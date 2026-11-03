@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "exp-api-key" => { {scheme: $scheme, headers: {exp-api-key: $token_val}, query: "", location: "header"} }
+    "exp-api-key" => { {scheme: $scheme, headers: {"exp-api-key": $token_val}, query: "", location: "header"} }
     "query-apiKey" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "apiKey")=(encode-path-segment $token_val)", location: "query"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -144,7 +144,7 @@ export def "available-products" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (e.g. en-US)
+  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
   --currency-code: string # **currency** in which to display product pricing - default: `'USD'`
   --end-date: string # **end date** of the date range to search within (must be in the future)
   --num-adults: int # **number of adult travelers** who wish to participate - default: `1`
@@ -154,6 +154,7 @@ export def "available-products" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/available/products" $auth.query)
   let req_body = {"currencyCode": $currency_code, "endDate": $end_date, "numAdults": $num_adults, "productCodes": $product_codes, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -190,7 +191,7 @@ export def "booking-availability" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (e.g. en-US)
+  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
   --age-bands: list # **array of objects** specifying the age bands by which to to filter search results — item shape: {bandId?: int, count?: int}
   --currency-code: string # **currency code** for the currency in which to display tour grade pricing information
   --month: string # **month component** (text format) of the start of the date range for which to retrieve tour grade availability information (must be in the future)
@@ -200,6 +201,7 @@ export def "booking-availability" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/booking/availability" $auth.query)
   let req_body = {"ageBands": $age_bands, "currencyCode": $currency_code, "month": $month, "productCode": $product_code, "year": $year} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -236,10 +238,11 @@ export def "booking-availability-dates" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --product-code: string # **unique alphanumeric identifier** of the product (e.g. 2280AAHT)
-  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (e.g. en-US)
+  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
 ]: nothing -> record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: record> {
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let qp = [(serialize-qp "productCode" $product_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/booking/availability/dates" $qp $auth.query)
   let accept_val = "application/json"
@@ -275,7 +278,7 @@ export def "booking-availability-tourgrades" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (e.g. en-US)
+  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
   --age-bands: list # **array** of ageBand objects — item shape: {bandId?: int, count?: int}
   --booking-date: string # **date** to enquire about available tour grades for *this* product (must be in the future)
   --currency-code: string # **currency code** for the currency in which to display pricing information
@@ -284,6 +287,7 @@ export def "booking-availability-tourgrades" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/booking/availability/tourgrades" $auth.query)
   let req_body = {"ageBands": $age_bands, "bookingDate": $booking_date, "currencyCode": $currency_code, "productCode": $product_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -319,7 +323,7 @@ export def "booking-availability-tourgrades-pricingmatrix" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (e.g. en-US)
+  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
   --currency-code: string # **currency code** for the currency in which to display pricing details
   --month: string # **month of year** (as text) by which to filter results (must be in the future)
   --product-code: string # **alphanumeric identifier** of product about which to retrieve tour grade and pricing information
@@ -328,6 +332,7 @@ export def "booking-availability-tourgrades-pricingmatrix" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/booking/availability/tourgrades/pricingmatrix" $auth.query)
   let req_body = {"currencyCode": $currency_code, "month": $month, "productCode": $product_code, "year": $year} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -366,7 +371,7 @@ export def "booking-book" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (e.g. en-US)
+  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
   --booker: record # **object** containing details about the primary contact (**note**: this contact needn't be a traveller) — shape: {cellPhone?: string, cellPhoneCountryCode?: string, email?: string, firstname: string, homePhone?: string, surname: string, title?: string}
   --currency-code: string # **currency code** for the currency the booking will be submitted in (you will be billed in this currency)
   --demo: oneof<nothing, bool> # **specifier**: `true` if this is a *demo* booking only (demos do not send any notifications, are automatically confirmed and OnRequest products become freesale products. Default value is true. Production must have `demo` set to `false`.
@@ -376,6 +381,7 @@ export def "booking-book" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/booking/book" $auth.query)
   let req_body = {"booker": $booker, "currencyCode": $currency_code, "demo": $demo, "items": $items, "partnerDetail": $partner_detail} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -412,13 +418,14 @@ export def "booking-calculateprice" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (e.g. en-US)
+  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
   --currency-code: string # **currency code** for the currency in which to display pricing details
   --items: list # **array** of travel detail objects — item shape: {productCode?: string, tourGradeCode?: string, travelDate?: string, travellers?: list}
 ]: any -> record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: record<currencyCode: string, hasPromoCode: bool, itinerary: record<bookerEmail: string, bookingDate: string, bookingStatus: record, currencyCode: string, distributorRef: string, exchangeRate: int, hasVoucher: bool, itemSummaries: list, itineraryId: int, omniPreRuleList: int, paypalRedirectURL: string, rulesApplied: list, securityToken: string, sortOrder: int, totalPrice: float, totalPriceFormatted: string, totalPriceUSD: float, userId: int, voucherKey: string, voucherURL: string>, itineraryFromPrice: float, itineraryFromPriceFormatted: string, itineraryNewPrice: float, itineraryNewPriceFormatted: string, itinerarySaving: int, itinerarySavingFormatted: string, paymentGatewayInfo: string, promoCode: string, promoCodeExpired: bool, promoCodeValid: bool, rulesApplied: list<string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/booking/calculateprice" $auth.query)
   let req_body = {"currencyCode": $currency_code, "items": $items} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -456,10 +463,11 @@ export def "booking-hotels" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --product-code: string # **unique alphanumeric identifier** of the product (e.g. 2280AAHT)
   --dest-id: int # **unique numeric identifier** of the destination (e.g. 123)
-  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (e.g. en-US)
+  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
 ]: nothing -> record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: table<address: string, brand: string, city: string, destinationId: int, hotelString: string, id: string, latitude: float, longitude: float, name: string, notes: string, phone: string, postcode: string, productCodes: list, sortOrder: int>> {
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let qp = [(serialize-qp "productCode" $product_code "scalar") (serialize-qp "destId" $dest_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/booking/hotels" $qp $auth.query)
   let accept_val = "application/json"
@@ -497,10 +505,11 @@ export def "booking-mybookings" [
   --voucher-key: string # **voucher key** for the booking (e.g. 3299307:93c7f36a56b18ba1068787ba7fb7988da5c8ad08db77604110141ff21498603e:600033670)
   --email: string # **email address** of the booker for the booking (e.g. apitest@viator.com)
   --itinerary-or-item-id: string # The booking reference number of the item - **Note**: For more information, see [Booking references](#section/Key-concepts/Booking-references) (e.g. 700179574)
-  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (e.g. en-US)
+  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
 ]: nothing -> record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: record<bookerEmail: string, bookingDate: string, bookingStatus: record<amended: bool, cancelled: bool, confirmed: bool, failed: bool, level: string, pending: bool, status: int, text: string, type: string>, currencyCode: string, distributorRef: string, exchangeRate: int, hasVoucher: bool, itemSummaries: list<record>, itineraryId: int, rulesApplied: string, sortOrder: int, totalPrice: float, totalPriceFormatted: string, totalPriceUSD: float, userId: string, voucherKey: string, voucherURL: string>> {
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let qp = [(serialize-qp "voucherKey" $voucher_key "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "itineraryOrItemId" $itinerary_or_item_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/booking/mybookings" $qp $auth.query)
   let accept_val = "application/json"
@@ -538,10 +547,11 @@ export def "booking-pastbooking" [
   --voucher-key: string # **specifier** of past booking type (use *one* of: `itemId` (booking reference) *and* `'voucherKey'` *or* `'email'`) (e.g. 1005851866:4af44c13ecf3f1a7d3f9ef2fc00c2257e08fa42ae20f877f3039ff9b52aba24e:580669678)
   --email: string # **email address** by which to search for past bookings (e.g. apitest@viator.com)
   --item-id: string # Search for a booking with this **unique booking-reference number**. See [Booking references](#section/Key-concepts/Booking-references) for more information. (e.g. 580669678)
-  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (e.g. en-US)
+  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
 ]: nothing -> record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: record<bookerEmail: string, bookingDate: string, bookingStatus: record<amended: bool, cancelled: bool, confirmed: bool, failed: bool, level: string, pending: bool, status: int, text: string, type: string>, currencyCode: string, distributorRef: string, exchangeRate: int, hasVoucher: bool, itemSummaries: list<record>, itineraryId: int, rulesApplied: string, sortOrder: int, totalPrice: float, totalPriceFormatted: string, totalPriceUSD: float, userId: string, voucherKey: string, voucherURL: string>> {
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let qp = [(serialize-qp "voucherKey" $voucher_key "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "itemId" $item_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/booking/pastbooking" $qp $auth.query)
   let accept_val = "application/json"
@@ -576,7 +586,7 @@ export def "booking-pricingmatrix" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (e.g. en-US)
+  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
   --booking-date: string # **date** for which to retrieve pricing data (must be in the future) (**note**: this is an optional parameter for normal products; if the date is *not* provided then the nearest available date is determined)
   --currency-code: string # **currency code** of the currency in which to display pricing information
   --product-code: string # **unique alphanumeric identifier** of the product for which to retrieve the pricing matrix
@@ -585,6 +595,7 @@ export def "booking-pricingmatrix" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/booking/pricingmatrix" $auth.query)
   let req_body = {"bookingDate": $booking_date, "currencyCode": $currency_code, "productCode": $product_code, "tourGradeCode": $tour_grade_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -620,7 +631,7 @@ export def "booking-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (e.g. en-US)
+  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
   --booking-date-from: string # **earliest date** for *this* booking (must be in the future)
   --booking-date-to: string # **latest date** for *this* booking (must be in the future)
   --distributor-item-refs: list<string> # **array** of partner-defined distributor item reference identifiers e.g. `['refItem1','refItem2','refItem3']`
@@ -633,6 +644,7 @@ export def "booking-status" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/booking/status" $auth.query)
   let req_body = {"bookingDateFrom": $booking_date_from, "bookingDateTo": $booking_date_to, "distributorItemRefs": $distributor_item_refs, "distributorRefs": $distributor_refs, "itemIds": $item_ids, "leadFirstName": $lead_first_name, "leadSurname": $lead_surname, "test": $test} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -668,7 +680,7 @@ export def "booking-status-items" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (e.g. en-US)
+  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
   --booking-date-from: string # **earliest date** for when the booking(s) in question were made (must be in the future)
   --booking-date-to: string # **latest date** for when the booking(s) in question were made (must be in the future)
   --distributor-item-refs: list<string> # **array** of partner-defined distributor item reference identifiers e.g. `['refItem1','refItem2','refItem3']`
@@ -681,6 +693,7 @@ export def "booking-status-items" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/booking/status/items" $auth.query)
   let req_body = {"bookingDateFrom": $booking_date_from, "bookingDateTo": $booking_date_to, "distributorItemRefs": $distributor_item_refs, "distributorRefs": $distributor_refs, "itemIds": $item_ids, "leadFirstName": $lead_first_name, "leadSurname": $lead_surname, "test": $test} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -722,10 +735,11 @@ export def "booking-voucher" [
   --voucher-key: string # **identifier** for the voucher - **note**: use <u>either</u> `voucherKey` <u>or</u> the three separate parameters - if `voucherKey` is provided as well as the other parameters, then `voucherKey` overrides the other paramaters - `voucherKey` is obtained from [/booking/mybookings](#operation/bookingMybookings) or in the response from [/booking/book](#operation/bookingBook) when you make a booking (e.g. 3299307:93c7f36a56b18ba1068787ba7fb7988da5c8ad08db77604110141ff21498603e:600033670)
   --full-html: oneof<nothing, bool> # **specifier**: - set to `true` if you wish to retrieve the full HTML-formatted voucher - set to `false` if you want the div fragment (optional) (e.g. true)
   --mobile-voucher: oneof<nothing, bool> # **specifier**: - if set to `true`, the service returns the mobile (cut down) HTML-formatted voucher - if `false` the full voucher HTML is returned (ignoring `fullHTML`) - default: `true` - this field should only be enabled for products that have a `voucherOption` of `'VOUCHER_E'` - do not enable `mobileVouchers` for paper vouchers (`voucherOption` of `'VOUCHER_PAPER_ONLY'`) as no barcode is returned - the voucher information is available in the response from [/product](#operation/product), [/booking/book](#operation/bookingBook), [/booking/pastbooking](#operation/bookingPastbooking), [/booking/mybookings](#operation/bookingMybookings) (it is also displayed under the 'Redemption Info' heading in this service) (e.g. true)
-  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (e.g. en-US)
+  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
 ]: nothing -> record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: string> {
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let qp = [(serialize-qp "leadLastName" $lead_last_name "scalar") (serialize-qp "itemId" $item_id "scalar") (serialize-qp "embeddedResources" $embedded_resources "scalar") (serialize-qp "voucherKey" $voucher_key "scalar") (serialize-qp "fullHTML" $full_html "scalar") (serialize-qp "mobileVoucher" $mobile_voucher "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/booking/voucher" $qp $auth.query)
   let accept_val = "application/json"
@@ -760,10 +774,11 @@ export def "cancellation-reasons" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (e.g. en-US)
+  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
 ]: nothing -> table<reasons: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default "https://api.sandbox.viator.com/partner")
+  if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/bookings/cancel-reasons" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -798,13 +813,14 @@ export def "cancel-booking" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (e.g. en-US)
+  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
   --reason-code: string # Machine-interpretable identification code for this cancellation reason, retrieved from [cancellationReasons](#operation/cancellationReasons) (e.g. Customer_Service.I_canceled_my_entire_trip)
 ]: any -> record<bookingId: string, reason: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default "https://api.sandbox.viator.com/partner")
   if ($booking_reference | is-empty) { error make --unspanned { msg: "path parameter 'booking-reference' must be non-empty" } }
+  if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base ({booking_reference: (encode-path-segment $booking_reference)} | format pattern "/bookings/{booking_reference}/cancel") $auth.query)
   let req_body = {"reasonCode": $reason_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -876,10 +892,11 @@ export def "health-check" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (e.g. en-US)
+  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
 ]: nothing -> record<allGood: bool, capiOk: bool, dbOk: bool, memcachedOk: bool, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/health/check" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -916,7 +933,7 @@ export def "merchant-cancellation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (e.g. en-US)
+  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
   --cancel-items: list # **array** of objects detailing itinerary items to cancel — item shape: {cancelCode?: string, cancelDescription?: string, distributorItemRef?: string, itemId?: int}
   --distributor-ref: string # **itinerary reference identifier** (partner defined) for the booking to cancel (e.g. Jdp122)
   --itinerary-id: int # **numeric identifier** for the itinerary (e.g. 1234655)
@@ -924,6 +941,7 @@ export def "merchant-cancellation" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/merchant/cancellation" $auth.query)
   let req_body = {"cancelItems": $cancel_items, "distributorRef": $distributor_ref, "itineraryId": $itinerary_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -965,10 +983,11 @@ export def "product" [
   --code: string # **unique alphanumeric identifier** of the product (e.g. 5010SYDNEY)
   --show-unavailable: oneof<nothing, bool> # **specifier** as to whether or not to show 'unavailable' products: - `true`: return *both* available and unavailable products - `false`: return *only* available products (default) (e.g. false)
   --exclude-tour-grade-availability: oneof<nothing, bool> # **specifier:** - `true`: return **all** tour grades, including those that are not available - `false`: only display tour grades that *are* available
-  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (e.g. en-US)
+  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
 ]: nothing -> record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: record<additionalInfo: list<string>, admission: string, ageBands: list<record>, allTravellerNamesRequired: bool, applePassSupported: bool, available: bool, bookingEngineId: string, bookingQuestions: list<record>, catIds: list<int>, city: string, code: string, country: string, currencyCode: string, departurePoint: string, departureTime: string, departureTimeComments: string, description: string, destinationId: int, duration: string, essential: string, exclusions: list<string>, highlights: int, hotelPickup: bool, inclusions: list<string>, itinerary: string, location: string, mapURL: string, maxTravellerCount: int, merchantCancellable: bool, merchantNetPriceFrom: float, merchantNetPriceFromFormatted: string, merchantTermsAndConditions: record<amountRefundable: int, cancellationFromTourDate: list, merchantTermsAndConditionsType: int, termsAndConditions: string>, onRequestPeriod: int, onSale: bool, operates: string, panoramaCount: int, pas: record, passengerAttributes: list<record>, photoCount: int, price: float, priceFormatted: string, primaryDestinationId: int, primaryDestinationName: string, primaryDestinationUrlName: string, primaryGroupId: string, productPhotos: list<record>, productUrlName: string, rating: float, ratingCounts: record<1: float, 2: float, 3: float, 4: float, 5: float>, region: string, returnDetails: string, reviewCount: int, reviews: list<record>, rrp: int, rrpFormatted: string, salesPoints: list<string>, savingAmount: string, savingAmountFormated: string, shortDescription: string, shortTitle: string, specialOffer: string, specialOfferAvailable: bool, specialReservation: bool, specialReservationDetails: string, sslSupported: bool, subCatIds: list<int>, supplierCode: string, supplierName: string, thumbnailHiResURL: string, thumbnailURL: string, title: string, tourGrades: list<record>, tourGradesAvailable: bool, translationLevel: int, userPhotos: list<record>, videoCount: int, videos: string, voucherOption: string, voucherRequirements: any, webURL: string>> {
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let qp = [(serialize-qp "currencyCode" $currency_code "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "voucherOption" $voucher_option "scalar") (serialize-qp "code" $code "scalar") (serialize-qp "showUnavailable" $show_unavailable "scalar") (serialize-qp "excludeTourGradeAvailability" $exclude_tour_grade_availability "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product" $qp $auth.query)
   let accept_val = "application/json"
@@ -1006,10 +1025,11 @@ export def "product-photos" [
   --top-x: string # **start and end rows** to return in the format {start}-{end} - e.g. `'1-10'`, `'11-20'` **Note**: - the maximum number of rows per request is 100; therefore, `'100-400'` will return the same as `'100-200'` - if `topX` is not specified, the default is `'1-100'` (e.g. 1-3)
   --code: string # **unique alphanumeric identifier** of the product (e.g. 5010SYDNEY)
   --show-unavailable: oneof<nothing, bool> # **specifier** as to whether or not to show 'unavailable' products: - `true`: return *both* available and unavailable products - `false`: return *only* available products (default) (e.g. false)
-  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (e.g. en-US)
+  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
 ]: nothing -> record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: table<caption: string, editorsPick: bool, ownerAvatarURL: string, ownerCountry: string, ownerId: int, ownerName: string, photoHiResURL: string, photoId: int, photoMediumResURL: string, photoURL: string, productCode: string, productTitle: string, productUrlName: string, sortOrder: int, sslSupported: bool, thumbnailURL: string, timeUploaded: string, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let qp = [(serialize-qp "topX" $top_x "scalar") (serialize-qp "code" $code "scalar") (serialize-qp "showUnavailable" $show_unavailable "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product/photos" $qp $auth.query)
   let accept_val = "application/json"
@@ -1048,10 +1068,11 @@ export def "product-reviews" [
   --top-x: string # **start and end rows** to return in the format {start}-{end} - e.g. `'1-10'`, `'11-20'` **Note**: - the maximum number of rows per request is 100; therefore, `'100-400'` will return the same as `'100-200'` - if `topX` is not specified, the default is `'1-100'` (e.g. 1-3)
   --code: string # **unique alphanumeric identifier** of the product (e.g. 5010SYDNEY)
   --show-unavailable: oneof<nothing, bool> # **specifier** as to whether or not to show 'unavailable' products: - `true`: return *both* available and unavailable products - `false`: return *only* available products (default) (e.g. false)
-  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (e.g. en-US)
+  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
 ]: nothing -> record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: table<ownerAvatarURL: string, ownerCountry: string, ownerId: int, ownerName: string, productCode: string, productTitle: string, productUrlName: string, publishedDate: string, rating: int, review: string, reviewId: int, sortOrder: int, sslSupported: bool, submissionDate: string, viatorFeedback: string, viatorNotes: string>> {
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let qp = [(serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "topX" $top_x "scalar") (serialize-qp "code" $code "scalar") (serialize-qp "showUnavailable" $show_unavailable "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product/reviews" $qp $auth.query)
   let accept_val = "application/json"
@@ -1086,7 +1107,7 @@ export def "search-freetext" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (e.g. en-US)
+  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
   --currency-code: string # **currency code** for the currency in which to display product pricing information
   --dest-id: int # **unique numeric identifier** of the destination to search within - `destinationId` can be retrieved from the [/taxonomy/destinations](#operation/taxonomyDestinations) service
   --search-types: list<string> # **array** of search domain specifiers where each item is *one of*: - `"PRODUCT"`: a tour / activity - `"DESTINATION"`: continent, country, city, region - `"ATTRACTION"`: an attraction within a destination (only available to partners with SEO access) - `"RECOMMENDATION"`: an attraction within a destination (only available to partners with SEO access)
@@ -1097,6 +1118,7 @@ export def "search-freetext" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/search/freetext" $auth.query)
   let req_body = {"currencyCode": $currency_code, "destId": $dest_id, "searchTypes": $search_types, "sortOrder": $sort_order, "text": $text, "topX": $top_x} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1132,7 +1154,7 @@ export def "search-products" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (e.g. en-US)
+  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
   --cat-id: int # **unique numeric identifier** of *this* product category to search within - `categoryId` can be retrieved from the [/taxonomy/categories](#operation/taxonomyCategories) service - at present, it is not possible to use `catId` in conjunction with `seoId`
   --currency-code: string # **currency** in which to display product prices
   --dest-id: int # **unique numeric identifier** of the destination in which to search for products - `destinationId` is available from the [/taxonomy/destinations](#operation/taxonomyDestinations) service - use **EITHER** `destId` **OR** `seoId`, but not both
@@ -1146,6 +1168,7 @@ export def "search-products" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/search/products" $auth.query)
   let req_body = {"catId": $cat_id, "currencyCode": $currency_code, "destId": $dest_id, "endDate": $end_date, "seoId": $seo_id, "sortOrder": $sort_order, "startDate": $start_date, "subCatId": $sub_cat_id, "topX": $top_x} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1181,13 +1204,14 @@ export def "search-products-codes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (e.g. en-US)
+  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
   --currency-code: string # **currency code** for the currency in which to display product pricing
   --product-codes: list<string> # **array** of product codes to search for
 ]: any -> record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: table<admission: string, bookingEngineId: string, catIds: list, code: string, currencyCode: string, duration: string, essential: string, merchantCancellable: bool, merchantNetPriceFrom: float, merchantNetPriceFromFormatted: string, onRequestPeriod: int, onSale: bool, panoramaCount: int, pas: record, photoCount: int, price: float, priceFormatted: string, primaryDestinationId: int, primaryDestinationName: string, primaryGroupId: string, rating: float, reviewCount: int, rrp: int, rrpformatted: string, savingAmount: string, savingAmountFormated: string, shortDescription: string, shortTitle: string, sortOrder: int, specialOfferAvailable: bool, specialReservation: bool, specialReservationDetails: string, subCatIds: list, supplierCode: string, supplierName: string, thumbnailHiResURL: string, thumbnailURL: string, title: string, translationLevel: int, uniqueShortDescription: string, videoCount: int, webURL: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/search/products/codes" $auth.query)
   let req_body = {"currencyCode": $currency_code, "productCodes": $product_codes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1223,7 +1247,7 @@ export def "taxonomy-attractions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (e.g. en-US)
+  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
   --dest-id: int # **unique numeric identifier** of the destination in which to search for attractions
   --sort-order: string@sort-order-completer-2 # **sort order** in which to return the results that is *one of*: * `"SEO_PUBLISHED_DATE_D"`: publish date (descending) * `"SEO_PUBLISHED_DATE_A"`: publish date (ascending) * `"SEO_REVIEW_AVG_RATING_D"`: traveler rating (high→low) * `"SEO_REVIEW_AVG_RATING_A"`: traveler rating (low→high) * `"SEO_ALPHABETICAL"`: alphabetical (A→Z)
   --top-x: string # **start and end rows** to return in the format {start}-{end} - e.g. `'1-10'`, `'11-20'` **Note**: - the maximum number of rows per request is 100; therefore, `'100-400'` will return the same as `'100-200'` - if `topX` is not specified, the default is `'1-100'`
@@ -1231,6 +1255,7 @@ export def "taxonomy-attractions" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/taxonomy/attractions" $auth.query)
   let req_body = {"destId": $dest_id, "sortOrder": $sort_order, "topX": $top_x} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1267,10 +1292,11 @@ export def "taxonomy-categories" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --dest-id: int # **unique numeric identifier** of the destination to enquire about (optional) - `destinationId` is returned by [/taxonomy/destinations](#operation/taxonomyDestinations) (e.g. 684)
-  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (e.g. en-US)
+  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
 ]: nothing -> record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: table<groupName: string, groupUrlName: string, id: int, productCount: int, subcategories: list, thumbnailURL: string>> {
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let qp = [(serialize-qp "destId" $dest_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/taxonomy/categories" $qp $auth.query)
   let accept_val = "application/json"
@@ -1305,10 +1331,11 @@ export def "taxonomy-destinations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (e.g. en-US)
+  --accept-language: string # Specifies the language into which the natural-language fields in the response from this service will be translated (see [Accept-Language header](#section/Appendices/Accept-Language-header) for available langage codes) (required, e.g. en-US)
 ]: nothing -> record<dateStamp: string, errorCodes: list<string>, errorMessage: list<any>, errorMessageText: string, errorName: string, errorReference: string, errorType: string, extraInfo: record, extraObject: record, success: bool, totalCount: int, vmid: string, data: table<defaultCurrencyCode: string, destinationId: int, destinationName: string, destinationType: string, destinationUrlName: string, iataCode: string, latitude: float, longitude: float, lookupId: string, parentId: int, selectable: bool, sortOrder: int, timeZone: string>> {
   let auth = (build-auth $token ($auth_scheme | default "exp-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/taxonomy/destinations" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

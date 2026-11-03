@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -148,7 +148,7 @@ export def "transformations-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<properties: record<etag: string, query: string, streamingUnits: int>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -156,6 +156,7 @@ export def "transformations-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
   if ($transformation_name | is-empty) { error make --unspanned { msg: "path parameter 'transformationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), job_name: (encode-path-segment $job_name), transformation_name: (encode-path-segment $transformation_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.StreamAnalytics/streamingjobs/{job_name}/transformations/{transformation_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -193,7 +194,7 @@ export def "transformations-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --if-match: string # The ETag of the transformation. Omit this value to always overwrite the current transformation. Specify the last-seen ETag value to prevent accidentally overwriting concurrent changes.
   --properties: any # The properties that are associated with a transformation. — shape: {query?: string, streamingUnits?: int}
   --name: string # Resource name
@@ -205,6 +206,7 @@ export def "transformations-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
   if ($transformation_name | is-empty) { error make --unspanned { msg: "path parameter 'transformationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), job_name: (encode-path-segment $job_name), transformation_name: (encode-path-segment $transformation_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.StreamAnalytics/streamingjobs/{job_name}/transformations/{transformation_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "name": $name} | compact
@@ -246,7 +248,7 @@ export def "transformations-create-or-replace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --if-match: string # The ETag of the transformation. Omit this value to always overwrite the current transformation. Specify the last-seen ETag value to prevent accidentally overwriting concurrent changes.
   --if-none-match: string # Set to '*' to allow a new transformation to be created, but to prevent updating an existing transformation. Other values will result in a 412 Pre-condition Failed response.
   --properties: any # The properties that are associated with a transformation. — shape: {query?: string, streamingUnits?: int}
@@ -259,6 +261,7 @@ export def "transformations-create-or-replace" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
   if ($transformation_name | is-empty) { error make --unspanned { msg: "path parameter 'transformationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), job_name: (encode-path-segment $job_name), transformation_name: (encode-path-segment $transformation_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.StreamAnalytics/streamingjobs/{job_name}/transformations/{transformation_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "name": $name} | compact

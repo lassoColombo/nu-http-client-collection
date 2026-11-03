@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -144,18 +144,18 @@ export def "get-classification-inclusions" [
   --classified-id: string # Limit the result to classification inclusions linked to a resource with this ID. You will have to use this filter together with either `classified_type` or `classification_type`. (format: uuid, e.g. fee1976e-f1bc-48a9-9ee8-58800f4d3462)
   --classified-type: string@classified-type-completer # Limit the result to classification inclusions linked to this type of entity.
   --q: string # Limit the result to classification inclusions linked to a classification containing the parameter value disregarding case.
-  --qp-sort: list<string> # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general. (default: created_at)
+  --sort: list<string> # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general. (default: created_at)
 ]: nothing -> record<data: table<attributes: record, id: string, relationships: record, type: string>, links: record<first: string, last: string, next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ids[]" $ids "multi") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "classification_id" $classification_id "scalar") (serialize-qp "classification_type" $classification_type "scalar") (serialize-qp "classified_id" $classified_id "scalar") (serialize-qp "classified_type" $classified_type "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "ids[]" $ids "multi") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "classification_id" $classification_id "scalar") (serialize-qp "classification_type" $classification_type "scalar") (serialize-qp "classified_id" $classified_id "scalar") (serialize-qp "classified_type" $classified_type "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "sort" $sort "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/classification_inclusions" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"ids[]": $ids, "page[number]": $page_number, "page[size]": $page_size, "classification_id": $classification_id, "classification_type": $classification_type, "classified_id": $classified_id, "classified_type": $classified_type, "q": $q, "sort": $qp_sort} | compact)
+    query: ({"ids[]": $ids, "page[number]": $page_number, "page[size]": $page_size, "classification_id": $classification_id, "classification_type": $classification_type, "classified_id": $classified_id, "classified_type": $classified_type, "q": $q, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -220,18 +220,18 @@ export def "get-classifications" [
   --type: string@type-completer # Limit the result to classifications of this type. The possible values for types depends on the privileges of the provided credential. (e.g. Genre)
   --q: string # Limit the result to classifications with a value containing the parameter value disregarding case.
   --is-country: string # If this parameter is provided and not empty, limit the result to classifications of type `Geography` representing countries. The credential must have at least one privilege with a network, series, or advertiser profile. (e.g. true)
-  --qp-sort: list<string> # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general. (default: value)
+  --sort: list<string> # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general. (default: value)
 ]: nothing -> record<data: table<attributes: record, id: string, type: string>, links: record<first: string, last: string, next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ids[]" $ids "multi") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "is_country" $is_country "scalar") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "ids[]" $ids "multi") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "is_country" $is_country "scalar") (serialize-qp "sort" $sort "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/classifications" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"ids[]": $ids, "page[number]": $page_number, "page[size]": $page_size, "type": $type, "q": $q, "is_country": $is_country, "sort": $qp_sort} | compact)
+    query: ({"ids[]": $ids, "page[number]": $page_number, "page[size]": $page_size, "type": $type, "q": $q, "is_country": $is_country, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -295,18 +295,18 @@ export def "get-credits" [
   --page-size: int # Indicate how many records to return per page. The maximum is 100.
   --creditable-id: string # Limit the result to credits for the entity with this ID only. If the entity is not published, the credential needs to have the right privilege to list the credits for it. (format: uuid, e.g. 76654e16-76ce-4945-92e9-e0a381917853)
   --creditable-type: string@creditable-type-completer # Limit the result to credits linked to this type of entity only. Depending on the privileges of the credential, this list might be further reduced to only published entities.
-  --qp-sort: list<string> # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general. (default: position)
+  --sort: list<string> # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general. (default: position)
 ]: nothing -> record<data: table<attributes: record, id: string, relationships: record, type: string>, links: record<first: string, last: string, next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ids[]" $ids "multi") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "creditable_id" $creditable_id "scalar") (serialize-qp "creditable_type" $creditable_type "scalar") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "ids[]" $ids "multi") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "creditable_id" $creditable_id "scalar") (serialize-qp "creditable_type" $creditable_type "scalar") (serialize-qp "sort" $sort "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/credits" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"ids[]": $ids, "page[number]": $page_number, "page[size]": $page_size, "creditable_id": $creditable_id, "creditable_type": $creditable_type, "sort": $qp_sort} | compact)
+    query: ({"ids[]": $ids, "page[number]": $page_number, "page[size]": $page_size, "creditable_id": $creditable_id, "creditable_type": $creditable_type, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -366,8 +366,8 @@ export def "get-episodes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list<string> # The list of IDs to filter by. Repeat this parameter for each ID you want to include in the filter. The brackets *MUST* be percent-encoded, per the requirements in [RFC 3986 § 3.4](https://tools.ietf.org/html/rfc3986#section-3.4).
-  --page-number: int # Select which page number to receive results for. Pages are numbered starting at 1.
-  --page-size: int # Indicate how many records to return per page. The maximum is 100.
+  --page-number: int # Select which page number to receive results for. Pages are numbered starting at 1. (required)
+  --page-size: int # Indicate how many records to return per page. The maximum is 100. (required)
   --included-in-inventory-calendar: string # Limit the result to episodes usable with an inventory management calendar for the provided AdDeal ID. (format: uuid, e.g. b97239ef-1776-489a-a1df-5f70a8407148)
   --month: string # Limit the result to episodes released in this month.
   --published: oneof<nothing, bool> # If `true`, limit the result to published episodes only. If `false`, limit the result to _unpublished_ episodes only.
@@ -377,19 +377,21 @@ export def "get-episodes" [
   --rss: oneof<nothing, bool> # If `true`, limit the result to published and released episodes holding an available media file. If this is `true`, it also changes the default sort order to `-released_at`.
   --season-id: string # Limit result to episodes linked to this season. (format: uuid, e.g. 30e7b568-d099-486b-9a8e-51b7594cab7d)
   --series-id: string # Limit the result to episodes linked to this series. (format: uuid, e.g. d0ceb1ff-b95b-4c1e-a7e5-a36ed7b4d3b7)
-  --qp-sort: list<string> # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general. (default: sort_title)
+  --sort: list<string> # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general. (default: sort_title)
   --year: string # Limit the result to episodes released in this year.
 ]: nothing -> record<data: table<attributes: record, id: string, relationships: record, type: string>, links: record<first: string, last: string, next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ids[]" $ids "multi") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "included_in_inventory_calendar" $included_in_inventory_calendar "scalar") (serialize-qp "month" $month "scalar") (serialize-qp "published" $published "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "released_after" $released_after "scalar") (serialize-qp "released_before" $released_before "scalar") (serialize-qp "rss" $rss "scalar") (serialize-qp "season_id" $season_id "scalar") (serialize-qp "series_id" $series_id "scalar") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "year" $year "scalar")] | flatten | str join "&"
+  if ($page_number == null) { error make --unspanned { msg: "required query parameter 'page[number]' missing: pass --page-number" } }
+  if ($page_size == null) { error make --unspanned { msg: "required query parameter 'page[size]' missing: pass --page-size" } }
+  let qp = [(serialize-qp "ids[]" $ids "multi") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "included_in_inventory_calendar" $included_in_inventory_calendar "scalar") (serialize-qp "month" $month "scalar") (serialize-qp "published" $published "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "released_after" $released_after "scalar") (serialize-qp "released_before" $released_before "scalar") (serialize-qp "rss" $rss "scalar") (serialize-qp "season_id" $season_id "scalar") (serialize-qp "series_id" $series_id "scalar") (serialize-qp "sort" $sort "csv") (serialize-qp "year" $year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/episodes" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"ids[]": $ids, "page[number]": $page_number, "page[size]": $page_size, "included_in_inventory_calendar": $included_in_inventory_calendar, "month": $month, "published": $published, "q": $q, "released_after": $released_after, "released_before": $released_before, "rss": $rss, "season_id": $season_id, "series_id": $series_id, "sort": $qp_sort, "year": $year} | compact)
+    query: ({"ids[]": $ids, "page[number]": $page_number, "page[size]": $page_size, "included_in_inventory_calendar": $included_in_inventory_calendar, "month": $month, "published": $published, "q": $q, "released_after": $released_after, "released_before": $released_before, "rss": $rss, "season_id": $season_id, "series_id": $series_id, "sort": $sort, "year": $year} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -522,10 +524,11 @@ export def "get-images" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list<string> # The list of IDs to filter by. Repeat this parameter for each ID you want to include in the filter. The brackets *MUST* be percent-encoded, per the requirements in [RFC 3986 § 3.4](https://tools.ietf.org/html/rfc3986#section-3.4).
+  --ids: list<string> # The list of IDs to filter by. Repeat this parameter for each ID you want to include in the filter. The brackets *MUST* be percent-encoded, per the requirements in [RFC 3986 § 3.4](https://tools.ietf.org/html/rfc3986#section-3.4). (required)
 ]: nothing -> record<data: table<attributes: record, id: string, relationships: record, type: string>, links: record<first: string, last: string, next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids[]' missing: pass --ids" } }
   let qp = [(serialize-qp "ids[]" $ids "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/images" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
@@ -592,10 +595,11 @@ export def "get-media-assets" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list<string> # The list of IDs to filter by. Repeat this parameter for each ID you want to include in the filter. The brackets *MUST* be percent-encoded, per the requirements in [RFC 3986 § 3.4](https://tools.ietf.org/html/rfc3986#section-3.4).
+  --ids: list<string> # The list of IDs to filter by. Repeat this parameter for each ID you want to include in the filter. The brackets *MUST* be percent-encoded, per the requirements in [RFC 3986 § 3.4](https://tools.ietf.org/html/rfc3986#section-3.4). (required)
 ]: nothing -> record<data: table<attributes: record, id: string, type: string>, links: record<first: string, last: string, next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids[]' missing: pass --ids" } }
   let qp = [(serialize-qp "ids[]" $ids "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/media_assets" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
@@ -668,18 +672,18 @@ export def "get-networks" [
   --q: string # Limit the result to networks with a name containing this parameter in a case-insensitive way.
   --ad-rep-account-id: string # Limit the result to networks containing at least one series with an ad deal of this Ad Ops profile. (format: uuid)
   --ad-deal-status: list<string> # Limit the result to networks containing at least one series with an ad deal matching one of the values in this parameter.
-  --qp-sort: list<string> # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general. (default: name)
+  --sort: list<string> # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general. (default: name)
 ]: nothing -> record<data: table<attributes: record, id: string, relationships: record, type: string>, links: record<first: string, last: string, next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ids[]" $ids "multi") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "ad_rep_account_id" $ad_rep_account_id "scalar") (serialize-qp "ad_deal_status" $ad_deal_status "csv") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "ids[]" $ids "multi") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "ad_rep_account_id" $ad_rep_account_id "scalar") (serialize-qp "ad_deal_status" $ad_deal_status "csv") (serialize-qp "sort" $sort "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/networks" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"ids[]": $ids, "page[number]": $page_number, "page[size]": $page_size, "q": $q, "ad_rep_account_id": $ad_rep_account_id, "ad_deal_status": $ad_deal_status, "sort": $qp_sort} | compact)
+    query: ({"ids[]": $ids, "page[number]": $page_number, "page[size]": $page_size, "q": $q, "ad_rep_account_id": $ad_rep_account_id, "ad_deal_status": $ad_deal_status, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -742,18 +746,18 @@ export def "get-people" [
   --page-number: int # Select which page number to receive results for. Pages are numbered starting at 1.
   --page-size: int # Indicate how many records to return per page. The maximum is 100.
   --q: string # Limit the result to people with a full name containing this parameter in a case-insensitive way.
-  --qp-sort: list<string> # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general. (default: last_name,first_name)
+  --sort: list<string> # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general. (default: last_name,first_name)
 ]: nothing -> record<data: table<attributes: record, id: string, relationships: record, type: string>, links: record<first: string, last: string, next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ids[]" $ids "multi") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "ids[]" $ids "multi") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "sort" $sort "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/people" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"ids[]": $ids, "page[number]": $page_number, "page[size]": $page_size, "q": $q, "sort": $qp_sort} | compact)
+    query: ({"ids[]": $ids, "page[number]": $page_number, "page[size]": $page_size, "q": $q, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -817,18 +821,18 @@ export def "get-seasons" [
   --page-size: int # Indicate how many records to return per page. The maximum is 100.
   --series-id: string # Limit the result to seasons owned by this series. (format: uuid, e.g. 7ebd702d-07c8-4da9-a7a8-cf18ec414d5c)
   --q: string # Limit the result to seasons with a title containing this parameter in a case-insensitive way.
-  --qp-sort: list<string> # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general. (default: sort_title)
+  --sort: list<string> # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general. (default: sort_title)
 ]: nothing -> record<data: table<attributes: record, id: string, relationships: record, type: string>, links: record<first: string, last: string, next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ids[]" $ids "multi") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "series_id" $series_id "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "ids[]" $ids "multi") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "series_id" $series_id "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "sort" $sort "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/seasons" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"ids[]": $ids, "page[number]": $page_number, "page[size]": $page_size, "series_id": $series_id, "q": $q, "sort": $qp_sort} | compact)
+    query: ({"ids[]": $ids, "page[number]": $page_number, "page[size]": $page_size, "series_id": $series_id, "q": $q, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -893,18 +897,18 @@ export def "get-series" [
   --ad-rep-account-id: string # Limit the result to series with an ad deal of this Ad Ops profile. (format: uuid, e.g. 35eb02fc-54db-4650-98e0-4695b101b71d)
   --network-id: string # Limit the result to series owned by this network. (format: uuid, e.g. 5317358a-527e-4365-a343-361854286cc7)
   --q: string # Limit the result to series with a title or slug containing this parameter in a case-insensitive way.
-  --qp-sort: list<string> # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general. (default: sort_title)
+  --sort: list<string> # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general. (default: sort_title)
 ]: nothing -> record<data: table<attributes: record, id: string, relationships: record, type: string>, links: record<first: string, last: string, next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ids[]" $ids "multi") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "ad_rep_account_id" $ad_rep_account_id "scalar") (serialize-qp "network_id" $network_id "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "ids[]" $ids "multi") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "ad_rep_account_id" $ad_rep_account_id "scalar") (serialize-qp "network_id" $network_id "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "sort" $sort "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/series" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"ids[]": $ids, "page[number]": $page_number, "page[size]": $page_size, "ad_rep_account_id": $ad_rep_account_id, "network_id": $network_id, "q": $q, "sort": $qp_sort} | compact)
+    query: ({"ids[]": $ids, "page[number]": $page_number, "page[size]": $page_size, "ad_rep_account_id": $ad_rep_account_id, "network_id": $network_id, "q": $q, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null

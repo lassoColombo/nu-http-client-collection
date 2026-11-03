@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -98,8 +98,10 @@ def auth-scheme-completer [] { ["bearer"] }
 # Completers for enum parameters
 def x-amz-target-completer [] { ["AWSEvents.ActivateEventSource"] }
 def x-amz-target-completer-1 [] { ["AWSEvents.CancelReplay"] }
+def http-method-completer [] { ["DELETE" "GET" "HEAD" "OPTIONS" "PATCH" "POST" "PUT"] }
 def x-amz-target-completer-2 [] { ["AWSEvents.CreateApiDestination"] }
 def x-amz-target-completer-3 [] { ["AWSEvents.CreateArchive"] }
+def authorization-type-completer [] { ["API_KEY" "BASIC" "OAUTH_CLIENT_CREDENTIALS"] }
 def x-amz-target-completer-4 [] { ["AWSEvents.CreateConnection"] }
 def x-amz-target-completer-5 [] { ["AWSEvents.CreateEndpoint"] }
 def x-amz-target-completer-6 [] { ["AWSEvents.CreateEventBus"] }
@@ -125,13 +127,16 @@ def x-amz-target-completer-25 [] { ["AWSEvents.DescribeRule"] }
 def x-amz-target-completer-26 [] { ["AWSEvents.DisableRule"] }
 def x-amz-target-completer-27 [] { ["AWSEvents.EnableRule"] }
 def x-amz-target-completer-28 [] { ["AWSEvents.ListApiDestinations"] }
+def state-completer [] { ["CREATE_FAILED" "CREATING" "DISABLED" "ENABLED" "UPDATE_FAILED" "UPDATING"] }
 def x-amz-target-completer-29 [] { ["AWSEvents.ListArchives"] }
+def connection-state-completer [] { ["AUTHORIZED" "AUTHORIZING" "CREATING" "DEAUTHORIZED" "DEAUTHORIZING" "DELETING" "UPDATING"] }
 def x-amz-target-completer-30 [] { ["AWSEvents.ListConnections"] }
 def x-amz-target-completer-31 [] { ["AWSEvents.ListEndpoints"] }
 def x-amz-target-completer-32 [] { ["AWSEvents.ListEventBuses"] }
 def x-amz-target-completer-33 [] { ["AWSEvents.ListEventSources"] }
 def x-amz-target-completer-34 [] { ["AWSEvents.ListPartnerEventSourceAccounts"] }
 def x-amz-target-completer-35 [] { ["AWSEvents.ListPartnerEventSources"] }
+def state-completer-1 [] { ["CANCELLED" "CANCELLING" "COMPLETED" "FAILED" "RUNNING" "STARTING"] }
 def x-amz-target-completer-36 [] { ["AWSEvents.ListReplays"] }
 def x-amz-target-completer-37 [] { ["AWSEvents.ListRuleNamesByTarget"] }
 def x-amz-target-completer-38 [] { ["AWSEvents.ListRules"] }
@@ -140,6 +145,7 @@ def x-amz-target-completer-40 [] { ["AWSEvents.ListTargetsByRule"] }
 def x-amz-target-completer-41 [] { ["AWSEvents.PutEvents"] }
 def x-amz-target-completer-42 [] { ["AWSEvents.PutPartnerEvents"] }
 def x-amz-target-completer-43 [] { ["AWSEvents.PutPermission"] }
+def state-completer-2 [] { ["DISABLED" "ENABLED"] }
 def x-amz-target-completer-44 [] { ["AWSEvents.PutRule"] }
 def x-amz-target-completer-45 [] { ["AWSEvents.PutTargets"] }
 def x-amz-target-completer-46 [] { ["AWSEvents.RemovePermission"] }
@@ -197,12 +203,13 @@ export def "activate-event-source" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  name: any
+  --x-amz-target: string@x-amz-target-completer # required
+  name: string # The name of the partner event source to activate.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.ActivateEventSource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -245,12 +252,13 @@ export def "cancel-replay" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  replay_name: any
-]: any -> record<ReplayArn: record, State: record, StateReason: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  replay_name: string # The name of the replay to cancel.
+]: any -> record<ReplayArn: string, State: string, StateReason: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.CancelReplay")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ReplayName": $replay_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -293,17 +301,18 @@ export def "create-api-destination" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  name: any
-  --description: any
-  connection_arn: any
-  invocation_endpoint: any
-  http_method: any
-  --invocation-rate-limit-per-second: any
-]: any -> record<ApiDestinationArn: record, ApiDestinationState: record, CreationTime: record, LastModifiedTime: record> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  name: string # The name for the API destination to create.
+  --description: string # A description for the API destination to create.
+  connection_arn: string # The ARN of the connection to use for the API destination. The destination endpoint must support the authorization type specified for the connection.
+  invocation_endpoint: string # The URL to the HTTP invocation endpoint for the API destination.
+  http_method: string@http-method-completer # The method to use for the request to the HTTP invocation endpoint.
+  --invocation-rate-limit-per-second: int # The maximum number of requests per second to send to the HTTP invocation endpoint.
+]: any -> record<ApiDestinationArn: string, ApiDestinationState: string, CreationTime: string, LastModifiedTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.CreateApiDestination")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Description": $description, "ConnectionArn": $connection_arn, "InvocationEndpoint": $invocation_endpoint, "HttpMethod": $http_method, "InvocationRateLimitPerSecond": $invocation_rate_limit_per_second} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -346,16 +355,17 @@ export def "create-archive" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  archive_name: any
-  event_source_arn: any
-  --description: any
-  --event-pattern: any
-  --retention-days: any
-]: any -> record<ArchiveArn: record, State: record, StateReason: record, CreationTime: record> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  archive_name: string # The name for the archive to create.
+  event_source_arn: string # The ARN of the event bus that sends events to the archive.
+  --description: string # A description for the archive.
+  --event-pattern: string # An event pattern to use to filter events sent to the archive.
+  --retention-days: int # The number of days to retain events for. Default value is 0. If set to 0, events are retained indefinitely
+]: any -> record<ArchiveArn: string, State: string, StateReason: string, CreationTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.CreateArchive")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ArchiveName": $archive_name, "EventSourceArn": $event_source_arn, "Description": $description, "EventPattern": $event_pattern, "RetentionDays": $retention_days} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -381,6 +391,7 @@ export def "create-archive" [
 #
 # POST /
 # operationId: CreateConnection
+# --AuthParameters shape: {BasicAuthParameters?: record, OAuthParameters?: record, ApiKeyAuthParameters?: record, InvocationHttpParameters?: record}
 export def "create-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -398,15 +409,16 @@ export def "create-connection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  name: any
-  --description: any
-  authorization_type: any
-  auth_parameters: any
-]: any -> record<ConnectionArn: record, ConnectionState: record, CreationTime: record, LastModifiedTime: record> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  name: string # The name for the connection to create.
+  --description: string # A description for the connection to create.
+  authorization_type: string@authorization-type-completer # The type of authorization to use for the connection. OAUTH tokens are refreshed when a 401 or 407 response is returned.
+  auth_parameters: record # Contains the authorization parameters for the connection. — shape: {BasicAuthParameters?: record, OAuthParameters?: record, ApiKeyAuthParameters?: record, InvocationHttpParameters?: record}
+]: any -> record<ConnectionArn: string, ConnectionState: string, CreationTime: string, LastModifiedTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.CreateConnection")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Description": $description, "AuthorizationType": $authorization_type, "AuthParameters": $auth_parameters} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -432,6 +444,9 @@ export def "create-connection" [
 #
 # POST /
 # operationId: CreateEndpoint
+# --RoutingConfig shape: {FailoverConfig: record}
+# --ReplicationConfig shape: {State?: "ENABLED"|"DISABLED"}
+# --EventBuses item shape: {EventBusArn: string}
 export def "create-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -449,17 +464,18 @@ export def "create-endpoint" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  name: any
-  --description: any
-  routing_config: any
-  --replication-config: any
-  event_buses: any
-  --role-arn: any
-]: any -> record<Name: record, Arn: record, RoutingConfig: record<FailoverConfig: record<Primary: record, Secondary: record>>, ReplicationConfig: record<State: record>, EventBuses: record, RoleArn: record, State: record> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  name: string # The name of the global endpoint. For example, "Name":"us-east-2-custom_bus_A-endpoint".
+  --description: string # A description of the global endpoint.
+  routing_config: record # The routing configuration of the endpoint. — shape: {FailoverConfig: record}
+  --replication-config: record # Endpoints can replicate all events to the secondary Region. — shape: {State?: "ENABLED"|"DISABLED"}
+  event_buses: list # Define the event buses used. The names of the event buses must be identical in each Region. — item shape: {EventBusArn: string}
+  --role-arn: string # The ARN of the role used for replication.
+]: any -> record<Name: string, Arn: string, RoutingConfig: record<FailoverConfig: record<Primary: record, Secondary: record>>, ReplicationConfig: record<State: string>, EventBuses: table<EventBusArn: string>, RoleArn: string, State: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.CreateEndpoint")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Description": $description, "RoutingConfig": $routing_config, "ReplicationConfig": $replication_config, "EventBuses": $event_buses, "RoleArn": $role_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -485,6 +501,7 @@ export def "create-endpoint" [
 #
 # POST /
 # operationId: CreateEventBus
+# --Tags item shape: {Key: string, Value: string}
 export def "create-event-bus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -502,14 +519,15 @@ export def "create-event-bus" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  name: any
-  --event-source-name: any
-  --tags: any
-]: any -> record<EventBusArn: record> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  name: string # The name of the new event bus. Custom event bus names can't contain the / character, but you can use the / character in partner event bus names. In addition, for partner event buses, the name must exactly match the name of the partner event source that this event bus is matched to. You can't use the name default for a custom event bus, as this name is already used for your account's default event bus.
+  --event-source-name: string # If you are creating a partner event bus, this specifies the partner event source that the new event bus will be matched with.
+  --tags: list # Tags to associate with the event bus. — item shape: {Key: string, Value: string}
+]: any -> record<EventBusArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.CreateEventBus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "EventSourceName": $event_source_name, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -552,13 +570,14 @@ export def "create-partner-event-source" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  name: any
-  account: any
-]: any -> record<EventSourceArn: record> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  name: string # The name of the partner event source. This name must be unique and must be in the format partner_name/event_namespace/event_name . The Amazon Web Services account that wants to use this partner event source must create a partner event bus with a name that matches the name of the partner event source.
+  account: string # The Amazon Web Services account ID that is permitted to create a matching partner event bus for this partner event source.
+]: any -> record<EventSourceArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.CreatePartnerEventSource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Account": $account} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -601,12 +620,13 @@ export def "deactivate-event-source" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  name: any
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  name: string # The name of the partner event source to deactivate.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.DeactivateEventSource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -649,12 +669,13 @@ export def "deauthorize-connection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  name: any
-]: any -> record<ConnectionArn: record, ConnectionState: record, CreationTime: record, LastModifiedTime: record, LastAuthorizedTime: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  name: string # The name of the connection to remove authorization from.
+]: any -> record<ConnectionArn: string, ConnectionState: string, CreationTime: string, LastModifiedTime: string, LastAuthorizedTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.DeauthorizeConnection")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -697,12 +718,13 @@ export def "delete-api-destination" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  name: any
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  name: string # The name of the destination to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.DeleteApiDestination")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -745,12 +767,13 @@ export def "delete-archive" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  archive_name: any
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  archive_name: string # The name of the archive to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.DeleteArchive")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ArchiveName": $archive_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -793,12 +816,13 @@ export def "delete-connection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  name: any
-]: any -> record<ConnectionArn: record, ConnectionState: record, CreationTime: record, LastModifiedTime: record, LastAuthorizedTime: record> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  name: string # The name of the connection to delete.
+]: any -> record<ConnectionArn: string, ConnectionState: string, CreationTime: string, LastModifiedTime: string, LastAuthorizedTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.DeleteConnection")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -841,12 +865,13 @@ export def "delete-endpoint" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  name: any
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  name: string # The name of the endpoint you want to delete. For example, "Name":"us-east-2-custom_bus_A-endpoint"..
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.DeleteEndpoint")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -889,12 +914,13 @@ export def "delete-event-bus" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  name: any
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  name: string # The name of the event bus to delete.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.DeleteEventBus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -937,13 +963,14 @@ export def "delete-partner-event-source" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  name: any
-  account: any
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  name: string # The name of the event source to delete.
+  account: string # The Amazon Web Services account ID of the Amazon Web Services customer that the event source was created for.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.DeletePartnerEventSource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Account": $account} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -986,14 +1013,15 @@ export def "delete-rule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  name: any
-  --event-bus-name: any
-  --force: any
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  name: string # The name of the rule.
+  --event-bus-name: string # The name or ARN of the event bus associated with the rule. If you omit this, the default event bus is used.
+  --force: oneof<nothing, bool> # If this is a managed rule, created by an Amazon Web Services service on your behalf, you must specify Force as True to delete the rule. This parameter is ignored for rules that are not managed rules. You can check whether a rule is a managed rule by using DescribeRule or ListRules and checking the ManagedBy field of the response.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.DeleteRule")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "EventBusName": $event_bus_name, "Force": $force} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1036,12 +1064,13 @@ export def "describe-api-destination" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  name: any
-]: any -> record<ApiDestinationArn: record, Name: record, Description: record, ApiDestinationState: record, ConnectionArn: record, InvocationEndpoint: record, HttpMethod: record, InvocationRateLimitPerSecond: record, CreationTime: record, LastModifiedTime: record> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  name: string # The name of the API destination to retrieve.
+]: any -> record<ApiDestinationArn: string, Name: string, Description: string, ApiDestinationState: string, ConnectionArn: string, InvocationEndpoint: string, HttpMethod: string, InvocationRateLimitPerSecond: int, CreationTime: string, LastModifiedTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.DescribeApiDestination")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1084,12 +1113,13 @@ export def "describe-archive" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  archive_name: any
-]: any -> record<ArchiveArn: record, ArchiveName: record, EventSourceArn: record, Description: record, EventPattern: record, State: record, StateReason: record, RetentionDays: record, SizeBytes: record, EventCount: record, CreationTime: record> {
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  archive_name: string # The name of the archive to retrieve.
+]: any -> record<ArchiveArn: string, ArchiveName: string, EventSourceArn: string, Description: string, EventPattern: string, State: string, StateReason: string, RetentionDays: int, SizeBytes: int, EventCount: int, CreationTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.DescribeArchive")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ArchiveName": $archive_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1132,12 +1162,13 @@ export def "describe-connection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  name: any
-]: any -> record<ConnectionArn: record, Name: record, Description: record, ConnectionState: record, StateReason: record, AuthorizationType: record, SecretArn: record, AuthParameters: record<BasicAuthParameters: record<Username: record>, OAuthParameters: record<ClientParameters: record, AuthorizationEndpoint: record, HttpMethod: record, OAuthHttpParameters: record>, ApiKeyAuthParameters: record<ApiKeyName: record>, InvocationHttpParameters: record<HeaderParameters: record, QueryStringParameters: record, BodyParameters: record>>, CreationTime: record, LastModifiedTime: record, LastAuthorizedTime: record> {
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  name: string # The name of the connection to retrieve.
+]: any -> record<ConnectionArn: string, Name: string, Description: string, ConnectionState: string, StateReason: string, AuthorizationType: string, SecretArn: string, AuthParameters: record<BasicAuthParameters: record<Username: string>, OAuthParameters: record<ClientParameters: record, AuthorizationEndpoint: string, HttpMethod: string, OAuthHttpParameters: record>, ApiKeyAuthParameters: record<ApiKeyName: string>, InvocationHttpParameters: record<HeaderParameters: list, QueryStringParameters: list, BodyParameters: list>>, CreationTime: string, LastModifiedTime: string, LastAuthorizedTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.DescribeConnection")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1180,13 +1211,14 @@ export def "describe-endpoint" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  name: any
-  --home-region: any
-]: any -> record<Name: record, Description: record, Arn: record, RoutingConfig: record<FailoverConfig: record<Primary: record, Secondary: record>>, ReplicationConfig: record<State: record>, EventBuses: record, RoleArn: record, EndpointId: record, EndpointUrl: record, State: record, StateReason: record, CreationTime: record, LastModifiedTime: record> {
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  name: string # The name of the endpoint you want to get information about. For example, "Name":"us-east-2-custom_bus_A-endpoint".
+  --home-region: string # The primary Region of the endpoint you want to get information about. For example "HomeRegion": "us-east-1".
+]: any -> record<Name: string, Description: string, Arn: string, RoutingConfig: record<FailoverConfig: record<Primary: record, Secondary: record>>, ReplicationConfig: record<State: string>, EventBuses: table<EventBusArn: string>, RoleArn: string, EndpointId: string, EndpointUrl: string, State: string, StateReason: string, CreationTime: string, LastModifiedTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.DescribeEndpoint")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "HomeRegion": $home_region} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1229,12 +1261,13 @@ export def "describe-event-bus" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  --name: any
-]: any -> record<Name: record, Arn: record, Policy: record> {
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  --name: string # The name or ARN of the event bus to show details for. If you omit this, the default event bus is displayed.
+]: any -> record<Name: string, Arn: string, Policy: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.DescribeEventBus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1277,12 +1310,13 @@ export def "describe-event-source" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  name: any
-]: any -> record<Arn: record, CreatedBy: record, CreationTime: record, ExpirationTime: record, Name: record, State: record> {
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  name: string # The name of the partner event source to display the details of.
+]: any -> record<Arn: string, CreatedBy: string, CreationTime: string, ExpirationTime: string, Name: string, State: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.DescribeEventSource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1325,12 +1359,13 @@ export def "describe-partner-event-source" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  name: any
-]: any -> record<Arn: record, Name: record> {
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  name: string # The name of the event source to display.
+]: any -> record<Arn: string, Name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.DescribePartnerEventSource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1373,12 +1408,13 @@ export def "describe-replay" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  replay_name: any
-]: any -> record<ReplayName: record, ReplayArn: record, Description: record, State: record, StateReason: record, EventSourceArn: record, Destination: record<Arn: record, FilterArns: record>, EventStartTime: record, EventEndTime: record, EventLastReplayedTime: record, ReplayStartTime: record, ReplayEndTime: record> {
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  replay_name: string # The name of the replay to retrieve.
+]: any -> record<ReplayName: string, ReplayArn: string, Description: string, State: string, StateReason: string, EventSourceArn: string, Destination: record<Arn: string, FilterArns: list<string>>, EventStartTime: string, EventEndTime: string, EventLastReplayedTime: string, ReplayStartTime: string, ReplayEndTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.DescribeReplay")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ReplayName": $replay_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1421,13 +1457,14 @@ export def "describe-rule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  name: any
-  --event-bus-name: any
-]: any -> record<Name: record, Arn: record, EventPattern: record, ScheduleExpression: record, State: record, Description: record, RoleArn: record, ManagedBy: record, EventBusName: record, CreatedBy: record> {
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  name: string # The name of the rule.
+  --event-bus-name: string # The name or ARN of the event bus associated with the rule. If you omit this, the default event bus is used.
+]: any -> record<Name: string, Arn: string, EventPattern: string, ScheduleExpression: string, State: string, Description: string, RoleArn: string, ManagedBy: string, EventBusName: string, CreatedBy: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.DescribeRule")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "EventBusName": $event_bus_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1470,13 +1507,14 @@ export def "disable-rule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-26
-  name: any
-  --event-bus-name: any
+  --x-amz-target: string@x-amz-target-completer-26 # required
+  name: string # The name of the rule.
+  --event-bus-name: string # The name or ARN of the event bus associated with the rule. If you omit this, the default event bus is used.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.DisableRule")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "EventBusName": $event_bus_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1519,13 +1557,14 @@ export def "enable-rule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-27
-  name: any
-  --event-bus-name: any
+  --x-amz-target: string@x-amz-target-completer-27 # required
+  name: string # The name of the rule.
+  --event-bus-name: string # The name or ARN of the event bus associated with the rule. If you omit this, the default event bus is used.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.EnableRule")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "EventBusName": $event_bus_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1568,15 +1607,16 @@ export def "list-api-destinations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-28
-  --name-prefix: any
-  --connection-arn: any
-  --next-token: any
-  --limit: any
-]: any -> record<ApiDestinations: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-28 # required
+  --name-prefix: string # A name prefix to filter results returned. Only API destinations with a name that starts with the prefix are returned.
+  --connection-arn: string # The ARN of the connection specified for the API destination.
+  --next-token: string # The token returned by a previous call to retrieve the next set of results.
+  --limit: int # The maximum number of API destinations to include in the response.
+]: any -> record<ApiDestinations: table<ApiDestinationArn: string, Name: string, ApiDestinationState: string, ConnectionArn: string, InvocationEndpoint: string, HttpMethod: string, InvocationRateLimitPerSecond: int, CreationTime: string, LastModifiedTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.ListApiDestinations")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"NamePrefix": $name_prefix, "ConnectionArn": $connection_arn, "NextToken": $next_token, "Limit": $limit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1619,16 +1659,17 @@ export def "list-archives" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-29
-  --name-prefix: any
-  --event-source-arn: any
-  --state: any
-  --next-token: any
-  --limit: any
-]: any -> record<Archives: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-29 # required
+  --name-prefix: string # A name prefix to filter the archives returned. Only archives with name that match the prefix are returned.
+  --event-source-arn: string # The ARN of the event source associated with the archive.
+  --state: string@state-completer # The state of the archive.
+  --next-token: string # The token returned by a previous call to retrieve the next set of results.
+  --limit: int # The maximum number of results to return.
+]: any -> record<Archives: table<ArchiveName: string, EventSourceArn: string, State: string, StateReason: string, RetentionDays: int, SizeBytes: int, EventCount: int, CreationTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.ListArchives")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"NamePrefix": $name_prefix, "EventSourceArn": $event_source_arn, "State": $state, "NextToken": $next_token, "Limit": $limit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1671,15 +1712,16 @@ export def "list-connections" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-30
-  --name-prefix: any
-  --connection-state: any
-  --next-token: any
-  --limit: any
-]: any -> record<Connections: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-30 # required
+  --name-prefix: string # A name prefix to filter results returned. Only connections with a name that starts with the prefix are returned.
+  --connection-state: string@connection-state-completer # The state of the connection.
+  --next-token: string # The token returned by a previous call to retrieve the next set of results.
+  --limit: int # The maximum number of connections to return.
+]: any -> record<Connections: table<ConnectionArn: string, Name: string, ConnectionState: string, StateReason: string, AuthorizationType: string, CreationTime: string, LastModifiedTime: string, LastAuthorizedTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.ListConnections")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"NamePrefix": $name_prefix, "ConnectionState": $connection_state, "NextToken": $next_token, "Limit": $limit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1722,15 +1764,16 @@ export def "list-endpoints" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-31
-  --name-prefix: any
-  --home-region: any
-  --next-token: any
-  --max-results: any
-]: any -> record<Endpoints: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-31 # required
+  --name-prefix: string # A value that will return a subset of the endpoints associated with this account. For example, "NamePrefix": "ABC" will return all endpoints with "ABC" in the name.
+  --home-region: string # The primary Region of the endpoints associated with this account. For example "HomeRegion": "us-east-1".
+  --next-token: string # If nextToken is returned, there are more results available. The value of nextToken is a unique pagination token for each page. Make the call again using the returned token to retrieve the next page. Keep all other arguments unchanged. Each pagination token expires after 24 hours. Using an expired pagination token will return an HTTP 400 InvalidToken error.
+  --max-results: int # The maximum number of results returned by the call.
+]: any -> record<Endpoints: table<Name: string, Description: string, Arn: string, RoutingConfig: record, ReplicationConfig: record, EventBuses: list, RoleArn: string, EndpointId: string, EndpointUrl: string, State: string, StateReason: string, CreationTime: string, LastModifiedTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.ListEndpoints")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"NamePrefix": $name_prefix, "HomeRegion": $home_region, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1773,14 +1816,15 @@ export def "list-event-buses" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-32
-  --name-prefix: any
-  --next-token: any
-  --limit: any
-]: any -> record<EventBuses: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-32 # required
+  --name-prefix: string # Specifying this limits the results to only those event buses with names that start with the specified prefix.
+  --next-token: string # The token returned by a previous call to retrieve the next set of results.
+  --limit: int # Specifying this limits the number of results returned by this operation. The operation also returns a NextToken which you can use in a subsequent operation to retrieve the next set of results.
+]: any -> record<EventBuses: table<Name: string, Arn: string, Policy: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.ListEventBuses")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"NamePrefix": $name_prefix, "NextToken": $next_token, "Limit": $limit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1823,14 +1867,15 @@ export def "list-event-sources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-33
-  --name-prefix: any
-  --next-token: any
-  --limit: any
-]: any -> record<EventSources: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-33 # required
+  --name-prefix: string # Specifying this limits the results to only those partner event sources with names that start with the specified prefix.
+  --next-token: string # The token returned by a previous call to retrieve the next set of results.
+  --limit: int # Specifying this limits the number of results returned by this operation. The operation also returns a NextToken which you can use in a subsequent operation to retrieve the next set of results.
+]: any -> record<EventSources: table<Arn: string, CreatedBy: string, CreationTime: string, ExpirationTime: string, Name: string, State: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.ListEventSources")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"NamePrefix": $name_prefix, "NextToken": $next_token, "Limit": $limit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1873,14 +1918,15 @@ export def "list-partner-event-source-accounts" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-34
-  event_source_name: any
-  --next-token: any
-  --limit: any
-]: any -> record<PartnerEventSourceAccounts: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-34 # required
+  event_source_name: string # The name of the partner event source to display account information about.
+  --next-token: string # The token returned by a previous call to this operation. Specifying this retrieves the next set of results.
+  --limit: int # Specifying this limits the number of results returned by this operation. The operation also returns a NextToken which you can use in a subsequent operation to retrieve the next set of results.
+]: any -> record<PartnerEventSourceAccounts: table<Account: string, CreationTime: string, ExpirationTime: string, State: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.ListPartnerEventSourceAccounts")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"EventSourceName": $event_source_name, "NextToken": $next_token, "Limit": $limit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1923,14 +1969,15 @@ export def "list-partner-event-sources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-35
-  name_prefix: any
-  --next-token: any
-  --limit: any
-]: any -> record<PartnerEventSources: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-35 # required
+  name_prefix: string # If you specify this, the results are limited to only those partner event sources that start with the string you specify.
+  --next-token: string # The token returned by a previous call to this operation. Specifying this retrieves the next set of results.
+  --limit: int # pecifying this limits the number of results returned by this operation. The operation also returns a NextToken which you can use in a subsequent operation to retrieve the next set of results.
+]: any -> record<PartnerEventSources: table<Arn: string, Name: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.ListPartnerEventSources")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"NamePrefix": $name_prefix, "NextToken": $next_token, "Limit": $limit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1973,16 +2020,17 @@ export def "list-replays" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-36
-  --name-prefix: any
-  --state: any
-  --event-source-arn: any
-  --next-token: any
-  --limit: any
-]: any -> record<Replays: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-36 # required
+  --name-prefix: string # A name prefix to filter the replays returned. Only replays with name that match the prefix are returned.
+  --state: string@state-completer-1 # The state of the replay.
+  --event-source-arn: string # The ARN of the archive from which the events are replayed.
+  --next-token: string # The token returned by a previous call to retrieve the next set of results.
+  --limit: int # The maximum number of replays to retrieve.
+]: any -> record<Replays: table<ReplayName: string, EventSourceArn: string, State: string, StateReason: string, EventStartTime: string, EventEndTime: string, EventLastReplayedTime: string, ReplayStartTime: string, ReplayEndTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.ListReplays")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"NamePrefix": $name_prefix, "State": $state, "EventSourceArn": $event_source_arn, "NextToken": $next_token, "Limit": $limit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2025,15 +2073,16 @@ export def "list-rule-names-by-target" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-37
-  target_arn: any
-  --event-bus-name: any
-  --next-token: any
-  --limit: any
-]: any -> record<RuleNames: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-37 # required
+  target_arn: string # The Amazon Resource Name (ARN) of the target resource.
+  --event-bus-name: string # The name or ARN of the event bus to list rules for. If you omit this, the default event bus is used.
+  --next-token: string # The token returned by a previous call to retrieve the next set of results.
+  --limit: int # The maximum number of results to return.
+]: any -> record<RuleNames: list<string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.ListRuleNamesByTarget")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TargetArn": $target_arn, "EventBusName": $event_bus_name, "NextToken": $next_token, "Limit": $limit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2076,15 +2125,16 @@ export def "list-rules" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-38
-  --name-prefix: any
-  --event-bus-name: any
-  --next-token: any
-  --limit: any
-]: any -> record<Rules: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-38 # required
+  --name-prefix: string # The prefix matching the rule name.
+  --event-bus-name: string # The name or ARN of the event bus to list the rules for. If you omit this, the default event bus is used.
+  --next-token: string # The token returned by a previous call to retrieve the next set of results.
+  --limit: int # The maximum number of results to return.
+]: any -> record<Rules: table<Name: string, Arn: string, EventPattern: string, State: string, Description: string, ScheduleExpression: string, RoleArn: string, ManagedBy: string, EventBusName: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.ListRules")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"NamePrefix": $name_prefix, "EventBusName": $event_bus_name, "NextToken": $next_token, "Limit": $limit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2127,12 +2177,13 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-39
-  resource_arn: any
-]: any -> record<Tags: record> {
+  --x-amz-target: string@x-amz-target-completer-39 # required
+  resource_arn: string # The ARN of the EventBridge resource for which you want to view tags.
+]: any -> record<Tags: table<Key: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.ListTagsForResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceARN": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2175,15 +2226,16 @@ export def "list-targets-by-rule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-40
-  rule: any
-  --event-bus-name: any
-  --next-token: any
-  --limit: any
-]: any -> record<Targets: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-40 # required
+  rule: string # The name of the rule.
+  --event-bus-name: string # The name or ARN of the event bus associated with the rule. If you omit this, the default event bus is used.
+  --next-token: string # The token returned by a previous call to retrieve the next set of results.
+  --limit: int # The maximum number of results to return.
+]: any -> record<Targets: table<Id: string, Arn: string, RoleArn: string, Input: string, InputPath: string, InputTransformer: record, KinesisParameters: record, RunCommandParameters: record, EcsParameters: record, BatchParameters: record, SqsParameters: record, HttpParameters: record, RedshiftDataParameters: record, SageMakerPipelineParameters: record, DeadLetterConfig: record, RetryPolicy: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.ListTargetsByRule")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Rule": $rule, "EventBusName": $event_bus_name, "NextToken": $next_token, "Limit": $limit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2209,6 +2261,7 @@ export def "list-targets-by-rule" [
 #
 # POST /
 # operationId: PutEvents
+# --Entries item shape: {Time?: string, Source?: string, Resources?: list<string>, DetailType?: string, Detail?: string, EventBusName?: string, TraceHeader?: string}
 export def "put-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2226,13 +2279,14 @@ export def "put-events" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-41
-  entries: any
-  --endpoint-id: any
-]: any -> record<FailedEntryCount: record, Entries: record> {
+  --x-amz-target: string@x-amz-target-completer-41 # required
+  entries: list # The entry that defines an event in your system. You can specify several parameters for the entry such as the source and type of the event, resources associated with the event, and so on. — item shape: {Time?: string, Source?: string, Resources?: list<string>, DetailType?: string, Detail?: string, EventBusName?: string, TraceHeader?: string}
+  --endpoint-id: string # The URL subdomain of the endpoint. For example, if the URL for Endpoint is https://abcde.veo.endpoints.event.amazonaws.com, then the EndpointId is abcde.veo. When using Java, you must include auth-crt on the class path.
+]: any -> record<FailedEntryCount: int, Entries: table<EventId: string, ErrorCode: string, ErrorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.PutEvents")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Entries": $entries, "EndpointId": $endpoint_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2258,6 +2312,7 @@ export def "put-events" [
 #
 # POST /
 # operationId: PutPartnerEvents
+# --Entries item shape: {Time?: string, Source?: string, Resources?: list<string>, DetailType?: string, Detail?: string}
 export def "put-partner-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2275,12 +2330,13 @@ export def "put-partner-events" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-42
-  entries: any
-]: any -> record<FailedEntryCount: record, Entries: record> {
+  --x-amz-target: string@x-amz-target-completer-42 # required
+  entries: list # The list of events to write to the event bus. — item shape: {Time?: string, Source?: string, Resources?: list<string>, DetailType?: string, Detail?: string}
+]: any -> record<FailedEntryCount: int, Entries: table<EventId: string, ErrorCode: string, ErrorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.PutPartnerEvents")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Entries": $entries} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2306,6 +2362,7 @@ export def "put-partner-events" [
 #
 # POST /
 # operationId: PutPermission
+# --Condition shape: {Type: string, Key: string, Value: string}
 export def "put-permission" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2323,17 +2380,18 @@ export def "put-permission" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-43
-  --event-bus-name: any
-  --action: any
-  --principal: any
-  --statement-id: any
-  --condition: any
-  --policy: any
+  --x-amz-target: string@x-amz-target-completer-43 # required
+  --event-bus-name: string # The name of the event bus associated with the rule. If you omit this, the default event bus is used.
+  --action: string # The action that you are enabling the other account to perform.
+  --principal: string # The 12-digit Amazon Web Services account ID that you are permitting to put events to your default event bus. Specify "*" to permit any account to put events to your default event bus. If you specify "*" without specifying Condition, avoid creating rules that may match undesirable events. To create more secure rules, make sure that the event pattern for each rule contains an account field with a specific account ID from which to receive events. Rules with an account field do not match any events sent from other accounts.
+  --statement-id: string # An identifier string for the external account that you are granting permissions to. If you later want to revoke the permission for this external account, specify this StatementId when you run RemovePermission (https://docs.aws.amazon.com/eventbridge/latest/APIReference/API_RemovePermission.html). Each StatementId must be unique.
+  --condition: record # A JSON string which you can use to limit the event bus permissions you are granting to only accounts that fulfill the condition. Currently, the only supported condition is membership in a certain Amazon Web Services organization. The string must contain Type, Key, and Value fields. The Value field specifies the ID of the Amazon Web Services organization. Following is an example value for Condition: '{"Type" : "StringEquals", "Key": "aws:PrincipalOrgID", "Value": "o-1234567890"}' — shape: {Type: string, Key: string, Value: string}
+  --policy: string # A JSON string that describes the permission policy statement. You can include a Policy parameter in the request instead of using the StatementId, Action, Principal, or Condition parameters.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.PutPermission")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"EventBusName": $event_bus_name, "Action": $action, "Principal": $principal, "StatementId": $statement_id, "Condition": $condition, "Policy": $policy} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2359,6 +2417,7 @@ export def "put-permission" [
 #
 # POST /
 # operationId: PutRule
+# --Tags item shape: {Key: string, Value: string}
 export def "put-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2376,19 +2435,20 @@ export def "put-rule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-44
-  name: any
-  --schedule-expression: any
-  --event-pattern: any
-  --state: any
-  --description: any
-  --role-arn: any
-  --tags: any
-  --event-bus-name: any
-]: any -> record<RuleArn: record> {
+  --x-amz-target: string@x-amz-target-completer-44 # required
+  name: string # The name of the rule that you are creating or updating.
+  --schedule-expression: string # The scheduling expression. For example, "cron(0 20 * * ? *)" or "rate(5 minutes)".
+  --event-pattern: string # The event pattern. For more information, see Amazon EventBridge event patterns (https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-event-patterns.html) in the Amazon EventBridge User Guide.
+  --state: string@state-completer-2 # Indicates whether the rule is enabled or disabled.
+  --description: string # A description of the rule.
+  --role-arn: string # The Amazon Resource Name (ARN) of the IAM role associated with the rule. If you're setting an event bus in another account as the target and that account granted permission to your account through an organization instead of directly by the account ID, you must specify a RoleArn with proper permissions in the Target structure, instead of here in this parameter.
+  --tags: list # The list of key-value pairs to associate with the rule. — item shape: {Key: string, Value: string}
+  --event-bus-name: string # The name or ARN of the event bus to associate with this rule. If you omit this, the default event bus is used.
+]: any -> record<RuleArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.PutRule")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "ScheduleExpression": $schedule_expression, "EventPattern": $event_pattern, "State": $state, "Description": $description, "RoleArn": $role_arn, "Tags": $tags, "EventBusName": $event_bus_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2414,6 +2474,7 @@ export def "put-rule" [
 #
 # POST /
 # operationId: PutTargets
+# --Targets item shape: {Id: string, Arn: string, RoleArn?: string, Input?: string, InputPath?: string, InputTransformer?: record, KinesisParameters?: record, RunCommandParameters?: record, EcsParameters?: record, BatchParameters?: record, SqsParameters?: record, HttpParameters?: record, RedshiftDataParameters?: record, SageMakerPipelineParameters?: record, DeadLetterConfig?: record, RetryPolicy?: record}
 export def "put-targets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2431,14 +2492,15 @@ export def "put-targets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-45
-  rule: any
-  --event-bus-name: any
-  targets: any
-]: any -> record<FailedEntryCount: record, FailedEntries: record> {
+  --x-amz-target: string@x-amz-target-completer-45 # required
+  rule: string # The name of the rule.
+  --event-bus-name: string # The name or ARN of the event bus associated with the rule. If you omit this, the default event bus is used.
+  targets: list # The targets to update or add to the rule. — item shape: {Id: string, Arn: string, RoleArn?: string, Input?: string, InputPath?: string, InputTransformer?: record, KinesisParameters?: record, RunCommandParameters?: record, EcsParameters?: record, BatchParameters?: record, SqsParameters?: record, HttpParameters?: record, RedshiftDataParameters?: record, SageMakerPipelineParameters?: record, DeadLetterConfig?: record, RetryPolicy?: record}
+]: any -> record<FailedEntryCount: int, FailedEntries: table<TargetId: string, ErrorCode: string, ErrorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.PutTargets")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Rule": $rule, "EventBusName": $event_bus_name, "Targets": $targets} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2481,14 +2543,15 @@ export def "remove-permission" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-46
-  --statement-id: any
-  --remove-all-permissions: any
-  --event-bus-name: any
+  --x-amz-target: string@x-amz-target-completer-46 # required
+  --statement-id: string # The statement ID corresponding to the account that is no longer allowed to put events to the default event bus.
+  --remove-all-permissions: oneof<nothing, bool> # Specifies whether to remove all permissions.
+  --event-bus-name: string # The name of the event bus to revoke permissions for. If you omit this, the default event bus is used.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.RemovePermission")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StatementId": $statement_id, "RemoveAllPermissions": $remove_all_permissions, "EventBusName": $event_bus_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2531,15 +2594,16 @@ export def "remove-targets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-47
-  rule: any
-  --event-bus-name: any
-  ids: any
-  --force: any
-]: any -> record<FailedEntryCount: record, FailedEntries: record> {
+  --x-amz-target: string@x-amz-target-completer-47 # required
+  rule: string # The name of the rule.
+  --event-bus-name: string # The name or ARN of the event bus associated with the rule. If you omit this, the default event bus is used.
+  ids: list<string> # The IDs of the targets to remove from the rule.
+  --force: oneof<nothing, bool> # If this is a managed rule, created by an Amazon Web Services service on your behalf, you must specify Force as True to remove targets. This parameter is ignored for rules that are not managed rules. You can check whether a rule is a managed rule by using DescribeRule or ListRules and checking the ManagedBy field of the response.
+]: any -> record<FailedEntryCount: int, FailedEntries: table<TargetId: string, ErrorCode: string, ErrorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.RemoveTargets")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Rule": $rule, "EventBusName": $event_bus_name, "Ids": $ids, "Force": $force} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2565,6 +2629,7 @@ export def "remove-targets" [
 #
 # POST /
 # operationId: StartReplay
+# --Destination shape: {Arn: string, FilterArns?: list<string>}
 export def "start-replay" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2582,17 +2647,18 @@ export def "start-replay" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-48
-  replay_name: any
-  --description: any
-  event_source_arn: any
-  event_start_time: any
-  event_end_time: any
-  destination: any
-]: any -> record<ReplayArn: record, State: record, StateReason: record, ReplayStartTime: record> {
+  --x-amz-target: string@x-amz-target-completer-48 # required
+  replay_name: string # The name of the replay to start.
+  --description: string # A description for the replay to start.
+  event_source_arn: string # The ARN of the archive to replay events from.
+  event_start_time: string # A time stamp for the time to start replaying events. Only events that occurred between the EventStartTime and EventEndTime are replayed. (format: date-time)
+  event_end_time: string # A time stamp for the time to stop replaying events. Only events that occurred between the EventStartTime and EventEndTime are replayed. (format: date-time)
+  destination: record # A ReplayDestination object that contains details about a replay. — shape: {Arn: string, FilterArns?: list<string>}
+]: any -> record<ReplayArn: string, State: string, StateReason: string, ReplayStartTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.StartReplay")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ReplayName": $replay_name, "Description": $description, "EventSourceArn": $event_source_arn, "EventStartTime": $event_start_time, "EventEndTime": $event_end_time, "Destination": $destination} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2618,6 +2684,7 @@ export def "start-replay" [
 #
 # POST /
 # operationId: TagResource
+# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2635,13 +2702,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-49
-  resource_arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-49 # required
+  resource_arn: string # The ARN of the EventBridge resource that you're adding tags to.
+  tags: list # The list of key-value pairs to associate with the resource. — item shape: {Key: string, Value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceARN": $resource_arn, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2684,13 +2752,14 @@ export def "test-event-pattern" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-50
-  event_pattern: any
-  event: any
-]: any -> record<Result: record> {
+  --x-amz-target: string@x-amz-target-completer-50 # required
+  event_pattern: string # The event pattern. For more information, see Events and Event Patterns (https://docs.aws.amazon.com/eventbridge/latest/userguide/eventbridge-and-event-patterns.html) in the Amazon EventBridge User Guide.
+  event: string # The event, in JSON format, to test against the event pattern. The JSON must follow the format specified in Amazon Web Services Events (https://docs.aws.amazon.com/eventbridge/latest/userguide/aws-events.html), and the following fields are mandatory: id account source time region resources detail-type
+]: any -> record<Result: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.TestEventPattern")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"EventPattern": $event_pattern, "Event": $event} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2733,13 +2802,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-51
-  resource_arn: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-51 # required
+  resource_arn: string # The ARN of the EventBridge resource from which you are removing tags.
+  tag_keys: list<string> # The list of tag keys to remove from the resource.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceARN": $resource_arn, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2782,17 +2852,18 @@ export def "update-api-destination" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-52
-  name: any
-  --description: any
-  --connection-arn: any
-  --invocation-endpoint: any
-  --http-method: any
-  --invocation-rate-limit-per-second: any
-]: any -> record<ApiDestinationArn: record, ApiDestinationState: record, CreationTime: record, LastModifiedTime: record> {
+  --x-amz-target: string@x-amz-target-completer-52 # required
+  name: string # The name of the API destination to update.
+  --description: string # The name of the API destination to update.
+  --connection-arn: string # The ARN of the connection to use for the API destination.
+  --invocation-endpoint: string # The URL to the endpoint to use for the API destination.
+  --http-method: string@http-method-completer # The method to use for the API destination.
+  --invocation-rate-limit-per-second: int # The maximum number of invocations per second to send to the API destination.
+]: any -> record<ApiDestinationArn: string, ApiDestinationState: string, CreationTime: string, LastModifiedTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.UpdateApiDestination")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Description": $description, "ConnectionArn": $connection_arn, "InvocationEndpoint": $invocation_endpoint, "HttpMethod": $http_method, "InvocationRateLimitPerSecond": $invocation_rate_limit_per_second} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2835,15 +2906,16 @@ export def "update-archive" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-53
-  archive_name: any
-  --description: any
-  --event-pattern: any
-  --retention-days: any
-]: any -> record<ArchiveArn: record, State: record, StateReason: record, CreationTime: record> {
+  --x-amz-target: string@x-amz-target-completer-53 # required
+  archive_name: string # The name of the archive to update.
+  --description: string # The description for the archive.
+  --event-pattern: string # The event pattern to use to filter events sent to the archive.
+  --retention-days: int # The number of days to retain events in the archive.
+]: any -> record<ArchiveArn: string, State: string, StateReason: string, CreationTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.UpdateArchive")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ArchiveName": $archive_name, "Description": $description, "EventPattern": $event_pattern, "RetentionDays": $retention_days} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2869,6 +2941,7 @@ export def "update-archive" [
 #
 # POST /
 # operationId: UpdateConnection
+# --AuthParameters shape: {BasicAuthParameters?: record, OAuthParameters?: record, ApiKeyAuthParameters?: record, InvocationHttpParameters?: record}
 export def "update-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2886,15 +2959,16 @@ export def "update-connection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-54
-  name: any
-  --description: any
-  --authorization-type: any
-  --auth-parameters: any
-]: any -> record<ConnectionArn: record, ConnectionState: record, CreationTime: record, LastModifiedTime: record, LastAuthorizedTime: record> {
+  --x-amz-target: string@x-amz-target-completer-54 # required
+  name: string # The name of the connection to update.
+  --description: string # A description for the connection.
+  --authorization-type: string@authorization-type-completer # The type of authorization to use for the connection.
+  --auth-parameters: record # Contains the additional parameters to use for the connection. — shape: {BasicAuthParameters?: record, OAuthParameters?: record, ApiKeyAuthParameters?: record, InvocationHttpParameters?: record}
+]: any -> record<ConnectionArn: string, ConnectionState: string, CreationTime: string, LastModifiedTime: string, LastAuthorizedTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.UpdateConnection")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Description": $description, "AuthorizationType": $authorization_type, "AuthParameters": $auth_parameters} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2920,6 +2994,9 @@ export def "update-connection" [
 #
 # POST /
 # operationId: UpdateEndpoint
+# --RoutingConfig shape: {FailoverConfig: record}
+# --ReplicationConfig shape: {State?: "ENABLED"|"DISABLED"}
+# --EventBuses item shape: {EventBusArn: string}
 export def "update-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2937,17 +3014,18 @@ export def "update-endpoint" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-55
-  name: any
-  --description: any
-  --routing-config: any
-  --replication-config: any
-  --event-buses: any
-  --role-arn: any
-]: any -> record<Name: record, Arn: record, RoutingConfig: record<FailoverConfig: record<Primary: record, Secondary: record>>, ReplicationConfig: record<State: record>, EventBuses: record, RoleArn: record, EndpointId: record, EndpointUrl: record, State: record> {
+  --x-amz-target: string@x-amz-target-completer-55 # required
+  name: string # The name of the endpoint you want to update.
+  --description: string # A description for the endpoint.
+  --routing-config: record # The routing configuration of the endpoint. — shape: {FailoverConfig: record}
+  --replication-config: record # Endpoints can replicate all events to the secondary Region. — shape: {State?: "ENABLED"|"DISABLED"}
+  --event-buses: list # Define event buses used for replication. — item shape: {EventBusArn: string}
+  --role-arn: string # The ARN of the role used by event replication for this request.
+]: any -> record<Name: string, Arn: string, RoutingConfig: record<FailoverConfig: record<Primary: record, Secondary: record>>, ReplicationConfig: record<State: string>, EventBuses: table<EventBusArn: string>, RoleArn: string, EndpointId: string, EndpointUrl: string, State: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSEvents.UpdateEndpoint")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Description": $description, "RoutingConfig": $routing_config, "ReplicationConfig": $replication_config, "EventBuses": $event_buses, "RoleArn": $role_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

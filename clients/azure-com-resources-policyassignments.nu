@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -146,11 +146,12 @@ export def "policy-assignments-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # The filter to apply on the operation. Valid values for $filter are: 'atScope()' or 'policyDefinitionId eq '{value}''. If $filter is not provided, no filtering is performed.
-  --api-version: string # The API version to use for the operation.
+  --api-version: string # The API version to use for the operation. (required)
 ]: nothing -> record<nextLink: string, value: table<id: string, identity: record, location: string, name: string, properties: record, sku: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Authorization/policyAssignments") $qp $auth.query)
   let accept_val = "application/json"
@@ -186,12 +187,13 @@ export def "policy-assignments-list-for-resource-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # The filter to apply on the operation. Valid values for $filter are: 'atScope()' or 'policyDefinitionId eq '{value}''. If $filter is not provided, no filtering is performed.
-  --api-version: string # The API version to use for the operation.
+  --api-version: string # The API version to use for the operation. (required)
 ]: nothing -> record<nextLink: string, value: table<id: string, identity: record, location: string, name: string, properties: record, sku: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Authorization/policyAssignments") $qp $auth.query)
   let accept_val = "application/json"
@@ -231,7 +233,7 @@ export def "policy-assignments-list-for-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # The filter to apply on the operation. Valid values for $filter are: 'atScope()' or 'policyDefinitionId eq '{value}''. If $filter is not provided, no filtering is performed.
-  --api-version: string # The API version to use for the operation.
+  --api-version: string # The API version to use for the operation. (required)
 ]: nothing -> record<nextLink: string, value: table<id: string, identity: record, location: string, name: string, properties: record, sku: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -241,6 +243,7 @@ export def "policy-assignments-list-for-resource" [
   if ($parent_resource_path | is-empty) { error make --unspanned { msg: "path parameter 'parentResourcePath' must be non-empty" } }
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_provider_namespace: (encode-path-segment $resource_provider_namespace), parent_resource_path: (encode-path-segment $parent_resource_path), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{resource_provider_namespace}/{parent_resource_path}/{resource_type}/{resource_name}/providers/Microsoft.Authorization/policyAssignments") $qp $auth.query)
   let accept_val = "application/json"
@@ -274,11 +277,12 @@ export def "policy-assignments-delete-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the operation.
+  --api-version: string # The API version to use for the operation. (required)
 ]: nothing -> record<id: string, identity: record<principalId: string, tenantId: string, type: string>, location: string, name: string, properties: record<description: string, displayName: string, enforcementMode: string, metadata: record, notScopes: list<string>, parameters: record, policyDefinitionId: string, scope: string>, sku: record<name: string, tier: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($policy_assignment_id | is-empty) { error make --unspanned { msg: "path parameter 'policyAssignmentId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({policy_assignment_id: (encode-path-segment $policy_assignment_id)} | format pattern "/{policy_assignment_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -312,11 +316,12 @@ export def "policy-assignments-get-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the operation.
+  --api-version: string # The API version to use for the operation. (required)
 ]: nothing -> record<id: string, identity: record<principalId: string, tenantId: string, type: string>, location: string, name: string, properties: record<description: string, displayName: string, enforcementMode: string, metadata: record, notScopes: list<string>, parameters: record, policyDefinitionId: string, scope: string>, sku: record<name: string, tier: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($policy_assignment_id | is-empty) { error make --unspanned { msg: "path parameter 'policyAssignmentId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({policy_assignment_id: (encode-path-segment $policy_assignment_id)} | format pattern "/{policy_assignment_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -353,7 +358,7 @@ export def "policy-assignments-create-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the operation.
+  --api-version: string # The API version to use for the operation. (required)
   --identity: any # Identity for the resource. — shape: {type?: "SystemAssigned"|"None"}
   --location: string # The location of the policy assignment. Only required when utilizing managed identity.
   --properties: any # The policy assignment properties. — shape: {description?: string, displayName?: string, enforcementMode?: "Default"|"DoNotEnforce", metadata?: record, notScopes?: list<string>, parameters?: record, policyDefinitionId?: string, scope?: string}
@@ -363,6 +368,7 @@ export def "policy-assignments-create-by-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($policy_assignment_id | is-empty) { error make --unspanned { msg: "path parameter 'policyAssignmentId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({policy_assignment_id: (encode-path-segment $policy_assignment_id)} | format pattern "/{policy_assignment_id}") $qp $auth.query)
   let req_body = {"identity": $identity, "location": $location, "properties": $properties, "sku": $sku} | compact
@@ -399,12 +405,13 @@ export def "policy-assignments-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the operation.
+  --api-version: string # The API version to use for the operation. (required)
 ]: nothing -> record<id: string, identity: record<principalId: string, tenantId: string, type: string>, location: string, name: string, properties: record<description: string, displayName: string, enforcementMode: string, metadata: record, notScopes: list<string>, parameters: record, policyDefinitionId: string, scope: string>, sku: record<name: string, tier: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($policy_assignment_name | is-empty) { error make --unspanned { msg: "path parameter 'policyAssignmentName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), policy_assignment_name: (encode-path-segment $policy_assignment_name)} | format pattern "/{scope}/providers/Microsoft.Authorization/policyAssignments/{policy_assignment_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -439,12 +446,13 @@ export def "policy-assignments-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the operation.
+  --api-version: string # The API version to use for the operation. (required)
 ]: nothing -> record<id: string, identity: record<principalId: string, tenantId: string, type: string>, location: string, name: string, properties: record<description: string, displayName: string, enforcementMode: string, metadata: record, notScopes: list<string>, parameters: record, policyDefinitionId: string, scope: string>, sku: record<name: string, tier: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($policy_assignment_name | is-empty) { error make --unspanned { msg: "path parameter 'policyAssignmentName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), policy_assignment_name: (encode-path-segment $policy_assignment_name)} | format pattern "/{scope}/providers/Microsoft.Authorization/policyAssignments/{policy_assignment_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -482,7 +490,7 @@ export def "policy-assignments-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the operation.
+  --api-version: string # The API version to use for the operation. (required)
   --identity: any # Identity for the resource. — shape: {type?: "SystemAssigned"|"None"}
   --location: string # The location of the policy assignment. Only required when utilizing managed identity.
   --properties: any # The policy assignment properties. — shape: {description?: string, displayName?: string, enforcementMode?: "Default"|"DoNotEnforce", metadata?: record, notScopes?: list<string>, parameters?: record, policyDefinitionId?: string, scope?: string}
@@ -493,6 +501,7 @@ export def "policy-assignments-create" [
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($policy_assignment_name | is-empty) { error make --unspanned { msg: "path parameter 'policyAssignmentName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), policy_assignment_name: (encode-path-segment $policy_assignment_name)} | format pattern "/{scope}/providers/Microsoft.Authorization/policyAssignments/{policy_assignment_name}") $qp $auth.query)
   let req_body = {"identity": $identity, "location": $location, "properties": $properties, "sku": $sku} | compact

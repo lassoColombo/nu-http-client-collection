@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -112,6 +112,8 @@ def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors
 def base-url-completer [] { ["https://connect.authentiq.io"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def accept-completer [] { ["application/json" "application/problem+json" "application/x-www-form-urlencoded" "text/html"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -151,11 +153,11 @@ export def "authorize" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --client-id: string # A client ID obtained from the [Dashboard](https://dashboard.authentiq.com/).
-  --response-type: string # The OIDC response type to use for this authentication flow. Valid choices are `code`, `id_token`, `token`, `token id_token`, `code id_token` `code token` and `code token id_token`, but a client can be configured with a more restricted set.
-  --scope: string # The space-separated identity claims to request from the end-user. Always include `openid` as a scope for compatibility with OIDC.
-  --redirect-uri: string # The location to redirect to after (un)successful authentication. See OIDC for the parameters passed in the query string (`response_mode=query`) or as fragments (`response_mode=fragment`). Unless the client is in test-mode this must be one of the registered redirect URLs.
-  --state: string # An opaque string that will be passed back to the redirect URL and therefore can be used to communicate client side state and prevent CSRF attacks.
+  --client-id: string # A client ID obtained from the [Dashboard](https://dashboard.authentiq.com/). (required)
+  --response-type: string # The OIDC response type to use for this authentication flow. Valid choices are `code`, `id_token`, `token`, `token id_token`, `code id_token` `code token` and `code token id_token`, but a client can be configured with a more restricted set. (required)
+  --scope: string # The space-separated identity claims to request from the end-user. Always include `openid` as a scope for compatibility with OIDC. (required)
+  --redirect-uri: string # The location to redirect to after (un)successful authentication. See OIDC for the parameters passed in the query string (`response_mode=query`) or as fragments (`response_mode=fragment`). Unless the client is in test-mode this must be one of the registered redirect URLs. (required)
+  --state: string # An opaque string that will be passed back to the redirect URL and therefore can be used to communicate client side state and prevent CSRF attacks. (required)
   --response-mode: string # Whether to append parameters to the redirect URL in the query string (`query`) or as fragments (`fragment`). This option usually has a sensible default for each of the response types.
   --nonce: string # An nonce provided by the client (and opaque to Authentiq Connect) that will be included in any ID Token generated for this session. Clients should use the nonce to mitigate replay attacks.
   --display: string # The authentication display mode, which can be one of `page`, `popup` or `modal`. Defaults to `page`. (default: page)
@@ -165,6 +167,11 @@ export def "authorize" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($client_id == null) { error make --unspanned { msg: "required query parameter 'client_id' missing: pass --client-id" } }
+  if ($response_type == null) { error make --unspanned { msg: "required query parameter 'response_type' missing: pass --response-type" } }
+  if ($scope == null) { error make --unspanned { msg: "required query parameter 'scope' missing: pass --scope" } }
+  if ($redirect_uri == null) { error make --unspanned { msg: "required query parameter 'redirect_uri' missing: pass --redirect-uri" } }
+  if ($state == null) { error make --unspanned { msg: "required query parameter 'state' missing: pass --state" } }
   let qp = [(serialize-qp "client_id" $client_id "scalar") (serialize-qp "response_type" $response_type "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "redirect_uri" $redirect_uri "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "response_mode" $response_mode "scalar") (serialize-qp "nonce" $nonce "scalar") (serialize-qp "display" $display "scalar") (serialize-qp "prompt" $prompt "scalar") (serialize-qp "max_age" $max_age "scalar") (serialize-qp "ui_locales" $ui_locales "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authorize" $qp $auth.query)
   let accept_val = "application/json"
@@ -197,11 +204,12 @@ export def "client" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
 ]: nothing -> table<application_type: string, client_id: string, client_name: string, client_uri: string, contacts: list<string>, default_max_age: int, default_scopes: list<string>, grant_types: list<string>, logo_uri: string, policy_uri: string, redirect_uris: list<string>, response_types: list<string>, tos_uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/client" $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -232,6 +240,7 @@ export def "create-client" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --application-type: string
   --client-id: string
   client_name: string
@@ -252,7 +261,7 @@ export def "create-client" [
   let full_url = (build-url $base "/client" $auth.query)
   let req_body = {"application_type": $application_type, "client_id": $client_id, "client_name": $client_name, "client_uri": $client_uri, "contacts": $contacts, "default_max_age": $default_max_age, "default_scopes": $default_scopes, "grant_types": $grant_types, "logo_uri": $logo_uri, "policy_uri": $policy_uri, "redirect_uris": $redirect_uris, "response_types": $response_types, "tos_uri": $tos_uri} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -284,12 +293,13 @@ export def "client-client-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'client_id' must be non-empty" } }
   let full_url = (build-url $base ({client_id: (encode-path-segment $client_id)} | format pattern "/client/{client_id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
@@ -321,12 +331,13 @@ export def "get-client" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
 ]: nothing -> record<application_type: string, client_id: string, client_name: string, client_uri: string, contacts: list<string>, default_max_age: int, default_scopes: list<string>, grant_types: list<string>, logo_uri: string, policy_uri: string, redirect_uris: list<string>, response_types: list<string>, tos_uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'client_id' must be non-empty" } }
   let full_url = (build-url $base ({client_id: (encode-path-segment $client_id)} | format pattern "/client/{client_id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -358,6 +369,7 @@ export def "update-client" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --application-type: string
   --body-client-id: string
   client_name: string
@@ -379,7 +391,7 @@ export def "update-client" [
   let full_url = (build-url $base ({client_id: (encode-path-segment $client_id)} | format pattern "/client/{client_id}") $auth.query)
   let req_body = {"application_type": $application_type, "client_id": $body_client_id, "client_name": $client_name, "client_uri": $client_uri, "contacts": $contacts, "default_max_age": $default_max_age, "default_scopes": $default_scopes, "grant_types": $grant_types, "logo_uri": $logo_uri, "policy_uri": $policy_uri, "redirect_uris": $redirect_uris, "response_types": $response_types, "tos_uri": $tos_uri} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "put"
@@ -410,20 +422,21 @@ export def "token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --authorization: string # HTTP Basic authorization header.
   client_id: string # The registered client ID.
   client_secret: string # The registered client ID secret. (format: password)
   code: string # The authorization code previously obtained from the Authentication endpoint.
   grant_type: string # The authorization grant type, must be `authorization_code`.
   redirect_uri: string # The redirect URL that was used previously with the Authentication endpoint.
-]: any -> any {
+]: any -> record<access_token: string, expires_at: int, expires_in: int, id_token: string, refresh_token: string, scope: string, token_type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/token" $auth.query)
   let req_body = {"client_id": $client_id, "client_secret": $client_secret, "code": $code, "grant_type": $grant_type, "redirect_uri": $redirect_uri} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -457,11 +470,12 @@ export def "user-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+  --accept: string@accept-completer # Response content type
+]: nothing -> record<address: record<country: string, locality: string, postal_code: string, region: string, street_address: string>, aq_location: record<address: record<country: string, locality: string, postal_code: string, region: string, street_address: string>, latitude: float, longitude: float>, email: string, email_verified: bool, family_name: string, given_name: string, name: string, phone_number: string, phone_number_verified: bool, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/userinfo" $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"

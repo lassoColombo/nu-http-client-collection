@@ -12,8 +12,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -257,7 +257,7 @@ export def "post-auth" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
   password: string # the user password
   username: string # the user username
 ]: any -> record<authentication_token: string> {
@@ -299,7 +299,7 @@ export def "get-api-keys-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> table<active: bool, expire_at: string, roles: list<record>, token: string, user: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -337,7 +337,7 @@ export def "post-api-keys-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
   --active: oneof<nothing, bool> # Is the API Key active or not
   --expire-at: string # Expiration date (format: date-time)
   roles: list # Roles to grant to this token bearer — item shape: {document_id?: string, inbox?: string, role: string}
@@ -382,7 +382,7 @@ export def "get-api-keys-inbox-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> table<active: bool, expire_at: string, roles: list<record>, token: string, user: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -422,7 +422,7 @@ export def "post-api-keys-inbox-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
   --active: oneof<nothing, bool> # Is the API Key active or not
   --expire-at: string # Expiration date (format: date-time)
   roles: list # Roles to grant to this token bearer — item shape: {document_id?: string, inbox?: string, role: string}
@@ -504,7 +504,7 @@ export def "get-api-key-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> record<active: bool, expire_at: string, roles: table<document_id: string, inbox: string, role: string>, token: string, user: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -543,7 +543,7 @@ export def "patch-api-key-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> record<active: bool, expire_at: string, roles: table<document_id: string, inbox: string, role: string>, token: string, user: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -581,7 +581,7 @@ export def "post-ephemeral-token-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> record<authentication_token: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -621,7 +621,7 @@ export def "post-get-jwt-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
   --roles: list # the user roles — item shape: {document_id?: string, inbox?: string, role: string}
   username: string # the user username
 ]: any -> record<authentication_token: string> {
@@ -704,7 +704,7 @@ export def "post-token-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
   --roles: list # the user roles — item shape: {document_id?: string, inbox?: string, role: string}
   username: string # the user username
 ]: any -> record<authentication_token: string> {
@@ -746,7 +746,7 @@ export def "get-connections-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> table<event: string, integration: string, routing: list<record>, scope: string, what: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -784,7 +784,7 @@ export def "post-connections-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
   event: string@event-completer # e.g. document_predict
   integration: string # e.g. abcdef123456789abcdef123
   --routing: list # item shape: {and_conditions?: record, target?: string}
@@ -866,7 +866,7 @@ export def "get-connection-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> record<event: string, integration: string, routing: table<and_conditions: record, target: string>, scope: string, what: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -906,7 +906,7 @@ export def "patch-connection-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
   event: string@event-completer # e.g. document_predict
   integration: string # e.g. abcdef123456789abcdef123
   --routing: list # item shape: {and_conditions?: record, target?: string}
@@ -952,7 +952,7 @@ export def "get-data-retention-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> table<scope: record<id: string, level: string>, settings: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1028,7 +1028,7 @@ export def "get-data-retention-settings-level-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> record<scope: record<id: string, level: string>, settings: table<age: int, how: string, what: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1070,7 +1070,7 @@ export def "patch-data-retention-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
   --settings: list # item shape: {age?: int, how?: "FULL"|"SOURCE_FILES", what?: "ALL"|"DONE"}
 ]: any -> record<scope: record<id: string, level: string>, settings: table<age: int, how: string, what: string>> {
   let input = $in
@@ -1126,8 +1126,8 @@ export def "post-simple-documents-resource" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -1516,20 +1516,20 @@ export def "get-document-last-version-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Return a specific named version, default is latest
-  --qp-source: string # human or machine (default either)
+  --source: string # human or machine (default either)
   --is-evaluated: oneof<nothing, bool> # Do you want to receive unevaluated version (for display, default) or evaluated (for stats) (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'document_id' must be non-empty" } }
-  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "is_evaluated" $is_evaluated "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "is_evaluated" $is_evaluated "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/documents/{document_id}/last_version") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"name": $name, "source": $qp_source, "is_evaluated": $is_evaluated} | compact)
+    query: ({"name": $name, "source": $source, "is_evaluated": $is_evaluated} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1713,7 +1713,7 @@ export def "post-reprocess-document-resource" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # default: reprocessed
   --reviewer: string@reviewer-completer # If human repcrocessing is triggered, the last version will become the passed version. No processing is done. (default: Machine)
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> record<escalate: record<by: string, since: string, value: bool>, feedback: record, files: table<embedded_attachment: bool, filehash: string, filename: string, leaf: bool, page: int, page_count: int>, flag_for_review: bool, id: string, inbox: string, last_version: string, lock: record<by: string, since: string, value: bool>, meta_information: record, opened_by: table<by: string, since: string, value: bool>, original_filename: string, page_count: int, prediction: record, reject: record<by: string, since: string, value: bool>, status_data: record<archived: bool, data: bool, escalate: bool, feedback: bool, lock: bool, ready_accepted: bool, ready_attempts: int, reject: bool, reject_accepted: bool, reject_attempts: int, sampling: bool, submit_accepted: bool, submit_attempts: int, success: bool>, submitted: record<by: string, since: string, value: bool>, timings: record<done_time: string, feedback_time: string, processing_period: float, receive_time: string, start_time: string, submit_time: string>, usage_data: record, versions: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1797,7 +1797,7 @@ export def "post-document-status-data-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
   --escalate: record # shape: {by?: string, since?: string, value?: bool}
   --last-version: string
   --lock: record # shape: {by?: string, since?: string, value?: bool}
@@ -1883,7 +1883,7 @@ export def "get-document-workflow-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> record<graph: record, links: record, nodes: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1936,8 +1936,8 @@ export def "post-documents-resource" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -2127,7 +2127,7 @@ export def "get-formats-doc-types-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> record<document_types: table<display_name: string, field_name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2241,7 +2241,7 @@ export def "patch-format-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
   --display-name: string
   --document-types: list # item shape: {display_name?: string, field_name: string}
   --labels: list # item shape: {category?: "annotation"|"tag"|"separator"|"computed", count_in_evaluation?: bool, description?: string, display_name?: string, field_name: string, formula?: string, initialized?: bool, is_library?: bool, mandatory?: bool, mandatory_if?: record, multiple?: bool, options?: list, scope?: "document"|"page"|"section", type?: "string"|"date"|"integer"|"float"|"currency"|"alphanumeric"|"national_identification_number_be"|"boolean"|"datetime"|"address", visible?: bool, visible_if?: record}
@@ -2289,7 +2289,7 @@ export def "get-format-tag-fields-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> record<tag_fields: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2327,7 +2327,7 @@ export def "get-inboxes-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> table<name: string, project: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2364,7 +2364,7 @@ export def "post-inboxes-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
   name: string
   project: string # e.g. abcdef123456789abcdef123
 ]: any -> record<name: string, project: string, id: string> {
@@ -2443,7 +2443,7 @@ export def "get-inbox-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> record<name: string, project: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2482,7 +2482,7 @@ export def "patch-inbox-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
   --name: string
   --project: string # e.g. abcdef123456789abcdef123
 ]: any -> record<name: string, project: string, id: string> {
@@ -2602,7 +2602,7 @@ export def "get-inbox-document-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> table<escalate: record<by: string, since: string, value: bool>, feedback: record, files: list<record>, flag_for_review: bool, id: string, inbox: string, last_version: string, lock: record<by: string, since: string, value: bool>, meta_information: record, opened_by: list<record>, original_filename: string, page_count: int, prediction: record, reject: record<by: string, since: string, value: bool>, status_data: record<archived: bool, data: bool, escalate: bool, feedback: bool, lock: bool, ready_accepted: bool, ready_attempts: int, reject: bool, reject_accepted: bool, reject_attempts: int, sampling: bool, submit_accepted: bool, submit_attempts: int, success: bool>, submitted: record<by: string, since: string, value: bool>, timings: record<done_time: string, feedback_time: string, processing_period: float, receive_time: string, start_time: string, submit_time: string>, usage_data: record, versions: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2646,7 +2646,7 @@ export def "get-inbox-paginated-resource" [
   --start-receive-date: string # format: date-time
   --end-receive-date: string # format: date-time
   --order-by: string # comma seperated list of fields to order by
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> table<page: int, per_page: int, results: list<record>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2700,8 +2700,8 @@ export def "post-inbox-reprocess-resource" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -2914,11 +2914,12 @@ export def "get-email-integration-activation-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --secret: string
+  --secret: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($integration_id | is-empty) { error make --unspanned { msg: "path parameter 'integration_id' must be non-empty" } }
+  if ($secret == null) { error make --unspanned { msg: "required query parameter 'secret' missing: pass --secret" } }
   let qp = [(serialize-qp "secret" $secret "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({integration_id: (encode-path-segment $integration_id)} | format pattern "/integrations/{integration_id}/activate") $qp $auth.query)
   let accept_val = "application/json"
@@ -2951,7 +2952,7 @@ export def "get-predictor-settings-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> table<blacklist: record, expected_values: record, fallback: record, key_value_pairs: record<classification_cutoff: int, rule_config: record, splitting_cutoff: int, uer_pre_config: record>, table_extraction_settings: record<field_settings: record>, whitelist: record, scope: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3025,7 +3026,7 @@ export def "get-predictor-setting-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> record<blacklist: record, expected_values: record, fallback: record, key_value_pairs: record<classification_cutoff: int, rule_config: record, splitting_cutoff: int, uer_pre_config: record>, table_extraction_settings: record<field_settings: record<_: record>>, whitelist: record, scope: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3066,7 +3067,7 @@ export def "patch-predictor-setting-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
   --blacklist: record
   --expected-values: record
   --fallback: record
@@ -3161,6 +3162,8 @@ export def "post-projects-resource" [
   let full_url = (build-url $base "/projects" $auth.query)
   let req_body = {"default_document_type": $default_document_type, "default_format": $default_format, "formats": $formats, "name": $name, "split_into_sections": $split_into_sections, "sub_page_splitting": $sub_page_splitting, "timeout": $timeout} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "split_into_sections") == null) { error make --unspanned { msg: "required body field 'split_into_sections' missing: pass --split-into-sections or pipe a record" } }
+  if (($req_body | get -o "sub_page_splitting") == null) { error make --unspanned { msg: "required body field 'sub_page_splitting' missing: pass --sub-page-splitting or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3309,7 +3312,7 @@ export def "get-reports-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> table<annotations: record<add_text: bool, include: bool>, automation_blockers: record<include: bool>, automation_score: record<include: bool>, automation_what_if: record<include: bool>, cover: record<include: bool>, documents: list<string>, elapse_time: record<include: bool>, evaluations: record<additional_column: string, include: bool>, field_automation: record<include: bool>, inboxes: list<string>, lines: record<include: bool>, metadata: record<columns: list, fields: record, include: bool, rename: record>, name: string, page_classification: record<include: bool>, projects: list<string>, sections: record<include: bool>, separator: string, sources: list<string>, text: record<include: bool>, version_name: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3359,7 +3362,7 @@ export def "post-reports-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
   --annotations: record # shape: {add_text?: bool, include?: bool}
   --automation-blockers: record # shape: {include?: bool}
   --automation-score: record # shape: {include?: bool}
@@ -3530,7 +3533,7 @@ export def "get-report-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> record<annotations: record<add_text: bool, include: bool>, automation_blockers: record<include: bool>, automation_score: record<include: bool>, automation_what_if: record<include: bool>, cover: record<include: bool>, documents: list<string>, elapse_time: record<include: bool>, evaluations: record<additional_column: string, include: bool>, field_automation: record<include: bool>, inboxes: list<string>, lines: record<include: bool>, metadata: record<columns: list<string>, fields: record<annotations: list, lines: list, meta_information: list>, include: bool, rename: record>, name: string, page_classification: record<include: bool>, projects: list<string>, sections: record<include: bool>, separator: string, sources: list<string>, text: record<include: bool>, version_name: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3582,7 +3585,7 @@ export def "patch-report-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
   --annotations: record # shape: {add_text?: bool, include?: bool}
   --automation-blockers: record # shape: {include?: bool}
   --automation-score: record # shape: {include?: bool}
@@ -3644,7 +3647,7 @@ export def "post-generate-report-id-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --delivery-method: string@delivery-method-completer
+  --delivery-method: string@delivery-method-completer # required
   --email: string
   --start-date: string # format: date-time
   --end-date: string # format: date-time
@@ -3652,6 +3655,7 @@ export def "post-generate-report-id-resource" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'report_id' must be non-empty" } }
+  if ($delivery_method == null) { error make --unspanned { msg: "required query parameter 'delivery_method' missing: pass --delivery-method" } }
   let qp = [(serialize-qp "delivery_method" $delivery_method "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({report_id: (encode-path-segment $report_id)} | format pattern "/reports/{report_id}/generate") $qp $auth.query)
   let accept_val = "application/json"
@@ -3684,7 +3688,7 @@ export def "get-roles-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> table<name: string, permissions: record<create_dropbox_user: bool, create_inbox: bool, create_webhook: bool, de_escalate_document: bool, delete_tenant: bool, delete_webhook: bool, edit_backend_settings: bool, edit_beats: bool, edit_dashboard_settings: bool, edit_data_retention_settings: bool, edit_flow_settings: bool, edit_format_settings: bool, edit_integration_settings: bool, edit_integrations: bool, edit_predictor_settings: bool, edit_reports: bool, edit_retention_settings: bool, edit_review_settings: bool, edit_roles: bool, edit_sampling_settings: bool, edit_security_settings: bool, edit_templates: bool, edit_thresholds_settings: bool, edit_translations: bool, edit_users: bool, escalate_document: bool, never_twice: bool, pick_next_escalated: bool, read_beats: bool, read_data_retention_settings: bool, read_feedback: bool, read_integrations: bool, read_release_notes: bool, read_reports: bool, read_thresholds_settings: bool, read_webhook: bool, reject_document: bool, release_lock: bool, review: bool, submit: bool, update_webhook: bool, upload: bool, versions: bool, view_api_keys: bool, view_list: bool, view_projects: bool, view_statistics: bool, view_templates: bool, write_feedback: bool, write_release_notes: bool>, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3722,7 +3726,7 @@ export def "post-roles-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
   name: string
   permissions: record # shape: {create_dropbox_user?: bool, create_inbox?: bool, create_webhook?: bool, de_escalate_document?: bool, delete_tenant?: bool, delete_webhook?: bool, edit_backend_settings?: bool, edit_beats?: bool, edit_dashboard_settings?: bool, edit_data_retention_settings?: bool, edit_flow_settings?: bool, edit_format_settings?: bool, edit_integration_settings?: bool, edit_integrations?: bool, edit_predictor_settings?: bool, edit_reports?: bool, edit_retention_settings?: bool, edit_review_settings?: bool, ... (32 more fields)}
 ]: any -> record<name: string, permissions: record<create_dropbox_user: bool, create_inbox: bool, create_webhook: bool, de_escalate_document: bool, delete_tenant: bool, delete_webhook: bool, edit_backend_settings: bool, edit_beats: bool, edit_dashboard_settings: bool, edit_data_retention_settings: bool, edit_flow_settings: bool, edit_format_settings: bool, edit_integration_settings: bool, edit_integrations: bool, edit_predictor_settings: bool, edit_reports: bool, edit_retention_settings: bool, edit_review_settings: bool, edit_roles: bool, edit_sampling_settings: bool, edit_security_settings: bool, edit_templates: bool, edit_thresholds_settings: bool, edit_translations: bool, edit_users: bool, escalate_document: bool, never_twice: bool, pick_next_escalated: bool, read_beats: bool, read_data_retention_settings: bool, read_feedback: bool, read_integrations: bool, read_release_notes: bool, read_reports: bool, read_thresholds_settings: bool, read_webhook: bool, reject_document: bool, release_lock: bool, review: bool, submit: bool, update_webhook: bool, upload: bool, versions: bool, view_api_keys: bool, view_list: bool, view_projects: bool, view_statistics: bool, view_templates: bool, write_feedback: bool, write_release_notes: bool>, id: string> {
@@ -3801,7 +3805,7 @@ export def "get-role-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> record<name: string, permissions: record<create_dropbox_user: bool, create_inbox: bool, create_webhook: bool, de_escalate_document: bool, delete_tenant: bool, delete_webhook: bool, edit_backend_settings: bool, edit_beats: bool, edit_dashboard_settings: bool, edit_data_retention_settings: bool, edit_flow_settings: bool, edit_format_settings: bool, edit_integration_settings: bool, edit_integrations: bool, edit_predictor_settings: bool, edit_reports: bool, edit_retention_settings: bool, edit_review_settings: bool, edit_roles: bool, edit_sampling_settings: bool, edit_security_settings: bool, edit_templates: bool, edit_thresholds_settings: bool, edit_translations: bool, edit_users: bool, escalate_document: bool, never_twice: bool, pick_next_escalated: bool, read_beats: bool, read_data_retention_settings: bool, read_feedback: bool, read_integrations: bool, read_release_notes: bool, read_reports: bool, read_thresholds_settings: bool, read_webhook: bool, reject_document: bool, release_lock: bool, review: bool, submit: bool, update_webhook: bool, upload: bool, versions: bool, view_api_keys: bool, view_list: bool, view_projects: bool, view_statistics: bool, view_templates: bool, write_feedback: bool, write_release_notes: bool>, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3841,7 +3845,7 @@ export def "patch-role-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
   --name: string
   --permissions: record # shape: {create_dropbox_user?: bool, create_inbox?: bool, create_webhook?: bool, de_escalate_document?: bool, delete_tenant?: bool, delete_webhook?: bool, edit_backend_settings?: bool, edit_beats?: bool, edit_dashboard_settings?: bool, edit_data_retention_settings?: bool, edit_flow_settings?: bool, edit_format_settings?: bool, edit_integration_settings?: bool, edit_integrations?: bool, edit_predictor_settings?: bool, edit_reports?: bool, edit_retention_settings?: bool, edit_review_settings?: bool, ... (32 more fields)}
 ]: any -> record<name: string, permissions: record<create_dropbox_user: bool, create_inbox: bool, create_webhook: bool, de_escalate_document: bool, delete_tenant: bool, delete_webhook: bool, edit_backend_settings: bool, edit_beats: bool, edit_dashboard_settings: bool, edit_data_retention_settings: bool, edit_flow_settings: bool, edit_format_settings: bool, edit_integration_settings: bool, edit_integrations: bool, edit_predictor_settings: bool, edit_reports: bool, edit_retention_settings: bool, edit_review_settings: bool, edit_roles: bool, edit_sampling_settings: bool, edit_security_settings: bool, edit_templates: bool, edit_thresholds_settings: bool, edit_translations: bool, edit_users: bool, escalate_document: bool, never_twice: bool, pick_next_escalated: bool, read_beats: bool, read_data_retention_settings: bool, read_feedback: bool, read_integrations: bool, read_release_notes: bool, read_reports: bool, read_thresholds_settings: bool, read_webhook: bool, reject_document: bool, release_lock: bool, review: bool, submit: bool, update_webhook: bool, upload: bool, versions: bool, view_api_keys: bool, view_list: bool, view_projects: bool, view_statistics: bool, view_templates: bool, write_feedback: bool, write_release_notes: bool>, id: string> {
@@ -3884,7 +3888,7 @@ export def "get-rule-configs-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> table<rule_config: record, scope: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4076,7 +4080,7 @@ export def "get-rule-config-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> record<rule_config: record, scope: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4115,7 +4119,7 @@ export def "patch-rule-config-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
   --rule-config: record
 ]: any -> record<rule_config: record, scope: string> {
   let input = $in
@@ -4157,7 +4161,7 @@ export def "get-setting-samplings-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> table<auto_reject_FFR: int, auto_submit_FFR: int, second_pass_FFR: int, second_pass_STP: int, scope: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4231,7 +4235,7 @@ export def "get-setting-sampling-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> record<auto_reject_FFR: int, auto_submit_FFR: int, second_pass_FFR: int, second_pass_STP: int, scope: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4270,7 +4274,7 @@ export def "patch-setting-sampling-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
   --auto-reject-ffr: int
   --auto-submit-ffr: int
   --second-pass-ffr: int
@@ -4317,7 +4321,7 @@ export def "get-dashboard-settings-atomic-resource" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --scope: string
   --qp-full: oneof<nothing, bool> # default: false
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> record<autolearning: bool, dashboard_timeout: int, default_date_range: record, default_inbox_size: record, default_inbox_sorting: record, flexible_filters: list<record>, navigation_menu: record, process_unreadable: bool, sequence_columns_of_inbox: record<columns_headers: list<record>, inline_headers: list<record>>, show_digital_annotations: bool, show_filters: record, show_inbox_actions: record, studio_format_options: record, upload_options: record, welcome_counters: bool, welcome_counters_options: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4356,7 +4360,7 @@ export def "patch-dashboard-settings-atomic-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
   --scope: string
   --settings: record # shape: {autolearning?: bool, dashboard_timeout?: int, default_date_range?: record, default_inbox_size?: record, default_inbox_sorting?: record, flexible_filters?: list, navigation_menu?: record, process_unreadable?: bool, sequence_columns_of_inbox?: record, show_digital_annotations?: bool, show_filters?: record, show_inbox_actions?: record, studio_format_options?: record, upload_options?: record, welcome_counters?: bool, welcome_counters_options?: record}
 ]: any -> record<autolearning: bool, dashboard_timeout: int, default_date_range: record, default_inbox_size: record, default_inbox_sorting: record, flexible_filters: list<record>, navigation_menu: record, process_unreadable: bool, sequence_columns_of_inbox: record<columns_headers: list<record>, inline_headers: list<record>>, show_digital_annotations: bool, show_filters: record, show_inbox_actions: record, studio_format_options: record, upload_options: record, welcome_counters: bool, welcome_counters_options: record> {
@@ -4400,7 +4404,7 @@ export def "get-review-settings-atomic-resource" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --scope: string
   --qp-full: oneof<nothing, bool> # default: false
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> record<default_zoom: record, first_toolbar: record, lock_expiry: record, review_options: record, second_toolbar: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4439,7 +4443,7 @@ export def "patch-review-settings-atomic-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
   --scope: string
   --settings: record # shape: {default_zoom?: record, first_toolbar?: record, lock_expiry?: record, review_options?: record, second_toolbar?: record}
 ]: any -> record<default_zoom: record, first_toolbar: record, lock_expiry: record, review_options: record, second_toolbar: record> {
@@ -4480,7 +4484,7 @@ export def "get-sso-config-resources" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> record<extra: record<entity_id: string, specification_url: string>, id: string, provider: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4517,7 +4521,7 @@ export def "post-sso-config-resources" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
   --extra: record # shape: {entity_id?: string, specification_url?: string}
   provider: string # usually your company name, only used for visualisation: log in as employee
   --type: string@type-completer-2 # Type of SSO integration, for now only SAML is supported (default: saml, e.g. saml)
@@ -4635,12 +4639,14 @@ export def "get-usage-stats-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --inbox-id: string
-  --start-date: string # default: 2023-01-31T13:36:39
-  --end-date: string # default: 2023-03-02T13:36:39
+  --start-date: string # required, default: 2023-01-31T13:36:39
+  --end-date: string # required, default: 2023-03-02T13:36:39
   --excel-output: oneof<nothing, bool> # Set to 'true' to get data in an excel. (Default output format: JSON) (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  let start_date = ($start_date | default "2023-01-31T13:36:39")
+  let end_date = ($end_date | default "2023-03-02T13:36:39")
   let qp = [(serialize-qp "inbox_id" $inbox_id "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "excel_output" $excel_output "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/stats/usage" $qp $auth.query)
   let accept_val = "application/json"
@@ -4757,9 +4763,9 @@ export def "post-blue-dots-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --end-date: string # format: date-time, default: 2023-03-02T13:36:39.250962
-  --fields-to-exclude: string # gross_amount,due_date (default: )
+  --fields-to-exclude: string # gross_amount,due_date (default: "")
   --level: string # possible values: file, field (default: file)
-  --option-level-fields: string # invoice,receipt (default: )
+  --option-level-fields: string # invoice,receipt (default: "")
   --start-date: string # format: date-time, default: 2023-02-02T13:36:39.250933
   --version-name: string # provide the version name to evaluate (default: submitted)
 ]: any -> any {
@@ -4772,8 +4778,8 @@ export def "post-blue-dots-resource" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -5053,8 +5059,8 @@ export def "post-style-sheet-resource" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -5127,8 +5133,8 @@ export def "post-style-logo-resource" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -5189,7 +5195,7 @@ export def "patch-activate-tenant-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
   --code: int
   --email: string
 ]: any -> record<id: string> {
@@ -5231,7 +5237,7 @@ export def "get-settings-threshold-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> table<thresholds: record<annotations: record, lines: record, sections: record>, scope: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -5306,7 +5312,7 @@ export def "get-setting-threshold-resource" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --default: oneof<nothing, bool> # default: false
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> record<thresholds: record<annotations: record, lines: record, sections: record>, scope: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -5347,7 +5353,7 @@ export def "patch-setting-threshold-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
   --thresholds: record # shape: {annotations?: record, lines?: record, sections?: record}
 ]: any -> record<thresholds: record<annotations: record, lines: record, sections: record>, scope: string> {
   let input = $in
@@ -5389,7 +5395,7 @@ export def "get-users-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> table<active: bool, confirmed_at: string, id: string, roles: list<record>, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -5427,7 +5433,7 @@ export def "post-users-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
   --active: oneof<nothing, bool> # Inactive users have to reset their password first
   --password: string # the user password
   roles: list # the user roles — item shape: {document_id?: string, inbox?: string, role: string}
@@ -5439,6 +5445,7 @@ export def "post-users-resource" [
   let full_url = (build-url $base "/users" $auth.query)
   let req_body = {"active": $active, "password": $password, "roles": $roles, "username": $username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "active") == null) { error make --unspanned { msg: "required body field 'active' missing: pass --active or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Fields": $x_fields} | compact
@@ -5471,7 +5478,7 @@ export def "get-me" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> record<active: bool, confirmed_at: string, id: string, roles: table<document_id: string, inbox: string, role: string>, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -5584,7 +5591,7 @@ export def "get-user-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> record<active: bool, confirmed_at: string, id: string, roles: table<document_id: string, inbox: string, role: string>, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -5624,7 +5631,7 @@ export def "patch-user-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
   --roles: list # the user roles — item shape: {inbox?: string, role?: string}
   --username: string # the user username
 ]: any -> record<active: bool, confirmed_at: string, id: string, roles: table<document_id: string, inbox: string, role: string>, username: string> {

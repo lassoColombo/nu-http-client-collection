@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -134,12 +134,13 @@ export def "topology-list-by-home-region" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version for the operation
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API version for the operation (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string, location: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($asc_location | is-empty) { error make --unspanned { msg: "path parameter 'ascLocation' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), asc_location: (encode-path-segment $asc_location)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/locations/{asc_location}/topologies") $qp $auth.query)
   let accept_val = "application/json"
@@ -173,11 +174,12 @@ export def "topology-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version for the operation
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API version for the operation (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string, location: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/topologies") $qp $auth.query)
   let accept_val = "application/json"
@@ -214,14 +216,15 @@ export def "topology-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version for the operation
-]: nothing -> record<properties: record<calculatedDateTime: string, topologyResources: list<record>>> {
+  --api-version: string # API version for the operation (required)
+]: nothing -> record<properties: record<calculatedDateTime: string, topologyResources: list<record>>, id: string, name: string, type: string, location: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($asc_location | is-empty) { error make --unspanned { msg: "path parameter 'ascLocation' must be non-empty" } }
   if ($topology_resource_name | is-empty) { error make --unspanned { msg: "path parameter 'topologyResourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), asc_location: (encode-path-segment $asc_location), topology_resource_name: (encode-path-segment $topology_resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Security/locations/{asc_location}/topologies/{topology_resource_name}") $qp $auth.query)
   let accept_val = "application/json"

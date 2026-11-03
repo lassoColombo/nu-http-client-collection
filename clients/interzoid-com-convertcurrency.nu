@@ -131,21 +131,25 @@ export def "convertcurrency" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --license: string # Your Interzoid license API key. Register at www.interzoid.com/register
-  --qp-from: string # Currency symbol for the converted from amount
-  --qp-to: string # Currency symbol for the converted to amount
-  --amount: string # The amount of currency to be converted
+  --license: string # Your Interzoid license API key. Register at www.interzoid.com/register (required)
+  --from: string # Currency symbol for the converted from amount (required)
+  --to: string # Currency symbol for the converted to amount (required)
+  --amount: string # The amount of currency to be converted (required)
 ]: nothing -> record<Code: string, Converted: string, Credits: string, Currency: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "license" $license "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "amount" $amount "scalar")] | flatten | str join "&"
+  if ($license == null) { error make --unspanned { msg: "required query parameter 'license' missing: pass --license" } }
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  if ($amount == null) { error make --unspanned { msg: "required query parameter 'amount' missing: pass --amount" } }
+  let qp = [(serialize-qp "license" $license "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "amount" $amount "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/convertcurrency" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"license": $license, "from": $qp_from, "to": $qp_to, "amount": $amount} | compact)
+    query: ({"license": $license, "from": $from, "to": $to, "amount": $amount} | compact)
     headers: $auth.headers
     body: null
     content_type: null

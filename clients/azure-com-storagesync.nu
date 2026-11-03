@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -159,10 +159,11 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string, origin: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.StorageSync/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -197,7 +198,7 @@ export def "storage-sync-services-check-name-availability" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   name: string # The name to check for availability
   type: string@type-completer # The resource type. Must be set to Microsoft.StorageSync/storageSyncServices
 ]: any -> record<message: string, nameAvailable: bool, reason: string> {
@@ -206,6 +207,7 @@ export def "storage-sync-services-check-name-availability" [
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($location_name | is-empty) { error make --unspanned { msg: "path parameter 'locationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location_name: (encode-path-segment $location_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.StorageSync/locations/{location_name}/checkNameAvailability") $qp $auth.query)
   let req_body = {"name": $name, "type": $type} | compact
@@ -241,11 +243,12 @@ export def "storage-sync-services-list-by-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<value: table<properties: record>> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> record<value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.StorageSync/storageSyncServices") $qp $auth.query)
   let accept_val = "application/json"
@@ -283,7 +286,7 @@ export def "operation-status-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
 ]: nothing -> record<endTime: string, error: record<code: string, details: record<code: string, message: string, target: string>, message: string, target: string>, name: string, startTime: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -292,6 +295,7 @@ export def "operation-status-get" [
   if ($location_name | is-empty) { error make --unspanned { msg: "path parameter 'locationName' must be non-empty" } }
   if ($workflow_id | is-empty) { error make --unspanned { msg: "path parameter 'workflowId' must be non-empty" } }
   if ($operation_id | is-empty) { error make --unspanned { msg: "path parameter 'operationId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), location_name: (encode-path-segment $location_name), workflow_id: (encode-path-segment $workflow_id), operation_id: (encode-path-segment $operation_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/locations/{location_name}/workflows/{workflow_id}/operations/{operation_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -326,12 +330,13 @@ export def "storage-sync-services-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<value: table<properties: record>> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> record<value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices") $qp $auth.query)
   let accept_val = "application/json"
@@ -367,13 +372,14 @@ export def "storage-sync-services-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<error: record<code: string, details: record<code: string, message: string, target: string>, message: string, target: string>, innererror: record<code: string, details: record<code: string, message: string, target: string>, message: string, target: string>> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($storage_sync_service_name | is-empty) { error make --unspanned { msg: "path parameter 'storageSyncServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), storage_sync_service_name: (encode-path-segment $storage_sync_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -409,13 +415,14 @@ export def "storage-sync-services-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<properties: record<storageSyncServiceStatus: int, storageSyncServiceUid: string>> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> record<properties: record<storageSyncServiceStatus: int, storageSyncServiceUid: string>, location: string, tags: record, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($storage_sync_service_name | is-empty) { error make --unspanned { msg: "path parameter 'storageSyncServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), storage_sync_service_name: (encode-path-segment $storage_sync_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -451,16 +458,17 @@ export def "storage-sync-services-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --properties: record # Storage Sync Service Update Properties object.
   --tags: record # The user-specified tags associated with the storage sync service.
-]: any -> record<properties: record<storageSyncServiceStatus: int, storageSyncServiceUid: string>> {
+]: any -> record<properties: record<storageSyncServiceStatus: int, storageSyncServiceUid: string>, location: string, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($storage_sync_service_name | is-empty) { error make --unspanned { msg: "path parameter 'storageSyncServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), storage_sync_service_name: (encode-path-segment $storage_sync_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -498,17 +506,18 @@ export def "storage-sync-services-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   location: string # Required. Gets or sets the location of the resource. This will be one of the supported and registered Azure Geo Regions (e.g. West US, East US, Southeast Asia, etc.). The geo region of a resource cannot be changed once it is created, but if an identical geo region is specified on update, the request will succeed.
   --properties: any
   --tags: record # Gets or sets a list of key value pairs that describe the resource. These tags can be used for viewing and grouping this resource (across resource groups). A maximum of 15 tags can be provided for a resource. Each tag must have a key with a length no greater than 128 characters and a value with a length no greater than 256 characters.
-]: any -> record<properties: record<storageSyncServiceStatus: int, storageSyncServiceUid: string>> {
+]: any -> record<properties: record<storageSyncServiceStatus: int, storageSyncServiceUid: string>, location: string, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($storage_sync_service_name | is-empty) { error make --unspanned { msg: "path parameter 'storageSyncServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), storage_sync_service_name: (encode-path-segment $storage_sync_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}") $qp $auth.query)
   let req_body = {"location": $location, "properties": $properties, "tags": $tags} | compact
@@ -546,13 +555,14 @@ export def "registered-servers-list-by-storage-sync-service" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<value: table<properties: record>> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> record<value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($storage_sync_service_name | is-empty) { error make --unspanned { msg: "path parameter 'storageSyncServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), storage_sync_service_name: (encode-path-segment $storage_sync_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/registeredServers") $qp $auth.query)
   let accept_val = "application/json"
@@ -589,14 +599,15 @@ export def "registered-servers-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<error: record<code: string, details: record<code: string, message: string, target: string>, message: string, target: string>, innererror: record<code: string, details: record<code: string, message: string, target: string>, message: string, target: string>> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($storage_sync_service_name | is-empty) { error make --unspanned { msg: "path parameter 'storageSyncServiceName' must be non-empty" } }
   if ($server_id | is-empty) { error make --unspanned { msg: "path parameter 'serverId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), storage_sync_service_name: (encode-path-segment $storage_sync_service_name), server_id: (encode-path-segment $server_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/registeredServers/{server_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -633,14 +644,15 @@ export def "registered-servers-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<properties: record<agentVersion: string, clusterId: string, clusterName: string, discoveryEndpointUri: string, friendlyName: string, lastHeartBeat: string, lastOperationName: string, lastWorkflowId: string, managementEndpointUri: string, monitoringConfiguration: string, provisioningState: string, resourceLocation: string, serverCertificate: string, serverId: string, serverManagementErrorCode: int, serverOSVersion: string, serverRole: string, serviceLocation: string, storageSyncServiceUid: string>> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> record<properties: record<agentVersion: string, clusterId: string, clusterName: string, discoveryEndpointUri: string, friendlyName: string, lastHeartBeat: string, lastOperationName: string, lastWorkflowId: string, managementEndpointUri: string, monitoringConfiguration: string, provisioningState: string, resourceLocation: string, serverCertificate: string, serverId: string, serverManagementErrorCode: int, serverOSVersion: string, serverRole: string, serviceLocation: string, storageSyncServiceUid: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($storage_sync_service_name | is-empty) { error make --unspanned { msg: "path parameter 'storageSyncServiceName' must be non-empty" } }
   if ($server_id | is-empty) { error make --unspanned { msg: "path parameter 'serverId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), storage_sync_service_name: (encode-path-segment $storage_sync_service_name), server_id: (encode-path-segment $server_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/registeredServers/{server_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -678,9 +690,9 @@ export def "registered-servers-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --properties: any # shape: {agentVersion?: string, clusterId?: string, clusterName?: string, friendlyName?: string, lastHeartBeat?: string, serverCertificate?: string, serverId?: string, serverOSVersion?: string, serverRole?: string}
-]: any -> record<properties: record<agentVersion: string, clusterId: string, clusterName: string, discoveryEndpointUri: string, friendlyName: string, lastHeartBeat: string, lastOperationName: string, lastWorkflowId: string, managementEndpointUri: string, monitoringConfiguration: string, provisioningState: string, resourceLocation: string, serverCertificate: string, serverId: string, serverManagementErrorCode: int, serverOSVersion: string, serverRole: string, serviceLocation: string, storageSyncServiceUid: string>> {
+]: any -> record<properties: record<agentVersion: string, clusterId: string, clusterName: string, discoveryEndpointUri: string, friendlyName: string, lastHeartBeat: string, lastOperationName: string, lastWorkflowId: string, managementEndpointUri: string, monitoringConfiguration: string, provisioningState: string, resourceLocation: string, serverCertificate: string, serverId: string, serverManagementErrorCode: int, serverOSVersion: string, serverRole: string, serviceLocation: string, storageSyncServiceUid: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -688,6 +700,7 @@ export def "registered-servers-create" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($storage_sync_service_name | is-empty) { error make --unspanned { msg: "path parameter 'storageSyncServiceName' must be non-empty" } }
   if ($server_id | is-empty) { error make --unspanned { msg: "path parameter 'serverId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), storage_sync_service_name: (encode-path-segment $storage_sync_service_name), server_id: (encode-path-segment $server_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/registeredServers/{server_id}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -726,9 +739,9 @@ export def "registered-servers-trigger-rollover" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --server-certificate: string # Certificate Data
-]: any -> record<error: record<code: string, details: record<code: string, message: string, target: string>, message: string, target: string>, innererror: record<code: string, details: record<code: string, message: string, target: string>, message: string, target: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -736,6 +749,7 @@ export def "registered-servers-trigger-rollover" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($storage_sync_service_name | is-empty) { error make --unspanned { msg: "path parameter 'storageSyncServiceName' must be non-empty" } }
   if ($server_id | is-empty) { error make --unspanned { msg: "path parameter 'serverId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), storage_sync_service_name: (encode-path-segment $storage_sync_service_name), server_id: (encode-path-segment $server_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/registeredServers/{server_id}/triggerRollover") $qp $auth.query)
   let req_body = {"serverCertificate": $server_certificate} | compact
@@ -773,13 +787,14 @@ export def "sync-groups-list-by-storage-sync-service" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<value: table<properties: record>> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> record<value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($storage_sync_service_name | is-empty) { error make --unspanned { msg: "path parameter 'storageSyncServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), storage_sync_service_name: (encode-path-segment $storage_sync_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups") $qp $auth.query)
   let accept_val = "application/json"
@@ -816,14 +831,15 @@ export def "sync-groups-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<error: record<code: string, details: record<code: string, message: string, target: string>, message: string, target: string>, innererror: record<code: string, details: record<code: string, message: string, target: string>, message: string, target: string>> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($storage_sync_service_name | is-empty) { error make --unspanned { msg: "path parameter 'storageSyncServiceName' must be non-empty" } }
   if ($sync_group_name | is-empty) { error make --unspanned { msg: "path parameter 'syncGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), storage_sync_service_name: (encode-path-segment $storage_sync_service_name), sync_group_name: (encode-path-segment $sync_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups/{sync_group_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -860,14 +876,15 @@ export def "sync-groups-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<properties: record<syncGroupStatus: string, uniqueId: string>> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> record<properties: record<syncGroupStatus: string, uniqueId: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($storage_sync_service_name | is-empty) { error make --unspanned { msg: "path parameter 'storageSyncServiceName' must be non-empty" } }
   if ($sync_group_name | is-empty) { error make --unspanned { msg: "path parameter 'syncGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), storage_sync_service_name: (encode-path-segment $storage_sync_service_name), sync_group_name: (encode-path-segment $sync_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups/{sync_group_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -904,9 +921,9 @@ export def "sync-groups-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --properties: record # Sync Group Create Properties object.
-]: any -> record<properties: record<syncGroupStatus: string, uniqueId: string>> {
+]: any -> record<properties: record<syncGroupStatus: string, uniqueId: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -914,6 +931,7 @@ export def "sync-groups-create" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($storage_sync_service_name | is-empty) { error make --unspanned { msg: "path parameter 'storageSyncServiceName' must be non-empty" } }
   if ($sync_group_name | is-empty) { error make --unspanned { msg: "path parameter 'syncGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), storage_sync_service_name: (encode-path-segment $storage_sync_service_name), sync_group_name: (encode-path-segment $sync_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups/{sync_group_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -952,14 +970,15 @@ export def "cloud-endpoints-list-by-sync-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<value: table<properties: record>> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> record<value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($storage_sync_service_name | is-empty) { error make --unspanned { msg: "path parameter 'storageSyncServiceName' must be non-empty" } }
   if ($sync_group_name | is-empty) { error make --unspanned { msg: "path parameter 'syncGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), storage_sync_service_name: (encode-path-segment $storage_sync_service_name), sync_group_name: (encode-path-segment $sync_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups/{sync_group_name}/cloudEndpoints") $qp $auth.query)
   let accept_val = "application/json"
@@ -997,8 +1016,8 @@ export def "cloud-endpoints-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<error: record<code: string, details: record<code: string, message: string, target: string>, message: string, target: string>, innererror: record<code: string, details: record<code: string, message: string, target: string>, message: string, target: string>> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1006,6 +1025,7 @@ export def "cloud-endpoints-delete" [
   if ($storage_sync_service_name | is-empty) { error make --unspanned { msg: "path parameter 'storageSyncServiceName' must be non-empty" } }
   if ($sync_group_name | is-empty) { error make --unspanned { msg: "path parameter 'syncGroupName' must be non-empty" } }
   if ($cloud_endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'cloudEndpointName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), storage_sync_service_name: (encode-path-segment $storage_sync_service_name), sync_group_name: (encode-path-segment $sync_group_name), cloud_endpoint_name: (encode-path-segment $cloud_endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups/{sync_group_name}/cloudEndpoints/{cloud_endpoint_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1043,8 +1063,8 @@ export def "cloud-endpoints-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<properties: record<azureFileShareName: string, backupEnabled: string, friendlyName: string, lastOperationName: string, lastWorkflowId: string, partnershipId: string, provisioningState: string, storageAccountResourceId: string, storageAccountTenantId: string>> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> record<properties: record<azureFileShareName: string, backupEnabled: string, friendlyName: string, lastOperationName: string, lastWorkflowId: string, partnershipId: string, provisioningState: string, storageAccountResourceId: string, storageAccountTenantId: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1052,6 +1072,7 @@ export def "cloud-endpoints-get" [
   if ($storage_sync_service_name | is-empty) { error make --unspanned { msg: "path parameter 'storageSyncServiceName' must be non-empty" } }
   if ($sync_group_name | is-empty) { error make --unspanned { msg: "path parameter 'syncGroupName' must be non-empty" } }
   if ($cloud_endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'cloudEndpointName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), storage_sync_service_name: (encode-path-segment $storage_sync_service_name), sync_group_name: (encode-path-segment $sync_group_name), cloud_endpoint_name: (encode-path-segment $cloud_endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups/{sync_group_name}/cloudEndpoints/{cloud_endpoint_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1090,9 +1111,9 @@ export def "cloud-endpoints-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --properties: any # CloudEndpoint Properties object. — shape: {azureFileShareName?: string, friendlyName?: string, storageAccountResourceId?: string, storageAccountTenantId?: string}
-]: any -> record<properties: record<azureFileShareName: string, backupEnabled: string, friendlyName: string, lastOperationName: string, lastWorkflowId: string, partnershipId: string, provisioningState: string, storageAccountResourceId: string, storageAccountTenantId: string>> {
+]: any -> record<properties: record<azureFileShareName: string, backupEnabled: string, friendlyName: string, lastOperationName: string, lastWorkflowId: string, partnershipId: string, provisioningState: string, storageAccountResourceId: string, storageAccountTenantId: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1101,6 +1122,7 @@ export def "cloud-endpoints-create" [
   if ($storage_sync_service_name | is-empty) { error make --unspanned { msg: "path parameter 'storageSyncServiceName' must be non-empty" } }
   if ($sync_group_name | is-empty) { error make --unspanned { msg: "path parameter 'syncGroupName' must be non-empty" } }
   if ($cloud_endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'cloudEndpointName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), storage_sync_service_name: (encode-path-segment $storage_sync_service_name), sync_group_name: (encode-path-segment $sync_group_name), cloud_endpoint_name: (encode-path-segment $cloud_endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups/{sync_group_name}/cloudEndpoints/{cloud_endpoint_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -1140,7 +1162,7 @@ export def "cloud-endpoints-post-backup" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --azure-file-share: string # Azure File Share.
 ]: any -> record<backupMetadata: record<cloudEndpointName: string>> {
   let input = $in
@@ -1151,6 +1173,7 @@ export def "cloud-endpoints-post-backup" [
   if ($storage_sync_service_name | is-empty) { error make --unspanned { msg: "path parameter 'storageSyncServiceName' must be non-empty" } }
   if ($sync_group_name | is-empty) { error make --unspanned { msg: "path parameter 'syncGroupName' must be non-empty" } }
   if ($cloud_endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'cloudEndpointName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), storage_sync_service_name: (encode-path-segment $storage_sync_service_name), sync_group_name: (encode-path-segment $sync_group_name), cloud_endpoint_name: (encode-path-segment $cloud_endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups/{sync_group_name}/cloudEndpoints/{cloud_endpoint_name}/postbackup") $qp $auth.query)
   let req_body = {"azureFileShare": $azure_file_share} | compact
@@ -1191,7 +1214,7 @@ export def "cloud-endpoints-post-restore" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --azure-file-share-uri: string # Post Restore Azure file share uri.
   --failed-file-list: string # Post Restore Azure failed file list.
   --partition: string # Post Restore partition.
@@ -1200,7 +1223,7 @@ export def "cloud-endpoints-post-restore" [
   --restore-file-spec: list # Post Restore restore file spec array. — item shape: {path?: string}
   --source-azure-file-share-uri: string # Post Restore Azure source azure file share uri.
   --status: string # Post Restore Azure status.
-]: any -> record<error: record<code: string, details: record<code: string, message: string, target: string>, message: string, target: string>, innererror: record<code: string, details: record<code: string, message: string, target: string>, message: string, target: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1209,6 +1232,7 @@ export def "cloud-endpoints-post-restore" [
   if ($storage_sync_service_name | is-empty) { error make --unspanned { msg: "path parameter 'storageSyncServiceName' must be non-empty" } }
   if ($sync_group_name | is-empty) { error make --unspanned { msg: "path parameter 'syncGroupName' must be non-empty" } }
   if ($cloud_endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'cloudEndpointName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), storage_sync_service_name: (encode-path-segment $storage_sync_service_name), sync_group_name: (encode-path-segment $sync_group_name), cloud_endpoint_name: (encode-path-segment $cloud_endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups/{sync_group_name}/cloudEndpoints/{cloud_endpoint_name}/postrestore") $qp $auth.query)
   let req_body = {"azureFileShareUri": $azure_file_share_uri, "failedFileList": $failed_file_list, "partition": $partition, "replicaGroup": $replica_group, "requestId": $request_id, "restoreFileSpec": $restore_file_spec, "sourceAzureFileShareUri": $source_azure_file_share_uri, "status": $status} | compact
@@ -1248,9 +1272,9 @@ export def "cloud-endpoints-pre-backup" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --azure-file-share: string # Azure File Share.
-]: any -> record<error: record<code: string, details: record<code: string, message: string, target: string>, message: string, target: string>, innererror: record<code: string, details: record<code: string, message: string, target: string>, message: string, target: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1259,6 +1283,7 @@ export def "cloud-endpoints-pre-backup" [
   if ($storage_sync_service_name | is-empty) { error make --unspanned { msg: "path parameter 'storageSyncServiceName' must be non-empty" } }
   if ($sync_group_name | is-empty) { error make --unspanned { msg: "path parameter 'syncGroupName' must be non-empty" } }
   if ($cloud_endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'cloudEndpointName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), storage_sync_service_name: (encode-path-segment $storage_sync_service_name), sync_group_name: (encode-path-segment $sync_group_name), cloud_endpoint_name: (encode-path-segment $cloud_endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups/{sync_group_name}/cloudEndpoints/{cloud_endpoint_name}/prebackup") $qp $auth.query)
   let req_body = {"azureFileShare": $azure_file_share} | compact
@@ -1299,7 +1324,7 @@ export def "cloud-endpoints-pre-restore" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --azure-file-share-uri: string # Pre Restore Azure file share uri.
   --backup-metadata-property-bag: string # Pre Restore backup metadata property bag.
   --partition: string # Pre Restore partition.
@@ -1309,7 +1334,7 @@ export def "cloud-endpoints-pre-restore" [
   --restore-file-spec: list # Pre Restore restore file spec array. — item shape: {path?: string}
   --source-azure-file-share-uri: string # Pre Restore Azure source azure file share uri.
   --status: string # Pre Restore Azure status.
-]: any -> record<error: record<code: string, details: record<code: string, message: string, target: string>, message: string, target: string>, innererror: record<code: string, details: record<code: string, message: string, target: string>, message: string, target: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1318,6 +1343,7 @@ export def "cloud-endpoints-pre-restore" [
   if ($storage_sync_service_name | is-empty) { error make --unspanned { msg: "path parameter 'storageSyncServiceName' must be non-empty" } }
   if ($sync_group_name | is-empty) { error make --unspanned { msg: "path parameter 'syncGroupName' must be non-empty" } }
   if ($cloud_endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'cloudEndpointName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), storage_sync_service_name: (encode-path-segment $storage_sync_service_name), sync_group_name: (encode-path-segment $sync_group_name), cloud_endpoint_name: (encode-path-segment $cloud_endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups/{sync_group_name}/cloudEndpoints/{cloud_endpoint_name}/prerestore") $qp $auth.query)
   let req_body = {"azureFileShareUri": $azure_file_share_uri, "backupMetadataPropertyBag": $backup_metadata_property_bag, "partition": $partition, "pauseWaitForSyncDrainTimePeriodInSeconds": $pause_wait_for_sync_drain_time_period_in_seconds, "replicaGroup": $replica_group, "requestId": $request_id, "restoreFileSpec": $restore_file_spec, "sourceAzureFileShareUri": $source_azure_file_share_uri, "status": $status} | compact
@@ -1357,8 +1383,8 @@ export def "cloud-endpoints-restoreheartbeat" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<error: record<code: string, details: record<code: string, message: string, target: string>, message: string, target: string>, innererror: record<code: string, details: record<code: string, message: string, target: string>, message: string, target: string>> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1366,6 +1392,7 @@ export def "cloud-endpoints-restoreheartbeat" [
   if ($storage_sync_service_name | is-empty) { error make --unspanned { msg: "path parameter 'storageSyncServiceName' must be non-empty" } }
   if ($sync_group_name | is-empty) { error make --unspanned { msg: "path parameter 'syncGroupName' must be non-empty" } }
   if ($cloud_endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'cloudEndpointName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), storage_sync_service_name: (encode-path-segment $storage_sync_service_name), sync_group_name: (encode-path-segment $sync_group_name), cloud_endpoint_name: (encode-path-segment $cloud_endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups/{sync_group_name}/cloudEndpoints/{cloud_endpoint_name}/restoreheartbeat") $qp $auth.query)
   let accept_val = "application/json"
@@ -1403,11 +1430,11 @@ export def "cloud-endpoints-trigger-change-detection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --change-detection-mode: string@change-detection-mode-completer # Change Detection Mode. Applies to a directory specified in directoryPath parameter.
   --directory-path: string # Relative path to a directory Azure File share for which change detection is to be performed.
   --paths: list<string> # Array of relative paths on the Azure File share to be included in the change detection. Can be files and directories.
-]: any -> record<error: record<code: string, details: record<code: string, message: string, target: string>, message: string, target: string>, innererror: record<code: string, details: record<code: string, message: string, target: string>, message: string, target: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1416,6 +1443,7 @@ export def "cloud-endpoints-trigger-change-detection" [
   if ($storage_sync_service_name | is-empty) { error make --unspanned { msg: "path parameter 'storageSyncServiceName' must be non-empty" } }
   if ($sync_group_name | is-empty) { error make --unspanned { msg: "path parameter 'syncGroupName' must be non-empty" } }
   if ($cloud_endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'cloudEndpointName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), storage_sync_service_name: (encode-path-segment $storage_sync_service_name), sync_group_name: (encode-path-segment $sync_group_name), cloud_endpoint_name: (encode-path-segment $cloud_endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups/{sync_group_name}/cloudEndpoints/{cloud_endpoint_name}/triggerChangeDetection") $qp $auth.query)
   let req_body = {"changeDetectionMode": $change_detection_mode, "directoryPath": $directory_path, "paths": $paths} | compact
@@ -1454,14 +1482,15 @@ export def "server-endpoints-list-by-sync-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<value: table<properties: record>> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> record<value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($storage_sync_service_name | is-empty) { error make --unspanned { msg: "path parameter 'storageSyncServiceName' must be non-empty" } }
   if ($sync_group_name | is-empty) { error make --unspanned { msg: "path parameter 'syncGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), storage_sync_service_name: (encode-path-segment $storage_sync_service_name), sync_group_name: (encode-path-segment $sync_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups/{sync_group_name}/serverEndpoints") $qp $auth.query)
   let accept_val = "application/json"
@@ -1499,8 +1528,8 @@ export def "server-endpoints-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<error: record<code: string, details: record<code: string, message: string, target: string>, message: string, target: string>, innererror: record<code: string, details: record<code: string, message: string, target: string>, message: string, target: string>> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1508,6 +1537,7 @@ export def "server-endpoints-delete" [
   if ($storage_sync_service_name | is-empty) { error make --unspanned { msg: "path parameter 'storageSyncServiceName' must be non-empty" } }
   if ($sync_group_name | is-empty) { error make --unspanned { msg: "path parameter 'syncGroupName' must be non-empty" } }
   if ($server_endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'serverEndpointName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), storage_sync_service_name: (encode-path-segment $storage_sync_service_name), sync_group_name: (encode-path-segment $sync_group_name), server_endpoint_name: (encode-path-segment $server_endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups/{sync_group_name}/serverEndpoints/{server_endpoint_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1545,8 +1575,8 @@ export def "server-endpoints-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<properties: record<cloudTiering: string, friendlyName: string, lastOperationName: string, lastWorkflowId: string, offlineDataTransfer: string, offlineDataTransferShareName: string, offlineDataTransferStorageAccountResourceId: string, offlineDataTransferStorageAccountTenantId: string, provisioningState: string, serverLocalPath: string, serverResourceId: string, syncStatus: record<combinedHealth: string, downloadActivity: record, downloadHealth: string, downloadStatus: record, lastUpdatedTimestamp: string, offlineDataTransferStatus: string, syncActivity: string, totalPersistentFilesNotSyncingCount: int, uploadActivity: record, uploadHealth: string, uploadStatus: record>, tierFilesOlderThanDays: int, volumeFreeSpacePercent: int>> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> record<properties: record<cloudTiering: string, friendlyName: string, lastOperationName: string, lastWorkflowId: string, offlineDataTransfer: string, offlineDataTransferShareName: string, offlineDataTransferStorageAccountResourceId: string, offlineDataTransferStorageAccountTenantId: string, provisioningState: string, serverLocalPath: string, serverResourceId: string, syncStatus: record<combinedHealth: string, downloadActivity: record, downloadHealth: string, downloadStatus: record, lastUpdatedTimestamp: string, offlineDataTransferStatus: string, syncActivity: string, totalPersistentFilesNotSyncingCount: int, uploadActivity: record, uploadHealth: string, uploadStatus: record>, tierFilesOlderThanDays: int, volumeFreeSpacePercent: int>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1554,6 +1584,7 @@ export def "server-endpoints-get" [
   if ($storage_sync_service_name | is-empty) { error make --unspanned { msg: "path parameter 'storageSyncServiceName' must be non-empty" } }
   if ($sync_group_name | is-empty) { error make --unspanned { msg: "path parameter 'syncGroupName' must be non-empty" } }
   if ($server_endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'serverEndpointName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), storage_sync_service_name: (encode-path-segment $storage_sync_service_name), sync_group_name: (encode-path-segment $sync_group_name), server_endpoint_name: (encode-path-segment $server_endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups/{sync_group_name}/serverEndpoints/{server_endpoint_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1592,9 +1623,9 @@ export def "server-endpoints-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --properties: record # ServerEndpoint Update Properties object. — shape: {cloudTiering?: "on"|"off", offlineDataTransfer?: "on"|"off", offlineDataTransferShareName?: string, tierFilesOlderThanDays?: int, volumeFreeSpacePercent?: int}
-]: any -> record<properties: record<cloudTiering: string, friendlyName: string, lastOperationName: string, lastWorkflowId: string, offlineDataTransfer: string, offlineDataTransferShareName: string, offlineDataTransferStorageAccountResourceId: string, offlineDataTransferStorageAccountTenantId: string, provisioningState: string, serverLocalPath: string, serverResourceId: string, syncStatus: record<combinedHealth: string, downloadActivity: record, downloadHealth: string, downloadStatus: record, lastUpdatedTimestamp: string, offlineDataTransferStatus: string, syncActivity: string, totalPersistentFilesNotSyncingCount: int, uploadActivity: record, uploadHealth: string, uploadStatus: record>, tierFilesOlderThanDays: int, volumeFreeSpacePercent: int>> {
+]: any -> record<properties: record<cloudTiering: string, friendlyName: string, lastOperationName: string, lastWorkflowId: string, offlineDataTransfer: string, offlineDataTransferShareName: string, offlineDataTransferStorageAccountResourceId: string, offlineDataTransferStorageAccountTenantId: string, provisioningState: string, serverLocalPath: string, serverResourceId: string, syncStatus: record<combinedHealth: string, downloadActivity: record, downloadHealth: string, downloadStatus: record, lastUpdatedTimestamp: string, offlineDataTransferStatus: string, syncActivity: string, totalPersistentFilesNotSyncingCount: int, uploadActivity: record, uploadHealth: string, uploadStatus: record>, tierFilesOlderThanDays: int, volumeFreeSpacePercent: int>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1603,6 +1634,7 @@ export def "server-endpoints-update" [
   if ($storage_sync_service_name | is-empty) { error make --unspanned { msg: "path parameter 'storageSyncServiceName' must be non-empty" } }
   if ($sync_group_name | is-empty) { error make --unspanned { msg: "path parameter 'syncGroupName' must be non-empty" } }
   if ($server_endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'serverEndpointName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), storage_sync_service_name: (encode-path-segment $storage_sync_service_name), sync_group_name: (encode-path-segment $sync_group_name), server_endpoint_name: (encode-path-segment $server_endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups/{sync_group_name}/serverEndpoints/{server_endpoint_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -1643,9 +1675,9 @@ export def "server-endpoints-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --properties: any # ServerEndpoint Properties object. — shape: {cloudTiering?: "on"|"off", friendlyName?: string, offlineDataTransfer?: "on"|"off", offlineDataTransferShareName?: string, serverLocalPath?: string, serverResourceId?: string, tierFilesOlderThanDays?: int, volumeFreeSpacePercent?: int}
-]: any -> record<properties: record<cloudTiering: string, friendlyName: string, lastOperationName: string, lastWorkflowId: string, offlineDataTransfer: string, offlineDataTransferShareName: string, offlineDataTransferStorageAccountResourceId: string, offlineDataTransferStorageAccountTenantId: string, provisioningState: string, serverLocalPath: string, serverResourceId: string, syncStatus: record<combinedHealth: string, downloadActivity: record, downloadHealth: string, downloadStatus: record, lastUpdatedTimestamp: string, offlineDataTransferStatus: string, syncActivity: string, totalPersistentFilesNotSyncingCount: int, uploadActivity: record, uploadHealth: string, uploadStatus: record>, tierFilesOlderThanDays: int, volumeFreeSpacePercent: int>> {
+]: any -> record<properties: record<cloudTiering: string, friendlyName: string, lastOperationName: string, lastWorkflowId: string, offlineDataTransfer: string, offlineDataTransferShareName: string, offlineDataTransferStorageAccountResourceId: string, offlineDataTransferStorageAccountTenantId: string, provisioningState: string, serverLocalPath: string, serverResourceId: string, syncStatus: record<combinedHealth: string, downloadActivity: record, downloadHealth: string, downloadStatus: record, lastUpdatedTimestamp: string, offlineDataTransferStatus: string, syncActivity: string, totalPersistentFilesNotSyncingCount: int, uploadActivity: record, uploadHealth: string, uploadStatus: record>, tierFilesOlderThanDays: int, volumeFreeSpacePercent: int>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1654,6 +1686,7 @@ export def "server-endpoints-create" [
   if ($storage_sync_service_name | is-empty) { error make --unspanned { msg: "path parameter 'storageSyncServiceName' must be non-empty" } }
   if ($sync_group_name | is-empty) { error make --unspanned { msg: "path parameter 'syncGroupName' must be non-empty" } }
   if ($server_endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'serverEndpointName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), storage_sync_service_name: (encode-path-segment $storage_sync_service_name), sync_group_name: (encode-path-segment $sync_group_name), server_endpoint_name: (encode-path-segment $server_endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups/{sync_group_name}/serverEndpoints/{server_endpoint_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -1693,10 +1726,10 @@ export def "server-endpoints-recall-action" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --pattern: string # Pattern of the files.
   --recall-path: string # Recall path.
-]: any -> record<error: record<code: string, details: record<code: string, message: string, target: string>, message: string, target: string>, innererror: record<code: string, details: record<code: string, message: string, target: string>, message: string, target: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1705,6 +1738,7 @@ export def "server-endpoints-recall-action" [
   if ($storage_sync_service_name | is-empty) { error make --unspanned { msg: "path parameter 'storageSyncServiceName' must be non-empty" } }
   if ($sync_group_name | is-empty) { error make --unspanned { msg: "path parameter 'syncGroupName' must be non-empty" } }
   if ($server_endpoint_name | is-empty) { error make --unspanned { msg: "path parameter 'serverEndpointName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), storage_sync_service_name: (encode-path-segment $storage_sync_service_name), sync_group_name: (encode-path-segment $sync_group_name), server_endpoint_name: (encode-path-segment $server_endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/syncGroups/{sync_group_name}/serverEndpoints/{server_endpoint_name}/recallAction") $qp $auth.query)
   let req_body = {"pattern": $pattern, "recallPath": $recall_path} | compact
@@ -1742,13 +1776,14 @@ export def "workflows-list-by-storage-sync-service" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<value: table<properties: record>> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> record<value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($storage_sync_service_name | is-empty) { error make --unspanned { msg: "path parameter 'storageSyncServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), storage_sync_service_name: (encode-path-segment $storage_sync_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/workflows") $qp $auth.query)
   let accept_val = "application/json"
@@ -1785,14 +1820,15 @@ export def "workflows-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<properties: record<lastOperationId: string, lastStepName: string, operation: string, status: string, steps: string>> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> record<properties: record<lastOperationId: string, lastStepName: string, operation: string, status: string, steps: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($storage_sync_service_name | is-empty) { error make --unspanned { msg: "path parameter 'storageSyncServiceName' must be non-empty" } }
   if ($workflow_id | is-empty) { error make --unspanned { msg: "path parameter 'workflowId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), storage_sync_service_name: (encode-path-segment $storage_sync_service_name), workflow_id: (encode-path-segment $workflow_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/workflows/{workflow_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1829,14 +1865,15 @@ export def "workflows-abort" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<error: record<code: string, details: record<code: string, message: string, target: string>, message: string, target: string>, innererror: record<code: string, details: record<code: string, message: string, target: string>, message: string, target: string>> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($storage_sync_service_name | is-empty) { error make --unspanned { msg: "path parameter 'storageSyncServiceName' must be non-empty" } }
   if ($workflow_id | is-empty) { error make --unspanned { msg: "path parameter 'workflowId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), storage_sync_service_name: (encode-path-segment $storage_sync_service_name), workflow_id: (encode-path-segment $workflow_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.StorageSync/storageSyncServices/{storage_sync_service_name}/workflows/{workflow_id}/abort") $qp $auth.query)
   let accept_val = "application/json"

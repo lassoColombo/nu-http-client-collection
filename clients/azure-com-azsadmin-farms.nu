@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -152,12 +152,13 @@ export def "farms-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # REST Api Version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # REST Api Version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Storage.Admin/farms") $qp $auth.query)
   let accept_val = "application/json"
@@ -193,13 +194,14 @@ export def "farms-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # REST Api Version.
-]: nothing -> record<properties: record<farmId: string, settings: record<bandwidthThrottleIsEnabled: bool, corsAllowedOriginsList: string, dataCenterUriHostSuffixes: string, defaultEgressThresholdInGbps: float, defaultIngressThresholdInGbps: float, defaultIntranetEgressThresholdInGbps: float, defaultIntranetIngressThresholdInGbps: float, defaultRequestThresholdInTps: float, defaultThrottleProbabilityDecayIntervalInSeconds: int, defaultTotalEgressThresholdInGbps: float, defaultTotalIngressThresholdInGbps: float, feedbackRefreshIntervalInSeconds: int, gracePeriodForFullThrottlingInRefreshIntervals: int, gracePeriodMaxThrottleProbability: float, hostStyleHttpPort: int, hostStyleHttpsPort: int, minimumEgressThresholdInGbps: float, minimumIngressThresholdInGbps: float, minimumIntranetEgressThresholdInGbps: float, minimumIntranetIngressThresholdInGbps: float, minimumRequestThresholdInTps: float, minimumTotalEgressThresholdInGbps: float, minimumTotalIngressThresholdInGbps: float, numberOfAccountsToSync: int, overallEgressThresholdInGbps: float, overallIngressThresholdInGbps: float, overallIntranetEgressThresholdInGbps: float, overallIntranetIngressThresholdInGbps: float, overallRequestThresholdInTps: float, overallTotalEgressThresholdInGbps: float, overallTotalIngressThresholdInGbps: float, retentionPeriodForDeletedStorageAccountsInDays: int, settingsPollingIntervalInSecond: int, toleranceFactorForEgress: float, toleranceFactorForIngress: float, toleranceFactorForIntranetEgress: float, toleranceFactorForIntranetIngress: float, toleranceFactorForTotalEgress: float, toleranceFactorForTotalIngress: float, toleranceFactorForTps: float, usageCollectionIntervalInSeconds: int>, settingsStore: string, version: string>> {
+  --api-version: string # REST Api Version. (required)
+]: nothing -> record<properties: record<farmId: string, settings: record<bandwidthThrottleIsEnabled: bool, corsAllowedOriginsList: string, dataCenterUriHostSuffixes: string, defaultEgressThresholdInGbps: float, defaultIngressThresholdInGbps: float, defaultIntranetEgressThresholdInGbps: float, defaultIntranetIngressThresholdInGbps: float, defaultRequestThresholdInTps: float, defaultThrottleProbabilityDecayIntervalInSeconds: int, defaultTotalEgressThresholdInGbps: float, defaultTotalIngressThresholdInGbps: float, feedbackRefreshIntervalInSeconds: int, gracePeriodForFullThrottlingInRefreshIntervals: int, gracePeriodMaxThrottleProbability: float, hostStyleHttpPort: int, hostStyleHttpsPort: int, minimumEgressThresholdInGbps: float, minimumIngressThresholdInGbps: float, minimumIntranetEgressThresholdInGbps: float, minimumIntranetIngressThresholdInGbps: float, minimumRequestThresholdInTps: float, minimumTotalEgressThresholdInGbps: float, minimumTotalIngressThresholdInGbps: float, numberOfAccountsToSync: int, overallEgressThresholdInGbps: float, overallIngressThresholdInGbps: float, overallIntranetEgressThresholdInGbps: float, overallIntranetIngressThresholdInGbps: float, overallRequestThresholdInTps: float, overallTotalEgressThresholdInGbps: float, overallTotalIngressThresholdInGbps: float, retentionPeriodForDeletedStorageAccountsInDays: int, settingsPollingIntervalInSecond: int, toleranceFactorForEgress: float, toleranceFactorForIngress: float, toleranceFactorForIntranetEgress: float, toleranceFactorForIntranetIngress: float, toleranceFactorForTotalEgress: float, toleranceFactorForTotalIngress: float, toleranceFactorForTps: float, usageCollectionIntervalInSeconds: int>, settingsStore: string, version: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($farm_id | is-empty) { error make --unspanned { msg: "path parameter 'farmId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), farm_id: (encode-path-segment $farm_id)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Storage.Admin/farms/{farm_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -236,20 +238,21 @@ export def "farms-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # REST Api Version.
+  --api-version: string # REST Api Version. (required)
   --properties: record # The properties of storage farm. — shape: {farmId?: string, settings?: record, settingsStore?: string, version?: string}
   --id: string # Resource ID.
   --location: string # Resource location.
   --name: string # Resource Name.
   --tags: record # Resource tags.
   --type: string # Resource type.
-]: any -> record<properties: record<farmId: string, settings: record<bandwidthThrottleIsEnabled: bool, corsAllowedOriginsList: string, dataCenterUriHostSuffixes: string, defaultEgressThresholdInGbps: float, defaultIngressThresholdInGbps: float, defaultIntranetEgressThresholdInGbps: float, defaultIntranetIngressThresholdInGbps: float, defaultRequestThresholdInTps: float, defaultThrottleProbabilityDecayIntervalInSeconds: int, defaultTotalEgressThresholdInGbps: float, defaultTotalIngressThresholdInGbps: float, feedbackRefreshIntervalInSeconds: int, gracePeriodForFullThrottlingInRefreshIntervals: int, gracePeriodMaxThrottleProbability: float, hostStyleHttpPort: int, hostStyleHttpsPort: int, minimumEgressThresholdInGbps: float, minimumIngressThresholdInGbps: float, minimumIntranetEgressThresholdInGbps: float, minimumIntranetIngressThresholdInGbps: float, minimumRequestThresholdInTps: float, minimumTotalEgressThresholdInGbps: float, minimumTotalIngressThresholdInGbps: float, numberOfAccountsToSync: int, overallEgressThresholdInGbps: float, overallIngressThresholdInGbps: float, overallIntranetEgressThresholdInGbps: float, overallIntranetIngressThresholdInGbps: float, overallRequestThresholdInTps: float, overallTotalEgressThresholdInGbps: float, overallTotalIngressThresholdInGbps: float, retentionPeriodForDeletedStorageAccountsInDays: int, settingsPollingIntervalInSecond: int, toleranceFactorForEgress: float, toleranceFactorForIngress: float, toleranceFactorForIntranetEgress: float, toleranceFactorForIntranetIngress: float, toleranceFactorForTotalEgress: float, toleranceFactorForTotalIngress: float, toleranceFactorForTps: float, usageCollectionIntervalInSeconds: int>, settingsStore: string, version: string>> {
+]: any -> record<properties: record<farmId: string, settings: record<bandwidthThrottleIsEnabled: bool, corsAllowedOriginsList: string, dataCenterUriHostSuffixes: string, defaultEgressThresholdInGbps: float, defaultIngressThresholdInGbps: float, defaultIntranetEgressThresholdInGbps: float, defaultIntranetIngressThresholdInGbps: float, defaultRequestThresholdInTps: float, defaultThrottleProbabilityDecayIntervalInSeconds: int, defaultTotalEgressThresholdInGbps: float, defaultTotalIngressThresholdInGbps: float, feedbackRefreshIntervalInSeconds: int, gracePeriodForFullThrottlingInRefreshIntervals: int, gracePeriodMaxThrottleProbability: float, hostStyleHttpPort: int, hostStyleHttpsPort: int, minimumEgressThresholdInGbps: float, minimumIngressThresholdInGbps: float, minimumIntranetEgressThresholdInGbps: float, minimumIntranetIngressThresholdInGbps: float, minimumRequestThresholdInTps: float, minimumTotalEgressThresholdInGbps: float, minimumTotalIngressThresholdInGbps: float, numberOfAccountsToSync: int, overallEgressThresholdInGbps: float, overallIngressThresholdInGbps: float, overallIntranetEgressThresholdInGbps: float, overallIntranetIngressThresholdInGbps: float, overallRequestThresholdInTps: float, overallTotalEgressThresholdInGbps: float, overallTotalIngressThresholdInGbps: float, retentionPeriodForDeletedStorageAccountsInDays: int, settingsPollingIntervalInSecond: int, toleranceFactorForEgress: float, toleranceFactorForIngress: float, toleranceFactorForIntranetEgress: float, toleranceFactorForIntranetIngress: float, toleranceFactorForTotalEgress: float, toleranceFactorForTotalIngress: float, toleranceFactorForTps: float, usageCollectionIntervalInSeconds: int>, settingsStore: string, version: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($farm_id | is-empty) { error make --unspanned { msg: "path parameter 'farmId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), farm_id: (encode-path-segment $farm_id)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Storage.Admin/farms/{farm_id}") $qp $auth.query)
   let req_body = {"properties": $properties, "id": $id, "location": $location, "name": $name, "tags": $tags, "type": $type} | compact
@@ -288,20 +291,21 @@ export def "farms-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # REST Api Version.
+  --api-version: string # REST Api Version. (required)
   --properties: record # Setting access string. — shape: {settingAccessString?: string}
   --id: string # Resource ID.
   --location: string # Resource location.
   --name: string # Resource Name.
   --tags: record # Resource tags.
   --type: string # Resource type.
-]: any -> record<properties: record<farmId: string, settings: record<bandwidthThrottleIsEnabled: bool, corsAllowedOriginsList: string, dataCenterUriHostSuffixes: string, defaultEgressThresholdInGbps: float, defaultIngressThresholdInGbps: float, defaultIntranetEgressThresholdInGbps: float, defaultIntranetIngressThresholdInGbps: float, defaultRequestThresholdInTps: float, defaultThrottleProbabilityDecayIntervalInSeconds: int, defaultTotalEgressThresholdInGbps: float, defaultTotalIngressThresholdInGbps: float, feedbackRefreshIntervalInSeconds: int, gracePeriodForFullThrottlingInRefreshIntervals: int, gracePeriodMaxThrottleProbability: float, hostStyleHttpPort: int, hostStyleHttpsPort: int, minimumEgressThresholdInGbps: float, minimumIngressThresholdInGbps: float, minimumIntranetEgressThresholdInGbps: float, minimumIntranetIngressThresholdInGbps: float, minimumRequestThresholdInTps: float, minimumTotalEgressThresholdInGbps: float, minimumTotalIngressThresholdInGbps: float, numberOfAccountsToSync: int, overallEgressThresholdInGbps: float, overallIngressThresholdInGbps: float, overallIntranetEgressThresholdInGbps: float, overallIntranetIngressThresholdInGbps: float, overallRequestThresholdInTps: float, overallTotalEgressThresholdInGbps: float, overallTotalIngressThresholdInGbps: float, retentionPeriodForDeletedStorageAccountsInDays: int, settingsPollingIntervalInSecond: int, toleranceFactorForEgress: float, toleranceFactorForIngress: float, toleranceFactorForIntranetEgress: float, toleranceFactorForIntranetIngress: float, toleranceFactorForTotalEgress: float, toleranceFactorForTotalIngress: float, toleranceFactorForTps: float, usageCollectionIntervalInSeconds: int>, settingsStore: string, version: string>> {
+]: any -> record<properties: record<farmId: string, settings: record<bandwidthThrottleIsEnabled: bool, corsAllowedOriginsList: string, dataCenterUriHostSuffixes: string, defaultEgressThresholdInGbps: float, defaultIngressThresholdInGbps: float, defaultIntranetEgressThresholdInGbps: float, defaultIntranetIngressThresholdInGbps: float, defaultRequestThresholdInTps: float, defaultThrottleProbabilityDecayIntervalInSeconds: int, defaultTotalEgressThresholdInGbps: float, defaultTotalIngressThresholdInGbps: float, feedbackRefreshIntervalInSeconds: int, gracePeriodForFullThrottlingInRefreshIntervals: int, gracePeriodMaxThrottleProbability: float, hostStyleHttpPort: int, hostStyleHttpsPort: int, minimumEgressThresholdInGbps: float, minimumIngressThresholdInGbps: float, minimumIntranetEgressThresholdInGbps: float, minimumIntranetIngressThresholdInGbps: float, minimumRequestThresholdInTps: float, minimumTotalEgressThresholdInGbps: float, minimumTotalIngressThresholdInGbps: float, numberOfAccountsToSync: int, overallEgressThresholdInGbps: float, overallIngressThresholdInGbps: float, overallIntranetEgressThresholdInGbps: float, overallIntranetIngressThresholdInGbps: float, overallRequestThresholdInTps: float, overallTotalEgressThresholdInGbps: float, overallTotalIngressThresholdInGbps: float, retentionPeriodForDeletedStorageAccountsInDays: int, settingsPollingIntervalInSecond: int, toleranceFactorForEgress: float, toleranceFactorForIngress: float, toleranceFactorForIntranetEgress: float, toleranceFactorForIntranetIngress: float, toleranceFactorForTotalEgress: float, toleranceFactorForTotalIngress: float, toleranceFactorForTps: float, usageCollectionIntervalInSeconds: int>, settingsStore: string, version: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($farm_id | is-empty) { error make --unspanned { msg: "path parameter 'farmId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), farm_id: (encode-path-segment $farm_id)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Storage.Admin/farms/{farm_id}") $qp $auth.query)
   let req_body = {"properties": $properties, "id": $id, "location": $location, "name": $name, "tags": $tags, "type": $type} | compact
@@ -339,13 +343,14 @@ export def "farms-list-metric-definitions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # REST Api Version.
+  --api-version: string # REST Api Version. (required)
 ]: nothing -> record<nextLink: string, value: table<metricAvailabilities: list, name: record, primaryAggregationType: string, unit: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($farm_id | is-empty) { error make --unspanned { msg: "path parameter 'farmId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), farm_id: (encode-path-segment $farm_id)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Storage.Admin/farms/{farm_id}/metricdefinitions") $qp $auth.query)
   let accept_val = "application/json"
@@ -381,13 +386,14 @@ export def "farms-list-metrics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # REST Api Version.
+  --api-version: string # REST Api Version. (required)
 ]: nothing -> record<nextLink: string, value: table<endTime: string, metricUnit: string, metricValues: list, name: record, startTime: string, timeGrain: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($farm_id | is-empty) { error make --unspanned { msg: "path parameter 'farmId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), farm_id: (encode-path-segment $farm_id)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Storage.Admin/farms/{farm_id}/metrics") $qp $auth.query)
   let accept_val = "application/json"
@@ -423,13 +429,14 @@ export def "farms-start-garbage-collection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # REST Api Version.
+  --api-version: string # REST Api Version. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($farm_id | is-empty) { error make --unspanned { msg: "path parameter 'farmId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), farm_id: (encode-path-segment $farm_id)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Storage.Admin/farms/{farm_id}/ondemandgc") $qp $auth.query)
   let accept_val = "application/json"
@@ -466,7 +473,7 @@ export def "farms-get-garbage-collection-state" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # REST Api Version.
+  --api-version: string # REST Api Version. (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -474,6 +481,7 @@ export def "farms-get-garbage-collection-state" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($farm_id | is-empty) { error make --unspanned { msg: "path parameter 'farmId' must be non-empty" } }
   if ($operation_id | is-empty) { error make --unspanned { msg: "path parameter 'operationId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), farm_id: (encode-path-segment $farm_id), operation_id: (encode-path-segment $operation_id)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Storage.Admin/farms/{farm_id}/operationresults/{operation_id}") $qp $auth.query)
   let accept_val = "application/json"

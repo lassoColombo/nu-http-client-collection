@@ -1,4 +1,4 @@
-# Auto-generated client for Security Token Service API vv1beta
+# Auto-generated client for Security Token Service API v1beta
 # Source: https://api.apis.guru/v2/specs/googleapis.com/sts/v1beta/openapi.json
 # Auth: --token flag or $env.SECURITY_TOKEN_SERVICE_API_TOKEN
 

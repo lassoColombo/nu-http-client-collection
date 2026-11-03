@@ -1,4 +1,4 @@
-# Auto-generated client for Cloud Search API vv1
+# Auto-generated client for Cloud Search API v1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/cloudsearch/v1/openapi.json
 # Auth: --token flag or $env.CLOUD_SEARCH_API_TOKEN
 
@@ -12,20 +12,10 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
-}
-
-# Merge multiple auth records (AND-form security: every scheme must be sent).
-def merge-auth [parts: list]: nothing -> record {
-  let active = ($parts | where {|p| $p.location != "none" })
-  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
-  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
-  let locs = ($active | each {|p| $p.location } | uniq)
-  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
-  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
 # Serialize a single query parameter based on collection style
@@ -165,8 +155,8 @@ export def commands []: nothing -> table {
 export def "cloudsearch-debug-datasources-items-search-by-view-url" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -189,7 +179,7 @@ export def "cloudsearch-debug-datasources-items-search-by-view-url" [
   --view-url: string # Specify the full view URL to find the corresponding item. The maximum length is 2048 characters.
 ]: any -> record<items: table<acl: record, content: record, itemType: string, metadata: record, name: string, payload: string, queue: string, status: record, structuredData: record, version: string>, nextPageToken: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -220,8 +210,8 @@ export def "cloudsearch-debug-datasources-items-search-by-view-url" [
 export def "cloudsearch-debug-datasources-items-check-access" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -245,7 +235,7 @@ export def "cloudsearch-debug-datasources-items-check-access" [
   --user-resource-name: string # This principal is a user identified using an external identity. The name field must specify the user resource name with this format: identitysources/{source_id}/users/{ID}
 ]: any -> record<hasAccess: bool> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "debugOptions.enableDebugging" $debug_options_enable_debugging "scalar")] | flatten | str join "&"
@@ -275,8 +265,8 @@ export def "cloudsearch-debug-datasources-items-check-access" [
 export def "cloudsearch-debug-identitysources-items-list-forunmappedidentity" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -300,7 +290,7 @@ export def "cloudsearch-debug-identitysources-items-list-forunmappedidentity" [
   --page-token: string # The next_page_token value returned from a previous List request, if any.
   --user-resource-name: string
 ]: nothing -> record<itemNames: list<string>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "debugOptions.enableDebugging" $debug_options_enable_debugging "scalar") (serialize-qp "groupResourceName" $group_resource_name "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "userResourceName" $user_resource_name "scalar")] | flatten | str join "&"
@@ -328,8 +318,8 @@ export def "cloudsearch-debug-identitysources-items-list-forunmappedidentity" [
 export def "cloudsearch-debug-identitysources-unmappedids-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -352,7 +342,7 @@ export def "cloudsearch-debug-identitysources-unmappedids-list" [
   --page-token: string # The next_page_token value returned from a previous List request, if any.
   --resolution-status-code: string@resolution-status-code-completer # Limit users selection to this status.
 ]: nothing -> record<nextPageToken: string, unmappedIdentities: table<externalIdentity: record, resolutionStatusCode: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "debugOptions.enableDebugging" $debug_options_enable_debugging "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "resolutionStatusCode" $resolution_status_code "scalar")] | flatten | str join "&"
@@ -380,8 +370,8 @@ export def "cloudsearch-debug-identitysources-unmappedids-list" [
 export def "cloudsearch-indexing-datasources-items-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -404,7 +394,7 @@ export def "cloudsearch-indexing-datasources-items-delete" [
   --mode: string@mode-completer # Required. The RequestMode for this request.
   --version: string # Required. The incremented version of the item to delete from the index. The indexing system stores the version from the datasource as a byte string and compares the Item version in the index to the version of the queued Item using lexical ordering. Cloud Search Indexing won't delete any queued item with a version value that is less than or equal to the version of the currently indexed item. The maximum length for this field is 1024 bytes. For information on how item version affects the deletion process, refer to [Handle revisions after manual deletes](https://developers.google.com/cloud-search/docs/guides/operations).
 ]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "connectorName" $connector_name "scalar") (serialize-qp "debugOptions.enableDebugging" $debug_options_enable_debugging "scalar") (serialize-qp "mode" $mode "scalar") (serialize-qp "version" $version "scalar")] | flatten | str join "&"
@@ -432,8 +422,8 @@ export def "cloudsearch-indexing-datasources-items-delete" [
 export def "cloudsearch-indexing-datasources-items-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -454,7 +444,7 @@ export def "cloudsearch-indexing-datasources-items-get" [
   --connector-name: string # The name of connector making this call. Format: datasources/{source_id}/connectors/{ID}
   --debug-options-enable-debugging: oneof<nothing, bool> # If you are asked by Google to help with debugging, set this field. Otherwise, ignore this field.
 ]: nothing -> record<acl: record<aclInheritanceType: string, deniedReaders: list<record>, inheritAclFrom: string, owners: list<record>, readers: list<record>>, content: record<contentDataRef: record<name: string>, contentFormat: string, hash: string, inlineContent: string>, itemType: string, metadata: record<containerName: string, contentLanguage: string, contextAttributes: list<record>, createTime: string, hash: string, interactions: list<record>, keywords: list<string>, mimeType: string, objectType: string, searchQualityMetadata: record<quality: float>, sourceRepositoryUrl: string, title: string, updateTime: string>, name: string, payload: string, queue: string, status: record<code: string, processingErrors: list<record>, repositoryErrors: list<record>>, structuredData: record<hash: string, object: record<properties: list>>, version: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "connectorName" $connector_name "scalar") (serialize-qp "debugOptions.enableDebugging" $debug_options_enable_debugging "scalar")] | flatten | str join "&"
@@ -482,8 +472,8 @@ export def "cloudsearch-indexing-datasources-items-get" [
 export def "cloudsearch-indexing-datasources-items-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -507,7 +497,7 @@ export def "cloudsearch-indexing-datasources-items-list" [
   --page-size: int # Maximum number of items to fetch in a request. The max value is 1000 when brief is true. The max value is 10 if brief is false. The default value is 10
   --page-token: string # The next_page_token value returned from a previous List request, if any.
 ]: nothing -> record<items: table<acl: record, content: record, itemType: string, metadata: record, name: string, payload: string, queue: string, status: record, structuredData: record, version: string>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "brief" $brief "scalar") (serialize-qp "connectorName" $connector_name "scalar") (serialize-qp "debugOptions.enableDebugging" $debug_options_enable_debugging "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -536,8 +526,8 @@ export def "cloudsearch-indexing-datasources-items-list" [
 export def "cloudsearch-indexing-datasources-items-delete-queue-items" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -560,7 +550,7 @@ export def "cloudsearch-indexing-datasources-items-delete-queue-items" [
   --queue: string # The name of a queue to delete items from.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -591,8 +581,8 @@ export def "cloudsearch-indexing-datasources-items-delete-queue-items" [
 export def "cloudsearch-indexing-datasources-items-poll" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -617,7 +607,7 @@ export def "cloudsearch-indexing-datasources-items-poll" [
   --status-codes: list<string> # Limit the items polled to the ones with these statuses.
 ]: any -> record<items: table<acl: record, content: record, itemType: string, metadata: record, name: string, payload: string, queue: string, status: record, structuredData: record, version: string>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -648,8 +638,8 @@ export def "cloudsearch-indexing-datasources-items-poll" [
 export def "cloudsearch-indexing-datasources-items-unreserve" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -672,7 +662,7 @@ export def "cloudsearch-indexing-datasources-items-unreserve" [
   --queue: string # The name of a queue to unreserve items from.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -702,8 +692,8 @@ export def "cloudsearch-indexing-datasources-items-unreserve" [
 export def "cloudsearch-indexing-datasources-delete-schema" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -723,7 +713,7 @@ export def "cloudsearch-indexing-datasources-delete-schema" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --debug-options-enable-debugging: oneof<nothing, bool> # If you are asked by Google to help with debugging, set this field. Otherwise, ignore this field.
 ]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "debugOptions.enableDebugging" $debug_options_enable_debugging "scalar")] | flatten | str join "&"
@@ -751,8 +741,8 @@ export def "cloudsearch-indexing-datasources-delete-schema" [
 export def "cloudsearch-indexing-datasources-get-schema" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -772,7 +762,7 @@ export def "cloudsearch-indexing-datasources-get-schema" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --debug-options-enable-debugging: oneof<nothing, bool> # If you are asked by Google to help with debugging, set this field. Otherwise, ignore this field.
 ]: nothing -> record<objectDefinitions: table<name: string, options: record, propertyDefinitions: list>, operationIds: list<string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "debugOptions.enableDebugging" $debug_options_enable_debugging "scalar")] | flatten | str join "&"
@@ -802,8 +792,8 @@ export def "cloudsearch-indexing-datasources-get-schema" [
 export def "cloudsearch-indexing-datasources-update-schema" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -826,7 +816,7 @@ export def "cloudsearch-indexing-datasources-update-schema" [
   --validate-only: oneof<nothing, bool> # If true, the schema will be checked for validity, but will not be registered with the data source, even if valid.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -859,8 +849,8 @@ export def "cloudsearch-indexing-datasources-update-schema" [
 export def "cloudsearch-indexing-datasources-items-index" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -885,7 +875,7 @@ export def "cloudsearch-indexing-datasources-items-index" [
   --mode: string@mode-completer # Required. The RequestMode for this request.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -917,8 +907,8 @@ export def "cloudsearch-indexing-datasources-items-index" [
 export def "cloudsearch-indexing-datasources-items-push" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -941,7 +931,7 @@ export def "cloudsearch-indexing-datasources-items-push" [
   --item: record # Represents an item to be pushed to the indexing queue. — shape: {contentHash?: string, metadataHash?: string, payload?: string, queue?: string, repositoryError?: record, structuredDataHash?: string, type?: "UNSPECIFIED"|"MODIFIED"|"NOT_MODIFIED"|"REPOSITORY_ERROR"|"REQUEUE"}
 ]: any -> record<acl: record<aclInheritanceType: string, deniedReaders: list<record>, inheritAclFrom: string, owners: list<record>, readers: list<record>>, content: record<contentDataRef: record<name: string>, contentFormat: string, hash: string, inlineContent: string>, itemType: string, metadata: record<containerName: string, contentLanguage: string, contextAttributes: list<record>, createTime: string, hash: string, interactions: list<record>, keywords: list<string>, mimeType: string, objectType: string, searchQualityMetadata: record<quality: float>, sourceRepositoryUrl: string, title: string, updateTime: string>, name: string, payload: string, queue: string, status: record<code: string, processingErrors: list<record>, repositoryErrors: list<record>>, structuredData: record<hash: string, object: record<properties: list>>, version: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -972,8 +962,8 @@ export def "cloudsearch-indexing-datasources-items-push" [
 export def "cloudsearch-indexing-datasources-items-upload" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -995,7 +985,7 @@ export def "cloudsearch-indexing-datasources-items-upload" [
   --debug-options: record # Shared request debug options for all cloudsearch RPC methods. — shape: {enableDebugging?: bool}
 ]: any -> record<name: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1025,8 +1015,8 @@ export def "cloudsearch-indexing-datasources-items-upload" [
 export def "cloudsearch-media-upload" [
   resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1047,7 +1037,7 @@ export def "cloudsearch-media-upload" [
   --body: any
 ]: any -> record<resourceName: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1082,8 +1072,8 @@ export def "cloudsearch-media-upload" [
 # --sortOptions shape: {operatorName?: string, sortOrder?: "ASCENDING"|"DESCENDING"}
 export def "cloudsearch-query-search" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1112,7 +1102,7 @@ export def "cloudsearch-query-search" [
   --start: int # Starting index of the results. (format: int32)
 ]: any -> record<debugInfo: record<formattedDebugInfo: string>, errorInfo: record<errorMessages: list<record>>, facetResults: table<buckets: list, objectType: string, operatorName: string, sourceName: string>, hasMoreResults: bool, queryInterpretation: record<interpretationType: string, interpretedQuery: string, reason: string>, resultCountEstimate: string, resultCountExact: string, resultCounts: record<sourceResultCounts: list<record>>, results: table<clusteredResults: list, debugInfo: record, metadata: record, snippet: record, title: string, url: string>, spellResults: table<suggestedQuery: string>, structuredResults: table<person: record>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/query/search" $qp $auth.query)
@@ -1140,8 +1130,8 @@ export def "cloudsearch-query-search" [
 # operationId: cloudsearch.query.sources.list
 export def "cloudsearch-query-sources-list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1165,7 +1155,7 @@ export def "cloudsearch-query-sources-list" [
   --request-options-search-application-id: string # The ID generated when you create a search application using the [admin console](https://support.google.com/a/answer/9043922).
   --request-options-time-zone: string # Current user's time zone id, such as "America/Los_Angeles" or "Australia/Sydney". These IDs are defined by [Unicode Common Locale Data Repository (CLDR)](http://cldr.unicode.org/) project, and currently available in the file [timezone.xml](http://unicode.org/repos/cldr/trunk/common/bcp47/timezone.xml). This field is used to correctly interpret date and time queries. If this field is not specified, the default time zone (UTC) is used.
 ]: nothing -> record<nextPageToken: string, sources: table<displayName: string, operators: list, shortName: string, source: record>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "requestOptions.debugOptions.enableDebugging" $request_options_debug_options_enable_debugging "scalar") (serialize-qp "requestOptions.languageCode" $request_options_language_code "scalar") (serialize-qp "requestOptions.searchApplicationId" $request_options_search_application_id "scalar") (serialize-qp "requestOptions.timeZone" $request_options_time_zone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/query/sources" $qp $auth.query)
@@ -1193,8 +1183,8 @@ export def "cloudsearch-query-sources-list" [
 # --requestOptions shape: {debugOptions?: record, languageCode?: string, searchApplicationId?: string, timeZone?: string}
 export def "cloudsearch-query-suggest" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1217,7 +1207,7 @@ export def "cloudsearch-query-suggest" [
   --request-options: record # Shared request options for all RPC methods. — shape: {debugOptions?: record, languageCode?: string, searchApplicationId?: string, timeZone?: string}
 ]: any -> record<suggestResults: table<peopleSuggestion: record, querySuggestion: record, source: record, suggestedQuery: string>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/query/suggest" $qp $auth.query)
@@ -1245,8 +1235,8 @@ export def "cloudsearch-query-suggest" [
 # operationId: cloudsearch.settings.getCustomer
 export def "cloudsearch-settings-get-customer" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1265,7 +1255,7 @@ export def "cloudsearch-settings-get-customer" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<auditLoggingSettings: record<logAdminReadActions: bool, logDataReadActions: bool, logDataWriteActions: bool, project: string>, vpcSettings: record<project: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/settings/customer" $qp $auth.query)
@@ -1293,8 +1283,8 @@ export def "cloudsearch-settings-get-customer" [
 # --vpcSettings shape: {project?: string}
 export def "cloudsearch-settings-update-customer" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1317,7 +1307,7 @@ export def "cloudsearch-settings-update-customer" [
   --vpc-settings: record # shape: {project?: string}
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/settings/customer" $qp $auth.query)
@@ -1345,8 +1335,8 @@ export def "cloudsearch-settings-update-customer" [
 # operationId: cloudsearch.settings.datasources.list
 export def "cloudsearch-settings-datasources-list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1368,7 +1358,7 @@ export def "cloudsearch-settings-datasources-list" [
   --page-size: int # Maximum number of datasources to fetch in a request. The max value is 1000. The default value is 1000.
   --page-token: string # Starting index of the results.
 ]: nothing -> record<nextPageToken: string, sources: table<disableModifications: bool, disableServing: bool, displayName: string, indexingServiceAccounts: list, itemsVisibility: list, name: string, operationIds: list, returnThumbnailUrls: bool, shortName: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "debugOptions.enableDebugging" $debug_options_enable_debugging "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/settings/datasources" $qp $auth.query)
@@ -1395,8 +1385,8 @@ export def "cloudsearch-settings-datasources-list" [
 # --itemsVisibility item shape: {gsuiteDomain?: bool, gsuiteGroupEmail?: string, gsuiteUserEmail?: string}
 export def "cloudsearch-settings-datasources-create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1425,7 +1415,7 @@ export def "cloudsearch-settings-datasources-create" [
   --short-name: string # A short name or alias for the source. This value will be used to match the 'source' operator. For example, if the short name is ** then queries like *source:* will only return results for this source. The value must be unique across all datasources. The value must only contain alphanumeric characters (a-zA-Z0-9). The value cannot start with 'google' and cannot be one of the following: mail, gmail, docs, drive, groups, sites, calendar, hangouts, gplus, keep, people, teams. Its maximum length is 32 characters.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/settings/datasources" $qp $auth.query)
@@ -1453,8 +1443,8 @@ export def "cloudsearch-settings-datasources-create" [
 # operationId: cloudsearch.settings.searchapplications.list
 export def "cloudsearch-settings-searchapplications-list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1476,7 +1466,7 @@ export def "cloudsearch-settings-searchapplications-list" [
   --page-size: int # The maximum number of items to return.
   --page-token: string # The next_page_token value returned from a previous List request, if any. The default value is 10
 ]: nothing -> record<nextPageToken: string, searchApplications: table<dataSourceRestrictions: list, defaultFacetOptions: list, defaultSortOptions: record, displayName: string, enableAuditLog: bool, name: string, operationIds: list, queryInterpretationConfig: record, returnResultThumbnailUrls: bool, scoringConfig: record, sourceConfig: list>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "debugOptions.enableDebugging" $debug_options_enable_debugging "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/settings/searchapplications" $qp $auth.query)
@@ -1508,8 +1498,8 @@ export def "cloudsearch-settings-searchapplications-list" [
 # --sourceConfig item shape: {crowdingConfig?: record, scoringConfig?: record, source?: record}
 export def "cloudsearch-settings-searchapplications-create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1539,7 +1529,7 @@ export def "cloudsearch-settings-searchapplications-create" [
   --source-config: list # Configuration for a sources specified in data_source_restrictions. — item shape: {crowdingConfig?: record, scoringConfig?: record, source?: record}
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/settings/searchapplications" $qp $auth.query)
@@ -1568,8 +1558,8 @@ export def "cloudsearch-settings-searchapplications-create" [
 export def "cloudsearch-settings-searchapplications-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1589,7 +1579,7 @@ export def "cloudsearch-settings-searchapplications-delete" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --debug-options-enable-debugging: oneof<nothing, bool> # If you are asked by Google to help with debugging, set this field. Otherwise, ignore this field.
 ]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "debugOptions.enableDebugging" $debug_options_enable_debugging "scalar")] | flatten | str join "&"
@@ -1617,8 +1607,8 @@ export def "cloudsearch-settings-searchapplications-delete" [
 export def "cloudsearch-settings-searchapplications-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1638,7 +1628,7 @@ export def "cloudsearch-settings-searchapplications-get" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --debug-options-enable-debugging: oneof<nothing, bool> # If you are asked by Google to help with debugging, set this field. Otherwise, ignore this field.
 ]: nothing -> record<dataSourceRestrictions: table<filterOptions: list, source: record>, defaultFacetOptions: table<integerFacetingOptions: record, numFacetBuckets: int, objectType: string, operatorName: string, sourceName: string>, defaultSortOptions: record<operatorName: string, sortOrder: string>, displayName: string, enableAuditLog: bool, name: string, operationIds: list<string>, queryInterpretationConfig: record<forceDisableSupplementalResults: bool, forceVerbatimMode: bool>, returnResultThumbnailUrls: bool, scoringConfig: record<disableFreshness: bool, disablePersonalization: bool>, sourceConfig: table<crowdingConfig: record, scoringConfig: record, source: record>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "debugOptions.enableDebugging" $debug_options_enable_debugging "scalar")] | flatten | str join "&"
@@ -1672,8 +1662,8 @@ export def "cloudsearch-settings-searchapplications-get" [
 export def "cloudsearch-settings-searchapplications-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1704,7 +1694,7 @@ export def "cloudsearch-settings-searchapplications-patch" [
   --source-config: list # Configuration for a sources specified in data_source_restrictions. — item shape: {crowdingConfig?: record, scoringConfig?: record, source?: record}
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
@@ -1740,8 +1730,8 @@ export def "cloudsearch-settings-searchapplications-patch" [
 export def "cloudsearch-settings-searchapplications-update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1772,7 +1762,7 @@ export def "cloudsearch-settings-searchapplications-update" [
   --source-config: list # Configuration for a sources specified in data_source_restrictions. — item shape: {crowdingConfig?: record, scoringConfig?: record, source?: record}
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
@@ -1803,8 +1793,8 @@ export def "cloudsearch-settings-searchapplications-update" [
 export def "cloudsearch-settings-searchapplications-reset" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1825,7 +1815,7 @@ export def "cloudsearch-settings-searchapplications-reset" [
   --debug-options: record # Shared request debug options for all cloudsearch RPC methods. — shape: {enableDebugging?: bool}
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1854,8 +1844,8 @@ export def "cloudsearch-settings-searchapplications-reset" [
 # operationId: cloudsearch.stats.getIndex
 export def "cloudsearch-stats-get-index" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1880,7 +1870,7 @@ export def "cloudsearch-stats-get-index" [
   --to-date-month: int # Month of date. Must be from 1 to 12.
   --to-date-year: int # Year of date. Must be from 1 to 9999.
 ]: nothing -> record<averageIndexedItemCount: string, stats: table<date: record, itemCountByStatus: list>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "fromDate.day" $from_date_day "scalar") (serialize-qp "fromDate.month" $from_date_month "scalar") (serialize-qp "fromDate.year" $from_date_year "scalar") (serialize-qp "toDate.day" $to_date_day "scalar") (serialize-qp "toDate.month" $to_date_month "scalar") (serialize-qp "toDate.year" $to_date_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/stats/index" $qp $auth.query)
@@ -1907,8 +1897,8 @@ export def "cloudsearch-stats-get-index" [
 export def "cloudsearch-stats-index-datasources-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1933,7 +1923,7 @@ export def "cloudsearch-stats-index-datasources-get" [
   --to-date-month: int # Month of date. Must be from 1 to 12.
   --to-date-year: int # Year of date. Must be from 1 to 9999.
 ]: nothing -> record<averageIndexedItemCount: string, stats: table<date: record, itemCountByStatus: list>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "fromDate.day" $from_date_day "scalar") (serialize-qp "fromDate.month" $from_date_month "scalar") (serialize-qp "fromDate.year" $from_date_year "scalar") (serialize-qp "toDate.day" $to_date_day "scalar") (serialize-qp "toDate.month" $to_date_month "scalar") (serialize-qp "toDate.year" $to_date_year "scalar")] | flatten | str join "&"
@@ -1960,8 +1950,8 @@ export def "cloudsearch-stats-index-datasources-get" [
 # operationId: cloudsearch.stats.getQuery
 export def "cloudsearch-stats-get-query" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1986,7 +1976,7 @@ export def "cloudsearch-stats-get-query" [
   --to-date-month: int # Month of date. Must be from 1 to 12.
   --to-date-year: int # Year of date. Must be from 1 to 9999.
 ]: nothing -> record<stats: table<date: record, queryCountByStatus: list>, totalQueryCount: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "fromDate.day" $from_date_day "scalar") (serialize-qp "fromDate.month" $from_date_month "scalar") (serialize-qp "fromDate.year" $from_date_year "scalar") (serialize-qp "toDate.day" $to_date_day "scalar") (serialize-qp "toDate.month" $to_date_month "scalar") (serialize-qp "toDate.year" $to_date_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/stats/query" $qp $auth.query)
@@ -2013,8 +2003,8 @@ export def "cloudsearch-stats-get-query" [
 export def "cloudsearch-stats-query-searchapplications-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2039,7 +2029,7 @@ export def "cloudsearch-stats-query-searchapplications-get" [
   --to-date-month: int # Month of date. Must be from 1 to 12.
   --to-date-year: int # Year of date. Must be from 1 to 9999.
 ]: nothing -> record<stats: table<date: record, queryCountByStatus: list>, totalQueryCount: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "fromDate.day" $from_date_day "scalar") (serialize-qp "fromDate.month" $from_date_month "scalar") (serialize-qp "fromDate.year" $from_date_year "scalar") (serialize-qp "toDate.day" $to_date_day "scalar") (serialize-qp "toDate.month" $to_date_month "scalar") (serialize-qp "toDate.year" $to_date_year "scalar")] | flatten | str join "&"
@@ -2066,8 +2056,8 @@ export def "cloudsearch-stats-query-searchapplications-get" [
 # operationId: cloudsearch.stats.getSearchapplication
 export def "cloudsearch-stats-get-searchapplication" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2092,7 +2082,7 @@ export def "cloudsearch-stats-get-searchapplication" [
   --start-date-month: int # Month of date. Must be from 1 to 12.
   --start-date-year: int # Year of date. Must be from 1 to 9999.
 ]: nothing -> record<averageSearchApplicationCount: string, stats: table<count: string, date: record>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "endDate.day" $end_date_day "scalar") (serialize-qp "endDate.month" $end_date_month "scalar") (serialize-qp "endDate.year" $end_date_year "scalar") (serialize-qp "startDate.day" $start_date_day "scalar") (serialize-qp "startDate.month" $start_date_month "scalar") (serialize-qp "startDate.year" $start_date_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/stats/searchapplication" $qp $auth.query)
@@ -2118,8 +2108,8 @@ export def "cloudsearch-stats-get-searchapplication" [
 # operationId: cloudsearch.stats.getSession
 export def "cloudsearch-stats-get-session" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2144,7 +2134,7 @@ export def "cloudsearch-stats-get-session" [
   --to-date-month: int # Month of date. Must be from 1 to 12.
   --to-date-year: int # Year of date. Must be from 1 to 9999.
 ]: nothing -> record<stats: table<date: record, searchSessionsCount: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "fromDate.day" $from_date_day "scalar") (serialize-qp "fromDate.month" $from_date_month "scalar") (serialize-qp "fromDate.year" $from_date_year "scalar") (serialize-qp "toDate.day" $to_date_day "scalar") (serialize-qp "toDate.month" $to_date_month "scalar") (serialize-qp "toDate.year" $to_date_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/stats/session" $qp $auth.query)
@@ -2171,8 +2161,8 @@ export def "cloudsearch-stats-get-session" [
 export def "cloudsearch-stats-session-searchapplications-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2197,7 +2187,7 @@ export def "cloudsearch-stats-session-searchapplications-get" [
   --to-date-month: int # Month of date. Must be from 1 to 12.
   --to-date-year: int # Year of date. Must be from 1 to 9999.
 ]: nothing -> record<stats: table<date: record, searchSessionsCount: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "fromDate.day" $from_date_day "scalar") (serialize-qp "fromDate.month" $from_date_month "scalar") (serialize-qp "fromDate.year" $from_date_year "scalar") (serialize-qp "toDate.day" $to_date_day "scalar") (serialize-qp "toDate.month" $to_date_month "scalar") (serialize-qp "toDate.year" $to_date_year "scalar")] | flatten | str join "&"
@@ -2224,8 +2214,8 @@ export def "cloudsearch-stats-session-searchapplications-get" [
 # operationId: cloudsearch.stats.getUser
 export def "cloudsearch-stats-get-user" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2250,7 +2240,7 @@ export def "cloudsearch-stats-get-user" [
   --to-date-month: int # Month of date. Must be from 1 to 12.
   --to-date-year: int # Year of date. Must be from 1 to 9999.
 ]: nothing -> record<stats: table<date: record, oneDayActiveUsersCount: string, sevenDaysActiveUsersCount: string, thirtyDaysActiveUsersCount: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "fromDate.day" $from_date_day "scalar") (serialize-qp "fromDate.month" $from_date_month "scalar") (serialize-qp "fromDate.year" $from_date_year "scalar") (serialize-qp "toDate.day" $to_date_day "scalar") (serialize-qp "toDate.month" $to_date_month "scalar") (serialize-qp "toDate.year" $to_date_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/stats/user" $qp $auth.query)
@@ -2277,8 +2267,8 @@ export def "cloudsearch-stats-get-user" [
 export def "cloudsearch-stats-user-searchapplications-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2303,7 +2293,7 @@ export def "cloudsearch-stats-user-searchapplications-get" [
   --to-date-month: int # Month of date. Must be from 1 to 12.
   --to-date-year: int # Year of date. Must be from 1 to 9999.
 ]: nothing -> record<stats: table<date: record, oneDayActiveUsersCount: string, sevenDaysActiveUsersCount: string, thirtyDaysActiveUsersCount: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "fromDate.day" $from_date_day "scalar") (serialize-qp "fromDate.month" $from_date_month "scalar") (serialize-qp "fromDate.year" $from_date_year "scalar") (serialize-qp "toDate.day" $to_date_day "scalar") (serialize-qp "toDate.month" $to_date_month "scalar") (serialize-qp "toDate.year" $to_date_year "scalar")] | flatten | str join "&"
@@ -2331,8 +2321,8 @@ export def "cloudsearch-stats-user-searchapplications-get" [
 export def "cloudsearch-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2351,7 +2341,7 @@ export def "cloudsearch-operations-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -2379,8 +2369,8 @@ export def "cloudsearch-operations-get" [
 export def "cloudsearch-operations-lro-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2402,7 +2392,7 @@ export def "cloudsearch-operations-lro-list" [
   --page-size: int # The standard list page size.
   --page-token: string # The standard list page token.
 ]: nothing -> record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -2429,8 +2419,8 @@ export def "cloudsearch-operations-lro-list" [
 # operationId: cloudsearch.initializeCustomer
 export def "cloudsearch-initialize-customer" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2451,7 +2441,7 @@ export def "cloudsearch-initialize-customer" [
   --body: record
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_SEARCH_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_SEARCH_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1:initializeCustomer" $qp $auth.query)

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -234,7 +234,7 @@ export def "set-workflow-in-attempt" [
   --dry-run(-n) # Return the request that would be sent without executing it
   attempt_number: int # format: int32
   job_id: int # format: int64
-  --processing-task-queue: string # default: 
+  --processing-task-queue: string # default: ""
   workflow_id: string
 ]: any -> record<succeeded: bool> {
   let input = $in
@@ -535,7 +535,7 @@ export def "search-connections" [
   --schedule: record # if null, then no schedule is set. — shape: {timeUnit: "minutes"|"hours"|"days"|"weeks"|"months", units: int}
   --schedule-data: record # schedule for when the the connection should run, per the schedule type — shape: {basicSchedule?: record, cron?: record}
   --schedule-type: string@schedule-type-completer # determine how the schedule data should be interpreted
-  --body-source: record # shape: {connectionConfiguration?: any, name?: string, sourceDefinitionId?: string, sourceId?: string, sourceName?: string, workspaceId?: string}
+  --source: record # shape: {connectionConfiguration?: any, name?: string, sourceDefinitionId?: string, sourceId?: string, sourceName?: string, workspaceId?: string}
   --source-id: string # format: uuid
   --status: string@status-completer # Active means that data is flowing through the connection. Inactive means it is not. Deprecated means the connection is off and cannot be re-activated. the schema field describes the elements of the schema that will be synced.
 ]: any -> record<connections: table<breakingChange: bool, connectionId: string, destinationId: string, geography: string, name: string, namespaceDefinition: string, namespaceFormat: string, nonBreakingChangesPreference: string, notifySchemaChanges: bool, operationIds: list, prefix: string, resourceRequirements: record, schedule: record, scheduleData: record, scheduleType: string, sourceCatalogId: string, sourceId: string, status: string, syncCatalog: record>> {
@@ -543,7 +543,7 @@ export def "search-connections" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/connections/search" $auth.query)
-  let req_body = {"connectionId": $connection_id, "destination": $destination, "destinationId": $destination_id, "name": $name, "namespaceDefinition": $namespace_definition, "namespaceFormat": $namespace_format, "prefix": $prefix, "schedule": $schedule, "scheduleData": $schedule_data, "scheduleType": $schedule_type, "source": $body_source, "sourceId": $source_id, "status": $status} | compact
+  let req_body = {"connectionId": $connection_id, "destination": $destination, "destinationId": $destination_id, "name": $name, "namespaceDefinition": $namespace_definition, "namespaceFormat": $namespace_format, "prefix": $prefix, "schedule": $schedule, "scheduleData": $schedule_data, "scheduleType": $schedule_type, "source": $source, "sourceId": $source_id, "status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1962,6 +1962,8 @@ export def "try-notification-config" [
   let full_url = (build-url $base "/v1/notifications/try" $auth.query)
   let req_body = {"customerioConfiguration": $customerio_configuration, "notificationType": $notification_type, "sendOnFailure": $send_on_failure, "sendOnSuccess": $send_on_success, "slackConfiguration": $slack_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "sendOnFailure") == null) { error make --unspanned { msg: "required body field 'sendOnFailure' missing: pass --send-on-failure or pipe a record" } }
+  if (($req_body | get -o "sendOnSuccess") == null) { error make --unspanned { msg: "required body field 'sendOnSuccess' missing: pass --send-on-success or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {

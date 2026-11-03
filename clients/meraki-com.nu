@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-cisco-meraki-api-key" => { {scheme: $scheme, headers: {X-Cisco-Meraki-API-Key: $token_val}, query: "", location: "header"} }
+    "x-cisco-meraki-api-key" => { {scheme: $scheme, headers: {"X-Cisco-Meraki-API-Key": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -3084,12 +3084,13 @@ export def "get-network-device-loss-and-latency-history" [
   --timespan: float # The timespan for which the information will be fetched. If specifying timespan, do not specify parameters t0 and t1. The value must be in seconds and be less than or equal to 31 days. The default is 1 day. (format: float)
   --resolution: int # The time resolution in seconds for returned data. The valid resolutions are: 60, 600, 3600, 86400. The default is 60.
   --uplink: string@uplink-completer # The WAN uplink used to obtain the requested stats. Valid uplinks are wan1, wan2, cellular. The default is wan1.
-  --ip: string # The destination IP used to obtain the requested stats. This is required.
+  --ip: string # The destination IP used to obtain the requested stats. This is required. (required)
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "x-cisco-meraki-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
   if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
+  if ($ip == null) { error make --unspanned { msg: "required query parameter 'ip' missing: pass --ip" } }
   let qp = [(serialize-qp "t0" $t0 "scalar") (serialize-qp "t1" $t1 "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "resolution" $resolution "scalar") (serialize-qp "uplink" $uplink "scalar") (serialize-qp "ip" $ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({network_id: (encode-path-segment $network_id), serial: (encode-path-segment $serial)} | format pattern "/networks/{network_id}/devices/{serial}/lossAndLatencyHistory") $qp $auth.query)
   let accept_val = "application/json"
@@ -8228,6 +8229,7 @@ export def "update-network-vlans-enabled-state" [
   let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/vlansEnabledState") $auth.query)
   let req_body = {"enabled": $enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "enabled") == null) { error make --unspanned { msg: "required body field 'enabled' missing: pass --enabled or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -8308,6 +8310,7 @@ export def "update-network-warm-spare-settings" [
   let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/networks/{network_id}/warmSpareSettings") $auth.query)
   let req_body = {"enabled": $enabled, "spareSerial": $spare_serial, "uplinkMode": $uplink_mode, "virtualIp1": $virtual_ip1, "virtualIp2": $virtual_ip2} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "enabled") == null) { error make --unspanned { msg: "required body field 'enabled' missing: pass --enabled or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {

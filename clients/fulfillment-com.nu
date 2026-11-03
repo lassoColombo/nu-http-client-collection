@@ -12,8 +12,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-api-key" => { {scheme: $scheme, headers: {x-api-key: $token_val}, query: "", location: "header"} }
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "x-api-key" => { {scheme: $scheme, headers: {"x-api-key": $token_val}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -153,16 +153,19 @@ export def "get-accounting" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --from-date: string # Orders invoice date. Date-time in ISO 8601 format for selecting orders after, or at, the specified time
-  --to-date: string # Orders invoice date. Date-time in ISO 8601 format for selecting orders before, or at, the specified time
+  --from-date: string # Orders invoice date. Date-time in ISO 8601 format for selecting orders after, or at, the specified time (required)
+  --to-date: string # Orders invoice date. Date-time in ISO 8601 format for selecting orders before, or at, the specified time (required)
   --page: int # A multiplier of the number of items (limit parameter) to skip before returning results (default: 1)
   --limit: int # The numbers of items to return (default: 80)
   --warehouse-ids: list<int> # A CSV of warehouse id, '123' or '1,2,3'
   --order-ids: list<int> # A CSV of FDC order id, '123' or '1,2,3'
-  --hydrate: list<string> # Adds additional information to the response, uses a CSV format for multiple values. (e.g. items)
+  --hydrate: list<string> # Adds additional information to the response, uses a CSV format for multiple values. (required, e.g. items)
 ]: nothing -> record<data: table<fees: record, itemCount: int, items: list, merchant: record, order: record, warehouse: record>, meta: record<pagination: record<count: int, currentPage: int, total: int, totalPages: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($from_date == null) { error make --unspanned { msg: "required query parameter 'fromDate' missing: pass --from-date" } }
+  if ($to_date == null) { error make --unspanned { msg: "required query parameter 'toDate' missing: pass --to-date" } }
+  if ($hydrate == null) { error make --unspanned { msg: "required query parameter 'hydrate' missing: pass --hydrate" } }
   let qp = [(serialize-qp "fromDate" $from_date "scalar") (serialize-qp "toDate" $to_date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "warehouseIds" $warehouse_ids "csv") (serialize-qp "orderIds" $order_ids "multi") (serialize-qp "hydrate" $hydrate "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/accounting" $qp $auth.query)
   let accept_val = "application/json"
@@ -274,8 +277,8 @@ export def "get-orders" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --from-date: string # Date-time in ISO 8601 format for selecting orders after, or at, the specified time
-  --to-date: string # Date-time in ISO 8601 format for selecting orders before, or at, the specified time
+  --from-date: string # Date-time in ISO 8601 format for selecting orders after, or at, the specified time (required)
+  --to-date: string # Date-time in ISO 8601 format for selecting orders before, or at, the specified time (required)
   --merchant-ids: list<int> # A CSV of merchant id, '123' or '1,2,3'
   --warehouse-ids: list<int> # A CSV of warehouse id, '123' or '1,2,3'
   --page: int # A multiplier of the number of items (limit parameter) to skip before returning results (default: 1)
@@ -284,6 +287,8 @@ export def "get-orders" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($from_date == null) { error make --unspanned { msg: "required query parameter 'fromDate' missing: pass --from-date" } }
+  if ($to_date == null) { error make --unspanned { msg: "required query parameter 'toDate' missing: pass --to-date" } }
   let qp = [(serialize-qp "fromDate" $from_date "scalar") (serialize-qp "toDate" $to_date "scalar") (serialize-qp "merchantIds" $merchant_ids "csv") (serialize-qp "warehouseIds" $warehouse_ids "csv") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "hydrate" $hydrate "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/orders" $qp $auth.query)
   let accept_val = "application/json"
@@ -522,13 +527,15 @@ export def "get-returns" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --from-date: string # Date-time in ISO 8601 format for selecting orders after, or at, the specified time
-  --to-date: string # Date-time in ISO 8601 format for selecting orders before, or at, the specified time
+  --from-date: string # Date-time in ISO 8601 format for selecting orders after, or at, the specified time (required)
+  --to-date: string # Date-time in ISO 8601 format for selecting orders before, or at, the specified time (required)
   --page: int # A multiplier of the number of items (limit parameter) to skip before returning results (default: 1)
   --limit: int # The numbers of items to return (default: 80)
 ]: nothing -> record<data: table<comments: string, createdAt: string, createdBy: record, id: int, order: record, reason: record, returnedBy: string, rmaItems: list, rmaNumber: string, status: record, updatedAt: string, updatedBy: record>, meta: record<pagination: record<count: int, currentPage: int, total: int, totalPages: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($from_date == null) { error make --unspanned { msg: "required query parameter 'fromDate' missing: pass --from-date" } }
+  if ($to_date == null) { error make --unspanned { msg: "required query parameter 'toDate' missing: pass --to-date" } }
   let qp = [(serialize-qp "fromDate" $from_date "scalar") (serialize-qp "toDate" $to_date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/returns" $qp $auth.query)
   let accept_val = "application/json"

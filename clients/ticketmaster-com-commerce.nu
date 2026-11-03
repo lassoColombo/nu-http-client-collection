@@ -1,4 +1,4 @@
-# Auto-generated client for Commerce API vv2
+# Auto-generated client for Commerce API v2
 # Source: https://api.apis.guru/v2/specs/ticketmaster.com/commerce/v2/swagger.json
 # Auth: --token flag or $env.COMMERCE_API_TOKEN
 
@@ -134,8 +134,8 @@ export def "get-event-offers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-token: string # Query Param Access Token
   --api-key: string # Query Param API Key for external API developer
-  --x-ssl-cert-uid: string # API Key for external API developer
-  --x-tm-access-token: string # Access token for
+  --x-ssl-cert-uid: string # API Key for external API developer (default: "")
+  --x-tm-access-token: string # Access token for (default: "")
 ]: nothing -> record<_embedded: record<areas: record<_links: record, data: list>, attributesRefs: record<_links: record, data: list>, holds: record<_links: record, data: list>, passwords: record<_links: record, data: list>, priceZones: record<_links: record, data: list>>, debug: list<string>, limits: record<max: int, maxAccessibleSeats: int, maxCompanionSeatsPerAccessibleSeat: int, min: int, multiples: int, sellableQty: string>, metadata: record<accessibleSeatingEnabled: bool, eventMapping: record<id: string, source: record, type: string>>, offers: table<_links: record, attributes: record, id: string, relationships: record, type: string>, prices: record<_links: record<self: record>, data: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -150,10 +150,11 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
+  --api-version: string # Version of the API to be used with the client request. (required)
 ]: nothing -> record<value: table<display: record, name: string, origin: string, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Maintenance/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -187,11 +188,12 @@ export def "maintenance-configurations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
-]: nothing -> record<value: table<location: string, properties: record, tags: record>> {
+  --api-version: string # Version of the API to be used with the client request. (required)
+]: nothing -> record<value: table<location: string, properties: record, tags: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Maintenance/maintenanceConfigurations") $qp $auth.query)
   let accept_val = "application/json"
@@ -227,13 +229,14 @@ export def "maintenance-configurations-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
-]: nothing -> record<location: string, properties: record<extensionProperties: record, maintenanceScope: string, namespace: string>, tags: record> {
+  --api-version: string # Version of the API to be used with the client request. (required)
+]: nothing -> record<location: string, properties: record<extensionProperties: record, maintenanceScope: string, namespace: string>, tags: record, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Maintenance/maintenanceConfigurations/{resource_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -269,13 +272,14 @@ export def "maintenance-configurations-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
-]: nothing -> record<location: string, properties: record<extensionProperties: record, maintenanceScope: string, namespace: string>, tags: record> {
+  --api-version: string # Version of the API to be used with the client request. (required)
+]: nothing -> record<location: string, properties: record<extensionProperties: record, maintenanceScope: string, namespace: string>, tags: record, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Maintenance/maintenanceConfigurations/{resource_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -312,17 +316,18 @@ export def "maintenance-configurations-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
+  --api-version: string # Version of the API to be used with the client request. (required)
   --location: string # Gets or sets location of the resource
   --properties: record # Properties for maintenance configuration — shape: {extensionProperties?: record, maintenanceScope?: "All"|"Host"|"Resource"|"InResource", namespace?: string}
   --tags: record # Gets or sets tags of the resource
-]: any -> record<location: string, properties: record<extensionProperties: record, maintenanceScope: string, namespace: string>, tags: record> {
+]: any -> record<location: string, properties: record<extensionProperties: record, maintenanceScope: string, namespace: string>, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Maintenance/maintenanceConfigurations/{resource_name}") $qp $auth.query)
   let req_body = {"location": $location, "properties": $properties, "tags": $tags} | compact
@@ -361,17 +366,18 @@ export def "maintenance-configurations-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
+  --api-version: string # Version of the API to be used with the client request. (required)
   --location: string # Gets or sets location of the resource
   --properties: record # Properties for maintenance configuration — shape: {extensionProperties?: record, maintenanceScope?: "All"|"Host"|"Resource"|"InResource", namespace?: string}
   --tags: record # Gets or sets tags of the resource
-]: any -> record<location: string, properties: record<extensionProperties: record, maintenanceScope: string, namespace: string>, tags: record> {
+]: any -> record<location: string, properties: record<extensionProperties: record, maintenanceScope: string, namespace: string>, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Maintenance/maintenanceConfigurations/{resource_name}") $qp $auth.query)
   let req_body = {"location": $location, "properties": $properties, "tags": $tags} | compact
@@ -413,8 +419,8 @@ export def "apply-updates-create-or-update-parent" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
-]: nothing -> record<properties: record<lastUpdateTime: string, resourceId: string, status: string>> {
+  --api-version: string # Version of the API to be used with the client request. (required)
+]: nothing -> record<properties: record<lastUpdateTime: string, resourceId: string, status: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -424,6 +430,7 @@ export def "apply-updates-create-or-update-parent" [
   if ($resource_parent_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceParentName' must be non-empty" } }
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), provider_name: (encode-path-segment $provider_name), resource_parent_type: (encode-path-segment $resource_parent_type), resource_parent_name: (encode-path-segment $resource_parent_name), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{provider_name}/{resource_parent_type}/{resource_parent_name}/{resource_type}/{resource_name}/providers/Microsoft.Maintenance/applyUpdates/default") $qp $auth.query)
   let accept_val = "application/json"
@@ -464,8 +471,8 @@ export def "apply-updates-get-parent" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
-]: nothing -> record<properties: record<lastUpdateTime: string, resourceId: string, status: string>> {
+  --api-version: string # Version of the API to be used with the client request. (required)
+]: nothing -> record<properties: record<lastUpdateTime: string, resourceId: string, status: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -476,6 +483,7 @@ export def "apply-updates-get-parent" [
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($apply_update_name | is-empty) { error make --unspanned { msg: "path parameter 'applyUpdateName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), provider_name: (encode-path-segment $provider_name), resource_parent_type: (encode-path-segment $resource_parent_type), resource_parent_name: (encode-path-segment $resource_parent_name), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name), apply_update_name: (encode-path-segment $apply_update_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{provider_name}/{resource_parent_type}/{resource_parent_name}/{resource_type}/{resource_name}/providers/Microsoft.Maintenance/applyUpdates/{apply_update_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -515,8 +523,8 @@ export def "configuration-assignments-list-parent" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
-]: nothing -> record<value: table<location: string, properties: record>> {
+  --api-version: string # Version of the API to be used with the client request. (required)
+]: nothing -> record<value: table<location: string, properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -526,6 +534,7 @@ export def "configuration-assignments-list-parent" [
   if ($resource_parent_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceParentName' must be non-empty" } }
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), provider_name: (encode-path-segment $provider_name), resource_parent_type: (encode-path-segment $resource_parent_type), resource_parent_name: (encode-path-segment $resource_parent_name), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{provider_name}/{resource_parent_type}/{resource_parent_name}/{resource_type}/{resource_name}/providers/Microsoft.Maintenance/configurationAssignments") $qp $auth.query)
   let accept_val = "application/json"
@@ -566,8 +575,8 @@ export def "configuration-assignments-delete-parent" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
-]: nothing -> record<location: string, properties: record<maintenanceConfigurationId: string, resourceId: string>> {
+  --api-version: string # Version of the API to be used with the client request. (required)
+]: nothing -> record<location: string, properties: record<maintenanceConfigurationId: string, resourceId: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -578,6 +587,7 @@ export def "configuration-assignments-delete-parent" [
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($configuration_assignment_name | is-empty) { error make --unspanned { msg: "path parameter 'configurationAssignmentName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), provider_name: (encode-path-segment $provider_name), resource_parent_type: (encode-path-segment $resource_parent_type), resource_parent_name: (encode-path-segment $resource_parent_name), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name), configuration_assignment_name: (encode-path-segment $configuration_assignment_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{provider_name}/{resource_parent_type}/{resource_parent_name}/{resource_type}/{resource_name}/providers/Microsoft.Maintenance/configurationAssignments/{configuration_assignment_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -619,10 +629,10 @@ export def "configuration-assignments-create-or-update-parent" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
+  --api-version: string # Version of the API to be used with the client request. (required)
   --location: string # Location of the resource
   --properties: record # Properties for configuration assignment — shape: {maintenanceConfigurationId?: string, resourceId?: string}
-]: any -> record<location: string, properties: record<maintenanceConfigurationId: string, resourceId: string>> {
+]: any -> record<location: string, properties: record<maintenanceConfigurationId: string, resourceId: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -634,6 +644,7 @@ export def "configuration-assignments-create-or-update-parent" [
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($configuration_assignment_name | is-empty) { error make --unspanned { msg: "path parameter 'configurationAssignmentName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), provider_name: (encode-path-segment $provider_name), resource_parent_type: (encode-path-segment $resource_parent_type), resource_parent_name: (encode-path-segment $resource_parent_name), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name), configuration_assignment_name: (encode-path-segment $configuration_assignment_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{provider_name}/{resource_parent_type}/{resource_parent_name}/{resource_type}/{resource_name}/providers/Microsoft.Maintenance/configurationAssignments/{configuration_assignment_name}") $qp $auth.query)
   let req_body = {"location": $location, "properties": $properties} | compact
@@ -675,7 +686,7 @@ export def "updates-list-parent" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
+  --api-version: string # Version of the API to be used with the client request. (required)
 ]: nothing -> record<value: table<impactDurationInSec: int, impactType: string, maintenanceScope: string, notBefore: string, properties: record, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -686,6 +697,7 @@ export def "updates-list-parent" [
   if ($resource_parent_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceParentName' must be non-empty" } }
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), provider_name: (encode-path-segment $provider_name), resource_parent_type: (encode-path-segment $resource_parent_type), resource_parent_name: (encode-path-segment $resource_parent_name), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{provider_name}/{resource_parent_type}/{resource_parent_name}/{resource_type}/{resource_name}/providers/Microsoft.Maintenance/updates") $qp $auth.query)
   let accept_val = "application/json"
@@ -723,8 +735,8 @@ export def "apply-updates-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
-]: nothing -> record<properties: record<lastUpdateTime: string, resourceId: string, status: string>> {
+  --api-version: string # Version of the API to be used with the client request. (required)
+]: nothing -> record<properties: record<lastUpdateTime: string, resourceId: string, status: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -732,6 +744,7 @@ export def "apply-updates-create-or-update" [
   if ($provider_name | is-empty) { error make --unspanned { msg: "path parameter 'providerName' must be non-empty" } }
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), provider_name: (encode-path-segment $provider_name), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{provider_name}/{resource_type}/{resource_name}/providers/Microsoft.Maintenance/applyUpdates/default") $qp $auth.query)
   let accept_val = "application/json"
@@ -770,8 +783,8 @@ export def "apply-updates-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
-]: nothing -> record<properties: record<lastUpdateTime: string, resourceId: string, status: string>> {
+  --api-version: string # Version of the API to be used with the client request. (required)
+]: nothing -> record<properties: record<lastUpdateTime: string, resourceId: string, status: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -780,6 +793,7 @@ export def "apply-updates-get" [
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($apply_update_name | is-empty) { error make --unspanned { msg: "path parameter 'applyUpdateName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), provider_name: (encode-path-segment $provider_name), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name), apply_update_name: (encode-path-segment $apply_update_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{provider_name}/{resource_type}/{resource_name}/providers/Microsoft.Maintenance/applyUpdates/{apply_update_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -817,8 +831,8 @@ export def "configuration-assignments-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
-]: nothing -> record<value: table<location: string, properties: record>> {
+  --api-version: string # Version of the API to be used with the client request. (required)
+]: nothing -> record<value: table<location: string, properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -826,6 +840,7 @@ export def "configuration-assignments-list" [
   if ($provider_name | is-empty) { error make --unspanned { msg: "path parameter 'providerName' must be non-empty" } }
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), provider_name: (encode-path-segment $provider_name), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{provider_name}/{resource_type}/{resource_name}/providers/Microsoft.Maintenance/configurationAssignments") $qp $auth.query)
   let accept_val = "application/json"
@@ -864,8 +879,8 @@ export def "configuration-assignments-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
-]: nothing -> record<location: string, properties: record<maintenanceConfigurationId: string, resourceId: string>> {
+  --api-version: string # Version of the API to be used with the client request. (required)
+]: nothing -> record<location: string, properties: record<maintenanceConfigurationId: string, resourceId: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -874,6 +889,7 @@ export def "configuration-assignments-delete" [
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($configuration_assignment_name | is-empty) { error make --unspanned { msg: "path parameter 'configurationAssignmentName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), provider_name: (encode-path-segment $provider_name), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name), configuration_assignment_name: (encode-path-segment $configuration_assignment_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{provider_name}/{resource_type}/{resource_name}/providers/Microsoft.Maintenance/configurationAssignments/{configuration_assignment_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -913,10 +929,10 @@ export def "configuration-assignments-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
+  --api-version: string # Version of the API to be used with the client request. (required)
   --location: string # Location of the resource
   --properties: record # Properties for configuration assignment — shape: {maintenanceConfigurationId?: string, resourceId?: string}
-]: any -> record<location: string, properties: record<maintenanceConfigurationId: string, resourceId: string>> {
+]: any -> record<location: string, properties: record<maintenanceConfigurationId: string, resourceId: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -926,6 +942,7 @@ export def "configuration-assignments-create-or-update" [
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($configuration_assignment_name | is-empty) { error make --unspanned { msg: "path parameter 'configurationAssignmentName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), provider_name: (encode-path-segment $provider_name), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name), configuration_assignment_name: (encode-path-segment $configuration_assignment_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{provider_name}/{resource_type}/{resource_name}/providers/Microsoft.Maintenance/configurationAssignments/{configuration_assignment_name}") $qp $auth.query)
   let req_body = {"location": $location, "properties": $properties} | compact
@@ -965,7 +982,7 @@ export def "updates-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
+  --api-version: string # Version of the API to be used with the client request. (required)
 ]: nothing -> record<value: table<impactDurationInSec: int, impactType: string, maintenanceScope: string, notBefore: string, properties: record, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -974,6 +991,7 @@ export def "updates-list" [
   if ($provider_name | is-empty) { error make --unspanned { msg: "path parameter 'providerName' must be non-empty" } }
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), provider_name: (encode-path-segment $provider_name), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{provider_name}/{resource_type}/{resource_name}/providers/Microsoft.Maintenance/updates") $qp $auth.query)
   let accept_val = "application/json"

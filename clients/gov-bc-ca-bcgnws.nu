@@ -102,6 +102,7 @@ def embed-completer [] { ["0" "1"] }
 def output-style-completer [] { ["detail" "summary"] }
 def exact-spelling-completer [] { ["0" "1"] }
 def sort-by-completer-1 [] { ["decisionDate" "featureType" "name" "relevance"] }
+def output-format-completer-2 [] { ["csv" "html" "json" "kml" "xml"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -139,10 +140,11 @@ export def "get-feature-categories" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --output-format: string@output-format-completer # The format of the output. (default: json, e.g. json)
+  --output-format: string@output-format-completer # The format of the output. (required, default: json, e.g. json)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let output_format = ($output_format | default "json")
   let qp = [(serialize-qp "outputFormat" $output_format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/featureCategories" $qp $auth.query)
   let accept_val = "application/json"
@@ -174,10 +176,11 @@ export def "get-feature-classes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --output-format: string@output-format-completer # The format of the output. (default: json, e.g. json)
+  --output-format: string@output-format-completer # The format of the output. (required, default: json, e.g. json)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let output_format = ($output_format | default "json")
   let qp = [(serialize-qp "outputFormat" $output_format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/featureClasses" $qp $auth.query)
   let accept_val = "application/json"
@@ -209,10 +212,11 @@ export def "get-feature-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --output-format: string@output-format-completer # The format of the output. (default: json, e.g. json)
+  --output-format: string@output-format-completer # The format of the output. (required, default: json, e.g. json)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let output_format = ($output_format | default "json")
   let qp = [(serialize-qp "outputFormat" $output_format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/featureTypes" $qp $auth.query)
   let accept_val = "application/json"
@@ -279,10 +283,11 @@ export def "get-name-authorities" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --output-format: string@output-format-completer # The format of the output. (default: json, e.g. json)
+  --output-format: string@output-format-completer # The format of the output. (required, default: json, e.g. json)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let output_format = ($output_format | default "json")
   let qp = [(serialize-qp "outputFormat" $output_format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nameAuthorities" $qp $auth.query)
   let accept_val = "application/json"
@@ -314,9 +319,9 @@ export def "get-names-changes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --output-format: string@output-format-completer-1 # The format of the output. (default: json, e.g. json)
-  --from-date: int # Defines the earliest date (YYYY-MM-DD format) of the change time window for the search (e.g. 2017-01-01)
-  --to-date: int # Defines the latest date (YYYY-MM-DD format) of the change time window for the search (e.g. 2017-06-30)
+  --output-format: string@output-format-completer-1 # The format of the output. (required, default: json, e.g. json)
+  --from-date: int # Defines the earliest date (YYYY-MM-DD format) of the change time window for the search (required, e.g. 2017-01-01)
+  --to-date: int # Defines the latest date (YYYY-MM-DD format) of the change time window for the search (required, e.g. 2017-06-30)
   --feature-class: string # A filter to limit the search to names associated with features of a certain 'class' The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
   --feature-category: string # A filter to limit the search to names associated with features of a certain 'category' The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
   --feature-type: string # A filter to limit the search to names associated with features of a certain 'type' The value of this parameter should be a 'featureTypeCode' value returned by the /featureTypes resource, or an asterisk (*) to request that all feature types be included (default: *)
@@ -329,6 +334,9 @@ export def "get-names-changes" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let output_format = ($output_format | default "json")
+  if ($from_date == null) { error make --unspanned { msg: "required query parameter 'fromDate' missing: pass --from-date" } }
+  if ($to_date == null) { error make --unspanned { msg: "required query parameter 'toDate' missing: pass --to-date" } }
   let qp = [(serialize-qp "outputFormat" $output_format "scalar") (serialize-qp "fromDate" $from_date "scalar") (serialize-qp "toDate" $to_date "scalar") (serialize-qp "featureClass" $feature_class "scalar") (serialize-qp "featureCategory" $feature_category "scalar") (serialize-qp "featureType" $feature_type "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "embed" $embed "scalar") (serialize-qp "outputStyle" $output_style "scalar") (serialize-qp "itemsPerPage" $items_per_page "scalar") (serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/names/changes" $qp $auth.query)
   let accept_val = "application/json"
@@ -360,8 +368,8 @@ export def "get-names-decisions-recent" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --output-format: string@output-format-completer-1 # The format of the output. (default: json, e.g. json)
-  --days: int # The number of days used to define the time window of naming decisions to search. The number is interpreted as searching for 'names affected by decisions within the last X days'. (default: 30, e.g. 30)
+  --output-format: string@output-format-completer-1 # The format of the output. (required, default: json, e.g. json)
+  --days: int # The number of days used to define the time window of naming decisions to search. The number is interpreted as searching for 'names affected by decisions within the last X days'. (required, default: 30, e.g. 30)
   --feature-class: string # A filter to limit the search to names associated with features of a certain 'class' The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
   --feature-category: string # A filter to limit the search to names associated with features of a certain 'category' The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
   --feature-type: string # A filter to limit the search to names associated with features of a certain 'type' The value of this parameter should be a 'featureTypeCode' value returned by the /featureTypes resource, or an asterisk (*) to request that all feature types be included (default: *)
@@ -374,6 +382,8 @@ export def "get-names-decisions-recent" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let output_format = ($output_format | default "json")
+  let days = ($days | default 30)
   let qp = [(serialize-qp "outputFormat" $output_format "scalar") (serialize-qp "days" $days "scalar") (serialize-qp "featureClass" $feature_class "scalar") (serialize-qp "featureCategory" $feature_category "scalar") (serialize-qp "featureType" $feature_type "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "embed" $embed "scalar") (serialize-qp "outputStyle" $output_style "scalar") (serialize-qp "itemsPerPage" $items_per_page "scalar") (serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/names/decisions/recent" $qp $auth.query)
   let accept_val = "application/json"
@@ -405,8 +415,8 @@ export def "get-names-decisions-year" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --output-format: string@output-format-completer-1 # The format of the output. (default: json, e.g. json)
-  --year: int # The year in which to search for names affected by naming decisions'. (e.g. 2007)
+  --output-format: string@output-format-completer-1 # The format of the output. (required, default: json, e.g. json)
+  --year: int # The year in which to search for names affected by naming decisions'. (required, e.g. 2007)
   --feature-class: string # A filter to limit the search to names associated with features of a certain 'class' The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
   --feature-category: string # A filter to limit the search to names associated with features of a certain 'category' The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
   --feature-type: string # A filter to limit the search to names associated with features of a certain 'type' The value of this parameter should be a 'featureTypeCode' value returned by the /featureTypes resource, or an asterisk (*) to request that all feature types be included (default: *)
@@ -419,6 +429,8 @@ export def "get-names-decisions-year" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let output_format = ($output_format | default "json")
+  if ($year == null) { error make --unspanned { msg: "required query parameter 'year' missing: pass --year" } }
   let qp = [(serialize-qp "outputFormat" $output_format "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "featureClass" $feature_class "scalar") (serialize-qp "featureCategory" $feature_category "scalar") (serialize-qp "featureType" $feature_type "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "embed" $embed "scalar") (serialize-qp "outputStyle" $output_style "scalar") (serialize-qp "itemsPerPage" $items_per_page "scalar") (serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/names/decisions/year" $qp $auth.query)
   let accept_val = "application/json"
@@ -450,8 +462,8 @@ export def "get-names-inside" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --output-format: string@output-format-completer-1 # The format of the output. (default: json, e.g. json)
-  --bbox: string # A geographic bounding box defining the search area. Must be specified as a string of the form 'minLongitude,minLatitude,maxLongitude,maxLatitude' (WGS84). e.g. -119,49,-118,50 (e.g. -119,49,-118,50)
+  --output-format: string@output-format-completer-1 # The format of the output. (required, default: json, e.g. json)
+  --bbox: string # A geographic bounding box defining the search area. Must be specified as a string of the form 'minLongitude,minLatitude,maxLongitude,maxLatitude' (WGS84). e.g. -119,49,-118,50 (required, e.g. -119,49,-118,50)
   --feature-class: string # A filter to limit the search to names associated with features of a certain 'class' The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
   --feature-category: string # A filter to limit the search to names associated with features of a certain 'category' The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
   --feature-type: string # A filter to limit the search to names associated with features of a certain 'type' The value of this parameter should be a 'featureTypeCode' value returned by the /featureTypes resource, or an asterisk (*) to request that all feature types be included (default: *)
@@ -464,6 +476,8 @@ export def "get-names-inside" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let output_format = ($output_format | default "json")
+  if ($bbox == null) { error make --unspanned { msg: "required query parameter 'bbox' missing: pass --bbox" } }
   let qp = [(serialize-qp "outputFormat" $output_format "scalar") (serialize-qp "bbox" $bbox "scalar") (serialize-qp "featureClass" $feature_class "scalar") (serialize-qp "featureCategory" $feature_category "scalar") (serialize-qp "featureType" $feature_type "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "embed" $embed "scalar") (serialize-qp "outputStyle" $output_style "scalar") (serialize-qp "itemsPerPage" $items_per_page "scalar") (serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/names/inside" $qp $auth.query)
   let accept_val = "application/json"
@@ -495,9 +509,9 @@ export def "get-names-near" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --output-format: string@output-format-completer-1 # The format of the output. (default: json, e.g. -119,49,-118,50)
-  --feature-point: string # A geographic coordinate specifying the centre point of the search area. Must be specified as a string of the form 'longitude,latitude' (WGS84). e.g. -120,51 (e.g. -120,51)
-  --distance: string # A radius (in kilometres) around the centre point.
+  --output-format: string@output-format-completer-1 # The format of the output. (required, default: json, e.g. -119,49,-118,50)
+  --feature-point: string # A geographic coordinate specifying the centre point of the search area. Must be specified as a string of the form 'longitude,latitude' (WGS84). e.g. -120,51 (required, e.g. -120,51)
+  --distance: string # A radius (in kilometres) around the centre point. (required)
   --feature-class: string # A filter to limit the search to names associated with features of a certain 'class' The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
   --feature-category: string # A filter to limit the search to names associated with features of a certain 'category' The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
   --feature-type: string # A filter to limit the search to names associated with features of a certain 'type' The value of this parameter should be a 'featureTypeCode' value returned by the /featureTypes resource, or an asterisk (*) to request that all feature types be included (default: *)
@@ -510,6 +524,9 @@ export def "get-names-near" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let output_format = ($output_format | default "json")
+  if ($feature_point == null) { error make --unspanned { msg: "required query parameter 'featurePoint' missing: pass --feature-point" } }
+  if ($distance == null) { error make --unspanned { msg: "required query parameter 'distance' missing: pass --distance" } }
   let qp = [(serialize-qp "outputFormat" $output_format "scalar") (serialize-qp "featurePoint" $feature_point "scalar") (serialize-qp "distance" $distance "scalar") (serialize-qp "featureClass" $feature_class "scalar") (serialize-qp "featureCategory" $feature_category "scalar") (serialize-qp "featureType" $feature_type "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "embed" $embed "scalar") (serialize-qp "outputStyle" $output_style "scalar") (serialize-qp "itemsPerPage" $items_per_page "scalar") (serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/names/near" $qp $auth.query)
   let accept_val = "application/json"
@@ -541,8 +558,8 @@ export def "get-names-not-official-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --output-format: string@output-format-completer-1 # The format of the output. (default: json, e.g. json)
-  --name: string # A filter to search based on the the text of the name itself. Use the asterisk (*) as a wildcard character. For example 'vancouv*' (e.g. Victoria)
+  --output-format: string@output-format-completer-1 # The format of the output. (required, default: json, e.g. json)
+  --name: string # A filter to search based on the the text of the name itself. Use the asterisk (*) as a wildcard character. For example 'vancouv*' (required, e.g. Victoria)
   --exact-spelling: int@exact-spelling-completer # If the 'name' parameter is specified, 'exactSpelling' specifies whether to include only names that exactly match the search text (exactSpelling=1), or whether to also include names with similar spellings (exactSpelling=0) (default: 0)
   --feature-class: string # A filter to limit the search to names associated with features of a certain 'class' The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
   --feature-category: string # A filter to limit the search to names associated with features of a certain 'category' The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
@@ -556,6 +573,8 @@ export def "get-names-not-official-search" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let output_format = ($output_format | default "json")
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
   let qp = [(serialize-qp "outputFormat" $output_format "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "exactSpelling" $exact_spelling "scalar") (serialize-qp "featureClass" $feature_class "scalar") (serialize-qp "featureCategory" $feature_category "scalar") (serialize-qp "featureType" $feature_type "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "embed" $embed "scalar") (serialize-qp "outputStyle" $output_style "scalar") (serialize-qp "itemsPerPage" $items_per_page "scalar") (serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/names/notOfficial/search" $qp $auth.query)
   let accept_val = "application/json"
@@ -587,8 +606,8 @@ export def "get-names-official-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --output-format: string@output-format-completer-1 # The format of the output. (default: json, e.g. json)
-  --name: string # A filter to search based on the the text of the name itself. Use the asterisk (*) as a wildcard character. For example 'vancouv*' (e.g. Victoria)
+  --output-format: string@output-format-completer-1 # The format of the output. (required, default: json, e.g. json)
+  --name: string # A filter to search based on the the text of the name itself. Use the asterisk (*) as a wildcard character. For example 'vancouv*' (required, e.g. Victoria)
   --exact-spelling: int@exact-spelling-completer # If the 'name' parameter is specified, 'exactSpelling' specifies whether to include only names that exactly match the search text (exactSpelling=1), or whether to also include names with similar spellings (exactSpelling=0) (default: 0)
   --feature-class: string # A filter to limit the search to names associated with features of a certain 'class' The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
   --feature-category: string # A filter to limit the search to names associated with features of a certain 'category' The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
@@ -602,6 +621,8 @@ export def "get-names-official-search" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let output_format = ($output_format | default "json")
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
   let qp = [(serialize-qp "outputFormat" $output_format "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "exactSpelling" $exact_spelling "scalar") (serialize-qp "featureClass" $feature_class "scalar") (serialize-qp "featureCategory" $feature_category "scalar") (serialize-qp "featureType" $feature_type "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "embed" $embed "scalar") (serialize-qp "outputStyle" $output_style "scalar") (serialize-qp "itemsPerPage" $items_per_page "scalar") (serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/names/official/search" $qp $auth.query)
   let accept_val = "application/json"
@@ -633,8 +654,8 @@ export def "get-names-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --output-format: string@output-format-completer-1 # The format of the output. (default: json, e.g. json)
-  --name: string # A filter to search based on the the text of the name itself. Use the asterisk (*) as a wildcard character. For example 'vancouv*' (e.g. Victoria)
+  --output-format: string@output-format-completer-1 # The format of the output. (required, default: json, e.g. json)
+  --name: string # A filter to search based on the the text of the name itself. Use the asterisk (*) as a wildcard character. For example 'vancouv*' (required, e.g. Victoria)
   --exact-spelling: int@exact-spelling-completer # If the 'name' parameter is specified, 'exactSpelling' specifies whether to include only names that exactly match the search text (exactSpelling=1), or whether to also include names with similar spellings (exactSpelling=0) (default: 0)
   --feature-class: string # A filter to limit the search to names associated with features of a certain 'class' The value of this parameter should be a 'featureClassCode' value returned by the /featureClasses resource, or an asterisk (*) to request that all feature classes be included. (default: *)
   --feature-category: string # A filter to limit the search to names associated with features of a certain 'category' The value of this parameter should be a 'featureCategoryCode' value returned by the /featureCategories resource, or an asterisk (*) to request that all feature categories be included. (default: *)
@@ -648,6 +669,8 @@ export def "get-names-search" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let output_format = ($output_format | default "json")
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
   let qp = [(serialize-qp "outputFormat" $output_format "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "exactSpelling" $exact_spelling "scalar") (serialize-qp "featureClass" $feature_class "scalar") (serialize-qp "featureCategory" $feature_category "scalar") (serialize-qp "featureType" $feature_type "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "embed" $embed "scalar") (serialize-qp "outputStyle" $output_style "scalar") (serialize-qp "itemsPerPage" $items_per_page "scalar") (serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/names/search" $qp $auth.query)
   let accept_val = "application/json"
@@ -671,7 +694,7 @@ export def "get-names-search" [
 # GET /names/{nameId}.{outputFormat}
 export def "get-names-name-id-output-format" [
   name_id: int
-  output_format: string
+  output_format: string@output-format-completer-2
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

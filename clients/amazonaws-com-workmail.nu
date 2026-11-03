@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -103,9 +103,12 @@ def x-amz-target-completer-3 [] { ["WorkMailService.CancelMailboxExportJob"] }
 def x-amz-target-completer-4 [] { ["WorkMailService.CreateAlias"] }
 def x-amz-target-completer-5 [] { ["WorkMailService.CreateAvailabilityConfiguration"] }
 def x-amz-target-completer-6 [] { ["WorkMailService.CreateGroup"] }
+def type-completer [] { ["FULL_ACCESS" "READ_ONLY"] }
 def x-amz-target-completer-7 [] { ["WorkMailService.CreateImpersonationRole"] }
+def effect-completer [] { ["ALLOW" "DENY"] }
 def x-amz-target-completer-8 [] { ["WorkMailService.CreateMobileDeviceAccessRule"] }
 def x-amz-target-completer-9 [] { ["WorkMailService.CreateOrganization"] }
+def type-completer-1 [] { ["EQUIPMENT" "ROOM"] }
 def x-amz-target-completer-10 [] { ["WorkMailService.CreateResource"] }
 def x-amz-target-completer-11 [] { ["WorkMailService.CreateUser"] }
 def x-amz-target-completer-12 [] { ["WorkMailService.DeleteAccessControlRule"] }
@@ -221,14 +224,15 @@ export def "associate-delegate-to-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  organization_id: any
-  resource_id: any
-  entity_id: any
+  --x-amz-target: string@x-amz-target-completer # required
+  organization_id: string # The organization under which the resource exists.
+  resource_id: string # The resource for which members (users or groups) are associated.
+  entity_id: string # The member (user or group) to associate to the resource.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.AssociateDelegateToResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "ResourceId": $resource_id, "EntityId": $entity_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -271,14 +275,15 @@ export def "associate-member-to-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  organization_id: any
-  group_id: any
-  member_id: any
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  organization_id: string # The organization under which the group exists.
+  group_id: string # The group to which the member (user or group) is associated.
+  member_id: string # The member (user or group) to associate to the group.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.AssociateMemberToGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "GroupId": $group_id, "MemberId": $member_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -321,13 +326,14 @@ export def "assume-impersonation-role" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  organization_id: any
-  impersonation_role_id: any
-]: any -> record<Token: record, ExpiresIn: record> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  organization_id: string # The WorkMail organization under which the impersonation role will be assumed.
+  impersonation_role_id: string # The impersonation role ID to assume.
+]: any -> record<Token: string, ExpiresIn: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.AssumeImpersonationRole")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "ImpersonationRoleId": $impersonation_role_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -370,14 +376,15 @@ export def "cancel-mailbox-export-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  client_token: any
-  job_id: any
-  organization_id: any
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  client_token: string # The idempotency token for the client request.
+  job_id: string # The job ID.
+  organization_id: string # The organization ID.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.CancelMailboxExportJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClientToken": $client_token, "JobId": $job_id, "OrganizationId": $organization_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -420,14 +427,15 @@ export def "create-alias" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  organization_id: any
-  entity_id: any
-  alias: any
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  organization_id: string # The organization under which the member (user or group) exists.
+  entity_id: string # The member (user or group) to which this alias is added.
+  alias: string # The alias to add to the member set.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.CreateAlias")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "EntityId": $entity_id, "Alias": $alias} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -453,6 +461,8 @@ export def "create-alias" [
 #
 # POST /
 # operationId: CreateAvailabilityConfiguration
+# --EwsProvider shape: {EwsEndpoint: string, EwsUsername: string, EwsPassword: string}
+# --LambdaProvider shape: {LambdaArn: string}
 export def "create-availability-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -470,16 +480,17 @@ export def "create-availability-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  --client-token: any
-  organization_id: any
-  domain_name: any
-  --ews-provider: any
-  --lambda-provider: any
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  --client-token: string # An idempotent token that ensures that an API request is executed only once.
+  organization_id: string # The WorkMail organization for which the AvailabilityConfiguration will be created.
+  domain_name: string # The domain to which the provider applies.
+  --ews-provider: record # Describes an EWS based availability provider. This is only used as input to the service. — shape: {EwsEndpoint: string, EwsUsername: string, EwsPassword: string}
+  --lambda-provider: record # Describes a Lambda based availability provider. — shape: {LambdaArn: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.CreateAvailabilityConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClientToken": $client_token, "OrganizationId": $organization_id, "DomainName": $domain_name, "EwsProvider": $ews_provider, "LambdaProvider": $lambda_provider} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -522,13 +533,14 @@ export def "create-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  organization_id: any
-  name: any
-]: any -> record<GroupId: record> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  organization_id: string # The organization under which the group is to be created.
+  name: string # The name of the group.
+]: any -> record<GroupId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.CreateGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -554,6 +566,7 @@ export def "create-group" [
 #
 # POST /
 # operationId: CreateImpersonationRole
+# --Rules item shape: {ImpersonationRuleId: string, Name?: string, Description?: string, Effect: "ALLOW"|"DENY", TargetUsers?: list<string>, NotTargetUsers?: list<string>}
 export def "create-impersonation-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -571,17 +584,18 @@ export def "create-impersonation-role" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  --client-token: any
-  organization_id: any
-  name: any
-  type: any
-  --description: any
-  rules: any
-]: any -> record<ImpersonationRoleId: record> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  --client-token: string # The idempotency token for the client request.
+  organization_id: string # The WorkMail organization to create the new impersonation role within.
+  name: string # The name of the new impersonation role.
+  type: string@type-completer # The impersonation role's type. The available impersonation role types are READ_ONLY or FULL_ACCESS.
+  --description: string # The description of the new impersonation role.
+  rules: list # The list of rules for the impersonation role. — item shape: {ImpersonationRuleId: string, Name?: string, Description?: string, Effect: "ALLOW"|"DENY", TargetUsers?: list<string>, NotTargetUsers?: list<string>}
+]: any -> record<ImpersonationRoleId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.CreateImpersonationRole")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClientToken": $client_token, "OrganizationId": $organization_id, "Name": $name, "Type": $type, "Description": $description, "Rules": $rules} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -624,24 +638,25 @@ export def "create-mobile-device-access-rule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  organization_id: any
-  --client-token: any
-  name: any
-  --description: any
-  effect: any
-  --device-types: any
-  --not-device-types: any
-  --device-models: any
-  --not-device-models: any
-  --device-operating-systems: any
-  --not-device-operating-systems: any
-  --device-user-agents: any
-  --not-device-user-agents: any
-]: any -> record<MobileDeviceAccessRuleId: record> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  organization_id: string # The WorkMail organization under which the rule will be created.
+  --client-token: string # The idempotency token for the client request.
+  name: string # The rule name.
+  --description: string # The rule description.
+  effect: string@effect-completer # The effect of the rule when it matches. Allowed values are ALLOW or DENY.
+  --device-types: list<string> # Device types that the rule will match.
+  --not-device-types: list<string> # Device types that the rule will not match. All other device types will match.
+  --device-models: list<string> # Device models that the rule will match.
+  --not-device-models: list<string> # Device models that the rule will not match. All other device models will match.
+  --device-operating-systems: list<string> # Device operating systems that the rule will match.
+  --not-device-operating-systems: list<string> # Device operating systems that the rule will not match. All other device operating systems will match.
+  --device-user-agents: list<string> # Device user agents that the rule will match.
+  --not-device-user-agents: list<string> # Device user agents that the rule will not match. All other device user agents will match.
+]: any -> record<MobileDeviceAccessRuleId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.CreateMobileDeviceAccessRule")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "ClientToken": $client_token, "Name": $name, "Description": $description, "Effect": $effect, "DeviceTypes": $device_types, "NotDeviceTypes": $not_device_types, "DeviceModels": $device_models, "NotDeviceModels": $not_device_models, "DeviceOperatingSystems": $device_operating_systems, "NotDeviceOperatingSystems": $not_device_operating_systems, "DeviceUserAgents": $device_user_agents, "NotDeviceUserAgents": $not_device_user_agents} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -667,6 +682,7 @@ export def "create-mobile-device-access-rule" [
 #
 # POST /
 # operationId: CreateOrganization
+# --Domains item shape: {DomainName?: string, HostedZoneId?: string}
 export def "create-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -684,17 +700,18 @@ export def "create-organization" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  --directory-id: any
-  alias: any
-  --client-token: any
-  --domains: any
-  --kms-key-arn: any
-  --enable-interoperability: any
-]: any -> record<OrganizationId: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  --directory-id: string # The AWS Directory Service directory ID.
+  alias: string # The organization alias.
+  --client-token: string # The idempotency token associated with the request.
+  --domains: list # The email domains to associate with the organization. — item shape: {DomainName?: string, HostedZoneId?: string}
+  --kms-key-arn: string # The Amazon Resource Name (ARN) of a customer managed key from AWS KMS.
+  --enable-interoperability: oneof<nothing, bool> # When true, allows organization interoperability between WorkMail and Microsoft Exchange. If true, you must include a AD Connector directory ID in the request.
+]: any -> record<OrganizationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.CreateOrganization")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id, "Alias": $alias, "ClientToken": $client_token, "Domains": $domains, "KmsKeyArn": $kms_key_arn, "EnableInteroperability": $enable_interoperability} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -737,14 +754,15 @@ export def "create-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  organization_id: any
-  name: any
-  type: any
-]: any -> record<ResourceId: record> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  organization_id: string # The identifier associated with the organization for which the resource is created.
+  name: string # The name of the new resource.
+  type: string@type-completer-1 # The type of the new resource. The available types are equipment and room.
+]: any -> record<ResourceId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.CreateResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "Name": $name, "Type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -787,15 +805,16 @@ export def "create-user" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  organization_id: any
-  name: any
-  display_name: any
-  password: any
-]: any -> record<UserId: record> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  organization_id: string # The identifier of the organization for which the user is created.
+  name: string # The name for the new user. WorkMail directory user names have a maximum length of 64. All others have a maximum length of 20.
+  display_name: string # The display name for the new user.
+  password: string # The password for the new user. (format: password)
+]: any -> record<UserId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.CreateUser")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "Name": $name, "DisplayName": $display_name, "Password": $password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -838,13 +857,14 @@ export def "delete-access-control-rule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  organization_id: any
-  name: any
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  organization_id: string # The identifier for the organization.
+  name: string # The name of the access control rule.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.DeleteAccessControlRule")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -887,14 +907,15 @@ export def "delete-alias" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  organization_id: any
-  entity_id: any
-  alias: any
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  organization_id: string # The identifier for the organization under which the user exists.
+  entity_id: string # The identifier for the member (user or group) from which to have the aliases removed.
+  alias: string # The aliases to be removed from the user's set of aliases. Duplicate entries in the list are collapsed into single entries (the list is transformed into a set).
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.DeleteAlias")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "EntityId": $entity_id, "Alias": $alias} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -937,13 +958,14 @@ export def "delete-availability-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  organization_id: any
-  domain_name: any
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  organization_id: string # The WorkMail organization for which the AvailabilityConfiguration will be deleted.
+  domain_name: string # The domain for which the AvailabilityConfiguration will be deleted.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.DeleteAvailabilityConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "DomainName": $domain_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -986,12 +1008,13 @@ export def "delete-email-monitoring-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  organization_id: any
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  organization_id: string # The ID of the organization from which the email monitoring configuration is deleted.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.DeleteEmailMonitoringConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1034,13 +1057,14 @@ export def "delete-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  organization_id: any
-  group_id: any
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  organization_id: string # The organization that contains the group.
+  group_id: string # The identifier of the group to be deleted.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.DeleteGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "GroupId": $group_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1083,13 +1107,14 @@ export def "delete-impersonation-role" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  organization_id: any
-  impersonation_role_id: any
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  organization_id: string # The WorkMail organization from which to delete the impersonation role.
+  impersonation_role_id: string # The ID of the impersonation role to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.DeleteImpersonationRole")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "ImpersonationRoleId": $impersonation_role_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1132,14 +1157,15 @@ export def "delete-mailbox-permissions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  organization_id: any
-  entity_id: any
-  grantee_id: any
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  organization_id: string # The identifier of the organization under which the member (user or group) exists.
+  entity_id: string # The identifier of the member (user or group) that owns the mailbox.
+  grantee_id: string # The identifier of the member (user or group) for which to delete granted permissions.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.DeleteMailboxPermissions")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "EntityId": $entity_id, "GranteeId": $grantee_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1182,14 +1208,15 @@ export def "delete-mobile-device-access-override" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  organization_id: any
-  user_id: any
-  device_id: any
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  organization_id: string # The WorkMail organization for which the access override will be deleted.
+  user_id: string # The WorkMail user for which you want to delete the override. Accepts the following types of user identities: User ID: 12345678-1234-1234-1234-123456789012 or S-1-1-12-1234567890-123456789-123456789-1234 Email address: user@domain.tld User name: user
+  device_id: string # The mobile device for which you delete the override. DeviceId is case insensitive.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.DeleteMobileDeviceAccessOverride")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "UserId": $user_id, "DeviceId": $device_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1232,13 +1259,14 @@ export def "delete-mobile-device-access-rule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  organization_id: any
-  mobile_device_access_rule_id: any
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  organization_id: string # The WorkMail organization under which the rule will be deleted.
+  mobile_device_access_rule_id: string # The identifier of the rule to be deleted.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.DeleteMobileDeviceAccessRule")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "MobileDeviceAccessRuleId": $mobile_device_access_rule_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1281,17 +1309,19 @@ export def "delete-organization" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  --client-token: any
-  organization_id: any
-  delete_directory: any
-]: any -> record<OrganizationId: record, State: record> {
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  --client-token: string # The idempotency token associated with the request.
+  organization_id: string # The organization ID.
+  --delete-directory: oneof<nothing, bool> # If true, deletes the AWS Directory Service directory associated with the organization.
+]: any -> record<OrganizationId: string, State: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.DeleteOrganization")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClientToken": $client_token, "OrganizationId": $organization_id, "DeleteDirectory": $delete_directory} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "DeleteDirectory") == null) { error make --unspanned { msg: "required body field 'DeleteDirectory' missing: pass --delete-directory or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
@@ -1331,13 +1361,14 @@ export def "delete-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  organization_id: any
-  resource_id: any
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  organization_id: string # The identifier associated with the organization from which the resource is deleted.
+  resource_id: string # The identifier of the resource to be deleted.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.DeleteResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "ResourceId": $resource_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1380,13 +1411,14 @@ export def "delete-retention-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  organization_id: any
-  id: any
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  organization_id: string # The organization ID.
+  id: string # The retention policy ID.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.DeleteRetentionPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "Id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1429,13 +1461,14 @@ export def "delete-user" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  organization_id: any
-  user_id: any
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  organization_id: string # The organization that contains the user to be deleted.
+  user_id: string # The identifier of the user to be deleted.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.DeleteUser")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "UserId": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1478,13 +1511,14 @@ export def "deregister-from-work-mail" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  organization_id: any
-  entity_id: any
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  organization_id: string # The identifier for the organization under which the WorkMail entity exists.
+  entity_id: string # The identifier for the member (user or group) to be updated.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.DeregisterFromWorkMail")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "EntityId": $entity_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1527,13 +1561,14 @@ export def "deregister-mail-domain" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-26
-  organization_id: any
-  domain_name: any
+  --x-amz-target: string@x-amz-target-completer-26 # required
+  organization_id: string # The WorkMail organization for which the domain will be deregistered.
+  domain_name: string # The domain to deregister in WorkMail and SES.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.DeregisterMailDomain")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "DomainName": $domain_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1576,12 +1611,13 @@ export def "describe-email-monitoring-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-27
-  organization_id: any
-]: any -> record<RoleArn: record, LogGroupArn: record> {
+  --x-amz-target: string@x-amz-target-completer-27 # required
+  organization_id: string # The ID of the organization for which the email monitoring configuration is described.
+]: any -> record<RoleArn: string, LogGroupArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.DescribeEmailMonitoringConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1624,13 +1660,14 @@ export def "describe-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-28
-  organization_id: any
-  group_id: any
-]: any -> record<GroupId: record, Name: record, Email: record, State: record, EnabledDate: record, DisabledDate: record> {
+  --x-amz-target: string@x-amz-target-completer-28 # required
+  organization_id: string # The identifier for the organization under which the group exists.
+  group_id: string # The identifier for the group to be described.
+]: any -> record<GroupId: string, Name: string, Email: string, State: string, EnabledDate: string, DisabledDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.DescribeGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "GroupId": $group_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1673,12 +1710,13 @@ export def "describe-inbound-dmarc-settings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-29
-  organization_id: any
-]: any -> record<Enforced: record> {
+  --x-amz-target: string@x-amz-target-completer-29 # required
+  organization_id: string # Lists the ID of the given organization.
+]: any -> record<Enforced: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.DescribeInboundDmarcSettings")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1721,13 +1759,14 @@ export def "describe-mailbox-export-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-30
-  job_id: any
-  organization_id: any
-]: any -> record<EntityId: record, Description: record, RoleArn: record, KmsKeyArn: record, S3BucketName: record, S3Prefix: record, S3Path: record, EstimatedProgress: record, State: record, ErrorInfo: record, StartTime: record, EndTime: record> {
+  --x-amz-target: string@x-amz-target-completer-30 # required
+  job_id: string # The mailbox export job ID.
+  organization_id: string # The organization ID.
+]: any -> record<EntityId: string, Description: string, RoleArn: string, KmsKeyArn: string, S3BucketName: string, S3Prefix: string, S3Path: string, EstimatedProgress: int, State: string, ErrorInfo: string, StartTime: string, EndTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.DescribeMailboxExportJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id, "OrganizationId": $organization_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1770,12 +1809,13 @@ export def "describe-organization" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-31
-  organization_id: any
-]: any -> record<OrganizationId: record, Alias: record, State: record, DirectoryId: record, DirectoryType: record, DefaultMailDomain: record, CompletedDate: record, ErrorMessage: record, ARN: record> {
+  --x-amz-target: string@x-amz-target-completer-31 # required
+  organization_id: string # The identifier for the organization to be described.
+]: any -> record<OrganizationId: string, Alias: string, State: string, DirectoryId: string, DirectoryType: string, DefaultMailDomain: string, CompletedDate: string, ErrorMessage: string, ARN: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.DescribeOrganization")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1818,13 +1858,14 @@ export def "describe-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-32
-  organization_id: any
-  resource_id: any
-]: any -> record<ResourceId: record, Email: record, Name: record, Type: record, BookingOptions: record<AutoAcceptRequests: record, AutoDeclineRecurringRequests: record, AutoDeclineConflictingRequests: record>, State: record, EnabledDate: record, DisabledDate: record> {
+  --x-amz-target: string@x-amz-target-completer-32 # required
+  organization_id: string # The identifier associated with the organization for which the resource is described.
+  resource_id: string # The identifier of the resource to be described.
+]: any -> record<ResourceId: string, Email: string, Name: string, Type: string, BookingOptions: record<AutoAcceptRequests: bool, AutoDeclineRecurringRequests: bool, AutoDeclineConflictingRequests: bool>, State: string, EnabledDate: string, DisabledDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.DescribeResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "ResourceId": $resource_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1867,13 +1908,14 @@ export def "describe-user" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-33
-  organization_id: any
-  user_id: any
-]: any -> record<UserId: record, Name: record, Email: record, DisplayName: record, State: record, UserRole: record, EnabledDate: record, DisabledDate: record> {
+  --x-amz-target: string@x-amz-target-completer-33 # required
+  organization_id: string # The identifier for the organization under which the user exists.
+  user_id: string # The identifier for the user to be described.
+]: any -> record<UserId: string, Name: string, Email: string, DisplayName: string, State: string, UserRole: string, EnabledDate: string, DisabledDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.DescribeUser")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "UserId": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1916,14 +1958,15 @@ export def "disassociate-delegate-from-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-34
-  organization_id: any
-  resource_id: any
-  entity_id: any
+  --x-amz-target: string@x-amz-target-completer-34 # required
+  organization_id: string # The identifier for the organization under which the resource exists.
+  resource_id: string # The identifier of the resource from which delegates' set members are removed.
+  entity_id: string # The identifier for the member (user, group) to be removed from the resource's delegates.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.DisassociateDelegateFromResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "ResourceId": $resource_id, "EntityId": $entity_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1966,14 +2009,15 @@ export def "disassociate-member-from-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-35
-  organization_id: any
-  group_id: any
-  member_id: any
+  --x-amz-target: string@x-amz-target-completer-35 # required
+  organization_id: string # The identifier for the organization under which the group exists.
+  group_id: string # The identifier for the group from which members are removed.
+  member_id: string # The identifier for the member to be removed to the group.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.DisassociateMemberFromGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "GroupId": $group_id, "MemberId": $member_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2016,16 +2060,17 @@ export def "get-access-control-effect" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-36
-  organization_id: any
-  ip_address: any
-  action: any
-  --user-id: any
-  --impersonation-role-id: any
-]: any -> record<Effect: record, MatchedRules: record> {
+  --x-amz-target: string@x-amz-target-completer-36 # required
+  organization_id: string # The identifier for the organization.
+  ip_address: string # The IPv4 address.
+  action: string # The access protocol action. Valid values include ActiveSync, AutoDiscover, EWS, IMAP, SMTP, WindowsOutlook, and WebMail.
+  --user-id: string # The user ID.
+  --impersonation-role-id: string # The impersonation role ID.
+]: any -> record<Effect: string, MatchedRules: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.GetAccessControlEffect")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "IpAddress": $ip_address, "Action": $action, "UserId": $user_id, "ImpersonationRoleId": $impersonation_role_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2068,12 +2113,13 @@ export def "get-default-retention-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-37
-  organization_id: any
-]: any -> record<Id: record, Name: record, Description: record, FolderConfigurations: record> {
+  --x-amz-target: string@x-amz-target-completer-37 # required
+  organization_id: string # The organization ID.
+]: any -> record<Id: string, Name: string, Description: string, FolderConfigurations: table<Name: string, Action: string, Period: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.GetDefaultRetentionPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2116,13 +2162,14 @@ export def "get-impersonation-role" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-38
-  organization_id: any
-  impersonation_role_id: any
-]: any -> record<ImpersonationRoleId: record, Name: record, Type: record, Description: record, Rules: record, DateCreated: record, DateModified: record> {
+  --x-amz-target: string@x-amz-target-completer-38 # required
+  organization_id: string # The WorkMail organization from which to retrieve the impersonation role.
+  impersonation_role_id: string # The impersonation role ID to retrieve.
+]: any -> record<ImpersonationRoleId: string, Name: string, Type: string, Description: string, Rules: table<ImpersonationRuleId: string, Name: string, Description: string, Effect: string, TargetUsers: list, NotTargetUsers: list>, DateCreated: string, DateModified: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.GetImpersonationRole")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "ImpersonationRoleId": $impersonation_role_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2165,14 +2212,15 @@ export def "get-impersonation-role-effect" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-39
-  organization_id: any
-  impersonation_role_id: any
-  target_user: any
-]: any -> record<Type: record, Effect: record, MatchedRules: record> {
+  --x-amz-target: string@x-amz-target-completer-39 # required
+  organization_id: string # The WorkMail organization where the impersonation role is defined.
+  impersonation_role_id: string # The impersonation role ID to test.
+  target_user: string # The WorkMail organization user chosen to test the impersonation role. The following identity formats are available: User ID: 12345678-1234-1234-1234-123456789012 or S-1-1-12-1234567890-123456789-123456789-1234 Email address: user@domain.tld User name: user
+]: any -> record<Type: string, Effect: string, MatchedRules: table<ImpersonationRuleId: string, Name: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.GetImpersonationRoleEffect")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "ImpersonationRoleId": $impersonation_role_id, "TargetUser": $target_user} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2215,13 +2263,14 @@ export def "get-mail-domain" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-40
-  organization_id: any
-  domain_name: any
-]: any -> record<Records: record, IsTestDomain: record, IsDefault: record, OwnershipVerificationStatus: record, DkimVerificationStatus: record> {
+  --x-amz-target: string@x-amz-target-completer-40 # required
+  organization_id: string # The WorkMail organization for which the domain is retrieved.
+  domain_name: string # The domain from which you want to retrieve details.
+]: any -> record<Records: table<Type: string, Hostname: string, Value: string>, IsTestDomain: bool, IsDefault: bool, OwnershipVerificationStatus: string, DkimVerificationStatus: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.GetMailDomain")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "DomainName": $domain_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2264,13 +2313,14 @@ export def "get-mailbox-details" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-41
-  organization_id: any
-  user_id: any
-]: any -> record<MailboxQuota: record, MailboxSize: record> {
+  --x-amz-target: string@x-amz-target-completer-41 # required
+  organization_id: string # The identifier for the organization that contains the user whose mailbox details are being requested.
+  user_id: string # The identifier for the user whose mailbox details are being requested.
+]: any -> record<MailboxQuota: int, MailboxSize: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.GetMailboxDetails")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "UserId": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2313,16 +2363,17 @@ export def "get-mobile-device-access-effect" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-42
-  organization_id: any
-  --device-type: any
-  --device-model: any
-  --device-operating-system: any
-  --device-user-agent: any
-]: any -> record<Effect: record, MatchedRules: record> {
+  --x-amz-target: string@x-amz-target-completer-42 # required
+  organization_id: string # The WorkMail organization to simulate the access effect for.
+  --device-type: string # Device type the simulated user will report.
+  --device-model: string # Device model the simulated user will report.
+  --device-operating-system: string # Device operating system the simulated user will report.
+  --device-user-agent: string # Device user agent the simulated user will report.
+]: any -> record<Effect: string, MatchedRules: table<MobileDeviceAccessRuleId: string, Name: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.GetMobileDeviceAccessEffect")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "DeviceType": $device_type, "DeviceModel": $device_model, "DeviceOperatingSystem": $device_operating_system, "DeviceUserAgent": $device_user_agent} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2365,14 +2416,15 @@ export def "get-mobile-device-access-override" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-43
-  organization_id: any
-  user_id: any
-  device_id: any
-]: any -> record<UserId: record, DeviceId: record, Effect: record, Description: record, DateCreated: record, DateModified: record> {
+  --x-amz-target: string@x-amz-target-completer-43 # required
+  organization_id: string # The WorkMail organization to which you want to apply the override.
+  user_id: string # Identifies the WorkMail user for the override. Accepts the following types of user identities: User ID: 12345678-1234-1234-1234-123456789012 or S-1-1-12-1234567890-123456789-123456789-1234 Email address: user@domain.tld User name: user
+  device_id: string # The mobile device to which the override applies. DeviceId is case insensitive.
+]: any -> record<UserId: string, DeviceId: string, Effect: string, Description: string, DateCreated: string, DateModified: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.GetMobileDeviceAccessOverride")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "UserId": $user_id, "DeviceId": $device_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2415,12 +2467,13 @@ export def "list-access-control-rules" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-44
-  organization_id: any
-]: any -> record<Rules: record> {
+  --x-amz-target: string@x-amz-target-completer-44 # required
+  organization_id: string # The identifier for the organization.
+]: any -> record<Rules: table<Name: string, Effect: string, Description: string, IpRanges: list, NotIpRanges: list, Actions: list, NotActions: list, UserIds: list, NotUserIds: list, DateCreated: string, DateModified: string, ImpersonationRoleIds: list, NotImpersonationRoleIds: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.ListAccessControlRules")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2465,15 +2518,16 @@ export def "list-aliases" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-45
-  organization_id: any
-  entity_id: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<Aliases: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-45 # required
+  organization_id: string # The identifier for the organization under which the entity exists.
+  entity_id: string # The identifier for the entity for which to list the aliases.
+  --next-token-body: string # The token to use to retrieve the next page of results. The first call does not contain any tokens. (body field)
+  --max-results-body: int # The maximum number of results to return in a single call. (body field)
+]: any -> record<Aliases: list<string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.ListAliases")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"OrganizationId": $organization_id, "EntityId": $entity_id, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -2519,14 +2573,15 @@ export def "list-availability-configurations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-46
-  organization_id: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<AvailabilityConfigurations: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-46 # required
+  organization_id: string # The WorkMail organization for which the AvailabilityConfiguration's will be listed.
+  --max-results-body: int # The maximum number of results to return in a single call. (body field)
+  --next-token-body: string # The token to use to retrieve the next page of results. The first call does not require a token. (body field)
+]: any -> record<AvailabilityConfigurations: table<DomainName: string, ProviderType: string, EwsProvider: record, LambdaProvider: record, DateCreated: string, DateModified: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.ListAvailabilityConfigurations")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"OrganizationId": $organization_id, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -2572,15 +2627,16 @@ export def "list-group-members" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-47
-  organization_id: any
-  group_id: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<Members: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-47 # required
+  organization_id: string # The identifier for the organization under which the group exists.
+  group_id: string # The identifier for the group to which the members (users or groups) are associated.
+  --next-token-body: string # The token to use to retrieve the next page of results. The first call does not contain any tokens. (body field)
+  --max-results-body: int # The maximum number of results to return in a single call. (body field)
+]: any -> record<Members: table<Id: string, Name: string, Type: string, State: string, EnabledDate: string, DisabledDate: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.ListGroupMembers")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"OrganizationId": $organization_id, "GroupId": $group_id, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -2626,14 +2682,15 @@ export def "list-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-48
-  organization_id: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<Groups: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-48 # required
+  organization_id: string # The identifier for the organization under which the groups exist.
+  --next-token-body: string # The token to use to retrieve the next page of results. The first call does not contain any tokens. (body field)
+  --max-results-body: int # The maximum number of results to return in a single call. (body field)
+]: any -> record<Groups: table<Id: string, Email: string, Name: string, State: string, EnabledDate: string, DisabledDate: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.ListGroups")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"OrganizationId": $organization_id, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -2679,14 +2736,15 @@ export def "list-impersonation-roles" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-49
-  organization_id: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<Roles: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-49 # required
+  organization_id: string # The WorkMail organization to which the listed impersonation roles belong.
+  --next-token-body: string # The token used to retrieve the next page of results. The first call doesn't require a token. (body field)
+  --max-results-body: int # The maximum number of results returned in a single call. (body field)
+]: any -> record<Roles: table<ImpersonationRoleId: string, Name: string, Type: string, DateCreated: string, DateModified: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.ListImpersonationRoles")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"OrganizationId": $organization_id, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -2732,14 +2790,15 @@ export def "list-mail-domains" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-50
-  organization_id: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<MailDomains: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-50 # required
+  organization_id: string # The WorkMail organization for which to list domains.
+  --max-results-body: int # The maximum number of results to return in a single call. (body field)
+  --next-token-body: string # The token to use to retrieve the next page of results. The first call does not require a token. (body field)
+]: any -> record<MailDomains: table<DomainName: string, DefaultDomain: bool>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.ListMailDomains")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"OrganizationId": $organization_id, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -2785,14 +2844,15 @@ export def "list-mailbox-export-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-51
-  organization_id: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<Jobs: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-51 # required
+  organization_id: string # The organization ID.
+  --next-token-body: string # The token to use to retrieve the next page of results. (body field)
+  --max-results-body: int # The maximum number of results to return in a single call. (body field)
+]: any -> record<Jobs: table<JobId: string, EntityId: string, Description: string, S3BucketName: string, S3Path: string, EstimatedProgress: int, State: string, StartTime: string, EndTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.ListMailboxExportJobs")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"OrganizationId": $organization_id, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -2838,15 +2898,16 @@ export def "list-mailbox-permissions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-52
-  organization_id: any
-  entity_id: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<Permissions: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-52 # required
+  organization_id: string # The identifier of the organization under which the user, group, or resource exists.
+  entity_id: string # The identifier of the user, group, or resource for which to list mailbox permissions.
+  --next-token-body: string # The token to use to retrieve the next page of results. The first call does not contain any tokens. (body field)
+  --max-results-body: int # The maximum number of results to return in a single call. (body field)
+]: any -> record<Permissions: table<GranteeId: string, GranteeType: string, PermissionValues: list>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.ListMailboxPermissions")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"OrganizationId": $organization_id, "EntityId": $entity_id, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -2892,16 +2953,17 @@ export def "list-mobile-device-access-overrides" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-53
-  organization_id: any
-  --user-id: any
-  --device-id: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<Overrides: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-53 # required
+  organization_id: string # The WorkMail organization under which to list mobile device access overrides.
+  --user-id: string # The WorkMail user under which you list the mobile device access overrides. Accepts the following types of user identities: User ID: 12345678-1234-1234-1234-123456789012 or S-1-1-12-1234567890-123456789-123456789-1234 Email address: user@domain.tld User name: user
+  --device-id: string # The mobile device to which the access override applies.
+  --next-token-body: string # The token to use to retrieve the next page of results. The first call does not require a token. (body field)
+  --max-results-body: int # The maximum number of results to return in a single call. (body field)
+]: any -> record<Overrides: table<UserId: string, DeviceId: string, Effect: string, Description: string, DateCreated: string, DateModified: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.ListMobileDeviceAccessOverrides")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"OrganizationId": $organization_id, "UserId": $user_id, "DeviceId": $device_id, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -2945,12 +3007,13 @@ export def "list-mobile-device-access-rules" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-54
-  organization_id: any
-]: any -> record<Rules: record> {
+  --x-amz-target: string@x-amz-target-completer-54 # required
+  organization_id: string # The WorkMail organization for which to list the rules.
+]: any -> record<Rules: table<MobileDeviceAccessRuleId: string, Name: string, Description: string, Effect: string, DeviceTypes: list, NotDeviceTypes: list, DeviceModels: list, NotDeviceModels: list, DeviceOperatingSystems: list, NotDeviceOperatingSystems: list, DeviceUserAgents: list, NotDeviceUserAgents: list, DateCreated: string, DateModified: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.ListMobileDeviceAccessRules")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2995,13 +3058,14 @@ export def "list-organizations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-55
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<OrganizationSummaries: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-55 # required
+  --next-token-body: string # The token to use to retrieve the next page of results. The first call does not contain any tokens. (body field)
+  --max-results-body: int # The maximum number of results to return in a single call. (body field)
+]: any -> record<OrganizationSummaries: table<OrganizationId: string, Alias: string, DefaultMailDomain: string, ErrorMessage: string, State: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.ListOrganizations")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -3047,15 +3111,16 @@ export def "list-resource-delegates" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-56
-  organization_id: any
-  resource_id: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<Delegates: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-56 # required
+  organization_id: string # The identifier for the organization that contains the resource for which delegates are listed.
+  resource_id: string # The identifier for the resource whose delegates are listed.
+  --next-token-body: string # The token used to paginate through the delegates associated with a resource. (body field)
+  --max-results-body: int # The number of maximum results in a page. (body field)
+]: any -> record<Delegates: table<Id: string, Type: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.ListResourceDelegates")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"OrganizationId": $organization_id, "ResourceId": $resource_id, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -3101,14 +3166,15 @@ export def "list-resources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-57
-  organization_id: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<Resources: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-57 # required
+  organization_id: string # The identifier for the organization under which the resources exist.
+  --next-token-body: string # The token to use to retrieve the next page of results. The first call does not contain any tokens. (body field)
+  --max-results-body: int # The maximum number of results to return in a single call. (body field)
+]: any -> record<Resources: table<Id: string, Email: string, Name: string, Type: string, State: string, EnabledDate: string, DisabledDate: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.ListResources")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"OrganizationId": $organization_id, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -3152,12 +3218,13 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-58
-  resource_arn: any
-]: any -> record<Tags: record> {
+  --x-amz-target: string@x-amz-target-completer-58 # required
+  resource_arn: string # The resource ARN.
+]: any -> record<Tags: table<Key: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.ListTagsForResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceARN": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3202,14 +3269,15 @@ export def "list-users" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-59
-  organization_id: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<Users: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-59 # required
+  organization_id: string # The identifier for the organization under which the users exist.
+  --next-token-body: string # The token to use to retrieve the next page of results. The first call does not contain any tokens. (body field)
+  --max-results-body: int # The maximum number of results to return in a single call. (body field)
+]: any -> record<Users: table<Id: string, Email: string, Name: string, DisplayName: string, State: string, UserRole: string, EnabledDate: string, DisabledDate: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.ListUsers")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"OrganizationId": $organization_id, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -3253,23 +3321,24 @@ export def "put-access-control-rule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-60
-  name: any
-  effect: any
-  description: any
-  --ip-ranges: any
-  --not-ip-ranges: any
-  --actions: any
-  --not-actions: any
-  --user-ids: any
-  --not-user-ids: any
-  organization_id: any
-  --impersonation-role-ids: any
-  --not-impersonation-role-ids: any
+  --x-amz-target: string@x-amz-target-completer-60 # required
+  name: string # The rule name.
+  effect: string@effect-completer # The rule effect.
+  description: string # The rule description.
+  --ip-ranges: list<string> # IPv4 CIDR ranges to include in the rule.
+  --not-ip-ranges: list<string> # IPv4 CIDR ranges to exclude from the rule.
+  --actions: list<string> # Access protocol actions to include in the rule. Valid values include ActiveSync, AutoDiscover, EWS, IMAP, SMTP, WindowsOutlook, and WebMail.
+  --not-actions: list<string> # Access protocol actions to exclude from the rule. Valid values include ActiveSync, AutoDiscover, EWS, IMAP, SMTP, WindowsOutlook, and WebMail.
+  --user-ids: list<string> # User IDs to include in the rule.
+  --not-user-ids: list<string> # User IDs to exclude from the rule.
+  organization_id: string # The identifier of the organization.
+  --impersonation-role-ids: list<string> # Impersonation role IDs to include in the rule.
+  --not-impersonation-role-ids: list<string> # Impersonation role IDs to exclude from the rule.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.PutAccessControlRule")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Effect": $effect, "Description": $description, "IpRanges": $ip_ranges, "NotIpRanges": $not_ip_ranges, "Actions": $actions, "NotActions": $not_actions, "UserIds": $user_ids, "NotUserIds": $not_user_ids, "OrganizationId": $organization_id, "ImpersonationRoleIds": $impersonation_role_ids, "NotImpersonationRoleIds": $not_impersonation_role_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3312,14 +3381,15 @@ export def "put-email-monitoring-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-61
-  organization_id: any
-  role_arn: any
-  log_group_arn: any
+  --x-amz-target: string@x-amz-target-completer-61 # required
+  organization_id: string # The ID of the organization for which the email monitoring configuration is set.
+  role_arn: string # The Amazon Resource Name (ARN) of the IAM Role associated with the email monitoring configuration.
+  log_group_arn: string # The Amazon Resource Name (ARN) of the CloudWatch Log group associated with the email monitoring configuration.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.PutEmailMonitoringConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "RoleArn": $role_arn, "LogGroupArn": $log_group_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3362,16 +3432,18 @@ export def "put-inbound-dmarc-settings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-62
-  organization_id: any
-  enforced: any
+  --x-amz-target: string@x-amz-target-completer-62 # required
+  organization_id: string # The ID of the organization that you are applying the DMARC policy to.
+  --enforced: oneof<nothing, bool> # Enforces or suspends a policy after it's applied.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.PutInboundDmarcSettings")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "Enforced": $enforced} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "Enforced") == null) { error make --unspanned { msg: "required body field 'Enforced' missing: pass --enforced or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
@@ -3411,15 +3483,16 @@ export def "put-mailbox-permissions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-63
-  organization_id: any
-  entity_id: any
-  grantee_id: any
-  permission_values: any
+  --x-amz-target: string@x-amz-target-completer-63 # required
+  organization_id: string # The identifier of the organization under which the user, group, or resource exists.
+  entity_id: string # The identifier of the user, group, or resource for which to update mailbox permissions.
+  grantee_id: string # The identifier of the user, group, or resource to which to grant the permissions.
+  permission_values: list<string> # The permissions granted to the grantee. SEND_AS allows the grantee to send email as the owner of the mailbox (the grantee is not mentioned on these emails). SEND_ON_BEHALF allows the grantee to send email on behalf of the owner of the mailbox (the grantee is not mentioned as the physical sender of these emails). FULL_ACCESS allows the grantee full access to the mailbox, irrespective of other folder-level permissions set on the mailbox.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.PutMailboxPermissions")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "EntityId": $entity_id, "GranteeId": $grantee_id, "PermissionValues": $permission_values} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3462,16 +3535,17 @@ export def "put-mobile-device-access-override" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-64
-  organization_id: any
-  user_id: any
-  device_id: any
-  effect: any
-  --description: any
+  --x-amz-target: string@x-amz-target-completer-64 # required
+  organization_id: string # Identifies the WorkMail organization for which you create the override.
+  user_id: string # The WorkMail user for which you create the override. Accepts the following types of user identities: User ID: 12345678-1234-1234-1234-123456789012 or S-1-1-12-1234567890-123456789-123456789-1234 Email address: user@domain.tld User name: user
+  device_id: string # The mobile device for which you create the override. DeviceId is case insensitive.
+  effect: string@effect-completer # The effect of the override, ALLOW or DENY.
+  --description: string # A description of the override.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.PutMobileDeviceAccessOverride")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "UserId": $user_id, "DeviceId": $device_id, "Effect": $effect, "Description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3497,6 +3571,7 @@ export def "put-mobile-device-access-override" [
 #
 # POST /
 # operationId: PutRetentionPolicy
+# --FolderConfigurations item shape: {Name: "INBOX"|"DELETED_ITEMS"|"SENT_ITEMS"|"DRAFTS"|"JUNK_EMAIL", Action: "NONE"|"DELETE"|"PERMANENTLY_DELETE", Period?: int}
 export def "put-retention-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3514,16 +3589,17 @@ export def "put-retention-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-65
-  organization_id: any
-  --id: any
-  name: any
-  --description: any
-  folder_configurations: any
+  --x-amz-target: string@x-amz-target-completer-65 # required
+  organization_id: string # The organization ID.
+  --id: string # The retention policy ID.
+  name: string # The retention policy name.
+  --description: string # The retention policy description. (format: password)
+  folder_configurations: list # The retention policy folder configurations. — item shape: {Name: "INBOX"|"DELETED_ITEMS"|"SENT_ITEMS"|"DRAFTS"|"JUNK_EMAIL", Action: "NONE"|"DELETE"|"PERMANENTLY_DELETE", Period?: int}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.PutRetentionPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "Id": $id, "Name": $name, "Description": $description, "FolderConfigurations": $folder_configurations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3566,14 +3642,15 @@ export def "register-mail-domain" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-66
-  --client-token: any
-  organization_id: any
-  domain_name: any
+  --x-amz-target: string@x-amz-target-completer-66 # required
+  --client-token: string # Idempotency token used when retrying requests.
+  organization_id: string # The WorkMail organization under which you're creating the domain.
+  domain_name: string # The name of the mail domain to create in WorkMail and SES.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.RegisterMailDomain")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClientToken": $client_token, "OrganizationId": $organization_id, "DomainName": $domain_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3616,14 +3693,15 @@ export def "register-to-work-mail" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-67
-  organization_id: any
-  entity_id: any
-  email: any
+  --x-amz-target: string@x-amz-target-completer-67 # required
+  organization_id: string # The identifier for the organization under which the user, group, or resource exists.
+  entity_id: string # The identifier for the user, group, or resource to be updated.
+  email: string # The email for the user, group, or resource to be updated.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.RegisterToWorkMail")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "EntityId": $entity_id, "Email": $email} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3666,14 +3744,15 @@ export def "reset-password" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-68
-  organization_id: any
-  user_id: any
-  password: any
+  --x-amz-target: string@x-amz-target-completer-68 # required
+  organization_id: string # The identifier of the organization that contains the user for which the password is reset.
+  user_id: string # The identifier of the user for whom the password is reset.
+  password: string # The new password for the user. (format: password)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.ResetPassword")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "UserId": $user_id, "Password": $password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3716,19 +3795,20 @@ export def "start-mailbox-export-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-69
-  client_token: any
-  organization_id: any
-  entity_id: any
-  --description: any
-  role_arn: any
-  kms_key_arn: any
-  s3_bucket_name: any
-  s3_prefix: any
-]: any -> record<JobId: record> {
+  --x-amz-target: string@x-amz-target-completer-69 # required
+  client_token: string # The idempotency token for the client request.
+  organization_id: string # The identifier associated with the organization.
+  entity_id: string # The identifier of the user or resource associated with the mailbox.
+  --description: string # The mailbox export job description.
+  role_arn: string # The ARN of the AWS Identity and Access Management (IAM) role that grants write permission to the S3 bucket.
+  kms_key_arn: string # The Amazon Resource Name (ARN) of the symmetric AWS Key Management Service (AWS KMS) key that encrypts the exported mailbox content.
+  s3_bucket_name: string # The name of the S3 bucket.
+  s3_prefix: string # The S3 bucket prefix.
+]: any -> record<JobId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.StartMailboxExportJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClientToken": $client_token, "OrganizationId": $organization_id, "EntityId": $entity_id, "Description": $description, "RoleArn": $role_arn, "KmsKeyArn": $kms_key_arn, "S3BucketName": $s3_bucket_name, "S3Prefix": $s3_prefix} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3754,6 +3834,7 @@ export def "start-mailbox-export-job" [
 #
 # POST /
 # operationId: TagResource
+# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3771,13 +3852,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-70
-  resource_arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-70 # required
+  resource_arn: string # The resource ARN.
+  tags: list # The tag key-value pairs. — item shape: {Key: string, Value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceARN": $resource_arn, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3803,8 +3885,8 @@ export def "tag-resource" [
 #
 # POST /
 # operationId: TestAvailabilityConfiguration
-# --EwsProvider shape: {EwsEndpoint: any, EwsUsername: any, EwsPassword: any}
-# --LambdaProvider shape: {LambdaArn: any}
+# --EwsProvider shape: {EwsEndpoint: string, EwsUsername: string, EwsPassword: string}
+# --LambdaProvider shape: {LambdaArn: string}
 export def "test-availability-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3822,15 +3904,16 @@ export def "test-availability-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-71
-  organization_id: any
-  --domain-name: any
-  --ews-provider: record # Describes an EWS based availability provider. This is only used as input to the service. — shape: {EwsEndpoint: any, EwsUsername: any, EwsPassword: any}
-  --lambda-provider: record # Describes a Lambda based availability provider. — shape: {LambdaArn: any}
-]: any -> record<TestPassed: record, FailureReason: record> {
+  --x-amz-target: string@x-amz-target-completer-71 # required
+  organization_id: string # The WorkMail organization where the availability provider will be tested.
+  --domain-name: string # The domain to which the provider applies. If this field is provided, a stored availability provider associated to this domain name will be tested.
+  --ews-provider: record # Describes an EWS based availability provider. This is only used as input to the service. — shape: {EwsEndpoint: string, EwsUsername: string, EwsPassword: string}
+  --lambda-provider: record # Describes a Lambda based availability provider. — shape: {LambdaArn: string}
+]: any -> record<TestPassed: bool, FailureReason: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.TestAvailabilityConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "DomainName": $domain_name, "EwsProvider": $ews_provider, "LambdaProvider": $lambda_provider} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3873,13 +3956,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-72
-  resource_arn: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-72 # required
+  resource_arn: string # The resource ARN.
+  tag_keys: list<string> # The tag keys.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceARN": $resource_arn, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3905,6 +3989,8 @@ export def "untag-resource" [
 #
 # POST /
 # operationId: UpdateAvailabilityConfiguration
+# --EwsProvider shape: {EwsEndpoint: string, EwsUsername: string, EwsPassword: string}
+# --LambdaProvider shape: {LambdaArn: string}
 export def "update-availability-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3922,15 +4008,16 @@ export def "update-availability-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-73
-  organization_id: any
-  domain_name: any
-  --ews-provider: any
-  --lambda-provider: any
+  --x-amz-target: string@x-amz-target-completer-73 # required
+  organization_id: string # The WorkMail organization for which the AvailabilityConfiguration will be updated.
+  domain_name: string # The domain to which the provider applies the availability configuration.
+  --ews-provider: record # Describes an EWS based availability provider. This is only used as input to the service. — shape: {EwsEndpoint: string, EwsUsername: string, EwsPassword: string}
+  --lambda-provider: record # Describes a Lambda based availability provider. — shape: {LambdaArn: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.UpdateAvailabilityConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "DomainName": $domain_name, "EwsProvider": $ews_provider, "LambdaProvider": $lambda_provider} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3973,13 +4060,14 @@ export def "update-default-mail-domain" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-74
-  organization_id: any
-  domain_name: any
+  --x-amz-target: string@x-amz-target-completer-74 # required
+  organization_id: string # The WorkMail organization for which to list domains.
+  domain_name: string # The domain name that will become the default domain.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.UpdateDefaultMailDomain")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "DomainName": $domain_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4005,6 +4093,7 @@ export def "update-default-mail-domain" [
 #
 # POST /
 # operationId: UpdateImpersonationRole
+# --Rules item shape: {ImpersonationRuleId: string, Name?: string, Description?: string, Effect: "ALLOW"|"DENY", TargetUsers?: list<string>, NotTargetUsers?: list<string>}
 export def "update-impersonation-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4022,17 +4111,18 @@ export def "update-impersonation-role" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-75
-  organization_id: any
-  impersonation_role_id: any
-  name: any
-  type: any
-  --description: any
-  rules: any
+  --x-amz-target: string@x-amz-target-completer-75 # required
+  organization_id: string # The WorkMail organization that contains the impersonation role to update.
+  impersonation_role_id: string # The ID of the impersonation role to update.
+  name: string # The updated impersonation role name.
+  type: string@type-completer # The updated impersonation role type.
+  --description: string # The updated impersonation role description.
+  rules: list # The updated list of rules. — item shape: {ImpersonationRuleId: string, Name?: string, Description?: string, Effect: "ALLOW"|"DENY", TargetUsers?: list<string>, NotTargetUsers?: list<string>}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.UpdateImpersonationRole")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "ImpersonationRoleId": $impersonation_role_id, "Name": $name, "Type": $type, "Description": $description, "Rules": $rules} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4075,14 +4165,15 @@ export def "update-mailbox-quota" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-76
-  organization_id: any
-  user_id: any
-  mailbox_quota: any
+  --x-amz-target: string@x-amz-target-completer-76 # required
+  organization_id: string # The identifier for the organization that contains the user for whom to update the mailbox quota.
+  user_id: string # The identifer for the user for whom to update the mailbox quota.
+  mailbox_quota: int # The updated mailbox quota, in MB, for the specified user.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.UpdateMailboxQuota")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "UserId": $user_id, "MailboxQuota": $mailbox_quota} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4125,24 +4216,25 @@ export def "update-mobile-device-access-rule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-77
-  organization_id: any
-  mobile_device_access_rule_id: any
-  name: any
-  --description: any
-  effect: any
-  --device-types: any
-  --not-device-types: any
-  --device-models: any
-  --not-device-models: any
-  --device-operating-systems: any
-  --not-device-operating-systems: any
-  --device-user-agents: any
-  --not-device-user-agents: any
+  --x-amz-target: string@x-amz-target-completer-77 # required
+  organization_id: string # The WorkMail organization under which the rule will be updated.
+  mobile_device_access_rule_id: string # The identifier of the rule to be updated.
+  name: string # The updated rule name.
+  --description: string # The updated rule description.
+  effect: string@effect-completer # The effect of the rule when it matches. Allowed values are ALLOW or DENY.
+  --device-types: list<string> # Device types that the updated rule will match.
+  --not-device-types: list<string> # Device types that the updated rule will not match. All other device types will match.
+  --device-models: list<string> # Device models that the updated rule will match.
+  --not-device-models: list<string> # Device models that the updated rule will not match. All other device models will match.
+  --device-operating-systems: list<string> # Device operating systems that the updated rule will match.
+  --not-device-operating-systems: list<string> # Device operating systems that the updated rule will not match. All other device operating systems will match.
+  --device-user-agents: list<string> # User agents that the updated rule will match.
+  --not-device-user-agents: list<string> # User agents that the updated rule will not match. All other user agents will match.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.UpdateMobileDeviceAccessRule")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "MobileDeviceAccessRuleId": $mobile_device_access_rule_id, "Name": $name, "Description": $description, "Effect": $effect, "DeviceTypes": $device_types, "NotDeviceTypes": $not_device_types, "DeviceModels": $device_models, "NotDeviceModels": $not_device_models, "DeviceOperatingSystems": $device_operating_systems, "NotDeviceOperatingSystems": $not_device_operating_systems, "DeviceUserAgents": $device_user_agents, "NotDeviceUserAgents": $not_device_user_agents} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4185,14 +4277,15 @@ export def "update-primary-email-address" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-78
-  organization_id: any
-  entity_id: any
-  email: any
+  --x-amz-target: string@x-amz-target-completer-78 # required
+  organization_id: string # The organization that contains the user, group, or resource to update.
+  entity_id: string # The user, group, or resource to update.
+  email: string # The value of the email to be updated as primary.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.UpdatePrimaryEmailAddress")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "EntityId": $entity_id, "Email": $email} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4218,6 +4311,7 @@ export def "update-primary-email-address" [
 #
 # POST /
 # operationId: UpdateResource
+# --BookingOptions shape: {AutoAcceptRequests?: bool, AutoDeclineRecurringRequests?: bool, AutoDeclineConflictingRequests?: bool}
 export def "update-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4235,15 +4329,16 @@ export def "update-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-79
-  organization_id: any
-  resource_id: any
-  --name: any
-  --booking-options: any
+  --x-amz-target: string@x-amz-target-completer-79 # required
+  organization_id: string # The identifier associated with the organization for which the resource is updated.
+  resource_id: string # The identifier of the resource to be updated.
+  --name: string # The name of the resource to be updated.
+  --booking-options: record # At least one delegate must be associated to the resource to disable automatic replies from the resource. — shape: {AutoAcceptRequests?: bool, AutoDeclineRecurringRequests?: bool, AutoDeclineConflictingRequests?: bool}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkMailService.UpdateResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "ResourceId": $resource_id, "Name": $name, "BookingOptions": $booking_options} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

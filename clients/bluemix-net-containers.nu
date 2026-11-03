@@ -154,17 +154,20 @@ export def "post-build" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --t: string # Tag the image with the full path to your private Bluemix registry in the following format: `t=registry.ng.bluemix.net//<image_name>:`. This path is used to push the image to the private Bluemix registry after it is built.
+  --t: string # Tag the image with the full path to your private Bluemix registry in the following format: `t=registry.ng.bluemix.net//<image_name>:`. This path is used to push the image to the private Bluemix registry after it is built. (required)
   --q: oneof<nothing, bool> # You can choose whether or not to show the verbose build output to review every step during the container image build. If you set the query parameter to `q=false`, `q=False`, or `q=0`, the verbose build output is suppressed. To show the verbose build output, enter `q=true`, `q=True`, or `q=1`.
   --nocache: oneof<nothing, bool> # If you set the query parameter to `nocache=true`, `nocache=True`, or `nocache=1`, the cache will not be used to build your image. To use the cache, enter `nocache=false`, `nocache=False`, or `nocache=0`.
   --pull: oneof<nothing, bool> # If set to pull=true, pull=True, or pull=1, then a newer version of the image is always attempted to be pulled even though an older version of the image exists locally. If set to pull=false, pull=False, or pull=0, then the local image will be used if one exists.
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
   --body: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($t == null) { error make --unspanned { msg: "required query parameter 't' missing: pass --t" } }
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let qp = [(serialize-qp "t" $t "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "nocache" $nocache "scalar") (serialize-qp "pull" $pull "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/build" $qp $auth.query)
   let req_body = $body
@@ -202,8 +205,8 @@ export def "post-containers-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Choose a name for your container. The characters in the name can include uppercase letters, lowercase letters, numbers, periods (.), underscores (_), or hyphens (-), but the name must start with a letter.
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
   --bluemix-app: string # The name of the Cloud Foundry app that you want to bind to your container. The Cloud Foundry app must be created in the same space where you want to create your container.
   --cmd: list<string> # The command and arguments in this list are passed to the container to be executed when the container is started. This command must be a long-running command. Do not use a short-lived command, for example, /bin/date, because it might cause the container to crash. Sample long-running commands:["ping","localhost"]["tail","-f","/dev/null"]["sh","-c","while true; do date; sleep 20; done"]
   --cpuset: string # Pins the container processes to a specific CPU core on the compute host. For example: 0 means that processes are executed on the first core only.
@@ -218,6 +221,8 @@ export def "post-containers-create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let qp = [(serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/containers/create" $qp $auth.query)
   let req_body = {"BluemixApp": $bluemix_app, "Cmd": $cmd, "Cpuset": $cpuset, "Env": $body_env, "ExposedPorts": $exposed_ports, "HostConfig": $host_config, "Image": $image, "Memory": $memory, "NumberCpus": $number_cpus, "Volumes": $volumes} | compact
@@ -254,11 +259,13 @@ export def "get-containers-floating-ips" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --all: oneof<nothing, bool> # If this option is set to `all=1`, `all=True`, or `all=true`, all public IP addresses that are allocated to a space are returned. If this option is set to `all=0`, `all=False`, or `all=false`, only available public IP addresses that are allocated but not bound to a container are returned. By default, only available public IP addresses are returned.
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
 ]: nothing -> table<Bindings: record<ContainerId: string>, IpAddress: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let qp = [(serialize-qp "all" $all "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/containers/floating-ips" $qp $auth.query)
   let accept_val = "application/json"
@@ -292,11 +299,13 @@ export def "post-containers-floating-ips-request" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base "/containers/floating-ips/request" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -330,12 +339,14 @@ export def "post-containers-floating-ips-ip-release" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ip | is-empty) { error make --unspanned { msg: "path parameter 'ip' must be non-empty" } }
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({ip: (encode-path-segment $ip)} | format pattern "/containers/floating-ips/{ip}/release") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -368,11 +379,13 @@ export def "get-containers-groups" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
 ]: nothing -> table<Creation_time: string, Id: string, Name: string, Port: int, Routes: list<string>, Status: string, Updated_time: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base "/containers/groups" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -407,8 +420,8 @@ export def "post-containers-groups" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
   --autorecovery: string # (Optional) Enable the Auto-recovery mode for your container group. If set to true, IBM Containers checks the health of each instance with an HTTP request to the port that is assigned. If the health check does not receive a TCP response from a container instance in two subsequent 90-second intervals, the instance is removed and replaced with a new instance. If set to false and container instances crash, they are not recovered by IBM Containers.
   --bluemix-app: string # (Optional) The name of the Cloud Foundry app that you created in your organization space.
   --cmd: list<string> # (Optional) Docker command that is passed to the container group to be run when the container instances are started. This command must be a long-running command. Do not use a short-lived command, for example, /bin/date, because it might cause the container to crash.
@@ -424,6 +437,8 @@ export def "post-containers-groups" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base "/containers/groups" $auth.query)
   let req_body = {"Autorecovery": $autorecovery, "BluemixApp": $bluemix_app, "Cmd": $cmd, "Env": $body_env, "Image": $image, "Memory": $memory, "Name": $name, "NumberInstances": $number_instances, "Port": $port, "Route": $route, "Volumes": $volumes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -460,12 +475,14 @@ export def "delete-containers-groups-name-or-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --force: string # If you want to force the deletion of a container group that has running container instances, use the force option. This parameter needs to be set to either true or false. If set to `force=true`, `force=True`, or `force=1`, running container instances are deleted. If set to `force=false`, `force=False`, or `force=0`, running container instances are not deleted. If you do not specify this paramater, running container instances are not deleted by default.
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name_or_id | is-empty) { error make --unspanned { msg: "path parameter 'name_or_id' must be non-empty" } }
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let qp = [(serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/containers/groups/{name_or_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -500,12 +517,14 @@ export def "get-containers-groups-name-or-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
 ]: nothing -> record<Anti_affinity: string, Autorecovery: string, AvailabilityZone: string, Cmd: list<string>, Creation_time: string, Env: list<string>, Id: string, Image: string, ImageName: string, Memory: int, Name: string, NumberInstances: record<CurrentSize: int, Desired: int, Max: int, Min: int>, Port: int, Route_Status: record<in_progress: bool, message: string, successful: bool>, Routes: list<string>, Status: string, UpdatedTime: string, Volumes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name_or_id | is-empty) { error make --unspanned { msg: "path parameter 'name_or_id' must be non-empty" } }
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/containers/groups/{name_or_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -540,8 +559,8 @@ export def "patch-containers-groups-name-or-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
   --autorecovery: string # Enable or disable the Autorecovery mode for your container group. To enable it, enter true. If you want to disable it, enter false. Note: You can only enable/ disable Autorecovery mode if your container group was initially created with Autorecovery mode enabled.
   --environment: list<string> # A list of environment variables that you want to add to your container group. Every environment variable needs to be a key=value pair. Every key that you use needs to be unique for this container group. Multiple environment variables are separated with comma (,)
   --number-instances: record # shape: {Desired?: int, Max?: int, Min?: int}
@@ -550,6 +569,8 @@ export def "patch-containers-groups-name-or-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name_or_id | is-empty) { error make --unspanned { msg: "path parameter 'name_or_id' must be non-empty" } }
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/containers/groups/{name_or_id}") $auth.query)
   let req_body = {"Autorecovery": $autorecovery, "Environment": $environment, "NumberInstances": $number_instances} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -585,8 +606,8 @@ export def "post-containers-groups-name-or-id-maproute" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
   --domain: string # The default system domain is mybluemix.net and already provides a SSL certificate, so you can access your container groups with HTTPS without any additional configuration.
   --host: string # The host name of your container group, such as mycontainerhost. Do not include underscores (_) in the host name. The host and the domain combined form the full public route URL, such as http://mycontainerhost.mybluemix.net.
 ]: any -> record<Id: string, Warnings: list<string>> {
@@ -594,6 +615,8 @@ export def "post-containers-groups-name-or-id-maproute" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name_or_id | is-empty) { error make --unspanned { msg: "path parameter 'name_or_id' must be non-empty" } }
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/containers/groups/{name_or_id}/maproute") $auth.query)
   let req_body = {"domain": $domain, "host": $host} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -629,8 +652,8 @@ export def "post-containers-groups-name-or-id-unmaproute" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
   --domain: string # The default system domain is mybluemix.net and already provides a SSL certificate, so you can access your container groups with HTTPS without any additional configuration.
   --host: string # The host name of your container group, such as mycontainerhost. Do not include underscores (_) in the host name. The host and the domain combined form the full public route URL, such as http://mycontainerhost.mybluemix.net.
 ]: any -> record<Id: string, Warnings: list<string>> {
@@ -638,6 +661,8 @@ export def "post-containers-groups-name-or-id-unmaproute" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name_or_id | is-empty) { error make --unspanned { msg: "path parameter 'name_or_id' must be non-empty" } }
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/containers/groups/{name_or_id}/unmaproute") $auth.query)
   let req_body = {"domain": $domain, "host": $host} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -674,11 +699,13 @@ export def "get-containers-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --all: string # By default, the `GET /containers/json` endpoint returns a list of all single containers in a space that are in a running state. To request a list of all containers independent of their current state, set the `all` query parameter to true. Allowed values are: `all=true`, `all=True`, and `all=1`.
   --filters: string # You can filter your containers by any environment variable key or value that is listed in the `Env` section of your CLI/ API response when you run the `cf ic inspect ` command, or call the `GET /containers/{id}/json` endpoint. Your search criteria does not need to be an exact match. It can also be a part of the key or value you are looking for. For example, to filter all containers with an environment variable that contains `id` in one of their environment variables, use `filter=id`.
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
 ]: nothing -> table<Command: string, ContainerState: string, Created: float, Env: list<string>, Group: record<Id: string, Name: string>, Id: string, Image: string, ImageId: string, Labels: record, Memory: int, Name: string, Names: list<string>, NetworkSettings: record<Bridge: string, Gateway: string, IpAddress: string, IpPrefixLen: int, MacAddress: string, Network: record, PortMapping: string, Ports: list, PublicIpAddress: string>, Ports: record<IP: string, PrivatePort: string, PublicPort: string, Type: string>, SizeRootFs: int, SizeRw: int, Started: float, Status: string, VCPU: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "filters" $filters "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/containers/json" $qp $auth.query)
   let accept_val = "application/json"
@@ -712,11 +739,13 @@ export def "get-containers-messages" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. To retrieve your space ID, run `cf space <space_name> --guid` and replace `<space_name>` with the name of the space where you want to create or work with your container.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. To retrieve your space ID, run `cf space <space_name> --guid` and replace `<space_name>` with the name of the space where you want to create or work with your container. (required)
 ]: nothing -> record<created_date: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base "/containers/messages" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -749,11 +778,13 @@ export def "get-containers-quota" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
 ]: nothing -> record<account_type: string, country_code: string, org_quota: record<floating_ips_max: string, floating_ips_space_default: string, floating_ips_usage: int, ram_max: int, ram_space_default: int, ram_usage: int, subnet_usage: int, subnets_default: int, subnets_max: int>, space_quota: record<floating_ips_max: string, ram_max: int, subnets_max: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base "/containers/quota" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -786,14 +817,16 @@ export def "put-containers-quota" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
   --floating-ips: int # The new number of public IP addresses that you want to assign to your space. (format: int32)
   --ram: int # The amount of container memory that you want to assign to your space. (format: int32)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base "/containers/quota" $auth.query)
   let req_body = {"floating_ips": $floating_ips, "ram": $ram} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -828,11 +861,13 @@ export def "get-containers-usage" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
 ]: nothing -> record<AvailableSizes: table<disk: int, id: string, memory_MB: int, name: string, vcpus: int>, Environment: string, Limits: record<containers: int, floating_ips: int, memory_MB: int, vcpu: int>, Usage: record<containers: int, floating_ips: int, floating_ips_bound: int, images: int, memory_MB: int, running: int, vcpu: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base "/containers/usage" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -899,12 +934,14 @@ export def "get-containers-id-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
 ]: nothing -> record<NameOrId: string, Status: string, Transient: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/containers/{id}/status") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -939,12 +976,14 @@ export def "delete-containers-name-or-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --force: oneof<nothing, bool> # Use the `force` query parameter if you want to delete the container independent of their current state. The container does not need to be stopped first. To force the deletion of a container, enter `force=true`, `force=True`, or `force=1`. If you want to delete containers that are in a non-running state only, do either not set this query parameter, or enter `force=false`, `force=False`, or `force=0`.
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name_or_id | is-empty) { error make --unspanned { msg: "path parameter 'name_or_id' must be non-empty" } }
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let qp = [(serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/containers/{name_or_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -980,13 +1019,15 @@ export def "post-containers-name-or-id-floating-ips-ip-bind" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name_or_id | is-empty) { error make --unspanned { msg: "path parameter 'name_or_id' must be non-empty" } }
   if ($ip | is-empty) { error make --unspanned { msg: "path parameter 'ip' must be non-empty" } }
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id), ip: (encode-path-segment $ip)} | format pattern "/containers/{name_or_id}/floating-ips/{ip}/bind") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1021,13 +1062,15 @@ export def "post-containers-name-or-id-floating-ips-ip-unbind" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name_or_id | is-empty) { error make --unspanned { msg: "path parameter 'name_or_id' must be non-empty" } }
   if ($ip | is-empty) { error make --unspanned { msg: "path parameter 'ip' must be non-empty" } }
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id), ip: (encode-path-segment $ip)} | format pattern "/containers/{name_or_id}/floating-ips/{ip}/unbind") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1061,12 +1104,14 @@ export def "get-containers-name-or-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
 ]: nothing -> record<BluemixApp: string, BluemixServices: string, Config: record<ArgsEscaped: bool, AttachStderr: string, AttachStdin: string, AttachStdout: string, Cmd: list<string>, Domainname: string, Env: list<string>, ExposedPorts: list<string>, Hostname: string, Image: string, ImageArchitecture: string, Labels: list<string>, Memory: int, MemorySwap: string, OpenStdin: string, PortSpecs: string, StdinOnce: string, Tty: string, User: string, VCPU: int, VolumesFrom: string, WorkingDir: string>, ContainerState: string, Created: string, Group: record<Id: string, Name: string>, HostConfig: record<Binds: list<string>, ExtraHosts: list<string>, Links: list<string>, PortBindings: list<string>>, HostId: string, Human_Id: string, Id: string, Image: string, Mounts: list<string>, Name: string, NetworkSettings: record<Bridge: string, Gateway: string, IpAddress: string, IpPrefixLen: int, MacAddress: string, Network: record<Aliases: string, EndpointID: string, Gateway: string, GlobalIPv6Address: string, GlobalIPv6PrefixLen: int, IPAMConfig: string, IPPrefixLen: string, IPv6Gateway: string, Links: string, MacAddress: string, NetworkID: string>, PortMapping: string, Ports: list<string>, PublicIpAddress: string>, Path: string, ResolveConfPath: string, State: record<ExitCode: string, FinishedAt: string, Ghost: string, Pid: int, Running: bool, StartedAt: string, Status: string>, Volumes: record<fsID: string, hostPath: string, otherSpaceVisibility: list<string>, spaceGuid: string, volName: string>, VolumesRW: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name_or_id | is-empty) { error make --unspanned { msg: "path parameter 'name_or_id' must be non-empty" } }
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/containers/{name_or_id}/json") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1100,12 +1145,14 @@ export def "post-containers-name-or-id-pause" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name_or_id | is-empty) { error make --unspanned { msg: "path parameter 'name_or_id' must be non-empty" } }
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/containers/{name_or_id}/pause") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1139,13 +1186,16 @@ export def "post-containers-name-or-id-rename" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name: string # The new name for the container. The characters in the name can include uppercase letters, lowercase letters, numbers, periods (.), underscores (_), or hyphens (-), but the name must start with a letter.
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --name: string # The new name for the container. The characters in the name can include uppercase letters, lowercase letters, numbers, periods (.), underscores (_), or hyphens (-), but the name must start with a letter. (required)
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name_or_id | is-empty) { error make --unspanned { msg: "path parameter 'name_or_id' must be non-empty" } }
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let qp = [(serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/containers/{name_or_id}/rename") $qp $auth.query)
   let accept_val = "application/json"
@@ -1181,12 +1231,14 @@ export def "post-containers-name-or-id-restart" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --t: int # The number of seconds to wait before the container is restarted. For example, if you want a container to restart after 10 seconds, enter `t=10`.
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name_or_id | is-empty) { error make --unspanned { msg: "path parameter 'name_or_id' must be non-empty" } }
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let qp = [(serialize-qp "t" $t "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/containers/{name_or_id}/restart") $qp $auth.query)
   let accept_val = "application/json"
@@ -1221,12 +1273,14 @@ export def "post-containers-name-or-id-start" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name_or_id | is-empty) { error make --unspanned { msg: "path parameter 'name_or_id' must be non-empty" } }
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/containers/{name_or_id}/start") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1261,12 +1315,14 @@ export def "post-containers-name-or-id-stop" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --t: int # The number of seconds to wait before the container is stopped. For example, if you want a container to stop after 10 seconds, enter `t=10`.
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name_or_id | is-empty) { error make --unspanned { msg: "path parameter 'name_or_id' must be non-empty" } }
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let qp = [(serialize-qp "t" $t "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/containers/{name_or_id}/stop") $qp $auth.query)
   let accept_val = "application/json"
@@ -1301,12 +1357,14 @@ export def "post-containers-name-or-id-unpause" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name_or_id | is-empty) { error make --unspanned { msg: "path parameter 'name_or_id' must be non-empty" } }
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/containers/{name_or_id}/unpause") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1339,11 +1397,13 @@ export def "get-images-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
 ]: nothing -> record<Created: float, Id: string, Image: string, RepoTags: list<string>, Size: int, VirtualSize: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base "/images/json" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1377,12 +1437,14 @@ export def "delete-images-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/images/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1416,12 +1478,14 @@ export def "get-images-name-or-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
 ]: nothing -> record<Architecture: string, Config: record<ArgsEscaped: bool, AttachStderr: bool, AttachStdin: bool, AttachStdout: bool, Cmd: list<string>, Domainmame: string, Entrypoint: string, Env: list<string>, ExposedPorts: list<string>, Hostname: string, Image: string, Labels: list<string>, OnBuild: list<string>, OpenStdin: bool, StdinOnce: bool, Tty: bool, User: string, Volumes: string, WorkingDir: string>, Container: string, ContainerConfig: record<ArgsEscaped: bool, AttachStderr: string, AttachStdin: string, AttachStdout: string, Cmd: list<string>, Domainname: string, Env: list<string>, ExposedPorts: list<string>, Hostname: string, Image: string, ImageArchitecture: string, Labels: list<string>, Memory: int, MemorySwap: string, OpenStdin: string, PortSpecs: string, StdinOnce: string, Tty: string, User: string, VCPU: int, VolumesFrom: string, WorkingDir: string>, Created: string, DockerVersion: string, Id: string, Os: string, Parent: string, Size: int, Tag: string, Throwaway: string, VirtualSize: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name_or_id | is-empty) { error make --unspanned { msg: "path parameter 'name_or_id' must be non-empty" } }
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/images/{name_or_id}/json") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1454,11 +1518,13 @@ export def "get-registry-namespaces" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
 ]: nothing -> record<namespace: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base "/registry/namespaces" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1492,12 +1558,14 @@ export def "get-registry-namespaces-namespace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
 ]: nothing -> record<namespace: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/registry/namespaces/{namespace}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1531,12 +1599,14 @@ export def "put-registry-namespaces-namespace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
 ]: nothing -> record<namespace: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/registry/namespaces/{namespace}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1569,11 +1639,13 @@ export def "get-tlskey" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
 ]: nothing -> record<ca_cert: string, server_cert: string, user_cert: string, user_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base "/tlskey" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1606,11 +1678,13 @@ export def "put-tlskey-refresh" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
 ]: nothing -> record<ca_cert: string, reg_host: string, server_cert: string, user_cert: string, user_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base "/tlskey/refresh" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1643,13 +1717,16 @@ export def "post-volumes-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name: string # The name of the volume. The name must be unique for a space and can contain uppercase letters, lowercase letters, numbers, underscores (_), and hyphens (-).
+  --name: string # The name of the volume. The name must be unique for a space and can contain uppercase letters, lowercase letters, numbers, underscores (_), and hyphens (-). (required)
   --fs-name: string # The name of the file share that the volume is hosted on. File shares can have different storage sizes and IOPS based on the required workload. If this field is left blank, the volume is hosted on the default file share.
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
 ]: nothing -> record<fsID: string, hostPath: string, otherSpaceVisibility: list<string>, spaceGuid: string, volName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "fsName" $fs_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/volumes/create" $qp $auth.query)
   let accept_val = "application/json"
@@ -1683,8 +1760,8 @@ export def "post-volumes-fs-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
   fs_iops: float # The number of input/output transactions per second. Available values are 0.25, 2 or 4. (format: double)
   fs_name: string # The name of the new file share that you want to create. The name can contain uppercase letters, lowercase letters, numbers, underscores (_), and hyphens (-).
   fs_size: int # The size of the file share in gigabyte. Run `cf ic volume fs-flavor-list` or call the GET /volumes/fs/flavors/json API endpoint to retrieve a list of available file share sizes.
@@ -1692,6 +1769,8 @@ export def "post-volumes-fs-create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base "/volumes/fs/create" $auth.query)
   let req_body = {"fsIOPS": $fs_iops, "fsName": $fs_name, "fsSize": $fs_size} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1726,11 +1805,13 @@ export def "get-volumes-fs-flavors-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base "/volumes/fs/flavors/json" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1763,11 +1844,13 @@ export def "get-volumes-fs-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
 ]: nothing -> table<capacity: int, created_date: string, fsName: string, hostPath: string, iops: float, iopsTotal: int, orderId: string, provider: string, spaceGuid: string, state: string, updated_date: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base "/volumes/fs/json" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1801,12 +1884,14 @@ export def "delete-volumes-fs-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/volumes/fs/{name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1840,12 +1925,14 @@ export def "get-volumes-fs-name-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
 ]: nothing -> table<fs: list<record>, fsUsage: list<record>, volnames: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/volumes/fs/{name}/json") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1878,11 +1965,13 @@ export def "get-volumes-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
 ]: nothing -> table<fsID: string, hostPath: string, otherSpaceVisibility: list<string>, spaceGuid: string, volName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base "/volumes/json" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1916,12 +2005,14 @@ export def "delete-volumes-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/volumes/{name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1955,8 +2046,8 @@ export def "post-volumes-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
   --add-spaces: list<string> # The name or ID of the space where you want to provision your existing volume. Run `cf spaces` to retrieve the name, or `cf space <space_name> --guid` to retrieve the space ID.
   --remove-spaces: list<string> # The name or ID of the space from which you want to unprovision your existing volume. Run `cf spaces` to retrieve the name, or `cf space <space_name> --guid` to retrieve the space ID.
 ]: any -> record<fsID: string, hostPath: string, otherSpaceVisibility: list<string>, spaceGuid: string, volName: string> {
@@ -1964,6 +2055,8 @@ export def "post-volumes-name" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/volumes/{name}") $auth.query)
   let req_body = {"addSpaces": $add_spaces, "removeSpaces": $remove_spaces} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1999,12 +2092,14 @@ export def "get-volumes-name-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
 ]: nothing -> record<fsID: string, hostPath: string, otherSpaceVisibility: list<string>, spaceGuid: string, volName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
+  if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/volumes/{name}/json") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

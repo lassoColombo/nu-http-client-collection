@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -220,7 +220,7 @@ export def "update-account" [
   --min-rating-playback-guard: string # The classification rating defining the minimum rating level a user should be forced to enter the account pin code for playback. Anything at this rating level or above will require the pin for playback. e.g. AUOFLC-MA15+ If you want to disable this guard pass an empty string or `null`.
   --segments: list<string> # The segments an account should be placed under
   --tracking-enabled: oneof<nothing, bool> # Whether usage tracking is associated with an account or anonymous.
-]: any -> record<code: int, message: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -308,6 +308,7 @@ export def "add-payment-method" [
   let full_url = (build-url $base "/account/billing/methods" $qp $auth.query)
   let req_body = {"makeDefault": $make_default, "token": $body_token, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -341,7 +342,7 @@ export def "remove-payment-method" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ff: list<string> # The set of opt in feature flags which cause breaking changes to responses. While Rocket APIs look to avoid breaking changes under the active major version, the formats of responses may need to evolve over this time. These feature flags allow clients to select which response formats they expect and avoid breaking clients as these formats evolve under the current major version. ### Flags - `all` - Enable all flags. Useful for testing. _Don't use in production_. - `idp` - Dynamic item detail pages with schedulable rows. - `ldp` - Dynamic list detail pages with schedulable rows. - `hb` - Hubble formatted image urls. - `rpt` - Updated resume point threshold logic. - `cas` - "Custom Asset Search", inlcude `customAssets` in search results. - `lrl` - Do not pre-populate related list if more than `max_list_prefetch` down the page. - `cd` - Custom Destination support. See the `feature-flags.md` for available flag details.
   --lang: string # Language code for the preferred language to be returned in the response. Parameter value is case-insensitive and should be - a valid 2 letter language code without region such as en, de - or with region such as en_us, en_au If undefined then defaults to 'en', unless the server has been configured with a custom default. See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-]: nothing -> record<code: int, message: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -500,7 +501,7 @@ export def "cancel-subscription" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ff: list<string> # The set of opt in feature flags which cause breaking changes to responses. While Rocket APIs look to avoid breaking changes under the active major version, the formats of responses may need to evolve over this time. These feature flags allow clients to select which response formats they expect and avoid breaking clients as these formats evolve under the current major version. ### Flags - `all` - Enable all flags. Useful for testing. _Don't use in production_. - `idp` - Dynamic item detail pages with schedulable rows. - `ldp` - Dynamic list detail pages with schedulable rows. - `hb` - Hubble formatted image urls. - `rpt` - Updated resume point threshold logic. - `cas` - "Custom Asset Search", inlcude `customAssets` in search results. - `lrl` - Do not pre-populate related list if more than `max_list_prefetch` down the page. - `cd` - Custom Destination support. See the `feature-flags.md` for available flag details.
   --lang: string # Language code for the preferred language to be returned in the response. Parameter value is case-insensitive and should be - a valid 2 letter language code without region such as en, de - or with region such as en_us, en_au If undefined then defaults to 'en', unless the server has been configured with a custom default. See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-]: nothing -> record<code: int, message: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -540,7 +541,7 @@ export def "update-subscription" [
   --plan-id: string # The id of the plan to switch to if switching plans.
   --ff: list<string> # The set of opt in feature flags which cause breaking changes to responses. While Rocket APIs look to avoid breaking changes under the active major version, the formats of responses may need to evolve over this time. These feature flags allow clients to select which response formats they expect and avoid breaking clients as these formats evolve under the current major version. ### Flags - `all` - Enable all flags. Useful for testing. _Don't use in production_. - `idp` - Dynamic item detail pages with schedulable rows. - `ldp` - Dynamic list detail pages with schedulable rows. - `hb` - Hubble formatted image urls. - `rpt` - Updated resume point threshold logic. - `cas` - "Custom Asset Search", inlcude `customAssets` in search results. - `lrl` - Do not pre-populate related list if more than `max_list_prefetch` down the page. - `cd` - Custom Destination support. See the `feature-flags.md` for available flag details.
   --lang: string # Language code for the preferred language to be returned in the response. Parameter value is case-insensitive and should be - a valid 2 letter language code without region such as en, de - or with region such as en_us, en_au If undefined then defaults to 'en', unless the server has been configured with a custom default. See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-]: nothing -> record<code: int, message: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -659,7 +660,7 @@ export def "authorize-device" [
   --ff: list<string> # The set of opt in feature flags which cause breaking changes to responses. While Rocket APIs look to avoid breaking changes under the active major version, the formats of responses may need to evolve over this time. These feature flags allow clients to select which response formats they expect and avoid breaking clients as these formats evolve under the current major version. ### Flags - `all` - Enable all flags. Useful for testing. _Don't use in production_. - `idp` - Dynamic item detail pages with schedulable rows. - `ldp` - Dynamic list detail pages with schedulable rows. - `hb` - Hubble formatted image urls. - `rpt` - Updated resume point threshold logic. - `cas` - "Custom Asset Search", inlcude `customAssets` in search results. - `lrl` - Do not pre-populate related list if more than `max_list_prefetch` down the page. - `cd` - Custom Destination support. See the `feature-flags.md` for available flag details.
   --lang: string # Language code for the preferred language to be returned in the response. Parameter value is case-insensitive and should be - a valid 2 letter language code without region such as en, de - or with region such as en_us, en_au If undefined then defaults to 'en', unless the server has been configured with a custom default. See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
   code: string # The generated device authorization code.
-]: any -> record<code: int, message: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -700,7 +701,7 @@ export def "deregister-device" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ff: list<string> # The set of opt in feature flags which cause breaking changes to responses. While Rocket APIs look to avoid breaking changes under the active major version, the formats of responses may need to evolve over this time. These feature flags allow clients to select which response formats they expect and avoid breaking clients as these formats evolve under the current major version. ### Flags - `all` - Enable all flags. Useful for testing. _Don't use in production_. - `idp` - Dynamic item detail pages with schedulable rows. - `ldp` - Dynamic list detail pages with schedulable rows. - `hb` - Hubble formatted image urls. - `rpt` - Updated resume point threshold logic. - `cas` - "Custom Asset Search", inlcude `customAssets` in search results. - `lrl` - Do not pre-populate related list if more than `max_list_prefetch` down the page. - `cd` - Custom Destination support. See the `feature-flags.md` for available flag details.
   --lang: string # Language code for the preferred language to be returned in the response. Parameter value is case-insensitive and should be - a valid 2 letter language code without region such as en, de - or with region such as en_us, en_au If undefined then defaults to 'en', unless the server has been configured with a custom default. See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-]: nothing -> record<code: int, message: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -776,13 +777,14 @@ export def "rename-device" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name: string # The new name for the device.
+  --name: string # The new name for the device. (required)
   --ff: list<string> # The set of opt in feature flags which cause breaking changes to responses. While Rocket APIs look to avoid breaking changes under the active major version, the formats of responses may need to evolve over this time. These feature flags allow clients to select which response formats they expect and avoid breaking clients as these formats evolve under the current major version. ### Flags - `all` - Enable all flags. Useful for testing. _Don't use in production_. - `idp` - Dynamic item detail pages with schedulable rows. - `ldp` - Dynamic list detail pages with schedulable rows. - `hb` - Hubble formatted image urls. - `rpt` - Updated resume point threshold logic. - `cas` - "Custom Asset Search", inlcude `customAssets` in search results. - `lrl` - Do not pre-populate related list if more than `max_list_prefetch` down the page. - `cd` - Custom Destination support. See the `feature-flags.md` for available flag details.
   --lang: string # Language code for the preferred language to be returned in the response. Parameter value is case-insensitive and should be - a valid 2 letter language code without region such as en, de - or with region such as en_us, en_au If undefined then defaults to 'en', unless the server has been configured with a custom default. See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-]: nothing -> record<code: int, message: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/account/devices/{id}/name") $qp $auth.query)
   let accept_val = "application/json"
@@ -853,8 +855,8 @@ export def "get-item-media-files" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --delivery: list<string> # The video delivery type you require.
-  --resolution: string@resolution-completer # The maximum resolution the device to playback the media can present.
+  --delivery: list<string> # The video delivery type you require. (required)
+  --resolution: string@resolution-completer # The maximum resolution the device to playback the media can present. (required)
   --formats: list<string> # The set of media file formats that the device supports, in the order of preference. When provided, Rocket API returns only media files in formats specified in this parameter. For each resolution, only the first media file of matching supported format is returned. Files of different resolutions may be of different supported media file formats. `external` value is reserved for project customizations where the real MIME type of the file on the specified URL is unknown at the time of ingestion. When not provided, Rocket API uses the legacy `User-Agent` header-based logic to find matching media files.
   --device: string # The type of device the content is targeting. (default: web_browser)
   --sub: string # The active subscription code.
@@ -865,6 +867,8 @@ export def "get-item-media-files" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($delivery == null) { error make --unspanned { msg: "required query parameter 'delivery' missing: pass --delivery" } }
+  if ($resolution == null) { error make --unspanned { msg: "required query parameter 'resolution' missing: pass --resolution" } }
   let qp = [(serialize-qp "delivery" $delivery "csv") (serialize-qp "resolution" $resolution "scalar") (serialize-qp "formats" $formats "csv") (serialize-qp "device" $device "scalar") (serialize-qp "sub" $sub "scalar") (serialize-qp "segments" $segments "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/account/items/{id}/videos") $qp $auth.query)
   let accept_val = "application/json"
@@ -898,8 +902,8 @@ export def "get-item-media-files-guarded" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --delivery: list<string> # The video delivery type you require.
-  --resolution: string@resolution-completer # The maximum resolution the device to playback the media can present.
+  --delivery: list<string> # The video delivery type you require. (required)
+  --resolution: string@resolution-completer # The maximum resolution the device to playback the media can present. (required)
   --formats: list<string> # The set of media file formats that the device supports, in the order of preference. When provided, Rocket API returns only media files in formats specified in this parameter. For each resolution, only the first media file of matching supported format is returned. Files of different resolutions may be of different supported media file formats. `external` value is reserved for project customizations where the real MIME type of the file on the specified URL is unknown at the time of ingestion. When not provided, Rocket API uses the legacy `User-Agent` header-based logic to find matching media files.
   --device: string # The type of device the content is targeting. (default: web_browser)
   --sub: string # The active subscription code.
@@ -910,6 +914,8 @@ export def "get-item-media-files-guarded" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($delivery == null) { error make --unspanned { msg: "required query parameter 'delivery' missing: pass --delivery" } }
+  if ($resolution == null) { error make --unspanned { msg: "required query parameter 'resolution' missing: pass --resolution" } }
   let qp = [(serialize-qp "delivery" $delivery "csv") (serialize-qp "resolution" $resolution "scalar") (serialize-qp "formats" $formats "csv") (serialize-qp "device" $device "scalar") (serialize-qp "sub" $sub "scalar") (serialize-qp "segments" $segments "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/account/items/{id}/videos-guarded") $qp $auth.query)
   let accept_val = "application/json"
@@ -983,7 +989,7 @@ export def "change-password" [
   --lang: string # Language code for the preferred language to be returned in the response. Parameter value is case-insensitive and should be - a valid 2 letter language code without region such as en, de - or with region such as en_us, en_au If undefined then defaults to 'en', unless the server has been configured with a custom default. See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
   password: string # The new password for the account.
   profile_token: string # The ITV profile token.
-]: any -> record<code: int, message: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1024,7 +1030,7 @@ export def "change-pin" [
   --ff: list<string> # The set of opt in feature flags which cause breaking changes to responses. While Rocket APIs look to avoid breaking changes under the active major version, the formats of responses may need to evolve over this time. These feature flags allow clients to select which response formats they expect and avoid breaking clients as these formats evolve under the current major version. ### Flags - `all` - Enable all flags. Useful for testing. _Don't use in production_. - `idp` - Dynamic item detail pages with schedulable rows. - `ldp` - Dynamic list detail pages with schedulable rows. - `hb` - Hubble formatted image urls. - `rpt` - Updated resume point threshold logic. - `cas` - "Custom Asset Search", inlcude `customAssets` in search results. - `lrl` - Do not pre-populate related list if more than `max_list_prefetch` down the page. - `cd` - Custom Destination support. See the `feature-flags.md` for available flag details.
   --lang: string # Language code for the preferred language to be returned in the response. Parameter value is case-insensitive and should be - a valid 2 letter language code without region such as en, de - or with region such as en_us, en_au If undefined then defaults to 'en', unless the server has been configured with a custom default. See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
   pin: string # The new pin to set.
-]: any -> record<code: int, message: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1183,7 +1189,7 @@ export def "delete-item-bookmark" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ff: list<string> # The set of opt in feature flags which cause breaking changes to responses. While Rocket APIs look to avoid breaking changes under the active major version, the formats of responses may need to evolve over this time. These feature flags allow clients to select which response formats they expect and avoid breaking clients as these formats evolve under the current major version. ### Flags - `all` - Enable all flags. Useful for testing. _Don't use in production_. - `idp` - Dynamic item detail pages with schedulable rows. - `ldp` - Dynamic list detail pages with schedulable rows. - `hb` - Hubble formatted image urls. - `rpt` - Updated resume point threshold logic. - `cas` - "Custom Asset Search", inlcude `customAssets` in search results. - `lrl` - Do not pre-populate related list if more than `max_list_prefetch` down the page. - `cd` - Custom Destination support. See the `feature-flags.md` for available flag details.
   --lang: string # Language code for the preferred language to be returned in the response. Parameter value is case-insensitive and should be - a valid 2 letter language code without region such as en, de - or with region such as en_us, en_au If undefined then defaults to 'en', unless the server has been configured with a custom default. See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-]: nothing -> record<code: int, message: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
@@ -1508,13 +1514,14 @@ export def "rate-item" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rating: int # The item rating between 1 and 10 inclusive. (format: int32)
+  --rating: int # The item rating between 1 and 10 inclusive. (required, format: int32)
   --ff: list<string> # The set of opt in feature flags which cause breaking changes to responses. While Rocket APIs look to avoid breaking changes under the active major version, the formats of responses may need to evolve over this time. These feature flags allow clients to select which response formats they expect and avoid breaking clients as these formats evolve under the current major version. ### Flags - `all` - Enable all flags. Useful for testing. _Don't use in production_. - `idp` - Dynamic item detail pages with schedulable rows. - `ldp` - Dynamic list detail pages with schedulable rows. - `hb` - Hubble formatted image urls. - `rpt` - Updated resume point threshold logic. - `cas` - "Custom Asset Search", inlcude `customAssets` in search results. - `lrl` - Do not pre-populate related list if more than `max_list_prefetch` down the page. - `cd` - Custom Destination support. See the `feature-flags.md` for available flag details.
   --lang: string # Language code for the preferred language to be returned in the response. Parameter value is case-insensitive and should be - a valid 2 letter language code without region such as en, de - or with region such as en_us, en_au If undefined then defaults to 'en', unless the server has been configured with a custom default. See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
 ]: nothing -> record<itemId: string, rating: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  if ($rating == null) { error make --unspanned { msg: "required query parameter 'rating' missing: pass --rating" } }
   let qp = [(serialize-qp "rating" $rating "scalar") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/account/profile/ratings/{item_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1550,7 +1557,7 @@ export def "delete-watched" [
   --item-ids: list<string> # List of `itemId`s to delete. Omit this parameter to delete all items
   --ff: list<string> # The set of opt in feature flags which cause breaking changes to responses. While Rocket APIs look to avoid breaking changes under the active major version, the formats of responses may need to evolve over this time. These feature flags allow clients to select which response formats they expect and avoid breaking clients as these formats evolve under the current major version. ### Flags - `all` - Enable all flags. Useful for testing. _Don't use in production_. - `idp` - Dynamic item detail pages with schedulable rows. - `ldp` - Dynamic list detail pages with schedulable rows. - `hb` - Hubble formatted image urls. - `rpt` - Updated resume point threshold logic. - `cas` - "Custom Asset Search", inlcude `customAssets` in search results. - `lrl` - Do not pre-populate related list if more than `max_list_prefetch` down the page. - `cd` - Custom Destination support. See the `feature-flags.md` for available flag details.
   --lang: string # Language code for the preferred language to be returned in the response. Parameter value is case-insensitive and should be - a valid 2 letter language code without region such as en, de - or with region such as en_us, en_au If undefined then defaults to 'en', unless the server has been configured with a custom default. See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-]: nothing -> record<code: int, message: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "item_ids" $item_ids "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
@@ -1708,13 +1715,14 @@ export def "set-item-watched-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --position: int # The playhead position to record. (format: int32)
+  --position: int # The playhead position to record. (required, format: int32)
   --ff: list<string> # The set of opt in feature flags which cause breaking changes to responses. While Rocket APIs look to avoid breaking changes under the active major version, the formats of responses may need to evolve over this time. These feature flags allow clients to select which response formats they expect and avoid breaking clients as these formats evolve under the current major version. ### Flags - `all` - Enable all flags. Useful for testing. _Don't use in production_. - `idp` - Dynamic item detail pages with schedulable rows. - `ldp` - Dynamic list detail pages with schedulable rows. - `hb` - Hubble formatted image urls. - `rpt` - Updated resume point threshold logic. - `cas` - "Custom Asset Search", inlcude `customAssets` in search results. - `lrl` - Do not pre-populate related list if more than `max_list_prefetch` down the page. - `cd` - Custom Destination support. See the `feature-flags.md` for available flag details.
   --lang: string # Language code for the preferred language to be returned in the response. Parameter value is case-insensitive and should be - a valid 2 letter language code without region such as en, de - or with region such as en_us, en_au If undefined then defaults to 'en', unless the server has been configured with a custom default. See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
 ]: nothing -> record<firstWatchedDate: string, isFullyWatched: bool, itemId: string, lastWatchedDate: string, position: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  if ($position == null) { error make --unspanned { msg: "required query parameter 'position' missing: pass --position" } }
   let qp = [(serialize-qp "position" $position "scalar") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/account/profile/watched/{item_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1795,7 +1803,7 @@ export def "delete-profile-with-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ff: list<string> # The set of opt in feature flags which cause breaking changes to responses. While Rocket APIs look to avoid breaking changes under the active major version, the formats of responses may need to evolve over this time. These feature flags allow clients to select which response formats they expect and avoid breaking clients as these formats evolve under the current major version. ### Flags - `all` - Enable all flags. Useful for testing. _Don't use in production_. - `idp` - Dynamic item detail pages with schedulable rows. - `ldp` - Dynamic list detail pages with schedulable rows. - `hb` - Hubble formatted image urls. - `rpt` - Updated resume point threshold logic. - `cas` - "Custom Asset Search", inlcude `customAssets` in search results. - `lrl` - Do not pre-populate related list if more than `max_list_prefetch` down the page. - `cd` - Custom Destination support. See the `feature-flags.md` for available flag details.
   --lang: string # Language code for the preferred language to be returned in the response. Parameter value is case-insensitive and should be - a valid 2 letter language code without region such as en, de - or with region such as en_us, en_au If undefined then defaults to 'en', unless the server has been configured with a custom default. See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-]: nothing -> record<code: int, message: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1880,7 +1888,7 @@ export def "update-profile-with-id" [
   --pin-enabled: oneof<nothing, bool> # Whether an account pin is required to enter the profile. If no account pin is defined this has no impact.
   --purchase-enabled: oneof<nothing, bool> # Whether the profile can make purchases with the account payment options.
   --segments: list<string> # The segments a profile should be placed under
-]: any -> record<code: int, message: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1921,7 +1929,7 @@ export def "request-email-verification" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ff: list<string> # The set of opt in feature flags which cause breaking changes to responses. While Rocket APIs look to avoid breaking changes under the active major version, the formats of responses may need to evolve over this time. These feature flags allow clients to select which response formats they expect and avoid breaking clients as these formats evolve under the current major version. ### Flags - `all` - Enable all flags. Useful for testing. _Don't use in production_. - `idp` - Dynamic item detail pages with schedulable rows. - `ldp` - Dynamic list detail pages with schedulable rows. - `hb` - Hubble formatted image urls. - `rpt` - Updated resume point threshold logic. - `cas` - "Custom Asset Search", inlcude `customAssets` in search results. - `lrl` - Do not pre-populate related list if more than `max_list_prefetch` down the page. - `cd` - Custom Destination support. See the `feature-flags.md` for available flag details.
   --lang: string # Language code for the preferred language to be returned in the response. Parameter value is case-insensitive and should be - a valid 2 letter language code without region such as en, de - or with region such as en_us, en_au If undefined then defaults to 'en', unless the server has been configured with a custom default. See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-]: nothing -> record<code: int, message: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
@@ -1958,7 +1966,7 @@ export def "sign-out" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ff: list<string> # The set of opt in feature flags which cause breaking changes to responses. While Rocket APIs look to avoid breaking changes under the active major version, the formats of responses may need to evolve over this time. These feature flags allow clients to select which response formats they expect and avoid breaking clients as these formats evolve under the current major version. ### Flags - `all` - Enable all flags. Useful for testing. _Don't use in production_. - `idp` - Dynamic item detail pages with schedulable rows. - `ldp` - Dynamic list detail pages with schedulable rows. - `hb` - Hubble formatted image urls. - `rpt` - Updated resume point threshold logic. - `cas` - "Custom Asset Search", inlcude `customAssets` in search results. - `lrl` - Do not pre-populate related list if more than `max_list_prefetch` down the page. - `cd` - Custom Destination support. See the `feature-flags.md` for available flag details.
   --lang: string # Language code for the preferred language to be returned in the response. Parameter value is case-insensitive and should be - a valid 2 letter language code without region such as en, de - or with region such as en_us, en_au If undefined then defaults to 'en', unless the server has been configured with a custom default. See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-]: nothing -> record<code: int, message: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
@@ -2179,6 +2187,7 @@ export def "refresh-token" [
   let full_url = (build-url $base "/authorization/refresh" $qp $auth.query)
   let req_body = {"cookieType": $cookie_type, "token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2224,6 +2233,7 @@ export def "single-sign-on" [
   let full_url = (build-url $base "/authorization/sso" $qp $auth.query)
   let req_body = {"cookieType": $cookie_type, "linkAccounts": $link_accounts, "provider": $provider, "scopes": $scopes, "token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2339,6 +2349,7 @@ export def "assign-token" [
   let full_url = (build-url $base "/bt/token/assign" $qp $auth.query)
   let req_body = {"profileToken": $profile_token, "token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2369,12 +2380,13 @@ export def "check-user-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # User token provided by BT.
+  --id: string # User token provided by BT. (required)
   --ff: list<string> # The set of opt in feature flags which cause breaking changes to responses. While Rocket APIs look to avoid breaking changes under the active major version, the formats of responses may need to evolve over this time. These feature flags allow clients to select which response formats they expect and avoid breaking clients as these formats evolve under the current major version. ### Flags - `all` - Enable all flags. Useful for testing. _Don't use in production_. - `idp` - Dynamic item detail pages with schedulable rows. - `ldp` - Dynamic list detail pages with schedulable rows. - `hb` - Hubble formatted image urls. - `rpt` - Updated resume point threshold logic. - `cas` - "Custom Asset Search", inlcude `customAssets` in search results. - `lrl` - Do not pre-populate related list if more than `max_list_prefetch` down the page. - `cd` - Custom Destination support. See the `feature-flags.md` for available flag details.
   --lang: string # Language code for the preferred language to be returned in the response. Parameter value is case-insensitive and should be - a valid 2 letter language code without region such as en, de - or with region such as en_us, en_au If undefined then defaults to 'en', unless the server has been configured with a custom default. See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-]: nothing -> record<code: int, message: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/bt/token/validate" $qp $auth.query)
   let accept_val = "application/json"
@@ -2939,8 +2951,8 @@ export def "get-public-item-media-files" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --delivery: list<string> # The video delivery type you require.
-  --resolution: string@resolution-completer # The maximum resolution the device to playback the media can present.
+  --delivery: list<string> # The video delivery type you require. (required)
+  --resolution: string@resolution-completer # The maximum resolution the device to playback the media can present. (required)
   --formats: list<string> # The set of media file formats that the device supports, in the order of preference. When provided, Rocket API returns only media files in formats specified in this parameter. For each resolution, only the first media file of matching supported format is returned. Files of different resolutions may be of different supported media file formats. `external` value is reserved for project customizations where the real MIME type of the file on the specified URL is unknown at the time of ingestion. When not provided, Rocket API uses the legacy `User-Agent` header-based logic to find matching media files.
   --device: string # The type of device the content is targeting. (default: web_browser)
   --sub: string # The active subscription code.
@@ -2951,6 +2963,8 @@ export def "get-public-item-media-files" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($delivery == null) { error make --unspanned { msg: "required query parameter 'delivery' missing: pass --delivery" } }
+  if ($resolution == null) { error make --unspanned { msg: "required query parameter 'resolution' missing: pass --resolution" } }
   let qp = [(serialize-qp "delivery" $delivery "csv") (serialize-qp "resolution" $resolution "scalar") (serialize-qp "formats" $formats "csv") (serialize-qp "device" $device "scalar") (serialize-qp "sub" $sub "scalar") (serialize-qp "segments" $segments "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/items/{id}/videos") $qp $auth.query)
   let accept_val = "application/json"
@@ -3114,7 +3128,7 @@ export def "change-card-details" [
   --lang: string # Language code for the preferred language to be returned in the response. Parameter value is case-insensitive and should be - a valid 2 letter language code without region such as en, de - or with region such as en_us, en_au If undefined then defaults to 'en', unless the server has been configured with a custom default. See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
   card_token: string # The credit card token.
   profile_token: string # The ITV profile token.
-]: any -> record<code: int, message: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3157,7 +3171,7 @@ export def "change-email" [
   --lang: string # Language code for the preferred language to be returned in the response. Parameter value is case-insensitive and should be - a valid 2 letter language code without region such as en, de - or with region such as en_us, en_au If undefined then defaults to 'en', unless the server has been configured with a custom default. See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
   email: string # New email address for account/profile.
   profile_token: string # The ITV profile token.
-]: any -> record<code: int, message: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3199,7 +3213,7 @@ export def "change-marketing" [
   --lang: string # Language code for the preferred language to be returned in the response. Parameter value is case-insensitive and should be - a valid 2 letter language code without region such as en, de - or with region such as en_us, en_au If undefined then defaults to 'en', unless the server has been configured with a custom default. See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
   --email-opt-in: oneof<nothing, bool> # Updated marketing preferences for account/profile.
   profile_token: string # The ITV profile token.
-]: any -> record<code: int, message: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3207,6 +3221,7 @@ export def "change-marketing" [
   let full_url = (build-url $base "/itv/changemarketing" $qp $auth.query)
   let req_body = {"emailOptIn": $email_opt_in, "profileToken": $profile_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "emailOptIn") == null) { error make --unspanned { msg: "required body field 'emailOptIn' missing: pass --email-opt-in or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3240,7 +3255,7 @@ export def "delete-account" [
   --ff: list<string> # The set of opt in feature flags which cause breaking changes to responses. While Rocket APIs look to avoid breaking changes under the active major version, the formats of responses may need to evolve over this time. These feature flags allow clients to select which response formats they expect and avoid breaking clients as these formats evolve under the current major version. ### Flags - `all` - Enable all flags. Useful for testing. _Don't use in production_. - `idp` - Dynamic item detail pages with schedulable rows. - `ldp` - Dynamic list detail pages with schedulable rows. - `hb` - Hubble formatted image urls. - `rpt` - Updated resume point threshold logic. - `cas` - "Custom Asset Search", inlcude `customAssets` in search results. - `lrl` - Do not pre-populate related list if more than `max_list_prefetch` down the page. - `cd` - Custom Destination support. See the `feature-flags.md` for available flag details.
   --lang: string # Language code for the preferred language to be returned in the response. Parameter value is case-insensitive and should be - a valid 2 letter language code without region such as en, de - or with region such as en_us, en_au If undefined then defaults to 'en', unless the server has been configured with a custom default. See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
   profile_token: string # The ITV profile token.
-]: any -> record<code: int, message: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3582,7 +3597,7 @@ export def "get-itv-page" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --path: string # The path of the page to load, e.g. '/movies'.
+  --path: string # The path of the page to load, e.g. '/movies'. (required)
   --list-page-size: int # The number of items to load when prefetching and paging each list in the page row. (format: int32, default: 12)
   --list-page-size-large: int # The number of items to load when prefetching a continuous scroll list entry in a page. By default any list page entry with template pattern `/^CS\d+$/` will be considered a continuous scroll list. (format: int32, default: 50)
   --max-list-prefetch: int # The maximum number of lists to prefetch in the page. (format: int32, default: 2)
@@ -3598,6 +3613,7 @@ export def "get-itv-page" [
 ]: nothing -> record<id: string, isStatic: bool, isSystemPage: bool, key: string, path: string, template: string, title: string, customFields: record, entries: table<customFields: record, id: string, images: record, item: record, list: record, people: list, template: string, text: string, title: string, type: string>, item: record<advisoryText: string, availableEpisodeCount: int, availableSeasonCount: int, averageUserRating: float, badge: string, channelShortCode: string, classification: record<code: string, name: string>, contextualTitle: string, customFields: record, customId: string, duration: int, episodeCount: int, episodeName: string, episodeNumber: int, genres: list<string>, hasClosedCaptions: bool, id: string, images: record, offers: list<record>, path: string, releaseYear: int, scopes: list<string>, seasonId: string, seasonNumber: int, shortDescription: string, showId: string, showTitle: string, subtype: string, tagline: string, themes: list<record>, title: string, type: string, watchPath: string, copyright: string, credits: list<record>, customMetadata: list<record>, description: string, distributor: string, episodes: record<customFields: record, description: string, id: string, images: record, itemTypes: list, items: list, listData: record, paging: record, parameter: string, path: string, shortDescription: string, size: int, tagline: string, themes: list, title: string>, eventDate: string, genrePaths: list<string>, location: string, season: any, seasons: record<customFields: record, description: string, id: string, images: record, itemTypes: list, items: list, listData: record, paging: record, parameter: string, path: string, shortDescription: string, size: int, tagline: string, themes: list, title: string>, show: any, totalUserRatings: int, trailers: list<record>, venue: string>, list: record<customFields: record, description: string, id: string, images: record, itemTypes: list<string>, items: list<record>, listData: record<ContinueWatching: record>, paging: record<authorization: record, next: string, options: record, page: int, previous: string, size: int, total: int>, parameter: string, path: string, shortDescription: string, size: int, tagline: string, themes: list<record>, title: string>, metadata: record<description: string, keywords: list<string>, segments: list<string>>, themes: table<colors: list, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "list_page_size" $list_page_size "scalar") (serialize-qp "list_page_size_large" $list_page_size_large "scalar") (serialize-qp "max_list_prefetch" $max_list_prefetch "scalar") (serialize-qp "item_detail_expand" $item_detail_expand "scalar") (serialize-qp "item_detail_select_season" $item_detail_select_season "scalar") (serialize-qp "text_entry_format" $text_entry_format "scalar") (serialize-qp "max_rating" $max_rating "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "sub" $sub "scalar") (serialize-qp "segments" $segments "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/itv/page" $qp $auth.query)
   let accept_val = "application/json"
@@ -3676,7 +3692,7 @@ export def "upgrade-plan" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --lang: string # Language code for the preferred language to be returned in the response. Parameter value is case-insensitive and should be - a valid 2 letter language code without region such as en, de - or with region such as en_us, en_au If undefined then defaults to 'en', unless the server has been configured with a custom default. See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
   plan_id: string # The identifier of the plan to purchase.
-]: any -> record<code: int, message: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3796,7 +3812,7 @@ export def "update-profile" [
   --postcode: string # The postal code.
   profile_token: string # The ITV profile token.
   --title: string # The title.
-]: any -> record<code: int, message: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3919,7 +3935,7 @@ export def "delete-itv-purchase-platform" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --lang: string # Language code for the preferred language to be returned in the response. Parameter value is case-insensitive and should be - a valid 2 letter language code without region such as en, de - or with region such as en_us, en_au If undefined then defaults to 'en', unless the server has been configured with a custom default. See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
   profile_token: string # The ITV profile token.
-]: any -> record<code: int, message: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4134,12 +4150,13 @@ export def "resubscribe" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --plan-id: string # The id of the plan to renew.
+  --plan-id: string # The id of the plan to renew. (required)
   --lang: string # Language code for the preferred language to be returned in the response. Parameter value is case-insensitive and should be - a valid 2 letter language code without region such as en, de - or with region such as en_us, en_au If undefined then defaults to 'en', unless the server has been configured with a custom default. See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($platform | is-empty) { error make --unspanned { msg: "path parameter 'platform' must be non-empty" } }
+  if ($plan_id == null) { error make --unspanned { msg: "required query parameter 'planId' missing: pass --plan-id" } }
   let qp = [(serialize-qp "planId" $plan_id "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({platform: (encode-path-segment $platform)} | format pattern "/itv/resubscribe/{platform}") $qp $auth.query)
   let accept_val = "application/json"
@@ -4210,7 +4227,7 @@ export def "execute-transaction" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --lang: string # Language code for the preferred language to be returned in the response. Parameter value is case-insensitive and should be - a valid 2 letter language code without region such as en, de - or with region such as en_us, en_au If undefined then defaults to 'en', unless the server has been configured with a custom default. See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
   profile_token: string # The ITV profile token.
-]: any -> record<code: int, message: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4520,7 +4537,7 @@ export def "update-payment-method-strong" [
   --payment-method-from-token: string # A paymentMethodFromToken.
   --payment-method-id: string # The paymentMethodId from Stripe.
   profile_token: string # The ITV profile token.
-]: any -> record<code: int, message: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4641,7 +4658,7 @@ export def "get-lists" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list<string> # A comma delimited list of item list identifiers. These can be list ids e.g. `14354,65473,3234` Or more complex sort/filter queries using pipes e.g. `14354|max_rating=AUOFLC-E|order=asc|order_by=year-added,65473|page_size=30,3234` _Note the id must always come first for each encoded list query_ List parameters may be provide without the `param=` prefix e.g. `14354|genre:action` Only the following options can be present. - `order` - `order_by` - `max_rating` - `page_size` - `item_type` - `param`
+  --ids: list<string> # A comma delimited list of item list identifiers. These can be list ids e.g. `14354,65473,3234` Or more complex sort/filter queries using pipes e.g. `14354|max_rating=AUOFLC-E|order=asc|order_by=year-added,65473|page_size=30,3234` _Note the id must always come first for each encoded list query_ List parameters may be provide without the `param=` prefix e.g. `14354|genre:action` Only the following options can be present. - `order` - `order_by` - `max_rating` - `page_size` - `item_type` - `param` (required)
   --page-size: int # The number of items to return in a page. (format: int32, default: 12)
   --max-rating: string # The maximum rating (inclusive) of items returned, e.g. 'auoflc-pg'.
   --order: string@order-completer # The list sort order, either 'asc' or 'desc'. (default: desc)
@@ -4655,6 +4672,7 @@ export def "get-lists" [
 ]: nothing -> table<customFields: record, description: string, id: string, images: record, itemTypes: list<string>, items: list<record>, listData: record<ContinueWatching: record>, paging: record<authorization: record, next: string, options: record, page: int, previous: string, size: int, total: int>, parameter: string, path: string, shortDescription: string, size: int, tagline: string, themes: list<record>, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "max_rating" $max_rating "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "item_type" $item_type "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "sub" $sub "scalar") (serialize-qp "segments" $segments "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/lists" $qp $auth.query)
   let accept_val = "application/json"
@@ -4736,7 +4754,7 @@ export def "get-page" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --path: string # The path of the page to load, e.g. '/movies'.
+  --path: string # The path of the page to load, e.g. '/movies'. (required)
   --list-page-size: int # The number of items to load when prefetching and paging each list in the page row. (format: int32, default: 12)
   --list-page-size-large: int # The number of items to load when prefetching a continuous scroll list entry in a page. By default any list page entry with template pattern `/^CS\d+$/` will be considered a continuous scroll list. (format: int32, default: 50)
   --max-list-prefetch: int # The maximum number of lists to prefetch in the page. (format: int32, default: 2)
@@ -4752,6 +4770,7 @@ export def "get-page" [
 ]: nothing -> record<id: string, isStatic: bool, isSystemPage: bool, key: string, path: string, template: string, title: string, customFields: record, entries: table<customFields: record, id: string, images: record, item: record, list: record, people: list, template: string, text: string, title: string, type: string>, item: record<advisoryText: string, availableEpisodeCount: int, availableSeasonCount: int, averageUserRating: float, badge: string, channelShortCode: string, classification: record<code: string, name: string>, contextualTitle: string, customFields: record, customId: string, duration: int, episodeCount: int, episodeName: string, episodeNumber: int, genres: list<string>, hasClosedCaptions: bool, id: string, images: record, offers: list<record>, path: string, releaseYear: int, scopes: list<string>, seasonId: string, seasonNumber: int, shortDescription: string, showId: string, showTitle: string, subtype: string, tagline: string, themes: list<record>, title: string, type: string, watchPath: string, copyright: string, credits: list<record>, customMetadata: list<record>, description: string, distributor: string, episodes: record<customFields: record, description: string, id: string, images: record, itemTypes: list, items: list, listData: record, paging: record, parameter: string, path: string, shortDescription: string, size: int, tagline: string, themes: list, title: string>, eventDate: string, genrePaths: list<string>, location: string, season: any, seasons: record<customFields: record, description: string, id: string, images: record, itemTypes: list, items: list, listData: record, paging: record, parameter: string, path: string, shortDescription: string, size: int, tagline: string, themes: list, title: string>, show: any, totalUserRatings: int, trailers: list<record>, venue: string>, list: record<customFields: record, description: string, id: string, images: record, itemTypes: list<string>, items: list<record>, listData: record<ContinueWatching: record>, paging: record<authorization: record, next: string, options: record, page: int, previous: string, size: int, total: int>, parameter: string, path: string, shortDescription: string, size: int, tagline: string, themes: list<record>, title: string>, metadata: record<description: string, keywords: list<string>, segments: list<string>>, themes: table<colors: list, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "list_page_size" $list_page_size "scalar") (serialize-qp "list_page_size_large" $list_page_size_large "scalar") (serialize-qp "max_list_prefetch" $max_list_prefetch "scalar") (serialize-qp "item_detail_expand" $item_detail_expand "scalar") (serialize-qp "item_detail_select_season" $item_detail_select_season "scalar") (serialize-qp "text_entry_format" $text_entry_format "scalar") (serialize-qp "max_rating" $max_rating "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "sub" $sub "scalar") (serialize-qp "segments" $segments "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/page" $qp $auth.query)
   let accept_val = "application/json"
@@ -4876,7 +4895,7 @@ export def "forgot-password" [
   --ff: list<string> # The set of opt in feature flags which cause breaking changes to responses. While Rocket APIs look to avoid breaking changes under the active major version, the formats of responses may need to evolve over this time. These feature flags allow clients to select which response formats they expect and avoid breaking clients as these formats evolve under the current major version. ### Flags - `all` - Enable all flags. Useful for testing. _Don't use in production_. - `idp` - Dynamic item detail pages with schedulable rows. - `ldp` - Dynamic list detail pages with schedulable rows. - `hb` - Hubble formatted image urls. - `rpt` - Updated resume point threshold logic. - `cas` - "Custom Asset Search", inlcude `customAssets` in search results. - `lrl` - Do not pre-populate related list if more than `max_list_prefetch` down the page. - `cd` - Custom Destination support. See the `feature-flags.md` for available flag details.
   --lang: string # Language code for the preferred language to be returned in the response. Parameter value is case-insensitive and should be - a valid 2 letter language code without region such as en, de - or with region such as en_us, en_au If undefined then defaults to 'en', unless the server has been configured with a custom default. See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
   email: string # The email address of the primary account profile to reset the password for.
-]: any -> record<code: int, message: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4918,7 +4937,7 @@ export def "reset-password" [
   --lang: string # Language code for the preferred language to be returned in the response. Parameter value is case-insensitive and should be - a valid 2 letter language code without region such as en, de - or with region such as en_us, en_au If undefined then defaults to 'en', unless the server has been configured with a custom default. See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
   password: string # The new password for the account.
   reset_token: string # The ITV reset token.
-]: any -> record<code: int, message: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4990,10 +5009,10 @@ export def "get-schedules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --channels: list<string> # The list of channel ids to get schedules for.
-  --date: string # The date to target in ISO format, e.g. `2017-05-23` (converted to UTC - see main description). The base hour requested will belong to this date. (format: date)
-  --hour: int # The base hour in the day, defined by the `date` parameter, you wish to load schedules for (converted to UTC - see main description). From 0 to 23, where 0 is midnight. (format: int32)
-  --duration: int # The number of hours of schedules to load from the base `hour` parameter. This may be negative or positive depending on whether you want to load past or future schedules. Minimum value is -24, maximum is 24. A value of zero is invalid. (format: int32)
+  --channels: list<string> # The list of channel ids to get schedules for. (required)
+  --date: string # The date to target in ISO format, e.g. `2017-05-23` (converted to UTC - see main description). The base hour requested will belong to this date. (required, format: date)
+  --hour: int # The base hour in the day, defined by the `date` parameter, you wish to load schedules for (converted to UTC - see main description). From 0 to 23, where 0 is midnight. (required, format: int32)
+  --duration: int # The number of hours of schedules to load from the base `hour` parameter. This may be negative or positive depending on whether you want to load past or future schedules. Minimum value is -24, maximum is 24. A value of zero is invalid. (required, format: int32)
   --intersect: oneof<nothing, bool> # Flag indicating whether schedules should intersect or be contained in the provided interval. If set to `true`, the result will contain all schedules where either schedule start time or end time touches the provided interval. If set to `false`, only schedules fully contained in the given period will be returned. (default: false)
   --device: string # The type of device the content is targeting. (default: web_browser)
   --sub: string # The active subscription code.
@@ -5003,6 +5022,10 @@ export def "get-schedules" [
 ]: nothing -> table<channelId: string, endDate: string, schedules: list<record>, startDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channels == null) { error make --unspanned { msg: "required query parameter 'channels' missing: pass --channels" } }
+  if ($date == null) { error make --unspanned { msg: "required query parameter 'date' missing: pass --date" } }
+  if ($hour == null) { error make --unspanned { msg: "required query parameter 'hour' missing: pass --hour" } }
+  if ($duration == null) { error make --unspanned { msg: "required query parameter 'duration' missing: pass --duration" } }
   let qp = [(serialize-qp "channels" $channels "csv") (serialize-qp "date" $date "scalar") (serialize-qp "hour" $hour "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "intersect" $intersect "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "sub" $sub "scalar") (serialize-qp "segments" $segments "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/schedules" $qp $auth.query)
   let accept_val = "application/json"
@@ -5035,7 +5058,7 @@ export def "search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --term: string # The search term to query.
+  --term: string # The search term to query. (required)
   --include: list<string> # By default people, movies and tv (shows + programs) will be included in the search results. If the `cas` feature flag is set, "other" items (`customAsset`s) will also be included by default If you don't want all of these types you can specifiy the specific includes you care about.
   --group: oneof<nothing, bool> # When this option is set, instead of all search result items being returned in a single list, they will instead be returned under two lists. One for movies and another for tv (shows + programs). if the `cas` feature flag is set, a third `other` list will be included containing `customAsset` results Default is undefined meaning items will be returned in a single list. The array of `people` results will always be separate from items.
   --max-results: int # The maximum number of results to return. (format: int32, default: 20)
@@ -5048,6 +5071,7 @@ export def "search" [
 ]: nothing -> record<items: record<customFields: record, description: string, id: string, images: record, itemTypes: list<string>, items: list<record>, listData: record<ContinueWatching: record>, paging: record<authorization: record, next: string, options: record, page: int, previous: string, size: int, total: int>, parameter: string, path: string, shortDescription: string, size: int, tagline: string, themes: list<record>, title: string>, movies: record<customFields: record, description: string, id: string, images: record, itemTypes: list<string>, items: list<record>, listData: record<ContinueWatching: record>, paging: record<authorization: record, next: string, options: record, page: int, previous: string, size: int, total: int>, parameter: string, path: string, shortDescription: string, size: int, tagline: string, themes: list<record>, title: string>, other: record<customFields: record, description: string, id: string, images: record, itemTypes: list<string>, items: list<record>, listData: record<ContinueWatching: record>, paging: record<authorization: record, next: string, options: record, page: int, previous: string, size: int, total: int>, parameter: string, path: string, shortDescription: string, size: int, tagline: string, themes: list<record>, title: string>, people: table<name: string, path: string>, term: string, total: int, tv: record<customFields: record, description: string, id: string, images: record, itemTypes: list<string>, items: list<record>, listData: record<ContinueWatching: record>, paging: record<authorization: record, next: string, options: record, page: int, previous: string, size: int, total: int>, parameter: string, path: string, shortDescription: string, size: int, tagline: string, themes: list<record>, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($term == null) { error make --unspanned { msg: "required query parameter 'term' missing: pass --term" } }
   let qp = [(serialize-qp "term" $term "scalar") (serialize-qp "include" $include "csv") (serialize-qp "group" $group "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "max_rating" $max_rating "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "sub" $sub "scalar") (serialize-qp "segments" $segments "csv") (serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search" $qp $auth.query)
   let accept_val = "application/json"
@@ -5082,7 +5106,7 @@ export def "verify-email" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ff: list<string> # The set of opt in feature flags which cause breaking changes to responses. While Rocket APIs look to avoid breaking changes under the active major version, the formats of responses may need to evolve over this time. These feature flags allow clients to select which response formats they expect and avoid breaking clients as these formats evolve under the current major version. ### Flags - `all` - Enable all flags. Useful for testing. _Don't use in production_. - `idp` - Dynamic item detail pages with schedulable rows. - `ldp` - Dynamic list detail pages with schedulable rows. - `hb` - Hubble formatted image urls. - `rpt` - Updated resume point threshold logic. - `cas` - "Custom Asset Search", inlcude `customAssets` in search results. - `lrl` - Do not pre-populate related list if more than `max_list_prefetch` down the page. - `cd` - Custom Destination support. See the `feature-flags.md` for available flag details.
   --lang: string # Language code for the preferred language to be returned in the response. Parameter value is case-insensitive and should be - a valid 2 letter language code without region such as en, de - or with region such as en_us, en_au If undefined then defaults to 'en', unless the server has been configured with a custom default. See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-]: nothing -> record<code: int, message: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ff" $ff "csv") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"

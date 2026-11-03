@@ -132,13 +132,14 @@ export def "get-vehicle-details-by-registration-number" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-api-key: string # Client Specific API Key
+  --x-api-key: string # Client Specific API Key (required)
   --x-correlation-id: string # Consumer Correlation ID
   --registration-number: string
 ]: any -> record<artEndDate: string, co2Emissions: int, colour: string, dateOfLastV5CIssued: string, engineCapacity: int, euroStatus: string, fuelType: string, make: string, markedForExport: bool, monthOfFirstDvlaRegistration: string, monthOfFirstRegistration: string, motExpiryDate: string, motStatus: string, realDrivingEmissions: string, registrationNumber: string, revenueWeight: int, taxDueDate: string, taxStatus: string, typeApproval: string, wheelplan: string, yearOfManufacture: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'x-api-key' missing: pass --x-api-key" } }
   let full_url = (build-url $base "/v1/vehicles" $auth.query)
   let req_body = {"registrationNumber": $registration_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

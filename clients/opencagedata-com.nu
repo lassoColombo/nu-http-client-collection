@@ -135,8 +135,8 @@ export def "get-v-version-format" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --q: string # string or lat,lng to be geocoded.
-  --key: string # an application key.
+  --q: string # string or lat,lng to be geocoded. (required)
+  --key: string # an application key. (required)
   --abbrv: oneof<nothing, bool> # when true we attempt to abbreviate the formatted field of results.
   --address-only: oneof<nothing, bool> # when true we include only address details in the formatted field of results.
   --add-request: oneof<nothing, bool> # if true the request is included in the response.
@@ -157,6 +157,8 @@ export def "get-v-version-format" [
   let base = ($base_url | default $BASE_URL)
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "abbrv" $abbrv "scalar") (serialize-qp "address_only" $address_only "scalar") (serialize-qp "add_request" $add_request "scalar") (serialize-qp "bounds" $bounds "scalar") (serialize-qp "countrycode" $countrycode "scalar") (serialize-qp "jsonp" $jsonp "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "min_confidence" $min_confidence "scalar") (serialize-qp "no_annotations" $no_annotations "scalar") (serialize-qp "no_dedupe" $no_dedupe "scalar") (serialize-qp "no_record" $no_record "scalar") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "proximity" $proximity "scalar") (serialize-qp "roadinfo" $roadinfo "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({version: (encode-path-segment $version), format: (encode-path-segment $format)} | format pattern "/v{version}/{format}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")

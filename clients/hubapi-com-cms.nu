@@ -1,4 +1,4 @@
-# Auto-generated client for Domains vv3
+# Auto-generated client for Domains v3
 # Source: https://api.apis.guru/v2/specs/hubapi.com/cms/v3/openapi.json
 # Auth: --token flag or $env.DOMAINS_TOKEN
 
@@ -13,9 +13,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "query-hapikey" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "hapikey")=(encode-path-segment $token_val)", location: "query"} }
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "private-app" => { {scheme: $scheme, headers: {private-app: $token_val}, query: "", location: "header"} }
-    "private-app-legacy" => { {scheme: $scheme, headers: {private-app-legacy: $token_val}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "private-app" => { {scheme: $scheme, headers: {"private-app": $token_val}, query: "", location: "header"} }
+    "private-app-legacy" => { {scheme: $scheme, headers: {"private-app-legacy": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -97,6 +97,8 @@ def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: 
 def base-url-completer [] { ["https://api.hubapi.com"] }
 def auth-scheme-completer [] { ["query-hapikey" "bearer" "private-app" "private-app-legacy"] }
 
+# Completers for enum parameters
+def accept-completer [] { ["*/*" "application/json"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -135,27 +137,28 @@ export def "get-cms-v3-domains-get-page" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --created-at: string # Only return domains created at this date. (format: date-time)
   --created-after: string # Only return domains created after this date. (format: date-time)
   --created-before: string # Only return domains created before this date. (format: date-time)
   --updated-at: string # Only return domains updated at this date. (format: date-time)
   --updated-after: string # Only return domains updated after this date. (format: date-time)
   --updated-before: string # Only return domains updated before this date. (format: date-time)
-  --qp-sort: list<string>
+  --sort: list<string>
   --after: string # The paging cursor token of the last successfully read resource will be returned as the `paging.next.after` JSON property of a paged response containing more results.
   --limit: int # Maximum number of results per page. (format: int32)
   --archived: oneof<nothing, bool> # Whether to return only results that have been archived.
 ]: nothing -> record<paging: record<next: record<after: string, link: string>>, results: table<correctCname: string, created: string, domain: string, id: string, isResolving: bool, isSslEnabled: bool, isSslOnly: bool, isUsedForBlogPost: bool, isUsedForEmail: bool, isUsedForKnowledge: bool, isUsedForLandingPage: bool, isUsedForSitePage: bool, manuallyMarkedAsResolving: bool, primaryBlogPost: bool, primaryEmail: bool, primaryKnowledge: bool, primaryLandingPage: bool, primarySitePage: bool, secondaryToDomain: string, updated: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "createdAt" $created_at "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar") (serialize-qp "updatedAt" $updated_at "scalar") (serialize-qp "updatedAfter" $updated_after "scalar") (serialize-qp "updatedBefore" $updated_before "scalar") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "after" $after "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "archived" $archived "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "createdAt" $created_at "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar") (serialize-qp "updatedAt" $updated_at "scalar") (serialize-qp "updatedAfter" $updated_after "scalar") (serialize-qp "updatedBefore" $updated_before "scalar") (serialize-qp "sort" $sort "multi") (serialize-qp "after" $after "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "archived" $archived "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cms/v3/domains/" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"createdAt": $created_at, "createdAfter": $created_after, "createdBefore": $created_before, "updatedAt": $updated_at, "updatedAfter": $updated_after, "updatedBefore": $updated_before, "sort": $qp_sort, "after": $after, "limit": $limit, "archived": $archived} | compact)
+    query: ({"createdAt": $created_at, "createdAfter": $created_after, "createdBefore": $created_before, "updatedAt": $updated_at, "updatedAfter": $updated_after, "updatedBefore": $updated_before, "sort": $sort, "after": $after, "limit": $limit, "archived": $archived} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -181,12 +184,13 @@ export def "get-cms-v3-domains-get-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
 ]: nothing -> record<correctCname: string, created: string, domain: string, id: string, isResolving: bool, isSslEnabled: bool, isSslOnly: bool, isUsedForBlogPost: bool, isUsedForEmail: bool, isUsedForKnowledge: bool, isUsedForLandingPage: bool, isUsedForSitePage: bool, manuallyMarkedAsResolving: bool, primaryBlogPost: bool, primaryEmail: bool, primaryKnowledge: bool, primaryLandingPage: bool, primarySitePage: bool, secondaryToDomain: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_id | is-empty) { error make --unspanned { msg: "path parameter 'domainId' must be non-empty" } }
   let full_url = (build-url $base ({domain_id: (encode-path-segment $domain_id)} | format pattern "/cms/v3/domains/{domain_id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"

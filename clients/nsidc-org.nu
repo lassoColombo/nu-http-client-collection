@@ -142,18 +142,18 @@ export def "facets" [
   --start-date: string # The start date in yyyy-mm-dd format (format: date)
   --end-date: string # The end date in yyyy-mm-dd format (format: date)
   --facet-filters: string # Describes faceted restrictions on the search. A URL-encoded JSON object where the keys are the names of the facet, and the values are arrays of the selected facet values
-  --qp-source: string@source-completer # Custom parameter for selecting which source to use; the Arctic Data Explorer (ADE) uses data aggregated from many sources, including, but not limited to, NSIDC (default: NSIDC)
+  --source: string@source-completer # Custom parameter for selecting which source to use; the Arctic Data Explorer (ADE) uses data aggregated from many sources, including, but not limited to, NSIDC (default: NSIDC)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "searchTerms" $search_terms "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "spatial" $spatial "scalar") (serialize-qp "sortKeys" $sort_keys "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "facetFilters" $facet_filters "scalar") (serialize-qp "source" $qp_source "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "searchTerms" $search_terms "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "spatial" $spatial "scalar") (serialize-qp "sortKeys" $sort_keys "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "facetFilters" $facet_filters "scalar") (serialize-qp "source" $source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Facets" $qp $auth.query)
   let accept_val = "application/nsidcfacets+xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"searchTerms": $search_terms, "count": $count, "startIndex": $start_index, "spatial": $spatial, "sortKeys": $sort_keys, "startDate": $start_date, "endDate": $end_date, "facetFilters": $facet_filters, "source": $qp_source} | compact)
+    query: ({"searchTerms": $search_terms, "count": $count, "startIndex": $start_index, "spatial": $spatial, "sortKeys": $sort_keys, "startDate": $start_date, "endDate": $end_date, "facetFilters": $facet_filters, "source": $source} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -186,18 +186,18 @@ export def "open-search" [
   --start-date: string # The start date in yyyy-mm-dd format (format: date)
   --end-date: string # The end date in yyyy-mm-dd format (format: date)
   --facet-filters: string # Describes faceted restrictions on the search. A URL-encoded JSON object where the keys are the names of the facet, and the values are arrays of the selected facet values
-  --qp-source: string@source-completer # Custom parameter for selecting which source to use; the Arctic Data Explorer (ADE) uses data aggregated from many sources, including, but not limited to, NSIDC (default: NSIDC)
+  --source: string@source-completer # Custom parameter for selecting which source to use; the Arctic Data Explorer (ADE) uses data aggregated from many sources, including, but not limited to, NSIDC (default: NSIDC)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "searchTerms" $search_terms "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "spatial" $spatial "scalar") (serialize-qp "sortKeys" $sort_keys "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "facetFilters" $facet_filters "scalar") (serialize-qp "source" $qp_source "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "searchTerms" $search_terms "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "spatial" $spatial "scalar") (serialize-qp "sortKeys" $sort_keys "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "facetFilters" $facet_filters "scalar") (serialize-qp "source" $source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/OpenSearch" $qp $auth.query)
   let accept_val = "application/atom+xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"searchTerms": $search_terms, "count": $count, "startIndex": $start_index, "spatial": $spatial, "sortKeys": $sort_keys, "startDate": $start_date, "endDate": $end_date, "facetFilters": $facet_filters, "source": $qp_source} | compact)
+    query: ({"searchTerms": $search_terms, "count": $count, "startIndex": $start_index, "spatial": $spatial, "sortKeys": $sort_keys, "startDate": $start_date, "endDate": $end_date, "facetFilters": $facet_filters, "source": $source} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -256,19 +256,21 @@ export def "id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # Search terms typed into the interface (minimum two characters)
-  --qp-source: string@source-completer # Custom parameter for selecting which source to use; the Arctic Data Explorer (ADE) uses data aggregated from many sources, including, but not limited to, NSIDC (default: NSIDC)
+  --q: string # Search terms typed into the interface (minimum two characters) (required)
+  --source: string@source-completer # Custom parameter for selecting which source to use; the Arctic Data Explorer (ADE) uses data aggregated from many sources, including, but not limited to, NSIDC (required, default: NSIDC)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "source" $qp_source "scalar")] | flatten | str join "&"
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
+  let source = ($source | default "NSIDC")
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "source" $source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/suggest" $qp $auth.query)
   let accept_val = "application/x-suggestions+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"q": $q, "source": $qp_source} | compact)
+    query: ({"q": $q, "source": $source} | compact)
     headers: $auth.headers
     body: null
     content_type: null

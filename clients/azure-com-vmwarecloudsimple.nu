@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -158,10 +158,11 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<display: record, isDataAction: bool, name: string, origin: string, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.VMwareCloudSimple/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -195,7 +196,7 @@ export def "dedicated-cloud-nodes-list-by-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --filter: string # The filter to apply on the list operation
   --top: int # The maximum number of record sets to return (format: int32)
   --skip-token: string # to be used by nextLink implementation
@@ -203,6 +204,7 @@ export def "dedicated-cloud-nodes-list-by-subscription" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudNodes") $qp $auth.query)
   let accept_val = "application/json"
@@ -236,7 +238,7 @@ export def "dedicated-cloud-services-list-by-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --filter: string # The filter to apply on the list operation
   --top: int # The maximum number of record sets to return (format: int32)
   --skip-token: string # to be used by nextLink implementation
@@ -244,6 +246,7 @@ export def "dedicated-cloud-services-list-by-subscription" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudServices") $qp $auth.query)
   let accept_val = "application/json"
@@ -279,12 +282,13 @@ export def "skus-availability-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --sku-id: string # sku id, if no sku is passed availability for all skus will be returned
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<dedicatedAvailabilityZoneId: string, dedicatedAvailabilityZoneName: string, dedicatedPlacementGroupId: string, dedicatedPlacementGroupName: string, limit: int, resourceType: string, skuId: string, skuName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($region_id | is-empty) { error make --unspanned { msg: "path parameter 'regionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "skuId" $sku_id "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), region_id: (encode-path-segment $region_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.VMwareCloudSimple/locations/{region_id}/availabilities") $qp $auth.query)
   let accept_val = "application/json"
@@ -320,14 +324,16 @@ export def "operations-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
-  --referer: string # referer url
+  --api-version: string # Client API version. (required)
+  --referer: string # referer url (required)
 ]: nothing -> record<endTime: string, error: record<code: string, message: string>, id: string, name: string, startTime: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($region_id | is-empty) { error make --unspanned { msg: "path parameter 'regionId' must be non-empty" } }
   if ($operation_id | is-empty) { error make --unspanned { msg: "path parameter 'operationId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  if ($referer == null) { error make --unspanned { msg: "required header parameter 'Referer' missing: pass --referer" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), region_id: (encode-path-segment $region_id), operation_id: (encode-path-segment $operation_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.VMwareCloudSimple/locations/{region_id}/operationResults/{operation_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -364,12 +370,13 @@ export def "private-clouds-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<id: string, location: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($region_id | is-empty) { error make --unspanned { msg: "path parameter 'regionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), region_id: (encode-path-segment $region_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.VMwareCloudSimple/locations/{region_id}/privateClouds") $qp $auth.query)
   let accept_val = "application/json"
@@ -405,13 +412,14 @@ export def "private-clouds-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<id: string, location: string, name: string, properties: record<availabilityZoneId: string, availabilityZoneName: string, clustersNumber: int, createdBy: string, createdOn: string, dnsServers: list<string>, expires: string, nsxType: string, placementGroupId: string, placementGroupName: string, privateCloudId: string, resourcePools: list<record>, state: string, totalCpuCores: int, totalNodes: int, totalRam: int, totalStorage: float, type: string, vSphereVersion: string, vcenterFqdn: string, vcenterRefid: string, virtualMachineTemplates: list<record>, virtualNetworks: list<record>, vrOpsEnabled: bool>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($region_id | is-empty) { error make --unspanned { msg: "path parameter 'regionId' must be non-empty" } }
   if ($pc_name | is-empty) { error make --unspanned { msg: "path parameter 'pcName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), region_id: (encode-path-segment $region_id), pc_name: (encode-path-segment $pc_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.VMwareCloudSimple/locations/{region_id}/privateClouds/{pc_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -447,7 +455,7 @@ export def "customization-policies-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --filter: string # The filter to apply on the list operation. only type is allowed here as a filter e.g. $filter=type eq 'xxxx'
 ]: nothing -> record<nextLink: string, value: table<id: string, location: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -455,6 +463,7 @@ export def "customization-policies-list" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($region_id | is-empty) { error make --unspanned { msg: "path parameter 'regionId' must be non-empty" } }
   if ($pc_name | is-empty) { error make --unspanned { msg: "path parameter 'pcName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), region_id: (encode-path-segment $region_id), pc_name: (encode-path-segment $pc_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.VMwareCloudSimple/locations/{region_id}/privateClouds/{pc_name}/customizationPolicies") $qp $auth.query)
   let accept_val = "application/json"
@@ -491,7 +500,7 @@ export def "customization-policies-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<id: string, location: string, name: string, properties: record<description: string, privateCloudId: string, specification: record<identity: record, nicSettings: list>, type: string, version: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -499,6 +508,7 @@ export def "customization-policies-get" [
   if ($region_id | is-empty) { error make --unspanned { msg: "path parameter 'regionId' must be non-empty" } }
   if ($pc_name | is-empty) { error make --unspanned { msg: "path parameter 'pcName' must be non-empty" } }
   if ($customization_policy_name | is-empty) { error make --unspanned { msg: "path parameter 'customizationPolicyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), region_id: (encode-path-segment $region_id), pc_name: (encode-path-segment $pc_name), customization_policy_name: (encode-path-segment $customization_policy_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.VMwareCloudSimple/locations/{region_id}/privateClouds/{pc_name}/customizationPolicies/{customization_policy_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -534,13 +544,14 @@ export def "resource-pools-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<id: string, location: string, name: string, privateCloudId: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($region_id | is-empty) { error make --unspanned { msg: "path parameter 'regionId' must be non-empty" } }
   if ($pc_name | is-empty) { error make --unspanned { msg: "path parameter 'pcName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), region_id: (encode-path-segment $region_id), pc_name: (encode-path-segment $pc_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.VMwareCloudSimple/locations/{region_id}/privateClouds/{pc_name}/resourcePools") $qp $auth.query)
   let accept_val = "application/json"
@@ -577,7 +588,7 @@ export def "resource-pools-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<id: string, location: string, name: string, privateCloudId: string, properties: record<fullName: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -585,6 +596,7 @@ export def "resource-pools-get" [
   if ($region_id | is-empty) { error make --unspanned { msg: "path parameter 'regionId' must be non-empty" } }
   if ($pc_name | is-empty) { error make --unspanned { msg: "path parameter 'pcName' must be non-empty" } }
   if ($resource_pool_name | is-empty) { error make --unspanned { msg: "path parameter 'resourcePoolName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), region_id: (encode-path-segment $region_id), pc_name: (encode-path-segment $pc_name), resource_pool_name: (encode-path-segment $resource_pool_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.VMwareCloudSimple/locations/{region_id}/privateClouds/{pc_name}/resourcePools/{resource_pool_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -620,14 +632,16 @@ export def "virtual-machine-templates-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
-  --resource-pool-name: string # Resource pool used to derive vSphere cluster which contains VM templates
+  --api-version: string # Client API version. (required)
+  --resource-pool-name: string # Resource pool used to derive vSphere cluster which contains VM templates (required)
 ]: nothing -> record<nextLink: string, value: table<id: string, location: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($region_id | is-empty) { error make --unspanned { msg: "path parameter 'regionId' must be non-empty" } }
   if ($pc_name | is-empty) { error make --unspanned { msg: "path parameter 'pcName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  if ($resource_pool_name == null) { error make --unspanned { msg: "required query parameter 'resourcePoolName' missing: pass --resource-pool-name" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "resourcePoolName" $resource_pool_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), region_id: (encode-path-segment $region_id), pc_name: (encode-path-segment $pc_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.VMwareCloudSimple/locations/{region_id}/privateClouds/{pc_name}/virtualMachineTemplates") $qp $auth.query)
   let accept_val = "application/json"
@@ -664,7 +678,7 @@ export def "virtual-machine-templates-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<id: string, location: string, name: string, properties: record<amountOfRam: int, controllers: list<record>, description: string, disks: list<record>, exposeToGuestVM: bool, guestOS: string, guestOSType: string, nics: list<record>, numberOfCores: int, path: string, privateCloudId: string, vSphereNetworks: list<string>, vSphereTags: list<string>, vmwaretools: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -672,6 +686,7 @@ export def "virtual-machine-templates-get" [
   if ($region_id | is-empty) { error make --unspanned { msg: "path parameter 'regionId' must be non-empty" } }
   if ($pc_name | is-empty) { error make --unspanned { msg: "path parameter 'pcName' must be non-empty" } }
   if ($virtual_machine_template_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualMachineTemplateName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), region_id: (encode-path-segment $region_id), pc_name: (encode-path-segment $pc_name), virtual_machine_template_name: (encode-path-segment $virtual_machine_template_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.VMwareCloudSimple/locations/{region_id}/privateClouds/{pc_name}/virtualMachineTemplates/{virtual_machine_template_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -707,14 +722,16 @@ export def "virtual-networks-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
-  --resource-pool-name: string # Resource pool used to derive vSphere cluster which contains virtual networks
+  --api-version: string # Client API version. (required)
+  --resource-pool-name: string # Resource pool used to derive vSphere cluster which contains virtual networks (required)
 ]: nothing -> record<nextLink: string, value: table<assignable: bool, id: string, location: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($region_id | is-empty) { error make --unspanned { msg: "path parameter 'regionId' must be non-empty" } }
   if ($pc_name | is-empty) { error make --unspanned { msg: "path parameter 'pcName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  if ($resource_pool_name == null) { error make --unspanned { msg: "required query parameter 'resourcePoolName' missing: pass --resource-pool-name" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "resourcePoolName" $resource_pool_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), region_id: (encode-path-segment $region_id), pc_name: (encode-path-segment $pc_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.VMwareCloudSimple/locations/{region_id}/privateClouds/{pc_name}/virtualNetworks") $qp $auth.query)
   let accept_val = "application/json"
@@ -751,7 +768,7 @@ export def "virtual-networks-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<assignable: bool, id: string, location: string, name: string, properties: record<privateCloudId: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -759,6 +776,7 @@ export def "virtual-networks-get" [
   if ($region_id | is-empty) { error make --unspanned { msg: "path parameter 'regionId' must be non-empty" } }
   if ($pc_name | is-empty) { error make --unspanned { msg: "path parameter 'pcName' must be non-empty" } }
   if ($virtual_network_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualNetworkName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), region_id: (encode-path-segment $region_id), pc_name: (encode-path-segment $pc_name), virtual_network_name: (encode-path-segment $virtual_network_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.VMwareCloudSimple/locations/{region_id}/privateClouds/{pc_name}/virtualNetworks/{virtual_network_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -794,12 +812,13 @@ export def "usages-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # The filter to apply on the list operation. only name.value is allowed here as a filter e.g. $filter=name.value eq 'xxxx'
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<currentValue: int, limit: int, name: record, unit: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($region_id | is-empty) { error make --unspanned { msg: "path parameter 'regionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), region_id: (encode-path-segment $region_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.VMwareCloudSimple/locations/{region_id}/usages") $qp $auth.query)
   let accept_val = "application/json"
@@ -833,7 +852,7 @@ export def "virtual-machines-list-by-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --filter: string # The filter to apply on the list operation
   --top: int # The maximum number of record sets to return (format: int32)
   --skip-token: string # to be used by nextLink implementation
@@ -841,6 +860,7 @@ export def "virtual-machines-list-by-subscription" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.VMwareCloudSimple/virtualMachines") $qp $auth.query)
   let accept_val = "application/json"
@@ -875,7 +895,7 @@ export def "dedicated-cloud-nodes-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --filter: string # The filter to apply on the list operation
   --top: int # The maximum number of record sets to return (format: int32)
   --skip-token: string # to be used by nextLink implementation
@@ -884,6 +904,7 @@ export def "dedicated-cloud-nodes-list-by-resource-group" [
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudNodes") $qp $auth.query)
   let accept_val = "application/json"
@@ -919,13 +940,14 @@ export def "dedicated-cloud-nodes-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Client API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($dedicated_cloud_node_name | is-empty) { error make --unspanned { msg: "path parameter 'dedicatedCloudNodeName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), dedicated_cloud_node_name: (encode-path-segment $dedicated_cloud_node_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudNodes/{dedicated_cloud_node_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -961,13 +983,14 @@ export def "dedicated-cloud-nodes-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<id: string, location: string, name: string, properties: record<availabilityZoneId: string, availabilityZoneName: string, cloudRackName: string, created: any, nodesCount: int, placementGroupId: string, placementGroupName: string, privateCloudId: string, privateCloudName: string, provisioningState: string, purchaseId: string, skuDescription: record<id: string, name: string>, status: string, vmwareClusterName: string>, sku: record<capacity: string, description: string, family: string, name: string, tier: string>, tags: any, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($dedicated_cloud_node_name | is-empty) { error make --unspanned { msg: "path parameter 'dedicatedCloudNodeName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), dedicated_cloud_node_name: (encode-path-segment $dedicated_cloud_node_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudNodes/{dedicated_cloud_node_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1003,7 +1026,7 @@ export def "dedicated-cloud-nodes-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --tags: any # Tags model
 ]: any -> record<id: string, location: string, name: string, properties: record<availabilityZoneId: string, availabilityZoneName: string, cloudRackName: string, created: any, nodesCount: int, placementGroupId: string, placementGroupName: string, privateCloudId: string, privateCloudName: string, provisioningState: string, purchaseId: string, skuDescription: record<id: string, name: string>, status: string, vmwareClusterName: string>, sku: record<capacity: string, description: string, family: string, name: string, tier: string>, tags: any, type: string> {
   let input = $in
@@ -1012,6 +1035,7 @@ export def "dedicated-cloud-nodes-update" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($dedicated_cloud_node_name | is-empty) { error make --unspanned { msg: "path parameter 'dedicatedCloudNodeName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), dedicated_cloud_node_name: (encode-path-segment $dedicated_cloud_node_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudNodes/{dedicated_cloud_node_name}") $qp $auth.query)
   let req_body = {"tags": $tags} | compact
@@ -1051,8 +1075,8 @@ export def "dedicated-cloud-nodes-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
-  --referer: string # referer url
+  --api-version: string # Client API version. (required)
+  --referer: string # referer url (required)
   location: string # Azure region
   --properties: any # Properties of dedicated cloud node — shape: {availabilityZoneId: string, nodesCount: int, placementGroupId: string, purchaseId: string, skuDescription?: any}
   --sku: any # The purchase SKU for CloudSimple paid resources — shape: {capacity?: string, description?: string, family?: string, name: string, tier?: string}
@@ -1064,6 +1088,8 @@ export def "dedicated-cloud-nodes-create-or-update" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($dedicated_cloud_node_name | is-empty) { error make --unspanned { msg: "path parameter 'dedicatedCloudNodeName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  if ($referer == null) { error make --unspanned { msg: "required header parameter 'Referer' missing: pass --referer" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), dedicated_cloud_node_name: (encode-path-segment $dedicated_cloud_node_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudNodes/{dedicated_cloud_node_name}") $qp $auth.query)
   let req_body = {"location": $location, "properties": $properties, "sku": $sku, "tags": $tags} | compact
@@ -1102,7 +1128,7 @@ export def "dedicated-cloud-services-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --filter: string # The filter to apply on the list operation
   --top: int # The maximum number of record sets to return (format: int32)
   --skip-token: string # to be used by nextLink implementation
@@ -1111,6 +1137,7 @@ export def "dedicated-cloud-services-list-by-resource-group" [
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudServices") $qp $auth.query)
   let accept_val = "application/json"
@@ -1146,13 +1173,14 @@ export def "dedicated-cloud-services-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Client API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($dedicated_cloud_service_name | is-empty) { error make --unspanned { msg: "path parameter 'dedicatedCloudServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), dedicated_cloud_service_name: (encode-path-segment $dedicated_cloud_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudServices/{dedicated_cloud_service_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1188,13 +1216,14 @@ export def "dedicated-cloud-services-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<id: string, location: string, name: string, properties: record<gatewaySubnet: string, isAccountOnboarded: string, nodes: int, serviceURL: string>, tags: any, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($dedicated_cloud_service_name | is-empty) { error make --unspanned { msg: "path parameter 'dedicatedCloudServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), dedicated_cloud_service_name: (encode-path-segment $dedicated_cloud_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudServices/{dedicated_cloud_service_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1230,7 +1259,7 @@ export def "dedicated-cloud-services-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --tags: any # Tags model
 ]: any -> record<id: string, location: string, name: string, properties: record<gatewaySubnet: string, isAccountOnboarded: string, nodes: int, serviceURL: string>, tags: any, type: string> {
   let input = $in
@@ -1239,6 +1268,7 @@ export def "dedicated-cloud-services-update" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($dedicated_cloud_service_name | is-empty) { error make --unspanned { msg: "path parameter 'dedicatedCloudServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), dedicated_cloud_service_name: (encode-path-segment $dedicated_cloud_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudServices/{dedicated_cloud_service_name}") $qp $auth.query)
   let req_body = {"tags": $tags} | compact
@@ -1277,7 +1307,7 @@ export def "dedicated-cloud-services-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   location: string # Azure region
   --properties: any # Properties of dedicated cloud service — shape: {gatewaySubnet: string}
   --tags: any # Tags model
@@ -1288,6 +1318,7 @@ export def "dedicated-cloud-services-create-or-update" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($dedicated_cloud_service_name | is-empty) { error make --unspanned { msg: "path parameter 'dedicatedCloudServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), dedicated_cloud_service_name: (encode-path-segment $dedicated_cloud_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudServices/{dedicated_cloud_service_name}") $qp $auth.query)
   let req_body = {"location": $location, "properties": $properties, "tags": $tags} | compact
@@ -1324,7 +1355,7 @@ export def "virtual-machines-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --filter: string # The filter to apply on the list operation
   --top: int # The maximum number of record sets to return (format: int32)
   --skip-token: string # to be used by nextLink implementation
@@ -1333,6 +1364,7 @@ export def "virtual-machines-list-by-resource-group" [
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VMwareCloudSimple/virtualMachines") $qp $auth.query)
   let accept_val = "application/json"
@@ -1368,14 +1400,16 @@ export def "virtual-machines-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
-  --referer: string # referer url
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Client API version. (required)
+  --referer: string # referer url (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_machine_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualMachineName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  if ($referer == null) { error make --unspanned { msg: "required header parameter 'Referer' missing: pass --referer" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_machine_name: (encode-path-segment $virtual_machine_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VMwareCloudSimple/virtualMachines/{virtual_machine_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1413,13 +1447,14 @@ export def "virtual-machines-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<id: string, location: string, name: string, properties: record<amountOfRam: int, controllers: list<record>, customization: record<dnsServers: list, hostName: string, password: string, policyId: string, username: string>, disks: list<record>, dnsname: string, exposeToGuestVM: bool, folder: string, guestOS: string, guestOSType: string, nics: list<record>, numberOfCores: int, password: string, privateCloudId: string, provisioningState: string, publicIP: string, resourcePool: record<id: string, location: string, name: string, privateCloudId: string, properties: record, type: string>, status: string, templateId: string, username: string, vSphereNetworks: list<string>, vmId: string, vmwaretools: string>, tags: any, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_machine_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualMachineName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_machine_name: (encode-path-segment $virtual_machine_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VMwareCloudSimple/virtualMachines/{virtual_machine_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1455,7 +1490,7 @@ export def "virtual-machines-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --tags: any # Tags model
 ]: any -> record<id: string, location: string, name: string, properties: record<amountOfRam: int, controllers: list<record>, customization: record<dnsServers: list, hostName: string, password: string, policyId: string, username: string>, disks: list<record>, dnsname: string, exposeToGuestVM: bool, folder: string, guestOS: string, guestOSType: string, nics: list<record>, numberOfCores: int, password: string, privateCloudId: string, provisioningState: string, publicIP: string, resourcePool: record<id: string, location: string, name: string, privateCloudId: string, properties: record, type: string>, status: string, templateId: string, username: string, vSphereNetworks: list<string>, vmId: string, vmwaretools: string>, tags: any, type: string> {
   let input = $in
@@ -1464,6 +1499,7 @@ export def "virtual-machines-update" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_machine_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualMachineName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_machine_name: (encode-path-segment $virtual_machine_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VMwareCloudSimple/virtualMachines/{virtual_machine_name}") $qp $auth.query)
   let req_body = {"tags": $tags} | compact
@@ -1502,8 +1538,8 @@ export def "virtual-machines-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
-  --referer: string # referer url
+  --api-version: string # Client API version. (required)
+  --referer: string # referer url (required)
   location: string # Azure region
   --properties: any # Properties of virtual machine — shape: {amountOfRam: int, customization?: any, disks?: list, exposeToGuestVM?: bool, nics?: list, numberOfCores: int, password?: string, privateCloudId: string, resourcePool?: any, templateId?: string, username?: string, vSphereNetworks?: list<string>}
   --tags: any # Tags model
@@ -1514,6 +1550,8 @@ export def "virtual-machines-create-or-update" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_machine_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualMachineName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  if ($referer == null) { error make --unspanned { msg: "required header parameter 'Referer' missing: pass --referer" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_machine_name: (encode-path-segment $virtual_machine_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VMwareCloudSimple/virtualMachines/{virtual_machine_name}") $qp $auth.query)
   let req_body = {"location": $location, "properties": $properties, "tags": $tags} | compact
@@ -1553,14 +1591,16 @@ export def "virtual-machines-start" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
-  --referer: string # referer url
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Client API version. (required)
+  --referer: string # referer url (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_machine_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualMachineName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  if ($referer == null) { error make --unspanned { msg: "required header parameter 'Referer' missing: pass --referer" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_machine_name: (encode-path-segment $virtual_machine_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VMwareCloudSimple/virtualMachines/{virtual_machine_name}/start") $qp $auth.query)
   let accept_val = "application/json"
@@ -1599,16 +1639,18 @@ export def "virtual-machines-stop" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --mode: string@mode-completer # query stop mode parameter (reboot, shutdown, etc...)
-  --api-version: string # Client API version.
-  --referer: string # referer url
+  --api-version: string # Client API version. (required)
+  --referer: string # referer url (required)
   --mode-body: string@mode-completer # mode indicates a type of stop operation - reboot, suspend, shutdown or power-off (body field)
-]: any -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_machine_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualMachineName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  if ($referer == null) { error make --unspanned { msg: "required header parameter 'Referer' missing: pass --referer" } }
   let qp = [(serialize-qp "mode" $mode "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_machine_name: (encode-path-segment $virtual_machine_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.VMwareCloudSimple/virtualMachines/{virtual_machine_name}/stop") $qp $auth.query)
   let req_body = {"mode": $mode_body} | compact

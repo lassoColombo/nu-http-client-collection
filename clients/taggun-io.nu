@@ -162,7 +162,7 @@ export def "post-api-account-v1-feedback" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apikey: string # API authentication key.
+  --apikey: string # API authentication key. (required)
   --currency-code: string # e.g. NZD
   --date: string # format: date-time, e.g. 2016-12-22T12:00:00.000Z
   --master-category: string # e.g. Hotel
@@ -174,6 +174,7 @@ export def "post-api-account-v1-feedback" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base "/api/account/v1/feedback" $auth.query)
   let req_body = {"currencyCode": $currency_code, "date": $date, "masterCategory": $master_category, "merchantName": $merchant_name, "referenceId": $reference_id, "taxAmount": $tax_amount, "totalAmount": $total_amount} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -209,12 +210,13 @@ export def "post-api-account-v1-merchantname-add" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apikey: string # API authentication key.
+  --apikey: string # API authentication key. (required)
   merchant_name: string # e.g. Walmart
 ]: any -> record<result: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base "/api/account/v1/merchantname/add" $auth.query)
   let req_body = {"merchantName": $merchant_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -252,19 +254,20 @@ export def "post-api-receipt-v1-match-file" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apikey: string # API authentication key.
+  --apikey: string # API authentication key. (required)
   --file: path # file less than 20MB. Accepted file types: PDF, JPG, PNG, GIF
   --refresh: oneof<nothing, bool> # Set true to force re-process image transcription if the receipt is already in storage
   --incognito: oneof<nothing, bool> # Set true to avoid saving the receipt in storage
   --ip-address: string # IP Address of the end user
-  --primary-keywords: list # An array of primary keywords to match
-  --secondary-keywords: list # An array of secondary keywords to match (lower confidence level than primaryKeywords)
-  --stop-words: list # An array of stop words that negate the result to be UNLIKELY
+  --primary-keywords: list<string> # An array of primary keywords to match
+  --secondary-keywords: list<string> # An array of secondary keywords to match (lower confidence level than primaryKeywords)
+  --stop-words: list<string> # An array of stop words that negate the result to be UNLIKELY
   --language: string@language-completer # Set language as a hint. Leave empty for auto detect. Supported languages: , en, es, fr, jp, he, iw, et, lv, lt, fi, el, zh
 ]: any -> record<confidenceLevel: float, date: record<confidenceLevel: float, data: string, index: float, regions: list<list>, text: string>, error: string, match: record<confidenceLevel: float, data: string, index: float, keyword: string, regions: list<list>, text: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base "/api/receipt/v1/match/file" $auth.query)
   let req_body = {"file": $file, "refresh": $refresh, "incognito": $incognito, "ipAddress": $ip_address, "primaryKeywords": $primary_keywords, "secondaryKeywords": $secondary_keywords, "stopWords": $stop_words, "language": $language} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -272,8 +275,8 @@ export def "post-api-receipt-v1-match-file" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"apikey": $apikey} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -302,7 +305,7 @@ export def "post-api-receipt-v1-simple-encoded" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apikey: string # API authentication key.
+  --apikey: string # API authentication key. (required)
   content_type: string # e.g. image/jpeg
   --extract-time: oneof<nothing, bool> # Set true to return time if found on the receipt. Otherwise, the time is always set to 12:00:00.000. (default: false, e.g. false)
   filename: string # e.g. example.jpg
@@ -319,6 +322,7 @@ export def "post-api-receipt-v1-simple-encoded" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base "/api/receipt/v1/simple/encoded" $auth.query)
   let req_body = {"contentType": $content_type, "extractTime": $extract_time, "filename": $filename, "ignoreMerchantName": $ignore_merchant_name, "image": $image, "incognito": $incognito, "ipAddress": $ip_address, "language": $language, "near": $near, "referenceId": $reference_id, "refresh": $refresh, "subAccountId": $sub_account_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -354,7 +358,7 @@ export def "post-api-receipt-v1-simple-file" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apikey: string # API authentication key.
+  --apikey: string # API authentication key. (required)
   --file: path # file less than 20MB. Accepted file types: PDF, JPG, PNG, GIF, HEIC
   --refresh: oneof<nothing, bool> # Set true to force re-process image transcription if the receipt is already in storage
   --incognito: oneof<nothing, bool> # Set true to avoid saving the receipt in storage
@@ -369,6 +373,7 @@ export def "post-api-receipt-v1-simple-file" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base "/api/receipt/v1/simple/file" $auth.query)
   let req_body = {"file": $file, "refresh": $refresh, "incognito": $incognito, "ipAddress": $ip_address, "near": $near, "ignoreMerchantName": $ignore_merchant_name, "language": $language, "extractTime": $extract_time, "subAccountId": $sub_account_id, "referenceId": $reference_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -376,8 +381,8 @@ export def "post-api-receipt-v1-simple-file" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"apikey": $apikey} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -408,7 +413,7 @@ export def "post-api-receipt-v1-simple-storage" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apikey: string # API authentication key.
+  --apikey: string # API authentication key. (required)
   content_type: string # e.g. image/jpeg
   --extract-time: oneof<nothing, bool> # Set true to return time if found on the receipt. Otherwise, the time is always set to 12:00:00.000. (default: false, e.g. false)
   --ignore-merchant-name: string # Ignore this merchant name if detected on the receipt. Use this field to avoid detecting the customer name as the merchant name.
@@ -423,6 +428,7 @@ export def "post-api-receipt-v1-simple-storage" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base "/api/receipt/v1/simple/storage" $auth.query)
   let req_body = {"contentType": $content_type, "extractTime": $extract_time, "ignoreMerchantName": $ignore_merchant_name, "ipAddress": $ip_address, "language": $language, "md5": $md5, "near": $near, "referenceId": $reference_id, "refresh": $refresh, "subAccountId": $sub_account_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -459,7 +465,7 @@ export def "post-api-receipt-v1-simple-url" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apikey: string # API authentication key.
+  --apikey: string # API authentication key. (required)
   --extract-time: oneof<nothing, bool> # Set true to return time if found on the receipt. Otherwise, the time is always set to 12:00:00.000. (default: false, e.g. false)
   --headers: record # Custom http headers can be set to forward to the target URL. — shape: {x-custom-key?: string}
   --ignore-merchant-name: string # Ignore this merchant name if detected on the receipt. Use this field to avoid detecting the customer name as the merchant name.
@@ -475,6 +481,7 @@ export def "post-api-receipt-v1-simple-url" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base "/api/receipt/v1/simple/url" $auth.query)
   let req_body = {"extractTime": $extract_time, "headers": $headers, "ignoreMerchantName": $ignore_merchant_name, "incognito": $incognito, "ipAddress": $ip_address, "language": $language, "near": $near, "referenceId": $reference_id, "refresh": $refresh, "subAccountId": $sub_account_id, "url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -510,7 +517,7 @@ export def "post-api-receipt-v1-verbose-encoded" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apikey: string # API authentication key.
+  --apikey: string # API authentication key. (required)
   content_type: string # e.g. image/jpeg
   --extract-time: oneof<nothing, bool> # Set true to return time if found on the receipt. Otherwise, the time is always set to 12:00:00.000. (default: false, e.g. false)
   filename: string # e.g. example.jpg
@@ -527,6 +534,7 @@ export def "post-api-receipt-v1-verbose-encoded" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base "/api/receipt/v1/verbose/encoded" $auth.query)
   let req_body = {"contentType": $content_type, "extractTime": $extract_time, "filename": $filename, "ignoreMerchantName": $ignore_merchant_name, "image": $image, "incognito": $incognito, "ipAddress": $ip_address, "language": $language, "near": $near, "referenceId": $reference_id, "refresh": $refresh, "subAccountId": $sub_account_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -562,7 +570,7 @@ export def "post-api-receipt-v1-verbose-file" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apikey: string # API authentication key.
+  --apikey: string # API authentication key. (required)
   --file: path # file less than 20MB. Accepted file types: PDF, JPG, PNG, GIF, HEIC
   --refresh: oneof<nothing, bool> # Set true to force re-process image transcription if the receipt is already in storage
   --incognito: oneof<nothing, bool> # Set true to avoid saving the receipt in storage
@@ -577,6 +585,7 @@ export def "post-api-receipt-v1-verbose-file" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base "/api/receipt/v1/verbose/file" $auth.query)
   let req_body = {"file": $file, "refresh": $refresh, "incognito": $incognito, "ipAddress": $ip_address, "near": $near, "ignoreMerchantName": $ignore_merchant_name, "language": $language, "extractTime": $extract_time, "subAccountId": $sub_account_id, "referenceId": $reference_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -584,8 +593,8 @@ export def "post-api-receipt-v1-verbose-file" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"apikey": $apikey} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -616,7 +625,7 @@ export def "post-api-receipt-v1-verbose-storage" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apikey: string # API authentication key.
+  --apikey: string # API authentication key. (required)
   content_type: string # e.g. image/jpeg
   --extract-time: oneof<nothing, bool> # Set true to return time if found on the receipt. Otherwise, the time is always set to 12:00:00.000. (default: false, e.g. false)
   --ignore-merchant-name: string # Ignore this merchant name if detected on the receipt. Use this field to avoid detecting the customer name as the merchant name.
@@ -631,6 +640,7 @@ export def "post-api-receipt-v1-verbose-storage" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base "/api/receipt/v1/verbose/storage" $auth.query)
   let req_body = {"contentType": $content_type, "extractTime": $extract_time, "ignoreMerchantName": $ignore_merchant_name, "ipAddress": $ip_address, "language": $language, "md5": $md5, "near": $near, "referenceId": $reference_id, "refresh": $refresh, "subAccountId": $sub_account_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -667,7 +677,7 @@ export def "post-api-receipt-v1-verbose-url" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apikey: string # API authentication key.
+  --apikey: string # API authentication key. (required)
   --extract-time: oneof<nothing, bool> # Set true to return time if found on the receipt. Otherwise, the time is always set to 12:00:00.000. (default: false, e.g. false)
   --headers: record # Custom http headers can be set to forward to the target URL. — shape: {x-custom-key?: string}
   --ignore-merchant-name: string # Ignore this merchant name if detected on the receipt. Use this field to avoid detecting the customer name as the merchant name.
@@ -683,6 +693,7 @@ export def "post-api-receipt-v1-verbose-url" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base "/api/receipt/v1/verbose/url" $auth.query)
   let req_body = {"extractTime": $extract_time, "headers": $headers, "ignoreMerchantName": $ignore_merchant_name, "incognito": $incognito, "ipAddress": $ip_address, "language": $language, "near": $near, "referenceId": $reference_id, "refresh": $refresh, "subAccountId": $sub_account_id, "url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -718,7 +729,7 @@ export def "post-api-validation-v1-campaign-file" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apikey: string # API authentication key.
+  --apikey: string # API authentication key. (required)
   --file: path # file less than 20MB. Accepted file types: PDF, JPG, PNG, GIF, HEIC
   --incognito: oneof<nothing, bool> # Set true to avoid saving the receipt in storage
   --ip-address: string # IP Address of the end user
@@ -729,6 +740,7 @@ export def "post-api-validation-v1-campaign-file" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base "/api/validation/v1/campaign/file" $auth.query)
   let req_body = {"file": $file, "incognito": $incognito, "ipAddress": $ip_address, "near": $near, "campaignId": $campaign_id, "referenceId": $reference_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -736,8 +748,8 @@ export def "post-api-validation-v1-campaign-file" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"apikey": $apikey} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -766,7 +778,7 @@ export def "post-api-validation-v1-campaign-productvalidation-file" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apikey: string # API authentication key.
+  --apikey: string # API authentication key. (required)
   --file: path # file less than 20MB. Accepted file types: PDF, JPG, PNG, GIF, HEIC
   product_verification_number: string # The number of the product to validate the receipt
   --incognito: oneof<nothing, bool> # Set true to avoid saving the receipt in storage
@@ -776,6 +788,7 @@ export def "post-api-validation-v1-campaign-productvalidation-file" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($apikey == null) { error make --unspanned { msg: "required header parameter 'apikey' missing: pass --apikey" } }
   let full_url = (build-url $base "/api/validation/v1/campaign/product-validation/file" $auth.query)
   let req_body = {"file": $file, "productVerificationNumber": $product_verification_number, "incognito": $incognito, "subAccountId": $sub_account_id, "referenceId": $reference_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -783,8 +796,8 @@ export def "post-api-validation-v1-campaign-productvalidation-file" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"apikey": $apikey} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url

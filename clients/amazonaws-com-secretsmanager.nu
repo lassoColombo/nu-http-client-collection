@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -105,6 +105,7 @@ def x-amz-target-completer-5 [] { ["secretsmanager.GetRandomPassword"] }
 def x-amz-target-completer-6 [] { ["secretsmanager.GetResourcePolicy"] }
 def x-amz-target-completer-7 [] { ["secretsmanager.GetSecretValue"] }
 def x-amz-target-completer-8 [] { ["secretsmanager.ListSecretVersionIds"] }
+def sort-order-completer [] { ["asc" "desc"] }
 def x-amz-target-completer-9 [] { ["secretsmanager.ListSecrets"] }
 def x-amz-target-completer-10 [] { ["secretsmanager.PutResourcePolicy"] }
 def x-amz-target-completer-11 [] { ["secretsmanager.PutSecretValue"] }
@@ -163,12 +164,13 @@ export def "cancel-rotate-secret" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  secret_id: any
-]: any -> record<ARN: record, Name: record, VersionId: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  secret_id: string # The ARN or name of the secret. For an ARN, we recommend that you specify a complete ARN rather than a partial ARN. See Finding a secret from a partial ARN (https://docs.aws.amazon.com/secretsmanager/latest/userguide/troubleshoot.html#ARN_secretnamehyphen).
+]: any -> record<ARN: string, Name: string, VersionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "secretsmanager.CancelRotateSecret")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SecretId": $secret_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -194,6 +196,8 @@ export def "cancel-rotate-secret" [
 #
 # POST /
 # operationId: CreateSecret
+# --Tags item shape: {Key?: string, Value?: string}
+# --AddReplicaRegions item shape: {Region?: string, KmsKeyId?: string}
 export def "create-secret" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -211,20 +215,21 @@ export def "create-secret" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  name: any
-  --client-request-token: any
-  --description: any
-  --kms-key-id: any
-  --secret-binary: any
-  --secret-string: any
-  --tags: any
-  --add-replica-regions: any
-  --force-overwrite-replica-secret: any
-]: any -> record<ARN: record, Name: record, VersionId: record, ReplicationStatus: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  name: string # The name of the new secret. The secret name can contain ASCII letters, numbers, and the following characters: /_+=.@- Do not end your secret name with a hyphen followed by six characters. If you do so, you risk confusion and unexpected results when searching for a secret by partial ARN. Secrets Manager automatically adds a hyphen and six random characters after the secret name at the end of the ARN.
+  --client-request-token: string # If you include SecretString or SecretBinary, then Secrets Manager creates an initial version for the secret, and this parameter specifies the unique identifier for the new version. If you use the Amazon Web Services CLI or one of the Amazon Web Services SDKs to call this operation, then you can leave this parameter empty. The CLI or SDK generates a random UUID for you and includes it as the value for this parameter in the request. If you don't use the SDK and instead generate a raw HTTP request to the Secrets Manager service endpoint, then you must generate a ClientRequestToken yourself for the new version and include the value in the request. This value helps ensure idempotency. Secrets Manager uses this value to prevent the accidental creation of duplicate versions if there are failures and retries during a rotation. We recommend that you generate a UUID-type (https://wikipedia.org/wiki/Universally_unique_identifier) value to ensure uniqueness of your versions within the specified secret. If the ClientRequestToken value isn't already associated with a version of the secret then a new version of the secret is created. If a version with this value already exists and the version SecretString and SecretBinary values are the same as those in the request, then the request is ignored. If a version with this value already exists and that version's SecretString and SecretBinary values are different from those in the request, then the request fails because you cannot modify an existing version. Instead, use PutSecretValue to create a new version. This value becomes the VersionId of the new version.
+  --description: string # The description of the secret.
+  --kms-key-id: string # The ARN, key ID, or alias of the KMS key that Secrets Manager uses to encrypt the secret value in the secret. An alias is always prefixed by alias/, for example alias/aws/secretsmanager. For more information, see About aliases (https://docs.aws.amazon.com/kms/latest/developerguide/alias-about.html). To use a KMS key in a different account, use the key ARN or the alias ARN. If you don't specify this value, then Secrets Manager uses the key aws/secretsmanager. If that key doesn't yet exist, then Secrets Manager creates it for you automatically the first time it encrypts the secret value. If the secret is in a different Amazon Web Services account from the credentials calling the API, then you can't use aws/secretsmanager to encrypt the secret, and you must create and use a customer managed KMS key.
+  --secret-binary: string # The binary data to encrypt and store in the new version of the secret. We recommend that you store your binary data in a file and then pass the contents of the file as a parameter. Either SecretString or SecretBinary must have a value, but not both. This parameter is not available in the Secrets Manager console. (format: password)
+  --secret-string: string # The text data to encrypt and store in this new version of the secret. We recommend you use a JSON structure of key/value pairs for your secret value. Either SecretString or SecretBinary must have a value, but not both. If you create a secret by using the Secrets Manager console then Secrets Manager puts the protected secret text in only the SecretString parameter. The Secrets Manager console stores the information as a JSON structure of key/value pairs that a Lambda rotation function can parse. (format: password)
+  --tags: list # A list of tags to attach to the secret. Each tag is a key and value pair of strings in a JSON text string, for example: [{"Key":"CostCenter","Value":"12345"},{"Key":"environment","Value":"production"}] Secrets Manager tag key names are case sensitive. A tag with the key "ABC" is a different tag from one with key "abc". If you check tags in permissions policies as part of your security strategy, then adding or removing a tag can change permissions. If the completion of this operation would result in you losing your permissions for this secret, then Secrets Manager blocks the operation and returns an Access Denied error. For more information, see Control access to secrets using tags (https://docs.aws.amazon.com/secretsmanager/latest/userguide/auth-and-access_examples.html#tag-secrets-abac) and Limit access to identities with tags that match secrets' tags (https://docs.aws.amazon.com/secretsmanager/latest/userguide/auth-and-access_examples.html#auth-and-access_tags2). For information about how to format a JSON parameter for the various command line tool environments, see Using JSON for Parameters (https://docs.aws.amazon.com/cli/latest/userguide/cli-using-param.html#cli-using-param-json). If your command-line tool or SDK requires quotation marks around the parameter, you should use single quotes to avoid confusion with the double quotes required in the JSON text. The following restrictions apply to tags: Maximum number of tags per secret: 50 Maximum key length: 127 Unicode characters in UTF-8 Maximum value length: 255 Unicode characters in UTF-8 Tag keys and values are case sensitive. Do not use the aws: prefix in your tag names or values because Amazon Web Services reserves it for Amazon Web Services use. You can't edit or delete tag names or values with this prefix. Tags with this prefix do not count against your tags per secret limit. If you use your tagging schema across multiple services and resources, other services might have restrictions on allowed characters. Generally allowed characters: letters, spaces, and numbers representable in UTF-8, plus the following special characters: + - = . _ : / @. — item shape: {Key?: string, Value?: string}
+  --add-replica-regions: list # A list of Regions and KMS keys to replicate secrets. — item shape: {Region?: string, KmsKeyId?: string}
+  --force-overwrite-replica-secret: oneof<nothing, bool> # Specifies whether to overwrite a secret with the same name in the destination Region. By default, secrets aren't overwritten.
+]: any -> record<ARN: string, Name: string, VersionId: string, ReplicationStatus: table<Region: string, KmsKeyId: string, Status: string, StatusMessage: string, LastAccessedDate: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "secretsmanager.CreateSecret")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "ClientRequestToken": $client_request_token, "Description": $description, "KmsKeyId": $kms_key_id, "SecretBinary": $secret_binary, "SecretString": $secret_string, "Tags": $tags, "AddReplicaRegions": $add_replica_regions, "ForceOverwriteReplicaSecret": $force_overwrite_replica_secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -267,12 +272,13 @@ export def "delete-resource-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  secret_id: any
-]: any -> record<ARN: record, Name: record> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  secret_id: string # The ARN or name of the secret to delete the attached resource-based policy for. For an ARN, we recommend that you specify a complete ARN rather than a partial ARN. See Finding a secret from a partial ARN (https://docs.aws.amazon.com/secretsmanager/latest/userguide/troubleshoot.html#ARN_secretnamehyphen).
+]: any -> record<ARN: string, Name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "secretsmanager.DeleteResourcePolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SecretId": $secret_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -315,14 +321,15 @@ export def "delete-secret" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  secret_id: any
-  --recovery-window-in-days: any
-  --force-delete-without-recovery: any
-]: any -> record<ARN: record, Name: record, DeletionDate: record> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  secret_id: string # The ARN or name of the secret to delete. For an ARN, we recommend that you specify a complete ARN rather than a partial ARN. See Finding a secret from a partial ARN (https://docs.aws.amazon.com/secretsmanager/latest/userguide/troubleshoot.html#ARN_secretnamehyphen).
+  --recovery-window-in-days: int # The number of days from 7 to 30 that Secrets Manager waits before permanently deleting the secret. You can't use both this parameter and ForceDeleteWithoutRecovery in the same call. If you don't use either, then by default Secrets Manager uses a 30 day recovery window.
+  --force-delete-without-recovery: oneof<nothing, bool> # Specifies whether to delete the secret without any recovery window. You can't use both this parameter and RecoveryWindowInDays in the same call. If you don't use either, then by default Secrets Manager uses a 30 day recovery window. Secrets Manager performs the actual deletion with an asynchronous background process, so there might be a short delay before the secret is permanently deleted. If you delete a secret and then immediately create a secret with the same name, use appropriate back off and retry logic. Use this parameter with caution. This parameter causes the operation to skip the normal recovery window before the permanent deletion that Secrets Manager would normally impose with the RecoveryWindowInDays parameter. If you delete a secret with the ForceDeleteWithoutRecovery parameter, then you have no opportunity to recover the secret. You lose the secret permanently.
+]: any -> record<ARN: string, Name: string, DeletionDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "secretsmanager.DeleteSecret")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SecretId": $secret_id, "RecoveryWindowInDays": $recovery_window_in_days, "ForceDeleteWithoutRecovery": $force_delete_without_recovery} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -365,12 +372,13 @@ export def "describe-secret" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  secret_id: any
-]: any -> record<ARN: record, Name: record, Description: record, KmsKeyId: record, RotationEnabled: record, RotationLambdaARN: record, RotationRules: record<AutomaticallyAfterDays: record, Duration: record, ScheduleExpression: record>, LastRotatedDate: record, LastChangedDate: record, LastAccessedDate: record, DeletedDate: record, NextRotationDate: record, Tags: record, VersionIdsToStages: record, OwningService: record, CreatedDate: record, PrimaryRegion: record, ReplicationStatus: record> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  secret_id: string # The ARN or name of the secret. For an ARN, we recommend that you specify a complete ARN rather than a partial ARN. See Finding a secret from a partial ARN (https://docs.aws.amazon.com/secretsmanager/latest/userguide/troubleshoot.html#ARN_secretnamehyphen).
+]: any -> record<ARN: string, Name: string, Description: string, KmsKeyId: string, RotationEnabled: bool, RotationLambdaARN: string, RotationRules: record<AutomaticallyAfterDays: int, Duration: string, ScheduleExpression: string>, LastRotatedDate: string, LastChangedDate: string, LastAccessedDate: string, DeletedDate: string, NextRotationDate: string, Tags: table<Key: string, Value: string>, VersionIdsToStages: record, OwningService: string, CreatedDate: string, PrimaryRegion: string, ReplicationStatus: table<Region: string, KmsKeyId: string, Status: string, StatusMessage: string, LastAccessedDate: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "secretsmanager.DescribeSecret")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SecretId": $secret_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -413,19 +421,20 @@ export def "get-random-password" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  --password-length: any
-  --exclude-characters: any
-  --exclude-numbers: any
-  --exclude-punctuation: any
-  --exclude-uppercase: any
-  --exclude-lowercase: any
-  --include-space: any
-  --require-each-included-type: any
-]: any -> record<RandomPassword: record> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  --password-length: int # The length of the password. If you don't include this parameter, the default length is 32 characters.
+  --exclude-characters: string # A string of the characters that you don't want in the password.
+  --exclude-numbers: oneof<nothing, bool> # Specifies whether to exclude numbers from the password. If you don't include this switch, the password can contain numbers.
+  --exclude-punctuation: oneof<nothing, bool> # Specifies whether to exclude the following punctuation characters from the password: ! " # $ % & ' ( ) * + , - . / : ; < = > ? @ [ \ ] ^ _ ` { | } ~. If you don't include this switch, the password can contain punctuation.
+  --exclude-uppercase: oneof<nothing, bool> # Specifies whether to exclude uppercase letters from the password. If you don't include this switch, the password can contain uppercase letters.
+  --exclude-lowercase: oneof<nothing, bool> # Specifies whether to exclude lowercase letters from the password. If you don't include this switch, the password can contain lowercase letters.
+  --include-space: oneof<nothing, bool> # Specifies whether to include the space character. If you include this switch, the password can contain space characters.
+  --require-each-included-type: oneof<nothing, bool> # Specifies whether to include at least one upper and lowercase letter, one number, and one punctuation. If you don't include this switch, the password contains at least one of every character type.
+]: any -> record<RandomPassword: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "secretsmanager.GetRandomPassword")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"PasswordLength": $password_length, "ExcludeCharacters": $exclude_characters, "ExcludeNumbers": $exclude_numbers, "ExcludePunctuation": $exclude_punctuation, "ExcludeUppercase": $exclude_uppercase, "ExcludeLowercase": $exclude_lowercase, "IncludeSpace": $include_space, "RequireEachIncludedType": $require_each_included_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -468,12 +477,13 @@ export def "get-resource-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  secret_id: any
-]: any -> record<ARN: record, Name: record, ResourcePolicy: record> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  secret_id: string # The ARN or name of the secret to retrieve the attached resource-based policy for. For an ARN, we recommend that you specify a complete ARN rather than a partial ARN. See Finding a secret from a partial ARN (https://docs.aws.amazon.com/secretsmanager/latest/userguide/troubleshoot.html#ARN_secretnamehyphen).
+]: any -> record<ARN: string, Name: string, ResourcePolicy: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "secretsmanager.GetResourcePolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SecretId": $secret_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -516,14 +526,15 @@ export def "get-secret-value" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  secret_id: any
-  --version-id: any
-  --version-stage: any
-]: any -> record<ARN: record, Name: record, VersionId: record, SecretBinary: record, SecretString: record, VersionStages: record, CreatedDate: record> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  secret_id: string # The ARN or name of the secret to retrieve. For an ARN, we recommend that you specify a complete ARN rather than a partial ARN. See Finding a secret from a partial ARN (https://docs.aws.amazon.com/secretsmanager/latest/userguide/troubleshoot.html#ARN_secretnamehyphen).
+  --version-id: string # The unique identifier of the version of the secret to retrieve. If you include both this parameter and VersionStage, the two parameters must refer to the same secret version. If you don't specify either a VersionStage or VersionId, then Secrets Manager returns the AWSCURRENT version. This value is typically a UUID-type (https://wikipedia.org/wiki/Universally_unique_identifier) value with 32 hexadecimal digits.
+  --version-stage: string # The staging label of the version of the secret to retrieve. Secrets Manager uses staging labels to keep track of different versions during the rotation process. If you include both this parameter and VersionId, the two parameters must refer to the same secret version. If you don't specify either a VersionStage or VersionId, Secrets Manager returns the AWSCURRENT version.
+]: any -> record<ARN: string, Name: string, VersionId: string, SecretBinary: string, SecretString: string, VersionStages: list<string>, CreatedDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "secretsmanager.GetSecretValue")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SecretId": $secret_id, "VersionId": $version_id, "VersionStage": $version_stage} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -568,15 +579,16 @@ export def "list-secret-version-ids" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  secret_id: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-  --include-deprecated: any
-]: any -> record<Versions: record, NextToken: record, ARN: record, Name: record> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  secret_id: string # The ARN or name of the secret whose versions you want to list. For an ARN, we recommend that you specify a complete ARN rather than a partial ARN. See Finding a secret from a partial ARN (https://docs.aws.amazon.com/secretsmanager/latest/userguide/troubleshoot.html#ARN_secretnamehyphen).
+  --max-results-body: int # The number of results to include in the response. If there are more results available, in the response, Secrets Manager includes NextToken. To get the next results, call ListSecretVersionIds again with the value from NextToken. (body field)
+  --next-token-body: string # A token that indicates where the output should continue from, if a previous call did not show all results. To get the next results, call ListSecretVersionIds again with this value. (body field)
+  --include-deprecated: oneof<nothing, bool> # Specifies whether to include versions of secrets that don't have any staging labels attached to them. Versions without staging labels are considered deprecated and are subject to deletion by Secrets Manager. By default, versions without staging labels aren't included.
+]: any -> record<Versions: table<VersionId: string, VersionStages: list, LastAccessedDate: string, CreatedDate: string, KmsKeyIds: list>, NextToken: string, ARN: string, Name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "secretsmanager.ListSecretVersionIds")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"SecretId": $secret_id, "MaxResults": $max_results_body, "NextToken": $next_token_body, "IncludeDeprecated": $include_deprecated} | compact
@@ -603,6 +615,7 @@ export def "list-secret-version-ids" [
 #
 # POST /
 # operationId: ListSecrets
+# --Filters item shape: {Key?: "description"|"name"|"tag-key"|"tag-value"|"primary-region"|"owning-service"|"all", Values?: list<string>}
 export def "list-secrets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -622,16 +635,17 @@ export def "list-secrets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  --include-planned-deletion: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-  --filters: any
-  --sort-order: any
-]: any -> record<SecretList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  --include-planned-deletion: oneof<nothing, bool> # Specifies whether to include secrets scheduled for deletion. By default, secrets scheduled for deletion aren't included.
+  --max-results-body: int # The number of results to include in the response. If there are more results available, in the response, Secrets Manager includes NextToken. To get the next results, call ListSecrets again with the value from NextToken. (body field)
+  --next-token-body: string # A token that indicates where the output should continue from, if a previous call did not show all results. To get the next results, call ListSecrets again with this value. (body field)
+  --filters: list # The filters to apply to the list of secrets. — item shape: {Key?: "description"|"name"|"tag-key"|"tag-value"|"primary-region"|"owning-service"|"all", Values?: list<string>}
+  --sort-order: string@sort-order-completer # Secrets are listed by CreatedDate.
+]: any -> record<SecretList: table<ARN: string, Name: string, Description: string, KmsKeyId: string, RotationEnabled: bool, RotationLambdaARN: string, RotationRules: record, LastRotatedDate: string, LastChangedDate: string, LastAccessedDate: string, DeletedDate: string, NextRotationDate: string, Tags: list, SecretVersionsToStages: record, OwningService: string, CreatedDate: string, PrimaryRegion: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "secretsmanager.ListSecrets")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"IncludePlannedDeletion": $include_planned_deletion, "MaxResults": $max_results_body, "NextToken": $next_token_body, "Filters": $filters, "SortOrder": $sort_order} | compact
@@ -675,14 +689,15 @@ export def "put-resource-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  secret_id: any
-  resource_policy: any
-  --block-public-policy: any
-]: any -> record<ARN: record, Name: record> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  secret_id: string # The ARN or name of the secret to attach the resource-based policy. For an ARN, we recommend that you specify a complete ARN rather than a partial ARN. See Finding a secret from a partial ARN (https://docs.aws.amazon.com/secretsmanager/latest/userguide/troubleshoot.html#ARN_secretnamehyphen).
+  resource_policy: string # A JSON-formatted string for an Amazon Web Services resource-based policy. For example policies, see Permissions policy examples (https://docs.aws.amazon.com/secretsmanager/latest/userguide/auth-and-access_examples.html).
+  --block-public-policy: oneof<nothing, bool> # Specifies whether to block resource-based policies that allow broad access to the secret, for example those that use a wildcard for the principal. By default, public policies aren't blocked.
+]: any -> record<ARN: string, Name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "secretsmanager.PutResourcePolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SecretId": $secret_id, "ResourcePolicy": $resource_policy, "BlockPublicPolicy": $block_public_policy} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -725,16 +740,17 @@ export def "put-secret-value" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  secret_id: any
-  --client-request-token: any
-  --secret-binary: any
-  --secret-string: any
-  --version-stages: any
-]: any -> record<ARN: record, Name: record, VersionId: record, VersionStages: record> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  secret_id: string # The ARN or name of the secret to add a new version to. For an ARN, we recommend that you specify a complete ARN rather than a partial ARN. See Finding a secret from a partial ARN (https://docs.aws.amazon.com/secretsmanager/latest/userguide/troubleshoot.html#ARN_secretnamehyphen). If the secret doesn't already exist, use CreateSecret instead.
+  --client-request-token: string # A unique identifier for the new version of the secret. If you use the Amazon Web Services CLI or one of the Amazon Web Services SDKs to call this operation, then you can leave this parameter empty because they generate a random UUID for you. If you don't use the SDK and instead generate a raw HTTP request to the Secrets Manager service endpoint, then you must generate a ClientRequestToken yourself for new versions and include that value in the request. This value helps ensure idempotency. Secrets Manager uses this value to prevent the accidental creation of duplicate versions if there are failures and retries during the Lambda rotation function processing. We recommend that you generate a UUID-type (https://wikipedia.org/wiki/Universally_unique_identifier) value to ensure uniqueness within the specified secret. If the ClientRequestToken value isn't already associated with a version of the secret then a new version of the secret is created. If a version with this value already exists and that version's SecretString or SecretBinary values are the same as those in the request then the request is ignored. The operation is idempotent. If a version with this value already exists and the version of the SecretString and SecretBinary values are different from those in the request, then the request fails because you can't modify a secret version. You can only create new versions to store new secret values. This value becomes the VersionId of the new version.
+  --secret-binary: string # The binary data to encrypt and store in the new version of the secret. To use this parameter in the command-line tools, we recommend that you store your binary data in a file and then pass the contents of the file as a parameter. You must include SecretBinary or SecretString, but not both. You can't access this value from the Secrets Manager console. (format: password)
+  --secret-string: string # The text to encrypt and store in the new version of the secret. You must include SecretBinary or SecretString, but not both. We recommend you create the secret string as JSON key/value pairs, as shown in the example. (format: password)
+  --version-stages: list<string> # A list of staging labels to attach to this version of the secret. Secrets Manager uses staging labels to track versions of a secret through the rotation process. If you specify a staging label that's already associated with a different version of the same secret, then Secrets Manager removes the label from the other version and attaches it to this version. If you specify AWSCURRENT, and it is already attached to another version, then Secrets Manager also moves the staging label AWSPREVIOUS to the version that AWSCURRENT was removed from. If you don't include VersionStages, then Secrets Manager automatically moves the staging label AWSCURRENT to this version.
+]: any -> record<ARN: string, Name: string, VersionId: string, VersionStages: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "secretsmanager.PutSecretValue")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SecretId": $secret_id, "ClientRequestToken": $client_request_token, "SecretBinary": $secret_binary, "SecretString": $secret_string, "VersionStages": $version_stages} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -777,13 +793,14 @@ export def "remove-regions-from-replication" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  secret_id: any
-  remove_replica_regions: any
-]: any -> record<ARN: record, ReplicationStatus: record> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  secret_id: string # The ARN or name of the secret.
+  remove_replica_regions: list<string> # The Regions of the replicas to remove.
+]: any -> record<ARN: string, ReplicationStatus: table<Region: string, KmsKeyId: string, Status: string, StatusMessage: string, LastAccessedDate: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "secretsmanager.RemoveRegionsFromReplication")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SecretId": $secret_id, "RemoveReplicaRegions": $remove_replica_regions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -809,6 +826,7 @@ export def "remove-regions-from-replication" [
 #
 # POST /
 # operationId: ReplicateSecretToRegions
+# --AddReplicaRegions item shape: {Region?: string, KmsKeyId?: string}
 export def "replicate-secret-to-regions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -826,14 +844,15 @@ export def "replicate-secret-to-regions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  secret_id: any
-  add_replica_regions: any
-  --force-overwrite-replica-secret: any
-]: any -> record<ARN: record, ReplicationStatus: record> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  secret_id: string # The ARN or name of the secret to replicate.
+  add_replica_regions: list # A list of Regions in which to replicate the secret. — item shape: {Region?: string, KmsKeyId?: string}
+  --force-overwrite-replica-secret: oneof<nothing, bool> # Specifies whether to overwrite a secret with the same name in the destination Region. By default, secrets aren't overwritten.
+]: any -> record<ARN: string, ReplicationStatus: table<Region: string, KmsKeyId: string, Status: string, StatusMessage: string, LastAccessedDate: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "secretsmanager.ReplicateSecretToRegions")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SecretId": $secret_id, "AddReplicaRegions": $add_replica_regions, "ForceOverwriteReplicaSecret": $force_overwrite_replica_secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -876,12 +895,13 @@ export def "restore-secret" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  secret_id: any
-]: any -> record<ARN: record, Name: record> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  secret_id: string # The ARN or name of the secret to restore. For an ARN, we recommend that you specify a complete ARN rather than a partial ARN. See Finding a secret from a partial ARN (https://docs.aws.amazon.com/secretsmanager/latest/userguide/troubleshoot.html#ARN_secretnamehyphen).
+]: any -> record<ARN: string, Name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "secretsmanager.RestoreSecret")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SecretId": $secret_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -907,6 +927,7 @@ export def "restore-secret" [
 #
 # POST /
 # operationId: RotateSecret
+# --RotationRules shape: {AutomaticallyAfterDays?: int, Duration?: string, ScheduleExpression?: string}
 export def "rotate-secret" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -924,16 +945,17 @@ export def "rotate-secret" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  secret_id: any
-  --client-request-token: any
-  --rotation-lambda-arn: any
-  --rotation-rules: any
-  --rotate-immediately: any
-]: any -> record<ARN: record, Name: record, VersionId: record> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  secret_id: string # The ARN or name of the secret to rotate. For an ARN, we recommend that you specify a complete ARN rather than a partial ARN. See Finding a secret from a partial ARN (https://docs.aws.amazon.com/secretsmanager/latest/userguide/troubleshoot.html#ARN_secretnamehyphen).
+  --client-request-token: string # A unique identifier for the new version of the secret that helps ensure idempotency. Secrets Manager uses this value to prevent the accidental creation of duplicate versions if there are failures and retries during rotation. This value becomes the VersionId of the new version. If you use the Amazon Web Services CLI or one of the Amazon Web Services SDK to call this operation, then you can leave this parameter empty. The CLI or SDK generates a random UUID for you and includes that in the request for this parameter. If you don't use the SDK and instead generate a raw HTTP request to the Secrets Manager service endpoint, then you must generate a ClientRequestToken yourself for new versions and include that value in the request. You only need to specify this value if you implement your own retry logic and you want to ensure that Secrets Manager doesn't attempt to create a secret version twice. We recommend that you generate a UUID-type (https://wikipedia.org/wiki/Universally_unique_identifier) value to ensure uniqueness within the specified secret.
+  --rotation-lambda-arn: string # For secrets that use a Lambda rotation function to rotate, the ARN of the Lambda rotation function. For secrets that use managed rotation, omit this field. For more information, see Managed rotation (https://docs.aws.amazon.com/secretsmanager/latest/userguide/rotate-secrets_managed.html) in the Secrets Manager User Guide.
+  --rotation-rules: record # A structure that defines the rotation configuration for the secret. — shape: {AutomaticallyAfterDays?: int, Duration?: string, ScheduleExpression?: string}
+  --rotate-immediately: oneof<nothing, bool> # Specifies whether to rotate the secret immediately or wait until the next scheduled rotation window. The rotation schedule is defined in RotateSecretRequest$RotationRules. For secrets that use a Lambda rotation function to rotate, if you don't immediately rotate the secret, Secrets Manager tests the rotation configuration by running the testSecret step (https://docs.aws.amazon.com/secretsmanager/latest/userguide/rotate-secrets_how.html) of the Lambda rotation function. The test creates an AWSPENDING version of the secret and then removes it. By default, Secrets Manager rotates the secret immediately.
+]: any -> record<ARN: string, Name: string, VersionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "secretsmanager.RotateSecret")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SecretId": $secret_id, "ClientRequestToken": $client_request_token, "RotationLambdaARN": $rotation_lambda_arn, "RotationRules": $rotation_rules, "RotateImmediately": $rotate_immediately} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -976,12 +998,13 @@ export def "stop-replication-to-replica" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  secret_id: any
-]: any -> record<ARN: record> {
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  secret_id: string # The ARN of the primary secret.
+]: any -> record<ARN: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "secretsmanager.StopReplicationToReplica")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SecretId": $secret_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1007,6 +1030,7 @@ export def "stop-replication-to-replica" [
 #
 # POST /
 # operationId: TagResource
+# --Tags item shape: {Key?: string, Value?: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1024,13 +1048,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  secret_id: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  secret_id: string # The identifier for the secret to attach tags to. You can specify either the Amazon Resource Name (ARN) or the friendly name of the secret. For an ARN, we recommend that you specify a complete ARN rather than a partial ARN. See Finding a secret from a partial ARN (https://docs.aws.amazon.com/secretsmanager/latest/userguide/troubleshoot.html#ARN_secretnamehyphen).
+  tags: list # The tags to attach to the secret as a JSON text string argument. Each element in the list consists of a Key and a Value. For storing multiple values, we recommend that you use a JSON text string argument and specify key/value pairs. For more information, see Specifying parameter values for the Amazon Web Services CLI (https://docs.aws.amazon.com/cli/latest/userguide/cli-usage-parameters.html) in the Amazon Web Services CLI User Guide. — item shape: {Key?: string, Value?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "secretsmanager.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SecretId": $secret_id, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1073,13 +1098,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  secret_id: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  secret_id: string # The ARN or name of the secret. For an ARN, we recommend that you specify a complete ARN rather than a partial ARN. See Finding a secret from a partial ARN (https://docs.aws.amazon.com/secretsmanager/latest/userguide/troubleshoot.html#ARN_secretnamehyphen).
+  tag_keys: list<string> # A list of tag key names to remove from the secret. You don't specify the value. Both the key and its associated value are removed. This parameter requires a JSON text string argument. For storing multiple values, we recommend that you use a JSON text string argument and specify key/value pairs. For more information, see Specifying parameter values for the Amazon Web Services CLI (https://docs.aws.amazon.com/cli/latest/userguide/cli-usage-parameters.html) in the Amazon Web Services CLI User Guide.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "secretsmanager.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SecretId": $secret_id, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1122,17 +1148,18 @@ export def "update-secret" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  secret_id: any
-  --client-request-token: any
-  --description: any
-  --kms-key-id: any
-  --secret-binary: any
-  --secret-string: any
-]: any -> record<ARN: record, Name: record, VersionId: record> {
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  secret_id: string # The ARN or name of the secret. For an ARN, we recommend that you specify a complete ARN rather than a partial ARN. See Finding a secret from a partial ARN (https://docs.aws.amazon.com/secretsmanager/latest/userguide/troubleshoot.html#ARN_secretnamehyphen).
+  --client-request-token: string # If you include SecretString or SecretBinary, then Secrets Manager creates a new version for the secret, and this parameter specifies the unique identifier for the new version. If you use the Amazon Web Services CLI or one of the Amazon Web Services SDKs to call this operation, then you can leave this parameter empty. The CLI or SDK generates a random UUID for you and includes it as the value for this parameter in the request. If you don't use the SDK and instead generate a raw HTTP request to the Secrets Manager service endpoint, then you must generate a ClientRequestToken yourself for the new version and include the value in the request. This value becomes the VersionId of the new version.
+  --description: string # The description of the secret.
+  --kms-key-id: string # The ARN, key ID, or alias of the KMS key that Secrets Manager uses to encrypt new secret versions as well as any existing versions with the staging labels AWSCURRENT, AWSPENDING, or AWSPREVIOUS. For more information about versions and staging labels, see Concepts: Version (https://docs.aws.amazon.com/secretsmanager/latest/userguide/getting-started.html#term_version). A key alias is always prefixed by alias/, for example alias/aws/secretsmanager. For more information, see About aliases (https://docs.aws.amazon.com/kms/latest/developerguide/alias-about.html). If you set this to an empty string, Secrets Manager uses the Amazon Web Services managed key aws/secretsmanager. If this key doesn't already exist in your account, then Secrets Manager creates it for you automatically. All users and roles in the Amazon Web Services account automatically have access to use aws/secretsmanager. Creating aws/secretsmanager can result in a one-time significant delay in returning the result. You can only use the Amazon Web Services managed key aws/secretsmanager if you call this operation using credentials from the same Amazon Web Services account that owns the secret. If the secret is in a different account, then you must use a customer managed key and provide the ARN of that KMS key in this field. The user making the call must have permissions to both the secret and the KMS key in their respective accounts.
+  --secret-binary: string # The binary data to encrypt and store in the new version of the secret. We recommend that you store your binary data in a file and then pass the contents of the file as a parameter. Either SecretBinary or SecretString must have a value, but not both. You can't access this parameter in the Secrets Manager console. (format: password)
+  --secret-string: string # The text data to encrypt and store in the new version of the secret. We recommend you use a JSON structure of key/value pairs for your secret value. Either SecretBinary or SecretString must have a value, but not both. (format: password)
+]: any -> record<ARN: string, Name: string, VersionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "secretsmanager.UpdateSecret")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SecretId": $secret_id, "ClientRequestToken": $client_request_token, "Description": $description, "KmsKeyId": $kms_key_id, "SecretBinary": $secret_binary, "SecretString": $secret_string} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1175,15 +1202,16 @@ export def "update-secret-version-stage" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  secret_id: any
-  version_stage: any
-  --remove-from-version-id: any
-  --move-to-version-id: any
-]: any -> record<ARN: record, Name: record> {
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  secret_id: string # The ARN or the name of the secret with the version and staging labelsto modify. For an ARN, we recommend that you specify a complete ARN rather than a partial ARN. See Finding a secret from a partial ARN (https://docs.aws.amazon.com/secretsmanager/latest/userguide/troubleshoot.html#ARN_secretnamehyphen).
+  version_stage: string # The staging label to add to this version.
+  --remove-from-version-id: string # The ID of the version that the staging label is to be removed from. If the staging label you are trying to attach to one version is already attached to a different version, then you must include this parameter and specify the version that the label is to be removed from. If the label is attached and you either do not specify this parameter, or the version ID does not match, then the operation fails.
+  --move-to-version-id: string # The ID of the version to add the staging label to. To remove a label from a version, then do not specify this parameter. If the staging label is already attached to a different version of the secret, then you must also specify the RemoveFromVersionId parameter.
+]: any -> record<ARN: string, Name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "secretsmanager.UpdateSecretVersionStage")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SecretId": $secret_id, "VersionStage": $version_stage, "RemoveFromVersionId": $remove_from_version_id, "MoveToVersionId": $move_to_version_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1226,13 +1254,14 @@ export def "validate-resource-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  --secret-id: any
-  resource_policy: any
-]: any -> record<PolicyValidationPassed: record, ValidationErrors: record> {
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  --secret-id: string # This field is reserved for internal use.
+  resource_policy: string # A JSON-formatted string that contains an Amazon Web Services resource-based policy. The policy in the string identifies who can access or manage this secret and its versions. For example policies, see Permissions policy examples (https://docs.aws.amazon.com/secretsmanager/latest/userguide/auth-and-access_examples.html).
+]: any -> record<PolicyValidationPassed: bool, ValidationErrors: table<CheckName: string, ErrorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "secretsmanager.ValidateResourcePolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SecretId": $secret_id, "ResourcePolicy": $resource_policy} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

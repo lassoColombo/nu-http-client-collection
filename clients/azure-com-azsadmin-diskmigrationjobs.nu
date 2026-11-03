@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -147,12 +147,13 @@ export def "disk-migration-jobs-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # The parameters of disk migration job status.
-  --api-version: string # Client API Version. (default: 2018-07-30-preview)
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client API Version. (required, default: 2018-07-30-preview)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  let api_version = ($api_version | default "2018-07-30-preview")
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Compute.Admin/locations/{location}/diskmigrationjobs") $qp $auth.query)
   let accept_val = "application/json"
@@ -188,13 +189,14 @@ export def "disk-migration-jobs-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2018-07-30-preview)
-]: nothing -> record<properties: record<creationTime: string, endTime: string, migrationId: string, startTime: string, status: string, subtasks: list<record>, targetShare: string>> {
+  --api-version: string # Client API Version. (required, default: 2018-07-30-preview)
+]: nothing -> record<properties: record<creationTime: string, endTime: string, migrationId: string, startTime: string, status: string, subtasks: list<record>, targetShare: string>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
   if ($migration_id | is-empty) { error make --unspanned { msg: "path parameter 'migrationId' must be non-empty" } }
+  let api_version = ($api_version | default "2018-07-30-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location), migration_id: (encode-path-segment $migration_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Compute.Admin/locations/{location}/diskmigrationjobs/{migration_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -230,16 +232,18 @@ export def "disk-migration-jobs-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --target-share: string # The target share name.
-  --api-version: string # Client API Version. (default: 2018-07-30-preview)
+  --target-share: string # The target share name. (required)
+  --api-version: string # Client API Version. (required, default: 2018-07-30-preview)
   --body: list
-]: any -> record<properties: record<creationTime: string, endTime: string, migrationId: string, startTime: string, status: string, subtasks: list<record>, targetShare: string>> {
+]: any -> record<properties: record<creationTime: string, endTime: string, migrationId: string, startTime: string, status: string, subtasks: list<record>, targetShare: string>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
   if ($migration_id | is-empty) { error make --unspanned { msg: "path parameter 'migrationId' must be non-empty" } }
+  if ($target_share == null) { error make --unspanned { msg: "required query parameter 'targetShare' missing: pass --target-share" } }
+  let api_version = ($api_version | default "2018-07-30-preview")
   let qp = [(serialize-qp "targetShare" $target_share "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location), migration_id: (encode-path-segment $migration_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Compute.Admin/locations/{location}/diskmigrationjobs/{migration_id}") $qp $auth.query)
   let req_body = $body
@@ -277,13 +281,14 @@ export def "disk-migration-jobs-cancel" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2018-07-30-preview)
-]: nothing -> record<properties: record<creationTime: string, endTime: string, migrationId: string, startTime: string, status: string, subtasks: list<record>, targetShare: string>> {
+  --api-version: string # Client API Version. (required, default: 2018-07-30-preview)
+]: nothing -> record<properties: record<creationTime: string, endTime: string, migrationId: string, startTime: string, status: string, subtasks: list<record>, targetShare: string>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
   if ($migration_id | is-empty) { error make --unspanned { msg: "path parameter 'migrationId' must be non-empty" } }
+  let api_version = ($api_version | default "2018-07-30-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location), migration_id: (encode-path-segment $migration_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Compute.Admin/locations/{location}/diskmigrationjobs/{migration_id}/Cancel") $qp $auth.query)
   let accept_val = "application/json"

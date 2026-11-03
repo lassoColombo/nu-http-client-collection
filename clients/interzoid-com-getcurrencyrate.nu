@@ -131,11 +131,13 @@ export def "getcurrencyrate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --license: string # Your Interzoid license API key. Register at www.interzoid.com/register
-  --symbol: string # Currency symbol to retrieve current rate for
+  --license: string # Your Interzoid license API key. Register at www.interzoid.com/register (required)
+  --symbol: string # Currency symbol to retrieve current rate for (required)
 ]: nothing -> record<Code: string, Country: string, Credits: string, Name: string, Rate: string, Symbol: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($license == null) { error make --unspanned { msg: "required query parameter 'license' missing: pass --license" } }
+  if ($symbol == null) { error make --unspanned { msg: "required query parameter 'symbol' missing: pass --symbol" } }
   let qp = [(serialize-qp "license" $license "scalar") (serialize-qp "symbol" $symbol "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getcurrencyrate" $qp $auth.query)
   let accept_val = "application/json"

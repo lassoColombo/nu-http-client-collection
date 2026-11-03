@@ -133,23 +133,25 @@ export def "get-nearest-relevant-airports" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --latitude: float # latitude location to be at the center of the search circle (format: double, e.g. 51.57285)
-  --longitude: float # longitude location to be at the center of the search circle (format: double, e.g. -0.44161)
+  --latitude: float # latitude location to be at the center of the search circle (required, format: double, e.g. 51.57285)
+  --longitude: float # longitude location to be at the center of the search circle (required, format: double, e.g. -0.44161)
   --radius: int # radius of the search in Kilometer. Can be from 0 to 500, default value is 500 Km. (default: 500)
   --page-limit: int # maximum items in one page (default: 10)
   --page-offset: int # start index of the requested page (default: 0)
-  --qp-sort: string@sort-completer # defines on which attribute the sorting will be done from the best option to the worst one: * **relevance** - Score value calculated based on distance and traffic analytics * **distance** - Distance from the location to the geo-code given in API request parameters * **analytics.flights.score** - Approximate score for ranking purposes calculated based on estimated number of flights from/to airport in one reference year (last year) * **analytics.travelers.score** - Approximate score for ranking purposes calculated based on estimated number of travelers in the airport for one reference year (last year) (default: relevance)
-]: nothing -> any {
+  --sort: string@sort-completer # defines on which attribute the sorting will be done from the best option to the worst one: * **relevance** - Score value calculated based on distance and traffic analytics * **distance** - Distance from the location to the geo-code given in API request parameters * **analytics.flights.score** - Approximate score for ranking purposes calculated based on estimated number of flights from/to airport in one reference year (last year) * **analytics.travelers.score** - Approximate score for ranking purposes calculated based on estimated number of travelers in the airport for one reference year (last year) (default: relevance)
+]: nothing -> record<data: table<address: record, analytics: record, detailedName: string, distance: record, geoCode: record, iataCode: string, name: string, relevance: float, subType: string, timeZoneOffset: string, type: string>, meta: record<count: int, links: record<first: string, last: string, next: string, previous: string, self: string, up: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "page[limit]" $page_limit "scalar") (serialize-qp "page[offset]" $page_offset "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  if ($latitude == null) { error make --unspanned { msg: "required query parameter 'latitude' missing: pass --latitude" } }
+  if ($longitude == null) { error make --unspanned { msg: "required query parameter 'longitude' missing: pass --longitude" } }
+  let qp = [(serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "page[limit]" $page_limit "scalar") (serialize-qp "page[offset]" $page_offset "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reference-data/locations/airports" $qp $auth.query)
   let accept_val = "application/vnd.amadeus+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"latitude": $latitude, "longitude": $longitude, "radius": $radius, "page[limit]": $page_limit, "page[offset]": $page_offset, "sort": $qp_sort} | compact)
+    query: ({"latitude": $latitude, "longitude": $longitude, "radius": $radius, "page[limit]": $page_limit, "page[offset]": $page_offset, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null

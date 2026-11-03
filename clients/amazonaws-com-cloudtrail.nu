@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -120,11 +120,14 @@ def x-amz-target-completer-20 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTra
 def x-amz-target-completer-21 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListChannels"] }
 def x-amz-target-completer-22 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListEventDataStores"] }
 def x-amz-target-completer-23 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListImportFailures"] }
+def import-status-completer [] { ["COMPLETED" "FAILED" "INITIALIZING" "IN_PROGRESS" "STOPPED"] }
 def x-amz-target-completer-24 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListImports"] }
 def x-amz-target-completer-25 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListPublicKeys"] }
+def query-status-completer [] { ["CANCELLED" "FAILED" "FINISHED" "QUEUED" "RUNNING" "TIMED_OUT"] }
 def x-amz-target-completer-26 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListQueries"] }
 def x-amz-target-completer-27 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListTags"] }
 def x-amz-target-completer-28 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListTrails"] }
+def event-category-completer [] { ["insight"] }
 def x-amz-target-completer-29 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.LookupEvents"] }
 def x-amz-target-completer-30 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.PutEventSelectors"] }
 def x-amz-target-completer-31 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.PutInsightSelectors"] }
@@ -168,6 +171,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AddTags
+# --TagsList item shape: {Key: string, Value?: string}
 export def "add-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -185,13 +189,14 @@ export def "add-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  resource_id: any
-  tags_list: any
+  --x-amz-target: string@x-amz-target-completer # required
+  resource_id: string # Specifies the ARN of the trail, event data store, or channel to which one or more tags will be added. The format of a trail ARN is: arn:aws:cloudtrail:us-east-2:123456789012:trail/MyTrail The format of an event data store ARN is: arn:aws:cloudtrail:us-east-2:12345678910:eventdatastore/EXAMPLE-f852-4e8f-8bd1-bcf6cEXAMPLE The format of a channel ARN is: arn:aws:cloudtrail:us-east-2:123456789012:channel/01234567890
+  tags_list: list # A list of tags. — item shape: {Key: string, Value?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.AddTags")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceId": $resource_id, "TagsList": $tags_list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -234,13 +239,14 @@ export def "cancel-query" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  --event-data-store: any
-  query_id: any
-]: any -> record<QueryId: record, QueryStatus: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  --event-data-store: string # The ARN (or the ID suffix of the ARN) of an event data store on which the specified query is running.EventDataStore is no longer required by CancelQueryRequest
+  query_id: string # The ID of the query that you want to cancel. The QueryId comes from the response of a StartQuery operation.
+]: any -> record<QueryId: string, QueryStatus: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.CancelQuery")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"EventDataStore": $event_data_store, "QueryId": $query_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -266,7 +272,8 @@ export def "cancel-query" [
 #
 # POST /
 # operationId: CreateChannel
-# --Tags item shape: {Key: any, Value?: any}
+# --Destinations item shape: {Type: "EVENT_DATA_STORE"|"AWS_SERVICE", Location: string}
+# --Tags item shape: {Key: string, Value?: string}
 export def "create-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -284,17 +291,18 @@ export def "create-channel" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  name: any
-  --body-source: any
-  destinations: any
-  --tags: list # A list of tags. — item shape: {Key: any, Value?: any}
-]: any -> record<ChannelArn: record, Name: record, Source: record, Destinations: record, Tags: table<Key: record, Value: record>> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  name: string # The name of the channel.
+  source: string # The name of the partner or external event source. You cannot change this name after you create the channel. A maximum of one channel is allowed per source. A source can be either Custom for all valid non-Amazon Web Services events, or the name of a partner event source. For information about the source names for available partners, see Additional information about integration partners (https://docs.aws.amazon.com/awscloudtrail/latest/userguide/query-event-data-store-integration.html#cloudtrail-lake-partner-information) in the CloudTrail User Guide.
+  destinations: list # One or more event data stores to which events arriving through a channel will be logged. — item shape: {Type: "EVENT_DATA_STORE"|"AWS_SERVICE", Location: string}
+  --tags: list # A list of tags. — item shape: {Key: string, Value?: string}
+]: any -> record<ChannelArn: string, Name: string, Source: string, Destinations: table<Type: string, Location: string>, Tags: table<Key: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.CreateChannel")
   let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"Name": $name, "Source": $body_source, "Destinations": $destinations, "Tags": $tags} | compact
+  let req_body = {"Name": $name, "Source": $source, "Destinations": $destinations, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -318,7 +326,8 @@ export def "create-channel" [
 #
 # POST /
 # operationId: CreateEventDataStore
-# --TagsList item shape: {Key: any, Value?: any}
+# --AdvancedEventSelectors item shape: {Name?: string, FieldSelectors: list}
+# --TagsList item shape: {Key: string, Value?: string}
 export def "create-event-data-store" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -336,19 +345,20 @@ export def "create-event-data-store" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  name: any
-  --advanced-event-selectors: any
-  --multi-region-enabled: any
-  --organization-enabled: any
-  --retention-period: any
-  --termination-protection-enabled: any
-  --tags-list: list # A list of tags. — item shape: {Key: any, Value?: any}
-  --kms-key-id: any
-]: any -> record<EventDataStoreArn: record, Name: record, Status: record, AdvancedEventSelectors: record, MultiRegionEnabled: record, OrganizationEnabled: record, RetentionPeriod: record, TerminationProtectionEnabled: record, TagsList: table<Key: record, Value: record>, CreatedTimestamp: record, UpdatedTimestamp: record, KmsKeyId: record> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  name: string # The name of the event data store.
+  --advanced-event-selectors: list # The advanced event selectors to use to select the events for the data store. You can configure up to five advanced event selectors for each event data store. For more information about how to use advanced event selectors to log CloudTrail events, see Log events by using advanced event selectors (https://docs.aws.amazon.com/awscloudtrail/latest/userguide/logging-data-events-with-cloudtrail.html#creating-data-event-selectors-advanced) in the CloudTrail User Guide. For more information about how to use advanced event selectors to include Config configuration items in your event data store, see Create an event data store for Config configuration items (https://docs.aws.amazon.com/awscloudtrail/latest/userguide/query-lake-cli.html#lake-cli-create-eds-config) in the CloudTrail User Guide. For more information about how to use advanced event selectors to include non-Amazon Web Services events in your event data store, see Create an integration to log events from outside Amazon Web Services (https://docs.aws.amazon.com/awscloudtrail/latest/userguide/query-lake-cli.html#lake-cli-create-integration) in the CloudTrail User Guide. — item shape: {Name?: string, FieldSelectors: list}
+  --multi-region-enabled: oneof<nothing, bool> # Specifies whether the event data store includes events from all regions, or only from the region in which the event data store is created.
+  --organization-enabled: oneof<nothing, bool> # Specifies whether an event data store collects events logged for an organization in Organizations.
+  --retention-period: int # The retention period of the event data store, in days. You can set a retention period of up to 2557 days, the equivalent of seven years.
+  --termination-protection-enabled: oneof<nothing, bool> # Specifies whether termination protection is enabled for the event data store. If termination protection is enabled, you cannot delete the event data store until termination protection is disabled.
+  --tags-list: list # A list of tags. — item shape: {Key: string, Value?: string}
+  --kms-key-id: string # Specifies the KMS key ID to use to encrypt the events delivered by CloudTrail. The value can be an alias name prefixed by alias/, a fully specified ARN to an alias, a fully specified ARN to a key, or a globally unique identifier. Disabling or deleting the KMS key, or removing CloudTrail permissions on the key, prevents CloudTrail from logging events to the event data store, and prevents users from querying the data in the event data store that was encrypted with the key. After you associate an event data store with a KMS key, the KMS key cannot be removed or changed. Before you disable or delete a KMS key that you are using with an event data store, delete or back up your event data store. CloudTrail also supports KMS multi-Region keys. For more information about multi-Region keys, see Using multi-Region keys (https://docs.aws.amazon.com/kms/latest/developerguide/multi-region-keys-overview.html) in the Key Management Service Developer Guide. Examples: alias/MyAliasName arn:aws:kms:us-east-2:123456789012:alias/MyAliasName arn:aws:kms:us-east-2:123456789012:key/12345678-1234-1234-1234-123456789012 12345678-1234-1234-1234-123456789012
+]: any -> record<EventDataStoreArn: string, Name: string, Status: string, AdvancedEventSelectors: table<Name: string, FieldSelectors: list>, MultiRegionEnabled: bool, OrganizationEnabled: bool, RetentionPeriod: int, TerminationProtectionEnabled: bool, TagsList: table<Key: string, Value: string>, CreatedTimestamp: string, UpdatedTimestamp: string, KmsKeyId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.CreateEventDataStore")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "AdvancedEventSelectors": $advanced_event_selectors, "MultiRegionEnabled": $multi_region_enabled, "OrganizationEnabled": $organization_enabled, "RetentionPeriod": $retention_period, "TerminationProtectionEnabled": $termination_protection_enabled, "TagsList": $tags_list, "KmsKeyId": $kms_key_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -374,7 +384,7 @@ export def "create-event-data-store" [
 #
 # POST /
 # operationId: CreateTrail
-# --TagsList item shape: {Key: any, Value?: any}
+# --TagsList item shape: {Key: string, Value?: string}
 export def "create-trail" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -392,23 +402,24 @@ export def "create-trail" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  name: any
-  s3_bucket_name: any
-  --s3-key-prefix: any
-  --sns-topic-name: any
-  --include-global-service-events: any
-  --is-multi-region-trail: any
-  --enable-log-file-validation: any
-  --cloud-watch-logs-log-group-arn: any
-  --cloud-watch-logs-role-arn: any
-  --kms-key-id: any
-  --is-organization-trail: any
-  --tags-list: list # A list of tags. — item shape: {Key: any, Value?: any}
-]: any -> record<Name: record, S3BucketName: record, S3KeyPrefix: record, SnsTopicName: record, SnsTopicARN: record, IncludeGlobalServiceEvents: record, IsMultiRegionTrail: record, TrailARN: record, LogFileValidationEnabled: record, CloudWatchLogsLogGroupArn: record, CloudWatchLogsRoleArn: record, KmsKeyId: record, IsOrganizationTrail: record> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  name: string # Specifies the name of the trail. The name must meet the following requirements: Contain only ASCII letters (a-z, A-Z), numbers (0-9), periods (.), underscores (_), or dashes (-) Start with a letter or number, and end with a letter or number Be between 3 and 128 characters Have no adjacent periods, underscores or dashes. Names like my-_namespace and my--namespace are not valid. Not be in IP address format (for example, 192.168.5.4)
+  s3_bucket_name: string # Specifies the name of the Amazon S3 bucket designated for publishing log files. See Amazon S3 Bucket Naming Requirements (https://docs.aws.amazon.com/awscloudtrail/latest/userguide/create_trail_naming_policy.html).
+  --s3-key-prefix: string # Specifies the Amazon S3 key prefix that comes after the name of the bucket you have designated for log file delivery. For more information, see Finding Your CloudTrail Log Files (https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-find-log-files.html). The maximum length is 200 characters.
+  --sns-topic-name: string # Specifies the name of the Amazon SNS topic defined for notification of log file delivery. The maximum length is 256 characters.
+  --include-global-service-events: oneof<nothing, bool> # Specifies whether the trail is publishing events from global services such as IAM to the log files.
+  --is-multi-region-trail: oneof<nothing, bool> # Specifies whether the trail is created in the current region or in all regions. The default is false, which creates a trail only in the region where you are signed in. As a best practice, consider creating trails that log events in all regions.
+  --enable-log-file-validation: oneof<nothing, bool> # Specifies whether log file integrity validation is enabled. The default is false. When you disable log file integrity validation, the chain of digest files is broken after one hour. CloudTrail does not create digest files for log files that were delivered during a period in which log file integrity validation was disabled. For example, if you enable log file integrity validation at noon on January 1, disable it at noon on January 2, and re-enable it at noon on January 10, digest files will not be created for the log files delivered from noon on January 2 to noon on January 10. The same applies whenever you stop CloudTrail logging or delete a trail.
+  --cloud-watch-logs-log-group-arn: string # Specifies a log group name using an Amazon Resource Name (ARN), a unique identifier that represents the log group to which CloudTrail logs will be delivered. You must use a log group that exists in your account. Not required unless you specify CloudWatchLogsRoleArn.
+  --cloud-watch-logs-role-arn: string # Specifies the role for the CloudWatch Logs endpoint to assume to write to a user's log group. You must use a role that exists in your account.
+  --kms-key-id: string # Specifies the KMS key ID to use to encrypt the logs delivered by CloudTrail. The value can be an alias name prefixed by alias/, a fully specified ARN to an alias, a fully specified ARN to a key, or a globally unique identifier. CloudTrail also supports KMS multi-Region keys. For more information about multi-Region keys, see Using multi-Region keys (https://docs.aws.amazon.com/kms/latest/developerguide/multi-region-keys-overview.html) in the Key Management Service Developer Guide. Examples: alias/MyAliasName arn:aws:kms:us-east-2:123456789012:alias/MyAliasName arn:aws:kms:us-east-2:123456789012:key/12345678-1234-1234-1234-123456789012 12345678-1234-1234-1234-123456789012
+  --is-organization-trail: oneof<nothing, bool> # Specifies whether the trail is created for all accounts in an organization in Organizations, or only for the current Amazon Web Services account. The default is false, and cannot be true unless the call is made on behalf of an Amazon Web Services account that is the management account or delegated administrator account for an organization in Organizations.
+  --tags-list: list # A list of tags. — item shape: {Key: string, Value?: string}
+]: any -> record<Name: string, S3BucketName: string, S3KeyPrefix: string, SnsTopicName: string, SnsTopicARN: string, IncludeGlobalServiceEvents: bool, IsMultiRegionTrail: bool, TrailARN: string, LogFileValidationEnabled: bool, CloudWatchLogsLogGroupArn: string, CloudWatchLogsRoleArn: string, KmsKeyId: string, IsOrganizationTrail: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.CreateTrail")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "S3BucketName": $s3_bucket_name, "S3KeyPrefix": $s3_key_prefix, "SnsTopicName": $sns_topic_name, "IncludeGlobalServiceEvents": $include_global_service_events, "IsMultiRegionTrail": $is_multi_region_trail, "EnableLogFileValidation": $enable_log_file_validation, "CloudWatchLogsLogGroupArn": $cloud_watch_logs_log_group_arn, "CloudWatchLogsRoleArn": $cloud_watch_logs_role_arn, "KmsKeyId": $kms_key_id, "IsOrganizationTrail": $is_organization_trail, "TagsList": $tags_list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -451,12 +462,13 @@ export def "delete-channel" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  channel: any
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  channel: string # The ARN or the UUID value of the channel that you want to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.DeleteChannel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Channel": $channel} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -499,12 +511,13 @@ export def "delete-event-data-store" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  event_data_store: any
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  event_data_store: string # The ARN (or the ID suffix of the ARN) of the event data store to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.DeleteEventDataStore")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"EventDataStore": $event_data_store} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -547,12 +560,13 @@ export def "delete-resource-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  resource_arn: any
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the CloudTrail channel you're deleting the resource-based policy from. The following is the format of a resource ARN: arn:aws:cloudtrail:us-east-2:123456789012:channel/MyChannel.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.DeleteResourcePolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -595,12 +609,13 @@ export def "delete-trail" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  name: any
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  name: string # Specifies the name or the CloudTrail ARN of the trail to be deleted. The following is the format of a trail ARN. arn:aws:cloudtrail:us-east-2:123456789012:trail/MyTrail
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.DeleteTrail")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -643,12 +658,13 @@ export def "deregister-organization-delegated-admin" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  delegated_admin_account_id: any
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  delegated_admin_account_id: string # A delegated administrator account ID. This is a member account in an organization that is currently designated as a delegated administrator.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.DeregisterOrganizationDelegatedAdmin")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DelegatedAdminAccountId": $delegated_admin_account_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -691,13 +707,14 @@ export def "describe-query" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  --event-data-store: any
-  query_id: any
-]: any -> record<QueryId: record, QueryString: record, QueryStatus: record, QueryStatistics: record<EventsMatched: record, EventsScanned: record, BytesScanned: record, ExecutionTimeInMillis: record, CreationTime: record>, ErrorMessage: record, DeliveryS3Uri: record, DeliveryStatus: record> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  --event-data-store: string # The ARN (or the ID suffix of the ARN) of an event data store on which the specified query was run.EventDataStore is no longer required by DescribeQueryRequest
+  query_id: string # The query ID.
+]: any -> record<QueryId: string, QueryString: string, QueryStatus: string, QueryStatistics: record<EventsMatched: int, EventsScanned: int, BytesScanned: int, ExecutionTimeInMillis: int, CreationTime: string>, ErrorMessage: string, DeliveryS3Uri: string, DeliveryStatus: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.DescribeQuery")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"EventDataStore": $event_data_store, "QueryId": $query_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -740,13 +757,14 @@ export def "describe-trails" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  --trail-name-list: any
-  --include-shadow-trails: any
-]: any -> record<trailList: record> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  --trail-name-list: list<string> # Specifies a list of trail names, trail ARNs, or both, of the trails to describe. The format of a trail ARN is: arn:aws:cloudtrail:us-east-2:123456789012:trail/MyTrail If an empty list is specified, information for the trail in the current region is returned. If an empty list is specified and IncludeShadowTrails is false, then information for all trails in the current region is returned. If an empty list is specified and IncludeShadowTrails is null or true, then information for all trails in the current region and any associated shadow trails in other regions is returned. If one or more trail names are specified, information is returned only if the names match the names of trails belonging only to the current region and current account. To return information about a trail in another region, you must specify its trail ARN.
+  --include-shadow-trails: oneof<nothing, bool> # Specifies whether to include shadow trails in the response. A shadow trail is the replication in a region of a trail that was created in a different region, or in the case of an organization trail, the replication of an organization trail in member accounts. If you do not include shadow trails, organization trails in a member account and region replication trails will not be returned. The default is true.
+]: any -> record<trailList: table<Name: string, S3BucketName: string, S3KeyPrefix: string, SnsTopicName: string, SnsTopicARN: string, IncludeGlobalServiceEvents: bool, IsMultiRegionTrail: bool, HomeRegion: string, TrailARN: string, LogFileValidationEnabled: bool, CloudWatchLogsLogGroupArn: string, CloudWatchLogsRoleArn: string, KmsKeyId: string, HasCustomEventSelectors: bool, HasInsightSelectors: bool, IsOrganizationTrail: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.DescribeTrails")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"trailNameList": $trail_name_list, "includeShadowTrails": $include_shadow_trails} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -789,12 +807,13 @@ export def "get-channel" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  channel: any
-]: any -> record<ChannelArn: record, Name: record, Source: record, SourceConfig: record<ApplyToAllRegions: record, AdvancedEventSelectors: record>, Destinations: record, IngestionStatus: record<LatestIngestionSuccessTime: record, LatestIngestionSuccessEventID: record, LatestIngestionErrorCode: record, LatestIngestionAttemptTime: record, LatestIngestionAttemptEventID: record>> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  channel: string # The ARN or UUID of a channel.
+]: any -> record<ChannelArn: string, Name: string, Source: string, SourceConfig: record<ApplyToAllRegions: bool, AdvancedEventSelectors: list<record>>, Destinations: table<Type: string, Location: string>, IngestionStatus: record<LatestIngestionSuccessTime: string, LatestIngestionSuccessEventID: string, LatestIngestionErrorCode: string, LatestIngestionAttemptTime: string, LatestIngestionAttemptEventID: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetChannel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Channel": $channel} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -837,12 +856,13 @@ export def "get-event-data-store" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  event_data_store: any
-]: any -> record<EventDataStoreArn: record, Name: record, Status: record, AdvancedEventSelectors: record, MultiRegionEnabled: record, OrganizationEnabled: record, RetentionPeriod: record, TerminationProtectionEnabled: record, CreatedTimestamp: record, UpdatedTimestamp: record, KmsKeyId: record> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  event_data_store: string # The ARN (or ID suffix of the ARN) of the event data store about which you want information.
+]: any -> record<EventDataStoreArn: string, Name: string, Status: string, AdvancedEventSelectors: table<Name: string, FieldSelectors: list>, MultiRegionEnabled: bool, OrganizationEnabled: bool, RetentionPeriod: int, TerminationProtectionEnabled: bool, CreatedTimestamp: string, UpdatedTimestamp: string, KmsKeyId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetEventDataStore")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"EventDataStore": $event_data_store} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -885,12 +905,13 @@ export def "get-event-selectors" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  trail_name: any
-]: any -> record<TrailARN: record, EventSelectors: record, AdvancedEventSelectors: record> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  trail_name: string # Specifies the name of the trail or trail ARN. If you specify a trail name, the string must meet the following requirements: Contain only ASCII letters (a-z, A-Z), numbers (0-9), periods (.), underscores (_), or dashes (-) Start with a letter or number, and end with a letter or number Be between 3 and 128 characters Have no adjacent periods, underscores or dashes. Names like my-_namespace and my--namespace are not valid. Not be in IP address format (for example, 192.168.5.4) If you specify a trail ARN, it must be in the format: arn:aws:cloudtrail:us-east-2:123456789012:trail/MyTrail
+]: any -> record<TrailARN: string, EventSelectors: table<ReadWriteType: string, IncludeManagementEvents: bool, DataResources: list, ExcludeManagementEventSources: list>, AdvancedEventSelectors: table<Name: string, FieldSelectors: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetEventSelectors")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TrailName": $trail_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -933,12 +954,13 @@ export def "get-import" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  import_id: any
-]: any -> record<ImportId: record, Destinations: record, ImportSource: record<S3: record<S3LocationUri: record, S3BucketRegion: record, S3BucketAccessRoleArn: record>>, StartEventTime: record, EndEventTime: record, ImportStatus: record, CreatedTimestamp: record, UpdatedTimestamp: record, ImportStatistics: record<PrefixesFound: record, PrefixesCompleted: record, FilesCompleted: record, EventsCompleted: record, FailedEntries: record>> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  import_id: string # The ID for the import.
+]: any -> record<ImportId: string, Destinations: list<string>, ImportSource: record<S3: record<S3LocationUri: string, S3BucketRegion: string, S3BucketAccessRoleArn: string>>, StartEventTime: string, EndEventTime: string, ImportStatus: string, CreatedTimestamp: string, UpdatedTimestamp: string, ImportStatistics: record<PrefixesFound: int, PrefixesCompleted: int, FilesCompleted: int, EventsCompleted: int, FailedEntries: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetImport")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ImportId": $import_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -981,12 +1003,13 @@ export def "get-insight-selectors" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  trail_name: any
-]: any -> record<TrailARN: record, InsightSelectors: record> {
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  trail_name: string # Specifies the name of the trail or trail ARN. If you specify a trail name, the string must meet the following requirements: Contain only ASCII letters (a-z, A-Z), numbers (0-9), periods (.), underscores (_), or dashes (-) Start with a letter or number, and end with a letter or number Be between 3 and 128 characters Have no adjacent periods, underscores or dashes. Names like my-_namespace and my--namespace are not valid. Not be in IP address format (for example, 192.168.5.4) If you specify a trail ARN, it must be in the format: arn:aws:cloudtrail:us-east-2:123456789012:trail/MyTrail
+]: any -> record<TrailARN: string, InsightSelectors: table<InsightType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetInsightSelectors")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TrailName": $trail_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1030,15 +1053,16 @@ export def "get-query-results" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  --event-data-store: any
-  query_id: any
-  --next-token-body: any #  (body field)
-  --max-query-results: any
-]: any -> record<QueryStatus: record, QueryStatistics: record<ResultsCount: record, TotalResultsCount: record, BytesScanned: record>, QueryResultRows: record, NextToken: record, ErrorMessage: record> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  --event-data-store: string # The ARN (or ID suffix of the ARN) of the event data store against which the query was run.EventDataStore is no longer required by GetQueryResultsRequest
+  query_id: string # The ID of the query for which you want to get results.
+  --next-token-body: string # A token you can use to get the next page of query results. (body field)
+  --max-query-results: int # The maximum number of query results to display on a single page.
+]: any -> record<QueryStatus: string, QueryStatistics: record<ResultsCount: int, TotalResultsCount: int, BytesScanned: int>, QueryResultRows: list<list<record>>, NextToken: string, ErrorMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetQueryResults")
   let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"EventDataStore": $event_data_store, "QueryId": $query_id, "NextToken": $next_token_body, "MaxQueryResults": $max_query_results} | compact
@@ -1082,12 +1106,13 @@ export def "get-resource-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  resource_arn: any
-]: any -> record<ResourceArn: record, ResourcePolicy: record> {
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the CloudTrail channel attached to the resource-based policy. The following is the format of a resource ARN: arn:aws:cloudtrail:us-east-2:123456789012:channel/MyChannel.
+]: any -> record<ResourceArn: string, ResourcePolicy: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetResourcePolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1130,12 +1155,13 @@ export def "get-trail" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  name: any
-]: any -> record<Trail: record<Name: record, S3BucketName: record, S3KeyPrefix: record, SnsTopicName: record, SnsTopicARN: record, IncludeGlobalServiceEvents: record, IsMultiRegionTrail: record, HomeRegion: record, TrailARN: record, LogFileValidationEnabled: record, CloudWatchLogsLogGroupArn: record, CloudWatchLogsRoleArn: record, KmsKeyId: record, HasCustomEventSelectors: record, HasInsightSelectors: record, IsOrganizationTrail: record>> {
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  name: string # The name or the Amazon Resource Name (ARN) of the trail for which you want to retrieve settings information.
+]: any -> record<Trail: record<Name: string, S3BucketName: string, S3KeyPrefix: string, SnsTopicName: string, SnsTopicARN: string, IncludeGlobalServiceEvents: bool, IsMultiRegionTrail: bool, HomeRegion: string, TrailARN: string, LogFileValidationEnabled: bool, CloudWatchLogsLogGroupArn: string, CloudWatchLogsRoleArn: string, KmsKeyId: string, HasCustomEventSelectors: bool, HasInsightSelectors: bool, IsOrganizationTrail: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetTrail")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1178,12 +1204,13 @@ export def "get-trail-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  name: any
-]: any -> record<IsLogging: record, LatestDeliveryError: record, LatestNotificationError: record, LatestDeliveryTime: record, LatestNotificationTime: record, StartLoggingTime: record, StopLoggingTime: record, LatestCloudWatchLogsDeliveryError: record, LatestCloudWatchLogsDeliveryTime: record, LatestDigestDeliveryTime: record, LatestDigestDeliveryError: record, LatestDeliveryAttemptTime: record, LatestNotificationAttemptTime: record, LatestNotificationAttemptSucceeded: record, LatestDeliveryAttemptSucceeded: record, TimeLoggingStarted: record, TimeLoggingStopped: record> {
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  name: string # Specifies the name or the CloudTrail ARN of the trail for which you are requesting status. To get the status of a shadow trail (a replication of the trail in another region), you must specify its ARN. The following is the format of a trail ARN. arn:aws:cloudtrail:us-east-2:123456789012:trail/MyTrail
+]: any -> record<IsLogging: bool, LatestDeliveryError: string, LatestNotificationError: string, LatestDeliveryTime: string, LatestNotificationTime: string, StartLoggingTime: string, StopLoggingTime: string, LatestCloudWatchLogsDeliveryError: string, LatestCloudWatchLogsDeliveryTime: string, LatestDigestDeliveryTime: string, LatestDigestDeliveryError: string, LatestDeliveryAttemptTime: string, LatestNotificationAttemptTime: string, LatestNotificationAttemptSucceeded: string, LatestDeliveryAttemptSucceeded: string, TimeLoggingStarted: string, TimeLoggingStopped: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetTrailStatus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1228,13 +1255,14 @@ export def "list-channels" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<Channels: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  --max-results-body: int # The maximum number of CloudTrail channels to display on a single page. (body field)
+  --next-token-body: string # The token to use to get the next page of results after a previous API call. This token must be passed in with the same parameters that were specified in the original call. For example, if the original call specified an AttributeKey of 'Username' with a value of 'root', the call with NextToken should include those same parameters. (body field)
+]: any -> record<Channels: table<ChannelArn: string, Name: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListChannels")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -1280,13 +1308,14 @@ export def "list-event-data-stores" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<EventDataStores: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  --next-token-body: string # A token you can use to get the next page of event data store results. (body field)
+  --max-results-body: int # The maximum number of event data stores to display on a single page. (body field)
+]: any -> record<EventDataStores: table<EventDataStoreArn: string, Name: string, TerminationProtectionEnabled: bool, Status: string, AdvancedEventSelectors: list, MultiRegionEnabled: bool, OrganizationEnabled: bool, RetentionPeriod: int, CreatedTimestamp: string, UpdatedTimestamp: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListEventDataStores")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -1332,14 +1361,15 @@ export def "list-import-failures" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  import_id: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<Failures: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  import_id: string # The ID of the import.
+  --max-results-body: int # The maximum number of failures to display on a single page. (body field)
+  --next-token-body: string # A token you can use to get the next page of import failures. (body field)
+]: any -> record<Failures: table<Location: string, Status: string, ErrorType: string, ErrorMessage: string, LastUpdatedTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListImportFailures")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ImportId": $import_id, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -1385,15 +1415,16 @@ export def "list-imports" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  --max-results-body: any #  (body field)
-  --destination: any
-  --import-status: any
-  --next-token-body: any #  (body field)
-]: any -> record<Imports: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  --max-results-body: int # The maximum number of imports to display on a single page. (body field)
+  --destination: string # The ARN of the destination event data store.
+  --import-status: string@import-status-completer # The status of the import.
+  --next-token-body: string # A token you can use to get the next page of import results. (body field)
+]: any -> record<Imports: table<ImportId: string, ImportStatus: string, Destinations: list, CreatedTimestamp: string, UpdatedTimestamp: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListImports")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"MaxResults": $max_results_body, "Destination": $destination, "ImportStatus": $import_status, "NextToken": $next_token_body} | compact
@@ -1438,14 +1469,15 @@ export def "list-public-keys" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  --start-time: any
-  --end-time: any
-  --next-token-body: any #  (body field)
-]: any -> record<PublicKeyList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  --start-time: string # Optionally specifies, in UTC, the start of the time range to look up public keys for CloudTrail digest files. If not specified, the current time is used, and the current public key is returned. (format: date-time)
+  --end-time: string # Optionally specifies, in UTC, the end of the time range to look up public keys for CloudTrail digest files. If not specified, the current time is used. (format: date-time)
+  --next-token-body: string # Reserved for future use. (body field)
+]: any -> record<PublicKeyList: table<Value: string, ValidityStartTime: string, ValidityEndTime: string, Fingerprint: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListPublicKeys")
   let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"StartTime": $start_time, "EndTime": $end_time, "NextToken": $next_token_body} | compact
@@ -1491,17 +1523,18 @@ export def "list-queries" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-26
-  event_data_store: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --start-time: any
-  --end-time: any
-  --query-status: any
-]: any -> record<Queries: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-26 # required
+  event_data_store: string # The ARN (or the ID suffix of the ARN) of an event data store on which queries were run.
+  --next-token-body: string # A token you can use to get the next page of results. (body field)
+  --max-results-body: int # The maximum number of queries to show on a page. (body field)
+  --start-time: string # Use with EndTime to bound a ListQueries request, and limit its results to only those queries run within a specified time period. (format: date-time)
+  --end-time: string # Use with StartTime to bound a ListQueries request, and limit its results to only those queries run within a specified time period. (format: date-time)
+  --query-status: string@query-status-completer # The status of queries that you want to return in results. Valid values for QueryStatus include QUEUED, RUNNING, FINISHED, FAILED, TIMED_OUT, or CANCELLED.
+]: any -> record<Queries: table<QueryId: string, QueryStatus: string, CreationTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListQueries")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"EventDataStore": $event_data_store, "NextToken": $next_token_body, "MaxResults": $max_results_body, "StartTime": $start_time, "EndTime": $end_time, "QueryStatus": $query_status} | compact
@@ -1546,13 +1579,14 @@ export def "list-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-27
-  resource_id_list: any
-  --next-token-body: any #  (body field)
-]: any -> record<ResourceTagList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-27 # required
+  resource_id_list: list<string> # Specifies a list of trail, event data store, or channel ARNs whose tags will be listed. The list has a limit of 20 ARNs.
+  --next-token-body: string # Reserved for future use. (body field)
+]: any -> record<ResourceTagList: table<ResourceId: string, TagsList: list>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListTags")
   let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ResourceIdList": $resource_id_list, "NextToken": $next_token_body} | compact
@@ -1597,12 +1631,13 @@ export def "list-trails" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-28
-  --next-token-body: any #  (body field)
-]: any -> record<Trails: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-28 # required
+  --next-token-body: string # The token to use to get the next page of results after a previous API call. This token must be passed in with the same parameters that were specified in the original call. For example, if the original call specified an AttributeKey of 'Username' with a value of 'root', the call with NextToken should include those same parameters. (body field)
+]: any -> record<Trails: table<TrailARN: string, Name: string, HomeRegion: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListTrails")
   let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body} | compact
@@ -1629,6 +1664,7 @@ export def "list-trails" [
 #
 # POST /
 # operationId: LookupEvents
+# --LookupAttributes item shape: {AttributeKey: "EventId"|"EventName"|"ReadOnly"|"Username"|"ResourceType"|"ResourceName"|"EventSource"|"AccessKeyId", AttributeValue: string}
 export def "lookup-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1648,17 +1684,18 @@ export def "lookup-events" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-29
-  --lookup-attributes: any
-  --start-time: any
-  --end-time: any
-  --event-category: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<Events: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-29 # required
+  --lookup-attributes: list # Contains a list of lookup attributes. Currently the list can contain only one item. — item shape: {AttributeKey: "EventId"|"EventName"|"ReadOnly"|"Username"|"ResourceType"|"ResourceName"|"EventSource"|"AccessKeyId", AttributeValue: string}
+  --start-time: string # Specifies that only events that occur after or at the specified time are returned. If the specified start time is after the specified end time, an error is returned. (format: date-time)
+  --end-time: string # Specifies that only events that occur before or at the specified time are returned. If the specified end time is before the specified start time, an error is returned. (format: date-time)
+  --event-category: string@event-category-completer # Specifies the event category. If you do not specify an event category, events of the category are not returned in the response. For example, if you do not specify insight as the value of EventCategory, no Insights events are returned.
+  --max-results-body: int # The number of events to return. Possible values are 1 through 50. The default is 50. (body field)
+  --next-token-body: string # The token to use to get the next page of results after a previous API call. This token must be passed in with the same parameters that were specified in the original call. For example, if the original call specified an AttributeKey of 'Username' with a value of 'root', the call with NextToken should include those same parameters. (body field)
+]: any -> record<Events: table<EventId: string, EventName: string, ReadOnly: string, AccessKeyId: string, EventTime: string, EventSource: string, Username: string, Resources: list, CloudTrailEvent: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.LookupEvents")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"LookupAttributes": $lookup_attributes, "StartTime": $start_time, "EndTime": $end_time, "EventCategory": $event_category, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -1685,6 +1722,8 @@ export def "lookup-events" [
 #
 # POST /
 # operationId: PutEventSelectors
+# --EventSelectors item shape: {ReadWriteType?: "ReadOnly"|"WriteOnly"|"All", IncludeManagementEvents?: bool, DataResources?: list, ExcludeManagementEventSources?: list<string>}
+# --AdvancedEventSelectors item shape: {Name?: string, FieldSelectors: list}
 export def "put-event-selectors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1702,14 +1741,15 @@ export def "put-event-selectors" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-30
-  trail_name: any
-  --event-selectors: any
-  --advanced-event-selectors: any
-]: any -> record<TrailARN: record, EventSelectors: record, AdvancedEventSelectors: record> {
+  --x-amz-target: string@x-amz-target-completer-30 # required
+  trail_name: string # Specifies the name of the trail or trail ARN. If you specify a trail name, the string must meet the following requirements: Contain only ASCII letters (a-z, A-Z), numbers (0-9), periods (.), underscores (_), or dashes (-) Start with a letter or number, and end with a letter or number Be between 3 and 128 characters Have no adjacent periods, underscores or dashes. Names like my-_namespace and my--namespace are not valid. Not be in IP address format (for example, 192.168.5.4) If you specify a trail ARN, it must be in the following format. arn:aws:cloudtrail:us-east-2:123456789012:trail/MyTrail
+  --event-selectors: list # Specifies the settings for your event selectors. You can configure up to five event selectors for a trail. You can use either EventSelectors or AdvancedEventSelectors in a PutEventSelectors request, but not both. If you apply EventSelectors to a trail, any existing AdvancedEventSelectors are overwritten. — item shape: {ReadWriteType?: "ReadOnly"|"WriteOnly"|"All", IncludeManagementEvents?: bool, DataResources?: list, ExcludeManagementEventSources?: list<string>}
+  --advanced-event-selectors: list # Specifies the settings for advanced event selectors. You can add advanced event selectors, and conditions for your advanced event selectors, up to a maximum of 500 values for all conditions and selectors on a trail. You can use either AdvancedEventSelectors or EventSelectors, but not both. If you apply AdvancedEventSelectors to a trail, any existing EventSelectors are overwritten. For more information about advanced event selectors, see Logging data events for trails (https://docs.aws.amazon.com/awscloudtrail/latest/userguide/logging-data-events-with-cloudtrail.html) in the CloudTrail User Guide. — item shape: {Name?: string, FieldSelectors: list}
+]: any -> record<TrailARN: string, EventSelectors: table<ReadWriteType: string, IncludeManagementEvents: bool, DataResources: list, ExcludeManagementEventSources: list>, AdvancedEventSelectors: table<Name: string, FieldSelectors: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.PutEventSelectors")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TrailName": $trail_name, "EventSelectors": $event_selectors, "AdvancedEventSelectors": $advanced_event_selectors} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1735,6 +1775,7 @@ export def "put-event-selectors" [
 #
 # POST /
 # operationId: PutInsightSelectors
+# --InsightSelectors item shape: {InsightType?: "ApiCallRateInsight"|"ApiErrorRateInsight"}
 export def "put-insight-selectors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1752,13 +1793,14 @@ export def "put-insight-selectors" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-31
-  trail_name: any
-  insight_selectors: any
-]: any -> record<TrailARN: record, InsightSelectors: record> {
+  --x-amz-target: string@x-amz-target-completer-31 # required
+  trail_name: string # The name of the CloudTrail trail for which you want to change or add Insights selectors.
+  insight_selectors: list # A JSON string that contains the insight types you want to log on a trail. ApiCallRateInsight and ApiErrorRateInsight are valid insight types. — item shape: {InsightType?: "ApiCallRateInsight"|"ApiErrorRateInsight"}
+]: any -> record<TrailARN: string, InsightSelectors: table<InsightType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.PutInsightSelectors")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TrailName": $trail_name, "InsightSelectors": $insight_selectors} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1801,13 +1843,14 @@ export def "put-resource-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-32
-  resource_arn: any
-  resource_policy: any
-]: any -> record<ResourceArn: record, ResourcePolicy: record> {
+  --x-amz-target: string@x-amz-target-completer-32 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the CloudTrail channel attached to the resource-based policy. The following is the format of a resource ARN: arn:aws:cloudtrail:us-east-2:123456789012:channel/MyChannel.
+  resource_policy: string # A JSON-formatted string for an Amazon Web Services resource-based policy. The following are requirements for the resource policy: Contains only one action: cloudtrail-data:PutAuditEvents Contains at least one statement. The policy can have a maximum of 20 statements. Each statement contains at least one principal. A statement can have a maximum of 50 principals.
+]: any -> record<ResourceArn: string, ResourcePolicy: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.PutResourcePolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "ResourcePolicy": $resource_policy} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1850,12 +1893,13 @@ export def "register-organization-delegated-admin" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-33
-  member_account_id: any
+  --x-amz-target: string@x-amz-target-completer-33 # required
+  member_account_id: string # An organization member account ID that you want to designate as a delegated administrator.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.RegisterOrganizationDelegatedAdmin")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"MemberAccountId": $member_account_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1881,6 +1925,7 @@ export def "register-organization-delegated-admin" [
 #
 # POST /
 # operationId: RemoveTags
+# --TagsList item shape: {Key: string, Value?: string}
 export def "remove-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1898,13 +1943,14 @@ export def "remove-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-34
-  resource_id: any
-  tags_list: any
+  --x-amz-target: string@x-amz-target-completer-34 # required
+  resource_id: string # Specifies the ARN of the trail, event data store, or channel from which tags should be removed. Example trail ARN format: arn:aws:cloudtrail:us-east-2:123456789012:trail/MyTrail Example event data store ARN format: arn:aws:cloudtrail:us-east-2:12345678910:eventdatastore/EXAMPLE-f852-4e8f-8bd1-bcf6cEXAMPLE Example channel ARN format: arn:aws:cloudtrail:us-east-2:123456789012:channel/01234567890
+  tags_list: list # A list of tags. — item shape: {Key: string, Value?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.RemoveTags")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceId": $resource_id, "TagsList": $tags_list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1947,12 +1993,13 @@ export def "restore-event-data-store" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-35
-  event_data_store: any
-]: any -> record<EventDataStoreArn: record, Name: record, Status: record, AdvancedEventSelectors: record, MultiRegionEnabled: record, OrganizationEnabled: record, RetentionPeriod: record, TerminationProtectionEnabled: record, CreatedTimestamp: record, UpdatedTimestamp: record, KmsKeyId: record> {
+  --x-amz-target: string@x-amz-target-completer-35 # required
+  event_data_store: string # The ARN (or the ID suffix of the ARN) of the event data store that you want to restore.
+]: any -> record<EventDataStoreArn: string, Name: string, Status: string, AdvancedEventSelectors: table<Name: string, FieldSelectors: list>, MultiRegionEnabled: bool, OrganizationEnabled: bool, RetentionPeriod: int, TerminationProtectionEnabled: bool, CreatedTimestamp: string, UpdatedTimestamp: string, KmsKeyId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.RestoreEventDataStore")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"EventDataStore": $event_data_store} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1978,6 +2025,7 @@ export def "restore-event-data-store" [
 #
 # POST /
 # operationId: StartImport
+# --ImportSource shape: {S3: record}
 export def "start-import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1995,16 +2043,17 @@ export def "start-import" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-36
-  --destinations: any
-  --import-source: any
-  --start-event-time: any
-  --end-event-time: any
-  --import-id: any
-]: any -> record<ImportId: record, Destinations: record, ImportSource: record<S3: record<S3LocationUri: record, S3BucketRegion: record, S3BucketAccessRoleArn: record>>, StartEventTime: record, EndEventTime: record, ImportStatus: record, CreatedTimestamp: record, UpdatedTimestamp: record> {
+  --x-amz-target: string@x-amz-target-completer-36 # required
+  --destinations: list<string> # The ARN of the destination event data store. Use this parameter for a new import.
+  --import-source: record # The import source. — shape: {S3: record}
+  --start-event-time: string # Use with EndEventTime to bound a StartImport request, and limit imported trail events to only those events logged within a specified time period. When you specify a time range, CloudTrail checks the prefix and log file names to verify the names contain a date between the specified StartEventTime and EndEventTime before attempting to import events. (format: date-time)
+  --end-event-time: string # Use with StartEventTime to bound a StartImport request, and limit imported trail events to only those events logged within a specified time period. When you specify a time range, CloudTrail checks the prefix and log file names to verify the names contain a date between the specified StartEventTime and EndEventTime before attempting to import events. (format: date-time)
+  --import-id: string # The ID of the import. Use this parameter when you are retrying an import.
+]: any -> record<ImportId: string, Destinations: list<string>, ImportSource: record<S3: record<S3LocationUri: string, S3BucketRegion: string, S3BucketAccessRoleArn: string>>, StartEventTime: string, EndEventTime: string, ImportStatus: string, CreatedTimestamp: string, UpdatedTimestamp: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.StartImport")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Destinations": $destinations, "ImportSource": $import_source, "StartEventTime": $start_event_time, "EndEventTime": $end_event_time, "ImportId": $import_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2047,12 +2096,13 @@ export def "start-logging" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-37
-  name: any
+  --x-amz-target: string@x-amz-target-completer-37 # required
+  name: string # Specifies the name or the CloudTrail ARN of the trail for which CloudTrail logs Amazon Web Services API calls. The following is the format of a trail ARN. arn:aws:cloudtrail:us-east-2:123456789012:trail/MyTrail
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.StartLogging")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2095,13 +2145,14 @@ export def "start-query" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-38
-  query_statement: any
-  --delivery-s3-uri: any
-]: any -> record<QueryId: record> {
+  --x-amz-target: string@x-amz-target-completer-38 # required
+  query_statement: string # The SQL code of your query.
+  --delivery-s3-uri: string # The URI for the S3 bucket where CloudTrail delivers the query results.
+]: any -> record<QueryId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.StartQuery")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"QueryStatement": $query_statement, "DeliveryS3Uri": $delivery_s3_uri} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2144,12 +2195,13 @@ export def "stop-import" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-39
-  import_id: any
-]: any -> record<ImportId: record, ImportSource: record<S3: record<S3LocationUri: record, S3BucketRegion: record, S3BucketAccessRoleArn: record>>, Destinations: record, ImportStatus: record, CreatedTimestamp: record, UpdatedTimestamp: record, StartEventTime: record, EndEventTime: record, ImportStatistics: record<PrefixesFound: record, PrefixesCompleted: record, FilesCompleted: record, EventsCompleted: record, FailedEntries: record>> {
+  --x-amz-target: string@x-amz-target-completer-39 # required
+  import_id: string # The ID of the import.
+]: any -> record<ImportId: string, ImportSource: record<S3: record<S3LocationUri: string, S3BucketRegion: string, S3BucketAccessRoleArn: string>>, Destinations: list<string>, ImportStatus: string, CreatedTimestamp: string, UpdatedTimestamp: string, StartEventTime: string, EndEventTime: string, ImportStatistics: record<PrefixesFound: int, PrefixesCompleted: int, FilesCompleted: int, EventsCompleted: int, FailedEntries: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.StopImport")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ImportId": $import_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2192,12 +2244,13 @@ export def "stop-logging" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-40
-  name: any
+  --x-amz-target: string@x-amz-target-completer-40 # required
+  name: string # Specifies the name or the CloudTrail ARN of the trail for which CloudTrail will stop logging Amazon Web Services API calls. The following is the format of a trail ARN. arn:aws:cloudtrail:us-east-2:123456789012:trail/MyTrail
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.StopLogging")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2223,6 +2276,7 @@ export def "stop-logging" [
 #
 # POST /
 # operationId: UpdateChannel
+# --Destinations item shape: {Type: "EVENT_DATA_STORE"|"AWS_SERVICE", Location: string}
 export def "update-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2240,14 +2294,15 @@ export def "update-channel" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-41
-  channel: any
-  --destinations: any
-  --name: any
-]: any -> record<ChannelArn: record, Name: record, Source: record, Destinations: record> {
+  --x-amz-target: string@x-amz-target-completer-41 # required
+  channel: string # The ARN or ID (the ARN suffix) of the channel that you want to update.
+  --destinations: list # The ARNs of event data stores that you want to log events arriving through the channel. — item shape: {Type: "EVENT_DATA_STORE"|"AWS_SERVICE", Location: string}
+  --name: string # Changes the name of the channel.
+]: any -> record<ChannelArn: string, Name: string, Source: string, Destinations: table<Type: string, Location: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.UpdateChannel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Channel": $channel, "Destinations": $destinations, "Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2273,6 +2328,7 @@ export def "update-channel" [
 #
 # POST /
 # operationId: UpdateEventDataStore
+# --AdvancedEventSelectors item shape: {Name?: string, FieldSelectors: list}
 export def "update-event-data-store" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2290,19 +2346,20 @@ export def "update-event-data-store" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-42
-  event_data_store: any
-  --name: any
-  --advanced-event-selectors: any
-  --multi-region-enabled: any
-  --organization-enabled: any
-  --retention-period: any
-  --termination-protection-enabled: any
-  --kms-key-id: any
-]: any -> record<EventDataStoreArn: record, Name: record, Status: record, AdvancedEventSelectors: record, MultiRegionEnabled: record, OrganizationEnabled: record, RetentionPeriod: record, TerminationProtectionEnabled: record, CreatedTimestamp: record, UpdatedTimestamp: record, KmsKeyId: record> {
+  --x-amz-target: string@x-amz-target-completer-42 # required
+  event_data_store: string # The ARN (or the ID suffix of the ARN) of the event data store that you want to update.
+  --name: string # The event data store name.
+  --advanced-event-selectors: list # The advanced event selectors used to select events for the event data store. You can configure up to five advanced event selectors for each event data store. — item shape: {Name?: string, FieldSelectors: list}
+  --multi-region-enabled: oneof<nothing, bool> # Specifies whether an event data store collects events from all regions, or only from the region in which it was created.
+  --organization-enabled: oneof<nothing, bool> # Specifies whether an event data store collects events logged for an organization in Organizations.
+  --retention-period: int # The retention period, in days.
+  --termination-protection-enabled: oneof<nothing, bool> # Indicates that termination protection is enabled and the event data store cannot be automatically deleted.
+  --kms-key-id: string # Specifies the KMS key ID to use to encrypt the events delivered by CloudTrail. The value can be an alias name prefixed by alias/, a fully specified ARN to an alias, a fully specified ARN to a key, or a globally unique identifier. Disabling or deleting the KMS key, or removing CloudTrail permissions on the key, prevents CloudTrail from logging events to the event data store, and prevents users from querying the data in the event data store that was encrypted with the key. After you associate an event data store with a KMS key, the KMS key cannot be removed or changed. Before you disable or delete a KMS key that you are using with an event data store, delete or back up your event data store. CloudTrail also supports KMS multi-Region keys. For more information about multi-Region keys, see Using multi-Region keys (https://docs.aws.amazon.com/kms/latest/developerguide/multi-region-keys-overview.html) in the Key Management Service Developer Guide. Examples: alias/MyAliasName arn:aws:kms:us-east-2:123456789012:alias/MyAliasName arn:aws:kms:us-east-2:123456789012:key/12345678-1234-1234-1234-123456789012 12345678-1234-1234-1234-123456789012
+]: any -> record<EventDataStoreArn: string, Name: string, Status: string, AdvancedEventSelectors: table<Name: string, FieldSelectors: list>, MultiRegionEnabled: bool, OrganizationEnabled: bool, RetentionPeriod: int, TerminationProtectionEnabled: bool, CreatedTimestamp: string, UpdatedTimestamp: string, KmsKeyId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.UpdateEventDataStore")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"EventDataStore": $event_data_store, "Name": $name, "AdvancedEventSelectors": $advanced_event_selectors, "MultiRegionEnabled": $multi_region_enabled, "OrganizationEnabled": $organization_enabled, "RetentionPeriod": $retention_period, "TerminationProtectionEnabled": $termination_protection_enabled, "KmsKeyId": $kms_key_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2345,22 +2402,23 @@ export def "update-trail" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-43
-  name: any
-  --s3-bucket-name: any
-  --s3-key-prefix: any
-  --sns-topic-name: any
-  --include-global-service-events: any
-  --is-multi-region-trail: any
-  --enable-log-file-validation: any
-  --cloud-watch-logs-log-group-arn: any
-  --cloud-watch-logs-role-arn: any
-  --kms-key-id: any
-  --is-organization-trail: any
-]: any -> record<Name: record, S3BucketName: record, S3KeyPrefix: record, SnsTopicName: record, SnsTopicARN: record, IncludeGlobalServiceEvents: record, IsMultiRegionTrail: record, TrailARN: record, LogFileValidationEnabled: record, CloudWatchLogsLogGroupArn: record, CloudWatchLogsRoleArn: record, KmsKeyId: record, IsOrganizationTrail: record> {
+  --x-amz-target: string@x-amz-target-completer-43 # required
+  name: string # Specifies the name of the trail or trail ARN. If Name is a trail name, the string must meet the following requirements: Contain only ASCII letters (a-z, A-Z), numbers (0-9), periods (.), underscores (_), or dashes (-) Start with a letter or number, and end with a letter or number Be between 3 and 128 characters Have no adjacent periods, underscores or dashes. Names like my-_namespace and my--namespace are not valid. Not be in IP address format (for example, 192.168.5.4) If Name is a trail ARN, it must be in the following format. arn:aws:cloudtrail:us-east-2:123456789012:trail/MyTrail
+  --s3-bucket-name: string # Specifies the name of the Amazon S3 bucket designated for publishing log files. See Amazon S3 Bucket Naming Requirements (https://docs.aws.amazon.com/awscloudtrail/latest/userguide/create_trail_naming_policy.html).
+  --s3-key-prefix: string # Specifies the Amazon S3 key prefix that comes after the name of the bucket you have designated for log file delivery. For more information, see Finding Your CloudTrail Log Files (https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-find-log-files.html). The maximum length is 200 characters.
+  --sns-topic-name: string # Specifies the name of the Amazon SNS topic defined for notification of log file delivery. The maximum length is 256 characters.
+  --include-global-service-events: oneof<nothing, bool> # Specifies whether the trail is publishing events from global services such as IAM to the log files.
+  --is-multi-region-trail: oneof<nothing, bool> # Specifies whether the trail applies only to the current region or to all regions. The default is false. If the trail exists only in the current region and this value is set to true, shadow trails (replications of the trail) will be created in the other regions. If the trail exists in all regions and this value is set to false, the trail will remain in the region where it was created, and its shadow trails in other regions will be deleted. As a best practice, consider using trails that log events in all regions.
+  --enable-log-file-validation: oneof<nothing, bool> # Specifies whether log file validation is enabled. The default is false. When you disable log file integrity validation, the chain of digest files is broken after one hour. CloudTrail does not create digest files for log files that were delivered during a period in which log file integrity validation was disabled. For example, if you enable log file integrity validation at noon on January 1, disable it at noon on January 2, and re-enable it at noon on January 10, digest files will not be created for the log files delivered from noon on January 2 to noon on January 10. The same applies whenever you stop CloudTrail logging or delete a trail.
+  --cloud-watch-logs-log-group-arn: string # Specifies a log group name using an Amazon Resource Name (ARN), a unique identifier that represents the log group to which CloudTrail logs are delivered. You must use a log group that exists in your account. Not required unless you specify CloudWatchLogsRoleArn.
+  --cloud-watch-logs-role-arn: string # Specifies the role for the CloudWatch Logs endpoint to assume to write to a user's log group. You must use a role that exists in your account.
+  --kms-key-id: string # Specifies the KMS key ID to use to encrypt the logs delivered by CloudTrail. The value can be an alias name prefixed by "alias/", a fully specified ARN to an alias, a fully specified ARN to a key, or a globally unique identifier. CloudTrail also supports KMS multi-Region keys. For more information about multi-Region keys, see Using multi-Region keys (https://docs.aws.amazon.com/kms/latest/developerguide/multi-region-keys-overview.html) in the Key Management Service Developer Guide. Examples: alias/MyAliasName arn:aws:kms:us-east-2:123456789012:alias/MyAliasName arn:aws:kms:us-east-2:123456789012:key/12345678-1234-1234-1234-123456789012 12345678-1234-1234-1234-123456789012
+  --is-organization-trail: oneof<nothing, bool> # Specifies whether the trail is applied to all accounts in an organization in Organizations, or only for the current Amazon Web Services account. The default is false, and cannot be true unless the call is made on behalf of an Amazon Web Services account that is the management account or delegated administrator account for an organization in Organizations. If the trail is not an organization trail and this is set to true, the trail will be created in all Amazon Web Services accounts that belong to the organization. If the trail is an organization trail and this is set to false, the trail will remain in the current Amazon Web Services account but be deleted from all member accounts in the organization.
+]: any -> record<Name: string, S3BucketName: string, S3KeyPrefix: string, SnsTopicName: string, SnsTopicARN: string, IncludeGlobalServiceEvents: bool, IsMultiRegionTrail: bool, TrailARN: string, LogFileValidationEnabled: bool, CloudWatchLogsLogGroupArn: string, CloudWatchLogsRoleArn: string, KmsKeyId: string, IsOrganizationTrail: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.UpdateTrail")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "S3BucketName": $s3_bucket_name, "S3KeyPrefix": $s3_key_prefix, "SnsTopicName": $sns_topic_name, "IncludeGlobalServiceEvents": $include_global_service_events, "IsMultiRegionTrail": $is_multi_region_trail, "EnableLogFileValidation": $enable_log_file_validation, "CloudWatchLogsLogGroupArn": $cloud_watch_logs_log_group_arn, "CloudWatchLogsRoleArn": $cloud_watch_logs_role_arn, "KmsKeyId": $kms_key_id, "IsOrganizationTrail": $is_organization_trail} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

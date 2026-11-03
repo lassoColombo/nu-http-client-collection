@@ -705,6 +705,7 @@ export def "put-v1-bundles-bundle-id-tracks" [
   let full_url = (build-url $base ({bundle_id: (encode-path-segment $bundle_id)} | format pattern "/v1/bundles/{bundle_id}/tracks") $auth.query)
   let req_body = {"parts_complete": $parts_complete, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "parts_complete") == null) { error make --unspanned { msg: "required body field 'parts_complete' missing: pass --parts-complete or pipe a record" } }
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
@@ -857,14 +858,17 @@ export def "v1reportsscores" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --interval: string@interval-completer # Duration of report periods. Default is month.
-  --score-field: string # A bundle/metadata field to use as a score. Ex. insights.spoken_words.listener_score.
-  --group-field: string # A metadata field by which to group scores, typically a user or team id field.
+  --interval: string@interval-completer # Duration of report periods. Default is month. (required)
+  --score-field: string # A bundle/metadata field to use as a score. Ex. insights.spoken_words.listener_score. (required)
+  --group-field: string # A metadata field by which to group scores, typically a user or team id field. (required)
   --filter: string # filter expression, typically programmatically generated based on input controls and data segregation rules etc. Up to 500 characters.
   --language: string@language-completer # Language to search in, specified with an RFC5646 code. Default is "en"
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($interval == null) { error make --unspanned { msg: "required query parameter 'interval' missing: pass --interval" } }
+  if ($score_field == null) { error make --unspanned { msg: "required query parameter 'score_field' missing: pass --score-field" } }
+  if ($group_field == null) { error make --unspanned { msg: "required query parameter 'group_field' missing: pass --group-field" } }
   let qp = [(serialize-qp "interval" $interval "scalar") (serialize-qp "score_field" $score_field "scalar") (serialize-qp "group_field" $group_field "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/reports/scores" $qp $auth.query)
   let accept_val = "application/hal+json"
@@ -897,13 +901,14 @@ export def "v1reportstrends" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --interval: string@interval-completer # Duration of report periods. Default is month.
+  --interval: string@interval-completer # Duration of report periods. Default is month. (required)
   --content: string # Content reported in each period. Zero or more of tracks, spoken_words, spoken_keywords. List is space or comma separated single string or an array of strings.
   --filter: string # filter expression, typically programmatically generated based on input controls and data segregation rules etc. Up to 500 characters.
   --language: string@language-completer # Language to search in, specified with an RFC5646 code. Default is "en"
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($interval == null) { error make --unspanned { msg: "required query parameter 'interval' missing: pass --interval" } }
   let qp = [(serialize-qp "interval" $interval "scalar") (serialize-qp "content" $content "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/reports/trends" $qp $auth.query)
   let accept_val = "application/hal+json"

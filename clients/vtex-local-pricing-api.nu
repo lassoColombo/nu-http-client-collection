@@ -1,6 +1,7 @@
 # Auto-generated client for Pricing API v1.0
 # Source: https://api.apis.guru/v2/specs/vtex.local/Pricing-API/1.0/openapi.json
-# Auth: --token flag or $env.PRICING_API_TOKEN
+# Auth (appKey): --token-appkey flag or $env.PRICING_API_APPKEY_TOKEN
+# Auth (appToken): --token-apptoken flag or $env.PRICING_API_APPTOKEN_TOKEN
 
 const BASE_URL = "https://vtex.local"
 
@@ -12,8 +13,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-vtex-api-appkey" => { {scheme: $scheme, headers: {X-VTEX-API-AppKey: $token_val}, query: "", location: "header"} }
-    "x-vtex-api-apptoken" => { {scheme: $scheme, headers: {X-VTEX-API-AppToken: $token_val}, query: "", location: "header"} }
+    "x-vtex-api-appkey" => { {scheme: $scheme, headers: {"X-VTEX-API-AppKey": $token_val}, query: "", location: "header"} }
+    "x-vtex-api-apptoken" => { {scheme: $scheme, headers: {"X-VTEX-API-AppToken": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -126,7 +127,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-appkey" "token-apptoken"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-pricing-config" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -161,11 +162,12 @@ export def "get-pricing-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Describes the type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
 ]: nothing -> record<blockAccount: bool, blockedRoutes: list<string>, defaultMarkup: int, hasMigrated: bool, hasOptionalBasePrice: bool, hasPriceInheritance: bool, migrationStatus: string, minimumMarkups: record, priceInheritance: string, priceTableLimit: int, priceTableSelectionStrategy: string, priceVariation: record<lowerLimit: int, upperLimit: int>, sellersToOverride: list<any>, tradePolicyConfigs: table<minimumMarkup: int, rulesShouldAffectListPrice: bool, tradePolicyId: string>> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PRICING_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PRICING_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default "https://api.vtex.com/DefaultParameterValue/pricing")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base "/pricing/config" $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -199,11 +201,12 @@ export def "get-pricingv2-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Describes the type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
 ]: nothing -> record<hasMigrated: bool, isActive: bool> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PRICING_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PRICING_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default "https://api.vtex.com/DefaultParameterValue/pricing")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base "/pricing/migration" $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -237,11 +240,12 @@ export def "getallpricetablesandrules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Describes the type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
 ]: nothing -> table<percentualModifier: int, rules: list<record>, tradePolicyId: string> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PRICING_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PRICING_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default "https://api.vtex.com/DefaultParameterValue/pricing")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base "/pricing/pipeline/catalog" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -276,12 +280,13 @@ export def "getrulesforapricetable" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Describes the type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
 ]: nothing -> record<percentualModifier: int, rules: table<context: record, id: float>, tradePolicyId: string> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PRICING_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PRICING_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default "https://api.vtex.com/DefaultParameterValue/pricing")
   if ($price_table_id | is-empty) { error make --unspanned { msg: "path parameter 'priceTableId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({price_table_id: (encode-path-segment $price_table_id)} | format pattern "/pricing/pipeline/catalog/{price_table_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -316,14 +321,15 @@ export def "put-pricing-pipeline-catalog-price-table-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Describes the type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
   rules: list # Array of rules for the price table. — item shape: {context: record, id: int, percentualModifier: float}
 ]: any -> any {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PRICING_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PRICING_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($price_table_id | is-empty) { error make --unspanned { msg: "path parameter 'priceTableId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({price_table_id: (encode-path-segment $price_table_id)} | format pattern "/pricing/pipeline/catalog/{price_table_id}") $auth.query)
   let req_body = {"rules": $rules} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -362,12 +368,14 @@ export def "delete-price" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Describes the type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PRICING_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PRICING_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/pricing/prices/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -402,12 +410,13 @@ export def "get-price" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Describes the type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
 ]: nothing -> record<basePrice: int, costPrice: int, fixedPrices: table<dateRange: record, listPrice: float, minQuantity: int, tradePolicyId: string, value: float>, itemId: string, listPrice: int, markup: int> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PRICING_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PRICING_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/pricing/prices/{item_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -443,8 +452,8 @@ export def "create-update-price-or-fixed-price" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
-  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
   base_price: float # SKU selling base price. If you decide to fill only the `basePrice` item, the `markup` and `costPrice` will be automatically generated to adapt to the number inserted in `basePrice`. (default: 100)
   --cost-price: float # SKU selling cost price. If you decide to fill the `costPrice` item, you must also fill the `markup` and `basePrice` will be automatically generated based on both values. (default: 35)
   --fixed-prices: list # item shape: {dateRange?: record, listPrice?: float, minQuantity: int, tradePolicyId: string, value: float}
@@ -455,6 +464,7 @@ export def "create-update-price-or-fixed-price" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PRICING_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PRICING_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/pricing/prices/{item_id}") $auth.query)
   let req_body = {"basePrice": $base_price, "costPrice": $cost_price, "fixedPrices": $fixed_prices, "listPrice": $list_price, "markup": $markup} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -494,16 +504,20 @@ export def "get-computed-pricebypricetable" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --category-ids: int # Category ID. (e.g. 1)
-  --brand-id: int # Brand ID. (e.g. 3)
-  --quantity: int # SKU quantity. (e.g. 2)
-  --content-type: string # Describes the type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --category-ids: int # Category ID. (required, e.g. 1)
+  --brand-id: int # Brand ID. (required, e.g. 3)
+  --quantity: int # SKU quantity. (required, e.g. 2)
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
 ]: nothing -> record<costPrice: float, listPrice: int, priceValidUntil: string, sellingPrice: float, tradePolicyId: string> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PRICING_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PRICING_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default "https://api.vtex.com/DefaultParameterValue/pricing")
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   if ($price_table_id | is-empty) { error make --unspanned { msg: "path parameter 'priceTableId' must be non-empty" } }
+  if ($category_ids == null) { error make --unspanned { msg: "required query parameter 'categoryIds' missing: pass --category-ids" } }
+  if ($brand_id == null) { error make --unspanned { msg: "required query parameter 'brandId' missing: pass --brand-id" } }
+  if ($quantity == null) { error make --unspanned { msg: "required query parameter 'quantity' missing: pass --quantity" } }
+  let content_type = ($content_type | default "application/json")
   let qp = [(serialize-qp "categoryIds" $category_ids "scalar") (serialize-qp "brandId" $brand_id "scalar") (serialize-qp "quantity" $quantity "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), price_table_id: (encode-path-segment $price_table_id)} | format pattern "/pricing/prices/{item_id}/computed/{price_table_id}") $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"
@@ -539,12 +553,13 @@ export def "get-fixed-prices" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
-  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
 ]: nothing -> table<dateRange: record<from: string, to: string>, listPrice: float, minQuantity: int, tradePolicyId: string, value: float> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PRICING_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PRICING_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/pricing/prices/{item_id}/fixed") $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -580,13 +595,14 @@ export def "deletefixedpricesonapricetableortradepolicy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Describes the type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PRICING_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PRICING_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   if ($price_table_id | is-empty) { error make --unspanned { msg: "path parameter 'priceTableId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), price_table_id: (encode-path-segment $price_table_id)} | format pattern "/pricing/prices/{item_id}/fixed/{price_table_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -622,13 +638,14 @@ export def "get-fixed-pricesonapricetable" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Describes the type of the content being sent.
-  --hdr-accept: string # e.g. application/json
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # required, e.g. application/json
 ]: nothing -> table<dateRange: record<from: string, to: string>, listPrice: float, minQuantity: int, tradePolicyId: string, value: float> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PRICING_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PRICING_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   if ($price_table_id | is-empty) { error make --unspanned { msg: "path parameter 'priceTableId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), price_table_id: (encode-path-segment $price_table_id)} | format pattern "/pricing/prices/{item_id}/fixed/{price_table_id}") $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -664,8 +681,8 @@ export def "createorupdatefixedpricesonpricetableortradepolicy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Describes the type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
   --body: list
 ]: any -> any {
   let input = $in
@@ -673,6 +690,8 @@ export def "createorupdatefixedpricesonpricetableortradepolicy" [
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   if ($price_table_id | is-empty) { error make --unspanned { msg: "path parameter 'priceTableId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), price_table_id: (encode-path-segment $price_table_id)} | format pattern "/pricing/prices/{item_id}/fixed/{price_table_id}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -710,11 +729,12 @@ export def "listpricetables" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Describes the type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
 ]: nothing -> list<string> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PRICING_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PRICING_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default "https://api.vtex.com/DefaultParameterValue/pricing")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base "/pricing/tables" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

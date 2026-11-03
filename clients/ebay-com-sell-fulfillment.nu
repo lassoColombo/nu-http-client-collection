@@ -1,4 +1,4 @@
-# Auto-generated client for Fulfillment API vv1.19.19
+# Auto-generated client for Fulfillment API v1.19.19
 # Source: https://api.apis.guru/v2/specs/ebay.com/sell-fulfillment/v1.19.19/openapi.json
 # Auth: --token flag or $env.FULFILLMENT_API_TOKEN
 
@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -581,12 +581,14 @@ export def "fetch-evidence-content" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --evidence-id: string # The identifier of the evidential file set. The identifier of an evidential file set for a payment dispute is returned under the evidence array in the getPaymentDispute response.Below is an example of the syntax to use for this query parameter:evidence_id=12345678
-  --file-id: string # The identifier of an evidential file. This file must belong to the evidential file set identified through the evidence_id query parameter. The identifier of each evidential file is returned under the evidence.files array in the getPaymentDispute response. Below is an example of the syntax to use for this query parameter:file_id=12345678
+  --evidence-id: string # The identifier of the evidential file set. The identifier of an evidential file set for a payment dispute is returned under the evidence array in the getPaymentDispute response.Below is an example of the syntax to use for this query parameter:evidence_id=12345678 (required)
+  --file-id: string # The identifier of an evidential file. This file must belong to the evidential file set identified through the evidence_id query parameter. The identifier of each evidential file is returned under the evidence.files array in the getPaymentDispute response. Below is an example of the syntax to use for this query parameter:file_id=12345678 (required)
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://apiz.ebay.com/sell/fulfillment/v1")
   if ($payment_dispute_id | is-empty) { error make --unspanned { msg: "path parameter 'payment_dispute_id' must be non-empty" } }
+  if ($evidence_id == null) { error make --unspanned { msg: "required query parameter 'evidence_id' missing: pass --evidence-id" } }
+  if ($file_id == null) { error make --unspanned { msg: "required query parameter 'file_id' missing: pass --file-id" } }
   let qp = [(serialize-qp "evidence_id" $evidence_id "scalar") (serialize-qp "file_id" $file_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({payment_dispute_id: (encode-path-segment $payment_dispute_id)} | format pattern "/payment_dispute/{payment_dispute_id}/fetch_evidence_content") $qp $auth.query)
   let accept_val = "application/octet-stream"

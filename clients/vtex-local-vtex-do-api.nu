@@ -1,6 +1,7 @@
 # Auto-generated client for VTEX Do API v1.0
 # Source: https://api.apis.guru/v2/specs/vtex.local/VTEX-Do-API/1.0/openapi.json
-# Auth: --token flag or $env.VTEX_DO_API_TOKEN
+# Auth (appKey): --token-appkey flag or $env.VTEX_DO_API_APPKEY_TOKEN
+# Auth (appToken): --token-apptoken flag or $env.VTEX_DO_API_APPTOKEN_TOKEN
 
 const BASE_URL = "https://vtex.local"
 
@@ -12,8 +13,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-vtex-api-appkey" => { {scheme: $scheme, headers: {X-VTEX-API-AppKey: $token_val}, query: "", location: "header"} }
-    "x-vtex-api-apptoken" => { {scheme: $scheme, headers: {X-VTEX-API-AppToken: $token_val}, query: "", location: "header"} }
+    "x-vtex-api-appkey" => { {scheme: $scheme, headers: {"X-VTEX-API-AppKey": $token_val}, query: "", location: "header"} }
+    "x-vtex-api-apptoken" => { {scheme: $scheme, headers: {"X-VTEX-API-AppToken": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -120,7 +121,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-appkey" "token-apptoken"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-notesbyorder-id" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -155,15 +156,16 @@ export def "get-notesbyorder-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --target-id: string # ID of the order. (e.g. 1172452900788-01)
+  --target-id: string # ID of the order. (required, e.g. 1172452900788-01)
   --per-page: int # Number of notes per page. Maximum: 30. (e.g. 20)
   --page: int # Number of the page to be retrieved. (e.g. 3)
   --reason: string # This parameter is relevant only for PII-compliant accounts. When sending requests to this endpoint, PII-compliant accounts can use this parameter to declare the reason for requesting unmasked data. Otherwise, this endpoint will return masked PII data. (e.g. data-validation)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (e.g. application/json)
-  --content-type: string # Type of the content being sent. (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o VTEX_DO_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o VTEX_DO_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  if ($target_id == null) { error make --unspanned { msg: "required query parameter 'target.id' missing: pass --target-id" } }
   let qp = [(serialize-qp "target.id" $target_id "scalar") (serialize-qp "perPage" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "reason" $reason "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/notes" $qp $auth.query)
   let accept_val = "application/json"
@@ -199,8 +201,8 @@ export def "new-note" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (e.g. application/json)
-  --content-type: string # Type of the content being sent. (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
   description: string # Note description. Maximum number of characters: 2000. (e.g. Order ID in the marketplace is 786-09.)
   domain: string # Note domain. (e.g. oms)
   target: record # Target. — shape: {id?: string, type?: string, url?: string}
@@ -247,8 +249,8 @@ export def "get-note" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --reason: string # This parameter is relevant only for PII-compliant accounts. When sending requests to this endpoint, PII-compliant accounts can use this parameter to declare the reason for requesting unmasked data. Otherwise, this endpoint will return masked PII data. (e.g. data-validation)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (e.g. application/json)
-  --content-type: string # Type of the content being sent. (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o VTEX_DO_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o VTEX_DO_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -293,8 +295,8 @@ export def "listtasksbyassignee" [
   --page: string # If you wish to list tasks by context, also insert the desired `page`. (e.g. {{page}})
   --per-page: string # If you wish to list tasks by context, also insert the desired `perPage` value. (e.g. {{desired number per page}})
   --status: string # If you wish to list tasks by context, also insert the desired `status`. (e.g. open)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (e.g. application/json)
-  --content-type: string # Type of the content being sent. (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o VTEX_DO_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o VTEX_DO_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -335,8 +337,8 @@ export def "new-task" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
   assignee: record # e.g. {email: frederico.santos@vtex.com.br, id: , name: } — shape: {email: string, id: string, name: string}
   context: string
   description: string
@@ -390,8 +392,8 @@ export def "get-task" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (e.g. application/json)
-  --content-type: string # Type of the content being sent. (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o VTEX_DO_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o VTEX_DO_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -430,8 +432,8 @@ export def "edit-task" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (e.g. application/json)
-  --content-type: string # Type of the content being sent. (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
   status: string
 ]: any -> any {
   let input = $in
@@ -476,8 +478,8 @@ export def "add-comment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (e.g. application/json)
-  --content-type: string # Type of the content being sent. (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
   text: string
 ]: any -> any {
   let input = $in

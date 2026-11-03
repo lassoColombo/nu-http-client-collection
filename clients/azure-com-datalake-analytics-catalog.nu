@@ -161,10 +161,11 @@ export def "catalog-list-acls" [
   --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<value: table<aceType: string, permission: string, principalId: string>, nextLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/catalog/usql/acl" $qp $auth.query)
   let accept_val = "application/json"
@@ -203,10 +204,11 @@ export def "catalog-list-databases" [
   --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<value: table<databaseName: string, computeAccountName: string, version: string>, nextLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/catalog/usql/databases" $qp $auth.query)
   let accept_val = "application/json"
@@ -240,11 +242,12 @@ export def "catalog-get-database" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<databaseName: string, computeAccountName: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name)} | format pattern "/catalog/usql/databases/{database_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -284,11 +287,12 @@ export def "catalog-list-acls-by-database" [
   --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<value: table<aceType: string, permission: string, principalId: string>, nextLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name)} | format pattern "/catalog/usql/databases/{database_name}/acl") $qp $auth.query)
   let accept_val = "application/json"
@@ -328,11 +332,12 @@ export def "catalog-list-assemblies" [
   --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<value: table<assemblyClrName: string, clrName: string, databaseName: string, computeAccountName: string, version: string>, nextLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name)} | format pattern "/catalog/usql/databases/{database_name}/assemblies") $qp $auth.query)
   let accept_val = "application/json"
@@ -367,12 +372,13 @@ export def "catalog-get-assembly" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<assemblyName: string, clrName: string, databaseName: string, dependencies: table<entityId: record>, files: table<contentPath: string, originalPath: string, type: string>, isUserDefined: bool, isVisible: bool, computeAccountName: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($assembly_name | is-empty) { error make --unspanned { msg: "path parameter 'assemblyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), assembly_name: (encode-path-segment $assembly_name)} | format pattern "/catalog/usql/databases/{database_name}/assemblies/{assembly_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -412,11 +418,12 @@ export def "catalog-list-credentials" [
   --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<value: table<credentialName: string, computeAccountName: string, version: string>, nextLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name)} | format pattern "/catalog/usql/databases/{database_name}/credentials") $qp $auth.query)
   let accept_val = "application/json"
@@ -451,12 +458,13 @@ export def "catalog-get-credential" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<credentialName: string, computeAccountName: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($credential_name | is-empty) { error make --unspanned { msg: "path parameter 'credentialName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), credential_name: (encode-path-segment $credential_name)} | format pattern "/catalog/usql/databases/{database_name}/credentials/{credential_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -491,7 +499,7 @@ export def "catalog-update-credential" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --new-password: string # the new password for the credential and user with access to the data source.
   --password: string # the current password for the credential and user with access to the data source. This is required if the requester is not the account owner.
   --uri: string # the URI identifier for the data source this credential can connect to in the format :
@@ -502,6 +510,7 @@ export def "catalog-update-credential" [
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($credential_name | is-empty) { error make --unspanned { msg: "path parameter 'credentialName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), credential_name: (encode-path-segment $credential_name)} | format pattern "/catalog/usql/databases/{database_name}/credentials/{credential_name}") $qp $auth.query)
   let req_body = {"newPassword": $new_password, "password": $password, "uri": $uri, "userId": $user_id} | compact
@@ -539,7 +548,7 @@ export def "catalog-delete-credential" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --cascade: oneof<nothing, bool> # Indicates if the delete should be a cascading delete (which deletes all resources dependent on the credential as well as the credential) or not. If false will fail if there are any resources relying on the credential. (default: false)
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --password: string # the current password for the credential and user with access to the data source. This is required if the requester is not the account owner.
 ]: any -> any {
   let input = $in
@@ -547,6 +556,7 @@ export def "catalog-delete-credential" [
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($credential_name | is-empty) { error make --unspanned { msg: "path parameter 'credentialName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "cascade" $cascade "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), credential_name: (encode-path-segment $credential_name)} | format pattern "/catalog/usql/databases/{database_name}/credentials/{credential_name}") $qp $auth.query)
   let req_body = {"password": $password} | compact
@@ -583,7 +593,7 @@ export def "catalog-create-credential" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   password: string # the password for the credential and user with access to the data source.
   uri: string # the URI identifier for the data source this credential can connect to in the format :
   user_id: string # the object identifier for the user associated with this credential with access to the data source.
@@ -593,6 +603,7 @@ export def "catalog-create-credential" [
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($credential_name | is-empty) { error make --unspanned { msg: "path parameter 'credentialName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), credential_name: (encode-path-segment $credential_name)} | format pattern "/catalog/usql/databases/{database_name}/credentials/{credential_name}") $qp $auth.query)
   let req_body = {"password": $password, "uri": $uri, "userId": $user_id} | compact
@@ -634,11 +645,12 @@ export def "catalog-list-external-data-sources" [
   --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<value: table<databaseName: string, externalDataSourceName: string, provider: string, providerString: string, pushdownTypes: list, computeAccountName: string, version: string>, nextLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name)} | format pattern "/catalog/usql/databases/{database_name}/externaldatasources") $qp $auth.query)
   let accept_val = "application/json"
@@ -673,12 +685,13 @@ export def "catalog-get-external-data-source" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<databaseName: string, externalDataSourceName: string, provider: string, providerString: string, pushdownTypes: list<string>, computeAccountName: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($external_data_source_name | is-empty) { error make --unspanned { msg: "path parameter 'externalDataSourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), external_data_source_name: (encode-path-segment $external_data_source_name)} | format pattern "/catalog/usql/databases/{database_name}/externaldatasources/{external_data_source_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -718,11 +731,12 @@ export def "catalog-list-schemas" [
   --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<value: table<databaseName: string, schemaName: string, computeAccountName: string, version: string>, nextLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name)} | format pattern "/catalog/usql/databases/{database_name}/schemas") $qp $auth.query)
   let accept_val = "application/json"
@@ -757,12 +771,13 @@ export def "catalog-get-schema" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<databaseName: string, schemaName: string, computeAccountName: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($schema_name | is-empty) { error make --unspanned { msg: "path parameter 'schemaName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), schema_name: (encode-path-segment $schema_name)} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -803,12 +818,13 @@ export def "catalog-list-packages" [
   --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<value: table<databaseName: string, definition: string, packageName: string, schemaName: string, computeAccountName: string, version: string>, nextLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($schema_name | is-empty) { error make --unspanned { msg: "path parameter 'schemaName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), schema_name: (encode-path-segment $schema_name)} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/packages") $qp $auth.query)
   let accept_val = "application/json"
@@ -844,13 +860,14 @@ export def "catalog-get-package" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<databaseName: string, definition: string, packageName: string, schemaName: string, computeAccountName: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($schema_name | is-empty) { error make --unspanned { msg: "path parameter 'schemaName' must be non-empty" } }
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), schema_name: (encode-path-segment $schema_name), package_name: (encode-path-segment $package_name)} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/packages/{package_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -891,12 +908,13 @@ export def "catalog-list-procedures" [
   --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<value: table<databaseName: string, definition: string, procName: string, schemaName: string, computeAccountName: string, version: string>, nextLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($schema_name | is-empty) { error make --unspanned { msg: "path parameter 'schemaName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), schema_name: (encode-path-segment $schema_name)} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/procedures") $qp $auth.query)
   let accept_val = "application/json"
@@ -932,13 +950,14 @@ export def "catalog-get-procedure" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<databaseName: string, definition: string, procName: string, schemaName: string, computeAccountName: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($schema_name | is-empty) { error make --unspanned { msg: "path parameter 'schemaName' must be non-empty" } }
   if ($procedure_name | is-empty) { error make --unspanned { msg: "path parameter 'procedureName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), schema_name: (encode-path-segment $schema_name), procedure_name: (encode-path-segment $procedure_name)} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/procedures/{procedure_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -979,12 +998,13 @@ export def "catalog-list-table-statistics-by-database-and-schema" [
   --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<value: table<colNames: list, createTime: string, databaseName: string, filterDefinition: string, hasFilter: bool, isAutoCreated: bool, isUserCreated: bool, schemaName: string, statDataPath: string, statisticsName: string, tableName: string, updateTime: string, userStatName: string, computeAccountName: string, version: string>, nextLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($schema_name | is-empty) { error make --unspanned { msg: "path parameter 'schemaName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), schema_name: (encode-path-segment $schema_name)} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/statistics") $qp $auth.query)
   let accept_val = "application/json"
@@ -1026,12 +1046,13 @@ export def "catalog-list-tables" [
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
   --basic: oneof<nothing, bool> # The basic switch indicates what level of information to return when listing tables. When basic is true, only database_name, schema_name, table_name and version are returned for each table, otherwise all table metadata is returned. By default, it is false. Optional. (default: false)
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<value: table<columnList: list, databaseName: string, distributionInfo: record, externalTable: record, indexList: list, partitionKeyList: list, schemaName: string, tableName: string, computeAccountName: string, version: string>, nextLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($schema_name | is-empty) { error make --unspanned { msg: "path parameter 'schemaName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "basic" $basic "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), schema_name: (encode-path-segment $schema_name)} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/tables") $qp $auth.query)
   let accept_val = "application/json"
@@ -1067,13 +1088,14 @@ export def "catalog-get-table" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<columnList: table<name: string, type: string>, databaseName: string, distributionInfo: record<count: int, dynamicCount: int, keys: list<record>, type: int>, externalTable: record<dataSource: record<name: record, version: string>, tableName: string>, indexList: table<columns: list, distributionInfo: record, indexId: int, indexKeys: list, isColumnstore: bool, isUnique: bool, name: string, partitionFunction: string, partitionKeyList: list, streamNames: list>, partitionKeyList: list<string>, schemaName: string, tableName: string, computeAccountName: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($schema_name | is-empty) { error make --unspanned { msg: "path parameter 'schemaName' must be non-empty" } }
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), schema_name: (encode-path-segment $schema_name), table_name: (encode-path-segment $table_name)} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/tables/{table_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1115,13 +1137,14 @@ export def "catalog-list-table-partitions" [
   --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<value: table<createDate: string, databaseName: string, indexId: int, label: list, parentName: record, partitionName: string, schemaName: string, computeAccountName: string, version: string>, nextLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($schema_name | is-empty) { error make --unspanned { msg: "path parameter 'schemaName' must be non-empty" } }
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), schema_name: (encode-path-segment $schema_name), table_name: (encode-path-segment $table_name)} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/tables/{table_name}/partitions") $qp $auth.query)
   let accept_val = "application/json"
@@ -1158,7 +1181,7 @@ export def "catalog-get-table-partition" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<createDate: string, databaseName: string, indexId: int, label: list<string>, parentName: record<firstPart: string, secondPart: string, server: string, thirdPart: string>, partitionName: string, schemaName: string, computeAccountName: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1166,6 +1189,7 @@ export def "catalog-get-table-partition" [
   if ($schema_name | is-empty) { error make --unspanned { msg: "path parameter 'schemaName' must be non-empty" } }
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
   if ($partition_name | is-empty) { error make --unspanned { msg: "path parameter 'partitionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), schema_name: (encode-path-segment $schema_name), table_name: (encode-path-segment $table_name), partition_name: (encode-path-segment $partition_name)} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/tables/{table_name}/partitions/{partition_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1204,7 +1228,7 @@ export def "catalog-preview-table-partition" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-rows: int # The maximum number of preview rows to be retrieved.Rows returned may be less than or equal to this number depending on row sizes and number of rows in the partition. (format: int64)
   --max-columns: int # The maximum number of columns to be retrieved. (format: int64)
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<rows: list<list<string>>, schema: table<name: string, type: string>, totalColumnCount: int, totalRowCount: int, truncated: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1212,6 +1236,7 @@ export def "catalog-preview-table-partition" [
   if ($schema_name | is-empty) { error make --unspanned { msg: "path parameter 'schemaName' must be non-empty" } }
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
   if ($partition_name | is-empty) { error make --unspanned { msg: "path parameter 'partitionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "maxRows" $max_rows "scalar") (serialize-qp "maxColumns" $max_columns "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), schema_name: (encode-path-segment $schema_name), table_name: (encode-path-segment $table_name), partition_name: (encode-path-segment $partition_name)} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/tables/{table_name}/partitions/{partition_name}/previewrows") $qp $auth.query)
   let accept_val = "application/json"
@@ -1249,13 +1274,14 @@ export def "catalog-preview-table" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-rows: int # The maximum number of preview rows to be retrieved. Rows returned may be less than or equal to this number depending on row sizes and number of rows in the table. (format: int64)
   --max-columns: int # The maximum number of columns to be retrieved. (format: int64)
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<rows: list<list<string>>, schema: table<name: string, type: string>, totalColumnCount: int, totalRowCount: int, truncated: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($schema_name | is-empty) { error make --unspanned { msg: "path parameter 'schemaName' must be non-empty" } }
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "maxRows" $max_rows "scalar") (serialize-qp "maxColumns" $max_columns "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), schema_name: (encode-path-segment $schema_name), table_name: (encode-path-segment $table_name)} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/tables/{table_name}/previewrows") $qp $auth.query)
   let accept_val = "application/json"
@@ -1297,13 +1323,14 @@ export def "catalog-list-table-statistics" [
   --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<value: table<colNames: list, createTime: string, databaseName: string, filterDefinition: string, hasFilter: bool, isAutoCreated: bool, isUserCreated: bool, schemaName: string, statDataPath: string, statisticsName: string, tableName: string, updateTime: string, userStatName: string, computeAccountName: string, version: string>, nextLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($schema_name | is-empty) { error make --unspanned { msg: "path parameter 'schemaName' must be non-empty" } }
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), schema_name: (encode-path-segment $schema_name), table_name: (encode-path-segment $table_name)} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/tables/{table_name}/statistics") $qp $auth.query)
   let accept_val = "application/json"
@@ -1340,7 +1367,7 @@ export def "catalog-get-table-statistic" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<colNames: list<string>, createTime: string, databaseName: string, filterDefinition: string, hasFilter: bool, isAutoCreated: bool, isUserCreated: bool, schemaName: string, statDataPath: string, statisticsName: string, tableName: string, updateTime: string, userStatName: string, computeAccountName: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1348,6 +1375,7 @@ export def "catalog-get-table-statistic" [
   if ($schema_name | is-empty) { error make --unspanned { msg: "path parameter 'schemaName' must be non-empty" } }
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
   if ($statistics_name | is-empty) { error make --unspanned { msg: "path parameter 'statisticsName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), schema_name: (encode-path-segment $schema_name), table_name: (encode-path-segment $table_name), statistics_name: (encode-path-segment $statistics_name)} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/tables/{table_name}/statistics/{statistics_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1389,13 +1417,14 @@ export def "catalog-list-table-fragments" [
   --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<value: table<createDate: string, fragmentId: string, indexId: int, parentId: string, rowCount: int, size: int, streamPath: string>, nextLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($schema_name | is-empty) { error make --unspanned { msg: "path parameter 'schemaName' must be non-empty" } }
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), schema_name: (encode-path-segment $schema_name), table_name: (encode-path-segment $table_name)} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/tables/{table_name}/tablefragments") $qp $auth.query)
   let accept_val = "application/json"
@@ -1436,12 +1465,13 @@ export def "catalog-list-table-types" [
   --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
-  --api-version: string # Client Api Version.
-]: nothing -> record<value: table<columns: list, cSharpName: string, databaseName: string, fullCSharpName: string, isAssemblyType: bool, isComplexType: bool, isNullable: bool, isTableType: bool, isUserDefined: bool, principalId: int, schemaId: int, schemaName: string, systemTypeId: int, typeFamily: string, typeName: string, userTypeId: int>, nextLink: string> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<value: table<columns: list, cSharpName: string, databaseName: string, fullCSharpName: string, isAssemblyType: bool, isComplexType: bool, isNullable: bool, isTableType: bool, isUserDefined: bool, principalId: int, schemaId: int, schemaName: string, systemTypeId: int, typeFamily: string, typeName: string, userTypeId: int, computeAccountName: string, version: string>, nextLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($schema_name | is-empty) { error make --unspanned { msg: "path parameter 'schemaName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), schema_name: (encode-path-segment $schema_name)} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/tabletypes") $qp $auth.query)
   let accept_val = "application/json"
@@ -1477,13 +1507,14 @@ export def "catalog-get-table-type" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<columns: table<name: string, type: string>, cSharpName: string, databaseName: string, fullCSharpName: string, isAssemblyType: bool, isComplexType: bool, isNullable: bool, isTableType: bool, isUserDefined: bool, principalId: int, schemaId: int, schemaName: string, systemTypeId: int, typeFamily: string, typeName: string, userTypeId: int> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<columns: table<name: string, type: string>, cSharpName: string, databaseName: string, fullCSharpName: string, isAssemblyType: bool, isComplexType: bool, isNullable: bool, isTableType: bool, isUserDefined: bool, principalId: int, schemaId: int, schemaName: string, systemTypeId: int, typeFamily: string, typeName: string, userTypeId: int, computeAccountName: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($schema_name | is-empty) { error make --unspanned { msg: "path parameter 'schemaName' must be non-empty" } }
   if ($table_type_name | is-empty) { error make --unspanned { msg: "path parameter 'tableTypeName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), schema_name: (encode-path-segment $schema_name), table_type_name: (encode-path-segment $table_type_name)} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/tabletypes/{table_type_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1524,12 +1555,13 @@ export def "catalog-list-table-valued-functions" [
   --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<value: table<databaseName: string, definition: string, schemaName: string, tvfName: string, computeAccountName: string, version: string>, nextLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($schema_name | is-empty) { error make --unspanned { msg: "path parameter 'schemaName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), schema_name: (encode-path-segment $schema_name)} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/tablevaluedfunctions") $qp $auth.query)
   let accept_val = "application/json"
@@ -1565,13 +1597,14 @@ export def "catalog-get-table-valued-function" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<databaseName: string, definition: string, schemaName: string, tvfName: string, computeAccountName: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($schema_name | is-empty) { error make --unspanned { msg: "path parameter 'schemaName' must be non-empty" } }
   if ($table_valued_function_name | is-empty) { error make --unspanned { msg: "path parameter 'tableValuedFunctionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), schema_name: (encode-path-segment $schema_name), table_valued_function_name: (encode-path-segment $table_valued_function_name)} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/tablevaluedfunctions/{table_valued_function_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1612,12 +1645,13 @@ export def "catalog-list-types" [
   --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<value: table<cSharpName: string, databaseName: string, fullCSharpName: string, isAssemblyType: bool, isComplexType: bool, isNullable: bool, isTableType: bool, isUserDefined: bool, principalId: int, schemaId: int, schemaName: string, systemTypeId: int, typeFamily: string, typeName: string, userTypeId: int, computeAccountName: string, version: string>, nextLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($schema_name | is-empty) { error make --unspanned { msg: "path parameter 'schemaName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), schema_name: (encode-path-segment $schema_name)} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/types") $qp $auth.query)
   let accept_val = "application/json"
@@ -1658,12 +1692,13 @@ export def "catalog-list-views" [
   --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<value: table<databaseName: string, definition: string, schemaName: string, viewName: string, computeAccountName: string, version: string>, nextLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($schema_name | is-empty) { error make --unspanned { msg: "path parameter 'schemaName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), schema_name: (encode-path-segment $schema_name)} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/views") $qp $auth.query)
   let accept_val = "application/json"
@@ -1699,13 +1734,14 @@ export def "catalog-get-view" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<databaseName: string, definition: string, schemaName: string, viewName: string, computeAccountName: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($schema_name | is-empty) { error make --unspanned { msg: "path parameter 'schemaName' must be non-empty" } }
   if ($view_name | is-empty) { error make --unspanned { msg: "path parameter 'viewName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), schema_name: (encode-path-segment $schema_name), view_name: (encode-path-segment $view_name)} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/views/{view_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1741,11 +1777,12 @@ export def "catalog-delete-all-secrets" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name)} | format pattern "/catalog/usql/databases/{database_name}/secrets") $qp $auth.query)
   let accept_val = "application/json"
@@ -1782,12 +1819,13 @@ export def "catalog-delete-secret" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($secret_name | is-empty) { error make --unspanned { msg: "path parameter 'secretName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), secret_name: (encode-path-segment $secret_name)} | format pattern "/catalog/usql/databases/{database_name}/secrets/{secret_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1824,12 +1862,13 @@ export def "catalog-get-secret" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<creationTime: string, databaseName: string, password: string, secretName: string, uri: string, computeAccountName: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($secret_name | is-empty) { error make --unspanned { msg: "path parameter 'secretName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), secret_name: (encode-path-segment $secret_name)} | format pattern "/catalog/usql/databases/{database_name}/secrets/{secret_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1866,7 +1905,7 @@ export def "catalog-update-secret" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   password: string # the password for the secret to pass in
   --uri: string # the URI identifier for the secret in the format :
 ]: any -> any {
@@ -1875,6 +1914,7 @@ export def "catalog-update-secret" [
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($secret_name | is-empty) { error make --unspanned { msg: "path parameter 'secretName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), secret_name: (encode-path-segment $secret_name)} | format pattern "/catalog/usql/databases/{database_name}/secrets/{secret_name}") $qp $auth.query)
   let req_body = {"password": $password, "uri": $uri} | compact
@@ -1913,7 +1953,7 @@ export def "catalog-create-secret" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   password: string # the password for the secret to pass in
   --uri: string # the URI identifier for the secret in the format :
 ]: any -> any {
@@ -1922,6 +1962,7 @@ export def "catalog-create-secret" [
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($secret_name | is-empty) { error make --unspanned { msg: "path parameter 'secretName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), secret_name: (encode-path-segment $secret_name)} | format pattern "/catalog/usql/databases/{database_name}/secrets/{secret_name}") $qp $auth.query)
   let req_body = {"password": $password, "uri": $uri} | compact
@@ -1963,11 +2004,12 @@ export def "catalog-list-table-statistics-by-database" [
   --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<value: table<colNames: list, createTime: string, databaseName: string, filterDefinition: string, hasFilter: bool, isAutoCreated: bool, isUserCreated: bool, schemaName: string, statDataPath: string, statisticsName: string, tableName: string, updateTime: string, userStatName: string, computeAccountName: string, version: string>, nextLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name)} | format pattern "/catalog/usql/databases/{database_name}/statistics") $qp $auth.query)
   let accept_val = "application/json"
@@ -2008,11 +2050,12 @@ export def "catalog-list-tables-by-database" [
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
   --basic: oneof<nothing, bool> # The basic switch indicates what level of information to return when listing tables. When basic is true, only database_name, schema_name, table_name and version are returned for each table, otherwise all table metadata is returned. By default, it is false (default: false)
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<value: table<columnList: list, databaseName: string, distributionInfo: record, externalTable: record, indexList: list, partitionKeyList: list, schemaName: string, tableName: string, computeAccountName: string, version: string>, nextLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "basic" $basic "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name)} | format pattern "/catalog/usql/databases/{database_name}/tables") $qp $auth.query)
   let accept_val = "application/json"
@@ -2052,11 +2095,12 @@ export def "catalog-list-table-valued-functions-by-database" [
   --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<value: table<databaseName: string, definition: string, schemaName: string, tvfName: string, computeAccountName: string, version: string>, nextLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name)} | format pattern "/catalog/usql/databases/{database_name}/tablevaluedfunctions") $qp $auth.query)
   let accept_val = "application/json"
@@ -2096,11 +2140,12 @@ export def "catalog-list-views-by-database" [
   --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<value: table<databaseName: string, definition: string, schemaName: string, viewName: string, computeAccountName: string, version: string>, nextLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name)} | format pattern "/catalog/usql/databases/{database_name}/views") $qp $auth.query)
   let accept_val = "application/json"

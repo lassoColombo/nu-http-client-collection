@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -148,12 +148,13 @@ export def "assessments-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version for the operation
-]: nothing -> record<error: record<code: string, message: string>> {
+  --api-version: string # API version for the operation (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   if ($assessment_name | is-empty) { error make --unspanned { msg: "path parameter 'assessmentName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id), assessment_name: (encode-path-segment $assessment_name)} | format pattern "/{resource_id}/providers/Microsoft.Security/assessments/{assessment_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -188,13 +189,14 @@ export def "assessments-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version for the operation
+  --api-version: string # API version for the operation (required)
   --expand: string@expand-completer # OData expand. Optional.
-]: nothing -> record<properties: record<additionalData: record, displayName: string, links: record<azurePortalUri: string>, metadata: record<assessmentType: string, category: list, description: string, displayName: string, implementationEffort: string, partnerData: record, policyDefinitionId: string, preview: bool, remediationDescription: string, severity: string, threats: list, userImpact: string>, partnersData: record<secret: string>, resourceDetails: record<source: string>, status: record<cause: string, code: string, description: string>>> {
+]: nothing -> record<properties: record<additionalData: record, displayName: string, links: record<azurePortalUri: string>, metadata: record<assessmentType: string, category: list, description: string, displayName: string, implementationEffort: string, partnerData: record, policyDefinitionId: string, preview: bool, remediationDescription: string, severity: string, threats: list, userImpact: string>, partnersData: record<secret: string>, resourceDetails: record<source: string>, status: record<cause: string, code: string, description: string>>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   if ($assessment_name | is-empty) { error make --unspanned { msg: "path parameter 'assessmentName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id), assessment_name: (encode-path-segment $assessment_name)} | format pattern "/{resource_id}/providers/Microsoft.Security/assessments/{assessment_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -230,14 +232,15 @@ export def "assessments-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version for the operation
+  --api-version: string # API version for the operation (required)
   --properties: record # Describes properties of an assessment. — shape: {additionalData?: record, metadata?: record, partnersData?: record, resourceDetails: record, status: record}
-]: any -> record<properties: record<additionalData: record, displayName: string, links: record<azurePortalUri: string>, metadata: record<assessmentType: string, category: list, description: string, displayName: string, implementationEffort: string, partnerData: record, policyDefinitionId: string, preview: bool, remediationDescription: string, severity: string, threats: list, userImpact: string>, partnersData: record<secret: string>, resourceDetails: record<source: string>, status: record<cause: string, code: string, description: string>>> {
+]: any -> record<properties: record<additionalData: record, displayName: string, links: record<azurePortalUri: string>, metadata: record<assessmentType: string, category: list, description: string, displayName: string, implementationEffort: string, partnerData: record, policyDefinitionId: string, preview: bool, remediationDescription: string, severity: string, threats: list, userImpact: string>, partnersData: record<secret: string>, resourceDetails: record<source: string>, status: record<cause: string, code: string, description: string>>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   if ($assessment_name | is-empty) { error make --unspanned { msg: "path parameter 'assessmentName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id), assessment_name: (encode-path-segment $assessment_name)} | format pattern "/{resource_id}/providers/Microsoft.Security/assessments/{assessment_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -273,11 +276,12 @@ export def "assessments-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version for the operation
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API version for the operation (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope)} | format pattern "/{scope}/providers/Microsoft.Security/assessments") $qp $auth.query)
   let accept_val = "application/json"

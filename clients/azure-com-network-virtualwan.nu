@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -159,11 +159,12 @@ export def "p2s-vpn-gateways-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/p2svpnGateways") $qp $auth.query)
   let accept_val = "application/json"
@@ -197,11 +198,12 @@ export def "virtual-hubs-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/virtualHubs") $qp $auth.query)
   let accept_val = "application/json"
@@ -235,11 +237,12 @@ export def "virtual-wans-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/virtualWans") $qp $auth.query)
   let accept_val = "application/json"
@@ -273,11 +276,12 @@ export def "vpn-gateways-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/vpnGateways") $qp $auth.query)
   let accept_val = "application/json"
@@ -311,11 +315,12 @@ export def "vpn-sites-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/vpnSites") $qp $auth.query)
   let accept_val = "application/json"
@@ -350,12 +355,13 @@ export def "p2s-vpn-gateways-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/p2svpnGateways") $qp $auth.query)
   let accept_val = "application/json"
@@ -391,13 +397,14 @@ export def "p2s-vpn-gateways-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
-]: nothing -> record<code: string, details: table<code: string, message: string, target: string>, innerError: string, message: string, target: string> {
+  --api-version: string # Client API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'gatewayName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gateway_name: (encode-path-segment $gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/p2svpnGateways/{gateway_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -433,13 +440,14 @@ export def "p2s-vpn-gateways-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<etag: string, properties: record<customRoutes: record<addressPrefixes: list>, p2SVpnServerConfiguration: record<id: string>, provisioningState: string, virtualHub: record<id: string>, vpnClientAddressPool: record<addressPrefixes: list>, vpnClientConnectionHealth: record<allocatedIpAddresses: list, totalEgressBytesTransferred: int, totalIngressBytesTransferred: int, vpnClientConnectionsCount: int>, vpnGatewayScaleUnit: int>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'gatewayName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gateway_name: (encode-path-segment $gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/p2svpnGateways/{gateway_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -475,7 +483,7 @@ export def "p2s-vpn-gateways-update-tags" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --tags: record # Resource tags.
 ]: any -> record<etag: string, properties: record<customRoutes: record<addressPrefixes: list>, p2SVpnServerConfiguration: record<id: string>, provisioningState: string, virtualHub: record<id: string>, vpnClientAddressPool: record<addressPrefixes: list>, vpnClientConnectionHealth: record<allocatedIpAddresses: list, totalEgressBytesTransferred: int, totalIngressBytesTransferred: int, vpnClientConnectionsCount: int>, vpnGatewayScaleUnit: int>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
@@ -484,6 +492,7 @@ export def "p2s-vpn-gateways-update-tags" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'gatewayName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gateway_name: (encode-path-segment $gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/p2svpnGateways/{gateway_name}") $qp $auth.query)
   let req_body = {"tags": $tags} | compact
@@ -522,7 +531,7 @@ export def "p2s-vpn-gateways-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --properties: any # Parameters for P2SVpnGateway. — shape: {customRoutes?: any, p2SVpnServerConfiguration?: any, virtualHub?: any, vpnClientAddressPool?: any, vpnClientConnectionHealth?: any, vpnGatewayScaleUnit?: int}
   --id: string # Resource ID.
   location: string # Resource location.
@@ -534,6 +543,7 @@ export def "p2s-vpn-gateways-create-or-update" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'gatewayName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gateway_name: (encode-path-segment $gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/p2svpnGateways/{gateway_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "id": $id, "location": $location, "tags": $tags} | compact
@@ -571,7 +581,7 @@ export def "p2s-vpn-gateways-generate-vpn-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --authentication-method: string@authentication-method-completer # VPN client authentication method.
 ]: any -> record<profileUrl: string> {
   let input = $in
@@ -580,6 +590,7 @@ export def "p2s-vpn-gateways-generate-vpn-profile" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'gatewayName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gateway_name: (encode-path-segment $gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/p2svpnGateways/{gateway_name}/generatevpnprofile") $qp $auth.query)
   let req_body = {"authenticationMethod": $authentication_method} | compact
@@ -617,13 +628,14 @@ export def "p2s-vpn-gateways-get-p2s-vpn-connection-health" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<etag: string, properties: record<customRoutes: record<addressPrefixes: list>, p2SVpnServerConfiguration: record<id: string>, provisioningState: string, virtualHub: record<id: string>, vpnClientAddressPool: record<addressPrefixes: list>, vpnClientConnectionHealth: record<allocatedIpAddresses: list, totalEgressBytesTransferred: int, totalIngressBytesTransferred: int, vpnClientConnectionsCount: int>, vpnGatewayScaleUnit: int>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'gatewayName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gateway_name: (encode-path-segment $gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/p2svpnGateways/{gateway_name}/getP2sVpnConnectionHealth") $qp $auth.query)
   let accept_val = "application/json"
@@ -658,12 +670,13 @@ export def "virtual-hubs-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualHubs") $qp $auth.query)
   let accept_val = "application/json"
@@ -699,13 +712,14 @@ export def "virtual-hubs-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
-]: nothing -> record<code: string, details: table<code: string, message: string, target: string>, innerError: string, message: string, target: string> {
+  --api-version: string # Client API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_hub_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualHubName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_hub_name: (encode-path-segment $virtual_hub_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualHubs/{virtual_hub_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -741,13 +755,14 @@ export def "virtual-hubs-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<etag: string, properties: record<addressPrefix: string, expressRouteGateway: record<id: string>, p2SVpnGateway: record<id: string>, provisioningState: string, routeTable: record<routes: list>, virtualNetworkConnections: list<record>, virtualWan: record<id: string>, vpnGateway: record<id: string>>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_hub_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualHubName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_hub_name: (encode-path-segment $virtual_hub_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualHubs/{virtual_hub_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -783,7 +798,7 @@ export def "virtual-hubs-update-tags" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --tags: record # Resource tags.
 ]: any -> record<etag: string, properties: record<addressPrefix: string, expressRouteGateway: record<id: string>, p2SVpnGateway: record<id: string>, provisioningState: string, routeTable: record<routes: list>, virtualNetworkConnections: list<record>, virtualWan: record<id: string>, vpnGateway: record<id: string>>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
@@ -792,6 +807,7 @@ export def "virtual-hubs-update-tags" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_hub_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualHubName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_hub_name: (encode-path-segment $virtual_hub_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualHubs/{virtual_hub_name}") $qp $auth.query)
   let req_body = {"tags": $tags} | compact
@@ -830,7 +846,7 @@ export def "virtual-hubs-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --properties: any # Parameters for VirtualHub. — shape: {addressPrefix?: string, expressRouteGateway?: any, p2SVpnGateway?: any, routeTable?: any, virtualNetworkConnections?: list, virtualWan?: any, vpnGateway?: any}
   --id: string # Resource ID.
   location: string # Resource location.
@@ -842,6 +858,7 @@ export def "virtual-hubs-create-or-update" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_hub_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualHubName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_hub_name: (encode-path-segment $virtual_hub_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualHubs/{virtual_hub_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "id": $id, "location": $location, "tags": $tags} | compact
@@ -879,13 +896,14 @@ export def "hub-virtual-network-connections-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, name: string, properties: record, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_hub_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualHubName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_hub_name: (encode-path-segment $virtual_hub_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualHubs/{virtual_hub_name}/hubVirtualNetworkConnections") $qp $auth.query)
   let accept_val = "application/json"
@@ -922,7 +940,7 @@ export def "hub-virtual-network-connections-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<etag: string, name: string, properties: record<allowHubToRemoteVnetTransit: bool, allowRemoteVnetToUseHubVnetGateways: bool, enableInternetSecurity: bool, provisioningState: string, remoteVirtualNetwork: record<id: string>>, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -930,6 +948,7 @@ export def "hub-virtual-network-connections-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_hub_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualHubName' must be non-empty" } }
   if ($connection_name | is-empty) { error make --unspanned { msg: "path parameter 'connectionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_hub_name: (encode-path-segment $virtual_hub_name), connection_name: (encode-path-segment $connection_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualHubs/{virtual_hub_name}/hubVirtualNetworkConnections/{connection_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -964,12 +983,13 @@ export def "virtual-wans-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualWans") $qp $auth.query)
   let accept_val = "application/json"
@@ -1005,13 +1025,14 @@ export def "virtual-wans-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
-]: nothing -> record<code: string, details: table<code: string, message: string, target: string>, innerError: string, message: string, target: string> {
+  --api-version: string # Client API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_wan_name | is-empty) { error make --unspanned { msg: "path parameter 'VirtualWANName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_wan_name: (encode-path-segment $virtual_wan_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualWans/{virtual_wan_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1047,13 +1068,14 @@ export def "virtual-wans-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<etag: string, properties: record<allowBranchToBranchTraffic: bool, allowVnetToVnetTraffic: bool, disableVpnEncryption: bool, office365LocalBreakoutCategory: string, p2SVpnServerConfigurations: list<record>, provisioningState: string, securityProviderName: string, virtualHubs: list<record>, vpnSites: list<record>>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_wan_name | is-empty) { error make --unspanned { msg: "path parameter 'VirtualWANName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_wan_name: (encode-path-segment $virtual_wan_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualWans/{virtual_wan_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1089,7 +1111,7 @@ export def "virtual-wans-update-tags" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --tags: record # Resource tags.
 ]: any -> record<etag: string, properties: record<allowBranchToBranchTraffic: bool, allowVnetToVnetTraffic: bool, disableVpnEncryption: bool, office365LocalBreakoutCategory: string, p2SVpnServerConfigurations: list<record>, provisioningState: string, securityProviderName: string, virtualHubs: list<record>, vpnSites: list<record>>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
@@ -1098,6 +1120,7 @@ export def "virtual-wans-update-tags" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_wan_name | is-empty) { error make --unspanned { msg: "path parameter 'VirtualWANName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_wan_name: (encode-path-segment $virtual_wan_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualWans/{virtual_wan_name}") $qp $auth.query)
   let req_body = {"tags": $tags} | compact
@@ -1136,7 +1159,7 @@ export def "virtual-wans-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --properties: any # Parameters for VirtualWAN. — shape: {allowBranchToBranchTraffic?: bool, allowVnetToVnetTraffic?: bool, disableVpnEncryption?: bool, p2SVpnServerConfigurations?: list, securityProviderName?: string}
   --id: string # Resource ID.
   location: string # Resource location.
@@ -1148,6 +1171,7 @@ export def "virtual-wans-create-or-update" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_wan_name | is-empty) { error make --unspanned { msg: "path parameter 'VirtualWANName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_wan_name: (encode-path-segment $virtual_wan_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualWans/{virtual_wan_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "id": $id, "location": $location, "tags": $tags} | compact
@@ -1185,13 +1209,14 @@ export def "supported-security-providers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<supportedProviders: table<name: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_wan_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualWANName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_wan_name: (encode-path-segment $virtual_wan_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualWans/{virtual_wan_name}/supportedSecurityProviders") $qp $auth.query)
   let accept_val = "application/json"
@@ -1227,16 +1252,17 @@ export def "vpn-sites-configuration-download" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   output_blob_sas_url: string # The sas-url to download the configurations for vpn-sites.
   --vpn-sites: list<string> # List of resource-ids of the vpn-sites for which config is to be downloaded.
-]: any -> record<code: string, details: table<code: string, message: string, target: string>, innerError: string, message: string, target: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_wan_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualWANName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_wan_name: (encode-path-segment $virtual_wan_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualWans/{virtual_wan_name}/vpnConfiguration") $qp $auth.query)
   let req_body = {"outputBlobSasUrl": $output_blob_sas_url, "vpnSites": $vpn_sites} | compact
@@ -1274,13 +1300,14 @@ export def "p2s-vpn-server-configurations-list-by-virtual-wan" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, name: string, properties: record, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_wan_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualWanName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_wan_name: (encode-path-segment $virtual_wan_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualWans/{virtual_wan_name}/p2sVpnServerConfigurations") $qp $auth.query)
   let accept_val = "application/json"
@@ -1317,14 +1344,15 @@ export def "p2s-vpn-server-configurations-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
-]: nothing -> record<code: string, details: table<code: string, message: string, target: string>, innerError: string, message: string, target: string> {
+  --api-version: string # Client API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_wan_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualWanName' must be non-empty" } }
   if ($p2_s_vpn_server_configuration_name | is-empty) { error make --unspanned { msg: "path parameter 'p2SVpnServerConfigurationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_wan_name: (encode-path-segment $virtual_wan_name), p2_s_vpn_server_configuration_name: (encode-path-segment $p2_s_vpn_server_configuration_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualWans/{virtual_wan_name}/p2sVpnServerConfigurations/{p2_s_vpn_server_configuration_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1361,7 +1389,7 @@ export def "p2s-vpn-server-configurations-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<etag: string, name: string, properties: record<etag: string, name: string, p2SVpnGateways: list<record>, p2SVpnServerConfigRadiusClientRootCertificates: list<record>, p2SVpnServerConfigRadiusServerRootCertificates: list<record>, p2SVpnServerConfigVpnClientRevokedCertificates: list<record>, p2SVpnServerConfigVpnClientRootCertificates: list<record>, provisioningState: string, radiusServerAddress: string, radiusServerSecret: string, vpnClientIpsecPolicies: list<record>, vpnProtocols: list<string>>, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1369,6 +1397,7 @@ export def "p2s-vpn-server-configurations-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_wan_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualWanName' must be non-empty" } }
   if ($p2_s_vpn_server_configuration_name | is-empty) { error make --unspanned { msg: "path parameter 'p2SVpnServerConfigurationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_wan_name: (encode-path-segment $virtual_wan_name), p2_s_vpn_server_configuration_name: (encode-path-segment $p2_s_vpn_server_configuration_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualWans/{virtual_wan_name}/p2sVpnServerConfigurations/{p2_s_vpn_server_configuration_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1406,7 +1435,7 @@ export def "p2s-vpn-server-configurations-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --name: string # The name of the resource that is unique within a resource group. This name can be used to access the resource.
   --properties: any # Parameters for P2SVpnServerConfiguration. — shape: {etag?: string, name?: string, p2SVpnServerConfigRadiusClientRootCertificates?: list, p2SVpnServerConfigRadiusServerRootCertificates?: list, p2SVpnServerConfigVpnClientRevokedCertificates?: list, p2SVpnServerConfigVpnClientRootCertificates?: list, radiusServerAddress?: string, radiusServerSecret?: string, vpnClientIpsecPolicies?: list, vpnProtocols?: list<string>}
   --id: string # Resource ID.
@@ -1418,6 +1447,7 @@ export def "p2s-vpn-server-configurations-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_wan_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualWanName' must be non-empty" } }
   if ($p2_s_vpn_server_configuration_name | is-empty) { error make --unspanned { msg: "path parameter 'p2SVpnServerConfigurationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_wan_name: (encode-path-segment $virtual_wan_name), p2_s_vpn_server_configuration_name: (encode-path-segment $p2_s_vpn_server_configuration_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualWans/{virtual_wan_name}/p2sVpnServerConfigurations/{p2_s_vpn_server_configuration_name}") $qp $auth.query)
   let req_body = {"name": $name, "properties": $properties, "id": $id} | compact
@@ -1454,12 +1484,13 @@ export def "vpn-gateways-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/vpnGateways") $qp $auth.query)
   let accept_val = "application/json"
@@ -1495,13 +1526,14 @@ export def "vpn-gateways-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
-]: nothing -> record<code: string, details: table<code: string, message: string, target: string>, innerError: string, message: string, target: string> {
+  --api-version: string # Client API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'gatewayName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gateway_name: (encode-path-segment $gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/vpnGateways/{gateway_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1537,13 +1569,14 @@ export def "vpn-gateways-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<etag: string, properties: record<bgpSettings: record<asn: int, bgpPeeringAddress: string, peerWeight: int>, connections: list<record>, provisioningState: string, virtualHub: record<id: string>, vpnGatewayScaleUnit: int>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'gatewayName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gateway_name: (encode-path-segment $gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/vpnGateways/{gateway_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1579,7 +1612,7 @@ export def "vpn-gateways-update-tags" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --tags: record # Resource tags.
 ]: any -> record<etag: string, properties: record<bgpSettings: record<asn: int, bgpPeeringAddress: string, peerWeight: int>, connections: list<record>, provisioningState: string, virtualHub: record<id: string>, vpnGatewayScaleUnit: int>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
@@ -1588,6 +1621,7 @@ export def "vpn-gateways-update-tags" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'gatewayName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gateway_name: (encode-path-segment $gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/vpnGateways/{gateway_name}") $qp $auth.query)
   let req_body = {"tags": $tags} | compact
@@ -1626,7 +1660,7 @@ export def "vpn-gateways-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --properties: any # Parameters for VpnGateway. — shape: {bgpSettings?: any, connections?: list, virtualHub?: any, vpnGatewayScaleUnit?: int}
   --id: string # Resource ID.
   location: string # Resource location.
@@ -1638,6 +1672,7 @@ export def "vpn-gateways-create-or-update" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'gatewayName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gateway_name: (encode-path-segment $gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/vpnGateways/{gateway_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "id": $id, "location": $location, "tags": $tags} | compact
@@ -1675,13 +1710,14 @@ export def "vpn-gateways-reset" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<etag: string, properties: record<bgpSettings: record<asn: int, bgpPeeringAddress: string, peerWeight: int>, connections: list<record>, provisioningState: string, virtualHub: record<id: string>, vpnGatewayScaleUnit: int>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'gatewayName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gateway_name: (encode-path-segment $gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/vpnGateways/{gateway_name}/reset") $qp $auth.query)
   let accept_val = "application/json"
@@ -1717,13 +1753,14 @@ export def "vpn-connections-list-by-vpn-gateway" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, name: string, properties: record, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'gatewayName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gateway_name: (encode-path-segment $gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/vpnGateways/{gateway_name}/vpnConnections") $qp $auth.query)
   let accept_val = "application/json"
@@ -1760,14 +1797,15 @@ export def "vpn-connections-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
-]: nothing -> record<code: string, details: table<code: string, message: string, target: string>, innerError: string, message: string, target: string> {
+  --api-version: string # Client API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'gatewayName' must be non-empty" } }
   if ($connection_name | is-empty) { error make --unspanned { msg: "path parameter 'connectionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gateway_name: (encode-path-segment $gateway_name), connection_name: (encode-path-segment $connection_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/vpnGateways/{gateway_name}/vpnConnections/{connection_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1804,7 +1842,7 @@ export def "vpn-connections-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<etag: string, name: string, properties: record<connectionBandwidth: int, connectionStatus: string, egressBytesTransferred: int, enableBgp: bool, enableInternetSecurity: bool, enableRateLimiting: bool, ingressBytesTransferred: int, ipsecPolicies: list<record>, provisioningState: string, remoteVpnSite: record<id: string>, routingWeight: int, sharedKey: string, useLocalAzureIpAddress: bool, usePolicyBasedTrafficSelectors: bool, vpnConnectionProtocolType: string, vpnLinkConnections: list<record>>, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1812,6 +1850,7 @@ export def "vpn-connections-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'gatewayName' must be non-empty" } }
   if ($connection_name | is-empty) { error make --unspanned { msg: "path parameter 'connectionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gateway_name: (encode-path-segment $gateway_name), connection_name: (encode-path-segment $connection_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/vpnGateways/{gateway_name}/vpnConnections/{connection_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1849,7 +1888,7 @@ export def "vpn-connections-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --name: string # The name of the resource that is unique within a resource group. This name can be used to access the resource.
   --properties: any # Parameters for VpnConnection. — shape: {connectionBandwidth?: int, enableBgp?: bool, enableInternetSecurity?: bool, enableRateLimiting?: bool, ipsecPolicies?: list, remoteVpnSite?: any, routingWeight?: int, sharedKey?: string, useLocalAzureIpAddress?: bool, usePolicyBasedTrafficSelectors?: bool, vpnConnectionProtocolType?: "IKEv2"|"IKEv1", vpnLinkConnections?: list}
   --id: string # Resource ID.
@@ -1861,6 +1900,7 @@ export def "vpn-connections-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'gatewayName' must be non-empty" } }
   if ($connection_name | is-empty) { error make --unspanned { msg: "path parameter 'connectionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gateway_name: (encode-path-segment $gateway_name), connection_name: (encode-path-segment $connection_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/vpnGateways/{gateway_name}/vpnConnections/{connection_name}") $qp $auth.query)
   let req_body = {"name": $name, "properties": $properties, "id": $id} | compact
@@ -1899,7 +1939,7 @@ export def "vpn-link-connections-list-by-vpn-connection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, name: string, properties: record, type: string, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1907,6 +1947,7 @@ export def "vpn-link-connections-list-by-vpn-connection" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'gatewayName' must be non-empty" } }
   if ($connection_name | is-empty) { error make --unspanned { msg: "path parameter 'connectionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gateway_name: (encode-path-segment $gateway_name), connection_name: (encode-path-segment $connection_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/vpnGateways/{gateway_name}/vpnConnections/{connection_name}/vpnLinkConnections") $qp $auth.query)
   let accept_val = "application/json"
@@ -1944,7 +1985,7 @@ export def "vpn-site-link-connections-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<etag: string, name: string, properties: record<connectionBandwidth: int, connectionStatus: string, egressBytesTransferred: int, enableBgp: bool, enableRateLimiting: bool, ingressBytesTransferred: int, ipsecPolicies: list<record>, provisioningState: string, routingWeight: int, sharedKey: string, useLocalAzureIpAddress: bool, usePolicyBasedTrafficSelectors: bool, vpnConnectionProtocolType: string, vpnSiteLink: record<id: string>>, type: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1953,6 +1994,7 @@ export def "vpn-site-link-connections-get" [
   if ($gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'gatewayName' must be non-empty" } }
   if ($connection_name | is-empty) { error make --unspanned { msg: "path parameter 'connectionName' must be non-empty" } }
   if ($link_connection_name | is-empty) { error make --unspanned { msg: "path parameter 'linkConnectionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gateway_name: (encode-path-segment $gateway_name), connection_name: (encode-path-segment $connection_name), link_connection_name: (encode-path-segment $link_connection_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/vpnGateways/{gateway_name}/vpnConnections/{connection_name}/vpnLinkConnections/{link_connection_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1987,12 +2029,13 @@ export def "vpn-sites-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/vpnSites") $qp $auth.query)
   let accept_val = "application/json"
@@ -2028,13 +2071,14 @@ export def "vpn-sites-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
-]: nothing -> record<code: string, details: table<code: string, message: string, target: string>, innerError: string, message: string, target: string> {
+  --api-version: string # Client API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($vpn_site_name | is-empty) { error make --unspanned { msg: "path parameter 'vpnSiteName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), vpn_site_name: (encode-path-segment $vpn_site_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/vpnSites/{vpn_site_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2070,13 +2114,14 @@ export def "vpn-sites-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<etag: string, properties: record<addressSpace: record<addressPrefixes: list>, bgpProperties: record<asn: int, bgpPeeringAddress: string, peerWeight: int>, deviceProperties: record<deviceModel: string, deviceVendor: string, linkSpeedInMbps: int>, ipAddress: string, isSecuritySite: bool, provisioningState: string, siteKey: string, virtualWan: record<id: string>, vpnSiteLinks: list<record>>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($vpn_site_name | is-empty) { error make --unspanned { msg: "path parameter 'vpnSiteName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), vpn_site_name: (encode-path-segment $vpn_site_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/vpnSites/{vpn_site_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2112,7 +2157,7 @@ export def "vpn-sites-update-tags" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --tags: record # Resource tags.
 ]: any -> record<etag: string, properties: record<addressSpace: record<addressPrefixes: list>, bgpProperties: record<asn: int, bgpPeeringAddress: string, peerWeight: int>, deviceProperties: record<deviceModel: string, deviceVendor: string, linkSpeedInMbps: int>, ipAddress: string, isSecuritySite: bool, provisioningState: string, siteKey: string, virtualWan: record<id: string>, vpnSiteLinks: list<record>>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
@@ -2121,6 +2166,7 @@ export def "vpn-sites-update-tags" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($vpn_site_name | is-empty) { error make --unspanned { msg: "path parameter 'vpnSiteName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), vpn_site_name: (encode-path-segment $vpn_site_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/vpnSites/{vpn_site_name}") $qp $auth.query)
   let req_body = {"tags": $tags} | compact
@@ -2159,7 +2205,7 @@ export def "vpn-sites-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --properties: any # Parameters for VpnSite. — shape: {addressSpace?: any, bgpProperties?: any, deviceProperties?: any, ipAddress?: string, isSecuritySite?: bool, siteKey?: string, virtualWan?: any, vpnSiteLinks?: list}
   --id: string # Resource ID.
   location: string # Resource location.
@@ -2171,6 +2217,7 @@ export def "vpn-sites-create-or-update" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($vpn_site_name | is-empty) { error make --unspanned { msg: "path parameter 'vpnSiteName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), vpn_site_name: (encode-path-segment $vpn_site_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/vpnSites/{vpn_site_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "id": $id, "location": $location, "tags": $tags} | compact
@@ -2208,13 +2255,14 @@ export def "vpn-site-links-list-by-vpn-site" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, name: string, properties: record, type: string, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($vpn_site_name | is-empty) { error make --unspanned { msg: "path parameter 'vpnSiteName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), vpn_site_name: (encode-path-segment $vpn_site_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/vpnSites/{vpn_site_name}/vpnSiteLinks") $qp $auth.query)
   let accept_val = "application/json"
@@ -2251,7 +2299,7 @@ export def "vpn-site-links-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<etag: string, name: string, properties: record<bgpProperties: record<asn: int, bgpPeeringAddress: string>, ipAddress: string, linkProperties: record<linkProviderName: string, linkSpeedInMbps: int>, provisioningState: string>, type: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2259,6 +2307,7 @@ export def "vpn-site-links-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($vpn_site_name | is-empty) { error make --unspanned { msg: "path parameter 'vpnSiteName' must be non-empty" } }
   if ($vpn_site_link_name | is-empty) { error make --unspanned { msg: "path parameter 'vpnSiteLinkName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), vpn_site_name: (encode-path-segment $vpn_site_name), vpn_site_link_name: (encode-path-segment $vpn_site_link_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/vpnSites/{vpn_site_name}/vpnSiteLinks/{vpn_site_link_name}") $qp $auth.query)
   let accept_val = "application/json"

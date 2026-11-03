@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -133,16 +133,19 @@ export def "subscriber-usage-aggregates-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version. (default: 2015-06-01-preview)
-  --reported-start-time: string # The reported start time (inclusive). (format: date-time)
-  --reported-end-time: string # The reported end time (exclusive). (format: date-time)
+  --api-version: string # Client Api Version. (required, default: 2015-06-01-preview)
+  --reported-start-time: string # The reported start time (inclusive). (required, format: date-time)
+  --reported-end-time: string # The reported end time (exclusive). (required, format: date-time)
   --aggregation-granularity: string # The aggregation granularity.
   --subscriber-id: string # The tenant subscription identifier.
   --continuation-token: string # The continuation token.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  let api_version = ($api_version | default "2015-06-01-preview")
+  if ($reported_start_time == null) { error make --unspanned { msg: "required query parameter 'reportedStartTime' missing: pass --reported-start-time" } }
+  if ($reported_end_time == null) { error make --unspanned { msg: "required query parameter 'reportedEndTime' missing: pass --reported-end-time" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "reportedStartTime" $reported_start_time "scalar") (serialize-qp "reportedEndTime" $reported_end_time "scalar") (serialize-qp "aggregationGranularity" $aggregation_granularity "scalar") (serialize-qp "subscriberId" $subscriber_id "scalar") (serialize-qp "continuationToken" $continuation_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Commerce/subscriberUsageAggregates") $qp $auth.query)
   let accept_val = "application/json"

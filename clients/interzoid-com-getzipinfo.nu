@@ -131,11 +131,13 @@ export def "getzipcodeinfo" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --license: string # Your Interzoid license API key. Register at www.interzoid.com/register
-  --zip: string # Zip code to retrieve detailed information
+  --license: string # Your Interzoid license API key. Register at www.interzoid.com/register (required)
+  --zip: string # Zip code to retrieve detailed information (required)
 ]: nothing -> record<AreaSquareMiles: string, City: string, Code: string, Credits: string, ElderlyHouseholdPercent: string, FarmerHouseholdPercent: string, IncomePercent100k: string, IncomePercent200k: string, IncomePercent50k: string, Latitude: string, Longitude: string, MarriedHouseholdPercent: string, Population: string, State: string, ZipCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($license == null) { error make --unspanned { msg: "required query parameter 'license' missing: pass --license" } }
+  if ($zip == null) { error make --unspanned { msg: "required query parameter 'zip' missing: pass --zip" } }
   let qp = [(serialize-qp "license" $license "scalar") (serialize-qp "zip" $zip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getzipcodeinfo" $qp $auth.query)
   let accept_val = "application/json"

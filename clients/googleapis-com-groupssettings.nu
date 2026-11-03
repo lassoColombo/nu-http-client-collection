@@ -1,4 +1,4 @@
-# Auto-generated client for Groups Settings API vv1
+# Auto-generated client for Groups Settings API v1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/groupssettings/v1/openapi.json
 # Auth: --token flag or $env.GROUPS_SETTINGS_API_TOKEN
 
@@ -12,20 +12,10 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
-}
-
-# Merge multiple auth records (AND-form security: every scheme must be sent).
-def merge-auth [parts: list]: nothing -> record {
-  let active = ($parts | where {|p| $p.location != "none" })
-  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
-  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
-  let locs = ($active | each {|p| $p.location } | uniq)
-  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
-  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
 # Serialize a single query parameter based on collection style
@@ -149,8 +139,8 @@ export def commands []: nothing -> table {
 export def "groups-settings-groups-get" [
   group_unique_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -165,7 +155,7 @@ export def "groups-settings-groups-get" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<allowExternalMembers: string, allowGoogleCommunication: string, allowWebPosting: string, archiveOnly: string, customFooterText: string, customReplyTo: string, customRolesEnabledForSettingsToBeMerged: string, defaultMessageDenyNotificationText: string, default_sender: string, description: string, email: string, enableCollaborativeInbox: string, favoriteRepliesOnTop: string, includeCustomFooter: string, includeInGlobalAddressList: string, isArchived: string, kind: string, maxMessageBytes: int, membersCanPostAsTheGroup: string, messageDisplayFont: string, messageModerationLevel: string, name: string, primaryLanguage: string, replyTo: string, sendMessageDenyNotification: string, showInGroupDirectory: string, spamModerationLevel: string, whoCanAdd: string, whoCanAddReferences: string, whoCanApproveMembers: string, whoCanApproveMessages: string, whoCanAssignTopics: string, whoCanAssistContent: string, whoCanBanUsers: string, whoCanContactOwner: string, whoCanDeleteAnyPost: string, whoCanDeleteTopics: string, whoCanDiscoverGroup: string, whoCanEnterFreeFormTags: string, whoCanHideAbuse: string, whoCanInvite: string, whoCanJoin: string, whoCanLeaveGroup: string, whoCanLockTopics: string, whoCanMakeTopicsSticky: string, whoCanMarkDuplicate: string, whoCanMarkFavoriteReplyOnAnyTopic: string, whoCanMarkFavoriteReplyOnOwnTopic: string, whoCanMarkNoResponseNeeded: string, whoCanModerateContent: string, whoCanModerateMembers: string, whoCanModifyMembers: string, whoCanModifyTagsAndCategories: string, whoCanMoveTopicsIn: string, whoCanMoveTopicsOut: string, whoCanPostAnnouncements: string, whoCanPostMessage: string, whoCanTakeTopics: string, whoCanUnassignTopic: string, whoCanUnmarkFavoriteReplyOnAnyTopic: string, whoCanViewGroup: string, whoCanViewMembership: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GROUPS_SETTINGS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GROUPS_SETTINGS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_unique_id | is-empty) { error make --unspanned { msg: "path parameter 'groupUniqueId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
@@ -193,8 +183,8 @@ export def "groups-settings-groups-get" [
 export def "groups-settings-groups-patch" [
   group_unique_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -272,7 +262,7 @@ export def "groups-settings-groups-patch" [
   --who-can-view-membership: string # Permissions to view membership. Possible values are: - ALL_IN_DOMAIN_CAN_VIEW: Anyone in the account can view the group members list. If a group already has external members, those members can still send email to this group. - ALL_MEMBERS_CAN_VIEW: The group members can view the group members list. - ALL_MANAGERS_CAN_VIEW: The group managers can view group members list.
 ]: any -> record<allowExternalMembers: string, allowGoogleCommunication: string, allowWebPosting: string, archiveOnly: string, customFooterText: string, customReplyTo: string, customRolesEnabledForSettingsToBeMerged: string, defaultMessageDenyNotificationText: string, default_sender: string, description: string, email: string, enableCollaborativeInbox: string, favoriteRepliesOnTop: string, includeCustomFooter: string, includeInGlobalAddressList: string, isArchived: string, kind: string, maxMessageBytes: int, membersCanPostAsTheGroup: string, messageDisplayFont: string, messageModerationLevel: string, name: string, primaryLanguage: string, replyTo: string, sendMessageDenyNotification: string, showInGroupDirectory: string, spamModerationLevel: string, whoCanAdd: string, whoCanAddReferences: string, whoCanApproveMembers: string, whoCanApproveMessages: string, whoCanAssignTopics: string, whoCanAssistContent: string, whoCanBanUsers: string, whoCanContactOwner: string, whoCanDeleteAnyPost: string, whoCanDeleteTopics: string, whoCanDiscoverGroup: string, whoCanEnterFreeFormTags: string, whoCanHideAbuse: string, whoCanInvite: string, whoCanJoin: string, whoCanLeaveGroup: string, whoCanLockTopics: string, whoCanMakeTopicsSticky: string, whoCanMarkDuplicate: string, whoCanMarkFavoriteReplyOnAnyTopic: string, whoCanMarkFavoriteReplyOnOwnTopic: string, whoCanMarkNoResponseNeeded: string, whoCanModerateContent: string, whoCanModerateMembers: string, whoCanModifyMembers: string, whoCanModifyTagsAndCategories: string, whoCanMoveTopicsIn: string, whoCanMoveTopicsOut: string, whoCanPostAnnouncements: string, whoCanPostMessage: string, whoCanTakeTopics: string, whoCanUnassignTopic: string, whoCanUnmarkFavoriteReplyOnAnyTopic: string, whoCanViewGroup: string, whoCanViewMembership: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GROUPS_SETTINGS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GROUPS_SETTINGS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_unique_id | is-empty) { error make --unspanned { msg: "path parameter 'groupUniqueId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
@@ -302,8 +292,8 @@ export def "groups-settings-groups-patch" [
 export def "groups-settings-groups-update" [
   group_unique_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -381,7 +371,7 @@ export def "groups-settings-groups-update" [
   --who-can-view-membership: string # Permissions to view membership. Possible values are: - ALL_IN_DOMAIN_CAN_VIEW: Anyone in the account can view the group members list. If a group already has external members, those members can still send email to this group. - ALL_MEMBERS_CAN_VIEW: The group members can view the group members list. - ALL_MANAGERS_CAN_VIEW: The group managers can view group members list.
 ]: any -> record<allowExternalMembers: string, allowGoogleCommunication: string, allowWebPosting: string, archiveOnly: string, customFooterText: string, customReplyTo: string, customRolesEnabledForSettingsToBeMerged: string, defaultMessageDenyNotificationText: string, default_sender: string, description: string, email: string, enableCollaborativeInbox: string, favoriteRepliesOnTop: string, includeCustomFooter: string, includeInGlobalAddressList: string, isArchived: string, kind: string, maxMessageBytes: int, membersCanPostAsTheGroup: string, messageDisplayFont: string, messageModerationLevel: string, name: string, primaryLanguage: string, replyTo: string, sendMessageDenyNotification: string, showInGroupDirectory: string, spamModerationLevel: string, whoCanAdd: string, whoCanAddReferences: string, whoCanApproveMembers: string, whoCanApproveMessages: string, whoCanAssignTopics: string, whoCanAssistContent: string, whoCanBanUsers: string, whoCanContactOwner: string, whoCanDeleteAnyPost: string, whoCanDeleteTopics: string, whoCanDiscoverGroup: string, whoCanEnterFreeFormTags: string, whoCanHideAbuse: string, whoCanInvite: string, whoCanJoin: string, whoCanLeaveGroup: string, whoCanLockTopics: string, whoCanMakeTopicsSticky: string, whoCanMarkDuplicate: string, whoCanMarkFavoriteReplyOnAnyTopic: string, whoCanMarkFavoriteReplyOnOwnTopic: string, whoCanMarkNoResponseNeeded: string, whoCanModerateContent: string, whoCanModerateMembers: string, whoCanModifyMembers: string, whoCanModifyTagsAndCategories: string, whoCanMoveTopicsIn: string, whoCanMoveTopicsOut: string, whoCanPostAnnouncements: string, whoCanPostMessage: string, whoCanTakeTopics: string, whoCanUnassignTopic: string, whoCanUnmarkFavoriteReplyOnAnyTopic: string, whoCanViewGroup: string, whoCanViewMembership: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GROUPS_SETTINGS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GROUPS_SETTINGS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_unique_id | is-empty) { error make --unspanned { msg: "path parameter 'groupUniqueId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"

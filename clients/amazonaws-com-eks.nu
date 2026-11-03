@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -138,7 +138,7 @@ export def commands []: nothing -> table {
 #
 # POST /clusters/{name}/encryption-config/associate
 # operationId: AssociateEncryptionConfig
-# --encryptionConfig item shape: {resources?: any, provider?: any}
+# --encryptionConfig item shape: {resources?: list<string>, provider?: record}
 export def "associate-encryption-config" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -157,9 +157,9 @@ export def "associate-encryption-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  encryption_config: list # The configuration you are using for encryption. — item shape: {resources?: any, provider?: any}
+  encryption_config: list # The configuration you are using for encryption. — item shape: {resources?: list<string>, provider?: record}
   --client-request-token: string # The client request token you are using with the encryption configuration.
-]: any -> record<update: record<id: record, status: record, type: record, params: record, createdAt: record, errors: record>> {
+]: any -> record<update: record<id: string, status: string, type: string, params: list<record>, createdAt: string, errors: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -189,7 +189,7 @@ export def "associate-encryption-config" [
 #
 # POST /clusters/{name}/identity-provider-configs/associate
 # operationId: AssociateIdentityProviderConfig
-# --oidc shape: {identityProviderConfigName?: any, issuerUrl?: any, clientId?: any, usernameClaim?: any, usernamePrefix?: any, groupsClaim?: any, groupsPrefix?: any, requiredClaims?: any}
+# --oidc shape: {identityProviderConfigName?: string, issuerUrl?: string, clientId?: string, usernameClaim?: string, usernamePrefix?: string, groupsClaim?: string, groupsPrefix?: string, requiredClaims?: record}
 export def "associate-identity-provider-config" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -208,10 +208,10 @@ export def "associate-identity-provider-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  oidc: record # An object representing an OpenID Connect (OIDC) configuration. Before associating an OIDC identity provider to your cluster, review the considerations in Authenticating users for your cluster from an OpenID Connect identity provider (https://docs.aws.amazon.com/eks/latest/userguide/authenticate-oidc-identity-provider.html) in the Amazon EKS User Guide. — shape: {identityProviderConfigName?: any, issuerUrl?: any, clientId?: any, usernameClaim?: any, usernamePrefix?: any, groupsClaim?: any, groupsPrefix?: any, requiredClaims?: any}
+  oidc: record # An object representing an OpenID Connect (OIDC) configuration. Before associating an OIDC identity provider to your cluster, review the considerations in Authenticating users for your cluster from an OpenID Connect identity provider (https://docs.aws.amazon.com/eks/latest/userguide/authenticate-oidc-identity-provider.html) in the Amazon EKS User Guide. — shape: {identityProviderConfigName?: string, issuerUrl?: string, clientId?: string, usernameClaim?: string, usernamePrefix?: string, groupsClaim?: string, groupsPrefix?: string, requiredClaims?: record}
   --tags: record # The metadata to apply to the configuration to assist with categorization and organization. Each tag consists of a key and an optional value. You define both.
   --client-request-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.
-]: any -> record<update: record<id: record, status: record, type: record, params: record, createdAt: record, errors: record>, tags: record> {
+]: any -> record<update: record<id: string, status: string, type: string, params: list<record>, createdAt: string, errors: list<record>>, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -266,7 +266,7 @@ export def "create-addon" [
   --client-request-token: string # A unique, case-sensitive identifier that you provide to ensure the idempotency of the request.
   --tags: record # The metadata to apply to the cluster to assist with categorization and organization. Each tag consists of a key and an optional value. You define both.
   --configuration-values: string # The set of configuration values for the add-on that's created. The values that you provide are validated against the schema in DescribeAddonConfiguration (https://docs.aws.amazon.com/eks/latest/APIReference/API_DescribeAddonConfiguration.html).
-]: any -> record<addon: record<addonName: record, clusterName: record, status: record, addonVersion: record, health: record<issues: record>, addonArn: record, createdAt: record, modifiedAt: record, serviceAccountRoleArn: record, tags: record, publisher: record, owner: record, marketplaceInformation: record<productId: record, productUrl: record>, configurationValues: record>> {
+]: any -> record<addon: record<addonName: string, clusterName: string, status: string, addonVersion: string, health: record<issues: list>, addonArn: string, createdAt: string, modifiedAt: string, serviceAccountRoleArn: string, tags: record, publisher: string, owner: string, marketplaceInformation: record<productId: string, productUrl: string>, configurationValues: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -316,7 +316,7 @@ export def "list-addons" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<addons: record, nextToken: record> {
+]: nothing -> record<addons: list<string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -344,11 +344,11 @@ export def "list-addons" [
 #
 # POST /clusters
 # operationId: CreateCluster
-# --resourcesVpcConfig shape: {subnetIds?: any, securityGroupIds?: any, endpointPublicAccess?: any, endpointPrivateAccess?: any, publicAccessCidrs?: any}
-# --kubernetesNetworkConfig shape: {serviceIpv4Cidr?: any, ipFamily?: any}
-# --logging shape: {clusterLogging?: any}
-# --encryptionConfig item shape: {resources?: any, provider?: any}
-# --outpostConfig shape: {outpostArns?: any, controlPlaneInstanceType?: any, controlPlanePlacement?: any}
+# --resourcesVpcConfig shape: {subnetIds?: list<string>, securityGroupIds?: list<string>, endpointPublicAccess?: bool, endpointPrivateAccess?: bool, publicAccessCidrs?: list<string>}
+# --kubernetesNetworkConfig shape: {serviceIpv4Cidr?: string, ipFamily?: "ipv4"|"ipv6"}
+# --logging shape: {clusterLogging?: list}
+# --encryptionConfig item shape: {resources?: list<string>, provider?: record}
+# --outpostConfig shape: {outpostArns?: list<string>, controlPlaneInstanceType?: string, controlPlanePlacement?: record}
 export def "create-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -369,14 +369,14 @@ export def "create-cluster" [
   name: string # The unique name to give to your cluster.
   --version: string # The desired Kubernetes version for your cluster. If you don't specify a value here, the default version available in Amazon EKS is used. The default version might not be the latest version available.
   role_arn: string # The Amazon Resource Name (ARN) of the IAM role that provides permissions for the Kubernetes control plane to make calls to Amazon Web Services API operations on your behalf. For more information, see Amazon EKS Service IAM Role (https://docs.aws.amazon.com/eks/latest/userguide/service_IAM_role.html) in the Amazon EKS User Guide .
-  resources_vpc_config: record # An object representing the VPC configuration to use for an Amazon EKS cluster. — shape: {subnetIds?: any, securityGroupIds?: any, endpointPublicAccess?: any, endpointPrivateAccess?: any, publicAccessCidrs?: any}
-  --kubernetes-network-config: record # The Kubernetes network configuration for the cluster. — shape: {serviceIpv4Cidr?: any, ipFamily?: any}
-  --logging: record # An object representing the logging configuration for resources in your cluster. — shape: {clusterLogging?: any}
+  resources_vpc_config: record # An object representing the VPC configuration to use for an Amazon EKS cluster. — shape: {subnetIds?: list<string>, securityGroupIds?: list<string>, endpointPublicAccess?: bool, endpointPrivateAccess?: bool, publicAccessCidrs?: list<string>}
+  --kubernetes-network-config: record # The Kubernetes network configuration for the cluster. — shape: {serviceIpv4Cidr?: string, ipFamily?: "ipv4"|"ipv6"}
+  --logging: record # An object representing the logging configuration for resources in your cluster. — shape: {clusterLogging?: list}
   --client-request-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.
   --tags: record # The metadata to apply to the cluster to assist with categorization and organization. Each tag consists of a key and an optional value. You define both.
-  --encryption-config: list # The encryption configuration for the cluster. — item shape: {resources?: any, provider?: any}
-  --outpost-config: record # The configuration of your local Amazon EKS cluster on an Amazon Web Services Outpost. Before creating a cluster on an Outpost, review Creating a local cluster on an Outpost (https://docs.aws.amazon.com/eks/latest/userguide/eks-outposts-local-cluster-create.html) in the Amazon EKS User Guide. This API isn't available for Amazon EKS clusters on the Amazon Web Services cloud. — shape: {outpostArns?: any, controlPlaneInstanceType?: any, controlPlanePlacement?: any}
-]: any -> record<cluster: record<name: record, arn: record, createdAt: record, version: record, endpoint: record, roleArn: record, resourcesVpcConfig: record<subnetIds: record, securityGroupIds: record, clusterSecurityGroupId: record, vpcId: record, endpointPublicAccess: record, endpointPrivateAccess: record, publicAccessCidrs: record>, kubernetesNetworkConfig: record<serviceIpv4Cidr: record, serviceIpv6Cidr: record, ipFamily: record>, logging: record<clusterLogging: record>, identity: record<oidc: record>, status: record, certificateAuthority: record<data: record>, clientRequestToken: record, platformVersion: record, tags: record, encryptionConfig: record, connectorConfig: record<activationId: record, activationCode: record, activationExpiry: record, provider: record, roleArn: record>, id: record, health: record<issues: record>, outpostConfig: record<outpostArns: record, controlPlaneInstanceType: record, controlPlanePlacement: record>>> {
+  --encryption-config: list # The encryption configuration for the cluster. — item shape: {resources?: list<string>, provider?: record}
+  --outpost-config: record # The configuration of your local Amazon EKS cluster on an Amazon Web Services Outpost. Before creating a cluster on an Outpost, review Creating a local cluster on an Outpost (https://docs.aws.amazon.com/eks/latest/userguide/eks-outposts-local-cluster-create.html) in the Amazon EKS User Guide. This API isn't available for Amazon EKS clusters on the Amazon Web Services cloud. — shape: {outpostArns?: list<string>, controlPlaneInstanceType?: string, controlPlanePlacement?: record}
+]: any -> record<cluster: record<name: string, arn: string, createdAt: string, version: string, endpoint: string, roleArn: string, resourcesVpcConfig: record<subnetIds: list, securityGroupIds: list, clusterSecurityGroupId: string, vpcId: string, endpointPublicAccess: bool, endpointPrivateAccess: bool, publicAccessCidrs: list>, kubernetesNetworkConfig: record<serviceIpv4Cidr: string, serviceIpv6Cidr: string, ipFamily: string>, logging: record<clusterLogging: list>, identity: record<oidc: record>, status: string, certificateAuthority: record<data: string>, clientRequestToken: string, platformVersion: string, tags: record, encryptionConfig: list<record>, connectorConfig: record<activationId: string, activationCode: string, activationExpiry: string, provider: string, roleArn: string>, id: string, health: record<issues: list>, outpostConfig: record<outpostArns: list, controlPlaneInstanceType: string, controlPlanePlacement: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -425,7 +425,7 @@ export def "list-clusters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<clusters: record, nextToken: record> {
+]: nothing -> record<clusters: list<string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "include" $include "multi")] | flatten | str join "&"
@@ -452,7 +452,7 @@ export def "list-clusters" [
 #
 # POST /clusters/{name}/fargate-profiles
 # operationId: CreateFargateProfile
-# --selectors item shape: {namespace?: any, labels?: any}
+# --selectors item shape: {namespace?: string, labels?: record}
 export def "create-fargate-profile" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -474,10 +474,10 @@ export def "create-fargate-profile" [
   fargate_profile_name: string # The name of the Fargate profile.
   pod_execution_role_arn: string # The Amazon Resource Name (ARN) of the pod execution role to use for pods that match the selectors in the Fargate profile. The pod execution role allows Fargate infrastructure to register with your cluster as a node, and it provides read access to Amazon ECR image repositories. For more information, see Pod Execution Role (https://docs.aws.amazon.com/eks/latest/userguide/pod-execution-role.html) in the Amazon EKS User Guide.
   --subnets: list<string> # The IDs of subnets to launch your pods into. At this time, pods running on Fargate are not assigned public IP addresses, so only private subnets (with no direct route to an Internet Gateway) are accepted for this parameter.
-  --selectors: list # The selectors to match for pods to use this Fargate profile. Each selector must have an associated namespace. Optionally, you can also specify labels for a namespace. You may specify up to five selectors in a Fargate profile. — item shape: {namespace?: any, labels?: any}
+  --selectors: list # The selectors to match for pods to use this Fargate profile. Each selector must have an associated namespace. Optionally, you can also specify labels for a namespace. You may specify up to five selectors in a Fargate profile. — item shape: {namespace?: string, labels?: record}
   --client-request-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.
   --tags: record # The metadata to apply to the Fargate profile to assist with categorization and organization. Each tag consists of a key and an optional value. You define both. Fargate profile tags do not propagate to any other resources associated with the Fargate profile, such as the pods that are scheduled with it.
-]: any -> record<fargateProfile: record<fargateProfileName: record, fargateProfileArn: record, clusterName: record, createdAt: record, podExecutionRoleArn: record, subnets: record, selectors: record, status: record, tags: record>> {
+]: any -> record<fargateProfile: record<fargateProfileName: string, fargateProfileArn: string, clusterName: string, createdAt: string, podExecutionRoleArn: string, subnets: list<string>, selectors: list<record>, status: string, tags: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -527,7 +527,7 @@ export def "list-fargate-profiles" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<fargateProfileNames: record, nextToken: record> {
+]: nothing -> record<fargateProfileNames: list<string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -555,11 +555,11 @@ export def "list-fargate-profiles" [
 #
 # POST /clusters/{name}/node-groups
 # operationId: CreateNodegroup
-# --scalingConfig shape: {minSize?: any, maxSize?: any, desiredSize?: any}
-# --remoteAccess shape: {ec2SshKey?: any, sourceSecurityGroups?: any}
-# --taints item shape: {key?: any, value?: any, effect?: any}
-# --launchTemplate shape: {name?: any, version?: any, id?: any}
-# --updateConfig shape: {maxUnavailable?: any, maxUnavailablePercentage?: any}
+# --scalingConfig shape: {minSize?: int, maxSize?: int, desiredSize?: int}
+# --remoteAccess shape: {ec2SshKey?: string, sourceSecurityGroups?: list<string>}
+# --taints item shape: {key?: string, value?: string, effect?: "NO_SCHEDULE"|"NO_EXECUTE"|"PREFER_NO_SCHEDULE"}
+# --launchTemplate shape: {name?: string, version?: string, id?: string}
+# --updateConfig shape: {maxUnavailable?: int, maxUnavailablePercentage?: int}
 export def "create-nodegroup" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -579,23 +579,23 @@ export def "create-nodegroup" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   nodegroup_name: string # The unique name to give your node group.
-  --scaling-config: record # An object representing the scaling configuration details for the Auto Scaling group that is associated with your node group. When creating a node group, you must specify all or none of the properties. When updating a node group, you can specify any or none of the properties. — shape: {minSize?: any, maxSize?: any, desiredSize?: any}
+  --scaling-config: record # An object representing the scaling configuration details for the Auto Scaling group that is associated with your node group. When creating a node group, you must specify all or none of the properties. When updating a node group, you can specify any or none of the properties. — shape: {minSize?: int, maxSize?: int, desiredSize?: int}
   --disk-size: int # The root device disk size (in GiB) for your node group instances. The default disk size is 20 GiB for Linux and Bottlerocket. The default disk size is 50 GiB for Windows. If you specify launchTemplate, then don't specify diskSize, or the node group deployment will fail. For more information about using launch templates with Amazon EKS, see Launch template support (https://docs.aws.amazon.com/eks/latest/userguide/launch-templates.html) in the Amazon EKS User Guide.
   subnets: list<string> # The subnets to use for the Auto Scaling group that is created for your node group. If you specify launchTemplate, then don't specify SubnetId (https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_CreateNetworkInterface.html) in your launch template, or the node group deployment will fail. For more information about using launch templates with Amazon EKS, see Launch template support (https://docs.aws.amazon.com/eks/latest/userguide/launch-templates.html) in the Amazon EKS User Guide.
   --instance-types: list<string> # Specify the instance types for a node group. If you specify a GPU instance type, make sure to also specify an applicable GPU AMI type with the amiType parameter. If you specify launchTemplate, then you can specify zero or one instance type in your launch template or you can specify 0-20 instance types for instanceTypes. If however, you specify an instance type in your launch template and specify any instanceTypes, the node group deployment will fail. If you don't specify an instance type in a launch template or for instanceTypes, then t3.medium is used, by default. If you specify Spot for capacityType, then we recommend specifying multiple values for instanceTypes. For more information, see Managed node group capacity types (https://docs.aws.amazon.com/eks/latest/userguide/managed-node-groups.html#managed-node-group-capacity-types) and Launch template support (https://docs.aws.amazon.com/eks/latest/userguide/launch-templates.html) in the Amazon EKS User Guide.
   --ami-type: string@ami-type-completer # The AMI type for your node group. If you specify launchTemplate, and your launch template uses a custom AMI, then don't specify amiType, or the node group deployment will fail. If your launch template uses a Windows custom AMI, then add eks:kube-proxy-windows to your Windows nodes rolearn in the aws-auth ConfigMap. For more information about using launch templates with Amazon EKS, see Launch template support (https://docs.aws.amazon.com/eks/latest/userguide/launch-templates.html) in the Amazon EKS User Guide.
-  --remote-access: record # An object representing the remote access configuration for the managed node group. — shape: {ec2SshKey?: any, sourceSecurityGroups?: any}
+  --remote-access: record # An object representing the remote access configuration for the managed node group. — shape: {ec2SshKey?: string, sourceSecurityGroups?: list<string>}
   node_role: string # The Amazon Resource Name (ARN) of the IAM role to associate with your node group. The Amazon EKS worker node kubelet daemon makes calls to Amazon Web Services APIs on your behalf. Nodes receive permissions for these API calls through an IAM instance profile and associated policies. Before you can launch nodes and register them into a cluster, you must create an IAM role for those nodes to use when they are launched. For more information, see Amazon EKS node IAM role (https://docs.aws.amazon.com/eks/latest/userguide/create-node-role.html) in the Amazon EKS User Guide . If you specify launchTemplate, then don't specify IamInstanceProfile (https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_IamInstanceProfile.html) in your launch template, or the node group deployment will fail. For more information about using launch templates with Amazon EKS, see Launch template support (https://docs.aws.amazon.com/eks/latest/userguide/launch-templates.html) in the Amazon EKS User Guide.
   --labels: record # The Kubernetes labels to be applied to the nodes in the node group when they are created.
-  --taints: list # The Kubernetes taints to be applied to the nodes in the node group. For more information, see Node taints on managed node groups (https://docs.aws.amazon.com/eks/latest/userguide/node-taints-managed-node-groups.html). — item shape: {key?: any, value?: any, effect?: any}
+  --taints: list # The Kubernetes taints to be applied to the nodes in the node group. For more information, see Node taints on managed node groups (https://docs.aws.amazon.com/eks/latest/userguide/node-taints-managed-node-groups.html). — item shape: {key?: string, value?: string, effect?: "NO_SCHEDULE"|"NO_EXECUTE"|"PREFER_NO_SCHEDULE"}
   --tags: record # The metadata to apply to the node group to assist with categorization and organization. Each tag consists of a key and an optional value. You define both. Node group tags do not propagate to any other resources associated with the node group, such as the Amazon EC2 instances or subnets.
   --client-request-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.
-  --launch-template: record # An object representing a node group launch template specification. The launch template can't include SubnetId (https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_CreateNetworkInterface.html), IamInstanceProfile (https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_IamInstanceProfile.html), RequestSpotInstances (https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_RequestSpotInstances.html), HibernationOptions (https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_HibernationOptionsRequest.html), or TerminateInstances (https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_TerminateInstances.html), or the node group deployment or update will fail. For more information about launch templates, see CreateLaunchTemplate (https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_CreateLaunchTemplate.html) in the Amazon EC2 API Reference. For more information about using launch templates with Amazon EKS, see Launch template support (https://docs.aws.amazon.com/eks/latest/userguide/launch-templates.html) in the Amazon EKS User Guide. You must specify either the launch template ID or the launch template name in the request, but not both. — shape: {name?: any, version?: any, id?: any}
-  --update-config: record # The node group update configuration. — shape: {maxUnavailable?: any, maxUnavailablePercentage?: any}
+  --launch-template: record # An object representing a node group launch template specification. The launch template can't include SubnetId (https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_CreateNetworkInterface.html), IamInstanceProfile (https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_IamInstanceProfile.html), RequestSpotInstances (https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_RequestSpotInstances.html), HibernationOptions (https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_HibernationOptionsRequest.html), or TerminateInstances (https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_TerminateInstances.html), or the node group deployment or update will fail. For more information about launch templates, see CreateLaunchTemplate (https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_CreateLaunchTemplate.html) in the Amazon EC2 API Reference. For more information about using launch templates with Amazon EKS, see Launch template support (https://docs.aws.amazon.com/eks/latest/userguide/launch-templates.html) in the Amazon EKS User Guide. You must specify either the launch template ID or the launch template name in the request, but not both. — shape: {name?: string, version?: string, id?: string}
+  --update-config: record # The node group update configuration. — shape: {maxUnavailable?: int, maxUnavailablePercentage?: int}
   --capacity-type: string@capacity-type-completer # The capacity type for your node group.
   --version: string # The Kubernetes version to use for your managed nodes. By default, the Kubernetes version of the cluster is used, and this is the only accepted specified value. If you specify launchTemplate, and your launch template uses a custom AMI, then don't specify version, or the node group deployment will fail. For more information about using launch templates with Amazon EKS, see Launch template support (https://docs.aws.amazon.com/eks/latest/userguide/launch-templates.html) in the Amazon EKS User Guide.
   --release-version: string # The AMI version of the Amazon EKS optimized AMI to use with your node group. By default, the latest available AMI version for the node group's current Kubernetes version is used. For information about Linux versions, see Amazon EKS optimized Amazon Linux AMI versions (https://docs.aws.amazon.com/eks/latest/userguide/eks-linux-ami-versions.html) in the Amazon EKS User Guide. Amazon EKS managed node groups support the November 2022 and later releases of the Windows AMIs. For information about Windows versions, see Amazon EKS optimized Windows AMI versions (https://docs.aws.amazon.com/eks/latest/userguide/eks-ami-versions-windows.html) in the Amazon EKS User Guide. If you specify launchTemplate, and your launch template uses a custom AMI, then don't specify releaseVersion, or the node group deployment will fail. For more information about using launch templates with Amazon EKS, see Launch template support (https://docs.aws.amazon.com/eks/latest/userguide/launch-templates.html) in the Amazon EKS User Guide.
-]: any -> record<nodegroup: record<nodegroupName: record, nodegroupArn: record, clusterName: record, version: record, releaseVersion: record, createdAt: record, modifiedAt: record, status: record, capacityType: record, scalingConfig: record<minSize: record, maxSize: record, desiredSize: record>, instanceTypes: record, subnets: record, remoteAccess: record<ec2SshKey: record, sourceSecurityGroups: record>, amiType: record, nodeRole: record, labels: record, taints: record, resources: record<autoScalingGroups: record, remoteAccessSecurityGroup: record>, diskSize: record, health: record<issues: record>, updateConfig: record<maxUnavailable: record, maxUnavailablePercentage: record>, launchTemplate: record<name: record, version: record, id: record>, tags: record>> {
+]: any -> record<nodegroup: record<nodegroupName: string, nodegroupArn: string, clusterName: string, version: string, releaseVersion: string, createdAt: string, modifiedAt: string, status: string, capacityType: string, scalingConfig: record<minSize: int, maxSize: int, desiredSize: int>, instanceTypes: list<string>, subnets: list<string>, remoteAccess: record<ec2SshKey: string, sourceSecurityGroups: list>, amiType: string, nodeRole: string, labels: record, taints: list<record>, resources: record<autoScalingGroups: list, remoteAccessSecurityGroup: string>, diskSize: int, health: record<issues: list>, updateConfig: record<maxUnavailable: int, maxUnavailablePercentage: int>, launchTemplate: record<name: string, version: string, id: string>, tags: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -645,7 +645,7 @@ export def "list-nodegroups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<nodegroups: record, nextToken: record> {
+]: nothing -> record<nodegroups: list<string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -693,7 +693,7 @@ export def "delete-addon" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<addon: record<addonName: record, clusterName: record, status: record, addonVersion: record, health: record<issues: record>, addonArn: record, createdAt: record, modifiedAt: record, serviceAccountRoleArn: record, tags: record, publisher: record, owner: record, marketplaceInformation: record<productId: record, productUrl: record>, configurationValues: record>> {
+]: nothing -> record<addon: record<addonName: string, clusterName: string, status: string, addonVersion: string, health: record<issues: list>, addonArn: string, createdAt: string, modifiedAt: string, serviceAccountRoleArn: string, tags: record, publisher: string, owner: string, marketplaceInformation: record<productId: string, productUrl: string>, configurationValues: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -741,7 +741,7 @@ export def "describe-addon" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<addon: record<addonName: record, clusterName: record, status: record, addonVersion: record, health: record<issues: record>, addonArn: record, createdAt: record, modifiedAt: record, serviceAccountRoleArn: record, tags: record, publisher: record, owner: record, marketplaceInformation: record<productId: record, productUrl: record>, configurationValues: record>> {
+]: nothing -> record<addon: record<addonName: string, clusterName: string, status: string, addonVersion: string, health: record<issues: list>, addonArn: string, createdAt: string, modifiedAt: string, serviceAccountRoleArn: string, tags: record, publisher: string, owner: string, marketplaceInformation: record<productId: string, productUrl: string>, configurationValues: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -787,7 +787,7 @@ export def "delete-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<cluster: record<name: record, arn: record, createdAt: record, version: record, endpoint: record, roleArn: record, resourcesVpcConfig: record<subnetIds: record, securityGroupIds: record, clusterSecurityGroupId: record, vpcId: record, endpointPublicAccess: record, endpointPrivateAccess: record, publicAccessCidrs: record>, kubernetesNetworkConfig: record<serviceIpv4Cidr: record, serviceIpv6Cidr: record, ipFamily: record>, logging: record<clusterLogging: record>, identity: record<oidc: record>, status: record, certificateAuthority: record<data: record>, clientRequestToken: record, platformVersion: record, tags: record, encryptionConfig: record, connectorConfig: record<activationId: record, activationCode: record, activationExpiry: record, provider: record, roleArn: record>, id: record, health: record<issues: record>, outpostConfig: record<outpostArns: record, controlPlaneInstanceType: record, controlPlanePlacement: record>>> {
+]: nothing -> record<cluster: record<name: string, arn: string, createdAt: string, version: string, endpoint: string, roleArn: string, resourcesVpcConfig: record<subnetIds: list, securityGroupIds: list, clusterSecurityGroupId: string, vpcId: string, endpointPublicAccess: bool, endpointPrivateAccess: bool, publicAccessCidrs: list>, kubernetesNetworkConfig: record<serviceIpv4Cidr: string, serviceIpv6Cidr: string, ipFamily: string>, logging: record<clusterLogging: list>, identity: record<oidc: record>, status: string, certificateAuthority: record<data: string>, clientRequestToken: string, platformVersion: string, tags: record, encryptionConfig: list<record>, connectorConfig: record<activationId: string, activationCode: string, activationExpiry: string, provider: string, roleArn: string>, id: string, health: record<issues: list>, outpostConfig: record<outpostArns: list, controlPlaneInstanceType: string, controlPlanePlacement: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -832,7 +832,7 @@ export def "describe-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<cluster: record<name: record, arn: record, createdAt: record, version: record, endpoint: record, roleArn: record, resourcesVpcConfig: record<subnetIds: record, securityGroupIds: record, clusterSecurityGroupId: record, vpcId: record, endpointPublicAccess: record, endpointPrivateAccess: record, publicAccessCidrs: record>, kubernetesNetworkConfig: record<serviceIpv4Cidr: record, serviceIpv6Cidr: record, ipFamily: record>, logging: record<clusterLogging: record>, identity: record<oidc: record>, status: record, certificateAuthority: record<data: record>, clientRequestToken: record, platformVersion: record, tags: record, encryptionConfig: record, connectorConfig: record<activationId: record, activationCode: record, activationExpiry: record, provider: record, roleArn: record>, id: record, health: record<issues: record>, outpostConfig: record<outpostArns: record, controlPlaneInstanceType: record, controlPlanePlacement: record>>> {
+]: nothing -> record<cluster: record<name: string, arn: string, createdAt: string, version: string, endpoint: string, roleArn: string, resourcesVpcConfig: record<subnetIds: list, securityGroupIds: list, clusterSecurityGroupId: string, vpcId: string, endpointPublicAccess: bool, endpointPrivateAccess: bool, publicAccessCidrs: list>, kubernetesNetworkConfig: record<serviceIpv4Cidr: string, serviceIpv6Cidr: string, ipFamily: string>, logging: record<clusterLogging: list>, identity: record<oidc: record>, status: string, certificateAuthority: record<data: string>, clientRequestToken: string, platformVersion: string, tags: record, encryptionConfig: list<record>, connectorConfig: record<activationId: string, activationCode: string, activationExpiry: string, provider: string, roleArn: string>, id: string, health: record<issues: list>, outpostConfig: record<outpostArns: list, controlPlaneInstanceType: string, controlPlanePlacement: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -878,7 +878,7 @@ export def "delete-fargate-profile" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<fargateProfile: record<fargateProfileName: record, fargateProfileArn: record, clusterName: record, createdAt: record, podExecutionRoleArn: record, subnets: record, selectors: record, status: record, tags: record>> {
+]: nothing -> record<fargateProfile: record<fargateProfileName: string, fargateProfileArn: string, clusterName: string, createdAt: string, podExecutionRoleArn: string, subnets: list<string>, selectors: list<record>, status: string, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -925,7 +925,7 @@ export def "describe-fargate-profile" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<fargateProfile: record<fargateProfileName: record, fargateProfileArn: record, clusterName: record, createdAt: record, podExecutionRoleArn: record, subnets: record, selectors: record, status: record, tags: record>> {
+]: nothing -> record<fargateProfile: record<fargateProfileName: string, fargateProfileArn: string, clusterName: string, createdAt: string, podExecutionRoleArn: string, subnets: list<string>, selectors: list<record>, status: string, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -972,7 +972,7 @@ export def "delete-nodegroup" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<nodegroup: record<nodegroupName: record, nodegroupArn: record, clusterName: record, version: record, releaseVersion: record, createdAt: record, modifiedAt: record, status: record, capacityType: record, scalingConfig: record<minSize: record, maxSize: record, desiredSize: record>, instanceTypes: record, subnets: record, remoteAccess: record<ec2SshKey: record, sourceSecurityGroups: record>, amiType: record, nodeRole: record, labels: record, taints: record, resources: record<autoScalingGroups: record, remoteAccessSecurityGroup: record>, diskSize: record, health: record<issues: record>, updateConfig: record<maxUnavailable: record, maxUnavailablePercentage: record>, launchTemplate: record<name: record, version: record, id: record>, tags: record>> {
+]: nothing -> record<nodegroup: record<nodegroupName: string, nodegroupArn: string, clusterName: string, version: string, releaseVersion: string, createdAt: string, modifiedAt: string, status: string, capacityType: string, scalingConfig: record<minSize: int, maxSize: int, desiredSize: int>, instanceTypes: list<string>, subnets: list<string>, remoteAccess: record<ec2SshKey: string, sourceSecurityGroups: list>, amiType: string, nodeRole: string, labels: record, taints: list<record>, resources: record<autoScalingGroups: list, remoteAccessSecurityGroup: string>, diskSize: int, health: record<issues: list>, updateConfig: record<maxUnavailable: int, maxUnavailablePercentage: int>, launchTemplate: record<name: string, version: string, id: string>, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1019,7 +1019,7 @@ export def "describe-nodegroup" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<nodegroup: record<nodegroupName: record, nodegroupArn: record, clusterName: record, version: record, releaseVersion: record, createdAt: record, modifiedAt: record, status: record, capacityType: record, scalingConfig: record<minSize: record, maxSize: record, desiredSize: record>, instanceTypes: record, subnets: record, remoteAccess: record<ec2SshKey: record, sourceSecurityGroups: record>, amiType: record, nodeRole: record, labels: record, taints: record, resources: record<autoScalingGroups: record, remoteAccessSecurityGroup: record>, diskSize: record, health: record<issues: record>, updateConfig: record<maxUnavailable: record, maxUnavailablePercentage: record>, launchTemplate: record<name: record, version: record, id: record>, tags: record>> {
+]: nothing -> record<nodegroup: record<nodegroupName: string, nodegroupArn: string, clusterName: string, version: string, releaseVersion: string, createdAt: string, modifiedAt: string, status: string, capacityType: string, scalingConfig: record<minSize: int, maxSize: int, desiredSize: int>, instanceTypes: list<string>, subnets: list<string>, remoteAccess: record<ec2SshKey: string, sourceSecurityGroups: list>, amiType: string, nodeRole: string, labels: record, taints: list<record>, resources: record<autoScalingGroups: list, remoteAccessSecurityGroup: string>, diskSize: int, health: record<issues: list>, updateConfig: record<maxUnavailable: int, maxUnavailablePercentage: int>, launchTemplate: record<name: string, version: string, id: string>, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1065,7 +1065,7 @@ export def "deregister-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<cluster: record<name: record, arn: record, createdAt: record, version: record, endpoint: record, roleArn: record, resourcesVpcConfig: record<subnetIds: record, securityGroupIds: record, clusterSecurityGroupId: record, vpcId: record, endpointPublicAccess: record, endpointPrivateAccess: record, publicAccessCidrs: record>, kubernetesNetworkConfig: record<serviceIpv4Cidr: record, serviceIpv6Cidr: record, ipFamily: record>, logging: record<clusterLogging: record>, identity: record<oidc: record>, status: record, certificateAuthority: record<data: record>, clientRequestToken: record, platformVersion: record, tags: record, encryptionConfig: record, connectorConfig: record<activationId: record, activationCode: record, activationExpiry: record, provider: record, roleArn: record>, id: record, health: record<issues: record>, outpostConfig: record<outpostArns: record, controlPlaneInstanceType: record, controlPlanePlacement: record>>> {
+]: nothing -> record<cluster: record<name: string, arn: string, createdAt: string, version: string, endpoint: string, roleArn: string, resourcesVpcConfig: record<subnetIds: list, securityGroupIds: list, clusterSecurityGroupId: string, vpcId: string, endpointPublicAccess: bool, endpointPrivateAccess: bool, publicAccessCidrs: list>, kubernetesNetworkConfig: record<serviceIpv4Cidr: string, serviceIpv6Cidr: string, ipFamily: string>, logging: record<clusterLogging: list>, identity: record<oidc: record>, status: string, certificateAuthority: record<data: string>, clientRequestToken: string, platformVersion: string, tags: record, encryptionConfig: list<record>, connectorConfig: record<activationId: string, activationCode: string, activationExpiry: string, provider: string, roleArn: string>, id: string, health: record<issues: list>, outpostConfig: record<outpostArns: list, controlPlaneInstanceType: string, controlPlanePlacement: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1102,8 +1102,8 @@ export def "describe-addon-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --addon-name: string # The name of the add-on. The name must match one of the names that DescribeAddonVersions (https://docs.aws.amazon.com/eks/latest/APIReference/API_DescribeAddonVersions.html) returns.
-  --addon-version: string # The version of the add-on. The version must match one of the versions returned by DescribeAddonVersions (https://docs.aws.amazon.com/eks/latest/APIReference/API_DescribeAddonVersions.html).
+  --addon-name: string # The name of the add-on. The name must match one of the names that DescribeAddonVersions (https://docs.aws.amazon.com/eks/latest/APIReference/API_DescribeAddonVersions.html) returns. (required)
+  --addon-version: string # The version of the add-on. The version must match one of the versions returned by DescribeAddonVersions (https://docs.aws.amazon.com/eks/latest/APIReference/API_DescribeAddonVersions.html). (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1111,9 +1111,11 @@ export def "describe-addon-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<addonName: record, addonVersion: record, configurationSchema: record> {
+]: nothing -> record<addonName: string, addonVersion: string, configurationSchema: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($addon_name == null) { error make --unspanned { msg: "required query parameter 'addonName' missing: pass --addon-name" } }
+  if ($addon_version == null) { error make --unspanned { msg: "required query parameter 'addonVersion' missing: pass --addon-version" } }
   let qp = [(serialize-qp "addonName" $addon_name "scalar") (serialize-qp "addonVersion" $addon_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/addons/configuration-schemas" $qp $auth.query)
   let accept_val = "application/json"
@@ -1162,7 +1164,7 @@ export def "describe-addon-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<addons: record, nextToken: record> {
+]: nothing -> record<addons: table<addonName: string, type: string, addonVersions: list, publisher: string, owner: string, marketplaceInformation: record>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "kubernetesVersion" $kubernetes_version "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "addonName" $addon_name "scalar") (serialize-qp "types" $types "multi") (serialize-qp "publishers" $publishers "multi") (serialize-qp "owners" $owners "multi")] | flatten | str join "&"
@@ -1189,7 +1191,7 @@ export def "describe-addon-versions" [
 #
 # POST /clusters/{name}/identity-provider-configs/describe
 # operationId: DescribeIdentityProviderConfig
-# --identityProviderConfig shape: {type?: any, name?: any}
+# --identityProviderConfig shape: {type?: string, name?: string}
 export def "describe-identity-provider-config" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1208,8 +1210,8 @@ export def "describe-identity-provider-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  identity_provider_config: record # An object representing an identity provider configuration. — shape: {type?: any, name?: any}
-]: any -> record<identityProviderConfig: record<oidc: record<identityProviderConfigName: record, identityProviderConfigArn: record, clusterName: record, issuerUrl: record, clientId: record, usernameClaim: record, usernamePrefix: record, groupsClaim: record, groupsPrefix: record, requiredClaims: record, tags: record, status: record>>> {
+  identity_provider_config: record # An object representing an identity provider configuration. — shape: {type?: string, name?: string}
+]: any -> record<identityProviderConfig: record<oidc: record<identityProviderConfigName: string, identityProviderConfigArn: string, clusterName: string, issuerUrl: string, clientId: string, usernameClaim: string, usernamePrefix: string, groupsClaim: string, groupsPrefix: string, requiredClaims: record, tags: record, status: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1260,7 +1262,7 @@ export def "describe-update" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<update: record<id: record, status: record, type: record, params: record, createdAt: record, errors: record>> {
+]: nothing -> record<update: record<id: string, status: string, type: string, params: list<record>, createdAt: string, errors: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1289,7 +1291,7 @@ export def "describe-update" [
 #
 # POST /clusters/{name}/identity-provider-configs/disassociate
 # operationId: DisassociateIdentityProviderConfig
-# --identityProviderConfig shape: {type?: any, name?: any}
+# --identityProviderConfig shape: {type?: string, name?: string}
 export def "disassociate-identity-provider-config" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1308,9 +1310,9 @@ export def "disassociate-identity-provider-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  identity_provider_config: record # An object representing an identity provider configuration. — shape: {type?: any, name?: any}
+  identity_provider_config: record # An object representing an identity provider configuration. — shape: {type?: string, name?: string}
   --client-request-token: string # A unique, case-sensitive identifier that you provide to ensure the idempotency of the request.
-]: any -> record<update: record<id: record, status: record, type: record, params: record, createdAt: record, errors: record>> {
+]: any -> record<update: record<id: string, status: string, type: string, params: list<record>, createdAt: string, errors: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1360,7 +1362,7 @@ export def "list-identity-provider-configs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<identityProviderConfigs: record, nextToken: record> {
+]: nothing -> record<identityProviderConfigs: table<type: string, name: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1504,7 +1506,7 @@ export def "list-updates" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<updateIds: record, nextToken: record> {
+]: nothing -> record<updateIds: list<string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1552,7 +1554,7 @@ export def "update-cluster-version" [
   --x-amz-signed-headers: string
   version: string # The desired Kubernetes version following a successful update.
   --client-request-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.
-]: any -> record<update: record<id: record, status: record, type: record, params: record, createdAt: record, errors: record>> {
+]: any -> record<update: record<id: string, status: string, type: string, params: list<record>, createdAt: string, errors: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1582,7 +1584,7 @@ export def "update-cluster-version" [
 #
 # POST /cluster-registrations
 # operationId: RegisterCluster
-# --connectorConfig shape: {roleArn?: any, provider?: any}
+# --connectorConfig shape: {roleArn?: string, provider?: "EKS_ANYWHERE"|"ANTHOS"|"GKE"|"AKS"|"OPENSHIFT"|"TANZU"|"RANCHER"|"EC2"|"OTHER"}
 export def "register-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1601,10 +1603,10 @@ export def "register-cluster" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   name: string # Define a unique name for this cluster for your Region.
-  connector_config: record # The configuration sent to a cluster for configuration. — shape: {roleArn?: any, provider?: any}
+  connector_config: record # The configuration sent to a cluster for configuration. — shape: {roleArn?: string, provider?: "EKS_ANYWHERE"|"ANTHOS"|"GKE"|"AKS"|"OPENSHIFT"|"TANZU"|"RANCHER"|"EC2"|"OTHER"}
   --client-request-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.
   --tags: record # The metadata that you apply to the cluster to assist with categorization and organization. Each tag consists of a key and an optional value, both of which you define. Cluster tags do not propagate to any other resources associated with the cluster.
-]: any -> record<cluster: record<name: record, arn: record, createdAt: record, version: record, endpoint: record, roleArn: record, resourcesVpcConfig: record<subnetIds: record, securityGroupIds: record, clusterSecurityGroupId: record, vpcId: record, endpointPublicAccess: record, endpointPrivateAccess: record, publicAccessCidrs: record>, kubernetesNetworkConfig: record<serviceIpv4Cidr: record, serviceIpv6Cidr: record, ipFamily: record>, logging: record<clusterLogging: record>, identity: record<oidc: record>, status: record, certificateAuthority: record<data: record>, clientRequestToken: record, platformVersion: record, tags: record, encryptionConfig: record, connectorConfig: record<activationId: record, activationCode: record, activationExpiry: record, provider: record, roleArn: record>, id: record, health: record<issues: record>, outpostConfig: record<outpostArns: record, controlPlaneInstanceType: record, controlPlanePlacement: record>>> {
+]: any -> record<cluster: record<name: string, arn: string, createdAt: string, version: string, endpoint: string, roleArn: string, resourcesVpcConfig: record<subnetIds: list, securityGroupIds: list, clusterSecurityGroupId: string, vpcId: string, endpointPublicAccess: bool, endpointPrivateAccess: bool, publicAccessCidrs: list>, kubernetesNetworkConfig: record<serviceIpv4Cidr: string, serviceIpv6Cidr: string, ipFamily: string>, logging: record<clusterLogging: list>, identity: record<oidc: record>, status: string, certificateAuthority: record<data: string>, clientRequestToken: string, platformVersion: string, tags: record, encryptionConfig: list<record>, connectorConfig: record<activationId: string, activationCode: string, activationExpiry: string, provider: string, roleArn: string>, id: string, health: record<issues: list>, outpostConfig: record<outpostArns: list, controlPlaneInstanceType: string, controlPlanePlacement: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1644,7 +1646,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # The keys of the tags to be removed.
+  --tag-keys: list # The keys of the tags to be removed. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1656,6 +1658,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1704,7 +1707,7 @@ export def "update-addon" [
   --resolve-conflicts: string@resolve-conflicts-completer # How to resolve field value conflicts for an Amazon EKS add-on if you've changed a value from the Amazon EKS default value. Conflicts are handled based on the option you choose: None – Amazon EKS doesn't change the value. The update might fail. Overwrite – Amazon EKS overwrites the changed value back to the Amazon EKS default value. Preserve – Amazon EKS preserves the value. If you choose this option, we recommend that you test any field and value changes on a non-production cluster before updating the add-on on your production cluster.
   --client-request-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.
   --configuration-values: string # The set of configuration values for the add-on that's created. The values that you provide are validated against the schema in DescribeAddonConfiguration (https://docs.aws.amazon.com/eks/latest/APIReference/API_DescribeAddonConfiguration.html).
-]: any -> record<update: record<id: record, status: record, type: record, params: record, createdAt: record, errors: record>> {
+]: any -> record<update: record<id: string, status: string, type: string, params: list<record>, createdAt: string, errors: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1735,8 +1738,8 @@ export def "update-addon" [
 #
 # POST /clusters/{name}/update-config
 # operationId: UpdateClusterConfig
-# --resourcesVpcConfig shape: {subnetIds?: any, securityGroupIds?: any, endpointPublicAccess?: any, endpointPrivateAccess?: any, publicAccessCidrs?: any}
-# --logging shape: {clusterLogging?: any}
+# --resourcesVpcConfig shape: {subnetIds?: list<string>, securityGroupIds?: list<string>, endpointPublicAccess?: bool, endpointPrivateAccess?: bool, publicAccessCidrs?: list<string>}
+# --logging shape: {clusterLogging?: list}
 export def "update-cluster-config" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1755,10 +1758,10 @@ export def "update-cluster-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --resources-vpc-config: record # An object representing the VPC configuration to use for an Amazon EKS cluster. — shape: {subnetIds?: any, securityGroupIds?: any, endpointPublicAccess?: any, endpointPrivateAccess?: any, publicAccessCidrs?: any}
-  --logging: record # An object representing the logging configuration for resources in your cluster. — shape: {clusterLogging?: any}
+  --resources-vpc-config: record # An object representing the VPC configuration to use for an Amazon EKS cluster. — shape: {subnetIds?: list<string>, securityGroupIds?: list<string>, endpointPublicAccess?: bool, endpointPrivateAccess?: bool, publicAccessCidrs?: list<string>}
+  --logging: record # An object representing the logging configuration for resources in your cluster. — shape: {clusterLogging?: list}
   --client-request-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.
-]: any -> record<update: record<id: record, status: record, type: record, params: record, createdAt: record, errors: record>> {
+]: any -> record<update: record<id: string, status: string, type: string, params: list<record>, createdAt: string, errors: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1788,10 +1791,10 @@ export def "update-cluster-config" [
 #
 # POST /clusters/{name}/node-groups/{nodegroupName}/update-config
 # operationId: UpdateNodegroupConfig
-# --labels shape: {addOrUpdateLabels?: any, removeLabels?: any}
-# --taints shape: {addOrUpdateTaints?: any, removeTaints?: any}
-# --scalingConfig shape: {minSize?: any, maxSize?: any, desiredSize?: any}
-# --updateConfig shape: {maxUnavailable?: any, maxUnavailablePercentage?: any}
+# --labels shape: {addOrUpdateLabels?: record, removeLabels?: list<string>}
+# --taints shape: {addOrUpdateTaints?: list, removeTaints?: list}
+# --scalingConfig shape: {minSize?: int, maxSize?: int, desiredSize?: int}
+# --updateConfig shape: {maxUnavailable?: int, maxUnavailablePercentage?: int}
 export def "update-nodegroup-config" [
   name: string
   nodegroup_name: string
@@ -1811,12 +1814,12 @@ export def "update-nodegroup-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --labels: record # An object representing a Kubernetes label change for a managed node group. — shape: {addOrUpdateLabels?: any, removeLabels?: any}
-  --taints: record # An object representing the details of an update to a taints payload. For more information, see Node taints on managed node groups (https://docs.aws.amazon.com/eks/latest/userguide/node-taints-managed-node-groups.html). — shape: {addOrUpdateTaints?: any, removeTaints?: any}
-  --scaling-config: record # An object representing the scaling configuration details for the Auto Scaling group that is associated with your node group. When creating a node group, you must specify all or none of the properties. When updating a node group, you can specify any or none of the properties. — shape: {minSize?: any, maxSize?: any, desiredSize?: any}
-  --update-config: record # The node group update configuration. — shape: {maxUnavailable?: any, maxUnavailablePercentage?: any}
+  --labels: record # An object representing a Kubernetes label change for a managed node group. — shape: {addOrUpdateLabels?: record, removeLabels?: list<string>}
+  --taints: record # An object representing the details of an update to a taints payload. For more information, see Node taints on managed node groups (https://docs.aws.amazon.com/eks/latest/userguide/node-taints-managed-node-groups.html). — shape: {addOrUpdateTaints?: list, removeTaints?: list}
+  --scaling-config: record # An object representing the scaling configuration details for the Auto Scaling group that is associated with your node group. When creating a node group, you must specify all or none of the properties. When updating a node group, you can specify any or none of the properties. — shape: {minSize?: int, maxSize?: int, desiredSize?: int}
+  --update-config: record # The node group update configuration. — shape: {maxUnavailable?: int, maxUnavailablePercentage?: int}
   --client-request-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.
-]: any -> record<update: record<id: record, status: record, type: record, params: record, createdAt: record, errors: record>> {
+]: any -> record<update: record<id: string, status: string, type: string, params: list<record>, createdAt: string, errors: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1847,7 +1850,7 @@ export def "update-nodegroup-config" [
 #
 # POST /clusters/{name}/node-groups/{nodegroupName}/update-version
 # operationId: UpdateNodegroupVersion
-# --launchTemplate shape: {name?: any, version?: any, id?: any}
+# --launchTemplate shape: {name?: string, version?: string, id?: string}
 export def "update-nodegroup-version" [
   name: string
   nodegroup_name: string
@@ -1869,10 +1872,10 @@ export def "update-nodegroup-version" [
   --x-amz-signed-headers: string
   --version: string # The Kubernetes version to update to. If no version is specified, then the Kubernetes version of the node group does not change. You can specify the Kubernetes version of the cluster to update the node group to the latest AMI version of the cluster's Kubernetes version. If you specify launchTemplate, and your launch template uses a custom AMI, then don't specify version, or the node group update will fail. For more information about using launch templates with Amazon EKS, see Launch template support (https://docs.aws.amazon.com/eks/latest/userguide/launch-templates.html) in the Amazon EKS User Guide.
   --release-version: string # The AMI version of the Amazon EKS optimized AMI to use for the update. By default, the latest available AMI version for the node group's Kubernetes version is used. For information about Linux versions, see Amazon EKS optimized Amazon Linux AMI versions (https://docs.aws.amazon.com/eks/latest/userguide/eks-linux-ami-versions.html) in the Amazon EKS User Guide. Amazon EKS managed node groups support the November 2022 and later releases of the Windows AMIs. For information about Windows versions, see Amazon EKS optimized Windows AMI versions (https://docs.aws.amazon.com/eks/latest/userguide/eks-ami-versions-windows.html) in the Amazon EKS User Guide. If you specify launchTemplate, and your launch template uses a custom AMI, then don't specify releaseVersion, or the node group update will fail. For more information about using launch templates with Amazon EKS, see Launch template support (https://docs.aws.amazon.com/eks/latest/userguide/launch-templates.html) in the Amazon EKS User Guide.
-  --launch-template: record # An object representing a node group launch template specification. The launch template can't include SubnetId (https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_CreateNetworkInterface.html), IamInstanceProfile (https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_IamInstanceProfile.html), RequestSpotInstances (https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_RequestSpotInstances.html), HibernationOptions (https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_HibernationOptionsRequest.html), or TerminateInstances (https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_TerminateInstances.html), or the node group deployment or update will fail. For more information about launch templates, see CreateLaunchTemplate (https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_CreateLaunchTemplate.html) in the Amazon EC2 API Reference. For more information about using launch templates with Amazon EKS, see Launch template support (https://docs.aws.amazon.com/eks/latest/userguide/launch-templates.html) in the Amazon EKS User Guide. You must specify either the launch template ID or the launch template name in the request, but not both. — shape: {name?: any, version?: any, id?: any}
+  --launch-template: record # An object representing a node group launch template specification. The launch template can't include SubnetId (https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_CreateNetworkInterface.html), IamInstanceProfile (https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_IamInstanceProfile.html), RequestSpotInstances (https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_RequestSpotInstances.html), HibernationOptions (https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_HibernationOptionsRequest.html), or TerminateInstances (https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_TerminateInstances.html), or the node group deployment or update will fail. For more information about launch templates, see CreateLaunchTemplate (https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_CreateLaunchTemplate.html) in the Amazon EC2 API Reference. For more information about using launch templates with Amazon EKS, see Launch template support (https://docs.aws.amazon.com/eks/latest/userguide/launch-templates.html) in the Amazon EKS User Guide. You must specify either the launch template ID or the launch template name in the request, but not both. — shape: {name?: string, version?: string, id?: string}
   --force: oneof<nothing, bool> # Force the update if the existing node group's pods are unable to be drained due to a pod disruption budget issue. If an update fails because pods could not be drained, you can force the update after it fails to terminate the old node whether or not any pods are running on the node.
   --client-request-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.
-]: any -> record<update: record<id: record, status: record, type: record, params: record, createdAt: record, errors: record>> {
+]: any -> record<update: record<id: string, status: string, type: string, params: list<record>, createdAt: string, errors: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -151,11 +151,12 @@ export def "applications-list-by-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<nextLink: string, value: table<kind: string, plan: record, properties: record, identity: record, managedBy: string, sku: record>> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> record<nextLink: string, value: table<kind: string, plan: record, properties: record, identity: record, managedBy: string, sku: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Solutions/applications") $qp $auth.query)
   let accept_val = "application/json"
@@ -190,12 +191,13 @@ export def "application-definitions-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<nextLink: string, value: table<properties: record, identity: record, managedBy: string, sku: record>> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, identity: record, managedBy: string, sku: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Solutions/applicationDefinitions") $qp $auth.query)
   let accept_val = "application/json"
@@ -231,13 +233,14 @@ export def "application-definitions-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<errorCode: string, errorMessage: string, httpStatus: string> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($application_definition_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationDefinitionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), application_definition_name: (encode-path-segment $application_definition_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Solutions/applicationDefinitions/{application_definition_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -273,13 +276,14 @@ export def "application-definitions-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<properties: record<artifacts: list<record>, authorizations: list<record>, createUiDefinition: record, description: string, displayName: string, isEnabled: string, lockLevel: string, mainTemplate: record, packageFileUri: string>, identity: record<principalId: string, tenantId: string, type: string>, managedBy: string, sku: record<capacity: int, family: string, model: string, name: string, size: string, tier: string>> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> record<properties: record<artifacts: list<record>, authorizations: list<record>, createUiDefinition: record, description: string, displayName: string, isEnabled: string, lockLevel: string, mainTemplate: record, packageFileUri: string>, identity: record<principalId: string, tenantId: string, type: string>, managedBy: string, sku: record<capacity: int, family: string, model: string, name: string, size: string, tier: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($application_definition_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationDefinitionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), application_definition_name: (encode-path-segment $application_definition_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Solutions/applicationDefinitions/{application_definition_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -318,18 +322,19 @@ export def "application-definitions-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   properties: any # The managed application definition properties. — shape: {artifacts?: list, authorizations: list, createUiDefinition?: record, description?: string, displayName?: string, isEnabled?: string, lockLevel: "CanNotDelete"|"ReadOnly"|"None", mainTemplate?: record, packageFileUri?: string}
   --identity: any # Identity for the resource. — shape: {type?: "SystemAssigned"}
   --managed-by: string # ID of the resource that manages this resource.
   --sku: any # SKU for the resource. — shape: {capacity?: int, family?: string, model?: string, name: string, size?: string, tier?: string}
-]: any -> record<properties: record<artifacts: list<record>, authorizations: list<record>, createUiDefinition: record, description: string, displayName: string, isEnabled: string, lockLevel: string, mainTemplate: record, packageFileUri: string>, identity: record<principalId: string, tenantId: string, type: string>, managedBy: string, sku: record<capacity: int, family: string, model: string, name: string, size: string, tier: string>> {
+]: any -> record<properties: record<artifacts: list<record>, authorizations: list<record>, createUiDefinition: record, description: string, displayName: string, isEnabled: string, lockLevel: string, mainTemplate: record, packageFileUri: string>, identity: record<principalId: string, tenantId: string, type: string>, managedBy: string, sku: record<capacity: int, family: string, model: string, name: string, size: string, tier: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($application_definition_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationDefinitionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), application_definition_name: (encode-path-segment $application_definition_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Solutions/applicationDefinitions/{application_definition_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "identity": $identity, "managedBy": $managed_by, "sku": $sku} | compact
@@ -366,12 +371,13 @@ export def "applications-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<nextLink: string, value: table<kind: string, plan: record, properties: record, identity: record, managedBy: string, sku: record>> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> record<nextLink: string, value: table<kind: string, plan: record, properties: record, identity: record, managedBy: string, sku: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Solutions/applications") $qp $auth.query)
   let accept_val = "application/json"
@@ -407,13 +413,14 @@ export def "applications-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<errorCode: string, errorMessage: string, httpStatus: string> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($application_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), application_name: (encode-path-segment $application_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Solutions/applications/{application_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -449,13 +456,14 @@ export def "applications-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<kind: string, plan: record<name: string, product: string, promotionCode: string, publisher: string, version: string>, properties: record<applicationDefinitionId: string, managedResourceGroupId: string, outputs: record, parameters: record, provisioningState: string>, identity: record<principalId: string, tenantId: string, type: string>, managedBy: string, sku: record<capacity: int, family: string, model: string, name: string, size: string, tier: string>> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> record<kind: string, plan: record<name: string, product: string, promotionCode: string, publisher: string, version: string>, properties: record<applicationDefinitionId: string, managedResourceGroupId: string, outputs: record, parameters: record, provisioningState: string>, identity: record<principalId: string, tenantId: string, type: string>, managedBy: string, sku: record<capacity: int, family: string, model: string, name: string, size: string, tier: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($application_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), application_name: (encode-path-segment $application_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Solutions/applications/{application_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -495,20 +503,21 @@ export def "applications-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   kind: string # The kind of the managed application. Allowed values are MarketPlace and ServiceCatalog.
   --plan: any # Plan for the managed application. — shape: {name: string, product: string, promotionCode?: string, publisher: string, version: string}
   properties: any # The managed application properties. — shape: {applicationDefinitionId?: string, managedResourceGroupId: string, parameters?: record}
   --identity: any # Identity for the resource. — shape: {type?: "SystemAssigned"}
   --managed-by: string # ID of the resource that manages this resource.
   --sku: any # SKU for the resource. — shape: {capacity?: int, family?: string, model?: string, name: string, size?: string, tier?: string}
-]: any -> record<kind: string, plan: record<name: string, product: string, promotionCode: string, publisher: string, version: string>, properties: record<applicationDefinitionId: string, managedResourceGroupId: string, outputs: record, parameters: record, provisioningState: string>, identity: record<principalId: string, tenantId: string, type: string>, managedBy: string, sku: record<capacity: int, family: string, model: string, name: string, size: string, tier: string>> {
+]: any -> record<kind: string, plan: record<name: string, product: string, promotionCode: string, publisher: string, version: string>, properties: record<applicationDefinitionId: string, managedResourceGroupId: string, outputs: record, parameters: record, provisioningState: string>, identity: record<principalId: string, tenantId: string, type: string>, managedBy: string, sku: record<capacity: int, family: string, model: string, name: string, size: string, tier: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($application_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), application_name: (encode-path-segment $application_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Solutions/applications/{application_name}") $qp $auth.query)
   let req_body = {"kind": $kind, "plan": $plan, "properties": $properties, "identity": $identity, "managedBy": $managed_by, "sku": $sku} | compact
@@ -550,20 +559,21 @@ export def "applications-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   kind: string # The kind of the managed application. Allowed values are MarketPlace and ServiceCatalog.
   --plan: any # Plan for the managed application. — shape: {name: string, product: string, promotionCode?: string, publisher: string, version: string}
   properties: any # The managed application properties. — shape: {applicationDefinitionId?: string, managedResourceGroupId: string, parameters?: record}
   --identity: any # Identity for the resource. — shape: {type?: "SystemAssigned"}
   --managed-by: string # ID of the resource that manages this resource.
   --sku: any # SKU for the resource. — shape: {capacity?: int, family?: string, model?: string, name: string, size?: string, tier?: string}
-]: any -> record<kind: string, plan: record<name: string, product: string, promotionCode: string, publisher: string, version: string>, properties: record<applicationDefinitionId: string, managedResourceGroupId: string, outputs: record, parameters: record, provisioningState: string>, identity: record<principalId: string, tenantId: string, type: string>, managedBy: string, sku: record<capacity: int, family: string, model: string, name: string, size: string, tier: string>> {
+]: any -> record<kind: string, plan: record<name: string, product: string, promotionCode: string, publisher: string, version: string>, properties: record<applicationDefinitionId: string, managedResourceGroupId: string, outputs: record, parameters: record, provisioningState: string>, identity: record<principalId: string, tenantId: string, type: string>, managedBy: string, sku: record<capacity: int, family: string, model: string, name: string, size: string, tier: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($application_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), application_name: (encode-path-segment $application_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Solutions/applications/{application_name}") $qp $auth.query)
   let req_body = {"kind": $kind, "plan": $plan, "properties": $properties, "identity": $identity, "managedBy": $managed_by, "sku": $sku} | compact
@@ -599,11 +609,12 @@ export def "applications-delete-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<errorCode: string, errorMessage: string, httpStatus: string> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/{application_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -637,11 +648,12 @@ export def "applications-get-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<kind: string, plan: record<name: string, product: string, promotionCode: string, publisher: string, version: string>, properties: record<applicationDefinitionId: string, managedResourceGroupId: string, outputs: record, parameters: record, provisioningState: string>, identity: record<principalId: string, tenantId: string, type: string>, managedBy: string, sku: record<capacity: int, family: string, model: string, name: string, size: string, tier: string>> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> record<kind: string, plan: record<name: string, product: string, promotionCode: string, publisher: string, version: string>, properties: record<applicationDefinitionId: string, managedResourceGroupId: string, outputs: record, parameters: record, provisioningState: string>, identity: record<principalId: string, tenantId: string, type: string>, managedBy: string, sku: record<capacity: int, family: string, model: string, name: string, size: string, tier: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/{application_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -679,18 +691,19 @@ export def "applications-update-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   kind: string # The kind of the managed application. Allowed values are MarketPlace and ServiceCatalog.
   --plan: any # Plan for the managed application. — shape: {name: string, product: string, promotionCode?: string, publisher: string, version: string}
   properties: any # The managed application properties. — shape: {applicationDefinitionId?: string, managedResourceGroupId: string, parameters?: record}
   --identity: any # Identity for the resource. — shape: {type?: "SystemAssigned"}
   --managed-by: string # ID of the resource that manages this resource.
   --sku: any # SKU for the resource. — shape: {capacity?: int, family?: string, model?: string, name: string, size?: string, tier?: string}
-]: any -> record<kind: string, plan: record<name: string, product: string, promotionCode: string, publisher: string, version: string>, properties: record<applicationDefinitionId: string, managedResourceGroupId: string, outputs: record, parameters: record, provisioningState: string>, identity: record<principalId: string, tenantId: string, type: string>, managedBy: string, sku: record<capacity: int, family: string, model: string, name: string, size: string, tier: string>> {
+]: any -> record<kind: string, plan: record<name: string, product: string, promotionCode: string, publisher: string, version: string>, properties: record<applicationDefinitionId: string, managedResourceGroupId: string, outputs: record, parameters: record, provisioningState: string>, identity: record<principalId: string, tenantId: string, type: string>, managedBy: string, sku: record<capacity: int, family: string, model: string, name: string, size: string, tier: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/{application_id}") $qp $auth.query)
   let req_body = {"kind": $kind, "plan": $plan, "properties": $properties, "identity": $identity, "managedBy": $managed_by, "sku": $sku} | compact
@@ -730,18 +743,19 @@ export def "applications-create-or-update-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   kind: string # The kind of the managed application. Allowed values are MarketPlace and ServiceCatalog.
   --plan: any # Plan for the managed application. — shape: {name: string, product: string, promotionCode?: string, publisher: string, version: string}
   properties: any # The managed application properties. — shape: {applicationDefinitionId?: string, managedResourceGroupId: string, parameters?: record}
   --identity: any # Identity for the resource. — shape: {type?: "SystemAssigned"}
   --managed-by: string # ID of the resource that manages this resource.
   --sku: any # SKU for the resource. — shape: {capacity?: int, family?: string, model?: string, name: string, size?: string, tier?: string}
-]: any -> record<kind: string, plan: record<name: string, product: string, promotionCode: string, publisher: string, version: string>, properties: record<applicationDefinitionId: string, managedResourceGroupId: string, outputs: record, parameters: record, provisioningState: string>, identity: record<principalId: string, tenantId: string, type: string>, managedBy: string, sku: record<capacity: int, family: string, model: string, name: string, size: string, tier: string>> {
+]: any -> record<kind: string, plan: record<name: string, product: string, promotionCode: string, publisher: string, version: string>, properties: record<applicationDefinitionId: string, managedResourceGroupId: string, outputs: record, parameters: record, provisioningState: string>, identity: record<principalId: string, tenantId: string, type: string>, managedBy: string, sku: record<capacity: int, family: string, model: string, name: string, size: string, tier: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/{application_id}") $qp $auth.query)
   let req_body = {"kind": $kind, "plan": $plan, "properties": $properties, "identity": $identity, "managedBy": $managed_by, "sku": $sku} | compact

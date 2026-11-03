@@ -1,4 +1,4 @@
-# Auto-generated client for Migration Center API vv1alpha1
+# Auto-generated client for Migration Center API v1alpha1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/migrationcenter/v1alpha1/openapi.json
 # Auth: --token flag or $env.MIGRATION_CENTER_API_TOKEN
 
@@ -12,20 +12,10 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
-}
-
-# Merge multiple auth records (AND-form security: every scheme must be sent).
-def merge-auth [parts: list]: nothing -> record {
-  let active = ($parts | where {|p| $p.location != "none" })
-  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
-  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
-  let locs = ($active | each {|p| $p.location } | uniq)
-  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
-  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
 # Serialize a single query parameter based on collection style
@@ -164,8 +154,8 @@ export def commands []: nothing -> table {
 export def "migrationcenter-projects-locations-groups-add-assets" [
   group: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -188,7 +178,7 @@ export def "migrationcenter-projects-locations-groups-add-assets" [
   --request-id: string # Optional. An optional request ID to identify requests. Specify a unique request ID so that if you must retry your request, the server will know to ignore the request if it has already been completed. The server will guarantee that for at least 60 minutes after the first request. For example, consider a situation where you make an initial request and the request times out. If you make the request again with the same request ID, the server can check if original operation with the same request ID was received, and if so, will ignore the second request. This prevents clients from accidentally creating duplicate commitments. The request ID must be a valid UUID with the exception that zero UUID is not supported (00000000-0000-0000-0000-000000000000).
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o MIGRATION_CENTER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o MIGRATION_CENTER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group | is-empty) { error make --unspanned { msg: "path parameter 'group' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -219,8 +209,8 @@ export def "migrationcenter-projects-locations-groups-add-assets" [
 export def "migrationcenter-projects-locations-groups-remove-assets" [
   group: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -243,7 +233,7 @@ export def "migrationcenter-projects-locations-groups-remove-assets" [
   --request-id: string # Optional. An optional request ID to identify requests. Specify a unique request ID so that if you must retry your request, the server will know to ignore the request if it has already been completed. The server will guarantee that for at least 60 minutes after the first request. For example, consider a situation where you make an initial request and the request times out. If you make the request again with the same request ID, the server can check if original operation with the same request ID was received, and if so, will ignore the second request. This prevents clients from accidentally creating duplicate commitments. The request ID must be a valid UUID with the exception that zero UUID is not supported (00000000-0000-0000-0000-000000000000).
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o MIGRATION_CENTER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o MIGRATION_CENTER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group | is-empty) { error make --unspanned { msg: "path parameter 'group' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -273,8 +263,8 @@ export def "migrationcenter-projects-locations-groups-remove-assets" [
 export def "migrationcenter-projects-locations-sources-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -294,7 +284,7 @@ export def "migrationcenter-projects-locations-sources-delete" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --request-id: string # Optional. An optional request ID to identify requests. Specify a unique request ID so that if you must retry your request, the server will know to ignore the request if it has already been completed. The server will guarantee that for at least 60 minutes after the first request. For example, consider a situation where you make an initial request and the request times out. If you make the request again with the same request ID, the server can check if original operation with the same request ID was received, and if so, will ignore the second request. This prevents clients from accidentally creating duplicate commitments. The request ID must be a valid UUID with the exception that zero UUID is not supported (00000000-0000-0000-0000-000000000000).
 ]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o MIGRATION_CENTER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o MIGRATION_CENTER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "requestId" $request_id "scalar")] | flatten | str join "&"
@@ -322,8 +312,8 @@ export def "migrationcenter-projects-locations-sources-delete" [
 export def "migrationcenter-projects-locations-sources-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -343,7 +333,7 @@ export def "migrationcenter-projects-locations-sources-get" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --view: string@view-completer # Determines what information to retrieve for the Report.
 ]: nothing -> record<createTime: string, description: string, displayName: string, isManaged: bool, name: string, pendingFrameCount: int, priority: int, type: string, updateTime: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o MIGRATION_CENTER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o MIGRATION_CENTER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
@@ -371,8 +361,8 @@ export def "migrationcenter-projects-locations-sources-get" [
 export def "migrationcenter-projects-locations-sources-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -399,7 +389,7 @@ export def "migrationcenter-projects-locations-sources-patch" [
   --type: string@type-completer # Data source type.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o MIGRATION_CENTER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o MIGRATION_CENTER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "requestId" $request_id "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
@@ -429,8 +419,8 @@ export def "migrationcenter-projects-locations-sources-patch" [
 export def "migrationcenter-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -452,7 +442,7 @@ export def "migrationcenter-projects-locations-list" [
   --page-size: int # The maximum number of results to return. If not set, the service selects a default.
   --page-token: string # A page token received from the `next_page_token` field in the response. Send that page token to receive the subsequent page.
 ]: nothing -> record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o MIGRATION_CENTER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o MIGRATION_CENTER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -480,8 +470,8 @@ export def "migrationcenter-projects-locations-list" [
 export def "migrationcenter-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -503,7 +493,7 @@ export def "migrationcenter-projects-locations-operations-list" [
   --page-size: int # The standard list page size.
   --page-token: string # The standard list page token.
 ]: nothing -> record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o MIGRATION_CENTER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o MIGRATION_CENTER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -531,8 +521,8 @@ export def "migrationcenter-projects-locations-operations-list" [
 export def "migrationcenter-projects-locations-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -553,7 +543,7 @@ export def "migrationcenter-projects-locations-operations-cancel" [
   --body: record
 ]: any -> record {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o MIGRATION_CENTER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o MIGRATION_CENTER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -583,8 +573,8 @@ export def "migrationcenter-projects-locations-operations-cancel" [
 export def "migrationcenter-projects-locations-import-jobs-run" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -605,7 +595,7 @@ export def "migrationcenter-projects-locations-import-jobs-run" [
   --request-id: string # Optional. An optional request ID to identify requests. Specify a unique request ID so that if you must retry your request, the server will know to ignore the request if it has already been completed. The server will guarantee that for at least 60 minutes after the first request. For example, consider a situation where you make an initial request and the request times out. If you make the request again with the same request ID, the server can check if original operation with the same request ID was received, and if so, will ignore the second request. This prevents clients from accidentally creating duplicate commitments. The request ID must be a valid UUID with the exception that zero UUID is not supported (00000000-0000-0000-0000-000000000000).
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o MIGRATION_CENTER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o MIGRATION_CENTER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -635,8 +625,8 @@ export def "migrationcenter-projects-locations-import-jobs-run" [
 export def "migrationcenter-projects-locations-import-jobs-validate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -657,7 +647,7 @@ export def "migrationcenter-projects-locations-import-jobs-validate" [
   --request-id: string # Optional. An optional request ID to identify requests. Specify a unique request ID so that if you must retry your request, the server will know to ignore the request if it has already been completed. The server will guarantee that for at least 60 minutes after the first request. For example, consider a situation where you make an initial request and the request times out. If you make the request again with the same request ID, the server can check if original operation with the same request ID was received, and if so, will ignore the second request. This prevents clients from accidentally creating duplicate commitments. The request ID must be a valid UUID with the exception that zero UUID is not supported (00000000-0000-0000-0000-000000000000).
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o MIGRATION_CENTER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o MIGRATION_CENTER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -687,8 +677,8 @@ export def "migrationcenter-projects-locations-import-jobs-validate" [
 export def "migrationcenter-projects-locations-assets-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -712,7 +702,7 @@ export def "migrationcenter-projects-locations-assets-list" [
   --page-token: string # A token identifying a page of results the server should return.
   --view: string@view-completer-1 # View of the assets. Defaults to BASIC.
 ]: nothing -> record<assets: table<assignedGroups: list, attributes: record, createTime: string, insightList: record, labels: record, name: string, performanceData: record, sources: list, updateTime: string, virtualMachineDetails: record>, nextPageToken: string, unreachable: list<string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o MIGRATION_CENTER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o MIGRATION_CENTER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
@@ -741,8 +731,8 @@ export def "migrationcenter-projects-locations-assets-list" [
 export def "migrationcenter-projects-locations-assets-aggregate-values" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -764,7 +754,7 @@ export def "migrationcenter-projects-locations-assets-aggregate-values" [
   --filter: string # The aggregation will be performed on assets that match the provided filter.
 ]: any -> record<results: table<count: record, field: string, frequency: record, histogram: record, sum: record>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o MIGRATION_CENTER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o MIGRATION_CENTER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -794,8 +784,8 @@ export def "migrationcenter-projects-locations-assets-aggregate-values" [
 export def "migrationcenter-projects-locations-assets-batch-delete" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -817,7 +807,7 @@ export def "migrationcenter-projects-locations-assets-batch-delete" [
   --names: list<string> # Required. The IDs of the assets to delete. A maximum of 10 assets can be deleted in a batch. format: projects/{project}/locations/{location}/asset/{name}.
 ]: any -> record {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o MIGRATION_CENTER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o MIGRATION_CENTER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -848,8 +838,8 @@ export def "migrationcenter-projects-locations-assets-batch-delete" [
 export def "migrationcenter-projects-locations-assets-batch-update" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -870,7 +860,7 @@ export def "migrationcenter-projects-locations-assets-batch-update" [
   --requests: list # Required. The request message specifying the resources to update. A maximum of 1000 assets can be modified in a batch. — item shape: {asset?: record, requestId?: string, updateMask?: string}
 ]: any -> record<assets: table<assignedGroups: list, attributes: record, createTime: string, insightList: record, labels: record, name: string, performanceData: record, sources: list, updateTime: string, virtualMachineDetails: record>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o MIGRATION_CENTER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o MIGRATION_CENTER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -901,8 +891,8 @@ export def "migrationcenter-projects-locations-assets-batch-update" [
 export def "migrationcenter-projects-locations-assets-report-asset-frames" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -920,14 +910,14 @@ export def "migrationcenter-projects-locations-assets-report-asset-frames" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --qp-source: string # Required. Reference to a source.
+  --source: string # Required. Reference to a source.
   --frames-data: list # A repeated field of asset data. — item shape: {attributes?: record, labels?: record, performanceSamples?: list, reportTime?: string, traceToken?: string, virtualMachineDetails?: record}
 ]: any -> record {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o MIGRATION_CENTER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o MIGRATION_CENTER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "source" $qp_source "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "source" $source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1alpha1/{parent}/assets:reportAssetFrames") $qp $auth.query)
   let req_body = {"framesData": $frames_data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -936,7 +926,7 @@ export def "migrationcenter-projects-locations-assets-report-asset-frames" [
   let req = {
     method: "post"
     url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "source": $qp_source} | compact)
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "source": $source} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -954,8 +944,8 @@ export def "migrationcenter-projects-locations-assets-report-asset-frames" [
 export def "migrationcenter-projects-locations-groups-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -978,7 +968,7 @@ export def "migrationcenter-projects-locations-groups-list" [
   --page-size: int # Requested page size. Server may return fewer items than requested. If unspecified, server will pick an appropriate default.
   --page-token: string # A token identifying a page of results the server should return.
 ]: nothing -> record<groups: table<createTime: string, description: string, displayName: string, labels: record, name: string, updateTime: string>, nextPageToken: string, unreachable: list<string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o MIGRATION_CENTER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o MIGRATION_CENTER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -1006,8 +996,8 @@ export def "migrationcenter-projects-locations-groups-list" [
 export def "migrationcenter-projects-locations-groups-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1032,7 +1022,7 @@ export def "migrationcenter-projects-locations-groups-create" [
   --labels: record # Labels as key value pairs.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o MIGRATION_CENTER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o MIGRATION_CENTER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "requestId" $request_id "scalar")] | flatten | str join "&"
@@ -1062,8 +1052,8 @@ export def "migrationcenter-projects-locations-groups-create" [
 export def "migrationcenter-projects-locations-import-jobs-import-data-files-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1086,7 +1076,7 @@ export def "migrationcenter-projects-locations-import-jobs-import-data-files-lis
   --page-size: int # The maximum number of data files to return. The service may return fewer than this value. If unspecified, at most 500 data files will be returned. The maximum value is 1000; values above 1000 will be coerced to 1000.
   --page-token: string # A page token, received from a previous `ListImportDataFiles` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListImportDataFiles` must match the call that provided the page token.
 ]: nothing -> record<importDataFiles: table<createTime: string, displayName: string, format: string, name: string, state: string, uploadFileInfo: record>, nextPageToken: string, unreachable: list<string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o MIGRATION_CENTER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o MIGRATION_CENTER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -1114,8 +1104,8 @@ export def "migrationcenter-projects-locations-import-jobs-import-data-files-lis
 export def "migrationcenter-projects-locations-import-jobs-import-data-files-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1140,7 +1130,7 @@ export def "migrationcenter-projects-locations-import-jobs-import-data-files-cre
   --upload-file-info: record # A resource that contains a URI to which a data file can be uploaded.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o MIGRATION_CENTER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o MIGRATION_CENTER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "importDataFileId" $import_data_file_id "scalar") (serialize-qp "requestId" $request_id "scalar")] | flatten | str join "&"
@@ -1170,8 +1160,8 @@ export def "migrationcenter-projects-locations-import-jobs-import-data-files-cre
 export def "migrationcenter-projects-locations-import-jobs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1195,7 +1185,7 @@ export def "migrationcenter-projects-locations-import-jobs-list" [
   --page-token: string # A token identifying a page of results the server should return.
   --view: string@view-completer-2 # Optional. The level of details of each import job. Default value is BASIC.
 ]: nothing -> record<importJobs: table<assetSource: string, completeTime: string, createTime: string, displayName: string, executionReport: record, gcsPayload: record, inlinePayload: record, labels: record, name: string, state: string, updateTime: string, validationReport: record>, nextPageToken: string, unreachable: list<string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o MIGRATION_CENTER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o MIGRATION_CENTER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
@@ -1227,8 +1217,8 @@ export def "migrationcenter-projects-locations-import-jobs-list" [
 export def "migrationcenter-projects-locations-import-jobs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1257,7 +1247,7 @@ export def "migrationcenter-projects-locations-import-jobs-create" [
   --validation-report: record # A resource that aggregates errors across import job files. — shape: {fileValidations?: list, jobErrors?: list}
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o MIGRATION_CENTER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o MIGRATION_CENTER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "importJobId" $import_job_id "scalar") (serialize-qp "requestId" $request_id "scalar")] | flatten | str join "&"
@@ -1287,8 +1277,8 @@ export def "migrationcenter-projects-locations-import-jobs-create" [
 export def "migrationcenter-projects-locations-preference-sets-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1310,7 +1300,7 @@ export def "migrationcenter-projects-locations-preference-sets-list" [
   --page-size: int # Requested page size. Server may return fewer items than requested. If unspecified, at most 500 preference sets will be returned. The maximum value is 1000; values above 1000 will be coerced to 1000.
   --page-token: string # A token identifying a page of results the server should return.
 ]: nothing -> record<nextPageToken: string, preferenceSets: table<createTime: string, description: string, displayName: string, name: string, updateTime: string, virtualMachinePreferences: record>, unreachable: list<string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o MIGRATION_CENTER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o MIGRATION_CENTER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -1339,8 +1329,8 @@ export def "migrationcenter-projects-locations-preference-sets-list" [
 export def "migrationcenter-projects-locations-preference-sets-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1365,7 +1355,7 @@ export def "migrationcenter-projects-locations-preference-sets-create" [
   --virtual-machine-preferences: record # VirtualMachinePreferences enables you to create sets of assumptions, for example, a geographical location and pricing track, for your migrated virtual machines. The set of preferences influence recommendations for migrating virtual machine assets. — shape: {commitmentPlan?: "COMMITMENT_PLAN_UNSPECIFIED"|"COMMITMENT_PLAN_NONE"|"COMMITMENT_PLAN_ONE_YEAR"|"COMMITMENT_PLAN_THREE_YEARS", computeEnginePreferences?: record, regionPreferences?: record, sizingOptimizationStrategy?: "SIZING_OPTIMIZATION_STRATEGY_UNSPECIFIED"|"SIZING_OPTIMIZATION_STRATEGY_SAME_AS_SOURCE"|"SIZING_OPTIMIZATION_STRATEGY_MODERATE"|"SIZING_OPTIMIZATION_STRATEGY_AGGRESSIVE"}
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o MIGRATION_CENTER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o MIGRATION_CENTER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "preferenceSetId" $preference_set_id "scalar") (serialize-qp "requestId" $request_id "scalar")] | flatten | str join "&"
@@ -1395,8 +1385,8 @@ export def "migrationcenter-projects-locations-preference-sets-create" [
 export def "migrationcenter-projects-locations-report-configs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1419,7 +1409,7 @@ export def "migrationcenter-projects-locations-report-configs-list" [
   --page-size: int # Requested page size. Server may return fewer items than requested. If unspecified, server will pick an appropriate default.
   --page-token: string # A token identifying a page of results the server should return.
 ]: nothing -> record<nextPageToken: string, reportConfigs: table<createTime: string, description: string, displayName: string, groupPreferencesetAssignments: list, name: string, updateTime: string>, unreachable: list<string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o MIGRATION_CENTER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o MIGRATION_CENTER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -1448,8 +1438,8 @@ export def "migrationcenter-projects-locations-report-configs-list" [
 export def "migrationcenter-projects-locations-report-configs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1474,7 +1464,7 @@ export def "migrationcenter-projects-locations-report-configs-create" [
   --group-preferenceset-assignments: list # Required. Collection of combinations of groups and preference sets. — item shape: {group?: string, preferenceSet?: string}
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o MIGRATION_CENTER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o MIGRATION_CENTER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "reportConfigId" $report_config_id "scalar") (serialize-qp "requestId" $request_id "scalar")] | flatten | str join "&"
@@ -1504,8 +1494,8 @@ export def "migrationcenter-projects-locations-report-configs-create" [
 export def "migrationcenter-projects-locations-report-configs-reports-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1529,7 +1519,7 @@ export def "migrationcenter-projects-locations-report-configs-reports-list" [
   --page-token: string # A token identifying a page of results that the server should return.
   --view: string@view-completer # Determines what information to retrieve for each Report.
 ]: nothing -> record<nextPageToken: string, reports: table<createTime: string, description: string, displayName: string, name: string, state: string, summary: record, type: string, updateTime: string>, unreachable: list<string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o MIGRATION_CENTER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o MIGRATION_CENTER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
@@ -1558,8 +1548,8 @@ export def "migrationcenter-projects-locations-report-configs-reports-list" [
 export def "migrationcenter-projects-locations-report-configs-reports-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1586,7 +1576,7 @@ export def "migrationcenter-projects-locations-report-configs-reports-create" [
   --type: string@type-completer-1 # Report type.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o MIGRATION_CENTER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o MIGRATION_CENTER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "reportId" $report_id "scalar") (serialize-qp "requestId" $request_id "scalar")] | flatten | str join "&"
@@ -1616,8 +1606,8 @@ export def "migrationcenter-projects-locations-report-configs-reports-create" [
 export def "migrationcenter-projects-locations-sources-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1640,7 +1630,7 @@ export def "migrationcenter-projects-locations-sources-list" [
   --page-size: int # Requested page size. The server may return fewer items than requested. If unspecified, the server will pick an appropriate default value.
   --page-token: string # A token identifying a page of results that the server should return.
 ]: nothing -> record<nextPageToken: string, sources: table<createTime: string, description: string, displayName: string, isManaged: bool, name: string, pendingFrameCount: int, priority: int, type: string, updateTime: string>, unreachable: list<string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o MIGRATION_CENTER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o MIGRATION_CENTER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -1668,8 +1658,8 @@ export def "migrationcenter-projects-locations-sources-list" [
 export def "migrationcenter-projects-locations-sources-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1696,7 +1686,7 @@ export def "migrationcenter-projects-locations-sources-create" [
   --type: string@type-completer # Data source type.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o MIGRATION_CENTER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o MIGRATION_CENTER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "requestId" $request_id "scalar") (serialize-qp "sourceId" $source_id "scalar")] | flatten | str join "&"

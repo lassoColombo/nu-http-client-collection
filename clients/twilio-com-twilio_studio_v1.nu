@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -226,16 +226,16 @@ export def "create-engagement" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-from: string # The Twilio phone number to send messages or initiate calls from during the Flow Engagement. Available as variable `{{flow.channel.address}}` (format: phone-number)
+  from: string # The Twilio phone number to send messages or initiate calls from during the Flow Engagement. Available as variable `{{flow.channel.address}}` (format: phone-number)
   --parameters: any # A JSON string we will add to your flow's context and that you can access as variables inside your flow. For example, if you pass in `Parameters={'name':'Zeke'}` then inside a widget you can reference the variable `{{flow.data.name}}` which will return the string 'Zeke'. Note: the JSON value must explicitly be passed as a string, not as a hash object. Depending on your particular HTTP library, you may need to add quotes or URL encode your JSON string.
-  --body-to: string # The Contact phone number to start a Studio Flow Engagement, available as variable `{{contact.channel.address}}`. (format: phone-number)
+  to: string # The Contact phone number to start a Studio Flow Engagement, available as variable `{{contact.channel.address}}`. (format: phone-number)
 ]: any -> record<account_sid: string, contact_channel_address: string, contact_sid: string, context: any, date_created: string, date_updated: string, flow_sid: string, links: record, sid: string, status: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://studio.twilio.com")
   if ($flow_sid | is-empty) { error make --unspanned { msg: "path parameter 'FlowSid' must be non-empty" } }
   let full_url = (build-url $base ({flow_sid: (encode-path-segment $flow_sid)} | format pattern "/v1/Flows/{flow_sid}/Engagements") $auth.query)
-  let req_body = {"From": $body_from, "Parameters": $parameters, "To": $body_to} | compact
+  let req_body = {"From": $from, "Parameters": $parameters, "To": $to} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -547,16 +547,16 @@ export def "create-execution" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-from: string # The Twilio phone number to send messages or initiate calls from during the Flow's Execution. Available as variable `{{flow.channel.address}}`. For SMS, this can also be a Messaging Service SID. (format: phone-number)
+  from: string # The Twilio phone number to send messages or initiate calls from during the Flow's Execution. Available as variable `{{flow.channel.address}}`. For SMS, this can also be a Messaging Service SID. (format: phone-number)
   --parameters: any # JSON data that will be added to the Flow's context and that can be accessed as variables inside your Flow. For example, if you pass in `Parameters={"name":"Zeke"}`, a widget in your Flow can reference the variable `{{flow.data.name}}`, which returns "Zeke". Note: the JSON value must explicitly be passed as a string, not as a hash object. Depending on your particular HTTP library, you may need to add quotes or URL encode the JSON string.
-  --body-to: string # The Contact phone number to start a Studio Flow Execution, available as variable `{{contact.channel.address}}`. (format: phone-number)
+  to: string # The Contact phone number to start a Studio Flow Execution, available as variable `{{contact.channel.address}}`. (format: phone-number)
 ]: any -> record<account_sid: string, contact_channel_address: string, contact_sid: string, context: any, date_created: string, date_updated: string, flow_sid: string, links: record, sid: string, status: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://studio.twilio.com")
   if ($flow_sid | is-empty) { error make --unspanned { msg: "path parameter 'FlowSid' must be non-empty" } }
   let full_url = (build-url $base ({flow_sid: (encode-path-segment $flow_sid)} | format pattern "/v1/Flows/{flow_sid}/Executions") $auth.query)
-  let req_body = {"From": $body_from, "Parameters": $parameters, "To": $body_to} | compact
+  let req_body = {"From": $from, "Parameters": $parameters, "To": $to} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -140,10 +140,11 @@ export def "get-feed-connections" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number which specifies the set of records to retrieve. By default the number of the records per set is 10. Example - https://api.xero.com/bankfeeds.xro/1.0/FeedConnections?page=1 to get the second set of the records. When page value is not a number or a negative number, by default, the first set of records is returned. (e.g. 1)
   --page-size: int # Page size which specifies how many records per page will be returned (default 10). Example - https://api.xero.com/bankfeeds.xro/1.0/FeedConnections?pageSize=100 to specify page size of 100. (e.g. 100)
-  --xero-tenant-id: string # Xero identifier for Tenant
+  --xero-tenant-id: string # Xero identifier for Tenant (required)
 ]: nothing -> record<items: table<accountId: string, accountName: string, accountNumber: string, accountToken: string, accountType: any, country: string, currency: string, error: record, id: string, status: string>, pagination: record<itemCount: int, page: int, pageCount: int, pageSize: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'Xero-Tenant-Id' missing: pass --xero-tenant-id" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/FeedConnections" $qp $auth.query)
   let accept_val = "application/json"
@@ -180,13 +181,14 @@ export def "create-feed-connections" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant
+  --xero-tenant-id: string # Xero identifier for Tenant (required)
   --items: list # item shape: {accountId?: string, accountName?: string, accountNumber?: string, accountToken?: string, accountType?: "BANK"|"CREDITCARD", ... (5 more fields)}
   --pagination: record # shape: {itemCount?: int, page?: int, pageCount?: int, pageSize?: int}
 ]: any -> record<items: table<accountId: string, accountName: string, accountNumber: string, accountToken: string, accountType: any, country: string, currency: string, error: record, id: string, status: string>, pagination: record<itemCount: int, page: int, pageCount: int, pageSize: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'Xero-Tenant-Id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base "/FeedConnections" $auth.query)
   let req_body = {"items": $items, "pagination": $pagination} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -224,13 +226,14 @@ export def "delete-feed-connections" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant
+  --xero-tenant-id: string # Xero identifier for Tenant (required)
   --items: list # item shape: {accountId?: string, accountName?: string, accountNumber?: string, accountToken?: string, accountType?: "BANK"|"CREDITCARD", ... (5 more fields)}
   --pagination: record # shape: {itemCount?: int, page?: int, pageCount?: int, pageSize?: int}
 ]: any -> record<items: table<accountId: string, accountName: string, accountNumber: string, accountToken: string, accountType: any, country: string, currency: string, error: record, id: string, status: string>, pagination: record<itemCount: int, page: int, pageCount: int, pageSize: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'Xero-Tenant-Id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base "/FeedConnections/DeleteRequests" $auth.query)
   let req_body = {"items": $items, "pagination": $pagination} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -267,11 +270,12 @@ export def "get-feed-connection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant
+  --xero-tenant-id: string # Xero identifier for Tenant (required)
 ]: nothing -> record<accountId: string, accountName: string, accountNumber: string, accountToken: string, accountType: any, country: string, currency: string, error: record<detail: string, status: int, title: string, type: string>, id: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'Xero-Tenant-Id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/FeedConnections/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -307,12 +311,13 @@ export def "get-statements" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # unique id for single object (format: int32)
   --page-size: int # Page size which specifies how many records per page will be returned (default 10). Example - https://api.xero.com/bankfeeds.xro/1.0/Statements?pageSize=100 to specify page size of 100. (format: int32)
-  --xero-tenant-id: string # Xero identifier for Tenant
-  --xero-application-id: string
-  --xero-user-id: string
+  --xero-tenant-id: string # Xero identifier for Tenant (required)
+  --xero-application-id: string # default: 00000000-0000-0000-0000-0000000010000
+  --xero-user-id: string # default: 00000000-0000-0000-0000-0000030000000
 ]: nothing -> record<items: table<endBalance: record, endDate: string, errors: list, feedConnectionId: string, id: string, startBalance: record, startDate: string, statementLineCount: int, statementLines: list, status: any>, pagination: record<itemCount: int, page: int, pageCount: int, pageSize: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'Xero-Tenant-Id' missing: pass --xero-tenant-id" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Statements" $qp $auth.query)
   let accept_val = "application/json"
@@ -349,13 +354,14 @@ export def "create-statements" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant
+  --xero-tenant-id: string # Xero identifier for Tenant (required)
   --items: list # item shape: {endBalance?: record, endDate?: string, errors?: list, feedConnectionId?: string, id?: string, startBalance?: record, startDate?: string, statementLineCount?: int, statementLines?: list, status?: "PENDING"|"REJECTED"|"DELIVERED"}
   --pagination: record # shape: {itemCount?: int, page?: int, pageCount?: int, pageSize?: int}
 ]: any -> record<items: table<endBalance: record, endDate: string, errors: list, feedConnectionId: string, id: string, startBalance: record, startDate: string, statementLineCount: int, statementLines: list, status: any>, pagination: record<itemCount: int, page: int, pageCount: int, pageSize: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'Xero-Tenant-Id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base "/Statements" $auth.query)
   let req_body = {"items": $items, "pagination": $pagination} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -392,12 +398,14 @@ export def "get-statement" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-statement-id: string # statement id for single object (format: uuid)
-  --xero-tenant-id: string # Xero identifier for Tenant
+  --qp-statement-id: string # statement id for single object (required, format: uuid)
+  --xero-tenant-id: string # Xero identifier for Tenant (required)
 ]: nothing -> record<endBalance: record<amount: float, creditDebitIndicator: string>, endDate: string, errors: table<detail: string, status: int, title: string, type: string>, feedConnectionId: string, id: string, startBalance: record<amount: float, creditDebitIndicator: string>, startDate: string, statementLineCount: int, statementLines: table<amount: float, chequeNumber: string, creditDebitIndicator: string, description: string, payeeName: string, postedDate: string, reference: string, transactionId: string>, status: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($statement_id | is-empty) { error make --unspanned { msg: "path parameter 'statementID' must be non-empty" } }
+  if ($qp_statement_id == null) { error make --unspanned { msg: "required query parameter 'statementId' missing: pass --qp-statement-id" } }
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'Xero-Tenant-Id' missing: pass --xero-tenant-id" } }
   let qp = [(serialize-qp "statementId" $qp_statement_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({statement_id: (encode-path-segment $statement_id)} | format pattern "/Statements/{statement_id}") $qp $auth.query)
   let accept_val = "application/json"

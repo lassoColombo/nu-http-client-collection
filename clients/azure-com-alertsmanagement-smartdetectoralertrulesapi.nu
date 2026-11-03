@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -151,12 +151,13 @@ export def "smart-detector-alert-rules-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --expand-detector: oneof<nothing, bool> # Indicates if Smart Detector should be expanded.
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "expandDetector" $expand_detector "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/microsoft.alertsManagement/smartDetectorAlertRules") $qp $auth.query)
   let accept_val = "application/json"
@@ -191,13 +192,14 @@ export def "smart-detector-alert-rules-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --expand-detector: oneof<nothing, bool> # Indicates if Smart Detector should be expanded.
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "expandDetector" $expand_detector "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.alertsManagement/smartDetectorAlertRules") $qp $auth.query)
   let accept_val = "application/json"
@@ -233,13 +235,14 @@ export def "smart-detector-alert-rules-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<code: string, message: string> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($alert_rule_name | is-empty) { error make --unspanned { msg: "path parameter 'alertRuleName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), alert_rule_name: (encode-path-segment $alert_rule_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.alertsManagement/smartDetectorAlertRules/{alert_rule_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -275,7 +278,7 @@ export def "smart-detector-alert-rules-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --expand-detector: oneof<nothing, bool> # Indicates if Smart Detector should be expanded.
 ]: nothing -> record<properties: record<actionGroups: record<customEmailSubject: string, customWebhookPayload: string, groupIds: list>, description: string, detector: record<description: string, id: string, imagePaths: list, name: string, parameters: record, supportedResourceTypes: list>, frequency: string, scope: list<string>, severity: string, state: string, throttling: record<duration: string>>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -283,6 +286,7 @@ export def "smart-detector-alert-rules-get" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($alert_rule_name | is-empty) { error make --unspanned { msg: "path parameter 'alertRuleName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "expandDetector" $expand_detector "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), alert_rule_name: (encode-path-segment $alert_rule_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.alertsManagement/smartDetectorAlertRules/{alert_rule_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -319,7 +323,7 @@ export def "smart-detector-alert-rules-patch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: any # The alert rule properties. — shape: {actionGroups?: any, description?: string, frequency?: string, severity?: "Sev0"|"Sev1"|"Sev2"|"Sev3"|"Sev4", state?: "Enabled"|"Disabled", throttling?: any}
   --tags: record # The resource tags.
 ]: any -> record<properties: record<actionGroups: record<customEmailSubject: string, customWebhookPayload: string, groupIds: list>, description: string, detector: record<description: string, id: string, imagePaths: list, name: string, parameters: record, supportedResourceTypes: list>, frequency: string, scope: list<string>, severity: string, state: string, throttling: record<duration: string>>, id: string, location: string, name: string, tags: record, type: string> {
@@ -329,6 +333,7 @@ export def "smart-detector-alert-rules-patch" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($alert_rule_name | is-empty) { error make --unspanned { msg: "path parameter 'alertRuleName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), alert_rule_name: (encode-path-segment $alert_rule_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.alertsManagement/smartDetectorAlertRules/{alert_rule_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -367,7 +372,7 @@ export def "smart-detector-alert-rules-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: any # The alert rule properties. — shape: {actionGroups: any, description?: string, detector: any, frequency: string, scope: list<string>, severity: "Sev0"|"Sev1"|"Sev2"|"Sev3"|"Sev4", state: "Enabled"|"Disabled", throttling?: any}
   --location: string # The resource location. (default: global)
   --tags: record # The resource tags.
@@ -378,6 +383,7 @@ export def "smart-detector-alert-rules-create-or-update" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($alert_rule_name | is-empty) { error make --unspanned { msg: "path parameter 'alertRuleName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), alert_rule_name: (encode-path-segment $alert_rule_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.alertsManagement/smartDetectorAlertRules/{alert_rule_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact

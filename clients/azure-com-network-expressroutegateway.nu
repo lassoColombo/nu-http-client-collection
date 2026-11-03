@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -145,11 +145,12 @@ export def "express-route-gateways-list-by-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/expressRouteGateways") $qp $auth.query)
   let accept_val = "application/json"
@@ -184,12 +185,13 @@ export def "express-route-gateways-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/expressRouteGateways") $qp $auth.query)
   let accept_val = "application/json"
@@ -225,13 +227,14 @@ export def "express-route-gateways-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($express_route_gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'expressRouteGatewayName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), express_route_gateway_name: (encode-path-segment $express_route_gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/expressRouteGateways/{express_route_gateway_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -267,13 +270,14 @@ export def "express-route-gateways-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<etag: string, properties: record<autoScaleConfiguration: record<bounds: record>, expressRouteConnections: list<record>, provisioningState: string, virtualHub: record<id: string>>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($express_route_gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'expressRouteGatewayName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), express_route_gateway_name: (encode-path-segment $express_route_gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/expressRouteGateways/{express_route_gateway_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -310,7 +314,7 @@ export def "express-route-gateways-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --properties: any # ExpressRoute gateway resource properties. — shape: {autoScaleConfiguration?: any, virtualHub: any}
   --id: string # Resource ID.
   --location: string # Resource location.
@@ -322,6 +326,7 @@ export def "express-route-gateways-create-or-update" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($express_route_gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'expressRouteGatewayName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), express_route_gateway_name: (encode-path-segment $express_route_gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/expressRouteGateways/{express_route_gateway_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "id": $id, "location": $location, "tags": $tags} | compact
@@ -359,13 +364,14 @@ export def "express-route-connections-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<value: table<name: string, properties: record, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($express_route_gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'expressRouteGatewayName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), express_route_gateway_name: (encode-path-segment $express_route_gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/expressRouteGateways/{express_route_gateway_name}/expressRouteConnections") $qp $auth.query)
   let accept_val = "application/json"
@@ -402,7 +408,7 @@ export def "express-route-connections-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -410,6 +416,7 @@ export def "express-route-connections-delete" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($express_route_gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'expressRouteGatewayName' must be non-empty" } }
   if ($connection_name | is-empty) { error make --unspanned { msg: "path parameter 'connectionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), express_route_gateway_name: (encode-path-segment $express_route_gateway_name), connection_name: (encode-path-segment $connection_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/expressRouteGateways/{express_route_gateway_name}/expressRouteConnections/{connection_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -446,7 +453,7 @@ export def "express-route-connections-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<name: string, properties: record<authorizationKey: string, expressRouteCircuitPeering: record<id: string>, provisioningState: string, routingWeight: int>, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -454,6 +461,7 @@ export def "express-route-connections-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($express_route_gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'expressRouteGatewayName' must be non-empty" } }
   if ($connection_name | is-empty) { error make --unspanned { msg: "path parameter 'connectionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), express_route_gateway_name: (encode-path-segment $express_route_gateway_name), connection_name: (encode-path-segment $connection_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/expressRouteGateways/{express_route_gateway_name}/expressRouteConnections/{connection_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -491,7 +499,7 @@ export def "express-route-connections-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   name: string # The name of the resource.
   --properties: any # Properties of the ExpressRouteConnection subresource. — shape: {authorizationKey?: string, expressRouteCircuitPeering: any, routingWeight?: int}
   --id: string # Resource ID.
@@ -503,6 +511,7 @@ export def "express-route-connections-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($express_route_gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'expressRouteGatewayName' must be non-empty" } }
   if ($connection_name | is-empty) { error make --unspanned { msg: "path parameter 'connectionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), express_route_gateway_name: (encode-path-segment $express_route_gateway_name), connection_name: (encode-path-segment $connection_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/expressRouteGateways/{express_route_gateway_name}/expressRouteConnections/{connection_name}") $qp $auth.query)
   let req_body = {"name": $name, "properties": $properties, "id": $id} | compact

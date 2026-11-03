@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -140,8 +140,8 @@ export def commands []: nothing -> table {
 #
 # POST /dataIntegrations
 # operationId: CreateDataIntegration
-# --ScheduleConfig shape: {FirstExecutionFrom?: any, Object?: any, ScheduleExpression?: any}
-# --FileConfiguration shape: {Folders?: any, Filters?: any}
+# --ScheduleConfig shape: {FirstExecutionFrom?: string, Object?: string, ScheduleExpression?: string}
+# --FileConfiguration shape: {Folders?: list<string>, Filters?: record}
 export def "create-data-integration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -163,12 +163,12 @@ export def "create-data-integration" [
   --description: string # A description of the DataIntegration.
   kms_key: string # The KMS key for the DataIntegration.
   source_uri: string # The URI of the data source.
-  schedule_config: record # The name of the data and how often it should be pulled from the source. — shape: {FirstExecutionFrom?: any, Object?: any, ScheduleExpression?: any}
+  schedule_config: record # The name of the data and how often it should be pulled from the source. — shape: {FirstExecutionFrom?: string, Object?: string, ScheduleExpression?: string}
   --tags: record # The tags used to organize, track, or control access for this resource. For example, { "tags": {"key1":"value1", "key2":"value2"} }.
   --client-token: string # A unique, case-sensitive identifier that you provide to ensure the idempotency of the request. If not provided, the Amazon Web Services SDK populates this field. For more information about idempotency, see Making retries safe with idempotent APIs (https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/).
-  --file-configuration: record # The configuration for what files should be pulled from the source. — shape: {Folders?: any, Filters?: any}
+  --file-configuration: record # The configuration for what files should be pulled from the source. — shape: {Folders?: list<string>, Filters?: record}
   --object-configuration: record # The configuration for what data should be pulled from the source.
-]: any -> record<Arn: record, Id: record, Name: record, Description: record, KmsKey: record, SourceURI: record, ScheduleConfiguration: record<FirstExecutionFrom: record, Object: record, ScheduleExpression: record>, Tags: record, ClientToken: record, FileConfiguration: record<Folders: record, Filters: record>, ObjectConfiguration: record> {
+]: any -> record<Arn: string, Id: string, Name: string, Description: string, KmsKey: string, SourceURI: string, ScheduleConfiguration: record<FirstExecutionFrom: string, Object: string, ScheduleExpression: string>, Tags: record, ClientToken: string, FileConfiguration: record<Folders: list<string>, Filters: record>, ObjectConfiguration: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -216,7 +216,7 @@ export def "list-data-integrations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DataIntegrations: record, NextToken: record> {
+]: nothing -> record<DataIntegrations: table<Arn: string, Name: string, SourceURI: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -243,7 +243,7 @@ export def "list-data-integrations" [
 #
 # POST /eventIntegrations
 # operationId: CreateEventIntegration
-# --EventFilter shape: {Source?: any}
+# --EventFilter shape: {Source?: string}
 export def "create-event-integration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -263,11 +263,11 @@ export def "create-event-integration" [
   --x-amz-signed-headers: string
   name: string # The name of the event integration.
   --description: string # The description of the event integration.
-  event_filter: record # The event filter. — shape: {Source?: any}
+  event_filter: record # The event filter. — shape: {Source?: string}
   event_bridge_bus: string # The EventBridge bus.
   --client-token: string # A unique, case-sensitive identifier that you provide to ensure the idempotency of the request. If not provided, the Amazon Web Services SDK populates this field. For more information about idempotency, see Making retries safe with idempotent APIs (https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/).
   --tags: record # The tags used to organize, track, or control access for this resource. For example, { "tags": {"key1":"value1", "key2":"value2"} }.
-]: any -> record<EventIntegrationArn: record> {
+]: any -> record<EventIntegrationArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -315,7 +315,7 @@ export def "list-event-integrations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EventIntegrations: record, NextToken: record> {
+]: nothing -> record<EventIntegrations: table<EventIntegrationArn: string, Name: string, Description: string, EventFilter: record, EventBridgeBus: string, Tags: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -405,7 +405,7 @@ export def "get-data-integration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: record, Id: record, Name: record, Description: record, KmsKey: record, SourceURI: record, ScheduleConfiguration: record<FirstExecutionFrom: record, Object: record, ScheduleExpression: record>, Tags: record, FileConfiguration: record<Folders: record, Filters: record>, ObjectConfiguration: record> {
+]: nothing -> record<Arn: string, Id: string, Name: string, Description: string, KmsKey: string, SourceURI: string, ScheduleConfiguration: record<FirstExecutionFrom: string, Object: string, ScheduleExpression: string>, Tags: record, FileConfiguration: record<Folders: list<string>, Filters: record>, ObjectConfiguration: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($identifier | is-empty) { error make --unspanned { msg: "path parameter 'Identifier' must be non-empty" } }
@@ -545,7 +545,7 @@ export def "get-event-integration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Name: record, Description: record, EventIntegrationArn: record, EventBridgeBus: record, EventFilter: record<Source: record>, Tags: record> {
+]: nothing -> record<Name: string, Description: string, EventIntegrationArn: string, EventBridgeBus: string, EventFilter: record<Source: string>, Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'Name' must be non-empty" } }
@@ -641,7 +641,7 @@ export def "list-data-integration-associations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DataIntegrationAssociations: record, NextToken: record> {
+]: nothing -> record<DataIntegrationAssociations: table<DataIntegrationAssociationArn: string, DataIntegrationArn: string, ClientId: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($identifier | is-empty) { error make --unspanned { msg: "path parameter 'Identifier' must be non-empty" } }
@@ -689,7 +689,7 @@ export def "list-event-integration-associations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EventIntegrationAssociations: record, NextToken: record> {
+]: nothing -> record<EventIntegrationAssociations: table<EventIntegrationAssociationArn: string, EventIntegrationAssociationId: string, EventIntegrationName: string, ClientId: string, EventBridgeRuleName: string, ClientAssociationMetadata: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'Name' must be non-empty" } }
@@ -822,7 +822,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # The tag keys.
+  --tag-keys: list # The tag keys. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -834,6 +834,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"

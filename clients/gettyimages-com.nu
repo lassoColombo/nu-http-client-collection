@@ -12,8 +12,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "api-key" => { {scheme: $scheme, headers: {Api-Key: $token_val}, query: "", location: "header"} }
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "api-key" => { {scheme: $scheme, headers: {"Api-Key": $token_val}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -1685,7 +1685,7 @@ export def "get-v3-search-events" [
   --fields: list # Specifies fields to return. Default set is 'id','name','start_date'. (nullable)
   --page: int # Request results starting at a page number (default is 1, maximum is 50). (format: int32, default: 1)
   --page-size: int # Request number of events to return in each page. Default is 30, maximum page_size is 100. (format: int32, default: 30)
-  --phrase: string # Filters to events related to this phrase (nullable, default: )
+  --phrase: string # Filters to events related to this phrase (nullable, default: "")
   --sort-order: string@sort-order-completer-1 # Specifies the order in which to sort the results. Default is `newest`.
   --accept-language: string # Provide a header to specify the language of result values. Supported values: cs (iStock only), de, en-GB, en-US, es, fi (iStock only), fr, hu (iStock only), id (iStock only), it, ja, ko (creative assets only), nl, pl (creative assets only), pt-BR, pt-PT, ro (iStock only), ru (creative assets only), sv, th (iStock only), tr, uk (iStock only), vi (iStock only), zh-HK (creative assets only).
   --gi-country-code: string # Receive regionally relevant search results based on the value specified. Accepts only ISO Alpha-3 country codes. The Countries operation can be used to retrieve the codes.
@@ -1811,7 +1811,7 @@ export def "get-v3-search-images-creative" [
   --orientations: list # Return only images with selected aspect ratios. (nullable)
   --page: int # Request results starting at a page number (default is 1). (format: int32, default: 1)
   --page-size: int # Request number of images to return in each page. Default is 30, maximum page_size is 100. (format: int32, default: 30)
-  --phrase: string # Search images using a search phrase. (nullable, default: )
+  --phrase: string # Search images using a search phrase. (nullable, default: "")
   --safe-search: oneof<nothing, bool> # Setting safe_search to "true" excludes images containing nudity, death, profanity, drugs and alcohol, suggestive content, and graphic content from the result set. The default is false. Because this is a keyword-based filter, it's possible that a small number of unsafe images may not be caught by the filter. Please direct feedback to your Getty Images Account or API support representative. (default: false)
   --sort-order: string@sort-order-completer-2 # Select sort order of results. The default is best_match
   --facet-fields: list # Specifies the facets to return in the response. Facets provide additional search parameters to refine your results. The include_facets parameter must be set to "true" for facets to be returned. (nullable)
@@ -1994,7 +1994,7 @@ export def "get-v3-search-videos-creative" [
   --max-clip-length: int # Provides filtering by maximum length of video, in seconds (format: int32, default: 0)
   --page: int # Identifies page to return. Default is 1. (format: int32, default: 1)
   --page-size: int # Specifies page size. Default is 30, maximum page_size is 100. (format: int32, default: 30)
-  --phrase: string # Free-text search query. (nullable, default: )
+  --phrase: string # Free-text search query. (nullable, default: "")
   --safe-search: oneof<nothing, bool> # Setting safe_search to "true" excludes images containing nudity, death, profanity, drugs and alcohol, suggestive content, and graphic content from the result set. The default is false. Because this is a keyword-based filter, it's possible that a small number of unsafe images may not be caught by the filter. Please direct feedback to your Getty Images Account or API support representative. (default: false)
   --sort-order: string@sort-order-completer-2 # Select sort order of results. The default is best_match
   --release-status: string@release-status-completer # Allows filtering by type of model release.
@@ -2107,7 +2107,7 @@ export def "get-v3-search-videos-editorial" [
   --orientations: list # Return only videos with selected orientations. (nullable)
   --page: int # Identifies page to return. Default is 1. (format: int32, default: 1)
   --page-size: int # Specifies page size. Default is 30, maximum page_size is 100. (format: int32, default: 30)
-  --phrase: string # Free-text search query. (nullable, default: )
+  --phrase: string # Free-text search query. (nullable, default: "")
   --sort-order: string@sort-order-completer-3 # Select sort order of results. The default is best_match
   --specific-people: list<string> # Allows filtering by specific peoples' names. (nullable)
   --release-status: string@release-status-completer # Allows filtering by type of model release.

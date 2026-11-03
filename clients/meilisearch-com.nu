@@ -680,7 +680,7 @@ export def "search-in-index" [
   --filter: string # e.g. genre="fantasy"
   --show-matches-position: string # e.g. true
   --facets: string # e.g. genre
-  --qp-sort: string # e.g. price
+  --sort: string # e.g. price
   --highlight-pre-tag: string # e.g. <mark>
   --highlight-post-tag: string # e.g. </mark>
   --matching-strategy: string # e.g. all
@@ -689,14 +689,14 @@ export def "search-in-index" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "attributesToRetrieve" $attributes_to_retrieve "scalar") (serialize-qp "attributesToCrop" $attributes_to_crop "scalar") (serialize-qp "attributesToHighlight" $attributes_to_highlight "scalar") (serialize-qp "cropLength" $crop_length "scalar") (serialize-qp "cropMarker" $crop_marker "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "showMatchesPosition" $show_matches_position "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "highlightPreTag" $highlight_pre_tag "scalar") (serialize-qp "highlightPostTag" $highlight_post_tag "scalar") (serialize-qp "matchingStrategy" $matching_strategy "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "hitsPerPage" $hits_per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "attributesToRetrieve" $attributes_to_retrieve "scalar") (serialize-qp "attributesToCrop" $attributes_to_crop "scalar") (serialize-qp "attributesToHighlight" $attributes_to_highlight "scalar") (serialize-qp "cropLength" $crop_length "scalar") (serialize-qp "cropMarker" $crop_marker "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "showMatchesPosition" $show_matches_position "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "highlightPreTag" $highlight_pre_tag "scalar") (serialize-qp "highlightPostTag" $highlight_post_tag "scalar") (serialize-qp "matchingStrategy" $matching_strategy "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "hitsPerPage" $hits_per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/indexes/books/search" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"q": $q, "offset": $offset, "limit": $limit, "attributesToRetrieve": $attributes_to_retrieve, "attributesToCrop": $attributes_to_crop, "attributesToHighlight": $attributes_to_highlight, "cropLength": $crop_length, "cropMarker": $crop_marker, "filter": $filter, "showMatchesPosition": $show_matches_position, "facets": $facets, "sort": $qp_sort, "highlightPreTag": $highlight_pre_tag, "highlightPostTag": $highlight_post_tag, "matchingStrategy": $matching_strategy, "page": $page, "hitsPerPage": $hits_per_page} | compact)
+    query: ({"q": $q, "offset": $offset, "limit": $limit, "attributesToRetrieve": $attributes_to_retrieve, "attributesToCrop": $attributes_to_crop, "attributesToHighlight": $attributes_to_highlight, "cropLength": $crop_length, "cropMarker": $crop_marker, "filter": $filter, "showMatchesPosition": $show_matches_position, "facets": $facets, "sort": $sort, "highlightPreTag": $highlight_pre_tag, "highlightPostTag": $highlight_post_tag, "matchingStrategy": $matching_strategy, "page": $page, "hitsPerPage": $hits_per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2347,18 +2347,18 @@ export def "delete-tasks" [
   --after-finished-at: string
   --canceled-by: string
   --limit: string # e.g. 2
-  --qp-from: string # e.g. 10
+  --from: string # e.g. 10
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "uids" $uids "scalar") (serialize-qp "indexUids" $index_uids "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "statuses" $statuses "scalar") (serialize-qp "beforeEnqueuedAt" $before_enqueued_at "scalar") (serialize-qp "afterEnqueuedAt" $after_enqueued_at "scalar") (serialize-qp "beforeStartedAt" $before_started_at "scalar") (serialize-qp "afterStartedAt" $after_started_at "scalar") (serialize-qp "beforeFinishedAt" $before_finished_at "scalar") (serialize-qp "afterFinishedAt" $after_finished_at "scalar") (serialize-qp "canceledBy" $canceled_by "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "from" $qp_from "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "uids" $uids "scalar") (serialize-qp "indexUids" $index_uids "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "statuses" $statuses "scalar") (serialize-qp "beforeEnqueuedAt" $before_enqueued_at "scalar") (serialize-qp "afterEnqueuedAt" $after_enqueued_at "scalar") (serialize-qp "beforeStartedAt" $before_started_at "scalar") (serialize-qp "afterStartedAt" $after_started_at "scalar") (serialize-qp "beforeFinishedAt" $before_finished_at "scalar") (serialize-qp "afterFinishedAt" $after_finished_at "scalar") (serialize-qp "canceledBy" $canceled_by "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "from" $from "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tasks" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
-    query: ({"uids": $uids, "indexUids": $index_uids, "types": $types, "statuses": $statuses, "beforeEnqueuedAt": $before_enqueued_at, "afterEnqueuedAt": $after_enqueued_at, "beforeStartedAt": $before_started_at, "afterStartedAt": $after_started_at, "beforeFinishedAt": $before_finished_at, "afterFinishedAt": $after_finished_at, "canceledBy": $canceled_by, "limit": $limit, "from": $qp_from} | compact)
+    query: ({"uids": $uids, "indexUids": $index_uids, "types": $types, "statuses": $statuses, "beforeEnqueuedAt": $before_enqueued_at, "afterEnqueuedAt": $after_enqueued_at, "beforeStartedAt": $before_started_at, "afterStartedAt": $after_started_at, "beforeFinishedAt": $before_finished_at, "afterFinishedAt": $after_finished_at, "canceledBy": $canceled_by, "limit": $limit, "from": $from} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -2395,18 +2395,18 @@ export def "get-all-tasks" [
   --after-finished-at: string
   --canceled-by: string
   --limit: string # e.g. 2
-  --qp-from: string # e.g. 10
+  --from: string # e.g. 10
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "uids" $uids "scalar") (serialize-qp "indexUids" $index_uids "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "statuses" $statuses "scalar") (serialize-qp "beforeEnqueuedAt" $before_enqueued_at "scalar") (serialize-qp "afterEnqueuedAt" $after_enqueued_at "scalar") (serialize-qp "beforeStartedAt" $before_started_at "scalar") (serialize-qp "afterStartedAt" $after_started_at "scalar") (serialize-qp "beforeFinishedAt" $before_finished_at "scalar") (serialize-qp "afterFinishedAt" $after_finished_at "scalar") (serialize-qp "canceledBy" $canceled_by "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "from" $qp_from "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "uids" $uids "scalar") (serialize-qp "indexUids" $index_uids "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "statuses" $statuses "scalar") (serialize-qp "beforeEnqueuedAt" $before_enqueued_at "scalar") (serialize-qp "afterEnqueuedAt" $after_enqueued_at "scalar") (serialize-qp "beforeStartedAt" $before_started_at "scalar") (serialize-qp "afterStartedAt" $after_started_at "scalar") (serialize-qp "beforeFinishedAt" $before_finished_at "scalar") (serialize-qp "afterFinishedAt" $after_finished_at "scalar") (serialize-qp "canceledBy" $canceled_by "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "from" $from "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tasks" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"uids": $uids, "indexUids": $index_uids, "types": $types, "statuses": $statuses, "beforeEnqueuedAt": $before_enqueued_at, "afterEnqueuedAt": $after_enqueued_at, "beforeStartedAt": $before_started_at, "afterStartedAt": $after_started_at, "beforeFinishedAt": $before_finished_at, "afterFinishedAt": $after_finished_at, "canceledBy": $canceled_by, "limit": $limit, "from": $qp_from} | compact)
+    query: ({"uids": $uids, "indexUids": $index_uids, "types": $types, "statuses": $statuses, "beforeEnqueuedAt": $before_enqueued_at, "afterEnqueuedAt": $after_enqueued_at, "beforeStartedAt": $before_started_at, "afterStartedAt": $after_started_at, "beforeFinishedAt": $before_finished_at, "afterFinishedAt": $after_finished_at, "canceledBy": $canceled_by, "limit": $limit, "from": $from} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2477,18 +2477,18 @@ export def "cancel-tasks" [
   --after-finished-at: string
   --canceled-by: string
   --limit: string # e.g. 2
-  --qp-from: string # e.g. 10
+  --from: string # e.g. 10
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "uids" $uids "scalar") (serialize-qp "indexUids" $index_uids "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "statuses" $statuses "scalar") (serialize-qp "beforeEnqueuedAt" $before_enqueued_at "scalar") (serialize-qp "afterEnqueuedAt" $after_enqueued_at "scalar") (serialize-qp "beforeStartedAt" $before_started_at "scalar") (serialize-qp "afterStartedAt" $after_started_at "scalar") (serialize-qp "beforeFinishedAt" $before_finished_at "scalar") (serialize-qp "afterFinishedAt" $after_finished_at "scalar") (serialize-qp "canceledBy" $canceled_by "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "from" $qp_from "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "uids" $uids "scalar") (serialize-qp "indexUids" $index_uids "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "statuses" $statuses "scalar") (serialize-qp "beforeEnqueuedAt" $before_enqueued_at "scalar") (serialize-qp "afterEnqueuedAt" $after_enqueued_at "scalar") (serialize-qp "beforeStartedAt" $before_started_at "scalar") (serialize-qp "afterStartedAt" $after_started_at "scalar") (serialize-qp "beforeFinishedAt" $before_finished_at "scalar") (serialize-qp "afterFinishedAt" $after_finished_at "scalar") (serialize-qp "canceledBy" $canceled_by "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "from" $from "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tasks/cancel" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
-    query: ({"uids": $uids, "indexUids": $index_uids, "types": $types, "statuses": $statuses, "beforeEnqueuedAt": $before_enqueued_at, "afterEnqueuedAt": $after_enqueued_at, "beforeStartedAt": $before_started_at, "afterStartedAt": $after_started_at, "beforeFinishedAt": $before_finished_at, "afterFinishedAt": $after_finished_at, "canceledBy": $canceled_by, "limit": $limit, "from": $qp_from} | compact)
+    query: ({"uids": $uids, "indexUids": $index_uids, "types": $types, "statuses": $statuses, "beforeEnqueuedAt": $before_enqueued_at, "afterEnqueuedAt": $after_enqueued_at, "beforeStartedAt": $before_started_at, "afterStartedAt": $after_started_at, "beforeFinishedAt": $before_finished_at, "afterFinishedAt": $after_finished_at, "canceledBy": $canceled_by, "limit": $limit, "from": $from} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -2503,7 +2503,7 @@ export def "cancel-tasks" [
 #
 # GET /version
 # operationId: version
-export def "version" [
+export def "get-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

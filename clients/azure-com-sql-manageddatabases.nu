@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -118,6 +118,8 @@ def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors
 def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def restore-details-name-completer [] { ["Default"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -159,13 +161,14 @@ export def "managed-databases-list-by-instance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($managed_instance_name | is-empty) { error make --unspanned { msg: "path parameter 'managedInstanceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), managed_instance_name: (encode-path-segment $managed_instance_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/managedInstances/{managed_instance_name}/databases") $qp $auth.query)
   let accept_val = "application/json"
@@ -202,7 +205,7 @@ export def "managed-databases-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -210,6 +213,7 @@ export def "managed-databases-delete" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($managed_instance_name | is-empty) { error make --unspanned { msg: "path parameter 'managedInstanceName' must be non-empty" } }
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), managed_instance_name: (encode-path-segment $managed_instance_name), database_name: (encode-path-segment $database_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/managedInstances/{managed_instance_name}/databases/{database_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -246,14 +250,15 @@ export def "managed-databases-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<properties: record<catalogCollation: string, collation: string, createMode: string, creationDate: string, defaultSecondaryLocation: string, earliestRestorePoint: string, failoverGroupId: string, recoverableDatabaseId: string, restorableDroppedDatabaseId: string, restorePointInTime: string, sourceDatabaseId: string, status: string, storageContainerSasToken: string, storageContainerUri: string>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<properties: record<catalogCollation: string, collation: string, createMode: string, creationDate: string, defaultSecondaryLocation: string, earliestRestorePoint: string, failoverGroupId: string, recoverableDatabaseId: string, restorableDroppedDatabaseId: string, restorePointInTime: string, sourceDatabaseId: string, status: string, storageContainerSasToken: string, storageContainerUri: string>, location: string, tags: record, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($managed_instance_name | is-empty) { error make --unspanned { msg: "path parameter 'managedInstanceName' must be non-empty" } }
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), managed_instance_name: (encode-path-segment $managed_instance_name), database_name: (encode-path-segment $database_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/managedInstances/{managed_instance_name}/databases/{database_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -291,10 +296,10 @@ export def "managed-databases-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
   --properties: record # The managed database's properties. — shape: {catalogCollation?: "DATABASE_DEFAULT"|"SQL_Latin1_General_CP1_CI_AS", collation?: string, createMode?: "Default"|"RestoreExternalBackup"|"PointInTimeRestore"|"Recovery", recoverableDatabaseId?: string, restorableDroppedDatabaseId?: string, restorePointInTime?: string, sourceDatabaseId?: string, storageContainerSasToken?: string, storageContainerUri?: string}
   --tags: record # Resource tags.
-]: any -> record<properties: record<catalogCollation: string, collation: string, createMode: string, creationDate: string, defaultSecondaryLocation: string, earliestRestorePoint: string, failoverGroupId: string, recoverableDatabaseId: string, restorableDroppedDatabaseId: string, restorePointInTime: string, sourceDatabaseId: string, status: string, storageContainerSasToken: string, storageContainerUri: string>> {
+]: any -> record<properties: record<catalogCollation: string, collation: string, createMode: string, creationDate: string, defaultSecondaryLocation: string, earliestRestorePoint: string, failoverGroupId: string, recoverableDatabaseId: string, restorableDroppedDatabaseId: string, restorePointInTime: string, sourceDatabaseId: string, status: string, storageContainerSasToken: string, storageContainerUri: string>, location: string, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -302,6 +307,7 @@ export def "managed-databases-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($managed_instance_name | is-empty) { error make --unspanned { msg: "path parameter 'managedInstanceName' must be non-empty" } }
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), managed_instance_name: (encode-path-segment $managed_instance_name), database_name: (encode-path-segment $database_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/managedInstances/{managed_instance_name}/databases/{database_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -341,11 +347,11 @@ export def "managed-databases-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
   --properties: record # The managed database's properties. — shape: {catalogCollation?: "DATABASE_DEFAULT"|"SQL_Latin1_General_CP1_CI_AS", collation?: string, createMode?: "Default"|"RestoreExternalBackup"|"PointInTimeRestore"|"Recovery", recoverableDatabaseId?: string, restorableDroppedDatabaseId?: string, restorePointInTime?: string, sourceDatabaseId?: string, storageContainerSasToken?: string, storageContainerUri?: string}
   location: string # Resource location.
   --tags: record # Resource tags.
-]: any -> record<properties: record<catalogCollation: string, collation: string, createMode: string, creationDate: string, defaultSecondaryLocation: string, earliestRestorePoint: string, failoverGroupId: string, recoverableDatabaseId: string, restorableDroppedDatabaseId: string, restorePointInTime: string, sourceDatabaseId: string, status: string, storageContainerSasToken: string, storageContainerUri: string>> {
+]: any -> record<properties: record<catalogCollation: string, collation: string, createMode: string, creationDate: string, defaultSecondaryLocation: string, earliestRestorePoint: string, failoverGroupId: string, recoverableDatabaseId: string, restorableDroppedDatabaseId: string, restorePointInTime: string, sourceDatabaseId: string, status: string, storageContainerSasToken: string, storageContainerUri: string>, location: string, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -353,6 +359,7 @@ export def "managed-databases-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($managed_instance_name | is-empty) { error make --unspanned { msg: "path parameter 'managedInstanceName' must be non-empty" } }
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), managed_instance_name: (encode-path-segment $managed_instance_name), database_name: (encode-path-segment $database_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/managedInstances/{managed_instance_name}/databases/{database_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -391,7 +398,7 @@ export def "managed-databases-complete-restore" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
   last_backup_name: string # The last backup name to apply
 ]: any -> any {
   let input = $in
@@ -401,6 +408,7 @@ export def "managed-databases-complete-restore" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($managed_instance_name | is-empty) { error make --unspanned { msg: "path parameter 'managedInstanceName' must be non-empty" } }
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), managed_instance_name: (encode-path-segment $managed_instance_name), database_name: (encode-path-segment $database_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/managedInstances/{managed_instance_name}/databases/{database_name}/completeRestore") $qp $auth.query)
   let req_body = {"lastBackupName": $last_backup_name} | compact
@@ -430,7 +438,7 @@ export def "managed-database-restore-details-get" [
   resource_group_name: string
   managed_instance_name: string
   database_name: string
-  restore_details_name: string
+  restore_details_name: string@restore-details-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -440,8 +448,8 @@ export def "managed-database-restore-details-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<properties: record<blockReason: string, currentRestoringFileName: string, lastRestoredFileName: string, lastRestoredFileTime: string, lastUploadedFileName: string, lastUploadedFileTime: string, numberOfFilesDetected: int, percentCompleted: float, status: string, unrestorableFiles: list<string>>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<properties: record<blockReason: string, currentRestoringFileName: string, lastRestoredFileName: string, lastRestoredFileTime: string, lastUploadedFileName: string, lastUploadedFileTime: string, numberOfFilesDetected: int, percentCompleted: float, status: string, unrestorableFiles: list<string>>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -449,6 +457,7 @@ export def "managed-database-restore-details-get" [
   if ($managed_instance_name | is-empty) { error make --unspanned { msg: "path parameter 'managedInstanceName' must be non-empty" } }
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($restore_details_name | is-empty) { error make --unspanned { msg: "path parameter 'restoreDetailsName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), managed_instance_name: (encode-path-segment $managed_instance_name), database_name: (encode-path-segment $database_name), restore_details_name: (encode-path-segment $restore_details_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/managedInstances/{managed_instance_name}/databases/{database_name}/restoreDetails/{restore_details_name}") $qp $auth.query)
   let accept_val = "application/json"

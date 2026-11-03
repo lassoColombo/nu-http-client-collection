@@ -1,4 +1,4 @@
-# Auto-generated client for App Engine Admin API vv1beta
+# Auto-generated client for App Engine Admin API v1beta
 # Source: https://api.apis.guru/v2/specs/googleapis.com/appengine/v1beta/openapi.json
 # Auth: --token flag or $env.APP_ENGINE_ADMIN_API_TOKEN
 
@@ -12,20 +12,10 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
-}
-
-# Merge multiple auth records (AND-form security: every scheme must be sent).
-def merge-auth [parts: list]: nothing -> record {
-  let active = ($parts | where {|p| $p.location != "none" })
-  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
-  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
-  let locs = ($active | each {|p| $p.location } | uniq)
-  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
-  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
 # Serialize a single query parameter based on collection style
@@ -165,8 +155,8 @@ export def commands []: nothing -> table {
 # --iap shape: {enabled?: bool, oauth2ClientId?: string, oauth2ClientSecret?: string}
 export def "appengine-apps-create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -197,7 +187,7 @@ export def "appengine-apps-create" [
   --serving-status: string@serving-status-completer # Serving status of this application.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "parent" $parent "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1beta/apps" $qp $auth.query)
@@ -226,8 +216,8 @@ export def "appengine-apps-create" [
 export def "appengine-apps-get" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -246,7 +236,7 @@ export def "appengine-apps-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<authDomain: string, codeBucket: string, databaseType: string, defaultBucket: string, defaultCookieExpiration: string, defaultHostname: string, dispatchRules: table<domain: string, path: string, service: string>, featureSettings: record<splitHealthChecks: bool, useContainerOptimizedOs: bool>, gcrDomain: string, iap: record<enabled: bool, oauth2ClientId: string, oauth2ClientSecret: string, oauth2ClientSecretSha256: string>, id: string, locationId: string, name: string, serviceAccount: string, servingStatus: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -277,8 +267,8 @@ export def "appengine-apps-get" [
 export def "appengine-apps-patch" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -309,7 +299,7 @@ export def "appengine-apps-patch" [
   --serving-status: string@serving-status-completer # Serving status of this application.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
@@ -339,8 +329,8 @@ export def "appengine-apps-patch" [
 export def "appengine-apps-authorized-certificates-list" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -362,7 +352,7 @@ export def "appengine-apps-authorized-certificates-list" [
   --page-token: string # Continuation token for fetching the next page of results.
   --view: string@view-completer # Controls the set of fields returned in the LIST response.
 ]: nothing -> record<certificates: table<certificateRawData: record, displayName: string, domainMappingsCount: int, domainNames: list, expireTime: string, id: string, managedCertificate: record, name: string, visibleDomainMappings: list>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
@@ -392,8 +382,8 @@ export def "appengine-apps-authorized-certificates-list" [
 export def "appengine-apps-authorized-certificates-create" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -422,7 +412,7 @@ export def "appengine-apps-authorized-certificates-create" [
   --visible-domain-mappings: list<string> # The full paths to user visible Domain Mapping resources that have this certificate mapped. Example: apps/myapp/domainMappings/example.com.This may not represent the full list of mapped domain mappings if the user does not have VIEWER permissions on all of the applications that have this certificate mapped. See domain_mappings_count for a complete count.Only returned by GET or LIST requests when specifically requested by the view=FULL_CERTIFICATE option.@OutputOnly
 ]: any -> record<certificateRawData: record<privateKey: string, publicCertificate: string>, displayName: string, domainMappingsCount: int, domainNames: list<string>, expireTime: string, id: string, managedCertificate: record<lastRenewalTime: string, status: string>, name: string, visibleDomainMappings: list<string>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -453,8 +443,8 @@ export def "appengine-apps-authorized-certificates-delete" [
   apps_id: string
   authorized_certificates_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -473,7 +463,7 @@ export def "appengine-apps-authorized-certificates-delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
   if ($authorized_certificates_id | is-empty) { error make --unspanned { msg: "path parameter 'authorizedCertificatesId' must be non-empty" } }
@@ -503,8 +493,8 @@ export def "appengine-apps-authorized-certificates-get" [
   apps_id: string
   authorized_certificates_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -524,7 +514,7 @@ export def "appengine-apps-authorized-certificates-get" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --view: string@view-completer # Controls the set of fields returned in the GET response.
 ]: nothing -> record<certificateRawData: record<privateKey: string, publicCertificate: string>, displayName: string, domainMappingsCount: int, domainNames: list<string>, expireTime: string, id: string, managedCertificate: record<lastRenewalTime: string, status: string>, name: string, visibleDomainMappings: list<string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
   if ($authorized_certificates_id | is-empty) { error make --unspanned { msg: "path parameter 'authorizedCertificatesId' must be non-empty" } }
@@ -556,8 +546,8 @@ export def "appengine-apps-authorized-certificates-patch" [
   apps_id: string
   authorized_certificates_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -587,7 +577,7 @@ export def "appengine-apps-authorized-certificates-patch" [
   --visible-domain-mappings: list<string> # The full paths to user visible Domain Mapping resources that have this certificate mapped. Example: apps/myapp/domainMappings/example.com.This may not represent the full list of mapped domain mappings if the user does not have VIEWER permissions on all of the applications that have this certificate mapped. See domain_mappings_count for a complete count.Only returned by GET or LIST requests when specifically requested by the view=FULL_CERTIFICATE option.@OutputOnly
 ]: any -> record<certificateRawData: record<privateKey: string, publicCertificate: string>, displayName: string, domainMappingsCount: int, domainNames: list<string>, expireTime: string, id: string, managedCertificate: record<lastRenewalTime: string, status: string>, name: string, visibleDomainMappings: list<string>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
   if ($authorized_certificates_id | is-empty) { error make --unspanned { msg: "path parameter 'authorizedCertificatesId' must be non-empty" } }
@@ -618,8 +608,8 @@ export def "appengine-apps-authorized-certificates-patch" [
 export def "appengine-apps-authorized-domains-list" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -640,7 +630,7 @@ export def "appengine-apps-authorized-domains-list" [
   --page-size: int # Maximum results to return per page.
   --page-token: string # Continuation token for fetching the next page of results.
 ]: nothing -> record<domains: table<id: string, name: string>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -668,8 +658,8 @@ export def "appengine-apps-authorized-domains-list" [
 export def "appengine-apps-domain-mappings-list" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -690,7 +680,7 @@ export def "appengine-apps-domain-mappings-list" [
   --page-size: int # Maximum results to return per page.
   --page-token: string # Continuation token for fetching the next page of results.
 ]: nothing -> record<domainMappings: table<id: string, name: string, resourceRecords: list, sslSettings: record>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -720,8 +710,8 @@ export def "appengine-apps-domain-mappings-list" [
 export def "appengine-apps-domain-mappings-create" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -746,7 +736,7 @@ export def "appengine-apps-domain-mappings-create" [
   --ssl-settings: record # SSL configuration for a DomainMapping resource. — shape: {certificateId?: string, pendingManagedCertificateId?: string, sslManagementType?: "AUTOMATIC"|"MANUAL"}
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "overrideStrategy" $override_strategy "scalar")] | flatten | str join "&"
@@ -777,8 +767,8 @@ export def "appengine-apps-domain-mappings-delete" [
   apps_id: string
   domain_mappings_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -797,7 +787,7 @@ export def "appengine-apps-domain-mappings-delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
   if ($domain_mappings_id | is-empty) { error make --unspanned { msg: "path parameter 'domainMappingsId' must be non-empty" } }
@@ -827,8 +817,8 @@ export def "appengine-apps-domain-mappings-get" [
   apps_id: string
   domain_mappings_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -847,7 +837,7 @@ export def "appengine-apps-domain-mappings-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<id: string, name: string, resourceRecords: table<name: string, rrdata: string, type: string>, sslSettings: record<certificateId: string, pendingManagedCertificateId: string, sslManagementType: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
   if ($domain_mappings_id | is-empty) { error make --unspanned { msg: "path parameter 'domainMappingsId' must be non-empty" } }
@@ -879,8 +869,8 @@ export def "appengine-apps-domain-mappings-patch" [
   apps_id: string
   domain_mappings_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -905,7 +895,7 @@ export def "appengine-apps-domain-mappings-patch" [
   --ssl-settings: record # SSL configuration for a DomainMapping resource. — shape: {certificateId?: string, pendingManagedCertificateId?: string, sslManagementType?: "AUTOMATIC"|"MANUAL"}
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
   if ($domain_mappings_id | is-empty) { error make --unspanned { msg: "path parameter 'domainMappingsId' must be non-empty" } }
@@ -936,8 +926,8 @@ export def "appengine-apps-domain-mappings-patch" [
 export def "appengine-apps-firewall-ingress-rules-list" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -959,7 +949,7 @@ export def "appengine-apps-firewall-ingress-rules-list" [
   --page-size: int # Maximum results to return per page.
   --page-token: string # Continuation token for fetching the next page of results.
 ]: nothing -> record<ingressRules: table<action: string, description: string, priority: int, sourceRange: string>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "matchingAddress" $matching_address "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -987,8 +977,8 @@ export def "appengine-apps-firewall-ingress-rules-list" [
 export def "appengine-apps-firewall-ingress-rules-create" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1012,7 +1002,7 @@ export def "appengine-apps-firewall-ingress-rules-create" [
   --source-range: string # IP address or range, defined using CIDR notation, of requests that this rule applies to. You can use the wildcard character "*" to match all IPs equivalent to "0/0" and "::/0" together. Examples: 192.168.1.1 or 192.168.0.0/16 or 2001:db8::/32 or 2001:0db8:0000:0042:0000:8a2e:0370:7334. Truncation will be silently performed on addresses which are not properly truncated. For example, 1.2.3.4/24 is accepted as the same address as 1.2.3.0/24. Similarly, for IPv6, 2001:db8::1/32 is accepted as the same address as 2001:db8::/32.
 ]: any -> record<action: string, description: string, priority: int, sourceRange: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1043,8 +1033,8 @@ export def "appengine-apps-firewall-ingress-rules-delete" [
   apps_id: string
   ingress_rules_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1063,7 +1053,7 @@ export def "appengine-apps-firewall-ingress-rules-delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
   if ($ingress_rules_id | is-empty) { error make --unspanned { msg: "path parameter 'ingressRulesId' must be non-empty" } }
@@ -1093,8 +1083,8 @@ export def "appengine-apps-firewall-ingress-rules-get" [
   apps_id: string
   ingress_rules_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1113,7 +1103,7 @@ export def "appengine-apps-firewall-ingress-rules-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<action: string, description: string, priority: int, sourceRange: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
   if ($ingress_rules_id | is-empty) { error make --unspanned { msg: "path parameter 'ingressRulesId' must be non-empty" } }
@@ -1143,8 +1133,8 @@ export def "appengine-apps-firewall-ingress-rules-patch" [
   apps_id: string
   ingress_rules_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1169,7 +1159,7 @@ export def "appengine-apps-firewall-ingress-rules-patch" [
   --source-range: string # IP address or range, defined using CIDR notation, of requests that this rule applies to. You can use the wildcard character "*" to match all IPs equivalent to "0/0" and "::/0" together. Examples: 192.168.1.1 or 192.168.0.0/16 or 2001:db8::/32 or 2001:0db8:0000:0042:0000:8a2e:0370:7334. Truncation will be silently performed on addresses which are not properly truncated. For example, 1.2.3.4/24 is accepted as the same address as 1.2.3.0/24. Similarly, for IPv6, 2001:db8::1/32 is accepted as the same address as 2001:db8::/32.
 ]: any -> record<action: string, description: string, priority: int, sourceRange: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
   if ($ingress_rules_id | is-empty) { error make --unspanned { msg: "path parameter 'ingressRulesId' must be non-empty" } }
@@ -1201,8 +1191,8 @@ export def "appengine-apps-firewall-ingress-rules-patch" [
 export def "appengine-apps-firewall-ingress-rules-batch-update" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1223,7 +1213,7 @@ export def "appengine-apps-firewall-ingress-rules-batch-update" [
   --ingress-rules: list # A list of FirewallRules to replace the existing set. — item shape: {action?: "UNSPECIFIED_ACTION"|"ALLOW"|"DENY", description?: string, priority?: int, sourceRange?: string}
 ]: any -> record<ingressRules: table<action: string, description: string, priority: int, sourceRange: string>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1253,8 +1243,8 @@ export def "appengine-apps-firewall-ingress-rules-batch-update" [
 export def "appengine-apps-locations-list" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1276,7 +1266,7 @@ export def "appengine-apps-locations-list" [
   --page-size: int # The maximum number of results to return. If not set, the service selects a default.
   --page-token: string # A page token received from the next_page_token field in the response. Send that page token to receive the subsequent page.
 ]: nothing -> record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -1305,8 +1295,8 @@ export def "appengine-apps-locations-get" [
   apps_id: string
   locations_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1325,7 +1315,7 @@ export def "appengine-apps-locations-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<displayName: string, labels: record, locationId: string, metadata: record, name: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
   if ($locations_id | is-empty) { error make --unspanned { msg: "path parameter 'locationsId' must be non-empty" } }
@@ -1354,8 +1344,8 @@ export def "appengine-apps-locations-get" [
 export def "appengine-apps-operations-list" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1377,7 +1367,7 @@ export def "appengine-apps-operations-list" [
   --page-size: int # The standard list page size.
   --page-token: string # The standard list page token.
 ]: nothing -> record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -1406,8 +1396,8 @@ export def "appengine-apps-operations-get" [
   apps_id: string
   operations_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1426,7 +1416,7 @@ export def "appengine-apps-operations-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
   if ($operations_id | is-empty) { error make --unspanned { msg: "path parameter 'operationsId' must be non-empty" } }
@@ -1455,8 +1445,8 @@ export def "appengine-apps-operations-get" [
 export def "appengine-apps-services-list" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1477,7 +1467,7 @@ export def "appengine-apps-services-list" [
   --page-size: int # Maximum results to return per page.
   --page-token: string # Continuation token for fetching the next page of results.
 ]: nothing -> record<nextPageToken: string, services: table<id: string, labels: record, name: string, networkSettings: record, split: record>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -1506,8 +1496,8 @@ export def "appengine-apps-services-delete" [
   apps_id: string
   services_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1526,7 +1516,7 @@ export def "appengine-apps-services-delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
   if ($services_id | is-empty) { error make --unspanned { msg: "path parameter 'servicesId' must be non-empty" } }
@@ -1556,8 +1546,8 @@ export def "appengine-apps-services-get" [
   apps_id: string
   services_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1576,7 +1566,7 @@ export def "appengine-apps-services-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<id: string, labels: record, name: string, networkSettings: record<ingressTrafficAllowed: string>, split: record<allocations: record, shardBy: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
   if ($services_id | is-empty) { error make --unspanned { msg: "path parameter 'servicesId' must be non-empty" } }
@@ -1608,8 +1598,8 @@ export def "appengine-apps-services-patch" [
   apps_id: string
   services_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1633,16 +1623,16 @@ export def "appengine-apps-services-patch" [
   --labels: record # A set of labels to apply to this service. Labels are key/value pairs that describe the service and all resources that belong to it (e.g., versions). The labels can be used to search and group resources, and are propagated to the usage and billing reports, enabling fine-grain analysis of costs. An example of using labels is to tag resources belonging to different environments (e.g., "env=prod", "env=qa"). Label keys and values can be no longer than 63 characters and can only contain lowercase letters, numeric characters, underscores, dashes, and international characters. Label keys must start with a lowercase letter or an international character. Each service can have at most 32 labels.
   --name: string # Full path to the Service resource in the API. Example: apps/myapp/services/default.@OutputOnly
   --network-settings: record # A NetworkSettings resource is a container for ingress settings for a version or service. — shape: {ingressTrafficAllowed?: "INGRESS_TRAFFIC_ALLOWED_UNSPECIFIED"|"INGRESS_TRAFFIC_ALLOWED_ALL"|"INGRESS_TRAFFIC_ALLOWED_INTERNAL_ONLY"|"INGRESS_TRAFFIC_ALLOWED_INTERNAL_AND_LB"}
-  --body-split: record # Traffic routing configuration for versions within a single service. Traffic splits define how traffic directed to the service is assigned to versions. — shape: {allocations?: record, shardBy?: "UNSPECIFIED"|"COOKIE"|"IP"|"RANDOM"}
+  --split: record # Traffic routing configuration for versions within a single service. Traffic splits define how traffic directed to the service is assigned to versions. — shape: {allocations?: record, shardBy?: "UNSPECIFIED"|"COOKIE"|"IP"|"RANDOM"}
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
   if ($services_id | is-empty) { error make --unspanned { msg: "path parameter 'servicesId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "migrateTraffic" $migrate_traffic "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), services_id: (encode-path-segment $services_id)} | format pattern "/v1beta/apps/{apps_id}/services/{services_id}") $qp $auth.query)
-  let req_body = {"id": $id, "labels": $labels, "name": $name, "networkSettings": $network_settings, "split": $body_split} | compact
+  let req_body = {"id": $id, "labels": $labels, "name": $name, "networkSettings": $network_settings, "split": $split} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1668,8 +1658,8 @@ export def "appengine-apps-services-versions-list" [
   apps_id: string
   services_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1691,7 +1681,7 @@ export def "appengine-apps-services-versions-list" [
   --page-token: string # Continuation token for fetching the next page of results.
   --view: string@view-completer-1 # Controls the set of fields returned in the List response.
 ]: nothing -> record<nextPageToken: string, versions: table<apiConfig: record, appEngineApis: bool, automaticScaling: record, basicScaling: record, betaSettings: record, buildEnvVariables: record, createTime: string, createdBy: string, defaultExpiration: string, deployment: record, diskUsageBytes: string, endpointsApiService: record, entrypoint: record, env: string, envVariables: record, errorHandlers: list, flexibleRuntimeSettings: record, handlers: list, healthCheck: record, id: string, inboundServices: list, instanceClass: string, libraries: list, livenessCheck: record, manualScaling: record, name: string, network: record, nobuildFilesRegex: string, readinessCheck: record, resources: record, runtime: string, runtimeApiVersion: string, runtimeChannel: string, runtimeMainExecutablePath: string, serviceAccount: string, servingStatus: string, threadsafe: bool, versionUrl: string, vm: bool, vpcAccessConnector: record, zones: list>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
   if ($services_id | is-empty) { error make --unspanned { msg: "path parameter 'servicesId' must be non-empty" } }
@@ -1738,8 +1728,8 @@ export def "appengine-apps-services-versions-create" [
   apps_id: string
   services_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1800,7 +1790,7 @@ export def "appengine-apps-services-versions-create" [
   --zones: list<string> # The Google Compute Engine zones that are supported by this version in the App Engine flexible environment. Deprecated.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
   if ($services_id | is-empty) { error make --unspanned { msg: "path parameter 'servicesId' must be non-empty" } }
@@ -1833,8 +1823,8 @@ export def "appengine-apps-services-versions-delete" [
   services_id: string
   versions_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1853,7 +1843,7 @@ export def "appengine-apps-services-versions-delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
   if ($services_id | is-empty) { error make --unspanned { msg: "path parameter 'servicesId' must be non-empty" } }
@@ -1885,8 +1875,8 @@ export def "appengine-apps-services-versions-get" [
   services_id: string
   versions_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1906,7 +1896,7 @@ export def "appengine-apps-services-versions-get" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --view: string@view-completer-1 # Controls the set of fields returned in the Get response.
 ]: nothing -> record<apiConfig: record<authFailAction: string, login: string, script: string, securityLevel: string, url: string>, appEngineApis: bool, automaticScaling: record<coolDownPeriod: string, cpuUtilization: record<aggregationWindowLength: string, targetUtilization: float>, customMetrics: list<record>, diskUtilization: record<targetReadBytesPerSecond: int, targetReadOpsPerSecond: int, targetWriteBytesPerSecond: int, targetWriteOpsPerSecond: int>, maxConcurrentRequests: int, maxIdleInstances: int, maxPendingLatency: string, maxTotalInstances: int, minIdleInstances: int, minPendingLatency: string, minTotalInstances: int, networkUtilization: record<targetReceivedBytesPerSecond: int, targetReceivedPacketsPerSecond: int, targetSentBytesPerSecond: int, targetSentPacketsPerSecond: int>, requestUtilization: record<targetConcurrentRequests: int, targetRequestCountPerSecond: int>, standardSchedulerSettings: record<maxInstances: int, minInstances: int, targetCpuUtilization: float, targetThroughputUtilization: float>>, basicScaling: record<idleTimeout: string, maxInstances: int>, betaSettings: record, buildEnvVariables: record, createTime: string, createdBy: string, defaultExpiration: string, deployment: record<build: record<cloudBuildId: string>, cloudBuildOptions: record<appYamlPath: string, cloudBuildTimeout: string>, container: record<image: string>, files: record, zip: record<filesCount: int, sourceUrl: string>>, diskUsageBytes: string, endpointsApiService: record<configId: string, disableTraceSampling: bool, name: string, rolloutStrategy: string>, entrypoint: record<shell: string>, env: string, envVariables: record, errorHandlers: table<errorCode: string, mimeType: string, staticFile: string>, flexibleRuntimeSettings: record<operatingSystem: string, runtimeVersion: string>, handlers: table<apiEndpoint: record, authFailAction: string, login: string, redirectHttpResponseCode: string, script: record, securityLevel: string, staticFiles: record, urlRegex: string>, healthCheck: record<checkInterval: string, disableHealthCheck: bool, healthyThreshold: int, host: string, restartThreshold: int, timeout: string, unhealthyThreshold: int>, id: string, inboundServices: list<string>, instanceClass: string, libraries: table<name: string, version: string>, livenessCheck: record<checkInterval: string, failureThreshold: int, host: string, initialDelay: string, path: string, successThreshold: int, timeout: string>, manualScaling: record<instances: int>, name: string, network: record<forwardedPorts: list<string>, instanceIpMode: string, instanceTag: string, name: string, sessionAffinity: bool, subnetworkName: string>, nobuildFilesRegex: string, readinessCheck: record<appStartTimeout: string, checkInterval: string, failureThreshold: int, host: string, path: string, successThreshold: int, timeout: string>, resources: record<cpu: float, diskGb: float, kmsKeyReference: string, memoryGb: float, volumes: list<record>>, runtime: string, runtimeApiVersion: string, runtimeChannel: string, runtimeMainExecutablePath: string, serviceAccount: string, servingStatus: string, threadsafe: bool, versionUrl: string, vm: bool, vpcAccessConnector: record<egressSetting: string, name: string>, zones: list<string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
   if ($services_id | is-empty) { error make --unspanned { msg: "path parameter 'servicesId' must be non-empty" } }
@@ -1955,8 +1945,8 @@ export def "appengine-apps-services-versions-patch" [
   services_id: string
   versions_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2018,7 +2008,7 @@ export def "appengine-apps-services-versions-patch" [
   --zones: list<string> # The Google Compute Engine zones that are supported by this version in the App Engine flexible environment. Deprecated.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
   if ($services_id | is-empty) { error make --unspanned { msg: "path parameter 'servicesId' must be non-empty" } }
@@ -2052,8 +2042,8 @@ export def "appengine-apps-services-versions-instances-list" [
   services_id: string
   versions_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2074,7 +2064,7 @@ export def "appengine-apps-services-versions-instances-list" [
   --page-size: int # Maximum results to return per page.
   --page-token: string # Continuation token for fetching the next page of results.
 ]: nothing -> record<instances: table<appEngineRelease: string, availability: string, averageLatency: int, errors: int, id: string, memoryUsage: string, name: string, qps: float, requests: int, startTime: string, vmDebugEnabled: bool, vmId: string, vmIp: string, vmLiveness: string, vmName: string, vmStatus: string, vmZoneName: string>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
   if ($services_id | is-empty) { error make --unspanned { msg: "path parameter 'servicesId' must be non-empty" } }
@@ -2107,8 +2097,8 @@ export def "appengine-apps-services-versions-instances-delete" [
   versions_id: string
   instances_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2127,7 +2117,7 @@ export def "appengine-apps-services-versions-instances-delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
   if ($services_id | is-empty) { error make --unspanned { msg: "path parameter 'servicesId' must be non-empty" } }
@@ -2161,8 +2151,8 @@ export def "appengine-apps-services-versions-instances-get" [
   versions_id: string
   instances_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2181,7 +2171,7 @@ export def "appengine-apps-services-versions-instances-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<appEngineRelease: string, availability: string, averageLatency: int, errors: int, id: string, memoryUsage: string, name: string, qps: float, requests: int, startTime: string, vmDebugEnabled: bool, vmId: string, vmIp: string, vmLiveness: string, vmName: string, vmStatus: string, vmZoneName: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
   if ($services_id | is-empty) { error make --unspanned { msg: "path parameter 'servicesId' must be non-empty" } }
@@ -2215,8 +2205,8 @@ export def "appengine-apps-services-versions-instances-debug" [
   versions_id: string
   instances_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2237,7 +2227,7 @@ export def "appengine-apps-services-versions-instances-debug" [
   --ssh-key: string # Public SSH key to add to the instance. Examples: [USERNAME]:ssh-rsa [KEY_VALUE] [USERNAME] [USERNAME]:ssh-rsa [KEY_VALUE] google-ssh {"userName":"[USERNAME]","expireOn":"[EXPIRE_TIME]"}For more information, see Adding and Removing SSH Keys (https://cloud.google.com/compute/docs/instances/adding-removing-ssh-keys).
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
   if ($services_id | is-empty) { error make --unspanned { msg: "path parameter 'servicesId' must be non-empty" } }
@@ -2270,8 +2260,8 @@ export def "appengine-apps-services-versions-instances-debug" [
 export def "appengine-apps-repair" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2292,7 +2282,7 @@ export def "appengine-apps-repair" [
   --body: record
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apps_id | is-empty) { error make --unspanned { msg: "path parameter 'appsId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -2322,8 +2312,8 @@ export def "appengine-apps-repair" [
 export def "appengine-projects-locations-list" [
   projects_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2345,7 +2335,7 @@ export def "appengine-projects-locations-list" [
   --page-size: int # The maximum number of results to return. If not set, the service selects a default.
   --page-token: string # A page token received from the next_page_token field in the response. Send that page token to receive the subsequent page.
 ]: nothing -> record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($projects_id | is-empty) { error make --unspanned { msg: "path parameter 'projectsId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -2374,8 +2364,8 @@ export def "appengine-projects-locations-get" [
   projects_id: string
   locations_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2394,7 +2384,7 @@ export def "appengine-projects-locations-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<displayName: string, labels: record, locationId: string, metadata: record, name: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($projects_id | is-empty) { error make --unspanned { msg: "path parameter 'projectsId' must be non-empty" } }
   if ($locations_id | is-empty) { error make --unspanned { msg: "path parameter 'locationsId' must be non-empty" } }
@@ -2427,8 +2417,8 @@ export def "appengine-projects-locations-applications-create" [
   projects_id: string
   locations_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2458,7 +2448,7 @@ export def "appengine-projects-locations-applications-create" [
   --serving-status: string@serving-status-completer # Serving status of this application.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($projects_id | is-empty) { error make --unspanned { msg: "path parameter 'projectsId' must be non-empty" } }
   if ($locations_id | is-empty) { error make --unspanned { msg: "path parameter 'locationsId' must be non-empty" } }
@@ -2491,8 +2481,8 @@ export def "appengine-projects-locations-applications-get" [
   locations_id: string
   applications_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2511,7 +2501,7 @@ export def "appengine-projects-locations-applications-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<authDomain: string, codeBucket: string, databaseType: string, defaultBucket: string, defaultCookieExpiration: string, defaultHostname: string, dispatchRules: table<domain: string, path: string, service: string>, featureSettings: record<splitHealthChecks: bool, useContainerOptimizedOs: bool>, gcrDomain: string, iap: record<enabled: bool, oauth2ClientId: string, oauth2ClientSecret: string, oauth2ClientSecretSha256: string>, id: string, locationId: string, name: string, serviceAccount: string, servingStatus: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($projects_id | is-empty) { error make --unspanned { msg: "path parameter 'projectsId' must be non-empty" } }
   if ($locations_id | is-empty) { error make --unspanned { msg: "path parameter 'locationsId' must be non-empty" } }
@@ -2543,8 +2533,8 @@ export def "appengine-projects-locations-applications-repair" [
   locations_id: string
   applications_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2565,7 +2555,7 @@ export def "appengine-projects-locations-applications-repair" [
   --body: record
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($projects_id | is-empty) { error make --unspanned { msg: "path parameter 'projectsId' must be non-empty" } }
   if ($locations_id | is-empty) { error make --unspanned { msg: "path parameter 'locationsId' must be non-empty" } }
@@ -2598,8 +2588,8 @@ export def "appengine-projects-locations-operations-list" [
   projects_id: string
   locations_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2621,7 +2611,7 @@ export def "appengine-projects-locations-operations-list" [
   --page-size: int # The standard list page size.
   --page-token: string # The standard list page token.
 ]: nothing -> record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($projects_id | is-empty) { error make --unspanned { msg: "path parameter 'projectsId' must be non-empty" } }
   if ($locations_id | is-empty) { error make --unspanned { msg: "path parameter 'locationsId' must be non-empty" } }
@@ -2652,8 +2642,8 @@ export def "appengine-projects-locations-operations-get" [
   locations_id: string
   operations_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2672,7 +2662,7 @@ export def "appengine-projects-locations-operations-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o APP_ENGINE_ADMIN_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($projects_id | is-empty) { error make --unspanned { msg: "path parameter 'projectsId' must be non-empty" } }
   if ($locations_id | is-empty) { error make --unspanned { msg: "path parameter 'locationsId' must be non-empty" } }

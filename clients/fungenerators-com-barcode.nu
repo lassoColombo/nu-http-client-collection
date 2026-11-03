@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-fungenerators-api-secret" => { {scheme: $scheme, headers: {X-Fungenerators-Api-Secret: $token_val}, query: "", location: "header"} }
+    "x-fungenerators-api-secret" => { {scheme: $scheme, headers: {"X-Fungenerators-Api-Secret": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -208,7 +208,7 @@ export def "get-barcode-encode" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --number: string # Barcode number (format: string)
+  --number: string # Barcode number (required, format: string)
   --barcodeformat: string # Barcode format default C39. Valid values are the keys to those returned from /barcode/encode/types. (format: string)
   --outputformat: string # Output image format. Must be one of png/html/jpg/svg (format: string)
   --widthfactor: int # Width factor of the image (format: integer)
@@ -216,6 +216,7 @@ export def "get-barcode-encode" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-fungenerators-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($number == null) { error make --unspanned { msg: "required query parameter 'number' missing: pass --number" } }
   let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "barcodeformat" $barcodeformat "scalar") (serialize-qp "outputformat" $outputformat "scalar") (serialize-qp "widthfactor" $widthfactor "scalar") (serialize-qp "totalheight" $totalheight "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/barcode/encode" $qp $auth.query)
   let accept_val = "application/json"

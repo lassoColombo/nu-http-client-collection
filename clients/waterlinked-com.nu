@@ -582,6 +582,7 @@ export def "config-modify-ip" [
   let full_url = (build-url $base "/api/v1/config/ip" $auth.query)
   let req_body = {"address": $address, "dhcp": $dhcp, "dns": $dns, "gateway": $gateway, "prefix": $prefix} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "dhcp") == null) { error make --unspanned { msg: "required body field 'dhcp' missing: pass --dhcp or pipe a record" } }
   let accept_val = "application/vnd.waterlinked.operation_response+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -695,6 +696,7 @@ export def "config-modify-receiver" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/config/receivers/{id}") $auth.query)
   let req_body = {"id": $body_id, "x": $x, "y": $y, "z": $z} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "id") == null) { error make --unspanned { msg: "required body field 'id' missing: pass --body-id or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1225,6 +1227,7 @@ export def "poi-create" [
   let full_url = (build-url $base "/api/v1/poi/" $auth.query)
   let req_body = {"depth": $depth, "icon": $icon, "id": $id, "lat": $lat, "lng": $lng, "name": $name, "visible": $visible} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "visible") == null) { error make --unspanned { msg: "required body field 'visible' missing: pass --visible or pipe a record" } }
   let accept_val = "application/vnd.goa.error"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1343,6 +1346,7 @@ export def "poi-update" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/poi/{id}") $auth.query)
   let req_body = {"depth": $depth, "icon": $icon, "id": $body_id, "lat": $lat, "lng": $lng, "name": $name, "visible": $visible} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "visible") == null) { error make --unspanned { msg: "required body field 'visible' missing: pass --visible or pipe a record" } }
   let accept_val = "application/vnd.goa.error"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {

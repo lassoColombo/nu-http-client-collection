@@ -1,4 +1,4 @@
-# Auto-generated client for Game Services API vv1
+# Auto-generated client for Game Services API v1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/gameservices/v1/openapi.json
 # Auth: --token flag or $env.GAME_SERVICES_API_TOKEN
 
@@ -12,20 +12,10 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
-}
-
-# Merge multiple auth records (AND-form security: every scheme must be sent).
-def merge-auth [parts: list]: nothing -> record {
-  let active = ($parts | where {|p| $p.location != "none" })
-  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
-  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
-  let locs = ($active | each {|p| $p.location } | uniq)
-  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
-  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
 # Serialize a single query parameter based on collection style
@@ -150,8 +140,8 @@ export def commands []: nothing -> table {
 export def "gameservices-projects-locations-operations-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -170,7 +160,7 @@ export def "gameservices-projects-locations-operations-delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GAME_SERVICES_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GAME_SERVICES_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -198,8 +188,8 @@ export def "gameservices-projects-locations-operations-delete" [
 export def "gameservices-projects-locations-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -218,7 +208,7 @@ export def "gameservices-projects-locations-operations-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GAME_SERVICES_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GAME_SERVICES_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -246,8 +236,8 @@ export def "gameservices-projects-locations-operations-get" [
 export def "gameservices-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -270,7 +260,7 @@ export def "gameservices-projects-locations-list" [
   --page-size: int # The maximum number of results to return. If not set, the service selects a default.
   --page-token: string # A page token received from the `next_page_token` field in the response. Send that page token to receive the subsequent page.
 ]: nothing -> record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GAME_SERVICES_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GAME_SERVICES_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "includeUnrevealedLocations" $include_unrevealed_locations "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -298,8 +288,8 @@ export def "gameservices-projects-locations-list" [
 export def "gameservices-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -321,7 +311,7 @@ export def "gameservices-projects-locations-operations-list" [
   --page-size: int # The standard list page size.
   --page-token: string # The standard list page token.
 ]: nothing -> record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GAME_SERVICES_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GAME_SERVICES_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -349,8 +339,8 @@ export def "gameservices-projects-locations-operations-list" [
 export def "gameservices-projects-locations-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -371,7 +361,7 @@ export def "gameservices-projects-locations-operations-cancel" [
   --body: record
 ]: any -> record {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GAME_SERVICES_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GAME_SERVICES_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -401,8 +391,8 @@ export def "gameservices-projects-locations-operations-cancel" [
 export def "gameservices-projects-locations-game-server-deployments-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -422,7 +412,7 @@ export def "gameservices-projects-locations-game-server-deployments-get-iam-poli
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --options-requested-policy-version: int # Optional. The maximum policy version that will be used to format the policy. Valid values are 0, 1, and 3. Requests specifying an invalid value will be rejected. Requests for policies with any conditional role bindings must specify version 3. Policies with no conditional role bindings may specify any valid value or leave the field unset. The policy in the response might use the policy version that you specified, or it might use a lower policy version. For example, if you specify version 3, but the policy has no conditional role bindings, the response uses version 1. To learn which resources support conditions in their IAM policies, see the [IAM documentation](https://cloud.google.com/iam/help/conditions/resource-policies).
 ]: nothing -> record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<bindingId: string, condition: record, members: list, role: string>, etag: string, rules: table<action: string, conditions: list, description: string, in: list, logConfig: list, notIn: list, permissions: list>, version: int> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GAME_SERVICES_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GAME_SERVICES_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource | is-empty) { error make --unspanned { msg: "path parameter 'resource' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "options.requestedPolicyVersion" $options_requested_policy_version "scalar")] | flatten | str join "&"
@@ -451,8 +441,8 @@ export def "gameservices-projects-locations-game-server-deployments-get-iam-poli
 export def "gameservices-projects-locations-game-server-deployments-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -474,7 +464,7 @@ export def "gameservices-projects-locations-game-server-deployments-set-iam-poli
   --update-mask: string # OPTIONAL: A FieldMask specifying which fields of the policy to modify. Only the fields in the mask will be modified. If no mask is provided, the following default mask is used: `paths: "bindings, etag"` (format: google-fieldmask)
 ]: any -> record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<bindingId: string, condition: record, members: list, role: string>, etag: string, rules: table<action: string, conditions: list, description: string, in: list, logConfig: list, notIn: list, permissions: list>, version: int> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GAME_SERVICES_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GAME_SERVICES_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource | is-empty) { error make --unspanned { msg: "path parameter 'resource' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -504,8 +494,8 @@ export def "gameservices-projects-locations-game-server-deployments-set-iam-poli
 export def "gameservices-projects-locations-game-server-deployments-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -526,7 +516,7 @@ export def "gameservices-projects-locations-game-server-deployments-test-iam-per
   --permissions: list<string> # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
 ]: any -> record<permissions: list<string>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GAME_SERVICES_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GAME_SERVICES_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource | is-empty) { error make --unspanned { msg: "path parameter 'resource' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"

@@ -1,6 +1,8 @@
 # Auto-generated client for MineSkin API v1.0.0
 # Source: https://api.apis.guru/v2/specs/mineskin.org/1.0.0/openapi.json
 # Auth: --token flag or $env.MINESKIN_API_TOKEN
+# Auth (apiKey): --token-apikey flag or $env.MINESKIN_API_APIKEY_TOKEN
+# Auth (bearerAuth): --token-bearerauth flag or $env.MINESKIN_API_BEARERAUTH_TOKEN
 
 const BASE_URL = "https://api.mineskin.org"
 
@@ -13,7 +15,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "query-key" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "key")=(encode-path-segment $token_val)", location: "query"} }
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -118,7 +120,7 @@ def visibility-completer [] { ["0" "1"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-apikey" "token-bearerauth"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-generate-upload" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -151,16 +153,17 @@ export def "post-generate-upload" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-agent: string # Custom User-Agent for your application, see [user-agent.dev](https://user-agent.dev/) for implementation examples (e.g. ExampleApp/v1.0)
+  --user-agent: string # Custom User-Agent for your application, see [user-agent.dev](https://user-agent.dev/) for implementation examples (required, e.g. ExampleApp/v1.0)
   --model: string@model-completer # DEPRECATED, default: steve
   --name: string
   --variant: string@variant-completer # Skin variant - automatically determined based on the image if not specified
   --visibility: int@visibility-completer # Visibility of the generated skin. 0 for public, 1 for private (default: 0)
   --file: string # format: binary
-]: any -> any {
+]: any -> record<account: int, accountId: int, data: record<texture: record<signature: string, url: string, value: string>, uuid: string>, duration: float, id: int, idStr: string, model: string, name: string, private: bool, server: string, timestamp: float, uuid: string, variant: string, views: float, duplicate: bool, nextRequest: int> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o MINESKIN_API_APIKEY_TOKEN | default "")) "query-key") (build-auth ($token_bearerauth | default ($env | get -o MINESKIN_API_BEARERAUTH_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
+  if ($user_agent == null) { error make --unspanned { msg: "required header parameter 'User-Agent' missing: pass --user-agent" } }
   let full_url = (build-url $base "/generate/upload" $auth.query)
   let req_body = {"model": $model, "name": $name, "variant": $variant, "visibility": $visibility, "file": $file} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -195,16 +198,17 @@ export def "post-generate-url" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-agent: string # Custom User-Agent for your application, see [user-agent.dev](https://user-agent.dev/) for implementation examples (e.g. ExampleApp/v1.0)
+  --user-agent: string # Custom User-Agent for your application, see [user-agent.dev](https://user-agent.dev/) for implementation examples (required, e.g. ExampleApp/v1.0)
   --model: string@model-completer # DEPRECATED, default: steve
   --name: string
   --variant: string@variant-completer # Skin variant - automatically determined based on the image if not specified
   --visibility: int@visibility-completer # Visibility of the generated skin. 0 for public, 1 for private (default: 0)
   --url: string
-]: any -> any {
+]: any -> record<account: int, accountId: int, data: record<texture: record<signature: string, url: string, value: string>, uuid: string>, duration: float, id: int, idStr: string, model: string, name: string, private: bool, server: string, timestamp: float, uuid: string, variant: string, views: float, duplicate: bool, nextRequest: int> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o MINESKIN_API_APIKEY_TOKEN | default "")) "query-key") (build-auth ($token_bearerauth | default ($env | get -o MINESKIN_API_BEARERAUTH_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
+  if ($user_agent == null) { error make --unspanned { msg: "required header parameter 'User-Agent' missing: pass --user-agent" } }
   let full_url = (build-url $base "/generate/url" $auth.query)
   let req_body = {"model": $model, "name": $name, "variant": $variant, "visibility": $visibility, "url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -238,16 +242,17 @@ export def "post-generate-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-agent: string # Custom User-Agent for your application, see [user-agent.dev](https://user-agent.dev/) for implementation examples (e.g. ExampleApp/v1.0)
+  --user-agent: string # Custom User-Agent for your application, see [user-agent.dev](https://user-agent.dev/) for implementation examples (required, e.g. ExampleApp/v1.0)
   --model: string@model-completer # DEPRECATED, default: steve
   --name: string
   --variant: string@variant-completer # Skin variant - automatically determined based on the image if not specified
   --visibility: int@visibility-completer # Visibility of the generated skin. 0 for public, 1 for private (default: 0)
   --uuid: string
-]: any -> any {
+]: any -> record<account: int, accountId: int, data: record<texture: record<signature: string, url: string, value: string>, uuid: string>, duration: float, id: int, idStr: string, model: string, name: string, private: bool, server: string, timestamp: float, uuid: string, variant: string, views: float, duplicate: bool, nextRequest: int> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o MINESKIN_API_APIKEY_TOKEN | default "")) "query-key") (build-auth ($token_bearerauth | default ($env | get -o MINESKIN_API_BEARERAUTH_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
+  if ($user_agent == null) { error make --unspanned { msg: "required header parameter 'User-Agent' missing: pass --user-agent" } }
   let full_url = (build-url $base "/generate/user" $auth.query)
   let req_body = {"model": $model, "name": $name, "variant": $variant, "visibility": $visibility, "uuid": $uuid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -280,10 +285,11 @@ export def "get-get-delay" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-agent: string # Custom User-Agent for your application, see [user-agent.dev](https://user-agent.dev/) for implementation examples (e.g. ExampleApp/v1.0)
-]: nothing -> any {
+  --user-agent: string # Custom User-Agent for your application, see [user-agent.dev](https://user-agent.dev/) for implementation examples (required, e.g. ExampleApp/v1.0)
+]: nothing -> record<delay: int, next: int, nextRelative: int> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o MINESKIN_API_APIKEY_TOKEN | default "")) "query-key") (build-auth ($token_bearerauth | default ($env | get -o MINESKIN_API_BEARERAUTH_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
+  if ($user_agent == null) { error make --unspanned { msg: "required header parameter 'User-Agent' missing: pass --user-agent" } }
   let full_url = (build-url $base "/get/delay" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -317,11 +323,12 @@ export def "get-get-id-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-agent: string # Custom User-Agent for your application, see [user-agent.dev](https://user-agent.dev/) for implementation examples (e.g. ExampleApp/v1.0)
+  --user-agent: string # Custom User-Agent for your application, see [user-agent.dev](https://user-agent.dev/) for implementation examples (required, e.g. ExampleApp/v1.0)
 ]: nothing -> record<account: int, accountId: int, data: record<texture: record<signature: string, url: string, value: string>, uuid: string>, duration: float, id: int, idStr: string, model: string, name: string, private: bool, server: string, timestamp: float, uuid: string, variant: string, views: float> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($user_agent == null) { error make --unspanned { msg: "required header parameter 'User-Agent' missing: pass --user-agent" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/get/id/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -353,11 +360,12 @@ export def "get-get-list-page" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-agent: string # Custom User-Agent for your application, see [user-agent.dev](https://user-agent.dev/) for implementation examples (e.g. ExampleApp/v1.0)
+  --user-agent: string # Custom User-Agent for your application, see [user-agent.dev](https://user-agent.dev/) for implementation examples (required, e.g. ExampleApp/v1.0)
 ]: nothing -> record<filter: string, page: record<amount: int, index: int, total: int>, skins: table<id: int, name: string, time: int, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   if ($page | is-empty) { error make --unspanned { msg: "path parameter 'page' must be non-empty" } }
+  if ($user_agent == null) { error make --unspanned { msg: "required header parameter 'User-Agent' missing: pass --user-agent" } }
   let full_url = (build-url $base ({page: (encode-path-segment $page)} | format pattern "/get/list/{page}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -389,11 +397,12 @@ export def "get-get-uuid-uuid" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-agent: string # Custom User-Agent for your application, see [user-agent.dev](https://user-agent.dev/) for implementation examples (e.g. ExampleApp/v1.0)
+  --user-agent: string # Custom User-Agent for your application, see [user-agent.dev](https://user-agent.dev/) for implementation examples (required, e.g. ExampleApp/v1.0)
 ]: nothing -> record<account: int, accountId: int, data: record<texture: record<signature: string, url: string, value: string>, uuid: string>, duration: float, id: int, idStr: string, model: string, name: string, private: bool, server: string, timestamp: float, uuid: string, variant: string, views: float> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   if ($uuid | is-empty) { error make --unspanned { msg: "path parameter 'uuid' must be non-empty" } }
+  if ($user_agent == null) { error make --unspanned { msg: "required header parameter 'User-Agent' missing: pass --user-agent" } }
   let full_url = (build-url $base ({uuid: (encode-path-segment $uuid)} | format pattern "/get/uuid/{uuid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -425,11 +434,12 @@ export def "get-validate-name-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-agent: string # Custom User-Agent for your application, see [user-agent.dev](https://user-agent.dev/) for implementation examples (e.g. ExampleApp/v1.0)
+  --user-agent: string # Custom User-Agent for your application, see [user-agent.dev](https://user-agent.dev/) for implementation examples (required, e.g. ExampleApp/v1.0)
 ]: nothing -> record<name: string, uuid: string, valid: bool> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($user_agent == null) { error make --unspanned { msg: "required header parameter 'User-Agent' missing: pass --user-agent" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/validate/name/{name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -461,11 +471,12 @@ export def "get-validate-uuid-uuid" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-agent: string # Custom User-Agent for your application, see [user-agent.dev](https://user-agent.dev/) for implementation examples (e.g. ExampleApp/v1.0)
+  --user-agent: string # Custom User-Agent for your application, see [user-agent.dev](https://user-agent.dev/) for implementation examples (required, e.g. ExampleApp/v1.0)
 ]: nothing -> record<name: string, uuid: string, valid: bool> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   if ($uuid | is-empty) { error make --unspanned { msg: "path parameter 'uuid' must be non-empty" } }
+  if ($user_agent == null) { error make --unspanned { msg: "required header parameter 'User-Agent' missing: pass --user-agent" } }
   let full_url = (build-url $base ({uuid: (encode-path-segment $uuid)} | format pattern "/validate/uuid/{uuid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

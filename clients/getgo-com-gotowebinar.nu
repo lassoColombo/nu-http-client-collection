@@ -153,15 +153,18 @@ export def "get-all-account-webinars" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --from-time: string # A required start of datetime range in ISO8601 UTC format, e.g. 2015-07-13T10:00:00Z (format: date-time)
-  --to-time: string # A required end of datetime range in ISO8601 UTC format, e.g. 2015-07-13T22:00:00Z (format: date-time)
+  --from-time: string # A required start of datetime range in ISO8601 UTC format, e.g. 2015-07-13T10:00:00Z (required, format: date-time)
+  --to-time: string # A required end of datetime range in ISO8601 UTC format, e.g. 2015-07-13T22:00:00Z (required, format: date-time)
   --page: int # The page number to be displayed. The first page is 0. (format: int64)
   --size: int # The size of the page. (format: int64)
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> record<_embedded: record<webinars: list<record>>, page: record<number: int, size: int, totalElements: int, totalPages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_key | is-empty) { error make --unspanned { msg: "path parameter 'accountKey' must be non-empty" } }
+  if ($from_time == null) { error make --unspanned { msg: "required query parameter 'fromTime' missing: pass --from-time" } }
+  if ($to_time == null) { error make --unspanned { msg: "required query parameter 'toTime' missing: pass --to-time" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "fromTime" $from_time "scalar") (serialize-qp "toTime" $to_time "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_key: (encode-path-segment $account_key)} | format pattern "/accounts/{account_key}/webinars") $qp $auth.query)
   let accept_val = "application/json"
@@ -197,13 +200,16 @@ export def "get-historical-webinars" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --from-time: string # A required start of datetime range in ISO8601 UTC format, e.g. 2015-07-13T10:00:00Z (format: date-time)
-  --to-time: string # A required end of datetime range in ISO8601 UTC format, e.g. 2015-07-13T22:00:00Z (format: date-time)
-  --authorization: string # Access token
+  --from-time: string # A required start of datetime range in ISO8601 UTC format, e.g. 2015-07-13T10:00:00Z (required, format: date-time)
+  --to-time: string # A required end of datetime range in ISO8601 UTC format, e.g. 2015-07-13T22:00:00Z (required, format: date-time)
+  --authorization: string # Access token (required)
 ]: nothing -> table<description: string, organizerKey: int, subject: string, timeZone: string, times: list<record>, webinarID: string, webinarKey: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
+  if ($from_time == null) { error make --unspanned { msg: "required query parameter 'fromTime' missing: pass --from-time" } }
+  if ($to_time == null) { error make --unspanned { msg: "required query parameter 'toTime' missing: pass --to-time" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "fromTime" $from_time "scalar") (serialize-qp "toTime" $to_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key)} | format pattern "/organizers/{organizer_key}/historicalWebinars") $qp $auth.query)
   let accept_val = "application/json"
@@ -239,13 +245,16 @@ export def "get-organizer-sessions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --from-time: string # A required start of datetime range in ISO8601 UTC format, e.g. 2015-07-13T10:00:00Z (format: date-time)
-  --to-time: string # A required end of datetime range in ISO8601 UTC format, e.g. 2015-07-13T22:00:00Z (format: date-time)
-  --authorization: string # Access token
+  --from-time: string # A required start of datetime range in ISO8601 UTC format, e.g. 2015-07-13T10:00:00Z (required, format: date-time)
+  --to-time: string # A required end of datetime range in ISO8601 UTC format, e.g. 2015-07-13T22:00:00Z (required, format: date-time)
+  --authorization: string # Access token (required)
 ]: nothing -> table<endTime: string, registrantsAttended: int, sessionKey: int, startTime: string, webinarID: string, webinarKey: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
+  if ($from_time == null) { error make --unspanned { msg: "required query parameter 'fromTime' missing: pass --from-time" } }
+  if ($to_time == null) { error make --unspanned { msg: "required query parameter 'toTime' missing: pass --to-time" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "fromTime" $from_time "scalar") (serialize-qp "toTime" $to_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key)} | format pattern "/organizers/{organizer_key}/sessions") $qp $auth.query)
   let accept_val = "application/json"
@@ -281,11 +290,12 @@ export def "get-upcoming-webinars" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> table<description: string, inSession: bool, organizerKey: int, registrationUrl: string, subject: string, timeZone: string, times: list<record>, webinarID: string, webinarKey: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key)} | format pattern "/organizers/{organizer_key}/upcomingWebinars") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -320,11 +330,12 @@ export def "get-all-webinars" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> table<description: string, inSession: bool, numberOfRegistrants: int, organizerKey: int, registrationUrl: string, subject: string, timeZone: string, times: list<record>, webinarID: string, webinarKey: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key)} | format pattern "/organizers/{organizer_key}/webinars") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -360,7 +371,7 @@ export def "create-webinar" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
   --description: string # A short description of the webinar (2048 characters maximum)
   --is-password-protected: oneof<nothing, bool> # A boolean flag indicating if the webinar is password protected or not. (default: false)
   subject: string # The name/subject of the webinar (128 characters maximum)
@@ -372,6 +383,7 @@ export def "create-webinar" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key)} | format pattern "/organizers/{organizer_key}/webinars") $auth.query)
   let req_body = {"description": $description, "isPasswordProtected": $is_password_protected, "subject": $subject, "timeZone": $time_zone, "times": $times, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -410,12 +422,13 @@ export def "cancel-webinar" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --send-cancellation-emails: oneof<nothing, bool> # Indicates whether cancellation notice emails should be sent. The default value is false
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($webinar_key | is-empty) { error make --unspanned { msg: "path parameter 'webinarKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "sendCancellationEmails" $send_cancellation_emails "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}") $qp $auth.query)
   let accept_val = "application/json"
@@ -452,12 +465,13 @@ export def "get-webinar" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> record<description: string, inSession: bool, numberOfOpenedInvitations: int, numberOfRegistrants: int, numberOfRegistrationLinkClicks: int, organizerKey: int, registrationUrl: string, subject: string, timeZone: string, times: table<endTime: string, startTime: string>, webinarID: string, webinarKey: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($webinar_key | is-empty) { error make --unspanned { msg: "path parameter 'webinarKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -495,7 +509,7 @@ export def "update-webinar" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --notify-participants: oneof<nothing, bool> # Defines whether to send notifications to participants
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
   --description: string # A description of the webinar (2048 characters maximum)
   --locale: string@locale-completer # The webinar language
   --subject: string # The name/subject of the webinar (128 characters maximum)
@@ -507,6 +521,7 @@ export def "update-webinar" [
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($webinar_key | is-empty) { error make --unspanned { msg: "path parameter 'webinarKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "notifyParticipants" $notify_participants "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}") $qp $auth.query)
   let req_body = {"description": $description, "locale": $locale, "subject": $subject, "timeZone": $time_zone, "times": $times} | compact
@@ -545,12 +560,13 @@ export def "get-attendees-for-all-webinar-sessions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> table<attendance: list<record>, attendanceTimeInSeconds: int, email: string, firstName: string, lastName: string, registrantKey: int, sessionKey: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($webinar_key | is-empty) { error make --unspanned { msg: "path parameter 'webinarKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/attendees") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -586,12 +602,13 @@ export def "get-audio-information" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> record<confCallNumbers: record, privateInfo: record<attendee: string, organizer: string, panelist: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($webinar_key | is-empty) { error make --unspanned { msg: "path parameter 'webinarKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/audio") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -630,7 +647,7 @@ export def "update-audio-information" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --notify-participants: oneof<nothing, bool> # Defines whether to send notifications to participants
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
   --private-info: any # Defines the audio data for an own conferencing system — shape: {attendee: string, organizer?: string, panelist?: string}
   --pstn-info: any # Defines the audio/conferencing settings for the specified webinar. It required to pass 'tollFreeCountries' or 'tollCountries' or both. — shape: {tollCountries?: list<string>, tollFreeCountries?: list<string>}
   type: string@type-completer # How to connect to the webinar's audio conference
@@ -640,6 +657,7 @@ export def "update-audio-information" [
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($webinar_key | is-empty) { error make --unspanned { msg: "path parameter 'webinarKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "notifyParticipants" $notify_participants "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/audio") $qp $auth.query)
   let req_body = {"privateInfo": $private_info, "pstnInfo": $pstn_info, "type": $type} | compact
@@ -678,12 +696,13 @@ export def "get-coorganizers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> table<email: string, external: bool, givenName: string, joinLink: string, memberKey: string, surname: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($webinar_key | is-empty) { error make --unspanned { msg: "path parameter 'webinarKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/coorganizers") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -719,7 +738,7 @@ export def "create-coorganizers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
   --body: list
 ]: any -> table<email: string, external: bool, givenName: string, joinLink: string, memberKey: string, surname: string> {
   let input = $in
@@ -727,6 +746,7 @@ export def "create-coorganizers" [
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($webinar_key | is-empty) { error make --unspanned { msg: "path parameter 'webinarKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/coorganizers") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -766,13 +786,14 @@ export def "delete-coorganizer" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --external: oneof<nothing, bool> # By default only internal co-organizers (with a GoToWebinar account) can be deleted. If you want to use this call for external co-organizers you have to set this parameter to 'true'.
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($webinar_key | is-empty) { error make --unspanned { msg: "path parameter 'webinarKey' must be non-empty" } }
   if ($coorganizer_key | is-empty) { error make --unspanned { msg: "path parameter 'coorganizerKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "external" $external "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key), coorganizer_key: (encode-path-segment $coorganizer_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/coorganizers/{coorganizer_key}") $qp $auth.query)
   let accept_val = "application/json"
@@ -811,13 +832,14 @@ export def "resend-coorganizer-invitation" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --external: oneof<nothing, bool> # By default only internal co-organizers (with a GoToWebinar account) will retrieve the resent invitation email. If you want to use this call for external co-organizers you have to set this parameter to 'true'.
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($webinar_key | is-empty) { error make --unspanned { msg: "path parameter 'webinarKey' must be non-empty" } }
   if ($coorganizer_key | is-empty) { error make --unspanned { msg: "path parameter 'coorganizerKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "external" $external "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key), coorganizer_key: (encode-path-segment $coorganizer_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/coorganizers/{coorganizer_key}/resendInvitation") $qp $auth.query)
   let accept_val = "application/json"
@@ -854,12 +876,13 @@ export def "get-webinar-meeting-times" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> table<endTime: string, startTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($webinar_key | is-empty) { error make --unspanned { msg: "path parameter 'webinarKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/meetingtimes") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -895,12 +918,13 @@ export def "get-panelists" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> table<email: string, firstName: string, joinLink: string, lastName: string, name: string, panelistId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($webinar_key | is-empty) { error make --unspanned { msg: "path parameter 'webinarKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/panelists") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -936,7 +960,7 @@ export def "create-panelists" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
   --body: list
 ]: any -> table<email: string, joinLink: string, name: string, panelistKey: string> {
   let input = $in
@@ -944,6 +968,7 @@ export def "create-panelists" [
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($webinar_key | is-empty) { error make --unspanned { msg: "path parameter 'webinarKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/panelists") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -982,13 +1007,14 @@ export def "delete-webinar-panelist" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($webinar_key | is-empty) { error make --unspanned { msg: "path parameter 'webinarKey' must be non-empty" } }
   if ($panelist_key | is-empty) { error make --unspanned { msg: "path parameter 'panelistKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key), panelist_key: (encode-path-segment $panelist_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/panelists/{panelist_key}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1025,13 +1051,14 @@ export def "resend-panelist-invitation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($webinar_key | is-empty) { error make --unspanned { msg: "path parameter 'webinarKey' must be non-empty" } }
   if ($panelist_key | is-empty) { error make --unspanned { msg: "path parameter 'panelistKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key), panelist_key: (encode-path-segment $panelist_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/panelists/{panelist_key}/resendInvitation") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1067,12 +1094,13 @@ export def "get-performance-for-all-webinar-sessions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($webinar_key | is-empty) { error make --unspanned { msg: "path parameter 'webinarKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/performance") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1108,12 +1136,13 @@ export def "get-all-registrants-for-webinar" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> table<email: string, firstName: string, joinUrl: string, lastName: string, registrantKey: int, registrationDate: string, status: string, timeZone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($webinar_key | is-empty) { error make --unspanned { msg: "path parameter 'webinarKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/registrants") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1151,7 +1180,7 @@ export def "create-registrant" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --resend-confirmation: oneof<nothing, bool> # Indicates whether the confirmation email should be resent when a registrant is re-registered. The default value is false.
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
   --hdr-accept: string # Set to 'application/vnd.citrix.g2wapi-v1.1+json' to make a registration using fields (custom or default) additional to the basic ones.
   --address: string # The registrant's address
   --city: string # The registrant's city
@@ -1168,7 +1197,7 @@ export def "create-registrant" [
   --purchasing-time-frame: string # The time frame within which the product will be purchased
   --questions-and-comments: string # Any questions or comments the registrant made at the time of registration
   --responses: list # Set the answers of all questions — item shape: {answerKey?: int, questionKey: int, responseText?: string}
-  --body-source: string # The source that led to the registration. This can be any string like 'Newsletter 123' or 'Marketing campaign ABC'
+  --source: string # The source that led to the registration. This can be any string like 'Newsletter 123' or 'Marketing campaign ABC'
   --state: string # The registrant's state (US only)
   --zip-code: string # The registrant's zip (post) code
 ]: any -> record<joinUrl: string, registrantKey: int> {
@@ -1177,9 +1206,10 @@ export def "create-registrant" [
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($webinar_key | is-empty) { error make --unspanned { msg: "path parameter 'webinarKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "resendConfirmation" $resend_confirmation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/registrants") $qp $auth.query)
-  let req_body = {"address": $address, "city": $city, "country": $country, "email": $email, "firstName": $first_name, "industry": $industry, "jobTitle": $job_title, "lastName": $last_name, "numberOfEmployees": $number_of_employees, "organization": $organization, "phone": $phone, "purchasingRole": $purchasing_role, "purchasingTimeFrame": $purchasing_time_frame, "questionsAndComments": $questions_and_comments, "responses": $responses, "source": $body_source, "state": $state, "zipCode": $zip_code} | compact
+  let req_body = {"address": $address, "city": $city, "country": $country, "email": $email, "firstName": $first_name, "industry": $industry, "jobTitle": $job_title, "lastName": $last_name, "numberOfEmployees": $number_of_employees, "organization": $organization, "phone": $phone, "purchasingRole": $purchasing_role, "purchasingTimeFrame": $purchasing_time_frame, "questionsAndComments": $questions_and_comments, "responses": $responses, "source": $source, "state": $state, "zipCode": $zip_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1215,12 +1245,13 @@ export def "get-registration-fields" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> record<fields: table<answers: list, field: string, maxSize: int, required: bool>, questions: table<answers: list, maxSize: int, question: string, questionKey: int, required: bool, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($webinar_key | is-empty) { error make --unspanned { msg: "path parameter 'webinarKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/registrants/fields") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1257,13 +1288,14 @@ export def "delete-registrant" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($webinar_key | is-empty) { error make --unspanned { msg: "path parameter 'webinarKey' must be non-empty" } }
   if ($registrant_key | is-empty) { error make --unspanned { msg: "path parameter 'registrantKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key), registrant_key: (encode-path-segment $registrant_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/registrants/{registrant_key}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1300,13 +1332,14 @@ export def "get-registrant" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> record<address: string, city: string, country: string, email: string, employeeCount: string, firstName: string, implementationTimeFrame: string, industry: string, jobTitle: string, joinUrl: string, lastName: string, numberOfEmployees: string, organization: string, phone: string, purchasingRole: string, purchasingTimeFrame: string, questionsAndComments: string, registrantKey: int, registrationDate: string, responses: table<answer: string, question: string>, source: string, state: string, status: string, timeZone: string, type: string, unsubscribed: bool, zipCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($webinar_key | is-empty) { error make --unspanned { msg: "path parameter 'webinarKey' must be non-empty" } }
   if ($registrant_key | is-empty) { error make --unspanned { msg: "path parameter 'registrantKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key), registrant_key: (encode-path-segment $registrant_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/registrants/{registrant_key}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1342,12 +1375,13 @@ export def "get-all-sessions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> table<endTime: string, registrantsAttended: int, sessionKey: int, startTime: string, webinarID: string, webinarKey: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($webinar_key | is-empty) { error make --unspanned { msg: "path parameter 'webinarKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/sessions") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1384,13 +1418,14 @@ export def "get-webinar-session" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> table<attendance: list<record>, attendanceTimeInSeconds: int, email: string, firstName: string, lastName: string, registrantKey: int, sessionKey: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($webinar_key | is-empty) { error make --unspanned { msg: "path parameter 'webinarKey' must be non-empty" } }
   if ($session_key | is-empty) { error make --unspanned { msg: "path parameter 'sessionKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key), session_key: (encode-path-segment $session_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/sessions/{session_key}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1427,13 +1462,14 @@ export def "get-attendees" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> table<attendance: list<record>, attendanceTimeInSeconds: int, email: string, firstName: string, lastName: string, registrantKey: int, sessionKey: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($webinar_key | is-empty) { error make --unspanned { msg: "path parameter 'webinarKey' must be non-empty" } }
   if ($session_key | is-empty) { error make --unspanned { msg: "path parameter 'sessionKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key), session_key: (encode-path-segment $session_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/sessions/{session_key}/attendees") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1471,7 +1507,7 @@ export def "get-attendee" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> record<email: string, firstName: string, joinUrl: string, lastName: string, registrantKey: int, registrationDate: string, status: string, timeZone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1479,6 +1515,7 @@ export def "get-attendee" [
   if ($webinar_key | is-empty) { error make --unspanned { msg: "path parameter 'webinarKey' must be non-empty" } }
   if ($session_key | is-empty) { error make --unspanned { msg: "path parameter 'sessionKey' must be non-empty" } }
   if ($registrant_key | is-empty) { error make --unspanned { msg: "path parameter 'registrantKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key), session_key: (encode-path-segment $session_key), registrant_key: (encode-path-segment $registrant_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/sessions/{session_key}/attendees/{registrant_key}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1516,7 +1553,7 @@ export def "get-attendee-poll-answers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> table<answer: string, question: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1524,6 +1561,7 @@ export def "get-attendee-poll-answers" [
   if ($webinar_key | is-empty) { error make --unspanned { msg: "path parameter 'webinarKey' must be non-empty" } }
   if ($session_key | is-empty) { error make --unspanned { msg: "path parameter 'sessionKey' must be non-empty" } }
   if ($registrant_key | is-empty) { error make --unspanned { msg: "path parameter 'registrantKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key), session_key: (encode-path-segment $session_key), registrant_key: (encode-path-segment $registrant_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/sessions/{session_key}/attendees/{registrant_key}/polls") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1561,7 +1599,7 @@ export def "get-attendee-questions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> table<answers: list<record>, askedBy: string, question: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1569,6 +1607,7 @@ export def "get-attendee-questions" [
   if ($webinar_key | is-empty) { error make --unspanned { msg: "path parameter 'webinarKey' must be non-empty" } }
   if ($session_key | is-empty) { error make --unspanned { msg: "path parameter 'sessionKey' must be non-empty" } }
   if ($registrant_key | is-empty) { error make --unspanned { msg: "path parameter 'registrantKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key), session_key: (encode-path-segment $session_key), registrant_key: (encode-path-segment $registrant_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/sessions/{session_key}/attendees/{registrant_key}/questions") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1606,7 +1645,7 @@ export def "get-attendee-survey-answers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> table<answer: string, question: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1614,6 +1653,7 @@ export def "get-attendee-survey-answers" [
   if ($webinar_key | is-empty) { error make --unspanned { msg: "path parameter 'webinarKey' must be non-empty" } }
   if ($session_key | is-empty) { error make --unspanned { msg: "path parameter 'sessionKey' must be non-empty" } }
   if ($registrant_key | is-empty) { error make --unspanned { msg: "path parameter 'registrantKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key), session_key: (encode-path-segment $session_key), registrant_key: (encode-path-segment $registrant_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/sessions/{session_key}/attendees/{registrant_key}/surveys") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1650,13 +1690,14 @@ export def "get-performance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> record<attendance: record<averageAttendanceTimeSeconds: float, averageAttentiveness: float, averageInterestRating: float, percentageAttendance: float, registrantCount: int>, pollsAndSurveys: record<percentagePollsCompleted: float, percentageSurveysCompleted: float, pollCount: int, questionsAsked: int, surveyCount: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($webinar_key | is-empty) { error make --unspanned { msg: "path parameter 'webinarKey' must be non-empty" } }
   if ($session_key | is-empty) { error make --unspanned { msg: "path parameter 'sessionKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key), session_key: (encode-path-segment $session_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/sessions/{session_key}/performance") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1693,13 +1734,14 @@ export def "get-polls" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> table<numberOfResponses: int, question: string, responses: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($webinar_key | is-empty) { error make --unspanned { msg: "path parameter 'webinarKey' must be non-empty" } }
   if ($session_key | is-empty) { error make --unspanned { msg: "path parameter 'sessionKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key), session_key: (encode-path-segment $session_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/sessions/{session_key}/polls") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1736,13 +1778,14 @@ export def "get-questions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> table<answers: list<record>, askedBy: string, question: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($webinar_key | is-empty) { error make --unspanned { msg: "path parameter 'webinarKey' must be non-empty" } }
   if ($session_key | is-empty) { error make --unspanned { msg: "path parameter 'sessionKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key), session_key: (encode-path-segment $session_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/sessions/{session_key}/questions") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1779,13 +1822,14 @@ export def "get-surveys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> table<numberOfResponses: int, question: string, responses: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
   if ($webinar_key | is-empty) { error make --unspanned { msg: "path parameter 'webinarKey' must be non-empty" } }
   if ($session_key | is-empty) { error make --unspanned { msg: "path parameter 'sessionKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key), webinar_key: (encode-path-segment $webinar_key), session_key: (encode-path-segment $session_key)} | format pattern "/organizers/{organizer_key}/webinars/{webinar_key}/sessions/{session_key}/surveys") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

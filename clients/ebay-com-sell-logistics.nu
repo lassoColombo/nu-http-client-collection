@@ -1,4 +1,4 @@
-# Auto-generated client for Logistics API vv1_beta.0.0
+# Auto-generated client for Logistics API v1_beta.0.0
 # Source: https://api.apis.guru/v2/specs/ebay.com/sell-logistics/v1_beta.0.0/openapi.json
 # Auth: --token flag or $env.LOGISTICS_API_TOKEN
 
@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -295,7 +295,7 @@ export def "create-shipping-quote" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-ebay-c-marketplace-id: string # This header parameter specifies the eBay marketplace for the shipping quote that is being created. For a list of valid values, refer to the section Marketplace ID Values (/api-docs/static/rest-request-components.html#marketpl) in the Using eBay RESTful APIs guide.
+  --x-ebay-c-marketplace-id: string # This header parameter specifies the eBay marketplace for the shipping quote that is being created. For a list of valid values, refer to the section Marketplace ID Values (/api-docs/static/rest-request-components.html#marketpl) in the Using eBay RESTful APIs guide. (required)
   --orders: list # A seller-defined list that contains information about the orders in the package. This allows sellers to include information about the line items in the package with the shipment information. A package can contain any number of line items from one or more orders, providing they all ship in the same package. Maximum list size: 10 — item shape: {channel?: string, orderId?: string}
   --package-specification: record # This complex type specifies the dimensions and weight of a package. — shape: {dimensions?: record, weight?: record}
   --ship-from: record # This complex type contains contact information for an individual buyer or seller. — shape: {companyName?: string, contactAddress?: record, fullName?: string, primaryPhone?: record}
@@ -304,6 +304,7 @@ export def "create-shipping-quote" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_ebay_c_marketplace_id == null) { error make --unspanned { msg: "required header parameter 'X-EBAY-C-MARKETPLACE-ID' missing: pass --x-ebay-c-marketplace-id" } }
   let full_url = (build-url $base "/shipping_quote" $auth.query)
   let req_body = {"orders": $orders, "packageSpecification": $package_specification, "shipFrom": $ship_from, "shipTo": $ship_to} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

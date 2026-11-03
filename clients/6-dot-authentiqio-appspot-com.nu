@@ -119,7 +119,9 @@ def base-url-completer [] { ["https://6-dot-authentiqio.appspot.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def accept-completer [] { ["application/json" "application/jwt"] }
+def accept-completer [] { ["*/*" "application/json"] }
+def accept-completer-1 [] { ["*/*" "application/json" "application/jwt"] }
+def accept-completer-2 [] { ["*/*" "application/jwt"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -158,15 +160,18 @@ export def "key-revoke-nosecret" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --email: string # primary email associated to Key (ID)
-  --phone: string # primary phone number, international representation
+  --accept: string@accept-completer # Response content type
+  --email: string # primary email associated to Key (ID) (required)
+  --phone: string # primary phone number, international representation (required)
   --code: string # verification code sent by email
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($email == null) { error make --unspanned { msg: "required query parameter 'email' missing: pass --email" } }
+  if ($phone == null) { error make --unspanned { msg: "required query parameter 'phone' missing: pass --phone" } }
   let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "phone" $phone "scalar") (serialize-qp "code" $code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/key" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
@@ -196,6 +201,7 @@ export def "key-register" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --body: any
 ]: any -> record<secret: string, status: string> {
   let input = $in
@@ -204,7 +210,7 @@ export def "key-register" [
   let full_url = (build-url $base "/key" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -235,14 +241,16 @@ export def "key-revoke" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --secret: string # revokation secret
+  --accept: string@accept-completer # Response content type
+  --secret: string # revokation secret (required)
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pk | is-empty) { error make --unspanned { msg: "path parameter 'PK' must be non-empty" } }
+  if ($secret == null) { error make --unspanned { msg: "required query parameter 'secret' missing: pass --secret" } }
   let qp = [(serialize-qp "secret" $secret "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pk: (encode-path-segment $pk)} | format pattern "/key/{pk}") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
@@ -273,12 +281,13 @@ export def "key-retrieve" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
 ]: nothing -> record<since: string, status: string, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pk | is-empty) { error make --unspanned { msg: "path parameter 'PK' must be non-empty" } }
   let full_url = (build-url $base ({pk: (encode-path-segment $pk)} | format pattern "/key/{pk}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -313,7 +322,7 @@ export def "head-key-pk" [
   let base = ($base_url | default $BASE_URL)
   if ($pk | is-empty) { error make --unspanned { msg: "path parameter 'PK' must be non-empty" } }
   let full_url = (build-url $base ({pk: (encode-path-segment $pk)} | format pattern "/key/{pk}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "head"
@@ -344,6 +353,7 @@ export def "key-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --body: any
 ]: any -> record<status: string> {
   let input = $in
@@ -353,7 +363,7 @@ export def "key-update" [
   let full_url = (build-url $base ({pk: (encode-path-segment $pk)} | format pattern "/key/{pk}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -384,6 +394,7 @@ export def "key-bind" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --body: any
 ]: any -> record<status: string> {
   let input = $in
@@ -393,7 +404,7 @@ export def "key-bind" [
   let full_url = (build-url $base ({pk: (encode-path-segment $pk)} | format pattern "/key/{pk}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "put"
@@ -423,17 +434,19 @@ export def "push-login-request" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --callback: string # URI App will connect to
+  --accept: string@accept-completer # Response content type
+  --callback: string # URI App will connect to (required)
   --body: any
 ]: any -> record<status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($callback == null) { error make --unspanned { msg: "required query parameter 'callback' missing: pass --callback" } }
   let qp = [(serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/login" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -463,6 +476,7 @@ export def "sign-request" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --test: int # test only mode, using test issuer
   --body: any
 ]: any -> record<job: string, status: string> {
@@ -473,7 +487,7 @@ export def "sign-request" [
   let full_url = (build-url $base "/scope" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -504,12 +518,13 @@ export def "sign-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job | is-empty) { error make --unspanned { msg: "path parameter 'job' must be non-empty" } }
   let full_url = (build-url $base ({job: (encode-path-segment $job)} | format pattern "/scope/{job}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
@@ -540,7 +555,7 @@ export def "sign-retrieve" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept: string@accept-completer # Response content type
+  --accept: string@accept-completer-1 # Response content type
 ]: nothing -> record<exp: int, field: string, sub: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -582,7 +597,7 @@ export def "sign-retrieve-head" [
   let base = ($base_url | default $BASE_URL)
   if ($job | is-empty) { error make --unspanned { msg: "path parameter 'job' must be non-empty" } }
   let full_url = (build-url $base ({job: (encode-path-segment $job)} | format pattern "/scope/{job}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "head"
@@ -613,12 +628,13 @@ export def "sign-confirm" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job | is-empty) { error make --unspanned { msg: "path parameter 'job' must be non-empty" } }
   let full_url = (build-url $base ({job: (encode-path-segment $job)} | format pattern "/scope/{job}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -649,12 +665,13 @@ export def "sign-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer-2 # Response content type
 ]: nothing -> record<jwt: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job | is-empty) { error make --unspanned { msg: "path parameter 'job' must be non-empty" } }
   let full_url = (build-url $base ({job: (encode-path-segment $job)} | format pattern "/scope/{job}") $auth.query)
-  let accept_val = "application/jwt"
+  let accept_val = ($accept | default "application/jwt")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "put"

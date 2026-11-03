@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -132,10 +132,11 @@ export def "get-calendar" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --year: int # Year filter
+  --year: int # Year filter (required)
 ]: nothing -> table<firstGameStart: string, lastGameStart: string, season: int, seasonType: string, week: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($year == null) { error make --unspanned { msg: "required query parameter 'year' missing: pass --year" } }
   let qp = [(serialize-qp "year" $year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/calendar" $qp $auth.query)
   let accept_val = "application/json"
@@ -352,7 +353,7 @@ export def "get-drives" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --season-type: string # Season type filter (default: regular)
-  --year: int # Year filter
+  --year: int # Year filter (required)
   --week: int # Week filter
   --team: string # Team filter
   --offense: string # Offensive team filter
@@ -364,6 +365,7 @@ export def "get-drives" [
 ]: nothing -> table<defense: string, defense_conference: string, drive_number: int, drive_result: string, end_defense_score: int, end_offense_score: int, end_period: int, end_time: record<minutes: int, seconds: int>, end_yardline: int, end_yards_to_goal: int, game_id: int, id: int, is_home_offense: bool, offense: string, offense_conference: string, plays: int, scoring: bool, start_defense_score: int, start_offense_score: int, start_period: int, start_time: record<minutes: int, seconds: int>, start_yardline: int, start_yards_to_goal: int, yards: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($year == null) { error make --unspanned { msg: "required query parameter 'year' missing: pass --year" } }
   let qp = [(serialize-qp "seasonType" $season_type "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "offense" $offense "scalar") (serialize-qp "defense" $defense "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "offenseConference" $offense_conference "scalar") (serialize-qp "defenseConference" $defense_conference "scalar") (serialize-qp "classification" $classification "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/drives" $qp $auth.query)
   let accept_val = "application/json"
@@ -396,10 +398,11 @@ export def "get-advanced-box-score" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --game-id: int # Game id parameters
+  --game-id: int # Game id parameters (required)
 ]: nothing -> record<players: record<ppa: list<record>, usage: list<record>>, teams: record<cumulativePpa: list<record>, explosiveness: list<record>, fieldPosition: list<record>, havoc: list<record>, ppa: list<record>, rushing: list<record>, scoringOpportunities: list<record>, successRates: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($game_id == null) { error make --unspanned { msg: "required query parameter 'gameId' missing: pass --game-id" } }
   let qp = [(serialize-qp "gameId" $game_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/game/box/advanced" $qp $auth.query)
   let accept_val = "application/json"
@@ -432,7 +435,7 @@ export def "get-games" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --year: int # Year/season filter for games
+  --year: int # Year/season filter for games (required)
   --week: int # Week filter
   --season-type: string # Season type filter (regular or postseason) (default: regular)
   --team: string # Team
@@ -444,6 +447,7 @@ export def "get-games" [
 ]: nothing -> table<attendance: int, away_conference: string, away_division: string, away_id: int, away_line_scores: list<int>, away_points: int, away_post_win_prob: float, away_postgame_elo: int, away_pregame_elo: int, away_team: string, completed: bool, conference_game: bool, excitement_index: float, highlights: string, home_conference: string, home_division: string, home_id: int, home_line_scores: list<int>, home_points: int, home_post_win_prob: float, home_postgame_elo: int, home_pregame_elo: int, home_team: string, id: int, neutral_site: bool, notes: string, season: int, season_type: string, start_date: string, start_time_tbd: bool, venue: string, venue_id: int, week: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($year == null) { error make --unspanned { msg: "required query parameter 'year' missing: pass --year" } }
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "seasonType" $season_type "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "home" $home "scalar") (serialize-qp "away" $away "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "division" $division "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/games" $qp $auth.query)
   let accept_val = "application/json"
@@ -476,7 +480,7 @@ export def "get-game-media" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --year: int # Year filter
+  --year: int # Year filter (required)
   --week: int # Week filter
   --season-type: string # Season type filter (regular, postseason, or both)
   --team: string # Team filter
@@ -486,6 +490,7 @@ export def "get-game-media" [
 ]: nothing -> table<awayConference: string, awayTeam: string, homeConference: string, homeTeam: string, id: int, isStartTimeTBD: bool, mediaType: string, outlet: string, season: int, seasonType: string, startTime: string, week: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($year == null) { error make --unspanned { msg: "required query parameter 'year' missing: pass --year" } }
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "seasonType" $season_type "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "mediaType" $media_type "scalar") (serialize-qp "classification" $classification "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/games/media" $qp $auth.query)
   let accept_val = "application/json"
@@ -518,7 +523,7 @@ export def "get-player-game-stats" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --year: int # Year/season filter for games
+  --year: int # Year/season filter for games (required)
   --week: int # Week filter
   --season-type: string # Season type filter (regular or postseason) (default: regular)
   --team: string # Team filter
@@ -528,6 +533,7 @@ export def "get-player-game-stats" [
 ]: nothing -> table<id: int, teams: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($year == null) { error make --unspanned { msg: "required query parameter 'year' missing: pass --year" } }
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "seasonType" $season_type "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "gameId" $game_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/games/players" $qp $auth.query)
   let accept_val = "application/json"
@@ -560,7 +566,7 @@ export def "get-team-game-stats" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --year: int # Year/season filter for games
+  --year: int # Year/season filter for games (required)
   --week: int # Week filter
   --season-type: string # Season type filter (regular or postseason) (default: regular)
   --team: string # Team filter
@@ -570,6 +576,7 @@ export def "get-team-game-stats" [
 ]: nothing -> table<id: int, teams: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($year == null) { error make --unspanned { msg: "required query parameter 'year' missing: pass --year" } }
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "seasonType" $season_type "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "gameId" $game_id "scalar") (serialize-qp "classification" $classification "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/games/teams" $qp $auth.query)
   let accept_val = "application/json"
@@ -687,10 +694,11 @@ export def "get-live-plays" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: int # Game id
+  --id: int # Game id (required)
 ]: nothing -> record<clock: string, distance: int, down: int, drives: table<defense: string, defenseId: int, duration: string, endClock: string, endPeriod: int, endYardsToGoal: int, id: int, offense: string, offenseId: int, playCount: int, plays: list, scoringOpportunity: bool, startClock: string, startPeriod: int, startYardsToGoal: int, yards: int>, id: int, period: int, possession: string, status: string, teams: table<drives: int, epaPerPass: float, epaPerPlay: float, epaPerRush: float, explosiveness: float, homeAway: string, lineYards: int, lineYardsPerRush: float, openFieldYards: int, openFieldYardsPerRush: float, passingDownSuccessRate: float, passingEpa: float, plays: int, points: int, pointsPerOpportunity: float, rushingEpa: float, scoringOpportunities: int, secondLevelYards: int, secondLevelYardsPerRush: float, standardDownSuccessRate: float, successRate: float, team: string, teamId: int, totalEpa: float>, yardsToGoal: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/live/plays" $qp $auth.query)
   let accept_val = "application/json"
@@ -723,10 +731,11 @@ export def "get-win-probability-data" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --game-id: int # Game id filter
+  --game-id: int # Game id filter (required)
 ]: nothing -> table<away: string, awayId: int, awayScore: int, distance: int, down: int, gamesId: int, home: string, homeBall: bool, homeId: int, homeScore: int, homeWinProb: float, playId: int, playNumber: int, playText: string, spread: float, timeRemaining: int, yardLine: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($game_id == null) { error make --unspanned { msg: "required query parameter 'gameId' missing: pass --game-id" } }
   let qp = [(serialize-qp "gameId" $game_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/metrics/wp" $qp $auth.query)
   let accept_val = "application/json"
@@ -909,10 +918,11 @@ export def "get-transfer-portal" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --year: int # Year filter
+  --year: int # Year filter (required)
 ]: nothing -> table<destination: string, eligibility: string, firstName: string, lastName: string, origin: string, position: string, rating: float, season: int, stars: int, transferDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($year == null) { error make --unspanned { msg: "required query parameter 'year' missing: pass --year" } }
   let qp = [(serialize-qp "year" $year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/player/portal" $qp $auth.query)
   let accept_val = "application/json"
@@ -983,13 +993,14 @@ export def "player-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --search-term: string # Term to search on
+  --search-term: string # Term to search on (required)
   --position: string # Position abbreviation filter
   --team: string # Team filter
   --year: int # Year filter
 ]: nothing -> table<firstName: string, height: int, hometown: string, id: int, jersey: int, lastName: string, name: string, position: string, team: string, teamColor: string, teamColorSecondary: string, weight: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($search_term == null) { error make --unspanned { msg: "required query parameter 'searchTerm' missing: pass --search-term" } }
   let qp = [(serialize-qp "searchTerm" $search_term "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "year" $year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/player/search" $qp $auth.query)
   let accept_val = "application/json"
@@ -1022,7 +1033,7 @@ export def "get-player-usage" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --year: int # Year filter (default: 2022)
+  --year: int # Year filter (required, default: 2022)
   --team: string # Team filter
   --conference: string # Conference abbreviation filter
   --position: string # Position abbreviation filter
@@ -1031,6 +1042,7 @@ export def "get-player-usage" [
 ]: nothing -> table<conference: string, id: int, name: string, position: string, season: int, team: string, usage: record<firstDown: float, overall: float, pass: float, passingDowns: float, rush: float, secondDown: float, standardDowns: float, thirdDown: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let year = ($year | default 2022)
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "playerId" $player_id "scalar") (serialize-qp "excludeGarbageTime" $exclude_garbage_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/player/usage" $qp $auth.query)
   let accept_val = "application/json"
@@ -1064,8 +1076,8 @@ export def "get-plays" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --season-type: string # Season type filter (default: regular)
-  --year: int # Year filter
-  --week: int # Week filter (required if team, offense, or defense, not specified)
+  --year: int # Year filter (required)
+  --week: int # Week filter (required if team, offense, or defense, not specified) (required)
   --team: string # Team filter
   --offense: string # Offensive team filter
   --defense: string # Defensive team filter
@@ -1077,6 +1089,8 @@ export def "get-plays" [
 ]: nothing -> table<away: string, clock: record<minutes: int, seconds: int>, defense: string, defense_conference: string, defense_score: int, defense_timeouts: int, distance: int, down: int, drive_id: int, drive_number: int, game_id: int, home: string, id: int, offense: string, offense_conference: string, offense_score: int, offense_timeouts: int, period: int, play_number: int, play_text: string, play_type: string, ppa: float, scoring: bool, wallclock: string, yard_line: int, yards_gained: int, yards_to_goal: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($year == null) { error make --unspanned { msg: "required query parameter 'year' missing: pass --year" } }
+  if ($week == null) { error make --unspanned { msg: "required query parameter 'week' missing: pass --week" } }
   let qp = [(serialize-qp "seasonType" $season_type "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "offense" $offense "scalar") (serialize-qp "defense" $defense "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "offenseConference" $offense_conference "scalar") (serialize-qp "defenseConference" $defense_conference "scalar") (serialize-qp "playType" $play_type "scalar") (serialize-qp "classification" $classification "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/plays" $qp $auth.query)
   let accept_val = "application/json"
@@ -1109,7 +1123,7 @@ export def "get-game-ppa" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --year: int # Year filter
+  --year: int # Year filter (required)
   --week: int # Week filter
   --team: string # Team filter
   --conference: string # Conference filter
@@ -1118,6 +1132,7 @@ export def "get-game-ppa" [
 ]: nothing -> table<conference: string, defense: record<firstDown: float, overall: float, passing: float, rushing: float, secondDown: float, thirdDown: float>, gameId: int, offense: record<firstDown: float, overall: float, passing: float, rushing: float, secondDown: float, thirdDown: float>, opponent: string, season: int, team: string, week: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($year == null) { error make --unspanned { msg: "required query parameter 'year' missing: pass --year" } }
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "excludeGarbageTime" $exclude_garbage_time "scalar") (serialize-qp "seasonType" $season_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ppa/games" $qp $auth.query)
   let accept_val = "application/json"
@@ -1235,11 +1250,13 @@ export def "get-predicted-points" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --down: int # Down filter
-  --distance: int # Distance filter
+  --down: int # Down filter (required)
+  --distance: int # Distance filter (required)
 ]: nothing -> table<predictedPoints: float, yardLine: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($down == null) { error make --unspanned { msg: "required query parameter 'down' missing: pass --down" } }
+  if ($distance == null) { error make --unspanned { msg: "required query parameter 'distance' missing: pass --distance" } }
   let qp = [(serialize-qp "down" $down "scalar") (serialize-qp "distance" $distance "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ppa/predicted" $qp $auth.query)
   let accept_val = "application/json"
@@ -1311,12 +1328,13 @@ export def "get-rankings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --year: int # Year/season filter for games
+  --year: int # Year/season filter for games (required)
   --week: int # Week filter
   --season-type: string # Season type filter (regular or postseason) (default: regular)
 ]: nothing -> table<polls: list<record>, season: int, seasonType: string, week: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($year == null) { error make --unspanned { msg: "required query parameter 'year' missing: pass --year" } }
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "seasonType" $season_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rankings" $qp $auth.query)
   let accept_val = "application/json"
@@ -1803,7 +1821,7 @@ export def "get-player-season-stats" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --year: int # Year filter
+  --year: int # Year filter (required)
   --team: string # Team filter
   --conference: string # Conference abbreviation filter
   --start-week: int # Start week filter
@@ -1813,6 +1831,7 @@ export def "get-player-season-stats" [
 ]: nothing -> table<category: string, conference: string, player: string, playerId: int, season: int, stat: float, statType: string, team: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($year == null) { error make --unspanned { msg: "required query parameter 'year' missing: pass --year" } }
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "startWeek" $start_week "scalar") (serialize-qp "endWeek" $end_week "scalar") (serialize-qp "seasonType" $season_type "scalar") (serialize-qp "category" $category "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/stats/player/season" $qp $auth.query)
   let accept_val = "application/json"
@@ -2033,13 +2052,15 @@ export def "get-team-matchup" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --team1: string # First team
-  --team2: string # Second team
+  --team1: string # First team (required)
+  --team2: string # Second team (required)
   --min-year: int # Minimum year
   --max-year: int # Maximum year
 ]: nothing -> record<endYear: int, games: table<awayScore: int, awayTeam: string, date: string, homeScore: int, homeTeam: string, neutralSite: bool, season: int, season_type: string, venue: string, week: int, winner: string>, startYear: int, team1: string, team1Wins: int, team2: string, team2Wins: int, ties: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team1 == null) { error make --unspanned { msg: "required query parameter 'team1' missing: pass --team1" } }
+  if ($team2 == null) { error make --unspanned { msg: "required query parameter 'team2' missing: pass --team2" } }
   let qp = [(serialize-qp "team1" $team1 "scalar") (serialize-qp "team2" $team2 "scalar") (serialize-qp "minYear" $min_year "scalar") (serialize-qp "maxYear" $max_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/teams/matchup" $qp $auth.query)
   let accept_val = "application/json"

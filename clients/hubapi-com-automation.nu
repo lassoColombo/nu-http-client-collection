@@ -1,4 +1,4 @@
-# Auto-generated client for Custom Workflow Actions vv4
+# Auto-generated client for Custom Workflow Actions v4
 # Source: https://api.apis.guru/v2/specs/hubapi.com/automation/v4/openapi.json
 # Auth: --token flag or $env.CUSTOM_WORKFLOW_ACTIONS_TOKEN
 
@@ -13,8 +13,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "query-hapikey" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "hapikey")=(encode-path-segment $token_val)", location: "query"} }
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "private-app-legacy" => { {scheme: $scheme, headers: {private-app-legacy: $token_val}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "private-app-legacy" => { {scheme: $scheme, headers: {"private-app-legacy": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -120,6 +120,9 @@ def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors
 def base-url-completer [] { ["https://api.hubapi.com"] }
 def auth-scheme-completer [] { ["query-hapikey" "bearer" "private-app-legacy"] }
 
+# Completers for enum parameters
+def accept-completer [] { ["*/*" "application/json"] }
+def function-type-completer [] { ["POST_FETCH_OPTIONS" "PRE_ACTION_EXECUTION" "PRE_FETCH_OPTIONS"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -167,7 +170,7 @@ export def "post-automation-v4-actions-callbacks-complete-complete-batch" [
   let full_url = (build-url $base "/automation/v4/actions/callbacks/complete" $auth.query)
   let req_body = {"inputs": $inputs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -207,7 +210,7 @@ export def "post-automation-v4-actions-callbacks-complete-complete" [
   let full_url = (build-url $base ({callback_id: (encode-path-segment $callback_id)} | format pattern "/automation/v4/actions/callbacks/{callback_id}/complete") $auth.query)
   let req_body = {"outputFields": $output_fields} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -238,6 +241,7 @@ export def "get-automation-v4-actions-get-page" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --limit: int # Maximum number of results per page. (format: int32)
   --after: string # The paging cursor token of the last successfully read resource will be returned as the `paging.next.after` JSON property of a paged response containing more results.
   --archived: oneof<nothing, bool> # Whether to include archived custom actions. (default: false)
@@ -247,7 +251,7 @@ export def "get-automation-v4-actions-get-page" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "after" $after "scalar") (serialize-qp "archived" $archived "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/automation/v4/actions/{app_id}") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -281,6 +285,7 @@ export def "post-automation-v4-actions-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   action_url: string # The URL that will accept an HTTPS request each time workflows executes the custom action.
   --archived-at: int # The date that this custom action was archived, if the custom action is archived. (format: int64)
   functions: list # A list of functions associated with the custom workflow action. — item shape: {functionSource: string, functionType: "PRE_ACTION_EXECUTION"|"PRE_FETCH_OPTIONS"|"POST_FETCH_OPTIONS", id?: string}
@@ -298,7 +303,8 @@ export def "post-automation-v4-actions-create" [
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/automation/v4/actions/{app_id}") $auth.query)
   let req_body = {"actionUrl": $action_url, "archivedAt": $archived_at, "functions": $functions, "inputFieldDependencies": $input_field_dependencies, "inputFields": $input_fields, "labels": $labels, "objectRequestOptions": $object_request_options, "objectTypes": $object_types, "published": $published} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  if (($req_body | get -o "published") == null) { error make --unspanned { msg: "required body field 'published' missing: pass --published or pipe a record" } }
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -336,7 +342,7 @@ export def "delete-automation-v4-actions-archive" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($definition_id | is-empty) { error make --unspanned { msg: "path parameter 'definitionId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), definition_id: (encode-path-segment $definition_id)} | format pattern "/automation/v4/actions/{app_id}/{definition_id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
@@ -368,6 +374,7 @@ export def "get-automation-v4-actions-get-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --archived: oneof<nothing, bool> # Whether to include archived custom actions. (default: false)
 ]: nothing -> record<actionUrl: string, archivedAt: int, functions: table<functionType: string, id: string>, id: string, inputFieldDependencies: list<any>, inputFields: table<isRequired: bool, supportedValueTypes: list, typeDefinition: record>, labels: record, objectRequestOptions: record<properties: list<string>>, objectTypes: list<string>, published: bool, revisionId: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
@@ -376,7 +383,7 @@ export def "get-automation-v4-actions-get-by-id" [
   if ($definition_id | is-empty) { error make --unspanned { msg: "path parameter 'definitionId' must be non-empty" } }
   let qp = [(serialize-qp "archived" $archived "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), definition_id: (encode-path-segment $definition_id)} | format pattern "/automation/v4/actions/{app_id}/{definition_id}") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -410,6 +417,7 @@ export def "patch-automation-v4-actions-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --action-url: string # The URL that will accept an HTTPS request each time workflows executes the custom action.
   --input-field-dependencies: list # A list of dependencies between the input fields. These configure when the input fields should be visible.
   --input-fields: list # The list of input fields to display in this custom action. — item shape: {isRequired: bool, supportedValueTypes?: list<string>, typeDefinition: record}
@@ -426,7 +434,7 @@ export def "patch-automation-v4-actions-update" [
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), definition_id: (encode-path-segment $definition_id)} | format pattern "/automation/v4/actions/{app_id}/{definition_id}") $auth.query)
   let req_body = {"actionUrl": $action_url, "inputFieldDependencies": $input_field_dependencies, "inputFields": $input_fields, "labels": $labels, "objectRequestOptions": $object_request_options, "objectTypes": $object_types, "published": $published} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "patch"
@@ -458,13 +466,14 @@ export def "get-automation-v4-actions-functions-get-page" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
 ]: nothing -> record<results: table<functionType: string, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($definition_id | is-empty) { error make --unspanned { msg: "path parameter 'definitionId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), definition_id: (encode-path-segment $definition_id)} | format pattern "/automation/v4/actions/{app_id}/{definition_id}/functions") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -487,7 +496,7 @@ export def "get-automation-v4-actions-functions-get-page" [
 export def "delete-automation-v4-actions-functions-archive-by-function-type" [
   app_id: int
   definition_id: string
-  function_type: string
+  function_type: string@function-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -504,7 +513,7 @@ export def "delete-automation-v4-actions-functions-archive-by-function-type" [
   if ($definition_id | is-empty) { error make --unspanned { msg: "path parameter 'definitionId' must be non-empty" } }
   if ($function_type | is-empty) { error make --unspanned { msg: "path parameter 'functionType' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), definition_id: (encode-path-segment $definition_id), function_type: (encode-path-segment $function_type)} | format pattern "/automation/v4/actions/{app_id}/{definition_id}/functions/{function_type}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
@@ -527,7 +536,7 @@ export def "delete-automation-v4-actions-functions-archive-by-function-type" [
 export def "get-automation-v4-actions-functions-get-by-function-type" [
   app_id: int
   definition_id: string
-  function_type: string
+  function_type: string@function-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -537,6 +546,7 @@ export def "get-automation-v4-actions-functions-get-by-function-type" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
 ]: nothing -> record<functionSource: string, functionType: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
@@ -544,7 +554,7 @@ export def "get-automation-v4-actions-functions-get-by-function-type" [
   if ($definition_id | is-empty) { error make --unspanned { msg: "path parameter 'definitionId' must be non-empty" } }
   if ($function_type | is-empty) { error make --unspanned { msg: "path parameter 'functionType' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), definition_id: (encode-path-segment $definition_id), function_type: (encode-path-segment $function_type)} | format pattern "/automation/v4/actions/{app_id}/{definition_id}/functions/{function_type}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -567,7 +577,7 @@ export def "get-automation-v4-actions-functions-get-by-function-type" [
 export def "put-automation-v4-actions-functions-create-or-replace-by-function-type" [
   app_id: int
   definition_id: string
-  function_type: string
+  function_type: string@function-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -577,6 +587,7 @@ export def "put-automation-v4-actions-functions-create-or-replace-by-function-ty
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --body: string
 ]: any -> record<functionType: string, id: string> {
   let input = $in
@@ -588,7 +599,7 @@ export def "put-automation-v4-actions-functions-create-or-replace-by-function-ty
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), definition_id: (encode-path-segment $definition_id), function_type: (encode-path-segment $function_type)} | format pattern "/automation/v4/actions/{app_id}/{definition_id}/functions/{function_type}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "put"
@@ -611,7 +622,7 @@ export def "put-automation-v4-actions-functions-create-or-replace-by-function-ty
 export def "delete-automation-v4-actions-functions-archive" [
   app_id: int
   definition_id: string
-  function_type: string
+  function_type: string@function-type-completer
   function_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -630,7 +641,7 @@ export def "delete-automation-v4-actions-functions-archive" [
   if ($function_type | is-empty) { error make --unspanned { msg: "path parameter 'functionType' must be non-empty" } }
   if ($function_id | is-empty) { error make --unspanned { msg: "path parameter 'functionId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), definition_id: (encode-path-segment $definition_id), function_type: (encode-path-segment $function_type), function_id: (encode-path-segment $function_id)} | format pattern "/automation/v4/actions/{app_id}/{definition_id}/functions/{function_type}/{function_id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
@@ -653,7 +664,7 @@ export def "delete-automation-v4-actions-functions-archive" [
 export def "get-automation-v4-actions-functions-get-by-id" [
   app_id: int
   definition_id: string
-  function_type: string
+  function_type: string@function-type-completer
   function_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -664,6 +675,7 @@ export def "get-automation-v4-actions-functions-get-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
 ]: nothing -> record<functionSource: string, functionType: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
@@ -672,7 +684,7 @@ export def "get-automation-v4-actions-functions-get-by-id" [
   if ($function_type | is-empty) { error make --unspanned { msg: "path parameter 'functionType' must be non-empty" } }
   if ($function_id | is-empty) { error make --unspanned { msg: "path parameter 'functionId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), definition_id: (encode-path-segment $definition_id), function_type: (encode-path-segment $function_type), function_id: (encode-path-segment $function_id)} | format pattern "/automation/v4/actions/{app_id}/{definition_id}/functions/{function_type}/{function_id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -695,7 +707,7 @@ export def "get-automation-v4-actions-functions-get-by-id" [
 export def "put-automation-v4-actions-functions-create-or-replace" [
   app_id: int
   definition_id: string
-  function_type: string
+  function_type: string@function-type-completer
   function_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -706,6 +718,7 @@ export def "put-automation-v4-actions-functions-create-or-replace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --body: string
 ]: any -> record<functionType: string, id: string> {
   let input = $in
@@ -718,7 +731,7 @@ export def "put-automation-v4-actions-functions-create-or-replace" [
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), definition_id: (encode-path-segment $definition_id), function_type: (encode-path-segment $function_type), function_id: (encode-path-segment $function_id)} | format pattern "/automation/v4/actions/{app_id}/{definition_id}/functions/{function_type}/{function_id}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "put"
@@ -750,6 +763,7 @@ export def "get-automation-v4-actions-revisions-get-page" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --limit: int # Maximum number of results per page. (format: int32)
   --after: string # The paging cursor token of the last successfully read resource will be returned as the `paging.next.after` JSON property of a paged response containing more results.
 ]: nothing -> record<paging: record<next: record<after: string, link: string>>, results: table<createdAt: string, definition: record, id: string, revisionId: string>> {
@@ -759,7 +773,7 @@ export def "get-automation-v4-actions-revisions-get-page" [
   if ($definition_id | is-empty) { error make --unspanned { msg: "path parameter 'definitionId' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), definition_id: (encode-path-segment $definition_id)} | format pattern "/automation/v4/actions/{app_id}/{definition_id}/revisions") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -792,6 +806,7 @@ export def "get-automation-v4-actions-revisions-get-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
 ]: nothing -> record<createdAt: string, definition: record<actionUrl: string, archivedAt: int, functions: list<record>, id: string, inputFieldDependencies: list<any>, inputFields: list<record>, labels: record, objectRequestOptions: record<properties: list>, objectTypes: list<string>, published: bool, revisionId: string>, id: string, revisionId: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
@@ -799,7 +814,7 @@ export def "get-automation-v4-actions-revisions-get-by-id" [
   if ($definition_id | is-empty) { error make --unspanned { msg: "path parameter 'definitionId' must be non-empty" } }
   if ($revision_id | is-empty) { error make --unspanned { msg: "path parameter 'revisionId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), definition_id: (encode-path-segment $definition_id), revision_id: (encode-path-segment $revision_id)} | format pattern "/automation/v4/actions/{app_id}/{definition_id}/revisions/{revision_id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"

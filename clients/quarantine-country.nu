@@ -130,11 +130,12 @@ export def "get-spots-day" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --region: string # Region short name
+  --region: string # Region short name (required)
   --date: string # Date to query spots on (default: Today)
 ]: nothing -> record<data: record, status: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($region == null) { error make --unspanned { msg: "required query parameter 'region' missing: pass --region" } }
   let qp = [(serialize-qp "region" $region "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/spots/day" $qp $auth.query)
   let accept_val = "application/json"
@@ -166,11 +167,12 @@ export def "get-spots-month" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --region: string # Region short name
+  --region: string # Region short name (required)
   --date: string # Date to query spots on (default: Today)
 ]: nothing -> record<data: record, status: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($region == null) { error make --unspanned { msg: "required query parameter 'region' missing: pass --region" } }
   let qp = [(serialize-qp "region" $region "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/spots/month" $qp $auth.query)
   let accept_val = "application/json"
@@ -202,11 +204,12 @@ export def "get-spots-week" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --region: string # Region short name
+  --region: string # Region short name (required)
   --date: string # Date to query spots on (default: Today)
 ]: nothing -> record<data: record, status: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($region == null) { error make --unspanned { msg: "required query parameter 'region' missing: pass --region" } }
   let qp = [(serialize-qp "region" $region "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/spots/week" $qp $auth.query)
   let accept_val = "application/json"
@@ -238,11 +241,12 @@ export def "get-spots-year" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --region: string # Region short name
+  --region: string # Region short name (required)
   --date: string # Date to query spots on (default: Today)
 ]: nothing -> record<data: record, status: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($region == null) { error make --unspanned { msg: "required query parameter 'region' missing: pass --region" } }
   let qp = [(serialize-qp "region" $region "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/spots/year" $qp $auth.query)
   let accept_val = "application/json"
@@ -309,11 +313,12 @@ export def "get-summary-region" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --region: string # Region short name
+  --region: string # Region short name (required)
   --date: string # Date of the report (default: today)
 ]: nothing -> record<data: record<change: record<active_cases: int, change: any, death_ratio: float, deaths: int, name: string, recovered_: int, recovery_ratio: float, total_cases: int>, generated_on: int, regions: record, summary: record<active_cases: int, change: any, death_ratio: float, deaths: int, name: string, recovered_: int, recovery_ratio: float, total_cases: int>>, status: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($region == null) { error make --unspanned { msg: "required query parameter 'region' missing: pass --region" } }
   let qp = [(serialize-qp "region" $region "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/summary/region" $qp $auth.query)
   let accept_val = "application/json"

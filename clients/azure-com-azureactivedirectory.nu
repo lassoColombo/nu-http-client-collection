@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -144,10 +144,11 @@ export def "diagnostic-settings-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<value: table<properties: record>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/microsoft.aadiam/diagnosticSettings" $qp $auth.query)
   let accept_val = "application/json"
@@ -181,11 +182,12 @@ export def "diagnostic-settings-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/providers/microsoft.aadiam/diagnosticSettings/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -219,11 +221,12 @@ export def "diagnostic-settings-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<eventHubAuthorizationRuleId: string, eventHubName: string, logs: list<record>, serviceBusRuleId: string, storageAccountId: string, workspaceId: string>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<eventHubAuthorizationRuleId: string, eventHubName: string, logs: list<record>, serviceBusRuleId: string, storageAccountId: string, workspaceId: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/providers/microsoft.aadiam/diagnosticSettings/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -258,13 +261,14 @@ export def "diagnostic-settings-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: any # The diagnostic settings. — shape: {eventHubAuthorizationRuleId?: string, eventHubName?: string, logs?: list, serviceBusRuleId?: string, storageAccountId?: string, workspaceId?: string}
-]: any -> record<properties: record<eventHubAuthorizationRuleId: string, eventHubName: string, logs: list<record>, serviceBusRuleId: string, storageAccountId: string, workspaceId: string>> {
+]: any -> record<properties: record<eventHubAuthorizationRuleId: string, eventHubName: string, logs: list<record>, serviceBusRuleId: string, storageAccountId: string, workspaceId: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/providers/microsoft.aadiam/diagnosticSettings/{name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -299,10 +303,11 @@ export def "diagnostic-settings-category-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<value: table<properties: record>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/microsoft.aadiam/diagnosticSettingsCategories" $qp $auth.query)
   let accept_val = "application/json"
@@ -335,10 +340,11 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<value: table<display: record, name: string, origin: string, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/microsoft.aadiam/operations" $qp $auth.query)
   let accept_val = "application/json"

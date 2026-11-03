@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -136,9 +136,9 @@ export def "post-post-review" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-email: string # User's email to which the review verification will be sent. (e.g. {user_email: johnsmith@companyxyz.com})
+  --user-email: string # User's email to which the review verification will be sent. (required, e.g. {user_email: johnsmith@companyxyz.com})
   --user-name: string # The user's name, defaults to empty string "". Thus, if this is omitted, the email to the user will not use the user's name. (e.g. {user_name: John}, allows empty value)
-  --rating: int@rating-completer # The user's star rating, must be a single integer from [1, 2, 3, 4, 5] (e.g. {rating: 5})
+  --rating: int@rating-completer # The user's star rating, must be a single integer from [1, 2, 3, 4, 5] (required, e.g. {rating: 5})
   --rating-body: int # e.g. 5 (body field)
   --user-email-body: string # e.g. johnsmith@usercompanyxyz.com (body field)
   --user-name-body: string # e.g. John (body field)
@@ -146,10 +146,14 @@ export def "post-post-review" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_email == null) { error make --unspanned { msg: "required query parameter 'user_email' missing: pass --user-email" } }
+  if ($rating == null) { error make --unspanned { msg: "required query parameter 'rating' missing: pass --rating" } }
   let qp = [(serialize-qp "user_email" $user_email "scalar") (serialize-qp "user_name" $user_name "scalar") (serialize-qp "rating" $rating "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/post-review" $qp $auth.query)
   let req_body = {"rating": $rating_body, "user_email": $user_email_body, "user_name": $user_name_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "rating") == null) { error make --unspanned { msg: "required body field 'rating' missing: pass --rating-body or pipe a record" } }
+  if (($req_body | get -o "user_email") == null) { error make --unspanned { msg: "required body field 'user_email' missing: pass --user-email-body or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {

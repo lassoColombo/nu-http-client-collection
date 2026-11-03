@@ -1,4 +1,4 @@
-# Auto-generated client for My Business Business Calls API vv1
+# Auto-generated client for My Business Business Calls API v1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/mybusinessbusinesscalls/v1/openapi.json
 # Auth: --token flag or $env.MY_BUSINESS_BUSINESS_CALLS_API_TOKEN
 

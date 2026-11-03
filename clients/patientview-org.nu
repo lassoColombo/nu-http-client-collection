@@ -595,14 +595,18 @@ export def "get-observations-by-codes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --code: list<string> # code
-  --limit: int # limit (format: int64)
-  --offset: int # offset (format: int64)
-  --order-direction: string # orderDirection
+  --code: list<string> # code (required)
+  --limit: int # limit (required, format: int64)
+  --offset: int # offset (required, format: int64)
+  --order-direction: string # orderDirection (required)
 ]: nothing -> record<data: table<key: list>, totalElements: int, totalPages: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($code == null) { error make --unspanned { msg: "required query parameter 'code' missing: pass --code" } }
+  if ($limit == null) { error make --unspanned { msg: "required query parameter 'limit' missing: pass --limit" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($order_direction == null) { error make --unspanned { msg: "required query parameter 'orderDirection' missing: pass --order-direction" } }
   let qp = [(serialize-qp "code" $code "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "orderDirection" $order_direction "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/observations") $qp $auth.query)
   let accept_val = "*/*"

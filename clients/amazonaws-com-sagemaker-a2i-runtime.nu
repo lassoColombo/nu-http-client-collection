@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -199,7 +199,7 @@ export def "describe-human-loop" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CreationTime: record, FailureReason: record, FailureCode: record, HumanLoopStatus: record, HumanLoopName: record, HumanLoopArn: record, FlowDefinitionArn: record, HumanLoopOutput: record<OutputS3Uri: record>> {
+]: nothing -> record<CreationTime: string, FailureReason: string, FailureCode: string, HumanLoopStatus: string, HumanLoopName: string, HumanLoopArn: string, FlowDefinitionArn: string, HumanLoopOutput: record<OutputS3Uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($human_loop_name | is-empty) { error make --unspanned { msg: "path parameter 'HumanLoopName' must be non-empty" } }
@@ -238,7 +238,7 @@ export def "list-human-loops" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --creation-time-after: string # (Optional) The timestamp of the date when you want the human loops to begin in ISO 8601 format. For example, 2020-02-24. (format: date-time)
   --creation-time-before: string # (Optional) The timestamp of the date before which you want the human loops to begin in ISO 8601 format. For example, 2020-02-24. (format: date-time)
-  --flow-definition-arn: string # The Amazon Resource Name (ARN) of a flow definition.
+  --flow-definition-arn: string # The Amazon Resource Name (ARN) of a flow definition. (required)
   --sort-order: string@sort-order-completer # Optional. The order for displaying results. Valid values: Ascending and Descending.
   --next-token: string # A token to display the next page of results.
   --max-results: int # The total number of items to return. If the total number of available items is more than the value specified in MaxResults, then a NextToken is returned in the output. You can use this token to display the next page of results.
@@ -249,9 +249,10 @@ export def "list-human-loops" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<HumanLoopSummaries: record, NextToken: record> {
+]: nothing -> record<HumanLoopSummaries: table<HumanLoopName: string, HumanLoopStatus: string, CreationTime: string, FailureReason: string, FlowDefinitionArn: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($flow_definition_arn == null) { error make --unspanned { msg: "required query parameter 'FlowDefinitionArn' missing: pass --flow-definition-arn" } }
   let qp = [(serialize-qp "CreationTimeAfter" $creation_time_after "scalar") (serialize-qp "CreationTimeBefore" $creation_time_before "scalar") (serialize-qp "FlowDefinitionArn" $flow_definition_arn "scalar") (serialize-qp "SortOrder" $sort_order "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/human-loops" $qp $auth.query)
   let accept_val = "application/json"
@@ -276,8 +277,8 @@ export def "list-human-loops" [
 #
 # POST /human-loops
 # operationId: StartHumanLoop
-# --HumanLoopInput shape: {InputContent?: any}
-# --DataAttributes shape: {ContentClassifiers?: any}
+# --HumanLoopInput shape: {InputContent?: string}
+# --DataAttributes shape: {ContentClassifiers?: list<string>}
 export def "start-human-loop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -297,9 +298,9 @@ export def "start-human-loop" [
   --x-amz-signed-headers: string
   human_loop_name: string # The name of the human loop.
   flow_definition_arn: string # The Amazon Resource Name (ARN) of the flow definition associated with this human loop.
-  human_loop_input: record # An object containing the human loop input in JSON format. — shape: {InputContent?: any}
-  --data-attributes: record # Attributes of the data specified by the customer. Use these to describe the data to be labeled. — shape: {ContentClassifiers?: any}
-]: any -> record<HumanLoopArn: record> {
+  human_loop_input: record # An object containing the human loop input in JSON format. — shape: {InputContent?: string}
+  --data-attributes: record # Attributes of the data specified by the customer. Use these to describe the data to be labeled. — shape: {ContentClassifiers?: list<string>}
+]: any -> record<HumanLoopArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

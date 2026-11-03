@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -113,6 +113,8 @@ def x-amz-target-completer-13 [] { ["Route53Domains_v20140515.GetDomainDetail"] 
 def x-amz-target-completer-14 [] { ["Route53Domains_v20140515.GetDomainSuggestions"] }
 def x-amz-target-completer-15 [] { ["Route53Domains_v20140515.GetOperationDetail"] }
 def x-amz-target-completer-16 [] { ["Route53Domains_v20140515.ListDomains"] }
+def sort-by-completer [] { ["SubmittedDate"] }
+def sort-order-completer [] { ["ASC" "DESC"] }
 def x-amz-target-completer-17 [] { ["Route53Domains_v20140515.ListOperations"] }
 def x-amz-target-completer-18 [] { ["Route53Domains_v20140515.ListPrices"] }
 def x-amz-target-completer-19 [] { ["Route53Domains_v20140515.ListTagsForDomain"] }
@@ -175,13 +177,14 @@ export def "accept-domain-transfer-from-another-aws-account" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  domain_name: any
-  password: any
-]: any -> record<OperationId: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  domain_name: string # The name of the domain that was specified when another Amazon Web Services account submitted a TransferDomainToAnotherAwsAccount (https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_TransferDomainToAnotherAwsAccount.html) request.
+  password: string # The password that was returned by the TransferDomainToAnotherAwsAccount (https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_TransferDomainToAnotherAwsAccount.html) request.
+]: any -> record<OperationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53Domains_v20140515.AcceptDomainTransferFromAnotherAwsAccount")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DomainName": $domain_name, "Password": $password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -207,6 +210,7 @@ export def "accept-domain-transfer-from-another-aws-account" [
 #
 # POST /
 # operationId: AssociateDelegationSignerToDomain
+# --SigningAttributes shape: {Algorithm?: int, Flags?: int, PublicKey?: string}
 export def "associate-delegation-signer-to-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -224,13 +228,14 @@ export def "associate-delegation-signer-to-domain" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  domain_name: any
-  signing_attributes: any
-]: any -> record<OperationId: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  domain_name: string # The name of the domain.
+  signing_attributes: record # Information about a delegation signer (DS) record that was created in the registry by AssociateDelegationSignerToDomain (https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_AssociateDelegationSignerToDomain.html). — shape: {Algorithm?: int, Flags?: int, PublicKey?: string}
+]: any -> record<OperationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53Domains_v20140515.AssociateDelegationSignerToDomain")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DomainName": $domain_name, "SigningAttributes": $signing_attributes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -273,12 +278,13 @@ export def "cancel-domain-transfer-to-another-aws-account" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  domain_name: any
-]: any -> record<OperationId: record> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  domain_name: string # The name of the domain for which you want to cancel the transfer to another Amazon Web Services account.
+]: any -> record<OperationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53Domains_v20140515.CancelDomainTransferToAnotherAwsAccount")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DomainName": $domain_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -321,13 +327,14 @@ export def "check-domain-availability" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  domain_name: any
-  --idn-lang-code: any
-]: any -> record<Availability: record> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  domain_name: string # The name of the domain that you want to get availability for. The top-level domain (TLD), such as .com, must be a TLD that Route 53 supports. For a list of supported TLDs, see Domains that You Can Register with Amazon Route 53 (https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/registrar-tld-list.html) in the Amazon Route 53 Developer Guide. The domain name can contain only the following characters: Letters a through z. Domain names are not case sensitive. Numbers 0 through 9. Hyphen (-). You can't specify a hyphen at the beginning or end of a label. Period (.) to separate the labels in the name, such as the . in example.com. Internationalized domain names are not supported for some top-level domains. To determine whether the TLD that you want to use supports internationalized domain names, see Domains that You Can Register with Amazon Route 53 (https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/registrar-tld-list.html). For more information, see Formatting Internationalized Domain Names (https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/DomainNameFormat.html#domain-name-format-idns).
+  --idn-lang-code: string # Reserved for future use.
+]: any -> record<Availability: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53Domains_v20140515.CheckDomainAvailability")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DomainName": $domain_name, "IdnLangCode": $idn_lang_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -370,13 +377,14 @@ export def "check-domain-transferability" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  domain_name: any
-  --auth-code: any
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  domain_name: string # The name of the domain that you want to transfer to Route 53. The top-level domain (TLD), such as .com, must be a TLD that Route 53 supports. For a list of supported TLDs, see Domains that You Can Register with Amazon Route 53 (https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/registrar-tld-list.html) in the Amazon Route 53 Developer Guide. The domain name can contain only the following characters: Letters a through z. Domain names are not case sensitive. Numbers 0 through 9. Hyphen (-). You can't specify a hyphen at the beginning or end of a label. Period (.) to separate the labels in the name, such as the . in example.com.
+  --auth-code: string # If the registrar for the top-level domain (TLD) requires an authorization code to transfer the domain, the code that you got from the current registrar for the domain. (format: password)
 ]: any -> record<Transferability: record<Transferable: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53Domains_v20140515.CheckDomainTransferability")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DomainName": $domain_name, "AuthCode": $auth_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -419,12 +427,13 @@ export def "delete-domain" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  domain_name: any
-]: any -> record<OperationId: record> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  domain_name: string # Name of the domain to be deleted.
+]: any -> record<OperationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53Domains_v20140515.DeleteDomain")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DomainName": $domain_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -467,13 +476,14 @@ export def "delete-tags-for-domain" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  domain_name: any
-  tags_to_delete: any
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  domain_name: string # The domain for which you want to delete one or more tags.
+  tags_to_delete: list<string> # A list of tag keys to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53Domains_v20140515.DeleteTagsForDomain")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DomainName": $domain_name, "TagsToDelete": $tags_to_delete} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -516,12 +526,13 @@ export def "disable-domain-auto-renew" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  domain_name: any
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  domain_name: string # The name of the domain that you want to disable automatic renewal for.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53Domains_v20140515.DisableDomainAutoRenew")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DomainName": $domain_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -564,12 +575,13 @@ export def "disable-domain-transfer-lock" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  domain_name: any
-]: any -> record<OperationId: record> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  domain_name: string # The name of the domain that you want to remove the transfer lock for.
+]: any -> record<OperationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53Domains_v20140515.DisableDomainTransferLock")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DomainName": $domain_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -612,13 +624,14 @@ export def "disassociate-delegation-signer-from-domain" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  domain_name: any
-  id: any
-]: any -> record<OperationId: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  domain_name: string # Name of the domain.
+  id: string # An internal identification number assigned to each DS record after it’s created. You can retrieve it as part of DNSSEC information returned by GetDomainDetail (https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_GetDomainDetail.html).
+]: any -> record<OperationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53Domains_v20140515.DisassociateDelegationSignerFromDomain")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DomainName": $domain_name, "Id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -661,12 +674,13 @@ export def "enable-domain-auto-renew" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  domain_name: any
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  domain_name: string # The name of the domain that you want to enable automatic renewal for.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53Domains_v20140515.EnableDomainAutoRenew")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DomainName": $domain_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -709,12 +723,13 @@ export def "enable-domain-transfer-lock" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  domain_name: any
-]: any -> record<OperationId: record> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  domain_name: string # The name of the domain that you want to set the transfer lock for.
+]: any -> record<OperationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53Domains_v20140515.EnableDomainTransferLock")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DomainName": $domain_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -757,12 +772,13 @@ export def "get-contact-reachability-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  --domain-name: any
-]: any -> record<domainName: record, status: record> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  --domain-name: string # The name of the domain for which you want to know whether the registrant contact has confirmed that the email address is valid.
+]: any -> record<domainName: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53Domains_v20140515.GetContactReachabilityStatus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"domainName": $domain_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -805,12 +821,13 @@ export def "get-domain-detail" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  domain_name: any
-]: any -> record<DomainName: record, Nameservers: record, AutoRenew: record, AdminContact: record<FirstName: record, LastName: record, ContactType: record, OrganizationName: record, AddressLine1: record, AddressLine2: record, City: record, State: record, CountryCode: record, ZipCode: record, PhoneNumber: record, Email: record, Fax: record, ExtraParams: record>, RegistrantContact: record<FirstName: record, LastName: record, ContactType: record, OrganizationName: record, AddressLine1: record, AddressLine2: record, City: record, State: record, CountryCode: record, ZipCode: record, PhoneNumber: record, Email: record, Fax: record, ExtraParams: record>, TechContact: record<FirstName: record, LastName: record, ContactType: record, OrganizationName: record, AddressLine1: record, AddressLine2: record, City: record, State: record, CountryCode: record, ZipCode: record, PhoneNumber: record, Email: record, Fax: record, ExtraParams: record>, AdminPrivacy: record, RegistrantPrivacy: record, TechPrivacy: record, RegistrarName: record, WhoIsServer: record, RegistrarUrl: record, AbuseContactEmail: record, AbuseContactPhone: record, RegistryDomainId: record, CreationDate: record, UpdatedDate: record, ExpirationDate: record, Reseller: record, DnsSec: record, StatusList: record, DnssecKeys: record> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  domain_name: string # The name of the domain that you want to get detailed information about.
+]: any -> record<DomainName: string, Nameservers: table<Name: string, GlueIps: list>, AutoRenew: bool, AdminContact: record<FirstName: string, LastName: string, ContactType: string, OrganizationName: string, AddressLine1: string, AddressLine2: string, City: string, State: string, CountryCode: string, ZipCode: string, PhoneNumber: string, Email: string, Fax: string, ExtraParams: list<record>>, RegistrantContact: record<FirstName: string, LastName: string, ContactType: string, OrganizationName: string, AddressLine1: string, AddressLine2: string, City: string, State: string, CountryCode: string, ZipCode: string, PhoneNumber: string, Email: string, Fax: string, ExtraParams: list<record>>, TechContact: record<FirstName: string, LastName: string, ContactType: string, OrganizationName: string, AddressLine1: string, AddressLine2: string, City: string, State: string, CountryCode: string, ZipCode: string, PhoneNumber: string, Email: string, Fax: string, ExtraParams: list<record>>, AdminPrivacy: bool, RegistrantPrivacy: bool, TechPrivacy: bool, RegistrarName: string, WhoIsServer: string, RegistrarUrl: string, AbuseContactEmail: string, AbuseContactPhone: string, RegistryDomainId: string, CreationDate: string, UpdatedDate: string, ExpirationDate: string, Reseller: string, DnsSec: string, StatusList: list<string>, DnssecKeys: table<Algorithm: int, Flags: int, PublicKey: string, DigestType: int, Digest: string, KeyTag: int, Id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53Domains_v20140515.GetDomainDetail")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DomainName": $domain_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -853,17 +870,19 @@ export def "get-domain-suggestions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  domain_name: any
-  suggestion_count: any
-  only_available: any
-]: any -> record<SuggestionsList: record> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  domain_name: string # A domain name that you want to use as the basis for a list of possible domain names. The top-level domain (TLD), such as .com, must be a TLD that Route 53 supports. For a list of supported TLDs, see Domains that You Can Register with Amazon Route 53 (https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/registrar-tld-list.html) in the Amazon Route 53 Developer Guide. The domain name can contain only the following characters: Letters a through z. Domain names are not case sensitive. Numbers 0 through 9. Hyphen (-). You can't specify a hyphen at the beginning or end of a label. Period (.) to separate the labels in the name, such as the . in example.com. Internationalized domain names are not supported for some top-level domains. To determine whether the TLD that you want to use supports internationalized domain names, see Domains that You Can Register with Amazon Route 53 (https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/registrar-tld-list.html).
+  suggestion_count: int # The number of suggested domain names that you want Route 53 to return. Specify a value between 1 and 50.
+  --only-available: oneof<nothing, bool> # If OnlyAvailable is true, Route 53 returns only domain names that are available. If OnlyAvailable is false, Route 53 returns domain names without checking whether they're available to be registered. To determine whether the domain is available, you can call checkDomainAvailability for each suggestion.
+]: any -> record<SuggestionsList: table<DomainName: string, Availability: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53Domains_v20140515.GetDomainSuggestions")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DomainName": $domain_name, "SuggestionCount": $suggestion_count, "OnlyAvailable": $only_available} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "OnlyAvailable") == null) { error make --unspanned { msg: "required body field 'OnlyAvailable' missing: pass --only-available or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
@@ -903,12 +922,13 @@ export def "get-operation-detail" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  operation_id: any
-]: any -> record<OperationId: record, Status: record, Message: record, DomainName: record, Type: record, SubmittedDate: record, LastUpdatedDate: record, StatusFlag: record> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  operation_id: string # The identifier for the operation for which you want to get the status. Route 53 returned the identifier in the response to the original request.
+]: any -> record<OperationId: string, Status: string, Message: string, DomainName: string, Type: string, SubmittedDate: string, LastUpdatedDate: string, StatusFlag: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53Domains_v20140515.GetOperationDetail")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OperationId": $operation_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -934,6 +954,8 @@ export def "get-operation-detail" [
 #
 # POST /
 # operationId: ListDomains
+# --FilterConditions item shape: {Name: "DomainName"|"Expiry", Operator: "LE"|"GE"|"BEGINS_WITH", Values: list<string>}
+# --SortCondition shape: {Name: "DomainName"|"Expiry", SortOrder: "ASC"|"DESC"}
 export def "list-domains" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -953,15 +975,16 @@ export def "list-domains" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  --filter-conditions: any
-  --sort-condition: any
-  --marker-body: any #  (body field)
-  --max-items-body: any #  (body field)
-]: any -> record<Domains: record, NextPageMarker: record> {
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  --filter-conditions: list # A complex type that contains information about the filters applied during the ListDomains request. The filter conditions can include domain name and domain expiration. — item shape: {Name: "DomainName"|"Expiry", Operator: "LE"|"GE"|"BEGINS_WITH", Values: list<string>}
+  --sort-condition: record # Information for sorting a list of domains. — shape: {Name: "DomainName"|"Expiry", SortOrder: "ASC"|"DESC"}
+  --marker-body: string # For an initial request for a list of domains, omit this element. If the number of domains that are associated with the current Amazon Web Services account is greater than the value that you specified for MaxItems, you can use Marker to return additional domains. Get the value of NextPageMarker from the previous response, and submit another request that includes the value of NextPageMarker in the Marker element. Constraints: The marker must match the value specified in the previous request. (body field)
+  --max-items-body: int # Number of domains to be returned. Default: 20 (body field)
+]: any -> record<Domains: table<DomainName: string, AutoRenew: bool, TransferLock: bool, Expiry: string>, NextPageMarker: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53Domains_v20140515.ListDomains")
   let qp = [(serialize-qp "MaxItems" $max_items "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"FilterConditions": $filter_conditions, "SortCondition": $sort_condition, "Marker": $marker_body, "MaxItems": $max_items_body} | compact
@@ -1007,18 +1030,19 @@ export def "list-operations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  --submitted-since: any
-  --marker-body: any #  (body field)
-  --max-items-body: any #  (body field)
-  --status: any
-  --type: any
-  --sort-by: any
-  --sort-order: any
-]: any -> record<Operations: record, NextPageMarker: record> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  --submitted-since: string # An optional parameter that lets you get information about all the operations that you submitted after a specified date and time. Specify the date and time in Unix time format and Coordinated Universal time (UTC). (format: date-time)
+  --marker-body: string # For an initial request for a list of operations, omit this element. If the number of operations that are not yet complete is greater than the value that you specified for MaxItems, you can use Marker to return additional operations. Get the value of NextPageMarker from the previous response, and submit another request that includes the value of NextPageMarker in the Marker element. (body field)
+  --max-items-body: int # Number of domains to be returned. Default: 20 (body field)
+  --status: list<string> # The status of the operations.
+  --type: list<string> # An arrays of the domains operation types.
+  --sort-by: string@sort-by-completer # The sort type for returned values.
+  --sort-order: string@sort-order-completer # The sort order ofr returned values, either ascending or descending.
+]: any -> record<Operations: table<OperationId: string, Status: string, Type: string, SubmittedDate: string, DomainName: string, Message: string, StatusFlag: string, LastUpdatedDate: string>, NextPageMarker: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53Domains_v20140515.ListOperations")
   let qp = [(serialize-qp "MaxItems" $max_items "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"SubmittedSince": $submitted_since, "Marker": $marker_body, "MaxItems": $max_items_body, "Status": $status, "Type": $type, "SortBy": $sort_by, "SortOrder": $sort_order} | compact
@@ -1064,14 +1088,15 @@ export def "list-prices" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  --tld: any
-  --marker-body: any #  (body field)
-  --max-items-body: any #  (body field)
-]: any -> record<Prices: record, NextPageMarker: record> {
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  --tld: string # The TLD for which you want to receive the pricing information. For example. .net. If a Tld value is not provided, a list of prices for all TLDs supported by Route 53 is returned.
+  --marker-body: string # For an initial request for a list of prices, omit this element. If the number of prices that are not yet complete is greater than the value that you specified for MaxItems, you can use Marker to return additional prices. Get the value of NextPageMarker from the previous response, and submit another request that includes the value of NextPageMarker in the Marker element. Used only for all TLDs. If you specify a TLD, don't specify a Marker. (body field)
+  --max-items-body: int # Number of Prices to be returned. Used only for all TLDs. If you specify a TLD, don't specify a MaxItems. (body field)
+]: any -> record<Prices: table<Name: string, RegistrationPrice: record, TransferPrice: record, RenewalPrice: record, ChangeOwnershipPrice: record, RestorationPrice: record>, NextPageMarker: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53Domains_v20140515.ListPrices")
   let qp = [(serialize-qp "MaxItems" $max_items "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"Tld": $tld, "Marker": $marker_body, "MaxItems": $max_items_body} | compact
@@ -1115,12 +1140,13 @@ export def "list-tags-for-domain" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  domain_name: any
-]: any -> record<TagList: record> {
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  domain_name: string # The domain for which you want to get a list of tags.
+]: any -> record<TagList: table<Key: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53Domains_v20140515.ListTagsForDomain")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DomainName": $domain_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1163,13 +1189,14 @@ export def "push-domain" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  domain_name: any
-  target: any
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  domain_name: string # Name of the domain.
+  target: string # New IPS tag for the domain.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53Domains_v20140515.PushDomain")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DomainName": $domain_name, "Target": $target} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1195,6 +1222,9 @@ export def "push-domain" [
 #
 # POST /
 # operationId: RegisterDomain
+# --AdminContact shape: {FirstName?: string, LastName?: string, ContactType?: "PERSON"|"COMPANY"|"ASSOCIATION"|"PUBLIC_BODY"|"RESELLER", OrganizationName?: string, AddressLine1?: string, AddressLine2?: string, City?: string, State?: string, ... (6 more fields)}
+# --RegistrantContact shape: {FirstName?: string, LastName?: string, ContactType?: "PERSON"|"COMPANY"|"ASSOCIATION"|"PUBLIC_BODY"|"RESELLER", OrganizationName?: string, AddressLine1?: string, AddressLine2?: string, City?: string, State?: string, ... (6 more fields)}
+# --TechContact shape: {FirstName?: string, LastName?: string, ContactType?: "PERSON"|"COMPANY"|"ASSOCIATION"|"PUBLIC_BODY"|"RESELLER", OrganizationName?: string, AddressLine1?: string, AddressLine2?: string, City?: string, State?: string, ... (6 more fields)}
 export def "register-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1212,21 +1242,22 @@ export def "register-domain" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  domain_name: any
-  --idn-lang-code: any
-  duration_in_years: any
-  --auto-renew: any
-  admin_contact: any
-  registrant_contact: any
-  tech_contact: any
-  --privacy-protect-admin-contact: any
-  --privacy-protect-registrant-contact: any
-  --privacy-protect-tech-contact: any
-]: any -> record<OperationId: record> {
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  domain_name: string # The domain name that you want to register. The top-level domain (TLD), such as .com, must be a TLD that Route 53 supports. For a list of supported TLDs, see Domains that You Can Register with Amazon Route 53 (https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/registrar-tld-list.html) in the Amazon Route 53 Developer Guide. The domain name can contain only the following characters: Letters a through z. Domain names are not case sensitive. Numbers 0 through 9. Hyphen (-). You can't specify a hyphen at the beginning or end of a label. Period (.) to separate the labels in the name, such as the . in example.com. Internationalized domain names are not supported for some top-level domains. To determine whether the TLD that you want to use supports internationalized domain names, see Domains that You Can Register with Amazon Route 53 (https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/registrar-tld-list.html). For more information, see Formatting Internationalized Domain Names (https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/DomainNameFormat.html#domain-name-format-idns).
+  --idn-lang-code: string # Reserved for future use.
+  duration_in_years: int # The number of years that you want to register the domain for. Domains are registered for a minimum of one year. The maximum period depends on the top-level domain. For the range of valid values for your domain, see Domains that You Can Register with Amazon Route 53 (https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/registrar-tld-list.html) in the Amazon Route 53 Developer Guide. Default: 1
+  --auto-renew: oneof<nothing, bool> # Indicates whether the domain will be automatically renewed (true) or not (false). Auto renewal only takes effect after the account is charged. Default: true
+  admin_contact: record # ContactDetail includes the following elements. — shape: {FirstName?: string, LastName?: string, ContactType?: "PERSON"|"COMPANY"|"ASSOCIATION"|"PUBLIC_BODY"|"RESELLER", OrganizationName?: string, AddressLine1?: string, AddressLine2?: string, City?: string, State?: string, ... (6 more fields)}
+  registrant_contact: record # ContactDetail includes the following elements. — shape: {FirstName?: string, LastName?: string, ContactType?: "PERSON"|"COMPANY"|"ASSOCIATION"|"PUBLIC_BODY"|"RESELLER", OrganizationName?: string, AddressLine1?: string, AddressLine2?: string, City?: string, State?: string, ... (6 more fields)}
+  tech_contact: record # ContactDetail includes the following elements. — shape: {FirstName?: string, LastName?: string, ContactType?: "PERSON"|"COMPANY"|"ASSOCIATION"|"PUBLIC_BODY"|"RESELLER", OrganizationName?: string, AddressLine1?: string, AddressLine2?: string, City?: string, State?: string, ... (6 more fields)}
+  --privacy-protect-admin-contact: oneof<nothing, bool> # Whether you want to conceal contact information from WHOIS queries. If you specify true, WHOIS ("who is") queries return contact information either for Amazon Registrar (for .com, .net, and .org domains) or for our registrar associate, Gandi (for all other TLDs). If you specify false, WHOIS queries return the information that you entered for the admin contact. You must specify the same privacy setting for the administrative, registrant, and technical contacts. Default: true
+  --privacy-protect-registrant-contact: oneof<nothing, bool> # Whether you want to conceal contact information from WHOIS queries. If you specify true, WHOIS ("who is") queries return contact information either for Amazon Registrar (for .com, .net, and .org domains) or for our registrar associate, Gandi (for all other TLDs). If you specify false, WHOIS queries return the information that you entered for the registrant contact (the domain owner). You must specify the same privacy setting for the administrative, registrant, and technical contacts. Default: true
+  --privacy-protect-tech-contact: oneof<nothing, bool> # Whether you want to conceal contact information from WHOIS queries. If you specify true, WHOIS ("who is") queries return contact information either for Amazon Registrar (for .com, .net, and .org domains) or for our registrar associate, Gandi (for all other TLDs). If you specify false, WHOIS queries return the information that you entered for the technical contact. You must specify the same privacy setting for the administrative, registrant, and technical contacts. Default: true
+]: any -> record<OperationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53Domains_v20140515.RegisterDomain")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DomainName": $domain_name, "IdnLangCode": $idn_lang_code, "DurationInYears": $duration_in_years, "AutoRenew": $auto_renew, "AdminContact": $admin_contact, "RegistrantContact": $registrant_contact, "TechContact": $tech_contact, "PrivacyProtectAdminContact": $privacy_protect_admin_contact, "PrivacyProtectRegistrantContact": $privacy_protect_registrant_contact, "PrivacyProtectTechContact": $privacy_protect_tech_contact} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1269,12 +1300,13 @@ export def "reject-domain-transfer-from-another-aws-account" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  domain_name: any
-]: any -> record<OperationId: record> {
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  domain_name: string # The name of the domain that was specified when another Amazon Web Services account submitted a TransferDomainToAnotherAwsAccount (https://docs.aws.amazon.com/Route53/latest/APIReference/API_domains_TransferDomainToAnotherAwsAccount.html) request.
+]: any -> record<OperationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53Domains_v20140515.RejectDomainTransferFromAnotherAwsAccount")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DomainName": $domain_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1317,14 +1349,15 @@ export def "renew-domain" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  domain_name: any
-  --duration-in-years: any
-  current_expiry_year: any
-]: any -> record<OperationId: record> {
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  domain_name: string # The name of the domain that you want to renew.
+  --duration-in-years: int # The number of years that you want to renew the domain for. The maximum number of years depends on the top-level domain. For the range of valid values for your domain, see Domains that You Can Register with Amazon Route 53 (https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/registrar-tld-list.html) in the Amazon Route 53 Developer Guide. Default: 1
+  current_expiry_year: int # The year when the registration for the domain is set to expire. This value must match the current expiration date for the domain.
+]: any -> record<OperationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53Domains_v20140515.RenewDomain")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DomainName": $domain_name, "DurationInYears": $duration_in_years, "CurrentExpiryYear": $current_expiry_year} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1367,12 +1400,13 @@ export def "resend-contact-reachability-email" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  --domain-name: any
-]: any -> record<domainName: record, emailAddress: record, isAlreadyVerified: record> {
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  --domain-name: string # The name of the domain for which you want Route 53 to resend a confirmation email to the registrant contact.
+]: any -> record<domainName: string, emailAddress: string, isAlreadyVerified: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53Domains_v20140515.ResendContactReachabilityEmail")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"domainName": $domain_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1415,12 +1449,13 @@ export def "resend-operation-authorization" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  operation_id: any
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  operation_id: string # Operation ID.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53Domains_v20140515.ResendOperationAuthorization")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OperationId": $operation_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1463,12 +1498,13 @@ export def "retrieve-domain-auth-code" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-26
-  domain_name: any
-]: any -> record<AuthCode: record> {
+  --x-amz-target: string@x-amz-target-completer-26 # required
+  domain_name: string # The name of the domain that you want to get an authorization code for.
+]: any -> record<AuthCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53Domains_v20140515.RetrieveDomainAuthCode")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DomainName": $domain_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1494,6 +1530,10 @@ export def "retrieve-domain-auth-code" [
 #
 # POST /
 # operationId: TransferDomain
+# --Nameservers item shape: {Name: string, GlueIps?: list<string>}
+# --AdminContact shape: {FirstName?: string, LastName?: string, ContactType?: "PERSON"|"COMPANY"|"ASSOCIATION"|"PUBLIC_BODY"|"RESELLER", OrganizationName?: string, AddressLine1?: string, AddressLine2?: string, City?: string, State?: string, ... (6 more fields)}
+# --RegistrantContact shape: {FirstName?: string, LastName?: string, ContactType?: "PERSON"|"COMPANY"|"ASSOCIATION"|"PUBLIC_BODY"|"RESELLER", OrganizationName?: string, AddressLine1?: string, AddressLine2?: string, City?: string, State?: string, ... (6 more fields)}
+# --TechContact shape: {FirstName?: string, LastName?: string, ContactType?: "PERSON"|"COMPANY"|"ASSOCIATION"|"PUBLIC_BODY"|"RESELLER", OrganizationName?: string, AddressLine1?: string, AddressLine2?: string, City?: string, State?: string, ... (6 more fields)}
 export def "transfer-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1511,23 +1551,24 @@ export def "transfer-domain" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-27
-  domain_name: any
-  --idn-lang-code: any
-  duration_in_years: any
-  --nameservers: any
-  --auth-code: any
-  --auto-renew: any
-  admin_contact: any
-  registrant_contact: any
-  tech_contact: any
-  --privacy-protect-admin-contact: any
-  --privacy-protect-registrant-contact: any
-  --privacy-protect-tech-contact: any
-]: any -> record<OperationId: record> {
+  --x-amz-target: string@x-amz-target-completer-27 # required
+  domain_name: string # The name of the domain that you want to transfer to Route 53. The top-level domain (TLD), such as .com, must be a TLD that Route 53 supports. For a list of supported TLDs, see Domains that You Can Register with Amazon Route 53 (https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/registrar-tld-list.html) in the Amazon Route 53 Developer Guide. The domain name can contain only the following characters: Letters a through z. Domain names are not case sensitive. Numbers 0 through 9. Hyphen (-). You can't specify a hyphen at the beginning or end of a label. Period (.) to separate the labels in the name, such as the . in example.com.
+  --idn-lang-code: string # Reserved for future use.
+  duration_in_years: int # The number of years that you want to register the domain for. Domains are registered for a minimum of one year. The maximum period depends on the top-level domain. Default: 1
+  --nameservers: list # Contains details for the host and glue IP addresses. — item shape: {Name: string, GlueIps?: list<string>}
+  --auth-code: string # The authorization code for the domain. You get this value from the current registrar. (format: password)
+  --auto-renew: oneof<nothing, bool> # Indicates whether the domain will be automatically renewed (true) or not (false). Auto renewal only takes effect after the account is charged. Default: true
+  admin_contact: record # ContactDetail includes the following elements. — shape: {FirstName?: string, LastName?: string, ContactType?: "PERSON"|"COMPANY"|"ASSOCIATION"|"PUBLIC_BODY"|"RESELLER", OrganizationName?: string, AddressLine1?: string, AddressLine2?: string, City?: string, State?: string, ... (6 more fields)}
+  registrant_contact: record # ContactDetail includes the following elements. — shape: {FirstName?: string, LastName?: string, ContactType?: "PERSON"|"COMPANY"|"ASSOCIATION"|"PUBLIC_BODY"|"RESELLER", OrganizationName?: string, AddressLine1?: string, AddressLine2?: string, City?: string, State?: string, ... (6 more fields)}
+  tech_contact: record # ContactDetail includes the following elements. — shape: {FirstName?: string, LastName?: string, ContactType?: "PERSON"|"COMPANY"|"ASSOCIATION"|"PUBLIC_BODY"|"RESELLER", OrganizationName?: string, AddressLine1?: string, AddressLine2?: string, City?: string, State?: string, ... (6 more fields)}
+  --privacy-protect-admin-contact: oneof<nothing, bool> # Whether you want to conceal contact information from WHOIS queries. If you specify true, WHOIS ("who is") queries return contact information either for Amazon Registrar (for .com, .net, and .org domains) or for our registrar associate, Gandi (for all other TLDs). If you specify false, WHOIS queries return the information that you entered for the admin contact. You must specify the same privacy setting for the administrative, registrant, and technical contacts. Default: true
+  --privacy-protect-registrant-contact: oneof<nothing, bool> # Whether you want to conceal contact information from WHOIS queries. If you specify true, WHOIS ("who is") queries return contact information either for Amazon Registrar (for .com, .net, and .org domains) or for our registrar associate, Gandi (for all other TLDs). If you specify false, WHOIS queries return the information that you entered for the registrant contact (domain owner). You must specify the same privacy setting for the administrative, registrant, and technical contacts. Default: true
+  --privacy-protect-tech-contact: oneof<nothing, bool> # Whether you want to conceal contact information from WHOIS queries. If you specify true, WHOIS ("who is") queries return contact information either for Amazon Registrar (for .com, .net, and .org domains) or for our registrar associate, Gandi (for all other TLDs). If you specify false, WHOIS queries return the information that you entered for the technical contact. You must specify the same privacy setting for the administrative, registrant, and technical contacts. Default: true
+]: any -> record<OperationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53Domains_v20140515.TransferDomain")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DomainName": $domain_name, "IdnLangCode": $idn_lang_code, "DurationInYears": $duration_in_years, "Nameservers": $nameservers, "AuthCode": $auth_code, "AutoRenew": $auto_renew, "AdminContact": $admin_contact, "RegistrantContact": $registrant_contact, "TechContact": $tech_contact, "PrivacyProtectAdminContact": $privacy_protect_admin_contact, "PrivacyProtectRegistrantContact": $privacy_protect_registrant_contact, "PrivacyProtectTechContact": $privacy_protect_tech_contact} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1570,13 +1611,14 @@ export def "transfer-domain-to-another-aws-account" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-28
-  domain_name: any
-  account_id: any
-]: any -> record<OperationId: record, Password: record> {
+  --x-amz-target: string@x-amz-target-completer-28 # required
+  domain_name: string # The name of the domain that you want to transfer from the current Amazon Web Services account to another account.
+  account_id: string # The account ID of the Amazon Web Services account that you want to transfer the domain to, for example, 111122223333.
+]: any -> record<OperationId: string, Password: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53Domains_v20140515.TransferDomainToAnotherAwsAccount")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DomainName": $domain_name, "AccountId": $account_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1602,6 +1644,10 @@ export def "transfer-domain-to-another-aws-account" [
 #
 # POST /
 # operationId: UpdateDomainContact
+# --AdminContact shape: {FirstName?: string, LastName?: string, ContactType?: "PERSON"|"COMPANY"|"ASSOCIATION"|"PUBLIC_BODY"|"RESELLER", OrganizationName?: string, AddressLine1?: string, AddressLine2?: string, City?: string, State?: string, ... (6 more fields)}
+# --RegistrantContact shape: {FirstName?: string, LastName?: string, ContactType?: "PERSON"|"COMPANY"|"ASSOCIATION"|"PUBLIC_BODY"|"RESELLER", OrganizationName?: string, AddressLine1?: string, AddressLine2?: string, City?: string, State?: string, ... (6 more fields)}
+# --TechContact shape: {FirstName?: string, LastName?: string, ContactType?: "PERSON"|"COMPANY"|"ASSOCIATION"|"PUBLIC_BODY"|"RESELLER", OrganizationName?: string, AddressLine1?: string, AddressLine2?: string, City?: string, State?: string, ... (6 more fields)}
+# --Consent shape: {MaxPrice: float, Currency: string}
 export def "update-domain-contact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1619,16 +1665,17 @@ export def "update-domain-contact" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-29
-  domain_name: any
-  --admin-contact: any
-  --registrant-contact: any
-  --tech-contact: any
-  --consent: any
-]: any -> record<OperationId: record> {
+  --x-amz-target: string@x-amz-target-completer-29 # required
+  domain_name: string # The name of the domain that you want to update contact information for.
+  --admin-contact: record # ContactDetail includes the following elements. — shape: {FirstName?: string, LastName?: string, ContactType?: "PERSON"|"COMPANY"|"ASSOCIATION"|"PUBLIC_BODY"|"RESELLER", OrganizationName?: string, AddressLine1?: string, AddressLine2?: string, City?: string, State?: string, ... (6 more fields)}
+  --registrant-contact: record # ContactDetail includes the following elements. — shape: {FirstName?: string, LastName?: string, ContactType?: "PERSON"|"COMPANY"|"ASSOCIATION"|"PUBLIC_BODY"|"RESELLER", OrganizationName?: string, AddressLine1?: string, AddressLine2?: string, City?: string, State?: string, ... (6 more fields)}
+  --tech-contact: record # ContactDetail includes the following elements. — shape: {FirstName?: string, LastName?: string, ContactType?: "PERSON"|"COMPANY"|"ASSOCIATION"|"PUBLIC_BODY"|"RESELLER", OrganizationName?: string, AddressLine1?: string, AddressLine2?: string, City?: string, State?: string, ... (6 more fields)}
+  --consent: record # Customer's consent for the owner change request. — shape: {MaxPrice: float, Currency: string}
+]: any -> record<OperationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53Domains_v20140515.UpdateDomainContact")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DomainName": $domain_name, "AdminContact": $admin_contact, "RegistrantContact": $registrant_contact, "TechContact": $tech_contact, "Consent": $consent} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1671,15 +1718,16 @@ export def "update-domain-contact-privacy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-30
-  domain_name: any
-  --admin-privacy: any
-  --registrant-privacy: any
-  --tech-privacy: any
-]: any -> record<OperationId: record> {
+  --x-amz-target: string@x-amz-target-completer-30 # required
+  domain_name: string # The name of the domain that you want to update the privacy setting for.
+  --admin-privacy: oneof<nothing, bool> # Whether you want to conceal contact information from WHOIS queries. If you specify true, WHOIS ("who is") queries return contact information either for Amazon Registrar (for .com, .net, and .org domains) or for our registrar associate, Gandi (for all other TLDs). If you specify false, WHOIS queries return the information that you entered for the admin contact. You must specify the same privacy setting for the administrative, registrant, and technical contacts.
+  --registrant-privacy: oneof<nothing, bool> # Whether you want to conceal contact information from WHOIS queries. If you specify true, WHOIS ("who is") queries return contact information either for Amazon Registrar (for .com, .net, and .org domains) or for our registrar associate, Gandi (for all other TLDs). If you specify false, WHOIS queries return the information that you entered for the registrant contact (domain owner). You must specify the same privacy setting for the administrative, registrant, and technical contacts.
+  --tech-privacy: oneof<nothing, bool> # Whether you want to conceal contact information from WHOIS queries. If you specify true, WHOIS ("who is") queries return contact information either for Amazon Registrar (for .com, .net, and .org domains) or for our registrar associate, Gandi (for all other TLDs). If you specify false, WHOIS queries return the information that you entered for the technical contact. You must specify the same privacy setting for the administrative, registrant, and technical contacts.
+]: any -> record<OperationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53Domains_v20140515.UpdateDomainContactPrivacy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DomainName": $domain_name, "AdminPrivacy": $admin_privacy, "RegistrantPrivacy": $registrant_privacy, "TechPrivacy": $tech_privacy} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1705,6 +1753,7 @@ export def "update-domain-contact-privacy" [
 #
 # POST /
 # operationId: UpdateDomainNameservers
+# --Nameservers item shape: {Name: string, GlueIps?: list<string>}
 export def "update-domain-nameservers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1722,14 +1771,15 @@ export def "update-domain-nameservers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-31
-  domain_name: any
-  --fi-auth-key: any
-  nameservers: any
-]: any -> record<OperationId: record> {
+  --x-amz-target: string@x-amz-target-completer-31 # required
+  domain_name: string # The name of the domain that you want to change name servers for.
+  --fi-auth-key: string # The authorization key for .fi domains (format: password)
+  nameservers: list # A list of new name servers for the domain. — item shape: {Name: string, GlueIps?: list<string>}
+]: any -> record<OperationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53Domains_v20140515.UpdateDomainNameservers")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DomainName": $domain_name, "FIAuthKey": $fi_auth_key, "Nameservers": $nameservers} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1755,6 +1805,7 @@ export def "update-domain-nameservers" [
 #
 # POST /
 # operationId: UpdateTagsForDomain
+# --TagsToUpdate item shape: {Key?: string, Value?: string}
 export def "update-tags-for-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1772,13 +1823,14 @@ export def "update-tags-for-domain" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-32
-  domain_name: any
-  --tags-to-update: any
+  --x-amz-target: string@x-amz-target-completer-32 # required
+  domain_name: string # The domain for which you want to add or update tags.
+  --tags-to-update: list # A list of the tag keys and values that you want to add or update. If you specify a key that already exists, the corresponding value will be replaced. — item shape: {Key?: string, Value?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53Domains_v20140515.UpdateTagsForDomain")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DomainName": $domain_name, "TagsToUpdate": $tags_to_update} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1823,15 +1875,16 @@ export def "view-billing" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-33
-  --start: any
-  --end: any
-  --marker-body: any #  (body field)
-  --max-items-body: any #  (body field)
-]: any -> record<NextPageMarker: record, BillingRecords: record> {
+  --x-amz-target: string@x-amz-target-completer-33 # required
+  --start: string # The beginning date and time for the time period for which you want a list of billing records. Specify the date and time in Unix time format and Coordinated Universal time (UTC). (format: date-time)
+  --end: string # The end date and time for the time period for which you want a list of billing records. Specify the date and time in Unix time format and Coordinated Universal time (UTC). (format: date-time)
+  --marker-body: string # For an initial request for a list of billing records, omit this element. If the number of billing records that are associated with the current Amazon Web Services account during the specified period is greater than the value that you specified for MaxItems, you can use Marker to return additional billing records. Get the value of NextPageMarker from the previous response, and submit another request that includes the value of NextPageMarker in the Marker element. Constraints: The marker must match the value of NextPageMarker that was returned in the previous response. (body field)
+  --max-items-body: int # The number of billing records to be returned. Default: 20 (body field)
+]: any -> record<NextPageMarker: string, BillingRecords: table<DomainName: string, Operation: string, InvoiceId: string, BillDate: string, Price: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53Domains_v20140515.ViewBilling")
   let qp = [(serialize-qp "MaxItems" $max_items "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"Start": $start, "End": $end, "Marker": $marker_body, "MaxItems": $max_items_body} | compact

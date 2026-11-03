@@ -134,17 +134,25 @@ export def "app-api-cari7-endpoints-cari7-ambient-dose" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --altitude: float # Altitude (in km). The minimum is 0 m, the maximum is 47 km (the upper limit of the stratosphere). (e.g. 11)
-  --latitude: float # Latitude. -90 (S) to 90 (N). (e.g. 30)
-  --longitude: float # Longitude. -180 (W) to 180 (E). (e.g. 30)
-  --year: int # Year in YYYY. (e.g. 2019)
-  --month: int # Month in MM. (e.g. 12)
-  --day: int # Day in DD. (e.g. 1)
-  --utc: int # Hour in 24 hour time. (e.g. 3)
-  --particle: string@particle-completer # The particle type as a string. Specifying 'total' returns the dose for all particle types. (e.g. total)
+  --altitude: float # Altitude (in km). The minimum is 0 m, the maximum is 47 km (the upper limit of the stratosphere). (required, e.g. 11)
+  --latitude: float # Latitude. -90 (S) to 90 (N). (required, e.g. 30)
+  --longitude: float # Longitude. -180 (W) to 180 (E). (required, e.g. 30)
+  --year: int # Year in YYYY. (required, e.g. 2019)
+  --month: int # Month in MM. (required, e.g. 12)
+  --day: int # Day in DD. (required, e.g. 1)
+  --utc: int # Hour in 24 hour time. (required, e.g. 3)
+  --particle: string@particle-completer # The particle type as a string. Specifying 'total' returns the dose for all particle types. (required, e.g. total)
 ]: nothing -> record<dose_rate: record<units: string, value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($altitude == null) { error make --unspanned { msg: "required query parameter 'altitude' missing: pass --altitude" } }
+  if ($latitude == null) { error make --unspanned { msg: "required query parameter 'latitude' missing: pass --latitude" } }
+  if ($longitude == null) { error make --unspanned { msg: "required query parameter 'longitude' missing: pass --longitude" } }
+  if ($year == null) { error make --unspanned { msg: "required query parameter 'year' missing: pass --year" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'month' missing: pass --month" } }
+  if ($day == null) { error make --unspanned { msg: "required query parameter 'day' missing: pass --day" } }
+  if ($utc == null) { error make --unspanned { msg: "required query parameter 'utc' missing: pass --utc" } }
+  if ($particle == null) { error make --unspanned { msg: "required query parameter 'particle' missing: pass --particle" } }
   let qp = [(serialize-qp "altitude" $altitude "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "month" $month "scalar") (serialize-qp "day" $day "scalar") (serialize-qp "utc" $utc "scalar") (serialize-qp "particle" $particle "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cari7/ambient_dose" $qp $auth.query)
   let accept_val = "application/json"
@@ -177,17 +185,25 @@ export def "app-api-cari7-endpoints-cari7-effective-dose" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --altitude: float # Altitude (in km). The minimum is 0 m, the maximum is 47 km (the upper limit of the stratosphere). (e.g. 11)
-  --latitude: float # Latitude. -90 (S) to 90 (N). (e.g. 30)
-  --longitude: float # Longitude. -180 (W) to 180 (E). (e.g. 30)
-  --year: int # Year in YYYY. (e.g. 2019)
-  --month: int # Month in MM. (e.g. 12)
-  --day: int # Day in DD. (e.g. 1)
-  --utc: int # Hour in 24 hour time. (e.g. 3)
-  --particle: string@particle-completer # The particle type as a string. Specifying 'total' returns the dose for all particle types. (e.g. total)
+  --altitude: float # Altitude (in km). The minimum is 0 m, the maximum is 47 km (the upper limit of the stratosphere). (required, e.g. 11)
+  --latitude: float # Latitude. -90 (S) to 90 (N). (required, e.g. 30)
+  --longitude: float # Longitude. -180 (W) to 180 (E). (required, e.g. 30)
+  --year: int # Year in YYYY. (required, e.g. 2019)
+  --month: int # Month in MM. (required, e.g. 12)
+  --day: int # Day in DD. (required, e.g. 1)
+  --utc: int # Hour in 24 hour time. (required, e.g. 3)
+  --particle: string@particle-completer # The particle type as a string. Specifying 'total' returns the dose for all particle types. (required, e.g. total)
 ]: nothing -> record<dose_rate: record<units: string, value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($altitude == null) { error make --unspanned { msg: "required query parameter 'altitude' missing: pass --altitude" } }
+  if ($latitude == null) { error make --unspanned { msg: "required query parameter 'latitude' missing: pass --latitude" } }
+  if ($longitude == null) { error make --unspanned { msg: "required query parameter 'longitude' missing: pass --longitude" } }
+  if ($year == null) { error make --unspanned { msg: "required query parameter 'year' missing: pass --year" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'month' missing: pass --month" } }
+  if ($day == null) { error make --unspanned { msg: "required query parameter 'day' missing: pass --day" } }
+  if ($utc == null) { error make --unspanned { msg: "required query parameter 'utc' missing: pass --utc" } }
+  if ($particle == null) { error make --unspanned { msg: "required query parameter 'particle' missing: pass --particle" } }
   let qp = [(serialize-qp "altitude" $altitude "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "month" $month "scalar") (serialize-qp "day" $day "scalar") (serialize-qp "utc" $utc "scalar") (serialize-qp "particle" $particle "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cari7/effective_dose" $qp $auth.query)
   let accept_val = "application/json"
@@ -222,15 +238,21 @@ export def "app-api-parma-endpoints-parma-ambient-dose" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --altitude: float # Altitude (in km). The minimum is 0 m, the maximum is 47 km (the upper limit of the stratosphere). (e.g. 11)
   --atmospheric-depth: float # Atmospheric depth from the top of the atmosphere (in units of g/cm2). The minimum is 0.913 g/cm2, the maximum is 1032.66 g/cm2. WARNING: you can specify either altitude OR atmospheric depth, not both. (e.g. 0.92)
-  --latitude: float # Latitude. -90 (S) to 90 (N). (e.g. 30)
-  --longitude: float # Longitude. -180 (W) to 180 (E). (e.g. 30)
-  --year: int # Year in YYYY. (e.g. 2019)
-  --month: int # Month in MM. (e.g. 12)
-  --day: int # Day in DD. (e.g. 1)
-  --particle: string@particle-completer-1 # The particle type as a string. Specifying 'total', only used for the dose calculation, returns the dose for all particle types. (e.g. proton)
+  --latitude: float # Latitude. -90 (S) to 90 (N). (required, e.g. 30)
+  --longitude: float # Longitude. -180 (W) to 180 (E). (required, e.g. 30)
+  --year: int # Year in YYYY. (required, e.g. 2019)
+  --month: int # Month in MM. (required, e.g. 12)
+  --day: int # Day in DD. (required, e.g. 1)
+  --particle: string@particle-completer-1 # The particle type as a string. Specifying 'total', only used for the dose calculation, returns the dose for all particle types. (required, e.g. proton)
 ]: nothing -> record<dose_rate: record<units: string, value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($latitude == null) { error make --unspanned { msg: "required query parameter 'latitude' missing: pass --latitude" } }
+  if ($longitude == null) { error make --unspanned { msg: "required query parameter 'longitude' missing: pass --longitude" } }
+  if ($year == null) { error make --unspanned { msg: "required query parameter 'year' missing: pass --year" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'month' missing: pass --month" } }
+  if ($day == null) { error make --unspanned { msg: "required query parameter 'day' missing: pass --day" } }
+  if ($particle == null) { error make --unspanned { msg: "required query parameter 'particle' missing: pass --particle" } }
   let qp = [(serialize-qp "altitude" $altitude "scalar") (serialize-qp "atmospheric_depth" $atmospheric_depth "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "month" $month "scalar") (serialize-qp "day" $day "scalar") (serialize-qp "particle" $particle "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/parma/ambient_dose" $qp $auth.query)
   let accept_val = "application/json"
@@ -265,16 +287,23 @@ export def "app-api-parma-endpoints-parma-differential-intensity" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --altitude: float # Altitude (in km). The minimum is 0 m, the maximum is 47 km (the upper limit of the stratosphere). (e.g. 11)
   --atmospheric-depth: float # Atmospheric depth from the top of the atmosphere (in units of g/cm2). The minimum is 0.913 g/cm2, the maximum is 1032.66 g/cm2. WARNING: you can specify either altitude OR atmospheric depth, not both. (e.g. 0.92)
-  --latitude: float # Latitude. -90 (S) to 90 (N). (e.g. 30)
-  --longitude: float # Longitude. -180 (W) to 180 (E). (e.g. 30)
-  --year: int # Year in YYYY. (e.g. 2019)
-  --month: int # Month in MM. (e.g. 12)
-  --day: int # Day in DD. (e.g. 1)
-  --particle: string@particle-completer-1 # The particle type as a string. Specifying 'total', only used for the dose calculation, returns the dose for all particle types. (e.g. proton)
-  --angle: float # Direction cosine. 1.0 is in the downward direction. (e.g. 1)
+  --latitude: float # Latitude. -90 (S) to 90 (N). (required, e.g. 30)
+  --longitude: float # Longitude. -180 (W) to 180 (E). (required, e.g. 30)
+  --year: int # Year in YYYY. (required, e.g. 2019)
+  --month: int # Month in MM. (required, e.g. 12)
+  --day: int # Day in DD. (required, e.g. 1)
+  --particle: string@particle-completer-1 # The particle type as a string. Specifying 'total', only used for the dose calculation, returns the dose for all particle types. (required, e.g. proton)
+  --angle: float # Direction cosine. 1.0 is in the downward direction. (required, e.g. 1)
 ]: nothing -> record<energies: record<data: list<float>, units: string>, intensities: record<data: list<float>, units: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($latitude == null) { error make --unspanned { msg: "required query parameter 'latitude' missing: pass --latitude" } }
+  if ($longitude == null) { error make --unspanned { msg: "required query parameter 'longitude' missing: pass --longitude" } }
+  if ($year == null) { error make --unspanned { msg: "required query parameter 'year' missing: pass --year" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'month' missing: pass --month" } }
+  if ($day == null) { error make --unspanned { msg: "required query parameter 'day' missing: pass --day" } }
+  if ($particle == null) { error make --unspanned { msg: "required query parameter 'particle' missing: pass --particle" } }
+  if ($angle == null) { error make --unspanned { msg: "required query parameter 'angle' missing: pass --angle" } }
   let qp = [(serialize-qp "altitude" $altitude "scalar") (serialize-qp "atmospheric_depth" $atmospheric_depth "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "month" $month "scalar") (serialize-qp "day" $day "scalar") (serialize-qp "particle" $particle "scalar") (serialize-qp "angle" $angle "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/parma/differential_intensity" $qp $auth.query)
   let accept_val = "application/json"
@@ -309,15 +338,21 @@ export def "app-api-parma-endpoints-parma-effective-dose" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --altitude: float # Altitude (in km). The minimum is 0 m, the maximum is 47 km (the upper limit of the stratosphere). (e.g. 11)
   --atmospheric-depth: float # Atmospheric depth from the top of the atmosphere (in units of g/cm2). The minimum is 0.913 g/cm2, the maximum is 1032.66 g/cm2. WARNING: you can specify either altitude OR atmospheric depth, not both. (e.g. 0.92)
-  --latitude: float # Latitude. -90 (S) to 90 (N). (e.g. 30)
-  --longitude: float # Longitude. -180 (W) to 180 (E). (e.g. 30)
-  --year: int # Year in YYYY. (e.g. 2019)
-  --month: int # Month in MM. (e.g. 12)
-  --day: int # Day in DD. (e.g. 1)
-  --particle: string@particle-completer-1 # The particle type as a string. Specifying 'total', only used for the dose calculation, returns the dose for all particle types. (e.g. proton)
+  --latitude: float # Latitude. -90 (S) to 90 (N). (required, e.g. 30)
+  --longitude: float # Longitude. -180 (W) to 180 (E). (required, e.g. 30)
+  --year: int # Year in YYYY. (required, e.g. 2019)
+  --month: int # Month in MM. (required, e.g. 12)
+  --day: int # Day in DD. (required, e.g. 1)
+  --particle: string@particle-completer-1 # The particle type as a string. Specifying 'total', only used for the dose calculation, returns the dose for all particle types. (required, e.g. proton)
 ]: nothing -> record<dose_rate: record<units: string, value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($latitude == null) { error make --unspanned { msg: "required query parameter 'latitude' missing: pass --latitude" } }
+  if ($longitude == null) { error make --unspanned { msg: "required query parameter 'longitude' missing: pass --longitude" } }
+  if ($year == null) { error make --unspanned { msg: "required query parameter 'year' missing: pass --year" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'month' missing: pass --month" } }
+  if ($day == null) { error make --unspanned { msg: "required query parameter 'day' missing: pass --day" } }
+  if ($particle == null) { error make --unspanned { msg: "required query parameter 'particle' missing: pass --particle" } }
   let qp = [(serialize-qp "altitude" $altitude "scalar") (serialize-qp "atmospheric_depth" $atmospheric_depth "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "month" $month "scalar") (serialize-qp "day" $day "scalar") (serialize-qp "particle" $particle "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/parma/effective_dose" $qp $auth.query)
   let accept_val = "application/json"
@@ -350,8 +385,8 @@ export def "app-api-icaro-endpoints-icaro-ambient-dose" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --origin: string # The ICAO code or IATA code or latitude,longitude pair (in decimal degrees) of the origin airport. (e.g. YSSY)
-  --destination: string # The ICAO code or IATA code or latitude,longitude pair (in decimal degrees) of the destination airport. (e.g. 33.94250107,-118.4079971)
+  --origin: string # The ICAO code or IATA code or latitude,longitude pair (in decimal degrees) of the origin airport. (required, e.g. YSSY)
+  --destination: string # The ICAO code or IATA code or latitude,longitude pair (in decimal degrees) of the destination airport. (required, e.g. 33.94250107,-118.4079971)
   --altitude: float # Altitude (in km). The minimum is 0 m, the maximum is 20 km. (e.g. 10.1)
   --duration: float # The flight duration in hours. The minimum is 0, the maximum is 20 hrs. (e.g. 5)
   --initial-altitude: float # Initial altitude (in km). The minimum is 0 m, the maximum is 20 km. (e.g. 0)
@@ -360,12 +395,17 @@ export def "app-api-icaro-endpoints-icaro-ambient-dose" [
   --cruising-times: list<float> # Cruising times at each cruising altitude (hours). (e.g. [1, 2])
   --descent-time: float # Descent time from last cruising altitude to final altitude (hours). (e.g. 0.5)
   --final-altitude: float # Final altitude (in km). (e.g. 0)
-  --year: int # Year in YYYY. (e.g. 2019)
-  --month: int # Month in MM. (e.g. 5)
-  --day: int # Day in DD. (e.g. 21)
+  --year: int # Year in YYYY. (required, e.g. 2019)
+  --month: int # Month in MM. (required, e.g. 5)
+  --day: int # Day in DD. (required, e.g. 21)
 ]: nothing -> record<dose: record<date: string, destination: string, origin: string, units: string, value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($origin == null) { error make --unspanned { msg: "required query parameter 'origin' missing: pass --origin" } }
+  if ($destination == null) { error make --unspanned { msg: "required query parameter 'destination' missing: pass --destination" } }
+  if ($year == null) { error make --unspanned { msg: "required query parameter 'year' missing: pass --year" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'month' missing: pass --month" } }
+  if ($day == null) { error make --unspanned { msg: "required query parameter 'day' missing: pass --day" } }
   let qp = [(serialize-qp "origin" $origin "scalar") (serialize-qp "destination" $destination "scalar") (serialize-qp "altitude" $altitude "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "initial_altitude" $initial_altitude "scalar") (serialize-qp "cruising_altitudes" $cruising_altitudes "multi") (serialize-qp "climb_times" $climb_times "multi") (serialize-qp "cruising_times" $cruising_times "multi") (serialize-qp "descent_time" $descent_time "scalar") (serialize-qp "final_altitude" $final_altitude "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "month" $month "scalar") (serialize-qp "day" $day "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/route/ambient_dose" $qp $auth.query)
   let accept_val = "application/json"
@@ -398,8 +438,8 @@ export def "app-api-icaro-endpoints-icaro-effective-dose" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --origin: string # The ICAO code or IATA code or latitude,longitude pair (in decimal degrees) of the origin airport. (e.g. YSSY)
-  --destination: string # The ICAO code or IATA code or latitude,longitude pair (in decimal degrees) of the destination airport. (e.g. 33.94250107,-118.4079971)
+  --origin: string # The ICAO code or IATA code or latitude,longitude pair (in decimal degrees) of the origin airport. (required, e.g. YSSY)
+  --destination: string # The ICAO code or IATA code or latitude,longitude pair (in decimal degrees) of the destination airport. (required, e.g. 33.94250107,-118.4079971)
   --altitude: float # Altitude (in km). The minimum is 0 m, the maximum is 20 km. (e.g. 10.1)
   --duration: float # The flight duration in hours. The minimum is 0, the maximum is 20 hrs. (e.g. 5)
   --initial-altitude: float # Initial altitude (in km). The minimum is 0 m, the maximum is 20 km. (e.g. 0)
@@ -408,12 +448,17 @@ export def "app-api-icaro-endpoints-icaro-effective-dose" [
   --cruising-times: list<float> # Cruising times at each cruising altitude (hours). (e.g. [1, 2])
   --descent-time: float # Descent time from last cruising altitude to final altitude (hours). (e.g. 0.5)
   --final-altitude: float # Final altitude (in km). (e.g. 0)
-  --year: int # Year in YYYY. (e.g. 2019)
-  --month: int # Month in MM. (e.g. 5)
-  --day: int # Day in DD. (e.g. 21)
+  --year: int # Year in YYYY. (required, e.g. 2019)
+  --month: int # Month in MM. (required, e.g. 5)
+  --day: int # Day in DD. (required, e.g. 21)
 ]: nothing -> record<dose: record<date: string, destination: string, origin: string, units: string, value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($origin == null) { error make --unspanned { msg: "required query parameter 'origin' missing: pass --origin" } }
+  if ($destination == null) { error make --unspanned { msg: "required query parameter 'destination' missing: pass --destination" } }
+  if ($year == null) { error make --unspanned { msg: "required query parameter 'year' missing: pass --year" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'month' missing: pass --month" } }
+  if ($day == null) { error make --unspanned { msg: "required query parameter 'day' missing: pass --day" } }
   let qp = [(serialize-qp "origin" $origin "scalar") (serialize-qp "destination" $destination "scalar") (serialize-qp "altitude" $altitude "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "initial_altitude" $initial_altitude "scalar") (serialize-qp "cruising_altitudes" $cruising_altitudes "multi") (serialize-qp "climb_times" $climb_times "multi") (serialize-qp "cruising_times" $cruising_times "multi") (serialize-qp "descent_time" $descent_time "scalar") (serialize-qp "final_altitude" $final_altitude "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "month" $month "scalar") (serialize-qp "day" $day "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/route/effective_dose" $qp $auth.query)
   let accept_val = "application/json"

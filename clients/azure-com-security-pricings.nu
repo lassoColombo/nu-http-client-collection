@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -139,11 +139,12 @@ export def "pricings-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version for the operation
-]: nothing -> record<value: table<properties: record>> {
+  --api-version: string # API version for the operation (required)
+]: nothing -> record<value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/pricings") $qp $auth.query)
   let accept_val = "application/json"
@@ -178,12 +179,13 @@ export def "pricings-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version for the operation
-]: nothing -> record<properties: record<freeTrialRemainingTime: string, pricingTier: string>> {
+  --api-version: string # API version for the operation (required)
+]: nothing -> record<properties: record<freeTrialRemainingTime: string, pricingTier: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($pricing_name | is-empty) { error make --unspanned { msg: "path parameter 'pricingName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), pricing_name: (encode-path-segment $pricing_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/pricings/{pricing_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -219,14 +221,15 @@ export def "pricings-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version for the operation
+  --api-version: string # API version for the operation (required)
   --properties: record # Pricing properties for the relevant scope — shape: {pricingTier: "Free"|"Standard"}
-]: any -> record<properties: record<freeTrialRemainingTime: string, pricingTier: string>> {
+]: any -> record<properties: record<freeTrialRemainingTime: string, pricingTier: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($pricing_name | is-empty) { error make --unspanned { msg: "path parameter 'pricingName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), pricing_name: (encode-path-segment $pricing_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/pricings/{pricing_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact

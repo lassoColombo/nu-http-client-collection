@@ -1,4 +1,4 @@
-# Auto-generated client for Semantic Tile API vv1
+# Auto-generated client for Semantic Tile API v1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/vectortile/v1/openapi.json
 # Auth: --token flag or $env.SEMANTIC_TILE_API_TOKEN
 

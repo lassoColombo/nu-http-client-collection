@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -158,11 +158,12 @@ export def "billing-accounts-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --expand: string # May be used to expand the address, invoiceSections and billingProfiles.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Billing/billingAccounts" $qp $auth.query)
   let accept_val = "application/json"
@@ -196,12 +197,13 @@ export def "billing-accounts-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --expand: string # May be used to expand the address, invoiceSections and billingProfiles.
-]: nothing -> record<properties: record<address: record<addressLine1: string, addressLine2: string, addressLine3: string, city: string, companyName: string, country: string, firstName: string, lastName: string, postalCode: string, region: string>, agreementType: string, billingProfiles: list<record>, customerType: string, departments: list<record>, displayName: string, enrollmentAccounts: list<record>, enrollmentDetails: record<billingCycle: string, channel: string, countryCode: string, currency: string, endDate: string, language: string, policies: record, startDate: string, status: string>, organizationId: string>> {
+]: nothing -> record<properties: record<address: record<addressLine1: string, addressLine2: string, addressLine3: string, city: string, companyName: string, country: string, firstName: string, lastName: string, postalCode: string, region: string>, agreementType: string, billingProfiles: list<record>, customerType: string, departments: list<record>, displayName: string, enrollmentAccounts: list<record>, enrollmentDetails: record<billingCycle: string, channel: string, countryCode: string, currency: string, endDate: string, language: string, policies: record, startDate: string, status: string>, organizationId: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -236,13 +238,14 @@ export def "billing-accounts-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --properties: any # The properties of the billing account. — shape: {address?: any, billingProfiles?: list, departments?: list, enrollmentAccounts?: list, enrollmentDetails?: any}
-]: any -> record<properties: record<address: record<addressLine1: string, addressLine2: string, addressLine3: string, city: string, companyName: string, country: string, firstName: string, lastName: string, postalCode: string, region: string>, agreementType: string, billingProfiles: list<record>, customerType: string, departments: list<record>, displayName: string, enrollmentAccounts: list<record>, enrollmentDetails: record<billingCycle: string, channel: string, countryCode: string, currency: string, endDate: string, language: string, policies: record, startDate: string, status: string>, organizationId: string>> {
+]: any -> record<properties: record<address: record<addressLine1: string, addressLine2: string, addressLine3: string, city: string, companyName: string, country: string, firstName: string, lastName: string, postalCode: string, region: string>, agreementType: string, billingProfiles: list<record>, customerType: string, departments: list<record>, displayName: string, enrollmentAccounts: list<record>, enrollmentDetails: record<billingCycle: string, channel: string, countryCode: string, currency: string, endDate: string, language: string, policies: record, startDate: string, status: string>, organizationId: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -278,12 +281,13 @@ export def "agreements-list-by-billing-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --expand: string # May be used to expand the participants.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/agreements") $qp $auth.query)
   let accept_val = "application/json"
@@ -318,13 +322,14 @@ export def "agreements-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --expand: string # May be used to expand the participants.
-]: nothing -> record<properties: record<agreementLink: string, effectiveDate: string, expirationDate: string, participants: list<record>, status: string>> {
+]: nothing -> record<properties: record<agreementLink: string, effectiveDate: string, expirationDate: string, participants: list<record>, status: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($agreement_name | is-empty) { error make --unspanned { msg: "path parameter 'agreementName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), agreement_name: (encode-path-segment $agreement_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/agreements/{agreement_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -358,11 +363,12 @@ export def "billing-permissions-list-by-billing-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
 ]: nothing -> record<value: table<actions: list, notActions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingPermissions") $qp $auth.query)
   let accept_val = "application/json"
@@ -396,12 +402,13 @@ export def "billing-profiles-list-by-billing-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --expand: string # May be used to expand the invoiceSections.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles") $qp $auth.query)
   let accept_val = "application/json"
@@ -436,13 +443,14 @@ export def "billing-profiles-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --expand: string # May be used to expand the invoiceSections.
-]: nothing -> record<properties: record<address: record<addressLine1: string, addressLine2: string, addressLine3: string, city: string, companyName: string, country: string, firstName: string, lastName: string, postalCode: string, region: string>, currency: string, displayName: string, enabledAzurePlans: list<record>, invoiceDay: int, invoiceEmailOptIn: bool, invoiceSections: list<record>, poNumber: string>> {
+]: nothing -> record<properties: record<address: record<addressLine1: string, addressLine2: string, addressLine3: string, city: string, companyName: string, country: string, firstName: string, lastName: string, postalCode: string, region: string>, currency: string, displayName: string, enabledAzurePlans: list<record>, invoiceDay: int, invoiceEmailOptIn: bool, invoiceSections: list<record>, poNumber: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -478,14 +486,15 @@ export def "billing-profiles-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --properties: any # The properties of the billing profile. — shape: {address?: any, displayName?: string, enabledAzurePlans?: list, invoiceEmailOptIn?: bool, invoiceSections?: list, poNumber?: string}
-]: any -> record<properties: record<address: record<addressLine1: string, addressLine2: string, addressLine3: string, city: string, companyName: string, country: string, firstName: string, lastName: string, postalCode: string, region: string>, currency: string, displayName: string, enabledAzurePlans: list<record>, invoiceDay: int, invoiceEmailOptIn: bool, invoiceSections: list<record>, poNumber: string>> {
+]: any -> record<properties: record<address: record<addressLine1: string, addressLine2: string, addressLine3: string, city: string, companyName: string, country: string, firstName: string, lastName: string, postalCode: string, region: string>, currency: string, displayName: string, enabledAzurePlans: list<record>, invoiceDay: int, invoiceEmailOptIn: bool, invoiceSections: list<record>, poNumber: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -524,18 +533,19 @@ export def "billing-profiles-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --address: any # Address details. — shape: {addressLine1?: string, addressLine2?: string, addressLine3?: string, city?: string, companyName?: string, country?: string, firstName?: string, lastName?: string, postalCode?: string, region?: string}
   --display-name: string # The billing profile name.
   --enabled-azure-plans: list # Enabled azure plans for this billing profile. — item shape: {skuId?: string}
   --invoice-email-opt-in: oneof<nothing, bool> # If the billing profile is opted in to receive invoices via email.
   --po-number: string # Purchase order number.
-]: any -> record<properties: record<address: record<addressLine1: string, addressLine2: string, addressLine3: string, city: string, companyName: string, country: string, firstName: string, lastName: string, postalCode: string, region: string>, currency: string, displayName: string, enabledAzurePlans: list<record>, invoiceDay: int, invoiceEmailOptIn: bool, invoiceSections: list<record>, poNumber: string>> {
+]: any -> record<properties: record<address: record<addressLine1: string, addressLine2: string, addressLine3: string, city: string, companyName: string, country: string, firstName: string, lastName: string, postalCode: string, region: string>, currency: string, displayName: string, enabledAzurePlans: list<record>, invoiceDay: int, invoiceEmailOptIn: bool, invoiceSections: list<record>, poNumber: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}") $qp $auth.query)
   let req_body = {"address": $address, "displayName": $display_name, "enabledAzurePlans": $enabled_azure_plans, "invoiceEmailOptIn": $invoice_email_opt_in, "poNumber": $po_number} | compact
@@ -572,12 +582,13 @@ export def "available-balances-get-by-billing-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-]: nothing -> record<properties: record<amount: record<currency: string, value: float>>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+]: nothing -> record<properties: record<amount: record<currency: string, value: float>>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/availableBalance/default") $qp $auth.query)
   let accept_val = "application/json"
@@ -612,12 +623,13 @@ export def "billing-permissions-list-by-billing-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
 ]: nothing -> record<value: table<actions: list, notActions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/billingPermissions") $qp $auth.query)
   let accept_val = "application/json"
@@ -652,12 +664,13 @@ export def "billing-role-assignments-list-by-billing-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-]: nothing -> record<value: table<properties: record>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+]: nothing -> record<value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/billingRoleAssignments") $qp $auth.query)
   let accept_val = "application/json"
@@ -693,13 +706,14 @@ export def "billing-role-assignments-delete-by-billing-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-]: nothing -> record<properties: record<createdByPrincipalId: string, createdByPrincipalTenantId: string, createdOn: string, name: string, principalId: string, roleDefinitionName: string, scope: string>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+]: nothing -> record<properties: record<createdByPrincipalId: string, createdByPrincipalTenantId: string, createdOn: string, name: string, principalId: string, roleDefinitionName: string, scope: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   if ($billing_role_assignment_name | is-empty) { error make --unspanned { msg: "path parameter 'billingRoleAssignmentName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), billing_role_assignment_name: (encode-path-segment $billing_role_assignment_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/billingRoleAssignments/{billing_role_assignment_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -735,13 +749,14 @@ export def "billing-role-assignments-get-by-billing-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-]: nothing -> record<properties: record<createdByPrincipalId: string, createdByPrincipalTenantId: string, createdOn: string, name: string, principalId: string, roleDefinitionName: string, scope: string>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+]: nothing -> record<properties: record<createdByPrincipalId: string, createdByPrincipalTenantId: string, createdOn: string, name: string, principalId: string, roleDefinitionName: string, scope: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   if ($billing_role_assignment_name | is-empty) { error make --unspanned { msg: "path parameter 'billingRoleAssignmentName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), billing_role_assignment_name: (encode-path-segment $billing_role_assignment_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/billingRoleAssignments/{billing_role_assignment_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -776,12 +791,13 @@ export def "billing-role-definitions-list-by-billing-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-]: nothing -> record<value: table<properties: record>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+]: nothing -> record<value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/billingRoleDefinitions") $qp $auth.query)
   let accept_val = "application/json"
@@ -817,13 +833,14 @@ export def "billing-role-definitions-get-by-billing-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-]: nothing -> record<properties: record<description: string, permissions: list<record>, roleName: string>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+]: nothing -> record<properties: record<description: string, permissions: list<record>, roleName: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   if ($billing_role_definition_name | is-empty) { error make --unspanned { msg: "path parameter 'billingRoleDefinitionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), billing_role_definition_name: (encode-path-segment $billing_role_definition_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/billingRoleDefinitions/{billing_role_definition_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -859,12 +876,13 @@ export def "billing-subscriptions-list-by-billing-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/billingSubscriptions") $qp $auth.query)
   let accept_val = "application/json"
@@ -899,15 +917,16 @@ export def "billing-role-assignments-add-by-billing-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --billing-role-definition-id: string # The role definition id
   --principal-id: string # The user's principal id that the role gets assigned to
-]: any -> record<value: table<properties: record>> {
+]: any -> record<value: table<properties: record, id: string, name: string, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/createBillingRoleAssignment") $qp $auth.query)
   let req_body = {"billingRoleDefinitionId": $billing_role_definition_id, "principalId": $principal_id} | compact
@@ -944,14 +963,15 @@ export def "customers-list-by-billing-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --filter: string # May be used to filter the list of customers.
   --skiptoken: string # Skiptoken is only used if a previous operation returned a partial result. If a previous response contains a nextLink element, the value of the nextLink element will include a skiptoken parameter that specifies a starting point to use for subsequent calls.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/customers") $qp $auth.query)
   let accept_val = "application/json"
@@ -1156,12 +1176,13 @@ export def "instructions-list-by-billing-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/instructions") $qp $auth.query)
   let accept_val = "application/json"
@@ -1197,13 +1218,14 @@ export def "instructions-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-]: nothing -> record<properties: record<amount: float, endDate: string, startDate: string>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+]: nothing -> record<properties: record<amount: float, endDate: string, startDate: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   if ($instruction_name | is-empty) { error make --unspanned { msg: "path parameter 'instructionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), instruction_name: (encode-path-segment $instruction_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/instructions/{instruction_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1240,15 +1262,16 @@ export def "instructions-put" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --properties: any # A billing instruction used during invoice generation. — shape: {amount: float, endDate: string, startDate: string}
-]: any -> record<properties: record<amount: float, endDate: string, startDate: string>> {
+]: any -> record<properties: record<amount: float, endDate: string, startDate: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   if ($instruction_name | is-empty) { error make --unspanned { msg: "path parameter 'instructionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), instruction_name: (encode-path-segment $instruction_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/instructions/{instruction_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -1285,12 +1308,13 @@ export def "invoice-sections-list-by-billing-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections") $qp $auth.query)
   let accept_val = "application/json"
@@ -1326,13 +1350,14 @@ export def "invoice-sections-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-]: nothing -> record<properties: record<displayName: string>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+]: nothing -> record<properties: record<displayName: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1369,15 +1394,16 @@ export def "invoice-sections-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --properties: any # The properties of an InvoiceSection. — shape: {displayName?: string}
-]: any -> record<properties: record<displayName: string>> {
+]: any -> record<properties: record<displayName: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -1415,15 +1441,16 @@ export def "invoice-sections-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --display-name: string # The name of the InvoiceSection.
-]: any -> record<properties: record<displayName: string>> {
+]: any -> record<properties: record<displayName: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}") $qp $auth.query)
   let req_body = {"displayName": $display_name} | compact
@@ -1461,13 +1488,14 @@ export def "billing-permissions-list-by-invoice-sections" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
 ]: nothing -> record<value: table<actions: list, notActions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingPermissions") $qp $auth.query)
   let accept_val = "application/json"
@@ -1503,13 +1531,14 @@ export def "billing-role-assignments-list-by-invoice-section" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-]: nothing -> record<value: table<properties: record>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+]: nothing -> record<value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingRoleAssignments") $qp $auth.query)
   let accept_val = "application/json"
@@ -1546,14 +1575,15 @@ export def "billing-role-assignments-delete-by-invoice-section" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-]: nothing -> record<properties: record<createdByPrincipalId: string, createdByPrincipalTenantId: string, createdOn: string, name: string, principalId: string, roleDefinitionName: string, scope: string>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+]: nothing -> record<properties: record<createdByPrincipalId: string, createdByPrincipalTenantId: string, createdOn: string, name: string, principalId: string, roleDefinitionName: string, scope: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
   if ($billing_role_assignment_name | is-empty) { error make --unspanned { msg: "path parameter 'billingRoleAssignmentName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), billing_role_assignment_name: (encode-path-segment $billing_role_assignment_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingRoleAssignments/{billing_role_assignment_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1590,14 +1620,15 @@ export def "billing-role-assignments-get-by-invoice-section" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-]: nothing -> record<properties: record<createdByPrincipalId: string, createdByPrincipalTenantId: string, createdOn: string, name: string, principalId: string, roleDefinitionName: string, scope: string>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+]: nothing -> record<properties: record<createdByPrincipalId: string, createdByPrincipalTenantId: string, createdOn: string, name: string, principalId: string, roleDefinitionName: string, scope: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
   if ($billing_role_assignment_name | is-empty) { error make --unspanned { msg: "path parameter 'billingRoleAssignmentName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), billing_role_assignment_name: (encode-path-segment $billing_role_assignment_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingRoleAssignments/{billing_role_assignment_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1633,13 +1664,14 @@ export def "billing-role-definitions-list-by-invoice-section" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-]: nothing -> record<value: table<properties: record>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+]: nothing -> record<value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingRoleDefinitions") $qp $auth.query)
   let accept_val = "application/json"
@@ -1676,14 +1708,15 @@ export def "billing-role-definitions-get-by-invoice-section" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-]: nothing -> record<properties: record<description: string, permissions: list<record>, roleName: string>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+]: nothing -> record<properties: record<description: string, permissions: list<record>, roleName: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
   if ($billing_role_definition_name | is-empty) { error make --unspanned { msg: "path parameter 'billingRoleDefinitionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), billing_role_definition_name: (encode-path-segment $billing_role_definition_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingRoleDefinitions/{billing_role_definition_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1720,13 +1753,14 @@ export def "billing-subscriptions-list-by-invoice-section" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingSubscriptions") $qp $auth.query)
   let accept_val = "application/json"
@@ -1764,14 +1798,15 @@ export def "billing-subscriptions-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-]: nothing -> record<properties: record<billingProfileDisplayName: string, billingProfileId: string, customerDisplayName: string, customerId: string, displayName: string, invoiceSectionDisplayName: string, invoiceSectionId: string, lastMonthCharges: record<currency: string, value: float>, monthToDateCharges: record<currency: string, value: float>, reseller: record<description: string, resellerId: string>, skuDescription: string, skuId: string, subscriptionBillingStatus: string, subscriptionId: string>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+]: nothing -> record<properties: record<billingProfileDisplayName: string, billingProfileId: string, customerDisplayName: string, customerId: string, displayName: string, invoiceSectionDisplayName: string, invoiceSectionId: string, lastMonthCharges: record<currency: string, value: float>, monthToDateCharges: record<currency: string, value: float>, reseller: record<description: string, resellerId: string>, skuDescription: string, skuId: string, subscriptionBillingStatus: string, subscriptionId: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
   if ($billing_subscription_name | is-empty) { error make --unspanned { msg: "path parameter 'billingSubscriptionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), billing_subscription_name: (encode-path-segment $billing_subscription_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingSubscriptions/{billing_subscription_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1901,16 +1936,17 @@ export def "billing-role-assignments-add-by-invoice-section" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --billing-role-definition-id: string # The role definition id
   --principal-id: string # The user's principal id that the role gets assigned to
-]: any -> record<value: table<properties: record>> {
+]: any -> record<value: table<properties: record, id: string, name: string, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/createBillingRoleAssignment") $qp $auth.query)
   let req_body = {"billingRoleDefinitionId": $billing_role_definition_id, "principalId": $principal_id} | compact
@@ -1948,7 +1984,7 @@ export def "invoice-sections-elevate-to-billing-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<error: record<code: string, message: string, target: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
@@ -2034,14 +2070,15 @@ export def "products-list-by-invoice-section" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --filter: string # May be used to filter by product type. The filter supports 'eq', 'lt', 'gt', 'le', 'ge', and 'and'. It does not currently support 'ne', 'or', or 'not'. Tag filter is a key value pair string where key and value is separated by a colon (:).
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/products") $qp $auth.query)
   let accept_val = "application/json"
@@ -2079,14 +2116,15 @@ export def "products-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-]: nothing -> record<properties: record<availabilityId: string, billingFrequency: string, billingProfileDisplayName: string, billingProfileId: string, customerDisplayName: string, customerId: string, displayName: string, endDate: string, invoiceSectionDisplayName: string, invoiceSectionId: string, lastCharge: record<currency: string, value: float>, lastChargeDate: string, parentProductId: string, productType: string, productTypeId: string, purchaseDate: string, quantity: float, reseller: record<description: string, resellerId: string>, skuDescription: string, skuId: string, status: string>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+]: nothing -> record<properties: record<availabilityId: string, billingFrequency: string, billingProfileDisplayName: string, billingProfileId: string, customerDisplayName: string, customerId: string, displayName: string, endDate: string, invoiceSectionDisplayName: string, invoiceSectionId: string, lastCharge: record<currency: string, value: float>, lastChargeDate: string, parentProductId: string, productType: string, productTypeId: string, purchaseDate: string, quantity: float, reseller: record<description: string, resellerId: string>, skuDescription: string, skuId: string, status: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
   if ($product_name | is-empty) { error make --unspanned { msg: "path parameter 'productName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), product_name: (encode-path-segment $product_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/products/{product_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2123,10 +2161,10 @@ export def "products-transfer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --destination-billing-profile-id: string # The destination billing profile id.
   --destination-invoice-section-id: string # The destination invoice section id.
-]: any -> record<properties: record<availabilityId: string, billingFrequency: string, billingProfileDisplayName: string, billingProfileId: string, customerDisplayName: string, customerId: string, displayName: string, endDate: string, invoiceSectionDisplayName: string, invoiceSectionId: string, lastCharge: record<currency: string, value: float>, lastChargeDate: string, parentProductId: string, productType: string, productTypeId: string, purchaseDate: string, quantity: float, reseller: record<description: string, resellerId: string>, skuDescription: string, skuId: string, status: string>> {
+]: any -> record<properties: record<availabilityId: string, billingFrequency: string, billingProfileDisplayName: string, billingProfileId: string, customerDisplayName: string, customerId: string, displayName: string, endDate: string, invoiceSectionDisplayName: string, invoiceSectionId: string, lastCharge: record<currency: string, value: float>, lastChargeDate: string, parentProductId: string, productType: string, productTypeId: string, purchaseDate: string, quantity: float, reseller: record<description: string, resellerId: string>, skuDescription: string, skuId: string, status: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2134,6 +2172,7 @@ export def "products-transfer" [
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
   if ($product_name | is-empty) { error make --unspanned { msg: "path parameter 'productName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), product_name: (encode-path-segment $product_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/products/{product_name}/transfer") $qp $auth.query)
   let req_body = {"destinationBillingProfileId": $destination_billing_profile_id, "destinationInvoiceSectionId": $destination_invoice_section_id} | compact
@@ -2172,7 +2211,7 @@ export def "products-update-auto-renew-by-invoice-section" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --auto-renew: string@auto-renew-completer # Request parameters to update auto renew policy a product.
 ]: any -> record<properties: record<endDate: string>> {
   let input = $in
@@ -2182,6 +2221,7 @@ export def "products-update-auto-renew-by-invoice-section" [
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
   if ($product_name | is-empty) { error make --unspanned { msg: "path parameter 'productName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), product_name: (encode-path-segment $product_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/products/{product_name}/updateAutoRenew") $qp $auth.query)
   let req_body = {"autoRenew": $auto_renew} | compact
@@ -2267,16 +2307,19 @@ export def "transactions-list-by-invoice-section" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-  --period-start-date: string # Start date
-  --period-end-date: string # End date
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+  --period-start-date: string # Start date (required)
+  --period-end-date: string # End date (required)
   --filter: string # May be used to filter by transaction kind. The filter supports 'eq', 'lt', 'gt', 'le', 'ge', and 'and'. It does not currently support 'ne', 'or', or 'not'. Tag filter is a key value pair string where key and value is separated by a colon (:).
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  if ($period_start_date == null) { error make --unspanned { msg: "required query parameter 'periodStartDate' missing: pass --period-start-date" } }
+  if ($period_end_date == null) { error make --unspanned { msg: "required query parameter 'periodEndDate' missing: pass --period-end-date" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "periodStartDate" $period_start_date "scalar") (serialize-qp "periodEndDate" $period_end_date "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/transactions") $qp $auth.query)
   let accept_val = "application/json"
@@ -2435,14 +2478,17 @@ export def "invoices-list-by-billing-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-  --period-start-date: string # Invoice period start date.
-  --period-end-date: string # Invoice period end date.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+  --period-start-date: string # Invoice period start date. (required)
+  --period-end-date: string # Invoice period end date. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  if ($period_start_date == null) { error make --unspanned { msg: "required query parameter 'periodStartDate' missing: pass --period-start-date" } }
+  if ($period_end_date == null) { error make --unspanned { msg: "required query parameter 'periodEndDate' missing: pass --period-end-date" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "periodStartDate" $period_start_date "scalar") (serialize-qp "periodEndDate" $period_end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoices") $qp $auth.query)
   let accept_val = "application/json"
@@ -2478,13 +2524,14 @@ export def "invoices-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-]: nothing -> record<properties: record<amountDue: record<currency: string, value: float>, billedAmount: record<currency: string, value: float>, billingProfileDisplayName: string, billingProfileId: string, documents: list<record>, dueDate: string, invoiceDate: string, invoicePeriodEndDate: string, invoicePeriodStartDate: string, invoiceType: any, payments: list<record>, purchaseOrderNumber: string, status: string>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+]: nothing -> record<properties: record<amountDue: record<currency: string, value: float>, billedAmount: record<currency: string, value: float>, billingProfileDisplayName: string, billingProfileId: string, documents: list<record>, dueDate: string, invoiceDate: string, invoicePeriodEndDate: string, invoicePeriodStartDate: string, invoiceType: any, payments: list<record>, purchaseOrderNumber: string, status: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   if ($invoice_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_name: (encode-path-segment $invoice_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoices/{invoice_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2520,13 +2567,14 @@ export def "price-sheet-download" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
 ]: nothing -> record<expiryTime: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   if ($invoice_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_name: (encode-path-segment $invoice_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoices/{invoice_name}/pricesheet/default/download") $qp $auth.query)
   let accept_val = "application/json"
@@ -2562,12 +2610,13 @@ export def "payment-methods-list-by-billing-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/paymentMethods") $qp $auth.query)
   let accept_val = "application/json"
@@ -2603,12 +2652,13 @@ export def "policies-get-by-billing-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-]: nothing -> record<properties: record<marketplacePurchases: string, reservationPurchases: string, viewCharges: string>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+]: nothing -> record<properties: record<marketplacePurchases: string, reservationPurchases: string, viewCharges: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/policies/default") $qp $auth.query)
   let accept_val = "application/json"
@@ -2644,14 +2694,15 @@ export def "policies-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --properties: any # The properties of policy. — shape: {marketplacePurchases?: "AllAllowed"|"OnlyFreeAllowed"|"NotAllowed", reservationPurchases?: "Allowed"|"NotAllowed", viewCharges?: "Allowed"|"NotAllowed"}
-]: any -> record<properties: record<marketplacePurchases: string, reservationPurchases: string, viewCharges: string>> {
+]: any -> record<properties: record<marketplacePurchases: string, reservationPurchases: string, viewCharges: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/policies/default") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -2688,12 +2739,13 @@ export def "price-sheet-download-by-billing-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
 ]: nothing -> record<expiryTime: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/pricesheet/default/download") $qp $auth.query)
   let accept_val = "application/json"
@@ -2729,15 +2781,18 @@ export def "transactions-list-by-billing-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-  --period-start-date: string # Start date
-  --period-end-date: string # End date
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+  --period-start-date: string # Start date (required)
+  --period-end-date: string # End date (required)
   --filter: string # May be used to filter by transaction kind. The filter supports 'eq', 'lt', 'gt', 'le', 'ge', and 'and'. It does not currently support 'ne', 'or', or 'not'. Tag filter is a key value pair string where key and value is separated by a colon (:).
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  if ($period_start_date == null) { error make --unspanned { msg: "required query parameter 'periodStartDate' missing: pass --period-start-date" } }
+  if ($period_end_date == null) { error make --unspanned { msg: "required query parameter 'periodEndDate' missing: pass --period-end-date" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "periodStartDate" $period_start_date "scalar") (serialize-qp "periodEndDate" $period_end_date "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/transactions") $qp $auth.query)
   let accept_val = "application/json"
@@ -2774,15 +2829,18 @@ export def "transactions-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --period-start-date: string # Start date
-  --period-end-date: string # End date
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-]: nothing -> record<properties: record<billingProfileDisplayName: string, billingProfileId: string, customerDisplayName: string, customerId: string, date: string, invoice: string, invoiceSectionDisplayName: string, invoiceSectionId: string, kind: string, orderId: string, orderName: string, productDescription: string, productFamily: string, productType: string, productTypeId: string, quantity: int, subscriptionId: string, subscriptionName: string, transactionAmount: record<currency: string, value: float>, transactionType: string>> {
+  --period-start-date: string # Start date (required)
+  --period-end-date: string # End date (required)
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+]: nothing -> record<properties: record<billingProfileDisplayName: string, billingProfileId: string, customerDisplayName: string, customerId: string, date: string, invoice: string, invoiceSectionDisplayName: string, invoiceSectionId: string, kind: string, orderId: string, orderName: string, productDescription: string, productFamily: string, productType: string, productTypeId: string, quantity: int, subscriptionId: string, subscriptionName: string, transactionAmount: record<currency: string, value: float>, transactionType: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   if ($transaction_name | is-empty) { error make --unspanned { msg: "path parameter 'transactionName' must be non-empty" } }
+  if ($period_start_date == null) { error make --unspanned { msg: "required query parameter 'periodStartDate' missing: pass --period-start-date" } }
+  if ($period_end_date == null) { error make --unspanned { msg: "required query parameter 'periodEndDate' missing: pass --period-end-date" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "periodStartDate" $period_start_date "scalar") (serialize-qp "periodEndDate" $period_end_date "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), transaction_name: (encode-path-segment $transaction_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/transactions/{transaction_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2816,11 +2874,12 @@ export def "billing-role-assignments-list-by-billing-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-]: nothing -> record<value: table<properties: record>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+]: nothing -> record<value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingRoleAssignments") $qp $auth.query)
   let accept_val = "application/json"
@@ -2855,12 +2914,13 @@ export def "billing-role-assignments-delete-by-billing-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-]: nothing -> record<properties: record<createdByPrincipalId: string, createdByPrincipalTenantId: string, createdOn: string, name: string, principalId: string, roleDefinitionName: string, scope: string>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+]: nothing -> record<properties: record<createdByPrincipalId: string, createdByPrincipalTenantId: string, createdOn: string, name: string, principalId: string, roleDefinitionName: string, scope: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_role_assignment_name | is-empty) { error make --unspanned { msg: "path parameter 'billingRoleAssignmentName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_role_assignment_name: (encode-path-segment $billing_role_assignment_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingRoleAssignments/{billing_role_assignment_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2895,12 +2955,13 @@ export def "billing-role-assignments-get-by-billing-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-]: nothing -> record<properties: record<createdByPrincipalId: string, createdByPrincipalTenantId: string, createdOn: string, name: string, principalId: string, roleDefinitionName: string, scope: string>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+]: nothing -> record<properties: record<createdByPrincipalId: string, createdByPrincipalTenantId: string, createdOn: string, name: string, principalId: string, roleDefinitionName: string, scope: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_role_assignment_name | is-empty) { error make --unspanned { msg: "path parameter 'billingRoleAssignmentName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_role_assignment_name: (encode-path-segment $billing_role_assignment_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingRoleAssignments/{billing_role_assignment_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2934,11 +2995,12 @@ export def "billing-role-definitions-list-by-billing-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-]: nothing -> record<value: table<properties: record>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+]: nothing -> record<value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingRoleDefinitions") $qp $auth.query)
   let accept_val = "application/json"
@@ -2973,12 +3035,13 @@ export def "billing-role-definitions-get-by-billing-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-]: nothing -> record<properties: record<description: string, permissions: list<record>, roleName: string>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+]: nothing -> record<properties: record<description: string, permissions: list<record>, roleName: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_role_definition_name | is-empty) { error make --unspanned { msg: "path parameter 'billingRoleDefinitionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_role_definition_name: (encode-path-segment $billing_role_definition_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingRoleDefinitions/{billing_role_definition_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -3013,11 +3076,12 @@ export def "billing-subscriptions-list-by-billing-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingSubscriptions") $qp $auth.query)
   let accept_val = "application/json"
@@ -3053,14 +3117,17 @@ export def "invoices-list-by-billing-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --period-start-date: string # Invoice period start date.
-  --period-end-date: string # Invoice period end date.
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --period-start-date: string # Invoice period start date. (required)
+  --period-end-date: string # Invoice period end date. (required)
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_subscription_name | is-empty) { error make --unspanned { msg: "path parameter 'billingSubscriptionName' must be non-empty" } }
+  if ($period_start_date == null) { error make --unspanned { msg: "required query parameter 'periodStartDate' missing: pass --period-start-date" } }
+  if ($period_end_date == null) { error make --unspanned { msg: "required query parameter 'periodEndDate' missing: pass --period-end-date" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "periodStartDate" $period_start_date "scalar") (serialize-qp "periodEndDate" $period_end_date "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_subscription_name: (encode-path-segment $billing_subscription_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingSubscriptions/{billing_subscription_name}/invoices") $qp $auth.query)
   let accept_val = "application/json"
@@ -3097,13 +3164,14 @@ export def "invoices-get-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-]: nothing -> record<properties: record<amountDue: record<currency: string, value: float>, billedAmount: record<currency: string, value: float>, billingProfileDisplayName: string, billingProfileId: string, documents: list<record>, dueDate: string, invoiceDate: string, invoicePeriodEndDate: string, invoicePeriodStartDate: string, invoiceType: any, payments: list<record>, purchaseOrderNumber: string, status: string>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+]: nothing -> record<properties: record<amountDue: record<currency: string, value: float>, billedAmount: record<currency: string, value: float>, billingProfileDisplayName: string, billingProfileId: string, documents: list<record>, dueDate: string, invoiceDate: string, invoicePeriodEndDate: string, invoicePeriodStartDate: string, invoiceType: any, payments: list<record>, purchaseOrderNumber: string, status: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($billing_subscription_name | is-empty) { error make --unspanned { msg: "path parameter 'billingSubscriptionName' must be non-empty" } }
   if ($invoice_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_subscription_name: (encode-path-segment $billing_subscription_name), invoice_name: (encode-path-segment $invoice_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingSubscriptions/{billing_subscription_name}/invoices/{invoice_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -3137,14 +3205,15 @@ export def "billing-role-assignments-add-by-billing-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --billing-role-definition-id: string # The role definition id
   --principal-id: string # The user's principal id that the role gets assigned to
-]: any -> record<value: table<properties: record>> {
+]: any -> record<value: table<properties: record, id: string, name: string, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/createBillingRoleAssignment") $qp $auth.query)
   let req_body = {"billingRoleDefinitionId": $billing_role_definition_id, "principalId": $principal_id} | compact
@@ -3180,13 +3249,14 @@ export def "customers-list-by-billing-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --filter: string # May be used to filter the list of customers.
   --skiptoken: string # Skiptoken is only used if a previous operation returned a partial result. If a previous response contains a nextLink element, the value of the nextLink element will include a skiptoken parameter that specifies a starting point to use for subsequent calls.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers") $qp $auth.query)
   let accept_val = "application/json"
@@ -3221,13 +3291,14 @@ export def "customers-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --expand: string # May be used to expand enabledAzurePlans, resellers.
-]: nothing -> record<properties: record<displayName: string, enabledAzurePlans: list<record>, resellers: list<record>>> {
+]: nothing -> record<properties: record<displayName: string, enabledAzurePlans: list<record>, resellers: list<record>>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($customer_name | is-empty) { error make --unspanned { msg: "path parameter 'customerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), customer_name: (encode-path-segment $customer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -3262,12 +3333,13 @@ export def "billing-permissions-list-by-customer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
 ]: nothing -> record<value: table<actions: list, notActions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($customer_name | is-empty) { error make --unspanned { msg: "path parameter 'customerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), customer_name: (encode-path-segment $customer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/billingPermissions") $qp $auth.query)
   let accept_val = "application/json"
@@ -3303,12 +3375,13 @@ export def "billing-subscriptions-list-by-customer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($customer_name | is-empty) { error make --unspanned { msg: "path parameter 'customerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), customer_name: (encode-path-segment $customer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/billingSubscriptions") $qp $auth.query)
   let accept_val = "application/json"
@@ -3345,13 +3418,14 @@ export def "billing-subscriptions-get-by-customer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-]: nothing -> record<properties: record<billingProfileDisplayName: string, billingProfileId: string, customerDisplayName: string, customerId: string, displayName: string, invoiceSectionDisplayName: string, invoiceSectionId: string, lastMonthCharges: record<currency: string, value: float>, monthToDateCharges: record<currency: string, value: float>, reseller: record<description: string, resellerId: string>, skuDescription: string, skuId: string, subscriptionBillingStatus: string, subscriptionId: string>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+]: nothing -> record<properties: record<billingProfileDisplayName: string, billingProfileId: string, customerDisplayName: string, customerId: string, displayName: string, invoiceSectionDisplayName: string, invoiceSectionId: string, lastMonthCharges: record<currency: string, value: float>, monthToDateCharges: record<currency: string, value: float>, reseller: record<description: string, resellerId: string>, skuDescription: string, skuId: string, subscriptionBillingStatus: string, subscriptionId: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($customer_name | is-empty) { error make --unspanned { msg: "path parameter 'customerName' must be non-empty" } }
   if ($billing_subscription_name | is-empty) { error make --unspanned { msg: "path parameter 'billingSubscriptionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), customer_name: (encode-path-segment $customer_name), billing_subscription_name: (encode-path-segment $billing_subscription_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/billingSubscriptions/{billing_subscription_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -3387,12 +3461,13 @@ export def "policies-get-by-customer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-]: nothing -> record<properties: record<viewCharges: string>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+]: nothing -> record<properties: record<viewCharges: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($customer_name | is-empty) { error make --unspanned { msg: "path parameter 'customerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), customer_name: (encode-path-segment $customer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/policies/default") $qp $auth.query)
   let accept_val = "application/json"
@@ -3428,14 +3503,15 @@ export def "policies-update-customer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --properties: any # The properties of a Customer's policy. — shape: {viewCharges?: "Allowed"|"NotAllowed"}
-]: any -> record<properties: record<viewCharges: string>> {
+]: any -> record<properties: record<viewCharges: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($customer_name | is-empty) { error make --unspanned { msg: "path parameter 'customerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), customer_name: (encode-path-segment $customer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/policies/default") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -3473,13 +3549,14 @@ export def "products-list-by-customer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --filter: string # May be used to filter by product type. The filter supports 'eq', 'lt', 'gt', 'le', 'ge', and 'and'. It does not currently support 'ne', 'or', or 'not'. Tag filter is a key value pair string where key and value is separated by a colon (:).
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($customer_name | is-empty) { error make --unspanned { msg: "path parameter 'customerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), customer_name: (encode-path-segment $customer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/products") $qp $auth.query)
   let accept_val = "application/json"
@@ -3516,13 +3593,14 @@ export def "products-get-by-customer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-]: nothing -> record<properties: record<availabilityId: string, billingFrequency: string, billingProfileDisplayName: string, billingProfileId: string, customerDisplayName: string, customerId: string, displayName: string, endDate: string, invoiceSectionDisplayName: string, invoiceSectionId: string, lastCharge: record<currency: string, value: float>, lastChargeDate: string, parentProductId: string, productType: string, productTypeId: string, purchaseDate: string, quantity: float, reseller: record<description: string, resellerId: string>, skuDescription: string, skuId: string, status: string>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+]: nothing -> record<properties: record<availabilityId: string, billingFrequency: string, billingProfileDisplayName: string, billingProfileId: string, customerDisplayName: string, customerId: string, displayName: string, endDate: string, invoiceSectionDisplayName: string, invoiceSectionId: string, lastCharge: record<currency: string, value: float>, lastChargeDate: string, parentProductId: string, productType: string, productTypeId: string, purchaseDate: string, quantity: float, reseller: record<description: string, resellerId: string>, skuDescription: string, skuId: string, status: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($customer_name | is-empty) { error make --unspanned { msg: "path parameter 'customerName' must be non-empty" } }
   if ($product_name | is-empty) { error make --unspanned { msg: "path parameter 'productName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), customer_name: (encode-path-segment $customer_name), product_name: (encode-path-segment $product_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/products/{product_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -3558,15 +3636,18 @@ export def "transactions-list-by-customer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-  --period-start-date: string # Start date
-  --period-end-date: string # End date
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+  --period-start-date: string # Start date (required)
+  --period-end-date: string # End date (required)
   --filter: string # May be used to filter by transaction kind. The filter supports 'eq', 'lt', 'gt', 'le', 'ge', and 'and'. It does not currently support 'ne', 'or', or 'not'. Tag filter is a key value pair string where key and value is separated by a colon (:).
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($customer_name | is-empty) { error make --unspanned { msg: "path parameter 'customerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  if ($period_start_date == null) { error make --unspanned { msg: "required query parameter 'periodStartDate' missing: pass --period-start-date" } }
+  if ($period_end_date == null) { error make --unspanned { msg: "required query parameter 'periodEndDate' missing: pass --period-end-date" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "periodStartDate" $period_start_date "scalar") (serialize-qp "periodEndDate" $period_end_date "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), customer_name: (encode-path-segment $customer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/transactions") $qp $auth.query)
   let accept_val = "application/json"
@@ -3600,13 +3681,14 @@ export def "departments-list-by-billing-account-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --expand: string # May be used to expand the enrollmentAccounts.
   --filter: string # The filter supports 'eq', 'lt', 'gt', 'le', 'ge', and 'and'. It does not currently support 'ne', 'or', or 'not'. Tag filter is a key value pair string where key and value is separated by a colon (:).
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/departments") $qp $auth.query)
   let accept_val = "application/json"
@@ -3641,14 +3723,15 @@ export def "departments-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --expand: string # May be used to expand the enrollmentAccounts.
   --filter: string # The filter supports 'eq', 'lt', 'gt', 'le', 'ge', and 'and'. It does not currently support 'ne', 'or', or 'not'. Tag filter is a key value pair string where key and value is separated by a colon (:).
-]: nothing -> record<properties: record<costCenter: string, departmentName: string, enrollmentAccounts: list<record>, status: string>> {
+]: nothing -> record<properties: record<costCenter: string, departmentName: string, enrollmentAccounts: list<record>, status: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($department_name | is-empty) { error make --unspanned { msg: "path parameter 'departmentName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), department_name: (encode-path-segment $department_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/departments/{department_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -3682,13 +3765,14 @@ export def "enrollment-accounts-list-by-billing-account-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --expand: string # May be used to expand the department.
   --filter: string # The filter supports 'eq', 'lt', 'gt', 'le', 'ge', and 'and'. It does not currently support 'ne', 'or', or 'not'. Tag filter is a key value pair string where key and value is separated by a colon (:).
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/enrollmentAccounts") $qp $auth.query)
   let accept_val = "application/json"
@@ -3723,14 +3807,15 @@ export def "enrollment-accounts-get-by-enrollment-account-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --expand: string # May be used to expand the Department.
   --filter: string # The filter supports 'eq', 'lt', 'gt', 'le', 'ge', and 'and'. It does not currently support 'ne', 'or', or 'not'. Tag filter is a key value pair string where key and value is separated by a colon (:).
-]: nothing -> record<properties: record<accountName: string, accountOwner: string, costCenter: string, department: record<properties: record>, endDate: string, startDate: string, status: string>> {
+]: nothing -> record<properties: record<accountName: string, accountOwner: string, costCenter: string, department: record<properties: record, id: string, name: string, type: string>, endDate: string, startDate: string, status: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   if ($enrollment_account_name | is-empty) { error make --unspanned { msg: "path parameter 'enrollmentAccountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), enrollment_account_name: (encode-path-segment $enrollment_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/enrollmentAccounts/{enrollment_account_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -3764,13 +3849,16 @@ export def "invoices-list-by-billing-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-  --period-start-date: string # Invoice period start date.
-  --period-end-date: string # Invoice period end date.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+  --period-start-date: string # Invoice period start date. (required)
+  --period-end-date: string # Invoice period end date. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  if ($period_start_date == null) { error make --unspanned { msg: "required query parameter 'periodStartDate' missing: pass --period-start-date" } }
+  if ($period_end_date == null) { error make --unspanned { msg: "required query parameter 'periodEndDate' missing: pass --period-end-date" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "periodStartDate" $period_start_date "scalar") (serialize-qp "periodEndDate" $period_end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/invoices") $qp $auth.query)
   let accept_val = "application/json"
@@ -3804,11 +3892,12 @@ export def "billing-accounts-list-invoice-sections-by-create-subscription-permis
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
 ]: nothing -> record<nextLink: string, value: table<billingProfileDisplayName: string, billingProfileId: string, enabledAzurePlans: list, invoiceSectionDisplayName: string, invoiceSectionId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/listInvoiceSectionsWithCreateSubscriptionPermission") $qp $auth.query)
   let accept_val = "application/json"
@@ -3843,11 +3932,12 @@ export def "payment-methods-list-by-billing-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/paymentMethods") $qp $auth.query)
   let accept_val = "application/json"
@@ -3882,12 +3972,13 @@ export def "products-list-by-billing-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --filter: string # May be used to filter by product type. The filter supports 'eq', 'lt', 'gt', 'le', 'ge', and 'and'. It does not currently support 'ne', 'or', or 'not'. Tag filter is a key value pair string where key and value is separated by a colon (:).
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/products") $qp $auth.query)
   let accept_val = "application/json"
@@ -3922,14 +4013,17 @@ export def "transactions-list-by-billing-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-  --period-start-date: string # Start date
-  --period-end-date: string # End date
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+  --period-start-date: string # Start date (required)
+  --period-end-date: string # End date (required)
   --filter: string # May be used to filter by transaction kind. The filter supports 'eq', 'lt', 'gt', 'le', 'ge', and 'and'. It does not currently support 'ne', 'or', or 'not'. Tag filter is a key value pair string where key and value is separated by a colon (:).
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  if ($period_start_date == null) { error make --unspanned { msg: "required query parameter 'periodStartDate' missing: pass --period-start-date" } }
+  if ($period_end_date == null) { error make --unspanned { msg: "required query parameter 'periodEndDate' missing: pass --period-end-date" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "periodStartDate" $period_start_date "scalar") (serialize-qp "periodEndDate" $period_end_date "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/transactions") $qp $auth.query)
   let accept_val = "application/json"
@@ -3962,10 +4056,11 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Billing/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -4186,7 +4281,7 @@ export def "address-validate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --address-line1: string # Address Line1.
   --address-line2: string # Address Line2.
   --address-line3: string # Address Line3.
@@ -4201,6 +4296,7 @@ export def "address-validate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Billing/validateAddress" $qp $auth.query)
   let req_body = {"addressLine1": $address_line1, "addressLine2": $address_line2, "addressLine3": $address_line3, "city": $city, "companyName": $company_name, "country": $country, "firstName": $first_name, "lastName": $last_name, "postalCode": $postal_code, "region": $region} | compact
@@ -4236,11 +4332,12 @@ export def "line-of-credits-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-]: nothing -> record<properties: record<creditLimit: record<currency: string, value: float>, reason: string, remainingBalance: record<currency: string, value: float>, status: string>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+]: nothing -> record<properties: record<creditLimit: record<currency: string, value: float>, reason: string, remainingBalance: record<currency: string, value: float>, status: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Billing/billingAccounts/default/lineOfCredit/default") $qp $auth.query)
   let accept_val = "application/json"
@@ -4275,13 +4372,14 @@ export def "line-of-credits-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
   --properties: any # The properties of the line of credit. — shape: {creditLimit?: any, remainingBalance?: any, status?: "Approved"|"Rejected"}
-]: any -> record<properties: record<creditLimit: record<currency: string, value: float>, reason: string, remainingBalance: record<currency: string, value: float>, status: string>> {
+]: any -> record<properties: record<creditLimit: record<currency: string, value: float>, reason: string, remainingBalance: record<currency: string, value: float>, status: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Billing/billingAccounts/default/lineOfCredit/default") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -4318,11 +4416,12 @@ export def "billing-property-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-]: nothing -> record<properties: record<billingAccountDisplayName: string, billingAccountId: string, billingProfileDisplayName: string, billingProfileId: string, billingTenantId: string, costCenter: string, invoiceSectionDisplayName: string, invoiceSectionId: string, productId: string, productName: string, skuDescription: string, skuId: string>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview. (required)
+]: nothing -> record<properties: record<billingAccountDisplayName: string, billingAccountId: string, billingProfileDisplayName: string, billingProfileId: string, billingTenantId: string, costCenter: string, invoiceSectionDisplayName: string, invoiceSectionId: string, productId: string, productName: string, skuDescription: string, skuId: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Billing/billingProperty/default") $qp $auth.query)
   let accept_val = "application/json"

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -521,19 +521,19 @@ export def "create-cert" [
   ca_ref: string # Reference for a CA certificate in otoroshi (e.g. a string value)
   chain: string # Certificate chain of trust in PEM format (e.g. a string value)
   domain: string # Domain of the certificate (read only) (e.g. a string value)
-  --body-from: string # Start date of validity (e.g. a string value)
+  from: string # Start date of validity (e.g. a string value)
   id: string # Id of the certificate (e.g. a string value)
   private_key: string # PKCS8 private key in PEM format (e.g. a string value)
   self_signed: string # Certificate is self signed read only) (e.g. a string value)
   subject: string # Subject of the certificate (read only) (e.g. a string value)
-  --body-to: string # End date of validity (e.g. a string value)
+  to: string # End date of validity (e.g. a string value)
   valid: string # Certificate is valid (read only) (e.g. a string value)
 ]: any -> record<autoRenew: string, ca: string, caRef: string, chain: string, domain: string, from: string, id: string, privateKey: string, selfSigned: string, subject: string, to: string, valid: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/certificates" $auth.query)
-  let req_body = {"autoRenew": $auto_renew, "ca": $ca, "caRef": $ca_ref, "chain": $chain, "domain": $domain, "from": $body_from, "id": $id, "privateKey": $private_key, "selfSigned": $self_signed, "subject": $subject, "to": $body_to, "valid": $valid} | compact
+  let req_body = {"autoRenew": $auto_renew, "ca": $ca, "caRef": $ca_ref, "chain": $chain, "domain": $domain, "from": $from, "id": $id, "privateKey": $private_key, "selfSigned": $self_signed, "subject": $subject, "to": $to, "valid": $valid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -683,12 +683,12 @@ export def "put-cert" [
   ca_ref: string # Reference for a CA certificate in otoroshi (e.g. a string value)
   chain: string # Certificate chain of trust in PEM format (e.g. a string value)
   domain: string # Domain of the certificate (read only) (e.g. a string value)
-  --body-from: string # Start date of validity (e.g. a string value)
+  from: string # Start date of validity (e.g. a string value)
   --body-id: string # Id of the certificate (e.g. a string value)
   private_key: string # PKCS8 private key in PEM format (e.g. a string value)
   self_signed: string # Certificate is self signed read only) (e.g. a string value)
   subject: string # Subject of the certificate (read only) (e.g. a string value)
-  --body-to: string # End date of validity (e.g. a string value)
+  to: string # End date of validity (e.g. a string value)
   valid: string # Certificate is valid (read only) (e.g. a string value)
 ]: any -> record<autoRenew: string, ca: string, caRef: string, chain: string, domain: string, from: string, id: string, privateKey: string, selfSigned: string, subject: string, to: string, valid: string> {
   let input = $in
@@ -696,8 +696,9 @@ export def "put-cert" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/certificates/{id}") $auth.query)
-  let req_body = {"autoRenew": $auto_renew, "ca": $ca, "caRef": $ca_ref, "chain": $chain, "domain": $domain, "from": $body_from, "id": $body_id, "privateKey": $private_key, "selfSigned": $self_signed, "subject": $subject, "to": $body_to, "valid": $valid} | compact
+  let req_body = {"autoRenew": $auto_renew, "ca": $ca, "caRef": $ca_ref, "chain": $chain, "domain": $domain, "from": $from, "id": $body_id, "privateKey": $private_key, "selfSigned": $self_signed, "subject": $subject, "to": $to, "valid": $valid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "id") == null) { error make --unspanned { msg: "required body field 'id' missing: pass --body-id or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -782,6 +783,8 @@ export def "create-client-validator" [
   let full_url = (build-url $base "/api/client-validators" $auth.query)
   let req_body = {"alwaysValid": $always_valid, "badTtl": $bad_ttl, "description": $description, "goodTtl": $good_ttl, "headers": $headers, "host": $host, "id": $id, "method": $method, "name": $name, "noCache": $no_cache, "path": $path, "timeout": $timeout, "url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "alwaysValid") == null) { error make --unspanned { msg: "required body field 'alwaysValid' missing: pass --always-valid or pipe a record" } }
+  if (($req_body | get -o "noCache") == null) { error make --unspanned { msg: "required body field 'noCache' missing: pass --no-cache or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -946,6 +949,9 @@ export def "update-client-validator" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/client-validators/{id}") $auth.query)
   let req_body = {"alwaysValid": $always_valid, "badTtl": $bad_ttl, "description": $description, "goodTtl": $good_ttl, "headers": $headers, "host": $host, "id": $body_id, "method": $method, "name": $name, "noCache": $no_cache, "path": $path, "timeout": $timeout, "url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "alwaysValid") == null) { error make --unspanned { msg: "required body field 'alwaysValid' missing: pass --always-valid or pipe a record" } }
+  if (($req_body | get -o "id") == null) { error make --unspanned { msg: "required body field 'id' missing: pass --body-id or pipe a record" } }
+  if (($req_body | get -o "noCache") == null) { error make --unspanned { msg: "required body field 'noCache' missing: pass --no-cache or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1532,6 +1538,12 @@ export def "put-global-config" [
   let full_url = (build-url $base "/api/globalconfig" $auth.query)
   let req_body = {"alertsEmails": $alerts_emails, "alertsWebhooks": $alerts_webhooks, "analyticsWebhooks": $analytics_webhooks, "apiReadOnly": $api_read_only, "autoLinkToDefaultGroup": $auto_link_to_default_group, "backofficeAuth0Config": $backoffice_auth0_config, "cleverSettings": $clever_settings, "elasticReadsConfig": $elastic_reads_config, "elasticWritesConfigs": $elastic_writes_configs, "endlessIpAddresses": $endless_ip_addresses, "ipFiltering": $ip_filtering, "limitConcurrentRequests": $limit_concurrent_requests, "lines": $lines, "mailerSettings": $mailer_settings, "maxConcurrentRequests": $max_concurrent_requests, "maxHttp10ResponseSize": $max_http10_response_size, "maxLogsSize": $max_logs_size, "middleFingers": $middle_fingers, "perIpThrottlingQuota": $per_ip_throttling_quota, "privateAppsAuth0Config": $private_apps_auth0_config, "streamEntityOnly": $stream_entity_only, "throttlingQuota": $throttling_quota, "u2fLoginOnly": $u2f_login_only, "useCircuitBreakers": $use_circuit_breakers} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "apiReadOnly") == null) { error make --unspanned { msg: "required body field 'apiReadOnly' missing: pass --api-read-only or pipe a record" } }
+  if (($req_body | get -o "autoLinkToDefaultGroup") == null) { error make --unspanned { msg: "required body field 'autoLinkToDefaultGroup' missing: pass --auto-link-to-default-group or pipe a record" } }
+  if (($req_body | get -o "limitConcurrentRequests") == null) { error make --unspanned { msg: "required body field 'limitConcurrentRequests' missing: pass --limit-concurrent-requests or pipe a record" } }
+  if (($req_body | get -o "streamEntityOnly") == null) { error make --unspanned { msg: "required body field 'streamEntityOnly' missing: pass --stream-entity-only or pipe a record" } }
+  if (($req_body | get -o "u2fLoginOnly") == null) { error make --unspanned { msg: "required body field 'u2fLoginOnly' missing: pass --u2f-login-only or pipe a record" } }
+  if (($req_body | get -o "useCircuitBreakers") == null) { error make --unspanned { msg: "required body field 'useCircuitBreakers' missing: pass --use-circuit-breakers or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1690,6 +1702,7 @@ export def "create-api-key-from-group" [
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/api/groups/{group_id}/apikeys") $auth.query)
   let req_body = {"authorizedEntities": $authorized_entities, "clientId": $client_id, "clientName": $client_name, "clientSecret": $client_secret, "dailyQuota": $daily_quota, "enabled": $enabled, "metadata": $metadata, "monthlyQuota": $monthly_quota, "throttlingQuota": $throttling_quota} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "enabled") == null) { error make --unspanned { msg: "required body field 'enabled' missing: pass --enabled or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1858,6 +1871,8 @@ export def "update-api-key-from-group" [
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), client_id: (encode-path-segment $client_id)} | format pattern "/api/groups/{group_id}/apikeys/{client_id}") $auth.query)
   let req_body = {"authorizedEntities": $authorized_entities, "clientId": $body_client_id, "clientName": $client_name, "clientSecret": $client_secret, "dailyQuota": $daily_quota, "enabled": $enabled, "metadata": $metadata, "monthlyQuota": $monthly_quota, "throttlingQuota": $throttling_quota} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "clientId") == null) { error make --unspanned { msg: "required body field 'clientId' missing: pass --body-client-id or pipe a record" } }
+  if (($req_body | get -o "enabled") == null) { error make --unspanned { msg: "required body field 'enabled' missing: pass --enabled or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2740,6 +2755,13 @@ export def "create-service" [
   let full_url = (build-url $base "/api/services" $auth.query)
   let req_body = {"Canary": $canary, "additionalHeaders": $additional_headers, "api": $api, "authConfigRef": $auth_config_ref, "buildMode": $build_mode, "chaosConfig": $chaos_config, "clientConfig": $client_config, "clientValidatorRef": $client_validator_ref, "cors": $cors, "domain": $domain, "enabled": $enabled, "enforceSecureCommunication": $enforce_secure_communication, "env": $body_env, "forceHttps": $force_https, "groups": $groups, "gzip": $gzip, "headersVerification": $headers_verification, "healthCheck": $health_check, "id": $id, "ipFiltering": $ip_filtering, "jwtVerifier": $jwt_verifier, "localHost": $local_host, "localScheme": $local_scheme, "maintenanceMode": $maintenance_mode, "matchingHeaders": $matching_headers, "matchingRoot": $matching_root, "metadata": $metadata, "name": $name, "overrideHost": $override_host, "privateApp": $private_app, "privatePatterns": $private_patterns, "publicPatterns": $public_patterns, "redirectToLocal": $redirect_to_local, "redirection": $redirection, "root": $root, "secComExcludedPatterns": $sec_com_excluded_patterns, "secComSettings": $sec_com_settings, "sendOtoroshiHeadersBack": $send_otoroshi_headers_back, "statsdConfig": $statsd_config, "subdomain": $subdomain, "targets": $targets, "transformerRef": $transformer_ref, "userFacing": $user_facing, "xForwardedHeaders": $x_forwarded_headers} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "buildMode") == null) { error make --unspanned { msg: "required body field 'buildMode' missing: pass --build-mode or pipe a record" } }
+  if (($req_body | get -o "enabled") == null) { error make --unspanned { msg: "required body field 'enabled' missing: pass --enabled or pipe a record" } }
+  if (($req_body | get -o "enforceSecureCommunication") == null) { error make --unspanned { msg: "required body field 'enforceSecureCommunication' missing: pass --enforce-secure-communication or pipe a record" } }
+  if (($req_body | get -o "env") == null) { error make --unspanned { msg: "required body field 'env' missing: pass --body-env or pipe a record" } }
+  if (($req_body | get -o "forceHttps") == null) { error make --unspanned { msg: "required body field 'forceHttps' missing: pass --force-https or pipe a record" } }
+  if (($req_body | get -o "maintenanceMode") == null) { error make --unspanned { msg: "required body field 'maintenanceMode' missing: pass --maintenance-mode or pipe a record" } }
+  if (($req_body | get -o "privateApp") == null) { error make --unspanned { msg: "required body field 'privateApp' missing: pass --private-app or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2946,6 +2968,13 @@ export def "update-service" [
   let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/api/services/{service_id}") $auth.query)
   let req_body = {"Canary": $canary, "additionalHeaders": $additional_headers, "api": $api, "authConfigRef": $auth_config_ref, "buildMode": $build_mode, "chaosConfig": $chaos_config, "clientConfig": $client_config, "clientValidatorRef": $client_validator_ref, "cors": $cors, "domain": $domain, "enabled": $enabled, "enforceSecureCommunication": $enforce_secure_communication, "env": $body_env, "forceHttps": $force_https, "groups": $groups, "gzip": $gzip, "headersVerification": $headers_verification, "healthCheck": $health_check, "id": $id, "ipFiltering": $ip_filtering, "jwtVerifier": $jwt_verifier, "localHost": $local_host, "localScheme": $local_scheme, "maintenanceMode": $maintenance_mode, "matchingHeaders": $matching_headers, "matchingRoot": $matching_root, "metadata": $metadata, "name": $name, "overrideHost": $override_host, "privateApp": $private_app, "privatePatterns": $private_patterns, "publicPatterns": $public_patterns, "redirectToLocal": $redirect_to_local, "redirection": $redirection, "root": $root, "secComExcludedPatterns": $sec_com_excluded_patterns, "secComSettings": $sec_com_settings, "sendOtoroshiHeadersBack": $send_otoroshi_headers_back, "statsdConfig": $statsd_config, "subdomain": $subdomain, "targets": $targets, "transformerRef": $transformer_ref, "userFacing": $user_facing, "xForwardedHeaders": $x_forwarded_headers} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "buildMode") == null) { error make --unspanned { msg: "required body field 'buildMode' missing: pass --build-mode or pipe a record" } }
+  if (($req_body | get -o "enabled") == null) { error make --unspanned { msg: "required body field 'enabled' missing: pass --enabled or pipe a record" } }
+  if (($req_body | get -o "enforceSecureCommunication") == null) { error make --unspanned { msg: "required body field 'enforceSecureCommunication' missing: pass --enforce-secure-communication or pipe a record" } }
+  if (($req_body | get -o "env") == null) { error make --unspanned { msg: "required body field 'env' missing: pass --body-env or pipe a record" } }
+  if (($req_body | get -o "forceHttps") == null) { error make --unspanned { msg: "required body field 'forceHttps' missing: pass --force-https or pipe a record" } }
+  if (($req_body | get -o "maintenanceMode") == null) { error make --unspanned { msg: "required body field 'maintenanceMode' missing: pass --maintenance-mode or pipe a record" } }
+  if (($req_body | get -o "privateApp") == null) { error make --unspanned { msg: "required body field 'privateApp' missing: pass --private-app or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3030,6 +3059,7 @@ export def "create-api-key" [
   let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/api/services/{service_id}/apikeys") $auth.query)
   let req_body = {"authorizedEntities": $authorized_entities, "clientId": $client_id, "clientName": $client_name, "clientSecret": $client_secret, "dailyQuota": $daily_quota, "enabled": $enabled, "metadata": $metadata, "monthlyQuota": $monthly_quota, "throttlingQuota": $throttling_quota} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "enabled") == null) { error make --unspanned { msg: "required body field 'enabled' missing: pass --enabled or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3198,6 +3228,8 @@ export def "update-api-key" [
   let full_url = (build-url $base ({service_id: (encode-path-segment $service_id), client_id: (encode-path-segment $client_id)} | format pattern "/api/services/{service_id}/apikeys/{client_id}") $auth.query)
   let req_body = {"authorizedEntities": $authorized_entities, "clientId": $body_client_id, "clientName": $client_name, "clientSecret": $client_secret, "dailyQuota": $daily_quota, "enabled": $enabled, "metadata": $metadata, "monthlyQuota": $monthly_quota, "throttlingQuota": $throttling_quota} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "clientId") == null) { error make --unspanned { msg: "required body field 'clientId' missing: pass --body-client-id or pipe a record" } }
+  if (($req_body | get -o "enabled") == null) { error make --unspanned { msg: "required body field 'enabled' missing: pass --enabled or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3582,6 +3614,7 @@ export def "create-service-template" [
   let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/api/services/{service_id}/template") $auth.query)
   let req_body = {"messages": $messages, "serviceId": $body_service_id, "template40x": $template40x, "template50x": $template50x, "templateBuild": $template_build, "templateMaintenance": $template_maintenance} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "serviceId") == null) { error make --unspanned { msg: "required body field 'serviceId' missing: pass --body-service-id or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3627,6 +3660,7 @@ export def "update-service-template" [
   let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/api/services/{service_id}/template") $auth.query)
   let req_body = {"messages": $messages, "serviceId": $body_service_id, "template40x": $template40x, "template50x": $template50x, "templateBuild": $template_build, "templateMaintenance": $template_maintenance} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "serviceId") == null) { error make --unspanned { msg: "required body field 'serviceId' missing: pass --body-service-id or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3946,7 +3980,7 @@ export def "create-global-jwt-verifier" [
   --enabled: oneof<nothing, bool> # Is it enabled (e.g. true)
   id: string # Verifier id (e.g. a string value)
   name: string # Verifier name (e.g. a string value)
-  --body-source: any
+  source: any
   strategy: any
   --strict: oneof<nothing, bool> # Does it fail if JWT not found (e.g. true)
 ]: any -> record<algoSettings: any, desc: string, enabled: bool, id: string, name: string, source: any, strategy: any, strict: bool> {
@@ -3954,8 +3988,10 @@ export def "create-global-jwt-verifier" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/verifiers" $auth.query)
-  let req_body = {"algoSettings": $algo_settings, "desc": $desc, "enabled": $enabled, "id": $id, "name": $name, "source": $body_source, "strategy": $strategy, "strict": $strict} | compact
+  let req_body = {"algoSettings": $algo_settings, "desc": $desc, "enabled": $enabled, "id": $id, "name": $name, "source": $source, "strategy": $strategy, "strict": $strict} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "enabled") == null) { error make --unspanned { msg: "required body field 'enabled' missing: pass --enabled or pipe a record" } }
+  if (($req_body | get -o "strict") == null) { error make --unspanned { msg: "required body field 'strict' missing: pass --strict or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -4104,7 +4140,7 @@ export def "update-global-jwt-verifier" [
   --enabled: oneof<nothing, bool> # Is it enabled (e.g. true)
   id: string # Verifier id (e.g. a string value)
   name: string # Verifier name (e.g. a string value)
-  --body-source: any
+  source: any
   strategy: any
   --strict: oneof<nothing, bool> # Does it fail if JWT not found (e.g. true)
 ]: any -> record<algoSettings: any, desc: string, enabled: bool, id: string, name: string, source: any, strategy: any, strict: bool> {
@@ -4113,8 +4149,10 @@ export def "update-global-jwt-verifier" [
   let base = ($base_url | default $BASE_URL)
   if ($verifier_id | is-empty) { error make --unspanned { msg: "path parameter 'verifierId' must be non-empty" } }
   let full_url = (build-url $base ({verifier_id: (encode-path-segment $verifier_id)} | format pattern "/api/verifiers/{verifier_id}") $auth.query)
-  let req_body = {"algoSettings": $algo_settings, "desc": $desc, "enabled": $enabled, "id": $id, "name": $name, "source": $body_source, "strategy": $strategy, "strict": $strict} | compact
+  let req_body = {"algoSettings": $algo_settings, "desc": $desc, "enabled": $enabled, "id": $id, "name": $name, "source": $source, "strategy": $strategy, "strict": $strict} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "enabled") == null) { error make --unspanned { msg: "required body field 'enabled' missing: pass --enabled or pipe a record" } }
+  if (($req_body | get -o "strict") == null) { error make --unspanned { msg: "required body field 'strict' missing: pass --strict or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {

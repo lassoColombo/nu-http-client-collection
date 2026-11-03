@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -155,7 +155,7 @@ export def "cancel-job-run" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<id: record, virtualClusterId: record> {
+]: nothing -> record<id: string, virtualClusterId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($virtual_cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'virtualClusterId' must be non-empty" } }
@@ -202,7 +202,7 @@ export def "describe-job-run" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<jobRun: record<id: record, name: record, virtualClusterId: record, arn: record, state: record, clientToken: record, executionRoleArn: record, releaseLabel: record, configurationOverrides: record<applicationConfiguration: record, monitoringConfiguration: record>, jobDriver: record<sparkSubmitJobDriver: record, sparkSqlJobDriver: record>, createdAt: record, createdBy: record, finishedAt: record, stateDetails: record, failureReason: record, tags: record, retryPolicyConfiguration: record<maxAttempts: record>, retryPolicyExecution: record<currentAttemptCount: record>>> {
+]: nothing -> record<jobRun: record<id: string, name: string, virtualClusterId: string, arn: string, state: string, clientToken: string, executionRoleArn: string, releaseLabel: string, configurationOverrides: record<applicationConfiguration: list, monitoringConfiguration: record>, jobDriver: record<sparkSubmitJobDriver: record, sparkSqlJobDriver: record>, createdAt: string, createdBy: string, finishedAt: string, stateDetails: string, failureReason: string, tags: record, retryPolicyConfiguration: record<maxAttempts: int>, retryPolicyExecution: record<currentAttemptCount: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($virtual_cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'virtualClusterId' must be non-empty" } }
@@ -230,7 +230,7 @@ export def "describe-job-run" [
 #
 # POST /jobtemplates
 # operationId: CreateJobTemplate
-# --jobTemplateData shape: {executionRoleArn?: any, releaseLabel?: any, configurationOverrides?: any, jobDriver?: record, parameterConfiguration?: any, jobTags?: any}
+# --jobTemplateData shape: {executionRoleArn?: string, releaseLabel?: string, configurationOverrides?: record, jobDriver?: record, parameterConfiguration?: record, jobTags?: record}
 export def "create-job-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -250,10 +250,10 @@ export def "create-job-template" [
   --x-amz-signed-headers: string
   name: string # The specified name of the job template.
   client_token: string # The client token of the job template.
-  job_template_data: record # The values of StartJobRun API requests used in job runs started using the job template. — shape: {executionRoleArn?: any, releaseLabel?: any, configurationOverrides?: any, jobDriver?: record, parameterConfiguration?: any, jobTags?: any}
+  job_template_data: record # The values of StartJobRun API requests used in job runs started using the job template. — shape: {executionRoleArn?: string, releaseLabel?: string, configurationOverrides?: record, jobDriver?: record, parameterConfiguration?: record, jobTags?: record}
   --tags: record # The tags that are associated with the job template.
   --kms-key-arn: string # The KMS key ARN used to encrypt the job template.
-]: any -> record<id: record, name: record, arn: record, createdAt: record> {
+]: any -> record<id: string, name: string, arn: string, createdAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -303,7 +303,7 @@ export def "list-job-templates" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<templates: record, nextToken: record> {
+]: nothing -> record<templates: table<name: string, id: string, arn: string, createdAt: string, createdBy: string, tags: record, jobTemplateData: record, kmsKeyArn: string, decryptionError: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -330,7 +330,7 @@ export def "list-job-templates" [
 #
 # POST /virtualclusters/{virtualClusterId}/endpoints
 # operationId: CreateManagedEndpoint
-# --configurationOverrides shape: {applicationConfiguration?: any, monitoringConfiguration?: any}
+# --configurationOverrides shape: {applicationConfiguration?: list, monitoringConfiguration?: record}
 export def "create-managed-endpoint" [
   virtual_cluster_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -354,10 +354,10 @@ export def "create-managed-endpoint" [
   release_label: string # The Amazon EMR release version.
   execution_role_arn: string # The ARN of the execution role.
   --certificate-arn: string # The certificate ARN provided by users for the managed endpoint. This field is under deprecation and will be removed in future releases.
-  --configuration-overrides: record # A configuration specification to be used to override existing configurations. — shape: {applicationConfiguration?: any, monitoringConfiguration?: any}
+  --configuration-overrides: record # A configuration specification to be used to override existing configurations. — shape: {applicationConfiguration?: list, monitoringConfiguration?: record}
   client_token: string # The client idempotency token for this create call.
   --tags: record # The tags of the managed endpoint.
-]: any -> record<id: record, name: record, arn: record, virtualClusterId: record> {
+]: any -> record<id: string, name: string, arn: string, virtualClusterId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -411,7 +411,7 @@ export def "list-managed-endpoints" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<endpoints: record, nextToken: record> {
+]: nothing -> record<endpoints: table<id: string, name: string, arn: string, virtualClusterId: string, type: string, state: string, releaseLabel: string, executionRoleArn: string, certificateArn: string, certificateAuthority: record, configurationOverrides: record, serverUrl: string, createdAt: string, securityGroup: string, subnetIds: list, stateDetails: string, failureReason: string, tags: record>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($virtual_cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'virtualClusterId' must be non-empty" } }
@@ -439,7 +439,7 @@ export def "list-managed-endpoints" [
 #
 # POST /virtualclusters
 # operationId: CreateVirtualCluster
-# --containerProvider shape: {type?: any, id?: any, info?: any}
+# --containerProvider shape: {type?: "EKS", id?: string, info?: record}
 export def "create-virtual-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -458,10 +458,10 @@ export def "create-virtual-cluster" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   name: string # The specified name of the virtual cluster.
-  container_provider: record # The information about the container provider. — shape: {type?: any, id?: any, info?: any}
+  container_provider: record # The information about the container provider. — shape: {type?: "EKS", id?: string, info?: record}
   client_token: string # The client token of the virtual cluster.
   --tags: record # The tags assigned to the virtual cluster.
-]: any -> record<id: record, name: record, arn: record> {
+]: any -> record<id: string, name: string, arn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -514,7 +514,7 @@ export def "list-virtual-clusters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<virtualClusters: record, nextToken: record> {
+]: nothing -> record<virtualClusters: table<id: string, name: string, arn: string, state: string, containerProvider: record, createdAt: string, tags: record>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "containerProviderId" $container_provider_id "scalar") (serialize-qp "containerProviderType" $container_provider_type "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar") (serialize-qp "states" $states "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -559,7 +559,7 @@ export def "delete-job-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<id: record> {
+]: nothing -> record<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
@@ -604,7 +604,7 @@ export def "describe-job-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<jobTemplate: record<name: record, id: record, arn: record, createdAt: record, createdBy: record, tags: record, jobTemplateData: record<executionRoleArn: record, releaseLabel: record, configurationOverrides: record, jobDriver: record, parameterConfiguration: record, jobTags: record>, kmsKeyArn: record, decryptionError: record>> {
+]: nothing -> record<jobTemplate: record<name: string, id: string, arn: string, createdAt: string, createdBy: string, tags: record, jobTemplateData: record<executionRoleArn: string, releaseLabel: string, configurationOverrides: record, jobDriver: record, parameterConfiguration: record, jobTags: record>, kmsKeyArn: string, decryptionError: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
@@ -650,7 +650,7 @@ export def "delete-managed-endpoint" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<id: record, virtualClusterId: record> {
+]: nothing -> record<id: string, virtualClusterId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($virtual_cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'virtualClusterId' must be non-empty" } }
@@ -697,7 +697,7 @@ export def "describe-managed-endpoint" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<endpoint: record<id: record, name: record, arn: record, virtualClusterId: record, type: record, state: record, releaseLabel: record, executionRoleArn: record, certificateArn: record, certificateAuthority: record<certificateArn: record, certificateData: record>, configurationOverrides: record<applicationConfiguration: record, monitoringConfiguration: record>, serverUrl: record, createdAt: record, securityGroup: record, subnetIds: record, stateDetails: record, failureReason: record, tags: record>> {
+]: nothing -> record<endpoint: record<id: string, name: string, arn: string, virtualClusterId: string, type: string, state: string, releaseLabel: string, executionRoleArn: string, certificateArn: string, certificateAuthority: record<certificateArn: string, certificateData: string>, configurationOverrides: record<applicationConfiguration: list, monitoringConfiguration: record>, serverUrl: string, createdAt: string, securityGroup: string, subnetIds: list<string>, stateDetails: string, failureReason: string, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($virtual_cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'virtualClusterId' must be non-empty" } }
@@ -743,7 +743,7 @@ export def "delete-virtual-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<id: record> {
+]: nothing -> record<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($virtual_cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'virtualClusterId' must be non-empty" } }
@@ -788,7 +788,7 @@ export def "describe-virtual-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<virtualCluster: record<id: record, name: record, arn: record, state: record, containerProvider: record<type: record, id: record, info: record>, createdAt: record, tags: record>> {
+]: nothing -> record<virtualCluster: record<id: string, name: string, arn: string, state: string, containerProvider: record<type: string, id: string, info: record>, createdAt: string, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($virtual_cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'virtualClusterId' must be non-empty" } }
@@ -839,7 +839,7 @@ export def "list-job-runs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<jobRuns: record, nextToken: record> {
+]: nothing -> record<jobRuns: table<id: string, name: string, virtualClusterId: string, arn: string, state: string, clientToken: string, executionRoleArn: string, releaseLabel: string, configurationOverrides: record, jobDriver: record, createdAt: string, createdBy: string, finishedAt: string, stateDetails: string, failureReason: string, tags: record, retryPolicyConfiguration: record, retryPolicyExecution: record>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($virtual_cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'virtualClusterId' must be non-empty" } }
@@ -867,9 +867,9 @@ export def "list-job-runs" [
 #
 # POST /virtualclusters/{virtualClusterId}/jobruns
 # operationId: StartJobRun
-# --jobDriver shape: {sparkSubmitJobDriver?: any, sparkSqlJobDriver?: any}
-# --configurationOverrides shape: {applicationConfiguration?: any, monitoringConfiguration?: any}
-# --retryPolicyConfiguration shape: {maxAttempts?: any}
+# --jobDriver shape: {sparkSubmitJobDriver?: record, sparkSqlJobDriver?: record}
+# --configurationOverrides shape: {applicationConfiguration?: list, monitoringConfiguration?: record}
+# --retryPolicyConfiguration shape: {maxAttempts?: int}
 export def "start-job-run" [
   virtual_cluster_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -892,13 +892,13 @@ export def "start-job-run" [
   client_token: string # The client idempotency token of the job run request.
   --execution-role-arn: string # The execution role ARN for the job run.
   --release-label: string # The Amazon EMR release version to use for the job run.
-  --job-driver: record # Specify the driver that the job runs on. Exactly one of the two available job drivers is required, either sparkSqlJobDriver or sparkSubmitJobDriver. — shape: {sparkSubmitJobDriver?: any, sparkSqlJobDriver?: any}
-  --configuration-overrides: record # A configuration specification to be used to override existing configurations. — shape: {applicationConfiguration?: any, monitoringConfiguration?: any}
+  --job-driver: record # Specify the driver that the job runs on. Exactly one of the two available job drivers is required, either sparkSqlJobDriver or sparkSubmitJobDriver. — shape: {sparkSubmitJobDriver?: record, sparkSqlJobDriver?: record}
+  --configuration-overrides: record # A configuration specification to be used to override existing configurations. — shape: {applicationConfiguration?: list, monitoringConfiguration?: record}
   --tags: record # The tags assigned to job runs.
   --job-template-id: string # The job template ID to be used to start the job run.
   --job-template-parameters: record # The values of job template parameters to start a job run.
-  --retry-policy-configuration: record # The configuration of the retry policy that the job runs on. — shape: {maxAttempts?: any}
-]: any -> record<id: record, name: record, arn: record, virtualClusterId: record> {
+  --retry-policy-configuration: record # The configuration of the retry policy that the job runs on. — shape: {maxAttempts?: int}
+]: any -> record<id: string, name: string, arn: string, virtualClusterId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1033,7 +1033,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # The tag keys of the resources.
+  --tag-keys: list # The tag keys of the resources. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1045,6 +1045,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"

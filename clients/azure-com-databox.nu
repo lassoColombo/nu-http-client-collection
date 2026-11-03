@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -161,10 +161,11 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
+  --api-version: string # The API Version (required)
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string, origin: string, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.DataBox/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -198,12 +199,13 @@ export def "jobs-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
+  --api-version: string # The API Version (required)
   --skip-token: string # $skipToken is supported on Get list of jobs, which provides the next page in the list of jobs.
-]: nothing -> record<nextLink: string, value: table<id: string, name: string, properties: record, type: string>> {
+]: nothing -> record<nextLink: string, value: table<id: string, name: string, properties: record, type: string, location: string, sku: record, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataBox/jobs") $qp $auth.query)
   let accept_val = "application/json"
@@ -238,7 +240,7 @@ export def "service-list-available-skus" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
+  --api-version: string # The API Version (required)
   country: string # ISO country code. Country for hardware shipment. For codes check: https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2#Officially_assigned_code_elements
   --body-location: string # Location for data transfer. For locations check: https://management.azure.com/subscriptions/SUBSCRIPTIONID/locations?api-version=2018-01-01
   --sku-names: list<string> # Sku Names to filter for available skus
@@ -249,10 +251,12 @@ export def "service-list-available-skus" [
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataBox/locations/{location}/availableSkus") $qp $auth.query)
   let req_body = {"country": $country, "location": $body_location, "skuNames": $sku_names, "transferType": $transfer_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "location") == null) { error make --unspanned { msg: "required body field 'location' missing: pass --body-location or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -287,7 +291,7 @@ export def "service-region-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
+  --api-version: string # The API Version (required)
   --schedule-availability-request: record # Request body to get the availability for scheduling orders. — shape: {skuName: "DataBox"|"DataBoxDisk"|"DataBoxHeavy", storageLocation: string}
   --transport-availability-request: record # Request body to get the transport availability for given sku. — shape: {skuName?: "DataBox"|"DataBoxDisk"|"DataBoxHeavy"}
 ]: any -> record<scheduleAvailabilityResponse: record<availableDates: list<string>>, transportAvailabilityResponse: record<transportAvailabilityDetails: list<record>>> {
@@ -296,6 +300,7 @@ export def "service-region-configuration" [
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataBox/locations/{location}/regionConfiguration") $qp $auth.query)
   let req_body = {"scheduleAvailabilityRequest": $schedule_availability_request, "transportAvailabilityRequest": $transport_availability_request} | compact
@@ -336,17 +341,18 @@ export def "service-validate-address" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
+  --api-version: string # The API Version (required)
   device_type: string@device-type-completer # Device type to be used for the job.
   shipping_address: record # Shipping address where customer wishes to receive the device. — shape: {addressType?: "None"|"Residential"|"Commercial", city?: string, companyName?: string, country: string, postalCode: string, stateOrProvince?: string, streetAddress1: string, streetAddress2?: string, streetAddress3?: string, zipExtendedCode?: string}
   --transport-preferences: record # Preferences related to the shipment logistics of the sku — shape: {preferredShipmentType: "CustomerManaged"|"MicrosoftManaged"}
   validation_type: string@validation-type-completer # Identifies the type of validation request.
-]: any -> record<properties: record<alternateAddresses: list<record>, validationStatus: string>> {
+]: any -> record<properties: record<alternateAddresses: list<record>, validationStatus: string, error: record<code: string, message: string>, validationType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataBox/locations/{location}/validateAddress") $qp $auth.query)
   let req_body = {"deviceType": $device_type, "shippingAddress": $shipping_address, "transportPreferences": $transport_preferences, "validationType": $validation_type} | compact
@@ -385,7 +391,7 @@ export def "service-validate-inputs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
+  --api-version: string # The API Version (required)
   individual_request_details: list # List of request details contain validationType and its request as key and value respectively. — item shape: {validationType: "ValidateAddress"|"ValidateDataDestinationDetails"|"ValidateSubscriptionIsAllowedToCreateJob"|"ValidatePreferences"|"ValidateCreateOrderLimit"|"ValidateSkuAvailability"}
   validation_category: string@validation-category-completer # Identify the nature of validation.
 ]: any -> record<properties: record<individualResponseDetails: list<record>, status: string>> {
@@ -394,6 +400,7 @@ export def "service-validate-inputs" [
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataBox/locations/{location}/validateInputs") $qp $auth.query)
   let req_body = {"individualRequestDetails": $individual_request_details, "validationCategory": $validation_category} | compact
@@ -430,13 +437,14 @@ export def "jobs-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
+  --api-version: string # The API Version (required)
   --skip-token: string # $skipToken is supported on Get list of jobs, which provides the next page in the list of jobs.
-]: nothing -> record<nextLink: string, value: table<id: string, name: string, properties: record, type: string>> {
+]: nothing -> record<nextLink: string, value: table<id: string, name: string, properties: record, type: string, location: string, sku: record, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBox/jobs") $qp $auth.query)
   let accept_val = "application/json"
@@ -472,13 +480,14 @@ export def "jobs-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
-]: nothing -> record<code: string, details: list<any>, message: string, target: string> {
+  --api-version: string # The API Version (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), job_name: (encode-path-segment $job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBox/jobs/{job_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -514,14 +523,15 @@ export def "jobs-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
+  --api-version: string # The API Version (required)
   --expand: string # $expand is supported on details parameter for job, which provides details on the job stages.
-]: nothing -> record<id: string, name: string, properties: record<cancellationReason: string, deliveryInfo: record<scheduledDateTime: string>, deliveryType: string, details: record<chainOfCustodySasKey: string, contactDetails: record, copyLogDetails: list, deliveryPackage: record, destinationAccountDetails: list, errorDetails: list, expectedDataSizeInTerabytes: int, jobDetailsType: string, jobStages: list, preferences: record, returnPackage: record, reverseShipmentLabelSasKey: string, shippingAddress: record>, error: record<code: string, message: string>, isCancellable: bool, isCancellableWithoutFee: bool, isDeletable: bool, isShippingAddressEditable: bool, startTime: string, status: string>, type: string> {
+]: nothing -> record<id: string, name: string, properties: record<cancellationReason: string, deliveryInfo: record<scheduledDateTime: string>, deliveryType: string, details: record<chainOfCustodySasKey: string, contactDetails: record, copyLogDetails: list, deliveryPackage: record, destinationAccountDetails: list, errorDetails: list, expectedDataSizeInTerabytes: int, jobDetailsType: string, jobStages: list, preferences: record, returnPackage: record, reverseShipmentLabelSasKey: string, shippingAddress: record>, error: record<code: string, message: string>, isCancellable: bool, isCancellableWithoutFee: bool, isDeletable: bool, isShippingAddressEditable: bool, startTime: string, status: string>, type: string, location: string, sku: record<displayName: string, family: string, name: string>, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), job_name: (encode-path-segment $job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBox/jobs/{job_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -558,17 +568,18 @@ export def "jobs-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
+  --api-version: string # The API Version (required)
   --if-match: string # Defines the If-Match condition. The patch will be performed only if the ETag of the job on the server matches this value.
   --properties: record # Job Properties for update — shape: {destinationAccountDetails?: list, details?: record}
   --tags: record # The list of key value pairs that describe the resource. These tags can be used in viewing and grouping this resource (across resource groups).
-]: any -> record<id: string, name: string, properties: record<cancellationReason: string, deliveryInfo: record<scheduledDateTime: string>, deliveryType: string, details: record<chainOfCustodySasKey: string, contactDetails: record, copyLogDetails: list, deliveryPackage: record, destinationAccountDetails: list, errorDetails: list, expectedDataSizeInTerabytes: int, jobDetailsType: string, jobStages: list, preferences: record, returnPackage: record, reverseShipmentLabelSasKey: string, shippingAddress: record>, error: record<code: string, message: string>, isCancellable: bool, isCancellableWithoutFee: bool, isDeletable: bool, isShippingAddressEditable: bool, startTime: string, status: string>, type: string> {
+]: any -> record<id: string, name: string, properties: record<cancellationReason: string, deliveryInfo: record<scheduledDateTime: string>, deliveryType: string, details: record<chainOfCustodySasKey: string, contactDetails: record, copyLogDetails: list, deliveryPackage: record, destinationAccountDetails: list, errorDetails: list, expectedDataSizeInTerabytes: int, jobDetailsType: string, jobStages: list, preferences: record, returnPackage: record, reverseShipmentLabelSasKey: string, shippingAddress: record>, error: record<code: string, message: string>, isCancellable: bool, isCancellableWithoutFee: bool, isDeletable: bool, isShippingAddressEditable: bool, startTime: string, status: string>, type: string, location: string, sku: record<displayName: string, family: string, name: string>, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), job_name: (encode-path-segment $job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBox/jobs/{job_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -610,18 +621,19 @@ export def "jobs-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
+  --api-version: string # The API Version (required)
   properties: record # Job Properties — shape: {deliveryInfo?: record, deliveryType?: "NonScheduled"|"Scheduled", details?: record, error?: record}
   location: string # The location of the resource. This will be one of the supported and registered Azure Regions (e.g. West US, East US, Southeast Asia, etc.). The region of a resource cannot be changed once it is created, but if an identical region is specified on update the request will succeed.
   sku: record # The Sku. — shape: {displayName?: string, family?: string, name: "DataBox"|"DataBoxDisk"|"DataBoxHeavy"}
   --tags: record # The list of key value pairs that describe the resource. These tags can be used in viewing and grouping this resource (across resource groups).
-]: any -> record<id: string, name: string, properties: record<cancellationReason: string, deliveryInfo: record<scheduledDateTime: string>, deliveryType: string, details: record<chainOfCustodySasKey: string, contactDetails: record, copyLogDetails: list, deliveryPackage: record, destinationAccountDetails: list, errorDetails: list, expectedDataSizeInTerabytes: int, jobDetailsType: string, jobStages: list, preferences: record, returnPackage: record, reverseShipmentLabelSasKey: string, shippingAddress: record>, error: record<code: string, message: string>, isCancellable: bool, isCancellableWithoutFee: bool, isDeletable: bool, isShippingAddressEditable: bool, startTime: string, status: string>, type: string> {
+]: any -> record<id: string, name: string, properties: record<cancellationReason: string, deliveryInfo: record<scheduledDateTime: string>, deliveryType: string, details: record<chainOfCustodySasKey: string, contactDetails: record, copyLogDetails: list, deliveryPackage: record, destinationAccountDetails: list, errorDetails: list, expectedDataSizeInTerabytes: int, jobDetailsType: string, jobStages: list, preferences: record, returnPackage: record, reverseShipmentLabelSasKey: string, shippingAddress: record>, error: record<code: string, message: string>, isCancellable: bool, isCancellableWithoutFee: bool, isDeletable: bool, isShippingAddressEditable: bool, startTime: string, status: string>, type: string, location: string, sku: record<displayName: string, family: string, name: string>, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), job_name: (encode-path-segment $job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBox/jobs/{job_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "sku": $sku, "tags": $tags} | compact
@@ -659,7 +671,7 @@ export def "jobs-book-shipment-pick-up" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
+  --api-version: string # The API Version (required)
   end_time: string # Maximum date before which the pick up should commence, this must be in local time of pick up area. (format: date-time)
   shipment_location: string # Shipment Location in the pickup place. Eg.front desk
   start_time: string # Minimum date after which the pick up should commence, this must be in local time of pick up area. (format: date-time)
@@ -670,6 +682,7 @@ export def "jobs-book-shipment-pick-up" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), job_name: (encode-path-segment $job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBox/jobs/{job_name}/bookShipmentPickUp") $qp $auth.query)
   let req_body = {"endTime": $end_time, "shipmentLocation": $shipment_location, "startTime": $start_time} | compact
@@ -707,15 +720,16 @@ export def "jobs-cancel" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
+  --api-version: string # The API Version (required)
   reason: string # Reason for cancellation.
-]: any -> record<code: string, details: list<any>, message: string, target: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), job_name: (encode-path-segment $job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBox/jobs/{job_name}/cancel") $qp $auth.query)
   let req_body = {"reason": $reason} | compact
@@ -753,13 +767,14 @@ export def "jobs-list-credentials" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
+  --api-version: string # The API Version (required)
 ]: nothing -> record<nextLink: string, value: table<jobName: string, jobSecrets: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), job_name: (encode-path-segment $job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBox/jobs/{job_name}/listCredentials") $qp $auth.query)
   let accept_val = "application/json"
@@ -795,7 +810,7 @@ export def "service-list-available-skus-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
+  --api-version: string # The API Version (required)
   country: string # ISO country code. Country for hardware shipment. For codes check: https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2#Officially_assigned_code_elements
   --body-location: string # Location for data transfer. For locations check: https://management.azure.com/subscriptions/SUBSCRIPTIONID/locations?api-version=2018-01-01
   --sku-names: list<string> # Sku Names to filter for available skus
@@ -807,10 +822,12 @@ export def "service-list-available-skus-by-resource-group" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), location: (encode-path-segment $location)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBox/locations/{location}/availableSkus") $qp $auth.query)
   let req_body = {"country": $country, "location": $body_location, "skuNames": $sku_names, "transferType": $transfer_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "location") == null) { error make --unspanned { msg: "required body field 'location' missing: pass --body-location or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -846,7 +863,7 @@ export def "service-validate-inputs-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
+  --api-version: string # The API Version (required)
   individual_request_details: list # List of request details contain validationType and its request as key and value respectively. — item shape: {validationType: "ValidateAddress"|"ValidateDataDestinationDetails"|"ValidateSubscriptionIsAllowedToCreateJob"|"ValidatePreferences"|"ValidateCreateOrderLimit"|"ValidateSkuAvailability"}
   validation_category: string@validation-category-completer # Identify the nature of validation.
 ]: any -> record<properties: record<individualResponseDetails: list<record>, status: string>> {
@@ -856,6 +873,7 @@ export def "service-validate-inputs-by-resource-group" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), location: (encode-path-segment $location)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBox/locations/{location}/validateInputs") $qp $auth.query)
   let req_body = {"individualRequestDetails": $individual_request_details, "validationCategory": $validation_category} | compact

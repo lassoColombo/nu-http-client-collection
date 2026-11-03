@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -139,6 +139,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CopyBackupToRegion
+# --TagList item shape: {Key: string, Value: string}
 export def "copy-backup-to-region" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -156,14 +157,15 @@ export def "copy-backup-to-region" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  destination_region: any
-  backup_id: any
-  --tag-list: any
-]: any -> record<DestinationBackup: record<CreateTimestamp: record, SourceRegion: record, SourceBackup: record, SourceCluster: record>> {
+  --x-amz-target: string@x-amz-target-completer # required
+  destination_region: string # The AWS region that will contain your copied CloudHSM cluster backup.
+  backup_id: string # The ID of the backup that will be copied to the destination region.
+  --tag-list: list # Tags to apply to the destination backup during creation. If you specify tags, only these tags will be applied to the destination backup. If you do not specify tags, the service copies tags from the source backup to the destination backup. — item shape: {Key: string, Value: string}
+]: any -> record<DestinationBackup: record<CreateTimestamp: string, SourceRegion: string, SourceBackup: string, SourceCluster: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "BaldrApiService.CopyBackupToRegion")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DestinationRegion": $destination_region, "BackupId": $backup_id, "TagList": $tag_list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -189,6 +191,8 @@ export def "copy-backup-to-region" [
 #
 # POST /
 # operationId: CreateCluster
+# --BackupRetentionPolicy shape: {Type?: "DAYS", Value?: string}
+# --TagList item shape: {Key: string, Value: string}
 export def "create-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -206,16 +210,17 @@ export def "create-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  --backup-retention-policy: any
-  hsm_type: any
-  --source-backup-id: any
-  subnet_ids: any
-  --tag-list: any
-]: any -> record<Cluster: record<BackupPolicy: record, BackupRetentionPolicy: record<Type: record, Value: record>, ClusterId: record, CreateTimestamp: record, Hsms: record, HsmType: record, PreCoPassword: record, SecurityGroup: record, SourceBackupId: record, State: record, StateMessage: record, SubnetMapping: record, VpcId: record, Certificates: record<ClusterCsr: record, HsmCertificate: record, AwsHardwareCertificate: record, ManufacturerHardwareCertificate: record, ClusterCertificate: record>, TagList: record>> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  --backup-retention-policy: record # A policy that defines the number of days to retain backups. — shape: {Type?: "DAYS", Value?: string}
+  hsm_type: string # The type of HSM to use in the cluster. Currently the only allowed value is hsm1.medium.
+  --source-backup-id: string # The identifier (ID) of the cluster backup to restore. Use this value to restore the cluster from a backup instead of creating a new cluster. To find the backup ID, use DescribeBackups.
+  subnet_ids: list<string> # The identifiers (IDs) of the subnets where you are creating the cluster. You must specify at least one subnet. If you specify multiple subnets, they must meet the following criteria: All subnets must be in the same virtual private cloud (VPC). You can specify only one subnet per Availability Zone.
+  --tag-list: list # Tags to apply to the CloudHSM cluster during creation. — item shape: {Key: string, Value: string}
+]: any -> record<Cluster: record<BackupPolicy: string, BackupRetentionPolicy: record<Type: string, Value: string>, ClusterId: string, CreateTimestamp: string, Hsms: list<record>, HsmType: string, PreCoPassword: string, SecurityGroup: string, SourceBackupId: string, State: string, StateMessage: string, SubnetMapping: record, VpcId: string, Certificates: record<ClusterCsr: string, HsmCertificate: string, AwsHardwareCertificate: string, ManufacturerHardwareCertificate: string, ClusterCertificate: string>, TagList: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "BaldrApiService.CreateCluster")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"BackupRetentionPolicy": $backup_retention_policy, "HsmType": $hsm_type, "SourceBackupId": $source_backup_id, "SubnetIds": $subnet_ids, "TagList": $tag_list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -258,14 +263,15 @@ export def "create-hsm" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  cluster_id: any
-  availability_zone: any
-  --ip-address: any
-]: any -> record<Hsm: record<AvailabilityZone: record, ClusterId: record, SubnetId: record, EniId: record, EniIp: record, HsmId: record, State: record, StateMessage: record>> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  cluster_id: string # The identifier (ID) of the HSM's cluster. To find the cluster ID, use DescribeClusters.
+  availability_zone: string # The Availability Zone where you are creating the HSM. To find the cluster's Availability Zones, use DescribeClusters.
+  --ip-address: string # The HSM's IP address. If you specify an IP address, use an available address from the subnet that maps to the Availability Zone where you are creating the HSM. If you don't specify an IP address, one is chosen for you from that subnet.
+]: any -> record<Hsm: record<AvailabilityZone: string, ClusterId: string, SubnetId: string, EniId: string, EniIp: string, HsmId: string, State: string, StateMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "BaldrApiService.CreateHsm")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClusterId": $cluster_id, "AvailabilityZone": $availability_zone, "IpAddress": $ip_address} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -308,12 +314,13 @@ export def "delete-backup" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  backup_id: any
-]: any -> record<Backup: record<BackupId: record, BackupState: record, ClusterId: record, CreateTimestamp: record, CopyTimestamp: record, NeverExpires: record, SourceRegion: record, SourceBackup: record, SourceCluster: record, DeleteTimestamp: record, TagList: record>> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  backup_id: string # The ID of the backup to be deleted. To find the ID of a backup, use the DescribeBackups operation.
+]: any -> record<Backup: record<BackupId: string, BackupState: string, ClusterId: string, CreateTimestamp: string, CopyTimestamp: string, NeverExpires: bool, SourceRegion: string, SourceBackup: string, SourceCluster: string, DeleteTimestamp: string, TagList: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "BaldrApiService.DeleteBackup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"BackupId": $backup_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -356,12 +363,13 @@ export def "delete-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  cluster_id: any
-]: any -> record<Cluster: record<BackupPolicy: record, BackupRetentionPolicy: record<Type: record, Value: record>, ClusterId: record, CreateTimestamp: record, Hsms: record, HsmType: record, PreCoPassword: record, SecurityGroup: record, SourceBackupId: record, State: record, StateMessage: record, SubnetMapping: record, VpcId: record, Certificates: record<ClusterCsr: record, HsmCertificate: record, AwsHardwareCertificate: record, ManufacturerHardwareCertificate: record, ClusterCertificate: record>, TagList: record>> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  cluster_id: string # The identifier (ID) of the cluster that you are deleting. To find the cluster ID, use DescribeClusters.
+]: any -> record<Cluster: record<BackupPolicy: string, BackupRetentionPolicy: record<Type: string, Value: string>, ClusterId: string, CreateTimestamp: string, Hsms: list<record>, HsmType: string, PreCoPassword: string, SecurityGroup: string, SourceBackupId: string, State: string, StateMessage: string, SubnetMapping: record, VpcId: string, Certificates: record<ClusterCsr: string, HsmCertificate: string, AwsHardwareCertificate: string, ManufacturerHardwareCertificate: string, ClusterCertificate: string>, TagList: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "BaldrApiService.DeleteCluster")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClusterId": $cluster_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -404,15 +412,16 @@ export def "delete-hsm" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  cluster_id: any
-  --hsm-id: any
-  --eni-id: any
-  --eni-ip: any
-]: any -> record<HsmId: record> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  cluster_id: string # The identifier (ID) of the cluster that contains the HSM that you are deleting.
+  --hsm-id: string # The identifier (ID) of the HSM that you are deleting.
+  --eni-id: string # The identifier (ID) of the elastic network interface (ENI) of the HSM that you are deleting.
+  --eni-ip: string # The IP address of the elastic network interface (ENI) of the HSM that you are deleting.
+]: any -> record<HsmId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "BaldrApiService.DeleteHsm")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClusterId": $cluster_id, "HsmId": $hsm_id, "EniId": $eni_id, "EniIp": $eni_ip} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -457,15 +466,16 @@ export def "describe-backups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --filters: any
-  --sort-ascending: any
-]: any -> record<Backups: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  --next-token-body: string # The NextToken value that you received in the previous response. Use this value to get more backups. (body field)
+  --max-results-body: int # The maximum number of backups to return in the response. When there are more backups than the number you specify, the response contains a NextToken value. (body field)
+  --filters: record # One or more filters to limit the items returned in the response. Use the backupIds filter to return only the specified backups. Specify backups by their backup identifier (ID). Use the sourceBackupIds filter to return only the backups created from a source backup. The sourceBackupID of a source backup is returned by the CopyBackupToRegion operation. Use the clusterIds filter to return only the backups for the specified clusters. Specify clusters by their cluster identifier (ID). Use the states filter to return only backups that match the specified state. Use the neverExpires filter to return backups filtered by the value in the neverExpires parameter. True returns all backups exempt from the backup retention policy. False returns all backups with a backup retention policy defined at the cluster.
+  --sort-ascending: oneof<nothing, bool> # Designates whether or not to sort the return backups by ascending chronological order of generation.
+]: any -> record<Backups: table<BackupId: string, BackupState: string, ClusterId: string, CreateTimestamp: string, CopyTimestamp: string, NeverExpires: bool, SourceRegion: string, SourceBackup: string, SourceCluster: string, DeleteTimestamp: string, TagList: list>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "BaldrApiService.DescribeBackups")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "Filters": $filters, "SortAscending": $sort_ascending} | compact
@@ -511,14 +521,15 @@ export def "describe-clusters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  --filters: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<Clusters: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  --filters: record # One or more filters to limit the items returned in the response. Use the clusterIds filter to return only the specified clusters. Specify clusters by their cluster identifier (ID). Use the vpcIds filter to return only the clusters in the specified virtual private clouds (VPCs). Specify VPCs by their VPC identifier (ID). Use the states filter to return only clusters that match the specified state.
+  --next-token-body: string # The NextToken value that you received in the previous response. Use this value to get more clusters. (body field)
+  --max-results-body: int # The maximum number of clusters to return in the response. When there are more clusters than the number you specify, the response contains a NextToken value. (body field)
+]: any -> record<Clusters: table<BackupPolicy: string, BackupRetentionPolicy: record, ClusterId: string, CreateTimestamp: string, Hsms: list, HsmType: string, PreCoPassword: string, SecurityGroup: string, SourceBackupId: string, State: string, StateMessage: string, SubnetMapping: record, VpcId: string, Certificates: record, TagList: list>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "BaldrApiService.DescribeClusters")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"Filters": $filters, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -562,14 +573,15 @@ export def "initialize-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  cluster_id: any
-  signed_cert: any
-  trust_anchor: any
-]: any -> record<State: record, StateMessage: record> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  cluster_id: string # The identifier (ID) of the cluster that you are claiming. To find the cluster ID, use DescribeClusters.
+  signed_cert: string # The cluster certificate issued (signed) by your issuing certificate authority (CA). The certificate must be in PEM format and can contain a maximum of 5000 characters.
+  trust_anchor: string # The issuing certificate of the issuing certificate authority (CA) that issued (signed) the cluster certificate. You must use a self-signed certificate. The certificate used to sign the HSM CSR must be directly available, and thus must be the root certificate. The certificate must be in PEM format and can contain a maximum of 5000 characters.
+]: any -> record<State: string, StateMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "BaldrApiService.InitializeCluster")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClusterId": $cluster_id, "SignedCert": $signed_cert, "TrustAnchor": $trust_anchor} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -614,14 +626,15 @@ export def "list-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  resource_id: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<TagList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  resource_id: string # The cluster identifier (ID) for the cluster whose tags you are getting. To find the cluster ID, use DescribeClusters.
+  --next-token-body: string # The NextToken value that you received in the previous response. Use this value to get more tags. (body field)
+  --max-results-body: int # The maximum number of tags to return in the response. When there are more tags than the number you specify, the response contains a NextToken value. (body field)
+]: any -> record<TagList: table<Key: string, Value: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "BaldrApiService.ListTags")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ResourceId": $resource_id, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -665,16 +678,18 @@ export def "modify-backup-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  backup_id: any
-  never_expires: any
-]: any -> record<Backup: record<BackupId: record, BackupState: record, ClusterId: record, CreateTimestamp: record, CopyTimestamp: record, NeverExpires: record, SourceRegion: record, SourceBackup: record, SourceCluster: record, DeleteTimestamp: record, TagList: record>> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  backup_id: string # The identifier (ID) of the backup to modify. To find the ID of a backup, use the DescribeBackups operation.
+  --never-expires: oneof<nothing, bool> # Specifies whether the service should exempt a backup from the retention policy for the cluster. True exempts a backup from the retention policy. False means the service applies the backup retention policy defined at the cluster.
+]: any -> record<Backup: record<BackupId: string, BackupState: string, ClusterId: string, CreateTimestamp: string, CopyTimestamp: string, NeverExpires: bool, SourceRegion: string, SourceBackup: string, SourceCluster: string, DeleteTimestamp: string, TagList: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "BaldrApiService.ModifyBackupAttributes")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"BackupId": $backup_id, "NeverExpires": $never_expires} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "NeverExpires") == null) { error make --unspanned { msg: "required body field 'NeverExpires' missing: pass --never-expires or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
@@ -697,6 +712,7 @@ export def "modify-backup-attributes" [
 #
 # POST /
 # operationId: ModifyCluster
+# --BackupRetentionPolicy shape: {Type?: "DAYS", Value?: string}
 export def "modify-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -714,13 +730,14 @@ export def "modify-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  backup_retention_policy: any
-  cluster_id: any
-]: any -> record<Cluster: record<BackupPolicy: record, BackupRetentionPolicy: record<Type: record, Value: record>, ClusterId: record, CreateTimestamp: record, Hsms: record, HsmType: record, PreCoPassword: record, SecurityGroup: record, SourceBackupId: record, State: record, StateMessage: record, SubnetMapping: record, VpcId: record, Certificates: record<ClusterCsr: record, HsmCertificate: record, AwsHardwareCertificate: record, ManufacturerHardwareCertificate: record, ClusterCertificate: record>, TagList: record>> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  backup_retention_policy: record # A policy that defines the number of days to retain backups. — shape: {Type?: "DAYS", Value?: string}
+  cluster_id: string # The identifier (ID) of the cluster that you want to modify. To find the cluster ID, use DescribeClusters.
+]: any -> record<Cluster: record<BackupPolicy: string, BackupRetentionPolicy: record<Type: string, Value: string>, ClusterId: string, CreateTimestamp: string, Hsms: list<record>, HsmType: string, PreCoPassword: string, SecurityGroup: string, SourceBackupId: string, State: string, StateMessage: string, SubnetMapping: record, VpcId: string, Certificates: record<ClusterCsr: string, HsmCertificate: string, AwsHardwareCertificate: string, ManufacturerHardwareCertificate: string, ClusterCertificate: string>, TagList: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "BaldrApiService.ModifyCluster")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"BackupRetentionPolicy": $backup_retention_policy, "ClusterId": $cluster_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -763,12 +780,13 @@ export def "restore-backup" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  backup_id: any
-]: any -> record<Backup: record<BackupId: record, BackupState: record, ClusterId: record, CreateTimestamp: record, CopyTimestamp: record, NeverExpires: record, SourceRegion: record, SourceBackup: record, SourceCluster: record, DeleteTimestamp: record, TagList: record>> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  backup_id: string # The ID of the backup to be restored. To find the ID of a backup, use the DescribeBackups operation.
+]: any -> record<Backup: record<BackupId: string, BackupState: string, ClusterId: string, CreateTimestamp: string, CopyTimestamp: string, NeverExpires: bool, SourceRegion: string, SourceBackup: string, SourceCluster: string, DeleteTimestamp: string, TagList: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "BaldrApiService.RestoreBackup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"BackupId": $backup_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -794,6 +812,7 @@ export def "restore-backup" [
 #
 # POST /
 # operationId: TagResource
+# --TagList item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -811,13 +830,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  resource_id: any
-  tag_list: any
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  resource_id: string # The cluster identifier (ID) for the cluster that you are tagging. To find the cluster ID, use DescribeClusters.
+  tag_list: list # A list of one or more tags. — item shape: {Key: string, Value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "BaldrApiService.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceId": $resource_id, "TagList": $tag_list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -860,13 +880,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  resource_id: any
-  tag_key_list: any
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  resource_id: string # The cluster identifier (ID) for the cluster whose tags you are removing. To find the cluster ID, use DescribeClusters.
+  tag_key_list: list<string> # A list of one or more tag keys for the tags that you are removing. Specify only the tag keys, not the tag values.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "BaldrApiService.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceId": $resource_id, "TagKeyList": $tag_key_list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

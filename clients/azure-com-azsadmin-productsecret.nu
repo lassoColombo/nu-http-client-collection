@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -140,12 +140,13 @@ export def "product-secrets-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2019-01-01)
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client API Version. (required, default: 2019-01-01)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
+  let api_version = ($api_version | default "2019-01-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), product_id: (encode-path-segment $product_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Deployment.Admin/locations/global/productPackages/{product_id}/secrets") $qp $auth.query)
   let accept_val = "application/json"
@@ -181,13 +182,14 @@ export def "product-secrets-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2019-01-01)
-]: nothing -> record<properties: record<description: string, expiresAfter: string, provisioningState: string, secretDescriptor: record<allowedCharacters: string, alternativeDnsNames: list, alternativeIpAddresses: list, keyLength: int, passwordLength: int, passwordValidationRegex: string, rotationStatus: string, secondaryKeyIsActive: bool, subject: string>, secretKind: string, secretState: record<expirationDate: string, rotationStatus: string, status: string>>> {
+  --api-version: string # Client API Version. (required, default: 2019-01-01)
+]: nothing -> record<properties: record<description: string, expiresAfter: string, provisioningState: string, secretDescriptor: record<allowedCharacters: string, alternativeDnsNames: list, alternativeIpAddresses: list, keyLength: int, passwordLength: int, passwordValidationRegex: string, rotationStatus: string, secondaryKeyIsActive: bool, subject: string>, secretKind: string, secretState: record<expirationDate: string, rotationStatus: string, status: string>>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
   if ($secret_name | is-empty) { error make --unspanned { msg: "path parameter 'secretName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-01-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), product_id: (encode-path-segment $product_id), secret_name: (encode-path-segment $secret_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Deployment.Admin/locations/global/productSecrets/{product_id}/secrets/{secret_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -223,7 +225,7 @@ export def "product-secrets-import" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2019-01-01)
+  --api-version: string # Client API Version. (required, default: 2019-01-01)
   --password: string # The password as a secure string.
   --pfx-file-name: string # The pfx certificate file location.
   --pfx-password: string # The pfx certificate file password as a secure string.
@@ -236,6 +238,7 @@ export def "product-secrets-import" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
   if ($secret_name | is-empty) { error make --unspanned { msg: "path parameter 'secretName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-01-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), product_id: (encode-path-segment $product_id), secret_name: (encode-path-segment $secret_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Deployment.Admin/locations/global/productSecrets/{product_id}/secrets/{secret_name}/import") $qp $auth.query)
   let req_body = {"password": $password, "pfxFileName": $pfx_file_name, "pfxPassword": $pfx_password, "secretValue": $secret_value, "symmetricKey": $symmetric_key} | compact
@@ -273,7 +276,7 @@ export def "product-secrets-validate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2019-01-01)
+  --api-version: string # Client API Version. (required, default: 2019-01-01)
   --password: string # The password as a secure string.
   --pfx-file-name: string # The pfx certificate file location.
   --pfx-password: string # The pfx certificate file password as a secure string.
@@ -286,6 +289,7 @@ export def "product-secrets-validate" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
   if ($secret_name | is-empty) { error make --unspanned { msg: "path parameter 'secretName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-01-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), product_id: (encode-path-segment $product_id), secret_name: (encode-path-segment $secret_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Deployment.Admin/locations/global/productSecrets/{product_id}/secrets/{secret_name}/validate") $qp $auth.query)
   let req_body = {"password": $password, "pfxFileName": $pfx_file_name, "pfxPassword": $pfx_password, "secretValue": $secret_value, "symmetricKey": $symmetric_key} | compact

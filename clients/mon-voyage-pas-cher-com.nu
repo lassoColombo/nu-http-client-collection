@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-api-key" => { {scheme: $scheme, headers: {x-api-key: $token_val}, query: "", location: "header"} }
+    "x-api-key" => { {scheme: $scheme, headers: {"x-api-key": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -143,7 +143,7 @@ export def "get-airport" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --language: string@language-completer # the language code of the language you want the content to be returned
+  --language: string@language-completer # the language code of the language you want the content to be returned (required)
   --location: string # The location you want to search for. Either a latitude/longitude point or a letter airport IATA CODE ( ex. LHR ) if you want the detail for only one single airport.
   --radius: int # Radius in km for a lat/long search, will be ignore if a IATA is passed in location parameter code is passed (default: 100)
   --countrycode: string # Filter - The country ISO code 2 letters, provided by the GET /countries. If passed the results will be filtered to this country only, regardless if you passed a lat/long and a large radius
@@ -151,6 +151,7 @@ export def "get-airport" [
 ]: nothing -> record<count: int, data: table<airlineroutescount: int, airport_website: string, altitude: int, cityname: string, countrycode: string, destinationscount: int, distance: string, iatacode: string, icao: string, istopdestination: bool, latitude: float, longitude: float, name: string, timezone: string, wikipedia_page: string>, message: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($language == null) { error make --unspanned { msg: "required query parameter 'language' missing: pass --language" } }
   let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "countrycode" $countrycode "scalar") (serialize-qp "top_airports" $top_airports "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/airports" $qp $auth.query)
   let accept_val = "application/json"
@@ -216,24 +217,26 @@ export def "get-cities" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --language: string@language-completer # the language code of the language you want the content to be returned
+  --language: string@language-completer # the language code of the language you want the content to be returned (required)
   --countrycode: string # if you want to limit the result to one country
   --location: string # The Lat/Long of the location your are seeking cities ( ex. 45.4478988,3.23456)
   --radius: int # Radius in km for a lat/long search. Default is 20km and there is no maximum, but need to be combined with limit. code is passed (default: 20)
   --limit: int # Limit of the result. Default is 20 rows, and maximum is 50. (default: 20)
   --offset: int # offset of the result set (default: 0)
-  --qp-sort: string@sort-completer # The order you want the result ordered. Default is population while when entering a lat/long, you can order the results by distance from requested lat/long point (default: distance,asc)
+  --sort: string@sort-completer # The order you want the result ordered. Default is population while when entering a lat/long, you can order the results by distance from requested lat/long point (required, default: distance,asc)
 ]: nothing -> record<count: int, data: table<alternatename: list, asciiname: string, country: string, elevation: float, latitude: float, longitude: float, name: string, population: float, timezone: string>, message: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "countrycode" $countrycode "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  if ($language == null) { error make --unspanned { msg: "required query parameter 'language' missing: pass --language" } }
+  let sort = ($sort | default "distance,asc")
+  let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "countrycode" $countrycode "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cities/findcitiesfromlatlong" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"language": $language, "countrycode": $countrycode, "location": $location, "radius": $radius, "limit": $limit, "offset": $offset, "sort": $qp_sort} | compact)
+    query: ({"language": $language, "countrycode": $countrycode, "location": $location, "radius": $radius, "limit": $limit, "offset": $offset, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -291,21 +294,24 @@ export def "get-autocomplete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # the string you want to search
-  --language: string@language-completer # the language code of the language you want the content to be returned
+  --q: string # the string you want to search (required)
+  --language: string@language-completer # the language code of the language you want the content to be returned (required)
   --countrycode: string # if you want to limit the result to one country
-  --qp-sort: string@sort-completer-1 # The order you want the result ordered. Default is population while when entering a lat/long, you can order the results by distance from requested lat/long point (default: population,desc)
+  --sort: string@sort-completer-1 # The order you want the result ordered. Default is population while when entering a lat/long, you can order the results by distance from requested lat/long point (required, default: population,desc)
 ]: nothing -> record<count: int, data: table<alternatename: list, asciiname: string, country: string, elevation: float, latitude: float, longitude: float, name: string, population: float, timezone: string>, message: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "countrycode" $countrycode "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
+  if ($language == null) { error make --unspanned { msg: "required query parameter 'language' missing: pass --language" } }
+  let sort = ($sort | default "population,desc")
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "countrycode" $countrycode "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cities/findcitiesfromtext" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"q": $q, "language": $language, "countrycode": $countrycode, "sort": $qp_sort} | compact)
+    query: ({"q": $q, "language": $language, "countrycode": $countrycode, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -363,25 +369,27 @@ export def "get-significant-cities" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --language: string@language-completer # the language code of the language you want the content to be returned
+  --language: string@language-completer # the language code of the language you want the content to be returned (required)
   --pourcent: float # The pourcent of population the cities need to be in order to appear in results (default: 0.5)
   --countrycode: string # if you want to limit the result to one country
   --location: string # The Lat/Long of the location your are seeking cities ( ex. 45.4478988,3.23456)
   --radius: int # Radius in km for a lat/long search. Default is 20km and there is no maximum, but need to be combined with limit. code is passed (default: 20)
   --limit: int # Limit of the result. Default is 20 rows, and maximum is 50. (default: 20)
   --offset: int # offset of the result set (default: 0)
-  --qp-sort: string@sort-completer # The order you want the result ordered. Default is population while when entering a lat/long, you can order the results by distance from requested lat/long point (default: population,desc)
+  --sort: string@sort-completer # The order you want the result ordered. Default is population while when entering a lat/long, you can order the results by distance from requested lat/long point (required, default: population,desc)
 ]: nothing -> record<count: int, data: table<alternatename: list, asciiname: string, country: string, elevation: float, latitude: float, longitude: float, name: string, population: float, timezone: string>, message: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "pourcent" $pourcent "scalar") (serialize-qp "countrycode" $countrycode "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  if ($language == null) { error make --unspanned { msg: "required query parameter 'language' missing: pass --language" } }
+  let sort = ($sort | default "population,desc")
+  let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "pourcent" $pourcent "scalar") (serialize-qp "countrycode" $countrycode "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cities/significant" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"language": $language, "pourcent": $pourcent, "countrycode": $countrycode, "location": $location, "radius": $radius, "limit": $limit, "offset": $offset, "sort": $qp_sort} | compact)
+    query: ({"language": $language, "pourcent": $pourcent, "countrycode": $countrycode, "location": $location, "radius": $radius, "limit": $limit, "offset": $offset, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -439,11 +447,12 @@ export def "get-continents" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --language: string@language-completer # The language code of the language you want the content to be returned
+  --language: string@language-completer # The language code of the language you want the content to be returned (required)
   --continentcode: string # The code of the continent you want to retrieve, this parameter is not required if you want ot retrieve all continents at once
 ]: nothing -> record<count: int, data: table<code: string, countries_in: list, latitude: float, longitude: float, name: string, name_locale: string>, message: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($language == null) { error make --unspanned { msg: "required query parameter 'language' missing: pass --language" } }
   let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "continentcode" $continentcode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/continents" $qp $auth.query)
   let accept_val = "application/json"
@@ -509,11 +518,12 @@ export def "get-countries" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --language: string@language-completer # the language code of the language you want the content to be returned
+  --language: string@language-completer # the language code of the language you want the content to be returned (required)
   --countrycode: string # The code of the country you want to retrieve
 ]: nothing -> record<count: int, data: table<airportscount: float, alternatename: list, areainsqkm: float, capital: string, currencycode: string, currencyname: string, fr_article: string, fr_preposition: string, iso_alpha2: string, languages: string, latitude: float, longitude: float, name: string, name_locale: string, neighbors: list, population: float, postalcode: string, postalcoderegex: string, tld: string>, message: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($language == null) { error make --unspanned { msg: "required query parameter 'language' missing: pass --language" } }
   let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "countrycode" $countrycode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/countries" $qp $auth.query)
   let accept_val = "application/json"
@@ -579,12 +589,14 @@ export def "get-distance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --location-a: string # The location as a latitude / longitude point ( ex. 67.85572,20.22513 ) of location point A
-  --location-b: string # The location as a latitude / longitude point ( ex. 67.85572,20.22513 ) of location point B
+  --location-a: string # The location as a latitude / longitude point ( ex. 67.85572,20.22513 ) of location point A (required)
+  --location-b: string # The location as a latitude / longitude point ( ex. 67.85572,20.22513 ) of location point B (required)
   --unit: string@unit-completer # The unit of length you want the elevation returned either meters or feet returned (default: kms)
 ]: nothing -> record<count: int, data: float, message: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($location_a == null) { error make --unspanned { msg: "required query parameter 'locationA' missing: pass --location-a" } }
+  if ($location_b == null) { error make --unspanned { msg: "required query parameter 'locationB' missing: pass --location-b" } }
   let qp = [(serialize-qp "locationA" $location_a "scalar") (serialize-qp "locationB" $location_b "scalar") (serialize-qp "unit" $unit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/distance" $qp $auth.query)
   let accept_val = "application/json"
@@ -650,11 +662,12 @@ export def "get-elevation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --locations: string # The location as a latitude / longitude point ( ex. 67.85572,20.22513 ) or a list of coordinates separated using the pipe ('|') character. The maximum number of coordinates you can send at one time is 20 ( ex. 67.85572,20.22513|27.85572,20.22513 ) (default: 67.85572,20.22513)
+  --locations: string # The location as a latitude / longitude point ( ex. 67.85572,20.22513 ) or a list of coordinates separated using the pipe ('|') character. The maximum number of coordinates you can send at one time is 20 ( ex. 67.85572,20.22513|27.85572,20.22513 ) (required, default: 67.85572,20.22513)
   --unit: string@unit-completer-1 # The unit of length you want the elevation returned either meters or feet returned (default: meters)
 ]: nothing -> record<count: int, data: table<elevation: int, location: string, unit: string>, message: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  let locations = ($locations | default "67.85572,20.22513")
   let qp = [(serialize-qp "locations" $locations "scalar") (serialize-qp "unit" $unit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/elevation" $qp $auth.query)
   let accept_val = "application/json"
@@ -754,11 +767,12 @@ export def "get-sun" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --location: string # Here you can send either a latitude / longitude
+  --location: string # Here you can send either a latitude / longitude (required)
   --date: string # The date for what you will get the data ( full-date notation as defined by RFC 3339, section 5.6, for example, 2017-07-21 ), if not provided as parameter, today is going to be used (format: date)
 ]: nothing -> record<count: int, data: record<dawn: string, dusk: string, goldenHour: string, goldenHourEnd: string, nadir: string, nauticalDawn: string, nauticalDusk: string, night: string, nightEnd: string, solarNoon: string, sunrise: string, sunriseEnd: string, sunset: string, sunsetStart: string>, message: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'location' missing: pass --location" } }
   let qp = [(serialize-qp "location" $location "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sun_positions" $qp $auth.query)
   let accept_val = "application/json"
@@ -824,10 +838,11 @@ export def "get-timezone" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --location: string # Here you can send either a latitude / longitude ( ex. 67.85572,20.22513 ) or a IATA Code ( ex. LHR for London Heathrow) (default: 45.8326307,6.8650517)
+  --location: string # Here you can send either a latitude / longitude ( ex. 67.85572,20.22513 ) or a IATA Code ( ex. LHR for London Heathrow) (required, default: 45.8326307,6.8650517)
 ]: nothing -> record<count: int, data: record<time_now: string, timezone_name: string>, message: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  let location = ($location | default "45.8326307,6.8650517")
   let qp = [(serialize-qp "location" $location "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/timezone" $qp $auth.query)
   let accept_val = "application/json"

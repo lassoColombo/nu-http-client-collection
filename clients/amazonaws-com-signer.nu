@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -165,7 +165,7 @@ export def "add-profile-permission" [
   principal: string # The AWS principal receiving cross-account permissions. This may be an IAM role or another AWS account ID.
   --revision-id: string # A unique identifier for the current profile revision.
   statement_id: string # A unique identifier for the cross-account permission statement.
-]: any -> record<revisionId: record> {
+]: any -> record<revisionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -214,7 +214,7 @@ export def "list-profile-permissions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<revisionId: record, policySizeBytes: record, permissions: record, nextToken: record> {
+]: nothing -> record<revisionId: string, policySizeBytes: int, permissions: table<action: string, principal: string, statementId: string, profileVersion: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($profile_name | is-empty) { error make --unspanned { msg: "path parameter 'profileName' must be non-empty" } }
@@ -306,7 +306,7 @@ export def "get-signing-profile" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<profileName: record, profileVersion: record, profileVersionArn: record, revocationRecord: record<revocationEffectiveFrom: record, revokedAt: record, revokedBy: record>, signingMaterial: record<certificateArn: record>, platformId: record, platformDisplayName: record, signatureValidityPeriod: record<value: record, type: record>, overrides: record<signingConfiguration: record<encryptionAlgorithm: record, hashAlgorithm: record>, signingImageFormat: record>, signingParameters: record, status: record, statusReason: record, arn: record, tags: record> {
+]: nothing -> record<profileName: string, profileVersion: string, profileVersionArn: string, revocationRecord: record<revocationEffectiveFrom: string, revokedAt: string, revokedBy: string>, signingMaterial: record<certificateArn: string>, platformId: string, platformDisplayName: string, signatureValidityPeriod: record<value: int, type: string>, overrides: record<signingConfiguration: record<encryptionAlgorithm: string, hashAlgorithm: string>, signingImageFormat: string>, signingParameters: record, status: string, statusReason: string, arn: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($profile_name | is-empty) { error make --unspanned { msg: "path parameter 'profileName' must be non-empty" } }
@@ -334,9 +334,9 @@ export def "get-signing-profile" [
 #
 # PUT /signing-profiles/{profileName}
 # operationId: PutSigningProfile
-# --signingMaterial shape: {certificateArn?: any}
-# --signatureValidityPeriod shape: {value?: any, type?: any}
-# --overrides shape: {signingConfiguration?: any, signingImageFormat?: any}
+# --signingMaterial shape: {certificateArn?: string}
+# --signatureValidityPeriod shape: {value?: int, type?: "DAYS"|"MONTHS"|"YEARS"}
+# --overrides shape: {signingConfiguration?: record, signingImageFormat?: "JSON"|"JSONEmbedded"|"JSONDetached"}
 export def "put-signing-profile" [
   profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -355,13 +355,13 @@ export def "put-signing-profile" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --signing-material: record # The ACM certificate that is used to sign your code. — shape: {certificateArn?: any}
-  --signature-validity-period: record # The validity period for a signing job. — shape: {value?: any, type?: any}
+  --signing-material: record # The ACM certificate that is used to sign your code. — shape: {certificateArn?: string}
+  --signature-validity-period: record # The validity period for a signing job. — shape: {value?: int, type?: "DAYS"|"MONTHS"|"YEARS"}
   platform_id: string # The ID of the signing platform to be created.
-  --overrides: record # Any overrides that are applied to the signing configuration of a code signing platform. — shape: {signingConfiguration?: any, signingImageFormat?: any}
+  --overrides: record # Any overrides that are applied to the signing configuration of a code signing platform. — shape: {signingConfiguration?: record, signingImageFormat?: "JSON"|"JSONEmbedded"|"JSONDetached"}
   --signing-parameters: record # Map of key-value pairs for signing. These can include any information that you want to use during signing.
   --tags: record # Tags to be associated with the signing profile that is being created.
-]: any -> record<arn: record, profileVersion: record, profileVersionArn: record> {
+]: any -> record<arn: string, profileVersion: string, profileVersionArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -409,7 +409,7 @@ export def "describe-signing-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<jobId: record, source: record<s3: record<bucketName: record, key: record, version: record>>, signingMaterial: record<certificateArn: record>, platformId: record, platformDisplayName: record, profileName: record, profileVersion: record, overrides: record<signingConfiguration: record<encryptionAlgorithm: record, hashAlgorithm: record>, signingImageFormat: record>, signingParameters: record, createdAt: record, completedAt: record, signatureExpiresAt: record, requestedBy: record, status: record, statusReason: record, revocationRecord: record<reason: record, revokedAt: record, revokedBy: record>, signedObject: record<s3: record<bucketName: record, key: record>>, jobOwner: record, jobInvoker: record> {
+]: nothing -> record<jobId: string, source: record<s3: record<bucketName: string, key: string, version: string>>, signingMaterial: record<certificateArn: string>, platformId: string, platformDisplayName: string, profileName: string, profileVersion: string, overrides: record<signingConfiguration: record<encryptionAlgorithm: string, hashAlgorithm: string>, signingImageFormat: string>, signingParameters: record, createdAt: string, completedAt: string, signatureExpiresAt: string, requestedBy: string, status: string, statusReason: string, revocationRecord: record<reason: string, revokedAt: string, revokedBy: string>, signedObject: record<s3: record<bucketName: string, key: string>>, jobOwner: string, jobInvoker: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
@@ -454,7 +454,7 @@ export def "get-signing-platform" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<platformId: record, displayName: record, partner: record, target: record, category: record, signingConfiguration: record<encryptionAlgorithmOptions: record<allowedValues: record, defaultValue: record>, hashAlgorithmOptions: record<allowedValues: record, defaultValue: record>>, signingImageFormat: record<supportedFormats: record, defaultFormat: record>, maxSizeInMB: record, revocationSupported: record> {
+]: nothing -> record<platformId: string, displayName: string, partner: string, target: string, category: string, signingConfiguration: record<encryptionAlgorithmOptions: record<allowedValues: list, defaultValue: string>, hashAlgorithmOptions: record<allowedValues: list, defaultValue: string>>, signingImageFormat: record<supportedFormats: list<string>, defaultFormat: string>, maxSizeInMB: int, revocationSupported: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($platform_id | is-empty) { error make --unspanned { msg: "path parameter 'platformId' must be non-empty" } }
@@ -507,7 +507,7 @@ export def "list-signing-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<jobs: record, nextToken: record> {
+]: nothing -> record<jobs: table<jobId: string, source: record, signedObject: record, signingMaterial: record, createdAt: string, status: string, isRevoked: bool, profileName: string, profileVersion: string, platformId: string, platformDisplayName: string, signatureExpiresAt: string, jobOwner: string, jobInvoker: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "platformId" $platform_id "scalar") (serialize-qp "requestedBy" $requested_by "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "isRevoked" $is_revoked "scalar") (serialize-qp "signatureExpiresBefore" $signature_expires_before "scalar") (serialize-qp "signatureExpiresAfter" $signature_expires_after "scalar") (serialize-qp "jobInvoker" $job_invoker "scalar")] | flatten | str join "&"
@@ -534,8 +534,8 @@ export def "list-signing-jobs" [
 #
 # POST /signing-jobs
 # operationId: StartSigningJob
-# --source shape: {s3?: any}
-# --destination shape: {s3?: any}
+# --source shape: {s3?: record}
+# --destination shape: {s3?: record}
 export def "start-signing-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -553,17 +553,17 @@ export def "start-signing-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --body-source: record # An S3Source object that contains information about the S3 bucket where you saved your unsigned code. — shape: {s3?: any}
-  destination: record # Points to an S3Destination object that contains information about your S3 bucket. — shape: {s3?: any}
+  source: record # An S3Source object that contains information about the S3 bucket where you saved your unsigned code. — shape: {s3?: record}
+  destination: record # Points to an S3Destination object that contains information about your S3 bucket. — shape: {s3?: record}
   profile_name: string # The name of the signing profile.
   client_request_token: string # String that identifies the signing request. All calls after the first that use this token return the same response as the first call.
   --profile-owner: string # The AWS account ID of the signing profile owner.
-]: any -> record<jobId: record, jobOwner: record> {
+]: any -> record<jobId: string, jobOwner: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/signing-jobs" $auth.query)
-  let req_body = {"source": $body_source, "destination": $destination, "profileName": $profile_name, "clientRequestToken": $client_request_token, "profileOwner": $profile_owner} | compact
+  let req_body = {"source": $source, "destination": $destination, "profileName": $profile_name, "clientRequestToken": $client_request_token, "profileOwner": $profile_owner} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -609,7 +609,7 @@ export def "list-signing-platforms" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<platforms: record, nextToken: record> {
+]: nothing -> record<platforms: table<platformId: string, displayName: string, partner: string, target: string, category: string, signingConfiguration: record, signingImageFormat: record, maxSizeInMB: int, revocationSupported: bool>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "category" $category "scalar") (serialize-qp "partner" $partner "scalar") (serialize-qp "target" $target "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -658,7 +658,7 @@ export def "list-signing-profiles" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<profiles: record, nextToken: record> {
+]: nothing -> record<profiles: table<profileName: string, profileVersion: string, profileVersionArn: string, signingMaterial: record, signatureValidityPeriod: record, platformId: string, platformDisplayName: string, signingParameters: record, status: string, arn: string, tags: record>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "includeCanceled" $include_canceled "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "platformId" $platform_id "scalar") (serialize-qp "statuses" $statuses "multi")] | flatten | str join "&"
@@ -791,7 +791,7 @@ export def "remove-profile-permission" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --revision-id: string # An identifier for the current revision of the signing profile permissions.
+  --revision-id: string # An identifier for the current revision of the signing profile permissions. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -799,11 +799,12 @@ export def "remove-profile-permission" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<revisionId: record> {
+]: nothing -> record<revisionId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($profile_name | is-empty) { error make --unspanned { msg: "path parameter 'profileName' must be non-empty" } }
   if ($statement_id | is-empty) { error make --unspanned { msg: "path parameter 'statementId' must be non-empty" } }
+  if ($revision_id == null) { error make --unspanned { msg: "required query parameter 'revisionId' missing: pass --revision-id" } }
   let qp = [(serialize-qp "revisionId" $revision_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({profile_name: (encode-path-segment $profile_name), statement_id: (encode-path-segment $statement_id)} | format pattern "/signing-profiles/{profile_name}/permissions/{statement_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -940,7 +941,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # A list of tag keys to be removed from the signing profile.
+  --tag-keys: list # A list of tag keys to be removed from the signing profile. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -952,6 +953,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"

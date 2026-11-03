@@ -168,10 +168,11 @@ export def "get-badge" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --url: string # The URL to retrieve the OpenAPI 3.0.x definition from (format: uri, e.g. https://raw.githubusercontent.com/Mermade/openapi-webconverter/master/contract/openapi.json)
+  --url: string # The URL to retrieve the OpenAPI 3.0.x definition from (required, format: uri, e.g. https://raw.githubusercontent.com/Mermade/openapi-webconverter/master/contract/openapi.json)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
   let qp = [(serialize-qp "url" $url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/badge" $qp $auth.query)
   let accept_val = "application/json"
@@ -205,10 +206,11 @@ export def "convert-url" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --url: string # The URL to retrieve the OpenAPI 2.0 definition from (format: uri, e.g. https://raw.githubusercontent.com/Mermade/openapi-webconverter/master/contract/swagger.json)
+  --url: string # The URL to retrieve the OpenAPI 2.0 definition from (required, format: uri, e.g. https://raw.githubusercontent.com/Mermade/openapi-webconverter/master/contract/swagger.json)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
   let qp = [(serialize-qp "url" $url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/convert" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -243,19 +245,19 @@ export def "convert" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --filename: string # The file to upload and convert
-  --body-source: string # The text of a Swagger 2.0 definition to convert
+  --source: string # The text of a Swagger 2.0 definition to convert
   --validate: string@validate-completer
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/convert" $auth.query)
-  let req_body = {"filename": $filename, "source": $body_source, "validate": $validate} | compact
+  let req_body = {"filename": $filename, "source": $source, "validate": $validate} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -320,10 +322,11 @@ export def "validate-url" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --url: string # The URL to retrieve the OpenAPI 3.0.x definition from (format: uri, e.g. https://raw.githubusercontent.com/Mermade/openapi-webconverter/master/contract/openapi.json)
+  --url: string # The URL to retrieve the OpenAPI 3.0.x definition from (required, format: uri, e.g. https://raw.githubusercontent.com/Mermade/openapi-webconverter/master/contract/openapi.json)
 ]: nothing -> record<openapi: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
   let qp = [(serialize-qp "url" $url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/validate" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -358,18 +361,18 @@ export def "validate" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --filename: string # The file to upload and validate
-  --body-source: string # The text of an OpenAPI 3.0.x definition to validate
+  --source: string # The text of an OpenAPI 3.0.x definition to validate
 ]: any -> record<openapi: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/validate" $auth.query)
-  let req_body = {"filename": $filename, "source": $body_source} | compact
+  let req_body = {"filename": $filename, "source": $source} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url

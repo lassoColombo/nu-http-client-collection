@@ -1,4 +1,4 @@
-# Auto-generated client for Domains RDAP API vv1
+# Auto-generated client for Domains RDAP API v1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/domainsrdap/v1/openapi.json
 # Auth: --token flag or $env.DOMAINS_RDAP_API_TOKEN
 

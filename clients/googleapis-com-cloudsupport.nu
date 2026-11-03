@@ -1,4 +1,4 @@
-# Auto-generated client for Google Cloud Support API vv2beta
+# Auto-generated client for Google Cloud Support API v2beta
 # Source: https://api.apis.guru/v2/specs/googleapis.com/cloudsupport/v2beta/openapi.json
 # Auth: --token flag or $env.GOOGLE_CLOUD_SUPPORT_API_TOKEN
 
@@ -12,20 +12,10 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
-}
-
-# Merge multiple auth records (AND-form security: every scheme must be sent).
-def merge-auth [parts: list]: nothing -> record {
-  let active = ($parts | where {|p| $p.location != "none" })
-  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
-  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
-  let locs = ($active | each {|p| $p.location } | uniq)
-  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
-  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
 # Serialize a single query parameter based on collection style
@@ -151,8 +141,8 @@ export def commands []: nothing -> table {
 # operationId: cloudsupport.caseClassifications.search
 export def "cloudsupport-case-classifications-search" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -174,7 +164,7 @@ export def "cloudsupport-case-classifications-search" [
   --page-token: string # A token identifying the page of results to return. If unspecified, the first page is retrieved.
   --query: string # An expression written in the Cloud filter language. If non-empty, then only cases whose fields match the filter are returned. If empty, then no messages are filtered out.
 ]: nothing -> record<caseClassifications: table<displayName: string, id: string>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_CLOUD_SUPPORT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_CLOUD_SUPPORT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2beta/caseClassifications:search" $qp $auth.query)
@@ -200,8 +190,8 @@ export def "cloudsupport-case-classifications-search" [
 # operationId: cloudsupport.cases.search
 export def "cloudsupport-cases-search" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -223,7 +213,7 @@ export def "cloudsupport-cases-search" [
   --page-token: string # A token identifying the page of results to return. If unspecified, the first page is retrieved.
   --query: string # An expression written in filter language. A query uses the following fields with the operators equals (`=`) and `AND`: - `organization`: An organization name in the form `organizations/`. - `project`: A project name in the form `projects/`. - `state`: The accepted values are `OPEN` or `CLOSED`. - `priority`: The accepted values are `P0`, `P1`, `P2`, `P3`, or `P4`. You can specify multiple values for priority using the `OR` operator. For example, `priority=P1 OR priority=P2`. - [DEPRECATED] `severity`: The accepted values are `S0`, `S1`, `S2`, `S3`, or `S4`. - `creator.email`: The email address of the case creator. - `billingAccount`: A billing account in the form `billingAccounts/` You must specify eitehr `organization` or `project`. To search across `displayName`, `description`, and comments, use a global restriction with no keyword or operator. For example, `"my search"`. To search only cases updated after a certain date, use `update_time` retricted with that particular date, time, and timezone in ISO datetime format. For example, `update_time>"2020-01-01T00:00:00-05:00"`. `update_time` only supports the greater than operator (`>`). Examples: - `organization="organizations/123456789"` - `project="projects/my-project-id"` - `project="projects/123456789"` - `billing_account="billingAccounts/123456-A0B0C0-CUZ789"` - `organization="organizations/123456789" AND state=CLOSED` - `project="projects/my-project-id" AND creator.email="tester@example.com"` - `project="projects/my-project-id" AND (priority=P0 OR priority=P1)`
 ]: nothing -> record<cases: table<classification: record, contactEmail: string, createTime: string, creator: record, description: string, displayName: string, escalated: bool, languageCode: string, name: string, priority: string, severity: string, state: string, subscriberEmailAddresses: list, testCase: bool, timeZone: string, updateTime: string>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_CLOUD_SUPPORT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_CLOUD_SUPPORT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2beta/cases:search" $qp $auth.query)
@@ -250,8 +240,8 @@ export def "cloudsupport-cases-search" [
 export def "cloudsupport-cases-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -270,7 +260,7 @@ export def "cloudsupport-cases-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<classification: record<displayName: string, id: string>, contactEmail: string, createTime: string, creator: record<displayName: string, email: string, googleSupport: bool>, description: string, displayName: string, escalated: bool, languageCode: string, name: string, priority: string, severity: string, state: string, subscriberEmailAddresses: list<string>, testCase: bool, timeZone: string, updateTime: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_CLOUD_SUPPORT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_CLOUD_SUPPORT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -300,8 +290,8 @@ export def "cloudsupport-cases-get" [
 export def "cloudsupport-cases-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -335,7 +325,7 @@ export def "cloudsupport-cases-patch" [
   --time-zone: string # The timezone of the user who created the support case. It should be in a format IANA recognizes: https://www.iana.org/time-zones. There is no additional validation done by the API.
 ]: any -> record<classification: record<displayName: string, id: string>, contactEmail: string, createTime: string, creator: record<displayName: string, email: string, googleSupport: bool>, description: string, displayName: string, escalated: bool, languageCode: string, name: string, priority: string, severity: string, state: string, subscriberEmailAddresses: list<string>, testCase: bool, timeZone: string, updateTime: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_CLOUD_SUPPORT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_CLOUD_SUPPORT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
@@ -365,8 +355,8 @@ export def "cloudsupport-cases-patch" [
 export def "cloudsupport-cases-close" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -387,7 +377,7 @@ export def "cloudsupport-cases-close" [
   --body: record
 ]: any -> record<classification: record<displayName: string, id: string>, contactEmail: string, createTime: string, creator: record<displayName: string, email: string, googleSupport: bool>, description: string, displayName: string, escalated: bool, languageCode: string, name: string, priority: string, severity: string, state: string, subscriberEmailAddresses: list<string>, testCase: bool, timeZone: string, updateTime: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_CLOUD_SUPPORT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_CLOUD_SUPPORT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -417,8 +407,8 @@ export def "cloudsupport-cases-close" [
 export def "cloudsupport-media-download" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -437,7 +427,7 @@ export def "cloudsupport-media-download" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<algorithm: string, bigstoreObjectRef: string, blobRef: string, blobstore2Info: record<blobGeneration: string, blobId: string, downloadReadHandle: string, readToken: string, uploadMetadataContainer: string>, compositeMedia: table<blobRef: string, blobstore2Info: record, cosmoBinaryReference: string, crc32cHash: int, inline: string, length: string, md5Hash: string, objectId: record, path: string, referenceType: string, sha1Hash: string>, contentType: string, contentTypeInfo: record<bestGuess: string, fromBytes: string, fromFileName: string, fromHeader: string, fromUrlPath: string>, cosmoBinaryReference: string, crc32cHash: int, diffChecksumsResponse: record<checksumsLocation: record<blobRef: string, blobstore2Info: record, cosmoBinaryReference: string, crc32cHash: int, inline: string, length: string, md5Hash: string, objectId: record, path: string, referenceType: string, sha1Hash: string>, chunkSizeBytes: string, objectLocation: record<blobRef: string, blobstore2Info: record, cosmoBinaryReference: string, crc32cHash: int, inline: string, length: string, md5Hash: string, objectId: record, path: string, referenceType: string, sha1Hash: string>, objectSizeBytes: string, objectVersion: string>, diffDownloadResponse: record<objectLocation: record<blobRef: string, blobstore2Info: record, cosmoBinaryReference: string, crc32cHash: int, inline: string, length: string, md5Hash: string, objectId: record, path: string, referenceType: string, sha1Hash: string>>, diffUploadRequest: record<checksumsInfo: record<blobRef: string, blobstore2Info: record, cosmoBinaryReference: string, crc32cHash: int, inline: string, length: string, md5Hash: string, objectId: record, path: string, referenceType: string, sha1Hash: string>, objectInfo: record<blobRef: string, blobstore2Info: record, cosmoBinaryReference: string, crc32cHash: int, inline: string, length: string, md5Hash: string, objectId: record, path: string, referenceType: string, sha1Hash: string>, objectVersion: string>, diffUploadResponse: record<objectVersion: string, originalObject: record<blobRef: string, blobstore2Info: record, cosmoBinaryReference: string, crc32cHash: int, inline: string, length: string, md5Hash: string, objectId: record, path: string, referenceType: string, sha1Hash: string>>, diffVersionResponse: record<objectSizeBytes: string, objectVersion: string>, downloadParameters: record<allowGzipCompression: bool, ignoreRange: bool>, filename: string, hash: string, hashVerified: bool, inline: string, isPotentialRetry: bool, length: string, md5Hash: string, mediaId: string, objectId: record<bucketName: string, generation: string, objectName: string>, path: string, referenceType: string, sha1Hash: string, sha256Hash: string, timestamp: string, token: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_CLOUD_SUPPORT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_CLOUD_SUPPORT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -466,8 +456,8 @@ export def "cloudsupport-media-download" [
 export def "cloudsupport-cases-escalate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -488,7 +478,7 @@ export def "cloudsupport-cases-escalate" [
   --escalation: record # An escalation of a support case. — shape: {justification?: string, reason?: "REASON_UNSPECIFIED"|"RESOLUTION_TIME"|"TECHNICAL_EXPERTISE"|"BUSINESS_IMPACT"}
 ]: any -> record<classification: record<displayName: string, id: string>, contactEmail: string, createTime: string, creator: record<displayName: string, email: string, googleSupport: bool>, description: string, displayName: string, escalated: bool, languageCode: string, name: string, priority: string, severity: string, state: string, subscriberEmailAddresses: list<string>, testCase: bool, timeZone: string, updateTime: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_CLOUD_SUPPORT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_CLOUD_SUPPORT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -518,8 +508,8 @@ export def "cloudsupport-cases-escalate" [
 export def "cloudsupport-cases-attachments-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -540,7 +530,7 @@ export def "cloudsupport-cases-attachments-list" [
   --page-size: int # The maximum number of attachments fetched with each request. If not provided, the default is 10. The maximum page size that will be returned is 100.
   --page-token: string # A token identifying the page of results to return. If unspecified, the first page is retrieved.
 ]: nothing -> record<attachments: table<createTime: string, creator: record, filename: string, mimeType: string, name: string, sizeBytes: string>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_CLOUD_SUPPORT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_CLOUD_SUPPORT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -568,8 +558,8 @@ export def "cloudsupport-cases-attachments-list" [
 export def "cloudsupport-media-upload" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -590,7 +580,7 @@ export def "cloudsupport-media-upload" [
   --body: any
 ]: any -> record<createTime: string, creator: record<displayName: string, email: string, googleSupport: bool>, filename: string, mimeType: string, name: string, sizeBytes: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_CLOUD_SUPPORT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_CLOUD_SUPPORT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -620,8 +610,8 @@ export def "cloudsupport-media-upload" [
 export def "cloudsupport-cases-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -643,7 +633,7 @@ export def "cloudsupport-cases-list" [
   --page-size: int # The maximum number of cases fetched with each request. Defaults to 10.
   --page-token: string # A token identifying the page of results to return. If unspecified, the first page is retrieved.
 ]: nothing -> record<cases: table<classification: record, contactEmail: string, createTime: string, creator: record, description: string, displayName: string, escalated: bool, languageCode: string, name: string, priority: string, severity: string, state: string, subscriberEmailAddresses: list, testCase: bool, timeZone: string, updateTime: string>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_CLOUD_SUPPORT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_CLOUD_SUPPORT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -673,8 +663,8 @@ export def "cloudsupport-cases-list" [
 export def "cloudsupport-cases-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -707,7 +697,7 @@ export def "cloudsupport-cases-create" [
   --time-zone: string # The timezone of the user who created the support case. It should be in a format IANA recognizes: https://www.iana.org/time-zones. There is no additional validation done by the API.
 ]: any -> record<classification: record<displayName: string, id: string>, contactEmail: string, createTime: string, creator: record<displayName: string, email: string, googleSupport: bool>, description: string, displayName: string, escalated: bool, languageCode: string, name: string, priority: string, severity: string, state: string, subscriberEmailAddresses: list<string>, testCase: bool, timeZone: string, updateTime: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_CLOUD_SUPPORT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_CLOUD_SUPPORT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -737,8 +727,8 @@ export def "cloudsupport-cases-create" [
 export def "cloudsupport-cases-comments-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -759,7 +749,7 @@ export def "cloudsupport-cases-comments-list" [
   --page-size: int # The maximum number of comments fetched with each request. Defaults to 10.
   --page-token: string # A token identifying the page of results to return. If unspecified, the first page is retrieved.
 ]: nothing -> record<comments: table<body: string, createTime: string, creator: record, name: string, plainTextBody: string>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_CLOUD_SUPPORT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_CLOUD_SUPPORT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -788,8 +778,8 @@ export def "cloudsupport-cases-comments-list" [
 export def "cloudsupport-cases-comments-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -811,7 +801,7 @@ export def "cloudsupport-cases-comments-create" [
   --creator: record # An object containing information about the effective user and authenticated principal responsible for an action. — shape: {displayName?: string, email?: string}
 ]: any -> record<body: string, createTime: string, creator: record<displayName: string, email: string, googleSupport: bool>, name: string, plainTextBody: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_CLOUD_SUPPORT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_CLOUD_SUPPORT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"

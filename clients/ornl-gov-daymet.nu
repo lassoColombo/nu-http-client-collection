@@ -134,16 +134,19 @@ export def "get-api-data" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --lat: float # Latitude component of location. (format: double)
-  --lon: float # Longitude component of location. (format: double)
+  --lat: float # Latitude component of location. (required, format: double)
+  --lon: float # Longitude component of location. (required, format: double)
   --vars: list<string> # Daymet Daily weather estimates.
   --years: list<string> # Subset on years [1980..2019].
   --start: string # Subset on dates (start date). (format: date)
   --end: string # Subset on dates (end date). (format: date)
-  --format: string@format-completer # Specify a format for data retrieval.
+  --format: string@format-completer # Specify a format for data retrieval. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($lat == null) { error make --unspanned { msg: "required query parameter 'lat' missing: pass --lat" } }
+  if ($lon == null) { error make --unspanned { msg: "required query parameter 'lon' missing: pass --lon" } }
+  if ($format == null) { error make --unspanned { msg: "required query parameter 'format' missing: pass --format" } }
   let qp = [(serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "vars" $vars "csv") (serialize-qp "years" $years "csv") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/data" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -175,16 +178,19 @@ export def "get-preview" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lat: float # Latitude component of location (format: double)
-  --lon: float # Longitude component of location. (format: double)
+  --lat: float # Latitude component of location (required, format: double)
+  --lon: float # Longitude component of location. (required, format: double)
   --vars: list<string> # Daymet Daily weather estimates.
   --years: list<string> # Subset on years [1980..2019].
   --start: string # Subset on dates (start date). (format: date)
   --end: string # Subset on dates (end date). (format: date)
-  --format: string@format-completer # Specify a format for data retrieval.
+  --format: string@format-completer # Specify a format for data retrieval. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($lat == null) { error make --unspanned { msg: "required query parameter 'lat' missing: pass --lat" } }
+  if ($lon == null) { error make --unspanned { msg: "required query parameter 'lon' missing: pass --lon" } }
+  if ($format == null) { error make --unspanned { msg: "required query parameter 'format' missing: pass --format" } }
   let qp = [(serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "vars" $vars "csv") (serialize-qp "years" $years "csv") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/preview" $qp $auth.query)
   let accept_val = "application/html"
@@ -217,16 +223,19 @@ export def "get-send-save-data" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --lat: float # Latitude component of location. (format: double)
-  --lon: float # Longitude component of location. (format: double)
+  --lat: float # Latitude component of location. (required, format: double)
+  --lon: float # Longitude component of location. (required, format: double)
   --vars: list<string> # Daymet Daily weather estimates.
   --years: list<string> # Subset on years [1980..2019].
   --start: string # Subset on dates (start date). (format: date)
   --end: string # Subset on dates (end date). (format: date)
-  --format: string@format-completer # Specify a format for data retrieval.
+  --format: string@format-completer # Specify a format for data retrieval. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($lat == null) { error make --unspanned { msg: "required query parameter 'lat' missing: pass --lat" } }
+  if ($lon == null) { error make --unspanned { msg: "required query parameter 'lon' missing: pass --lon" } }
+  if ($format == null) { error make --unspanned { msg: "required query parameter 'format' missing: pass --format" } }
   let qp = [(serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "vars" $vars "csv") (serialize-qp "years" $years "csv") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/send/saveData" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -258,16 +267,19 @@ export def "get-visualize" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lat: float # Latitude component of location. (format: double)
-  --lon: float # Longitude component of location. (format: double)
+  --lat: float # Latitude component of location. (required, format: double)
+  --lon: float # Longitude component of location. (required, format: double)
   --vars: list<string> # Daymet Daily weather estimates.
   --years: list<string> # Subset on years [1980..2019].
   --start: string # Subset on dates (start date). (format: date)
   --end: string # Subset on dates (end date). (format: date)
-  --format: string@format-completer # Specify a format for data retrieval.
+  --format: string@format-completer # Specify a format for data retrieval. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($lat == null) { error make --unspanned { msg: "required query parameter 'lat' missing: pass --lat" } }
+  if ($lon == null) { error make --unspanned { msg: "required query parameter 'lon' missing: pass --lon" } }
+  if ($format == null) { error make --unspanned { msg: "required query parameter 'format' missing: pass --format" } }
   let qp = [(serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "vars" $vars "csv") (serialize-qp "years" $years "csv") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/visualize" $qp $auth.query)
   let accept_val = "application/html"

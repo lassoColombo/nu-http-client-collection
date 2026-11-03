@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -465,6 +465,8 @@ export def "add-key" [
   let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/addresses/{address}/keys") $auth.query)
   let req_body = {"name": $name, "read": $read, "write": $write} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "read") == null) { error make --unspanned { msg: "required body field 'read' missing: pass --read or pipe a record" } }
+  if (($req_body | get -o "write") == null) { error make --unspanned { msg: "required body field 'write' missing: pass --write or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -585,6 +587,8 @@ export def "update-key" [
   let full_url = (build-url $base ({address: (encode-path-segment $address), key: (encode-path-segment $key)} | format pattern "/addresses/{address}/keys/{key}") $auth.query)
   let req_body = {"name": $name, "read": $read, "write": $write} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "read") == null) { error make --unspanned { msg: "required body field 'read' missing: pass --read or pipe a record" } }
+  if (($req_body | get -o "write") == null) { error make --unspanned { msg: "required body field 'write' missing: pass --write or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -937,17 +941,17 @@ export def "send" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-from: string
+  from: string
   --html: string
   subject: string
   --text: string
-  --body-to: string
+  to: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/send" $auth.query)
-  let req_body = {"from": $body_from, "html": $html, "subject": $subject, "text": $text, "to": $body_to} | compact
+  let req_body = {"from": $from, "html": $html, "subject": $subject, "text": $text, "to": $to} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1353,7 +1357,7 @@ export def "add-workflow" [
   --dry-run(-n) # Return the request that would be sent without executing it
   action: string
   --active: oneof<nothing, bool>
-  input: string
+  --body-input: string
   name: string
   --trigger: string
 ]: any -> any {
@@ -1361,8 +1365,9 @@ export def "add-workflow" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/workflows" $auth.query)
-  let req_body = {"action": $action, "active": $active, "input": $input, "name": $name, "trigger": $trigger} | compact
+  let req_body = {"action": $action, "active": $active, "input": $body_input, "name": $name, "trigger": $trigger} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1471,7 +1476,7 @@ export def "update-workflow" [
   --dry-run(-n) # Return the request that would be sent without executing it
   action: string
   --active: oneof<nothing, bool>
-  input: string
+  --body-input: string
   name: string
   --trigger: string
 ]: any -> any {
@@ -1480,8 +1485,9 @@ export def "update-workflow" [
   let base = ($base_url | default $BASE_URL)
   if ($workflow | is-empty) { error make --unspanned { msg: "path parameter 'workflow' must be non-empty" } }
   let full_url = (build-url $base ({workflow: (encode-path-segment $workflow)} | format pattern "/workflows/{workflow}") $auth.query)
-  let req_body = {"action": $action, "active": $active, "input": $input, "name": $name, "trigger": $trigger} | compact
+  let req_body = {"action": $action, "active": $active, "input": $body_input, "name": $name, "trigger": $trigger} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {

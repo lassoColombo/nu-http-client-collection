@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -151,13 +151,14 @@ export def "projects-list-by-account-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<value: table<kind: string, properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> record<value: table<kind: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($root_resource_name | is-empty) { error make --unspanned { msg: "path parameter 'rootResourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), root_resource_name: (encode-path-segment $root_resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.visualstudio/account/{root_resource_name}/project") $qp $auth.query)
   let accept_val = "application/json"
@@ -196,14 +197,15 @@ export def "projects-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<kind: string, properties: record<bootstrapPipelineTemplate: record<applicationSource: record, applicationTarget: record, authorizationDetails: record>, ownerUpn: string, pipelineBootstrapConfigurations: list<record>, processTemplateId: string, tfsUniqueIdentifier: string, versionControlOption: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> record<kind: string, properties: record<bootstrapPipelineTemplate: record<applicationSource: record, applicationTarget: record, authorizationDetails: record>, ownerUpn: string, pipelineBootstrapConfigurations: list<record>, processTemplateId: string, tfsUniqueIdentifier: string, versionControlOption: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($root_resource_name | is-empty) { error make --unspanned { msg: "path parameter 'rootResourceName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), root_resource_name: (encode-path-segment $root_resource_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.visualstudio/account/{root_resource_name}/project/{resource_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -243,10 +245,10 @@ export def "projects-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: record # Custom properties of project resource. — shape: {pipelineBootstrapConfigurations?: list}
   --tags: record # The custom tags to be set on the resource.
-]: any -> record<kind: string, properties: record<bootstrapPipelineTemplate: record<applicationSource: record, applicationTarget: record, authorizationDetails: record>, ownerUpn: string, pipelineBootstrapConfigurations: list<record>, processTemplateId: string, tfsUniqueIdentifier: string, versionControlOption: string>> {
+]: any -> record<kind: string, properties: record<bootstrapPipelineTemplate: record<applicationSource: record, applicationTarget: record, authorizationDetails: record>, ownerUpn: string, pipelineBootstrapConfigurations: list<record>, processTemplateId: string, tfsUniqueIdentifier: string, versionControlOption: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -254,6 +256,7 @@ export def "projects-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($root_resource_name | is-empty) { error make --unspanned { msg: "path parameter 'rootResourceName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), root_resource_name: (encode-path-segment $root_resource_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.visualstudio/account/{root_resource_name}/project/{resource_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -295,12 +298,12 @@ export def "projects-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --validating: string # This parameter is ignored and should be set to an empty string.
   --kind: string@kind-completer # Kind of project resource. A bootStrappedProject is a project which has additional bootstrap information to create a CI/CD pipeline in the project.
   --properties: record # Defines the custom properties of project resource. — shape: {bootstrapPipelineTemplate?: record, ownerUpn?: string, pipelineBootstrapConfigurations?: list, processTemplateId?: "Scrum"|"Agile"|"Cmmi", versionControlOption?: "Git"|"Tfvc"}
   --tags: record # Resource tags.
-]: any -> record<kind: string, properties: record<bootstrapPipelineTemplate: record<applicationSource: record, applicationTarget: record, authorizationDetails: record>, ownerUpn: string, pipelineBootstrapConfigurations: list<record>, processTemplateId: string, tfsUniqueIdentifier: string, versionControlOption: string>> {
+]: any -> record<kind: string, properties: record<bootstrapPipelineTemplate: record<applicationSource: record, applicationTarget: record, authorizationDetails: record>, ownerUpn: string, pipelineBootstrapConfigurations: list<record>, processTemplateId: string, tfsUniqueIdentifier: string, versionControlOption: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -308,6 +311,7 @@ export def "projects-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($root_resource_name | is-empty) { error make --unspanned { msg: "path parameter 'rootResourceName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "validating" $validating "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), root_resource_name: (encode-path-segment $root_resource_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.visualstudio/account/{root_resource_name}/project/{resource_name}") $qp $auth.query)
   let req_body = {"kind": $kind, "properties": $properties, "tags": $tags} | compact

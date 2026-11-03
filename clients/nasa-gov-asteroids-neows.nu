@@ -169,12 +169,13 @@ export def "get-api-projects-id-format" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-format: string@format-completer # The response type desired. (default: xml)
+  --qp-format: string@format-completer # The response type desired. (required, default: xml)
 ]: nothing -> record<acronym: string, additionalTas: table<code: string, id: int, name: string>, benefits: string, closeoutDocuments: list<string>, closeoutSummary: string, coFundingPartners: table<acronym: string, city: string, name: string, state: string>, coInvestigators: list<string>, description: string, destinations: list<string>, endDate: string, id: int, lastUpdated: string, leadOrganization: record<acronym: string, city: string, name: string, state: string>, libraryItems: table<completionDate: string, description: string, externalUrl: string, files: list, id: int, publishedBy: string, publishedDate: string, title: string, type: string>, primaryTas: table<code: string, id: int, name: string>, principalInvestigators: list<string>, programDirectors: list<string>, programManagers: list<string>, projectManagers: list<string>, responsibleMissionDirectorateOrOffice: string, responsibleProgram: string, startDate: string, status: string, supportedMissionType: string, supportingOrganizations: table<acronym: string, city: string, name: string, state: string>, technologyMaturityCurrent: string, technologyMaturityEnd: string, technologyMaturityStart: string, title: string, website: string, workLocations: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($format | is-empty) { error make --unspanned { msg: "path parameter '.format' must be non-empty" } }
+  let qp_format = ($qp_format | default "xml")
   let qp = [(serialize-qp "format" $qp_format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), format: (encode-path-segment $format)} | format pattern "/api/projects/{id}{format}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -208,12 +209,14 @@ export def "get-api-projects-format" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --updated-since: string # ISO 8601 full-date in the format YYYY-MM-DD. Filters the list of available ID values by their lastUpdated parameter. (format: date)
-  --qp-format: string@format-completer # The response type desired. (default: json)
+  --updated-since: string # ISO 8601 full-date in the format YYYY-MM-DD. Filters the list of available ID values by their lastUpdated parameter. (required, format: date)
+  --qp-format: string@format-completer # The response type desired. (required, default: json)
 ]: nothing -> record<id: int, lastUpdated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter '.format' must be non-empty" } }
+  if ($updated_since == null) { error make --unspanned { msg: "required query parameter 'updatedSince' missing: pass --updated-since" } }
+  let qp_format = ($qp_format | default "json")
   let qp = [(serialize-qp "updatedSince" $updated_since "scalar") (serialize-qp "format" $qp_format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/api/projects{format}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "apikey" => { {scheme: $scheme, headers: {apikey: $token_val}, query: "", location: "header"} }
+    "apikey" => { {scheme: $scheme, headers: {"apikey": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -772,13 +772,15 @@ export def "list-schedule" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --channel-id: string # The identifier for the selected channel.
-  --start: string # The Start Date for the schedule. (default: 2015-05-05T00:00:00)
+  --channel-id: string # The identifier for the selected channel. (required)
+  --start: string # The Start Date for the schedule. (required, default: 2015-05-05T00:00:00)
   --end: string # The End Date for the schedule. (default: 2015-05-06T00:00:00)
   --aliases: oneof<nothing, bool> # Flag to display Legacy and Provider Ids. (default: true)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id == null) { error make --unspanned { msg: "required query parameter 'channelId' missing: pass --channel-id" } }
+  let start = ($start | default "2015-05-05T00:00:00")
   let qp = [(serialize-qp "channelId" $channel_id "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "aliases" $aliases "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/schedule" $qp $auth.query)
   let accept_val = "application/json"

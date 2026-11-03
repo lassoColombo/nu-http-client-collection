@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -113,11 +113,34 @@ def base-url-completer [] { ["https://api.trakt.tv"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def type-completer [] { ["movies" "shows"] }
+def comment-type-completer [] { ["all" "reviews" "shouts"] }
+def type-completer-1 [] { ["all" "episodes" "lists" "movies" "seasons" "shows"] }
+def sort-completer [] { ["likes" "newest" "oldest" "replies"] }
+def type-completer-2 [] { ["episode" "movie" "person" "season" "show"] }
+def period-completer [] { ["all" "daily" "monthly" "weekly" "yearly"] }
+def sort-completer-1 [] { ["highest" "likes" "lowest" "newest" "oldest" "plays" "replies"] }
+def type-completer-3 [] { ["all" "official" "personal" "recommendations" "watchlists"] }
+def sort-completer-2 [] { ["added" "comments" "items" "likes" "popular" "updated"] }
+def type-completer-4 [] { ["all" "official" "personal"] }
 def ignore-collected-completer [] { ["false" "true"] }
 def ignore-watchlisted-completer [] { ["false" "true"] }
-def type-completer [] { ["episode" "list" "movie" "person" "show"] }
-def type-completer-1 [] { ["movie" "season" "show" "user"] }
+def id-type-completer [] { ["imdb" "tmdb" "trakt" "tvdb"] }
+def type-completer-5 [] { ["episode" "list" "movie" "person" "show"] }
+def sort-completer-3 [] { ["highest" "likes" "lowest" "newest" "oldest" "plays" "replies" "watched"] }
+def type-completer-6 [] { ["all" "official" "personal" "watchlists"] }
+def type-completer-7 [] { ["episodes" "movies" "seasons" "shows"] }
+def type-completer-8 [] { ["episodes" "movies"] }
+def type-completer-9 [] { ["all" "episodes" "movies" "seasons" "shows"] }
+def rating-completer [] { ["1" "10" "2" "3" "4" "5" "6" "7" "8" "9"] }
+def sort-completer-4 [] { ["added" "rank" "released" "title"] }
+def section-completer [] { ["calendar" "comments" "progress_collected" "progress_watched" "progress_watched_reset" "recommendations"] }
+def type-completer-10 [] { ["movie" "season" "show" "user"] }
+def section-completer-1 [] { ["calendar" "progress_collected" "progress_watched" "recommendations"] }
+def section-completer-2 [] { ["calendar" "comments" "progress_collected" "progress_watched" "recommendations"] }
+def section-completer-3 [] { ["calendars" "movies" "search" "shows"] }
 def include-replies-completer [] { ["false" "only" "true"] }
+def type-completer-11 [] { ["comments" "lists"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -562,7 +585,7 @@ export def "get-shows" [
 # GET /certifications/{type}
 # operationId: Get certifications
 export def "get-certifications" [
-  type: string
+  type: string@type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -735,8 +758,8 @@ export def "post-a-comment" [
 # GET /comments/recent/{comment_type}/{type}
 # operationId: Get recently created comments
 export def "get-recently-created-comments" [
-  comment_type: string
-  type: string
+  comment_type: string@comment-type-completer
+  type: string@type-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -779,8 +802,8 @@ export def "get-recently-created-comments" [
 # GET /comments/trending/{comment_type}/{type}
 # operationId: Get trending comments
 export def "get-trending-comments" [
-  comment_type: string
-  type: string
+  comment_type: string@comment-type-completer
+  type: string@type-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -823,8 +846,8 @@ export def "get-trending-comments" [
 # GET /comments/updates/{comment_type}/{type}
 # operationId: Get recently updated comments
 export def "get-recently-updated-comments" [
-  comment_type: string
-  type: string
+  comment_type: string@comment-type-completer
+  type: string@type-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1237,7 +1260,7 @@ export def "post-a-reply-for-a-comment" [
 # GET /countries/{type}
 # operationId: Get countries
 export def "get-countries" [
-  type: string
+  type: string@type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1277,7 +1300,7 @@ export def "get-countries" [
 # GET /genres/{type}
 # operationId: Get genres
 export def "get-genres" [
-  type: string
+  type: string@type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1317,7 +1340,7 @@ export def "get-genres" [
 # GET /languages/{type}
 # operationId: Get languages
 export def "get-languages" [
-  type: string
+  type: string@type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1474,7 +1497,7 @@ export def "get-list" [
 # operationId: Get all list comments
 export def "get-all-list-comments" [
   id: int
-  sort: string
+  sort: string@sort-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1516,7 +1539,7 @@ export def "get-all-list-comments" [
 # operationId: Get items on a list
 export def "get-items-on-a-list" [
   id: string
-  type: string
+  type: string@type-completer-2
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1673,7 +1696,7 @@ export def "get-the-weekend-box-office" [
 # GET /movies/collected/{period}
 # operationId: Get the most Collected movies
 export def "get-the-most-collected-movies" [
-  period: string
+  period: string@period-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1713,7 +1736,7 @@ export def "get-the-most-collected-movies" [
 # GET /movies/played/{period}
 # operationId: Get the most played movies
 export def "get-the-most-played-movies" [
-  period: string
+  period: string@period-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1791,7 +1814,7 @@ export def "get-popular-movies" [
 # GET /movies/recommended/{period}
 # operationId: Get the most recommended movies
 export def "get-the-most-recommended-movies" [
-  period: string
+  period: string@period-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1949,7 +1972,7 @@ export def "get-recently-updated-movies" [
 # GET /movies/watched/{period}
 # operationId: Get the most watched movies
 export def "get-the-most-watched-movies" [
-  period: string
+  period: string@period-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2070,7 +2093,7 @@ export def "get-all-movie-aliases" [
 # operationId: Get all movie comments
 export def "get-all-movie-comments" [
   id: string
-  sort: string
+  sort: string@sort-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2112,8 +2135,8 @@ export def "get-all-movie-comments" [
 # operationId: Get lists containing this movie
 export def "get-lists-containing-this-movie" [
   id: string
-  type: string
-  sort: string
+  type: string@type-completer-3
+  sort: string@sort-completer-2
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2526,13 +2549,16 @@ export def "authorize-application" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --response-type: string # Must be set to code. (e.g. code)
-  --client-id: string # Get this from your app settings. (e.g.  )
-  --redirect-uri: string # URI specified in your app settings. (e.g.  )
+  --response-type: string # Must be set to code. (required, e.g. code)
+  --client-id: string # Get this from your app settings. (required, e.g.  )
+  --redirect-uri: string # URI specified in your app settings. (required, e.g.  )
   --state: string # State variable for CSRF purposes. (e.g.  )
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($response_type == null) { error make --unspanned { msg: "required query parameter 'response_type' missing: pass --response-type" } }
+  if ($client_id == null) { error make --unspanned { msg: "required query parameter 'client_id' missing: pass --client-id" } }
+  if ($redirect_uri == null) { error make --unspanned { msg: "required query parameter 'redirect_uri' missing: pass --redirect-uri" } }
   let qp = [(serialize-qp "response_type" $response_type "scalar") (serialize-qp "client_id" $client_id "scalar") (serialize-qp "redirect_uri" $redirect_uri "scalar") (serialize-qp "state" $state "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/oauth/authorize" $qp $auth.query)
   let accept_val = "application/json"
@@ -2837,8 +2863,8 @@ export def "get-a-single-person" [
 # operationId: Get lists containing this person
 export def "get-lists-containing-this-person" [
   id: string
-  type: string
-  sort: string
+  type: string@type-completer-4
+  sort: string@sort-completer-2
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3260,7 +3286,7 @@ export def "stop-or-finish-watching-in-a-media-center" [
 # GET /search/{id_type}/{id}
 # operationId: Get ID lookup results
 export def "get-id-lookup-results" [
-  id_type: string
+  id_type: string@id-type-completer
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3271,7 +3297,7 @@ export def "get-id-lookup-results" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --type: string@type-completer # Search type. (e.g. movie)
+  --type: string@type-completer-5 # Search type. (e.g. movie)
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
@@ -3304,7 +3330,7 @@ export def "get-id-lookup-results" [
 # GET /search/{type}
 # operationId: Get text query results
 export def "get-text-query-results" [
-  type: string
+  type: string@type-completer-5
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3314,13 +3340,14 @@ export def "get-text-query-results" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query: string # Search all text based fields. (e.g. tron)
+  --query: string # Search all text based fields. (required, e.g. tron)
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/search/{type}") $qp $auth.query)
   let accept_val = "application/json"
@@ -3384,7 +3411,7 @@ export def "get-the-most-anticipated-shows" [
 # GET /shows/collected/{period}
 # operationId: Get the most collected shows
 export def "get-the-most-collected-shows" [
-  period: string
+  period: string@period-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3424,7 +3451,7 @@ export def "get-the-most-collected-shows" [
 # GET /shows/played/{period}
 # operationId: Get the most played shows
 export def "get-the-most-played-shows" [
-  period: string
+  period: string@period-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3502,7 +3529,7 @@ export def "get-popular-shows" [
 # GET /shows/recommended/{period}
 # operationId: Get the most recommended shows
 export def "get-the-most-recommended-shows" [
-  period: string
+  period: string@period-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3660,7 +3687,7 @@ export def "get-recently-updated-shows" [
 # GET /shows/watched/{period}
 # operationId: Get the most watched shows
 export def "get-the-most-watched-shows" [
-  period: string
+  period: string@period-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3821,7 +3848,7 @@ export def "get-all-show-certifications" [
 # operationId: Get all show comments
 export def "get-all-show-comments" [
   id: string
-  sort: string
+  sort: string@sort-completer-3
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3903,8 +3930,8 @@ export def "get-last-episode" [
 # operationId: Get lists containing this show
 export def "get-lists-containing-this-show" [
   id: string
-  type: string
-  sort: string
+  type: string@type-completer-3
+  sort: string@sort-completer-2
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4360,7 +4387,7 @@ export def "get-single-season-for-a-show" [
 export def "get-all-season-comments" [
   id: string
   season: int
-  sort: string
+  sort: string@sort-completer-3
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4449,7 +4476,7 @@ export def "get-all-episode-comments" [
   id: string
   season: int
   episode: int
-  sort: string
+  sort: string@sort-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4495,8 +4522,8 @@ export def "get-lists-containing-this-episode" [
   id: string
   season: int
   episode: int
-  type: string
-  sort: string
+  type: string@type-completer-6
+  sort: string@sort-completer-2
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4763,8 +4790,8 @@ export def "get-shows-id-seasons-season-episodes-episode-watching" [
 export def "get-lists-containing-this-season" [
   id: string
   season: int
-  type: string
-  sort: string
+  type: string@type-completer-6
+  sort: string@sort-completer-2
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5277,7 +5304,7 @@ export def "remove-items-from-collection" [
 # GET /sync/collection/{type}
 # operationId: Get collection
 export def "get-collection" [
-  type: string
+  type: string@type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5416,7 +5443,7 @@ export def "remove-items-from-history" [
 # GET /sync/history/{type}/{id}
 # operationId: Get watched history
 export def "get-watched-history" [
-  type: string
+  type: string@type-completer-7
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5539,7 +5566,7 @@ export def "remove-a-playback-item" [
 # GET /sync/playback/{type}
 # operationId: Get playback progress
 export def "get-playback-progress" [
-  type: string
+  type: string@type-completer-8
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5680,8 +5707,8 @@ export def "remove-ratings" [
 # GET /sync/ratings/{type}/{rating}
 # operationId: Get ratings
 export def "get-ratings" [
-  type: string
-  rating: int
+  type: string@type-completer-9
+  rating: int@rating-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5854,8 +5881,8 @@ export def "reorder-personally-recommended-items" [
 # GET /sync/recommendations/{type}/{sort}
 # operationId: Get personal recommendations
 export def "get-personal-recommendations" [
-  type: string
-  sort: string
+  type: string@type-completer
+  sort: string@sort-completer-4
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5896,7 +5923,7 @@ export def "get-personal-recommendations" [
 # GET /sync/watched/{type}
 # operationId: Get watched
 export def "get-watched" [
-  type: string
+  type: string@type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6076,8 +6103,8 @@ export def "reorder-watchlist-items" [
 # GET /sync/watchlist/{type}/{sort}
 # operationId: Get watchlist
 export def "get-watchlist" [
-  type: string
-  sort: string
+  type: string@type-completer-7
+  sort: string@sort-completer-4
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6118,7 +6145,7 @@ export def "get-watchlist" [
 # GET /users/hidden/{section}
 # operationId: Get hidden items
 export def "get-hidden-items" [
-  section: string
+  section: string@section-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6128,7 +6155,7 @@ export def "get-hidden-items" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --type: string@type-completer-1 # Narrow down by element type.
+  --type: string@type-completer-10 # Narrow down by element type.
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
 ]: nothing -> any {
@@ -6163,7 +6190,7 @@ export def "get-hidden-items" [
 # --seasons item shape: {ids?: record}
 # --shows item shape: {ids: record, seasons?: list, title: string, year: float}
 export def "add-hidden-items" [
-  section: string
+  section: string@section-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6212,7 +6239,7 @@ export def "add-hidden-items" [
 # --seasons item shape: {ids?: record}
 # --shows item shape: {ids: record, seasons?: list, title: string, year: float}
 export def "remove-hidden-items" [
-  section: string
+  section: string@section-completer-2
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6414,7 +6441,7 @@ export def "approve-follow-request" [
 # GET /users/saved_filters/{section}
 # operationId: Get saved filters
 export def "get-saved-filters" [
-  section: string
+  section: string@section-completer-3
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6532,7 +6559,7 @@ export def "get-user-profile" [
 # GET /users/{id}/collection/{type}
 export def "get-users-id-collection-type" [
   id: string
-  type: string
+  type: string@type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6574,8 +6601,8 @@ export def "get-users-id-collection-type" [
 # operationId: Get comments
 export def "get-comments" [
   id: string
-  comment_type: string
-  type: string
+  comment_type: string@comment-type-completer
+  type: string@type-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6819,7 +6846,7 @@ export def "get-friends" [
 # GET /users/{id}/history/{type}/{item_id}
 export def "get-users-id-history-type-item-id" [
   id: string
-  type: string
+  type: string@type-completer-7
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6866,7 +6893,7 @@ export def "get-users-id-history-type-item-id" [
 # operationId: Get likes
 export def "get-likes" [
   id: string
-  type: string
+  type: string@type-completer-11
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7216,7 +7243,7 @@ export def "update-personal-list" [
 export def "get-users-id-lists-list-id-comments-sort" [
   id: string
   list_id: string
-  sort: string
+  sort: string@sort-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7416,7 +7443,7 @@ export def "reorder-items-on-a-list" [
 export def "get-items-on-a-personal-list" [
   id: string
   list_id: string
-  type: string
+  type: string@type-completer-2
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7583,8 +7610,8 @@ export def "get-users-id-lists-list-id-likes" [
 # GET /users/{id}/ratings/{type}/{rating}
 export def "get-users-id-ratings-type-rating" [
   id: string
-  type: string
-  rating: int
+  type: string@type-completer-9
+  rating: int@rating-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7626,8 +7653,8 @@ export def "get-users-id-ratings-type-rating" [
 # GET /users/{id}/recommendations/{type}/{sort}
 export def "get-users-id-recommendations-type-sort" [
   id: string
-  type: string
-  sort: string
+  type: string@type-completer
+  sort: string@sort-completer-4
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7709,7 +7736,7 @@ export def "get-stats" [
 # GET /users/{id}/watched/{type}
 export def "get-users-id-watched-type" [
   id: string
-  type: string
+  type: string@type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7790,8 +7817,8 @@ export def "get-watching" [
 # GET /users/{id}/watchlist/{type}/{sort}
 export def "get-users-id-watchlist-type-sort" [
   id: string
-  type: string
-  sort: string
+  type: string@type-completer-7
+  sort: string@sort-completer-4
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

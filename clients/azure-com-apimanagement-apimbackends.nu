@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -169,13 +169,14 @@ export def "backend-list-by-service" [
   --filter: string # | Field | Usage | Supported operators | Supported functions ||-------------|-------------|-------------|-------------|| name | filter | ge, le, eq, ne, gt, lt | substringof, contains, startswith, endswith | | title | filter | ge, le, eq, ne, gt, lt | substringof, contains, startswith, endswith | | url | filter | ge, le, eq, ne, gt, lt | substringof, contains, startswith, endswith |
   --top: int # Number of records to return. (format: int32)
   --skip: int # Number of records to skip. (format: int32)
-  --api-version: string # Version of the API to be used with the client request.
+  --api-version: string # Version of the API to be used with the client request. (required)
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ApiManagement/service/{service_name}/backends") $qp $auth.query)
   let accept_val = "application/json"
@@ -212,15 +213,17 @@ export def "backend-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
-  --if-match: string # ETag of the Entity. ETag should match the current entity state from the header response of the GET request or it should be * for unconditional update.
-]: nothing -> record<error: record<code: string, details: list<record>, message: string>> {
+  --api-version: string # Version of the API to be used with the client request. (required)
+  --if-match: string # ETag of the Entity. ETag should match the current entity state from the header response of the GET request or it should be * for unconditional update. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
   if ($backend_id | is-empty) { error make --unspanned { msg: "path parameter 'backendId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  if ($if_match == null) { error make --unspanned { msg: "required header parameter 'If-Match' missing: pass --if-match" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name), backend_id: (encode-path-segment $backend_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ApiManagement/service/{service_name}/backends/{backend_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -259,7 +262,7 @@ export def "backend-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
+  --api-version: string # Version of the API to be used with the client request. (required)
 ]: nothing -> record<properties: record<protocol: string, url: string, credentials: record<authorization: record, certificate: list, header: record, query: record>, description: string, properties: record<serviceFabricCluster: record>, proxy: record<password: string, url: string, username: string>, resourceId: string, title: string, tls: record<validateCertificateChain: bool, validateCertificateName: bool>>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -267,6 +270,7 @@ export def "backend-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
   if ($backend_id | is-empty) { error make --unspanned { msg: "path parameter 'backendId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name), backend_id: (encode-path-segment $backend_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ApiManagement/service/{service_name}/backends/{backend_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -303,7 +307,7 @@ export def "backend-get-entity-tag" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
+  --api-version: string # Version of the API to be used with the client request. (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -311,6 +315,7 @@ export def "backend-get-entity-tag" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
   if ($backend_id | is-empty) { error make --unspanned { msg: "path parameter 'backendId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name), backend_id: (encode-path-segment $backend_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ApiManagement/service/{service_name}/backends/{backend_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -348,10 +353,10 @@ export def "backend-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
-  --if-match: string # ETag of the Entity. ETag should match the current entity state from the header response of the GET request or it should be * for unconditional update.
+  --api-version: string # Version of the API to be used with the client request. (required)
+  --if-match: string # ETag of the Entity. ETag should match the current entity state from the header response of the GET request or it should be * for unconditional update. (required)
   --properties: any # Parameters supplied to the Update Backend operation. — shape: {protocol?: "http"|"soap", url?: string, credentials?: any, description?: string, properties?: any, proxy?: any, resourceId?: string, title?: string, tls?: any}
-]: any -> record<error: record<code: string, details: list<record>, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -359,6 +364,8 @@ export def "backend-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
   if ($backend_id | is-empty) { error make --unspanned { msg: "path parameter 'backendId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  if ($if_match == null) { error make --unspanned { msg: "required header parameter 'If-Match' missing: pass --if-match" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name), backend_id: (encode-path-segment $backend_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ApiManagement/service/{service_name}/backends/{backend_id}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -400,7 +407,7 @@ export def "backend-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
+  --api-version: string # Version of the API to be used with the client request. (required)
   --if-match: string # ETag of the Entity. Not required when creating an entity, but required when updating an entity.
   --properties: any # Parameters supplied to the Create Backend operation. — shape: {protocol: "http"|"soap", url: string, credentials?: any, description?: string, properties?: any, proxy?: any, resourceId?: string, title?: string, tls?: any}
 ]: any -> record<properties: record<protocol: string, url: string, credentials: record<authorization: record, certificate: list, header: record, query: record>, description: string, properties: record<serviceFabricCluster: record>, proxy: record<password: string, url: string, username: string>, resourceId: string, title: string, tls: record<validateCertificateChain: bool, validateCertificateName: bool>>, id: string, name: string, type: string> {
@@ -411,6 +418,7 @@ export def "backend-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
   if ($backend_id | is-empty) { error make --unspanned { msg: "path parameter 'backendId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name), backend_id: (encode-path-segment $backend_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ApiManagement/service/{service_name}/backends/{backend_id}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -452,9 +460,9 @@ export def "backend-reconnect" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
+  --api-version: string # Version of the API to be used with the client request. (required)
   --properties: any # Properties to control reconnect requests. — shape: {after?: string}
-]: any -> record<error: record<code: string, details: list<record>, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -462,6 +470,7 @@ export def "backend-reconnect" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
   if ($backend_id | is-empty) { error make --unspanned { msg: "path parameter 'backendId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name), backend_id: (encode-path-segment $backend_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ApiManagement/service/{service_name}/backends/{backend_id}/reconnect") $qp $auth.query)
   let req_body = {"properties": $properties} | compact

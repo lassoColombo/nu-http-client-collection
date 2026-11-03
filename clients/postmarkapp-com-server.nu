@@ -155,8 +155,8 @@ export def "get-bounces" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --count: int # Number of bounces to return per request. Max 500.
-  --offset: int # Number of bounces to skip.
+  --count: int # Number of bounces to return per request. Max 500. (required)
+  --offset: int # Number of bounces to skip. (required)
   --type: string@type-completer # Filter by type of bounce
   --inactive: oneof<nothing, bool> # Filter by emails that were deactivated by Postmark due to the bounce. Set to true or false. If this isn't specified it will return both active and inactive.
   --email-filter: string # Filter by email address (format: email)
@@ -164,10 +164,13 @@ export def "get-bounces" [
   --tag: string # Filter by tag
   --todate: string # Filter messages up to the date specified. e.g. `2014-02-01` (format: date)
   --fromdate: string # Filter messages starting from the date specified. e.g. `2014-02-01` (format: date)
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
 ]: nothing -> record<Bounces: table<BouncedAt: string, CanActivate: bool, Content: string, Description: string, Details: string, DumpAvailable: bool, Email: string, ID: string, Inactive: bool, MessageID: string, Name: string, Subject: string, Tag: string, Type: string, TypeCode: int>, TotalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "inactive" $inactive "scalar") (serialize-qp "emailFilter" $email_filter "scalar") (serialize-qp "messageID" $message_id "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "fromdate" $fromdate "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/bounces" $qp $auth.query)
   let accept_val = "application/json"
@@ -203,11 +206,12 @@ export def "get-single-bounce" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
 ]: nothing -> record<BouncedAt: string, CanActivate: bool, Content: string, Description: string, Details: string, DumpAvailable: bool, Email: string, ID: string, Inactive: bool, MessageID: string, Name: string, Subject: string, Tag: string, Type: string, TypeCode: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bounceid | is-empty) { error make --unspanned { msg: "path parameter 'bounceid' must be non-empty" } }
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let full_url = (build-url $base ({bounceid: (encode-path-segment $bounceid)} | format pattern "/bounces/{bounceid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -242,11 +246,12 @@ export def "activate-bounce" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
 ]: nothing -> record<Bounce: record<BouncedAt: string, CanActivate: bool, Content: string, Description: string, Details: string, DumpAvailable: bool, Email: string, ID: string, Inactive: bool, MessageID: string, Name: string, Subject: string, Tag: string, Type: string, TypeCode: int>, Message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bounceid | is-empty) { error make --unspanned { msg: "path parameter 'bounceid' must be non-empty" } }
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let full_url = (build-url $base ({bounceid: (encode-path-segment $bounceid)} | format pattern "/bounces/{bounceid}/activate") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -280,11 +285,12 @@ export def "get-bounces-bounceid-dump" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
 ]: nothing -> record<Body: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bounceid | is-empty) { error make --unspanned { msg: "path parameter 'bounceid' must be non-empty" } }
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let full_url = (build-url $base ({bounceid: (encode-path-segment $bounceid)} | format pattern "/bounces/{bounceid}/dump") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -318,10 +324,11 @@ export def "get-delivery-stats" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
 ]: nothing -> record<Bounces: table<Count: int, Name: string, Type: string>, InactiveMails: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let full_url = (build-url $base "/deliverystats" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -357,26 +364,27 @@ export def "send-email" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
   --attachments: list # item shape: {Content?: string, ContentID?: string, ContentType?: string, Name?: string}
   --bcc: string # Bcc recipient email address. Multiple addresses are comma seperated. Max 50.
   --cc: string # Recipient email address. Multiple addresses are comma seperated. Max 50.
-  --body-from: string # The sender email address. Must have a registered and confirmed Sender Signature.
+  --from: string # The sender email address. Must have a registered and confirmed Sender Signature.
   --headers: list # item shape: {Name?: string, Value?: string}
   --html-body: string # If no TextBody specified HTML email message
   --reply-to: string # Reply To override email address. Defaults to the Reply To set in the sender signature.
   --subject: string # Email Subject
   --tag: string # Email tag that allows you to categorize outgoing emails and get detailed statistics.
   --text-body: string # If no HtmlBody specified Plain text email message
-  --body-to: string # Recipient email address. Multiple addresses are comma seperated. Max 50.
+  --to: string # Recipient email address. Multiple addresses are comma seperated. Max 50.
   --track-links: string@track-links-completer # Replace links in content to enable "click tracking" stats. Default is 'null', which uses the server's LinkTracking setting'.
   --track-opens: oneof<nothing, bool> # Activate open tracking for this email.
 ]: any -> record<ErrorCode: int, Message: string, MessageID: string, SubmittedAt: string, To: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let full_url = (build-url $base "/email" $auth.query)
-  let req_body = {"Attachments": $attachments, "Bcc": $bcc, "Cc": $cc, "From": $body_from, "Headers": $headers, "HtmlBody": $html_body, "ReplyTo": $reply_to, "Subject": $subject, "Tag": $tag, "TextBody": $text_body, "To": $body_to, "TrackLinks": $track_links, "TrackOpens": $track_opens} | compact
+  let req_body = {"Attachments": $attachments, "Bcc": $bcc, "Cc": $cc, "From": $from, "Headers": $headers, "HtmlBody": $html_body, "ReplyTo": $reply_to, "Subject": $subject, "Tag": $tag, "TextBody": $text_body, "To": $to, "TrackLinks": $track_links, "TrackOpens": $track_opens} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -410,12 +418,13 @@ export def "send-email-batch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
   --body: list
 ]: any -> table<ErrorCode: int, Message: string, MessageID: string, SubmittedAt: string, To: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let full_url = (build-url $base "/email/batch" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -452,12 +461,13 @@ export def "send-email-batch-with-templates" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
   --messages: list # item shape: {Attachments?: list, Bcc?: string, Cc?: string, From: string, Headers?: list, InlineCss?: bool, ReplyTo?: string, Tag?: string, TemplateAlias: string, TemplateId: int, TemplateModel: record, To: string, TrackLinks?: "None"|"HtmlAndText"|"HtmlOnly"|"TextOnly", TrackOpens?: bool}
 ]: any -> table<ErrorCode: int, Message: string, MessageID: string, SubmittedAt: string, To: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let full_url = (build-url $base "/email/batchWithTemplates" $auth.query)
   let req_body = {"Messages": $messages} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -495,11 +505,11 @@ export def "send-email-with-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
   --attachments: list # item shape: {Content?: string, ContentID?: string, ContentType?: string, Name?: string}
   --bcc: string # format: email
   --cc: string # format: email
-  --body-from: string # format: email
+  from: string # format: email
   --headers: list # item shape: {Name?: string, Value?: string}
   --inline-css: oneof<nothing, bool> # default: true
   --reply-to: string
@@ -507,15 +517,16 @@ export def "send-email-with-template" [
   template_alias: string # Required if 'TemplateId' is not specified.
   template_id: int # Required if 'TemplateAlias' is not specified.
   template_model: record
-  --body-to: string # format: email
+  to: string # format: email
   --track-links: string@track-links-completer # Replace links in content to enable "click tracking" stats. Default is 'null', which uses the server's LinkTracking setting'.
   --track-opens: oneof<nothing, bool> # Activate open tracking for this email.
 ]: any -> record<ErrorCode: int, Message: string, MessageID: string, SubmittedAt: string, To: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let full_url = (build-url $base "/email/withTemplate" $auth.query)
-  let req_body = {"Attachments": $attachments, "Bcc": $bcc, "Cc": $cc, "From": $body_from, "Headers": $headers, "InlineCss": $inline_css, "ReplyTo": $reply_to, "Tag": $tag, "TemplateAlias": $template_alias, "TemplateId": $template_id, "TemplateModel": $template_model, "To": $body_to, "TrackLinks": $track_links, "TrackOpens": $track_opens} | compact
+  let req_body = {"Attachments": $attachments, "Bcc": $bcc, "Cc": $cc, "From": $from, "Headers": $headers, "InlineCss": $inline_css, "ReplyTo": $reply_to, "Tag": $tag, "TemplateAlias": $template_alias, "TemplateId": $template_id, "TemplateModel": $template_model, "To": $to, "TrackLinks": $track_links, "TrackOpens": $track_opens} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -549,8 +560,8 @@ export def "search-inbound-messages" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --count: int # Number of messages to return per request. Max 500.
-  --offset: int # Number of messages to skip
+  --count: int # Number of messages to return per request. Max 500. (required)
+  --offset: int # Number of messages to skip (required)
   --recipient: string # Filter by the user who was receiving the email (format: email)
   --fromemail: string # Filter by the sender email address (format: email)
   --subject: string # Filter by email subject
@@ -559,10 +570,13 @@ export def "search-inbound-messages" [
   --status: string@status-completer # Filter by status (`blocked`, `processed`, `queued`, `failed`, `scheduled`)
   --todate: string # Filter messages up to the date specified. e.g. `2014-02-01` (format: date)
   --fromdate: string # Filter messages starting from the date specified. e.g. `2014-02-01` (format: date)
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
 ]: nothing -> record<InboundMessages: table<Attachments: list, Cc: string, CcFull: list, Date: string, From: string, FromFull: record, FromName: string, MailboxHash: string, MessageID: string, OriginalRecipient: string, ReplyTo: string, Status: string, Subject: string, Tag: string, To: string, ToFull: list>, TotalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "recipient" $recipient "scalar") (serialize-qp "fromemail" $fromemail "scalar") (serialize-qp "subject" $subject "scalar") (serialize-qp "mailboxhash" $mailboxhash "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "fromdate" $fromdate "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/messages/inbound" $qp $auth.query)
   let accept_val = "application/json"
@@ -598,11 +612,12 @@ export def "bypass-rules-for-inbound-message" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
 ]: nothing -> record<ErrorCode: int, Message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($messageid | is-empty) { error make --unspanned { msg: "path parameter 'messageid' must be non-empty" } }
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let full_url = (build-url $base ({messageid: (encode-path-segment $messageid)} | format pattern "/messages/inbound/{messageid}/bypass") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -637,11 +652,12 @@ export def "get-inbound-message-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
 ]: nothing -> record<Attachments: table<Content: string, ContentID: string, ContentType: string, Name: string>, BlockedReason: string, Cc: string, CcFull: table<Email: string, Name: string>, Date: string, From: string, FromFull: record<Email: string, Name: string>, FromName: string, Headers: table<Name: string, Value: string>, HtmlBody: string, MailboxHash: string, MessageID: string, OriginalRecipient: string, ReplyTo: string, Status: string, Subject: string, Tag: string, TextBody: string, To: string, ToFull: table<Email: string, Name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($messageid | is-empty) { error make --unspanned { msg: "path parameter 'messageid' must be non-empty" } }
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let full_url = (build-url $base ({messageid: (encode-path-segment $messageid)} | format pattern "/messages/inbound/{messageid}/details") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -676,11 +692,12 @@ export def "retry-inbound-message-processing" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
 ]: nothing -> record<ErrorCode: int, Message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($messageid | is-empty) { error make --unspanned { msg: "path parameter 'messageid' must be non-empty" } }
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let full_url = (build-url $base ({messageid: (encode-path-segment $messageid)} | format pattern "/messages/inbound/{messageid}/retry") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -714,18 +731,21 @@ export def "search-outbound-messages" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --count: int # Number of messages to return per request. Max 500.
-  --offset: int # Number of messages to skip
+  --count: int # Number of messages to return per request. Max 500. (required)
+  --offset: int # Number of messages to skip (required)
   --recipient: string # Filter by the user who was receiving the email (format: email)
   --fromemail: string # Filter by the sender email address (format: email)
   --tag: string # Filter by tag
   --status: string@status-completer-1 # Filter by status (`queued` or `sent`)
   --todate: string # Filter messages up to the date specified. e.g. `2014-02-01` (format: date)
   --fromdate: string # Filter messages starting from the date specified. e.g. `2014-02-01` (format: date)
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
 ]: nothing -> record<Messages: table<Attachments: list, Bcc: list, Cc: list, From: string, MessageID: string, ReceivedAt: string, Recipients: list, Status: string, Subject: string, Tag: string, To: list, TrackLinks: string, TrackOpens: bool>, TotalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "recipient" $recipient "scalar") (serialize-qp "fromemail" $fromemail "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "fromdate" $fromdate "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/messages/outbound" $qp $auth.query)
   let accept_val = "application/json"
@@ -760,8 +780,8 @@ export def "search-clicks-for-outbound-messages" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --count: int # Number of message clicks to return per request. Max 500.
-  --offset: int # Number of messages to skip
+  --count: int # Number of message clicks to return per request. Max 500. (required)
+  --offset: int # Number of messages to skip (required)
   --recipient: string # Filter by To, Cc, Bcc
   --tag: string # Filter by tag
   --client-name: string # Filter by client name, i.e. Outlook, Gmail
@@ -774,10 +794,13 @@ export def "search-clicks-for-outbound-messages" [
   --country: string # Filter by country messages were opened in, i.e. Denmark, Russia
   --region: string # Filter by full name of region messages were opened in, i.e. Moscow, New York
   --city: string # Filter by full name of region messages were opened in, i.e. Moscow, New York
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
 ]: nothing -> record<Clicks: table<ClickLocation: string, Client: record, Geo: record, MessageID: string, OS: record, OriginalLink: string, Platform: string, ReceivedAt: string, Recipient: string, Tag: string, UserAgent: string>, TotalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "recipient" $recipient "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "client_name" $client_name "scalar") (serialize-qp "client_company" $client_company "scalar") (serialize-qp "client_family" $client_family "scalar") (serialize-qp "os_name" $os_name "scalar") (serialize-qp "os_family" $os_family "scalar") (serialize-qp "os_company" $os_company "scalar") (serialize-qp "platform" $platform "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "city" $city "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/messages/outbound/clicks" $qp $auth.query)
   let accept_val = "application/json"
@@ -813,13 +836,16 @@ export def "get-clicks-for-single-outbound-message" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --count: int # Number of message clicks to return per request. Max 500. (default: 1)
-  --offset: int # Number of messages to skip. (default: 0)
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --count: int # Number of message clicks to return per request. Max 500. (required, default: 1)
+  --offset: int # Number of messages to skip. (required, default: 0)
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
 ]: nothing -> record<Clicks: table<ClickLocation: string, Client: record, Geo: record, MessageID: string, OS: record, OriginalLink: string, Platform: string, ReceivedAt: string, Recipient: string, Tag: string, UserAgent: string>, TotalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($messageid | is-empty) { error make --unspanned { msg: "path parameter 'messageid' must be non-empty" } }
+  let count = ($count | default 1)
+  let offset = ($offset | default 0)
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({messageid: (encode-path-segment $messageid)} | format pattern "/messages/outbound/clicks/{messageid}") $qp $auth.query)
   let accept_val = "application/json"
@@ -854,8 +880,8 @@ export def "search-opens-for-outbound-messages" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --count: int # Number of message opens to return per request. Max 500.
-  --offset: int # Number of messages to skip
+  --count: int # Number of message opens to return per request. Max 500. (required)
+  --offset: int # Number of messages to skip (required)
   --recipient: string # Filter by To, Cc, Bcc
   --tag: string # Filter by tag
   --client-name: string # Filter by client name, i.e. Outlook, Gmail
@@ -868,10 +894,13 @@ export def "search-opens-for-outbound-messages" [
   --country: string # Filter by country messages were opened in, i.e. Denmark, Russia
   --region: string # Filter by full name of region messages were opened in, i.e. Moscow, New York
   --city: string # Filter by full name of region messages were opened in, i.e. Moscow, New York
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
 ]: nothing -> record<Opens: table<Client: record, FirstOpen: bool, Geo: record, MessageID: string, OS: record, Platform: string, ReceivedAt: string, Recipient: string, Tag: string, UserAgent: string>, TotalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "recipient" $recipient "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "client_name" $client_name "scalar") (serialize-qp "client_company" $client_company "scalar") (serialize-qp "client_family" $client_family "scalar") (serialize-qp "os_name" $os_name "scalar") (serialize-qp "os_family" $os_family "scalar") (serialize-qp "os_company" $os_company "scalar") (serialize-qp "platform" $platform "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "city" $city "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/messages/outbound/opens" $qp $auth.query)
   let accept_val = "application/json"
@@ -907,13 +936,16 @@ export def "get-opens-for-single-outbound-message" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --count: int # Number of message opens to return per request. Max 500. (default: 1)
-  --offset: int # Number of messages to skip. (default: 0)
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --count: int # Number of message opens to return per request. Max 500. (required, default: 1)
+  --offset: int # Number of messages to skip. (required, default: 0)
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
 ]: nothing -> record<Opens: table<Client: record, FirstOpen: bool, Geo: record, MessageID: string, OS: record, Platform: string, ReceivedAt: string, Recipient: string, Tag: string, UserAgent: string>, TotalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($messageid | is-empty) { error make --unspanned { msg: "path parameter 'messageid' must be non-empty" } }
+  let count = ($count | default 1)
+  let offset = ($offset | default 0)
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({messageid: (encode-path-segment $messageid)} | format pattern "/messages/outbound/opens/{messageid}") $qp $auth.query)
   let accept_val = "application/json"
@@ -949,11 +981,12 @@ export def "get-outbound-message-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
 ]: nothing -> record<Attachments: table<Content: string, ContentID: string, ContentType: string, Name: string>, Bcc: table<Email: string, Name: string>, Body: string, Cc: table<Email: string, Name: string>, From: string, HtmlBody: string, MessageEvents: table<Details: record, ReceivedAt: string, Recipient: string, Type: string>, MessageID: string, ReceivedAt: string, Recipients: list<string>, Status: string, Subject: string, Tag: string, TextBody: string, To: table<Email: string, Name: string>, TrackLinks: string, TrackOpens: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($messageid | is-empty) { error make --unspanned { msg: "path parameter 'messageid' must be non-empty" } }
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let full_url = (build-url $base ({messageid: (encode-path-segment $messageid)} | format pattern "/messages/outbound/{messageid}/details") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -988,11 +1021,12 @@ export def "get-outbound-message-dump" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
 ]: nothing -> record<Body: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($messageid | is-empty) { error make --unspanned { msg: "path parameter 'messageid' must be non-empty" } }
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let full_url = (build-url $base ({messageid: (encode-path-segment $messageid)} | format pattern "/messages/outbound/{messageid}/dump") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1026,10 +1060,11 @@ export def "get-current-server-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
 ]: nothing -> record<ApiTokens: list<string>, BounceHookUrl: string, ClickHookUrl: string, Color: string, DeliveryHookUrl: string, ID: int, InboundAddress: string, InboundDomain: string, InboundHash: string, InboundHookUrl: string, InboundSpamThreshold: int, Name: string, OpenHookUrl: string, PostFirstOpenOnly: bool, RawEmailEnabled: bool, ServerLink: string, SmtpApiActivated: bool, TrackLinks: string, TrackOpens: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let full_url = (build-url $base "/server" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1063,7 +1098,7 @@ export def "edit-current-server-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
   --bounce-hook-url: string
   --click-hook-url: string # Webhook url allowing real-time notification when tracked links are clicked.
   --color: string@color-completer
@@ -1082,6 +1117,7 @@ export def "edit-current-server-configuration" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let full_url = (build-url $base "/server" $auth.query)
   let req_body = {"BounceHookUrl": $bounce_hook_url, "ClickHookUrl": $click_hook_url, "Color": $color, "DeliveryHookUrl": $delivery_hook_url, "InboundDomain": $inbound_domain, "InboundHookUrl": $inbound_hook_url, "InboundSpamThreshold": $inbound_spam_threshold, "Name": $name, "OpenHookUrl": $open_hook_url, "PostFirstOpenOnly": $post_first_open_only, "RawEmailEnabled": $raw_email_enabled, "SmtpApiActivated": $smtp_api_activated, "TrackLinks": $track_links, "TrackOpens": $track_opens} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1120,10 +1156,11 @@ export def "get-outbound-overview-statistics" [
   --tag: string # Filter by tag
   --fromdate: string # Filter stats starting from the date specified. e.g. `2014-01-01` (format: date)
   --todate: string # Filter stats up to the date specified. e.g. `2014-02-01` (format: date)
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
 ]: nothing -> record<BounceRate: int, Bounced: int, Opens: int, SMTPAPIErrors: int, Sent: int, SpamComplaints: int, SpamComplaintsRate: int, TotalClicks: int, TotalTrackedLinksSent: int, Tracked: int, UniqueLinksClicked: int, UniqueOpens: int, WithClientRecorded: int, WithLinkTracking: int, WithOpenTracking: int, WithPlatformRecorded: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let qp = [(serialize-qp "tag" $tag "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/stats/outbound" $qp $auth.query)
   let accept_val = "application/json"
@@ -1161,10 +1198,11 @@ export def "get-bounce-counts" [
   --tag: string # Filter by tag
   --fromdate: string # Filter stats starting from the date specified. e.g. `2014-01-01` (format: date)
   --todate: string # Filter stats up to the date specified. e.g. `2014-02-01` (format: date)
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
 ]: nothing -> record<Days: table<Date: string, HardBounce: int, SMTPApiError: int, SoftBounce: int, Transient: int>, HardBounce: int, SMTPApiError: int, SoftBounce: int, Transient: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let qp = [(serialize-qp "tag" $tag "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/stats/outbound/bounces" $qp $auth.query)
   let accept_val = "application/json"
@@ -1202,10 +1240,11 @@ export def "get-outbound-click-counts" [
   --tag: string # Filter by tag
   --fromdate: string # Filter stats starting from the date specified. e.g. `2014-01-01` (format: date)
   --todate: string # Filter stats up to the date specified. e.g. `2014-02-01` (format: date)
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let qp = [(serialize-qp "tag" $tag "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/stats/outbound/clicks" $qp $auth.query)
   let accept_val = "application/json"
@@ -1243,10 +1282,11 @@ export def "get-outbound-click-counts-by-browser-family" [
   --tag: string # Filter by tag
   --fromdate: string # Filter stats starting from the date specified. e.g. `2014-01-01` (format: date)
   --todate: string # Filter stats up to the date specified. e.g. `2014-02-01` (format: date)
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let qp = [(serialize-qp "tag" $tag "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/stats/outbound/clicks/browserfamilies" $qp $auth.query)
   let accept_val = "application/json"
@@ -1284,10 +1324,11 @@ export def "get-outbound-click-counts-by-location" [
   --tag: string # Filter by tag
   --fromdate: string # Filter stats starting from the date specified. e.g. `2014-01-01` (format: date)
   --todate: string # Filter stats up to the date specified. e.g. `2014-02-01` (format: date)
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let qp = [(serialize-qp "tag" $tag "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/stats/outbound/clicks/location" $qp $auth.query)
   let accept_val = "application/json"
@@ -1325,10 +1366,11 @@ export def "get-outbound-click-counts-by-platform" [
   --tag: string # Filter by tag
   --fromdate: string # Filter stats starting from the date specified. e.g. `2014-01-01` (format: date)
   --todate: string # Filter stats up to the date specified. e.g. `2014-02-01` (format: date)
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let qp = [(serialize-qp "tag" $tag "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/stats/outbound/clicks/platforms" $qp $auth.query)
   let accept_val = "application/json"
@@ -1366,10 +1408,11 @@ export def "get-outbound-open-counts" [
   --tag: string # Filter by tag
   --fromdate: string # Filter stats starting from the date specified. e.g. `2014-01-01` (format: date)
   --todate: string # Filter stats up to the date specified. e.g. `2014-02-01` (format: date)
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
 ]: nothing -> record<Days: table<Date: string, Opens: int, Unique: int>, Opens: int, Unique: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let qp = [(serialize-qp "tag" $tag "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/stats/outbound/opens" $qp $auth.query)
   let accept_val = "application/json"
@@ -1407,10 +1450,11 @@ export def "get-outbound-open-counts-by-email-client" [
   --tag: string # Filter by tag
   --fromdate: string # Filter stats starting from the date specified. e.g. `2014-01-01` (format: date)
   --todate: string # Filter stats up to the date specified. e.g. `2014-02-01` (format: date)
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
 ]: nothing -> record<Days: list<any>, Desktop: int, Mobile: int, Unknown: int, WebMail: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let qp = [(serialize-qp "tag" $tag "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/stats/outbound/opens/emailclients" $qp $auth.query)
   let accept_val = "application/json"
@@ -1448,10 +1492,11 @@ export def "get-outbound-open-counts-by-platform" [
   --tag: string # Filter by tag
   --fromdate: string # Filter stats starting from the date specified. e.g. `2014-01-01` (format: date)
   --todate: string # Filter stats up to the date specified. e.g. `2014-02-01` (format: date)
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
 ]: nothing -> record<Days: table<Date: string, Desktop: int, Mobile: int, Unknown: int, WebMail: int>, Desktop: int, Mobile: int, Unknown: int, WebMail: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let qp = [(serialize-qp "tag" $tag "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/stats/outbound/opens/platforms" $qp $auth.query)
   let accept_val = "application/json"
@@ -1489,10 +1534,11 @@ export def "get-sent-counts" [
   --tag: string # Filter by tag
   --fromdate: string # Filter stats starting from the date specified. e.g. `2014-01-01` (format: date)
   --todate: string # Filter stats up to the date specified. e.g. `2014-02-01` (format: date)
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
 ]: nothing -> record<Days: table<Date: string, Sent: int>, Sent: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let qp = [(serialize-qp "tag" $tag "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/stats/outbound/sends" $qp $auth.query)
   let accept_val = "application/json"
@@ -1530,10 +1576,11 @@ export def "get-spam-complaints" [
   --tag: string # Filter by tag
   --fromdate: string # Filter stats starting from the date specified. e.g. `2014-01-01` (format: date)
   --todate: string # Filter stats up to the date specified. e.g. `2014-02-01` (format: date)
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
 ]: nothing -> record<Days: table<Date: string, SpamComplaint: int>, SpamComplaint: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let qp = [(serialize-qp "tag" $tag "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/stats/outbound/spam" $qp $auth.query)
   let accept_val = "application/json"
@@ -1571,10 +1618,11 @@ export def "get-tracked-email-counts" [
   --tag: string # Filter by tag
   --fromdate: string # Filter stats starting from the date specified. e.g. `2014-01-01` (format: date)
   --todate: string # Filter stats starting from the date specified. e.g. `2014-01-01` (format: date)
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
 ]: nothing -> record<Days: table<Date: string, Tracked: int>, Tracked: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let qp = [(serialize-qp "tag" $tag "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/stats/outbound/tracked" $qp $auth.query)
   let accept_val = "application/json"
@@ -1609,12 +1657,15 @@ export def "list-templates" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --count: float # The number of Templates to return (format: int)
-  --offset: float # The number of Templates to "skip" before returning results. (format: int)
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --count: float # The number of Templates to return (required, format: int)
+  --offset: float # The number of Templates to "skip" before returning results. (required, format: int)
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
 ]: nothing -> record<Templates_API: table<Active: bool, Alias: string, Name: string, TemplateId: float>, TotalCount: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'Count' missing: pass --count" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'Offset' missing: pass --offset" } }
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let qp = [(serialize-qp "Count" $count "scalar") (serialize-qp "Offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templates" $qp $auth.query)
   let accept_val = "application/json"
@@ -1648,7 +1699,7 @@ export def "post-templates" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
   --alias: string # The optional string identifier for referring to this Template (numbers, letters, and '.', '-', '_' characters, starts with a letter).
   --html-body: string # The HTML template definition for this Template.
   name: string # The friendly display name for the template.
@@ -1658,6 +1709,7 @@ export def "post-templates" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let full_url = (build-url $base "/templates" $auth.query)
   let req_body = {"Alias": $alias, "HtmlBody": $html_body, "Name": $name, "Subject": $subject, "TextBody": $text_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1693,7 +1745,7 @@ export def "test-template-content" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
   --html-body: string # The html body content to validate. Must be specified if Subject or TextBody are not. See our template language documentation for more information on the syntax for this field.
   --inline-css-for-html-test-render: oneof<nothing, bool> # When HtmlBody is specified, the test render will have style blocks inlined as style attributes on matching html elements. You may disable the css inlining behavior by passing false for this parameter. (default: true)
   --subject: string # The subject content to validate. Must be specified if HtmlBody or TextBody are not. See our template language documentation for more information on the syntax for this field.
@@ -1703,6 +1755,7 @@ export def "test-template-content" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let full_url = (build-url $base "/templates/validate" $auth.query)
   let req_body = {"HtmlBody": $html_body, "InlineCssForHtmlTestRender": $inline_css_for_html_test_render, "Subject": $subject, "TestRenderModel": $test_render_model, "TextBody": $text_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1739,11 +1792,12 @@ export def "delete-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
 ]: nothing -> record<Active: bool, Alias: string, AssociatedServerId: int, HtmlBody: string, Name: string, Subject: string, TemplateID: int, TextBody: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($template_id_or_alias | is-empty) { error make --unspanned { msg: "path parameter 'templateIdOrAlias' must be non-empty" } }
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let full_url = (build-url $base ({template_id_or_alias: (encode-path-segment $template_id_or_alias)} | format pattern "/templates/{template_id_or_alias}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1778,11 +1832,12 @@ export def "get-single-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
 ]: nothing -> record<Active: bool, Alias: string, AssociatedServerId: int, HtmlBody: string, Name: string, Subject: string, TemplateID: int, TextBody: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($template_id_or_alias | is-empty) { error make --unspanned { msg: "path parameter 'templateIdOrAlias' must be non-empty" } }
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let full_url = (build-url $base ({template_id_or_alias: (encode-path-segment $template_id_or_alias)} | format pattern "/templates/{template_id_or_alias}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1817,7 +1872,7 @@ export def "update-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
   --alias: string # The optional string identifier for referring to this Template (numbers, letters, and '.', '-', '_' characters, starts with a letter).
   --html-body: string # The HTML template definition for this Template.
   --name: string # The friendly display name for the template.
@@ -1828,6 +1883,7 @@ export def "update-template" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($template_id_or_alias | is-empty) { error make --unspanned { msg: "path parameter 'templateIdOrAlias' must be non-empty" } }
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let full_url = (build-url $base ({template_id_or_alias: (encode-path-segment $template_id_or_alias)} | format pattern "/templates/{template_id_or_alias}") $auth.query)
   let req_body = {"Alias": $alias, "HtmlBody": $html_body, "Name": $name, "Subject": $subject, "TextBody": $text_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1863,12 +1919,15 @@ export def "list-inbound-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --count: int # Number of records to return per request.
-  --offset: int # Number of records to skip.
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --count: int # Number of records to return per request. (required)
+  --offset: int # Number of records to skip. (required)
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
 ]: nothing -> record<InboundRules: table<ID: int, Rule: string>, TotalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/triggers/inboundrules" $qp $auth.query)
   let accept_val = "application/json"
@@ -1903,12 +1962,13 @@ export def "create-inbound-rule" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
   --rule: string # format: email
 ]: any -> record<ID: int, Rule: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let full_url = (build-url $base "/triggers/inboundrules" $auth.query)
   let req_body = {"Rule": $rule} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1945,11 +2005,12 @@ export def "delete-inbound-rule" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-server-token: string # The token associated with the Server on which this request will operate.
+  --x-postmark-server-token: string # The token associated with the Server on which this request will operate. (required)
 ]: nothing -> record<ErrorCode: int, Message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($triggerid | is-empty) { error make --unspanned { msg: "path parameter 'triggerid' must be non-empty" } }
+  if ($x_postmark_server_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Server-Token' missing: pass --x-postmark-server-token" } }
   let full_url = (build-url $base ({triggerid: (encode-path-segment $triggerid)} | format pattern "/triggers/inboundrules/{triggerid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

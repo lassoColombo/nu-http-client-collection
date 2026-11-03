@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -547,8 +547,8 @@ export def "list-call-summaries" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-from: string
-  --qp-to: string
+  --from: string
+  --to: string
   --from-carrier: string
   --to-carrier: string
   --from-country-code: string
@@ -572,14 +572,14 @@ export def "list-call-summaries" [
 ]: nothing -> record<call_summaries: table<account_sid: string, answered_by: string, attributes: any, call_sid: string, call_state: string, call_type: string, carrier_edge: any, client_edge: any, connect_duration: int, created_time: string, duration: int, end_time: string, from: any, processing_state: string, properties: any, sdk_edge: any, sip_edge: any, start_time: string, tags: list, to: any, trust: any, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://insights.twilio.com")
-  let qp = [(serialize-qp "From" $qp_from "scalar") (serialize-qp "To" $qp_to "scalar") (serialize-qp "FromCarrier" $from_carrier "scalar") (serialize-qp "ToCarrier" $to_carrier "scalar") (serialize-qp "FromCountryCode" $from_country_code "scalar") (serialize-qp "ToCountryCode" $to_country_code "scalar") (serialize-qp "Branded" $branded "scalar") (serialize-qp "VerifiedCaller" $verified_caller "scalar") (serialize-qp "HasTag" $has_tag "scalar") (serialize-qp "StartTime" $start_time "scalar") (serialize-qp "EndTime" $end_time "scalar") (serialize-qp "CallType" $call_type "scalar") (serialize-qp "CallState" $call_state "scalar") (serialize-qp "Direction" $direction "scalar") (serialize-qp "ProcessingState" $processing_state "scalar") (serialize-qp "SortBy" $sort_by "scalar") (serialize-qp "Subaccount" $subaccount "scalar") (serialize-qp "AbnormalSession" $abnormal_session "scalar") (serialize-qp "AnsweredBy" $answered_by "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "From" $from "scalar") (serialize-qp "To" $to "scalar") (serialize-qp "FromCarrier" $from_carrier "scalar") (serialize-qp "ToCarrier" $to_carrier "scalar") (serialize-qp "FromCountryCode" $from_country_code "scalar") (serialize-qp "ToCountryCode" $to_country_code "scalar") (serialize-qp "Branded" $branded "scalar") (serialize-qp "VerifiedCaller" $verified_caller "scalar") (serialize-qp "HasTag" $has_tag "scalar") (serialize-qp "StartTime" $start_time "scalar") (serialize-qp "EndTime" $end_time "scalar") (serialize-qp "CallType" $call_type "scalar") (serialize-qp "CallState" $call_state "scalar") (serialize-qp "Direction" $direction "scalar") (serialize-qp "ProcessingState" $processing_state "scalar") (serialize-qp "SortBy" $sort_by "scalar") (serialize-qp "Subaccount" $subaccount "scalar") (serialize-qp "AbnormalSession" $abnormal_session "scalar") (serialize-qp "AnsweredBy" $answered_by "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Voice/Summaries" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"From": $qp_from, "To": $qp_to, "FromCarrier": $from_carrier, "ToCarrier": $to_carrier, "FromCountryCode": $from_country_code, "ToCountryCode": $to_country_code, "Branded": $branded, "VerifiedCaller": $verified_caller, "HasTag": $has_tag, "StartTime": $start_time, "EndTime": $end_time, "CallType": $call_type, "CallState": $call_state, "Direction": $direction, "ProcessingState": $processing_state, "SortBy": $sort_by, "Subaccount": $subaccount, "AbnormalSession": $abnormal_session, "AnsweredBy": $answered_by, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
+    query: ({"From": $from, "To": $to, "FromCarrier": $from_carrier, "ToCarrier": $to_carrier, "FromCountryCode": $from_country_code, "ToCountryCode": $to_country_code, "Branded": $branded, "VerifiedCaller": $verified_caller, "HasTag": $has_tag, "StartTime": $start_time, "EndTime": $end_time, "CallType": $call_type, "CallState": $call_state, "Direction": $direction, "ProcessingState": $processing_state, "SortBy": $sort_by, "Subaccount": $subaccount, "AbnormalSession": $abnormal_session, "AnsweredBy": $answered_by, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null

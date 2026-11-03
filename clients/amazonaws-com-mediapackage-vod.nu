@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # PUT /packaging_groups/{id}/configure_logs
 # operationId: ConfigureLogs
-# --egressAccessLogs shape: {LogGroupName?: any}
+# --egressAccessLogs shape: {LogGroupName?: string}
 export def "configure-logs" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -159,8 +159,8 @@ export def "configure-logs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --egress-access-logs: record # Configure egress access logging. — shape: {LogGroupName?: any}
-]: any -> record<Arn: record, Authorization: record<CdnIdentifierSecret: record, SecretsRoleArn: record>, CreatedAt: record, DomainName: record, EgressAccessLogs: record<LogGroupName: record>, Id: record, Tags: record> {
+  --egress-access-logs: record # Configure egress access logging. — shape: {LogGroupName?: string}
+]: any -> record<Arn: string, Authorization: record<CdnIdentifierSecret: string, SecretsRoleArn: string>, CreatedAt: string, DomainName: string, EgressAccessLogs: record<LogGroupName: string>, Id: string, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -213,7 +213,7 @@ export def "create-asset" [
   source_arn: string # ARN of the source object in S3.
   source_role_arn: string # The IAM role ARN used to access the source S3 bucket.
   --tags: record # A collection of tags associated with a resource
-]: any -> record<Arn: record, CreatedAt: record, EgressEndpoints: record, Id: record, PackagingGroupId: record, ResourceId: record, SourceArn: record, SourceRoleArn: record, Tags: record> {
+]: any -> record<Arn: string, CreatedAt: string, EgressEndpoints: table<PackagingConfigurationId: string, Status: string, Url: string>, Id: string, PackagingGroupId: string, ResourceId: string, SourceArn: string, SourceRoleArn: string, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -264,7 +264,7 @@ export def "list-assets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Assets: record, NextToken: record> {
+]: nothing -> record<Assets: table<Arn: string, CreatedAt: string, Id: string, PackagingGroupId: string, ResourceId: string, SourceArn: string, SourceRoleArn: string, Tags: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "packagingGroupId" $packaging_group_id "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -291,10 +291,10 @@ export def "list-assets" [
 #
 # POST /packaging_configurations
 # operationId: CreatePackagingConfiguration
-# --cmafPackage shape: {Encryption?: any, HlsManifests?: any, IncludeEncoderConfigurationInSegments?: any, SegmentDurationSeconds?: any}
-# --dashPackage shape: {DashManifests?: any, Encryption?: any, IncludeEncoderConfigurationInSegments?: any, IncludeIframeOnlyStream?: any, PeriodTriggers?: any, SegmentDurationSeconds?: any, SegmentTemplateFormat?: any}
-# --hlsPackage shape: {Encryption?: any, HlsManifests?: any, IncludeDvbSubtitles?: any, SegmentDurationSeconds?: any, UseAudioRenditionGroup?: any}
-# --mssPackage shape: {Encryption?: any, MssManifests?: any, SegmentDurationSeconds?: any}
+# --cmafPackage shape: {Encryption?: record, HlsManifests?: list, IncludeEncoderConfigurationInSegments?: bool, SegmentDurationSeconds?: int}
+# --dashPackage shape: {DashManifests?: list, Encryption?: record, IncludeEncoderConfigurationInSegments?: bool, IncludeIframeOnlyStream?: bool, PeriodTriggers?: list<string>, SegmentDurationSeconds?: int, SegmentTemplateFormat?: "NUMBER_WITH_TIMELINE"|"TIME_WITH_TIMELINE"|"NUMBER_WITH_DURATION"}
+# --hlsPackage shape: {Encryption?: record, HlsManifests?: list, IncludeDvbSubtitles?: bool, SegmentDurationSeconds?: int, UseAudioRenditionGroup?: bool}
+# --mssPackage shape: {Encryption?: record, MssManifests?: list, SegmentDurationSeconds?: int}
 export def "create-packaging-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -312,14 +312,14 @@ export def "create-packaging-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --cmaf-package: record # A CMAF packaging configuration. — shape: {Encryption?: any, HlsManifests?: any, IncludeEncoderConfigurationInSegments?: any, SegmentDurationSeconds?: any}
-  --dash-package: record # A Dynamic Adaptive Streaming over HTTP (DASH) packaging configuration. — shape: {DashManifests?: any, Encryption?: any, IncludeEncoderConfigurationInSegments?: any, IncludeIframeOnlyStream?: any, PeriodTriggers?: any, SegmentDurationSeconds?: any, SegmentTemplateFormat?: any}
-  --hls-package: record # An HTTP Live Streaming (HLS) packaging configuration. — shape: {Encryption?: any, HlsManifests?: any, IncludeDvbSubtitles?: any, SegmentDurationSeconds?: any, UseAudioRenditionGroup?: any}
+  --cmaf-package: record # A CMAF packaging configuration. — shape: {Encryption?: record, HlsManifests?: list, IncludeEncoderConfigurationInSegments?: bool, SegmentDurationSeconds?: int}
+  --dash-package: record # A Dynamic Adaptive Streaming over HTTP (DASH) packaging configuration. — shape: {DashManifests?: list, Encryption?: record, IncludeEncoderConfigurationInSegments?: bool, IncludeIframeOnlyStream?: bool, PeriodTriggers?: list<string>, SegmentDurationSeconds?: int, SegmentTemplateFormat?: "NUMBER_WITH_TIMELINE"|"TIME_WITH_TIMELINE"|"NUMBER_WITH_DURATION"}
+  --hls-package: record # An HTTP Live Streaming (HLS) packaging configuration. — shape: {Encryption?: record, HlsManifests?: list, IncludeDvbSubtitles?: bool, SegmentDurationSeconds?: int, UseAudioRenditionGroup?: bool}
   id: string # The ID of the PackagingConfiguration.
-  --mss-package: record # A Microsoft Smooth Streaming (MSS) PackagingConfiguration. — shape: {Encryption?: any, MssManifests?: any, SegmentDurationSeconds?: any}
+  --mss-package: record # A Microsoft Smooth Streaming (MSS) PackagingConfiguration. — shape: {Encryption?: record, MssManifests?: list, SegmentDurationSeconds?: int}
   packaging_group_id: string # The ID of a PackagingGroup.
   --tags: record # A collection of tags associated with a resource
-]: any -> record<Arn: record, CmafPackage: record<Encryption: record<ConstantInitializationVector: record, SpekeKeyProvider: record>, HlsManifests: record, IncludeEncoderConfigurationInSegments: record, SegmentDurationSeconds: record>, CreatedAt: record, DashPackage: record<DashManifests: record, Encryption: record<SpekeKeyProvider: record>, IncludeEncoderConfigurationInSegments: record, IncludeIframeOnlyStream: record, PeriodTriggers: record, SegmentDurationSeconds: record, SegmentTemplateFormat: record>, HlsPackage: record<Encryption: record<ConstantInitializationVector: record, EncryptionMethod: record, SpekeKeyProvider: record>, HlsManifests: record, IncludeDvbSubtitles: record, SegmentDurationSeconds: record, UseAudioRenditionGroup: record>, Id: record, MssPackage: record<Encryption: record<SpekeKeyProvider: record>, MssManifests: record, SegmentDurationSeconds: record>, PackagingGroupId: record, Tags: record> {
+]: any -> record<Arn: string, CmafPackage: record<Encryption: record<ConstantInitializationVector: string, SpekeKeyProvider: record>, HlsManifests: list<record>, IncludeEncoderConfigurationInSegments: bool, SegmentDurationSeconds: int>, CreatedAt: string, DashPackage: record<DashManifests: list<record>, Encryption: record<SpekeKeyProvider: record>, IncludeEncoderConfigurationInSegments: bool, IncludeIframeOnlyStream: bool, PeriodTriggers: list<string>, SegmentDurationSeconds: int, SegmentTemplateFormat: string>, HlsPackage: record<Encryption: record<ConstantInitializationVector: string, EncryptionMethod: string, SpekeKeyProvider: record>, HlsManifests: list<record>, IncludeDvbSubtitles: bool, SegmentDurationSeconds: int, UseAudioRenditionGroup: bool>, Id: string, MssPackage: record<Encryption: record<SpekeKeyProvider: record>, MssManifests: list<record>, SegmentDurationSeconds: int>, PackagingGroupId: string, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -370,7 +370,7 @@ export def "list-packaging-configurations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: record, PackagingConfigurations: record> {
+]: nothing -> record<NextToken: string, PackagingConfigurations: table<Arn: string, CmafPackage: record, CreatedAt: string, DashPackage: record, HlsPackage: record, Id: string, MssPackage: record, PackagingGroupId: string, Tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "packagingGroupId" $packaging_group_id "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -397,8 +397,8 @@ export def "list-packaging-configurations" [
 #
 # POST /packaging_groups
 # operationId: CreatePackagingGroup
-# --authorization shape: {CdnIdentifierSecret?: any, SecretsRoleArn?: any}
-# --egressAccessLogs shape: {LogGroupName?: any}
+# --authorization shape: {CdnIdentifierSecret?: string, SecretsRoleArn?: string}
+# --egressAccessLogs shape: {LogGroupName?: string}
 export def "create-packaging-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -416,11 +416,11 @@ export def "create-packaging-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --authorization: record # CDN Authorization credentials — shape: {CdnIdentifierSecret?: any, SecretsRoleArn?: any}
-  --egress-access-logs: record # Configure egress access logging. — shape: {LogGroupName?: any}
+  --authorization: record # CDN Authorization credentials — shape: {CdnIdentifierSecret?: string, SecretsRoleArn?: string}
+  --egress-access-logs: record # Configure egress access logging. — shape: {LogGroupName?: string}
   id: string # The ID of the PackagingGroup.
   --tags: record # A collection of tags associated with a resource
-]: any -> record<Arn: record, Authorization: record<CdnIdentifierSecret: record, SecretsRoleArn: record>, CreatedAt: record, DomainName: record, EgressAccessLogs: record<LogGroupName: record>, Id: record, Tags: record> {
+]: any -> record<Arn: string, Authorization: record<CdnIdentifierSecret: string, SecretsRoleArn: string>, CreatedAt: string, DomainName: string, EgressAccessLogs: record<LogGroupName: string>, Id: string, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -470,7 +470,7 @@ export def "list-packaging-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: record, PackagingGroups: record> {
+]: nothing -> record<NextToken: string, PackagingGroups: table<ApproximateAssetCount: int, Arn: string, Authorization: record, CreatedAt: string, DomainName: string, EgressAccessLogs: record, Id: string, Tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -560,7 +560,7 @@ export def "describe-asset" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: record, CreatedAt: record, EgressEndpoints: record, Id: record, PackagingGroupId: record, ResourceId: record, SourceArn: record, SourceRoleArn: record, Tags: record> {
+]: nothing -> record<Arn: string, CreatedAt: string, EgressEndpoints: table<PackagingConfigurationId: string, Status: string, Url: string>, Id: string, PackagingGroupId: string, ResourceId: string, SourceArn: string, SourceRoleArn: string, Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -650,7 +650,7 @@ export def "describe-packaging-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: record, CmafPackage: record<Encryption: record<ConstantInitializationVector: record, SpekeKeyProvider: record>, HlsManifests: record, IncludeEncoderConfigurationInSegments: record, SegmentDurationSeconds: record>, CreatedAt: record, DashPackage: record<DashManifests: record, Encryption: record<SpekeKeyProvider: record>, IncludeEncoderConfigurationInSegments: record, IncludeIframeOnlyStream: record, PeriodTriggers: record, SegmentDurationSeconds: record, SegmentTemplateFormat: record>, HlsPackage: record<Encryption: record<ConstantInitializationVector: record, EncryptionMethod: record, SpekeKeyProvider: record>, HlsManifests: record, IncludeDvbSubtitles: record, SegmentDurationSeconds: record, UseAudioRenditionGroup: record>, Id: record, MssPackage: record<Encryption: record<SpekeKeyProvider: record>, MssManifests: record, SegmentDurationSeconds: record>, PackagingGroupId: record, Tags: record> {
+]: nothing -> record<Arn: string, CmafPackage: record<Encryption: record<ConstantInitializationVector: string, SpekeKeyProvider: record>, HlsManifests: list<record>, IncludeEncoderConfigurationInSegments: bool, SegmentDurationSeconds: int>, CreatedAt: string, DashPackage: record<DashManifests: list<record>, Encryption: record<SpekeKeyProvider: record>, IncludeEncoderConfigurationInSegments: bool, IncludeIframeOnlyStream: bool, PeriodTriggers: list<string>, SegmentDurationSeconds: int, SegmentTemplateFormat: string>, HlsPackage: record<Encryption: record<ConstantInitializationVector: string, EncryptionMethod: string, SpekeKeyProvider: record>, HlsManifests: list<record>, IncludeDvbSubtitles: bool, SegmentDurationSeconds: int, UseAudioRenditionGroup: bool>, Id: string, MssPackage: record<Encryption: record<SpekeKeyProvider: record>, MssManifests: list<record>, SegmentDurationSeconds: int>, PackagingGroupId: string, Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -740,7 +740,7 @@ export def "describe-packaging-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ApproximateAssetCount: record, Arn: record, Authorization: record<CdnIdentifierSecret: record, SecretsRoleArn: record>, CreatedAt: record, DomainName: record, EgressAccessLogs: record<LogGroupName: record>, Id: record, Tags: record> {
+]: nothing -> record<ApproximateAssetCount: int, Arn: string, Authorization: record<CdnIdentifierSecret: string, SecretsRoleArn: string>, CreatedAt: string, DomainName: string, EgressAccessLogs: record<LogGroupName: string>, Id: string, Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -767,7 +767,7 @@ export def "describe-packaging-group" [
 #
 # PUT /packaging_groups/{id}
 # operationId: UpdatePackagingGroup
-# --authorization shape: {CdnIdentifierSecret?: any, SecretsRoleArn?: any}
+# --authorization shape: {CdnIdentifierSecret?: string, SecretsRoleArn?: string}
 export def "update-packaging-group" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -786,8 +786,8 @@ export def "update-packaging-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --authorization: record # CDN Authorization credentials — shape: {CdnIdentifierSecret?: any, SecretsRoleArn?: any}
-]: any -> record<ApproximateAssetCount: record, Arn: record, Authorization: record<CdnIdentifierSecret: record, SecretsRoleArn: record>, CreatedAt: record, DomainName: record, EgressAccessLogs: record<LogGroupName: record>, Id: record, Tags: record> {
+  --authorization: record # CDN Authorization credentials — shape: {CdnIdentifierSecret?: string, SecretsRoleArn?: string}
+]: any -> record<ApproximateAssetCount: int, Arn: string, Authorization: record<CdnIdentifierSecret: string, SecretsRoleArn: string>, CreatedAt: string, DomainName: string, EgressAccessLogs: record<LogGroupName: string>, Id: string, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -922,7 +922,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # A comma-separated list of the tag keys to remove from the resource.
+  --tag-keys: list # A comma-separated list of the tag keys to remove from the resource. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -934,6 +934,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resource-arn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"

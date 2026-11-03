@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -160,10 +160,11 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string, origin: string, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.DataFactory/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -197,11 +198,12 @@ export def "factories-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
-]: nothing -> record<nextLink: string, value: table<identity: record, properties: record>> {
+  --api-version: string # The API version. (required)
+]: nothing -> record<nextLink: string, value: table<identity: record, properties: record, eTag: string, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataFactory/factories") $qp $auth.query)
   let accept_val = "application/json"
@@ -237,15 +239,16 @@ export def "factories-configure-factory-repo" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
   --factory-resource-id: string # The factory resource id.
   --repo-configuration: record # Factory's git repo information. — shape: {accountName: string, collaborationBranch: string, lastCommitId?: string, repositoryName: string, rootFolder: string, type: string}
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<createTime: string, provisioningState: string, repoConfiguration: record<accountName: string, collaborationBranch: string, lastCommitId: string, repositoryName: string, rootFolder: string, type: string>, version: string>> {
+]: any -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<createTime: string, provisioningState: string, repoConfiguration: record<accountName: string, collaborationBranch: string, lastCommitId: string, repositoryName: string, rootFolder: string, type: string>, version: string>, eTag: string, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'locationId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location_id: (encode-path-segment $location_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataFactory/locations/{location_id}/configureFactoryRepo") $qp $auth.query)
   let req_body = {"factoryResourceId": $factory_resource_id, "repoConfiguration": $repo_configuration} | compact
@@ -282,7 +285,7 @@ export def "exposure-control-get-feature-value" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
   --feature-name: string # The feature name.
   --feature-type: string # The feature type.
 ]: any -> record<featureName: string, value: string> {
@@ -291,6 +294,7 @@ export def "exposure-control-get-feature-value" [
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'locationId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location_id: (encode-path-segment $location_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataFactory/locations/{location_id}/getFeatureValue") $qp $auth.query)
   let req_body = {"featureName": $feature_name, "featureType": $feature_type} | compact
@@ -327,12 +331,13 @@ export def "factories-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
-]: nothing -> record<nextLink: string, value: table<identity: record, properties: record>> {
+  --api-version: string # The API version. (required)
+]: nothing -> record<nextLink: string, value: table<identity: record, properties: record, eTag: string, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories") $qp $auth.query)
   let accept_val = "application/json"
@@ -368,13 +373,14 @@ export def "factories-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # The API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -410,14 +416,15 @@ export def "factories-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
   --if-none-match: string # ETag of the factory entity. Should only be specified for get. If the ETag matches the existing entity tag, or if * was provided, then no content will be returned.
-]: nothing -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<createTime: string, provisioningState: string, repoConfiguration: record<accountName: string, collaborationBranch: string, lastCommitId: string, repositoryName: string, rootFolder: string, type: string>, version: string>> {
+]: nothing -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<createTime: string, provisioningState: string, repoConfiguration: record<accountName: string, collaborationBranch: string, lastCommitId: string, repositoryName: string, rootFolder: string, type: string>, version: string>, eTag: string, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -456,16 +463,17 @@ export def "factories-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
   --identity: any # Identity properties of the factory resource. — shape: {type: "SystemAssigned"}
   --tags: record # The resource tags.
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<createTime: string, provisioningState: string, repoConfiguration: record<accountName: string, collaborationBranch: string, lastCommitId: string, repositoryName: string, rootFolder: string, type: string>, version: string>> {
+]: any -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<createTime: string, provisioningState: string, repoConfiguration: record<accountName: string, collaborationBranch: string, lastCommitId: string, repositoryName: string, rootFolder: string, type: string>, version: string>, eTag: string, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}") $qp $auth.query)
   let req_body = {"identity": $identity, "tags": $tags} | compact
@@ -505,19 +513,20 @@ export def "factories-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
   --if-match: string # ETag of the factory entity. Should only be specified for update, for which it should match existing entity or can be * for unconditional update.
   --identity: any # Identity properties of the factory resource. — shape: {type: "SystemAssigned"}
   --properties: any # Factory resource properties. — shape: {repoConfiguration?: record}
   --location: string # The resource location.
   --tags: record # The resource tags.
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<createTime: string, provisioningState: string, repoConfiguration: record<accountName: string, collaborationBranch: string, lastCommitId: string, repositoryName: string, rootFolder: string, type: string>, version: string>> {
+]: any -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<createTime: string, provisioningState: string, repoConfiguration: record<accountName: string, collaborationBranch: string, lastCommitId: string, repositoryName: string, rootFolder: string, type: string>, version: string>, eTag: string, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}") $qp $auth.query)
   let req_body = {"identity": $identity, "properties": $properties, "location": $location, "tags": $tags} | compact
@@ -562,7 +571,7 @@ export def "data-flow-debug-session-add-data-flow" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
   --data-flow: any # Data flow debug resource. — shape: {properties: record, name?: string}
   --datasets: list # List of datasets. — item shape: {properties: record, name?: string}
   --debug-settings: record # Data flow debug settings. — shape: {datasetParameters?: record, parameters?: record, sourceSettings?: list}
@@ -576,6 +585,7 @@ export def "data-flow-debug-session-add-data-flow" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/addDataFlowToDebugSession") $qp $auth.query)
   let req_body = {"dataFlow": $data_flow, "datasets": $datasets, "debugSettings": $debug_settings, "linkedServices": $linked_services, "sessionId": $session_id, "staging": $staging} | compact
@@ -614,7 +624,7 @@ export def "data-flow-debug-session-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
   --compute-type: string # Compute type of the cluster. The value will be overwritten by the same setting in integration runtime if provided.
   --core-count: int # Core count of the cluster. The value will be overwritten by the same setting in integration runtime if provided.
   --integration-runtime: any # Integration runtime debug resource. — shape: {properties: record, name?: string}
@@ -626,6 +636,7 @@ export def "data-flow-debug-session-create" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/createDataFlowDebugSession") $qp $auth.query)
   let req_body = {"computeType": $compute_type, "coreCount": $core_count, "integrationRuntime": $integration_runtime, "timeToLive": $time_to_live} | compact
@@ -663,13 +674,14 @@ export def "data-flows-list-by-factory" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
 ]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/dataflows") $qp $auth.query)
   let accept_val = "application/json"
@@ -706,14 +718,15 @@ export def "data-flows-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # The API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($data_flow_name | is-empty) { error make --unspanned { msg: "path parameter 'dataFlowName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), data_flow_name: (encode-path-segment $data_flow_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/dataflows/{data_flow_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -750,7 +763,7 @@ export def "data-flows-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
   --if-none-match: string # ETag of the data flow entity. Should only be specified for get. If the ETag matches the existing entity tag, or if * was provided, then no content will be returned.
 ]: nothing -> record<properties: record<annotations: list<record>, description: string, folder: record<name: string>, type: string>, etag: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -759,6 +772,7 @@ export def "data-flows-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($data_flow_name | is-empty) { error make --unspanned { msg: "path parameter 'dataFlowName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), data_flow_name: (encode-path-segment $data_flow_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/dataflows/{data_flow_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -798,7 +812,7 @@ export def "data-flows-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
   --if-match: string # ETag of the data flow entity. Should only be specified for update, for which it should match existing entity or can be * for unconditional update.
   properties: record # Azure Data Factory nested object which contains a flow with data movements and transformations. — shape: {annotations?: list, description?: string, folder?: record, type: string}
 ]: any -> record<properties: record<annotations: list<record>, description: string, folder: record<name: string>, type: string>, etag: string, id: string, name: string, type: string> {
@@ -809,6 +823,7 @@ export def "data-flows-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($data_flow_name | is-empty) { error make --unspanned { msg: "path parameter 'dataFlowName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), data_flow_name: (encode-path-segment $data_flow_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/dataflows/{data_flow_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -848,13 +863,14 @@ export def "datasets-list-by-factory" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
 ]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/datasets") $qp $auth.query)
   let accept_val = "application/json"
@@ -891,14 +907,15 @@ export def "datasets-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # The API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($dataset_name | is-empty) { error make --unspanned { msg: "path parameter 'datasetName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), dataset_name: (encode-path-segment $dataset_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/datasets/{dataset_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -935,7 +952,7 @@ export def "datasets-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
   --if-none-match: string # ETag of the dataset entity. Should only be specified for get. If the ETag matches the existing entity tag, or if * was provided, then no content will be returned.
 ]: nothing -> record<properties: record<annotations: list<record>, description: string, folder: record<name: string>, linkedServiceName: record<parameters: record, referenceName: string, type: string>, parameters: record, schema: record, structure: record, type: string>, etag: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -944,6 +961,7 @@ export def "datasets-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($dataset_name | is-empty) { error make --unspanned { msg: "path parameter 'datasetName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), dataset_name: (encode-path-segment $dataset_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/datasets/{dataset_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -983,7 +1001,7 @@ export def "datasets-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
   --if-match: string # ETag of the dataset entity. Should only be specified for update, for which it should match existing entity or can be * for unconditional update.
   properties: record # The Azure Data Factory nested object which identifies data within different data stores, such as tables, files, folders, and documents. — shape: {annotations?: list, description?: string, folder?: record, linkedServiceName: any, parameters?: record, schema?: record, structure?: record, type: string}
 ]: any -> record<properties: record<annotations: list<record>, description: string, folder: record<name: string>, linkedServiceName: record<parameters: record, referenceName: string, type: string>, parameters: record, schema: record, structure: record, type: string>, etag: string, id: string, name: string, type: string> {
@@ -994,6 +1012,7 @@ export def "datasets-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($dataset_name | is-empty) { error make --unspanned { msg: "path parameter 'datasetName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), dataset_name: (encode-path-segment $dataset_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/datasets/{dataset_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -1033,15 +1052,16 @@ export def "data-flow-debug-session-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
   --session-id: string # The ID of data flow debug session.
-]: any -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/deleteDataFlowDebugSession") $qp $auth.query)
   let req_body = {"sessionId": $session_id} | compact
@@ -1080,7 +1100,7 @@ export def "data-flow-debug-session-execute-command" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
   --command: string@command-completer # The command type.
   --command-payload: record # Structure of command payload. — shape: {columns?: list<string>, expression?: string, rowLimits?: int, streamName: string}
   --session-id: string # The ID of data flow debug session.
@@ -1091,6 +1111,7 @@ export def "data-flow-debug-session-execute-command" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/executeDataFlowDebugCommand") $qp $auth.query)
   let req_body = {"command": $command, "commandPayload": $command_payload, "sessionId": $session_id} | compact
@@ -1128,7 +1149,7 @@ export def "factories-get-data-plane-access" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
   --access-resource-path: string # The resource path to get access relative to factory. Currently only empty string is supported which corresponds to the factory resource.
   --expire-time: string # Expiration time for the token. Maximum duration for the token is eight hours and by default the token will expire in eight hours.
   --permissions: string # The string with permissions for Data Plane access. Currently only 'r' is supported which grants read only access.
@@ -1141,6 +1162,7 @@ export def "factories-get-data-plane-access" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/getDataPlaneAccess") $qp $auth.query)
   let req_body = {"accessResourcePath": $access_resource_path, "expireTime": $expire_time, "permissions": $permissions, "profileName": $profile_name, "startTime": $start_time} | compact
@@ -1178,7 +1200,7 @@ export def "exposure-control-get-feature-value-by-factory" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
   --feature-name: string # The feature name.
   --feature-type: string # The feature type.
 ]: any -> record<featureName: string, value: string> {
@@ -1188,6 +1210,7 @@ export def "exposure-control-get-feature-value-by-factory" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/getFeatureValue") $qp $auth.query)
   let req_body = {"featureName": $feature_name, "featureType": $feature_type} | compact
@@ -1225,7 +1248,7 @@ export def "factories-get-git-hub-access-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
   git_hub_access_code: string # GitHub access code.
   git_hub_access_token_base_url: string # GitHub access token base URL.
   --git-hub-client-id: string # GitHub application client ID.
@@ -1236,6 +1259,7 @@ export def "factories-get-git-hub-access-token" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/getGitHubAccessToken") $qp $auth.query)
   let req_body = {"gitHubAccessCode": $git_hub_access_code, "gitHubAccessTokenBaseUrl": $git_hub_access_token_base_url, "gitHubClientId": $git_hub_client_id} | compact
@@ -1273,13 +1297,14 @@ export def "integration-runtimes-list-by-factory" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
 ]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes") $qp $auth.query)
   let accept_val = "application/json"
@@ -1316,14 +1341,15 @@ export def "integration-runtimes-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # The API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($integration_runtime_name | is-empty) { error make --unspanned { msg: "path parameter 'integrationRuntimeName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1360,7 +1386,7 @@ export def "integration-runtimes-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
   --if-none-match: string # ETag of the integration runtime entity. Should only be specified for get. If the ETag matches the existing entity tag, or if * was provided, then no content will be returned.
 ]: nothing -> record<properties: record<description: string, type: string>, etag: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1369,6 +1395,7 @@ export def "integration-runtimes-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($integration_runtime_name | is-empty) { error make --unspanned { msg: "path parameter 'integrationRuntimeName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1407,7 +1434,7 @@ export def "integration-runtimes-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
   --auto-update: string@auto-update-completer # The state of integration runtime auto update.
   --update-delay-offset: string # The time offset (in hours) in the day, e.g., PT03H is 3 hours. The integration runtime auto update will happen on that time.
 ]: any -> record<properties: record<description: string, type: string>, etag: string, id: string, name: string, type: string> {
@@ -1418,6 +1445,7 @@ export def "integration-runtimes-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($integration_runtime_name | is-empty) { error make --unspanned { msg: "path parameter 'integrationRuntimeName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}") $qp $auth.query)
   let req_body = {"autoUpdate": $auto_update, "updateDelayOffset": $update_delay_offset} | compact
@@ -1457,7 +1485,7 @@ export def "integration-runtimes-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
   --if-match: string # ETag of the integration runtime entity. Should only be specified for update, for which it should match existing entity or can be * for unconditional update.
   properties: record # Azure Data Factory nested object which serves as a compute resource for activities. — shape: {description?: string, type: "Managed"|"SelfHosted"}
 ]: any -> record<properties: record<description: string, type: string>, etag: string, id: string, name: string, type: string> {
@@ -1468,6 +1496,7 @@ export def "integration-runtimes-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($integration_runtime_name | is-empty) { error make --unspanned { msg: "path parameter 'integrationRuntimeName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -1508,7 +1537,7 @@ export def "integration-runtimes-get-connection-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
 ]: nothing -> record<hostServiceUri: string, identityCertThumbprint: string, isIdentityCertExprired: bool, publicKey: string, serviceToken: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1516,6 +1545,7 @@ export def "integration-runtimes-get-connection-info" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($integration_runtime_name | is-empty) { error make --unspanned { msg: "path parameter 'integrationRuntimeName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/getConnectionInfo") $qp $auth.query)
   let accept_val = "application/json"
@@ -1552,7 +1582,7 @@ export def "integration-runtime-object-metadata-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
   --metadata-path: string # Metadata path.
 ]: any -> record<nextLink: string, value: table<description: string, id: int, name: string, type: string>> {
   let input = $in
@@ -1562,6 +1592,7 @@ export def "integration-runtime-object-metadata-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($integration_runtime_name | is-empty) { error make --unspanned { msg: "path parameter 'integrationRuntimeName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/getObjectMetadata") $qp $auth.query)
   let req_body = {"metadataPath": $metadata_path} | compact
@@ -1600,7 +1631,7 @@ export def "integration-runtimes-get-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
 ]: nothing -> record<name: string, properties: record<dataFactoryName: string, state: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1608,6 +1639,7 @@ export def "integration-runtimes-get-status" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($integration_runtime_name | is-empty) { error make --unspanned { msg: "path parameter 'integrationRuntimeName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/getStatus") $qp $auth.query)
   let accept_val = "application/json"
@@ -1644,7 +1676,7 @@ export def "integration-runtimes-create-linked-integration-runtime" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
   --data-factory-location: string # The location of the data factory that the linked integration runtime belongs to.
   --data-factory-name: string # The name of the data factory that the linked integration runtime belongs to.
   --name: string # The name of the linked integration runtime.
@@ -1657,6 +1689,7 @@ export def "integration-runtimes-create-linked-integration-runtime" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($integration_runtime_name | is-empty) { error make --unspanned { msg: "path parameter 'integrationRuntimeName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/linkedIntegrationRuntime") $qp $auth.query)
   let req_body = {"dataFactoryLocation": $data_factory_location, "dataFactoryName": $data_factory_name, "name": $name, "subscriptionId": $body_subscription_id} | compact
@@ -1695,7 +1728,7 @@ export def "integration-runtimes-list-auth-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
 ]: nothing -> record<authKey1: string, authKey2: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1703,6 +1736,7 @@ export def "integration-runtimes-list-auth-keys" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($integration_runtime_name | is-empty) { error make --unspanned { msg: "path parameter 'integrationRuntimeName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/listAuthKeys") $qp $auth.query)
   let accept_val = "application/json"
@@ -1739,7 +1773,7 @@ export def "integration-runtimes-get-monitoring-data" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
 ]: nothing -> record<name: string, nodes: table<availableMemoryInMB: int, concurrentJobsLimit: int, concurrentJobsRunning: int, cpuUtilization: int, maxConcurrentJobs: int, nodeName: string, receivedBytes: float, sentBytes: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1747,6 +1781,7 @@ export def "integration-runtimes-get-monitoring-data" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($integration_runtime_name | is-empty) { error make --unspanned { msg: "path parameter 'integrationRuntimeName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/monitoringData") $qp $auth.query)
   let accept_val = "application/json"
@@ -1784,8 +1819,8 @@ export def "integration-runtime-nodes-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # The API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1793,6 +1828,7 @@ export def "integration-runtime-nodes-delete" [
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($integration_runtime_name | is-empty) { error make --unspanned { msg: "path parameter 'integrationRuntimeName' must be non-empty" } }
   if ($node_name | is-empty) { error make --unspanned { msg: "path parameter 'nodeName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name), node_name: (encode-path-segment $node_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/nodes/{node_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1830,7 +1866,7 @@ export def "integration-runtime-nodes-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
 ]: nothing -> record<capabilities: record, concurrentJobsLimit: int, expiryTime: string, hostServiceUri: string, isActiveDispatcher: bool, lastConnectTime: string, lastEndUpdateTime: string, lastStartTime: string, lastStartUpdateTime: string, lastStopTime: string, lastUpdateResult: string, machineName: string, maxConcurrentJobs: int, nodeName: string, registerTime: string, status: string, version: string, versionStatus: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1839,6 +1875,7 @@ export def "integration-runtime-nodes-get" [
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($integration_runtime_name | is-empty) { error make --unspanned { msg: "path parameter 'integrationRuntimeName' must be non-empty" } }
   if ($node_name | is-empty) { error make --unspanned { msg: "path parameter 'nodeName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name), node_name: (encode-path-segment $node_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/nodes/{node_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1876,7 +1913,7 @@ export def "integration-runtime-nodes-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
   --concurrent-jobs-limit: int # The number of concurrent jobs permitted to run on the integration runtime node. Values between 1 and maxConcurrentJobs(inclusive) are allowed.
 ]: any -> record<capabilities: record, concurrentJobsLimit: int, expiryTime: string, hostServiceUri: string, isActiveDispatcher: bool, lastConnectTime: string, lastEndUpdateTime: string, lastStartTime: string, lastStartUpdateTime: string, lastStopTime: string, lastUpdateResult: string, machineName: string, maxConcurrentJobs: int, nodeName: string, registerTime: string, status: string, version: string, versionStatus: string> {
   let input = $in
@@ -1887,6 +1924,7 @@ export def "integration-runtime-nodes-update" [
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($integration_runtime_name | is-empty) { error make --unspanned { msg: "path parameter 'integrationRuntimeName' must be non-empty" } }
   if ($node_name | is-empty) { error make --unspanned { msg: "path parameter 'nodeName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name), node_name: (encode-path-segment $node_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/nodes/{node_name}") $qp $auth.query)
   let req_body = {"concurrentJobsLimit": $concurrent_jobs_limit} | compact
@@ -1926,7 +1964,7 @@ export def "integration-runtime-nodes-get-ip-address" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
 ]: nothing -> record<ipAddress: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1935,6 +1973,7 @@ export def "integration-runtime-nodes-get-ip-address" [
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($integration_runtime_name | is-empty) { error make --unspanned { msg: "path parameter 'integrationRuntimeName' must be non-empty" } }
   if ($node_name | is-empty) { error make --unspanned { msg: "path parameter 'nodeName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name), node_name: (encode-path-segment $node_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/nodes/{node_name}/ipAddress") $qp $auth.query)
   let accept_val = "application/json"
@@ -1971,7 +2010,7 @@ export def "integration-runtime-object-metadata-refresh" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
 ]: nothing -> record<error: string, name: string, properties: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1979,6 +2018,7 @@ export def "integration-runtime-object-metadata-refresh" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($integration_runtime_name | is-empty) { error make --unspanned { msg: "path parameter 'integrationRuntimeName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/refreshObjectMetadata") $qp $auth.query)
   let accept_val = "application/json"
@@ -2015,7 +2055,7 @@ export def "integration-runtimes-regenerate-auth-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
   --key-name: string@key-name-completer # The name of the authentication key to regenerate.
 ]: any -> record<authKey1: string, authKey2: string> {
   let input = $in
@@ -2025,6 +2065,7 @@ export def "integration-runtimes-regenerate-auth-key" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($integration_runtime_name | is-empty) { error make --unspanned { msg: "path parameter 'integrationRuntimeName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/regenerateAuthKey") $qp $auth.query)
   let req_body = {"keyName": $key_name} | compact
@@ -2063,9 +2104,9 @@ export def "integration-runtimes-remove-links" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
   --body-factory-name: string # The data factory name for linked integration runtime.
-]: any -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2073,10 +2114,12 @@ export def "integration-runtimes-remove-links" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($integration_runtime_name | is-empty) { error make --unspanned { msg: "path parameter 'integrationRuntimeName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/removeLinks") $qp $auth.query)
   let req_body = {"factoryName": $body_factory_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "factoryName") == null) { error make --unspanned { msg: "required body field 'factoryName' missing: pass --body-factory-name or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2111,7 +2154,7 @@ export def "integration-runtimes-start" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
 ]: nothing -> record<name: string, properties: record<dataFactoryName: string, state: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2119,6 +2162,7 @@ export def "integration-runtimes-start" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($integration_runtime_name | is-empty) { error make --unspanned { msg: "path parameter 'integrationRuntimeName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/start") $qp $auth.query)
   let accept_val = "application/json"
@@ -2155,14 +2199,15 @@ export def "integration-runtimes-stop" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # The API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($integration_runtime_name | is-empty) { error make --unspanned { msg: "path parameter 'integrationRuntimeName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/stop") $qp $auth.query)
   let accept_val = "application/json"
@@ -2199,14 +2244,15 @@ export def "integration-runtimes-sync-credentials" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # The API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($integration_runtime_name | is-empty) { error make --unspanned { msg: "path parameter 'integrationRuntimeName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/syncCredentials") $qp $auth.query)
   let accept_val = "application/json"
@@ -2243,14 +2289,15 @@ export def "integration-runtimes-upgrade" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # The API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($integration_runtime_name | is-empty) { error make --unspanned { msg: "path parameter 'integrationRuntimeName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), integration_runtime_name: (encode-path-segment $integration_runtime_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/integrationRuntimes/{integration_runtime_name}/upgrade") $qp $auth.query)
   let accept_val = "application/json"
@@ -2286,13 +2333,14 @@ export def "linked-services-list-by-factory" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
 ]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/linkedservices") $qp $auth.query)
   let accept_val = "application/json"
@@ -2329,14 +2377,15 @@ export def "linked-services-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # The API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($linked_service_name | is-empty) { error make --unspanned { msg: "path parameter 'linkedServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), linked_service_name: (encode-path-segment $linked_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/linkedservices/{linked_service_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2373,7 +2422,7 @@ export def "linked-services-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
   --if-none-match: string # ETag of the linked service entity. Should only be specified for get. If the ETag matches the existing entity tag, or if * was provided, then no content will be returned.
 ]: nothing -> record<properties: record<annotations: list<record>, connectVia: record<parameters: record, referenceName: string, type: string>, description: string, parameters: record, type: string>, etag: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2382,6 +2431,7 @@ export def "linked-services-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($linked_service_name | is-empty) { error make --unspanned { msg: "path parameter 'linkedServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), linked_service_name: (encode-path-segment $linked_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/linkedservices/{linked_service_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2421,7 +2471,7 @@ export def "linked-services-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
   --if-match: string # ETag of the linkedService entity. Should only be specified for update, for which it should match existing entity or can be * for unconditional update.
   properties: record # The Azure Data Factory nested object which contains the information and credential which can be used to connect with related store or compute resource. — shape: {annotations?: list, connectVia?: any, description?: string, parameters?: record, type: string}
 ]: any -> record<properties: record<annotations: list<record>, connectVia: record<parameters: record, referenceName: string, type: string>, description: string, parameters: record, type: string>, etag: string, id: string, name: string, type: string> {
@@ -2432,6 +2482,7 @@ export def "linked-services-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($linked_service_name | is-empty) { error make --unspanned { msg: "path parameter 'linkedServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), linked_service_name: (encode-path-segment $linked_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/linkedservices/{linked_service_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -2472,7 +2523,7 @@ export def "pipeline-runs-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
 ]: nothing -> record<durationInMs: int, invokedBy: record<id: string, invokedByType: string, name: string>, isLatest: bool, lastUpdated: string, message: string, parameters: record, pipelineName: string, runDimensions: record, runEnd: string, runGroupId: string, runId: string, runStart: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2480,6 +2531,7 @@ export def "pipeline-runs-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($run_id | is-empty) { error make --unspanned { msg: "path parameter 'runId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), run_id: (encode-path-segment $run_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/pipelineruns/{run_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2517,14 +2569,15 @@ export def "pipeline-runs-cancel" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --is-recursive: oneof<nothing, bool> # If true, cancel all the Child pipelines that are triggered by the current pipeline.
-  --api-version: string # The API version.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # The API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($run_id | is-empty) { error make --unspanned { msg: "path parameter 'runId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "isRecursive" $is_recursive "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), run_id: (encode-path-segment $run_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/pipelineruns/{run_id}/cancel") $qp $auth.query)
   let accept_val = "application/json"
@@ -2563,7 +2616,7 @@ export def "activity-runs-query-by-pipeline-run" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
   --continuation-token: string # The continuation token for getting the next page of results. Null for first page.
   --filters: list # List of filters. — item shape: {operand: "PipelineName"|"Status"|"RunStart"|"RunEnd"|"ActivityName"|"ActivityRunStart"|"ActivityRunEnd"|"ActivityType"|"TriggerName"|"TriggerRunTimestamp"|"RunGroupId"|"LatestOnly", operator: "Equals"|"NotEquals"|"In"|"NotIn", values: list<string>}
   last_updated_after: string # The time at or after which the run event was updated in 'ISO 8601' format. (format: date-time)
@@ -2577,6 +2630,7 @@ export def "activity-runs-query-by-pipeline-run" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($run_id | is-empty) { error make --unspanned { msg: "path parameter 'runId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), run_id: (encode-path-segment $run_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/pipelineruns/{run_id}/queryActivityruns") $qp $auth.query)
   let req_body = {"continuationToken": $continuation_token, "filters": $filters, "lastUpdatedAfter": $last_updated_after, "lastUpdatedBefore": $last_updated_before, "orderBy": $order_by} | compact
@@ -2614,13 +2668,14 @@ export def "pipelines-list-by-factory" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # The API version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/pipelines") $qp $auth.query)
   let accept_val = "application/json"
@@ -2657,14 +2712,15 @@ export def "pipelines-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # The API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($pipeline_name | is-empty) { error make --unspanned { msg: "path parameter 'pipelineName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), pipeline_name: (encode-path-segment $pipeline_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/pipelines/{pipeline_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2701,15 +2757,16 @@ export def "pipelines-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
   --if-none-match: string # ETag of the pipeline entity. Should only be specified for get. If the ETag matches the existing entity tag, or if * was provided, then no content will be returned.
-]: nothing -> record<properties: record<activities: list<record>, annotations: list<record>, concurrency: int, description: string, folder: record<name: string>, parameters: record, runDimensions: record, variables: record>> {
+]: nothing -> record<properties: record<activities: list<record>, annotations: list<record>, concurrency: int, description: string, folder: record<name: string>, parameters: record, runDimensions: record, variables: record>, etag: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($pipeline_name | is-empty) { error make --unspanned { msg: "path parameter 'pipelineName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), pipeline_name: (encode-path-segment $pipeline_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/pipelines/{pipeline_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2749,10 +2806,10 @@ export def "pipelines-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
   --if-match: string # ETag of the pipeline entity. Should only be specified for update, for which it should match existing entity or can be * for unconditional update.
   properties: record # A data factory pipeline. — shape: {activities?: list, annotations?: list, concurrency?: int, description?: string, folder?: record, parameters?: record, runDimensions?: record, variables?: record}
-]: any -> record<properties: record<activities: list<record>, annotations: list<record>, concurrency: int, description: string, folder: record<name: string>, parameters: record, runDimensions: record, variables: record>> {
+]: any -> record<properties: record<activities: list<record>, annotations: list<record>, concurrency: int, description: string, folder: record<name: string>, parameters: record, runDimensions: record, variables: record>, etag: string, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2760,6 +2817,7 @@ export def "pipelines-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($pipeline_name | is-empty) { error make --unspanned { msg: "path parameter 'pipelineName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), pipeline_name: (encode-path-segment $pipeline_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/pipelines/{pipeline_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -2800,7 +2858,7 @@ export def "pipelines-create-run" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
   --reference-pipeline-run-id: string # The pipeline run identifier. If run ID is specified the parameters of the specified run will be used to create a new run.
   --is-recovery: oneof<nothing, bool> # Recovery mode flag. If recovery mode is set to true, the specified referenced pipeline run and the new run will be grouped under the same groupId.
   --start-activity-name: string # In recovery mode, the rerun will start from this activity. If not specified, all activities will run.
@@ -2813,6 +2871,7 @@ export def "pipelines-create-run" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($pipeline_name | is-empty) { error make --unspanned { msg: "path parameter 'pipelineName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "referencePipelineRunId" $reference_pipeline_run_id "scalar") (serialize-qp "isRecovery" $is_recovery "scalar") (serialize-qp "startActivityName" $start_activity_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), pipeline_name: (encode-path-segment $pipeline_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/pipelines/{pipeline_name}/createRun") $qp $auth.query)
   let req_body = $body
@@ -2850,13 +2909,14 @@ export def "data-flow-debug-session-query-by-factory" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
 ]: nothing -> record<nextLink: string, value: table<computeType: string, coreCount: int, dataFlowName: string, integrationRuntimeName: string, lastActivityTime: string, nodeCount: int, sessionId: string, startTime: string, timeToLiveInMinutes: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/queryDataFlowDebugSessions") $qp $auth.query)
   let accept_val = "application/json"
@@ -2894,7 +2954,7 @@ export def "pipeline-runs-query-by-factory" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
   --continuation-token: string # The continuation token for getting the next page of results. Null for first page.
   --filters: list # List of filters. — item shape: {operand: "PipelineName"|"Status"|"RunStart"|"RunEnd"|"ActivityName"|"ActivityRunStart"|"ActivityRunEnd"|"ActivityType"|"TriggerName"|"TriggerRunTimestamp"|"RunGroupId"|"LatestOnly", operator: "Equals"|"NotEquals"|"In"|"NotIn", values: list<string>}
   last_updated_after: string # The time at or after which the run event was updated in 'ISO 8601' format. (format: date-time)
@@ -2907,6 +2967,7 @@ export def "pipeline-runs-query-by-factory" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/queryPipelineRuns") $qp $auth.query)
   let req_body = {"continuationToken": $continuation_token, "filters": $filters, "lastUpdatedAfter": $last_updated_after, "lastUpdatedBefore": $last_updated_before, "orderBy": $order_by} | compact
@@ -2946,7 +3007,7 @@ export def "trigger-runs-query-by-factory" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
   --continuation-token: string # The continuation token for getting the next page of results. Null for first page.
   --filters: list # List of filters. — item shape: {operand: "PipelineName"|"Status"|"RunStart"|"RunEnd"|"ActivityName"|"ActivityRunStart"|"ActivityRunEnd"|"ActivityType"|"TriggerName"|"TriggerRunTimestamp"|"RunGroupId"|"LatestOnly", operator: "Equals"|"NotEquals"|"In"|"NotIn", values: list<string>}
   last_updated_after: string # The time at or after which the run event was updated in 'ISO 8601' format. (format: date-time)
@@ -2959,6 +3020,7 @@ export def "trigger-runs-query-by-factory" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/queryTriggerRuns") $qp $auth.query)
   let req_body = {"continuationToken": $continuation_token, "filters": $filters, "lastUpdatedAfter": $last_updated_after, "lastUpdatedBefore": $last_updated_before, "orderBy": $order_by} | compact
@@ -2996,13 +3058,14 @@ export def "triggers-list-by-factory" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
 ]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers") $qp $auth.query)
   let accept_val = "application/json"
@@ -3039,14 +3102,15 @@ export def "triggers-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # The API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($trigger_name | is-empty) { error make --unspanned { msg: "path parameter 'triggerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), trigger_name: (encode-path-segment $trigger_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -3083,7 +3147,7 @@ export def "triggers-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
   --if-none-match: string # ETag of the trigger entity. Should only be specified for get. If the ETag matches the existing entity tag, or if * was provided, then no content will be returned.
 ]: nothing -> record<properties: record<annotations: list<record>, description: string, runtimeState: string, type: string>, etag: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3092,6 +3156,7 @@ export def "triggers-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($trigger_name | is-empty) { error make --unspanned { msg: "path parameter 'triggerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), trigger_name: (encode-path-segment $trigger_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -3131,7 +3196,7 @@ export def "triggers-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
   --if-match: string # ETag of the trigger entity. Should only be specified for update, for which it should match existing entity or can be * for unconditional update.
   properties: record # Azure data factory nested object which contains information about creating pipeline run — shape: {annotations?: list, description?: string, runtimeState?: "Started"|"Stopped"|"Disabled", type: string}
 ]: any -> record<properties: record<annotations: list<record>, description: string, runtimeState: string, type: string>, etag: string, id: string, name: string, type: string> {
@@ -3142,6 +3207,7 @@ export def "triggers-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($trigger_name | is-empty) { error make --unspanned { msg: "path parameter 'triggerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), trigger_name: (encode-path-segment $trigger_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -3182,7 +3248,7 @@ export def "triggers-get-event-subscription-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
 ]: nothing -> record<status: string, triggerName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3190,6 +3256,7 @@ export def "triggers-get-event-subscription-status" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($trigger_name | is-empty) { error make --unspanned { msg: "path parameter 'triggerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), trigger_name: (encode-path-segment $trigger_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}/getEventSubscriptionStatus") $qp $auth.query)
   let accept_val = "application/json"
@@ -3226,7 +3293,7 @@ export def "rerun-triggers-list-by-trigger" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
 ]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3234,6 +3301,7 @@ export def "rerun-triggers-list-by-trigger" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($trigger_name | is-empty) { error make --unspanned { msg: "path parameter 'triggerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), trigger_name: (encode-path-segment $trigger_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}/rerunTriggers") $qp $auth.query)
   let accept_val = "application/json"
@@ -3271,7 +3339,7 @@ export def "rerun-triggers-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
   end_time: string # The end time for the time period for which restatement is initiated. Only UTC time is currently supported. (format: date-time)
   max_concurrency: int # The max number of parallel time windows (ready for execution) for which a rerun is triggered.
   start_time: string # The start time for the time period for which restatement is initiated. Only UTC time is currently supported. (format: date-time)
@@ -3284,6 +3352,7 @@ export def "rerun-triggers-create" [
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($trigger_name | is-empty) { error make --unspanned { msg: "path parameter 'triggerName' must be non-empty" } }
   if ($rerun_trigger_name | is-empty) { error make --unspanned { msg: "path parameter 'rerunTriggerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), trigger_name: (encode-path-segment $trigger_name), rerun_trigger_name: (encode-path-segment $rerun_trigger_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}/rerunTriggers/{rerun_trigger_name}") $qp $auth.query)
   let req_body = {"endTime": $end_time, "maxConcurrency": $max_concurrency, "startTime": $start_time} | compact
@@ -3323,8 +3392,8 @@ export def "rerun-triggers-cancel" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # The API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3332,6 +3401,7 @@ export def "rerun-triggers-cancel" [
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($trigger_name | is-empty) { error make --unspanned { msg: "path parameter 'triggerName' must be non-empty" } }
   if ($rerun_trigger_name | is-empty) { error make --unspanned { msg: "path parameter 'rerunTriggerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), trigger_name: (encode-path-segment $trigger_name), rerun_trigger_name: (encode-path-segment $rerun_trigger_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}/rerunTriggers/{rerun_trigger_name}/cancel") $qp $auth.query)
   let accept_val = "application/json"
@@ -3369,8 +3439,8 @@ export def "rerun-triggers-start" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # The API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3378,6 +3448,7 @@ export def "rerun-triggers-start" [
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($trigger_name | is-empty) { error make --unspanned { msg: "path parameter 'triggerName' must be non-empty" } }
   if ($rerun_trigger_name | is-empty) { error make --unspanned { msg: "path parameter 'rerunTriggerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), trigger_name: (encode-path-segment $trigger_name), rerun_trigger_name: (encode-path-segment $rerun_trigger_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}/rerunTriggers/{rerun_trigger_name}/start") $qp $auth.query)
   let accept_val = "application/json"
@@ -3415,8 +3486,8 @@ export def "rerun-triggers-stop" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # The API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3424,6 +3495,7 @@ export def "rerun-triggers-stop" [
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($trigger_name | is-empty) { error make --unspanned { msg: "path parameter 'triggerName' must be non-empty" } }
   if ($rerun_trigger_name | is-empty) { error make --unspanned { msg: "path parameter 'rerunTriggerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), trigger_name: (encode-path-segment $trigger_name), rerun_trigger_name: (encode-path-segment $rerun_trigger_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}/rerunTriggers/{rerun_trigger_name}/stop") $qp $auth.query)
   let accept_val = "application/json"
@@ -3460,14 +3532,15 @@ export def "triggers-start" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # The API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($trigger_name | is-empty) { error make --unspanned { msg: "path parameter 'triggerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), trigger_name: (encode-path-segment $trigger_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}/start") $qp $auth.query)
   let accept_val = "application/json"
@@ -3504,14 +3577,15 @@ export def "triggers-stop" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # The API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($trigger_name | is-empty) { error make --unspanned { msg: "path parameter 'triggerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), trigger_name: (encode-path-segment $trigger_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}/stop") $qp $auth.query)
   let accept_val = "application/json"
@@ -3548,7 +3622,7 @@ export def "triggers-subscribe-to-events" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
 ]: nothing -> record<status: string, triggerName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3556,6 +3630,7 @@ export def "triggers-subscribe-to-events" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($trigger_name | is-empty) { error make --unspanned { msg: "path parameter 'triggerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), trigger_name: (encode-path-segment $trigger_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}/subscribeToEvents") $qp $auth.query)
   let accept_val = "application/json"
@@ -3593,8 +3668,8 @@ export def "trigger-runs-rerun" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # The API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3602,6 +3677,7 @@ export def "trigger-runs-rerun" [
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($trigger_name | is-empty) { error make --unspanned { msg: "path parameter 'triggerName' must be non-empty" } }
   if ($run_id | is-empty) { error make --unspanned { msg: "path parameter 'runId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), trigger_name: (encode-path-segment $trigger_name), run_id: (encode-path-segment $run_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}/triggerRuns/{run_id}/rerun") $qp $auth.query)
   let accept_val = "application/json"
@@ -3638,7 +3714,7 @@ export def "triggers-unsubscribe-from-events" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version.
+  --api-version: string # The API version. (required)
 ]: nothing -> record<status: string, triggerName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3646,6 +3722,7 @@ export def "triggers-unsubscribe-from-events" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($factory_name | is-empty) { error make --unspanned { msg: "path parameter 'factoryName' must be non-empty" } }
   if ($trigger_name | is-empty) { error make --unspanned { msg: "path parameter 'triggerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), factory_name: (encode-path-segment $factory_name), trigger_name: (encode-path-segment $trigger_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataFactory/factories/{factory_name}/triggers/{trigger_name}/unsubscribeFromEvents") $qp $auth.query)
   let accept_val = "application/json"

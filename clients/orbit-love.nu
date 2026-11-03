@@ -1,4 +1,4 @@
-# Auto-generated client for Orbit API vv1
+# Auto-generated client for Orbit API v1
 # Source: https://api.apis.guru/v2/specs/orbit.love/v1/openapi.json
 # Auth: --token flag or $env.ORBIT_API_TOKEN
 
@@ -13,7 +13,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "query-api_key" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "api_key")=(encode-path-segment $token_val)", location: "query"} }
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -281,20 +281,20 @@ export def "get-workspace-slug-activities" [
   --page: string
   --direction: string@direction-completer
   --items: string@items-completer
-  --qp-sort: string@sort-completer
+  --sort: string@sort-completer
   --type: string # Deprecated in favor of the activity_type parameter. (DEPRECATED)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workspace_slug | is-empty) { error make --unspanned { msg: "path parameter 'workspace_slug' must be non-empty" } }
-  let qp = [(serialize-qp "affiliation" $affiliation "scalar") (serialize-qp "member_tags" $member_tags "scalar") (serialize-qp "orbit" $orbit "scalar") (serialize-qp "activity_type" $activity_type "scalar") (serialize-qp "identity" $identity "scalar") (serialize-qp "company[]" $company "scalar") (serialize-qp "title[]" $title "scalar") (serialize-qp "regions[]" $regions "scalar") (serialize-qp "countries[]" $countries "scalar") (serialize-qp "cities[]" $cities "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "relative" $relative "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "items" $items "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "affiliation" $affiliation "scalar") (serialize-qp "member_tags" $member_tags "scalar") (serialize-qp "orbit" $orbit "scalar") (serialize-qp "activity_type" $activity_type "scalar") (serialize-qp "identity" $identity "scalar") (serialize-qp "company[]" $company "scalar") (serialize-qp "title[]" $title "scalar") (serialize-qp "regions[]" $regions "scalar") (serialize-qp "countries[]" $countries "scalar") (serialize-qp "cities[]" $cities "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "relative" $relative "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "items" $items "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug)} | format pattern "/{workspace_slug}/activities") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"affiliation": $affiliation, "member_tags": $member_tags, "orbit": $orbit, "activity_type": $activity_type, "identity": $identity, "company[]": $company, "title[]": $title, "regions[]": $regions, "countries[]": $countries, "cities[]": $cities, "start_date": $start_date, "end_date": $end_date, "relative": $relative, "page": $page, "direction": $direction, "items": $items, "sort": $qp_sort, "type": $type} | compact)
+    query: ({"affiliation": $affiliation, "member_tags": $member_tags, "orbit": $orbit, "activity_type": $activity_type, "identity": $identity, "company[]": $company, "title[]": $title, "regions[]": $regions, "countries[]": $countries, "cities[]": $cities, "start_date": $start_date, "end_date": $end_date, "relative": $relative, "page": $page, "direction": $direction, "items": $items, "sort": $sort, "type": $type} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -452,20 +452,20 @@ export def "get-workspace-slug-members" [
   --items: string@items-completer
   --activities-count-min: string
   --activities-count-max: string
-  --qp-sort: string@sort-completer-1
+  --sort: string@sort-completer-1
   --type: string # Deprecated in favor of the activity_type parameter. (DEPRECATED)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workspace_slug | is-empty) { error make --unspanned { msg: "path parameter 'workspace_slug' must be non-empty" } }
-  let qp = [(serialize-qp "affiliation" $affiliation "scalar") (serialize-qp "member_tags" $member_tags "scalar") (serialize-qp "orbit" $orbit "scalar") (serialize-qp "activity_type" $activity_type "scalar") (serialize-qp "identity" $identity "scalar") (serialize-qp "company[]" $company "scalar") (serialize-qp "title[]" $title "scalar") (serialize-qp "regions[]" $regions "scalar") (serialize-qp "countries[]" $countries "scalar") (serialize-qp "cities[]" $cities "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "relative" $relative "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "items" $items "scalar") (serialize-qp "activities_count_min" $activities_count_min "scalar") (serialize-qp "activities_count_max" $activities_count_max "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "affiliation" $affiliation "scalar") (serialize-qp "member_tags" $member_tags "scalar") (serialize-qp "orbit" $orbit "scalar") (serialize-qp "activity_type" $activity_type "scalar") (serialize-qp "identity" $identity "scalar") (serialize-qp "company[]" $company "scalar") (serialize-qp "title[]" $title "scalar") (serialize-qp "regions[]" $regions "scalar") (serialize-qp "countries[]" $countries "scalar") (serialize-qp "cities[]" $cities "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "relative" $relative "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "items" $items "scalar") (serialize-qp "activities_count_min" $activities_count_min "scalar") (serialize-qp "activities_count_max" $activities_count_max "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug)} | format pattern "/{workspace_slug}/members") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"affiliation": $affiliation, "member_tags": $member_tags, "orbit": $orbit, "activity_type": $activity_type, "identity": $identity, "company[]": $company, "title[]": $title, "regions[]": $regions, "countries[]": $countries, "cities[]": $cities, "start_date": $start_date, "end_date": $end_date, "relative": $relative, "query": $query, "page": $page, "direction": $direction, "items": $items, "activities_count_min": $activities_count_min, "activities_count_max": $activities_count_max, "sort": $qp_sort, "type": $type} | compact)
+    query: ({"affiliation": $affiliation, "member_tags": $member_tags, "orbit": $orbit, "activity_type": $activity_type, "identity": $identity, "company[]": $company, "title[]": $title, "regions[]": $regions, "countries[]": $countries, "cities[]": $cities, "start_date": $start_date, "end_date": $end_date, "relative": $relative, "query": $query, "page": $page, "direction": $direction, "items": $items, "activities_count_min": $activities_count_min, "activities_count_max": $activities_count_max, "sort": $sort, "type": $type} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -532,7 +532,7 @@ export def "get-workspace-slug-members-find" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-source: string
+  --source: string
   --source-host: string
   --uid: string
   --username: string
@@ -542,14 +542,14 @@ export def "get-workspace-slug-members-find" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workspace_slug | is-empty) { error make --unspanned { msg: "path parameter 'workspace_slug' must be non-empty" } }
-  let qp = [(serialize-qp "source" $qp_source "scalar") (serialize-qp "source_host" $source_host "scalar") (serialize-qp "uid" $uid "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "github" $github "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "source" $source "scalar") (serialize-qp "source_host" $source_host "scalar") (serialize-qp "uid" $uid "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "github" $github "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug)} | format pattern "/{workspace_slug}/members/find") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"source": $qp_source, "source_host": $source_host, "uid": $uid, "username": $username, "email": $email, "github": $github} | compact)
+    query: ({"source": $source, "source_host": $source_host, "uid": $uid, "username": $username, "email": $email, "github": $github} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -713,7 +713,7 @@ export def "get-workspace-slug-members-member-slug-activities" [
   --page: string
   --direction: string@direction-completer
   --items: string@items-completer
-  --qp-sort: string@sort-completer
+  --sort: string@sort-completer
   --activity-type: string
   --type: string # Deprecated in favor of the activity_type parameter. (DEPRECATED)
 ]: nothing -> any {
@@ -721,14 +721,14 @@ export def "get-workspace-slug-members-member-slug-activities" [
   let base = ($base_url | default $BASE_URL)
   if ($workspace_slug | is-empty) { error make --unspanned { msg: "path parameter 'workspace_slug' must be non-empty" } }
   if ($member_slug | is-empty) { error make --unspanned { msg: "path parameter 'member_slug' must be non-empty" } }
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "items" $items "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "activity_type" $activity_type "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "items" $items "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "activity_type" $activity_type "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug), member_slug: (encode-path-segment $member_slug)} | format pattern "/{workspace_slug}/members/{member_slug}/activities") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"page": $page, "direction": $direction, "items": $items, "sort": $qp_sort, "activity_type": $activity_type, "type": $type} | compact)
+    query: ({"page": $page, "direction": $direction, "items": $items, "sort": $sort, "activity_type": $activity_type, "type": $type} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -898,7 +898,7 @@ export def "delete-workspace-slug-members-member-slug-identities" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # The email of the person in the source system
   --name: string # The name of the person in the source system
-  --body-source: string # The type of source: known values include github, twitter, discourse, email, linkedin, devto. Custom values can also be used
+  source: string # The type of source: known values include github, twitter, discourse, email, linkedin, devto. Custom values can also be used
   --source-host: string # Specifies the location of the source, such as the host of a Discourse instance
   --uid: string # The uid of the person in the source system
   --url: string # For custom identities, an optional link to the profile on the source system
@@ -910,7 +910,7 @@ export def "delete-workspace-slug-members-member-slug-identities" [
   if ($workspace_slug | is-empty) { error make --unspanned { msg: "path parameter 'workspace_slug' must be non-empty" } }
   if ($member_slug | is-empty) { error make --unspanned { msg: "path parameter 'member_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug), member_slug: (encode-path-segment $member_slug)} | format pattern "/{workspace_slug}/members/{member_slug}/identities") $auth.query)
-  let req_body = {"email": $email, "name": $name, "source": $body_source, "source_host": $source_host, "uid": $uid, "url": $url, "username": $username} | compact
+  let req_body = {"email": $email, "name": $name, "source": $source, "source_host": $source_host, "uid": $uid, "url": $url, "username": $username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -945,7 +945,7 @@ export def "post-workspace-slug-members-member-slug-identities" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # The email of the person in the source system
   --name: string # The name of the person in the source system
-  --body-source: string # The type of source: known values include github, twitter, discourse, email, linkedin, devto. Custom values can also be used
+  source: string # The type of source: known values include github, twitter, discourse, email, linkedin, devto. Custom values can also be used
   --source-host: string # Specifies the location of the source, such as the host of a Discourse instance
   --uid: string # The uid of the person in the source system
   --url: string # For custom identities, an optional link to the profile on the source system
@@ -957,7 +957,7 @@ export def "post-workspace-slug-members-member-slug-identities" [
   if ($workspace_slug | is-empty) { error make --unspanned { msg: "path parameter 'workspace_slug' must be non-empty" } }
   if ($member_slug | is-empty) { error make --unspanned { msg: "path parameter 'member_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug), member_slug: (encode-path-segment $member_slug)} | format pattern "/{workspace_slug}/members/{member_slug}/identities") $auth.query)
-  let req_body = {"email": $email, "name": $name, "source": $body_source, "source_host": $source_host, "uid": $uid, "url": $url, "username": $username} | compact
+  let req_body = {"email": $email, "name": $name, "source": $source, "source_host": $source_host, "uid": $uid, "url": $url, "username": $username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1116,19 +1116,19 @@ export def "get-workspace-slug-organizations" [
   --page: string
   --direction: string@direction-completer
   --items: string@items-completer
-  --qp-sort: string@sort-completer-2
+  --sort: string@sort-completer-2
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workspace_slug | is-empty) { error make --unspanned { msg: "path parameter 'workspace_slug' must be non-empty" } }
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "items" $items "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "items" $items "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug)} | format pattern "/{workspace_slug}/organizations") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"query": $query, "page": $page, "direction": $direction, "items": $items, "sort": $qp_sort} | compact)
+    query: ({"query": $query, "page": $page, "direction": $direction, "items": $items, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1198,7 +1198,7 @@ export def "put-workspace-slug-organizations-organization-id" [
   --owner-email: string # The email of the team member who is in charge of the organization.
   --owner-name: string # The name of the team member who is in charge of the organization.
   --price-plan: string # The pricing plan the organization is on.
-  --body-source: string # The name of the CRM you use for tracking the organization.
+  source: string # The name of the CRM you use for tracking the organization.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1206,7 +1206,7 @@ export def "put-workspace-slug-organizations-organization-id" [
   if ($workspace_slug | is-empty) { error make --unspanned { msg: "path parameter 'workspace_slug' must be non-empty" } }
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organization_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug), organization_id: (encode-path-segment $organization_id)} | format pattern "/{workspace_slug}/organizations/{organization_id}") $auth.query)
-  let req_body = {"crm_uid": $crm_uid, "crm_url": $crm_url, "deal_closed_date": $deal_closed_date, "lifecycle_stage": $lifecycle_stage, "owner_email": $owner_email, "owner_name": $owner_name, "price_plan": $price_plan, "source": $body_source} | compact
+  let req_body = {"crm_uid": $crm_uid, "crm_url": $crm_url, "deal_closed_date": $deal_closed_date, "lifecycle_stage": $lifecycle_stage, "owner_email": $owner_email, "owner_name": $owner_name, "price_plan": $price_plan, "source": $source} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1242,21 +1242,21 @@ export def "get-workspace-slug-organizations-organization-id-activities" [
   --page: string
   --direction: string@direction-completer
   --items: string@items-completer
-  --qp-sort: string@sort-completer
+  --sort: string@sort-completer
   --activity-type: string@activity-type-completer-1
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workspace_slug | is-empty) { error make --unspanned { msg: "path parameter 'workspace_slug' must be non-empty" } }
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organization_id' must be non-empty" } }
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "items" $items "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "activity_type" $activity_type "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "items" $items "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "activity_type" $activity_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_slug: (encode-path-segment $workspace_slug), organization_id: (encode-path-segment $organization_id)} | format pattern "/{workspace_slug}/organizations/{organization_id}/activities") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"page": $page, "direction": $direction, "items": $items, "sort": $qp_sort, "activity_type": $activity_type} | compact)
+    query: ({"page": $page, "direction": $direction, "items": $items, "sort": $sort, "activity_type": $activity_type} | compact)
     headers: $auth.headers
     body: null
     content_type: null

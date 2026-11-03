@@ -131,14 +131,16 @@ export def "get-bulk-lookup" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --key: string # Your API Key. Each user has a unique API Key that can be used to access the API functions. If you don't have an account yet, please create new account first. (e.g. 2517bc4fc3f790e8f09bc808bb63b899)
-  --ips: string # The IP Addresses you want to lookup. It's a CSV (Comma Separated Values) (e.g. 1.1.1.1,2.2.2.2)
+  --key: string # Your API Key. Each user has a unique API Key that can be used to access the API functions. If you don't have an account yet, please create new account first. (required, e.g. 2517bc4fc3f790e8f09bc808bb63b899)
+  --ips: string # The IP Addresses you want to lookup. It's a CSV (Comma Separated Values) (required, e.g. 1.1.1.1,2.2.2.2)
   --params: string # The modules you want to use of the request. It's a CSV (Comma Separated Values) (e.g. currency)
   --lang: string # Used to inform the API to retrieve the response in your native language. (e.g. AR)
   --format: string # Sets the format of the API response. JSON is the default format. (e.g. XML)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
+  if ($ips == null) { error make --unspanned { msg: "required query parameter 'ips' missing: pass --ips" } }
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "ips" $ips "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/BulkLookup" $qp $auth.query)
   let accept_val = "application/json"
@@ -171,14 +173,16 @@ export def "get-country" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --key: string # Your API Key. Each user has a unique API Key that can be used to access the API functions. If you don't have an account yet, please create new account first. (e.g. 2517bc4fc3f790e8f09bc808bb63b899)
-  --country-code: string # The Country Code of the country you want to fetch it's data. (e.g. PS)
+  --key: string # Your API Key. Each user has a unique API Key that can be used to access the API functions. If you don't have an account yet, please create new account first. (required, e.g. 2517bc4fc3f790e8f09bc808bb63b899)
+  --country-code: string # The Country Code of the country you want to fetch it's data. (required, e.g. PS)
   --params: string # The modules you want to use of the request. It's a CSV (Comma Separated Values) (e.g. language)
   --lang: string # Used to inform the API to retrieve the response in your native language. (e.g. AR)
   --format: string # Sets the format of the API response. JSON is the default format. (e.g. XML)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
+  if ($country_code == null) { error make --unspanned { msg: "required query parameter 'CountryCode' missing: pass --country-code" } }
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "CountryCode" $country_code "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Country" $qp $auth.query)
   let accept_val = "application/json"
@@ -211,13 +215,14 @@ export def "get-geo-ip" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --key: string # Your API Key. Each user has a unique API Key that can be used to access the API functions. If you don't have an account yet, please create new account first. (e.g. 2517bc4fc3f790e8f09bc808bb63b899)
+  --key: string # Your API Key. Each user has a unique API Key that can be used to access the API functions. If you don't have an account yet, please create new account first. (required, e.g. 2517bc4fc3f790e8f09bc808bb63b899)
   --params: string # The modules you want to use of the request. It's a CSV (Comma Separated Values) (e.g. currency)
   --lang: string # Used to inform the API to retrieve the response in your native language. (e.g. AR)
   --format: string # Sets the format of the API response. JSON is the default format. (e.g. XML)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/GeoIP" $qp $auth.query)
   let accept_val = "application/json"
@@ -250,14 +255,16 @@ export def "get-ip-lookup" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --key: string # Your API Key. Each user has a unique API Key that can be used to access the API functions. If you don't have an account yet, please create new account first. (e.g. 2517bc4fc3f790e8f09bc808bb63b899)
-  --ip: string # The IP Address you want to lookup. (e.g. 1.1.1.1)
+  --key: string # Your API Key. Each user has a unique API Key that can be used to access the API functions. If you don't have an account yet, please create new account first. (required, e.g. 2517bc4fc3f790e8f09bc808bb63b899)
+  --ip: string # The IP Address you want to lookup. (required, e.g. 1.1.1.1)
   --params: string # The modules you want to use of the request. It's a CSV (Comma Separated Values) (e.g. currency)
   --lang: string # Used to inform the API to retrieve the response in your native language. (e.g. AR)
   --format: string # Sets the format of the API response. JSON is the default format. (e.g. XML)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
+  if ($ip == null) { error make --unspanned { msg: "required query parameter 'ip' missing: pass --ip" } }
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "ip" $ip "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/IPLookup" $qp $auth.query)
   let accept_val = "application/json"
@@ -290,14 +297,16 @@ export def "get-bad-words" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --key: string # Your API Key. Each user has a unique API Key that can be used to access the API functions. If you don't have an account yet, please create new account first. (e.g. 2517bc4fc3f790e8f09bc808bb63b899)
-  --text: string # The text you want to check. (e.g. This is a sample text without profanity!)
+  --key: string # Your API Key. Each user has a unique API Key that can be used to access the API functions. If you don't have an account yet, please create new account first. (required, e.g. 2517bc4fc3f790e8f09bc808bb63b899)
+  --text: string # The text you want to check. (required, e.g. This is a sample text without profanity!)
   --list-bad-words: string # Set to `yes` to list the bad-words as an Array. (e.g. no)
   --score-only: string # Set to `yes` to return only the score of the text and whether it's safe or not. (e.g. no)
   --format: string # Sets the format of the API response. JSON is the default format. (e.g. JSON)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "listBadWords" $list_bad_words "scalar") (serialize-qp "scoreOnly" $score_only "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/badWords" $qp $auth.query)
   let accept_val = "application/json"

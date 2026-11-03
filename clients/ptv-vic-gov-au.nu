@@ -1,4 +1,4 @@
-# Auto-generated client for PTV Timetable API - Version 3 vv3
+# Auto-generated client for PTV Timetable API - Version 3 v3
 # Source: https://api.apis.guru/v2/specs/ptv.vic.gov.au/v3/openapi.json
 # Auth: --token flag or $env.PTV_TIMETABLE_API_VERSION_3_TOKEN
 
@@ -94,6 +94,7 @@ def base-url-completer [] { ["http://timetableapi.ptv.vic.gov.au" "https://timet
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def route-type-completer [] { ["0" "1" "2" "3" "4"] }
 def accept-completer [] { ["application/json" "text/html" "text/json"] }
 def disruption-status-completer [] { ["current" "planned"] }
 
@@ -125,7 +126,7 @@ export def commands []: nothing -> table {
 # GET /v3/departures/route_type/{route_type}/stop/{stop_id}
 # operationId: Departures_GetForStop
 export def "departures-get-for-stop" [
-  route_type: int
+  route_type: int@route-type-completer
   stop_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -177,7 +178,7 @@ export def "departures-get-for-stop" [
 # GET /v3/departures/route_type/{route_type}/stop/{stop_id}/route/{route_id}
 # operationId: Departures_GetForStopAndRoute
 export def "departures-get-for-stop-and-route" [
-  route_type: int
+  route_type: int@route-type-completer
   stop_id: int
   route_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -313,7 +314,7 @@ export def "directions-for-direction" [
 # operationId: Directions_ForDirectionAndType
 export def "directions-for-direction-and-type" [
   direction_id: int
-  route_type: int
+  route_type: int@route-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -738,7 +739,7 @@ export def "outlets-get-outlets-by-geolocation" [
 # operationId: Patterns_GetPatternByRun
 export def "patterns-get-pattern-by-run" [
   run_ref: string
-  route_type: int
+  route_type: int@route-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -749,7 +750,7 @@ export def "patterns-get-pattern-by-run" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --expand: list<string> # List of objects to be returned in full (i.e. expanded) - options include: All, Stop, Route, Run, Direction, Disruption, VehiclePosition, VehicleDescriptor and None. Default is Disruption. Run must be expanded to receive VehiclePosition and VehicleDescriptor information.
+  --expand: list<string> # List of objects to be returned in full (i.e. expanded) - options include: All, Stop, Route, Run, Direction, Disruption, VehiclePosition, VehicleDescriptor and None. Default is Disruption. Run must be expanded to receive VehiclePosition and VehicleDescriptor information. (required)
   --stop-id: int # Filter by stop_id; values returned by Stops API (format: int32)
   --date-utc: string # Filter by the date and time of the request (ISO 8601 UTC format) (format: date-time)
   --include-skipped-stops: oneof<nothing, bool> # Include any skipped stops in a stopping pattern. Defaults to false.
@@ -762,6 +763,7 @@ export def "patterns-get-pattern-by-run" [
   let base = ($base_url | default $BASE_URL)
   if ($run_ref | is-empty) { error make --unspanned { msg: "path parameter 'run_ref' must be non-empty" } }
   if ($route_type | is-empty) { error make --unspanned { msg: "path parameter 'route_type' must be non-empty" } }
+  if ($expand == null) { error make --unspanned { msg: "required query parameter 'expand' missing: pass --expand" } }
   let qp = [(serialize-qp "expand" $expand "multi") (serialize-qp "stop_id" $stop_id "scalar") (serialize-qp "date_utc" $date_utc "scalar") (serialize-qp "include_skipped_stops" $include_skipped_stops "scalar") (serialize-qp "include_geopath" $include_geopath "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({run_ref: (encode-path-segment $run_ref), route_type: (encode-path-segment $route_type)} | format pattern "/v3/pattern/run/{run_ref}/route_type/{route_type}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -952,7 +954,7 @@ export def "runs-for-route" [
 # operationId: Runs_ForRouteAndRouteType
 export def "runs-for-route-and-route-type" [
   route_id: int
-  route_type: int
+  route_type: int@route-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -963,7 +965,7 @@ export def "runs-for-route-and-route-type" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --expand: list<string> # List of objects to be returned in full (i.e. expanded) - options include: All, VehiclePosition, VehicleDescriptor, or None. Default is All.
+  --expand: list<string> # List of objects to be returned in full (i.e. expanded) - options include: All, VehiclePosition, VehicleDescriptor, or None. Default is All. (required)
   --date-utc: string # Date of the request. (optional - defaults to now) (format: date-time)
   --qp-token: string # Please ignore
   --devid: string # Your developer id
@@ -973,6 +975,7 @@ export def "runs-for-route-and-route-type" [
   let base = ($base_url | default $BASE_URL)
   if ($route_id | is-empty) { error make --unspanned { msg: "path parameter 'route_id' must be non-empty" } }
   if ($route_type | is-empty) { error make --unspanned { msg: "path parameter 'route_type' must be non-empty" } }
+  if ($expand == null) { error make --unspanned { msg: "required query parameter 'expand' missing: pass --expand" } }
   let qp = [(serialize-qp "expand" $expand "multi") (serialize-qp "date_utc" $date_utc "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({route_id: (encode-path-segment $route_id), route_type: (encode-path-segment $route_type)} | format pattern "/v3/runs/route/{route_id}/route_type/{route_type}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1007,7 +1010,7 @@ export def "runs-for-run" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --expand: list<string> # List of objects to be returned in full (i.e. expanded) - options include: All, VehiclePosition, VehicleDescriptor, or None. Default is None.
+  --expand: list<string> # List of objects to be returned in full (i.e. expanded) - options include: All, VehiclePosition, VehicleDescriptor, or None. Default is None. (required)
   --date-utc: string # Date of the request. (optional - defaults to now) (format: date-time)
   --include-geopath: oneof<nothing, bool> # Indicates if geopath data will be returned (default = false)
   --qp-token: string # Please ignore
@@ -1017,6 +1020,7 @@ export def "runs-for-run" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($run_ref | is-empty) { error make --unspanned { msg: "path parameter 'run_ref' must be non-empty" } }
+  if ($expand == null) { error make --unspanned { msg: "required query parameter 'expand' missing: pass --expand" } }
   let qp = [(serialize-qp "expand" $expand "multi") (serialize-qp "date_utc" $date_utc "scalar") (serialize-qp "include_geopath" $include_geopath "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({run_ref: (encode-path-segment $run_ref)} | format pattern "/v3/runs/{run_ref}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1041,7 +1045,7 @@ export def "runs-for-run" [
 # operationId: Runs_ForRunAndRouteType
 export def "runs-for-run-and-route-type" [
   run_ref: string
-  route_type: int
+  route_type: int@route-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1052,7 +1056,7 @@ export def "runs-for-run-and-route-type" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --expand: list<string> # List of objects to be returned in full (i.e. expanded) - options include: All, VehiclePosition, VehicleDescriptor, or None. Default is None.
+  --expand: list<string> # List of objects to be returned in full (i.e. expanded) - options include: All, VehiclePosition, VehicleDescriptor, or None. Default is None. (required)
   --date-utc: string # Date of the request. (optional - defaults to now) (format: date-time)
   --include-geopath: oneof<nothing, bool> # Indicates if geopath data will be returned (default = false)
   --qp-token: string # Please ignore
@@ -1063,6 +1067,7 @@ export def "runs-for-run-and-route-type" [
   let base = ($base_url | default $BASE_URL)
   if ($run_ref | is-empty) { error make --unspanned { msg: "path parameter 'run_ref' must be non-empty" } }
   if ($route_type | is-empty) { error make --unspanned { msg: "path parameter 'route_type' must be non-empty" } }
+  if ($expand == null) { error make --unspanned { msg: "required query parameter 'expand' missing: pass --expand" } }
   let qp = [(serialize-qp "expand" $expand "multi") (serialize-qp "date_utc" $date_utc "scalar") (serialize-qp "include_geopath" $include_geopath "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({run_ref: (encode-path-segment $run_ref), route_type: (encode-path-segment $route_type)} | format pattern "/v3/runs/{run_ref}/route_type/{route_type}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1184,7 +1189,7 @@ export def "stops-stops-by-geolocation" [
 # operationId: Stops_StopsForRoute
 export def "stops-stops-for-route" [
   route_id: int
-  route_type: int
+  route_type: int@route-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1231,7 +1236,7 @@ export def "stops-stops-for-route" [
 # operationId: Stops_StopDetails
 export def "stops-stop-details" [
   stop_id: int
-  route_type: int
+  route_type: int@route-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

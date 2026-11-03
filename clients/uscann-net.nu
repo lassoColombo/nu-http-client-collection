@@ -132,12 +132,13 @@ export def "forgot-password" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
+  --content-type: string # required, default: application/json
   email: string # The email of user
 ]: any -> record<code: string, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base "/authentication/forgotPassword" $auth.query)
   let req_body = {"email": $email} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -175,7 +176,7 @@ export def "register" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
+  --content-type: string # required, default: application/json
   --city: string # The city of address
   --company-description: string # The company Description
   company_name: string # The company name of customer
@@ -203,6 +204,7 @@ export def "register" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base "/authentication/register" $auth.query)
   let req_body = {"city": $city, "companyDescription": $company_description, "companyName": $company_name, "country": $country, "date1": $date1, "date2": $date2, "date3": $date3, "email": $email, "firstName": $first_name, "lastName": $last_name, "number1": $number1, "number2": $number2, "number3": $number3, "password": $password, "phone": $phone, "state": $state, "storage": $storage, "streetAddress": $street_address, "string1": $string1, "string2": $string2, "string3": $string3, "username": $username, "zip": $zip} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -240,7 +242,7 @@ export def "set-forgot-password" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
+  --content-type: string # required, default: application/json
   activity: string # The user activity
   --password: string # The user password
   --body-token: string # The token
@@ -248,9 +250,11 @@ export def "set-forgot-password" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base "/authentication/setForgotPassword" $auth.query)
   let req_body = {"activity": $activity, "password": $password, "token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type} | compact
@@ -285,13 +289,14 @@ export def "authenticate-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
+  --content-type: string # required, default: application/json
   password: string # The user password
   username: string # The name of user
 ]: any -> record<activities: string, customerId: int, email: string, fullName: string, partnerId: int, role: string, settings: string, token: string, type: string, userId: int, username: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base "/authentication/token" $auth.query)
   let req_body = {"password": $password, "username": $username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -329,16 +334,18 @@ export def "validate-mail-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
+  --content-type: string # required, default: application/json
   activity: string # The user activity
   --body-token: string # The token
 ]: any -> record<code: string, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base "/authentication/validateMailToken" $auth.query)
   let req_body = {"activity": $activity, "token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type} | compact

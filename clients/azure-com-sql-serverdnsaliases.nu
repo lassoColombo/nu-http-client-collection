@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -153,13 +153,14 @@ export def "server-dns-aliases-list-by-server" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/dnsAliases") $qp $auth.query)
   let accept_val = "application/json"
@@ -196,7 +197,7 @@ export def "server-dns-aliases-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -204,6 +205,7 @@ export def "server-dns-aliases-delete" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($dns_alias_name | is-empty) { error make --unspanned { msg: "path parameter 'dnsAliasName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), dns_alias_name: (encode-path-segment $dns_alias_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/dnsAliases/{dns_alias_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -240,14 +242,15 @@ export def "server-dns-aliases-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<properties: record<azureDnsRecord: string>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<properties: record<azureDnsRecord: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($dns_alias_name | is-empty) { error make --unspanned { msg: "path parameter 'dnsAliasName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), dns_alias_name: (encode-path-segment $dns_alias_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/dnsAliases/{dns_alias_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -284,14 +287,15 @@ export def "server-dns-aliases-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<properties: record<azureDnsRecord: string>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<properties: record<azureDnsRecord: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($dns_alias_name | is-empty) { error make --unspanned { msg: "path parameter 'dnsAliasName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), dns_alias_name: (encode-path-segment $dns_alias_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/dnsAliases/{dns_alias_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -328,7 +332,7 @@ export def "server-dns-aliases-acquire" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
   --old-server-dns-alias-id: string # The id of the server alias that will be acquired to point to this server instead.
 ]: any -> any {
   let input = $in
@@ -338,6 +342,7 @@ export def "server-dns-aliases-acquire" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($dns_alias_name | is-empty) { error make --unspanned { msg: "path parameter 'dnsAliasName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), dns_alias_name: (encode-path-segment $dns_alias_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/dnsAliases/{dns_alias_name}/acquire") $qp $auth.query)
   let req_body = {"oldServerDnsAliasId": $old_server_dns_alias_id} | compact

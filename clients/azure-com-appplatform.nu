@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -159,10 +159,11 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client Api Version.
+  --api-version: string@api-version-completer # Client Api Version. (required)
 ]: nothing -> record<nextLink: string, value: table<dataAction: bool, display: record, name: string, origin: string, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let api_version = ($api_version | default "2019-05-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.AppPlatform/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -196,11 +197,12 @@ export def "services-list-by-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client Api Version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string@api-version-completer # Client Api Version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AppPlatform/Spring") $qp $auth.query)
   let accept_val = "application/json"
@@ -235,7 +237,7 @@ export def "services-check-name-availability" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client Api Version.
+  --api-version: string@api-version-completer # Client Api Version. (required)
   name: string # Name to be checked
   type: string # Type of the resource to check name availability
 ]: any -> record<message: string, nameAvailable: bool, reason: string> {
@@ -244,6 +246,7 @@ export def "services-check-name-availability" [
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AppPlatform/locations/{location}/checkNameAvailability") $qp $auth.query)
   let req_body = {"name": $name, "type": $type} | compact
@@ -280,12 +283,13 @@ export def "services-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client Api Version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string@api-version-completer # Client Api Version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring") $qp $auth.query)
   let accept_val = "application/json"
@@ -321,13 +325,14 @@ export def "services-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client Api Version.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string@api-version-completer # Client Api Version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -363,13 +368,14 @@ export def "services-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client Api Version.
-]: nothing -> record<properties: record<configServerProperties: record<configServer: record, error: record, state: string>, provisioningState: string, serviceId: string, trace: record<appInsightInstrumentationKey: string, enabled: bool, error: record, state: string>, version: int>> {
+  --api-version: string@api-version-completer # Client Api Version. (required)
+]: nothing -> record<properties: record<configServerProperties: record<configServer: record, error: record, state: string>, provisioningState: string, serviceId: string, trace: record<appInsightInstrumentationKey: string, enabled: bool, error: record, state: string>, version: int>, location: string, tags: record, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -406,17 +412,18 @@ export def "services-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client Api Version.
+  --api-version: string@api-version-completer # Client Api Version. (required)
   --properties: record # Service properties payload — shape: {configServerProperties?: record, trace?: record}
   --location: string # The GEO location of the resource.
   --tags: record # Tags of the service which is a list of key value pairs that describe the resource.
-]: any -> record<properties: record<configServerProperties: record<configServer: record, error: record, state: string>, provisioningState: string, serviceId: string, trace: record<appInsightInstrumentationKey: string, enabled: bool, error: record, state: string>, version: int>> {
+]: any -> record<properties: record<configServerProperties: record<configServer: record, error: record, state: string>, provisioningState: string, serviceId: string, trace: record<appInsightInstrumentationKey: string, enabled: bool, error: record, state: string>, version: int>, location: string, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -455,17 +462,18 @@ export def "services-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client Api Version.
+  --api-version: string@api-version-completer # Client Api Version. (required)
   --properties: record # Service properties payload — shape: {configServerProperties?: record, trace?: record}
   --location: string # The GEO location of the resource.
   --tags: record # Tags of the service which is a list of key value pairs that describe the resource.
-]: any -> record<properties: record<configServerProperties: record<configServer: record, error: record, state: string>, provisioningState: string, serviceId: string, trace: record<appInsightInstrumentationKey: string, enabled: bool, error: record, state: string>, version: int>> {
+]: any -> record<properties: record<configServerProperties: record<configServer: record, error: record, state: string>, provisioningState: string, serviceId: string, trace: record<appInsightInstrumentationKey: string, enabled: bool, error: record, state: string>, version: int>, location: string, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -503,13 +511,14 @@ export def "apps-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client Api Version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string@api-version-completer # Client Api Version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps") $qp $auth.query)
   let accept_val = "application/json"
@@ -546,14 +555,15 @@ export def "apps-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client Api Version.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string@api-version-completer # Client Api Version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name), app_name: (encode-path-segment $app_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps/{app_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -591,14 +601,15 @@ export def "apps-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --sync-status: string # Indicates whether sync status
-  --api-version: string@api-version-completer # Client Api Version.
-]: nothing -> record<properties: record<activeDeploymentName: string, createdTime: string, persistentDisk: record<mountPath: string, sizeInGB: int, usedInGB: int>, provisioningState: string, public: bool, temporaryDisk: record<mountPath: string, sizeInGB: int>, url: string>> {
+  --api-version: string@api-version-completer # Client Api Version. (required)
+]: nothing -> record<properties: record<activeDeploymentName: string, createdTime: string, persistentDisk: record<mountPath: string, sizeInGB: int, usedInGB: int>, provisioningState: string, public: bool, temporaryDisk: record<mountPath: string, sizeInGB: int>, url: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-01-preview")
   let qp = [(serialize-qp "syncStatus" $sync_status "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name), app_name: (encode-path-segment $app_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps/{app_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -636,9 +647,9 @@ export def "apps-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client Api Version.
+  --api-version: string@api-version-completer # Client Api Version. (required)
   --properties: record # App resource properties payload — shape: {activeDeploymentName?: string, persistentDisk?: record, public?: bool, temporaryDisk?: record}
-]: any -> record<properties: record<activeDeploymentName: string, createdTime: string, persistentDisk: record<mountPath: string, sizeInGB: int, usedInGB: int>, provisioningState: string, public: bool, temporaryDisk: record<mountPath: string, sizeInGB: int>, url: string>> {
+]: any -> record<properties: record<activeDeploymentName: string, createdTime: string, persistentDisk: record<mountPath: string, sizeInGB: int, usedInGB: int>, provisioningState: string, public: bool, temporaryDisk: record<mountPath: string, sizeInGB: int>, url: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -646,6 +657,7 @@ export def "apps-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name), app_name: (encode-path-segment $app_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps/{app_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -685,9 +697,9 @@ export def "apps-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client Api Version.
+  --api-version: string@api-version-completer # Client Api Version. (required)
   --properties: record # App resource properties payload — shape: {activeDeploymentName?: string, persistentDisk?: record, public?: bool, temporaryDisk?: record}
-]: any -> record<properties: record<activeDeploymentName: string, createdTime: string, persistentDisk: record<mountPath: string, sizeInGB: int, usedInGB: int>, provisioningState: string, public: bool, temporaryDisk: record<mountPath: string, sizeInGB: int>, url: string>> {
+]: any -> record<properties: record<activeDeploymentName: string, createdTime: string, persistentDisk: record<mountPath: string, sizeInGB: int, usedInGB: int>, provisioningState: string, public: bool, temporaryDisk: record<mountPath: string, sizeInGB: int>, url: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -695,6 +707,7 @@ export def "apps-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name), app_name: (encode-path-segment $app_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps/{app_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -733,14 +746,15 @@ export def "bindings-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client Api Version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string@api-version-completer # Client Api Version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name), app_name: (encode-path-segment $app_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps/{app_name}/bindings") $qp $auth.query)
   let accept_val = "application/json"
@@ -778,8 +792,8 @@ export def "bindings-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client Api Version.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string@api-version-completer # Client Api Version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -787,6 +801,7 @@ export def "bindings-delete" [
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
   if ($binding_name | is-empty) { error make --unspanned { msg: "path parameter 'bindingName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name), app_name: (encode-path-segment $app_name), binding_name: (encode-path-segment $binding_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps/{app_name}/bindings/{binding_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -824,8 +839,8 @@ export def "bindings-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client Api Version.
-]: nothing -> record<properties: record<bindingParameters: record, createdAt: string, generatedProperties: string, key: string, resourceId: string, resourceName: string, resourceType: string, updatedAt: string>> {
+  --api-version: string@api-version-completer # Client Api Version. (required)
+]: nothing -> record<properties: record<bindingParameters: record, createdAt: string, generatedProperties: string, key: string, resourceId: string, resourceName: string, resourceType: string, updatedAt: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -833,6 +848,7 @@ export def "bindings-get" [
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
   if ($binding_name | is-empty) { error make --unspanned { msg: "path parameter 'bindingName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name), app_name: (encode-path-segment $app_name), binding_name: (encode-path-segment $binding_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps/{app_name}/bindings/{binding_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -871,9 +887,9 @@ export def "bindings-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client Api Version.
+  --api-version: string@api-version-completer # Client Api Version. (required)
   --properties: record # Binding resource properties payload — shape: {bindingParameters?: record, key?: string, resourceId?: string, resourceName?: string, resourceType?: string}
-]: any -> record<properties: record<bindingParameters: record, createdAt: string, generatedProperties: string, key: string, resourceId: string, resourceName: string, resourceType: string, updatedAt: string>> {
+]: any -> record<properties: record<bindingParameters: record, createdAt: string, generatedProperties: string, key: string, resourceId: string, resourceName: string, resourceType: string, updatedAt: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -882,6 +898,7 @@ export def "bindings-update" [
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
   if ($binding_name | is-empty) { error make --unspanned { msg: "path parameter 'bindingName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name), app_name: (encode-path-segment $app_name), binding_name: (encode-path-segment $binding_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps/{app_name}/bindings/{binding_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -922,9 +939,9 @@ export def "bindings-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client Api Version.
+  --api-version: string@api-version-completer # Client Api Version. (required)
   --properties: record # Binding resource properties payload — shape: {bindingParameters?: record, key?: string, resourceId?: string, resourceName?: string, resourceType?: string}
-]: any -> record<properties: record<bindingParameters: record, createdAt: string, generatedProperties: string, key: string, resourceId: string, resourceName: string, resourceType: string, updatedAt: string>> {
+]: any -> record<properties: record<bindingParameters: record, createdAt: string, generatedProperties: string, key: string, resourceId: string, resourceName: string, resourceType: string, updatedAt: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -933,6 +950,7 @@ export def "bindings-create-or-update" [
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
   if ($binding_name | is-empty) { error make --unspanned { msg: "path parameter 'bindingName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name), app_name: (encode-path-segment $app_name), binding_name: (encode-path-segment $binding_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps/{app_name}/bindings/{binding_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -972,14 +990,15 @@ export def "deployments-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --version: list<string> # Version of the deployments to be listed
-  --api-version: string@api-version-completer # Client Api Version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string@api-version-completer # Client Api Version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-01-preview")
   let qp = [(serialize-qp "version" $version "multi") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name), app_name: (encode-path-segment $app_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps/{app_name}/deployments") $qp $auth.query)
   let accept_val = "application/json"
@@ -1017,8 +1036,8 @@ export def "deployments-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client Api Version.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string@api-version-completer # Client Api Version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1026,6 +1045,7 @@ export def "deployments-delete" [
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
   if ($deployment_name | is-empty) { error make --unspanned { msg: "path parameter 'deploymentName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name), app_name: (encode-path-segment $app_name), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps/{app_name}/deployments/{deployment_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1063,8 +1083,8 @@ export def "deployments-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client Api Version.
-]: nothing -> record<properties: record<active: bool, appName: string, createdTime: string, deploymentSettings: record<cpu: int, environmentVariables: record, instanceCount: int, jvmOptions: string, memoryInGB: int, runtimeVersion: string>, instances: list<record>, provisioningState: string, source: record<artifactSelector: string, relativePath: string, type: string, version: string>, status: string>> {
+  --api-version: string@api-version-completer # Client Api Version. (required)
+]: nothing -> record<properties: record<active: bool, appName: string, createdTime: string, deploymentSettings: record<cpu: int, environmentVariables: record, instanceCount: int, jvmOptions: string, memoryInGB: int, runtimeVersion: string>, instances: list<record>, provisioningState: string, source: record<artifactSelector: string, relativePath: string, type: string, version: string>, status: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1072,6 +1092,7 @@ export def "deployments-get" [
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
   if ($deployment_name | is-empty) { error make --unspanned { msg: "path parameter 'deploymentName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name), app_name: (encode-path-segment $app_name), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps/{app_name}/deployments/{deployment_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1110,9 +1131,9 @@ export def "deployments-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client Api Version.
+  --api-version: string@api-version-completer # Client Api Version. (required)
   --properties: record # Deployment resource properties payload — shape: {deploymentSettings?: record, source?: record}
-]: any -> record<properties: record<active: bool, appName: string, createdTime: string, deploymentSettings: record<cpu: int, environmentVariables: record, instanceCount: int, jvmOptions: string, memoryInGB: int, runtimeVersion: string>, instances: list<record>, provisioningState: string, source: record<artifactSelector: string, relativePath: string, type: string, version: string>, status: string>> {
+]: any -> record<properties: record<active: bool, appName: string, createdTime: string, deploymentSettings: record<cpu: int, environmentVariables: record, instanceCount: int, jvmOptions: string, memoryInGB: int, runtimeVersion: string>, instances: list<record>, provisioningState: string, source: record<artifactSelector: string, relativePath: string, type: string, version: string>, status: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1121,6 +1142,7 @@ export def "deployments-update" [
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
   if ($deployment_name | is-empty) { error make --unspanned { msg: "path parameter 'deploymentName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name), app_name: (encode-path-segment $app_name), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps/{app_name}/deployments/{deployment_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -1161,9 +1183,9 @@ export def "deployments-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client Api Version.
+  --api-version: string@api-version-completer # Client Api Version. (required)
   --properties: record # Deployment resource properties payload — shape: {deploymentSettings?: record, source?: record}
-]: any -> record<properties: record<active: bool, appName: string, createdTime: string, deploymentSettings: record<cpu: int, environmentVariables: record, instanceCount: int, jvmOptions: string, memoryInGB: int, runtimeVersion: string>, instances: list<record>, provisioningState: string, source: record<artifactSelector: string, relativePath: string, type: string, version: string>, status: string>> {
+]: any -> record<properties: record<active: bool, appName: string, createdTime: string, deploymentSettings: record<cpu: int, environmentVariables: record, instanceCount: int, jvmOptions: string, memoryInGB: int, runtimeVersion: string>, instances: list<record>, provisioningState: string, source: record<artifactSelector: string, relativePath: string, type: string, version: string>, status: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1172,6 +1194,7 @@ export def "deployments-create-or-update" [
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
   if ($deployment_name | is-empty) { error make --unspanned { msg: "path parameter 'deploymentName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name), app_name: (encode-path-segment $app_name), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps/{app_name}/deployments/{deployment_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -1211,7 +1234,7 @@ export def "deployments-get-log-file-url" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client Api Version.
+  --api-version: string@api-version-completer # Client Api Version. (required)
 ]: nothing -> record<url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1220,6 +1243,7 @@ export def "deployments-get-log-file-url" [
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
   if ($deployment_name | is-empty) { error make --unspanned { msg: "path parameter 'deploymentName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name), app_name: (encode-path-segment $app_name), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps/{app_name}/deployments/{deployment_name}/getLogFileUrl") $qp $auth.query)
   let accept_val = "application/json"
@@ -1257,8 +1281,8 @@ export def "deployments-restart" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client Api Version.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string@api-version-completer # Client Api Version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1266,6 +1290,7 @@ export def "deployments-restart" [
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
   if ($deployment_name | is-empty) { error make --unspanned { msg: "path parameter 'deploymentName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name), app_name: (encode-path-segment $app_name), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps/{app_name}/deployments/{deployment_name}/restart") $qp $auth.query)
   let accept_val = "application/json"
@@ -1303,8 +1328,8 @@ export def "deployments-start" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client Api Version.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string@api-version-completer # Client Api Version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1312,6 +1337,7 @@ export def "deployments-start" [
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
   if ($deployment_name | is-empty) { error make --unspanned { msg: "path parameter 'deploymentName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name), app_name: (encode-path-segment $app_name), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps/{app_name}/deployments/{deployment_name}/start") $qp $auth.query)
   let accept_val = "application/json"
@@ -1349,8 +1375,8 @@ export def "deployments-stop" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client Api Version.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string@api-version-completer # Client Api Version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1358,6 +1384,7 @@ export def "deployments-stop" [
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
   if ($deployment_name | is-empty) { error make --unspanned { msg: "path parameter 'deploymentName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name), app_name: (encode-path-segment $app_name), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps/{app_name}/deployments/{deployment_name}/stop") $qp $auth.query)
   let accept_val = "application/json"
@@ -1394,7 +1421,7 @@ export def "apps-get-resource-upload-url" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client Api Version.
+  --api-version: string@api-version-completer # Client Api Version. (required)
 ]: nothing -> record<relativePath: string, uploadUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1402,6 +1429,7 @@ export def "apps-get-resource-upload-url" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name), app_name: (encode-path-segment $app_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps/{app_name}/getResourceUploadUrl") $qp $auth.query)
   let accept_val = "application/json"
@@ -1438,13 +1466,14 @@ export def "deployments-list-cluster-all-deployments" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --version: list<string> # Version of the deployments to be listed
-  --api-version: string@api-version-completer # Client Api Version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string@api-version-completer # Client Api Version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-01-preview")
   let qp = [(serialize-qp "version" $version "multi") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/deployments") $qp $auth.query)
   let accept_val = "application/json"
@@ -1479,13 +1508,14 @@ export def "services-disable-test-endpoint" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client Api Version.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string@api-version-completer # Client Api Version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/disableTestEndpoint") $qp $auth.query)
   let accept_val = "application/json"
@@ -1520,13 +1550,14 @@ export def "services-enable-test-endpoint" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client Api Version.
+  --api-version: string@api-version-completer # Client Api Version. (required)
 ]: nothing -> record<enabled: bool, primaryKey: string, primaryTestEndpoint: string, secondaryKey: string, secondaryTestEndpoint: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/enableTestEndpoint") $qp $auth.query)
   let accept_val = "application/json"
@@ -1562,13 +1593,14 @@ export def "services-list-test-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client Api Version.
+  --api-version: string@api-version-completer # Client Api Version. (required)
 ]: nothing -> record<enabled: bool, primaryKey: string, primaryTestEndpoint: string, secondaryKey: string, secondaryTestEndpoint: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/listTestKeys") $qp $auth.query)
   let accept_val = "application/json"
@@ -1604,7 +1636,7 @@ export def "services-regenerate-test-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client Api Version.
+  --api-version: string@api-version-completer # Client Api Version. (required)
   key_type: string@key-type-completer # Type of the test key
 ]: any -> record<enabled: bool, primaryKey: string, primaryTestEndpoint: string, secondaryKey: string, secondaryTestEndpoint: string> {
   let input = $in
@@ -1613,6 +1645,7 @@ export def "services-regenerate-test-key" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-05-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/regenerateTestKey") $qp $auth.query)
   let req_body = {"keyType": $key_type} | compact

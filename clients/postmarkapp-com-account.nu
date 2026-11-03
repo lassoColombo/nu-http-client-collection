@@ -151,12 +151,15 @@ export def "list-domains" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --count: int # Number of records to return per request. Max 500.
-  --offset: int # Number of records to skip
-  --x-postmark-account-token: string # The token associated with the Account on which this request will operate.
+  --count: int # Number of records to return per request. Max 500. (required)
+  --offset: int # Number of records to skip (required)
+  --x-postmark-account-token: string # The token associated with the Account on which this request will operate. (required)
 ]: nothing -> record<Domains: table<DKIMVerified: bool, ID: int, Name: string, ReturnPathDomainVerified: bool, SPFVerified: bool, WeakDKIM: bool>, TotalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/domains" $qp $auth.query)
   let accept_val = "application/json"
@@ -191,13 +194,14 @@ export def "create-domain" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-account-token: string # The token associated with the Account on which this request will operate.
+  --x-postmark-account-token: string # The token associated with the Account on which this request will operate. (required)
   --name: string
   --return-path-domain: string
 ]: any -> record<DKIMHost: string, DKIMPendingHost: string, DKIMPendingTextValue: string, DKIMRevokedHost: string, DKIMRevokedTextValue: string, DKIMTestValue: string, DKIMUpdateStatus: string, DKIMVerified: bool, ID: int, Name: string, ReturnPathDomain: string, ReturnPathDomainCNAMEValue: string, ReturnPathDomainVerified: bool, SPFHost: string, SPFTextValue: string, SPFVerified: bool, SafeToRemoveRevokedKeyFromDNS: bool, WeakDKIM: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base "/domains" $auth.query)
   let req_body = {"Name": $name, "ReturnPathDomain": $return_path_domain} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -234,11 +238,12 @@ export def "delete-domain" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-account-token: string # The token associated with the Account on which this request will operate.
+  --x-postmark-account-token: string # The token associated with the Account on which this request will operate. (required)
 ]: nothing -> record<ErrorCode: int, Message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domainid | is-empty) { error make --unspanned { msg: "path parameter 'domainid' must be non-empty" } }
+  if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base ({domainid: (encode-path-segment $domainid)} | format pattern "/domains/{domainid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -273,11 +278,12 @@ export def "get-domain" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-account-token: string # The token associated with the Account on which this request will operate.
+  --x-postmark-account-token: string # The token associated with the Account on which this request will operate. (required)
 ]: nothing -> record<DKIMHost: string, DKIMPendingHost: string, DKIMPendingTextValue: string, DKIMRevokedHost: string, DKIMRevokedTextValue: string, DKIMTestValue: string, DKIMUpdateStatus: string, DKIMVerified: bool, ID: int, Name: string, ReturnPathDomain: string, ReturnPathDomainCNAMEValue: string, ReturnPathDomainVerified: bool, SPFHost: string, SPFTextValue: string, SPFVerified: bool, SafeToRemoveRevokedKeyFromDNS: bool, WeakDKIM: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domainid | is-empty) { error make --unspanned { msg: "path parameter 'domainid' must be non-empty" } }
+  if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base ({domainid: (encode-path-segment $domainid)} | format pattern "/domains/{domainid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -312,13 +318,14 @@ export def "edit-domain" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-account-token: string # The token associated with the Account on which this request will operate.
+  --x-postmark-account-token: string # The token associated with the Account on which this request will operate. (required)
   --return-path-domain: string
 ]: any -> record<DKIMHost: string, DKIMPendingHost: string, DKIMPendingTextValue: string, DKIMRevokedHost: string, DKIMRevokedTextValue: string, DKIMTestValue: string, DKIMUpdateStatus: string, DKIMVerified: bool, ID: int, Name: string, ReturnPathDomain: string, ReturnPathDomainCNAMEValue: string, ReturnPathDomainVerified: bool, SPFHost: string, SPFTextValue: string, SPFVerified: bool, SafeToRemoveRevokedKeyFromDNS: bool, WeakDKIM: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domainid | is-empty) { error make --unspanned { msg: "path parameter 'domainid' must be non-empty" } }
+  if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base ({domainid: (encode-path-segment $domainid)} | format pattern "/domains/{domainid}") $auth.query)
   let req_body = {"ReturnPathDomain": $return_path_domain} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -355,11 +362,12 @@ export def "rotate-dkim-key-for-domain" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-account-token: string # The token associated with the Account on which this request will operate.
+  --x-postmark-account-token: string # The token associated with the Account on which this request will operate. (required)
 ]: nothing -> record<DKIMHost: string, DKIMPendingHost: string, DKIMPendingTextValue: string, DKIMRevokedHost: string, DKIMRevokedTextValue: string, DKIMTestValue: string, DKIMUpdateStatus: string, DKIMVerified: bool, ID: int, Name: string, SafeToRemoveRevokedKeyFromDNS: bool, WeakDKIM: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domainid | is-empty) { error make --unspanned { msg: "path parameter 'domainid' must be non-empty" } }
+  if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base ({domainid: (encode-path-segment $domainid)} | format pattern "/domains/{domainid}/rotatedkim") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -394,11 +402,12 @@ export def "request-dkim-verification-for-domain" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-account-token: string # The token associated with the Account on which this request will operate.
+  --x-postmark-account-token: string # The token associated with the Account on which this request will operate. (required)
 ]: nothing -> record<DKIMHost: string, DKIMPendingHost: string, DKIMPendingTextValue: string, DKIMRevokedHost: string, DKIMRevokedTextValue: string, DKIMTestValue: string, DKIMUpdateStatus: string, DKIMVerified: bool, ID: int, Name: string, ReturnPathDomain: string, ReturnPathDomainCNAMEValue: string, ReturnPathDomainVerified: bool, SPFHost: string, SPFTextValue: string, SPFVerified: bool, SafeToRemoveRevokedKeyFromDNS: bool, WeakDKIM: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domainid | is-empty) { error make --unspanned { msg: "path parameter 'domainid' must be non-empty" } }
+  if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base ({domainid: (encode-path-segment $domainid)} | format pattern "/domains/{domainid}/verifydkim") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -433,11 +442,12 @@ export def "request-return-path-verification-for-domain" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-account-token: string # The token associated with the Account on which this request will operate.
+  --x-postmark-account-token: string # The token associated with the Account on which this request will operate. (required)
 ]: nothing -> record<DKIMHost: string, DKIMPendingHost: string, DKIMPendingTextValue: string, DKIMRevokedHost: string, DKIMRevokedTextValue: string, DKIMTestValue: string, DKIMUpdateStatus: string, DKIMVerified: bool, ID: int, Name: string, ReturnPathDomain: string, ReturnPathDomainCNAMEValue: string, ReturnPathDomainVerified: bool, SPFHost: string, SPFTextValue: string, SPFVerified: bool, SafeToRemoveRevokedKeyFromDNS: bool, WeakDKIM: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domainid | is-empty) { error make --unspanned { msg: "path parameter 'domainid' must be non-empty" } }
+  if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base ({domainid: (encode-path-segment $domainid)} | format pattern "/domains/{domainid}/verifyreturnpath") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -472,11 +482,12 @@ export def "request-spf-verification-for-domain" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-account-token: string # The token associated with the Account on which this request will operate.
+  --x-postmark-account-token: string # The token associated with the Account on which this request will operate. (required)
 ]: nothing -> record<SPFHost: string, SPFTextValue: string, SPFVerified: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domainid | is-empty) { error make --unspanned { msg: "path parameter 'domainid' must be non-empty" } }
+  if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base ({domainid: (encode-path-segment $domainid)} | format pattern "/domains/{domainid}/verifyspf") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -510,12 +521,15 @@ export def "list-sender-signatures" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --count: int # Number of records to return per request. Max 500.
-  --offset: int # Number of records to skip
-  --x-postmark-account-token: string # The token associated with the Account on which this request will operate.
+  --count: int # Number of records to return per request. Max 500. (required)
+  --offset: int # Number of records to skip (required)
+  --x-postmark-account-token: string # The token associated with the Account on which this request will operate. (required)
 ]: nothing -> record<SenderSignatures: table<Confirmed: bool, Domain: string, EmailAddress: string, ID: int, Name: string, ReplyToEmailAddress: string>, TotalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/senders" $qp $auth.query)
   let accept_val = "application/json"
@@ -550,7 +564,7 @@ export def "create-sender-signature" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-account-token: string # The token associated with the Account on which this request will operate.
+  --x-postmark-account-token: string # The token associated with the Account on which this request will operate. (required)
   --from-email: string # format: email
   --name: string
   --reply-to-email: string # format: email
@@ -559,6 +573,7 @@ export def "create-sender-signature" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base "/senders" $auth.query)
   let req_body = {"FromEmail": $from_email, "Name": $name, "ReplyToEmail": $reply_to_email, "ReturnPathDomain": $return_path_domain} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -595,11 +610,12 @@ export def "delete-sender-signature" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-account-token: string # The token associated with the Account on which this request will operate.
+  --x-postmark-account-token: string # The token associated with the Account on which this request will operate. (required)
 ]: nothing -> record<ErrorCode: int, Message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($signatureid | is-empty) { error make --unspanned { msg: "path parameter 'signatureid' must be non-empty" } }
+  if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base ({signatureid: (encode-path-segment $signatureid)} | format pattern "/senders/{signatureid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -634,11 +650,12 @@ export def "get-sender-signature" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-account-token: string # The token associated with the Account on which this request will operate.
+  --x-postmark-account-token: string # The token associated with the Account on which this request will operate. (required)
 ]: nothing -> record<Confirmed: bool, DKIMHost: string, DKIMPendingHost: string, DKIMPendingTextValue: string, DKIMRevokedHost: string, DKIMRevokedTextValue: string, DKIMTestValue: string, DKIMUpdateStatus: string, DKIMVerified: bool, Domain: string, EmailAddress: string, ID: int, Name: string, ReplyToEmailAddress: string, ReturnPathDomain: string, ReturnPathDomainCNAMEValue: string, ReturnPathDomainVerified: bool, SPFHost: string, SPFTextValue: string, SPFVerified: bool, SafeToRemoveRevokedKeyFromDNS: bool, WeakDKIM: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($signatureid | is-empty) { error make --unspanned { msg: "path parameter 'signatureid' must be non-empty" } }
+  if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base ({signatureid: (encode-path-segment $signatureid)} | format pattern "/senders/{signatureid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -673,7 +690,7 @@ export def "edit-sender-signature" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-account-token: string # The token associated with the Account on which this request will operate.
+  --x-postmark-account-token: string # The token associated with the Account on which this request will operate. (required)
   --name: string
   --reply-to-email: string # format: email
   --return-path-domain: string
@@ -682,6 +699,7 @@ export def "edit-sender-signature" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($signatureid | is-empty) { error make --unspanned { msg: "path parameter 'signatureid' must be non-empty" } }
+  if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base ({signatureid: (encode-path-segment $signatureid)} | format pattern "/senders/{signatureid}") $auth.query)
   let req_body = {"Name": $name, "ReplyToEmail": $reply_to_email, "ReturnPathDomain": $return_path_domain} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -718,11 +736,12 @@ export def "request-new-dkim-key-for-sender-signature" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-account-token: string # The token associated with the Account on which this request will operate.
+  --x-postmark-account-token: string # The token associated with the Account on which this request will operate. (required)
 ]: nothing -> record<ErrorCode: int, Message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($signatureid | is-empty) { error make --unspanned { msg: "path parameter 'signatureid' must be non-empty" } }
+  if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base ({signatureid: (encode-path-segment $signatureid)} | format pattern "/senders/{signatureid}/requestnewdkim") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -757,11 +776,12 @@ export def "resend-sender-signature-confirmation-email" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-account-token: string # The token associated with the Account on which this request will operate.
+  --x-postmark-account-token: string # The token associated with the Account on which this request will operate. (required)
 ]: nothing -> record<ErrorCode: int, Message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($signatureid | is-empty) { error make --unspanned { msg: "path parameter 'signatureid' must be non-empty" } }
+  if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base ({signatureid: (encode-path-segment $signatureid)} | format pattern "/senders/{signatureid}/resend") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -796,11 +816,12 @@ export def "request-spf-verification-for-sender-signature" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-account-token: string # The token associated with the Account on which this request will operate.
+  --x-postmark-account-token: string # The token associated with the Account on which this request will operate. (required)
 ]: nothing -> record<Confirmed: bool, DKIMHost: string, DKIMPendingHost: string, DKIMPendingTextValue: string, DKIMRevokedHost: string, DKIMRevokedTextValue: string, DKIMTestValue: string, DKIMUpdateStatus: string, DKIMVerified: bool, Domain: string, EmailAddress: string, ID: int, Name: string, ReplyToEmailAddress: string, ReturnPathDomain: string, ReturnPathDomainCNAMEValue: string, ReturnPathDomainVerified: bool, SPFHost: string, SPFTextValue: string, SPFVerified: bool, SafeToRemoveRevokedKeyFromDNS: bool, WeakDKIM: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($signatureid | is-empty) { error make --unspanned { msg: "path parameter 'signatureid' must be non-empty" } }
+  if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base ({signatureid: (encode-path-segment $signatureid)} | format pattern "/senders/{signatureid}/verifyspf") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -834,13 +855,16 @@ export def "list-servers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --count: int # Number of servers to return per request.
-  --offset: int # Number of servers to skip.
+  --count: int # Number of servers to return per request. (required)
+  --offset: int # Number of servers to skip. (required)
   --name: string # Filter by a specific server name
-  --x-postmark-account-token: string # The token associated with the Account on which this request will operate.
+  --x-postmark-account-token: string # The token associated with the Account on which this request will operate. (required)
 ]: nothing -> record<Servers: table<ApiTokens: list, BounceHookUrl: string, ClickHookUrl: string, Color: string, DeliveryHookUrl: string, ID: int, InboundAddress: string, InboundDomain: string, InboundHash: string, InboundHookUrl: string, InboundSpamThreshold: int, Name: string, OpenHookUrl: string, PostFirstOpenOnly: bool, RawEmailEnabled: bool, ServerLink: string, SmtpApiActivated: bool, TrackLinks: string, TrackOpens: bool>, TotalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/servers" $qp $auth.query)
   let accept_val = "application/json"
@@ -875,7 +899,7 @@ export def "create-server" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-account-token: string # The token associated with the Account on which this request will operate.
+  --x-postmark-account-token: string # The token associated with the Account on which this request will operate. (required)
   --bounce-hook-url: string
   --click-hook-url: string
   --color: string
@@ -894,6 +918,7 @@ export def "create-server" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base "/servers" $auth.query)
   let req_body = {"BounceHookUrl": $bounce_hook_url, "ClickHookUrl": $click_hook_url, "Color": $color, "DeliveryHookUrl": $delivery_hook_url, "InboundDomain": $inbound_domain, "InboundHookUrl": $inbound_hook_url, "InboundSpamThreshold": $inbound_spam_threshold, "Name": $name, "OpenHookUrl": $open_hook_url, "PostFirstOpenOnly": $post_first_open_only, "RawEmailEnabled": $raw_email_enabled, "SmtpApiActivated": $smtp_api_activated, "TrackLinks": $track_links, "TrackOpens": $track_opens} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -930,11 +955,12 @@ export def "delete-server" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-account-token: string # The token associated with the Account on which this request will operate.
+  --x-postmark-account-token: string # The token associated with the Account on which this request will operate. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
+  if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -969,11 +995,12 @@ export def "get-server-information" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-account-token: string # The token associated with the Account on which this request will operate.
+  --x-postmark-account-token: string # The token associated with the Account on which this request will operate. (required)
 ]: nothing -> record<ApiTokens: list<string>, BounceHookUrl: string, ClickHookUrl: string, Color: string, DeliveryHookUrl: string, ID: int, InboundAddress: string, InboundDomain: string, InboundHash: string, InboundHookUrl: string, InboundSpamThreshold: int, Name: string, OpenHookUrl: string, PostFirstOpenOnly: bool, RawEmailEnabled: bool, ServerLink: string, SmtpApiActivated: bool, TrackLinks: string, TrackOpens: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
+  if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1008,7 +1035,7 @@ export def "edit-server-information" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-account-token: string # The token associated with the Account on which this request will operate.
+  --x-postmark-account-token: string # The token associated with the Account on which this request will operate. (required)
   --bounce-hook-url: string
   --click-hook-url: string
   --color: string
@@ -1028,6 +1055,7 @@ export def "edit-server-information" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
+  if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}") $auth.query)
   let req_body = {"BounceHookUrl": $bounce_hook_url, "ClickHookUrl": $click_hook_url, "Color": $color, "DeliveryHookUrl": $delivery_hook_url, "InboundDomain": $inbound_domain, "InboundHookUrl": $inbound_hook_url, "InboundSpamThreshold": $inbound_spam_threshold, "Name": $name, "OpenHookUrl": $open_hook_url, "PostFirstOpenOnly": $post_first_open_only, "RawEmailEnabled": $raw_email_enabled, "SmtpApiActivated": $smtp_api_activated, "TrackLinks": $track_links, "TrackOpens": $track_opens} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1063,7 +1091,7 @@ export def "push-templates" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-postmark-account-token: string # The token associated with the Account on which this request will operate.
+  --x-postmark-account-token: string # The token associated with the Account on which this request will operate. (required)
   --destination-server-id: int
   --perform-changes: oneof<nothing, bool>
   --source-server-id: int
@@ -1071,6 +1099,7 @@ export def "push-templates" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base "/templates/push" $auth.query)
   let req_body = {"DestinationServerId": $destination_server_id, "PerformChanges": $perform_changes, "SourceServerId": $source_server_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

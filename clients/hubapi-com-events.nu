@@ -1,4 +1,4 @@
-# Auto-generated client for HubSpot Events API vv3
+# Auto-generated client for HubSpot Events API v3
 # Source: https://api.apis.guru/v2/specs/hubapi.com/events/v3/openapi.json
 # Auth: --token flag or $env.HUBSPOT_EVENTS_API_TOKEN
 
@@ -13,8 +13,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "query-hapikey" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "hapikey")=(encode-path-segment $token_val)", location: "query"} }
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "private-app-legacy" => { {scheme: $scheme, headers: {private-app-legacy: $token_val}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "private-app-legacy" => { {scheme: $scheme, headers: {"private-app-legacy": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -96,6 +96,8 @@ def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: 
 def base-url-completer [] { ["https://api.hubapi.com"] }
 def auth-scheme-completer [] { ["query-hapikey" "bearer" "private-app-legacy"] }
 
+# Completers for enum parameters
+def accept-completer [] { ["*/*" "application/json"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -134,6 +136,7 @@ export def "get-events-v3-events-get-page" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --occurred-after: string # The starting time as an ISO 8601 timestamp. (format: date-time)
   --occurred-before: string # The ending time as an ISO 8601 timestamp. (format: date-time)
   --object-type: string # The type of object being selected. Valid values are hubspot named object types (e.g. `contact`).
@@ -142,18 +145,18 @@ export def "get-events-v3-events-get-page" [
   --after: string # An additional parameter that may be used to get the next `limit` set of results.
   --before: string
   --limit: int # The maximum number of events to return, defaults to 20. (format: int32)
-  --qp-sort: list<string> # Selects the sort field and order. Defaults to ascending, prefix with `-` for descending order. `occurredAt` is the only field supported for sorting.
+  --sort: list<string> # Selects the sort field and order. Defaults to ascending, prefix with `-` for descending order. `occurredAt` is the only field supported for sorting.
 ]: nothing -> record<paging: record<next: record<after: string, link: string>>, results: table<eventType: string, id: string, objectId: string, objectType: string, occurredAt: string, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "occurredAfter" $occurred_after "scalar") (serialize-qp "occurredBefore" $occurred_before "scalar") (serialize-qp "objectType" $object_type "scalar") (serialize-qp "objectId" $object_id "scalar") (serialize-qp "eventType" $event_type "scalar") (serialize-qp "after" $after "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "occurredAfter" $occurred_after "scalar") (serialize-qp "occurredBefore" $occurred_before "scalar") (serialize-qp "objectType" $object_type "scalar") (serialize-qp "objectId" $object_id "scalar") (serialize-qp "eventType" $event_type "scalar") (serialize-qp "after" $after "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $sort "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/events/v3/events" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"occurredAfter": $occurred_after, "occurredBefore": $occurred_before, "objectType": $object_type, "objectId": $object_id, "eventType": $event_type, "after": $after, "before": $before, "limit": $limit, "sort": $qp_sort} | compact)
+    query: ({"occurredAfter": $occurred_after, "occurredBefore": $occurred_before, "objectType": $object_type, "objectId": $object_id, "eventType": $event_type, "after": $after, "before": $before, "limit": $limit, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null

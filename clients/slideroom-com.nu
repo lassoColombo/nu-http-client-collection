@@ -1,4 +1,4 @@
-# Auto-generated client for SlideRoom API V2 vv2
+# Auto-generated client for SlideRoom API V2 v2
 # Source: https://api.apis.guru/v2/specs/slideroom.com/v2/swagger.json
 # Auth: --token flag or $env.SLIDEROOM_API_V2_TOKEN
 
@@ -151,13 +151,15 @@ export def "applicant-delete-attributes-v2" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --email: string # The email address of the applicant.
-  --name: string # The name of the attribute to be deleted.
+  --email: string # The email address of the applicant. (required)
+  --name: string # The name of the attribute to be deleted. (required)
   --pool: string@pool-completer
   --common-app-year: int # format: int32
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($email == null) { error make --unspanned { msg: "required query parameter 'email' missing: pass --email" } }
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
   let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "pool" $pool "scalar") (serialize-qp "commonAppYear" $common_app_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v2/applicant/attributes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -191,12 +193,13 @@ export def "applicant-get-attributes-v2" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --email: string # The email address of the applicant.
+  --email: string # The email address of the applicant. (required)
   --pool: string@pool-completer
   --common-app-year: int # format: int32
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($email == null) { error make --unspanned { msg: "required query parameter 'email' missing: pass --email" } }
   let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "pool" $pool "scalar") (serialize-qp "commonAppYear" $common_app_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v2/applicant/attributes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -230,7 +233,7 @@ export def "applicant-post-attributes-v2" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --email: string # The email address of the applicant.
+  --email: string # The email address of the applicant. (required)
   --pool: string@pool-completer
   --common-app-year: int # format: int32
   --body: record
@@ -238,6 +241,7 @@ export def "applicant-post-attributes-v2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($email == null) { error make --unspanned { msg: "required query parameter 'email' missing: pass --email" } }
   let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "pool" $pool "scalar") (serialize-qp "commonAppYear" $common_app_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v2/applicant/attributes" $qp $auth.query)
   let req_body = $body
@@ -410,11 +414,12 @@ export def "application-delete-attributes-v2" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --name: string # The name of the attribute to be deleted.
+  --name: string # The name of the attribute to be deleted. (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
   let qp = [(serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/api/v2/application/{application_id}/attributes") $qp $auth.query)
   let accept_val = ($accept | default "application/json")

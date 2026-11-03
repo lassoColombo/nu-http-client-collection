@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -173,7 +173,7 @@ export def "get-visible-accounts" [
 # POST /companies/{companyId}/sync/commerce/latest
 # operationId: request-sync
 export def "request-sync" [
-  company_id: any
+  company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -213,7 +213,7 @@ export def "request-sync" [
 # GET /config/companies/{companyId}/sync/commerce
 # operationId: get-configuration
 export def "get-configuration" [
-  company_id: any
+  company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -249,7 +249,7 @@ export def "get-configuration" [
 # POST /config/companies/{companyId}/sync/commerce
 # operationId: set-configuration
 export def "set-configuration" [
-  company_id: any
+  company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -294,13 +294,14 @@ export def "list-integrations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page: int # Page number. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 1)
+  --page: int # Page number. [Read more](https://docs.codat.io/using-the-api/paging). (required, format: int32, default: 1)
   --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100)
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
   --order-by: string # Field to order results by. [Read more](https://docs.codat.io/using-the-api/ordering-results).
 ]: nothing -> record<results: table<dataProvidedBy: string, datatypeFeatures: list, enabled: bool, integrationId: string, isBeta: bool, isOfflineConnector: bool, key: string, logoUrl: string, name: string, sourceId: string, sourceType: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let page = ($page | default 1)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/config/integrations" $qp $auth.query)
   let accept_val = "application/json"
@@ -409,13 +410,14 @@ export def "list-companies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page: int # Page number. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 1)
+  --page: int # Page number. [Read more](https://docs.codat.io/using-the-api/paging). (required, format: int32, default: 1)
   --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100)
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
   --order-by: string # Field to order results by. [Read more](https://docs.codat.io/using-the-api/ordering-results).
 ]: nothing -> record<results: table<created: string, createdByUserName: string, dataConnections: list, description: string, id: string, lastSync: string, name: string, platform: string, redirect: string>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let page = ($page | default 1)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/meta/companies" $qp $auth.query)
   let accept_val = "application/json"
@@ -487,7 +489,7 @@ export def "list-connections" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page: int # Page number. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 1)
+  --page: int # Page number. [Read more](https://docs.codat.io/using-the-api/paging). (required, format: int32, default: 1)
   --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100)
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
   --order-by: string # Field to order results by. [Read more](https://docs.codat.io/using-the-api/ordering-results).
@@ -495,6 +497,7 @@ export def "list-connections" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
+  let page = ($page | default 1)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/meta/companies/{company_id}/connections") $qp $auth.query)
   let accept_val = "application/json"
@@ -558,7 +561,7 @@ export def "create-connection" [
 # PATCH /meta/companies/{companyId}/connections/{connectionId}
 # operationId: update-connection
 export def "update-connection" [
-  company_id: any
+  company_id: string
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -600,7 +603,7 @@ export def "update-connection" [
 # POST /meta/companies/{companyId}/sync/commerce/historic
 # operationId: request-sync-for-date-range
 export def "request-sync-for-date-range" [
-  company_id: any
+  company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -641,7 +644,7 @@ export def "request-sync-for-date-range" [
 # GET /meta/companies/{companyId}/sync/commerce/status
 # operationId: get-sync-status
 export def "get-sync-status" [
-  company_id: any
+  company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

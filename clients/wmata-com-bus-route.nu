@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "api_key" => { {scheme: $scheme, headers: {api_key: $token_val}, query: "", location: "header"} }
+    "api_key" => { {scheme: $scheme, headers: {"api_key": $token_val}, query: "", location: "header"} }
     "query-api_key" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "api_key")=(encode-path-segment $token_val)", location: "query"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -179,11 +179,12 @@ export def "5476362a281d830c946a3d6f" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --route-id: string@route-id-completer # Bus route variant, e.g.: 70, 10A, 10Av1. (default: 70)
+  --route-id: string@route-id-completer # Bus route variant, e.g.: 70, 10A, 10Av1. (required, default: 70)
   --date: string # Date in YYYY-MM-DD format for which to retrieve route and stop information. Defaults to today's date unless specified.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
+  let route_id = ($route_id | default "70")
   let qp = [(serialize-qp "RouteID" $route_id "scalar") (serialize-qp "Date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/RouteDetails" $qp $auth.query)
   let accept_val = "application/xml"
@@ -216,12 +217,13 @@ export def "5476362a281d830c946a3d71" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --route-id: string@route-id-completer # Bus route variant, e.g.: 70, 10A, 10Av1. (default: 70)
+  --route-id: string@route-id-completer # Bus route variant, e.g.: 70, 10A, 10Av1. (required, default: 70)
   --date: string # Date in YYYY-MM-DD format for which to retrieve schedule. Defaults to today's date unless specified.
   --including-variations: oneof<nothing, bool> # Whether or not to include variations. For example, if B30 is specified, include all variations such as B30v1, B30v2, etc. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
+  let route_id = ($route_id | default "70")
   let qp = [(serialize-qp "RouteID" $route_id "scalar") (serialize-qp "Date" $date "scalar") (serialize-qp "IncludingVariations" $including_variations "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/RouteSchedule" $qp $auth.query)
   let accept_val = "application/xml"
@@ -288,11 +290,12 @@ export def "5476362a281d830c946a3d72" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stop-id: string@stop-id-completer # 7-digit regional stop ID. (default: 1001195)
+  --stop-id: string@stop-id-completer # 7-digit regional stop ID. (required, default: 1001195)
   --date: string # Date in YYYY-MM-DD format for which to retrieve schedule. Defaults to today's date unless specified.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
+  let stop_id = ($stop_id | default "1001195")
   let qp = [(serialize-qp "StopID" $stop_id "scalar") (serialize-qp "Date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/StopSchedule" $qp $auth.query)
   let accept_val = "application/xml"
@@ -402,11 +405,12 @@ export def "5476362a281d830c946a3d69" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --route-id: string@route-id-completer # Bus route variant, e.g.: 70, 10A, 10Av1. (default: 70)
+  --route-id: string@route-id-completer # Bus route variant, e.g.: 70, 10A, 10Av1. (required, default: 70)
   --date: string # Date in YYYY-MM-DD format for which to retrieve route and stop information. Defaults to today's date unless specified.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
+  let route_id = ($route_id | default "70")
   let qp = [(serialize-qp "RouteID" $route_id "scalar") (serialize-qp "Date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/json/jRouteDetails" $qp $auth.query)
   let accept_val = "application/json"
@@ -439,12 +443,13 @@ export def "5476362a281d830c946a3d6b" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --route-id: string@route-id-completer # Bus route variant, e.g.: 70, 10A, 10Av1, etc. (default: 70)
+  --route-id: string@route-id-completer # Bus route variant, e.g.: 70, 10A, 10Av1, etc. (required, default: 70)
   --date: string # Date in YYYY-MM-DD format for which to retrieve schedule. Defaults to today's date unless specified.
   --including-variations: oneof<nothing, bool> # Whether or not to include variations if a base route is specified in RouteID. For example, if B30 is specified and IncludingVariations is set to true, data for all variations of B30 such as B30v1, B30v2, etc. will be returned. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
+  let route_id = ($route_id | default "70")
   let qp = [(serialize-qp "RouteID" $route_id "scalar") (serialize-qp "Date" $date "scalar") (serialize-qp "IncludingVariations" $including_variations "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/json/jRouteSchedule" $qp $auth.query)
   let accept_val = "application/json"
@@ -511,11 +516,12 @@ export def "5476362a281d830c946a3d6c" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stop-id: string@stop-id-completer # 7-digit regional stop ID. (default: 1001195)
+  --stop-id: string@stop-id-completer # 7-digit regional stop ID. (required, default: 1001195)
   --date: string # Date in YYYY-MM-DD format for which to retrieve schedule. Defaults to today's date unless specified.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
+  let stop_id = ($stop_id | default "1001195")
   let qp = [(serialize-qp "StopID" $stop_id "scalar") (serialize-qp "Date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/json/jStopSchedule" $qp $auth.query)
   let accept_val = "application/json"

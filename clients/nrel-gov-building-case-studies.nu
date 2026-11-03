@@ -93,6 +93,8 @@ def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: 
 def base-url-completer [] { ["https://localhost/api/building-case-studies"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def output-format-completer [] { ["json" "xml"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -122,7 +124,7 @@ export def commands []: nothing -> table {
 # GET /project.{output_format}
 # operationId: project
 export def "project" [
-  output_format: string
+  output_format: string@output-format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -132,7 +134,7 @@ export def "project" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # API Key (default: DEMO_KEY)
+  --api-key: string # API Key (required, default: DEMO_KEY)
   --search: string # Search Text
   --portal: string # Portal ID
   --page: int # Page Number
@@ -143,6 +145,7 @@ export def "project" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($output_format | is-empty) { error make --unspanned { msg: "path parameter 'output_format' must be non-empty" } }
+  let api_key = ($api_key | default "DEMO_KEY")
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "portal" $portal "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "province" $province "scalar") (serialize-qp "region" $region "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({output_format: (encode-path-segment $output_format)} | format pattern "/project.{output_format}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -167,7 +170,7 @@ export def "project" [
 # operationId: document
 export def "document" [
   project_id: int
-  output_format: string
+  output_format: string@output-format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -177,12 +180,13 @@ export def "document" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # API Key (default: DEMO_KEY)
+  --api-key: string # API Key (required, default: DEMO_KEY)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   if ($output_format | is-empty) { error make --unspanned { msg: "path parameter 'output_format' must be non-empty" } }
+  let api_key = ($api_key | default "DEMO_KEY")
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), output_format: (encode-path-segment $output_format)} | format pattern "/project/{project_id}.{output_format}") $qp $auth.query)
   let accept_val = "text/xml"

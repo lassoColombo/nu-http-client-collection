@@ -132,7 +132,7 @@ export def "getairlines" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --airline-codes: string # Code of the airline following IATA standard([IATA table codes](http://www.iata.org/publications/Pages/code-search.aspx)) or ICAO standard ([ICAO airlines table codes](https://en.wikipedia.org/wiki/List_of_airline_codes)) Several airlines can be selected at once by sending a list separated by a coma (i.e. AF, SWA) (e.g. BA)
-]: nothing -> any {
+]: nothing -> record<data: table<businessName: string, commonName: string, iataCode: string, icaoCode: string, type: string>, meta: record<count: int, links: record<first: string, last: string, next: string, previous: string, self: string, up: string>>, warnings: table<code: int, detail: string, source: record, status: int, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "airlineCodes" $airline_codes "scalar")] | flatten | str join "&"

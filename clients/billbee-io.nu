@@ -1,4 +1,4 @@
-# Auto-generated client for Billbee API vv1
+# Auto-generated client for Billbee API v1
 # Source: https://api.apis.guru/v2/specs/billbee.io/v1/openapi.json
 # Auth: --token flag or $env.BILLBEE_API_TOKEN
 
@@ -12,8 +12,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-billbee-api-key" => { {scheme: $scheme, headers: {X-Billbee-Api-Key: $token_val}, query: "", location: "header"} }
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "x-billbee-api-key" => { {scheme: $scheme, headers: {"X-Billbee-Api-Key": $token_val}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -2088,6 +2088,8 @@ export def "article-create-article" [
   let full_url = (build-url $base "/api/v1/products" $auth.query)
   let req_body = {"BasicAttributes": $basic_attributes, "BillOfMaterial": $bill_of_material, "Category1": $category1, "Category2": $category2, "Category3": $category3, "Condition": $condition, "CostPrice": $cost_price, "CountryOfOrigin": $country_of_origin, "CustomFields": $custom_fields, "DeliveryTime": $delivery_time, "Description": $description, "EAN": $ean, "ExportDescription": $export_description, "ExportDescriptionMultiLanguage": $export_description_multi_language, "HeightCm": $height_cm, "Id": $id, "Images": $images, "InvoiceText": $invoice_text, "IsCustomizable": $is_customizable, "IsDeactivated": $is_deactivated, "IsDigital": $is_digital, "LengthCm": $length_cm, "Manufacturer": $manufacturer, "Materials": $materials, "Occasion": $occasion, "Price": $price, "Recipient": $recipient, "SKU": $sku, "ShippingProductId": $shipping_product_id, "ShortDescription": $short_description, "SoldAmount": $sold_amount, "SoldAmountLast30Days": $sold_amount_last30_days, "SoldSumGross": $sold_sum_gross, "SoldSumGrossLast30Days": $sold_sum_gross_last30_days, "SoldSumNet": $sold_sum_net, "SoldSumNetLast30Days": $sold_sum_net_last30_days, "Sources": $sources, "StockCode": $stock_code, "StockCurrent": $stock_current, "StockDesired": $stock_desired, "StockReduceItemsPerSale": $stock_reduce_items_per_sale, "StockWarning": $stock_warning, "Stocks": $stocks, "Tags": $tags, "TaricNumber": $taric_number, "Title": $title, "Type": $type, "Unit": $unit, "UnitsPerItem": $units_per_item, "Vat1Rate": $vat1_rate, "Vat2Rate": $vat2_rate, "VatIndex": $vat_index, "Weight": $weight, "WeightNet": $weight_net, "WidthCm": $width_cm} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "IsCustomizable") == null) { error make --unspanned { msg: "required body field 'IsCustomizable' missing: pass --is-customizable or pipe a record" } }
+  if (($req_body | get -o "IsDigital") == null) { error make --unspanned { msg: "required body field 'IsDigital' missing: pass --is-digital or pipe a record" } }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2377,12 +2379,13 @@ export def "article-get-reserved-amount" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --id: string # The id or the sku of the article to query
+  --id: string # The id or the sku of the article to query (required)
   --lookup-by: string # Either the value id or the value sku to specify the meaning of the id parameter
   --stock-id: int # Optional the stock id if the multi stock feature is enabled (format: int64)
 ]: nothing -> record<Data: record<ReservedAmount: float>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "lookupBy" $lookup_by "scalar") (serialize-qp "stockId" $stock_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/products/reservedamount" $qp $auth.query)
   let accept_val = ($accept | default "application/json")

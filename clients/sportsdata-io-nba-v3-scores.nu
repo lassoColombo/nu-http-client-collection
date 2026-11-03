@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {Ocp-Apim-Subscription-Key: $token_val}, query: "", location: "header"} }
+    "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {"Ocp-Apim-Subscription-Key": $token_val}, query: "", location: "header"} }
     "query-key" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "key")=(encode-path-segment $token_val)", location: "query"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -95,6 +95,9 @@ def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: 
 def base-url-completer [] { ["http://azure-api.sportsdata.io/v3/nba/scores" "https://azure-api.sportsdata.io/v3/nba/scores"] }
 def auth-scheme-completer [] { ["ocp-apim-subscription-key" "query-key"] }
 
+# Completers for enum parameters
+def format-completer [] { ["JSON" "XML"] }
+def format-completer-1 [] { ["json" "xml"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -124,7 +127,7 @@ export def commands []: nothing -> table {
 # GET /{format}/AllTeams
 # operationId: TeamsAll
 export def "teams-all" [
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,7 +163,7 @@ export def "teams-all" [
 # GET /{format}/AreAnyGamesInProgress
 # operationId: AreGamesInProgress
 export def "are-games-in-progress" [
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -196,7 +199,7 @@ export def "are-games-in-progress" [
 # GET /{format}/CurrentSeason
 # operationId: CurrentSeason
 export def "current-season" [
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -232,7 +235,7 @@ export def "current-season" [
 # GET /{format}/DepthCharts
 # operationId: DepthCharts
 export def "depth-charts" [
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -268,7 +271,7 @@ export def "depth-charts" [
 # GET /{format}/FreeAgents
 # operationId: PlayerDetailsByFreeAgent
 export def "player-details-by-free-agent" [
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -304,7 +307,7 @@ export def "player-details-by-free-agent" [
 # GET /{format}/Games/{season}
 # operationId: Schedules
 export def "schedules" [
-  format: string
+  format: string@format-completer
   season: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -342,7 +345,7 @@ export def "schedules" [
 # GET /{format}/GamesByDate/{date}
 # operationId: GamesByDate
 export def "games-by-date" [
-  format: string
+  format: string@format-completer
   date: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -380,7 +383,7 @@ export def "games-by-date" [
 # GET /{format}/News
 # operationId: News
 export def "news" [
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -416,7 +419,7 @@ export def "news" [
 # GET /{format}/NewsByDate/{date}
 # operationId: NewsByDate
 export def "news-by-date" [
-  format: string
+  format: string@format-completer
   date: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -454,7 +457,7 @@ export def "news-by-date" [
 # GET /{format}/NewsByPlayerID/{playerid}
 # operationId: NewsByPlayer
 export def "news-by-player" [
-  format: string
+  format: string@format-completer
   playerid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -492,7 +495,7 @@ export def "news-by-player" [
 # GET /{format}/Player/{playerid}
 # operationId: PlayerDetailsByPlayer
 export def "player-details-by-player" [
-  format: string
+  format: string@format-completer
   playerid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -530,7 +533,7 @@ export def "player-details-by-player" [
 # GET /{format}/Players
 # operationId: PlayerDetailsByActive
 export def "player-details-by-active" [
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -566,7 +569,7 @@ export def "player-details-by-active" [
 # GET /{format}/Players/{team}
 # operationId: PlayersByTeam
 export def "players-by-team" [
-  format: string
+  format: string@format-completer
   team: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -604,7 +607,7 @@ export def "players-by-team" [
 # GET /{format}/Referees
 # operationId: Referees
 export def "referees" [
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -640,7 +643,7 @@ export def "referees" [
 # GET /{format}/Stadiums
 # operationId: Stadiums
 export def "stadiums" [
-  format: string
+  format: string@format-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -676,7 +679,7 @@ export def "stadiums" [
 # GET /{format}/Standings/{season}
 # operationId: Standings
 export def "standings" [
-  format: string
+  format: string@format-completer
   season: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -714,7 +717,7 @@ export def "standings" [
 # GET /{format}/TeamGameStatsByDate/{date}
 # operationId: TeamGameStatsByDate
 export def "team-game-stats-by-date" [
-  format: string
+  format: string@format-completer
   date: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -752,7 +755,7 @@ export def "team-game-stats-by-date" [
 # GET /{format}/TeamGameStatsBySeason/{season}/{teamid}/{numberofgames}
 # operationId: TeamGameLogsBySeason
 export def "team-game-logs-by-season" [
-  format: string
+  format: string@format-completer
   season: string
   teamid: string
   numberofgames: string
@@ -794,7 +797,7 @@ export def "team-game-logs-by-season" [
 # GET /{format}/TeamSeasonStats/{season}
 # operationId: TeamSeasonStats
 export def "team-season-stats" [
-  format: string
+  format: string@format-completer
   season: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -832,7 +835,7 @@ export def "team-season-stats" [
 # GET /{format}/teams
 # operationId: TeamsActive
 export def "teams-active" [
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -100,6 +100,8 @@ def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: b
 def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def data-masking-policy-name-completer [] { ["Default"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -133,7 +135,7 @@ export def "data-masking-policies-get" [
   resource_group_name: string
   server_name: string
   database_name: string
-  data_masking_policy_name: string
+  data_masking_policy_name: string@data-masking-policy-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -143,8 +145,8 @@ export def "data-masking-policies-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<kind: string, location: string, properties: record<applicationPrincipals: string, dataMaskingState: string, exemptPrincipals: string, maskingLevel: string>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<kind: string, location: string, properties: record<applicationPrincipals: string, dataMaskingState: string, exemptPrincipals: string, maskingLevel: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -152,6 +154,7 @@ export def "data-masking-policies-get" [
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($data_masking_policy_name | is-empty) { error make --unspanned { msg: "path parameter 'dataMaskingPolicyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), database_name: (encode-path-segment $database_name), data_masking_policy_name: (encode-path-segment $data_masking_policy_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/databases/{database_name}/dataMaskingPolicies/{data_masking_policy_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -180,7 +183,7 @@ export def "data-masking-policies-create-or-update" [
   resource_group_name: string
   server_name: string
   database_name: string
-  data_masking_policy_name: string
+  data_masking_policy_name: string@data-masking-policy-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -190,9 +193,9 @@ export def "data-masking-policies-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
   --properties: any # The properties of a database data masking policy. — shape: {dataMaskingState: "Disabled"|"Enabled", exemptPrincipals?: string}
-]: any -> record<kind: string, location: string, properties: record<applicationPrincipals: string, dataMaskingState: string, exemptPrincipals: string, maskingLevel: string>> {
+]: any -> record<kind: string, location: string, properties: record<applicationPrincipals: string, dataMaskingState: string, exemptPrincipals: string, maskingLevel: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -201,6 +204,7 @@ export def "data-masking-policies-create-or-update" [
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($data_masking_policy_name | is-empty) { error make --unspanned { msg: "path parameter 'dataMaskingPolicyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), database_name: (encode-path-segment $database_name), data_masking_policy_name: (encode-path-segment $data_masking_policy_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/databases/{database_name}/dataMaskingPolicies/{data_masking_policy_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -230,7 +234,7 @@ export def "data-masking-rules-list-by-database" [
   resource_group_name: string
   server_name: string
   database_name: string
-  data_masking_policy_name: string
+  data_masking_policy_name: string@data-masking-policy-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -240,8 +244,8 @@ export def "data-masking-rules-list-by-database" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<value: table<kind: string, location: string, properties: record>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<value: table<kind: string, location: string, properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -249,6 +253,7 @@ export def "data-masking-rules-list-by-database" [
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($data_masking_policy_name | is-empty) { error make --unspanned { msg: "path parameter 'dataMaskingPolicyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), database_name: (encode-path-segment $database_name), data_masking_policy_name: (encode-path-segment $data_masking_policy_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/databases/{database_name}/dataMaskingPolicies/{data_masking_policy_name}/rules") $qp $auth.query)
   let accept_val = "application/json"
@@ -277,7 +282,7 @@ export def "data-masking-rules-create-or-update" [
   resource_group_name: string
   server_name: string
   database_name: string
-  data_masking_policy_name: string
+  data_masking_policy_name: string@data-masking-policy-name-completer
   data_masking_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -288,9 +293,9 @@ export def "data-masking-rules-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
   --properties: any # The properties of a database data masking rule. — shape: {aliasName?: string, columnName: string, maskingFunction: "Default"|"CCN"|"Email"|"Number"|"SSN"|"Text", numberFrom?: string, numberTo?: string, prefixSize?: string, replacementString?: string, ruleState?: "Disabled"|"Enabled", schemaName: string, suffixSize?: string, tableName: string}
-]: any -> record<kind: string, location: string, properties: record<aliasName: string, columnName: string, id: string, maskingFunction: string, numberFrom: string, numberTo: string, prefixSize: string, replacementString: string, ruleState: string, schemaName: string, suffixSize: string, tableName: string>> {
+]: any -> record<kind: string, location: string, properties: record<aliasName: string, columnName: string, id: string, maskingFunction: string, numberFrom: string, numberTo: string, prefixSize: string, replacementString: string, ruleState: string, schemaName: string, suffixSize: string, tableName: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -300,6 +305,7 @@ export def "data-masking-rules-create-or-update" [
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($data_masking_policy_name | is-empty) { error make --unspanned { msg: "path parameter 'dataMaskingPolicyName' must be non-empty" } }
   if ($data_masking_rule_name | is-empty) { error make --unspanned { msg: "path parameter 'dataMaskingRuleName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), database_name: (encode-path-segment $database_name), data_masking_policy_name: (encode-path-segment $data_masking_policy_name), data_masking_rule_name: (encode-path-segment $data_masking_rule_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/databases/{database_name}/dataMaskingPolicies/{data_masking_policy_name}/rules/{data_masking_rule_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact

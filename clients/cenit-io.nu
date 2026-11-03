@@ -1,6 +1,7 @@
-# Auto-generated client for Cenit IO - REST API Specification vv1
+# Auto-generated client for Cenit IO - REST API Specification v1
 # Source: https://api.apis.guru/v2/specs/cenit.io/v1/swagger.json
-# Auth: --token flag or $env.CENIT_IO_REST_API_SPECIFICATION_TOKEN
+# Auth (X-User-Access-Key): --token-xuseraccesskey flag or $env.CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN
+# Auth (X-User-Access-Token): --token-xuseraccesstoken flag or $env.CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN
 
 const BASE_URL = "https://cenit.io/api/v1"
 
@@ -12,8 +13,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-user-access-key" => { {scheme: $scheme, headers: {X-User-Access-Key: $token_val}, query: "", location: "header"} }
-    "x-user-access-token" => { {scheme: $scheme, headers: {X-User-Access-Token: $token_val}, query: "", location: "header"} }
+    "x-user-access-key" => { {scheme: $scheme, headers: {"X-User-Access-Key": $token_val}, query: "", location: "header"} }
+    "x-user-access-token" => { {scheme: $scheme, headers: {"X-User-Access-Token": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -120,7 +121,7 @@ def auth-scheme-completer [] { ["x-user-access-key" "x-user-access-token"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-xuseraccesskey" "token-xuseraccesstoken"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-setup-connection" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)

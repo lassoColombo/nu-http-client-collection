@@ -1,4 +1,4 @@
-# Auto-generated client for Accelerated Mobile Pages (AMP) URL API vv1
+# Auto-generated client for Accelerated Mobile Pages (AMP) URL API v1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/acceleratedmobilepageurl/v1/openapi.json
 # Auth: --token flag or $env.ACCELERATED_MOBILE_PAGES_AMP_URL_API_TOKEN
 

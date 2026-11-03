@@ -142,7 +142,7 @@ export def "bills-search-bills-get" [
   --updated-since: string # Filter to only include bills with updates since a given date.
   --created-since: string # Filter to only include bills created since a given date.
   --action-since: string # Filter to only include bills with an action since a given date.
-  --qp-sort: string # Desired sort order for bill results. (default: updated_desc)
+  --sort: string # Desired sort order for bill results. (default: updated_desc)
   --sponsor: string # Filter to only include bills sponsored by a given name or person ID.
   --sponsor-classification: string # Filter matched sponsors to only include particular types of sponsorships.
   --q: string # Filter by full text search term.
@@ -154,7 +154,7 @@ export def "bills-search-bills-get" [
 ]: nothing -> record<pagination: record<max_page: int, page: int, per_page: int, total_items: int>, results: table<abstracts: list, actions: list, classification: list, created_at: string, documents: list, extras: record, first_action_date: string, from_organization: record, id: string, identifier: string, jurisdiction: record, latest_action_date: string, latest_action_description: string, latest_passage_date: string, openstates_url: string, other_identifiers: list, other_titles: list, related_bills: list, session: string, sources: list, sponsorships: list, subject: list, title: string, updated_at: string, versions: list, votes: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "jurisdiction" $jurisdiction "scalar") (serialize-qp "session" $session "scalar") (serialize-qp "chamber" $chamber "scalar") (serialize-qp "identifier" $identifier "multi") (serialize-qp "classification" $classification "scalar") (serialize-qp "subject" $subject "multi") (serialize-qp "updated_since" $updated_since "scalar") (serialize-qp "created_since" $created_since "scalar") (serialize-qp "action_since" $action_since "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sponsor" $sponsor "scalar") (serialize-qp "sponsor_classification" $sponsor_classification "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "include" $include "multi") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "apikey" $apikey "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "jurisdiction" $jurisdiction "scalar") (serialize-qp "session" $session "scalar") (serialize-qp "chamber" $chamber "scalar") (serialize-qp "identifier" $identifier "multi") (serialize-qp "classification" $classification "scalar") (serialize-qp "subject" $subject "multi") (serialize-qp "updated_since" $updated_since "scalar") (serialize-qp "created_since" $created_since "scalar") (serialize-qp "action_since" $action_since "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "sponsor" $sponsor "scalar") (serialize-qp "sponsor_classification" $sponsor_classification "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "include" $include "multi") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "apikey" $apikey "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/bills" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -163,7 +163,7 @@ export def "bills-search-bills-get" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"jurisdiction": $jurisdiction, "session": $session, "chamber": $chamber, "identifier": $identifier, "classification": $classification, "subject": $subject, "updated_since": $updated_since, "created_since": $created_since, "action_since": $action_since, "sort": $qp_sort, "sponsor": $sponsor, "sponsor_classification": $sponsor_classification, "q": $q, "include": $include, "page": $page, "per_page": $per_page, "apikey": $apikey} | compact)
+    query: ({"jurisdiction": $jurisdiction, "session": $session, "chamber": $chamber, "identifier": $identifier, "classification": $classification, "subject": $subject, "updated_since": $updated_since, "created_since": $created_since, "action_since": $action_since, "sort": $sort, "sponsor": $sponsor, "sponsor_classification": $sponsor_classification, "q": $q, "include": $include, "page": $page, "per_page": $per_page, "apikey": $apikey} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -192,7 +192,7 @@ export def "bill-detail-by-id-bills-ocd-bill-openstates-bill-id-get" [
   --include: list # default: []
   --apikey: string
   --x-api-key: string
-]: nothing -> record<abstracts: table<abstract: string, note: string>, actions: table<classification: list, date: string, description: string, order: int, organization: record>, classification: list<string>, created_at: string, documents: table<date: string, links: list, note: string>, extras: record, first_action_date: string, from_organization: record<classification: string, id: string, name: string>, id: string, identifier: string, jurisdiction: record<classification: record, id: string, name: string>, latest_action_date: string, latest_action_description: string, latest_passage_date: string, openstates_url: string, other_identifiers: table<identifier: string>, other_titles: table<note: string, title: string>, related_bills: table<identifier: string, legislative_session: string, relation_type: string>, session: string, sources: table<note: string, url: string>, sponsorships: table<classification: string, entity_type: string, name: string, organization: record, person: record, primary: bool>, subject: list<string>, title: string, updated_at: string, versions: table<date: string, links: list, note: string>, votes: table<counts: list, extras: record, id: string, identifier: string, motion_classification: list, motion_text: string, organization: record, result: string, sources: list, start_date: string, votes: list>> {
+]: nothing -> record<abstracts: table<abstract: string, note: string>, actions: table<classification: list, date: string, description: string, order: int, organization: record>, classification: list<string>, created_at: string, documents: table<date: string, links: list, note: string>, extras: record, first_action_date: string, from_organization: record<classification: string, id: string, name: string>, id: string, identifier: string, jurisdiction: record<classification: string, id: string, name: string>, latest_action_date: string, latest_action_description: string, latest_passage_date: string, openstates_url: string, other_identifiers: table<identifier: string>, other_titles: table<note: string, title: string>, related_bills: table<identifier: string, legislative_session: string, relation_type: string>, session: string, sources: table<note: string, url: string>, sponsorships: table<classification: string, entity_type: string, name: string, organization: record, person: record, primary: bool>, subject: list<string>, title: string, updated_at: string, versions: table<date: string, links: list, note: string>, votes: table<counts: list, extras: record, id: string, identifier: string, motion_classification: list, motion_text: string, organization: record, result: string, sources: list, start_date: string, votes: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($openstates_bill_id | is-empty) { error make --unspanned { msg: "path parameter 'openstates_bill_id' must be non-empty" } }
@@ -236,7 +236,7 @@ export def "bill-detail-bills-jurisdiction-session-bill-id-get" [
   --include: list # default: []
   --apikey: string
   --x-api-key: string
-]: nothing -> record<abstracts: table<abstract: string, note: string>, actions: table<classification: list, date: string, description: string, order: int, organization: record>, classification: list<string>, created_at: string, documents: table<date: string, links: list, note: string>, extras: record, first_action_date: string, from_organization: record<classification: string, id: string, name: string>, id: string, identifier: string, jurisdiction: record<classification: record, id: string, name: string>, latest_action_date: string, latest_action_description: string, latest_passage_date: string, openstates_url: string, other_identifiers: table<identifier: string>, other_titles: table<note: string, title: string>, related_bills: table<identifier: string, legislative_session: string, relation_type: string>, session: string, sources: table<note: string, url: string>, sponsorships: table<classification: string, entity_type: string, name: string, organization: record, person: record, primary: bool>, subject: list<string>, title: string, updated_at: string, versions: table<date: string, links: list, note: string>, votes: table<counts: list, extras: record, id: string, identifier: string, motion_classification: list, motion_text: string, organization: record, result: string, sources: list, start_date: string, votes: list>> {
+]: nothing -> record<abstracts: table<abstract: string, note: string>, actions: table<classification: list, date: string, description: string, order: int, organization: record>, classification: list<string>, created_at: string, documents: table<date: string, links: list, note: string>, extras: record, first_action_date: string, from_organization: record<classification: string, id: string, name: string>, id: string, identifier: string, jurisdiction: record<classification: string, id: string, name: string>, latest_action_date: string, latest_action_description: string, latest_passage_date: string, openstates_url: string, other_identifiers: table<identifier: string>, other_titles: table<note: string, title: string>, related_bills: table<identifier: string, legislative_session: string, relation_type: string>, session: string, sources: table<note: string, url: string>, sponsorships: table<classification: string, entity_type: string, name: string, organization: record, person: record, primary: bool>, subject: list<string>, title: string, updated_at: string, versions: table<date: string, links: list, note: string>, votes: table<counts: list, extras: record, id: string, identifier: string, motion_classification: list, motion_text: string, organization: record, result: string, sources: list, start_date: string, votes: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($jurisdiction | is-empty) { error make --unspanned { msg: "path parameter 'jurisdiction' must be non-empty" } }
@@ -415,7 +415,7 @@ export def "event-detail-events-event-id-get" [
   --include: list # Additional includes for the Event response. (default: [])
   --apikey: string
   --x-api-key: string
-]: nothing -> record<agenda: table<classification: list, description: string, extras: record, media: list, notes: list, order: int, related_entities: list, subjects: list>, all_day: bool, classification: string, deleted: bool, description: string, documents: table<classification: string, date: string, links: list, note: string>, end_date: string, id: string, jurisdiction: record<classification: record, id: string, name: string>, links: table<note: string, url: string>, location: record<name: string, url: string>, media: table<classification: string, date: string, links: list, note: string, offset: int>, name: string, participants: table<entity_type: string, name: string, note: string, organization: record, person: record>, sources: table<note: string, url: string>, start_date: string, status: string, upstream_id: string> {
+]: nothing -> record<agenda: table<classification: list, description: string, extras: record, media: list, notes: list, order: int, related_entities: list, subjects: list>, all_day: bool, classification: string, deleted: bool, description: string, documents: table<classification: string, date: string, links: list, note: string>, end_date: string, id: string, jurisdiction: record<classification: string, id: string, name: string>, links: table<note: string, url: string>, location: record<name: string, url: string>, media: table<classification: string, date: string, links: list, note: string, offset: int>, name: string, participants: table<entity_type: string, name: string, note: string, organization: record, person: record>, sources: table<note: string, url: string>, start_date: string, status: string, upstream_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'event_id' must be non-empty" } }
@@ -459,7 +459,7 @@ export def "jurisdiction-list-jurisdictions-get" [
   --per-page: int # default: 52
   --apikey: string
   --x-api-key: string
-]: nothing -> record<pagination: record<max_page: int, page: int, per_page: int, total_items: int>, results: table<classification: record, division_id: string, id: string, latest_bill_update: string, latest_people_update: string, latest_runs: list, legislative_sessions: list, name: string, organizations: list, url: string>> {
+]: nothing -> record<pagination: record<max_page: int, page: int, per_page: int, total_items: int>, results: table<classification: string, division_id: string, id: string, latest_bill_update: string, latest_people_update: string, latest_runs: list, legislative_sessions: list, name: string, organizations: list, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "classification" $classification "scalar") (serialize-qp "include" $include "multi") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "apikey" $apikey "scalar")] | flatten | str join "&"
@@ -500,7 +500,7 @@ export def "jurisdiction-detail-jurisdictions-jurisdiction-id-get" [
   --include: list # Additional includes for the Jurisdiction response. (default: [])
   --apikey: string
   --x-api-key: string
-]: nothing -> record<classification: record, division_id: string, id: string, latest_bill_update: string, latest_people_update: string, latest_runs: table<end_time: string, start_time: string, success: bool>, legislative_sessions: table<classification: string, downloads: list, end_date: string, identifier: string, name: string, start_date: string>, name: string, organizations: table<classification: string, districts: list, id: string, name: string>, url: string> {
+]: nothing -> record<classification: string, division_id: string, id: string, latest_bill_update: string, latest_people_update: string, latest_runs: table<end_time: string, start_time: string, success: bool>, legislative_sessions: table<classification: string, downloads: list, end_date: string, identifier: string, name: string, start_date: string>, name: string, organizations: table<classification: string, districts: list, id: string, name: string>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($jurisdiction_id | is-empty) { error make --unspanned { msg: "path parameter 'jurisdiction_id' must be non-empty" } }
@@ -619,14 +619,16 @@ export def "people-geo-people-geo-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lat: float # Latitude of point.
-  --lng: float # Longitude of point.
+  --lat: float # Latitude of point. (required)
+  --lng: float # Longitude of point. (required)
   --include: list # Additional information to include in the response. (default: [])
   --apikey: string
   --x-api-key: string
 ]: nothing -> record<pagination: record<max_page: int, page: int, per_page: int, total_items: int>, results: table<birth_date: string, created_at: string, current_role: record, death_date: string, email: string, extras: record, family_name: string, gender: string, given_name: string, id: string, image: string, jurisdiction: record, links: list, name: string, offices: list, openstates_url: string, other_identifiers: list, other_names: list, party: string, sources: list, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($lat == null) { error make --unspanned { msg: "required query parameter 'lat' missing: pass --lat" } }
+  if ($lng == null) { error make --unspanned { msg: "required query parameter 'lng' missing: pass --lng" } }
   let qp = [(serialize-qp "lat" $lat "scalar") (serialize-qp "lng" $lng "scalar") (serialize-qp "include" $include "multi") (serialize-qp "apikey" $apikey "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/people.geo" $qp $auth.query)
   let accept_val = "application/json"

@@ -1,4 +1,4 @@
-# Auto-generated client for Bills API vv1
+# Auto-generated client for Bills API v1
 # Source: https://api.apis.guru/v2/specs/parliament.uk/bills/v1/openapi.json
 # Auth: --token flag or $env.BILLS_API_TOKEN
 

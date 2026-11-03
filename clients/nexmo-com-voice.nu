@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -392,7 +392,7 @@ export def "start-stream" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --level: string # Set the audio level of the stream in the range `-1 >= level <= 1` with a precision of 0.1. The default value is 0. (default: 0, e.g. 0.4)
-  --body-loop: int # the number of times to play the file, 0 for infinite (default: 1)
+  --loop: int # the number of times to play the file, 0 for infinite (default: 1)
   stream_url: list<string> # e.g. [https://example.com/waiting.mp3]
 ]: any -> record<message: string, uuid: string> {
   let input = $in
@@ -400,7 +400,7 @@ export def "start-stream" [
   let base = ($base_url | default $BASE_URL)
   if ($uuid | is-empty) { error make --unspanned { msg: "path parameter 'uuid' must be non-empty" } }
   let full_url = (build-url $base ({uuid: (encode-path-segment $uuid)} | format pattern "/{uuid}/stream") $auth.query)
-  let req_body = {"level": $level, "loop": $body_loop, "stream_url": $stream_url} | compact
+  let req_body = {"level": $level, "loop": $loop, "stream_url": $stream_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -472,7 +472,7 @@ export def "start-talk" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --language: string@language-completer # The language to use (default: en-US)
   --level: string # The volume level that the speech is played. This can be any value between `-1` to `1` in `0.1` increments, with `0` being the default. (default: 0, e.g. 0.4)
-  --body-loop: int # The number of times to repeat the text the file, 0 for infinite (default: 1)
+  --loop: int # The number of times to repeat the text the file, 0 for infinite (default: 1)
   --premium: oneof<nothing, bool> # Set to true to use the premium version of the specified style if available, otherwise the standard version will be used. The default value is false. You can find more information about Premium Voices in the [Text-To-Speech guide](/voice/voice-api/guides/text-to-speech#premium-voices). (default: false)
   --style: int # The vocal style (vocal range, tessitura, and timbre) to use (default: 0)
   text: string # The text to read (e.g. Hello. How are you today?)
@@ -483,7 +483,7 @@ export def "start-talk" [
   let base = ($base_url | default $BASE_URL)
   if ($uuid | is-empty) { error make --unspanned { msg: "path parameter 'uuid' must be non-empty" } }
   let full_url = (build-url $base ({uuid: (encode-path-segment $uuid)} | format pattern "/{uuid}/talk") $auth.query)
-  let req_body = {"language": $language, "level": $level, "loop": $body_loop, "premium": $premium, "style": $style, "text": $text, "voice_name": $voice_name} | compact
+  let req_body = {"language": $language, "level": $level, "loop": $loop, "premium": $premium, "style": $style, "text": $text, "voice_name": $voice_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

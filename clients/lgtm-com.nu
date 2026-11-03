@@ -1,4 +1,4 @@
-# Auto-generated client for LGTM API specification vv1.0
+# Auto-generated client for LGTM API specification v1.0
 # Source: https://api.apis.guru/v2/specs/lgtm.com/v1.0/openapi.json
 # Auth: --token flag or $env.LGTM_API_SPECIFICATION_TOKEN
 
@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -265,12 +265,13 @@ export def "request-analysis" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --commit: string # The identifier of the commit to analyze.
+  --commit: string # The identifier of the commit to analyze. (required)
   --language: list<string> # The language codes of the languages to analyze. For a list of available languages, see [Supported languages](https://lgtm.com/help/lgtm/analysis-faqs#which-languages-are-supported). To specify more than one language, this parameter can be repeated. If no language is specified, all the project's languages will be analyzed.
 ]: nothing -> record<id: int, status: string, task_result: any, task_result_url: string, task_type: string, uploads: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project-id' must be non-empty" } }
+  if ($commit == null) { error make --unspanned { msg: "required query parameter 'commit' missing: pass --commit" } }
   let qp = [(serialize-qp "commit" $commit "scalar") (serialize-qp "language" $language "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/analyses/{project_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -342,8 +343,8 @@ export def "request-review" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-base: string # The identifier for the base commit.
-  --external-id: int # Your reference number for the code review. (format: int32, e.g. integer)
+  --qp-base: string # The identifier for the base commit. (required)
+  --external-id: int # Your reference number for the code review. (required, format: int32, e.g. integer)
   --review-url: string # An informative back-link to an external system.
   --callback-url: string # The callback URL for LGTM to post to on completion of the review. When the code review is complete, the API sends an HTTP POST request to the callback URL with the result of the code review in the request body. The code review results in the request body are identical to the results accessed through the [`/codereviews/{review-id}`](https://lgtm.com/help/lgtm/api/api-v1#opIdgetCodeReview) end-point. If you specify a `callback-secret`, the request also includes an `x-lgtm-signature` header with a digital signature of the request's contents.
   --callback-secret: string # The `callback-secret` is used to compute a signature which is included in the `x-lgtm-signature` header of the callback response. The receiver of the callback can check the validity of the response by computing the signature using HMAC-SHA1 and verifying that it matches the `x-lgtm-signature` header value. The HMAC algorithm requires byte sequences as inputs for both the secret and the message. The callback secret string must be converted to bytes using UTF-8 encoding. The response body should ideally be read as a plain byte sequence. Conversion to, for example a JSON object, and back to a byte sequence might change the formatting, and would invalidate the signature.
@@ -353,6 +354,8 @@ export def "request-review" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project-id' must be non-empty" } }
+  if ($qp_base == null) { error make --unspanned { msg: "required query parameter 'base' missing: pass --qp-base" } }
+  if ($external_id == null) { error make --unspanned { msg: "required query parameter 'external-id' missing: pass --external-id" } }
   let qp = [(serialize-qp "base" $qp_base "scalar") (serialize-qp "external-id" $external_id "scalar") (serialize-qp "review-url" $review_url "scalar") (serialize-qp "callback-url" $callback_url "scalar") (serialize-qp "callback-secret" $callback_secret "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/codereviews/{project_id}") $qp $auth.query)
   let req_body = $body
@@ -568,7 +571,7 @@ export def "add-project" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --repository: string # The URL of the repository to analyze. LGTM tests this against the [repository providers](https://lgtm.com/admin/help/adding-repository-providers) defined for the system. If it doesn't match any of them, the request fails. (format: uri)
+  --repository: string # The URL of the repository to analyze. LGTM tests this against the [repository providers](https://lgtm.com/admin/help/adding-repository-providers) defined for the system. If it doesn't match any of them, the request fails. (required, format: uri)
   --language: list<string> # Optional, a [language code](https://lgtm.com/help/lgtm/analysis-faqs#which-languages-are-supported) to specify which language to analyze. To request the analysis of more than one language, specify a query parameter for each language. By default, LGTM tries to analyze all supported languages.
   --mode: string@mode-completer # The analysis mode of the new project. When set to `full` all commits of the project are analyzed; when set to `sparse` the latest commit of the project is analyzed periodically; when set to `upload`, no automatic analysis is performed, instead externally-generated databases should be uploaded. For new projects the default value is `full`. The `mode` parameter cannot be used to change the analysis mode of existing projects. Therefore, for existing projects, it should either be left blank or set to match the analysis mode of the project.
   --commit: string # Required when `mode=upload`, specify the identifier of the commit used to generate the database.
@@ -579,6 +582,7 @@ export def "add-project" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($repository == null) { error make --unspanned { msg: "required query parameter 'repository' missing: pass --repository" } }
   let qp = [(serialize-qp "repository" $repository "scalar") (serialize-qp "language" $language "multi") (serialize-qp "mode" $mode "scalar") (serialize-qp "commit" $commit "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "worker-label" $worker_label "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/projects" $qp $auth.query)
   let req_body = $body
@@ -686,19 +690,19 @@ export def "get-project-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-source: string@source-completer # The type of project configuration to retrieve. If this parameter isn't specified, the request retrieves the effective configuration. That is, the configuration that is actually applied to the project, which may be from: * the repository * the administrator-set, project configuration * the global configuration. If you do specify this value, it must be one of: * `repository` to retrieve the configuration specified by a YAML file in the repository. A 404 status is returned if there is no repository configuration. * `administrator` to retrieve the administrator-set, project configuration. A 404 status is returned if there is no administrator configuration.
+  --source: string@source-completer # The type of project configuration to retrieve. If this parameter isn't specified, the request retrieves the effective configuration. That is, the configuration that is actually applied to the project, which may be from: * the repository * the administrator-set, project configuration * the global configuration. If you do specify this value, it must be one of: * `repository` to retrieve the configuration specified by a YAML file in the repository. A 404 status is returned if there is no repository configuration. * `administrator` to retrieve the administrator-set, project configuration. A 404 status is returned if there is no administrator configuration.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project-id' must be non-empty" } }
-  let qp = [(serialize-qp "source" $qp_source "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "source" $source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/settings/analysis-configuration") $qp $auth.query)
   let accept_val = "application/x-yaml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"source": $qp_source} | compact)
+    query: ({"source": $source} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -803,7 +807,7 @@ export def "create-query-job" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --language: string # The [language](https://lgtm.com/help/lgtm/analysis-faqs#which-languages-are-supported) you want to analyze.
+  --language: string # The [language](https://lgtm.com/help/lgtm/analysis-faqs#which-languages-are-supported) you want to analyze. (required)
   --project-id: list<int> # The identifier of the project to analyze. Either `project-id` or `projects-list` must be specified.
   --projects-list: string # Name of the list containing the projects to analyze. Either `project-id` or `projects-list` must be specified.
   --body: string
@@ -811,6 +815,7 @@ export def "create-query-job" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($language == null) { error make --unspanned { msg: "required query parameter 'language' missing: pass --language" } }
   let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "project-id" $project_id "multi") (serialize-qp "projects-list" $projects_list "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/queryjobs" $qp $auth.query)
   let req_body = $body
@@ -1115,13 +1120,14 @@ export def "init-snapshot-upload" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --commit: string # The identifier of the analyzed commit.
+  --commit: string # The identifier of the analyzed commit. (required)
   --date: string # The date and time of the analyzed commit (default the current time). (format: date-time)
 ]: nothing -> record<id: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project-id' must be non-empty" } }
   if ($language | is-empty) { error make --unspanned { msg: "path parameter 'language' must be non-empty" } }
+  if ($commit == null) { error make --unspanned { msg: "required query parameter 'commit' missing: pass --commit" } }
   let qp = [(serialize-qp "commit" $commit "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), language: (encode-path-segment $language)} | format pattern "/snapshots/{project_id}/{language}") $qp $auth.query)
   let accept_val = "application/json"

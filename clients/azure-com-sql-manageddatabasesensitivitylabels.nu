@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -112,6 +112,10 @@ def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors
 def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def sensitivity-label-source-completer [] { ["current"] }
+def sensitivity-label-source-completer-1 [] { ["current" "recommended"] }
+def sensitivity-label-source-completer-2 [] { ["recommended"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -155,14 +159,15 @@ export def "managed-database-sensitivity-labels-list-current-by-database" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # An OData filter expression that filters elements in the collection.
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($managed_instance_name | is-empty) { error make --unspanned { msg: "path parameter 'managedInstanceName' must be non-empty" } }
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), managed_instance_name: (encode-path-segment $managed_instance_name), database_name: (encode-path-segment $database_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/managedInstances/{managed_instance_name}/databases/{database_name}/currentSensitivityLabels") $qp $auth.query)
   let accept_val = "application/json"
@@ -202,14 +207,15 @@ export def "managed-database-sensitivity-labels-list-recommended-by-database" [
   --include-disabled-recommendations: oneof<nothing, bool> # Specifies whether to include disabled recommendations or not.
   --skip-token: string
   --filter: string # An OData filter expression that filters elements in the collection.
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($managed_instance_name | is-empty) { error make --unspanned { msg: "path parameter 'managedInstanceName' must be non-empty" } }
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "includeDisabledRecommendations" $include_disabled_recommendations "scalar") (serialize-qp "$skipToken" $skip_token "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), managed_instance_name: (encode-path-segment $managed_instance_name), database_name: (encode-path-segment $database_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/managedInstances/{managed_instance_name}/databases/{database_name}/recommendedSensitivityLabels") $qp $auth.query)
   let accept_val = "application/json"
@@ -240,7 +246,7 @@ export def "managed-database-sensitivity-labels-delete" [
   schema_name: string
   table_name: string
   column_name: string
-  sensitivity_label_source: string
+  sensitivity_label_source: string@sensitivity-label-source-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -250,7 +256,7 @@ export def "managed-database-sensitivity-labels-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -262,6 +268,7 @@ export def "managed-database-sensitivity-labels-delete" [
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
   if ($column_name | is-empty) { error make --unspanned { msg: "path parameter 'columnName' must be non-empty" } }
   if ($sensitivity_label_source | is-empty) { error make --unspanned { msg: "path parameter 'sensitivityLabelSource' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), managed_instance_name: (encode-path-segment $managed_instance_name), database_name: (encode-path-segment $database_name), schema_name: (encode-path-segment $schema_name), table_name: (encode-path-segment $table_name), column_name: (encode-path-segment $column_name), sensitivity_label_source: (encode-path-segment $sensitivity_label_source)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/managedInstances/{managed_instance_name}/databases/{database_name}/schemas/{schema_name}/tables/{table_name}/columns/{column_name}/sensitivityLabels/{sensitivity_label_source}") $qp $auth.query)
   let accept_val = "application/json"
@@ -292,7 +299,7 @@ export def "managed-database-sensitivity-labels-get" [
   schema_name: string
   table_name: string
   column_name: string
-  sensitivity_label_source: string
+  sensitivity_label_source: string@sensitivity-label-source-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -302,8 +309,8 @@ export def "managed-database-sensitivity-labels-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<properties: record<informationType: string, informationTypeId: string, isDisabled: bool, labelId: string, labelName: string, rank: string>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<properties: record<informationType: string, informationTypeId: string, isDisabled: bool, labelId: string, labelName: string, rank: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -314,6 +321,7 @@ export def "managed-database-sensitivity-labels-get" [
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
   if ($column_name | is-empty) { error make --unspanned { msg: "path parameter 'columnName' must be non-empty" } }
   if ($sensitivity_label_source | is-empty) { error make --unspanned { msg: "path parameter 'sensitivityLabelSource' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), managed_instance_name: (encode-path-segment $managed_instance_name), database_name: (encode-path-segment $database_name), schema_name: (encode-path-segment $schema_name), table_name: (encode-path-segment $table_name), column_name: (encode-path-segment $column_name), sensitivity_label_source: (encode-path-segment $sensitivity_label_source)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/managedInstances/{managed_instance_name}/databases/{database_name}/schemas/{schema_name}/tables/{table_name}/columns/{column_name}/sensitivityLabels/{sensitivity_label_source}") $qp $auth.query)
   let accept_val = "application/json"
@@ -345,7 +353,7 @@ export def "managed-database-sensitivity-labels-create-or-update" [
   schema_name: string
   table_name: string
   column_name: string
-  sensitivity_label_source: string
+  sensitivity_label_source: string@sensitivity-label-source-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -355,9 +363,9 @@ export def "managed-database-sensitivity-labels-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
   --properties: record # Properties of a sensitivity label. — shape: {informationType?: string, informationTypeId?: string, labelId?: string, labelName?: string, rank?: "None"|"Low"|"Medium"|"High"|"Critical"}
-]: any -> record<properties: record<informationType: string, informationTypeId: string, isDisabled: bool, labelId: string, labelName: string, rank: string>> {
+]: any -> record<properties: record<informationType: string, informationTypeId: string, isDisabled: bool, labelId: string, labelName: string, rank: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -369,6 +377,7 @@ export def "managed-database-sensitivity-labels-create-or-update" [
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
   if ($column_name | is-empty) { error make --unspanned { msg: "path parameter 'columnName' must be non-empty" } }
   if ($sensitivity_label_source | is-empty) { error make --unspanned { msg: "path parameter 'sensitivityLabelSource' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), managed_instance_name: (encode-path-segment $managed_instance_name), database_name: (encode-path-segment $database_name), schema_name: (encode-path-segment $schema_name), table_name: (encode-path-segment $table_name), column_name: (encode-path-segment $column_name), sensitivity_label_source: (encode-path-segment $sensitivity_label_source)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/managedInstances/{managed_instance_name}/databases/{database_name}/schemas/{schema_name}/tables/{table_name}/columns/{column_name}/sensitivityLabels/{sensitivity_label_source}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -401,7 +410,7 @@ export def "managed-database-sensitivity-labels-disable-recommendation" [
   schema_name: string
   table_name: string
   column_name: string
-  sensitivity_label_source: string
+  sensitivity_label_source: string@sensitivity-label-source-completer-2
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -411,7 +420,7 @@ export def "managed-database-sensitivity-labels-disable-recommendation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -423,6 +432,7 @@ export def "managed-database-sensitivity-labels-disable-recommendation" [
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
   if ($column_name | is-empty) { error make --unspanned { msg: "path parameter 'columnName' must be non-empty" } }
   if ($sensitivity_label_source | is-empty) { error make --unspanned { msg: "path parameter 'sensitivityLabelSource' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), managed_instance_name: (encode-path-segment $managed_instance_name), database_name: (encode-path-segment $database_name), schema_name: (encode-path-segment $schema_name), table_name: (encode-path-segment $table_name), column_name: (encode-path-segment $column_name), sensitivity_label_source: (encode-path-segment $sensitivity_label_source)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/managedInstances/{managed_instance_name}/databases/{database_name}/schemas/{schema_name}/tables/{table_name}/columns/{column_name}/sensitivityLabels/{sensitivity_label_source}/disable") $qp $auth.query)
   let accept_val = "application/json"
@@ -453,7 +463,7 @@ export def "managed-database-sensitivity-labels-enable-recommendation" [
   schema_name: string
   table_name: string
   column_name: string
-  sensitivity_label_source: string
+  sensitivity_label_source: string@sensitivity-label-source-completer-2
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -463,7 +473,7 @@ export def "managed-database-sensitivity-labels-enable-recommendation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -475,6 +485,7 @@ export def "managed-database-sensitivity-labels-enable-recommendation" [
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'tableName' must be non-empty" } }
   if ($column_name | is-empty) { error make --unspanned { msg: "path parameter 'columnName' must be non-empty" } }
   if ($sensitivity_label_source | is-empty) { error make --unspanned { msg: "path parameter 'sensitivityLabelSource' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), managed_instance_name: (encode-path-segment $managed_instance_name), database_name: (encode-path-segment $database_name), schema_name: (encode-path-segment $schema_name), table_name: (encode-path-segment $table_name), column_name: (encode-path-segment $column_name), sensitivity_label_source: (encode-path-segment $sensitivity_label_source)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/managedInstances/{managed_instance_name}/databases/{database_name}/schemas/{schema_name}/tables/{table_name}/columns/{column_name}/sensitivityLabels/{sensitivity_label_source}/enable") $qp $auth.query)
   let accept_val = "application/json"

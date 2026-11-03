@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -9405,7 +9405,7 @@ export def "resume" [
 #
 # PUT /mimic/agent/{agentNum}/save
 # operationId: save
-export def "save" [
+export def "put-mimic-agent-agent-num-save" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10129,7 +10129,7 @@ export def "set-write-community" [
 #
 # PUT /mimic/agent/{agentNum}/start
 # operationId: start
-export def "start" [
+export def "put-mimic-agent-agent-num-start" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12270,7 +12270,7 @@ export def "cfg-load" [
 # GET /mimic/mget/{infoArray}
 # operationId: mget_info
 export def "mget-info" [
-  info_array: list
+  info_array: list<string>
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -287,21 +287,21 @@ export def "get-product-search-facets" [
   --simulation-behavior: string@simulation-behavior-completer # Defines the simulation behavior. * `default` - Calls the simulation for every single seller. * `skip` - Never calls the simulation. * `only1P` - Only calls the simulation for first party sellers. (nullable, default: default)
   --count: float # Number of products per page. (nullable, default: 24)
   --page: float # Current search page. (nullable, default: 1)
-  --qp-sort: string@sort-completer # Defines the sort type. If null, the products will be sorted by relevance. (nullable)
+  --sort: string@sort-completer # Defines the sort type. If null, the products will be sorted by relevance. (nullable)
   --locale: string # Indicates the target language as a BCP 47 language code. The Intelligent Search must have indexed the account in the target language. (nullable, e.g. en-US)
   --hide-unavailable-items: oneof<nothing, bool> # Whether the result should hide unavailable items (`true`), or not (`false`) (default: false)
 ]: nothing -> record<correction: record<misspelled: bool>, fuzzy: string, operator: string, products: list<record>, recordsFiltered: float, translated: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($facets | is-empty) { error make --unspanned { msg: "path parameter 'facets' must be non-empty" } }
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "simulationBehavior" $simulation_behavior "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "hideUnavailableItems" $hide_unavailable_items "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "simulationBehavior" $simulation_behavior "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "hideUnavailableItems" $hide_unavailable_items "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({facets: (encode-path-segment $facets)} | format pattern "/product_search/{facets}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"query": $query, "simulationBehavior": $simulation_behavior, "count": $count, "page": $page, "sort": $qp_sort, "locale": $locale, "hideUnavailableItems": $hide_unavailable_items} | compact)
+    query: ({"query": $query, "simulationBehavior": $simulation_behavior, "count": $count, "page": $page, "sort": $sort, "locale": $locale, "hideUnavailableItems": $hide_unavailable_items} | compact)
     headers: $auth.headers
     body: null
     content_type: null

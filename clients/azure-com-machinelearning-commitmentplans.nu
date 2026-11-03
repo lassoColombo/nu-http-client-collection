@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -156,10 +156,11 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use.
+  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use. (required)
 ]: nothing -> record<value: table<display: record, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.MachineLearning/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -194,11 +195,12 @@ export def "commitment-plans-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --skip-token: string # Continuation token for pagination.
-  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use.
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, sku: record>> {
+  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use. (required)
+]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, sku: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$skipToken" $skip_token "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MachineLearning/commitmentPlans") $qp $auth.query)
   let accept_val = "application/json"
@@ -232,11 +234,12 @@ export def "skus-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use.
+  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use. (required)
 ]: nothing -> record<value: table<capabilities: list, capacity: record, costs: list, locations: list, name: string, resourceType: string, restrictions: list, tier: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MachineLearning/skus") $qp $auth.query)
   let accept_val = "application/json"
@@ -272,12 +275,13 @@ export def "commitment-plans-list-in-resource-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --skip-token: string # Continuation token for pagination.
-  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use.
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, sku: record>> {
+  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use. (required)
+]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, sku: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$skipToken" $skip_token "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearning/commitmentPlans") $qp $auth.query)
   let accept_val = "application/json"
@@ -313,13 +317,14 @@ export def "commitment-plans-remove" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use.
+  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($commitment_plan_name | is-empty) { error make --unspanned { msg: "path parameter 'commitmentPlanName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), commitment_plan_name: (encode-path-segment $commitment_plan_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearning/commitmentPlans/{commitment_plan_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -355,13 +360,14 @@ export def "commitment-plans-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use.
-]: nothing -> record<etag: string, properties: record<chargeForOverage: bool, chargeForPlan: bool, creationDate: string, includedQuantities: record, maxAssociationLimit: int, maxCapacityLimit: int, minCapacityLimit: int, planMeter: string, refillFrequencyInDays: int, suspendPlanOnOverage: bool>, sku: record<capacity: int, name: string, tier: string>> {
+  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use. (required)
+]: nothing -> record<etag: string, properties: record<chargeForOverage: bool, chargeForPlan: bool, creationDate: string, includedQuantities: record, maxAssociationLimit: int, maxCapacityLimit: int, minCapacityLimit: int, planMeter: string, refillFrequencyInDays: int, suspendPlanOnOverage: bool>, sku: record<capacity: int, name: string, tier: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($commitment_plan_name | is-empty) { error make --unspanned { msg: "path parameter 'commitmentPlanName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), commitment_plan_name: (encode-path-segment $commitment_plan_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearning/commitmentPlans/{commitment_plan_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -398,16 +404,17 @@ export def "commitment-plans-patch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use.
+  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use. (required)
   --sku: record # The SKU of a resource. — shape: {capacity?: int, name?: string, tier?: string}
   --tags: record # Resource tags
-]: any -> record<etag: string, properties: record<chargeForOverage: bool, chargeForPlan: bool, creationDate: string, includedQuantities: record, maxAssociationLimit: int, maxCapacityLimit: int, minCapacityLimit: int, planMeter: string, refillFrequencyInDays: int, suspendPlanOnOverage: bool>, sku: record<capacity: int, name: string, tier: string>> {
+]: any -> record<etag: string, properties: record<chargeForOverage: bool, chargeForPlan: bool, creationDate: string, includedQuantities: record, maxAssociationLimit: int, maxCapacityLimit: int, minCapacityLimit: int, planMeter: string, refillFrequencyInDays: int, suspendPlanOnOverage: bool>, sku: record<capacity: int, name: string, tier: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($commitment_plan_name | is-empty) { error make --unspanned { msg: "path parameter 'commitmentPlanName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), commitment_plan_name: (encode-path-segment $commitment_plan_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearning/commitmentPlans/{commitment_plan_name}") $qp $auth.query)
   let req_body = {"sku": $sku, "tags": $tags} | compact
@@ -446,19 +453,20 @@ export def "commitment-plans-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use.
+  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use. (required)
   --etag: string # An entity tag used to enforce optimistic concurrency.
   --properties: record # Properties of an Azure ML commitment plan.
   --sku: record # The SKU of a resource. — shape: {capacity?: int, name?: string, tier?: string}
   location: string # Resource location.
   --tags: record # Resource tags
-]: any -> record<etag: string, properties: record<chargeForOverage: bool, chargeForPlan: bool, creationDate: string, includedQuantities: record, maxAssociationLimit: int, maxCapacityLimit: int, minCapacityLimit: int, planMeter: string, refillFrequencyInDays: int, suspendPlanOnOverage: bool>, sku: record<capacity: int, name: string, tier: string>> {
+]: any -> record<etag: string, properties: record<chargeForOverage: bool, chargeForPlan: bool, creationDate: string, includedQuantities: record, maxAssociationLimit: int, maxCapacityLimit: int, minCapacityLimit: int, planMeter: string, refillFrequencyInDays: int, suspendPlanOnOverage: bool>, sku: record<capacity: int, name: string, tier: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($commitment_plan_name | is-empty) { error make --unspanned { msg: "path parameter 'commitmentPlanName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), commitment_plan_name: (encode-path-segment $commitment_plan_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearning/commitmentPlans/{commitment_plan_name}") $qp $auth.query)
   let req_body = {"etag": $etag, "properties": $properties, "sku": $sku, "location": $location, "tags": $tags} | compact
@@ -497,13 +505,14 @@ export def "commitment-associations-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --skip-token: string # Continuation token for pagination.
-  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use.
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record>> {
+  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use. (required)
+]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($commitment_plan_name | is-empty) { error make --unspanned { msg: "path parameter 'commitmentPlanName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$skipToken" $skip_token "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), commitment_plan_name: (encode-path-segment $commitment_plan_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearning/commitmentPlans/{commitment_plan_name}/commitmentAssociations") $qp $auth.query)
   let accept_val = "application/json"
@@ -540,14 +549,15 @@ export def "commitment-associations-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use.
-]: nothing -> record<etag: string, properties: record<associatedResourceId: string, commitmentPlanId: string, creationDate: string>> {
+  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use. (required)
+]: nothing -> record<etag: string, properties: record<associatedResourceId: string, commitmentPlanId: string, creationDate: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($commitment_plan_name | is-empty) { error make --unspanned { msg: "path parameter 'commitmentPlanName' must be non-empty" } }
   if ($commitment_association_name | is-empty) { error make --unspanned { msg: "path parameter 'commitmentAssociationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), commitment_plan_name: (encode-path-segment $commitment_plan_name), commitment_association_name: (encode-path-segment $commitment_association_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearning/commitmentPlans/{commitment_plan_name}/commitmentAssociations/{commitment_association_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -584,9 +594,9 @@ export def "commitment-associations-move" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use.
+  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use. (required)
   --destination-plan-id: string # The ARM ID of the commitment plan to re-parent the commitment association to.
-]: any -> record<etag: string, properties: record<associatedResourceId: string, commitmentPlanId: string, creationDate: string>> {
+]: any -> record<etag: string, properties: record<associatedResourceId: string, commitmentPlanId: string, creationDate: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -594,6 +604,7 @@ export def "commitment-associations-move" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($commitment_plan_name | is-empty) { error make --unspanned { msg: "path parameter 'commitmentPlanName' must be non-empty" } }
   if ($commitment_association_name | is-empty) { error make --unspanned { msg: "path parameter 'commitmentAssociationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), commitment_plan_name: (encode-path-segment $commitment_plan_name), commitment_association_name: (encode-path-segment $commitment_association_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearning/commitmentPlans/{commitment_plan_name}/commitmentAssociations/{commitment_association_name}/move") $qp $auth.query)
   let req_body = {"destinationPlanId": $destination_plan_id} | compact
@@ -632,13 +643,14 @@ export def "usage-history-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --skip-token: string # Continuation token for pagination.
-  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use.
+  --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use. (required)
 ]: nothing -> record<nextLink: string, value: table<planDeletionOverage: record, planMigrationOverage: record, planQuantitiesAfterUsage: record, planQuantitiesBeforeUsage: record, planUsageOverage: record, usage: record, usageDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($commitment_plan_name | is-empty) { error make --unspanned { msg: "path parameter 'commitmentPlanName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$skipToken" $skip_token "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), commitment_plan_name: (encode-path-segment $commitment_plan_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearning/commitmentPlans/{commitment_plan_name}/usageHistory") $qp $auth.query)
   let accept_val = "application/json"

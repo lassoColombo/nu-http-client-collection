@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -147,13 +147,14 @@ export def "offer-delegations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version. (default: 2015-11-01)
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client Api Version. (required, default: 2015-11-01)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($offer | is-empty) { error make --unspanned { msg: "path parameter 'offer' must be non-empty" } }
+  let api_version = ($api_version | default "2015-11-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), offer: (encode-path-segment $offer)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Subscriptions.Admin/offers/{offer}/offerDelegations") $qp $auth.query)
   let accept_val = "application/json"
@@ -190,7 +191,7 @@ export def "offer-delegations-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version. (default: 2015-11-01)
+  --api-version: string # Client Api Version. (required, default: 2015-11-01)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -198,6 +199,7 @@ export def "offer-delegations-delete" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($offer | is-empty) { error make --unspanned { msg: "path parameter 'offer' must be non-empty" } }
   if ($offer_delegation_name | is-empty) { error make --unspanned { msg: "path parameter 'offerDelegationName' must be non-empty" } }
+  let api_version = ($api_version | default "2015-11-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), offer: (encode-path-segment $offer), offer_delegation_name: (encode-path-segment $offer_delegation_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Subscriptions.Admin/offers/{offer}/offerDelegations/{offer_delegation_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -234,14 +236,15 @@ export def "offer-delegations-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version. (default: 2015-11-01)
-]: nothing -> record<properties: record<subscriptionId: string>> {
+  --api-version: string # Client Api Version. (required, default: 2015-11-01)
+]: nothing -> record<properties: record<subscriptionId: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($offer | is-empty) { error make --unspanned { msg: "path parameter 'offer' must be non-empty" } }
   if ($offer_delegation_name | is-empty) { error make --unspanned { msg: "path parameter 'offerDelegationName' must be non-empty" } }
+  let api_version = ($api_version | default "2015-11-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), offer: (encode-path-segment $offer), offer_delegation_name: (encode-path-segment $offer_delegation_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Subscriptions.Admin/offers/{offer}/offerDelegations/{offer_delegation_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -279,10 +282,10 @@ export def "offer-delegations-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version. (default: 2015-11-01)
+  --api-version: string # Client Api Version. (required, default: 2015-11-01)
   --properties: record # Properties for an offer delegation. — shape: {subscriptionId?: string}
   --location: string # Location of the resource
-]: any -> record<properties: record<subscriptionId: string>> {
+]: any -> record<properties: record<subscriptionId: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -290,6 +293,7 @@ export def "offer-delegations-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($offer | is-empty) { error make --unspanned { msg: "path parameter 'offer' must be non-empty" } }
   if ($offer_delegation_name | is-empty) { error make --unspanned { msg: "path parameter 'offerDelegationName' must be non-empty" } }
+  let api_version = ($api_version | default "2015-11-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), offer: (encode-path-segment $offer), offer_delegation_name: (encode-path-segment $offer_delegation_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Subscriptions.Admin/offers/{offer}/offerDelegations/{offer_delegation_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location} | compact

@@ -139,11 +139,11 @@ export def "get-flight-offers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --origin-location-code: string # city/airport [IATA code](http://www.iata.org/publications/Pages/code-search.aspx) from which the traveler will depart, e.g. BOS for Boston (e.g. SYD)
-  --destination-location-code: string # city/airport [IATA code](http://www.iata.org/publications/Pages/code-search.aspx) to which the traveler is going, e.g. PAR for Paris (e.g. BKK)
-  --departure-date: string # the date on which the traveler will depart from the origin to go to the destination. Dates are specified in the [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) YYYY-MM-DD format, e.g. 2017-12-25 (format: date, e.g. 2021-02-01)
+  --origin-location-code: string # city/airport [IATA code](http://www.iata.org/publications/Pages/code-search.aspx) from which the traveler will depart, e.g. BOS for Boston (required, e.g. SYD)
+  --destination-location-code: string # city/airport [IATA code](http://www.iata.org/publications/Pages/code-search.aspx) to which the traveler is going, e.g. PAR for Paris (required, e.g. BKK)
+  --departure-date: string # the date on which the traveler will depart from the origin to go to the destination. Dates are specified in the [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) YYYY-MM-DD format, e.g. 2017-12-25 (required, format: date, e.g. 2021-02-01)
   --return-date: string # the date on which the traveler will depart from the destination to return to the origin. If this parameter is not specified, only one-way itineraries are found. If this parameter is specified, only round-trip itineraries are found. Dates are specified in the [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) YYYY-MM-DD format, e.g. 2018-02-28 (format: date)
-  --adults: int # the number of adult travelers (age 12 or older on date of departure). (default: 1)
+  --adults: int # the number of adult travelers (age 12 or older on date of departure). (required, default: 1)
   --children: int # the number of child travelers (older than age 2 and younger than age 12 on date of departure) who will each have their own separate seat. If specified, this number should be greater than or equal to 0
   --infants: int # the number of infant travelers (whose age is less or equal to 2 on date of departure). Infants travel on the lap of an adult traveler, and thus the number of infants must not exceed the number of adults. If specified, this number should be greater than or equal to 0
   --travel-class: string@travel-class-completer # most of the flight time should be spent in a cabin of this quality or higher. The accepted travel class is economy, premium economy, business or first class. If no travel class is specified, the search considers any travel class
@@ -153,12 +153,16 @@ export def "get-flight-offers" [
   --currency-code: string # the preferred currency for the flight offers. Currency is specified in the [ISO 4217](https://en.wikipedia.org/wiki/ISO_4217) format, e.g. EUR for Euro
   --max-price: int # maximum price per traveler. By default, no limit is applied. If specified, the value should be a positive number with no decimals
   --max: int # maximum number of flight offers to return. If specified, the value should be greater than or equal to 1 (default: 250)
-]: nothing -> any {
+]: nothing -> record<data: table<disablePricing: bool, id: string, instantTicketingRequired: bool, itineraries: list, lastTicketingDate: string, nonHomogeneous: bool, numberOfBookableSeats: float, oneWay: bool, paymentCardRequired: bool, price: record, pricingOptions: record, source: string, travelerPricings: list, type: string, validatingAirlineCodes: list>, dictionaries: record<aircraft: record<key: string>, carriers: record<key: string>, currencies: record<key: string>, locations: record<key: string>>, meta: record<count: int, links: record<first: string, last: string, next: string, previous: string, self: string, up: string>>, warnings: table<code: int, detail: string, source: record, status: int, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($origin_location_code == null) { error make --unspanned { msg: "required query parameter 'originLocationCode' missing: pass --origin-location-code" } }
+  if ($destination_location_code == null) { error make --unspanned { msg: "required query parameter 'destinationLocationCode' missing: pass --destination-location-code" } }
+  if ($departure_date == null) { error make --unspanned { msg: "required query parameter 'departureDate' missing: pass --departure-date" } }
+  let adults = ($adults | default 1)
   let qp = [(serialize-qp "originLocationCode" $origin_location_code "scalar") (serialize-qp "destinationLocationCode" $destination_location_code "scalar") (serialize-qp "departureDate" $departure_date "scalar") (serialize-qp "returnDate" $return_date "scalar") (serialize-qp "adults" $adults "scalar") (serialize-qp "children" $children "scalar") (serialize-qp "infants" $infants "scalar") (serialize-qp "travelClass" $travel_class "scalar") (serialize-qp "includedAirlineCodes" $included_airline_codes "scalar") (serialize-qp "excludedAirlineCodes" $excluded_airline_codes "scalar") (serialize-qp "nonStop" $non_stop "scalar") (serialize-qp "currencyCode" $currency_code "scalar") (serialize-qp "maxPrice" $max_price "scalar") (serialize-qp "max" $max "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/shopping/flight-offers" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/vnd.amadeus+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -188,16 +192,17 @@ export def "search-flight-offers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-http-method-override: string # the HTTP method to apply
+  --x-http-method-override: string # the HTTP method to apply (required, default: GET)
   --body: any
-]: any -> any {
+]: any -> record<data: table<disablePricing: bool, id: string, instantTicketingRequired: bool, itineraries: list, lastTicketingDate: string, nonHomogeneous: bool, numberOfBookableSeats: float, oneWay: bool, paymentCardRequired: bool, price: record, pricingOptions: record, source: string, travelerPricings: list, type: string, validatingAirlineCodes: list>, dictionaries: record<aircraft: record<key: string>, carriers: record<key: string>, currencies: record<key: string>, locations: record<key: string>>, meta: record<count: int, oneWayCombinations: list<record>>, warnings: table<code: int, detail: string, source: record, status: int, title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_http_method_override = ($x_http_method_override | default "GET")
   let full_url = (build-url $base "/shopping/flight-offers" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = "application/vnd.amadeus+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-HTTP-Method-Override": $x_http_method_override} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

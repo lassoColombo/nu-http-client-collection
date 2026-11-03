@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -100,8 +100,11 @@ def x-amz-target-completer [] { ["AmazonPersonalize.CreateBatchInferenceJob"] }
 def x-amz-target-completer-1 [] { ["AmazonPersonalize.CreateBatchSegmentJob"] }
 def x-amz-target-completer-2 [] { ["AmazonPersonalize.CreateCampaign"] }
 def x-amz-target-completer-3 [] { ["AmazonPersonalize.CreateDataset"] }
+def ingestion-mode-completer [] { ["ALL" "BULK" "PUT"] }
 def x-amz-target-completer-4 [] { ["AmazonPersonalize.CreateDatasetExportJob"] }
+def domain-completer [] { ["ECOMMERCE" "VIDEO_ON_DEMAND"] }
 def x-amz-target-completer-5 [] { ["AmazonPersonalize.CreateDatasetGroup"] }
+def import-mode-completer [] { ["FULL" "INCREMENTAL"] }
 def x-amz-target-completer-6 [] { ["AmazonPersonalize.CreateDatasetImportJob"] }
 def x-amz-target-completer-7 [] { ["AmazonPersonalize.CreateEventTracker"] }
 def x-amz-target-completer-8 [] { ["AmazonPersonalize.CreateFilter"] }
@@ -109,6 +112,7 @@ def x-amz-target-completer-9 [] { ["AmazonPersonalize.CreateMetricAttribution"] 
 def x-amz-target-completer-10 [] { ["AmazonPersonalize.CreateRecommender"] }
 def x-amz-target-completer-11 [] { ["AmazonPersonalize.CreateSchema"] }
 def x-amz-target-completer-12 [] { ["AmazonPersonalize.CreateSolution"] }
+def training-mode-completer [] { ["FULL" "UPDATE"] }
 def x-amz-target-completer-13 [] { ["AmazonPersonalize.CreateSolutionVersion"] }
 def x-amz-target-completer-14 [] { ["AmazonPersonalize.DeleteCampaign"] }
 def x-amz-target-completer-15 [] { ["AmazonPersonalize.DeleteDataset"] }
@@ -148,6 +152,7 @@ def x-amz-target-completer-48 [] { ["AmazonPersonalize.ListEventTrackers"] }
 def x-amz-target-completer-49 [] { ["AmazonPersonalize.ListFilters"] }
 def x-amz-target-completer-50 [] { ["AmazonPersonalize.ListMetricAttributionMetrics"] }
 def x-amz-target-completer-51 [] { ["AmazonPersonalize.ListMetricAttributions"] }
+def recipe-provider-completer [] { ["SERVICE"] }
 def x-amz-target-completer-52 [] { ["AmazonPersonalize.ListRecipes"] }
 def x-amz-target-completer-53 [] { ["AmazonPersonalize.ListRecommenders"] }
 def x-amz-target-completer-54 [] { ["AmazonPersonalize.ListSchemas"] }
@@ -190,6 +195,10 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateBatchInferenceJob
+# --jobInput shape: {s3DataSource: record}
+# --jobOutput shape: {s3DataDestination: record}
+# --batchInferenceJobConfig shape: {itemExplorationConfig?: record}
+# --tags item shape: {tagKey: string, tagValue: string}
 export def "create-batch-inference-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -207,20 +216,21 @@ export def "create-batch-inference-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  job_name: any
-  solution_version_arn: any
-  --filter-arn: any
-  --num-results: any
-  job_input: any
-  job_output: any
-  role_arn: any
-  --batch-inference-job-config: any
-  --tags: any
-]: any -> record<batchInferenceJobArn: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  job_name: string # The name of the batch inference job to create.
+  solution_version_arn: string # The Amazon Resource Name (ARN) of the solution version that will be used to generate the batch inference recommendations.
+  --filter-arn: string # The ARN of the filter to apply to the batch inference job. For more information on using filters, see Filtering batch recommendations (https://docs.aws.amazon.com/personalize/latest/dg/filter-batch.html).
+  --num-results: int # The number of recommendations to retrieve.
+  job_input: record # The input configuration of a batch inference job. — shape: {s3DataSource: record}
+  job_output: record # The output configuration parameters of a batch inference job. — shape: {s3DataDestination: record}
+  role_arn: string # The ARN of the Amazon Identity and Access Management role that has permissions to read and write to your input and output Amazon S3 buckets respectively.
+  --batch-inference-job-config: record # The configuration details of a batch inference job. — shape: {itemExplorationConfig?: record}
+  --tags: list # A list of tags (https://docs.aws.amazon.com/personalize/latest/dev/tagging-resources.html) to apply to the batch inference job. — item shape: {tagKey: string, tagValue: string}
+]: any -> record<batchInferenceJobArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.CreateBatchInferenceJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"jobName": $job_name, "solutionVersionArn": $solution_version_arn, "filterArn": $filter_arn, "numResults": $num_results, "jobInput": $job_input, "jobOutput": $job_output, "roleArn": $role_arn, "batchInferenceJobConfig": $batch_inference_job_config, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -246,6 +256,9 @@ export def "create-batch-inference-job" [
 #
 # POST /
 # operationId: CreateBatchSegmentJob
+# --jobInput shape: {s3DataSource: record}
+# --jobOutput shape: {s3DataDestination: record}
+# --tags item shape: {tagKey: string, tagValue: string}
 export def "create-batch-segment-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -263,19 +276,20 @@ export def "create-batch-segment-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  job_name: any
-  solution_version_arn: any
-  --filter-arn: any
-  --num-results: any
-  job_input: any
-  job_output: any
-  role_arn: any
-  --tags: any
-]: any -> record<batchSegmentJobArn: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  job_name: string # The name of the batch segment job to create.
+  solution_version_arn: string # The Amazon Resource Name (ARN) of the solution version you want the batch segment job to use to generate batch segments.
+  --filter-arn: string # The ARN of the filter to apply to the batch segment job. For more information on using filters, see Filtering batch recommendations (https://docs.aws.amazon.com/personalize/latest/dg/filter-batch.html).
+  --num-results: int # The number of predicted users generated by the batch segment job for each line of input data.
+  job_input: record # The input configuration of a batch segment job. — shape: {s3DataSource: record}
+  job_output: record # The output configuration parameters of a batch segment job. — shape: {s3DataDestination: record}
+  role_arn: string # The ARN of the Amazon Identity and Access Management role that has permissions to read and write to your input and output Amazon S3 buckets respectively.
+  --tags: list # A list of tags (https://docs.aws.amazon.com/personalize/latest/dev/tagging-resources.html) to apply to the batch segment job. — item shape: {tagKey: string, tagValue: string}
+]: any -> record<batchSegmentJobArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.CreateBatchSegmentJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"jobName": $job_name, "solutionVersionArn": $solution_version_arn, "filterArn": $filter_arn, "numResults": $num_results, "jobInput": $job_input, "jobOutput": $job_output, "roleArn": $role_arn, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -301,6 +315,8 @@ export def "create-batch-segment-job" [
 #
 # POST /
 # operationId: CreateCampaign
+# --campaignConfig shape: {itemExplorationConfig?: record}
+# --tags item shape: {tagKey: string, tagValue: string}
 export def "create-campaign" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -318,16 +334,17 @@ export def "create-campaign" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  name: any
-  solution_version_arn: any
-  --min-provisioned-tps: any
-  --campaign-config: any
-  --tags: any
-]: any -> record<campaignArn: record> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  name: string # A name for the new campaign. The campaign name must be unique within your account.
+  solution_version_arn: string # The Amazon Resource Name (ARN) of the solution version to deploy.
+  --min-provisioned-tps: int # Specifies the requested minimum provisioned transactions (recommendations) per second that Amazon Personalize will support.
+  --campaign-config: record # The configuration details of a campaign. — shape: {itemExplorationConfig?: record}
+  --tags: list # A list of tags (https://docs.aws.amazon.com/personalize/latest/dev/tagging-resources.html) to apply to the campaign. — item shape: {tagKey: string, tagValue: string}
+]: any -> record<campaignArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.CreateCampaign")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name, "solutionVersionArn": $solution_version_arn, "minProvisionedTPS": $min_provisioned_tps, "campaignConfig": $campaign_config, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -353,6 +370,7 @@ export def "create-campaign" [
 #
 # POST /
 # operationId: CreateDataset
+# --tags item shape: {tagKey: string, tagValue: string}
 export def "create-dataset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -370,16 +388,17 @@ export def "create-dataset" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  name: any
-  schema_arn: any
-  dataset_group_arn: any
-  dataset_type: any
-  --tags: any
-]: any -> record<datasetArn: record> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  name: string # The name for the dataset.
+  schema_arn: string # The ARN of the schema to associate with the dataset. The schema defines the dataset fields.
+  dataset_group_arn: string # The Amazon Resource Name (ARN) of the dataset group to add the dataset to.
+  dataset_type: string # The type of dataset. One of the following (case insensitive) values: Interactions Items Users
+  --tags: list # A list of tags (https://docs.aws.amazon.com/personalize/latest/dev/tagging-resources.html) to apply to the dataset. — item shape: {tagKey: string, tagValue: string}
+]: any -> record<datasetArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.CreateDataset")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name, "schemaArn": $schema_arn, "datasetGroupArn": $dataset_group_arn, "datasetType": $dataset_type, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -405,6 +424,8 @@ export def "create-dataset" [
 #
 # POST /
 # operationId: CreateDatasetExportJob
+# --jobOutput shape: {s3DataDestination: record}
+# --tags item shape: {tagKey: string, tagValue: string}
 export def "create-dataset-export-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -422,17 +443,18 @@ export def "create-dataset-export-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  job_name: any
-  dataset_arn: any
-  --ingestion-mode: any
-  role_arn: any
-  job_output: any
-  --tags: any
-]: any -> record<datasetExportJobArn: record> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  job_name: string # The name for the dataset export job.
+  dataset_arn: string # The Amazon Resource Name (ARN) of the dataset that contains the data to export.
+  --ingestion-mode: string@ingestion-mode-completer # The data to export, based on how you imported the data. You can choose to export only BULK data that you imported using a dataset import job, only PUT data that you imported incrementally (using the console, PutEvents, PutUsers and PutItems operations), or ALL for both types. The default value is PUT.
+  role_arn: string # The Amazon Resource Name (ARN) of the IAM service role that has permissions to add data to your output Amazon S3 bucket.
+  job_output: record # The output configuration parameters of a dataset export job. — shape: {s3DataDestination: record}
+  --tags: list # A list of tags (https://docs.aws.amazon.com/personalize/latest/dev/tagging-resources.html) to apply to the dataset export job. — item shape: {tagKey: string, tagValue: string}
+]: any -> record<datasetExportJobArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.CreateDatasetExportJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"jobName": $job_name, "datasetArn": $dataset_arn, "ingestionMode": $ingestion_mode, "roleArn": $role_arn, "jobOutput": $job_output, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -458,6 +480,7 @@ export def "create-dataset-export-job" [
 #
 # POST /
 # operationId: CreateDatasetGroup
+# --tags item shape: {tagKey: string, tagValue: string}
 export def "create-dataset-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -475,16 +498,17 @@ export def "create-dataset-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  name: any
-  --role-arn: any
-  --kms-key-arn: any
-  --domain: any
-  --tags: any
-]: any -> record<datasetGroupArn: record, domain: record> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  name: string # The name for the new dataset group.
+  --role-arn: string # The ARN of the Identity and Access Management (IAM) role that has permissions to access the Key Management Service (KMS) key. Supplying an IAM role is only valid when also specifying a KMS key.
+  --kms-key-arn: string # The Amazon Resource Name (ARN) of a Key Management Service (KMS) key used to encrypt the datasets.
+  --domain: string@domain-completer # The domain of the dataset group. Specify a domain to create a Domain dataset group. The domain you specify determines the default schemas for datasets and the use cases available for recommenders. If you don't specify a domain, you create a Custom dataset group with solution versions that you deploy with a campaign.
+  --tags: list # A list of tags (https://docs.aws.amazon.com/personalize/latest/dev/tagging-resources.html) to apply to the dataset group. — item shape: {tagKey: string, tagValue: string}
+]: any -> record<datasetGroupArn: string, domain: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.CreateDatasetGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name, "roleArn": $role_arn, "kmsKeyArn": $kms_key_arn, "domain": $domain, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -510,6 +534,8 @@ export def "create-dataset-group" [
 #
 # POST /
 # operationId: CreateDatasetImportJob
+# --dataSource shape: {dataLocation?: string}
+# --tags item shape: {tagKey: string, tagValue: string}
 export def "create-dataset-import-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -527,18 +553,19 @@ export def "create-dataset-import-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  job_name: any
-  dataset_arn: any
-  data_source: any
-  role_arn: any
-  --tags: any
-  --import-mode: any
-  --publish-attribution-metrics-to-s3: any
-]: any -> record<datasetImportJobArn: record> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  job_name: string # The name for the dataset import job.
+  dataset_arn: string # The ARN of the dataset that receives the imported data.
+  data_source: record # Describes the data source that contains the data to upload to a dataset. — shape: {dataLocation?: string}
+  role_arn: string # The ARN of the IAM role that has permissions to read from the Amazon S3 data source.
+  --tags: list # A list of tags (https://docs.aws.amazon.com/personalize/latest/dev/tagging-resources.html) to apply to the dataset import job. — item shape: {tagKey: string, tagValue: string}
+  --import-mode: string@import-mode-completer # Specify how to add the new records to an existing dataset. The default import mode is FULL. If you haven't imported bulk records into the dataset previously, you can only specify FULL. Specify FULL to overwrite all existing bulk data in your dataset. Data you imported individually is not replaced. Specify INCREMENTAL to append the new records to the existing data in your dataset. Amazon Personalize replaces any record with the same ID with the new one.
+  --publish-attribution-metrics-to-s3: oneof<nothing, bool> # If you created a metric attribution, specify whether to publish metrics for this import job to Amazon S3
+]: any -> record<datasetImportJobArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.CreateDatasetImportJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"jobName": $job_name, "datasetArn": $dataset_arn, "dataSource": $data_source, "roleArn": $role_arn, "tags": $tags, "importMode": $import_mode, "publishAttributionMetricsToS3": $publish_attribution_metrics_to_s3} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -564,6 +591,7 @@ export def "create-dataset-import-job" [
 #
 # POST /
 # operationId: CreateEventTracker
+# --tags item shape: {tagKey: string, tagValue: string}
 export def "create-event-tracker" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -581,14 +609,15 @@ export def "create-event-tracker" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  name: any
-  dataset_group_arn: any
-  --tags: any
-]: any -> record<eventTrackerArn: record, trackingId: record> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  name: string # The name for the event tracker.
+  dataset_group_arn: string # The Amazon Resource Name (ARN) of the dataset group that receives the event data.
+  --tags: list # A list of tags (https://docs.aws.amazon.com/personalize/latest/dev/tagging-resources.html) to apply to the event tracker. — item shape: {tagKey: string, tagValue: string}
+]: any -> record<eventTrackerArn: string, trackingId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.CreateEventTracker")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name, "datasetGroupArn": $dataset_group_arn, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -614,6 +643,7 @@ export def "create-event-tracker" [
 #
 # POST /
 # operationId: CreateFilter
+# --tags item shape: {tagKey: string, tagValue: string}
 export def "create-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -631,15 +661,16 @@ export def "create-filter" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  name: any
-  dataset_group_arn: any
-  filter_expression: any
-  --tags: any
-]: any -> record<filterArn: record> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  name: string # The name of the filter to create.
+  dataset_group_arn: string # The ARN of the dataset group that the filter will belong to.
+  filter_expression: string # The filter expression defines which items are included or excluded from recommendations. Filter expression must follow specific format rules. For information about filter expression structure and syntax, see Filter expressions (https://docs.aws.amazon.com/personalize/latest/dg/filter-expressions.html). (format: password)
+  --tags: list # A list of tags (https://docs.aws.amazon.com/personalize/latest/dev/tagging-resources.html) to apply to the filter. — item shape: {tagKey: string, tagValue: string}
+]: any -> record<filterArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.CreateFilter")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name, "datasetGroupArn": $dataset_group_arn, "filterExpression": $filter_expression, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -665,6 +696,8 @@ export def "create-filter" [
 #
 # POST /
 # operationId: CreateMetricAttribution
+# --metrics item shape: {eventType: string, metricName: string, expression: string}
+# --metricsOutputConfig shape: {s3DataDestination?: record, roleArn: string}
 export def "create-metric-attribution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -682,15 +715,16 @@ export def "create-metric-attribution" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  name: any
-  dataset_group_arn: any
-  metrics: any
-  metrics_output_config: any
-]: any -> record<metricAttributionArn: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  name: string # A name for the metric attribution.
+  dataset_group_arn: string # The Amazon Resource Name (ARN) of the destination dataset group for the metric attribution.
+  metrics: list # A list of metric attributes for the metric attribution. Each metric attribute specifies an event type to track and a function. Available functions are SUM() or SAMPLECOUNT(). For SUM() functions, provide the dataset type (either Interactions or Items) and column to sum as a parameter. For example SUM(Items.PRICE). — item shape: {eventType: string, metricName: string, expression: string}
+  metrics_output_config: record # The output configuration details for a metric attribution. — shape: {s3DataDestination?: record, roleArn: string}
+]: any -> record<metricAttributionArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.CreateMetricAttribution")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name, "datasetGroupArn": $dataset_group_arn, "metrics": $metrics, "metricsOutputConfig": $metrics_output_config} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -716,6 +750,8 @@ export def "create-metric-attribution" [
 #
 # POST /
 # operationId: CreateRecommender
+# --recommenderConfig shape: {itemExplorationConfig?: record, minRecommendationRequestsPerSecond?: int}
+# --tags item shape: {tagKey: string, tagValue: string}
 export def "create-recommender" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -733,16 +769,17 @@ export def "create-recommender" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  name: any
-  dataset_group_arn: any
-  recipe_arn: any
-  --recommender-config: any
-  --tags: any
-]: any -> record<recommenderArn: record> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  name: string # The name of the recommender.
+  dataset_group_arn: string # The Amazon Resource Name (ARN) of the destination domain dataset group for the recommender.
+  recipe_arn: string # The Amazon Resource Name (ARN) of the recipe that the recommender will use. For a recommender, a recipe is a Domain dataset group use case. Only Domain dataset group use cases can be used to create a recommender. For information about use cases see Choosing recommender use cases (https://docs.aws.amazon.com/personalize/latest/dg/domain-use-cases.html).
+  --recommender-config: record # The configuration details of the recommender. — shape: {itemExplorationConfig?: record, minRecommendationRequestsPerSecond?: int}
+  --tags: list # A list of tags (https://docs.aws.amazon.com/personalize/latest/dev/tagging-resources.html) to apply to the recommender. — item shape: {tagKey: string, tagValue: string}
+]: any -> record<recommenderArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.CreateRecommender")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name, "datasetGroupArn": $dataset_group_arn, "recipeArn": $recipe_arn, "recommenderConfig": $recommender_config, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -785,14 +822,15 @@ export def "create-schema" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  name: any
-  schema: any
-  --domain: any
-]: any -> record<schemaArn: record> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  name: string # The name for the schema.
+  schema: string # A schema in Avro JSON format.
+  --domain: string@domain-completer # The domain for the schema. If you are creating a schema for a dataset in a Domain dataset group, specify the domain you chose when you created the Domain dataset group.
+]: any -> record<schemaArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.CreateSchema")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name, "schema": $schema, "domain": $domain} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -818,6 +856,8 @@ export def "create-schema" [
 #
 # POST /
 # operationId: CreateSolution
+# --solutionConfig shape: {eventValueThreshold?: string, hpoConfig?: record, algorithmHyperParameters?: record, featureTransformationParameters?: record, autoMLConfig?: record, optimizationObjective?: record}
+# --tags item shape: {tagKey: string, tagValue: string}
 export def "create-solution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -835,19 +875,20 @@ export def "create-solution" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  name: any
-  --perform-hpo: any
-  --perform-auto-ml: any
-  --recipe-arn: any
-  dataset_group_arn: any
-  --event-type: any
-  --solution-config: any
-  --tags: any
-]: any -> record<solutionArn: record> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  name: string # The name for the solution.
+  --perform-hpo: oneof<nothing, bool> # Whether to perform hyperparameter optimization (HPO) on the specified or selected recipe. The default is false. When performing AutoML, this parameter is always true and you should not set it to false.
+  --perform-auto-ml: oneof<nothing, bool> # Whether to perform automated machine learning (AutoML). The default is false. For this case, you must specify recipeArn. When set to true, Amazon Personalize analyzes your training data and selects the optimal USER_PERSONALIZATION recipe and hyperparameters. In this case, you must omit recipeArn. Amazon Personalize determines the optimal recipe by running tests with different values for the hyperparameters. AutoML lengthens the training process as compared to selecting a specific recipe.
+  --recipe-arn: string # The ARN of the recipe to use for model training. Only specified when performAutoML is false.
+  dataset_group_arn: string # The Amazon Resource Name (ARN) of the dataset group that provides the training data.
+  --event-type: string # When your have multiple event types (using an EVENT_TYPE schema field), this parameter specifies which event type (for example, 'click' or 'like') is used for training the model. If you do not provide an eventType, Amazon Personalize will use all interactions for training with equal weight regardless of type.
+  --solution-config: record # Describes the configuration properties for the solution. — shape: {eventValueThreshold?: string, hpoConfig?: record, algorithmHyperParameters?: record, featureTransformationParameters?: record, autoMLConfig?: record, optimizationObjective?: record}
+  --tags: list # A list of tags (https://docs.aws.amazon.com/personalize/latest/dev/tagging-resources.html) to apply to the solution. — item shape: {tagKey: string, tagValue: string}
+]: any -> record<solutionArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.CreateSolution")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name, "performHPO": $perform_hpo, "performAutoML": $perform_auto_ml, "recipeArn": $recipe_arn, "datasetGroupArn": $dataset_group_arn, "eventType": $event_type, "solutionConfig": $solution_config, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -873,6 +914,7 @@ export def "create-solution" [
 #
 # POST /
 # operationId: CreateSolutionVersion
+# --tags item shape: {tagKey: string, tagValue: string}
 export def "create-solution-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -890,15 +932,16 @@ export def "create-solution-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  --name: any
-  solution_arn: any
-  --training-mode: any
-  --tags: any
-]: any -> record<solutionVersionArn: record> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  --name: string # The name of the solution version.
+  solution_arn: string # The Amazon Resource Name (ARN) of the solution containing the training configuration information.
+  --training-mode: string@training-mode-completer # The scope of training to be performed when creating the solution version. The FULL option trains the solution version based on the entirety of the input solution's training data, while the UPDATE option processes only the data that has changed in comparison to the input solution. Choose UPDATE when you want to incrementally update your solution version instead of creating an entirely new one. The UPDATE option can only be used when you already have an active solution version created from the input solution using the FULL option and the input solution was trained with the User-Personalization (https://docs.aws.amazon.com/personalize/latest/dg/native-recipe-new-item-USER_PERSONALIZATION.html) recipe or the HRNN-Coldstart (https://docs.aws.amazon.com/personalize/latest/dg/native-recipe-hrnn-coldstart.html) recipe.
+  --tags: list # A list of tags (https://docs.aws.amazon.com/personalize/latest/dev/tagging-resources.html) to apply to the solution version. — item shape: {tagKey: string, tagValue: string}
+]: any -> record<solutionVersionArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.CreateSolutionVersion")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name, "solutionArn": $solution_arn, "trainingMode": $training_mode, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -941,12 +984,13 @@ export def "delete-campaign" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  campaign_arn: any
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  campaign_arn: string # The Amazon Resource Name (ARN) of the campaign to delete.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.DeleteCampaign")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"campaignArn": $campaign_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -989,12 +1033,13 @@ export def "delete-dataset" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  dataset_arn: any
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  dataset_arn: string # The Amazon Resource Name (ARN) of the dataset to delete.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.DeleteDataset")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"datasetArn": $dataset_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1037,12 +1082,13 @@ export def "delete-dataset-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  dataset_group_arn: any
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  dataset_group_arn: string # The ARN of the dataset group to delete.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.DeleteDatasetGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"datasetGroupArn": $dataset_group_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1085,12 +1131,13 @@ export def "delete-event-tracker" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  event_tracker_arn: any
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  event_tracker_arn: string # The Amazon Resource Name (ARN) of the event tracker to delete.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.DeleteEventTracker")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"eventTrackerArn": $event_tracker_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1133,12 +1180,13 @@ export def "delete-filter" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  filter_arn: any
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  filter_arn: string # The ARN of the filter to delete.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.DeleteFilter")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"filterArn": $filter_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1181,12 +1229,13 @@ export def "delete-metric-attribution" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  metric_attribution_arn: any
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  metric_attribution_arn: string # The metric attribution's Amazon Resource Name (ARN).
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.DeleteMetricAttribution")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"metricAttributionArn": $metric_attribution_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1229,12 +1278,13 @@ export def "delete-recommender" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  recommender_arn: any
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  recommender_arn: string # The Amazon Resource Name (ARN) of the recommender to delete.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.DeleteRecommender")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"recommenderArn": $recommender_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1277,12 +1327,13 @@ export def "delete-schema" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  schema_arn: any
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  schema_arn: string # The Amazon Resource Name (ARN) of the schema to delete.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.DeleteSchema")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"schemaArn": $schema_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1325,12 +1376,13 @@ export def "delete-solution" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  solution_arn: any
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  solution_arn: string # The ARN of the solution to delete.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.DeleteSolution")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"solutionArn": $solution_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1373,12 +1425,13 @@ export def "describe-algorithm" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  algorithm_arn: any
-]: any -> record<algorithm: record<name: record, algorithmArn: record, algorithmImage: record<name: record, dockerURI: record>, defaultHyperParameters: record, defaultHyperParameterRanges: record<integerHyperParameterRanges: record, continuousHyperParameterRanges: record, categoricalHyperParameterRanges: record>, defaultResourceConfig: record, trainingInputMode: record, roleArn: record, creationDateTime: record, lastUpdatedDateTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  algorithm_arn: string # The Amazon Resource Name (ARN) of the algorithm to describe.
+]: any -> record<algorithm: record<name: string, algorithmArn: string, algorithmImage: record<name: string, dockerURI: string>, defaultHyperParameters: record, defaultHyperParameterRanges: record<integerHyperParameterRanges: list, continuousHyperParameterRanges: list, categoricalHyperParameterRanges: list>, defaultResourceConfig: record, trainingInputMode: string, roleArn: string, creationDateTime: string, lastUpdatedDateTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.DescribeAlgorithm")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"algorithmArn": $algorithm_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1421,12 +1474,13 @@ export def "describe-batch-inference-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  batch_inference_job_arn: any
-]: any -> record<batchInferenceJob: record<jobName: record, batchInferenceJobArn: record, filterArn: record, failureReason: record, solutionVersionArn: record, numResults: record, jobInput: record<s3DataSource: record>, jobOutput: record<s3DataDestination: record>, batchInferenceJobConfig: record<itemExplorationConfig: record>, roleArn: record, status: record, creationDateTime: record, lastUpdatedDateTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  batch_inference_job_arn: string # The ARN of the batch inference job to describe.
+]: any -> record<batchInferenceJob: record<jobName: string, batchInferenceJobArn: string, filterArn: string, failureReason: string, solutionVersionArn: string, numResults: int, jobInput: record<s3DataSource: record>, jobOutput: record<s3DataDestination: record>, batchInferenceJobConfig: record<itemExplorationConfig: record>, roleArn: string, status: string, creationDateTime: string, lastUpdatedDateTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.DescribeBatchInferenceJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"batchInferenceJobArn": $batch_inference_job_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1469,12 +1523,13 @@ export def "describe-batch-segment-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  batch_segment_job_arn: any
-]: any -> record<batchSegmentJob: record<jobName: record, batchSegmentJobArn: record, filterArn: record, failureReason: record, solutionVersionArn: record, numResults: record, jobInput: record<s3DataSource: record>, jobOutput: record<s3DataDestination: record>, roleArn: record, status: record, creationDateTime: record, lastUpdatedDateTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  batch_segment_job_arn: string # The ARN of the batch segment job to describe.
+]: any -> record<batchSegmentJob: record<jobName: string, batchSegmentJobArn: string, filterArn: string, failureReason: string, solutionVersionArn: string, numResults: int, jobInput: record<s3DataSource: record>, jobOutput: record<s3DataDestination: record>, roleArn: string, status: string, creationDateTime: string, lastUpdatedDateTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.DescribeBatchSegmentJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"batchSegmentJobArn": $batch_segment_job_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1517,12 +1572,13 @@ export def "describe-campaign" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-26
-  campaign_arn: any
-]: any -> record<campaign: record<name: record, campaignArn: record, solutionVersionArn: record, minProvisionedTPS: record, campaignConfig: record<itemExplorationConfig: record>, status: record, failureReason: record, creationDateTime: record, lastUpdatedDateTime: record, latestCampaignUpdate: record<solutionVersionArn: record, minProvisionedTPS: record, campaignConfig: record, status: record, failureReason: record, creationDateTime: record, lastUpdatedDateTime: record>>> {
+  --x-amz-target: string@x-amz-target-completer-26 # required
+  campaign_arn: string # The Amazon Resource Name (ARN) of the campaign.
+]: any -> record<campaign: record<name: string, campaignArn: string, solutionVersionArn: string, minProvisionedTPS: int, campaignConfig: record<itemExplorationConfig: record>, status: string, failureReason: string, creationDateTime: string, lastUpdatedDateTime: string, latestCampaignUpdate: record<solutionVersionArn: string, minProvisionedTPS: int, campaignConfig: record, status: string, failureReason: string, creationDateTime: string, lastUpdatedDateTime: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.DescribeCampaign")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"campaignArn": $campaign_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1565,12 +1621,13 @@ export def "describe-dataset" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-27
-  dataset_arn: any
-]: any -> record<dataset: record<name: record, datasetArn: record, datasetGroupArn: record, datasetType: record, schemaArn: record, status: record, creationDateTime: record, lastUpdatedDateTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-27 # required
+  dataset_arn: string # The Amazon Resource Name (ARN) of the dataset to describe.
+]: any -> record<dataset: record<name: string, datasetArn: string, datasetGroupArn: string, datasetType: string, schemaArn: string, status: string, creationDateTime: string, lastUpdatedDateTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.DescribeDataset")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"datasetArn": $dataset_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1613,12 +1670,13 @@ export def "describe-dataset-export-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-28
-  dataset_export_job_arn: any
-]: any -> record<datasetExportJob: record<jobName: record, datasetExportJobArn: record, datasetArn: record, ingestionMode: record, roleArn: record, status: record, jobOutput: record<s3DataDestination: record>, creationDateTime: record, lastUpdatedDateTime: record, failureReason: record>> {
+  --x-amz-target: string@x-amz-target-completer-28 # required
+  dataset_export_job_arn: string # The Amazon Resource Name (ARN) of the dataset export job to describe.
+]: any -> record<datasetExportJob: record<jobName: string, datasetExportJobArn: string, datasetArn: string, ingestionMode: string, roleArn: string, status: string, jobOutput: record<s3DataDestination: record>, creationDateTime: string, lastUpdatedDateTime: string, failureReason: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.DescribeDatasetExportJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"datasetExportJobArn": $dataset_export_job_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1661,12 +1719,13 @@ export def "describe-dataset-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-29
-  dataset_group_arn: any
-]: any -> record<datasetGroup: record<name: record, datasetGroupArn: record, status: record, roleArn: record, kmsKeyArn: record, creationDateTime: record, lastUpdatedDateTime: record, failureReason: record, domain: record>> {
+  --x-amz-target: string@x-amz-target-completer-29 # required
+  dataset_group_arn: string # The Amazon Resource Name (ARN) of the dataset group to describe.
+]: any -> record<datasetGroup: record<name: string, datasetGroupArn: string, status: string, roleArn: string, kmsKeyArn: string, creationDateTime: string, lastUpdatedDateTime: string, failureReason: string, domain: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.DescribeDatasetGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"datasetGroupArn": $dataset_group_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1709,12 +1768,13 @@ export def "describe-dataset-import-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-30
-  dataset_import_job_arn: any
-]: any -> record<datasetImportJob: record<jobName: record, datasetImportJobArn: record, datasetArn: record, dataSource: record<dataLocation: record>, roleArn: record, status: record, creationDateTime: record, lastUpdatedDateTime: record, failureReason: record, importMode: record, publishAttributionMetricsToS3: record>> {
+  --x-amz-target: string@x-amz-target-completer-30 # required
+  dataset_import_job_arn: string # The Amazon Resource Name (ARN) of the dataset import job to describe.
+]: any -> record<datasetImportJob: record<jobName: string, datasetImportJobArn: string, datasetArn: string, dataSource: record<dataLocation: string>, roleArn: string, status: string, creationDateTime: string, lastUpdatedDateTime: string, failureReason: string, importMode: string, publishAttributionMetricsToS3: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.DescribeDatasetImportJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"datasetImportJobArn": $dataset_import_job_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1757,12 +1817,13 @@ export def "describe-event-tracker" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-31
-  event_tracker_arn: any
-]: any -> record<eventTracker: record<name: record, eventTrackerArn: record, accountId: record, trackingId: record, datasetGroupArn: record, status: record, creationDateTime: record, lastUpdatedDateTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-31 # required
+  event_tracker_arn: string # The Amazon Resource Name (ARN) of the event tracker to describe.
+]: any -> record<eventTracker: record<name: string, eventTrackerArn: string, accountId: string, trackingId: string, datasetGroupArn: string, status: string, creationDateTime: string, lastUpdatedDateTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.DescribeEventTracker")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"eventTrackerArn": $event_tracker_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1805,12 +1866,13 @@ export def "describe-feature-transformation" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-32
-  feature_transformation_arn: any
-]: any -> record<featureTransformation: record<name: record, featureTransformationArn: record, defaultParameters: record, creationDateTime: record, lastUpdatedDateTime: record, status: record>> {
+  --x-amz-target: string@x-amz-target-completer-32 # required
+  feature_transformation_arn: string # The Amazon Resource Name (ARN) of the feature transformation to describe.
+]: any -> record<featureTransformation: record<name: string, featureTransformationArn: string, defaultParameters: record, creationDateTime: string, lastUpdatedDateTime: string, status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.DescribeFeatureTransformation")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"featureTransformationArn": $feature_transformation_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1853,12 +1915,13 @@ export def "describe-filter" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-33
-  filter_arn: any
-]: any -> record<filter: record<name: record, filterArn: record, creationDateTime: record, lastUpdatedDateTime: record, datasetGroupArn: record, failureReason: record, filterExpression: record, status: record>> {
+  --x-amz-target: string@x-amz-target-completer-33 # required
+  filter_arn: string # The ARN of the filter to describe.
+]: any -> record<filter: record<name: string, filterArn: string, creationDateTime: string, lastUpdatedDateTime: string, datasetGroupArn: string, failureReason: string, filterExpression: string, status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.DescribeFilter")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"filterArn": $filter_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1901,12 +1964,13 @@ export def "describe-metric-attribution" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-34
-  metric_attribution_arn: any
-]: any -> record<metricAttribution: record<name: record, metricAttributionArn: record, datasetGroupArn: record, metricsOutputConfig: record<s3DataDestination: record, roleArn: record>, status: record, creationDateTime: record, lastUpdatedDateTime: record, failureReason: record>> {
+  --x-amz-target: string@x-amz-target-completer-34 # required
+  metric_attribution_arn: string # The metric attribution's Amazon Resource Name (ARN).
+]: any -> record<metricAttribution: record<name: string, metricAttributionArn: string, datasetGroupArn: string, metricsOutputConfig: record<s3DataDestination: record, roleArn: string>, status: string, creationDateTime: string, lastUpdatedDateTime: string, failureReason: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.DescribeMetricAttribution")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"metricAttributionArn": $metric_attribution_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1949,12 +2013,13 @@ export def "describe-recipe" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-35
-  recipe_arn: any
-]: any -> record<recipe: record<name: record, recipeArn: record, algorithmArn: record, featureTransformationArn: record, status: record, description: record, creationDateTime: record, recipeType: record, lastUpdatedDateTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-35 # required
+  recipe_arn: string # The Amazon Resource Name (ARN) of the recipe to describe.
+]: any -> record<recipe: record<name: string, recipeArn: string, algorithmArn: string, featureTransformationArn: string, status: string, description: string, creationDateTime: string, recipeType: string, lastUpdatedDateTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.DescribeRecipe")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"recipeArn": $recipe_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1997,12 +2062,13 @@ export def "describe-recommender" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-36
-  recommender_arn: any
-]: any -> record<recommender: record<recommenderArn: record, datasetGroupArn: record, name: record, recipeArn: record, recommenderConfig: record<itemExplorationConfig: record, minRecommendationRequestsPerSecond: record>, creationDateTime: record, lastUpdatedDateTime: record, status: record, failureReason: record, latestRecommenderUpdate: record<recommenderConfig: record, creationDateTime: record, lastUpdatedDateTime: record, status: record, failureReason: record>, modelMetrics: record>> {
+  --x-amz-target: string@x-amz-target-completer-36 # required
+  recommender_arn: string # The Amazon Resource Name (ARN) of the recommender to describe.
+]: any -> record<recommender: record<recommenderArn: string, datasetGroupArn: string, name: string, recipeArn: string, recommenderConfig: record<itemExplorationConfig: record, minRecommendationRequestsPerSecond: int>, creationDateTime: string, lastUpdatedDateTime: string, status: string, failureReason: string, latestRecommenderUpdate: record<recommenderConfig: record, creationDateTime: string, lastUpdatedDateTime: string, status: string, failureReason: string>, modelMetrics: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.DescribeRecommender")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"recommenderArn": $recommender_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2045,12 +2111,13 @@ export def "describe-schema" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-37
-  schema_arn: any
-]: any -> record<schema: record<name: record, schemaArn: record, schema: record, creationDateTime: record, lastUpdatedDateTime: record, domain: record>> {
+  --x-amz-target: string@x-amz-target-completer-37 # required
+  schema_arn: string # The Amazon Resource Name (ARN) of the schema to retrieve.
+]: any -> record<schema: record<name: string, schemaArn: string, schema: string, creationDateTime: string, lastUpdatedDateTime: string, domain: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.DescribeSchema")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"schemaArn": $schema_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2093,12 +2160,13 @@ export def "describe-solution" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-38
-  solution_arn: any
-]: any -> record<solution: record<name: record, solutionArn: record, performHPO: record, performAutoML: record, recipeArn: record, datasetGroupArn: record, eventType: record, solutionConfig: record<eventValueThreshold: record, hpoConfig: record, algorithmHyperParameters: record, featureTransformationParameters: record, autoMLConfig: record, optimizationObjective: record>, autoMLResult: record<bestRecipeArn: record>, status: record, creationDateTime: record, lastUpdatedDateTime: record, latestSolutionVersion: record<solutionVersionArn: record, status: record, creationDateTime: record, lastUpdatedDateTime: record, failureReason: record>>> {
+  --x-amz-target: string@x-amz-target-completer-38 # required
+  solution_arn: string # The Amazon Resource Name (ARN) of the solution to describe.
+]: any -> record<solution: record<name: string, solutionArn: string, performHPO: bool, performAutoML: bool, recipeArn: string, datasetGroupArn: string, eventType: string, solutionConfig: record<eventValueThreshold: string, hpoConfig: record, algorithmHyperParameters: record, featureTransformationParameters: record, autoMLConfig: record, optimizationObjective: record>, autoMLResult: record<bestRecipeArn: string>, status: string, creationDateTime: string, lastUpdatedDateTime: string, latestSolutionVersion: record<solutionVersionArn: string, status: string, creationDateTime: string, lastUpdatedDateTime: string, failureReason: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.DescribeSolution")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"solutionArn": $solution_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2141,12 +2209,13 @@ export def "describe-solution-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-39
-  solution_version_arn: any
-]: any -> record<solutionVersion: record<name: record, solutionVersionArn: record, solutionArn: record, performHPO: record, performAutoML: record, recipeArn: record, eventType: record, datasetGroupArn: record, solutionConfig: record<eventValueThreshold: record, hpoConfig: record, algorithmHyperParameters: record, featureTransformationParameters: record, autoMLConfig: record, optimizationObjective: record>, trainingHours: record, trainingMode: record, tunedHPOParams: record<algorithmHyperParameters: record>, status: record, failureReason: record, creationDateTime: record, lastUpdatedDateTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-39 # required
+  solution_version_arn: string # The Amazon Resource Name (ARN) of the solution version.
+]: any -> record<solutionVersion: record<name: string, solutionVersionArn: string, solutionArn: string, performHPO: bool, performAutoML: bool, recipeArn: string, eventType: string, datasetGroupArn: string, solutionConfig: record<eventValueThreshold: string, hpoConfig: record, algorithmHyperParameters: record, featureTransformationParameters: record, autoMLConfig: record, optimizationObjective: record>, trainingHours: float, trainingMode: string, tunedHPOParams: record<algorithmHyperParameters: record>, status: string, failureReason: string, creationDateTime: string, lastUpdatedDateTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.DescribeSolutionVersion")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"solutionVersionArn": $solution_version_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2189,12 +2258,13 @@ export def "get-solution-metrics" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-40
-  solution_version_arn: any
-]: any -> record<solutionVersionArn: record, metrics: record> {
+  --x-amz-target: string@x-amz-target-completer-40 # required
+  solution_version_arn: string # The Amazon Resource Name (ARN) of the solution version for which to get metrics.
+]: any -> record<solutionVersionArn: string, metrics: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.GetSolutionMetrics")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"solutionVersionArn": $solution_version_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2239,14 +2309,15 @@ export def "list-batch-inference-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-41
-  --solution-version-arn: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<batchInferenceJobs: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-41 # required
+  --solution-version-arn: string # The Amazon Resource Name (ARN) of the solution version from which the batch inference jobs were created.
+  --next-token-body: string # The token to request the next page of results. (body field)
+  --max-results-body: int # The maximum number of batch inference job results to return in each page. The default value is 100. (body field)
+]: any -> record<batchInferenceJobs: table<batchInferenceJobArn: string, jobName: string, status: string, creationDateTime: string, lastUpdatedDateTime: string, failureReason: string, solutionVersionArn: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.ListBatchInferenceJobs")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"solutionVersionArn": $solution_version_arn, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -2292,14 +2363,15 @@ export def "list-batch-segment-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-42
-  --solution-version-arn: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<batchSegmentJobs: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-42 # required
+  --solution-version-arn: string # The Amazon Resource Name (ARN) of the solution version that the batch segment jobs used to generate batch segments.
+  --next-token-body: string # The token to request the next page of results. (body field)
+  --max-results-body: int # The maximum number of batch segment job results to return in each page. The default value is 100. (body field)
+]: any -> record<batchSegmentJobs: table<batchSegmentJobArn: string, jobName: string, status: string, creationDateTime: string, lastUpdatedDateTime: string, failureReason: string, solutionVersionArn: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.ListBatchSegmentJobs")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"solutionVersionArn": $solution_version_arn, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -2345,14 +2417,15 @@ export def "list-campaigns" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-43
-  --solution-arn: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<campaigns: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-43 # required
+  --solution-arn: string # The Amazon Resource Name (ARN) of the solution to list the campaigns for. When a solution is not specified, all the campaigns associated with the account are listed.
+  --next-token-body: string # A token returned from the previous call to ListCampaigns (https://docs.aws.amazon.com/personalize/latest/dg/API_ListCampaigns.html) for getting the next set of campaigns (if they exist). (body field)
+  --max-results-body: int # The maximum number of campaigns to return. (body field)
+]: any -> record<campaigns: table<name: string, campaignArn: string, status: string, creationDateTime: string, lastUpdatedDateTime: string, failureReason: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.ListCampaigns")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"solutionArn": $solution_arn, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -2398,14 +2471,15 @@ export def "list-dataset-export-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-44
-  --dataset-arn: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<datasetExportJobs: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-44 # required
+  --dataset-arn: string # The Amazon Resource Name (ARN) of the dataset to list the dataset export jobs for.
+  --next-token-body: string # A token returned from the previous call to ListDatasetExportJobs for getting the next set of dataset export jobs (if they exist). (body field)
+  --max-results-body: int # The maximum number of dataset export jobs to return. (body field)
+]: any -> record<datasetExportJobs: table<datasetExportJobArn: string, jobName: string, status: string, creationDateTime: string, lastUpdatedDateTime: string, failureReason: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.ListDatasetExportJobs")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"datasetArn": $dataset_arn, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -2451,13 +2525,14 @@ export def "list-dataset-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-45
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<datasetGroups: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-45 # required
+  --next-token-body: string # A token returned from the previous call to ListDatasetGroups for getting the next set of dataset groups (if they exist). (body field)
+  --max-results-body: int # The maximum number of dataset groups to return. (body field)
+]: any -> record<datasetGroups: table<name: string, datasetGroupArn: string, status: string, creationDateTime: string, lastUpdatedDateTime: string, failureReason: string, domain: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.ListDatasetGroups")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -2503,14 +2578,15 @@ export def "list-dataset-import-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-46
-  --dataset-arn: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<datasetImportJobs: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-46 # required
+  --dataset-arn: string # The Amazon Resource Name (ARN) of the dataset to list the dataset import jobs for.
+  --next-token-body: string # A token returned from the previous call to ListDatasetImportJobs for getting the next set of dataset import jobs (if they exist). (body field)
+  --max-results-body: int # The maximum number of dataset import jobs to return. (body field)
+]: any -> record<datasetImportJobs: table<datasetImportJobArn: string, jobName: string, status: string, creationDateTime: string, lastUpdatedDateTime: string, failureReason: string, importMode: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.ListDatasetImportJobs")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"datasetArn": $dataset_arn, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -2556,14 +2632,15 @@ export def "list-datasets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-47
-  --dataset-group-arn: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<datasets: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-47 # required
+  --dataset-group-arn: string # The Amazon Resource Name (ARN) of the dataset group that contains the datasets to list.
+  --next-token-body: string # A token returned from the previous call to ListDatasetImportJobs for getting the next set of dataset import jobs (if they exist). (body field)
+  --max-results-body: int # The maximum number of datasets to return. (body field)
+]: any -> record<datasets: table<name: string, datasetArn: string, datasetType: string, status: string, creationDateTime: string, lastUpdatedDateTime: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.ListDatasets")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"datasetGroupArn": $dataset_group_arn, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -2609,14 +2686,15 @@ export def "list-event-trackers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-48
-  --dataset-group-arn: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<eventTrackers: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-48 # required
+  --dataset-group-arn: string # The ARN of a dataset group used to filter the response.
+  --next-token-body: string # A token returned from the previous call to ListEventTrackers for getting the next set of event trackers (if they exist). (body field)
+  --max-results-body: int # The maximum number of event trackers to return. (body field)
+]: any -> record<eventTrackers: table<name: string, eventTrackerArn: string, status: string, creationDateTime: string, lastUpdatedDateTime: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.ListEventTrackers")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"datasetGroupArn": $dataset_group_arn, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -2662,14 +2740,15 @@ export def "list-filters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-49
-  --dataset-group-arn: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<Filters: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-49 # required
+  --dataset-group-arn: string # The ARN of the dataset group that contains the filters.
+  --next-token-body: string # A token returned from the previous call to ListFilters for getting the next set of filters (if they exist). (body field)
+  --max-results-body: int # The maximum number of filters to return. (body field)
+]: any -> record<Filters: table<name: string, filterArn: string, creationDateTime: string, lastUpdatedDateTime: string, datasetGroupArn: string, failureReason: string, status: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.ListFilters")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"datasetGroupArn": $dataset_group_arn, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -2715,14 +2794,15 @@ export def "list-metric-attribution-metrics" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-50
-  --metric-attribution-arn: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<metrics: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-50 # required
+  --metric-attribution-arn: string # The Amazon Resource Name (ARN) of the metric attribution to retrieve attributes for.
+  --next-token-body: string # Specify the pagination token from a previous request to retrieve the next page of results. (body field)
+  --max-results-body: int # The maximum number of metrics to return in one page of results. (body field)
+]: any -> record<metrics: table<eventType: string, metricName: string, expression: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.ListMetricAttributionMetrics")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"metricAttributionArn": $metric_attribution_arn, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -2768,14 +2848,15 @@ export def "list-metric-attributions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-51
-  --dataset-group-arn: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<metricAttributions: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-51 # required
+  --dataset-group-arn: string # The metric attributions' dataset group Amazon Resource Name (ARN).
+  --next-token-body: string # Specify the pagination token from a previous request to retrieve the next page of results. (body field)
+  --max-results-body: int # The maximum number of metric attributions to return in one page of results. (body field)
+]: any -> record<metricAttributions: table<name: string, metricAttributionArn: string, status: string, creationDateTime: string, lastUpdatedDateTime: string, failureReason: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.ListMetricAttributions")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"datasetGroupArn": $dataset_group_arn, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -2821,15 +2902,16 @@ export def "list-recipes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-52
-  --recipe-provider: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --domain: any
-]: any -> record<recipes: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-52 # required
+  --recipe-provider: string@recipe-provider-completer # The default is SERVICE.
+  --next-token-body: string # A token returned from the previous call to ListRecipes for getting the next set of recipes (if they exist). (body field)
+  --max-results-body: int # The maximum number of recipes to return. (body field)
+  --domain: string@domain-completer # Filters returned recipes by domain for a Domain dataset group. Only recipes (Domain dataset group use cases) for this domain are included in the response. If you don't specify a domain, all recipes are returned.
+]: any -> record<recipes: table<name: string, recipeArn: string, status: string, creationDateTime: string, lastUpdatedDateTime: string, domain: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.ListRecipes")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"recipeProvider": $recipe_provider, "nextToken": $next_token_body, "maxResults": $max_results_body, "domain": $domain} | compact
@@ -2875,14 +2957,15 @@ export def "list-recommenders" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-53
-  --dataset-group-arn: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<recommenders: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-53 # required
+  --dataset-group-arn: string # The Amazon Resource Name (ARN) of the Domain dataset group to list the recommenders for. When a Domain dataset group is not specified, all the recommenders associated with the account are listed.
+  --next-token-body: string # A token returned from the previous call to ListRecommenders for getting the next set of recommenders (if they exist). (body field)
+  --max-results-body: int # The maximum number of recommenders to return. (body field)
+]: any -> record<recommenders: table<name: string, recommenderArn: string, datasetGroupArn: string, recipeArn: string, recommenderConfig: record, status: string, creationDateTime: string, lastUpdatedDateTime: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.ListRecommenders")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"datasetGroupArn": $dataset_group_arn, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -2928,13 +3011,14 @@ export def "list-schemas" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-54
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<schemas: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-54 # required
+  --next-token-body: string # A token returned from the previous call to ListSchemas for getting the next set of schemas (if they exist). (body field)
+  --max-results-body: int # The maximum number of schemas to return. (body field)
+]: any -> record<schemas: table<name: string, schemaArn: string, creationDateTime: string, lastUpdatedDateTime: string, domain: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.ListSchemas")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -2980,14 +3064,15 @@ export def "list-solution-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-55
-  --solution-arn: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<solutionVersions: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-55 # required
+  --solution-arn: string # The Amazon Resource Name (ARN) of the solution.
+  --next-token-body: string # A token returned from the previous call to ListSolutionVersions for getting the next set of solution versions (if they exist). (body field)
+  --max-results-body: int # The maximum number of solution versions to return. (body field)
+]: any -> record<solutionVersions: table<solutionVersionArn: string, status: string, creationDateTime: string, lastUpdatedDateTime: string, failureReason: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.ListSolutionVersions")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"solutionArn": $solution_arn, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -3033,14 +3118,15 @@ export def "list-solutions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-56
-  --dataset-group-arn: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<solutions: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-56 # required
+  --dataset-group-arn: string # The Amazon Resource Name (ARN) of the dataset group.
+  --next-token-body: string # A token returned from the previous call to ListSolutions for getting the next set of solutions (if they exist). (body field)
+  --max-results-body: int # The maximum number of solutions to return. (body field)
+]: any -> record<solutions: table<name: string, solutionArn: string, status: string, creationDateTime: string, lastUpdatedDateTime: string, recipeArn: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.ListSolutions")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"datasetGroupArn": $dataset_group_arn, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -3084,12 +3170,13 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-57
-  resource_arn: any
-]: any -> record<tags: record> {
+  --x-amz-target: string@x-amz-target-completer-57 # required
+  resource_arn: string # The resource's Amazon Resource Name.
+]: any -> record<tags: table<tagKey: string, tagValue: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.ListTagsForResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceArn": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3132,12 +3219,13 @@ export def "start-recommender" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-58
-  recommender_arn: any
-]: any -> record<recommenderArn: record> {
+  --x-amz-target: string@x-amz-target-completer-58 # required
+  recommender_arn: string # The Amazon Resource Name (ARN) of the recommender to start.
+]: any -> record<recommenderArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.StartRecommender")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"recommenderArn": $recommender_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3180,12 +3268,13 @@ export def "stop-recommender" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-59
-  recommender_arn: any
-]: any -> record<recommenderArn: record> {
+  --x-amz-target: string@x-amz-target-completer-59 # required
+  recommender_arn: string # The Amazon Resource Name (ARN) of the recommender to stop.
+]: any -> record<recommenderArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.StopRecommender")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"recommenderArn": $recommender_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3228,12 +3317,13 @@ export def "stop-solution-version-creation" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-60
-  solution_version_arn: any
+  --x-amz-target: string@x-amz-target-completer-60 # required
+  solution_version_arn: string # The Amazon Resource Name (ARN) of the solution version you want to stop creating.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.StopSolutionVersionCreation")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"solutionVersionArn": $solution_version_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3259,6 +3349,7 @@ export def "stop-solution-version-creation" [
 #
 # POST /
 # operationId: TagResource
+# --tags item shape: {tagKey: string, tagValue: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3276,13 +3367,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-61
-  resource_arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-61 # required
+  resource_arn: string # The resource's Amazon Resource Name (ARN).
+  tags: list # Tags to apply to the resource. For more information see Tagging Personalize resources (https://docs.aws.amazon.com/personalize/latest/dev/tagging-resources.html). — item shape: {tagKey: string, tagValue: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceArn": $resource_arn, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3325,13 +3417,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-62
-  resource_arn: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-62 # required
+  resource_arn: string # The resource's Amazon Resource Name (ARN).
+  tag_keys: list<string> # Keys to remove from the resource's tags.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceArn": $resource_arn, "tagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3357,6 +3450,7 @@ export def "untag-resource" [
 #
 # POST /
 # operationId: UpdateCampaign
+# --campaignConfig shape: {itemExplorationConfig?: record}
 export def "update-campaign" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3374,15 +3468,16 @@ export def "update-campaign" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-63
-  campaign_arn: any
-  --solution-version-arn: any
-  --min-provisioned-tps: any
-  --campaign-config: any
-]: any -> record<campaignArn: record> {
+  --x-amz-target: string@x-amz-target-completer-63 # required
+  campaign_arn: string # The Amazon Resource Name (ARN) of the campaign.
+  --solution-version-arn: string # The ARN of a new solution version to deploy.
+  --min-provisioned-tps: int # Specifies the requested minimum provisioned transactions (recommendations) per second that Amazon Personalize will support.
+  --campaign-config: record # The configuration details of a campaign. — shape: {itemExplorationConfig?: record}
+]: any -> record<campaignArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.UpdateCampaign")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"campaignArn": $campaign_arn, "solutionVersionArn": $solution_version_arn, "minProvisionedTPS": $min_provisioned_tps, "campaignConfig": $campaign_config} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3408,6 +3503,8 @@ export def "update-campaign" [
 #
 # POST /
 # operationId: UpdateMetricAttribution
+# --addMetrics item shape: {eventType: string, metricName: string, expression: string}
+# --metricsOutputConfig shape: {s3DataDestination?: record, roleArn: string}
 export def "update-metric-attribution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3425,15 +3522,16 @@ export def "update-metric-attribution" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-64
-  --add-metrics: any
-  --remove-metrics: any
-  --metrics-output-config: any
-  --metric-attribution-arn: any
-]: any -> record<metricAttributionArn: record> {
+  --x-amz-target: string@x-amz-target-completer-64 # required
+  --add-metrics: list # Add new metric attributes to the metric attribution. — item shape: {eventType: string, metricName: string, expression: string}
+  --remove-metrics: list<string> # Remove metric attributes from the metric attribution.
+  --metrics-output-config: record # The output configuration details for a metric attribution. — shape: {s3DataDestination?: record, roleArn: string}
+  --metric-attribution-arn: string # The Amazon Resource Name (ARN) for the metric attribution to update.
+]: any -> record<metricAttributionArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.UpdateMetricAttribution")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"addMetrics": $add_metrics, "removeMetrics": $remove_metrics, "metricsOutputConfig": $metrics_output_config, "metricAttributionArn": $metric_attribution_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3459,6 +3557,7 @@ export def "update-metric-attribution" [
 #
 # POST /
 # operationId: UpdateRecommender
+# --recommenderConfig shape: {itemExplorationConfig?: record, minRecommendationRequestsPerSecond?: int}
 export def "update-recommender" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3476,13 +3575,14 @@ export def "update-recommender" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-65
-  recommender_arn: any
-  recommender_config: any
-]: any -> record<recommenderArn: record> {
+  --x-amz-target: string@x-amz-target-completer-65 # required
+  recommender_arn: string # The Amazon Resource Name (ARN) of the recommender to modify.
+  recommender_config: record # The configuration details of the recommender. — shape: {itemExplorationConfig?: record, minRecommendationRequestsPerSecond?: int}
+]: any -> record<recommenderArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonPersonalize.UpdateRecommender")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"recommenderArn": $recommender_arn, "recommenderConfig": $recommender_config} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

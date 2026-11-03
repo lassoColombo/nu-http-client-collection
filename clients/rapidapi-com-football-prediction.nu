@@ -130,7 +130,7 @@ export def "get-api-v2-list-federations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-rapid-api-key: string # Your key obtained from https://boggio-analytics.com/fp-api/
+  --x-rapid-api-key: string # Your key obtained from https://boggio-analytics.com/fp-api/ (format: uuid)
 ]: nothing -> record<data: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -166,7 +166,7 @@ export def "get-api-v2-list-markets" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-rapid-api-key: string # Your key obtained from https://boggio-analytics.com/fp-api/
+  --x-rapid-api-key: string # Your key obtained from https://boggio-analytics.com/fp-api/ (format: uuid)
 ]: nothing -> record<data: record<all: list<string>, allowed_for_your_subscription: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -202,7 +202,7 @@ export def "get-api-v2-performance-stats" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-rapid-api-key: string # Your key obtained from https://boggio-analytics.com/fp-api/
+  --x-rapid-api-key: string # Your key obtained from https://boggio-analytics.com/fp-api/ (format: uuid)
 ]: nothing -> record<data: record<accuracy: record<last_14_days: float, last_30_days: float, last_7_days: float, yesterday: float>, details: record<last_14_days: record, last_30_days: record, last_7_days: record, yesterday: record>, market: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -238,7 +238,7 @@ export def "get-api-v2-predictions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-rapid-api-key: string # Your key obtained from https://boggio-analytics.com/fp-api/
+  --x-rapid-api-key: string # Your key obtained from https://boggio-analytics.com/fp-api/ (format: uuid)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

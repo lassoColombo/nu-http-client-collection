@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -153,11 +153,12 @@ export def "galleries-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Compute/galleries") $qp $auth.query)
   let accept_val = "application/json"
@@ -192,12 +193,13 @@ export def "galleries-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries") $qp $auth.query)
   let accept_val = "application/json"
@@ -233,13 +235,14 @@ export def "galleries-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<error: record<code: string, details: list<record>, innererror: record<errordetail: string, exceptiontype: string>, message: string, target: string>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($gallery_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -275,13 +278,14 @@ export def "galleries-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<properties: record<description: string, identifier: record<uniqueName: string>, provisioningState: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($gallery_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -318,7 +322,7 @@ export def "galleries-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: any # Describes the properties of a Shared Image Gallery. — shape: {description?: string, identifier?: any}
   --tags: record # Resource tags
 ]: any -> record<properties: record<description: string, identifier: record<uniqueName: string>, provisioningState: string>, id: string, location: string, name: string, tags: record, type: string> {
@@ -328,6 +332,7 @@ export def "galleries-update" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($gallery_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -366,7 +371,7 @@ export def "galleries-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: any # Describes the properties of a Shared Image Gallery. — shape: {description?: string, identifier?: any}
   location: string # Resource location
   --tags: record # Resource tags
@@ -377,6 +382,7 @@ export def "galleries-create-or-update" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($gallery_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -414,13 +420,14 @@ export def "gallery-applications-list-by-gallery" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($gallery_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/applications") $qp $auth.query)
   let accept_val = "application/json"
@@ -457,14 +464,15 @@ export def "gallery-applications-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<error: record<code: string, details: list<record>, innererror: record<errordetail: string, exceptiontype: string>, message: string, target: string>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($gallery_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryName' must be non-empty" } }
   if ($gallery_application_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryApplicationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name), gallery_application_name: (encode-path-segment $gallery_application_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/applications/{gallery_application_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -501,7 +509,7 @@ export def "gallery-applications-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<properties: record<description: string, endOfLifeDate: string, eula: string, privacyStatementUri: string, releaseNoteUri: string, supportedOSType: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -509,6 +517,7 @@ export def "gallery-applications-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($gallery_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryName' must be non-empty" } }
   if ($gallery_application_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryApplicationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name), gallery_application_name: (encode-path-segment $gallery_application_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/applications/{gallery_application_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -546,7 +555,7 @@ export def "gallery-applications-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: any # Describes the properties of a gallery Application Definition. — shape: {description?: string, endOfLifeDate?: string, eula?: string, privacyStatementUri?: string, releaseNoteUri?: string, supportedOSType: "Windows"|"Linux"}
   --tags: record # Resource tags
 ]: any -> record<properties: record<description: string, endOfLifeDate: string, eula: string, privacyStatementUri: string, releaseNoteUri: string, supportedOSType: string>, id: string, location: string, name: string, tags: record, type: string> {
@@ -557,6 +566,7 @@ export def "gallery-applications-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($gallery_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryName' must be non-empty" } }
   if ($gallery_application_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryApplicationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name), gallery_application_name: (encode-path-segment $gallery_application_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/applications/{gallery_application_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -596,7 +606,7 @@ export def "gallery-applications-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: any # Describes the properties of a gallery Application Definition. — shape: {description?: string, endOfLifeDate?: string, eula?: string, privacyStatementUri?: string, releaseNoteUri?: string, supportedOSType: "Windows"|"Linux"}
   location: string # Resource location
   --tags: record # Resource tags
@@ -608,6 +618,7 @@ export def "gallery-applications-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($gallery_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryName' must be non-empty" } }
   if ($gallery_application_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryApplicationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name), gallery_application_name: (encode-path-segment $gallery_application_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/applications/{gallery_application_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -646,7 +657,7 @@ export def "gallery-application-versions-list-by-gallery-application" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -654,6 +665,7 @@ export def "gallery-application-versions-list-by-gallery-application" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($gallery_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryName' must be non-empty" } }
   if ($gallery_application_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryApplicationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name), gallery_application_name: (encode-path-segment $gallery_application_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/applications/{gallery_application_name}/versions") $qp $auth.query)
   let accept_val = "application/json"
@@ -691,8 +703,8 @@ export def "gallery-application-versions-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<error: record<code: string, details: list<record>, innererror: record<errordetail: string, exceptiontype: string>, message: string, target: string>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -700,6 +712,7 @@ export def "gallery-application-versions-delete" [
   if ($gallery_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryName' must be non-empty" } }
   if ($gallery_application_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryApplicationName' must be non-empty" } }
   if ($gallery_application_version_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryApplicationVersionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name), gallery_application_name: (encode-path-segment $gallery_application_name), gallery_application_version_name: (encode-path-segment $gallery_application_version_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/applications/{gallery_application_name}/versions/{gallery_application_version_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -738,7 +751,7 @@ export def "gallery-application-versions-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string@expand-completer # The expand expression to apply on the operation.
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<properties: record<provisioningState: string, publishingProfile: record<contentType: string, enableHealthCheck: bool, source: record, endOfLifeDate: string, excludeFromLatest: bool, publishedDate: string, replicaCount: int, storageAccountType: string, targetRegions: list>, replicationStatus: record<aggregatedState: string, summary: list>>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -747,6 +760,7 @@ export def "gallery-application-versions-get" [
   if ($gallery_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryName' must be non-empty" } }
   if ($gallery_application_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryApplicationName' must be non-empty" } }
   if ($gallery_application_version_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryApplicationVersionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name), gallery_application_name: (encode-path-segment $gallery_application_name), gallery_application_version_name: (encode-path-segment $gallery_application_version_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/applications/{gallery_application_name}/versions/{gallery_application_version_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -785,7 +799,7 @@ export def "gallery-application-versions-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: any # Describes the properties of a gallery Image Version. — shape: {publishingProfile: any, replicationStatus?: any}
   --tags: record # Resource tags
 ]: any -> record<properties: record<provisioningState: string, publishingProfile: record<contentType: string, enableHealthCheck: bool, source: record, endOfLifeDate: string, excludeFromLatest: bool, publishedDate: string, replicaCount: int, storageAccountType: string, targetRegions: list>, replicationStatus: record<aggregatedState: string, summary: list>>, id: string, location: string, name: string, tags: record, type: string> {
@@ -797,6 +811,7 @@ export def "gallery-application-versions-update" [
   if ($gallery_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryName' must be non-empty" } }
   if ($gallery_application_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryApplicationName' must be non-empty" } }
   if ($gallery_application_version_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryApplicationVersionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name), gallery_application_name: (encode-path-segment $gallery_application_name), gallery_application_version_name: (encode-path-segment $gallery_application_version_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/applications/{gallery_application_name}/versions/{gallery_application_version_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -837,7 +852,7 @@ export def "gallery-application-versions-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: any # Describes the properties of a gallery Image Version. — shape: {publishingProfile: any, replicationStatus?: any}
   location: string # Resource location
   --tags: record # Resource tags
@@ -850,6 +865,7 @@ export def "gallery-application-versions-create-or-update" [
   if ($gallery_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryName' must be non-empty" } }
   if ($gallery_application_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryApplicationName' must be non-empty" } }
   if ($gallery_application_version_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryApplicationVersionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name), gallery_application_name: (encode-path-segment $gallery_application_name), gallery_application_version_name: (encode-path-segment $gallery_application_version_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/applications/{gallery_application_name}/versions/{gallery_application_version_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -887,13 +903,14 @@ export def "gallery-images-list-by-gallery" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($gallery_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/images") $qp $auth.query)
   let accept_val = "application/json"
@@ -930,14 +947,15 @@ export def "gallery-images-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<error: record<code: string, details: list<record>, innererror: record<errordetail: string, exceptiontype: string>, message: string, target: string>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($gallery_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryName' must be non-empty" } }
   if ($gallery_image_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryImageName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name), gallery_image_name: (encode-path-segment $gallery_image_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/images/{gallery_image_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -974,7 +992,7 @@ export def "gallery-images-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<properties: record<description: string, disallowed: record<diskTypes: list>, endOfLifeDate: string, eula: string, hyperVGeneration: string, identifier: record<offer: string, publisher: string, sku: string>, osState: string, osType: string, privacyStatementUri: string, provisioningState: string, purchasePlan: record<name: string, product: string, publisher: string>, recommended: record<memory: record, vCPUs: record>, releaseNoteUri: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -982,6 +1000,7 @@ export def "gallery-images-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($gallery_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryName' must be non-empty" } }
   if ($gallery_image_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryImageName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name), gallery_image_name: (encode-path-segment $gallery_image_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/images/{gallery_image_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1019,7 +1038,7 @@ export def "gallery-images-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: any # Describes the properties of a gallery Image Definition. — shape: {description?: string, disallowed?: any, endOfLifeDate?: string, eula?: string, hyperVGeneration?: "V1"|"V2", identifier: any, osState: "Generalized"|"Specialized", osType: "Windows"|"Linux", privacyStatementUri?: string, purchasePlan?: any, recommended?: any, releaseNoteUri?: string}
   --tags: record # Resource tags
 ]: any -> record<properties: record<description: string, disallowed: record<diskTypes: list>, endOfLifeDate: string, eula: string, hyperVGeneration: string, identifier: record<offer: string, publisher: string, sku: string>, osState: string, osType: string, privacyStatementUri: string, provisioningState: string, purchasePlan: record<name: string, product: string, publisher: string>, recommended: record<memory: record, vCPUs: record>, releaseNoteUri: string>, id: string, location: string, name: string, tags: record, type: string> {
@@ -1030,6 +1049,7 @@ export def "gallery-images-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($gallery_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryName' must be non-empty" } }
   if ($gallery_image_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryImageName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name), gallery_image_name: (encode-path-segment $gallery_image_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/images/{gallery_image_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -1069,7 +1089,7 @@ export def "gallery-images-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: any # Describes the properties of a gallery Image Definition. — shape: {description?: string, disallowed?: any, endOfLifeDate?: string, eula?: string, hyperVGeneration?: "V1"|"V2", identifier: any, osState: "Generalized"|"Specialized", osType: "Windows"|"Linux", privacyStatementUri?: string, purchasePlan?: any, recommended?: any, releaseNoteUri?: string}
   location: string # Resource location
   --tags: record # Resource tags
@@ -1081,6 +1101,7 @@ export def "gallery-images-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($gallery_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryName' must be non-empty" } }
   if ($gallery_image_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryImageName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name), gallery_image_name: (encode-path-segment $gallery_image_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/images/{gallery_image_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -1119,7 +1140,7 @@ export def "gallery-image-versions-list-by-gallery-image" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1127,6 +1148,7 @@ export def "gallery-image-versions-list-by-gallery-image" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($gallery_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryName' must be non-empty" } }
   if ($gallery_image_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryImageName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name), gallery_image_name: (encode-path-segment $gallery_image_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/images/{gallery_image_name}/versions") $qp $auth.query)
   let accept_val = "application/json"
@@ -1164,8 +1186,8 @@ export def "gallery-image-versions-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<error: record<code: string, details: list<record>, innererror: record<errordetail: string, exceptiontype: string>, message: string, target: string>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1173,6 +1195,7 @@ export def "gallery-image-versions-delete" [
   if ($gallery_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryName' must be non-empty" } }
   if ($gallery_image_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryImageName' must be non-empty" } }
   if ($gallery_image_version_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryImageVersionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name), gallery_image_name: (encode-path-segment $gallery_image_name), gallery_image_version_name: (encode-path-segment $gallery_image_version_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/images/{gallery_image_name}/versions/{gallery_image_version_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1211,7 +1234,7 @@ export def "gallery-image-versions-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string@expand-completer # The expand expression to apply on the operation.
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<properties: record<provisioningState: string, publishingProfile: record<endOfLifeDate: string, excludeFromLatest: bool, publishedDate: string, replicaCount: int, storageAccountType: string, targetRegions: list>, replicationStatus: record<aggregatedState: string, summary: list>, storageProfile: record<dataDiskImages: list, osDiskImage: record, source: record>>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1220,6 +1243,7 @@ export def "gallery-image-versions-get" [
   if ($gallery_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryName' must be non-empty" } }
   if ($gallery_image_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryImageName' must be non-empty" } }
   if ($gallery_image_version_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryImageVersionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name), gallery_image_name: (encode-path-segment $gallery_image_name), gallery_image_version_name: (encode-path-segment $gallery_image_version_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/images/{gallery_image_name}/versions/{gallery_image_version_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1258,7 +1282,7 @@ export def "gallery-image-versions-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: any # Describes the properties of a gallery Image Version. — shape: {publishingProfile?: any, replicationStatus?: any, storageProfile: any}
   --tags: record # Resource tags
 ]: any -> record<properties: record<provisioningState: string, publishingProfile: record<endOfLifeDate: string, excludeFromLatest: bool, publishedDate: string, replicaCount: int, storageAccountType: string, targetRegions: list>, replicationStatus: record<aggregatedState: string, summary: list>, storageProfile: record<dataDiskImages: list, osDiskImage: record, source: record>>, id: string, location: string, name: string, tags: record, type: string> {
@@ -1270,6 +1294,7 @@ export def "gallery-image-versions-update" [
   if ($gallery_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryName' must be non-empty" } }
   if ($gallery_image_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryImageName' must be non-empty" } }
   if ($gallery_image_version_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryImageVersionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name), gallery_image_name: (encode-path-segment $gallery_image_name), gallery_image_version_name: (encode-path-segment $gallery_image_version_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/images/{gallery_image_name}/versions/{gallery_image_version_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -1310,7 +1335,7 @@ export def "gallery-image-versions-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: any # Describes the properties of a gallery Image Version. — shape: {publishingProfile?: any, replicationStatus?: any, storageProfile: any}
   location: string # Resource location
   --tags: record # Resource tags
@@ -1323,6 +1348,7 @@ export def "gallery-image-versions-create-or-update" [
   if ($gallery_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryName' must be non-empty" } }
   if ($gallery_image_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryImageName' must be non-empty" } }
   if ($gallery_image_version_name | is-empty) { error make --unspanned { msg: "path parameter 'galleryImageVersionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), gallery_name: (encode-path-segment $gallery_name), gallery_image_name: (encode-path-segment $gallery_image_name), gallery_image_version_name: (encode-path-segment $gallery_image_version_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/galleries/{gallery_name}/images/{gallery_image_name}/versions/{gallery_image_version_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact

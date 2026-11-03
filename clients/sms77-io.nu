@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-api-key" => { {scheme: $scheme, headers: {X-API-Key: $token_val}, query: "", location: "header"} }
+    "x-api-key" => { {scheme: $scheme, headers: {"X-API-Key": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -229,11 +229,12 @@ export def "contacts-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --action: string@action-completer # Determines the action to execute.
+  --action: string@action-completer # Determines the action to execute. (required)
   --json: float@json-completer # Defines whether to return the response as JSON or CSV separated by semicolon. (default: 0)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "read")
   let qp = [(serialize-qp "action" $action "scalar") (serialize-qp "json" $json "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/contacts" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -266,7 +267,7 @@ export def "contacts-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --action: string@action-completer-1 # Determines the action to execute.
+  --action: string@action-completer-1 # Determines the action to execute. (required)
   --json: float@json-completer # Defines whether to return the response as JSON or CSV separated by semicolon. (default: 0)
   --id: string # The contact ID for editing/deletion.
   --nick: string # The contacts name.
@@ -275,6 +276,7 @@ export def "contacts-post" [
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($action == null) { error make --unspanned { msg: "required query parameter 'action' missing: pass --action" } }
   let qp = [(serialize-qp "action" $action "scalar") (serialize-qp "json" $json "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "nick" $nick "scalar") (serialize-qp "empfaenger" $empfaenger "scalar") (serialize-qp "email" $email "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/contacts" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -306,10 +308,11 @@ export def "hooks-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer # Determines the action to execute.
+  --action: string@action-completer # Determines the action to execute. (required)
 ]: nothing -> record<hooks: table<created: string, event_type: string, id: string, request_method: string, target_url: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "read")
   let qp = [(serialize-qp "action" $action "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hooks" $qp $auth.query)
   let accept_val = "application/json"
@@ -341,7 +344,7 @@ export def "hooks-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-2 # Determines the action to execute.
+  --action: string@action-completer-2 # Determines the action to execute. (required)
   --id: int # The Webhook ID you wish to unsubscribe.
   --target-url: string # Target URL of your Webhook.
   --event-type: string@event-type-completer # Type of event for which you would like to receive a webhook.
@@ -349,6 +352,7 @@ export def "hooks-post" [
 ]: nothing -> record<id: int, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($action == null) { error make --unspanned { msg: "required query parameter 'action' missing: pass --action" } }
   let qp = [(serialize-qp "action" $action "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "target_url" $target_url "scalar") (serialize-qp "event_type" $event_type "scalar") (serialize-qp "request_method" $request_method "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hooks" $qp $auth.query)
   let accept_val = "application/json"
@@ -380,12 +384,14 @@ export def "lookup" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --type: string # Allowed values are "cnam", "format", "hlr" and "mnp".
-  --number: list<string> # The phone number to look up.
+  --type: string # Allowed values are "cnam", "format", "hlr" and "mnp". (required)
+  --number: list<string> # The phone number to look up. (required)
   --json: string # Determines whether the response shall be returned in JSON format. Does not work with type "format".
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($type == null) { error make --unspanned { msg: "required query parameter 'type' missing: pass --type" } }
+  if ($number == null) { error make --unspanned { msg: "required query parameter 'number' missing: pass --number" } }
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "number" $number "csv") (serialize-qp "json" $json "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/lookup" $qp $auth.query)
   let accept_val = "application/json"
@@ -417,10 +423,11 @@ export def "lookup-cnam" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --number: list<string> # The phone number to look up.
+  --number: list<string> # The phone number to look up. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($number == null) { error make --unspanned { msg: "required query parameter 'number' missing: pass --number" } }
   let qp = [(serialize-qp "number" $number "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/lookup/cnam" $qp $auth.query)
   let accept_val = "application/json"
@@ -452,10 +459,11 @@ export def "lookup-format" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --number: list<string> # The phone number to look up.
+  --number: list<string> # The phone number to look up. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($number == null) { error make --unspanned { msg: "required query parameter 'number' missing: pass --number" } }
   let qp = [(serialize-qp "number" $number "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/lookup/format" $qp $auth.query)
   let accept_val = "application/json"
@@ -487,10 +495,11 @@ export def "lookup-hlr" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --number: list<string> # The phone number to look up.
+  --number: list<string> # The phone number to look up. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($number == null) { error make --unspanned { msg: "required query parameter 'number' missing: pass --number" } }
   let qp = [(serialize-qp "number" $number "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/lookup/hlr" $qp $auth.query)
   let accept_val = "application/json"
@@ -522,11 +531,12 @@ export def "lookup-mnp" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --number: list<string> # The phone number to look up.
+  --number: list<string> # The phone number to look up. (required)
   --json: string # Determines whether the response shall be returned in JSON format.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($number == null) { error make --unspanned { msg: "required query parameter 'number' missing: pass --number" } }
   let qp = [(serialize-qp "number" $number "csv") (serialize-qp "json" $json "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/lookup/mnp" $qp $auth.query)
   let accept_val = "application/json"
@@ -596,9 +606,9 @@ export def "sms" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --text: string # The actual text message to send.
-  --qp-to: string # The recipient number or group name.
-  --qp-from: string # Set a custom sender name.
+  --text: string # The actual text message to send. (required)
+  --to: string # The recipient number or group name. (required)
+  --from: string # Set a custom sender name.
   --foreign-id: string # Identifier to return in callbacks.
   --label: string # A custom label.
   --udh: string # A custom User Data Header.
@@ -615,14 +625,16 @@ export def "sms" [
 ]: nothing -> record<balance: float, debug: string, messages: table<encoding: string, error: string, error_text: string, id: string, messages: list, parts: int, price: int, recipient: string, sender: string, success: bool, text: string>, sms_type: string, success: string, total_price: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "foreign_id" $foreign_id "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "udh" $udh "scalar") (serialize-qp "delay" $delay "scalar") (serialize-qp "debug" $debug "scalar") (serialize-qp "no_reload" $no_reload "scalar") (serialize-qp "unicode" $unicode "scalar") (serialize-qp "flash" $flash "scalar") (serialize-qp "utf8" $utf8 "scalar") (serialize-qp "details" $details "scalar") (serialize-qp "return_msg_id" $return_msg_id "scalar") (serialize-qp "json" $json "scalar") (serialize-qp "performance_tracking" $performance_tracking "scalar")] | flatten | str join "&"
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "foreign_id" $foreign_id "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "udh" $udh "scalar") (serialize-qp "delay" $delay "scalar") (serialize-qp "debug" $debug "scalar") (serialize-qp "no_reload" $no_reload "scalar") (serialize-qp "unicode" $unicode "scalar") (serialize-qp "flash" $flash "scalar") (serialize-qp "utf8" $utf8 "scalar") (serialize-qp "details" $details "scalar") (serialize-qp "return_msg_id" $return_msg_id "scalar") (serialize-qp "json" $json "scalar") (serialize-qp "performance_tracking" $performance_tracking "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sms" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
-    query: ({"text": $text, "to": $qp_to, "from": $qp_from, "foreign_id": $foreign_id, "label": $label, "udh": $udh, "delay": $delay, "debug": $debug, "no_reload": $no_reload, "unicode": $unicode, "flash": $flash, "utf8": $utf8, "details": $details, "return_msg_id": $return_msg_id, "json": $json, "performance_tracking": $performance_tracking} | compact)
+    query: ({"text": $text, "to": $to, "from": $from, "foreign_id": $foreign_id, "label": $label, "udh": $udh, "delay": $delay, "debug": $debug, "no_reload": $no_reload, "unicode": $unicode, "flash": $flash, "utf8": $utf8, "details": $details, "return_msg_id": $return_msg_id, "json": $json, "performance_tracking": $performance_tracking} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -646,10 +658,11 @@ export def "status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --msg-id: string # The ID from the SMS.
+  --msg-id: string # The ID from the SMS. (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($msg_id == null) { error make --unspanned { msg: "required query parameter 'msg_id' missing: pass --msg-id" } }
   let qp = [(serialize-qp "msg_id" $msg_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/status" $qp $auth.query)
   let accept_val = "text/plain"
@@ -681,11 +694,12 @@ export def "validate-for-voice" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --number: string # Determines the recipient. Can only be a number, not a contact from your address book.
+  --number: string # Determines the recipient. Can only be a number, not a contact from your address book. (required)
   --callback: string # The callback URL which gets queried right after validation. (format: uri)
 ]: nothing -> record<code: string, error: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($number == null) { error make --unspanned { msg: "required query parameter 'number' missing: pass --number" } }
   let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/validate_for_voice" $qp $auth.query)
   let accept_val = "application/json"
@@ -717,21 +731,23 @@ export def "voice" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-to: string # Determines the receiver. Must be a valid phone number or contact from the address book.
-  --text: string # The text to convert to a voice message. Accepts valid XML too.
+  --to: string # Determines the receiver. Must be a valid phone number or contact from the address book. (required)
+  --text: string # The text to convert to a voice message. Accepts valid XML too. (required)
   --xml: float@xml-completer # Decides whether the parameter "text" is plain text or XML. The default value is 0.
-  --qp-from: string # Sets the sender. Must be a verified sender. Use an inbound number of yours or one of ours.
+  --from: string # Sets the sender. Must be a verified sender. Use an inbound number of yours or one of ours.
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "to" $qp_to "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "xml" $xml "scalar") (serialize-qp "from" $qp_from "scalar")] | flatten | str join "&"
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
+  let qp = [(serialize-qp "to" $to "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "xml" $xml "scalar") (serialize-qp "from" $from "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/voice" $qp $auth.query)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
-    query: ({"to": $qp_to, "text": $text, "xml": $xml, "from": $qp_from} | compact)
+    query: ({"to": $to, "text": $text, "xml": $xml, "from": $from} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"

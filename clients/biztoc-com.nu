@@ -1,4 +1,4 @@
-# Auto-generated client for BizToc vv1
+# Auto-generated client for BizToc v1
 # Source: https://api.apis.guru/v2/specs/biztoc.com/v1/openapi.json
 # Auth: --token flag or $env.BIZTOC_TOKEN
 

@@ -1,4 +1,4 @@
-# Auto-generated client for Superset vv1
+# Auto-generated client for Superset v1
 # Source: https://api.apis.guru/v2/specs/superset.apache.local/superset/v1/openapi.json
 # Auth: --token flag or $env.SUPERSET_TOKEN
 
@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -929,7 +929,7 @@ export def "get-chart-info" [
 #
 # POST /chart/data
 # --datasource shape: {id: int, type?: "druid"|"table"}
-# --queries item shape: {annotation_layers?: list, applied_time_extras?: record, apply_fetch_values_predicate?: bool, columns?: list<string>, datasource?: any, druid_time_origin?: string, extras?: any, filters?: list, granularity?: string, granularity_sqla?: string, groupby?: list<string>, having?: string, having_filters?: list, is_rowcount?: bool, is_timeseries?: bool, metrics?: list, order_desc?: bool, orderby?: list, post_processing?: list, result_type?: any, row_limit?: int, row_offset?: int, ... (7 more fields)}
+# --queries item shape: {annotation_layers?: list, applied_time_extras?: record, apply_fetch_values_predicate?: bool, columns?: list<string>, datasource?: record, druid_time_origin?: string, extras?: record, filters?: list, granularity?: string, granularity_sqla?: string, groupby?: list<string>, having?: string, having_filters?: list, is_rowcount?: bool, is_timeseries?: bool, metrics?: list, order_desc?: bool, orderby?: list, post_processing?: list, result_type?: any, row_limit?: int, row_offset?: int, ... (7 more fields)}
 export def "post-chart-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -942,7 +942,7 @@ export def "post-chart-data" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: record # shape: {id: int, type?: "druid"|"table"}
   --force: oneof<nothing, bool> # Should the queries be forced to load from the source. Default: `false`
-  --queries: list # item shape: {annotation_layers?: list, applied_time_extras?: record, apply_fetch_values_predicate?: bool, columns?: list<string>, datasource?: any, druid_time_origin?: string, extras?: any, filters?: list, granularity?: string, granularity_sqla?: string, groupby?: list<string>, having?: string, having_filters?: list, is_rowcount?: bool, is_timeseries?: bool, metrics?: list, order_desc?: bool, orderby?: list, post_processing?: list, result_type?: any, row_limit?: int, row_offset?: int, ... (7 more fields)}
+  --queries: list # item shape: {annotation_layers?: list, applied_time_extras?: record, apply_fetch_values_predicate?: bool, columns?: list<string>, datasource?: record, druid_time_origin?: string, extras?: record, filters?: list, granularity?: string, granularity_sqla?: string, groupby?: list<string>, having?: string, having_filters?: list, is_rowcount?: bool, is_timeseries?: bool, metrics?: list, order_desc?: bool, orderby?: list, post_processing?: list, result_type?: any, row_limit?: int, row_offset?: int, ... (7 more fields)}
   --result-format: any
   --result-type: any
 ]: any -> record<result: table<annotation_data: list, applied_filters: list, cache_key: string, cache_timeout: int, cached_dttm: string, data: list, error: string, is_cached: bool, query: string, rejected_filters: list, rowcount: int, stacktrace: string, status: string>> {
@@ -1096,8 +1096,8 @@ export def "post-chart-import" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["formData"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["formData"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -1950,8 +1950,8 @@ export def "post-dashboard-import" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["formData"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["formData"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -2444,8 +2444,8 @@ export def "post-database-import" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["formData"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["formData"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -2799,12 +2799,13 @@ export def "get-database-pk-select-star-table-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --schema-name: string # Table schema
+  --schema-name: string # Table schema (required)
 ]: nothing -> record<result: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pk | is-empty) { error make --unspanned { msg: "path parameter 'pk' must be non-empty" } }
   if ($table_name | is-empty) { error make --unspanned { msg: "path parameter 'table_name' must be non-empty" } }
+  if ($schema_name == null) { error make --unspanned { msg: "required query parameter 'schema_name' missing: pass --schema-name" } }
   let qp = [(serialize-qp "schema_name" $schema_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pk: (encode-path-segment $pk), table_name: (encode-path-segment $table_name)} | format pattern "/database/{pk}/select_star/{table_name}/") $qp $auth.query)
   let accept_val = "application/json"
@@ -3139,8 +3140,8 @@ export def "post-dataset-import" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["formData"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["formData"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -4427,8 +4428,8 @@ export def "post-saved-query-import" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["formData"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["formData"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url

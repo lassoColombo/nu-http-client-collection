@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -151,11 +151,12 @@ export def "load-balancers-list-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, sku: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/loadBalancers") $qp $auth.query)
   let accept_val = "application/json"
@@ -190,12 +191,13 @@ export def "load-balancers-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, sku: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers") $qp $auth.query)
   let accept_val = "application/json"
@@ -231,13 +233,14 @@ export def "load-balancers-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($load_balancer_name | is-empty) { error make --unspanned { msg: "path parameter 'loadBalancerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), load_balancer_name: (encode-path-segment $load_balancer_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers/{load_balancer_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -273,7 +276,7 @@ export def "load-balancers-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --expand: string # Expands referenced resources.
 ]: nothing -> record<etag: string, properties: record<backendAddressPools: list<record>, frontendIPConfigurations: list<record>, inboundNatPools: list<record>, inboundNatRules: list<record>, loadBalancingRules: list<record>, outboundRules: list<record>, probes: list<record>, provisioningState: string, resourceGuid: string>, sku: record<name: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -281,6 +284,7 @@ export def "load-balancers-get" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($load_balancer_name | is-empty) { error make --unspanned { msg: "path parameter 'loadBalancerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), load_balancer_name: (encode-path-segment $load_balancer_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers/{load_balancer_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -316,7 +320,7 @@ export def "load-balancers-update-tags" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --tags: record # Resource tags.
 ]: any -> record<etag: string, properties: record<backendAddressPools: list<record>, frontendIPConfigurations: list<record>, inboundNatPools: list<record>, inboundNatRules: list<record>, loadBalancingRules: list<record>, outboundRules: list<record>, probes: list<record>, provisioningState: string, resourceGuid: string>, sku: record<name: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
@@ -325,6 +329,7 @@ export def "load-balancers-update-tags" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($load_balancer_name | is-empty) { error make --unspanned { msg: "path parameter 'loadBalancerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), load_balancer_name: (encode-path-segment $load_balancer_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers/{load_balancer_name}") $qp $auth.query)
   let req_body = {"tags": $tags} | compact
@@ -364,7 +369,7 @@ export def "load-balancers-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --etag: string # A unique read-only string that changes whenever the resource is updated.
   --properties: any # Properties of the load balancer. — shape: {backendAddressPools?: list, frontendIPConfigurations?: list, inboundNatPools?: list, inboundNatRules?: list, loadBalancingRules?: list, outboundRules?: list, probes?: list, resourceGuid?: string}
   --sku: any # SKU of a load balancer. — shape: {name?: "Basic"|"Standard"}
@@ -378,6 +383,7 @@ export def "load-balancers-create-or-update" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($load_balancer_name | is-empty) { error make --unspanned { msg: "path parameter 'loadBalancerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), load_balancer_name: (encode-path-segment $load_balancer_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers/{load_balancer_name}") $qp $auth.query)
   let req_body = {"etag": $etag, "properties": $properties, "sku": $sku, "id": $id, "location": $location, "tags": $tags} | compact
@@ -415,13 +421,14 @@ export def "load-balancer-backend-address-pools-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, name: string, properties: record, type: string, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($load_balancer_name | is-empty) { error make --unspanned { msg: "path parameter 'loadBalancerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), load_balancer_name: (encode-path-segment $load_balancer_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers/{load_balancer_name}/backendAddressPools") $qp $auth.query)
   let accept_val = "application/json"
@@ -458,7 +465,7 @@ export def "load-balancer-backend-address-pools-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<etag: string, name: string, properties: record<backendIPConfigurations: list<any>, loadBalancingRules: list<record>, outboundRule: record<id: string>, outboundRules: list<record>, provisioningState: string>, type: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -466,6 +473,7 @@ export def "load-balancer-backend-address-pools-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($load_balancer_name | is-empty) { error make --unspanned { msg: "path parameter 'loadBalancerName' must be non-empty" } }
   if ($backend_address_pool_name | is-empty) { error make --unspanned { msg: "path parameter 'backendAddressPoolName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), load_balancer_name: (encode-path-segment $load_balancer_name), backend_address_pool_name: (encode-path-segment $backend_address_pool_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers/{load_balancer_name}/backendAddressPools/{backend_address_pool_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -501,13 +509,14 @@ export def "load-balancer-frontend-ip-configurations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, name: string, properties: record, type: string, zones: list, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($load_balancer_name | is-empty) { error make --unspanned { msg: "path parameter 'loadBalancerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), load_balancer_name: (encode-path-segment $load_balancer_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers/{load_balancer_name}/frontendIPConfigurations") $qp $auth.query)
   let accept_val = "application/json"
@@ -544,7 +553,7 @@ export def "load-balancer-frontend-ip-configurations-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<etag: string, name: string, properties: record<inboundNatPools: list<record>, inboundNatRules: list<record>, loadBalancingRules: list<record>, outboundRules: list<record>, privateIPAddress: string, privateIPAddressVersion: string, privateIPAllocationMethod: string, provisioningState: string, publicIPAddress: any, publicIPPrefix: record<id: string>, subnet: any>, type: string, zones: list<string>, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -552,6 +561,7 @@ export def "load-balancer-frontend-ip-configurations-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($load_balancer_name | is-empty) { error make --unspanned { msg: "path parameter 'loadBalancerName' must be non-empty" } }
   if ($frontend_ip_configuration_name | is-empty) { error make --unspanned { msg: "path parameter 'frontendIPConfigurationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), load_balancer_name: (encode-path-segment $load_balancer_name), frontend_ip_configuration_name: (encode-path-segment $frontend_ip_configuration_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers/{load_balancer_name}/frontendIPConfigurations/{frontend_ip_configuration_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -587,13 +597,14 @@ export def "inbound-nat-rules-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, name: string, properties: record, type: string, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($load_balancer_name | is-empty) { error make --unspanned { msg: "path parameter 'loadBalancerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), load_balancer_name: (encode-path-segment $load_balancer_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers/{load_balancer_name}/inboundNatRules") $qp $auth.query)
   let accept_val = "application/json"
@@ -630,7 +641,7 @@ export def "inbound-nat-rules-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -638,6 +649,7 @@ export def "inbound-nat-rules-delete" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($load_balancer_name | is-empty) { error make --unspanned { msg: "path parameter 'loadBalancerName' must be non-empty" } }
   if ($inbound_nat_rule_name | is-empty) { error make --unspanned { msg: "path parameter 'inboundNatRuleName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), load_balancer_name: (encode-path-segment $load_balancer_name), inbound_nat_rule_name: (encode-path-segment $inbound_nat_rule_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers/{load_balancer_name}/inboundNatRules/{inbound_nat_rule_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -674,7 +686,7 @@ export def "inbound-nat-rules-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --expand: string # Expands referenced resources.
 ]: nothing -> record<etag: string, name: string, properties: record<backendIPConfiguration: any, backendPort: int, enableFloatingIP: bool, enableTcpReset: bool, frontendIPConfiguration: record<id: string>, frontendPort: int, idleTimeoutInMinutes: int, protocol: string, provisioningState: string>, type: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -683,6 +695,7 @@ export def "inbound-nat-rules-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($load_balancer_name | is-empty) { error make --unspanned { msg: "path parameter 'loadBalancerName' must be non-empty" } }
   if ($inbound_nat_rule_name | is-empty) { error make --unspanned { msg: "path parameter 'inboundNatRuleName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), load_balancer_name: (encode-path-segment $load_balancer_name), inbound_nat_rule_name: (encode-path-segment $inbound_nat_rule_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers/{load_balancer_name}/inboundNatRules/{inbound_nat_rule_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -720,7 +733,7 @@ export def "inbound-nat-rules-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --etag: string # A unique read-only string that changes whenever the resource is updated.
   --name: string # The name of the resource that is unique within the set of inbound NAT rules used by the load balancer. This name can be used to access the resource.
   --properties: any # Properties of the inbound NAT rule. — shape: {backendPort?: int, enableFloatingIP?: bool, enableTcpReset?: bool, frontendIPConfiguration?: any, frontendPort?: int, idleTimeoutInMinutes?: int, protocol?: "Udp"|"Tcp"|"All"}
@@ -733,6 +746,7 @@ export def "inbound-nat-rules-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($load_balancer_name | is-empty) { error make --unspanned { msg: "path parameter 'loadBalancerName' must be non-empty" } }
   if ($inbound_nat_rule_name | is-empty) { error make --unspanned { msg: "path parameter 'inboundNatRuleName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), load_balancer_name: (encode-path-segment $load_balancer_name), inbound_nat_rule_name: (encode-path-segment $inbound_nat_rule_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers/{load_balancer_name}/inboundNatRules/{inbound_nat_rule_name}") $qp $auth.query)
   let req_body = {"etag": $etag, "name": $name, "properties": $properties, "id": $id} | compact
@@ -770,13 +784,14 @@ export def "load-balancer-load-balancing-rules-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, name: string, properties: record, type: string, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($load_balancer_name | is-empty) { error make --unspanned { msg: "path parameter 'loadBalancerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), load_balancer_name: (encode-path-segment $load_balancer_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers/{load_balancer_name}/loadBalancingRules") $qp $auth.query)
   let accept_val = "application/json"
@@ -813,7 +828,7 @@ export def "load-balancer-load-balancing-rules-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<etag: string, name: string, properties: record<backendAddressPool: record<id: string>, backendPort: int, disableOutboundSnat: bool, enableFloatingIP: bool, enableTcpReset: bool, frontendIPConfiguration: record<id: string>, frontendPort: int, idleTimeoutInMinutes: int, loadDistribution: string, probe: record<id: string>, protocol: string, provisioningState: string>, type: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -821,6 +836,7 @@ export def "load-balancer-load-balancing-rules-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($load_balancer_name | is-empty) { error make --unspanned { msg: "path parameter 'loadBalancerName' must be non-empty" } }
   if ($load_balancing_rule_name | is-empty) { error make --unspanned { msg: "path parameter 'loadBalancingRuleName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), load_balancer_name: (encode-path-segment $load_balancer_name), load_balancing_rule_name: (encode-path-segment $load_balancing_rule_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers/{load_balancer_name}/loadBalancingRules/{load_balancing_rule_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -856,13 +872,14 @@ export def "load-balancer-network-interfaces-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, properties: any, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($load_balancer_name | is-empty) { error make --unspanned { msg: "path parameter 'loadBalancerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), load_balancer_name: (encode-path-segment $load_balancer_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers/{load_balancer_name}/networkInterfaces") $qp $auth.query)
   let accept_val = "application/json"
@@ -898,13 +915,14 @@ export def "load-balancer-outbound-rules-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, name: string, properties: record, type: string, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($load_balancer_name | is-empty) { error make --unspanned { msg: "path parameter 'loadBalancerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), load_balancer_name: (encode-path-segment $load_balancer_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers/{load_balancer_name}/outboundRules") $qp $auth.query)
   let accept_val = "application/json"
@@ -941,7 +959,7 @@ export def "load-balancer-outbound-rules-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<etag: string, name: string, properties: record<allocatedOutboundPorts: int, backendAddressPool: record<id: string>, enableTcpReset: bool, frontendIPConfigurations: list<record>, idleTimeoutInMinutes: int, protocol: string, provisioningState: string>, type: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -949,6 +967,7 @@ export def "load-balancer-outbound-rules-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($load_balancer_name | is-empty) { error make --unspanned { msg: "path parameter 'loadBalancerName' must be non-empty" } }
   if ($outbound_rule_name | is-empty) { error make --unspanned { msg: "path parameter 'outboundRuleName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), load_balancer_name: (encode-path-segment $load_balancer_name), outbound_rule_name: (encode-path-segment $outbound_rule_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers/{load_balancer_name}/outboundRules/{outbound_rule_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -984,13 +1003,14 @@ export def "load-balancer-probes-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, name: string, properties: record, type: string, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($load_balancer_name | is-empty) { error make --unspanned { msg: "path parameter 'loadBalancerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), load_balancer_name: (encode-path-segment $load_balancer_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers/{load_balancer_name}/probes") $qp $auth.query)
   let accept_val = "application/json"
@@ -1027,7 +1047,7 @@ export def "load-balancer-probes-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<etag: string, name: string, properties: record<intervalInSeconds: int, loadBalancingRules: list<record>, numberOfProbes: int, port: int, protocol: string, provisioningState: string, requestPath: string>, type: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1035,6 +1055,7 @@ export def "load-balancer-probes-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($load_balancer_name | is-empty) { error make --unspanned { msg: "path parameter 'loadBalancerName' must be non-empty" } }
   if ($probe_name | is-empty) { error make --unspanned { msg: "path parameter 'probeName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), load_balancer_name: (encode-path-segment $load_balancer_name), probe_name: (encode-path-segment $probe_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers/{load_balancer_name}/probes/{probe_name}") $qp $auth.query)
   let accept_val = "application/json"

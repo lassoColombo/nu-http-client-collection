@@ -1,4 +1,4 @@
-# Auto-generated client for Marketing Events Extension vv3
+# Auto-generated client for Marketing Events Extension v3
 # Source: https://api.apis.guru/v2/specs/hubapi.com/marketing/v3/openapi.json
 # Auth: --token flag or $env.MARKETING_EVENTS_EXTENSION_TOKEN
 
@@ -13,8 +13,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "query-hapikey" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "hapikey")=(encode-path-segment $token_val)", location: "query"} }
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "private-app-legacy" => { {scheme: $scheme, headers: {private-app-legacy: $token_val}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "private-app-legacy" => { {scheme: $scheme, headers: {"private-app-legacy": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -120,6 +120,8 @@ def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors
 def base-url-completer [] { ["https://api.hubapi.com"] }
 def auth-scheme-completer [] { ["query-hapikey" "bearer" "private-app-legacy"] }
 
+# Completers for enum parameters
+def accept-completer [] { ["*/*" "application/json"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -161,6 +163,7 @@ export def "post-marketing-v3-marketing-events-attendance-create-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --external-account-id: string # The account id associated with the marketing event
   inputs: list # List of HubSpot contacts to subscribe to the marketing event — item shape: {interactionDateTime: int, properties?: record, vid?: int}
 ]: any -> record<completedAt: string, errors: table<category: record, context: record, errors: list, id: string, links: record, message: string, status: string, subCategory: record>, links: record, numErrors: int, requestedAt: string, results: table<vid: int>, startedAt: string, status: string> {
@@ -173,7 +176,7 @@ export def "post-marketing-v3-marketing-events-attendance-create-create" [
   let full_url = (build-url $base ({external_event_id: (encode-path-segment $external_event_id), subscriber_state: (encode-path-segment $subscriber_state)} | format pattern "/marketing/v3/marketing-events/attendance/{external_event_id}/{subscriber_state}/create") $qp $auth.query)
   let req_body = {"inputs": $inputs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -206,6 +209,7 @@ export def "post-marketing-v3-marketing-events-attendance-email-create-create-by
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --external-account-id: string # The account id associated with the marketing event
   inputs: list # List of marketing event details to create or update — item shape: {contactProperties?: record, email: string, interactionDateTime: int, properties?: record}
 ]: any -> record<completedAt: string, errors: table<category: record, context: record, errors: list, id: string, links: record, message: string, status: string, subCategory: record>, links: record, numErrors: int, requestedAt: string, results: table<email: string, vid: int>, startedAt: string, status: string> {
@@ -218,7 +222,7 @@ export def "post-marketing-v3-marketing-events-attendance-email-create-create-by
   let full_url = (build-url $base ({external_event_id: (encode-path-segment $external_event_id), subscriber_state: (encode-path-segment $subscriber_state)} | format pattern "/marketing/v3/marketing-events/attendance/{external_event_id}/{subscriber_state}/email-create") $qp $auth.query)
   let req_body = {"inputs": $inputs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -248,6 +252,7 @@ export def "post-marketing-v3-marketing-events-events-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --custom-properties: list # A list of PropertyValues. These can be whatever kind of property names and values you want. However, they must already exist on the HubSpot account's definition of the MarketingEvent Object. If they don't they will be filtered out and not set. In order to do this you'll need to create a new PropertyGroup on the HubSpot account's MarketingEvent object for your specific app and create the Custom Property you want to track on that HubSpot account. Do not create any new default properties on the MarketingEvent object as that will apply to all HubSpot accounts. — item shape: {name: string, persistenceTimestamp?: int, requestId: string, selectedByUser: bool, selectedByUserTimestamp: int, ... (9 more fields)}
   --end-date-time: string # The end date and time of the marketing event. (format: date-time)
   --event-cancelled: oneof<nothing, bool> # Indicates if the marketing event has been cancelled. Defaults to `false`
@@ -266,7 +271,7 @@ export def "post-marketing-v3-marketing-events-events-create" [
   let full_url = (build-url $base "/marketing/v3/marketing-events/events" $auth.query)
   let req_body = {"customProperties": $custom_properties, "endDateTime": $end_date_time, "eventCancelled": $event_cancelled, "eventDescription": $event_description, "eventName": $event_name, "eventOrganizer": $event_organizer, "eventType": $event_type, "eventUrl": $event_url, "externalAccountId": $external_account_id, "externalEventId": $external_event_id, "startDateTime": $start_date_time} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -297,14 +302,14 @@ export def "post-marketing-v3-marketing-events-events-delete-archive-batch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   inputs: list # item shape: {appId: int, externalAccountId: string, externalEventId: string}
-]: any -> any {
+]: any -> record<category: string, context: record, correlationId: string, errors: table<code: string, context: record, in: string, message: string, subCategory: string>, links: record, message: string, subCategory: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/marketing/v3/marketing-events/events/delete" $auth.query)
   let req_body = {"inputs": $inputs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -334,13 +339,15 @@ export def "get-marketing-v3-marketing-events-events-search-do-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The id of the marketing event in the external event application
+  --accept: string@accept-completer # Response content type
+  --q: string # The id of the marketing event in the external event application (required)
 ]: nothing -> record<results: table<appId: int, externalAccountId: string, externalEventId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/marketing/v3/marketing-events/events/search" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -370,6 +377,7 @@ export def "post-marketing-v3-marketing-events-events-upsert-do-upsert" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   inputs: list # item shape: {customProperties?: list, endDateTime?: string, eventCancelled?: bool, eventDescription?: string, eventName: string, eventOrganizer: string, eventType?: string, eventUrl?: string, externalAccountId: string, externalEventId: string, startDateTime?: string}
 ]: any -> record<completedAt: string, errors: table<category: record, context: record, errors: list, id: string, links: record, message: string, status: string, subCategory: record>, links: record, numErrors: int, requestedAt: string, results: table<createdAt: string, customProperties: list, endDateTime: string, eventCancelled: bool, eventDescription: string, eventName: string, eventOrganizer: string, eventType: string, eventUrl: string, id: string, startDateTime: string, updatedAt: string>, startedAt: string, status: string> {
   let input = $in
@@ -378,7 +386,7 @@ export def "post-marketing-v3-marketing-events-events-upsert-do-upsert" [
   let full_url = (build-url $base "/marketing/v3/marketing-events/events/upsert" $auth.query)
   let req_body = {"inputs": $inputs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -408,14 +416,15 @@ export def "delete-marketing-v3-marketing-events-events-archive" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --external-account-id: string
+  --external-account-id: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
   if ($external_event_id | is-empty) { error make --unspanned { msg: "path parameter 'externalEventId' must be non-empty" } }
+  if ($external_account_id == null) { error make --unspanned { msg: "required query parameter 'externalAccountId' missing: pass --external-account-id" } }
   let qp = [(serialize-qp "externalAccountId" $external_account_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({external_event_id: (encode-path-segment $external_event_id)} | format pattern "/marketing/v3/marketing-events/events/{external_event_id}") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
@@ -445,14 +454,16 @@ export def "get-marketing-v3-marketing-events-events-get-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --external-account-id: string
+  --accept: string@accept-completer # Response content type
+  --external-account-id: string # required
 ]: nothing -> record<attendees: int, cancellations: int, createdAt: string, customProperties: table<name: string, persistenceTimestamp: int, requestId: string, selectedByUser: bool, selectedByUserTimestamp: int, source: string, sourceId: string, sourceLabel: string, sourceMetadata: string, sourceVid: list, timestamp: int, updatedByUserId: int, useTimestampAsPersistenceTimestamp: bool, value: string>, endDateTime: string, eventCancelled: bool, eventDescription: string, eventName: string, eventOrganizer: string, eventType: string, eventUrl: string, externalEventId: string, id: string, noShows: int, registrants: int, startDateTime: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($external_event_id | is-empty) { error make --unspanned { msg: "path parameter 'externalEventId' must be non-empty" } }
+  if ($external_account_id == null) { error make --unspanned { msg: "required query parameter 'externalAccountId' missing: pass --external-account-id" } }
   let qp = [(serialize-qp "externalAccountId" $external_account_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({external_event_id: (encode-path-segment $external_event_id)} | format pattern "/marketing/v3/marketing-events/events/{external_event_id}") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -483,7 +494,8 @@ export def "patch-marketing-v3-marketing-events-events-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --external-account-id: string
+  --accept: string@accept-completer # Response content type
+  --external-account-id: string # required
   --custom-properties: list # A list of PropertyValues. These can be whatever kind of property names and values you want. However, they must already exist on the HubSpot account's definition of the MarketingEvent Object. If they don't they will be filtered out and not set. In order to do this you'll need to create a new PropertyGroup on the HubSpot account's MarketingEvent object for your specific app and create the Custom Property you want to track on that HubSpot account. Do not create any new default properties on the MarketingEvent object as that will apply to all HubSpot accounts. — item shape: {name: string, persistenceTimestamp?: int, requestId: string, selectedByUser: bool, selectedByUserTimestamp: int, ... (9 more fields)}
   --end-date-time: string # The end date and time of the marketing event. (format: date-time)
   --event-cancelled: oneof<nothing, bool> # Indicates if the marketing event has been cancelled. Defaults to `false`
@@ -498,11 +510,12 @@ export def "patch-marketing-v3-marketing-events-events-update" [
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
   if ($external_event_id | is-empty) { error make --unspanned { msg: "path parameter 'externalEventId' must be non-empty" } }
+  if ($external_account_id == null) { error make --unspanned { msg: "required query parameter 'externalAccountId' missing: pass --external-account-id" } }
   let qp = [(serialize-qp "externalAccountId" $external_account_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({external_event_id: (encode-path-segment $external_event_id)} | format pattern "/marketing/v3/marketing-events/events/{external_event_id}") $qp $auth.query)
   let req_body = {"customProperties": $custom_properties, "endDateTime": $end_date_time, "eventCancelled": $event_cancelled, "eventDescription": $event_description, "eventName": $event_name, "eventOrganizer": $event_organizer, "eventType": $event_type, "eventUrl": $event_url, "startDateTime": $start_date_time} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "patch"
@@ -533,6 +546,7 @@ export def "put-marketing-v3-marketing-events-events-replace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --custom-properties: list # A list of PropertyValues. These can be whatever kind of property names and values you want. However, they must already exist on the HubSpot account's definition of the MarketingEvent Object. If they don't they will be filtered out and not set. In order to do this you'll need to create a new PropertyGroup on the HubSpot account's MarketingEvent object for your specific app and create the Custom Property you want to track on that HubSpot account. Do not create any new default properties on the MarketingEvent object as that will apply to all HubSpot accounts. — item shape: {name: string, persistenceTimestamp?: int, requestId: string, selectedByUser: bool, selectedByUserTimestamp: int, ... (9 more fields)}
   --end-date-time: string # The end date and time of the marketing event. (format: date-time)
   --event-cancelled: oneof<nothing, bool> # Indicates if the marketing event has been cancelled. Defaults to `false`
@@ -552,7 +566,8 @@ export def "put-marketing-v3-marketing-events-events-replace" [
   let full_url = (build-url $base ({external_event_id: (encode-path-segment $external_event_id)} | format pattern "/marketing/v3/marketing-events/events/{external_event_id}") $auth.query)
   let req_body = {"customProperties": $custom_properties, "endDateTime": $end_date_time, "eventCancelled": $event_cancelled, "eventDescription": $event_description, "eventName": $event_name, "eventOrganizer": $event_organizer, "eventType": $event_type, "eventUrl": $event_url, "externalAccountId": $external_account_id, "externalEventId": $body_external_event_id, "startDateTime": $start_date_time} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  if (($req_body | get -o "externalEventId") == null) { error make --unspanned { msg: "required body field 'externalEventId' missing: pass --body-external-event-id or pipe a record" } }
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "put"
@@ -582,14 +597,16 @@ export def "post-marketing-v3-marketing-events-events-cancel-do-cancel" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --external-account-id: string
+  --accept: string@accept-completer # Response content type
+  --external-account-id: string # required
 ]: nothing -> record<customProperties: table<name: string, persistenceTimestamp: int, requestId: string, selectedByUser: bool, selectedByUserTimestamp: int, source: string, sourceId: string, sourceLabel: string, sourceMetadata: string, sourceVid: list, timestamp: int, updatedByUserId: int, useTimestampAsPersistenceTimestamp: bool, value: string>, endDateTime: string, eventCancelled: bool, eventDescription: string, eventName: string, eventOrganizer: string, eventType: string, eventUrl: string, startDateTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
   if ($external_event_id | is-empty) { error make --unspanned { msg: "path parameter 'externalEventId' must be non-empty" } }
+  if ($external_account_id == null) { error make --unspanned { msg: "required query parameter 'externalAccountId' missing: pass --external-account-id" } }
   let qp = [(serialize-qp "externalAccountId" $external_account_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({external_event_id: (encode-path-segment $external_event_id)} | format pattern "/marketing/v3/marketing-events/events/{external_event_id}/cancel") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -619,7 +636,8 @@ export def "post-marketing-v3-marketing-events-events-complete-complete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --external-account-id: string
+  --accept: string@accept-completer # Response content type
+  --external-account-id: string # required
   end_date_time: string # format: date-time
   start_date_time: string # format: date-time
 ]: any -> record<customProperties: table<name: string, persistenceTimestamp: int, requestId: string, selectedByUser: bool, selectedByUserTimestamp: int, source: string, sourceId: string, sourceLabel: string, sourceMetadata: string, sourceVid: list, timestamp: int, updatedByUserId: int, useTimestampAsPersistenceTimestamp: bool, value: string>, endDateTime: string, eventCancelled: bool, eventDescription: string, eventName: string, eventOrganizer: string, eventType: string, eventUrl: string, startDateTime: string> {
@@ -627,11 +645,12 @@ export def "post-marketing-v3-marketing-events-events-complete-complete" [
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
   if ($external_event_id | is-empty) { error make --unspanned { msg: "path parameter 'externalEventId' must be non-empty" } }
+  if ($external_account_id == null) { error make --unspanned { msg: "required query parameter 'externalAccountId' missing: pass --external-account-id" } }
   let qp = [(serialize-qp "externalAccountId" $external_account_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({external_event_id: (encode-path-segment $external_event_id)} | format pattern "/marketing/v3/marketing-events/events/{external_event_id}/complete") $qp $auth.query)
   let req_body = {"endDateTime": $end_date_time, "startDateTime": $start_date_time} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -663,19 +682,20 @@ export def "post-marketing-v3-marketing-events-events-email-upsert-do-email-upse
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --external-account-id: string
+  --external-account-id: string # required
   inputs: list # List of marketing event details to create or update — item shape: {contactProperties?: record, email: string, interactionDateTime: int, properties?: record}
-]: any -> any {
+]: any -> record<category: string, context: record, correlationId: string, errors: table<code: string, context: record, in: string, message: string, subCategory: string>, links: record, message: string, subCategory: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
   if ($external_event_id | is-empty) { error make --unspanned { msg: "path parameter 'externalEventId' must be non-empty" } }
   if ($subscriber_state | is-empty) { error make --unspanned { msg: "path parameter 'subscriberState' must be non-empty" } }
+  if ($external_account_id == null) { error make --unspanned { msg: "required query parameter 'externalAccountId' missing: pass --external-account-id" } }
   let qp = [(serialize-qp "externalAccountId" $external_account_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({external_event_id: (encode-path-segment $external_event_id), subscriber_state: (encode-path-segment $subscriber_state)} | format pattern "/marketing/v3/marketing-events/events/{external_event_id}/{subscriber_state}/email-upsert") $qp $auth.query)
   let req_body = {"inputs": $inputs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -707,19 +727,20 @@ export def "post-marketing-v3-marketing-events-events-upsert-do-upsert-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --external-account-id: string
+  --external-account-id: string # required
   inputs: list # List of HubSpot contacts to subscribe to the marketing event — item shape: {interactionDateTime: int, properties?: record, vid?: int}
-]: any -> any {
+]: any -> record<category: string, context: record, correlationId: string, errors: table<code: string, context: record, in: string, message: string, subCategory: string>, links: record, message: string, subCategory: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
   if ($external_event_id | is-empty) { error make --unspanned { msg: "path parameter 'externalEventId' must be non-empty" } }
   if ($subscriber_state | is-empty) { error make --unspanned { msg: "path parameter 'subscriberState' must be non-empty" } }
+  if ($external_account_id == null) { error make --unspanned { msg: "required query parameter 'externalAccountId' missing: pass --external-account-id" } }
   let qp = [(serialize-qp "externalAccountId" $external_account_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({external_event_id: (encode-path-segment $external_event_id), subscriber_state: (encode-path-segment $subscriber_state)} | format pattern "/marketing/v3/marketing-events/events/{external_event_id}/{subscriber_state}/upsert") $qp $auth.query)
   let req_body = {"inputs": $inputs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -749,12 +770,13 @@ export def "get-marketing-v3-marketing-events-settings-get-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
 ]: nothing -> record<appId: int, eventDetailsUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/marketing/v3/marketing-events/{app_id}/settings") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -784,6 +806,7 @@ export def "post-marketing-v3-marketing-events-settings-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   event_details_url: string # The url that will be used to fetch marketing event details by id. Must contain a `%s` character sequence that will be substituted with the event id. For example: `https://my.event.app/events/%s`
 ]: any -> record<appId: int, eventDetailsUrl: string> {
   let input = $in
@@ -793,7 +816,7 @@ export def "post-marketing-v3-marketing-events-settings-create" [
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/marketing/v3/marketing-events/{app_id}/settings") $auth.query)
   let req_body = {"eventDetailsUrl": $event_details_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"

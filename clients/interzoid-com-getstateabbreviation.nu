@@ -131,11 +131,13 @@ export def "getstateabbreviation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --license: string # Your Interzoid license API key. Register at www.interzoid.com/register
-  --state: string # State (or province) name from which to retrieve the two letter abbreviation.
+  --license: string # Your Interzoid license API key. Register at www.interzoid.com/register (required)
+  --state: string # State (or province) name from which to retrieve the two letter abbreviation. (required)
 ]: nothing -> record<Abbreviation: string, Code: string, Credits: string, State: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($license == null) { error make --unspanned { msg: "required query parameter 'license' missing: pass --license" } }
+  if ($state == null) { error make --unspanned { msg: "required query parameter 'state' missing: pass --state" } }
   let qp = [(serialize-qp "license" $license "scalar") (serialize-qp "state" $state "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getstateabbreviation" $qp $auth.query)
   let accept_val = "application/json"

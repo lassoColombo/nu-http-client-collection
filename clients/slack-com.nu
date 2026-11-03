@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -139,7 +139,7 @@ export def "admin-apps-approve" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `admin.apps:write`
+  --hdr-token: string # Authentication token. Requires scope: `admin.apps:write` (required)
   --app-id: string # The id of the app to approve.
   --request-id: string # The id of the request to approve.
   --team-id: string
@@ -147,6 +147,7 @@ export def "admin-apps-approve" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/admin.apps.approve" $auth.query)
   let req_body = {"app_id": $app_id, "request_id": $request_id, "team_id": $team_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -184,7 +185,7 @@ export def "admin-apps-approved-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # Authentication token. Requires scope: `admin.apps:read`
+  --qp-token: string # Authentication token. Requires scope: `admin.apps:read` (required)
   --limit: int # The maximum number of items to return. Must be between 1 - 1000 both inclusive.
   --cursor: string # Set `cursor` to `next_cursor` returned by the previous call to list items in the next page
   --team-id: string
@@ -192,6 +193,7 @@ export def "admin-apps-approved-list" [
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "team_id" $team_id "scalar") (serialize-qp "enterprise_id" $enterprise_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin.apps.approved.list" $qp $auth.query)
   let accept_val = "application/json"
@@ -225,13 +227,14 @@ export def "admin-apps-requests-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # Authentication token. Requires scope: `admin.apps:read`
+  --qp-token: string # Authentication token. Requires scope: `admin.apps:read` (required)
   --limit: int # The maximum number of items to return. Must be between 1 - 1000 both inclusive.
   --cursor: string # Set `cursor` to `next_cursor` returned by the previous call to list items in the next page
   --team-id: string
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "team_id" $team_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin.apps.requests.list" $qp $auth.query)
   let accept_val = "application/json"
@@ -265,7 +268,7 @@ export def "admin-apps-restrict" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `admin.apps:write`
+  --hdr-token: string # Authentication token. Requires scope: `admin.apps:write` (required)
   --app-id: string # The id of the app to restrict.
   --request-id: string # The id of the request to restrict.
   --team-id: string
@@ -273,6 +276,7 @@ export def "admin-apps-restrict" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/admin.apps.restrict" $auth.query)
   let req_body = {"app_id": $app_id, "request_id": $request_id, "team_id": $team_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -310,7 +314,7 @@ export def "admin-apps-restricted-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # Authentication token. Requires scope: `admin.apps:read`
+  --qp-token: string # Authentication token. Requires scope: `admin.apps:read` (required)
   --limit: int # The maximum number of items to return. Must be between 1 - 1000 both inclusive.
   --cursor: string # Set `cursor` to `next_cursor` returned by the previous call to list items in the next page
   --team-id: string
@@ -318,6 +322,7 @@ export def "admin-apps-restricted-list" [
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "team_id" $team_id "scalar") (serialize-qp "enterprise_id" $enterprise_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin.apps.restricted.list" $qp $auth.query)
   let accept_val = "application/json"
@@ -351,12 +356,13 @@ export def "admin-conversations-archive" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write`
+  --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write` (required)
   channel_id: string # The channel to archive.
 ]: any -> record<ok: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/admin.conversations.archive" $auth.query)
   let req_body = {"channel_id": $channel_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -394,12 +400,13 @@ export def "admin-conversations-convert-to-private" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write`
+  --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write` (required)
   channel_id: string # The channel to convert to private.
 ]: any -> record<ok: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/admin.conversations.convertToPrivate" $auth.query)
   let req_body = {"channel_id": $channel_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -437,7 +444,7 @@ export def "admin-conversations-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write`
+  --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write` (required)
   --description: string # Description of the public or private channel to create.
   --is-private: oneof<nothing, bool> # When `true`, creates a private channel instead of a public channel
   name: string # Name of the public or private channel to create.
@@ -447,9 +454,11 @@ export def "admin-conversations-create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/admin.conversations.create" $auth.query)
   let req_body = {"description": $description, "is_private": $is_private, "name": $name, "org_wide": $org_wide, "team_id": $team_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "is_private") == null) { error make --unspanned { msg: "required body field 'is_private' missing: pass --is-private or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"token": $hdr_token} | compact
@@ -484,12 +493,13 @@ export def "admin-conversations-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write`
+  --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write` (required)
   channel_id: string # The channel to delete.
 ]: any -> record<ok: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/admin.conversations.delete" $auth.query)
   let req_body = {"channel_id": $channel_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -527,13 +537,14 @@ export def "admin-conversations-disconnect-shared" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write`
+  --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write` (required)
   channel_id: string # The channel to be disconnected from some workspaces.
   --leaving-team-ids: string # The team to be removed from the channel. Currently only a single team id can be specified.
 ]: any -> record<ok: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/admin.conversations.disconnectShared" $auth.query)
   let req_body = {"channel_id": $channel_id, "leaving_team_ids": $leaving_team_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -571,7 +582,7 @@ export def "admin-conversations-ekm-list-original-connected-channel-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # Authentication token. Requires scope: `admin.conversations:read`
+  --qp-token: string # Authentication token. Requires scope: `admin.conversations:read` (required)
   --channel-ids: string # A comma-separated list of channels to filter to.
   --team-ids: string # A comma-separated list of the workspaces to which the channels you would like returned belong.
   --limit: int # The maximum number of items to return. Must be between 1 - 1000 both inclusive.
@@ -579,6 +590,7 @@ export def "admin-conversations-ekm-list-original-connected-channel-info" [
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "channel_ids" $channel_ids "scalar") (serialize-qp "team_ids" $team_ids "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "cursor" $cursor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin.conversations.ekm.listOriginalConnectedChannelInfo" $qp $auth.query)
   let accept_val = "application/json"
@@ -612,11 +624,13 @@ export def "admin-conversations-get-conversation-prefs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --channel-id: string # The channel to get preferences for.
-  --hdr-token: string # Authentication token. Requires scope: `admin.conversations:read`
+  --channel-id: string # The channel to get preferences for. (required)
+  --hdr-token: string # Authentication token. Requires scope: `admin.conversations:read` (required)
 ]: nothing -> record<ok: bool, prefs: record<can_thread: record<type: list, user: list>, who_can_post: record<type: list, user: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id == null) { error make --unspanned { msg: "required query parameter 'channel_id' missing: pass --channel-id" } }
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let qp = [(serialize-qp "channel_id" $channel_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin.conversations.getConversationPrefs" $qp $auth.query)
   let accept_val = "application/json"
@@ -652,13 +666,15 @@ export def "admin-conversations-get-teams" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --channel-id: string # The channel to determine connected workspaces within the organization for.
+  --channel-id: string # The channel to determine connected workspaces within the organization for. (required)
   --cursor: string # Set `cursor` to `next_cursor` returned by the previous call to list items in the next page
   --limit: int # The maximum number of items to return. Must be between 1 - 1000 both inclusive.
-  --hdr-token: string # Authentication token. Requires scope: `admin.conversations:read`
+  --hdr-token: string # Authentication token. Requires scope: `admin.conversations:read` (required)
 ]: nothing -> record<ok: bool, response_metadata: record<next_cursor: string>, team_ids: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id == null) { error make --unspanned { msg: "required query parameter 'channel_id' missing: pass --channel-id" } }
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let qp = [(serialize-qp "channel_id" $channel_id "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin.conversations.getTeams" $qp $auth.query)
   let accept_val = "application/json"
@@ -694,13 +710,14 @@ export def "admin-conversations-invite" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write`
+  --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write` (required)
   channel_id: string # The channel that the users will be invited to.
   user_ids: string # The users to invite.
 ]: any -> record<ok: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/admin.conversations.invite" $auth.query)
   let req_body = {"channel_id": $channel_id, "user_ids": $user_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -738,13 +755,14 @@ export def "admin-conversations-rename" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write`
+  --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write` (required)
   channel_id: string # The channel to rename.
   name: string
 ]: any -> record<ok: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/admin.conversations.rename" $auth.query)
   let req_body = {"channel_id": $channel_id, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -793,6 +811,7 @@ export def "admin-conversations-restrict-access-add-group" [
   let full_url = (build-url $base "/admin.conversations.restrictAccess.addGroup" $auth.query)
   let req_body = {"channel_id": $channel_id, "group_id": $group_id, "team_id": $team_id, "token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
@@ -825,12 +844,14 @@ export def "admin-conversations-restrict-access-list-groups" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # Authentication token. Requires scope: `admin.conversations:read`
-  --channel-id: string
+  --qp-token: string # Authentication token. Requires scope: `admin.conversations:read` (required)
+  --channel-id: string # required
   --team-id: string # The workspace where the channel exists. This argument is required for channels only tied to one workspace, and optional for channels that are shared across an organization.
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
+  if ($channel_id == null) { error make --unspanned { msg: "required query parameter 'channel_id' missing: pass --channel-id" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "channel_id" $channel_id "scalar") (serialize-qp "team_id" $team_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin.conversations.restrictAccess.listGroups" $qp $auth.query)
   let accept_val = "application/json"
@@ -875,6 +896,7 @@ export def "admin-conversations-restrict-access-remove-group" [
   let full_url = (build-url $base "/admin.conversations.restrictAccess.removeGroup" $auth.query)
   let req_body = {"channel_id": $channel_id, "group_id": $group_id, "team_id": $team_id, "token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
@@ -912,13 +934,14 @@ export def "admin-conversations-search" [
   --limit: int # Maximum number of items to be returned. Must be between 1 - 20 both inclusive. Default is 10.
   --cursor: string # Set `cursor` to `next_cursor` returned by the previous call to list items in the next page.
   --search-channel-types: string # The type of channel to include or exclude in the search. For example `private` will search private channels, while `private_exclude` will exclude them. For a full list of types, check the [Types section](#types).
-  --qp-sort: string # Possible values are `relevant` (search ranking based on what we think is closest), `name` (alphabetical), `member_count` (number of users in the channel), and `created` (date channel was created). You can optionally pair this with the `sort_dir` arg to change how it is sorted
+  --sort: string # Possible values are `relevant` (search ranking based on what we think is closest), `name` (alphabetical), `member_count` (number of users in the channel), and `created` (date channel was created). You can optionally pair this with the `sort_dir` arg to change how it is sorted
   --sort-dir: string # Sort direction. Possible values are `asc` for ascending order like (1, 2, 3) or (a, b, c), and `desc` for descending order like (3, 2, 1) or (c, b, a)
-  --hdr-token: string # Authentication token. Requires scope: `admin.conversations:read`
+  --hdr-token: string # Authentication token. Requires scope: `admin.conversations:read` (required)
 ]: nothing -> record<channels: table<accepted_user: string, created: int, creator: string, id: string, is_archived: bool, is_channel: bool, is_frozen: bool, is_general: bool, is_member: bool, is_moved: int, is_mpim: bool, is_non_threadable: bool, is_org_shared: bool, is_pending_ext_shared: bool, is_private: bool, is_read_only: bool, is_shared: bool, is_thread_only: bool, last_read: string, latest: list, members: list, name: string, name_normalized: string, num_members: int, pending_shared: list, previous_names: list, priority: float, purpose: record, topic: record, unlinked: int, unread_count: int, unread_count_display: int>, next_cursor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "team_ids" $team_ids "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "search_channel_types" $search_channel_types "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sort_dir" $sort_dir "scalar")] | flatten | str join "&"
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
+  let qp = [(serialize-qp "team_ids" $team_ids "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "search_channel_types" $search_channel_types "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "sort_dir" $sort_dir "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin.conversations.search" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -927,7 +950,7 @@ export def "admin-conversations-search" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"team_ids": $team_ids, "query": $query, "limit": $limit, "cursor": $cursor, "search_channel_types": $search_channel_types, "sort": $qp_sort, "sort_dir": $sort_dir} | compact)
+    query: ({"team_ids": $team_ids, "query": $query, "limit": $limit, "cursor": $cursor, "search_channel_types": $search_channel_types, "sort": $sort, "sort_dir": $sort_dir} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -953,13 +976,14 @@ export def "admin-conversations-set-conversation-prefs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write`
+  --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write` (required)
   channel_id: string # The channel to set the prefs for
   prefs: string # The prefs for this channel in a stringified JSON format.
 ]: any -> record<ok: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/admin.conversations.setConversationPrefs" $auth.query)
   let req_body = {"channel_id": $channel_id, "prefs": $prefs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -997,7 +1021,7 @@ export def "admin-conversations-set-teams" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write`
+  --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write` (required)
   channel_id: string # The encoded `channel_id` to add or remove to workspaces.
   --org-channel: oneof<nothing, bool> # True if channel has to be converted to an org channel
   --target-team-ids: string # A comma-separated list of workspaces to which the channel should be shared. Not required if the channel is being shared org-wide.
@@ -1006,6 +1030,7 @@ export def "admin-conversations-set-teams" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/admin.conversations.setTeams" $auth.query)
   let req_body = {"channel_id": $channel_id, "org_channel": $org_channel, "target_team_ids": $target_team_ids, "team_id": $team_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1043,12 +1068,13 @@ export def "admin-conversations-unarchive" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write`
+  --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write` (required)
   channel_id: string # The channel to unarchive.
 ]: any -> record<ok: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/admin.conversations.unarchive" $auth.query)
   let req_body = {"channel_id": $channel_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1096,6 +1122,7 @@ export def "admin-emoji-add" [
   let full_url = (build-url $base "/admin.emoji.add" $auth.query)
   let req_body = {"name": $name, "token": $body_token, "url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
@@ -1138,6 +1165,7 @@ export def "admin-emoji-add-alias" [
   let full_url = (build-url $base "/admin.emoji.addAlias" $auth.query)
   let req_body = {"alias_for": $alias_for, "name": $name, "token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
@@ -1170,12 +1198,13 @@ export def "admin-emoji-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # Authentication token. Requires scope: `admin.teams:read`
+  --qp-token: string # Authentication token. Requires scope: `admin.teams:read` (required)
   --cursor: string # Set `cursor` to `next_cursor` returned by the previous call to list items in the next page
   --limit: int # The maximum number of items to return. Must be between 1 - 1000 both inclusive.
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin.emoji.list" $qp $auth.query)
   let accept_val = "application/json"
@@ -1218,6 +1247,7 @@ export def "admin-emoji-remove" [
   let full_url = (build-url $base "/admin.emoji.remove" $auth.query)
   let req_body = {"name": $name, "token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
@@ -1260,6 +1290,7 @@ export def "admin-emoji-rename" [
   let full_url = (build-url $base "/admin.emoji.rename" $auth.query)
   let req_body = {"name": $name, "new_name": $new_name, "token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
@@ -1292,13 +1323,14 @@ export def "admin-invite-requests-approve" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `admin.invites:write`
+  --hdr-token: string # Authentication token. Requires scope: `admin.invites:write` (required)
   invite_request_id: string # ID of the request to invite.
   --team-id: string # ID for the workspace where the invite request was made.
 ]: any -> record<ok: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/admin.inviteRequests.approve" $auth.query)
   let req_body = {"invite_request_id": $invite_request_id, "team_id": $team_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1339,10 +1371,11 @@ export def "admin-invite-requests-approved-list" [
   --team-id: string # ID for the workspace where the invite requests were made.
   --cursor: string # Value of the `next_cursor` field sent as part of the previous API response
   --limit: int # The number of results that will be returned by the API on each invocation. Must be between 1 - 1000, both inclusive
-  --hdr-token: string # Authentication token. Requires scope: `admin.invites:read`
+  --hdr-token: string # Authentication token. Requires scope: `admin.invites:read` (required)
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let qp = [(serialize-qp "team_id" $team_id "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin.inviteRequests.approved.list" $qp $auth.query)
   let accept_val = "application/json"
@@ -1381,10 +1414,11 @@ export def "admin-invite-requests-denied-list" [
   --team-id: string # ID for the workspace where the invite requests were made.
   --cursor: string # Value of the `next_cursor` field sent as part of the previous api response
   --limit: int # The number of results that will be returned by the API on each invocation. Must be between 1 - 1000 both inclusive
-  --hdr-token: string # Authentication token. Requires scope: `admin.invites:read`
+  --hdr-token: string # Authentication token. Requires scope: `admin.invites:read` (required)
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let qp = [(serialize-qp "team_id" $team_id "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin.inviteRequests.denied.list" $qp $auth.query)
   let accept_val = "application/json"
@@ -1420,13 +1454,14 @@ export def "admin-invite-requests-deny" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `admin.invites:write`
+  --hdr-token: string # Authentication token. Requires scope: `admin.invites:write` (required)
   invite_request_id: string # ID of the request to invite.
   --team-id: string # ID for the workspace where the invite request was made.
 ]: any -> record<ok: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/admin.inviteRequests.deny" $auth.query)
   let req_body = {"invite_request_id": $invite_request_id, "team_id": $team_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1467,10 +1502,11 @@ export def "admin-invite-requests-list" [
   --team-id: string # ID for the workspace where the invite requests were made.
   --cursor: string # Value of the `next_cursor` field sent as part of the previous API response
   --limit: int # The number of results that will be returned by the API on each invocation. Must be between 1 - 1000, both inclusive
-  --hdr-token: string # Authentication token. Requires scope: `admin.invites:read`
+  --hdr-token: string # Authentication token. Requires scope: `admin.invites:read` (required)
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let qp = [(serialize-qp "team_id" $team_id "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin.inviteRequests.list" $qp $auth.query)
   let accept_val = "application/json"
@@ -1506,13 +1542,15 @@ export def "admin-teams-admins-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # Authentication token. Requires scope: `admin.teams:read`
+  --qp-token: string # Authentication token. Requires scope: `admin.teams:read` (required)
   --limit: int # The maximum number of items to return.
   --cursor: string # Set `cursor` to `next_cursor` returned by the previous call to list items in the next page.
-  --team-id: string
+  --team-id: string # required
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
+  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'team_id' missing: pass --team-id" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "team_id" $team_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin.teams.admins.list" $qp $auth.query)
   let accept_val = "application/json"
@@ -1546,7 +1584,7 @@ export def "admin-teams-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `admin.teams:write`
+  --hdr-token: string # Authentication token. Requires scope: `admin.teams:write` (required)
   --team-description: string # Description for the team.
   --team-discoverability: string # Who can join the team. A team's discoverability can be `open`, `closed`, `invite_only`, or `unlisted`.
   team_domain: string # Team domain (for example, slacksoftballteam).
@@ -1555,6 +1593,7 @@ export def "admin-teams-create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/admin.teams.create" $auth.query)
   let req_body = {"team_description": $team_description, "team_discoverability": $team_discoverability, "team_domain": $team_domain, "team_name": $team_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1594,10 +1633,11 @@ export def "admin-teams-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of items to return. Must be between 1 - 100 both inclusive.
   --cursor: string # Set `cursor` to `next_cursor` returned by the previous call to list items in the next page.
-  --hdr-token: string # Authentication token. Requires scope: `admin.teams:read`
+  --hdr-token: string # Authentication token. Requires scope: `admin.teams:read` (required)
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "cursor" $cursor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin.teams.list" $qp $auth.query)
   let accept_val = "application/json"
@@ -1633,13 +1673,15 @@ export def "admin-teams-owners-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # Authentication token. Requires scope: `admin.teams:read`
-  --team-id: string
+  --qp-token: string # Authentication token. Requires scope: `admin.teams:read` (required)
+  --team-id: string # required
   --limit: int # The maximum number of items to return. Must be between 1 - 1000 both inclusive.
   --cursor: string # Set `cursor` to `next_cursor` returned by the previous call to list items in the next page.
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
+  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'team_id' missing: pass --team-id" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "team_id" $team_id "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "cursor" $cursor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin.teams.owners.list" $qp $auth.query)
   let accept_val = "application/json"
@@ -1673,11 +1715,13 @@ export def "admin-teams-settings-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --team-id: string
-  --hdr-token: string # Authentication token. Requires scope: `admin.teams:read`
+  --team-id: string # required
+  --hdr-token: string # Authentication token. Requires scope: `admin.teams:read` (required)
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'team_id' missing: pass --team-id" } }
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let qp = [(serialize-qp "team_id" $team_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin.teams.settings.info" $qp $auth.query)
   let accept_val = "application/json"
@@ -1723,6 +1767,7 @@ export def "admin-teams-settings-set-default-channels" [
   let full_url = (build-url $base "/admin.teams.settings.setDefaultChannels" $auth.query)
   let req_body = {"channel_ids": $channel_ids, "team_id": $team_id, "token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
@@ -1755,13 +1800,14 @@ export def "admin-teams-settings-set-description" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `admin.teams:write`
+  --hdr-token: string # Authentication token. Requires scope: `admin.teams:write` (required)
   description: string # The new description for the workspace.
   team_id: string # ID for the workspace to set the description for.
 ]: any -> record<ok: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/admin.teams.settings.setDescription" $auth.query)
   let req_body = {"description": $description, "team_id": $team_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1799,13 +1845,14 @@ export def "admin-teams-settings-set-discoverability" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `admin.teams:write`
+  --hdr-token: string # Authentication token. Requires scope: `admin.teams:write` (required)
   discoverability: string # This workspace's discovery setting. It must be set to one of `open`, `invite_only`, `closed`, or `unlisted`.
   team_id: string # The ID of the workspace to set discoverability on.
 ]: any -> record<ok: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/admin.teams.settings.setDiscoverability" $auth.query)
   let req_body = {"discoverability": $discoverability, "team_id": $team_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1853,6 +1900,7 @@ export def "admin-teams-settings-set-icon" [
   let full_url = (build-url $base "/admin.teams.settings.setIcon" $auth.query)
   let req_body = {"image_url": $image_url, "team_id": $team_id, "token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
@@ -1885,13 +1933,14 @@ export def "admin-teams-settings-set-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `admin.teams:write`
+  --hdr-token: string # Authentication token. Requires scope: `admin.teams:write` (required)
   name: string # The new name of the workspace.
   team_id: string # ID for the workspace to set the name for.
 ]: any -> record<ok: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/admin.teams.settings.setName" $auth.query)
   let req_body = {"name": $name, "team_id": $team_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1929,7 +1978,7 @@ export def "admin-usergroups-add-channels" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `admin.usergroups:write`
+  --hdr-token: string # Authentication token. Requires scope: `admin.usergroups:write` (required)
   channel_ids: string # Comma separated string of channel IDs.
   --team-id: string # The workspace to add default channels in.
   usergroup_id: string # ID of the IDP group to add default channels for.
@@ -1937,6 +1986,7 @@ export def "admin-usergroups-add-channels" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/admin.usergroups.addChannels" $auth.query)
   let req_body = {"channel_ids": $channel_ids, "team_id": $team_id, "usergroup_id": $usergroup_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1974,7 +2024,7 @@ export def "admin-usergroups-add-teams" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `admin.teams:write`
+  --hdr-token: string # Authentication token. Requires scope: `admin.teams:write` (required)
   --auto-provision: oneof<nothing, bool> # When `true`, this method automatically creates new workspace accounts for the IDP group members.
   team_ids: string # A comma separated list of encoded team (workspace) IDs. Each workspace *MUST* belong to the organization associated with the token.
   usergroup_id: string # An encoded usergroup (IDP Group) ID.
@@ -1982,6 +2032,7 @@ export def "admin-usergroups-add-teams" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/admin.usergroups.addTeams" $auth.query)
   let req_body = {"auto_provision": $auto_provision, "team_ids": $team_ids, "usergroup_id": $usergroup_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2019,13 +2070,15 @@ export def "admin-usergroups-list-channels" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --usergroup-id: string # ID of the IDP group to list default channels for.
+  --usergroup-id: string # ID of the IDP group to list default channels for. (required)
   --team-id: string # ID of the the workspace.
   --include-num-members: oneof<nothing, bool> # Flag to include or exclude the count of members per channel.
-  --hdr-token: string # Authentication token. Requires scope: `admin.usergroups:read`
+  --hdr-token: string # Authentication token. Requires scope: `admin.usergroups:read` (required)
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($usergroup_id == null) { error make --unspanned { msg: "required query parameter 'usergroup_id' missing: pass --usergroup-id" } }
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let qp = [(serialize-qp "usergroup_id" $usergroup_id "scalar") (serialize-qp "team_id" $team_id "scalar") (serialize-qp "include_num_members" $include_num_members "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin.usergroups.listChannels" $qp $auth.query)
   let accept_val = "application/json"
@@ -2061,13 +2114,14 @@ export def "admin-usergroups-remove-channels" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `admin.usergroups:write`
+  --hdr-token: string # Authentication token. Requires scope: `admin.usergroups:write` (required)
   channel_ids: string # Comma-separated string of channel IDs
   usergroup_id: string # ID of the IDP Group
 ]: any -> record<ok: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/admin.usergroups.removeChannels" $auth.query)
   let req_body = {"channel_ids": $channel_ids, "usergroup_id": $usergroup_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2105,7 +2159,7 @@ export def "admin-users-assign" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `admin.users:write`
+  --hdr-token: string # Authentication token. Requires scope: `admin.users:write` (required)
   --channel-ids: string # Comma separated values of channel IDs to add user in the new workspace.
   --is-restricted: oneof<nothing, bool> # True if user should be added to the workspace as a guest.
   --is-ultra-restricted: oneof<nothing, bool> # True if user should be added to the workspace as a single-channel guest.
@@ -2115,6 +2169,7 @@ export def "admin-users-assign" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/admin.users.assign" $auth.query)
   let req_body = {"channel_ids": $channel_ids, "is_restricted": $is_restricted, "is_ultra_restricted": $is_ultra_restricted, "team_id": $team_id, "user_id": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2152,7 +2207,7 @@ export def "admin-users-invite" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `admin.users:write`
+  --hdr-token: string # Authentication token. Requires scope: `admin.users:write` (required)
   channel_ids: string # A comma-separated list of `channel_id`s for this user to join. At least one channel is required.
   --custom-message: string # An optional message to send to the user in the invite email.
   email: string # The email address of the person to invite.
@@ -2166,6 +2221,7 @@ export def "admin-users-invite" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/admin.users.invite" $auth.query)
   let req_body = {"channel_ids": $channel_ids, "custom_message": $custom_message, "email": $email, "guest_expiration_ts": $guest_expiration_ts, "is_restricted": $is_restricted, "is_ultra_restricted": $is_ultra_restricted, "real_name": $real_name, "resend": $resend, "team_id": $team_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2203,13 +2259,15 @@ export def "admin-users-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --team-id: string # The ID (`T1234`) of the workspace.
+  --team-id: string # The ID (`T1234`) of the workspace. (required)
   --cursor: string # Set `cursor` to `next_cursor` returned by the previous call to list items in the next page.
   --limit: int # Limit for how many users to be retrieved per page
-  --hdr-token: string # Authentication token. Requires scope: `admin.users:read`
+  --hdr-token: string # Authentication token. Requires scope: `admin.users:read` (required)
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id == null) { error make --unspanned { msg: "required query parameter 'team_id' missing: pass --team-id" } }
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let qp = [(serialize-qp "team_id" $team_id "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin.users.list" $qp $auth.query)
   let accept_val = "application/json"
@@ -2245,13 +2303,14 @@ export def "admin-users-remove" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `admin.users:write`
+  --hdr-token: string # Authentication token. Requires scope: `admin.users:write` (required)
   team_id: string # The ID (`T1234`) of the workspace.
   user_id: string # The ID of the user to remove.
 ]: any -> record<ok: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/admin.users.remove" $auth.query)
   let req_body = {"team_id": $team_id, "user_id": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2289,13 +2348,14 @@ export def "admin-users-session-invalidate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `admin.users:write`
+  --hdr-token: string # Authentication token. Requires scope: `admin.users:write` (required)
   session_id: int
   team_id: string # ID of the team that the session belongs to
 ]: any -> record<ok: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/admin.users.session.invalidate" $auth.query)
   let req_body = {"session_id": $session_id, "team_id": $team_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2333,7 +2393,7 @@ export def "admin-users-session-reset" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `admin.users:write`
+  --hdr-token: string # Authentication token. Requires scope: `admin.users:write` (required)
   --mobile-only: oneof<nothing, bool> # Only expire mobile sessions (default: false)
   user_id: string # The ID of the user to wipe sessions for
   --web-only: oneof<nothing, bool> # Only expire web sessions (default: false)
@@ -2341,6 +2401,7 @@ export def "admin-users-session-reset" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/admin.users.session.reset" $auth.query)
   let req_body = {"mobile_only": $mobile_only, "user_id": $user_id, "web_only": $web_only} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2378,13 +2439,14 @@ export def "admin-users-set-admin" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `admin.users:write`
+  --hdr-token: string # Authentication token. Requires scope: `admin.users:write` (required)
   team_id: string # The ID (`T1234`) of the workspace.
   user_id: string # The ID of the user to designate as an admin.
 ]: any -> record<ok: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/admin.users.setAdmin" $auth.query)
   let req_body = {"team_id": $team_id, "user_id": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2422,7 +2484,7 @@ export def "admin-users-set-expiration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `admin.users:write`
+  --hdr-token: string # Authentication token. Requires scope: `admin.users:write` (required)
   expiration_ts: int # Timestamp when guest account should be disabled.
   team_id: string # The ID (`T1234`) of the workspace.
   user_id: string # The ID of the user to set an expiration for.
@@ -2430,6 +2492,7 @@ export def "admin-users-set-expiration" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/admin.users.setExpiration" $auth.query)
   let req_body = {"expiration_ts": $expiration_ts, "team_id": $team_id, "user_id": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2467,13 +2530,14 @@ export def "admin-users-set-owner" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `admin.users:write`
+  --hdr-token: string # Authentication token. Requires scope: `admin.users:write` (required)
   team_id: string # The ID (`T1234`) of the workspace.
   user_id: string # Id of the user to promote to owner.
 ]: any -> record<ok: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/admin.users.setOwner" $auth.query)
   let req_body = {"team_id": $team_id, "user_id": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2511,13 +2575,14 @@ export def "admin-users-set-regular" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `admin.users:write`
+  --hdr-token: string # Authentication token. Requires scope: `admin.users:write` (required)
   team_id: string # The ID (`T1234`) of the workspace.
   user_id: string # The ID of the user to designate as a regular user.
 ]: any -> record<ok: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/admin.users.setRegular" $auth.query)
   let req_body = {"team_id": $team_id, "user_id": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2555,19 +2620,19 @@ export def "api-test" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-error: string # Error response to return
+  --error: string # Error response to return
   --foo: string # example property to return
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "error" $qp_error "scalar") (serialize-qp "foo" $foo "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "error" $error "scalar") (serialize-qp "foo" $foo "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api.test" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"error": $qp_error, "foo": $foo} | compact)
+    query: ({"error": $error, "foo": $foo} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2593,13 +2658,15 @@ export def "apps-event-authorizations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --event-context: string
+  --event-context: string # required
   --cursor: string
   --limit: int
-  --hdr-token: string # Authentication token. Requires scope: `authorizations:read`
+  --hdr-token: string # Authentication token. Requires scope: `authorizations:read` (required)
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($event_context == null) { error make --unspanned { msg: "required query parameter 'event_context' missing: pass --event-context" } }
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let qp = [(serialize-qp "event_context" $event_context "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apps.event.authorizations.list" $qp $auth.query)
   let accept_val = "application/json"
@@ -2672,12 +2739,15 @@ export def "apps-permissions-request" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # Authentication token. Requires scope: `none`
-  --scopes: string # A comma separated list of scopes to request for
-  --trigger-id: string # Token used to trigger the permissions API
+  --qp-token: string # Authentication token. Requires scope: `none` (required)
+  --scopes: string # A comma separated list of scopes to request for (required)
+  --trigger-id: string # Token used to trigger the permissions API (required)
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
+  if ($scopes == null) { error make --unspanned { msg: "required query parameter 'scopes' missing: pass --scopes" } }
+  if ($trigger_id == null) { error make --unspanned { msg: "required query parameter 'trigger_id' missing: pass --trigger-id" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "scopes" $scopes "scalar") (serialize-qp "trigger_id" $trigger_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apps.permissions.request" $qp $auth.query)
   let accept_val = "application/json"
@@ -2711,12 +2781,13 @@ export def "apps-permissions-resources-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # Authentication token. Requires scope: `none`
+  --qp-token: string # Authentication token. Requires scope: `none` (required)
   --cursor: string # Paginate through collections of data by setting the `cursor` parameter to a `next_cursor` attribute returned by a previous request's `response_metadata`. Default value fetches the first "page" of the collection. See [pagination](/docs/pagination) for more detail.
   --limit: int # The maximum number of items to return.
 ]: nothing -> record<ok: bool, resources: table<id: string, type: string>, response_metadata: record<next_cursor: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apps.permissions.resources.list" $qp $auth.query)
   let accept_val = "application/json"
@@ -2750,10 +2821,11 @@ export def "apps-permissions-scopes-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # Authentication token. Requires scope: `none`
+  --qp-token: string # Authentication token. Requires scope: `none` (required)
 ]: nothing -> record<ok: bool, scopes: record<app_home: list<string>, channel: list<string>, group: list<string>, im: list<string>, mpim: list<string>, team: list<string>, user: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apps.permissions.scopes.list" $qp $auth.query)
   let accept_val = "application/json"
@@ -2787,12 +2859,13 @@ export def "apps-permissions-users-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # Authentication token. Requires scope: `none`
+  --qp-token: string # Authentication token. Requires scope: `none` (required)
   --cursor: string # Paginate through collections of data by setting the `cursor` parameter to a `next_cursor` attribute returned by a previous request's `response_metadata`. Default value fetches the first "page" of the collection. See [pagination](/docs/pagination) for more detail.
   --limit: int # The maximum number of items to return.
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apps.permissions.users.list" $qp $auth.query)
   let accept_val = "application/json"
@@ -2826,13 +2899,17 @@ export def "apps-permissions-users-request" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # Authentication token. Requires scope: `none`
-  --scopes: string # A comma separated list of user scopes to request for
-  --trigger-id: string # Token used to trigger the request
-  --user: string # The user this scope is being requested for
+  --qp-token: string # Authentication token. Requires scope: `none` (required)
+  --scopes: string # A comma separated list of user scopes to request for (required)
+  --trigger-id: string # Token used to trigger the request (required)
+  --user: string # The user this scope is being requested for (required)
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
+  if ($scopes == null) { error make --unspanned { msg: "required query parameter 'scopes' missing: pass --scopes" } }
+  if ($trigger_id == null) { error make --unspanned { msg: "required query parameter 'trigger_id' missing: pass --trigger-id" } }
+  if ($user == null) { error make --unspanned { msg: "required query parameter 'user' missing: pass --user" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "scopes" $scopes "scalar") (serialize-qp "trigger_id" $trigger_id "scalar") (serialize-qp "user" $user "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apps.permissions.users.request" $qp $auth.query)
   let accept_val = "application/json"
@@ -2905,11 +2982,12 @@ export def "auth-revoke" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # Authentication token. Requires scope: `none`
+  --qp-token: string # Authentication token. Requires scope: `none` (required)
   --test: oneof<nothing, bool> # Setting this parameter to `1` triggers a _testing mode_ where the specified token will not actually be revoked.
 ]: nothing -> record<ok: bool, revoked: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "test" $test "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/auth.revoke" $qp $auth.query)
   let accept_val = "application/json"
@@ -2943,10 +3021,11 @@ export def "auth-test" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `none`
+  --hdr-token: string # Authentication token. Requires scope: `none` (required)
 ]: nothing -> record<bot_id: string, is_enterprise_install: bool, ok: bool, team: string, team_id: string, url: string, user: string, user_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/auth.test" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2981,11 +3060,12 @@ export def "bots-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # Authentication token. Requires scope: `users:read`
+  --qp-token: string # Authentication token. Requires scope: `users:read` (required)
   --bot: string # Bot user to get info on
 ]: nothing -> record<bot: record<app_id: string, deleted: bool, icons: record<image_36: string, image_48: string, image_72: string>, id: string, name: string, updated: int, user_id: string>, ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "bot" $bot "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/bots.info" $qp $auth.query)
   let accept_val = "application/json"
@@ -3019,7 +3099,7 @@ export def "calls-add" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `calls:write`
+  --hdr-token: string # Authentication token. Requires scope: `calls:write` (required)
   --created-by: string # The valid Slack user ID of the user who created this Call. When this method is called with a user token, the `created_by` field is optional and defaults to the authed user of the token. Otherwise, the field is required.
   --date-start: int # Call start time in UTC UNIX timestamp format
   --desktop-app-join-url: string # When supplied, available Slack clients will attempt to directly launch the 3rd-party Call with this URL.
@@ -3032,6 +3112,7 @@ export def "calls-add" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/calls.add" $auth.query)
   let req_body = {"created_by": $created_by, "date_start": $date_start, "desktop_app_join_url": $desktop_app_join_url, "external_display_id": $external_display_id, "external_unique_id": $external_unique_id, "join_url": $join_url, "title": $title, "users": $users} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3069,13 +3150,14 @@ export def "calls-end" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `calls:write`
+  --hdr-token: string # Authentication token. Requires scope: `calls:write` (required)
   --duration: int # Call duration in seconds
   id: string # `id` returned when registering the call using the [`calls.add`](/methods/calls.add) method.
 ]: any -> record<ok: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/calls.end" $auth.query)
   let req_body = {"duration": $duration, "id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3113,11 +3195,13 @@ export def "calls-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # `id` of the Call returned by the [`calls.add`](/methods/calls.add) method.
-  --hdr-token: string # Authentication token. Requires scope: `calls:read`
+  --id: string # `id` of the Call returned by the [`calls.add`](/methods/calls.add) method. (required)
+  --hdr-token: string # Authentication token. Requires scope: `calls:read` (required)
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/calls.info" $qp $auth.query)
   let accept_val = "application/json"
@@ -3153,13 +3237,14 @@ export def "calls-participants-add" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `calls:write`
+  --hdr-token: string # Authentication token. Requires scope: `calls:write` (required)
   id: string # `id` returned by the [`calls.add`](/methods/calls.add) method.
   users: string # The list of users to add as participants in the Call. [Read more on how to specify users here](/apis/calls#users).
 ]: any -> record<ok: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/calls.participants.add" $auth.query)
   let req_body = {"id": $id, "users": $users} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3197,13 +3282,14 @@ export def "calls-participants-remove" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `calls:write`
+  --hdr-token: string # Authentication token. Requires scope: `calls:write` (required)
   id: string # `id` returned by the [`calls.add`](/methods/calls.add) method.
   users: string # The list of users to remove as participants in the Call. [Read more on how to specify users here](/apis/calls#users).
 ]: any -> record<ok: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/calls.participants.remove" $auth.query)
   let req_body = {"id": $id, "users": $users} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3241,7 +3327,7 @@ export def "calls-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `calls:write`
+  --hdr-token: string # Authentication token. Requires scope: `calls:write` (required)
   --desktop-app-join-url: string # When supplied, available Slack clients will attempt to directly launch the 3rd-party Call with this URL.
   id: string # `id` returned by the [`calls.add`](/methods/calls.add) method.
   --join-url: string # The URL required for a client to join the Call.
@@ -3250,6 +3336,7 @@ export def "calls-update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/calls.update" $auth.query)
   let req_body = {"desktop_app_join_url": $desktop_app_join_url, "id": $id, "join_url": $join_url, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3332,7 +3419,7 @@ export def "chat-delete-scheduled-message" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `chat:write`
+  --hdr-token: string # Authentication token. Requires scope: `chat:write` (required)
   --as-user: oneof<nothing, bool> # Pass true to delete the message as the authed user with `chat:write:user` scope. [Bot users](/bot-users) in this context are considered authed users. If unused or false, the message will be deleted with `chat:write:bot` scope.
   channel: string # The channel the scheduled_message is posting to
   scheduled_message_id: string # `scheduled_message_id` returned from call to chat.scheduleMessage
@@ -3340,6 +3427,7 @@ export def "chat-delete-scheduled-message" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/chat.deleteScheduledMessage" $auth.query)
   let req_body = {"as_user": $as_user, "channel": $channel, "scheduled_message_id": $scheduled_message_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3377,12 +3465,15 @@ export def "chat-get-permalink" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # Authentication token. Requires scope: `none`
-  --channel: string # The ID of the conversation or channel containing the message
-  --message-ts: string # A message's `ts` value, uniquely identifying it within a channel
+  --qp-token: string # Authentication token. Requires scope: `none` (required)
+  --channel: string # The ID of the conversation or channel containing the message (required)
+  --message-ts: string # A message's `ts` value, uniquely identifying it within a channel (required)
 ]: nothing -> record<channel: string, ok: bool, permalink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
+  if ($channel == null) { error make --unspanned { msg: "required query parameter 'channel' missing: pass --channel" } }
+  if ($message_ts == null) { error make --unspanned { msg: "required query parameter 'message_ts' missing: pass --message-ts" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "message_ts" $message_ts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/chat.getPermalink" $qp $auth.query)
   let accept_val = "application/json"
@@ -3460,7 +3551,7 @@ export def "chat-post-ephemeral" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `chat:write`
+  --hdr-token: string # Authentication token. Requires scope: `chat:write` (required)
   --as-user: oneof<nothing, bool> # Pass true to post the message as the authed user. Defaults to true if the chat:write:bot scope is not included. Otherwise, defaults to false.
   --attachments: string # A JSON-based array of structured attachments, presented as a URL-encoded string.
   --blocks: string # A JSON-based array of structured blocks, presented as a URL-encoded string.
@@ -3477,6 +3568,7 @@ export def "chat-post-ephemeral" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/chat.postEphemeral" $auth.query)
   let req_body = {"as_user": $as_user, "attachments": $attachments, "blocks": $blocks, "channel": $channel, "icon_emoji": $icon_emoji, "icon_url": $icon_url, "link_names": $link_names, "parse": $parse, "text": $text, "thread_ts": $thread_ts, "user": $user, "username": $username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3514,7 +3606,7 @@ export def "chat-post-message" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `chat:write`
+  --hdr-token: string # Authentication token. Requires scope: `chat:write` (required)
   --as-user: string # Pass true to post the message as the authed user, instead of as a bot. Defaults to false. See [authorship](#authorship) below.
   --attachments: string # A JSON-based array of structured attachments, presented as a URL-encoded string.
   --blocks: string # A JSON-based array of structured blocks, presented as a URL-encoded string.
@@ -3534,6 +3626,7 @@ export def "chat-post-message" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/chat.postMessage" $auth.query)
   let req_body = {"as_user": $as_user, "attachments": $attachments, "blocks": $blocks, "channel": $channel, "icon_emoji": $icon_emoji, "icon_url": $icon_url, "link_names": $link_names, "mrkdwn": $mrkdwn, "parse": $parse, "reply_broadcast": $reply_broadcast, "text": $text, "thread_ts": $thread_ts, "unfurl_links": $unfurl_links, "unfurl_media": $unfurl_media, "username": $username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3669,7 +3762,7 @@ export def "chat-unfurl" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `links:write`
+  --hdr-token: string # Authentication token. Requires scope: `links:write` (required)
   channel: string # Channel ID of the message
   ts: string # Timestamp of the message to add unfurl behavior to.
   --unfurls: string # URL-encoded JSON map with keys set to URLs featured in the the message, pointing to their unfurl blocks or message attachments.
@@ -3680,6 +3773,7 @@ export def "chat-unfurl" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/chat.unfurl" $auth.query)
   let req_body = {"channel": $channel, "ts": $ts, "unfurls": $unfurls, "user_auth_message": $user_auth_message, "user_auth_required": $user_auth_required, "user_auth_url": $user_auth_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3717,7 +3811,7 @@ export def "chat-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `chat:write`
+  --hdr-token: string # Authentication token. Requires scope: `chat:write` (required)
   --as-user: string # Pass true to update the message as the authed user. [Bot users](/bot-users) in this context are considered authed users.
   --attachments: string # A JSON-based array of structured attachments, presented as a URL-encoded string. This field is required when not presenting `text`. If you don't include this field, the message's previous `attachments` will be retained. To remove previous `attachments`, include an empty array for this field.
   --blocks: string # A JSON-based array of [structured blocks](/block-kit/building), presented as a URL-encoded string. If you don't include this field, the message's previous `blocks` will be retained. To remove previous `blocks`, include an empty array for this field.
@@ -3730,6 +3824,7 @@ export def "chat-update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/chat.update" $auth.query)
   let req_body = {"as_user": $as_user, "attachments": $attachments, "blocks": $blocks, "channel": $channel, "link_names": $link_names, "parse": $parse, "text": $text, "ts": $ts} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4543,12 +4638,15 @@ export def "dialog-open" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --dialog: string # The dialog definition. This must be a JSON-encoded string.
-  --trigger-id: string # Exchange a trigger to post to the user.
-  --hdr-token: string # Authentication token. Requires scope: `none`
+  --dialog: string # The dialog definition. This must be a JSON-encoded string. (required)
+  --trigger-id: string # Exchange a trigger to post to the user. (required)
+  --hdr-token: string # Authentication token. Requires scope: `none` (required)
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($dialog == null) { error make --unspanned { msg: "required query parameter 'dialog' missing: pass --dialog" } }
+  if ($trigger_id == null) { error make --unspanned { msg: "required query parameter 'trigger_id' missing: pass --trigger-id" } }
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let qp = [(serialize-qp "dialog" $dialog "scalar") (serialize-qp "trigger_id" $trigger_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dialog.open" $qp $auth.query)
   let accept_val = "application/json"
@@ -4584,10 +4682,11 @@ export def "dnd-end-dnd" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `dnd:write`
+  --hdr-token: string # Authentication token. Requires scope: `dnd:write` (required)
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/dnd.endDnd" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4622,10 +4721,11 @@ export def "dnd-end-snooze" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `dnd:write`
+  --hdr-token: string # Authentication token. Requires scope: `dnd:write` (required)
 ]: nothing -> record<dnd_enabled: bool, next_dnd_end_ts: int, next_dnd_start_ts: int, ok: bool, snooze_enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/dnd.endSnooze" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4707,6 +4807,7 @@ export def "dnd-set-snooze" [
   let full_url = (build-url $base "/dnd.setSnooze" $auth.query)
   let req_body = {"num_minutes": $num_minutes, "token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
@@ -4777,10 +4878,11 @@ export def "emoji-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # Authentication token. Requires scope: `emoji:read`
+  --qp-token: string # Authentication token. Requires scope: `emoji:read` (required)
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/emoji.list" $qp $auth.query)
   let accept_val = "application/json"
@@ -5378,13 +5480,15 @@ export def "migration-exchange" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # Authentication token. Requires scope: `tokens.basic`
-  --users: string # A comma-separated list of user ids, up to 400 per request
+  --qp-token: string # Authentication token. Requires scope: `tokens.basic` (required)
+  --users: string # A comma-separated list of user ids, up to 400 per request (required)
   --team-id: string # Specify team_id starts with `T` in case of Org Token
   --to-old: oneof<nothing, bool> # Specify `true` to convert `W` global user IDs to workspace-specific `U` IDs. Defaults to `false`.
 ]: nothing -> record<enterprise_id: string, invalid_user_ids: list<string>, ok: bool, team_id: string, user_id_map: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
+  if ($users == null) { error make --unspanned { msg: "required query parameter 'users' missing: pass --users" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "users" $users "scalar") (serialize-qp "team_id" $team_id "scalar") (serialize-qp "to_old" $to_old "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/migration.exchange" $qp $auth.query)
   let accept_val = "application/json"
@@ -5502,11 +5606,12 @@ export def "oauth-v2-access" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Issued when you created your application.
   --client-secret: string # Issued when you created your application.
-  --code: string # The `code` param returned via the OAuth callback.
+  --code: string # The `code` param returned via the OAuth callback. (required)
   --redirect-uri: string # This must match the originally submitted URI (if one was sent).
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($code == null) { error make --unspanned { msg: "required query parameter 'code' missing: pass --code" } }
   let qp = [(serialize-qp "client_id" $client_id "scalar") (serialize-qp "client_secret" $client_secret "scalar") (serialize-qp "code" $code "scalar") (serialize-qp "redirect_uri" $redirect_uri "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/oauth.v2.access" $qp $auth.query)
   let accept_val = "application/json"
@@ -5540,13 +5645,14 @@ export def "pins-add" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `pins:write`
+  --hdr-token: string # Authentication token. Requires scope: `pins:write` (required)
   channel: string # Channel to pin the item in.
   --timestamp: string # Timestamp of the message to pin.
 ]: any -> record<ok: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/pins.add" $auth.query)
   let req_body = {"channel": $channel, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5584,11 +5690,13 @@ export def "pins-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # Authentication token. Requires scope: `pins:read`
-  --channel: string # Channel to get pinned items for.
+  --qp-token: string # Authentication token. Requires scope: `pins:read` (required)
+  --channel: string # Channel to get pinned items for. (required)
 ]: nothing -> list<any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
+  if ($channel == null) { error make --unspanned { msg: "required query parameter 'channel' missing: pass --channel" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "channel" $channel "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pins.list" $qp $auth.query)
   let accept_val = "application/json"
@@ -5622,13 +5730,14 @@ export def "pins-remove" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `pins:write`
+  --hdr-token: string # Authentication token. Requires scope: `pins:write` (required)
   channel: string # Channel where the item is pinned to.
   --timestamp: string # Timestamp of the message to un-pin.
 ]: any -> record<ok: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/pins.remove" $auth.query)
   let req_body = {"channel": $channel, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5666,7 +5775,7 @@ export def "reactions-add" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `reactions:write`
+  --hdr-token: string # Authentication token. Requires scope: `reactions:write` (required)
   channel: string # Channel where the message to add reaction to was posted.
   name: string # Reaction (emoji) name.
   timestamp: string # Timestamp of the message to add reaction to.
@@ -5674,6 +5783,7 @@ export def "reactions-add" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/reactions.add" $auth.query)
   let req_body = {"channel": $channel, "name": $name, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5711,7 +5821,7 @@ export def "reactions-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # Authentication token. Requires scope: `reactions:read`
+  --qp-token: string # Authentication token. Requires scope: `reactions:read` (required)
   --channel: string # Channel where the message to get reactions for was posted.
   --file: string # File to get reactions for.
   --file-comment: string # File comment to get reactions for.
@@ -5720,6 +5830,7 @@ export def "reactions-get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "file" $file "scalar") (serialize-qp "file_comment" $file_comment "scalar") (serialize-qp "full" $qp_full "scalar") (serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reactions.get" $qp $auth.query)
   let accept_val = "application/json"
@@ -5753,7 +5864,7 @@ export def "reactions-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # Authentication token. Requires scope: `reactions:read`
+  --qp-token: string # Authentication token. Requires scope: `reactions:read` (required)
   --user: string # Show reactions made by this user. Defaults to the authed user.
   --qp-full: oneof<nothing, bool> # If true always return the complete reaction list.
   --count: int
@@ -5763,6 +5874,7 @@ export def "reactions-list" [
 ]: nothing -> record<items: list<list<any>>, ok: bool, paging: record<count: int, page: int, pages: int, per_page: int, spill: int, total: int>, response_metadata: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "full" $qp_full "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reactions.list" $qp $auth.query)
   let accept_val = "application/json"
@@ -5796,7 +5908,7 @@ export def "reactions-remove" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `reactions:write`
+  --hdr-token: string # Authentication token. Requires scope: `reactions:write` (required)
   --channel: string # Channel where the message to remove reaction from was posted.
   --file: string # File to remove reaction from.
   --file-comment: string # File comment to remove reaction from.
@@ -5806,6 +5918,7 @@ export def "reactions-remove" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/reactions.remove" $auth.query)
   let req_body = {"channel": $channel, "file": $file, "file_comment": $file_comment, "name": $name, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5843,7 +5956,7 @@ export def "reminders-add" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `reminders:write`
+  --hdr-token: string # Authentication token. Requires scope: `reminders:write` (required)
   text: string # The content of the reminder
   time: string # When this reminder should happen: the Unix timestamp (up to five years from now), the number of seconds until the reminder (if within 24 hours), or a natural language description (Ex. "in 15 minutes," or "every Thursday")
   --user: string # The user who will receive the reminder. If no user is specified, the reminder will go to user who created it.
@@ -5851,6 +5964,7 @@ export def "reminders-add" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/reminders.add" $auth.query)
   let req_body = {"text": $text, "time": $time, "user": $user} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -6049,12 +6163,13 @@ export def "rtm-connect" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # Authentication token. Requires scope: `rtm:stream`
+  --qp-token: string # Authentication token. Requires scope: `rtm:stream` (required)
   --batch-presence-aware: oneof<nothing, bool> # Batch presence deliveries via subscription. Enabling changes the shape of `presence_change` events. See [batch presence](/docs/presence-and-status#batching).
   --presence-sub: oneof<nothing, bool> # Only deliver presence events when requested by subscription. See [presence subscriptions](/docs/presence-and-status#subscriptions).
 ]: nothing -> record<ok: bool, self: record<id: string, name: string>, team: record<domain: string, id: string, name: string>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "batch_presence_aware" $batch_presence_aware "scalar") (serialize-qp "presence_sub" $presence_sub "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rtm.connect" $qp $auth.query)
   let accept_val = "application/json"
@@ -6088,24 +6203,26 @@ export def "search-messages" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # Authentication token. Requires scope: `search:read`
+  --qp-token: string # Authentication token. Requires scope: `search:read` (required)
   --count: int # Pass the number of results you want per "page". Maximum of `100`.
   --highlight: oneof<nothing, bool> # Pass a value of `true` to enable query highlight markers (see below).
   --page: int
-  --query: string # Search query.
-  --qp-sort: string # Return matches sorted by either `score` or `timestamp`.
+  --query: string # Search query. (required)
+  --sort: string # Return matches sorted by either `score` or `timestamp`.
   --sort-dir: string # Change sort direction to ascending (`asc`) or descending (`desc`).
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "highlight" $highlight "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sort_dir" $sort_dir "scalar")] | flatten | str join "&"
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
+  let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "highlight" $highlight "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "sort_dir" $sort_dir "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search.messages" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"token": $qp_token, "count": $count, "highlight": $highlight, "page": $page, "query": $query, "sort": $qp_sort, "sort_dir": $sort_dir} | compact)
+    query: ({"token": $qp_token, "count": $count, "highlight": $highlight, "page": $page, "query": $query, "sort": $sort, "sort_dir": $sort_dir} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -6131,7 +6248,7 @@ export def "stars-add" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `stars:write`
+  --hdr-token: string # Authentication token. Requires scope: `stars:write` (required)
   --channel: string # Channel to add star to, or channel where the message to add star to was posted (used with `timestamp`).
   --file: string # File to add star to.
   --file-comment: string # File comment to add star to.
@@ -6140,6 +6257,7 @@ export def "stars-add" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/stars.add" $auth.query)
   let req_body = {"channel": $channel, "file": $file, "file_comment": $file_comment, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -6218,7 +6336,7 @@ export def "stars-remove" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `stars:write`
+  --hdr-token: string # Authentication token. Requires scope: `stars:write` (required)
   --channel: string # Channel to remove star from, or channel where the message to remove star from was posted (used with `timestamp`).
   --file: string # File to remove star from.
   --file-comment: string # File comment to remove star from.
@@ -6227,6 +6345,7 @@ export def "stars-remove" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/stars.remove" $auth.query)
   let req_body = {"channel": $channel, "file": $file, "file_comment": $file_comment, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -6264,13 +6383,14 @@ export def "team-access-logs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # Authentication token. Requires scope: `admin`
+  --qp-token: string # Authentication token. Requires scope: `admin` (required)
   --before: string # End of time range of logs to include in results (inclusive).
   --count: string
   --page: string
 ]: nothing -> record<logins: table<count: int, country: string, date_first: int, date_last: int, ip: string, isp: string, region: string, user_agent: string, user_id: string, username: string>, ok: bool, paging: record<count: int, page: int, pages: int, per_page: int, spill: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/team.accessLogs" $qp $auth.query)
   let accept_val = "application/json"
@@ -6304,11 +6424,12 @@ export def "team-billable-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # Authentication token. Requires scope: `admin`
+  --qp-token: string # Authentication token. Requires scope: `admin` (required)
   --user: string # A user to retrieve the billable information for. Defaults to all users.
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "user" $user "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/team.billableInfo" $qp $auth.query)
   let accept_val = "application/json"
@@ -6342,11 +6463,12 @@ export def "team-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # Authentication token. Requires scope: `team:read`
+  --qp-token: string # Authentication token. Requires scope: `team:read` (required)
   --team: string # Team to get info on, if omitted, will return information about the current team. Will only return team that the authenticated token is allowed to see through external shared channels
 ]: nothing -> record<ok: bool, team: record<archived: bool, avatar_base_url: string, created: int, date_create: int, deleted: bool, description: string, discoverable: list<any>, domain: string, email_domain: string, enterprise_id: string, enterprise_name: string, external_org_migrations: record<current: list, date_updated: int>, has_compliance_export: bool, icon: record<image_102: string, image_132: string, image_230: string, image_34: string, image_44: string, image_68: string, image_88: string, image_default: bool>, id: string, is_assigned: bool, is_enterprise: int, is_over_storage_limit: bool, limit_ts: int, locale: string, messages_count: int, msg_edit_window_mins: int, name: string, over_integrations_limit: bool, over_storage_limit: bool, pay_prod_cur: string, plan: string, primary_owner: record<email: string, id: string>, sso_provider: record<label: string, name: string, type: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "team" $team "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/team.info" $qp $auth.query)
   let accept_val = "application/json"
@@ -6380,7 +6502,7 @@ export def "team-integration-logs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # Authentication token. Requires scope: `admin`
+  --qp-token: string # Authentication token. Requires scope: `admin` (required)
   --app-id: string # Filter logs to this Slack app. Defaults to all logs.
   --change-type: string # Filter logs with this change type. Defaults to all logs.
   --count: string
@@ -6390,6 +6512,7 @@ export def "team-integration-logs" [
 ]: nothing -> record<logs: table<admin_app_id: string, app_id: string, app_type: string, change_type: string, channel: string, date: string, scope: string, service_id: string, service_type: string, user_id: string, user_name: string>, ok: bool, paging: record<count: int, page: int, pages: int, per_page: int, spill: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "app_id" $app_id "scalar") (serialize-qp "change_type" $change_type "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "service_id" $service_id "scalar") (serialize-qp "user" $user "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/team.integrationLogs" $qp $auth.query)
   let accept_val = "application/json"
@@ -6423,11 +6546,12 @@ export def "team-profile-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # Authentication token. Requires scope: `users.profile:read`
+  --qp-token: string # Authentication token. Requires scope: `users.profile:read` (required)
   --visibility: string # Filter by visibility.
 ]: nothing -> record<ok: bool, profile: record<fields: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "visibility" $visibility "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/team.profile.get" $qp $auth.query)
   let accept_val = "application/json"
@@ -6461,7 +6585,7 @@ export def "usergroups-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `usergroups:write`
+  --hdr-token: string # Authentication token. Requires scope: `usergroups:write` (required)
   --channels: string # A comma separated string of encoded channel IDs for which the User Group uses as a default.
   --description: string # A short description of the User Group.
   --handle: string # A mention handle. Must be unique among channels, users and User Groups.
@@ -6471,6 +6595,7 @@ export def "usergroups-create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/usergroups.create" $auth.query)
   let req_body = {"channels": $channels, "description": $description, "handle": $handle, "include_count": $include_count, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -6508,13 +6633,14 @@ export def "usergroups-disable" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `usergroups:write`
+  --hdr-token: string # Authentication token. Requires scope: `usergroups:write` (required)
   --include-count: oneof<nothing, bool> # Include the number of users in the User Group.
   usergroup: string # The encoded ID of the User Group to disable.
 ]: any -> record<ok: bool, usergroup: record<auto_provision: bool, auto_type: list<any>, channel_count: int, created_by: string, date_create: int, date_delete: int, date_update: int, deleted_by: list<any>, description: string, enterprise_subteam_id: string, handle: string, id: string, is_external: bool, is_subteam: bool, is_usergroup: bool, name: string, prefs: record<channels: list, groups: list>, team_id: string, updated_by: string, user_count: int, users: list<string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/usergroups.disable" $auth.query)
   let req_body = {"include_count": $include_count, "usergroup": $usergroup} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -6552,13 +6678,14 @@ export def "usergroups-enable" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `usergroups:write`
+  --hdr-token: string # Authentication token. Requires scope: `usergroups:write` (required)
   --include-count: oneof<nothing, bool> # Include the number of users in the User Group.
   usergroup: string # The encoded ID of the User Group to enable.
 ]: any -> record<ok: bool, usergroup: record<auto_provision: bool, auto_type: list<any>, channel_count: int, created_by: string, date_create: int, date_delete: int, date_update: int, deleted_by: list<any>, description: string, enterprise_subteam_id: string, handle: string, id: string, is_external: bool, is_subteam: bool, is_usergroup: bool, name: string, prefs: record<channels: list, groups: list>, team_id: string, updated_by: string, user_count: int, users: list<string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/usergroups.enable" $auth.query)
   let req_body = {"include_count": $include_count, "usergroup": $usergroup} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -6597,12 +6724,13 @@ export def "usergroups-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include-users: oneof<nothing, bool> # Include the list of users for each User Group.
-  --qp-token: string # Authentication token. Requires scope: `usergroups:read`
+  --qp-token: string # Authentication token. Requires scope: `usergroups:read` (required)
   --include-count: oneof<nothing, bool> # Include the number of users in each User Group.
   --include-disabled: oneof<nothing, bool> # Include disabled User Groups.
 ]: nothing -> record<ok: bool, usergroups: table<auto_provision: bool, auto_type: list, channel_count: int, created_by: string, date_create: int, date_delete: int, date_update: int, deleted_by: list, description: string, enterprise_subteam_id: string, handle: string, id: string, is_external: bool, is_subteam: bool, is_usergroup: bool, name: string, prefs: record, team_id: string, updated_by: string, user_count: int, users: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "include_users" $include_users "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "include_count" $include_count "scalar") (serialize-qp "include_disabled" $include_disabled "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/usergroups.list" $qp $auth.query)
   let accept_val = "application/json"
@@ -6636,7 +6764,7 @@ export def "usergroups-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `usergroups:write`
+  --hdr-token: string # Authentication token. Requires scope: `usergroups:write` (required)
   --channels: string # A comma separated string of encoded channel IDs for which the User Group uses as a default.
   --description: string # A short description of the User Group.
   --handle: string # A mention handle. Must be unique among channels, users and User Groups.
@@ -6647,6 +6775,7 @@ export def "usergroups-update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/usergroups.update" $auth.query)
   let req_body = {"channels": $channels, "description": $description, "handle": $handle, "include_count": $include_count, "name": $name, "usergroup": $usergroup} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -6684,12 +6813,14 @@ export def "usergroups-users-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # Authentication token. Requires scope: `usergroups:read`
+  --qp-token: string # Authentication token. Requires scope: `usergroups:read` (required)
   --include-disabled: oneof<nothing, bool> # Allow results that involve disabled User Groups.
-  --usergroup: string # The encoded ID of the User Group to update.
+  --usergroup: string # The encoded ID of the User Group to update. (required)
 ]: nothing -> record<ok: bool, users: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
+  if ($usergroup == null) { error make --unspanned { msg: "required query parameter 'usergroup' missing: pass --usergroup" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "include_disabled" $include_disabled "scalar") (serialize-qp "usergroup" $usergroup "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/usergroups.users.list" $qp $auth.query)
   let accept_val = "application/json"
@@ -6723,7 +6854,7 @@ export def "usergroups-users-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `usergroups:write`
+  --hdr-token: string # Authentication token. Requires scope: `usergroups:write` (required)
   --include-count: oneof<nothing, bool> # Include the number of users in the User Group.
   usergroup: string # The encoded ID of the User Group to update.
   users: string # A comma separated string of encoded user IDs that represent the entire list of users for the User Group.
@@ -6731,6 +6862,7 @@ export def "usergroups-users-update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/usergroups.users.update" $auth.query)
   let req_body = {"include_count": $include_count, "usergroup": $usergroup, "users": $users} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -6818,6 +6950,7 @@ export def "users-delete-photo" [
   let full_url = (build-url $base "/users.deletePhoto" $auth.query)
   let req_body = {"token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
@@ -6850,11 +6983,12 @@ export def "users-get-presence" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # Authentication token. Requires scope: `users:read`
+  --qp-token: string # Authentication token. Requires scope: `users:read` (required)
   --user: string # User to get presence info on. Defaults to the authed user.
 ]: nothing -> record<auto_away: bool, connection_count: int, last_activity: int, manual_away: bool, ok: bool, online: bool, presence: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "user" $user "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users.getPresence" $qp $auth.query)
   let accept_val = "application/json"
@@ -6925,12 +7059,13 @@ export def "users-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # Authentication token. Requires scope: `users:read`
+  --qp-token: string # Authentication token. Requires scope: `users:read` (required)
   --include-locale: oneof<nothing, bool> # Set this to `true` to receive the locale for this user. Defaults to `false`
   --user: string # User to get info on
 ]: nothing -> record<ok: bool, user: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "include_locale" $include_locale "scalar") (serialize-qp "user" $user "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users.info" $qp $auth.query)
   let accept_val = "application/json"
@@ -7004,11 +7139,13 @@ export def "users-lookup-by-email" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # Authentication token. Requires scope: `users:read.email`
-  --email: string # An email address belonging to a user in the workspace
+  --qp-token: string # Authentication token. Requires scope: `users:read.email` (required)
+  --email: string # An email address belonging to a user in the workspace (required)
 ]: nothing -> record<ok: bool, user: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
+  if ($email == null) { error make --unspanned { msg: "required query parameter 'email' missing: pass --email" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "email" $email "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users.lookupByEmail" $qp $auth.query)
   let accept_val = "application/json"
@@ -7042,12 +7179,13 @@ export def "users-profile-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # Authentication token. Requires scope: `users.profile:read`
+  --qp-token: string # Authentication token. Requires scope: `users.profile:read` (required)
   --include-labels: oneof<nothing, bool> # Include labels for each ID in custom profile fields
   --user: string # User to retrieve profile info for
 ]: nothing -> record<ok: bool, profile: record<always_active: bool, api_app_id: string, avatar_hash: string, bot_id: string, display_name: string, display_name_normalized: string, email: string, fields: list<record>, first_name: string, guest_expiration_ts: int, guest_invited_by: string, image_1024: string, image_192: string, image_24: string, image_32: string, image_48: string, image_512: string, image_72: string, image_original: string, is_app_user: bool, is_custom_image: bool, is_restricted: bool, is_ultra_restricted: bool, last_avatar_image_hash: string, last_name: string, memberships_count: int, name: string, phone: string, pronouns: string, real_name: string, real_name_normalized: string, skype: string, status_default_emoji: string, status_default_text: string, status_default_text_canonical: string, status_emoji: string, status_expiration: int, status_text: string, status_text_canonical: string, team: string, title: string, updated: int, user_id: string, username: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "include_labels" $include_labels "scalar") (serialize-qp "user" $user "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users.profile.get" $qp $auth.query)
   let accept_val = "application/json"
@@ -7081,7 +7219,7 @@ export def "users-profile-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `users.profile:write`
+  --hdr-token: string # Authentication token. Requires scope: `users.profile:write` (required)
   --name: string # Name of a single key to set. Usable only if `profile` is not passed.
   --profile: string # Collection of key:value pairs presented as a URL-encoded JSON hash. At most 50 fields may be set. Each field name is limited to 255 characters.
   --user: string # ID of user to change. This argument may only be specified by team admins on paid teams.
@@ -7090,6 +7228,7 @@ export def "users-profile-set" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/users.profile.set" $auth.query)
   let req_body = {"name": $name, "profile": $profile, "user": $user, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -7127,10 +7266,11 @@ export def "users-set-active" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `users:write`
+  --hdr-token: string # Authentication token. Requires scope: `users:write` (required)
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/users.setActive" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7177,6 +7317,7 @@ export def "users-set-photo" [
   let full_url = (build-url $base "/users.setPhoto" $auth.query)
   let req_body = {"crop_w": $crop_w, "crop_x": $crop_x, "crop_y": $crop_y, "image": $image, "token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
@@ -7209,12 +7350,13 @@ export def "users-set-presence" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # Authentication token. Requires scope: `users:write`
+  --hdr-token: string # Authentication token. Requires scope: `users:write` (required)
   presence: string # Either `auto` or `away`
 ]: any -> record<ok: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let full_url = (build-url $base "/users.setPresence" $auth.query)
   let req_body = {"presence": $presence} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -7252,12 +7394,15 @@ export def "views-open" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --trigger-id: string # Exchange a trigger to post to the user.
-  --view: string # A [view payload](/reference/surfaces/views). This must be a JSON-encoded string.
-  --hdr-token: string # Authentication token. Requires scope: `none`
+  --trigger-id: string # Exchange a trigger to post to the user. (required)
+  --view: string # A [view payload](/reference/surfaces/views). This must be a JSON-encoded string. (required)
+  --hdr-token: string # Authentication token. Requires scope: `none` (required)
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($trigger_id == null) { error make --unspanned { msg: "required query parameter 'trigger_id' missing: pass --trigger-id" } }
+  if ($view == null) { error make --unspanned { msg: "required query parameter 'view' missing: pass --view" } }
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let qp = [(serialize-qp "trigger_id" $trigger_id "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/views.open" $qp $auth.query)
   let accept_val = "application/json"
@@ -7293,13 +7438,16 @@ export def "views-publish" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-id: string # `id` of the user you want publish a view to.
-  --view: string # A [view payload](/reference/surfaces/views). This must be a JSON-encoded string.
+  --user-id: string # `id` of the user you want publish a view to. (required)
+  --view: string # A [view payload](/reference/surfaces/views). This must be a JSON-encoded string. (required)
   --hash: string # A string that represents view state to protect against possible race conditions.
-  --hdr-token: string # Authentication token. Requires scope: `none`
+  --hdr-token: string # Authentication token. Requires scope: `none` (required)
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id == null) { error make --unspanned { msg: "required query parameter 'user_id' missing: pass --user-id" } }
+  if ($view == null) { error make --unspanned { msg: "required query parameter 'view' missing: pass --view" } }
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let qp = [(serialize-qp "user_id" $user_id "scalar") (serialize-qp "view" $view "scalar") (serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/views.publish" $qp $auth.query)
   let accept_val = "application/json"
@@ -7335,12 +7483,15 @@ export def "views-push" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --trigger-id: string # Exchange a trigger to post to the user.
-  --view: string # A [view payload](/reference/surfaces/views). This must be a JSON-encoded string.
-  --hdr-token: string # Authentication token. Requires scope: `none`
+  --trigger-id: string # Exchange a trigger to post to the user. (required)
+  --view: string # A [view payload](/reference/surfaces/views). This must be a JSON-encoded string. (required)
+  --hdr-token: string # Authentication token. Requires scope: `none` (required)
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($trigger_id == null) { error make --unspanned { msg: "required query parameter 'trigger_id' missing: pass --trigger-id" } }
+  if ($view == null) { error make --unspanned { msg: "required query parameter 'view' missing: pass --view" } }
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let qp = [(serialize-qp "trigger_id" $trigger_id "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/views.push" $qp $auth.query)
   let accept_val = "application/json"
@@ -7380,10 +7531,11 @@ export def "views-update" [
   --external-id: string # A unique identifier of the view set by the developer. Must be unique for all views on a team. Max length of 255 characters. Either `view_id` or `external_id` is required.
   --view: string # A [view object](/reference/surfaces/views). This must be a JSON-encoded string.
   --hash: string # A string that represents view state to protect against possible race conditions.
-  --hdr-token: string # Authentication token. Requires scope: `none`
+  --hdr-token: string # Authentication token. Requires scope: `none` (required)
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let qp = [(serialize-qp "view_id" $view_id "scalar") (serialize-qp "external_id" $external_id "scalar") (serialize-qp "view" $view "scalar") (serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/views.update" $qp $auth.query)
   let accept_val = "application/json"
@@ -7419,12 +7571,14 @@ export def "workflows-step-completed" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --workflow-step-execute-id: string # Context identifier that maps to the correct workflow step execution.
+  --workflow-step-execute-id: string # Context identifier that maps to the correct workflow step execution. (required)
   --outputs: string # Key-value object of outputs from your step. Keys of this object reflect the configured `key` properties of your [`outputs`](/reference/workflows/workflow_step#output) array from your `workflow_step` object.
-  --hdr-token: string # Authentication token. Requires scope: `workflow.steps:execute`
+  --hdr-token: string # Authentication token. Requires scope: `workflow.steps:execute` (required)
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workflow_step_execute_id == null) { error make --unspanned { msg: "required query parameter 'workflow_step_execute_id' missing: pass --workflow-step-execute-id" } }
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let qp = [(serialize-qp "workflow_step_execute_id" $workflow_step_execute_id "scalar") (serialize-qp "outputs" $outputs "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/workflows.stepCompleted" $qp $auth.query)
   let accept_val = "application/json"
@@ -7460,13 +7614,16 @@ export def "workflows-step-failed" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --workflow-step-execute-id: string # Context identifier that maps to the correct workflow step execution.
-  --qp-error: string # A JSON-based object with a `message` property that should contain a human readable error message.
-  --hdr-token: string # Authentication token. Requires scope: `workflow.steps:execute`
+  --workflow-step-execute-id: string # Context identifier that maps to the correct workflow step execution. (required)
+  --error: string # A JSON-based object with a `message` property that should contain a human readable error message. (required)
+  --hdr-token: string # Authentication token. Requires scope: `workflow.steps:execute` (required)
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "workflow_step_execute_id" $workflow_step_execute_id "scalar") (serialize-qp "error" $qp_error "scalar")] | flatten | str join "&"
+  if ($workflow_step_execute_id == null) { error make --unspanned { msg: "required query parameter 'workflow_step_execute_id' missing: pass --workflow-step-execute-id" } }
+  if ($error == null) { error make --unspanned { msg: "required query parameter 'error' missing: pass --error" } }
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
+  let qp = [(serialize-qp "workflow_step_execute_id" $workflow_step_execute_id "scalar") (serialize-qp "error" $error "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/workflows.stepFailed" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7475,7 +7632,7 @@ export def "workflows-step-failed" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"workflow_step_execute_id": $workflow_step_execute_id, "error": $qp_error} | compact)
+    query: ({"workflow_step_execute_id": $workflow_step_execute_id, "error": $error} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -7501,15 +7658,17 @@ export def "workflows-update-step" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --workflow-step-edit-id: string # A context identifier provided with `view_submission` payloads used to call back to `workflows.updateStep`.
+  --workflow-step-edit-id: string # A context identifier provided with `view_submission` payloads used to call back to `workflows.updateStep`. (required)
   --inputs: string # A JSON key-value map of inputs required from a user during configuration. This is the data your app expects to receive when the workflow step starts. **Please note**: the embedded variable format is set and replaced by the workflow system. You cannot create custom variables that will be replaced at runtime. [Read more about variables in workflow steps here](/workflows/steps#variables).
   --outputs: string # An JSON array of output objects used during step execution. This is the data your app agrees to provide when your workflow step was executed.
   --step-name: string # An optional field that can be used to override the step name that is shown in the Workflow Builder.
   --step-image-url: string # An optional field that can be used to override app image that is shown in the Workflow Builder.
-  --hdr-token: string # Authentication token. Requires scope: `workflow.steps:execute`
+  --hdr-token: string # Authentication token. Requires scope: `workflow.steps:execute` (required)
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workflow_step_edit_id == null) { error make --unspanned { msg: "required query parameter 'workflow_step_edit_id' missing: pass --workflow-step-edit-id" } }
+  if ($hdr_token == null) { error make --unspanned { msg: "required header parameter 'token' missing: pass --hdr-token" } }
   let qp = [(serialize-qp "workflow_step_edit_id" $workflow_step_edit_id "scalar") (serialize-qp "inputs" $inputs "scalar") (serialize-qp "outputs" $outputs "scalar") (serialize-qp "step_name" $step_name "scalar") (serialize-qp "step_image_url" $step_image_url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/workflows.updateStep" $qp $auth.query)
   let accept_val = "application/json"

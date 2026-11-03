@@ -1,4 +1,4 @@
-# Auto-generated client for hetras Hotel API Version 0 vv0
+# Auto-generated client for hetras Hotel API Version 0 v0
 # Source: https://api.apis.guru/v2/specs/hetras-certification.net/hotel/v0/swagger.json
 # Auth: --token flag or $env.HETRAS_HOTEL_API_VERSION_0_TOKEN
 
@@ -151,11 +151,13 @@ export def "hotels-get-hotels" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
 ]: nothing -> table<city: string, code: string, country: string, created: string, current_business_day: string, desc: string, email: string, fax: string, hotel_id: int, latitude: float, longitude: float, name: string, phone: string, postal_code: string, state: string, street: string, updated: string, url: string, utc_offset: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
   let full_url = (build-url $base "/api/hotel/v0/hotels" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -191,12 +193,14 @@ export def "hotels-get-hotel" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
 ]: nothing -> record<city: string, code: string, country: string, created: string, current_business_day: string, desc: string, email: string, fax: string, hotel_id: int, latitude: float, longitude: float, name: string, phone: string, postal_code: string, state: string, street: string, updated: string, url: string, utc_offset: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id)} | format pattern "/api/hotel/v0/hotels/{hotel_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -234,12 +238,14 @@ export def "codes-get-codes" [
   --accept: string@accept-completer # Response content type
   --code: string # Return all results matching the specified code. A code is unique in combination with the type which means when you query for a code you could get multiple results each for a different type
   --type: string@type-completer # Return all codes for the specified type
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
 ]: nothing -> record<codes: table<_links: record, code: string, default: bool, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
   let qp = [(serialize-qp "code" $code "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id)} | format pattern "/api/hotel/v0/hotels/{hotel_id}/codes") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -277,13 +283,15 @@ export def "codes-get-code" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
 ]: nothing -> record<_links: record, code: string, comment: string, default: bool, id: string, name: string, parent: record<_links: record, code: string, default: bool, id: string, name: string, type: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id), id: (encode-path-segment $id)} | format pattern "/api/hotel/v0/hotels/{hotel_id}/codes/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -331,12 +339,14 @@ export def "rate-plans-get-rateplans" [
   --skip: int # Amount of items to skip. (format: int32)
   --top: int # Amount of items to select. (format: int32)
   --inlinecount: string@inlinecount-completer # Return total number of items for a given filter criteria.
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
 ]: nothing -> record<_count: int, _links: record, rateplans: table<_links: record, access_control: list, active: bool, active_periods: list, base_rateplan: string, booking_periods: list, code: string, commissionable: bool, created: string, day_use: bool, derived_rateplans: list, description: string, group: string, included_services: list, is_yieldable: bool, market_code: string, name: string, room_types: list, suspended: bool, updated: string, visibility: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
   let qp = [(serialize-qp "sellingStatus" $selling_status "scalar") (serialize-qp "commissionable" $commissionable "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "baseRateplan" $base_rateplan "scalar") (serialize-qp "channelGroup" $channel_group "scalar") (serialize-qp "channelCode" $channel_code "scalar") (serialize-qp "marketCodes" $market_codes "csv") (serialize-qp "roomTypes" $room_types "csv") (serialize-qp "includedServices" $included_services "csv") (serialize-qp "skip" $skip "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "inlinecount" $inlinecount "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id)} | format pattern "/api/hotel/v0/hotels/{hotel_id}/rateplans") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -382,12 +392,14 @@ export def "rate-plans-get-rateplans-count" [
   --market-codes: list<string> # Return all rateplans having one of the specified values as a market code
   --room-types: list<string> # Return all rateplans by which at least one of the specified room types are sold
   --included-services: list<string> # Return all rateplans having at least one of the specified services included
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
 ]: nothing -> record<_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
   let qp = [(serialize-qp "sellingStatus" $selling_status "scalar") (serialize-qp "commissionable" $commissionable "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "baseRateplan" $base_rateplan "scalar") (serialize-qp "channelGroup" $channel_group "scalar") (serialize-qp "channelCode" $channel_code "scalar") (serialize-qp "marketCodes" $market_codes "csv") (serialize-qp "roomTypes" $room_types "csv") (serialize-qp "includedServices" $included_services "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id)} | format pattern "/api/hotel/v0/hotels/{hotel_id}/rateplans/$count") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -424,14 +436,16 @@ export def "rate-plans-batch-update-rates" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
   --body: list
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id)} | format pattern "/api/hotel/v0/hotels/{hotel_id}/rateplans/batch/$rates") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -470,13 +484,15 @@ export def "rate-plans-get-rateplan" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
 ]: nothing -> record<_links: record, access_control: table<channel_codes: list, channel_group: string>, active: bool, active_periods: table<from: string, to: string>, booking_periods: table<from: string, to: string>, code: string, commissionable: bool, created: string, day_use: bool, derivation: record<adjustment: string, base_rateplan: record<_links: record, code: string, name: string>>, derived_rateplans: table<_links: record, code: string, name: string>, description: string, folio_name: string, group: record<code: string, name: string>, included_services: list<string>, is_yieldable: bool, market_code: string, name: string, noshow_policy: string, restrictions: record<leadtime_to_book: int, max_advance_booking: int>, room_types: table<_links: record, code: string, description: string, name: string>, suspended: bool, taxes_included: bool, updated: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
   if ($rateplan_code | is-empty) { error make --unspanned { msg: "path parameter 'rateplanCode' must be non-empty" } }
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id), rateplan_code: (encode-path-segment $rateplan_code)} | format pattern "/api/hotel/v0/hotels/{hotel_id}/rateplans/{rateplan_code}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -514,19 +530,23 @@ export def "rate-plans-get-rates" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --expand: string@expand-completer # You can expand the supplements per room type on demand. By default they are not shown.
-  --qp-from: string # Defines the last business day you would like to get rates for. The maximum time span between from´and to is limited to 365 days. (format: date-time)
-  --qp-to: string # Defines the first business day you would like to get rates for. (format: date-time)
+  --from: string # Defines the last business day you would like to get rates for. The maximum time span between from´and to is limited to 365 days. (required, format: date-time)
+  --to: string # Defines the first business day you would like to get rates for. (required, format: date-time)
   --skip: int # Amount of items to skip. (format: int32)
   --top: int # Amount of items to select. (format: int32)
   --inlinecount: string@inlinecount-completer # Return total number of items for a given filter criteria.
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
 ]: nothing -> record<_count: int, _links: record, rates: table<_links: record, base_price: float, business_day: string, cancellation_policy: record, derivation: record, minimum_guarantee_type: string, per_person_surcharge: float, room_type_supplements: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
   if ($rateplan_code | is-empty) { error make --unspanned { msg: "path parameter 'rateplanCode' must be non-empty" } }
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "inlinecount" $inlinecount "scalar")] | flatten | str join "&"
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "inlinecount" $inlinecount "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id), rateplan_code: (encode-path-segment $rateplan_code)} | format pattern "/api/hotel/v0/hotels/{hotel_id}/rateplans/{rateplan_code}/rates") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -535,7 +555,7 @@ export def "rate-plans-get-rates" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"expand": $expand, "from": $qp_from, "to": $qp_to, "skip": $skip, "top": $top, "inlinecount": $inlinecount} | compact)
+    query: ({"expand": $expand, "from": $from, "to": $to, "skip": $skip, "top": $top, "inlinecount": $inlinecount} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -563,10 +583,10 @@ export def "rate-plans-patch-rates" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-from: string # Defines the last business day you would like to get rates for. The maximum time span between from´and to is limited to 365 days. (format: date-time)
-  --qp-to: string # Defines the first business day you would like to get rates for. (format: date-time)
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --from: string # Defines the last business day you would like to get rates for. The maximum time span between from´and to is limited to 365 days. (required, format: date-time)
+  --to: string # Defines the first business day you would like to get rates for. (required, format: date-time)
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
   --body: list
 ]: any -> record {
   let input = $in
@@ -574,7 +594,11 @@ export def "rate-plans-patch-rates" [
   let base = ($base_url | default $BASE_URL)
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
   if ($rateplan_code | is-empty) { error make --unspanned { msg: "path parameter 'rateplanCode' must be non-empty" } }
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id), rateplan_code: (encode-path-segment $rateplan_code)} | format pattern "/api/hotel/v0/hotels/{hotel_id}/rateplans/{rateplan_code}/rates") $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -585,7 +609,7 @@ export def "rate-plans-patch-rates" [
   let req = {
     method: "patch"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to} | compact)
+    query: ({"from": $from, "to": $to} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -613,16 +637,20 @@ export def "rate-plans-get-rates-count" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-from: string # Defines the last business day you would like to get rates for. The maximum time span between from´and to is limited to 365 days. (format: date-time)
-  --qp-to: string # Defines the first business day you would like to get rates for. (format: date-time)
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --from: string # Defines the last business day you would like to get rates for. The maximum time span between from´and to is limited to 365 days. (required, format: date-time)
+  --to: string # Defines the first business day you would like to get rates for. (required, format: date-time)
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
 ]: nothing -> record<_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
   if ($rateplan_code | is-empty) { error make --unspanned { msg: "path parameter 'rateplanCode' must be non-empty" } }
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id), rateplan_code: (encode-path-segment $rateplan_code)} | format pattern "/api/hotel/v0/hotels/{hotel_id}/rateplans/{rateplan_code}/rates/$count") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -631,7 +659,7 @@ export def "rate-plans-get-rates-count" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to} | compact)
+    query: ({"from": $from, "to": $to} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -660,14 +688,16 @@ export def "rate-plans-get-rate" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
 ]: nothing -> record<_links: record, base_price: float, business_day: string, cancellation_policy: record<description: string, name: string>, derivation: record<adjustment: string, value: float>, minimum_guarantee_type: string, per_person_surcharge: float, room_type_supplements: table<_links: record, code: string, default: bool, supplements: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
   if ($rateplan_code | is-empty) { error make --unspanned { msg: "path parameter 'rateplanCode' must be non-empty" } }
   if ($business_day | is-empty) { error make --unspanned { msg: "path parameter 'businessDay' must be non-empty" } }
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id), rateplan_code: (encode-path-segment $rateplan_code), business_day: (encode-path-segment $business_day)} | format pattern "/api/hotel/v0/hotels/{hotel_id}/rateplans/{rateplan_code}/rates/{business_day}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -705,8 +735,8 @@ export def "rate-plans-patch-rate" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
   --body: list
 ]: any -> record {
   let input = $in
@@ -715,6 +745,8 @@ export def "rate-plans-patch-rate" [
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
   if ($rateplan_code | is-empty) { error make --unspanned { msg: "path parameter 'rateplanCode' must be non-empty" } }
   if ($business_day | is-empty) { error make --unspanned { msg: "path parameter 'businessDay' must be non-empty" } }
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id), rateplan_code: (encode-path-segment $rateplan_code), business_day: (encode-path-segment $business_day)} | format pattern "/api/hotel/v0/hotels/{hotel_id}/rateplans/{rateplan_code}/rates/{business_day}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -752,12 +784,14 @@ export def "room-types-get-room-types" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
 ]: nothing -> table<amenities: list<record>, bedding_type: string, code: string, created: string, default: bool, description: string, expected_occupancy: int, facilities: list<record>, max_persons: int, min_persons: int, name: string, updated: string, views: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id)} | format pattern "/api/hotel/v0/hotels/{hotel_id}/room_types") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -794,13 +828,15 @@ export def "room-types-get-room-type" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
 ]: nothing -> record<amenities: table<code: string, name: string>, bedding_type: string, code: string, created: string, default: bool, description: string, expected_occupancy: int, facilities: table<code: string, name: string>, max_persons: int, min_persons: int, name: string, updated: string, views: table<code: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id), code: (encode-path-segment $code)} | format pattern "/api/hotel/v0/hotels/{hotel_id}/room_types/{code}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -846,12 +882,14 @@ export def "rooms-get-rooms" [
   --skip: int # Amount of items to skip. (format: int32)
   --top: int # Amount of items to select. (format: int32)
   --inlinecount: string@inlinecount-completer # Return total number of items for a given filter criteria.
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
 ]: nothing -> record<_count: int, _links: record, rooms: table<_links: record, created: string, description: string, name: string, number: string, room_type: record, status: record, updated: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
   let qp = [(serialize-qp "occupancy" $occupancy "scalar") (serialize-qp "conditions" $conditions "csv") (serialize-qp "maintenances" $maintenances "csv") (serialize-qp "roomTypes" $room_types "csv") (serialize-qp "amenities" $amenities "csv") (serialize-qp "views" $views "csv") (serialize-qp "locations" $locations "csv") (serialize-qp "skip" $skip "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "inlinecount" $inlinecount "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id)} | format pattern "/api/hotel/v0/hotels/{hotel_id}/rooms") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -895,12 +933,14 @@ export def "rooms-get-rooms-count" [
   --amenities: list<string> # Return result only for rooms having all of the given amenities. You can provide a comma seperated list of amenity codes.
   --views: list<string> # Return result only for rooms having at least one of the specified views. You can provide a comma seperated list of view codes.
   --locations: list<string> # Return result only for rooms having at least one of the specified locations. You can provide a comma seperated list of location codes.
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
 ]: nothing -> record<_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
   let qp = [(serialize-qp "occupancy" $occupancy "scalar") (serialize-qp "conditions" $conditions "csv") (serialize-qp "maintenances" $maintenances "csv") (serialize-qp "roomTypes" $room_types "csv") (serialize-qp "amenities" $amenities "csv") (serialize-qp "views" $views "csv") (serialize-qp "locations" $locations "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id)} | format pattern "/api/hotel/v0/hotels/{hotel_id}/rooms/$count") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -937,8 +977,8 @@ export def "rooms-get-available-rooms" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-from: string # Rooms returned will not be assigned to a reservation or be under maintenance between this date and the specified to date. Still there could be departing reservations or ending maintenances for this date. (format: date-time)
-  --qp-to: string # Rooms returned will not be assigned to a reservation or be under maintenance between the specified from date and this date. Still there could be arriving reservations or beginning maintenances for this date. (format: date-time)
+  --from: string # Rooms returned will not be assigned to a reservation or be under maintenance between this date and the specified to date. Still there could be departing reservations or ending maintenances for this date. (required, format: date-time)
+  --to: string # Rooms returned will not be assigned to a reservation or be under maintenance between the specified from date and this date. Still there could be arriving reservations or beginning maintenances for this date. (required, format: date-time)
   --adults: string # Specifies number of adults the returned rooms will have to be able to house. The default value is 1. (format: byte)
   --include-out-of-service: oneof<nothing, bool> # Should rooms that are set OutOfService in the defined time period be returned as available. By default they are not.
   --room-types: list<string> # Return result only for rooms for the given room types. Allows to pass a comma-separated list of room types.
@@ -948,13 +988,17 @@ export def "rooms-get-available-rooms" [
   --skip: int # Amount of items to skip. (format: int32)
   --top: int # Amount of items to select. (format: int32)
   --inlinecount: string@inlinecount-completer # Return total number of items for a given filter criteria.
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
 ]: nothing -> record<_count: int, _links: record, rooms: table<_links: record, created: string, description: string, name: string, number: string, room_type: record, status: record, updated: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "adults" $adults "scalar") (serialize-qp "includeOutOfService" $include_out_of_service "scalar") (serialize-qp "roomTypes" $room_types "csv") (serialize-qp "amenities" $amenities "csv") (serialize-qp "views" $views "csv") (serialize-qp "locations" $locations "csv") (serialize-qp "skip" $skip "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "inlinecount" $inlinecount "scalar")] | flatten | str join "&"
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "adults" $adults "scalar") (serialize-qp "includeOutOfService" $include_out_of_service "scalar") (serialize-qp "roomTypes" $room_types "csv") (serialize-qp "amenities" $amenities "csv") (serialize-qp "views" $views "csv") (serialize-qp "locations" $locations "csv") (serialize-qp "skip" $skip "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "inlinecount" $inlinecount "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id)} | format pattern "/api/hotel/v0/hotels/{hotel_id}/rooms/available") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -963,7 +1007,7 @@ export def "rooms-get-available-rooms" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to, "adults": $adults, "includeOutOfService": $include_out_of_service, "roomTypes": $room_types, "amenities": $amenities, "views": $views, "locations": $locations, "skip": $skip, "top": $top, "inlinecount": $inlinecount} | compact)
+    query: ({"from": $from, "to": $to, "adults": $adults, "includeOutOfService": $include_out_of_service, "roomTypes": $room_types, "amenities": $amenities, "views": $views, "locations": $locations, "skip": $skip, "top": $top, "inlinecount": $inlinecount} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -991,13 +1035,15 @@ export def "rooms-get-room" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
 ]: nothing -> record<amenities: table<code: string, name: string>, beddings: table<count: int, type: string>, created: string, description: string, expected_occupancy: int, extra_bed_allowed: bool, floor: int, locations: table<code: string, name: string>, max_persons: int, min_persons: int, name: string, number: string, reservations: table<_links: record, arrival_date: string, confirmation_id: string, departure_date: string, reservation_number: int, reservation_status: string>, room_type: record<_links: record, code: string, description: string, name: string>, status: record<condition: string, frontdesk_occupancy: string, housekeeping_occupancy: string, maintenance: record<from: string, reason: string, to: string, value: string>>, updated: string, views: table<code: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
   if ($room_number | is-empty) { error make --unspanned { msg: "path parameter 'roomNumber' must be non-empty" } }
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id), room_number: (encode-path-segment $room_number)} | format pattern "/api/hotel/v0/hotels/{hotel_id}/rooms/{room_number}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1034,8 +1080,8 @@ export def "rooms-patch-room" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
   --body: list
 ]: any -> record {
   let input = $in
@@ -1043,6 +1089,8 @@ export def "rooms-patch-room" [
   let base = ($base_url | default $BASE_URL)
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
   if ($room_number | is-empty) { error make --unspanned { msg: "path parameter 'roomNumber' must be non-empty" } }
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id), room_number: (encode-path-segment $room_number)} | format pattern "/api/hotel/v0/hotels/{hotel_id}/rooms/{room_number}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -1081,8 +1129,8 @@ export def "yieldable-rates-save-prices" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --app-id: string # Application identifier
-  --app-key: string # Application key.
+  --app-id: string # Application identifier (required)
+  --app-key: string # Application key. (required)
   --body: list
 ]: any -> record {
   let input = $in
@@ -1090,6 +1138,8 @@ export def "yieldable-rates-save-prices" [
   let base = ($base_url | default $BASE_URL)
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
   if ($rateplan_code | is-empty) { error make --unspanned { msg: "path parameter 'rateplanCode' must be non-empty" } }
+  if ($app_id == null) { error make --unspanned { msg: "required header parameter 'App-Id' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id), rateplan_code: (encode-path-segment $rateplan_code)} | format pattern "/api/hotel/v0/hotels/{hotel_id}/yieldable_rateplans/{rateplan_code}/$rates") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }

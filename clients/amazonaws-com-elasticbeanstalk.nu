@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -192,8 +192,8 @@ export def "get-abort-environment-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --environment-id: string # This specifies the ID of the environment with the in-progress update that you want to cancel.
   --environment-name: string # This specifies the name of the environment with the in-progress update that you want to cancel.
-  --action: string@action-completer
-  --version: string@version-completer
+  --action: string@action-completer # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -204,6 +204,8 @@ export def "get-abort-environment-update" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "AbortEnvironmentUpdate")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "EnvironmentId" $environment_id "scalar") (serialize-qp "EnvironmentName" $environment_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -238,8 +240,8 @@ export def "post-abort-environment-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer
-  --version: string@version-completer
+  --action: string@action-completer # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -252,6 +254,8 @@ export def "post-abort-environment-update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "AbortEnvironmentUpdate")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -290,9 +294,9 @@ export def "get-apply-environment-managed-action" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --environment-name: string # The name of the target environment.
   --environment-id: string # The environment ID of the target environment.
-  --action-id: string # The action ID of the scheduled managed action to execute.
-  --action: string@action-completer-1
-  --version: string@version-completer
+  --action-id: string # The action ID of the scheduled managed action to execute. (required)
+  --action: string@action-completer-1 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -300,9 +304,12 @@ export def "get-apply-environment-managed-action" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ActionId: record, ActionDescription: record, ActionType: record, Status: record> {
+]: nothing -> record<ActionId: string, ActionDescription: string, ActionType: string, Status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($action_id == null) { error make --unspanned { msg: "required query parameter 'ActionId' missing: pass --action-id" } }
+  let action = ($action | default "ApplyEnvironmentManagedAction")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "EnvironmentName" $environment_name "scalar") (serialize-qp "EnvironmentId" $environment_id "scalar") (serialize-qp "ActionId" $action_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -337,8 +344,8 @@ export def "post-apply-environment-managed-action" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-1
-  --version: string@version-completer
+  --action: string@action-completer-1 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -347,10 +354,12 @@ export def "post-apply-environment-managed-action" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ActionId: record, ActionDescription: record, ActionType: record, Status: record> {
+]: any -> record<ActionId: string, ActionDescription: string, ActionType: string, Status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ApplyEnvironmentManagedAction")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -387,10 +396,10 @@ export def "get-associate-environment-operations-role" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --environment-name: string # The name of the environment to which to set the operations role.
-  --operations-role: string # The Amazon Resource Name (ARN) of an existing IAM role to be used as the environment's operations role.
-  --action: string@action-completer-2
-  --version: string@version-completer
+  --environment-name: string # The name of the environment to which to set the operations role. (required)
+  --operations-role: string # The Amazon Resource Name (ARN) of an existing IAM role to be used as the environment's operations role. (required)
+  --action: string@action-completer-2 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -401,6 +410,10 @@ export def "get-associate-environment-operations-role" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($environment_name == null) { error make --unspanned { msg: "required query parameter 'EnvironmentName' missing: pass --environment-name" } }
+  if ($operations_role == null) { error make --unspanned { msg: "required query parameter 'OperationsRole' missing: pass --operations-role" } }
+  let action = ($action | default "AssociateEnvironmentOperationsRole")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "EnvironmentName" $environment_name "scalar") (serialize-qp "OperationsRole" $operations_role "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -435,8 +448,8 @@ export def "post-associate-environment-operations-role" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-2
-  --version: string@version-completer
+  --action: string@action-completer-2 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -449,6 +462,8 @@ export def "post-associate-environment-operations-role" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "AssociateEnvironmentOperationsRole")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -485,9 +500,9 @@ export def "get-check-dns-availability" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cname-prefix: string # The prefix used when this CNAME is reserved.
-  --action: string@action-completer-3
-  --version: string@version-completer
+  --cname-prefix: string # The prefix used when this CNAME is reserved. (required)
+  --action: string@action-completer-3 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -495,9 +510,12 @@ export def "get-check-dns-availability" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Available: record, FullyQualifiedCNAME: record> {
+]: nothing -> record<Available: bool, FullyQualifiedCNAME: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($cname_prefix == null) { error make --unspanned { msg: "required query parameter 'CNAMEPrefix' missing: pass --cname-prefix" } }
+  let action = ($action | default "CheckDNSAvailability")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "CNAMEPrefix" $cname_prefix "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -532,8 +550,8 @@ export def "post-check-dns-availability" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-3
-  --version: string@version-completer
+  --action: string@action-completer-3 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -542,10 +560,12 @@ export def "post-check-dns-availability" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Available: record, FullyQualifiedCNAME: record> {
+]: any -> record<Available: bool, FullyQualifiedCNAME: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CheckDNSAvailability")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -585,8 +605,8 @@ export def "get-compose-environments" [
   --application-name: string # The name of the application to which the specified source bundles belong.
   --group-name: string # The name of the group to which the target environments belong. Specify a group name only if the environment name defined in each target environment's manifest ends with a + (plus) character. See Environment Manifest (env.yaml) (https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/environment-cfg-manifest.html) for details.
   --version-labels: list # A list of version labels, specifying one or more application source bundles that belong to the target application. Each source bundle must include an environment manifest that specifies the name of the environment and the name of the solution stack to use, and optionally can specify environment links to create.
-  --action: string@action-completer-4
-  --version: string@version-completer
+  --action: string@action-completer-4 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -594,9 +614,11 @@ export def "get-compose-environments" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Environments: record, NextToken: record> {
+]: nothing -> record<Environments: table<EnvironmentName: string, EnvironmentId: string, ApplicationName: string, VersionLabel: string, SolutionStackName: string, PlatformArn: string, TemplateName: string, Description: string, EndpointURL: string, CNAME: string, DateCreated: string, DateUpdated: string, Status: string, AbortableOperationInProgress: bool, Health: string, HealthStatus: string, Resources: record, Tier: record, EnvironmentLinks: list, EnvironmentArn: string, OperationsRole: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ComposeEnvironments")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "ApplicationName" $application_name "scalar") (serialize-qp "GroupName" $group_name "scalar") (serialize-qp "VersionLabels" $version_labels "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -631,8 +653,8 @@ export def "post-compose-environments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-4
-  --version: string@version-completer
+  --action: string@action-completer-4 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -641,10 +663,12 @@ export def "post-compose-environments" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Environments: record, NextToken: record> {
+]: any -> record<Environments: table<EnvironmentName: string, EnvironmentId: string, ApplicationName: string, VersionLabel: string, SolutionStackName: string, PlatformArn: string, TemplateName: string, Description: string, EndpointURL: string, CNAME: string, DateCreated: string, DateUpdated: string, Status: string, AbortableOperationInProgress: bool, Health: string, HealthStatus: string, Resources: record, Tier: record, EnvironmentLinks: list, EnvironmentArn: string, OperationsRole: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ComposeEnvironments")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -681,12 +705,12 @@ export def "get-create-application" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --application-name: string # The name of the application. Must be unique within your account.
+  --application-name: string # The name of the application. Must be unique within your account. (required)
   --description: string # Your description of the application.
   --resource-lifecycle-config: record # Specifies an application resource lifecycle configuration to prevent your application from accumulating too many versions.
   --tags: list # Specifies the tags applied to the application. Elastic Beanstalk applies these tags only to the application. Environments that you create in the application don't inherit the tags.
-  --action: string@action-completer-5
-  --version: string@version-completer
+  --action: string@action-completer-5 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -694,9 +718,12 @@ export def "get-create-application" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Application: record<ApplicationArn: record, ApplicationName: record, Description: record, DateCreated: record, DateUpdated: record, Versions: record, ConfigurationTemplates: record, ResourceLifecycleConfig: record<ServiceRole: record, VersionLifecycleConfig: record>>> {
+]: nothing -> record<Application: record<ApplicationArn: string, ApplicationName: string, Description: string, DateCreated: string, DateUpdated: string, Versions: list<string>, ConfigurationTemplates: list<string>, ResourceLifecycleConfig: record<ServiceRole: string, VersionLifecycleConfig: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_name == null) { error make --unspanned { msg: "required query parameter 'ApplicationName' missing: pass --application-name" } }
+  let action = ($action | default "CreateApplication")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "ApplicationName" $application_name "scalar") (serialize-qp "Description" $description "scalar") (serialize-qp "ResourceLifecycleConfig" $resource_lifecycle_config "multi") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -731,8 +758,8 @@ export def "post-create-application" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-5
-  --version: string@version-completer
+  --action: string@action-completer-5 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -741,10 +768,12 @@ export def "post-create-application" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Application: record<ApplicationArn: record, ApplicationName: record, Description: record, DateCreated: record, DateUpdated: record, Versions: record, ConfigurationTemplates: record, ResourceLifecycleConfig: record<ServiceRole: record, VersionLifecycleConfig: record>>> {
+]: any -> record<Application: record<ApplicationArn: string, ApplicationName: string, Description: string, DateCreated: string, DateUpdated: string, Versions: list<string>, ConfigurationTemplates: list<string>, ResourceLifecycleConfig: record<ServiceRole: string, VersionLifecycleConfig: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateApplication")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -781,8 +810,8 @@ export def "get-create-application-version" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --application-name: string # The name of the application. If no application is found with this name, and AutoCreateApplication is false, returns an InvalidParameterValue error.
-  --version-label: string # A label identifying this version. Constraint: Must be unique per application. If an application version already exists with this label for the specified application, AWS Elastic Beanstalk returns an InvalidParameterValue error.
+  --application-name: string # The name of the application. If no application is found with this name, and AutoCreateApplication is false, returns an InvalidParameterValue error. (required)
+  --version-label: string # A label identifying this version. Constraint: Must be unique per application. If an application version already exists with this label for the specified application, AWS Elastic Beanstalk returns an InvalidParameterValue error. (required)
   --description: string # A description of this application version.
   --source-build-information: record # Specify a commit in an AWS CodeCommit Git repository to use as the source code for the application version.
   --source-bundle: record # The Amazon S3 bucket and key that identify the location of the source bundle for this version. The Amazon S3 bucket must be in the same region as the environment. Specify a source bundle in S3 or a commit in an AWS CodeCommit repository (with SourceBuildInformation), but not both. If neither SourceBundle nor SourceBuildInformation are provided, Elastic Beanstalk uses a sample application.
@@ -790,8 +819,8 @@ export def "get-create-application-version" [
   --auto-create-application: oneof<nothing, bool> # Set to true to create an application with the specified name if it doesn't already exist.
   --process: oneof<nothing, bool> # Pre-processes and validates the environment manifest (env.yaml) and configuration files (*.config files in the .ebextensions folder) in the source bundle. Validating configuration files can identify issues prior to deploying the application version to an environment. You must turn processing on for application versions that you create using AWS CodeBuild or AWS CodeCommit. For application versions built from a source bundle in Amazon S3, processing is optional. The Process option validates Elastic Beanstalk configuration files. It doesn't validate your application's configuration files, like proxy server or Docker configuration.
   --tags: list # Specifies the tags applied to the application version. Elastic Beanstalk applies these tags only to the application version. Environments that use the application version don't inherit the tags.
-  --action: string@action-completer-6
-  --version: string@version-completer
+  --action: string@action-completer-6 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -799,9 +828,13 @@ export def "get-create-application-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ApplicationVersion: record<ApplicationVersionArn: record, ApplicationName: record, Description: record, VersionLabel: record, SourceBuildInformation: record<SourceType: record, SourceRepository: record, SourceLocation: record>, BuildArn: record, SourceBundle: record<S3Bucket: record, S3Key: record>, DateCreated: record, DateUpdated: record, Status: record>> {
+]: nothing -> record<ApplicationVersion: record<ApplicationVersionArn: string, ApplicationName: string, Description: string, VersionLabel: string, SourceBuildInformation: record<SourceType: string, SourceRepository: string, SourceLocation: string>, BuildArn: string, SourceBundle: record<S3Bucket: string, S3Key: string>, DateCreated: string, DateUpdated: string, Status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_name == null) { error make --unspanned { msg: "required query parameter 'ApplicationName' missing: pass --application-name" } }
+  if ($version_label == null) { error make --unspanned { msg: "required query parameter 'VersionLabel' missing: pass --version-label" } }
+  let action = ($action | default "CreateApplicationVersion")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "ApplicationName" $application_name "scalar") (serialize-qp "VersionLabel" $version_label "scalar") (serialize-qp "Description" $description "scalar") (serialize-qp "SourceBuildInformation" $source_build_information "multi") (serialize-qp "SourceBundle" $source_bundle "multi") (serialize-qp "BuildConfiguration" $build_configuration "multi") (serialize-qp "AutoCreateApplication" $auto_create_application "scalar") (serialize-qp "Process" $process "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -836,8 +869,8 @@ export def "post-create-application-version" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-6
-  --version: string@version-completer
+  --action: string@action-completer-6 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -846,10 +879,12 @@ export def "post-create-application-version" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ApplicationVersion: record<ApplicationVersionArn: record, ApplicationName: record, Description: record, VersionLabel: record, SourceBuildInformation: record<SourceType: record, SourceRepository: record, SourceLocation: record>, BuildArn: record, SourceBundle: record<S3Bucket: record, S3Key: record>, DateCreated: record, DateUpdated: record, Status: record>> {
+]: any -> record<ApplicationVersion: record<ApplicationVersionArn: string, ApplicationName: string, Description: string, VersionLabel: string, SourceBuildInformation: record<SourceType: string, SourceRepository: string, SourceLocation: string>, BuildArn: string, SourceBundle: record<S3Bucket: string, S3Key: string>, DateCreated: string, DateUpdated: string, Status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateApplicationVersion")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -886,8 +921,8 @@ export def "get-create-configuration-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --application-name: string # The name of the Elastic Beanstalk application to associate with this configuration template.
-  --template-name: string # The name of the configuration template. Constraint: This name must be unique per application.
+  --application-name: string # The name of the Elastic Beanstalk application to associate with this configuration template. (required)
+  --template-name: string # The name of the configuration template. Constraint: This name must be unique per application. (required)
   --solution-stack-name: string # The name of an Elastic Beanstalk solution stack (platform version) that this configuration uses. For example, 64bit Amazon Linux 2013.09 running Tomcat 7 Java 7. A solution stack specifies the operating system, runtime, and application server for a configuration template. It also determines the set of configuration options as well as the possible and default values. For more information, see Supported Platforms (https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/concepts.platforms.html) in the AWS Elastic Beanstalk Developer Guide. You must specify SolutionStackName if you don't specify PlatformArn, EnvironmentId, or SourceConfiguration. Use the ListAvailableSolutionStacks (https://docs.aws.amazon.com/elasticbeanstalk/latest/api/API_ListAvailableSolutionStacks.html) API to obtain a list of available solution stacks.
   --platform-arn: string # The Amazon Resource Name (ARN) of the custom platform. For more information, see Custom Platforms (https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/custom-platforms.html) in the AWS Elastic Beanstalk Developer Guide. If you specify PlatformArn, then don't specify SolutionStackName.
   --source-configuration: record # An Elastic Beanstalk configuration template to base this one on. If specified, Elastic Beanstalk uses the configuration values from the specified configuration template to create a new configuration. Values specified in OptionSettings override any values obtained from the SourceConfiguration. You must specify SourceConfiguration if you don't specify PlatformArn, EnvironmentId, or SolutionStackName. Constraint: If both solution stack name and source configuration are specified, the solution stack of the source configuration template must match the specified solution stack name.
@@ -895,8 +930,8 @@ export def "get-create-configuration-template" [
   --description: string # An optional description for this configuration.
   --option-settings: list # Option values for the Elastic Beanstalk configuration, such as the instance type. If specified, these values override the values obtained from the solution stack or the source configuration template. For a complete list of Elastic Beanstalk configuration options, see Option Values (https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/command-options.html) in the AWS Elastic Beanstalk Developer Guide.
   --tags: list # Specifies the tags applied to the configuration template.
-  --action: string@action-completer-7
-  --version: string@version-completer
+  --action: string@action-completer-7 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -904,9 +939,13 @@ export def "get-create-configuration-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<SolutionStackName: record, PlatformArn: record, ApplicationName: record, TemplateName: record, Description: record, EnvironmentName: record, DeploymentStatus: record, DateCreated: record, DateUpdated: record, OptionSettings: record> {
+]: nothing -> record<SolutionStackName: string, PlatformArn: string, ApplicationName: string, TemplateName: string, Description: string, EnvironmentName: string, DeploymentStatus: string, DateCreated: string, DateUpdated: string, OptionSettings: table<ResourceName: string, Namespace: string, OptionName: string, Value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_name == null) { error make --unspanned { msg: "required query parameter 'ApplicationName' missing: pass --application-name" } }
+  if ($template_name == null) { error make --unspanned { msg: "required query parameter 'TemplateName' missing: pass --template-name" } }
+  let action = ($action | default "CreateConfigurationTemplate")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "ApplicationName" $application_name "scalar") (serialize-qp "TemplateName" $template_name "scalar") (serialize-qp "SolutionStackName" $solution_stack_name "scalar") (serialize-qp "PlatformArn" $platform_arn "scalar") (serialize-qp "SourceConfiguration" $source_configuration "multi") (serialize-qp "EnvironmentId" $environment_id "scalar") (serialize-qp "Description" $description "scalar") (serialize-qp "OptionSettings" $option_settings "multi") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -941,8 +980,8 @@ export def "post-create-configuration-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-7
-  --version: string@version-completer
+  --action: string@action-completer-7 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -951,10 +990,12 @@ export def "post-create-configuration-template" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<SolutionStackName: record, PlatformArn: record, ApplicationName: record, TemplateName: record, Description: record, EnvironmentName: record, DeploymentStatus: record, DateCreated: record, DateUpdated: record, OptionSettings: record> {
+]: any -> record<SolutionStackName: string, PlatformArn: string, ApplicationName: string, TemplateName: string, Description: string, EnvironmentName: string, DeploymentStatus: string, DateCreated: string, DateUpdated: string, OptionSettings: table<ResourceName: string, Namespace: string, OptionName: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateConfigurationTemplate")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -991,7 +1032,7 @@ export def "get-create-environment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --application-name: string # The name of the application that is associated with this environment.
+  --application-name: string # The name of the application that is associated with this environment. (required)
   --environment-name: string # A unique name for the environment. Constraint: Must be from 4 to 40 characters in length. The name can contain only letters, numbers, and hyphens. It can't start or end with a hyphen. This name must be unique within a region in your account. If the specified name already exists in the region, Elastic Beanstalk returns an InvalidParameterValue error. If you don't specify the CNAMEPrefix parameter, the environment name becomes part of the CNAME, and therefore part of the visible URL for your application.
   --group-name: string # The name of the group to which the target environment belongs. Specify a group name only if the environment's name is specified in an environment manifest and not with the environment name parameter. See Environment Manifest (env.yaml) (https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/environment-cfg-manifest.html) for details.
   --description: string # Your description for this environment.
@@ -1005,8 +1046,8 @@ export def "get-create-environment" [
   --option-settings: list # If specified, AWS Elastic Beanstalk sets the specified configuration options to the requested value in the configuration set for the new environment. These override the values obtained from the solution stack or the configuration template.
   --options-to-remove: list # A list of custom user-defined configuration options to remove from the configuration set for this new environment.
   --operations-role: string # The Amazon Resource Name (ARN) of an existing IAM role to be used as the environment's operations role. If specified, Elastic Beanstalk uses the operations role for permissions to downstream services during this call and during subsequent calls acting on this environment. To specify an operations role, you must have the iam:PassRole permission for the role. For more information, see Operations roles (https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/iam-operationsrole.html) in the AWS Elastic Beanstalk Developer Guide.
-  --action: string@action-completer-8
-  --version: string@version-completer
+  --action: string@action-completer-8 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1014,9 +1055,12 @@ export def "get-create-environment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EnvironmentName: record, EnvironmentId: record, ApplicationName: record, VersionLabel: record, SolutionStackName: record, PlatformArn: record, TemplateName: record, Description: record, EndpointURL: record, CNAME: record, DateCreated: record, DateUpdated: record, Status: record, AbortableOperationInProgress: record, Health: record, HealthStatus: record, Resources: record<LoadBalancer: record<LoadBalancerName: record, Domain: record, Listeners: record>>, Tier: record<Name: record, Type: record, Version: record>, EnvironmentLinks: record, EnvironmentArn: record, OperationsRole: record> {
+]: nothing -> record<EnvironmentName: string, EnvironmentId: string, ApplicationName: string, VersionLabel: string, SolutionStackName: string, PlatformArn: string, TemplateName: string, Description: string, EndpointURL: string, CNAME: string, DateCreated: string, DateUpdated: string, Status: string, AbortableOperationInProgress: bool, Health: string, HealthStatus: string, Resources: record<LoadBalancer: record<LoadBalancerName: string, Domain: string, Listeners: list>>, Tier: record<Name: string, Type: string, Version: string>, EnvironmentLinks: table<LinkName: string, EnvironmentName: string>, EnvironmentArn: string, OperationsRole: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_name == null) { error make --unspanned { msg: "required query parameter 'ApplicationName' missing: pass --application-name" } }
+  let action = ($action | default "CreateEnvironment")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "ApplicationName" $application_name "scalar") (serialize-qp "EnvironmentName" $environment_name "scalar") (serialize-qp "GroupName" $group_name "scalar") (serialize-qp "Description" $description "scalar") (serialize-qp "CNAMEPrefix" $cname_prefix "scalar") (serialize-qp "Tier" $tier "multi") (serialize-qp "Tags" $tags "multi") (serialize-qp "VersionLabel" $version_label "scalar") (serialize-qp "TemplateName" $template_name "scalar") (serialize-qp "SolutionStackName" $solution_stack_name "scalar") (serialize-qp "PlatformArn" $platform_arn "scalar") (serialize-qp "OptionSettings" $option_settings "multi") (serialize-qp "OptionsToRemove" $options_to_remove "multi") (serialize-qp "OperationsRole" $operations_role "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1051,8 +1095,8 @@ export def "post-create-environment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-8
-  --version: string@version-completer
+  --action: string@action-completer-8 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1061,10 +1105,12 @@ export def "post-create-environment" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<EnvironmentName: record, EnvironmentId: record, ApplicationName: record, VersionLabel: record, SolutionStackName: record, PlatformArn: record, TemplateName: record, Description: record, EndpointURL: record, CNAME: record, DateCreated: record, DateUpdated: record, Status: record, AbortableOperationInProgress: record, Health: record, HealthStatus: record, Resources: record<LoadBalancer: record<LoadBalancerName: record, Domain: record, Listeners: record>>, Tier: record<Name: record, Type: record, Version: record>, EnvironmentLinks: record, EnvironmentArn: record, OperationsRole: record> {
+]: any -> record<EnvironmentName: string, EnvironmentId: string, ApplicationName: string, VersionLabel: string, SolutionStackName: string, PlatformArn: string, TemplateName: string, Description: string, EndpointURL: string, CNAME: string, DateCreated: string, DateUpdated: string, Status: string, AbortableOperationInProgress: bool, Health: string, HealthStatus: string, Resources: record<LoadBalancer: record<LoadBalancerName: string, Domain: string, Listeners: list>>, Tier: record<Name: string, Type: string, Version: string>, EnvironmentLinks: table<LinkName: string, EnvironmentName: string>, EnvironmentArn: string, OperationsRole: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateEnvironment")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1101,14 +1147,14 @@ export def "get-create-platform-version" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --platform-name: string # The name of your custom platform.
-  --platform-version: string # The number, such as 1.0.2, for the new platform version.
-  --platform-definition-bundle: record # The location of the platform definition archive in Amazon S3.
+  --platform-name: string # The name of your custom platform. (required)
+  --platform-version: string # The number, such as 1.0.2, for the new platform version. (required)
+  --platform-definition-bundle: record # The location of the platform definition archive in Amazon S3. (required)
   --environment-name: string # The name of the builder environment.
   --option-settings: list # The configuration option settings to apply to the builder environment.
   --tags: list # Specifies the tags applied to the new platform version. Elastic Beanstalk applies these tags only to the platform version. Environments that you create using the platform version don't inherit the tags.
-  --action: string@action-completer-9
-  --version: string@version-completer
+  --action: string@action-completer-9 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1116,9 +1162,14 @@ export def "get-create-platform-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PlatformSummary: record<PlatformArn: record, PlatformOwner: record, PlatformStatus: record, PlatformCategory: record, OperatingSystemName: record, OperatingSystemVersion: record, SupportedTierList: record, SupportedAddonList: record, PlatformLifecycleState: record, PlatformVersion: record, PlatformBranchName: record, PlatformBranchLifecycleState: record>, Builder: record<ARN: record>> {
+]: nothing -> record<PlatformSummary: record<PlatformArn: string, PlatformOwner: string, PlatformStatus: string, PlatformCategory: string, OperatingSystemName: string, OperatingSystemVersion: string, SupportedTierList: list<string>, SupportedAddonList: list<string>, PlatformLifecycleState: string, PlatformVersion: string, PlatformBranchName: string, PlatformBranchLifecycleState: string>, Builder: record<ARN: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($platform_name == null) { error make --unspanned { msg: "required query parameter 'PlatformName' missing: pass --platform-name" } }
+  if ($platform_version == null) { error make --unspanned { msg: "required query parameter 'PlatformVersion' missing: pass --platform-version" } }
+  if ($platform_definition_bundle == null) { error make --unspanned { msg: "required query parameter 'PlatformDefinitionBundle' missing: pass --platform-definition-bundle" } }
+  let action = ($action | default "CreatePlatformVersion")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "PlatformName" $platform_name "scalar") (serialize-qp "PlatformVersion" $platform_version "scalar") (serialize-qp "PlatformDefinitionBundle" $platform_definition_bundle "multi") (serialize-qp "EnvironmentName" $environment_name "scalar") (serialize-qp "OptionSettings" $option_settings "multi") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1153,8 +1204,8 @@ export def "post-create-platform-version" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-9
-  --version: string@version-completer
+  --action: string@action-completer-9 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1163,10 +1214,12 @@ export def "post-create-platform-version" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<PlatformSummary: record<PlatformArn: record, PlatformOwner: record, PlatformStatus: record, PlatformCategory: record, OperatingSystemName: record, OperatingSystemVersion: record, SupportedTierList: record, SupportedAddonList: record, PlatformLifecycleState: record, PlatformVersion: record, PlatformBranchName: record, PlatformBranchLifecycleState: record>, Builder: record<ARN: record>> {
+]: any -> record<PlatformSummary: record<PlatformArn: string, PlatformOwner: string, PlatformStatus: string, PlatformCategory: string, OperatingSystemName: string, OperatingSystemVersion: string, SupportedTierList: list<string>, SupportedAddonList: list<string>, PlatformLifecycleState: string, PlatformVersion: string, PlatformBranchName: string, PlatformBranchLifecycleState: string>, Builder: record<ARN: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreatePlatformVersion")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1203,8 +1256,8 @@ export def "get-create-storage-location" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-10
-  --version: string@version-completer
+  --action: string@action-completer-10 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1212,9 +1265,11 @@ export def "get-create-storage-location" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<S3Bucket: record> {
+]: nothing -> record<S3Bucket: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateStorageLocation")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1249,8 +1304,8 @@ export def "post-create-storage-location" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-10
-  --version: string@version-completer
+  --action: string@action-completer-10 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1258,9 +1313,11 @@ export def "post-create-storage-location" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<S3Bucket: record> {
+]: nothing -> record<S3Bucket: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateStorageLocation")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1295,10 +1352,10 @@ export def "get-delete-application" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --application-name: string # The name of the application to delete.
+  --application-name: string # The name of the application to delete. (required)
   --terminate-env-by-force: oneof<nothing, bool> # When set to true, running environments will be terminated before deleting the application.
-  --action: string@action-completer-11
-  --version: string@version-completer
+  --action: string@action-completer-11 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1309,6 +1366,9 @@ export def "get-delete-application" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_name == null) { error make --unspanned { msg: "required query parameter 'ApplicationName' missing: pass --application-name" } }
+  let action = ($action | default "DeleteApplication")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "ApplicationName" $application_name "scalar") (serialize-qp "TerminateEnvByForce" $terminate_env_by_force "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -1343,8 +1403,8 @@ export def "post-delete-application" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-11
-  --version: string@version-completer
+  --action: string@action-completer-11 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1357,6 +1417,8 @@ export def "post-delete-application" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteApplication")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1393,11 +1455,11 @@ export def "get-delete-application-version" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --application-name: string # The name of the application to which the version belongs.
-  --version-label: string # The label of the version to delete.
+  --application-name: string # The name of the application to which the version belongs. (required)
+  --version-label: string # The label of the version to delete. (required)
   --delete-source-bundle: oneof<nothing, bool> # Set to true to delete the source bundle from your storage bucket. Otherwise, the application version is deleted only from Elastic Beanstalk and the source bundle remains in Amazon S3.
-  --action: string@action-completer-12
-  --version: string@version-completer
+  --action: string@action-completer-12 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1408,6 +1470,10 @@ export def "get-delete-application-version" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_name == null) { error make --unspanned { msg: "required query parameter 'ApplicationName' missing: pass --application-name" } }
+  if ($version_label == null) { error make --unspanned { msg: "required query parameter 'VersionLabel' missing: pass --version-label" } }
+  let action = ($action | default "DeleteApplicationVersion")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "ApplicationName" $application_name "scalar") (serialize-qp "VersionLabel" $version_label "scalar") (serialize-qp "DeleteSourceBundle" $delete_source_bundle "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -1442,8 +1508,8 @@ export def "post-delete-application-version" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-12
-  --version: string@version-completer
+  --action: string@action-completer-12 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1456,6 +1522,8 @@ export def "post-delete-application-version" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteApplicationVersion")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1492,10 +1560,10 @@ export def "get-delete-configuration-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --application-name: string # The name of the application to delete the configuration template from.
-  --template-name: string # The name of the configuration template to delete.
-  --action: string@action-completer-13
-  --version: string@version-completer
+  --application-name: string # The name of the application to delete the configuration template from. (required)
+  --template-name: string # The name of the configuration template to delete. (required)
+  --action: string@action-completer-13 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1506,6 +1574,10 @@ export def "get-delete-configuration-template" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_name == null) { error make --unspanned { msg: "required query parameter 'ApplicationName' missing: pass --application-name" } }
+  if ($template_name == null) { error make --unspanned { msg: "required query parameter 'TemplateName' missing: pass --template-name" } }
+  let action = ($action | default "DeleteConfigurationTemplate")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "ApplicationName" $application_name "scalar") (serialize-qp "TemplateName" $template_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -1540,8 +1612,8 @@ export def "post-delete-configuration-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-13
-  --version: string@version-completer
+  --action: string@action-completer-13 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1554,6 +1626,8 @@ export def "post-delete-configuration-template" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteConfigurationTemplate")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1590,10 +1664,10 @@ export def "get-delete-environment-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --application-name: string # The name of the application the environment is associated with.
-  --environment-name: string # The name of the environment to delete the draft configuration from.
-  --action: string@action-completer-14
-  --version: string@version-completer
+  --application-name: string # The name of the application the environment is associated with. (required)
+  --environment-name: string # The name of the environment to delete the draft configuration from. (required)
+  --action: string@action-completer-14 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1604,6 +1678,10 @@ export def "get-delete-environment-configuration" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_name == null) { error make --unspanned { msg: "required query parameter 'ApplicationName' missing: pass --application-name" } }
+  if ($environment_name == null) { error make --unspanned { msg: "required query parameter 'EnvironmentName' missing: pass --environment-name" } }
+  let action = ($action | default "DeleteEnvironmentConfiguration")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "ApplicationName" $application_name "scalar") (serialize-qp "EnvironmentName" $environment_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -1638,8 +1716,8 @@ export def "post-delete-environment-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-14
-  --version: string@version-completer
+  --action: string@action-completer-14 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1652,6 +1730,8 @@ export def "post-delete-environment-configuration" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteEnvironmentConfiguration")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1689,8 +1769,8 @@ export def "get-delete-platform-version" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform-arn: string # The ARN of the version of the custom platform.
-  --action: string@action-completer-15
-  --version: string@version-completer
+  --action: string@action-completer-15 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1698,9 +1778,11 @@ export def "get-delete-platform-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PlatformSummary: record<PlatformArn: record, PlatformOwner: record, PlatformStatus: record, PlatformCategory: record, OperatingSystemName: record, OperatingSystemVersion: record, SupportedTierList: record, SupportedAddonList: record, PlatformLifecycleState: record, PlatformVersion: record, PlatformBranchName: record, PlatformBranchLifecycleState: record>> {
+]: nothing -> record<PlatformSummary: record<PlatformArn: string, PlatformOwner: string, PlatformStatus: string, PlatformCategory: string, OperatingSystemName: string, OperatingSystemVersion: string, SupportedTierList: list<string>, SupportedAddonList: list<string>, PlatformLifecycleState: string, PlatformVersion: string, PlatformBranchName: string, PlatformBranchLifecycleState: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeletePlatformVersion")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "PlatformArn" $platform_arn "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1735,8 +1817,8 @@ export def "post-delete-platform-version" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-15
-  --version: string@version-completer
+  --action: string@action-completer-15 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1745,10 +1827,12 @@ export def "post-delete-platform-version" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<PlatformSummary: record<PlatformArn: record, PlatformOwner: record, PlatformStatus: record, PlatformCategory: record, OperatingSystemName: record, OperatingSystemVersion: record, SupportedTierList: record, SupportedAddonList: record, PlatformLifecycleState: record, PlatformVersion: record, PlatformBranchName: record, PlatformBranchLifecycleState: record>> {
+]: any -> record<PlatformSummary: record<PlatformArn: string, PlatformOwner: string, PlatformStatus: string, PlatformCategory: string, OperatingSystemName: string, OperatingSystemVersion: string, SupportedTierList: list<string>, SupportedAddonList: list<string>, PlatformLifecycleState: string, PlatformVersion: string, PlatformBranchName: string, PlatformBranchLifecycleState: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeletePlatformVersion")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1785,8 +1869,8 @@ export def "get-describe-account-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-16
-  --version: string@version-completer
+  --action: string@action-completer-16 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1794,9 +1878,11 @@ export def "get-describe-account-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ResourceQuotas: record<ApplicationQuota: record<Maximum: record>, ApplicationVersionQuota: record<Maximum: record>, EnvironmentQuota: record<Maximum: record>, ConfigurationTemplateQuota: record<Maximum: record>, CustomPlatformQuota: record<Maximum: record>>> {
+]: nothing -> record<ResourceQuotas: record<ApplicationQuota: record<Maximum: int>, ApplicationVersionQuota: record<Maximum: int>, EnvironmentQuota: record<Maximum: int>, ConfigurationTemplateQuota: record<Maximum: int>, CustomPlatformQuota: record<Maximum: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeAccountAttributes")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1831,8 +1917,8 @@ export def "post-describe-account-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-16
-  --version: string@version-completer
+  --action: string@action-completer-16 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1840,9 +1926,11 @@ export def "post-describe-account-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ResourceQuotas: record<ApplicationQuota: record<Maximum: record>, ApplicationVersionQuota: record<Maximum: record>, EnvironmentQuota: record<Maximum: record>, ConfigurationTemplateQuota: record<Maximum: record>, CustomPlatformQuota: record<Maximum: record>>> {
+]: nothing -> record<ResourceQuotas: record<ApplicationQuota: record<Maximum: int>, ApplicationVersionQuota: record<Maximum: int>, EnvironmentQuota: record<Maximum: int>, ConfigurationTemplateQuota: record<Maximum: int>, CustomPlatformQuota: record<Maximum: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeAccountAttributes")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1881,8 +1969,8 @@ export def "get-describe-application-versions" [
   --version-labels: list # Specify a version label to show a specific application version.
   --max-records: int # For a paginated request. Specify a maximum number of application versions to include in each response. If no MaxRecords is specified, all available application versions are retrieved in a single response.
   --next-token: string # For a paginated request. Specify a token from a previous response page to retrieve the next response page. All other parameter values must be identical to the ones specified in the initial request. If no NextToken is specified, the first page is retrieved.
-  --action: string@action-completer-17
-  --version: string@version-completer
+  --action: string@action-completer-17 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1890,9 +1978,11 @@ export def "get-describe-application-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ApplicationVersions: record, NextToken: record> {
+]: nothing -> record<ApplicationVersions: table<ApplicationVersionArn: string, ApplicationName: string, Description: string, VersionLabel: string, SourceBuildInformation: record, BuildArn: string, SourceBundle: record, DateCreated: string, DateUpdated: string, Status: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeApplicationVersions")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "ApplicationName" $application_name "scalar") (serialize-qp "VersionLabels" $version_labels "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1927,8 +2017,8 @@ export def "post-describe-application-versions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-17
-  --version: string@version-completer
+  --action: string@action-completer-17 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1937,10 +2027,12 @@ export def "post-describe-application-versions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ApplicationVersions: record, NextToken: record> {
+]: any -> record<ApplicationVersions: table<ApplicationVersionArn: string, ApplicationName: string, Description: string, VersionLabel: string, SourceBuildInformation: record, BuildArn: string, SourceBundle: record, DateCreated: string, DateUpdated: string, Status: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeApplicationVersions")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1978,8 +2070,8 @@ export def "get-describe-applications" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --application-names: list # If specified, AWS Elastic Beanstalk restricts the returned descriptions to only include those with the specified names.
-  --action: string@action-completer-18
-  --version: string@version-completer
+  --action: string@action-completer-18 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1987,9 +2079,11 @@ export def "get-describe-applications" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Applications: record> {
+]: nothing -> record<Applications: table<ApplicationArn: string, ApplicationName: string, Description: string, DateCreated: string, DateUpdated: string, Versions: list, ConfigurationTemplates: list, ResourceLifecycleConfig: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeApplications")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "ApplicationNames" $application_names "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2024,8 +2118,8 @@ export def "post-describe-applications" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-18
-  --version: string@version-completer
+  --action: string@action-completer-18 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2034,10 +2128,12 @@ export def "post-describe-applications" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Applications: record> {
+]: any -> record<Applications: table<ApplicationArn: string, ApplicationName: string, Description: string, DateCreated: string, DateUpdated: string, Versions: list, ConfigurationTemplates: list, ResourceLifecycleConfig: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeApplications")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2080,8 +2176,8 @@ export def "get-describe-configuration-options" [
   --solution-stack-name: string # The name of the solution stack whose configuration options you want to describe.
   --platform-arn: string # The ARN of the custom platform.
   --options: list # If specified, restricts the descriptions to only the specified options.
-  --action: string@action-completer-19
-  --version: string@version-completer
+  --action: string@action-completer-19 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2089,9 +2185,11 @@ export def "get-describe-configuration-options" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<SolutionStackName: record, PlatformArn: record, Options: record> {
+]: nothing -> record<SolutionStackName: string, PlatformArn: string, Options: table<Namespace: string, Name: string, DefaultValue: string, ChangeSeverity: string, UserDefined: bool, ValueType: string, ValueOptions: list, MinValue: int, MaxValue: int, MaxLength: int, Regex: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeConfigurationOptions")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "ApplicationName" $application_name "scalar") (serialize-qp "TemplateName" $template_name "scalar") (serialize-qp "EnvironmentName" $environment_name "scalar") (serialize-qp "SolutionStackName" $solution_stack_name "scalar") (serialize-qp "PlatformArn" $platform_arn "scalar") (serialize-qp "Options" $options "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2126,8 +2224,8 @@ export def "post-describe-configuration-options" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-19
-  --version: string@version-completer
+  --action: string@action-completer-19 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2136,10 +2234,12 @@ export def "post-describe-configuration-options" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<SolutionStackName: record, PlatformArn: record, Options: record> {
+]: any -> record<SolutionStackName: string, PlatformArn: string, Options: table<Namespace: string, Name: string, DefaultValue: string, ChangeSeverity: string, UserDefined: bool, ValueType: string, ValueOptions: list, MinValue: int, MaxValue: int, MaxLength: int, Regex: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeConfigurationOptions")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2176,11 +2276,11 @@ export def "get-describe-configuration-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --application-name: string # The application for the environment or configuration template.
+  --application-name: string # The application for the environment or configuration template. (required)
   --template-name: string # The name of the configuration template to describe. Conditional: You must specify either this parameter or an EnvironmentName, but not both. If you specify both, AWS Elastic Beanstalk returns an InvalidParameterCombination error. If you do not specify either, AWS Elastic Beanstalk returns a MissingRequiredParameter error.
   --environment-name: string # The name of the environment to describe. Condition: You must specify either this or a TemplateName, but not both. If you specify both, AWS Elastic Beanstalk returns an InvalidParameterCombination error. If you do not specify either, AWS Elastic Beanstalk returns MissingRequiredParameter error.
-  --action: string@action-completer-20
-  --version: string@version-completer
+  --action: string@action-completer-20 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2188,9 +2288,12 @@ export def "get-describe-configuration-settings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ConfigurationSettings: record> {
+]: nothing -> record<ConfigurationSettings: table<SolutionStackName: string, PlatformArn: string, ApplicationName: string, TemplateName: string, Description: string, EnvironmentName: string, DeploymentStatus: string, DateCreated: string, DateUpdated: string, OptionSettings: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_name == null) { error make --unspanned { msg: "required query parameter 'ApplicationName' missing: pass --application-name" } }
+  let action = ($action | default "DescribeConfigurationSettings")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "ApplicationName" $application_name "scalar") (serialize-qp "TemplateName" $template_name "scalar") (serialize-qp "EnvironmentName" $environment_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2225,8 +2328,8 @@ export def "post-describe-configuration-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-20
-  --version: string@version-completer
+  --action: string@action-completer-20 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2235,10 +2338,12 @@ export def "post-describe-configuration-settings" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ConfigurationSettings: record> {
+]: any -> record<ConfigurationSettings: table<SolutionStackName: string, PlatformArn: string, ApplicationName: string, TemplateName: string, Description: string, EnvironmentName: string, DeploymentStatus: string, DateCreated: string, DateUpdated: string, OptionSettings: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeConfigurationSettings")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2278,8 +2383,8 @@ export def "get-describe-environment-health" [
   --environment-name: string # Specify the environment by name. You must specify either this or an EnvironmentName, or both.
   --environment-id: string # Specify the environment by ID. You must specify either this or an EnvironmentName, or both.
   --attribute-names: list # Specify the response elements to return. To retrieve all attributes, set to All. If no attribute names are specified, returns the name of the environment.
-  --action: string@action-completer-21
-  --version: string@version-completer
+  --action: string@action-completer-21 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2287,9 +2392,11 @@ export def "get-describe-environment-health" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EnvironmentName: record, HealthStatus: record, Status: record, Color: record, Causes: record, ApplicationMetrics: record<Duration: record, RequestCount: record, StatusCodes: record<Status2xx: record, Status3xx: record, Status4xx: record, Status5xx: record>, Latency: record<P999: record, P99: record, P95: record, P90: record, P85: record, P75: record, P50: record, P10: record>>, InstancesHealth: record<NoData: record, Unknown: record, Pending: record, Ok: record, Info: record, Warning: record, Degraded: record, Severe: record>, RefreshedAt: record> {
+]: nothing -> record<EnvironmentName: string, HealthStatus: string, Status: string, Color: string, Causes: list<string>, ApplicationMetrics: record<Duration: int, RequestCount: int, StatusCodes: record<Status2xx: int, Status3xx: int, Status4xx: int, Status5xx: int>, Latency: record<P999: float, P99: float, P95: float, P90: float, P85: float, P75: float, P50: float, P10: float>>, InstancesHealth: record<NoData: int, Unknown: int, Pending: int, Ok: int, Info: int, Warning: int, Degraded: int, Severe: int>, RefreshedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeEnvironmentHealth")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "EnvironmentName" $environment_name "scalar") (serialize-qp "EnvironmentId" $environment_id "scalar") (serialize-qp "AttributeNames" $attribute_names "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2324,8 +2431,8 @@ export def "post-describe-environment-health" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-21
-  --version: string@version-completer
+  --action: string@action-completer-21 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2334,10 +2441,12 @@ export def "post-describe-environment-health" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<EnvironmentName: record, HealthStatus: record, Status: record, Color: record, Causes: record, ApplicationMetrics: record<Duration: record, RequestCount: record, StatusCodes: record<Status2xx: record, Status3xx: record, Status4xx: record, Status5xx: record>, Latency: record<P999: record, P99: record, P95: record, P90: record, P85: record, P75: record, P50: record, P10: record>>, InstancesHealth: record<NoData: record, Unknown: record, Pending: record, Ok: record, Info: record, Warning: record, Degraded: record, Severe: record>, RefreshedAt: record> {
+]: any -> record<EnvironmentName: string, HealthStatus: string, Status: string, Color: string, Causes: list<string>, ApplicationMetrics: record<Duration: int, RequestCount: int, StatusCodes: record<Status2xx: int, Status3xx: int, Status4xx: int, Status5xx: int>, Latency: record<P999: float, P99: float, P95: float, P90: float, P85: float, P75: float, P50: float, P10: float>>, InstancesHealth: record<NoData: int, Unknown: int, Pending: int, Ok: int, Info: int, Warning: int, Degraded: int, Severe: int>, RefreshedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeEnvironmentHealth")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2378,8 +2487,8 @@ export def "get-describe-environment-managed-action-history" [
   --environment-name: string # The name of the target environment.
   --next-token: string # The pagination token returned by a previous request.
   --max-items: int # The maximum number of items to return for a single request.
-  --action: string@action-completer-22
-  --version: string@version-completer
+  --action: string@action-completer-22 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2387,9 +2496,11 @@ export def "get-describe-environment-managed-action-history" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ManagedActionHistoryItems: record, NextToken: record> {
+]: nothing -> record<ManagedActionHistoryItems: table<ActionId: string, ActionType: string, ActionDescription: string, FailureType: string, Status: string, FailureDescription: string, ExecutedTime: string, FinishedTime: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeEnvironmentManagedActionHistory")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "EnvironmentId" $environment_id "scalar") (serialize-qp "EnvironmentName" $environment_name "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxItems" $max_items "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2426,8 +2537,8 @@ export def "post-describe-environment-managed-action-history" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-items: string # Pagination limit
   --next-token: string # Pagination token
-  --action: string@action-completer-22
-  --version: string@version-completer
+  --action: string@action-completer-22 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2436,10 +2547,12 @@ export def "post-describe-environment-managed-action-history" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ManagedActionHistoryItems: record, NextToken: record> {
+]: any -> record<ManagedActionHistoryItems: table<ActionId: string, ActionType: string, ActionDescription: string, FailureType: string, Status: string, FailureDescription: string, ExecutedTime: string, FinishedTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeEnvironmentManagedActionHistory")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "MaxItems" $max_items "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2479,8 +2592,8 @@ export def "get-describe-environment-managed-actions" [
   --environment-name: string # The name of the target environment.
   --environment-id: string # The environment ID of the target environment.
   --status: string@status-completer # To show only actions with a particular status, specify a status.
-  --action: string@action-completer-23
-  --version: string@version-completer
+  --action: string@action-completer-23 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2488,9 +2601,11 @@ export def "get-describe-environment-managed-actions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ManagedActions: record> {
+]: nothing -> record<ManagedActions: table<ActionId: string, ActionDescription: string, ActionType: string, Status: string, WindowStartTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeEnvironmentManagedActions")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "EnvironmentName" $environment_name "scalar") (serialize-qp "EnvironmentId" $environment_id "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2525,8 +2640,8 @@ export def "post-describe-environment-managed-actions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-23
-  --version: string@version-completer
+  --action: string@action-completer-23 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2535,10 +2650,12 @@ export def "post-describe-environment-managed-actions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ManagedActions: record> {
+]: any -> record<ManagedActions: table<ActionId: string, ActionDescription: string, ActionType: string, Status: string, WindowStartTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeEnvironmentManagedActions")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2577,8 +2694,8 @@ export def "get-describe-environment-resources" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --environment-id: string # The ID of the environment to retrieve AWS resource usage data. Condition: You must specify either this or an EnvironmentName, or both. If you do not specify either, AWS Elastic Beanstalk returns MissingRequiredParameter error.
   --environment-name: string # The name of the environment to retrieve AWS resource usage data. Condition: You must specify either this or an EnvironmentId, or both. If you do not specify either, AWS Elastic Beanstalk returns MissingRequiredParameter error.
-  --action: string@action-completer-24
-  --version: string@version-completer
+  --action: string@action-completer-24 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2586,9 +2703,11 @@ export def "get-describe-environment-resources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EnvironmentResources: record<EnvironmentName: record, AutoScalingGroups: record, Instances: record, LaunchConfigurations: record, LaunchTemplates: record, LoadBalancers: record, Triggers: record, Queues: record>> {
+]: nothing -> record<EnvironmentResources: record<EnvironmentName: string, AutoScalingGroups: list<record>, Instances: list<record>, LaunchConfigurations: list<record>, LaunchTemplates: list<record>, LoadBalancers: list<record>, Triggers: list<record>, Queues: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeEnvironmentResources")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "EnvironmentId" $environment_id "scalar") (serialize-qp "EnvironmentName" $environment_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2623,8 +2742,8 @@ export def "post-describe-environment-resources" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-24
-  --version: string@version-completer
+  --action: string@action-completer-24 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2633,10 +2752,12 @@ export def "post-describe-environment-resources" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<EnvironmentResources: record<EnvironmentName: record, AutoScalingGroups: record, Instances: record, LaunchConfigurations: record, LaunchTemplates: record, LoadBalancers: record, Triggers: record, Queues: record>> {
+]: any -> record<EnvironmentResources: record<EnvironmentName: string, AutoScalingGroups: list<record>, Instances: list<record>, LaunchConfigurations: list<record>, LaunchTemplates: list<record>, LoadBalancers: list<record>, Triggers: list<record>, Queues: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeEnvironmentResources")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2681,8 +2802,8 @@ export def "get-describe-environments" [
   --included-deleted-back-to: string # If specified when IncludeDeleted is set to true, then environments deleted after this date are displayed. (format: date-time)
   --max-records: int # For a paginated request. Specify a maximum number of environments to include in each response. If no MaxRecords is specified, all available environments are retrieved in a single response.
   --next-token: string # For a paginated request. Specify a token from a previous response page to retrieve the next response page. All other parameter values must be identical to the ones specified in the initial request. If no NextToken is specified, the first page is retrieved.
-  --action: string@action-completer-25
-  --version: string@version-completer
+  --action: string@action-completer-25 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2690,9 +2811,11 @@ export def "get-describe-environments" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Environments: record, NextToken: record> {
+]: nothing -> record<Environments: table<EnvironmentName: string, EnvironmentId: string, ApplicationName: string, VersionLabel: string, SolutionStackName: string, PlatformArn: string, TemplateName: string, Description: string, EndpointURL: string, CNAME: string, DateCreated: string, DateUpdated: string, Status: string, AbortableOperationInProgress: bool, Health: string, HealthStatus: string, Resources: record, Tier: record, EnvironmentLinks: list, EnvironmentArn: string, OperationsRole: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeEnvironments")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "ApplicationName" $application_name "scalar") (serialize-qp "VersionLabel" $version_label "scalar") (serialize-qp "EnvironmentIds" $environment_ids "multi") (serialize-qp "EnvironmentNames" $environment_names "multi") (serialize-qp "IncludeDeleted" $include_deleted "scalar") (serialize-qp "IncludedDeletedBackTo" $included_deleted_back_to "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2727,8 +2850,8 @@ export def "post-describe-environments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-25
-  --version: string@version-completer
+  --action: string@action-completer-25 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2737,10 +2860,12 @@ export def "post-describe-environments" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Environments: record, NextToken: record> {
+]: any -> record<Environments: table<EnvironmentName: string, EnvironmentId: string, ApplicationName: string, VersionLabel: string, SolutionStackName: string, PlatformArn: string, TemplateName: string, Description: string, EndpointURL: string, CNAME: string, DateCreated: string, DateUpdated: string, Status: string, AbortableOperationInProgress: bool, Health: string, HealthStatus: string, Resources: record, Tier: record, EnvironmentLinks: list, EnvironmentArn: string, OperationsRole: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeEnvironments")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2789,8 +2914,8 @@ export def "get-describe-events" [
   --end-time: string # If specified, AWS Elastic Beanstalk restricts the returned descriptions to those that occur up to, but not including, the EndTime. (format: date-time)
   --max-records: int # Specifies the maximum number of events that can be returned, beginning with the most recent event.
   --next-token: string # Pagination token. If specified, the events return the next batch of results.
-  --action: string@action-completer-26
-  --version: string@version-completer
+  --action: string@action-completer-26 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2798,9 +2923,11 @@ export def "get-describe-events" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Events: record, NextToken: record> {
+]: nothing -> record<Events: table<EventDate: string, Message: string, ApplicationName: string, VersionLabel: string, TemplateName: string, EnvironmentName: string, PlatformArn: string, RequestId: string, Severity: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeEvents")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "ApplicationName" $application_name "scalar") (serialize-qp "VersionLabel" $version_label "scalar") (serialize-qp "TemplateName" $template_name "scalar") (serialize-qp "EnvironmentId" $environment_id "scalar") (serialize-qp "EnvironmentName" $environment_name "scalar") (serialize-qp "PlatformArn" $platform_arn "scalar") (serialize-qp "RequestId" $request_id "scalar") (serialize-qp "Severity" $severity "scalar") (serialize-qp "StartTime" $start_time "scalar") (serialize-qp "EndTime" $end_time "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2837,8 +2964,8 @@ export def "post-describe-events" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --next-token: string # Pagination token
-  --action: string@action-completer-26
-  --version: string@version-completer
+  --action: string@action-completer-26 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2847,10 +2974,12 @@ export def "post-describe-events" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Events: record, NextToken: record> {
+]: any -> record<Events: table<EventDate: string, Message: string, ApplicationName: string, VersionLabel: string, TemplateName: string, EnvironmentName: string, PlatformArn: string, RequestId: string, Severity: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeEvents")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2891,8 +3020,8 @@ export def "get-describe-instances-health" [
   --environment-id: string # Specify the AWS Elastic Beanstalk environment by ID.
   --attribute-names: list # Specifies the response elements you wish to receive. To retrieve all attributes, set to All. If no attribute names are specified, returns a list of instances.
   --next-token: string # Specify the pagination token returned by a previous call.
-  --action: string@action-completer-27
-  --version: string@version-completer
+  --action: string@action-completer-27 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2900,9 +3029,11 @@ export def "get-describe-instances-health" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<InstanceHealthList: record, RefreshedAt: record, NextToken: record> {
+]: nothing -> record<InstanceHealthList: table<InstanceId: string, HealthStatus: string, Color: string, Causes: list, LaunchedAt: string, ApplicationMetrics: record, System: record, Deployment: record, AvailabilityZone: string, InstanceType: string>, RefreshedAt: string, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeInstancesHealth")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "EnvironmentName" $environment_name "scalar") (serialize-qp "EnvironmentId" $environment_id "scalar") (serialize-qp "AttributeNames" $attribute_names "multi") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2937,8 +3068,8 @@ export def "post-describe-instances-health" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-27
-  --version: string@version-completer
+  --action: string@action-completer-27 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2947,10 +3078,12 @@ export def "post-describe-instances-health" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<InstanceHealthList: record, RefreshedAt: record, NextToken: record> {
+]: any -> record<InstanceHealthList: table<InstanceId: string, HealthStatus: string, Color: string, Causes: list, LaunchedAt: string, ApplicationMetrics: record, System: record, Deployment: record, AvailabilityZone: string, InstanceType: string>, RefreshedAt: string, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeInstancesHealth")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2988,8 +3121,8 @@ export def "get-describe-platform-version" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform-arn: string # The ARN of the platform version.
-  --action: string@action-completer-28
-  --version: string@version-completer
+  --action: string@action-completer-28 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2997,9 +3130,11 @@ export def "get-describe-platform-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PlatformDescription: record<PlatformArn: record, PlatformOwner: record, PlatformName: record, PlatformVersion: record, SolutionStackName: record, PlatformStatus: record, DateCreated: record, DateUpdated: record, PlatformCategory: record, Description: record, Maintainer: record, OperatingSystemName: record, OperatingSystemVersion: record, ProgrammingLanguages: record, Frameworks: record, CustomAmiList: record, SupportedTierList: record, SupportedAddonList: record, PlatformLifecycleState: record, PlatformBranchName: record, PlatformBranchLifecycleState: record>> {
+]: nothing -> record<PlatformDescription: record<PlatformArn: string, PlatformOwner: string, PlatformName: string, PlatformVersion: string, SolutionStackName: string, PlatformStatus: string, DateCreated: string, DateUpdated: string, PlatformCategory: string, Description: string, Maintainer: string, OperatingSystemName: string, OperatingSystemVersion: string, ProgrammingLanguages: list<record>, Frameworks: list<record>, CustomAmiList: list<record>, SupportedTierList: list<string>, SupportedAddonList: list<string>, PlatformLifecycleState: string, PlatformBranchName: string, PlatformBranchLifecycleState: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribePlatformVersion")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "PlatformArn" $platform_arn "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3034,8 +3169,8 @@ export def "post-describe-platform-version" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-28
-  --version: string@version-completer
+  --action: string@action-completer-28 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3044,10 +3179,12 @@ export def "post-describe-platform-version" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<PlatformDescription: record<PlatformArn: record, PlatformOwner: record, PlatformName: record, PlatformVersion: record, SolutionStackName: record, PlatformStatus: record, DateCreated: record, DateUpdated: record, PlatformCategory: record, Description: record, Maintainer: record, OperatingSystemName: record, OperatingSystemVersion: record, ProgrammingLanguages: record, Frameworks: record, CustomAmiList: record, SupportedTierList: record, SupportedAddonList: record, PlatformLifecycleState: record, PlatformBranchName: record, PlatformBranchLifecycleState: record>> {
+]: any -> record<PlatformDescription: record<PlatformArn: string, PlatformOwner: string, PlatformName: string, PlatformVersion: string, SolutionStackName: string, PlatformStatus: string, DateCreated: string, DateUpdated: string, PlatformCategory: string, Description: string, Maintainer: string, OperatingSystemName: string, OperatingSystemVersion: string, ProgrammingLanguages: list<record>, Frameworks: list<record>, CustomAmiList: list<record>, SupportedTierList: list<string>, SupportedAddonList: list<string>, PlatformLifecycleState: string, PlatformBranchName: string, PlatformBranchLifecycleState: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribePlatformVersion")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3084,9 +3221,9 @@ export def "get-disassociate-environment-operations-role" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --environment-name: string # The name of the environment from which to disassociate the operations role.
-  --action: string@action-completer-29
-  --version: string@version-completer
+  --environment-name: string # The name of the environment from which to disassociate the operations role. (required)
+  --action: string@action-completer-29 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3097,6 +3234,9 @@ export def "get-disassociate-environment-operations-role" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($environment_name == null) { error make --unspanned { msg: "required query parameter 'EnvironmentName' missing: pass --environment-name" } }
+  let action = ($action | default "DisassociateEnvironmentOperationsRole")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "EnvironmentName" $environment_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -3131,8 +3271,8 @@ export def "post-disassociate-environment-operations-role" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-29
-  --version: string@version-completer
+  --action: string@action-completer-29 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3145,6 +3285,8 @@ export def "post-disassociate-environment-operations-role" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DisassociateEnvironmentOperationsRole")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3181,8 +3323,8 @@ export def "get-list-available-solution-stacks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-30
-  --version: string@version-completer
+  --action: string@action-completer-30 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3190,9 +3332,11 @@ export def "get-list-available-solution-stacks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<SolutionStacks: record, SolutionStackDetails: record> {
+]: nothing -> record<SolutionStacks: list<string>, SolutionStackDetails: table<SolutionStackName: string, PermittedFileTypes: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListAvailableSolutionStacks")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3227,8 +3371,8 @@ export def "post-list-available-solution-stacks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-30
-  --version: string@version-completer
+  --action: string@action-completer-30 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3236,9 +3380,11 @@ export def "post-list-available-solution-stacks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<SolutionStacks: record, SolutionStackDetails: record> {
+]: nothing -> record<SolutionStacks: list<string>, SolutionStackDetails: table<SolutionStackName: string, PermittedFileTypes: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListAvailableSolutionStacks")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3276,8 +3422,8 @@ export def "get-list-platform-branches" [
   --filters: list # Criteria for restricting the resulting list of platform branches. The filter is evaluated as a logical conjunction (AND) of the separate SearchFilter terms. The following list shows valid attribute values for each of the SearchFilter terms. Most operators take a single value. The in and not_in operators can take multiple values. Attribute = BranchName: Operator: = | != | begins_with | ends_with | contains | in | not_in Attribute = LifecycleState: Operator: = | != | in | not_in Values: beta | supported | deprecated | retired Attribute = PlatformName: Operator: = | != | begins_with | ends_with | contains | in | not_in Attribute = TierType: Operator: = | != Values: WebServer/Standard | Worker/SQS/HTTP Array size: limited to 10 SearchFilter objects. Within each SearchFilter item, the Values array is limited to 10 items.
   --max-records: int # The maximum number of platform branch values returned in one call.
   --next-token: string # For a paginated request. Specify a token from a previous response page to retrieve the next response page. All other parameter values must be identical to the ones specified in the initial request. If no NextToken is specified, the first page is retrieved.
-  --action: string@action-completer-31
-  --version: string@version-completer
+  --action: string@action-completer-31 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3285,9 +3431,11 @@ export def "get-list-platform-branches" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PlatformBranchSummaryList: record, NextToken: record> {
+]: nothing -> record<PlatformBranchSummaryList: table<PlatformName: string, BranchName: string, LifecycleState: string, BranchOrder: int, SupportedTierList: list>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListPlatformBranches")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3324,8 +3472,8 @@ export def "post-list-platform-branches" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --next-token: string # Pagination token
-  --action: string@action-completer-31
-  --version: string@version-completer
+  --action: string@action-completer-31 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3334,10 +3482,12 @@ export def "post-list-platform-branches" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<PlatformBranchSummaryList: record, NextToken: record> {
+]: any -> record<PlatformBranchSummaryList: table<PlatformName: string, BranchName: string, LifecycleState: string, BranchOrder: int, SupportedTierList: list>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListPlatformBranches")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3377,8 +3527,8 @@ export def "get-list-platform-versions" [
   --filters: list # Criteria for restricting the resulting list of platform versions. The filter is interpreted as a logical conjunction (AND) of the separate PlatformFilter terms.
   --max-records: int # The maximum number of platform version values returned in one call.
   --next-token: string # For a paginated request. Specify a token from a previous response page to retrieve the next response page. All other parameter values must be identical to the ones specified in the initial request. If no NextToken is specified, the first page is retrieved.
-  --action: string@action-completer-32
-  --version: string@version-completer
+  --action: string@action-completer-32 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3386,9 +3536,11 @@ export def "get-list-platform-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PlatformSummaryList: record, NextToken: record> {
+]: nothing -> record<PlatformSummaryList: table<PlatformArn: string, PlatformOwner: string, PlatformStatus: string, PlatformCategory: string, OperatingSystemName: string, OperatingSystemVersion: string, SupportedTierList: list, SupportedAddonList: list, PlatformLifecycleState: string, PlatformVersion: string, PlatformBranchName: string, PlatformBranchLifecycleState: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListPlatformVersions")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3425,8 +3577,8 @@ export def "post-list-platform-versions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --next-token: string # Pagination token
-  --action: string@action-completer-32
-  --version: string@version-completer
+  --action: string@action-completer-32 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3435,10 +3587,12 @@ export def "post-list-platform-versions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<PlatformSummaryList: record, NextToken: record> {
+]: any -> record<PlatformSummaryList: table<PlatformArn: string, PlatformOwner: string, PlatformStatus: string, PlatformCategory: string, OperatingSystemName: string, OperatingSystemVersion: string, SupportedTierList: list, SupportedAddonList: list, PlatformLifecycleState: string, PlatformVersion: string, PlatformBranchName: string, PlatformBranchLifecycleState: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListPlatformVersions")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3475,9 +3629,9 @@ export def "get-list-tags-for-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-arn: string # The Amazon Resource Name (ARN) of the resouce for which a tag list is requested. Must be the ARN of an Elastic Beanstalk resource.
-  --action: string@action-completer-33
-  --version: string@version-completer
+  --resource-arn: string # The Amazon Resource Name (ARN) of the resouce for which a tag list is requested. Must be the ARN of an Elastic Beanstalk resource. (required)
+  --action: string@action-completer-33 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3485,9 +3639,12 @@ export def "get-list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ResourceArn: record, ResourceTags: record> {
+]: nothing -> record<ResourceArn: string, ResourceTags: table<Key: string, Value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'ResourceArn' missing: pass --resource-arn" } }
+  let action = ($action | default "ListTagsForResource")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "ResourceArn" $resource_arn "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3522,8 +3679,8 @@ export def "post-list-tags-for-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-33
-  --version: string@version-completer
+  --action: string@action-completer-33 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3532,10 +3689,12 @@ export def "post-list-tags-for-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ResourceArn: record, ResourceTags: record> {
+]: any -> record<ResourceArn: string, ResourceTags: table<Key: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListTagsForResource")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3574,8 +3733,8 @@ export def "get-rebuild-environment" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --environment-id: string # The ID of the environment to rebuild. Condition: You must specify either this or an EnvironmentName, or both. If you do not specify either, AWS Elastic Beanstalk returns MissingRequiredParameter error.
   --environment-name: string # The name of the environment to rebuild. Condition: You must specify either this or an EnvironmentId, or both. If you do not specify either, AWS Elastic Beanstalk returns MissingRequiredParameter error.
-  --action: string@action-completer-34
-  --version: string@version-completer
+  --action: string@action-completer-34 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3586,6 +3745,8 @@ export def "get-rebuild-environment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "RebuildEnvironment")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "EnvironmentId" $environment_id "scalar") (serialize-qp "EnvironmentName" $environment_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -3620,8 +3781,8 @@ export def "post-rebuild-environment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-34
-  --version: string@version-completer
+  --action: string@action-completer-34 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3634,6 +3795,8 @@ export def "post-rebuild-environment" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "RebuildEnvironment")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3672,9 +3835,9 @@ export def "get-request-environment-info" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --environment-id: string # The ID of the environment of the requested data. If no such environment is found, RequestEnvironmentInfo returns an InvalidParameterValue error. Condition: You must specify either this or an EnvironmentName, or both. If you do not specify either, AWS Elastic Beanstalk returns MissingRequiredParameter error.
   --environment-name: string # The name of the environment of the requested data. If no such environment is found, RequestEnvironmentInfo returns an InvalidParameterValue error. Condition: You must specify either this or an EnvironmentId, or both. If you do not specify either, AWS Elastic Beanstalk returns MissingRequiredParameter error.
-  --info-type: string@info-type-completer # The type of information to request.
-  --action: string@action-completer-35
-  --version: string@version-completer
+  --info-type: string@info-type-completer # The type of information to request. (required)
+  --action: string@action-completer-35 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3685,6 +3848,9 @@ export def "get-request-environment-info" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($info_type == null) { error make --unspanned { msg: "required query parameter 'InfoType' missing: pass --info-type" } }
+  let action = ($action | default "RequestEnvironmentInfo")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "EnvironmentId" $environment_id "scalar") (serialize-qp "EnvironmentName" $environment_name "scalar") (serialize-qp "InfoType" $info_type "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -3719,8 +3885,8 @@ export def "post-request-environment-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-35
-  --version: string@version-completer
+  --action: string@action-completer-35 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3733,6 +3899,8 @@ export def "post-request-environment-info" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "RequestEnvironmentInfo")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3771,8 +3939,8 @@ export def "get-restart-app-server" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --environment-id: string # The ID of the environment to restart the server for. Condition: You must specify either this or an EnvironmentName, or both. If you do not specify either, AWS Elastic Beanstalk returns MissingRequiredParameter error.
   --environment-name: string # The name of the environment to restart the server for. Condition: You must specify either this or an EnvironmentId, or both. If you do not specify either, AWS Elastic Beanstalk returns MissingRequiredParameter error.
-  --action: string@action-completer-36
-  --version: string@version-completer
+  --action: string@action-completer-36 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3783,6 +3951,8 @@ export def "get-restart-app-server" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "RestartAppServer")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "EnvironmentId" $environment_id "scalar") (serialize-qp "EnvironmentName" $environment_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -3817,8 +3987,8 @@ export def "post-restart-app-server" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-36
-  --version: string@version-completer
+  --action: string@action-completer-36 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3831,6 +4001,8 @@ export def "post-restart-app-server" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "RestartAppServer")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3869,9 +4041,9 @@ export def "get-retrieve-environment-info" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --environment-id: string # The ID of the data's environment. If no such environment is found, returns an InvalidParameterValue error. Condition: You must specify either this or an EnvironmentName, or both. If you do not specify either, AWS Elastic Beanstalk returns MissingRequiredParameter error.
   --environment-name: string # The name of the data's environment. If no such environment is found, returns an InvalidParameterValue error. Condition: You must specify either this or an EnvironmentId, or both. If you do not specify either, AWS Elastic Beanstalk returns MissingRequiredParameter error.
-  --info-type: string@info-type-completer # The type of information to retrieve.
-  --action: string@action-completer-37
-  --version: string@version-completer
+  --info-type: string@info-type-completer # The type of information to retrieve. (required)
+  --action: string@action-completer-37 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3879,9 +4051,12 @@ export def "get-retrieve-environment-info" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EnvironmentInfo: record> {
+]: nothing -> record<EnvironmentInfo: table<InfoType: string, Ec2InstanceId: string, SampleTimestamp: string, Message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($info_type == null) { error make --unspanned { msg: "required query parameter 'InfoType' missing: pass --info-type" } }
+  let action = ($action | default "RetrieveEnvironmentInfo")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "EnvironmentId" $environment_id "scalar") (serialize-qp "EnvironmentName" $environment_name "scalar") (serialize-qp "InfoType" $info_type "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3916,8 +4091,8 @@ export def "post-retrieve-environment-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-37
-  --version: string@version-completer
+  --action: string@action-completer-37 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3926,10 +4101,12 @@ export def "post-retrieve-environment-info" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<EnvironmentInfo: record> {
+]: any -> record<EnvironmentInfo: table<InfoType: string, Ec2InstanceId: string, SampleTimestamp: string, Message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "RetrieveEnvironmentInfo")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3970,8 +4147,8 @@ export def "get-swap-environment-cnam-es" [
   --source-environment-name: string # The name of the source environment. Condition: You must specify at least the SourceEnvironmentID or the SourceEnvironmentName. You may also specify both. If you specify the SourceEnvironmentName, you must specify the DestinationEnvironmentName.
   --destination-environment-id: string # The ID of the destination environment. Condition: You must specify at least the DestinationEnvironmentID or the DestinationEnvironmentName. You may also specify both. You must specify the SourceEnvironmentId with the DestinationEnvironmentId.
   --destination-environment-name: string # The name of the destination environment. Condition: You must specify at least the DestinationEnvironmentID or the DestinationEnvironmentName. You may also specify both. You must specify the SourceEnvironmentName with the DestinationEnvironmentName.
-  --action: string@action-completer-38
-  --version: string@version-completer
+  --action: string@action-completer-38 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3982,6 +4159,8 @@ export def "get-swap-environment-cnam-es" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "SwapEnvironmentCNAMEs")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "SourceEnvironmentId" $source_environment_id "scalar") (serialize-qp "SourceEnvironmentName" $source_environment_name "scalar") (serialize-qp "DestinationEnvironmentId" $destination_environment_id "scalar") (serialize-qp "DestinationEnvironmentName" $destination_environment_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -4016,8 +4195,8 @@ export def "post-swap-environment-cnam-es" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-38
-  --version: string@version-completer
+  --action: string@action-completer-38 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4030,6 +4209,8 @@ export def "post-swap-environment-cnam-es" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "SwapEnvironmentCNAMEs")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4070,8 +4251,8 @@ export def "get-terminate-environment" [
   --environment-name: string # The name of the environment to terminate. Condition: You must specify either this or an EnvironmentId, or both. If you do not specify either, AWS Elastic Beanstalk returns MissingRequiredParameter error.
   --terminate-resources: oneof<nothing, bool> # Indicates whether the associated AWS resources should shut down when the environment is terminated: true: The specified environment as well as the associated AWS resources, such as Auto Scaling group and LoadBalancer, are terminated. false: AWS Elastic Beanstalk resource management is removed from the environment, but the AWS resources continue to operate. For more information, see the AWS Elastic Beanstalk User Guide. (https://docs.aws.amazon.com/elasticbeanstalk/latest/ug/) Default: true Valid Values: true | false
   --force-terminate: oneof<nothing, bool> # Terminates the target environment even if another environment in the same group is dependent on it.
-  --action: string@action-completer-39
-  --version: string@version-completer
+  --action: string@action-completer-39 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4079,9 +4260,11 @@ export def "get-terminate-environment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EnvironmentName: record, EnvironmentId: record, ApplicationName: record, VersionLabel: record, SolutionStackName: record, PlatformArn: record, TemplateName: record, Description: record, EndpointURL: record, CNAME: record, DateCreated: record, DateUpdated: record, Status: record, AbortableOperationInProgress: record, Health: record, HealthStatus: record, Resources: record<LoadBalancer: record<LoadBalancerName: record, Domain: record, Listeners: record>>, Tier: record<Name: record, Type: record, Version: record>, EnvironmentLinks: record, EnvironmentArn: record, OperationsRole: record> {
+]: nothing -> record<EnvironmentName: string, EnvironmentId: string, ApplicationName: string, VersionLabel: string, SolutionStackName: string, PlatformArn: string, TemplateName: string, Description: string, EndpointURL: string, CNAME: string, DateCreated: string, DateUpdated: string, Status: string, AbortableOperationInProgress: bool, Health: string, HealthStatus: string, Resources: record<LoadBalancer: record<LoadBalancerName: string, Domain: string, Listeners: list>>, Tier: record<Name: string, Type: string, Version: string>, EnvironmentLinks: table<LinkName: string, EnvironmentName: string>, EnvironmentArn: string, OperationsRole: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "TerminateEnvironment")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "EnvironmentId" $environment_id "scalar") (serialize-qp "EnvironmentName" $environment_name "scalar") (serialize-qp "TerminateResources" $terminate_resources "scalar") (serialize-qp "ForceTerminate" $force_terminate "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4116,8 +4299,8 @@ export def "post-terminate-environment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-39
-  --version: string@version-completer
+  --action: string@action-completer-39 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4126,10 +4309,12 @@ export def "post-terminate-environment" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<EnvironmentName: record, EnvironmentId: record, ApplicationName: record, VersionLabel: record, SolutionStackName: record, PlatformArn: record, TemplateName: record, Description: record, EndpointURL: record, CNAME: record, DateCreated: record, DateUpdated: record, Status: record, AbortableOperationInProgress: record, Health: record, HealthStatus: record, Resources: record<LoadBalancer: record<LoadBalancerName: record, Domain: record, Listeners: record>>, Tier: record<Name: record, Type: record, Version: record>, EnvironmentLinks: record, EnvironmentArn: record, OperationsRole: record> {
+]: any -> record<EnvironmentName: string, EnvironmentId: string, ApplicationName: string, VersionLabel: string, SolutionStackName: string, PlatformArn: string, TemplateName: string, Description: string, EndpointURL: string, CNAME: string, DateCreated: string, DateUpdated: string, Status: string, AbortableOperationInProgress: bool, Health: string, HealthStatus: string, Resources: record<LoadBalancer: record<LoadBalancerName: string, Domain: string, Listeners: list>>, Tier: record<Name: string, Type: string, Version: string>, EnvironmentLinks: table<LinkName: string, EnvironmentName: string>, EnvironmentArn: string, OperationsRole: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "TerminateEnvironment")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4166,10 +4351,10 @@ export def "get-update-application" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --application-name: string # The name of the application to update. If no such application is found, UpdateApplication returns an InvalidParameterValue error.
+  --application-name: string # The name of the application to update. If no such application is found, UpdateApplication returns an InvalidParameterValue error. (required)
   --description: string # A new description for the application. Default: If not specified, AWS Elastic Beanstalk does not update the description.
-  --action: string@action-completer-40
-  --version: string@version-completer
+  --action: string@action-completer-40 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4177,9 +4362,12 @@ export def "get-update-application" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Application: record<ApplicationArn: record, ApplicationName: record, Description: record, DateCreated: record, DateUpdated: record, Versions: record, ConfigurationTemplates: record, ResourceLifecycleConfig: record<ServiceRole: record, VersionLifecycleConfig: record>>> {
+]: nothing -> record<Application: record<ApplicationArn: string, ApplicationName: string, Description: string, DateCreated: string, DateUpdated: string, Versions: list<string>, ConfigurationTemplates: list<string>, ResourceLifecycleConfig: record<ServiceRole: string, VersionLifecycleConfig: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_name == null) { error make --unspanned { msg: "required query parameter 'ApplicationName' missing: pass --application-name" } }
+  let action = ($action | default "UpdateApplication")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "ApplicationName" $application_name "scalar") (serialize-qp "Description" $description "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4214,8 +4402,8 @@ export def "post-update-application" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-40
-  --version: string@version-completer
+  --action: string@action-completer-40 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4224,10 +4412,12 @@ export def "post-update-application" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Application: record<ApplicationArn: record, ApplicationName: record, Description: record, DateCreated: record, DateUpdated: record, Versions: record, ConfigurationTemplates: record, ResourceLifecycleConfig: record<ServiceRole: record, VersionLifecycleConfig: record>>> {
+]: any -> record<Application: record<ApplicationArn: string, ApplicationName: string, Description: string, DateCreated: string, DateUpdated: string, Versions: list<string>, ConfigurationTemplates: list<string>, ResourceLifecycleConfig: record<ServiceRole: string, VersionLifecycleConfig: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "UpdateApplication")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4264,10 +4454,10 @@ export def "get-update-application-resource-lifecycle" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --application-name: string # The name of the application.
-  --resource-lifecycle-config: record # The lifecycle configuration.
-  --action: string@action-completer-41
-  --version: string@version-completer
+  --application-name: string # The name of the application. (required)
+  --resource-lifecycle-config: record # The lifecycle configuration. (required)
+  --action: string@action-completer-41 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4275,9 +4465,13 @@ export def "get-update-application-resource-lifecycle" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ApplicationName: record, ResourceLifecycleConfig: record<ServiceRole: record, VersionLifecycleConfig: record<MaxCountRule: record, MaxAgeRule: record>>> {
+]: nothing -> record<ApplicationName: string, ResourceLifecycleConfig: record<ServiceRole: string, VersionLifecycleConfig: record<MaxCountRule: record, MaxAgeRule: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_name == null) { error make --unspanned { msg: "required query parameter 'ApplicationName' missing: pass --application-name" } }
+  if ($resource_lifecycle_config == null) { error make --unspanned { msg: "required query parameter 'ResourceLifecycleConfig' missing: pass --resource-lifecycle-config" } }
+  let action = ($action | default "UpdateApplicationResourceLifecycle")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "ApplicationName" $application_name "scalar") (serialize-qp "ResourceLifecycleConfig" $resource_lifecycle_config "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4312,8 +4506,8 @@ export def "post-update-application-resource-lifecycle" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-41
-  --version: string@version-completer
+  --action: string@action-completer-41 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4322,10 +4516,12 @@ export def "post-update-application-resource-lifecycle" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ApplicationName: record, ResourceLifecycleConfig: record<ServiceRole: record, VersionLifecycleConfig: record<MaxCountRule: record, MaxAgeRule: record>>> {
+]: any -> record<ApplicationName: string, ResourceLifecycleConfig: record<ServiceRole: string, VersionLifecycleConfig: record<MaxCountRule: record, MaxAgeRule: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "UpdateApplicationResourceLifecycle")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4362,11 +4558,11 @@ export def "get-update-application-version" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --application-name: string # The name of the application associated with this version. If no application is found with this name, UpdateApplication returns an InvalidParameterValue error.
-  --version-label: string # The name of the version to update. If no application version is found with this label, UpdateApplication returns an InvalidParameterValue error.
+  --application-name: string # The name of the application associated with this version. If no application is found with this name, UpdateApplication returns an InvalidParameterValue error. (required)
+  --version-label: string # The name of the version to update. If no application version is found with this label, UpdateApplication returns an InvalidParameterValue error. (required)
   --description: string # A new description for this version.
-  --action: string@action-completer-42
-  --version: string@version-completer
+  --action: string@action-completer-42 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4374,9 +4570,13 @@ export def "get-update-application-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ApplicationVersion: record<ApplicationVersionArn: record, ApplicationName: record, Description: record, VersionLabel: record, SourceBuildInformation: record<SourceType: record, SourceRepository: record, SourceLocation: record>, BuildArn: record, SourceBundle: record<S3Bucket: record, S3Key: record>, DateCreated: record, DateUpdated: record, Status: record>> {
+]: nothing -> record<ApplicationVersion: record<ApplicationVersionArn: string, ApplicationName: string, Description: string, VersionLabel: string, SourceBuildInformation: record<SourceType: string, SourceRepository: string, SourceLocation: string>, BuildArn: string, SourceBundle: record<S3Bucket: string, S3Key: string>, DateCreated: string, DateUpdated: string, Status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_name == null) { error make --unspanned { msg: "required query parameter 'ApplicationName' missing: pass --application-name" } }
+  if ($version_label == null) { error make --unspanned { msg: "required query parameter 'VersionLabel' missing: pass --version-label" } }
+  let action = ($action | default "UpdateApplicationVersion")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "ApplicationName" $application_name "scalar") (serialize-qp "VersionLabel" $version_label "scalar") (serialize-qp "Description" $description "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4411,8 +4611,8 @@ export def "post-update-application-version" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-42
-  --version: string@version-completer
+  --action: string@action-completer-42 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4421,10 +4621,12 @@ export def "post-update-application-version" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ApplicationVersion: record<ApplicationVersionArn: record, ApplicationName: record, Description: record, VersionLabel: record, SourceBuildInformation: record<SourceType: record, SourceRepository: record, SourceLocation: record>, BuildArn: record, SourceBundle: record<S3Bucket: record, S3Key: record>, DateCreated: record, DateUpdated: record, Status: record>> {
+]: any -> record<ApplicationVersion: record<ApplicationVersionArn: string, ApplicationName: string, Description: string, VersionLabel: string, SourceBuildInformation: record<SourceType: string, SourceRepository: string, SourceLocation: string>, BuildArn: string, SourceBundle: record<S3Bucket: string, S3Key: string>, DateCreated: string, DateUpdated: string, Status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "UpdateApplicationVersion")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4461,13 +4663,13 @@ export def "get-update-configuration-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --application-name: string # The name of the application associated with the configuration template to update. If no application is found with this name, UpdateConfigurationTemplate returns an InvalidParameterValue error.
-  --template-name: string # The name of the configuration template to update. If no configuration template is found with this name, UpdateConfigurationTemplate returns an InvalidParameterValue error.
+  --application-name: string # The name of the application associated with the configuration template to update. If no application is found with this name, UpdateConfigurationTemplate returns an InvalidParameterValue error. (required)
+  --template-name: string # The name of the configuration template to update. If no configuration template is found with this name, UpdateConfigurationTemplate returns an InvalidParameterValue error. (required)
   --description: string # A new description for the configuration.
   --option-settings: list # A list of configuration option settings to update with the new specified option value.
   --options-to-remove: list # A list of configuration options to remove from the configuration set. Constraint: You can remove only UserDefined configuration options.
-  --action: string@action-completer-43
-  --version: string@version-completer
+  --action: string@action-completer-43 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4475,9 +4677,13 @@ export def "get-update-configuration-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<SolutionStackName: record, PlatformArn: record, ApplicationName: record, TemplateName: record, Description: record, EnvironmentName: record, DeploymentStatus: record, DateCreated: record, DateUpdated: record, OptionSettings: record> {
+]: nothing -> record<SolutionStackName: string, PlatformArn: string, ApplicationName: string, TemplateName: string, Description: string, EnvironmentName: string, DeploymentStatus: string, DateCreated: string, DateUpdated: string, OptionSettings: table<ResourceName: string, Namespace: string, OptionName: string, Value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_name == null) { error make --unspanned { msg: "required query parameter 'ApplicationName' missing: pass --application-name" } }
+  if ($template_name == null) { error make --unspanned { msg: "required query parameter 'TemplateName' missing: pass --template-name" } }
+  let action = ($action | default "UpdateConfigurationTemplate")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "ApplicationName" $application_name "scalar") (serialize-qp "TemplateName" $template_name "scalar") (serialize-qp "Description" $description "scalar") (serialize-qp "OptionSettings" $option_settings "multi") (serialize-qp "OptionsToRemove" $options_to_remove "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4512,8 +4718,8 @@ export def "post-update-configuration-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-43
-  --version: string@version-completer
+  --action: string@action-completer-43 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4522,10 +4728,12 @@ export def "post-update-configuration-template" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<SolutionStackName: record, PlatformArn: record, ApplicationName: record, TemplateName: record, Description: record, EnvironmentName: record, DeploymentStatus: record, DateCreated: record, DateUpdated: record, OptionSettings: record> {
+]: any -> record<SolutionStackName: string, PlatformArn: string, ApplicationName: string, TemplateName: string, Description: string, EnvironmentName: string, DeploymentStatus: string, DateCreated: string, DateUpdated: string, OptionSettings: table<ResourceName: string, Namespace: string, OptionName: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "UpdateConfigurationTemplate")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4574,8 +4782,8 @@ export def "get-update-environment" [
   --platform-arn: string # The ARN of the platform, if used.
   --option-settings: list # If specified, AWS Elastic Beanstalk updates the configuration set associated with the running environment and sets the specified configuration options to the requested value.
   --options-to-remove: list # A list of custom user-defined configuration options to remove from the configuration set for this environment.
-  --action: string@action-completer-44
-  --version: string@version-completer
+  --action: string@action-completer-44 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4583,9 +4791,11 @@ export def "get-update-environment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EnvironmentName: record, EnvironmentId: record, ApplicationName: record, VersionLabel: record, SolutionStackName: record, PlatformArn: record, TemplateName: record, Description: record, EndpointURL: record, CNAME: record, DateCreated: record, DateUpdated: record, Status: record, AbortableOperationInProgress: record, Health: record, HealthStatus: record, Resources: record<LoadBalancer: record<LoadBalancerName: record, Domain: record, Listeners: record>>, Tier: record<Name: record, Type: record, Version: record>, EnvironmentLinks: record, EnvironmentArn: record, OperationsRole: record> {
+]: nothing -> record<EnvironmentName: string, EnvironmentId: string, ApplicationName: string, VersionLabel: string, SolutionStackName: string, PlatformArn: string, TemplateName: string, Description: string, EndpointURL: string, CNAME: string, DateCreated: string, DateUpdated: string, Status: string, AbortableOperationInProgress: bool, Health: string, HealthStatus: string, Resources: record<LoadBalancer: record<LoadBalancerName: string, Domain: string, Listeners: list>>, Tier: record<Name: string, Type: string, Version: string>, EnvironmentLinks: table<LinkName: string, EnvironmentName: string>, EnvironmentArn: string, OperationsRole: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "UpdateEnvironment")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "ApplicationName" $application_name "scalar") (serialize-qp "EnvironmentId" $environment_id "scalar") (serialize-qp "EnvironmentName" $environment_name "scalar") (serialize-qp "GroupName" $group_name "scalar") (serialize-qp "Description" $description "scalar") (serialize-qp "Tier" $tier "multi") (serialize-qp "VersionLabel" $version_label "scalar") (serialize-qp "TemplateName" $template_name "scalar") (serialize-qp "SolutionStackName" $solution_stack_name "scalar") (serialize-qp "PlatformArn" $platform_arn "scalar") (serialize-qp "OptionSettings" $option_settings "multi") (serialize-qp "OptionsToRemove" $options_to_remove "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4620,8 +4830,8 @@ export def "post-update-environment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-44
-  --version: string@version-completer
+  --action: string@action-completer-44 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4630,10 +4840,12 @@ export def "post-update-environment" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<EnvironmentName: record, EnvironmentId: record, ApplicationName: record, VersionLabel: record, SolutionStackName: record, PlatformArn: record, TemplateName: record, Description: record, EndpointURL: record, CNAME: record, DateCreated: record, DateUpdated: record, Status: record, AbortableOperationInProgress: record, Health: record, HealthStatus: record, Resources: record<LoadBalancer: record<LoadBalancerName: record, Domain: record, Listeners: record>>, Tier: record<Name: record, Type: record, Version: record>, EnvironmentLinks: record, EnvironmentArn: record, OperationsRole: record> {
+]: any -> record<EnvironmentName: string, EnvironmentId: string, ApplicationName: string, VersionLabel: string, SolutionStackName: string, PlatformArn: string, TemplateName: string, Description: string, EndpointURL: string, CNAME: string, DateCreated: string, DateUpdated: string, Status: string, AbortableOperationInProgress: bool, Health: string, HealthStatus: string, Resources: record<LoadBalancer: record<LoadBalancerName: string, Domain: string, Listeners: list>>, Tier: record<Name: string, Type: string, Version: string>, EnvironmentLinks: table<LinkName: string, EnvironmentName: string>, EnvironmentArn: string, OperationsRole: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "UpdateEnvironment")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4670,11 +4882,11 @@ export def "get-update-tags-for-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-arn: string # The Amazon Resource Name (ARN) of the resouce to be updated. Must be the ARN of an Elastic Beanstalk resource.
+  --resource-arn: string # The Amazon Resource Name (ARN) of the resouce to be updated. Must be the ARN of an Elastic Beanstalk resource. (required)
   --tags-to-add: list # A list of tags to add or update. If a key of an existing tag is added, the tag's value is updated. Specify at least one of these parameters: TagsToAdd, TagsToRemove.
   --tags-to-remove: list # A list of tag keys to remove. If a tag key doesn't exist, it is silently ignored. Specify at least one of these parameters: TagsToAdd, TagsToRemove.
-  --action: string@action-completer-45
-  --version: string@version-completer
+  --action: string@action-completer-45 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4685,6 +4897,9 @@ export def "get-update-tags-for-resource" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'ResourceArn' missing: pass --resource-arn" } }
+  let action = ($action | default "UpdateTagsForResource")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "ResourceArn" $resource_arn "scalar") (serialize-qp "TagsToAdd" $tags_to_add "multi") (serialize-qp "TagsToRemove" $tags_to_remove "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -4719,8 +4934,8 @@ export def "post-update-tags-for-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-45
-  --version: string@version-completer
+  --action: string@action-completer-45 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4733,6 +4948,8 @@ export def "post-update-tags-for-resource" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "UpdateTagsForResource")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4769,12 +4986,12 @@ export def "get-validate-configuration-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --application-name: string # The name of the application that the configuration template or environment belongs to.
+  --application-name: string # The name of the application that the configuration template or environment belongs to. (required)
   --template-name: string # The name of the configuration template to validate the settings against. Condition: You cannot specify both this and an environment name.
   --environment-name: string # The name of the environment to validate the settings against. Condition: You cannot specify both this and a configuration template name.
-  --option-settings: list # A list of the options and desired values to evaluate.
-  --action: string@action-completer-46
-  --version: string@version-completer
+  --option-settings: list # A list of the options and desired values to evaluate. (required)
+  --action: string@action-completer-46 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4782,9 +4999,13 @@ export def "get-validate-configuration-settings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Messages: record> {
+]: nothing -> record<Messages: table<Message: string, Severity: string, Namespace: string, OptionName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_name == null) { error make --unspanned { msg: "required query parameter 'ApplicationName' missing: pass --application-name" } }
+  if ($option_settings == null) { error make --unspanned { msg: "required query parameter 'OptionSettings' missing: pass --option-settings" } }
+  let action = ($action | default "ValidateConfigurationSettings")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "ApplicationName" $application_name "scalar") (serialize-qp "TemplateName" $template_name "scalar") (serialize-qp "EnvironmentName" $environment_name "scalar") (serialize-qp "OptionSettings" $option_settings "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4819,8 +5040,8 @@ export def "post-validate-configuration-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-46
-  --version: string@version-completer
+  --action: string@action-completer-46 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4829,10 +5050,12 @@ export def "post-validate-configuration-settings" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Messages: record> {
+]: any -> record<Messages: table<Message: string, Severity: string, Namespace: string, OptionName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ValidateConfigurationSettings")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body

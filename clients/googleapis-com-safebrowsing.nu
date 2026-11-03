@@ -1,4 +1,4 @@
-# Auto-generated client for Safe Browsing API vv4
+# Auto-generated client for Safe Browsing API v4
 # Source: https://api.apis.guru/v2/specs/googleapis.com/safebrowsing/v4/openapi.json
 # Auth: --token flag or $env.SAFE_BROWSING_API_TOKEN
 

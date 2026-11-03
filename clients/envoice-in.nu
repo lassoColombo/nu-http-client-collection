@@ -1,4 +1,4 @@
-# Auto-generated client for API v1.0.0 vv1
+# Auto-generated client for API v1.0.0 v1
 # Source: https://api.apis.guru/v2/specs/envoice.in/v1/openapi.json
 # Auth: --token flag or $env.API_V1_0_0_TOKEN
 
@@ -12,8 +12,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-auth-key" => { {scheme: $scheme, headers: {x-auth-key: $token_val}, query: "", location: "header"} }
-    "x-auth-secret" => { {scheme: $scheme, headers: {x-auth-secret: $token_val}, query: "", location: "header"} }
+    "x-auth-key" => { {scheme: $scheme, headers: {"x-auth-key": $token_val}, query: "", location: "header"} }
+    "x-auth-secret" => { {scheme: $scheme, headers: {"x-auth-secret": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -147,11 +147,13 @@ export def "client-api-all" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
 ]: nothing -> table<AdditionalEmails: list<record>, Address: string, ClientCountryId: int, ClientCurrencyId: int, CompanyRegistrationNumber: string, CreatedOn: string, DefaultDueDateInDays: int, Email: string, Id: int, Name: string, PhoneNumber: string, UiLanguageId: int, Vat: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/client/all" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -186,12 +188,15 @@ export def "client-api-can-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --id: int # format: int32
-  --x-auth-key: string
-  --x-auth-secret: string
+  --id: int # required, format: int32
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
 ]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/client/candelete" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -227,13 +232,15 @@ export def "client-api-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
   --id: int # Id of client to be deleted (format: int32)
 ]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/client/delete" $auth.query)
   let req_body = {"Id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -270,12 +277,15 @@ export def "client-api-details" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --id: int # format: int32
-  --x-auth-key: string
-  --x-auth-secret: string
+  --id: int # required, format: int32
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
 ]: nothing -> record<AdditionalEmails: table<Email: string>, Address: string, ClientCountryId: int, ClientCurrencyId: int, CompanyRegistrationNumber: string, CreatedOn: string, DefaultDueDateInDays: int, Email: string, Id: int, Name: string, PhoneNumber: string, UiLanguageId: int, Vat: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/client/details" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -312,8 +322,8 @@ export def "client-api-new" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
   --additional-emails: list # Client additional emails contact for CC — item shape: {Email?: string}
   --address: string # Client business address
   --client-country-id: int # Indicates the country where the clients is from (format: int32)
@@ -329,6 +339,8 @@ export def "client-api-new" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/client/new" $auth.query)
   let req_body = {"AdditionalEmails": $additional_emails, "Address": $address, "ClientCountryId": $client_country_id, "ClientCurrencyId": $client_currency_id, "CompanyRegistrationNumber": $company_registration_number, "DefaultDueDateInDays": $default_due_date_in_days, "Email": $email, "Name": $name, "PhoneNumber": $phone_number, "UiLanguageId": $ui_language_id, "Vat": $vat} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -365,8 +377,8 @@ export def "client-api-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
   --additional-emails: list # Client additional emails contact for CC — item shape: {Email?: string}
   --address: string # Client business address
   --client-country-id: int # Indicates the country where the clients is from (format: int32)
@@ -383,6 +395,8 @@ export def "client-api-update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/client/update" $auth.query)
   let req_body = {"AdditionalEmails": $additional_emails, "Address": $address, "ClientCountryId": $client_country_id, "ClientCurrencyId": $client_currency_id, "CompanyRegistrationNumber": $company_registration_number, "DefaultDueDateInDays": $default_due_date_in_days, "Email": $email, "Id": $id, "Name": $name, "PhoneNumber": $phone_number, "UiLanguageId": $ui_language_id, "Vat": $vat} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -421,11 +435,13 @@ export def "estimation-api-all" [
   --accept: string@accept-completer # Response content type
   --query-options-page: int # format: int32
   --query-options-page-size: int # format: int32
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
 ]: nothing -> record<Count: int, ErrorMessages: table<Code: string, FaultMessage: string, Group: string, UserVisibleMessage: string>, IsFaulted: bool, Result: table<AccessToken: string, Client: record, ClonedFromId: int, Currency: record, DiscountAmount: float, ExpiresOn: string, Id: int, IssuedOn: string, Notes: string, Number: string, PoNumber: string, Status: string, SubTotalAmount: float, TaxAmount: float, Terms: string, TotalAmount: float>, TotalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let qp = [(serialize-qp "queryOptions.page" $query_options_page "scalar") (serialize-qp "queryOptions.pageSize" $query_options_page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/estimation/all" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -461,14 +477,16 @@ export def "estimation-api-change-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
   --id: int # Estimation Id (format: int32)
   --status: string@status-completer # New status of the estimation
 ]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/estimation/changestatus" $auth.query)
   let req_body = {"Id": $id, "Status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -505,13 +523,15 @@ export def "estimation-api-convert" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
   --body: int
 ]: any -> record<AccessToken: string, Activities: table<Id: int, InvoiceNumber: string, Link: string, Message: string, Type: string>, Attachments: table<Id: int, Link: string, ObfuscatedFileName: string, OriginalFileName: string, Size: int, Type: string>, Client: record<AdditionalEmails: list<record>, Address: string, ClientCountryId: int, ClientCurrencyId: int, CompanyRegistrationNumber: string, CreatedOn: string, DefaultDueDateInDays: int, Email: string, Id: int, Name: string, PhoneNumber: string, UiLanguageId: int, Vat: string>, ClonedFromId: int, Currency: record<Code: string, Id: int, Name: string, Symbol: string, Value: string>, DiscountAmount: float, Duedate: string, EnablePartialPayments: bool, Id: int, InvoiceCategoryId: int, IssuedOn: string, Items: table<Cost: float, Description: string, DiscountAmount: float, DiscountPercentage: float, Id: int, Quantity: float, SubTotalAmount: float, TaxAmount: float, TaxId: int, TaxPercentage: float, TotalAmount: float, WorkTypeId: int>, Notes: string, Number: string, PaymentGateways: table<Name: string>, Payments: table<Amount: float, Id: int, IsAutomatic: bool, Note: string, PaidOn: string, ReferenceId: string, Type: string>, PoNumber: string, RecurringProfile: record<DayOfMonth: int, DayOfWeek: string, DueDateInDays: int, EndOfRecurrance: string, Month: int, RecurrancePattern: string, RecurranceValue: int, StartOfRecurrance: string, Status: string, Title: string>, RecurringProfileId: int, ShouldSendReminders: bool, Status: string, SubTotalAmount: float, TaxAmount: float, Terms: string, TotalAmount: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/estimation/convert" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -548,13 +568,15 @@ export def "estimation-api-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
   --id: int # Id of estimation to be deleted (format: int32)
 ]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/estimation/delete" $auth.query)
   let req_body = {"Id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -591,12 +613,15 @@ export def "estimation-api-details" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --id: int # format: int32
-  --x-auth-key: string
-  --x-auth-secret: string
+  --id: int # required, format: int32
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
 ]: nothing -> record<AccessToken: string, Activities: table<EstimationNumber: string, Id: int, Link: string, Message: string, Type: string>, Attachments: table<Id: int, Link: string, ObfuscatedFileName: string, OriginalFileName: string, Size: int, Type: string>, Client: record<AdditionalEmails: list<record>, Address: string, ClientCountryId: int, ClientCurrencyId: int, CompanyRegistrationNumber: string, CreatedOn: string, DefaultDueDateInDays: int, Email: string, Id: int, Name: string, PhoneNumber: string, UiLanguageId: int, Vat: string>, ClonedFromId: int, Currency: record<Code: string, Id: int, Name: string, Symbol: string, Value: string>, DiscountAmount: float, ExpiresOn: string, Id: int, IssuedOn: string, Items: table<Cost: float, Description: string, DiscountAmount: float, DiscountPercentage: float, Id: int, Quantity: float, SubTotalAmount: float, TaxAmount: float, TaxId: int, TaxPercentage: float, TotalAmount: float, WorkTypeId: int>, Notes: string, Number: string, PaymentGateways: table<Name: string>, PoNumber: string, Status: string, SubTotalAmount: float, TaxAmount: float, Terms: string, TotalAmount: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/estimation/details" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -635,8 +660,8 @@ export def "estimation-api-new" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
   --attachments: list # List of estimation attachments — item shape: {Link?: string, ObfuscatedFileName?: string, OriginalFileName?: string, Size?: int, Type?: "External"|"Uploaded"}
   --client-id: int # The client to whom this estimation is assigned (format: int32)
   --cloned-from-id: int # Indicate from which estimation this estimation has been cloned from (format: int32)
@@ -654,6 +679,8 @@ export def "estimation-api-new" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/estimation/new" $auth.query)
   let req_body = {"Attachments": $attachments, "ClientId": $client_id, "ClonedFromId": $cloned_from_id, "CurrencyId": $currency_id, "ExpiresOn": $expires_on, "IssuedOn": $issued_on, "Items": $items, "Notes": $notes, "Number": $number, "PaymentGateways": $payment_gateways, "PoNumber": $po_number, "Status": $status, "Terms": $terms} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -690,8 +717,8 @@ export def "estimation-api-send-to-client" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
   --attach-pdf: oneof<nothing, bool> # Should attach pdf file
   --estimation-id: int # Id of the estimation (format: int32)
   --id: int # Id of the estimation (format: int32)
@@ -702,6 +729,8 @@ export def "estimation-api-send-to-client" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/estimation/sendtoclient" $auth.query)
   let req_body = {"AttachPdf": $attach_pdf, "EstimationId": $estimation_id, "Id": $id, "Message": $message, "SendToSelf": $send_to_self, "Subject": $subject} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -738,12 +767,15 @@ export def "estimation-api-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --id: int # format: int32
-  --x-auth-key: string
-  --x-auth-secret: string
+  --id: int # required, format: int32
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/estimation/status" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -782,8 +814,8 @@ export def "estimation-api-update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
   --attachments: list # List of estimation attachments — item shape: {Id?: int, Link?: string, ObfuscatedFileName?: string, OriginalFileName?: string, Size?: int, Type?: "External"|"Uploaded"}
   --client-id: int # The client to whom this estimation is assigned (format: int32)
   --cloned-from-id: int # Indicate from which estimation this estimation has been cloned from (format: int32)
@@ -802,6 +834,8 @@ export def "estimation-api-update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/estimation/update" $auth.query)
   let req_body = {"Attachments": $attachments, "ClientId": $client_id, "ClonedFromId": $cloned_from_id, "CurrencyId": $currency_id, "ExpiresOn": $expires_on, "Id": $id, "IssuedOn": $issued_on, "Items": $items, "Notes": $notes, "Number": $number, "PaymentGateways": $payment_gateways, "PoNumber": $po_number, "Status": $status, "Terms": $terms} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -838,12 +872,15 @@ export def "estimation-api-uri" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --id: int # format: int32
-  --x-auth-key: string
-  --x-auth-secret: string
+  --id: int # required, format: int32
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
 ]: nothing -> record<Link: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/estimation/uri" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -879,11 +916,13 @@ export def "general-api-countries" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
 ]: nothing -> table<Id: int, Name: string, Value: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/general/countries" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -918,11 +957,13 @@ export def "general-api-currencies" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
 ]: nothing -> table<Code: string, Id: int, Name: string, Symbol: string, Value: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/general/currencies" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -957,11 +998,13 @@ export def "general-api-date-formats" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/general/dateformats" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -996,11 +1039,13 @@ export def "general-api-ui-languages" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
 ]: nothing -> table<Id: int, Name: string, UiCulture: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/general/uilanguages" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1037,11 +1082,13 @@ export def "invoice-api-all" [
   --accept: string@accept-completer # Response content type
   --query-options-page: int # format: int32
   --query-options-page-size: int # format: int32
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
 ]: nothing -> record<Count: int, ErrorMessages: table<Code: string, FaultMessage: string, Group: string, UserVisibleMessage: string>, IsFaulted: bool, Result: table<AccessToken: string, Client: record, ClonedFromId: int, Currency: record, DiscountAmount: float, Duedate: string, EnablePartialPayments: bool, Id: int, InvoiceCategoryId: int, IssuedOn: string, Notes: string, Number: string, PoNumber: string, RecurringProfile: record, RecurringProfileId: int, ShouldSendReminders: bool, Status: string, SubTotalAmount: float, TaxAmount: float, Terms: string, TotalAmount: float>, TotalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let qp = [(serialize-qp "queryOptions.page" $query_options_page "scalar") (serialize-qp "queryOptions.pageSize" $query_options_page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/invoice/all" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1077,11 +1124,13 @@ export def "get-api-invoice-allcategories" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --query: string
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
 ]: nothing -> record<Count: int, ErrorMessages: table<Code: string, FaultMessage: string, Group: string, UserVisibleMessage: string>, IsFaulted: bool, Result: table<Id: int, Name: string>, TotalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/invoice/allcategories" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1117,14 +1166,16 @@ export def "invoice-api-change-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
   --id: int # Invoice Id (format: int32)
   --status: string@status-completer-1 # New status of the invoice
 ]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/invoice/changestatus" $auth.query)
   let req_body = {"Id": $id, "Status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1161,13 +1212,15 @@ export def "invoice-api-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
   --id: int # Id of invoice to be deleted (format: int32)
 ]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/invoice/delete" $auth.query)
   let req_body = {"Id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1203,13 +1256,15 @@ export def "post-api-invoice-deletecategory" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
   --id: int # format: int32
 ]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/invoice/deletecategory" $auth.query)
   let req_body = {"Id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1246,12 +1301,15 @@ export def "invoice-api-details" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --id: int # format: int32
-  --x-auth-key: string
-  --x-auth-secret: string
+  --id: int # required, format: int32
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
 ]: nothing -> record<AccessToken: string, Activities: table<Id: int, InvoiceNumber: string, Link: string, Message: string, Type: string>, Attachments: table<Id: int, Link: string, ObfuscatedFileName: string, OriginalFileName: string, Size: int, Type: string>, Client: record<AdditionalEmails: list<record>, Address: string, ClientCountryId: int, ClientCurrencyId: int, CompanyRegistrationNumber: string, CreatedOn: string, DefaultDueDateInDays: int, Email: string, Id: int, Name: string, PhoneNumber: string, UiLanguageId: int, Vat: string>, ClonedFromId: int, Currency: record<Code: string, Id: int, Name: string, Symbol: string, Value: string>, DiscountAmount: float, Duedate: string, EnablePartialPayments: bool, Id: int, InvoiceCategoryId: int, IssuedOn: string, Items: table<Cost: float, Description: string, DiscountAmount: float, DiscountPercentage: float, Id: int, Quantity: float, SubTotalAmount: float, TaxAmount: float, TaxId: int, TaxPercentage: float, TotalAmount: float, WorkTypeId: int>, Notes: string, Number: string, PaymentGateways: table<Name: string>, Payments: table<Amount: float, Id: int, IsAutomatic: bool, Note: string, PaidOn: string, ReferenceId: string, Type: string>, PoNumber: string, RecurringProfile: record<DayOfMonth: int, DayOfWeek: string, DueDateInDays: int, EndOfRecurrance: string, Month: int, RecurrancePattern: string, RecurranceValue: int, StartOfRecurrance: string, Status: string, Title: string>, RecurringProfileId: int, ShouldSendReminders: bool, Status: string, SubTotalAmount: float, TaxAmount: float, Terms: string, TotalAmount: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/invoice/details" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1291,8 +1349,8 @@ export def "invoice-api-new" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
   --attachments: list # List of invoice attachments — item shape: {Link?: string, ObfuscatedFileName?: string, OriginalFileName?: string, Size?: int, Type?: "External"|"Uploaded"}
   --client-id: int # The client to whom this invoice is assigned (format: int32)
   --cloned-from-id: int # Indicate from which invoice this invoice has been cloned from (format: int32)
@@ -1314,6 +1372,8 @@ export def "invoice-api-new" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/invoice/new" $auth.query)
   let req_body = {"Attachments": $attachments, "ClientId": $client_id, "ClonedFromId": $cloned_from_id, "CurrencyId": $currency_id, "Duedate": $duedate, "InvoiceCategoryId": $invoice_category_id, "IssuedOn": $issued_on, "Items": $items, "Notes": $notes, "Number": $number, "PaymentGateways": $payment_gateways, "PoNumber": $po_number, "RecurringProfile": $recurring_profile, "RecurringProfileId": $recurring_profile_id, "ShouldSendReminders": $should_send_reminders, "Status": $status, "Terms": $terms} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1349,13 +1409,15 @@ export def "post-api-invoice-newcategory" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
   --name: string # Category name
 ]: any -> record<Id: int, Name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/invoice/newcategory" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1392,13 +1454,16 @@ export def "invoice-api-pdf" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --id: int # format: int32
+  --id: int # required, format: int32
   --signed-version: oneof<nothing, bool>
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
 ]: nothing -> record<Link: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "signedVersion" $signed_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/invoice/pdf" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1434,13 +1499,15 @@ export def "invoice-api-send-to-accountant" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
   --id: int # Id of the invoice (format: int32)
 ]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/invoice/sendtoaccountant" $auth.query)
   let req_body = {"Id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1477,8 +1544,8 @@ export def "invoice-api-send-to-client" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
   --attach-pdf: oneof<nothing, bool> # Should attach pdf file
   --id: int # Id of the invoice (format: int32)
   --invoice-id: int # Id of the invoice (format: int32)
@@ -1489,6 +1556,8 @@ export def "invoice-api-send-to-client" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/invoice/sendtoclient" $auth.query)
   let req_body = {"AttachPdf": $attach_pdf, "Id": $id, "InvoiceId": $invoice_id, "Message": $message, "SendToSelf": $send_to_self, "Subject": $subject} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1525,12 +1594,15 @@ export def "invoice-api-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --id: int # format: int32
-  --x-auth-key: string
-  --x-auth-secret: string
+  --id: int # required, format: int32
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/invoice/status" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1570,8 +1642,8 @@ export def "invoice-api-update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
   --attachments: list # List of invoice attachments — item shape: {Id?: int, Link?: string, ObfuscatedFileName?: string, OriginalFileName?: string, Size?: int, Type?: "External"|"Uploaded"}
   --client-id: int # The client to whom this invoice is assigned (format: int32)
   --cloned-from-id: int # Indicate from which invoice this invoice has been cloned from (format: int32)
@@ -1594,6 +1666,8 @@ export def "invoice-api-update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/invoice/update" $auth.query)
   let req_body = {"Attachments": $attachments, "ClientId": $client_id, "ClonedFromId": $cloned_from_id, "CurrencyId": $currency_id, "Duedate": $duedate, "Id": $id, "InvoiceCategoryId": $invoice_category_id, "IssuedOn": $issued_on, "Items": $items, "Notes": $notes, "Number": $number, "PaymentGateways": $payment_gateways, "PoNumber": $po_number, "RecurringProfile": $recurring_profile, "RecurringProfileId": $recurring_profile_id, "ShouldSendReminders": $should_send_reminders, "Status": $status, "Terms": $terms} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1629,14 +1703,16 @@ export def "post-api-invoice-updatecategory" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
   --id: int # Entity id (format: int32)
   --name: string # Category name
 ]: any -> record<Id: int, Name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/invoice/updatecategory" $auth.query)
   let req_body = {"Id": $id, "Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1673,12 +1749,15 @@ export def "invoice-api-uri" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --id: int # format: int32
-  --x-auth-key: string
-  --x-auth-secret: string
+  --id: int # required, format: int32
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
 ]: nothing -> record<Link: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/invoice/uri" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1716,11 +1795,13 @@ export def "order-api-all" [
   --accept: string@accept-completer # Response content type
   --query-options-page: int # format: int32
   --query-options-page-size: int # format: int32
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
 ]: nothing -> record<Count: int, ErrorMessages: table<Code: string, FaultMessage: string, Group: string, UserVisibleMessage: string>, IsFaulted: bool, Result: table<AccessToken: string, AfterPaymentDescription: string, CouponCode: string, Currency: record, CurrencyId: int, Description: string, DiscountAmount: float, Id: int, Name: string, Note: string, OrderBillingDetails: record, OrderShippingDetails: record, ProductId: int, Referral: string, ShippingAmount: float, ShippingDescription: string, Status: string, SubTotalAmount: float, TaxAmount: float, TotalAmount: float, TotalWithShipping: float, WhatHappensNextDescription: string>, TotalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let qp = [(serialize-qp "queryOptions.page" $query_options_page "scalar") (serialize-qp "queryOptions.pageSize" $query_options_page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/order/all" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1755,9 +1836,9 @@ export def "order-api-change-shipping-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --order-id: int # format: int32
-  --x-auth-key: string
-  --x-auth-secret: string
+  --order-id: int # required, format: int32
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
   --address: string # Client street and number
   --country-id: int # Client country id (format: int32)
   --email: string # Client email
@@ -1767,6 +1848,9 @@ export def "order-api-change-shipping-details" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($order_id == null) { error make --unspanned { msg: "required query parameter 'orderId' missing: pass --order-id" } }
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let qp = [(serialize-qp "orderId" $order_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/order/changeshippingdetails" $qp $auth.query)
   let req_body = {"Address": $address, "CountryId": $country_id, "Email": $email, "Name": $name, "PhoneNumber": $phone_number} | compact
@@ -1803,8 +1887,8 @@ export def "order-api-change-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
   --id: int # Order Id (format: int32)
   --reason: string # Reason for status change
   --status: string@status-completer-2 # New status of the order
@@ -1812,6 +1896,8 @@ export def "order-api-change-status" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/order/changestatus" $auth.query)
   let req_body = {"Id": $id, "Reason": $reason, "Status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1848,13 +1934,15 @@ export def "order-api-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
   --id: int # Id of order to be deleted (format: int32)
 ]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/order/delete" $auth.query)
   let req_body = {"Id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1891,12 +1979,15 @@ export def "order-api-details" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --id: int # format: int32
-  --x-auth-key: string
-  --x-auth-secret: string
+  --id: int # required, format: int32
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
 ]: nothing -> record<AccessToken: string, AfterPaymentDescription: string, Attachments: table<Link: string, ObfuscatedFileName: string, OriginalFileName: string, Size: int, Type: string>, CouponCode: string, Currency: record<Code: string, Id: int, Name: string, Symbol: string, Value: string>, CurrencyId: int, Description: string, DiscountAmount: float, Id: int, Items: table<Cost: float, Description: string, ProductItemId: int, Quantity: float, ReferenceId: string, SubTotalAmount: float, TaxAmount: float, TaxId: int, TaxPercentage: float, TotalAmount: float, WorkTypeId: int>, Name: string, Note: string, OrderBillingDetails: record<Address: string, CountryId: int, Email: string, Name: string, PhoneNumber: string>, OrderShippingDetails: record<Address: string, CountryId: int, Email: string, Name: string, PhoneNumber: string>, ProductId: int, Referral: string, ShippingAmount: float, ShippingDescription: string, Status: string, SubTotalAmount: float, TaxAmount: float, TotalAmount: float, TotalWithShipping: float, WhatHappensNextDescription: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/order/details" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1936,8 +2027,8 @@ export def "order-api-new" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
   --after-payment-description: string # After payment description
   --attachments: list # List of Order attachments — item shape: {Link?: string, ObfuscatedFileName?: string, OriginalFileName?: string, Size?: int, Type?: "External"|"Uploaded"}
   --coupon-code: string # Coupon to apply in order to get the discount
@@ -1962,6 +2053,8 @@ export def "order-api-new" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/order/new" $auth.query)
   let req_body = {"AfterPaymentDescription": $after_payment_description, "Attachments": $attachments, "CouponCode": $coupon_code, "CurrencyId": $currency_id, "Description": $description, "DiscountAmount": $discount_amount, "Items": $items, "Name": $name, "Note": $note, "OrderBillingDetails": $order_billing_details, "OrderShippingDetails": $order_shipping_details, "ProductId": $product_id, "Referral": $referral, "ShippingAmount": $shipping_amount, "ShippingDescription": $shipping_description, "Status": $status, "SubTotalAmount": $sub_total_amount, "TaxAmount": $tax_amount, "TotalAmount": $total_amount, "WhatHappensNextDescription": $what_happens_next_description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1998,11 +2091,13 @@ export def "payment-api-supported" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
 ]: nothing -> table<Name: string, SupportedCurrencies: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/payment/supported" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2039,11 +2134,13 @@ export def "payment-link-api-all" [
   --accept: string@accept-completer # Response content type
   --query-options-page: int # format: int32
   --query-options-page-size: int # format: int32
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
 ]: nothing -> record<Count: int, ErrorMessages: table<Code: string, FaultMessage: string, Group: string, UserVisibleMessage: string>, IsFaulted: bool, Result: table<AccessToken: string, Client: record, ClientId: int, Currency: record, CurrencyId: int, DiscountAmount: float, Id: int, Invoice: record, Items: list, Number: string, SubTotalAmount: float, TaxAmount: float, TotalAmount: float, User: record, UserId: int>, TotalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let qp = [(serialize-qp "queryOptions.page" $query_options_page "scalar") (serialize-qp "queryOptions.pageSize" $query_options_page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/paymentlink/all" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2084,8 +2181,8 @@ export def "payment-link-api-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
   --access-token: string
   --client: record # shape: {Address?: string, ClientCountryId?: int, ClientCurrencyId?: int, CompanyRegistrationNumber?: string, DefaultDueDateInDays?: int, Email?: string, Id?: int, Name?: string, PhoneNumber?: string, UiLanguageId?: int, UserId?: int, Vat?: string}
   --client-id: int # format: int32
@@ -2105,6 +2202,8 @@ export def "payment-link-api-delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/paymentlink/delete" $auth.query)
   let req_body = {"AccessToken": $access_token, "Client": $client, "ClientId": $client_id, "Currency": $currency, "CurrencyId": $currency_id, "DiscountAmount": $discount_amount, "Id": $id, "Invoice": $invoice, "Items": $items, "Number": $number, "SubTotalAmount": $sub_total_amount, "TaxAmount": $tax_amount, "TotalAmount": $total_amount, "User": $user, "UserId": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2146,8 +2245,8 @@ export def "payment-link-api-new" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
   --access-token: string
   --client: record # shape: {Address?: string, ClientCountryId?: int, ClientCurrencyId?: int, CompanyRegistrationNumber?: string, DefaultDueDateInDays?: int, Email?: string, Id?: int, Name?: string, PhoneNumber?: string, UiLanguageId?: int, UserId?: int, Vat?: string}
   --client-id: int # format: int32
@@ -2167,6 +2266,8 @@ export def "payment-link-api-new" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/paymentlink/new" $auth.query)
   let req_body = {"AccessToken": $access_token, "Client": $client, "ClientId": $client_id, "Currency": $currency, "CurrencyId": $currency_id, "DiscountAmount": $discount_amount, "Id": $id, "Invoice": $invoice, "Items": $items, "Number": $number, "SubTotalAmount": $sub_total_amount, "TaxAmount": $tax_amount, "TotalAmount": $total_amount, "User": $user, "UserId": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2203,12 +2304,15 @@ export def "payment-link-api-uri" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --id: int # format: int32
-  --x-auth-key: string
-  --x-auth-secret: string
+  --id: int # required, format: int32
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
 ]: nothing -> record<Link: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/paymentlink/uri" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2246,11 +2350,13 @@ export def "product-api-all" [
   --accept: string@accept-completer # Response content type
   --query-options-page: int # format: int32
   --query-options-page-size: int # format: int32
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
 ]: nothing -> record<Count: int, ErrorMessages: table<Code: string, FaultMessage: string, Group: string, UserVisibleMessage: string>, IsFaulted: bool, Result: table<AccessToken: string, AfterPaymentDescription: string, ButtonCallToAction: string, Currency: record, CurrencyId: int, Description: string, Id: int, IsFeatured: bool, Name: string, ShippingAmount: float, ShippingDescription: string, Status: string, SubTotalAmount: float, TotalAmount: float, TotalWithShipping: float, WhatHappensNextDescription: string>, TotalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let qp = [(serialize-qp "queryOptions.page" $query_options_page "scalar") (serialize-qp "queryOptions.pageSize" $query_options_page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/product/all" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2286,13 +2392,15 @@ export def "product-api-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
   --id: int # Id of product to be deleted (format: int32)
 ]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/product/delete" $auth.query)
   let req_body = {"Id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2329,12 +2437,15 @@ export def "product-api-details" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --id: int # format: int32
-  --x-auth-key: string
-  --x-auth-secret: string
+  --id: int # required, format: int32
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
 ]: nothing -> record<AccessToken: string, AfterPaymentDescription: string, Attachments: table<Id: int, Link: string, ObfuscatedFileName: string, OriginalFileName: string, Size: int, Type: string>, ButtonCallToAction: string, Coupons: table<Code: string, DiscountAmount: float, DiscountPercentage: float, Id: int, ValidUntil: string>, Currency: record<Code: string, Id: int, Name: string, Symbol: string, Value: string>, CurrencyId: int, Description: string, Discounts: table<DiscountAmount: float, DiscountPercentage: float, Id: int, Name: string, ValidFrom: string, ValidTo: string>, Id: int, IsFeatured: bool, Items: table<Cost: float, Description: string, Id: int, MinimumQuantity: float, ReferenceId: string, SubTotalAmount: float, TaxAmount: float, TaxId: int, TaxPercentage: float, TotalAmount: float, WorkTypeId: int>, Name: string, PaymentGateways: table<Name: string>, ShippingAmount: float, ShippingDescription: string, Status: string, SubTotalAmount: float, TotalAmount: float, TotalWithShipping: float, WhatHappensNextDescription: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/product/details" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2375,8 +2486,8 @@ export def "product-api-new" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
   --after-payment-description: string # After payment description
   --attachments: list # List of product attachments — item shape: {Id?: int, Link?: string, ObfuscatedFileName?: string, OriginalFileName?: string, Size?: int, Type?: "External"|"Uploaded"}
   --button-call-to-action: string # Default button call to action Ex: Buy now, subscribe, ...
@@ -2396,6 +2507,8 @@ export def "product-api-new" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/product/new" $auth.query)
   let req_body = {"AfterPaymentDescription": $after_payment_description, "Attachments": $attachments, "ButtonCallToAction": $button_call_to_action, "Coupons": $coupons, "CurrencyId": $currency_id, "Description": $description, "Discounts": $discounts, "IsFeatured": $is_featured, "Items": $items, "Name": $name, "PaymentGateways": $payment_gateways, "ShippingAmount": $shipping_amount, "ShippingDescription": $shipping_description, "Status": $status, "WhatHappensNextDescription": $what_happens_next_description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2436,8 +2549,8 @@ export def "product-api-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
   --after-payment-description: string # After payment description
   --attachments: list # List of product attachments — item shape: {Id?: int, Link?: string, ObfuscatedFileName?: string, OriginalFileName?: string, Size?: int, Type?: "External"|"Uploaded"}
   --button-call-to-action: string # Default button call to action Ex: Buy now, subscribe, ...
@@ -2458,6 +2571,8 @@ export def "product-api-update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/product/update" $auth.query)
   let req_body = {"AfterPaymentDescription": $after_payment_description, "Attachments": $attachments, "ButtonCallToAction": $button_call_to_action, "Coupons": $coupons, "CurrencyId": $currency_id, "Description": $description, "Discounts": $discounts, "Id": $id, "IsFeatured": $is_featured, "Items": $items, "Name": $name, "PaymentGateways": $payment_gateways, "ShippingAmount": $shipping_amount, "ShippingDescription": $shipping_description, "Status": $status, "WhatHappensNextDescription": $what_happens_next_description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2494,11 +2609,13 @@ export def "tax-api-all" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
 ]: nothing -> table<CreatedOn: string, Id: int, Name: string, Percentage: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/tax/all" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2533,13 +2650,15 @@ export def "tax-api-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
   --id: int # Id of tax to be deleted (format: int32)
 ]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/tax/delete" $auth.query)
   let req_body = {"Id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2576,14 +2695,16 @@ export def "tax-api-new" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
   --name: string # Name of the task
   --percentage: float # Task percentage. Ex: 18% (format: double)
 ]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/tax/new" $auth.query)
   let req_body = {"Name": $name, "Percentage": $percentage} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2619,8 +2740,8 @@ export def "tax-api-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
   --id: int # Entity id (format: int32)
   --name: string # Name of the task
   --percentage: float # Task percentage. Ex: 18% (format: double)
@@ -2628,6 +2749,8 @@ export def "tax-api-update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/tax/update" $auth.query)
   let req_body = {"Id": $id, "Name": $name, "Percentage": $percentage} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2664,11 +2787,13 @@ export def "work-type-api-all" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
 ]: nothing -> table<CreatedOn: string, Id: int, Title: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/worktype/all" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2703,13 +2828,15 @@ export def "work-type-api-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
   --id: int # Id of work type to be deleted (format: int32)
 ]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/worktype/delete" $auth.query)
   let req_body = {"Id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2746,12 +2873,15 @@ export def "work-type-api-details" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --work-type-id: int # format: int32
-  --x-auth-key: string
-  --x-auth-secret: string
+  --work-type-id: int # required, format: int32
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
 ]: nothing -> record<CreatedOn: string, Id: int, Title: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($work_type_id == null) { error make --unspanned { msg: "required query parameter 'workTypeId' missing: pass --work-type-id" } }
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let qp = [(serialize-qp "workTypeId" $work_type_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/worktype/details" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2787,13 +2917,15 @@ export def "work-type-api-new" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
   --title: string # Indicates the title of of the work type (Logo design, development...)
 ]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/worktype/new" $auth.query)
   let req_body = {"Title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2835,11 +2967,13 @@ export def "work-type-api-search" [
   --query-options-order: string@query-options-order-completer
   --query-options-page: int # format: int32
   --query-options-page-size: int # format: int32
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
 ]: nothing -> table<CreatedOn: string, Id: int, Title: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let qp = [(serialize-qp "queryOptions.query" $query_options_query "scalar") (serialize-qp "queryOptions.orderBy" $query_options_order_by "scalar") (serialize-qp "queryOptions.order" $query_options_order "scalar") (serialize-qp "queryOptions.page" $query_options_page "scalar") (serialize-qp "queryOptions.pageSize" $query_options_page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/worktype/search" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2874,14 +3008,16 @@ export def "work-type-api-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-key: string
-  --x-auth-secret: string
+  --x-auth-key: string # required, default: [authentication key]
+  --x-auth-secret: string # required, default: [authentication secret]
   --id: int # Entity id (format: int32)
   --title: string # Indicates the title of of the work type (Logo design, development...)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
+  let x_auth_key = ($x_auth_key | default "[authentication key]")
+  let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/worktype/update" $auth.query)
   let req_body = {"Id": $id, "Title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

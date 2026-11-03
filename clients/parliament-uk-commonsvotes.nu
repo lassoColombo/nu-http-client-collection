@@ -1,4 +1,4 @@
-# Auto-generated client for Commons Votes API vv1
+# Auto-generated client for Commons Votes API v1
 # Source: https://api.apis.guru/v2/specs/parliament.uk/commonsvotes/v1/swagger.json
 # Auth: --token flag or $env.COMMONS_VOTES_API_TOKEN
 
@@ -218,7 +218,7 @@ export def "divisions-get-voting-records-for-member" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --query-parameters-member-id: int # Id number of a Member whose voting records are to be returned (format: int32)
+  --query-parameters-member-id: int # Id number of a Member whose voting records are to be returned (required, format: int32)
   --query-parameters-skip: int # The number of records to skip. Default is 0 (format: int32)
   --query-parameters-take: int # The number of records to return per page. Default is 25 (format: int32)
   --query-parameters-search-term: string # Divisions containing search term within title or number
@@ -230,6 +230,7 @@ export def "divisions-get-voting-records-for-member" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
+  if ($query_parameters_member_id == null) { error make --unspanned { msg: "required query parameter 'queryParameters.memberId' missing: pass --query-parameters-member-id" } }
   let qp = [(serialize-qp "queryParameters.memberId" $query_parameters_member_id "scalar") (serialize-qp "queryParameters.skip" $query_parameters_skip "scalar") (serialize-qp "queryParameters.take" $query_parameters_take "scalar") (serialize-qp "queryParameters.searchTerm" $query_parameters_search_term "scalar") (serialize-qp "queryParameters.includeWhenMemberWasTeller" $query_parameters_include_when_member_was_teller "scalar") (serialize-qp "queryParameters.startDate" $query_parameters_start_date "scalar") (serialize-qp "queryParameters.endDate" $query_parameters_end_date "scalar") (serialize-qp "queryParameters.divisionNumber" $query_parameters_division_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/data/divisions.{format}/membervoting") $qp $auth.query)
   let accept_val = ($accept | default "application/json")

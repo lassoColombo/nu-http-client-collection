@@ -131,19 +131,19 @@ export def "get-public-history" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Ortssuche mit Freitext (e.g. Berlin, Reichstag)
-  --qp-from: string # Startdatum der Abfrage im Format (JJJJ-MM-DD) (e.g. 2021-01-01)
-  --qp-to: string # Enddatum der Abfrage im Format (JJJJ-MM-DD) (e.g. 2022-01-01)
+  --from: string # Startdatum der Abfrage im Format (JJJJ-MM-DD) (e.g. 2021-01-01)
+  --to: string # Enddatum der Abfrage im Format (JJJJ-MM-DD) (e.g. 2022-01-01)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/public/history" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"q": $q, "from": $qp_from, "to": $qp_to} | compact)
+    query: ({"q": $q, "from": $from, "to": $to} | compact)
     headers: $auth.headers
     body: null
     content_type: null

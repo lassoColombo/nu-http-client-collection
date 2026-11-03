@@ -1,4 +1,4 @@
-# Auto-generated client for Open Data API vv1.3
+# Auto-generated client for Open Data API v1.3
 # Source: https://api.apis.guru/v2/specs/openbanking.org.uk/v1.3/openapi.json
 # Auth: --token flag or $env.OPEN_DATA_API_TOKEN
 

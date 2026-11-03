@@ -206,11 +206,12 @@ export def "get-easywind" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --period: string # Period of time to get the data latestdata|latesthour|latestday (default: latestdata)
+  --period: string # Period of time to get the data latestdata|latesthour|latestday (required, default: latestdata)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($easywind_id | is-empty) { error make --unspanned { msg: "path parameter 'easywindId' must be non-empty" } }
+  let period = ($period | default "latestdata")
   let qp = [(serialize-qp "period" $period "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({easywind_id: (encode-path-segment $easywind_id)} | format pattern "/v1.0/getEasyWind/{easywind_id}/") $qp $auth.query)
   let accept_val = "application/json"
@@ -323,7 +324,7 @@ export def "get-forecast-time-series" [
   --endtime: string # end date for the forecast ISO string YYYY-MM-DDTHH:mm:SS.SZ
   --days: int # optional number of days in string. Will be added to init forecast date (format: int32)
   --hours: int # optional number of hours in string. Will be added to init forecast date (format: int32)
-  --weather: string # Comma separated values for the weather parameteres temperature,rain,wind_u,wind_v,gust,pressure,cloud,humidity&wave=height,direction,period
+  --weather: string # Comma separated values for the weather parameteres temperature,rain,wind_u,wind_v,gust,pressure,cloud,humidity&wave=height,direction,period (required)
   --wave: string # Comma separated values for the wave parameteres height,direction,period
   --entryid: string # Direct file I want to extract
 ]: nothing -> any {
@@ -331,6 +332,7 @@ export def "get-forecast-time-series" [
   let base = ($base_url | default $BASE_URL)
   if ($latitude | is-empty) { error make --unspanned { msg: "path parameter 'latitude' must be non-empty" } }
   if ($longitude | is-empty) { error make --unspanned { msg: "path parameter 'longitude' must be non-empty" } }
+  if ($weather == null) { error make --unspanned { msg: "required query parameter 'weather' missing: pass --weather" } }
   let qp = [(serialize-qp "inittime" $inittime "scalar") (serialize-qp "endtime" $endtime "scalar") (serialize-qp "days" $days "scalar") (serialize-qp "hours" $hours "scalar") (serialize-qp "weather" $weather "scalar") (serialize-qp "wave" $wave "scalar") (serialize-qp "entryid" $entryid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({latitude: (encode-path-segment $latitude), longitude: (encode-path-segment $longitude)} | format pattern "/v1.0/getForecastTimeSeries/{latitude}/{longitude}/") $qp $auth.query)
   let accept_val = "application/json"
@@ -369,7 +371,7 @@ export def "get-forecast-time-series-wrf" [
   --endtime: string # end date for the forecast ISO string YYYY-MM-DDTHH:mm:SS.SZ
   --days: int # optional number of days in string. Will be added to init forecast date (format: int32)
   --hours: int # optional number of hours in string. Will be added to init forecast date (format: int32)
-  --weather: string # Comma separated values for the weather parameteres temperature,rain,wind_u,wind_v,gust,pressure,cloud,humidity&wave=height,direction,period
+  --weather: string # Comma separated values for the weather parameteres temperature,rain,wind_u,wind_v,gust,pressure,cloud,humidity&wave=height,direction,period (required)
   --wave: string # Comma separated values for the wave parameteres height,direction,period
   --entryid: string # Direct file I want to extract
 ]: nothing -> any {
@@ -377,6 +379,7 @@ export def "get-forecast-time-series-wrf" [
   let base = ($base_url | default $BASE_URL)
   if ($latitude | is-empty) { error make --unspanned { msg: "path parameter 'latitude' must be non-empty" } }
   if ($longitude | is-empty) { error make --unspanned { msg: "path parameter 'longitude' must be non-empty" } }
+  if ($weather == null) { error make --unspanned { msg: "required query parameter 'weather' missing: pass --weather" } }
   let qp = [(serialize-qp "inittime" $inittime "scalar") (serialize-qp "endtime" $endtime "scalar") (serialize-qp "days" $days "scalar") (serialize-qp "hours" $hours "scalar") (serialize-qp "weather" $weather "scalar") (serialize-qp "wave" $wave "scalar") (serialize-qp "entryid" $entryid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({latitude: (encode-path-segment $latitude), longitude: (encode-path-segment $longitude)} | format pattern "/v1.0/getForecastTimeSeriesWrf/{latitude}/{longitude}/") $qp $auth.query)
   let accept_val = "application/json"
@@ -448,11 +451,12 @@ export def "get-weather-display" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --period: string # Period of time to get the data latestdata|latesthour|latestday|dailylog (default: latestdata)
+  --period: string # Period of time to get the data latestdata|latesthour|latestday|dailylog (required, default: latestdata)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($station_name | is-empty) { error make --unspanned { msg: "path parameter 'stationName' must be non-empty" } }
+  let period = ($period | default "latestdata")
   let qp = [(serialize-qp "period" $period "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({station_name: (encode-path-segment $station_name)} | format pattern "/v1.0/getWeatherDisplay/{station_name}/") $qp $auth.query)
   let accept_val = "application/json"

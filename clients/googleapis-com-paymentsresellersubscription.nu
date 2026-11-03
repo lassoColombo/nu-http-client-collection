@@ -1,4 +1,4 @@
-# Auto-generated client for Payments Reseller Subscription API vv1
+# Auto-generated client for Payments Reseller Subscription API v1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/paymentsresellersubscription/v1/openapi.json
 # Auth: --token flag or $env.PAYMENTS_RESELLER_SUBSCRIPTION_API_TOKEN
 

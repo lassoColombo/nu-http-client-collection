@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -107,6 +107,7 @@ def base-url-completer [] { ["https://api.stoplight.io/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def format-completer [] { ["oas.json" "oas.yaml" "raml08.yaml" "raml10.yaml" "stoplight.json" "stoplight.yaml"] }
 def accept-completer [] { ["application/json" "text/yaml"] }
 
 # List all available API commands with their parameters
@@ -177,7 +178,7 @@ export def "post-versions-publish-anon" [
 # operationId: GET_versions-versionId-export-format
 export def "get-versions-version-id-export-format" [
   version_id: string
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

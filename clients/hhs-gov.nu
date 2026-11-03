@@ -130,10 +130,11 @@ export def "get-resources-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The search query supplied by the user (format: )
+  --q: string # The search query supplied by the user (required, format: )
 ]: nothing -> list<any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/resources.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -167,18 +168,18 @@ export def "get-resources-campaigns-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max: int # The maximum number of records to return (format: int32)
   --offset: int # The offset of the records set to return for pagination (format: int32)
-  --qp-sort: string # * Set of fields to sort the records by. (format: )
+  --sort: string # * Set of fields to sort the records by. (format: )
 ]: nothing -> record<callback: string, meta: record<messages: list<record>, pagination: record<count: int, currentUrl: string, max: int, nextUrl: string, offset: int, pageNum: int, previousUrl: string, sort: string, total: int, totalPages: int>, status: int>, results: table<contactEmail: string, description: string, endDate: string, id: int, name: string, source: record, startDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/resources/campaigns.json" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"max": $max, "offset": $offset, "sort": $qp_sort} | compact)
+    query: ({"max": $max, "offset": $offset, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -238,21 +239,21 @@ export def "get-resources-campaigns-id-media-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-sort: string # The name of the property to which sorting will be applied (format: )
+  --sort: string # The name of the property to which sorting will be applied (format: )
   --max: int # The maximum number of records to return (format: int32)
   --offset: int # The offset of the records set to return for pagination (format: int32)
 ]: nothing -> record<callback: string, meta: record<messages: list<record>, pagination: record<count: int, currentUrl: string, max: int, nextUrl: string, offset: int, pageNum: int, previousUrl: string, sort: string, total: int, totalPages: int>, status: int>, results: table<campaigns: list, createdBy: string, customAttributionUrl: string, customPreviewUrl: string, customThumbnailUrl: string, dateContentAuthored: string, dateContentPublished: string, dateContentReviewed: string, dateContentUpdated: string, dateSyndicationCaptured: string, dateSyndicationUpdated: string, dateSyndicationVisible: string, description: string, extendedAttributes: list, externalGuid: string, foreignSyndicationAPIUrl: string, hash: string, id: int, language: record, mediaType: string, name: string, source: record, sourceUrl: string, targetUrl: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/campaigns/{id}/media.json") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sort": $qp_sort, "max": $max, "offset": $offset} | compact)
+    query: ({"sort": $sort, "max": $max, "offset": $offset} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -317,18 +318,18 @@ export def "get-resources-languages-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max: int # The maximum number of records to return (format: int32)
   --offset: int # Return records starting at the offset index. (format: int32)
-  --qp-sort: string # The name of the property to which sorting will be applied (format: )
+  --sort: string # The name of the property to which sorting will be applied (format: )
 ]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/resources/languages.json" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"max": $max, "offset": $offset, "sort": $qp_sort} | compact)
+    query: ({"max": $max, "offset": $offset, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -389,7 +390,7 @@ export def "get-resources-media-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max: int # The maximum number of records to return (format: int32)
   --offset: int # The offset of the records set to return for pagination. (format: int32)
-  --qp-sort: string # * Set of fields to sort the records by. (format: )
+  --sort: string # * Set of fields to sort the records by. (format: )
   --order: string # * The ascending or descending order. (format: )
   --media-types: string # Find all media items belonging to the specified media type[s]. (format: )
   --name: string # Find all media items containing the provided name, case insensitive. (format: )
@@ -443,14 +444,14 @@ export def "get-resources-media-json" [
 ]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "mediaTypes" $media_types "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "collectionId" $collection_id "scalar") (serialize-qp "nameContains" $name_contains "scalar") (serialize-qp "descriptionContains" $description_contains "scalar") (serialize-qp "sourceUrl" $source_url "scalar") (serialize-qp "sourceUrlContains" $source_url_contains "scalar") (serialize-qp "customThumbnailUrl" $custom_thumbnail_url "scalar") (serialize-qp "customThumbnailUrlContains" $custom_thumbnail_url_contains "scalar") (serialize-qp "dateContentAuthored" $date_content_authored "scalar") (serialize-qp "dateContentUpdated" $date_content_updated "scalar") (serialize-qp "dateContentPublished" $date_content_published "scalar") (serialize-qp "dateContentReviewed" $date_content_reviewed "scalar") (serialize-qp "dateSyndicationCaptured" $date_syndication_captured "scalar") (serialize-qp "dateSyndicationUpdated" $date_syndication_updated "scalar") (serialize-qp "contentAuthoredSinceDate" $content_authored_since_date "scalar") (serialize-qp "contentAuthoredBeforeDate" $content_authored_before_date "scalar") (serialize-qp "contentAuthoredInRange" $content_authored_in_range "scalar") (serialize-qp "contentUpdatedSinceDate" $content_updated_since_date "scalar") (serialize-qp "contentUpdatedBeforeDate" $content_updated_before_date "scalar") (serialize-qp "contentUpdatedInRange" $content_updated_in_range "scalar") (serialize-qp "contentPublishedSinceDate" $content_published_since_date "scalar") (serialize-qp "contentPublishedBeforeDate" $content_published_before_date "scalar") (serialize-qp "contentPublishedInRange" $content_published_in_range "scalar") (serialize-qp "contentReviewedSinceDate" $content_reviewed_since_date "scalar") (serialize-qp "contentReviewedBeforeDate" $content_reviewed_before_date "scalar") (serialize-qp "contentReviewedInRange" $content_reviewed_in_range "scalar") (serialize-qp "syndicationCapturedSinceDate" $syndication_captured_since_date "scalar") (serialize-qp "syndicationCapturedBeforeDate" $syndication_captured_before_date "scalar") (serialize-qp "syndicationCapturedInRange" $syndication_captured_in_range "scalar") (serialize-qp "syndicationUpdatedSinceDate" $syndication_updated_since_date "scalar") (serialize-qp "syndicationUpdatedBeforeDate" $syndication_updated_before_date "scalar") (serialize-qp "syndicationUpdatedInRange" $syndication_updated_in_range "scalar") (serialize-qp "syndicationVisibleSinceDate" $syndication_visible_since_date "scalar") (serialize-qp "syndicationVisibleBeforeDate" $syndication_visible_before_date "scalar") (serialize-qp "syndicationVisibleInRange" $syndication_visible_in_range "scalar") (serialize-qp "languageId" $language_id "scalar") (serialize-qp "languageName" $language_name "scalar") (serialize-qp "languageIsoCode" $language_iso_code "scalar") (serialize-qp "hash" $hash "scalar") (serialize-qp "hashContains" $hash_contains "scalar") (serialize-qp "sourceId" $source_id "scalar") (serialize-qp "sourceName" $source_name "scalar") (serialize-qp "sourceNameContains" $source_name_contains "scalar") (serialize-qp "sourceAcronym" $source_acronym "scalar") (serialize-qp "sourceAcronymContains" $source_acronym_contains "scalar") (serialize-qp "tagIds" $tag_ids "scalar") (serialize-qp "restrictToSet" $restrict_to_set "scalar") (serialize-qp "createdBy" $created_by "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "mediaTypes" $media_types "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "collectionId" $collection_id "scalar") (serialize-qp "nameContains" $name_contains "scalar") (serialize-qp "descriptionContains" $description_contains "scalar") (serialize-qp "sourceUrl" $source_url "scalar") (serialize-qp "sourceUrlContains" $source_url_contains "scalar") (serialize-qp "customThumbnailUrl" $custom_thumbnail_url "scalar") (serialize-qp "customThumbnailUrlContains" $custom_thumbnail_url_contains "scalar") (serialize-qp "dateContentAuthored" $date_content_authored "scalar") (serialize-qp "dateContentUpdated" $date_content_updated "scalar") (serialize-qp "dateContentPublished" $date_content_published "scalar") (serialize-qp "dateContentReviewed" $date_content_reviewed "scalar") (serialize-qp "dateSyndicationCaptured" $date_syndication_captured "scalar") (serialize-qp "dateSyndicationUpdated" $date_syndication_updated "scalar") (serialize-qp "contentAuthoredSinceDate" $content_authored_since_date "scalar") (serialize-qp "contentAuthoredBeforeDate" $content_authored_before_date "scalar") (serialize-qp "contentAuthoredInRange" $content_authored_in_range "scalar") (serialize-qp "contentUpdatedSinceDate" $content_updated_since_date "scalar") (serialize-qp "contentUpdatedBeforeDate" $content_updated_before_date "scalar") (serialize-qp "contentUpdatedInRange" $content_updated_in_range "scalar") (serialize-qp "contentPublishedSinceDate" $content_published_since_date "scalar") (serialize-qp "contentPublishedBeforeDate" $content_published_before_date "scalar") (serialize-qp "contentPublishedInRange" $content_published_in_range "scalar") (serialize-qp "contentReviewedSinceDate" $content_reviewed_since_date "scalar") (serialize-qp "contentReviewedBeforeDate" $content_reviewed_before_date "scalar") (serialize-qp "contentReviewedInRange" $content_reviewed_in_range "scalar") (serialize-qp "syndicationCapturedSinceDate" $syndication_captured_since_date "scalar") (serialize-qp "syndicationCapturedBeforeDate" $syndication_captured_before_date "scalar") (serialize-qp "syndicationCapturedInRange" $syndication_captured_in_range "scalar") (serialize-qp "syndicationUpdatedSinceDate" $syndication_updated_since_date "scalar") (serialize-qp "syndicationUpdatedBeforeDate" $syndication_updated_before_date "scalar") (serialize-qp "syndicationUpdatedInRange" $syndication_updated_in_range "scalar") (serialize-qp "syndicationVisibleSinceDate" $syndication_visible_since_date "scalar") (serialize-qp "syndicationVisibleBeforeDate" $syndication_visible_before_date "scalar") (serialize-qp "syndicationVisibleInRange" $syndication_visible_in_range "scalar") (serialize-qp "languageId" $language_id "scalar") (serialize-qp "languageName" $language_name "scalar") (serialize-qp "languageIsoCode" $language_iso_code "scalar") (serialize-qp "hash" $hash "scalar") (serialize-qp "hashContains" $hash_contains "scalar") (serialize-qp "sourceId" $source_id "scalar") (serialize-qp "sourceName" $source_name "scalar") (serialize-qp "sourceNameContains" $source_name_contains "scalar") (serialize-qp "sourceAcronym" $source_acronym "scalar") (serialize-qp "sourceAcronymContains" $source_acronym_contains "scalar") (serialize-qp "tagIds" $tag_ids "scalar") (serialize-qp "restrictToSet" $restrict_to_set "scalar") (serialize-qp "createdBy" $created_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/resources/media.json" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"max": $max, "offset": $offset, "sort": $qp_sort, "order": $order, "mediaTypes": $media_types, "name": $name, "collectionId": $collection_id, "nameContains": $name_contains, "descriptionContains": $description_contains, "sourceUrl": $source_url, "sourceUrlContains": $source_url_contains, "customThumbnailUrl": $custom_thumbnail_url, "customThumbnailUrlContains": $custom_thumbnail_url_contains, "dateContentAuthored": $date_content_authored, "dateContentUpdated": $date_content_updated, "dateContentPublished": $date_content_published, "dateContentReviewed": $date_content_reviewed, "dateSyndicationCaptured": $date_syndication_captured, "dateSyndicationUpdated": $date_syndication_updated, "contentAuthoredSinceDate": $content_authored_since_date, "contentAuthoredBeforeDate": $content_authored_before_date, "contentAuthoredInRange": $content_authored_in_range, "contentUpdatedSinceDate": $content_updated_since_date, "contentUpdatedBeforeDate": $content_updated_before_date, "contentUpdatedInRange": $content_updated_in_range, "contentPublishedSinceDate": $content_published_since_date, "contentPublishedBeforeDate": $content_published_before_date, "contentPublishedInRange": $content_published_in_range, "contentReviewedSinceDate": $content_reviewed_since_date, "contentReviewedBeforeDate": $content_reviewed_before_date, "contentReviewedInRange": $content_reviewed_in_range, "syndicationCapturedSinceDate": $syndication_captured_since_date, "syndicationCapturedBeforeDate": $syndication_captured_before_date, "syndicationCapturedInRange": $syndication_captured_in_range, "syndicationUpdatedSinceDate": $syndication_updated_since_date, "syndicationUpdatedBeforeDate": $syndication_updated_before_date, "syndicationUpdatedInRange": $syndication_updated_in_range, "syndicationVisibleSinceDate": $syndication_visible_since_date, "syndicationVisibleBeforeDate": $syndication_visible_before_date, "syndicationVisibleInRange": $syndication_visible_in_range, "languageId": $language_id, "languageName": $language_name, "languageIsoCode": $language_iso_code, "hash": $hash, "hashContains": $hash_contains, "sourceId": $source_id, "sourceName": $source_name, "sourceNameContains": $source_name_contains, "sourceAcronym": $source_acronym, "sourceAcronymContains": $source_acronym_contains, "tagIds": $tag_ids, "restrictToSet": $restrict_to_set, "createdBy": $created_by} | compact)
+    query: ({"max": $max, "offset": $offset, "sort": $sort, "order": $order, "mediaTypes": $media_types, "name": $name, "collectionId": $collection_id, "nameContains": $name_contains, "descriptionContains": $description_contains, "sourceUrl": $source_url, "sourceUrlContains": $source_url_contains, "customThumbnailUrl": $custom_thumbnail_url, "customThumbnailUrlContains": $custom_thumbnail_url_contains, "dateContentAuthored": $date_content_authored, "dateContentUpdated": $date_content_updated, "dateContentPublished": $date_content_published, "dateContentReviewed": $date_content_reviewed, "dateSyndicationCaptured": $date_syndication_captured, "dateSyndicationUpdated": $date_syndication_updated, "contentAuthoredSinceDate": $content_authored_since_date, "contentAuthoredBeforeDate": $content_authored_before_date, "contentAuthoredInRange": $content_authored_in_range, "contentUpdatedSinceDate": $content_updated_since_date, "contentUpdatedBeforeDate": $content_updated_before_date, "contentUpdatedInRange": $content_updated_in_range, "contentPublishedSinceDate": $content_published_since_date, "contentPublishedBeforeDate": $content_published_before_date, "contentPublishedInRange": $content_published_in_range, "contentReviewedSinceDate": $content_reviewed_since_date, "contentReviewedBeforeDate": $content_reviewed_before_date, "contentReviewedInRange": $content_reviewed_in_range, "syndicationCapturedSinceDate": $syndication_captured_since_date, "syndicationCapturedBeforeDate": $syndication_captured_before_date, "syndicationCapturedInRange": $syndication_captured_in_range, "syndicationUpdatedSinceDate": $syndication_updated_since_date, "syndicationUpdatedBeforeDate": $syndication_updated_before_date, "syndicationUpdatedInRange": $syndication_updated_in_range, "syndicationVisibleSinceDate": $syndication_visible_since_date, "syndicationVisibleBeforeDate": $syndication_visible_before_date, "syndicationVisibleInRange": $syndication_visible_in_range, "languageId": $language_id, "languageName": $language_name, "languageIsoCode": $language_iso_code, "hash": $hash, "hashContains": $hash_contains, "sourceId": $source_id, "sourceName": $source_name, "sourceNameContains": $source_name_contains, "sourceAcronym": $source_acronym, "sourceAcronymContains": $source_acronym_contains, "tagIds": $tag_ids, "restrictToSet": $restrict_to_set, "createdBy": $created_by} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -474,20 +475,20 @@ export def "get-resources-media-featured-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-sort: string # The name of the property to which sorting will be applied (format: )
+  --sort: string # The name of the property to which sorting will be applied (format: )
   --max: int # The maximum number of records to return (format: int32)
   --offset: int # Return records starting at the offset index. (format: int32)
 ]: nothing -> table<campaigns: list<record>, createdBy: string, customAttributionUrl: string, customPreviewUrl: string, customThumbnailUrl: string, dateContentAuthored: string, dateContentPublished: string, dateContentReviewed: string, dateContentUpdated: string, dateSyndicationCaptured: string, dateSyndicationUpdated: string, dateSyndicationVisible: string, description: string, extendedAttributes: list<record>, externalGuid: string, foreignSyndicationAPIUrl: string, hash: string, id: int, language: record<id: int, isActive: bool, isoCode: string, name: string>, mediaType: string, name: string, source: record<acronym: string, contactEmail: string, id: int, largeLogoUrl: string, name: string, smallLogoUrl: string, websiteUrl: string>, sourceUrl: string, targetUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/resources/media/featured.json" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sort": $qp_sort, "max": $max, "offset": $offset} | compact)
+    query: ({"sort": $sort, "max": $max, "offset": $offset} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -549,12 +550,13 @@ export def "get-resources-media-search-results-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The search query supplied by the user (format: )
+  --q: string # The search query supplied by the user (required, format: )
   --max: int # The maximum number of records to return (format: int32)
   --offset: int # The offset of the records set to return for pagination. (format: int32)
 ]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/resources/media/searchResults.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -741,20 +743,20 @@ export def "get-resources-media-id-related-media-format" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max: int # The maximum number of records to return (format: int32)
   --offset: int # Return records starting at the offset index. (format: int32)
-  --qp-sort: string # The name of the property to which sorting will be applied (format: )
+  --sort: string # The name of the property to which sorting will be applied (format: )
 ]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  let qp = [(serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), format: (encode-path-segment $format)} | format pattern "/resources/media/{id}/relatedMedia.{format}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"max": $max, "offset": $offset, "sort": $qp_sort} | compact)
+    query: ({"max": $max, "offset": $offset, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -934,18 +936,18 @@ export def "get-resources-sources-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max: int # The maximum number of records to return (format: int32)
   --offset: int # Return records starting at the offset index. (format: int32)
-  --qp-sort: string # The name of the property to which sorting will be applied (format: )
+  --sort: string # The name of the property to which sorting will be applied (format: )
 ]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/resources/sources.json" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"max": $max, "offset": $offset, "sort": $qp_sort} | compact)
+    query: ({"max": $max, "offset": $offset, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1044,7 +1046,7 @@ export def "get-resources-tags-format" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-sort: string # The name of the property to which sorting will be applied (format: )
+  --sort: string # The name of the property to which sorting will be applied (format: )
   --max: int # The maximum number of records to return (format: int32)
   --offset: int # Return records starting at the offset index. (format: int32)
   --name: string # Return tags[s] matching the supplied name (format: )
@@ -1056,14 +1058,14 @@ export def "get-resources-tags-format" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "nameContains" $name_contains "scalar") (serialize-qp "mediaId" $media_id "scalar") (serialize-qp "typeId" $type_id "scalar") (serialize-qp "typeName" $type_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "nameContains" $name_contains "scalar") (serialize-qp "mediaId" $media_id "scalar") (serialize-qp "typeId" $type_id "scalar") (serialize-qp "typeName" $type_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/resources/tags.{format}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sort": $qp_sort, "max": $max, "offset": $offset, "name": $name, "nameContains": $name_contains, "mediaId": $media_id, "typeId": $type_id, "typeName": $type_name} | compact)
+    query: ({"sort": $sort, "max": $max, "offset": $offset, "name": $name, "nameContains": $name_contains, "mediaId": $media_id, "typeId": $type_id, "typeName": $type_name} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1196,7 +1198,7 @@ export def "get-resources-tags-id-media-format" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-sort: string # The name of the property to which sorting will be applied (format: )
+  --sort: string # The name of the property to which sorting will be applied (format: )
   --max: int # The maximum number of records to return (format: int32)
   --offset: int # Return records starting at the offset index. (format: int32)
 ]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
@@ -1204,14 +1206,14 @@ export def "get-resources-tags-id-media-format" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), format: (encode-path-segment $format)} | format pattern "/resources/tags/{id}/media.{format}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sort": $qp_sort, "max": $max, "offset": $offset} | compact)
+    query: ({"sort": $sort, "max": $max, "offset": $offset} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1237,7 +1239,7 @@ export def "get-resources-tags-id-related-format" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-sort: string # The name of the property to which sorting will be applied (format: )
+  --sort: string # The name of the property to which sorting will be applied (format: )
   --max: int # The maximum number of records to return (format: int32)
   --offset: int # Return records starting at the offset index. (format: int32)
 ]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
@@ -1245,14 +1247,14 @@ export def "get-resources-tags-id-related-format" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), format: (encode-path-segment $format)} | format pattern "/resources/tags/{id}/related.{format}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sort": $qp_sort, "max": $max, "offset": $offset} | compact)
+    query: ({"sort": $sort, "max": $max, "offset": $offset} | compact)
     headers: $auth.headers
     body: null
     content_type: null

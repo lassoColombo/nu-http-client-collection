@@ -132,7 +132,7 @@ export def "get-arrivals-and-departures-by-crs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The National Rail OpenLDBWS API Key to use for looking up service information. You must register with National Rail to obtain this key and whitelist it with us. See https://api.departureboard.io/docs/registration for more information.
+  --api-key: string # The National Rail OpenLDBWS API Key to use for looking up service information. You must register with National Rail to obtain this key and whitelist it with us. See https://api.departureboard.io/docs/registration for more information. (required)
   --num-services: int # The number of arriving and departing services to return. This is a maximum value, less may be returned if there is not a sufficient amount of services arriving to or departing from this station within the time window specified. (default: 10)
   --time-offset: int # The time window in minutes to offset the arrival and departure information by. For example, a value of 20 will not show services arriving to or departing from the station within the next 20 minutes. (default: 0)
   --time-window: int # The time window in minutes to offset the arrival and departure information by. For example, a value of 20 will not show services arriving to or departing from the selected station within the next 20 minutes. (default: 120)
@@ -143,6 +143,7 @@ export def "get-arrivals-and-departures-by-crs" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($crs | is-empty) { error make --unspanned { msg: "path parameter 'CRS' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'apiKey' missing: pass --api-key" } }
   let qp = [(serialize-qp "apiKey" $api_key "scalar") (serialize-qp "numServices" $num_services "scalar") (serialize-qp "timeOffset" $time_offset "scalar") (serialize-qp "timeWindow" $time_window "scalar") (serialize-qp "serviceDetails" $service_details "scalar") (serialize-qp "filterStation" $filter_station "scalar") (serialize-qp "filterType" $filter_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({crs: (encode-path-segment $crs)} | format pattern "/getArrivalsAndDeparturesByCRS/{crs}") $qp $auth.query)
   let accept_val = "application/json"
@@ -176,7 +177,7 @@ export def "get-arrivals-by-crs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The National Rail OpenLDBWS API Key to use for looking up service information. You must register with National Rail to obtain this key and whitelist it with us. See https://api.departureboard.io/docs/registration for more information.
+  --api-key: string # The National Rail OpenLDBWS API Key to use for looking up service information. You must register with National Rail to obtain this key and whitelist it with us. See https://api.departureboard.io/docs/registration for more information. (required)
   --num-services: int # The number of arriving train services to return. This is a maximum value, less may be returned if there is not a sufficient amount of services running to this station within the time window specified. (default: 10)
   --time-offset: int # The time window in minutes to offset the arrival information by. For example, a value of 20 will not show services arriving within the next 20 minutes. (default: 0)
   --time-window: int # The time window to show train services for in minutes. For example, a value of 60 will show services arriving to the station in the next 60 minutes. (default: 120)
@@ -186,6 +187,7 @@ export def "get-arrivals-by-crs" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($crs | is-empty) { error make --unspanned { msg: "path parameter 'CRS' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'apiKey' missing: pass --api-key" } }
   let qp = [(serialize-qp "apiKey" $api_key "scalar") (serialize-qp "numServices" $num_services "scalar") (serialize-qp "timeOffset" $time_offset "scalar") (serialize-qp "timeWindow" $time_window "scalar") (serialize-qp "serviceDetails" $service_details "scalar") (serialize-qp "filterStation" $filter_station "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({crs: (encode-path-segment $crs)} | format pattern "/getArrivalsByCRS/{crs}") $qp $auth.query)
   let accept_val = "application/json"
@@ -219,7 +221,7 @@ export def "get-departures-by-crs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The National Rail OpenLDBWS API Key to use for looking up service information. You must register with National Rail to obtain this key and whitelist it with us. See https://api.departureboard.io/docs/registration for more information.
+  --api-key: string # The National Rail OpenLDBWS API Key to use for looking up service information. You must register with National Rail to obtain this key and whitelist it with us. See https://api.departureboard.io/docs/registration for more information. (required)
   --num-services: int # The number of departing services to return. This is a maximum value, less may be returned if there is not a sufficient amount of services running from the selected station within the time window specified. (default: 10)
   --time-offset: int # The time window in minutes to offset the departure information by. For example, a value of 20 will not show services departing within the next 20 minutes. (default: 0)
   --time-window: int # The time window to show services for in minutes. For example, a value of 60 will show services departing the station in the next 60 minutes. (default: 120)
@@ -229,6 +231,7 @@ export def "get-departures-by-crs" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($crs | is-empty) { error make --unspanned { msg: "path parameter 'CRS' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'apiKey' missing: pass --api-key" } }
   let qp = [(serialize-qp "apiKey" $api_key "scalar") (serialize-qp "numServices" $num_services "scalar") (serialize-qp "timeOffset" $time_offset "scalar") (serialize-qp "timeWindow" $time_window "scalar") (serialize-qp "serviceDetails" $service_details "scalar") (serialize-qp "filterStation" $filter_station "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({crs: (encode-path-segment $crs)} | format pattern "/getDeparturesByCRS/{crs}") $qp $auth.query)
   let accept_val = "application/json"
@@ -262,8 +265,8 @@ export def "get-fastest-departures-by-crs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The National Rail OpenLDBWS API Key to use for looking up service information. You must register with National Rail to obtain this key and whitelist it with us. See https://api.departureboard.io/docs/registration for more information.
-  --filter-list: string # The CRS (Computer Reservation System) codes to show the fastest departing services to. Up to 20 destination stations can be specified. These should be split by a comma, for example HAY,EAL,PAD.
+  --api-key: string # The National Rail OpenLDBWS API Key to use for looking up service information. You must register with National Rail to obtain this key and whitelist it with us. See https://api.departureboard.io/docs/registration for more information. (required)
+  --filter-list: string # The CRS (Computer Reservation System) codes to show the fastest departing services to. Up to 20 destination stations can be specified. These should be split by a comma, for example HAY,EAL,PAD. (required)
   --time-offset: int # The time window in minutes to offset the departure information by. For example, a value of 20 will show the fastest services departing after 20 minutes. (default: 0)
   --time-window: int # The time window to show train services for in minutes. For example, a value of 60 will show the fastest services departing the station in the next 60 minutes. (default: 120)
   --service-details: oneof<nothing, bool> # Should the response contain information on the calling points for each service? If set to false, calling points will not be returned. (default: true)
@@ -271,6 +274,8 @@ export def "get-fastest-departures-by-crs" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($crs | is-empty) { error make --unspanned { msg: "path parameter 'CRS' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'apiKey' missing: pass --api-key" } }
+  if ($filter_list == null) { error make --unspanned { msg: "required query parameter 'filterList' missing: pass --filter-list" } }
   let qp = [(serialize-qp "apiKey" $api_key "scalar") (serialize-qp "filterList" $filter_list "scalar") (serialize-qp "timeOffset" $time_offset "scalar") (serialize-qp "timeWindow" $time_window "scalar") (serialize-qp "serviceDetails" $service_details "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({crs: (encode-path-segment $crs)} | format pattern "/getFastestDeparturesByCRS/{crs}") $qp $auth.query)
   let accept_val = "application/json"
@@ -304,8 +309,8 @@ export def "get-next-departures-by-crs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The National Rail OpenLDBWS API Key to use for looking up service information. You must register with National Rail to obtain this key and whitelist it with us. See https://api.departureboard.io/docs/registration for more information.
-  --filter-list: string # The CRS (Computer Reservation System) codes to show departing services to. Up to 20 destination stations can be specified. These should be split by a comma, for example HAY,EAL,PAD.
+  --api-key: string # The National Rail OpenLDBWS API Key to use for looking up service information. You must register with National Rail to obtain this key and whitelist it with us. See https://api.departureboard.io/docs/registration for more information. (required)
+  --filter-list: string # The CRS (Computer Reservation System) codes to show departing services to. Up to 20 destination stations can be specified. These should be split by a comma, for example HAY,EAL,PAD. (required)
   --time-offset: int # The time window in minutes to offset the arrival and departure information by. For example, a value of 20 will not show services arriving to or departing from the station within the next 20 minutes. (default: 0)
   --time-window: int # The time window in minutes to offset the arrival and departure information by. For example, a value of 20 will not show services arriving to or departing from the selected station within the next 20 minutes. (default: 120)
   --service-details: oneof<nothing, bool> # Should the response contain information on the calling points for each service? If set to false, calling points will not be returned. (default: true)
@@ -313,6 +318,8 @@ export def "get-next-departures-by-crs" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($crs | is-empty) { error make --unspanned { msg: "path parameter 'CRS' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'apiKey' missing: pass --api-key" } }
+  if ($filter_list == null) { error make --unspanned { msg: "required query parameter 'filterList' missing: pass --filter-list" } }
   let qp = [(serialize-qp "apiKey" $api_key "scalar") (serialize-qp "filterList" $filter_list "scalar") (serialize-qp "timeOffset" $time_offset "scalar") (serialize-qp "timeWindow" $time_window "scalar") (serialize-qp "serviceDetails" $service_details "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({crs: (encode-path-segment $crs)} | format pattern "/getNextDeparturesByCRS/{crs}") $qp $auth.query)
   let accept_val = "application/json"
@@ -346,11 +353,12 @@ export def "get-service-details-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The National Rail OpenLDBWS API Key to use for looking up service information. You must register with National Rail to obtain this key and whitelist it with us. See https://api.departureboard.io/docs/registration for more information.
+  --api-key: string # The National Rail OpenLDBWS API Key to use for looking up service information. You must register with National Rail to obtain this key and whitelist it with us. See https://api.departureboard.io/docs/registration for more information. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceID' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'apiKey' missing: pass --api-key" } }
   let qp = [(serialize-qp "apiKey" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/getServiceDetailsByID/{service_id}") $qp $auth.query)
   let accept_val = "application/json"

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -186,9 +186,9 @@ export def "get-delete-alarms" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --alarm-names: list # The alarms to be deleted. Do not enclose the alarm names in quote marks.
-  --action: string@action-completer
-  --version: string@version-completer
+  --alarm-names: list # The alarms to be deleted. Do not enclose the alarm names in quote marks. (required)
+  --action: string@action-completer # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -199,6 +199,9 @@ export def "get-delete-alarms" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($alarm_names == null) { error make --unspanned { msg: "required query parameter 'AlarmNames' missing: pass --alarm-names" } }
+  let action = ($action | default "DeleteAlarms")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "AlarmNames" $alarm_names "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -233,8 +236,8 @@ export def "post-delete-alarms" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer
-  --version: string@version-completer
+  --action: string@action-completer # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -247,6 +250,8 @@ export def "post-delete-alarms" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteAlarms")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -289,8 +294,8 @@ export def "get-delete-anomaly-detector" [
   --stat: string # The statistic associated with the anomaly detection model to delete.
   --single-metric-anomaly-detector: record # A single metric anomaly detector to be deleted. When using SingleMetricAnomalyDetector, you cannot include the following parameters in the same operation: Dimensions, MetricName Namespace Stat the MetricMathAnomalyDetector parameters of DeleteAnomalyDetectorInput Instead, specify the single metric anomaly detector attributes as part of the SingleMetricAnomalyDetector property.
   --metric-math-anomaly-detector: record # The metric math anomaly detector to be deleted. When using MetricMathAnomalyDetector, you cannot include following parameters in the same operation: Dimensions, MetricName Namespace Stat the SingleMetricAnomalyDetector parameters of DeleteAnomalyDetectorInput Instead, specify the metric math anomaly detector attributes as part of the MetricMathAnomalyDetector property.
-  --action: string@action-completer-1
-  --version: string@version-completer
+  --action: string@action-completer-1 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -301,6 +306,8 @@ export def "get-delete-anomaly-detector" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteAnomalyDetector")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "Namespace" $namespace "scalar") (serialize-qp "MetricName" $metric_name "scalar") (serialize-qp "Dimensions" $dimensions "multi") (serialize-qp "Stat" $stat "scalar") (serialize-qp "SingleMetricAnomalyDetector" $single_metric_anomaly_detector "multi") (serialize-qp "MetricMathAnomalyDetector" $metric_math_anomaly_detector "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -335,8 +342,8 @@ export def "post-delete-anomaly-detector" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-1
-  --version: string@version-completer
+  --action: string@action-completer-1 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -349,6 +356,8 @@ export def "post-delete-anomaly-detector" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteAnomalyDetector")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -385,9 +394,9 @@ export def "get-delete-dashboards" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --dashboard-names: list # The dashboards to be deleted. This parameter is required.
-  --action: string@action-completer-2
-  --version: string@version-completer
+  --dashboard-names: list # The dashboards to be deleted. This parameter is required. (required)
+  --action: string@action-completer-2 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -398,6 +407,9 @@ export def "get-delete-dashboards" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($dashboard_names == null) { error make --unspanned { msg: "required query parameter 'DashboardNames' missing: pass --dashboard-names" } }
+  let action = ($action | default "DeleteDashboards")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "DashboardNames" $dashboard_names "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -432,8 +444,8 @@ export def "post-delete-dashboards" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-2
-  --version: string@version-completer
+  --action: string@action-completer-2 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -446,6 +458,8 @@ export def "post-delete-dashboards" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteDashboards")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -482,9 +496,9 @@ export def "get-delete-insight-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rule-names: list # An array of the rule names to delete. If you need to find out the names of your rules, use DescribeInsightRules (https://docs.aws.amazon.com/AmazonCloudWatch/latest/APIReference/API_DescribeInsightRules.html).
-  --action: string@action-completer-3
-  --version: string@version-completer
+  --rule-names: list # An array of the rule names to delete. If you need to find out the names of your rules, use DescribeInsightRules (https://docs.aws.amazon.com/AmazonCloudWatch/latest/APIReference/API_DescribeInsightRules.html). (required)
+  --action: string@action-completer-3 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -492,9 +506,12 @@ export def "get-delete-insight-rules" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Failures: record> {
+]: nothing -> record<Failures: table<FailureResource: string, ExceptionType: string, FailureCode: string, FailureDescription: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($rule_names == null) { error make --unspanned { msg: "required query parameter 'RuleNames' missing: pass --rule-names" } }
+  let action = ($action | default "DeleteInsightRules")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "RuleNames" $rule_names "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -529,8 +546,8 @@ export def "post-delete-insight-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-3
-  --version: string@version-completer
+  --action: string@action-completer-3 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -539,10 +556,12 @@ export def "post-delete-insight-rules" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Failures: record> {
+]: any -> record<Failures: table<FailureResource: string, ExceptionType: string, FailureCode: string, FailureDescription: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteInsightRules")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -579,9 +598,9 @@ export def "get-delete-metric-stream" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name: string # The name of the metric stream to delete.
-  --action: string@action-completer-4
-  --version: string@version-completer
+  --name: string # The name of the metric stream to delete. (required)
+  --action: string@action-completer-4 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -592,6 +611,9 @@ export def "get-delete-metric-stream" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'Name' missing: pass --name" } }
+  let action = ($action | default "DeleteMetricStream")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "Name" $name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -626,8 +648,8 @@ export def "post-delete-metric-stream" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-4
-  --version: string@version-completer
+  --action: string@action-completer-4 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -640,6 +662,8 @@ export def "post-delete-metric-stream" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteMetricStream")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -684,8 +708,8 @@ export def "get-describe-alarm-history" [
   --max-records: int # The maximum number of alarm history records to retrieve.
   --next-token: string # The token returned by a previous call to indicate that there is more data available.
   --scan-by: string@scan-by-completer # Specified whether to return the newest or oldest alarm history first. Specify TimestampDescending to have the newest event history returned first, and specify TimestampAscending to have the oldest history returned first.
-  --action: string@action-completer-5
-  --version: string@version-completer
+  --action: string@action-completer-5 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -693,9 +717,11 @@ export def "get-describe-alarm-history" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AlarmHistoryItems: record, NextToken: record> {
+]: nothing -> record<AlarmHistoryItems: table<AlarmName: string, AlarmType: string, Timestamp: string, HistoryItemType: string, HistorySummary: string, HistoryData: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeAlarmHistory")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "AlarmName" $alarm_name "scalar") (serialize-qp "AlarmTypes" $alarm_types "multi") (serialize-qp "HistoryItemType" $history_item_type "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "ScanBy" $scan_by "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -732,8 +758,8 @@ export def "post-describe-alarm-history" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --next-token: string # Pagination token
-  --action: string@action-completer-5
-  --version: string@version-completer
+  --action: string@action-completer-5 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -742,10 +768,12 @@ export def "post-describe-alarm-history" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<AlarmHistoryItems: record, NextToken: record> {
+]: any -> record<AlarmHistoryItems: table<AlarmName: string, AlarmType: string, Timestamp: string, HistoryItemType: string, HistorySummary: string, HistoryData: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeAlarmHistory")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -791,8 +819,8 @@ export def "get-describe-alarms" [
   --action-prefix: string # Use this parameter to filter the results of the operation to only those alarms that use a certain alarm action. For example, you could specify the ARN of an SNS topic to find all alarms that send notifications to that topic.
   --max-records: int # The maximum number of alarm descriptions to retrieve.
   --next-token: string # The token returned by a previous call to indicate that there is more data available.
-  --action: string@action-completer-6
-  --version: string@version-completer
+  --action: string@action-completer-6 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -800,9 +828,11 @@ export def "get-describe-alarms" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CompositeAlarms: record, MetricAlarms: record, NextToken: record> {
+]: nothing -> record<CompositeAlarms: table<ActionsEnabled: bool, AlarmActions: list, AlarmArn: string, AlarmConfigurationUpdatedTimestamp: string, AlarmDescription: string, AlarmName: string, AlarmRule: string, InsufficientDataActions: list, OKActions: list, StateReason: string, StateReasonData: string, StateUpdatedTimestamp: string, StateValue: string, StateTransitionedTimestamp: string, ActionsSuppressedBy: string, ActionsSuppressedReason: string, ActionsSuppressor: string, ActionsSuppressorWaitPeriod: int, ActionsSuppressorExtensionPeriod: int>, MetricAlarms: table<AlarmName: string, AlarmArn: string, AlarmDescription: string, AlarmConfigurationUpdatedTimestamp: string, ActionsEnabled: bool, OKActions: list, AlarmActions: list, InsufficientDataActions: list, StateValue: string, StateReason: string, StateReasonData: string, StateUpdatedTimestamp: string, MetricName: string, Namespace: string, Statistic: string, ExtendedStatistic: string, Dimensions: list, Period: int, Unit: string, EvaluationPeriods: int, DatapointsToAlarm: int, Threshold: float, ComparisonOperator: string, TreatMissingData: string, EvaluateLowSampleCountPercentile: string, Metrics: list, ThresholdMetricId: string, EvaluationState: string, StateTransitionedTimestamp: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeAlarms")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "AlarmNames" $alarm_names "multi") (serialize-qp "AlarmNamePrefix" $alarm_name_prefix "scalar") (serialize-qp "AlarmTypes" $alarm_types "multi") (serialize-qp "ChildrenOfAlarmName" $children_of_alarm_name "scalar") (serialize-qp "ParentsOfAlarmName" $parents_of_alarm_name "scalar") (serialize-qp "StateValue" $state_value "scalar") (serialize-qp "ActionPrefix" $action_prefix "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -839,8 +869,8 @@ export def "post-describe-alarms" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --next-token: string # Pagination token
-  --action: string@action-completer-6
-  --version: string@version-completer
+  --action: string@action-completer-6 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -849,10 +879,12 @@ export def "post-describe-alarms" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<CompositeAlarms: record, MetricAlarms: record, NextToken: record> {
+]: any -> record<CompositeAlarms: table<ActionsEnabled: bool, AlarmActions: list, AlarmArn: string, AlarmConfigurationUpdatedTimestamp: string, AlarmDescription: string, AlarmName: string, AlarmRule: string, InsufficientDataActions: list, OKActions: list, StateReason: string, StateReasonData: string, StateUpdatedTimestamp: string, StateValue: string, StateTransitionedTimestamp: string, ActionsSuppressedBy: string, ActionsSuppressedReason: string, ActionsSuppressor: string, ActionsSuppressorWaitPeriod: int, ActionsSuppressorExtensionPeriod: int>, MetricAlarms: table<AlarmName: string, AlarmArn: string, AlarmDescription: string, AlarmConfigurationUpdatedTimestamp: string, ActionsEnabled: bool, OKActions: list, AlarmActions: list, InsufficientDataActions: list, StateValue: string, StateReason: string, StateReasonData: string, StateUpdatedTimestamp: string, MetricName: string, Namespace: string, Statistic: string, ExtendedStatistic: string, Dimensions: list, Period: int, Unit: string, EvaluationPeriods: int, DatapointsToAlarm: int, Threshold: float, ComparisonOperator: string, TreatMissingData: string, EvaluateLowSampleCountPercentile: string, Metrics: list, ThresholdMetricId: string, EvaluationState: string, StateTransitionedTimestamp: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeAlarms")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -889,15 +921,15 @@ export def "get-describe-alarms-for-metric" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --metric-name: string # The name of the metric.
-  --namespace: string # The namespace of the metric.
+  --metric-name: string # The name of the metric. (required)
+  --namespace: string # The namespace of the metric. (required)
   --statistic: string@statistic-completer # The statistic for the metric, other than percentiles. For percentile statistics, use ExtendedStatistics.
   --extended-statistic: string # The percentile statistic for the metric. Specify a value between p0.0 and p100.
   --dimensions: list # The dimensions associated with the metric. If the metric has any associated dimensions, you must specify them in order for the call to succeed.
   --period: int # The period, in seconds, over which the statistic is applied.
   --unit: string@unit-completer # The unit for the metric.
-  --action: string@action-completer-7
-  --version: string@version-completer
+  --action: string@action-completer-7 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -905,9 +937,13 @@ export def "get-describe-alarms-for-metric" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<MetricAlarms: record> {
+]: nothing -> record<MetricAlarms: table<AlarmName: string, AlarmArn: string, AlarmDescription: string, AlarmConfigurationUpdatedTimestamp: string, ActionsEnabled: bool, OKActions: list, AlarmActions: list, InsufficientDataActions: list, StateValue: string, StateReason: string, StateReasonData: string, StateUpdatedTimestamp: string, MetricName: string, Namespace: string, Statistic: string, ExtendedStatistic: string, Dimensions: list, Period: int, Unit: string, EvaluationPeriods: int, DatapointsToAlarm: int, Threshold: float, ComparisonOperator: string, TreatMissingData: string, EvaluateLowSampleCountPercentile: string, Metrics: list, ThresholdMetricId: string, EvaluationState: string, StateTransitionedTimestamp: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($metric_name == null) { error make --unspanned { msg: "required query parameter 'MetricName' missing: pass --metric-name" } }
+  if ($namespace == null) { error make --unspanned { msg: "required query parameter 'Namespace' missing: pass --namespace" } }
+  let action = ($action | default "DescribeAlarmsForMetric")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "MetricName" $metric_name "scalar") (serialize-qp "Namespace" $namespace "scalar") (serialize-qp "Statistic" $statistic "scalar") (serialize-qp "ExtendedStatistic" $extended_statistic "scalar") (serialize-qp "Dimensions" $dimensions "multi") (serialize-qp "Period" $period "scalar") (serialize-qp "Unit" $unit "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -942,8 +978,8 @@ export def "post-describe-alarms-for-metric" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-7
-  --version: string@version-completer
+  --action: string@action-completer-7 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -952,10 +988,12 @@ export def "post-describe-alarms-for-metric" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<MetricAlarms: record> {
+]: any -> record<MetricAlarms: table<AlarmName: string, AlarmArn: string, AlarmDescription: string, AlarmConfigurationUpdatedTimestamp: string, ActionsEnabled: bool, OKActions: list, AlarmActions: list, InsufficientDataActions: list, StateValue: string, StateReason: string, StateReasonData: string, StateUpdatedTimestamp: string, MetricName: string, Namespace: string, Statistic: string, ExtendedStatistic: string, Dimensions: list, Period: int, Unit: string, EvaluationPeriods: int, DatapointsToAlarm: int, Threshold: float, ComparisonOperator: string, TreatMissingData: string, EvaluateLowSampleCountPercentile: string, Metrics: list, ThresholdMetricId: string, EvaluationState: string, StateTransitionedTimestamp: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeAlarmsForMetric")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -998,8 +1036,8 @@ export def "get-describe-anomaly-detectors" [
   --metric-name: string # Limits the results to only the anomaly detection models that are associated with the specified metric name. If there are multiple metrics with this name in different namespaces that have anomaly detection models, they're all returned.
   --dimensions: list # Limits the results to only the anomaly detection models that are associated with the specified metric dimensions. If there are multiple metrics that have these dimensions and have anomaly detection models associated, they're all returned.
   --anomaly-detector-types: list # The anomaly detector types to request when using DescribeAnomalyDetectorsInput. If empty, defaults to SINGLE_METRIC.
-  --action: string@action-completer-8
-  --version: string@version-completer
+  --action: string@action-completer-8 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1007,9 +1045,11 @@ export def "get-describe-anomaly-detectors" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AnomalyDetectors: record, NextToken: record> {
+]: nothing -> record<AnomalyDetectors: table<Namespace: string, MetricName: string, Dimensions: list, Stat: string, Configuration: record, StateValue: string, SingleMetricAnomalyDetector: record, MetricMathAnomalyDetector: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeAnomalyDetectors")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "Namespace" $namespace "scalar") (serialize-qp "MetricName" $metric_name "scalar") (serialize-qp "Dimensions" $dimensions "multi") (serialize-qp "AnomalyDetectorTypes" $anomaly_detector_types "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1046,8 +1086,8 @@ export def "post-describe-anomaly-detectors" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-results: string # Pagination limit
   --next-token: string # Pagination token
-  --action: string@action-completer-8
-  --version: string@version-completer
+  --action: string@action-completer-8 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1056,10 +1096,12 @@ export def "post-describe-anomaly-detectors" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<AnomalyDetectors: record, NextToken: record> {
+]: any -> record<AnomalyDetectors: table<Namespace: string, MetricName: string, Dimensions: list, Stat: string, Configuration: record, StateValue: string, SingleMetricAnomalyDetector: record, MetricMathAnomalyDetector: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeAnomalyDetectors")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1098,8 +1140,8 @@ export def "get-describe-insight-rules" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # Include this value, if it was returned by the previous operation, to get the next set of rules.
   --max-results: int # The maximum number of results to return in one operation. If you omit this parameter, the default of 500 is used.
-  --action: string@action-completer-9
-  --version: string@version-completer
+  --action: string@action-completer-9 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1107,9 +1149,11 @@ export def "get-describe-insight-rules" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: record, InsightRules: record> {
+]: nothing -> record<NextToken: string, InsightRules: table<Name: string, State: string, Schema: string, Definition: string, ManagedRule: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeInsightRules")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1146,8 +1190,8 @@ export def "post-describe-insight-rules" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-results: string # Pagination limit
   --next-token: string # Pagination token
-  --action: string@action-completer-9
-  --version: string@version-completer
+  --action: string@action-completer-9 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1156,10 +1200,12 @@ export def "post-describe-insight-rules" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<NextToken: record, InsightRules: record> {
+]: any -> record<NextToken: string, InsightRules: table<Name: string, State: string, Schema: string, Definition: string, ManagedRule: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeInsightRules")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1196,9 +1242,9 @@ export def "get-disable-alarm-actions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --alarm-names: list # The names of the alarms.
-  --action: string@action-completer-10
-  --version: string@version-completer
+  --alarm-names: list # The names of the alarms. (required)
+  --action: string@action-completer-10 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1209,6 +1255,9 @@ export def "get-disable-alarm-actions" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($alarm_names == null) { error make --unspanned { msg: "required query parameter 'AlarmNames' missing: pass --alarm-names" } }
+  let action = ($action | default "DisableAlarmActions")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "AlarmNames" $alarm_names "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -1243,8 +1292,8 @@ export def "post-disable-alarm-actions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-10
-  --version: string@version-completer
+  --action: string@action-completer-10 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1257,6 +1306,8 @@ export def "post-disable-alarm-actions" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DisableAlarmActions")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1293,9 +1344,9 @@ export def "get-disable-insight-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rule-names: list # An array of the rule names to disable. If you need to find out the names of your rules, use DescribeInsightRules (https://docs.aws.amazon.com/AmazonCloudWatch/latest/APIReference/API_DescribeInsightRules.html).
-  --action: string@action-completer-11
-  --version: string@version-completer
+  --rule-names: list # An array of the rule names to disable. If you need to find out the names of your rules, use DescribeInsightRules (https://docs.aws.amazon.com/AmazonCloudWatch/latest/APIReference/API_DescribeInsightRules.html). (required)
+  --action: string@action-completer-11 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1303,9 +1354,12 @@ export def "get-disable-insight-rules" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Failures: record> {
+]: nothing -> record<Failures: table<FailureResource: string, ExceptionType: string, FailureCode: string, FailureDescription: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($rule_names == null) { error make --unspanned { msg: "required query parameter 'RuleNames' missing: pass --rule-names" } }
+  let action = ($action | default "DisableInsightRules")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "RuleNames" $rule_names "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1340,8 +1394,8 @@ export def "post-disable-insight-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-11
-  --version: string@version-completer
+  --action: string@action-completer-11 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1350,10 +1404,12 @@ export def "post-disable-insight-rules" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Failures: record> {
+]: any -> record<Failures: table<FailureResource: string, ExceptionType: string, FailureCode: string, FailureDescription: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DisableInsightRules")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1390,9 +1446,9 @@ export def "get-enable-alarm-actions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --alarm-names: list # The names of the alarms.
-  --action: string@action-completer-12
-  --version: string@version-completer
+  --alarm-names: list # The names of the alarms. (required)
+  --action: string@action-completer-12 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1403,6 +1459,9 @@ export def "get-enable-alarm-actions" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($alarm_names == null) { error make --unspanned { msg: "required query parameter 'AlarmNames' missing: pass --alarm-names" } }
+  let action = ($action | default "EnableAlarmActions")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "AlarmNames" $alarm_names "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -1437,8 +1496,8 @@ export def "post-enable-alarm-actions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-12
-  --version: string@version-completer
+  --action: string@action-completer-12 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1451,6 +1510,8 @@ export def "post-enable-alarm-actions" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "EnableAlarmActions")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1487,9 +1548,9 @@ export def "get-enable-insight-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rule-names: list # An array of the rule names to enable. If you need to find out the names of your rules, use DescribeInsightRules (https://docs.aws.amazon.com/AmazonCloudWatch/latest/APIReference/API_DescribeInsightRules.html).
-  --action: string@action-completer-13
-  --version: string@version-completer
+  --rule-names: list # An array of the rule names to enable. If you need to find out the names of your rules, use DescribeInsightRules (https://docs.aws.amazon.com/AmazonCloudWatch/latest/APIReference/API_DescribeInsightRules.html). (required)
+  --action: string@action-completer-13 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1497,9 +1558,12 @@ export def "get-enable-insight-rules" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Failures: record> {
+]: nothing -> record<Failures: table<FailureResource: string, ExceptionType: string, FailureCode: string, FailureDescription: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($rule_names == null) { error make --unspanned { msg: "required query parameter 'RuleNames' missing: pass --rule-names" } }
+  let action = ($action | default "EnableInsightRules")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "RuleNames" $rule_names "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1534,8 +1598,8 @@ export def "post-enable-insight-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-13
-  --version: string@version-completer
+  --action: string@action-completer-13 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1544,10 +1608,12 @@ export def "post-enable-insight-rules" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Failures: record> {
+]: any -> record<Failures: table<FailureResource: string, ExceptionType: string, FailureCode: string, FailureDescription: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "EnableInsightRules")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1584,9 +1650,9 @@ export def "get-get-dashboard" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --dashboard-name: string # The name of the dashboard to be described.
-  --action: string@action-completer-14
-  --version: string@version-completer
+  --dashboard-name: string # The name of the dashboard to be described. (required)
+  --action: string@action-completer-14 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1594,9 +1660,12 @@ export def "get-get-dashboard" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DashboardArn: record, DashboardBody: record, DashboardName: record> {
+]: nothing -> record<DashboardArn: string, DashboardBody: string, DashboardName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($dashboard_name == null) { error make --unspanned { msg: "required query parameter 'DashboardName' missing: pass --dashboard-name" } }
+  let action = ($action | default "GetDashboard")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "DashboardName" $dashboard_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1631,8 +1700,8 @@ export def "post-get-dashboard" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-14
-  --version: string@version-completer
+  --action: string@action-completer-14 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1641,10 +1710,12 @@ export def "post-get-dashboard" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DashboardArn: record, DashboardBody: record, DashboardName: record> {
+]: any -> record<DashboardArn: string, DashboardBody: string, DashboardName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "GetDashboard")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1681,15 +1752,15 @@ export def "get-get-insight-rule-report" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rule-name: string # The name of the rule that you want to see data from.
-  --start-time: string # The start time of the data to use in the report. When used in a raw HTTP Query API, it is formatted as yyyy-MM-dd'T'HH:mm:ss. For example, 2019-07-01T23:59:59. (format: date-time)
-  --end-time: string # The end time of the data to use in the report. When used in a raw HTTP Query API, it is formatted as yyyy-MM-dd'T'HH:mm:ss. For example, 2019-07-01T23:59:59. (format: date-time)
-  --period: int # The period, in seconds, to use for the statistics in the InsightRuleMetricDatapoint results.
+  --rule-name: string # The name of the rule that you want to see data from. (required)
+  --start-time: string # The start time of the data to use in the report. When used in a raw HTTP Query API, it is formatted as yyyy-MM-dd'T'HH:mm:ss. For example, 2019-07-01T23:59:59. (required, format: date-time)
+  --end-time: string # The end time of the data to use in the report. When used in a raw HTTP Query API, it is formatted as yyyy-MM-dd'T'HH:mm:ss. For example, 2019-07-01T23:59:59. (required, format: date-time)
+  --period: int # The period, in seconds, to use for the statistics in the InsightRuleMetricDatapoint results. (required)
   --max-contributor-count: int # The maximum number of contributors to include in the report. The range is 1 to 100. If you omit this, the default of 10 is used.
   --metrics: list # Specifies which metrics to use for aggregation of contributor values for the report. You can specify one or more of the following metrics: UniqueContributors -- the number of unique contributors for each data point. MaxContributorValue -- the value of the top contributor for each data point. The identity of the contributor might change for each data point in the graph. If this rule aggregates by COUNT, the top contributor for each data point is the contributor with the most occurrences in that period. If the rule aggregates by SUM, the top contributor is the contributor with the highest sum in the log field specified by the rule's Value, during that period. SampleCount -- the number of data points matched by the rule. Sum -- the sum of the values from all contributors during the time period represented by that data point. Minimum -- the minimum value from a single observation during the time period represented by that data point. Maximum -- the maximum value from a single observation during the time period represented by that data point. Average -- the average value from all contributors during the time period represented by that data point.
   --order-by: string # Determines what statistic to use to rank the contributors. Valid values are SUM and MAXIMUM.
-  --action: string@action-completer-15
-  --version: string@version-completer
+  --action: string@action-completer-15 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1697,9 +1768,15 @@ export def "get-get-insight-rule-report" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<KeyLabels: record, AggregationStatistic: record, AggregateValue: record, ApproximateUniqueCount: record, Contributors: record, MetricDatapoints: record> {
+]: nothing -> record<KeyLabels: list<string>, AggregationStatistic: string, AggregateValue: float, ApproximateUniqueCount: int, Contributors: table<Keys: list, ApproximateAggregateValue: float, Datapoints: list>, MetricDatapoints: table<Timestamp: string, UniqueContributors: float, MaxContributorValue: float, SampleCount: float, Average: float, Sum: float, Minimum: float, Maximum: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($rule_name == null) { error make --unspanned { msg: "required query parameter 'RuleName' missing: pass --rule-name" } }
+  if ($start_time == null) { error make --unspanned { msg: "required query parameter 'StartTime' missing: pass --start-time" } }
+  if ($end_time == null) { error make --unspanned { msg: "required query parameter 'EndTime' missing: pass --end-time" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  let action = ($action | default "GetInsightRuleReport")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "RuleName" $rule_name "scalar") (serialize-qp "StartTime" $start_time "scalar") (serialize-qp "EndTime" $end_time "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "MaxContributorCount" $max_contributor_count "scalar") (serialize-qp "Metrics" $metrics "multi") (serialize-qp "OrderBy" $order_by "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1734,8 +1811,8 @@ export def "post-get-insight-rule-report" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-15
-  --version: string@version-completer
+  --action: string@action-completer-15 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1744,10 +1821,12 @@ export def "post-get-insight-rule-report" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<KeyLabels: record, AggregationStatistic: record, AggregateValue: record, ApproximateUniqueCount: record, Contributors: record, MetricDatapoints: record> {
+]: any -> record<KeyLabels: list<string>, AggregationStatistic: string, AggregateValue: float, ApproximateUniqueCount: int, Contributors: table<Keys: list, ApproximateAggregateValue: float, Datapoints: list>, MetricDatapoints: table<Timestamp: string, UniqueContributors: float, MaxContributorValue: float, SampleCount: float, Average: float, Sum: float, Minimum: float, Maximum: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "GetInsightRuleReport")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1784,15 +1863,15 @@ export def "get-get-metric-data" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --metric-data-queries: list # The metric queries to be returned. A single GetMetricData call can include as many as 500 MetricDataQuery structures. Each of these structures can specify either a metric to retrieve, a Metrics Insights query, or a math expression to perform on retrieved data.
-  --start-time: string # The time stamp indicating the earliest data to be returned. The value specified is inclusive; results include data points with the specified time stamp. CloudWatch rounds the specified time stamp as follows: Start time less than 15 days ago - Round down to the nearest whole minute. For example, 12:32:34 is rounded down to 12:32:00. Start time between 15 and 63 days ago - Round down to the nearest 5-minute clock interval. For example, 12:32:34 is rounded down to 12:30:00. Start time greater than 63 days ago - Round down to the nearest 1-hour clock interval. For example, 12:32:34 is rounded down to 12:00:00. If you set Period to 5, 10, or 30, the start time of your request is rounded down to the nearest time that corresponds to even 5-, 10-, or 30-second divisions of a minute. For example, if you make a query at (HH:mm:ss) 01:05:23 for the previous 10-second period, the start time of your request is rounded down and you receive data from 01:05:10 to 01:05:20. If you make a query at 15:07:17 for the previous 5 minutes of data, using a period of 5 seconds, you receive data timestamped between 15:02:15 and 15:07:15. For better performance, specify StartTime and EndTime values that align with the value of the metric's Period and sync up with the beginning and end of an hour. For example, if the Period of a metric is 5 minutes, specifying 12:05 or 12:30 as StartTime can get a faster response from CloudWatch than setting 12:07 or 12:29 as the StartTime. (format: date-time)
-  --end-time: string # The time stamp indicating the latest data to be returned. The value specified is exclusive; results include data points up to the specified time stamp. For better performance, specify StartTime and EndTime values that align with the value of the metric's Period and sync up with the beginning and end of an hour. For example, if the Period of a metric is 5 minutes, specifying 12:05 or 12:30 as EndTime can get a faster response from CloudWatch than setting 12:07 or 12:29 as the EndTime. (format: date-time)
+  --metric-data-queries: list # The metric queries to be returned. A single GetMetricData call can include as many as 500 MetricDataQuery structures. Each of these structures can specify either a metric to retrieve, a Metrics Insights query, or a math expression to perform on retrieved data. (required)
+  --start-time: string # The time stamp indicating the earliest data to be returned. The value specified is inclusive; results include data points with the specified time stamp. CloudWatch rounds the specified time stamp as follows: Start time less than 15 days ago - Round down to the nearest whole minute. For example, 12:32:34 is rounded down to 12:32:00. Start time between 15 and 63 days ago - Round down to the nearest 5-minute clock interval. For example, 12:32:34 is rounded down to 12:30:00. Start time greater than 63 days ago - Round down to the nearest 1-hour clock interval. For example, 12:32:34 is rounded down to 12:00:00. If you set Period to 5, 10, or 30, the start time of your request is rounded down to the nearest time that corresponds to even 5-, 10-, or 30-second divisions of a minute. For example, if you make a query at (HH:mm:ss) 01:05:23 for the previous 10-second period, the start time of your request is rounded down and you receive data from 01:05:10 to 01:05:20. If you make a query at 15:07:17 for the previous 5 minutes of data, using a period of 5 seconds, you receive data timestamped between 15:02:15 and 15:07:15. For better performance, specify StartTime and EndTime values that align with the value of the metric's Period and sync up with the beginning and end of an hour. For example, if the Period of a metric is 5 minutes, specifying 12:05 or 12:30 as StartTime can get a faster response from CloudWatch than setting 12:07 or 12:29 as the StartTime. (required, format: date-time)
+  --end-time: string # The time stamp indicating the latest data to be returned. The value specified is exclusive; results include data points up to the specified time stamp. For better performance, specify StartTime and EndTime values that align with the value of the metric's Period and sync up with the beginning and end of an hour. For example, if the Period of a metric is 5 minutes, specifying 12:05 or 12:30 as EndTime can get a faster response from CloudWatch than setting 12:07 or 12:29 as the EndTime. (required, format: date-time)
   --next-token: string # Include this value, if it was returned by the previous GetMetricData operation, to get the next set of data points.
   --scan-by: string@scan-by-completer # The order in which data points should be returned. TimestampDescending returns the newest data first and paginates when the MaxDatapoints limit is reached. TimestampAscending returns the oldest data first and paginates when the MaxDatapoints limit is reached.
   --max-datapoints: int # The maximum number of data points the request should return before paginating. If you omit this, the default of 100,800 is used.
   --label-options: record # This structure includes the Timezone parameter, which you can use to specify your time zone so that the labels of returned data display the correct time for your time zone.
-  --action: string@action-completer-16
-  --version: string@version-completer
+  --action: string@action-completer-16 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1800,9 +1879,14 @@ export def "get-get-metric-data" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<MetricDataResults: record, NextToken: record, Messages: record> {
+]: nothing -> record<MetricDataResults: table<Id: string, Label: string, Timestamps: list, Values: list, StatusCode: string, Messages: list>, NextToken: string, Messages: table<Code: string, Value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($metric_data_queries == null) { error make --unspanned { msg: "required query parameter 'MetricDataQueries' missing: pass --metric-data-queries" } }
+  if ($start_time == null) { error make --unspanned { msg: "required query parameter 'StartTime' missing: pass --start-time" } }
+  if ($end_time == null) { error make --unspanned { msg: "required query parameter 'EndTime' missing: pass --end-time" } }
+  let action = ($action | default "GetMetricData")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "MetricDataQueries" $metric_data_queries "multi") (serialize-qp "StartTime" $start_time "scalar") (serialize-qp "EndTime" $end_time "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "ScanBy" $scan_by "scalar") (serialize-qp "MaxDatapoints" $max_datapoints "scalar") (serialize-qp "LabelOptions" $label_options "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1839,8 +1923,8 @@ export def "post-get-metric-data" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-datapoints: string # Pagination limit
   --next-token: string # Pagination token
-  --action: string@action-completer-16
-  --version: string@version-completer
+  --action: string@action-completer-16 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1849,10 +1933,12 @@ export def "post-get-metric-data" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<MetricDataResults: record, NextToken: record, Messages: record> {
+]: any -> record<MetricDataResults: table<Id: string, Label: string, Timestamps: list, Values: list, StatusCode: string, Messages: list>, NextToken: string, Messages: table<Code: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "GetMetricData")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "MaxDatapoints" $max_datapoints "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1889,17 +1975,17 @@ export def "get-get-metric-statistics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --namespace: string # The namespace of the metric, with or without spaces.
-  --metric-name: string # The name of the metric, with or without spaces.
+  --namespace: string # The namespace of the metric, with or without spaces. (required)
+  --metric-name: string # The name of the metric, with or without spaces. (required)
   --dimensions: list # The dimensions. If the metric contains multiple dimensions, you must include a value for each dimension. CloudWatch treats each unique combination of dimensions as a separate metric. If a specific combination of dimensions was not published, you can't retrieve statistics for it. You must specify the same dimensions that were used when the metrics were created. For an example, see Dimension Combinations (https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/cloudwatch_concepts.html#dimension-combinations) in the Amazon CloudWatch User Guide. For more information about specifying dimensions, see Publishing Metrics (https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/publishingMetrics.html) in the Amazon CloudWatch User Guide.
-  --start-time: string # The time stamp that determines the first data point to return. Start times are evaluated relative to the time that CloudWatch receives the request. The value specified is inclusive; results include data points with the specified time stamp. In a raw HTTP query, the time stamp must be in ISO 8601 UTC format (for example, 2016-10-03T23:00:00Z). CloudWatch rounds the specified time stamp as follows: Start time less than 15 days ago - Round down to the nearest whole minute. For example, 12:32:34 is rounded down to 12:32:00. Start time between 15 and 63 days ago - Round down to the nearest 5-minute clock interval. For example, 12:32:34 is rounded down to 12:30:00. Start time greater than 63 days ago - Round down to the nearest 1-hour clock interval. For example, 12:32:34 is rounded down to 12:00:00. If you set Period to 5, 10, or 30, the start time of your request is rounded down to the nearest time that corresponds to even 5-, 10-, or 30-second divisions of a minute. For example, if you make a query at (HH:mm:ss) 01:05:23 for the previous 10-second period, the start time of your request is rounded down and you receive data from 01:05:10 to 01:05:20. If you make a query at 15:07:17 for the previous 5 minutes of data, using a period of 5 seconds, you receive data timestamped between 15:02:15 and 15:07:15. (format: date-time)
-  --end-time: string # The time stamp that determines the last data point to return. The value specified is exclusive; results include data points up to the specified time stamp. In a raw HTTP query, the time stamp must be in ISO 8601 UTC format (for example, 2016-10-10T23:00:00Z). (format: date-time)
-  --period: int # The granularity, in seconds, of the returned data points. For metrics with regular resolution, a period can be as short as one minute (60 seconds) and must be a multiple of 60. For high-resolution metrics that are collected at intervals of less than one minute, the period can be 1, 5, 10, 30, 60, or any multiple of 60. High-resolution metrics are those metrics stored by a PutMetricData call that includes a StorageResolution of 1 second. If the StartTime parameter specifies a time stamp that is greater than 3 hours ago, you must specify the period as follows or no data points in that time range is returned: Start time between 3 hours and 15 days ago - Use a multiple of 60 seconds (1 minute). Start time between 15 and 63 days ago - Use a multiple of 300 seconds (5 minutes). Start time greater than 63 days ago - Use a multiple of 3600 seconds (1 hour).
+  --start-time: string # The time stamp that determines the first data point to return. Start times are evaluated relative to the time that CloudWatch receives the request. The value specified is inclusive; results include data points with the specified time stamp. In a raw HTTP query, the time stamp must be in ISO 8601 UTC format (for example, 2016-10-03T23:00:00Z). CloudWatch rounds the specified time stamp as follows: Start time less than 15 days ago - Round down to the nearest whole minute. For example, 12:32:34 is rounded down to 12:32:00. Start time between 15 and 63 days ago - Round down to the nearest 5-minute clock interval. For example, 12:32:34 is rounded down to 12:30:00. Start time greater than 63 days ago - Round down to the nearest 1-hour clock interval. For example, 12:32:34 is rounded down to 12:00:00. If you set Period to 5, 10, or 30, the start time of your request is rounded down to the nearest time that corresponds to even 5-, 10-, or 30-second divisions of a minute. For example, if you make a query at (HH:mm:ss) 01:05:23 for the previous 10-second period, the start time of your request is rounded down and you receive data from 01:05:10 to 01:05:20. If you make a query at 15:07:17 for the previous 5 minutes of data, using a period of 5 seconds, you receive data timestamped between 15:02:15 and 15:07:15. (required, format: date-time)
+  --end-time: string # The time stamp that determines the last data point to return. The value specified is exclusive; results include data points up to the specified time stamp. In a raw HTTP query, the time stamp must be in ISO 8601 UTC format (for example, 2016-10-10T23:00:00Z). (required, format: date-time)
+  --period: int # The granularity, in seconds, of the returned data points. For metrics with regular resolution, a period can be as short as one minute (60 seconds) and must be a multiple of 60. For high-resolution metrics that are collected at intervals of less than one minute, the period can be 1, 5, 10, 30, 60, or any multiple of 60. High-resolution metrics are those metrics stored by a PutMetricData call that includes a StorageResolution of 1 second. If the StartTime parameter specifies a time stamp that is greater than 3 hours ago, you must specify the period as follows or no data points in that time range is returned: Start time between 3 hours and 15 days ago - Use a multiple of 60 seconds (1 minute). Start time between 15 and 63 days ago - Use a multiple of 300 seconds (5 minutes). Start time greater than 63 days ago - Use a multiple of 3600 seconds (1 hour). (required)
   --statistics: list # The metric statistics, other than percentile. For percentile statistics, use ExtendedStatistics. When calling GetMetricStatistics, you must specify either Statistics or ExtendedStatistics, but not both.
   --extended-statistics: list # The percentile statistics. Specify values between p0.0 and p100. When calling GetMetricStatistics, you must specify either Statistics or ExtendedStatistics, but not both. Percentile statistics are not available for metrics when any of the metric values are negative numbers.
   --unit: string@unit-completer # The unit for a given metric. If you omit Unit, all data that was collected with any unit is returned, along with the corresponding units that were specified when the data was reported to CloudWatch. If you specify a unit, the operation returns only data that was collected with that unit specified. If you specify a unit that does not match the data collected, the results of the operation are null. CloudWatch does not perform unit conversions.
-  --action: string@action-completer-17
-  --version: string@version-completer
+  --action: string@action-completer-17 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1907,9 +1993,16 @@ export def "get-get-metric-statistics" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Label: record, Datapoints: record> {
+]: nothing -> record<Label: string, Datapoints: table<Timestamp: string, SampleCount: float, Average: float, Sum: float, Minimum: float, Maximum: float, Unit: string, ExtendedStatistics: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($namespace == null) { error make --unspanned { msg: "required query parameter 'Namespace' missing: pass --namespace" } }
+  if ($metric_name == null) { error make --unspanned { msg: "required query parameter 'MetricName' missing: pass --metric-name" } }
+  if ($start_time == null) { error make --unspanned { msg: "required query parameter 'StartTime' missing: pass --start-time" } }
+  if ($end_time == null) { error make --unspanned { msg: "required query parameter 'EndTime' missing: pass --end-time" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'Period' missing: pass --period" } }
+  let action = ($action | default "GetMetricStatistics")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "Namespace" $namespace "scalar") (serialize-qp "MetricName" $metric_name "scalar") (serialize-qp "Dimensions" $dimensions "multi") (serialize-qp "StartTime" $start_time "scalar") (serialize-qp "EndTime" $end_time "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "Statistics" $statistics "multi") (serialize-qp "ExtendedStatistics" $extended_statistics "multi") (serialize-qp "Unit" $unit "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1944,8 +2037,8 @@ export def "post-get-metric-statistics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-17
-  --version: string@version-completer
+  --action: string@action-completer-17 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1954,10 +2047,12 @@ export def "post-get-metric-statistics" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Label: record, Datapoints: record> {
+]: any -> record<Label: string, Datapoints: table<Timestamp: string, SampleCount: float, Average: float, Sum: float, Minimum: float, Maximum: float, Unit: string, ExtendedStatistics: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "GetMetricStatistics")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1994,9 +2089,9 @@ export def "get-get-metric-stream" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name: string # The name of the metric stream to retrieve information about.
-  --action: string@action-completer-18
-  --version: string@version-completer
+  --name: string # The name of the metric stream to retrieve information about. (required)
+  --action: string@action-completer-18 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2004,9 +2099,12 @@ export def "get-get-metric-stream" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: record, Name: record, IncludeFilters: record, ExcludeFilters: record, FirehoseArn: record, RoleArn: record, State: record, CreationDate: record, LastUpdateDate: record, OutputFormat: record, StatisticsConfigurations: record, IncludeLinkedAccountsMetrics: record> {
+]: nothing -> record<Arn: string, Name: string, IncludeFilters: table<Namespace: string>, ExcludeFilters: table<Namespace: string>, FirehoseArn: string, RoleArn: string, State: string, CreationDate: string, LastUpdateDate: string, OutputFormat: string, StatisticsConfigurations: table<IncludeMetrics: list, AdditionalStatistics: list>, IncludeLinkedAccountsMetrics: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'Name' missing: pass --name" } }
+  let action = ($action | default "GetMetricStream")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "Name" $name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2041,8 +2139,8 @@ export def "post-get-metric-stream" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-18
-  --version: string@version-completer
+  --action: string@action-completer-18 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2051,10 +2149,12 @@ export def "post-get-metric-stream" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Arn: record, Name: record, IncludeFilters: record, ExcludeFilters: record, FirehoseArn: record, RoleArn: record, State: record, CreationDate: record, LastUpdateDate: record, OutputFormat: record, StatisticsConfigurations: record, IncludeLinkedAccountsMetrics: record> {
+]: any -> record<Arn: string, Name: string, IncludeFilters: table<Namespace: string>, ExcludeFilters: table<Namespace: string>, FirehoseArn: string, RoleArn: string, State: string, CreationDate: string, LastUpdateDate: string, OutputFormat: string, StatisticsConfigurations: table<IncludeMetrics: list, AdditionalStatistics: list>, IncludeLinkedAccountsMetrics: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "GetMetricStream")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2091,10 +2191,10 @@ export def "get-get-metric-widget-image" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --metric-widget: string # A JSON string that defines the bitmap graph to be retrieved. The string includes the metrics to include in the graph, statistics, annotations, title, axis limits, and so on. You can include only one MetricWidget parameter in each GetMetricWidgetImage call. For more information about the syntax of MetricWidget see GetMetricWidgetImage: Metric Widget Structure and Syntax (https://docs.aws.amazon.com/AmazonCloudWatch/latest/APIReference/CloudWatch-Metric-Widget-Structure.html). If any metric on the graph could not load all the requested data points, an orange triangle with an exclamation point appears next to the graph legend.
+  --metric-widget: string # A JSON string that defines the bitmap graph to be retrieved. The string includes the metrics to include in the graph, statistics, annotations, title, axis limits, and so on. You can include only one MetricWidget parameter in each GetMetricWidgetImage call. For more information about the syntax of MetricWidget see GetMetricWidgetImage: Metric Widget Structure and Syntax (https://docs.aws.amazon.com/AmazonCloudWatch/latest/APIReference/CloudWatch-Metric-Widget-Structure.html). If any metric on the graph could not load all the requested data points, an orange triangle with an exclamation point appears next to the graph legend. (required)
   --output-format: string # The format of the resulting image. Only PNG images are supported. The default is png. If you specify png, the API returns an HTTP response with the content-type set to text/xml. The image data is in a MetricWidgetImage field. For example: <GetMetricWidgetImageResponse xmlns=<URLstring>> <GetMetricWidgetImageResult> <MetricWidgetImage> iVBORw0KGgoAAAANSUhEUgAAAlgAAAGQEAYAAAAip... </MetricWidgetImage> </GetMetricWidgetImageResult> <ResponseMetadata> <RequestId>6f0d4192-4d42-11e8-82c1-f539a07e0e3b</RequestId> </ResponseMetadata> </GetMetricWidgetImageResponse> The image/png setting is intended only for custom HTTP requests. For most use cases, and all actions using an Amazon Web Services SDK, you should use png. If you specify image/png, the HTTP response has a content-type set to image/png, and the body of the response is a PNG image.
-  --action: string@action-completer-19
-  --version: string@version-completer
+  --action: string@action-completer-19 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2102,9 +2202,12 @@ export def "get-get-metric-widget-image" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<MetricWidgetImage: record> {
+]: nothing -> record<MetricWidgetImage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($metric_widget == null) { error make --unspanned { msg: "required query parameter 'MetricWidget' missing: pass --metric-widget" } }
+  let action = ($action | default "GetMetricWidgetImage")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "MetricWidget" $metric_widget "scalar") (serialize-qp "OutputFormat" $output_format "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2139,8 +2242,8 @@ export def "post-get-metric-widget-image" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-19
-  --version: string@version-completer
+  --action: string@action-completer-19 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2149,10 +2252,12 @@ export def "post-get-metric-widget-image" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<MetricWidgetImage: record> {
+]: any -> record<MetricWidgetImage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "GetMetricWidgetImage")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2191,8 +2296,8 @@ export def "get-list-dashboards" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --dashboard-name-prefix: string # If you specify this parameter, only the dashboards with names starting with the specified string are listed. The maximum length is 255, and valid characters are A-Z, a-z, 0-9, ".", "-", and "_".
   --next-token: string # The token returned by a previous call to indicate that there is more data available.
-  --action: string@action-completer-20
-  --version: string@version-completer
+  --action: string@action-completer-20 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2200,9 +2305,11 @@ export def "get-list-dashboards" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DashboardEntries: record, NextToken: record> {
+]: nothing -> record<DashboardEntries: table<DashboardName: string, DashboardArn: string, LastModified: string, Size: int>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListDashboards")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "DashboardNamePrefix" $dashboard_name_prefix "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2238,8 +2345,8 @@ export def "post-list-dashboards" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # Pagination token
-  --action: string@action-completer-20
-  --version: string@version-completer
+  --action: string@action-completer-20 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2248,10 +2355,12 @@ export def "post-list-dashboards" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DashboardEntries: record, NextToken: record> {
+]: any -> record<DashboardEntries: table<DashboardName: string, DashboardArn: string, LastModified: string, Size: int>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListDashboards")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2288,11 +2397,11 @@ export def "get-list-managed-insight-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-arn: string # The ARN of an Amazon Web Services resource that has managed Contributor Insights rules.
+  --resource-arn: string # The ARN of an Amazon Web Services resource that has managed Contributor Insights rules. (required)
   --next-token: string # Include this value to get the next set of rules if the value was returned by the previous operation.
   --max-results: int # The maximum number of results to return in one operation. If you omit this parameter, the default number is used. The default number is 100.
-  --action: string@action-completer-21
-  --version: string@version-completer
+  --action: string@action-completer-21 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2300,9 +2409,12 @@ export def "get-list-managed-insight-rules" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ManagedRules: record, NextToken: record> {
+]: nothing -> record<ManagedRules: table<TemplateName: string, ResourceARN: string, RuleState: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'ResourceARN' missing: pass --resource-arn" } }
+  let action = ($action | default "ListManagedInsightRules")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "ResourceARN" $resource_arn "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2339,8 +2451,8 @@ export def "post-list-managed-insight-rules" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-results: string # Pagination limit
   --next-token: string # Pagination token
-  --action: string@action-completer-21
-  --version: string@version-completer
+  --action: string@action-completer-21 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2349,10 +2461,12 @@ export def "post-list-managed-insight-rules" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ManagedRules: record, NextToken: record> {
+]: any -> record<ManagedRules: table<TemplateName: string, ResourceARN: string, RuleState: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListManagedInsightRules")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2391,8 +2505,8 @@ export def "get-list-metric-streams" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # Include this value, if it was returned by the previous call, to get the next set of metric streams.
   --max-results: int # The maximum number of results to return in one operation.
-  --action: string@action-completer-22
-  --version: string@version-completer
+  --action: string@action-completer-22 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2400,9 +2514,11 @@ export def "get-list-metric-streams" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: record, Entries: record> {
+]: nothing -> record<NextToken: string, Entries: table<Arn: string, CreationDate: string, LastUpdateDate: string, Name: string, FirehoseArn: string, State: string, OutputFormat: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListMetricStreams")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2439,8 +2555,8 @@ export def "post-list-metric-streams" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-results: string # Pagination limit
   --next-token: string # Pagination token
-  --action: string@action-completer-22
-  --version: string@version-completer
+  --action: string@action-completer-22 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2449,10 +2565,12 @@ export def "post-list-metric-streams" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<NextToken: record, Entries: record> {
+]: any -> record<NextToken: string, Entries: table<Arn: string, CreationDate: string, LastUpdateDate: string, Name: string, FirehoseArn: string, State: string, OutputFormat: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListMetricStreams")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2496,8 +2614,8 @@ export def "get-list-metrics" [
   --recently-active: string@recently-active-completer # To filter the results to show only metrics that have had data points published in the past three hours, specify this parameter with a value of PT3H. This is the only valid value for this parameter. The results that are returned are an approximation of the value you specify. There is a low probability that the returned results include metrics with last published data as much as 40 minutes more than the specified time interval.
   --include-linked-accounts: oneof<nothing, bool> # If you are using this operation in a monitoring account, specify true to include metrics from source accounts in the returned data. The default is false.
   --owning-account: string # When you use this operation in a monitoring account, use this field to return metrics only from one source account. To do so, specify that source account ID in this field, and also specify true for IncludeLinkedAccounts.
-  --action: string@action-completer-23
-  --version: string@version-completer
+  --action: string@action-completer-23 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2505,9 +2623,11 @@ export def "get-list-metrics" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Metrics: record, NextToken: record, OwningAccounts: record> {
+]: nothing -> record<Metrics: table<Namespace: string, MetricName: string, Dimensions: list>, NextToken: string, OwningAccounts: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListMetrics")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "Namespace" $namespace "scalar") (serialize-qp "MetricName" $metric_name "scalar") (serialize-qp "Dimensions" $dimensions "multi") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "RecentlyActive" $recently_active "scalar") (serialize-qp "IncludeLinkedAccounts" $include_linked_accounts "scalar") (serialize-qp "OwningAccount" $owning_account "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2543,8 +2663,8 @@ export def "post-list-metrics" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # Pagination token
-  --action: string@action-completer-23
-  --version: string@version-completer
+  --action: string@action-completer-23 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2553,10 +2673,12 @@ export def "post-list-metrics" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Metrics: record, NextToken: record, OwningAccounts: record> {
+]: any -> record<Metrics: table<Namespace: string, MetricName: string, Dimensions: list>, NextToken: string, OwningAccounts: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListMetrics")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2593,9 +2715,9 @@ export def "get-list-tags-for-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-arn: string # The ARN of the CloudWatch resource that you want to view tags for. The ARN format of an alarm is arn:aws:cloudwatch:Region:account-id:alarm:alarm-name The ARN format of a Contributor Insights rule is arn:aws:cloudwatch:Region:account-id:insight-rule:insight-rule-name For more information about ARN format, see Resource Types Defined by Amazon CloudWatch (https://docs.aws.amazon.com/IAM/latest/UserGuide/list_amazoncloudwatch.html#amazoncloudwatch-resources-for-iam-policies) in the Amazon Web Services General Reference.
-  --action: string@action-completer-24
-  --version: string@version-completer
+  --resource-arn: string # The ARN of the CloudWatch resource that you want to view tags for. The ARN format of an alarm is arn:aws:cloudwatch:Region:account-id:alarm:alarm-name The ARN format of a Contributor Insights rule is arn:aws:cloudwatch:Region:account-id:insight-rule:insight-rule-name For more information about ARN format, see Resource Types Defined by Amazon CloudWatch (https://docs.aws.amazon.com/IAM/latest/UserGuide/list_amazoncloudwatch.html#amazoncloudwatch-resources-for-iam-policies) in the Amazon Web Services General Reference. (required)
+  --action: string@action-completer-24 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2603,9 +2725,12 @@ export def "get-list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Tags: record> {
+]: nothing -> record<Tags: table<Key: string, Value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'ResourceARN' missing: pass --resource-arn" } }
+  let action = ($action | default "ListTagsForResource")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "ResourceARN" $resource_arn "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2640,8 +2765,8 @@ export def "post-list-tags-for-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-24
-  --version: string@version-completer
+  --action: string@action-completer-24 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2650,10 +2775,12 @@ export def "post-list-tags-for-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Tags: record> {
+]: any -> record<Tags: table<Key: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListTagsForResource")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2697,8 +2824,8 @@ export def "get-put-anomaly-detector" [
   --configuration: record # The configuration specifies details about how the anomaly detection model is to be trained, including time ranges to exclude when training and updating the model. You can specify as many as 10 time ranges. The configuration can also include the time zone to use for the metric.
   --single-metric-anomaly-detector: record # A single metric anomaly detector to be created. When using SingleMetricAnomalyDetector, you cannot include the following parameters in the same operation: Dimensions MetricName Namespace Stat the MetricMatchAnomalyDetector parameters of PutAnomalyDetectorInput Instead, specify the single metric anomaly detector attributes as part of the property SingleMetricAnomalyDetector.
   --metric-math-anomaly-detector: record # The metric math anomaly detector to be created. When using MetricMathAnomalyDetector, you cannot include the following parameters in the same operation: Dimensions MetricName Namespace Stat the SingleMetricAnomalyDetector parameters of PutAnomalyDetectorInput Instead, specify the metric math anomaly detector attributes as part of the property MetricMathAnomalyDetector.
-  --action: string@action-completer-25
-  --version: string@version-completer
+  --action: string@action-completer-25 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2709,6 +2836,8 @@ export def "get-put-anomaly-detector" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "PutAnomalyDetector")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "Namespace" $namespace "scalar") (serialize-qp "MetricName" $metric_name "scalar") (serialize-qp "Dimensions" $dimensions "multi") (serialize-qp "Stat" $stat "scalar") (serialize-qp "Configuration" $configuration "multi") (serialize-qp "SingleMetricAnomalyDetector" $single_metric_anomaly_detector "multi") (serialize-qp "MetricMathAnomalyDetector" $metric_math_anomaly_detector "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2743,8 +2872,8 @@ export def "post-put-anomaly-detector" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-25
-  --version: string@version-completer
+  --action: string@action-completer-25 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2757,6 +2886,8 @@ export def "post-put-anomaly-detector" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "PutAnomalyDetector")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2796,16 +2927,16 @@ export def "get-put-composite-alarm" [
   --actions-enabled: oneof<nothing, bool> # Indicates whether actions should be executed during any changes to the alarm state of the composite alarm. The default is TRUE.
   --alarm-actions: list # The actions to execute when this alarm transitions to the ALARM state from any other state. Each action is specified as an Amazon Resource Name (ARN). Valid Values: arn:aws:sns:region:account-id:sns-topic-name | arn:aws:ssm:region:account-id:opsitem:severity
   --alarm-description: string # The description for the composite alarm.
-  --alarm-name: string # The name for the composite alarm. This name must be unique within the Region.
-  --alarm-rule: string # An expression that specifies which other alarms are to be evaluated to determine this composite alarm's state. For each alarm that you reference, you designate a function that specifies whether that alarm needs to be in ALARM state, OK state, or INSUFFICIENT_DATA state. You can use operators (AND, OR and NOT) to combine multiple functions in a single expression. You can use parenthesis to logically group the functions in your expression. You can use either alarm names or ARNs to reference the other alarms that are to be evaluated. Functions can include the following: ALARM("alarm-name or alarm-ARN") is TRUE if the named alarm is in ALARM state. OK("alarm-name or alarm-ARN") is TRUE if the named alarm is in OK state. INSUFFICIENT_DATA("alarm-name or alarm-ARN") is TRUE if the named alarm is in INSUFFICIENT_DATA state. TRUE always evaluates to TRUE. FALSE always evaluates to FALSE. TRUE and FALSE are useful for testing a complex AlarmRule structure, and for testing your alarm actions. Alarm names specified in AlarmRule can be surrounded with double-quotes ("), but do not have to be. The following are some examples of AlarmRule: ALARM(CPUUtilizationTooHigh) AND ALARM(DiskReadOpsTooHigh) specifies that the composite alarm goes into ALARM state only if both CPUUtilizationTooHigh and DiskReadOpsTooHigh alarms are in ALARM state. ALARM(CPUUtilizationTooHigh) AND NOT ALARM(DeploymentInProgress) specifies that the alarm goes to ALARM state if CPUUtilizationTooHigh is in ALARM state and DeploymentInProgress is not in ALARM state. This example reduces alarm noise during a known deployment window. (ALARM(CPUUtilizationTooHigh) OR ALARM(DiskReadOpsTooHigh)) AND OK(NetworkOutTooHigh) goes into ALARM state if CPUUtilizationTooHigh OR DiskReadOpsTooHigh is in ALARM state, and if NetworkOutTooHigh is in OK state. This provides another example of using a composite alarm to prevent noise. This rule ensures that you are not notified with an alarm action on high CPU or disk usage if a known network problem is also occurring. The AlarmRule can specify as many as 100 "children" alarms. The AlarmRule expression can have as many as 500 elements. Elements are child alarms, TRUE or FALSE statements, and parentheses.
+  --alarm-name: string # The name for the composite alarm. This name must be unique within the Region. (required)
+  --alarm-rule: string # An expression that specifies which other alarms are to be evaluated to determine this composite alarm's state. For each alarm that you reference, you designate a function that specifies whether that alarm needs to be in ALARM state, OK state, or INSUFFICIENT_DATA state. You can use operators (AND, OR and NOT) to combine multiple functions in a single expression. You can use parenthesis to logically group the functions in your expression. You can use either alarm names or ARNs to reference the other alarms that are to be evaluated. Functions can include the following: ALARM("alarm-name or alarm-ARN") is TRUE if the named alarm is in ALARM state. OK("alarm-name or alarm-ARN") is TRUE if the named alarm is in OK state. INSUFFICIENT_DATA("alarm-name or alarm-ARN") is TRUE if the named alarm is in INSUFFICIENT_DATA state. TRUE always evaluates to TRUE. FALSE always evaluates to FALSE. TRUE and FALSE are useful for testing a complex AlarmRule structure, and for testing your alarm actions. Alarm names specified in AlarmRule can be surrounded with double-quotes ("), but do not have to be. The following are some examples of AlarmRule: ALARM(CPUUtilizationTooHigh) AND ALARM(DiskReadOpsTooHigh) specifies that the composite alarm goes into ALARM state only if both CPUUtilizationTooHigh and DiskReadOpsTooHigh alarms are in ALARM state. ALARM(CPUUtilizationTooHigh) AND NOT ALARM(DeploymentInProgress) specifies that the alarm goes to ALARM state if CPUUtilizationTooHigh is in ALARM state and DeploymentInProgress is not in ALARM state. This example reduces alarm noise during a known deployment window. (ALARM(CPUUtilizationTooHigh) OR ALARM(DiskReadOpsTooHigh)) AND OK(NetworkOutTooHigh) goes into ALARM state if CPUUtilizationTooHigh OR DiskReadOpsTooHigh is in ALARM state, and if NetworkOutTooHigh is in OK state. This provides another example of using a composite alarm to prevent noise. This rule ensures that you are not notified with an alarm action on high CPU or disk usage if a known network problem is also occurring. The AlarmRule can specify as many as 100 "children" alarms. The AlarmRule expression can have as many as 500 elements. Elements are child alarms, TRUE or FALSE statements, and parentheses. (required)
   --insufficient-data-actions: list # The actions to execute when this alarm transitions to the INSUFFICIENT_DATA state from any other state. Each action is specified as an Amazon Resource Name (ARN). Valid Values: arn:aws:sns:region:account-id:sns-topic-name
   --ok-actions: list # The actions to execute when this alarm transitions to an OK state from any other state. Each action is specified as an Amazon Resource Name (ARN). Valid Values: arn:aws:sns:region:account-id:sns-topic-name
   --tags: list # A list of key-value pairs to associate with the composite alarm. You can associate as many as 50 tags with an alarm. Tags can help you organize and categorize your resources. You can also use them to scope user permissions, by granting a user permission to access or change only resources with certain tag values.
   --actions-suppressor: string # Actions will be suppressed if the suppressor alarm is in the ALARM state. ActionsSuppressor can be an AlarmName or an Amazon Resource Name (ARN) from an existing alarm.
   --actions-suppressor-wait-period: int # The maximum time in seconds that the composite alarm waits for the suppressor alarm to go into the ALARM state. After this time, the composite alarm performs its actions. WaitPeriod is required only when ActionsSuppressor is specified.
   --actions-suppressor-extension-period: int # The maximum time in seconds that the composite alarm waits after suppressor alarm goes out of the ALARM state. After this time, the composite alarm performs its actions. ExtensionPeriod is required only when ActionsSuppressor is specified.
-  --action: string@action-completer-26
-  --version: string@version-completer
+  --action: string@action-completer-26 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2816,6 +2947,10 @@ export def "get-put-composite-alarm" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($alarm_name == null) { error make --unspanned { msg: "required query parameter 'AlarmName' missing: pass --alarm-name" } }
+  if ($alarm_rule == null) { error make --unspanned { msg: "required query parameter 'AlarmRule' missing: pass --alarm-rule" } }
+  let action = ($action | default "PutCompositeAlarm")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "ActionsEnabled" $actions_enabled "scalar") (serialize-qp "AlarmActions" $alarm_actions "multi") (serialize-qp "AlarmDescription" $alarm_description "scalar") (serialize-qp "AlarmName" $alarm_name "scalar") (serialize-qp "AlarmRule" $alarm_rule "scalar") (serialize-qp "InsufficientDataActions" $insufficient_data_actions "multi") (serialize-qp "OKActions" $ok_actions "multi") (serialize-qp "Tags" $tags "multi") (serialize-qp "ActionsSuppressor" $actions_suppressor "scalar") (serialize-qp "ActionsSuppressorWaitPeriod" $actions_suppressor_wait_period "scalar") (serialize-qp "ActionsSuppressorExtensionPeriod" $actions_suppressor_extension_period "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -2850,8 +2985,8 @@ export def "post-put-composite-alarm" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-26
-  --version: string@version-completer
+  --action: string@action-completer-26 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2864,6 +2999,8 @@ export def "post-put-composite-alarm" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "PutCompositeAlarm")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2900,10 +3037,10 @@ export def "get-put-dashboard" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --dashboard-name: string # The name of the dashboard. If a dashboard with this name already exists, this call modifies that dashboard, replacing its current contents. Otherwise, a new dashboard is created. The maximum length is 255, and valid characters are A-Z, a-z, 0-9, "-", and "_". This parameter is required.
-  --dashboard-body: string # The detailed information about the dashboard in JSON format, including the widgets to include and their location on the dashboard. This parameter is required. For more information about the syntax, see Dashboard Body Structure and Syntax (https://docs.aws.amazon.com/AmazonCloudWatch/latest/APIReference/CloudWatch-Dashboard-Body-Structure.html).
-  --action: string@action-completer-27
-  --version: string@version-completer
+  --dashboard-name: string # The name of the dashboard. If a dashboard with this name already exists, this call modifies that dashboard, replacing its current contents. Otherwise, a new dashboard is created. The maximum length is 255, and valid characters are A-Z, a-z, 0-9, "-", and "_". This parameter is required. (required)
+  --dashboard-body: string # The detailed information about the dashboard in JSON format, including the widgets to include and their location on the dashboard. This parameter is required. For more information about the syntax, see Dashboard Body Structure and Syntax (https://docs.aws.amazon.com/AmazonCloudWatch/latest/APIReference/CloudWatch-Dashboard-Body-Structure.html). (required)
+  --action: string@action-completer-27 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2911,9 +3048,13 @@ export def "get-put-dashboard" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DashboardValidationMessages: record> {
+]: nothing -> record<DashboardValidationMessages: table<DataPath: string, Message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($dashboard_name == null) { error make --unspanned { msg: "required query parameter 'DashboardName' missing: pass --dashboard-name" } }
+  if ($dashboard_body == null) { error make --unspanned { msg: "required query parameter 'DashboardBody' missing: pass --dashboard-body" } }
+  let action = ($action | default "PutDashboard")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "DashboardName" $dashboard_name "scalar") (serialize-qp "DashboardBody" $dashboard_body "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2948,8 +3089,8 @@ export def "post-put-dashboard" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-27
-  --version: string@version-completer
+  --action: string@action-completer-27 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2958,10 +3099,12 @@ export def "post-put-dashboard" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DashboardValidationMessages: record> {
+]: any -> record<DashboardValidationMessages: table<DataPath: string, Message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "PutDashboard")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2998,12 +3141,12 @@ export def "get-put-insight-rule" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rule-name: string # A unique name for the rule.
+  --rule-name: string # A unique name for the rule. (required)
   --rule-state: string # The state of the rule. Valid values are ENABLED and DISABLED.
-  --rule-definition: string # The definition of the rule, as a JSON object. For details on the valid syntax, see Contributor Insights Rule Syntax (https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/ContributorInsights-RuleSyntax.html).
+  --rule-definition: string # The definition of the rule, as a JSON object. For details on the valid syntax, see Contributor Insights Rule Syntax (https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/ContributorInsights-RuleSyntax.html). (required)
   --tags: list # A list of key-value pairs to associate with the Contributor Insights rule. You can associate as many as 50 tags with a rule. Tags can help you organize and categorize your resources. You can also use them to scope user permissions, by granting a user permission to access or change only the resources that have certain tag values. To be able to associate tags with a rule, you must have the cloudwatch:TagResource permission in addition to the cloudwatch:PutInsightRule permission. If you are using this operation to update an existing Contributor Insights rule, any tags you specify in this parameter are ignored. To change the tags of an existing rule, use TagResource (https://docs.aws.amazon.com/AmazonCloudWatch/latest/APIReference/API_TagResource.html).
-  --action: string@action-completer-28
-  --version: string@version-completer
+  --action: string@action-completer-28 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3014,6 +3157,10 @@ export def "get-put-insight-rule" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($rule_name == null) { error make --unspanned { msg: "required query parameter 'RuleName' missing: pass --rule-name" } }
+  if ($rule_definition == null) { error make --unspanned { msg: "required query parameter 'RuleDefinition' missing: pass --rule-definition" } }
+  let action = ($action | default "PutInsightRule")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "RuleName" $rule_name "scalar") (serialize-qp "RuleState" $rule_state "scalar") (serialize-qp "RuleDefinition" $rule_definition "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3048,8 +3195,8 @@ export def "post-put-insight-rule" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-28
-  --version: string@version-completer
+  --action: string@action-completer-28 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3062,6 +3209,8 @@ export def "post-put-insight-rule" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "PutInsightRule")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3098,9 +3247,9 @@ export def "get-put-managed-insight-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --managed-rules: list # A list of ManagedRules to enable.
-  --action: string@action-completer-29
-  --version: string@version-completer
+  --managed-rules: list # A list of ManagedRules to enable. (required)
+  --action: string@action-completer-29 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3108,9 +3257,12 @@ export def "get-put-managed-insight-rules" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Failures: record> {
+]: nothing -> record<Failures: table<FailureResource: string, ExceptionType: string, FailureCode: string, FailureDescription: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($managed_rules == null) { error make --unspanned { msg: "required query parameter 'ManagedRules' missing: pass --managed-rules" } }
+  let action = ($action | default "PutManagedInsightRules")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "ManagedRules" $managed_rules "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3145,8 +3297,8 @@ export def "post-put-managed-insight-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-29
-  --version: string@version-completer
+  --action: string@action-completer-29 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3155,10 +3307,12 @@ export def "post-put-managed-insight-rules" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Failures: record> {
+]: any -> record<Failures: table<FailureResource: string, ExceptionType: string, FailureCode: string, FailureDescription: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "PutManagedInsightRules")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3195,7 +3349,7 @@ export def "get-put-metric-alarm" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --alarm-name: string # The name for the alarm. This name must be unique within the Region. The name must contain only UTF-8 characters, and can't contain ASCII control characters
+  --alarm-name: string # The name for the alarm. This name must be unique within the Region. The name must contain only UTF-8 characters, and can't contain ASCII control characters (required)
   --alarm-description: string # The description for the alarm.
   --actions-enabled: oneof<nothing, bool> # Indicates whether actions should be executed during any changes to the alarm state. The default is TRUE.
   --ok-actions: list # The actions to execute when this alarm transitions to an OK state from any other state. Each action is specified as an Amazon Resource Name (ARN). Valid values: EC2 actions: arn:aws:automate:region:ec2:stop arn:aws:automate:region:ec2:terminate arn:aws:automate:region:ec2:reboot arn:aws:automate:region:ec2:recover arn:aws:swf:region:account-id:action/actions/AWS_EC2.InstanceId.Stop/1.0 arn:aws:swf:region:account-id:action/actions/AWS_EC2.InstanceId.Terminate/1.0 arn:aws:swf:region:account-id:action/actions/AWS_EC2.InstanceId.Reboot/1.0 arn:aws:swf:region:account-id:action/actions/AWS_EC2.InstanceId.Recover/1.0 Autoscaling action: arn:aws:autoscaling:region:account-id:scalingPolicy:policy-id:autoScalingGroupName/group-friendly-name:policyName/policy-friendly-name SSN notification action: arn:aws:sns:region:account-id:sns-topic-name:autoScalingGroupName/group-friendly-name:policyName/policy-friendly-name SSM integration actions: arn:aws:ssm:region:account-id:opsitem:severity#CATEGORY=category-name arn:aws:ssm-incidents::account-id:responseplan/response-plan-name
@@ -3208,17 +3362,17 @@ export def "get-put-metric-alarm" [
   --dimensions: list # The dimensions for the metric specified in MetricName.
   --period: int # The length, in seconds, used each time the metric specified in MetricName is evaluated. Valid values are 10, 30, and any multiple of 60. Period is required for alarms based on static thresholds. If you are creating an alarm based on a metric math expression, you specify the period for each metric within the objects in the Metrics array. Be sure to specify 10 or 30 only for metrics that are stored by a PutMetricData call with a StorageResolution of 1. If you specify a period of 10 or 30 for a metric that does not have sub-minute resolution, the alarm still attempts to gather data at the period rate that you specify. In this case, it does not receive data for the attempts that do not correspond to a one-minute data resolution, and the alarm might often lapse into INSUFFICENT_DATA status. Specifying 10 or 30 also sets this alarm as a high-resolution alarm, which has a higher charge than other alarms. For more information about pricing, see Amazon CloudWatch Pricing (https://aws.amazon.com/cloudwatch/pricing/). An alarm's total current evaluation period can be no longer than one day, so Period multiplied by EvaluationPeriods cannot be more than 86,400 seconds.
   --unit: string@unit-completer # The unit of measure for the statistic. For example, the units for the Amazon EC2 NetworkIn metric are Bytes because NetworkIn tracks the number of bytes that an instance receives on all network interfaces. You can also specify a unit when you create a custom metric. Units help provide conceptual meaning to your data. Metric data points that specify a unit of measure, such as Percent, are aggregated separately. If you don't specify Unit, CloudWatch retrieves all unit types that have been published for the metric and attempts to evaluate the alarm. Usually, metrics are published with only one unit, so the alarm works as intended. However, if the metric is published with multiple types of units and you don't specify a unit, the alarm's behavior is not defined and it behaves unpredictably. We recommend omitting Unit so that you don't inadvertently specify an incorrect unit that is not published for this metric. Doing so causes the alarm to be stuck in the INSUFFICIENT DATA state.
-  --evaluation-periods: int # The number of periods over which data is compared to the specified threshold. If you are setting an alarm that requires that a number of consecutive data points be breaching to trigger the alarm, this value specifies that number. If you are setting an "M out of N" alarm, this value is the N. An alarm's total current evaluation period can be no longer than one day, so this number multiplied by Period cannot be more than 86,400 seconds.
+  --evaluation-periods: int # The number of periods over which data is compared to the specified threshold. If you are setting an alarm that requires that a number of consecutive data points be breaching to trigger the alarm, this value specifies that number. If you are setting an "M out of N" alarm, this value is the N. An alarm's total current evaluation period can be no longer than one day, so this number multiplied by Period cannot be more than 86,400 seconds. (required)
   --datapoints-to-alarm: int # The number of data points that must be breaching to trigger the alarm. This is used only if you are setting an "M out of N" alarm. In that case, this value is the M. For more information, see Evaluating an Alarm (https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/AlarmThatSendsEmail.html#alarm-evaluation) in the Amazon CloudWatch User Guide.
   --threshold: float # The value against which the specified statistic is compared. This parameter is required for alarms based on static thresholds, but should not be used for alarms based on anomaly detection models. (format: double)
-  --comparison-operator: string@comparison-operator-completer # The arithmetic operation to use when comparing the specified statistic and threshold. The specified statistic value is used as the first operand. The values LessThanLowerOrGreaterThanUpperThreshold, LessThanLowerThreshold, and GreaterThanUpperThreshold are used only for alarms based on anomaly detection models.
+  --comparison-operator: string@comparison-operator-completer # The arithmetic operation to use when comparing the specified statistic and threshold. The specified statistic value is used as the first operand. The values LessThanLowerOrGreaterThanUpperThreshold, LessThanLowerThreshold, and GreaterThanUpperThreshold are used only for alarms based on anomaly detection models. (required)
   --treat-missing-data: string # Sets how this alarm is to handle missing data points. If TreatMissingData is omitted, the default behavior of missing is used. For more information, see Configuring How CloudWatch Alarms Treats Missing Data (https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/AlarmThatSendsEmail.html#alarms-and-missing-data). Valid Values: breaching | notBreaching | ignore | missing Alarms that evaluate metrics in the AWS/DynamoDB namespace always ignore missing data even if you choose a different option for TreatMissingData. When an AWS/DynamoDB metric has missing data, alarms that evaluate that metric remain in their current state.
   --evaluate-low-sample-count-percentile: string # Used only for alarms based on percentiles. If you specify ignore, the alarm state does not change during periods with too few data points to be statistically significant. If you specify evaluate or omit this parameter, the alarm is always evaluated and possibly changes state no matter how many data points are available. For more information, see Percentile-Based CloudWatch Alarms and Low Data Samples (https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/AlarmThatSendsEmail.html#percentiles-with-low-samples). Valid Values: evaluate | ignore
   --metrics: list # An array of MetricDataQuery structures that enable you to create an alarm based on the result of a metric math expression. For each PutMetricAlarm operation, you must specify either MetricName or a Metrics array. Each item in the Metrics array either retrieves a metric or performs a math expression. One item in the Metrics array is the expression that the alarm watches. You designate this expression by setting ReturnData to true for this object in the array. For more information, see MetricDataQuery (https://docs.aws.amazon.com/AmazonCloudWatch/latest/APIReference/API_MetricDataQuery.html). If you use the Metrics parameter, you cannot include the MetricName, Dimensions, Period, Namespace, Statistic, or ExtendedStatistic parameters of PutMetricAlarm in the same operation. Instead, you retrieve the metrics you are using in your math expression as part of the Metrics array.
   --tags: list # A list of key-value pairs to associate with the alarm. You can associate as many as 50 tags with an alarm. Tags can help you organize and categorize your resources. You can also use them to scope user permissions by granting a user permission to access or change only resources with certain tag values. If you are using this operation to update an existing alarm, any tags you specify in this parameter are ignored. To change the tags of an existing alarm, use TagResource (https://docs.aws.amazon.com/AmazonCloudWatch/latest/APIReference/API_TagResource.html) or UntagResource (https://docs.aws.amazon.com/AmazonCloudWatch/latest/APIReference/API_UntagResource.html).
   --threshold-metric-id: string # If this is an alarm based on an anomaly detection model, make this value match the ID of the ANOMALY_DETECTION_BAND function. For an example of how to use this parameter, see the Anomaly Detection Model Alarm example on this page. If your alarm uses this parameter, it cannot have Auto Scaling actions.
-  --action: string@action-completer-30
-  --version: string@version-completer
+  --action: string@action-completer-30 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3229,6 +3383,11 @@ export def "get-put-metric-alarm" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($alarm_name == null) { error make --unspanned { msg: "required query parameter 'AlarmName' missing: pass --alarm-name" } }
+  if ($evaluation_periods == null) { error make --unspanned { msg: "required query parameter 'EvaluationPeriods' missing: pass --evaluation-periods" } }
+  if ($comparison_operator == null) { error make --unspanned { msg: "required query parameter 'ComparisonOperator' missing: pass --comparison-operator" } }
+  let action = ($action | default "PutMetricAlarm")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "AlarmName" $alarm_name "scalar") (serialize-qp "AlarmDescription" $alarm_description "scalar") (serialize-qp "ActionsEnabled" $actions_enabled "scalar") (serialize-qp "OKActions" $ok_actions "multi") (serialize-qp "AlarmActions" $alarm_actions "multi") (serialize-qp "InsufficientDataActions" $insufficient_data_actions "multi") (serialize-qp "MetricName" $metric_name "scalar") (serialize-qp "Namespace" $namespace "scalar") (serialize-qp "Statistic" $statistic "scalar") (serialize-qp "ExtendedStatistic" $extended_statistic "scalar") (serialize-qp "Dimensions" $dimensions "multi") (serialize-qp "Period" $period "scalar") (serialize-qp "Unit" $unit "scalar") (serialize-qp "EvaluationPeriods" $evaluation_periods "scalar") (serialize-qp "DatapointsToAlarm" $datapoints_to_alarm "scalar") (serialize-qp "Threshold" $threshold "scalar") (serialize-qp "ComparisonOperator" $comparison_operator "scalar") (serialize-qp "TreatMissingData" $treat_missing_data "scalar") (serialize-qp "EvaluateLowSampleCountPercentile" $evaluate_low_sample_count_percentile "scalar") (serialize-qp "Metrics" $metrics "multi") (serialize-qp "Tags" $tags "multi") (serialize-qp "ThresholdMetricId" $threshold_metric_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -3263,8 +3422,8 @@ export def "post-put-metric-alarm" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-30
-  --version: string@version-completer
+  --action: string@action-completer-30 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3277,6 +3436,8 @@ export def "post-put-metric-alarm" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "PutMetricAlarm")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3313,10 +3474,10 @@ export def "get-put-metric-data" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --namespace: string # The namespace for the metric data. You can use ASCII characters for the namespace, except for control characters which are not supported. To avoid conflicts with Amazon Web Services service namespaces, you should not specify a namespace that begins with AWS/
-  --metric-data: list # The data for the metric. The array can include no more than 1000 metrics per call.
-  --action: string@action-completer-31
-  --version: string@version-completer
+  --namespace: string # The namespace for the metric data. You can use ASCII characters for the namespace, except for control characters which are not supported. To avoid conflicts with Amazon Web Services service namespaces, you should not specify a namespace that begins with AWS/ (required)
+  --metric-data: list # The data for the metric. The array can include no more than 1000 metrics per call. (required)
+  --action: string@action-completer-31 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3327,6 +3488,10 @@ export def "get-put-metric-data" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($namespace == null) { error make --unspanned { msg: "required query parameter 'Namespace' missing: pass --namespace" } }
+  if ($metric_data == null) { error make --unspanned { msg: "required query parameter 'MetricData' missing: pass --metric-data" } }
+  let action = ($action | default "PutMetricData")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "Namespace" $namespace "scalar") (serialize-qp "MetricData" $metric_data "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -3361,8 +3526,8 @@ export def "post-put-metric-data" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-31
-  --version: string@version-completer
+  --action: string@action-completer-31 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3375,6 +3540,8 @@ export def "post-put-metric-data" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "PutMetricData")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3411,17 +3578,17 @@ export def "get-put-metric-stream" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name: string # If you are creating a new metric stream, this is the name for the new stream. The name must be different than the names of other metric streams in this account and Region. If you are updating a metric stream, specify the name of that stream here. Valid characters are A-Z, a-z, 0-9, "-" and "_".
+  --name: string # If you are creating a new metric stream, this is the name for the new stream. The name must be different than the names of other metric streams in this account and Region. If you are updating a metric stream, specify the name of that stream here. Valid characters are A-Z, a-z, 0-9, "-" and "_". (required)
   --include-filters: list # If you specify this parameter, the stream sends only the metrics from the metric namespaces that you specify here. You cannot include IncludeFilters and ExcludeFilters in the same operation.
   --exclude-filters: list # If you specify this parameter, the stream sends metrics from all metric namespaces except for the namespaces that you specify here. You cannot include ExcludeFilters and IncludeFilters in the same operation.
-  --firehose-arn: string # The ARN of the Amazon Kinesis Data Firehose delivery stream to use for this metric stream. This Amazon Kinesis Data Firehose delivery stream must already exist and must be in the same account as the metric stream.
-  --role-arn: string # The ARN of an IAM role that this metric stream will use to access Amazon Kinesis Data Firehose resources. This IAM role must already exist and must be in the same account as the metric stream. This IAM role must include the following permissions: firehose:PutRecord firehose:PutRecordBatch
-  --output-format: string@output-format-completer # The output format for the stream. Valid values are json and opentelemetry0.7. For more information about metric stream output formats, see Metric streams output formats (https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch-metric-streams-formats.html).
+  --firehose-arn: string # The ARN of the Amazon Kinesis Data Firehose delivery stream to use for this metric stream. This Amazon Kinesis Data Firehose delivery stream must already exist and must be in the same account as the metric stream. (required)
+  --role-arn: string # The ARN of an IAM role that this metric stream will use to access Amazon Kinesis Data Firehose resources. This IAM role must already exist and must be in the same account as the metric stream. This IAM role must include the following permissions: firehose:PutRecord firehose:PutRecordBatch (required)
+  --output-format: string@output-format-completer # The output format for the stream. Valid values are json and opentelemetry0.7. For more information about metric stream output formats, see Metric streams output formats (https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch-metric-streams-formats.html). (required)
   --tags: list # A list of key-value pairs to associate with the metric stream. You can associate as many as 50 tags with a metric stream. Tags can help you organize and categorize your resources. You can also use them to scope user permissions by granting a user permission to access or change only resources with certain tag values. You can use this parameter only when you are creating a new metric stream. If you are using this operation to update an existing metric stream, any tags you specify in this parameter are ignored. To change the tags of an existing metric stream, use TagResource (https://docs.aws.amazon.com/AmazonCloudWatch/latest/APIReference/API_TagResource.html) or UntagResource (https://docs.aws.amazon.com/AmazonCloudWatch/latest/APIReference/API_UntagResource.html).
   --statistics-configurations: list # By default, a metric stream always sends the MAX, MIN, SUM, and SAMPLECOUNT statistics for each metric that is streamed. You can use this parameter to have the metric stream also send additional statistics in the stream. This array can have up to 100 members. For each entry in this array, you specify one or more metrics and the list of additional statistics to stream for those metrics. The additional statistics that you can stream depend on the stream's OutputFormat. If the OutputFormat is json, you can stream any additional statistic that is supported by CloudWatch, listed in CloudWatch statistics definitions (https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/Statistics-definitions.html.html). If the OutputFormat is opentelemetry0.7, you can stream percentile statistics such as p95, p99.9, and so on.
   --include-linked-accounts-metrics: oneof<nothing, bool> # If you are creating a metric stream in a monitoring account, specify true to include metrics from source accounts in the metric stream.
-  --action: string@action-completer-32
-  --version: string@version-completer
+  --action: string@action-completer-32 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3429,9 +3596,15 @@ export def "get-put-metric-stream" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: record> {
+]: nothing -> record<Arn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'Name' missing: pass --name" } }
+  if ($firehose_arn == null) { error make --unspanned { msg: "required query parameter 'FirehoseArn' missing: pass --firehose-arn" } }
+  if ($role_arn == null) { error make --unspanned { msg: "required query parameter 'RoleArn' missing: pass --role-arn" } }
+  if ($output_format == null) { error make --unspanned { msg: "required query parameter 'OutputFormat' missing: pass --output-format" } }
+  let action = ($action | default "PutMetricStream")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "Name" $name "scalar") (serialize-qp "IncludeFilters" $include_filters "multi") (serialize-qp "ExcludeFilters" $exclude_filters "multi") (serialize-qp "FirehoseArn" $firehose_arn "scalar") (serialize-qp "RoleArn" $role_arn "scalar") (serialize-qp "OutputFormat" $output_format "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "StatisticsConfigurations" $statistics_configurations "multi") (serialize-qp "IncludeLinkedAccountsMetrics" $include_linked_accounts_metrics "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3466,8 +3639,8 @@ export def "post-put-metric-stream" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-32
-  --version: string@version-completer
+  --action: string@action-completer-32 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3476,10 +3649,12 @@ export def "post-put-metric-stream" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Arn: record> {
+]: any -> record<Arn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "PutMetricStream")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3516,12 +3691,12 @@ export def "get-set-alarm-state" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --alarm-name: string # The name of the alarm.
-  --state-value: string@state-value-completer # The value of the state.
-  --state-reason: string # The reason that this alarm is set to this specific state, in text format.
+  --alarm-name: string # The name of the alarm. (required)
+  --state-value: string@state-value-completer # The value of the state. (required)
+  --state-reason: string # The reason that this alarm is set to this specific state, in text format. (required)
   --state-reason-data: string # The reason that this alarm is set to this specific state, in JSON format. For SNS or EC2 alarm actions, this is just informational. But for EC2 Auto Scaling or application Auto Scaling alarm actions, the Auto Scaling policy uses the information in this field to take the correct action.
-  --action: string@action-completer-33
-  --version: string@version-completer
+  --action: string@action-completer-33 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3532,6 +3707,11 @@ export def "get-set-alarm-state" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($alarm_name == null) { error make --unspanned { msg: "required query parameter 'AlarmName' missing: pass --alarm-name" } }
+  if ($state_value == null) { error make --unspanned { msg: "required query parameter 'StateValue' missing: pass --state-value" } }
+  if ($state_reason == null) { error make --unspanned { msg: "required query parameter 'StateReason' missing: pass --state-reason" } }
+  let action = ($action | default "SetAlarmState")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "AlarmName" $alarm_name "scalar") (serialize-qp "StateValue" $state_value "scalar") (serialize-qp "StateReason" $state_reason "scalar") (serialize-qp "StateReasonData" $state_reason_data "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -3566,8 +3746,8 @@ export def "post-set-alarm-state" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-33
-  --version: string@version-completer
+  --action: string@action-completer-33 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3580,6 +3760,8 @@ export def "post-set-alarm-state" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "SetAlarmState")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3616,9 +3798,9 @@ export def "get-start-metric-streams" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --names: list # The array of the names of metric streams to start streaming. This is an "all or nothing" operation. If you do not have permission to access all of the metric streams that you list here, then none of the streams that you list in the operation will start streaming.
-  --action: string@action-completer-34
-  --version: string@version-completer
+  --names: list # The array of the names of metric streams to start streaming. This is an "all or nothing" operation. If you do not have permission to access all of the metric streams that you list here, then none of the streams that you list in the operation will start streaming. (required)
+  --action: string@action-completer-34 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3629,6 +3811,9 @@ export def "get-start-metric-streams" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($names == null) { error make --unspanned { msg: "required query parameter 'Names' missing: pass --names" } }
+  let action = ($action | default "StartMetricStreams")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "Names" $names "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3663,8 +3848,8 @@ export def "post-start-metric-streams" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-34
-  --version: string@version-completer
+  --action: string@action-completer-34 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3677,6 +3862,8 @@ export def "post-start-metric-streams" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "StartMetricStreams")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3713,9 +3900,9 @@ export def "get-stop-metric-streams" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --names: list # The array of the names of metric streams to stop streaming. This is an "all or nothing" operation. If you do not have permission to access all of the metric streams that you list here, then none of the streams that you list in the operation will stop streaming.
-  --action: string@action-completer-35
-  --version: string@version-completer
+  --names: list # The array of the names of metric streams to stop streaming. This is an "all or nothing" operation. If you do not have permission to access all of the metric streams that you list here, then none of the streams that you list in the operation will stop streaming. (required)
+  --action: string@action-completer-35 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3726,6 +3913,9 @@ export def "get-stop-metric-streams" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($names == null) { error make --unspanned { msg: "required query parameter 'Names' missing: pass --names" } }
+  let action = ($action | default "StopMetricStreams")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "Names" $names "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3760,8 +3950,8 @@ export def "post-stop-metric-streams" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-35
-  --version: string@version-completer
+  --action: string@action-completer-35 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3774,6 +3964,8 @@ export def "post-stop-metric-streams" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "StopMetricStreams")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3810,10 +4002,10 @@ export def "get-tag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-arn: string # The ARN of the CloudWatch resource that you're adding tags to. The ARN format of an alarm is arn:aws:cloudwatch:Region:account-id:alarm:alarm-name The ARN format of a Contributor Insights rule is arn:aws:cloudwatch:Region:account-id:insight-rule:insight-rule-name For more information about ARN format, see Resource Types Defined by Amazon CloudWatch (https://docs.aws.amazon.com/IAM/latest/UserGuide/list_amazoncloudwatch.html#amazoncloudwatch-resources-for-iam-policies) in the Amazon Web Services General Reference.
-  --tags: list # The list of key-value pairs to associate with the alarm.
-  --action: string@action-completer-36
-  --version: string@version-completer
+  --resource-arn: string # The ARN of the CloudWatch resource that you're adding tags to. The ARN format of an alarm is arn:aws:cloudwatch:Region:account-id:alarm:alarm-name The ARN format of a Contributor Insights rule is arn:aws:cloudwatch:Region:account-id:insight-rule:insight-rule-name For more information about ARN format, see Resource Types Defined by Amazon CloudWatch (https://docs.aws.amazon.com/IAM/latest/UserGuide/list_amazoncloudwatch.html#amazoncloudwatch-resources-for-iam-policies) in the Amazon Web Services General Reference. (required)
+  --tags: list # The list of key-value pairs to associate with the alarm. (required)
+  --action: string@action-completer-36 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3824,6 +4016,10 @@ export def "get-tag-resource" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'ResourceARN' missing: pass --resource-arn" } }
+  if ($tags == null) { error make --unspanned { msg: "required query parameter 'Tags' missing: pass --tags" } }
+  let action = ($action | default "TagResource")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "ResourceARN" $resource_arn "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3858,8 +4054,8 @@ export def "post-tag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-36
-  --version: string@version-completer
+  --action: string@action-completer-36 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3872,6 +4068,8 @@ export def "post-tag-resource" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "TagResource")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3908,10 +4106,10 @@ export def "get-untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-arn: string # The ARN of the CloudWatch resource that you're removing tags from. The ARN format of an alarm is arn:aws:cloudwatch:Region:account-id:alarm:alarm-name The ARN format of a Contributor Insights rule is arn:aws:cloudwatch:Region:account-id:insight-rule:insight-rule-name For more information about ARN format, see Resource Types Defined by Amazon CloudWatch (https://docs.aws.amazon.com/IAM/latest/UserGuide/list_amazoncloudwatch.html#amazoncloudwatch-resources-for-iam-policies) in the Amazon Web Services General Reference.
-  --tag-keys: list # The list of tag keys to remove from the resource.
-  --action: string@action-completer-37
-  --version: string@version-completer
+  --resource-arn: string # The ARN of the CloudWatch resource that you're removing tags from. The ARN format of an alarm is arn:aws:cloudwatch:Region:account-id:alarm:alarm-name The ARN format of a Contributor Insights rule is arn:aws:cloudwatch:Region:account-id:insight-rule:insight-rule-name For more information about ARN format, see Resource Types Defined by Amazon CloudWatch (https://docs.aws.amazon.com/IAM/latest/UserGuide/list_amazoncloudwatch.html#amazoncloudwatch-resources-for-iam-policies) in the Amazon Web Services General Reference. (required)
+  --tag-keys: list # The list of tag keys to remove from the resource. (required)
+  --action: string@action-completer-37 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3922,6 +4120,10 @@ export def "get-untag-resource" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'ResourceARN' missing: pass --resource-arn" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'TagKeys' missing: pass --tag-keys" } }
+  let action = ($action | default "UntagResource")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "ResourceARN" $resource_arn "scalar") (serialize-qp "TagKeys" $tag_keys "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3956,8 +4158,8 @@ export def "post-untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-37
-  --version: string@version-completer
+  --action: string@action-completer-37 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3970,6 +4172,8 @@ export def "post-untag-resource" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "UntagResource")
+  let version = ($version | default "2010-08-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body

@@ -1,4 +1,4 @@
-# Auto-generated client for Google My Business API vv4
+# Auto-generated client for Google My Business API v4
 # Source: https://api.apis.guru/v2/specs/googleapis.com/my-business/v4/openapi.json
 # Auth: --token flag or $env.GOOGLE_MY_BUSINESS_API_TOKEN
 

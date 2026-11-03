@@ -169,12 +169,13 @@ export def "transit" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --from-type: string # occurence type in the source basic residential unit (1 - transit, 2 - visit, 0 - both)
   --to-type: string # occurence type in the destination basic residential unit (1 - transit, 2 - visit, 0 - both)
-  --uniques: string # all or only uniques (0 - all, 1 - uniques) (e.g. 0)
+  --uniques: string # all or only uniques (0 - all, 1 - uniques) (required, e.g. 0)
 ]: nothing -> record<count: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($from | is-empty) { error make --unspanned { msg: "path parameter 'from' must be non-empty" } }
   if ($to | is-empty) { error make --unspanned { msg: "path parameter 'to' must be non-empty" } }
+  if ($uniques == null) { error make --unspanned { msg: "required query parameter 'uniques' missing: pass --uniques" } }
   let qp = [(serialize-qp "fromType" $from_type "scalar") (serialize-qp "toType" $to_type "scalar") (serialize-qp "uniques" $uniques "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({from: (encode-path-segment $from), to: (encode-path-segment $to)} | format pattern "/transit/{from}/{to}") $qp $auth.query)
   let accept_val = "application/json"

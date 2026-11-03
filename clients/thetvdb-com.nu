@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "jwt" => { {scheme: $scheme, headers: {Authorization: $"JWT ($token_val)"}, query: "", location: "header"} }
+    "jwt" => { {scheme: $scheme, headers: {"Authorization": $"JWT ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -339,10 +339,11 @@ export def "get-movieupdates" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --since: string # Epoch time to start your date range.
+  --since: string # Epoch time to start your date range. (required)
 ]: nothing -> record<movies: list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($since == null) { error make --unspanned { msg: "required query parameter 'since' missing: pass --since" } }
   let qp = [(serialize-qp "since" $since "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/movieupdates" $qp $auth.query)
   let accept_val = "application/json"
@@ -746,12 +747,13 @@ export def "get-series-id-filter" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --keys: string # Comma-separated list of keys to filter by
+  --keys: string # Comma-separated list of keys to filter by (required)
   --accept-language: string # Records are returned with the some fields in the desired language, if it exists. If there is no translation for the given language, then the record is still returned but with empty values for the translated fields.
 ]: nothing -> record<data: record<added: string, airsDayOfWeek: string, airsTime: string, aliases: list<string>, banner: string, firstAired: string, genre: list<string>, id: int, imdbId: string, lastUpdated: int, network: string, networkId: string, overview: string, rating: string, runtime: string, seriesId: string, seriesName: string, siteRating: float, siteRatingCount: int, slug: string, status: string, zap2itId: string>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($keys == null) { error make --unspanned { msg: "required query parameter 'keys' missing: pass --keys" } }
   let qp = [(serialize-qp "keys" $keys "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}/filter") $qp $auth.query)
   let accept_val = "application/json"
@@ -941,12 +943,13 @@ export def "get-updated-query" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --from-time: string # Epoch time to start your date range.
+  --from-time: string # Epoch time to start your date range. (required)
   --to-time: string # Epoch time to end your date range. Must be one week from `fromTime`.
   --accept-language: string # Records are returned with the some fields in the desired language, if it exists. If there is no translation for the given language, then the record is still returned but with empty values for the translated fields.
 ]: nothing -> record<data: table<id: int, lastUpdated: int>, errors: record<invalidFilters: list<string>, invalidLanguage: string, invalidQueryParams: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($from_time == null) { error make --unspanned { msg: "required query parameter 'fromTime' missing: pass --from-time" } }
   let qp = [(serialize-qp "fromTime" $from_time "scalar") (serialize-qp "toTime" $to_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/updated/query" $qp $auth.query)
   let accept_val = "application/json"

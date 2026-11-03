@@ -1,4 +1,4 @@
-# Auto-generated client for My Business Place Actions API vv1
+# Auto-generated client for My Business Place Actions API v1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/mybusinessplaceactions/v1/openapi.json
 # Auth: --token flag or $env.MY_BUSINESS_PLACE_ACTIONS_API_TOKEN
 

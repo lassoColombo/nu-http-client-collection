@@ -1,4 +1,4 @@
-# Auto-generated client for Feed API vv1.3.1
+# Auto-generated client for Feed API v1.3.1
 # Source: https://api.apis.guru/v2/specs/ebay.com/sell-feed/v1.3.1/openapi.json
 # Auth: --token flag or $env.FEED_API_TOKEN
 
@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -219,7 +219,7 @@ export def "create-customer-service-metric-task" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # Use this header to specify the natural language in which the authenticated user desires the response.
+  --accept-language: string # Use this header to specify the natural language in which the authenticated user desires the response. (required)
   --feed-type: string # The feedType specified for the task. The report lists the transaction details that contribute to the service metrics evaluation. Supported types include:CUSTOMER_SERVICE_METRICS_REPORT
   --filter-criteria: record # A complex data type that filters data for report creation. See CustomerServiceMetricsFilterCriteria for fields and descriptions. — shape: {customerServiceMetricType?: string, evaluationMarketplaceId?: string, listingCategories?: list<string>, shippingRegions?: list<string>}
   --schema-version: string # The version number of the file format. Valid value: 1.0
@@ -227,6 +227,7 @@ export def "create-customer-service-metric-task" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'accept-language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/customer_service_metric_task" $auth.query)
   let req_body = {"feedType": $feed_type, "filterCriteria": $filter_criteria, "schemaVersion": $schema_version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -534,12 +535,13 @@ export def "get-schedules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --feed-type: string # The feedType associated with the schedule.
+  --feed-type: string # The feedType associated with the schedule. (required)
   --limit: string # The maximum number of schedules that can be returned on each page of the paginated response. Use this parameter in conjunction with the offset parameter to control the pagination of the output. Note: This feature employs a zero-based list, where the first item in the list has an offset of 0.For example, if offset is set to 10 and limit is set to 10, the call retrieves schedules 11 thru 20 from the result set.If this parameter is omitted, the default value is used. Default: 10 Maximum: 500
   --offset: string # The number of schedules to skip in the result set before returning the first schedule in the paginated response. Combine offset with the limit query parameter to control the items returned in the response. For example, if you supply an offset of 0 and a limit of 10, the first page of the response contains the first 10 items from the complete list of items retrieved by the call. If offset is 10 and limit is 20, the first page of the response contains items 11-30 from the complete result set. If this query parameter is not set, the default value is used and the first page of records is returned.Default: 0
 ]: nothing -> record<href: string, limit: int, next: string, offset: int, prev: string, schedules: table<creationDate: string, feedType: string, lastModifiedDate: string, preferredTriggerDayOfMonth: int, preferredTriggerDayOfWeek: string, preferredTriggerHour: string, scheduleEndDate: string, scheduleId: string, scheduleName: string, scheduleStartDate: string, scheduleTemplateId: string, schemaVersion: string, status: string, statusReason: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($feed_type == null) { error make --unspanned { msg: "required query parameter 'feed_type' missing: pass --feed-type" } }
   let qp = [(serialize-qp "feed_type" $feed_type "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/schedule" $qp $auth.query)
   let accept_val = "application/json"
@@ -772,12 +774,13 @@ export def "get-schedule-templates" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --feed-type: string # The feed type of the schedule templates to retrieve.
+  --feed-type: string # The feed type of the schedule templates to retrieve. (required)
   --limit: string # The maximum number of schedule templates that can be returned on each page of the paginated response. Use this parameter in conjunction with the offset parameter to control the pagination of the output. Note: This feature employs a zero-based list, where the first item in the list has an offset of 0.For example, if offset is set to 10 and limit is set to 10, the call retrieves schedule templates 11 thru 20 from the result set.If this parameter is omitted, the default value is used. Default: 10 Maximum: 500
   --offset: string # The number of schedule templates to skip in the result set before returning the first template in the paginated response. Combine offset with the limit query parameter to control the items returned in the response. For example, if you supply an offset of 0 and a limit of 10, the first page of the response contains the first 10 items from the complete list of items retrieved by the call. If offset is 10 and limit is 20, the first page of the response contains items 11-30 from the complete result set. If this query parameter is not set, the default value is used and the first page of records is returned.Default: 0
 ]: nothing -> record<href: string, limit: int, next: string, offset: int, prev: string, scheduleTemplates: table<feedType: string, frequency: string, name: string, scheduleTemplateId: string, status: string, supportedConfigurations: list>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($feed_type == null) { error make --unspanned { msg: "required query parameter 'feed_type' missing: pass --feed-type" } }
   let qp = [(serialize-qp "feed_type" $feed_type "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/schedule_template" $qp $auth.query)
   let accept_val = "application/json"
@@ -1056,8 +1059,8 @@ export def "upload-file" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url

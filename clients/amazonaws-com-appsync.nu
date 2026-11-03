@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -160,7 +160,7 @@ export def "associate-api" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   api_id: string # The API ID.
-]: any -> record<apiAssociation: record<domainName: record, apiId: record, associationStatus: record, deploymentDetail: record>> {
+]: any -> record<apiAssociation: record<domainName: string, apiId: string, associationStatus: string, deploymentDetail: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -253,7 +253,7 @@ export def "get-api-association" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<apiAssociation: record<domainName: record, apiId: record, associationStatus: record, deploymentDetail: record>> {
+]: nothing -> record<apiAssociation: record<domainName: string, apiId: string, associationStatus: string, deploymentDetail: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
@@ -303,7 +303,7 @@ export def "create-api-cache" [
   --at-rest-encryption-enabled: oneof<nothing, bool> # At-rest encryption flag for cache. You cannot update this setting after creation.
   api_caching_behavior: string@api-caching-behavior-completer # Caching behavior. FULL_REQUEST_CACHING: All requests are fully cached. PER_RESOLVER_CACHING: Individual resolvers that you specify are cached.
   type: string@type-completer # The cache instance type. Valid values are SMALL MEDIUM LARGE XLARGE LARGE_2X LARGE_4X LARGE_8X (not available in all regions) LARGE_12X Historically, instance types were identified by an EC2-style value. As of July 2020, this is deprecated, and the generic identifiers above should be used. The following legacy instance types are available, but their use is discouraged: T2_SMALL: A t2.small instance type. T2_MEDIUM: A t2.medium instance type. R4_LARGE: A r4.large instance type. R4_XLARGE: A r4.xlarge instance type. R4_2XLARGE: A r4.2xlarge instance type. R4_4XLARGE: A r4.4xlarge instance type. R4_8XLARGE: A r4.8xlarge instance type.
-]: any -> record<apiCache: record<ttl: record, apiCachingBehavior: record, transitEncryptionEnabled: record, atRestEncryptionEnabled: record, type: record, status: record>> {
+]: any -> record<apiCache: record<ttl: int, apiCachingBehavior: string, transitEncryptionEnabled: bool, atRestEncryptionEnabled: bool, type: string, status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -396,7 +396,7 @@ export def "get-api-cache" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<apiCache: record<ttl: record, apiCachingBehavior: record, transitEncryptionEnabled: record, atRestEncryptionEnabled: record, type: record, status: record>> {
+]: nothing -> record<apiCache: record<ttl: int, apiCachingBehavior: string, transitEncryptionEnabled: bool, atRestEncryptionEnabled: bool, type: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
@@ -443,7 +443,7 @@ export def "create-api-key" [
   --x-amz-signed-headers: string
   --description: string # A description of the purpose of the API key.
   --expires: int # From the creation time, the time after which the API key expires. The date is represented as seconds since the epoch, rounded down to the nearest hour. The default value for this parameter is 7 days from creation time. For more information, see .
-]: any -> record<apiKey: record<id: record, description: record, expires: record, deletes: record>> {
+]: any -> record<apiKey: record<id: string, description: string, expires: int, deletes: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -493,7 +493,7 @@ export def "list-api-keys" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<apiKeys: record, nextToken: record> {
+]: nothing -> record<apiKeys: table<id: string, description: string, expires: int, deletes: int>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
@@ -521,13 +521,13 @@ export def "list-api-keys" [
 #
 # POST /v1/apis/{apiId}/datasources
 # operationId: CreateDataSource
-# --dynamodbConfig shape: {tableName?: any, awsRegion?: any, useCallerCredentials?: any, deltaSyncConfig?: any, versioned?: any}
-# --lambdaConfig shape: {lambdaFunctionArn?: any}
-# --elasticsearchConfig shape: {endpoint?: any, awsRegion?: any}
-# --openSearchServiceConfig shape: {endpoint?: any, awsRegion?: any}
-# --httpConfig shape: {endpoint?: any, authorizationConfig?: any}
-# --relationalDatabaseConfig shape: {relationalDatabaseSourceType?: any, rdsHttpEndpointConfig?: any}
-# --eventBridgeConfig shape: {eventBusArn?: any}
+# --dynamodbConfig shape: {tableName?: string, awsRegion?: string, useCallerCredentials?: bool, deltaSyncConfig?: record, versioned?: bool}
+# --lambdaConfig shape: {lambdaFunctionArn?: string}
+# --elasticsearchConfig shape: {endpoint?: string, awsRegion?: string}
+# --openSearchServiceConfig shape: {endpoint?: string, awsRegion?: string}
+# --httpConfig shape: {endpoint?: string, authorizationConfig?: record}
+# --relationalDatabaseConfig shape: {relationalDatabaseSourceType?: "RDS_HTTP_ENDPOINT", rdsHttpEndpointConfig?: record}
+# --eventBridgeConfig shape: {eventBusArn?: string}
 export def "create-data-source" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -550,14 +550,14 @@ export def "create-data-source" [
   --description: string # A description of the DataSource.
   type: string@type-completer-1 # The type of the DataSource.
   --service-role-arn: string # The Identity and Access Management (IAM) service role Amazon Resource Name (ARN) for the data source. The system assumes this role when accessing the data source.
-  --dynamodb-config: record # Describes an Amazon DynamoDB data source configuration. — shape: {tableName?: any, awsRegion?: any, useCallerCredentials?: any, deltaSyncConfig?: any, versioned?: any}
-  --lambda-config: record # Describes an Lambda data source configuration. — shape: {lambdaFunctionArn?: any}
-  --elasticsearch-config: record # Describes an OpenSearch data source configuration. As of September 2021, Amazon Elasticsearch service is Amazon OpenSearch Service. This configuration is deprecated. For new data sources, use OpenSearchServiceDataSourceConfig to specify an OpenSearch data source. — shape: {endpoint?: any, awsRegion?: any}
-  --open-search-service-config: record # Describes an OpenSearch data source configuration. — shape: {endpoint?: any, awsRegion?: any}
-  --http-config: record # Describes an HTTP data source configuration. — shape: {endpoint?: any, authorizationConfig?: any}
-  --relational-database-config: record # Describes a relational database data source configuration. — shape: {relationalDatabaseSourceType?: any, rdsHttpEndpointConfig?: any}
-  --event-bridge-config: record # Describes an Amazon EventBridge bus data source configuration. — shape: {eventBusArn?: any}
-]: any -> record<dataSource: record<dataSourceArn: record, name: record, description: record, type: record, serviceRoleArn: record, dynamodbConfig: record<tableName: record, awsRegion: record, useCallerCredentials: record, deltaSyncConfig: record, versioned: record>, lambdaConfig: record<lambdaFunctionArn: record>, elasticsearchConfig: record<endpoint: record, awsRegion: record>, openSearchServiceConfig: record<endpoint: record, awsRegion: record>, httpConfig: record<endpoint: record, authorizationConfig: record>, relationalDatabaseConfig: record<relationalDatabaseSourceType: record, rdsHttpEndpointConfig: record>, eventBridgeConfig: record<eventBusArn: record>>> {
+  --dynamodb-config: record # Describes an Amazon DynamoDB data source configuration. — shape: {tableName?: string, awsRegion?: string, useCallerCredentials?: bool, deltaSyncConfig?: record, versioned?: bool}
+  --lambda-config: record # Describes an Lambda data source configuration. — shape: {lambdaFunctionArn?: string}
+  --elasticsearch-config: record # Describes an OpenSearch data source configuration. As of September 2021, Amazon Elasticsearch service is Amazon OpenSearch Service. This configuration is deprecated. For new data sources, use OpenSearchServiceDataSourceConfig to specify an OpenSearch data source. — shape: {endpoint?: string, awsRegion?: string}
+  --open-search-service-config: record # Describes an OpenSearch data source configuration. — shape: {endpoint?: string, awsRegion?: string}
+  --http-config: record # Describes an HTTP data source configuration. — shape: {endpoint?: string, authorizationConfig?: record}
+  --relational-database-config: record # Describes a relational database data source configuration. — shape: {relationalDatabaseSourceType?: "RDS_HTTP_ENDPOINT", rdsHttpEndpointConfig?: record}
+  --event-bridge-config: record # Describes an Amazon EventBridge bus data source configuration. — shape: {eventBusArn?: string}
+]: any -> record<dataSource: record<dataSourceArn: string, name: string, description: string, type: string, serviceRoleArn: string, dynamodbConfig: record<tableName: string, awsRegion: string, useCallerCredentials: bool, deltaSyncConfig: record, versioned: bool>, lambdaConfig: record<lambdaFunctionArn: string>, elasticsearchConfig: record<endpoint: string, awsRegion: string>, openSearchServiceConfig: record<endpoint: string, awsRegion: string>, httpConfig: record<endpoint: string, authorizationConfig: record>, relationalDatabaseConfig: record<relationalDatabaseSourceType: string, rdsHttpEndpointConfig: record>, eventBridgeConfig: record<eventBusArn: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -607,7 +607,7 @@ export def "list-data-sources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<dataSources: record, nextToken: record> {
+]: nothing -> record<dataSources: table<dataSourceArn: string, name: string, description: string, type: string, serviceRoleArn: string, dynamodbConfig: record, lambdaConfig: record, elasticsearchConfig: record, openSearchServiceConfig: record, httpConfig: record, relationalDatabaseConfig: record, eventBridgeConfig: record>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
@@ -655,7 +655,7 @@ export def "create-domain-name" [
   domain_name: string # The domain name.
   certificate_arn: string # The Amazon Resource Name (ARN) of the certificate. This can be an Certificate Manager (ACM) certificate or an Identity and Access Management (IAM) server certificate.
   --description: string # A description of the DomainName.
-]: any -> record<domainNameConfig: record<domainName: record, description: record, certificateArn: record, appsyncDomainName: record, hostedZoneId: record>> {
+]: any -> record<domainNameConfig: record<domainName: string, description: string, certificateArn: string, appsyncDomainName: string, hostedZoneId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -703,7 +703,7 @@ export def "list-domain-names" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<domainNameConfigs: record, nextToken: record> {
+]: nothing -> record<domainNameConfigs: table<domainName: string, description: string, certificateArn: string, appsyncDomainName: string, hostedZoneId: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -730,8 +730,8 @@ export def "list-domain-names" [
 #
 # POST /v1/apis/{apiId}/functions
 # operationId: CreateFunction
-# --syncConfig shape: {conflictHandler?: any, conflictDetection?: any, lambdaConflictHandlerConfig?: any}
-# --runtime shape: {name?: any, runtimeVersion?: any}
+# --syncConfig shape: {conflictHandler?: "OPTIMISTIC_CONCURRENCY"|"LAMBDA"|"AUTOMERGE"|"NONE", conflictDetection?: "VERSION"|"NONE", lambdaConflictHandlerConfig?: record}
+# --runtime shape: {name?: "APPSYNC_JS", runtimeVersion?: string}
 export def "create-function" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -756,11 +756,11 @@ export def "create-function" [
   --request-mapping-template: string # The Function request mapping template. Functions support only the 2018-05-29 version of the request mapping template.
   --response-mapping-template: string # The Function response mapping template.
   --function-version: string # The version of the request mapping template. Currently, the supported value is 2018-05-29. Note that when using VTL and mapping templates, the functionVersion is required.
-  --sync-config: record # Describes a Sync configuration for a resolver. Specifies which Conflict Detection strategy and Resolution strategy to use when the resolver is invoked. — shape: {conflictHandler?: any, conflictDetection?: any, lambdaConflictHandlerConfig?: any}
+  --sync-config: record # Describes a Sync configuration for a resolver. Specifies which Conflict Detection strategy and Resolution strategy to use when the resolver is invoked. — shape: {conflictHandler?: "OPTIMISTIC_CONCURRENCY"|"LAMBDA"|"AUTOMERGE"|"NONE", conflictDetection?: "VERSION"|"NONE", lambdaConflictHandlerConfig?: record}
   --max-batch-size: int # The maximum batching size for a resolver.
-  --runtime: record # Describes a runtime used by an Amazon Web Services AppSync pipeline resolver or Amazon Web Services AppSync function. Specifies the name and version of the runtime to use. Note that if a runtime is specified, code must also be specified. — shape: {name?: any, runtimeVersion?: any}
+  --runtime: record # Describes a runtime used by an Amazon Web Services AppSync pipeline resolver or Amazon Web Services AppSync function. Specifies the name and version of the runtime to use. Note that if a runtime is specified, code must also be specified. — shape: {name?: "APPSYNC_JS", runtimeVersion?: string}
   --code: string # The function code that contains the request and response functions. When code is used, the runtime is required. The runtime value must be APPSYNC_JS.
-]: any -> record<functionConfiguration: record<functionId: record, functionArn: record, name: record, description: record, dataSourceName: record, requestMappingTemplate: record, responseMappingTemplate: record, functionVersion: record, syncConfig: record<conflictHandler: record, conflictDetection: record, lambdaConflictHandlerConfig: record>, maxBatchSize: record, runtime: record<name: record, runtimeVersion: record>, code: record>> {
+]: any -> record<functionConfiguration: record<functionId: string, functionArn: string, name: string, description: string, dataSourceName: string, requestMappingTemplate: string, responseMappingTemplate: string, functionVersion: string, syncConfig: record<conflictHandler: string, conflictDetection: string, lambdaConflictHandlerConfig: record>, maxBatchSize: int, runtime: record<name: string, runtimeVersion: string>, code: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -810,7 +810,7 @@ export def "list-functions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<functions: record, nextToken: record> {
+]: nothing -> record<functions: table<functionId: string, functionArn: string, name: string, description: string, dataSourceName: string, requestMappingTemplate: string, responseMappingTemplate: string, functionVersion: string, syncConfig: record, maxBatchSize: int, runtime: record, code: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
@@ -838,11 +838,11 @@ export def "list-functions" [
 #
 # POST /v1/apis
 # operationId: CreateGraphqlApi
-# --logConfig shape: {fieldLogLevel?: any, cloudWatchLogsRoleArn?: any, excludeVerboseContent?: any}
-# --userPoolConfig shape: {userPoolId?: any, awsRegion?: any, defaultAction?: any, appIdClientRegex?: any}
-# --openIDConnectConfig shape: {issuer?: any, clientId?: any, iatTTL?: any, authTTL?: any}
-# --additionalAuthenticationProviders item shape: {authenticationType?: any, openIDConnectConfig?: any, userPoolConfig?: any, lambdaAuthorizerConfig?: any}
-# --lambdaAuthorizerConfig shape: {authorizerResultTtlInSeconds?: any, authorizerUri?: any, identityValidationExpression?: any}
+# --logConfig shape: {fieldLogLevel?: "NONE"|"ERROR"|"ALL", cloudWatchLogsRoleArn?: string, excludeVerboseContent?: bool}
+# --userPoolConfig shape: {userPoolId?: string, awsRegion?: string, defaultAction?: "ALLOW"|"DENY", appIdClientRegex?: string}
+# --openIDConnectConfig shape: {issuer?: string, clientId?: string, iatTTL?: int, authTTL?: int}
+# --additionalAuthenticationProviders item shape: {authenticationType?: "API_KEY"|"AWS_IAM"|"AMAZON_COGNITO_USER_POOLS"|"OPENID_CONNECT"|"AWS_LAMBDA", openIDConnectConfig?: record, userPoolConfig?: record, lambdaAuthorizerConfig?: record}
+# --lambdaAuthorizerConfig shape: {authorizerResultTtlInSeconds?: int, authorizerUri?: string, identityValidationExpression?: string}
 export def "create-graphql-api" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -861,15 +861,15 @@ export def "create-graphql-api" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   name: string # A user-supplied name for the GraphqlApi.
-  --log-config: record # The Amazon CloudWatch Logs configuration. — shape: {fieldLogLevel?: any, cloudWatchLogsRoleArn?: any, excludeVerboseContent?: any}
+  --log-config: record # The Amazon CloudWatch Logs configuration. — shape: {fieldLogLevel?: "NONE"|"ERROR"|"ALL", cloudWatchLogsRoleArn?: string, excludeVerboseContent?: bool}
   authentication_type: string@authentication-type-completer # The authentication type: API key, Identity and Access Management (IAM), OpenID Connect (OIDC), Amazon Cognito user pools, or Lambda.
-  --user-pool-config: record # Describes an Amazon Cognito user pool configuration. — shape: {userPoolId?: any, awsRegion?: any, defaultAction?: any, appIdClientRegex?: any}
-  --open-id-connect-config: record # Describes an OpenID Connect (OIDC) configuration. — shape: {issuer?: any, clientId?: any, iatTTL?: any, authTTL?: any}
+  --user-pool-config: record # Describes an Amazon Cognito user pool configuration. — shape: {userPoolId?: string, awsRegion?: string, defaultAction?: "ALLOW"|"DENY", appIdClientRegex?: string}
+  --open-id-connect-config: record # Describes an OpenID Connect (OIDC) configuration. — shape: {issuer?: string, clientId?: string, iatTTL?: int, authTTL?: int}
   --tags: record # A map with keys of TagKey objects and values of TagValue objects.
-  --additional-authentication-providers: list # A list of additional authentication providers for the GraphqlApi API. — item shape: {authenticationType?: any, openIDConnectConfig?: any, userPoolConfig?: any, lambdaAuthorizerConfig?: any}
+  --additional-authentication-providers: list # A list of additional authentication providers for the GraphqlApi API. — item shape: {authenticationType?: "API_KEY"|"AWS_IAM"|"AMAZON_COGNITO_USER_POOLS"|"OPENID_CONNECT"|"AWS_LAMBDA", openIDConnectConfig?: record, userPoolConfig?: record, lambdaAuthorizerConfig?: record}
   --xray-enabled: oneof<nothing, bool> # A flag indicating whether to use X-Ray tracing for the GraphqlApi.
-  --lambda-authorizer-config: record # A LambdaAuthorizerConfig specifies how to authorize AppSync API access when using the AWS_LAMBDA authorizer mode. Be aware that an AppSync API can have only one Lambda authorizer configured at a time. — shape: {authorizerResultTtlInSeconds?: any, authorizerUri?: any, identityValidationExpression?: any}
-]: any -> record<graphqlApi: record<name: record, apiId: record, authenticationType: record, logConfig: record<fieldLogLevel: record, cloudWatchLogsRoleArn: record, excludeVerboseContent: record>, userPoolConfig: record<userPoolId: record, awsRegion: record, defaultAction: record, appIdClientRegex: record>, openIDConnectConfig: record<issuer: record, clientId: record, iatTTL: record, authTTL: record>, arn: record, uris: record, tags: record, additionalAuthenticationProviders: record, xrayEnabled: record, wafWebAclArn: record, lambdaAuthorizerConfig: record<authorizerResultTtlInSeconds: record, authorizerUri: record, identityValidationExpression: record>>> {
+  --lambda-authorizer-config: record # A LambdaAuthorizerConfig specifies how to authorize AppSync API access when using the AWS_LAMBDA authorizer mode. Be aware that an AppSync API can have only one Lambda authorizer configured at a time. — shape: {authorizerResultTtlInSeconds?: int, authorizerUri?: string, identityValidationExpression?: string}
+]: any -> record<graphqlApi: record<name: string, apiId: string, authenticationType: string, logConfig: record<fieldLogLevel: string, cloudWatchLogsRoleArn: string, excludeVerboseContent: bool>, userPoolConfig: record<userPoolId: string, awsRegion: string, defaultAction: string, appIdClientRegex: string>, openIDConnectConfig: record<issuer: string, clientId: string, iatTTL: int, authTTL: int>, arn: string, uris: record, tags: record, additionalAuthenticationProviders: list<record>, xrayEnabled: bool, wafWebAclArn: string, lambdaAuthorizerConfig: record<authorizerResultTtlInSeconds: int, authorizerUri: string, identityValidationExpression: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -917,7 +917,7 @@ export def "list-graphql-apis" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<graphqlApis: record, nextToken: record> {
+]: nothing -> record<graphqlApis: table<name: string, apiId: string, authenticationType: string, logConfig: record, userPoolConfig: record, openIDConnectConfig: record, arn: string, uris: record, tags: record, additionalAuthenticationProviders: list, xrayEnabled: bool, wafWebAclArn: string, lambdaAuthorizerConfig: record>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -944,10 +944,10 @@ export def "list-graphql-apis" [
 #
 # POST /v1/apis/{apiId}/types/{typeName}/resolvers
 # operationId: CreateResolver
-# --pipelineConfig shape: {functions?: any}
-# --syncConfig shape: {conflictHandler?: any, conflictDetection?: any, lambdaConflictHandlerConfig?: any}
-# --cachingConfig shape: {ttl?: any, cachingKeys?: any}
-# --runtime shape: {name?: any, runtimeVersion?: any}
+# --pipelineConfig shape: {functions?: list<string>}
+# --syncConfig shape: {conflictHandler?: "OPTIMISTIC_CONCURRENCY"|"LAMBDA"|"AUTOMERGE"|"NONE", conflictDetection?: "VERSION"|"NONE", lambdaConflictHandlerConfig?: record}
+# --cachingConfig shape: {ttl?: int, cachingKeys?: list<string>}
+# --runtime shape: {name?: "APPSYNC_JS", runtimeVersion?: string}
 export def "create-resolver" [
   api_id: string
   type_name: string
@@ -972,13 +972,13 @@ export def "create-resolver" [
   --request-mapping-template: string # The mapping template to use for requests. A resolver uses a request mapping template to convert a GraphQL expression into a format that a data source can understand. Mapping templates are written in Apache Velocity Template Language (VTL). VTL request mapping templates are optional when using an Lambda data source. For all other data sources, VTL request and response mapping templates are required.
   --response-mapping-template: string # The mapping template to use for responses from the data source.
   --kind: string@kind-completer # The resolver type. UNIT: A UNIT resolver type. A UNIT resolver is the default resolver type. You can use a UNIT resolver to run a GraphQL query against a single data source. PIPELINE: A PIPELINE resolver type. You can use a PIPELINE resolver to invoke a series of Function objects in a serial manner. You can use a pipeline resolver to run a GraphQL query against multiple data sources.
-  --pipeline-config: record # The pipeline configuration for a resolver of kind PIPELINE. — shape: {functions?: any}
-  --sync-config: record # Describes a Sync configuration for a resolver. Specifies which Conflict Detection strategy and Resolution strategy to use when the resolver is invoked. — shape: {conflictHandler?: any, conflictDetection?: any, lambdaConflictHandlerConfig?: any}
-  --caching-config: record # The caching configuration for a resolver that has caching activated. — shape: {ttl?: any, cachingKeys?: any}
+  --pipeline-config: record # The pipeline configuration for a resolver of kind PIPELINE. — shape: {functions?: list<string>}
+  --sync-config: record # Describes a Sync configuration for a resolver. Specifies which Conflict Detection strategy and Resolution strategy to use when the resolver is invoked. — shape: {conflictHandler?: "OPTIMISTIC_CONCURRENCY"|"LAMBDA"|"AUTOMERGE"|"NONE", conflictDetection?: "VERSION"|"NONE", lambdaConflictHandlerConfig?: record}
+  --caching-config: record # The caching configuration for a resolver that has caching activated. — shape: {ttl?: int, cachingKeys?: list<string>}
   --max-batch-size: int # The maximum batching size for a resolver.
-  --runtime: record # Describes a runtime used by an Amazon Web Services AppSync pipeline resolver or Amazon Web Services AppSync function. Specifies the name and version of the runtime to use. Note that if a runtime is specified, code must also be specified. — shape: {name?: any, runtimeVersion?: any}
+  --runtime: record # Describes a runtime used by an Amazon Web Services AppSync pipeline resolver or Amazon Web Services AppSync function. Specifies the name and version of the runtime to use. Note that if a runtime is specified, code must also be specified. — shape: {name?: "APPSYNC_JS", runtimeVersion?: string}
   --code: string # The resolver code that contains the request and response functions. When code is used, the runtime is required. The runtime value must be APPSYNC_JS.
-]: any -> record<resolver: record<typeName: record, fieldName: record, dataSourceName: record, resolverArn: record, requestMappingTemplate: record, responseMappingTemplate: record, kind: record, pipelineConfig: record<functions: record>, syncConfig: record<conflictHandler: record, conflictDetection: record, lambdaConflictHandlerConfig: record>, cachingConfig: record<ttl: record, cachingKeys: record>, maxBatchSize: record, runtime: record<name: record, runtimeVersion: record>, code: record>> {
+]: any -> record<resolver: record<typeName: string, fieldName: string, dataSourceName: string, resolverArn: string, requestMappingTemplate: string, responseMappingTemplate: string, kind: string, pipelineConfig: record<functions: list>, syncConfig: record<conflictHandler: string, conflictDetection: string, lambdaConflictHandlerConfig: record>, cachingConfig: record<ttl: int, cachingKeys: list>, maxBatchSize: int, runtime: record<name: string, runtimeVersion: string>, code: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1030,7 +1030,7 @@ export def "list-resolvers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<resolvers: record, nextToken: record> {
+]: nothing -> record<resolvers: table<typeName: string, fieldName: string, dataSourceName: string, resolverArn: string, requestMappingTemplate: string, responseMappingTemplate: string, kind: string, pipelineConfig: record, syncConfig: record, cachingConfig: record, maxBatchSize: int, runtime: record, code: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
@@ -1079,7 +1079,7 @@ export def "create-type" [
   --x-amz-signed-headers: string
   definition: string # The type definition, in GraphQL Schema Definition Language (SDL) format. For more information, see the GraphQL SDL documentation (http://graphql.org/learn/schema/).
   format: string@format-completer # The type format: SDL or JSON.
-]: any -> record<type: record<name: record, description: record, arn: record, definition: record, format: record>> {
+]: any -> record<type: record<name: string, description: string, arn: string, definition: string, format: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1177,7 +1177,7 @@ export def "update-api-key" [
   --x-amz-signed-headers: string
   --description: string # A description of the purpose of the API key.
   --expires: int # From the update time, the time after which the API key expires. The date is represented as seconds since the epoch. For more information, see .
-]: any -> record<apiKey: record<id: record, description: record, expires: record, deletes: record>> {
+]: any -> record<apiKey: record<id: string, description: string, expires: int, deletes: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1274,7 +1274,7 @@ export def "get-data-source" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<dataSource: record<dataSourceArn: record, name: record, description: record, type: record, serviceRoleArn: record, dynamodbConfig: record<tableName: record, awsRegion: record, useCallerCredentials: record, deltaSyncConfig: record, versioned: record>, lambdaConfig: record<lambdaFunctionArn: record>, elasticsearchConfig: record<endpoint: record, awsRegion: record>, openSearchServiceConfig: record<endpoint: record, awsRegion: record>, httpConfig: record<endpoint: record, authorizationConfig: record>, relationalDatabaseConfig: record<relationalDatabaseSourceType: record, rdsHttpEndpointConfig: record>, eventBridgeConfig: record<eventBusArn: record>>> {
+]: nothing -> record<dataSource: record<dataSourceArn: string, name: string, description: string, type: string, serviceRoleArn: string, dynamodbConfig: record<tableName: string, awsRegion: string, useCallerCredentials: bool, deltaSyncConfig: record, versioned: bool>, lambdaConfig: record<lambdaFunctionArn: string>, elasticsearchConfig: record<endpoint: string, awsRegion: string>, openSearchServiceConfig: record<endpoint: string, awsRegion: string>, httpConfig: record<endpoint: string, authorizationConfig: record>, relationalDatabaseConfig: record<relationalDatabaseSourceType: string, rdsHttpEndpointConfig: record>, eventBridgeConfig: record<eventBusArn: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
@@ -1302,13 +1302,13 @@ export def "get-data-source" [
 #
 # POST /v1/apis/{apiId}/datasources/{name}
 # operationId: UpdateDataSource
-# --dynamodbConfig shape: {tableName?: any, awsRegion?: any, useCallerCredentials?: any, deltaSyncConfig?: any, versioned?: any}
-# --lambdaConfig shape: {lambdaFunctionArn?: any}
-# --elasticsearchConfig shape: {endpoint?: any, awsRegion?: any}
-# --openSearchServiceConfig shape: {endpoint?: any, awsRegion?: any}
-# --httpConfig shape: {endpoint?: any, authorizationConfig?: any}
-# --relationalDatabaseConfig shape: {relationalDatabaseSourceType?: any, rdsHttpEndpointConfig?: any}
-# --eventBridgeConfig shape: {eventBusArn?: any}
+# --dynamodbConfig shape: {tableName?: string, awsRegion?: string, useCallerCredentials?: bool, deltaSyncConfig?: record, versioned?: bool}
+# --lambdaConfig shape: {lambdaFunctionArn?: string}
+# --elasticsearchConfig shape: {endpoint?: string, awsRegion?: string}
+# --openSearchServiceConfig shape: {endpoint?: string, awsRegion?: string}
+# --httpConfig shape: {endpoint?: string, authorizationConfig?: record}
+# --relationalDatabaseConfig shape: {relationalDatabaseSourceType?: "RDS_HTTP_ENDPOINT", rdsHttpEndpointConfig?: record}
+# --eventBridgeConfig shape: {eventBusArn?: string}
 export def "update-data-source" [
   api_id: string
   name: string
@@ -1331,14 +1331,14 @@ export def "update-data-source" [
   --description: string # The new description for the data source.
   type: string@type-completer-1 # The new data source type.
   --service-role-arn: string # The new service role Amazon Resource Name (ARN) for the data source.
-  --dynamodb-config: record # Describes an Amazon DynamoDB data source configuration. — shape: {tableName?: any, awsRegion?: any, useCallerCredentials?: any, deltaSyncConfig?: any, versioned?: any}
-  --lambda-config: record # Describes an Lambda data source configuration. — shape: {lambdaFunctionArn?: any}
-  --elasticsearch-config: record # Describes an OpenSearch data source configuration. As of September 2021, Amazon Elasticsearch service is Amazon OpenSearch Service. This configuration is deprecated. For new data sources, use OpenSearchServiceDataSourceConfig to specify an OpenSearch data source. — shape: {endpoint?: any, awsRegion?: any}
-  --open-search-service-config: record # Describes an OpenSearch data source configuration. — shape: {endpoint?: any, awsRegion?: any}
-  --http-config: record # Describes an HTTP data source configuration. — shape: {endpoint?: any, authorizationConfig?: any}
-  --relational-database-config: record # Describes a relational database data source configuration. — shape: {relationalDatabaseSourceType?: any, rdsHttpEndpointConfig?: any}
-  --event-bridge-config: record # Describes an Amazon EventBridge bus data source configuration. — shape: {eventBusArn?: any}
-]: any -> record<dataSource: record<dataSourceArn: record, name: record, description: record, type: record, serviceRoleArn: record, dynamodbConfig: record<tableName: record, awsRegion: record, useCallerCredentials: record, deltaSyncConfig: record, versioned: record>, lambdaConfig: record<lambdaFunctionArn: record>, elasticsearchConfig: record<endpoint: record, awsRegion: record>, openSearchServiceConfig: record<endpoint: record, awsRegion: record>, httpConfig: record<endpoint: record, authorizationConfig: record>, relationalDatabaseConfig: record<relationalDatabaseSourceType: record, rdsHttpEndpointConfig: record>, eventBridgeConfig: record<eventBusArn: record>>> {
+  --dynamodb-config: record # Describes an Amazon DynamoDB data source configuration. — shape: {tableName?: string, awsRegion?: string, useCallerCredentials?: bool, deltaSyncConfig?: record, versioned?: bool}
+  --lambda-config: record # Describes an Lambda data source configuration. — shape: {lambdaFunctionArn?: string}
+  --elasticsearch-config: record # Describes an OpenSearch data source configuration. As of September 2021, Amazon Elasticsearch service is Amazon OpenSearch Service. This configuration is deprecated. For new data sources, use OpenSearchServiceDataSourceConfig to specify an OpenSearch data source. — shape: {endpoint?: string, awsRegion?: string}
+  --open-search-service-config: record # Describes an OpenSearch data source configuration. — shape: {endpoint?: string, awsRegion?: string}
+  --http-config: record # Describes an HTTP data source configuration. — shape: {endpoint?: string, authorizationConfig?: record}
+  --relational-database-config: record # Describes a relational database data source configuration. — shape: {relationalDatabaseSourceType?: "RDS_HTTP_ENDPOINT", rdsHttpEndpointConfig?: record}
+  --event-bridge-config: record # Describes an Amazon EventBridge bus data source configuration. — shape: {eventBusArn?: string}
+]: any -> record<dataSource: record<dataSourceArn: string, name: string, description: string, type: string, serviceRoleArn: string, dynamodbConfig: record<tableName: string, awsRegion: string, useCallerCredentials: bool, deltaSyncConfig: record, versioned: bool>, lambdaConfig: record<lambdaFunctionArn: string>, elasticsearchConfig: record<endpoint: string, awsRegion: string>, openSearchServiceConfig: record<endpoint: string, awsRegion: string>, httpConfig: record<endpoint: string, authorizationConfig: record>, relationalDatabaseConfig: record<relationalDatabaseSourceType: string, rdsHttpEndpointConfig: record>, eventBridgeConfig: record<eventBusArn: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1432,7 +1432,7 @@ export def "get-domain-name" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<domainNameConfig: record<domainName: record, description: record, certificateArn: record, appsyncDomainName: record, hostedZoneId: record>> {
+]: nothing -> record<domainNameConfig: record<domainName: string, description: string, certificateArn: string, appsyncDomainName: string, hostedZoneId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
@@ -1478,7 +1478,7 @@ export def "update-domain-name" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --description: string # A description of the DomainName.
-]: any -> record<domainNameConfig: record<domainName: record, description: record, certificateArn: record, appsyncDomainName: record, hostedZoneId: record>> {
+]: any -> record<domainNameConfig: record<domainName: string, description: string, certificateArn: string, appsyncDomainName: string, hostedZoneId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1574,7 +1574,7 @@ export def "get-function" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<functionConfiguration: record<functionId: record, functionArn: record, name: record, description: record, dataSourceName: record, requestMappingTemplate: record, responseMappingTemplate: record, functionVersion: record, syncConfig: record<conflictHandler: record, conflictDetection: record, lambdaConflictHandlerConfig: record>, maxBatchSize: record, runtime: record<name: record, runtimeVersion: record>, code: record>> {
+]: nothing -> record<functionConfiguration: record<functionId: string, functionArn: string, name: string, description: string, dataSourceName: string, requestMappingTemplate: string, responseMappingTemplate: string, functionVersion: string, syncConfig: record<conflictHandler: string, conflictDetection: string, lambdaConflictHandlerConfig: record>, maxBatchSize: int, runtime: record<name: string, runtimeVersion: string>, code: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
@@ -1602,8 +1602,8 @@ export def "get-function" [
 #
 # POST /v1/apis/{apiId}/functions/{functionId}
 # operationId: UpdateFunction
-# --syncConfig shape: {conflictHandler?: any, conflictDetection?: any, lambdaConflictHandlerConfig?: any}
-# --runtime shape: {name?: any, runtimeVersion?: any}
+# --syncConfig shape: {conflictHandler?: "OPTIMISTIC_CONCURRENCY"|"LAMBDA"|"AUTOMERGE"|"NONE", conflictDetection?: "VERSION"|"NONE", lambdaConflictHandlerConfig?: record}
+# --runtime shape: {name?: "APPSYNC_JS", runtimeVersion?: string}
 export def "update-function" [
   api_id: string
   function_id: string
@@ -1629,11 +1629,11 @@ export def "update-function" [
   --request-mapping-template: string # The Function request mapping template. Functions support only the 2018-05-29 version of the request mapping template.
   --response-mapping-template: string # The Function request mapping template.
   --function-version: string # The version of the request mapping template. Currently, the supported value is 2018-05-29. Note that when using VTL and mapping templates, the functionVersion is required.
-  --sync-config: record # Describes a Sync configuration for a resolver. Specifies which Conflict Detection strategy and Resolution strategy to use when the resolver is invoked. — shape: {conflictHandler?: any, conflictDetection?: any, lambdaConflictHandlerConfig?: any}
+  --sync-config: record # Describes a Sync configuration for a resolver. Specifies which Conflict Detection strategy and Resolution strategy to use when the resolver is invoked. — shape: {conflictHandler?: "OPTIMISTIC_CONCURRENCY"|"LAMBDA"|"AUTOMERGE"|"NONE", conflictDetection?: "VERSION"|"NONE", lambdaConflictHandlerConfig?: record}
   --max-batch-size: int # The maximum batching size for a resolver.
-  --runtime: record # Describes a runtime used by an Amazon Web Services AppSync pipeline resolver or Amazon Web Services AppSync function. Specifies the name and version of the runtime to use. Note that if a runtime is specified, code must also be specified. — shape: {name?: any, runtimeVersion?: any}
+  --runtime: record # Describes a runtime used by an Amazon Web Services AppSync pipeline resolver or Amazon Web Services AppSync function. Specifies the name and version of the runtime to use. Note that if a runtime is specified, code must also be specified. — shape: {name?: "APPSYNC_JS", runtimeVersion?: string}
   --code: string # The function code that contains the request and response functions. When code is used, the runtime is required. The runtime value must be APPSYNC_JS.
-]: any -> record<functionConfiguration: record<functionId: record, functionArn: record, name: record, description: record, dataSourceName: record, requestMappingTemplate: record, responseMappingTemplate: record, functionVersion: record, syncConfig: record<conflictHandler: record, conflictDetection: record, lambdaConflictHandlerConfig: record>, maxBatchSize: record, runtime: record<name: record, runtimeVersion: record>, code: record>> {
+]: any -> record<functionConfiguration: record<functionId: string, functionArn: string, name: string, description: string, dataSourceName: string, requestMappingTemplate: string, responseMappingTemplate: string, functionVersion: string, syncConfig: record<conflictHandler: string, conflictDetection: string, lambdaConflictHandlerConfig: record>, maxBatchSize: int, runtime: record<name: string, runtimeVersion: string>, code: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1727,7 +1727,7 @@ export def "get-graphql-api" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<graphqlApi: record<name: record, apiId: record, authenticationType: record, logConfig: record<fieldLogLevel: record, cloudWatchLogsRoleArn: record, excludeVerboseContent: record>, userPoolConfig: record<userPoolId: record, awsRegion: record, defaultAction: record, appIdClientRegex: record>, openIDConnectConfig: record<issuer: record, clientId: record, iatTTL: record, authTTL: record>, arn: record, uris: record, tags: record, additionalAuthenticationProviders: record, xrayEnabled: record, wafWebAclArn: record, lambdaAuthorizerConfig: record<authorizerResultTtlInSeconds: record, authorizerUri: record, identityValidationExpression: record>>> {
+]: nothing -> record<graphqlApi: record<name: string, apiId: string, authenticationType: string, logConfig: record<fieldLogLevel: string, cloudWatchLogsRoleArn: string, excludeVerboseContent: bool>, userPoolConfig: record<userPoolId: string, awsRegion: string, defaultAction: string, appIdClientRegex: string>, openIDConnectConfig: record<issuer: string, clientId: string, iatTTL: int, authTTL: int>, arn: string, uris: record, tags: record, additionalAuthenticationProviders: list<record>, xrayEnabled: bool, wafWebAclArn: string, lambdaAuthorizerConfig: record<authorizerResultTtlInSeconds: int, authorizerUri: string, identityValidationExpression: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
@@ -1754,11 +1754,11 @@ export def "get-graphql-api" [
 #
 # POST /v1/apis/{apiId}
 # operationId: UpdateGraphqlApi
-# --logConfig shape: {fieldLogLevel?: any, cloudWatchLogsRoleArn?: any, excludeVerboseContent?: any}
-# --userPoolConfig shape: {userPoolId?: any, awsRegion?: any, defaultAction?: any, appIdClientRegex?: any}
-# --openIDConnectConfig shape: {issuer?: any, clientId?: any, iatTTL?: any, authTTL?: any}
-# --additionalAuthenticationProviders item shape: {authenticationType?: any, openIDConnectConfig?: any, userPoolConfig?: any, lambdaAuthorizerConfig?: any}
-# --lambdaAuthorizerConfig shape: {authorizerResultTtlInSeconds?: any, authorizerUri?: any, identityValidationExpression?: any}
+# --logConfig shape: {fieldLogLevel?: "NONE"|"ERROR"|"ALL", cloudWatchLogsRoleArn?: string, excludeVerboseContent?: bool}
+# --userPoolConfig shape: {userPoolId?: string, awsRegion?: string, defaultAction?: "ALLOW"|"DENY", appIdClientRegex?: string}
+# --openIDConnectConfig shape: {issuer?: string, clientId?: string, iatTTL?: int, authTTL?: int}
+# --additionalAuthenticationProviders item shape: {authenticationType?: "API_KEY"|"AWS_IAM"|"AMAZON_COGNITO_USER_POOLS"|"OPENID_CONNECT"|"AWS_LAMBDA", openIDConnectConfig?: record, userPoolConfig?: record, lambdaAuthorizerConfig?: record}
+# --lambdaAuthorizerConfig shape: {authorizerResultTtlInSeconds?: int, authorizerUri?: string, identityValidationExpression?: string}
 export def "update-graphql-api" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1778,14 +1778,14 @@ export def "update-graphql-api" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   name: string # The new name for the GraphqlApi object.
-  --log-config: record # The Amazon CloudWatch Logs configuration. — shape: {fieldLogLevel?: any, cloudWatchLogsRoleArn?: any, excludeVerboseContent?: any}
+  --log-config: record # The Amazon CloudWatch Logs configuration. — shape: {fieldLogLevel?: "NONE"|"ERROR"|"ALL", cloudWatchLogsRoleArn?: string, excludeVerboseContent?: bool}
   --authentication-type: string@authentication-type-completer # The new authentication type for the GraphqlApi object.
-  --user-pool-config: record # Describes an Amazon Cognito user pool configuration. — shape: {userPoolId?: any, awsRegion?: any, defaultAction?: any, appIdClientRegex?: any}
-  --open-id-connect-config: record # Describes an OpenID Connect (OIDC) configuration. — shape: {issuer?: any, clientId?: any, iatTTL?: any, authTTL?: any}
-  --additional-authentication-providers: list # A list of additional authentication providers for the GraphqlApi API. — item shape: {authenticationType?: any, openIDConnectConfig?: any, userPoolConfig?: any, lambdaAuthorizerConfig?: any}
+  --user-pool-config: record # Describes an Amazon Cognito user pool configuration. — shape: {userPoolId?: string, awsRegion?: string, defaultAction?: "ALLOW"|"DENY", appIdClientRegex?: string}
+  --open-id-connect-config: record # Describes an OpenID Connect (OIDC) configuration. — shape: {issuer?: string, clientId?: string, iatTTL?: int, authTTL?: int}
+  --additional-authentication-providers: list # A list of additional authentication providers for the GraphqlApi API. — item shape: {authenticationType?: "API_KEY"|"AWS_IAM"|"AMAZON_COGNITO_USER_POOLS"|"OPENID_CONNECT"|"AWS_LAMBDA", openIDConnectConfig?: record, userPoolConfig?: record, lambdaAuthorizerConfig?: record}
   --xray-enabled: oneof<nothing, bool> # A flag indicating whether to use X-Ray tracing for the GraphqlApi.
-  --lambda-authorizer-config: record # A LambdaAuthorizerConfig specifies how to authorize AppSync API access when using the AWS_LAMBDA authorizer mode. Be aware that an AppSync API can have only one Lambda authorizer configured at a time. — shape: {authorizerResultTtlInSeconds?: any, authorizerUri?: any, identityValidationExpression?: any}
-]: any -> record<graphqlApi: record<name: record, apiId: record, authenticationType: record, logConfig: record<fieldLogLevel: record, cloudWatchLogsRoleArn: record, excludeVerboseContent: record>, userPoolConfig: record<userPoolId: record, awsRegion: record, defaultAction: record, appIdClientRegex: record>, openIDConnectConfig: record<issuer: record, clientId: record, iatTTL: record, authTTL: record>, arn: record, uris: record, tags: record, additionalAuthenticationProviders: record, xrayEnabled: record, wafWebAclArn: record, lambdaAuthorizerConfig: record<authorizerResultTtlInSeconds: record, authorizerUri: record, identityValidationExpression: record>>> {
+  --lambda-authorizer-config: record # A LambdaAuthorizerConfig specifies how to authorize AppSync API access when using the AWS_LAMBDA authorizer mode. Be aware that an AppSync API can have only one Lambda authorizer configured at a time. — shape: {authorizerResultTtlInSeconds?: int, authorizerUri?: string, identityValidationExpression?: string}
+]: any -> record<graphqlApi: record<name: string, apiId: string, authenticationType: string, logConfig: record<fieldLogLevel: string, cloudWatchLogsRoleArn: string, excludeVerboseContent: bool>, userPoolConfig: record<userPoolId: string, awsRegion: string, defaultAction: string, appIdClientRegex: string>, openIDConnectConfig: record<issuer: string, clientId: string, iatTTL: int, authTTL: int>, arn: string, uris: record, tags: record, additionalAuthenticationProviders: list<record>, xrayEnabled: bool, wafWebAclArn: string, lambdaAuthorizerConfig: record<authorizerResultTtlInSeconds: int, authorizerUri: string, identityValidationExpression: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1884,7 +1884,7 @@ export def "get-resolver" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<resolver: record<typeName: record, fieldName: record, dataSourceName: record, resolverArn: record, requestMappingTemplate: record, responseMappingTemplate: record, kind: record, pipelineConfig: record<functions: record>, syncConfig: record<conflictHandler: record, conflictDetection: record, lambdaConflictHandlerConfig: record>, cachingConfig: record<ttl: record, cachingKeys: record>, maxBatchSize: record, runtime: record<name: record, runtimeVersion: record>, code: record>> {
+]: nothing -> record<resolver: record<typeName: string, fieldName: string, dataSourceName: string, resolverArn: string, requestMappingTemplate: string, responseMappingTemplate: string, kind: string, pipelineConfig: record<functions: list>, syncConfig: record<conflictHandler: string, conflictDetection: string, lambdaConflictHandlerConfig: record>, cachingConfig: record<ttl: int, cachingKeys: list>, maxBatchSize: int, runtime: record<name: string, runtimeVersion: string>, code: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
@@ -1913,10 +1913,10 @@ export def "get-resolver" [
 #
 # POST /v1/apis/{apiId}/types/{typeName}/resolvers/{fieldName}
 # operationId: UpdateResolver
-# --pipelineConfig shape: {functions?: any}
-# --syncConfig shape: {conflictHandler?: any, conflictDetection?: any, lambdaConflictHandlerConfig?: any}
-# --cachingConfig shape: {ttl?: any, cachingKeys?: any}
-# --runtime shape: {name?: any, runtimeVersion?: any}
+# --pipelineConfig shape: {functions?: list<string>}
+# --syncConfig shape: {conflictHandler?: "OPTIMISTIC_CONCURRENCY"|"LAMBDA"|"AUTOMERGE"|"NONE", conflictDetection?: "VERSION"|"NONE", lambdaConflictHandlerConfig?: record}
+# --cachingConfig shape: {ttl?: int, cachingKeys?: list<string>}
+# --runtime shape: {name?: "APPSYNC_JS", runtimeVersion?: string}
 export def "update-resolver" [
   api_id: string
   type_name: string
@@ -1941,13 +1941,13 @@ export def "update-resolver" [
   --request-mapping-template: string # The new request mapping template. A resolver uses a request mapping template to convert a GraphQL expression into a format that a data source can understand. Mapping templates are written in Apache Velocity Template Language (VTL). VTL request mapping templates are optional when using an Lambda data source. For all other data sources, VTL request and response mapping templates are required.
   --response-mapping-template: string # The new response mapping template.
   --kind: string@kind-completer # The resolver type. UNIT: A UNIT resolver type. A UNIT resolver is the default resolver type. You can use a UNIT resolver to run a GraphQL query against a single data source. PIPELINE: A PIPELINE resolver type. You can use a PIPELINE resolver to invoke a series of Function objects in a serial manner. You can use a pipeline resolver to run a GraphQL query against multiple data sources.
-  --pipeline-config: record # The pipeline configuration for a resolver of kind PIPELINE. — shape: {functions?: any}
-  --sync-config: record # Describes a Sync configuration for a resolver. Specifies which Conflict Detection strategy and Resolution strategy to use when the resolver is invoked. — shape: {conflictHandler?: any, conflictDetection?: any, lambdaConflictHandlerConfig?: any}
-  --caching-config: record # The caching configuration for a resolver that has caching activated. — shape: {ttl?: any, cachingKeys?: any}
+  --pipeline-config: record # The pipeline configuration for a resolver of kind PIPELINE. — shape: {functions?: list<string>}
+  --sync-config: record # Describes a Sync configuration for a resolver. Specifies which Conflict Detection strategy and Resolution strategy to use when the resolver is invoked. — shape: {conflictHandler?: "OPTIMISTIC_CONCURRENCY"|"LAMBDA"|"AUTOMERGE"|"NONE", conflictDetection?: "VERSION"|"NONE", lambdaConflictHandlerConfig?: record}
+  --caching-config: record # The caching configuration for a resolver that has caching activated. — shape: {ttl?: int, cachingKeys?: list<string>}
   --max-batch-size: int # The maximum batching size for a resolver.
-  --runtime: record # Describes a runtime used by an Amazon Web Services AppSync pipeline resolver or Amazon Web Services AppSync function. Specifies the name and version of the runtime to use. Note that if a runtime is specified, code must also be specified. — shape: {name?: any, runtimeVersion?: any}
+  --runtime: record # Describes a runtime used by an Amazon Web Services AppSync pipeline resolver or Amazon Web Services AppSync function. Specifies the name and version of the runtime to use. Note that if a runtime is specified, code must also be specified. — shape: {name?: "APPSYNC_JS", runtimeVersion?: string}
   --code: string # The resolver code that contains the request and response functions. When code is used, the runtime is required. The runtime value must be APPSYNC_JS.
-]: any -> record<resolver: record<typeName: record, fieldName: record, dataSourceName: record, resolverArn: record, requestMappingTemplate: record, responseMappingTemplate: record, kind: record, pipelineConfig: record<functions: record>, syncConfig: record<conflictHandler: record, conflictDetection: record, lambdaConflictHandlerConfig: record>, cachingConfig: record<ttl: record, cachingKeys: record>, maxBatchSize: record, runtime: record<name: record, runtimeVersion: record>, code: record>> {
+]: any -> record<resolver: record<typeName: string, fieldName: string, dataSourceName: string, resolverArn: string, requestMappingTemplate: string, responseMappingTemplate: string, kind: string, pipelineConfig: record<functions: list>, syncConfig: record<conflictHandler: string, conflictDetection: string, lambdaConflictHandlerConfig: record>, cachingConfig: record<ttl: int, cachingKeys: list>, maxBatchSize: int, runtime: record<name: string, runtimeVersion: string>, code: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2047,7 +2047,7 @@ export def "update-type" [
   --x-amz-signed-headers: string
   --definition: string # The new definition.
   format: string@format-completer # The new type format: SDL or JSON.
-]: any -> record<type: record<name: record, description: record, arn: record, definition: record, format: record>> {
+]: any -> record<type: record<name: string, description: string, arn: string, definition: string, format: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2078,7 +2078,7 @@ export def "update-type" [
 #
 # POST /v1/dataplane-evaluatecode
 # operationId: EvaluateCode
-# --runtime shape: {name?: any, runtimeVersion?: any}
+# --runtime shape: {name?: "APPSYNC_JS", runtimeVersion?: string}
 export def "evaluate-code" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2096,11 +2096,11 @@ export def "evaluate-code" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  runtime: record # Describes a runtime used by an Amazon Web Services AppSync pipeline resolver or Amazon Web Services AppSync function. Specifies the name and version of the runtime to use. Note that if a runtime is specified, code must also be specified. — shape: {name?: any, runtimeVersion?: any}
+  runtime: record # Describes a runtime used by an Amazon Web Services AppSync pipeline resolver or Amazon Web Services AppSync function. Specifies the name and version of the runtime to use. Note that if a runtime is specified, code must also be specified. — shape: {name?: "APPSYNC_JS", runtimeVersion?: string}
   code: string # The code definition to be evaluated. Note that code and runtime are both required for this action. The runtime value must be APPSYNC_JS.
   context: string # The map that holds all of the contextual information for your resolver invocation. A context is required for this action.
   --function: string # The function within the code to be evaluated. If provided, the valid values are request and response.
-]: any -> record<evaluationResult: record, error: record<message: record, codeErrors: record>, logs: record> {
+]: any -> record<evaluationResult: string, error: record<message: string, codeErrors: list<record>>, logs: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2148,7 +2148,7 @@ export def "evaluate-mapping-template" [
   --x-amz-signed-headers: string
   template: string # The mapping template; this can be a request or response template. A template is required for this action.
   context: string # The map that holds all of the contextual information for your resolver invocation. A context is required for this action.
-]: any -> record<evaluationResult: record, error: record<message: record>, logs: record> {
+]: any -> record<evaluationResult: string, error: record<message: string>, logs: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2233,7 +2233,7 @@ export def "get-introspection-schema" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --format: string@format-completer # The schema format: SDL or JSON.
+  --format: string@format-completer # The schema format: SDL or JSON. (required)
   --include-directives: oneof<nothing, bool> # A flag that specifies whether the schema introspection should contain directives.
   --x-amz-content-sha256: string
   --x-amz-date: string
@@ -2242,10 +2242,11 @@ export def "get-introspection-schema" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<schema: record> {
+]: nothing -> record<schema: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
+  if ($format == null) { error make --unspanned { msg: "required query parameter 'format' missing: pass --format" } }
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "includeDirectives" $include_directives "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({api_id: (encode-path-segment $api_id)} | format pattern "/v1/apis/{api_id}/schema") $qp $auth.query)
   let accept_val = "application/json"
@@ -2288,7 +2289,7 @@ export def "get-schema-creation-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<status: record, details: record> {
+]: nothing -> record<status: string, details: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
@@ -2334,7 +2335,7 @@ export def "start-schema-creation" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   definition: string # The schema definition, in GraphQL schema language format.
-]: any -> record<status: record> {
+]: any -> record<status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2376,7 +2377,7 @@ export def "get-type" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --format: string@format-completer # The type format: SDL or JSON.
+  --format: string@format-completer # The type format: SDL or JSON. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2384,11 +2385,12 @@ export def "get-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<type: record<name: record, description: record, arn: record, definition: record, format: record>> {
+]: nothing -> record<type: record<name: string, description: string, arn: string, definition: string, format: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
   if ($type_name | is-empty) { error make --unspanned { msg: "path parameter 'typeName' must be non-empty" } }
+  if ($format == null) { error make --unspanned { msg: "required query parameter 'format' missing: pass --format" } }
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({api_id: (encode-path-segment $api_id), type_name: (encode-path-segment $type_name)} | format pattern "/v1/apis/{api_id}/types/{type_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2434,7 +2436,7 @@ export def "list-resolvers-by-function" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<resolvers: record, nextToken: record> {
+]: nothing -> record<resolvers: table<typeName: string, fieldName: string, dataSourceName: string, resolverArn: string, requestMappingTemplate: string, responseMappingTemplate: string, kind: string, pipelineConfig: record, syncConfig: record, cachingConfig: record, maxBatchSize: int, runtime: record, code: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
@@ -2568,7 +2570,7 @@ export def "list-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --format: string@format-completer # The type format: SDL or JSON.
+  --format: string@format-completer # The type format: SDL or JSON. (required)
   --next-token: string # An identifier that was returned from the previous call to this operation, which you can use to return the next set of items in the list.
   --max-results: int # The maximum number of results that you want the request to return.
   --x-amz-content-sha256: string
@@ -2578,10 +2580,11 @@ export def "list-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<types: record, nextToken: record> {
+]: nothing -> record<types: table<name: string, description: string, arn: string, definition: string, format: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
+  if ($format == null) { error make --unspanned { msg: "required query parameter 'format' missing: pass --format" } }
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({api_id: (encode-path-segment $api_id)} | format pattern "/v1/apis/{api_id}/types") $qp $auth.query)
   let accept_val = "application/json"
@@ -2617,7 +2620,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # A list of TagKey objects.
+  --tag-keys: list # A list of TagKey objects. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2629,6 +2632,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/v1/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2674,7 +2678,7 @@ export def "update-api-cache" [
   ttl: int # TTL in seconds for cache entries. Valid values are 1–3,600 seconds.
   api_caching_behavior: string@api-caching-behavior-completer # Caching behavior. FULL_REQUEST_CACHING: All requests are fully cached. PER_RESOLVER_CACHING: Individual resolvers that you specify are cached.
   type: string@type-completer # The cache instance type. Valid values are SMALL MEDIUM LARGE XLARGE LARGE_2X LARGE_4X LARGE_8X (not available in all regions) LARGE_12X Historically, instance types were identified by an EC2-style value. As of July 2020, this is deprecated, and the generic identifiers above should be used. The following legacy instance types are available, but their use is discouraged: T2_SMALL: A t2.small instance type. T2_MEDIUM: A t2.medium instance type. R4_LARGE: A r4.large instance type. R4_XLARGE: A r4.xlarge instance type. R4_2XLARGE: A r4.2xlarge instance type. R4_4XLARGE: A r4.4xlarge instance type. R4_8XLARGE: A r4.8xlarge instance type.
-]: any -> record<apiCache: record<ttl: record, apiCachingBehavior: record, transitEncryptionEnabled: record, atRestEncryptionEnabled: record, type: record, status: record>> {
+]: any -> record<apiCache: record<ttl: int, apiCachingBehavior: string, transitEncryptionEnabled: bool, atRestEncryptionEnabled: bool, type: string, status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

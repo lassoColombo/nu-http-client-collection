@@ -1,6 +1,7 @@
 # Auto-generated client for Number Insight API v1.2.1
 # Source: https://api.apis.guru/v2/specs/nexmo.com/number-insight/1.2.1/openapi.json
-# Auth: --token flag or $env.NUMBER_INSIGHT_API_TOKEN
+# Auth (apiKey): --token-apikey flag or $env.NUMBER_INSIGHT_API_APIKEY_TOKEN
+# Auth (apiSecret): --token-apisecret flag or $env.NUMBER_INSIGHT_API_APISECRET_TOKEN
 
 const BASE_URL = "https://api.nexmo.com/ni"
 
@@ -106,11 +107,12 @@ def base-url-completer [] { ["https://api.nexmo.com/ni"] }
 def auth-scheme-completer [] { ["query-api_key" "query-api_secret"] }
 
 # Completers for enum parameters
+def format-completer [] { ["json" "xml"] }
 def accept-completer [] { ["application/json" "text/xml"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-apikey" "token-apisecret"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-number-insight-async" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -137,7 +139,7 @@ export def commands []: nothing -> table {
 # operationId: getNumberInsightAsync
 @deprecated --flag ip
 export def "get-number-insight-async" [
-  format: any
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (api_key)
   --token-apisecret: string # Auth token for apiSecret (api_secret)
@@ -148,8 +150,8 @@ export def "get-number-insight-async" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --callback: string # The callback URL (format: uriref, e.g. https://example.com/callback)
-  --number: string # A single phone number that you need insight about in national or international format. (e.g. 447700900000)
+  --callback: string # The callback URL (required, format: uriref, e.g. https://example.com/callback)
+  --number: string # A single phone number that you need insight about in national or international format. (required, e.g. 447700900000)
   --country: string # If a number does not have a country code or is uncertain, set the two-character country code. This code must be in ISO 3166-1 alpha-2 format and in upper case. For example, GB or US. If you set country and number is already in [E.164](https://en.wikipedia.org/wiki/E.164) format, country must match the country code in number. (e.g. GB)
   --cnam: oneof<nothing, bool> # Indicates if the name of the person who owns the phone number should be looked up and returned in the response. Set to true to receive phone number owner name in the response. This features is available for US numbers only and incurs an additional charge. (default: false, e.g. true)
   --ip: string # This parameter is deprecated as we are no longer able to retrieve reliable IP data globally from carriers. (DEPRECATED, e.g. 123.0.0.255)
@@ -157,6 +159,8 @@ export def "get-number-insight-async" [
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NUMBER_INSIGHT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_apisecret | default ($env | get -o NUMBER_INSIGHT_API_APISECRET_TOKEN | default "")) "query-api_secret")])
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
+  if ($callback == null) { error make --unspanned { msg: "required query parameter 'callback' missing: pass --callback" } }
+  if ($number == null) { error make --unspanned { msg: "required query parameter 'number' missing: pass --number" } }
   let qp = [(serialize-qp "callback" $callback "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "cnam" $cnam "scalar") (serialize-qp "ip" $ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/advanced/async/{format}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -181,7 +185,7 @@ export def "get-number-insight-async" [
 # operationId: getNumberInsightAdvanced
 @deprecated --flag ip
 export def "get-number-insight-advanced" [
-  format: any
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (api_key)
   --token-apisecret: string # Auth token for apiSecret (api_secret)
@@ -193,7 +197,7 @@ export def "get-number-insight-advanced" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --real-time-data: oneof<nothing, bool> # A boolean to choose whether to get real time data back in the response. (e.g. true)
-  --number: string # A single phone number that you need insight about in national or international format. (e.g. 447700900000)
+  --number: string # A single phone number that you need insight about in national or international format. (required, e.g. 447700900000)
   --country: string # If a number does not have a country code or is uncertain, set the two-character country code. This code must be in ISO 3166-1 alpha-2 format and in upper case. For example, GB or US. If you set country and number is already in [E.164](https://en.wikipedia.org/wiki/E.164) format, country must match the country code in number. (e.g. GB)
   --cnam: oneof<nothing, bool> # Indicates if the name of the person who owns the phone number should be looked up and returned in the response. Set to true to receive phone number owner name in the response. This features is available for US numbers only and incurs an additional charge. (default: false, e.g. true)
   --ip: string # This parameter is deprecated as we are no longer able to retrieve reliable IP data globally from carriers. (DEPRECATED, e.g. 123.0.0.255)
@@ -201,6 +205,7 @@ export def "get-number-insight-advanced" [
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NUMBER_INSIGHT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_apisecret | default ($env | get -o NUMBER_INSIGHT_API_APISECRET_TOKEN | default "")) "query-api_secret")])
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
+  if ($number == null) { error make --unspanned { msg: "required query parameter 'number' missing: pass --number" } }
   let qp = [(serialize-qp "real_time_data" $real_time_data "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "cnam" $cnam "scalar") (serialize-qp "ip" $ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/advanced/{format}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -224,7 +229,7 @@ export def "get-number-insight-advanced" [
 # GET /basic/{format}
 # operationId: getNumberInsightBasic
 export def "get-number-insight-basic" [
-  format: any
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (api_key)
   --token-apisecret: string # Auth token for apiSecret (api_secret)
@@ -235,12 +240,13 @@ export def "get-number-insight-basic" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --number: string # A single phone number that you need insight about in national or international format. (e.g. 447700900000)
+  --number: string # A single phone number that you need insight about in national or international format. (required, e.g. 447700900000)
   --country: string # If a number does not have a country code or is uncertain, set the two-character country code. This code must be in ISO 3166-1 alpha-2 format and in upper case. For example, GB or US. If you set country and number is already in [E.164](https://en.wikipedia.org/wiki/E.164) format, country must match the country code in number. (e.g. GB)
 ]: nothing -> record<country_code: string, country_code_iso3: string, country_name: string, country_prefix: string, international_format_number: string, national_format_number: string, request_id: string, status: int, status_message: string> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NUMBER_INSIGHT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_apisecret | default ($env | get -o NUMBER_INSIGHT_API_APISECRET_TOKEN | default "")) "query-api_secret")])
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
+  if ($number == null) { error make --unspanned { msg: "required query parameter 'number' missing: pass --number" } }
   let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "country" $country "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/basic/{format}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -264,7 +270,7 @@ export def "get-number-insight-basic" [
 # GET /standard/{format}
 # operationId: getNumberInsightStandard
 export def "get-number-insight-standard" [
-  format: any
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (api_key)
   --token-apisecret: string # Auth token for apiSecret (api_secret)
@@ -275,13 +281,14 @@ export def "get-number-insight-standard" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --number: string # A single phone number that you need insight about in national or international format. (e.g. 447700900000)
+  --number: string # A single phone number that you need insight about in national or international format. (required, e.g. 447700900000)
   --country: string # If a number does not have a country code or is uncertain, set the two-character country code. This code must be in ISO 3166-1 alpha-2 format and in upper case. For example, GB or US. If you set country and number is already in [E.164](https://en.wikipedia.org/wiki/E.164) format, country must match the country code in number. (e.g. GB)
   --cnam: oneof<nothing, bool> # Indicates if the name of the person who owns the phone number should be looked up and returned in the response. Set to true to receive phone number owner name in the response. This features is available for US numbers only and incurs an additional charge. (default: false, e.g. true)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NUMBER_INSIGHT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_apisecret | default ($env | get -o NUMBER_INSIGHT_API_APISECRET_TOKEN | default "")) "query-api_secret")])
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
+  if ($number == null) { error make --unspanned { msg: "required query parameter 'number' missing: pass --number" } }
   let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "cnam" $cnam "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/standard/{format}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")

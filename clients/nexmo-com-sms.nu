@@ -95,6 +95,7 @@ def base-url-completer [] { ["https://rest.nexmo.com/sms"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def format-completer [] { ["json" "xml"] }
 def message-class-completer [] { ["0" "1" "2" "3"] }
 def type-completer [] { ["binary" "text" "unicode"] }
 def accept-completer [] { ["application/json" "text/xml"] }
@@ -127,7 +128,7 @@ export def commands []: nothing -> table {
 # POST /{format}
 # operationId: send-an-sms
 export def "send-an-sms" [
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -146,13 +147,13 @@ export def "send-an-sms" [
   --client-ref: string # **Advanced**: You can optionally include your own reference of up to 100 characters. (e.g. my-personal-reference)
   --content-id: string # **Advanced**: A string parameter that satisfies regulatory requirements when sending an SMS to specific countries. For more information please refer to the [Country-Specific Outbound SMS Features](https://help.nexmo.com/hc/en-us/articles/115011781468) (e.g. 1107457532145798767)
   --entity-id: string # **Advanced**: A string parameter that satisfies regulatory requirements when sending an SMS to specific countries. For more information please refer to the [Country-Specific Outbound SMS Features](https://help.nexmo.com/hc/en-us/articles/115011781468) (e.g. 1101456324675322134)
-  --body-from: string # The name or number the message should be sent from. Alphanumeric senderID's are not supported in all countries, see [Global Messaging](/messaging/sms/guides/global-messaging#country-specific-features) for more details. If alphanumeric, spaces will be ignored. Numbers are specified in E.164 format. (e.g. AcmeInc)
+  from: string # The name or number the message should be sent from. Alphanumeric senderID's are not supported in all countries, see [Global Messaging](/messaging/sms/guides/global-messaging#country-specific-features) for more details. If alphanumeric, spaces will be ignored. Numbers are specified in E.164 format. (e.g. AcmeInc)
   --message-class: int@message-class-completer # **Advanced**: The Data Coding Scheme value of the message
   --protocol-id: int # **Advanced**: The value of the [protocol identifier](https://en.wikipedia.org/wiki/GSM_03.40#Protocol_Identifier) to use. Ensure that the value is aligned with `udh`. (e.g. 127)
   --sig: string # The hash of the request parameters in alphabetical order, a timestamp and the signature secret. See [Signing Requests](/concepts/guides/signing-messages) for more details.
   --status-report-req: oneof<nothing, bool> # **Advanced**: Boolean indicating if you like to receive a [Delivery Receipt](/messaging/sms/building-blocks/receive-a-delivery-receipt). (default: true, e.g. false)
   --text: string # The body of the message being sent. If your message contains characters that can be encoded according to the GSM Standard and Extended tables then you can set the `type` to `text`. If your message contains characters outside this range, then you will need to set the `type` to `unicode`. (e.g. Hello World!)
-  --body-to: string # The number that the message should be sent to. Numbers are specified in E.164 format. (e.g. 447700900000)
+  to: string # The number that the message should be sent to. Numbers are specified in E.164 format. (e.g. 447700900000)
   --ttl: int # **Advanced**: The duration in milliseconds the delivery of an SMS will be attempted.§§ By default Vonage attempts delivery for 72 hours, however the maximum effective value depends on the operator and is typically 24 - 48 hours. We recommend this value should be kept at its default or at least 30 minutes. (default: 259200000, e.g. 900000)
   --type: string@type-completer # **Advanced**: The format of the message body (default: text, e.g. text)
   --udh: string # **Advanced**: Your custom Hex encoded [User Data Header](https://en.wikipedia.org/wiki/User_Data_Header). Depends on `type` parameter having the value `binary`. (e.g. 06050415811581)
@@ -162,7 +163,7 @@ export def "send-an-sms" [
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}") $auth.query)
-  let req_body = {"account-ref": $account_ref, "api_key": $api_key, "api_secret": $api_secret, "body": $body, "callback": $callback, "client-ref": $client_ref, "content-id": $content_id, "entity-id": $entity_id, "from": $body_from, "message-class": $message_class, "protocol-id": $protocol_id, "sig": $sig, "status-report-req": $status_report_req, "text": $text, "to": $body_to, "ttl": $ttl, "type": $type, "udh": $udh} | compact
+  let req_body = {"account-ref": $account_ref, "api_key": $api_key, "api_secret": $api_secret, "body": $body, "callback": $callback, "client-ref": $client_ref, "content-id": $content_id, "entity-id": $entity_id, "from": $from, "message-class": $message_class, "protocol-id": $protocol_id, "sig": $sig, "status-report-req": $status_report_req, "text": $text, "to": $to, "ttl": $ttl, "type": $type, "udh": $udh} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

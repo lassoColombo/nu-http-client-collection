@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -512,21 +512,21 @@ export def "post-messages" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --credits: float # The number of credits used on the message. Floating point number. (e.g. 2)
   --destination: string # The phone number of the recipient. Start UK numbers with 44 and drop the leading 0. (e.g. 447777777777)
-  --body-from: string # The date-time from which you would like matching messages (e.g. Wed Jul 12 2017 20:26:28 GMT+0100 (BST))
+  --from: string # The date-time from which you would like matching messages (e.g. Wed Jul 12 2017 20:26:28 GMT+0100 (BST))
   --keyword: string # The keyword used in the inbound message (e.g. SKYWALKER)
   --limit: float # The maximum number of messages that you would like returned in this call. The default is 1000. (e.g. 1000)
   --metadata: list # An array of objects containing metadata key/value pairs that have been saved on messages. (e.g. [{key: myKey1, value: myValue1}, {key: myKey2, value: myValue2}])
   --sender: string # The sender of the message (this can be the configured sender name for an outbound message or the senders phone number for an inbound message). (e.g. YourCompany)
   --skip: float # The number of results you would like to ignore before returning messages. In combination with the 'limit' parameter his can be used to page results, so that you can deal with a limited number in your logic at each time. (e.g. 2000)
   --status: string # The status of the messages you would like returned (either 'SENT', 'DELIVERED', 'EXPIRED', 'UNDELIVERABLE', 'REJECTED' or 'INCOMING') (e.g. SENT)
-  --body-to: string # The date-time to which you would like matching messages (e.g. Wed Jul 19 2017 20:26:28 GMT+0100 (BST))
+  --to: string # The date-time to which you would like matching messages (e.g. Wed Jul 19 2017 20:26:28 GMT+0100 (BST))
   --unread: oneof<nothing, bool> # In queries for incoming messages ('status' is 'INCOMING'), specify whether you explicitly want unread messages (true) or read messages (false). Omit this parameter in other circumstances.
 ]: any -> table<batchid: string, content: string, created: string, customerid: string, deliveryreporturl: string, destination: float, failurereason: record<code: float, details: string, permanent: bool>, id: string, identifier: string, keyword: string, messageid: string, modified: string, schedule: string, sender: string, status: string, tag: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages" $auth.query)
-  let req_body = {"credits": $credits, "destination": $destination, "from": $body_from, "keyword": $keyword, "limit": $limit, "metadata": $metadata, "sender": $sender, "skip": $skip, "status": $status, "to": $body_to, "unread": $unread} | compact
+  let req_body = {"credits": $credits, "destination": $destination, "from": $from, "keyword": $keyword, "limit": $limit, "metadata": $metadata, "sender": $sender, "skip": $skip, "status": $status, "to": $to, "unread": $unread} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -559,21 +559,21 @@ export def "post-messages-failed" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --credits: float # The number of credits used on the message. Floating point number. (e.g. 2)
   --destination: string # The phone number of the recipient. Start UK numbers with 44 and drop the leading 0. (e.g. 447777777777)
-  --body-from: string # The date-time from which you would like matching messages (e.g. Wed Jul 12 2017 20:26:28 GMT+0100 (BST))
+  --from: string # The date-time from which you would like matching messages (e.g. Wed Jul 12 2017 20:26:28 GMT+0100 (BST))
   --keyword: string # The keyword used in the inbound message (e.g. SKYWALKER)
   --limit: float # The maximum number of messages that you would like returned in this call. The default is 1000. (e.g. 1000)
   --metadata: list # An array of objects containing metadata key/value pairs that have been saved on messages. (e.g. [{key: myKey1, value: myValue1}, {key: myKey2, value: myValue2}])
   --sender: string # The sender of the message (this can be the configured sender name for an outbound message or the senders phone number for an inbound message). (e.g. YourCompany)
   --skip: float # The number of results you would like to ignore before returning messages. In combination with the 'limit' parameter his can be used to page results, so that you can deal with a limited number in your logic at each time. (e.g. 2000)
   --status: string # The status of the messages you would like returned (either 'SENT', 'DELIVERED', 'EXPIRED', 'UNDELIVERABLE', 'REJECTED' or 'INCOMING') (e.g. SENT)
-  --body-to: string # The date-time to which you would like matching messages (e.g. Wed Jul 19 2017 20:26:28 GMT+0100 (BST))
+  --to: string # The date-time to which you would like matching messages (e.g. Wed Jul 19 2017 20:26:28 GMT+0100 (BST))
   --unread: oneof<nothing, bool> # In queries for incoming messages ('status' is 'INCOMING'), specify whether you explicitly want unread messages (true) or read messages (false). Omit this parameter in other circumstances.
 ]: any -> table<batchid: string, content: string, created: string, customerid: string, deliveryreporturl: string, destination: float, failurereason: record<code: float, details: string, permanent: bool>, id: string, identifier: string, keyword: string, messageid: string, modified: string, schedule: string, sender: string, status: string, tag: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages/failed" $auth.query)
-  let req_body = {"credits": $credits, "destination": $destination, "from": $body_from, "keyword": $keyword, "limit": $limit, "metadata": $metadata, "sender": $sender, "skip": $skip, "status": $status, "to": $body_to, "unread": $unread} | compact
+  let req_body = {"credits": $credits, "destination": $destination, "from": $from, "keyword": $keyword, "limit": $limit, "metadata": $metadata, "sender": $sender, "skip": $skip, "status": $status, "to": $to, "unread": $unread} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -606,21 +606,21 @@ export def "post-messages-inbox" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --credits: float # The number of credits used on the message. Floating point number. (e.g. 2)
   --destination: string # The phone number of the recipient. Start UK numbers with 44 and drop the leading 0. (e.g. 447777777777)
-  --body-from: string # The date-time from which you would like matching messages (e.g. Wed Jul 12 2017 20:26:28 GMT+0100 (BST))
+  --from: string # The date-time from which you would like matching messages (e.g. Wed Jul 12 2017 20:26:28 GMT+0100 (BST))
   --keyword: string # The keyword used in the inbound message (e.g. SKYWALKER)
   --limit: float # The maximum number of messages that you would like returned in this call. The default is 1000. (e.g. 1000)
   --metadata: list # An array of objects containing metadata key/value pairs that have been saved on messages. (e.g. [{key: myKey1, value: myValue1}, {key: myKey2, value: myValue2}])
   --sender: string # The sender of the message (this can be the configured sender name for an outbound message or the senders phone number for an inbound message). (e.g. YourCompany)
   --skip: float # The number of results you would like to ignore before returning messages. In combination with the 'limit' parameter his can be used to page results, so that you can deal with a limited number in your logic at each time. (e.g. 2000)
   --status: string # The status of the messages you would like returned (either 'SENT', 'DELIVERED', 'EXPIRED', 'UNDELIVERABLE', 'REJECTED' or 'INCOMING') (e.g. SENT)
-  --body-to: string # The date-time to which you would like matching messages (e.g. Wed Jul 19 2017 20:26:28 GMT+0100 (BST))
+  --to: string # The date-time to which you would like matching messages (e.g. Wed Jul 19 2017 20:26:28 GMT+0100 (BST))
   --unread: oneof<nothing, bool> # In queries for incoming messages ('status' is 'INCOMING'), specify whether you explicitly want unread messages (true) or read messages (false). Omit this parameter in other circumstances.
 ]: any -> table<batchid: string, content: string, created: string, customerid: string, deliveryreporturl: string, destination: float, failurereason: record<code: float, details: string, permanent: bool>, id: string, identifier: string, keyword: string, messageid: string, modified: string, schedule: string, sender: string, status: string, tag: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages/inbox" $auth.query)
-  let req_body = {"credits": $credits, "destination": $destination, "from": $body_from, "keyword": $keyword, "limit": $limit, "metadata": $metadata, "sender": $sender, "skip": $skip, "status": $status, "to": $body_to, "unread": $unread} | compact
+  let req_body = {"credits": $credits, "destination": $destination, "from": $from, "keyword": $keyword, "limit": $limit, "metadata": $metadata, "sender": $sender, "skip": $skip, "status": $status, "to": $to, "unread": $unread} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

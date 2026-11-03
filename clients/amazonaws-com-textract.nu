@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -137,6 +137,9 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AnalyzeDocument
+# --Document shape: {Bytes?: string, S3Object?: record}
+# --HumanLoopConfig shape: {HumanLoopName: string, FlowDefinitionArn: string, DataAttributes?: record}
+# --QueriesConfig shape: {Queries: list}
 export def "analyze-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -154,15 +157,16 @@ export def "analyze-document" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  document: any
-  feature_types: any
-  --human-loop-config: any
-  --queries-config: any
-]: any -> record<DocumentMetadata: record<Pages: record>, Blocks: record, HumanLoopActivationOutput: record<HumanLoopArn: record, HumanLoopActivationReasons: record, HumanLoopActivationConditionsEvaluationResults: record>, AnalyzeDocumentModelVersion: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  document: record # The input document, either as bytes or as an S3 object. You pass image bytes to an Amazon Textract API operation by using the Bytes property. For example, you would use the Bytes property to pass a document loaded from a local file system. Image bytes passed by using the Bytes property must be base64 encoded. Your code might not need to encode document file bytes if you're using an AWS SDK to call Amazon Textract API operations. You pass images stored in an S3 bucket to an Amazon Textract API operation by using the S3Object property. Documents stored in an S3 bucket don't need to be base64 encoded. The AWS Region for the S3 bucket that contains the S3 object must match the AWS Region that you use for Amazon Textract operations. If you use the AWS CLI to call Amazon Textract operations, passing image bytes using the Bytes property isn't supported. You must first upload the document to an Amazon S3 bucket, and then call the operation using the S3Object property. For Amazon Textract to process an S3 object, the user must have permission to access the S3 object. — shape: {Bytes?: string, S3Object?: record}
+  feature_types: list<string> # A list of the types of analysis to perform. Add TABLES to the list to return information about the tables that are detected in the input document. Add FORMS to return detected form data. Add SIGNATURES to return the locations of detected signatures. To perform both forms and table analysis, add TABLES and FORMS to FeatureTypes. To detect signatures within form data and table data, add SIGNATURES to either TABLES or FORMS. All lines and words detected in the document are included in the response (including text that isn't related to the value of FeatureTypes).
+  --human-loop-config: record # Sets up the human review workflow the document will be sent to if one of the conditions is met. You can also set certain attributes of the image before review. — shape: {HumanLoopName: string, FlowDefinitionArn: string, DataAttributes?: record}
+  --queries-config: record # shape: {Queries: list}
+]: any -> record<DocumentMetadata: record<Pages: int>, Blocks: table<BlockType: string, Confidence: float, Text: string, TextType: string, RowIndex: int, ColumnIndex: int, RowSpan: int, ColumnSpan: int, Geometry: record, Id: string, Relationships: list, EntityTypes: list, SelectionStatus: string, Page: int, Query: record>, HumanLoopActivationOutput: record<HumanLoopArn: string, HumanLoopActivationReasons: list<string>, HumanLoopActivationConditionsEvaluationResults: string>, AnalyzeDocumentModelVersion: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Textract.AnalyzeDocument")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Document": $document, "FeatureTypes": $feature_types, "HumanLoopConfig": $human_loop_config, "QueriesConfig": $queries_config} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -188,7 +192,7 @@ export def "analyze-document" [
 #
 # POST /
 # operationId: AnalyzeExpense
-# --Document shape: {Bytes?: any, S3Object?: any}
+# --Document shape: {Bytes?: string, S3Object?: record}
 export def "analyze-expense" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -206,12 +210,13 @@ export def "analyze-expense" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  document: record # The input document, either as bytes or as an S3 object. You pass image bytes to an Amazon Textract API operation by using the Bytes property. For example, you would use the Bytes property to pass a document loaded from a local file system. Image bytes passed by using the Bytes property must be base64 encoded. Your code might not need to encode document file bytes if you're using an AWS SDK to call Amazon Textract API operations. You pass images stored in an S3 bucket to an Amazon Textract API operation by using the S3Object property. Documents stored in an S3 bucket don't need to be base64 encoded. The AWS Region for the S3 bucket that contains the S3 object must match the AWS Region that you use for Amazon Textract operations. If you use the AWS CLI to call Amazon Textract operations, passing image bytes using the Bytes property isn't supported. You must first upload the document to an Amazon S3 bucket, and then call the operation using the S3Object property. For Amazon Textract to process an S3 object, the user must have permission to access the S3 object. — shape: {Bytes?: any, S3Object?: any}
-]: any -> record<DocumentMetadata: record<Pages: record>, ExpenseDocuments: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  document: record # The input document, either as bytes or as an S3 object. You pass image bytes to an Amazon Textract API operation by using the Bytes property. For example, you would use the Bytes property to pass a document loaded from a local file system. Image bytes passed by using the Bytes property must be base64 encoded. Your code might not need to encode document file bytes if you're using an AWS SDK to call Amazon Textract API operations. You pass images stored in an S3 bucket to an Amazon Textract API operation by using the S3Object property. Documents stored in an S3 bucket don't need to be base64 encoded. The AWS Region for the S3 bucket that contains the S3 object must match the AWS Region that you use for Amazon Textract operations. If you use the AWS CLI to call Amazon Textract operations, passing image bytes using the Bytes property isn't supported. You must first upload the document to an Amazon S3 bucket, and then call the operation using the S3Object property. For Amazon Textract to process an S3 object, the user must have permission to access the S3 object. — shape: {Bytes?: string, S3Object?: record}
+]: any -> record<DocumentMetadata: record<Pages: int>, ExpenseDocuments: table<ExpenseIndex: int, SummaryFields: list, LineItemGroups: list, Blocks: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Textract.AnalyzeExpense")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Document": $document} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -237,6 +242,7 @@ export def "analyze-expense" [
 #
 # POST /
 # operationId: AnalyzeID
+# --DocumentPages item shape: {Bytes?: string, S3Object?: record}
 export def "analyze-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -254,12 +260,13 @@ export def "analyze-id" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  document_pages: any
-]: any -> record<IdentityDocuments: record, DocumentMetadata: record<Pages: record>, AnalyzeIDModelVersion: record> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  document_pages: list # The document being passed to AnalyzeID. — item shape: {Bytes?: string, S3Object?: record}
+]: any -> record<IdentityDocuments: table<DocumentIndex: int, IdentityDocumentFields: list, Blocks: list>, DocumentMetadata: record<Pages: int>, AnalyzeIDModelVersion: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Textract.AnalyzeID")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DocumentPages": $document_pages} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -285,6 +292,7 @@ export def "analyze-id" [
 #
 # POST /
 # operationId: DetectDocumentText
+# --Document shape: {Bytes?: string, S3Object?: record}
 export def "detect-document-text" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -302,12 +310,13 @@ export def "detect-document-text" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  document: any
-]: any -> record<DocumentMetadata: record<Pages: record>, Blocks: record, DetectDocumentTextModelVersion: record> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  document: record # The input document, either as bytes or as an S3 object. You pass image bytes to an Amazon Textract API operation by using the Bytes property. For example, you would use the Bytes property to pass a document loaded from a local file system. Image bytes passed by using the Bytes property must be base64 encoded. Your code might not need to encode document file bytes if you're using an AWS SDK to call Amazon Textract API operations. You pass images stored in an S3 bucket to an Amazon Textract API operation by using the S3Object property. Documents stored in an S3 bucket don't need to be base64 encoded. The AWS Region for the S3 bucket that contains the S3 object must match the AWS Region that you use for Amazon Textract operations. If you use the AWS CLI to call Amazon Textract operations, passing image bytes using the Bytes property isn't supported. You must first upload the document to an Amazon S3 bucket, and then call the operation using the S3Object property. For Amazon Textract to process an S3 object, the user must have permission to access the S3 object. — shape: {Bytes?: string, S3Object?: record}
+]: any -> record<DocumentMetadata: record<Pages: int>, Blocks: table<BlockType: string, Confidence: float, Text: string, TextType: string, RowIndex: int, ColumnIndex: int, RowSpan: int, ColumnSpan: int, Geometry: record, Id: string, Relationships: list, EntityTypes: list, SelectionStatus: string, Page: int, Query: record>, DetectDocumentTextModelVersion: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Textract.DetectDocumentText")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Document": $document} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -350,14 +359,15 @@ export def "get-document-analysis" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  job_id: any
-  --max-results: any
-  --next-token: any
-]: any -> record<DocumentMetadata: record<Pages: record>, JobStatus: record, NextToken: record, Blocks: record, Warnings: record, StatusMessage: record, AnalyzeDocumentModelVersion: record> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  job_id: string # A unique identifier for the text-detection job. The JobId is returned from StartDocumentAnalysis. A JobId value is only valid for 7 days.
+  --max-results: int # The maximum number of results to return per paginated call. The largest value that you can specify is 1,000. If you specify a value greater than 1,000, a maximum of 1,000 results is returned. The default value is 1,000.
+  --next-token: string # If the previous response was incomplete (because there are more blocks to retrieve), Amazon Textract returns a pagination token in the response. You can use this pagination token to retrieve the next set of blocks.
+]: any -> record<DocumentMetadata: record<Pages: int>, JobStatus: string, NextToken: string, Blocks: table<BlockType: string, Confidence: float, Text: string, TextType: string, RowIndex: int, ColumnIndex: int, RowSpan: int, ColumnSpan: int, Geometry: record, Id: string, Relationships: list, EntityTypes: list, SelectionStatus: string, Page: int, Query: record>, Warnings: table<ErrorCode: string, Pages: list>, StatusMessage: string, AnalyzeDocumentModelVersion: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Textract.GetDocumentAnalysis")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -400,14 +410,15 @@ export def "get-document-text-detection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  job_id: any
-  --max-results: any
-  --next-token: any
-]: any -> record<DocumentMetadata: record<Pages: record>, JobStatus: record, NextToken: record, Blocks: record, Warnings: record, StatusMessage: record, DetectDocumentTextModelVersion: record> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  job_id: string # A unique identifier for the text detection job. The JobId is returned from StartDocumentTextDetection. A JobId value is only valid for 7 days.
+  --max-results: int # The maximum number of results to return per paginated call. The largest value you can specify is 1,000. If you specify a value greater than 1,000, a maximum of 1,000 results is returned. The default value is 1,000.
+  --next-token: string # If the previous response was incomplete (because there are more blocks to retrieve), Amazon Textract returns a pagination token in the response. You can use this pagination token to retrieve the next set of blocks.
+]: any -> record<DocumentMetadata: record<Pages: int>, JobStatus: string, NextToken: string, Blocks: table<BlockType: string, Confidence: float, Text: string, TextType: string, RowIndex: int, ColumnIndex: int, RowSpan: int, ColumnSpan: int, Geometry: record, Id: string, Relationships: list, EntityTypes: list, SelectionStatus: string, Page: int, Query: record>, Warnings: table<ErrorCode: string, Pages: list>, StatusMessage: string, DetectDocumentTextModelVersion: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Textract.GetDocumentTextDetection")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -450,14 +461,15 @@ export def "get-expense-analysis" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  job_id: any
-  --max-results: any
-  --next-token: any
-]: any -> record<DocumentMetadata: record<Pages: record>, JobStatus: record, NextToken: record, ExpenseDocuments: record, Warnings: record, StatusMessage: record, AnalyzeExpenseModelVersion: record> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  job_id: string # A unique identifier for the text detection job. The JobId is returned from StartExpenseAnalysis. A JobId value is only valid for 7 days.
+  --max-results: int # The maximum number of results to return per paginated call. The largest value you can specify is 20. If you specify a value greater than 20, a maximum of 20 results is returned. The default value is 20.
+  --next-token: string # If the previous response was incomplete (because there are more blocks to retrieve), Amazon Textract returns a pagination token in the response. You can use this pagination token to retrieve the next set of blocks.
+]: any -> record<DocumentMetadata: record<Pages: int>, JobStatus: string, NextToken: string, ExpenseDocuments: table<ExpenseIndex: int, SummaryFields: list, LineItemGroups: list, Blocks: list>, Warnings: table<ErrorCode: string, Pages: list>, StatusMessage: string, AnalyzeExpenseModelVersion: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Textract.GetExpenseAnalysis")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -500,14 +512,15 @@ export def "get-lending-analysis" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  job_id: any
-  --max-results: any
-  --next-token: any
-]: any -> record<DocumentMetadata: record<Pages: record>, JobStatus: record, NextToken: record, Results: record, Warnings: record, StatusMessage: record, AnalyzeLendingModelVersion: record> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  job_id: string # A unique identifier for the lending or text-detection job. The JobId is returned from StartLendingAnalysis. A JobId value is only valid for 7 days.
+  --max-results: int # The maximum number of results to return per paginated call. The largest value that you can specify is 30. If you specify a value greater than 30, a maximum of 30 results is returned. The default value is 30.
+  --next-token: string # If the previous response was incomplete, Amazon Textract returns a pagination token in the response. You can use this pagination token to retrieve the next set of lending results.
+]: any -> record<DocumentMetadata: record<Pages: int>, JobStatus: string, NextToken: string, Results: table<Page: int, PageClassification: record, Extractions: list>, Warnings: table<ErrorCode: string, Pages: list>, StatusMessage: string, AnalyzeLendingModelVersion: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Textract.GetLendingAnalysis")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -550,12 +563,13 @@ export def "get-lending-analysis-summary" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  job_id: any
-]: any -> record<DocumentMetadata: record<Pages: record>, JobStatus: record, Summary: record<DocumentGroups: record, UndetectedDocumentTypes: record>, Warnings: record, StatusMessage: record, AnalyzeLendingModelVersion: record> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  job_id: string # A unique identifier for the lending or text-detection job. The JobId is returned from StartLendingAnalysis. A JobId value is only valid for 7 days.
+]: any -> record<DocumentMetadata: record<Pages: int>, JobStatus: string, Summary: record<DocumentGroups: list<record>, UndetectedDocumentTypes: list<string>>, Warnings: table<ErrorCode: string, Pages: list>, StatusMessage: string, AnalyzeLendingModelVersion: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Textract.GetLendingAnalysisSummary")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -581,7 +595,10 @@ export def "get-lending-analysis-summary" [
 #
 # POST /
 # operationId: StartDocumentAnalysis
-# --QueriesConfig shape: {Queries: any}
+# --DocumentLocation shape: {S3Object?: record}
+# --NotificationChannel shape: {SNSTopicArn: string, RoleArn: string}
+# --OutputConfig shape: {S3Bucket: string, S3Prefix?: string}
+# --QueriesConfig shape: {Queries: list}
 export def "start-document-analysis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -599,19 +616,20 @@ export def "start-document-analysis" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  document_location: any
-  feature_types: any
-  --client-request-token: any
-  --job-tag: any
-  --notification-channel: any
-  --output-config: any
-  --kms-key-id: any
-  --queries-config: record # shape: {Queries: any}
-]: any -> record<JobId: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  document_location: record # The Amazon S3 bucket that contains the document to be processed. It's used by asynchronous operations. The input document can be an image file in JPEG or PNG format. It can also be a file in PDF format. — shape: {S3Object?: record}
+  feature_types: list<string> # A list of the types of analysis to perform. Add TABLES to the list to return information about the tables that are detected in the input document. Add FORMS to return detected form data. To perform both types of analysis, add TABLES and FORMS to FeatureTypes. All lines and words detected in the document are included in the response (including text that isn't related to the value of FeatureTypes).
+  --client-request-token: string # The idempotent token that you use to identify the start request. If you use the same token with multiple StartDocumentAnalysis requests, the same JobId is returned. Use ClientRequestToken to prevent the same job from being accidentally started more than once. For more information, see Calling Amazon Textract Asynchronous Operations (https://docs.aws.amazon.com/textract/latest/dg/api-async.html).
+  --job-tag: string # An identifier that you specify that's included in the completion notification published to the Amazon SNS topic. For example, you can use JobTag to identify the type of document that the completion notification corresponds to (such as a tax form or a receipt).
+  --notification-channel: record # The Amazon Simple Notification Service (Amazon SNS) topic to which Amazon Textract publishes the completion status of an asynchronous document operation. — shape: {SNSTopicArn: string, RoleArn: string}
+  --output-config: record # Sets whether or not your output will go to a user created bucket. Used to set the name of the bucket, and the prefix on the output file. OutputConfig is an optional parameter which lets you adjust where your output will be placed. By default, Amazon Textract will store the results internally and can only be accessed by the Get API operations. With OutputConfig enabled, you can set the name of the bucket the output will be sent to the file prefix of the results where you can download your results. Additionally, you can set the KMSKeyID parameter to a customer master key (CMK) to encrypt your output. Without this parameter set Amazon Textract will encrypt server-side using the AWS managed CMK for Amazon S3. Decryption of Customer Content is necessary for processing of the documents by Amazon Textract. If your account is opted out under an AI services opt out policy then all unencrypted Customer Content is immediately and permanently deleted after the Customer Content has been processed by the service. No copy of of the output is retained by Amazon Textract. For information about how to opt out, see Managing AI services opt-out policy. (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_ai-opt-out.html) For more information on data privacy, see the Data Privacy FAQ (https://aws.amazon.com/compliance/data-privacy-faq/). — shape: {S3Bucket: string, S3Prefix?: string}
+  --kms-key-id: string # The KMS key used to encrypt the inference results. This can be in either Key ID or Key Alias format. When a KMS key is provided, the KMS key will be used for server-side encryption of the objects in the customer bucket. When this parameter is not enabled, the result will be encrypted server side,using SSE-S3.
+  --queries-config: record # shape: {Queries: list}
+]: any -> record<JobId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Textract.StartDocumentAnalysis")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DocumentLocation": $document_location, "FeatureTypes": $feature_types, "ClientRequestToken": $client_request_token, "JobTag": $job_tag, "NotificationChannel": $notification_channel, "OutputConfig": $output_config, "KMSKeyId": $kms_key_id, "QueriesConfig": $queries_config} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -637,6 +655,9 @@ export def "start-document-analysis" [
 #
 # POST /
 # operationId: StartDocumentTextDetection
+# --DocumentLocation shape: {S3Object?: record}
+# --NotificationChannel shape: {SNSTopicArn: string, RoleArn: string}
+# --OutputConfig shape: {S3Bucket: string, S3Prefix?: string}
 export def "start-document-text-detection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -654,17 +675,18 @@ export def "start-document-text-detection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  document_location: any
-  --client-request-token: any
-  --job-tag: any
-  --notification-channel: any
-  --output-config: any
-  --kms-key-id: any
-]: any -> record<JobId: record> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  document_location: record # The Amazon S3 bucket that contains the document to be processed. It's used by asynchronous operations. The input document can be an image file in JPEG or PNG format. It can also be a file in PDF format. — shape: {S3Object?: record}
+  --client-request-token: string # The idempotent token that's used to identify the start request. If you use the same token with multiple StartDocumentTextDetection requests, the same JobId is returned. Use ClientRequestToken to prevent the same job from being accidentally started more than once. For more information, see Calling Amazon Textract Asynchronous Operations (https://docs.aws.amazon.com/textract/latest/dg/api-async.html).
+  --job-tag: string # An identifier that you specify that's included in the completion notification published to the Amazon SNS topic. For example, you can use JobTag to identify the type of document that the completion notification corresponds to (such as a tax form or a receipt).
+  --notification-channel: record # The Amazon Simple Notification Service (Amazon SNS) topic to which Amazon Textract publishes the completion status of an asynchronous document operation. — shape: {SNSTopicArn: string, RoleArn: string}
+  --output-config: record # Sets whether or not your output will go to a user created bucket. Used to set the name of the bucket, and the prefix on the output file. OutputConfig is an optional parameter which lets you adjust where your output will be placed. By default, Amazon Textract will store the results internally and can only be accessed by the Get API operations. With OutputConfig enabled, you can set the name of the bucket the output will be sent to the file prefix of the results where you can download your results. Additionally, you can set the KMSKeyID parameter to a customer master key (CMK) to encrypt your output. Without this parameter set Amazon Textract will encrypt server-side using the AWS managed CMK for Amazon S3. Decryption of Customer Content is necessary for processing of the documents by Amazon Textract. If your account is opted out under an AI services opt out policy then all unencrypted Customer Content is immediately and permanently deleted after the Customer Content has been processed by the service. No copy of of the output is retained by Amazon Textract. For information about how to opt out, see Managing AI services opt-out policy. (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_ai-opt-out.html) For more information on data privacy, see the Data Privacy FAQ (https://aws.amazon.com/compliance/data-privacy-faq/). — shape: {S3Bucket: string, S3Prefix?: string}
+  --kms-key-id: string # The KMS key used to encrypt the inference results. This can be in either Key ID or Key Alias format. When a KMS key is provided, the KMS key will be used for server-side encryption of the objects in the customer bucket. When this parameter is not enabled, the result will be encrypted server side,using SSE-S3.
+]: any -> record<JobId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Textract.StartDocumentTextDetection")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DocumentLocation": $document_location, "ClientRequestToken": $client_request_token, "JobTag": $job_tag, "NotificationChannel": $notification_channel, "OutputConfig": $output_config, "KMSKeyId": $kms_key_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -690,6 +712,9 @@ export def "start-document-text-detection" [
 #
 # POST /
 # operationId: StartExpenseAnalysis
+# --DocumentLocation shape: {S3Object?: record}
+# --NotificationChannel shape: {SNSTopicArn: string, RoleArn: string}
+# --OutputConfig shape: {S3Bucket: string, S3Prefix?: string}
 export def "start-expense-analysis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -707,17 +732,18 @@ export def "start-expense-analysis" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  document_location: any
-  --client-request-token: any
-  --job-tag: any
-  --notification-channel: any
-  --output-config: any
-  --kms-key-id: any
-]: any -> record<JobId: record> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  document_location: record # The Amazon S3 bucket that contains the document to be processed. It's used by asynchronous operations. The input document can be an image file in JPEG or PNG format. It can also be a file in PDF format. — shape: {S3Object?: record}
+  --client-request-token: string # The idempotent token that's used to identify the start request. If you use the same token with multiple StartDocumentTextDetection requests, the same JobId is returned. Use ClientRequestToken to prevent the same job from being accidentally started more than once. For more information, see Calling Amazon Textract Asynchronous Operations (https://docs.aws.amazon.com/textract/latest/dg/api-async.html)
+  --job-tag: string # An identifier you specify that's included in the completion notification published to the Amazon SNS topic. For example, you can use JobTag to identify the type of document that the completion notification corresponds to (such as a tax form or a receipt).
+  --notification-channel: record # The Amazon Simple Notification Service (Amazon SNS) topic to which Amazon Textract publishes the completion status of an asynchronous document operation. — shape: {SNSTopicArn: string, RoleArn: string}
+  --output-config: record # Sets whether or not your output will go to a user created bucket. Used to set the name of the bucket, and the prefix on the output file. OutputConfig is an optional parameter which lets you adjust where your output will be placed. By default, Amazon Textract will store the results internally and can only be accessed by the Get API operations. With OutputConfig enabled, you can set the name of the bucket the output will be sent to the file prefix of the results where you can download your results. Additionally, you can set the KMSKeyID parameter to a customer master key (CMK) to encrypt your output. Without this parameter set Amazon Textract will encrypt server-side using the AWS managed CMK for Amazon S3. Decryption of Customer Content is necessary for processing of the documents by Amazon Textract. If your account is opted out under an AI services opt out policy then all unencrypted Customer Content is immediately and permanently deleted after the Customer Content has been processed by the service. No copy of of the output is retained by Amazon Textract. For information about how to opt out, see Managing AI services opt-out policy. (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_ai-opt-out.html) For more information on data privacy, see the Data Privacy FAQ (https://aws.amazon.com/compliance/data-privacy-faq/). — shape: {S3Bucket: string, S3Prefix?: string}
+  --kms-key-id: string # The KMS key used to encrypt the inference results. This can be in either Key ID or Key Alias format. When a KMS key is provided, the KMS key will be used for server-side encryption of the objects in the customer bucket. When this parameter is not enabled, the result will be encrypted server side,using SSE-S3.
+]: any -> record<JobId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Textract.StartExpenseAnalysis")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DocumentLocation": $document_location, "ClientRequestToken": $client_request_token, "JobTag": $job_tag, "NotificationChannel": $notification_channel, "OutputConfig": $output_config, "KMSKeyId": $kms_key_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -743,9 +769,9 @@ export def "start-expense-analysis" [
 #
 # POST /
 # operationId: StartLendingAnalysis
-# --DocumentLocation shape: {S3Object?: any}
-# --NotificationChannel shape: {SNSTopicArn: any, RoleArn: any}
-# --OutputConfig shape: {S3Bucket: any, S3Prefix?: any}
+# --DocumentLocation shape: {S3Object?: record}
+# --NotificationChannel shape: {SNSTopicArn: string, RoleArn: string}
+# --OutputConfig shape: {S3Bucket: string, S3Prefix?: string}
 export def "start-lending-analysis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -763,17 +789,18 @@ export def "start-lending-analysis" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  document_location: record # The Amazon S3 bucket that contains the document to be processed. It's used by asynchronous operations. The input document can be an image file in JPEG or PNG format. It can also be a file in PDF format. — shape: {S3Object?: any}
-  --client-request-token: any
-  --job-tag: any
-  --notification-channel: record # The Amazon Simple Notification Service (Amazon SNS) topic to which Amazon Textract publishes the completion status of an asynchronous document operation. — shape: {SNSTopicArn: any, RoleArn: any}
-  --output-config: record # Sets whether or not your output will go to a user created bucket. Used to set the name of the bucket, and the prefix on the output file. OutputConfig is an optional parameter which lets you adjust where your output will be placed. By default, Amazon Textract will store the results internally and can only be accessed by the Get API operations. With OutputConfig enabled, you can set the name of the bucket the output will be sent to the file prefix of the results where you can download your results. Additionally, you can set the KMSKeyID parameter to a customer master key (CMK) to encrypt your output. Without this parameter set Amazon Textract will encrypt server-side using the AWS managed CMK for Amazon S3. Decryption of Customer Content is necessary for processing of the documents by Amazon Textract. If your account is opted out under an AI services opt out policy then all unencrypted Customer Content is immediately and permanently deleted after the Customer Content has been processed by the service. No copy of of the output is retained by Amazon Textract. For information about how to opt out, see Managing AI services opt-out policy. (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_ai-opt-out.html) For more information on data privacy, see the Data Privacy FAQ (https://aws.amazon.com/compliance/data-privacy-faq/). — shape: {S3Bucket: any, S3Prefix?: any}
-  --kms-key-id: any
-]: any -> record<JobId: record> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  document_location: record # The Amazon S3 bucket that contains the document to be processed. It's used by asynchronous operations. The input document can be an image file in JPEG or PNG format. It can also be a file in PDF format. — shape: {S3Object?: record}
+  --client-request-token: string # The idempotent token that you use to identify the start request. If you use the same token with multiple StartLendingAnalysis requests, the same JobId is returned. Use ClientRequestToken to prevent the same job from being accidentally started more than once. For more information, see Calling Amazon Textract Asynchronous Operations (https://docs.aws.amazon.com/textract/latest/dg/api-sync.html).
+  --job-tag: string # An identifier that you specify to be included in the completion notification published to the Amazon SNS topic. For example, you can use JobTag to identify the type of document that the completion notification corresponds to (such as a tax form or a receipt).
+  --notification-channel: record # The Amazon Simple Notification Service (Amazon SNS) topic to which Amazon Textract publishes the completion status of an asynchronous document operation. — shape: {SNSTopicArn: string, RoleArn: string}
+  --output-config: record # Sets whether or not your output will go to a user created bucket. Used to set the name of the bucket, and the prefix on the output file. OutputConfig is an optional parameter which lets you adjust where your output will be placed. By default, Amazon Textract will store the results internally and can only be accessed by the Get API operations. With OutputConfig enabled, you can set the name of the bucket the output will be sent to the file prefix of the results where you can download your results. Additionally, you can set the KMSKeyID parameter to a customer master key (CMK) to encrypt your output. Without this parameter set Amazon Textract will encrypt server-side using the AWS managed CMK for Amazon S3. Decryption of Customer Content is necessary for processing of the documents by Amazon Textract. If your account is opted out under an AI services opt out policy then all unencrypted Customer Content is immediately and permanently deleted after the Customer Content has been processed by the service. No copy of of the output is retained by Amazon Textract. For information about how to opt out, see Managing AI services opt-out policy. (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_ai-opt-out.html) For more information on data privacy, see the Data Privacy FAQ (https://aws.amazon.com/compliance/data-privacy-faq/). — shape: {S3Bucket: string, S3Prefix?: string}
+  --kms-key-id: string # The KMS key used to encrypt the inference results. This can be in either Key ID or Key Alias format. When a KMS key is provided, the KMS key will be used for server-side encryption of the objects in the customer bucket. When this parameter is not enabled, the result will be encrypted server side, using SSE-S3.
+]: any -> record<JobId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Textract.StartLendingAnalysis")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DocumentLocation": $document_location, "ClientRequestToken": $client_request_token, "JobTag": $job_tag, "NotificationChannel": $notification_channel, "OutputConfig": $output_config, "KMSKeyId": $kms_key_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

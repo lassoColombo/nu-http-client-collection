@@ -94,6 +94,8 @@ def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: 
 def base-url-completer [] { ["https://test.api.amadeus.com/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def accept-encoding-completer [] { ["gzip" "identity"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -132,8 +134,10 @@ export def "create-booking" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --ama-client-ref: string # Client Reference to track Request/Response
+  --accept-encoding: string@accept-encoding-completer # Compress the Response
   --body: any
-]: any -> any {
+]: any -> record<data: table<associatedRecords: list, id: string, providerConfirmationId: string, self: string, type: string>, warnings: table<code: int, detail: string, title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -142,6 +146,8 @@ export def "create-booking" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.amadeus+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Ama-Client-Ref": $ama_client_ref, "Accept-Encoding": $accept_encoding} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let req = {
     method: "post"
     url: $full_url

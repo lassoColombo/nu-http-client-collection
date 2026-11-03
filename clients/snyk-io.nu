@@ -114,6 +114,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # Completers for enum parameters
 def sort-by-completer [] { ["dependenciesWithIssues" "dependency" "projects" "severity"] }
 def order-completer [] { ["asc" "desc"] }
+def entitlement-key-completer [] { ["fullVulnDB" "licenses" "reports"] }
 def type-completer [] { ["acr" "artifactory-cr" "azure-repos" "bitbucket-cloud" "bitbucket-server" "digitalocean-cr" "docker-hub" "ecr" "gcr" "github" "github-cr" "github-enterprise" "gitlab" "gitlab-cr" "google-artifact-cr" "harbor-cr" "nexus-cr" "quay-cr"] }
 def sort-by-completer-1 [] { ["dependencies" "license" "projects" "severity"] }
 def reason-type-completer [] { ["not-vulnerable" "temporary-ignore" "wont-fix"] }
@@ -162,8 +163,8 @@ export def "get-group-level-audit-logs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-from: string # The date you wish to fetch results from, in the format YYYY-MM-DD. Default is 3 months ago. Please note that logs are only available for past 3 months. (e.g. 2019-07-01)
-  --qp-to: string # The date you wish to fetch results until, in the format YYYY-MM-DD. Default is today. Please note that logs are only available for past 3 months. (e.g. 2019-07-07)
+  --from: string # The date you wish to fetch results from, in the format YYYY-MM-DD. Default is 3 months ago. Please note that logs are only available for past 3 months. (e.g. 2019-07-01)
+  --to: string # The date you wish to fetch results until, in the format YYYY-MM-DD. Default is today. Please note that logs are only available for past 3 months. (e.g. 2019-07-07)
   --page: float # The page of results to request. Audit logs are returned in page sizes of 100 (e.g. 1)
   --sort-order: string # The sort order of the returned audit logs by date. Values: `ASC`, `DESC`. Default: `DESC`. (e.g. ASC)
   --filters: record # shape: {email?: string, ... (4 more fields)}
@@ -172,7 +173,7 @@ export def "get-group-level-audit-logs" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/group/{group_id}/audit") $qp $auth.query)
   let req_body = {"filters": $filters} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -181,7 +182,7 @@ export def "get-group-level-audit-logs" [
   let req = {
     method: "post"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to, "page": $page, "sortOrder": $sort_order} | compact)
+    query: ({"from": $from, "to": $to, "page": $page, "sortOrder": $sort_order} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -635,8 +636,8 @@ export def "get-organization-level-audit-logs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-from: string # The date you wish to fetch results from, in the format YYYY-MM-DD. Default is 3 months ago. Please note that logs are only available for past 3 months. (e.g. 2019-07-01)
-  --qp-to: string # The date you wish to fetch results until, in the format YYYY-MM-DD. Default is today. Please note that logs are only available for past 3 months. (e.g. 2019-07-07)
+  --from: string # The date you wish to fetch results from, in the format YYYY-MM-DD. Default is 3 months ago. Please note that logs are only available for past 3 months. (e.g. 2019-07-01)
+  --to: string # The date you wish to fetch results until, in the format YYYY-MM-DD. Default is today. Please note that logs are only available for past 3 months. (e.g. 2019-07-07)
   --page: float # The page of results to request. Audit logs are returned in page sizes of 100. (e.g. 1)
   --sort-order: string # The sort order of the returned audit logs by date. Values: `ASC`, `DESC`. Default: `DESC`. (e.g. ASC)
   --filters: record # shape: {email?: string, ... (4 more fields)}
@@ -645,7 +646,7 @@ export def "get-organization-level-audit-logs" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($org_id | is-empty) { error make --unspanned { msg: "path parameter 'orgId' must be non-empty" } }
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({org_id: (encode-path-segment $org_id)} | format pattern "/org/{org_id}/audit") $qp $auth.query)
   let req_body = {"filters": $filters} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -654,7 +655,7 @@ export def "get-organization-level-audit-logs" [
   let req = {
     method: "post"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to, "page": $page, "sortOrder": $sort_order} | compact)
+    query: ({"from": $from, "to": $to, "page": $page, "sortOrder": $sort_order} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -717,7 +718,7 @@ export def "list-all-dependencies" [
 # operationId: Get an organization's entitlement value
 export def "get-an-organizations-entitlement-value" [
   org_id: string
-  entitlement_key: string
+  entitlement_key: string@entitlement-key-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1197,7 +1198,7 @@ export def "retrieve" [
 # --autoRemediationPrs shape: {backlogPrsEnabled?: bool, freshPrsEnabled?: bool, usePatchRemediation?: bool}
 # --manualRemediationPrs shape: {usePatchRemediation?: bool}
 # --pullRequestAssignment shape: {assignees?: list, enabled?: bool, type?: "auto"|"manual"}
-export def "update" [
+export def "put-org-org-id-integrations-integration-id-settings" [
   org_id: string
   integration_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2183,6 +2184,7 @@ export def "add-ignore" [
   let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), project_id: (encode-path-segment $project_id), issue_id: (encode-path-segment $issue_id)} | format pattern "/org/{org_id}/project/{project_id}/ignore/{issue_id}") $auth.query)
   let req_body = {"disregardIfFixable": $disregard_if_fixable, "expires": $expires, "ignorePath": $ignore_path, "reason": $reason, "reasonType": $reason_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "disregardIfFixable") == null) { error make --unspanned { msg: "required body field 'disregardIfFixable' missing: pass --disregard-if-fixable or pipe a record" } }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3132,15 +3134,17 @@ export def "get-issue-counts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-from: string # The date you wish to fetch results from, in the format `YYYY-MM-DD` (e.g. 2017-07-01)
-  --qp-to: string # The date you wish to fetch results until, in the format `YYYY-MM-DD` (e.g. 2017-07-03)
+  --from: string # The date you wish to fetch results from, in the format `YYYY-MM-DD` (required, e.g. 2017-07-01)
+  --to: string # The date you wish to fetch results until, in the format `YYYY-MM-DD` (required, e.g. 2017-07-03)
   --group-by: string@group-by-completer # The field to group results by (e.g. severity)
   --filters: record # shape: {fixable?: bool, ignored?: bool, isPatchable?: bool, isPinnable?: bool, isUpgradable?: bool, languages?: list, orgs: any, patched?: bool, priorityScore?: record, projects?: any, severity?: list, types?: list}
 ]: any -> record<results: table<count: float, day: string, fixable: record, severity: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "groupBy" $group_by "scalar")] | flatten | str join "&"
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "groupBy" $group_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reporting/counts/issues" $qp $auth.query)
   let req_body = {"filters": $filters} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3149,7 +3153,7 @@ export def "get-issue-counts" [
   let req = {
     method: "post"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to, "groupBy": $group_by} | compact)
+    query: ({"from": $from, "to": $to, "groupBy": $group_by} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -3216,14 +3220,16 @@ export def "get-project-counts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-from: string # The date you wish to fetch results from, in the format `YYYY-MM-DD` (e.g. 2017-07-01)
-  --qp-to: string # The date you wish to fetch results until, in the format `YYYY-MM-DD` (e.g. 2017-07-03)
+  --from: string # The date you wish to fetch results from, in the format `YYYY-MM-DD` (required, e.g. 2017-07-01)
+  --to: string # The date you wish to fetch results until, in the format `YYYY-MM-DD` (required, e.g. 2017-07-03)
   --filters: record # shape: {languages?: list, orgs: any, projects?: any}
 ]: any -> record<results: table<count: float, day: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reporting/counts/projects" $qp $auth.query)
   let req_body = {"filters": $filters} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3232,7 +3238,7 @@ export def "get-project-counts" [
   let req = {
     method: "post"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to} | compact)
+    query: ({"from": $from, "to": $to} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -3297,15 +3303,17 @@ export def "get-test-counts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-from: string # The date you wish to count tests from, in the format `YYYY-MM-DD` (e.g. 2017-07-01)
-  --qp-to: string # The date you wish to count tests until, in the format `YYYY-MM-DD` (e.g. 2017-07-03)
+  --from: string # The date you wish to count tests from, in the format `YYYY-MM-DD` (required, e.g. 2017-07-01)
+  --to: string # The date you wish to count tests until, in the format `YYYY-MM-DD` (required, e.g. 2017-07-03)
   --group-by: string@group-by-completer-1 # The field to group results by (e.g. isPrivate)
   --filters: record # shape: {isPrivate?: bool, issuesPrevented?: bool, orgs: any, projects?: any}
 ]: any -> record<results: table<count: float, isPrivate: record, issuesPrevented: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "groupBy" $group_by "scalar")] | flatten | str join "&"
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "groupBy" $group_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reporting/counts/tests" $qp $auth.query)
   let req_body = {"filters": $filters} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3314,7 +3322,7 @@ export def "get-test-counts" [
   let req = {
     method: "post"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to, "groupBy": $group_by} | compact)
+    query: ({"from": $from, "to": $to, "groupBy": $group_by} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -3340,8 +3348,8 @@ export def "get-list-of-issues" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-from: string # The date you wish to fetch results from, in the format `YYYY-MM-DD` (e.g. 2017-07-01)
-  --qp-to: string # The date you wish to fetch results until, in the format `YYYY-MM-DD` (e.g. 2017-07-07)
+  --from: string # The date you wish to fetch results from, in the format `YYYY-MM-DD` (required, e.g. 2017-07-01)
+  --to: string # The date you wish to fetch results until, in the format `YYYY-MM-DD` (required, e.g. 2017-07-07)
   --page: float # The page of results to request (e.g. 1)
   --per-page: float # The number of results to return per page (Maximum: 1000) (e.g. 100)
   --sort-by: string@sort-by-completer-2 # The key to sort results by (e.g. issueTitle)
@@ -3352,7 +3360,9 @@ export def "get-list-of-issues" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "perPage" $per_page "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "groupBy" $group_by "scalar")] | flatten | str join "&"
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "perPage" $per_page "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "groupBy" $group_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reporting/issues/" $qp $auth.query)
   let req_body = {"filters": $filters} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3361,7 +3371,7 @@ export def "get-list-of-issues" [
   let req = {
     method: "post"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to, "page": $page, "perPage": $per_page, "sortBy": $sort_by, "order": $order, "groupBy": $group_by} | compact)
+    query: ({"from": $from, "to": $to, "page": $page, "perPage": $per_page, "sortBy": $sort_by, "order": $order, "groupBy": $group_by} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"

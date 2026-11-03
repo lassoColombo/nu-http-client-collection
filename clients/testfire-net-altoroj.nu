@@ -137,10 +137,11 @@ export def "get-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Authorization token (provided upon successful login)
+  --authorization: string # Authorization token (provided upon successful login) (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/account" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -175,11 +176,12 @@ export def "get-account-balance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Authorization token (provided upon successful login)
+  --authorization: string # Authorization token (provided upon successful login) (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_no | is-empty) { error make --unspanned { msg: "path parameter 'accountNo' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({account_no: (encode-path-segment $account_no)} | format pattern "/account/{account_no}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -214,11 +216,12 @@ export def "show-last-ten-transactions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Authorization token (provided upon successful login)
+  --authorization: string # Authorization token (provided upon successful login) (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_no | is-empty) { error make --unspanned { msg: "path parameter 'accountNo' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({account_no: (encode-path-segment $account_no)} | format pattern "/account/{account_no}/transactions") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -253,7 +256,7 @@ export def "get-transactions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Authorization token (provided upon successful login)
+  --authorization: string # Authorization token (provided upon successful login) (required)
   end_date: string # format: date, e.g. 2012-03-17
   start_date: string # format: date, e.g. 2012-03-12
 ]: any -> any {
@@ -261,6 +264,7 @@ export def "get-transactions" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_no | is-empty) { error make --unspanned { msg: "path parameter 'accountNo' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({account_no: (encode-path-segment $account_no)} | format pattern "/account/{account_no}/transactions") $auth.query)
   let req_body = {"endDate": $end_date, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -296,7 +300,7 @@ export def "add-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Authorization token (provided upon successful login)
+  --authorization: string # Authorization token (provided upon successful login) (required)
   firstname: string # e.g. Bilbo
   lastname: string # e.g. Baggins
   password1: string # format: password, e.g. S3l3ctS0methingStr0ng5AsP@ssword
@@ -306,6 +310,7 @@ export def "add-user" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/admin/addUser" $auth.query)
   let req_body = {"firstname": $firstname, "lastname": $lastname, "password1": $password1, "password2": $password2, "username": $username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -341,7 +346,7 @@ export def "change-password" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Authorization token (provided upon successful login)
+  --authorization: string # Authorization token (provided upon successful login) (required)
   --password1: string # format: password, e.g. Th1s!sz3nu3Passv0rd
   password2: string # format: password, e.g. Th1s!sz3nu3Passv0rd
   username: string # e.g. jdoe
@@ -349,6 +354,7 @@ export def "change-password" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/admin/changePassword" $auth.query)
   let req_body = {"password1": $password1, "password2": $password2, "username": $username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -426,11 +432,12 @@ export def "get-feedback" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Authorization token (provided upon successful login)
+  --authorization: string # Authorization token (provided upon successful login) (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($feedback_id | is-empty) { error make --unspanned { msg: "path parameter 'feedbackId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({feedback_id: (encode-path-segment $feedback_id)} | format pattern "/feedback/{feedback_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -464,10 +471,11 @@ export def "check-login" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Authorization token (provided upon successful login)
+  --authorization: string # Authorization token (provided upon successful login) (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/login" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -574,7 +582,7 @@ export def "trasnfer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Authorization token (provided upon successful login)
+  --authorization: string # Authorization token (provided upon successful login) (required)
   from_account: string # e.g. 800003
   to_account: string # e.g. 800002
   transfer_amount: string # e.g. 200
@@ -582,6 +590,7 @@ export def "trasnfer" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/transfer" $auth.query)
   let req_body = {"fromAccount": $from_account, "toAccount": $to_account, "transferAmount": $transfer_amount} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

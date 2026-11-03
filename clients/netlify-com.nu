@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -1608,13 +1608,16 @@ export def "transfer-dns-zone" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --account-id: string # the account of the dns zone
-  --transfer-account-id: string # the account you want to transfer the dns zone to
-  --transfer-user-id: string # the user you want to transfer the dns zone to
+  --account-id: string # the account of the dns zone (required)
+  --transfer-account-id: string # the account you want to transfer the dns zone to (required)
+  --transfer-user-id: string # the user you want to transfer the dns zone to (required)
 ]: nothing -> record<account_id: string, account_name: string, account_slug: string, created_at: string, dedicated: bool, dns_servers: list<string>, domain: string, errors: list<string>, id: string, ipv6_enabled: bool, name: string, records: table<dns_zone_id: string, flag: int, hostname: string, id: string, managed: bool, priority: int, site_id: string, tag: string, ttl: int, type: string, value: string>, site_id: string, supported_record_types: list<string>, updated_at: string, user_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($zone_id | is-empty) { error make --unspanned { msg: "path parameter 'zone_id' must be non-empty" } }
+  if ($account_id == null) { error make --unspanned { msg: "required query parameter 'account_id' missing: pass --account-id" } }
+  if ($transfer_account_id == null) { error make --unspanned { msg: "required query parameter 'transfer_account_id' missing: pass --transfer-account-id" } }
+  if ($transfer_user_id == null) { error make --unspanned { msg: "required query parameter 'transfer_user_id' missing: pass --transfer-user-id" } }
   let qp = [(serialize-qp "account_id" $account_id "scalar") (serialize-qp "transfer_account_id" $transfer_account_id "scalar") (serialize-qp "transfer_user_id" $transfer_user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({zone_id: (encode-path-segment $zone_id)} | format pattern "/dns_zones/{zone_id}/transfer") $qp $auth.query)
   let accept_val = "application/json"
@@ -1684,10 +1687,11 @@ export def "list-hooks-by-site-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --site-id: string
+  --site-id: string # required
 ]: nothing -> table<created_at: string, data: record, disabled: bool, event: string, id: string, site_id: string, type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($site_id == null) { error make --unspanned { msg: "required query parameter 'site_id' missing: pass --site-id" } }
   let qp = [(serialize-qp "site_id" $site_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hooks" $qp $auth.query)
   let accept_val = "application/json"
@@ -1719,19 +1723,20 @@ export def "create-hook-by-site-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --site-id: string
+  --site-id: string # required
   --created-at: string # format: dateTime
   --data: record
   --disabled: oneof<nothing, bool>
   --event: string
   --id: string
-  --site-id-body: string #  (body field)
+  --site-id-body: string # (body field)
   --type: string
   --updated-at: string # format: dateTime
 ]: any -> record<created_at: string, data: record, disabled: bool, event: string, id: string, site_id: string, type: string, updated_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($site_id == null) { error make --unspanned { msg: "required query parameter 'site_id' missing: pass --site-id" } }
   let qp = [(serialize-qp "site_id" $site_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hooks" $qp $auth.query)
   let req_body = {"created_at": $created_at, "data": $data, "disabled": $disabled, "event": $event, "id": $id, "site_id": $site_id_body, "type": $type, "updated_at": $updated_at} | compact
@@ -1949,10 +1954,11 @@ export def "create-ticket" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --client-id: string
+  --client-id: string # required
 ]: nothing -> record<authorized: bool, client_id: string, created_at: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($client_id == null) { error make --unspanned { msg: "required query parameter 'client_id' missing: pass --client-id" } }
   let qp = [(serialize-qp "client_id" $client_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/oauth/tickets" $qp $auth.query)
   let accept_val = "application/json"
@@ -2459,14 +2465,17 @@ export def "create-site-asset" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name: string
-  --size: int # format: int64
-  --content-type: string
+  --name: string # required
+  --size: int # required, format: int64
+  --content-type: string # required
   --visibility: string
 ]: nothing -> record<asset: record<content_type: string, created_at: string, creator_id: string, id: string, key: string, name: string, site_id: string, size: int, state: string, updated_at: string, url: string, visibility: string>, form: record<fields: record, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($site_id | is-empty) { error make --unspanned { msg: "path parameter 'site_id' must be non-empty" } }
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
+  if ($size == null) { error make --unspanned { msg: "required query parameter 'size' missing: pass --size" } }
+  if ($content_type == null) { error make --unspanned { msg: "required query parameter 'content_type' missing: pass --content-type" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "content_type" $content_type "scalar") (serialize-qp "visibility" $visibility "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({site_id: (encode-path-segment $site_id)} | format pattern "/sites/{site_id}/assets") $qp $auth.query)
   let accept_val = "application/json"
@@ -2574,12 +2583,13 @@ export def "update-site-asset" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --state: string
+  --state: string # required
 ]: nothing -> record<content_type: string, created_at: string, creator_id: string, id: string, key: string, name: string, site_id: string, size: int, state: string, updated_at: string, url: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($site_id | is-empty) { error make --unspanned { msg: "path parameter 'site_id' must be non-empty" } }
   if ($asset_id | is-empty) { error make --unspanned { msg: "path parameter 'asset_id' must be non-empty" } }
+  if ($state == null) { error make --unspanned { msg: "required query parameter 'state' missing: pass --state" } }
   let qp = [(serialize-qp "state" $state "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({site_id: (encode-path-segment $site_id), asset_id: (encode-path-segment $asset_id)} | format pattern "/sites/{site_id}/assets/{asset_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -3004,7 +3014,7 @@ export def "create-site-deploy" [
   --latest-published: oneof<nothing, bool>
   --title: string
   --async: oneof<nothing, bool>
-  --branch-body: string #  (body field)
+  --branch-body: string # (body field)
   --draft: oneof<nothing, bool>
   --files: record
   --framework: string
@@ -3499,12 +3509,13 @@ export def "get-latest-plugin-runs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --packages: list<string>
+  --packages: list<string> # required
   --state: string
 ]: nothing -> table<package: string, reporting_event: string, state: string, summary: string, text: string, title: string, version: string, deploy_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($site_id | is-empty) { error make --unspanned { msg: "path parameter 'site_id' must be non-empty" } }
+  if ($packages == null) { error make --unspanned { msg: "required query parameter 'packages' missing: pass --packages" } }
   let qp = [(serialize-qp "packages" $packages "csv") (serialize-qp "state" $state "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({site_id: (encode-path-segment $site_id)} | format pattern "/sites/{site_id}/plugin_runs/latest") $qp $auth.query)
   let accept_val = "application/json"

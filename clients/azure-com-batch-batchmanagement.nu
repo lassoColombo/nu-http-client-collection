@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -159,10 +159,11 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to be used with the HTTP request.
+  --api-version: string # The API version to be used with the HTTP request. (required)
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string, origin: string, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Batch/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -196,11 +197,12 @@ export def "batch-account-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to be used with the HTTP request.
+  --api-version: string # The API version to be used with the HTTP request. (required)
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Batch/batchAccounts") $qp $auth.query)
   let accept_val = "application/json"
@@ -235,7 +237,7 @@ export def "location-check-name-availability" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to be used with the HTTP request.
+  --api-version: string # The API version to be used with the HTTP request. (required)
   name: string # The name to check for availability
   type: string@type-completer # The resource type. Must be set to Microsoft.Batch/batchAccounts
 ]: any -> record<message: string, nameAvailable: bool, reason: string> {
@@ -244,6 +246,7 @@ export def "location-check-name-availability" [
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($location_name | is-empty) { error make --unspanned { msg: "path parameter 'locationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location_name: (encode-path-segment $location_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Batch/locations/{location_name}/checkNameAvailability") $qp $auth.query)
   let req_body = {"name": $name, "type": $type} | compact
@@ -280,12 +283,13 @@ export def "location-get-quotas" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to be used with the HTTP request.
+  --api-version: string # The API version to be used with the HTTP request. (required)
 ]: nothing -> record<accountQuota: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($location_name | is-empty) { error make --unspanned { msg: "path parameter 'locationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location_name: (encode-path-segment $location_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Batch/locations/{location_name}/quotas") $qp $auth.query)
   let accept_val = "application/json"
@@ -320,12 +324,13 @@ export def "batch-account-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to be used with the HTTP request.
+  --api-version: string # The API version to be used with the HTTP request. (required)
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts") $qp $auth.query)
   let accept_val = "application/json"
@@ -361,13 +366,14 @@ export def "batch-account-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to be used with the HTTP request.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # The API version to be used with the HTTP request. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -403,13 +409,14 @@ export def "batch-account-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to be used with the HTTP request.
+  --api-version: string # The API version to be used with the HTTP request. (required)
 ]: nothing -> record<properties: record<accountEndpoint: string, activeJobAndJobScheduleQuota: int, autoStorage: record<lastKeySync: string, storageAccountId: string>, dedicatedCoreQuota: int, dedicatedCoreQuotaPerVMFamily: list<record>, dedicatedCoreQuotaPerVMFamilyEnforced: bool, keyVaultReference: record<id: string, url: string>, lowPriorityCoreQuota: int, poolAllocationMode: string, poolQuota: int, provisioningState: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -446,7 +453,7 @@ export def "batch-account-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to be used with the HTTP request.
+  --api-version: string # The API version to be used with the HTTP request. (required)
   --properties: any # The properties of a Batch account. — shape: {autoStorage?: any}
   --tags: record # The user-specified tags associated with the account.
 ]: any -> record<properties: record<accountEndpoint: string, activeJobAndJobScheduleQuota: int, autoStorage: record<lastKeySync: string, storageAccountId: string>, dedicatedCoreQuota: int, dedicatedCoreQuotaPerVMFamily: list<record>, dedicatedCoreQuotaPerVMFamilyEnforced: bool, keyVaultReference: record<id: string, url: string>, lowPriorityCoreQuota: int, poolAllocationMode: string, poolQuota: int, provisioningState: string>, id: string, location: string, name: string, tags: record, type: string> {
@@ -456,6 +463,7 @@ export def "batch-account-update" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -494,7 +502,7 @@ export def "batch-account-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to be used with the HTTP request.
+  --api-version: string # The API version to be used with the HTTP request. (required)
   location: string # The region in which to create the account.
   --properties: any # The properties of a Batch account. — shape: {autoStorage?: any, keyVaultReference?: any, poolAllocationMode?: "BatchService"|"UserSubscription"}
   --tags: record # The user-specified tags associated with the account.
@@ -505,6 +513,7 @@ export def "batch-account-create" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}") $qp $auth.query)
   let req_body = {"location": $location, "properties": $properties, "tags": $tags} | compact
@@ -543,13 +552,14 @@ export def "application-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # The maximum number of items to return in the response. (format: int32)
-  --api-version: string # The API version to be used with the HTTP request.
+  --api-version: string # The API version to be used with the HTTP request. (required)
 ]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/applications") $qp $auth.query)
   let accept_val = "application/json"
@@ -586,14 +596,15 @@ export def "application-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to be used with the HTTP request.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # The API version to be used with the HTTP request. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($application_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), application_name: (encode-path-segment $application_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/applications/{application_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -630,7 +641,7 @@ export def "application-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to be used with the HTTP request.
+  --api-version: string # The API version to be used with the HTTP request. (required)
 ]: nothing -> record<properties: record<allowUpdates: bool, defaultVersion: string, displayName: string>, etag: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -638,6 +649,7 @@ export def "application-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($application_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), application_name: (encode-path-segment $application_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/applications/{application_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -675,7 +687,7 @@ export def "application-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to be used with the HTTP request.
+  --api-version: string # The API version to be used with the HTTP request. (required)
   --properties: any # The properties associated with the Application. — shape: {allowUpdates?: bool, defaultVersion?: string, displayName?: string}
 ]: any -> record<properties: record<allowUpdates: bool, defaultVersion: string, displayName: string>, etag: string, id: string, name: string, type: string> {
   let input = $in
@@ -685,6 +697,7 @@ export def "application-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($application_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), application_name: (encode-path-segment $application_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/applications/{application_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -724,7 +737,7 @@ export def "application-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to be used with the HTTP request.
+  --api-version: string # The API version to be used with the HTTP request. (required)
   --properties: any # The properties associated with the Application. — shape: {allowUpdates?: bool, defaultVersion?: string, displayName?: string}
 ]: any -> record<properties: record<allowUpdates: bool, defaultVersion: string, displayName: string>, etag: string, id: string, name: string, type: string> {
   let input = $in
@@ -734,6 +747,7 @@ export def "application-create" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($application_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), application_name: (encode-path-segment $application_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/applications/{application_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -773,7 +787,7 @@ export def "application-package-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # The maximum number of items to return in the response. (format: int32)
-  --api-version: string # The API version to be used with the HTTP request.
+  --api-version: string # The API version to be used with the HTTP request. (required)
 ]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -781,6 +795,7 @@ export def "application-package-list" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($application_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), application_name: (encode-path-segment $application_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/applications/{application_name}/versions") $qp $auth.query)
   let accept_val = "application/json"
@@ -818,8 +833,8 @@ export def "application-package-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to be used with the HTTP request.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # The API version to be used with the HTTP request. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -827,6 +842,7 @@ export def "application-package-delete" [
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($application_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationName' must be non-empty" } }
   if ($version_name | is-empty) { error make --unspanned { msg: "path parameter 'versionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), application_name: (encode-path-segment $application_name), version_name: (encode-path-segment $version_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/applications/{application_name}/versions/{version_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -864,7 +880,7 @@ export def "application-package-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to be used with the HTTP request.
+  --api-version: string # The API version to be used with the HTTP request. (required)
 ]: nothing -> record<properties: record<format: string, lastActivationTime: string, state: string, storageUrl: string, storageUrlExpiry: string>, etag: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -873,6 +889,7 @@ export def "application-package-get" [
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($application_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationName' must be non-empty" } }
   if ($version_name | is-empty) { error make --unspanned { msg: "path parameter 'versionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), application_name: (encode-path-segment $application_name), version_name: (encode-path-segment $version_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/applications/{application_name}/versions/{version_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -910,7 +927,7 @@ export def "application-package-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to be used with the HTTP request.
+  --api-version: string # The API version to be used with the HTTP request. (required)
   --properties: any # Properties of an application package
 ]: any -> record<properties: record<format: string, lastActivationTime: string, state: string, storageUrl: string, storageUrlExpiry: string>, etag: string, id: string, name: string, type: string> {
   let input = $in
@@ -921,6 +938,7 @@ export def "application-package-create" [
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($application_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationName' must be non-empty" } }
   if ($version_name | is-empty) { error make --unspanned { msg: "path parameter 'versionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), application_name: (encode-path-segment $application_name), version_name: (encode-path-segment $version_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/applications/{application_name}/versions/{version_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -960,7 +978,7 @@ export def "application-package-activate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to be used with the HTTP request.
+  --api-version: string # The API version to be used with the HTTP request. (required)
   format: string # The format of the application package binary file.
 ]: any -> record<properties: record<format: string, lastActivationTime: string, state: string, storageUrl: string, storageUrlExpiry: string>, etag: string, id: string, name: string, type: string> {
   let input = $in
@@ -971,6 +989,7 @@ export def "application-package-activate" [
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($application_name | is-empty) { error make --unspanned { msg: "path parameter 'applicationName' must be non-empty" } }
   if ($version_name | is-empty) { error make --unspanned { msg: "path parameter 'versionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), application_name: (encode-path-segment $application_name), version_name: (encode-path-segment $version_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/applications/{application_name}/versions/{version_name}/activate") $qp $auth.query)
   let req_body = {"format": $format} | compact
@@ -1011,13 +1030,14 @@ export def "certificate-list-by-batch-account" [
   --maxresults: int # The maximum number of items to return in the response. (format: int32)
   --select: string # Comma separated list of properties that should be returned. e.g. "properties/provisioningState". Only top level properties under properties/ are valid for selection.
   --filter: string # OData filter expression. Valid properties for filtering are "properties/provisioningState", "properties/provisioningStateTransitionTime", "name".
-  --api-version: string # The API version to be used with the HTTP request.
+  --api-version: string # The API version to be used with the HTTP request. (required)
 ]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/certificates") $qp $auth.query)
   let accept_val = "application/json"
@@ -1054,14 +1074,15 @@ export def "certificate-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to be used with the HTTP request.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # The API version to be used with the HTTP request. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'certificateName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), certificate_name: (encode-path-segment $certificate_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/certificates/{certificate_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1098,7 +1119,7 @@ export def "certificate-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to be used with the HTTP request.
+  --api-version: string # The API version to be used with the HTTP request. (required)
 ]: nothing -> record<properties: record<deleteCertificateError: record<code: string, details: list, message: string, target: string>, previousProvisioningState: string, previousProvisioningStateTransitionTime: string, provisioningState: string, provisioningStateTransitionTime: string, publicData: string, format: string, thumbprint: string, thumbprintAlgorithm: string>, etag: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1106,6 +1127,7 @@ export def "certificate-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'certificateName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), certificate_name: (encode-path-segment $certificate_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/certificates/{certificate_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1143,7 +1165,7 @@ export def "certificate-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to be used with the HTTP request.
+  --api-version: string # The API version to be used with the HTTP request. (required)
   --if-match: string # The entity state (ETag) version of the certificate to update. This value can be omitted or set to "*" to apply the operation unconditionally.
   --properties: any # Certificate properties for create operations — shape: {data: string, password?: string, format?: "Pfx"|"Cer", thumbprint?: string, thumbprintAlgorithm?: string}
 ]: any -> record<properties: record<deleteCertificateError: record<code: string, details: list, message: string, target: string>, previousProvisioningState: string, previousProvisioningStateTransitionTime: string, provisioningState: string, provisioningStateTransitionTime: string, publicData: string, format: string, thumbprint: string, thumbprintAlgorithm: string>, etag: string, id: string, name: string, type: string> {
@@ -1154,6 +1176,7 @@ export def "certificate-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'certificateName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), certificate_name: (encode-path-segment $certificate_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/certificates/{certificate_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -1195,7 +1218,7 @@ export def "certificate-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to be used with the HTTP request.
+  --api-version: string # The API version to be used with the HTTP request. (required)
   --if-match: string # The entity state (ETag) version of the certificate to update. A value of "*" can be used to apply the operation only if the certificate already exists. If omitted, this operation will always be applied.
   --if-none-match: string # Set to '*' to allow a new certificate to be created, but to prevent updating an existing certificate. Other values will be ignored.
   --properties: any # Certificate properties for create operations — shape: {data: string, password?: string, format?: "Pfx"|"Cer", thumbprint?: string, thumbprintAlgorithm?: string}
@@ -1207,6 +1230,7 @@ export def "certificate-create" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'certificateName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), certificate_name: (encode-path-segment $certificate_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/certificates/{certificate_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -1247,7 +1271,7 @@ export def "certificate-cancel-deletion" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to be used with the HTTP request.
+  --api-version: string # The API version to be used with the HTTP request. (required)
 ]: nothing -> record<properties: record<deleteCertificateError: record<code: string, details: list, message: string, target: string>, previousProvisioningState: string, previousProvisioningStateTransitionTime: string, provisioningState: string, provisioningStateTransitionTime: string, publicData: string, format: string, thumbprint: string, thumbprintAlgorithm: string>, etag: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1255,6 +1279,7 @@ export def "certificate-cancel-deletion" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'certificateName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), certificate_name: (encode-path-segment $certificate_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/certificates/{certificate_name}/cancelDelete") $qp $auth.query)
   let accept_val = "application/json"
@@ -1290,13 +1315,14 @@ export def "batch-account-get-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to be used with the HTTP request.
+  --api-version: string # The API version to be used with the HTTP request. (required)
 ]: nothing -> record<accountName: string, primary: string, secondary: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/listKeys") $qp $auth.query)
   let accept_val = "application/json"
@@ -1335,13 +1361,14 @@ export def "pool-list-by-batch-account" [
   --maxresults: int # The maximum number of items to return in the response. (format: int32)
   --select: string # Comma separated list of properties that should be returned. e.g. "properties/provisioningState". Only top level properties under properties/ are valid for selection.
   --filter: string # OData filter expression. Valid properties for filtering are: name properties/allocationState properties/allocationStateTransitionTime properties/creationTime properties/provisioningState properties/provisioningStateTransitionTime properties/lastModified properties/vmSize properties/interNodeCommunication properties/scaleSettings/autoScale properties/scaleSettings/fixedScale
-  --api-version: string # The API version to be used with the HTTP request.
+  --api-version: string # The API version to be used with the HTTP request. (required)
 ]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/pools") $qp $auth.query)
   let accept_val = "application/json"
@@ -1378,14 +1405,15 @@ export def "pool-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to be used with the HTTP request.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # The API version to be used with the HTTP request. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($pool_name | is-empty) { error make --unspanned { msg: "path parameter 'poolName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), pool_name: (encode-path-segment $pool_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/pools/{pool_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1422,7 +1450,7 @@ export def "pool-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to be used with the HTTP request.
+  --api-version: string # The API version to be used with the HTTP request. (required)
 ]: nothing -> record<properties: record<allocationState: string, allocationStateTransitionTime: string, applicationLicenses: list<string>, applicationPackages: list<record>, autoScaleRun: record<error: record, evaluationTime: string, results: string>, certificates: list<record>, creationTime: string, currentDedicatedNodes: int, currentLowPriorityNodes: int, deploymentConfiguration: record<cloudServiceConfiguration: record, virtualMachineConfiguration: record>, displayName: string, interNodeCommunication: string, lastModified: string, maxTasksPerNode: int, metadata: list<record>, mountConfiguration: list<record>, networkConfiguration: record<endpointConfiguration: record, publicIPs: list, subnetId: string>, provisioningState: string, provisioningStateTransitionTime: string, resizeOperationStatus: record<errors: list, nodeDeallocationOption: string, resizeTimeout: string, startTime: string, targetDedicatedNodes: int, targetLowPriorityNodes: int>, scaleSettings: record<autoScale: record, fixedScale: record>, startTask: record<commandLine: string, containerSettings: record, environmentSettings: list, maxTaskRetryCount: int, resourceFiles: list, userIdentity: record, waitForSuccess: bool>, taskSchedulingPolicy: record<nodeFillType: string>, userAccounts: list<record>, vmSize: string>, etag: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1430,6 +1458,7 @@ export def "pool-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($pool_name | is-empty) { error make --unspanned { msg: "path parameter 'poolName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), pool_name: (encode-path-segment $pool_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/pools/{pool_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1467,7 +1496,7 @@ export def "pool-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to be used with the HTTP request.
+  --api-version: string # The API version to be used with the HTTP request. (required)
   --if-match: string # The entity state (ETag) version of the pool to update. This value can be omitted or set to "*" to apply the operation unconditionally.
   --properties: any # Pool properties. — shape: {applicationLicenses?: list<string>, applicationPackages?: list, autoScaleRun?: any, certificates?: list, deploymentConfiguration?: any, displayName?: string, interNodeCommunication?: "Enabled"|"Disabled", maxTasksPerNode?: int, metadata?: list, mountConfiguration?: list, networkConfiguration?: any, resizeOperationStatus?: any, scaleSettings?: any, startTask?: any, taskSchedulingPolicy?: any, userAccounts?: list, vmSize?: string}
 ]: any -> record<properties: record<allocationState: string, allocationStateTransitionTime: string, applicationLicenses: list<string>, applicationPackages: list<record>, autoScaleRun: record<error: record, evaluationTime: string, results: string>, certificates: list<record>, creationTime: string, currentDedicatedNodes: int, currentLowPriorityNodes: int, deploymentConfiguration: record<cloudServiceConfiguration: record, virtualMachineConfiguration: record>, displayName: string, interNodeCommunication: string, lastModified: string, maxTasksPerNode: int, metadata: list<record>, mountConfiguration: list<record>, networkConfiguration: record<endpointConfiguration: record, publicIPs: list, subnetId: string>, provisioningState: string, provisioningStateTransitionTime: string, resizeOperationStatus: record<errors: list, nodeDeallocationOption: string, resizeTimeout: string, startTime: string, targetDedicatedNodes: int, targetLowPriorityNodes: int>, scaleSettings: record<autoScale: record, fixedScale: record>, startTask: record<commandLine: string, containerSettings: record, environmentSettings: list, maxTaskRetryCount: int, resourceFiles: list, userIdentity: record, waitForSuccess: bool>, taskSchedulingPolicy: record<nodeFillType: string>, userAccounts: list<record>, vmSize: string>, etag: string, id: string, name: string, type: string> {
@@ -1478,6 +1507,7 @@ export def "pool-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($pool_name | is-empty) { error make --unspanned { msg: "path parameter 'poolName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), pool_name: (encode-path-segment $pool_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/pools/{pool_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -1519,7 +1549,7 @@ export def "pool-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to be used with the HTTP request.
+  --api-version: string # The API version to be used with the HTTP request. (required)
   --if-match: string # The entity state (ETag) version of the pool to update. A value of "*" can be used to apply the operation only if the pool already exists. If omitted, this operation will always be applied.
   --if-none-match: string # Set to '*' to allow a new pool to be created, but to prevent updating an existing pool. Other values will be ignored.
   --properties: any # Pool properties. — shape: {applicationLicenses?: list<string>, applicationPackages?: list, autoScaleRun?: any, certificates?: list, deploymentConfiguration?: any, displayName?: string, interNodeCommunication?: "Enabled"|"Disabled", maxTasksPerNode?: int, metadata?: list, mountConfiguration?: list, networkConfiguration?: any, resizeOperationStatus?: any, scaleSettings?: any, startTask?: any, taskSchedulingPolicy?: any, userAccounts?: list, vmSize?: string}
@@ -1531,6 +1561,7 @@ export def "pool-create" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($pool_name | is-empty) { error make --unspanned { msg: "path parameter 'poolName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), pool_name: (encode-path-segment $pool_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/pools/{pool_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -1571,7 +1602,7 @@ export def "pool-disable-auto-scale" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to be used with the HTTP request.
+  --api-version: string # The API version to be used with the HTTP request. (required)
 ]: nothing -> record<properties: record<allocationState: string, allocationStateTransitionTime: string, applicationLicenses: list<string>, applicationPackages: list<record>, autoScaleRun: record<error: record, evaluationTime: string, results: string>, certificates: list<record>, creationTime: string, currentDedicatedNodes: int, currentLowPriorityNodes: int, deploymentConfiguration: record<cloudServiceConfiguration: record, virtualMachineConfiguration: record>, displayName: string, interNodeCommunication: string, lastModified: string, maxTasksPerNode: int, metadata: list<record>, mountConfiguration: list<record>, networkConfiguration: record<endpointConfiguration: record, publicIPs: list, subnetId: string>, provisioningState: string, provisioningStateTransitionTime: string, resizeOperationStatus: record<errors: list, nodeDeallocationOption: string, resizeTimeout: string, startTime: string, targetDedicatedNodes: int, targetLowPriorityNodes: int>, scaleSettings: record<autoScale: record, fixedScale: record>, startTask: record<commandLine: string, containerSettings: record, environmentSettings: list, maxTaskRetryCount: int, resourceFiles: list, userIdentity: record, waitForSuccess: bool>, taskSchedulingPolicy: record<nodeFillType: string>, userAccounts: list<record>, vmSize: string>, etag: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1579,6 +1610,7 @@ export def "pool-disable-auto-scale" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($pool_name | is-empty) { error make --unspanned { msg: "path parameter 'poolName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), pool_name: (encode-path-segment $pool_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/pools/{pool_name}/disableAutoScale") $qp $auth.query)
   let accept_val = "application/json"
@@ -1615,7 +1647,7 @@ export def "pool-stop-resize" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to be used with the HTTP request.
+  --api-version: string # The API version to be used with the HTTP request. (required)
 ]: nothing -> record<properties: record<allocationState: string, allocationStateTransitionTime: string, applicationLicenses: list<string>, applicationPackages: list<record>, autoScaleRun: record<error: record, evaluationTime: string, results: string>, certificates: list<record>, creationTime: string, currentDedicatedNodes: int, currentLowPriorityNodes: int, deploymentConfiguration: record<cloudServiceConfiguration: record, virtualMachineConfiguration: record>, displayName: string, interNodeCommunication: string, lastModified: string, maxTasksPerNode: int, metadata: list<record>, mountConfiguration: list<record>, networkConfiguration: record<endpointConfiguration: record, publicIPs: list, subnetId: string>, provisioningState: string, provisioningStateTransitionTime: string, resizeOperationStatus: record<errors: list, nodeDeallocationOption: string, resizeTimeout: string, startTime: string, targetDedicatedNodes: int, targetLowPriorityNodes: int>, scaleSettings: record<autoScale: record, fixedScale: record>, startTask: record<commandLine: string, containerSettings: record, environmentSettings: list, maxTaskRetryCount: int, resourceFiles: list, userIdentity: record, waitForSuccess: bool>, taskSchedulingPolicy: record<nodeFillType: string>, userAccounts: list<record>, vmSize: string>, etag: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1623,6 +1655,7 @@ export def "pool-stop-resize" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($pool_name | is-empty) { error make --unspanned { msg: "path parameter 'poolName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), pool_name: (encode-path-segment $pool_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/pools/{pool_name}/stopResize") $qp $auth.query)
   let accept_val = "application/json"
@@ -1658,7 +1691,7 @@ export def "batch-account-regenerate-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to be used with the HTTP request.
+  --api-version: string # The API version to be used with the HTTP request. (required)
   key_name: string@key-name-completer # The type of account key to regenerate.
 ]: any -> record<accountName: string, primary: string, secondary: string> {
   let input = $in
@@ -1667,6 +1700,7 @@ export def "batch-account-regenerate-key" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/regenerateKeys") $qp $auth.query)
   let req_body = {"keyName": $key_name} | compact
@@ -1704,13 +1738,14 @@ export def "batch-account-synchronize-auto-storage-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to be used with the HTTP request.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # The API version to be used with the HTTP request. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Batch/batchAccounts/{account_name}/syncAutoStorageKeys") $qp $auth.query)
   let accept_val = "application/json"

@@ -1,6 +1,7 @@
 # Auto-generated client for Marketplace API v1.0
 # Source: https://api.apis.guru/v2/specs/vtex.local/Marketplace-APIs/1.0/openapi.json
-# Auth: --token flag or $env.MARKETPLACE_API_TOKEN
+# Auth (appKey): --token-appkey flag or $env.MARKETPLACE_API_APPKEY_TOKEN
+# Auth (appToken): --token-apptoken flag or $env.MARKETPLACE_API_APPTOKEN_TOKEN
 
 const BASE_URL = "https://vtex.local"
 
@@ -12,8 +13,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-vtex-api-appkey" => { {scheme: $scheme, headers: {X-VTEX-API-AppKey: $token_val}, query: "", location: "header"} }
-    "x-vtex-api-apptoken" => { {scheme: $scheme, headers: {X-VTEX-API-AppToken: $token_val}, query: "", location: "header"} }
+    "x-vtex-api-appkey" => { {scheme: $scheme, headers: {"X-VTEX-API-AppKey": $token_val}, query: "", location: "header"} }
+    "x-vtex-api-apptoken" => { {scheme: $scheme, headers: {"X-VTEX-API-AppToken": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -132,7 +133,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-appkey" "token-apptoken"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "inventory-notification" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -169,15 +170,19 @@ export def "inventory-notification" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --account-name: string # Name of the VTEX account that belongs to the marketplace. The notification will be posted into this account. (default: apiexamples)
-  --environment: string # Environment to use. Used as part of the URL. (default: vtexcommercestable)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --content-type: string # Describes the type of the content being sent.
+  --account-name: string # Name of the VTEX account that belongs to the marketplace. The notification will be posted into this account. (required, default: apiexamples)
+  --environment: string # Environment to use. Used as part of the URL. (required, default: vtexcommercestable)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MARKETPLACE_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MARKETPLACE_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($seller_id | is-empty) { error make --unspanned { msg: "path parameter 'sellerId' must be non-empty" } }
   if ($sku_id | is-empty) { error make --unspanned { msg: "path parameter 'skuId' must be non-empty" } }
+  let account_name = ($account_name | default "apiexamples")
+  let environment = ($environment | default "vtexcommercestable")
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id), sku_id: (encode-path-segment $sku_id)} | format pattern "/notificator/{seller_id}/changenotification/{sku_id}/inventory") $qp $auth.query)
   let accept_val = "application/json"
@@ -214,15 +219,19 @@ export def "price-notification" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --account-name: string # Name of the VTEX account that belongs to the marketplace. The notification will be posted into this account. (default: apiexamples)
-  --environment: string # Environment to use. Used as part of the URL. (default: vtexcommercestable)
-  --content-type: string # Describes the type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
+  --account-name: string # Name of the VTEX account that belongs to the marketplace. The notification will be posted into this account. (required, default: apiexamples)
+  --environment: string # Environment to use. Used as part of the URL. (required, default: vtexcommercestable)
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MARKETPLACE_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MARKETPLACE_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($seller_id | is-empty) { error make --unspanned { msg: "path parameter 'sellerId' must be non-empty" } }
   if ($sku_id | is-empty) { error make --unspanned { msg: "path parameter 'skuId' must be non-empty" } }
+  let account_name = ($account_name | default "apiexamples")
+  let environment = ($environment | default "vtexcommercestable")
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id), sku_id: (encode-path-segment $sku_id)} | format pattern "/notificator/{seller_id}/changenotification/{sku_id}/price") $qp $auth.query)
   let accept_val = "application/json"
@@ -257,18 +266,22 @@ export def "getofferslist" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-sort: string # Criteria used to sort the list of offers. For sorting values in ascending order, use `asc`, while for descending order, use `desc`. To fill in the field, insert the sorting criteria, followed by 'asc', or 'desc', separated by a comma. You can sort by the following criteria: - **price:** sorts offers by price. *Ascending* goes from lowest to highest price, while *Descending* goes from highest to lowest price. - **name:** sorts offers by *productName*, in alphabetical order. *Ascending* goes from *A* to *Z*, while *Descending* goes from *Z* to *A*. - **availability:** availability in the sales channel (sc). The default value is 1. Ex. sort=availability,desc Ex. sort=name,asc Ex. price,desc (e.g. availability,desc)
+  --sort: string # Criteria used to sort the list of offers. For sorting values in ascending order, use `asc`, while for descending order, use `desc`. To fill in the field, insert the sorting criteria, followed by 'asc', or 'desc', separated by a comma. You can sort by the following criteria: - **price:** sorts offers by price. *Ascending* goes from lowest to highest price, while *Descending* goes from highest to lowest price. - **name:** sorts offers by *productName*, in alphabetical order. *Ascending* goes from *A* to *Z*, while *Descending* goes from *Z* to *A*. - **availability:** availability in the sales channel (sc). The default value is 1. Ex. sort=availability,desc Ex. sort=name,asc Ex. price,desc (e.g. availability,desc)
   --rows: int # Number of rows included in the response. Each row corresponds to a single offer. The default amount of rows in the response is 1, and the maximum amount is 50. To have more than one offer listed in the response, please add the `rows` parameter with a number greater than 1. (default: 20)
   --start: int # Number corresponding to the row from which the offer list will begin, used for pagination. Filters the list of offers by retrieving the offers starting from the row defined. The default value is 0, if the param is not included in the call. (default: 21)
   --fq: string # This filter query can be used to filter offers by the criteria described below. It should be filled in by following the format: `fq={{criteriaName}}:{{criteriaValue}}`. - **productId:** integer of the product ID - **productName:** string of the product's name - **skuId:** integer of the SKU ID - **eanId:** string of the EAN ID - **refId:** string of the Ref ID - **categoryId:** integer of the category ID - **brandId:** integer of the brand ID - **sellerId:** string of the seller ID - **sc:** integer of the sales channel's ID (trade policy in VTEX) Ex: skuId:172 Ex: categoryId:13 Ex. productName:Product example-123 (e.g. skuId:172)
-  --account-name: string # Name of the VTEX account. Used as part of the URL (default: apiexamples)
-  --environment: string # Environment to use. Used as part of the URL. (default: vtexcommercestable)
-  --content-type: string # Describes the type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
+  --account-name: string # Name of the VTEX account. Used as part of the URL (required, default: apiexamples)
+  --environment: string # Environment to use. Used as part of the URL. (required, default: vtexcommercestable)
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
 ]: nothing -> table<BrandId: int, CategoryId: int, LastModified: string, ProductId: string, ProductName: string, Skus: list<record>> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MARKETPLACE_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MARKETPLACE_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "fq" $fq "scalar") (serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
+  let account_name = ($account_name | default "apiexamples")
+  let environment = ($environment | default "vtexcommercestable")
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "fq" $fq "scalar") (serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/offer-manager/pvt/offers" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -277,7 +290,7 @@ export def "getofferslist" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sort": $qp_sort, "rows": $rows, "start": $start, "fq": $fq, "accountName": $account_name, "environment": $environment} | compact)
+    query: ({"sort": $sort, "rows": $rows, "start": $start, "fq": $fq, "accountName": $account_name, "environment": $environment} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -303,14 +316,18 @@ export def "get-productoffers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --account-name: string # Name of the VTEX account. Used as part of the URL. (default: apiexamples)
-  --environment: string # Environment to use. Used as part of the URL. (default: vtexcommercestable)
-  --content-type: string # Describes the type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
+  --account-name: string # Name of the VTEX account. Used as part of the URL. (required, default: apiexamples)
+  --environment: string # Environment to use. Used as part of the URL. (required, default: vtexcommercestable)
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MARKETPLACE_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MARKETPLACE_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
+  let account_name = ($account_name | default "apiexamples")
+  let environment = ($environment | default "vtexcommercestable")
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/offer-manager/pvt/product/{product_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -347,15 +364,19 @@ export def "get-sk-uoffers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --account-name: string # Name of the VTEX account. Used as part of the URL. (default: apiexamples)
-  --environment: string # Environment to use. Used as part of the URL. (default: vtexcommercestable)
-  --content-type: string # Describes the type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
+  --account-name: string # Name of the VTEX account. Used as part of the URL. (required, default: apiexamples)
+  --environment: string # Environment to use. Used as part of the URL. (required, default: vtexcommercestable)
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MARKETPLACE_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MARKETPLACE_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
   if ($sku_id | is-empty) { error make --unspanned { msg: "path parameter 'skuId' must be non-empty" } }
+  let account_name = ($account_name | default "apiexamples")
+  let environment = ($environment | default "vtexcommercestable")
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({product_id: (encode-path-segment $product_id), sku_id: (encode-path-segment $sku_id)} | format pattern "/offer-manager/pvt/product/{product_id}/sku/{sku_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -390,19 +411,29 @@ export def "list-seller-leads" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --account-name: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (default: apiexamples)
-  --environment: string # Environment to use. Used as part of the URL. (default: vtexcommercestable)
-  --offset: int # This field determines the limit used to retrieve the list of sellers. The response includes objects starting `from` the value inputted here. (format: int32, default: 0)
-  --limit: int # This field determines the limit used to retrieve the list of sellers. The response includes objects until the value inputted here. (format: int32, default: 15)
-  --is-connected: string # Query param that enables results to be filter by whether the seller lead is already connected to the marketplace or not. (default: )
-  --search: string # Custom search field, that filters sellers invited by specific marketplace operator's email. (default: user email)
-  --status: string # Seller Lead's status. Includes `accepted`, `connected` or `invited`. (default: invited)
-  --order-by: string # Query param determining how data will be ordered in the response, ordering by name or ID in descending our ascending order. Includes the following values: `namesort` = desc/asc `idsort` = desc/asc
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --content-type: string # Describes the type of the content being sent.
+  --account-name: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (required, default: apiexamples)
+  --environment: string # Environment to use. Used as part of the URL. (required, default: vtexcommercestable)
+  --offset: int # This field determines the limit used to retrieve the list of sellers. The response includes objects starting `from` the value inputted here. (required, format: int32, default: 0)
+  --limit: int # This field determines the limit used to retrieve the list of sellers. The response includes objects until the value inputted here. (required, format: int32, default: 15)
+  --is-connected: string # Query param that enables results to be filter by whether the seller lead is already connected to the marketplace or not. (required, default: "")
+  --search: string # Custom search field, that filters sellers invited by specific marketplace operator's email. (required, default: user email)
+  --status: string # Seller Lead's status. Includes `accepted`, `connected` or `invited`. (required, default: invited)
+  --order-by: string # Query param determining how data will be ordered in the response, ordering by name or ID in descending our ascending order. Includes the following values: `namesort` = desc/asc `idsort` = desc/asc (required)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MARKETPLACE_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MARKETPLACE_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let account_name = ($account_name | default "apiexamples")
+  let environment = ($environment | default "vtexcommercestable")
+  let offset = ($offset | default 0)
+  let limit = ($limit | default 15)
+  let is_connected = ($is_connected | default "")
+  let search = ($search | default "user email")
+  let status = ($status | default "invited")
+  if ($order_by == null) { error make --unspanned { msg: "required query parameter 'orderBy' missing: pass --order-by" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "isConnected" $is_connected "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/seller-register/pvt/seller-leads" $qp $auth.query)
   let accept_val = "application/json"
@@ -439,10 +470,10 @@ export def "create-seller-lead" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --account-name: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (default: apiexample)
-  --environment: string # Environment to use. Used as part of the URL. (default: vtexcommercestable)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --content-type: string # Describes the type of the content being sent.
+  --account-name: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (required, default: apiexample)
+  --environment: string # Environment to use. Used as part of the URL. (required, default: vtexcommercestable)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
   account_id: string # Marketplace's account ID (default: 5fb38ace-d95e-45ad-970d-ee97cce9fbcd)
   accountable: record # shape: {email: string, name: string, phone: string}
   address: record # shape: {city: string, complement: string, neighborhood: string, number: string, postalcode: string, state: string, street: string}
@@ -458,10 +489,15 @@ export def "create-seller-lead" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MARKETPLACE_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MARKETPLACE_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let account_name = ($account_name | default "apiexample")
+  let environment = ($environment | default "vtexcommercestable")
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/seller-register/pvt/seller-leads" $qp $auth.query)
   let req_body = {"accountId": $account_id, "accountable": $accountable, "address": $address, "document": $document, "email": $email, "hasAcceptedLegalTerms": $has_accepted_legal_terms, "salesChannel": $sales_channel, "sellerAccountName": $seller_account_name, "sellerEmail": $seller_email, "sellerName": $seller_name, "sellerType": $seller_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "hasAcceptedLegalTerms") == null) { error make --unspanned { msg: "required body field 'hasAcceptedLegalTerms' missing: pass --has-accepted-legal-terms or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
@@ -497,14 +533,18 @@ export def "remove-seller-lead" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --account-name: string # Name of the VTEX account that belongs to the marketplace. (default: apiexamples)
-  --environment: string # Environment to use. Used as part of the URL. (default: vtexcommercestable)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --content-type: string # Type of the content being sent.
+  --account-name: string # Name of the VTEX account that belongs to the marketplace. (required, default: apiexamples)
+  --environment: string # Environment to use. Used as part of the URL. (required, default: vtexcommercestable)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --content-type: string # Type of the content being sent. (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MARKETPLACE_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MARKETPLACE_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($seller_lead_id | is-empty) { error make --unspanned { msg: "path parameter 'sellerLeadId' must be non-empty" } }
+  let account_name = ($account_name | default "apiexamples")
+  let environment = ($environment | default "vtexcommercestable")
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({seller_lead_id: (encode-path-segment $seller_lead_id)} | format pattern "/seller-register/pvt/seller-leads/{seller_lead_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -540,14 +580,18 @@ export def "retrieve-seller-lead" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --account-name: string # Name of the VTEX account that belongs to the marketplace. (default: apiexamples)
-  --environment: string # Environment to use. Used as part of the URL. (default: vtexcommercestable)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --content-type: string # Type of the content being sent.
+  --account-name: string # Name of the VTEX account that belongs to the marketplace. (required, default: apiexamples)
+  --environment: string # Environment to use. Used as part of the URL. (required, default: vtexcommercestable)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --content-type: string # Type of the content being sent. (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MARKETPLACE_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MARKETPLACE_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($seller_lead_id | is-empty) { error make --unspanned { msg: "path parameter 'sellerLeadId' must be non-empty" } }
+  let account_name = ($account_name | default "apiexamples")
+  let environment = ($environment | default "vtexcommercestable")
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({seller_lead_id: (encode-path-segment $seller_lead_id)} | format pattern "/seller-register/pvt/seller-leads/{seller_lead_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -585,10 +629,10 @@ export def "accept-seller-lead" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --account-name: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (default: apiexamples)
-  --environment: string # Environment to use. Used as part of the URL. (default: vtexcommercestable)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --content-type: string # Type of the content being sent.
+  --account-name: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (required, default: apiexamples)
+  --environment: string # Environment to use. Used as part of the URL. (required, default: vtexcommercestable)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --content-type: string # Type of the content being sent. (required, default: application/json)
   account_id: string # Marketplace's account ID (default: 5fb38ace-d95e-45ad-970d-ee97cce9fbcd)
   accountable: record # shape: {email: string, name: string, phone: string}
   address: record # shape: {city: string, complement: string, neighborhood: string, number: string, postalcode: string, state: string, street: string}
@@ -605,10 +649,15 @@ export def "accept-seller-lead" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MARKETPLACE_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MARKETPLACE_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($seller_lead_id | is-empty) { error make --unspanned { msg: "path parameter 'sellerLeadId' must be non-empty" } }
+  let account_name = ($account_name | default "apiexamples")
+  let environment = ($environment | default "vtexcommercestable")
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({seller_lead_id: (encode-path-segment $seller_lead_id)} | format pattern "/seller-register/pvt/seller-leads/{seller_lead_id}") $qp $auth.query)
   let req_body = {"accountId": $account_id, "accountable": $accountable, "address": $address, "document": $document, "email": $email, "hasAcceptedLegalTerms": $has_accepted_legal_terms, "salesChannel": $sales_channel, "sellerAccountName": $seller_account_name, "sellerEmail": $seller_email, "sellerName": $seller_name, "sellerType": $seller_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "hasAcceptedLegalTerms") == null) { error make --unspanned { msg: "required body field 'hasAcceptedLegalTerms' missing: pass --has-accepted-legal-terms or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
@@ -644,15 +693,20 @@ export def "create-seller-from-seller-lead" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --account-name: string # Marketplace's account name, the same one inputted on the endpoint's path. (default: apiexamples)
-  --environment: string # Environment to use. Used as part of the URL. (default: vtexcommercestable)
-  --is-active: oneof<nothing, bool> # Whether the Seller Lead is `active` or not in Seller Portal. This request only supports the value `false` in this field. If that´s not the case, the request will respond with an internal error. (default: false)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --content-type: string # Type of the content being sent.
+  --account-name: string # Marketplace's account name, the same one inputted on the endpoint's path. (required, default: apiexamples)
+  --environment: string # Environment to use. Used as part of the URL. (required, default: vtexcommercestable)
+  --is-active: oneof<nothing, bool> # Whether the Seller Lead is `active` or not in Seller Portal. This request only supports the value `false` in this field. If that´s not the case, the request will respond with an internal error. (required, default: false)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --content-type: string # Type of the content being sent. (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MARKETPLACE_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MARKETPLACE_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($seller_lead_id | is-empty) { error make --unspanned { msg: "path parameter 'sellerLeadId' must be non-empty" } }
+  let account_name = ($account_name | default "apiexamples")
+  let environment = ($environment | default "vtexcommercestable")
+  let is_active = ($is_active | default false)
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar") (serialize-qp "isActive" $is_active "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({seller_lead_id: (encode-path-segment $seller_lead_id)} | format pattern "/seller-register/pvt/seller-leads/{seller_lead_id}/seller") $qp $auth.query)
   let accept_val = "application/json"
@@ -688,16 +742,20 @@ export def "resend-seller-lead-request" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --account-name: string # Name of the VTEX account that belongs to the marketplace. (default: apiexamples)
-  --environment: string # Environment to use. Used as part of the URL. (default: vtexcommercestable)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --content-type: string # Type of the content being sent.
+  --account-name: string # Name of the VTEX account that belongs to the marketplace. (required, default: apiexamples)
+  --environment: string # Environment to use. Used as part of the URL. (required, default: vtexcommercestable)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --content-type: string # Type of the content being sent. (required, default: application/json)
   status: string # Seller Lead's status. Includes `accepted`, `connected` or `invited`. (default: accepted)
 ]: any -> any {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MARKETPLACE_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MARKETPLACE_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($seller_lead_id | is-empty) { error make --unspanned { msg: "path parameter 'sellerLeadId' must be non-empty" } }
+  let account_name = ($account_name | default "apiexamples")
+  let environment = ($environment | default "vtexcommercestable")
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({seller_lead_id: (encode-path-segment $seller_lead_id)} | format pattern "/seller-register/pvt/seller-leads/{seller_lead_id}/status") $qp $auth.query)
   let req_body = {"status": $status} | compact
@@ -736,10 +794,10 @@ export def "get-list-sellers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --account-name: string # Name of the VTEX account that belongs to the marketplace. (default: apiexamples)
-  --environment: string # Environment to use. Used as part of the URL. (default: vtexcommercestable)
-  --qp-from: float # The start number of pagination, being `0` the default value. (default: 0)
-  --qp-to: float # The end number of pagination, being `100` the default value. (default: 100)
+  --account-name: string # Name of the VTEX account that belongs to the marketplace. (required, default: apiexamples)
+  --environment: string # Environment to use. Used as part of the URL. (required, default: vtexcommercestable)
+  --from: float # The start number of pagination, being `0` the default value. (default: 0)
+  --to: float # The end number of pagination, being `100` the default value. (default: 100)
   --keyword: string # Search sellers by a keyword in `sellerId` or `sellerName`. (default: keyword)
   --integration: string # Filters sellers by the name of who made the integration, if VTEX or an external hub. The possible values for VTEX integrations are: `vtex-sellerportal`, `vtex-seller` and `vtex-franchise`. (default: vtex-seller)
   --group: string # Groups are defined by keywords that group sellers into categories defined by the marketplace. (default: Group)
@@ -748,13 +806,17 @@ export def "get-list-sellers" [
   --is-vtex: oneof<nothing, bool> # When set as `true`, the list returned will be of sellers who have a VTEX store configured. When set as `false`, the list will be of sellers who do not have a VTEX store configured. (default: false)
   --sc: string # Filters sellers available for the marketplace's sales channel (or [trade policy](https://help.vtex.com/en/tutorial/how-trade-policies-work--6Xef8PZiFm40kg2STrMkMV)) indicated in this field. (default: 1)
   --seller-type: int # Filters sellers by their type, which can be regular seller (`1`) or whitelabel seller (`2`). (default: 1)
-  --qp-sort: string # Narrow the search filtering by the fields: `id`, `name` or `pendingoffers`. The list retrieved can be organized in an ascending (`asc`) or descending (`desc`) order. The standardized format is `{field}:{order}`, and the default value is `id:asc`. (default: id:asc)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --content-type: string # Type of the content being sent.
+  --sort: string # Narrow the search filtering by the fields: `id`, `name` or `pendingoffers`. The list retrieved can be organized in an ascending (`asc`) or descending (`desc`) order. The standardized format is `{field}:{order}`, and the default value is `id:asc`. (default: id:asc)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --content-type: string # Type of the content being sent. (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MARKETPLACE_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MARKETPLACE_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "keyword" $keyword "scalar") (serialize-qp "integration" $integration "scalar") (serialize-qp "group " $group "scalar") (serialize-qp "isActive" $is_active "scalar") (serialize-qp "isBetterScope" $is_better_scope "scalar") (serialize-qp "isVtex" $is_vtex "scalar") (serialize-qp "sc" $sc "scalar") (serialize-qp "sellerType" $seller_type "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let account_name = ($account_name | default "apiexamples")
+  let environment = ($environment | default "vtexcommercestable")
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
+  let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "keyword" $keyword "scalar") (serialize-qp "integration" $integration "scalar") (serialize-qp "group " $group "scalar") (serialize-qp "isActive" $is_active "scalar") (serialize-qp "isBetterScope" $is_better_scope "scalar") (serialize-qp "isVtex" $is_vtex "scalar") (serialize-qp "sc" $sc "scalar") (serialize-qp "sellerType" $seller_type "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/seller-register/pvt/sellers" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -763,7 +825,7 @@ export def "get-list-sellers" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"accountName": $account_name, "environment": $environment, "from": $qp_from, "to": $qp_to, "keyword": $keyword, "integration": $integration, "group ": $group, "isActive": $is_active, "isBetterScope": $is_better_scope, "isVtex": $is_vtex, "sc": $sc, "sellerType": $seller_type, "sort": $qp_sort} | compact)
+    query: ({"accountName": $account_name, "environment": $environment, "from": $from, "to": $to, "keyword": $keyword, "integration": $integration, "group ": $group, "isActive": $is_active, "isBetterScope": $is_better_scope, "isVtex": $is_vtex, "sc": $sc, "sellerType": $seller_type, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -790,10 +852,10 @@ export def "upsert-seller-request" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --account-name: string # Marketplace's account name, the same one inputted on the endpoint's path. (default: apiexamples)
-  --environment: string # Environment to use. Used as part of the URL. (default: vtexcommercestable)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --content-type: string # Type of the content being sent.
+  --account-name: string # Marketplace's account name, the same one inputted on the endpoint's path. (required, default: apiexamples)
+  --environment: string # Environment to use. Used as part of the URL. (required, default: vtexcommercestable)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --content-type: string # Type of the content being sent. (required, default: application/json)
   csc_identification: string # SKU Seller Identification (default: cscidentification 123)
   account: string # Seller's account name (default: partner01)
   --allow-hybrid-payments: oneof<nothing, bool> # Flag that allows customers to use gift cards from the seller to buy their products on the marketplace. It identifies purchases made with a gift card so that only the final price (with discounts applied) is paid to the seller. (default: false)
@@ -825,10 +887,18 @@ export def "upsert-seller-request" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MARKETPLACE_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MARKETPLACE_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let account_name = ($account_name | default "apiexamples")
+  let environment = ($environment | default "vtexcommercestable")
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/seller-register/pvt/sellers" $qp $auth.query)
   let req_body = {"CSCIdentification": $csc_identification, "account": $account, "allowHybridPayments": $allow_hybrid_payments, "availableSalesChannels": $available_sales_channels, "catalogSystemEndpoint": $catalog_system_endpoint, "channel": $channel, "deliveryPolicy": $delivery_policy, "description": $description, "email": $email, "exchangeReturnPolicy": $exchange_return_policy, "fulfillmentEndpoint": $fulfillment_endpoint, "fulfillmentSellerId": $fulfillment_seller_id, "groups": $groups, "id": $id, "isActive": $is_active, "isBetterScope": $is_better_scope, "isVtex": $is_vtex, "name": $name, "password": $password, "salesChannel": $sales_channel, "score": $score, "securityPrivacyPolicy": $security_privacy_policy, "sellerCommissionConfiguration": $seller_commission_configuration, "sellerType": $seller_type, "taxCode": $tax_code, "trustPolicy": $trust_policy, "user": $user} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "allowHybridPayments") == null) { error make --unspanned { msg: "required body field 'allowHybridPayments' missing: pass --allow-hybrid-payments or pipe a record" } }
+  if (($req_body | get -o "isActive") == null) { error make --unspanned { msg: "required body field 'isActive' missing: pass --is-active or pipe a record" } }
+  if (($req_body | get -o "isBetterScope") == null) { error make --unspanned { msg: "required body field 'isBetterScope' missing: pass --is-better-scope or pipe a record" } }
+  if (($req_body | get -o "isVtex") == null) { error make --unspanned { msg: "required body field 'isVtex' missing: pass --is-vtex or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
@@ -864,15 +934,19 @@ export def "get-retrieve-seller" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --account-name: string # Name of the VTEX account that belongs to the marketplace. (default: apiexamples)
-  --environment: string # Environment to use. Used as part of the URL. (default: vtexcommercestable)
+  --account-name: string # Name of the VTEX account that belongs to the marketplace. (required, default: apiexamples)
+  --environment: string # Environment to use. Used as part of the URL. (required, default: vtexcommercestable)
   --sc: string # Sales channel (or [trade policy](https://help.vtex.com/en/tutorial/how-trade-policies-work--6Xef8PZiFm40kg2STrMkMV)) associated to the seller account created. (default: 1)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --content-type: string # Type of the content being sent. (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MARKETPLACE_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MARKETPLACE_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($seller_id | is-empty) { error make --unspanned { msg: "path parameter 'sellerId' must be non-empty" } }
+  let account_name = ($account_name | default "apiexamples")
+  let environment = ($environment | default "vtexcommercestable")
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar") (serialize-qp "sc" $sc "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id)} | format pattern "/seller-register/pvt/sellers/{seller_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -908,16 +982,20 @@ export def "update-seller" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --account-name: string # Name of the VTEX account that belongs to the marketplace. (default: apiexamples)
-  --environment: string # Environment to use. Used as part of the URL. (default: vtexcommercestable)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --content-type: string # Type of the content being sent.
+  --account-name: string # Name of the VTEX account that belongs to the marketplace. (required, default: apiexamples)
+  --environment: string # Environment to use. Used as part of the URL. (required, default: vtexcommercestable)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --content-type: string # Type of the content being sent. (required, default: application/json)
   --body: list
 ]: any -> any {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MARKETPLACE_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MARKETPLACE_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($seller_id | is-empty) { error make --unspanned { msg: "path parameter 'sellerId' must be non-empty" } }
+  let account_name = ($account_name | default "apiexamples")
+  let environment = ($environment | default "vtexcommercestable")
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id)} | format pattern "/seller-register/pvt/sellers/{seller_id}") $qp $auth.query)
   let req_body = $body
@@ -957,14 +1035,18 @@ export def "list-seller-commissions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --account-name: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (default: apiexamples)
-  --environment: string # Environment to use. Used as part of the URL. (default: vtexcommercestable)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --content-type: string # Describes the type of the content being sent.
+  --account-name: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (required, default: apiexamples)
+  --environment: string # Environment to use. Used as part of the URL. (required, default: vtexcommercestable)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MARKETPLACE_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MARKETPLACE_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($seller_id | is-empty) { error make --unspanned { msg: "path parameter 'sellerId' must be non-empty" } }
+  let account_name = ($account_name | default "apiexamples")
+  let environment = ($environment | default "vtexcommercestable")
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id)} | format pattern "/seller-register/pvt/sellers/{seller_id}/commissions") $qp $auth.query)
   let accept_val = "application/json"
@@ -1000,16 +1082,20 @@ export def "bulk-upsert-seller-commissions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --account-name: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (default: apiexamples)
-  --environment: string # Environment to use. Used as part of the URL. (default: vtexcommercestable)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --content-type: string # Describes the type of the content being sent.
+  --account-name: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (required, default: apiexamples)
+  --environment: string # Environment to use. Used as part of the URL. (required, default: vtexcommercestable)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
   --body: list
 ]: any -> any {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MARKETPLACE_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MARKETPLACE_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($seller_id | is-empty) { error make --unspanned { msg: "path parameter 'sellerId' must be non-empty" } }
+  let account_name = ($account_name | default "apiexamples")
+  let environment = ($environment | default "vtexcommercestable")
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id)} | format pattern "/seller-register/pvt/sellers/{seller_id}/commissions/categories") $qp $auth.query)
   let req_body = $body
@@ -1050,15 +1136,19 @@ export def "remove-seller-commissions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --account-name: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (default: apiexamples)
-  --environment: string # Environment to use. Used as part of the URL. (default: vtexcommercestable)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --content-type: string # Describes the type of the content being sent.
+  --account-name: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (required, default: apiexamples)
+  --environment: string # Environment to use. Used as part of the URL. (required, default: vtexcommercestable)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MARKETPLACE_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MARKETPLACE_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($seller_id | is-empty) { error make --unspanned { msg: "path parameter 'sellerId' must be non-empty" } }
   if ($category_id | is-empty) { error make --unspanned { msg: "path parameter 'categoryId' must be non-empty" } }
+  let account_name = ($account_name | default "apiexamples")
+  let environment = ($environment | default "vtexcommercestable")
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id), category_id: (encode-path-segment $category_id)} | format pattern "/seller-register/pvt/sellers/{seller_id}/commissions/{category_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1095,15 +1185,19 @@ export def "retrieve-seller-commissions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --account-name: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (default: apiexamples)
-  --environment: string # Environment to use. Used as part of the URL. (default: vtexcommercestable)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --content-type: string # Describes the type of the content being sent.
+  --account-name: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (required, default: apiexamples)
+  --environment: string # Environment to use. Used as part of the URL. (required, default: vtexcommercestable)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MARKETPLACE_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MARKETPLACE_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($seller_id | is-empty) { error make --unspanned { msg: "path parameter 'sellerId' must be non-empty" } }
   if ($category_id | is-empty) { error make --unspanned { msg: "path parameter 'categoryId' must be non-empty" } }
+  let account_name = ($account_name | default "apiexamples")
+  let environment = ($environment | default "vtexcommercestable")
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id), category_id: (encode-path-segment $category_id)} | format pattern "/seller-register/pvt/sellers/{seller_id}/commissions/{category_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1140,10 +1234,10 @@ export def "upsert-seller-commissions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --account-name: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (default: apiexamples)
-  --environment: string # Environment to use. Used as part of the URL. (default: vtexcommercestable)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --content-type: string # Describes the type of the content being sent.
+  --account-name: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (required, default: apiexamples)
+  --environment: string # Environment to use. Used as part of the URL. (required, default: vtexcommercestable)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
   --category-full-path: string # Full path to the SKU's category. It should be written as {department}/{category}. For example: if the department is **Appliances** and the category is **Oven**, the full path should be 'Appliances/Oven'. (nullable, default: Appliances/Oven)
   --body-category-id: string # Marketplace's Category ID that the product belongs to, configured in the Catalog. (default: 6)
   freight_commission_percentage: float # Percentage of the comission applied to the freight in decimals. (default: 2.43)
@@ -1154,10 +1248,15 @@ export def "upsert-seller-commissions" [
   let base = ($base_url | default $BASE_URL)
   if ($seller_id | is-empty) { error make --unspanned { msg: "path parameter 'sellerId' must be non-empty" } }
   if ($category_id | is-empty) { error make --unspanned { msg: "path parameter 'categoryId' must be non-empty" } }
+  let account_name = ($account_name | default "apiexamples")
+  let environment = ($environment | default "vtexcommercestable")
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id), category_id: (encode-path-segment $category_id)} | format pattern "/seller-register/pvt/sellers/{seller_id}/commissions/{category_id}") $qp $auth.query)
   let req_body = {"categoryFullPath": $category_full_path, "categoryId": $body_category_id, "freightCommissionPercentage": $freight_commission_percentage, "productCommissionPercentage": $product_commission_percentage} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "categoryId") == null) { error make --unspanned { msg: "required body field 'categoryId' missing: pass --body-category-id or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
@@ -1193,15 +1292,20 @@ export def "retrieve-mapping" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --account-name: string # Name of the VTEX account that belongs to the marketplace. Used as part of the URL (default: apiexamples)
-  --environment: string # Environment to use. Used as part of the URL. (default: vtexcommercestable)
-  --an: string # Marketplace's account name, the same one inputted on the endpoint's path. (default: apiexamples)
-  --content-type: string # Describes the type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
+  --account-name: string # Name of the VTEX account that belongs to the marketplace. Used as part of the URL (required, default: apiexamples)
+  --environment: string # Environment to use. Used as part of the URL. (required, default: vtexcommercestable)
+  --an: string # Marketplace's account name, the same one inputted on the endpoint's path. (required, default: apiexamples)
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
 ]: nothing -> table<marketplaceSalesChannel: string, sellerChannel: string> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MARKETPLACE_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MARKETPLACE_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($seller_id | is-empty) { error make --unspanned { msg: "path parameter 'sellerId' must be non-empty" } }
+  let account_name = ($account_name | default "apiexamples")
+  let environment = ($environment | default "vtexcommercestable")
+  let an = ($an | default "apiexamples")
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar") (serialize-qp "an" $an "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id)} | format pattern "/seller-register/pvt/sellers/{seller_id}/sales-channel/mapping") $qp $auth.query)
   let accept_val = "application/json"
@@ -1237,17 +1341,22 @@ export def "upsert-mapping" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --account-name: string # Name of the VTEX account that belongs to the marketplace. Used as part of the URL. (default: apiexamples)
-  --environment: string # Environment to use. Used as part of the URL. (default: vtexcommercestable)
-  --an: string # Marketplace's account name, the same one inputted on the endpoint's path. (default: apiexamples)
-  --content-type: string # Describes the type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
+  --account-name: string # Name of the VTEX account that belongs to the marketplace. Used as part of the URL. (required, default: apiexamples)
+  --environment: string # Environment to use. Used as part of the URL. (required, default: vtexcommercestable)
+  --an: string # Marketplace's account name, the same one inputted on the endpoint's path. (required, default: apiexamples)
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
   --body: list
 ]: any -> table<marketplaceSalesChannel: string, sellerChannel: string> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MARKETPLACE_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MARKETPLACE_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($seller_id | is-empty) { error make --unspanned { msg: "path parameter 'sellerId' must be non-empty" } }
+  let account_name = ($account_name | default "apiexamples")
+  let environment = ($environment | default "vtexcommercestable")
+  let an = ($an | default "apiexamples")
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "environment" $environment "scalar") (serialize-qp "an" $an "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id)} | format pattern "/seller-register/pvt/sellers/{seller_id}/sales-channel/mapping") $qp $auth.query)
   let req_body = $body

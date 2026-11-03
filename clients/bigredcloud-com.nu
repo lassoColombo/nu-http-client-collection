@@ -1,4 +1,4 @@
-# Auto-generated client for Big Red Cloud API vv1
+# Auto-generated client for Big Red Cloud API v1
 # Source: https://api.apis.guru/v2/specs/bigredcloud.com/v1/openapi.json
 # Auth: --token flag or $env.BIG_RED_CLOUD_API_TOKEN
 
@@ -344,11 +344,12 @@ export def "bank-accounts-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --timestamp: string # Timestamp of Bank Account to remove. Should be encoded in Base64.
+  --timestamp: string # Timestamp of Bank Account to remove. Should be encoded in Base64. (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'timestamp' missing: pass --timestamp" } }
   let qp = [(serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/bankAccounts/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -636,11 +637,12 @@ export def "cash-payments-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --timestamp: string # Timestamp of Cash Receipt to remove. Should be encoded in Base64.
+  --timestamp: string # Timestamp of Cash Receipt to remove. Should be encoded in Base64. (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'timestamp' missing: pass --timestamp" } }
   let qp = [(serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/cashPayments/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -898,11 +900,12 @@ export def "cash-receipts-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --timestamp: string # Timestamp of Cash Receipt to remove. Should be encoded in Base64.
+  --timestamp: string # Timestamp of Cash Receipt to remove. Should be encoded in Base64. (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'timestamp' missing: pass --timestamp" } }
   let qp = [(serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/cashReceipts/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1340,11 +1343,12 @@ export def "customers-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --timestamp: string # Timestamp of Customer to remove. Should be encoded in Base64.
+  --timestamp: string # Timestamp of Customer to remove. Should be encoded in Base64. (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'timestamp' missing: pass --timestamp" } }
   let qp = [(serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/customers/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1953,11 +1957,12 @@ export def "payments-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --timestamp: string # Timestamp of Payment to remove. Should be encoded in Base64.
+  --timestamp: string # Timestamp of Payment to remove. Should be encoded in Base64. (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'timestamp' missing: pass --timestamp" } }
   let qp = [(serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/payments/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2240,11 +2245,12 @@ export def "products-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --timestamp: string # Timestamp of Product to remove. Should be encoded in Base64.
+  --timestamp: string # Timestamp of Product to remove. Should be encoded in Base64. (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'timestamp' missing: pass --timestamp" } }
   let qp = [(serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/products/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2497,11 +2503,12 @@ export def "purchases-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --timestamp: string # Timestamp of Purchase to remove. Should be encoded in Base64.
+  --timestamp: string # Timestamp of Purchase to remove. Should be encoded in Base64. (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'timestamp' missing: pass --timestamp" } }
   let qp = [(serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/purchases/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2949,11 +2956,12 @@ export def "quote-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --timestamp: string # Timestamp of Quote to remove. Should be encoded in Base64.
+  --timestamp: string # Timestamp of Quote to remove. Should be encoded in Base64. (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'timestamp' missing: pass --timestamp" } }
   let qp = [(serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/quotes/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -3260,11 +3268,12 @@ export def "sales-credit-notes-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --timestamp: string # Timestamp of Sales Credit Note to remove. Should be encoded in Base64.
+  --timestamp: string # Timestamp of Sales Credit Note to remove. Should be encoded in Base64. (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'timestamp' missing: pass --timestamp" } }
   let qp = [(serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/salesCreditNotes/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -3533,11 +3542,12 @@ export def "sales-entries-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --timestamp: string # Timestamp of Sales Entry to remove. Should be encoded in Base64.
+  --timestamp: string # Timestamp of Sales Entry to remove. Should be encoded in Base64. (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'timestamp' missing: pass --timestamp" } }
   let qp = [(serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/salesEntries/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -3871,11 +3881,12 @@ export def "sales-invoices-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --timestamp: string # Timestamp of Sales Invoice to remove. Should be encoded in Base64.
+  --timestamp: string # Timestamp of Sales Invoice to remove. Should be encoded in Base64. (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'timestamp' missing: pass --timestamp" } }
   let qp = [(serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/salesInvoices/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -4127,11 +4138,12 @@ export def "sales-rep-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --timestamp: string # Timestamp of Sale Rep to remove. Should be encoded in Base64.
+  --timestamp: string # Timestamp of Sale Rep to remove. Should be encoded in Base64. (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'timestamp' missing: pass --timestamp" } }
   let qp = [(serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/salesReps/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -4385,11 +4397,12 @@ export def "suppliers-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --timestamp: string # Timestamp of Supplier to remove. Should be encoded in Base64.
+  --timestamp: string # Timestamp of Supplier to remove. Should be encoded in Base64. (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'timestamp' missing: pass --timestamp" } }
   let qp = [(serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/suppliers/{id}") $qp $auth.query)
   let accept_val = "application/json"

@@ -112,7 +112,9 @@ def base-url-completer [] { ["https://api.jumpseller.com/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def status-completer [] { ["Abandoned" "Canceled" "Paid" "Pending Payment"] }
 def fields-completer [] { ["barcode" "brand" "custom_fields" "custom_fields_selects" "description" "name" "option_name" "sku" "variants"] }
+def status-completer-1 [] { ["available" "disabled" "not-available"] }
 def plan-name-completer [] { ["plus" "premium" "pro"] }
 
 # List all available API commands with their parameters
@@ -151,11 +153,13 @@ export def "get-categories-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<category: record<id: int, name: string, parent_id: int, permalink: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/categories.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -188,13 +192,15 @@ export def "post-categories-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --category: record # shape: {name?: string, parent_id?: int}
 ]: any -> record<category: record<id: int, name: string, parent_id: int, permalink: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/categories.json" $qp $auth.query)
   let req_body = {"category": $category} | compact
@@ -228,11 +234,13 @@ export def "get-categories-count-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/categories/count.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -265,12 +273,14 @@ export def "delete-categories-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/categories/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -303,12 +313,14 @@ export def "get-categories-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<category: record<id: int, name: string, parent_id: int, permalink: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/categories/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -342,14 +354,16 @@ export def "put-categories-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --category: record # shape: {name?: string, parent_id?: int}
 ]: any -> record<category: record<id: int, name: string, parent_id: int, permalink: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/categories/{id}.json") $qp $auth.query)
   let req_body = {"category": $category} | compact
@@ -383,13 +397,15 @@ export def "get-checkout-custom-fields-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --limit: int # List restriction (format: integer, default: 50)
   --page: int # List page (format: integer, default: 1)
 ]: nothing -> table<checkout_custom_field: record<area: string, custom_field_select_options: list, deletable: bool, id: int, label: string, position: int, required: bool, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/checkout_custom_fields.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -422,13 +438,15 @@ export def "post-checkout-custom-fields-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --checkout-custom-field: record # shape: {area?: "contact"|"billing_shipping"|"other", custom_field_select_options?: list<string>, deletable?: bool, label?: string, position?: int, required?: bool, type?: "text"|"select"|"input"|"checkbox"|"date"}
 ]: any -> record<checkout_custom_field: record<area: string, custom_field_select_options: list<string>, deletable: bool, id: int, label: string, position: int, required: bool, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/checkout_custom_fields.json" $qp $auth.query)
   let req_body = {"checkout_custom_field": $checkout_custom_field} | compact
@@ -463,12 +481,14 @@ export def "delete-checkout-custom-fields-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/checkout_custom_fields/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -501,12 +521,14 @@ export def "get-checkout-custom-fields-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<checkout_custom_field: record<area: string, custom_field_select_options: list<string>, deletable: bool, id: int, label: string, position: int, required: bool, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/checkout_custom_fields/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -540,14 +562,16 @@ export def "put-checkout-custom-fields-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --checkout-custom-field: record # shape: {area?: "contact"|"billing_shipping"|"other", custom_field_select_options?: list<string>, deletable?: bool, label?: string, position?: int, required?: bool, type?: "text"|"select"|"input"|"checkbox"|"date"}
 ]: any -> record<checkout_custom_field: record<area: string, custom_field_select_options: list<string>, deletable: bool, id: int, label: string, position: int, required: bool, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/checkout_custom_fields/{id}.json") $qp $auth.query)
   let req_body = {"checkout_custom_field": $checkout_custom_field} | compact
@@ -581,11 +605,13 @@ export def "get-countries-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> table<code: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/countries.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -618,12 +644,14 @@ export def "get-countries-country-code-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<code: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($country_code | is-empty) { error make --unspanned { msg: "path parameter 'country_code' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({country_code: (encode-path-segment $country_code)} | format pattern "/countries/{country_code}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -656,12 +684,14 @@ export def "get-countries-country-code-regions-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> table<code: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($country_code | is-empty) { error make --unspanned { msg: "path parameter 'country_code' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({country_code: (encode-path-segment $country_code)} | format pattern "/countries/{country_code}/regions.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -695,13 +725,15 @@ export def "get-countries-country-code-regions-region-code-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<code: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($country_code | is-empty) { error make --unspanned { msg: "path parameter 'country_code' must be non-empty" } }
   if ($region_code | is-empty) { error make --unspanned { msg: "path parameter 'region_code' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({country_code: (encode-path-segment $country_code), region_code: (encode-path-segment $region_code)} | format pattern "/countries/{country_code}/regions/{region_code}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -733,11 +765,13 @@ export def "get-custom-fields-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> table<custom_field: record<id: int, label: string, type: string, values: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/custom_fields.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -770,13 +804,15 @@ export def "post-custom-fields-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --custom-field: record # shape: {label?: string, type?: "text"|"selection"|"input", values?: list<string>}
 ]: any -> record<custom_field: record<id: int, label: string, type: string, values: list<string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/custom_fields.json" $qp $auth.query)
   let req_body = {"custom_field": $custom_field} | compact
@@ -811,12 +847,14 @@ export def "delete-custom-fields-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/custom_fields/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -849,12 +887,14 @@ export def "get-custom-fields-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<custom_field: record<id: int, label: string, type: string, values: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/custom_fields/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -888,14 +928,16 @@ export def "put-custom-fields-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --custom-field: record # shape: {label?: string, type?: "text"|"selection"|"input", values?: list<string>}
 ]: any -> record<custom_field: record<id: int, label: string, type: string, values: list<string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/custom_fields/{id}.json") $qp $auth.query)
   let req_body = {"custom_field": $custom_field} | compact
@@ -930,12 +972,14 @@ export def "get-custom-fields-id-select-options-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> table<custom_field_select_option: record<id: int, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/custom_fields/{id}/select_options.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -969,14 +1013,16 @@ export def "post-custom-fields-id-select-options-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --custom-field-select-option: record # shape: {value?: string}
 ]: any -> record<custom_field_select_option: record<id: int, value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/custom_fields/{id}/select_options.json") $qp $auth.query)
   let req_body = {"custom_field_select_option": $custom_field_select_option} | compact
@@ -1012,13 +1058,15 @@ export def "delete-custom-fields-id-select-options-custom-field-select-option-id
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($custom_field_select_option_id | is-empty) { error make --unspanned { msg: "path parameter 'custom_field_select_option_id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), custom_field_select_option_id: (encode-path-segment $custom_field_select_option_id)} | format pattern "/custom_fields/{id}/select_options/{custom_field_select_option_id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -1052,13 +1100,15 @@ export def "get-custom-fields-id-select-options-custom-field-select-option-id-js
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<custom_field_select_option: record<id: int, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($custom_field_select_option_id | is-empty) { error make --unspanned { msg: "path parameter 'custom_field_select_option_id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), custom_field_select_option_id: (encode-path-segment $custom_field_select_option_id)} | format pattern "/custom_fields/{id}/select_options/{custom_field_select_option_id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -1093,8 +1143,8 @@ export def "put-custom-fields-id-select-options-custom-field-select-option-id-js
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --custom-field-select-option: record # shape: {value?: string}
 ]: any -> record<custom_field_select_option: record<id: int, value: string>> {
   let input = $in
@@ -1102,6 +1152,8 @@ export def "put-custom-fields-id-select-options-custom-field-select-option-id-js
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($custom_field_select_option_id | is-empty) { error make --unspanned { msg: "path parameter 'custom_field_select_option_id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), custom_field_select_option_id: (encode-path-segment $custom_field_select_option_id)} | format pattern "/custom_fields/{id}/select_options/{custom_field_select_option_id}.json") $qp $auth.query)
   let req_body = {"custom_field_select_option": $custom_field_select_option} | compact
@@ -1135,13 +1187,15 @@ export def "get-customer-categories-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --limit: int # List restriction (format: integer, default: 50)
   --page: int # List page (format: integer, default: 1)
 ]: nothing -> table<category: record<code: string, id: int, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customer_categories.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -1174,13 +1228,15 @@ export def "post-customer-categories-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --category: record # shape: {name?: string}
 ]: any -> record<category: record<code: string, id: int, name: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customer_categories.json" $qp $auth.query)
   let req_body = {"category": $category} | compact
@@ -1215,12 +1271,14 @@ export def "delete-customer-categories-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customer_categories/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -1253,12 +1311,14 @@ export def "get-customer-categories-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<category: record<code: string, id: int, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customer_categories/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -1292,14 +1352,16 @@ export def "put-customer-categories-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --category: record # shape: {name?: string}
 ]: any -> record<category: record<code: string, id: int, name: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customer_categories/{id}.json") $qp $auth.query)
   let req_body = {"category": $category} | compact
@@ -1335,14 +1397,16 @@ export def "delete-customer-categories-id-customers-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --customers: list # item shape: {email?: string, id?: int}
 ]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customer_categories/{id}/customers.json") $qp $auth.query)
   let req_body = {"customers": $customers} | compact
@@ -1377,12 +1441,14 @@ export def "get-customer-categories-id-customers-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> table<customer: record<billing_address: record, customer_additional_fields: list, customer_categories: list, email: string, id: int, name: string, phone: string, shipping_address: record, status: string, surname: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customer_categories/{id}/customers.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -1416,14 +1482,16 @@ export def "post-customer-categories-id-customers-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --customers: list # item shape: {email?: string, id?: int}
 ]: any -> table<customer: record<billing_address: record, customer_additional_fields: list, customer_categories: list, email: string, id: int, name: string, phone: string, shipping_address: record, status: string, surname: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customer_categories/{id}/customers.json") $qp $auth.query)
   let req_body = {"customers": $customers} | compact
@@ -1457,13 +1525,15 @@ export def "get-customers-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --limit: int # List restriction (format: integer, default: 50)
   --page: int # List page (format: integer, default: 1)
 ]: nothing -> table<customer: record<billing_address: record, customer_additional_fields: list, customer_categories: list, email: string, id: int, name: string, phone: string, shipping_address: record, status: string, surname: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customers.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -1496,13 +1566,15 @@ export def "post-customers-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --customer: record # shape: {billing_address?: any, customer_category?: list<int>, email?: string, password?: string, phone?: string, shipping_address?: any, status?: "approved"|"pending"|"disabled"}
 ]: any -> record<customer: record<billing_address: record<address: string, city: string, country: string, municipality: string, name: string, postal: string, region: string, surname: string, taxid: string>, customer_additional_fields: list<record>, customer_categories: list<record>, email: string, id: int, name: string, phone: string, shipping_address: record<address: string, city: string, country: string, municipality: string, name: string, postal: string, region: string, surname: string>, status: string, surname: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customers.json" $qp $auth.query)
   let req_body = {"customer": $customer} | compact
@@ -1536,11 +1608,13 @@ export def "get-customers-count-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customers/count.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -1573,12 +1647,14 @@ export def "get-customers-email-email-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<customer: record<billing_address: record<address: string, city: string, country: string, municipality: string, name: string, postal: string, region: string, surname: string, taxid: string>, customer_additional_fields: list<record>, customer_categories: list<record>, email: string, id: int, name: string, phone: string, shipping_address: record<address: string, city: string, country: string, municipality: string, name: string, postal: string, region: string, surname: string>, status: string, surname: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($email | is-empty) { error make --unspanned { msg: "path parameter 'email' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({email: (encode-path-segment $email)} | format pattern "/customers/email/{email}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -1611,12 +1687,14 @@ export def "delete-customers-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customers/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -1649,12 +1727,14 @@ export def "get-customers-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<customer: record<billing_address: record<address: string, city: string, country: string, municipality: string, name: string, postal: string, region: string, surname: string, taxid: string>, customer_additional_fields: list<record>, customer_categories: list<record>, email: string, id: int, name: string, phone: string, shipping_address: record<address: string, city: string, country: string, municipality: string, name: string, postal: string, region: string, surname: string>, status: string, surname: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customers/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -1688,14 +1768,16 @@ export def "put-customers-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --customer: record # shape: {billing_address?: any, customer_category?: list<int>, email?: string, password?: string, phone?: string, shipping_address?: any, status?: "approved"|"pending"|"disabled"}
 ]: any -> record<customer: record<billing_address: record<address: string, city: string, country: string, municipality: string, name: string, postal: string, region: string, surname: string, taxid: string>, customer_additional_fields: list<record>, customer_categories: list<record>, email: string, id: int, name: string, phone: string, shipping_address: record<address: string, city: string, country: string, municipality: string, name: string, postal: string, region: string, surname: string>, status: string, surname: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customers/{id}.json") $qp $auth.query)
   let req_body = {"customer": $customer} | compact
@@ -1730,12 +1812,14 @@ export def "get-customers-id-fields" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> table<customer_additional_field: record<area: string, checkout_custom_field_id: int, customer_id: int, id: int, label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customers/{id}/fields") $qp $auth.query)
   let accept_val = "application/json"
@@ -1769,14 +1853,16 @@ export def "post-customers-id-fields" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --customer-additional-field: record # shape: {checkout_custom_field_id?: int, value?: string}
 ]: any -> record<customer_additional_field: record<area: string, checkout_custom_field_id: int, customer_id: int, id: int, label: string, value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customers/{id}/fields") $qp $auth.query)
   let req_body = {"customer_additional_field": $customer_additional_field} | compact
@@ -1812,13 +1898,15 @@ export def "delete-customers-id-fields-field-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($field_id | is-empty) { error make --unspanned { msg: "path parameter 'field_id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), field_id: (encode-path-segment $field_id)} | format pattern "/customers/{id}/fields/{field_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1852,13 +1940,15 @@ export def "get-customers-id-fields-field-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<customer_additional_field: record<area: string, checkout_custom_field_id: int, customer_id: int, id: int, label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($field_id | is-empty) { error make --unspanned { msg: "path parameter 'field_id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), field_id: (encode-path-segment $field_id)} | format pattern "/customers/{id}/fields/{field_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1893,8 +1983,8 @@ export def "put-customers-id-fields-field-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --customer-additional-field: record # shape: {checkout_custom_field_id?: int, value?: string}
 ]: any -> record<customer_additional_field: record<area: string, checkout_custom_field_id: int, customer_id: int, id: int, label: string, value: string>> {
   let input = $in
@@ -1902,6 +1992,8 @@ export def "put-customers-id-fields-field-id" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($field_id | is-empty) { error make --unspanned { msg: "path parameter 'field_id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), field_id: (encode-path-segment $field_id)} | format pattern "/customers/{id}/fields/{field_id}") $qp $auth.query)
   let req_body = {"customer_additional_field": $customer_additional_field} | compact
@@ -1935,13 +2027,15 @@ export def "get-fulfillments-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --limit: int # List restriction (format: integer, default: 50)
   --page: int # List page (format: integer, default: 1)
 ]: nothing -> table<category: record<external_id: string, id: int, order_id: string, service_type: string, shipment_status: string, tracking_company: string, tracking_number: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/fulfillments.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -1973,11 +2067,13 @@ export def "get-fulfillments-count-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/fulfillments/count.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -2010,12 +2106,14 @@ export def "get-fulfillments-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<category: record<external_id: string, id: int, order_id: string, service_type: string, shipment_status: string, tracking_company: string, tracking_number: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/fulfillments/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -2047,13 +2145,15 @@ export def "get-hooks-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --limit: int # List restriction (format: integer, default: 50)
   --page: int # List page (format: integer, default: 1)
 ]: nothing -> table<hook: record<created_at: string, event: string, id: int, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hooks.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -2086,13 +2186,15 @@ export def "post-hooks-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --hook: record # shape: {event: "order_updated"|"order_pending_payment"|"order_paid"|"order_shipped"|"order_canceled"|"order_abandoned"|"product_created"|"product_updated"|"product_deleted"|"customer_created"|"customer_updated"|"customer_deleted", url: string}
 ]: any -> record<hook: record<created_at: string, event: string, id: int, name: string, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hooks.json" $qp $auth.query)
   let req_body = {"hook": $hook} | compact
@@ -2127,12 +2229,14 @@ export def "delete-hooks-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/hooks/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -2165,12 +2269,14 @@ export def "get-hooks-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<hook: record<created_at: string, event: string, id: int, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/hooks/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -2204,14 +2310,16 @@ export def "put-hooks-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --hook: record # shape: {event: "order_updated"|"order_pending_payment"|"order_paid"|"order_shipped"|"order_canceled"|"order_abandoned"|"product_created"|"product_updated"|"product_deleted"|"customer_created"|"customer_updated"|"customer_deleted", url: string}
 ]: any -> record<hook: record<created_at: string, event: string, id: int, name: string, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/hooks/{id}.json") $qp $auth.query)
   let req_body = {"hook": $hook} | compact
@@ -2245,11 +2353,13 @@ export def "get-jsapps-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<apps: table<author: string, code: string, description: string, js: bool, name: string, page: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/jsapps.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -2282,13 +2392,15 @@ export def "post-jsapps-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --app: record # shape: {element?: string, template?: string, url?: string}
 ]: any -> record<element: string, template: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/jsapps.json" $qp $auth.query)
   let req_body = {"app": $app} | compact
@@ -2323,12 +2435,14 @@ export def "delete-jsapps-code-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/jsapps/{code}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -2361,12 +2475,14 @@ export def "get-jsapps-code-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<element: string, template: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/jsapps/{code}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -2399,12 +2515,14 @@ export def "get-order-id-fulfillments-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> table<category: record<external_id: string, id: int, order_id: string, service_type: string, shipment_status: string, tracking_company: string, tracking_number: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/order/{id}/fulfillments.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -2436,13 +2554,15 @@ export def "get-orders-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --limit: int # List restriction (format: integer, default: 50)
   --page: int # List page (format: integer, default: 1)
 ]: nothing -> table<order: record<additional_fields: list, additional_information: string, billing_address: record, checkout_url: string, coupons: string, created_at: string, currency: string, customer: record, discount: float, duplicate_url: string, external_shipping_rate_id: string, id: int, payment_information: string, payment_method_name: string, payment_method_type: string, products: list, recovery_url: string, shipment_status: string, shipping: float, shipping_address: record, shipping_discount: float, shipping_method_id: int, shipping_method_name: string, shipping_option: string, shipping_required: bool, shipping_tax: float, shipping_taxes: list, source: record, status: string, subtotal: float, tax: float, total: float, tracking_company: string, tracking_number: string, tracking_url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orders.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -2475,13 +2595,15 @@ export def "post-orders-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --order: any # shape: {customer?: record, products?: list, shipping_method_id?: int, shipping_method_name?: string, shipping_price?: float, status?: "Abandoned"|"Canceled"|"Pending Payment"|"Paid"}
 ]: any -> record<order: record<additional_fields: list<record>, additional_information: string, billing_address: record<address: string, city: string, country: string, country_name: string, municipality: string, name: string, postal: string, region: string, street_number: float, surname: string>, checkout_url: string, coupons: string, created_at: string, currency: string, customer: record<customer: record>, discount: float, duplicate_url: string, external_shipping_rate_id: string, id: int, payment_information: string, payment_method_name: string, payment_method_type: string, products: list<record>, recovery_url: string, shipment_status: string, shipping: float, shipping_address: record<address: string, city: string, country: string, country_name: string, latitude: float, longitude: float, municipality: string, name: string, postal: string, region: string, street_number: float, surname: string>, shipping_discount: float, shipping_method_id: int, shipping_method_name: string, shipping_option: string, shipping_required: bool, shipping_tax: float, shipping_taxes: list<record>, source: record<campaign: string, first_page_visited: string, first_page_visited_at: string, medium: string, referral_code: string, referral_source: string, referral_url: string, source_name: string, user_agent: string>, status: string, subtotal: float, tax: float, total: float, tracking_company: string, tracking_number: string, tracking_url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orders.json" $qp $auth.query)
   let req_body = {"order": $order} | compact
@@ -2516,12 +2638,14 @@ export def "get-orders-after-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<order: record<additional_fields: list<record>, additional_information: string, billing_address: record<address: string, city: string, country: string, country_name: string, municipality: string, name: string, postal: string, region: string, street_number: float, surname: string>, checkout_url: string, coupons: string, created_at: string, currency: string, customer: record<customer: record>, discount: float, duplicate_url: string, external_shipping_rate_id: string, id: int, payment_information: string, payment_method_name: string, payment_method_type: string, products: list<record>, recovery_url: string, shipment_status: string, shipping: float, shipping_address: record<address: string, city: string, country: string, country_name: string, latitude: float, longitude: float, municipality: string, name: string, postal: string, region: string, street_number: float, surname: string>, shipping_discount: float, shipping_method_id: int, shipping_method_name: string, shipping_option: string, shipping_required: bool, shipping_tax: float, shipping_taxes: list<record>, source: record<campaign: string, first_page_visited: string, first_page_visited_at: string, medium: string, referral_code: string, referral_source: string, referral_url: string, source_name: string, user_agent: string>, status: string, subtotal: float, tax: float, total: float, tracking_company: string, tracking_number: string, tracking_url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/orders/after/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -2553,11 +2677,13 @@ export def "get-orders-count-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orders/count.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -2580,7 +2706,7 @@ export def "get-orders-count-json" [
 #
 # GET /orders/status/{status}.json
 export def "get-orders-status-status-json" [
-  status: string
+  status: string@status-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2590,12 +2716,14 @@ export def "get-orders-status-status-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> table<order: record<additional_fields: list, additional_information: string, billing_address: record, checkout_url: string, coupons: string, created_at: string, currency: string, customer: record, discount: float, duplicate_url: string, external_shipping_rate_id: string, id: int, payment_information: string, payment_method_name: string, payment_method_type: string, products: list, recovery_url: string, shipment_status: string, shipping: float, shipping_address: record, shipping_discount: float, shipping_method_id: int, shipping_method_name: string, shipping_option: string, shipping_required: bool, shipping_tax: float, shipping_taxes: list, source: record, status: string, subtotal: float, tax: float, total: float, tracking_company: string, tracking_number: string, tracking_url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($status | is-empty) { error make --unspanned { msg: "path parameter 'status' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({status: (encode-path-segment $status)} | format pattern "/orders/status/{status}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -2628,12 +2756,14 @@ export def "get-orders-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<order: record<additional_fields: list<record>, additional_information: string, billing_address: record<address: string, city: string, country: string, country_name: string, municipality: string, name: string, postal: string, region: string, street_number: float, surname: string>, checkout_url: string, coupons: string, created_at: string, currency: string, customer: record<customer: record>, discount: float, duplicate_url: string, external_shipping_rate_id: string, id: int, payment_information: string, payment_method_name: string, payment_method_type: string, products: list<record>, recovery_url: string, shipment_status: string, shipping: float, shipping_address: record<address: string, city: string, country: string, country_name: string, latitude: float, longitude: float, municipality: string, name: string, postal: string, region: string, street_number: float, surname: string>, shipping_discount: float, shipping_method_id: int, shipping_method_name: string, shipping_option: string, shipping_required: bool, shipping_tax: float, shipping_taxes: list<record>, source: record<campaign: string, first_page_visited: string, first_page_visited_at: string, medium: string, referral_code: string, referral_source: string, referral_url: string, source_name: string, user_agent: string>, status: string, subtotal: float, tax: float, total: float, tracking_company: string, tracking_number: string, tracking_url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/orders/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -2667,14 +2797,16 @@ export def "put-orders-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --order: any # shape: {additional_fields?: list, additional_information?: string, shipment_status?: "requested"|"in_transit"|"delivered"|"failed"|"pickup_available", status?: "Abandoned"|"Canceled"|"Pending Payment"|"Paid", tracking_company?: string, tracking_number?: string, tracking_url?: string}
 ]: any -> record<order: record<additional_fields: list<record>, additional_information: string, billing_address: record<address: string, city: string, country: string, country_name: string, municipality: string, name: string, postal: string, region: string, street_number: float, surname: string>, checkout_url: string, coupons: string, created_at: string, currency: string, customer: record<customer: record>, discount: float, duplicate_url: string, external_shipping_rate_id: string, id: int, payment_information: string, payment_method_name: string, payment_method_type: string, products: list<record>, recovery_url: string, shipment_status: string, shipping: float, shipping_address: record<address: string, city: string, country: string, country_name: string, latitude: float, longitude: float, municipality: string, name: string, postal: string, region: string, street_number: float, surname: string>, shipping_discount: float, shipping_method_id: int, shipping_method_name: string, shipping_option: string, shipping_required: bool, shipping_tax: float, shipping_taxes: list<record>, source: record<campaign: string, first_page_visited: string, first_page_visited_at: string, medium: string, referral_code: string, referral_source: string, referral_url: string, source_name: string, user_agent: string>, status: string, subtotal: float, tax: float, total: float, tracking_company: string, tracking_number: string, tracking_url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/orders/{id}.json") $qp $auth.query)
   let req_body = {"order": $order} | compact
@@ -2709,12 +2841,14 @@ export def "get-orders-id-history-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> table<order_history: record<created_at: string, id: int, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/orders/{id}/history.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -2748,14 +2882,16 @@ export def "post-orders-id-history-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --order-history: record # shape: {message?: string}
 ]: any -> record<order_history: record<created_at: string, id: int, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/orders/{id}/history.json") $qp $auth.query)
   let req_body = {"order_history": $order_history} | compact
@@ -2789,13 +2925,15 @@ export def "get-pages-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --limit: int # List restriction (format: integer, default: 50)
   --page: int # List page (format: integer, default: 1)
 ]: nothing -> table<page: record<body: string, categories: list, id: int, image: record, legal: bool, meta_description: string, page_title: string, permalink: string, status: string, template: record, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pages.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -2828,13 +2966,15 @@ export def "post-pages-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --page: record # shape: {body?: string, categories?: list, image?: record, meta_description?: string, page_title?: string, permalink?: string, status?: "public"|"draft"|"hidden", template?: int, title?: string}
 ]: any -> record<page: record<body: string, categories: list<record>, id: int, image: record<id: int, url: string>, legal: bool, meta_description: string, page_title: string, permalink: string, status: string, template: record<id: int, name: string>, title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pages.json" $qp $auth.query)
   let req_body = {"page": $page} | compact
@@ -2868,11 +3008,13 @@ export def "get-pages-count-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pages/count.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -2905,12 +3047,14 @@ export def "delete-pages-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/pages/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -2943,12 +3087,14 @@ export def "get-pages-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<page: record<body: string, categories: list<record>, id: int, image: record<id: int, url: string>, legal: bool, meta_description: string, page_title: string, permalink: string, status: string, template: record<id: int, name: string>, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/pages/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -2982,14 +3128,16 @@ export def "put-pages-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --page: record # shape: {body?: string, categories?: list, image?: record, meta_description?: string, page_title?: string, permalink?: string, status?: "public"|"draft"|"hidden", template?: int, title?: string}
 ]: any -> record<page: record<body: string, categories: list<record>, id: int, image: record<id: int, url: string>, legal: bool, meta_description: string, page_title: string, permalink: string, status: string, template: record<id: int, name: string>, title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/pages/{id}.json") $qp $auth.query)
   let req_body = {"page": $page} | compact
@@ -3023,22 +3171,26 @@ export def "get-partners-stores-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --partner-code: string # Partner code. (format: string)
-  --auth-token: string # Partner authentication token. (format: string)
+  --partner-code: string # Partner code. (required, format: string)
+  --auth-token: string # Partner authentication token. (required, format: string)
   --page: int # List page (format: integer, default: 1)
-  --qp-from: string # Statistics start date. Should be in format 'Y-m-d'. (format: string)
-  --qp-to: string # Statistics end date. Should be in format 'Y-m-d'. (format: sting)
+  --from: string # Statistics start date. Should be in format 'Y-m-d'. (required, format: string)
+  --to: string # Statistics end date. Should be in format 'Y-m-d'. (required, format: sting)
 ]: nothing -> table<code: string, stats: record<best_sold: list, conversions: record, currency: string, daily_visits: list, from: string, new_vs_returning_customers: record, new_vs_returning_orders: record, orders: record, payment_methods: list, referrers: list, region_orders: record, search_frequencies_all: list, search_frequencies_without_results: list, shipping_methods: list, to: string, traffic_type: list, visits: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "partner_code" $partner_code "scalar") (serialize-qp "auth_token" $auth_token "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  if ($partner_code == null) { error make --unspanned { msg: "required query parameter 'partner_code' missing: pass --partner-code" } }
+  if ($auth_token == null) { error make --unspanned { msg: "required query parameter 'auth_token' missing: pass --auth-token" } }
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  let qp = [(serialize-qp "partner_code" $partner_code "scalar") (serialize-qp "auth_token" $auth_token "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/partners/stores.json" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"partner_code": $partner_code, "auth_token": $auth_token, "page": $page, "from": $qp_from, "to": $qp_to} | compact)
+    query: ({"partner_code": $partner_code, "auth_token": $auth_token, "page": $page, "from": $from, "to": $to} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3062,11 +3214,13 @@ export def "get-payment-methods-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> table<payment_method: record<id: int, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/payment_methods.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -3099,12 +3253,14 @@ export def "get-payment-methods-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<payment_method: record<id: int, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/payment_methods/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -3136,14 +3292,16 @@ export def "get-products-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --limit: int # List restriction (format: integer, default: 50)
   --page: int # List page (format: integer, default: 1)
   --locale: string # Locale code of the translation (format: string)
 ]: nothing -> table<product: record<barcode: string, categories: list, created_at: string, description: string, diameter: float, discount: float, featured: bool, google_product_category: string, height: float, id: int, images: list, length: float, name: string, package_format: string, permalink: string, price: float, sku: string, status: string, stock: int, stock_unlimited: bool, variants: list, weight: float, width: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/products.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -3176,14 +3334,16 @@ export def "post-products-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --locale: string # Locale code of the translation (format: string)
   --product: record # shape: {barcode?: string, categories?: list, description?: string, diameter?: float, featured?: bool, google_product_category?: string, height?: float, length?: float, meta_description?: string, name: string, package_format?: "box"|"cylinder", page_title?: string, permalink?: string, price: float, shipping_required?: bool, sku?: string, status?: "available"|"not-available"|"disabled", stock?: int, stock_unlimited?: bool, weight?: float, width?: float}
 ]: any -> record<product: record<barcode: string, categories: list<record>, created_at: string, description: string, diameter: float, discount: float, featured: bool, google_product_category: string, height: float, id: int, images: list<record>, length: float, name: string, package_format: string, permalink: string, price: float, sku: string, status: string, stock: int, stock_unlimited: bool, variants: list<record>, weight: float, width: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar") (serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/products.json" $qp $auth.query)
   let req_body = {"product": $product} | compact
@@ -3218,13 +3378,15 @@ export def "get-products-after-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --locale: string # Locale code of the translation (format: string)
 ]: nothing -> table<product: record<barcode: string, categories: list, created_at: string, description: string, diameter: float, discount: float, featured: bool, google_product_category: string, height: float, id: int, images: list, length: float, name: string, package_format: string, permalink: string, price: float, sku: string, status: string, stock: int, stock_unlimited: bool, variants: list, weight: float, width: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar") (serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/after/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -3257,13 +3419,15 @@ export def "get-products-category-category-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --locale: string # Locale code of the translation (format: string)
 ]: nothing -> table<product: record<barcode: string, categories: list, created_at: string, description: string, diameter: float, discount: float, featured: bool, google_product_category: string, height: float, id: int, images: list, length: float, name: string, package_format: string, permalink: string, price: float, sku: string, status: string, stock: int, stock_unlimited: bool, variants: list, weight: float, width: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($category_id | is-empty) { error make --unspanned { msg: "path parameter 'category_id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar") (serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category_id: (encode-path-segment $category_id)} | format pattern "/products/category/{category_id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -3296,13 +3460,15 @@ export def "get-products-category-category-id-count-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --locale: string # Locale code of the translation (format: string)
 ]: nothing -> record<count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($category_id | is-empty) { error make --unspanned { msg: "path parameter 'category_id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar") (serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category_id: (encode-path-segment $category_id)} | format pattern "/products/category/{category_id}/count.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -3334,11 +3500,13 @@ export def "get-products-count-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/products/count.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -3370,14 +3538,17 @@ export def "get-products-search-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --locale: string # Locale code of the translation (format: string)
-  --query: string # Text to query for the Product (format: string)
+  --query: string # Text to query for the Product (required, format: string)
   --fields: string@fields-completer # Comma separated values of the fields to query for the Product (format: string)
 ]: nothing -> table<product: record<barcode: string, categories: list, created_at: string, description: string, diameter: float, discount: float, featured: bool, google_product_category: string, height: float, id: int, images: list, length: float, name: string, package_format: string, permalink: string, price: float, sku: string, status: string, stock: int, stock_unlimited: bool, variants: list, weight: float, width: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/products/search.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -3400,7 +3571,7 @@ export def "get-products-search-json" [
 #
 # GET /products/status/{status}.json
 export def "get-products-status-status-json" [
-  status: string
+  status: string@status-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3410,13 +3581,15 @@ export def "get-products-status-status-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --locale: string # Locale code of the translation (format: string)
 ]: nothing -> table<product: record<barcode: string, categories: list, created_at: string, description: string, diameter: float, discount: float, featured: bool, google_product_category: string, height: float, id: int, images: list, length: float, name: string, package_format: string, permalink: string, price: float, sku: string, status: string, stock: int, stock_unlimited: bool, variants: list, weight: float, width: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($status | is-empty) { error make --unspanned { msg: "path parameter 'status' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar") (serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({status: (encode-path-segment $status)} | format pattern "/products/status/{status}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -3439,7 +3612,7 @@ export def "get-products-status-status-json" [
 #
 # GET /products/status/{status}/count.json
 export def "get-products-status-status-count-json" [
-  status: string
+  status: string@status-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3449,13 +3622,15 @@ export def "get-products-status-status-count-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --locale: string # Locale code of the translation (format: string)
 ]: nothing -> record<count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($status | is-empty) { error make --unspanned { msg: "path parameter 'status' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar") (serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({status: (encode-path-segment $status)} | format pattern "/products/status/{status}/count.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -3488,12 +3663,14 @@ export def "delete-products-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -3526,13 +3703,15 @@ export def "get-products-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --locale: string # Locale code of the translation (format: string)
 ]: nothing -> record<product: record<barcode: string, categories: list<record>, created_at: string, description: string, diameter: float, discount: float, featured: bool, google_product_category: string, height: float, id: int, images: list<record>, length: float, name: string, package_format: string, permalink: string, price: float, sku: string, status: string, stock: int, stock_unlimited: bool, variants: list<record>, weight: float, width: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar") (serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -3566,8 +3745,8 @@ export def "put-products-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --locale: string # Locale code of the translation (format: string)
   --product: record # shape: {barcode?: string, categories?: list, description?: string, diameter?: float, featured?: bool, google_product_category?: string, height?: float, length?: float, meta_description?: string, name: string, package_format?: "box"|"cylinder", page_title?: string, permalink?: string, price: float, shipping_required?: bool, sku?: string, status?: "available"|"not-available"|"disabled", stock?: int, stock_unlimited?: bool, weight?: float, width?: float}
 ]: any -> record<product: record<barcode: string, categories: list<record>, created_at: string, description: string, diameter: float, discount: float, featured: bool, google_product_category: string, height: float, id: int, images: list<record>, length: float, name: string, package_format: string, permalink: string, price: float, sku: string, status: string, stock: int, stock_unlimited: bool, variants: list<record>, weight: float, width: float>> {
@@ -3575,6 +3754,8 @@ export def "put-products-id-json" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar") (serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}.json") $qp $auth.query)
   let req_body = {"product": $product} | compact
@@ -3609,12 +3790,14 @@ export def "get-products-id-attachments-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> table<attachment: record<id: int, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}/attachments.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -3648,14 +3831,16 @@ export def "post-products-id-attachments-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --attachment: record # shape: {filename?: string, url?: string}
 ]: any -> record<attachment: record<id: int, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}/attachments.json") $qp $auth.query)
   let req_body = {"attachment": $attachment} | compact
@@ -3690,12 +3875,14 @@ export def "get-products-id-attachments-count-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}/attachments/count.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -3729,13 +3916,15 @@ export def "delete-products-id-attachments-attachment-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachment_id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/products/{id}/attachments/{attachment_id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -3769,13 +3958,15 @@ export def "get-products-id-attachments-attachment-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<attachment: record<id: int, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachment_id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/products/{id}/attachments/{attachment_id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -3808,12 +3999,14 @@ export def "get-products-id-digital-products-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> table<digital_product: record<expiration_seconds: int, id: int, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}/digital_products.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -3847,14 +4040,16 @@ export def "post-products-id-digital-products-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --digital-product: record # shape: {filename?: string, url?: string}
 ]: any -> record<digital_product: record<expiration_seconds: int, id: int, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}/digital_products.json") $qp $auth.query)
   let req_body = {"digital_product": $digital_product} | compact
@@ -3889,12 +4084,14 @@ export def "get-products-id-digital-products-count-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}/digital_products/count.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -3928,13 +4125,15 @@ export def "delete-products-id-digital-products-digital-product-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($digital_product_id | is-empty) { error make --unspanned { msg: "path parameter 'digital_product_id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), digital_product_id: (encode-path-segment $digital_product_id)} | format pattern "/products/{id}/digital_products/{digital_product_id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -3968,13 +4167,15 @@ export def "get-products-id-digital-products-digital-product-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<digital_product: record<expiration_seconds: int, id: int, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($digital_product_id | is-empty) { error make --unspanned { msg: "path parameter 'digital_product_id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), digital_product_id: (encode-path-segment $digital_product_id)} | format pattern "/products/{id}/digital_products/{digital_product_id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -4007,12 +4208,14 @@ export def "get-products-id-fields-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> table<field: record<custom_field_id: int, id: int, label: string, type: string, value: string, value_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}/fields.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -4046,14 +4249,16 @@ export def "post-products-id-fields-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --field: record # shape: {id?: int, value?: string}
 ]: any -> record<product: record<barcode: string, categories: list<record>, created_at: string, description: string, diameter: float, discount: float, featured: bool, google_product_category: string, height: float, id: int, images: list<record>, length: float, name: string, package_format: string, permalink: string, price: float, sku: string, status: string, stock: int, stock_unlimited: bool, variants: list<record>, weight: float, width: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}/fields.json") $qp $auth.query)
   let req_body = {"field": $field} | compact
@@ -4088,12 +4293,14 @@ export def "get-products-id-fields-count-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}/fields/count.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -4126,12 +4333,14 @@ export def "get-products-id-images-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> table<image: record<id: int, position: int, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}/images.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -4165,14 +4374,16 @@ export def "post-products-id-images-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --image: record # shape: {url?: string}
 ]: any -> record<image: record<id: int, position: int, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}/images.json") $qp $auth.query)
   let req_body = {"image": $image} | compact
@@ -4207,12 +4418,14 @@ export def "get-products-id-images-count-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}/images/count.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -4246,13 +4459,15 @@ export def "delete-products-id-images-image-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($image_id | is-empty) { error make --unspanned { msg: "path parameter 'image_id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), image_id: (encode-path-segment $image_id)} | format pattern "/products/{id}/images/{image_id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -4286,13 +4501,15 @@ export def "get-products-id-images-image-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<image: record<id: int, position: int, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($image_id | is-empty) { error make --unspanned { msg: "path parameter 'image_id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), image_id: (encode-path-segment $image_id)} | format pattern "/products/{id}/images/{image_id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -4325,12 +4542,14 @@ export def "get-products-id-options-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> table<option: record<id: int, name: string, option_type: string, position: int, values: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}/options.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -4364,14 +4583,16 @@ export def "post-products-id-options-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --option: record # shape: {name?: string, option_type?: "option"|"input"|"text"|"file", position?: int}
 ]: any -> record<option: record<id: int, name: string, option_type: string, position: int, values: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}/options.json") $qp $auth.query)
   let req_body = {"option": $option} | compact
@@ -4406,12 +4627,14 @@ export def "get-products-id-options-count-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}/options/count.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -4445,13 +4668,15 @@ export def "delete-products-id-options-option-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($option_id | is-empty) { error make --unspanned { msg: "path parameter 'option_id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), option_id: (encode-path-segment $option_id)} | format pattern "/products/{id}/options/{option_id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -4485,13 +4710,15 @@ export def "get-products-id-options-option-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<option: record<id: int, name: string, option_type: string, position: int, values: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($option_id | is-empty) { error make --unspanned { msg: "path parameter 'option_id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), option_id: (encode-path-segment $option_id)} | format pattern "/products/{id}/options/{option_id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -4526,8 +4753,8 @@ export def "put-products-id-options-option-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --option: record # shape: {name?: string, option_type?: "option"|"input"|"text"|"file", position?: int}
 ]: any -> record<option: record<id: int, name: string, option_type: string, position: int, values: list<record>>> {
   let input = $in
@@ -4535,6 +4762,8 @@ export def "put-products-id-options-option-id-json" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($option_id | is-empty) { error make --unspanned { msg: "path parameter 'option_id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), option_id: (encode-path-segment $option_id)} | format pattern "/products/{id}/options/{option_id}.json") $qp $auth.query)
   let req_body = {"option": $option} | compact
@@ -4570,13 +4799,15 @@ export def "get-products-id-options-option-id-values-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> table<value: record<id: int, name: string, position: int, product_option: record, variants: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($option_id | is-empty) { error make --unspanned { msg: "path parameter 'option_id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), option_id: (encode-path-segment $option_id)} | format pattern "/products/{id}/options/{option_id}/values.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -4611,8 +4842,8 @@ export def "post-products-id-options-option-id-values-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --value: record # shape: {name?: string, position?: int}
 ]: any -> record<value: record<id: int, name: string, position: int, product_option: record<option: record>, variants: list<record>>> {
   let input = $in
@@ -4620,6 +4851,8 @@ export def "post-products-id-options-option-id-values-json" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($option_id | is-empty) { error make --unspanned { msg: "path parameter 'option_id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), option_id: (encode-path-segment $option_id)} | format pattern "/products/{id}/options/{option_id}/values.json") $qp $auth.query)
   let req_body = {"value": $value} | compact
@@ -4655,13 +4888,15 @@ export def "get-products-id-options-option-id-values-count-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($option_id | is-empty) { error make --unspanned { msg: "path parameter 'option_id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), option_id: (encode-path-segment $option_id)} | format pattern "/products/{id}/options/{option_id}/values/count.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -4696,14 +4931,16 @@ export def "delete-products-id-options-option-id-values-value-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($option_id | is-empty) { error make --unspanned { msg: "path parameter 'option_id' must be non-empty" } }
   if ($value_id | is-empty) { error make --unspanned { msg: "path parameter 'value_id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), option_id: (encode-path-segment $option_id), value_id: (encode-path-segment $value_id)} | format pattern "/products/{id}/options/{option_id}/values/{value_id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -4738,14 +4975,16 @@ export def "get-products-id-options-option-id-values-value-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<value: record<id: int, name: string, position: int, product_option: record<option: record>, variants: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($option_id | is-empty) { error make --unspanned { msg: "path parameter 'option_id' must be non-empty" } }
   if ($value_id | is-empty) { error make --unspanned { msg: "path parameter 'value_id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), option_id: (encode-path-segment $option_id), value_id: (encode-path-segment $value_id)} | format pattern "/products/{id}/options/{option_id}/values/{value_id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -4781,8 +5020,8 @@ export def "put-products-id-options-option-id-values-value-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --value: record # shape: {name?: string, position?: int}
 ]: any -> record<value: record<id: int, name: string, position: int, product_option: record<option: record>, variants: list<record>>> {
   let input = $in
@@ -4791,6 +5030,8 @@ export def "put-products-id-options-option-id-values-value-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($option_id | is-empty) { error make --unspanned { msg: "path parameter 'option_id' must be non-empty" } }
   if ($value_id | is-empty) { error make --unspanned { msg: "path parameter 'value_id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), option_id: (encode-path-segment $option_id), value_id: (encode-path-segment $value_id)} | format pattern "/products/{id}/options/{option_id}/values/{value_id}.json") $qp $auth.query)
   let req_body = {"value": $value} | compact
@@ -4825,12 +5066,14 @@ export def "get-products-id-variants-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> table<variant: record<id: int, image: record, options: list, price: float, sku: string, stock: int, stock_unlimited: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}/variants.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -4864,14 +5107,16 @@ export def "post-products-id-variants-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --variant: record # shape: {image_id?: int, options?: list, price?: float, sku?: string, stock?: int, stock_unlimited?: bool}
 ]: any -> record<variant: record<id: int, image: record<id: int, position: int, url: string>, options: list<record>, price: float, sku: string, stock: int, stock_unlimited: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}/variants.json") $qp $auth.query)
   let req_body = {"variant": $variant} | compact
@@ -4906,12 +5151,14 @@ export def "get-products-id-variants-count-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}/variants/count.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -4945,13 +5192,15 @@ export def "get-products-id-variants-variant-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<variant: record<id: int, image: record<id: int, position: int, url: string>, options: list<record>, price: float, sku: string, stock: int, stock_unlimited: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($variant_id | is-empty) { error make --unspanned { msg: "path parameter 'variant_id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), variant_id: (encode-path-segment $variant_id)} | format pattern "/products/{id}/variants/{variant_id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -4986,8 +5235,8 @@ export def "put-products-id-variants-variant-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --variant: record # shape: {image_id?: int, options?: list, price?: float, sku?: string, stock?: int, stock_unlimited?: bool}
 ]: any -> record<variant: record<id: int, image: record<id: int, position: int, url: string>, options: list<record>, price: float, sku: string, stock: int, stock_unlimited: bool>> {
   let input = $in
@@ -4995,6 +5244,8 @@ export def "put-products-id-variants-variant-id-json" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($variant_id | is-empty) { error make --unspanned { msg: "path parameter 'variant_id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), variant_id: (encode-path-segment $variant_id)} | format pattern "/products/{id}/variants/{variant_id}.json") $qp $auth.query)
   let req_body = {"variant": $variant} | compact
@@ -5030,13 +5281,15 @@ export def "delete-products-product-id-fields-field-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'product_id' must be non-empty" } }
   if ($field_id | is-empty) { error make --unspanned { msg: "path parameter 'field_id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({product_id: (encode-path-segment $product_id), field_id: (encode-path-segment $field_id)} | format pattern "/products/{product_id}/fields/{field_id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -5070,13 +5323,15 @@ export def "put-products-product-id-fields-field-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<field: record<custom_field_id: int, id: int, label: string, type: string, value: string, value_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'product_id' must be non-empty" } }
   if ($field_id | is-empty) { error make --unspanned { msg: "path parameter 'field_id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({product_id: (encode-path-segment $product_id), field_id: (encode-path-segment $field_id)} | format pattern "/products/{product_id}/fields/{field_id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -5108,13 +5363,15 @@ export def "get-promotions-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --limit: int # Promotions' list restriction (default: 50 | max: 200). (format: integer)
   --page: int # Promotions' list page (default: 1). (format: integer)
 ]: nothing -> table<promotion: record<begins_at: string, categories: list, code: string, condition_price: float, condition_qty: int, cumulative: bool, customer_categories: list, discount_amount_fix: float, discount_amount_percent: float, discount_target: string, enabled: bool, expires_at: string, id: int, lasts: string, max_times_used: int, name: string, products: list, products_x: list, quantity_x: int, status: string, times_used: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/promotions.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -5147,13 +5404,15 @@ export def "post-promotions-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --promotion: record # shape: {begins_at?: string, buys_at_least?: string, categories?: list, code?: string, condition_price?: float, condition_qty?: int, cumulative?: bool, customer_categories?: list, customers?: string, discount_amount_fix?: float, discount_amount_percent?: float, discount_target?: string, enabled?: bool, expires_at?: string, lasts?: string, max_times_used?: int, name?: string, products?: list, products_x?: list, quantity_x?: int, type?: string}
 ]: any -> record<promotion: record<begins_at: string, categories: list<record>, code: string, condition_price: float, condition_qty: int, cumulative: bool, customer_categories: list<record>, discount_amount_fix: float, discount_amount_percent: float, discount_target: string, enabled: bool, expires_at: string, id: int, lasts: string, max_times_used: int, name: string, products: list<record>, products_x: list<record>, quantity_x: int, status: string, times_used: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/promotions.json" $qp $auth.query)
   let req_body = {"promotion": $promotion} | compact
@@ -5188,12 +5447,14 @@ export def "delete-promotions-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/promotions/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -5226,12 +5487,14 @@ export def "get-promotions-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<promotion: record<begins_at: string, categories: list<record>, code: string, condition_price: float, condition_qty: int, cumulative: bool, customer_categories: list<record>, discount_amount_fix: float, discount_amount_percent: float, discount_target: string, enabled: bool, expires_at: string, id: int, lasts: string, max_times_used: int, name: string, products: list<record>, products_x: list<record>, quantity_x: int, status: string, times_used: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/promotions/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -5265,14 +5528,16 @@ export def "put-promotions-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --promotion: record # shape: {begins_at?: string, buys_at_least?: string, categories?: list, code?: string, condition_price?: float, condition_qty?: int, cumulative?: bool, customer_categories?: list, customers?: string, discount_amount_fix?: float, discount_amount_percent?: float, discount_target?: string, enabled?: bool, expires_at?: string, lasts?: string, max_times_used?: int, name?: string, products?: list, products_x?: list, quantity_x?: int, type?: string}
 ]: any -> record<promotion: record<begins_at: string, categories: list<record>, code: string, condition_price: float, condition_qty: int, cumulative: bool, customer_categories: list<record>, discount_amount_fix: float, discount_amount_percent: float, discount_target: string, enabled: bool, expires_at: string, id: int, lasts: string, max_times_used: int, name: string, products: list<record>, products_x: list<record>, quantity_x: int, status: string, times_used: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/promotions/{id}.json") $qp $auth.query)
   let req_body = {"promotion": $promotion} | compact
@@ -5306,11 +5571,13 @@ export def "get-shipping-methods-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> table<shipping_method: record<callback_url: string, city: string, fetch_services_url: string, id: int, name: string, postal: string, services: list, state: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/shipping_methods.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -5343,13 +5610,15 @@ export def "post-shipping-methods-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --shipping-method: record # shape: {callback_url?: string, city?: string, fetch_services_url?: string, name?: string, postal?: string, state?: string, token?: string}
 ]: any -> record<shipping_method: record<callback_url: string, city: string, fetch_services_url: string, id: int, name: string, postal: string, services: list<record>, state: string, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/shipping_methods.json" $qp $auth.query)
   let req_body = {"shipping_method": $shipping_method} | compact
@@ -5384,12 +5653,14 @@ export def "delete-shipping-methods-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shipping_methods/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -5422,12 +5693,14 @@ export def "get-shipping-methods-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<shipping_method: record<callback_url: string, city: string, fetch_services_url: string, id: int, name: string, postal: string, services: list<record>, state: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shipping_methods/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -5461,14 +5734,16 @@ export def "put-shipping-methods-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --shipping-method: record # shape: {callback_url?: string, city?: string, fetch_services_url?: string, name?: string, postal?: string, state?: string, token?: string}
 ]: any -> record<shipping_method: record<callback_url: string, city: string, fetch_services_url: string, id: int, name: string, postal: string, services: list<record>, state: string, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shipping_methods/{id}.json") $qp $auth.query)
   let req_body = {"shipping_method": $shipping_method} | compact
@@ -5502,13 +5777,16 @@ export def "get-store-check-status-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --partner-code: string # Partner code. (format: string)
-  --auth-token: string # Partner authentication token. (format: string)
-  --store-code: string # Store Code (format: string)
+  --partner-code: string # Partner code. (required, format: string)
+  --auth-token: string # Partner authentication token. (required, format: string)
+  --store-code: string # Store Code (required, format: string)
   --locale: string # ISO 3166-2 code of the language used in the response messages. (format: string, default: en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($partner_code == null) { error make --unspanned { msg: "required query parameter 'partner_code' missing: pass --partner-code" } }
+  if ($auth_token == null) { error make --unspanned { msg: "required query parameter 'auth_token' missing: pass --auth-token" } }
+  if ($store_code == null) { error make --unspanned { msg: "required query parameter 'store_code' missing: pass --store-code" } }
   let qp = [(serialize-qp "partner_code" $partner_code "scalar") (serialize-qp "auth_token" $auth_token "scalar") (serialize-qp "store_code" $store_code "scalar") (serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/store/check_status.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -5540,8 +5818,8 @@ export def "post-store-create-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --partner-code: string # Partner code. (format: string)
-  --auth-token: string # Partner authentication token. (format: string)
+  --partner-code: string # Partner code. (required, format: string)
+  --auth-token: string # Partner authentication token. (required, format: string)
   --aff: string # Partner code.
   --email: string # New Store administrator email. (format: email)
   --locale: string # ISO3166-2 code for the store langauge. (default: en)
@@ -5553,6 +5831,8 @@ export def "post-store-create-json" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($partner_code == null) { error make --unspanned { msg: "required query parameter 'partner_code' missing: pass --partner-code" } }
+  if ($auth_token == null) { error make --unspanned { msg: "required query parameter 'auth_token' missing: pass --auth-token" } }
   let qp = [(serialize-qp "partner_code" $partner_code "scalar") (serialize-qp "auth_token" $auth_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/store/create.json" $qp $auth.query)
   let req_body = {"aff": $aff, "email": $email, "locale": $locale, "password": $password, "plan_name": $plan_name, "reject_duplicates": $reject_duplicates, "store_name": $store_name} | compact
@@ -5586,11 +5866,13 @@ export def "get-store-info-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<address: record<address: string, city: string, country: string, country_code: string, postal: string, region: string, region_code: string>, code: string, country: string, currency: string, email: string, hooks_token: string, logo: string, name: string, timezone: string, url: string, weight_unit: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/store/info.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -5622,11 +5904,13 @@ export def "get-store-languages-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> table<code: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/store/languages.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -5658,11 +5942,13 @@ export def "get-taxes-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> table<tax: record<category_id: int, country: string, fixed: bool, id: int, name: string, region: string, shipping: bool, tax_amount: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/taxes.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -5695,13 +5981,15 @@ export def "post-taxes-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
   --tax: record # shape: {category_id?: int, country?: string, fixed?: bool, name?: string, region?: string, shipping?: bool, tax?: float}
 ]: any -> record<tax: record<category_id: int, country: string, fixed: bool, id: int, name: string, region: string, shipping: bool, tax_amount: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/taxes.json" $qp $auth.query)
   let req_body = {"tax": $tax} | compact
@@ -5736,12 +6024,14 @@ export def "get-taxes-id-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --login: string # API OAuth login. (format: string)
-  --authtoken: string # API OAuth token. (format: string)
+  --login: string # API OAuth login. (required, format: string)
+  --authtoken: string # API OAuth token. (required, format: string)
 ]: nothing -> record<tax: record<category_id: int, country: string, fixed: bool, id: int, name: string, region: string, shipping: bool, tax_amount: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
+  if ($authtoken == null) { error make --unspanned { msg: "required query parameter 'authtoken' missing: pass --authtoken" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/taxes/{id}.json") $qp $auth.query)
   let accept_val = "application/json"

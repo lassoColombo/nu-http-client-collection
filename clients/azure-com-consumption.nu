@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -150,12 +150,13 @@ export def "balances-get-for-billing-period-by-billing-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01.
-]: nothing -> record<properties: record<adjustmentDetails: list<record>, adjustments: float, azureMarketplaceServiceCharges: float, beginningBalance: float, billingFrequency: string, chargesBilledSeparately: float, currency: string, endingBalance: float, newPurchases: float, newPurchasesDetails: list<record>, priceHidden: bool, serviceOverage: float, totalOverage: float, totalUsage: float, utilized: float>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01. (required)
+]: nothing -> record<properties: record<adjustmentDetails: list<record>, adjustments: float, azureMarketplaceServiceCharges: float, beginningBalance: float, billingFrequency: string, chargesBilledSeparately: float, currency: string, endingBalance: float, newPurchases: float, newPurchasesDetails: list<record>, priceHidden: bool, serviceOverage: float, totalOverage: float, totalUsage: float, utilized: float>, id: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_id | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountId' must be non-empty" } }
   if ($billing_period_name | is-empty) { error make --unspanned { msg: "path parameter 'billingPeriodName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_id: (encode-path-segment $billing_account_id), billing_period_name: (encode-path-segment $billing_period_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_id}/providers/Microsoft.Billing/billingPeriods/{billing_period_name}/providers/Microsoft.Consumption/balances") $qp $auth.query)
   let accept_val = "application/json"
@@ -190,11 +191,12 @@ export def "balances-get-by-billing-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01.
-]: nothing -> record<properties: record<adjustmentDetails: list<record>, adjustments: float, azureMarketplaceServiceCharges: float, beginningBalance: float, billingFrequency: string, chargesBilledSeparately: float, currency: string, endingBalance: float, newPurchases: float, newPurchasesDetails: list<record>, priceHidden: bool, serviceOverage: float, totalOverage: float, totalUsage: float, utilized: float>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01. (required)
+]: nothing -> record<properties: record<adjustmentDetails: list<record>, adjustments: float, azureMarketplaceServiceCharges: float, beginningBalance: float, billingFrequency: string, chargesBilledSeparately: float, currency: string, endingBalance: float, newPurchases: float, newPurchasesDetails: list<record>, priceHidden: bool, serviceOverage: float, totalOverage: float, totalUsage: float, utilized: float>, id: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_id | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_id: (encode-path-segment $billing_account_id)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_id}/providers/Microsoft.Consumption/balances") $qp $auth.query)
   let accept_val = "application/json"
@@ -229,12 +231,14 @@ export def "reservations-details-list-by-billing-account-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter: string # Filter reservation details by date range. The properties/UsageDate for start date and end date. The filter supports 'le' and 'ge'
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --filter: string # Filter reservation details by date range. The properties/UsageDate for start date and end date. The filter supports 'le' and 'ge' (required)
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_id | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountId' must be non-empty" } }
+  if ($filter == null) { error make --unspanned { msg: "required query parameter '$filter' missing: pass --filter" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_id: (encode-path-segment $billing_account_id)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_id}/providers/Microsoft.Consumption/reservationDetails") $qp $auth.query)
   let accept_val = "application/json"
@@ -269,13 +273,15 @@ export def "reservations-summaries-list-by-billing-account-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --grain: string@grain-completer # Can be daily or monthly
+  --grain: string@grain-completer # Can be daily or monthly (required)
   --filter: string # Required only for daily grain. The properties/UsageDate for start date and end date. The filter supports 'le' and 'ge'
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_id | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountId' must be non-empty" } }
+  if ($grain == null) { error make --unspanned { msg: "required query parameter 'grain' missing: pass --grain" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "grain" $grain "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_id: (encode-path-segment $billing_account_id)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_id}/providers/Microsoft.Consumption/reservationSummaries") $qp $auth.query)
   let accept_val = "application/json"
@@ -311,11 +317,12 @@ export def "reservation-transactions-list-by-billing-account-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter reservation transactions by date range. The properties/UsageDate for start date and end date. The filter supports 'le' and 'ge'
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_id | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_id: (encode-path-segment $billing_account_id)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_id}/providers/Microsoft.Consumption/reservationTransactions") $qp $auth.query)
   let accept_val = "application/json"
@@ -351,11 +358,12 @@ export def "reservation-recommendations-list-by-billing-account-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # May be used to filter reservationRecommendations by properties/scope and properties/lookBackPeriod.
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, tags: record, type: string, location: string, sku: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_account_id | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_id: (encode-path-segment $billing_account_id)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_id}/providers/microsoft.consumption/ReservationRecommendations") $qp $auth.query)
   let accept_val = "application/json"
@@ -390,12 +398,14 @@ export def "reservations-details-list-by-reservation-order" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter: string # Filter reservation details by date range. The properties/UsageDate for start date and end date. The filter supports 'le' and 'ge'
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --filter: string # Filter reservation details by date range. The properties/UsageDate for start date and end date. The filter supports 'le' and 'ge' (required)
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($reservation_order_id | is-empty) { error make --unspanned { msg: "path parameter 'reservationOrderId' must be non-empty" } }
+  if ($filter == null) { error make --unspanned { msg: "required query parameter '$filter' missing: pass --filter" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({reservation_order_id: (encode-path-segment $reservation_order_id)} | format pattern "/providers/Microsoft.Capacity/reservationorders/{reservation_order_id}/providers/Microsoft.Consumption/reservationDetails") $qp $auth.query)
   let accept_val = "application/json"
@@ -430,13 +440,15 @@ export def "reservations-summaries-list-by-reservation-order" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --grain: string@grain-completer # Can be daily or monthly
+  --grain: string@grain-completer # Can be daily or monthly (required)
   --filter: string # Required only for daily grain. The properties/UsageDate for start date and end date. The filter supports 'le' and 'ge'
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($reservation_order_id | is-empty) { error make --unspanned { msg: "path parameter 'reservationOrderId' must be non-empty" } }
+  if ($grain == null) { error make --unspanned { msg: "required query parameter 'grain' missing: pass --grain" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "grain" $grain "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({reservation_order_id: (encode-path-segment $reservation_order_id)} | format pattern "/providers/Microsoft.Capacity/reservationorders/{reservation_order_id}/providers/Microsoft.Consumption/reservationSummaries") $qp $auth.query)
   let accept_val = "application/json"
@@ -472,13 +484,15 @@ export def "reservations-details-list-by-reservation-order-and-reservation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter: string # Filter reservation details by date range. The properties/UsageDate for start date and end date. The filter supports 'le' and 'ge'
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --filter: string # Filter reservation details by date range. The properties/UsageDate for start date and end date. The filter supports 'le' and 'ge' (required)
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($reservation_order_id | is-empty) { error make --unspanned { msg: "path parameter 'reservationOrderId' must be non-empty" } }
   if ($reservation_id | is-empty) { error make --unspanned { msg: "path parameter 'reservationId' must be non-empty" } }
+  if ($filter == null) { error make --unspanned { msg: "required query parameter '$filter' missing: pass --filter" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({reservation_order_id: (encode-path-segment $reservation_order_id), reservation_id: (encode-path-segment $reservation_id)} | format pattern "/providers/Microsoft.Capacity/reservationorders/{reservation_order_id}/reservations/{reservation_id}/providers/Microsoft.Consumption/reservationDetails") $qp $auth.query)
   let accept_val = "application/json"
@@ -514,14 +528,16 @@ export def "reservations-summaries-list-by-reservation-order-and-reservation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --grain: string@grain-completer # Can be daily or monthly
+  --grain: string@grain-completer # Can be daily or monthly (required)
   --filter: string # Required only for daily grain. The properties/UsageDate for start date and end date. The filter supports 'le' and 'ge'
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($reservation_order_id | is-empty) { error make --unspanned { msg: "path parameter 'reservationOrderId' must be non-empty" } }
   if ($reservation_id | is-empty) { error make --unspanned { msg: "path parameter 'reservationId' must be non-empty" } }
+  if ($grain == null) { error make --unspanned { msg: "required query parameter 'grain' missing: pass --grain" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "grain" $grain "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({reservation_order_id: (encode-path-segment $reservation_order_id), reservation_id: (encode-path-segment $reservation_id)} | format pattern "/providers/Microsoft.Capacity/reservationorders/{reservation_order_id}/reservations/{reservation_id}/providers/Microsoft.Consumption/reservationSummaries") $qp $auth.query)
   let accept_val = "application/json"
@@ -554,10 +570,11 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01. (required)
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Consumption/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -593,12 +610,13 @@ export def "aggregated-cost-get-for-billing-period-by-management-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01.
-]: nothing -> record<properties: record<azureCharges: float, billingPeriodId: string, chargesBilledSeparately: float, children: list<any>, currency: string, excludedSubscriptions: list<string>, includedSubscriptions: list<string>, marketplaceCharges: float, usageEnd: string, usageStart: string>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01. (required)
+]: nothing -> record<properties: record<azureCharges: float, billingPeriodId: string, chargesBilledSeparately: float, children: list<any>, currency: string, excludedSubscriptions: list<string>, includedSubscriptions: list<string>, marketplaceCharges: float, usageEnd: string, usageStart: string>, id: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($management_group_id | is-empty) { error make --unspanned { msg: "path parameter 'managementGroupId' must be non-empty" } }
   if ($billing_period_name | is-empty) { error make --unspanned { msg: "path parameter 'billingPeriodName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({management_group_id: (encode-path-segment $management_group_id), billing_period_name: (encode-path-segment $billing_period_name)} | format pattern "/providers/Microsoft.Management/managementGroups/{management_group_id}/providers/Microsoft.Billing/billingPeriods/{billing_period_name}/Microsoft.Consumption/aggregatedcost") $qp $auth.query)
   let accept_val = "application/json"
@@ -633,12 +651,13 @@ export def "aggregated-cost-get-by-management-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01. (required)
   --filter: string # May be used to filter aggregated cost by properties/usageStart (Utc time), properties/usageEnd (Utc time). The filter supports 'eq', 'lt', 'gt', 'le', 'ge', and 'and'. It does not currently support 'ne', 'or', or 'not'. Tag filter is a key value pair string where key and value is separated by a colon (:).
-]: nothing -> record<properties: record<azureCharges: float, billingPeriodId: string, chargesBilledSeparately: float, children: list<any>, currency: string, excludedSubscriptions: list<string>, includedSubscriptions: list<string>, marketplaceCharges: float, usageEnd: string, usageStart: string>> {
+]: nothing -> record<properties: record<azureCharges: float, billingPeriodId: string, chargesBilledSeparately: float, children: list<any>, currency: string, excludedSubscriptions: list<string>, includedSubscriptions: list<string>, marketplaceCharges: float, usageEnd: string, usageStart: string>, id: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($management_group_id | is-empty) { error make --unspanned { msg: "path parameter 'managementGroupId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({management_group_id: (encode-path-segment $management_group_id)} | format pattern "/providers/Microsoft.Management/managementGroups/{management_group_id}/providers/Microsoft.Consumption/aggregatedcost") $qp $auth.query)
   let accept_val = "application/json"
@@ -677,12 +696,13 @@ export def "price-sheet-get-by-billing-period" [
   --expand: string # May be used to expand the properties/meterDetails within a price sheet. By default, these fields are not included when returning price sheet.
   --skiptoken: string # Skiptoken is only used if a previous operation returned a partial result. If a previous response contains a nextLink element, the value of the nextLink element will include a skiptoken parameter that specifies a starting point to use for subsequent calls.
   --top: int # May be used to limit the number of results to the top N results.
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01.
-]: nothing -> record<properties: record<nextLink: string, pricesheets: list<record>>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01. (required)
+]: nothing -> record<properties: record<nextLink: string, pricesheets: list<record>>, id: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($billing_period_name | is-empty) { error make --unspanned { msg: "path parameter 'billingPeriodName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), billing_period_name: (encode-path-segment $billing_period_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Billing/billingPeriods/{billing_period_name}/providers/Microsoft.Consumption/pricesheets/default") $qp $auth.query)
   let accept_val = "application/json"
@@ -718,11 +738,12 @@ export def "forecasts-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # May be used to filter forecasts by properties/usageDate (Utc time), properties/chargeType or properties/grain. The filter supports 'eq', 'lt', 'gt', 'le', 'ge', and 'and'. It does not currently support 'ne', 'or', or 'not'.
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01.
-]: nothing -> record<value: table<properties: record>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01. (required)
+]: nothing -> record<value: table<properties: record, id: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Consumption/forecasts") $qp $auth.query)
   let accept_val = "application/json"
@@ -760,11 +781,12 @@ export def "price-sheet-get" [
   --expand: string # May be used to expand the properties/meterDetails within a price sheet. By default, these fields are not included when returning price sheet.
   --skiptoken: string # Skiptoken is only used if a previous operation returned a partial result. If a previous response contains a nextLink element, the value of the nextLink element will include a skiptoken parameter that specifies a starting point to use for subsequent calls.
   --top: int # May be used to limit the number of results to the top N results.
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01.
-]: nothing -> record<properties: record<nextLink: string, pricesheets: list<record>>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01. (required)
+]: nothing -> record<properties: record<nextLink: string, pricesheets: list<record>>, id: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Consumption/pricesheets/default") $qp $auth.query)
   let accept_val = "application/json"
@@ -800,11 +822,12 @@ export def "reservation-recommendations-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # May be used to filter reservationRecommendations by properties/scope and properties/lookBackPeriod.
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, tags: record, type: string, location: string, sku: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Consumption/reservationRecommendations") $qp $auth.query)
   let accept_val = "application/json"
@@ -839,11 +862,12 @@ export def "budgets-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, eTag: string, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope)} | format pattern "/{scope}/providers/Microsoft.Consumption/budgets") $qp $auth.query)
   let accept_val = "application/json"
@@ -879,12 +903,13 @@ export def "budgets-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01.
-]: nothing -> record<error: record<code: string, message: string>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($budget_name | is-empty) { error make --unspanned { msg: "path parameter 'budgetName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), budget_name: (encode-path-segment $budget_name)} | format pattern "/{scope}/providers/Microsoft.Consumption/budgets/{budget_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -920,12 +945,13 @@ export def "budgets-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01.
-]: nothing -> record<properties: record<amount: float, category: string, currentSpend: record<amount: float, unit: string>, filters: record<meters: list, resourceGroups: list, resources: list, tags: record>, notifications: record, timeGrain: string, timePeriod: record<endDate: string, startDate: string>>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01. (required)
+]: nothing -> record<properties: record<amount: float, category: string, currentSpend: record<amount: float, unit: string>, filters: record<meters: list, resourceGroups: list, resources: list, tags: record>, notifications: record, timeGrain: string, timePeriod: record<endDate: string, startDate: string>>, eTag: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($budget_name | is-empty) { error make --unspanned { msg: "path parameter 'budgetName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), budget_name: (encode-path-segment $budget_name)} | format pattern "/{scope}/providers/Microsoft.Consumption/budgets/{budget_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -962,15 +988,16 @@ export def "budgets-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01. (required)
   --properties: any # The properties of the budget. — shape: {amount: float, category: "Cost"|"Usage", currentSpend?: any, filters?: any, notifications?: record, timeGrain: "Monthly"|"Quarterly"|"Annually"|"BillingMonth"|"BillingQuarter"|"BillingAnnual", timePeriod: any}
   --e-tag: string # eTag of the resource. To handle concurrent update scenario, this field will be used to determine whether the user is updating the latest version or not.
-]: any -> record<properties: record<amount: float, category: string, currentSpend: record<amount: float, unit: string>, filters: record<meters: list, resourceGroups: list, resources: list, tags: record>, notifications: record, timeGrain: string, timePeriod: record<endDate: string, startDate: string>>> {
+]: any -> record<properties: record<amount: float, category: string, currentSpend: record<amount: float, unit: string>, filters: record<meters: list, resourceGroups: list, resources: list, tags: record>, notifications: record, timeGrain: string, timePeriod: record<endDate: string, startDate: string>>, eTag: string, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($budget_name | is-empty) { error make --unspanned { msg: "path parameter 'budgetName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), budget_name: (encode-path-segment $budget_name)} | format pattern "/{scope}/providers/Microsoft.Consumption/budgets/{budget_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "eTag": $e_tag} | compact
@@ -1007,12 +1034,13 @@ export def "charges-list-by-scope" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01. (required)
   --filter: string # May be used to filter charges by properties/usageEnd (Utc time), properties/usageStart (Utc time). The filter supports 'eq', 'lt', 'gt', 'le', 'ge', and 'and'. It does not currently support 'ne', 'or', or 'not'. Tag filter is a key value pair string where key and value is separated by a colon (:).
-]: nothing -> record<properties: record<azureCharges: float, billingPeriodId: string, chargesBilledSeparately: float, currency: string, marketplaceCharges: float, usageEnd: string, usageStart: string>> {
+]: nothing -> record<properties: record<azureCharges: float, billingPeriodId: string, chargesBilledSeparately: float, currency: string, marketplaceCharges: float, usageEnd: string, usageStart: string>, id: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope)} | format pattern "/{scope}/providers/Microsoft.Consumption/charges") $qp $auth.query)
   let accept_val = "application/json"
@@ -1050,11 +1078,12 @@ export def "marketplaces-list" [
   --filter: string # May be used to filter marketplaces by properties/usageEnd (Utc time), properties/usageStart (Utc time), properties/resourceGroup, properties/instanceName or properties/instanceId. The filter supports 'eq', 'lt', 'gt', 'le', 'ge', and 'and'. It does not currently support 'ne', 'or', or 'not'.
   --top: int # May be used to limit the number of results to the most recent N marketplaces.
   --skiptoken: string # Skiptoken is only used if a previous operation returned a partial result. If a previous response contains a nextLink element, the value of the nextLink element will include a skiptoken parameter that specifies a starting point to use for subsequent calls.
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope)} | format pattern "/{scope}/providers/Microsoft.Consumption/marketplaces") $qp $auth.query)
   let accept_val = "application/json"
@@ -1089,11 +1118,12 @@ export def "tags-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01.
-]: nothing -> record<properties: record<tags: list<record>>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01. (required)
+]: nothing -> record<properties: record<tags: list<record>>, eTag: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope)} | format pattern "/{scope}/providers/Microsoft.Consumption/tags") $qp $auth.query)
   let accept_val = "application/json"
@@ -1132,12 +1162,13 @@ export def "usage-details-list" [
   --filter: string # May be used to filter usageDetails by properties/resourceGroup, properties/resourceName, properties/resourceId, properties/chargeType, properties/reservationId, properties/publisherType or tags. The filter supports 'eq', 'lt', 'gt', 'le', 'ge', and 'and'. It does not currently support 'ne', 'or', or 'not'. Tag filter is a key value pair string where key and value is separated by a colon (:). PublisherType Filter accepts two values azure and marketplace and it is currently supported for Web Direct Offer Type
   --skiptoken: string # Skiptoken is only used if a previous operation returned a partial result. If a previous response contains a nextLink element, the value of the nextLink element will include a skiptoken parameter that specifies a starting point to use for subsequent calls.
   --top: int # May be used to limit the number of results to the most recent N usageDetails.
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01.
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01. (required)
   --metric: string@metric-completer # Allows to select different type of cost/usage records.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "api-version" $api_version "scalar") (serialize-qp "metric" $metric "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope)} | format pattern "/{scope}/providers/Microsoft.Consumption/usageDetails") $qp $auth.query)
   let accept_val = "application/json"

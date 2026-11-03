@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -167,7 +167,7 @@ export def "get-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<auto_collection: string, balance: int, balance_currency_code: string, free_target_quantity: int, has_used_trial: bool, heroku: bool, next_billing_at: string, plan: record<allowed_scan_profiles: list<string>, charge_model: string, currency_code: string, description: string, id: string, is_trial: bool, name: string, period: string, period_unit: string, price: int>, plan_target_quantity: int, pool_size: int, status: string, trialEnd: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/" $auth.query)
@@ -202,7 +202,7 @@ export def "post-auth-obtain" [
   --dry-run(-n) # Return the request that would be sent without executing it
   password: string # e.g. dolphins
   username: string # e.g. example@probely.com
-]: any -> any {
+]: any -> record<token: string, ttl: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -239,7 +239,7 @@ export def "post-auth-refresh" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string # Authentication token (e.g. eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiJKR3ZRSTkzSTJhc0oiLCJ0ZW5hbnQiOiJwcm9iZWx5IiwidXNlcm5hbWUiOiJxd2VAZGVmbnVsbC5ldSJ9.7KtUn-Oy8aevOCv2lAnDroAJojLXmm7m2A4CX5cjwAk)
-]: any -> any {
+]: any -> record<token: string, ttl: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -276,7 +276,7 @@ export def "post-auth-revoke" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string # Authentication token (e.g. eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiJKR3ZRSTkzSTJhc0oiLCJ0ZW5hbnQiOiJwcm9iZWx5IiwidXNlcm5hbWUiOiJxd2VAZGVmbnVsbC5ldSJ9.7KtUn-Oy8aevOCv2lAnDroAJojLXmm7m2A4CX5cjwAk)
-]: any -> any {
+]: any -> record<token: string, ttl: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -313,7 +313,7 @@ export def "post-auth-verify" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string # Authentication token (e.g. eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiJKR3ZRSTkzSTJhc0oiLCJ0ZW5hbnQiOiJwcm9iZWx5IiwidXNlcm5hbWUiOiJxd2VAZGVmbnVsbC5ldSJ9.7KtUn-Oy8aevOCv2lAnDroAJojLXmm7m2A4CX5cjwAk)
-]: any -> any {
+]: any -> record<token: string, ttl: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -349,7 +349,7 @@ export def "get-billing" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<address: string, city: string, country: string, email: string, first_name: string, last_name: string, other: string, reg_number: string, vat_number: string, zip: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/billing/" $auth.query)
@@ -392,7 +392,7 @@ export def "patch-billing" [
   --reg-number: string # Company registration number
   vat_number: string # Company VAT registration number
   zip: string # Address ZIP code
-]: any -> any {
+]: any -> record<address: string, city: string, country: string, email: string, first_name: string, last_name: string, other: string, reg_number: string, vat_number: string, zip: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -438,7 +438,7 @@ export def "put-billing" [
   --reg-number: string # Company registration number
   vat_number: string # Company VAT registration number
   zip: string # Address ZIP code
-]: any -> any {
+]: any -> record<address: string, city: string, country: string, email: string, first_name: string, last_name: string, other: string, reg_number: string, vat_number: string, zip: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -475,7 +475,7 @@ export def "post-billing-actions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> any {
+]: any -> record<action: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -513,7 +513,7 @@ export def "post-billing-estimate" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --coupon-ids: list<string> # Coupon ids
   --target-ids: list<string>
-]: any -> any {
+]: any -> record<amount_due: int, amount_paid: int, currency_code: string, discounts: table<amount: int, description: string>, line_items: table<amount: int, description: string, discount_amount: int, quantity: int, tax_amount: int, unit_amount: int>, plan: string, plan_id: string, sub_total: int, taxes: table<tax_amount: int, tax_name: string, tax_rate: float>, total: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -551,7 +551,7 @@ export def "post-billing-subscribe" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --coupon-ids: list<string> # Coupon ids
   --target-ids: list<string>
-]: any -> any {
+]: any -> record<amount_due: int, amount_paid: int, currency_code: string, discounts: table<amount: int, description: string>, line_items: table<amount: int, description: string, discount_amount: int, quantity: int, tax_amount: int, unit_amount: int>, plan: string, plan_id: string, sub_total: int, taxes: table<tax_amount: int, tax_name: string, tax_rate: float>, total: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -588,13 +588,14 @@ export def "post-check" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string # Reset token received in the user email (e.g. KJUUCY2VIVEHO5KJGVHQ====-PJZXGNKSGNQVSODFPJGQ====-GYZDKOI=-8065bfbf8a0192774f3f/)
-]: any -> any {
+]: any -> record<message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/check/" $auth.query)
   let req_body = {"token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -626,7 +627,7 @@ export def "post-enterprise-auth-obtain" [
   --dry-run(-n) # Return the request that would be sent without executing it
   password: string # e.g. dolphins
   username: string # e.g. example@probely.com
-]: any -> any {
+]: any -> record<token: string, ttl: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -663,7 +664,7 @@ export def "post-enterprise-auth-refresh" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string # Authentication token (e.g. eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiJKR3ZRSTkzSTJhc0oiLCJ0ZW5hbnQiOiJwcm9iZWx5IiwidXNlcm5hbWUiOiJxd2VAZGVmbnVsbC5ldSJ9.7KtUn-Oy8aevOCv2lAnDroAJojLXmm7m2A4CX5cjwAk)
-]: any -> any {
+]: any -> record<token: string, ttl: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -700,7 +701,7 @@ export def "post-enterprise-auth-revoke" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string # Authentication token (e.g. eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiJKR3ZRSTkzSTJhc0oiLCJ0ZW5hbnQiOiJwcm9iZWx5IiwidXNlcm5hbWUiOiJxd2VAZGVmbnVsbC5ldSJ9.7KtUn-Oy8aevOCv2lAnDroAJojLXmm7m2A4CX5cjwAk)
-]: any -> any {
+]: any -> record<token: string, ttl: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -737,7 +738,7 @@ export def "post-enterprise-auth-verify" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string # Authentication token (e.g. eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiJKR3ZRSTkzSTJhc0oiLCJ0ZW5hbnQiOiJwcm9iZWx5IiwidXNlcm5hbWUiOiJxd2VAZGVmbnVsbC5ldSJ9.7KtUn-Oy8aevOCv2lAnDroAJojLXmm7m2A4CX5cjwAk)
-]: any -> any {
+]: any -> record<token: string, ttl: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -773,7 +774,7 @@ export def "get-events" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<count: int, length: int, page: int, page_total: int, results: table<content: record, event_type: string, id: string, object_type: string, ocurred_at: string, webhooks: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/events/" $auth.query)
@@ -807,7 +808,7 @@ export def "get-events-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<content: record, event_type: string, id: string, object_type: string, ocurred_at: string, webhooks: table<api_version: string, changed: string, changed_by: record, check_cert: bool, created: string, created_by: record, id: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -845,7 +846,7 @@ export def "get-frameworks" [
   --length: int # Number of results to return per page (default: 10)
   --ordering: string # Which field to use when ordering the results, prefix with `-` to invert ordering. (e.g. -changed)
   --search: string # Search term
-]: nothing -> any {
+]: nothing -> record<count: int, length: int, page: int, page_total: int, results: table<desc: string, id: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "length" $length "scalar") (serialize-qp "ordering" $ordering "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
@@ -880,7 +881,7 @@ export def "get-frameworks-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<desc: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -914,7 +915,7 @@ export def "get-integrations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<available: record<heroku: bool, jira_cloud: bool, jira_server: bool, slack: bool>, installed: record<heroku: bool, jira_cloud: bool, jira_server: bool, slack: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/integrations/" $auth.query)
@@ -947,7 +948,7 @@ export def "get-integrations-jira-cloud-projects" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/integrations/jira-cloud/projects/" $auth.query)
@@ -981,7 +982,7 @@ export def "get-integrations-jira-cloud-projects-project-id-issue-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
@@ -1017,7 +1018,7 @@ export def "get-integrations-jira-cloud-projects-project-id-issue-types-issue-ty
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
@@ -1054,7 +1055,7 @@ export def "get-integrations-jira-cloud-projects-project-id-issue-types-issue-ty
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
@@ -1089,7 +1090,7 @@ export def "get-integrations-jira-server-projects" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/integrations/jira-server/projects/" $auth.query)
@@ -1123,7 +1124,7 @@ export def "get-integrations-jira-server-projects-project-id-issue-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
@@ -1159,7 +1160,7 @@ export def "get-integrations-jira-server-projects-project-id-issue-types-issue-t
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
@@ -1196,7 +1197,7 @@ export def "get-integrations-jira-server-projects-project-id-issue-types-issue-t
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
@@ -1235,7 +1236,7 @@ export def "get-keys" [
   --length: int # Number of results to return per page (default: 10)
   --ordering: string # Which field to use when ordering the results, prefix with `-` to invert ordering. (e.g. -changed)
   --search: string # Search term
-]: nothing -> any {
+]: nothing -> record<count: int, length: int, page: int, page_total: int, results: table<id: string, key: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "length" $length "scalar") (serialize-qp "ordering" $ordering "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
@@ -1269,8 +1270,8 @@ export def "post-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name: string # Custom name for the resource (default: , e.g. Object name)
-]: any -> any {
+  --name: string # Custom name for the resource (default: "", e.g. Object name)
+]: any -> record<id: string, key: string, name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1342,7 +1343,7 @@ export def "get-keys-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<id: string, key: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1380,7 +1381,7 @@ export def "get-labels" [
   --length: int # Number of results to return per page (default: 10)
   --ordering: string # Which field to use when ordering the results, prefix with `-` to invert ordering. (e.g. -changed)
   --search: string # Search term
-]: nothing -> any {
+]: nothing -> record<count: int, length: int, page: int, page_total: int, results: table<id: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "length" $length "scalar") (serialize-qp "ordering" $ordering "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
@@ -1414,8 +1415,8 @@ export def "post-labels" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name: string # Custom name for the resource (default: , e.g. Object name)
-]: any -> any {
+  --name: string # Custom name for the resource (default: "", e.g. Object name)
+]: any -> record<id: string, name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1487,7 +1488,7 @@ export def "get-labels-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1522,8 +1523,8 @@ export def "patch-labels-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name: string # Custom name for the resource (default: , e.g. Object name)
-]: any -> any {
+  --name: string # Custom name for the resource (default: "", e.g. Object name)
+]: any -> record<id: string, name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1561,8 +1562,8 @@ export def "put-labels-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name: string # Custom name for the resource (default: , e.g. Object name)
-]: any -> any {
+  --name: string # Custom name for the resource (default: "", e.g. Object name)
+]: any -> record<id: string, name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1599,7 +1600,7 @@ export def "get-plans" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<allowed_scan_profiles: list<string>, charge_model: string, currency_code: string, description: string, id: string, is_trial: bool, name: string, period: string, period_unit: string, price: int> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/plans/" $auth.query)
@@ -1636,7 +1637,7 @@ export def "get-profile" [
   --length: int # Number of results to return per page (default: 10)
   --ordering: string # Which field to use when ordering the results, prefix with `-` to invert ordering. (e.g. -changed)
   --search: string # Search term
-]: nothing -> any {
+]: nothing -> record<changed: string, changed_by: record<email: string, id: string, name: string>, email: string, id: string, is_active: bool, is_admin: bool, is_billing_admin: bool, name: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "length" $length "scalar") (serialize-qp "ordering" $ordering "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
@@ -1670,10 +1671,10 @@ export def "post-profile-change-password" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  confpassword: any
-  current_password: any
-  password: any
-]: any -> any {
+  confpassword: string # New user password (confirmation)
+  current_password: string # Current user password
+  password: string # New user password
+]: any -> record<message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1710,7 +1711,7 @@ export def "post-reset" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   email: string # e.g. example@probely.com
-]: any -> any {
+]: any -> record<message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -1746,16 +1747,17 @@ export def "post-setpassword" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  confpassword: any
-  password: any
+  confpassword: string # New user password (confirmation)
+  password: string # New user password
   --body-token: string # Reset token received in the user email (e.g. KJUUCY2VIVEHO5KJGVHQ====-PJZXGNKSGNQVSODFPJGQ====-GYZDKOI=-8065bfbf8a0192774f3f/)
-]: any -> any {
+]: any -> record<message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setpassword/" $auth.query)
   let req_body = {"confpassword": $confpassword, "password": $password, "token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1786,7 +1788,7 @@ export def "post-target-actions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> any {
+]: any -> table<action: string, label: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1826,7 +1828,7 @@ export def "get-targets" [
   --length: int # Number of results to return per page (default: 10)
   --ordering: string # Which field to use when ordering the results, prefix with `-` to invert ordering. (e.g. -changed)
   --search: string # Search term
-]: nothing -> any {
+]: nothing -> record<length: int, page: int, page_total: int, pagination_count: int, results: table<allowed_scan_profiles: list, assets: list, changed: string, changed_by: record, connected_target: string, enabled: bool, environment: string, id: string, labels: list, name: string, report_type: string, scan_profile: string, site: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "length" $length "scalar") (serialize-qp "ordering" $ordering "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
@@ -1867,12 +1869,12 @@ export def "post-targets" [
   --connected-target: string # Id of the connected target in a multi-environment targets.
   --environment: string@environment-completer # Multi-environment targets can identify environments using this property. (default: testing)
   --labels: list<string> # User labels for the scope. (This feature is currently only available for certain accounts, please contact our support if you are interested in using it)
-  --name: string # Custom name for the resource (default: , e.g. Object name)
+  --name: string # Custom name for the resource (default: "", e.g. Object name)
   --report-type: string@report-type-completer # * default - default report, no extra information added * owasp - adds table on OWASP Top 10 most critical web application risks * pci - adds table on PCI requirements
   --scan-profile: string@scan-profile-completer # * lightning - fast simple scan * normal - default profile * full - does everything the default profile does and adds boolean based SQL injection tests * safe - doesn't use any content changing methods (no POST, DELETE, etc) and tries fewer payloads for SQL injection tests (default: normal, e.g. normal)
   --site: record # Main resource associated with a target — shape: {basic_auth?: record, cookies?: list, desc?: string, form_login?: list, form_login_check_pattern?: string, form_login_url?: string, has_basic_auth?: bool, has_form_login?: bool, headers?: list, name?: string, url?: string, whitelist?: list<string>}
   --type: string@type-completer # The type of a target determines what the limitations imposed on a target. * free - Every account is allowed to have 5 free targets, these targets do not need to be verified but can only perform lightning scans. * single - Single environment targets need to be verified but are allowed to run any type of scan allowed by the plan. * multi - Multi environment targets are used when you want to scan the same application in different environments. (default: single)
-]: any -> any {
+]: any -> record<allowed_scan_profiles: table<id: string, name: string>, assets: table<changed: string, changed_by: record, cookies: list, desc: string, headers: list, host: string, id: string, include: bool, name: string, stack: list, verification_date: string, verification_last_error: string, verification_method: string, verification_token: string, verified: bool>, changed: string, changed_by: record<email: string, id: string, name: string>, connected_target: string, enabled: bool, environment: string, id: string, labels: list<string>, name: string, report_type: string, scan_profile: string, site: record<basic_auth: record<password: string, username: string>, changed: string, changed_by: record<email: string, id: string, name: string>, cookies: list<record>, desc: string, form_login: list<record>, form_login_check_pattern: string, form_login_url: string, has_basic_auth: bool, has_form_login: bool, headers: list<record>, host: string, id: string, name: string, stack: list<string>, url: string, verification_date: string, verification_last_error: string, verification_method: string, verification_token: string, verified: bool, whitelist: list<string>>, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1909,7 +1911,7 @@ export def "post-targets-activate" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> any {
+]: any -> list<string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1945,7 +1947,7 @@ export def "get-targets-all-average-fix-time" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<results: record<high: int, low: int, medium: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/targets/all/average_fix_time/" $auth.query)
@@ -1978,7 +1980,7 @@ export def "get-targets-all-needs-attention-pie" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<0: record<0: string, 1: int, 2: string>, 1: record<0: string, 1: int, 2: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/targets/all/needs_attention_pie/" $auth.query)
@@ -2011,7 +2013,7 @@ export def "get-targets-all-needs-attention-top" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<highs: int, id: string, lows: int, mediums: int, name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/targets/all/needs_attention_top/" $auth.query)
@@ -2044,7 +2046,7 @@ export def "get-targets-all-risk-trend" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<0: string, 1: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/targets/all/risk_trend/" $auth.query)
@@ -2083,7 +2085,7 @@ export def "get-targets-all-scans" [
   --search: string # Search term
   --started: list<string> # Filter by scan start dates
   --status: string@status-completer # Filter by scan statuses
-]: nothing -> any {
+]: nothing -> record<count: int, length: int, page: int, page_total: int, results: table<changed: string, changed_by: record, completed: string, crawler: record, created: string, created_by: record, fingerprinter: record, highs: int, id: string, lows: int, mediums: int, scan_profile: string, scanner: record, started: string, status: string, target: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "length" $length "scalar") (serialize-qp "ordering" $ordering "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "started" $started "multi") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
@@ -2118,7 +2120,7 @@ export def "get-targets-all-scheduledscans-expanded" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --length: int # Number of results to return per page (default: 10)
-]: nothing -> any {
+]: nothing -> record<results: table<changed: string, changed_by: record, date_time: string, id: string, recurrence: string, target: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "length" $length "scalar")] | flatten | str join "&"
@@ -2152,7 +2154,7 @@ export def "get-targets-all-severity-trend" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<results: record<high: list<record>, low: list<record>, medium: list<record>>, step: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/targets/all/severity_trend/" $auth.query)
@@ -2185,7 +2187,7 @@ export def "get-targets-all-top-vulns" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<0: string, 1: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/targets/all/top_vulns/" $auth.query)
@@ -2219,7 +2221,7 @@ export def "post-targets-archive" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> any {
+]: any -> list<string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2256,7 +2258,7 @@ export def "post-targets-archived" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> any {
+]: any -> record<length: int, page: int, page_total: int, pagination_count: int, results: table<allowed_scan_profiles: list, assets: list, changed: string, changed_by: record, connected_target: string, enabled: bool, environment: string, id: string, labels: list, name: string, report_type: string, scan_profile: string, site: record, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2328,7 +2330,7 @@ export def "get-targets-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<allowed_scan_profiles: table<id: string, name: string>, assets: table<changed: string, changed_by: record, cookies: list, desc: string, headers: list, host: string, id: string, include: bool, name: string, stack: list, verification_date: string, verification_last_error: string, verification_method: string, verification_token: string, verified: bool>, changed: string, changed_by: record<email: string, id: string, name: string>, connected_target: string, enabled: bool, environment: string, id: string, labels: list<string>, name: string, report_type: string, scan_profile: string, site: record<basic_auth: record<password: string, username: string>, changed: string, changed_by: record<email: string, id: string, name: string>, cookies: list<record>, desc: string, form_login: list<record>, form_login_check_pattern: string, form_login_url: string, has_basic_auth: bool, has_form_login: bool, headers: list<record>, host: string, id: string, name: string, stack: list<string>, url: string, verification_date: string, verification_last_error: string, verification_method: string, verification_token: string, verified: bool, whitelist: list<string>>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2370,12 +2372,12 @@ export def "patch-targets-id" [
   --connected-target: string # Id of the connected target in a multi-environment targets.
   --environment: string@environment-completer # Multi-environment targets can identify environments using this property. (default: testing)
   --labels: list<string> # User labels for the scope. (This feature is currently only available for certain accounts, please contact our support if you are interested in using it)
-  --name: string # Custom name for the resource (default: , e.g. Object name)
+  --name: string # Custom name for the resource (default: "", e.g. Object name)
   --report-type: string@report-type-completer # * default - default report, no extra information added * owasp - adds table on OWASP Top 10 most critical web application risks * pci - adds table on PCI requirements
   --scan-profile: string@scan-profile-completer # * lightning - fast simple scan * normal - default profile * full - does everything the default profile does and adds boolean based SQL injection tests * safe - doesn't use any content changing methods (no POST, DELETE, etc) and tries fewer payloads for SQL injection tests (default: normal, e.g. normal)
   --site: record # Main resource associated with a target — shape: {basic_auth?: record, cookies?: list, desc?: string, form_login?: list, form_login_check_pattern?: string, form_login_url?: string, has_basic_auth?: bool, has_form_login?: bool, headers?: list, name?: string, url?: string, whitelist?: list<string>}
   --type: string@type-completer # The type of a target determines what the limitations imposed on a target. * free - Every account is allowed to have 5 free targets, these targets do not need to be verified but can only perform lightning scans. * single - Single environment targets need to be verified but are allowed to run any type of scan allowed by the plan. * multi - Multi environment targets are used when you want to scan the same application in different environments. (default: single)
-]: any -> any {
+]: any -> record<allowed_scan_profiles: table<id: string, name: string>, assets: table<changed: string, changed_by: record, cookies: list, desc: string, headers: list, host: string, id: string, include: bool, name: string, stack: list, verification_date: string, verification_last_error: string, verification_method: string, verification_token: string, verified: bool>, changed: string, changed_by: record<email: string, id: string, name: string>, connected_target: string, enabled: bool, environment: string, id: string, labels: list<string>, name: string, report_type: string, scan_profile: string, site: record<basic_auth: record<password: string, username: string>, changed: string, changed_by: record<email: string, id: string, name: string>, cookies: list<record>, desc: string, form_login: list<record>, form_login_check_pattern: string, form_login_url: string, has_basic_auth: bool, has_form_login: bool, headers: list<record>, host: string, id: string, name: string, stack: list<string>, url: string, verification_date: string, verification_last_error: string, verification_method: string, verification_token: string, verified: bool, whitelist: list<string>>, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2420,12 +2422,12 @@ export def "put-targets-id" [
   --connected-target: string # Id of the connected target in a multi-environment targets.
   --environment: string@environment-completer # Multi-environment targets can identify environments using this property. (default: testing)
   --labels: list<string> # User labels for the scope. (This feature is currently only available for certain accounts, please contact our support if you are interested in using it)
-  --name: string # Custom name for the resource (default: , e.g. Object name)
+  --name: string # Custom name for the resource (default: "", e.g. Object name)
   --report-type: string@report-type-completer # * default - default report, no extra information added * owasp - adds table on OWASP Top 10 most critical web application risks * pci - adds table on PCI requirements
   --scan-profile: string@scan-profile-completer # * lightning - fast simple scan * normal - default profile * full - does everything the default profile does and adds boolean based SQL injection tests * safe - doesn't use any content changing methods (no POST, DELETE, etc) and tries fewer payloads for SQL injection tests (default: normal, e.g. normal)
   --site: record # Main resource associated with a target — shape: {basic_auth?: record, cookies?: list, desc?: string, form_login?: list, form_login_check_pattern?: string, form_login_url?: string, has_basic_auth?: bool, has_form_login?: bool, headers?: list, name?: string, url?: string, whitelist?: list<string>}
   --type: string@type-completer # The type of a target determines what the limitations imposed on a target. * free - Every account is allowed to have 5 free targets, these targets do not need to be verified but can only perform lightning scans. * single - Single environment targets need to be verified but are allowed to run any type of scan allowed by the plan. * multi - Multi environment targets are used when you want to scan the same application in different environments. (default: single)
-]: any -> any {
+]: any -> record<allowed_scan_profiles: table<id: string, name: string>, assets: table<changed: string, changed_by: record, cookies: list, desc: string, headers: list, host: string, id: string, include: bool, name: string, stack: list, verification_date: string, verification_last_error: string, verification_method: string, verification_token: string, verified: bool>, changed: string, changed_by: record<email: string, id: string, name: string>, connected_target: string, enabled: bool, environment: string, id: string, labels: list<string>, name: string, report_type: string, scan_profile: string, site: record<basic_auth: record<password: string, username: string>, changed: string, changed_by: record<email: string, id: string, name: string>, cookies: list<record>, desc: string, form_login: list<record>, form_login_check_pattern: string, form_login_url: string, has_basic_auth: bool, has_form_login: bool, headers: list<record>, host: string, id: string, name: string, stack: list<string>, url: string, verification_date: string, verification_last_error: string, verification_method: string, verification_token: string, verified: bool, whitelist: list<string>>, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2467,7 +2469,7 @@ export def "get-targets-target-id-assets" [
   --length: int # Number of results to return per page (default: 10)
   --ordering: string # Which field to use when ordering the results, prefix with `-` to invert ordering. (e.g. -changed)
   --search: string # Search term
-]: nothing -> any {
+]: nothing -> record<count: int, length: int, page: int, page_total: int, results: table<changed: string, changed_by: record, cookies: list, desc: string, headers: list, host: string, id: string, include: bool, name: string, stack: list, verification_date: string, verification_last_error: string, verification_method: string, verification_token: string, verified: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_id | is-empty) { error make --unspanned { msg: "path parameter 'target_id' must be non-empty" } }
@@ -2507,12 +2509,12 @@ export def "post-targets-target-id-assets" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --cookies: list # Custom cookies name/value pairs — item shape: {name?: string, value?: string}
-  --desc: string # Custom description for the resource (default: , e.g. Object description)
+  --desc: string # Custom description for the resource (default: "", e.g. Object description)
   --headers: list # Custom headers name value pairs — item shape: {name?: string, value?: string}
   --host: string # Fully qualified hostname
   --include: oneof<nothing, bool> # Use this asset in scans.
-  --name: string # Custom name for the resource (default: , e.g. Object name)
-]: any -> any {
+  --name: string # Custom name for the resource (default: "", e.g. Object name)
+]: any -> record<changed: string, changed_by: record<email: string, id: string, name: string>, cookies: table<name: string, value: string>, desc: string, headers: table<name: string, value: string>, host: string, id: string, include: bool, name: string, stack: list<string>, verification_date: string, verification_last_error: string, verification_method: string, verification_token: string, verified: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2588,7 +2590,7 @@ export def "get-targets-target-id-assets-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<changed: string, changed_by: record<email: string, id: string, name: string>, cookies: table<name: string, value: string>, desc: string, headers: table<name: string, value: string>, host: string, id: string, include: bool, name: string, stack: list<string>, verification_date: string, verification_last_error: string, verification_method: string, verification_token: string, verified: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_id | is-empty) { error make --unspanned { msg: "path parameter 'target_id' must be non-empty" } }
@@ -2629,12 +2631,12 @@ export def "patch-targets-target-id-assets-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --cookies: list # Custom cookies name/value pairs — item shape: {name?: string, value?: string}
-  --desc: string # Custom description for the resource (default: , e.g. Object description)
+  --desc: string # Custom description for the resource (default: "", e.g. Object description)
   --headers: list # Custom headers name value pairs — item shape: {name?: string, value?: string}
   --host: string # Fully qualified hostname
   --include: oneof<nothing, bool> # Use this asset in scans.
-  --name: string # Custom name for the resource (default: , e.g. Object name)
-]: any -> any {
+  --name: string # Custom name for the resource (default: "", e.g. Object name)
+]: any -> record<changed: string, changed_by: record<email: string, id: string, name: string>, cookies: table<name: string, value: string>, desc: string, headers: table<name: string, value: string>, host: string, id: string, include: bool, name: string, stack: list<string>, verification_date: string, verification_last_error: string, verification_method: string, verification_token: string, verified: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2678,12 +2680,12 @@ export def "put-targets-target-id-assets-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --cookies: list # Custom cookies name/value pairs — item shape: {name?: string, value?: string}
-  --desc: string # Custom description for the resource (default: , e.g. Object description)
+  --desc: string # Custom description for the resource (default: "", e.g. Object description)
   --headers: list # Custom headers name value pairs — item shape: {name?: string, value?: string}
   --host: string # Fully qualified hostname
   --include: oneof<nothing, bool> # Use this asset in scans.
-  --name: string # Custom name for the resource (default: , e.g. Object name)
-]: any -> any {
+  --name: string # Custom name for the resource (default: "", e.g. Object name)
+]: any -> record<changed: string, changed_by: record<email: string, id: string, name: string>, cookies: table<name: string, value: string>, desc: string, headers: table<name: string, value: string>, host: string, id: string, include: bool, name: string, stack: list<string>, verification_date: string, verification_last_error: string, verification_method: string, verification_token: string, verified: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2724,7 +2726,7 @@ export def "post-targets-target-id-assets-id-verify" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer-1 # Type of verification: * dns - we look or a TXT record on the host you registered containing `Probely=<verification_token>` * file - on the root of the path you registered we look for a file named `` containing `Probely`.
-]: any -> any {
+]: any -> record<message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2763,7 +2765,7 @@ export def "get-targets-target-id-average-fix-time" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<results: record<high: int, low: int, medium: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_id | is-empty) { error make --unspanned { msg: "path parameter 'target_id' must be non-empty" } }
@@ -2798,7 +2800,7 @@ export def "get-targets-target-id-events" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<count: int, length: int, page: int, page_total: int, results: table<content: record, event_type: string, id: string, object_type: string, ocurred_at: string, webhooks: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_id | is-empty) { error make --unspanned { msg: "path parameter 'target_id' must be non-empty" } }
@@ -2834,7 +2836,7 @@ export def "get-targets-target-id-events-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<content: record, event_type: string, id: string, object_type: string, ocurred_at: string, webhooks: table<api_version: string, changed: string, changed_by: record, check_cert: bool, created: string, created_by: record, id: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_id | is-empty) { error make --unspanned { msg: "path parameter 'target_id' must be non-empty" } }
@@ -2879,7 +2881,7 @@ export def "get-targets-target-id-findings" [
   --length: int # Number of results to return per page (default: 10)
   --ordering: string # Which field to use when ordering the results, prefix with `-` to invert ordering. (e.g. -changed)
   --search: string # Search term
-]: nothing -> any {
+]: nothing -> record<count: int, length: int, page: int, page_total: int, results: table<assignee: record, changed: string, changed_by: record, comment: string, cvss_score: float, cvss_vector: string, definition: record, evidence: string, extra: string, fix: string, id: string, insertion_point: string, labels: list, last_found: string, method: string, parameter: string, params: string, path: string, reporter: record, requests: list, scans: list, severity: string, state: string, target: record, url: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_id | is-empty) { error make --unspanned { msg: "path parameter 'target_id' must be non-empty" } }
@@ -3044,14 +3046,15 @@ export def "get-targets-target-id-findings-report" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # Token received from the finding report endpoint.
-]: nothing -> any {
+  --qp-token: string # Token received from the finding report endpoint. (required)
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_id | is-empty) { error make --unspanned { msg: "path parameter 'target_id' must be non-empty" } }
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({target_id: (encode-path-segment $target_id)} | format pattern "/targets/{target_id}/findings/report/") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -3082,7 +3085,7 @@ export def "get-targets-target-id-findings-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<assignee: record<email: string, id: string, name: string>, changed: string, changed_by: record<email: string, id: string, name: string>, comment: string, cvss_score: float, cvss_vector: string, definition: record<desc: string, id: string, name: string>, evidence: string, extra: string, fix: string, id: string, insertion_point: string, labels: list<string>, last_found: string, method: string, parameter: string, params: string, path: string, reporter: record<email: string, id: string, name: string>, requests: table<request: string, response: string>, scans: list<string>, severity: string, state: string, target: record<desc: string, id: string, name: string, stack: list<string>, url: string>, url: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_id | is-empty) { error make --unspanned { msg: "path parameter 'target_id' must be non-empty" } }
@@ -3130,7 +3133,7 @@ export def "patch-targets-target-id-findings-id" [
   --labels: list<string> # User labels for the finding.
   --severity: string@severity-completer # Severity, how serious the issue is considered: * 10 - low * 20 - medium * 30 - high
   --state: string@state-completer # Finding state: * notfixed - Issue can still be exploited * invalid - Issue determined to be a false positive * accepted - Issue will not be solved and the risk was accepted * fixed - No problem here anymore
-]: any -> any {
+]: any -> record<assignee: record<email: string, id: string, name: string>, changed: string, changed_by: record<email: string, id: string, name: string>, comment: string, cvss_score: float, cvss_vector: string, definition: record<desc: string, id: string, name: string>, evidence: string, extra: string, fix: string, id: string, insertion_point: string, labels: list<string>, last_found: string, method: string, parameter: string, params: string, path: string, reporter: record<email: string, id: string, name: string>, requests: table<request: string, response: string>, scans: list<string>, severity: string, state: string, target: record<desc: string, id: string, name: string, stack: list<string>, url: string>, url: string, value: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3181,7 +3184,7 @@ export def "put-targets-target-id-findings-id" [
   --labels: list<string> # User labels for the finding.
   --severity: string@severity-completer # Severity, how serious the issue is considered: * 10 - low * 20 - medium * 30 - high
   --state: string@state-completer # Finding state: * notfixed - Issue can still be exploited * invalid - Issue determined to be a false positive * accepted - Issue will not be solved and the risk was accepted * fixed - No problem here anymore
-]: any -> any {
+]: any -> record<assignee: record<email: string, id: string, name: string>, changed: string, changed_by: record<email: string, id: string, name: string>, comment: string, cvss_score: float, cvss_vector: string, definition: record<desc: string, id: string, name: string>, evidence: string, extra: string, fix: string, id: string, insertion_point: string, labels: list<string>, last_found: string, method: string, parameter: string, params: string, path: string, reporter: record<email: string, id: string, name: string>, requests: table<request: string, response: string>, scans: list<string>, severity: string, state: string, target: record<desc: string, id: string, name: string, stack: list<string>, url: string>, url: string, value: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3221,7 +3224,7 @@ export def "get-targets-target-id-findings-id-integrations-jira-cloud" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<issue_id: string, selective_sync: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_id | is-empty) { error make --unspanned { msg: "path parameter 'target_id' must be non-empty" } }
@@ -3260,7 +3263,7 @@ export def "patch-targets-target-id-findings-id-integrations-jira-cloud" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --issue-id: string # Jira issue id connected to this finding
   --selective-sync: oneof<nothing, bool> # Selective sync active for this finding.
-]: any -> any {
+]: any -> record<issue_id: string, selective_sync: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3302,7 +3305,7 @@ export def "put-targets-target-id-findings-id-integrations-jira-cloud" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --issue-id: string # Jira issue id connected to this finding
   --selective-sync: oneof<nothing, bool> # Selective sync active for this finding.
-]: any -> any {
+]: any -> record<issue_id: string, selective_sync: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3342,7 +3345,7 @@ export def "get-targets-target-id-findings-id-integrations-jira-server" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<issue_id: string, selective_sync: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_id | is-empty) { error make --unspanned { msg: "path parameter 'target_id' must be non-empty" } }
@@ -3381,7 +3384,7 @@ export def "patch-targets-target-id-findings-id-integrations-jira-server" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --issue-id: string # Jira issue id connected to this finding
   --selective-sync: oneof<nothing, bool> # Selective sync active for this finding.
-]: any -> any {
+]: any -> record<issue_id: string, selective_sync: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3423,7 +3426,7 @@ export def "put-targets-target-id-findings-id-integrations-jira-server" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --issue-id: string # Jira issue id connected to this finding
   --selective-sync: oneof<nothing, bool> # Selective sync active for this finding.
-]: any -> any {
+]: any -> record<issue_id: string, selective_sync: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3463,7 +3466,7 @@ export def "get-targets-target-id-findings-id-log" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<change: int, changed: string, changed_by: record<email: string, id: string, name: string>, field: string, old_value: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_id | is-empty) { error make --unspanned { msg: "path parameter 'target_id' must be non-empty" } }
@@ -3500,7 +3503,7 @@ export def "post-targets-target-id-findings-id-retest" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<changed: string, changed_by: record<email: string, id: string, name: string>, completed: string, crawler: record<error: list<string>, state: string, status: record<0: int, 1: int>, warning: list<string>>, created: string, created_by: record<email: string, id: string, name: string>, fingerprinter: record<count: int, error: list<string>, state: string, warning: list<string>>, highs: int, id: string, lows: int, mediums: int, scan_profile: string, scanner: record<error: list<string>, state: string, status: record<0: int, 1: int>, warning: list<string>>, started: string, status: string, target: record<desc: string, id: string, name: string, stack: list<string>, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_id | is-empty) { error make --unspanned { msg: "path parameter 'target_id' must be non-empty" } }
@@ -3536,7 +3539,7 @@ export def "get-targets-target-id-integrations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<available: record<heroku: bool, jira_cloud: bool, jira_server: bool, slack: bool>, installed: record<heroku: bool, jira_cloud: bool, jira_server: bool, slack: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_id | is-empty) { error make --unspanned { msg: "path parameter 'target_id' must be non-empty" } }
@@ -3571,7 +3574,7 @@ export def "get-targets-target-id-integrations-jira-cloud" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<allow_jira: bool, auto_sync: bool, issue_type_id: string, priority_mapping: record<10: string, 20: string, 30: string>, project_id: string, status_mapping: record<accepted: string, fixed: string, invalid: string, notfixed: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_id | is-empty) { error make --unspanned { msg: "path parameter 'target_id' must be non-empty" } }
@@ -3614,7 +3617,7 @@ export def "patch-targets-target-id-integrations-jira-cloud" [
   --priority-mapping: record # shape: {10?: string, 20?: string, 30?: string}
   --project-id: string # Id of the Jira project where issues for this target will be created.
   --status-mapping: record # shape: {accepted?: string, fixed?: string, invalid?: string, notfixed?: string}
-]: any -> any {
+]: any -> record<allow_jira: bool, auto_sync: bool, issue_type_id: string, priority_mapping: record<10: string, 20: string, 30: string>, project_id: string, status_mapping: record<accepted: string, fixed: string, invalid: string, notfixed: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3660,7 +3663,7 @@ export def "put-targets-target-id-integrations-jira-cloud" [
   --priority-mapping: record # shape: {10?: string, 20?: string, 30?: string}
   --project-id: string # Id of the Jira project where issues for this target will be created.
   --status-mapping: record # shape: {accepted?: string, fixed?: string, invalid?: string, notfixed?: string}
-]: any -> any {
+]: any -> record<allow_jira: bool, auto_sync: bool, issue_type_id: string, priority_mapping: record<10: string, 20: string, 30: string>, project_id: string, status_mapping: record<accepted: string, fixed: string, invalid: string, notfixed: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3698,7 +3701,7 @@ export def "get-targets-target-id-integrations-jira-server" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<allow_jira: bool, auto_sync: bool, issue_type_id: string, priority_mapping: record<10: string, 20: string, 30: string>, project_id: string, status_mapping: record<accepted: string, fixed: string, invalid: string, notfixed: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_id | is-empty) { error make --unspanned { msg: "path parameter 'target_id' must be non-empty" } }
@@ -3741,7 +3744,7 @@ export def "patch-targets-target-id-integrations-jira-server" [
   --priority-mapping: record # shape: {10?: string, 20?: string, 30?: string}
   --project-id: string # Id of the Jira project where issues for this target will be created.
   --status-mapping: record # shape: {accepted?: string, fixed?: string, invalid?: string, notfixed?: string}
-]: any -> any {
+]: any -> record<allow_jira: bool, auto_sync: bool, issue_type_id: string, priority_mapping: record<10: string, 20: string, 30: string>, project_id: string, status_mapping: record<accepted: string, fixed: string, invalid: string, notfixed: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3787,7 +3790,7 @@ export def "put-targets-target-id-integrations-jira-server" [
   --priority-mapping: record # shape: {10?: string, 20?: string, 30?: string}
   --project-id: string # Id of the Jira project where issues for this target will be created.
   --status-mapping: record # shape: {accepted?: string, fixed?: string, invalid?: string, notfixed?: string}
-]: any -> any {
+]: any -> record<allow_jira: bool, auto_sync: bool, issue_type_id: string, priority_mapping: record<10: string, 20: string, 30: string>, project_id: string, status_mapping: record<accepted: string, fixed: string, invalid: string, notfixed: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3825,7 +3828,7 @@ export def "get-targets-target-id-integrations-slack" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<notify_finding_fixed: bool, notify_high_findings: bool, notify_low_findings: bool, notify_medium_findings: bool, notify_scan_completed: bool, notify_scan_started: bool, webhook_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_id | is-empty) { error make --unspanned { msg: "path parameter 'target_id' must be non-empty" } }
@@ -3866,8 +3869,8 @@ export def "patch-targets-target-id-integrations-slack" [
   --notify-medium-findings: oneof<nothing, bool> # Notify of new medium severity findings. (default: false)
   --notify-scan-completed: oneof<nothing, bool> # Notify of completed scans. (default: false)
   --notify-scan-started: oneof<nothing, bool> # Notify of started scans. (default: false)
-  --webhook-url: string # Slack notification webhook url. (default: )
-]: any -> any {
+  --webhook-url: string # Slack notification webhook url. (default: "")
+]: any -> record<notify_finding_fixed: bool, notify_high_findings: bool, notify_low_findings: bool, notify_medium_findings: bool, notify_scan_completed: bool, notify_scan_started: bool, webhook_url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3911,8 +3914,8 @@ export def "put-targets-target-id-integrations-slack" [
   --notify-medium-findings: oneof<nothing, bool> # Notify of new medium severity findings. (default: false)
   --notify-scan-completed: oneof<nothing, bool> # Notify of completed scans. (default: false)
   --notify-scan-started: oneof<nothing, bool> # Notify of started scans. (default: false)
-  --webhook-url: string # Slack notification webhook url. (default: )
-]: any -> any {
+  --webhook-url: string # Slack notification webhook url. (default: "")
+]: any -> record<notify_finding_fixed: bool, notify_high_findings: bool, notify_low_findings: bool, notify_medium_findings: bool, notify_scan_completed: bool, notify_scan_started: bool, webhook_url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3954,7 +3957,7 @@ export def "get-targets-target-id-keys" [
   --length: int # Number of results to return per page (default: 10)
   --ordering: string # Which field to use when ordering the results, prefix with `-` to invert ordering. (e.g. -changed)
   --search: string # Search term
-]: nothing -> any {
+]: nothing -> record<count: int, length: int, page: int, page_total: int, results: table<id: string, key: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_id | is-empty) { error make --unspanned { msg: "path parameter 'target_id' must be non-empty" } }
@@ -3990,8 +3993,8 @@ export def "post-targets-target-id-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name: string # Custom name for the resource (default: , e.g. Object name)
-]: any -> any {
+  --name: string # Custom name for the resource (default: "", e.g. Object name)
+]: any -> record<id: string, key: string, name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4067,7 +4070,7 @@ export def "get-targets-target-id-keys-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<id: string, key: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_id | is-empty) { error make --unspanned { msg: "path parameter 'target_id' must be non-empty" } }
@@ -4103,7 +4106,7 @@ export def "get-targets-target-id-risk-trend" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<0: string, 1: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_id | is-empty) { error make --unspanned { msg: "path parameter 'target_id' must be non-empty" } }
@@ -4139,7 +4142,7 @@ export def "post-targets-target-id-scan-now" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --scan-profile: string@scan-profile-completer # Override the target's `scan_profile`.
-]: any -> any {
+]: any -> record<changed: string, changed_by: record<email: string, id: string, name: string>, completed: string, crawler: record<error: list<string>, state: string, status: record<0: int, 1: int>, warning: list<string>>, created: string, created_by: record<email: string, id: string, name: string>, fingerprinter: record<count: int, error: list<string>, state: string, warning: list<string>>, highs: int, id: string, lows: int, mediums: int, scan_profile: string, scanner: record<error: list<string>, state: string, status: record<0: int, 1: int>, warning: list<string>>, started: string, status: string, target: record<desc: string, id: string, name: string, stack: list<string>, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4183,7 +4186,7 @@ export def "get-targets-target-id-scans" [
   --search: string # Search term
   --started: list<string> # Filter by scan start dates
   --status: string@status-completer # Filter by scan statuses
-]: nothing -> any {
+]: nothing -> record<count: int, length: int, page: int, page_total: int, results: table<changed: string, changed_by: record, completed: string, crawler: record, created: string, created_by: record, fingerprinter: record, highs: int, id: string, lows: int, mediums: int, scan_profile: string, scanner: record, started: string, status: string, target: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_id | is-empty) { error make --unspanned { msg: "path parameter 'target_id' must be non-empty" } }
@@ -4219,7 +4222,7 @@ export def "get-targets-target-id-scans-dates" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_id | is-empty) { error make --unspanned { msg: "path parameter 'target_id' must be non-empty" } }
@@ -4255,11 +4258,12 @@ export def "get-targets-target-id-scans-retrieve-page" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --length: int # Number of results to return per page (default: 10)
-  --date: string # Date (format: date)
-]: nothing -> any {
+  --date: string # Date (required, format: date)
+]: nothing -> record<page: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_id | is-empty) { error make --unspanned { msg: "path parameter 'target_id' must be non-empty" } }
+  if ($date == null) { error make --unspanned { msg: "required query parameter 'date' missing: pass --date" } }
   let qp = [(serialize-qp "length" $length "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({target_id: (encode-path-segment $target_id)} | format pattern "/targets/{target_id}/scans/retrieve_page/") $qp $auth.query)
   let accept_val = "application/json"
@@ -4293,7 +4297,7 @@ export def "get-targets-target-id-scans-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<changed: string, changed_by: record<email: string, id: string, name: string>, completed: string, crawler: record<error: list<string>, state: string, status: record<0: int, 1: int>, warning: list<string>>, created: string, created_by: record<email: string, id: string, name: string>, fingerprinter: record<count: int, error: list<string>, state: string, warning: list<string>>, highs: int, id: string, lows: int, mediums: int, scan_profile: string, scanner: record<error: list<string>, state: string, status: record<0: int, 1: int>, warning: list<string>>, started: string, status: string, target: record<desc: string, id: string, name: string, stack: list<string>, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_id | is-empty) { error make --unspanned { msg: "path parameter 'target_id' must be non-empty" } }
@@ -4330,7 +4334,7 @@ export def "post-targets-target-id-scans-id-cancel" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<changed: string, changed_by: record<email: string, id: string, name: string>, completed: string, crawler: record<error: list<string>, state: string, status: record<0: int, 1: int>, warning: list<string>>, created: string, created_by: record<email: string, id: string, name: string>, fingerprinter: record<count: int, error: list<string>, state: string, warning: list<string>>, highs: int, id: string, lows: int, mediums: int, scan_profile: string, scanner: record<error: list<string>, state: string, status: record<0: int, 1: int>, warning: list<string>>, started: string, status: string, target: record<desc: string, id: string, name: string, stack: list<string>, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_id | is-empty) { error make --unspanned { msg: "path parameter 'target_id' must be non-empty" } }
@@ -4367,13 +4371,13 @@ export def "get-targets-target-id-scans-id-endpoints" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_id | is-empty) { error make --unspanned { msg: "path parameter 'target_id' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({target_id: (encode-path-segment $target_id), id: (encode-path-segment $id)} | format pattern "/targets/{target_id}/scans/{id}/endpoints/") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -4404,13 +4408,13 @@ export def "get-targets-target-id-scans-id-report" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_id | is-empty) { error make --unspanned { msg: "path parameter 'target_id' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({target_id: (encode-path-segment $target_id), id: (encode-path-segment $id)} | format pattern "/targets/{target_id}/scans/{id}/report/") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -4441,13 +4445,13 @@ export def "get-targets-target-id-scans-id-report-default" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_id | is-empty) { error make --unspanned { msg: "path parameter 'target_id' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({target_id: (encode-path-segment $target_id), id: (encode-path-segment $id)} | format pattern "/targets/{target_id}/scans/{id}/report/default/") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -4478,13 +4482,13 @@ export def "get-targets-target-id-scans-id-report-owasp" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_id | is-empty) { error make --unspanned { msg: "path parameter 'target_id' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({target_id: (encode-path-segment $target_id), id: (encode-path-segment $id)} | format pattern "/targets/{target_id}/scans/{id}/report/owasp/") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -4515,13 +4519,13 @@ export def "get-targets-target-id-scans-id-report-pci" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_id | is-empty) { error make --unspanned { msg: "path parameter 'target_id' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({target_id: (encode-path-segment $target_id), id: (encode-path-segment $id)} | format pattern "/targets/{target_id}/scans/{id}/report/pci/") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -4555,7 +4559,7 @@ export def "get-targets-target-id-scheduledscans" [
   --length: int # Number of results to return per page (default: 10)
   --ordering: string # Which field to use when ordering the results, prefix with `-` to invert ordering. (e.g. -changed)
   --search: string # Search term
-]: nothing -> any {
+]: nothing -> record<count: int, length: int, page: int, page_total: int, results: table<changed: string, changed_by: record, date_time: string, id: string, recurrence: string, target: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_id | is-empty) { error make --unspanned { msg: "path parameter 'target_id' must be non-empty" } }
@@ -4593,7 +4597,7 @@ export def "post-targets-target-id-scheduledscans" [
   --dry-run(-n) # Return the request that would be sent without executing it
   date_time: string # Date time of next scan (format: date-time)
   --recurrence: string@recurrence-completer # Scan recurrence: * d - daily * w - weekly * m - monthly * q - quarterly * '' - no recurrence
-]: any -> any {
+]: any -> record<changed: string, changed_by: record<email: string, id: string, name: string>, date_time: string, id: string, recurrence: string, target: record<desc: string, id: string, name: string, stack: list<string>, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4632,7 +4636,7 @@ export def "get-targets-target-id-scheduledscans-expanded" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --length: int # Number of results to return per page (default: 10)
-]: nothing -> any {
+]: nothing -> record<results: table<changed: string, changed_by: record, date_time: string, id: string, recurrence: string, target: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_id | is-empty) { error make --unspanned { msg: "path parameter 'target_id' must be non-empty" } }
@@ -4706,7 +4710,7 @@ export def "get-targets-target-id-scheduledscans-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<changed: string, changed_by: record<email: string, id: string, name: string>, date_time: string, id: string, recurrence: string, target: record<desc: string, id: string, name: string, stack: list<string>, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_id | is-empty) { error make --unspanned { msg: "path parameter 'target_id' must be non-empty" } }
@@ -4745,7 +4749,7 @@ export def "patch-targets-target-id-scheduledscans-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   date_time: string # Date time of next scan (format: date-time)
   --recurrence: string@recurrence-completer # Scan recurrence: * d - daily * w - weekly * m - monthly * q - quarterly * '' - no recurrence
-]: any -> any {
+]: any -> record<changed: string, changed_by: record<email: string, id: string, name: string>, date_time: string, id: string, recurrence: string, target: record<desc: string, id: string, name: string, stack: list<string>, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4787,7 +4791,7 @@ export def "put-targets-target-id-scheduledscans-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   date_time: string # Date time of next scan (format: date-time)
   --recurrence: string@recurrence-completer # Scan recurrence: * d - daily * w - weekly * m - monthly * q - quarterly * '' - no recurrence
-]: any -> any {
+]: any -> record<changed: string, changed_by: record<email: string, id: string, name: string>, date_time: string, id: string, recurrence: string, target: record<desc: string, id: string, name: string, stack: list<string>, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4826,7 +4830,7 @@ export def "get-targets-target-id-severity-trend" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<results: record<high: list<record>, low: list<record>, medium: list<record>>, step: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_id | is-empty) { error make --unspanned { msg: "path parameter 'target_id' must be non-empty" } }
@@ -4863,7 +4867,7 @@ export def "get-targets-target-id-site" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<basic_auth: record<password: string, username: string>, changed: string, changed_by: record<email: string, id: string, name: string>, cookies: table<name: string, value: string>, desc: string, form_login: table<name: string, value: string>, form_login_check_pattern: string, form_login_url: string, has_basic_auth: bool, has_form_login: bool, headers: table<name: string, value: string>, host: string, id: string, name: string, stack: list<string>, url: string, verification_date: string, verification_last_error: string, verification_method: string, verification_token: string, verified: bool, whitelist: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_id | is-empty) { error make --unspanned { msg: "path parameter 'target_id' must be non-empty" } }
@@ -4907,17 +4911,17 @@ export def "patch-targets-target-id-site" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --basic-auth: record # Basic authentication credentials — shape: {password?: string, username?: string}
   --cookies: list # Custom cookies name/value pairs — item shape: {name?: string, value?: string}
-  --desc: string # Custom description for the resource (default: , e.g. Object description)
+  --desc: string # Custom description for the resource (default: "", e.g. Object description)
   --form-login: list # Form login field name, field input pairs — item shape: {name?: string, value?: string}
-  --form-login-check-pattern: string # Pattern to check successful authentication (not used) (default: )
-  --form-login-url: string # URL for the form login (default: , e.g. https://app.probely.com/)
+  --form-login-check-pattern: string # Pattern to check successful authentication (not used) (default: "")
+  --form-login-url: string # URL for the form login (default: "", e.g. https://app.probely.com/)
   --has-basic-auth: oneof<nothing, bool> # Use basic authentication in scan (default: false, e.g. true)
   --has-form-login: oneof<nothing, bool> # Does the resource use form login (default: false, e.g. true)
   --headers: list # Custom headers name value pairs — item shape: {name?: string, value?: string}
-  --name: string # Custom name for the resource (default: , e.g. Object name)
-  --url: string # Site URL, it should include the path if the site is not located at the root. This URL can only be set once. (format: URL, default: , e.g. https://app.probely.com)
+  --name: string # Custom name for the resource (default: "", e.g. Object name)
+  --url: string # Site URL, it should include the path if the site is not located at the root. This URL can only be set once. (format: URL, default: "", e.g. https://app.probely.com)
   --whitelist: list<string>
-]: any -> any {
+]: any -> record<basic_auth: record<password: string, username: string>, changed: string, changed_by: record<email: string, id: string, name: string>, cookies: table<name: string, value: string>, desc: string, form_login: table<name: string, value: string>, form_login_check_pattern: string, form_login_url: string, has_basic_auth: bool, has_form_login: bool, headers: table<name: string, value: string>, host: string, id: string, name: string, stack: list<string>, url: string, verification_date: string, verification_last_error: string, verification_method: string, verification_token: string, verified: bool, whitelist: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4964,17 +4968,17 @@ export def "put-targets-target-id-site" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --basic-auth: record # Basic authentication credentials — shape: {password?: string, username?: string}
   --cookies: list # Custom cookies name/value pairs — item shape: {name?: string, value?: string}
-  --desc: string # Custom description for the resource (default: , e.g. Object description)
+  --desc: string # Custom description for the resource (default: "", e.g. Object description)
   --form-login: list # Form login field name, field input pairs — item shape: {name?: string, value?: string}
-  --form-login-check-pattern: string # Pattern to check successful authentication (not used) (default: )
-  --form-login-url: string # URL for the form login (default: , e.g. https://app.probely.com/)
+  --form-login-check-pattern: string # Pattern to check successful authentication (not used) (default: "")
+  --form-login-url: string # URL for the form login (default: "", e.g. https://app.probely.com/)
   --has-basic-auth: oneof<nothing, bool> # Use basic authentication in scan (default: false, e.g. true)
   --has-form-login: oneof<nothing, bool> # Does the resource use form login (default: false, e.g. true)
   --headers: list # Custom headers name value pairs — item shape: {name?: string, value?: string}
-  --name: string # Custom name for the resource (default: , e.g. Object name)
-  --url: string # Site URL, it should include the path if the site is not located at the root. This URL can only be set once. (format: URL, default: , e.g. https://app.probely.com)
+  --name: string # Custom name for the resource (default: "", e.g. Object name)
+  --url: string # Site URL, it should include the path if the site is not located at the root. This URL can only be set once. (format: URL, default: "", e.g. https://app.probely.com)
   --whitelist: list<string>
-]: any -> any {
+]: any -> record<basic_auth: record<password: string, username: string>, changed: string, changed_by: record<email: string, id: string, name: string>, cookies: table<name: string, value: string>, desc: string, form_login: table<name: string, value: string>, form_login_check_pattern: string, form_login_url: string, has_basic_auth: bool, has_form_login: bool, headers: table<name: string, value: string>, host: string, id: string, name: string, stack: list<string>, url: string, verification_date: string, verification_last_error: string, verification_method: string, verification_token: string, verified: bool, whitelist: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5015,7 +5019,7 @@ export def "post-targets-target-id-site-verify" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer-1 # Type of verification: * dns - we look or a TXT record on the host you registered containing `Probely=<verification_token>` * file - on the root of the path you registered we look for a file named `` containing `Probely`.
-]: any -> any {
+]: any -> record<message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5053,7 +5057,7 @@ export def "get-targets-target-id-top-vulns" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<0: string, 1: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_id | is-empty) { error make --unspanned { msg: "path parameter 'target_id' must be non-empty" } }
@@ -5088,7 +5092,7 @@ export def "get-targets-target-id-webhooks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<count: int, length: int, page: int, page_total: int, results: table<api_version: string, changed: string, changed_by: record, check_cert: bool, created: string, created_by: record, id: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_id | is-empty) { error make --unspanned { msg: "path parameter 'target_id' must be non-empty" } }
@@ -5127,9 +5131,9 @@ export def "post-targets-target-id-webhooks" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # API version for the webhook
   --check-cert: oneof<nothing, bool> # Verify webhook URL HTTPS certificate
-  --name: string # Custom name for the resource (default: , e.g. Object name)
+  --name: string # Custom name for the resource (default: "", e.g. Object name)
   url: string # URL to post events to (must be https)
-]: any -> any {
+]: any -> record<api_version: string, changed: string, changed_by: record<email: string, id: string, name: string>, check_cert: bool, created: string, created_by: record<email: string, id: string, name: string>, id: string, name: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5205,7 +5209,7 @@ export def "get-targets-target-id-webhooks-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<api_version: string, changed: string, changed_by: record<email: string, id: string, name: string>, check_cert: bool, created: string, created_by: record<email: string, id: string, name: string>, id: string, name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_id | is-empty) { error make --unspanned { msg: "path parameter 'target_id' must be non-empty" } }
@@ -5246,9 +5250,9 @@ export def "patch-targets-target-id-webhooks-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # API version for the webhook
   --check-cert: oneof<nothing, bool> # Verify webhook URL HTTPS certificate
-  --name: string # Custom name for the resource (default: , e.g. Object name)
+  --name: string # Custom name for the resource (default: "", e.g. Object name)
   url: string # URL to post events to (must be https)
-]: any -> any {
+]: any -> record<api_version: string, changed: string, changed_by: record<email: string, id: string, name: string>, check_cert: bool, created: string, created_by: record<email: string, id: string, name: string>, id: string, name: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5292,9 +5296,9 @@ export def "put-targets-target-id-webhooks-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # API version for the webhook
   --check-cert: oneof<nothing, bool> # Verify webhook URL HTTPS certificate
-  --name: string # Custom name for the resource (default: , e.g. Object name)
+  --name: string # Custom name for the resource (default: "", e.g. Object name)
   url: string # URL to post events to (must be https)
-]: any -> any {
+]: any -> record<api_version: string, changed: string, changed_by: record<email: string, id: string, name: string>, check_cert: bool, created: string, created_by: record<email: string, id: string, name: string>, id: string, name: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5336,7 +5340,7 @@ export def "get-users" [
   --length: int # Number of results to return per page (default: 10)
   --ordering: string # Which field to use when ordering the results, prefix with `-` to invert ordering. (e.g. -changed)
   --search: string # Search term
-]: nothing -> any {
+]: nothing -> record<count: int, length: int, page: int, page_total: int, results: table<changed: string, changed_by: record, email: string, id: string, is_active: bool, is_admin: bool, is_billing_admin: bool, name: string, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "length" $length "scalar") (serialize-qp "ordering" $ordering "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
@@ -5373,7 +5377,7 @@ export def "post-users" [
   email: string # User's email (changing this resets the user's password and revokes existing tokens) (e.g. example@probely.com)
   name: string # User's name (e.g. Henrique Cimento)
   --title: string@title-completer
-]: any -> any {
+]: any -> record<changed: string, changed_by: record<email: string, id: string, name: string>, email: string, id: string, is_active: bool, is_admin: bool, is_billing_admin: bool, name: string, title: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5445,7 +5449,7 @@ export def "get-users-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<changed: string, changed_by: record<email: string, id: string, name: string>, email: string, id: string, is_active: bool, is_admin: bool, is_billing_admin: bool, name: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5483,7 +5487,7 @@ export def "patch-users-id" [
   email: string # User's email (changing this resets the user's password and revokes existing tokens) (e.g. example@probely.com)
   name: string # User's name (e.g. Henrique Cimento)
   --title: string@title-completer
-]: any -> any {
+]: any -> record<changed: string, changed_by: record<email: string, id: string, name: string>, email: string, id: string, is_active: bool, is_admin: bool, is_billing_admin: bool, name: string, title: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5524,7 +5528,7 @@ export def "put-users-id" [
   email: string # User's email (changing this resets the user's password and revokes existing tokens) (e.g. example@probely.com)
   name: string # User's name (e.g. Henrique Cimento)
   --title: string@title-completer
-]: any -> any {
+]: any -> record<changed: string, changed_by: record<email: string, id: string, name: string>, email: string, id: string, is_active: bool, is_admin: bool, is_billing_admin: bool, name: string, title: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5565,7 +5569,7 @@ export def "get-vulnerability-definitions" [
   --length: int # Number of results to return per page (default: 10)
   --ordering: string # Which field to use when ordering the results, prefix with `-` to invert ordering. (e.g. -changed)
   --search: string # Search term
-]: nothing -> any {
+]: nothing -> record<count: int, length: int, page: int, page_total: int, results: table<changed: string, desc: string, id: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "length" $length "scalar") (serialize-qp "ordering" $ordering "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
@@ -5600,7 +5604,7 @@ export def "get-vulnerability-definitions-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<changed: string, desc: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5634,7 +5638,7 @@ export def "get-webhooks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<count: int, length: int, page: int, page_total: int, results: table<api_version: string, changed: string, changed_by: record, check_cert: bool, created: string, created_by: record, id: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhooks/" $auth.query)
@@ -5671,9 +5675,9 @@ export def "post-webhooks" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # API version for the webhook
   --check-cert: oneof<nothing, bool> # Verify webhook URL HTTPS certificate
-  --name: string # Custom name for the resource (default: , e.g. Object name)
+  --name: string # Custom name for the resource (default: "", e.g. Object name)
   url: string # URL to post events to (must be https)
-]: any -> any {
+]: any -> record<api_version: string, changed: string, changed_by: record<email: string, id: string, name: string>, check_cert: bool, created: string, created_by: record<email: string, id: string, name: string>, id: string, name: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5745,7 +5749,7 @@ export def "get-webhooks-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<api_version: string, changed: string, changed_by: record<email: string, id: string, name: string>, check_cert: bool, created: string, created_by: record<email: string, id: string, name: string>, id: string, name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5784,9 +5788,9 @@ export def "patch-webhooks-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # API version for the webhook
   --check-cert: oneof<nothing, bool> # Verify webhook URL HTTPS certificate
-  --name: string # Custom name for the resource (default: , e.g. Object name)
+  --name: string # Custom name for the resource (default: "", e.g. Object name)
   url: string # URL to post events to (must be https)
-]: any -> any {
+]: any -> record<api_version: string, changed: string, changed_by: record<email: string, id: string, name: string>, check_cert: bool, created: string, created_by: record<email: string, id: string, name: string>, id: string, name: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5828,9 +5832,9 @@ export def "put-webhooks-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # API version for the webhook
   --check-cert: oneof<nothing, bool> # Verify webhook URL HTTPS certificate
-  --name: string # Custom name for the resource (default: , e.g. Object name)
+  --name: string # Custom name for the resource (default: "", e.g. Object name)
   url: string # URL to post events to (must be https)
-]: any -> any {
+]: any -> record<api_version: string, changed: string, changed_by: record<email: string, id: string, name: string>, check_cert: bool, created: string, created_by: record<email: string, id: string, name: string>, id: string, name: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

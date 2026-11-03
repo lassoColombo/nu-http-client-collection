@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -153,18 +153,18 @@ export def "get-api-v1-clips" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Filters to be applied to the query. Query params in the url must look like this: "filter[attributeName_*matcher*]" (i.e. filter[name_eq]=chimp%20into%20space) Available matchers can be found here: https://activerecord-hackery.github.io/ransack/getting-started/search-matches/ (e.g. {   "filter[name_eq]": "john h. glenn, kindly air force base hospital",   "filter[text_start]": "He landed in the sea" })
   --page: record # Specify page number and page size for the query (e.g. {   "page[number]": 1,   "page[size]": 5 })
-  --qp-sort: string@sort-completer # Sorting to be applied to the query. For more info: https://jsonapi.org/format/#fetching-sorting
+  --sort: string@sort-completer # Sorting to be applied to the query. For more info: https://jsonapi.org/format/#fetching-sorting
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "page" $page "deepObject") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "page" $page "deepObject") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/clips" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "page": $page, "sort": $qp_sort} | compact)
+    query: ({"filter": $filter, "page": $page, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -371,18 +371,18 @@ export def "get-api-v1-medias" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Filters to be applied to the query. Query params in the url must look like this: "filter[attributeName_*matcher*]" (i.e. filter[name_eq]=chimp%20into%20space) Available matchers can be found here: https://activerecord-hackery.github.io/ransack/getting-started/search-matches/ (e.g. {   "filter[name_eq]": "chimp into space",   "filter[sourceUrl_start]": "https://archive.org" })
   --page: record # Specify page number and page size for the query (e.g. {   "page[number]": 1,   "page[size]": 5 })
-  --qp-sort: string@sort-completer # Sorting to be applied to the query. For more info: https://jsonapi.org/format/#fetching-sorting
+  --sort: string@sort-completer # Sorting to be applied to the query. For more info: https://jsonapi.org/format/#fetching-sorting
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "page" $page "deepObject") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "page" $page "deepObject") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/medias" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "page": $page, "sort": $qp_sort} | compact)
+    query: ({"filter": $filter, "page": $page, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -555,18 +555,18 @@ export def "get-api-v1-webhook-subscriptions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Filters to be applied to the query. Query params in the url must look like this: "filter[attributeName_*matcher*]" (i.e. filter[name_eq]=chimp%20into%20space) Available matchers can be found here: https://activerecord-hackery.github.io/ransack/getting-started/search-matches/ (e.g. {   "filter[name_eq]": "chimp into space" })
-  --qp-sort: string@sort-completer # Sorting to be applied to the query. For more info: https://jsonapi.org/format/#fetching-sorting
+  --sort: string@sort-completer # Sorting to be applied to the query. For more info: https://jsonapi.org/format/#fetching-sorting
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/webhook_subscriptions" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "sort": $qp_sort} | compact)
+    query: ({"filter": $filter, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null

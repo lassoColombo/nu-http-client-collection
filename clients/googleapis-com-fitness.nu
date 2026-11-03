@@ -1,4 +1,4 @@
-# Auto-generated client for Fitness API vv1
+# Auto-generated client for Fitness API v1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/fitness/v1/openapi.json
 # Auth: --token flag or $env.FITNESS_API_TOKEN
 
@@ -12,20 +12,10 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
-}
-
-# Merge multiple auth records (AND-form security: every scheme must be sent).
-def merge-auth [parts: list]: nothing -> record {
-  let active = ($parts | where {|p| $p.location != "none" })
-  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
-  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
-  let locs = ($active | each {|p| $p.location } | uniq)
-  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
-  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
 # Serialize a single query parameter based on collection style
@@ -163,8 +153,8 @@ export def commands []: nothing -> table {
 export def "fitness-users-data-sources-list" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -184,7 +174,7 @@ export def "fitness-users-data-sources-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --data-type-name: list<string> # The names of data types to include in the list. If not specified, all data sources will be returned.
 ]: nothing -> record<dataSource: table<application: record, dataQualityStandard: list, dataStreamId: string, dataStreamName: string, dataType: record, device: record, name: string, type: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o FITNESS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o FITNESS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dataTypeName" $data_type_name "multi")] | flatten | str join "&"
@@ -215,8 +205,8 @@ export def "fitness-users-data-sources-list" [
 export def "fitness-users-data-sources-create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -244,7 +234,7 @@ export def "fitness-users-data-sources-create" [
   --type: string@type-completer # A constant describing the type of this data source. Indicates whether this data source produces raw or derived data.
 ]: any -> record<application: record<detailsUrl: string, name: string, packageName: string, version: string>, dataQualityStandard: list<string>, dataStreamId: string, dataStreamName: string, dataType: record<field: list<record>, name: string>, device: record<manufacturer: string, model: string, type: string, uid: string, version: string>, name: string, type: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o FITNESS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o FITNESS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -275,8 +265,8 @@ export def "fitness-users-data-sources-delete" [
   user_id: string
   data_source_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -295,7 +285,7 @@ export def "fitness-users-data-sources-delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<application: record<detailsUrl: string, name: string, packageName: string, version: string>, dataQualityStandard: list<string>, dataStreamId: string, dataStreamName: string, dataType: record<field: list<record>, name: string>, device: record<manufacturer: string, model: string, type: string, uid: string, version: string>, name: string, type: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o FITNESS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o FITNESS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   if ($data_source_id | is-empty) { error make --unspanned { msg: "path parameter 'dataSourceId' must be non-empty" } }
@@ -325,8 +315,8 @@ export def "fitness-users-data-sources-get" [
   user_id: string
   data_source_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -345,7 +335,7 @@ export def "fitness-users-data-sources-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<application: record<detailsUrl: string, name: string, packageName: string, version: string>, dataQualityStandard: list<string>, dataStreamId: string, dataStreamName: string, dataType: record<field: list<record>, name: string>, device: record<manufacturer: string, model: string, type: string, uid: string, version: string>, name: string, type: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o FITNESS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o FITNESS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   if ($data_source_id | is-empty) { error make --unspanned { msg: "path parameter 'dataSourceId' must be non-empty" } }
@@ -378,8 +368,8 @@ export def "fitness-users-data-sources-update" [
   user_id: string
   data_source_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -407,7 +397,7 @@ export def "fitness-users-data-sources-update" [
   --type: string@type-completer # A constant describing the type of this data source. Indicates whether this data source produces raw or derived data.
 ]: any -> record<application: record<detailsUrl: string, name: string, packageName: string, version: string>, dataQualityStandard: list<string>, dataStreamId: string, dataStreamName: string, dataType: record<field: list<record>, name: string>, device: record<manufacturer: string, model: string, type: string, uid: string, version: string>, name: string, type: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o FITNESS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o FITNESS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   if ($data_source_id | is-empty) { error make --unspanned { msg: "path parameter 'dataSourceId' must be non-empty" } }
@@ -439,8 +429,8 @@ export def "fitness-users-data-sources-data-point-changes-list" [
   user_id: string
   data_source_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -461,7 +451,7 @@ export def "fitness-users-data-sources-data-point-changes-list" [
   --limit: int # If specified, no more than this many data point changes will be included in the response.
   --page-token: string # The continuation token, which is used to page through large result sets. To get the next page of results, set this parameter to the value of nextPageToken from the previous response.
 ]: nothing -> record<dataSourceId: string, deletedDataPoint: table<computationTimeMillis: string, dataTypeName: string, endTimeNanos: string, modifiedTimeMillis: string, originDataSourceId: string, rawTimestampNanos: string, startTimeNanos: string, value: list>, insertedDataPoint: table<computationTimeMillis: string, dataTypeName: string, endTimeNanos: string, modifiedTimeMillis: string, originDataSourceId: string, rawTimestampNanos: string, startTimeNanos: string, value: list>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o FITNESS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o FITNESS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   if ($data_source_id | is-empty) { error make --unspanned { msg: "path parameter 'dataSourceId' must be non-empty" } }
@@ -492,8 +482,8 @@ export def "fitness-users-data-sources-datasets-delete" [
   data_source_id: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -512,7 +502,7 @@ export def "fitness-users-data-sources-datasets-delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> any {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o FITNESS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o FITNESS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   if ($data_source_id | is-empty) { error make --unspanned { msg: "path parameter 'dataSourceId' must be non-empty" } }
@@ -544,8 +534,8 @@ export def "fitness-users-data-sources-datasets-get" [
   data_source_id: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -566,7 +556,7 @@ export def "fitness-users-data-sources-datasets-get" [
   --limit: int # If specified, no more than this many data points will be included in the dataset. If there are more data points in the dataset, nextPageToken will be set in the dataset response. The limit is applied from the end of the time range. That is, if pageToken is absent, the limit most recent data points will be returned.
   --page-token: string # The continuation token, which is used to page through large datasets. To get the next page of a dataset, set this parameter to the value of nextPageToken from the previous response. Each subsequent call will yield a partial dataset with data point end timestamps that are strictly smaller than those in the previous partial response.
 ]: nothing -> record<dataSourceId: string, maxEndTimeNs: string, minStartTimeNs: string, nextPageToken: string, point: table<computationTimeMillis: string, dataTypeName: string, endTimeNanos: string, modifiedTimeMillis: string, originDataSourceId: string, rawTimestampNanos: string, startTimeNanos: string, value: list>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o FITNESS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o FITNESS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   if ($data_source_id | is-empty) { error make --unspanned { msg: "path parameter 'dataSourceId' must be non-empty" } }
@@ -599,8 +589,8 @@ export def "fitness-users-data-sources-datasets-patch" [
   data_source_id: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -625,7 +615,7 @@ export def "fitness-users-data-sources-datasets-patch" [
   --point: list # A partial list of data points contained in the dataset, ordered by endTimeNanos. This list is considered complete when retrieving a small dataset and partial when patching a dataset or retrieving a dataset that is too large to include in a single response. — item shape: {computationTimeMillis?: string, dataTypeName?: string, endTimeNanos?: string, modifiedTimeMillis?: string, originDataSourceId?: string, rawTimestampNanos?: string, startTimeNanos?: string, value?: list}
 ]: any -> record<dataSourceId: string, maxEndTimeNs: string, minStartTimeNs: string, nextPageToken: string, point: table<computationTimeMillis: string, dataTypeName: string, endTimeNanos: string, modifiedTimeMillis: string, originDataSourceId: string, rawTimestampNanos: string, startTimeNanos: string, value: list>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o FITNESS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o FITNESS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   if ($data_source_id | is-empty) { error make --unspanned { msg: "path parameter 'dataSourceId' must be non-empty" } }
@@ -662,8 +652,8 @@ export def "fitness-users-data-sources-datasets-patch" [
 export def "fitness-users-dataset-aggregate" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -691,7 +681,7 @@ export def "fitness-users-dataset-aggregate" [
   --start-time-millis: string # The start of a window of time. Data that intersects with this time window will be aggregated. The time is in milliseconds since epoch, inclusive. (format: int64)
 ]: any -> record<bucket: table<activity: int, dataset: list, endTimeMillis: string, session: record, startTimeMillis: string, type: string>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o FITNESS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o FITNESS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -721,8 +711,8 @@ export def "fitness-users-dataset-aggregate" [
 export def "fitness-users-sessions-list" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -746,7 +736,7 @@ export def "fitness-users-sessions-list" [
   --page-token: string # The continuation token, which is used for incremental syncing. To get the next batch of changes, set this parameter to the value of nextPageToken from the previous response. The page token is ignored if either start or end time is specified. If none of start time, end time, and the page token is specified, sessions modified in the last 30 days are returned.
   --start-time: string # An RFC3339 timestamp. Only sessions ending between the start and end times will be included in the response. If this time is omitted but endTime is specified, all sessions from the start of time up to endTime will be returned.
 ]: nothing -> record<deletedSession: table<activeTimeMillis: string, activityType: int, application: record, description: string, endTimeMillis: string, id: string, modifiedTimeMillis: string, name: string, startTimeMillis: string>, hasMoreData: bool, nextPageToken: string, session: table<activeTimeMillis: string, activityType: int, application: record, description: string, endTimeMillis: string, id: string, modifiedTimeMillis: string, name: string, startTimeMillis: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o FITNESS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o FITNESS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "activityType" $activity_type "multi") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "startTime" $start_time "scalar")] | flatten | str join "&"
@@ -775,8 +765,8 @@ export def "fitness-users-sessions-delete" [
   user_id: string
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -795,7 +785,7 @@ export def "fitness-users-sessions-delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> any {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o FITNESS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o FITNESS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   if ($session_id | is-empty) { error make --unspanned { msg: "path parameter 'sessionId' must be non-empty" } }
@@ -826,8 +816,8 @@ export def "fitness-users-sessions-update" [
   user_id: string
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -856,7 +846,7 @@ export def "fitness-users-sessions-update" [
   --start-time-millis: string # A start time, in milliseconds since epoch, inclusive. (format: int64)
 ]: any -> record<activeTimeMillis: string, activityType: int, application: record<detailsUrl: string, name: string, packageName: string, version: string>, description: string, endTimeMillis: string, id: string, modifiedTimeMillis: string, name: string, startTimeMillis: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o FITNESS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o FITNESS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   if ($session_id | is-empty) { error make --unspanned { msg: "path parameter 'sessionId' must be non-empty" } }

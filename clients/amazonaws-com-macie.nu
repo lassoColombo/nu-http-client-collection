@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -148,12 +148,13 @@ export def "associate-member-account" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  member_account_id: any
+  --x-amz-target: string@x-amz-target-completer # required
+  member_account_id: string # (Discontinued) The ID of the Amazon Web Services account that you want to associate with Amazon Macie Classic as a member account.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MacieService.AssociateMemberAccount")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"memberAccountId": $member_account_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -179,6 +180,7 @@ export def "associate-member-account" [
 #
 # POST /
 # operationId: AssociateS3Resources
+# --s3Resources item shape: {bucketName: string, prefix?: string, classificationType: record}
 export def "associate-s3-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -196,13 +198,14 @@ export def "associate-s3-resources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  --member-account-id: any
-  s3_resources: any
-]: any -> record<failedS3Resources: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  --member-account-id: string # (Discontinued) The ID of the Amazon Macie Classic member account whose resources you want to associate with Macie Classic.
+  s3_resources: list # (Discontinued) The S3 resources that you want to associate with Amazon Macie Classic for monitoring and data classification. — item shape: {bucketName: string, prefix?: string, classificationType: record}
+]: any -> record<failedS3Resources: table<failedItem: record, errorCode: string, errorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MacieService.AssociateS3Resources")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"memberAccountId": $member_account_id, "s3Resources": $s3_resources} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -245,12 +248,13 @@ export def "disassociate-member-account" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  member_account_id: any
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  member_account_id: string # (Discontinued) The ID of the member account that you want to remove from Amazon Macie Classic.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MacieService.DisassociateMemberAccount")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"memberAccountId": $member_account_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -276,6 +280,7 @@ export def "disassociate-member-account" [
 #
 # POST /
 # operationId: DisassociateS3Resources
+# --associatedS3Resources item shape: {bucketName: string, prefix?: string}
 export def "disassociate-s3-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -293,13 +298,14 @@ export def "disassociate-s3-resources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  --member-account-id: any
-  associated_s3_resources: any
-]: any -> record<failedS3Resources: record> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  --member-account-id: string # (Discontinued) The ID of the Amazon Macie Classic member account whose resources you want to remove from being monitored by Macie Classic.
+  associated_s3_resources: list # (Discontinued) The S3 resources (buckets or prefixes) that you want to remove from being monitored and classified by Amazon Macie Classic. — item shape: {bucketName: string, prefix?: string}
+]: any -> record<failedS3Resources: table<failedItem: record, errorCode: string, errorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MacieService.DisassociateS3Resources")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"memberAccountId": $member_account_id, "associatedS3Resources": $associated_s3_resources} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -344,13 +350,14 @@ export def "list-member-accounts" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<memberAccounts: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  --next-token-body: string # (Discontinued) Use this parameter when paginating results. Set the value of this parameter to null on your first call to the ListMemberAccounts action. Subsequent calls to the action fill nextToken in the request with the value of nextToken from the previous response to continue listing data. (body field)
+  --max-results-body: int # (Discontinued) Use this parameter to indicate the maximum number of items that you want in the response. The default value is 250. (body field)
+]: any -> record<memberAccounts: table<accountId: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MacieService.ListMemberAccounts")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -396,14 +403,15 @@ export def "list-s3-resources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  --member-account-id: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<s3Resources: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  --member-account-id: string # (Discontinued) The Amazon Macie Classic member account ID whose associated S3 resources you want to list.
+  --next-token-body: string # (Discontinued) Use this parameter when paginating results. Set its value to null on your first call to the ListS3Resources action. Subsequent calls to the action fill nextToken in the request with the value of nextToken from the previous response to continue listing data. (body field)
+  --max-results-body: int # (Discontinued) Use this parameter to indicate the maximum number of items that you want in the response. The default value is 250. (body field)
+]: any -> record<s3Resources: table<bucketName: string, prefix: string, classificationType: record>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MacieService.ListS3Resources")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"memberAccountId": $member_account_id, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -430,6 +438,7 @@ export def "list-s3-resources" [
 #
 # POST /
 # operationId: UpdateS3Resources
+# --s3ResourcesUpdate item shape: {bucketName: string, prefix?: string, classificationTypeUpdate: record}
 export def "update-s3-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -447,13 +456,14 @@ export def "update-s3-resources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  --member-account-id: any
-  s3_resources_update: any
-]: any -> record<failedS3Resources: record> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  --member-account-id: string # (Discontinued) The Amazon Web Services account ID of the Amazon Macie Classic member account whose S3 resources' classification types you want to update.
+  s3_resources_update: list # (Discontinued) The S3 resources whose classification types you want to update. — item shape: {bucketName: string, prefix?: string, classificationTypeUpdate: record}
+]: any -> record<failedS3Resources: table<failedItem: record, errorCode: string, errorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MacieService.UpdateS3Resources")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"memberAccountId": $member_account_id, "s3ResourcesUpdate": $s3_resources_update} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

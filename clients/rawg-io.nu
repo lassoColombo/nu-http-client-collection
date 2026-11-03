@@ -1,4 +1,4 @@
-# Auto-generated client for RAWG Video Games Database API vv1.0
+# Auto-generated client for RAWG Video Games Database API v1.0
 # Source: https://api.apis.guru/v2/specs/rawg.io/v1.0/openapi.json
 # Auth: --token flag or $env.RAWG_VIDEO_GAMES_DATABASE_API_TOKEN
 

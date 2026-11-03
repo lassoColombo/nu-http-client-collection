@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -155,7 +155,7 @@ export def "batch-get-channel" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   arns: list<string> # Array of ARNs, one per channel.
-]: any -> record<channels: record, errors: record> {
+]: any -> record<channels: table<arn: string, authorized: bool, ingestEndpoint: string, insecureIngest: bool, latencyMode: string, name: string, playbackUrl: string, recordingConfigurationArn: string, tags: record, type: string>, errors: table<arn: string, code: string, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -202,7 +202,7 @@ export def "batch-get-stream-key" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   arns: list<string> # Array of ARNs, one per stream key.
-]: any -> record<errors: record, streamKeys: record> {
+]: any -> record<errors: table<arn: string, code: string, message: string>, streamKeys: table<arn: string, channelArn: string, tags: record, value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -255,7 +255,7 @@ export def "create-channel" [
   --recording-configuration-arn: string # Recording-configuration ARN. Default: "" (empty string, recording is disabled).
   --tags: record # Array of 1-50 maps, each of the form string:string (key:value). See Tagging Amazon Web Services Resources (https://docs.aws.amazon.com/general/latest/gr/aws_tagging.html) for more information, including restrictions that apply to tags and "Tag naming limits and requirements"; Amazon IVS has no service-specific constraints beyond what is documented there.
   --type: string@type-completer # Channel type, which determines the allowable resolution and bitrate. If you exceed the allowable resolution or bitrate, the stream probably will disconnect immediately. Default: STANDARD. Valid values: STANDARD: Video is transcoded: multiple qualities are generated from the original input, to automatically give viewers the best experience for their devices and network conditions. Transcoding allows higher playback quality across a range of download speeds. Resolution can be up to 1080p and bitrate can be up to 8.5 Mbps. Audio is transcoded only for renditions 360p and below; above that, audio is passed through. This is the default. BASIC: Video is transmuxed: Amazon IVS delivers the original input to viewers. The viewer’s video-quality choice is limited to the original input. Resolution can be up to 1080p and bitrate can be up to 1.5 Mbps for 480p and up to 3.5 Mbps for resolutions between 480p and 1080p.
-]: any -> record<channel: record<arn: record, authorized: record, ingestEndpoint: record, insecureIngest: record, latencyMode: record, name: record, playbackUrl: record, recordingConfigurationArn: record, tags: record, type: record>, streamKey: record<arn: record, channelArn: record, tags: record, value: record>> {
+]: any -> record<channel: record<arn: string, authorized: bool, ingestEndpoint: string, insecureIngest: bool, latencyMode: string, name: string, playbackUrl: string, recordingConfigurationArn: string, tags: record, type: string>, streamKey: record<arn: string, channelArn: string, tags: record, value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -284,8 +284,8 @@ export def "create-channel" [
 #
 # POST /CreateRecordingConfiguration
 # operationId: CreateRecordingConfiguration
-# --destinationConfiguration shape: {s3?: any}
-# --thumbnailConfiguration shape: {recordingMode?: any, targetIntervalSeconds?: any}
+# --destinationConfiguration shape: {s3?: record}
+# --thumbnailConfiguration shape: {recordingMode?: "DISABLED"|"INTERVAL", targetIntervalSeconds?: int}
 export def "create-recording-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -303,12 +303,12 @@ export def "create-recording-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  destination_configuration: record # A complex type that describes a location where recorded videos will be stored. Each member represents a type of destination configuration. For recording, you define one and only one type of destination configuration. — shape: {s3?: any}
+  destination_configuration: record # A complex type that describes a location where recorded videos will be stored. Each member represents a type of destination configuration. For recording, you define one and only one type of destination configuration. — shape: {s3?: record}
   --name: string # Recording-configuration name. The value does not need to be unique.
   --recording-reconnect-window-seconds: int # If a broadcast disconnects and then reconnects within the specified interval, the multiple streams will be considered a single broadcast and merged together. Default: 0.
   --tags: record # Array of 1-50 maps, each of the form string:string (key:value). See Tagging Amazon Web Services Resources (https://docs.aws.amazon.com/general/latest/gr/aws_tagging.html) for more information, including restrictions that apply to tags and "Tag naming limits and requirements"; Amazon IVS has no service-specific constraints beyond what is documented there.
-  --thumbnail-configuration: record # An object representing a configuration of thumbnails for recorded video. — shape: {recordingMode?: any, targetIntervalSeconds?: any}
-]: any -> record<recordingConfiguration: record<arn: record, destinationConfiguration: record<s3: record>, name: record, recordingReconnectWindowSeconds: record, state: record, tags: record, thumbnailConfiguration: record<recordingMode: record, targetIntervalSeconds: record>>> {
+  --thumbnail-configuration: record # An object representing a configuration of thumbnails for recorded video. — shape: {recordingMode?: "DISABLED"|"INTERVAL", targetIntervalSeconds?: int}
+]: any -> record<recordingConfiguration: record<arn: string, destinationConfiguration: record<s3: record>, name: string, recordingReconnectWindowSeconds: int, state: string, tags: record, thumbnailConfiguration: record<recordingMode: string, targetIntervalSeconds: int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -356,7 +356,7 @@ export def "create-stream-key" [
   --x-amz-signed-headers: string
   channel_arn: string # ARN of the channel for which to create the stream key.
   --tags: record # Array of 1-50 maps, each of the form string:string (key:value). See Tagging Amazon Web Services Resources (https://docs.aws.amazon.com/general/latest/gr/aws_tagging.html) for more information, including restrictions that apply to tags and "Tag naming limits and requirements"; Amazon IVS has no service-specific constraints beyond what is documented there.
-]: any -> record<streamKey: record<arn: record, channelArn: record, tags: record, value: record>> {
+]: any -> record<streamKey: record<arn: string, channelArn: string, tags: record, value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -591,7 +591,7 @@ export def "get-channel" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   arn: string # ARN of the channel for which the configuration is to be retrieved.
-]: any -> record<channel: record<arn: record, authorized: record, ingestEndpoint: record, insecureIngest: record, latencyMode: record, name: record, playbackUrl: record, recordingConfigurationArn: record, tags: record, type: record>> {
+]: any -> record<channel: record<arn: string, authorized: bool, ingestEndpoint: string, insecureIngest: bool, latencyMode: string, name: string, playbackUrl: string, recordingConfigurationArn: string, tags: record, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -638,7 +638,7 @@ export def "get-playback-key-pair" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   arn: string # ARN of the key pair to be returned.
-]: any -> record<keyPair: record<arn: record, fingerprint: record, name: record, tags: record>> {
+]: any -> record<keyPair: record<arn: string, fingerprint: string, name: string, tags: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -685,7 +685,7 @@ export def "get-recording-configuration" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   arn: string # ARN of the recording configuration to be retrieved.
-]: any -> record<recordingConfiguration: record<arn: record, destinationConfiguration: record<s3: record>, name: record, recordingReconnectWindowSeconds: record, state: record, tags: record, thumbnailConfiguration: record<recordingMode: record, targetIntervalSeconds: record>>> {
+]: any -> record<recordingConfiguration: record<arn: string, destinationConfiguration: record<s3: record>, name: string, recordingReconnectWindowSeconds: int, state: string, tags: record, thumbnailConfiguration: record<recordingMode: string, targetIntervalSeconds: int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -732,7 +732,7 @@ export def "get-stream" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   channel_arn: string # Channel ARN for stream to be accessed.
-]: any -> record<stream: record<channelArn: record, health: record, playbackUrl: record, startTime: record, state: record, streamId: record, viewerCount: record>> {
+]: any -> record<stream: record<channelArn: string, health: string, playbackUrl: string, startTime: string, state: string, streamId: string, viewerCount: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -779,7 +779,7 @@ export def "get-stream-key" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   arn: string # ARN for the stream key to be retrieved.
-]: any -> record<streamKey: record<arn: record, channelArn: record, tags: record, value: record>> {
+]: any -> record<streamKey: record<arn: string, channelArn: string, tags: record, value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -827,7 +827,7 @@ export def "get-stream-session" [
   --x-amz-signed-headers: string
   channel_arn: string # ARN of the channel resource
   --stream-id: string # Unique identifier for a live or previously live stream in the specified channel. If no streamId is provided, this returns the most recent stream session for the channel, if it exists.
-]: any -> record<streamSession: record<channel: record<arn: record, authorized: record, ingestEndpoint: record, insecureIngest: record, latencyMode: record, name: record, playbackUrl: record, recordingConfigurationArn: record, tags: record, type: record>, endTime: record, ingestConfiguration: record<audio: record, video: record>, recordingConfiguration: record<arn: record, destinationConfiguration: record, name: record, recordingReconnectWindowSeconds: record, state: record, tags: record, thumbnailConfiguration: record>, startTime: record, streamId: record, truncatedEvents: record>> {
+]: any -> record<streamSession: record<channel: record<arn: string, authorized: bool, ingestEndpoint: string, insecureIngest: bool, latencyMode: string, name: string, playbackUrl: string, recordingConfigurationArn: string, tags: record, type: string>, endTime: string, ingestConfiguration: record<audio: record, video: record>, recordingConfiguration: record<arn: string, destinationConfiguration: record, name: string, recordingReconnectWindowSeconds: int, state: string, tags: record, thumbnailConfiguration: record>, startTime: string, streamId: string, truncatedEvents: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -876,7 +876,7 @@ export def "import-playback-key-pair" [
   --name: string # Playback-key-pair name. The value does not need to be unique.
   public_key_material: string # The public portion of a customer-generated key pair.
   --tags: record # Any tags provided with the request are added to the playback key pair tags. See Tagging Amazon Web Services Resources (https://docs.aws.amazon.com/general/latest/gr/aws_tagging.html) for more information, including restrictions that apply to tags and "Tag naming limits and requirements"; Amazon IVS has no service-specific constraints beyond what is documented there.
-]: any -> record<keyPair: record<arn: record, fingerprint: record, name: record, tags: record>> {
+]: any -> record<keyPair: record<arn: string, fingerprint: string, name: string, tags: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -928,7 +928,7 @@ export def "list-channels" [
   --filter-by-recording-configuration-arn: string # Filters the channel list to match the specified recording-configuration ARN.
   --max-results-body: int # Maximum number of channels to return. Default: 100. (body field)
   --next-token-body: string # The first channel to retrieve. This is used for pagination; see the nextToken response field. (body field)
-]: any -> record<channels: record, nextToken: record> {
+]: any -> record<channels: table<arn: string, authorized: bool, insecureIngest: bool, latencyMode: string, name: string, recordingConfigurationArn: string, tags: record>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -979,7 +979,7 @@ export def "list-playback-key-pairs" [
   --x-amz-signed-headers: string
   --max-results-body: int # Maximum number of key pairs to return. Default: your service quota or 100, whichever is smaller. (body field)
   --next-token-body: string # The first key pair to retrieve. This is used for pagination; see the nextToken response field. (body field)
-]: any -> record<keyPairs: record, nextToken: record> {
+]: any -> record<keyPairs: table<arn: string, name: string, tags: record>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1030,7 +1030,7 @@ export def "list-recording-configurations" [
   --x-amz-signed-headers: string
   --max-results-body: int # Maximum number of recording configurations to return. Default: your service quota or 100, whichever is smaller. (body field)
   --next-token-body: string # The first recording configuration to retrieve. This is used for pagination; see the nextToken response field. (body field)
-]: any -> record<nextToken: record, recordingConfigurations: record> {
+]: any -> record<nextToken: string, recordingConfigurations: table<arn: string, destinationConfiguration: record, name: string, state: string, tags: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1082,7 +1082,7 @@ export def "list-stream-keys" [
   channel_arn: string # Channel ARN used to filter the list.
   --max-results-body: int # Maximum number of streamKeys to return. Default: 1. (body field)
   --next-token-body: string # The first stream key to retrieve. This is used for pagination; see the nextToken response field. (body field)
-]: any -> record<nextToken: record, streamKeys: record> {
+]: any -> record<nextToken: string, streamKeys: table<arn: string, channelArn: string, tags: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1134,7 +1134,7 @@ export def "list-stream-sessions" [
   channel_arn: string # Channel ARN used to filter the list.
   --max-results-body: int # Maximum number of streams to return. Default: 100. (body field)
   --next-token-body: string # The first stream to retrieve. This is used for pagination; see the nextToken response field. (body field)
-]: any -> record<nextToken: record, streamSessions: record> {
+]: any -> record<nextToken: string, streamSessions: table<endTime: string, hasErrorEvent: bool, startTime: string, streamId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1164,7 +1164,7 @@ export def "list-stream-sessions" [
 #
 # POST /ListStreams
 # operationId: ListStreams
-# --filterBy shape: {health?: any}
+# --filterBy shape: {health?: "HEALTHY"|"STARVING"|"UNKNOWN"}
 export def "list-streams" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1184,10 +1184,10 @@ export def "list-streams" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --filter-by: record # Object specifying the stream attribute on which to filter. — shape: {health?: any}
+  --filter-by: record # Object specifying the stream attribute on which to filter. — shape: {health?: "HEALTHY"|"STARVING"|"UNKNOWN"}
   --max-results-body: int # Maximum number of streams to return. Default: 100. (body field)
   --next-token-body: string # The first stream to retrieve. This is used for pagination; see the nextToken response field. (body field)
-]: any -> record<nextToken: record, streams: record> {
+]: any -> record<nextToken: string, streams: table<channelArn: string, health: string, startTime: string, state: string, streamId: string, viewerCount: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1417,7 +1417,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # Array of tags to be removed. Array of maps, each of the form string:string (key:value). See Tagging Amazon Web Services Resources (https://docs.aws.amazon.com/general/latest/gr/aws_tagging.html) for more information, including restrictions that apply to tags and "Tag naming limits and requirements"; Amazon IVS has no service-specific constraints beyond what is documented there.
+  --tag-keys: list # Array of tags to be removed. Array of maps, each of the form string:string (key:value). See Tagging Amazon Web Services Resources (https://docs.aws.amazon.com/general/latest/gr/aws_tagging.html) for more information, including restrictions that apply to tags and "Tag naming limits and requirements"; Amazon IVS has no service-specific constraints beyond what is documented there. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1429,6 +1429,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1477,7 +1478,7 @@ export def "update-channel" [
   --name: string # Channel name.
   --recording-configuration-arn: string # Recording-configuration ARN. If this is set to an empty string, recording is disabled. A value other than an empty string indicates that recording is enabled
   --type: string@type-completer # Channel type, which determines the allowable resolution and bitrate. If you exceed the allowable resolution or bitrate, the stream probably will disconnect immediately. Valid values: STANDARD: Video is transcoded: multiple qualities are generated from the original input, to automatically give viewers the best experience for their devices and network conditions. Transcoding allows higher playback quality across a range of download speeds. Resolution can be up to 1080p and bitrate can be up to 8.5 Mbps. Audio is transcoded only for renditions 360p and below; above that, audio is passed through. This is the default. BASIC: Video is transmuxed: Amazon IVS delivers the original input to viewers. The viewer’s video-quality choice is limited to the original input. Resolution can be up to 1080p and bitrate can be up to 1.5 Mbps for 480p and up to 3.5 Mbps for resolutions between 480p and 1080p.
-]: any -> record<channel: record<arn: record, authorized: record, ingestEndpoint: record, insecureIngest: record, latencyMode: record, name: record, playbackUrl: record, recordingConfigurationArn: record, tags: record, type: record>> {
+]: any -> record<channel: record<arn: string, authorized: bool, ingestEndpoint: string, insecureIngest: bool, latencyMode: string, name: string, playbackUrl: string, recordingConfigurationArn: string, tags: record, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

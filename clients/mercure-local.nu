@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "cookie-mercureAuthorization" => { {scheme: $scheme, headers: {Cookie: $"(encode-path-segment "mercureAuthorization")=(encode-path-segment $token_val)"}, query: "", location: "cookie"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -139,12 +139,13 @@ export def "get-well-known-mercure" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --topic: list<string> # The topic to get updates from, can be a URI template (RFC6570).
+  --topic: list<string> # The topic to get updates from, can be a URI template (RFC6570). (required)
   --last-event-id: string # The last received event id, to retrieve missed events.
   --last-event-id-2: string # The last received event id, to retrieve missed events, takes precedence over the query parameter. (disambiguated-2)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($topic == null) { error make --unspanned { msg: "required query parameter 'topic' missing: pass --topic" } }
   let qp = [(serialize-qp "topic" $topic "multi") (serialize-qp "Last-Event-ID" $last_event_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/.well-known/mercure" $qp $auth.query)
   let accept_val = "text/event-stream"

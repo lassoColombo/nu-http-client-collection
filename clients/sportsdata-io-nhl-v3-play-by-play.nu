@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {Ocp-Apim-Subscription-Key: $token_val}, query: "", location: "header"} }
+    "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {"Ocp-Apim-Subscription-Key": $token_val}, query: "", location: "header"} }
     "query-key" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "key")=(encode-path-segment $token_val)", location: "query"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -95,6 +95,8 @@ def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: 
 def base-url-completer [] { ["http://azure-api.sportsdata.io/v3/nhl/pbp" "https://azure-api.sportsdata.io/v3/nhl/pbp"] }
 def auth-scheme-completer [] { ["ocp-apim-subscription-key" "query-key"] }
 
+# Completers for enum parameters
+def format-completer [] { ["JSON" "XML"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -124,7 +126,7 @@ export def commands []: nothing -> table {
 # GET /{format}/PlayByPlay/{gameid}
 # operationId: PlayByPlay
 export def "play-by-play" [
-  format: string
+  format: string@format-completer
   gameid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -162,7 +164,7 @@ export def "play-by-play" [
 # GET /{format}/PlayByPlayDelta/{date}/{minutes}
 # operationId: PlayByPlayDelta
 export def "play-by-play-delta" [
-  format: string
+  format: string@format-completer
   date: string
   minutes: string
   --base-url(-b): string@base-url-completer # API base URL

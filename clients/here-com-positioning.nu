@@ -13,7 +13,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "query-apiKey" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "apiKey")=(encode-path-segment $token_val)", location: "query"} }
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -195,7 +195,7 @@ export def "post-locate" [
   --tdscdma: list # TD-SCDMA cells (UTRA-TDD, 3G UMTS TDD) — item shape: {cid: int, lac?: int, localId?: record, mcc: int, mnc: int, nmr?: list, pathloss?: int, rscp?: int, ta?: int}
   --wcdma: list # WCDMA cells (UTRA-FDD, 3G UMTS) — item shape: {cid: int, lac?: int, localId?: record, mcc: int, mnc: int, nmr?: list, pathloss?: int, rscp?: int}
   --wlan: list # WLAN access positions. For privacy reasons positioning based on a single WLAN AP is not possible; there has to be at least one other matching wlan or cell. Alternatively, you can allow fallbacks to less accurate single WLAN AP location estimates by using the setting `fallback=singleWifi`. — item shape: {mac: string, rss?: int}
-]: any -> any {
+]: any -> record<location: record<accuracy: float, alt: float, altAccuracy: float, lat: float, lng: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)

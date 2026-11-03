@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -148,20 +148,22 @@ export def "clusters-execute-script-actions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The HDInsight client API Version.
+  --api-version: string # The HDInsight client API Version. (required)
   --persist-on-success: oneof<nothing, bool> # Gets or sets if the scripts needs to be persisted.
   --script-actions: list # The list of run time script actions. — item shape: {name: string, parameters?: string, roles: list<string>, uri: string}
-]: any -> record<code: string, message: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($cluster_name | is-empty) { error make --unspanned { msg: "path parameter 'clusterName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HDInsight/clusters/{cluster_name}/executeScriptActions") $qp $auth.query)
   let req_body = {"persistOnSuccess": $persist_on_success, "scriptActions": $script_actions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "persistOnSuccess") == null) { error make --unspanned { msg: "required body field 'persistOnSuccess' missing: pass --persist-on-success or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -195,13 +197,14 @@ export def "script-actions-list-by-cluster" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The HDInsight client API Version.
+  --api-version: string # The HDInsight client API Version. (required)
 ]: nothing -> record<nextLink: string, value: table<applicationName: string, name: string, parameters: string, roles: list, uri: string, debugInformation: string, endTime: string, executionSummary: list, operation: string, scriptExecutionId: int, startTime: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($cluster_name | is-empty) { error make --unspanned { msg: "path parameter 'clusterName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HDInsight/clusters/{cluster_name}/scriptActions") $qp $auth.query)
   let accept_val = "application/json"
@@ -238,14 +241,15 @@ export def "script-actions-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The HDInsight client API Version.
-]: nothing -> record<code: string, message: string> {
+  --api-version: string # The HDInsight client API Version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($cluster_name | is-empty) { error make --unspanned { msg: "path parameter 'clusterName' must be non-empty" } }
   if ($script_name | is-empty) { error make --unspanned { msg: "path parameter 'scriptName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name), script_name: (encode-path-segment $script_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HDInsight/clusters/{cluster_name}/scriptActions/{script_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -281,13 +285,14 @@ export def "script-execution-history-list-by-cluster" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The HDInsight client API Version.
+  --api-version: string # The HDInsight client API Version. (required)
 ]: nothing -> record<nextLink: string, value: table<applicationName: string, name: string, parameters: string, roles: list, uri: string, debugInformation: string, endTime: string, executionSummary: list, operation: string, scriptExecutionId: int, startTime: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($cluster_name | is-empty) { error make --unspanned { msg: "path parameter 'clusterName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HDInsight/clusters/{cluster_name}/scriptExecutionHistory") $qp $auth.query)
   let accept_val = "application/json"
@@ -324,7 +329,7 @@ export def "script-actions-get-execution-detail" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The HDInsight client API Version.
+  --api-version: string # The HDInsight client API Version. (required)
 ]: nothing -> record<applicationName: string, name: string, parameters: string, roles: list<string>, uri: string, debugInformation: string, endTime: string, executionSummary: table<instanceCount: int, status: string>, operation: string, scriptExecutionId: int, startTime: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -332,6 +337,7 @@ export def "script-actions-get-execution-detail" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($cluster_name | is-empty) { error make --unspanned { msg: "path parameter 'clusterName' must be non-empty" } }
   if ($script_execution_id | is-empty) { error make --unspanned { msg: "path parameter 'scriptExecutionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name), script_execution_id: (encode-path-segment $script_execution_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HDInsight/clusters/{cluster_name}/scriptExecutionHistory/{script_execution_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -368,14 +374,15 @@ export def "script-execution-history-promote" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The HDInsight client API Version.
-]: nothing -> record<code: string, message: string> {
+  --api-version: string # The HDInsight client API Version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($cluster_name | is-empty) { error make --unspanned { msg: "path parameter 'clusterName' must be non-empty" } }
   if ($script_execution_id | is-empty) { error make --unspanned { msg: "path parameter 'scriptExecutionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name), script_execution_id: (encode-path-segment $script_execution_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HDInsight/clusters/{cluster_name}/scriptExecutionHistory/{script_execution_id}/promote") $qp $auth.query)
   let accept_val = "application/json"

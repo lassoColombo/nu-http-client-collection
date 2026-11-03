@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -239,6 +239,7 @@ export def "verify-password-reset" [
   let full_url = (build-url $base "/account/password" $auth.query)
   let req_body = {"password": $password, "token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -358,6 +359,7 @@ export def "verify-user-registration" [
   let full_url = (build-url $base "/account/verification" $auth.query)
   let req_body = {"token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1406,8 +1408,8 @@ export def "create-document" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["content"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["content"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -1451,8 +1453,8 @@ export def "put-document" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["content"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["content"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "put"
     url: $full_url
@@ -1693,12 +1695,13 @@ export def "get-guids-without-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --organization-id: string # The namespace of the organization to search GUIDs for
+  --organization-id: string # The namespace of the organization to search GUIDs for (required)
   --offset: int # Start with the n-th element (format: int32)
   --limit: int # The maximum count of returned elements (format: int32)
 ]: nothing -> record<elements: table<createdTimestamp: int, holderOrganizationId: string, id4n: string, ownerOrganizationId: string, physicalState: string, properties: record>, limit: int, offset: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($organization_id == null) { error make --unspanned { msg: "required query parameter 'organizationId' missing: pass --organization-id" } }
   let qp = [(serialize-qp "organizationId" $organization_id "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/guids/withoutCollection" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2148,7 +2151,7 @@ export def "get-guid-aliases" [
 # operationId: removeGuidAlias
 export def "remove-guid-alias" [
   id4n: string
-  alias_type: string
+  alias_type: string@alias-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2186,7 +2189,7 @@ export def "remove-guid-alias" [
 # operationId: addGuidAlias
 export def "add-guid-alias" [
   id4n: string
-  alias_type: string
+  alias_type: string@alias-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2278,13 +2281,14 @@ export def "delete-properties" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --organization-id: string # The organization namespace to work on while deleting the properties.
+  --organization-id: string # The organization namespace to work on while deleting the properties. (required)
   --body: list
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id4n | is-empty) { error make --unspanned { msg: "path parameter 'id4n' must be non-empty" } }
+  if ($organization_id == null) { error make --unspanned { msg: "required query parameter 'organizationId' missing: pass --organization-id" } }
   let qp = [(serialize-qp "organizationId" $organization_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id4n: (encode-path-segment $id4n)} | format pattern "/api/v1/id4ns/{id4n}/properties") $qp $auth.query)
   let req_body = $body
@@ -2359,13 +2363,14 @@ export def "patch-properties" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --organization-id: string # The organization namespace to work on while patching the properties.
+  --organization-id: string # The organization namespace to work on while patching the properties. (required)
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id4n | is-empty) { error make --unspanned { msg: "path parameter 'id4n' must be non-empty" } }
+  if ($organization_id == null) { error make --unspanned { msg: "required query parameter 'organizationId' missing: pass --organization-id" } }
   let qp = [(serialize-qp "organizationId" $organization_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id4n: (encode-path-segment $id4n)} | format pattern "/api/v1/id4ns/{id4n}/properties") $qp $auth.query)
   let req_body = $body
@@ -2518,7 +2523,7 @@ export def "write-to-microstorage" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --content-type: string # Content-Type
-  --content-length: int # Content-Length
+  --content-length: int # Content-Length (format: int64)
   --body: string
 ]: any -> record {
   let input = $in
@@ -2533,7 +2538,7 @@ export def "write-to-microstorage" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Content-Length": $content_length} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let effective_ct = ($content_type | default "*/*")
+  let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "put"
@@ -2564,11 +2569,12 @@ export def "get-multiple-properties" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --id4ns: list<string> # The list of ID4ns to resolve.
+  --id4ns: list<string> # The list of ID4ns to resolve. (required)
   --organization-id: string # The organization namespace.
 ]: nothing -> record<list: table<id4n: string, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id4ns == null) { error make --unspanned { msg: "required query parameter 'id4ns' missing: pass --id4ns" } }
   let qp = [(serialize-qp "id4ns" $id4ns "multi") (serialize-qp "organizationId" $organization_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/multiple/id4ns/properties" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3054,8 +3060,8 @@ export def "set-organization-logo" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -3212,6 +3218,7 @@ export def "remove-partner-organization" [
   let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/api/v1/organizations/{organization_id}/partner") $auth.query)
   let req_body = {"organizationId": $body_organization_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "organizationId") == null) { error make --unspanned { msg: "required body field 'organizationId' missing: pass --body-organization-id or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3292,6 +3299,7 @@ export def "add-partner-organization" [
   let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/api/v1/organizations/{organization_id}/partner") $auth.query)
   let req_body = {"organizationId": $body_organization_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "organizationId") == null) { error make --unspanned { msg: "required body field 'organizationId' missing: pass --body-organization-id or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3846,12 +3854,13 @@ export def "get-routes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --type: string # type (default: web)
+  --type: string # type (required, default: web)
   --interpolate: oneof<nothing, bool> # interpolate (default: true)
 ]: nothing -> table<params: record, priority: int, public: bool, type: string, validUntil: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id4n | is-empty) { error make --unspanned { msg: "path parameter 'id4n' must be non-empty" } }
+  let type = ($type | default "web")
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "interpolate" $interpolate "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id4n: (encode-path-segment $id4n)} | format pattern "/api/v1/public/routes/{id4n}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -4090,13 +4099,15 @@ export def "search-by-alias" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --alias: string # The alias to search for
-  --alias-type: string@alias-type-completer # Alias type type to search for
+  --alias: string # The alias to search for (required)
+  --alias-type: string@alias-type-completer # Alias type type to search for (required)
   --offset: int # Start with the n-th element (format: int32)
   --limit: int # The maximum count of returned elements (format: int32)
 ]: nothing -> record<elements: table<createdTimestamp: int, holderOrganizationId: string, id4n: string, ownerOrganizationId: string, physicalState: string, properties: record>, limit: int, offset: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($alias == null) { error make --unspanned { msg: "required query parameter 'alias' missing: pass --alias" } }
+  if ($alias_type == null) { error make --unspanned { msg: "required query parameter 'aliasType' missing: pass --alias-type" } }
   let qp = [(serialize-qp "alias" $alias "scalar") (serialize-qp "aliasType" $alias_type "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/search/guids" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -4254,6 +4265,8 @@ export def "prepare" [
   let full_url = (build-url $base ({id4n: (encode-path-segment $id4n)} | format pattern "/api/v1/transfers/{id4n}/sendInfo") $auth.query)
   let req_body = {"keepOwnership": $keep_ownership, "openForClaims": $open_for_claims, "recipientOrganizationIds": $recipient_organization_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "keepOwnership") == null) { error make --unspanned { msg: "required body field 'keepOwnership' missing: pass --keep-ownership or pipe a record" } }
+  if (($req_body | get -o "openForClaims") == null) { error make --unspanned { msg: "required body field 'openForClaims' missing: pass --open-for-claims or pipe a record" } }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {

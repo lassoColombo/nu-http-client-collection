@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -162,12 +162,14 @@ export def "companies-all" [
   --cursor: string # Cursor to start from. You can find cursors for next/previous pages in the meta.cursors property of the response. (nullable)
   --limit: int # Number of results to return. Minimum 1, Maximum 200, Default 20 (default: 20)
   --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
-  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
-  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
+  --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> any {
+]: nothing -> record<data: table<addresses: list, company_number: string, created_at: string, created_by: string, debtor_id: string, deleted: bool, display_name: string, emails: list, id: string, legal_name: string, phone_numbers: list, status: string, subdomain: string, updated_at: string, updated_by: string, websites: list>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
+  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hris/companies" $qp $auth.query)
   let accept_val = "application/json"
@@ -207,8 +209,8 @@ export def "companies-add" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
-  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
-  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
+  --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
   --addresses: list # item shape: {city?: string, contact_name?: string, country?: string, county?: string, email?: string, fax?: string, id?: string, latitude?: string, line1?: string, line2?: string, line3?: string, line4?: string, longitude?: string, name?: string, phone_number?: string, postal_code?: string, row_version?: string, salutation?: string, state?: string, street_number?: string, string?: string, type?: "primary"|"secondary"|"home"|"office"|"shipping"|"billing"|"other", website?: string}
   --company-number: string # An Company Number, Company ID or Company Code, is a unique number that has been assigned to each company. (nullable, e.g. 123456-AB)
@@ -220,10 +222,12 @@ export def "companies-add" [
   --status: string@status-completer # e.g. active
   --subdomain: string # e.g. company
   --websites: list # item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
-]: any -> any {
+]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
+  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hris/companies" $qp $auth.query)
   let req_body = {"addresses": $addresses, "company_number": $company_number, "debtor_id": $debtor_id, "display_name": $display_name, "emails": $emails, "legal_name": $legal_name, "phone_numbers": $phone_numbers, "status": $status, "subdomain": $subdomain, "websites": $websites} | compact
@@ -262,13 +266,15 @@ export def "companies-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
-  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
-  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
+  --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> any {
+]: nothing -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
+  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/hris/companies/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -306,13 +312,15 @@ export def "companies-one" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
-  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
-  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
+  --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> any {
+]: nothing -> record<data: record<addresses: list<record>, company_number: string, created_at: string, created_by: string, debtor_id: string, deleted: bool, display_name: string, emails: list<record>, id: string, legal_name: string, phone_numbers: list<record>, status: string, subdomain: string, updated_at: string, updated_by: string, websites: list<record>>, operation: string, resource: string, service: string, status: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
+  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/hris/companies/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -353,8 +361,8 @@ export def "companies-update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
-  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
-  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
+  --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
   --addresses: list # item shape: {city?: string, contact_name?: string, country?: string, county?: string, email?: string, fax?: string, id?: string, latitude?: string, line1?: string, line2?: string, line3?: string, line4?: string, longitude?: string, name?: string, phone_number?: string, postal_code?: string, row_version?: string, salutation?: string, state?: string, street_number?: string, string?: string, type?: "primary"|"secondary"|"home"|"office"|"shipping"|"billing"|"other", website?: string}
   --company-number: string # An Company Number, Company ID or Company Code, is a unique number that has been assigned to each company. (nullable, e.g. 123456-AB)
@@ -366,11 +374,13 @@ export def "companies-update" [
   --status: string@status-completer # e.g. active
   --subdomain: string # e.g. company
   --websites: list # item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
-]: any -> any {
+]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
+  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/hris/companies/{id}") $qp $auth.query)
   let req_body = {"addresses": $addresses, "company_number": $company_number, "debtor_id": $debtor_id, "display_name": $display_name, "emails": $emails, "legal_name": $legal_name, "phone_numbers": $phone_numbers, "status": $status, "subdomain": $subdomain, "websites": $websites} | compact
@@ -411,12 +421,14 @@ export def "departments-all" [
   --cursor: string # Cursor to start from. You can find cursors for next/previous pages in the meta.cursors property of the response. (nullable)
   --limit: int # Number of results to return. Minimum 1, Maximum 200, Default 20 (default: 20)
   --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
-  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
-  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
+  --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> any {
+]: nothing -> record<data: table<code: string, created_at: string, created_by: string, description: string, id: string, name: string, parent_id: string, updated_at: string, updated_by: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
+  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hris/departments" $qp $auth.query)
   let accept_val = "application/json"
@@ -452,16 +464,18 @@ export def "departments-add" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
-  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
-  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
+  --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
   --code: string # nullable, e.g. 2
   --description: string # nullable, e.g. R&D
   --name: string # Department name (nullable, e.g. R&D)
-]: any -> any {
+]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
+  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hris/departments" $qp $auth.query)
   let req_body = {"code": $code, "description": $description, "name": $name} | compact
@@ -500,13 +514,15 @@ export def "departments-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
-  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
-  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
+  --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> any {
+]: nothing -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
+  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/hris/departments/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -544,13 +560,15 @@ export def "departments-one" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
-  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
-  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
+  --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> any {
+]: nothing -> record<data: record<code: string, created_at: string, created_by: string, description: string, id: string, name: string, parent_id: string, updated_at: string, updated_by: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
+  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/hris/departments/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -587,17 +605,19 @@ export def "departments-update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
-  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
-  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
+  --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
   --code: string # nullable, e.g. 2
   --description: string # nullable, e.g. R&D
   --name: string # Department name (nullable, e.g. R&D)
-]: any -> any {
+]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
+  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/hris/departments/{id}") $qp $auth.query)
   let req_body = {"code": $code, "description": $description, "name": $name} | compact
@@ -638,15 +658,17 @@ export def "employees-all" [
   --cursor: string # Cursor to start from. You can find cursors for next/previous pages in the meta.cursors property of the response. (nullable)
   --limit: int # Number of results to return. Minimum 1, Maximum 200, Default 20 (default: 20)
   --filter: record # Apply filters (e.g. {company_id: 1234, department_id: 1234, email: elon@tesla.com, employee_number: 123456-AB, employment_status: active, first_name: Elon, last_name: Musk, manager_id: 1234, title: Manager})
-  --qp-sort: record # Apply sorting (e.g. {by: created_at, direction: desc})
+  --sort: record # Apply sorting (e.g. {by: created_at, direction: desc})
   --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
-  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
-  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
+  --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> any {
+]: nothing -> record<data: table<addresses: list, birthday: string, company_id: string, company_name: string, compensations: list, country_of_birth: string, created_at: string, created_by: string, custom_fields: list, deceased_on: string, deleted: bool, department: string, department_id: string, department_name: string, description: string, dietary_preference: string, direct_reports: list, display_name: string, division: string, division_id: string, emails: list, employee_number: string, employment_end_date: string, employment_role: record, employment_start_date: string, employment_status: string, first_name: string, food_allergies: list, gender: string, id: string, initials: string, jobs: list, languages: list, last_name: string, leaving_reason: string, manager: record, marital_status: string, middle_name: string, nationalities: list, partner: record, phone_numbers: list, photo_url: string, preferred_language: string, preferred_name: string, pronouns: string, record_url: string, row_version: string, salutation: string, social_links: list, social_security_number: string, source: string, source_id: string, tags: list, tax_code: string, tax_id: string, team: record, timezone: string, title: string, updated_at: string, updated_by: string, works_remote: bool>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "sort" $qp_sort "deepObject") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
+  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
+  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
+  let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "sort" $sort "deepObject") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hris/employees" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -655,7 +677,7 @@ export def "employees-all" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"raw": $qp_raw, "cursor": $cursor, "limit": $limit, "filter": $filter, "sort": $qp_sort, "fields": $fields} | compact)
+    query: ({"raw": $qp_raw, "cursor": $cursor, "limit": $limit, "filter": $filter, "sort": $sort, "fields": $fields} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -693,8 +715,8 @@ export def "employees-add" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
-  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
-  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
+  --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
   --addresses: list # item shape: {city?: string, contact_name?: string, country?: string, county?: string, email?: string, fax?: string, id?: string, latitude?: string, line1?: string, line2?: string, line3?: string, line4?: string, longitude?: string, name?: string, phone_number?: string, postal_code?: string, row_version?: string, salutation?: string, state?: string, street_number?: string, string?: string, type?: "primary"|"secondary"|"home"|"office"|"shipping"|"billing"|"other", website?: string}
   --birthday: string # The date of birth of the person. (nullable, format: date, e.g. 2000-08-12)
@@ -743,7 +765,7 @@ export def "employees-add" [
   --salutation: string # A formal salutation for the person. For example, 'Mr', 'Mrs' (nullable, e.g. Mr)
   --social-links: list # item shape: {id?: string, type?: string, url: string}
   --social-security-number: string # A unique identifier assigned by the government. This field is considered sensitive information and may be subject to special security and privacy restrictions. (nullable, e.g. 123456789)
-  --body-source: string # When the employee is imported as a new hire, this field indicates what system (e.g. the name of the ATS) this employee was imported from. (nullable, e.g. lever)
+  --source: string # When the employee is imported as a new hire, this field indicates what system (e.g. the name of the ATS) this employee was imported from. (nullable, e.g. lever)
   --source-id: string # Unique identifier of the employee in the system this employee was imported from (e.g. the ID in the ATS). (nullable, e.g. 12345)
   --tags: list<string> # e.g. [New]
   --tax-code: string # nullable, e.g. 1111
@@ -752,13 +774,15 @@ export def "employees-add" [
   --timezone: string # The time zone related to the resource. The value is a string containing a standard time zone identifier, e.g. Europe/London. (nullable, e.g. Europe/London)
   --title: string # The job title of the person. (nullable, e.g. CEO)
   --works-remote: oneof<nothing, bool> # Indicates if the employee works from a remote location. (nullable, e.g. true)
-]: any -> any {
+]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
+  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hris/employees" $qp $auth.query)
-  let req_body = {"addresses": $addresses, "birthday": $birthday, "company_id": $company_id, "company_name": $company_name, "compensations": $compensations, "country_of_birth": $country_of_birth, "custom_fields": $custom_fields, "deceased_on": $deceased_on, "deleted": $deleted, "department": $department, "department_id": $department_id, "department_name": $department_name, "description": $description, "dietary_preference": $dietary_preference, "direct_reports": $direct_reports, "display_name": $display_name, "division": $division, "division_id": $division_id, "emails": $emails, "employee_number": $employee_number, "employment_end_date": $employment_end_date, "employment_role": $employment_role, "employment_start_date": $employment_start_date, "employment_status": $employment_status, "first_name": $first_name, "food_allergies": $food_allergies, "gender": $gender, "initials": $initials, "jobs": $jobs, "languages": $languages, "last_name": $last_name, "leaving_reason": $leaving_reason, "manager": $manager, "marital_status": $marital_status, "middle_name": $middle_name, "nationalities": $nationalities, "partner": $partner, "phone_numbers": $phone_numbers, "photo_url": $photo_url, "preferred_language": $preferred_language, "preferred_name": $preferred_name, "pronouns": $pronouns, "record_url": $record_url, "row_version": $row_version, "salutation": $salutation, "social_links": $social_links, "social_security_number": $social_security_number, "source": $body_source, "source_id": $source_id, "tags": $tags, "tax_code": $tax_code, "tax_id": $tax_id, "team": $team, "timezone": $timezone, "title": $title, "works_remote": $works_remote} | compact
+  let req_body = {"addresses": $addresses, "birthday": $birthday, "company_id": $company_id, "company_name": $company_name, "compensations": $compensations, "country_of_birth": $country_of_birth, "custom_fields": $custom_fields, "deceased_on": $deceased_on, "deleted": $deleted, "department": $department, "department_id": $department_id, "department_name": $department_name, "description": $description, "dietary_preference": $dietary_preference, "direct_reports": $direct_reports, "display_name": $display_name, "division": $division, "division_id": $division_id, "emails": $emails, "employee_number": $employee_number, "employment_end_date": $employment_end_date, "employment_role": $employment_role, "employment_start_date": $employment_start_date, "employment_status": $employment_status, "first_name": $first_name, "food_allergies": $food_allergies, "gender": $gender, "initials": $initials, "jobs": $jobs, "languages": $languages, "last_name": $last_name, "leaving_reason": $leaving_reason, "manager": $manager, "marital_status": $marital_status, "middle_name": $middle_name, "nationalities": $nationalities, "partner": $partner, "phone_numbers": $phone_numbers, "photo_url": $photo_url, "preferred_language": $preferred_language, "preferred_name": $preferred_name, "pronouns": $pronouns, "record_url": $record_url, "row_version": $row_version, "salutation": $salutation, "social_links": $social_links, "social_security_number": $social_security_number, "source": $source, "source_id": $source_id, "tags": $tags, "tax_code": $tax_code, "tax_id": $tax_id, "team": $team, "timezone": $timezone, "title": $title, "works_remote": $works_remote} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -794,13 +818,15 @@ export def "employees-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
-  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
-  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
+  --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> any {
+]: nothing -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
+  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/hris/employees/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -838,13 +864,15 @@ export def "employees-one" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
-  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
-  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
+  --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> any {
+]: nothing -> record<data: record<addresses: list<record>, birthday: string, company_id: string, company_name: string, compensations: list<record>, country_of_birth: string, created_at: string, created_by: string, custom_fields: list<record>, deceased_on: string, deleted: bool, department: string, department_id: string, department_name: string, description: string, dietary_preference: string, direct_reports: list<string>, display_name: string, division: string, division_id: string, emails: list<record>, employee_number: string, employment_end_date: string, employment_role: record<sub_type: string, type: string>, employment_start_date: string, employment_status: string, first_name: string, food_allergies: list<string>, gender: string, id: string, initials: string, jobs: list<record>, languages: list<string>, last_name: string, leaving_reason: string, manager: record<email: string, employment_status: string, first_name: string, id: string, last_name: string, name: string>, marital_status: string, middle_name: string, nationalities: list<string>, partner: record<birthday: string, deceased_on: string, first_name: string, gender: string, id: string, initials: string, last_name: string, middle_name: string>, phone_numbers: list<record>, photo_url: string, preferred_language: string, preferred_name: string, pronouns: string, record_url: string, row_version: string, salutation: string, social_links: list<record>, social_security_number: string, source: string, source_id: string, tags: list<string>, tax_code: string, tax_id: string, team: record<id: string, name: string>, timezone: string, title: string, updated_at: string, updated_by: string, works_remote: bool>, operation: string, resource: string, service: string, status: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
+  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/hris/employees/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -893,8 +921,8 @@ export def "employees-update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
-  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
-  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
+  --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
   --addresses: list # item shape: {city?: string, contact_name?: string, country?: string, county?: string, email?: string, fax?: string, id?: string, latitude?: string, line1?: string, line2?: string, line3?: string, line4?: string, longitude?: string, name?: string, phone_number?: string, postal_code?: string, row_version?: string, salutation?: string, state?: string, street_number?: string, string?: string, type?: "primary"|"secondary"|"home"|"office"|"shipping"|"billing"|"other", website?: string}
   --birthday: string # The date of birth of the person. (nullable, format: date, e.g. 2000-08-12)
@@ -943,7 +971,7 @@ export def "employees-update" [
   --salutation: string # A formal salutation for the person. For example, 'Mr', 'Mrs' (nullable, e.g. Mr)
   --social-links: list # item shape: {id?: string, type?: string, url: string}
   --social-security-number: string # A unique identifier assigned by the government. This field is considered sensitive information and may be subject to special security and privacy restrictions. (nullable, e.g. 123456789)
-  --body-source: string # When the employee is imported as a new hire, this field indicates what system (e.g. the name of the ATS) this employee was imported from. (nullable, e.g. lever)
+  --source: string # When the employee is imported as a new hire, this field indicates what system (e.g. the name of the ATS) this employee was imported from. (nullable, e.g. lever)
   --source-id: string # Unique identifier of the employee in the system this employee was imported from (e.g. the ID in the ATS). (nullable, e.g. 12345)
   --tags: list<string> # e.g. [New]
   --tax-code: string # nullable, e.g. 1111
@@ -952,14 +980,16 @@ export def "employees-update" [
   --timezone: string # The time zone related to the resource. The value is a string containing a standard time zone identifier, e.g. Europe/London. (nullable, e.g. Europe/London)
   --title: string # The job title of the person. (nullable, e.g. CEO)
   --works-remote: oneof<nothing, bool> # Indicates if the employee works from a remote location. (nullable, e.g. true)
-]: any -> any {
+]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
+  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/hris/employees/{id}") $qp $auth.query)
-  let req_body = {"addresses": $addresses, "birthday": $birthday, "company_id": $company_id, "company_name": $company_name, "compensations": $compensations, "country_of_birth": $country_of_birth, "custom_fields": $custom_fields, "deceased_on": $deceased_on, "deleted": $deleted, "department": $department, "department_id": $department_id, "department_name": $department_name, "description": $description, "dietary_preference": $dietary_preference, "direct_reports": $direct_reports, "display_name": $display_name, "division": $division, "division_id": $division_id, "emails": $emails, "employee_number": $employee_number, "employment_end_date": $employment_end_date, "employment_role": $employment_role, "employment_start_date": $employment_start_date, "employment_status": $employment_status, "first_name": $first_name, "food_allergies": $food_allergies, "gender": $gender, "initials": $initials, "jobs": $jobs, "languages": $languages, "last_name": $last_name, "leaving_reason": $leaving_reason, "manager": $manager, "marital_status": $marital_status, "middle_name": $middle_name, "nationalities": $nationalities, "partner": $partner, "phone_numbers": $phone_numbers, "photo_url": $photo_url, "preferred_language": $preferred_language, "preferred_name": $preferred_name, "pronouns": $pronouns, "record_url": $record_url, "row_version": $row_version, "salutation": $salutation, "social_links": $social_links, "social_security_number": $social_security_number, "source": $body_source, "source_id": $source_id, "tags": $tags, "tax_code": $tax_code, "tax_id": $tax_id, "team": $team, "timezone": $timezone, "title": $title, "works_remote": $works_remote} | compact
+  let req_body = {"addresses": $addresses, "birthday": $birthday, "company_id": $company_id, "company_name": $company_name, "compensations": $compensations, "country_of_birth": $country_of_birth, "custom_fields": $custom_fields, "deceased_on": $deceased_on, "deleted": $deleted, "department": $department, "department_id": $department_id, "department_name": $department_name, "description": $description, "dietary_preference": $dietary_preference, "direct_reports": $direct_reports, "display_name": $display_name, "division": $division, "division_id": $division_id, "emails": $emails, "employee_number": $employee_number, "employment_end_date": $employment_end_date, "employment_role": $employment_role, "employment_start_date": $employment_start_date, "employment_status": $employment_status, "first_name": $first_name, "food_allergies": $food_allergies, "gender": $gender, "initials": $initials, "jobs": $jobs, "languages": $languages, "last_name": $last_name, "leaving_reason": $leaving_reason, "manager": $manager, "marital_status": $marital_status, "middle_name": $middle_name, "nationalities": $nationalities, "partner": $partner, "phone_numbers": $phone_numbers, "photo_url": $photo_url, "preferred_language": $preferred_language, "preferred_name": $preferred_name, "pronouns": $pronouns, "record_url": $record_url, "row_version": $row_version, "salutation": $salutation, "social_links": $social_links, "social_security_number": $social_security_number, "source": $source, "source_id": $source_id, "tags": $tags, "tax_code": $tax_code, "tax_id": $tax_id, "team": $team, "timezone": $timezone, "title": $title, "works_remote": $works_remote} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -996,13 +1026,15 @@ export def "jobs-all" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
-  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
-  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
+  --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> any {
+]: nothing -> record<data: record<employee: record<addresses: list, birthday: string, company_id: string, company_name: string, compensations: list, country_of_birth: string, created_at: string, created_by: string, custom_fields: list, deceased_on: string, deleted: bool, department: string, department_id: string, department_name: string, description: string, dietary_preference: string, direct_reports: list, display_name: string, division: string, division_id: string, emails: list, employee_number: string, employment_end_date: string, employment_role: record, employment_start_date: string, employment_status: string, first_name: string, food_allergies: list, gender: string, id: string, initials: string, jobs: list, languages: list, last_name: string, leaving_reason: string, manager: record, marital_status: string, middle_name: string, nationalities: list, partner: record, phone_numbers: list, photo_url: string, preferred_language: string, preferred_name: string, pronouns: string, record_url: string, row_version: string, salutation: string, social_links: list, social_security_number: string, source: string, source_id: string, tags: list, tax_code: string, tax_id: string, team: record, timezone: string, title: string, updated_at: string, updated_by: string, works_remote: bool>, jobs: list<record>>, operation: string, resource: string, service: string, status: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employee_id' must be non-empty" } }
+  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
+  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/hris/jobs/employees/{employee_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1041,14 +1073,16 @@ export def "jobs-one" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
-  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
-  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
+  --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> any {
+]: nothing -> record<data: record<department: string, employee_id: string, employment_status: string, end_date: string, id: string, is_primary: bool, location: record<name: string>, start_date: string, title: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employee_id' must be non-empty" } }
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'job_id' must be non-empty" } }
+  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
+  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id), job_id: (encode-path-segment $job_id)} | format pattern "/hris/jobs/employees/{employee_id}/jobs/{job_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1086,12 +1120,14 @@ export def "payrolls-all" [
   --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --filter: record # Apply filters (e.g. {end_date: 2022-04-21, start_date: 2022-04-08})
   --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
-  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
-  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
+  --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> any {
+]: nothing -> record<data: table<check_date: string, company_id: string, compensations: list, end_date: string, id: string, processed: bool, processed_date: string, start_date: string, totals: record>, operation: string, resource: string, service: string, status: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
+  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hris/payrolls" $qp $auth.query)
   let accept_val = "application/json"
@@ -1130,13 +1166,15 @@ export def "employee-payrolls-all" [
   --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --filter: record # Apply filters (e.g. {end_date: 2022-04-21, start_date: 2022-04-08})
   --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
-  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
-  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
+  --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> any {
+]: nothing -> record<data: record<employee: record<addresses: list, birthday: string, company_id: string, company_name: string, compensations: list, country_of_birth: string, created_at: string, created_by: string, custom_fields: list, deceased_on: string, deleted: bool, department: string, department_id: string, department_name: string, description: string, dietary_preference: string, direct_reports: list, display_name: string, division: string, division_id: string, emails: list, employee_number: string, employment_end_date: string, employment_role: record, employment_start_date: string, employment_status: string, first_name: string, food_allergies: list, gender: string, id: string, initials: string, jobs: list, languages: list, last_name: string, leaving_reason: string, manager: record, marital_status: string, middle_name: string, nationalities: list, partner: record, phone_numbers: list, photo_url: string, preferred_language: string, preferred_name: string, pronouns: string, record_url: string, row_version: string, salutation: string, social_links: list, social_security_number: string, source: string, source_id: string, tags: list, tax_code: string, tax_id: string, team: record, timezone: string, title: string, updated_at: string, updated_by: string, works_remote: bool>, payrolls: list<record>>, operation: string, resource: string, service: string, status: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employee_id' must be non-empty" } }
+  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
+  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/hris/payrolls/employees/{employee_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1175,14 +1213,16 @@ export def "employee-payrolls-one" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
-  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
-  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
+  --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> any {
+]: nothing -> record<data: record<employee: record<addresses: list, birthday: string, company_id: string, company_name: string, compensations: list, country_of_birth: string, created_at: string, created_by: string, custom_fields: list, deceased_on: string, deleted: bool, department: string, department_id: string, department_name: string, description: string, dietary_preference: string, direct_reports: list, display_name: string, division: string, division_id: string, emails: list, employee_number: string, employment_end_date: string, employment_role: record, employment_start_date: string, employment_status: string, first_name: string, food_allergies: list, gender: string, id: string, initials: string, jobs: list, languages: list, last_name: string, leaving_reason: string, manager: record, marital_status: string, middle_name: string, nationalities: list, partner: record, phone_numbers: list, photo_url: string, preferred_language: string, preferred_name: string, pronouns: string, record_url: string, row_version: string, salutation: string, social_links: list, social_security_number: string, source: string, source_id: string, tags: list, tax_code: string, tax_id: string, team: record, timezone: string, title: string, updated_at: string, updated_by: string, works_remote: bool>, payroll: record<check_date: string, company_id: string, compensations: list, end_date: string, id: string, processed: bool, processed_date: string, start_date: string, totals: record>>, operation: string, resource: string, service: string, status: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employee_id' must be non-empty" } }
   if ($payroll_id | is-empty) { error make --unspanned { msg: "path parameter 'payroll_id' must be non-empty" } }
+  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
+  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id), payroll_id: (encode-path-segment $payroll_id)} | format pattern "/hris/payrolls/employees/{employee_id}/payrolls/{payroll_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1220,13 +1260,15 @@ export def "payrolls-one" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
-  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
-  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
+  --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> any {
+]: nothing -> record<data: record<check_date: string, company_id: string, compensations: list<record>, end_date: string, id: string, processed: bool, processed_date: string, start_date: string, totals: record<check_amount: float, company_debit: float, employee_benefit_deductions: float, employee_taxes: float, employer_benefit_contributions: float, employer_taxes: float, gross_pay: float, net_pay: float, tax_debit: float>>, operation: string, resource: string, service: string, status: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payroll_id | is-empty) { error make --unspanned { msg: "path parameter 'payroll_id' must be non-empty" } }
+  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
+  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({payroll_id: (encode-path-segment $payroll_id)} | format pattern "/hris/payrolls/{payroll_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1264,13 +1306,15 @@ export def "employee-schedules-all" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
-  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
-  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
+  --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> any {
+]: nothing -> record<data: record<employee: record<addresses: list, birthday: string, company_id: string, company_name: string, compensations: list, country_of_birth: string, created_at: string, created_by: string, custom_fields: list, deceased_on: string, deleted: bool, department: string, department_id: string, department_name: string, description: string, dietary_preference: string, direct_reports: list, display_name: string, division: string, division_id: string, emails: list, employee_number: string, employment_end_date: string, employment_role: record, employment_start_date: string, employment_status: string, first_name: string, food_allergies: list, gender: string, id: string, initials: string, jobs: list, languages: list, last_name: string, leaving_reason: string, manager: record, marital_status: string, middle_name: string, nationalities: list, partner: record, phone_numbers: list, photo_url: string, preferred_language: string, preferred_name: string, pronouns: string, record_url: string, row_version: string, salutation: string, social_links: list, social_security_number: string, source: string, source_id: string, tags: list, tax_code: string, tax_id: string, team: record, timezone: string, title: string, updated_at: string, updated_by: string, works_remote: bool>, schedules: list<record>>, operation: string, resource: string, service: string, status: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employee_id' must be non-empty" } }
+  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
+  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/hris/schedules/employees/{employee_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1310,12 +1354,14 @@ export def "time-off-requests-all" [
   --limit: int # Number of results to return. Minimum 1, Maximum 200, Default 20 (default: 20)
   --filter: record # Apply filters (e.g. {employee_id: 1234, end_date: 2022-04-21, start_date: 2022-04-08, time_off_request_status: approved})
   --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
-  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
-  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
+  --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> any {
+]: nothing -> record<data: table<amount: float, approval_date: string, created_at: string, created_by: string, description: string, employee_id: string, end_date: string, id: string, notes: record, policy_id: string, request_date: string, request_type: string, start_date: string, status: string, units: string, updated_at: string, updated_by: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
+  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hris/time-off-requests" $qp $auth.query)
   let accept_val = "application/json"
@@ -1352,8 +1398,8 @@ export def "time-off-requests-add" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
-  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
-  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
+  --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
   --amount: float # The amount of time off requested. (e.g. 3.5)
   --approval-date: string # The date the request was approved (e.g. 2022-03-21)
@@ -1367,10 +1413,12 @@ export def "time-off-requests-add" [
   --start-date: string # The start date of the time off request. (e.g. 2022-04-01)
   --status: string@status-completer-1 # The status of the time off request. (e.g. approved)
   --units: string@units-completer # The unit of time off requested. Possible values include: `hours`, `days`, or `other`. (e.g. hours)
-]: any -> any {
+]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
+  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hris/time-off-requests" $qp $auth.query)
   let req_body = {"amount": $amount, "approval_date": $approval_date, "description": $description, "employee_id": $employee_id, "end_date": $end_date, "notes": $notes, "policy_id": $policy_id, "request_date": $request_date, "request_type": $request_type, "start_date": $start_date, "status": $status, "units": $units} | compact
@@ -1409,13 +1457,15 @@ export def "time-off-requests-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
-  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
-  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
+  --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> any {
+]: nothing -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
+  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/hris/time-off-requests/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1453,13 +1503,15 @@ export def "time-off-requests-one" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
-  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
-  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
+  --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> any {
+]: nothing -> record<data: record<amount: float, approval_date: string, created_at: string, created_by: string, description: string, employee_id: string, end_date: string, id: string, notes: record<employee: string, manager: string>, policy_id: string, request_date: string, request_type: string, start_date: string, status: string, units: string, updated_at: string, updated_by: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
+  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/hris/time-off-requests/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1497,8 +1549,8 @@ export def "time-off-requests-update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
-  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
-  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
+  --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
   --amount: float # The amount of time off requested. (e.g. 3.5)
   --approval-date: string # The date the request was approved (e.g. 2022-03-21)
@@ -1512,11 +1564,13 @@ export def "time-off-requests-update" [
   --start-date: string # The start date of the time off request. (e.g. 2022-04-01)
   --status: string@status-completer-1 # The status of the time off request. (e.g. approved)
   --units: string@units-completer # The unit of time off requested. Possible values include: `hours`, `days`, or `other`. (e.g. hours)
-]: any -> any {
+]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
+  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/hris/time-off-requests/{id}") $qp $auth.query)
   let req_body = {"amount": $amount, "approval_date": $approval_date, "description": $description, "employee_id": $employee_id, "end_date": $end_date, "notes": $notes, "policy_id": $policy_id, "request_date": $request_date, "request_type": $request_type, "start_date": $start_date, "status": $status, "units": $units} | compact

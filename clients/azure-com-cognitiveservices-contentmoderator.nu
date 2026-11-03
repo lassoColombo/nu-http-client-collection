@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {Ocp-Apim-Subscription-Key: $token_val}, query: "", location: "header"} }
+    "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {"Ocp-Apim-Subscription-Key": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -190,7 +190,7 @@ export def "list-management-image-lists-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # The content type.
+  --content-type: string # The content type. (required)
   --description: string # Description of the list.
   --metadata: record # Metadata of the list.
   --name: string # Name of the list.
@@ -308,7 +308,7 @@ export def "list-management-image-lists-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # The content type.
+  --content-type: string # The content type. (required)
   --description: string # Description of the list.
   --metadata: record # Metadata of the list.
   --name: string # Name of the list.
@@ -573,7 +573,7 @@ export def "list-management-term-lists-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # The content type.
+  --content-type: string # The content type. (required)
   --description: string # Description of the list.
   --metadata: record # Metadata of the list.
   --name: string # Name of the list.
@@ -691,7 +691,7 @@ export def "list-management-term-lists-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # The content type.
+  --content-type: string # The content type. (required)
   --description: string # Description of the list.
   --metadata: record # Metadata of the list.
   --name: string # Name of the list.
@@ -738,11 +738,12 @@ export def "list-management-term-lists-refresh-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --language: string # Language of the terms.
+  --language: string # Language of the terms. (required)
 ]: nothing -> record<AdvancedInfo: list<record>, ContentSourceId: string, IsUpdateSuccess: bool, Status: record<Code: int, Description: string, Exception: string>, TrackingId: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'listId' must be non-empty" } }
+  if ($language == null) { error make --unspanned { msg: "required query parameter 'language' missing: pass --language" } }
   let qp = [(serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/contentmoderator/lists/v1.0/termlists/{list_id}/RefreshIndex") $qp $auth.query)
   let accept_val = "application/json"
@@ -776,11 +777,12 @@ export def "list-management-term-delete-all-terms" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --language: string # Language of the terms.
-]: nothing -> record<Error: record<Code: string, Message: string>> {
+  --language: string # Language of the terms. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'listId' must be non-empty" } }
+  if ($language == null) { error make --unspanned { msg: "required query parameter 'language' missing: pass --language" } }
   let qp = [(serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/contentmoderator/lists/v1.0/termlists/{list_id}/terms") $qp $auth.query)
   let accept_val = "application/json"
@@ -814,13 +816,14 @@ export def "list-management-term-get-all-terms" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --language: string # Language of the terms.
+  --language: string # Language of the terms. (required)
   --offset: int # The pagination start index.
   --limit: int # The max limit.
 ]: nothing -> record<Data: record<Language: string, Status: record<Code: int, Description: string, Exception: string>, Terms: list<record>, TrackingId: string>, Paging: record<Limit: int, Offset: int, Returned: int, Total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'listId' must be non-empty" } }
+  if ($language == null) { error make --unspanned { msg: "required query parameter 'language' missing: pass --language" } }
   let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/contentmoderator/lists/v1.0/termlists/{list_id}/terms") $qp $auth.query)
   let accept_val = "application/json"
@@ -855,12 +858,13 @@ export def "list-management-term-delete-term" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --language: string # Language of the terms.
-]: nothing -> record<Error: record<Code: string, Message: string>> {
+  --language: string # Language of the terms. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'listId' must be non-empty" } }
   if ($term | is-empty) { error make --unspanned { msg: "path parameter 'term' must be non-empty" } }
+  if ($language == null) { error make --unspanned { msg: "required query parameter 'language' missing: pass --language" } }
   let qp = [(serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({list_id: (encode-path-segment $list_id), term: (encode-path-segment $term)} | format pattern "/contentmoderator/lists/v1.0/termlists/{list_id}/terms/{term}") $qp $auth.query)
   let accept_val = "application/json"
@@ -895,12 +899,13 @@ export def "list-management-term-add-term" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --language: string # Language of the terms.
-]: nothing -> record<Error: record<Code: string, Message: string>> {
+  --language: string # Language of the terms. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'listId' must be non-empty" } }
   if ($term | is-empty) { error make --unspanned { msg: "path parameter 'term' must be non-empty" } }
+  if ($language == null) { error make --unspanned { msg: "required query parameter 'language' missing: pass --language" } }
   let qp = [(serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({list_id: (encode-path-segment $list_id), term: (encode-path-segment $term)} | format pattern "/contentmoderator/lists/v1.0/termlists/{list_id}/terms/{term}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1042,12 +1047,13 @@ export def "image-moderation-ocr" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --language: string # Language of the terms.
+  --language: string # Language of the terms. (required)
   --cache-image: oneof<nothing, bool> # Whether to retain the submitted image for future use; defaults to false if omitted.
   --enhanced: oneof<nothing, bool> # When set to True, the image goes through additional processing to come with additional candidates. image/tiff is not supported when enhanced is set to true Note: This impacts the response time. (default: false)
 ]: nothing -> record<CacheId: string, Candidates: table<Confidence: float, Text: string>, Language: string, Metadata: table<Key: string, Value: string>, Status: record<Code: int, Description: string, Exception: string>, Text: string, TrackingId: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($language == null) { error make --unspanned { msg: "required query parameter 'language' missing: pass --language" } }
   let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "CacheImage" $cache_image "scalar") (serialize-qp "enhanced" $enhanced "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/contentmoderator/moderate/v1.0/ProcessImage/OCR" $qp $auth.query)
   let accept_val = "application/json"
@@ -1080,7 +1086,7 @@ export def "text-moderation-detect-language" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string@content-type-completer # The content type.
+  --content-type: string@content-type-completer # The content type. (required)
   --body: any
 ]: any -> record<DetectedLanguage: string, Status: record<Code: int, Description: string, Exception: string>, TrackingId: string> {
   let input = $in
@@ -1128,7 +1134,7 @@ export def "text-moderation-screen-text" [
   --pii: oneof<nothing, bool> # Detect personal identifiable information. (default: false)
   --list-id: string # The list Id.
   --classify: oneof<nothing, bool> # Classify input. (default: false)
-  --content-type: string@content-type-completer # The content type.
+  --content-type: string@content-type-completer # The content type. (required)
   --body: any
 ]: any -> record<AutoCorrectedText: string, Classification: record<Category1: record<Score: float>, Category2: record<Score: float>, Category3: record<Score: float>, ReviewRecommended: bool>, Language: string, Misrepresentation: list<string>, NormalizedText: string, OriginalText: string, PII: record<Address: list<record>, Email: list<record>, IPA: list<record>, Phone: list<record>, SSN: list<record>>, Status: record<Code: int, Description: string, Exception: string>, Terms: table<Index: int, ListId: int, OriginalIndex: int, Term: string>, TrackingId: string> {
   let input = $in
@@ -1174,17 +1180,20 @@ export def "reviews-create-job" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --content-type: string@content-type-completer-1 # Image, Text or Video.
-  --content-id: string # Id/Name to identify the content submitted.
-  --workflow-name: string # Workflow Name that you want to invoke.
+  --content-type: string@content-type-completer-1 # Image, Text or Video. (required)
+  --content-id: string # Id/Name to identify the content submitted. (required)
+  --workflow-name: string # Workflow Name that you want to invoke. (required)
   --call-back-endpoint: string # Callback endpoint for posting the create job result.
-  --content-type-2: string@content-type-completer-2 # The content type. (disambiguated-2)
+  --content-type-2: string@content-type-completer-2 # The content type. (required) (disambiguated-2)
   content_value: string # Content to evaluate for a job.
 ]: any -> record<JobId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($team_name | is-empty) { error make --unspanned { msg: "path parameter 'teamName' must be non-empty" } }
+  if ($content_type == null) { error make --unspanned { msg: "required query parameter 'ContentType' missing: pass --content-type" } }
+  if ($content_id == null) { error make --unspanned { msg: "required query parameter 'ContentId' missing: pass --content-id" } }
+  if ($workflow_name == null) { error make --unspanned { msg: "required query parameter 'WorkflowName' missing: pass --workflow-name" } }
   let qp = [(serialize-qp "ContentType" $content_type "scalar") (serialize-qp "ContentId" $content_id "scalar") (serialize-qp "WorkflowName" $workflow_name "scalar") (serialize-qp "CallBackEndpoint" $call_back_endpoint "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({team_name: (encode-path-segment $team_name)} | format pattern "/contentmoderator/review/v1.0/teams/{team_name}/jobs") $qp $auth.query)
   let req_body = {"ContentValue": $content_value} | compact
@@ -1263,13 +1272,14 @@ export def "reviews-create-reviews" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --sub-team: string # SubTeam of your team, you want to assign the created review to.
-  --url-content-type: string # The content type.
+  --url-content-type: string # The content type. (required)
   --body: list
 ]: any -> list<string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($team_name | is-empty) { error make --unspanned { msg: "path parameter 'teamName' must be non-empty" } }
+  if ($url_content_type == null) { error make --unspanned { msg: "required header parameter 'UrlContentType' missing: pass --url-content-type" } }
   let qp = [(serialize-qp "subTeam" $sub_team "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({team_name: (encode-path-segment $team_name)} | format pattern "/contentmoderator/review/v1.0/teams/{team_name}/reviews") $qp $auth.query)
   let req_body = $body
@@ -1389,7 +1399,7 @@ export def "reviews-add-video-frame" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timescale: int # Timescale of the video you are adding frames to.
-]: nothing -> record<Error: record<Code: string, Message: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($team_name | is-empty) { error make --unspanned { msg: "path parameter 'teamName' must be non-empty" } }
@@ -1428,7 +1438,7 @@ export def "reviews-publish-video-review" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<Error: record<Code: string, Message: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($team_name | is-empty) { error make --unspanned { msg: "path parameter 'teamName' must be non-empty" } }
@@ -1466,14 +1476,15 @@ export def "reviews-add-video-transcript" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string@content-type-completer-3 # The content type.
+  --content-type: string@content-type-completer-3 # The content type. (required)
   --body: any
-]: any -> record<Error: record<Code: string, Message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($team_name | is-empty) { error make --unspanned { msg: "path parameter 'teamName' must be non-empty" } }
   if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'reviewId' must be non-empty" } }
+  let content_type = ($content_type | default "text/plain")
   let full_url = (build-url $base ({team_name: (encode-path-segment $team_name), review_id: (encode-path-segment $review_id)} | format pattern "/contentmoderator/review/v1.0/teams/{team_name}/reviews/{review_id}/transcript") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -1513,9 +1524,9 @@ export def "reviews-add-video-transcript-moderation-result" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # The content type.
+  --content-type: string # The content type. (required)
   --body: list
-]: any -> record<Error: record<Code: string, Message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)

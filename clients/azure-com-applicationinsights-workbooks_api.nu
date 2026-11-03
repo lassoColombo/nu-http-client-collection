@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -155,16 +155,19 @@ export def "workbooks-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --category: string@category-completer # Category of workbook to return.
+  --category: string@category-completer # Category of workbook to return. (required)
   --tags: list<string> # Tags presents on each workbook returned.
-  --source-id: string # Azure Resource Id that will fetch all related workbooks.
+  --source-id: string # Azure Resource Id that will fetch all related workbooks. (required)
   --can-fetch-content: oneof<nothing, bool> # Flag indicating whether or not to return the full content for each applicable workbook. If false, only return summary content for workbooks.
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
 ]: nothing -> record<value: table<properties: record, id: string, kind: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($category == null) { error make --unspanned { msg: "required query parameter 'category' missing: pass --category" } }
+  if ($source_id == null) { error make --unspanned { msg: "required query parameter 'sourceId' missing: pass --source-id" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "category" $category "scalar") (serialize-qp "tags" $tags "csv") (serialize-qp "sourceId" $source_id "scalar") (serialize-qp "canFetchContent" $can_fetch_content "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroup/{resource_group_name}/providers/microsoft.insights/workbooks") $qp $auth.query)
   let accept_val = "application/json"
@@ -200,13 +203,14 @@ export def "workbooks-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<code: string, details: table<code: string, message: string, target: string>, message: string> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroup/{resource_group_name}/providers/microsoft.insights/workbooks/{resource_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -242,13 +246,14 @@ export def "workbooks-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
 ]: nothing -> record<properties: record<category: string, displayName: string, serializedData: string, tags: list<string>, timeModified: string, userId: string, version: string>, id: string, kind: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroup/{resource_group_name}/providers/microsoft.insights/workbooks/{resource_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -285,8 +290,8 @@ export def "workbooks-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --source-id: string # Azure Resource Id that will fetch all related workbooks.
-  --api-version: string # The API version to use for this operation.
+  --source-id: string # Azure Resource Id that will fetch all related workbooks. (required)
+  --api-version: string # The API version to use for this operation. (required)
   --kind: string@kind-completer # The kind of workbook. Choices are user and shared.
   --properties: any # Properties that contain a workbook for PATCH operation. — shape: {category?: string, displayName?: string, serializedData?: string, tags?: list<string>}
   --tags: record # Resource tags
@@ -297,6 +302,8 @@ export def "workbooks-update" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($source_id == null) { error make --unspanned { msg: "required query parameter 'sourceId' missing: pass --source-id" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "sourceId" $source_id "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroup/{resource_group_name}/providers/microsoft.insights/workbooks/{resource_name}") $qp $auth.query)
   let req_body = {"kind": $kind, "properties": $properties, "tags": $tags} | compact
@@ -335,8 +342,8 @@ export def "workbooks-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --source-id: string # Azure Resource Id that will fetch all related workbooks.
-  --api-version: string # The API version to use for this operation.
+  --source-id: string # Azure Resource Id that will fetch all related workbooks. (required)
+  --api-version: string # The API version to use for this operation. (required)
   --properties: any # Properties that contain a workbook. — shape: {category: string, displayName: string, serializedData: string, tags?: list<string>, userId: string, version?: string}
   --kind: string@kind-completer # The kind of workbook. Choices are user and shared.
   location: string # Resource location
@@ -348,6 +355,8 @@ export def "workbooks-create-or-update" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($source_id == null) { error make --unspanned { msg: "required query parameter 'sourceId' missing: pass --source-id" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "sourceId" $source_id "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroup/{resource_group_name}/providers/microsoft.insights/workbooks/{resource_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind, "location": $location, "tags": $tags} | compact

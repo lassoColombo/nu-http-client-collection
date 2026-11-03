@@ -171,10 +171,11 @@ export def "post-me" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --servicekey: string # Licencia que identifica al cliente. Si no tienes una, puedes solicitarla en https://www.afterbanks.com
+  --servicekey: string # Licencia que identifica al cliente. Si no tienes una, puedes solicitarla en https://www.afterbanks.com (required)
 ]: nothing -> record<date_renewal: string, remaining_calls: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($servicekey == null) { error make --unspanned { msg: "required query parameter 'servicekey' missing: pass --servicekey" } }
   let qp = [(serialize-qp "servicekey" $servicekey "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me" $qp $auth.query)
   let accept_val = "application/json"
@@ -206,17 +207,22 @@ export def "post-service-v3" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --servicekey: string # Licencia que identifica al cliente. Si no tienes una, puedes solicitarla en https://www.afterbanks.com
-  --service: string # Identificador único para cada banco. El listado de bancos soportados se obtiene de https://www.afterbanks.com/forms/
+  --servicekey: string # Licencia que identifica al cliente. Si no tienes una, puedes solicitarla en https://www.afterbanks.com (required)
+  --service: string # Identificador único para cada banco. El listado de bancos soportados se obtiene de https://www.afterbanks.com/forms/ (required)
   --document-type: float # Algunos bancos, en su formulario de login, solicitan el tipo de documento. En estos casos, se deberá identificar un número entero (de 0 a 4), que corresponde con su posición en el formulario de login del banco. (format: int32)
-  --user: string # Usuario
-  --pass: string # Contraseña
+  --user: string # Usuario (required)
+  --pass: string # Contraseña (required)
   --pass2: string # Algunos bancos utilizan una segunda contraseña.
   --products: string # Nombres de productos bancarios (cuentas corrientes, tarjetas, etc), separados por coma. Cabe destacar que en la primera llamada a la API, aún no conocemos los nombres de los productos que el usuario tiene contratados, por lo que este parámetro estará vacío.
-  --startdate: string # Fecha desde la que queremos obtener los movimientos en formato dd-mm-aaaa. Obligatorio cuando el valor de "products" es distinto de GLOBAL.
+  --startdate: string # Fecha desde la que queremos obtener los movimientos en formato dd-mm-aaaa. Obligatorio cuando el valor de "products" es distinto de GLOBAL. (required)
 ]: nothing -> table<arranged_balance: float, balance: float, balance_credit_granted: float, balance_value: float, countable_balance: float, currency: string, description: string, product: string, transactions: list<record>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($servicekey == null) { error make --unspanned { msg: "required query parameter 'servicekey' missing: pass --servicekey" } }
+  if ($service == null) { error make --unspanned { msg: "required query parameter 'service' missing: pass --service" } }
+  if ($user == null) { error make --unspanned { msg: "required query parameter 'user' missing: pass --user" } }
+  if ($pass == null) { error make --unspanned { msg: "required query parameter 'pass' missing: pass --pass" } }
+  if ($startdate == null) { error make --unspanned { msg: "required query parameter 'startdate' missing: pass --startdate" } }
   let qp = [(serialize-qp "servicekey" $servicekey "scalar") (serialize-qp "service" $service "scalar") (serialize-qp "documentType" $document_type "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "pass" $pass "scalar") (serialize-qp "pass2" $pass2 "scalar") (serialize-qp "products" $products "scalar") (serialize-qp "startdate" $startdate "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/serviceV3" $qp $auth.query)
   let accept_val = "application/json"

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 #
 # POST /BatchGetRecord
 # operationId: BatchGetRecord
-# --Identifiers item shape: {FeatureGroupName: any, RecordIdentifiersValueAsString: any, FeatureNames?: any}
+# --Identifiers item shape: {FeatureGroupName: string, RecordIdentifiersValueAsString: list<string>, FeatureNames?: list<string>}
 export def "batch-get-record" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -160,8 +160,8 @@ export def "batch-get-record" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  identifiers: list # A list of FeatureGroup names, with their corresponding RecordIdentifier value, and Feature name that have been requested to be retrieved in batch. — item shape: {FeatureGroupName: any, RecordIdentifiersValueAsString: any, FeatureNames?: any}
-]: any -> record<Records: record, Errors: record, UnprocessedIdentifiers: record> {
+  identifiers: list # A list of FeatureGroup names, with their corresponding RecordIdentifier value, and Feature name that have been requested to be retrieved in batch. — item shape: {FeatureGroupName: string, RecordIdentifiersValueAsString: list<string>, FeatureNames?: list<string>}
+]: any -> record<Records: table<FeatureGroupName: string, RecordIdentifierValueAsString: string, Record: list>, Errors: table<FeatureGroupName: string, RecordIdentifierValueAsString: string, ErrorCode: string, ErrorMessage: string>, UnprocessedIdentifiers: table<FeatureGroupName: string, RecordIdentifiersValueAsString: list, FeatureNames: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -201,8 +201,8 @@ export def "delete-record" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --record-identifier-value-as-string: string # The value for the RecordIdentifier that uniquely identifies the record, in string format.
-  --event-time: string # Timestamp indicating when the deletion event occurred. EventTime can be used to query data at a certain point in time.
+  --record-identifier-value-as-string: string # The value for the RecordIdentifier that uniquely identifies the record, in string format. (required)
+  --event-time: string # Timestamp indicating when the deletion event occurred. EventTime can be used to query data at a certain point in time. (required)
   --target-stores: list # A list of stores from which you're deleting the record. By default, Feature Store deletes the record from all of the stores that you're using for the FeatureGroup.
   --deletion-mode: string@deletion-mode-completer # The name of the deletion mode for deleting the record. By default, the deletion mode is set to SoftDelete.
   --x-amz-content-sha256: string
@@ -216,6 +216,8 @@ export def "delete-record" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($feature_group_name | is-empty) { error make --unspanned { msg: "path parameter 'FeatureGroupName' must be non-empty" } }
+  if ($record_identifier_value_as_string == null) { error make --unspanned { msg: "required query parameter 'RecordIdentifierValueAsString' missing: pass --record-identifier-value-as-string" } }
+  if ($event_time == null) { error make --unspanned { msg: "required query parameter 'EventTime' missing: pass --event-time" } }
   let qp = [(serialize-qp "RecordIdentifierValueAsString" $record_identifier_value_as_string "scalar") (serialize-qp "EventTime" $event_time "scalar") (serialize-qp "TargetStores" $target_stores "multi") (serialize-qp "DeletionMode" $deletion_mode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({feature_group_name: (encode-path-segment $feature_group_name)} | format pattern "/FeatureGroup/{feature_group_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -251,7 +253,7 @@ export def "get-record" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --record-identifier-value-as-string: string # The value that corresponds to RecordIdentifier type and uniquely identifies the record in the FeatureGroup.
+  --record-identifier-value-as-string: string # The value that corresponds to RecordIdentifier type and uniquely identifies the record in the FeatureGroup. (required)
   --feature-name: list # List of names of Features to be retrieved. If not specified, the latest value for all the Features are returned.
   --x-amz-content-sha256: string
   --x-amz-date: string
@@ -260,10 +262,11 @@ export def "get-record" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Record: record> {
+]: nothing -> record<Record: table<FeatureName: string, ValueAsString: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($feature_group_name | is-empty) { error make --unspanned { msg: "path parameter 'FeatureGroupName' must be non-empty" } }
+  if ($record_identifier_value_as_string == null) { error make --unspanned { msg: "required query parameter 'RecordIdentifierValueAsString' missing: pass --record-identifier-value-as-string" } }
   let qp = [(serialize-qp "RecordIdentifierValueAsString" $record_identifier_value_as_string "scalar") (serialize-qp "FeatureName" $feature_name "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({feature_group_name: (encode-path-segment $feature_group_name)} | format pattern "/FeatureGroup/{feature_group_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -288,7 +291,7 @@ export def "get-record" [
 #
 # PUT /FeatureGroup/{FeatureGroupName}
 # operationId: PutRecord
-# --Record item shape: {FeatureName: any, ValueAsString: any}
+# --Record item shape: {FeatureName: string, ValueAsString: string}
 export def "put-record" [
   feature_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -307,7 +310,7 @@ export def "put-record" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  record: list # List of FeatureValues to be inserted. This will be a full over-write. If you only want to update few of the feature values, do the following: Use GetRecord to retrieve the latest record. Update the record returned from GetRecord. Use PutRecord to update feature values. — item shape: {FeatureName: any, ValueAsString: any}
+  record: list # List of FeatureValues to be inserted. This will be a full over-write. If you only want to update few of the feature values, do the following: Use GetRecord to retrieve the latest record. Update the record returned from GetRecord. Use PutRecord to update feature values. — item shape: {FeatureName: string, ValueAsString: string}
   --target-stores: list<string> # A list of stores to which you're adding the record. By default, Feature Store adds the record to all of the stores that you're using for the FeatureGroup.
 ]: any -> any {
   let input = $in

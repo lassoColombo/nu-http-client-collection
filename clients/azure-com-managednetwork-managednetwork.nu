@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -152,10 +152,11 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.ManagedNetwork/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -189,13 +190,14 @@ export def "managed-networks-list-by-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --top: int # May be used to limit the number of results in a page for list queries.
   --skiptoken: string # Skiptoken is only used if a previous operation returned a partial result. If a previous response contains a nextLink element, the value of the nextLink element will include a skiptoken parameter that specifies a starting point to use for subsequent calls.
-]: nothing -> record<nextLink: string, value: table<properties: record, tags: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, tags: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.ManagedNetwork/managedNetworks") $qp $auth.query)
   let accept_val = "application/json"
@@ -230,14 +232,15 @@ export def "managed-networks-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --top: int # May be used to limit the number of results in a page for list queries.
   --skiptoken: string # Skiptoken is only used if a previous operation returned a partial result. If a previous response contains a nextLink element, the value of the nextLink element will include a skiptoken parameter that specifies a starting point to use for subsequent calls.
-]: nothing -> record<nextLink: string, value: table<properties: record, tags: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, tags: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ManagedNetwork/managedNetworks") $qp $auth.query)
   let accept_val = "application/json"
@@ -273,13 +276,14 @@ export def "managed-networks-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<code: string, message: string> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($managed_network_name | is-empty) { error make --unspanned { msg: "path parameter 'managedNetworkName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), managed_network_name: (encode-path-segment $managed_network_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ManagedNetwork/managedNetworks/{managed_network_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -315,13 +319,14 @@ export def "managed-networks-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<connectivity: record<groups: list, peerings: list>, scope: record<managementGroups: list, subnets: list, subscriptions: list, virtualNetworks: list>>, tags: record> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<connectivity: record<groups: list, peerings: list>, scope: record<managementGroups: list, subnets: list, subscriptions: list, virtualNetworks: list>, etag: string, provisioningState: string>, tags: record, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($managed_network_name | is-empty) { error make --unspanned { msg: "path parameter 'managedNetworkName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), managed_network_name: (encode-path-segment $managed_network_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ManagedNetwork/managedNetworks/{managed_network_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -357,15 +362,16 @@ export def "managed-networks-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --tags: record # Resource tags
-]: any -> record<properties: record<connectivity: record<groups: list, peerings: list>, scope: record<managementGroups: list, subnets: list, subscriptions: list, virtualNetworks: list>>, tags: record> {
+]: any -> record<properties: record<connectivity: record<groups: list, peerings: list>, scope: record<managementGroups: list, subnets: list, subscriptions: list, virtualNetworks: list>, etag: string, provisioningState: string>, tags: record, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($managed_network_name | is-empty) { error make --unspanned { msg: "path parameter 'managedNetworkName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), managed_network_name: (encode-path-segment $managed_network_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ManagedNetwork/managedNetworks/{managed_network_name}") $qp $auth.query)
   let req_body = {"tags": $tags} | compact
@@ -404,16 +410,17 @@ export def "managed-networks-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: record # Properties of Managed Network — shape: {connectivity?: any, scope?: any}
   --tags: record # Resource tags
-]: any -> record<properties: record<connectivity: record<groups: list, peerings: list>, scope: record<managementGroups: list, subnets: list, subscriptions: list, virtualNetworks: list>>, tags: record> {
+]: any -> record<properties: record<connectivity: record<groups: list, peerings: list>, scope: record<managementGroups: list, subnets: list, subscriptions: list, virtualNetworks: list>, etag: string, provisioningState: string>, tags: record, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($managed_network_name | is-empty) { error make --unspanned { msg: "path parameter 'managedNetworkName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), managed_network_name: (encode-path-segment $managed_network_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ManagedNetwork/managedNetworks/{managed_network_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -451,15 +458,16 @@ export def "managed-network-groups-list-by-managed-network" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --top: int # May be used to limit the number of results in a page for list queries.
   --skiptoken: string # Skiptoken is only used if a previous operation returned a partial result. If a previous response contains a nextLink element, the value of the nextLink element will include a skiptoken parameter that specifies a starting point to use for subsequent calls.
-]: nothing -> record<nextLink: string, value: table<kind: string, properties: record>> {
+]: nothing -> record<nextLink: string, value: table<kind: string, properties: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($managed_network_name | is-empty) { error make --unspanned { msg: "path parameter 'managedNetworkName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), managed_network_name: (encode-path-segment $managed_network_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ManagedNetwork/managedNetworks/{managed_network_name}/managedNetworkGroups") $qp $auth.query)
   let accept_val = "application/json"
@@ -496,14 +504,15 @@ export def "managed-network-groups-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<code: string, message: string> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($managed_network_name | is-empty) { error make --unspanned { msg: "path parameter 'managedNetworkName' must be non-empty" } }
   if ($managed_network_group_name | is-empty) { error make --unspanned { msg: "path parameter 'managedNetworkGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), managed_network_name: (encode-path-segment $managed_network_name), managed_network_group_name: (encode-path-segment $managed_network_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ManagedNetwork/managedNetworks/{managed_network_name}/managedNetworkGroups/{managed_network_group_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -540,14 +549,15 @@ export def "managed-network-groups-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<kind: string, properties: record<managementGroups: list<record>, subnets: list<record>, subscriptions: list<record>, virtualNetworks: list<record>, etag: string, provisioningState: string>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<kind: string, properties: record<managementGroups: list<record>, subnets: list<record>, subscriptions: list<record>, virtualNetworks: list<record>, etag: string, provisioningState: string>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($managed_network_name | is-empty) { error make --unspanned { msg: "path parameter 'managedNetworkName' must be non-empty" } }
   if ($managed_network_group_name | is-empty) { error make --unspanned { msg: "path parameter 'managedNetworkGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), managed_network_name: (encode-path-segment $managed_network_name), managed_network_group_name: (encode-path-segment $managed_network_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ManagedNetwork/managedNetworks/{managed_network_name}/managedNetworkGroups/{managed_network_group_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -585,10 +595,10 @@ export def "managed-network-groups-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --kind: string@kind-completer # Responsibility role under which this Managed Network Group will be created
   --properties: any # Properties of a Managed Network Group — shape: {managementGroups?: list, subnets?: list, subscriptions?: list, virtualNetworks?: list}
-]: any -> record<kind: string, properties: record<managementGroups: list<record>, subnets: list<record>, subscriptions: list<record>, virtualNetworks: list<record>, etag: string, provisioningState: string>> {
+]: any -> record<kind: string, properties: record<managementGroups: list<record>, subnets: list<record>, subscriptions: list<record>, virtualNetworks: list<record>, etag: string, provisioningState: string>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -596,6 +606,7 @@ export def "managed-network-groups-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($managed_network_name | is-empty) { error make --unspanned { msg: "path parameter 'managedNetworkName' must be non-empty" } }
   if ($managed_network_group_name | is-empty) { error make --unspanned { msg: "path parameter 'managedNetworkGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), managed_network_name: (encode-path-segment $managed_network_name), managed_network_group_name: (encode-path-segment $managed_network_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ManagedNetwork/managedNetworks/{managed_network_name}/managedNetworkGroups/{managed_network_group_name}") $qp $auth.query)
   let req_body = {"kind": $kind, "properties": $properties} | compact
@@ -633,15 +644,16 @@ export def "managed-network-peering-policies-list-by-managed-network" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --top: int # May be used to limit the number of results in a page for list queries.
   --skiptoken: string # Skiptoken is only used if a previous operation returned a partial result. If a previous response contains a nextLink element, the value of the nextLink element will include a skiptoken parameter that specifies a starting point to use for subsequent calls.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($managed_network_name | is-empty) { error make --unspanned { msg: "path parameter 'managedNetworkName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), managed_network_name: (encode-path-segment $managed_network_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ManagedNetwork/managedNetworks/{managed_network_name}/managedNetworkPeeringPolicies") $qp $auth.query)
   let accept_val = "application/json"
@@ -678,14 +690,15 @@ export def "managed-network-peering-policies-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<code: string, message: string> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($managed_network_name | is-empty) { error make --unspanned { msg: "path parameter 'managedNetworkName' must be non-empty" } }
   if ($managed_network_peering_policy_name | is-empty) { error make --unspanned { msg: "path parameter 'managedNetworkPeeringPolicyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), managed_network_name: (encode-path-segment $managed_network_name), managed_network_peering_policy_name: (encode-path-segment $managed_network_peering_policy_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ManagedNetwork/managedNetworks/{managed_network_name}/managedNetworkPeeringPolicies/{managed_network_peering_policy_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -722,14 +735,15 @@ export def "managed-network-peering-policies-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<hub: record<id: string>, mesh: list<record>, spokes: list<record>, type: string, etag: string, provisioningState: string>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<hub: record<id: string>, mesh: list<record>, spokes: list<record>, type: string, etag: string, provisioningState: string>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($managed_network_name | is-empty) { error make --unspanned { msg: "path parameter 'managedNetworkName' must be non-empty" } }
   if ($managed_network_peering_policy_name | is-empty) { error make --unspanned { msg: "path parameter 'managedNetworkPeeringPolicyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), managed_network_name: (encode-path-segment $managed_network_name), managed_network_peering_policy_name: (encode-path-segment $managed_network_peering_policy_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ManagedNetwork/managedNetworks/{managed_network_name}/managedNetworkPeeringPolicies/{managed_network_peering_policy_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -767,9 +781,9 @@ export def "managed-network-peering-policies-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: any # Properties of a Managed Network Peering Policy — shape: {hub?: any, mesh?: list, spokes?: list, type: "HubAndSpokeTopology"|"MeshTopology"}
-]: any -> record<properties: record<hub: record<id: string>, mesh: list<record>, spokes: list<record>, type: string, etag: string, provisioningState: string>> {
+]: any -> record<properties: record<hub: record<id: string>, mesh: list<record>, spokes: list<record>, type: string, etag: string, provisioningState: string>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -777,6 +791,7 @@ export def "managed-network-peering-policies-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($managed_network_name | is-empty) { error make --unspanned { msg: "path parameter 'managedNetworkName' must be non-empty" } }
   if ($managed_network_peering_policy_name | is-empty) { error make --unspanned { msg: "path parameter 'managedNetworkPeeringPolicyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), managed_network_name: (encode-path-segment $managed_network_name), managed_network_peering_policy_name: (encode-path-segment $managed_network_peering_policy_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ManagedNetwork/managedNetworks/{managed_network_name}/managedNetworkPeeringPolicies/{managed_network_peering_policy_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -812,11 +827,12 @@ export def "scope-assignments-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope)} | format pattern "/{scope}/providers/Microsoft.ManagedNetwork/scopeAssignments") $qp $auth.query)
   let accept_val = "application/json"
@@ -851,12 +867,13 @@ export def "scope-assignments-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($scope_assignment_name | is-empty) { error make --unspanned { msg: "path parameter 'scopeAssignmentName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), scope_assignment_name: (encode-path-segment $scope_assignment_name)} | format pattern "/{scope}/providers/Microsoft.ManagedNetwork/scopeAssignments/{scope_assignment_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -891,12 +908,13 @@ export def "scope-assignments-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<assignedManagedNetwork: string>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<assignedManagedNetwork: string, etag: string, provisioningState: string>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($scope_assignment_name | is-empty) { error make --unspanned { msg: "path parameter 'scopeAssignmentName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), scope_assignment_name: (encode-path-segment $scope_assignment_name)} | format pattern "/{scope}/providers/Microsoft.ManagedNetwork/scopeAssignments/{scope_assignment_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -932,14 +950,15 @@ export def "scope-assignments-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: record # Properties of Managed Network — shape: {assignedManagedNetwork?: string}
-]: any -> record<properties: record<assignedManagedNetwork: string>> {
+]: any -> record<properties: record<assignedManagedNetwork: string, etag: string, provisioningState: string>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($scope_assignment_name | is-empty) { error make --unspanned { msg: "path parameter 'scopeAssignmentName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), scope_assignment_name: (encode-path-segment $scope_assignment_name)} | format pattern "/{scope}/providers/Microsoft.ManagedNetwork/scopeAssignments/{scope_assignment_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact

@@ -131,11 +131,13 @@ export def "getaddressmatch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --license: string # Your Interzoid license API key. Register at www.interzoid.com/register
-  --address: string # Address from which to generate similarity key
+  --license: string # Your Interzoid license API key. Register at www.interzoid.com/register (required)
+  --address: string # Address from which to generate similarity key (required)
 ]: nothing -> record<Code: string, Credits: string, Simkey: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($license == null) { error make --unspanned { msg: "required query parameter 'license' missing: pass --license" } }
+  if ($address == null) { error make --unspanned { msg: "required query parameter 'address' missing: pass --address" } }
   let qp = [(serialize-qp "license" $license "scalar") (serialize-qp "address" $address "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getaddressmatch" $qp $auth.query)
   let accept_val = "application/json"

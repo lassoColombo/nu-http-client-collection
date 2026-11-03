@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -102,11 +102,17 @@ def x-amz-target-completer-2 [] { ["AWSHawksNestServiceFacade.CancelBatchImportJ
 def x-amz-target-completer-3 [] { ["AWSHawksNestServiceFacade.CancelBatchPredictionJob"] }
 def x-amz-target-completer-4 [] { ["AWSHawksNestServiceFacade.CreateBatchImportJob"] }
 def x-amz-target-completer-5 [] { ["AWSHawksNestServiceFacade.CreateBatchPredictionJob"] }
+def rule-execution-mode-completer [] { ["ALL_MATCHED" "FIRST_MATCHED"] }
 def x-amz-target-completer-6 [] { ["AWSHawksNestServiceFacade.CreateDetectorVersion"] }
 def x-amz-target-completer-7 [] { ["AWSHawksNestServiceFacade.CreateList"] }
+def model-type-completer [] { ["ACCOUNT_TAKEOVER_INSIGHTS" "ONLINE_FRAUD_INSIGHTS" "TRANSACTION_FRAUD_INSIGHTS"] }
 def x-amz-target-completer-8 [] { ["AWSHawksNestServiceFacade.CreateModel"] }
+def training-data-source-completer [] { ["EXTERNAL_EVENTS" "INGESTED_EVENTS"] }
 def x-amz-target-completer-9 [] { ["AWSHawksNestServiceFacade.CreateModelVersion"] }
+def language-completer [] { ["DETECTORPL"] }
 def x-amz-target-completer-10 [] { ["AWSHawksNestServiceFacade.CreateRule"] }
+def data-type-completer [] { ["BOOLEAN" "FLOAT" "INTEGER" "STRING"] }
+def data-source-completer [] { ["EVENT" "EXTERNAL_MODEL_SCORE" "MODEL_SCORE"] }
 def x-amz-target-completer-11 [] { ["AWSHawksNestServiceFacade.CreateVariable"] }
 def x-amz-target-completer-12 [] { ["AWSHawksNestServiceFacade.DeleteBatchImportJob"] }
 def x-amz-target-completer-13 [] { ["AWSHawksNestServiceFacade.DeleteBatchPredictionJob"] }
@@ -150,7 +156,10 @@ def x-amz-target-completer-50 [] { ["AWSHawksNestServiceFacade.ListEventPredicti
 def x-amz-target-completer-51 [] { ["AWSHawksNestServiceFacade.ListTagsForResource"] }
 def x-amz-target-completer-52 [] { ["AWSHawksNestServiceFacade.PutDetector"] }
 def x-amz-target-completer-53 [] { ["AWSHawksNestServiceFacade.PutEntityType"] }
+def event-ingestion-completer [] { ["DISABLED" "ENABLED"] }
 def x-amz-target-completer-54 [] { ["AWSHawksNestServiceFacade.PutEventType"] }
+def model-source-completer [] { ["SAGEMAKER"] }
+def model-endpoint-status-completer [] { ["ASSOCIATED" "DISSOCIATED"] }
 def x-amz-target-completer-55 [] { ["AWSHawksNestServiceFacade.PutExternalModel"] }
 def x-amz-target-completer-56 [] { ["AWSHawksNestServiceFacade.PutKMSEncryptionKey"] }
 def x-amz-target-completer-57 [] { ["AWSHawksNestServiceFacade.PutLabel"] }
@@ -160,11 +169,14 @@ def x-amz-target-completer-60 [] { ["AWSHawksNestServiceFacade.TagResource"] }
 def x-amz-target-completer-61 [] { ["AWSHawksNestServiceFacade.UntagResource"] }
 def x-amz-target-completer-62 [] { ["AWSHawksNestServiceFacade.UpdateDetectorVersion"] }
 def x-amz-target-completer-63 [] { ["AWSHawksNestServiceFacade.UpdateDetectorVersionMetadata"] }
+def status-completer [] { ["ACTIVE" "DRAFT" "INACTIVE"] }
 def x-amz-target-completer-64 [] { ["AWSHawksNestServiceFacade.UpdateDetectorVersionStatus"] }
 def x-amz-target-completer-65 [] { ["AWSHawksNestServiceFacade.UpdateEventLabel"] }
+def update-mode-completer [] { ["APPEND" "REMOVE" "REPLACE"] }
 def x-amz-target-completer-66 [] { ["AWSHawksNestServiceFacade.UpdateList"] }
 def x-amz-target-completer-67 [] { ["AWSHawksNestServiceFacade.UpdateModel"] }
 def x-amz-target-completer-68 [] { ["AWSHawksNestServiceFacade.UpdateModelVersion"] }
+def status-completer-1 [] { ["ACTIVE" "INACTIVE" "TRAINING_CANCELLED"] }
 def x-amz-target-completer-69 [] { ["AWSHawksNestServiceFacade.UpdateModelVersionStatus"] }
 def x-amz-target-completer-70 [] { ["AWSHawksNestServiceFacade.UpdateRuleMetadata"] }
 def x-amz-target-completer-71 [] { ["AWSHawksNestServiceFacade.UpdateRuleVersion"] }
@@ -197,6 +209,8 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: BatchCreateVariable
+# --variableEntries item shape: {name?: string, dataType?: string, dataSource?: string, defaultValue?: string, description?: string, variableType?: string}
+# --tags item shape: {key: string, value: string}
 export def "batch-create-variable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -214,13 +228,14 @@ export def "batch-create-variable" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  variable_entries: any
-  --tags: any
-]: any -> record<errors: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  variable_entries: list # The list of variables for the batch create variable request. — item shape: {name?: string, dataType?: string, dataSource?: string, defaultValue?: string, description?: string, variableType?: string}
+  --tags: list # A collection of key and value pairs. — item shape: {key: string, value: string}
+]: any -> record<errors: table<name: string, code: int, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.BatchCreateVariable")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"variableEntries": $variable_entries, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -263,12 +278,13 @@ export def "batch-get-variable" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  names: any
-]: any -> record<variables: record, errors: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  names: list<string> # The list of variable names to get.
+]: any -> record<variables: table<name: string, dataType: string, dataSource: string, defaultValue: string, description: string, variableType: string, lastUpdatedTime: string, createdTime: string, arn: string>, errors: table<name: string, code: int, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.BatchGetVariable")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"names": $names} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -311,12 +327,13 @@ export def "cancel-batch-import-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  job_id: any
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  job_id: string # The ID of an in-progress batch import job to cancel. Amazon Fraud Detector will throw an error if the batch import job is in FAILED, CANCELED, or COMPLETED state.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.CancelBatchImportJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"jobId": $job_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -359,12 +376,13 @@ export def "cancel-batch-prediction-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  job_id: any
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  job_id: string # The ID of the batch prediction job to cancel.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.CancelBatchPredictionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"jobId": $job_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -390,6 +408,7 @@ export def "cancel-batch-prediction-job" [
 #
 # POST /
 # operationId: CreateBatchImportJob
+# --tags item shape: {key: string, value: string}
 export def "create-batch-import-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -407,17 +426,18 @@ export def "create-batch-import-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  job_id: any
-  input_path: any
-  output_path: any
-  event_type_name: any
-  iam_role_arn: any
-  --tags: any
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  job_id: string # The ID of the batch import job. The ID cannot be of a past job, unless the job exists in CREATE_FAILED state.
+  input_path: string # The URI that points to the Amazon S3 location of your data file.
+  output_path: string # The URI that points to the Amazon S3 location for storing your results.
+  event_type_name: string # The name of the event type.
+  iam_role_arn: string # The ARN of the IAM role created for Amazon S3 bucket that holds your data file. The IAM role must have read permissions to your input S3 bucket and write permissions to your output S3 bucket. For more information about bucket permissions, see User policy examples (https://docs.aws.amazon.com/AmazonS3/latest/userguide/example-policies-s3.html) in the Amazon S3 User Guide.
+  --tags: list # A collection of key-value pairs associated with this request. — item shape: {key: string, value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.CreateBatchImportJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"jobId": $job_id, "inputPath": $input_path, "outputPath": $output_path, "eventTypeName": $event_type_name, "iamRoleArn": $iam_role_arn, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -443,6 +463,7 @@ export def "create-batch-import-job" [
 #
 # POST /
 # operationId: CreateBatchPredictionJob
+# --tags item shape: {key: string, value: string}
 export def "create-batch-prediction-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -460,19 +481,20 @@ export def "create-batch-prediction-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  job_id: any
-  input_path: any
-  output_path: any
-  event_type_name: any
-  detector_name: any
-  --detector-version: any
-  iam_role_arn: any
-  --tags: any
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  job_id: string # The ID of the batch prediction job.
+  input_path: string # The Amazon S3 location of your training file.
+  output_path: string # The Amazon S3 location of your output file.
+  event_type_name: string # The name of the event type.
+  detector_name: string # The name of the detector.
+  --detector-version: string # The detector version.
+  iam_role_arn: string # The ARN of the IAM role to use for this job request. The IAM Role must have read permissions to your input S3 bucket and write permissions to your output S3 bucket. For more information about bucket permissions, see User policy examples (https://docs.aws.amazon.com/AmazonS3/latest/userguide/example-policies-s3.html) in the Amazon S3 User Guide.
+  --tags: list # A collection of key and value pairs. — item shape: {key: string, value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.CreateBatchPredictionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"jobId": $job_id, "inputPath": $input_path, "outputPath": $output_path, "eventTypeName": $event_type_name, "detectorName": $detector_name, "detectorVersion": $detector_version, "iamRoleArn": $iam_role_arn, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -498,6 +520,9 @@ export def "create-batch-prediction-job" [
 #
 # POST /
 # operationId: CreateDetectorVersion
+# --rules item shape: {detectorId: string, ruleId: string, ruleVersion: string}
+# --modelVersions item shape: {modelId: string, modelType: "ONLINE_FRAUD_INSIGHTS"|"TRANSACTION_FRAUD_INSIGHTS"|"ACCOUNT_TAKEOVER_INSIGHTS", modelVersionNumber: string, arn?: string}
+# --tags item shape: {key: string, value: string}
 export def "create-detector-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -515,18 +540,19 @@ export def "create-detector-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  detector_id: any
-  --description: any
-  --external-model-endpoints: any
-  rules: any
-  --model-versions: any
-  --rule-execution-mode: any
-  --tags: any
-]: any -> record<detectorId: record, detectorVersionId: record, status: record> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  detector_id: string # The ID of the detector under which you want to create a new version.
+  --description: string # The description of the detector version.
+  --external-model-endpoints: list<string> # The Amazon Sagemaker model endpoints to include in the detector version.
+  rules: list # The rules to include in the detector version. — item shape: {detectorId: string, ruleId: string, ruleVersion: string}
+  --model-versions: list # The model versions to include in the detector version. — item shape: {modelId: string, modelType: "ONLINE_FRAUD_INSIGHTS"|"TRANSACTION_FRAUD_INSIGHTS"|"ACCOUNT_TAKEOVER_INSIGHTS", modelVersionNumber: string, arn?: string}
+  --rule-execution-mode: string@rule-execution-mode-completer # The rule execution mode for the rules included in the detector version. You can define and edit the rule mode at the detector version level, when it is in draft status. If you specify FIRST_MATCHED, Amazon Fraud Detector evaluates rules sequentially, first to last, stopping at the first matched rule. Amazon Fraud dectector then provides the outcomes for that single rule. If you specifiy ALL_MATCHED, Amazon Fraud Detector evaluates all rules and returns the outcomes for all matched rules. The default behavior is FIRST_MATCHED.
+  --tags: list # A collection of key and value pairs. — item shape: {key: string, value: string}
+]: any -> record<detectorId: string, detectorVersionId: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.CreateDetectorVersion")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"detectorId": $detector_id, "description": $description, "externalModelEndpoints": $external_model_endpoints, "rules": $rules, "modelVersions": $model_versions, "ruleExecutionMode": $rule_execution_mode, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -552,6 +578,7 @@ export def "create-detector-version" [
 #
 # POST /
 # operationId: CreateList
+# --tags item shape: {key: string, value: string}
 export def "create-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -569,16 +596,17 @@ export def "create-list" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  name: any
-  --elements: any
-  --variable-type: any
-  --description: any
-  --tags: any
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  name: string # The name of the list.
+  --elements: list<string> # The names of the elements, if providing. You can also create an empty list and add elements later using the UpdateList (https://docs.aws.amazon.com/frauddetector/latest/api/API_Updatelist.html) API.
+  --variable-type: string # The variable type of the list. You can only assign the variable type with String data type. For more information, see Variable types (https://docs.aws.amazon.com/frauddetector/latest/ug/create-a-variable.html#variable-types).
+  --description: string # The description of the list.
+  --tags: list # A collection of the key and value pairs. — item shape: {key: string, value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.CreateList")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name, "elements": $elements, "variableType": $variable_type, "description": $description, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -604,6 +632,7 @@ export def "create-list" [
 #
 # POST /
 # operationId: CreateModel
+# --tags item shape: {key: string, value: string}
 export def "create-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -621,16 +650,17 @@ export def "create-model" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  model_id: any
-  model_type: any
-  --description: any
-  event_type_name: any
-  --tags: any
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  model_id: string # The model ID.
+  model_type: string@model-type-completer # The model type.
+  --description: string # The model description.
+  event_type_name: string # The name of the event type.
+  --tags: list # A collection of key and value pairs. — item shape: {key: string, value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.CreateModel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"modelId": $model_id, "modelType": $model_type, "description": $description, "eventTypeName": $event_type_name, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -656,6 +686,10 @@ export def "create-model" [
 #
 # POST /
 # operationId: CreateModelVersion
+# --trainingDataSchema shape: {modelVariables: list<string>, labelSchema?: record}
+# --externalEventsDetail shape: {dataLocation: string, dataAccessRoleArn: string}
+# --ingestedEventsDetail shape: {ingestedEventsTimeWindow: record}
+# --tags item shape: {key: string, value: string}
 export def "create-model-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -673,18 +707,19 @@ export def "create-model-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  model_id: any
-  model_type: any
-  training_data_source: any
-  training_data_schema: any
-  --external-events-detail: any
-  --ingested-events-detail: any
-  --tags: any
-]: any -> record<modelId: record, modelType: record, modelVersionNumber: record, status: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  model_id: string # The model ID.
+  model_type: string@model-type-completer # The model type.
+  training_data_source: string@training-data-source-completer # The training data source location in Amazon S3.
+  training_data_schema: record # The training data schema. — shape: {modelVariables: list<string>, labelSchema?: record}
+  --external-events-detail: record # Details for the external events data used for model version training. — shape: {dataLocation: string, dataAccessRoleArn: string}
+  --ingested-events-detail: record # The details of the ingested event. — shape: {ingestedEventsTimeWindow: record}
+  --tags: list # A collection of key and value pairs. — item shape: {key: string, value: string}
+]: any -> record<modelId: string, modelType: string, modelVersionNumber: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.CreateModelVersion")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"modelId": $model_id, "modelType": $model_type, "trainingDataSource": $training_data_source, "trainingDataSchema": $training_data_schema, "externalEventsDetail": $external_events_detail, "ingestedEventsDetail": $ingested_events_detail, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -710,6 +745,7 @@ export def "create-model-version" [
 #
 # POST /
 # operationId: CreateRule
+# --tags item shape: {key: string, value: string}
 export def "create-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -727,18 +763,19 @@ export def "create-rule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  rule_id: any
-  detector_id: any
-  --description: any
-  expression: any
-  language: any
-  outcomes: any
-  --tags: any
-]: any -> record<rule: record<detectorId: record, ruleId: record, ruleVersion: record>> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  rule_id: string # The rule ID.
+  detector_id: string # The detector ID for the rule's parent detector.
+  --description: string # The rule description.
+  expression: string # The rule expression. (format: password)
+  language: string@language-completer # The language of the rule.
+  outcomes: list<string> # The outcome or outcomes returned when the rule expression matches.
+  --tags: list # A collection of key and value pairs. — item shape: {key: string, value: string}
+]: any -> record<rule: record<detectorId: string, ruleId: string, ruleVersion: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.CreateRule")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ruleId": $rule_id, "detectorId": $detector_id, "description": $description, "expression": $expression, "language": $language, "outcomes": $outcomes, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -764,6 +801,7 @@ export def "create-rule" [
 #
 # POST /
 # operationId: CreateVariable
+# --tags item shape: {key: string, value: string}
 export def "create-variable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -781,18 +819,19 @@ export def "create-variable" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  name: any
-  data_type: any
-  data_source: any
-  default_value: any
-  --description: any
-  --variable-type: any
-  --tags: any
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  name: string # The name of the variable.
+  data_type: string@data-type-completer # The data type.
+  data_source: string@data-source-completer # The source of the data.
+  default_value: string # The default value for the variable when no value is received.
+  --description: string # The description.
+  --variable-type: string # The variable type. For more information see Variable types (https://docs.aws.amazon.com/frauddetector/latest/ug/create-a-variable.html#variable-types). Valid Values: AUTH_CODE | AVS | BILLING_ADDRESS_L1 | BILLING_ADDRESS_L2 | BILLING_CITY | BILLING_COUNTRY | BILLING_NAME | BILLING_PHONE | BILLING_STATE | BILLING_ZIP | CARD_BIN | CATEGORICAL | CURRENCY_CODE | EMAIL_ADDRESS | FINGERPRINT | FRAUD_LABEL | FREE_FORM_TEXT | IP_ADDRESS | NUMERIC | ORDER_ID | PAYMENT_TYPE | PHONE_NUMBER | PRICE | PRODUCT_CATEGORY | SHIPPING_ADDRESS_L1 | SHIPPING_ADDRESS_L2 | SHIPPING_CITY | SHIPPING_COUNTRY | SHIPPING_NAME | SHIPPING_PHONE | SHIPPING_STATE | SHIPPING_ZIP | USERAGENT
+  --tags: list # A collection of key and value pairs. — item shape: {key: string, value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.CreateVariable")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name, "dataType": $data_type, "dataSource": $data_source, "defaultValue": $default_value, "description": $description, "variableType": $variable_type, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -835,12 +874,13 @@ export def "delete-batch-import-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  job_id: any
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  job_id: string # The ID of the batch import job to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.DeleteBatchImportJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"jobId": $job_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -883,12 +923,13 @@ export def "delete-batch-prediction-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  job_id: any
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  job_id: string # The ID of the batch prediction job to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.DeleteBatchPredictionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"jobId": $job_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -931,12 +972,13 @@ export def "delete-detector" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  detector_id: any
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  detector_id: string # The ID of the detector to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.DeleteDetector")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"detectorId": $detector_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -979,13 +1021,14 @@ export def "delete-detector-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  detector_id: any
-  detector_version_id: any
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  detector_id: string # The ID of the parent detector for the detector version to delete.
+  detector_version_id: string # The ID of the detector version to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.DeleteDetectorVersion")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"detectorId": $detector_id, "detectorVersionId": $detector_version_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1028,12 +1071,13 @@ export def "delete-entity-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  name: any
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  name: string # The name of the entity type to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.DeleteEntityType")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1076,14 +1120,15 @@ export def "delete-event" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  event_id: any
-  event_type_name: any
-  --delete-audit-history: any
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  event_id: string # The ID of the event to delete.
+  event_type_name: string # The name of the event type.
+  --delete-audit-history: oneof<nothing, bool> # Specifies whether or not to delete any predictions associated with the event.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.DeleteEvent")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"eventId": $event_id, "eventTypeName": $event_type_name, "deleteAuditHistory": $delete_audit_history} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1126,12 +1171,13 @@ export def "delete-event-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  name: any
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  name: string # The name of the event type to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.DeleteEventType")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1174,12 +1220,13 @@ export def "delete-events-by-event-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  event_type_name: any
-]: any -> record<eventTypeName: record, eventsDeletionStatus: record> {
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  event_type_name: string # The name of the event type.
+]: any -> record<eventTypeName: string, eventsDeletionStatus: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.DeleteEventsByEventType")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"eventTypeName": $event_type_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1222,12 +1269,13 @@ export def "delete-external-model" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  model_endpoint: any
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  model_endpoint: string # The endpoint of the Amazon Sagemaker model to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.DeleteExternalModel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"modelEndpoint": $model_endpoint} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1270,12 +1318,13 @@ export def "delete-label" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  name: any
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  name: string # The name of the label to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.DeleteLabel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1318,12 +1367,13 @@ export def "delete-list" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  name: any
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  name: string # The name of the list to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.DeleteList")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1366,13 +1416,14 @@ export def "delete-model" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  model_id: any
-  model_type: any
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  model_id: string # The model ID of the model to delete.
+  model_type: string@model-type-completer # The model type of the model to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.DeleteModel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"modelId": $model_id, "modelType": $model_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1415,14 +1466,15 @@ export def "delete-model-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  model_id: any
-  model_type: any
-  model_version_number: any
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  model_id: string # The model ID of the model version to delete.
+  model_type: string@model-type-completer # The model type of the model version to delete.
+  model_version_number: string # The model version number of the model version to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.DeleteModelVersion")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"modelId": $model_id, "modelType": $model_type, "modelVersionNumber": $model_version_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1465,12 +1517,13 @@ export def "delete-outcome" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  name: any
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  name: string # The name of the outcome to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.DeleteOutcome")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1496,7 +1549,7 @@ export def "delete-outcome" [
 #
 # POST /
 # operationId: DeleteRule
-# --rule shape: {detectorId: any, ruleId: any, ruleVersion: any}
+# --rule shape: {detectorId: string, ruleId: string, ruleVersion: string}
 export def "delete-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1514,12 +1567,13 @@ export def "delete-rule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-26
-  rule: record # A rule. — shape: {detectorId: any, ruleId: any, ruleVersion: any}
+  --x-amz-target: string@x-amz-target-completer-26 # required
+  rule: record # A rule. — shape: {detectorId: string, ruleId: string, ruleVersion: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.DeleteRule")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"rule": $rule} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1562,12 +1616,13 @@ export def "delete-variable" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-27
-  name: any
+  --x-amz-target: string@x-amz-target-completer-27 # required
+  name: string # The name of the variable to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.DeleteVariable")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1610,14 +1665,15 @@ export def "describe-detector" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-28
-  detector_id: any
-  --next-token: any
-  --max-results: any
-]: any -> record<detectorId: record, detectorVersionSummaries: record, nextToken: record, arn: record> {
+  --x-amz-target: string@x-amz-target-completer-28 # required
+  detector_id: string # The detector ID.
+  --next-token: string # The next token from the previous response.
+  --max-results: int # The maximum number of results to return for the request.
+]: any -> record<detectorId: string, detectorVersionSummaries: table<detectorVersionId: string, status: string, description: string, lastUpdatedTime: string>, nextToken: string, arn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.DescribeDetector")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"detectorId": $detector_id, "nextToken": $next_token, "maxResults": $max_results} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1662,16 +1718,17 @@ export def "describe-model-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-29
-  --model-id: any
-  --model-version-number: any
-  --model-type: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<modelVersionDetails: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-29 # required
+  --model-id: string # The model ID.
+  --model-version-number: string # The model version number.
+  --model-type: string@model-type-completer # The model type.
+  --next-token-body: string # The next token from the previous results. (body field)
+  --max-results-body: int # The maximum number of results to return. (body field)
+]: any -> record<modelVersionDetails: table<modelId: string, modelType: string, modelVersionNumber: string, status: string, trainingDataSource: string, trainingDataSchema: record, externalEventsDetail: record, ingestedEventsDetail: record, trainingResult: record, lastUpdatedTime: string, createdTime: string, arn: string, trainingResultV2: record>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.DescribeModelVersions")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"modelId": $model_id, "modelVersionNumber": $model_version_number, "modelType": $model_type, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -1717,14 +1774,15 @@ export def "get-batch-import-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-30
-  --job-id: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<batchImports: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-30 # required
+  --job-id: string # The ID of the batch import job to get.
+  --max-results-body: int # The maximum number of objects to return for request. (body field)
+  --next-token-body: string # The next token from the previous request. (body field)
+]: any -> record<batchImports: table<jobId: string, status: string, failureReason: string, startTime: string, completionTime: string, inputPath: string, outputPath: string, eventTypeName: string, iamRoleArn: string, arn: string, processedRecordsCount: int, failedRecordsCount: int, totalRecordsCount: int>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.GetBatchImportJobs")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"jobId": $job_id, "maxResults": $max_results_body, "nextToken": $next_token_body} | compact
@@ -1770,14 +1828,15 @@ export def "get-batch-prediction-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-31
-  --job-id: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<batchPredictions: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-31 # required
+  --job-id: string # The batch prediction job for which to get the details.
+  --max-results-body: int # The maximum number of objects to return for the request. (body field)
+  --next-token-body: string # The next token from the previous request. (body field)
+]: any -> record<batchPredictions: table<jobId: string, status: string, failureReason: string, startTime: string, completionTime: string, lastHeartbeatTime: string, inputPath: string, outputPath: string, eventTypeName: string, detectorName: string, detectorVersion: string, iamRoleArn: string, arn: string, processedRecordsCount: int, totalRecordsCount: int>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.GetBatchPredictionJobs")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"jobId": $job_id, "maxResults": $max_results_body, "nextToken": $next_token_body} | compact
@@ -1821,12 +1880,13 @@ export def "get-delete-events-by-event-type-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-32
-  event_type_name: any
-]: any -> record<eventTypeName: record, eventsDeletionStatus: record> {
+  --x-amz-target: string@x-amz-target-completer-32 # required
+  event_type_name: string # Name of event type for which to get the deletion status.
+]: any -> record<eventTypeName: string, eventsDeletionStatus: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.GetDeleteEventsByEventTypeStatus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"eventTypeName": $event_type_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1869,13 +1929,14 @@ export def "get-detector-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-33
-  detector_id: any
-  detector_version_id: any
-]: any -> record<detectorId: record, detectorVersionId: record, description: record, externalModelEndpoints: record, modelVersions: record, rules: record, status: record, lastUpdatedTime: record, createdTime: record, ruleExecutionMode: record, arn: record> {
+  --x-amz-target: string@x-amz-target-completer-33 # required
+  detector_id: string # The detector ID.
+  detector_version_id: string # The detector version ID.
+]: any -> record<detectorId: string, detectorVersionId: string, description: string, externalModelEndpoints: list<string>, modelVersions: table<modelId: string, modelType: string, modelVersionNumber: string, arn: string>, rules: table<detectorId: string, ruleId: string, ruleVersion: string>, status: string, lastUpdatedTime: string, createdTime: string, ruleExecutionMode: string, arn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.GetDetectorVersion")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"detectorId": $detector_id, "detectorVersionId": $detector_version_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1920,14 +1981,15 @@ export def "get-detectors" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-34
-  --detector-id: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<detectors: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-34 # required
+  --detector-id: string # The detector ID.
+  --next-token-body: string # The next token for the subsequent request. (body field)
+  --max-results-body: int # The maximum number of objects to return for the request. (body field)
+]: any -> record<detectors: table<detectorId: string, description: string, eventTypeName: string, lastUpdatedTime: string, createdTime: string, arn: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.GetDetectors")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"detectorId": $detector_id, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -1973,14 +2035,15 @@ export def "get-entity-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-35
-  --name: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<entityTypes: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-35 # required
+  --name: string # The name.
+  --next-token-body: string # The next token for the subsequent request. (body field)
+  --max-results-body: int # The maximum number of objects to return for the request. (body field)
+]: any -> record<entityTypes: table<name: string, description: string, lastUpdatedTime: string, createdTime: string, arn: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.GetEntityTypes")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"name": $name, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -2024,13 +2087,14 @@ export def "get-event" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-36
-  event_id: any
-  event_type_name: any
-]: any -> record<event: record<eventId: record, eventTypeName: record, eventTimestamp: record, eventVariables: record, currentLabel: record, labelTimestamp: record, entities: record>> {
+  --x-amz-target: string@x-amz-target-completer-36 # required
+  event_id: string # The ID of the event to retrieve.
+  event_type_name: string # The event type of the event to retrieve.
+]: any -> record<event: record<eventId: string, eventTypeName: string, eventTimestamp: string, eventVariables: record, currentLabel: string, labelTimestamp: string, entities: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.GetEvent")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"eventId": $event_id, "eventTypeName": $event_type_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2056,6 +2120,7 @@ export def "get-event" [
 #
 # POST /
 # operationId: GetEventPrediction
+# --entities item shape: {entityType: string, entityId: string}
 export def "get-event-prediction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2073,19 +2138,20 @@ export def "get-event-prediction" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-37
-  detector_id: any
-  --detector-version-id: any
-  event_id: any
-  event_type_name: any
-  entities: any
-  event_timestamp: any
-  event_variables: any
-  --external-model-endpoint-data-blobs: any
-]: any -> record<modelScores: record, ruleResults: record, externalModelOutputs: record> {
+  --x-amz-target: string@x-amz-target-completer-37 # required
+  detector_id: string # The detector ID.
+  --detector-version-id: string # The detector version ID.
+  event_id: string # The unique ID used to identify the event.
+  event_type_name: string # The event type associated with the detector specified for the prediction.
+  entities: list # The entity type (associated with the detector's event type) and specific entity ID representing who performed the event. If an entity id is not available, use "UNKNOWN." — item shape: {entityType: string, entityId: string}
+  event_timestamp: string # Timestamp that defines when the event under evaluation occurred. The timestamp must be specified using ISO 8601 standard in UTC.
+  event_variables: record # Names of the event type's variables you defined in Amazon Fraud Detector to represent data elements and their corresponding values for the event you are sending for evaluation. You must provide at least one eventVariable To ensure most accurate fraud prediction and to simplify your data preparation, Amazon Fraud Detector will replace all missing variables or values as follows: For Amazon Fraud Detector trained models: If a null value is provided explicitly for a variable or if a variable is missing, model will replace the null value or the missing variable (no variable name in the eventVariables map) with calculated default mean/medians for numeric variables and with special values for categorical variables. For imported SageMaker models: If a null value is provided explicitly for a variable, the model and rules will use “null” as the value. If a variable is not provided (no variable name in the eventVariables map), model and rules will use the default value that is provided for the variable.
+  --external-model-endpoint-data-blobs: record # The Amazon SageMaker model endpoint input data blobs.
+]: any -> record<modelScores: table<modelVersion: record, scores: record>, ruleResults: table<ruleId: string, outcomes: list>, externalModelOutputs: table<externalModel: record, outputs: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.GetEventPrediction")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"detectorId": $detector_id, "detectorVersionId": $detector_version_id, "eventId": $event_id, "eventTypeName": $event_type_name, "entities": $entities, "eventTimestamp": $event_timestamp, "eventVariables": $event_variables, "externalModelEndpointDataBlobs": $external_model_endpoint_data_blobs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2128,16 +2194,17 @@ export def "get-event-prediction-metadata" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-38
-  event_id: any
-  event_type_name: any
-  detector_id: any
-  detector_version_id: any
-  prediction_timestamp: any
-]: any -> record<eventId: record, eventTypeName: record, entityId: record, entityType: record, eventTimestamp: record, detectorId: record, detectorVersionId: record, detectorVersionStatus: record, eventVariables: record, rules: record, ruleExecutionMode: record, outcomes: record, evaluatedModelVersions: record, evaluatedExternalModels: record, predictionTimestamp: record> {
+  --x-amz-target: string@x-amz-target-completer-38 # required
+  event_id: string # The event ID.
+  event_type_name: string # The event type associated with the detector specified for the prediction.
+  detector_id: string # The detector ID.
+  detector_version_id: string # The detector version ID.
+  prediction_timestamp: string # The timestamp that defines when the prediction was generated. The timestamp must be specified using ISO 8601 standard in UTC. We recommend calling ListEventPredictions (https://docs.aws.amazon.com/frauddetector/latest/api/API_ListEventPredictions.html) first, and using the predictionTimestamp value in the response to provide an accurate prediction timestamp value.
+]: any -> record<eventId: string, eventTypeName: string, entityId: string, entityType: string, eventTimestamp: string, detectorId: string, detectorVersionId: string, detectorVersionStatus: string, eventVariables: table<name: string, value: string, source: string>, rules: table<ruleId: string, ruleVersion: string, expression: string, expressionWithValues: string, outcomes: list, evaluated: bool, matched: bool>, ruleExecutionMode: string, outcomes: list<string>, evaluatedModelVersions: table<modelId: string, modelVersion: string, modelType: string, evaluations: list>, evaluatedExternalModels: table<modelEndpoint: string, useEventVariables: bool, inputVariables: record, outputVariables: record>, predictionTimestamp: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.GetEventPredictionMetadata")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"eventId": $event_id, "eventTypeName": $event_type_name, "detectorId": $detector_id, "detectorVersionId": $detector_version_id, "predictionTimestamp": $prediction_timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2182,14 +2249,15 @@ export def "get-event-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-39
-  --name: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<eventTypes: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-39 # required
+  --name: string # The name.
+  --next-token-body: string # The next token for the subsequent request. (body field)
+  --max-results-body: int # The maximum number of objects to return for the request. (body field)
+]: any -> record<eventTypes: table<name: string, description: string, eventVariables: list, labels: list, entityTypes: list, eventIngestion: string, ingestedEventStatistics: record, lastUpdatedTime: string, createdTime: string, arn: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.GetEventTypes")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"name": $name, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -2235,14 +2303,15 @@ export def "get-external-models" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-40
-  --model-endpoint: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<externalModels: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-40 # required
+  --model-endpoint: string # The Amazon SageMaker model endpoint.
+  --next-token-body: string # The next page token for the request. (body field)
+  --max-results-body: int # The maximum number of objects to return for the request. (body field)
+]: any -> record<externalModels: table<modelEndpoint: string, modelSource: string, invokeModelEndpointRoleArn: string, inputConfiguration: record, outputConfiguration: record, modelEndpointStatus: string, lastUpdatedTime: string, createdTime: string, arn: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.GetExternalModels")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"modelEndpoint": $model_endpoint, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -2286,10 +2355,11 @@ export def "get-kms-encryption-key" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-41
-]: nothing -> record<kmsKey: record<kmsEncryptionKeyArn: record>> {
+  --x-amz-target: string@x-amz-target-completer-41 # required
+]: nothing -> record<kmsKey: record<kmsEncryptionKeyArn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.GetKMSEncryptionKey")
   let full_url = (build-url $base "/" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2332,14 +2402,15 @@ export def "get-labels" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-42
-  --name: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<labels: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-42 # required
+  --name: string # The name of the label or labels to get.
+  --next-token-body: string # The next token for the subsequent request. (body field)
+  --max-results-body: int # The maximum number of objects to return for the request. (body field)
+]: any -> record<labels: table<name: string, description: string, lastUpdatedTime: string, createdTime: string, arn: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.GetLabels")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"name": $name, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -2385,14 +2456,15 @@ export def "get-list-elements" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-43
-  name: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<elements: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-43 # required
+  name: string # The name of the list.
+  --next-token-body: string # The next token for the subsequent request. (body field)
+  --max-results-body: int # The maximum number of objects to return for the request. (body field)
+]: any -> record<elements: list<string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.GetListElements")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"name": $name, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -2438,14 +2510,15 @@ export def "get-lists-metadata" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-44
-  --name: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<lists: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-44 # required
+  --name: string # The name of the list.
+  --next-token-body: string # The next token for the subsequent request. (body field)
+  --max-results-body: int # The maximum number of objects to return for the request. (body field)
+]: any -> record<lists: table<name: string, description: string, variableType: string, createdTime: string, updatedTime: string, arn: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.GetListsMetadata")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"name": $name, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -2489,14 +2562,15 @@ export def "get-model-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-45
-  model_id: any
-  model_type: any
-  model_version_number: any
-]: any -> record<modelId: record, modelType: record, modelVersionNumber: record, trainingDataSource: record, trainingDataSchema: record<modelVariables: record, labelSchema: record<labelMapper: record, unlabeledEventsTreatment: record>>, externalEventsDetail: record<dataLocation: record, dataAccessRoleArn: record>, ingestedEventsDetail: record<ingestedEventsTimeWindow: record<startTime: record, endTime: record>>, status: record, arn: record> {
+  --x-amz-target: string@x-amz-target-completer-45 # required
+  model_id: string # The model ID.
+  model_type: string@model-type-completer # The model type.
+  model_version_number: string # The model version number.
+]: any -> record<modelId: string, modelType: string, modelVersionNumber: string, trainingDataSource: string, trainingDataSchema: record<modelVariables: list<string>, labelSchema: record<labelMapper: record, unlabeledEventsTreatment: string>>, externalEventsDetail: record<dataLocation: string, dataAccessRoleArn: string>, ingestedEventsDetail: record<ingestedEventsTimeWindow: record<startTime: string, endTime: string>>, status: string, arn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.GetModelVersion")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"modelId": $model_id, "modelType": $model_type, "modelVersionNumber": $model_version_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2541,15 +2615,16 @@ export def "get-models" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-46
-  --model-id: any
-  --model-type: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<nextToken: record, models: record> {
+  --x-amz-target: string@x-amz-target-completer-46 # required
+  --model-id: string # The model ID.
+  --model-type: string@model-type-completer # The model type.
+  --next-token-body: string # The next token for the subsequent request. (body field)
+  --max-results-body: int # The maximum number of objects to return for the request. (body field)
+]: any -> record<nextToken: string, models: table<modelId: string, modelType: string, description: string, eventTypeName: string, createdTime: string, lastUpdatedTime: string, arn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.GetModels")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"modelId": $model_id, "modelType": $model_type, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -2595,14 +2670,15 @@ export def "get-outcomes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-47
-  --name: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<outcomes: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-47 # required
+  --name: string # The name of the outcome or outcomes to get.
+  --next-token-body: string # The next page token for the request. (body field)
+  --max-results-body: int # The maximum number of objects to return for the request. (body field)
+]: any -> record<outcomes: table<name: string, description: string, lastUpdatedTime: string, createdTime: string, arn: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.GetOutcomes")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"name": $name, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -2648,16 +2724,17 @@ export def "get-rules" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-48
-  --rule-id: any
-  detector_id: any
-  --rule-version: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<ruleDetails: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-48 # required
+  --rule-id: string # The rule ID.
+  detector_id: string # The detector ID.
+  --rule-version: string # The rule version.
+  --next-token-body: string # The next page token. (body field)
+  --max-results-body: int # The maximum number of rules to return for the request. (body field)
+]: any -> record<ruleDetails: table<ruleId: string, description: string, detectorId: string, ruleVersion: string, expression: string, language: string, outcomes: list, lastUpdatedTime: string, createdTime: string, arn: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.GetRules")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ruleId": $rule_id, "detectorId": $detector_id, "ruleVersion": $rule_version, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -2703,14 +2780,15 @@ export def "get-variables" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-49
-  --name: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<variables: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-49 # required
+  --name: string # The name of the variable.
+  --next-token-body: string # The next page token of the get variable request. (body field)
+  --max-results-body: int # The max size per page determined for the get variable request. (body field)
+]: any -> record<variables: table<name: string, dataType: string, dataSource: string, defaultValue: string, description: string, variableType: string, lastUpdatedTime: string, createdTime: string, arn: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.GetVariables")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"name": $name, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -2737,6 +2815,11 @@ export def "get-variables" [
 #
 # POST /
 # operationId: ListEventPredictions
+# --eventId shape: {value?: string}
+# --eventType shape: {value?: string}
+# --detectorId shape: {value?: string}
+# --detectorVersionId shape: {value?: string}
+# --predictionTimeRange shape: {startTime: string, endTime: string}
 export def "list-event-predictions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2756,18 +2839,19 @@ export def "list-event-predictions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-50
-  --event-id: any
-  --event-type: any
-  --detector-id: any
-  --detector-version-id: any
-  --prediction-time-range: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<eventPredictionSummaries: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-50 # required
+  --event-id: record # A conditional statement for filtering a list of past predictions. — shape: {value?: string}
+  --event-type: record # A conditional statement for filtering a list of past predictions. — shape: {value?: string}
+  --detector-id: record # A conditional statement for filtering a list of past predictions. — shape: {value?: string}
+  --detector-version-id: record # A conditional statement for filtering a list of past predictions. — shape: {value?: string}
+  --prediction-time-range: record # The time period for when the predictions were generated. — shape: {startTime: string, endTime: string}
+  --next-token-body: string # Identifies the next page of results to return. Use the token to make the call again to retrieve the next page. Keep all other arguments unchanged. Each pagination token expires after 24 hours. (body field)
+  --max-results-body: int # The maximum number of predictions to return for the request. (body field)
+]: any -> record<eventPredictionSummaries: table<eventId: string, eventTypeName: string, eventTimestamp: string, predictionTimestamp: string, detectorId: string, detectorVersionId: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.ListEventPredictions")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"eventId": $event_id, "eventType": $event_type, "detectorId": $detector_id, "detectorVersionId": $detector_version_id, "predictionTimeRange": $prediction_time_range, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -2813,14 +2897,15 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-51
-  resource_arn: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<tags: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-51 # required
+  resource_arn: string # The ARN that specifies the resource whose tags you want to list.
+  --next-token-body: string # The next token from the previous results. (body field)
+  --max-results-body: int # The maximum number of objects to return for the request. (body field)
+]: any -> record<tags: table<key: string, value: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.ListTagsForResource")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"resourceARN": $resource_arn, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -2847,6 +2932,7 @@ export def "list-tags-for-resource" [
 #
 # POST /
 # operationId: PutDetector
+# --tags item shape: {key: string, value: string}
 export def "put-detector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2864,15 +2950,16 @@ export def "put-detector" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-52
-  detector_id: any
-  --description: any
-  event_type_name: any
-  --tags: any
+  --x-amz-target: string@x-amz-target-completer-52 # required
+  detector_id: string # The detector ID.
+  --description: string # The description of the detector.
+  event_type_name: string # The name of the event type.
+  --tags: list # A collection of key and value pairs. — item shape: {key: string, value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.PutDetector")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"detectorId": $detector_id, "description": $description, "eventTypeName": $event_type_name, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2898,6 +2985,7 @@ export def "put-detector" [
 #
 # POST /
 # operationId: PutEntityType
+# --tags item shape: {key: string, value: string}
 export def "put-entity-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2915,14 +3003,15 @@ export def "put-entity-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-53
-  name: any
-  --description: any
-  --tags: any
+  --x-amz-target: string@x-amz-target-completer-53 # required
+  name: string # The name of the entity type.
+  --description: string # The description.
+  --tags: list # A collection of key and value pairs. — item shape: {key: string, value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.PutEntityType")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name, "description": $description, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2948,6 +3037,7 @@ export def "put-entity-type" [
 #
 # POST /
 # operationId: PutEventType
+# --tags item shape: {key: string, value: string}
 export def "put-event-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2965,18 +3055,19 @@ export def "put-event-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-54
-  name: any
-  --description: any
-  event_variables: any
-  --labels: any
-  entity_types: any
-  --event-ingestion: any
-  --tags: any
+  --x-amz-target: string@x-amz-target-completer-54 # required
+  name: string # The name.
+  --description: string # The description of the event type.
+  event_variables: list<string> # The event type variables.
+  --labels: list<string> # The event type labels.
+  entity_types: list<string> # The entity type for the event type. Example entity types: customer, merchant, account.
+  --event-ingestion: string@event-ingestion-completer # Specifies if ingenstion is enabled or disabled.
+  --tags: list # A collection of key and value pairs. — item shape: {key: string, value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.PutEventType")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name, "description": $description, "eventVariables": $event_variables, "labels": $labels, "entityTypes": $entity_types, "eventIngestion": $event_ingestion, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3002,6 +3093,9 @@ export def "put-event-type" [
 #
 # POST /
 # operationId: PutExternalModel
+# --inputConfiguration shape: {eventTypeName?: string, format?: "TEXT_CSV"|"APPLICATION_JSON", useEventVariables: bool, jsonInputTemplate?: string, csvInputTemplate?: string}
+# --outputConfiguration shape: {format: "TEXT_CSV"|"APPLICATION_JSONLINES", jsonKeyToVariableMap?: record, csvIndexToVariableMap?: record}
+# --tags item shape: {key: string, value: string}
 export def "put-external-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3019,18 +3113,19 @@ export def "put-external-model" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-55
-  model_endpoint: any
-  model_source: any
-  invoke_model_endpoint_role_arn: any
-  input_configuration: any
-  output_configuration: any
-  model_endpoint_status: any
-  --tags: any
+  --x-amz-target: string@x-amz-target-completer-55 # required
+  model_endpoint: string # The model endpoints name.
+  model_source: string@model-source-completer # The source of the model.
+  invoke_model_endpoint_role_arn: string # The IAM role used to invoke the model endpoint.
+  input_configuration: record # The Amazon SageMaker model input configuration. — shape: {eventTypeName?: string, format?: "TEXT_CSV"|"APPLICATION_JSON", useEventVariables: bool, jsonInputTemplate?: string, csvInputTemplate?: string}
+  output_configuration: record # Provides the Amazon Sagemaker model output configuration. — shape: {format: "TEXT_CSV"|"APPLICATION_JSONLINES", jsonKeyToVariableMap?: record, csvIndexToVariableMap?: record}
+  model_endpoint_status: string@model-endpoint-status-completer # The model endpoint’s status in Amazon Fraud Detector.
+  --tags: list # A collection of key and value pairs. — item shape: {key: string, value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.PutExternalModel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"modelEndpoint": $model_endpoint, "modelSource": $model_source, "invokeModelEndpointRoleArn": $invoke_model_endpoint_role_arn, "inputConfiguration": $input_configuration, "outputConfiguration": $output_configuration, "modelEndpointStatus": $model_endpoint_status, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3073,12 +3168,13 @@ export def "put-kms-encryption-key" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-56
-  kms_encryption_key_arn: any
+  --x-amz-target: string@x-amz-target-completer-56 # required
+  kms_encryption_key_arn: string # The KMS encryption key ARN. The KMS key must be single-Region key. Amazon Fraud Detector does not support multi-Region KMS key.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.PutKMSEncryptionKey")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"kmsEncryptionKeyArn": $kms_encryption_key_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3104,6 +3200,7 @@ export def "put-kms-encryption-key" [
 #
 # POST /
 # operationId: PutLabel
+# --tags item shape: {key: string, value: string}
 export def "put-label" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3121,14 +3218,15 @@ export def "put-label" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-57
-  name: any
-  --description: any
-  --tags: any
+  --x-amz-target: string@x-amz-target-completer-57 # required
+  name: string # The label name.
+  --description: string # The label description.
+  --tags: list # item shape: {key: string, value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.PutLabel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name, "description": $description, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3154,6 +3252,7 @@ export def "put-label" [
 #
 # POST /
 # operationId: PutOutcome
+# --tags item shape: {key: string, value: string}
 export def "put-outcome" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3171,14 +3270,15 @@ export def "put-outcome" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-58
-  name: any
-  --description: any
-  --tags: any
+  --x-amz-target: string@x-amz-target-completer-58 # required
+  name: string # The name of the outcome.
+  --description: string # The outcome description.
+  --tags: list # A collection of key and value pairs. — item shape: {key: string, value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.PutOutcome")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name, "description": $description, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3204,6 +3304,7 @@ export def "put-outcome" [
 #
 # POST /
 # operationId: SendEvent
+# --entities item shape: {entityType: string, entityId: string}
 export def "send-event" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3221,18 +3322,19 @@ export def "send-event" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-59
-  event_id: any
-  event_type_name: any
-  event_timestamp: any
-  event_variables: any
-  --assigned-label: any
-  --label-timestamp: any
-  entities: any
+  --x-amz-target: string@x-amz-target-completer-59 # required
+  event_id: string # The event ID to upload.
+  event_type_name: string # The event type name of the event.
+  event_timestamp: string # The timestamp that defines when the event under evaluation occurred. The timestamp must be specified using ISO 8601 standard in UTC.
+  event_variables: record # Names of the event type's variables you defined in Amazon Fraud Detector to represent data elements and their corresponding values for the event you are sending for evaluation.
+  --assigned-label: string # The label to associate with the event. Required if specifying labelTimestamp.
+  --label-timestamp: string # The timestamp associated with the label. Required if specifying assignedLabel.
+  entities: list # An array of entities. — item shape: {entityType: string, entityId: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.SendEvent")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"eventId": $event_id, "eventTypeName": $event_type_name, "eventTimestamp": $event_timestamp, "eventVariables": $event_variables, "assignedLabel": $assigned_label, "labelTimestamp": $label_timestamp, "entities": $entities} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3258,6 +3360,7 @@ export def "send-event" [
 #
 # POST /
 # operationId: TagResource
+# --tags item shape: {key: string, value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3275,13 +3378,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-60
-  resource_arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-60 # required
+  resource_arn: string # The resource ARN.
+  tags: list # The tags to assign to the resource. — item shape: {key: string, value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceARN": $resource_arn, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3324,13 +3428,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-61
-  resource_arn: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-61 # required
+  resource_arn: string # The ARN of the resource from which to remove the tag.
+  tag_keys: list<string> # The resource ARN.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceARN": $resource_arn, "tagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3356,6 +3461,8 @@ export def "untag-resource" [
 #
 # POST /
 # operationId: UpdateDetectorVersion
+# --rules item shape: {detectorId: string, ruleId: string, ruleVersion: string}
+# --modelVersions item shape: {modelId: string, modelType: "ONLINE_FRAUD_INSIGHTS"|"TRANSACTION_FRAUD_INSIGHTS"|"ACCOUNT_TAKEOVER_INSIGHTS", modelVersionNumber: string, arn?: string}
 export def "update-detector-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3373,18 +3480,19 @@ export def "update-detector-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-62
-  detector_id: any
-  detector_version_id: any
-  external_model_endpoints: any
-  rules: any
-  --description: any
-  --model-versions: any
-  --rule-execution-mode: any
+  --x-amz-target: string@x-amz-target-completer-62 # required
+  detector_id: string # The parent detector ID for the detector version you want to update.
+  detector_version_id: string # The detector version ID.
+  external_model_endpoints: list<string> # The Amazon SageMaker model endpoints to include in the detector version.
+  rules: list # The rules to include in the detector version. — item shape: {detectorId: string, ruleId: string, ruleVersion: string}
+  --description: string # The detector version description.
+  --model-versions: list # The model versions to include in the detector version. — item shape: {modelId: string, modelType: "ONLINE_FRAUD_INSIGHTS"|"TRANSACTION_FRAUD_INSIGHTS"|"ACCOUNT_TAKEOVER_INSIGHTS", modelVersionNumber: string, arn?: string}
+  --rule-execution-mode: string@rule-execution-mode-completer # The rule execution mode to add to the detector. If you specify FIRST_MATCHED, Amazon Fraud Detector evaluates rules sequentially, first to last, stopping at the first matched rule. Amazon Fraud dectector then provides the outcomes for that single rule. If you specifiy ALL_MATCHED, Amazon Fraud Detector evaluates all rules and returns the outcomes for all matched rules. You can define and edit the rule mode at the detector version level, when it is in draft status. The default behavior is FIRST_MATCHED.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.UpdateDetectorVersion")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"detectorId": $detector_id, "detectorVersionId": $detector_version_id, "externalModelEndpoints": $external_model_endpoints, "rules": $rules, "description": $description, "modelVersions": $model_versions, "ruleExecutionMode": $rule_execution_mode} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3427,14 +3535,15 @@ export def "update-detector-version-metadata" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-63
-  detector_id: any
-  detector_version_id: any
-  description: any
+  --x-amz-target: string@x-amz-target-completer-63 # required
+  detector_id: string # The detector ID.
+  detector_version_id: string # The detector version ID.
+  description: string # The description.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.UpdateDetectorVersionMetadata")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"detectorId": $detector_id, "detectorVersionId": $detector_version_id, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3477,14 +3586,15 @@ export def "update-detector-version-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-64
-  detector_id: any
-  detector_version_id: any
-  status: any
+  --x-amz-target: string@x-amz-target-completer-64 # required
+  detector_id: string # The detector ID.
+  detector_version_id: string # The detector version ID.
+  status: string@status-completer # The new status. The only supported values are ACTIVE and INACTIVE
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.UpdateDetectorVersionStatus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"detectorId": $detector_id, "detectorVersionId": $detector_version_id, "status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3527,15 +3637,16 @@ export def "update-event-label" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-65
-  event_id: any
-  event_type_name: any
-  assigned_label: any
-  label_timestamp: any
+  --x-amz-target: string@x-amz-target-completer-65 # required
+  event_id: string # The ID of the event associated with the label to update.
+  event_type_name: string # The event type of the event associated with the label to update.
+  assigned_label: string # The new label to assign to the event.
+  label_timestamp: string # The timestamp associated with the label. The timestamp must be specified using ISO 8601 standard in UTC.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.UpdateEventLabel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"eventId": $event_id, "eventTypeName": $event_type_name, "assignedLabel": $assigned_label, "labelTimestamp": $label_timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3578,16 +3689,17 @@ export def "update-list" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-66
-  name: any
-  --elements: any
-  --description: any
-  --update-mode: any
-  --variable-type: any
+  --x-amz-target: string@x-amz-target-completer-66 # required
+  name: string # The name of the list to update.
+  --elements: list<string> # One or more list elements to add or replace. If you are providing the elements, make sure to specify the updateMode to use. If you are deleting all elements from the list, use REPLACE for the updateMode and provide an empty list (0 elements).
+  --description: string # The new description.
+  --update-mode: string@update-mode-completer # The update mode (type). Use APPEND if you are adding elements to the list. Use REPLACE if you replacing existing elements in the list. Use REMOVE if you are removing elements from the list.
+  --variable-type: string # The variable type you want to assign to the list. You cannot update a variable type of a list that already has a variable type assigned to it. You can assign a variable type to a list only if the list does not already have a variable type.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.UpdateList")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name, "elements": $elements, "description": $description, "updateMode": $update_mode, "variableType": $variable_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3630,14 +3742,15 @@ export def "update-model" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-67
-  model_id: any
-  model_type: any
-  --description: any
+  --x-amz-target: string@x-amz-target-completer-67 # required
+  model_id: string # The model ID.
+  model_type: string@model-type-completer # The model type.
+  --description: string # The new model description.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.UpdateModel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"modelId": $model_id, "modelType": $model_type, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3663,6 +3776,9 @@ export def "update-model" [
 #
 # POST /
 # operationId: UpdateModelVersion
+# --externalEventsDetail shape: {dataLocation: string, dataAccessRoleArn: string}
+# --ingestedEventsDetail shape: {ingestedEventsTimeWindow: record}
+# --tags item shape: {key: string, value: string}
 export def "update-model-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3680,17 +3796,18 @@ export def "update-model-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-68
-  model_id: any
-  model_type: any
-  major_version_number: any
-  --external-events-detail: any
-  --ingested-events-detail: any
-  --tags: any
-]: any -> record<modelId: record, modelType: record, modelVersionNumber: record, status: record> {
+  --x-amz-target: string@x-amz-target-completer-68 # required
+  model_id: string # The model ID.
+  model_type: string@model-type-completer # The model type.
+  major_version_number: string # The major version number.
+  --external-events-detail: record # Details for the external events data used for model version training. — shape: {dataLocation: string, dataAccessRoleArn: string}
+  --ingested-events-detail: record # The details of the ingested event. — shape: {ingestedEventsTimeWindow: record}
+  --tags: list # A collection of key and value pairs. — item shape: {key: string, value: string}
+]: any -> record<modelId: string, modelType: string, modelVersionNumber: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.UpdateModelVersion")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"modelId": $model_id, "modelType": $model_type, "majorVersionNumber": $major_version_number, "externalEventsDetail": $external_events_detail, "ingestedEventsDetail": $ingested_events_detail, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3733,15 +3850,16 @@ export def "update-model-version-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-69
-  model_id: any
-  model_type: any
-  model_version_number: any
-  status: any
+  --x-amz-target: string@x-amz-target-completer-69 # required
+  model_id: string # The model ID of the model version to update.
+  model_type: string@model-type-completer # The model type.
+  model_version_number: string # The model version number.
+  status: string@status-completer-1 # The model version status.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.UpdateModelVersionStatus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"modelId": $model_id, "modelType": $model_type, "modelVersionNumber": $model_version_number, "status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3767,6 +3885,7 @@ export def "update-model-version-status" [
 #
 # POST /
 # operationId: UpdateRuleMetadata
+# --rule shape: {detectorId: string, ruleId: string, ruleVersion: string}
 export def "update-rule-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3784,13 +3903,14 @@ export def "update-rule-metadata" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-70
-  rule: any
-  description: any
+  --x-amz-target: string@x-amz-target-completer-70 # required
+  rule: record # A rule. — shape: {detectorId: string, ruleId: string, ruleVersion: string}
+  description: string # The rule description.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.UpdateRuleMetadata")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"rule": $rule, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3816,6 +3936,8 @@ export def "update-rule-metadata" [
 #
 # POST /
 # operationId: UpdateRuleVersion
+# --rule shape: {detectorId: string, ruleId: string, ruleVersion: string}
+# --tags item shape: {key: string, value: string}
 export def "update-rule-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3833,17 +3955,18 @@ export def "update-rule-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-71
-  rule: any
-  --description: any
-  expression: any
-  language: any
-  outcomes: any
-  --tags: any
-]: any -> record<rule: record<detectorId: record, ruleId: record, ruleVersion: record>> {
+  --x-amz-target: string@x-amz-target-completer-71 # required
+  rule: record # A rule. — shape: {detectorId: string, ruleId: string, ruleVersion: string}
+  --description: string # The description.
+  expression: string # The rule expression. (format: password)
+  language: string@language-completer # The language.
+  outcomes: list<string> # The outcomes.
+  --tags: list # The tags to assign to the rule version. — item shape: {key: string, value: string}
+]: any -> record<rule: record<detectorId: string, ruleId: string, ruleVersion: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.UpdateRuleVersion")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"rule": $rule, "description": $description, "expression": $expression, "language": $language, "outcomes": $outcomes, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3886,15 +4009,16 @@ export def "update-variable" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-72
-  name: any
-  --default-value: any
-  --description: any
-  --variable-type: any
+  --x-amz-target: string@x-amz-target-completer-72 # required
+  name: string # The name of the variable.
+  --default-value: string # The new default value of the variable.
+  --description: string # The new description.
+  --variable-type: string # The variable type. For more information see Variable types (https://docs.aws.amazon.com/frauddetector/latest/ug/create-a-variable.html#variable-types).
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSHawksNestServiceFacade.UpdateVariable")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name, "defaultValue": $default_value, "description": $description, "variableType": $variable_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

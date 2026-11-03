@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-api-key" => { {scheme: $scheme, headers: {x-api-key: $token_val}, query: "", location: "header"} }
+    "x-api-key" => { {scheme: $scheme, headers: {"x-api-key": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -138,15 +138,15 @@ export def "detect-device" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ftp-banner: string # default: 
-  --hostname: string # default: 
-  --http-response: string # default: 
-  --https-response: string # default: 
-  --nic-mac: string # default: 
-  --snmp-sysdescr: string # default: 
-  --snmp-sysoid: string # default: 
-  --telnet-banner: string # default: 
-  --upnp-response: string # default: 
+  --ftp-banner: string # default: ""
+  --hostname: string # default: ""
+  --http-response: string # default: ""
+  --https-response: string # default: ""
+  --nic-mac: string # default: ""
+  --snmp-sysdescr: string # default: ""
+  --snmp-sysoid: string # default: ""
+  --telnet-banner: string # default: ""
+  --upnp-response: string # default: ""
 ]: any -> record<cve_list: table<cve_id: string, cvss: float>, device_type: string, firmware_info: record<download_url: string, name: string, release_date: string, sha2: string, version: string>, firmware_version: string, is_discontinued: bool, latest_firmware_info: record<download_url: string, name: string, release_date: string, sha2: string, version: string>, manufacturer: string, model_name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))

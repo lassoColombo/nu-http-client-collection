@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -166,7 +166,7 @@ export def "associate-user-to-permission-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --client-token: string # Idempotence Token for API operations
-]: any -> record<statusCode: record> {
+]: any -> record<statusCode: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -217,7 +217,7 @@ export def "disassociate-user-from-permission-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<statusCode: record> {
+]: nothing -> record<statusCode: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($permission_group_id | is-empty) { error make --unspanned { msg: "path parameter 'permissionGroupId' must be non-empty" } }
@@ -268,7 +268,7 @@ export def "create-changeset" [
   change_type: string@change-type-completer # Indicates how the given change will be applied to the dataset.
   source_params: record # Source Parameters of a Changeset
   format_params: record # Format Parameters of a Changeset
-]: any -> record<datasetId: record, changesetId: record> {
+]: any -> record<datasetId: string, changesetId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -318,7 +318,7 @@ export def "list-changesets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<changesets: record, nextToken: record> {
+]: nothing -> record<changesets: table<changesetId: string, changesetArn: string, datasetId: string, changeType: string, sourceParams: record, formatParams: record, createTime: int, status: string, errorInfo: record, activeUntilTimestamp: int, activeFromTimestamp: int, updatesChangesetId: string, updatedByChangesetId: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -346,7 +346,7 @@ export def "list-changesets" [
 #
 # POST /datasets/{datasetId}/dataviewsv2
 # operationId: CreateDataView
-# --destinationTypeParams shape: {destinationType?: any, s3DestinationExportFileFormat?: any, s3DestinationExportFileFormatOptions?: any}
+# --destinationTypeParams shape: {destinationType?: string, s3DestinationExportFileFormat?: "PARQUET"|"DELIMITED_TEXT", s3DestinationExportFileFormatOptions?: record}
 export def "create-data-view" [
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -370,8 +370,8 @@ export def "create-data-view" [
   --sort-columns: list<string> # DataView Sort Column List
   --partition-columns: list<string> # DataView Partition Column List
   --as-of-timestamp: int # Milliseconds since UTC epoch
-  destination_type_params: record # Structure for the Dataview destination type parameters. — shape: {destinationType?: any, s3DestinationExportFileFormat?: any, s3DestinationExportFileFormatOptions?: any}
-]: any -> record<datasetId: record, dataViewId: record> {
+  destination_type_params: record # Structure for the Dataview destination type parameters. — shape: {destinationType?: string, s3DestinationExportFileFormat?: "PARQUET"|"DELIMITED_TEXT", s3DestinationExportFileFormatOptions?: record}
+]: any -> record<datasetId: string, dataViewId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -421,7 +421,7 @@ export def "list-data-views" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<nextToken: record, dataViews: record> {
+]: nothing -> record<nextToken: string, dataViews: table<dataViewId: string, dataViewArn: string, datasetId: string, asOfTimestamp: int, partitionColumns: list, sortColumns: list, status: string, errorInfo: record, destinationTypeProperties: record, autoUpdate: bool, createTime: int, lastModifiedTime: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -449,9 +449,9 @@ export def "list-data-views" [
 #
 # POST /datasetsv2
 # operationId: CreateDataset
-# --ownerInfo shape: {name?: any, phoneNumber?: any, email?: any}
-# --permissionGroupParams shape: {permissionGroupId?: any, datasetPermissions?: any}
-# --schemaDefinition shape: {tabularSchemaConfig?: any}
+# --ownerInfo shape: {name?: string, phoneNumber?: string, email?: string}
+# --permissionGroupParams shape: {permissionGroupId?: string, datasetPermissions?: list}
+# --schemaDefinition shape: {tabularSchemaConfig?: record}
 export def "create-dataset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -473,11 +473,11 @@ export def "create-dataset" [
   dataset_title: string # Title for a given Dataset
   kind: string@kind-completer # Dataset Kind
   --dataset-description: string # Description of a dataset
-  --owner-info: record # A structure for Dataset owner info. — shape: {name?: any, phoneNumber?: any, email?: any}
-  permission_group_params: record # Permission group parameters for Dataset permissions. Here is an example of how you could specify the PermissionGroupParams: { "permissionGroupId": "0r6fCRtSTUk4XPfXQe3M0g", "datasetPermissions": [ {"permission": "ViewDatasetDetails"}, {"permission": "AddDatasetData"}, {"permission": "EditDatasetMetadata"}, {"permission": "DeleteDataset"} ] } — shape: {permissionGroupId?: any, datasetPermissions?: any}
+  --owner-info: record # A structure for Dataset owner info. — shape: {name?: string, phoneNumber?: string, email?: string}
+  permission_group_params: record # Permission group parameters for Dataset permissions. Here is an example of how you could specify the PermissionGroupParams: { "permissionGroupId": "0r6fCRtSTUk4XPfXQe3M0g", "datasetPermissions": [ {"permission": "ViewDatasetDetails"}, {"permission": "AddDatasetData"}, {"permission": "EditDatasetMetadata"}, {"permission": "DeleteDataset"} ] } — shape: {permissionGroupId?: string, datasetPermissions?: list}
   --alias: string # The unique resource identifier for a Dataset.
-  --schema-definition: record # A union of schema types. — shape: {tabularSchemaConfig?: any}
-]: any -> record<datasetId: record> {
+  --schema-definition: record # A union of schema types. — shape: {tabularSchemaConfig?: record}
+]: any -> record<datasetId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -525,7 +525,7 @@ export def "list-datasets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<datasets: record, nextToken: record> {
+]: nothing -> record<datasets: table<datasetId: string, datasetArn: string, datasetTitle: string, kind: string, datasetDescription: string, ownerInfo: record, createTime: int, lastModifiedTime: int, schemaDefinition: record, alias: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -573,7 +573,7 @@ export def "create-permission-group" [
   --description: string # A brief description for the permission group. (format: password)
   application_permissions: list<string> # The option to indicate FinSpace application permissions that are granted to a specific group. When assigning application permissions, be aware that the permission ManageUsersAndGroups allows users to grant themselves or others access to any functionality in their FinSpace environment's application. It should only be granted to trusted users. CreateDataset – Group members can create new datasets. ManageClusters – Group members can manage Apache Spark clusters from FinSpace notebooks. ManageUsersAndGroups – Group members can manage users and permission groups. This is a privileged permission that allows users to grant themselves or others access to any functionality in the application. It should only be granted to trusted users. ManageAttributeSets – Group members can manage attribute sets. ViewAuditData – Group members can view audit data. AccessNotebooks – Group members will have access to FinSpace notebooks. GetTemporaryCredentials – Group members can get temporary API credentials.
   --client-token: string # Idempotence Token for API operations
-]: any -> record<permissionGroupId: record> {
+]: any -> record<permissionGroupId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -626,7 +626,7 @@ export def "create-user" [
   --api-access: string@api-access-completer # The option to indicate whether the user can use the GetProgrammaticAccessCredentials API to obtain credentials that can then be used to access other FinSpace Data API operations. ENABLED – The user has permissions to use the APIs. DISABLED – The user does not have permissions to use any APIs.
   --api-access-principal-arn: string # The ARN identifier of an AWS user or role that is allowed to call the GetProgrammaticAccessCredentials API to obtain a credentials token for a specific FinSpace user. This must be an IAM role within your FinSpace account.
   --client-token: string # Idempotence Token for API operations
-]: any -> record<userId: record> {
+]: any -> record<userId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -674,7 +674,7 @@ export def "delete-dataset" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<datasetId: record> {
+]: nothing -> record<datasetId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -720,7 +720,7 @@ export def "get-dataset" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<datasetId: record, datasetArn: record, datasetTitle: record, kind: record, datasetDescription: record, createTime: record, lastModifiedTime: record, schemaDefinition: record<tabularSchemaConfig: record<columns: record, primaryKeyColumns: record>>, alias: record, status: record> {
+]: nothing -> record<datasetId: string, datasetArn: string, datasetTitle: string, kind: string, datasetDescription: string, createTime: int, lastModifiedTime: int, schemaDefinition: record<tabularSchemaConfig: record<columns: list, primaryKeyColumns: list>>, alias: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -747,7 +747,7 @@ export def "get-dataset" [
 #
 # PUT /datasetsv2/{datasetId}
 # operationId: UpdateDataset
-# --schemaDefinition shape: {tabularSchemaConfig?: any}
+# --schemaDefinition shape: {tabularSchemaConfig?: record}
 export def "update-dataset" [
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -771,8 +771,8 @@ export def "update-dataset" [
   kind: string@kind-completer # Dataset Kind
   --dataset-description: string # Description of a dataset
   --alias: string # The unique resource identifier for a Dataset.
-  --schema-definition: record # A union of schema types. — shape: {tabularSchemaConfig?: any}
-]: any -> record<datasetId: record> {
+  --schema-definition: record # A union of schema types. — shape: {tabularSchemaConfig?: record}
+]: any -> record<datasetId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -821,7 +821,7 @@ export def "delete-permission-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<permissionGroupId: record> {
+]: nothing -> record<permissionGroupId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($permission_group_id | is-empty) { error make --unspanned { msg: "path parameter 'permissionGroupId' must be non-empty" } }
@@ -867,7 +867,7 @@ export def "get-permission-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<permissionGroup: record<permissionGroupId: record, name: record, description: record, applicationPermissions: record, createTime: record, lastModifiedTime: record, membershipStatus: record>> {
+]: nothing -> record<permissionGroup: record<permissionGroupId: string, name: string, description: string, applicationPermissions: list<string>, createTime: int, lastModifiedTime: int, membershipStatus: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($permission_group_id | is-empty) { error make --unspanned { msg: "path parameter 'permissionGroupId' must be non-empty" } }
@@ -916,7 +916,7 @@ export def "update-permission-group" [
   --description: string # A brief description for the permission group. (format: password)
   --application-permissions: list<string> # The permissions that are granted to a specific group for accessing the FinSpace application. When assigning application permissions, be aware that the permission ManageUsersAndGroups allows users to grant themselves or others access to any functionality in their FinSpace environment's application. It should only be granted to trusted users. CreateDataset – Group members can create new datasets. ManageClusters – Group members can manage Apache Spark clusters from FinSpace notebooks. ManageUsersAndGroups – Group members can manage users and permission groups. This is a privileged permission that allows users to grant themselves or others access to any functionality in the application. It should only be granted to trusted users. ManageAttributeSets – Group members can manage attribute sets. ViewAuditData – Group members can view audit data. AccessNotebooks – Group members will have access to FinSpace notebooks. GetTemporaryCredentials – Group members can get temporary API credentials.
   --client-token: string # Idempotence Token for API operations
-]: any -> record<permissionGroupId: record> {
+]: any -> record<permissionGroupId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -965,7 +965,7 @@ export def "disable-user" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --client-token: string # Idempotence Token for API operations
-]: any -> record<userId: record> {
+]: any -> record<userId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1014,7 +1014,7 @@ export def "enable-user" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --client-token: string # Idempotence Token for API operations
-]: any -> record<userId: record> {
+]: any -> record<userId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1063,7 +1063,7 @@ export def "get-changeset" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<changesetId: record, changesetArn: record, datasetId: record, changeType: record, sourceParams: record, formatParams: record, createTime: record, status: record, errorInfo: record<errorMessage: record, errorCategory: record>, activeUntilTimestamp: record, activeFromTimestamp: record, updatesChangesetId: record, updatedByChangesetId: record> {
+]: nothing -> record<changesetId: string, changesetArn: string, datasetId: string, changeType: string, sourceParams: record, formatParams: record, createTime: int, status: string, errorInfo: record<errorMessage: string, errorCategory: string>, activeUntilTimestamp: int, activeFromTimestamp: int, updatesChangesetId: string, updatedByChangesetId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -1113,7 +1113,7 @@ export def "update-changeset" [
   --client-token: string # Idempotence Token for API operations
   source_params: record # Source Parameters of a Changeset
   format_params: record # Format Parameters of a Changeset
-]: any -> record<changesetId: record, datasetId: record> {
+]: any -> record<changesetId: string, datasetId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1163,7 +1163,7 @@ export def "get-data-view" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<autoUpdate: record, partitionColumns: record, datasetId: record, asOfTimestamp: record, errorInfo: record<errorMessage: record, errorCategory: record>, lastModifiedTime: record, createTime: record, sortColumns: record, dataViewId: record, dataViewArn: record, destinationTypeParams: record<destinationType: record, s3DestinationExportFileFormat: record, s3DestinationExportFileFormatOptions: record>, status: record> {
+]: nothing -> record<autoUpdate: bool, partitionColumns: list<string>, datasetId: string, asOfTimestamp: int, errorInfo: record<errorMessage: string, errorCategory: string>, lastModifiedTime: int, createTime: int, sortColumns: list<string>, dataViewId: string, dataViewArn: string, destinationTypeParams: record<destinationType: string, s3DestinationExportFileFormat: string, s3DestinationExportFileFormatOptions: record>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -1210,7 +1210,7 @@ export def "get-external-data-view-access-details" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<credentials: record<accessKeyId: record, secretAccessKey: record, sessionToken: record, expiration: record>, s3Location: record<bucket: record, key: record>> {
+]: nothing -> record<credentials: record<accessKeyId: string, secretAccessKey: string, sessionToken: string, expiration: int>, s3Location: record<bucket: string, key: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -1249,7 +1249,7 @@ export def "get-programmatic-access-credentials" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --duration-in-minutes: int # The time duration in which the credentials remain valid.
-  --environment-id: string # The FinSpace environment identifier.
+  --environment-id: string # The FinSpace environment identifier. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1257,9 +1257,10 @@ export def "get-programmatic-access-credentials" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<credentials: record<accessKeyId: record, secretAccessKey: record, sessionToken: record>, durationInMinutes: record> {
+]: nothing -> record<credentials: record<accessKeyId: string, secretAccessKey: string, sessionToken: string>, durationInMinutes: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($environment_id == null) { error make --unspanned { msg: "required query parameter 'environmentId' missing: pass --environment-id" } }
   let qp = [(serialize-qp "durationInMinutes" $duration_in_minutes "scalar") (serialize-qp "environmentId" $environment_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/credentials/programmatic" $qp $auth.query)
   let accept_val = "application/json"
@@ -1302,7 +1303,7 @@ export def "get-user" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<userId: record, status: record, firstName: record, lastName: record, emailAddress: record, type: record, apiAccess: record, apiAccessPrincipalArn: record, createTime: record, lastEnabledTime: record, lastDisabledTime: record, lastModifiedTime: record, lastLoginTime: record> {
+]: nothing -> record<userId: string, status: string, firstName: string, lastName: string, emailAddress: string, type: string, apiAccess: string, apiAccessPrincipalArn: string, createTime: int, lastEnabledTime: int, lastDisabledTime: int, lastModifiedTime: int, lastLoginTime: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -1353,7 +1354,7 @@ export def "update-user" [
   --api-access: string@api-access-completer # The option to indicate whether the user can use the GetProgrammaticAccessCredentials API to obtain credentials that can then be used to access other FinSpace Data API operations. ENABLED – The user has permissions to use the APIs. DISABLED – The user does not have permissions to use any APIs.
   --api-access-principal-arn: string # The ARN identifier of an AWS user or role that is allowed to call the GetProgrammaticAccessCredentials API to obtain a credentials token for a specific FinSpace user. This must be an IAM role within your FinSpace account.
   --client-token: string # Idempotence Token for API operations
-]: any -> record<userId: record> {
+]: any -> record<userId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1401,7 +1402,7 @@ export def "get-working-location" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --location-type: string@location-type-completer # Specify the type of the working location. SAGEMAKER – Use the Amazon S3 location as a temporary location to store data content when working with FinSpace Notebooks that run on SageMaker studio. INGESTION – Use the Amazon S3 location as a staging location to copy your data content and then use the location with the Changeset creation operation.
-]: any -> record<s3Uri: record, s3Path: record, s3Bucket: record> {
+]: any -> record<s3Uri: string, s3Path: string, s3Bucket: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1441,7 +1442,7 @@ export def "list-permission-groups" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # A token that indicates where a results page should begin.
-  --max-results: int # The maximum number of results per page.
+  --max-results: int # The maximum number of results per page. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1449,9 +1450,10 @@ export def "list-permission-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<permissionGroups: record, nextToken: record> {
+]: nothing -> record<permissionGroups: table<permissionGroupId: string, name: string, description: string, applicationPermissions: list, createTime: int, lastModifiedTime: int, membershipStatus: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($max_results == null) { error make --unspanned { msg: "required query parameter 'maxResults' missing: pass --max-results" } }
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/permission-group" $qp $auth.query)
   let accept_val = "application/json"
@@ -1488,7 +1490,7 @@ export def "list-permission-groups-by-user" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # A token that indicates where a results page should begin.
-  --max-results: int # The maximum number of results per page.
+  --max-results: int # The maximum number of results per page. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1496,10 +1498,11 @@ export def "list-permission-groups-by-user" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<permissionGroups: record, nextToken: record> {
+]: nothing -> record<permissionGroups: table<permissionGroupId: string, name: string, membershipStatus: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($max_results == null) { error make --unspanned { msg: "required query parameter 'maxResults' missing: pass --max-results" } }
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/user/{user_id}/permission-groups") $qp $auth.query)
   let accept_val = "application/json"
@@ -1535,7 +1538,7 @@ export def "list-users" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # A token that indicates where a results page should begin.
-  --max-results: int # The maximum number of results per page.
+  --max-results: int # The maximum number of results per page. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1543,9 +1546,10 @@ export def "list-users" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<users: record, nextToken: record> {
+]: nothing -> record<users: table<userId: string, status: string, firstName: string, lastName: string, emailAddress: string, type: string, apiAccess: string, apiAccessPrincipalArn: string, createTime: int, lastEnabledTime: int, lastDisabledTime: int, lastModifiedTime: int, lastLoginTime: int>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($max_results == null) { error make --unspanned { msg: "required query parameter 'maxResults' missing: pass --max-results" } }
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user" $qp $auth.query)
   let accept_val = "application/json"
@@ -1582,7 +1586,7 @@ export def "list-users-by-permission-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # A token that indicates where a results page should begin.
-  --max-results: int # The maximum number of results per page.
+  --max-results: int # The maximum number of results per page. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1590,10 +1594,11 @@ export def "list-users-by-permission-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<users: record, nextToken: record> {
+]: nothing -> record<users: table<userId: string, status: string, firstName: string, lastName: string, emailAddress: string, type: string, apiAccess: string, apiAccessPrincipalArn: string, membershipStatus: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($permission_group_id | is-empty) { error make --unspanned { msg: "path parameter 'permissionGroupId' must be non-empty" } }
+  if ($max_results == null) { error make --unspanned { msg: "required query parameter 'maxResults' missing: pass --max-results" } }
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({permission_group_id: (encode-path-segment $permission_group_id)} | format pattern "/permission-group/{permission_group_id}/users") $qp $auth.query)
   let accept_val = "application/json"
@@ -1637,7 +1642,7 @@ export def "reset-user-password" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --client-token: string # Idempotence Token for API operations
-]: any -> record<userId: record, temporaryPassword: record> {
+]: any -> record<userId: string, temporaryPassword: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

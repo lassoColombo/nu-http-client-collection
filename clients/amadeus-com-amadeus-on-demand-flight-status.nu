@@ -131,13 +131,16 @@ export def "get-flights-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --carrier-code: string # 2 to 3-character IATA carrier code ([IATA table codes](http://www.iata.org/publications/Pages/code-search.aspx)). (e.g. TP)
-  --flight-number: string # 1 to 4-digit number of the flight. e.g. 4537 (e.g. 487)
-  --scheduled-departure-date: string # scheduled departure date of the flight, local to the departure airport, format YYYY-MM-DD. (format: date, e.g. 2023-08-01)
+  --carrier-code: string # 2 to 3-character IATA carrier code ([IATA table codes](http://www.iata.org/publications/Pages/code-search.aspx)). (required, e.g. TP)
+  --flight-number: string # 1 to 4-digit number of the flight. e.g. 4537 (required, e.g. 487)
+  --scheduled-departure-date: string # scheduled departure date of the flight, local to the departure airport, format YYYY-MM-DD. (required, format: date, e.g. 2023-08-01)
   --operational-suffix: string # 1-letter operational suffix assigned by the carrier to differentiate flight in case of delay changing the departure date e.g. A
-]: nothing -> any {
+]: nothing -> record<data: table<flightDesignator: record, flightPoints: list, legs: list, scheduledDepartureDate: string, segments: list, type: string>, meta: record<count: int, links: record<first: string, last: string, next: string, previous: string, self: string, up: string>>, warnings: table<code: int, detail: string, source: record, status: int, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($carrier_code == null) { error make --unspanned { msg: "required query parameter 'carrierCode' missing: pass --carrier-code" } }
+  if ($flight_number == null) { error make --unspanned { msg: "required query parameter 'flightNumber' missing: pass --flight-number" } }
+  if ($scheduled_departure_date == null) { error make --unspanned { msg: "required query parameter 'scheduledDepartureDate' missing: pass --scheduled-departure-date" } }
   let qp = [(serialize-qp "carrierCode" $carrier_code "scalar") (serialize-qp "flightNumber" $flight_number "scalar") (serialize-qp "scheduledDepartureDate" $scheduled_departure_date "scalar") (serialize-qp "operationalSuffix" $operational_suffix "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/schedule/flights" $qp $auth.query)
   let accept_val = "application/vnd.amadeus+json"

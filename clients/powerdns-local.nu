@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-api-key" => { {scheme: $scheme, headers: {X-API-Key: $token_val}, query: "", location: "header"} }
+    "x-api-key" => { {scheme: $scheme, headers: {"X-API-Key": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -230,11 +230,12 @@ export def "cache-flush-by-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain: string # The domain name to flush from the cache
+  --domain: string # The domain name to flush from the cache (required)
 ]: nothing -> record<count: float, result: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($server_id | is-empty) { error make --unspanned { msg: "path parameter 'server_id' must be non-empty" } }
+  if ($domain == null) { error make --unspanned { msg: "required query parameter 'domain' missing: pass --domain" } }
   let qp = [(serialize-qp "domain" $domain "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({server_id: (encode-path-segment $server_id)} | format pattern "/servers/{server_id}/cache/flush") $qp $auth.query)
   let accept_val = "application/json"
@@ -342,13 +343,15 @@ export def "search-data" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The string to search for
-  --max: int # Maximum number of entries to return
+  --q: string # The string to search for (required)
+  --max: int # Maximum number of entries to return (required)
   --object-type: string # Type of data to search for, one of “all”, “zone”, “record”, “comment”
 ]: nothing -> table<content: string, disabled: bool, name: string, object_type: string, ttl: int, type: string, zone: string, zone_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($server_id | is-empty) { error make --unspanned { msg: "path parameter 'server_id' must be non-empty" } }
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
+  if ($max == null) { error make --unspanned { msg: "required query parameter 'max' missing: pass --max" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "object_type" $object_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({server_id: (encode-path-segment $server_id)} | format pattern "/servers/{server_id}/search-data") $qp $auth.query)
   let accept_val = "application/json"
@@ -659,7 +662,7 @@ export def "create-zone" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rrsets: oneof<nothing, bool> # “true” (default) or “false”, whether to include the “rrsets” in the response Zone object. (default: true) — item shape: {changetype: string, comments?: list, name: string, records: list, ttl: int, type: string}
+  --rrsets: oneof<nothing, bool> # “true” (default) or “false”, whether to include the “rrsets” in the response Zone object. (default: true)
   --account: string # MAY be set. Its value is defined by local policy
   --api-rectify: oneof<nothing, bool> # Whether or not the zone will be rectified on data changes via the API
   --dnssec: oneof<nothing, bool> # Whether or not this zone is DNSSEC signed (inferred from presigned being true XOR presence of at least one cryptokey with active being true)

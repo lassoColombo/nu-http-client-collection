@@ -99,7 +99,7 @@ def list-completer [] { ["basic" "bestOf" "chineseTraditional" "default" "french
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-op" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 # Get all colors of the default color name list
 #
 # GET /
-export def "get" [
+export def "get-op" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -202,11 +202,12 @@ export def "get-names" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name: string # The name of the color to retrieve (min 3 characters)
+  --name: string # The name of the color to retrieve (min 3 characters) (required)
   --list: string@list-completer # The name of the color name list to use
 ]: nothing -> record<colors: table<distance: float, hex: string, hsl: record, lab: record, luminance: float, luminanceWCAG: float, name: string, requestedHex: string, rgb: record, svg: string, svgNamed: string, swatchImg: record>, paletteTitle: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "list" $list "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/names/" $qp $auth.query)
   let accept_val = "application/json"
@@ -238,11 +239,12 @@ export def "get-swatch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --color: string # The hex value of the color to retrieve without '#'
+  --color: string # The hex value of the color to retrieve without '#' (required)
   --name: string # The name of the color
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($color == null) { error make --unspanned { msg: "required query parameter 'color' missing: pass --color" } }
   let qp = [(serialize-qp "color" $color "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/swatch/" $qp $auth.query)
   let accept_val = "image/svg+xml"

@@ -149,10 +149,11 @@ export def "dev-get-assets" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/allapps" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -186,11 +187,13 @@ export def "dev-get-collections" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --appid: string # System Key that identifies the system the collections belong to.
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --appid: string # System Key that identifies the system the collections belong to. (required)
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($appid == null) { error make --unspanned { msg: "required query parameter 'appid' missing: pass --appid" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let qp = [(serialize-qp "appid" $appid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/allcollections" $qp $auth.query)
   let accept_val = "application/json"
@@ -225,10 +228,11 @@ export def "get-systems" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/allsystems" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -263,10 +267,11 @@ export def "get-audit" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Query object used to filter the items. See query model at in the description for example.
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> table<action_type: string, asset_class: string, asset_id: string, changes: string, email: string, id: int, response_time: int, system_key: string, time: string, user_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/audit" $qp $auth.query)
   let accept_val = "application/json"
@@ -301,10 +306,11 @@ export def "get-counts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/audit/count" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -340,11 +346,12 @@ export def "get-audit-dev" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Query object used to filter the items. See query model at in the description for example.
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> table<action_type: string, asset_class: string, asset_id: string, changes: string, email: string, id: int, response_time: int, system_key: string, time: string, user_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/audit/{system_key}") $qp $auth.query)
   let accept_val = "application/json"
@@ -380,11 +387,12 @@ export def "get-counts-dev" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/audit/{system_key}/count") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -457,10 +465,11 @@ export def "verify-auth" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/checkauth" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -494,11 +503,13 @@ export def "dev-delete-collection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # ID that identifies the collection to be deleted.
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --id: string # ID that identifies the collection to be deleted. (required)
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/collectionmanagement" $qp $auth.query)
   let accept_val = "application/json"
@@ -533,7 +544,7 @@ export def "dev-create-collection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through authentication. (required)
   app_id: string # This is the system key (e.g. c0f8e2c50bbeeaf87f5efa2eee301)
   --collection-id: string # e.g. c0f8e2c50bbeeafb87f5efa2eee301
   name: string # e.g. newCollection
@@ -541,6 +552,7 @@ export def "dev-create-collection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/collectionmanagement" $auth.query)
   let req_body = {"appID": $app_id, "collectionID": $collection_id, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -619,10 +631,11 @@ export def "get-admin-dev-count" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/count/developers" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -656,10 +669,11 @@ export def "get-system-count" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/count/systems" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -728,7 +742,7 @@ export def "admin-owner-change" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   change: any
   owner: string # e.g. owner@clearblade.com
 ]: any -> any {
@@ -736,6 +750,7 @@ export def "admin-owner-change" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/developers/{system_key}") $auth.query)
   let req_body = {"change": $change, "owner": $owner} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -773,12 +788,13 @@ export def "delete-device-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through developer authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through developer authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($device_name | is-empty) { error make --unspanned { msg: "path parameter 'deviceName' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), device_name: (encode-path-segment $device_name)} | format pattern "/admin/devices/keys/{system_key}/{device_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -814,7 +830,7 @@ export def "create-rotating-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through developer authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through developer authentication. (required)
   --body: record
 ]: any -> record<active_key: string, keys: list<string>> {
   let input = $in
@@ -822,6 +838,7 @@ export def "create-rotating-keys" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($device_name | is-empty) { error make --unspanned { msg: "path parameter 'deviceName' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), device_name: (encode-path-segment $device_name)} | format pattern "/admin/devices/keys/{system_key}/{device_name}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -858,12 +875,14 @@ export def "delete-devices-admin" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query: string # Tags to filter devices by. See the query model below for an example.
-  --clear-blade-dev-token: string # Token obtained through user authentication.
+  --query: string # Tags to filter devices by. See the query model below for an example. (required)
+  --clear-blade-dev-token: string # Token obtained through user authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/devices/{system_key}") $qp $auth.query)
   let accept_val = "application/json"
@@ -900,11 +919,12 @@ export def "get-system-devices" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Tags to filter devices by. See the query model below for an example. All devices are returned if a query is not specified.
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/devices/{system_key}") $qp $auth.query)
   let accept_val = "application/json"
@@ -942,7 +962,7 @@ export def "update-devices-admin" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Token obtained through user authentication.
+  --clear-blade-dev-token: string # Token obtained through user authentication. (required)
   --set: record # shape: {[columnName]?: any}
   --query: list # item shape: {EQ?: list, GT?: list, GTE?: list, LT?: list, LTE?: list, NEQ?: list, RE?: list}
 ]: any -> record<DATA: list<record>, TOTAL: int> {
@@ -950,6 +970,7 @@ export def "update-devices-admin" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/devices/{system_key}") $auth.query)
   let req_body = {"$set": $set, "query": $query} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -987,12 +1008,13 @@ export def "delete-system-device" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/devices/{system_key}/{name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1028,12 +1050,13 @@ export def "get-system-device" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/devices/{system_key}/{name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1069,7 +1092,7 @@ export def "create-system-device" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   --active-key: string
   --allow-certificate-auth: oneof<nothing, bool>
   --allow-key-auth: oneof<nothing, bool>
@@ -1087,9 +1110,14 @@ export def "create-system-device" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/devices/{system_key}/{name}") $auth.query)
   let req_body = {"active_key": $active_key, "allow_certificate_auth": $allow_certificate_auth, "allow_key_auth": $allow_key_auth, "certificate": $certificate, "custom": $custom, "description": $description, "enabled": $enabled, "keys": $keys, "name": $body_name, "state": $state, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "allow_certificate_auth") == null) { error make --unspanned { msg: "required body field 'allow_certificate_auth' missing: pass --allow-certificate-auth or pipe a record" } }
+  if (($req_body | get -o "allow_key_auth") == null) { error make --unspanned { msg: "required body field 'allow_key_auth' missing: pass --allow-key-auth or pipe a record" } }
+  if (($req_body | get -o "enabled") == null) { error make --unspanned { msg: "required body field 'enabled' missing: pass --enabled or pipe a record" } }
+  if (($req_body | get -o "name") == null) { error make --unspanned { msg: "required body field 'name' missing: pass --body-name or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
@@ -1124,7 +1152,7 @@ export def "update-system-device" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   --active-key: string
   --allow-certificate-auth: oneof<nothing, bool>
   --allow-key-auth: oneof<nothing, bool>
@@ -1141,6 +1169,7 @@ export def "update-system-device" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/devices/{system_key}/{name}") $auth.query)
   let req_body = {"active_key": $active_key, "allow_certificate_auth": $allow_certificate_auth, "allow_key_auth": $allow_key_auth, "certificate": $certificate, "custom": $custom, "description": $description, "enabled": $enabled, "keys": $keys, "state": $state, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1177,11 +1206,12 @@ export def "get-edge-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/edges/template/{system_key}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1218,7 +1248,7 @@ export def "update-edge-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   --def-module: any # shape: {module?: "trigger"|"service"|"library"}
   def_name: string
 ]: any -> any {
@@ -1227,6 +1257,7 @@ export def "update-edge-template" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($edge_name | is-empty) { error make --unspanned { msg: "path parameter 'edgeName' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), edge_name: (encode-path-segment $edge_name)} | format pattern "/admin/edges/template/{system_key}/{edge_name}") $auth.query)
   let req_body = {"def_module": $def_module, "def_name": $def_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1263,11 +1294,12 @@ export def "get-edges" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/edges/{system_key}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1302,11 +1334,12 @@ export def "get-adapter-edges" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/edges/{system_key}/control") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1342,12 +1375,13 @@ export def "delete-edge" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($edge_name | is-empty) { error make --unspanned { msg: "path parameter 'edgeName' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), edge_name: (encode-path-segment $edge_name)} | format pattern "/admin/edges/{system_key}/{edge_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1383,12 +1417,13 @@ export def "get-edge" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($edge_name | is-empty) { error make --unspanned { msg: "path parameter 'edgeName' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), edge_name: (encode-path-segment $edge_name)} | format pattern "/admin/edges/{system_key}/{edge_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1424,7 +1459,7 @@ export def "create-edge" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   --description: string
   --local-addr: string
   --local-port: string
@@ -1441,9 +1476,12 @@ export def "create-edge" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($edge_name | is-empty) { error make --unspanned { msg: "path parameter 'edgeName' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), edge_name: (encode-path-segment $edge_name)} | format pattern "/admin/edges/{system_key}/{edge_name}") $auth.query)
   let req_body = {"description": $description, "local_addr": $local_addr, "local_port": $local_port, "location": $location, "mac_address": $mac_address, "public_addr": $public_addr, "public_port": $public_port, "system_key": $body_system_key, "system_secret": $system_secret, "token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "system_key") == null) { error make --unspanned { msg: "required body field 'system_key' missing: pass --body-system-key or pipe a record" } }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
@@ -1478,7 +1516,7 @@ export def "update-edge" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   --description: string
   --local-addr: string
   --local-port: string
@@ -1495,9 +1533,11 @@ export def "update-edge" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($edge_name | is-empty) { error make --unspanned { msg: "path parameter 'edgeName' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), edge_name: (encode-path-segment $edge_name)} | format pattern "/admin/edges/{system_key}/{edge_name}") $auth.query)
   let req_body = {"description": $description, "local_addr": $local_addr, "local_port": $local_port, "location": $location, "mac_address": $mac_address, "public_addr": $public_addr, "public_port": $public_port, "system_key": $body_system_key, "system_secret": $system_secret, "token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "system_key") == null) { error make --unspanned { msg: "required body field 'system_key' missing: pass --body-system-key or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
@@ -1530,10 +1570,11 @@ export def "dev-logout" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/logout" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1567,10 +1608,11 @@ export def "get-license-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/pkey" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1604,11 +1646,13 @@ export def "get-dev" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --developer: string # Email of the developer in question.
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --developer: string # Email of the developer in question. (required)
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($developer == null) { error make --unspanned { msg: "required query parameter 'developer' missing: pass --developer" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let qp = [(serialize-qp "developer" $developer "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/platform/developer" $qp $auth.query)
   let accept_val = "application/json"
@@ -1643,7 +1687,7 @@ export def "disable-dev" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   --admin: oneof<nothing, bool>
   --disabled: oneof<nothing, bool>
   email: string
@@ -1651,9 +1695,12 @@ export def "disable-dev" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/platform/developer" $auth.query)
   let req_body = {"admin": $admin, "disabled": $disabled, "email": $email} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "admin") == null) { error make --unspanned { msg: "required body field 'admin' missing: pass --admin or pipe a record" } }
+  if (($req_body | get -o "disabled") == null) { error make --unspanned { msg: "required body field 'disabled' missing: pass --disabled or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
@@ -1690,10 +1737,11 @@ export def "get-devs" [
   --pagenum: string # Response page number.
   --total: string
   --filter: string # Filter response.
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "pagenum" $pagenum "scalar") (serialize-qp "total" $total "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/platform/developers" $qp $auth.query)
   let accept_val = "application/json"
@@ -1729,10 +1777,11 @@ export def "get-system-updates" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Query object used to filter the items. See query model at in the description for example.
-  --clearblade-dev-token: string # Developer Token obtained through admin authentication.
+  --clearblade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> table<developers: list<any>, disabled: bool, diskUsage: int, lastUpdated: int, name: string, numAPIReqsMonth: int, numAPIReqsTotal: int, numAPIReqsYear: int, numDeployments: int, numDevices: int, numDevs: int, numEdges: int, numLibraries: int, numPub: int, numPubMonth: int, numPubYear: int, numRecMonth: int, numRecTotal: int, numRecYear: int, numRoles: int, numServices: int, numUsers: int, owner: string, system_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clearblade_dev_token == null) { error make --unspanned { msg: "required header parameter 'Clearblade-DevToken' missing: pass --clearblade-dev-token" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/platform/systems" $qp $auth.query)
   let accept_val = "application/json"
@@ -1769,11 +1818,12 @@ export def "get-system-updates-dev" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Query object used to filter the items. See query model at in the description for example.
-  --clearblade-devtoken: string # Developer Token obtained through admin authentication.
+  --clearblade-devtoken: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> table<developers: list<any>, disabled: bool, diskUsage: int, lastUpdated: int, name: string, numAPIReqsMonth: int, numAPIReqsTotal: int, numAPIReqsYear: int, numDeployments: int, numDevices: int, numDevs: int, numEdges: int, numLibraries: int, numPub: int, numPubMonth: int, numPubYear: int, numRecMonth: int, numRecTotal: int, numRecYear: int, numRoles: int, numServices: int, numUsers: int, owner: string, system_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clearblade_devtoken == null) { error make --unspanned { msg: "required header parameter 'clearblade-devtoken' missing: pass --clearblade-devtoken" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/platform/systems/{system_key}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1809,11 +1859,12 @@ export def "get-system-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/platform/{system_key}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1848,11 +1899,12 @@ export def "get-portal-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through developer authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through developer authentication. (required)
 ]: nothing -> table<config: record, description: string, last_updated: string, name: string, namespace: string, system_key: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/portals/{system_key}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1886,13 +1938,14 @@ export def "change-dev-password" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   new_password: string # e.g. bieberluver
   old_password: string # e.g. bieberboy
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/putpass" $auth.query)
   let req_body = {"new_password": $new_password, "old_password": $old_password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1970,12 +2023,13 @@ export def "regen-secret" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   id: string # e.g. [systemID]
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/regensystemsecret" $auth.query)
   let req_body = {"id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2011,13 +2065,14 @@ export def "reset-password" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   --email: string # e.g. example@clearblade.com
   --new-password: string # e.g. password
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/resetpassword" $auth.query)
   let req_body = {"email": $email, "new_password": $new_password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2053,10 +2108,11 @@ export def "delete-email-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/settings/email-service" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2090,10 +2146,11 @@ export def "email-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> record<encryption_type: string, from: string, host: string, password: string, port: string, protocol: string, two_factor_message: string, two_factor_subject: string, username: string, validation_message: string, validation_subject: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/settings/email-service" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2127,9 +2184,9 @@ export def "create-email-communication" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   --encryption-type: string # e.g. STARTTLS
-  --body-from: string # e.g. example@gmail.com
+  --from: string # e.g. example@gmail.com
   --host: string # e.g. smtp.gmail.com
   --password: string # e.g. test
   --port: string # e.g. 587
@@ -2143,8 +2200,9 @@ export def "create-email-communication" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/settings/email-service" $auth.query)
-  let req_body = {"encryption_type": $encryption_type, "from": $body_from, "host": $host, "password": $password, "port": $port, "protocol": $protocol, "two_factor_message": $two_factor_message, "two_factor_subject": $two_factor_subject, "username": $username, "validation_message": $validation_message, "validation_subject": $validation_subject} | compact
+  let req_body = {"encryption_type": $encryption_type, "from": $from, "host": $host, "password": $password, "port": $port, "protocol": $protocol, "two_factor_message": $two_factor_message, "two_factor_subject": $two_factor_subject, "username": $username, "validation_message": $validation_message, "validation_subject": $validation_subject} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2178,9 +2236,9 @@ export def "update-email-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   --encryption-type: string # e.g. STARTTLS
-  --body-from: string # e.g. example@gmail.com
+  --from: string # e.g. example@gmail.com
   --host: string # e.g. smtp.gmail.com
   --password: string # e.g. test
   --port: string # e.g. 587
@@ -2194,8 +2252,9 @@ export def "update-email-settings" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/settings/email-service" $auth.query)
-  let req_body = {"encryption_type": $encryption_type, "from": $body_from, "host": $host, "password": $password, "port": $port, "protocol": $protocol, "two_factor_message": $two_factor_message, "two_factor_subject": $two_factor_subject, "username": $username, "validation_message": $validation_message, "validation_subject": $validation_subject} | compact
+  let req_body = {"encryption_type": $encryption_type, "from": $from, "host": $host, "password": $password, "port": $port, "protocol": $protocol, "two_factor_message": $two_factor_message, "two_factor_subject": $two_factor_subject, "username": $username, "validation_message": $validation_message, "validation_subject": $validation_subject} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2229,12 +2288,13 @@ export def "test-email" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   --recipient: string # e.g. example@companyname.com
 ]: any -> record<success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/settings/email-service/test" $auth.query)
   let req_body = {"recipient": $recipient} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2270,10 +2330,11 @@ export def "view-security" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> record<developer_token_ttl: int, two_factor_auth: record<enabled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/settings/security" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2308,13 +2369,14 @@ export def "update-security" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   --developer-token-ttl: int # e.g. 86400
   --two-factor-auth: any # shape: {enabled?: bool}
 ]: any -> record<developer_token_ttl: int, two_factor_auth: record<enabled: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/settings/security" $auth.query)
   let req_body = {"developer_token_ttl": $developer_token_ttl, "two_factor_auth": $two_factor_auth} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2350,10 +2412,11 @@ export def "delete-sms-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/settings/sms-service" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2387,10 +2450,11 @@ export def "sms-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> record<from: string, password: string, service_name: string, two_factor_message: string, url: string, username: string, validation_message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/settings/sms-service" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2424,8 +2488,8 @@ export def "create-sms-communication" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
-  --body-from: string # e.g. +15120000000
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
+  --from: string # e.g. +15120000000
   --password: string # e.g. test
   --service-name: string # Only Twilio is supported. (e.g. Twilio)
   --two-factor-message: string # e.g. Please use the code to log in: $CODE
@@ -2436,8 +2500,9 @@ export def "create-sms-communication" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/settings/sms-service" $auth.query)
-  let req_body = {"from": $body_from, "password": $password, "service_name": $service_name, "two_factor_message": $two_factor_message, "url": $url, "username": $username, "validation_message": $validation_message} | compact
+  let req_body = {"from": $from, "password": $password, "service_name": $service_name, "two_factor_message": $two_factor_message, "url": $url, "username": $username, "validation_message": $validation_message} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2471,8 +2536,8 @@ export def "update-sms-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
-  --body-from: string # e.g. +15120000000
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
+  --from: string # e.g. +15120000000
   --password: string # e.g. test
   --service-name: string # Only Twilio is supported. (e.g. Twilio)
   --two-factor-message: string # e.g. Please use the code to log in: $CODE
@@ -2483,8 +2548,9 @@ export def "update-sms-settings" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/settings/sms-service" $auth.query)
-  let req_body = {"from": $body_from, "password": $password, "service_name": $service_name, "two_factor_message": $two_factor_message, "url": $url, "username": $username, "validation_message": $validation_message} | compact
+  let req_body = {"from": $from, "password": $password, "service_name": $service_name, "two_factor_message": $two_factor_message, "url": $url, "username": $username, "validation_message": $validation_message} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2518,12 +2584,13 @@ export def "test-sms" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   --recipient: string # e.g. +15120000000
 ]: any -> record<success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/settings/sms-service/test" $auth.query)
   let req_body = {"recipient": $recipient} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2560,11 +2627,12 @@ export def "get-systems-for-dev" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> table<developers: list<any>, disabled: bool, diskUsage: int, lastUpdated: int, name: string, numAPIReqsMonth: int, numAPIReqsTotal: int, numAPIReqsYear: int, numDeployments: int, numDevices: int, numDevs: int, numEdges: int, numLibraries: int, numPub: int, numPubMonth: int, numPubYear: int, numRecMonth: int, numRecTotal: int, numRecYear: int, numRoles: int, numServices: int, numUsers: int, owner: string, system_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dev_email | is-empty) { error make --unspanned { msg: "path parameter 'devEmail' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({dev_email: (encode-path-segment $dev_email)} | format pattern "/admin/systems/{dev_email}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2598,10 +2666,11 @@ export def "get-triggers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/triggers/definitions" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2636,11 +2705,12 @@ export def "get-trigger-handlers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/triggers/handlers/{system_key}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2676,12 +2746,13 @@ export def "delete-trigger-handler" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/triggers/handlers/{system_key}/{name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2717,12 +2788,13 @@ export def "get-trigger-handler" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/triggers/handlers/{system_key}/{name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2759,7 +2831,7 @@ export def "create-trigger" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   def_module: string # e.g. Messaging
   def_name: string # e.g. Publish
   --disabled: oneof<nothing, bool> # Enable or disable trigger (e.g. true)
@@ -2771,9 +2843,11 @@ export def "create-trigger" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/triggers/handlers/{system_key}/{name}") $auth.query)
   let req_body = {"def_module": $def_module, "def_name": $def_name, "disabled": $disabled, "key_value_pairs": $key_value_pairs, "service_name": $service_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "disabled") == null) { error make --unspanned { msg: "required body field 'disabled' missing: pass --disabled or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
@@ -2809,7 +2883,7 @@ export def "update-trigger-handler" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   def_module: string # e.g. Messaging
   def_name: string # e.g. Publish
   --disabled: oneof<nothing, bool> # Enable or disable trigger (e.g. true)
@@ -2821,9 +2895,11 @@ export def "update-trigger-handler" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/triggers/handlers/{system_key}/{name}") $auth.query)
   let req_body = {"def_module": $def_module, "def_name": $def_name, "disabled": $disabled, "key_value_pairs": $key_value_pairs, "service_name": $service_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "disabled") == null) { error make --unspanned { msg: "required body field 'disabled' missing: pass --disabled or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
@@ -2857,11 +2933,12 @@ export def "get-timer-handlers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/triggers/timers/{system_key}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2897,12 +2974,13 @@ export def "delete-timer-handler" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/triggers/timers/{system_key}/{name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2938,12 +3016,13 @@ export def "get-timer-handler" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/triggers/timers/{system_key}/{name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2979,7 +3058,7 @@ export def "create-timer-handler" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   --description: string # Information about the timer (e.g. My 10 second timer)
   --disabled: oneof<nothing, bool> # Enable or disable timer (e.g. true)
   frequency: int # Frequency (in seconds) between two consecutive invocations of a timer handler (e.g. 10)
@@ -2992,9 +3071,12 @@ export def "create-timer-handler" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/triggers/timers/{system_key}/{name}") $auth.query)
   let req_body = {"description": $description, "disabled": $disabled, "frequency": $frequency, "name": $body_name, "repeats": $repeats, "service_name": $service_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "disabled") == null) { error make --unspanned { msg: "required body field 'disabled' missing: pass --disabled or pipe a record" } }
+  if (($req_body | get -o "name") == null) { error make --unspanned { msg: "required body field 'name' missing: pass --body-name or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
@@ -3029,7 +3111,7 @@ export def "update-timer-handler" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   --description: string # Information about the timer (e.g. My 10 second timer)
   --disabled: oneof<nothing, bool> # Enable or disable timer (e.g. true)
   frequency: int # Frequency (in seconds) between two consecutive invocations of a timer handler (e.g. 10)
@@ -3042,9 +3124,12 @@ export def "update-timer-handler" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/triggers/timers/{system_key}/{name}") $auth.query)
   let req_body = {"description": $description, "disabled": $disabled, "frequency": $frequency, "name": $body_name, "repeats": $repeats, "service_name": $service_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "disabled") == null) { error make --unspanned { msg: "required body field 'disabled' missing: pass --disabled or pipe a record" } }
+  if (($req_body | get -o "name") == null) { error make --unspanned { msg: "required body field 'name' missing: pass --body-name or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
@@ -3079,11 +3164,12 @@ export def "delete-user" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --user: string # UserId of the user to delete
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let qp = [(serialize-qp "user" $user "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/user/{system_key}") $qp $auth.query)
   let accept_val = "application/json"
@@ -3120,11 +3206,12 @@ export def "get-user-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Tags to filter users. Check 'users' model at the bottom of this page.
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/user/{system_key}") $qp $auth.query)
   let accept_val = "application/json"
@@ -3160,7 +3247,7 @@ export def "add-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   email: string # e.g. helpme@clearblade.com
   password: string # e.g. c13rb1ad3ru13z
 ]: any -> any {
@@ -3168,6 +3255,7 @@ export def "add-user" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/user/{system_key}") $auth.query)
   let req_body = {"email": $email, "password": $password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3205,7 +3293,7 @@ export def "user-change-user-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   changes: any # Changes roles — shape: {roles: any}
   user: string # e.g. b4d8aaab0bf48e98dacbd78e9e50
 ]: any -> any {
@@ -3213,6 +3301,7 @@ export def "user-change-user-info" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/user/{system_key}") $auth.query)
   let req_body = {"changes": $changes, "user": $user} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3249,11 +3338,12 @@ export def "get-user-column-data" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/user/{system_key}/columns") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3288,7 +3378,7 @@ export def "add-column" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   column_name: string # e.g. phone_number
   type: string # e.g. string
 ]: any -> any {
@@ -3296,6 +3386,7 @@ export def "add-column" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/user/{system_key}/columns") $auth.query)
   let req_body = {"column_name": $column_name, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3332,12 +3423,14 @@ export def "delete-roles" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query: string # Role identification key.
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --query: string # Role identification key. (required)
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/user/{system_key}/roles") $qp $auth.query)
   let accept_val = "application/json"
@@ -3374,11 +3467,12 @@ export def "get-roles" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Refer to the example query above.
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/user/{system_key}/roles") $qp $auth.query)
   let accept_val = "application/json"
@@ -3414,7 +3508,7 @@ export def "add-role" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   --collections: list # e.g. []
   --description: string # e.g. 
   name: string # e.g. Administrator
@@ -3425,6 +3519,7 @@ export def "add-role" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/user/{system_key}/roles") $auth.query)
   let req_body = {"collections": $collections, "description": $description, "name": $name, "services": $services, "topics": $topics} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3462,7 +3557,7 @@ export def "settings-changes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   changes: any # Assets with permission changes — shape: {allcollections?: any, allservices?: record, collections?: any, deployments?: record, description?: string, devices?: record, edges?: any, msgHistory?: record, portals?: any, roles?: record, services?: any, topics?: any, triggers?: record, users?: record}
   id: string # e.g. Administrator
 ]: any -> any {
@@ -3470,6 +3565,7 @@ export def "settings-changes" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/user/{system_key}/roles") $auth.query)
   let req_body = {"changes": $changes, "id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3506,12 +3602,14 @@ export def "get-roles-count" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user: string # Identifies page size and page number for roles list.
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --user: string # Identifies page size and page number for roles list. (required)
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($user == null) { error make --unspanned { msg: "required query parameter 'user' missing: pass --user" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let qp = [(serialize-qp "user" $user "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/user/{system_key}/roles/count") $qp $auth.query)
   let accept_val = "application/json"
@@ -3546,10 +3644,11 @@ export def "get-dev-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> record<admin: bool, creation_date: int, email: string, email_validated: bool, fname: string, last_login: int, lname: string, org: string, phone: string, phone_validated: bool, two_factor_enabled: bool, two_factor_enabled_instance_: bool, two_factor_method: string, userid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/userinfo" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3583,7 +3682,7 @@ export def "update-dev2-fa" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   --phone: string # e.g. +15120000000
   --two-factor-enabled: oneof<nothing, bool> # e.g. true
   --two-factor-method: string # e.g. sms
@@ -3591,6 +3690,7 @@ export def "update-dev2-fa" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/userinfo" $auth.query)
   let req_body = {"phone": $phone, "two_factor_enabled": $two_factor_enabled, "two_factor_method": $two_factor_method} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3627,11 +3727,12 @@ export def "get-shared-cache" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Dev Token obtained through user authentication.
+  --clear-blade-dev-token: string # Dev Token obtained through user authentication. (required)
 ]: nothing -> table<description: string, id: string, name: string, system_key: string, ttl: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/v/4/service_caches/{system_key}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3667,12 +3768,13 @@ export def "delete-shared-cache" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Dev Token obtained through user authentication.
+  --clear-blade-dev-token: string # Dev Token obtained through user authentication. (required)
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($cache_name | is-empty) { error make --unspanned { msg: "path parameter 'cacheName' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), cache_name: (encode-path-segment $cache_name)} | format pattern "/admin/v/4/service_caches/{system_key}/{cache_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3708,7 +3810,7 @@ export def "add-shared-cache" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Dev Token obtained through user authentication.
+  --clear-blade-dev-token: string # Dev Token obtained through user authentication. (required)
   --description: string # Description of new shared cache
   --name: string # e.g. sharedCache
   ttl: int # e.g. 30
@@ -3718,6 +3820,7 @@ export def "add-shared-cache" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($cache_name | is-empty) { error make --unspanned { msg: "path parameter 'cacheName' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), cache_name: (encode-path-segment $cache_name)} | format pattern "/admin/v/4/service_caches/{system_key}/{cache_name}") $auth.query)
   let req_body = {"description": $description, "name": $name, "ttl": $ttl} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3755,7 +3858,7 @@ export def "update-shared-cache" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Dev Token obtained through user authentication.
+  --clear-blade-dev-token: string # Dev Token obtained through user authentication. (required)
   --description: string
   ttl: int # e.g. 30
 ]: any -> record<success: bool> {
@@ -3764,6 +3867,7 @@ export def "update-shared-cache" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($cache_name | is-empty) { error make --unspanned { msg: "path parameter 'cacheName' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), cache_name: (encode-path-segment $cache_name)} | format pattern "/admin/v/4/service_caches/{system_key}/{cache_name}") $auth.query)
   let req_body = {"description": $description, "ttl": $ttl} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3801,11 +3905,12 @@ export def "delete-device-session" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Query object used to filter the items. See query model at in the description for example.
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/v/4/session/{system_key}/device") $qp $auth.query)
   let accept_val = "application/json"
@@ -3842,11 +3947,12 @@ export def "get-device-session" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Query object used to filter the items. See query model at in the description for example.
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> table<device_key: string, issued: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/v/4/session/{system_key}/device") $qp $auth.query)
   let accept_val = "application/json"
@@ -3883,11 +3989,12 @@ export def "get-device-session-count" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Query object used to filter the items. See query model at in the description for example.
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/v/4/session/{system_key}/device/count") $qp $auth.query)
   let accept_val = "application/json"
@@ -3924,11 +4031,12 @@ export def "delete-user-session" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Query object used to filter the items. See query model at in the description for example.
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/v/4/session/{system_key}/user") $qp $auth.query)
   let accept_val = "application/json"
@@ -3965,11 +4073,12 @@ export def "get-user-session" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Query object used to filter the items. See query model at in the description for example.
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> table<issued: int, user_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/v/4/session/{system_key}/user") $qp $auth.query)
   let accept_val = "application/json"
@@ -4006,11 +4115,12 @@ export def "get-user-session-count" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Query object used to filter the items. See query model at in the description for example.
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/v/4/session/{system_key}/user/count") $qp $auth.query)
   let accept_val = "application/json"
@@ -4045,11 +4155,13 @@ export def "delete-system" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # System Key that identifies the system you want to delete.
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --id: string # System Key that identifies the system you want to delete. (required)
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/v/4/systemmanagement" $qp $auth.query)
   let accept_val = "application/json"
@@ -4084,11 +4196,13 @@ export def "get-system-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # System Key that identifies the system you want the info about.
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --id: string # System Key that identifies the system you want the info about. (required)
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> record<Dev: string, appId: string, appSecret: string, auth_service: string, description: string, name: string, reg_service: string, registration: string, token_ttl: string, token_ttl_anon: int, token_ttl_device: string, token_ttl_user: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/v/4/systemmanagement" $qp $auth.query)
   let accept_val = "application/json"
@@ -4123,13 +4237,14 @@ export def "create-system" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through developer authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through developer authentication. (required)
   description: string # e.g. Here is my new system.
   name: string # e.g. ExampleSystem
 ]: any -> record<Dev: string, appId: string, appSecret: string, auth_service: string, description: string, name: string, reg_service: string, registration: string, token_ttl: string, token_ttl_anon: int, token_ttl_device: string, token_ttl_user: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/v/4/systemmanagement" $auth.query)
   let req_body = {"description": $description, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4165,7 +4280,7 @@ export def "update-system" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   --dev: string # Developer Id for the owner of the system (e.g. 92f8dbbb0bccb3fff4be5cdb601)
   --app-id: string # system key (e.g. a6e0f8e20bbefcec789de6b8f4cf01)
   --app-secret: string # system secret (e.g. A6E0F8E20BDEB0C2838EF2B6D09801)
@@ -4182,6 +4297,7 @@ export def "update-system" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/v/4/systemmanagement" $auth.query)
   let req_body = {"Dev": $dev, "appId": $app_id, "appSecret": $app_secret, "auth_service": $auth_service, "description": $description, "name": $name, "reg_service": $reg_service, "registration": $registration, "token_ttl": $token_ttl, "token_ttl_anon": $token_ttl_anon, "token_ttl_device": $token_ttl_device, "token_ttl_user": $token_ttl_user} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4218,11 +4334,12 @@ export def "get-webhooks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Dev Token obtained through authentication.
+  --clear-blade-dev-token: string # Dev Token obtained through authentication. (required)
 ]: nothing -> table<auth_method: string, description: string, id: string, name: string, service_name: string, system_key: string, system_secret: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/v/4/webhook/{system_key}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4258,12 +4375,13 @@ export def "delete-webhook" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Dev Token obtained through authentication.
+  --clear-blade-dev-token: string # Dev Token obtained through authentication. (required)
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/v/4/webhook/{system_key}/{name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4299,7 +4417,7 @@ export def "create-webhook" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Dev Token obtained through authentication.
+  --clear-blade-dev-token: string # Dev Token obtained through authentication. (required)
   auth_method: string # e.g. http_basic_auth
   --description: string # e.g. Create a webhook
   --body-name: string # e.g. webhook_example
@@ -4310,9 +4428,11 @@ export def "create-webhook" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/v/4/webhook/{system_key}/{name}") $auth.query)
   let req_body = {"auth_method": $auth_method, "description": $description, "name": $body_name, "service_name": $service_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "name") == null) { error make --unspanned { msg: "required body field 'name' missing: pass --body-name or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
@@ -4347,7 +4467,7 @@ export def "update-webhook" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Dev Token obtained through authentication.
+  --clear-blade-dev-token: string # Dev Token obtained through authentication. (required)
   auth_method: string # e.g. http_basic_auth
   --description: string # e.g. Create a webhook
 ]: any -> any {
@@ -4356,6 +4476,7 @@ export def "update-webhook" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/v/4/webhook/{system_key}/{name}") $auth.query)
   let req_body = {"auth_method": $auth_method, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4391,12 +4512,13 @@ export def "send-validation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   --type: string # e.g. email
 ]: any -> record<success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/validate" $auth.query)
   let req_body = {"type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4433,11 +4555,12 @@ export def "all-edge-sync-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Token obtained through dev authentication.
+  --clear-blade-dev-token: string # Token obtained through dev authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/{system_key}/sync/alledges/status") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4473,12 +4596,13 @@ export def "get-sync-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Dev Token obtained through user authentication.
+  --clear-blade-dev-token: string # Dev Token obtained through user authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($deployment_name | is-empty) { error make --unspanned { msg: "path parameter 'deploymentName' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/admin/{system_key}/sync/deployment/status/{deployment_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4514,12 +4638,13 @@ export def "edge-sync-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Token obtained through dev authentication.
+  --clear-blade-dev-token: string # Token obtained through dev authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($edge_name | is-empty) { error make --unspanned { msg: "path parameter 'edgeName' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), edge_name: (encode-path-segment $edge_name)} | format pattern "/admin/{system_key}/sync/edge/status/{edge_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4554,7 +4679,7 @@ export def "retry-sync" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Dev Token obtained through dev authentication.
+  --clear-blade-dev-token: string # Dev Token obtained through dev authentication. (required)
   --asset-class: string # Asset Type (e.g. services)
   --asset-id: string # e.g. c0f8e2c50bbeeafb87f5efa2eee301
   --edge: string # Edge Name (e.g. ExampleEdge)
@@ -4565,6 +4690,7 @@ export def "retry-sync" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/{system_key}/sync/retry") $auth.query)
   let req_body = {"asset_class": $asset_class, "asset_id": $asset_id, "edge": $edge, "is_collection": $is_collection, "sync_event": $sync_event} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4636,12 +4762,13 @@ export def "get-service" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Dev Token obtained through authentication.
+  --clear-blade-dev-token: string # Dev Token obtained through authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), service_name: (encode-path-segment $service_name)} | format pattern "/api/v/1/code/{system_key}/{service_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4677,7 +4804,7 @@ export def "execute-service" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
   --body: record
 ]: any -> any {
   let input = $in
@@ -4685,6 +4812,7 @@ export def "execute-service" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), service_name: (encode-path-segment $service_name)} | format pattern "/api/v/1/code/{system_key}/{service_name}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4722,13 +4850,15 @@ export def "delete-collection-data" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query: string # Query to limit scope of deletion.
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --query: string # Query to limit scope of deletion. (required)
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($collection_name | is-empty) { error make --unspanned { msg: "path parameter 'collectionName' must be non-empty" } }
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), collection_name: (encode-path-segment $collection_name)} | format pattern "/api/v/1/collection/{system_key}/{collection_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -4766,12 +4896,13 @@ export def "get-collection-data" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Query object used to filter the items. See query model below for example.
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
 ]: nothing -> record<CURRENTPAGE: int, DATA: list<record>, NEXTPAGEURL: string, PREVPAGEURL: int, TOTAL: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($collection_name | is-empty) { error make --unspanned { msg: "path parameter 'collectionName' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), collection_name: (encode-path-segment $collection_name)} | format pattern "/api/v/1/collection/{system_key}/{collection_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -4808,7 +4939,7 @@ export def "create-collection-data" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
   --body: list
 ]: any -> table<item_id: string> {
   let input = $in
@@ -4816,6 +4947,7 @@ export def "create-collection-data" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($collection_name | is-empty) { error make --unspanned { msg: "path parameter 'collectionName' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), collection_name: (encode-path-segment $collection_name)} | format pattern "/api/v/1/collection/{system_key}/{collection_name}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -4855,7 +4987,7 @@ export def "update-collection-data" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
   --set: record # shape: {columnName?: any}
   --query: any # shape: {FILTERS?: list}
 ]: any -> record {
@@ -4864,6 +4996,7 @@ export def "update-collection-data" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($collection_name | is-empty) { error make --unspanned { msg: "path parameter 'collectionName' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), collection_name: (encode-path-segment $collection_name)} | format pattern "/api/v/1/collection/{system_key}/{collection_name}") $auth.query)
   let req_body = {"$set": $set, "query": $query} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4900,12 +5033,14 @@ export def "delete-collection-data-alt" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query: string # Query to limit scope of deletion.
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --query: string # Query to limit scope of deletion. (required)
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collectionID' must be non-empty" } }
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/api/v/1/data/{collection_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -4942,11 +5077,12 @@ export def "get-collection-data-alt" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Query object used to filter the items. See query model below for example.
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
 ]: nothing -> record<CURRENTPAGE: int, DATA: list<record>, NEXTPAGEURL: string, PREVPAGEURL: int, TOTAL: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collectionID' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/api/v/1/data/{collection_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -4982,13 +5118,14 @@ export def "create-collection-data-alt" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
   --body: list
 ]: any -> table<item_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collectionID' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/api/v/1/data/{collection_id}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -5027,7 +5164,7 @@ export def "update-collection-data-alt" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
   --set: record # shape: {columnName?: any}
   --query: any # shape: {FILTERS?: list}
 ]: any -> record {
@@ -5035,6 +5172,7 @@ export def "update-collection-data-alt" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collectionID' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/api/v/1/data/{collection_id}") $auth.query)
   let req_body = {"$set": $set, "query": $query} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5071,13 +5209,16 @@ export def "get-columns" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Token obtained through user authentication.
-  --clear-blade-system-key: string # System Key that identifies the system that holds the collection.
-  --clear-blade-system-secret: string # header parameter for ensuring authenticity
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
+  --clear-blade-system-key: string # System Key that identifies the system that holds the collection. (required)
+  --clear-blade-system-secret: string # header parameter for ensuring authenticity (required)
 ]: nothing -> table<ColumnName: string, ColumnType: string, PK: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collectionID' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
+  if ($clear_blade_system_key == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-SystemKey' missing: pass --clear-blade-system-key" } }
+  if ($clear_blade_system_secret == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-SystemSecret' missing: pass --clear-blade-system-secret" } }
   let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/api/v/1/data/{collection_id}/columns") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5112,16 +5253,19 @@ export def "delete-message-history" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --topic: string # Messaging topic to delete the history for.
-  --count: string # Number of messages to delete. 0 deletes all messages.
+  --topic: string # Messaging topic to delete the history for. (required)
+  --count: string # Number of messages to delete. 0 deletes all messages. (required)
   --last: string # Point in time to start deleting. (epoch timestamp)
   --start: string # Start time for deleting within a timeframe. (epoch timestamp)
   --stop: string # End time for deleting within a timeframe. (epoch timestamp)
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($topic == null) { error make --unspanned { msg: "required query parameter 'topic' missing: pass --topic" } }
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let qp = [(serialize-qp "topic" $topic "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "last" $last "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "stop" $stop "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/1/message/{system_key}") $qp $auth.query)
   let accept_val = "application/json"
@@ -5157,16 +5301,19 @@ export def "get-message-history" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --topic: string # Messaging topic to retrieve the history for.
-  --count: string # Number of messages to retrieve. 0 retrieves all messages.
+  --topic: string # Messaging topic to retrieve the history for. (required)
+  --count: string # Number of messages to retrieve. 0 retrieves all messages. (required)
   --last: string # Point in time to start search. (epoch timestamp)
   --start: string # Start time for searching within a timeframe. (epoch timestamp)
   --stop: string # End time for searching within a timeframe. (epoch timestamp)
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($topic == null) { error make --unspanned { msg: "required query parameter 'topic' missing: pass --topic" } }
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let qp = [(serialize-qp "topic" $topic "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "last" $last "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "stop" $stop "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/1/message/{system_key}") $qp $auth.query)
   let accept_val = "application/json"
@@ -5202,7 +5349,7 @@ export def "publish-message" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
   --body: string # e.g. {"temperature":43}
   --qos: float # e.g. 0
   topic: string # e.g. /sensor/111111
@@ -5211,6 +5358,7 @@ export def "publish-message" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/1/message/{system_key}/publish") $auth.query)
   let req_body = {"body": $body, "qos": $qos, "topic": $topic} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5247,10 +5395,11 @@ export def "get-users" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Query object used to filter the user list. See the query model below for an example.
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
 ]: nothing -> record<Data: table<creation_date: string, email: string, user_id: string>, Total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v/1/user" $qp $auth.query)
   let accept_val = "application/json"
@@ -5285,11 +5434,13 @@ export def "auth-anon" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-system-key: string # System Key that identifies the system you're logging the user into.
-  --clear-blade-system-secret: string # System Secret that ensures authenticity.
+  --clear-blade-system-key: string # System Key that identifies the system you're logging the user into. (required)
+  --clear-blade-system-secret: string # System Secret that ensures authenticity. (required)
 ]: nothing -> record<user_token: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_system_key == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-SystemKey' missing: pass --clear-blade-system-key" } }
+  if ($clear_blade_system_secret == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-SystemSecret' missing: pass --clear-blade-system-secret" } }
   let full_url = (build-url $base "/api/v/1/user/anon" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5323,14 +5474,16 @@ export def "auth-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-system-key: string # System Key that identifies the system you're logging the user into.
-  --clear-blade-system-secret: string # System Secret that ensures authenticity.
+  --clear-blade-system-key: string # System Key that identifies the system you're logging the user into. (required)
+  --clear-blade-system-secret: string # System Secret that ensures authenticity. (required)
   --email: string # e.g. cbman@clearblade.com
   --password: string # e.g. cl34rbl4d3
 ]: any -> record<expires_at: int, refresh_token: string, user_id: string, user_token: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_system_key == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-SystemKey' missing: pass --clear-blade-system-key" } }
+  if ($clear_blade_system_secret == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-SystemSecret' missing: pass --clear-blade-system-secret" } }
   let full_url = (build-url $base "/api/v/1/user/auth" $auth.query)
   let req_body = {"email": $email, "password": $password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5366,11 +5519,13 @@ export def "user-check-auth" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-system-key: string # System Key that identifies the system the user might be logged into.
-  --clear-blade-user-token: string # User Token obtained through previous authentication.
+  --clear-blade-system-key: string # System Key that identifies the system the user might be logged into. (required)
+  --clear-blade-user-token: string # User Token obtained through previous authentication. (required)
 ]: nothing -> record<is_authenticated: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_system_key == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-SystemKey' missing: pass --clear-blade-system-key" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base "/api/v/1/user/checkauth" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5404,14 +5559,17 @@ export def "delete-user-as-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Token obtained through user authentication.
-  --clear-blade-system-key: string
-  --clear-blade-system-secret: string
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
+  --clear-blade-system-key: string # required
+  --clear-blade-system-secret: string # required
   --user-id: string # e.g. c6b4cf0b8ca5b7c3fad793cb12
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
+  if ($clear_blade_system_key == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-SystemKey' missing: pass --clear-blade-system-key" } }
+  if ($clear_blade_system_secret == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-SystemSecret' missing: pass --clear-blade-system-secret" } }
   let full_url = (build-url $base "/api/v/1/user/info" $auth.query)
   let req_body = {"user_id": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5447,10 +5605,11 @@ export def "get-user-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
 ]: nothing -> record<creation_date: string, email: string, user_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base "/api/v/1/user/info" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5484,12 +5643,13 @@ export def "update-user-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
   --column-name: string # e.g. column_value
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base "/api/v/1/user/info" $auth.query)
   let req_body = {"column_name": $column_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5525,10 +5685,11 @@ export def "user-logout" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base "/api/v/1/user/logout" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5562,13 +5723,14 @@ export def "update-user-pass" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
   new_password: string # e.g. P@ssw0rd
   old_password: string # e.g. cl34rbl4d3
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base "/api/v/1/user/pass" $auth.query)
   let req_body = {"new_password": $new_password, "old_password": $old_password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5604,15 +5766,18 @@ export def "reg-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-system-key: string # System Key that identifies the system you're adding the user to.
-  --clear-blade-system-secret: string # System Secret that ensures authenticity.
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-system-key: string # System Key that identifies the system you're adding the user to. (required)
+  --clear-blade-system-secret: string # System Secret that ensures authenticity. (required)
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
   email: string # User's email. (e.g. cbman@clearblade.com)
   password: string # User's password. (e.g. cl34rbl4d3)
 ]: any -> record<creation_date: string, email: string, expires_at: int, options: string, refresh_token: string, user_id: string, user_token: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_system_key == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-SystemKey' missing: pass --clear-blade-system-key" } }
+  if ($clear_blade_system_secret == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-SystemSecret' missing: pass --clear-blade-system-secret" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base "/api/v/1/user/reg" $auth.query)
   let req_body = {"email": $email, "password": $password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5649,12 +5814,14 @@ export def "delete-devices" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query: string # Tags to filter devices by. See the query model below for an example.
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --query: string # Tags to filter devices by. See the query model below for an example. (required)
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'SystemKey' must be non-empty" } }
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/2/devices/{system_key}") $qp $auth.query)
   let accept_val = "application/json"
@@ -5691,11 +5858,12 @@ export def "get-devices" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Tags to filter devices by. See the query model below for an example.
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
 ]: nothing -> record<allow_certificate_auth: bool, allow_key_auth: bool, certificate: string, created_date: int, description: string, device_key: string, enabled: bool, last_active_date: int, name: string, state: string, system_key: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'SystemKey' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/2/devices/{system_key}") $qp $auth.query)
   let accept_val = "application/json"
@@ -5733,7 +5901,7 @@ export def "update-devices" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
   --set: record # shape: {[columnName]?: any}
   --query: list # item shape: {EQ?: list, GT?: list, GTE?: list, LT?: list, LTE?: list, NEQ?: list, RE?: list}
 ]: any -> record<DATA: list<record>, TOTAL: int> {
@@ -5741,6 +5909,7 @@ export def "update-devices" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'SystemKey' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/2/devices/{system_key}") $auth.query)
   let req_body = {"$set": $set, "query": $query} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5819,7 +5988,7 @@ export def "add-device" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
   --active-key: string # e.g. 1574445864
   --allow-certificate-auth: oneof<nothing, bool>
   --allow-key-auth: oneof<nothing, bool>
@@ -5834,6 +6003,7 @@ export def "add-device" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/2/devices/{system_key}/{name}") $auth.query)
   let req_body = {"active_key": $active_key, "allow_certificate_auth": $allow_certificate_auth, "allow_key_auth": $allow_key_auth, "certificate": $certificate, "description": $description, "name": $body_name, "state": $state, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5871,7 +6041,7 @@ export def "update-device-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
   --custom-attribute: string # e.g. custom_setting
   --state: string # e.g. On
 ]: any -> record<allow_certificate_auth: bool, allow_key_auth: bool, certificate: string, created_date: int, description: string, device_key: string, enabled: bool, last_active_date: int, name: string, state: string, system_key: string, type: string> {
@@ -5880,6 +6050,7 @@ export def "update-device-info" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/2/devices/{system_key}/{name}") $auth.query)
   let req_body = {"custom_attribute": $custom_attribute, "state": $state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5916,12 +6087,14 @@ export def "get-all-edges" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # System Key that identifies the system you want the info about.
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --id: string # System Key that identifies the system you want the info about. (required)
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/2/edges/{system_key}") $qp $auth.query)
   let accept_val = "application/json"
@@ -5957,11 +6130,12 @@ export def "get-collections" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
 ]: nothing -> table<appID: string, collectionID: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/3/allcollections/{system_key}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5996,11 +6170,12 @@ export def "return-service-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Dev Token obtained through authentication.
+  --clear-blade-dev-token: string # Dev Token obtained through authentication. (required)
 ]: nothing -> record<code: table<auto_balance: bool, auto_balance_euid: string, auto_restart: bool, concurrency: int, euid: string, execution_timeout: int, logging_enabled: bool, name: string, namespace: string, system_key: string, uuid: string, version: int, version_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/3/code/codemeta/{system_key}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6036,12 +6211,13 @@ export def "delete-timer-by-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/3/code/{system_key}/timer/{name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6077,12 +6253,13 @@ export def "get-timer-by-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
 ]: nothing -> record<description: string, frequency: int, name: string, namespace: string, repeats: int, service_name: string, start_time: string, system_key: string, system_secret: string, timer_key: string, user_id: string, user_token: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/3/code/{system_key}/timer/{name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6118,7 +6295,7 @@ export def "create-new-timer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
   --description: string # Information about the timer (e.g. My 10 second timer)
   --disabled: oneof<nothing, bool> # Enable or disable timer (e.g. true)
   frequency: int # Frequency (in seconds) between two consecutive invocations of a timer handler (e.g. 10)
@@ -6131,9 +6308,12 @@ export def "create-new-timer" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/3/code/{system_key}/timer/{name}") $auth.query)
   let req_body = {"description": $description, "disabled": $disabled, "frequency": $frequency, "name": $body_name, "repeats": $repeats, "service_name": $service_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "disabled") == null) { error make --unspanned { msg: "required body field 'disabled' missing: pass --disabled or pipe a record" } }
+  if (($req_body | get -o "name") == null) { error make --unspanned { msg: "required body field 'name' missing: pass --body-name or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
@@ -6168,7 +6348,7 @@ export def "update-timer-by-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
   --description: string # Information about the timer (e.g. My 10 second timer)
   --disabled: oneof<nothing, bool> # Enable or disable timer (e.g. true)
   frequency: int # Frequency (in seconds) between two consecutive invocations of a timer handler (e.g. 10)
@@ -6181,9 +6361,12 @@ export def "update-timer-by-name" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/3/code/{system_key}/timer/{name}") $auth.query)
   let req_body = {"description": $description, "disabled": $disabled, "frequency": $frequency, "name": $body_name, "repeats": $repeats, "service_name": $service_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "disabled") == null) { error make --unspanned { msg: "required body field 'disabled' missing: pass --disabled or pipe a record" } }
+  if (($req_body | get -o "name") == null) { error make --unspanned { msg: "required body field 'name' missing: pass --body-name or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
@@ -6217,11 +6400,12 @@ export def "get-all-timers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
 ]: nothing -> table<description: string, frequency: int, name: string, namespace: string, repeats: int, service_name: string, start_time: string, system_key: string, system_secret: string, timer_key: string, user_id: string, user_token: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/3/code/{system_key}/timers") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6257,12 +6441,13 @@ export def "delete-trigger-by-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/3/code/{system_key}/trigger/{name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6298,12 +6483,13 @@ export def "get-trigger-by-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
 ]: nothing -> table<event_definition: record<def_keys: list, def_module: string, def_name: string, visibility: bool>, key_value_pairs: record, name: string, namespace: string, service_name: string, system_key: string, system_secret: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/3/code/{system_key}/trigger/{name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6340,7 +6526,7 @@ export def "create-new-trigger" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
   def_module: string # e.g. Messaging
   def_name: string # e.g. Publish
   --disabled: oneof<nothing, bool> # Enable or disable trigger (e.g. true)
@@ -6352,9 +6538,11 @@ export def "create-new-trigger" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/3/code/{system_key}/trigger/{name}") $auth.query)
   let req_body = {"def_module": $def_module, "def_name": $def_name, "disabled": $disabled, "key_value_pairs": $key_value_pairs, "service_name": $service_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "disabled") == null) { error make --unspanned { msg: "required body field 'disabled' missing: pass --disabled or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
@@ -6390,7 +6578,7 @@ export def "update-trigger-by-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
   def_module: string # e.g. Messaging
   def_name: string # e.g. Publish
   --disabled: oneof<nothing, bool> # Enable or disable trigger (e.g. true)
@@ -6402,9 +6590,11 @@ export def "update-trigger-by-name" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/3/code/{system_key}/trigger/{name}") $auth.query)
   let req_body = {"def_module": $def_module, "def_name": $def_name, "disabled": $disabled, "key_value_pairs": $key_value_pairs, "service_name": $service_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "disabled") == null) { error make --unspanned { msg: "required body field 'disabled' missing: pass --disabled or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
@@ -6438,11 +6628,12 @@ export def "get-all-trigger" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
 ]: nothing -> table<event_definition: record<def_keys: list, def_module: string, def_name: string, visibility: bool>, key_value_pairs: record, name: string, namespace: string, service_name: string, system_key: string, system_secret: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/3/code/{system_key}/triggers") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6476,12 +6667,15 @@ export def "delete-collection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # ID that identifies the collection to be deleted.
-  --clear-blade-user-token: string # Token obtained through user authentication.
-  --clear-blade-system-key: string # System Key that identifies the system you're adding the user to.
+  --id: string # ID that identifies the collection to be deleted. (required)
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
+  --clear-blade-system-key: string # System Key that identifies the system you're adding the user to. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
+  if ($clear_blade_system_key == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-SystemKey' missing: pass --clear-blade-system-key" } }
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v/3/collectionmanagement" $qp $auth.query)
   let accept_val = "application/json"
@@ -6516,8 +6710,8 @@ export def "create-collection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Token obtained through user authentication.
-  --clear-blade-system-key: string # System Key that identifies the system you're adding the user to.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
+  --clear-blade-system-key: string # System Key that identifies the system you're adding the user to. (required)
   app_id: string # This is the system key (e.g. c0f8e2c50bbeeaf87f5efa2eee301)
   --collection-id: string # e.g. c0f8e2c50bbeeafb87f5efa2eee301
   name: string # e.g. newCollection
@@ -6525,6 +6719,8 @@ export def "create-collection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
+  if ($clear_blade_system_key == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-SystemKey' missing: pass --clear-blade-system-key" } }
   let full_url = (build-url $base "/api/v/3/collectionmanagement" $auth.query)
   let req_body = {"appID": $app_id, "collectionID": $collection_id, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -6561,14 +6757,16 @@ export def "update-collection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Token obtained through user authentication.
-  --clear-blade-system-key: string # System Key that identifies the system you're adding the user to.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
+  --clear-blade-system-key: string # System Key that identifies the system you're adding the user to. (required)
   --add-column: any # shape: {id: string, name: string, type: string}
   id: string # This is the collection ID (e.g. c0f8e2c50bbeeafb87f5efa2eee301)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
+  if ($clear_blade_system_key == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-SystemKey' missing: pass --clear-blade-system-key" } }
   let full_url = (build-url $base "/api/v/3/collectionmanagement" $auth.query)
   let req_body = {"addColumn": $add_column, "id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -6605,11 +6803,12 @@ export def "get-device-table-schema" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
 ]: nothing -> table<ColumnName: string, ColumnType: string, PK: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/3/devices/{system_key}/columns") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6644,11 +6843,12 @@ export def "get-device-count" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/3/devices/{system_key}/count") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6683,11 +6883,12 @@ export def "get-edge-table-schema" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/3/edges/{system_key}/columns") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6722,11 +6923,12 @@ export def "get-edge-count" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/3/edges/{system_key}/count") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6762,12 +6964,13 @@ export def "delete-edge-by-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-user-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/3/edges/{system_key}/{name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6803,12 +7006,13 @@ export def "get-edge-data-by-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/3/edges/{system_key}/{name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6844,7 +7048,7 @@ export def "create-new-edge" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-user-token: string # Developer Token obtained through admin authentication. (required)
   --description: string
   --local-addr: string
   --local-port: string
@@ -6861,9 +7065,12 @@ export def "create-new-edge" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/3/edges/{system_key}/{name}") $auth.query)
   let req_body = {"description": $description, "local_addr": $local_addr, "local_port": $local_port, "location": $location, "mac_address": $mac_address, "public_addr": $public_addr, "public_port": $public_port, "system_key": $body_system_key, "system_secret": $system_secret, "token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "system_key") == null) { error make --unspanned { msg: "required body field 'system_key' missing: pass --body-system-key or pipe a record" } }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
@@ -6898,7 +7105,7 @@ export def "update-edge-by-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-user-token: string # Developer Token obtained through admin authentication. (required)
   --description: string
   --local-addr: string
   --local-port: string
@@ -6915,9 +7122,11 @@ export def "update-edge-by-name" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/3/edges/{system_key}/{name}") $auth.query)
   let req_body = {"description": $description, "local_addr": $local_addr, "local_port": $local_port, "location": $location, "mac_address": $mac_address, "public_addr": $public_addr, "public_port": $public_port, "system_key": $body_system_key, "system_secret": $system_secret, "token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "system_key") == null) { error make --unspanned { msg: "required body field 'system_key' missing: pass --body-system-key or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
@@ -6952,11 +7161,12 @@ export def "get-all-deployments" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Tags to filter deployments by. See the query model above for an example.
-  --clear-blade-user-token: string # User Token obtained through user authentication.
+  --clear-blade-user-token: string # User Token obtained through user authentication. (required)
 ]: nothing -> table<description: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/3/{system_key}/deployments") $qp $auth.query)
   let accept_val = "application/json"
@@ -6993,7 +7203,7 @@ export def "create-deployment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # User Token obtained through user authentication.
+  --clear-blade-user-token: string # User Token obtained through user authentication. (required)
   --assets: list # item shape: {asset_class?: string, asset_id?: string, sync_to_edge?: bool, sync_to_platform?: bool}
   --edges: list # Names of edges to be included in the deployment (e.g. [edge1, edge2, edge3])
   name: string
@@ -7002,6 +7212,7 @@ export def "create-deployment" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/3/{system_key}/deployments") $auth.query)
   let req_body = {"assets": $assets, "edges": $edges, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -7039,12 +7250,13 @@ export def "delete-deployment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # User Token obtained through user authentication.
+  --clear-blade-user-token: string # User Token obtained through user authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($deployment_name | is-empty) { error make --unspanned { msg: "path parameter 'deploymentName' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/api/v/3/{system_key}/deployments/{deployment_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7080,12 +7292,13 @@ export def "get-a-deployment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clearblade-usertoken: string # User Token obtained through user authentication.
+  --clearblade-usertoken: string # User Token obtained through user authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($deployment_name | is-empty) { error make --unspanned { msg: "path parameter 'deploymentName' must be non-empty" } }
+  if ($clearblade_usertoken == null) { error make --unspanned { msg: "required header parameter 'clearblade-usertoken' missing: pass --clearblade-usertoken" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/api/v/3/{system_key}/deployments/{deployment_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7123,7 +7336,7 @@ export def "update-deployment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # User Token obtained through user authentication.
+  --clear-blade-user-token: string # User Token obtained through user authentication. (required)
   assets: record # Assets to be added and removed from deployment — shape: {add?: list, remove?: list}
   edges: record # Edges to be added and removed from deployment — shape: {adds?: list<string>, removes?: list<string>}
 ]: any -> any {
@@ -7132,6 +7345,7 @@ export def "update-deployment" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($deployment_name | is-empty) { error make --unspanned { msg: "path parameter 'deploymentName' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/api/v/3/{system_key}/deployments/{deployment_name}") $auth.query)
   let req_body = {"assets": $assets, "edges": $edges} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -7168,11 +7382,12 @@ export def "get-buckets-data" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> table<deployment_name: string, edge_config: list<any>, edge_storage: string, platform_config: list<any>, platform_storage: string, system_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/4/bucket_sets/{system_key}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7208,12 +7423,13 @@ export def "get-single-bucket-data" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> record<deployment_name: string, edge_config: list<any>, edge_storage: string, platform_config: list<any>, platform_storage: string, system_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($deployment_name | is-empty) { error make --unspanned { msg: "path parameter 'deploymentName' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/api/v/4/bucket_sets/{system_key}/{deployment_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7249,7 +7465,7 @@ export def "copy-bucket-file" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   --from-box: string # Box Name where file is being copied/moved (e.g. inbox)
   --from-path: string # Relative File Path Name where file is being copied/moved (e.g. /relative/file/path)
   --to-box: string # Box Name of where file is being copied/moved to (e.g. inbox)
@@ -7260,6 +7476,7 @@ export def "copy-bucket-file" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($deployment_name | is-empty) { error make --unspanned { msg: "path parameter 'deploymentName' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/api/v/4/bucket_sets/{system_key}/{deployment_name}/file/copy") $auth.query)
   let req_body = {"from_box": $from_box, "from_path": $from_path, "to_box": $to_box, "to_path": $to_path} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -7297,7 +7514,7 @@ export def "create-bucket-file" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   --box: string # Box Name (e.g. inbox)
   --contents: string # base64 encoded file contents (e.g. IyEvYmluL2Jhc2gKbWtkaXIgU2hvd1RpbWVBZGFwdGVyCgptdiBzdGFydC5zaCBTaG93VGltZUFkYXB0ZXIKbXYgc3RvcC5zaCBTaG93VGltZUFkYXB0ZXIKbXYgc3RhdHVzLnNoIFNob3dUaW1lQWRhcHRlcgptdiBkZXBsb3kuc2ggU2hvd1RpbWVBZGFwdGVyCm12IHVuZGVwbG95LnNoIFNob3dUaW1lQWRhcHRlcgptdiBzaG93VGltZSBTaG93VGltZUFkYXB0ZXIKCmVjaG8gIlNob3dUaW1lQWRhcHRlciBEZXBsb3llZCI=)
   --path: string # Relative File Path (e.g. /relative/file/path)
@@ -7307,6 +7524,7 @@ export def "create-bucket-file" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($deployment_name | is-empty) { error make --unspanned { msg: "path parameter 'deploymentName' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/api/v/4/bucket_sets/{system_key}/{deployment_name}/file/create") $auth.query)
   let req_body = {"box": $box, "contents": $contents, "path": $path} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -7344,7 +7562,7 @@ export def "delete-bucket-file" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   --box: string # Box Name of file being deleted (e.g. inbox)
   --path: string # Relative File Path Name of file being deleted (e.g. /relative/file/path)
 ]: any -> any {
@@ -7353,6 +7571,7 @@ export def "delete-bucket-file" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($deployment_name | is-empty) { error make --unspanned { msg: "path parameter 'deploymentName' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/api/v/4/bucket_sets/{system_key}/{deployment_name}/file/delete") $auth.query)
   let req_body = {"box": $box, "path": $path} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -7392,12 +7611,13 @@ export def "get-box-files-meta" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --box: string # one of inbox, outbox or sandbox, defaults to 'inbox' if empty.
   --path: string # Query object used to filter the items. See query model at in the description for example.
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> record<base_name: string, bucket_name: string, last_modified: string, path_name: string, permissions: string, relative_name: string, size: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($deployment_name | is-empty) { error make --unspanned { msg: "path parameter 'deploymentName' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let qp = [(serialize-qp "box" $box "scalar") (serialize-qp "path" $path "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/api/v/4/bucket_sets/{system_key}/{deployment_name}/file/meta") $qp $auth.query)
   let accept_val = "application/json"
@@ -7434,7 +7654,7 @@ export def "move-bucket-file" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   --from-box: string # Box Name where file is being copied/moved (e.g. inbox)
   --from-path: string # Relative File Path Name where file is being copied/moved (e.g. /relative/file/path)
   --to-box: string # Box Name of where file is being copied/moved to (e.g. inbox)
@@ -7445,6 +7665,7 @@ export def "move-bucket-file" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($deployment_name | is-empty) { error make --unspanned { msg: "path parameter 'deploymentName' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/api/v/4/bucket_sets/{system_key}/{deployment_name}/file/move") $auth.query)
   let req_body = {"from_box": $from_box, "from_path": $from_path, "to_box": $to_box, "to_path": $to_path} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -7483,12 +7704,13 @@ export def "get-box-files" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --box: string # Query object used to filter the items. See query model at in the description for example.
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> record<example_full_path_to_file_txt: record<base_name: string, bucket_name: string, last_modified: string, path_name: string, permissions: string, relative_name: string, size: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($deployment_name | is-empty) { error make --unspanned { msg: "path parameter 'deploymentName' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let qp = [(serialize-qp "box" $box "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/api/v/4/bucket_sets/{system_key}/{deployment_name}/files") $qp $auth.query)
   let accept_val = "application/json"
@@ -7525,13 +7747,15 @@ export def "delete-non-unique-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --column-name: string
-  --clear-blade-dev-token: string # Dev Token obtained through dev authentication.
+  --column-name: string # required
+  --clear-blade-dev-token: string # Dev Token obtained through dev authentication. (required)
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($collection_name | is-empty) { error make --unspanned { msg: "path parameter 'collectionName' must be non-empty" } }
+  if ($column_name == null) { error make --unspanned { msg: "required query parameter 'columnName' missing: pass --column-name" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let qp = [(serialize-qp "columnName" $column_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), collection_name: (encode-path-segment $collection_name)} | format pattern "/api/v/4/data/{system_key}/{collection_name}/index") $qp $auth.query)
   let accept_val = "application/json"
@@ -7568,13 +7792,15 @@ export def "create-non-unique-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --column-name: string
-  --clear-blade-dev-token: string # Dev Token obtained through dev authentication.
+  --column-name: string # required
+  --clear-blade-dev-token: string # Dev Token obtained through dev authentication. (required)
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($collection_name | is-empty) { error make --unspanned { msg: "path parameter 'collectionName' must be non-empty" } }
+  if ($column_name == null) { error make --unspanned { msg: "required query parameter 'columnName' missing: pass --column-name" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let qp = [(serialize-qp "columnName" $column_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), collection_name: (encode-path-segment $collection_name)} | format pattern "/api/v/4/data/{system_key}/{collection_name}/index") $qp $auth.query)
   let accept_val = "application/json"
@@ -7611,12 +7837,13 @@ export def "get-indexes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Dev Token obtained through authentication.
+  --clear-blade-dev-token: string # Dev Token obtained through authentication. (required)
 ]: nothing -> record<Data: table<name: string, type: string>, Total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($collection_name | is-empty) { error make --unspanned { msg: "path parameter 'collectionName' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), collection_name: (encode-path-segment $collection_name)} | format pattern "/api/v/4/data/{system_key}/{collection_name}/listindexes") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7652,13 +7879,15 @@ export def "delete-unique-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --column-name: string
-  --clear-blade-dev-token: string # Dev Token obtained through dev authentication.
+  --column-name: string # required
+  --clear-blade-dev-token: string # Dev Token obtained through dev authentication. (required)
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($collection_name | is-empty) { error make --unspanned { msg: "path parameter 'collectionName' must be non-empty" } }
+  if ($column_name == null) { error make --unspanned { msg: "required query parameter 'columnName' missing: pass --column-name" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let qp = [(serialize-qp "columnName" $column_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), collection_name: (encode-path-segment $collection_name)} | format pattern "/api/v/4/data/{system_key}/{collection_name}/uniqueindex") $qp $auth.query)
   let accept_val = "application/json"
@@ -7695,13 +7924,15 @@ export def "create-unique-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --column-name: string
-  --clear-blade-dev-token: string # Dev Token obtained through dev authentication.
+  --column-name: string # required
+  --clear-blade-dev-token: string # Dev Token obtained through dev authentication. (required)
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($collection_name | is-empty) { error make --unspanned { msg: "path parameter 'collectionName' must be non-empty" } }
+  if ($column_name == null) { error make --unspanned { msg: "required query parameter 'columnName' missing: pass --column-name" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let qp = [(serialize-qp "columnName" $column_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), collection_name: (encode-path-segment $collection_name)} | format pattern "/api/v/4/data/{system_key}/{collection_name}/uniqueindex") $qp $auth.query)
   let accept_val = "application/json"
@@ -7738,13 +7969,15 @@ export def "update-upsert" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --conflict-column: string # A column in your table that has a unique constraint. `columnName` can be used.
-  --clear-blade-dev-token: string # Dev Token obtained through dev authentication.
+  --conflict-column: string # A column in your table that has a unique constraint. `columnName` can be used. (required)
+  --clear-blade-dev-token: string # Dev Token obtained through dev authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($collection_name | is-empty) { error make --unspanned { msg: "path parameter 'collectionName' must be non-empty" } }
+  if ($conflict_column == null) { error make --unspanned { msg: "required query parameter 'conflictColumn' missing: pass --conflict-column" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let qp = [(serialize-qp "conflictColumn" $conflict_column "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), collection_name: (encode-path-segment $collection_name)} | format pattern "/api/v/4/data/{system_key}/{collection_name}/upsert") $qp $auth.query)
   let accept_val = "application/json"
@@ -7780,11 +8013,12 @@ export def "connected-device-count" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
 ]: nothing -> record<total_device_connections: int, total_devices: int, unique_device_connections: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/4/devices/{system_key}/connectioncount") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7819,11 +8053,12 @@ export def "get-connected-device-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Dev Token obtained through authentication.
+  --clear-blade-user-token: string # Dev Token obtained through authentication. (required)
 ]: nothing -> record<device_name: table<client_id: string, time_connected: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/4/devices/{system_key}/connections") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7859,12 +8094,13 @@ export def "get-connected-device-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
 ]: nothing -> record<allow_certificate_auth: bool, allow_key_auth: bool, certificate: string, connections: table<client_id: string, time_connected: string>, created_date: int, description: string, device_key: string, enabled: bool, has_keys: bool, last_active_date: int, name: string, state: string, system_key: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/4/devices/{system_key}/connections/{name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7899,11 +8135,12 @@ export def "get-all-external-db" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Dev Token obtained through authentication.
+  --clear-blade-dev-token: string # Dev Token obtained through authentication. (required)
 ]: nothing -> table<dbtype: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/4/external-db/{system_key}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7939,7 +8176,7 @@ export def "create-external-db" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Dev Token obtained through authentication.
+  --clear-blade-dev-token: string # Dev Token obtained through authentication. (required)
   --credentials: any # shape: {address?: string, dbname?: string, password?: string, port?: string, user?: string}
   --dbtype: string # e.g. mysql
   --name: string # e.g. mysql_example
@@ -7948,6 +8185,7 @@ export def "create-external-db" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/4/external-db/{system_key}") $auth.query)
   let req_body = {"credentials": $credentials, "dbtype": $dbtype, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -7985,12 +8223,13 @@ export def "delete-external-db" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # User Token obtained through authentication.
+  --clear-blade-user-token: string # User Token obtained through authentication. (required)
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/4/external-db/{system_key}/{name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8026,12 +8265,13 @@ export def "get-external-db" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # User Token obtained through authentication.
+  --clear-blade-user-token: string # User Token obtained through authentication. (required)
 ]: nothing -> record<credentials: record<address: string, dbname: string, password: string, port: string, user: string>, dbtype: string, id: int, name: string, system_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/4/external-db/{system_key}/{name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8067,7 +8307,7 @@ export def "update-database-credentials" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # User Token obtained through authentication.
+  --clear-blade-user-token: string # User Token obtained through authentication. (required)
   --address: string # e.g. MYSQL_ADDRESS
   --dbname: string # e.g. MYSQL_DATABASE_NAME
   --password: string # e.g. MSQL_PASSWORD
@@ -8079,6 +8319,7 @@ export def "update-database-credentials" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/4/external-db/{system_key}/{name}") $auth.query)
   let req_body = {"address": $address, "dbname": $dbname, "password": $password, "port": $port, "user": $user} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -8116,7 +8357,7 @@ export def "perform-db-operation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # User Token obtained through authentication.
+  --clear-blade-user-token: string # User Token obtained through authentication. (required)
   --operation: any
 ]: any -> record<Data: list<any>, Total: int> {
   let input = $in
@@ -8124,6 +8365,7 @@ export def "perform-db-operation" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/4/external-db/{system_key}/{name}/data") $auth.query)
   let req_body = {"operation": $operation} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -8161,11 +8403,12 @@ export def "get-topics" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Query object used to filter the items. See query model in the description for example.
-  --clear-blade-dev-token: string # Dev Token obtained through authentication.
+  --clear-blade-dev-token: string # Dev Token obtained through authentication. (required)
 ]: nothing -> table<ip: string, payload: string, payloadsize: int, pk: string, qos: int, time: int, topicid: string, userid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/4/message/{system_key}/topics") $qp $auth.query)
   let accept_val = "application/json"
@@ -8201,11 +8444,12 @@ export def "get-topic-count" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Dev Token obtained through authentication.
+  --clear-blade-dev-token: string # Dev Token obtained through authentication. (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/4/message/{system_key}/topics/count") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8240,13 +8484,14 @@ export def "change-user-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
   changes: any # Changes roles and password — shape: {password?: string, roles?: any}
   user: string # e.g. b4d8aaab0bf48e98dacbd78e9e50
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base "/api/v/4/user/manage" $auth.query)
   let req_body = {"changes": $changes, "user": $user} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -8284,12 +8529,13 @@ export def "payload-webhook-query" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # User authentication and data pushed through webhook
+  --qp-token: string # User authentication and data pushed through webhook (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($webhook_name | is-empty) { error make --unspanned { msg: "path parameter 'webhookName' must be non-empty" } }
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), webhook_name: (encode-path-segment $webhook_name)} | format pattern "/api/v/4/webhook/execute/{system_key}/{webhook_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -8324,7 +8570,7 @@ export def "execute-webhook" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-user-token: string # Token obtained through user authentication.
+  --clear-blade-user-token: string # Token obtained through user authentication. (required)
   data: string # e.g. Third party server data
 ]: any -> any {
   let input = $in
@@ -8332,6 +8578,7 @@ export def "execute-webhook" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($webhook_name | is-empty) { error make --unspanned { msg: "path parameter 'webhookName' must be non-empty" } }
+  if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), webhook_name: (encode-path-segment $webhook_name)} | format pattern "/api/v/4/webhook/execute/{system_key}/{webhook_name}") $auth.query)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -8368,11 +8615,12 @@ export def "get-adapters" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Dev Token obtained through authentication.
+  --clear-blade-dev-token: string # Dev Token obtained through authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'SystemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/4/{system_key}/adapters") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8407,7 +8655,7 @@ export def "add-adapter" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Dev Token obtained through authentication..
+  --clear-blade-dev-token: string # Dev Token obtained through authentication.. (required)
   --architecture: string # The platform the adapter will be running on. (e.g. darwin-amd64)
   --deploy-command: string # The file name that will be running for the deploy command. (e.g. )
   --logs-command: string # A command or shell script that will be used to retrieve any logs printed out by the adapter while it is running. (e.g. )
@@ -8422,6 +8670,7 @@ export def "add-adapter" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'SystemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/4/{system_key}/adapters") $auth.query)
   let req_body = {"architecture": $architecture, "deploy_command": $deploy_command, "logs_command": $logs_command, "name": $name, "os": $os, "start_command": $start_command, "status_command": $status_command, "stop_command": $stop_command, "undeploy_command": $undeploy_command} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -8459,12 +8708,13 @@ export def "delete-adapter" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'SystemKey' must be non-empty" } }
   if ($adapter_name | is-empty) { error make --unspanned { msg: "path parameter 'AdapterName' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), adapter_name: (encode-path-segment $adapter_name)} | format pattern "/api/v/4/{system_key}/adapters/{adapter_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8500,7 +8750,7 @@ export def "map-adapter-command" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Dev Token obtained through authentication.
+  --clear-blade-dev-token: string # Dev Token obtained through authentication. (required)
   --architecture: string # The platform the adapter will be running on. (e.g. darwin-amd64)
   --deploy-command: string # The file name that will be running for the deploy command. (e.g. ./deploy.sh)
   --logs-command: string # e.g. ./logs.sh
@@ -8518,6 +8768,7 @@ export def "map-adapter-command" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'SystemKey' must be non-empty" } }
   if ($adapter_name | is-empty) { error make --unspanned { msg: "path parameter 'AdapterName' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), adapter_name: (encode-path-segment $adapter_name)} | format pattern "/api/v/4/{system_key}/adapters/{adapter_name}") $auth.query)
   let req_body = {"architecture": $architecture, "deploy_command": $deploy_command, "logs_command": $logs_command, "os": $os, "run_deploy_on_deploy": $run_deploy_on_deploy, "run_start_on_deploy": $run_start_on_deploy, "run_stop_on_deploy": $run_stop_on_deploy, "start_command": $start_command, "status_command": $status_command, "stop_command": $stop_command, "undeploy_command": $undeploy_command} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -8555,7 +8806,7 @@ export def "add-edge-command" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Dev Token obtained through authentication.
+  --clear-blade-dev-token: string # Dev Token obtained through authentication. (required)
   command: string # The command the edge is currently using. (e.g. status)
   edges: string # Name of edge(s) being used. (e.g. [edgeName])
 ]: any -> any {
@@ -8564,6 +8815,7 @@ export def "add-edge-command" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'SystemKey' must be non-empty" } }
   if ($adapter_name | is-empty) { error make --unspanned { msg: "path parameter 'AdapterName' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), adapter_name: (encode-path-segment $adapter_name)} | format pattern "/api/v/4/{system_key}/adapters/{adapter_name}/control") $auth.query)
   let req_body = {"command": $command, "edges": $edges} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -8601,12 +8853,13 @@ export def "adapter-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Dev Token obtained through authentication.
+  --clear-blade-dev-token: string # Dev Token obtained through authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'SystemKey' must be non-empty" } }
   if ($adapter_name | is-empty) { error make --unspanned { msg: "path parameter 'AdapterName' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), adapter_name: (encode-path-segment $adapter_name)} | format pattern "/api/v/4/{system_key}/adapters/{adapter_name}/files") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8642,7 +8895,7 @@ export def "update-file-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Dev Token obtained through authentication.
+  --clear-blade-dev-token: string # Dev Token obtained through authentication. (required)
   --body-adapter-name: string # The adapter the file is a part of.
   --file: string # The base64 encoded file content. (e.g. IyEvYmluL2Jhc2gKbWtkaXIgU2hvd1RpbWVBZGFwdGVyCgptdiBzdGFydC5zaCBTaG93VGltZUFkYXB0ZXIKbXYgc3RvcC5zaCBTaG93VGltZUFkYXB0ZXIKbXYgc3RhdHVzLnNoIFNob3dUaW1lQWRhcHRlcgptdiBkZXBsb3kuc2ggU2hvd1RpbWVBZGFwdGVyCm12IHVuZGVwbG95LnNoIFNob3dUaW1lQWRhcHRlcgptdiBzaG93VGltZSBTaG93VGltZUFkYXB0ZXIKCmVjaG8gIlNob3dUaW1lQWRhcHRlciBEZXBsb3llZCI=)
   name: string # The name of the file, spaces ` ` or `-` are not allowed
@@ -8653,6 +8906,7 @@ export def "update-file-info" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'SystemKey' must be non-empty" } }
   if ($adapter_name | is-empty) { error make --unspanned { msg: "path parameter 'AdapterName' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), adapter_name: (encode-path-segment $adapter_name)} | format pattern "/api/v/4/{system_key}/adapters/{adapter_name}/files") $auth.query)
   let req_body = {"adapter_name": $body_adapter_name, "file": $file, "name": $name, "path_name": $path_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -8691,13 +8945,14 @@ export def "delete-file" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'SystemKey' must be non-empty" } }
   if ($adapter_name | is-empty) { error make --unspanned { msg: "path parameter 'AdapterName' must be non-empty" } }
   if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'fileName' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), adapter_name: (encode-path-segment $adapter_name), file_name: (encode-path-segment $file_name)} | format pattern "/api/v/4/{system_key}/adapters/{adapter_name}/files/{file_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8734,13 +8989,14 @@ export def "file-download" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Dev Token obtained through authentication.
+  --clear-blade-dev-token: string # Dev Token obtained through authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'SystemKey' must be non-empty" } }
   if ($adapter_name | is-empty) { error make --unspanned { msg: "path parameter 'AdapterName' must be non-empty" } }
   if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'fileName' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), adapter_name: (encode-path-segment $adapter_name), file_name: (encode-path-segment $file_name)} | format pattern "/api/v/4/{system_key}/adapters/{adapter_name}/files/{file_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8777,7 +9033,7 @@ export def "update-existing-file-content" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Dev Token obtained through authentication.
+  --clear-blade-dev-token: string # Dev Token obtained through authentication. (required)
   file: string # base64 encoded string as file content to overwrite the existing content (e.g. IyEvYmluL2Jhc2gKZWNobyAiaGVsbG8gd29ybGQi)
 ]: any -> any {
   let input = $in
@@ -8786,6 +9042,7 @@ export def "update-existing-file-content" [
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'SystemKey' must be non-empty" } }
   if ($adapter_name | is-empty) { error make --unspanned { msg: "path parameter 'AdapterName' must be non-empty" } }
   if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'fileName' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), adapter_name: (encode-path-segment $adapter_name), file_name: (encode-path-segment $file_name)} | format pattern "/api/v/4/{system_key}/adapters/{adapter_name}/files/{file_name}") $auth.query)
   let req_body = {"file": $file} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -8823,11 +9080,12 @@ export def "get-failed-service-query" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Uses query to limit scope of list of failed services. Check FailQuery Model at the bottom of this page.
-  --clear-blade-dev-token: string # Dev Token obtained through authentication.
+  --clear-blade-dev-token: string # Dev Token obtained through authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/4/{system_key}/code/failed") $qp $auth.query)
   let accept_val = "application/json"
@@ -8862,10 +9120,11 @@ export def "get-failed-services" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/codeadmin/failed" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8900,13 +9159,14 @@ export def "delete-failed-service" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   --body: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/codeadmin/failed/{system_key}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -8943,11 +9203,12 @@ export def "get-system-failed-services" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/codeadmin/failed/{system_key}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8982,13 +9243,14 @@ export def "retry-failed-service" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   --body: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/codeadmin/failed/{system_key}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -9026,12 +9288,13 @@ export def "library-history" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($lib_name | is-empty) { error make --unspanned { msg: "path parameter 'libName' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), lib_name: (encode-path-segment $lib_name)} | format pattern "/codeadmin/v/2/history/library/{system_key}/{lib_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9068,13 +9331,14 @@ export def "get-old-library-version" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($lib_name | is-empty) { error make --unspanned { msg: "path parameter 'libName' must be non-empty" } }
   if ($lib_version | is-empty) { error make --unspanned { msg: "path parameter 'libVersion' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), lib_name: (encode-path-segment $lib_name), lib_version: (encode-path-segment $lib_version)} | format pattern "/codeadmin/v/2/history/library/{system_key}/{lib_name}/{lib_version}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9109,11 +9373,12 @@ export def "get-libraries" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/codeadmin/v/2/library/{system_key}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9149,12 +9414,13 @@ export def "delete-library" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($lib_name | is-empty) { error make --unspanned { msg: "path parameter 'libName' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), lib_name: (encode-path-segment $lib_name)} | format pattern "/codeadmin/v/2/library/{system_key}/{lib_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9190,12 +9456,13 @@ export def "get-library" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($lib_name | is-empty) { error make --unspanned { msg: "path parameter 'libName' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), lib_name: (encode-path-segment $lib_name)} | format pattern "/codeadmin/v/2/library/{system_key}/{lib_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9231,7 +9498,7 @@ export def "create-library" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   code: string # e.g. function getter(uri){var r=Requests();r.get({'uri':uri},function(err,resp){log(JSON.stringify(resp));});}
   dependencies: string # e.g. http,log
   visibility: string # e.g. system
@@ -9241,6 +9508,7 @@ export def "create-library" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($lib_name | is-empty) { error make --unspanned { msg: "path parameter 'libName' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), lib_name: (encode-path-segment $lib_name)} | format pattern "/codeadmin/v/2/library/{system_key}/{lib_name}") $auth.query)
   let req_body = {"code": $code, "dependencies": $dependencies, "visibility": $visibility} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -9278,7 +9546,7 @@ export def "update-library" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   code: string # e.g. function rand(){log('rolling die'); return 3;}
   dependencies: string # e.g. log
   description: string # e.g. Random number generator
@@ -9288,6 +9556,7 @@ export def "update-library" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($lib_name | is-empty) { error make --unspanned { msg: "path parameter 'libName' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), lib_name: (encode-path-segment $lib_name)} | format pattern "/codeadmin/v/2/library/{system_key}/{lib_name}") $auth.query)
   let req_body = {"code": $code, "dependencies": $dependencies, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -9325,12 +9594,13 @@ export def "get-logs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), service_name: (encode-path-segment $service_name)} | format pattern "/codeadmin/v/2/logs/{system_key}/{service_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9366,12 +9636,13 @@ export def "delete-service" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), service_name: (encode-path-segment $service_name)} | format pattern "/codeadmin/v/2/{system_key}/{service_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9407,7 +9678,7 @@ export def "add-service" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   code: string # e.g. function serviceName(req,resp){resp.success(“success”);}
   --dependencies: string # e.g. log
   name: string # e.g. serviceName
@@ -9420,6 +9691,7 @@ export def "add-service" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), service_name: (encode-path-segment $service_name)} | format pattern "/codeadmin/v/2/{system_key}/{service_name}") $auth.query)
   let req_body = {"code": $code, "dependencies": $dependencies, "name": $name, "parameters": $parameters, "run_user": $run_user, "systemID": $system_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -9457,7 +9729,7 @@ export def "update-service" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clear-blade-dev-token: string # Developer Token obtained through admin authentication.
+  --clear-blade-dev-token: string # Developer Token obtained through admin authentication. (required)
   --auto-balance: oneof<nothing, bool> # If concurrency > 0 then auto_balance can be set to true if needed
   --auto-restart: oneof<nothing, bool> # If execution_timeout = -1 => Stream Service then auto_restart can be set to true if needed
   code: string # e.g. function serviceName(req,resp){resp.success(“success”);}
@@ -9477,9 +9749,13 @@ export def "update-service" [
   let base = ($base_url | default $BASE_URL)
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'systemKey' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
+  if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), service_name: (encode-path-segment $service_name)} | format pattern "/codeadmin/v/2/{system_key}/{service_name}") $auth.query)
   let req_body = {"auto_balance": $auto_balance, "auto_restart": $auto_restart, "code": $code, "concurrency": $concurrency, "current_version": $current_version, "dependencies": $dependencies, "execution_timeout": $execution_timeout, "logging_enabled": $logging_enabled, "name": $name, "parameters": $parameters, "run_user": $run_user, "timers": $timers, "triggers": $triggers} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "auto_balance") == null) { error make --unspanned { msg: "required body field 'auto_balance' missing: pass --auto-balance or pipe a record" } }
+  if (($req_body | get -o "auto_restart") == null) { error make --unspanned { msg: "required body field 'auto_restart' missing: pass --auto-restart or pipe a record" } }
+  if (($req_body | get -o "logging_enabled") == null) { error make --unspanned { msg: "required body field 'logging_enabled' missing: pass --logging-enabled or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact

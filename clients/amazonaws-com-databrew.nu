@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -163,7 +163,7 @@ export def "batch-delete-recipe-version" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   recipe_versions: list<string> # An array of version identifiers, for the recipe versions to be deleted. You can specify numeric versions (X.Y) or LATEST_WORKING. LATEST_PUBLISHED is not supported.
-]: any -> record<Name: record, Errors: record> {
+]: any -> record<Name: string, Errors: table<ErrorCode: string, ErrorMessage: string, RecipeVersion: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -193,9 +193,9 @@ export def "batch-delete-recipe-version" [
 #
 # POST /datasets
 # operationId: CreateDataset
-# --FormatOptions shape: {Json?: any, Excel?: any, Csv?: any}
-# --Input shape: {S3InputDefinition?: any, DataCatalogInputDefinition?: any, DatabaseInputDefinition?: any, Metadata?: any}
-# --PathOptions shape: {LastModifiedDateCondition?: any, FilesLimit?: any, Parameters?: any}
+# --FormatOptions shape: {Json?: record, Excel?: record, Csv?: record}
+# --Input shape: {S3InputDefinition?: record, DataCatalogInputDefinition?: record, DatabaseInputDefinition?: record, Metadata?: record}
+# --PathOptions shape: {LastModifiedDateCondition?: record, FilesLimit?: record, Parameters?: record}
 export def "create-dataset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -215,17 +215,18 @@ export def "create-dataset" [
   --x-amz-signed-headers: string
   name: string # The name of the dataset to be created. Valid characters are alphanumeric (A-Z, a-z, 0-9), hyphen (-), period (.), and space.
   --format: string@format-completer # The file format of a dataset that is created from an Amazon S3 file or folder.
-  --format-options: record # Represents a set of options that define the structure of either comma-separated value (CSV), Excel, or JSON input. — shape: {Json?: any, Excel?: any, Csv?: any}
-  input: record # Represents information on how DataBrew can find data, in either the Glue Data Catalog or Amazon S3. — shape: {S3InputDefinition?: any, DataCatalogInputDefinition?: any, DatabaseInputDefinition?: any, Metadata?: any}
-  --path-options: record # Represents a set of options that define how DataBrew selects files for a given Amazon S3 path in a dataset. — shape: {LastModifiedDateCondition?: any, FilesLimit?: any, Parameters?: any}
+  --format-options: record # Represents a set of options that define the structure of either comma-separated value (CSV), Excel, or JSON input. — shape: {Json?: record, Excel?: record, Csv?: record}
+  --body-input: record # Represents information on how DataBrew can find data, in either the Glue Data Catalog or Amazon S3. — shape: {S3InputDefinition?: record, DataCatalogInputDefinition?: record, DatabaseInputDefinition?: record, Metadata?: record}
+  --path-options: record # Represents a set of options that define how DataBrew selects files for a given Amazon S3 path in a dataset. — shape: {LastModifiedDateCondition?: record, FilesLimit?: record, Parameters?: record}
   --tags: record # Metadata tags to apply to this dataset.
-]: any -> record<Name: record> {
+]: any -> record<Name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/datasets" $auth.query)
-  let req_body = {"Name": $name, "Format": $format, "FormatOptions": $format_options, "Input": $input, "PathOptions": $path_options, "Tags": $tags} | compact
+  let req_body = {"Name": $name, "Format": $format, "FormatOptions": $format_options, "Input": $body_input, "PathOptions": $path_options, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "Input") == null) { error make --unspanned { msg: "required body field 'Input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
@@ -269,7 +270,7 @@ export def "list-datasets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Datasets: record, NextToken: record> {
+]: nothing -> record<Datasets: table<AccountId: string, CreatedBy: string, CreateDate: string, Name: string, Format: string, FormatOptions: record, Input: record, LastModifiedDate: string, LastModifiedBy: string, Source: string, PathOptions: record, Tags: record, ResourceArn: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -296,10 +297,10 @@ export def "list-datasets" [
 #
 # POST /profileJobs
 # operationId: CreateProfileJob
-# --OutputLocation shape: {Bucket?: any, Key?: any, BucketOwner?: any}
-# --Configuration shape: {DatasetStatisticsConfiguration?: any, ProfileColumns?: any, ColumnStatisticsConfigurations?: any, EntityDetectorConfiguration?: any}
-# --ValidationConfigurations item shape: {RulesetArn: any, ValidationMode?: any}
-# --JobSample shape: {Mode?: any, Size?: any}
+# --OutputLocation shape: {Bucket?: string, Key?: string, BucketOwner?: string}
+# --Configuration shape: {DatasetStatisticsConfiguration?: record, ProfileColumns?: list, ColumnStatisticsConfigurations?: list, EntityDetectorConfiguration?: record}
+# --ValidationConfigurations item shape: {RulesetArn: string, ValidationMode?: "CHECK_ALL"}
+# --JobSample shape: {Mode?: "FULL_DATASET"|"CUSTOM_ROWS", Size?: int}
 export def "create-profile-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -324,14 +325,14 @@ export def "create-profile-job" [
   --log-subscription: string@log-subscription-completer # Enables or disables Amazon CloudWatch logging for the job. If logging is enabled, CloudWatch writes one log stream for each job run.
   --max-capacity: int # The maximum number of nodes that DataBrew can use when the job processes data.
   --max-retries: int # The maximum number of times to retry the job after a job run fails.
-  output_location: record # Represents an Amazon S3 location (bucket name, bucket owner, and object key) where DataBrew can read input data, or write output from a job. — shape: {Bucket?: any, Key?: any, BucketOwner?: any}
-  --configuration: record # Configuration for profile jobs. Configuration can be used to select columns, do evaluations, and override default parameters of evaluations. When configuration is undefined, the profile job will apply default settings to all supported columns. — shape: {DatasetStatisticsConfiguration?: any, ProfileColumns?: any, ColumnStatisticsConfigurations?: any, EntityDetectorConfiguration?: any}
-  --validation-configurations: list # List of validation configurations that are applied to the profile job. — item shape: {RulesetArn: any, ValidationMode?: any}
+  output_location: record # Represents an Amazon S3 location (bucket name, bucket owner, and object key) where DataBrew can read input data, or write output from a job. — shape: {Bucket?: string, Key?: string, BucketOwner?: string}
+  --configuration: record # Configuration for profile jobs. Configuration can be used to select columns, do evaluations, and override default parameters of evaluations. When configuration is undefined, the profile job will apply default settings to all supported columns. — shape: {DatasetStatisticsConfiguration?: record, ProfileColumns?: list, ColumnStatisticsConfigurations?: list, EntityDetectorConfiguration?: record}
+  --validation-configurations: list # List of validation configurations that are applied to the profile job. — item shape: {RulesetArn: string, ValidationMode?: "CHECK_ALL"}
   role_arn: string # The Amazon Resource Name (ARN) of the Identity and Access Management (IAM) role to be assumed when DataBrew runs the job.
   --tags: record # Metadata tags to apply to this job.
   --timeout: int # The job's timeout in minutes. A job that attempts to run longer than this timeout period ends with a status of TIMEOUT.
-  --job-sample: record # A sample configuration for profile jobs only, which determines the number of rows on which the profile job is run. If a JobSample value isn't provided, the default is used. The default value is CUSTOM_ROWS for the mode parameter and 20,000 for the size parameter. — shape: {Mode?: any, Size?: any}
-]: any -> record<Name: record> {
+  --job-sample: record # A sample configuration for profile jobs only, which determines the number of rows on which the profile job is run. If a JobSample value isn't provided, the default is used. The default value is CUSTOM_ROWS for the mode parameter and 20,000 for the size parameter. — shape: {Mode?: "FULL_DATASET"|"CUSTOM_ROWS", Size?: int}
+]: any -> record<Name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -360,7 +361,7 @@ export def "create-profile-job" [
 #
 # POST /projects
 # operationId: CreateProject
-# --Sample shape: {Size?: any, Type?: any}
+# --Sample shape: {Size?: int, Type?: "FIRST_N"|"LAST_N"|"RANDOM"}
 export def "create-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -381,10 +382,10 @@ export def "create-project" [
   dataset_name: string # The name of an existing dataset to associate this project with.
   name: string # A unique name for the new project. Valid characters are alphanumeric (A-Z, a-z, 0-9), hyphen (-), period (.), and space.
   recipe_name: string # The name of an existing recipe to associate with the project.
-  --sample: record # Represents the sample size and sampling type for DataBrew to use for interactive data analysis. — shape: {Size?: any, Type?: any}
+  --sample: record # Represents the sample size and sampling type for DataBrew to use for interactive data analysis. — shape: {Size?: int, Type?: "FIRST_N"|"LAST_N"|"RANDOM"}
   role_arn: string # The Amazon Resource Name (ARN) of the Identity and Access Management (IAM) role to be assumed for this request.
   --tags: record # Metadata tags to apply to this project.
-]: any -> record<Name: record> {
+]: any -> record<Name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -434,7 +435,7 @@ export def "list-projects" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Projects: record, NextToken: record> {
+]: nothing -> record<Projects: table<AccountId: string, CreateDate: string, CreatedBy: string, DatasetName: string, LastModifiedDate: string, LastModifiedBy: string, Name: string, RecipeName: string, ResourceArn: string, Sample: record, Tags: record, RoleArn: string, OpenedBy: string, OpenDate: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -461,7 +462,7 @@ export def "list-projects" [
 #
 # POST /recipes
 # operationId: CreateRecipe
-# --Steps item shape: {Action: any, ConditionExpressions?: any}
+# --Steps item shape: {Action: record, ConditionExpressions?: list}
 export def "create-recipe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -481,9 +482,9 @@ export def "create-recipe" [
   --x-amz-signed-headers: string
   --description: string # A description for the recipe.
   name: string # A unique name for the recipe. Valid characters are alphanumeric (A-Z, a-z, 0-9), hyphen (-), period (.), and space.
-  steps: list # An array containing the steps to be performed by the recipe. Each recipe step consists of one recipe action and (optionally) an array of condition expressions. — item shape: {Action: any, ConditionExpressions?: any}
+  steps: list # An array containing the steps to be performed by the recipe. Each recipe step consists of one recipe action and (optionally) an array of condition expressions. — item shape: {Action: record, ConditionExpressions?: list}
   --tags: record # Metadata tags to apply to this recipe.
-]: any -> record<Name: record> {
+]: any -> record<Name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -534,7 +535,7 @@ export def "list-recipes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Recipes: record, NextToken: record> {
+]: nothing -> record<Recipes: table<CreatedBy: string, CreateDate: string, LastModifiedBy: string, LastModifiedDate: string, ProjectName: string, PublishedBy: string, PublishedDate: string, Description: string, Name: string, ResourceArn: string, Steps: list, Tags: record, RecipeVersion: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "recipeVersion" $recipe_version "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -561,10 +562,10 @@ export def "list-recipes" [
 #
 # POST /recipeJobs
 # operationId: CreateRecipeJob
-# --Outputs item shape: {CompressionFormat?: any, Format?: any, PartitionColumns?: any, Location: any, Overwrite?: any, FormatOptions?: any, MaxOutputFiles?: any}
-# --DataCatalogOutputs item shape: {CatalogId?: any, DatabaseName: any, TableName: any, S3Options?: any, DatabaseOptions?: any, Overwrite?: any}
-# --DatabaseOutputs item shape: {GlueConnectionName: any, DatabaseOptions: any, DatabaseOutputMode?: any}
-# --RecipeReference shape: {Name?: any, RecipeVersion?: any}
+# --Outputs item shape: {CompressionFormat?: "GZIP"|"LZ4"|"SNAPPY"|"BZIP2"|"DEFLATE"|"LZO"|"BROTLI"|"ZSTD"|"ZLIB", Format?: "CSV"|"JSON"|"PARQUET"|"GLUEPARQUET"|"AVRO"|"ORC"|"XML"|"TABLEAUHYPER", PartitionColumns?: list<string>, Location: record, Overwrite?: bool, FormatOptions?: record, MaxOutputFiles?: int}
+# --DataCatalogOutputs item shape: {CatalogId?: string, DatabaseName: string, TableName: string, S3Options?: record, DatabaseOptions?: record, Overwrite?: bool}
+# --DatabaseOutputs item shape: {GlueConnectionName: string, DatabaseOptions: record, DatabaseOutputMode?: "NEW_TABLE"}
+# --RecipeReference shape: {Name?: string, RecipeVersion?: string}
 export def "create-recipe-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -589,15 +590,15 @@ export def "create-recipe-job" [
   --log-subscription: string@log-subscription-completer # Enables or disables Amazon CloudWatch logging for the job. If logging is enabled, CloudWatch writes one log stream for each job run.
   --max-capacity: int # The maximum number of nodes that DataBrew can consume when the job processes data.
   --max-retries: int # The maximum number of times to retry the job after a job run fails.
-  --outputs: list # One or more artifacts that represent the output from running the job. — item shape: {CompressionFormat?: any, Format?: any, PartitionColumns?: any, Location: any, Overwrite?: any, FormatOptions?: any, MaxOutputFiles?: any}
-  --data-catalog-outputs: list # One or more artifacts that represent the Glue Data Catalog output from running the job. — item shape: {CatalogId?: any, DatabaseName: any, TableName: any, S3Options?: any, DatabaseOptions?: any, Overwrite?: any}
-  --database-outputs: list # Represents a list of JDBC database output objects which defines the output destination for a DataBrew recipe job to write to. — item shape: {GlueConnectionName: any, DatabaseOptions: any, DatabaseOutputMode?: any}
+  --outputs: list # One or more artifacts that represent the output from running the job. — item shape: {CompressionFormat?: "GZIP"|"LZ4"|"SNAPPY"|"BZIP2"|"DEFLATE"|"LZO"|"BROTLI"|"ZSTD"|"ZLIB", Format?: "CSV"|"JSON"|"PARQUET"|"GLUEPARQUET"|"AVRO"|"ORC"|"XML"|"TABLEAUHYPER", PartitionColumns?: list<string>, Location: record, Overwrite?: bool, FormatOptions?: record, MaxOutputFiles?: int}
+  --data-catalog-outputs: list # One or more artifacts that represent the Glue Data Catalog output from running the job. — item shape: {CatalogId?: string, DatabaseName: string, TableName: string, S3Options?: record, DatabaseOptions?: record, Overwrite?: bool}
+  --database-outputs: list # Represents a list of JDBC database output objects which defines the output destination for a DataBrew recipe job to write to. — item shape: {GlueConnectionName: string, DatabaseOptions: record, DatabaseOutputMode?: "NEW_TABLE"}
   --project-name: string # Either the name of an existing project, or a combination of a recipe and a dataset to associate with the recipe.
-  --recipe-reference: record # Represents the name and version of a DataBrew recipe. — shape: {Name?: any, RecipeVersion?: any}
+  --recipe-reference: record # Represents the name and version of a DataBrew recipe. — shape: {Name?: string, RecipeVersion?: string}
   role_arn: string # The Amazon Resource Name (ARN) of the Identity and Access Management (IAM) role to be assumed when DataBrew runs the job.
   --tags: record # Metadata tags to apply to this job.
   --timeout: int # The job's timeout in minutes. A job that attempts to run longer than this timeout period ends with a status of TIMEOUT.
-]: any -> record<Name: record> {
+]: any -> record<Name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -626,7 +627,7 @@ export def "create-recipe-job" [
 #
 # POST /rulesets
 # operationId: CreateRuleset
-# --Rules item shape: {Name: any, Disabled?: any, CheckExpression: any, SubstitutionMap?: any, Threshold?: any, ColumnSelectors?: any}
+# --Rules item shape: {Name: string, Disabled?: bool, CheckExpression: string, SubstitutionMap?: record, Threshold?: record, ColumnSelectors?: list}
 export def "create-ruleset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -647,9 +648,9 @@ export def "create-ruleset" [
   name: string # The name of the ruleset to be created. Valid characters are alphanumeric (A-Z, a-z, 0-9), hyphen (-), period (.), and space.
   --description: string # The description of the ruleset.
   target_arn: string # The Amazon Resource Name (ARN) of a resource (dataset) that the ruleset is associated with.
-  rules: list # A list of rules that are defined with the ruleset. A rule includes one or more checks to be validated on a DataBrew dataset. — item shape: {Name: any, Disabled?: any, CheckExpression: any, SubstitutionMap?: any, Threshold?: any, ColumnSelectors?: any}
+  rules: list # A list of rules that are defined with the ruleset. A rule includes one or more checks to be validated on a DataBrew dataset. — item shape: {Name: string, Disabled?: bool, CheckExpression: string, SubstitutionMap?: record, Threshold?: record, ColumnSelectors?: list}
   --tags: record # Metadata tags to apply to the ruleset.
-]: any -> record<Name: record> {
+]: any -> record<Name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -700,7 +701,7 @@ export def "list-rulesets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Rulesets: record, NextToken: record> {
+]: nothing -> record<Rulesets: table<AccountId: string, CreatedBy: string, CreateDate: string, Description: string, LastModifiedBy: string, LastModifiedDate: string, Name: string, ResourceArn: string, RuleCount: int, Tags: record, TargetArn: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "targetArn" $target_arn "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -748,7 +749,7 @@ export def "create-schedule" [
   cron_expression: string # The date or dates and time or times when the jobs are to be run. For more information, see Cron expressions (https://docs.aws.amazon.com/databrew/latest/dg/jobs.cron.html) in the Glue DataBrew Developer Guide.
   --tags: record # Metadata tags to apply to this schedule.
   name: string # A unique name for the schedule. Valid characters are alphanumeric (A-Z, a-z, 0-9), hyphen (-), period (.), and space.
-]: any -> record<Name: record> {
+]: any -> record<Name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -799,7 +800,7 @@ export def "list-schedules" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Schedules: record, NextToken: record> {
+]: nothing -> record<Schedules: table<AccountId: string, CreatedBy: string, CreateDate: string, JobNames: list, LastModifiedBy: string, LastModifiedDate: string, ResourceArn: string, CronExpression: string, Tags: record, Name: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jobName" $job_name "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -844,7 +845,7 @@ export def "delete-dataset" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Name: record> {
+]: nothing -> record<Name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -889,7 +890,7 @@ export def "describe-dataset" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CreatedBy: record, CreateDate: record, Name: record, Format: record, FormatOptions: record<Json: record<MultiLine: record>, Excel: record<SheetNames: record, SheetIndexes: record, HeaderRow: record>, Csv: record<Delimiter: record, HeaderRow: record>>, Input: record<S3InputDefinition: record<Bucket: record, Key: record, BucketOwner: record>, DataCatalogInputDefinition: record<CatalogId: record, DatabaseName: record, TableName: record, TempDirectory: record>, DatabaseInputDefinition: record<GlueConnectionName: record, DatabaseTableName: record, TempDirectory: record, QueryString: record>, Metadata: record<SourceArn: record>>, LastModifiedDate: record, LastModifiedBy: record, Source: record, PathOptions: record<LastModifiedDateCondition: record<Expression: record, ValuesMap: record>, FilesLimit: record<MaxFiles: record, OrderedBy: record, Order: record>, Parameters: record>, Tags: record, ResourceArn: record> {
+]: nothing -> record<CreatedBy: string, CreateDate: string, Name: string, Format: string, FormatOptions: record<Json: record<MultiLine: bool>, Excel: record<SheetNames: list, SheetIndexes: list, HeaderRow: bool>, Csv: record<Delimiter: string, HeaderRow: bool>>, Input: record<S3InputDefinition: record<Bucket: string, Key: string, BucketOwner: string>, DataCatalogInputDefinition: record<CatalogId: string, DatabaseName: string, TableName: string, TempDirectory: record>, DatabaseInputDefinition: record<GlueConnectionName: string, DatabaseTableName: string, TempDirectory: record, QueryString: string>, Metadata: record<SourceArn: string>>, LastModifiedDate: string, LastModifiedBy: string, Source: string, PathOptions: record<LastModifiedDateCondition: record<Expression: string, ValuesMap: record>, FilesLimit: record<MaxFiles: int, OrderedBy: string, Order: string>, Parameters: record>, Tags: record, ResourceArn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -916,9 +917,9 @@ export def "describe-dataset" [
 #
 # PUT /datasets/{name}
 # operationId: UpdateDataset
-# --FormatOptions shape: {Json?: any, Excel?: any, Csv?: any}
-# --Input shape: {S3InputDefinition?: any, DataCatalogInputDefinition?: any, DatabaseInputDefinition?: any, Metadata?: any}
-# --PathOptions shape: {LastModifiedDateCondition?: any, FilesLimit?: any, Parameters?: any}
+# --FormatOptions shape: {Json?: record, Excel?: record, Csv?: record}
+# --Input shape: {S3InputDefinition?: record, DataCatalogInputDefinition?: record, DatabaseInputDefinition?: record, Metadata?: record}
+# --PathOptions shape: {LastModifiedDateCondition?: record, FilesLimit?: record, Parameters?: record}
 export def "update-dataset" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -938,17 +939,18 @@ export def "update-dataset" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --format: string@format-completer # The file format of a dataset that is created from an Amazon S3 file or folder.
-  --format-options: record # Represents a set of options that define the structure of either comma-separated value (CSV), Excel, or JSON input. — shape: {Json?: any, Excel?: any, Csv?: any}
-  input: record # Represents information on how DataBrew can find data, in either the Glue Data Catalog or Amazon S3. — shape: {S3InputDefinition?: any, DataCatalogInputDefinition?: any, DatabaseInputDefinition?: any, Metadata?: any}
-  --path-options: record # Represents a set of options that define how DataBrew selects files for a given Amazon S3 path in a dataset. — shape: {LastModifiedDateCondition?: any, FilesLimit?: any, Parameters?: any}
-]: any -> record<Name: record> {
+  --format-options: record # Represents a set of options that define the structure of either comma-separated value (CSV), Excel, or JSON input. — shape: {Json?: record, Excel?: record, Csv?: record}
+  --body-input: record # Represents information on how DataBrew can find data, in either the Glue Data Catalog or Amazon S3. — shape: {S3InputDefinition?: record, DataCatalogInputDefinition?: record, DatabaseInputDefinition?: record, Metadata?: record}
+  --path-options: record # Represents a set of options that define how DataBrew selects files for a given Amazon S3 path in a dataset. — shape: {LastModifiedDateCondition?: record, FilesLimit?: record, Parameters?: record}
+]: any -> record<Name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/datasets/{name}") $auth.query)
-  let req_body = {"Format": $format, "FormatOptions": $format_options, "Input": $input, "PathOptions": $path_options} | compact
+  let req_body = {"Format": $format, "FormatOptions": $format_options, "Input": $body_input, "PathOptions": $path_options} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "Input") == null) { error make --unspanned { msg: "required body field 'Input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
@@ -989,7 +991,7 @@ export def "delete-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Name: record> {
+]: nothing -> record<Name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1034,7 +1036,7 @@ export def "describe-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CreateDate: record, CreatedBy: record, DatasetName: record, EncryptionKeyArn: record, EncryptionMode: record, Name: record, Type: record, LastModifiedBy: record, LastModifiedDate: record, LogSubscription: record, MaxCapacity: record, MaxRetries: record, Outputs: record, DataCatalogOutputs: record, DatabaseOutputs: record, ProjectName: record, ProfileConfiguration: record<DatasetStatisticsConfiguration: record<IncludedStatistics: record, Overrides: record>, ProfileColumns: record, ColumnStatisticsConfigurations: record, EntityDetectorConfiguration: record<EntityTypes: record, AllowedStatistics: record>>, ValidationConfigurations: record, RecipeReference: record<Name: record, RecipeVersion: record>, ResourceArn: record, RoleArn: record, Tags: record, Timeout: record, JobSample: record<Mode: record, Size: record>> {
+]: nothing -> record<CreateDate: string, CreatedBy: string, DatasetName: string, EncryptionKeyArn: string, EncryptionMode: string, Name: string, Type: string, LastModifiedBy: string, LastModifiedDate: string, LogSubscription: string, MaxCapacity: int, MaxRetries: int, Outputs: table<CompressionFormat: string, Format: string, PartitionColumns: list, Location: record, Overwrite: bool, FormatOptions: record, MaxOutputFiles: int>, DataCatalogOutputs: table<CatalogId: string, DatabaseName: string, TableName: string, S3Options: record, DatabaseOptions: record, Overwrite: bool>, DatabaseOutputs: table<GlueConnectionName: string, DatabaseOptions: record, DatabaseOutputMode: string>, ProjectName: string, ProfileConfiguration: record<DatasetStatisticsConfiguration: record<IncludedStatistics: list, Overrides: list>, ProfileColumns: list<record>, ColumnStatisticsConfigurations: list<record>, EntityDetectorConfiguration: record<EntityTypes: list, AllowedStatistics: list>>, ValidationConfigurations: table<RulesetArn: string, ValidationMode: string>, RecipeReference: record<Name: string, RecipeVersion: string>, ResourceArn: string, RoleArn: string, Tags: record, Timeout: int, JobSample: record<Mode: string, Size: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1079,7 +1081,7 @@ export def "delete-project" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Name: record> {
+]: nothing -> record<Name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1124,7 +1126,7 @@ export def "describe-project" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CreateDate: record, CreatedBy: record, DatasetName: record, LastModifiedDate: record, LastModifiedBy: record, Name: record, RecipeName: record, ResourceArn: record, Sample: record<Size: record, Type: record>, RoleArn: record, Tags: record, SessionStatus: record, OpenedBy: record, OpenDate: record> {
+]: nothing -> record<CreateDate: string, CreatedBy: string, DatasetName: string, LastModifiedDate: string, LastModifiedBy: string, Name: string, RecipeName: string, ResourceArn: string, Sample: record<Size: int, Type: string>, RoleArn: string, Tags: record, SessionStatus: string, OpenedBy: string, OpenDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1151,7 +1153,7 @@ export def "describe-project" [
 #
 # PUT /projects/{name}
 # operationId: UpdateProject
-# --Sample shape: {Size?: any, Type?: any}
+# --Sample shape: {Size?: int, Type?: "FIRST_N"|"LAST_N"|"RANDOM"}
 export def "update-project" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1170,9 +1172,9 @@ export def "update-project" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --sample: record # Represents the sample size and sampling type for DataBrew to use for interactive data analysis. — shape: {Size?: any, Type?: any}
+  --sample: record # Represents the sample size and sampling type for DataBrew to use for interactive data analysis. — shape: {Size?: int, Type?: "FIRST_N"|"LAST_N"|"RANDOM"}
   role_arn: string # The Amazon Resource Name (ARN) of the IAM role to be assumed for this request.
-]: any -> record<LastModifiedDate: record, Name: record> {
+]: any -> record<LastModifiedDate: string, Name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1221,7 +1223,7 @@ export def "delete-recipe-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Name: record, RecipeVersion: record> {
+]: nothing -> record<Name: string, RecipeVersion: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1267,7 +1269,7 @@ export def "delete-ruleset" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Name: record> {
+]: nothing -> record<Name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1312,7 +1314,7 @@ export def "describe-ruleset" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Name: record, Description: record, TargetArn: record, Rules: record, CreateDate: record, CreatedBy: record, LastModifiedBy: record, LastModifiedDate: record, ResourceArn: record, Tags: record> {
+]: nothing -> record<Name: string, Description: string, TargetArn: string, Rules: table<Name: string, Disabled: bool, CheckExpression: string, SubstitutionMap: record, Threshold: record, ColumnSelectors: list>, CreateDate: string, CreatedBy: string, LastModifiedBy: string, LastModifiedDate: string, ResourceArn: string, Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1339,7 +1341,7 @@ export def "describe-ruleset" [
 #
 # PUT /rulesets/{name}
 # operationId: UpdateRuleset
-# --Rules item shape: {Name: any, Disabled?: any, CheckExpression: any, SubstitutionMap?: any, Threshold?: any, ColumnSelectors?: any}
+# --Rules item shape: {Name: string, Disabled?: bool, CheckExpression: string, SubstitutionMap?: record, Threshold?: record, ColumnSelectors?: list}
 export def "update-ruleset" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1359,8 +1361,8 @@ export def "update-ruleset" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --description: string # The description of the ruleset.
-  rules: list # A list of rules that are defined with the ruleset. A rule includes one or more checks to be validated on a DataBrew dataset. — item shape: {Name: any, Disabled?: any, CheckExpression: any, SubstitutionMap?: any, Threshold?: any, ColumnSelectors?: any}
-]: any -> record<Name: record> {
+  rules: list # A list of rules that are defined with the ruleset. A rule includes one or more checks to be validated on a DataBrew dataset. — item shape: {Name: string, Disabled?: bool, CheckExpression: string, SubstitutionMap?: record, Threshold?: record, ColumnSelectors?: list}
+]: any -> record<Name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1408,7 +1410,7 @@ export def "delete-schedule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Name: record> {
+]: nothing -> record<Name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1453,7 +1455,7 @@ export def "describe-schedule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CreateDate: record, CreatedBy: record, JobNames: record, LastModifiedBy: record, LastModifiedDate: record, ResourceArn: record, CronExpression: record, Tags: record, Name: record> {
+]: nothing -> record<CreateDate: string, CreatedBy: string, JobNames: list<string>, LastModifiedBy: string, LastModifiedDate: string, ResourceArn: string, CronExpression: string, Tags: record, Name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1500,7 +1502,7 @@ export def "update-schedule" [
   --x-amz-signed-headers: string
   --job-names: list<string> # The name or names of one or more jobs to be run for this schedule.
   cron_expression: string # The date or dates and time or times when the jobs are to be run. For more information, see Cron expressions (https://docs.aws.amazon.com/databrew/latest/dg/jobs.cron.html) in the Glue DataBrew Developer Guide.
-]: any -> record<Name: record> {
+]: any -> record<Name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1549,7 +1551,7 @@ export def "describe-job-run" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Attempt: record, CompletedOn: record, DatasetName: record, ErrorMessage: record, ExecutionTime: record, JobName: record, ProfileConfiguration: record<DatasetStatisticsConfiguration: record<IncludedStatistics: record, Overrides: record>, ProfileColumns: record, ColumnStatisticsConfigurations: record, EntityDetectorConfiguration: record<EntityTypes: record, AllowedStatistics: record>>, ValidationConfigurations: record, RunId: record, State: record, LogSubscription: record, LogGroupName: record, Outputs: record, DataCatalogOutputs: record, DatabaseOutputs: record, RecipeReference: record<Name: record, RecipeVersion: record>, StartedBy: record, StartedOn: record, JobSample: record<Mode: record, Size: record>> {
+]: nothing -> record<Attempt: int, CompletedOn: string, DatasetName: string, ErrorMessage: string, ExecutionTime: int, JobName: string, ProfileConfiguration: record<DatasetStatisticsConfiguration: record<IncludedStatistics: list, Overrides: list>, ProfileColumns: list<record>, ColumnStatisticsConfigurations: list<record>, EntityDetectorConfiguration: record<EntityTypes: list, AllowedStatistics: list>>, ValidationConfigurations: table<RulesetArn: string, ValidationMode: string>, RunId: string, State: string, LogSubscription: string, LogGroupName: string, Outputs: table<CompressionFormat: string, Format: string, PartitionColumns: list, Location: record, Overwrite: bool, FormatOptions: record, MaxOutputFiles: int>, DataCatalogOutputs: table<CatalogId: string, DatabaseName: string, TableName: string, S3Options: record, DatabaseOptions: record, Overwrite: bool>, DatabaseOutputs: table<GlueConnectionName: string, DatabaseOptions: record, DatabaseOutputMode: string>, RecipeReference: record<Name: string, RecipeVersion: string>, StartedBy: string, StartedOn: string, JobSample: record<Mode: string, Size: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1596,7 +1598,7 @@ export def "describe-recipe" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CreatedBy: record, CreateDate: record, LastModifiedBy: record, LastModifiedDate: record, ProjectName: record, PublishedBy: record, PublishedDate: record, Description: record, Name: record, Steps: record, Tags: record, ResourceArn: record, RecipeVersion: record> {
+]: nothing -> record<CreatedBy: string, CreateDate: string, LastModifiedBy: string, LastModifiedDate: string, ProjectName: string, PublishedBy: string, PublishedDate: string, Description: string, Name: string, Steps: table<Action: record, ConditionExpressions: list>, Tags: record, ResourceArn: string, RecipeVersion: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1624,7 +1626,7 @@ export def "describe-recipe" [
 #
 # PUT /recipes/{name}
 # operationId: UpdateRecipe
-# --Steps item shape: {Action: any, ConditionExpressions?: any}
+# --Steps item shape: {Action: record, ConditionExpressions?: list}
 export def "update-recipe" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1644,8 +1646,8 @@ export def "update-recipe" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --description: string # A description of the recipe.
-  --steps: list # One or more steps to be performed by the recipe. Each step consists of an action, and the conditions under which the action should succeed. — item shape: {Action: any, ConditionExpressions?: any}
-]: any -> record<Name: record> {
+  --steps: list # One or more steps to be performed by the recipe. Each step consists of an action, and the conditions under which the action should succeed. — item shape: {Action: record, ConditionExpressions?: list}
+]: any -> record<Name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1697,7 +1699,7 @@ export def "list-job-runs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<JobRuns: record, NextToken: record> {
+]: nothing -> record<JobRuns: table<Attempt: int, CompletedOn: string, DatasetName: string, ErrorMessage: string, ExecutionTime: int, JobName: string, RunId: string, State: string, LogSubscription: string, LogGroupName: string, Outputs: list, DataCatalogOutputs: list, DatabaseOutputs: list, RecipeReference: record, StartedBy: string, StartedOn: string, JobSample: record, ValidationConfigurations: list>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1748,7 +1750,7 @@ export def "list-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Jobs: record, NextToken: record> {
+]: nothing -> record<Jobs: table<AccountId: string, CreatedBy: string, CreateDate: string, DatasetName: string, EncryptionKeyArn: string, EncryptionMode: string, Name: string, Type: string, LastModifiedBy: string, LastModifiedDate: string, LogSubscription: string, MaxCapacity: int, MaxRetries: int, Outputs: list, DataCatalogOutputs: list, DatabaseOutputs: list, ProjectName: string, RecipeReference: record, ResourceArn: string, RoleArn: string, Timeout: int, Tags: record, JobSample: record, ValidationConfigurations: list>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasetName" $dataset_name "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "projectName" $project_name "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -1787,7 +1789,7 @@ export def "list-recipe-versions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-results: int # The maximum number of results to return in this request.
   --next-token: string # The token returned by a previous call to retrieve the next set of results.
-  --name: string # The name of the recipe for which to return version information.
+  --name: string # The name of the recipe for which to return version information. (required)
   --max-results-2: string # Pagination limit (disambiguated-2)
   --next-token-2: string # Pagination token (disambiguated-2)
   --x-amz-content-sha256: string
@@ -1797,9 +1799,10 @@ export def "list-recipe-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: record, Recipes: record> {
+]: nothing -> record<NextToken: string, Recipes: table<CreatedBy: string, CreateDate: string, LastModifiedBy: string, LastModifiedDate: string, ProjectName: string, PublishedBy: string, PublishedDate: string, Description: string, Name: string, ResourceArn: string, Steps: list, Tags: record, RecipeVersion: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipeVersions" $qp $auth.query)
   let accept_val = "application/json"
@@ -1937,7 +1940,7 @@ export def "publish-recipe" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --description: string # A description of the recipe to be published, for this version of the recipe.
-]: any -> record<Name: record> {
+]: any -> record<Name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1967,8 +1970,8 @@ export def "publish-recipe" [
 #
 # PUT /projects/{name}/sendProjectSessionAction
 # operationId: SendProjectSessionAction
-# --RecipeStep shape: {Action?: any, ConditionExpressions?: any}
-# --ViewFrame shape: {StartColumnIndex?: any, ColumnRange?: any, HiddenColumns?: any, StartRowIndex?: any, RowRange?: any, Analytics?: any}
+# --RecipeStep shape: {Action?: record, ConditionExpressions?: list}
+# --ViewFrame shape: {StartColumnIndex?: int, ColumnRange?: int, HiddenColumns?: list<string>, StartRowIndex?: int, RowRange?: int, Analytics?: "ENABLE"|"DISABLE"}
 export def "send-project-session-action" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1988,11 +1991,11 @@ export def "send-project-session-action" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --preview: oneof<nothing, bool> # If true, the result of the recipe step will be returned, but not applied.
-  --recipe-step: record # Represents a single step from a DataBrew recipe to be performed. — shape: {Action?: any, ConditionExpressions?: any}
+  --recipe-step: record # Represents a single step from a DataBrew recipe to be performed. — shape: {Action?: record, ConditionExpressions?: list}
   --step-index: int # The index from which to preview a step. This index is used to preview the result of steps that have already been applied, so that the resulting view frame is from earlier in the view frame stack.
   --client-session-id: string # A unique identifier for an interactive session that's currently open and ready for work. The action will be performed on this session. (format: password)
-  --view-frame: record # Represents the data being transformed during an action. — shape: {StartColumnIndex?: any, ColumnRange?: any, HiddenColumns?: any, StartRowIndex?: any, RowRange?: any, Analytics?: any}
-]: any -> record<Result: record, Name: record, ActionId: record> {
+  --view-frame: record # Represents the data being transformed during an action. — shape: {StartColumnIndex?: int, ColumnRange?: int, HiddenColumns?: list<string>, StartRowIndex?: int, RowRange?: int, Analytics?: "ENABLE"|"DISABLE"}
+]: any -> record<Result: string, Name: string, ActionId: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2040,7 +2043,7 @@ export def "start-job-run" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<RunId: record> {
+]: nothing -> record<RunId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -2086,7 +2089,7 @@ export def "start-project-session" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --assume-control: oneof<nothing, bool> # A value that, if true, enables you to take control of a session, even if a different client is currently accessing the project.
-]: any -> record<Name: record, ClientSessionId: record> {
+]: any -> record<Name: string, ClientSessionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2135,7 +2138,7 @@ export def "stop-job-run" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<RunId: record> {
+]: nothing -> record<RunId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -2174,7 +2177,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # The tag keys (names) of one or more tags to be removed.
+  --tag-keys: list # The tag keys (names) of one or more tags to be removed. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2186,6 +2189,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'ResourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2210,10 +2214,10 @@ export def "untag-resource" [
 #
 # PUT /profileJobs/{name}
 # operationId: UpdateProfileJob
-# --Configuration shape: {DatasetStatisticsConfiguration?: any, ProfileColumns?: any, ColumnStatisticsConfigurations?: any, EntityDetectorConfiguration?: any}
-# --OutputLocation shape: {Bucket?: any, Key?: any, BucketOwner?: any}
-# --ValidationConfigurations item shape: {RulesetArn: any, ValidationMode?: any}
-# --JobSample shape: {Mode?: any, Size?: any}
+# --Configuration shape: {DatasetStatisticsConfiguration?: record, ProfileColumns?: list, ColumnStatisticsConfigurations?: list, EntityDetectorConfiguration?: record}
+# --OutputLocation shape: {Bucket?: string, Key?: string, BucketOwner?: string}
+# --ValidationConfigurations item shape: {RulesetArn: string, ValidationMode?: "CHECK_ALL"}
+# --JobSample shape: {Mode?: "FULL_DATASET"|"CUSTOM_ROWS", Size?: int}
 export def "update-profile-job" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2232,18 +2236,18 @@ export def "update-profile-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --configuration: record # Configuration for profile jobs. Configuration can be used to select columns, do evaluations, and override default parameters of evaluations. When configuration is undefined, the profile job will apply default settings to all supported columns. — shape: {DatasetStatisticsConfiguration?: any, ProfileColumns?: any, ColumnStatisticsConfigurations?: any, EntityDetectorConfiguration?: any}
+  --configuration: record # Configuration for profile jobs. Configuration can be used to select columns, do evaluations, and override default parameters of evaluations. When configuration is undefined, the profile job will apply default settings to all supported columns. — shape: {DatasetStatisticsConfiguration?: record, ProfileColumns?: list, ColumnStatisticsConfigurations?: list, EntityDetectorConfiguration?: record}
   --encryption-key-arn: string # The Amazon Resource Name (ARN) of an encryption key that is used to protect the job.
   --encryption-mode: string@encryption-mode-completer # The encryption mode for the job, which can be one of the following: SSE-KMS - Server-side encryption with keys managed by KMS. SSE-S3 - Server-side encryption with keys managed by Amazon S3.
   --log-subscription: string@log-subscription-completer # Enables or disables Amazon CloudWatch logging for the job. If logging is enabled, CloudWatch writes one log stream for each job run.
   --max-capacity: int # The maximum number of compute nodes that DataBrew can use when the job processes data.
   --max-retries: int # The maximum number of times to retry the job after a job run fails.
-  output_location: record # Represents an Amazon S3 location (bucket name, bucket owner, and object key) where DataBrew can read input data, or write output from a job. — shape: {Bucket?: any, Key?: any, BucketOwner?: any}
-  --validation-configurations: list # List of validation configurations that are applied to the profile job. — item shape: {RulesetArn: any, ValidationMode?: any}
+  output_location: record # Represents an Amazon S3 location (bucket name, bucket owner, and object key) where DataBrew can read input data, or write output from a job. — shape: {Bucket?: string, Key?: string, BucketOwner?: string}
+  --validation-configurations: list # List of validation configurations that are applied to the profile job. — item shape: {RulesetArn: string, ValidationMode?: "CHECK_ALL"}
   role_arn: string # The Amazon Resource Name (ARN) of the Identity and Access Management (IAM) role to be assumed when DataBrew runs the job.
   --timeout: int # The job's timeout in minutes. A job that attempts to run longer than this timeout period ends with a status of TIMEOUT.
-  --job-sample: record # A sample configuration for profile jobs only, which determines the number of rows on which the profile job is run. If a JobSample value isn't provided, the default is used. The default value is CUSTOM_ROWS for the mode parameter and 20,000 for the size parameter. — shape: {Mode?: any, Size?: any}
-]: any -> record<Name: record> {
+  --job-sample: record # A sample configuration for profile jobs only, which determines the number of rows on which the profile job is run. If a JobSample value isn't provided, the default is used. The default value is CUSTOM_ROWS for the mode parameter and 20,000 for the size parameter. — shape: {Mode?: "FULL_DATASET"|"CUSTOM_ROWS", Size?: int}
+]: any -> record<Name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2273,9 +2277,9 @@ export def "update-profile-job" [
 #
 # PUT /recipeJobs/{name}
 # operationId: UpdateRecipeJob
-# --Outputs item shape: {CompressionFormat?: any, Format?: any, PartitionColumns?: any, Location: any, Overwrite?: any, FormatOptions?: any, MaxOutputFiles?: any}
-# --DataCatalogOutputs item shape: {CatalogId?: any, DatabaseName: any, TableName: any, S3Options?: any, DatabaseOptions?: any, Overwrite?: any}
-# --DatabaseOutputs item shape: {GlueConnectionName: any, DatabaseOptions: any, DatabaseOutputMode?: any}
+# --Outputs item shape: {CompressionFormat?: "GZIP"|"LZ4"|"SNAPPY"|"BZIP2"|"DEFLATE"|"LZO"|"BROTLI"|"ZSTD"|"ZLIB", Format?: "CSV"|"JSON"|"PARQUET"|"GLUEPARQUET"|"AVRO"|"ORC"|"XML"|"TABLEAUHYPER", PartitionColumns?: list<string>, Location: record, Overwrite?: bool, FormatOptions?: record, MaxOutputFiles?: int}
+# --DataCatalogOutputs item shape: {CatalogId?: string, DatabaseName: string, TableName: string, S3Options?: record, DatabaseOptions?: record, Overwrite?: bool}
+# --DatabaseOutputs item shape: {GlueConnectionName: string, DatabaseOptions: record, DatabaseOutputMode?: "NEW_TABLE"}
 export def "update-recipe-job" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2299,12 +2303,12 @@ export def "update-recipe-job" [
   --log-subscription: string@log-subscription-completer # Enables or disables Amazon CloudWatch logging for the job. If logging is enabled, CloudWatch writes one log stream for each job run.
   --max-capacity: int # The maximum number of nodes that DataBrew can consume when the job processes data.
   --max-retries: int # The maximum number of times to retry the job after a job run fails.
-  --outputs: list # One or more artifacts that represent the output from running the job. — item shape: {CompressionFormat?: any, Format?: any, PartitionColumns?: any, Location: any, Overwrite?: any, FormatOptions?: any, MaxOutputFiles?: any}
-  --data-catalog-outputs: list # One or more artifacts that represent the Glue Data Catalog output from running the job. — item shape: {CatalogId?: any, DatabaseName: any, TableName: any, S3Options?: any, DatabaseOptions?: any, Overwrite?: any}
-  --database-outputs: list # Represents a list of JDBC database output objects which defines the output destination for a DataBrew recipe job to write into. — item shape: {GlueConnectionName: any, DatabaseOptions: any, DatabaseOutputMode?: any}
+  --outputs: list # One or more artifacts that represent the output from running the job. — item shape: {CompressionFormat?: "GZIP"|"LZ4"|"SNAPPY"|"BZIP2"|"DEFLATE"|"LZO"|"BROTLI"|"ZSTD"|"ZLIB", Format?: "CSV"|"JSON"|"PARQUET"|"GLUEPARQUET"|"AVRO"|"ORC"|"XML"|"TABLEAUHYPER", PartitionColumns?: list<string>, Location: record, Overwrite?: bool, FormatOptions?: record, MaxOutputFiles?: int}
+  --data-catalog-outputs: list # One or more artifacts that represent the Glue Data Catalog output from running the job. — item shape: {CatalogId?: string, DatabaseName: string, TableName: string, S3Options?: record, DatabaseOptions?: record, Overwrite?: bool}
+  --database-outputs: list # Represents a list of JDBC database output objects which defines the output destination for a DataBrew recipe job to write into. — item shape: {GlueConnectionName: string, DatabaseOptions: record, DatabaseOutputMode?: "NEW_TABLE"}
   role_arn: string # The Amazon Resource Name (ARN) of the Identity and Access Management (IAM) role to be assumed when DataBrew runs the job.
   --timeout: int # The job's timeout in minutes. A job that attempts to run longer than this timeout period ends with a status of TIMEOUT.
-]: any -> record<Name: record> {
+]: any -> record<Name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

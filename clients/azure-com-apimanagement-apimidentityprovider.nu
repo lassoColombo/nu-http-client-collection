@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -119,6 +119,8 @@ def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors
 def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def identity-provider-name-completer [] { ["aad" "aadB2C" "facebook" "google" "microsoft" "twitter"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -161,13 +163,14 @@ export def "identity-provider-list-by-service" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
+  --api-version: string # Version of the API to be used with the client request. (required)
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ApiManagement/service/{service_name}/identityProviders") $qp $auth.query)
   let accept_val = "application/json"
@@ -194,7 +197,7 @@ export def "identity-provider-delete" [
   subscription_id: string
   resource_group_name: string
   service_name: string
-  identity_provider_name: string
+  identity_provider_name: string@identity-provider-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -204,15 +207,17 @@ export def "identity-provider-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
-  --if-match: string # ETag of the Entity. ETag should match the current entity state from the header response of the GET request or it should be * for unconditional update.
-]: nothing -> record<error: record<code: string, details: list<record>, message: string>> {
+  --api-version: string # Version of the API to be used with the client request. (required)
+  --if-match: string # ETag of the Entity. ETag should match the current entity state from the header response of the GET request or it should be * for unconditional update. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
   if ($identity_provider_name | is-empty) { error make --unspanned { msg: "path parameter 'identityProviderName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  if ($if_match == null) { error make --unspanned { msg: "required header parameter 'If-Match' missing: pass --if-match" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name), identity_provider_name: (encode-path-segment $identity_provider_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ApiManagement/service/{service_name}/identityProviders/{identity_provider_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -241,7 +246,7 @@ export def "identity-provider-get" [
   subscription_id: string
   resource_group_name: string
   service_name: string
-  identity_provider_name: string
+  identity_provider_name: string@identity-provider-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -251,7 +256,7 @@ export def "identity-provider-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
+  --api-version: string # Version of the API to be used with the client request. (required)
 ]: nothing -> record<properties: record<clientId: string, clientSecret: string, allowedTenants: list<string>, authority: string, passwordResetPolicyName: string, profileEditingPolicyName: string, signinPolicyName: string, signinTenant: string, signupPolicyName: string, type: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -259,6 +264,7 @@ export def "identity-provider-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
   if ($identity_provider_name | is-empty) { error make --unspanned { msg: "path parameter 'identityProviderName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name), identity_provider_name: (encode-path-segment $identity_provider_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ApiManagement/service/{service_name}/identityProviders/{identity_provider_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -285,7 +291,7 @@ export def "identity-provider-get-entity-tag" [
   subscription_id: string
   resource_group_name: string
   service_name: string
-  identity_provider_name: string
+  identity_provider_name: string@identity-provider-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -295,7 +301,7 @@ export def "identity-provider-get-entity-tag" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
+  --api-version: string # Version of the API to be used with the client request. (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -303,6 +309,7 @@ export def "identity-provider-get-entity-tag" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
   if ($identity_provider_name | is-empty) { error make --unspanned { msg: "path parameter 'identityProviderName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name), identity_provider_name: (encode-path-segment $identity_provider_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ApiManagement/service/{service_name}/identityProviders/{identity_provider_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -330,7 +337,7 @@ export def "identity-provider-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
-  identity_provider_name: string
+  identity_provider_name: string@identity-provider-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -340,10 +347,10 @@ export def "identity-provider-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
-  --if-match: string # ETag of the Entity. ETag should match the current entity state from the header response of the GET request or it should be * for unconditional update.
+  --api-version: string # Version of the API to be used with the client request. (required)
+  --if-match: string # ETag of the Entity. ETag should match the current entity state from the header response of the GET request or it should be * for unconditional update. (required)
   --properties: any # Parameters supplied to the Update Identity Provider operation. — shape: {clientId?: string, clientSecret?: string, allowedTenants?: list<string>, authority?: string, passwordResetPolicyName?: string, profileEditingPolicyName?: string, signinPolicyName?: string, signinTenant?: string, signupPolicyName?: string, type?: "facebook"|"google"|"microsoft"|"twitter"|"aad"|"aadB2C"}
-]: any -> record<error: record<code: string, details: list<record>, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -351,6 +358,8 @@ export def "identity-provider-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
   if ($identity_provider_name | is-empty) { error make --unspanned { msg: "path parameter 'identityProviderName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  if ($if_match == null) { error make --unspanned { msg: "required header parameter 'If-Match' missing: pass --if-match" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name), identity_provider_name: (encode-path-segment $identity_provider_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ApiManagement/service/{service_name}/identityProviders/{identity_provider_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -382,7 +391,7 @@ export def "identity-provider-create-or-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
-  identity_provider_name: string
+  identity_provider_name: string@identity-provider-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -392,7 +401,7 @@ export def "identity-provider-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
+  --api-version: string # Version of the API to be used with the client request. (required)
   --if-match: string # ETag of the Entity. Not required when creating an entity, but required when updating an entity.
   --properties: any # The external Identity Providers like Facebook, Google, Microsoft, Twitter or Azure Active Directory which can be used to enable access to the API Management service developer portal for all users. — shape: {clientId: string, clientSecret: string, allowedTenants?: list<string>, authority?: string, passwordResetPolicyName?: string, profileEditingPolicyName?: string, signinPolicyName?: string, signinTenant?: string, signupPolicyName?: string, type?: "facebook"|"google"|"microsoft"|"twitter"|"aad"|"aadB2C"}
 ]: any -> record<properties: record<clientId: string, clientSecret: string, allowedTenants: list<string>, authority: string, passwordResetPolicyName: string, profileEditingPolicyName: string, signinPolicyName: string, signinTenant: string, signupPolicyName: string, type: string>, id: string, name: string, type: string> {
@@ -403,6 +412,7 @@ export def "identity-provider-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
   if ($identity_provider_name | is-empty) { error make --unspanned { msg: "path parameter 'identityProviderName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name), identity_provider_name: (encode-path-segment $identity_provider_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ApiManagement/service/{service_name}/identityProviders/{identity_provider_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact

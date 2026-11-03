@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -148,13 +148,15 @@ export def "get-cost" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --ride-type: string@ride-type-completer # ID of a ride type
-  --start-lat: float # Latitude of the starting location (format: double)
-  --start-lng: float # Longitude of the starting location (format: double)
+  --start-lat: float # Latitude of the starting location (required, format: double)
+  --start-lng: float # Longitude of the starting location (required, format: double)
   --end-lat: float # Latitude of the ending location (format: double)
   --end-lng: float # Longitude of the ending location (format: double)
 ]: nothing -> record<cost_estimates: table<cost_token: string, currency: string, display_name: string, estimated_cost_cents_max: int, estimated_cost_cents_min: int, estimated_distance_miles: float, estimated_duration_seconds: int, is_valid_estimate: bool, primetime_confirmation_token: string, primetime_percentage: string, ride_type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($start_lat == null) { error make --unspanned { msg: "required query parameter 'start_lat' missing: pass --start-lat" } }
+  if ($start_lng == null) { error make --unspanned { msg: "required query parameter 'start_lng' missing: pass --start-lng" } }
   let qp = [(serialize-qp "ride_type" $ride_type "scalar") (serialize-qp "start_lat" $start_lat "scalar") (serialize-qp "start_lng" $start_lng "scalar") (serialize-qp "end_lat" $end_lat "scalar") (serialize-qp "end_lng" $end_lng "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cost" $qp $auth.query)
   let accept_val = "application/json"
@@ -187,11 +189,13 @@ export def "get-drivers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lat: float # Latitude of a location (format: double)
-  --lng: float # Longitude of a location (format: double)
+  --lat: float # Latitude of a location (required, format: double)
+  --lng: float # Longitude of a location (required, format: double)
 ]: nothing -> record<nearby_drivers: table<drivers: list, ride_type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($lat == null) { error make --unspanned { msg: "required query parameter 'lat' missing: pass --lat" } }
+  if ($lng == null) { error make --unspanned { msg: "required query parameter 'lng' missing: pass --lng" } }
   let qp = [(serialize-qp "lat" $lat "scalar") (serialize-qp "lng" $lng "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/drivers" $qp $auth.query)
   let accept_val = "application/json"
@@ -224,14 +228,16 @@ export def "get-eta" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lat: float # Latitude of a location (format: double)
-  --lng: float # Longitude of a location (format: double)
+  --lat: float # Latitude of a location (required, format: double)
+  --lng: float # Longitude of a location (required, format: double)
   --destination-lat: float # Latitude of destination location (format: double)
   --destination-lng: float # Longitude of destination location (format: double)
   --ride-type: string@ride-type-completer # ID of a ride type
 ]: nothing -> record<eta_estimates: table<display_name: string, eta_seconds: int, eta_seconds_max: int, is_valid_estimate: bool, ride_type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($lat == null) { error make --unspanned { msg: "required query parameter 'lat' missing: pass --lat" } }
+  if ($lng == null) { error make --unspanned { msg: "required query parameter 'lng' missing: pass --lng" } }
   let qp = [(serialize-qp "lat" $lat "scalar") (serialize-qp "lng" $lng "scalar") (serialize-qp "destination_lat" $destination_lat "scalar") (serialize-qp "destination_lng" $destination_lng "scalar") (serialize-qp "ride_type" $ride_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/eta" $qp $auth.query)
   let accept_val = "application/json"
@@ -298,12 +304,13 @@ export def "get-rides" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start-time: string # Restrict to rides starting after this point in time. The earliest supported date is 2015-01-01T00:00:00+00:00 (format: date-time)
+  --start-time: string # Restrict to rides starting after this point in time. The earliest supported date is 2015-01-01T00:00:00+00:00 (required, format: date-time)
   --end-time: string # Restrict to rides starting before this point in time. The earliest supported date is 2015-01-01T00:00:00+00:00 (format: date-time)
   --limit: int # The maximum number of rides to return. The default limit is 10 if not specified. The maximum allowed value is 50, an integer greater that 50 will return at most 50 results. (format: int32, default: 10)
 ]: nothing -> record<ride_history: table<beacon_color: string, can_cancel: list, canceled_by: string, cancellation_price: record, destination: record, distance_miles: float, driver: record, dropoff: record, duration_seconds: int, feedback: string, generated_at: string, line_items: list, location: record, origin: record, passenger: record, pickup: record, price: record, pricing_details_url: string, primetime_percentage: string, rating: int, requested_at: string, ride_id: string, ride_profile: record, ride_type: string, route_url: string, status: string, vehicle: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($start_time == null) { error make --unspanned { msg: "required query parameter 'start_time' missing: pass --start-time" } }
   let qp = [(serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rides" $qp $auth.query)
   let accept_val = "application/json"
@@ -326,6 +333,8 @@ export def "get-rides" [
 #
 # POST /rides
 # operationId: NewRide
+# --destination shape: {lat: float, lng: float, address?: string}
+# --origin shape: {lat: float, lng: float, address?: string}
 export def "new-ride" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -337,11 +346,11 @@ export def "new-ride" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --cost-token: string # A token that confirms the user has accepted current Prime Time and/or fixed price charges
-  --destination: record # The *requested* location for passenger drop off
-  origin: record # The *requested* location for passenger pickup
+  --destination: record # The *requested* location for passenger drop off — shape: {lat: float, lng: float, address?: string}
+  origin: record # The *requested* location for passenger pickup — shape: {lat: float, lng: float, address?: string}
   --primetime-confirmation-token: string # A token that confirms the user has accepted current primetime charges (Deprecated)
   ride_type: string@ride-type-completer # The ID of the ride type
-]: any -> record<destination: record, origin: record, passenger: record, ride_id: string, status: string> {
+]: any -> record<destination: record<lat: float, lng: float, address: string>, origin: record<lat: float, lng: float, address: string>, passenger: record<first_name: string, image_url: string, rating: string, last_name: string, user_id: string>, ride_id: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -379,7 +388,7 @@ export def "get-ride" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<beacon_color: string, can_cancel: list<string>, canceled_by: string, cancellation_price: record, destination: record, distance_miles: float, driver: record<first_name: string, image_url: string, phone_number: string, rating: string, user_id: string>, dropoff: record, duration_seconds: int, feedback: string, generated_at: string, line_items: table<amount: int, currency: string, type: string>, location: record, origin: record, passenger: record, pickup: record, price: record, pricing_details_url: string, primetime_percentage: string, rating: int, requested_at: string, ride_id: string, ride_profile: record, ride_type: string, route_url: string, status: string, vehicle: record<color: string, image_url: string, license_plate: string, license_plate_state: string, make: string, model: string, year: int>> {
+]: nothing -> record<beacon_color: string, can_cancel: list<string>, canceled_by: string, cancellation_price: record<amount: int, currency: string, description: string, token: string, token_duration: int>, destination: record<lat: float, lng: float, address: string, eta_seconds: int>, distance_miles: float, driver: record<first_name: string, image_url: string, phone_number: string, rating: string, user_id: string>, dropoff: record<lat: float, lng: float, address: string, time: string>, duration_seconds: int, feedback: string, generated_at: string, line_items: table<amount: int, currency: string, type: string>, location: record<lat: float, lng: float, bearing: float>, origin: record<lat: float, lng: float, address: string, eta_seconds: int>, passenger: record<first_name: string, image_url: string, rating: string, last_name: string, user_id: string>, pickup: record<lat: float, lng: float, address: string, time: string>, price: record<amount: int, currency: string, description: string>, pricing_details_url: string, primetime_percentage: string, rating: int, requested_at: string, ride_id: string, ride_profile: record, ride_type: string, route_url: string, status: string, vehicle: record<color: string, image_url: string, license_plate: string, license_plate_state: string, make: string, model: string, year: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -458,7 +467,7 @@ export def "set-ride-destination" [
   lat: float # The latitude component of a location (format: double)
   lng: float # The longitude component of a location (format: double)
   --address: string # A human readable address at/near the given location
-]: any -> record {
+]: any -> record<lat: float, lng: float, address: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -486,6 +495,7 @@ export def "set-ride-destination" [
 #
 # PUT /rides/{id}/rating
 # operationId: SetRideRating
+# --tip shape: {amount?: int, currency?: string}
 export def "set-ride-rating" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -499,7 +509,7 @@ export def "set-ride-rating" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --feedback: string # The passenger's written feedback about this ride
   rating: int # The passenger's rating of this ride from 1 to 5 (format: int32)
-  --tip: record # Tip amount in minor units and tip currency
+  --tip: record # Tip amount in minor units and tip currency — shape: {amount?: int, currency?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -539,7 +549,7 @@ export def "get-ride-receipt" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<charges: table<amount: int, currency: string, payment_method: string>, line_items: table<amount: int, currency: string, type: string>, price: record, requested_at: string, ride_id: string, ride_profile: record> {
+]: nothing -> record<charges: table<amount: int, currency: string, payment_method: string>, line_items: table<amount: int, currency: string, type: string>, price: record<amount: int, currency: string, description: string>, requested_at: string, ride_id: string, ride_profile: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -574,12 +584,14 @@ export def "get-ride-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lat: float # Latitude of a location (format: double)
-  --lng: float # Longitude of a location (format: double)
+  --lat: float # Latitude of a location (required, format: double)
+  --lng: float # Longitude of a location (required, format: double)
   --ride-type: string@ride-type-completer # ID of a ride type
 ]: nothing -> record<ride_types: table<display_name: string, image_url: string, pricing_details: record, ride_type: string, scheduled_pricing_details: record, seats: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($lat == null) { error make --unspanned { msg: "required query parameter 'lat' missing: pass --lat" } }
+  if ($lng == null) { error make --unspanned { msg: "required query parameter 'lng' missing: pass --lng" } }
   let qp = [(serialize-qp "lat" $lat "scalar") (serialize-qp "lng" $lng "scalar") (serialize-qp "ride_type" $ride_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ridetypes" $qp $auth.query)
   let accept_val = "application/json"
@@ -723,7 +735,7 @@ export def "set-ride-types" [
 # PUT /sandbox/ridetypes/{ride_type}
 # operationId: SetRideTypeAvailability
 export def "set-ride-type-availability" [
-  ride_type: string
+  ride_type: string@ride-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -744,6 +756,7 @@ export def "set-ride-type-availability" [
   let full_url = (build-url $base ({ride_type: (encode-path-segment $ride_type)} | format pattern "/sandbox/ridetypes/{ride_type}") $auth.query)
   let req_body = {"driver_availability": $driver_availability, "lat": $lat, "lng": $lng} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "driver_availability") == null) { error make --unspanned { msg: "required body field 'driver_availability' missing: pass --driver-availability or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {

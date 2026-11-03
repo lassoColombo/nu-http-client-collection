@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -224,7 +224,7 @@ export def "post-app-clients" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
+  --content-type: string # required
   --callback-urls: list<string>
   --default-login-url: string
   --description: string # nullable
@@ -337,7 +337,7 @@ export def "patch-app-clients-app-client-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
+  --content-type: string # required
   --default-login-url: string
   --description: string # nullable
   --login-urls: list<string>
@@ -446,7 +446,7 @@ export def "post-assets" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
+  --content-type: string # required
   content: string
   --description: string # nullable
   --name: string # nullable
@@ -588,7 +588,7 @@ export def "patch-assets-asset-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
+  --content-type: string # required
   --content: string
   --description: string # nullable
   --name: string # nullable
@@ -696,7 +696,7 @@ export def "post-datasets" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
+  --content-type: string # required
   --contains-personally-identifiable-information: oneof<nothing, bool>
   --description: string # nullable
   --metadata: record
@@ -840,7 +840,7 @@ export def "patch-datasets-dataset-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
+  --content-type: string # required
   --contains-personally-identifiable-information: oneof<nothing, bool>
   --description: string # nullable
   --metadata: record
@@ -1125,7 +1125,7 @@ export def "post-documents" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
+  --content-type: string # required
   --consent-id: string
   content: string
   --content-type-body: string@content-type-completer # nullable (body field)
@@ -1275,7 +1275,7 @@ export def "patch-documents-document-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
+  --content-type: string # required
   --dataset-id: string
   --description: string # nullable
   --ground-truth: list # nullable — item shape: {label: string, value: any}
@@ -1525,7 +1525,7 @@ export def "post-models" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
+  --content-type: string # required
   --description: string # nullable
   field_config: record
   --height: int
@@ -1674,7 +1674,7 @@ export def "patch-models-model-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
+  --content-type: string # required
   --description: string # nullable
   --field-config: record
   --height: int
@@ -1794,7 +1794,7 @@ export def "post-models-model-id-data-bundles" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
+  --content-type: string # required
   --dataset-ids: list<string>
   --description: string # nullable
   --name: string # nullable
@@ -1909,7 +1909,7 @@ export def "patch-models-model-id-data-bundles-data-bundle-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
+  --content-type: string # required
   --description: string # nullable
   --name: string # nullable
 ]: any -> record<createdBy: string, createdTime: string, dataBundleId: string, datasets: table<containsPersonallyIdentifiableInformation: bool, createdBy: string, createdTime: string, datasetId: string, description: string, groundTruthSummary: record, metadata: record, name: string, numberOfDocuments: int, retentionInDays: int, storageLocation: string, updatedBy: string, updatedTime: string, version: int>, description: string, modelId: string, name: string, retentionInDays: int, status: string, summary: record, updatedBy: string, updatedTime: string> {
@@ -2025,7 +2025,7 @@ export def "post-models-model-id-trainings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
+  --content-type: string # required
   --data-bundle-ids: list<string>
   --data-scientist-assistance: oneof<nothing, bool>
   --description: string # nullable
@@ -2109,7 +2109,7 @@ export def "patch-models-model-id-trainings-training-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
+  --content-type: string # required
   --deployment-environment-id: string # nullable
   --description: string # nullable
   --metadata: record
@@ -2220,7 +2220,7 @@ export def "post-organizations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
+  --content-type: string # required
   --name: string # nullable
 ]: any -> record<clientId: string, deploymentsAllowed: record, deploymentsCreated: record, description: string, documentRetentionInDays: int, monthlyNumberOfActiveModelsUsed: int, monthlyNumberOfDataBundlesAllowed: int, monthlyNumberOfDataBundlesCreated: int, monthlyNumberOfDocumentsAllowed: int, monthlyNumberOfDocumentsCreated: int, monthlyNumberOfFieldPredictionsUsed: int, monthlyNumberOfGpuHoursUsed: float, monthlyNumberOfModelDeploymentUnitsUsed: int, monthlyNumberOfPredictionsAllowed: int, monthlyNumberOfPredictionsCreated: int, monthlyNumberOfTrainingsAllowed: int, monthlyNumberOfTrainingsCreated: int, monthlyNumberOfTransitionExecutionsAllowed: int, monthlyNumberOfTransitionExecutionsCreated: int, monthlyNumberOfWorkflowExecutionsAllowed: int, monthlyNumberOfWorkflowExecutionsCreated: int, monthlyUsageSummary: record, name: string, numberOfAppClientsAllowed: int, numberOfAppClientsCreated: int, numberOfAssetsAllowed: int, numberOfAssetsCreated: int, numberOfDatasetsAllowed: int, numberOfDatasetsCreated: int, numberOfModelsAllowed: int, numberOfModelsCreated: int, numberOfSecretsAllowed: int, numberOfSecretsCreated: int, numberOfTransitionsAllowed: int, numberOfTransitionsCreated: int, numberOfUsersAllowed: int, numberOfUsersCreated: int, numberOfWorkflowsAllowed: int, numberOfWorkflowsCreated: int, organizationId: string, paymentMethodId: string, planId: string, updatedBy: string, updatedTime: string> {
   let input = $in
@@ -2327,7 +2327,7 @@ export def "patch-organizations-organization-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
+  --content-type: string # required
   --description: string # nullable
   --name: string # nullable
   --payment-method-id: string
@@ -2436,7 +2436,7 @@ export def "post-payment-methods" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
+  --content-type: string # required
   --description: string # nullable
   --name: string # nullable
 ]: any -> record<createdBy: string, createdTime: string, description: string, details: record, name: string, paymentMethodId: string, stripePublishableKey: string, stripeSetupIntentSecret: string, updatedBy: string, updatedTime: string> {
@@ -2577,7 +2577,7 @@ export def "patch-payment-methods-payment-method-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
+  --content-type: string # required
   --description: string # nullable
   --name: string # nullable
   --stripe-setup-intent-secret: string
@@ -2819,7 +2819,7 @@ export def "post-predictions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
+  --content-type: string # required
   --auto-rotate: oneof<nothing, bool>
   document_id: string
   --image-quality: string@image-quality-completer
@@ -3030,7 +3030,7 @@ export def "post-secrets" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
+  --content-type: string # required
   data: record
   --description: string # nullable
   --name: string # nullable
@@ -3139,7 +3139,7 @@ export def "patch-secrets-secret-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
+  --content-type: string # required
   --data: record
   --description: string # nullable
   --name: string # nullable
@@ -3213,7 +3213,7 @@ export def "post-signup" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
+  --content-type: string # required
   email: string
   --name: string # nullable
   password: string
@@ -3322,7 +3322,7 @@ export def "post-transitions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
+  --content-type: string # required
   --description: string # nullable
   --input-json-schema: record
   --name: string # nullable
@@ -3470,7 +3470,7 @@ export def "patch-transitions-transition-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
+  --content-type: string # required
   --assets: record # shape: {jsRemoteComponent?: string}
   --description: string # nullable
   --environment: record
@@ -3592,7 +3592,7 @@ export def "post-transitions-transition-id-executions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
+  --content-type: string # required
   --body: record
 ]: any -> record<completedBy: string, endTime: string, executionId: string, input: record, logId: string, startTime: string, status: string, transitionId: any> {
   let input = $in
@@ -3707,8 +3707,8 @@ export def "patch-transitions-transition-id-executions-execution-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
-  --body-error: record # shape: {message: string}
+  --content-type: string # required
+  --error: record # shape: {message: string}
   --output: record
   --start-time: string # nullable
   --status: string
@@ -3719,7 +3719,7 @@ export def "patch-transitions-transition-id-executions-execution-id" [
   if ($transition_id | is-empty) { error make --unspanned { msg: "path parameter 'transitionId' must be non-empty" } }
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
   let full_url = (build-url $base ({transition_id: (encode-path-segment $transition_id), execution_id: (encode-path-segment $execution_id)} | format pattern "/transitions/{transition_id}/executions/{execution_id}") $auth.query)
-  let req_body = {"error": $body_error, "output": $output, "startTime": $start_time, "status": $status} | compact
+  let req_body = {"error": $error, "output": $output, "startTime": $start_time, "status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3789,7 +3789,7 @@ export def "post-transitions-transition-id-executions-execution-id-heartbeats" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
+  --content-type: string # required
   --body: record
 ]: any -> any {
   let input = $in
@@ -3896,7 +3896,7 @@ export def "post-users" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
+  --content-type: string # required
   --app-client-id: string
   --avatar: string # nullable
   email: string
@@ -4040,7 +4040,7 @@ export def "patch-users-user-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
+  --content-type: string # required
   --avatar: string # nullable
   --metadata: record
   --name: string # nullable
@@ -4152,7 +4152,7 @@ export def "post-workflows" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
+  --content-type: string # required
   --completed-config: record # shape: {environment?: record, environmentSecrets?: list<string>, imageUrl: string, secretId?: string}
   --description: string # nullable
   --error-config: record # shape: {email?: string, manualRetry?: bool}
@@ -4299,7 +4299,7 @@ export def "patch-workflows-workflow-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
+  --content-type: string # required
   --completed-config: record # shape: {environment?: record, environmentSecrets?: list<string>, imageUrl: string, secretId?: string}
   --description: string # nullable
   --error-config: record # shape: {email?: string, manualRetry?: bool}
@@ -4418,16 +4418,17 @@ export def "post-workflows-workflow-id-executions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
-  input: record
+  --content-type: string # required
+  --body-input: record
 ]: any -> record<completedBy: list<any>, completedTaskLogId: string, endTime: string, events: list<record>, executionId: string, input: record, logId: string, output: record, startTime: string, status: string, transitionExecutions: record, workflowId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workflow_id | is-empty) { error make --unspanned { msg: "path parameter 'workflowId' must be non-empty" } }
   let full_url = (build-url $base ({workflow_id: (encode-path-segment $workflow_id)} | format pattern "/workflows/{workflow_id}/executions") $auth.query)
-  let req_body = {"input": $input} | compact
+  let req_body = {"input": $body_input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type} | compact
@@ -4566,7 +4567,7 @@ export def "patch-workflows-workflow-id-executions-execution-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string
+  --content-type: string # required
   next_transition_id: any
 ]: any -> record<completedBy: list<any>, completedTaskLogId: string, endTime: string, events: list<record>, executionId: string, input: record, logId: string, output: record, startTime: string, status: string, transitionExecutions: record, workflowId: string> {
   let input = $in

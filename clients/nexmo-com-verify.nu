@@ -100,6 +100,7 @@ def base-url-completer [] { ["https://api.nexmo.com/verify"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def format-completer [] { ["json" "xml"] }
 def accept-completer [] { ["application/json" "text/xml"] }
 def cmd-completer [] { ["cancel" "trigger_next_event"] }
 def code-length-completer [] { ["4" "6"] }
@@ -136,7 +137,7 @@ export def commands []: nothing -> table {
 # operationId: verifyCheck
 @deprecated --flag ip-address
 export def "verify-check" [
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,7 +183,7 @@ export def "verify-check" [
 # POST /control/{format}
 # operationId: verifyControl
 export def "verify-control" [
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -266,7 +267,7 @@ export def "network-unblock" [
 # POST /psd2/{format}
 # operationId: verifyRequestWithPSD2
 export def "verify-request-with-psd2" [
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -317,7 +318,7 @@ export def "verify-request-with-psd2" [
 # GET /search/{format}
 # operationId: verifySearch
 export def "verify-search" [
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -328,14 +329,17 @@ export def "verify-search" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-key: string # e.g. abcd1234
-  --api-secret: string # e.g. Sup3rS3cr3t!!
-  --request-id: string # The `request_id` you received in the Verify Request Response. Required if `request_ids` not provided. (e.g. abcdef0123456789abcdef0123456789)
+  --api-key: string # required, e.g. abcd1234
+  --api-secret: string # required, e.g. Sup3rS3cr3t!!
+  --request-id: string # The `request_id` you received in the Verify Request Response. Required if `request_ids` not provided. (required, e.g. abcdef0123456789abcdef0123456789)
   --request-ids: list<string> # More than one `request_id`. Each `request_id` is a new parameter in the Verify Search request. Required if `request_id` not provided.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
+  if ($api_secret == null) { error make --unspanned { msg: "required query parameter 'api_secret' missing: pass --api-secret" } }
+  if ($request_id == null) { error make --unspanned { msg: "required query parameter 'request_id' missing: pass --request-id" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "api_secret" $api_secret "scalar") (serialize-qp "request_id" $request_id "scalar") (serialize-qp "request_ids" $request_ids "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/search/{format}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -359,7 +363,7 @@ export def "verify-search" [
 # POST /{format}
 # operationId: verifyRequest
 export def "verify-request" [
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

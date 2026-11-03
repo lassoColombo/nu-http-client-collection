@@ -95,6 +95,7 @@ def base-url-completer [] { ["https://api.digitalnz.org"] }
 def auth-scheme-completer [] { ["query-api_key"] }
 
 # Completers for enum parameters
+def format-completer [] { ["json" "xml"] }
 def and-category-completer [] { ["Archives" "Articles" "Audio" "Books" "Data" "Groups" "Images" "Journals" "Manuscripts" "Music Score" "Newspapers" "Other" "Reference sources" "Research papers" "Sets" "Videos" "Websites"] }
 def and-usage-completer [] { ["All rights reserved" "Modify" "Share" "Unknown" "Use commercially"] }
 def and-has-large-thumbnail-url-completer [] { ["Y"] }
@@ -129,7 +130,7 @@ export def commands []: nothing -> table {
 #
 # GET /records.{format}
 export def "get-records-format" [
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -162,7 +163,7 @@ export def "get-records-format" [
   --and-has-lat-lng: oneof<nothing, bool> # Filters results to only those records that have latitude and longitude coordinates present in the metadata. *Tip* - To see the location metadata you'll need to specifically request that field using the *fields* parameter - *"&fields=verbose,locations"* as it is not part of the default, or verbose field sets.
   --geo-bbox: string # A geographic bounding box scoping a search to a geographic region. Order of latitude-longitude coordinates is north, west, south, east. For example, filtering the Wellington region would be *"&geo_bbox=-41,174,-42,175"*
   --fields: string # Comma-separated whitelist of fields to be returned. The syntax *"&fields=verbose"* can be used to return the bulk of the fields, or you can customise which fields you are interested in, eg. *"&fields=id,title,subject,collection,landing_url,locations"*.
-  --qp-sort: string@sort-completer # Used to control the order of the results in conjunction with the *direction* field. - *syndication_date* - is the creation date of the record within DigitalNZ, ie. when DigitalNZ first harvested the record. - *date* - is the date metadata (if present) associated with the record. To sort the search results with newest records at the top use: "&sort=syndication_date&direction=desc"
+  --sort: string@sort-completer # Used to control the order of the results in conjunction with the *direction* field. - *syndication_date* - is the creation date of the record within DigitalNZ, ie. when DigitalNZ first harvested the record. - *date* - is the date metadata (if present) associated with the record. To sort the search results with newest records at the top use: "&sort=syndication_date&direction=desc"
   --direction: string@direction-completer # Used in conjunction with *sort* to order the results - *asc* - Ascending, oldest first. - *desc* - Descending, newest first. (default: asc)
   --page: int # Specify which page of results to return. (default: 1)
   --per-page: int # The number of records to return per page of search results. (default: 20)
@@ -175,7 +176,7 @@ export def "get-records-format" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "and[category][]" $and_category "scalar") (serialize-qp "and[content_partner][]" $and_content_partner "scalar") (serialize-qp "and[primary_collection][]" $and_primary_collection "scalar") (serialize-qp "and[collection][]" $and_collection "scalar") (serialize-qp "and[usage][]" $and_usage "scalar") (serialize-qp "and[subject][]" $and_subject "scalar") (serialize-qp "and[dc_type][]" $and_dc_type "scalar") (serialize-qp "and[format][]" $and_format "scalar") (serialize-qp "and[placename][]" $and_placename "scalar") (serialize-qp "and[creator][]" $and_creator "scalar") (serialize-qp "and[title][]" $and_title "scalar") (serialize-qp "and[date]" $and_date "scalar") (serialize-qp "and[year]" $and_year "scalar") (serialize-qp "and[decade]" $and_decade "scalar") (serialize-qp "and[century]" $and_century "scalar") (serialize-qp "without[{filter_field}]" $without_filter_field "scalar") (serialize-qp "and[or][{filter_field}][]" $and_or_filter_field "scalar") (serialize-qp "and[is_commercial_use]" $and_is_commercial_use "scalar") (serialize-qp "and[has_large_thumbnail_url]" $and_has_large_thumbnail_url "scalar") (serialize-qp "and[has_lat_lng]" $and_has_lat_lng "scalar") (serialize-qp "geo_bbox" $geo_bbox "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "facets" $facets "csv") (serialize-qp "facets_page" $facets_page "scalar") (serialize-qp "facets_per_page" $facets_per_page "scalar") (serialize-qp "exclude_filters_from_facets" $exclude_filters_from_facets "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "and[category][]" $and_category "scalar") (serialize-qp "and[content_partner][]" $and_content_partner "scalar") (serialize-qp "and[primary_collection][]" $and_primary_collection "scalar") (serialize-qp "and[collection][]" $and_collection "scalar") (serialize-qp "and[usage][]" $and_usage "scalar") (serialize-qp "and[subject][]" $and_subject "scalar") (serialize-qp "and[dc_type][]" $and_dc_type "scalar") (serialize-qp "and[format][]" $and_format "scalar") (serialize-qp "and[placename][]" $and_placename "scalar") (serialize-qp "and[creator][]" $and_creator "scalar") (serialize-qp "and[title][]" $and_title "scalar") (serialize-qp "and[date]" $and_date "scalar") (serialize-qp "and[year]" $and_year "scalar") (serialize-qp "and[decade]" $and_decade "scalar") (serialize-qp "and[century]" $and_century "scalar") (serialize-qp "without[{filter_field}]" $without_filter_field "scalar") (serialize-qp "and[or][{filter_field}][]" $and_or_filter_field "scalar") (serialize-qp "and[is_commercial_use]" $and_is_commercial_use "scalar") (serialize-qp "and[has_large_thumbnail_url]" $and_has_large_thumbnail_url "scalar") (serialize-qp "and[has_lat_lng]" $and_has_lat_lng "scalar") (serialize-qp "geo_bbox" $geo_bbox "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "facets" $facets "csv") (serialize-qp "facets_page" $facets_page "scalar") (serialize-qp "facets_per_page" $facets_per_page "scalar") (serialize-qp "exclude_filters_from_facets" $exclude_filters_from_facets "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/records.{format}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -184,7 +185,7 @@ export def "get-records-format" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"text": $text, "and[category][]": $and_category, "and[content_partner][]": $and_content_partner, "and[primary_collection][]": $and_primary_collection, "and[collection][]": $and_collection, "and[usage][]": $and_usage, "and[subject][]": $and_subject, "and[dc_type][]": $and_dc_type, "and[format][]": $and_format, "and[placename][]": $and_placename, "and[creator][]": $and_creator, "and[title][]": $and_title, "and[date]": $and_date, "and[year]": $and_year, "and[decade]": $and_decade, "and[century]": $and_century, "without[{filter_field}]": $without_filter_field, "and[or][{filter_field}][]": $and_or_filter_field, "and[is_commercial_use]": $and_is_commercial_use, "and[has_large_thumbnail_url]": $and_has_large_thumbnail_url, "and[has_lat_lng]": $and_has_lat_lng, "geo_bbox": $geo_bbox, "fields": $fields, "sort": $qp_sort, "direction": $direction, "page": $page, "per_page": $per_page, "facets": $facets, "facets_page": $facets_page, "facets_per_page": $facets_per_page, "exclude_filters_from_facets": $exclude_filters_from_facets} | compact)
+    query: ({"text": $text, "and[category][]": $and_category, "and[content_partner][]": $and_content_partner, "and[primary_collection][]": $and_primary_collection, "and[collection][]": $and_collection, "and[usage][]": $and_usage, "and[subject][]": $and_subject, "and[dc_type][]": $and_dc_type, "and[format][]": $and_format, "and[placename][]": $and_placename, "and[creator][]": $and_creator, "and[title][]": $and_title, "and[date]": $and_date, "and[year]": $and_year, "and[decade]": $and_decade, "and[century]": $and_century, "without[{filter_field}]": $without_filter_field, "and[or][{filter_field}][]": $and_or_filter_field, "and[is_commercial_use]": $and_is_commercial_use, "and[has_large_thumbnail_url]": $and_has_large_thumbnail_url, "and[has_lat_lng]": $and_has_lat_lng, "geo_bbox": $geo_bbox, "fields": $fields, "sort": $sort, "direction": $direction, "page": $page, "per_page": $per_page, "facets": $facets, "facets_page": $facets_page, "facets_per_page": $facets_per_page, "exclude_filters_from_facets": $exclude_filters_from_facets} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -200,7 +201,7 @@ export def "get-records-format" [
 # GET /records/{record_id}.{format}
 export def "get-records-record-id-format" [
   record_id: int
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,7 +243,7 @@ export def "get-records-record-id-format" [
 # GET /records/{record_id}/more_like_this.{format}
 export def "get-records-record-id-more-like-this-format" [
   record_id: int
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

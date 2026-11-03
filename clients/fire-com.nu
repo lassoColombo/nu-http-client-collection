@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -274,12 +274,14 @@ export def "get-transactions-by-idv1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --limit: int # format: int64
-  --offset: int # format: int64
+  --limit: int # required, format: int64
+  --offset: int # required, format: int64
 ]: nothing -> record<dateRangeTo: int, total: int, transactions: table<amountAfterCharges: int, amountBeforeCharges: int, balance: int, batchItemDetails: record, card: record, currency: record, date: string, dateAcknowledged: string, directDebitDetails: record, eventUuid: string, feeAmount: int, fxTradeDetails: record, ican: int, myRef: string, paymentRequestPublicCode: string, proprietarySchemeDetails: list, refId: int, relatedParty: any, taxAmount: int, txnId: int, type: string, yourRef: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ican | is-empty) { error make --unspanned { msg: "path parameter 'ican' must be non-empty" } }
+  if ($limit == null) { error make --unspanned { msg: "required query parameter 'limit' missing: pass --limit" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ican: (encode-path-segment $ican)} | format pattern "/v1/accounts/{ican}/transactions") $qp $auth.query)
   let accept_val = "application/json"
@@ -315,15 +317,20 @@ export def "get-transactions-filtered-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --date-range-from: int # format: int64
-  --date-range-to: int # format: int64
-  --search-keyword: string
-  --transaction-types: list<string>
-  --offset: int # format: int64
+  --date-range-from: int # required, format: int64
+  --date-range-to: int # required, format: int64
+  --search-keyword: string # required
+  --transaction-types: list<string> # required
+  --offset: int # required, format: int64
 ]: nothing -> record<dateRangeTo: int, total: int, transactions: table<amountAfterCharges: int, amountBeforeCharges: int, balance: int, batchItemDetails: record, card: record, currency: record, date: string, dateAcknowledged: string, directDebitDetails: record, eventUuid: string, feeAmount: int, fxTradeDetails: record, ican: int, myRef: string, paymentRequestPublicCode: string, proprietarySchemeDetails: list, refId: int, relatedParty: any, taxAmount: int, txnId: int, type: string, yourRef: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ican | is-empty) { error make --unspanned { msg: "path parameter 'ican' must be non-empty" } }
+  if ($date_range_from == null) { error make --unspanned { msg: "required query parameter 'dateRangeFrom' missing: pass --date-range-from" } }
+  if ($date_range_to == null) { error make --unspanned { msg: "required query parameter 'dateRangeTo' missing: pass --date-range-to" } }
+  if ($search_keyword == null) { error make --unspanned { msg: "required query parameter 'searchKeyword' missing: pass --search-keyword" } }
+  if ($transaction_types == null) { error make --unspanned { msg: "required query parameter 'transactionTypes' missing: pass --transaction-types" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
   let qp = [(serialize-qp "dateRangeFrom" $date_range_from "scalar") (serialize-qp "dateRangeTo" $date_range_to "scalar") (serialize-qp "searchKeyword" $search_keyword "scalar") (serialize-qp "transactionTypes" $transaction_types "multi") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ican: (encode-path-segment $ican)} | format pattern "/v1/accounts/{ican}/transactions/filter") $qp $auth.query)
   let accept_val = "application/json"
@@ -1137,10 +1144,11 @@ export def "get-direct-debits-for-mandate-uuid" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --mandate-uuid: string # The mandate UUID to retrieve (e.g. 1A07774B-1461-4595-BC4B-423B739712AF)
+  --mandate-uuid: string # The mandate UUID to retrieve (required, e.g. 1A07774B-1461-4595-BC4B-423B739712AF)
 ]: nothing -> record<directdebits: table<amount: int, currency: record, dateCreated: string, directDebitReference: string, directDebitUuid: string, isDDIC: bool, lastUpdated: string, mandateUUid: string, originatorAlias: string, originatorName: string, originatorReference: string, schemeRejectReason: string, schemeRejectReasonCode: string, status: string, targetIcan: int, targetPayeeId: int, type: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($mandate_uuid == null) { error make --unspanned { msg: "required query parameter 'mandateUuid' missing: pass --mandate-uuid" } }
   let qp = [(serialize-qp "mandateUuid" $mandate_uuid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/directdebits" $qp $auth.query)
   let accept_val = "application/json"

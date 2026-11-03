@@ -1,4 +1,4 @@
-# Auto-generated client for Tafqit vv1
+# Auto-generated client for Tafqit v1
 # Source: https://api.apis.guru/v2/specs/tafqit.herokuapp.com/v1/openapi.json
 # Auth: --token flag or $env.TAFQIT_TOKEN
 
@@ -172,8 +172,8 @@ export def "convert" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url

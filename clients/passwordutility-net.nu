@@ -1,4 +1,4 @@
-# Auto-generated client for PasswordUtility.Web vv1
+# Auto-generated client for PasswordUtility.Web v1
 # Source: https://api.apis.guru/v2/specs/passwordutility.net/v1/swagger.json
 # Auth: --token flag or $env.PASSWORDUTILITY_WEB_TOKEN
 
@@ -134,13 +134,14 @@ export def "password-generate" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --length: int # format: int32
+  --length: int # required, format: int32
   --upper-case: oneof<nothing, bool>
   --digits: oneof<nothing, bool>
   --special-characters: oneof<nothing, bool>
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($length == null) { error make --unspanned { msg: "required query parameter 'length' missing: pass --length" } }
   let qp = [(serialize-qp "length" $length "scalar") (serialize-qp "upperCase" $upper_case "scalar") (serialize-qp "digits" $digits "scalar") (serialize-qp "specialCharacters" $special_characters "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/password/generate" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -173,10 +174,11 @@ export def "password-validate" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --password: string
+  --password: string # required
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($password == null) { error make --unspanned { msg: "required query parameter 'password' missing: pass --password" } }
   let qp = [(serialize-qp "password" $password "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/password/validate" $qp $auth.query)
   let accept_val = ($accept | default "application/json")

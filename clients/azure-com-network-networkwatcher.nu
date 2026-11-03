@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -162,11 +162,12 @@ export def "network-watchers-list-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/networkWatchers") $qp $auth.query)
   let accept_val = "application/json"
@@ -201,12 +202,13 @@ export def "network-watchers-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkWatchers") $qp $auth.query)
   let accept_val = "application/json"
@@ -242,13 +244,14 @@ export def "network-watchers-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
-]: nothing -> record<error: record<code: string, message: string, target: string>> {
+  --api-version: string # Client API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($network_watcher_name | is-empty) { error make --unspanned { msg: "path parameter 'networkWatcherName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), network_watcher_name: (encode-path-segment $network_watcher_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkWatchers/{network_watcher_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -284,13 +287,14 @@ export def "network-watchers-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<etag: string, properties: record<provisioningState: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($network_watcher_name | is-empty) { error make --unspanned { msg: "path parameter 'networkWatcherName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), network_watcher_name: (encode-path-segment $network_watcher_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkWatchers/{network_watcher_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -326,7 +330,7 @@ export def "network-watchers-update-tags" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --tags: record # Resource tags.
 ]: any -> record<etag: string, properties: record<provisioningState: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
@@ -335,6 +339,7 @@ export def "network-watchers-update-tags" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($network_watcher_name | is-empty) { error make --unspanned { msg: "path parameter 'networkWatcherName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), network_watcher_name: (encode-path-segment $network_watcher_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkWatchers/{network_watcher_name}") $qp $auth.query)
   let req_body = {"tags": $tags} | compact
@@ -372,7 +377,7 @@ export def "network-watchers-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --etag: string # A unique read-only string that changes whenever the resource is updated.
   --properties: any # The network watcher properties.
   --id: string # Resource ID.
@@ -385,6 +390,7 @@ export def "network-watchers-create-or-update" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($network_watcher_name | is-empty) { error make --unspanned { msg: "path parameter 'networkWatcherName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), network_watcher_name: (encode-path-segment $network_watcher_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkWatchers/{network_watcher_name}") $qp $auth.query)
   let req_body = {"etag": $etag, "properties": $properties, "id": $id, "location": $location, "tags": $tags} | compact
@@ -422,7 +428,7 @@ export def "network-watchers-list-available-providers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --azure-locations: list<string> # A list of Azure regions.
   --city: string # The city or town for available providers list.
   --country: string # The country for available providers list.
@@ -434,6 +440,7 @@ export def "network-watchers-list-available-providers" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($network_watcher_name | is-empty) { error make --unspanned { msg: "path parameter 'networkWatcherName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), network_watcher_name: (encode-path-segment $network_watcher_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkWatchers/{network_watcher_name}/availableProvidersList") $qp $auth.query)
   let req_body = {"azureLocations": $azure_locations, "city": $city, "country": $country, "state": $state} | compact
@@ -472,7 +479,7 @@ export def "network-watchers-get-azure-reachability-report" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --azure-locations: list<string> # Optional Azure regions to scope the query to.
   end_time: string # The end time for the Azure reachability report. (format: date-time)
   provider_location: any # Parameters that define a geographic location. — shape: {city?: string, country: string, state?: string}
@@ -485,6 +492,7 @@ export def "network-watchers-get-azure-reachability-report" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($network_watcher_name | is-empty) { error make --unspanned { msg: "path parameter 'networkWatcherName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), network_watcher_name: (encode-path-segment $network_watcher_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkWatchers/{network_watcher_name}/azureReachabilityReport") $qp $auth.query)
   let req_body = {"azureLocations": $azure_locations, "endTime": $end_time, "providerLocation": $provider_location, "providers": $providers, "startTime": $start_time} | compact
@@ -524,7 +532,7 @@ export def "network-watchers-set-flow-log-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --flow-analytics-configuration: any # Parameters that define the configuration of traffic analytics. — shape: {networkWatcherFlowAnalyticsConfiguration: any}
   properties: any # Parameters that define the configuration of flow log. — shape: {enabled: bool, format?: any, retentionPolicy?: any, storageId: string}
   target_resource_id: string # The ID of the resource to configure for flow log and traffic analytics (optional) .
@@ -535,6 +543,7 @@ export def "network-watchers-set-flow-log-configuration" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($network_watcher_name | is-empty) { error make --unspanned { msg: "path parameter 'networkWatcherName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), network_watcher_name: (encode-path-segment $network_watcher_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkWatchers/{network_watcher_name}/configureFlowLog") $qp $auth.query)
   let req_body = {"flowAnalyticsConfiguration": $flow_analytics_configuration, "properties": $properties, "targetResourceId": $target_resource_id} | compact
@@ -575,11 +584,11 @@ export def "network-watchers-check-connectivity" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   destination: any # Parameters that define destination of connection. — shape: {address?: string, port?: int, resourceId?: string}
   --protocol: string@protocol-completer # Network protocol.
   --protocol-configuration: any # Configuration of the protocol. — shape: {HTTPConfiguration?: any}
-  --body-source: any # Parameters that define the source of the connection. — shape: {port?: int, resourceId: string}
+  source: any # Parameters that define the source of the connection. — shape: {port?: int, resourceId: string}
 ]: any -> record<avgLatencyInMs: int, connectionStatus: string, hops: table<address: string, id: string, issues: list, nextHopIds: list, resourceId: string, type: string>, maxLatencyInMs: int, minLatencyInMs: int, probesFailed: int, probesSent: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -587,9 +596,10 @@ export def "network-watchers-check-connectivity" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($network_watcher_name | is-empty) { error make --unspanned { msg: "path parameter 'networkWatcherName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), network_watcher_name: (encode-path-segment $network_watcher_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkWatchers/{network_watcher_name}/connectivityCheck") $qp $auth.query)
-  let req_body = {"destination": $destination, "protocol": $protocol, "protocolConfiguration": $protocol_configuration, "source": $body_source} | compact
+  let req_body = {"destination": $destination, "protocol": $protocol, "protocolConfiguration": $protocol_configuration, "source": $source} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -624,7 +634,7 @@ export def "network-watchers-verify-ip-flow" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   direction: string@direction-completer # The direction of the traffic.
   local_ip_address: string # The local IP address. Acceptable values are valid IPv4 addresses.
   local_port: string # The local port. Acceptable values are a single integer in the range (0-65535). Support for * for the source port, which depends on the direction.
@@ -640,6 +650,7 @@ export def "network-watchers-verify-ip-flow" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($network_watcher_name | is-empty) { error make --unspanned { msg: "path parameter 'networkWatcherName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), network_watcher_name: (encode-path-segment $network_watcher_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkWatchers/{network_watcher_name}/ipFlowVerify") $qp $auth.query)
   let req_body = {"direction": $direction, "localIPAddress": $local_ip_address, "localPort": $local_port, "protocol": $protocol, "remoteIPAddress": $remote_ip_address, "remotePort": $remote_port, "targetNicResourceId": $target_nic_resource_id, "targetResourceId": $target_resource_id} | compact
@@ -678,7 +689,7 @@ export def "network-watchers-get-network-configuration-diagnostic" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   profiles: list # List of network configuration diagnostic profiles. — item shape: {destination: string, destinationPort: string, direction: "Inbound"|"Outbound", protocol: string, source: string}
   target_resource_id: string # The ID of the target resource to perform network configuration diagnostic. Valid options are VM, NetworkInterface, VMSS/NetworkInterface and Application Gateway.
   --verbosity-level: string@verbosity-level-completer # Verbosity level.
@@ -689,6 +700,7 @@ export def "network-watchers-get-network-configuration-diagnostic" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($network_watcher_name | is-empty) { error make --unspanned { msg: "path parameter 'networkWatcherName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), network_watcher_name: (encode-path-segment $network_watcher_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkWatchers/{network_watcher_name}/networkConfigurationDiagnostic") $qp $auth.query)
   let req_body = {"profiles": $profiles, "targetResourceId": $target_resource_id, "verbosityLevel": $verbosity_level} | compact
@@ -726,7 +738,7 @@ export def "network-watchers-get-next-hop" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   destination_ip_address: string # The destination IP address.
   source_ip_address: string # The source IP address.
   --target-nic-resource-id: string # The NIC ID. (If VM has multiple NICs and IP forwarding is enabled on any of the nics, then this parameter must be specified. Otherwise optional).
@@ -738,6 +750,7 @@ export def "network-watchers-get-next-hop" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($network_watcher_name | is-empty) { error make --unspanned { msg: "path parameter 'networkWatcherName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), network_watcher_name: (encode-path-segment $network_watcher_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkWatchers/{network_watcher_name}/nextHop") $qp $auth.query)
   let req_body = {"destinationIPAddress": $destination_ip_address, "sourceIPAddress": $source_ip_address, "targetNicResourceId": $target_nic_resource_id, "targetResourceId": $target_resource_id} | compact
@@ -775,13 +788,14 @@ export def "packet-captures-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<value: table<etag: string, id: string, name: string, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($network_watcher_name | is-empty) { error make --unspanned { msg: "path parameter 'networkWatcherName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), network_watcher_name: (encode-path-segment $network_watcher_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkWatchers/{network_watcher_name}/packetCaptures") $qp $auth.query)
   let accept_val = "application/json"
@@ -818,14 +832,15 @@ export def "packet-captures-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
-]: nothing -> record<error: record<code: string, message: string, target: string>> {
+  --api-version: string # Client API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($network_watcher_name | is-empty) { error make --unspanned { msg: "path parameter 'networkWatcherName' must be non-empty" } }
   if ($packet_capture_name | is-empty) { error make --unspanned { msg: "path parameter 'packetCaptureName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), network_watcher_name: (encode-path-segment $network_watcher_name), packet_capture_name: (encode-path-segment $packet_capture_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkWatchers/{network_watcher_name}/packetCaptures/{packet_capture_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -862,7 +877,7 @@ export def "packet-captures-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<etag: string, id: string, name: string, properties: record<provisioningState: string, bytesToCapturePerPacket: int, filters: list<record>, storageLocation: record<filePath: string, storageId: string, storagePath: string>, target: string, timeLimitInSeconds: int, totalBytesPerSession: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -870,6 +885,7 @@ export def "packet-captures-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($network_watcher_name | is-empty) { error make --unspanned { msg: "path parameter 'networkWatcherName' must be non-empty" } }
   if ($packet_capture_name | is-empty) { error make --unspanned { msg: "path parameter 'packetCaptureName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), network_watcher_name: (encode-path-segment $network_watcher_name), packet_capture_name: (encode-path-segment $packet_capture_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkWatchers/{network_watcher_name}/packetCaptures/{packet_capture_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -907,7 +923,7 @@ export def "packet-captures-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   properties: any # Parameters that define the create packet capture operation. — shape: {bytesToCapturePerPacket?: int, filters?: list, storageLocation: any, target: string, timeLimitInSeconds?: int, totalBytesPerSession?: int}
 ]: any -> record<etag: string, id: string, name: string, properties: record<provisioningState: string, bytesToCapturePerPacket: int, filters: list<record>, storageLocation: record<filePath: string, storageId: string, storagePath: string>, target: string, timeLimitInSeconds: int, totalBytesPerSession: int>> {
   let input = $in
@@ -917,6 +933,7 @@ export def "packet-captures-create" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($network_watcher_name | is-empty) { error make --unspanned { msg: "path parameter 'networkWatcherName' must be non-empty" } }
   if ($packet_capture_name | is-empty) { error make --unspanned { msg: "path parameter 'packetCaptureName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), network_watcher_name: (encode-path-segment $network_watcher_name), packet_capture_name: (encode-path-segment $packet_capture_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkWatchers/{network_watcher_name}/packetCaptures/{packet_capture_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -955,7 +972,7 @@ export def "packet-captures-get-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<captureStartTime: string, id: string, name: string, packetCaptureError: list<string>, packetCaptureStatus: string, stopReason: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -963,6 +980,7 @@ export def "packet-captures-get-status" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($network_watcher_name | is-empty) { error make --unspanned { msg: "path parameter 'networkWatcherName' must be non-empty" } }
   if ($packet_capture_name | is-empty) { error make --unspanned { msg: "path parameter 'packetCaptureName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), network_watcher_name: (encode-path-segment $network_watcher_name), packet_capture_name: (encode-path-segment $packet_capture_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkWatchers/{network_watcher_name}/packetCaptures/{packet_capture_name}/queryStatus") $qp $auth.query)
   let accept_val = "application/json"
@@ -999,14 +1017,15 @@ export def "packet-captures-stop" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
-]: nothing -> record<error: record<code: string, message: string, target: string>> {
+  --api-version: string # Client API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($network_watcher_name | is-empty) { error make --unspanned { msg: "path parameter 'networkWatcherName' must be non-empty" } }
   if ($packet_capture_name | is-empty) { error make --unspanned { msg: "path parameter 'packetCaptureName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), network_watcher_name: (encode-path-segment $network_watcher_name), packet_capture_name: (encode-path-segment $packet_capture_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkWatchers/{network_watcher_name}/packetCaptures/{packet_capture_name}/stop") $qp $auth.query)
   let accept_val = "application/json"
@@ -1042,7 +1061,7 @@ export def "network-watchers-get-flow-log-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   target_resource_id: string # The target resource where getting the flow log and traffic analytics (optional) status.
 ]: any -> record<flowAnalyticsConfiguration: record<networkWatcherFlowAnalyticsConfiguration: record<enabled: bool, trafficAnalyticsInterval: int, workspaceId: string, workspaceRegion: string, workspaceResourceId: string>>, properties: record<enabled: bool, format: record<type: string, version: int>, retentionPolicy: record<days: int, enabled: bool>, storageId: string>, targetResourceId: string> {
   let input = $in
@@ -1051,6 +1070,7 @@ export def "network-watchers-get-flow-log-status" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($network_watcher_name | is-empty) { error make --unspanned { msg: "path parameter 'networkWatcherName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), network_watcher_name: (encode-path-segment $network_watcher_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkWatchers/{network_watcher_name}/queryFlowLogStatus") $qp $auth.query)
   let req_body = {"targetResourceId": $target_resource_id} | compact
@@ -1088,7 +1108,7 @@ export def "network-watchers-get-troubleshooting-result" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   target_resource_id: string # The target resource ID to query the troubleshooting result.
 ]: any -> record<code: string, endTime: string, results: table<detail: string, id: string, reasonType: string, recommendedActions: list, summary: string>, startTime: string> {
   let input = $in
@@ -1097,6 +1117,7 @@ export def "network-watchers-get-troubleshooting-result" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($network_watcher_name | is-empty) { error make --unspanned { msg: "path parameter 'networkWatcherName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), network_watcher_name: (encode-path-segment $network_watcher_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkWatchers/{network_watcher_name}/queryTroubleshootResult") $qp $auth.query)
   let req_body = {"targetResourceId": $target_resource_id} | compact
@@ -1134,7 +1155,7 @@ export def "network-watchers-get-vm-security-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   target_resource_id: string # ID of the target VM.
 ]: any -> record<networkInterfaces: table<id: string, securityRuleAssociations: record>> {
   let input = $in
@@ -1143,6 +1164,7 @@ export def "network-watchers-get-vm-security-rules" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($network_watcher_name | is-empty) { error make --unspanned { msg: "path parameter 'networkWatcherName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), network_watcher_name: (encode-path-segment $network_watcher_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkWatchers/{network_watcher_name}/securityGroupView") $qp $auth.query)
   let req_body = {"targetResourceId": $target_resource_id} | compact
@@ -1182,7 +1204,7 @@ export def "network-watchers-get-topology" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --target-resource-group-name: string # The name of the target resource group to perform topology on.
   --target-subnet: any # Reference to another subresource. — shape: {id?: string}
   --target-virtual-network: any # Reference to another subresource. — shape: {id?: string}
@@ -1193,6 +1215,7 @@ export def "network-watchers-get-topology" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($network_watcher_name | is-empty) { error make --unspanned { msg: "path parameter 'networkWatcherName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), network_watcher_name: (encode-path-segment $network_watcher_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkWatchers/{network_watcher_name}/topology") $qp $auth.query)
   let req_body = {"targetResourceGroupName": $target_resource_group_name, "targetSubnet": $target_subnet, "targetVirtualNetwork": $target_virtual_network} | compact
@@ -1231,7 +1254,7 @@ export def "network-watchers-get-troubleshooting" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   properties: any # Storage location provided for troubleshoot. — shape: {storageId: string, storagePath: string}
   target_resource_id: string # The target resource to troubleshoot.
 ]: any -> record<code: string, endTime: string, results: table<detail: string, id: string, reasonType: string, recommendedActions: list, summary: string>, startTime: string> {
@@ -1241,6 +1264,7 @@ export def "network-watchers-get-troubleshooting" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($network_watcher_name | is-empty) { error make --unspanned { msg: "path parameter 'networkWatcherName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), network_watcher_name: (encode-path-segment $network_watcher_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/networkWatchers/{network_watcher_name}/troubleshoot") $qp $auth.query)
   let req_body = {"properties": $properties, "targetResourceId": $target_resource_id} | compact

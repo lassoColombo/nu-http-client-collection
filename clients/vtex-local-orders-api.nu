@@ -1,6 +1,7 @@
 # Auto-generated client for Orders API v1.0
 # Source: https://api.apis.guru/v2/specs/vtex.local/Orders-API/1.0/openapi.json
-# Auth: --token flag or $env.ORDERS_API_TOKEN
+# Auth (appKey): --token-appkey flag or $env.ORDERS_API_APPKEY_TOKEN
+# Auth (appToken): --token-apptoken flag or $env.ORDERS_API_APPTOKEN_TOKEN
 
 const BASE_URL = "https://vtex.local"
 
@@ -12,8 +13,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-vtex-api-appkey" => { {scheme: $scheme, headers: {X-VTEX-API-AppKey: $token_val}, query: "", location: "header"} }
-    "x-vtex-api-apptoken" => { {scheme: $scheme, headers: {X-VTEX-API-AppToken: $token_val}, query: "", location: "header"} }
+    "x-vtex-api-appkey" => { {scheme: $scheme, headers: {"X-VTEX-API-AppKey": $token_val}, query: "", location: "header"} }
+    "x-vtex-api-apptoken" => { {scheme: $scheme, headers: {"X-VTEX-API-AppToken": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -132,7 +133,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-appkey" "token-apptoken"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-window-to-change-seller" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -167,11 +168,13 @@ export def "get-window-to-change-seller" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
 ]: nothing -> oneof<int, string, record, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o ORDERS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o ORDERS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/checkout/pvt/configuration/window-to-change-seller" $auth.query)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -205,13 +208,15 @@ export def "update-window-to-change-seller" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
   waiting_time: int # Number of days after order cancelation by a seller, during which another seller may be assigned to fulfill the order.
 ]: any -> any {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o ORDERS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o ORDERS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/checkout/pvt/configuration/window-to-change-seller" $auth.query)
   let req_body = {"waitingTime": $waiting_time} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -249,11 +254,13 @@ export def "status-completed" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
 ]: nothing -> table<cancelled: bool, completedDate: string, dateOfRequest: string, email: string, filter: string, hostUri: string, id: string, instanceId: string, lasUpdateTime: string, linkToDownload: string, publishId: string, query: string, rowNumber: int, rowsProcessed: int, startDate: string, utcTime: string> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o ORDERS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o ORDERS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/oms/pvt/admin/reports/completed" $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -287,11 +294,13 @@ export def "status-in-progress" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
 ]: nothing -> table<cancelled: bool, completedDate: string, dateOfRequest: string, email: string, filter: string, hostUri: string, id: string, instanceId: string, lasUpdateTime: string, linkToDownload: string, publishId: string, query: string, rowNumber: int, rowsProcessed: int, startDate: string, utcTime: string> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o ORDERS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o ORDERS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/oms/pvt/admin/reports/inprogress" $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -325,12 +334,15 @@ export def "getfeedorderstatus" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --max-lot: string # default: {{maxLot}}
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
-  --content-type: string # Type of the content being sent
+  --max-lot: string # required, default: {{maxLot}}
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
+  --content-type: string # Type of the content being sent (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o ORDERS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o ORDERS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let max_lot = ($max_lot | default "{{maxLot}}")
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let qp = [(serialize-qp "maxLot" $max_lot "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/oms/pvt/feed/orders/status" $qp $auth.query)
   let accept_val = "application/json"
@@ -368,7 +380,7 @@ export def "list-orders" [
   --order-by: string # You can retrieve orders lists filtering by an `OrderField` combined with an `OrderType`. To do so, you have to concatenate them: `orderBy={{OrderField}},{{OrderType}}`. - `OrderField` values accepted: `creationDate`, `orderId`, `items`, `totalValue` and `origin`. - `OrderType` values accepted: `asc` and `desc`. (default: v502556llux-01,asc)
   --page: int # Define the number of pages you wish to retrieve, restricted to the limit of 30 pages. (format: int32, default: 10)
   --per-page: int # Quantity of orders for each page, the default value is 15 and it goes up to 100 orders per page. Be aware that the limit of retrieval ofthis endpoint is 30 pages. (format: int32, default: 15)
-  --f-creation-date: string # Concatened value sufix `{{creationDate}}` and range date in Timestamp format. To use the `utc` query parameter, to filter orders by time zone, you must also fill the `f_creationDate` date parameter. (default: creationDate:[2016-01-01T02:00:00.000Z TO 2021-01-01T01:59:59.999Z])
+  --f-creation-date: string # Concatened value sufix `{{creationDate}}` and range date in Timestamp format. To use the `utc` query parameter, to filter orders by time zone, you must also fill the `f_creationDate` date parameter. (required, default: creationDate:[2016-01-01T02:00:00.000Z TO 2021-01-01T01:59:59.999Z])
   --f-has-input-invoice: oneof<nothing, bool> # Filters list to return only orders with non `null` values for the `invoiceInput` field. (default: false)
   --q: string # This parameter filters using Fulltext and accepts the values below. Be aware that the `+` caracter is not allowed in Fulltext Search. - Order Id - Client email - Client document - Client name (default: - OrderID: v212333lux-02  - Client email: taylor@email.com  - Client document: 21133355524  - Client name: Taylor)
   --utc: int # Converts orders' time zone to the Universal Time Coordinated (UTC) format and shows the amount of orders set for that UTC, up to the limit of 30 pages. For it to work properly, you have to associate it with the `f_creationDate` parameter. (format: int32, default: -2000)
@@ -387,11 +399,14 @@ export def "list-orders" [
   --f-rn-b: string # You can filter orders by rates and benefits (promotions). (default: Free+Shipping)
   --search-field: string # You can search orders by using one of the following criterias: - SKU ID - `sku_Ids&sku_Ids` - Gift List ID - `listId&listId` - Transaction ID (TID) - `tid&tid` - PCI Connector's Transaction ID (TID) - `pci_tid&pci_tid` - Payment ID (PID) - `paymentId&paymentId` - Connector's NSU - `nsu&nsu` (default:  - SKU ID: `25`  - Gift List ID: `11223`  - Transaction ID (TID): `54546300238810034995829230012`  - PCI Connector's Transaction ID (TID): `7032909234899834298423209`  - Payment ID (PID): `2`  - Connector's NSU: `2437281`)
   --f-is-instore: oneof<nothing, bool> # When set as `true`, this parameter filters orders made via [inStore](https://help.vtex.com/en/tracks/what-is-instore--zav76TFEZlAjnyBVL5tRc), and when set as `false`, it filters orders that were not made via inStore. (default: true)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --content-type: string # Type of the content being sent. (required, default: application/json)
 ]: nothing -> record<facets: list<string>, list: table<ShippingEstimatedDate: string, ShippingEstimatedDateMax: string, ShippingEstimatedDateMin: string, affiliateId: string, authorizedDate: string, callCenterOperatorName: string, clientName: string, creationDate: string, currencyCode: string, items: string, lastMessageUnread: string, listId: string, listType: string, marketPlaceOrderId: string, orderId: string, orderIsComplete: bool, origin: string, paymentNames: string, salesChannel: string, sequence: string, status: string, statusDescription: string, totalItems: int, totalValue: int, workflowInErrorState: bool, workflowInRetry: bool>, paging: record<currentPage: int, pages: int, perPage: int, total: int>, stats: record<stats: record<totalItems: record, totalValue: record>>> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o ORDERS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o ORDERS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let f_creation_date = ($f_creation_date | default "creationDate:[2016-01-01T02:00:00.000Z TO 2021-01-01T01:59:59.999Z]")
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let qp = [(serialize-qp "orderBy" $order_by "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "f_creationDate" $f_creation_date "scalar") (serialize-qp "f_hasInputInvoice" $f_has_input_invoice "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "utc" $utc "scalar") (serialize-qp "f_shippingEstimate" $f_shipping_estimate "scalar") (serialize-qp "f_invoicedDate" $f_invoiced_date "scalar") (serialize-qp "f_authorizedDate" $f_authorized_date "scalar") (serialize-qp "f_UtmSource" $f_utm_source "scalar") (serialize-qp "f_sellerNames" $f_seller_names "scalar") (serialize-qp "f_callCenterOperatorName" $f_call_center_operator_name "scalar") (serialize-qp "f_salesChannel" $f_sales_channel "scalar") (serialize-qp "salesChannelId" $sales_channel_id "scalar") (serialize-qp "f_affiliateId" $f_affiliate_id "scalar") (serialize-qp "f_status" $f_status "scalar") (serialize-qp "incompleteOrders" $incomplete_orders "scalar") (serialize-qp "f_paymentNames" $f_payment_names "scalar") (serialize-qp "f_RnB" $f_rn_b "scalar") (serialize-qp "searchField" $search_field "scalar") (serialize-qp "f_isInstore" $f_is_instore "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/oms/pvt/orders" $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"
@@ -427,12 +442,14 @@ export def "get-order" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --content-type: string # Type of the content being sent. (required, default: application/json)
 ]: nothing -> record<affiliateId: string, allowCancellation: bool, allowEdition: bool, approvedBy: string, authorizedDate: string, callCenterOperatorData: string, cancelReason: string, cancelledBy: string, changesAttachment: record<changesData: list<record>, id: string>, clientProfileData: record<corporateDocument: string, corporateName: string, corporatePhone: string, customerClass: string, document: string, documentType: string, email: string, firstName: string, id: string, isCorporate: bool, lastName: string, phone: string, stateInscription: string, tradeName: string, userProfileId: string>, commercialConditionData: string, creationDate: string, customData: string, emailTracked: string, followUpEmail: string, giftRegistryData: string, hostname: string, invoiceData: record, invoicedDate: string, isCheckedIn: bool, isCompleted: bool, items: table<additionalInfo: record, attachments: list, availability: string, bundleItems: list, detailUrl: string, ean: string, id: string, imageUrl: string, isGift: bool, listPrice: int, manualPrice: int, manualPriceAppliedBy: string, manufacturerCode: string, measurementUnit: string, modalType: string, name: string, parentAssemblyBinding: string, parentItemIndex: int, preSaleDate: string, price: int, priceDefinition: record, priceTags: list, priceValidUntil: string, productCategories: record, productCategoryIds: string, productId: string, productRefId: string, quantity: int, refId: string, rewardValue: int, seller: string, sellerChain: list, sellingPrice: int, skuName: string, tax: int, uniqueId: string, unitMultiplier: int>, lastChange: string, lastMessage: string, marketingData: string, marketplace: record<baseURL: string, isCertified: string, name: string>, marketplaceItems: list<string>, marketplaceOrderId: string, marketplaceServicesEndpoint: string, merchantName: string, openTextField: string, orderFormId: string, orderGroup: string, orderId: string, origin: string, packageAttachment: record<packages: list<record>>, paymentData: record<giftCards: list<any>, transactions: list<record>>, ratesAndBenefitsData: record<id: string, rateAndBenefitsIdentifiers: list<string>>, roundingError: int, salesChannel: string, sellerOrderId: string, sellers: table<fulfillmentEndpoint: string, id: string, logo: string, name: string>, sequence: string, shippingData: record<address: record<addressId: string, addressType: string, city: string, complement: string, country: string, entityId: string, geoCoordinates: list, neighborhood: string, number: string, postalCode: string, receiverName: string, reference: string, state: string, street: string, versionId: string>, id: string, logisticsInfo: list<record>, selectedAddresses: list<record>, trackingHints: string>, status: string, statusDescription: string, storePreferencesData: record<countryCode: string, currencyCode: string, currencyFormatInfo: record<CurrencyDecimalDigits: int, CurrencyDecimalSeparator: string, CurrencyGroupSeparator: string, CurrencyGroupSize: int, StartsWithCurrencySymbol: bool>, currencyLocale: int, currencySymbol: string, timeZone: string>, totals: table<id: string, name: string, value: int>, value: int> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o ORDERS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o ORDERS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/api/oms/pvt/orders/{order_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -467,14 +484,16 @@ export def "cancel-order" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
   --reason: string # Reason for cancelling the order. (default: Unexpected stock shortage)
 ]: any -> record<date: string, orderId: string, receipt: string> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o ORDERS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o ORDERS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/api/oms/pvt/orders/{order_id}/cancel") $auth.query)
   let req_body = {"reason": $reason} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -515,8 +534,8 @@ export def "register-change" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
   discount_value: int # This field can be used to apply a discount to the total value of the order. Value in cents. (format: int32, default: 100)
   increment_value: int # This field can be used to increment the total value of the order. Value in cents. (format: int32, default: 100)
   --items-added: list # List of items that should be added to the order. — item shape: {id: string, price: int, quantity: int}
@@ -528,6 +547,8 @@ export def "register-change" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o ORDERS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o ORDERS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/api/oms/pvt/orders/{order_id}/changes") $auth.query)
   let req_body = {"discountValue": $discount_value, "incrementValue": $increment_value, "itemsAdded": $items_added, "itemsRemoved": $items_removed, "reason": $reason, "requestId": $request_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -567,12 +588,14 @@ export def "get-conversation" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --reason: string # Reason for requesting unmasked data. Relevant only for PII platform version. (e.g. data-validation)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --content-type: string # Type of the content being sent. (required, default: application/json)
 ]: nothing -> table<attachmentNames: list<string>, body: string, date: string, firstWords: string, from: record<aliasMaskType: int, conversationRelatedTo: string, conversationSubject: string, email: string, emailAlias: string, name: string, role: string>, hasAttachment: bool, id: string, subject: string, to: list<record>> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o ORDERS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o ORDERS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let qp = [(serialize-qp "reason" $reason "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/api/oms/pvt/orders/{order_id}/conversation-message") $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"
@@ -608,17 +631,19 @@ export def "add-log" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
   message: string
-  --body-source: string
+  source: string
 ]: any -> any {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o ORDERS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o ORDERS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/api/oms/pvt/orders/{order_id}/interactions") $auth.query)
-  let req_body = {"message": $message, "source": $body_source} | compact
+  let req_body = {"message": $message, "source": $source} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -656,8 +681,8 @@ export def "invoice-notification" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
   --courier: string # The name of the carrier responsible for delivering the order. *This field should only be used when sending the **tracking** information. When the request is used for sending the invoice, this field should be left empty (`""`).* (nullable)
   --dispatched-date: string # Order dispatch date. May be `null`. (nullable, default: 2019-02-08T13:16:13.4617653+00:00)
   --embedded-invoice: string # XML text of the invoice, not the URL. This field is very important for external marketplace integrations such as Mercado Libre. (nullable, default: <NFe> <infNFe Id="NFe34687999999090910270550010000000015180000000000" versao="1.10"> <ide> <cUF>37</cUF> <cNF>000005177</cNF> <natOp>Venda a vista</natOp> <indPag>0</indPag> <mod>55</mod> <serie>1</serie> <nNF>1</nNF> <dEmi>2018-07-06</dEmi> <dSaiEnt>2018-07-06</dSaiEnt> <tpNF>0</tpNF> <cMunFG>79950308</cMunFG> <tpImp>1</tpImp> <tpEmis>1</tpEmis> <cDV>3</cDV> <tpAmb>2</tpAmb> <finNFe>1</finNFe> <procEmi>0</procEmi> <verProc>NF-eletronica.com</verProc> </ide> <emit> <CNPJ>99999090998760</CNPJ> <xNome>NF-e Associacao NF-e</xNome> <xFant>NF-e</xFant> <enderEmit> <xLgr>Rua Central</xLgr> <nro>100</nro> <xCpl>Fundos</xCpl> <xBairro>Distrito Industrial</xBairro> <cMun>0000000</cMun> <xMun>Município</xMun> <UF>SP</UF> <CEP>0000000</CEP> <cPais>1058</cPais> <xPais>Brasil</xPais> <fone>1733021717</fone> </enderEmit> <IE>123456789012</IE> </emit> <dest> <CNPJ>00000000000000</CNPJ> <xNome>DISTRIBUIDORA DE AGUAS MINERAIS</xNome> <enderDest> <xLgr>AV DAS FONTES</xLgr> <nro>1777</nro> <xCpl>1001 ANDAR</xCpl> <xBairro>PARQUE</xBairro> <cMun>0000000</cMun> <xMun>Sao Paulo</xMun> <UF>SP</UF> <CEP>00000000</CEP> <cPais>1058</cPais> <xPais>BRASIL</xPais> <fone>3900000000</fone> </enderDest> <IE> </IE> </dest> <retirada> <CNPJ>000000000004</CNPJ> <xLgr>AV PAULISTA</xLgr> <nro>12345</nro> <xCpl>TERREO</xCpl> <xBairro>CERQUEIRA CESAR</xBairro> <cMun>0000000</cMun> <xMun>SAO PAULO</xMun> <UF>SP</UF> </retirada> <entrega> <CNPJ>00000000299000194</CNPJ> <xLgr>AV FARIA LIMA</xLgr> <nro>154400</nro> <xCpl>156 ANDAR</xCpl> <xBairro>PINHEIROS</xBairro> <cMun>0000308</cMun> <xMun>SAO PAULO</xMun> <UF>SP</UF> </entrega> <det nItem="1"> <prod> <cProd>00001</cProd> <cEAN/> <xProd>Agua Mineral</xProd> <CFOP>5101</CFOP> <uCom>dz</uCom> <qCom>1000000.0000</qCom> <vUnCom>1</vUnCom> <vProd>10000000.00</vProd> <cEANTrib/> <uTrib>und</uTrib> <qTrib>12000000.0000</qTrib> <vUnTrib>1</vUnTrib> </prod> <imposto> <ICMS> <ICMS00> <orig>0</orig> <CST>00</CST> <modBC>0</modBC> <vBC>10000000.00</vBC> <pICMS>18.00</pICMS> <vICMS>1800000.00</vICMS> </ICMS00> </ICMS> <PIS> <PISAliq> <CST>01</CST> <vBC>10000000.00</vBC> <pPIS>0.65</pPIS> <vPIS>65000</vPIS> </PISAliq> </PIS> <COFINS> <COFINSAliq> <CST>01</CST> <vBC>10000000.00</vBC> <pCOFINS>2.00</pCOFINS> <vCOFINS>200000.00</vCOFINS> </COFINSAliq> </COFINS> </imposto> </det> <det nItem="2"> <prod> <cProd>00002</cProd> <cEAN/> <xProd>Agua Mineral</xProd> <CFOP>5101</CFOP> <uCom>pack</uCom> <qCom>5000000.0000</qCom> <vUnCom>2</vUnCom> <vProd>10000000.00</vProd> <cEANTrib/> <uTrib>und</uTrib> <qTrib>3000000.0000</qTrib> <vUnTrib>0.3333</vUnTrib> </prod> <imposto> <ICMS> <ICMS00> <orig>0</orig> <CST>00</CST> <modBC>0</modBC> <vBC>10000000.00</vBC> <pICMS>18.00</pICMS> <vICMS>1800000.00</vICMS> </ICMS00> </ICMS> <PIS> <PISAliq> <CST>01</CST> <vBC>10000000.00</vBC> <pPIS>0.65</pPIS> <vPIS>65000</vPIS> </PISAliq> </PIS> <COFINS> <COFINSAliq> <CST>01</CST> <vBC>10000000.00</vBC> <pCOFINS>2.00</pCOFINS> <vCOFINS>200000.00</vCOFINS> </COFINSAliq> </COFINS> </imposto> </det> <total> <ICMSTot> <vBC>20000000.00</vBC> <vICMS>18.00</vICMS> <vBCST>0</vBCST> <vST>0</vST> <vProd>20000000.00</vProd> <vFrete>0</vFrete> <vSeg>0</vSeg> <vDesc>0</vDesc> <vII>0</vII> <vIPI>0</vIPI> <vPIS>130000.00</vPIS> <vCOFINS>400000.00</vCOFINS> <vOutro>0</vOutro> <vNF>20000000.00</vNF> </ICMSTot> </total> <transp> <modFrete>0</modFrete> <transporta> <CNPJ>00000000000000</CNPJ> <xNome>Distribuidora de Bebidas Fazenda de SP Ltda.</xNome> <IE>00000000999119</IE> <xEnder>Rua Central 100 - Fundos - Distrito Industrial</xEnder> <xMun>SAO PAULO</xMun> <UF>SP</UF> </transporta> <veicTransp> <placa>BXI1717</placa> <UF>SP</UF> <RNTC>123456789</RNTC> </veicTransp> <reboque> <placa>UUU0000</placa> <UF>SP</UF> <RNTC>123456789</RNTC> </reboque> <vol> <qVol>10000</qVol> <esp>CAIXA</esp> <marca>LINDOYA</marca> <nVol>500</nVol> <pesoL>1000000000.000</pesoL> <pesoB>1200000000.000</pesoB> <lacres> <nLacre>XYZ10231486</nLacre> </lacres> </vol> </transp> <infAdic> <infAdFisco>Nota Fiscal de exemplo NF-eletronica.com</infAdFisco> </infAdic> </infNFe> <Signature> <SignedInfo> <CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-0321120010315"/> <SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/> <Reference URI="#NFe3508059999977777777705500100000000000000000"> <Transforms> <Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/> <Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-66666615"/> </Transforms> <DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/> <DigestValue>xFzhgdgnhjSD1e9uqe04lnoHT4ZzLSY=</DigestValue> </Reference> </SignedInfo> <SignatureValue> Iz5Z3PLQbzZt9jnBtr6xsmHZMOu/3plXG9xxfFjRCQYGnD1rjlhzBGrqt026Ca2VHHM/bHNepi6FuFkAi595GScKVuHREUotzifE2OIjgavvTOrMwbXG7+0LYgkwPFiPCao2S33UpZe7MneaxcmKQGKQZw1fP8fsWmaQ4cczZT8= </SignatureValue> <KeyInfo> <X509Data> <X509Certificate> MIIEuzCCA6OgAwIBAgIDMTMxMA0GasfFSDAGQUAMIGSMQswCQYDVQQGEwJCUjELMAkGA1UECBMCUlMxFTATBgNVBAcTDFBvcnRvIEFsZWdyZTEdMBsGA1UEChMUVGVzdGUgUHJvamV0byBORmUgUlMxHTAbBgNVBAsTFFRlc3RlIFByb2pldG8gTkZlIFJTMSEwHwYDVQQDExhORmUgLSBBQyBJbnRlcm1lZGlhcmlhIDEwHhcNMDgwNDI4MDkwMTAyWhcNMDkwNDMwMjM1OTU5WjCBnjELMAkGA1UECBMCUlMxHTAfvw4567DRhg76FByb2pldG8gTkZlIFJTMR0wGwYDVQQKExRUZXN0ZSBQcm9qZXRvIE5GZSBSUzEVMBMGA1UEBxMMUE9SVE8gQUxFR1JFMQswCQYDVQQGEwJCUjEtMCsGA1UEAxMkTkZlIC0gQXNzb2NpYWNhbyBORi1lOjk5OTk5MDkwOTEwMjcwMIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDDh6RRv0bj4RYX+tDQrZRb5opa77LBVVs+6LphIfSF3TSWPfnKh0+xLlBFdmnB5YGgbbW9Uon6pZQTfaC8jZhRhI5eFRRofY/Ugoeo0NGt6PcIQNZQd6lLQ/ASd1qWwjqJoEa7udriKjy3h351Mf1bng1VxS1urqC3Dn39ZWIEwQIDAQABo4IBjjCCAYowIgYDVR0jAQEABBgwFoAUPT5TqhNWAm+ZpcVsvB7malDBjEQwDwYDVR0TAQH/BAUwAwEBADAPBgNVHQ8BAf8EBQMDAOAAMAwGA1UdIAEBAAQCMAAwgbwGA1UdEQEBAASBsTCBrqA4BgVgTAEDBKAvBC0wNzA4MTk1MTE1MTk0NTMxMDg3MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDCgHQYFYEwBAwKgFAQSRmVybmFuZG8gQ2FudG8gQWx0oBkGBWBMAQMDoBAEDjk5OTk5MDkwOTEwMjcwoBcGBWBMAQMHoA4EDDAwMDAwMDAwMDAwMIEfZmVybmFuZG8tYWx0QHByb2NlcmdzLnJzLmdvdi5icjAgBgNVHSUBAf8EFjAUBggrBgEFBQcDAgYIKwYBBQUHAwQwUwYDVR0fAQEABEkwRzBFoEOgQYY/aHR0cDovL25mZWNlcnRpZmljYWRvLnNlZmF6LnJzLmdvdi5ici9MQ1IvQUNJbnRlcm1lZGlhcmlhMzguY3JsMA0GCSqGSIb3DQEBBQUAA4IBAQCNPpaZ3Byu3/70nObXE8NiM53j1ddIFXsb+v2ghCVd4ffExv3hYc+/a3lfgV8H/WfQsdSCTzS2cHrd4Aasr/eXfclVDmf2hcWz+R7iysOHuT6B6r+DvV3JcMdJJCDdynR5REa+zViMnVZo1G3KuceQ7/y5X3WFNVq4kwHvonJ9oExsWyw8rTwUK5bsjz0A2yEwXkmkJIngnF41sP31+9jCImiqkXcmsesFhxzX7iurAQAQCZOm7iwMWxQKcAjXCZrgSZWRQy6mU224sX3HTArHahmLJ9Iw+WYAua5qBJsiN6PC7v5tfhdsgGD46DHMnOecxvkkPolDUyBa7d7xwgm </X509Certificate> </X509Data> </KeyInfo> </Signature> </NFe>)
@@ -675,6 +700,8 @@ export def "invoice-notification" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o ORDERS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o ORDERS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/api/oms/pvt/orders/{order_id}/invoice") $auth.query)
   let req_body = {"courier": $courier, "dispatchedDate": $dispatched_date, "embeddedInvoice": $embedded_invoice, "invoiceKey": $invoice_key, "invoiceNumber": $invoice_number, "invoiceUrl": $invoice_url, "invoiceValue": $invoice_value, "issuanceDate": $issuance_date, "items": $items, "trackingNumber": $tracking_number, "trackingUrl": $tracking_url, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -714,8 +741,8 @@ export def "updatepartialinvoice-send-tracking-number" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
   --courier: string # The name of the carrier responsible for delivering the order. (nullable)
   --dispatched-date: string # Date when the package was dispatched. For example, 2023-01-08T13:16:13.4617653+00:00. (nullable)
   tracking_number: string # The number code that identifies the order tracking.
@@ -726,6 +753,8 @@ export def "updatepartialinvoice-send-tracking-number" [
   let base = ($base_url | default $BASE_URL)
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
   if ($invoice_number | is-empty) { error make --unspanned { msg: "path parameter 'invoiceNumber' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({order_id: (encode-path-segment $order_id), invoice_number: (encode-path-segment $invoice_number)} | format pattern "/api/oms/pvt/orders/{order_id}/invoice/{invoice_number}") $auth.query)
   let req_body = {"courier": $courier, "dispatchedDate": $dispatched_date, "trackingNumber": $tracking_number, "trackingUrl": $tracking_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -766,8 +795,8 @@ export def "update-tracking-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
   --delivered-date: string # Date and time of when the package was delivered. Note that it is different from the tracking date parameter. The `deliveredDate` format is `yyyy-mm-dd hh:mm`. (nullable, default: 2022-10-01 21:15)
   events: list # item shape: {city: string, date: string, description: string, state: string}
   --is-delivered: oneof<nothing, bool>
@@ -777,9 +806,12 @@ export def "update-tracking-status" [
   let base = ($base_url | default $BASE_URL)
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
   if ($invoice_number | is-empty) { error make --unspanned { msg: "path parameter 'invoiceNumber' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({order_id: (encode-path-segment $order_id), invoice_number: (encode-path-segment $invoice_number)} | format pattern "/api/oms/pvt/orders/{order_id}/invoice/{invoice_number}/tracking") $auth.query)
   let req_body = {"deliveredDate": $delivered_date, "events": $events, "isDelivered": $is_delivered} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "isDelivered") == null) { error make --unspanned { msg: "required body field 'isDelivered' missing: pass --is-delivered or pipe a record" } }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
@@ -815,12 +847,14 @@ export def "get-paymenttransaction" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --content-type: string # Type of the content being sent. (required, default: application/json)
 ]: nothing -> record<isActive: bool, merchantName: string, payments: table<cardHolder: string, cardNumber: string, connectorResponses: record, cvv2: string, dueDate: string, expireMonth: string, expireYear: string, firstDigits: string, giftCardCaption: string, giftCardId: string, giftCardName: string, group: string, id: string, installments: int, lastDigits: string, paymentSystem: string, paymentSystemName: string, redemptionCode: string, referenceValue: int, tid: string, url: string, value: int>, status: string, transactionId: string> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o ORDERS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o ORDERS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/api/oms/pvt/orders/{order_id}/payment-transaction") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -856,13 +890,15 @@ export def "send-payment-notification" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --content-type: string # Type of the content being sent. (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o ORDERS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o ORDERS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({order_id: (encode-path-segment $order_id), payment_id: (encode-path-segment $payment_id)} | format pattern "/api/oms/pvt/orders/{order_id}/payments/{payment_id}/payment-notification") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -897,12 +933,14 @@ export def "start-handling" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --content-type: string # Type of the content being sent. (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o ORDERS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o ORDERS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/api/oms/pvt/orders/{order_id}/start-handling") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -936,14 +974,19 @@ export def "userorderslist" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --client-email: string # Customer email. (e.g. customer@mail.com)
-  --page: string # Page number for result pagination. (e.g. 15)
-  --per-page: string # Page quantity for result pagination. (e.g. 15)
-  --content-type: string # Type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
+  --client-email: string # Customer email. (required, e.g. customer@mail.com)
+  --page: string # Page number for result pagination. (required, e.g. 15)
+  --per-page: string # Page quantity for result pagination. (required, e.g. 15)
+  --content-type: string # Type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
 ]: nothing -> record<facets: list<string>, list: table<ShippingEstimatedDate: string, ShippingEstimatedDateMax: string, ShippingEstimatedDateMin: string, affiliateId: string, authorizedDate: string, callCenterOperatorName: string, clientName: string, creationDate: string, currencyCode: string, items: list, lastMessageUnread: string, listId: string, listType: string, marketPlaceOrderId: string, orderId: string, orderIsComplete: bool, origin: string, paymentNames: string, salesChannel: string, sequence: string, status: string, statusDescription: string, totalItems: int, totalValue: int, workflowInErrorState: bool, workflowInRetry: bool>, paging: record<currentPage: int, pages: int, perPage: int, total: int>, stats: record<stats: record<totalItems: record, totalValue: record>>> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o ORDERS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o ORDERS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  if ($client_email == null) { error make --unspanned { msg: "required query parameter 'clientEmail' missing: pass --client-email" } }
+  if ($page == null) { error make --unspanned { msg: "required query parameter 'page' missing: pass --page" } }
+  if ($per_page == null) { error make --unspanned { msg: "required query parameter 'per_page' missing: pass --per-page" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let qp = [(serialize-qp "clientEmail" $client_email "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/oms/user/orders" $qp $auth.query)
   let accept_val = "application/json"
@@ -979,13 +1022,16 @@ export def "userorderdetails" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --client-email: string # Customer email. (e.g. customer@mail.com)
-  --content-type: string # Type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
+  --client-email: string # Customer email. (required, e.g. customer@mail.com)
+  --content-type: string # Type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
 ]: nothing -> record<affiliateId: string, allowCancellation: bool, allowEdition: bool, authorizedDate: string, callCenterOperatorData: string, cancelReason: string, cancellationData: record<CancellationDate: string, Reason: string, RequestedByPaymentNotification: bool, RequestedBySellerNotification: bool, RequestedBySystem: bool, RequestedByUser: bool>, changesAttachment: record<changesData: list<record>, id: string>, checkedInPickupPointId: string, clientPreferencesData: record<locale: string, optinNewsLetter: bool>, clientProfileData: record<corporateDocument: string, corporateName: string, corporatePhone: string, customerClass: string, document: string, documentType: string, email: string, firstName: string, id: string, isCorporate: bool, lastName: string, phone: string, stateInscription: string, tradeName: string, userProfileId: string>, commercialConditionData: string, creationDate: string, customData: string, followUpEmail: string, giftRegistryData: string, hostname: string, invoiceData: record, invoicedDate: string, isCheckedIn: bool, isCompleted: bool, itemMetadata: record<Items: list<record>>, items: table<additionalInfo: record, assemblies: list, attachmentOfferings: list, attachments: list, bundleItems: list, callCenterOperator: string, commission: int, components: list, costPrice: int, detailUrl: string, ean: string, freightCommission: int, id: string, imageUrl: string, isGift: bool, itemAttachment: record, listPrice: int, lockId: string, manualPrice: string, measurementUnit: string, name: string, offerings: list, params: list, parentAssemblyBinding: string, parentItemIndex: string, preSaleDate: string, price: int, priceDefinitions: record, priceTags: list, priceValidUntil: string, productId: string, quantity: int, refId: string, rewardValue: int, seller: string, sellerSku: string, sellingPrice: int, serialNumbers: string, shippingPrice: string, tax: int, taxCode: string, uniqueId: string, unitMultiplier: int>, lastChange: string, lastMessage: string, marketingData: record<coupon: string, id: string, marketingTags: list<string>, utmCampaign: string, utmMedium: string, utmPartner: string, utmSource: string, utmiCampaign: string, utmiPart: string, utmipage: string>, marketplace: record<baseURL: string, isCertified: string, name: string>, marketplaceItems: list<string>, marketplaceOrderId: string, marketplaceServicesEndpoint: string, merchantName: string, openTextField: string, orderFormId: string, orderGroup: string, orderId: string, origin: string, packageAttachment: record<packages: list<string>>, paymentData: record<giftCards: list<any>, transactions: list<record>>, ratesAndBenefitsData: record<id: string, rateAndBenefitsIdentifiers: list<string>>, roundingError: int, salesChannel: string, sellerOrderId: string, sellers: table<fulfillmentEndpoint: string, id: string, logo: string, name: string>, sequence: string, shippingData: record<address: record<addressId: string, addressType: string, city: string, complement: string, country: string, entityId: string, geoCoordinates: list, neighborhood: string, number: string, postalCode: string, receiverName: string, reference: string, state: string, street: string, versionId: string>, id: string, logisticsInfo: list<record>, selectedAddresses: list<record>, trackingHints: string>, status: string, statusDescription: string, storePreferencesData: record<countryCode: string, currencyCode: string, currencyFormatInfo: record<CurrencyDecimalDigits: int, CurrencyDecimalSeparator: string, CurrencyGroupSeparator: string, CurrencyGroupSize: int, StartsWithCurrencySymbol: bool>, currencyLocale: int, currencySymbol: string, timeZone: string>, subscriptionData: record<SubscriptionGroupId: string, Subscriptions: list<record>>, taxData: record<areTaxesDesignatedByMarketplace: bool, taxInfoCollection: list<record>>, totals: table<id: string, name: string, value: int>, value: int> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o ORDERS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o ORDERS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
+  if ($client_email == null) { error make --unspanned { msg: "required query parameter 'clientEmail' missing: pass --client-email" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let qp = [(serialize-qp "clientEmail" $client_email "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/api/oms/user/orders/{order_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1020,14 +1066,16 @@ export def "test-jso-nata-expression" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
-  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
+  --content-type: string # Type of the content being sent (required, default: application/json)
   document: string # JSON document to be evaluated by the expression.
   expression: string # JSONata expression to be tested.
 ]: any -> any {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o ORDERS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o ORDERS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base "/api/orders/expressions/jsonata" $auth.query)
   let req_body = {"Document": $document, "Expression": $expression} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1065,12 +1113,15 @@ export def "getfeedorderstatus1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxlot: string # Lot quantity to retrieve. Maximum accepted value is 10. (default: {{maxLot}})
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
-  --content-type: string # Type of the content being sent
+  --maxlot: string # Lot quantity to retrieve. Maximum accepted value is 10. (required, default: {{maxLot}})
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
+  --content-type: string # Type of the content being sent (required, default: application/json)
 ]: nothing -> table<currentChange: string, domain: string, eventId: string, handle: string, lastChange: string, lastState: string, orderId: string, state: string> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o ORDERS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o ORDERS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let maxlot = ($maxlot | default "{{maxLot}}")
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let qp = [(serialize-qp "maxlot" $maxlot "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/orders/feed" $qp $auth.query)
   let accept_val = "application/json"
@@ -1105,13 +1156,15 @@ export def "commititemfeedorderstatus" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
   handles: list<string> # List of item handles to commit
 ]: any -> record {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o ORDERS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o ORDERS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/orders/feed" $auth.query)
   let req_body = {"handles": $handles} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1149,11 +1202,13 @@ export def "feed-configuration-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --content-type: string # Type of the content being sent. (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o ORDERS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o ORDERS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base "/api/orders/feed/config" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1187,11 +1242,13 @@ export def "get-feed-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
 ]: nothing -> record<approximateAgeOfOldestMessageInSeconds: float, filter: record<disableSingleFire: bool, expression: string, status: list<string>, type: string>, quantity: int, queue: record<MessageRetentionPeriodInSeconds: int, visibilityTimeoutInSeconds: int>> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o ORDERS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o ORDERS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/orders/feed/config" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1227,14 +1284,16 @@ export def "feed-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --content-type: string # Type of the content being sent. (required, default: application/json)
   filter: record # Object with type and status that will filter feed orders. — shape: {disableSingleFire?: bool, expression?: string, status?: list<string>, type: string}
   queue: record # Object with information about timeout and message retention. — shape: {MessageRetentionPeriodInSeconds: int, visibilityTimeoutInSeconds: int}
 ]: any -> any {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o ORDERS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o ORDERS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base "/api/orders/feed/config" $auth.query)
   let req_body = {"filter": $filter, "queue": $queue} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1272,11 +1331,13 @@ export def "delete-hook-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --content-type: string # Type of the content being sent. (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o ORDERS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o ORDERS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base "/api/orders/hook/config" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1313,11 +1374,13 @@ export def "get-hook-configuration" [
   --client-email: string # Customer email. (e.g. customer@mail.com)
   --page: string # Page number for result pagination. (e.g. 10)
   --per-page: string # Page quantity for result pagination. (e.g. 15)
-  --content-type: string # Type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o ORDERS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o ORDERS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let qp = [(serialize-qp "clientEmail" $client_email "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/orders/hook/config" $qp $auth.query)
   let accept_val = "application/json"
@@ -1354,14 +1417,16 @@ export def "hook-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
   filter: record # shape: {disableSingleFire?: bool, expression?: string, status?: list<string>, type: string}
   hook: record # e.g. {headers: {key: value}, url: https://endpoint.example/path} — shape: {headers: record, url: string}
 ]: any -> record<CurrentChange: string, Domain: string, LastChange: string, LastState: string, OrderId: string, Origin: record<Account: string, Key: string>, State: string> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o ORDERS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o ORDERS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/orders/hook/config" $auth.query)
   let req_body = {"filter": $filter, "hook": $hook} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

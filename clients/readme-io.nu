@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -218,10 +218,11 @@ export def "get-api-specification" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --per-page: int # Number of items to include in pagination (up to 100, defaults to 10) (default: 10)
   --page: int # Used to specify further pages (starts at 1) (default: 1)
-  --x-readme-version: string # Version number of your docs project, for example, v3.0. To see all valid versions for your docs project call https://docs.readme.com/developers/reference/version#getversions. (e.g. v3.0)
+  --x-readme-version: string # Version number of your docs project, for example, v3.0. To see all valid versions for your docs project call https://docs.readme.com/developers/reference/version#getversions. (required, e.g. v3.0)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_readme_version == null) { error make --unspanned { msg: "required header parameter 'x-readme-version' missing: pass --x-readme-version" } }
   let qp = [(serialize-qp "perPage" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api-specification" $qp $auth.query)
   let accept_val = "application/json"
@@ -256,12 +257,13 @@ export def "upload-api-specification" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-readme-version: string # Version number of your docs project, for example, v3.0. To see all valid versions for your docs project call https://docs.readme.com/developers/reference/version#getversions. (e.g. v3.0)
+  --x-readme-version: string # Version number of your docs project, for example, v3.0. To see all valid versions for your docs project call https://docs.readme.com/developers/reference/version#getversions. (required, e.g. v3.0)
   --spec: string # OpenAPI/Swagger file (format: binary)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_readme_version == null) { error make --unspanned { msg: "required header parameter 'x-readme-version' missing: pass --x-readme-version" } }
   let full_url = (build-url $base "/api-specification" $auth.query)
   let req_body = {"spec": $spec} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -269,8 +271,8 @@ export def "upload-api-specification" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-readme-version": $x_readme_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["spec"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["spec"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -347,8 +349,8 @@ export def "update-api-specification" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["spec"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["spec"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "put"
     url: $full_url
@@ -378,11 +380,12 @@ export def "get-category" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-readme-version: string # Version number of your docs project, for example, v3.0. To see all valid versions for your docs project call https://docs.readme.com/developers/reference/version#getversions. (e.g. v3.0)
+  --x-readme-version: string # Version number of your docs project, for example, v3.0. To see all valid versions for your docs project call https://docs.readme.com/developers/reference/version#getversions. (required, e.g. v3.0)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
+  if ($x_readme_version == null) { error make --unspanned { msg: "required header parameter 'x-readme-version' missing: pass --x-readme-version" } }
   let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/categories/{slug}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -417,11 +420,12 @@ export def "get-category-docs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-readme-version: string # Version number of your docs project, for example, v3.0. To see all valid versions for your docs project call https://docs.readme.com/developers/reference/version#getversions. (e.g. v3.0)
+  --x-readme-version: string # Version number of your docs project, for example, v3.0. To see all valid versions for your docs project call https://docs.readme.com/developers/reference/version#getversions. (required, e.g. v3.0)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
+  if ($x_readme_version == null) { error make --unspanned { msg: "required header parameter 'x-readme-version' missing: pass --x-readme-version" } }
   let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/categories/{slug}/docs") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -495,7 +499,7 @@ export def "create-changelog" [
   body: string # Body content of the changelog
   --hidden: oneof<nothing, bool> # Visibility of the changelog (default: true)
   title: string # Title of the changelog
-  --type: string@type-completer # default: 
+  --type: string@type-completer # default: ""
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -609,7 +613,7 @@ export def "update-changelog" [
   body: string # Body content of the changelog
   --hidden: oneof<nothing, bool> # Visibility of the changelog (default: true)
   title: string # Title of the changelog
-  --type: string@type-completer # default: 
+  --type: string@type-completer # default: ""
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -843,7 +847,7 @@ export def "create-doc" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-readme-version: string # Version number of your docs project, for example, v3.0. To see all valid versions for your docs project call https://docs.readme.com/developers/reference/version#getversions. (e.g. v3.0)
+  --x-readme-version: string # Version number of your docs project, for example, v3.0. To see all valid versions for your docs project call https://docs.readme.com/developers/reference/version#getversions. (required, e.g. v3.0)
   --body: string # Body content of the page, formatted in ReadMe or Github flavored Markdown. Accepts long page content, for example, greater than 100k characters
   category: string # Category ID of the page, which you can get through https://docs.readme.com/developers/reference/categories#getcategory
   --hidden: oneof<nothing, bool> # Visibility of the page (default: true)
@@ -854,6 +858,7 @@ export def "create-doc" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_readme_version == null) { error make --unspanned { msg: "required header parameter 'x-readme-version' missing: pass --x-readme-version" } }
   let full_url = (build-url $base "/docs" $auth.query)
   let req_body = {"body": $body, "category": $category, "hidden": $hidden, "parentDoc": $parent_doc, "title": $title, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -889,11 +894,13 @@ export def "search-docs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --search: string # Search string to look for
-  --x-readme-version: string # Version number of your docs project, for example, v3.0. To see all valid versions for your docs project call https://docs.readme.com/developers/reference/version#getversions. (e.g. v3.0)
+  --search: string # Search string to look for (required)
+  --x-readme-version: string # Version number of your docs project, for example, v3.0. To see all valid versions for your docs project call https://docs.readme.com/developers/reference/version#getversions. (required, e.g. v3.0)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($search == null) { error make --unspanned { msg: "required query parameter 'search' missing: pass --search" } }
+  if ($x_readme_version == null) { error make --unspanned { msg: "required header parameter 'x-readme-version' missing: pass --x-readme-version" } }
   let qp = [(serialize-qp "search" $search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/docs/search" $qp $auth.query)
   let accept_val = "application/json"
@@ -929,11 +936,12 @@ export def "delete-doc" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-readme-version: string # Version number of your docs project, for example, v3.0. To see all valid versions for your docs project call https://docs.readme.com/developers/reference/version#getversions. (e.g. v3.0)
+  --x-readme-version: string # Version number of your docs project, for example, v3.0. To see all valid versions for your docs project call https://docs.readme.com/developers/reference/version#getversions. (required, e.g. v3.0)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
+  if ($x_readme_version == null) { error make --unspanned { msg: "required header parameter 'x-readme-version' missing: pass --x-readme-version" } }
   let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/docs/{slug}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -968,11 +976,12 @@ export def "get-doc" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-readme-version: string # Version number of your docs project, for example, v3.0. To see all valid versions for your docs project call https://docs.readme.com/developers/reference/version#getversions. (e.g. v3.0)
+  --x-readme-version: string # Version number of your docs project, for example, v3.0. To see all valid versions for your docs project call https://docs.readme.com/developers/reference/version#getversions. (required, e.g. v3.0)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
+  if ($x_readme_version == null) { error make --unspanned { msg: "required header parameter 'x-readme-version' missing: pass --x-readme-version" } }
   let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/docs/{slug}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1007,7 +1016,7 @@ export def "update-doc" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-readme-version: string # Version number of your docs project, for example, v3.0. To see all valid versions for your docs project call https://docs.readme.com/developers/reference/version#getversions. (e.g. v3.0)
+  --x-readme-version: string # Version number of your docs project, for example, v3.0. To see all valid versions for your docs project call https://docs.readme.com/developers/reference/version#getversions. (required, e.g. v3.0)
   --body: string # Body content of the page, formatted in ReadMe or Github flavored Markdown. Accepts long page content, for example, greater than 100k characters
   category: string # Category ID of the page, which you can get through https://docs.readme.com/developers/reference/categories#getcategory
   --hidden: oneof<nothing, bool> # Visibility of the page (default: true)
@@ -1019,6 +1028,7 @@ export def "update-doc" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
+  if ($x_readme_version == null) { error make --unspanned { msg: "required header parameter 'x-readme-version' missing: pass --x-readme-version" } }
   let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/docs/{slug}") $auth.query)
   let req_body = {"body": $body, "category": $category, "hidden": $hidden, "parentDoc": $parent_doc, "title": $title, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1100,8 +1110,8 @@ export def "upload-swagger" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["swagger"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["swagger"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -1182,8 +1192,8 @@ export def "update-swagger" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["swagger"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["swagger"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "put"
     url: $full_url
@@ -1247,7 +1257,7 @@ export def "create-version" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --codename: string # Dubbed name of version
-  --body-from: string # Semantic Version to use as the base fork
+  from: string # Semantic Version to use as the base fork
   --is-beta: oneof<nothing, bool> # default: true
   --is-deprecated: oneof<nothing, bool> # Should this be deprecated? Only allowed in PUT operations
   --is-hidden: oneof<nothing, bool> # Should this be publically accessible?
@@ -1258,7 +1268,7 @@ export def "create-version" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/version" $auth.query)
-  let req_body = {"codename": $codename, "from": $body_from, "is_beta": $is_beta, "is_deprecated": $is_deprecated, "is_hidden": $is_hidden, "is_stable": $is_stable, "version": $version} | compact
+  let req_body = {"codename": $codename, "from": $from, "is_beta": $is_beta, "is_deprecated": $is_deprecated, "is_hidden": $is_hidden, "is_stable": $is_stable, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1364,7 +1374,7 @@ export def "update-version" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --codename: string # Dubbed name of version
-  --body-from: string # Semantic Version to use as the base fork
+  from: string # Semantic Version to use as the base fork
   --is-beta: oneof<nothing, bool> # default: true
   --is-deprecated: oneof<nothing, bool> # Should this be deprecated? Only allowed in PUT operations
   --is-hidden: oneof<nothing, bool> # Should this be publically accessible?
@@ -1376,7 +1386,7 @@ export def "update-version" [
   let base = ($base_url | default $BASE_URL)
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   let full_url = (build-url $base ({version_id: (encode-path-segment $version_id)} | format pattern "/version/{version_id}") $auth.query)
-  let req_body = {"codename": $codename, "from": $body_from, "is_beta": $is_beta, "is_deprecated": $is_deprecated, "is_hidden": $is_hidden, "is_stable": $is_stable, "version": $version} | compact
+  let req_body = {"codename": $codename, "from": $from, "is_beta": $is_beta, "is_deprecated": $is_deprecated, "is_hidden": $is_hidden, "is_stable": $is_stable, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

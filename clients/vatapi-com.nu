@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "apikey" => { {scheme: $scheme, headers: {apikey: $token_val}, query: "", location: "header"} }
+    "apikey" => { {scheme: $scheme, headers: {"apikey": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -150,11 +150,12 @@ export def "country-code-check" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --code: string # The 2 digit country code
+  --code: string # The 2 digit country code (required)
   --response-type: string # The default response type is application/json if you would like to receive an XML response then set this to XML
 ]: nothing -> record<country: string, country_code: string, rates: record<parking: record<applies_to: string, value: int>, reduced: record<applies_to: string, value: int>, reduced_alt: record<applies_to: string, value: int>, standard: record<value: int>, super_reduced: record<applies_to: string, value: int>>, status: int, vat_applies: string> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($code == null) { error make --unspanned { msg: "required query parameter 'code' missing: pass --code" } }
   let qp = [(serialize-qp "code" $code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/country-code-check" $qp $auth.query)
   let accept_val = "application/json"
@@ -189,13 +190,15 @@ export def "currency-conversion" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --currency-from: string # The currency code you are converting from
-  --currency-to: string # The currency code you are converting to
+  --currency-from: string # The currency code you are converting from (required)
+  --currency-to: string # The currency code you are converting to (required)
   --amount: int # Optional, an amount you are wanting to convert. Leave blank to just get the current rate
   --response-type: string # The default response type is application/json if you would like to receive an XML response then set this to XML
 ]: nothing -> record<amount_from: string, amount_to: string, currency_from: string, currency_to: int, rate: string, status: int> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($currency_from == null) { error make --unspanned { msg: "required query parameter 'currency_from' missing: pass --currency-from" } }
+  if ($currency_to == null) { error make --unspanned { msg: "required query parameter 'currency_to' missing: pass --currency-to" } }
   let qp = [(serialize-qp "currency_from" $currency_from "scalar") (serialize-qp "currency_to" $currency_to "scalar") (serialize-qp "amount" $amount "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/currency-conversion" $qp $auth.query)
   let accept_val = "application/json"
@@ -425,11 +428,12 @@ export def "ip-check" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --address: string # The IP address to search against
+  --address: string # The IP address to search against (required)
   --response-type: string # The default response type is application/json if you would like to receive an XML response then set this to XML
 ]: nothing -> record<country: string, country_code: string, rates: record<parking: record<applies_to: string, value: int>, reduced: record<applies_to: string, value: int>, reduced_alt: record<applies_to: string, value: int>, standard: record<value: int>, super_reduced: record<applies_to: string, value: int>>, status: int, vat_applies: string> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($address == null) { error make --unspanned { msg: "required query parameter 'address' missing: pass --address" } }
   let qp = [(serialize-qp "address" $address "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ip-check" $qp $auth.query)
   let accept_val = "application/json"
@@ -501,11 +505,12 @@ export def "vat-number-validate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --vatid: string # The VAT number to validate
+  --vatid: string # The VAT number to validate (required)
   --response-type: string # The default response type is application/json if you would like to receive an XML response then set this to XML
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($vatid == null) { error make --unspanned { msg: "required query parameter 'vatid' missing: pass --vatid" } }
   let qp = [(serialize-qp "vatid" $vatid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/vat-number-check" $qp $auth.query)
   let accept_val = "application/json"
@@ -540,14 +545,16 @@ export def "convert-price" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --code: string # The 2 digit country code
+  --code: string # The 2 digit country code (required)
   --country-rate: string # The VAT rate to get the price for. Default: standard
-  --price: int # The price you want converting
+  --price: int # The price you want converting (required)
   --type: string # Optional, if the price is including VAT set the type to 'incl'. Otherwise the default is assumed as excluding VAT already, 'excl'
   --response-type: string # The default response type is application/json if you would like to receive an XML response then set this to XML
 ]: nothing -> record<country_code: string, country_rate: string, price_excl_vat: int, price_incl_vat: int, rate: int, status: int, vat: int> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($code == null) { error make --unspanned { msg: "required query parameter 'code' missing: pass --code" } }
+  if ($price == null) { error make --unspanned { msg: "required query parameter 'price' missing: pass --price" } }
   let qp = [(serialize-qp "code" $code "scalar") (serialize-qp "country_rate" $country_rate "scalar") (serialize-qp "price" $price "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/vat-price" $qp $auth.query)
   let accept_val = "application/json"

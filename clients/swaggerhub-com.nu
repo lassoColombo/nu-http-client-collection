@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -123,8 +123,10 @@ def state-completer [] { ["ALL" "PUBLISHED" "UNPUBLISHED"] }
 def sort-completer [] { ["BEST_MATCH" "CREATED" "NAME" "OWNER" "TITLE" "UPDATED"] }
 def order-completer [] { ["ASC" "DESC"] }
 def accept-completer [] { ["application/json" "application/yaml"] }
+def status-completer [] { ["OPEN" "RESOLVED"] }
 def sort-completer-1 [] { ["NAME" "OWNER"] }
-def spec-type-completer [] { ["ANY" "API" "DOMAIN" "TEMPLATE"] }
+def spec-type-completer [] { ["apis" "domains"] }
+def spec-type-completer-1 [] { ["ANY" "API" "DOMAIN" "TEMPLATE"] }
 def visibility-completer [] { ["ANY" "PRIVATE" "PUBLIC"] }
 
 # List all available API commands with their parameters
@@ -168,19 +170,19 @@ export def "search-apis" [
   --state: string@state-completer # Matches against published state of the spec: * UNPUBLISHED - spec is a draft, a work in progress * PUBLISHED - spec is a stable version ready for consuming from client applications * ANY - either PUBLISHED or UNPUBLISHED (default: ALL)
   --page: int # Page to return (format: int32, default: 0)
   --limit: int # Number of results per page (1 .. 100) (format: int32, default: 10)
-  --qp-sort: string@sort-completer # Sort criteria of result set: * NAME * UPDATED * CREATED * OWNER * BEST_MATCH - by relevance * TITLE - by `info.title` (default: NAME)
+  --sort: string@sort-completer # Sort criteria of result set: * NAME * UPDATED * CREATED * OWNER * BEST_MATCH - by relevance * TITLE - by `info.title` (default: NAME)
   --order: string@order-completer # Sort order (default: ASC)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apis" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"query": $query, "state": $state, "page": $page, "limit": $limit, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"query": $query, "state": $state, "page": $page, "limit": $limit, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -208,20 +210,20 @@ export def "get-owner-apis" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page to return (format: int32, default: 0)
   --limit: int # Number of results per page (1 .. 100) (format: int32, default: 10)
-  --qp-sort: string@sort-completer # Sort criteria of result set: * NAME * UPDATED * CREATED * OWNER * BEST_MATCH - by relevance * TITLE - by `info.title` (default: NAME)
+  --sort: string@sort-completer # Sort criteria of result set: * NAME * UPDATED * CREATED * OWNER * BEST_MATCH - by relevance * TITLE - by `info.title` (default: NAME)
   --order: string@order-completer # Sort order (default: ASC)
 ]: nothing -> record<apis: table<description: string, name: string, properties: list, tags: list>, description: string, name: string, offset: int, totalCount: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner)} | format pattern "/apis/{owner}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"page": $page, "limit": $limit, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"page": $page, "limit": $limit, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -370,12 +372,13 @@ export def "rename-api" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --new-name: string # New name
+  --new-name: string # New name (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($api | is-empty) { error make --unspanned { msg: "path parameter 'api' must be non-empty" } }
+  if ($new_name == null) { error make --unspanned { msg: "required query parameter 'newName' missing: pass --new-name" } }
   let qp = [(serialize-qp "newName" $new_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api)} | format pattern "/apis/{owner}/{api}/rename") $qp $auth.query)
   let accept_val = "application/json"
@@ -587,6 +590,7 @@ export def "clone-api" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}/clone") $auth.query)
   let req_body = {"private": $private, "version": $body_version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "version") == null) { error make --unspanned { msg: "required body field 'version' missing: pass --body-version or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -977,7 +981,7 @@ export def "set-api-comment-status-v2" [
   api: string
   version: string
   comment: string
-  status: string
+  status: string@status-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1044,6 +1048,8 @@ export def "fork-api" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}/fork") $auth.query)
   let req_body = {"name": $name, "owner": $body_owner, "private": $private, "project": $project, "version": $body_version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "owner") == null) { error make --unspanned { msg: "required body field 'owner' missing: pass --body-owner or pipe a record" } }
+  if (($req_body | get -o "version") == null) { error make --unspanned { msg: "required body field 'version' missing: pass --body-version or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1518,6 +1524,7 @@ export def "set-private-settings" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}/settings/private") $auth.query)
   let req_body = {"private": $private} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "private") == null) { error make --unspanned { msg: "required body field 'private' missing: pass --private or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1720,19 +1727,19 @@ export def "search-domains" [
   --state: string@state-completer # Matches against published state of the spec: * UNPUBLISHED - spec is a draft, a work in progress * PUBLISHED - spec is a stable version ready for consuming from client applications * ANY - either PUBLISHED or UNPUBLISHED (default: ALL)
   --page: int # Page to return (format: int32, default: 0)
   --limit: int # Number of results per page (1 .. 100) (format: int32, default: 10)
-  --qp-sort: string@sort-completer # Sort criteria of result set: * NAME * UPDATED * CREATED * OWNER * BEST_MATCH - by relevance * TITLE - by `info.title` (default: NAME)
+  --sort: string@sort-completer # Sort criteria of result set: * NAME * UPDATED * CREATED * OWNER * BEST_MATCH - by relevance * TITLE - by `info.title` (default: NAME)
   --order: string@order-completer # Sort order (default: ASC)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/domains" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"query": $query, "state": $state, "page": $page, "limit": $limit, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"query": $query, "state": $state, "page": $page, "limit": $limit, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1760,20 +1767,20 @@ export def "get-owner-domains" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page to return (format: int32, default: 0)
   --limit: int # Number of results per page (1 .. 100) (format: int32, default: 10)
-  --qp-sort: string@sort-completer # Sort criteria of result set: * NAME * UPDATED * CREATED * OWNER * BEST_MATCH - by relevance * TITLE - by `info.title` (default: NAME)
+  --sort: string@sort-completer # Sort criteria of result set: * NAME * UPDATED * CREATED * OWNER * BEST_MATCH - by relevance * TITLE - by `info.title` (default: NAME)
   --order: string@order-completer # Sort order (default: ASC)
 ]: nothing -> record<apis: table<description: string, name: string, properties: list, tags: list>, description: string, name: string, offset: int, totalCount: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner)} | format pattern "/domains/{owner}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"page": $page, "limit": $limit, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"page": $page, "limit": $limit, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1924,13 +1931,14 @@ export def "rename-domain" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --new-name: string # New name
+  --new-name: string # New name (required)
   --force: oneof<nothing, bool> # If this domain is referenced from other APIs and domains, this parameter must be true. Otherwise, the request will be rejected with status code 424. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
+  if ($new_name == null) { error make --unspanned { msg: "required query parameter 'newName' missing: pass --new-name" } }
   let qp = [(serialize-qp "newName" $new_name "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain)} | format pattern "/domains/{owner}/{domain}/rename") $qp $auth.query)
   let accept_val = "application/json"
@@ -2141,6 +2149,7 @@ export def "clone-domain" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version)} | format pattern "/domains/{owner}/{domain}/{version}/clone") $auth.query)
   let req_body = {"private": $private, "version": $body_version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "version") == null) { error make --unspanned { msg: "required body field 'version' missing: pass --body-version or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2531,7 +2540,7 @@ export def "set-domain-comment-status-v2" [
   domain: string
   version: string
   comment: string
-  status: string
+  status: string@status-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2678,6 +2687,8 @@ export def "fork-domain" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version)} | format pattern "/domains/{owner}/{domain}/{version}/fork") $auth.query)
   let req_body = {"name": $name, "owner": $body_owner, "private": $private, "project": $project, "version": $body_version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "owner") == null) { error make --unspanned { msg: "required body field 'owner' missing: pass --body-owner or pipe a record" } }
+  if (($req_body | get -o "version") == null) { error make --unspanned { msg: "required body field 'version' missing: pass --body-version or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2850,6 +2861,7 @@ export def "set-domain-private-settings" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version)} | format pattern "/domains/{owner}/{domain}/{version}/settings/private") $qp $auth.query)
   let req_body = {"private": $private} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "private") == null) { error make --unspanned { msg: "required body field 'private' missing: pass --private or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2883,19 +2895,19 @@ export def "get-user-projects" [
   --name-only: oneof<nothing, bool> # Return the project information excluding APIs and domains (default: false - DELETE)
   --page: int # Page to return (format: int32, default: 0)
   --limit: int # Number of results per page (1 .. 100) (format: int32, default: 10)
-  --qp-sort: string@sort-completer-1 # Sort criteria or result set: * NAME * OWNER (default: NAME)
+  --sort: string@sort-completer-1 # Sort criteria or result set: * NAME * OWNER (default: NAME)
   --order: string@order-completer # Sort order (default: ASC)
 ]: nothing -> record<offset: int, projects: table<apis: list, description: string, domains: list, name: string>, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "nameOnly" $name_only "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "nameOnly" $name_only "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/projects" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"nameOnly": $name_only, "page": $page, "limit": $limit, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"nameOnly": $name_only, "page": $page, "limit": $limit, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2911,7 +2923,7 @@ export def "get-user-projects" [
 # GET /projects/{owner}
 # operationId: getOrgProjectsV2
 export def "get-org-projects-v2" [
-  owner: any
+  owner: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2952,7 +2964,7 @@ export def "get-org-projects-v2" [
 # POST /projects/{owner}
 # operationId: createProject
 export def "create-project" [
-  owner: any
+  owner: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2963,7 +2975,7 @@ export def "create-project" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --apis: list<string> # A list of APIs included in this project. The APIs must belong to the same owner as the project. API names are case-sensitive. (default: [], e.g. [petstore])
-  --description: string # Project description (default: , e.g. APIs for core functionality)
+  --description: string # Project description (default: "", e.g. APIs for core functionality)
   --domains: list<string> # A list of domains included in this project. The domains must belong to the same owner as the project. Domain names are case-sensitive. (default: [], e.g. [common-models])
   --name: string # Project name (e.g. CoreServices)
 ]: any -> any {
@@ -3071,8 +3083,8 @@ export def "get-project-v2" [
 # PUT /projects/{owner}/{projectId}
 # operationId: saveProjectV2
 export def "save-project-v2" [
-  owner: any
-  project_id: any
+  owner: string
+  project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3083,7 +3095,7 @@ export def "save-project-v2" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --apis: list<string> # A list of APIs included in this project. The APIs must belong to the same owner as the project. API names are case-sensitive. (default: [], e.g. [petstore])
-  --description: string # Project description (default: , e.g. APIs for core functionality)
+  --description: string # Project description (default: "", e.g. APIs for core functionality)
   --domains: list<string> # A list of domains included in this project. The domains must belong to the same owner as the project. Domain names are case-sensitive. (default: [], e.g. [common-models])
   --name: string # Project name (e.g. CoreServices)
 ]: any -> any {
@@ -3155,8 +3167,8 @@ export def "get-project-members-v2" [
 # operationId: updateProjectMembersV2
 # --members item shape: {name: string, type: "USER"|"TEAM"}
 export def "update-project-members-v2" [
-  owner: any
-  project_id: any
+  owner: string
+  project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3199,7 +3211,7 @@ export def "update-project-members-v2" [
 export def "add-spec-to-project-v2" [
   owner: string
   project_id: string
-  spec_type: string
+  spec_type: string@spec-type-completer
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3248,26 +3260,26 @@ export def "search-apis-and-domains" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --spec-type: string@spec-type-completer # Type of definitions to search: * API - APIs only * DOMAIN - domains only * TEMPLATE - templates only * ANY - APIs, domains, and templates (default: ANY)
+  --spec-type: string@spec-type-completer-1 # Type of definitions to search: * API - APIs only * DOMAIN - domains only * TEMPLATE - templates only * ANY - APIs, domains, and templates (default: ANY)
   --visibility: string@visibility-completer # The visibility of a definition in SwaggerHub: * PUBLIC - can be viewed by anyone * PRIVATE - can only be viewed by you or your organization and those that you are collaborating with or have shared it with * ANY - either PUBLIC or PRIVATE (default: ANY)
   --state: string@state-completer # Matches against published state of the spec: * UNPUBLISHED - spec is a draft, a work in progress * PUBLISHED - spec is a stable version ready for consuming from client applications * ANY - either PUBLISHED or UNPUBLISHED (default: ALL)
   --owner: string # API or domain owner. Can be username or organization name. Case-sensitive.
   --query: string # Free text query to match
   --page: int # Page to return (format: int32, default: 0)
   --limit: int # Number of results per page (1 .. 100) (format: int32, default: 10)
-  --qp-sort: string@sort-completer # Sort criteria of result set: * NAME * UPDATED * CREATED * OWNER * BEST_MATCH - by relevance * TITLE - by `info.title` (default: NAME)
+  --sort: string@sort-completer # Sort criteria of result set: * NAME * UPDATED * CREATED * OWNER * BEST_MATCH - by relevance * TITLE - by `info.title` (default: NAME)
   --order: string@order-completer # Sort order (default: ASC)
 ]: nothing -> record<apis: table<description: string, name: string, properties: list, tags: list>, description: string, name: string, offset: int, totalCount: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "specType" $spec_type "scalar") (serialize-qp "visibility" $visibility "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "owner" $owner "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "specType" $spec_type "scalar") (serialize-qp "visibility" $visibility "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "owner" $owner "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/specs" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"specType": $spec_type, "visibility": $visibility, "state": $state, "owner": $owner, "query": $query, "page": $page, "limit": $limit, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"specType": $spec_type, "visibility": $visibility, "state": $state, "owner": $owner, "query": $query, "page": $page, "limit": $limit, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3453,12 +3465,13 @@ export def "rename-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --new-name: string # New name
+  --new-name: string # New name (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
+  if ($new_name == null) { error make --unspanned { msg: "required query parameter 'newName' missing: pass --new-name" } }
   let qp = [(serialize-qp "newName" $new_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), template_id: (encode-path-segment $template_id)} | format pattern "/templates/{owner}/{template_id}/rename") $qp $auth.query)
   let accept_val = "application/json"
@@ -3682,6 +3695,8 @@ export def "fork-template" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), template_id: (encode-path-segment $template_id), version: (encode-path-segment $version)} | format pattern "/templates/{owner}/{template_id}/{version}/fork") $auth.query)
   let req_body = {"name": $name, "owner": $body_owner, "private": $private, "project": $project, "version": $body_version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "owner") == null) { error make --unspanned { msg: "required body field 'owner' missing: pass --body-owner or pipe a record" } }
+  if (($req_body | get -o "version") == null) { error make --unspanned { msg: "required body field 'version' missing: pass --body-version or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3852,6 +3867,7 @@ export def "set-template-private-settings" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), template_id: (encode-path-segment $template_id), version: (encode-path-segment $version)} | format pattern "/templates/{owner}/{template_id}/{version}/settings/private") $auth.query)
   let req_body = {"private": $private} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "private") == null) { error make --unspanned { msg: "required body field 'private' missing: pass --private or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {

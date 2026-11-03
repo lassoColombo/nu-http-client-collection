@@ -1,4 +1,4 @@
-# Auto-generated client for Travel Impact Model API vv1
+# Auto-generated client for Travel Impact Model API v1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/travelimpactmodel/v1/openapi.json
 # Auth: --token flag or $env.TRAVEL_IMPACT_MODEL_API_TOKEN
 

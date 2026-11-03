@@ -1,4 +1,4 @@
-# Auto-generated client for Android Management API vv1
+# Auto-generated client for Android Management API v1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/androidmanagement/v1/openapi.json
 # Auth: --token flag or $env.ANDROID_MANAGEMENT_API_TOKEN
 
@@ -12,20 +12,10 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
-}
-
-# Merge multiple auth records (AND-form security: every scheme must be sent).
-def merge-auth [parts: list]: nothing -> record {
-  let active = ($parts | where {|p| $p.location != "none" })
-  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
-  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
-  let locs = ($active | each {|p| $p.location } | uniq)
-  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
-  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
 # Serialize a single query parameter based on collection style
@@ -160,8 +150,8 @@ export def commands []: nothing -> table {
 # operationId: androidmanagement.enterprises.list
 export def "androidmanagement-enterprises-list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -184,7 +174,7 @@ export def "androidmanagement-enterprises-list" [
   --project-id: string # Required. The Cloud project ID of the EMM managing the enterprises.
   --view: string@view-completer # Specifies which Enterprise fields to return. This method only supports BASIC.
 ]: nothing -> record<enterprises: table<appAutoApprovalEnabled: bool, contactInfo: record, enabledNotificationTypes: list, enterpriseDisplayName: string, logo: record, name: string, primaryColor: int, pubsubTopic: string, signinDetails: list, termsAndConditions: list>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ANDROID_MANAGEMENT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ANDROID_MANAGEMENT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "projectId" $project_id "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/enterprises" $qp $auth.query)
@@ -214,8 +204,8 @@ export def "androidmanagement-enterprises-list" [
 # --termsAndConditions item shape: {content?: record, header?: record}
 export def "androidmanagement-enterprises-create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -249,7 +239,7 @@ export def "androidmanagement-enterprises-create" [
   --terms-and-conditions: list # Terms and conditions that must be accepted when provisioning a device for this enterprise. A page of terms is generated for each value in this list. — item shape: {content?: record, header?: record}
 ]: any -> record<appAutoApprovalEnabled: bool, contactInfo: record<contactEmail: string, dataProtectionOfficerEmail: string, dataProtectionOfficerName: string, dataProtectionOfficerPhone: string, euRepresentativeEmail: string, euRepresentativeName: string, euRepresentativePhone: string>, enabledNotificationTypes: list<string>, enterpriseDisplayName: string, logo: record<sha256Hash: string, url: string>, name: string, primaryColor: int, pubsubTopic: string, signinDetails: table<allowPersonalUsage: string, qrCode: string, signinEnrollmentToken: string, signinUrl: string>, termsAndConditions: table<content: record, header: record>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ANDROID_MANAGEMENT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ANDROID_MANAGEMENT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "agreementAccepted" $agreement_accepted "scalar") (serialize-qp "enterpriseToken" $enterprise_token "scalar") (serialize-qp "projectId" $project_id "scalar") (serialize-qp "signupUrlName" $signup_url_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/enterprises" $qp $auth.query)
@@ -277,8 +267,8 @@ export def "androidmanagement-enterprises-create" [
 # operationId: androidmanagement.signupUrls.create
 export def "androidmanagement-signup-urls-create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -299,7 +289,7 @@ export def "androidmanagement-signup-urls-create" [
   --callback-url: string # The callback URL that the admin will be redirected to after successfully creating an enterprise. Before redirecting there the system will add a query parameter to this URL named enterpriseToken which will contain an opaque token to be used for the create enterprise request. The URL will be parsed then reformatted in order to add the enterpriseToken parameter, so there may be some minor formatting changes.
   --project-id: string # The ID of the Google Cloud Platform project which will own the enterprise.
 ]: nothing -> record<name: string, url: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ANDROID_MANAGEMENT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ANDROID_MANAGEMENT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "callbackUrl" $callback_url "scalar") (serialize-qp "projectId" $project_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/signupUrls" $qp $auth.query)
@@ -326,8 +316,8 @@ export def "androidmanagement-signup-urls-create" [
 export def "androidmanagement-enterprises-web-apps-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -348,7 +338,7 @@ export def "androidmanagement-enterprises-web-apps-delete" [
   --wipe-data-flags: list<string> # Optional flags that control the device wiping behavior.
   --wipe-reason-message: string # Optional. A short message displayed to the user before wiping the work profile on personal devices. This has no effect on company owned devices. The maximum message length is 200 characters.
 ]: nothing -> record {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ANDROID_MANAGEMENT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ANDROID_MANAGEMENT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "wipeDataFlags" $wipe_data_flags "multi") (serialize-qp "wipeReasonMessage" $wipe_reason_message "scalar")] | flatten | str join "&"
@@ -376,8 +366,8 @@ export def "androidmanagement-enterprises-web-apps-delete" [
 export def "androidmanagement-enterprises-web-apps-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -399,7 +389,7 @@ export def "androidmanagement-enterprises-web-apps-get" [
   --page-size: int # The standard list page size.
   --page-token: string # The standard list page token.
 ]: nothing -> record<displayMode: string, icons: table<imageData: string>, name: string, startUrl: string, title: string, versionCode: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ANDROID_MANAGEMENT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ANDROID_MANAGEMENT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -428,8 +418,8 @@ export def "androidmanagement-enterprises-web-apps-get" [
 export def "androidmanagement-enterprises-web-apps-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -456,7 +446,7 @@ export def "androidmanagement-enterprises-web-apps-patch" [
   --version-code: string # The current version of the app.Note that the version can automatically increase during the lifetime of the web app, while Google does internal housekeeping to keep the web app up-to-date. (format: int64)
 ]: any -> record<displayMode: string, icons: table<imageData: string>, name: string, startUrl: string, title: string, versionCode: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ANDROID_MANAGEMENT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ANDROID_MANAGEMENT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
@@ -486,8 +476,8 @@ export def "androidmanagement-enterprises-web-apps-patch" [
 export def "androidmanagement-enterprises-devices-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -506,7 +496,7 @@ export def "androidmanagement-enterprises-devices-operations-cancel" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ANDROID_MANAGEMENT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ANDROID_MANAGEMENT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -536,8 +526,8 @@ export def "androidmanagement-enterprises-devices-operations-cancel" [
 export def "androidmanagement-enterprises-devices-issue-command" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -566,7 +556,7 @@ export def "androidmanagement-enterprises-devices-issue-command" [
   --user-name: string # The resource name of the user that owns the device in the form enterprises/{enterpriseId}/users/{userId}. This is automatically generated by the server based on the device the command is sent to.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ANDROID_MANAGEMENT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ANDROID_MANAGEMENT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -596,8 +586,8 @@ export def "androidmanagement-enterprises-devices-issue-command" [
 export def "androidmanagement-enterprises-devices-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -618,7 +608,7 @@ export def "androidmanagement-enterprises-devices-list" [
   --page-size: int # The requested page size. The actual page size may be fixed to a min or max value.
   --page-token: string # A token identifying a page of results returned by the server.
 ]: nothing -> record<devices: table<apiLevel: int, applicationReports: list, appliedPasswordPolicies: list, appliedPolicyName: string, appliedPolicyVersion: string, appliedState: string, commonCriteriaModeInfo: record, deviceSettings: record, disabledReason: record, displays: list, enrollmentTime: string, enrollmentTokenData: string, enrollmentTokenName: string, hardwareInfo: record, hardwareStatusSamples: list, lastPolicyComplianceReportTime: string, lastPolicySyncTime: string, lastStatusReportTime: string, managementMode: string, memoryEvents: list, memoryInfo: record, name: string, networkInfo: record, nonComplianceDetails: list, ownership: string, policyCompliant: bool, policyName: string, powerManagementEvents: list, previousDeviceNames: list, securityPosture: record, softwareInfo: record, state: string, systemProperties: record, user: record, userName: string>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ANDROID_MANAGEMENT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ANDROID_MANAGEMENT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -646,8 +636,8 @@ export def "androidmanagement-enterprises-devices-list" [
 export def "androidmanagement-enterprises-enrollment-tokens-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -668,7 +658,7 @@ export def "androidmanagement-enterprises-enrollment-tokens-list" [
   --page-size: int # The requested page size. The service may return fewer than this value. If unspecified, at most 10 items will be returned. The maximum value is 100; values above 100 will be coerced to 100.
   --page-token: string # A token identifying a page of results returned by the server.
 ]: nothing -> record<enrollmentTokens: table<additionalData: string, allowPersonalUsage: string, duration: string, expirationTimestamp: string, name: string, oneTimeOnly: bool, policyName: string, qrCode: string, user: record, value: string>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ANDROID_MANAGEMENT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ANDROID_MANAGEMENT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -697,8 +687,8 @@ export def "androidmanagement-enterprises-enrollment-tokens-list" [
 export def "androidmanagement-enterprises-enrollment-tokens-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -728,7 +718,7 @@ export def "androidmanagement-enterprises-enrollment-tokens-create" [
   --value: string # The token value that's passed to the device and authorizes the device to enroll. This is a read-only field generated by the server.
 ]: any -> record<additionalData: string, allowPersonalUsage: string, duration: string, expirationTimestamp: string, name: string, oneTimeOnly: bool, policyName: string, qrCode: string, user: record<accountIdentifier: string>, value: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ANDROID_MANAGEMENT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ANDROID_MANAGEMENT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -758,8 +748,8 @@ export def "androidmanagement-enterprises-enrollment-tokens-create" [
 export def "androidmanagement-enterprises-policies-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -780,7 +770,7 @@ export def "androidmanagement-enterprises-policies-list" [
   --page-size: int # The requested page size. The actual page size may be fixed to a min or max value.
   --page-token: string # A token identifying a page of results returned by the server.
 ]: nothing -> record<nextPageToken: string, policies: table<accountTypesWithManagementDisabled: list, addUserDisabled: bool, adjustVolumeDisabled: bool, advancedSecurityOverrides: record, alwaysOnVpnPackage: record, androidDevicePolicyTracks: list, appAutoUpdatePolicy: string, applications: list, autoDateAndTimeZone: string, autoTimeRequired: bool, blockApplicationsEnabled: bool, bluetoothConfigDisabled: bool, bluetoothContactSharingDisabled: bool, bluetoothDisabled: bool, cameraAccess: string, cameraDisabled: bool, cellBroadcastsConfigDisabled: bool, choosePrivateKeyRules: list, complianceRules: list, createWindowsDisabled: bool, credentialsConfigDisabled: bool, crossProfilePolicies: record, dataRoamingDisabled: bool, debuggingFeaturesAllowed: bool, defaultPermissionPolicy: string, deviceOwnerLockScreenInfo: record, encryptionPolicy: string, ensureVerifyAppsEnabled: bool, factoryResetDisabled: bool, frpAdminEmails: list, funDisabled: bool, installAppsDisabled: bool, installUnknownSourcesAllowed: bool, keyguardDisabled: bool, keyguardDisabledFeatures: list, kioskCustomLauncherEnabled: bool, kioskCustomization: record, locationMode: string, longSupportMessage: record, maximumTimeToLock: string, microphoneAccess: string, minimumApiLevel: int, mobileNetworksConfigDisabled: bool, modifyAccountsDisabled: bool, mountPhysicalMediaDisabled: bool, name: string, networkEscapeHatchEnabled: bool, networkResetDisabled: bool, oncCertificateProviders: list, openNetworkConfiguration: record, outgoingBeamDisabled: bool, outgoingCallsDisabled: bool, passwordPolicies: list, passwordRequirements: record, permissionGrants: list, permittedAccessibilityServices: record, permittedInputMethods: record, persistentPreferredActivities: list, personalUsagePolicies: record, playStoreMode: string, policyEnforcementRules: list, preferentialNetworkService: string, privateKeySelectionEnabled: bool, recommendedGlobalProxy: record, removeUserDisabled: bool, safeBootDisabled: bool, screenCaptureDisabled: bool, setUserIconDisabled: bool, setWallpaperDisabled: bool, setupActions: list, shareLocationDisabled: bool, shortSupportMessage: record, skipFirstUseHintsEnabled: bool, smsDisabled: bool, statusBarDisabled: bool, statusReportingSettings: record, stayOnPluggedModes: list, systemUpdate: record, tetheringConfigDisabled: bool, uninstallAppsDisabled: bool, unmuteMicrophoneDisabled: bool, usageLog: record, usbFileTransferDisabled: bool, usbMassStorageEnabled: bool, version: string, vpnConfigDisabled: bool, wifiConfigDisabled: bool, wifiConfigsLockdownEnabled: bool>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ANDROID_MANAGEMENT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ANDROID_MANAGEMENT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -808,8 +798,8 @@ export def "androidmanagement-enterprises-policies-list" [
 export def "androidmanagement-enterprises-web-apps-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -830,7 +820,7 @@ export def "androidmanagement-enterprises-web-apps-list" [
   --page-size: int # The requested page size. This is a hint and the actual page size in the response may be different.
   --page-token: string # A token identifying a page of results returned by the server.
 ]: nothing -> record<nextPageToken: string, webApps: table<displayMode: string, icons: list, name: string, startUrl: string, title: string, versionCode: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ANDROID_MANAGEMENT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ANDROID_MANAGEMENT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -859,8 +849,8 @@ export def "androidmanagement-enterprises-web-apps-list" [
 export def "androidmanagement-enterprises-web-apps-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -886,7 +876,7 @@ export def "androidmanagement-enterprises-web-apps-create" [
   --version-code: string # The current version of the app.Note that the version can automatically increase during the lifetime of the web app, while Google does internal housekeeping to keep the web app up-to-date. (format: int64)
 ]: any -> record<displayMode: string, icons: table<imageData: string>, name: string, startUrl: string, title: string, versionCode: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ANDROID_MANAGEMENT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ANDROID_MANAGEMENT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -916,8 +906,8 @@ export def "androidmanagement-enterprises-web-apps-create" [
 export def "androidmanagement-enterprises-web-tokens-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -942,7 +932,7 @@ export def "androidmanagement-enterprises-web-tokens-create" [
   --value: string # The token value which is used in the hosting page to generate the iframe with the embedded UI. This is a read-only field generated by the server.
 ]: any -> record<enabledFeatures: list<string>, name: string, parentFrameUrl: string, permissions: list<string>, value: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ANDROID_MANAGEMENT_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ANDROID_MANAGEMENT_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"

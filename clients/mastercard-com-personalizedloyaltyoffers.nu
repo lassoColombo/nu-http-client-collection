@@ -136,12 +136,15 @@ export def "post-activatestatementcreditoffer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --f-id: string # Financial Institution Identifier. Code that specifies the platform and configuration instance, provided by Mastercard during implementation. (e.g. 999999)
-  --user-token: string # Session identifier as returned by the UserToken resource.
-  --offer-id: string # System-wide identifier for the campaign, not intended for end-user display. (e.g. c7dcfca7-cf35-36b0-9e67-d4f363d643e0)
+  --f-id: string # Financial Institution Identifier. Code that specifies the platform and configuration instance, provided by Mastercard during implementation. (required, e.g. 999999)
+  --user-token: string # Session identifier as returned by the UserToken resource. (required)
+  --offer-id: string # System-wide identifier for the campaign, not intended for end-user display. (required, e.g. c7dcfca7-cf35-36b0-9e67-d4f363d643e0)
 ]: nothing -> record<Response: record<ScActivation: record<ActivationDate: string, ActivationId: string, CashBack: string, DaysRemaining: string, Headline: string, Merchant: string, MerchantLogo: string, OfferId: string, PointsEarned: string, RedemptionEndDate: string, RedemptionMode: string, RemainingSpend: string, ShortDescription: string, Status: string, TotalSpend: string>, Status: record<Code: string, Message: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($f_id == null) { error make --unspanned { msg: "required query parameter 'FId' missing: pass --f-id" } }
+  if ($user_token == null) { error make --unspanned { msg: "required query parameter 'UserToken' missing: pass --user-token" } }
+  if ($offer_id == null) { error make --unspanned { msg: "required query parameter 'OfferId' missing: pass --offer-id" } }
   let qp = [(serialize-qp "FId" $f_id "scalar") (serialize-qp "UserToken" $user_token "scalar") (serialize-qp "OfferId" $offer_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/activatestatementcreditoffer" $qp $auth.query)
   let accept_val = "application/json"
@@ -173,8 +176,8 @@ export def "get-matchedoffers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --f-id: string # Financial Institution Identifier. Code that specifies the platform and configuration instance, provided by Mastercard during implementation. (e.g. 999999)
-  --user-token: string # Session identifier as returned by the UserToken resource.
+  --f-id: string # Financial Institution Identifier. Code that specifies the platform and configuration instance, provided by Mastercard during implementation. (required, e.g. 999999)
+  --user-token: string # Session identifier as returned by the UserToken resource. (required)
   --lang: string # When utilized with a multi-lingual implementation, may be the tongue and country of the user in ISO 639-1, underscore, ISO 3166-1 alpha-2 format. (e.g. en_US)
   --merchant-name: string # Fuzzy term to search retailers with offers for the user. In general, searching of Matched Offers is not advised as users generally have a modest selection of highly relevant promotions. (e.g. Example.com)
   --category: string # Offer Categories. (e.g. DEPARTMENTSTORE)
@@ -184,6 +187,8 @@ export def "get-matchedoffers" [
 ]: nothing -> record<Response: record<CurrentPage: int, Items: record<MatchedOffer: record>, ItemsPerPage: int, NumberOfPages: int, Status: record<Code: string, Message: string>, TotalCount: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($f_id == null) { error make --unspanned { msg: "required query parameter 'FId' missing: pass --f-id" } }
+  if ($user_token == null) { error make --unspanned { msg: "required query parameter 'UserToken' missing: pass --user-token" } }
   let qp = [(serialize-qp "FId" $f_id "scalar") (serialize-qp "UserToken" $user_token "scalar") (serialize-qp "Lang" $lang "scalar") (serialize-qp "MerchantName" $merchant_name "scalar") (serialize-qp "Category" $category "scalar") (serialize-qp "OfferType" $offer_type "scalar") (serialize-qp "PageNumber" $page_number "scalar") (serialize-qp "ItemsPerPage" $items_per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/matchedoffers" $qp $auth.query)
   let accept_val = "application/json"
@@ -215,12 +220,15 @@ export def "get-offerdetails" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --f-id: string # Financial Institution Identifier. Code that specifies the platform and configuration instance, provided by Mastercard during implementation. (e.g. 999999)
-  --user-token: string # Session identifier as returned by the UserToken resource. (e.g. mh3WonUm5xmE)
-  --offer-id: string # System-wide identifier for the campaign, not intended for end-user display. (e.g. c7dcfca7-cf35-36b0-9e67-d4f363d643e0)
+  --f-id: string # Financial Institution Identifier. Code that specifies the platform and configuration instance, provided by Mastercard during implementation. (required, e.g. 999999)
+  --user-token: string # Session identifier as returned by the UserToken resource. (required, e.g. mh3WonUm5xmE)
+  --offer-id: string # System-wide identifier for the campaign, not intended for end-user display. (required, e.g. c7dcfca7-cf35-36b0-9e67-d4f363d643e0)
 ]: nothing -> record<Response: record<OfferDetails: record<CurrencyCode: string, DetailPostpaidCreditOffer: record, EventEndDate: string, EventStartDate: string, Headline: string, Language: string, LinkOut: any, LongDescription: string, Merchant: record, OfferDisplay: record, OfferId: string, OfferMedia: record, OfferSource: string, OfferType: string, OfferUrl: any, RedemptionMode: string, RedemptionType: string, ShortDescription: string>, Status: record<Code: string, Message: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($f_id == null) { error make --unspanned { msg: "required query parameter 'FId' missing: pass --f-id" } }
+  if ($user_token == null) { error make --unspanned { msg: "required query parameter 'UserToken' missing: pass --user-token" } }
+  if ($offer_id == null) { error make --unspanned { msg: "required query parameter 'OfferId' missing: pass --offer-id" } }
   let qp = [(serialize-qp "FId" $f_id "scalar") (serialize-qp "UserToken" $user_token "scalar") (serialize-qp "OfferId" $offer_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/offerdetails" $qp $auth.query)
   let accept_val = "application/json"
@@ -252,14 +260,16 @@ export def "get-redeemedoffers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --f-id: string # Financial Institution Identifier. Code that specifies the platform and configuration instance, provided by Mastercard during implementation. (e.g. 999999)
-  --user-token: string # Session identifier as returned by the UserToken resource.
+  --f-id: string # Financial Institution Identifier. Code that specifies the platform and configuration instance, provided by Mastercard during implementation. (required, e.g. 999999)
+  --user-token: string # Session identifier as returned by the UserToken resource. (required)
   --lang: string # When utilized with a multi-lingual implementation, may be the tongue and country of the user in ISO 639-1, underscore, ISO 3166-1 alpha-2 format. (e.g. en_US)
   --page-number: int # Segment of offers to return. (e.g. 1)
   --items-per-page: int # Segment size of offer to be returned. Default is 25. (e.g. 1)
 ]: nothing -> record<Response: record<CurrentPage: int, Items: record<RedemedOffer: record>, ItemsPerPage: int, NumberOfPages: int, Status: record<Code: string, Message: string>, TotalCount: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($f_id == null) { error make --unspanned { msg: "required query parameter 'FId' missing: pass --f-id" } }
+  if ($user_token == null) { error make --unspanned { msg: "required query parameter 'UserToken' missing: pass --user-token" } }
   let qp = [(serialize-qp "FId" $f_id "scalar") (serialize-qp "UserToken" $user_token "scalar") (serialize-qp "Lang" $lang "scalar") (serialize-qp "PageNumber" $page_number "scalar") (serialize-qp "ItemsPerPage" $items_per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/redeemedoffers" $qp $auth.query)
   let accept_val = "application/json"
@@ -291,12 +301,15 @@ export def "get-statementcreditactivationdetail" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --f-id: string # Financial Institution Identifier. Code that specifies the platform and configuration instance, provided by Mastercard during implementation. (e.g. 999999)
-  --user-token: string # Session identifier as returned by the UserToken resource.
-  --activation-id: string # Distinct identifier for the offer being available for redemption by the user as returned by Activate Statement Credit Offer or Redeemed Offers, not intended for end-user display. (e.g. TRU_1000136)
+  --f-id: string # Financial Institution Identifier. Code that specifies the platform and configuration instance, provided by Mastercard during implementation. (required, e.g. 999999)
+  --user-token: string # Session identifier as returned by the UserToken resource. (required)
+  --activation-id: string # Distinct identifier for the offer being available for redemption by the user as returned by Activate Statement Credit Offer or Redeemed Offers, not intended for end-user display. (required, e.g. TRU_1000136)
 ]: nothing -> record<Response: record<ScActivation: record<ActivationDate: string, ActivationId: string, CashBack: string, DaysRemaining: string, Headline: string, Merchant: string, MerchantLogo: string, OfferId: string, PointsEarned: string, RedemptionEndDate: string, RedemptionMode: string, RemainingSpend: string, ShortDescription: string, Status: string, TotalSpend: string>, Status: record<Code: string, Message: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($f_id == null) { error make --unspanned { msg: "required query parameter 'FId' missing: pass --f-id" } }
+  if ($user_token == null) { error make --unspanned { msg: "required query parameter 'UserToken' missing: pass --user-token" } }
+  if ($activation_id == null) { error make --unspanned { msg: "required query parameter 'ActivationId' missing: pass --activation-id" } }
   let qp = [(serialize-qp "FId" $f_id "scalar") (serialize-qp "UserToken" $user_token "scalar") (serialize-qp "ActivationId" $activation_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/statementcreditactivationdetail" $qp $auth.query)
   let accept_val = "application/json"
@@ -328,13 +341,17 @@ export def "post-userfeedback" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --f-id: string # Financial Institution Identifier. Code that specifies the platform and configuration instance, provided by Mastercard during implementation. (e.g. 999999)
-  --user-token: string # Session identifier as returned by the UserToken resource.
-  --offer-id: string # System-wide identifier for the campaign, not intended for end-user display. (e.g. d82e1e7c-c6b9-3b46-acd0-5498731c2838)
-  --feedback: int # User response to the offer. 0- Dislike offer. 1- Like offer. (e.g. 1)
+  --f-id: string # Financial Institution Identifier. Code that specifies the platform and configuration instance, provided by Mastercard during implementation. (required, e.g. 999999)
+  --user-token: string # Session identifier as returned by the UserToken resource. (required)
+  --offer-id: string # System-wide identifier for the campaign, not intended for end-user display. (required, e.g. d82e1e7c-c6b9-3b46-acd0-5498731c2838)
+  --feedback: int # User response to the offer. 0- Dislike offer. 1- Like offer. (required, e.g. 1)
 ]: nothing -> record<Response: record<Status: record<Code: string, Message: string>, UserFeedback: record<Feedback: string, OfferId: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($f_id == null) { error make --unspanned { msg: "required query parameter 'FId' missing: pass --f-id" } }
+  if ($user_token == null) { error make --unspanned { msg: "required query parameter 'UserToken' missing: pass --user-token" } }
+  if ($offer_id == null) { error make --unspanned { msg: "required query parameter 'OfferId' missing: pass --offer-id" } }
+  if ($feedback == null) { error make --unspanned { msg: "required query parameter 'Feedback' missing: pass --feedback" } }
   let qp = [(serialize-qp "FId" $f_id "scalar") (serialize-qp "UserToken" $user_token "scalar") (serialize-qp "OfferId" $offer_id "scalar") (serialize-qp "Feedback" $feedback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/userfeedback" $qp $auth.query)
   let accept_val = "application/json"
@@ -366,11 +383,13 @@ export def "get-usersavings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --f-id: string # Financial Institution Identifier. Code that specifies the platform and configuration instance, provided by Mastercard during implementation. (e.g. 999999)
-  --user-token: string # Session identifier as returned by the UserToken resource.
+  --f-id: string # Financial Institution Identifier. Code that specifies the platform and configuration instance, provided by Mastercard during implementation. (required, e.g. 999999)
+  --user-token: string # Session identifier as returned by the UserToken resource. (required)
 ]: nothing -> record<Response: record<Status: record<Code: string, Message: string>, UserSavings: record<PrepaidOfferSavings: record, StatementCreditOffersSavings: record, TotalAmountSaved: string, TotalOffersUsed: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($f_id == null) { error make --unspanned { msg: "required query parameter 'FId' missing: pass --f-id" } }
+  if ($user_token == null) { error make --unspanned { msg: "required query parameter 'UserToken' missing: pass --user-token" } }
   let qp = [(serialize-qp "FId" $f_id "scalar") (serialize-qp "UserToken" $user_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/usersavings" $qp $auth.query)
   let accept_val = "application/json"
@@ -402,11 +421,13 @@ export def "get-usertoken" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --f-id: string # Financial Institution Identifier. Code that specifies the platform and configuration instance, provided by Mastercard during implementation. (e.g. 999999)
-  --auth-info: string # Authorization Information. AES 128-bit encrypted concatenation of "User ID as specified in enrollment:FI ID as provided by Mastercard:current Unix time". Key exchange and establishment of maintenance procedures occur during implementation.
+  --f-id: string # Financial Institution Identifier. Code that specifies the platform and configuration instance, provided by Mastercard during implementation. (required, e.g. 999999)
+  --auth-info: string # Authorization Information. AES 128-bit encrypted concatenation of "User ID as specified in enrollment:FI ID as provided by Mastercard:current Unix time". Key exchange and establishment of maintenance procedures occur during implementation. (required)
 ]: nothing -> record<Response: record<Status: record<Code: string, Message: string>, UserToken: record<Token: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($f_id == null) { error make --unspanned { msg: "required query parameter 'FId' missing: pass --f-id" } }
+  if ($auth_info == null) { error make --unspanned { msg: "required query parameter 'AuthInfo' missing: pass --auth-info" } }
   let qp = [(serialize-qp "FId" $f_id "scalar") (serialize-qp "AuthInfo" $auth_info "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/usertoken" $qp $auth.query)
   let accept_val = "application/json"

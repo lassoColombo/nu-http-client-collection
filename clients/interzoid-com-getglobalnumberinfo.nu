@@ -131,11 +131,13 @@ export def "getglobalnumberinfo" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --license: string # Your Interzoid license API key. Register at www.interzoid.com/register
-  --intlnumber: string # International number (with country code) to retrieve information for
+  --license: string # Your Interzoid license API key. Register at www.interzoid.com/register (required)
+  --intlnumber: string # International number (with country code) to retrieve information for (required)
 ]: nothing -> record<Code: string, Country: string, Credits: string, Language2: string, Language3: string, Mobile: string, PrimaryCity: string, PrimaryLanguage: string, Region: string, Wealth: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($license == null) { error make --unspanned { msg: "required query parameter 'license' missing: pass --license" } }
+  if ($intlnumber == null) { error make --unspanned { msg: "required query parameter 'intlnumber' missing: pass --intlnumber" } }
   let qp = [(serialize-qp "license" $license "scalar") (serialize-qp "intlnumber" $intlnumber "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getglobalnumberinfo" $qp $auth.query)
   let accept_val = "application/json"

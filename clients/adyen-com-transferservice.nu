@@ -12,8 +12,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-api-key" => { {scheme: $scheme, headers: {X-API-Key: $token_val}, query: "", location: "header"} }
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "x-api-key" => { {scheme: $scheme, headers: {"X-API-Key": $token_val}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -148,12 +148,14 @@ export def "get-transactions" [
   --account-holder-id: string # Unique identifier of the [account holder](https://docs.adyen.com/api-explorer/#/balanceplatform/latest/get/accountHolders/{id}__queryParam_id).
   --balance-account-id: string # Unique identifier of the [balance account](https://docs.adyen.com/api-explorer/#/balanceplatform/latest/get/balanceAccounts/{id}__queryParam_id).
   --cursor: string # The `cursor` returned in the links of the previous response.
-  --created-since: string # Only include transactions that have been created on or after this point in time. The value must be in ISO 8601 format. For example, **2021-05-30T15:07:40Z**. (format: date-time)
-  --created-until: string # Only include transactions that have been created on or before this point in time. The value must be in ISO 8601 format. For example, **2021-05-30T15:07:40Z**. (format: date-time)
+  --created-since: string # Only include transactions that have been created on or after this point in time. The value must be in ISO 8601 format. For example, **2021-05-30T15:07:40Z**. (required, format: date-time)
+  --created-until: string # Only include transactions that have been created on or before this point in time. The value must be in ISO 8601 format. For example, **2021-05-30T15:07:40Z**. (required, format: date-time)
   --limit: int # The number of items returned per page, maximum of 100 items. By default, the response returns 10 items per page. (format: int32)
 ]: nothing -> record<_links: record<next: record<href: string>, prev: record<href: string>>, data: table<accountHolderId: string, amount: record, balanceAccountId: string, balancePlatform: string, bookingDate: string, category: string, counterparty: record, createdAt: string, description: string, id: string, instructedAmount: record, paymentInstrumentId: string, reference: string, referenceForBeneficiary: string, status: string, transferId: string, type: string, valueDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($created_since == null) { error make --unspanned { msg: "required query parameter 'createdSince' missing: pass --created-since" } }
+  if ($created_until == null) { error make --unspanned { msg: "required query parameter 'createdUntil' missing: pass --created-until" } }
   let qp = [(serialize-qp "balancePlatform" $balance_platform "scalar") (serialize-qp "paymentInstrumentId" $payment_instrument_id "scalar") (serialize-qp "accountHolderId" $account_holder_id "scalar") (serialize-qp "balanceAccountId" $balance_account_id "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "createdSince" $created_since "scalar") (serialize-qp "createdUntil" $created_until "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/transactions" $qp $auth.query)
   let accept_val = "application/json"

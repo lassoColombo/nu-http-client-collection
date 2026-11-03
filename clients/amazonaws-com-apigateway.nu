@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -126,6 +126,7 @@ def location-status-completer [] { ["DOCUMENTED" "UNDOCUMENTED"] }
 def mode-completer [] { ["merge" "overwrite"] }
 def security-policy-completer [] { ["TLS_1_0" "TLS_1_2"] }
 def api-key-source-completer [] { ["AUTHORIZER" "HEADER"] }
+def response-type-completer [] { ["ACCESS_DENIED" "API_CONFIGURATION_ERROR" "AUTHORIZER_CONFIGURATION_ERROR" "AUTHORIZER_FAILURE" "BAD_REQUEST_BODY" "BAD_REQUEST_PARAMETERS" "DEFAULT_4XX" "DEFAULT_5XX" "EXPIRED_TOKEN" "INTEGRATION_FAILURE" "INTEGRATION_TIMEOUT" "INVALID_API_KEY" "INVALID_SIGNATURE" "MISSING_AUTHENTICATION_TOKEN" "QUOTA_EXCEEDED" "REQUEST_TOO_LARGE" "RESOURCE_NOT_FOUND" "THROTTLED" "UNAUTHORIZED" "UNSUPPORTED_MEDIA_TYPE" "WAF_FILTERED"] }
 def type-completer-2 [] { ["AWS" "AWS_PROXY" "HTTP" "HTTP_PROXY" "MOCK"] }
 def connection-type-completer [] { ["INTERNET" "VPC_LINK"] }
 def content-handling-completer [] { ["CONVERT_TO_BINARY" "CONVERT_TO_TEXT"] }
@@ -159,7 +160,7 @@ export def commands []: nothing -> table {
 #
 # POST /apikeys
 # operationId: CreateApiKey
-# --stageKeys item shape: {restApiId?: any, stageName?: any}
+# --stageKeys item shape: {restApiId?: string, stageName?: string}
 export def "create-api-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -182,10 +183,10 @@ export def "create-api-key" [
   --enabled: oneof<nothing, bool> # Specifies whether the ApiKey can be used by callers.
   --generate-distinct-id: oneof<nothing, bool> # Specifies whether (true) or not (false) the key identifier is distinct from the created API key value. This parameter is deprecated and should not be used.
   --value: string # Specifies a value of the API key.
-  --stage-keys: list # DEPRECATED FOR USAGE PLANS - Specifies stages associated with the API key. — item shape: {restApiId?: any, stageName?: any}
+  --stage-keys: list # DEPRECATED FOR USAGE PLANS - Specifies stages associated with the API key. — item shape: {restApiId?: string, stageName?: string}
   --customer-id: string # An AWS Marketplace customer identifier , when integrating with the AWS SaaS Marketplace.
   --tags: record # The key-value map of strings. The valid character set is [a-zA-Z+-=._:/]. The tag key can be up to 128 characters and must not start with aws:. The tag value can be up to 256 characters.
-]: any -> record<id: record, value: record, name: record, customerId: record, description: record, enabled: record, createdDate: record, lastUpdatedDate: record, stageKeys: record, tags: record> {
+]: any -> record<id: string, value: string, name: string, customerId: string, description: string, enabled: bool, createdDate: string, lastUpdatedDate: string, stageKeys: list<string>, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -236,7 +237,7 @@ export def "get-api-keys" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<warnings: record, position: string, items: record> {
+]: nothing -> record<warnings: list<string>, position: string, items: table<id: string, value: string, name: string, customerId: string, description: string, enabled: bool, createdDate: string, lastUpdatedDate: string, stageKeys: list, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "position" $position "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "customerId" $customer_id "scalar") (serialize-qp "includeValues" $include_values "scalar")] | flatten | str join "&"
@@ -290,7 +291,7 @@ export def "create-authorizer" [
   --identity-source: string # The identity source for which authorization is requested. For a TOKEN or COGNITO_USER_POOLS authorizer, this is required and specifies the request header mapping expression for the custom header holding the authorization token submitted by the client. For example, if the token header name is Auth, the header mapping expression is method.request.header.Auth. For the REQUEST authorizer, this is required when authorization caching is enabled. The value is a comma-separated string of one or more mapping expressions of the specified request parameters. For example, if an Auth header, a Name query string parameter are defined as identity sources, this value is method.request.header.Auth, method.request.querystring.Name. These parameters will be used to derive the authorization caching key and to perform runtime validation of the REQUEST authorizer by verifying all of the identity-related request parameters are present, not null and non-empty. Only when this is true does the authorizer invoke the authorizer Lambda function, otherwise, it returns a 401 Unauthorized response without calling the Lambda function. The valid value is a string of comma-separated mapping expressions of the specified request parameters. When the authorization caching is not enabled, this property is optional.
   --identity-validation-expression: string # A validation expression for the incoming identity token. For TOKEN authorizers, this value is a regular expression. For COGNITO_USER_POOLS authorizers, API Gateway will match the aud field of the incoming token from the client against the specified regular expression. It will invoke the authorizer's Lambda function when there is a match. Otherwise, it will return a 401 Unauthorized response without calling the Lambda function. The validation expression does not apply to the REQUEST authorizer.
   --authorizer-result-ttl-in-seconds: int # The TTL in seconds of cached authorizer results. If it equals 0, authorization caching is disabled. If it is greater than 0, API Gateway will cache authorizer responses. If this field is not set, the default value is 300. The maximum value is 3600, or 1 hour.
-]: any -> record<id: record, name: record, type: record, providerARNs: record, authType: record, authorizerUri: record, authorizerCredentials: record, identitySource: record, identityValidationExpression: record, authorizerResultTtlInSeconds: record> {
+]: any -> record<id: string, name: string, type: string, providerARNs: list<string>, authType: string, authorizerUri: string, authorizerCredentials: string, identitySource: string, identityValidationExpression: string, authorizerResultTtlInSeconds: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -340,7 +341,7 @@ export def "get-authorizers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<position: string, items: record> {
+]: nothing -> record<position: string, items: table<id: string, name: string, type: string, providerARNs: list, authType: string, authorizerUri: string, authorizerCredentials: string, identitySource: string, identityValidationExpression: string, authorizerResultTtlInSeconds: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
@@ -389,7 +390,7 @@ export def "create-base-path-mapping" [
   --base-path: string # The base path name that callers of the API must provide as part of the URL after the domain name. This value must be unique for all of the mappings across a single API. Specify '(none)' if you do not want callers to specify a base path name after the domain name.
   rest_api_id: string # The string identifier of the associated RestApi.
   --stage: string # The name of the API's stage that you want to use for this mapping. Specify '(none)' if you want callers to explicitly specify the stage name after any base path name.
-]: any -> record<basePath: record, restApiId: record, stage: record> {
+]: any -> record<basePath: string, restApiId: string, stage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -439,7 +440,7 @@ export def "get-base-path-mappings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<position: string, items: record> {
+]: nothing -> record<position: string, items: table<basePath: string, restApiId: string, stage: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domain_name' must be non-empty" } }
@@ -467,7 +468,7 @@ export def "get-base-path-mappings" [
 #
 # POST /restapis/{restapi_id}/deployments
 # operationId: CreateDeployment
-# --canarySettings shape: {percentTraffic?: any, stageVariableOverrides?: any, useStageCache?: any}
+# --canarySettings shape: {percentTraffic?: float, stageVariableOverrides?: record, useStageCache?: bool}
 export def "create-deployment" [
   restapi_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -492,9 +493,9 @@ export def "create-deployment" [
   --cache-cluster-enabled: oneof<nothing, bool> # Enables a cache cluster for the Stage resource specified in the input.
   --cache-cluster-size: string@cache-cluster-size-completer # Returns the size of the CacheCluster.
   --variables: record # A map that defines the stage variables for the Stage resource that is associated with the new deployment. Variable names can have alphanumeric and underscore characters, and the values must match [A-Za-z0-9-._~:/?#&=,]+.
-  --canary-settings: record # The input configuration for a canary deployment. — shape: {percentTraffic?: any, stageVariableOverrides?: any, useStageCache?: any}
+  --canary-settings: record # The input configuration for a canary deployment. — shape: {percentTraffic?: float, stageVariableOverrides?: record, useStageCache?: bool}
   --tracing-enabled: oneof<nothing, bool> # Specifies whether active tracing with X-ray is enabled for the Stage.
-]: any -> record<id: record, description: record, createdDate: record, apiSummary: record> {
+]: any -> record<id: string, description: string, createdDate: string, apiSummary: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -544,7 +545,7 @@ export def "get-deployments" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<position: string, items: record> {
+]: nothing -> record<position: string, items: table<id: string, description: string, createdDate: string, apiSummary: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
@@ -572,7 +573,7 @@ export def "get-deployments" [
 #
 # POST /restapis/{restapi_id}/documentation/parts
 # operationId: CreateDocumentationPart
-# --location shape: {type?: any, path?: any, method?: any, statusCode?: any, name?: any}
+# --location shape: {type?: "API"|"AUTHORIZER"|"MODEL"|"RESOURCE"|"METHOD"|"PATH_PARAMETER"|"QUERY_PARAMETER"|"REQUEST_HEADER"|"REQUEST_BODY"|"RESPONSE"|"RESPONSE_HEADER"|"RESPONSE_BODY", path?: string, method?: string, statusCode?: string, name?: string}
 export def "create-documentation-part" [
   restapi_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -591,9 +592,9 @@ export def "create-documentation-part" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  location: record # Specifies the target API entity to which the documentation applies. — shape: {type?: any, path?: any, method?: any, statusCode?: any, name?: any}
+  location: record # Specifies the target API entity to which the documentation applies. — shape: {type?: "API"|"AUTHORIZER"|"MODEL"|"RESOURCE"|"METHOD"|"PATH_PARAMETER"|"QUERY_PARAMETER"|"REQUEST_HEADER"|"REQUEST_BODY"|"RESPONSE"|"RESPONSE_HEADER"|"RESPONSE_BODY", path?: string, method?: string, statusCode?: string, name?: string}
   properties: string # The new documentation content map of the targeted API entity. Enclosed key-value pairs are API-specific, but only OpenAPI-compliant key-value pairs can be exported and, hence, published.
-]: any -> record<id: record, location: record<type: record, path: record, method: record, statusCode: record, name: record>, properties: any> {
+]: any -> record<id: string, location: record<type: string, path: string, method: string, statusCode: string, name: string>, properties: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -647,7 +648,7 @@ export def "get-documentation-parts" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<position: string, items: record> {
+]: nothing -> record<position: string, items: table<id: string, location: record, properties: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
@@ -696,7 +697,7 @@ export def "import-documentation-parts" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   body: string # Raw byte array representing the to-be-imported documentation parts. To import from an OpenAPI file, this is a JSON object.
-]: any -> record<ids: record, warnings: record> {
+]: any -> record<ids: list<string>, warnings: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -748,7 +749,7 @@ export def "create-documentation-version" [
   documentation_version: string # The version identifier of the new snapshot.
   --stage-name: string # The stage name to be associated with the new documentation snapshot.
   --description: string # A description about the new documentation snapshot.
-]: any -> record<version: record, createdDate: record, description: record> {
+]: any -> record<version: string, createdDate: string, description: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -798,7 +799,7 @@ export def "get-documentation-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<position: string, items: record> {
+]: nothing -> record<position: string, items: table<version: string, createdDate: string, description: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
@@ -826,8 +827,8 @@ export def "get-documentation-versions" [
 #
 # POST /domainnames
 # operationId: CreateDomainName
-# --endpointConfiguration shape: {types?: any, vpcEndpointIds?: any}
-# --mutualTlsAuthentication shape: {truststoreUri?: any, truststoreVersion?: any}
+# --endpointConfiguration shape: {types?: list<string>, vpcEndpointIds?: list<string>}
+# --mutualTlsAuthentication shape: {truststoreUri?: string, truststoreVersion?: string}
 export def "create-domain-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -853,12 +854,12 @@ export def "create-domain-name" [
   --certificate-arn: string # The reference to an AWS-managed certificate that will be used by edge-optimized endpoint for this domain name. AWS Certificate Manager is the only supported source.
   --regional-certificate-name: string # The user-friendly name of the certificate that will be used by regional endpoint for this domain name.
   --regional-certificate-arn: string # The reference to an AWS-managed certificate that will be used by regional endpoint for this domain name. AWS Certificate Manager is the only supported source.
-  --endpoint-configuration: record # The endpoint configuration to indicate the types of endpoints an API (RestApi) or its custom domain name (DomainName) has. — shape: {types?: any, vpcEndpointIds?: any}
+  --endpoint-configuration: record # The endpoint configuration to indicate the types of endpoints an API (RestApi) or its custom domain name (DomainName) has. — shape: {types?: list<string>, vpcEndpointIds?: list<string>}
   --tags: record # The key-value map of strings. The valid character set is [a-zA-Z+-=._:/]. The tag key can be up to 128 characters and must not start with aws:. The tag value can be up to 256 characters.
   --security-policy: string@security-policy-completer # The Transport Layer Security (TLS) version + cipher suite for this DomainName. The valid values are TLS_1_0 and TLS_1_2.
-  --mutual-tls-authentication: record # The mutual TLS authentication configuration for a custom domain name. If specified, API Gateway performs two-way authentication between the client and the server. Clients must present a trusted certificate to access your API. — shape: {truststoreUri?: any, truststoreVersion?: any}
+  --mutual-tls-authentication: record # The mutual TLS authentication configuration for a custom domain name. If specified, API Gateway performs two-way authentication between the client and the server. Clients must present a trusted certificate to access your API. — shape: {truststoreUri?: string, truststoreVersion?: string}
   --ownership-verification-certificate-arn: string # The ARN of the public certificate issued by ACM to validate ownership of your custom domain. Only required when configuring mutual TLS and using an ACM imported or private CA certificate ARN as the regionalCertificateArn.
-]: any -> record<domainName: record, certificateName: record, certificateArn: record, certificateUploadDate: record, regionalDomainName: record, regionalHostedZoneId: record, regionalCertificateName: record, regionalCertificateArn: record, distributionDomainName: record, distributionHostedZoneId: record, endpointConfiguration: record<types: record, vpcEndpointIds: record>, domainNameStatus: record, domainNameStatusMessage: record, securityPolicy: record, tags: record, mutualTlsAuthentication: record<truststoreUri: record, truststoreVersion: record, truststoreWarnings: record>, ownershipVerificationCertificateArn: record> {
+]: any -> record<domainName: string, certificateName: string, certificateArn: string, certificateUploadDate: string, regionalDomainName: string, regionalHostedZoneId: string, regionalCertificateName: string, regionalCertificateArn: string, distributionDomainName: string, distributionHostedZoneId: string, endpointConfiguration: record<types: list<string>, vpcEndpointIds: list<string>>, domainNameStatus: string, domainNameStatusMessage: string, securityPolicy: string, tags: record, mutualTlsAuthentication: record<truststoreUri: string, truststoreVersion: string, truststoreWarnings: list<string>>, ownershipVerificationCertificateArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -906,7 +907,7 @@ export def "get-domain-names" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<position: string, items: record> {
+]: nothing -> record<position: string, items: table<domainName: string, certificateName: string, certificateArn: string, certificateUploadDate: string, regionalDomainName: string, regionalHostedZoneId: string, regionalCertificateName: string, regionalCertificateArn: string, distributionDomainName: string, distributionHostedZoneId: string, endpointConfiguration: record, domainNameStatus: string, domainNameStatusMessage: string, securityPolicy: string, tags: record, mutualTlsAuthentication: record, ownershipVerificationCertificateArn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "position" $position "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -955,7 +956,7 @@ export def "create-model" [
   --description: string # The description of the model.
   --schema: string # The schema for the model. For application/json models, this should be JSON schema draft 4 model.
   content_type: string # The content-type for the model.
-]: any -> record<id: record, name: record, description: record, schema: record, contentType: record> {
+]: any -> record<id: string, name: string, description: string, schema: string, contentType: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1005,7 +1006,7 @@ export def "get-models" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<position: string, items: record> {
+]: nothing -> record<position: string, items: table<id: string, name: string, description: string, schema: string, contentType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
@@ -1054,7 +1055,7 @@ export def "create-request-validator" [
   --name: string # The name of the to-be-created RequestValidator.
   --validate-request-body: oneof<nothing, bool> # A Boolean flag to indicate whether to validate request body according to the configured model schema for the method (true) or not (false).
   --validate-request-parameters: oneof<nothing, bool> # A Boolean flag to indicate whether to validate request parameters, true, or not false.
-]: any -> record<id: record, name: record, validateRequestBody: record, validateRequestParameters: record> {
+]: any -> record<id: string, name: string, validateRequestBody: bool, validateRequestParameters: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1104,7 +1105,7 @@ export def "get-request-validators" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<position: string, items: record> {
+]: nothing -> record<position: string, items: table<id: string, name: string, validateRequestBody: bool, validateRequestParameters: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
@@ -1152,7 +1153,7 @@ export def "create-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   path_part: string # The last path segment for this resource.
-]: any -> record<id: record, parentId: record, pathPart: record, path: record, resourceMethods: record> {
+]: any -> record<id: string, parentId: string, pathPart: string, path: string, resourceMethods: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1183,7 +1184,7 @@ export def "create-resource" [
 #
 # POST /restapis
 # operationId: CreateRestApi
-# --endpointConfiguration shape: {types?: any, vpcEndpointIds?: any}
+# --endpointConfiguration shape: {types?: list<string>, vpcEndpointIds?: list<string>}
 export def "create-rest-api" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1208,11 +1209,11 @@ export def "create-rest-api" [
   --binary-media-types: list<string> # The list of binary media types supported by the RestApi. By default, the RestApi supports only UTF-8-encoded text payloads.
   --minimum-compression-size: int # A nullable integer that is used to enable compression (with non-negative between 0 and 10485760 (10M) bytes, inclusive) or disable compression (with a null value) on an API. When compression is enabled, compression or decompression is not applied on the payload if the payload size is smaller than this value. Setting it to zero allows compression for any payload size.
   --api-key-source: string@api-key-source-completer # The source of the API key for metering requests according to a usage plan. Valid values are: >HEADER to read the API key from the X-API-Key header of a request. AUTHORIZER to read the API key from the UsageIdentifierKey from a custom authorizer.
-  --endpoint-configuration: record # The endpoint configuration to indicate the types of endpoints an API (RestApi) or its custom domain name (DomainName) has. — shape: {types?: any, vpcEndpointIds?: any}
+  --endpoint-configuration: record # The endpoint configuration to indicate the types of endpoints an API (RestApi) or its custom domain name (DomainName) has. — shape: {types?: list<string>, vpcEndpointIds?: list<string>}
   --policy: string # A stringified JSON policy document that applies to this RestApi regardless of the caller and Method configuration.
   --tags: record # The key-value map of strings. The valid character set is [a-zA-Z+-=._:/]. The tag key can be up to 128 characters and must not start with aws:. The tag value can be up to 256 characters.
   --disable-execute-api-endpoint: oneof<nothing, bool> # Specifies whether clients can invoke your API by using the default execute-api endpoint. By default, clients can invoke your API with the default https://{api_id}.execute-api.{region}.amazonaws.com endpoint. To require that clients use a custom domain name to invoke your API, disable the default endpoint
-]: any -> record<id: record, name: record, description: record, createdDate: record, version: record, warnings: record, binaryMediaTypes: record, minimumCompressionSize: record, apiKeySource: record, endpointConfiguration: record<types: record, vpcEndpointIds: record>, policy: record, tags: record, disableExecuteApiEndpoint: record> {
+]: any -> record<id: string, name: string, description: string, createdDate: string, version: string, warnings: list<string>, binaryMediaTypes: list<string>, minimumCompressionSize: int, apiKeySource: string, endpointConfiguration: record<types: list<string>, vpcEndpointIds: list<string>>, policy: string, tags: record, disableExecuteApiEndpoint: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1260,7 +1261,7 @@ export def "get-rest-apis" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<position: string, items: record> {
+]: nothing -> record<position: string, items: table<id: string, name: string, description: string, createdDate: string, version: string, warnings: list, binaryMediaTypes: list, minimumCompressionSize: int, apiKeySource: string, endpointConfiguration: record, policy: string, tags: record, disableExecuteApiEndpoint: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "position" $position "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -1287,7 +1288,7 @@ export def "get-rest-apis" [
 #
 # POST /restapis/{restapi_id}/stages
 # operationId: CreateStage
-# --canarySettings shape: {percentTraffic?: any, deploymentId?: any, stageVariableOverrides?: any, useStageCache?: any}
+# --canarySettings shape: {percentTraffic?: float, deploymentId?: string, stageVariableOverrides?: record, useStageCache?: bool}
 export def "create-stage" [
   restapi_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1313,10 +1314,10 @@ export def "create-stage" [
   --cache-cluster-size: string@cache-cluster-size-completer # Returns the size of the CacheCluster.
   --variables: record # A map that defines the stage variables for the new Stage resource. Variable names can have alphanumeric and underscore characters, and the values must match [A-Za-z0-9-._~:/?#&=,]+.
   --documentation-version: string # The version of the associated API documentation.
-  --canary-settings: record # Configuration settings of a canary deployment. — shape: {percentTraffic?: any, deploymentId?: any, stageVariableOverrides?: any, useStageCache?: any}
+  --canary-settings: record # Configuration settings of a canary deployment. — shape: {percentTraffic?: float, deploymentId?: string, stageVariableOverrides?: record, useStageCache?: bool}
   --tracing-enabled: oneof<nothing, bool> # Specifies whether active tracing with X-ray is enabled for the Stage.
   --tags: record # The key-value map of strings. The valid character set is [a-zA-Z+-=._:/]. The tag key can be up to 128 characters and must not start with aws:. The tag value can be up to 256 characters.
-]: any -> record<deploymentId: record, clientCertificateId: record, stageName: record, description: record, cacheClusterEnabled: record, cacheClusterSize: record, cacheClusterStatus: record, methodSettings: record, variables: record, documentationVersion: record, accessLogSettings: record<format: record, destinationArn: record>, canarySettings: record<percentTraffic: record, deploymentId: record, stageVariableOverrides: record, useStageCache: record>, tracingEnabled: record, webAclArn: record, tags: record, createdDate: record, lastUpdatedDate: record> {
+]: any -> record<deploymentId: string, clientCertificateId: string, stageName: string, description: string, cacheClusterEnabled: bool, cacheClusterSize: string, cacheClusterStatus: string, methodSettings: record, variables: record, documentationVersion: string, accessLogSettings: record<format: string, destinationArn: string>, canarySettings: record<percentTraffic: float, deploymentId: string, stageVariableOverrides: record, useStageCache: bool>, tracingEnabled: bool, webAclArn: string, tags: record, createdDate: string, lastUpdatedDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1365,7 +1366,7 @@ export def "get-stages" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<item: record> {
+]: nothing -> record<item: table<deploymentId: string, clientCertificateId: string, stageName: string, description: string, cacheClusterEnabled: bool, cacheClusterSize: string, cacheClusterStatus: string, methodSettings: record, variables: record, documentationVersion: string, accessLogSettings: record, canarySettings: record, tracingEnabled: bool, webAclArn: string, tags: record, createdDate: string, lastUpdatedDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
@@ -1393,9 +1394,9 @@ export def "get-stages" [
 #
 # POST /usageplans
 # operationId: CreateUsagePlan
-# --apiStages item shape: {apiId?: any, stage?: any, throttle?: any}
-# --throttle shape: {burstLimit?: any, rateLimit?: any}
-# --quota shape: {limit?: any, offset?: any, period?: any}
+# --apiStages item shape: {apiId?: string, stage?: string, throttle?: record}
+# --throttle shape: {burstLimit?: int, rateLimit?: float}
+# --quota shape: {limit?: int, offset?: int, period?: "DAY"|"WEEK"|"MONTH"}
 export def "create-usage-plan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1415,11 +1416,11 @@ export def "create-usage-plan" [
   --x-amz-signed-headers: string
   name: string # The name of the usage plan.
   --description: string # The description of the usage plan.
-  --api-stages: list # The associated API stages of the usage plan. — item shape: {apiId?: any, stage?: any, throttle?: any}
-  --throttle: record # The API request rate limits. — shape: {burstLimit?: any, rateLimit?: any}
-  --quota: record # Quotas configured for a usage plan. — shape: {limit?: any, offset?: any, period?: any}
+  --api-stages: list # The associated API stages of the usage plan. — item shape: {apiId?: string, stage?: string, throttle?: record}
+  --throttle: record # The API request rate limits. — shape: {burstLimit?: int, rateLimit?: float}
+  --quota: record # Quotas configured for a usage plan. — shape: {limit?: int, offset?: int, period?: "DAY"|"WEEK"|"MONTH"}
   --tags: record # The key-value map of strings. The valid character set is [a-zA-Z+-=._:/]. The tag key can be up to 128 characters and must not start with aws:. The tag value can be up to 256 characters.
-]: any -> record<id: record, name: record, description: record, apiStages: record, throttle: record<burstLimit: record, rateLimit: record>, quota: record<limit: record, offset: record, period: record>, productCode: record, tags: record> {
+]: any -> record<id: string, name: string, description: string, apiStages: table<apiId: string, stage: string, throttle: record>, throttle: record<burstLimit: int, rateLimit: float>, quota: record<limit: int, offset: int, period: string>, productCode: string, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1468,7 +1469,7 @@ export def "get-usage-plans" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<position: string, items: record> {
+]: nothing -> record<position: string, items: table<id: string, name: string, description: string, apiStages: list, throttle: record, quota: record, productCode: string, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "position" $position "scalar") (serialize-qp "keyId" $key_id "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -1515,7 +1516,7 @@ export def "create-usage-plan-key" [
   --x-amz-signed-headers: string
   key_id: string # The identifier of a UsagePlanKey resource for a plan customer.
   key_type: string # The type of a UsagePlanKey resource for a plan customer.
-]: any -> record<id: record, type: record, value: record, name: record> {
+]: any -> record<id: string, type: string, value: string, name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1566,7 +1567,7 @@ export def "get-usage-plan-keys" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<position: string, items: record> {
+]: nothing -> record<position: string, items: table<id: string, type: string, value: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($usageplan_id | is-empty) { error make --unspanned { msg: "path parameter 'usageplanId' must be non-empty" } }
@@ -1615,7 +1616,7 @@ export def "create-vpc-link" [
   --description: string # The description of the VPC link.
   target_arns: list<string> # The ARN of the network load balancer of the VPC targeted by the VPC link. The network load balancer must be owned by the same AWS account of the API owner.
   --tags: record # The key-value map of strings. The valid character set is [a-zA-Z+-=._:/]. The tag key can be up to 128 characters and must not start with aws:. The tag value can be up to 256 characters.
-]: any -> record<id: record, name: record, description: record, targetArns: record, status: record, statusMessage: record, tags: record> {
+]: any -> record<id: string, name: string, description: string, targetArns: list<string>, status: string, statusMessage: string, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1663,7 +1664,7 @@ export def "get-vpc-links" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<position: string, items: record> {
+]: nothing -> record<position: string, items: table<id: string, name: string, description: string, targetArns: list, status: string, statusMessage: string, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "position" $position "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -1754,7 +1755,7 @@ export def "get-api-key" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<id: record, value: record, name: record, customerId: record, description: record, enabled: record, createdDate: record, lastUpdatedDate: record, stageKeys: record, tags: record> {
+]: nothing -> record<id: string, value: string, name: string, customerId: string, description: string, enabled: bool, createdDate: string, lastUpdatedDate: string, stageKeys: list<string>, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'api_Key' must be non-empty" } }
@@ -1782,7 +1783,7 @@ export def "get-api-key" [
 #
 # PATCH /apikeys/{api_Key}
 # operationId: UpdateApiKey
-# --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
+# --patchOperations item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
 export def "update-api-key" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1801,8 +1802,8 @@ export def "update-api-key" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: any, path?: any, value?: any, from?: any}
-]: any -> record<id: record, value: record, name: record, customerId: record, description: record, enabled: record, createdDate: record, lastUpdatedDate: record, stageKeys: record, tags: record> {
+  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
+]: any -> record<id: string, value: string, name: string, customerId: string, description: string, enabled: bool, createdDate: string, lastUpdatedDate: string, stageKeys: list<string>, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1898,7 +1899,7 @@ export def "get-authorizer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<id: record, name: record, type: record, providerARNs: record, authType: record, authorizerUri: record, authorizerCredentials: record, identitySource: record, identityValidationExpression: record, authorizerResultTtlInSeconds: record> {
+]: nothing -> record<id: string, name: string, type: string, providerARNs: list<string>, authType: string, authorizerUri: string, authorizerCredentials: string, identitySource: string, identityValidationExpression: string, authorizerResultTtlInSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
@@ -1951,7 +1952,7 @@ export def "test-invoke-authorizer" [
   --body: string # The simulated request body of an incoming invocation request.
   --stage-variables: record # A key-value map of stage variables to simulate an invocation on a deployed Stage.
   --additional-context: record # A key-value map of additional context variables.
-]: any -> record<clientStatus: record, log: record, latency: record, principalId: record, policy: record, authorization: record, claims: record> {
+]: any -> record<clientStatus: int, log: string, latency: int, principalId: string, policy: string, authorization: record, claims: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1982,7 +1983,7 @@ export def "test-invoke-authorizer" [
 #
 # PATCH /restapis/{restapi_id}/authorizers/{authorizer_id}
 # operationId: UpdateAuthorizer
-# --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
+# --patchOperations item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
 export def "update-authorizer" [
   restapi_id: string
   authorizer_id: string
@@ -2002,8 +2003,8 @@ export def "update-authorizer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: any, path?: any, value?: any, from?: any}
-]: any -> record<id: record, name: record, type: record, providerARNs: record, authType: record, authorizerUri: record, authorizerCredentials: record, identitySource: record, identityValidationExpression: record, authorizerResultTtlInSeconds: record> {
+  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
+]: any -> record<id: string, name: string, type: string, providerARNs: list<string>, authType: string, authorizerUri: string, authorizerCredentials: string, identitySource: string, identityValidationExpression: string, authorizerResultTtlInSeconds: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2100,7 +2101,7 @@ export def "get-base-path-mapping" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<basePath: record, restApiId: record, stage: record> {
+]: nothing -> record<basePath: string, restApiId: string, stage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domain_name' must be non-empty" } }
@@ -2128,7 +2129,7 @@ export def "get-base-path-mapping" [
 #
 # PATCH /domainnames/{domain_name}/basepathmappings/{base_path}
 # operationId: UpdateBasePathMapping
-# --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
+# --patchOperations item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
 export def "update-base-path-mapping" [
   domain_name: string
   base_path: string
@@ -2148,8 +2149,8 @@ export def "update-base-path-mapping" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: any, path?: any, value?: any, from?: any}
-]: any -> record<basePath: record, restApiId: record, stage: record> {
+  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
+]: any -> record<basePath: string, restApiId: string, stage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2243,7 +2244,7 @@ export def "get-client-certificate" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<clientCertificateId: record, description: record, pemEncodedCertificate: record, createdDate: record, expirationDate: record, tags: record> {
+]: nothing -> record<clientCertificateId: string, description: string, pemEncodedCertificate: string, createdDate: string, expirationDate: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($clientcertificate_id | is-empty) { error make --unspanned { msg: "path parameter 'clientcertificate_id' must be non-empty" } }
@@ -2270,7 +2271,7 @@ export def "get-client-certificate" [
 #
 # PATCH /clientcertificates/{clientcertificate_id}
 # operationId: UpdateClientCertificate
-# --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
+# --patchOperations item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
 export def "update-client-certificate" [
   clientcertificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2289,8 +2290,8 @@ export def "update-client-certificate" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: any, path?: any, value?: any, from?: any}
-]: any -> record<clientCertificateId: record, description: record, pemEncodedCertificate: record, createdDate: record, expirationDate: record, tags: record> {
+  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
+]: any -> record<clientCertificateId: string, description: string, pemEncodedCertificate: string, createdDate: string, expirationDate: string, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2387,7 +2388,7 @@ export def "get-deployment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<id: record, description: record, createdDate: record, apiSummary: record> {
+]: nothing -> record<id: string, description: string, createdDate: string, apiSummary: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
@@ -2416,7 +2417,7 @@ export def "get-deployment" [
 #
 # PATCH /restapis/{restapi_id}/deployments/{deployment_id}
 # operationId: UpdateDeployment
-# --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
+# --patchOperations item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
 export def "update-deployment" [
   restapi_id: string
   deployment_id: string
@@ -2436,8 +2437,8 @@ export def "update-deployment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: any, path?: any, value?: any, from?: any}
-]: any -> record<id: record, description: record, createdDate: record, apiSummary: record> {
+  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
+]: any -> record<id: string, description: string, createdDate: string, apiSummary: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2534,7 +2535,7 @@ export def "get-documentation-part" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<id: record, location: record<type: record, path: record, method: record, statusCode: record, name: record>, properties: any> {
+]: nothing -> record<id: string, location: record<type: string, path: string, method: string, statusCode: string, name: string>, properties: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
@@ -2562,7 +2563,7 @@ export def "get-documentation-part" [
 #
 # PATCH /restapis/{restapi_id}/documentation/parts/{part_id}
 # operationId: UpdateDocumentationPart
-# --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
+# --patchOperations item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
 export def "update-documentation-part" [
   restapi_id: string
   part_id: string
@@ -2582,8 +2583,8 @@ export def "update-documentation-part" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: any, path?: any, value?: any, from?: any}
-]: any -> record<id: record, location: record<type: record, path: record, method: record, statusCode: record, name: record>, properties: any> {
+  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
+]: any -> record<id: string, location: record<type: string, path: string, method: string, statusCode: string, name: string>, properties: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2680,7 +2681,7 @@ export def "get-documentation-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<version: record, createdDate: record, description: record> {
+]: nothing -> record<version: string, createdDate: string, description: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
@@ -2708,7 +2709,7 @@ export def "get-documentation-version" [
 #
 # PATCH /restapis/{restapi_id}/documentation/versions/{doc_version}
 # operationId: UpdateDocumentationVersion
-# --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
+# --patchOperations item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
 export def "update-documentation-version" [
   restapi_id: string
   doc_version: string
@@ -2728,8 +2729,8 @@ export def "update-documentation-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: any, path?: any, value?: any, from?: any}
-]: any -> record<version: record, createdDate: record, description: record> {
+  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
+]: any -> record<version: string, createdDate: string, description: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2823,7 +2824,7 @@ export def "get-domain-name" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<domainName: record, certificateName: record, certificateArn: record, certificateUploadDate: record, regionalDomainName: record, regionalHostedZoneId: record, regionalCertificateName: record, regionalCertificateArn: record, distributionDomainName: record, distributionHostedZoneId: record, endpointConfiguration: record<types: record, vpcEndpointIds: record>, domainNameStatus: record, domainNameStatusMessage: record, securityPolicy: record, tags: record, mutualTlsAuthentication: record<truststoreUri: record, truststoreVersion: record, truststoreWarnings: record>, ownershipVerificationCertificateArn: record> {
+]: nothing -> record<domainName: string, certificateName: string, certificateArn: string, certificateUploadDate: string, regionalDomainName: string, regionalHostedZoneId: string, regionalCertificateName: string, regionalCertificateArn: string, distributionDomainName: string, distributionHostedZoneId: string, endpointConfiguration: record<types: list<string>, vpcEndpointIds: list<string>>, domainNameStatus: string, domainNameStatusMessage: string, securityPolicy: string, tags: record, mutualTlsAuthentication: record<truststoreUri: string, truststoreVersion: string, truststoreWarnings: list<string>>, ownershipVerificationCertificateArn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domain_name' must be non-empty" } }
@@ -2850,7 +2851,7 @@ export def "get-domain-name" [
 #
 # PATCH /domainnames/{domain_name}
 # operationId: UpdateDomainName
-# --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
+# --patchOperations item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
 export def "update-domain-name" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2869,8 +2870,8 @@ export def "update-domain-name" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: any, path?: any, value?: any, from?: any}
-]: any -> record<domainName: record, certificateName: record, certificateArn: record, certificateUploadDate: record, regionalDomainName: record, regionalHostedZoneId: record, regionalCertificateName: record, regionalCertificateArn: record, distributionDomainName: record, distributionHostedZoneId: record, endpointConfiguration: record<types: record, vpcEndpointIds: record>, domainNameStatus: record, domainNameStatusMessage: record, securityPolicy: record, tags: record, mutualTlsAuthentication: record<truststoreUri: record, truststoreVersion: record, truststoreWarnings: record>, ownershipVerificationCertificateArn: record> {
+  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
+]: any -> record<domainName: string, certificateName: string, certificateArn: string, certificateUploadDate: string, regionalDomainName: string, regionalHostedZoneId: string, regionalCertificateName: string, regionalCertificateArn: string, distributionDomainName: string, distributionHostedZoneId: string, endpointConfiguration: record<types: list<string>, vpcEndpointIds: list<string>>, domainNameStatus: string, domainNameStatusMessage: string, securityPolicy: string, tags: record, mutualTlsAuthentication: record<truststoreUri: string, truststoreVersion: string, truststoreWarnings: list<string>>, ownershipVerificationCertificateArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2902,7 +2903,7 @@ export def "update-domain-name" [
 # operationId: DeleteGatewayResponse
 export def "delete-gateway-response" [
   restapi_id: string
-  response_type: string
+  response_type: string@response-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2949,7 +2950,7 @@ export def "delete-gateway-response" [
 # operationId: GetGatewayResponse
 export def "get-gateway-response" [
   restapi_id: string
-  response_type: string
+  response_type: string@response-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2966,7 +2967,7 @@ export def "get-gateway-response" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<responseType: record, statusCode: record, responseParameters: record, responseTemplates: record, defaultResponse: record> {
+]: nothing -> record<responseType: string, statusCode: string, responseParameters: record, responseTemplates: record, defaultResponse: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
@@ -2996,7 +2997,7 @@ export def "get-gateway-response" [
 # operationId: PutGatewayResponse
 export def "put-gateway-response" [
   restapi_id: string
-  response_type: string
+  response_type: string@response-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3016,7 +3017,7 @@ export def "put-gateway-response" [
   --status-code: string # The status code.
   --response-parameters: record # Response parameters (paths, query strings and headers) of the GatewayResponse as a string-to-string map of key-value pairs.
   --response-templates: record # Response templates of the GatewayResponse as a string-to-string map of key-value pairs.
-]: any -> record<responseType: record, statusCode: record, responseParameters: record, responseTemplates: record, defaultResponse: record> {
+]: any -> record<responseType: string, statusCode: string, responseParameters: record, responseTemplates: record, defaultResponse: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3047,10 +3048,10 @@ export def "put-gateway-response" [
 #
 # PATCH /restapis/{restapi_id}/gatewayresponses/{response_type}
 # operationId: UpdateGatewayResponse
-# --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
+# --patchOperations item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
 export def "update-gateway-response" [
   restapi_id: string
-  response_type: string
+  response_type: string@response-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3067,8 +3068,8 @@ export def "update-gateway-response" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: any, path?: any, value?: any, from?: any}
-]: any -> record<responseType: record, statusCode: record, responseParameters: record, responseTemplates: record, defaultResponse: record> {
+  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
+]: any -> record<responseType: string, statusCode: string, responseParameters: record, responseTemplates: record, defaultResponse: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3168,7 +3169,7 @@ export def "get-integration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<type: record, httpMethod: record, uri: record, connectionType: record, connectionId: record, credentials: record, requestParameters: record, requestTemplates: record, passthroughBehavior: record, contentHandling: record, timeoutInMillis: record, cacheNamespace: record, cacheKeyParameters: record, integrationResponses: record, tlsConfig: record<insecureSkipVerification: record>> {
+]: nothing -> record<type: string, httpMethod: string, uri: string, connectionType: string, connectionId: string, credentials: string, requestParameters: record, requestTemplates: record, passthroughBehavior: string, contentHandling: string, timeoutInMillis: int, cacheNamespace: string, cacheKeyParameters: list<string>, integrationResponses: record, tlsConfig: record<insecureSkipVerification: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
@@ -3197,7 +3198,7 @@ export def "get-integration" [
 #
 # PUT /restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/integration
 # operationId: PutIntegration
-# --tlsConfig shape: {insecureSkipVerification?: any}
+# --tlsConfig shape: {insecureSkipVerification?: bool}
 export def "put-integration" [
   restapi_id: string
   resource_id: string
@@ -3231,8 +3232,8 @@ export def "put-integration" [
   --cache-key-parameters: list<string> # A list of request parameters whose values API Gateway caches. To be valid values for cacheKeyParameters, these parameters must also be specified for Method requestParameters.
   --content-handling: string@content-handling-completer # Specifies how to handle request payload content type conversions. Supported values are CONVERT_TO_BINARY and CONVERT_TO_TEXT, with the following behaviors: If this property is not defined, the request payload will be passed through from the method request to integration request without modification, provided that the passthroughBehavior is configured to support payload pass-through.
   --timeout-in-millis: int # Custom timeout between 50 and 29,000 milliseconds. The default value is 29,000 milliseconds or 29 seconds.
-  --tls-config: record # Specifies the TLS configuration for an integration. — shape: {insecureSkipVerification?: any}
-]: any -> record<type: record, httpMethod: record, uri: record, connectionType: record, connectionId: record, credentials: record, requestParameters: record, requestTemplates: record, passthroughBehavior: record, contentHandling: record, timeoutInMillis: record, cacheNamespace: record, cacheKeyParameters: record, integrationResponses: record, tlsConfig: record<insecureSkipVerification: record>> {
+  --tls-config: record # Specifies the TLS configuration for an integration. — shape: {insecureSkipVerification?: bool}
+]: any -> record<type: string, httpMethod: string, uri: string, connectionType: string, connectionId: string, credentials: string, requestParameters: record, requestTemplates: record, passthroughBehavior: string, contentHandling: string, timeoutInMillis: int, cacheNamespace: string, cacheKeyParameters: list<string>, integrationResponses: record, tlsConfig: record<insecureSkipVerification: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3264,7 +3265,7 @@ export def "put-integration" [
 #
 # PATCH /restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/integration
 # operationId: UpdateIntegration
-# --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
+# --patchOperations item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
 export def "update-integration" [
   restapi_id: string
   resource_id: string
@@ -3285,8 +3286,8 @@ export def "update-integration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: any, path?: any, value?: any, from?: any}
-]: any -> record<type: record, httpMethod: record, uri: record, connectionType: record, connectionId: record, credentials: record, requestParameters: record, requestTemplates: record, passthroughBehavior: record, contentHandling: record, timeoutInMillis: record, cacheNamespace: record, cacheKeyParameters: record, integrationResponses: record, tlsConfig: record<insecureSkipVerification: record>> {
+  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
+]: any -> record<type: string, httpMethod: string, uri: string, connectionType: string, connectionId: string, credentials: string, requestParameters: record, requestTemplates: record, passthroughBehavior: string, contentHandling: string, timeoutInMillis: int, cacheNamespace: string, cacheKeyParameters: list<string>, integrationResponses: record, tlsConfig: record<insecureSkipVerification: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3390,7 +3391,7 @@ export def "get-integration-response" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<statusCode: record, selectionPattern: record, responseParameters: record, responseTemplates: record, contentHandling: record> {
+]: nothing -> record<statusCode: string, selectionPattern: string, responseParameters: record, responseTemplates: record, contentHandling: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
@@ -3445,7 +3446,7 @@ export def "put-integration-response" [
   --response-parameters: record # A key-value map specifying response parameters that are passed to the method response from the back end. The key is a method response header parameter name and the mapped value is an integration response header value, a static value enclosed within a pair of single quotes, or a JSON expression from the integration response body. The mapping key must match the pattern of method.response.header.{name}, where name is a valid and unique header name. The mapped non-static value must match the pattern of integration.response.header.{name} or integration.response.body.{JSON-expression}, where name must be a valid and unique response header name and JSON-expression a valid JSON expression without the $ prefix.
   --response-templates: record # Specifies a put integration response's templates.
   --content-handling: string@content-handling-completer # Specifies how to handle response payload content type conversions. Supported values are CONVERT_TO_BINARY and CONVERT_TO_TEXT, with the following behaviors: If this property is not defined, the response payload will be passed through from the integration response to the method response without modification.
-]: any -> record<statusCode: record, selectionPattern: record, responseParameters: record, responseTemplates: record, contentHandling: record> {
+]: any -> record<statusCode: string, selectionPattern: string, responseParameters: record, responseTemplates: record, contentHandling: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3478,7 +3479,7 @@ export def "put-integration-response" [
 #
 # PATCH /restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/integration/responses/{status_code}
 # operationId: UpdateIntegrationResponse
-# --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
+# --patchOperations item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
 export def "update-integration-response" [
   restapi_id: string
   resource_id: string
@@ -3500,8 +3501,8 @@ export def "update-integration-response" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: any, path?: any, value?: any, from?: any}
-]: any -> record<statusCode: record, selectionPattern: record, responseParameters: record, responseTemplates: record, contentHandling: record> {
+  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
+]: any -> record<statusCode: string, selectionPattern: string, responseParameters: record, responseTemplates: record, contentHandling: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3603,7 +3604,7 @@ export def "get-method" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<httpMethod: record, authorizationType: record, authorizerId: record, apiKeyRequired: record, requestValidatorId: record, operationName: record, requestParameters: record, requestModels: record, methodResponses: record, methodIntegration: record<type: record, httpMethod: record, uri: record, connectionType: record, connectionId: record, credentials: record, requestParameters: record, requestTemplates: record, passthroughBehavior: record, contentHandling: record, timeoutInMillis: record, cacheNamespace: record, cacheKeyParameters: record, integrationResponses: record, tlsConfig: record<insecureSkipVerification: record>>, authorizationScopes: record> {
+]: nothing -> record<httpMethod: string, authorizationType: string, authorizerId: string, apiKeyRequired: bool, requestValidatorId: string, operationName: string, requestParameters: record, requestModels: record, methodResponses: record, methodIntegration: record<type: string, httpMethod: string, uri: string, connectionType: string, connectionId: string, credentials: string, requestParameters: record, requestTemplates: record, passthroughBehavior: string, contentHandling: string, timeoutInMillis: int, cacheNamespace: string, cacheKeyParameters: list<string>, integrationResponses: record, tlsConfig: record<insecureSkipVerification: bool>>, authorizationScopes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
@@ -3660,7 +3661,7 @@ export def "put-method" [
   --request-models: record # Specifies the Model resources used for the request's content type. Request models are represented as a key/value map, with a content type as the key and a Model name as the value.
   --request-validator-id: string # The identifier of a RequestValidator for validating the method request.
   --authorization-scopes: list<string> # A list of authorization scopes configured on the method. The scopes are used with a COGNITO_USER_POOLS authorizer to authorize the method invocation. The authorization works by matching the method scopes against the scopes parsed from the access token in the incoming request. The method invocation is authorized if any method scopes matches a claimed scope in the access token. Otherwise, the invocation is not authorized. When the method scope is configured, the client must provide an access token instead of an identity token for authorization purposes.
-]: any -> record<httpMethod: record, authorizationType: record, authorizerId: record, apiKeyRequired: record, requestValidatorId: record, operationName: record, requestParameters: record, requestModels: record, methodResponses: record, methodIntegration: record<type: record, httpMethod: record, uri: record, connectionType: record, connectionId: record, credentials: record, requestParameters: record, requestTemplates: record, passthroughBehavior: record, contentHandling: record, timeoutInMillis: record, cacheNamespace: record, cacheKeyParameters: record, integrationResponses: record, tlsConfig: record<insecureSkipVerification: record>>, authorizationScopes: record> {
+]: any -> record<httpMethod: string, authorizationType: string, authorizerId: string, apiKeyRequired: bool, requestValidatorId: string, operationName: string, requestParameters: record, requestModels: record, methodResponses: record, methodIntegration: record<type: string, httpMethod: string, uri: string, connectionType: string, connectionId: string, credentials: string, requestParameters: record, requestTemplates: record, passthroughBehavior: string, contentHandling: string, timeoutInMillis: int, cacheNamespace: string, cacheKeyParameters: list<string>, integrationResponses: record, tlsConfig: record<insecureSkipVerification: bool>>, authorizationScopes: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3718,7 +3719,7 @@ export def "test-invoke-method" [
   --multi-value-headers: record # The headers as a map from string to list of values to simulate an incoming invocation request.
   --client-certificate-id: string # A ClientCertificate identifier to use in the test invocation. API Gateway will use the certificate when making the HTTPS request to the defined back-end endpoint.
   --stage-variables: record # A key-value map of stage variables to simulate an invocation on a deployed Stage.
-]: any -> record<status: record, body: record, headers: record, multiValueHeaders: record, log: record, latency: record> {
+]: any -> record<status: int, body: string, headers: record, multiValueHeaders: record, log: string, latency: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3750,7 +3751,7 @@ export def "test-invoke-method" [
 #
 # PATCH /restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}
 # operationId: UpdateMethod
-# --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
+# --patchOperations item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
 export def "update-method" [
   restapi_id: string
   resource_id: string
@@ -3771,8 +3772,8 @@ export def "update-method" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: any, path?: any, value?: any, from?: any}
-]: any -> record<httpMethod: record, authorizationType: record, authorizerId: record, apiKeyRequired: record, requestValidatorId: record, operationName: record, requestParameters: record, requestModels: record, methodResponses: record, methodIntegration: record<type: record, httpMethod: record, uri: record, connectionType: record, connectionId: record, credentials: record, requestParameters: record, requestTemplates: record, passthroughBehavior: record, contentHandling: record, timeoutInMillis: record, cacheNamespace: record, cacheKeyParameters: record, integrationResponses: record, tlsConfig: record<insecureSkipVerification: record>>, authorizationScopes: record> {
+  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
+]: any -> record<httpMethod: string, authorizationType: string, authorizerId: string, apiKeyRequired: bool, requestValidatorId: string, operationName: string, requestParameters: record, requestModels: record, methodResponses: record, methodIntegration: record<type: string, httpMethod: string, uri: string, connectionType: string, connectionId: string, credentials: string, requestParameters: record, requestTemplates: record, passthroughBehavior: string, contentHandling: string, timeoutInMillis: int, cacheNamespace: string, cacheKeyParameters: list<string>, integrationResponses: record, tlsConfig: record<insecureSkipVerification: bool>>, authorizationScopes: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3876,7 +3877,7 @@ export def "get-method-response" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<statusCode: record, responseParameters: record, responseModels: record> {
+]: nothing -> record<statusCode: string, responseParameters: record, responseModels: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
@@ -3929,7 +3930,7 @@ export def "put-method-response" [
   --x-amz-signed-headers: string
   --response-parameters: record # A key-value map specifying required or optional response parameters that API Gateway can send back to the caller. A key defines a method response header name and the associated value is a Boolean flag indicating whether the method response parameter is required or not. The method response header names must match the pattern of method.response.header.{name}, where name is a valid and unique header name. The response parameter names defined here are available in the integration response to be mapped from an integration response header expressed in integration.response.header.{name}, a static value enclosed within a pair of single quotes (e.g., 'application/json'), or a JSON expression from the back-end response payload in the form of integration.response.body.{JSON-expression}, where JSON-expression is a valid JSON expression without the $ prefix.)
   --response-models: record # Specifies the Model resources used for the response's content type. Response models are represented as a key/value map, with a content type as the key and a Model name as the value.
-]: any -> record<statusCode: record, responseParameters: record, responseModels: record> {
+]: any -> record<statusCode: string, responseParameters: record, responseModels: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3962,7 +3963,7 @@ export def "put-method-response" [
 #
 # PATCH /restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/responses/{status_code}
 # operationId: UpdateMethodResponse
-# --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
+# --patchOperations item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
 export def "update-method-response" [
   restapi_id: string
   resource_id: string
@@ -3984,8 +3985,8 @@ export def "update-method-response" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: any, path?: any, value?: any, from?: any}
-]: any -> record<statusCode: record, responseParameters: record, responseModels: record> {
+  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
+]: any -> record<statusCode: string, responseParameters: record, responseModels: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4085,7 +4086,7 @@ export def "get-model" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<id: record, name: record, description: record, schema: record, contentType: record> {
+]: nothing -> record<id: string, name: string, description: string, schema: string, contentType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
@@ -4114,7 +4115,7 @@ export def "get-model" [
 #
 # PATCH /restapis/{restapi_id}/models/{model_name}
 # operationId: UpdateModel
-# --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
+# --patchOperations item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
 export def "update-model" [
   restapi_id: string
   model_name: string
@@ -4134,8 +4135,8 @@ export def "update-model" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: any, path?: any, value?: any, from?: any}
-]: any -> record<id: record, name: record, description: record, schema: record, contentType: record> {
+  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
+]: any -> record<id: string, name: string, description: string, schema: string, contentType: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4232,7 +4233,7 @@ export def "get-request-validator" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<id: record, name: record, validateRequestBody: record, validateRequestParameters: record> {
+]: nothing -> record<id: string, name: string, validateRequestBody: bool, validateRequestParameters: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
@@ -4260,7 +4261,7 @@ export def "get-request-validator" [
 #
 # PATCH /restapis/{restapi_id}/requestvalidators/{requestvalidator_id}
 # operationId: UpdateRequestValidator
-# --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
+# --patchOperations item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
 export def "update-request-validator" [
   restapi_id: string
   requestvalidator_id: string
@@ -4280,8 +4281,8 @@ export def "update-request-validator" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: any, path?: any, value?: any, from?: any}
-]: any -> record<id: record, name: record, validateRequestBody: record, validateRequestParameters: record> {
+  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
+]: any -> record<id: string, name: string, validateRequestBody: bool, validateRequestParameters: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4379,7 +4380,7 @@ export def "get-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<id: record, parentId: record, pathPart: record, path: record, resourceMethods: record> {
+]: nothing -> record<id: string, parentId: string, pathPart: string, path: string, resourceMethods: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
@@ -4408,7 +4409,7 @@ export def "get-resource" [
 #
 # PATCH /restapis/{restapi_id}/resources/{resource_id}
 # operationId: UpdateResource
-# --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
+# --patchOperations item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
 export def "update-resource" [
   restapi_id: string
   resource_id: string
@@ -4428,8 +4429,8 @@ export def "update-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: any, path?: any, value?: any, from?: any}
-]: any -> record<id: record, parentId: record, pathPart: record, path: record, resourceMethods: record> {
+  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
+]: any -> record<id: string, parentId: string, pathPart: string, path: string, resourceMethods: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4523,7 +4524,7 @@ export def "get-rest-api" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<id: record, name: record, description: record, createdDate: record, version: record, warnings: record, binaryMediaTypes: record, minimumCompressionSize: record, apiKeySource: record, endpointConfiguration: record<types: record, vpcEndpointIds: record>, policy: record, tags: record, disableExecuteApiEndpoint: record> {
+]: nothing -> record<id: string, name: string, description: string, createdDate: string, version: string, warnings: list<string>, binaryMediaTypes: list<string>, minimumCompressionSize: int, apiKeySource: string, endpointConfiguration: record<types: list<string>, vpcEndpointIds: list<string>>, policy: string, tags: record, disableExecuteApiEndpoint: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
@@ -4572,7 +4573,7 @@ export def "put-rest-api" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   body: string # The PUT request body containing external API definitions. Currently, only OpenAPI definition JSON/YAML files are supported. The maximum size of the API definition file is 6MB.
-]: any -> record<id: record, name: record, description: record, createdDate: record, version: record, warnings: record, binaryMediaTypes: record, minimumCompressionSize: record, apiKeySource: record, endpointConfiguration: record<types: record, vpcEndpointIds: record>, policy: record, tags: record, disableExecuteApiEndpoint: record> {
+]: any -> record<id: string, name: string, description: string, createdDate: string, version: string, warnings: list<string>, binaryMediaTypes: list<string>, minimumCompressionSize: int, apiKeySource: string, endpointConfiguration: record<types: list<string>, vpcEndpointIds: list<string>>, policy: string, tags: record, disableExecuteApiEndpoint: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4603,7 +4604,7 @@ export def "put-rest-api" [
 #
 # PATCH /restapis/{restapi_id}
 # operationId: UpdateRestApi
-# --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
+# --patchOperations item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
 export def "update-rest-api" [
   restapi_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4622,8 +4623,8 @@ export def "update-rest-api" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: any, path?: any, value?: any, from?: any}
-]: any -> record<id: record, name: record, description: record, createdDate: record, version: record, warnings: record, binaryMediaTypes: record, minimumCompressionSize: record, apiKeySource: record, endpointConfiguration: record<types: record, vpcEndpointIds: record>, policy: record, tags: record, disableExecuteApiEndpoint: record> {
+  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
+]: any -> record<id: string, name: string, description: string, createdDate: string, version: string, warnings: list<string>, binaryMediaTypes: list<string>, minimumCompressionSize: int, apiKeySource: string, endpointConfiguration: record<types: list<string>, vpcEndpointIds: list<string>>, policy: string, tags: record, disableExecuteApiEndpoint: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4719,7 +4720,7 @@ export def "get-stage" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<deploymentId: record, clientCertificateId: record, stageName: record, description: record, cacheClusterEnabled: record, cacheClusterSize: record, cacheClusterStatus: record, methodSettings: record, variables: record, documentationVersion: record, accessLogSettings: record<format: record, destinationArn: record>, canarySettings: record<percentTraffic: record, deploymentId: record, stageVariableOverrides: record, useStageCache: record>, tracingEnabled: record, webAclArn: record, tags: record, createdDate: record, lastUpdatedDate: record> {
+]: nothing -> record<deploymentId: string, clientCertificateId: string, stageName: string, description: string, cacheClusterEnabled: bool, cacheClusterSize: string, cacheClusterStatus: string, methodSettings: record, variables: record, documentationVersion: string, accessLogSettings: record<format: string, destinationArn: string>, canarySettings: record<percentTraffic: float, deploymentId: string, stageVariableOverrides: record, useStageCache: bool>, tracingEnabled: bool, webAclArn: string, tags: record, createdDate: string, lastUpdatedDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
@@ -4747,7 +4748,7 @@ export def "get-stage" [
 #
 # PATCH /restapis/{restapi_id}/stages/{stage_name}
 # operationId: UpdateStage
-# --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
+# --patchOperations item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
 export def "update-stage" [
   restapi_id: string
   stage_name: string
@@ -4767,8 +4768,8 @@ export def "update-stage" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: any, path?: any, value?: any, from?: any}
-]: any -> record<deploymentId: record, clientCertificateId: record, stageName: record, description: record, cacheClusterEnabled: record, cacheClusterSize: record, cacheClusterStatus: record, methodSettings: record, variables: record, documentationVersion: record, accessLogSettings: record<format: record, destinationArn: record>, canarySettings: record<percentTraffic: record, deploymentId: record, stageVariableOverrides: record, useStageCache: record>, tracingEnabled: record, webAclArn: record, tags: record, createdDate: record, lastUpdatedDate: record> {
+  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
+]: any -> record<deploymentId: string, clientCertificateId: string, stageName: string, description: string, cacheClusterEnabled: bool, cacheClusterSize: string, cacheClusterStatus: string, methodSettings: record, variables: record, documentationVersion: string, accessLogSettings: record<format: string, destinationArn: string>, canarySettings: record<percentTraffic: float, deploymentId: string, stageVariableOverrides: record, useStageCache: bool>, tracingEnabled: bool, webAclArn: string, tags: record, createdDate: string, lastUpdatedDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4862,7 +4863,7 @@ export def "get-usage-plan" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<id: record, name: record, description: record, apiStages: record, throttle: record<burstLimit: record, rateLimit: record>, quota: record<limit: record, offset: record, period: record>, productCode: record, tags: record> {
+]: nothing -> record<id: string, name: string, description: string, apiStages: table<apiId: string, stage: string, throttle: record>, throttle: record<burstLimit: int, rateLimit: float>, quota: record<limit: int, offset: int, period: string>, productCode: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($usageplan_id | is-empty) { error make --unspanned { msg: "path parameter 'usageplanId' must be non-empty" } }
@@ -4889,7 +4890,7 @@ export def "get-usage-plan" [
 #
 # PATCH /usageplans/{usageplanId}
 # operationId: UpdateUsagePlan
-# --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
+# --patchOperations item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
 export def "update-usage-plan" [
   usageplan_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4908,8 +4909,8 @@ export def "update-usage-plan" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: any, path?: any, value?: any, from?: any}
-]: any -> record<id: record, name: record, description: record, apiStages: record, throttle: record<burstLimit: record, rateLimit: record>, quota: record<limit: record, offset: record, period: record>, productCode: record, tags: record> {
+  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
+]: any -> record<id: string, name: string, description: string, apiStages: table<apiId: string, stage: string, throttle: record>, throttle: record<burstLimit: int, rateLimit: float>, quota: record<limit: int, offset: int, period: string>, productCode: string, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5005,7 +5006,7 @@ export def "get-usage-plan-key" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<id: record, type: record, value: record, name: record> {
+]: nothing -> record<id: string, type: string, value: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($usageplan_id | is-empty) { error make --unspanned { msg: "path parameter 'usageplanId' must be non-empty" } }
@@ -5096,7 +5097,7 @@ export def "get-vpc-link" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<id: record, name: record, description: record, targetArns: record, status: record, statusMessage: record, tags: record> {
+]: nothing -> record<id: string, name: string, description: string, targetArns: list<string>, status: string, statusMessage: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($vpclink_id | is-empty) { error make --unspanned { msg: "path parameter 'vpclink_id' must be non-empty" } }
@@ -5123,7 +5124,7 @@ export def "get-vpc-link" [
 #
 # PATCH /vpclinks/{vpclink_id}
 # operationId: UpdateVpcLink
-# --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
+# --patchOperations item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
 export def "update-vpc-link" [
   vpclink_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5142,8 +5143,8 @@ export def "update-vpc-link" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: any, path?: any, value?: any, from?: any}
-]: any -> record<id: record, name: record, description: record, targetArns: record, status: record, statusMessage: record, tags: record> {
+  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
+]: any -> record<id: string, name: string, description: string, targetArns: list<string>, status: string, statusMessage: string, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5286,7 +5287,7 @@ export def "generate-client-certificate" [
   --x-amz-signed-headers: string
   --description: string # The description of the ClientCertificate.
   --tags: record # The key-value map of strings. The valid character set is [a-zA-Z+-=._:/]. The tag key can be up to 128 characters and must not start with aws:. The tag value can be up to 256 characters.
-]: any -> record<clientCertificateId: record, description: record, pemEncodedCertificate: record, createdDate: record, expirationDate: record, tags: record> {
+]: any -> record<clientCertificateId: string, description: string, pemEncodedCertificate: string, createdDate: string, expirationDate: string, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5334,7 +5335,7 @@ export def "get-client-certificates" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<position: string, items: record> {
+]: nothing -> record<position: string, items: table<clientCertificateId: string, description: string, pemEncodedCertificate: string, createdDate: string, expirationDate: string, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "position" $position "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -5378,7 +5379,7 @@ export def "get-account" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<cloudwatchRoleArn: record, throttleSettings: record<burstLimit: record, rateLimit: record>, features: record, apiKeyVersion: record> {
+]: nothing -> record<cloudwatchRoleArn: string, throttleSettings: record<burstLimit: int, rateLimit: float>, features: list<string>, apiKeyVersion: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account" $auth.query)
@@ -5404,7 +5405,7 @@ export def "get-account" [
 #
 # PATCH /account
 # operationId: UpdateAccount
-# --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
+# --patchOperations item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
 export def "update-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5422,8 +5423,8 @@ export def "update-account" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: any, path?: any, value?: any, from?: any}
-]: any -> record<cloudwatchRoleArn: record, throttleSettings: record<burstLimit: record, rateLimit: record>, features: record, apiKeyVersion: record> {
+  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
+]: any -> record<cloudwatchRoleArn: string, throttleSettings: record<burstLimit: int, rateLimit: float>, features: list<string>, apiKeyVersion: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5474,7 +5475,7 @@ export def "get-export" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --hdr-accept: string # The content-type of the export, for example application/json. Currently application/json and application/yaml are supported for exportType ofoas30 and swagger. This should be specified in the Accept header for direct API requests.
-]: nothing -> record<body: record> {
+]: nothing -> record<body: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
@@ -5524,7 +5525,7 @@ export def "get-gateway-responses" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<position: string, items: record> {
+]: nothing -> record<position: string, items: table<responseType: string, statusCode: string, responseParameters: record, responseTemplates: record, defaultResponse: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
@@ -5571,7 +5572,7 @@ export def "get-model-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<value: record> {
+]: nothing -> record<value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
@@ -5620,7 +5621,7 @@ export def "get-resources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<position: string, items: record> {
+]: nothing -> record<position: string, items: table<id: string, parentId: string, pathPart: string, path: string, resourceMethods: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
@@ -5669,7 +5670,7 @@ export def "get-sdk" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<body: record> {
+]: nothing -> record<body: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($restapi_id | is-empty) { error make --unspanned { msg: "path parameter 'restapi_id' must be non-empty" } }
@@ -5717,7 +5718,7 @@ export def "get-sdk-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<id: record, friendlyName: record, description: record, configurationProperties: record> {
+]: nothing -> record<id: string, friendlyName: string, description: string, configurationProperties: table<name: string, friendlyName: string, description: string, required: bool, defaultValue: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sdktype_id | is-empty) { error make --unspanned { msg: "path parameter 'sdktype_id' must be non-empty" } }
@@ -5763,7 +5764,7 @@ export def "get-sdk-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<position: string, items: record> {
+]: nothing -> record<position: string, items: table<id: string, friendlyName: string, description: string, configurationProperties: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "position" $position "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -5899,8 +5900,8 @@ export def "get-usage" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key-id: string # The Id of the API key associated with the resultant usage data.
-  --start-date: string # The starting date (e.g., 2016-01-01) of the usage data.
-  --end-date: string # The ending date (e.g., 2016-12-31) of the usage data.
+  --start-date: string # The starting date (e.g., 2016-01-01) of the usage data. (required)
+  --end-date: string # The ending date (e.g., 2016-12-31) of the usage data. (required)
   --position: string # The current pagination position in the paged result set.
   --limit: int # The maximum number of returned results per page. The default value is 25 and the maximum value is 500.
   --x-amz-content-sha256: string
@@ -5910,10 +5911,12 @@ export def "get-usage" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<usagePlanId: record, startDate: record, endDate: record, position: string, items: record> {
+]: nothing -> record<usagePlanId: string, startDate: string, endDate: string, position: string, items: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($usageplan_id | is-empty) { error make --unspanned { msg: "path parameter 'usageplanId' must be non-empty" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'startDate' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'endDate' missing: pass --end-date" } }
   let qp = [(serialize-qp "keyId" $key_id "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({usageplan_id: (encode-path-segment $usageplan_id)} | format pattern "/usageplans/{usageplan_id}/usage") $qp $auth.query)
   let accept_val = "application/json"
@@ -5948,9 +5951,9 @@ export def "import-api-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --format: string@format-completer # A query parameter to specify the input format to imported API keys. Currently, only the csv format is supported.
+  --format: string@format-completer # A query parameter to specify the input format to imported API keys. Currently, only the csv format is supported. (required)
   --failonwarnings: oneof<nothing, bool> # A query parameter to indicate whether to rollback ApiKey importation (true) or not (false) when error is encountered.
-  --mode: string@mode-completer-1
+  --mode: string@mode-completer-1 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5959,10 +5962,12 @@ export def "import-api-keys" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   body: string # The payload of the POST request to import API keys. For the payload format, see API Key File Format.
-]: any -> record<ids: record, warnings: record> {
+]: any -> record<ids: list<string>, warnings: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let format = ($format | default "csv")
+  let mode = ($mode | default "import")
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "failonwarnings" $failonwarnings "scalar") (serialize-qp "mode" $mode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apikeys" $qp $auth.query)
   let req_body = {"body": $body} | compact
@@ -6001,7 +6006,7 @@ export def "import-rest-api" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --failonwarnings: oneof<nothing, bool> # A query parameter to indicate whether to rollback the API creation (true) or not (false) when a warning is encountered. The default value is false.
   --parameters: record # A key-value map of context-specific query string parameters specifying the behavior of different API importing operations. The following shows operation-specific parameters and their supported values. To exclude DocumentationParts from the import, set parameters as ignore=documentation. To configure the endpoint type, set parameters as endpointConfigurationTypes=EDGE, endpointConfigurationTypes=REGIONAL, or endpointConfigurationTypes=PRIVATE. The default endpoint type is EDGE. To handle imported basepath, set parameters as basepath=ignore, basepath=prepend or basepath=split. For example, the AWS CLI command to exclude documentation from the imported API is: The AWS CLI command to set the regional endpoint on the imported API is:
-  --mode: string@mode-completer-1
+  --mode: string@mode-completer-1 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6010,10 +6015,11 @@ export def "import-rest-api" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   body: string # The POST request body containing external API definitions. Currently, only OpenAPI definition JSON/YAML files are supported. The maximum size of the API definition file is 6MB.
-]: any -> record<id: record, name: record, description: record, createdDate: record, version: record, warnings: record, binaryMediaTypes: record, minimumCompressionSize: record, apiKeySource: record, endpointConfiguration: record<types: record, vpcEndpointIds: record>, policy: record, tags: record, disableExecuteApiEndpoint: record> {
+]: any -> record<id: string, name: string, description: string, createdDate: string, version: string, warnings: list<string>, binaryMediaTypes: list<string>, minimumCompressionSize: int, apiKeySource: string, endpointConfiguration: record<types: list<string>, vpcEndpointIds: list<string>>, policy: string, tags: record, disableExecuteApiEndpoint: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let mode = ($mode | default "import")
   let qp = [(serialize-qp "failonwarnings" $failonwarnings "scalar") (serialize-qp "parameters" $parameters "multi") (serialize-qp "mode" $mode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/restapis" $qp $auth.query)
   let req_body = {"body": $body} | compact
@@ -6051,7 +6057,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # The Tag keys to delete.
+  --tag-keys: list # The Tag keys to delete. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6063,6 +6069,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resource_arn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"
@@ -6087,7 +6094,7 @@ export def "untag-resource" [
 #
 # PATCH /usageplans/{usageplanId}/keys/{keyId}/usage
 # operationId: UpdateUsage
-# --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
+# --patchOperations item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
 export def "update-usage" [
   usageplan_id: string
   key_id: string
@@ -6107,8 +6114,8 @@ export def "update-usage" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: any, path?: any, value?: any, from?: any}
-]: any -> record<usagePlanId: record, startDate: record, endDate: record, position: string, items: record> {
+  --patch-operations: list # A list of operations describing the updates to apply to the specified resource. The patches are applied in the order specified in the list. — item shape: {op?: "add"|"remove"|"replace"|"move"|"copy"|"test", path?: string, value?: string, from?: string}
+]: any -> record<usagePlanId: string, startDate: string, endDate: string, position: string, items: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

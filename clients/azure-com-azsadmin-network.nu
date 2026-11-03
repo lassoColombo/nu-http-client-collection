@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -132,10 +132,11 @@ export def "on-prem-locations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2015-06-15)
+  --api-version: string # Client API Version. (required, default: 2015-06-15)
 ]: nothing -> record<nextLink: string, value: table<name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let api_version = ($api_version | default "2015-06-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Network.Admin/locations" $qp $auth.query)
   let accept_val = "application/json"
@@ -169,11 +170,12 @@ export def "locations-operation-results-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2015-06-15)
+  --api-version: string # Client API Version. (required, default: 2015-06-15)
 ]: nothing -> record<nextLink: string, value: table<name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  let api_version = ($api_version | default "2015-06-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({location: (encode-path-segment $location)} | format pattern "/providers/Microsoft.Network.Admin/locations/{location}/operationResults") $qp $auth.query)
   let accept_val = "application/json"
@@ -207,11 +209,12 @@ export def "locations-operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2015-06-15)
+  --api-version: string # Client API Version. (required, default: 2015-06-15)
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  let api_version = ($api_version | default "2015-06-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({location: (encode-path-segment $location)} | format pattern "/providers/Microsoft.Network.Admin/locations/{location}/operations") $qp $auth.query)
   let accept_val = "application/json"
@@ -244,10 +247,11 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2015-06-15)
+  --api-version: string # Client API Version. (required, default: 2015-06-15)
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let api_version = ($api_version | default "2015-06-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Network.Admin/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -281,11 +285,12 @@ export def "resource-provider-state-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2015-06-15)
+  --api-version: string # Client API Version. (required, default: 2015-06-15)
 ]: nothing -> record<properties: record<backendIpUsage: record<inUseResourceCount: int, totalResourceCount: int>, loadBalancerMuxHealth: record<errorResourceCount: int, healthUnknownCount: int, healthyResourceCount: int, totalResourceCount: int, warningResourceCount: int>, macAddressUsage: record<inUseResourceCount: int, totalResourceCount: int>, provisioningState: string, publicIpAddressUsage: record<inUseResourceCount: int, totalResourceCount: int>, virtualGatewayHealth: record<errorResourceCount: int, healthUnknownCount: int, healthyResourceCount: int, totalResourceCount: int, warningResourceCount: int>, virtualNetworkHealth: record<errorResourceCount: int, healthUnknownCount: int, healthyResourceCount: int, totalResourceCount: int, warningResourceCount: int>>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  let api_version = ($api_version | default "2015-06-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network.Admin/adminOverview") $qp $auth.query)
   let accept_val = "application/json"

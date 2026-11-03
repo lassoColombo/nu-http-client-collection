@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -103,6 +103,7 @@ def x-amz-target-completer-3 [] { ["MTurkRequesterServiceV20170117.CreateAdditio
 def x-amz-target-completer-4 [] { ["MTurkRequesterServiceV20170117.CreateHIT"] }
 def x-amz-target-completer-5 [] { ["MTurkRequesterServiceV20170117.CreateHITType"] }
 def x-amz-target-completer-6 [] { ["MTurkRequesterServiceV20170117.CreateHITWithHITType"] }
+def qualification-type-status-completer [] { ["Active" "Inactive"] }
 def x-amz-target-completer-7 [] { ["MTurkRequesterServiceV20170117.CreateQualificationType"] }
 def x-amz-target-completer-8 [] { ["MTurkRequesterServiceV20170117.CreateWorkerBlock"] }
 def x-amz-target-completer-9 [] { ["MTurkRequesterServiceV20170117.DeleteHIT"] }
@@ -122,13 +123,16 @@ def x-amz-target-completer-22 [] { ["MTurkRequesterServiceV20170117.ListHITsForQ
 def x-amz-target-completer-23 [] { ["MTurkRequesterServiceV20170117.ListQualificationRequests"] }
 def x-amz-target-completer-24 [] { ["MTurkRequesterServiceV20170117.ListQualificationTypes"] }
 def x-amz-target-completer-25 [] { ["MTurkRequesterServiceV20170117.ListReviewPolicyResultsForHIT"] }
+def status-completer [] { ["Reviewable" "Reviewing"] }
 def x-amz-target-completer-26 [] { ["MTurkRequesterServiceV20170117.ListReviewableHITs"] }
 def x-amz-target-completer-27 [] { ["MTurkRequesterServiceV20170117.ListWorkerBlocks"] }
+def status-completer-1 [] { ["Granted" "Revoked"] }
 def x-amz-target-completer-28 [] { ["MTurkRequesterServiceV20170117.ListWorkersWithQualificationType"] }
 def x-amz-target-completer-29 [] { ["MTurkRequesterServiceV20170117.NotifyWorkers"] }
 def x-amz-target-completer-30 [] { ["MTurkRequesterServiceV20170117.RejectAssignment"] }
 def x-amz-target-completer-31 [] { ["MTurkRequesterServiceV20170117.RejectQualificationRequest"] }
 def x-amz-target-completer-32 [] { ["MTurkRequesterServiceV20170117.SendBonus"] }
+def test-event-type-completer [] { ["AssignmentAbandoned" "AssignmentAccepted" "AssignmentApproved" "AssignmentRejected" "AssignmentReturned" "AssignmentSubmitted" "HITCreated" "HITDisposed" "HITExpired" "HITExtended" "HITReviewable" "Ping"] }
 def x-amz-target-completer-33 [] { ["MTurkRequesterServiceV20170117.SendTestEventNotification"] }
 def x-amz-target-completer-34 [] { ["MTurkRequesterServiceV20170117.UpdateExpirationForHIT"] }
 def x-amz-target-completer-35 [] { ["MTurkRequesterServiceV20170117.UpdateHITReviewStatus"] }
@@ -180,13 +184,14 @@ export def "accept-qualification-request" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  qualification_request_id: any
-  --integer-value: any
+  --x-amz-target: string@x-amz-target-completer # required
+  qualification_request_id: string # The ID of the Qualification request, as returned by the GetQualificationRequests operation.
+  --integer-value: int # The value of the Qualification. You can omit this value if you are using the presence or absence of the Qualification as the basis for a HIT requirement.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MTurkRequesterServiceV20170117.AcceptQualificationRequest")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"QualificationRequestId": $qualification_request_id, "IntegerValue": $integer_value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -229,14 +234,15 @@ export def "approve-assignment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  assignment_id: any
-  --requester-feedback: any
-  --override-rejection: any
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  assignment_id: string # The ID of the assignment. The assignment must correspond to a HIT created by the Requester.
+  --requester-feedback: string # A message for the Worker, which the Worker can see in the Status section of the web site.
+  --override-rejection: oneof<nothing, bool> # A flag indicating that an assignment should be approved even if it was previously rejected. Defaults to False.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MTurkRequesterServiceV20170117.ApproveAssignment")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AssignmentId": $assignment_id, "RequesterFeedback": $requester_feedback, "OverrideRejection": $override_rejection} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -279,15 +285,16 @@ export def "associate-qualification-with-worker" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  qualification_type_id: any
-  worker_id: any
-  --integer-value: any
-  --send-notification: any
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  qualification_type_id: string # The ID of the Qualification type to use for the assigned Qualification.
+  worker_id: string # The ID of the Worker to whom the Qualification is being assigned. Worker IDs are included with submitted HIT assignments and Qualification requests.
+  --integer-value: int # The value of the Qualification to assign.
+  --send-notification: oneof<nothing, bool> # Specifies whether to send a notification email message to the Worker saying that the qualification was assigned to the Worker. Note: this is true by default.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MTurkRequesterServiceV20170117.AssociateQualificationWithWorker")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"QualificationTypeId": $qualification_type_id, "WorkerId": $worker_id, "IntegerValue": $integer_value, "SendNotification": $send_notification} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -330,14 +337,15 @@ export def "create-additional-assignments-for-hit" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  hit_id: any
-  number_of_additional_assignments: any
-  --unique-request-token: any
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  hit_id: string # The ID of the HIT to extend.
+  number_of_additional_assignments: int # The number of additional assignments to request for this HIT.
+  --unique-request-token: string # A unique identifier for this request, which allows you to retry the call on error without extending the HIT multiple times. This is useful in cases such as network timeouts where it is unclear whether or not the call succeeded on the server. If the extend HIT already exists in the system from a previous call using the same UniqueRequestToken, subsequent calls will return an error with a message containing the request ID.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MTurkRequesterServiceV20170117.CreateAdditionalAssignmentsForHIT")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"HITId": $hit_id, "NumberOfAdditionalAssignments": $number_of_additional_assignments, "UniqueRequestToken": $unique_request_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -363,6 +371,10 @@ export def "create-additional-assignments-for-hit" [
 #
 # POST /
 # operationId: CreateHIT
+# --QualificationRequirements item shape: {QualificationTypeId: string, Comparator: "LessThan"|"LessThanOrEqualTo"|"GreaterThan"|"GreaterThanOrEqualTo"|"EqualTo"|"NotEqualTo"|"Exists"|"DoesNotExist"|"In"|"NotIn", IntegerValues?: list<int>, LocaleValues?: list, RequiredToPreview?: bool, ActionsGuarded?: "Accept"|"PreviewAndAccept"|"DiscoverPreviewAndAccept"}
+# --AssignmentReviewPolicy shape: {PolicyName: string, Parameters?: list}
+# --HITReviewPolicy shape: {PolicyName: string, Parameters?: list}
+# --HITLayoutParameters item shape: {Name: string, Value: string}
 export def "create-hit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -380,27 +392,28 @@ export def "create-hit" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  --max-assignments: any
-  --auto-approval-delay-in-seconds: any
-  lifetime_in_seconds: any
-  assignment_duration_in_seconds: any
-  reward: any
-  title: any
-  --keywords: any
-  description: any
-  --question: any
-  --requester-annotation: any
-  --qualification-requirements: any
-  --unique-request-token: any
-  --assignment-review-policy: any
-  --hit-review-policy: any
-  --hit-layout-id: any
-  --hit-layout-parameters: any
-]: any -> record<HIT: record<HITId: record, HITTypeId: record, HITGroupId: record, HITLayoutId: record, CreationTime: record, Title: record, Description: record, Question: record, Keywords: record, HITStatus: record, MaxAssignments: record, Reward: string, AutoApprovalDelayInSeconds: record, Expiration: record, AssignmentDurationInSeconds: record, RequesterAnnotation: record, QualificationRequirements: record, HITReviewStatus: record, NumberOfAssignmentsPending: record, NumberOfAssignmentsAvailable: record, NumberOfAssignmentsCompleted: record>> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  --max-assignments: int # The number of times the HIT can be accepted and completed before the HIT becomes unavailable.
+  --auto-approval-delay-in-seconds: int # The number of seconds after an assignment for the HIT has been submitted, after which the assignment is considered Approved automatically unless the Requester explicitly rejects it.
+  lifetime_in_seconds: int # An amount of time, in seconds, after which the HIT is no longer available for users to accept. After the lifetime of the HIT elapses, the HIT no longer appears in HIT searches, even if not all of the assignments for the HIT have been accepted.
+  assignment_duration_in_seconds: int # The amount of time, in seconds, that a Worker has to complete the HIT after accepting it. If a Worker does not complete the assignment within the specified duration, the assignment is considered abandoned. If the HIT is still active (that is, its lifetime has not elapsed), the assignment becomes available for other users to find and accept.
+  reward: string # A string representing a currency amount.
+  title: string # The title of the HIT. A title should be short and descriptive about the kind of task the HIT contains. On the Amazon Mechanical Turk web site, the HIT title appears in search results, and everywhere the HIT is mentioned.
+  --keywords: string # One or more words or phrases that describe the HIT, separated by commas. These words are used in searches to find HITs.
+  description: string # A general description of the HIT. A description includes detailed information about the kind of task the HIT contains. On the Amazon Mechanical Turk web site, the HIT description appears in the expanded view of search results, and in the HIT and assignment screens. A good description gives the user enough information to evaluate the HIT before accepting it.
+  --question: string # The data the person completing the HIT uses to produce the results. Constraints: Must be a QuestionForm data structure, an ExternalQuestion data structure, or an HTMLQuestion data structure. The XML question data must not be larger than 64 kilobytes (65,535 bytes) in size, including whitespace. Either a Question parameter or a HITLayoutId parameter must be provided.
+  --requester-annotation: string # An arbitrary data field. The RequesterAnnotation parameter lets your application attach arbitrary data to the HIT for tracking purposes. For example, this parameter could be an identifier internal to the Requester's application that corresponds with the HIT. The RequesterAnnotation parameter for a HIT is only visible to the Requester who created the HIT. It is not shown to the Worker, or any other Requester. The RequesterAnnotation parameter may be different for each HIT you submit. It does not affect how your HITs are grouped.
+  --qualification-requirements: list # Conditions that a Worker's Qualifications must meet in order to accept the HIT. A HIT can have between zero and ten Qualification requirements. All requirements must be met in order for a Worker to accept the HIT. Additionally, other actions can be restricted using the ActionsGuarded field on each QualificationRequirement structure. — item shape: {QualificationTypeId: string, Comparator: "LessThan"|"LessThanOrEqualTo"|"GreaterThan"|"GreaterThanOrEqualTo"|"EqualTo"|"NotEqualTo"|"Exists"|"DoesNotExist"|"In"|"NotIn", IntegerValues?: list<int>, LocaleValues?: list, RequiredToPreview?: bool, ActionsGuarded?: "Accept"|"PreviewAndAccept"|"DiscoverPreviewAndAccept"}
+  --unique-request-token: string # A unique identifier for this request which allows you to retry the call on error without creating duplicate HITs. This is useful in cases such as network timeouts where it is unclear whether or not the call succeeded on the server. If the HIT already exists in the system from a previous call using the same UniqueRequestToken, subsequent calls will return a AWS.MechanicalTurk.HitAlreadyExists error with a message containing the HITId. Note: It is your responsibility to ensure uniqueness of the token. The unique token expires after 24 hours. Subsequent calls using the same UniqueRequestToken made after the 24 hour limit could create duplicate HITs.
+  --assignment-review-policy: record # HIT Review Policy data structures represent HIT review policies, which you specify when you create a HIT. — shape: {PolicyName: string, Parameters?: list}
+  --hit-review-policy: record # HIT Review Policy data structures represent HIT review policies, which you specify when you create a HIT. — shape: {PolicyName: string, Parameters?: list}
+  --hit-layout-id: string # The HITLayoutId allows you to use a pre-existing HIT design with placeholder values and create an additional HIT by providing those values as HITLayoutParameters. Constraints: Either a Question parameter or a HITLayoutId parameter must be provided.
+  --hit-layout-parameters: list # If the HITLayoutId is provided, any placeholder values must be filled in with values using the HITLayoutParameter structure. For more information, see HITLayout. — item shape: {Name: string, Value: string}
+]: any -> record<HIT: record<HITId: string, HITTypeId: string, HITGroupId: string, HITLayoutId: string, CreationTime: string, Title: string, Description: string, Question: string, Keywords: string, HITStatus: string, MaxAssignments: int, Reward: string, AutoApprovalDelayInSeconds: int, Expiration: string, AssignmentDurationInSeconds: int, RequesterAnnotation: string, QualificationRequirements: list<record>, HITReviewStatus: string, NumberOfAssignmentsPending: int, NumberOfAssignmentsAvailable: int, NumberOfAssignmentsCompleted: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MTurkRequesterServiceV20170117.CreateHIT")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"MaxAssignments": $max_assignments, "AutoApprovalDelayInSeconds": $auto_approval_delay_in_seconds, "LifetimeInSeconds": $lifetime_in_seconds, "AssignmentDurationInSeconds": $assignment_duration_in_seconds, "Reward": $reward, "Title": $title, "Keywords": $keywords, "Description": $description, "Question": $question, "RequesterAnnotation": $requester_annotation, "QualificationRequirements": $qualification_requirements, "UniqueRequestToken": $unique_request_token, "AssignmentReviewPolicy": $assignment_review_policy, "HITReviewPolicy": $hit_review_policy, "HITLayoutId": $hit_layout_id, "HITLayoutParameters": $hit_layout_parameters} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -426,6 +439,7 @@ export def "create-hit" [
 #
 # POST /
 # operationId: CreateHITType
+# --QualificationRequirements item shape: {QualificationTypeId: string, Comparator: "LessThan"|"LessThanOrEqualTo"|"GreaterThan"|"GreaterThanOrEqualTo"|"EqualTo"|"NotEqualTo"|"Exists"|"DoesNotExist"|"In"|"NotIn", IntegerValues?: list<int>, LocaleValues?: list, RequiredToPreview?: bool, ActionsGuarded?: "Accept"|"PreviewAndAccept"|"DiscoverPreviewAndAccept"}
 export def "create-hit-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -443,18 +457,19 @@ export def "create-hit-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  --auto-approval-delay-in-seconds: any
-  assignment_duration_in_seconds: any
-  reward: any
-  title: any
-  --keywords: any
-  description: any
-  --qualification-requirements: any
-]: any -> record<HITTypeId: record> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  --auto-approval-delay-in-seconds: int # The number of seconds after an assignment for the HIT has been submitted, after which the assignment is considered Approved automatically unless the Requester explicitly rejects it.
+  assignment_duration_in_seconds: int # The amount of time, in seconds, that a Worker has to complete the HIT after accepting it. If a Worker does not complete the assignment within the specified duration, the assignment is considered abandoned. If the HIT is still active (that is, its lifetime has not elapsed), the assignment becomes available for other users to find and accept.
+  reward: string # A string representing a currency amount.
+  title: string # The title of the HIT. A title should be short and descriptive about the kind of task the HIT contains. On the Amazon Mechanical Turk web site, the HIT title appears in search results, and everywhere the HIT is mentioned.
+  --keywords: string # One or more words or phrases that describe the HIT, separated by commas. These words are used in searches to find HITs.
+  description: string # A general description of the HIT. A description includes detailed information about the kind of task the HIT contains. On the Amazon Mechanical Turk web site, the HIT description appears in the expanded view of search results, and in the HIT and assignment screens. A good description gives the user enough information to evaluate the HIT before accepting it.
+  --qualification-requirements: list # Conditions that a Worker's Qualifications must meet in order to accept the HIT. A HIT can have between zero and ten Qualification requirements. All requirements must be met in order for a Worker to accept the HIT. Additionally, other actions can be restricted using the ActionsGuarded field on each QualificationRequirement structure. — item shape: {QualificationTypeId: string, Comparator: "LessThan"|"LessThanOrEqualTo"|"GreaterThan"|"GreaterThanOrEqualTo"|"EqualTo"|"NotEqualTo"|"Exists"|"DoesNotExist"|"In"|"NotIn", IntegerValues?: list<int>, LocaleValues?: list, RequiredToPreview?: bool, ActionsGuarded?: "Accept"|"PreviewAndAccept"|"DiscoverPreviewAndAccept"}
+]: any -> record<HITTypeId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MTurkRequesterServiceV20170117.CreateHITType")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AutoApprovalDelayInSeconds": $auto_approval_delay_in_seconds, "AssignmentDurationInSeconds": $assignment_duration_in_seconds, "Reward": $reward, "Title": $title, "Keywords": $keywords, "Description": $description, "QualificationRequirements": $qualification_requirements} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -480,6 +495,9 @@ export def "create-hit-type" [
 #
 # POST /
 # operationId: CreateHITWithHITType
+# --AssignmentReviewPolicy shape: {PolicyName: string, Parameters?: list}
+# --HITReviewPolicy shape: {PolicyName: string, Parameters?: list}
+# --HITLayoutParameters item shape: {Name: string, Value: string}
 export def "create-hit-with-hit-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -497,21 +515,22 @@ export def "create-hit-with-hit-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  hit_type_id: any
-  --max-assignments: any
-  lifetime_in_seconds: any
-  --question: any
-  --requester-annotation: any
-  --unique-request-token: any
-  --assignment-review-policy: any
-  --hit-review-policy: any
-  --hit-layout-id: any
-  --hit-layout-parameters: any
-]: any -> record<HIT: record<HITId: record, HITTypeId: record, HITGroupId: record, HITLayoutId: record, CreationTime: record, Title: record, Description: record, Question: record, Keywords: record, HITStatus: record, MaxAssignments: record, Reward: string, AutoApprovalDelayInSeconds: record, Expiration: record, AssignmentDurationInSeconds: record, RequesterAnnotation: record, QualificationRequirements: record, HITReviewStatus: record, NumberOfAssignmentsPending: record, NumberOfAssignmentsAvailable: record, NumberOfAssignmentsCompleted: record>> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  hit_type_id: string # The HIT type ID you want to create this HIT with.
+  --max-assignments: int # The number of times the HIT can be accepted and completed before the HIT becomes unavailable.
+  lifetime_in_seconds: int # An amount of time, in seconds, after which the HIT is no longer available for users to accept. After the lifetime of the HIT elapses, the HIT no longer appears in HIT searches, even if not all of the assignments for the HIT have been accepted.
+  --question: string # The data the person completing the HIT uses to produce the results. Constraints: Must be a QuestionForm data structure, an ExternalQuestion data structure, or an HTMLQuestion data structure. The XML question data must not be larger than 64 kilobytes (65,535 bytes) in size, including whitespace. Either a Question parameter or a HITLayoutId parameter must be provided.
+  --requester-annotation: string # An arbitrary data field. The RequesterAnnotation parameter lets your application attach arbitrary data to the HIT for tracking purposes. For example, this parameter could be an identifier internal to the Requester's application that corresponds with the HIT. The RequesterAnnotation parameter for a HIT is only visible to the Requester who created the HIT. It is not shown to the Worker, or any other Requester. The RequesterAnnotation parameter may be different for each HIT you submit. It does not affect how your HITs are grouped.
+  --unique-request-token: string # A unique identifier for this request which allows you to retry the call on error without creating duplicate HITs. This is useful in cases such as network timeouts where it is unclear whether or not the call succeeded on the server. If the HIT already exists in the system from a previous call using the same UniqueRequestToken, subsequent calls will return a AWS.MechanicalTurk.HitAlreadyExists error with a message containing the HITId. Note: It is your responsibility to ensure uniqueness of the token. The unique token expires after 24 hours. Subsequent calls using the same UniqueRequestToken made after the 24 hour limit could create duplicate HITs.
+  --assignment-review-policy: record # HIT Review Policy data structures represent HIT review policies, which you specify when you create a HIT. — shape: {PolicyName: string, Parameters?: list}
+  --hit-review-policy: record # HIT Review Policy data structures represent HIT review policies, which you specify when you create a HIT. — shape: {PolicyName: string, Parameters?: list}
+  --hit-layout-id: string # The HITLayoutId allows you to use a pre-existing HIT design with placeholder values and create an additional HIT by providing those values as HITLayoutParameters. Constraints: Either a Question parameter or a HITLayoutId parameter must be provided.
+  --hit-layout-parameters: list # If the HITLayoutId is provided, any placeholder values must be filled in with values using the HITLayoutParameter structure. For more information, see HITLayout. — item shape: {Name: string, Value: string}
+]: any -> record<HIT: record<HITId: string, HITTypeId: string, HITGroupId: string, HITLayoutId: string, CreationTime: string, Title: string, Description: string, Question: string, Keywords: string, HITStatus: string, MaxAssignments: int, Reward: string, AutoApprovalDelayInSeconds: int, Expiration: string, AssignmentDurationInSeconds: int, RequesterAnnotation: string, QualificationRequirements: list<record>, HITReviewStatus: string, NumberOfAssignmentsPending: int, NumberOfAssignmentsAvailable: int, NumberOfAssignmentsCompleted: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MTurkRequesterServiceV20170117.CreateHITWithHITType")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"HITTypeId": $hit_type_id, "MaxAssignments": $max_assignments, "LifetimeInSeconds": $lifetime_in_seconds, "Question": $question, "RequesterAnnotation": $requester_annotation, "UniqueRequestToken": $unique_request_token, "AssignmentReviewPolicy": $assignment_review_policy, "HITReviewPolicy": $hit_review_policy, "HITLayoutId": $hit_layout_id, "HITLayoutParameters": $hit_layout_parameters} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -554,21 +573,22 @@ export def "create-qualification-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  name: any
-  --keywords: any
-  description: any
-  qualification_type_status: any
-  --retry-delay-in-seconds: any
-  --test: any
-  --answer-key: any
-  --test-duration-in-seconds: any
-  --auto-granted: any
-  --auto-granted-value: any
-]: any -> record<QualificationType: record<QualificationTypeId: record, CreationTime: record, Name: record, Description: record, Keywords: record, QualificationTypeStatus: record, Test: record, TestDurationInSeconds: record, AnswerKey: record, RetryDelayInSeconds: record, IsRequestable: record, AutoGranted: record, AutoGrantedValue: record>> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  name: string # The name you give to the Qualification type. The type name is used to represent the Qualification to Workers, and to find the type using a Qualification type search. It must be unique across all of your Qualification types.
+  --keywords: string # One or more words or phrases that describe the Qualification type, separated by commas. The keywords of a type make the type easier to find during a search.
+  description: string # A long description for the Qualification type. On the Amazon Mechanical Turk website, the long description is displayed when a Worker examines a Qualification type.
+  qualification_type_status: string@qualification-type-status-completer # The initial status of the Qualification type. Constraints: Valid values are: Active | Inactive
+  --retry-delay-in-seconds: int # The number of seconds that a Worker must wait after requesting a Qualification of the Qualification type before the worker can retry the Qualification request. Constraints: None. If not specified, retries are disabled and Workers can request a Qualification of this type only once, even if the Worker has not been granted the Qualification. It is not possible to disable retries for a Qualification type after it has been created with retries enabled. If you want to disable retries, you must delete existing retry-enabled Qualification type and then create a new Qualification type with retries disabled.
+  --test: string # The questions for the Qualification test a Worker must answer correctly to obtain a Qualification of this type. If this parameter is specified, TestDurationInSeconds must also be specified. Constraints: Must not be longer than 65535 bytes. Must be a QuestionForm data structure. This parameter cannot be specified if AutoGranted is true. Constraints: None. If not specified, the Worker may request the Qualification without answering any questions.
+  --answer-key: string # The answers to the Qualification test specified in the Test parameter, in the form of an AnswerKey data structure. Constraints: Must not be longer than 65535 bytes. Constraints: None. If not specified, you must process Qualification requests manually.
+  --test-duration-in-seconds: int # The number of seconds the Worker has to complete the Qualification test, starting from the time the Worker requests the Qualification.
+  --auto-granted: oneof<nothing, bool> # Specifies whether requests for the Qualification type are granted immediately, without prompting the Worker with a Qualification test. Constraints: If the Test parameter is specified, this parameter cannot be true.
+  --auto-granted-value: int # The Qualification value to use for automatically granted Qualifications. This parameter is used only if the AutoGranted parameter is true.
+]: any -> record<QualificationType: record<QualificationTypeId: string, CreationTime: string, Name: string, Description: string, Keywords: string, QualificationTypeStatus: string, Test: string, TestDurationInSeconds: int, AnswerKey: string, RetryDelayInSeconds: int, IsRequestable: bool, AutoGranted: bool, AutoGrantedValue: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MTurkRequesterServiceV20170117.CreateQualificationType")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Keywords": $keywords, "Description": $description, "QualificationTypeStatus": $qualification_type_status, "RetryDelayInSeconds": $retry_delay_in_seconds, "Test": $test, "AnswerKey": $answer_key, "TestDurationInSeconds": $test_duration_in_seconds, "AutoGranted": $auto_granted, "AutoGrantedValue": $auto_granted_value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -611,13 +631,14 @@ export def "create-worker-block" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  worker_id: any
-  reason: any
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  worker_id: string # The ID of the Worker to block.
+  reason: string # A message explaining the reason for blocking the Worker. This parameter enables you to keep track of your Workers. The Worker does not see this message.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MTurkRequesterServiceV20170117.CreateWorkerBlock")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"WorkerId": $worker_id, "Reason": $reason} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -660,12 +681,13 @@ export def "delete-hit" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  hit_id: any
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  hit_id: string # The ID of the HIT to be deleted.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MTurkRequesterServiceV20170117.DeleteHIT")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"HITId": $hit_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -708,12 +730,13 @@ export def "delete-qualification-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  qualification_type_id: any
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  qualification_type_id: string # The ID of the QualificationType to dispose.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MTurkRequesterServiceV20170117.DeleteQualificationType")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"QualificationTypeId": $qualification_type_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -756,13 +779,14 @@ export def "delete-worker-block" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  worker_id: any
-  --reason: any
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  worker_id: string # The ID of the Worker to unblock.
+  --reason: string # A message that explains the reason for unblocking the Worker. The Worker does not see this message.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MTurkRequesterServiceV20170117.DeleteWorkerBlock")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"WorkerId": $worker_id, "Reason": $reason} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -805,14 +829,15 @@ export def "disassociate-qualification-from-worker" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  worker_id: any
-  qualification_type_id: any
-  --reason: any
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  worker_id: string # The ID of the Worker who possesses the Qualification to be revoked.
+  qualification_type_id: string # The ID of the Qualification type of the Qualification to be revoked.
+  --reason: string # A text message that explains why the Qualification was revoked. The user who had the Qualification sees this message.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MTurkRequesterServiceV20170117.DisassociateQualificationFromWorker")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"WorkerId": $worker_id, "QualificationTypeId": $qualification_type_id, "Reason": $reason} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -855,12 +880,13 @@ export def "get-account-balance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
+  --x-amz-target: string@x-amz-target-completer-13 # required
   --body: record
 ]: any -> record<AvailableBalance: string, OnHoldBalance: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MTurkRequesterServiceV20170117.GetAccountBalance")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -903,12 +929,13 @@ export def "get-assignment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  assignment_id: any
-]: any -> record<Assignment: record<AssignmentId: record, WorkerId: record, HITId: record, AssignmentStatus: record, AutoApprovalTime: record, AcceptTime: record, SubmitTime: record, ApprovalTime: record, RejectionTime: record, Deadline: record, Answer: record, RequesterFeedback: record>, HIT: record<HITId: record, HITTypeId: record, HITGroupId: record, HITLayoutId: record, CreationTime: record, Title: record, Description: record, Question: record, Keywords: record, HITStatus: record, MaxAssignments: record, Reward: string, AutoApprovalDelayInSeconds: record, Expiration: record, AssignmentDurationInSeconds: record, RequesterAnnotation: record, QualificationRequirements: record, HITReviewStatus: record, NumberOfAssignmentsPending: record, NumberOfAssignmentsAvailable: record, NumberOfAssignmentsCompleted: record>> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  assignment_id: string # The ID of the Assignment to be retrieved.
+]: any -> record<Assignment: record<AssignmentId: string, WorkerId: string, HITId: string, AssignmentStatus: string, AutoApprovalTime: string, AcceptTime: string, SubmitTime: string, ApprovalTime: string, RejectionTime: string, Deadline: string, Answer: string, RequesterFeedback: string>, HIT: record<HITId: string, HITTypeId: string, HITGroupId: string, HITLayoutId: string, CreationTime: string, Title: string, Description: string, Question: string, Keywords: string, HITStatus: string, MaxAssignments: int, Reward: string, AutoApprovalDelayInSeconds: int, Expiration: string, AssignmentDurationInSeconds: int, RequesterAnnotation: string, QualificationRequirements: list<record>, HITReviewStatus: string, NumberOfAssignmentsPending: int, NumberOfAssignmentsAvailable: int, NumberOfAssignmentsCompleted: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MTurkRequesterServiceV20170117.GetAssignment")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AssignmentId": $assignment_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -951,13 +978,14 @@ export def "get-file-upload-url" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  assignment_id: any
-  question_identifier: any
-]: any -> record<FileUploadURL: record> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  assignment_id: string # The ID of the assignment that contains the question with a FileUploadAnswer.
+  question_identifier: string # The identifier of the question with a FileUploadAnswer, as specified in the QuestionForm of the HIT.
+]: any -> record<FileUploadURL: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MTurkRequesterServiceV20170117.GetFileUploadURL")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AssignmentId": $assignment_id, "QuestionIdentifier": $question_identifier} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1000,12 +1028,13 @@ export def "get-hit" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  hit_id: any
-]: any -> record<HIT: record<HITId: record, HITTypeId: record, HITGroupId: record, HITLayoutId: record, CreationTime: record, Title: record, Description: record, Question: record, Keywords: record, HITStatus: record, MaxAssignments: record, Reward: string, AutoApprovalDelayInSeconds: record, Expiration: record, AssignmentDurationInSeconds: record, RequesterAnnotation: record, QualificationRequirements: record, HITReviewStatus: record, NumberOfAssignmentsPending: record, NumberOfAssignmentsAvailable: record, NumberOfAssignmentsCompleted: record>> {
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  hit_id: string # The ID of the HIT to be retrieved.
+]: any -> record<HIT: record<HITId: string, HITTypeId: string, HITGroupId: string, HITLayoutId: string, CreationTime: string, Title: string, Description: string, Question: string, Keywords: string, HITStatus: string, MaxAssignments: int, Reward: string, AutoApprovalDelayInSeconds: int, Expiration: string, AssignmentDurationInSeconds: int, RequesterAnnotation: string, QualificationRequirements: list<record>, HITReviewStatus: string, NumberOfAssignmentsPending: int, NumberOfAssignmentsAvailable: int, NumberOfAssignmentsCompleted: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MTurkRequesterServiceV20170117.GetHIT")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"HITId": $hit_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1048,13 +1077,14 @@ export def "get-qualification-score" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  qualification_type_id: any
-  worker_id: any
-]: any -> record<Qualification: record<QualificationTypeId: record, WorkerId: record, GrantTime: record, IntegerValue: record, LocaleValue: record<Country: record, Subdivision: record>, Status: record>> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  qualification_type_id: string # The ID of the QualificationType.
+  worker_id: string # The ID of the Worker whose Qualification is being updated.
+]: any -> record<Qualification: record<QualificationTypeId: string, WorkerId: string, GrantTime: string, IntegerValue: int, LocaleValue: record<Country: string, Subdivision: string>, Status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MTurkRequesterServiceV20170117.GetQualificationScore")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"QualificationTypeId": $qualification_type_id, "WorkerId": $worker_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1097,12 +1127,13 @@ export def "get-qualification-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  qualification_type_id: any
-]: any -> record<QualificationType: record<QualificationTypeId: record, CreationTime: record, Name: record, Description: record, Keywords: record, QualificationTypeStatus: record, Test: record, TestDurationInSeconds: record, AnswerKey: record, RetryDelayInSeconds: record, IsRequestable: record, AutoGranted: record, AutoGrantedValue: record>> {
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  qualification_type_id: string # The ID of the QualificationType.
+]: any -> record<QualificationType: record<QualificationTypeId: string, CreationTime: string, Name: string, Description: string, Keywords: string, QualificationTypeStatus: string, Test: string, TestDurationInSeconds: int, AnswerKey: string, RetryDelayInSeconds: int, IsRequestable: bool, AutoGranted: bool, AutoGrantedValue: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MTurkRequesterServiceV20170117.GetQualificationType")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"QualificationTypeId": $qualification_type_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1147,15 +1178,16 @@ export def "list-assignments-for-hit" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  hit_id: any
-  --next-token-body: any #  (body field)
-  --max-results-body: int #  (body field)
-  --assignment-statuses: any
-]: any -> record<NextToken: string, NumResults: record, Assignments: record> {
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  hit_id: string # The ID of the HIT.
+  --next-token-body: string # If the previous response was incomplete (because there is more data to retrieve), Amazon Mechanical Turk returns a pagination token in the response. You can use this pagination token to retrieve the next set of results. (body field)
+  --max-results-body: int # (body field)
+  --assignment-statuses: list<string> # The status of the assignments to return: Submitted | Approved | Rejected
+]: any -> record<NextToken: string, NumResults: int, Assignments: table<AssignmentId: string, WorkerId: string, HITId: string, AssignmentStatus: string, AutoApprovalTime: string, AcceptTime: string, SubmitTime: string, ApprovalTime: string, RejectionTime: string, Deadline: string, Answer: string, RequesterFeedback: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MTurkRequesterServiceV20170117.ListAssignmentsForHIT")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"HITId": $hit_id, "NextToken": $next_token_body, "MaxResults": $max_results_body, "AssignmentStatuses": $assignment_statuses} | compact
@@ -1201,15 +1233,16 @@ export def "list-bonus-payments" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  --hit-id: any
-  --assignment-id: any
-  --next-token-body: any #  (body field)
-  --max-results-body: int #  (body field)
-]: any -> record<NumResults: record, NextToken: string, BonusPayments: record> {
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  --hit-id: string # The ID of the HIT associated with the bonus payments to retrieve. If not specified, all bonus payments for all assignments for the given HIT are returned. Either the HITId parameter or the AssignmentId parameter must be specified
+  --assignment-id: string # The ID of the assignment associated with the bonus payments to retrieve. If specified, only bonus payments for the given assignment are returned. Either the HITId parameter or the AssignmentId parameter must be specified
+  --next-token-body: string # If the previous response was incomplete (because there is more data to retrieve), Amazon Mechanical Turk returns a pagination token in the response. You can use this pagination token to retrieve the next set of results. (body field)
+  --max-results-body: int # (body field)
+]: any -> record<NumResults: int, NextToken: string, BonusPayments: table<WorkerId: string, BonusAmount: string, AssignmentId: string, Reason: string, GrantTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MTurkRequesterServiceV20170117.ListBonusPayments")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"HITId": $hit_id, "AssignmentId": $assignment_id, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -1255,13 +1288,14 @@ export def "list-hi-ts" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  --next-token-body: any #  (body field)
-  --max-results-body: int #  (body field)
-]: any -> record<NextToken: string, NumResults: record, HITs: record> {
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  --next-token-body: string # If the previous response was incomplete (because there is more data to retrieve), Amazon Mechanical Turk returns a pagination token in the response. You can use this pagination token to retrieve the next set of results. (body field)
+  --max-results-body: int # (body field)
+]: any -> record<NextToken: string, NumResults: int, HITs: table<HITId: string, HITTypeId: string, HITGroupId: string, HITLayoutId: string, CreationTime: string, Title: string, Description: string, Question: string, Keywords: string, HITStatus: string, MaxAssignments: int, Reward: string, AutoApprovalDelayInSeconds: int, Expiration: string, AssignmentDurationInSeconds: int, RequesterAnnotation: string, QualificationRequirements: list, HITReviewStatus: string, NumberOfAssignmentsPending: int, NumberOfAssignmentsAvailable: int, NumberOfAssignmentsCompleted: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MTurkRequesterServiceV20170117.ListHITs")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -1307,14 +1341,15 @@ export def "list-hi-ts-for-qualification-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  qualification_type_id: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<NextToken: string, NumResults: record, HITs: record> {
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  qualification_type_id: string # The ID of the Qualification type to use when querying HITs.
+  --next-token-body: string # If the previous response was incomplete (because there is more data to retrieve), Amazon Mechanical Turk returns a pagination token in the response. You can use this pagination token to retrieve the next set of results. (body field)
+  --max-results-body: int # Limit the number of results returned. (body field)
+]: any -> record<NextToken: string, NumResults: int, HITs: table<HITId: string, HITTypeId: string, HITGroupId: string, HITLayoutId: string, CreationTime: string, Title: string, Description: string, Question: string, Keywords: string, HITStatus: string, MaxAssignments: int, Reward: string, AutoApprovalDelayInSeconds: int, Expiration: string, AssignmentDurationInSeconds: int, RequesterAnnotation: string, QualificationRequirements: list, HITReviewStatus: string, NumberOfAssignmentsPending: int, NumberOfAssignmentsAvailable: int, NumberOfAssignmentsCompleted: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MTurkRequesterServiceV20170117.ListHITsForQualificationType")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"QualificationTypeId": $qualification_type_id, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -1360,14 +1395,15 @@ export def "list-qualification-requests" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  --qualification-type-id: any
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  --qualification-type-id: string # The ID of the QualificationType.
   --next-token-body: string # If the previous response was incomplete (because there is more data to retrieve), Amazon Mechanical Turk returns a pagination token in the response. You can use this pagination token to retrieve the next set of results. (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<NumResults: record, NextToken: string, QualificationRequests: record> {
+  --max-results-body: int # The maximum number of results to return in a single call. (body field)
+]: any -> record<NumResults: int, NextToken: string, QualificationRequests: table<QualificationRequestId: string, QualificationTypeId: string, WorkerId: string, Test: string, Answer: string, SubmitTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MTurkRequesterServiceV20170117.ListQualificationRequests")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"QualificationTypeId": $qualification_type_id, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -1413,20 +1449,22 @@ export def "list-qualification-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  --query: any
-  must_be_requestable: any
-  --must-be-owned-by-caller: any
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  --query: string # A text query against all of the searchable attributes of Qualification types.
+  --must-be-requestable: oneof<nothing, bool> # Specifies that only Qualification types that a user can request through the Amazon Mechanical Turk web site, such as by taking a Qualification test, are returned as results of the search. Some Qualification types, such as those assigned automatically by the system, cannot be requested directly by users. If false, all Qualification types, including those managed by the system, are considered. Valid values are True | False.
+  --must-be-owned-by-caller: oneof<nothing, bool> # Specifies that only Qualification types that the Requester created are returned. If false, the operation returns all Qualification types.
   --next-token-body: string # If the previous response was incomplete (because there is more data to retrieve), Amazon Mechanical Turk returns a pagination token in the response. You can use this pagination token to retrieve the next set of results. (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<NumResults: record, NextToken: string, QualificationTypes: record> {
+  --max-results-body: int # The maximum number of results to return in a single call. (body field)
+]: any -> record<NumResults: int, NextToken: string, QualificationTypes: table<QualificationTypeId: string, CreationTime: string, Name: string, Description: string, Keywords: string, QualificationTypeStatus: string, Test: string, TestDurationInSeconds: int, AnswerKey: string, RetryDelayInSeconds: int, IsRequestable: bool, AutoGranted: bool, AutoGrantedValue: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MTurkRequesterServiceV20170117.ListQualificationTypes")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"Query": $query, "MustBeRequestable": $must_be_requestable, "MustBeOwnedByCaller": $must_be_owned_by_caller, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "MustBeRequestable") == null) { error make --unspanned { msg: "required body field 'MustBeRequestable' missing: pass --must-be-requestable or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
@@ -1468,17 +1506,18 @@ export def "list-review-policy-results-for-hit" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  hit_id: any
-  --policy-levels: any
-  --retrieve-actions: any
-  --retrieve-results: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<HITId: record, AssignmentReviewPolicy: record<PolicyName: record, Parameters: record>, HITReviewPolicy: record<PolicyName: record, Parameters: record>, AssignmentReviewReport: record<ReviewResults: record, ReviewActions: record>, HITReviewReport: record<ReviewResults: record, ReviewActions: record>, NextToken: string> {
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  hit_id: string # The unique identifier of the HIT to retrieve review results for.
+  --policy-levels: list<string> # The Policy Level(s) to retrieve review results for - HIT or Assignment. If omitted, the default behavior is to retrieve all data for both policy levels. For a list of all the described policies, see Review Policies.
+  --retrieve-actions: oneof<nothing, bool> # Specify if the operation should retrieve a list of the actions taken executing the Review Policies and their outcomes.
+  --retrieve-results: oneof<nothing, bool> # Specify if the operation should retrieve a list of the results computed by the Review Policies.
+  --next-token-body: string # If the previous response was incomplete (because there is more data to retrieve), Amazon Mechanical Turk returns a pagination token in the response. You can use this pagination token to retrieve the next set of results. (body field)
+  --max-results-body: int # Limit the number of results returned. (body field)
+]: any -> record<HITId: string, AssignmentReviewPolicy: record<PolicyName: string, Parameters: list<record>>, HITReviewPolicy: record<PolicyName: string, Parameters: list<record>>, AssignmentReviewReport: record<ReviewResults: list<record>, ReviewActions: list<record>>, HITReviewReport: record<ReviewResults: list<record>, ReviewActions: list<record>>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MTurkRequesterServiceV20170117.ListReviewPolicyResultsForHIT")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"HITId": $hit_id, "PolicyLevels": $policy_levels, "RetrieveActions": $retrieve_actions, "RetrieveResults": $retrieve_results, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -1524,15 +1563,16 @@ export def "list-reviewable-hi-ts" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-26
-  --hit-type-id: any
-  --status: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<NextToken: string, NumResults: record, HITs: record> {
+  --x-amz-target: string@x-amz-target-completer-26 # required
+  --hit-type-id: string # The ID of the HIT type of the HITs to consider for the query. If not specified, all HITs for the Reviewer are considered
+  --status: string@status-completer # Can be either Reviewable or Reviewing. Reviewable is the default value.
+  --next-token-body: string # If the previous response was incomplete (because there is more data to retrieve), Amazon Mechanical Turk returns a pagination token in the response. You can use this pagination token to retrieve the next set of results. (body field)
+  --max-results-body: int # Limit the number of results returned. (body field)
+]: any -> record<NextToken: string, NumResults: int, HITs: table<HITId: string, HITTypeId: string, HITGroupId: string, HITLayoutId: string, CreationTime: string, Title: string, Description: string, Question: string, Keywords: string, HITStatus: string, MaxAssignments: int, Reward: string, AutoApprovalDelayInSeconds: int, Expiration: string, AssignmentDurationInSeconds: int, RequesterAnnotation: string, QualificationRequirements: list, HITReviewStatus: string, NumberOfAssignmentsPending: int, NumberOfAssignmentsAvailable: int, NumberOfAssignmentsCompleted: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MTurkRequesterServiceV20170117.ListReviewableHITs")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"HITTypeId": $hit_type_id, "Status": $status, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -1578,13 +1618,14 @@ export def "list-worker-blocks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-27
-  --next-token-body: any #  (body field)
-  --max-results-body: int #  (body field)
-]: any -> record<NextToken: string, NumResults: record, WorkerBlocks: record> {
+  --x-amz-target: string@x-amz-target-completer-27 # required
+  --next-token-body: string # If the previous response was incomplete (because there is more data to retrieve), Amazon Mechanical Turk returns a pagination token in the response. You can use this pagination token to retrieve the next set of results. (body field)
+  --max-results-body: int # (body field)
+]: any -> record<NextToken: string, NumResults: int, WorkerBlocks: table<WorkerId: string, Reason: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MTurkRequesterServiceV20170117.ListWorkerBlocks")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -1630,15 +1671,16 @@ export def "list-workers-with-qualification-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-28
-  qualification_type_id: any
-  --status: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<NextToken: string, NumResults: record, Qualifications: record> {
+  --x-amz-target: string@x-amz-target-completer-28 # required
+  qualification_type_id: string # The ID of the Qualification type of the Qualifications to return.
+  --status: string@status-completer-1 # The status of the Qualifications to return. Can be Granted | Revoked.
+  --next-token-body: string # If the previous response was incomplete (because there is more data to retrieve), Amazon Mechanical Turk returns a pagination token in the response. You can use this pagination token to retrieve the next set of results. (body field)
+  --max-results-body: int # Limit the number of results returned. (body field)
+]: any -> record<NextToken: string, NumResults: int, Qualifications: table<QualificationTypeId: string, WorkerId: string, GrantTime: string, IntegerValue: int, LocaleValue: record, Status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MTurkRequesterServiceV20170117.ListWorkersWithQualificationType")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"QualificationTypeId": $qualification_type_id, "Status": $status, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -1682,14 +1724,15 @@ export def "notify-workers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-29
-  subject: any
-  message_text: any
-  worker_ids: any
-]: any -> record<NotifyWorkersFailureStatuses: record> {
+  --x-amz-target: string@x-amz-target-completer-29 # required
+  subject: string # The subject line of the email message to send. Can include up to 200 characters.
+  message_text: string # The text of the email message to send. Can include up to 4,096 characters
+  worker_ids: list<string> # A list of Worker IDs you wish to notify. You can notify upto 100 Workers at a time.
+]: any -> record<NotifyWorkersFailureStatuses: table<NotifyWorkersFailureCode: string, NotifyWorkersFailureMessage: string, WorkerId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MTurkRequesterServiceV20170117.NotifyWorkers")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Subject": $subject, "MessageText": $message_text, "WorkerIds": $worker_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1732,13 +1775,14 @@ export def "reject-assignment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-30
-  assignment_id: any
-  requester_feedback: any
+  --x-amz-target: string@x-amz-target-completer-30 # required
+  assignment_id: string # The ID of the assignment. The assignment must correspond to a HIT created by the Requester.
+  requester_feedback: string # A message for the Worker, which the Worker can see in the Status section of the web site.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MTurkRequesterServiceV20170117.RejectAssignment")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AssignmentId": $assignment_id, "RequesterFeedback": $requester_feedback} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1781,13 +1825,14 @@ export def "reject-qualification-request" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-31
-  qualification_request_id: any
-  --reason: any
+  --x-amz-target: string@x-amz-target-completer-31 # required
+  qualification_request_id: string # The ID of the Qualification request, as returned by the ListQualificationRequests operation.
+  --reason: string # A text message explaining why the request was rejected, to be shown to the Worker who made the request.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MTurkRequesterServiceV20170117.RejectQualificationRequest")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"QualificationRequestId": $qualification_request_id, "Reason": $reason} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1830,16 +1875,17 @@ export def "send-bonus" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-32
-  worker_id: any
-  bonus_amount: any
-  assignment_id: any
-  reason: any
-  --unique-request-token: any
+  --x-amz-target: string@x-amz-target-completer-32 # required
+  worker_id: string # The ID of the Worker being paid the bonus.
+  bonus_amount: string # A string representing a currency amount.
+  assignment_id: string # The ID of the assignment for which this bonus is paid.
+  reason: string # A message that explains the reason for the bonus payment. The Worker receiving the bonus can see this message.
+  --unique-request-token: string # A unique identifier for this request, which allows you to retry the call on error without granting multiple bonuses. This is useful in cases such as network timeouts where it is unclear whether or not the call succeeded on the server. If the bonus already exists in the system from a previous call using the same UniqueRequestToken, subsequent calls will return an error with a message containing the request ID.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MTurkRequesterServiceV20170117.SendBonus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"WorkerId": $worker_id, "BonusAmount": $bonus_amount, "AssignmentId": $assignment_id, "Reason": $reason, "UniqueRequestToken": $unique_request_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1865,6 +1911,7 @@ export def "send-bonus" [
 #
 # POST /
 # operationId: SendTestEventNotification
+# --Notification shape: {Destination: string, Transport: "Email"|"SQS"|"SNS", Version: string, EventTypes: list<string>}
 export def "send-test-event-notification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1882,13 +1929,14 @@ export def "send-test-event-notification" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-33
-  notification: any
-  test_event_type: any
+  --x-amz-target: string@x-amz-target-completer-33 # required
+  notification: record # The NotificationSpecification data structure describes a HIT event notification for a HIT type. — shape: {Destination: string, Transport: "Email"|"SQS"|"SNS", Version: string, EventTypes: list<string>}
+  test_event_type: string@test-event-type-completer # The event to simulate to test the notification specification. This event is included in the test message even if the notification specification does not include the event type. The notification specification does not filter out the test event.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MTurkRequesterServiceV20170117.SendTestEventNotification")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Notification": $notification, "TestEventType": $test_event_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1931,13 +1979,14 @@ export def "update-expiration-for-hit" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-34
-  hit_id: any
-  expire_at: any
+  --x-amz-target: string@x-amz-target-completer-34 # required
+  hit_id: string # The HIT to update.
+  expire_at: string # The date and time at which you want the HIT to expire (format: date-time)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MTurkRequesterServiceV20170117.UpdateExpirationForHIT")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"HITId": $hit_id, "ExpireAt": $expire_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1980,13 +2029,14 @@ export def "update-hit-review-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-35
-  hit_id: any
-  --revert: any
+  --x-amz-target: string@x-amz-target-completer-35 # required
+  hit_id: string # The ID of the HIT to update.
+  --revert: oneof<nothing, bool> # Specifies how to update the HIT status. Default is False. Setting this to false will only transition a HIT from Reviewable to Reviewing Setting this to true will only transition a HIT from Reviewing to Reviewable
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MTurkRequesterServiceV20170117.UpdateHITReviewStatus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"HITId": $hit_id, "Revert": $revert} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2029,13 +2079,14 @@ export def "update-hit-type-of-hit" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-36
-  hit_id: any
-  hit_type_id: any
+  --x-amz-target: string@x-amz-target-completer-36 # required
+  hit_id: string # The HIT to update.
+  hit_type_id: string # The ID of the new HIT type.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MTurkRequesterServiceV20170117.UpdateHITTypeOfHIT")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"HITId": $hit_id, "HITTypeId": $hit_type_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2061,6 +2112,7 @@ export def "update-hit-type-of-hit" [
 #
 # POST /
 # operationId: UpdateNotificationSettings
+# --Notification shape: {Destination: string, Transport: "Email"|"SQS"|"SNS", Version: string, EventTypes: list<string>}
 export def "update-notification-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2078,14 +2130,15 @@ export def "update-notification-settings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-37
-  hit_type_id: any
-  --notification: any
-  --active: any
+  --x-amz-target: string@x-amz-target-completer-37 # required
+  hit_type_id: string # The ID of the HIT type whose notification specification is being updated.
+  --notification: record # The NotificationSpecification data structure describes a HIT event notification for a HIT type. — shape: {Destination: string, Transport: "Email"|"SQS"|"SNS", Version: string, EventTypes: list<string>}
+  --active: oneof<nothing, bool> # Specifies whether notifications are sent for HITs of this HIT type, according to the notification specification. You must specify either the Notification parameter or the Active parameter for the call to UpdateNotificationSettings to succeed.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MTurkRequesterServiceV20170117.UpdateNotificationSettings")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"HITTypeId": $hit_type_id, "Notification": $notification, "Active": $active} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2128,20 +2181,21 @@ export def "update-qualification-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-38
-  qualification_type_id: any
-  --description: any
-  --qualification-type-status: any
-  --test: any
-  --answer-key: any
-  --test-duration-in-seconds: any
-  --retry-delay-in-seconds: any
-  --auto-granted: any
-  --auto-granted-value: any
-]: any -> record<QualificationType: record<QualificationTypeId: record, CreationTime: record, Name: record, Description: record, Keywords: record, QualificationTypeStatus: record, Test: record, TestDurationInSeconds: record, AnswerKey: record, RetryDelayInSeconds: record, IsRequestable: record, AutoGranted: record, AutoGrantedValue: record>> {
+  --x-amz-target: string@x-amz-target-completer-38 # required
+  qualification_type_id: string # The ID of the Qualification type to update.
+  --description: string # The new description of the Qualification type.
+  --qualification-type-status: string@qualification-type-status-completer # The new status of the Qualification type - Active | Inactive
+  --test: string # The questions for the Qualification test a Worker must answer correctly to obtain a Qualification of this type. If this parameter is specified, TestDurationInSeconds must also be specified. Constraints: Must not be longer than 65535 bytes. Must be a QuestionForm data structure. This parameter cannot be specified if AutoGranted is true. Constraints: None. If not specified, the Worker may request the Qualification without answering any questions.
+  --answer-key: string # The answers to the Qualification test specified in the Test parameter, in the form of an AnswerKey data structure.
+  --test-duration-in-seconds: int # The number of seconds the Worker has to complete the Qualification test, starting from the time the Worker requests the Qualification.
+  --retry-delay-in-seconds: int # The amount of time, in seconds, that Workers must wait after requesting a Qualification of the specified Qualification type before they can retry the Qualification request. It is not possible to disable retries for a Qualification type after it has been created with retries enabled. If you want to disable retries, you must dispose of the existing retry-enabled Qualification type using DisposeQualificationType and then create a new Qualification type with retries disabled using CreateQualificationType.
+  --auto-granted: oneof<nothing, bool> # Specifies whether requests for the Qualification type are granted immediately, without prompting the Worker with a Qualification test. Constraints: If the Test parameter is specified, this parameter cannot be true.
+  --auto-granted-value: int # The Qualification value to use for automatically granted Qualifications. This parameter is used only if the AutoGranted parameter is true.
+]: any -> record<QualificationType: record<QualificationTypeId: string, CreationTime: string, Name: string, Description: string, Keywords: string, QualificationTypeStatus: string, Test: string, TestDurationInSeconds: int, AnswerKey: string, RetryDelayInSeconds: int, IsRequestable: bool, AutoGranted: bool, AutoGrantedValue: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MTurkRequesterServiceV20170117.UpdateQualificationType")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"QualificationTypeId": $qualification_type_id, "Description": $description, "QualificationTypeStatus": $qualification_type_status, "Test": $test, "AnswerKey": $answer_key, "TestDurationInSeconds": $test_duration_in_seconds, "RetryDelayInSeconds": $retry_delay_in_seconds, "AutoGranted": $auto_granted, "AutoGrantedValue": $auto_granted_value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

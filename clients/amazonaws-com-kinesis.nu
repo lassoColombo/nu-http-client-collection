@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -108,6 +108,7 @@ def x-amz-target-completer-8 [] { ["Kinesis_20131202.DescribeStreamSummary"] }
 def x-amz-target-completer-9 [] { ["Kinesis_20131202.DisableEnhancedMonitoring"] }
 def x-amz-target-completer-10 [] { ["Kinesis_20131202.EnableEnhancedMonitoring"] }
 def x-amz-target-completer-11 [] { ["Kinesis_20131202.GetRecords"] }
+def shard-iterator-type-completer [] { ["AFTER_SEQUENCE_NUMBER" "AT_SEQUENCE_NUMBER" "AT_TIMESTAMP" "LATEST" "TRIM_HORIZON"] }
 def x-amz-target-completer-12 [] { ["Kinesis_20131202.GetShardIterator"] }
 def x-amz-target-completer-13 [] { ["Kinesis_20131202.IncreaseStreamRetentionPeriod"] }
 def x-amz-target-completer-14 [] { ["Kinesis_20131202.ListShards"] }
@@ -120,8 +121,10 @@ def x-amz-target-completer-20 [] { ["Kinesis_20131202.PutRecords"] }
 def x-amz-target-completer-21 [] { ["Kinesis_20131202.RegisterStreamConsumer"] }
 def x-amz-target-completer-22 [] { ["Kinesis_20131202.RemoveTagsFromStream"] }
 def x-amz-target-completer-23 [] { ["Kinesis_20131202.SplitShard"] }
+def encryption-type-completer [] { ["KMS" "NONE"] }
 def x-amz-target-completer-24 [] { ["Kinesis_20131202.StartStreamEncryption"] }
 def x-amz-target-completer-25 [] { ["Kinesis_20131202.StopStreamEncryption"] }
+def scaling-type-completer [] { ["UNIFORM_SCALING"] }
 def x-amz-target-completer-26 [] { ["Kinesis_20131202.UpdateShardCount"] }
 def x-amz-target-completer-27 [] { ["Kinesis_20131202.UpdateStreamMode"] }
 
@@ -169,14 +172,15 @@ export def "add-tags-to-stream" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  --stream-name: any
-  tags: any
-  --stream-arn: any
+  --x-amz-target: string@x-amz-target-completer # required
+  --stream-name: string # The name of the stream.
+  tags: record # A set of up to 10 key-value pairs to use to create the tags.
+  --stream-arn: string # The ARN of the stream.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Kinesis_20131202.AddTagsToStream")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StreamName": $stream_name, "Tags": $tags, "StreamARN": $stream_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -202,6 +206,7 @@ export def "add-tags-to-stream" [
 #
 # POST /
 # operationId: CreateStream
+# --StreamModeDetails shape: {StreamMode: "PROVISIONED"|"ON_DEMAND"}
 export def "create-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -219,14 +224,15 @@ export def "create-stream" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  stream_name: any
-  --shard-count: any
-  --stream-mode-details: any
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  stream_name: string # A name to identify the stream. The stream name is scoped to the Amazon Web Services account used by the application that creates the stream. It is also scoped by Amazon Web Services Region. That is, two streams in two different Amazon Web Services accounts can have the same name. Two streams in the same Amazon Web Services account but in two different Regions can also have the same name.
+  --shard-count: int # The number of shards that the stream will use. The throughput of the stream is a function of the number of shards; more shards are required for greater provisioned throughput.
+  --stream-mode-details: record # Specifies the capacity mode to which you want to set your data stream. Currently, in Kinesis Data Streams, you can choose between an on-demand capacity mode and a provisioned capacity mode for your data streams. — shape: {StreamMode: "PROVISIONED"|"ON_DEMAND"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Kinesis_20131202.CreateStream")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StreamName": $stream_name, "ShardCount": $shard_count, "StreamModeDetails": $stream_mode_details} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -269,14 +275,15 @@ export def "decrease-stream-retention-period" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  --stream-name: any
-  retention_period_hours: any
-  --stream-arn: any
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  --stream-name: string # The name of the stream to modify.
+  retention_period_hours: int # The new retention period of the stream, in hours. Must be less than the current retention period.
+  --stream-arn: string # The ARN of the stream.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Kinesis_20131202.DecreaseStreamRetentionPeriod")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StreamName": $stream_name, "RetentionPeriodHours": $retention_period_hours, "StreamARN": $stream_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -319,14 +326,15 @@ export def "delete-stream" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  --stream-name: any
-  --enforce-consumer-deletion: any
-  --stream-arn: any
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  --stream-name: string # The name of the stream to delete.
+  --enforce-consumer-deletion: oneof<nothing, bool> # If this parameter is unset (null) or if you set it to false, and the stream has registered consumers, the call to DeleteStream fails with a ResourceInUseException.
+  --stream-arn: string # The ARN of the stream.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Kinesis_20131202.DeleteStream")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StreamName": $stream_name, "EnforceConsumerDeletion": $enforce_consumer_deletion, "StreamARN": $stream_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -369,14 +377,15 @@ export def "deregister-stream-consumer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  --stream-arn: any
-  --consumer-name: any
-  --consumer-arn: any
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  --stream-arn: string # The ARN of the Kinesis data stream that the consumer is registered with. For more information, see Amazon Resource Names (ARNs) and Amazon Web Services Service Namespaces (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html#arn-syntax-kinesis-streams).
+  --consumer-name: string # The name that you gave to the consumer.
+  --consumer-arn: string # The ARN returned by Kinesis Data Streams when you registered the consumer. If you don't know the ARN of the consumer that you want to deregister, you can use the ListStreamConsumers operation to get a list of the descriptions of all the consumers that are currently registered with a given data stream. The description of a consumer contains its ARN.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Kinesis_20131202.DeregisterStreamConsumer")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StreamARN": $stream_arn, "ConsumerName": $consumer_name, "ConsumerARN": $consumer_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -419,12 +428,13 @@ export def "describe-limits" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
+  --x-amz-target: string@x-amz-target-completer-5 # required
   --body: record
-]: any -> record<ShardLimit: record, OpenShardCount: record, OnDemandStreamCount: record, OnDemandStreamCountLimit: record> {
+]: any -> record<ShardLimit: int, OpenShardCount: int, OnDemandStreamCount: int, OnDemandStreamCountLimit: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Kinesis_20131202.DescribeLimits")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -469,15 +479,16 @@ export def "describe-stream" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  --stream-name: any
-  --limit-body: any #  (body field)
-  --exclusive-start-shard-id-body: any #  (body field)
-  --stream-arn: any
-]: any -> record<StreamDescription: record<StreamName: record, StreamARN: record, StreamStatus: record, StreamModeDetails: record<StreamMode: record>, Shards: record, HasMoreShards: record, RetentionPeriodHours: record, StreamCreationTimestamp: record, EnhancedMonitoring: record, EncryptionType: record, KeyId: record>> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  --stream-name: string # The name of the stream to describe.
+  --limit-body: int # The maximum number of shards to return in a single call. The default value is 100. If you specify a value greater than 100, at most 100 results are returned. (body field)
+  --exclusive-start-shard-id-body: string # The shard ID of the shard to start with. Specify this parameter to indicate that you want to describe the stream starting with the shard whose ID immediately follows ExclusiveStartShardId. If you don't specify this parameter, the default behavior for DescribeStream is to describe the stream starting with the first shard in the stream. (body field)
+  --stream-arn: string # The ARN of the stream.
+]: any -> record<StreamDescription: record<StreamName: string, StreamARN: string, StreamStatus: string, StreamModeDetails: record<StreamMode: string>, Shards: list<record>, HasMoreShards: bool, RetentionPeriodHours: int, StreamCreationTimestamp: string, EnhancedMonitoring: list<record>, EncryptionType: string, KeyId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Kinesis_20131202.DescribeStream")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "ExclusiveStartShardId" $exclusive_start_shard_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"StreamName": $stream_name, "Limit": $limit_body, "ExclusiveStartShardId": $exclusive_start_shard_id_body, "StreamARN": $stream_arn} | compact
@@ -521,14 +532,15 @@ export def "describe-stream-consumer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  --stream-arn: any
-  --consumer-name: any
-  --consumer-arn: any
-]: any -> record<ConsumerDescription: record<ConsumerName: record, ConsumerARN: record, ConsumerStatus: record, ConsumerCreationTimestamp: record, StreamARN: record>> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  --stream-arn: string # The ARN of the Kinesis data stream that the consumer is registered with. For more information, see Amazon Resource Names (ARNs) and Amazon Web Services Service Namespaces (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html#arn-syntax-kinesis-streams).
+  --consumer-name: string # The name that you gave to the consumer.
+  --consumer-arn: string # The ARN returned by Kinesis Data Streams when you registered the consumer.
+]: any -> record<ConsumerDescription: record<ConsumerName: string, ConsumerARN: string, ConsumerStatus: string, ConsumerCreationTimestamp: string, StreamARN: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Kinesis_20131202.DescribeStreamConsumer")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StreamARN": $stream_arn, "ConsumerName": $consumer_name, "ConsumerARN": $consumer_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -571,13 +583,14 @@ export def "describe-stream-summary" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  --stream-name: any
-  --stream-arn: any
-]: any -> record<StreamDescriptionSummary: record<StreamName: record, StreamARN: record, StreamStatus: record, StreamModeDetails: record<StreamMode: record>, RetentionPeriodHours: record, StreamCreationTimestamp: record, EnhancedMonitoring: record, EncryptionType: record, KeyId: record, OpenShardCount: record, ConsumerCount: record>> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  --stream-name: string # The name of the stream to describe.
+  --stream-arn: string # The ARN of the stream.
+]: any -> record<StreamDescriptionSummary: record<StreamName: string, StreamARN: string, StreamStatus: string, StreamModeDetails: record<StreamMode: string>, RetentionPeriodHours: int, StreamCreationTimestamp: string, EnhancedMonitoring: list<record>, EncryptionType: string, KeyId: string, OpenShardCount: int, ConsumerCount: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Kinesis_20131202.DescribeStreamSummary")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StreamName": $stream_name, "StreamARN": $stream_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -620,14 +633,15 @@ export def "disable-enhanced-monitoring" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  --stream-name: any
-  shard_level_metrics: any
-  --stream-arn: any
-]: any -> record<StreamName: record, CurrentShardLevelMetrics: record, DesiredShardLevelMetrics: record, StreamARN: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  --stream-name: string # The name of the Kinesis data stream for which to disable enhanced monitoring.
+  shard_level_metrics: list<string> # List of shard-level metrics to disable. The following are the valid shard-level metrics. The value "ALL" disables every metric. IncomingBytes IncomingRecords OutgoingBytes OutgoingRecords WriteProvisionedThroughputExceeded ReadProvisionedThroughputExceeded IteratorAgeMilliseconds ALL For more information, see Monitoring the Amazon Kinesis Data Streams Service with Amazon CloudWatch (https://docs.aws.amazon.com/kinesis/latest/dev/monitoring-with-cloudwatch.html) in the Amazon Kinesis Data Streams Developer Guide.
+  --stream-arn: string # The ARN of the stream.
+]: any -> record<StreamName: string, CurrentShardLevelMetrics: list<string>, DesiredShardLevelMetrics: list<string>, StreamARN: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Kinesis_20131202.DisableEnhancedMonitoring")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StreamName": $stream_name, "ShardLevelMetrics": $shard_level_metrics, "StreamARN": $stream_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -670,14 +684,15 @@ export def "enable-enhanced-monitoring" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  --stream-name: any
-  shard_level_metrics: any
-  --stream-arn: any
-]: any -> record<StreamName: record, CurrentShardLevelMetrics: record, DesiredShardLevelMetrics: record, StreamARN: record> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  --stream-name: string # The name of the stream for which to enable enhanced monitoring.
+  shard_level_metrics: list<string> # List of shard-level metrics to enable. The following are the valid shard-level metrics. The value "ALL" enables every metric. IncomingBytes IncomingRecords OutgoingBytes OutgoingRecords WriteProvisionedThroughputExceeded ReadProvisionedThroughputExceeded IteratorAgeMilliseconds ALL For more information, see Monitoring the Amazon Kinesis Data Streams Service with Amazon CloudWatch (https://docs.aws.amazon.com/kinesis/latest/dev/monitoring-with-cloudwatch.html) in the Amazon Kinesis Data Streams Developer Guide.
+  --stream-arn: string # The ARN of the stream.
+]: any -> record<StreamName: string, CurrentShardLevelMetrics: list<string>, DesiredShardLevelMetrics: list<string>, StreamARN: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Kinesis_20131202.EnableEnhancedMonitoring")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StreamName": $stream_name, "ShardLevelMetrics": $shard_level_metrics, "StreamARN": $stream_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -720,14 +735,15 @@ export def "get-records" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  shard_iterator: any
-  --limit: any
-  --stream-arn: any
-]: any -> record<Records: record, NextShardIterator: record, MillisBehindLatest: record, ChildShards: record> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  shard_iterator: string # The position in the shard from which you want to start sequentially reading data records. A shard iterator specifies this position using the sequence number of a data record in the shard.
+  --limit: int # The maximum number of records to return. Specify a value of up to 10,000. If you specify a value that is greater than 10,000, GetRecords throws InvalidArgumentException. The default value is 10,000.
+  --stream-arn: string # The ARN of the stream.
+]: any -> record<Records: table<SequenceNumber: string, ApproximateArrivalTimestamp: string, Data: string, PartitionKey: string, EncryptionType: string>, NextShardIterator: string, MillisBehindLatest: int, ChildShards: table<ShardId: string, ParentShards: list, HashKeyRange: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Kinesis_20131202.GetRecords")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ShardIterator": $shard_iterator, "Limit": $limit, "StreamARN": $stream_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -770,17 +786,18 @@ export def "get-shard-iterator" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  --stream-name: any
-  shard_id: any
-  shard_iterator_type: any
-  --starting-sequence-number: any
-  --timestamp: any
-  --stream-arn: any
-]: any -> record<ShardIterator: record> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  --stream-name: string # The name of the Amazon Kinesis data stream.
+  shard_id: string # The shard ID of the Kinesis Data Streams shard to get the iterator for.
+  shard_iterator_type: string@shard-iterator-type-completer # Determines how the shard iterator is used to start reading data records from the shard. The following are the valid Amazon Kinesis shard iterator types: AT_SEQUENCE_NUMBER - Start reading from the position denoted by a specific sequence number, provided in the value StartingSequenceNumber. AFTER_SEQUENCE_NUMBER - Start reading right after the position denoted by a specific sequence number, provided in the value StartingSequenceNumber. AT_TIMESTAMP - Start reading from the position denoted by a specific time stamp, provided in the value Timestamp. TRIM_HORIZON - Start reading at the last untrimmed record in the shard in the system, which is the oldest data record in the shard. LATEST - Start reading just after the most recent record in the shard, so that you always read the most recent data in the shard.
+  --starting-sequence-number: string # The sequence number of the data record in the shard from which to start reading. Used with shard iterator type AT_SEQUENCE_NUMBER and AFTER_SEQUENCE_NUMBER.
+  --timestamp: string # The time stamp of the data record from which to start reading. Used with shard iterator type AT_TIMESTAMP. A time stamp is the Unix epoch date with precision in milliseconds. For example, 2016-04-04T19:58:46.480-00:00 or 1459799926.480. If a record with this exact time stamp does not exist, the iterator returned is for the next (later) record. If the time stamp is older than the current trim horizon, the iterator returned is for the oldest untrimmed data record (TRIM_HORIZON). (format: date-time)
+  --stream-arn: string # The ARN of the stream.
+]: any -> record<ShardIterator: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Kinesis_20131202.GetShardIterator")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StreamName": $stream_name, "ShardId": $shard_id, "ShardIteratorType": $shard_iterator_type, "StartingSequenceNumber": $starting_sequence_number, "Timestamp": $timestamp, "StreamARN": $stream_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -823,14 +840,15 @@ export def "increase-stream-retention-period" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  --stream-name: any
-  retention_period_hours: any
-  --stream-arn: any
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  --stream-name: string # The name of the stream to modify.
+  retention_period_hours: int # The new retention period of the stream, in hours. Must be more than the current retention period.
+  --stream-arn: string # The ARN of the stream.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Kinesis_20131202.IncreaseStreamRetentionPeriod")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StreamName": $stream_name, "RetentionPeriodHours": $retention_period_hours, "StreamARN": $stream_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -856,6 +874,7 @@ export def "increase-stream-retention-period" [
 #
 # POST /
 # operationId: ListShards
+# --ShardFilter shape: {Type: "AFTER_SHARD_ID"|"AT_TRIM_HORIZON"|"FROM_TRIM_HORIZON"|"AT_LATEST"|"AT_TIMESTAMP"|"FROM_TIMESTAMP", ShardId?: string, Timestamp?: string}
 export def "list-shards" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -873,18 +892,19 @@ export def "list-shards" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  --stream-name: any
-  --next-token: any
-  --exclusive-start-shard-id: any
-  --max-results: any
-  --stream-creation-timestamp: any
-  --shard-filter: any
-  --stream-arn: any
-]: any -> record<Shards: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  --stream-name: string # The name of the data stream whose shards you want to list. You cannot specify this parameter if you specify the NextToken parameter.
+  --next-token: string # When the number of shards in the data stream is greater than the default value for the MaxResults parameter, or if you explicitly specify a value for MaxResults that is less than the number of shards in the data stream, the response includes a pagination token named NextToken. You can specify this NextToken value in a subsequent call to ListShards to list the next set of shards. Don't specify StreamName or StreamCreationTimestamp if you specify NextToken because the latter unambiguously identifies the stream. You can optionally specify a value for the MaxResults parameter when you specify NextToken. If you specify a MaxResults value that is less than the number of shards that the operation returns if you don't specify MaxResults, the response will contain a new NextToken value. You can use the new NextToken value in a subsequent call to the ListShards operation. Tokens expire after 300 seconds. When you obtain a value for NextToken in the response to a call to ListShards, you have 300 seconds to use that value. If you specify an expired token in a call to ListShards, you get ExpiredNextTokenException.
+  --exclusive-start-shard-id: string # Specify this parameter to indicate that you want to list the shards starting with the shard whose ID immediately follows ExclusiveStartShardId. If you don't specify this parameter, the default behavior is for ListShards to list the shards starting with the first one in the stream. You cannot specify this parameter if you specify NextToken.
+  --max-results: int # The maximum number of shards to return in a single call to ListShards. The maximum number of shards to return in a single call. The default value is 1000. If you specify a value greater than 1000, at most 1000 results are returned. When the number of shards to be listed is greater than the value of MaxResults, the response contains a NextToken value that you can use in a subsequent call to ListShards to list the next set of shards.
+  --stream-creation-timestamp: string # Specify this input parameter to distinguish data streams that have the same name. For example, if you create a data stream and then delete it, and you later create another data stream with the same name, you can use this input parameter to specify which of the two streams you want to list the shards for. You cannot specify this parameter if you specify the NextToken parameter. (format: date-time)
+  --shard-filter: record # The request parameter used to filter out the response of the ListShards API. — shape: {Type: "AFTER_SHARD_ID"|"AT_TRIM_HORIZON"|"FROM_TRIM_HORIZON"|"AT_LATEST"|"AT_TIMESTAMP"|"FROM_TIMESTAMP", ShardId?: string, Timestamp?: string}
+  --stream-arn: string # The ARN of the stream.
+]: any -> record<Shards: table<ShardId: string, ParentShardId: string, AdjacentParentShardId: string, HashKeyRange: record, SequenceNumberRange: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Kinesis_20131202.ListShards")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StreamName": $stream_name, "NextToken": $next_token, "ExclusiveStartShardId": $exclusive_start_shard_id, "MaxResults": $max_results, "StreamCreationTimestamp": $stream_creation_timestamp, "ShardFilter": $shard_filter, "StreamARN": $stream_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -929,15 +949,16 @@ export def "list-stream-consumers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  stream_arn: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --stream-creation-timestamp: any
-]: any -> record<Consumers: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  stream_arn: string # The ARN of the Kinesis data stream for which you want to list the registered consumers. For more information, see Amazon Resource Names (ARNs) and Amazon Web Services Service Namespaces (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html#arn-syntax-kinesis-streams).
+  --next-token-body: string # When the number of consumers that are registered with the data stream is greater than the default value for the MaxResults parameter, or if you explicitly specify a value for MaxResults that is less than the number of consumers that are registered with the data stream, the response includes a pagination token named NextToken. You can specify this NextToken value in a subsequent call to ListStreamConsumers to list the next set of registered consumers. Don't specify StreamName or StreamCreationTimestamp if you specify NextToken because the latter unambiguously identifies the stream. You can optionally specify a value for the MaxResults parameter when you specify NextToken. If you specify a MaxResults value that is less than the number of consumers that the operation returns if you don't specify MaxResults, the response will contain a new NextToken value. You can use the new NextToken value in a subsequent call to the ListStreamConsumers operation to list the next set of consumers. Tokens expire after 300 seconds. When you obtain a value for NextToken in the response to a call to ListStreamConsumers, you have 300 seconds to use that value. If you specify an expired token in a call to ListStreamConsumers, you get ExpiredNextTokenException. (body field)
+  --max-results-body: int # The maximum number of consumers that you want a single call of ListStreamConsumers to return. The default value is 100. If you specify a value greater than 100, at most 100 results are returned. (body field)
+  --stream-creation-timestamp: string # Specify this input parameter to distinguish data streams that have the same name. For example, if you create a data stream and then delete it, and you later create another data stream with the same name, you can use this input parameter to specify which of the two streams you want to list the consumers for. You can't specify this parameter if you specify the NextToken parameter. (format: date-time)
+]: any -> record<Consumers: table<ConsumerName: string, ConsumerARN: string, ConsumerStatus: string, ConsumerCreationTimestamp: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Kinesis_20131202.ListStreamConsumers")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"StreamARN": $stream_arn, "NextToken": $next_token_body, "MaxResults": $max_results_body, "StreamCreationTimestamp": $stream_creation_timestamp} | compact
@@ -983,14 +1004,15 @@ export def "list-streams" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  --limit-body: any #  (body field)
-  --exclusive-start-stream-name: any
-  --next-token-body: any #  (body field)
-]: any -> record<StreamNames: record, HasMoreStreams: record, NextToken: record, StreamSummaries: record> {
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  --limit-body: int # The maximum number of streams to list. The default value is 100. If you specify a value greater than 100, at most 100 results are returned. (body field)
+  --exclusive-start-stream-name: string # The name of the stream to start the list with.
+  --next-token-body: string # (body field)
+]: any -> record<StreamNames: list<string>, HasMoreStreams: bool, NextToken: string, StreamSummaries: table<StreamName: string, StreamARN: string, StreamStatus: string, StreamModeDetails: record, StreamCreationTimestamp: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Kinesis_20131202.ListStreams")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"Limit": $limit_body, "ExclusiveStartStreamName": $exclusive_start_stream_name, "NextToken": $next_token_body} | compact
@@ -1034,15 +1056,16 @@ export def "list-tags-for-stream" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  --stream-name: any
-  --exclusive-start-tag-key: any
-  --limit: any
-  --stream-arn: any
-]: any -> record<Tags: record, HasMoreTags: record> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  --stream-name: string # The name of the stream.
+  --exclusive-start-tag-key: string # The key to use as the starting point for the list of tags. If this parameter is set, ListTagsForStream gets all tags that occur after ExclusiveStartTagKey.
+  --limit: int # The number of tags to return. If this number is less than the total number of tags associated with the stream, HasMoreTags is set to true. To list additional tags, set ExclusiveStartTagKey to the last key in the response.
+  --stream-arn: string # The ARN of the stream.
+]: any -> record<Tags: table<Key: string, Value: string>, HasMoreTags: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Kinesis_20131202.ListTagsForStream")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StreamName": $stream_name, "ExclusiveStartTagKey": $exclusive_start_tag_key, "Limit": $limit, "StreamARN": $stream_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1085,15 +1108,16 @@ export def "merge-shards" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  --stream-name: any
-  shard_to_merge: any
-  adjacent_shard_to_merge: any
-  --stream-arn: any
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  --stream-name: string # The name of the stream for the merge.
+  shard_to_merge: string # The shard ID of the shard to combine with the adjacent shard for the merge.
+  adjacent_shard_to_merge: string # The shard ID of the adjacent shard for the merge.
+  --stream-arn: string # The ARN of the stream.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Kinesis_20131202.MergeShards")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StreamName": $stream_name, "ShardToMerge": $shard_to_merge, "AdjacentShardToMerge": $adjacent_shard_to_merge, "StreamARN": $stream_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1136,17 +1160,18 @@ export def "put-record" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  --stream-name: any
-  data: any
-  partition_key: any
-  --explicit-hash-key: any
-  --sequence-number-for-ordering: any
-  --stream-arn: any
-]: any -> record<ShardId: record, SequenceNumber: record, EncryptionType: record> {
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  --stream-name: string # The name of the stream to put the data record into.
+  data: string # The data blob to put into the record, which is base64-encoded when the blob is serialized. When the data blob (the payload before base64-encoding) is added to the partition key size, the total size must not exceed the maximum record size (1 MiB).
+  partition_key: string # Determines which shard in the stream the data record is assigned to. Partition keys are Unicode strings with a maximum length limit of 256 characters for each key. Amazon Kinesis Data Streams uses the partition key as input to a hash function that maps the partition key and associated data to a specific shard. Specifically, an MD5 hash function is used to map partition keys to 128-bit integer values and to map associated data records to shards. As a result of this hashing mechanism, all data records with the same partition key map to the same shard within the stream.
+  --explicit-hash-key: string # The hash value used to explicitly determine the shard the data record is assigned to by overriding the partition key hash.
+  --sequence-number-for-ordering: string # Guarantees strictly increasing sequence numbers, for puts from the same client and to the same partition key. Usage: set the SequenceNumberForOrdering of record n to the sequence number of record n-1 (as returned in the result when putting record n-1). If this parameter is not set, records are coarsely ordered based on arrival time.
+  --stream-arn: string # The ARN of the stream.
+]: any -> record<ShardId: string, SequenceNumber: string, EncryptionType: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Kinesis_20131202.PutRecord")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StreamName": $stream_name, "Data": $data, "PartitionKey": $partition_key, "ExplicitHashKey": $explicit_hash_key, "SequenceNumberForOrdering": $sequence_number_for_ordering, "StreamARN": $stream_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1172,6 +1197,7 @@ export def "put-record" [
 #
 # POST /
 # operationId: PutRecords
+# --Records item shape: {Data: string, ExplicitHashKey?: string, PartitionKey: string}
 export def "put-records" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1189,14 +1215,15 @@ export def "put-records" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  records: any
-  --stream-name: any
-  --stream-arn: any
-]: any -> record<FailedRecordCount: record, Records: record, EncryptionType: record> {
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  records: list # The records associated with the request. — item shape: {Data: string, ExplicitHashKey?: string, PartitionKey: string}
+  --stream-name: string # The stream name associated with the request.
+  --stream-arn: string # The ARN of the stream.
+]: any -> record<FailedRecordCount: int, Records: table<SequenceNumber: string, ShardId: string, ErrorCode: string, ErrorMessage: string>, EncryptionType: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Kinesis_20131202.PutRecords")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Records": $records, "StreamName": $stream_name, "StreamARN": $stream_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1239,13 +1266,14 @@ export def "register-stream-consumer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  stream_arn: any
-  consumer_name: any
-]: any -> record<Consumer: record<ConsumerName: record, ConsumerARN: record, ConsumerStatus: record, ConsumerCreationTimestamp: record>> {
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  stream_arn: string # The ARN of the Kinesis data stream that you want to register the consumer with. For more info, see Amazon Resource Names (ARNs) and Amazon Web Services Service Namespaces (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html#arn-syntax-kinesis-streams).
+  consumer_name: string # For a given Kinesis data stream, each consumer must have a unique name. However, consumer names don't have to be unique across data streams.
+]: any -> record<Consumer: record<ConsumerName: string, ConsumerARN: string, ConsumerStatus: string, ConsumerCreationTimestamp: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Kinesis_20131202.RegisterStreamConsumer")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StreamARN": $stream_arn, "ConsumerName": $consumer_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1288,14 +1316,15 @@ export def "remove-tags-from-stream" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  --stream-name: any
-  tag_keys: any
-  --stream-arn: any
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  --stream-name: string # The name of the stream.
+  tag_keys: list<string> # A list of tag keys. Each corresponding tag is removed from the stream.
+  --stream-arn: string # The ARN of the stream.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Kinesis_20131202.RemoveTagsFromStream")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StreamName": $stream_name, "TagKeys": $tag_keys, "StreamARN": $stream_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1338,15 +1367,16 @@ export def "split-shard" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  --stream-name: any
-  shard_to_split: any
-  new_starting_hash_key: any
-  --stream-arn: any
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  --stream-name: string # The name of the stream for the shard split.
+  shard_to_split: string # The shard ID of the shard to split.
+  new_starting_hash_key: string # A hash key value for the starting hash key of one of the child shards created by the split. The hash key range for a given shard constitutes a set of ordered contiguous positive integers. The value for NewStartingHashKey must be in the range of hash keys being mapped into the shard. The NewStartingHashKey hash key value and all higher hash key values in hash key range are distributed to one of the child shards. All the lower hash key values in the range are distributed to the other child shard.
+  --stream-arn: string # The ARN of the stream.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Kinesis_20131202.SplitShard")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StreamName": $stream_name, "ShardToSplit": $shard_to_split, "NewStartingHashKey": $new_starting_hash_key, "StreamARN": $stream_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1389,15 +1419,16 @@ export def "start-stream-encryption" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  --stream-name: any
-  encryption_type: any
-  key_id: any
-  --stream-arn: any
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  --stream-name: string # The name of the stream for which to start encrypting records.
+  encryption_type: string@encryption-type-completer # The encryption type to use. The only valid value is KMS.
+  key_id: string # The GUID for the customer-managed Amazon Web Services KMS key to use for encryption. This value can be a globally unique identifier, a fully specified Amazon Resource Name (ARN) to either an alias or a key, or an alias name prefixed by "alias/".You can also use a master key owned by Kinesis Data Streams by specifying the alias aws/kinesis. Key ARN example: arn:aws:kms:us-east-1:123456789012:key/12345678-1234-1234-1234-123456789012 Alias ARN example: arn:aws:kms:us-east-1:123456789012:alias/MyAliasName Globally unique key ID example: 12345678-1234-1234-1234-123456789012 Alias name example: alias/MyAliasName Master key owned by Kinesis Data Streams: alias/aws/kinesis
+  --stream-arn: string # The ARN of the stream.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Kinesis_20131202.StartStreamEncryption")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StreamName": $stream_name, "EncryptionType": $encryption_type, "KeyId": $key_id, "StreamARN": $stream_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1440,15 +1471,16 @@ export def "stop-stream-encryption" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  --stream-name: any
-  encryption_type: any
-  key_id: any
-  --stream-arn: any
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  --stream-name: string # The name of the stream on which to stop encrypting records.
+  encryption_type: string@encryption-type-completer # The encryption type. The only valid value is KMS.
+  key_id: string # The GUID for the customer-managed Amazon Web Services KMS key to use for encryption. This value can be a globally unique identifier, a fully specified Amazon Resource Name (ARN) to either an alias or a key, or an alias name prefixed by "alias/".You can also use a master key owned by Kinesis Data Streams by specifying the alias aws/kinesis. Key ARN example: arn:aws:kms:us-east-1:123456789012:key/12345678-1234-1234-1234-123456789012 Alias ARN example: arn:aws:kms:us-east-1:123456789012:alias/MyAliasName Globally unique key ID example: 12345678-1234-1234-1234-123456789012 Alias name example: alias/MyAliasName Master key owned by Kinesis Data Streams: alias/aws/kinesis
+  --stream-arn: string # The ARN of the stream.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Kinesis_20131202.StopStreamEncryption")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StreamName": $stream_name, "EncryptionType": $encryption_type, "KeyId": $key_id, "StreamARN": $stream_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1491,15 +1523,16 @@ export def "update-shard-count" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-26
-  --stream-name: any
-  target_shard_count: any
-  scaling_type: any
-  --stream-arn: any
-]: any -> record<StreamName: record, CurrentShardCount: record, TargetShardCount: record, StreamARN: record> {
+  --x-amz-target: string@x-amz-target-completer-26 # required
+  --stream-name: string # The name of the stream.
+  target_shard_count: int # The new number of shards. This value has the following default limits. By default, you cannot do the following: Set this value to more than double your current shard count for a stream. Set this value below half your current shard count for a stream. Set this value to more than 10000 shards in a stream (the default limit for shard count per stream is 10000 per account per region), unless you request a limit increase. Scale a stream with more than 10000 shards down unless you set this value to less than 10000 shards.
+  scaling_type: string@scaling-type-completer # The scaling type. Uniform scaling creates shards of equal size.
+  --stream-arn: string # The ARN of the stream.
+]: any -> record<StreamName: string, CurrentShardCount: int, TargetShardCount: int, StreamARN: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Kinesis_20131202.UpdateShardCount")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StreamName": $stream_name, "TargetShardCount": $target_shard_count, "ScalingType": $scaling_type, "StreamARN": $stream_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1525,6 +1558,7 @@ export def "update-shard-count" [
 #
 # POST /
 # operationId: UpdateStreamMode
+# --StreamModeDetails shape: {StreamMode: "PROVISIONED"|"ON_DEMAND"}
 export def "update-stream-mode" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1542,13 +1576,14 @@ export def "update-stream-mode" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-27
-  stream_arn: any
-  stream_mode_details: any
+  --x-amz-target: string@x-amz-target-completer-27 # required
+  stream_arn: string # Specifies the ARN of the data stream whose capacity mode you want to update.
+  stream_mode_details: record # Specifies the capacity mode to which you want to set your data stream. Currently, in Kinesis Data Streams, you can choose between an on-demand capacity mode and a provisioned capacity mode for your data streams. — shape: {StreamMode: "PROVISIONED"|"ON_DEMAND"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Kinesis_20131202.UpdateStreamMode")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StreamARN": $stream_arn, "StreamModeDetails": $stream_mode_details} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

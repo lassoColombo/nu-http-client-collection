@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -181,21 +181,21 @@ export def "get-assignments" [
   --page-size: int # Pagination page size
   --q: string # Restrict results to assignments whose name or description matches this keyword.
   --url-words: string # Select an assignment by urlWords.
-  --qp-open: oneof<nothing, bool> # Select open or closed assignments
+  --open: oneof<nothing, bool> # Select open or closed assignments
   --always-open: oneof<nothing, bool> # Select assignments with no closing date.
   --tag: string # Restrict results to assignments which are tagged with this tag.
   --name: string # Restrict results to the assignment (or potentially assignments) with this exact name
 ]: nothing -> table<allowsAnonymousContributions: bool, callToAction: string, cover: record<artifacts: list, id: string, media: record>, created: string, description: string, embargo: string, ends: string, featured: bool, id: string, mediaRequired: bool, moderator: string, name: string, open: bool, receiptMessage: string, starts: string, tags: list<record>, urlWords: string, webUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ownedBy" $owned_by "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "urlWords" $url_words "scalar") (serialize-qp "open" $qp_open "scalar") (serialize-qp "alwaysOpen" $always_open "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "ownedBy" $owned_by "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "urlWords" $url_words "scalar") (serialize-qp "open" $open "scalar") (serialize-qp "alwaysOpen" $always_open "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/assignments" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"ownedBy": $owned_by, "page": $page, "pageSize": $page_size, "q": $q, "urlWords": $url_words, "open": $qp_open, "alwaysOpen": $always_open, "tag": $tag, "name": $name} | compact)
+    query: ({"ownedBy": $owned_by, "page": $page, "pageSize": $page_size, "q": $q, "urlWords": $url_words, "open": $open, "alwaysOpen": $always_open, "tag": $tag, "name": $name} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1094,10 +1094,11 @@ export def "get-forms" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --owned-by: string # Restrict results to forms owned by this user.
+  --owned-by: string # Restrict results to forms owned by this user. (required)
 ]: nothing -> table<callToAction: string, cssUrl: string, fields: list<record>, heading: string, id: string, name: string, noCss: bool, ownedBy: string, tags: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owned_by == null) { error make --unspanned { msg: "required query parameter 'ownedBy' missing: pass --owned-by" } }
   let qp = [(serialize-qp "ownedBy" $owned_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/forms" $qp $auth.query)
   let accept_val = "application/json"
@@ -1280,11 +1281,12 @@ export def "get-notifications-contributions-id-preview" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --message: string # Type of message to preview.
+  --message: string # Type of message to preview. (required)
 ]: nothing -> record<email: string, html: string, subject: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($message == null) { error make --unspanned { msg: "required query parameter 'message' missing: pass --message" } }
   let qp = [(serialize-qp "message" $message "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notifications/contributions/{id}/preview") $qp $auth.query)
   let accept_val = "application/json"

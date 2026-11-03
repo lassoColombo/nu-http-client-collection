@@ -131,10 +131,11 @@ export def "status-call-api-v1-status-call-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query: string
+  --query: string # required
 ]: nothing -> record<data: record<answered_by: string, error: string, option_selected: string, phone_number: string, previously_verified_at: string, progress: string, token: string>, meta: record<job_id: string, job_time: int, query: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/status/call" $qp $auth.query)
   let accept_val = "application/json"
@@ -167,10 +168,11 @@ export def "status-sku-api-v1-status-sku-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query: string
+  --query: string # required
 ]: nothing -> record<data: record<answered_by: string, error: string, option_selected: string, phone_number: string, previously_verified_at: string, progress: string, token: string>, meta: record<job_id: string, job_time: int, query: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/status/sku" $qp $auth.query)
   let accept_val = "application/json"
@@ -203,12 +205,13 @@ export def "verify-name-api-v1-verify-name-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query: string
+  --query: string # required
   --state: string
   --city: string
 ]: nothing -> record<data: table<business_name: string, city: string, department_code_and_type: list, entity_type: string, is_gstn_verified: bool, nature_of_business: list, pincode: int, registration_date: string, registration_type: string, state: string>, meta: record<job_id: string, job_time: int, query: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city" $city "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/verify/name" $qp $auth.query)
   let accept_val = "application/json"
@@ -241,11 +244,12 @@ export def "verify-business-api-v1-verify-phone-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query: string
+  --query: string # required
   --locking-period: string # default: 24
 ]: nothing -> record<data: record<answered_by: string, error: string, option_selected: string, phone_number: string, previously_verified_at: string, progress: string, token: string>, meta: record<job_id: string, job_time: int, query: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "locking_period" $locking_period "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/verify/phone" $qp $auth.query)
   let accept_val = "application/json"
@@ -278,11 +282,12 @@ export def "verify-sku-api-v1-verify-sku-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query: string
+  --query: string # required
   --locking-period: string # default: 24
 ]: nothing -> record<data: record<answered_by: string, error: string, option_selected: string, phone_number: string, previously_verified_at: string, progress: string, token: string>, meta: record<job_id: string, job_time: int, query: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "locking_period" $locking_period "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/verify/sku" $qp $auth.query)
   let accept_val = "application/json"

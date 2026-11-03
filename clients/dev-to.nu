@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "api-key" => { {scheme: $scheme, headers: {api-key: $token_val}, query: "", location: "header"} }
+    "api-key" => { {scheme: $scheme, headers: {"api-key": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -889,18 +889,18 @@ export def "get-followers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Pagination page (format: int32, default: 1)
   --per-page: int # Page size (the number of items to return per page). The default maximum value can be overridden by "API_PER_PAGE_MAX" environment variable. (format: int32, default: 30)
-  --qp-sort: string # Default is 'created_at'. Specifies the sort order for the created_at param of the follow relationship. To sort by newest followers first (descending order) specify ?sort=-created_at. (e.g. created_at)
+  --sort: string # Default is 'created_at'. Specifies the sort order for the created_at param of the follow relationship. To sort by newest followers first (descending order) specify ?sort=-created_at. (e.g. created_at)
 ]: nothing -> table<id: int, name: string, path: string, profile_image: string, type_of: string, user_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/followers/users" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"page": $page, "per_page": $per_page, "sort": $qp_sort} | compact)
+    query: ({"page": $page, "per_page": $per_page, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1338,12 +1338,15 @@ export def "post-api-reactions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --category: string@category-completer
-  --reactable-id: int # format: int32
-  --reactable-type: string@reactable-type-completer
+  --category: string@category-completer # required
+  --reactable-id: int # required, format: int32
+  --reactable-type: string@reactable-type-completer # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($category == null) { error make --unspanned { msg: "required query parameter 'category' missing: pass --category" } }
+  if ($reactable_id == null) { error make --unspanned { msg: "required query parameter 'reactable_id' missing: pass --reactable-id" } }
+  if ($reactable_type == null) { error make --unspanned { msg: "required query parameter 'reactable_type' missing: pass --reactable-type" } }
   let qp = [(serialize-qp "category" $category "scalar") (serialize-qp "reactable_id" $reactable_id "scalar") (serialize-qp "reactable_type" $reactable_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/reactions" $qp $auth.query)
   let accept_val = "application/json"
@@ -1375,12 +1378,15 @@ export def "post-api-reactions-toggle" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --category: string@category-completer
-  --reactable-id: int # format: int32
-  --reactable-type: string@reactable-type-completer
+  --category: string@category-completer # required
+  --reactable-id: int # required, format: int32
+  --reactable-type: string@reactable-type-completer # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($category == null) { error make --unspanned { msg: "required query parameter 'category' missing: pass --category" } }
+  if ($reactable_id == null) { error make --unspanned { msg: "required query parameter 'reactable_id' missing: pass --reactable-id" } }
+  if ($reactable_type == null) { error make --unspanned { msg: "required query parameter 'reactable_type' missing: pass --reactable-type" } }
   let qp = [(serialize-qp "category" $category "scalar") (serialize-qp "reactable_id" $reactable_id "scalar") (serialize-qp "reactable_type" $reactable_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/reactions/toggle" $qp $auth.query)
   let accept_val = "application/json"

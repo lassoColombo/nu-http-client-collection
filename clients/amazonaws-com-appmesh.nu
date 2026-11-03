@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -134,8 +134,8 @@ export def commands []: nothing -> table {
 #
 # PUT /v20190125/meshes/{meshName}/virtualGateway/{virtualGatewayName}/gatewayRoutes
 # operationId: CreateGatewayRoute
-# --spec shape: {grpcRoute?: any, http2Route?: any, httpRoute?: any, priority?: any}
-# --tags item shape: {key: any, value: any}
+# --spec shape: {grpcRoute?: record, http2Route?: record, httpRoute?: record, priority?: int}
+# --tags item shape: {key: string, value: string}
 export def "create-gateway-route" [
   mesh_name: string
   virtual_gateway_name: string
@@ -158,9 +158,9 @@ export def "create-gateway-route" [
   --x-amz-signed-headers: string
   --client-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request. Up to 36 letters, numbers, hyphens, and underscores are allowed.
   gateway_route_name: string # The name to use for the gateway route.
-  spec: record # An object that represents a gateway route specification. Specify one gateway route type. — shape: {grpcRoute?: any, http2Route?: any, httpRoute?: any, priority?: any}
-  --tags: list # Optional metadata that you can apply to the gateway route to assist with categorization and organization. Each tag consists of a key and an optional value, both of which you define. Tag keys can have a maximum character length of 128 characters, and tag values can have a maximum length of 256 characters. — item shape: {key: any, value: any}
-]: any -> record<gatewayRoute: record<gatewayRouteName: record, meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, spec: record<grpcRoute: record, http2Route: record, httpRoute: record, priority: record>, status: record<status: record>, virtualGatewayName: record>> {
+  spec: record # An object that represents a gateway route specification. Specify one gateway route type. — shape: {grpcRoute?: record, http2Route?: record, httpRoute?: record, priority?: int}
+  --tags: list # Optional metadata that you can apply to the gateway route to assist with categorization and organization. Each tag consists of a key and an optional value, both of which you define. Tag keys can have a maximum character length of 128 characters, and tag values can have a maximum length of 256 characters. — item shape: {key: string, value: string}
+]: any -> record<gatewayRoute: record<gatewayRouteName: string, meshName: string, metadata: record<arn: string, createdAt: string, lastUpdatedAt: string, meshOwner: string, resourceOwner: string, uid: string, version: int>, spec: record<grpcRoute: record, http2Route: record, httpRoute: record, priority: int>, status: record<status: string>, virtualGatewayName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -214,7 +214,7 @@ export def "list-gateway-routes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<gatewayRoutes: record, nextToken: record> {
+]: nothing -> record<gatewayRoutes: table<arn: string, createdAt: string, gatewayRouteName: string, lastUpdatedAt: string, meshName: string, meshOwner: string, resourceOwner: string, version: int, virtualGatewayName: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
@@ -243,8 +243,8 @@ export def "list-gateway-routes" [
 #
 # PUT /v20190125/meshes
 # operationId: CreateMesh
-# --spec shape: {egressFilter?: any, serviceDiscovery?: record}
-# --tags item shape: {key: any, value: any}
+# --spec shape: {egressFilter?: record, serviceDiscovery?: record}
+# --tags item shape: {key: string, value: string}
 export def "create-mesh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -264,9 +264,9 @@ export def "create-mesh" [
   --x-amz-signed-headers: string
   --client-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request. Up to 36 letters, numbers, hyphens, and underscores are allowed.
   mesh_name: string # The name to use for the service mesh.
-  --spec: record # An object that represents the specification of a service mesh. — shape: {egressFilter?: any, serviceDiscovery?: record}
-  --tags: list # Optional metadata that you can apply to the service mesh to assist with categorization and organization. Each tag consists of a key and an optional value, both of which you define. Tag keys can have a maximum character length of 128 characters, and tag values can have a maximum length of 256 characters. — item shape: {key: any, value: any}
-]: any -> record<mesh: record<meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, spec: record<egressFilter: record, serviceDiscovery: record>, status: record<status: record>>> {
+  --spec: record # An object that represents the specification of a service mesh. — shape: {egressFilter?: record, serviceDiscovery?: record}
+  --tags: list # Optional metadata that you can apply to the service mesh to assist with categorization and organization. Each tag consists of a key and an optional value, both of which you define. Tag keys can have a maximum character length of 128 characters, and tag values can have a maximum length of 256 characters. — item shape: {key: string, value: string}
+]: any -> record<mesh: record<meshName: string, metadata: record<arn: string, createdAt: string, lastUpdatedAt: string, meshOwner: string, resourceOwner: string, uid: string, version: int>, spec: record<egressFilter: record, serviceDiscovery: record>, status: record<status: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -314,7 +314,7 @@ export def "list-meshes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<meshes: record, nextToken: record> {
+]: nothing -> record<meshes: table<arn: string, createdAt: string, lastUpdatedAt: string, meshName: string, meshOwner: string, resourceOwner: string, version: int>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -341,8 +341,8 @@ export def "list-meshes" [
 #
 # PUT /v20190125/meshes/{meshName}/virtualRouter/{virtualRouterName}/routes
 # operationId: CreateRoute
-# --spec shape: {grpcRoute?: any, http2Route?: any, httpRoute?: any, priority?: any, tcpRoute?: any}
-# --tags item shape: {key: any, value: any}
+# --spec shape: {grpcRoute?: record, http2Route?: record, httpRoute?: record, priority?: int, tcpRoute?: record}
+# --tags item shape: {key: string, value: string}
 export def "create-route" [
   mesh_name: string
   virtual_router_name: string
@@ -365,9 +365,9 @@ export def "create-route" [
   --x-amz-signed-headers: string
   --client-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request. Up to 36 letters, numbers, hyphens, and underscores are allowed.
   route_name: string # The name to use for the route.
-  spec: record # An object that represents a route specification. Specify one route type. — shape: {grpcRoute?: any, http2Route?: any, httpRoute?: any, priority?: any, tcpRoute?: any}
-  --tags: list # Optional metadata that you can apply to the route to assist with categorization and organization. Each tag consists of a key and an optional value, both of which you define. Tag keys can have a maximum character length of 128 characters, and tag values can have a maximum length of 256 characters. — item shape: {key: any, value: any}
-]: any -> record<route: record<meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, routeName: record, spec: record<grpcRoute: record, http2Route: record, httpRoute: record, priority: record, tcpRoute: record>, status: record<status: record>, virtualRouterName: record>> {
+  spec: record # An object that represents a route specification. Specify one route type. — shape: {grpcRoute?: record, http2Route?: record, httpRoute?: record, priority?: int, tcpRoute?: record}
+  --tags: list # Optional metadata that you can apply to the route to assist with categorization and organization. Each tag consists of a key and an optional value, both of which you define. Tag keys can have a maximum character length of 128 characters, and tag values can have a maximum length of 256 characters. — item shape: {key: string, value: string}
+]: any -> record<route: record<meshName: string, metadata: record<arn: string, createdAt: string, lastUpdatedAt: string, meshOwner: string, resourceOwner: string, uid: string, version: int>, routeName: string, spec: record<grpcRoute: record, http2Route: record, httpRoute: record, priority: int, tcpRoute: record>, status: record<status: string>, virtualRouterName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -421,7 +421,7 @@ export def "list-routes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<nextToken: record, routes: record> {
+]: nothing -> record<nextToken: string, routes: table<arn: string, createdAt: string, lastUpdatedAt: string, meshName: string, meshOwner: string, resourceOwner: string, routeName: string, version: int, virtualRouterName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
@@ -450,8 +450,8 @@ export def "list-routes" [
 #
 # PUT /v20190125/meshes/{meshName}/virtualGateways
 # operationId: CreateVirtualGateway
-# --spec shape: {backendDefaults?: any, listeners?: any, logging?: record}
-# --tags item shape: {key: any, value: any}
+# --spec shape: {backendDefaults?: record, listeners?: list, logging?: record}
+# --tags item shape: {key: string, value: string}
 export def "create-virtual-gateway" [
   mesh_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -472,10 +472,10 @@ export def "create-virtual-gateway" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --client-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request. Up to 36 letters, numbers, hyphens, and underscores are allowed.
-  spec: record # An object that represents the specification of a service mesh resource. — shape: {backendDefaults?: any, listeners?: any, logging?: record}
-  --tags: list # Optional metadata that you can apply to the virtual gateway to assist with categorization and organization. Each tag consists of a key and an optional value, both of which you define. Tag keys can have a maximum character length of 128 characters, and tag values can have a maximum length of 256 characters. — item shape: {key: any, value: any}
+  spec: record # An object that represents the specification of a service mesh resource. — shape: {backendDefaults?: record, listeners?: list, logging?: record}
+  --tags: list # Optional metadata that you can apply to the virtual gateway to assist with categorization and organization. Each tag consists of a key and an optional value, both of which you define. Tag keys can have a maximum character length of 128 characters, and tag values can have a maximum length of 256 characters. — item shape: {key: string, value: string}
   virtual_gateway_name: string # The name to use for the virtual gateway.
-]: any -> record<virtualGateway: record<meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, spec: record<backendDefaults: record, listeners: record, logging: record>, status: record<status: record>, virtualGatewayName: record>> {
+]: any -> record<virtualGateway: record<meshName: string, metadata: record<arn: string, createdAt: string, lastUpdatedAt: string, meshOwner: string, resourceOwner: string, uid: string, version: int>, spec: record<backendDefaults: record, listeners: list, logging: record>, status: record<status: string>, virtualGatewayName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -527,7 +527,7 @@ export def "list-virtual-gateways" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<nextToken: record, virtualGateways: record> {
+]: nothing -> record<nextToken: string, virtualGateways: table<arn: string, createdAt: string, lastUpdatedAt: string, meshName: string, meshOwner: string, resourceOwner: string, version: int, virtualGatewayName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
@@ -555,8 +555,8 @@ export def "list-virtual-gateways" [
 #
 # PUT /v20190125/meshes/{meshName}/virtualNodes
 # operationId: CreateVirtualNode
-# --spec shape: {backendDefaults?: any, backends?: any, listeners?: any, logging?: any, serviceDiscovery?: any}
-# --tags item shape: {key: any, value: any}
+# --spec shape: {backendDefaults?: record, backends?: list, listeners?: list, logging?: record, serviceDiscovery?: record}
+# --tags item shape: {key: string, value: string}
 export def "create-virtual-node" [
   mesh_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -577,10 +577,10 @@ export def "create-virtual-node" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --client-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request. Up to 36 letters, numbers, hyphens, and underscores are allowed.
-  spec: record # An object that represents the specification of a virtual node. — shape: {backendDefaults?: any, backends?: any, listeners?: any, logging?: any, serviceDiscovery?: any}
-  --tags: list # Optional metadata that you can apply to the virtual node to assist with categorization and organization. Each tag consists of a key and an optional value, both of which you define. Tag keys can have a maximum character length of 128 characters, and tag values can have a maximum length of 256 characters. — item shape: {key: any, value: any}
+  spec: record # An object that represents the specification of a virtual node. — shape: {backendDefaults?: record, backends?: list, listeners?: list, logging?: record, serviceDiscovery?: record}
+  --tags: list # Optional metadata that you can apply to the virtual node to assist with categorization and organization. Each tag consists of a key and an optional value, both of which you define. Tag keys can have a maximum character length of 128 characters, and tag values can have a maximum length of 256 characters. — item shape: {key: string, value: string}
   virtual_node_name: string # The name to use for the virtual node.
-]: any -> record<virtualNode: record<meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, spec: record<backendDefaults: record, backends: record, listeners: record, logging: record, serviceDiscovery: record>, status: record<status: record>, virtualNodeName: record>> {
+]: any -> record<virtualNode: record<meshName: string, metadata: record<arn: string, createdAt: string, lastUpdatedAt: string, meshOwner: string, resourceOwner: string, uid: string, version: int>, spec: record<backendDefaults: record, backends: list, listeners: list, logging: record, serviceDiscovery: record>, status: record<status: string>, virtualNodeName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -632,7 +632,7 @@ export def "list-virtual-nodes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<nextToken: record, virtualNodes: record> {
+]: nothing -> record<nextToken: string, virtualNodes: table<arn: string, createdAt: string, lastUpdatedAt: string, meshName: string, meshOwner: string, resourceOwner: string, version: int, virtualNodeName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
@@ -660,8 +660,8 @@ export def "list-virtual-nodes" [
 #
 # PUT /v20190125/meshes/{meshName}/virtualRouters
 # operationId: CreateVirtualRouter
-# --spec shape: {listeners?: any}
-# --tags item shape: {key: any, value: any}
+# --spec shape: {listeners?: list}
+# --tags item shape: {key: string, value: string}
 export def "create-virtual-router" [
   mesh_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -682,10 +682,10 @@ export def "create-virtual-router" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --client-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request. Up to 36 letters, numbers, hyphens, and underscores are allowed.
-  spec: record # An object that represents the specification of a virtual router. — shape: {listeners?: any}
-  --tags: list # Optional metadata that you can apply to the virtual router to assist with categorization and organization. Each tag consists of a key and an optional value, both of which you define. Tag keys can have a maximum character length of 128 characters, and tag values can have a maximum length of 256 characters. — item shape: {key: any, value: any}
+  spec: record # An object that represents the specification of a virtual router. — shape: {listeners?: list}
+  --tags: list # Optional metadata that you can apply to the virtual router to assist with categorization and organization. Each tag consists of a key and an optional value, both of which you define. Tag keys can have a maximum character length of 128 characters, and tag values can have a maximum length of 256 characters. — item shape: {key: string, value: string}
   virtual_router_name: string # The name to use for the virtual router.
-]: any -> record<virtualRouter: record<meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, spec: record<listeners: record>, status: record<status: record>, virtualRouterName: record>> {
+]: any -> record<virtualRouter: record<meshName: string, metadata: record<arn: string, createdAt: string, lastUpdatedAt: string, meshOwner: string, resourceOwner: string, uid: string, version: int>, spec: record<listeners: list>, status: record<status: string>, virtualRouterName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -737,7 +737,7 @@ export def "list-virtual-routers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<nextToken: record, virtualRouters: record> {
+]: nothing -> record<nextToken: string, virtualRouters: table<arn: string, createdAt: string, lastUpdatedAt: string, meshName: string, meshOwner: string, resourceOwner: string, version: int, virtualRouterName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
@@ -765,8 +765,8 @@ export def "list-virtual-routers" [
 #
 # PUT /v20190125/meshes/{meshName}/virtualServices
 # operationId: CreateVirtualService
-# --spec shape: {provider?: any}
-# --tags item shape: {key: any, value: any}
+# --spec shape: {provider?: record}
+# --tags item shape: {key: string, value: string}
 export def "create-virtual-service" [
   mesh_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -787,10 +787,10 @@ export def "create-virtual-service" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --client-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request. Up to 36 letters, numbers, hyphens, and underscores are allowed.
-  spec: record # An object that represents the specification of a virtual service. — shape: {provider?: any}
-  --tags: list # Optional metadata that you can apply to the virtual service to assist with categorization and organization. Each tag consists of a key and an optional value, both of which you define. Tag keys can have a maximum character length of 128 characters, and tag values can have a maximum length of 256 characters. — item shape: {key: any, value: any}
+  spec: record # An object that represents the specification of a virtual service. — shape: {provider?: record}
+  --tags: list # Optional metadata that you can apply to the virtual service to assist with categorization and organization. Each tag consists of a key and an optional value, both of which you define. Tag keys can have a maximum character length of 128 characters, and tag values can have a maximum length of 256 characters. — item shape: {key: string, value: string}
   virtual_service_name: string # The name to use for the virtual service.
-]: any -> record<virtualService: record<meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, spec: record<provider: record>, status: record<status: record>, virtualServiceName: record>> {
+]: any -> record<virtualService: record<meshName: string, metadata: record<arn: string, createdAt: string, lastUpdatedAt: string, meshOwner: string, resourceOwner: string, uid: string, version: int>, spec: record<provider: record>, status: record<status: string>, virtualServiceName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -842,7 +842,7 @@ export def "list-virtual-services" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<nextToken: record, virtualServices: record> {
+]: nothing -> record<nextToken: string, virtualServices: table<arn: string, createdAt: string, lastUpdatedAt: string, meshName: string, meshOwner: string, resourceOwner: string, version: int, virtualServiceName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
@@ -891,7 +891,7 @@ export def "delete-gateway-route" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<gatewayRoute: record<gatewayRouteName: record, meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, spec: record<grpcRoute: record, http2Route: record, httpRoute: record, priority: record>, status: record<status: record>, virtualGatewayName: record>> {
+]: nothing -> record<gatewayRoute: record<gatewayRouteName: string, meshName: string, metadata: record<arn: string, createdAt: string, lastUpdatedAt: string, meshOwner: string, resourceOwner: string, uid: string, version: int>, spec: record<grpcRoute: record, http2Route: record, httpRoute: record, priority: int>, status: record<status: string>, virtualGatewayName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
@@ -942,7 +942,7 @@ export def "describe-gateway-route" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<gatewayRoute: record<gatewayRouteName: record, meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, spec: record<grpcRoute: record, http2Route: record, httpRoute: record, priority: record>, status: record<status: record>, virtualGatewayName: record>> {
+]: nothing -> record<gatewayRoute: record<gatewayRouteName: string, meshName: string, metadata: record<arn: string, createdAt: string, lastUpdatedAt: string, meshOwner: string, resourceOwner: string, uid: string, version: int>, spec: record<grpcRoute: record, http2Route: record, httpRoute: record, priority: int>, status: record<status: string>, virtualGatewayName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
@@ -972,7 +972,7 @@ export def "describe-gateway-route" [
 #
 # PUT /v20190125/meshes/{meshName}/virtualGateway/{virtualGatewayName}/gatewayRoutes/{gatewayRouteName}
 # operationId: UpdateGatewayRoute
-# --spec shape: {grpcRoute?: any, http2Route?: any, httpRoute?: any, priority?: any}
+# --spec shape: {grpcRoute?: record, http2Route?: record, httpRoute?: record, priority?: int}
 export def "update-gateway-route" [
   mesh_name: string
   virtual_gateway_name: string
@@ -995,8 +995,8 @@ export def "update-gateway-route" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --client-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request. Up to 36 letters, numbers, hyphens, and underscores are allowed.
-  spec: record # An object that represents a gateway route specification. Specify one gateway route type. — shape: {grpcRoute?: any, http2Route?: any, httpRoute?: any, priority?: any}
-]: any -> record<gatewayRoute: record<gatewayRouteName: record, meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, spec: record<grpcRoute: record, http2Route: record, httpRoute: record, priority: record>, status: record<status: record>, virtualGatewayName: record>> {
+  spec: record # An object that represents a gateway route specification. Specify one gateway route type. — shape: {grpcRoute?: record, http2Route?: record, httpRoute?: record, priority?: int}
+]: any -> record<gatewayRoute: record<gatewayRouteName: string, meshName: string, metadata: record<arn: string, createdAt: string, lastUpdatedAt: string, meshOwner: string, resourceOwner: string, uid: string, version: int>, spec: record<grpcRoute: record, http2Route: record, httpRoute: record, priority: int>, status: record<status: string>, virtualGatewayName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1047,7 +1047,7 @@ export def "delete-mesh" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<mesh: record<meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, spec: record<egressFilter: record, serviceDiscovery: record>, status: record<status: record>>> {
+]: nothing -> record<mesh: record<meshName: string, metadata: record<arn: string, createdAt: string, lastUpdatedAt: string, meshOwner: string, resourceOwner: string, uid: string, version: int>, spec: record<egressFilter: record, serviceDiscovery: record>, status: record<status: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
@@ -1093,7 +1093,7 @@ export def "describe-mesh" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<mesh: record<meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, spec: record<egressFilter: record, serviceDiscovery: record>, status: record<status: record>>> {
+]: nothing -> record<mesh: record<meshName: string, metadata: record<arn: string, createdAt: string, lastUpdatedAt: string, meshOwner: string, resourceOwner: string, uid: string, version: int>, spec: record<egressFilter: record, serviceDiscovery: record>, status: record<status: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
@@ -1121,7 +1121,7 @@ export def "describe-mesh" [
 #
 # PUT /v20190125/meshes/{meshName}
 # operationId: UpdateMesh
-# --spec shape: {egressFilter?: any, serviceDiscovery?: record}
+# --spec shape: {egressFilter?: record, serviceDiscovery?: record}
 export def "update-mesh" [
   mesh_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1141,8 +1141,8 @@ export def "update-mesh" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --client-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request. Up to 36 letters, numbers, hyphens, and underscores are allowed.
-  --spec: record # An object that represents the specification of a service mesh. — shape: {egressFilter?: any, serviceDiscovery?: record}
-]: any -> record<mesh: record<meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, spec: record<egressFilter: record, serviceDiscovery: record>, status: record<status: record>>> {
+  --spec: record # An object that represents the specification of a service mesh. — shape: {egressFilter?: record, serviceDiscovery?: record}
+]: any -> record<mesh: record<meshName: string, metadata: record<arn: string, createdAt: string, lastUpdatedAt: string, meshOwner: string, resourceOwner: string, uid: string, version: int>, spec: record<egressFilter: record, serviceDiscovery: record>, status: record<status: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1193,7 +1193,7 @@ export def "delete-route" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<route: record<meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, routeName: record, spec: record<grpcRoute: record, http2Route: record, httpRoute: record, priority: record, tcpRoute: record>, status: record<status: record>, virtualRouterName: record>> {
+]: nothing -> record<route: record<meshName: string, metadata: record<arn: string, createdAt: string, lastUpdatedAt: string, meshOwner: string, resourceOwner: string, uid: string, version: int>, routeName: string, spec: record<grpcRoute: record, http2Route: record, httpRoute: record, priority: int, tcpRoute: record>, status: record<status: string>, virtualRouterName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
@@ -1244,7 +1244,7 @@ export def "describe-route" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<route: record<meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, routeName: record, spec: record<grpcRoute: record, http2Route: record, httpRoute: record, priority: record, tcpRoute: record>, status: record<status: record>, virtualRouterName: record>> {
+]: nothing -> record<route: record<meshName: string, metadata: record<arn: string, createdAt: string, lastUpdatedAt: string, meshOwner: string, resourceOwner: string, uid: string, version: int>, routeName: string, spec: record<grpcRoute: record, http2Route: record, httpRoute: record, priority: int, tcpRoute: record>, status: record<status: string>, virtualRouterName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
@@ -1274,7 +1274,7 @@ export def "describe-route" [
 #
 # PUT /v20190125/meshes/{meshName}/virtualRouter/{virtualRouterName}/routes/{routeName}
 # operationId: UpdateRoute
-# --spec shape: {grpcRoute?: any, http2Route?: any, httpRoute?: any, priority?: any, tcpRoute?: any}
+# --spec shape: {grpcRoute?: record, http2Route?: record, httpRoute?: record, priority?: int, tcpRoute?: record}
 export def "update-route" [
   mesh_name: string
   virtual_router_name: string
@@ -1297,8 +1297,8 @@ export def "update-route" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --client-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request. Up to 36 letters, numbers, hyphens, and underscores are allowed.
-  spec: record # An object that represents a route specification. Specify one route type. — shape: {grpcRoute?: any, http2Route?: any, httpRoute?: any, priority?: any, tcpRoute?: any}
-]: any -> record<route: record<meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, routeName: record, spec: record<grpcRoute: record, http2Route: record, httpRoute: record, priority: record, tcpRoute: record>, status: record<status: record>, virtualRouterName: record>> {
+  spec: record # An object that represents a route specification. Specify one route type. — shape: {grpcRoute?: record, http2Route?: record, httpRoute?: record, priority?: int, tcpRoute?: record}
+]: any -> record<route: record<meshName: string, metadata: record<arn: string, createdAt: string, lastUpdatedAt: string, meshOwner: string, resourceOwner: string, uid: string, version: int>, routeName: string, spec: record<grpcRoute: record, http2Route: record, httpRoute: record, priority: int, tcpRoute: record>, status: record<status: string>, virtualRouterName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1351,7 +1351,7 @@ export def "delete-virtual-gateway" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<virtualGateway: record<meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, spec: record<backendDefaults: record, listeners: record, logging: record>, status: record<status: record>, virtualGatewayName: record>> {
+]: nothing -> record<virtualGateway: record<meshName: string, metadata: record<arn: string, createdAt: string, lastUpdatedAt: string, meshOwner: string, resourceOwner: string, uid: string, version: int>, spec: record<backendDefaults: record, listeners: list, logging: record>, status: record<status: string>, virtualGatewayName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
@@ -1400,7 +1400,7 @@ export def "describe-virtual-gateway" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<virtualGateway: record<meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, spec: record<backendDefaults: record, listeners: record, logging: record>, status: record<status: record>, virtualGatewayName: record>> {
+]: nothing -> record<virtualGateway: record<meshName: string, metadata: record<arn: string, createdAt: string, lastUpdatedAt: string, meshOwner: string, resourceOwner: string, uid: string, version: int>, spec: record<backendDefaults: record, listeners: list, logging: record>, status: record<status: string>, virtualGatewayName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
@@ -1429,7 +1429,7 @@ export def "describe-virtual-gateway" [
 #
 # PUT /v20190125/meshes/{meshName}/virtualGateways/{virtualGatewayName}
 # operationId: UpdateVirtualGateway
-# --spec shape: {backendDefaults?: any, listeners?: any, logging?: record}
+# --spec shape: {backendDefaults?: record, listeners?: list, logging?: record}
 export def "update-virtual-gateway" [
   mesh_name: string
   virtual_gateway_name: string
@@ -1451,8 +1451,8 @@ export def "update-virtual-gateway" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --client-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request. Up to 36 letters, numbers, hyphens, and underscores are allowed.
-  spec: record # An object that represents the specification of a service mesh resource. — shape: {backendDefaults?: any, listeners?: any, logging?: record}
-]: any -> record<virtualGateway: record<meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, spec: record<backendDefaults: record, listeners: record, logging: record>, status: record<status: record>, virtualGatewayName: record>> {
+  spec: record # An object that represents the specification of a service mesh resource. — shape: {backendDefaults?: record, listeners?: list, logging?: record}
+]: any -> record<virtualGateway: record<meshName: string, metadata: record<arn: string, createdAt: string, lastUpdatedAt: string, meshOwner: string, resourceOwner: string, uid: string, version: int>, spec: record<backendDefaults: record, listeners: list, logging: record>, status: record<status: string>, virtualGatewayName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1504,7 +1504,7 @@ export def "delete-virtual-node" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<virtualNode: record<meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, spec: record<backendDefaults: record, backends: record, listeners: record, logging: record, serviceDiscovery: record>, status: record<status: record>, virtualNodeName: record>> {
+]: nothing -> record<virtualNode: record<meshName: string, metadata: record<arn: string, createdAt: string, lastUpdatedAt: string, meshOwner: string, resourceOwner: string, uid: string, version: int>, spec: record<backendDefaults: record, backends: list, listeners: list, logging: record, serviceDiscovery: record>, status: record<status: string>, virtualNodeName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
@@ -1553,7 +1553,7 @@ export def "describe-virtual-node" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<virtualNode: record<meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, spec: record<backendDefaults: record, backends: record, listeners: record, logging: record, serviceDiscovery: record>, status: record<status: record>, virtualNodeName: record>> {
+]: nothing -> record<virtualNode: record<meshName: string, metadata: record<arn: string, createdAt: string, lastUpdatedAt: string, meshOwner: string, resourceOwner: string, uid: string, version: int>, spec: record<backendDefaults: record, backends: list, listeners: list, logging: record, serviceDiscovery: record>, status: record<status: string>, virtualNodeName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
@@ -1582,7 +1582,7 @@ export def "describe-virtual-node" [
 #
 # PUT /v20190125/meshes/{meshName}/virtualNodes/{virtualNodeName}
 # operationId: UpdateVirtualNode
-# --spec shape: {backendDefaults?: any, backends?: any, listeners?: any, logging?: any, serviceDiscovery?: any}
+# --spec shape: {backendDefaults?: record, backends?: list, listeners?: list, logging?: record, serviceDiscovery?: record}
 export def "update-virtual-node" [
   mesh_name: string
   virtual_node_name: string
@@ -1604,8 +1604,8 @@ export def "update-virtual-node" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --client-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request. Up to 36 letters, numbers, hyphens, and underscores are allowed.
-  spec: record # An object that represents the specification of a virtual node. — shape: {backendDefaults?: any, backends?: any, listeners?: any, logging?: any, serviceDiscovery?: any}
-]: any -> record<virtualNode: record<meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, spec: record<backendDefaults: record, backends: record, listeners: record, logging: record, serviceDiscovery: record>, status: record<status: record>, virtualNodeName: record>> {
+  spec: record # An object that represents the specification of a virtual node. — shape: {backendDefaults?: record, backends?: list, listeners?: list, logging?: record, serviceDiscovery?: record}
+]: any -> record<virtualNode: record<meshName: string, metadata: record<arn: string, createdAt: string, lastUpdatedAt: string, meshOwner: string, resourceOwner: string, uid: string, version: int>, spec: record<backendDefaults: record, backends: list, listeners: list, logging: record, serviceDiscovery: record>, status: record<status: string>, virtualNodeName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1657,7 +1657,7 @@ export def "delete-virtual-router" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<virtualRouter: record<meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, spec: record<listeners: record>, status: record<status: record>, virtualRouterName: record>> {
+]: nothing -> record<virtualRouter: record<meshName: string, metadata: record<arn: string, createdAt: string, lastUpdatedAt: string, meshOwner: string, resourceOwner: string, uid: string, version: int>, spec: record<listeners: list>, status: record<status: string>, virtualRouterName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
@@ -1706,7 +1706,7 @@ export def "describe-virtual-router" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<virtualRouter: record<meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, spec: record<listeners: record>, status: record<status: record>, virtualRouterName: record>> {
+]: nothing -> record<virtualRouter: record<meshName: string, metadata: record<arn: string, createdAt: string, lastUpdatedAt: string, meshOwner: string, resourceOwner: string, uid: string, version: int>, spec: record<listeners: list>, status: record<status: string>, virtualRouterName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
@@ -1735,7 +1735,7 @@ export def "describe-virtual-router" [
 #
 # PUT /v20190125/meshes/{meshName}/virtualRouters/{virtualRouterName}
 # operationId: UpdateVirtualRouter
-# --spec shape: {listeners?: any}
+# --spec shape: {listeners?: list}
 export def "update-virtual-router" [
   mesh_name: string
   virtual_router_name: string
@@ -1757,8 +1757,8 @@ export def "update-virtual-router" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --client-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request. Up to 36 letters, numbers, hyphens, and underscores are allowed.
-  spec: record # An object that represents the specification of a virtual router. — shape: {listeners?: any}
-]: any -> record<virtualRouter: record<meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, spec: record<listeners: record>, status: record<status: record>, virtualRouterName: record>> {
+  spec: record # An object that represents the specification of a virtual router. — shape: {listeners?: list}
+]: any -> record<virtualRouter: record<meshName: string, metadata: record<arn: string, createdAt: string, lastUpdatedAt: string, meshOwner: string, resourceOwner: string, uid: string, version: int>, spec: record<listeners: list>, status: record<status: string>, virtualRouterName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1810,7 +1810,7 @@ export def "delete-virtual-service" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<virtualService: record<meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, spec: record<provider: record>, status: record<status: record>, virtualServiceName: record>> {
+]: nothing -> record<virtualService: record<meshName: string, metadata: record<arn: string, createdAt: string, lastUpdatedAt: string, meshOwner: string, resourceOwner: string, uid: string, version: int>, spec: record<provider: record>, status: record<status: string>, virtualServiceName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
@@ -1859,7 +1859,7 @@ export def "describe-virtual-service" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<virtualService: record<meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, spec: record<provider: record>, status: record<status: record>, virtualServiceName: record>> {
+]: nothing -> record<virtualService: record<meshName: string, metadata: record<arn: string, createdAt: string, lastUpdatedAt: string, meshOwner: string, resourceOwner: string, uid: string, version: int>, spec: record<provider: record>, status: record<status: string>, virtualServiceName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
@@ -1888,7 +1888,7 @@ export def "describe-virtual-service" [
 #
 # PUT /v20190125/meshes/{meshName}/virtualServices/{virtualServiceName}
 # operationId: UpdateVirtualService
-# --spec shape: {provider?: any}
+# --spec shape: {provider?: record}
 export def "update-virtual-service" [
   mesh_name: string
   virtual_service_name: string
@@ -1910,8 +1910,8 @@ export def "update-virtual-service" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --client-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request. Up to 36 letters, numbers, hyphens, and underscores are allowed.
-  spec: record # An object that represents the specification of a virtual service. — shape: {provider?: any}
-]: any -> record<virtualService: record<meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, spec: record<provider: record>, status: record<status: record>, virtualServiceName: record>> {
+  spec: record # An object that represents the specification of a virtual service. — shape: {provider?: record}
+]: any -> record<virtualService: record<meshName: string, metadata: record<arn: string, createdAt: string, lastUpdatedAt: string, meshOwner: string, resourceOwner: string, uid: string, version: int>, spec: record<provider: record>, status: record<status: string>, virtualServiceName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1955,7 +1955,7 @@ export def "list-tags-for-resource" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of tag results returned by ListTagsForResource in paginated output. When this parameter is used, ListTagsForResource returns only limit results in a single page along with a nextToken response element. You can see the remaining results of the initial request by sending another ListTagsForResource request with the returned nextToken value. This value can be between 1 and 100. If you don't use this parameter, ListTagsForResource returns up to 100 results and a nextToken value if applicable.
   --next-token: string # The nextToken value returned from a previous paginated ListTagsForResource request where limit was used and the results exceeded the value of that parameter. Pagination continues from the end of the previous results that returned the nextToken value.
-  --resource-arn: string # The Amazon Resource Name (ARN) that identifies the resource to list the tags for.
+  --resource-arn: string # The Amazon Resource Name (ARN) that identifies the resource to list the tags for. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1963,9 +1963,10 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<nextToken: record, tags: record> {
+]: nothing -> record<nextToken: string, tags: table<key: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'resourceArn' missing: pass --resource-arn" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "resourceArn" $resource_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v20190125/tags" $qp $auth.query)
   let accept_val = "application/json"
@@ -1990,7 +1991,7 @@ export def "list-tags-for-resource" [
 #
 # PUT /v20190125/tag
 # operationId: TagResource
-# --tags item shape: {key: any, value: any}
+# --tags item shape: {key: string, value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2001,7 +2002,7 @@ export def "tag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-arn: string # The Amazon Resource Name (ARN) of the resource to add tags to.
+  --resource-arn: string # The Amazon Resource Name (ARN) of the resource to add tags to. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2009,11 +2010,12 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  tags: list # The tags to add to the resource. A tag is an array of key-value pairs. Tag keys can have a maximum character length of 128 characters, and tag values can have a maximum length of 256 characters. — item shape: {key: any, value: any}
+  tags: list # The tags to add to the resource. A tag is an array of key-value pairs. Tag keys can have a maximum character length of 128 characters, and tag values can have a maximum length of 256 characters. — item shape: {key: string, value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'resourceArn' missing: pass --resource-arn" } }
   let qp = [(serialize-qp "resourceArn" $resource_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v20190125/tag" $qp $auth.query)
   let req_body = {"tags": $tags} | compact
@@ -2050,7 +2052,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-arn: string # The Amazon Resource Name (ARN) of the resource to delete tags from.
+  --resource-arn: string # The Amazon Resource Name (ARN) of the resource to delete tags from. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2063,6 +2065,7 @@ export def "untag-resource" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'resourceArn' missing: pass --resource-arn" } }
   let qp = [(serialize-qp "resourceArn" $resource_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v20190125/untag" $qp $auth.query)
   let req_body = {"tagKeys": $tag_keys} | compact

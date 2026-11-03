@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -108,6 +108,7 @@ def x-amz-target-completer-8 [] { ["Timestream_20181101.PrepareQuery"] }
 def x-amz-target-completer-9 [] { ["Timestream_20181101.Query"] }
 def x-amz-target-completer-10 [] { ["Timestream_20181101.TagResource"] }
 def x-amz-target-completer-11 [] { ["Timestream_20181101.UntagResource"] }
+def state-completer [] { ["DISABLED" "ENABLED"] }
 def x-amz-target-completer-12 [] { ["Timestream_20181101.UpdateScheduledQuery"] }
 
 # List all available API commands with their parameters
@@ -154,12 +155,13 @@ export def "cancel-query" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  query_id: any
-]: any -> record<CancellationMessage: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  query_id: string # The ID of the query that needs to be cancelled. QueryID is returned as part of the query result.
+]: any -> record<CancellationMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Timestream_20181101.CancelQuery")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"QueryId": $query_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -185,6 +187,11 @@ export def "cancel-query" [
 #
 # POST /
 # operationId: CreateScheduledQuery
+# --ScheduleConfiguration shape: {ScheduleExpression: string}
+# --NotificationConfiguration shape: {SnsConfiguration: record}
+# --TargetConfiguration shape: {TimestreamConfiguration: record}
+# --Tags item shape: {Key: string, Value: string}
+# --ErrorReportConfiguration shape: {S3Configuration: record}
 export def "create-scheduled-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -202,21 +209,22 @@ export def "create-scheduled-query" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  name: any
-  query_string: any
-  schedule_configuration: any
-  notification_configuration: any
-  --target-configuration: any
-  --client-token: any
-  scheduled_query_execution_role_arn: any
-  --tags: any
-  --kms-key-id: any
-  error_report_configuration: any
-]: any -> record<Arn: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  name: string # Name of the scheduled query.
+  query_string: string # The query string to run. Parameter names can be specified in the query string @ character followed by an identifier. The named Parameter @scheduled_runtime is reserved and can be used in the query to get the time at which the query is scheduled to run. The timestamp calculated according to the ScheduleConfiguration parameter, will be the value of @scheduled_runtime paramater for each query run. For example, consider an instance of a scheduled query executing on 2021-12-01 00:00:00. For this instance, the @scheduled_runtime parameter is initialized to the timestamp 2021-12-01 00:00:00 when invoking the query. (format: password)
+  schedule_configuration: record # Configuration of the schedule of the query. — shape: {ScheduleExpression: string}
+  notification_configuration: record # Notification configuration for a scheduled query. A notification is sent by Timestream when a scheduled query is created, its state is updated or when it is deleted. — shape: {SnsConfiguration: record}
+  --target-configuration: record # Configuration used for writing the output of a query. — shape: {TimestreamConfiguration: record}
+  --client-token: string # Using a ClientToken makes the call to CreateScheduledQuery idempotent, in other words, making the same request repeatedly will produce the same result. Making multiple identical CreateScheduledQuery requests has the same effect as making a single request. If CreateScheduledQuery is called without a ClientToken, the Query SDK generates a ClientToken on your behalf. After 8 hours, any request with the same ClientToken is treated as a new request. (format: password)
+  scheduled_query_execution_role_arn: string # The ARN for the IAM role that Timestream will assume when running the scheduled query.
+  --tags: list # A list of key-value pairs to label the scheduled query. — item shape: {Key: string, Value: string}
+  --kms-key-id: string # The Amazon KMS key used to encrypt the scheduled query resource, at-rest. If the Amazon KMS key is not specified, the scheduled query resource will be encrypted with a Timestream owned Amazon KMS key. To specify a KMS key, use the key ID, key ARN, alias name, or alias ARN. When using an alias name, prefix the name with alias/ If ErrorReportConfiguration uses SSE_KMS as encryption type, the same KmsKeyId is used to encrypt the error report at rest.
+  error_report_configuration: record # Configuration required for error reporting. — shape: {S3Configuration: record}
+]: any -> record<Arn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Timestream_20181101.CreateScheduledQuery")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "QueryString": $query_string, "ScheduleConfiguration": $schedule_configuration, "NotificationConfiguration": $notification_configuration, "TargetConfiguration": $target_configuration, "ClientToken": $client_token, "ScheduledQueryExecutionRoleArn": $scheduled_query_execution_role_arn, "Tags": $tags, "KmsKeyId": $kms_key_id, "ErrorReportConfiguration": $error_report_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -259,12 +267,13 @@ export def "delete-scheduled-query" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  scheduled_query_arn: any
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  scheduled_query_arn: string # The ARN of the scheduled query.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Timestream_20181101.DeleteScheduledQuery")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ScheduledQueryArn": $scheduled_query_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -307,12 +316,13 @@ export def "describe-endpoints" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
+  --x-amz-target: string@x-amz-target-completer-3 # required
   --body: record
-]: any -> record<Endpoints: record> {
+]: any -> record<Endpoints: table<Address: string, CachePeriodInMinutes: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Timestream_20181101.DescribeEndpoints")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -355,12 +365,13 @@ export def "describe-scheduled-query" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  scheduled_query_arn: any
-]: any -> record<ScheduledQuery: record<Arn: record, Name: record, QueryString: record, CreationTime: record, State: record, PreviousInvocationTime: record, NextInvocationTime: record, ScheduleConfiguration: record<ScheduleExpression: record>, NotificationConfiguration: record<SnsConfiguration: record>, TargetConfiguration: record<TimestreamConfiguration: record>, ScheduledQueryExecutionRoleArn: record, KmsKeyId: record, ErrorReportConfiguration: record<S3Configuration: record>, LastRunSummary: record<InvocationTime: record, TriggerTime: record, RunStatus: record, ExecutionStats: record, ErrorReportLocation: record, FailureReason: record>, RecentlyFailedRuns: record>> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  scheduled_query_arn: string # The ARN of the scheduled query.
+]: any -> record<ScheduledQuery: record<Arn: string, Name: string, QueryString: string, CreationTime: string, State: string, PreviousInvocationTime: string, NextInvocationTime: string, ScheduleConfiguration: record<ScheduleExpression: string>, NotificationConfiguration: record<SnsConfiguration: record>, TargetConfiguration: record<TimestreamConfiguration: record>, ScheduledQueryExecutionRoleArn: string, KmsKeyId: string, ErrorReportConfiguration: record<S3Configuration: record>, LastRunSummary: record<InvocationTime: string, TriggerTime: string, RunStatus: string, ExecutionStats: record, ErrorReportLocation: record, FailureReason: string>, RecentlyFailedRuns: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Timestream_20181101.DescribeScheduledQuery")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ScheduledQueryArn": $scheduled_query_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -403,14 +414,15 @@ export def "execute-scheduled-query" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  scheduled_query_arn: any
-  invocation_time: any
-  --client-token: any
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  scheduled_query_arn: string # ARN of the scheduled query.
+  invocation_time: string # The timestamp in UTC. Query will be run as if it was invoked at this timestamp. (format: date-time)
+  --client-token: string # Not used. (format: password)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Timestream_20181101.ExecuteScheduledQuery")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ScheduledQueryArn": $scheduled_query_arn, "InvocationTime": $invocation_time, "ClientToken": $client_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -455,13 +467,14 @@ export def "list-scheduled-queries" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<ScheduledQueries: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  --max-results-body: int # The maximum number of items to return in the output. If the total number of items available is more than the value specified, a NextToken is provided in the output. To resume pagination, provide the NextToken value as the argument to the subsequent call to ListScheduledQueriesRequest. (body field)
+  --next-token-body: string # A pagination token to resume pagination. (body field)
+]: any -> record<ScheduledQueries: table<Arn: string, Name: string, CreationTime: string, State: string, PreviousInvocationTime: string, NextInvocationTime: string, ErrorReportConfiguration: record, TargetDestination: record, LastRunStatus: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Timestream_20181101.ListScheduledQueries")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -507,14 +520,15 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  resource_arn: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<Tags: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  resource_arn: string # The Timestream resource with tags to be listed. This value is an Amazon Resource Name (ARN).
+  --max-results-body: int # The maximum number of tags to return. (body field)
+  --next-token-body: string # A pagination token to resume pagination. (body field)
+]: any -> record<Tags: table<Key: string, Value: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Timestream_20181101.ListTagsForResource")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ResourceARN": $resource_arn, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -558,13 +572,14 @@ export def "prepare-query" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  query_string: any
-  --validate-only: any
-]: any -> record<QueryString: record, Columns: record, Parameters: record> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  query_string: string # The Timestream query string that you want to use as a prepared statement. Parameter names can be specified in the query string @ character followed by an identifier. (format: password)
+  --validate-only: oneof<nothing, bool> # By setting this value to true, Timestream will only validate that the query string is a valid Timestream query, and not store the prepared query for later use.
+]: any -> record<QueryString: string, Columns: table<Name: string, Type: record, DatabaseName: string, TableName: string, Aliased: bool>, Parameters: table<Name: string, Type: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Timestream_20181101.PrepareQuery")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"QueryString": $query_string, "ValidateOnly": $validate_only} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -609,15 +624,16 @@ export def "query" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  query_string: any
-  --client-token: any
-  --next-token-body: any #  (body field)
-  --max-rows-body: any #  (body field)
-]: any -> record<QueryId: record, NextToken: record, Rows: record, ColumnInfo: record, QueryStatus: record<ProgressPercentage: record, CumulativeBytesScanned: record, CumulativeBytesMetered: record>> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  query_string: string # The query to be run by Timestream. (format: password)
+  --client-token: string # Unique, case-sensitive string of up to 64 ASCII characters specified when a Query request is made. Providing a ClientToken makes the call to Query idempotent. This means that running the same query repeatedly will produce the same result. In other words, making multiple identical Query requests has the same effect as making a single request. When using ClientToken in a query, note the following: If the Query API is instantiated without a ClientToken, the Query SDK generates a ClientToken on your behalf. If the Query invocation only contains the ClientToken but does not include a NextToken, that invocation of Query is assumed to be a new query run. If the invocation contains NextToken, that particular invocation is assumed to be a subsequent invocation of a prior call to the Query API, and a result set is returned. After 4 hours, any request with the same ClientToken is treated as a new request. (format: password)
+  --next-token-body: string # A pagination token used to return a set of results. When the Query API is invoked using NextToken, that particular invocation is assumed to be a subsequent invocation of a prior call to Query, and a result set is returned. However, if the Query invocation only contains the ClientToken, that invocation of Query is assumed to be a new query run. Note the following when using NextToken in a query: A pagination token can be used for up to five Query invocations, OR for a duration of up to 1 hour – whichever comes first. Using the same NextToken will return the same set of records. To keep paginating through the result set, you must to use the most recent nextToken. Suppose a Query invocation returns two NextToken values, TokenA and TokenB. If TokenB is used in a subsequent Query invocation, then TokenA is invalidated and cannot be reused. To request a previous result set from a query after pagination has begun, you must re-invoke the Query API. The latest NextToken should be used to paginate until null is returned, at which point a new NextToken should be used. If the IAM principal of the query initiator and the result reader are not the same and/or the query initiator and the result reader do not have the same query string in the query requests, the query will fail with an Invalid pagination token error. (body field)
+  --max-rows-body: int # The total number of rows to be returned in the Query output. The initial run of Query with a MaxRows value specified will return the result set of the query in two cases: The size of the result is less than 1MB. The number of rows in the result set is less than the value of maxRows. Otherwise, the initial invocation of Query only returns a NextToken, which can then be used in subsequent calls to fetch the result set. To resume pagination, provide the NextToken value in the subsequent command. If the row size is large (e.g. a row has many columns), Timestream may return fewer rows to keep the response size from exceeding the 1 MB limit. If MaxRows is not provided, Timestream will send the necessary number of rows to meet the 1 MB limit. (body field)
+]: any -> record<QueryId: string, NextToken: string, Rows: table<Data: list>, ColumnInfo: table<Name: string, Type: record>, QueryStatus: record<ProgressPercentage: float, CumulativeBytesScanned: int, CumulativeBytesMetered: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Timestream_20181101.Query")
   let qp = [(serialize-qp "MaxRows" $max_rows "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"QueryString": $query_string, "ClientToken": $client_token, "NextToken": $next_token_body, "MaxRows": $max_rows_body} | compact
@@ -644,6 +660,7 @@ export def "query" [
 #
 # POST /
 # operationId: TagResource
+# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -661,13 +678,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  resource_arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  resource_arn: string # Identifies the Timestream resource to which tags should be added. This value is an Amazon Resource Name (ARN).
+  tags: list # The tags to be assigned to the Timestream resource. — item shape: {Key: string, Value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Timestream_20181101.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceARN": $resource_arn, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -710,13 +728,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  resource_arn: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  resource_arn: string # The Timestream resource that the tags will be removed from. This value is an Amazon Resource Name (ARN).
+  tag_keys: list<string> # A list of tags keys. Existing tags of the resource whose keys are members of this list will be removed from the Timestream resource.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Timestream_20181101.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceARN": $resource_arn, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -759,13 +778,14 @@ export def "update-scheduled-query" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  scheduled_query_arn: any
-  state: any
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  scheduled_query_arn: string # ARN of the scheuled query.
+  state: string@state-completer # State of the scheduled query.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Timestream_20181101.UpdateScheduledQuery")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ScheduledQueryArn": $scheduled_query_arn, "State": $state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

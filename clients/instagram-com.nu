@@ -13,7 +13,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "query-access_token" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "access_token")=(encode-path-segment $token_val)", location: "query"} }
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -336,14 +336,16 @@ export def "get-media-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lat: float # Latitude of the center search coordinate. If used, `lng` is required. (format: double)
-  --lng: float # Longitude of the center search coordinate. If used, `lat` is required. (format: double)
+  --lat: float # Latitude of the center search coordinate. If used, `lng` is required. (required, format: double)
+  --lng: float # Longitude of the center search coordinate. If used, `lat` is required. (required, format: double)
   --min-timestamp: int # A unix timestamp. All media returned will be taken later than this timestamp. (format: int64)
   --max-timestamp: int # A unix timestamp. All media returned will be taken earlier than this timestamp. (format: int64)
   --distance: int # Default is 1km (distance=1000), max distance is 5km. (format: int32)
 ]: nothing -> record<data: table<attribution: string, caption: record, comments: record, created_time: string, filter: string, id: string, images: record, likes: record, link: string, location: record, tags: list, type: string, user: record, user_has_liked: bool, users_in_photo: list, videos: record>, meta: record<code: int>> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
+  if ($lat == null) { error make --unspanned { msg: "required query parameter 'lat' missing: pass --lat" } }
+  if ($lng == null) { error make --unspanned { msg: "required query parameter 'lng' missing: pass --lng" } }
   let qp = [(serialize-qp "lat" $lat "scalar") (serialize-qp "lng" $lng "scalar") (serialize-qp "min_timestamp" $min_timestamp "scalar") (serialize-qp "max_timestamp" $max_timestamp "scalar") (serialize-qp "distance" $distance "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/media/search" $qp $auth.query)
   let accept_val = "application/json"
@@ -481,11 +483,12 @@ export def "post-media-media-id-comments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --text: string # Text to post as a comment on the media object as specified in `media-id`.
+  --text: string # Text to post as a comment on the media object as specified in `media-id`. (required)
 ]: nothing -> record<data: string, meta: record<code: int>> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
   if ($media_id | is-empty) { error make --unspanned { msg: "path parameter 'media-id' must be non-empty" } }
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({media_id: (encode-path-segment $media_id)} | format pattern "/media/{media_id}/comments") $qp $auth.query)
   let accept_val = "application/json"
@@ -659,10 +662,11 @@ export def "get-tags-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # A valid tag name without a leading \#. (eg. snowy, nofilter)
+  --q: string # A valid tag name without a leading \#. (eg. snowy, nofilter) (required)
 ]: nothing -> record<data: table<media_count: int, name: string>, meta: record<code: int>> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tags/search" $qp $auth.query)
   let accept_val = "application/json"
@@ -768,11 +772,12 @@ export def "get-users-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # A query string.
+  --q: string # A query string. (required)
   --count: int # Number of users to return.
 ]: nothing -> record<data: table<full_name: string, id: string, profile_picture: string, username: string>, meta: record<code: int>> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users/search" $qp $auth.query)
   let accept_val = "application/json"
@@ -1094,11 +1099,12 @@ export def "post-users-user-id-relationship" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer # Type of action to apply for relationship with the user.
+  --action: string@action-completer # Type of action to apply for relationship with the user. (required)
 ]: nothing -> record<data: record<outgoing_status: string>, meta: record<code: int>> {
   let auth = (build-auth $token ($auth_scheme | default "query-access_token"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user-id' must be non-empty" } }
+  if ($action == null) { error make --unspanned { msg: "required query parameter 'action' missing: pass --action" } }
   let qp = [(serialize-qp "action" $action "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/relationship") $qp $auth.query)
   let accept_val = "application/json"

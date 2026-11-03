@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -211,7 +211,7 @@ export def "get-administrator-account" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Administrator: record<AccountId: record, InvitationId: record, RelationshipStatus: record, InvitedAt: record>> {
+]: nothing -> record<Administrator: record<AccountId: string, InvitationId: string, RelationshipStatus: string, InvitedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($detector_id | is-empty) { error make --unspanned { msg: "path parameter 'detectorId' must be non-empty" } }
@@ -310,7 +310,7 @@ export def "get-master-account" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Master: record<AccountId: record, InvitationId: record, RelationshipStatus: record, InvitedAt: record>> {
+]: nothing -> record<Master: record<AccountId: string, InvitationId: string, RelationshipStatus: string, InvitedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($detector_id | is-empty) { error make --unspanned { msg: "path parameter 'detectorId' must be non-empty" } }
@@ -386,8 +386,8 @@ export def "archive-findings" [
 #
 # POST /detector
 # operationId: CreateDetector
-# --dataSources shape: {S3Logs?: any, Kubernetes?: any, MalwareProtection?: any}
-# --features item shape: {Name?: any, Status?: any, AdditionalConfiguration?: any}
+# --dataSources shape: {S3Logs?: record, Kubernetes?: record, MalwareProtection?: record}
+# --features item shape: {Name?: "S3_DATA_EVENTS"|"EKS_AUDIT_LOGS"|"EBS_MALWARE_PROTECTION"|"RDS_LOGIN_EVENTS"|"EKS_RUNTIME_MONITORING"|"LAMBDA_NETWORK_LOGS", Status?: "ENABLED"|"DISABLED", AdditionalConfiguration?: list}
 export def "create-detector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -408,16 +408,17 @@ export def "create-detector" [
   --enable: oneof<nothing, bool> # A Boolean value that specifies whether the detector is to be enabled.
   --client-token: string # The idempotency token for the create request.
   --finding-publishing-frequency: string@finding-publishing-frequency-completer # A value that specifies how frequently updated findings are exported.
-  --data-sources: record # Contains information about which data sources are enabled. — shape: {S3Logs?: any, Kubernetes?: any, MalwareProtection?: any}
+  --data-sources: record # Contains information about which data sources are enabled. — shape: {S3Logs?: record, Kubernetes?: record, MalwareProtection?: record}
   --tags: record # The tags to be added to a new detector resource.
-  --features: list # A list of features that will be configured for the detector. — item shape: {Name?: any, Status?: any, AdditionalConfiguration?: any}
-]: any -> record<DetectorId: record, UnprocessedDataSources: record<MalwareProtection: record<ScanEc2InstanceWithFindings: record, ServiceRole: record>>> {
+  --features: list # A list of features that will be configured for the detector. — item shape: {Name?: "S3_DATA_EVENTS"|"EKS_AUDIT_LOGS"|"EBS_MALWARE_PROTECTION"|"RDS_LOGIN_EVENTS"|"EKS_RUNTIME_MONITORING"|"LAMBDA_NETWORK_LOGS", Status?: "ENABLED"|"DISABLED", AdditionalConfiguration?: list}
+]: any -> record<DetectorId: string, UnprocessedDataSources: record<MalwareProtection: record<ScanEc2InstanceWithFindings: record, ServiceRole: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/detector" $auth.query)
   let req_body = {"enable": $enable, "clientToken": $client_token, "findingPublishingFrequency": $finding_publishing_frequency, "dataSources": $data_sources, "tags": $tags, "features": $features} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "enable") == null) { error make --unspanned { msg: "required body field 'enable' missing: pass --enable or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
@@ -461,7 +462,7 @@ export def "list-detectors" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DetectorIds: record, NextToken: record> {
+]: nothing -> record<DetectorIds: list<string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -488,7 +489,7 @@ export def "list-detectors" [
 #
 # POST /detector/{detectorId}/filter
 # operationId: CreateFilter
-# --findingCriteria shape: {Criterion?: any}
+# --findingCriteria shape: {Criterion?: record}
 export def "create-filter" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -511,10 +512,10 @@ export def "create-filter" [
   --description: string # The description of the filter. Valid characters include alphanumeric characters, and special characters such as hyphen, period, colon, underscore, parentheses ({ }, [ ], and ( )), forward slash, horizontal tab, vertical tab, newline, form feed, return, and whitespace.
   --action: string@action-completer # Specifies the action that is to be applied to the findings that match the filter.
   --rank: int # Specifies the position of the filter in the list of current filters. Also specifies the order in which this filter is applied to the findings.
-  finding_criteria: record # Contains information about the criteria used for querying findings. — shape: {Criterion?: any}
+  finding_criteria: record # Contains information about the criteria used for querying findings. — shape: {Criterion?: record}
   --client-token: string # The idempotency token for the create request.
   --tags: record # The tags to be added to a new filter resource.
-]: any -> record<Name: record> {
+]: any -> record<Name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -566,7 +567,7 @@ export def "list-filters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<FilterNames: record, NextToken: record> {
+]: nothing -> record<FilterNames: list<string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($detector_id | is-empty) { error make --unspanned { msg: "path parameter 'detectorId' must be non-empty" } }
@@ -618,7 +619,7 @@ export def "create-ip-set" [
   --activate: oneof<nothing, bool> # A Boolean value that indicates whether GuardDuty is to start using the uploaded IPSet.
   --client-token: string # The idempotency token for the create request.
   --tags: record # The tags to be added to a new IP set resource.
-]: any -> record<IpSetId: record> {
+]: any -> record<IpSetId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -626,6 +627,7 @@ export def "create-ip-set" [
   let full_url = (build-url $base ({detector_id: (encode-path-segment $detector_id)} | format pattern "/detector/{detector_id}/ipset") $auth.query)
   let req_body = {"name": $name, "format": $format, "location": $location, "activate": $activate, "clientToken": $client_token, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "activate") == null) { error make --unspanned { msg: "required body field 'activate' missing: pass --activate or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
@@ -670,7 +672,7 @@ export def "list-ip-sets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<IpSetIds: record, NextToken: record> {
+]: nothing -> record<IpSetIds: list<string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($detector_id | is-empty) { error make --unspanned { msg: "path parameter 'detectorId' must be non-empty" } }
@@ -698,7 +700,7 @@ export def "list-ip-sets" [
 #
 # POST /detector/{detectorId}/member
 # operationId: CreateMembers
-# --accountDetails item shape: {AccountId: any, Email: any}
+# --accountDetails item shape: {AccountId: string, Email: string}
 export def "create-members" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -717,8 +719,8 @@ export def "create-members" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  account_details: list # A list of account ID and email address pairs of the accounts that you want to associate with the GuardDuty administrator account. — item shape: {AccountId: any, Email: any}
-]: any -> record<UnprocessedAccounts: record> {
+  account_details: list # A list of account ID and email address pairs of the accounts that you want to associate with the GuardDuty administrator account. — item shape: {AccountId: string, Email: string}
+]: any -> record<UnprocessedAccounts: table<AccountId: string, Result: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -771,7 +773,7 @@ export def "list-members" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Members: record, NextToken: record> {
+]: nothing -> record<Members: table<AccountId: string, DetectorId: string, MasterId: string, Email: string, RelationshipStatus: string, InvitedAt: string, UpdatedAt: string, AdministratorId: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($detector_id | is-empty) { error make --unspanned { msg: "path parameter 'detectorId' must be non-empty" } }
@@ -799,7 +801,7 @@ export def "list-members" [
 #
 # POST /detector/{detectorId}/publishingDestination
 # operationId: CreatePublishingDestination
-# --destinationProperties shape: {DestinationArn?: any, KmsKeyArn?: any}
+# --destinationProperties shape: {DestinationArn?: string, KmsKeyArn?: string}
 export def "create-publishing-destination" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -819,9 +821,9 @@ export def "create-publishing-destination" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   destination_type: string@destination-type-completer # The type of resource for the publishing destination. Currently only Amazon S3 buckets are supported.
-  destination_properties: record # Contains the Amazon Resource Name (ARN) of the resource to publish to, such as an S3 bucket, and the ARN of the KMS key to use to encrypt published findings. — shape: {DestinationArn?: any, KmsKeyArn?: any}
+  destination_properties: record # Contains the Amazon Resource Name (ARN) of the resource to publish to, such as an S3 bucket, and the ARN of the KMS key to use to encrypt published findings. — shape: {DestinationArn?: string, KmsKeyArn?: string}
   --client-token: string # The idempotency token for the request.
-]: any -> record<DestinationId: record> {
+]: any -> record<DestinationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -873,7 +875,7 @@ export def "list-publishing-destinations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Destinations: record, NextToken: record> {
+]: nothing -> record<Destinations: table<DestinationId: string, DestinationType: string, Status: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($detector_id | is-empty) { error make --unspanned { msg: "path parameter 'detectorId' must be non-empty" } }
@@ -974,7 +976,7 @@ export def "create-threat-intel-set" [
   --activate: oneof<nothing, bool> # A Boolean value that indicates whether GuardDuty is to start using the uploaded ThreatIntelSet.
   --client-token: string # The idempotency token for the create request.
   --tags: record # The tags to be added to a new threat list resource.
-]: any -> record<ThreatIntelSetId: record> {
+]: any -> record<ThreatIntelSetId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -982,6 +984,7 @@ export def "create-threat-intel-set" [
   let full_url = (build-url $base ({detector_id: (encode-path-segment $detector_id)} | format pattern "/detector/{detector_id}/threatintelset") $auth.query)
   let req_body = {"name": $name, "format": $format, "location": $location, "activate": $activate, "clientToken": $client_token, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "activate") == null) { error make --unspanned { msg: "required body field 'activate' missing: pass --activate or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
@@ -1026,7 +1029,7 @@ export def "list-threat-intel-sets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ThreatIntelSetIds: record, NextToken: record> {
+]: nothing -> record<ThreatIntelSetIds: list<string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($detector_id | is-empty) { error make --unspanned { msg: "path parameter 'detectorId' must be non-empty" } }
@@ -1072,7 +1075,7 @@ export def "decline-invitations" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   account_ids: list<string> # A list of account IDs of the Amazon Web Services accounts that sent invitations to the current member account that you want to decline invitations from.
-]: any -> record<UnprocessedAccounts: record> {
+]: any -> record<UnprocessedAccounts: table<AccountId: string, Result: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1164,7 +1167,7 @@ export def "get-detector" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CreatedAt: record, FindingPublishingFrequency: record, ServiceRole: record, Status: record, UpdatedAt: record, DataSources: record<CloudTrail: record<Status: record>, DNSLogs: record<Status: record>, FlowLogs: record<Status: record>, S3Logs: record<Status: record>, Kubernetes: record<AuditLogs: record>, MalwareProtection: record<ScanEc2InstanceWithFindings: record, ServiceRole: record>>, Tags: record, Features: record> {
+]: nothing -> record<CreatedAt: string, FindingPublishingFrequency: string, ServiceRole: string, Status: string, UpdatedAt: string, DataSources: record<CloudTrail: record<Status: string>, DNSLogs: record<Status: string>, FlowLogs: record<Status: string>, S3Logs: record<Status: string>, Kubernetes: record<AuditLogs: record>, MalwareProtection: record<ScanEc2InstanceWithFindings: record, ServiceRole: string>>, Tags: record, Features: table<Name: string, Status: string, UpdatedAt: string, AdditionalConfiguration: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($detector_id | is-empty) { error make --unspanned { msg: "path parameter 'detectorId' must be non-empty" } }
@@ -1191,8 +1194,8 @@ export def "get-detector" [
 #
 # POST /detector/{detectorId}
 # operationId: UpdateDetector
-# --dataSources shape: {S3Logs?: any, Kubernetes?: any, MalwareProtection?: any}
-# --features item shape: {Name?: any, Status?: any, AdditionalConfiguration?: any}
+# --dataSources shape: {S3Logs?: record, Kubernetes?: record, MalwareProtection?: record}
+# --features item shape: {Name?: "S3_DATA_EVENTS"|"EKS_AUDIT_LOGS"|"EBS_MALWARE_PROTECTION"|"RDS_LOGIN_EVENTS"|"EKS_RUNTIME_MONITORING"|"LAMBDA_NETWORK_LOGS", Status?: "ENABLED"|"DISABLED", AdditionalConfiguration?: list}
 export def "update-detector" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1213,8 +1216,8 @@ export def "update-detector" [
   --x-amz-signed-headers: string
   --enable: oneof<nothing, bool> # Specifies whether the detector is enabled or not enabled.
   --finding-publishing-frequency: string@finding-publishing-frequency-completer # An enum value that specifies how frequently findings are exported, such as to CloudWatch Events.
-  --data-sources: record # Contains information about which data sources are enabled. — shape: {S3Logs?: any, Kubernetes?: any, MalwareProtection?: any}
-  --features: list # Provides the features that will be updated for the detector. — item shape: {Name?: any, Status?: any, AdditionalConfiguration?: any}
+  --data-sources: record # Contains information about which data sources are enabled. — shape: {S3Logs?: record, Kubernetes?: record, MalwareProtection?: record}
+  --features: list # Provides the features that will be updated for the detector. — item shape: {Name?: "S3_DATA_EVENTS"|"EKS_AUDIT_LOGS"|"EBS_MALWARE_PROTECTION"|"RDS_LOGIN_EVENTS"|"EKS_RUNTIME_MONITORING"|"LAMBDA_NETWORK_LOGS", Status?: "ENABLED"|"DISABLED", AdditionalConfiguration?: list}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1311,7 +1314,7 @@ export def "get-filter" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Name: record, Description: record, Action: record, Rank: record, FindingCriteria: record<Criterion: record>, Tags: record> {
+]: nothing -> record<Name: string, Description: string, Action: string, Rank: int, FindingCriteria: record<Criterion: record>, Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($detector_id | is-empty) { error make --unspanned { msg: "path parameter 'detectorId' must be non-empty" } }
@@ -1339,7 +1342,7 @@ export def "get-filter" [
 #
 # POST /detector/{detectorId}/filter/{filterName}
 # operationId: UpdateFilter
-# --findingCriteria shape: {Criterion?: any}
+# --findingCriteria shape: {Criterion?: record}
 export def "update-filter" [
   detector_id: string
   filter_name: string
@@ -1362,8 +1365,8 @@ export def "update-filter" [
   --description: string # The description of the filter. Valid characters include alphanumeric characters, and special characters such as hyphen, period, colon, underscore, parentheses ({ }, [ ], and ( )), forward slash, horizontal tab, vertical tab, newline, form feed, return, and whitespace.
   --action: string@action-completer # Specifies the action that is to be applied to the findings that match the filter.
   --rank: int # Specifies the position of the filter in the list of current filters. Also specifies the order in which this filter is applied to the findings.
-  --finding-criteria: record # Contains information about the criteria used for querying findings. — shape: {Criterion?: any}
-]: any -> record<Name: record> {
+  --finding-criteria: record # Contains information about the criteria used for querying findings. — shape: {Criterion?: record}
+]: any -> record<Name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1460,7 +1463,7 @@ export def "get-ip-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Name: record, Format: record, Location: record, Status: record, Tags: record> {
+]: nothing -> record<Name: string, Format: string, Location: string, Status: string, Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($detector_id | is-empty) { error make --unspanned { msg: "path parameter 'detectorId' must be non-empty" } }
@@ -1559,7 +1562,7 @@ export def "delete-invitations" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   account_ids: list<string> # A list of account IDs of the Amazon Web Services accounts that sent invitations to the current member account that you want to delete invitations from.
-]: any -> record<UnprocessedAccounts: record> {
+]: any -> record<UnprocessedAccounts: table<AccountId: string, Result: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1607,7 +1610,7 @@ export def "delete-members" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   account_ids: list<string> # A list of account IDs of the GuardDuty member accounts that you want to delete.
-]: any -> record<UnprocessedAccounts: record> {
+]: any -> record<UnprocessedAccounts: table<AccountId: string, Result: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1703,7 +1706,7 @@ export def "describe-publishing-destination" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DestinationId: record, DestinationType: record, Status: record, PublishingFailureStartTimestamp: record, DestinationProperties: record<DestinationArn: record, KmsKeyArn: record>> {
+]: nothing -> record<DestinationId: string, DestinationType: string, Status: string, PublishingFailureStartTimestamp: int, DestinationProperties: record<DestinationArn: string, KmsKeyArn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($detector_id | is-empty) { error make --unspanned { msg: "path parameter 'detectorId' must be non-empty" } }
@@ -1731,7 +1734,7 @@ export def "describe-publishing-destination" [
 #
 # POST /detector/{detectorId}/publishingDestination/{destinationId}
 # operationId: UpdatePublishingDestination
-# --destinationProperties shape: {DestinationArn?: any, KmsKeyArn?: any}
+# --destinationProperties shape: {DestinationArn?: string, KmsKeyArn?: string}
 export def "update-publishing-destination" [
   detector_id: string
   destination_id: string
@@ -1751,7 +1754,7 @@ export def "update-publishing-destination" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --destination-properties: record # Contains the Amazon Resource Name (ARN) of the resource to publish to, such as an S3 bucket, and the ARN of the KMS key to use to encrypt published findings. — shape: {DestinationArn?: any, KmsKeyArn?: any}
+  --destination-properties: record # Contains the Amazon Resource Name (ARN) of the resource to publish to, such as an S3 bucket, and the ARN of the KMS key to use to encrypt published findings. — shape: {DestinationArn?: string, KmsKeyArn?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1849,7 +1852,7 @@ export def "get-threat-intel-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Name: record, Format: record, Location: record, Status: record, Tags: record> {
+]: nothing -> record<Name: string, Format: string, Location: string, Status: string, Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($detector_id | is-empty) { error make --unspanned { msg: "path parameter 'detectorId' must be non-empty" } }
@@ -1930,8 +1933,8 @@ export def "update-threat-intel-set" [
 #
 # POST /detector/{detectorId}/malware-scans
 # operationId: DescribeMalwareScans
-# --filterCriteria shape: {FilterCriterion?: any}
-# --sortCriteria shape: {AttributeName?: any, OrderBy?: any}
+# --filterCriteria shape: {FilterCriterion?: list}
+# --sortCriteria shape: {AttributeName?: string, OrderBy?: "ASC"|"DESC"}
 export def "describe-malware-scans" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1954,9 +1957,9 @@ export def "describe-malware-scans" [
   --x-amz-signed-headers: string
   --next-token-body: string # You can use this parameter when paginating results. Set the value of this parameter to null on your first call to the list action. For subsequent calls to the action, fill nextToken in the request with the value of NextToken from the previous response to continue listing data. (body field)
   --max-results-body: int # You can use this parameter to indicate the maximum number of items that you want in the response. The default value is 50. The maximum value is 50. (body field)
-  --filter-criteria: record # Represents the criteria to be used in the filter for describing scan entries. — shape: {FilterCriterion?: any}
-  --sort-criteria: record # Contains information about the criteria used for sorting findings. — shape: {AttributeName?: any, OrderBy?: any}
-]: any -> record<Scans: record, NextToken: record> {
+  --filter-criteria: record # Represents the criteria to be used in the filter for describing scan entries. — shape: {FilterCriterion?: list}
+  --sort-criteria: record # Contains information about the criteria used for sorting findings. — shape: {AttributeName?: string, OrderBy?: "ASC"|"DESC"}
+]: any -> record<Scans: table<DetectorId: string, AdminDetectorId: string, ScanId: string, ScanStatus: string, FailureReason: string, ScanStartTime: string, ScanEndTime: string, TriggerDetails: record, ResourceDetails: record, ScanResultDetails: record, AccountId: string, TotalBytes: int, FileCount: int, AttachedVolumes: list>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2009,7 +2012,7 @@ export def "describe-organization-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AutoEnable: record, MemberAccountLimitReached: record, DataSources: record<S3Logs: record<AutoEnable: record>, Kubernetes: record<AuditLogs: record>, MalwareProtection: record<ScanEc2InstanceWithFindings: record>>, Features: record, NextToken: record, AutoEnableOrganizationMembers: record> {
+]: nothing -> record<AutoEnable: bool, MemberAccountLimitReached: bool, DataSources: record<S3Logs: record<AutoEnable: bool>, Kubernetes: record<AuditLogs: record>, MalwareProtection: record<ScanEc2InstanceWithFindings: record>>, Features: table<Name: string, AutoEnable: string, AdditionalConfiguration: list>, NextToken: string, AutoEnableOrganizationMembers: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($detector_id | is-empty) { error make --unspanned { msg: "path parameter 'detectorId' must be non-empty" } }
@@ -2037,8 +2040,8 @@ export def "describe-organization-configuration" [
 #
 # POST /detector/{detectorId}/admin
 # operationId: UpdateOrganizationConfiguration
-# --dataSources shape: {S3Logs?: any, Kubernetes?: any, MalwareProtection?: any}
-# --features item shape: {Name?: any, AutoEnable?: any, AdditionalConfiguration?: any}
+# --dataSources shape: {S3Logs?: record, Kubernetes?: record, MalwareProtection?: record}
+# --features item shape: {Name?: "S3_DATA_EVENTS"|"EKS_AUDIT_LOGS"|"EBS_MALWARE_PROTECTION"|"RDS_LOGIN_EVENTS"|"EKS_RUNTIME_MONITORING"|"LAMBDA_NETWORK_LOGS", AutoEnable?: "NEW"|"NONE", AdditionalConfiguration?: list}
 export def "update-organization-configuration" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2058,8 +2061,8 @@ export def "update-organization-configuration" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --auto-enable: oneof<nothing, bool> # Indicates whether to automatically enable member accounts in the organization. Even though this is still supported, we recommend using AutoEnableOrganizationMembers to achieve the similar results.
-  --data-sources: record # An object that contains information on which data sources will be configured to be automatically enabled for new members within the organization. — shape: {S3Logs?: any, Kubernetes?: any, MalwareProtection?: any}
-  --features: list # A list of features that will be configured for the organization. — item shape: {Name?: any, AutoEnable?: any, AdditionalConfiguration?: any}
+  --data-sources: record # An object that contains information on which data sources will be configured to be automatically enabled for new members within the organization. — shape: {S3Logs?: record, Kubernetes?: record, MalwareProtection?: record}
+  --features: list # A list of features that will be configured for the organization. — item shape: {Name?: "S3_DATA_EVENTS"|"EKS_AUDIT_LOGS"|"EBS_MALWARE_PROTECTION"|"RDS_LOGIN_EVENTS"|"EKS_RUNTIME_MONITORING"|"LAMBDA_NETWORK_LOGS", AutoEnable?: "NEW"|"NONE", AdditionalConfiguration?: list}
   --auto-enable-organization-members: string@auto-enable-organization-members-completer # Indicates the auto-enablement configuration of GuardDuty for the member accounts in the organization. NEW: Indicates that when a new account joins the organization, they will have GuardDuty enabled automatically. ALL: Indicates that all accounts in the Amazon Web Services Organization have GuardDuty enabled automatically. This includes NEW accounts that join the organization and accounts that may have been suspended or removed from the organization in GuardDuty. NONE: Indicates that GuardDuty will not be automatically enabled for any accounts in the organization. GuardDuty must be managed for each account individually by the administrator.
 ]: any -> record {
   let input = $in
@@ -2249,7 +2252,7 @@ export def "disassociate-members" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   account_ids: list<string> # A list of account IDs of the GuardDuty member accounts that you want to disassociate from the administrator account.
-]: any -> record<UnprocessedAccounts: record> {
+]: any -> record<UnprocessedAccounts: table<AccountId: string, Result: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2326,7 +2329,7 @@ export def "enable-organization-admin-account" [
 #
 # POST /detector/{detectorId}/coverage/statistics
 # operationId: GetCoverageStatistics
-# --filterCriteria shape: {FilterCriterion?: any}
+# --filterCriteria shape: {FilterCriterion?: list}
 export def "get-coverage-statistics" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2345,7 +2348,7 @@ export def "get-coverage-statistics" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --filter-criteria: record # Represents the criteria used in the filter. — shape: {FilterCriterion?: any}
+  --filter-criteria: record # Represents the criteria used in the filter. — shape: {FilterCriterion?: list}
   statistics_type: list<string> # Represents the statistics type used to aggregate the coverage details.
 ]: any -> record<CoverageStatistics: record<CountByResourceType: record, CountByCoverageStatus: record>> {
   let input = $in
@@ -2377,7 +2380,7 @@ export def "get-coverage-statistics" [
 #
 # POST /detector/{detectorId}/findings/get
 # operationId: GetFindings
-# --sortCriteria shape: {AttributeName?: any, OrderBy?: any}
+# --sortCriteria shape: {AttributeName?: string, OrderBy?: "ASC"|"DESC"}
 export def "get-findings" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2397,8 +2400,8 @@ export def "get-findings" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   finding_ids: list<string> # The IDs of the findings that you want to retrieve.
-  --sort-criteria: record # Contains information about the criteria used for sorting findings. — shape: {AttributeName?: any, OrderBy?: any}
-]: any -> record<Findings: record> {
+  --sort-criteria: record # Contains information about the criteria used for sorting findings. — shape: {AttributeName?: string, OrderBy?: "ASC"|"DESC"}
+]: any -> record<Findings: table<AccountId: string, Arn: string, Confidence: float, CreatedAt: string, Description: string, Id: string, Partition: string, Region: string, Resource: record, SchemaVersion: string, Service: record, Severity: float, Title: string, Type: string, UpdatedAt: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2428,7 +2431,7 @@ export def "get-findings" [
 #
 # POST /detector/{detectorId}/findings/statistics
 # operationId: GetFindingsStatistics
-# --findingCriteria shape: {Criterion?: any}
+# --findingCriteria shape: {Criterion?: record}
 export def "get-findings-statistics" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2448,7 +2451,7 @@ export def "get-findings-statistics" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   finding_statistic_types: list<string> # The types of finding statistics to retrieve.
-  --finding-criteria: record # Contains information about the criteria used for querying findings. — shape: {Criterion?: any}
+  --finding-criteria: record # Contains information about the criteria used for querying findings. — shape: {Criterion?: record}
 ]: any -> record<FindingStatistics: record<CountBySeverity: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2496,7 +2499,7 @@ export def "get-invitations-count" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<InvitationsCount: record> {
+]: nothing -> record<InvitationsCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/invitation/count" $auth.query)
@@ -2540,7 +2543,7 @@ export def "get-malware-scan-settings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ScanResourceCriteria: record<Include: record, Exclude: record>, EbsSnapshotPreservation: record> {
+]: nothing -> record<ScanResourceCriteria: record<Include: record, Exclude: record>, EbsSnapshotPreservation: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($detector_id | is-empty) { error make --unspanned { msg: "path parameter 'detectorId' must be non-empty" } }
@@ -2567,7 +2570,7 @@ export def "get-malware-scan-settings" [
 #
 # POST /detector/{detectorId}/malware-scan-settings
 # operationId: UpdateMalwareScanSettings
-# --scanResourceCriteria shape: {Include?: any, Exclude?: any}
+# --scanResourceCriteria shape: {Include?: record, Exclude?: record}
 export def "update-malware-scan-settings" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2586,7 +2589,7 @@ export def "update-malware-scan-settings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --scan-resource-criteria: record # Contains information about criteria used to filter resources before triggering malware scan. — shape: {Include?: any, Exclude?: any}
+  --scan-resource-criteria: record # Contains information about criteria used to filter resources before triggering malware scan. — shape: {Include?: record, Exclude?: record}
   --ebs-snapshot-preservation: string@ebs-snapshot-preservation-completer # An enum value representing possible snapshot preservation settings.
 ]: any -> record {
   let input = $in
@@ -2637,7 +2640,7 @@ export def "get-member-detectors" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   account_ids: list<string> # The account ID of the member account.
-]: any -> record<MemberDataSourceConfigurations: record, UnprocessedAccounts: record> {
+]: any -> record<MemberDataSourceConfigurations: table<AccountId: string, DataSources: record, Features: list>, UnprocessedAccounts: table<AccountId: string, Result: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2686,7 +2689,7 @@ export def "get-members" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   account_ids: list<string> # A list of account IDs of the GuardDuty member accounts that you want to describe.
-]: any -> record<Members: record, UnprocessedAccounts: record> {
+]: any -> record<Members: table<AccountId: string, DetectorId: string, MasterId: string, Email: string, RelationshipStatus: string, InvitedAt: string, UpdatedAt: string, AdministratorId: string>, UnprocessedAccounts: table<AccountId: string, Result: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2735,7 +2738,7 @@ export def "get-remaining-free-trial-days" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --account-ids: list<string> # A list of account identifiers of the GuardDuty member account.
-]: any -> record<Accounts: record, UnprocessedAccounts: record> {
+]: any -> record<Accounts: table<AccountId: string, DataSources: record, Features: list>, UnprocessedAccounts: table<AccountId: string, Result: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2765,7 +2768,7 @@ export def "get-remaining-free-trial-days" [
 #
 # POST /detector/{detectorId}/usage/statistics
 # operationId: GetUsageStatistics
-# --usageCriteria shape: {AccountIds?: any, DataSources?: any, Resources?: any, Features?: any}
+# --usageCriteria shape: {AccountIds?: list<string>, DataSources?: list<string>, Resources?: list<string>, Features?: list<string>}
 export def "get-usage-statistics" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2787,11 +2790,11 @@ export def "get-usage-statistics" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   usage_statistics_type: string@usage-statistics-type-completer # The type of usage statistics to retrieve.
-  usage_criteria: record # Contains information about the criteria used to query usage statistics. — shape: {AccountIds?: any, DataSources?: any, Resources?: any, Features?: any}
+  usage_criteria: record # Contains information about the criteria used to query usage statistics. — shape: {AccountIds?: list<string>, DataSources?: list<string>, Resources?: list<string>, Features?: list<string>}
   --unit: string # The currency unit you would like to view your usage statistics in. Current valid values are USD.
   --max-results-body: int # The maximum number of results to return in the response. (body field)
   --next-token-body: string # A token to use for paginating results that are returned in the response. Set the value of this parameter to null for the first request to a list action. For subsequent calls, use the NextToken value returned from the previous request to continue listing results after the first page. (body field)
-]: any -> record<UsageStatistics: record<SumByAccount: record, SumByDataSource: record, SumByResource: record, TopResources: record, SumByFeature: record>, NextToken: record> {
+]: any -> record<UsageStatistics: record<SumByAccount: list<record>, SumByDataSource: list<record>, SumByResource: list<record>, TopResources: list<record>, SumByFeature: list<record>>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2843,7 +2846,7 @@ export def "invite-members" [
   account_ids: list<string> # A list of account IDs of the accounts that you want to invite to GuardDuty as members.
   --disable-email-notification: oneof<nothing, bool> # A Boolean value that specifies whether you want to disable email notification to the accounts that you are inviting to GuardDuty as members.
   --message: string # The invitation message that you want to send to the accounts that you're inviting to GuardDuty as members.
-]: any -> record<UnprocessedAccounts: record> {
+]: any -> record<UnprocessedAccounts: table<AccountId: string, Result: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2873,8 +2876,8 @@ export def "invite-members" [
 #
 # POST /detector/{detectorId}/coverage
 # operationId: ListCoverage
-# --filterCriteria shape: {FilterCriterion?: any}
-# --sortCriteria shape: {AttributeName?: any, OrderBy?: any}
+# --filterCriteria shape: {FilterCriterion?: list}
+# --sortCriteria shape: {AttributeName?: "ACCOUNT_ID"|"CLUSTER_NAME"|"COVERAGE_STATUS"|"ISSUE"|"ADDON_VERSION"|"UPDATED_AT", OrderBy?: "ASC"|"DESC"}
 export def "list-coverage" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2897,9 +2900,9 @@ export def "list-coverage" [
   --x-amz-signed-headers: string
   --next-token-body: string # A token to use for paginating results that are returned in the response. Set the value of this parameter to null for the first request to a list action. For subsequent calls, use the NextToken value returned from the previous request to continue listing results after the first page. (body field)
   --max-results-body: int # The maximum number of results to return in the response. (body field)
-  --filter-criteria: record # Represents the criteria used in the filter. — shape: {FilterCriterion?: any}
-  --sort-criteria: record # Information about the sorting criteria used in the coverage statistics. — shape: {AttributeName?: any, OrderBy?: any}
-]: any -> record<Resources: record, NextToken: record> {
+  --filter-criteria: record # Represents the criteria used in the filter. — shape: {FilterCriterion?: list}
+  --sort-criteria: record # Information about the sorting criteria used in the coverage statistics. — shape: {AttributeName?: "ACCOUNT_ID"|"CLUSTER_NAME"|"COVERAGE_STATUS"|"ISSUE"|"ADDON_VERSION"|"UPDATED_AT", OrderBy?: "ASC"|"DESC"}
+]: any -> record<Resources: table<ResourceId: string, DetectorId: string, AccountId: string, ResourceDetails: record, CoverageStatus: string, Issue: string, UpdatedAt: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2930,8 +2933,8 @@ export def "list-coverage" [
 #
 # POST /detector/{detectorId}/findings
 # operationId: ListFindings
-# --findingCriteria shape: {Criterion?: any}
-# --sortCriteria shape: {AttributeName?: any, OrderBy?: any}
+# --findingCriteria shape: {Criterion?: record}
+# --sortCriteria shape: {AttributeName?: string, OrderBy?: "ASC"|"DESC"}
 export def "list-findings" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2952,11 +2955,11 @@ export def "list-findings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --finding-criteria: record # Contains information about the criteria used for querying findings. — shape: {Criterion?: any}
-  --sort-criteria: record # Contains information about the criteria used for sorting findings. — shape: {AttributeName?: any, OrderBy?: any}
+  --finding-criteria: record # Contains information about the criteria used for querying findings. — shape: {Criterion?: record}
+  --sort-criteria: record # Contains information about the criteria used for sorting findings. — shape: {AttributeName?: string, OrderBy?: "ASC"|"DESC"}
   --max-results-body: int # You can use this parameter to indicate the maximum number of items you want in the response. The default value is 50. The maximum value is 50. (body field)
   --next-token-body: string # You can use this parameter when paginating results. Set the value of this parameter to null on your first call to the list action. For subsequent calls to the action, fill nextToken in the request with the value of NextToken from the previous response to continue listing data. (body field)
-]: any -> record<FindingIds: record, NextToken: record> {
+]: any -> record<FindingIds: list<string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3008,7 +3011,7 @@ export def "list-invitations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Invitations: record, NextToken: record> {
+]: nothing -> record<Invitations: table<AccountId: string, InvitationId: string, RelationshipStatus: string, InvitedAt: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -3056,7 +3059,7 @@ export def "list-organization-admin-accounts" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AdminAccounts: record, NextToken: record> {
+]: nothing -> record<AdminAccounts: table<AdminAccountId: string, AdminStatus: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -3196,7 +3199,7 @@ export def "start-monitoring-members" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   account_ids: list<string> # A list of account IDs of the GuardDuty member accounts to start monitoring.
-]: any -> record<UnprocessedAccounts: record> {
+]: any -> record<UnprocessedAccounts: table<AccountId: string, Result: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3245,7 +3248,7 @@ export def "stop-monitoring-members" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   account_ids: list<string> # A list of account IDs for the member accounts to stop monitoring.
-]: any -> record<UnprocessedAccounts: record> {
+]: any -> record<UnprocessedAccounts: table<AccountId: string, Result: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3335,7 +3338,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # The tag keys to remove from the resource.
+  --tag-keys: list # The tag keys to remove from the resource. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3347,6 +3350,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"
@@ -3422,8 +3426,8 @@ export def "update-findings-feedback" [
 #
 # POST /detector/{detectorId}/member/detector/update
 # operationId: UpdateMemberDetectors
-# --dataSources shape: {S3Logs?: any, Kubernetes?: any, MalwareProtection?: any}
-# --features item shape: {Name?: any, Status?: any, AdditionalConfiguration?: any}
+# --dataSources shape: {S3Logs?: record, Kubernetes?: record, MalwareProtection?: record}
+# --features item shape: {Name?: "S3_DATA_EVENTS"|"EKS_AUDIT_LOGS"|"EBS_MALWARE_PROTECTION"|"RDS_LOGIN_EVENTS"|"EKS_RUNTIME_MONITORING"|"LAMBDA_NETWORK_LOGS", Status?: "ENABLED"|"DISABLED", AdditionalConfiguration?: list}
 export def "update-member-detectors" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3443,9 +3447,9 @@ export def "update-member-detectors" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   account_ids: list<string> # A list of member account IDs to be updated.
-  --data-sources: record # Contains information about which data sources are enabled. — shape: {S3Logs?: any, Kubernetes?: any, MalwareProtection?: any}
-  --features: list # A list of features that will be updated for the specified member accounts. — item shape: {Name?: any, Status?: any, AdditionalConfiguration?: any}
-]: any -> record<UnprocessedAccounts: record> {
+  --data-sources: record # Contains information about which data sources are enabled. — shape: {S3Logs?: record, Kubernetes?: record, MalwareProtection?: record}
+  --features: list # A list of features that will be updated for the specified member accounts. — item shape: {Name?: "S3_DATA_EVENTS"|"EKS_AUDIT_LOGS"|"EBS_MALWARE_PROTECTION"|"RDS_LOGIN_EVENTS"|"EKS_RUNTIME_MONITORING"|"LAMBDA_NETWORK_LOGS", Status?: "ENABLED"|"DISABLED", AdditionalConfiguration?: list}
+]: any -> record<UnprocessedAccounts: table<AccountId: string, Result: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

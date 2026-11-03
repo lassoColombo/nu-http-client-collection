@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -151,11 +151,12 @@ export def "log-profiles-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<value: table<properties: record>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<value: table<properties: record, id: string, location: string, name: string, tags: any, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/microsoft.insights/logprofiles") $qp $auth.query)
   let accept_val = "application/json"
@@ -190,12 +191,13 @@ export def "log-profiles-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($log_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'logProfileName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), log_profile_name: (encode-path-segment $log_profile_name)} | format pattern "/subscriptions/{subscription_id}/providers/microsoft.insights/logprofiles/{log_profile_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -230,12 +232,13 @@ export def "log-profiles-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<categories: list<string>, locations: list<string>, retentionPolicy: record<days: int, enabled: bool>, serviceBusRuleId: string, storageAccountId: string>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<categories: list<string>, locations: list<string>, retentionPolicy: record<days: int, enabled: bool>, serviceBusRuleId: string, storageAccountId: string>, id: string, location: string, name: string, tags: any, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($log_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'logProfileName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), log_profile_name: (encode-path-segment $log_profile_name)} | format pattern "/subscriptions/{subscription_id}/providers/microsoft.insights/logprofiles/{log_profile_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -271,15 +274,16 @@ export def "log-profiles-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: any # The log profile properties. — shape: {categories: list<string>, locations: list<string>, retentionPolicy: any, serviceBusRuleId?: string, storageAccountId?: string}
   --tags: any # Resource tags
-]: any -> record<properties: record<categories: list<string>, locations: list<string>, retentionPolicy: record<days: int, enabled: bool>, serviceBusRuleId: string, storageAccountId: string>> {
+]: any -> record<properties: record<categories: list<string>, locations: list<string>, retentionPolicy: record<days: int, enabled: bool>, serviceBusRuleId: string, storageAccountId: string>, id: string, location: string, name: string, tags: any, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($log_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'logProfileName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), log_profile_name: (encode-path-segment $log_profile_name)} | format pattern "/subscriptions/{subscription_id}/providers/microsoft.insights/logprofiles/{log_profile_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -317,16 +321,17 @@ export def "log-profiles-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   properties: any # The log profile properties. — shape: {categories: list<string>, locations: list<string>, retentionPolicy: any, serviceBusRuleId?: string, storageAccountId?: string}
   location: string # Resource location
   --tags: any # Resource tags
-]: any -> record<properties: record<categories: list<string>, locations: list<string>, retentionPolicy: record<days: int, enabled: bool>, serviceBusRuleId: string, storageAccountId: string>> {
+]: any -> record<properties: record<categories: list<string>, locations: list<string>, retentionPolicy: record<days: int, enabled: bool>, serviceBusRuleId: string, storageAccountId: string>, id: string, location: string, name: string, tags: any, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($log_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'logProfileName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), log_profile_name: (encode-path-segment $log_profile_name)} | format pattern "/subscriptions/{subscription_id}/providers/microsoft.insights/logprofiles/{log_profile_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact

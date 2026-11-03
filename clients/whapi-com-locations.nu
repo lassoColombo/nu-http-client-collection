@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "apikey" => { {scheme: $scheme, headers: {apiKey: $token_val}, query: "", location: "header"} }
+    "apikey" => { {scheme: $scheme, headers: {"apiKey": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -132,11 +132,13 @@ export def "address-lookup" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --house-num: string # House number or name of the address.
-  --post-code: string # Postcode of the address, no spaces required.
+  --house-num: string # House number or name of the address. (required)
+  --post-code: string # Postcode of the address, no spaces required. (required)
 ]: nothing -> record<addresses: table<city: string, county: string, fullAddress: string, postCode: string, street: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($house_num == null) { error make --unspanned { msg: "required query parameter 'houseNum' missing: pass --house-num" } }
+  if ($post_code == null) { error make --unspanned { msg: "required query parameter 'postCode' missing: pass --post-code" } }
   let qp = [(serialize-qp "houseNum" $house_num "scalar") (serialize-qp "postCode" $post_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/address/lookup/" $qp $auth.query)
   let accept_val = "application/json"

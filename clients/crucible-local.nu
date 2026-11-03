@@ -484,7 +484,7 @@ export def "get-contents" [
 #
 # GET /rest-service/repositories-v1/history/{repository}/{revision}/{path}
 # operationId: history
-export def "history" [
+export def "get-rest-service-repositories-v1-history-repository-revision-path" [
   repository: string
   revision: string
   path: string

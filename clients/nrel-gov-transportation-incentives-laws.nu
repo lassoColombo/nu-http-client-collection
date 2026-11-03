@@ -94,6 +94,8 @@ def base-url-completer [] { ["http://localhost/api/transportation-incentives-law
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def output-format-completer [] { ["csv" "json" "xml"] }
+def output-format-completer-1 [] { ["json" "xml"] }
 def type-completer [] { ["incentive" "regulation" "tech" "user"] }
 
 # List all available API commands with their parameters
@@ -124,7 +126,7 @@ export def commands []: nothing -> table {
 # GET /v1.{output_format}
 # operationId: transportation_incentives_laws_all
 export def "transportation-incentives-laws-all" [
-  output_format: string
+  output_format: string@output-format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,7 +136,7 @@ export def "transportation-incentives-laws-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # API Key (default: DEMO_KEY)
+  --api-key: string # API Key (required, default: DEMO_KEY)
   --limit: int # Limit the number of laws returned (default: 10)
   --jurisdiction: string # Return laws for the given Jurisdiction. Jurisdiction must be given as a two character state code (eg, 'CO' for Colorado). A single jurisdiction, or a comma-separate list of multiple jurisdiction, may be given. Use the code 'US' for federal laws and the code 'DC' for Washington D.C.
   --technology: string # Search by the technology type. A single type, or a comma-separate list of multiple types, may be given. Values and what they stand for are as follows: 'BIOD' for Biodiesel, 'ETH' for Ethanol / Flexible Fuel Vehicles, 'NG' for Natural Gas / Natural Gas Vehicles, 'LPG' for Liquefied Petroleum Gas (Propane) / Propane Vehicles, 'HY' for Hydrogen / Fuel Cell Electric Vehicles, 'ELEC' for All-Electric Vehicles (EVs), 'PHEV' for Plug-In Hybrid Electric Vehicles (PHEVs), 'HEV' for Hybrid Electric Vehicles (HEVs), 'NEVS' for Neighborhood Electric Vehicles (NEVs), 'RD' for Renewable Diesel, 'AFTMKTCONV' for Aftermarket Conversions, 'EFFEC' for Fuel Economy / Efficiency, 'IR' for Idle Reduction, 'AUTONOMOUS' for Connected and Autonomous Vehicles, and 'OTHER' for Other.
@@ -151,6 +153,7 @@ export def "transportation-incentives-laws-all" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($output_format | is-empty) { error make --unspanned { msg: "path parameter 'output_format' must be non-empty" } }
+  let api_key = ($api_key | default "DEMO_KEY")
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "jurisdiction" $jurisdiction "scalar") (serialize-qp "technology" $technology "scalar") (serialize-qp "incentive_type" $incentive_type "scalar") (serialize-qp "regulation_type" $regulation_type "scalar") (serialize-qp "user_type" $user_type "scalar") (serialize-qp "poc" $poc "scalar") (serialize-qp "recent" $recent "scalar") (serialize-qp "expired" $expired "scalar") (serialize-qp "law_type" $law_type "scalar") (serialize-qp "keyword" $keyword "scalar") (serialize-qp "local" $local "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({output_format: (encode-path-segment $output_format)} | format pattern "/v1.{output_format}") $qp $auth.query)
   let accept_val = "*/*"
@@ -174,7 +177,7 @@ export def "transportation-incentives-laws-all" [
 # GET /v1/category-list.{output_format}
 # operationId: transportation_incentives_laws_categories
 export def "transportation-incentives-laws-categories" [
-  output_format: string
+  output_format: string@output-format-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,12 +187,13 @@ export def "transportation-incentives-laws-categories" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # API Key (default: DEMO_KEY)
+  --api-key: string # API Key (required, default: DEMO_KEY)
   --type: string@type-completer # Search by the category type.
 ]: nothing -> record<inputs: any, metadata: record<count: int, version: string>, result: table<category_type: string, code: string, help_text: string, sort_order: string, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($output_format | is-empty) { error make --unspanned { msg: "path parameter 'output_format' must be non-empty" } }
+  let api_key = ($api_key | default "DEMO_KEY")
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({output_format: (encode-path-segment $output_format)} | format pattern "/v1/category-list.{output_format}") $qp $auth.query)
   let accept_val = "*/*"
@@ -213,7 +217,7 @@ export def "transportation-incentives-laws-categories" [
 # GET /v1/pocs.{output_format}
 # operationId: transportation_incentives_laws_pocs
 export def "transportation-incentives-laws-pocs" [
-  output_format: string
+  output_format: string@output-format-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -223,12 +227,14 @@ export def "transportation-incentives-laws-pocs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # API Key (default: DEMO_KEY)
-  --jurisdiction: string # Return the points of contact for the given Jurisdiction. Jurisdiction must be given as a two character state code (eg, 'CO' for Colorado). A single jurisdiction, or a comma-separate list of multiple jurisdiction, may be given. Use the code 'US' for federal laws and the code 'DC' for Washington D.C.
+  --api-key: string # API Key (required, default: DEMO_KEY)
+  --jurisdiction: string # Return the points of contact for the given Jurisdiction. Jurisdiction must be given as a two character state code (eg, 'CO' for Colorado). A single jurisdiction, or a comma-separate list of multiple jurisdiction, may be given. Use the code 'US' for federal laws and the code 'DC' for Washington D.C. (required)
 ]: nothing -> record<inputs: any, metadata: record<count: int, version: string>, result: table<agency: string, email: string, fax: string, name: string, state: string, telephone: string, title: string, web_page: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($output_format | is-empty) { error make --unspanned { msg: "path parameter 'output_format' must be non-empty" } }
+  let api_key = ($api_key | default "DEMO_KEY")
+  if ($jurisdiction == null) { error make --unspanned { msg: "required query parameter 'jurisdiction' missing: pass --jurisdiction" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "jurisdiction" $jurisdiction "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({output_format: (encode-path-segment $output_format)} | format pattern "/v1/pocs.{output_format}") $qp $auth.query)
   let accept_val = "*/*"
@@ -253,7 +259,7 @@ export def "transportation-incentives-laws-pocs" [
 # operationId: transportation_incentives_laws_id
 export def "transportation-incentives-laws-id" [
   id: int
-  output_format: string
+  output_format: string@output-format-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -263,7 +269,7 @@ export def "transportation-incentives-laws-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # API Key (default: DEMO_KEY)
+  --api-key: string # API Key (required, default: DEMO_KEY)
   --poc: oneof<nothing, bool> # Include points of contacts in the return value. (default: false)
   --expired: oneof<nothing, bool> # The 'true' value returns a record no matter its status (current, expired, archived, or repealed). The default 'false' value returns only current laws and incentives. (default: false)
 ]: nothing -> record<inputs: any, metadata: record<count: int, version: string>, result: record<agency: string, amended_date: string, archived_date: string, categories: list<record>, contacts: list<record>, enacted_date: string, expired_date: string, id: int, is_recent: bool, plaintext: string, recent_update_or_new: string, references: list<record>, repealed_date: string, seq_num: int, significant_update_date: string, state: string, text: string, title: string, topics: list<record>, type: string, types: list<record>>> {
@@ -271,6 +277,7 @@ export def "transportation-incentives-laws-id" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($output_format | is-empty) { error make --unspanned { msg: "path parameter 'output_format' must be non-empty" } }
+  let api_key = ($api_key | default "DEMO_KEY")
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "poc" $poc "scalar") (serialize-qp "expired" $expired "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), output_format: (encode-path-segment $output_format)} | format pattern "/v1/{id}.{output_format}") $qp $auth.query)
   let accept_val = "*/*"

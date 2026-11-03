@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -145,11 +145,12 @@ export def "diagnostic-settings-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<value: table<properties: record>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_uri | is-empty) { error make --unspanned { msg: "path parameter 'resourceUri' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_uri: (encode-path-segment $resource_uri)} | format pattern "/{resource_uri}/providers/microsoft.insights/diagnosticSettings") $qp $auth.query)
   let accept_val = "application/json"
@@ -184,12 +185,13 @@ export def "diagnostic-settings-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<code: string, message: string> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_uri | is-empty) { error make --unspanned { msg: "path parameter 'resourceUri' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_uri: (encode-path-segment $resource_uri), name: (encode-path-segment $name)} | format pattern "/{resource_uri}/providers/microsoft.insights/diagnosticSettings/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -224,12 +226,13 @@ export def "diagnostic-settings-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<eventHubAuthorizationRuleId: string, eventHubName: string, logAnalyticsDestinationType: string, logs: list<record>, metrics: list<record>, serviceBusRuleId: string, storageAccountId: string, workspaceId: string>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<eventHubAuthorizationRuleId: string, eventHubName: string, logAnalyticsDestinationType: string, logs: list<record>, metrics: list<record>, serviceBusRuleId: string, storageAccountId: string, workspaceId: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_uri | is-empty) { error make --unspanned { msg: "path parameter 'resourceUri' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_uri: (encode-path-segment $resource_uri), name: (encode-path-segment $name)} | format pattern "/{resource_uri}/providers/microsoft.insights/diagnosticSettings/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -265,14 +268,15 @@ export def "diagnostic-settings-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: any # The diagnostic settings. — shape: {eventHubAuthorizationRuleId?: string, eventHubName?: string, logAnalyticsDestinationType?: string, logs?: list, metrics?: list, serviceBusRuleId?: string, storageAccountId?: string, workspaceId?: string}
-]: any -> record<properties: record<eventHubAuthorizationRuleId: string, eventHubName: string, logAnalyticsDestinationType: string, logs: list<record>, metrics: list<record>, serviceBusRuleId: string, storageAccountId: string, workspaceId: string>> {
+]: any -> record<properties: record<eventHubAuthorizationRuleId: string, eventHubName: string, logAnalyticsDestinationType: string, logs: list<record>, metrics: list<record>, serviceBusRuleId: string, storageAccountId: string, workspaceId: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_uri | is-empty) { error make --unspanned { msg: "path parameter 'resourceUri' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_uri: (encode-path-segment $resource_uri), name: (encode-path-segment $name)} | format pattern "/{resource_uri}/providers/microsoft.insights/diagnosticSettings/{name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact

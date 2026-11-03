@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -108,10 +108,13 @@ def x-amz-target-completer-8 [] { ["InspectorService.DescribeAssessmentRuns"] }
 def x-amz-target-completer-9 [] { ["InspectorService.DescribeAssessmentTargets"] }
 def x-amz-target-completer-10 [] { ["InspectorService.DescribeAssessmentTemplates"] }
 def x-amz-target-completer-11 [] { ["InspectorService.DescribeCrossAccountAccessRole"] }
+def locale-completer [] { ["EN_US"] }
 def x-amz-target-completer-12 [] { ["InspectorService.DescribeExclusions"] }
 def x-amz-target-completer-13 [] { ["InspectorService.DescribeFindings"] }
 def x-amz-target-completer-14 [] { ["InspectorService.DescribeResourceGroups"] }
 def x-amz-target-completer-15 [] { ["InspectorService.DescribeRulesPackages"] }
+def report-file-format-completer [] { ["HTML" "PDF"] }
+def report-type-completer [] { ["FINDING" "FULL"] }
 def x-amz-target-completer-16 [] { ["InspectorService.GetAssessmentReport"] }
 def x-amz-target-completer-17 [] { ["InspectorService.GetExclusionsPreview"] }
 def x-amz-target-completer-18 [] { ["InspectorService.GetTelemetryMetadata"] }
@@ -129,7 +132,9 @@ def x-amz-target-completer-29 [] { ["InspectorService.RegisterCrossAccountAccess
 def x-amz-target-completer-30 [] { ["InspectorService.RemoveAttributesFromFindings"] }
 def x-amz-target-completer-31 [] { ["InspectorService.SetTagsForResource"] }
 def x-amz-target-completer-32 [] { ["InspectorService.StartAssessmentRun"] }
+def stop-action-completer [] { ["SKIP_EVALUATION" "START_EVALUATION"] }
 def x-amz-target-completer-33 [] { ["InspectorService.StopAssessmentRun"] }
+def event-completer [] { ["ASSESSMENT_RUN_COMPLETED" "ASSESSMENT_RUN_STARTED" "ASSESSMENT_RUN_STATE_CHANGED" "FINDING_REPORTED" "OTHER"] }
 def x-amz-target-completer-34 [] { ["InspectorService.SubscribeToEvent"] }
 def x-amz-target-completer-35 [] { ["InspectorService.UnsubscribeFromEvent"] }
 def x-amz-target-completer-36 [] { ["InspectorService.UpdateAssessmentTarget"] }
@@ -161,6 +166,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AddAttributesToFindings
+# --attributes item shape: {key: string, value?: string}
 export def "add-attributes-to-findings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -178,13 +184,14 @@ export def "add-attributes-to-findings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  finding_arns: any
-  attributes: any
+  --x-amz-target: string@x-amz-target-completer # required
+  finding_arns: list<string> # The ARNs that specify the findings that you want to assign attributes to.
+  attributes: list # The array of attributes that you want to assign to specified findings. — item shape: {key: string, value?: string}
 ]: any -> record<failedItems: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "InspectorService.AddAttributesToFindings")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"findingArns": $finding_arns, "attributes": $attributes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -227,13 +234,14 @@ export def "create-assessment-target" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  assessment_target_name: any
-  --resource-group-arn: any
-]: any -> record<assessmentTargetArn: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  assessment_target_name: string # The user-defined name that identifies the assessment target that you want to create. The name must be unique within the AWS account.
+  --resource-group-arn: string # The ARN that specifies the resource group that is used to create the assessment target. If resourceGroupArn is not specified, all EC2 instances in the current AWS account and region are included in the assessment target.
+]: any -> record<assessmentTargetArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "InspectorService.CreateAssessmentTarget")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"assessmentTargetName": $assessment_target_name, "resourceGroupArn": $resource_group_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -259,6 +267,7 @@ export def "create-assessment-target" [
 #
 # POST /
 # operationId: CreateAssessmentTemplate
+# --userAttributesForFindings item shape: {key: string, value?: string}
 export def "create-assessment-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -276,16 +285,17 @@ export def "create-assessment-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  assessment_target_arn: any
-  assessment_template_name: any
-  duration_in_seconds: any
-  rules_package_arns: any
-  --user-attributes-for-findings: any
-]: any -> record<assessmentTemplateArn: record> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  assessment_target_arn: string # The ARN that specifies the assessment target for which you want to create the assessment template.
+  assessment_template_name: string # The user-defined name that identifies the assessment template that you want to create. You can create several assessment templates for an assessment target. The names of the assessment templates that correspond to a particular assessment target must be unique.
+  duration_in_seconds: int # The duration of the assessment run in seconds.
+  rules_package_arns: list<string> # The ARNs that specify the rules packages that you want to attach to the assessment template.
+  --user-attributes-for-findings: list # The user-defined attributes that are assigned to every finding that is generated by the assessment run that uses this assessment template. An attribute is a key and value pair (an Attribute object). Within an assessment template, each key must be unique. — item shape: {key: string, value?: string}
+]: any -> record<assessmentTemplateArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "InspectorService.CreateAssessmentTemplate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"assessmentTargetArn": $assessment_target_arn, "assessmentTemplateName": $assessment_template_name, "durationInSeconds": $duration_in_seconds, "rulesPackageArns": $rules_package_arns, "userAttributesForFindings": $user_attributes_for_findings} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -328,12 +338,13 @@ export def "create-exclusions-preview" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  assessment_template_arn: any
-]: any -> record<previewToken: record> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  assessment_template_arn: string # The ARN that specifies the assessment template for which you want to create an exclusions preview.
+]: any -> record<previewToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "InspectorService.CreateExclusionsPreview")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"assessmentTemplateArn": $assessment_template_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -359,6 +370,7 @@ export def "create-exclusions-preview" [
 #
 # POST /
 # operationId: CreateResourceGroup
+# --resourceGroupTags item shape: {key: string, value?: string}
 export def "create-resource-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -376,12 +388,13 @@ export def "create-resource-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  resource_group_tags: any
-]: any -> record<resourceGroupArn: record> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  resource_group_tags: list # A collection of keys and an array of possible values, '[{"key":"key1","values":["Value1","Value2"]},{"key":"Key2","values":["Value3"]}]'. For example,'[{"key":"Name","values":["TestEC2Instance"]}]'. — item shape: {key: string, value?: string}
+]: any -> record<resourceGroupArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "InspectorService.CreateResourceGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceGroupTags": $resource_group_tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -424,12 +437,13 @@ export def "delete-assessment-run" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  assessment_run_arn: any
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  assessment_run_arn: string # The ARN that specifies the assessment run that you want to delete.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "InspectorService.DeleteAssessmentRun")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"assessmentRunArn": $assessment_run_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -472,12 +486,13 @@ export def "delete-assessment-target" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  assessment_target_arn: any
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  assessment_target_arn: string # The ARN that specifies the assessment target that you want to delete.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "InspectorService.DeleteAssessmentTarget")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"assessmentTargetArn": $assessment_target_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -520,12 +535,13 @@ export def "delete-assessment-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  assessment_template_arn: any
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  assessment_template_arn: string # The ARN that specifies the assessment template that you want to delete.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "InspectorService.DeleteAssessmentTemplate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"assessmentTemplateArn": $assessment_template_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -568,12 +584,13 @@ export def "describe-assessment-runs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  assessment_run_arns: any
-]: any -> record<assessmentRuns: record, failedItems: record> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  assessment_run_arns: list<string> # The ARN that specifies the assessment run that you want to describe.
+]: any -> record<assessmentRuns: table<arn: string, name: string, assessmentTemplateArn: string, state: string, durationInSeconds: int, rulesPackageArns: list, userAttributesForFindings: list, createdAt: string, startedAt: string, completedAt: string, stateChangedAt: string, dataCollected: bool, stateChanges: list, notifications: list, findingCounts: record>, failedItems: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "InspectorService.DescribeAssessmentRuns")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"assessmentRunArns": $assessment_run_arns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -616,12 +633,13 @@ export def "describe-assessment-targets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  assessment_target_arns: any
-]: any -> record<assessmentTargets: record, failedItems: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  assessment_target_arns: list<string> # The ARNs that specifies the assessment targets that you want to describe.
+]: any -> record<assessmentTargets: table<arn: string, name: string, resourceGroupArn: string, createdAt: string, updatedAt: string>, failedItems: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "InspectorService.DescribeAssessmentTargets")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"assessmentTargetArns": $assessment_target_arns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -664,12 +682,13 @@ export def "describe-assessment-templates" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
+  --x-amz-target: string@x-amz-target-completer-10 # required
   assessment_template_arns: list<string>
-]: any -> record<assessmentTemplates: record, failedItems: record> {
+]: any -> record<assessmentTemplates: table<arn: string, name: string, assessmentTargetArn: string, durationInSeconds: int, rulesPackageArns: list, userAttributesForFindings: list, lastAssessmentRunArn: string, assessmentRunCount: int, createdAt: string>, failedItems: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "InspectorService.DescribeAssessmentTemplates")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"assessmentTemplateArns": $assessment_template_arns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -712,10 +731,11 @@ export def "describe-cross-account-access-role" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-]: nothing -> record<roleArn: record, valid: record, registeredAt: record> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+]: nothing -> record<roleArn: string, valid: bool, registeredAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "InspectorService.DescribeCrossAccountAccessRole")
   let full_url = (build-url $base "/" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -756,13 +776,14 @@ export def "describe-exclusions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  exclusion_arns: any
-  --locale: any
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  exclusion_arns: list<string> # The list of ARNs that specify the exclusions that you want to describe.
+  --locale: string@locale-completer # The locale into which you want to translate the exclusion's title, description, and recommendation.
 ]: any -> record<exclusions: record, failedItems: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "InspectorService.DescribeExclusions")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"exclusionArns": $exclusion_arns, "locale": $locale} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -805,13 +826,14 @@ export def "describe-findings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  finding_arns: any
-  --locale: any
-]: any -> record<findings: record, failedItems: record> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  finding_arns: list<string> # The ARN that specifies the finding that you want to describe.
+  --locale: string@locale-completer # The locale into which you want to translate a finding description, recommendation, and the short description that identifies the finding.
+]: any -> record<findings: table<arn: string, schemaVersion: int, service: string, serviceAttributes: record, assetType: string, assetAttributes: record, id: string, title: string, description: string, recommendation: string, severity: string, numericSeverity: float, confidence: int, indicatorOfCompromise: bool, attributes: list, userAttributes: list, createdAt: string, updatedAt: string>, failedItems: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "InspectorService.DescribeFindings")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"findingArns": $finding_arns, "locale": $locale} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -854,12 +876,13 @@ export def "describe-resource-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  resource_group_arns: any
-]: any -> record<resourceGroups: record, failedItems: record> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  resource_group_arns: list<string> # The ARN that specifies the resource group that you want to describe.
+]: any -> record<resourceGroups: table<arn: string, tags: list, createdAt: string>, failedItems: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "InspectorService.DescribeResourceGroups")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceGroupArns": $resource_group_arns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -902,13 +925,14 @@ export def "describe-rules-packages" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  rules_package_arns: any
-  --locale: any
-]: any -> record<rulesPackages: record, failedItems: record> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  rules_package_arns: list<string> # The ARN that specifies the rules package that you want to describe.
+  --locale: string@locale-completer # The locale that you want to translate a rules package description into.
+]: any -> record<rulesPackages: table<arn: string, name: string, version: string, provider: string, description: string>, failedItems: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "InspectorService.DescribeRulesPackages")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"rulesPackageArns": $rules_package_arns, "locale": $locale} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -951,14 +975,15 @@ export def "get-assessment-report" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  assessment_run_arn: any
-  report_file_format: any
-  report_type: any
-]: any -> record<status: record, url: record> {
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  assessment_run_arn: string # The ARN that specifies the assessment run for which you want to generate a report.
+  report_file_format: string@report-file-format-completer # Specifies the file format (html or pdf) of the assessment report that you want to generate.
+  report_type: string@report-type-completer # Specifies the type of the assessment report that you want to generate. There are two types of assessment reports: a finding report and a full report. For more information, see Assessment Reports (https://docs.aws.amazon.com/inspector/latest/userguide/inspector_reports.html).
+]: any -> record<status: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "InspectorService.GetAssessmentReport")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"assessmentRunArn": $assessment_run_arn, "reportFileFormat": $report_file_format, "reportType": $report_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1003,16 +1028,17 @@ export def "get-exclusions-preview" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  assessment_template_arn: any
-  preview_token: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --locale: any
-]: any -> record<previewStatus: record, exclusionPreviews: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  assessment_template_arn: string # The ARN that specifies the assessment template for which the exclusions preview was requested.
+  preview_token: string # The unique identifier associated of the exclusions preview.
+  --next-token-body: string # You can use this parameter when paginating results. Set the value of this parameter to null on your first call to the GetExclusionsPreviewRequest action. Subsequent calls to the action fill nextToken in the request with the value of nextToken from the previous response to continue listing data. (body field)
+  --max-results-body: int # You can use this parameter to indicate the maximum number of items you want in the response. The default value is 100. The maximum value is 500. (body field)
+  --locale: string@locale-completer # The locale into which you want to translate the exclusion's title, description, and recommendation.
+]: any -> record<previewStatus: string, exclusionPreviews: table<title: string, description: string, recommendation: string, scopes: list, attributes: list>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "InspectorService.GetExclusionsPreview")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"assessmentTemplateArn": $assessment_template_arn, "previewToken": $preview_token, "nextToken": $next_token_body, "maxResults": $max_results_body, "locale": $locale} | compact
@@ -1056,12 +1082,13 @@ export def "get-telemetry-metadata" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  assessment_run_arn: any
-]: any -> record<telemetryMetadata: record> {
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  assessment_run_arn: string # The ARN that specifies the assessment run that has the telemetry data that you want to obtain.
+]: any -> record<telemetryMetadata: table<messageType: string, count: int, dataSize: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "InspectorService.GetTelemetryMetadata")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"assessmentRunArn": $assessment_run_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1087,6 +1114,7 @@ export def "get-telemetry-metadata" [
 #
 # POST /
 # operationId: ListAssessmentRunAgents
+# --filter shape: {agentHealths: list<string>, agentHealthCodes: list<string>}
 export def "list-assessment-run-agents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1106,15 +1134,16 @@ export def "list-assessment-run-agents" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  assessment_run_arn: any
-  --filter: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<assessmentRunAgents: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  assessment_run_arn: string # The ARN that specifies the assessment run whose agents you want to list.
+  --filter: record # Contains information about an Amazon Inspector agent. This data type is used as a request parameter in the ListAssessmentRunAgents action. — shape: {agentHealths: list<string>, agentHealthCodes: list<string>}
+  --next-token-body: string # You can use this parameter when paginating results. Set the value of this parameter to null on your first call to the ListAssessmentRunAgents action. Subsequent calls to the action fill nextToken in the request with the value of NextToken from the previous response to continue listing data. (body field)
+  --max-results-body: int # You can use this parameter to indicate the maximum number of items that you want in the response. The default value is 10. The maximum value is 500. (body field)
+]: any -> record<assessmentRunAgents: table<agentId: string, assessmentRunArn: string, agentHealth: string, agentHealthCode: string, agentHealthDetails: string, autoScalingGroup: string, telemetryMetadata: list>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "InspectorService.ListAssessmentRunAgents")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"assessmentRunArn": $assessment_run_arn, "filter": $filter, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -1141,6 +1170,7 @@ export def "list-assessment-run-agents" [
 #
 # POST /
 # operationId: ListAssessmentRuns
+# --filter shape: {namePattern?: string, states?: list<string>, durationRange?: record, rulesPackageArns?: list<string>, startTimeRange?: record, completionTimeRange?: record, stateChangeTimeRange?: record}
 export def "list-assessment-runs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1160,15 +1190,16 @@ export def "list-assessment-runs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  --assessment-template-arns: any
-  --filter: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<assessmentRunArns: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  --assessment-template-arns: list<string> # The ARNs that specify the assessment templates whose assessment runs you want to list.
+  --filter: record # Used as the request parameter in the ListAssessmentRuns action. — shape: {namePattern?: string, states?: list<string>, durationRange?: record, rulesPackageArns?: list<string>, startTimeRange?: record, completionTimeRange?: record, stateChangeTimeRange?: record}
+  --next-token-body: string # You can use this parameter when paginating results. Set the value of this parameter to null on your first call to the ListAssessmentRuns action. Subsequent calls to the action fill nextToken in the request with the value of NextToken from the previous response to continue listing data. (body field)
+  --max-results-body: int # You can use this parameter to indicate the maximum number of items that you want in the response. The default value is 10. The maximum value is 500. (body field)
+]: any -> record<assessmentRunArns: list<string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "InspectorService.ListAssessmentRuns")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"assessmentTemplateArns": $assessment_template_arns, "filter": $filter, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -1195,6 +1226,7 @@ export def "list-assessment-runs" [
 #
 # POST /
 # operationId: ListAssessmentTargets
+# --filter shape: {assessmentTargetNamePattern?: string}
 export def "list-assessment-targets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1214,14 +1246,15 @@ export def "list-assessment-targets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  --filter: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<assessmentTargetArns: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  --filter: record # Used as the request parameter in the ListAssessmentTargets action. — shape: {assessmentTargetNamePattern?: string}
+  --next-token-body: string # You can use this parameter when paginating results. Set the value of this parameter to null on your first call to the ListAssessmentTargets action. Subsequent calls to the action fill nextToken in the request with the value of NextToken from the previous response to continue listing data. (body field)
+  --max-results-body: int # You can use this parameter to indicate the maximum number of items you want in the response. The default value is 10. The maximum value is 500. (body field)
+]: any -> record<assessmentTargetArns: list<string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "InspectorService.ListAssessmentTargets")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"filter": $filter, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -1248,6 +1281,7 @@ export def "list-assessment-targets" [
 #
 # POST /
 # operationId: ListAssessmentTemplates
+# --filter shape: {namePattern?: string, durationRange?: record, rulesPackageArns?: list<string>}
 export def "list-assessment-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1267,15 +1301,16 @@ export def "list-assessment-templates" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  --assessment-target-arns: any
-  --filter: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<assessmentTemplateArns: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  --assessment-target-arns: list<string> # A list of ARNs that specifies the assessment targets whose assessment templates you want to list.
+  --filter: record # Used as the request parameter in the ListAssessmentTemplates action. — shape: {namePattern?: string, durationRange?: record, rulesPackageArns?: list<string>}
+  --next-token-body: string # You can use this parameter when paginating results. Set the value of this parameter to null on your first call to the ListAssessmentTemplates action. Subsequent calls to the action fill nextToken in the request with the value of NextToken from the previous response to continue listing data. (body field)
+  --max-results-body: int # You can use this parameter to indicate the maximum number of items you want in the response. The default value is 10. The maximum value is 500. (body field)
+]: any -> record<assessmentTemplateArns: list<string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "InspectorService.ListAssessmentTemplates")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"assessmentTargetArns": $assessment_target_arns, "filter": $filter, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -1321,14 +1356,15 @@ export def "list-event-subscriptions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  --resource-arn: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<subscriptions: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  --resource-arn: string # The ARN of the assessment template for which you want to list the existing event subscriptions.
+  --next-token-body: string # You can use this parameter when paginating results. Set the value of this parameter to null on your first call to the ListEventSubscriptions action. Subsequent calls to the action fill nextToken in the request with the value of NextToken from the previous response to continue listing data. (body field)
+  --max-results-body: int # You can use this parameter to indicate the maximum number of items you want in the response. The default value is 10. The maximum value is 500. (body field)
+]: any -> record<subscriptions: table<resourceArn: string, topicArn: string, eventSubscriptions: list>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "InspectorService.ListEventSubscriptions")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"resourceArn": $resource_arn, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -1374,14 +1410,15 @@ export def "list-exclusions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  assessment_run_arn: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<exclusionArns: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  assessment_run_arn: string # The ARN of the assessment run that generated the exclusions that you want to list.
+  --next-token-body: string # You can use this parameter when paginating results. Set the value of this parameter to null on your first call to the ListExclusionsRequest action. Subsequent calls to the action fill nextToken in the request with the value of nextToken from the previous response to continue listing data. (body field)
+  --max-results-body: int # You can use this parameter to indicate the maximum number of items you want in the response. The default value is 100. The maximum value is 500. (body field)
+]: any -> record<exclusionArns: list<string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "InspectorService.ListExclusions")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"assessmentRunArn": $assessment_run_arn, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -1408,6 +1445,7 @@ export def "list-exclusions" [
 #
 # POST /
 # operationId: ListFindings
+# --filter shape: {agentIds?: list<string>, autoScalingGroups?: list<string>, ruleNames?: list<string>, severities?: list<string>, rulesPackageArns?: list<string>, attributes?: list, userAttributes?: list, creationTimeRange?: record}
 export def "list-findings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1427,15 +1465,16 @@ export def "list-findings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  --assessment-run-arns: any
-  --filter: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<findingArns: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  --assessment-run-arns: list<string> # The ARNs of the assessment runs that generate the findings that you want to list.
+  --filter: record # This data type is used as a request parameter in the ListFindings action. — shape: {agentIds?: list<string>, autoScalingGroups?: list<string>, ruleNames?: list<string>, severities?: list<string>, rulesPackageArns?: list<string>, attributes?: list, userAttributes?: list, creationTimeRange?: record}
+  --next-token-body: string # You can use this parameter when paginating results. Set the value of this parameter to null on your first call to the ListFindings action. Subsequent calls to the action fill nextToken in the request with the value of NextToken from the previous response to continue listing data. (body field)
+  --max-results-body: int # You can use this parameter to indicate the maximum number of items you want in the response. The default value is 10. The maximum value is 500. (body field)
+]: any -> record<findingArns: list<string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "InspectorService.ListFindings")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"assessmentRunArns": $assessment_run_arns, "filter": $filter, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -1481,13 +1520,14 @@ export def "list-rules-packages" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-26
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<rulesPackageArns: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-26 # required
+  --next-token-body: string # You can use this parameter when paginating results. Set the value of this parameter to null on your first call to the ListRulesPackages action. Subsequent calls to the action fill nextToken in the request with the value of NextToken from the previous response to continue listing data. (body field)
+  --max-results-body: int # You can use this parameter to indicate the maximum number of items you want in the response. The default value is 10. The maximum value is 500. (body field)
+]: any -> record<rulesPackageArns: list<string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "InspectorService.ListRulesPackages")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -1531,12 +1571,13 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-27
-  resource_arn: any
-]: any -> record<tags: record> {
+  --x-amz-target: string@x-amz-target-completer-27 # required
+  resource_arn: string # The ARN that specifies the assessment template whose tags you want to list.
+]: any -> record<tags: table<key: string, value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "InspectorService.ListTagsForResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceArn": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1581,14 +1622,15 @@ export def "preview-agents" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-28
-  preview_agents_arn: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<agentPreviews: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-28 # required
+  preview_agents_arn: string # The ARN of the assessment target whose agents you want to preview.
+  --next-token-body: string # You can use this parameter when paginating results. Set the value of this parameter to null on your first call to the PreviewAgents action. Subsequent calls to the action fill nextToken in the request with the value of NextToken from the previous response to continue listing data. (body field)
+  --max-results-body: int # You can use this parameter to indicate the maximum number of items you want in the response. The default value is 10. The maximum value is 500. (body field)
+]: any -> record<agentPreviews: table<hostname: string, agentId: string, autoScalingGroup: string, agentHealth: string, agentVersion: string, operatingSystem: string, kernelVersion: string, ipv4Address: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "InspectorService.PreviewAgents")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"previewAgentsArn": $preview_agents_arn, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -1632,12 +1674,13 @@ export def "register-cross-account-access-role" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-29
-  role_arn: any
+  --x-amz-target: string@x-amz-target-completer-29 # required
+  role_arn: string # The ARN of the IAM role that grants Amazon Inspector access to AWS Services needed to perform security assessments.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "InspectorService.RegisterCrossAccountAccessRole")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"roleArn": $role_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1680,13 +1723,14 @@ export def "remove-attributes-from-findings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-30
-  finding_arns: any
-  attribute_keys: any
+  --x-amz-target: string@x-amz-target-completer-30 # required
+  finding_arns: list<string> # The ARNs that specify the findings that you want to remove attributes from.
+  attribute_keys: list<string> # The array of attribute keys that you want to remove from specified findings.
 ]: any -> record<failedItems: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "InspectorService.RemoveAttributesFromFindings")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"findingArns": $finding_arns, "attributeKeys": $attribute_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1712,6 +1756,7 @@ export def "remove-attributes-from-findings" [
 #
 # POST /
 # operationId: SetTagsForResource
+# --tags item shape: {key: string, value?: string}
 export def "set-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1729,13 +1774,14 @@ export def "set-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-31
-  resource_arn: any
-  --tags: any
+  --x-amz-target: string@x-amz-target-completer-31 # required
+  resource_arn: string # The ARN of the assessment template that you want to set tags to.
+  --tags: list # A collection of key and value pairs that you want to set to the assessment template. — item shape: {key: string, value?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "InspectorService.SetTagsForResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceArn": $resource_arn, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1778,13 +1824,14 @@ export def "start-assessment-run" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-32
-  assessment_template_arn: any
-  --assessment-run-name: any
-]: any -> record<assessmentRunArn: record> {
+  --x-amz-target: string@x-amz-target-completer-32 # required
+  assessment_template_arn: string # The ARN of the assessment template of the assessment run that you want to start.
+  --assessment-run-name: string # You can specify the name for the assessment run. The name must be unique for the assessment template whose ARN is used to start the assessment run.
+]: any -> record<assessmentRunArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "InspectorService.StartAssessmentRun")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"assessmentTemplateArn": $assessment_template_arn, "assessmentRunName": $assessment_run_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1827,13 +1874,14 @@ export def "stop-assessment-run" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-33
-  assessment_run_arn: any
-  --stop-action: any
+  --x-amz-target: string@x-amz-target-completer-33 # required
+  assessment_run_arn: string # The ARN of the assessment run that you want to stop.
+  --stop-action: string@stop-action-completer # An input option that can be set to either START_EVALUATION or SKIP_EVALUATION. START_EVALUATION (the default value), stops the AWS agent from collecting data and begins the results evaluation and the findings generation process. SKIP_EVALUATION cancels the assessment run immediately, after which no findings are generated.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "InspectorService.StopAssessmentRun")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"assessmentRunArn": $assessment_run_arn, "stopAction": $stop_action} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1876,14 +1924,15 @@ export def "subscribe-to-event" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-34
-  resource_arn: any
-  event: any
-  topic_arn: any
+  --x-amz-target: string@x-amz-target-completer-34 # required
+  resource_arn: string # The ARN of the assessment template that is used during the event for which you want to receive SNS notifications.
+  event: string@event-completer # The event for which you want to receive SNS notifications.
+  topic_arn: string # The ARN of the SNS topic to which the SNS notifications are sent.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "InspectorService.SubscribeToEvent")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceArn": $resource_arn, "event": $event, "topicArn": $topic_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1926,14 +1975,15 @@ export def "unsubscribe-from-event" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-35
-  resource_arn: any
-  event: any
-  topic_arn: any
+  --x-amz-target: string@x-amz-target-completer-35 # required
+  resource_arn: string # The ARN of the assessment template that is used during the event for which you want to stop receiving SNS notifications.
+  event: string@event-completer # The event for which you want to stop receiving SNS notifications.
+  topic_arn: string # The ARN of the SNS topic to which SNS notifications are sent.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "InspectorService.UnsubscribeFromEvent")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceArn": $resource_arn, "event": $event, "topicArn": $topic_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1976,14 +2026,15 @@ export def "update-assessment-target" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-36
-  assessment_target_arn: any
-  assessment_target_name: any
-  --resource-group-arn: any
+  --x-amz-target: string@x-amz-target-completer-36 # required
+  assessment_target_arn: string # The ARN of the assessment target that you want to update.
+  assessment_target_name: string # The name of the assessment target that you want to update.
+  --resource-group-arn: string # The ARN of the resource group that is used to specify the new resource group to associate with the assessment target.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "InspectorService.UpdateAssessmentTarget")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"assessmentTargetArn": $assessment_target_arn, "assessmentTargetName": $assessment_target_name, "resourceGroupArn": $resource_group_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

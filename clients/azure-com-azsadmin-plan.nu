@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -145,11 +145,12 @@ export def "plans-list-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version. (default: 2015-11-01)
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client Api Version. (required, default: 2015-11-01)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  let api_version = ($api_version | default "2015-11-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Subscriptions.Admin/plans") $qp $auth.query)
   let accept_val = "application/json"
@@ -184,12 +185,13 @@ export def "plans-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version. (default: 2015-11-01)
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client Api Version. (required, default: 2015-11-01)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  let api_version = ($api_version | default "2015-11-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Subscriptions.Admin/plans") $qp $auth.query)
   let accept_val = "application/json"
@@ -225,13 +227,14 @@ export def "plans-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version. (default: 2015-11-01)
+  --api-version: string # Client Api Version. (required, default: 2015-11-01)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($plan | is-empty) { error make --unspanned { msg: "path parameter 'plan' must be non-empty" } }
+  let api_version = ($api_version | default "2015-11-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), plan: (encode-path-segment $plan)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Subscriptions.Admin/plans/{plan}") $qp $auth.query)
   let accept_val = "application/json"
@@ -267,13 +270,14 @@ export def "plans-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version. (default: 2015-11-01)
-]: nothing -> record<properties: record<description: string, displayName: string, externalReferenceId: string, name: string, quotaIds: list<string>, skuIds: list<string>, subscriptionCount: int>> {
+  --api-version: string # Client Api Version. (required, default: 2015-11-01)
+]: nothing -> record<properties: record<description: string, displayName: string, externalReferenceId: string, name: string, quotaIds: list<string>, skuIds: list<string>, subscriptionCount: int>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($plan | is-empty) { error make --unspanned { msg: "path parameter 'plan' must be non-empty" } }
+  let api_version = ($api_version | default "2015-11-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), plan: (encode-path-segment $plan)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Subscriptions.Admin/plans/{plan}") $qp $auth.query)
   let accept_val = "application/json"
@@ -310,16 +314,17 @@ export def "plans-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version. (default: 2015-11-01)
+  --api-version: string # Client Api Version. (required, default: 2015-11-01)
   --properties: record # Properties of a plan. — shape: {description?: string, displayName?: string, externalReferenceId?: string, name?: string, quotaIds?: list<string>, skuIds?: list<string>, subscriptionCount?: int}
   --location: string # Location of the resource
-]: any -> record<properties: record<description: string, displayName: string, externalReferenceId: string, name: string, quotaIds: list<string>, skuIds: list<string>, subscriptionCount: int>> {
+]: any -> record<properties: record<description: string, displayName: string, externalReferenceId: string, name: string, quotaIds: list<string>, skuIds: list<string>, subscriptionCount: int>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($plan | is-empty) { error make --unspanned { msg: "path parameter 'plan' must be non-empty" } }
+  let api_version = ($api_version | default "2015-11-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), plan: (encode-path-segment $plan)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Subscriptions.Admin/plans/{plan}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location} | compact
@@ -357,13 +362,14 @@ export def "plans-list-metric-definitions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version. (default: 2015-11-01)
+  --api-version: string # Client Api Version. (required, default: 2015-11-01)
 ]: nothing -> record<nextLink: string, value: table<metricAvailabilities: list, name: string, primaryAggregationType: string, unit: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($plan | is-empty) { error make --unspanned { msg: "path parameter 'plan' must be non-empty" } }
+  let api_version = ($api_version | default "2015-11-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), plan: (encode-path-segment $plan)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Subscriptions.Admin/plans/{plan}/metricDefinitions") $qp $auth.query)
   let accept_val = "application/json"
@@ -399,13 +405,14 @@ export def "plans-list-metrics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version. (default: 2015-11-01)
+  --api-version: string # Client Api Version. (required, default: 2015-11-01)
 ]: nothing -> record<nextLink: string, value: table<endTime: string, metricUnit: string, metricValues: list, startTime: string, timeGrain: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($plan | is-empty) { error make --unspanned { msg: "path parameter 'plan' must be non-empty" } }
+  let api_version = ($api_version | default "2015-11-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), plan: (encode-path-segment $plan)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Subscriptions.Admin/plans/{plan}/metrics") $qp $auth.query)
   let accept_val = "application/json"

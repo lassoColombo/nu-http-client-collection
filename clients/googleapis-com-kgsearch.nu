@@ -1,4 +1,4 @@
-# Auto-generated client for Knowledge Graph Search API vv1
+# Auto-generated client for Knowledge Graph Search API v1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/kgsearch/v1/openapi.json
 # Auth: --token flag or $env.KNOWLEDGE_GRAPH_SEARCH_API_TOKEN
 

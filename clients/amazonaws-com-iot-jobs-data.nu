@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -157,7 +157,7 @@ export def "describe-job-execution" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<execution: record<jobId: record, thingName: record, status: record, statusDetails: record, queuedAt: record, startedAt: record, lastUpdatedAt: record, approximateSecondsBeforeTimedOut: record, versionNumber: record, executionNumber: record, jobDocument: record>> {
+]: nothing -> record<execution: record<jobId: string, thingName: string, status: string, statusDetails: record, queuedAt: int, startedAt: int, lastUpdatedAt: int, approximateSecondsBeforeTimedOut: int, versionNumber: int, executionNumber: int, jobDocument: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($thing_name | is-empty) { error make --unspanned { msg: "path parameter 'thingName' must be non-empty" } }
@@ -212,7 +212,7 @@ export def "update-job-execution" [
   --include-job-execution-state: oneof<nothing, bool> # Optional. When included and set to true, the response contains the JobExecutionState data. The default is false.
   --include-job-document: oneof<nothing, bool> # Optional. When set to true, the response contains the job document. The default is false.
   --execution-number: int # Optional. A number that identifies a particular job execution on a particular device.
-]: any -> record<executionState: record<status: record, statusDetails: record, versionNumber: record>, jobDocument: record> {
+]: any -> record<executionState: record<status: string, statusDetails: record, versionNumber: int>, jobDocument: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -261,7 +261,7 @@ export def "get-pending-job-executions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<inProgressJobs: record, queuedJobs: record> {
+]: nothing -> record<inProgressJobs: table<jobId: string, queuedAt: int, startedAt: int, lastUpdatedAt: int, versionNumber: int, executionNumber: int>, queuedJobs: table<jobId: string, queuedAt: int, startedAt: int, lastUpdatedAt: int, versionNumber: int, executionNumber: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($thing_name | is-empty) { error make --unspanned { msg: "path parameter 'thingName' must be non-empty" } }
@@ -308,7 +308,7 @@ export def "start-next-pending-job-execution" [
   --x-amz-signed-headers: string
   --status-details: record # A collection of name/value pairs that describe the status of the job execution. If not specified, the statusDetails are unchanged.
   --step-timeout-in-minutes: int # Specifies the amount of time this device has to finish execution of this job. If the job execution status is not set to a terminal state before this timer expires, or before the timer is reset (by calling UpdateJobExecution, setting the status to IN_PROGRESS and specifying a new timeout value in field stepTimeoutInMinutes) the job execution status will be automatically set to TIMED_OUT. Note that setting this timeout has no effect on that job execution timeout which may have been specified when the job was created (CreateJob using field timeoutConfig).
-]: any -> record<execution: record<jobId: record, thingName: record, status: record, statusDetails: record, queuedAt: record, startedAt: record, lastUpdatedAt: record, approximateSecondsBeforeTimedOut: record, versionNumber: record, executionNumber: record, jobDocument: record>> {
+]: any -> record<execution: record<jobId: string, thingName: string, status: string, statusDetails: record, queuedAt: int, startedAt: int, lastUpdatedAt: int, approximateSecondsBeforeTimedOut: int, versionNumber: int, executionNumber: int, jobDocument: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

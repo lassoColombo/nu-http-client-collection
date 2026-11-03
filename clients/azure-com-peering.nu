@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -158,10 +158,11 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
+  --api-version: string # The client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<display: record, isDataAction: bool, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Peering/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -195,7 +196,7 @@ export def "check-service-provider-availability" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
+  --api-version: string # The client API version. (required)
   --peering-service-location: string # Gets or sets the PeeringServiceLocation
   --peering-service-provider: string # Gets or sets the PeeringServiceProvider
 ]: any -> oneof<string, record, nothing> {
@@ -203,6 +204,7 @@ export def "check-service-provider-availability" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Peering/CheckServiceProviderAvailability") $qp $auth.query)
   let req_body = {"peeringServiceLocation": $peering_service_location, "peeringServiceProvider": $peering_service_provider} | compact
@@ -238,13 +240,16 @@ export def "legacy-peerings-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --peering-location: string # The location of the peering.
-  --kind: string@kind-completer # The kind of the peering.
-  --api-version: string # The client API version.
-]: nothing -> record<nextLink: string, value: table<kind: string, location: string, properties: record, sku: record, tags: record>> {
+  --peering-location: string # The location of the peering. (required)
+  --kind: string@kind-completer # The kind of the peering. (required)
+  --api-version: string # The client API version. (required)
+]: nothing -> record<nextLink: string, value: table<kind: string, location: string, properties: record, sku: record, tags: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($peering_location == null) { error make --unspanned { msg: "required query parameter 'peeringLocation' missing: pass --peering-location" } }
+  if ($kind == null) { error make --unspanned { msg: "required query parameter 'kind' missing: pass --kind" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "peeringLocation" $peering_location "scalar") (serialize-qp "kind" $kind "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Peering/legacyPeerings") $qp $auth.query)
   let accept_val = "application/json"
@@ -278,11 +283,12 @@ export def "peer-asns-list-by-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # The client API version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Peering/peerAsns") $qp $auth.query)
   let accept_val = "application/json"
@@ -317,12 +323,13 @@ export def "peer-asns-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
-]: nothing -> record<code: string, message: string> {
+  --api-version: string # The client API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($peer_asn_name | is-empty) { error make --unspanned { msg: "path parameter 'peerAsnName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), peer_asn_name: (encode-path-segment $peer_asn_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Peering/peerAsns/{peer_asn_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -357,12 +364,13 @@ export def "peer-asns-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
-]: nothing -> record<properties: record<peerAsn: int, peerContactInfo: record<emails: list, phone: list>, peerName: string, validationState: string>> {
+  --api-version: string # The client API version. (required)
+]: nothing -> record<properties: record<peerAsn: int, peerContactInfo: record<emails: list, phone: list>, peerName: string, validationState: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($peer_asn_name | is-empty) { error make --unspanned { msg: "path parameter 'peerAsnName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), peer_asn_name: (encode-path-segment $peer_asn_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Peering/peerAsns/{peer_asn_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -398,14 +406,15 @@ export def "peer-asns-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
+  --api-version: string # The client API version. (required)
   --properties: record # The properties that define a peer's ASN. — shape: {peerAsn?: int, peerContactInfo?: record, peerName?: string, validationState?: "None"|"Pending"|"Approved"|"Failed"}
-]: any -> record<properties: record<peerAsn: int, peerContactInfo: record<emails: list, phone: list>, peerName: string, validationState: string>> {
+]: any -> record<properties: record<peerAsn: int, peerContactInfo: record<emails: list, phone: list>, peerName: string, validationState: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($peer_asn_name | is-empty) { error make --unspanned { msg: "path parameter 'peerAsnName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), peer_asn_name: (encode-path-segment $peer_asn_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Peering/peerAsns/{peer_asn_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -441,12 +450,14 @@ export def "peering-locations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --kind: string@kind-completer # The kind of the peering.
-  --api-version: string # The client API version.
-]: nothing -> record<nextLink: string, value: table<kind: string, properties: record>> {
+  --kind: string@kind-completer # The kind of the peering. (required)
+  --api-version: string # The client API version. (required)
+]: nothing -> record<nextLink: string, value: table<kind: string, properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($kind == null) { error make --unspanned { msg: "required query parameter 'kind' missing: pass --kind" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "kind" $kind "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Peering/peeringLocations") $qp $auth.query)
   let accept_val = "application/json"
@@ -480,11 +491,12 @@ export def "peering-service-locations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # The client API version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Peering/peeringServiceLocations") $qp $auth.query)
   let accept_val = "application/json"
@@ -518,11 +530,12 @@ export def "peering-service-providers-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # The client API version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Peering/peeringServiceProviders") $qp $auth.query)
   let accept_val = "application/json"
@@ -556,11 +569,12 @@ export def "peering-services-list-by-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
-]: nothing -> record<nextLink: string, value: table<location: string, properties: record, tags: record>> {
+  --api-version: string # The client API version. (required)
+]: nothing -> record<nextLink: string, value: table<location: string, properties: record, tags: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Peering/peeringServices") $qp $auth.query)
   let accept_val = "application/json"
@@ -594,11 +608,12 @@ export def "peerings-list-by-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
-]: nothing -> record<nextLink: string, value: table<kind: string, location: string, properties: record, sku: record, tags: record>> {
+  --api-version: string # The client API version. (required)
+]: nothing -> record<nextLink: string, value: table<kind: string, location: string, properties: record, sku: record, tags: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Peering/peerings") $qp $auth.query)
   let accept_val = "application/json"
@@ -633,12 +648,13 @@ export def "peering-services-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
-]: nothing -> record<nextLink: string, value: table<location: string, properties: record, tags: record>> {
+  --api-version: string # The client API version. (required)
+]: nothing -> record<nextLink: string, value: table<location: string, properties: record, tags: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Peering/peeringServices") $qp $auth.query)
   let accept_val = "application/json"
@@ -674,13 +690,14 @@ export def "peering-services-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
-]: nothing -> record<code: string, message: string> {
+  --api-version: string # The client API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($peering_service_name | is-empty) { error make --unspanned { msg: "path parameter 'peeringServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), peering_service_name: (encode-path-segment $peering_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Peering/peeringServices/{peering_service_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -716,13 +733,14 @@ export def "peering-services-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
-]: nothing -> record<location: string, properties: record<peeringServiceLocation: string, peeringServiceProvider: string, provisioningState: string>, tags: record> {
+  --api-version: string # The client API version. (required)
+]: nothing -> record<location: string, properties: record<peeringServiceLocation: string, peeringServiceProvider: string, provisioningState: string>, tags: record, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($peering_service_name | is-empty) { error make --unspanned { msg: "path parameter 'peeringServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), peering_service_name: (encode-path-segment $peering_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Peering/peeringServices/{peering_service_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -758,15 +776,16 @@ export def "peering-services-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
+  --api-version: string # The client API version. (required)
   --tags: record # Gets or sets the tags, a dictionary of descriptors arm object
-]: any -> record<location: string, properties: record<peeringServiceLocation: string, peeringServiceProvider: string, provisioningState: string>, tags: record> {
+]: any -> record<location: string, properties: record<peeringServiceLocation: string, peeringServiceProvider: string, provisioningState: string>, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($peering_service_name | is-empty) { error make --unspanned { msg: "path parameter 'peeringServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), peering_service_name: (encode-path-segment $peering_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Peering/peeringServices/{peering_service_name}") $qp $auth.query)
   let req_body = {"tags": $tags} | compact
@@ -805,17 +824,18 @@ export def "peering-services-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
+  --api-version: string # The client API version. (required)
   location: string # The location of the resource.
   --properties: record # The properties that define connectivity to the Peering Service. — shape: {peeringServiceLocation?: string, peeringServiceProvider?: string}
   --tags: record # The resource tags.
-]: any -> record<location: string, properties: record<peeringServiceLocation: string, peeringServiceProvider: string, provisioningState: string>, tags: record> {
+]: any -> record<location: string, properties: record<peeringServiceLocation: string, peeringServiceProvider: string, provisioningState: string>, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($peering_service_name | is-empty) { error make --unspanned { msg: "path parameter 'peeringServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), peering_service_name: (encode-path-segment $peering_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Peering/peeringServices/{peering_service_name}") $qp $auth.query)
   let req_body = {"location": $location, "properties": $properties, "tags": $tags} | compact
@@ -853,13 +873,14 @@ export def "prefixes-list-by-peering-service" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # The client API version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($peering_service_name | is-empty) { error make --unspanned { msg: "path parameter 'peeringServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), peering_service_name: (encode-path-segment $peering_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Peering/peeringServices/{peering_service_name}/prefixes") $qp $auth.query)
   let accept_val = "application/json"
@@ -896,14 +917,15 @@ export def "peering-service-prefixes-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
-]: nothing -> record<code: string, message: string> {
+  --api-version: string # The client API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($peering_service_name | is-empty) { error make --unspanned { msg: "path parameter 'peeringServiceName' must be non-empty" } }
   if ($prefix_name | is-empty) { error make --unspanned { msg: "path parameter 'prefixName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), peering_service_name: (encode-path-segment $peering_service_name), prefix_name: (encode-path-segment $prefix_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Peering/peeringServices/{peering_service_name}/prefixes/{prefix_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -940,14 +962,15 @@ export def "peering-service-prefixes-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
-]: nothing -> record<properties: record<learnedType: string, prefix: string, prefixValidationState: string, provisioningState: string>> {
+  --api-version: string # The client API version. (required)
+]: nothing -> record<properties: record<learnedType: string, prefix: string, prefixValidationState: string, provisioningState: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($peering_service_name | is-empty) { error make --unspanned { msg: "path parameter 'peeringServiceName' must be non-empty" } }
   if ($prefix_name | is-empty) { error make --unspanned { msg: "path parameter 'prefixName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), peering_service_name: (encode-path-segment $peering_service_name), prefix_name: (encode-path-segment $prefix_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Peering/peeringServices/{peering_service_name}/prefixes/{prefix_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -985,9 +1008,9 @@ export def "peering-service-prefixes-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
+  --api-version: string # The client API version. (required)
   --properties: record # The peering service prefix properties class. — shape: {learnedType?: "None"|"ViaPartner"|"ViaSession", prefix?: string, prefixValidationState?: "None"|"Invalid"|"Verified"|"Failed"|"Pending"|"Unknown"}
-]: any -> record<properties: record<learnedType: string, prefix: string, prefixValidationState: string, provisioningState: string>> {
+]: any -> record<properties: record<learnedType: string, prefix: string, prefixValidationState: string, provisioningState: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -995,6 +1018,7 @@ export def "peering-service-prefixes-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($peering_service_name | is-empty) { error make --unspanned { msg: "path parameter 'peeringServiceName' must be non-empty" } }
   if ($prefix_name | is-empty) { error make --unspanned { msg: "path parameter 'prefixName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), peering_service_name: (encode-path-segment $peering_service_name), prefix_name: (encode-path-segment $prefix_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Peering/peeringServices/{peering_service_name}/prefixes/{prefix_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -1031,12 +1055,13 @@ export def "peerings-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
-]: nothing -> record<nextLink: string, value: table<kind: string, location: string, properties: record, sku: record, tags: record>> {
+  --api-version: string # The client API version. (required)
+]: nothing -> record<nextLink: string, value: table<kind: string, location: string, properties: record, sku: record, tags: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Peering/peerings") $qp $auth.query)
   let accept_val = "application/json"
@@ -1072,13 +1097,14 @@ export def "peerings-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
-]: nothing -> record<code: string, message: string> {
+  --api-version: string # The client API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($peering_name | is-empty) { error make --unspanned { msg: "path parameter 'peeringName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), peering_name: (encode-path-segment $peering_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Peering/peerings/{peering_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1114,13 +1140,14 @@ export def "peerings-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
-]: nothing -> record<kind: string, location: string, properties: record<direct: record<connections: list, peerAsn: record, useForPeeringService: bool>, exchange: record<connections: list, peerAsn: record>, peeringLocation: string, provisioningState: string>, sku: record<family: string, name: string, size: string, tier: string>, tags: record> {
+  --api-version: string # The client API version. (required)
+]: nothing -> record<kind: string, location: string, properties: record<direct: record<connections: list, peerAsn: record, useForPeeringService: bool>, exchange: record<connections: list, peerAsn: record>, peeringLocation: string, provisioningState: string>, sku: record<family: string, name: string, size: string, tier: string>, tags: record, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($peering_name | is-empty) { error make --unspanned { msg: "path parameter 'peeringName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), peering_name: (encode-path-segment $peering_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Peering/peerings/{peering_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1156,15 +1183,16 @@ export def "peerings-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
+  --api-version: string # The client API version. (required)
   --tags: record # Gets or sets the tags, a dictionary of descriptors arm object
-]: any -> record<kind: string, location: string, properties: record<direct: record<connections: list, peerAsn: record, useForPeeringService: bool>, exchange: record<connections: list, peerAsn: record>, peeringLocation: string, provisioningState: string>, sku: record<family: string, name: string, size: string, tier: string>, tags: record> {
+]: any -> record<kind: string, location: string, properties: record<direct: record<connections: list, peerAsn: record, useForPeeringService: bool>, exchange: record<connections: list, peerAsn: record>, peeringLocation: string, provisioningState: string>, sku: record<family: string, name: string, size: string, tier: string>, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($peering_name | is-empty) { error make --unspanned { msg: "path parameter 'peeringName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), peering_name: (encode-path-segment $peering_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Peering/peerings/{peering_name}") $qp $auth.query)
   let req_body = {"tags": $tags} | compact
@@ -1204,19 +1232,20 @@ export def "peerings-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
+  --api-version: string # The client API version. (required)
   kind: string@kind-completer # The kind of the peering.
   location: string # The location of the resource.
   --properties: record # The properties that define connectivity to the Microsoft Cloud Edge. — shape: {direct?: record, exchange?: record, peeringLocation?: string}
   sku: record # The SKU that defines the tier and kind of the peering. — shape: {family?: "Direct"|"Exchange", name?: "Basic_Exchange_Free"|"Basic_Direct_Free"|"Premium_Direct_Free"|"Premium_Exchange_Metered", size?: "Free"|"Metered"|"Unlimited", tier?: "Basic"|"Premium"}
   --tags: record # The resource tags.
-]: any -> record<kind: string, location: string, properties: record<direct: record<connections: list, peerAsn: record, useForPeeringService: bool>, exchange: record<connections: list, peerAsn: record>, peeringLocation: string, provisioningState: string>, sku: record<family: string, name: string, size: string, tier: string>, tags: record> {
+]: any -> record<kind: string, location: string, properties: record<direct: record<connections: list, peerAsn: record, useForPeeringService: bool>, exchange: record<connections: list, peerAsn: record>, peeringLocation: string, provisioningState: string>, sku: record<family: string, name: string, size: string, tier: string>, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($peering_name | is-empty) { error make --unspanned { msg: "path parameter 'peeringName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), peering_name: (encode-path-segment $peering_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Peering/peerings/{peering_name}") $qp $auth.query)
   let req_body = {"kind": $kind, "location": $location, "properties": $properties, "sku": $sku, "tags": $tags} | compact

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -270,10 +270,11 @@ export def "get-api-v1-accounts-relationships" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: list<string> # Array of account IDs to check
+  --id: list<string> # Array of account IDs to check (required)
 ]: nothing -> table<blocked_by: bool, blocking: bool, domain_blocking: bool, endorsed: bool, followed_by: bool, following: bool, id: string, muting: bool, muting_notifications: bool, note: string, notifying: bool, requested: bool, showing_reblogs: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/accounts/relationships" $qp $auth.query)
   let accept_val = "application/json"
@@ -305,13 +306,14 @@ export def "get-api-v1-accounts-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # What to search for
+  --q: string # What to search for (required)
   --limit: int # Maximum number of results. Defaults to 40. (default: 40)
   --resolve: string # Attempt WebFinger lookup. Defaults to false. Use this when `q` is an exact address.
   --following: oneof<nothing, bool> # Only who the user is following. Defaults to false.
 ]: nothing -> table<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list<record>, fields: list<record>, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record<fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool>, statuses_count: int, suspended: bool, url: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "resolve" $resolve "scalar") (serialize-qp "following" $following "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/accounts/search" $qp $auth.query)
   let accept_val = "application/json"
@@ -1971,10 +1973,11 @@ export def "delete-api-v1-domain-blocks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain: string # Domain to unblock.
+  --domain: string # Domain to unblock. (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain == null) { error make --unspanned { msg: "required query parameter 'domain' missing: pass --domain" } }
   let qp = [(serialize-qp "domain" $domain "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/domain_blocks" $qp $auth.query)
   let accept_val = "application/json"
@@ -2849,11 +2852,12 @@ export def "delete-api-v1-lists-id-accounts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --account-ids: list<string> # Array of account IDs to add to the list.
+  --account-ids: list<string> # Array of account IDs to add to the list. (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($account_ids == null) { error make --unspanned { msg: "required query parameter 'account_ids' missing: pass --account-ids" } }
   let qp = [(serialize-qp "account_ids" $account_ids "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/lists/{id}/accounts") $qp $auth.query)
   let accept_val = "application/json"
@@ -2963,10 +2967,11 @@ export def "get-api-v1-markers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --timeline: list # Array of markers to fetch. String enum anyOf home, notifications. If not provided, an empty object will be returned.
+  --timeline: list # Array of markers to fetch. String enum anyOf home, notifications. If not provided, an empty object will be returned. (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($timeline == null) { error make --unspanned { msg: "required query parameter 'timeline' missing: pass --timeline" } }
   let qp = [(serialize-qp "timeline" $timeline "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/markers" $qp $auth.query)
   let accept_val = "application/json"
@@ -4590,7 +4595,7 @@ export def "get-api-v2-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # What to search for
+  --q: string # What to search for (required)
   --limit: int # Maximum number of results. Defaults to 40. (default: 20)
   --resolve: string # Attempt WebFinger lookup.
   --following: oneof<nothing, bool> # Only who the user is following. Defaults to false.
@@ -4603,6 +4608,7 @@ export def "get-api-v2-search" [
 ]: nothing -> record<accounts: table<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list, fields: list, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record, statuses_count: int, suspended: bool, url: string, username: string>, hashtags: table<account: record, application: record, bookmarked: bool, card: record, content: string, created_at: string, emojis: list, favourited: bool, favourites_count: int, id: string, in_reply_to_account_id: string, in_reply_to_id: string, language: string, media_attachments: list, mentions: list, muted: bool, pinned: bool, poll: record, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list, text: string, uri: string, url: string, visibility: string>, statuses: table<history: list, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "resolve" $resolve "scalar") (serialize-qp "following" $following "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "max_id" $max_id "scalar") (serialize-qp "min_id" $min_id "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "exclude_unreviewed" $exclude_unreviewed "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v2/search" $qp $auth.query)
   let accept_val = "application/json"
@@ -4634,14 +4640,17 @@ export def "get-oauth-authorize" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --response-type: string # Should be set equal to code.
-  --client-id: string # Client ID, obtained during app registration.
-  --redirect-uri: string # Set a URI to redirect the user to. If this parameter is set to urn:ietf:wg:oauth:2.0:oob then the authorization code will be shown instead. Must match one of the redirect URIs declared during app registration.
+  --response-type: string # Should be set equal to code. (required)
+  --client-id: string # Client ID, obtained during app registration. (required)
+  --redirect-uri: string # Set a URI to redirect the user to. If this parameter is set to urn:ietf:wg:oauth:2.0:oob then the authorization code will be shown instead. Must match one of the redirect URIs declared during app registration. (required)
   --scope: string # List of requested OAuth scopes, separated by spaces (or by pluses, if using query parameters). Must be a subset of scopes declared during app registration. If not provided, defaults to read.
   --force-login: oneof<nothing, bool> # Added in 2.6.0. Forces the user to re-login, which is necessary for authorizing with multiple accounts from the same instance.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($response_type == null) { error make --unspanned { msg: "required query parameter 'response_type' missing: pass --response-type" } }
+  if ($client_id == null) { error make --unspanned { msg: "required query parameter 'client_id' missing: pass --client-id" } }
+  if ($redirect_uri == null) { error make --unspanned { msg: "required query parameter 'redirect_uri' missing: pass --redirect-uri" } }
   let qp = [(serialize-qp "response_type" $response_type "scalar") (serialize-qp "client_id" $client_id "scalar") (serialize-qp "redirect_uri" $redirect_uri "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "force_login" $force_login "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/oauth/authorize" $qp $auth.query)
   let accept_val = "application/json"

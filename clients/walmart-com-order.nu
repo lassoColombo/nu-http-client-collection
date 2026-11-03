@@ -152,17 +152,25 @@ export def "get-all-orders" [
   --from-expected-ship-date: string # Limit orders to those that have order lines with an expected ship date after this date.
   --to-expected-ship-date: string # Limit orders to those that have order lines with an expected ship date before this date.
   --limit: int # The number of orders to be returned. Do not set this parameter to over 200 orders. (format: int32, default: 10)
-  --content-type: string@content-type-completer # application/xml, application/json
-  --hdr-accept: string@accept-completer # application/xml, application/json
-  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type
-  --wm-consumer-id: string # Your Consumer ID
-  --wm-sec-timestamp: string # Epoch timestamp
-  --wm-sec-auth-signature: string # Authentication signature
-  --wm-svc-name: string # The Service name
-  --wm-qos-correlation-id: string # A Transaction ID
+  --content-type: string@content-type-completer # application/xml, application/json (required, default: application/xml)
+  --hdr-accept: string@accept-completer # application/xml, application/json (required, default: application/xml)
+  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type (required, default: SWAGGER_CHANNEL_TYPE)
+  --wm-consumer-id: string # Your Consumer ID (required)
+  --wm-sec-timestamp: string # Epoch timestamp (required, default: Auto populated)
+  --wm-sec-auth-signature: string # Authentication signature (required, default: Auto populated)
+  --wm-svc-name: string # The Service name (required, default: Walmart Marketplace)
+  --wm-qos-correlation-id: string # A Transaction ID (required, default: 123456abcdef)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let content_type = ($content_type | default "application/xml")
+  let hdr_accept = ($hdr_accept | default "application/xml")
+  let wm_consumer_channel_type = ($wm_consumer_channel_type | default "SWAGGER_CHANNEL_TYPE")
+  if ($wm_consumer_id == null) { error make --unspanned { msg: "required header parameter 'WM_CONSUMER.ID' missing: pass --wm-consumer-id" } }
+  let wm_sec_timestamp = ($wm_sec_timestamp | default "Auto populated")
+  let wm_sec_auth_signature = ($wm_sec_auth_signature | default "Auto populated")
+  let wm_svc_name = ($wm_svc_name | default "Walmart Marketplace")
+  let wm_qos_correlation_id = ($wm_qos_correlation_id | default "123456abcdef")
   let qp = [(serialize-qp "shipNode" $ship_node "scalar") (serialize-qp "sku" $sku "scalar") (serialize-qp "customerOrderId" $customer_order_id "scalar") (serialize-qp "purchaseOrderId" $purchase_order_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "createdStartDate" $created_start_date "scalar") (serialize-qp "createdEndDate" $created_end_date "scalar") (serialize-qp "fromExpectedShipDate" $from_expected_ship_date "scalar") (serialize-qp "toExpectedShipDate" $to_expected_ship_date "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/orders" $qp $auth.query)
   let accept_val = ($accept | default "application/xml")
@@ -199,19 +207,28 @@ export def "get-released-orders" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --ship-node: string # Ship Node
-  --created-start-date: string # Limit orders to those created after this date or a timestamp.
+  --created-start-date: string # Limit orders to those created after this date or a timestamp. (required)
   --limit: int # The number of orders to be returned. Do not set this parameter to over 200 orders. (format: int32)
-  --content-type: string@content-type-completer # application/xml, application/json
-  --hdr-accept: string@accept-completer # application/xml, application/json
-  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type
-  --wm-consumer-id: string # Your Consumer ID
-  --wm-sec-timestamp: string # Epoch timestamp
-  --wm-sec-auth-signature: string # Authentication signature
-  --wm-svc-name: string # The Service name
-  --wm-qos-correlation-id: string # A Transaction ID
+  --content-type: string@content-type-completer # application/xml, application/json (required, default: application/xml)
+  --hdr-accept: string@accept-completer # application/xml, application/json (required, default: application/xml)
+  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type (required, default: SWAGGER_CHANNEL_TYPE)
+  --wm-consumer-id: string # Your Consumer ID (required)
+  --wm-sec-timestamp: string # Epoch timestamp (required, default: Auto populated)
+  --wm-sec-auth-signature: string # Authentication signature (required, default: Auto populated)
+  --wm-svc-name: string # The Service name (required, default: Walmart Marketplace)
+  --wm-qos-correlation-id: string # A Transaction ID (required, default: 123456abcdef)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($created_start_date == null) { error make --unspanned { msg: "required query parameter 'createdStartDate' missing: pass --created-start-date" } }
+  let content_type = ($content_type | default "application/xml")
+  let hdr_accept = ($hdr_accept | default "application/xml")
+  let wm_consumer_channel_type = ($wm_consumer_channel_type | default "SWAGGER_CHANNEL_TYPE")
+  if ($wm_consumer_id == null) { error make --unspanned { msg: "required header parameter 'WM_CONSUMER.ID' missing: pass --wm-consumer-id" } }
+  let wm_sec_timestamp = ($wm_sec_timestamp | default "Auto populated")
+  let wm_sec_auth_signature = ($wm_sec_auth_signature | default "Auto populated")
+  let wm_svc_name = ($wm_svc_name | default "Walmart Marketplace")
+  let wm_qos_correlation_id = ($wm_qos_correlation_id | default "123456abcdef")
   let qp = [(serialize-qp "shipNode" $ship_node "scalar") (serialize-qp "createdStartDate" $created_start_date "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/orders/released" $qp $auth.query)
   let accept_val = ($accept | default "application/xml")
@@ -248,18 +265,26 @@ export def "get-next-cursor-released-orders" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --content-type: string@content-type-completer # application/xml, application/json
-  --hdr-accept: string@accept-completer # application/xml, application/json
-  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type
-  --wm-consumer-id: string # Your Consumer ID
-  --wm-sec-timestamp: string # Epoch timestamp
-  --wm-sec-auth-signature: string # Authentication signature
-  --wm-svc-name: string # The Service name
-  --wm-qos-correlation-id: string # A Transaction ID
+  --content-type: string@content-type-completer # application/xml, application/json (required, default: application/xml)
+  --hdr-accept: string@accept-completer # application/xml, application/json (required, default: application/xml)
+  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type (required, default: SWAGGER_CHANNEL_TYPE)
+  --wm-consumer-id: string # Your Consumer ID (required)
+  --wm-sec-timestamp: string # Epoch timestamp (required, default: Auto populated)
+  --wm-sec-auth-signature: string # Authentication signature (required, default: Auto populated)
+  --wm-svc-name: string # The Service name (required, default: Walmart Marketplace)
+  --wm-qos-correlation-id: string # A Transaction ID (required, default: 123456abcdef)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($next_cursor | is-empty) { error make --unspanned { msg: "path parameter 'nextCursor' must be non-empty" } }
+  let content_type = ($content_type | default "application/xml")
+  let hdr_accept = ($hdr_accept | default "application/xml")
+  let wm_consumer_channel_type = ($wm_consumer_channel_type | default "SWAGGER_CHANNEL_TYPE")
+  if ($wm_consumer_id == null) { error make --unspanned { msg: "required header parameter 'WM_CONSUMER.ID' missing: pass --wm-consumer-id" } }
+  let wm_sec_timestamp = ($wm_sec_timestamp | default "Auto populated")
+  let wm_sec_auth_signature = ($wm_sec_auth_signature | default "Auto populated")
+  let wm_svc_name = ($wm_svc_name | default "Walmart Marketplace")
+  let wm_qos_correlation_id = ($wm_qos_correlation_id | default "123456abcdef")
   let full_url = (build-url $base ({next_cursor: (encode-path-segment $next_cursor)} | format pattern "/v3/orders/released{next_cursor}") $auth.query)
   let accept_val = ($accept | default "application/xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -296,18 +321,26 @@ export def "get-order-by-purchase-order-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --ship-node: string # Ship Node
-  --content-type: string@content-type-completer # application/xml, application/json
-  --hdr-accept: string@accept-completer # application/xml, application/json
-  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type
-  --wm-consumer-id: string # Your Consumer ID
-  --wm-sec-timestamp: string # Epoch timestamp
-  --wm-sec-auth-signature: string # Authentication signature
-  --wm-svc-name: string # The Service name
-  --wm-qos-correlation-id: string # A Transaction ID
+  --content-type: string@content-type-completer # application/xml, application/json (required, default: application/xml)
+  --hdr-accept: string@accept-completer # application/xml, application/json (required, default: application/xml)
+  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type (required, default: SWAGGER_CHANNEL_TYPE)
+  --wm-consumer-id: string # Your Consumer ID (required)
+  --wm-sec-timestamp: string # Epoch timestamp (required, default: Auto populated)
+  --wm-sec-auth-signature: string # Authentication signature (required, default: Auto populated)
+  --wm-svc-name: string # The Service name (required, default: Walmart Marketplace)
+  --wm-qos-correlation-id: string # A Transaction ID (required, default: 123456abcdef)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($purchase_order_id | is-empty) { error make --unspanned { msg: "path parameter 'purchaseOrderId' must be non-empty" } }
+  let content_type = ($content_type | default "application/xml")
+  let hdr_accept = ($hdr_accept | default "application/xml")
+  let wm_consumer_channel_type = ($wm_consumer_channel_type | default "SWAGGER_CHANNEL_TYPE")
+  if ($wm_consumer_id == null) { error make --unspanned { msg: "required header parameter 'WM_CONSUMER.ID' missing: pass --wm-consumer-id" } }
+  let wm_sec_timestamp = ($wm_sec_timestamp | default "Auto populated")
+  let wm_sec_auth_signature = ($wm_sec_auth_signature | default "Auto populated")
+  let wm_svc_name = ($wm_svc_name | default "Walmart Marketplace")
+  let wm_qos_correlation_id = ($wm_qos_correlation_id | default "123456abcdef")
   let qp = [(serialize-qp "shipNode" $ship_node "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({purchase_order_id: (encode-path-segment $purchase_order_id)} | format pattern "/v3/orders/{purchase_order_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/xml")
@@ -345,18 +378,26 @@ export def "acknowledge-orders" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --ship-node: string # Ship Node
-  --content-type: string@content-type-completer # application/xml, application/json
-  --hdr-accept: string@accept-completer # application/xml, application/json
-  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type
-  --wm-consumer-id: string # Your Consumer ID
-  --wm-sec-timestamp: string # Epoch timestamp
-  --wm-sec-auth-signature: string # Authentication signature
-  --wm-svc-name: string # The Service name
-  --wm-qos-correlation-id: string # A Transaction ID
+  --content-type: string@content-type-completer # application/xml, application/json (required, default: application/xml)
+  --hdr-accept: string@accept-completer # application/xml, application/json (required, default: application/xml)
+  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type (required, default: SWAGGER_CHANNEL_TYPE)
+  --wm-consumer-id: string # Your Consumer ID (required)
+  --wm-sec-timestamp: string # Epoch timestamp (required, default: Auto populated)
+  --wm-sec-auth-signature: string # Authentication signature (required, default: Auto populated)
+  --wm-svc-name: string # The Service name (required, default: Walmart Marketplace)
+  --wm-qos-correlation-id: string # A Transaction ID (required, default: 123456abcdef)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($purchase_order_id | is-empty) { error make --unspanned { msg: "path parameter 'purchaseOrderId' must be non-empty" } }
+  let content_type = ($content_type | default "application/xml")
+  let hdr_accept = ($hdr_accept | default "application/xml")
+  let wm_consumer_channel_type = ($wm_consumer_channel_type | default "SWAGGER_CHANNEL_TYPE")
+  if ($wm_consumer_id == null) { error make --unspanned { msg: "required header parameter 'WM_CONSUMER.ID' missing: pass --wm-consumer-id" } }
+  let wm_sec_timestamp = ($wm_sec_timestamp | default "Auto populated")
+  let wm_sec_auth_signature = ($wm_sec_auth_signature | default "Auto populated")
+  let wm_svc_name = ($wm_svc_name | default "Walmart Marketplace")
+  let wm_qos_correlation_id = ($wm_qos_correlation_id | default "123456abcdef")
   let qp = [(serialize-qp "shipNode" $ship_node "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({purchase_order_id: (encode-path-segment $purchase_order_id)} | format pattern "/v3/orders/{purchase_order_id}/acknowledge") $qp $auth.query)
   let accept_val = ($accept | default "application/xml")
@@ -394,20 +435,28 @@ export def "cancel-order" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --ship-node: string # Ship Node
-  --content-type: string@content-type-completer # application/xml, application/json
-  --hdr-accept: string@accept-completer # application/xml, application/json
-  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type
-  --wm-consumer-id: string # Your Consumer ID
-  --wm-sec-timestamp: string # Epoch timestamp
-  --wm-sec-auth-signature: string # Authentication signature
-  --wm-svc-name: string # The Service name
-  --wm-qos-correlation-id: string # A Transaction ID
+  --content-type: string@content-type-completer # application/xml, application/json (required, default: application/xml)
+  --hdr-accept: string@accept-completer # application/xml, application/json (required, default: application/xml)
+  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type (required, default: SWAGGER_CHANNEL_TYPE)
+  --wm-consumer-id: string # Your Consumer ID (required)
+  --wm-sec-timestamp: string # Epoch timestamp (required, default: Auto populated)
+  --wm-sec-auth-signature: string # Authentication signature (required, default: Auto populated)
+  --wm-svc-name: string # The Service name (required, default: Walmart Marketplace)
+  --wm-qos-correlation-id: string # A Transaction ID (required, default: 123456abcdef)
   --body: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($purchase_order_id | is-empty) { error make --unspanned { msg: "path parameter 'purchaseOrderId' must be non-empty" } }
+  let content_type = ($content_type | default "application/xml")
+  let hdr_accept = ($hdr_accept | default "application/xml")
+  let wm_consumer_channel_type = ($wm_consumer_channel_type | default "SWAGGER_CHANNEL_TYPE")
+  if ($wm_consumer_id == null) { error make --unspanned { msg: "required header parameter 'WM_CONSUMER.ID' missing: pass --wm-consumer-id" } }
+  let wm_sec_timestamp = ($wm_sec_timestamp | default "Auto populated")
+  let wm_sec_auth_signature = ($wm_sec_auth_signature | default "Auto populated")
+  let wm_svc_name = ($wm_svc_name | default "Walmart Marketplace")
+  let wm_qos_correlation_id = ($wm_qos_correlation_id | default "123456abcdef")
   let qp = [(serialize-qp "shipNode" $ship_node "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({purchase_order_id: (encode-path-segment $purchase_order_id)} | format pattern "/v3/orders/{purchase_order_id}/cancel") $qp $auth.query)
   let req_body = $body
@@ -449,20 +498,28 @@ export def "refund-order" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --ship-node: string # Ship Node
-  --content-type: string@content-type-completer # application/xml, application/json
-  --hdr-accept: string@accept-completer # application/xml, application/json
-  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type
-  --wm-consumer-id: string # Your Consumer ID
-  --wm-sec-timestamp: string # Epoch timestamp
-  --wm-sec-auth-signature: string # Authentication signature
-  --wm-svc-name: string # The Service name
-  --wm-qos-correlation-id: string # A Transaction ID
+  --content-type: string@content-type-completer # application/xml, application/json (required, default: application/xml)
+  --hdr-accept: string@accept-completer # application/xml, application/json (required, default: application/xml)
+  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type (required, default: SWAGGER_CHANNEL_TYPE)
+  --wm-consumer-id: string # Your Consumer ID (required)
+  --wm-sec-timestamp: string # Epoch timestamp (required, default: Auto populated)
+  --wm-sec-auth-signature: string # Authentication signature (required, default: Auto populated)
+  --wm-svc-name: string # The Service name (required, default: Walmart Marketplace)
+  --wm-qos-correlation-id: string # A Transaction ID (required, default: 123456abcdef)
   --body: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($purchase_order_id | is-empty) { error make --unspanned { msg: "path parameter 'purchaseOrderId' must be non-empty" } }
+  let content_type = ($content_type | default "application/xml")
+  let hdr_accept = ($hdr_accept | default "application/xml")
+  let wm_consumer_channel_type = ($wm_consumer_channel_type | default "SWAGGER_CHANNEL_TYPE")
+  if ($wm_consumer_id == null) { error make --unspanned { msg: "required header parameter 'WM_CONSUMER.ID' missing: pass --wm-consumer-id" } }
+  let wm_sec_timestamp = ($wm_sec_timestamp | default "Auto populated")
+  let wm_sec_auth_signature = ($wm_sec_auth_signature | default "Auto populated")
+  let wm_svc_name = ($wm_svc_name | default "Walmart Marketplace")
+  let wm_qos_correlation_id = ($wm_qos_correlation_id | default "123456abcdef")
   let qp = [(serialize-qp "shipNode" $ship_node "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({purchase_order_id: (encode-path-segment $purchase_order_id)} | format pattern "/v3/orders/{purchase_order_id}/refund") $qp $auth.query)
   let req_body = $body
@@ -504,20 +561,28 @@ export def "shipping-order" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --ship-node: string # Ship Node
-  --content-type: string@content-type-completer # application/xml, application/json
-  --hdr-accept: string@accept-completer # application/xml, application/json
-  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type
-  --wm-consumer-id: string # Your Consumer ID
-  --wm-sec-timestamp: string # Epoch timestamp
-  --wm-sec-auth-signature: string # Authentication signature
-  --wm-svc-name: string # The Service name
-  --wm-qos-correlation-id: string # A Transaction ID
+  --content-type: string@content-type-completer # application/xml, application/json (required, default: application/xml)
+  --hdr-accept: string@accept-completer # application/xml, application/json (required, default: application/xml)
+  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type (required, default: SWAGGER_CHANNEL_TYPE)
+  --wm-consumer-id: string # Your Consumer ID (required)
+  --wm-sec-timestamp: string # Epoch timestamp (required, default: Auto populated)
+  --wm-sec-auth-signature: string # Authentication signature (required, default: Auto populated)
+  --wm-svc-name: string # The Service name (required, default: Walmart Marketplace)
+  --wm-qos-correlation-id: string # A Transaction ID (required, default: 123456abcdef)
   --body: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($purchase_order_id | is-empty) { error make --unspanned { msg: "path parameter 'purchaseOrderId' must be non-empty" } }
+  let content_type = ($content_type | default "application/xml")
+  let hdr_accept = ($hdr_accept | default "application/xml")
+  let wm_consumer_channel_type = ($wm_consumer_channel_type | default "SWAGGER_CHANNEL_TYPE")
+  if ($wm_consumer_id == null) { error make --unspanned { msg: "required header parameter 'WM_CONSUMER.ID' missing: pass --wm-consumer-id" } }
+  let wm_sec_timestamp = ($wm_sec_timestamp | default "Auto populated")
+  let wm_sec_auth_signature = ($wm_sec_auth_signature | default "Auto populated")
+  let wm_svc_name = ($wm_svc_name | default "Walmart Marketplace")
+  let wm_qos_correlation_id = ($wm_qos_correlation_id | default "123456abcdef")
   let qp = [(serialize-qp "shipNode" $ship_node "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({purchase_order_id: (encode-path-segment $purchase_order_id)} | format pattern "/v3/orders/{purchase_order_id}/shipping") $qp $auth.query)
   let req_body = $body
@@ -558,18 +623,26 @@ export def "get-all-orders-next" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --content-type: string@content-type-completer # application/xml, application/json
-  --hdr-accept: string@accept-completer # application/xml, application/json
-  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type
-  --wm-consumer-id: string # Your Consumer ID
-  --wm-sec-timestamp: string # Epoch timestamp
-  --wm-sec-auth-signature: string # Authentication signature
-  --wm-svc-name: string # The Service name
-  --wm-qos-correlation-id: string # A Transaction ID
+  --content-type: string@content-type-completer # application/xml, application/json (required, default: application/xml)
+  --hdr-accept: string@accept-completer # application/xml, application/json (required, default: application/xml)
+  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type (required, default: SWAGGER_CHANNEL_TYPE)
+  --wm-consumer-id: string # Your Consumer ID (required)
+  --wm-sec-timestamp: string # Epoch timestamp (required, default: Auto populated)
+  --wm-sec-auth-signature: string # Authentication signature (required, default: Auto populated)
+  --wm-svc-name: string # The Service name (required, default: Walmart Marketplace)
+  --wm-qos-correlation-id: string # A Transaction ID (required, default: 123456abcdef)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($next_cursor | is-empty) { error make --unspanned { msg: "path parameter 'nextCursor' must be non-empty" } }
+  let content_type = ($content_type | default "application/xml")
+  let hdr_accept = ($hdr_accept | default "application/xml")
+  let wm_consumer_channel_type = ($wm_consumer_channel_type | default "SWAGGER_CHANNEL_TYPE")
+  if ($wm_consumer_id == null) { error make --unspanned { msg: "required header parameter 'WM_CONSUMER.ID' missing: pass --wm-consumer-id" } }
+  let wm_sec_timestamp = ($wm_sec_timestamp | default "Auto populated")
+  let wm_sec_auth_signature = ($wm_sec_auth_signature | default "Auto populated")
+  let wm_svc_name = ($wm_svc_name | default "Walmart Marketplace")
+  let wm_qos_correlation_id = ($wm_qos_correlation_id | default "123456abcdef")
   let full_url = (build-url $base ({next_cursor: (encode-path-segment $next_cursor)} | format pattern "/v3/orders{next_cursor}") $auth.query)
   let accept_val = ($accept | default "application/xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

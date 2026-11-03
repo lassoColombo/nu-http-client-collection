@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {Ocp-Apim-Subscription-Key: $token_val}, query: "", location: "header"} }
+    "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {"Ocp-Apim-Subscription-Key": $token_val}, query: "", location: "header"} }
     "query-key" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "key")=(encode-path-segment $token_val)", location: "query"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -95,6 +95,11 @@ def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: 
 def base-url-completer [] { ["http://azure-api.sportsdata.io/v3/nfl/stats" "https://azure-api.sportsdata.io/v3/nfl/stats"] }
 def auth-scheme-completer [] { ["ocp-apim-subscription-key" "query-key"] }
 
+# Completers for enum parameters
+def format-completer [] { ["JSON" "XML"] }
+def playerstoinclude-completer [] { ["all" "fantasy" "idp"] }
+def position-completer [] { ["ALL" "DB" "DEFENSE" "DL" "K" "LB" "OFFENSE" "QB" "RB" "TE" "WR"] }
+def column-completer [] { ["FantasyPoints" "Interceptions" "PassingYards" "Receptions" "RushingYards" "Sacks" "Touchdowns"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -124,7 +129,7 @@ export def commands []: nothing -> table {
 # GET /{format}/ActiveBoxScores
 # operationId: LegacyBoxScoresActive
 export def "legacy-box-scores-active" [
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -196,7 +201,7 @@ export def "teams-all" [
 # GET /{format}/AreAnyGamesInProgress
 # operationId: AreGamesInProgress
 export def "are-games-in-progress" [
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -232,7 +237,7 @@ export def "are-games-in-progress" [
 # GET /{format}/BoxScore/{season}/{week}/{hometeam}
 # operationId: LegacyBoxScore
 export def "legacy-box-score" [
-  format: string
+  format: string@format-completer
   season: string
   week: string
   hometeam: string
@@ -274,7 +279,7 @@ export def "legacy-box-score" [
 # GET /{format}/BoxScoreByScoreIDV3/{scoreid}
 # operationId: BoxScoreByScoreidV
 export def "box-score-by-scoreid-v" [
-  format: string
+  format: string@format-completer
   scoreid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -312,7 +317,7 @@ export def "box-score-by-scoreid-v" [
 # GET /{format}/BoxScoreV3/{season}/{week}/{hometeam}
 # operationId: BoxScoreV
 export def "box-score-v" [
-  format: string
+  format: string@format-completer
   season: string
   week: string
   hometeam: string
@@ -354,7 +359,7 @@ export def "box-score-v" [
 # GET /{format}/BoxScores/{season}/{week}
 # operationId: LegacyBoxScores
 export def "legacy-box-scores" [
-  format: string
+  format: string@format-completer
   season: string
   week: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -394,7 +399,7 @@ export def "legacy-box-scores" [
 # GET /{format}/BoxScoresDelta/{season}/{week}/{minutes}
 # operationId: LegacyBoxScoresDelta
 export def "legacy-box-scores-delta" [
-  format: string
+  format: string@format-completer
   season: string
   week: string
   minutes: string
@@ -436,10 +441,10 @@ export def "legacy-box-scores-delta" [
 # GET /{format}/BoxScoresDeltaV3/{season}/{week}/{playerstoinclude}/{minutes}
 # operationId: BoxScoresDeltaV
 export def "box-scores-delta-v" [
-  format: string
+  format: string@format-completer
   season: string
   week: string
-  playerstoinclude: string
+  playerstoinclude: string@playerstoinclude-completer
   minutes: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -590,7 +595,7 @@ export def "week-current" [
 # GET /{format}/DailyFantasyPlayers/{date}
 # operationId: DailyFantasyPlayers
 export def "daily-fantasy-players" [
-  format: string
+  format: string@format-completer
   date: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -628,7 +633,7 @@ export def "daily-fantasy-players" [
 # GET /{format}/DailyFantasyPoints/{date}
 # operationId: DailyFantasyScoring
 export def "daily-fantasy-scoring" [
-  format: string
+  format: string@format-completer
   date: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -666,7 +671,7 @@ export def "daily-fantasy-scoring" [
 # GET /{format}/DfsSlatesByDate/{date}
 # operationId: DfsSlatesByDate
 export def "dfs-slates-by-date" [
-  format: string
+  format: string@format-completer
   date: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -704,7 +709,7 @@ export def "dfs-slates-by-date" [
 # GET /{format}/DfsSlatesByWeek/{season}/{week}
 # operationId: DfsSlatesByWeek
 export def "dfs-slates-by-week" [
-  format: string
+  format: string@format-completer
   season: string
   week: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -744,7 +749,7 @@ export def "dfs-slates-by-week" [
 # GET /{format}/FantasyDefenseByGame/{season}/{week}
 # operationId: FantasyDefenseGameStats
 export def "fantasy-defense-game-stats" [
-  format: string
+  format: string@format-completer
   season: string
   week: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -784,7 +789,7 @@ export def "fantasy-defense-game-stats" [
 # GET /{format}/FantasyDefenseByGameByTeam/{season}/{week}/{team}
 # operationId: FantasyDefenseGameStatsByTeam
 export def "fantasy-defense-game-stats-by-team" [
-  format: string
+  format: string@format-completer
   season: string
   week: string
   team: string
@@ -826,7 +831,7 @@ export def "fantasy-defense-game-stats-by-team" [
 # GET /{format}/FantasyDefenseBySeason/{season}
 # operationId: FantasyDefenseSeasonStats
 export def "fantasy-defense-season-stats" [
-  format: string
+  format: string@format-completer
   season: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -864,7 +869,7 @@ export def "fantasy-defense-season-stats" [
 # GET /{format}/FantasyDefenseBySeasonByTeam/{season}/{team}
 # operationId: FantasyDefenseSeasonStatsByTeam
 export def "fantasy-defense-season-stats-by-team" [
-  format: string
+  format: string@format-completer
   season: string
   team: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -904,7 +909,7 @@ export def "fantasy-defense-season-stats-by-team" [
 # GET /{format}/FantasyPlayers
 # operationId: FantasyPlayersWithAdp
 export def "fantasy-players-with-adp" [
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -940,7 +945,7 @@ export def "fantasy-players-with-adp" [
 # GET /{format}/FantasyPlayersIDP
 # operationId: IdpFantasyPlayersWithAdp
 export def "idp-fantasy-players-with-adp" [
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -976,7 +981,7 @@ export def "idp-fantasy-players-with-adp" [
 # GET /{format}/FinalBoxScores
 # operationId: LegacyBoxScoresFinal
 export def "legacy-box-scores-final" [
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1012,7 +1017,7 @@ export def "legacy-box-scores-final" [
 # GET /{format}/FreeAgents
 # operationId: PlayerDetailsByFreeAgents
 export def "player-details-by-free-agents" [
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1048,11 +1053,11 @@ export def "player-details-by-free-agents" [
 # GET /{format}/GameLeagueLeaders/{season}/{week}/{position}/{column}
 # operationId: LeagueLeadersByWeek
 export def "league-leaders-by-week" [
-  format: string
+  format: string@format-completer
   season: string
   week: string
-  position: string
-  column: string
+  position: string@position-completer
+  column: string@column-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1092,7 +1097,7 @@ export def "league-leaders-by-week" [
 # GET /{format}/GameStats/{season}
 # operationId: GameStatsBySeasonDeprecatedUseTeamGameStatsInstead
 export def "game-stats-by-season-deprecated-use-team-game-stats-instead" [
-  format: string
+  format: string@format-completer
   season: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1130,7 +1135,7 @@ export def "game-stats-by-season-deprecated-use-team-game-stats-instead" [
 # GET /{format}/GameStatsByWeek/{season}/{week}
 # operationId: GameStatsByWeekDeprecatedUseTeamGameStatsInstead
 export def "game-stats-by-week-deprecated-use-team-game-stats-instead" [
-  format: string
+  format: string@format-completer
   season: string
   week: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1170,7 +1175,7 @@ export def "game-stats-by-week-deprecated-use-team-game-stats-instead" [
 # GET /{format}/Injuries/{season}/{week}
 # operationId: Injuries
 export def "injuries" [
-  format: string
+  format: string@format-completer
   season: string
   week: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1210,7 +1215,7 @@ export def "injuries" [
 # GET /{format}/Injuries/{season}/{week}/{team}
 # operationId: InjuriesByTeam
 export def "injuries-by-team" [
-  format: string
+  format: string@format-completer
   season: string
   week: string
   team: string
@@ -1324,7 +1329,7 @@ export def "week-last-completed" [
 # GET /{format}/LiveBoxScores
 # operationId: LegacyBoxScoresLive
 export def "legacy-box-scores-live" [
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1510,7 +1515,7 @@ export def "news-by-team" [
 # GET /{format}/Player/{playerid}
 # operationId: PlayerDetailsByPlayer
 export def "player-details-by-player" [
-  format: string
+  format: string@format-completer
   playerid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1548,7 +1553,7 @@ export def "player-details-by-player" [
 # GET /{format}/PlayerGameRedZoneInsideFiveStats/{season}/{week}
 # operationId: PlayerGameRedZoneStatsInsideFive
 export def "player-game-red-zone-stats-inside-five" [
-  format: string
+  format: string@format-completer
   season: string
   week: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1588,7 +1593,7 @@ export def "player-game-red-zone-stats-inside-five" [
 # GET /{format}/PlayerGameRedZoneInsideTenStats/{season}/{week}
 # operationId: PlayerGameRedZoneStatsInsideTen
 export def "player-game-red-zone-stats-inside-ten" [
-  format: string
+  format: string@format-completer
   season: string
   week: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1628,7 +1633,7 @@ export def "player-game-red-zone-stats-inside-ten" [
 # GET /{format}/PlayerGameRedZoneStats/{season}/{week}
 # operationId: PlayerGameRedZoneStats
 export def "player-game-red-zone-stats" [
-  format: string
+  format: string@format-completer
   season: string
   week: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1668,7 +1673,7 @@ export def "player-game-red-zone-stats" [
 # GET /{format}/PlayerGameStatsByPlayerID/{season}/{week}/{playerid}
 # operationId: PlayerGameStatsByPlayer
 export def "player-game-stats-by-player" [
-  format: string
+  format: string@format-completer
   season: string
   week: string
   playerid: string
@@ -1710,7 +1715,7 @@ export def "player-game-stats-by-player" [
 # GET /{format}/PlayerGameStatsBySeason/{season}/{playerid}/{numberofgames}
 # operationId: PlayerGameLogsBySeason
 export def "player-game-logs-by-season" [
-  format: string
+  format: string@format-completer
   season: string
   playerid: string
   numberofgames: string
@@ -1752,7 +1757,7 @@ export def "player-game-logs-by-season" [
 # GET /{format}/PlayerGameStatsByTeam/{season}/{week}/{team}
 # operationId: PlayerGameStatsByTeam
 export def "player-game-stats-by-team" [
-  format: string
+  format: string@format-completer
   season: string
   week: string
   team: string
@@ -1794,7 +1799,7 @@ export def "player-game-stats-by-team" [
 # GET /{format}/PlayerGameStatsByWeek/{season}/{week}
 # operationId: PlayerGameStatsByWeek
 export def "player-game-stats-by-week" [
-  format: string
+  format: string@format-completer
   season: string
   week: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1834,7 +1839,7 @@ export def "player-game-stats-by-week" [
 # GET /{format}/PlayerGameStatsByWeekDelta/{season}/{week}/{minutes}
 # operationId: PlayerGameStatsByWeekDelta
 export def "player-game-stats-by-week-delta" [
-  format: string
+  format: string@format-completer
   season: string
   week: string
   minutes: string
@@ -1876,7 +1881,7 @@ export def "player-game-stats-by-week-delta" [
 # GET /{format}/PlayerGameStatsDelta/{minutes}
 # operationId: PlayerGameStatsDelta
 export def "player-game-stats-delta" [
-  format: string
+  format: string@format-completer
   minutes: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1914,7 +1919,7 @@ export def "player-game-stats-delta" [
 # GET /{format}/PlayerOwnership/{season}/{week}
 # operationId: FantasyPlayerOwnershipPercentagesSeasonLong
 export def "fantasy-player-ownership-percentages-season-long" [
-  format: string
+  format: string@format-completer
   season: string
   week: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1954,7 +1959,7 @@ export def "fantasy-player-ownership-percentages-season-long" [
 # GET /{format}/PlayerSeasonRedZoneInsideFiveStats/{season}
 # operationId: PlayerSeasonRedZoneStatsInsideFive
 export def "player-season-red-zone-stats-inside-five" [
-  format: string
+  format: string@format-completer
   season: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1992,7 +1997,7 @@ export def "player-season-red-zone-stats-inside-five" [
 # GET /{format}/PlayerSeasonRedZoneInsideTenStats/{season}
 # operationId: PlayerSeasonRedZoneStatsInsideTen
 export def "player-season-red-zone-stats-inside-ten" [
-  format: string
+  format: string@format-completer
   season: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2030,7 +2035,7 @@ export def "player-season-red-zone-stats-inside-ten" [
 # GET /{format}/PlayerSeasonRedZoneStats/{season}
 # operationId: PlayerSeasonRedZoneStats
 export def "player-season-red-zone-stats" [
-  format: string
+  format: string@format-completer
   season: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2068,7 +2073,7 @@ export def "player-season-red-zone-stats" [
 # GET /{format}/PlayerSeasonStats/{season}
 # operationId: PlayerSeasonStats
 export def "player-season-stats" [
-  format: string
+  format: string@format-completer
   season: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2106,7 +2111,7 @@ export def "player-season-stats" [
 # GET /{format}/PlayerSeasonStatsByPlayerID/{season}/{playerid}
 # operationId: PlayerSeasonStatsByPlayer
 export def "player-season-stats-by-player" [
-  format: string
+  format: string@format-completer
   season: string
   playerid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2146,7 +2151,7 @@ export def "player-season-stats-by-player" [
 # GET /{format}/PlayerSeasonStatsByTeam/{season}/{team}
 # operationId: PlayerSeasonStatsByTeam
 export def "player-season-stats-by-team" [
-  format: string
+  format: string@format-completer
   season: string
   team: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2186,7 +2191,7 @@ export def "player-season-stats-by-team" [
 # GET /{format}/PlayerSeasonThirdDownStats/{season}
 # operationId: PlayerSeasonThirdDownStats
 export def "player-season-third-down-stats" [
-  format: string
+  format: string@format-completer
   season: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2224,7 +2229,7 @@ export def "player-season-third-down-stats" [
 # GET /{format}/Players
 # operationId: PlayerDetailsByAvailable
 export def "player-details-by-available" [
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2260,7 +2265,7 @@ export def "player-details-by-available" [
 # GET /{format}/Players/{team}
 # operationId: PlayerDetailsByTeam
 export def "player-details-by-team" [
-  format: string
+  format: string@format-completer
   team: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2298,7 +2303,7 @@ export def "player-details-by-team" [
 # GET /{format}/ProBowlers/{season}
 # operationId: ProBowlers
 export def "pro-bowlers" [
-  format: string
+  format: string@format-completer
   season: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2336,7 +2341,7 @@ export def "pro-bowlers" [
 # GET /{format}/RecentlyUpdatedBoxScores/{minutes}
 # operationId: LegacyBoxScoresDeltaCurrentWeek
 export def "legacy-box-scores-delta-current-week" [
-  format: string
+  format: string@format-completer
   minutes: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2566,10 +2571,10 @@ export def "scores-by-week" [
 # GET /{format}/SeasonLeagueLeaders/{season}/{position}/{column}
 # operationId: LeagueLeadersBySeason
 export def "league-leaders-by-season" [
-  format: string
+  format: string@format-completer
   season: string
-  position: string
-  column: string
+  position: string@position-completer
+  column: string@column-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2608,7 +2613,7 @@ export def "league-leaders-by-season" [
 # GET /{format}/SimulatedBoxScoresV3/{numberofplays}
 # operationId: BoxScoresVSimulation
 export def "box-scores-v-simulation" [
-  format: string
+  format: string@format-completer
   numberofplays: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2646,7 +2651,7 @@ export def "box-scores-v-simulation" [
 # GET /{format}/SimulatedScores/{numberofplays}
 # operationId: ScoresByWeekSimulation
 export def "scores-by-week-simulation" [
-  format: string
+  format: string@format-completer
   numberofplays: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2758,7 +2763,7 @@ export def "standings" [
 # GET /{format}/TeamGameStats/{season}/{week}
 # operationId: TeamGameStats
 export def "team-game-stats" [
-  format: string
+  format: string@format-completer
   season: string
   week: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2798,7 +2803,7 @@ export def "team-game-stats" [
 # GET /{format}/TeamGameStatsBySeason/{season}/{teamid}/{numberofgames}
 # operationId: TeamGameLogsBySeason
 export def "team-game-logs-by-season" [
-  format: string
+  format: string@format-completer
   season: string
   teamid: string
   numberofgames: string
@@ -2840,7 +2845,7 @@ export def "team-game-logs-by-season" [
 # GET /{format}/TeamSeasonStats/{season}
 # operationId: TeamSeasonStats
 export def "team-season-stats" [
-  format: string
+  format: string@format-completer
   season: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

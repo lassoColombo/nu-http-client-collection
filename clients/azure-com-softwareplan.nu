@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -157,11 +157,12 @@ export def "software-plan-register" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api-version to be used by the service
-]: nothing -> record<code: string, message: string> {
+  --api-version: string # The api-version to be used by the service (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.SoftwarePlan/register") $qp $auth.query)
   let accept_val = "application/json"
@@ -195,12 +196,13 @@ export def "hybrid-use-benefit-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api-version to be used by the service
+  --api-version: string # The api-version to be used by the service (required)
   --filter: string # Supports applying filter on the type of SKU
 ]: nothing -> record<nextLink: string, value: table<etag: int, properties: record, sku: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope)} | format pattern "/{scope}/providers/Microsoft.SoftwarePlan/hybridUseBenefits") $qp $auth.query)
   let accept_val = "application/json"
@@ -235,12 +237,13 @@ export def "hybrid-use-benefit-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api-version to be used by the service
-]: nothing -> record<code: string, message: string> {
+  --api-version: string # The api-version to be used by the service (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($plan_id | is-empty) { error make --unspanned { msg: "path parameter 'planId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), plan_id: (encode-path-segment $plan_id)} | format pattern "/{scope}/providers/Microsoft.SoftwarePlan/hybridUseBenefits/{plan_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -275,12 +278,13 @@ export def "hybrid-use-benefit-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api-version to be used by the service
+  --api-version: string # The api-version to be used by the service (required)
 ]: nothing -> record<etag: int, properties: record<createdDate: string, lastUpdatedDate: string, provisioningState: string>, sku: record<name: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($plan_id | is-empty) { error make --unspanned { msg: "path parameter 'planId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), plan_id: (encode-path-segment $plan_id)} | format pattern "/{scope}/providers/Microsoft.SoftwarePlan/hybridUseBenefits/{plan_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -317,7 +321,7 @@ export def "hybrid-use-benefit-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api-version to be used by the service
+  --api-version: string # The api-version to be used by the service (required)
   --properties: any # Hybrid use benefit properties — shape: {provisioningState?: "Succeeded"|"Cancelled"|"Failed"}
   sku: record # The SKU to be applied for this resource — shape: {name?: string}
 ]: any -> record<etag: int, properties: record<createdDate: string, lastUpdatedDate: string, provisioningState: string>, sku: record<name: string>, id: string, name: string, type: string> {
@@ -326,6 +330,7 @@ export def "hybrid-use-benefit-update" [
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($plan_id | is-empty) { error make --unspanned { msg: "path parameter 'planId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), plan_id: (encode-path-segment $plan_id)} | format pattern "/{scope}/providers/Microsoft.SoftwarePlan/hybridUseBenefits/{plan_id}") $qp $auth.query)
   let req_body = {"properties": $properties, "sku": $sku} | compact
@@ -364,7 +369,7 @@ export def "hybrid-use-benefit-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api-version to be used by the service
+  --api-version: string # The api-version to be used by the service (required)
   --properties: any # Hybrid use benefit properties — shape: {provisioningState?: "Succeeded"|"Cancelled"|"Failed"}
   sku: record # The SKU to be applied for this resource — shape: {name?: string}
 ]: any -> record<etag: int, properties: record<createdDate: string, lastUpdatedDate: string, provisioningState: string>, sku: record<name: string>, id: string, name: string, type: string> {
@@ -373,6 +378,7 @@ export def "hybrid-use-benefit-create" [
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($plan_id | is-empty) { error make --unspanned { msg: "path parameter 'planId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), plan_id: (encode-path-segment $plan_id)} | format pattern "/{scope}/providers/Microsoft.SoftwarePlan/hybridUseBenefits/{plan_id}") $qp $auth.query)
   let req_body = {"properties": $properties, "sku": $sku} | compact
@@ -409,12 +415,13 @@ export def "hybrid-use-benefit-revision-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api-version to be used by the service
+  --api-version: string # The api-version to be used by the service (required)
 ]: nothing -> record<nextLink: string, value: table<etag: int, properties: record, sku: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($plan_id | is-empty) { error make --unspanned { msg: "path parameter 'planId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), plan_id: (encode-path-segment $plan_id)} | format pattern "/{scope}/providers/Microsoft.SoftwarePlan/hybridUseBenefits/{plan_id}/revisions") $qp $auth.query)
   let accept_val = "application/json"
@@ -448,11 +455,12 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api-version to be used by the service
+  --api-version: string # The api-version to be used by the service (required)
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string, origin: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope)} | format pattern "/{scope}/providers/Microsoft.SoftwarePlan/operations") $qp $auth.query)
   let accept_val = "application/json"

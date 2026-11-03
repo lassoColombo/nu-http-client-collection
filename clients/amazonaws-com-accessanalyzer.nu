@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -261,7 +261,7 @@ export def "get-generated-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<jobDetails: record<jobId: record, status: record, startedOn: record, completedOn: record, jobError: record<code: record, message: record>>, generatedPolicyResult: record<properties: any, generatedPolicies: record>> {
+]: nothing -> record<jobDetails: record<jobId: string, status: string, startedOn: string, completedOn: string, jobError: record<code: string, message: string>>, generatedPolicyResult: record<properties: any, generatedPolicies: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
@@ -309,7 +309,7 @@ export def "create-access-preview" [
   analyzer_arn: string # The ARN of the account analyzer (https://docs.aws.amazon.com/IAM/latest/UserGuide/access-analyzer-getting-started.html#permission-resources) used to generate the access preview. You can only create an access preview for analyzers with an Account type and Active status.
   configurations: record # Access control configuration for your resource that is used to generate the access preview. The access preview includes findings for external access allowed to the resource with the proposed access control configuration. The configuration must contain exactly one element.
   --client-token: string # A client token.
-]: any -> record<id: record> {
+]: any -> record<id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -338,7 +338,7 @@ export def "create-access-preview" [
 #
 # PUT /analyzer
 # operationId: CreateAnalyzer
-# --archiveRules item shape: {ruleName: any, filter: any}
+# --archiveRules item shape: {ruleName: string, filter: record}
 export def "create-analyzer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -358,10 +358,10 @@ export def "create-analyzer" [
   --x-amz-signed-headers: string
   analyzer_name: string # The name of the analyzer to create.
   type: string@type-completer # The type of analyzer to create. Only ACCOUNT and ORGANIZATION analyzers are supported. You can create only one analyzer per account per Region. You can create up to 5 analyzers per organization per Region.
-  --archive-rules: list # Specifies the archive rules to add for the analyzer. Archive rules automatically archive findings that meet the criteria you define for the rule. — item shape: {ruleName: any, filter: any}
+  --archive-rules: list # Specifies the archive rules to add for the analyzer. Archive rules automatically archive findings that meet the criteria you define for the rule. — item shape: {ruleName: string, filter: record}
   --tags: record # The tags to apply to the analyzer.
   --client-token: string # A client token.
-]: any -> record<arn: record> {
+]: any -> record<arn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -410,7 +410,7 @@ export def "list-analyzers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<analyzers: record, nextToken: record> {
+]: nothing -> record<analyzers: table<arn: string, name: string, type: string, createdAt: string, lastResourceAnalyzed: string, lastResourceAnalyzedAt: string, tags: record, status: string, statusReason: record>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
@@ -508,7 +508,7 @@ export def "list-archive-rules" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<archiveRules: record, nextToken: record> {
+]: nothing -> record<archiveRules: table<ruleName: string, filter: record, createdAt: string, updatedAt: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($analyzer_name | is-empty) { error make --unspanned { msg: "path parameter 'analyzerName' must be non-empty" } }
@@ -601,7 +601,7 @@ export def "get-analyzer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<analyzer: record<arn: record, name: record, type: record, createdAt: record, lastResourceAnalyzed: record, lastResourceAnalyzedAt: record, tags: record, status: record, statusReason: record<code: record>>> {
+]: nothing -> record<analyzer: record<arn: string, name: string, type: string, createdAt: string, lastResourceAnalyzed: string, lastResourceAnalyzedAt: string, tags: record, status: string, statusReason: record<code: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($analyzer_name | is-empty) { error make --unspanned { msg: "path parameter 'analyzerName' must be non-empty" } }
@@ -696,7 +696,7 @@ export def "get-archive-rule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<archiveRule: record<ruleName: record, filter: record, createdAt: record, updatedAt: record>> {
+]: nothing -> record<archiveRule: record<ruleName: string, filter: record, createdAt: string, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($analyzer_name | is-empty) { error make --unspanned { msg: "path parameter 'analyzerName' must be non-empty" } }
@@ -787,7 +787,7 @@ export def "get-access-preview" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --analyzer-arn: string # The ARN of the analyzer (https://docs.aws.amazon.com/IAM/latest/UserGuide/access-analyzer-getting-started.html#permission-resources) used to generate the access preview.
+  --analyzer-arn: string # The ARN of the analyzer (https://docs.aws.amazon.com/IAM/latest/UserGuide/access-analyzer-getting-started.html#permission-resources) used to generate the access preview. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -795,10 +795,11 @@ export def "get-access-preview" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<accessPreview: record<id: record, analyzerArn: record, configurations: record, createdAt: record, status: record, statusReason: record<code: record>>> {
+]: nothing -> record<accessPreview: record<id: string, analyzerArn: string, configurations: record, createdAt: string, status: string, statusReason: record<code: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_preview_id | is-empty) { error make --unspanned { msg: "path parameter 'accessPreviewId' must be non-empty" } }
+  if ($analyzer_arn == null) { error make --unspanned { msg: "required query parameter 'analyzerArn' missing: pass --analyzer-arn" } }
   let qp = [(serialize-qp "analyzerArn" $analyzer_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({access_preview_id: (encode-path-segment $access_preview_id)} | format pattern "/access-preview/{access_preview_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -833,8 +834,8 @@ export def "get-analyzed-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --analyzer-arn: string # The ARN of the analyzer (https://docs.aws.amazon.com/IAM/latest/UserGuide/access-analyzer-getting-started.html#permission-resources) to retrieve information from.
-  --resource-arn: string # The ARN of the resource to retrieve information about.
+  --analyzer-arn: string # The ARN of the analyzer (https://docs.aws.amazon.com/IAM/latest/UserGuide/access-analyzer-getting-started.html#permission-resources) to retrieve information from. (required)
+  --resource-arn: string # The ARN of the resource to retrieve information about. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -842,9 +843,11 @@ export def "get-analyzed-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<resource: record<resourceArn: record, resourceType: record, createdAt: record, analyzedAt: record, updatedAt: record, isPublic: record, actions: record, sharedVia: record, status: record, resourceOwnerAccount: record, error: record>> {
+]: nothing -> record<resource: record<resourceArn: string, resourceType: string, createdAt: string, analyzedAt: string, updatedAt: string, isPublic: bool, actions: list<string>, sharedVia: list<string>, status: string, resourceOwnerAccount: string, error: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($analyzer_arn == null) { error make --unspanned { msg: "required query parameter 'analyzerArn' missing: pass --analyzer-arn" } }
+  if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'resourceArn' missing: pass --resource-arn" } }
   let qp = [(serialize-qp "analyzerArn" $analyzer_arn "scalar") (serialize-qp "resourceArn" $resource_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/analyzed-resource" $qp $auth.query)
   let accept_val = "application/json"
@@ -880,7 +883,7 @@ export def "get-finding" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --analyzer-arn: string # The ARN of the analyzer (https://docs.aws.amazon.com/IAM/latest/UserGuide/access-analyzer-getting-started.html#permission-resources) that generated the finding.
+  --analyzer-arn: string # The ARN of the analyzer (https://docs.aws.amazon.com/IAM/latest/UserGuide/access-analyzer-getting-started.html#permission-resources) that generated the finding. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -888,10 +891,11 @@ export def "get-finding" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<finding: record<id: record, principal: record, action: record, resource: record, isPublic: record, resourceType: record, condition: record, createdAt: record, analyzedAt: record, updatedAt: record, status: record, resourceOwnerAccount: record, error: record, sources: record>> {
+]: nothing -> record<finding: record<id: string, principal: record, action: list<string>, resource: string, isPublic: bool, resourceType: string, condition: record, createdAt: string, analyzedAt: string, updatedAt: string, status: string, resourceOwnerAccount: string, error: string, sources: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($analyzer_arn == null) { error make --unspanned { msg: "required query parameter 'analyzerArn' missing: pass --analyzer-arn" } }
   let qp = [(serialize-qp "analyzerArn" $analyzer_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/finding/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -940,7 +944,7 @@ export def "list-access-preview-findings" [
   --filter: record # Criteria to filter the returned findings.
   --next-token-body: string # A token used for pagination of results returned. (body field)
   --max-results-body: int # The maximum number of results to return in the response. (body field)
-]: any -> record<findings: record, nextToken: record> {
+]: any -> record<findings: table<id: string, existingFindingId: string, existingFindingStatus: string, principal: record, action: list, condition: record, resource: string, isPublic: bool, resourceType: string, createdAt: string, changeType: string, status: string, resourceOwnerAccount: string, error: string, sources: list>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -981,7 +985,7 @@ export def "list-access-previews" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --analyzer-arn: string # The ARN of the analyzer (https://docs.aws.amazon.com/IAM/latest/UserGuide/access-analyzer-getting-started.html#permission-resources) used to generate the access preview.
+  --analyzer-arn: string # The ARN of the analyzer (https://docs.aws.amazon.com/IAM/latest/UserGuide/access-analyzer-getting-started.html#permission-resources) used to generate the access preview. (required)
   --next-token: string # A token used for pagination of results returned.
   --max-results: int # The maximum number of results to return in the response.
   --x-amz-content-sha256: string
@@ -991,9 +995,10 @@ export def "list-access-previews" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<accessPreviews: record, nextToken: record> {
+]: nothing -> record<accessPreviews: table<id: string, analyzerArn: string, createdAt: string, status: string, statusReason: record>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($analyzer_arn == null) { error make --unspanned { msg: "required query parameter 'analyzerArn' missing: pass --analyzer-arn" } }
   let qp = [(serialize-qp "analyzerArn" $analyzer_arn "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/access-preview" $qp $auth.query)
   let accept_val = "application/json"
@@ -1041,7 +1046,7 @@ export def "list-analyzed-resources" [
   --resource-type: string@resource-type-completer # The type of resource.
   --next-token-body: string # A token used for pagination of results returned. (body field)
   --max-results-body: int # The maximum number of results to return in the response. (body field)
-]: any -> record<analyzedResources: record, nextToken: record> {
+]: any -> record<analyzedResources: table<resourceArn: string, resourceOwnerAccount: string, resourceType: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1071,7 +1076,7 @@ export def "list-analyzed-resources" [
 #
 # POST /finding
 # operationId: ListFindings
-# --sort shape: {attributeName?: any, orderBy?: any}
+# --sort shape: {attributeName?: string, orderBy?: "ASC"|"DESC"}
 export def "list-findings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1093,16 +1098,16 @@ export def "list-findings" [
   --x-amz-signed-headers: string
   analyzer_arn: string # The ARN of the analyzer (https://docs.aws.amazon.com/IAM/latest/UserGuide/access-analyzer-getting-started.html#permission-resources) to retrieve findings from.
   --filter: record # A filter to match for the findings to return.
-  --body-sort: record # The criteria used to sort. — shape: {attributeName?: any, orderBy?: any}
+  --sort: record # The criteria used to sort. — shape: {attributeName?: string, orderBy?: "ASC"|"DESC"}
   --next-token-body: string # A token used for pagination of results returned. (body field)
   --max-results-body: int # The maximum number of results to return in the response. (body field)
-]: any -> record<findings: record, nextToken: record> {
+]: any -> record<findings: table<id: string, principal: record, action: list, resource: string, isPublic: bool, resourceType: string, condition: record, createdAt: string, analyzedAt: string, updatedAt: string, status: string, resourceOwnerAccount: string, error: string, sources: list>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/finding" $qp $auth.query)
-  let req_body = {"analyzerArn": $analyzer_arn, "filter": $filter, "sort": $body_sort, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
+  let req_body = {"analyzerArn": $analyzer_arn, "filter": $filter, "sort": $sort, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1197,7 +1202,7 @@ export def "list-policy-generations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<policyGenerations: record, nextToken: record> {
+]: nothing -> record<policyGenerations: table<jobId: string, principalArn: string, status: string, startedOn: string, completedOn: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "principalArn" $principal_arn "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -1224,8 +1229,8 @@ export def "list-policy-generations" [
 #
 # PUT /policy/generation
 # operationId: StartPolicyGeneration
-# --policyGenerationDetails shape: {principalArn?: any}
-# --cloudTrailDetails shape: {trails?: any, accessRole?: any, startTime?: any, endTime?: any}
+# --policyGenerationDetails shape: {principalArn?: string}
+# --cloudTrailDetails shape: {trails?: list, accessRole?: string, startTime?: string, endTime?: string}
 export def "start-policy-generation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1243,10 +1248,10 @@ export def "start-policy-generation" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  policy_generation_details: record # Contains the ARN details about the IAM entity for which the policy is generated. — shape: {principalArn?: any}
-  --cloud-trail-details: record # Contains information about CloudTrail access. — shape: {trails?: any, accessRole?: any, startTime?: any, endTime?: any}
+  policy_generation_details: record # Contains the ARN details about the IAM entity for which the policy is generated. — shape: {principalArn?: string}
+  --cloud-trail-details: record # Contains information about CloudTrail access. — shape: {trails?: list, accessRole?: string, startTime?: string, endTime?: string}
   --client-token: string # A unique, case-sensitive identifier that you provide to ensure the idempotency of the request. Idempotency ensures that an API request completes only once. With an idempotent request, if the original request completes successfully, the subsequent retries with the same client token return the result from the original successful request and they have no additional effect. If you do not specify a client token, one is automatically generated by the Amazon Web Services SDK.
-]: any -> record<jobId: record> {
+]: any -> record<jobId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1429,7 +1434,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # The key for the tag to add.
+  --tag-keys: list # The key for the tag to add. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1441,6 +1446,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1488,7 +1494,7 @@ export def "validate-policy" [
   policy_document: string # The JSON policy document to use as the content for the policy.
   policy_type: string@policy-type-completer # The type of policy to validate. Identity policies grant permissions to IAM principals. Identity policies include managed and inline policies for IAM roles, users, and groups. They also include service-control policies (SCPs) that are attached to an Amazon Web Services organization, organizational unit (OU), or an account. Resource policies grant permissions on Amazon Web Services resources. Resource policies include trust policies for IAM roles and bucket policies for Amazon S3 buckets. You can provide a generic input such as identity policy or resource policy or a specific input such as managed policy or Amazon S3 bucket policy.
   --validate-policy-resource-type: string@validate-policy-resource-type-completer # The type of resource to attach to your resource policy. Specify a value for the policy validation resource type only if the policy type is RESOURCE_POLICY. For example, to validate a resource policy to attach to an Amazon S3 bucket, you can choose AWS::S3::Bucket for the policy validation resource type. For resource types not supported as valid values, IAM Access Analyzer runs policy checks that apply to all resource policies. For example, to validate a resource policy to attach to a KMS key, do not specify a value for the policy validation resource type and IAM Access Analyzer will run policy checks that apply to all resource policies.
-]: any -> record<findings: record, nextToken: record> {
+]: any -> record<findings: table<findingDetails: string, findingType: string, issueCode: string, learnMoreLink: string, locations: list>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

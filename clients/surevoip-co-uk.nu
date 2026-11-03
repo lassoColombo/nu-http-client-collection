@@ -12,8 +12,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -144,7 +144,7 @@ def accept-completer [] { ["application/json" "text/xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-op" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -167,7 +167,7 @@ export def commands []: nothing -> table {
 # List global resources
 #
 # GET /
-export def "get" [
+export def "get-op" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -259,8 +259,8 @@ export def "post-announcements" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -393,17 +393,17 @@ export def "post-calls" [
   --announcement-at: string # is in seconds. Just take 120 secs away from the hangup_at time for a announcement to be played 2 mins before the end of the call. If provided announcement_id is required (e.g. 180)
   --announcement-id: string # is the announcement id (from https://api.surevoip.co.uk/customers/{customer}/announcements/{announcement_id}) to play for example “your call is about to end in 2 mins”. We only allow a wav file, but we may allow "words", which will use SureVoIP provided text to speech. If provided announcement_at is required (e.g. hgCRVfWB4hGRSEAkICyA)
   caller_id: string # The caller ID to show the b leg (to). (e.g. 1224900123)
-  --body-from: string # The person making the call, i.e the a leg. This person must answer in order for the b leg to be rung (e.g. 442035159999)
+  from: string # The person making the call, i.e the a leg. This person must answer in order for the b leg to be rung (e.g. 442035159999)
   --hangup-announcement-id: string # the id of a thank you announcement or similar. You can manage these as you would with any RESTful resource at https://api.surevoip.co.uk/announcements and https://api.surevoip.co.uk/customers/{customer}/announcements/{announcement_id}. It will be played at the end of the call at hangup. If provided hangup_at is required. (e.g. RVfWB4hGRSEAkIXYCyA)
   --hangup-at: string # length in seconds from when the call is *answered* to when the system hangs up. If "hangup_announcement_id" is present, this will be played at hangup (e.g. 300)
   --options: record # shape: {a_leg_caller_id?: string, a_leg_only?: int, cancel_key?: int, connect_key?: int, play_audio?: list}
-  --body-to: string # The b leg of the call, i.e. the person you are calling (e.g. 442035159995)
+  to: string # The b leg of the call, i.e. the person you are calling (e.g. 442035159995)
 ]: any -> record<Call: string, Location: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/calls" $auth.query)
-  let req_body = {"announcement_at": $announcement_at, "announcement_id": $announcement_id, "caller_id": $caller_id, "from": $body_from, "hangup_announcement_id": $hangup_announcement_id, "hangup_at": $hangup_at, "options": $options, "to": $body_to} | compact
+  let req_body = {"announcement_at": $announcement_at, "announcement_id": $announcement_id, "caller_id": $caller_id, "from": $from, "hangup_announcement_id": $hangup_announcement_id, "hangup_at": $hangup_at, "options": $options, "to": $to} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -628,8 +628,8 @@ export def "get-customers-account-announcements" [
 #
 # DELETE /customers/{account}/announcements/{announcement_id}
 export def "delete-customers-account-announcements-announcement-id" [
-  account: any
-  announcement_id: any
+  account: int
+  announcement_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -665,7 +665,7 @@ export def "delete-customers-account-announcements-announcement-id" [
 #
 # GET /customers/{account}/announcements/{announcement_id}
 export def "get-customers-account-announcements-announcement-id" [
-  account: any
+  account: int
   announcement_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

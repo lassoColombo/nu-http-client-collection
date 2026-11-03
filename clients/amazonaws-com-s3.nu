@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -214,7 +214,7 @@ export def "abort-multipart-upload" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --upload-id: string # Upload ID that identifies the multipart upload.
+  --upload-id: string # Upload ID that identifies the multipart upload. (required)
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
@@ -223,6 +223,7 @@ export def "abort-multipart-upload" [
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
+  if ($upload_id == null) { error make --unspanned { msg: "required query parameter 'uploadId' missing: pass --upload-id" } }
   let qp = [(serialize-qp "uploadId" $upload_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -260,7 +261,7 @@ export def "complete-multipart-upload" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --upload-id: string # ID for the initiated multipart upload.
+  --upload-id: string # ID for the initiated multipart upload. (required)
   --x-amz-security-token: string
   --x-amz-checksum-crc32: string # This header can be used as a data integrity check to verify that the data received is the same data that was originally sent. This header specifies the base64-encoded, 32-bit CRC32 checksum of the object. For more information, see Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide.
   --x-amz-checksum-crc32c: string # This header can be used as a data integrity check to verify that the data received is the same data that was originally sent. This header specifies the base64-encoded, 32-bit CRC32C checksum of the object. For more information, see Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide.
@@ -269,15 +270,16 @@ export def "complete-multipart-upload" [
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --x-amz-server-side-encryption-customer-algorithm: string # The server-side encryption (SSE) algorithm used to encrypt the object. This parameter is needed only when the object was created using a checksum algorithm. For more information, see Protecting data using SSE-C keys (https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html) in the Amazon S3 User Guide.
-  --x-amz-server-side-encryption-customer-key: string # The server-side encryption (SSE) customer managed key. This parameter is needed only when the object was created using a checksum algorithm. For more information, see Protecting data using SSE-C keys (https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html) in the Amazon S3 User Guide.
+  --x-amz-server-side-encryption-customer-key: string # The server-side encryption (SSE) customer managed key. This parameter is needed only when the object was created using a checksum algorithm. For more information, see Protecting data using SSE-C keys (https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html) in the Amazon S3 User Guide. (format: password)
   --x-amz-server-side-encryption-customer-key-md5: string # The MD5 server-side encryption (SSE) customer managed key. This parameter is needed only when the object was created using a checksum algorithm. For more information, see Protecting data using SSE-C keys (https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html) in the Amazon S3 User Guide.
   --body: any
-]: any -> record<Location: record, Bucket: record, Key: record, ETag: record, ChecksumCRC32: record, ChecksumCRC32C: record, ChecksumSHA1: record, ChecksumSHA256: record> {
+]: any -> record<Location: string, Bucket: string, Key: string, ETag: string, ChecksumCRC32: string, ChecksumCRC32C: string, ChecksumSHA1: string, ChecksumSHA256: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
+  if ($upload_id == null) { error make --unspanned { msg: "required query parameter 'uploadId' missing: pass --upload-id" } }
   let qp = [(serialize-qp "uploadId" $upload_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let req_body = $body
@@ -319,20 +321,21 @@ export def "list-parts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-parts: int # Sets the maximum number of parts to return.
   --part-number-marker: int # Specifies the part after which listing should begin. Only parts with higher part numbers will be listed.
-  --upload-id: string # Upload ID identifying the multipart upload whose parts are being listed.
+  --upload-id: string # Upload ID identifying the multipart upload whose parts are being listed. (required)
   --max-parts-2: string # Pagination limit (disambiguated-2)
   --part-number-marker-2: string # Pagination token (disambiguated-2)
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --x-amz-server-side-encryption-customer-algorithm: string # The server-side encryption (SSE) algorithm used to encrypt the object. This parameter is needed only when the object was created using a checksum algorithm. For more information, see Protecting data using SSE-C keys (https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html) in the Amazon S3 User Guide.
-  --x-amz-server-side-encryption-customer-key: string # The server-side encryption (SSE) customer managed key. This parameter is needed only when the object was created using a checksum algorithm. For more information, see Protecting data using SSE-C keys (https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html) in the Amazon S3 User Guide.
+  --x-amz-server-side-encryption-customer-key: string # The server-side encryption (SSE) customer managed key. This parameter is needed only when the object was created using a checksum algorithm. For more information, see Protecting data using SSE-C keys (https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html) in the Amazon S3 User Guide. (format: password)
   --x-amz-server-side-encryption-customer-key-md5: string # The MD5 server-side encryption (SSE) customer managed key. This parameter is needed only when the object was created using a checksum algorithm. For more information, see Protecting data using SSE-C keys (https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html) in the Amazon S3 User Guide.
-]: nothing -> record<Bucket: record, Key: record, UploadId: record, PartNumberMarker: record, NextPartNumberMarker: record, MaxParts: record, IsTruncated: record, Parts: record, Initiator: record<ID: record, DisplayName: record>, Owner: record<DisplayName: record, ID: record>, StorageClass: record, ChecksumAlgorithm: record> {
+]: nothing -> record<Bucket: string, Key: string, UploadId: string, PartNumberMarker: int, NextPartNumberMarker: int, MaxParts: int, IsTruncated: bool, Parts: table<PartNumber: int, LastModified: string, ETag: string, Size: int, ChecksumCRC32: string, ChecksumCRC32C: string, ChecksumSHA1: string, ChecksumSHA256: string>, Initiator: record<ID: string, DisplayName: string>, Owner: record<DisplayName: string, ID: string>, StorageClass: string, ChecksumAlgorithm: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
+  if ($upload_id == null) { error make --unspanned { msg: "required query parameter 'uploadId' missing: pass --upload-id" } }
   let qp = [(serialize-qp "max-parts" $max_parts "scalar") (serialize-qp "part-number-marker" $part_number_marker "scalar") (serialize-qp "uploadId" $upload_id "scalar") (serialize-qp "MaxParts" $max_parts_2 "scalar") (serialize-qp "PartNumberMarker" $part_number_marker_2 "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -378,12 +381,12 @@ export def "copy-object" [
   --content-encoding: string # Specifies what content encodings have been applied to the object and thus what decoding mechanisms must be applied to obtain the media-type referenced by the Content-Type header field.
   --content-language: string # The language the content is in.
   --content-type: string # A standard MIME type describing the format of the object data.
-  --x-amz-copy-source: string # Specifies the source object for the copy operation. You specify the value in one of two formats, depending on whether you want to access the source object through an access point (https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-points.html): For objects not accessed through an access point, specify the name of the source bucket and the key of the source object, separated by a slash (/). For example, to copy the object reports/january.pdf from the bucket awsexamplebucket, use awsexamplebucket/reports/january.pdf. The value must be URL-encoded. For objects accessed through access points, specify the Amazon Resource Name (ARN) of the object as accessed through the access point, in the format arn:aws:s3:<Region>:<account-id>:accesspoint/<access-point-name>/object/<key>. For example, to copy the object reports/january.pdf through access point my-access-point owned by account 123456789012 in Region us-west-2, use the URL encoding of arn:aws:s3:us-west-2:123456789012:accesspoint/my-access-point/object/reports/january.pdf. The value must be URL encoded. Amazon S3 supports copy operations using access points only when the source and destination buckets are in the same Amazon Web Services Region. Alternatively, for objects accessed through Amazon S3 on Outposts, specify the ARN of the object as accessed in the format arn:aws:s3-outposts:<Region>:<account-id>:outpost/<outpost-id>/object/<key>. For example, to copy the object reports/january.pdf through outpost my-outpost owned by account 123456789012 in Region us-west-2, use the URL encoding of arn:aws:s3-outposts:us-west-2:123456789012:outpost/my-outpost/object/reports/january.pdf. The value must be URL-encoded. To copy a specific version of an object, append ?versionId=<version-id> to the value (for example, awsexamplebucket/reports/january.pdf?versionId=QUpfdndhfd8438MNFDN93jdnJFkdmqnh893). If you don't specify a version ID, Amazon S3 copies the latest version of the source object.
+  --x-amz-copy-source: string # Specifies the source object for the copy operation. You specify the value in one of two formats, depending on whether you want to access the source object through an access point (https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-points.html): For objects not accessed through an access point, specify the name of the source bucket and the key of the source object, separated by a slash (/). For example, to copy the object reports/january.pdf from the bucket awsexamplebucket, use awsexamplebucket/reports/january.pdf. The value must be URL-encoded. For objects accessed through access points, specify the Amazon Resource Name (ARN) of the object as accessed through the access point, in the format arn:aws:s3:<Region>:<account-id>:accesspoint/<access-point-name>/object/<key>. For example, to copy the object reports/january.pdf through access point my-access-point owned by account 123456789012 in Region us-west-2, use the URL encoding of arn:aws:s3:us-west-2:123456789012:accesspoint/my-access-point/object/reports/january.pdf. The value must be URL encoded. Amazon S3 supports copy operations using access points only when the source and destination buckets are in the same Amazon Web Services Region. Alternatively, for objects accessed through Amazon S3 on Outposts, specify the ARN of the object as accessed in the format arn:aws:s3-outposts:<Region>:<account-id>:outpost/<outpost-id>/object/<key>. For example, to copy the object reports/january.pdf through outpost my-outpost owned by account 123456789012 in Region us-west-2, use the URL encoding of arn:aws:s3-outposts:us-west-2:123456789012:outpost/my-outpost/object/reports/january.pdf. The value must be URL-encoded. To copy a specific version of an object, append ?versionId=<version-id> to the value (for example, awsexamplebucket/reports/january.pdf?versionId=QUpfdndhfd8438MNFDN93jdnJFkdmqnh893). If you don't specify a version ID, Amazon S3 copies the latest version of the source object. (required)
   --x-amz-copy-source-if-match: string # Copies the object if its entity tag (ETag) matches the specified tag.
-  --x-amz-copy-source-if-modified-since: string # Copies the object if it has been modified since the specified time.
+  --x-amz-copy-source-if-modified-since: string # Copies the object if it has been modified since the specified time. (format: date-time)
   --x-amz-copy-source-if-none-match: string # Copies the object if its entity tag (ETag) is different than the specified ETag.
-  --x-amz-copy-source-if-unmodified-since: string # Copies the object if it hasn't been modified since the specified time.
-  --expires: string # The date and time at which the object is no longer cacheable.
+  --x-amz-copy-source-if-unmodified-since: string # Copies the object if it hasn't been modified since the specified time. (format: date-time)
+  --expires: string # The date and time at which the object is no longer cacheable. (format: date-time)
   --x-amz-grant-full-control: string # Gives the grantee READ, READ_ACP, and WRITE_ACP permissions on the object. This action is not supported by Amazon S3 on Outposts.
   --x-amz-grant-read: string # Allows grantee to read the object data and its metadata. This action is not supported by Amazon S3 on Outposts.
   --x-amz-grant-read-acp: string # Allows grantee to read the object ACL. This action is not supported by Amazon S3 on Outposts.
@@ -394,28 +397,29 @@ export def "copy-object" [
   --x-amz-storage-class: string@x-amz-storage-class-completer # By default, Amazon S3 uses the STANDARD Storage Class to store newly created objects. The STANDARD storage class provides high durability and high availability. Depending on performance needs, you can specify a different Storage Class. Amazon S3 on Outposts only uses the OUTPOSTS Storage Class. For more information, see Storage Classes (https://docs.aws.amazon.com/AmazonS3/latest/dev/storage-class-intro.html) in the Amazon S3 User Guide.
   --x-amz-website-redirect-location: string # If the bucket is configured as a website, redirects requests for this object to another object in the same bucket or to an external URL. Amazon S3 stores the value of this header in the object metadata.
   --x-amz-server-side-encryption-customer-algorithm: string # Specifies the algorithm to use to when encrypting the object (for example, AES256).
-  --x-amz-server-side-encryption-customer-key: string # Specifies the customer-provided encryption key for Amazon S3 to use in encrypting data. This value is used to store the object and then it is discarded; Amazon S3 does not store the encryption key. The key must be appropriate for use with the algorithm specified in the x-amz-server-side-encryption-customer-algorithm header.
+  --x-amz-server-side-encryption-customer-key: string # Specifies the customer-provided encryption key for Amazon S3 to use in encrypting data. This value is used to store the object and then it is discarded; Amazon S3 does not store the encryption key. The key must be appropriate for use with the algorithm specified in the x-amz-server-side-encryption-customer-algorithm header. (format: password)
   --x-amz-server-side-encryption-customer-key-md5: string # Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header for a message integrity check to ensure that the encryption key was transmitted without error.
-  --x-amz-server-side-encryption-aws-kms-key-id: string # Specifies the Amazon Web Services KMS key ID to use for object encryption. All GET and PUT requests for an object protected by Amazon Web Services KMS will fail if not made via SSL or using SigV4. For information about configuring using any of the officially supported Amazon Web Services SDKs and Amazon Web Services CLI, see Specifying the Signature Version in Request Authentication (https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingAWSSDK.html#specify-signature-version) in the Amazon S3 User Guide.
-  --x-amz-server-side-encryption-context: string # Specifies the Amazon Web Services KMS Encryption Context to use for object encryption. The value of this header is a base64-encoded UTF-8 string holding JSON with the encryption context key-value pairs.
+  --x-amz-server-side-encryption-aws-kms-key-id: string # Specifies the Amazon Web Services KMS key ID to use for object encryption. All GET and PUT requests for an object protected by Amazon Web Services KMS will fail if not made via SSL or using SigV4. For information about configuring using any of the officially supported Amazon Web Services SDKs and Amazon Web Services CLI, see Specifying the Signature Version in Request Authentication (https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingAWSSDK.html#specify-signature-version) in the Amazon S3 User Guide. (format: password)
+  --x-amz-server-side-encryption-context: string # Specifies the Amazon Web Services KMS Encryption Context to use for object encryption. The value of this header is a base64-encoded UTF-8 string holding JSON with the encryption context key-value pairs. (format: password)
   --x-amz-server-side-encryption-bucket-key-enabled: oneof<nothing, bool> # Specifies whether Amazon S3 should use an S3 Bucket Key for object encryption with server-side encryption using AWS KMS (SSE-KMS). Setting this header to true causes Amazon S3 to use an S3 Bucket Key for object encryption with SSE-KMS. Specifying this header with a COPY action doesn’t affect bucket-level settings for S3 Bucket Key.
   --x-amz-copy-source-server-side-encryption-customer-algorithm: string # Specifies the algorithm to use when decrypting the source object (for example, AES256).
-  --x-amz-copy-source-server-side-encryption-customer-key: string # Specifies the customer-provided encryption key for Amazon S3 to use to decrypt the source object. The encryption key provided in this header must be one that was used when the source object was created.
+  --x-amz-copy-source-server-side-encryption-customer-key: string # Specifies the customer-provided encryption key for Amazon S3 to use to decrypt the source object. The encryption key provided in this header must be one that was used when the source object was created. (format: password)
   --x-amz-copy-source-server-side-encryption-customer-key-md5: string # Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header for a message integrity check to ensure that the encryption key was transmitted without error.
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-tagging: string # The tag-set for the object destination object this value must be used in conjunction with the TaggingDirective. The tag-set must be encoded as URL Query parameters.
   --x-amz-object-lock-mode: string@x-amz-object-lock-mode-completer # The Object Lock mode that you want to apply to the copied object.
-  --x-amz-object-lock-retain-until-date: string # The date and time when you want the copied object's Object Lock to expire.
+  --x-amz-object-lock-retain-until-date: string # The date and time when you want the copied object's Object Lock to expire. (format: date-time)
   --x-amz-object-lock-legal-hold: string@x-amz-object-lock-legal-hold-completer # Specifies whether you want to apply a legal hold to the copied object.
   --x-amz-expected-bucket-owner: string # The account ID of the expected destination bucket owner. If the destination bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --x-amz-source-expected-bucket-owner: string # The account ID of the expected source bucket owner. If the source bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
-]: any -> record<CopyObjectResult: record<ETag: record, LastModified: record, ChecksumCRC32: record, ChecksumCRC32C: record, ChecksumSHA1: record, ChecksumSHA256: record>> {
+]: any -> record<CopyObjectResult: record<ETag: string, LastModified: string, ChecksumCRC32: string, ChecksumCRC32C: string, ChecksumSHA1: string, ChecksumSHA256: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
+  if ($x_amz_copy_source == null) { error make --unspanned { msg: "required header parameter 'x-amz-copy-source' missing: pass --x-amz-copy-source" } }
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -599,7 +603,7 @@ export def "list-objects" [
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer # Confirms that the requester knows that she or he will be charged for the list objects request. Bucket owners need not specify this parameter in their requests.
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> record<IsTruncated: record, Marker: record, NextMarker: record, Contents: record, Name: record, Prefix: record, Delimiter: record, MaxKeys: record, CommonPrefixes: record, EncodingType: record> {
+]: nothing -> record<IsTruncated: bool, Marker: string, NextMarker: string, Contents: table<Key: string, LastModified: string, ETag: string, ChecksumAlgorithm: list, Size: int, StorageClass: string, Owner: record>, Name: string, Prefix: string, Delimiter: string, MaxKeys: int, CommonPrefixes: table<Prefix: string>, EncodingType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -640,7 +644,7 @@ export def "create-multipart-upload" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --uploads: oneof<nothing, bool> # allows empty value
+  --uploads: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-acl: string@x-amz-acl-completer # The canned ACL to apply to the object. This action is not supported by Amazon S3 on Outposts.
   --cache-control: string # Specifies caching behavior along the request/reply chain.
@@ -648,7 +652,7 @@ export def "create-multipart-upload" [
   --content-encoding: string # Specifies what content encodings have been applied to the object and thus what decoding mechanisms must be applied to obtain the media-type referenced by the Content-Type header field.
   --content-language: string # The language the content is in.
   --content-type: string # A standard MIME type describing the format of the object data.
-  --expires: string # The date and time at which the object is no longer cacheable.
+  --expires: string # The date and time at which the object is no longer cacheable. (format: date-time)
   --x-amz-grant-full-control: string # Gives the grantee READ, READ_ACP, and WRITE_ACP permissions on the object. This action is not supported by Amazon S3 on Outposts.
   --x-amz-grant-read: string # Allows grantee to read the object data and its metadata. This action is not supported by Amazon S3 on Outposts.
   --x-amz-grant-read-acp: string # Allows grantee to read the object ACL. This action is not supported by Amazon S3 on Outposts.
@@ -657,25 +661,26 @@ export def "create-multipart-upload" [
   --x-amz-storage-class: string@x-amz-storage-class-completer # By default, Amazon S3 uses the STANDARD Storage Class to store newly created objects. The STANDARD storage class provides high durability and high availability. Depending on performance needs, you can specify a different Storage Class. Amazon S3 on Outposts only uses the OUTPOSTS Storage Class. For more information, see Storage Classes (https://docs.aws.amazon.com/AmazonS3/latest/dev/storage-class-intro.html) in the Amazon S3 User Guide.
   --x-amz-website-redirect-location: string # If the bucket is configured as a website, redirects requests for this object to another object in the same bucket or to an external URL. Amazon S3 stores the value of this header in the object metadata.
   --x-amz-server-side-encryption-customer-algorithm: string # Specifies the algorithm to use to when encrypting the object (for example, AES256).
-  --x-amz-server-side-encryption-customer-key: string # Specifies the customer-provided encryption key for Amazon S3 to use in encrypting data. This value is used to store the object and then it is discarded; Amazon S3 does not store the encryption key. The key must be appropriate for use with the algorithm specified in the x-amz-server-side-encryption-customer-algorithm header.
+  --x-amz-server-side-encryption-customer-key: string # Specifies the customer-provided encryption key for Amazon S3 to use in encrypting data. This value is used to store the object and then it is discarded; Amazon S3 does not store the encryption key. The key must be appropriate for use with the algorithm specified in the x-amz-server-side-encryption-customer-algorithm header. (format: password)
   --x-amz-server-side-encryption-customer-key-md5: string # Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header for a message integrity check to ensure that the encryption key was transmitted without error.
-  --x-amz-server-side-encryption-aws-kms-key-id: string # Specifies the ID of the symmetric customer managed key to use for object encryption. All GET and PUT requests for an object protected by Amazon Web Services KMS will fail if not made via SSL or using SigV4. For information about configuring using any of the officially supported Amazon Web Services SDKs and Amazon Web Services CLI, see Specifying the Signature Version in Request Authentication (https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingAWSSDK.html#specify-signature-version) in the Amazon S3 User Guide.
-  --x-amz-server-side-encryption-context: string # Specifies the Amazon Web Services KMS Encryption Context to use for object encryption. The value of this header is a base64-encoded UTF-8 string holding JSON with the encryption context key-value pairs.
+  --x-amz-server-side-encryption-aws-kms-key-id: string # Specifies the ID of the symmetric customer managed key to use for object encryption. All GET and PUT requests for an object protected by Amazon Web Services KMS will fail if not made via SSL or using SigV4. For information about configuring using any of the officially supported Amazon Web Services SDKs and Amazon Web Services CLI, see Specifying the Signature Version in Request Authentication (https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingAWSSDK.html#specify-signature-version) in the Amazon S3 User Guide. (format: password)
+  --x-amz-server-side-encryption-context: string # Specifies the Amazon Web Services KMS Encryption Context to use for object encryption. The value of this header is a base64-encoded UTF-8 string holding JSON with the encryption context key-value pairs. (format: password)
   --x-amz-server-side-encryption-bucket-key-enabled: oneof<nothing, bool> # Specifies whether Amazon S3 should use an S3 Bucket Key for object encryption with server-side encryption using AWS KMS (SSE-KMS). Setting this header to true causes Amazon S3 to use an S3 Bucket Key for object encryption with SSE-KMS. Specifying this header with an object action doesn’t affect bucket-level settings for S3 Bucket Key.
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-tagging: string # The tag-set for the object. The tag-set must be encoded as URL Query parameters.
   --x-amz-object-lock-mode: string@x-amz-object-lock-mode-completer # Specifies the Object Lock mode that you want to apply to the uploaded object.
-  --x-amz-object-lock-retain-until-date: string # Specifies the date and time when you want the Object Lock to expire.
+  --x-amz-object-lock-retain-until-date: string # Specifies the date and time when you want the Object Lock to expire. (format: date-time)
   --x-amz-object-lock-legal-hold: string@x-amz-object-lock-legal-hold-completer # Specifies whether you want to apply a legal hold to the uploaded object.
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --x-amz-checksum-algorithm: string@x-amz-checksum-algorithm-completer # Indicates the algorithm you want Amazon S3 to use to create the checksum for the object. For more information, see Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide.
   --body: any
-]: any -> record<Bucket: record, Key: record, UploadId: record> {
+]: any -> record<Bucket: string, Key: string, UploadId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
+  let uploads = ($uploads | default true)
   let qp = [(serialize-qp "uploads" $uploads "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let req_body = $body
@@ -715,14 +720,16 @@ export def "delete-bucket-analytics-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # The ID that identifies the analytics configuration.
-  --analytics: oneof<nothing, bool> # allows empty value
+  --id: string # The ID that identifies the analytics configuration. (required)
+  --analytics: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  let analytics = ($analytics | default true)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "analytics" $analytics "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "application/json"
@@ -758,14 +765,16 @@ export def "get-bucket-analytics-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # The ID that identifies the analytics configuration.
-  --analytics: oneof<nothing, bool> # allows empty value
+  --id: string # The ID that identifies the analytics configuration. (required)
+  --analytics: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> record<AnalyticsConfiguration: record<Id: record, Filter: record<Prefix: record, Tag: record, And: record>, StorageClassAnalysis: record<DataExport: record>>> {
+]: nothing -> record<AnalyticsConfiguration: record<Id: string, Filter: record<Prefix: string, Tag: record, And: record>, StorageClassAnalysis: record<DataExport: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  let analytics = ($analytics | default true)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "analytics" $analytics "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -801,8 +810,8 @@ export def "put-bucket-analytics-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # The ID that identifies the analytics configuration.
-  --analytics: oneof<nothing, bool> # allows empty value
+  --id: string # The ID that identifies the analytics configuration. (required)
+  --analytics: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
@@ -811,6 +820,8 @@ export def "put-bucket-analytics-configuration" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  let analytics = ($analytics | default true)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "analytics" $analytics "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
@@ -849,13 +860,14 @@ export def "delete-bucket-cors" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cors: oneof<nothing, bool> # allows empty value
+  --cors: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let cors = ($cors | default true)
   let qp = [(serialize-qp "cors" $cors "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "application/json"
@@ -892,13 +904,14 @@ export def "get-bucket-cors" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cors: oneof<nothing, bool> # allows empty value
+  --cors: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> record<CORSRules: record> {
+]: nothing -> record<CORSRules: table<ID: string, AllowedHeaders: list, AllowedMethods: list, AllowedOrigins: list, ExposeHeaders: list, MaxAgeSeconds: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let cors = ($cors | default true)
   let qp = [(serialize-qp "cors" $cors "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -935,7 +948,7 @@ export def "put-bucket-cors" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cors: oneof<nothing, bool> # allows empty value
+  --cors: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --content-md5: string # The base64-encoded 128-bit MD5 digest of the data. This header must be used as a message integrity check to verify that the request body was not corrupted in transit. For more information, go to RFC 1864. (http://www.ietf.org/rfc/rfc1864.txt) For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding x-amz-checksum or x-amz-trailer header sent. Otherwise, Amazon S3 fails the request with the HTTP status code 400 Bad Request. For more information, see Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide. If you provide an individual checksum, Amazon S3 ignores any provided ChecksumAlgorithm parameter.
@@ -946,6 +959,7 @@ export def "put-bucket-cors" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let cors = ($cors | default true)
   let qp = [(serialize-qp "cors" $cors "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
@@ -983,13 +997,14 @@ export def "delete-bucket-encryption" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --encryption: oneof<nothing, bool> # allows empty value
+  --encryption: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let encryption = ($encryption | default true)
   let qp = [(serialize-qp "encryption" $encryption "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1025,13 +1040,14 @@ export def "get-bucket-encryption" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --encryption: oneof<nothing, bool> # allows empty value
+  --encryption: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> record<ServerSideEncryptionConfiguration: record<Rules: record>> {
+]: nothing -> record<ServerSideEncryptionConfiguration: record<Rules: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let encryption = ($encryption | default true)
   let qp = [(serialize-qp "encryption" $encryption "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -1067,7 +1083,7 @@ export def "put-bucket-encryption" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --encryption: oneof<nothing, bool> # allows empty value
+  --encryption: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --content-md5: string # The base64-encoded 128-bit MD5 digest of the server-side encryption configuration. For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding x-amz-checksum or x-amz-trailer header sent. Otherwise, Amazon S3 fails the request with the HTTP status code 400 Bad Request. For more information, see Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide. If you provide an individual checksum, Amazon S3 ignores any provided ChecksumAlgorithm parameter.
@@ -1078,6 +1094,7 @@ export def "put-bucket-encryption" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let encryption = ($encryption | default true)
   let qp = [(serialize-qp "encryption" $encryption "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
@@ -1115,13 +1132,15 @@ export def "delete-bucket-intelligent-tiering-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # The ID used to identify the S3 Intelligent-Tiering configuration.
-  --intelligent-tiering: oneof<nothing, bool> # allows empty value
+  --id: string # The ID used to identify the S3 Intelligent-Tiering configuration. (required)
+  --intelligent-tiering: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  let intelligent_tiering = ($intelligent_tiering | default true)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "intelligent-tiering" $intelligent_tiering "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1157,13 +1176,15 @@ export def "get-bucket-intelligent-tiering-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # The ID used to identify the S3 Intelligent-Tiering configuration.
-  --intelligent-tiering: oneof<nothing, bool> # allows empty value
+  --id: string # The ID used to identify the S3 Intelligent-Tiering configuration. (required)
+  --intelligent-tiering: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
-]: nothing -> record<IntelligentTieringConfiguration: record<Id: record, Filter: record<Prefix: record, Tag: record, And: record>, Status: record, Tierings: record>> {
+]: nothing -> record<IntelligentTieringConfiguration: record<Id: string, Filter: record<Prefix: string, Tag: record, And: record>, Status: string, Tierings: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  let intelligent_tiering = ($intelligent_tiering | default true)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "intelligent-tiering" $intelligent_tiering "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -1199,8 +1220,8 @@ export def "put-bucket-intelligent-tiering-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # The ID used to identify the S3 Intelligent-Tiering configuration.
-  --intelligent-tiering: oneof<nothing, bool> # allows empty value
+  --id: string # The ID used to identify the S3 Intelligent-Tiering configuration. (required)
+  --intelligent-tiering: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --body: any
 ]: any -> any {
@@ -1208,6 +1229,8 @@ export def "put-bucket-intelligent-tiering-configuration" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  let intelligent_tiering = ($intelligent_tiering | default true)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "intelligent-tiering" $intelligent_tiering "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
@@ -1245,14 +1268,16 @@ export def "delete-bucket-inventory-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # The ID used to identify the inventory configuration.
-  --inventory: oneof<nothing, bool> # allows empty value
+  --id: string # The ID used to identify the inventory configuration. (required)
+  --inventory: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  let inventory = ($inventory | default true)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "inventory" $inventory "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1288,14 +1313,16 @@ export def "get-bucket-inventory-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # The ID used to identify the inventory configuration.
-  --inventory: oneof<nothing, bool> # allows empty value
+  --id: string # The ID used to identify the inventory configuration. (required)
+  --inventory: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> record<InventoryConfiguration: record<Destination: record<S3BucketDestination: record>, IsEnabled: record, Filter: record<Prefix: record>, Id: record, IncludedObjectVersions: record, OptionalFields: record, Schedule: record<Frequency: record>>> {
+]: nothing -> record<InventoryConfiguration: record<Destination: record<S3BucketDestination: record>, IsEnabled: bool, Filter: record<Prefix: string>, Id: string, IncludedObjectVersions: string, OptionalFields: list<string>, Schedule: record<Frequency: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  let inventory = ($inventory | default true)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "inventory" $inventory "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -1331,8 +1358,8 @@ export def "put-bucket-inventory-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # The ID used to identify the inventory configuration.
-  --inventory: oneof<nothing, bool> # allows empty value
+  --id: string # The ID used to identify the inventory configuration. (required)
+  --inventory: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
@@ -1341,6 +1368,8 @@ export def "put-bucket-inventory-configuration" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  let inventory = ($inventory | default true)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "inventory" $inventory "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
@@ -1379,13 +1408,14 @@ export def "delete-bucket-lifecycle" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lifecycle: oneof<nothing, bool> # allows empty value
+  --lifecycle: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let lifecycle = ($lifecycle | default true)
   let qp = [(serialize-qp "lifecycle" $lifecycle "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1421,13 +1451,14 @@ export def "get-bucket-lifecycle-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lifecycle: oneof<nothing, bool> # allows empty value
+  --lifecycle: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> record<Rules: record> {
+]: nothing -> record<Rules: table<Expiration: record, ID: string, Prefix: string, Filter: record, Status: string, Transitions: list, NoncurrentVersionTransitions: list, NoncurrentVersionExpiration: record, AbortIncompleteMultipartUpload: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let lifecycle = ($lifecycle | default true)
   let qp = [(serialize-qp "lifecycle" $lifecycle "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -1463,7 +1494,7 @@ export def "put-bucket-lifecycle-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lifecycle: oneof<nothing, bool> # allows empty value
+  --lifecycle: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding x-amz-checksum or x-amz-trailer header sent. Otherwise, Amazon S3 fails the request with the HTTP status code 400 Bad Request. For more information, see Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide. If you provide an individual checksum, Amazon S3 ignores any provided ChecksumAlgorithm parameter.
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
@@ -1473,6 +1504,7 @@ export def "put-bucket-lifecycle-configuration" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let lifecycle = ($lifecycle | default true)
   let qp = [(serialize-qp "lifecycle" $lifecycle "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
@@ -1510,14 +1542,16 @@ export def "delete-bucket-metrics-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # The ID used to identify the metrics configuration.
-  --metrics: oneof<nothing, bool> # allows empty value
+  --id: string # The ID used to identify the metrics configuration. (required)
+  --metrics: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  let metrics = ($metrics | default true)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "metrics" $metrics "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1553,14 +1587,16 @@ export def "get-bucket-metrics-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # The ID used to identify the metrics configuration.
-  --metrics: oneof<nothing, bool> # allows empty value
+  --id: string # The ID used to identify the metrics configuration. (required)
+  --metrics: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> record<MetricsConfiguration: record<Id: record, Filter: record<Prefix: record, Tag: record, AccessPointArn: record, And: record>>> {
+]: nothing -> record<MetricsConfiguration: record<Id: string, Filter: record<Prefix: string, Tag: record, AccessPointArn: string, And: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  let metrics = ($metrics | default true)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "metrics" $metrics "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -1596,8 +1632,8 @@ export def "put-bucket-metrics-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # The ID used to identify the metrics configuration.
-  --metrics: oneof<nothing, bool> # allows empty value
+  --id: string # The ID used to identify the metrics configuration. (required)
+  --metrics: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
@@ -1606,6 +1642,8 @@ export def "put-bucket-metrics-configuration" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  let metrics = ($metrics | default true)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "metrics" $metrics "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
@@ -1643,13 +1681,14 @@ export def "delete-bucket-ownership-controls" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ownership-controls: oneof<nothing, bool> # allows empty value
+  --ownership-controls: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let ownership_controls = ($ownership_controls | default true)
   let qp = [(serialize-qp "ownershipControls" $ownership_controls "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1685,13 +1724,14 @@ export def "get-bucket-ownership-controls" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ownership-controls: oneof<nothing, bool> # allows empty value
+  --ownership-controls: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> record<OwnershipControls: record<Rules: record>> {
+]: nothing -> record<OwnershipControls: record<Rules: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let ownership_controls = ($ownership_controls | default true)
   let qp = [(serialize-qp "ownershipControls" $ownership_controls "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -1727,7 +1767,7 @@ export def "put-bucket-ownership-controls" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ownership-controls: oneof<nothing, bool> # allows empty value
+  --ownership-controls: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --content-md5: string # The MD5 hash of the OwnershipControls request body. For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
@@ -1737,6 +1777,7 @@ export def "put-bucket-ownership-controls" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let ownership_controls = ($ownership_controls | default true)
   let qp = [(serialize-qp "ownershipControls" $ownership_controls "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
@@ -1775,13 +1816,14 @@ export def "delete-bucket-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --policy: oneof<nothing, bool> # allows empty value
+  --policy: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let policy = ($policy | default true)
   let qp = [(serialize-qp "policy" $policy "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1818,13 +1860,14 @@ export def "get-bucket-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --policy: oneof<nothing, bool> # allows empty value
+  --policy: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> record<Policy: record> {
+]: nothing -> record<Policy: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let policy = ($policy | default true)
   let qp = [(serialize-qp "policy" $policy "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -1861,7 +1904,7 @@ export def "put-bucket-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --policy: oneof<nothing, bool> # allows empty value
+  --policy: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --content-md5: string # The MD5 hash of the request body. For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding x-amz-checksum or x-amz-trailer header sent. Otherwise, Amazon S3 fails the request with the HTTP status code 400 Bad Request. For more information, see Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide. If you provide an individual checksum, Amazon S3 ignores any provided ChecksumAlgorithm parameter.
@@ -1873,6 +1916,7 @@ export def "put-bucket-policy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let policy = ($policy | default true)
   let qp = [(serialize-qp "policy" $policy "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
@@ -1910,13 +1954,14 @@ export def "delete-bucket-replication" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --replication: oneof<nothing, bool> # allows empty value
+  --replication: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let replication = ($replication | default true)
   let qp = [(serialize-qp "replication" $replication "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1952,13 +1997,14 @@ export def "get-bucket-replication" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --replication: oneof<nothing, bool> # allows empty value
+  --replication: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> record<ReplicationConfiguration: record<Role: record, Rules: record>> {
+]: nothing -> record<ReplicationConfiguration: record<Role: string, Rules: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let replication = ($replication | default true)
   let qp = [(serialize-qp "replication" $replication "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -1994,7 +2040,7 @@ export def "put-bucket-replication" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --replication: oneof<nothing, bool> # allows empty value
+  --replication: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --content-md5: string # The base64-encoded 128-bit MD5 digest of the data. You must use this header as a message integrity check to verify that the request body was not corrupted in transit. For more information, see RFC 1864 (http://www.ietf.org/rfc/rfc1864.txt). For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding x-amz-checksum or x-amz-trailer header sent. Otherwise, Amazon S3 fails the request with the HTTP status code 400 Bad Request. For more information, see Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide. If you provide an individual checksum, Amazon S3 ignores any provided ChecksumAlgorithm parameter.
@@ -2006,6 +2052,7 @@ export def "put-bucket-replication" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let replication = ($replication | default true)
   let qp = [(serialize-qp "replication" $replication "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
@@ -2044,13 +2091,14 @@ export def "delete-bucket-tagging" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tagging: oneof<nothing, bool> # allows empty value
+  --tagging: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let tagging = ($tagging | default true)
   let qp = [(serialize-qp "tagging" $tagging "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2087,13 +2135,14 @@ export def "get-bucket-tagging" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tagging: oneof<nothing, bool> # allows empty value
+  --tagging: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> record<TagSet: record> {
+]: nothing -> record<TagSet: table<Key: string, Value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let tagging = ($tagging | default true)
   let qp = [(serialize-qp "tagging" $tagging "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -2130,7 +2179,7 @@ export def "put-bucket-tagging" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tagging: oneof<nothing, bool> # allows empty value
+  --tagging: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --content-md5: string # The base64-encoded 128-bit MD5 digest of the data. You must use this header as a message integrity check to verify that the request body was not corrupted in transit. For more information, see RFC 1864 (http://www.ietf.org/rfc/rfc1864.txt). For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding x-amz-checksum or x-amz-trailer header sent. Otherwise, Amazon S3 fails the request with the HTTP status code 400 Bad Request. For more information, see Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide. If you provide an individual checksum, Amazon S3 ignores any provided ChecksumAlgorithm parameter.
@@ -2141,6 +2190,7 @@ export def "put-bucket-tagging" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let tagging = ($tagging | default true)
   let qp = [(serialize-qp "tagging" $tagging "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
@@ -2179,13 +2229,14 @@ export def "delete-bucket-website" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --website: oneof<nothing, bool> # allows empty value
+  --website: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let website = ($website | default true)
   let qp = [(serialize-qp "website" $website "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2222,13 +2273,14 @@ export def "get-bucket-website" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --website: oneof<nothing, bool> # allows empty value
+  --website: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> record<RedirectAllRequestsTo: record<HostName: record, Protocol: record>, IndexDocument: record<Suffix: record>, ErrorDocument: record<Key: record>, RoutingRules: record> {
+]: nothing -> record<RedirectAllRequestsTo: record<HostName: string, Protocol: string>, IndexDocument: record<Suffix: string>, ErrorDocument: record<Key: string>, RoutingRules: table<Condition: record, Redirect: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let website = ($website | default true)
   let qp = [(serialize-qp "website" $website "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -2265,7 +2317,7 @@ export def "put-bucket-website" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --website: oneof<nothing, bool> # allows empty value
+  --website: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --content-md5: string # The base64-encoded 128-bit MD5 digest of the data. You must use this header as a message integrity check to verify that the request body was not corrupted in transit. For more information, see RFC 1864 (http://www.ietf.org/rfc/rfc1864.txt). For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding x-amz-checksum or x-amz-trailer header sent. Otherwise, Amazon S3 fails the request with the HTTP status code 400 Bad Request. For more information, see Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide. If you provide an individual checksum, Amazon S3 ignores any provided ChecksumAlgorithm parameter.
@@ -2276,6 +2328,7 @@ export def "put-bucket-website" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let website = ($website | default true)
   let qp = [(serialize-qp "website" $website "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
@@ -2373,17 +2426,17 @@ export def "get-object" [
   --part-number: int # Part number of the object being read. This is a positive integer between 1 and 10,000. Effectively performs a 'ranged' GET request for the part specified. Useful for downloading just a part of an object.
   --x-amz-security-token: string
   --if-match: string # Return the object only if its entity tag (ETag) is the same as the one specified; otherwise, return a 412 (precondition failed) error.
-  --if-modified-since: string # Return the object only if it has been modified since the specified time; otherwise, return a 304 (not modified) error.
+  --if-modified-since: string # Return the object only if it has been modified since the specified time; otherwise, return a 304 (not modified) error. (format: date-time)
   --if-none-match: string # Return the object only if its entity tag (ETag) is different from the one specified; otherwise, return a 304 (not modified) error.
-  --if-unmodified-since: string # Return the object only if it has not been modified since the specified time; otherwise, return a 412 (precondition failed) error.
+  --if-unmodified-since: string # Return the object only if it has not been modified since the specified time; otherwise, return a 412 (precondition failed) error. (format: date-time)
   --range: string # Downloads the specified range bytes of an object. For more information about the HTTP Range header, see https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35 (https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35). Amazon S3 doesn't support retrieving multiple ranges of data per GET request.
   --x-amz-server-side-encryption-customer-algorithm: string # Specifies the algorithm to use to when decrypting the object (for example, AES256).
-  --x-amz-server-side-encryption-customer-key: string # Specifies the customer-provided encryption key for Amazon S3 used to encrypt the data. This value is used to decrypt the object when recovering it and must match the one used when storing the data. The key must be appropriate for use with the algorithm specified in the x-amz-server-side-encryption-customer-algorithm header.
+  --x-amz-server-side-encryption-customer-key: string # Specifies the customer-provided encryption key for Amazon S3 used to encrypt the data. This value is used to decrypt the object when recovering it and must match the one used when storing the data. The key must be appropriate for use with the algorithm specified in the x-amz-server-side-encryption-customer-algorithm header. (format: password)
   --x-amz-server-side-encryption-customer-key-md5: string # Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header for a message integrity check to ensure that the encryption key was transmitted without error.
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --x-amz-checksum-mode: string@x-amz-checksum-mode-completer # To retrieve the checksum, this mode must be enabled.
-]: nothing -> record<Body: record, Metadata: record> {
+]: nothing -> record<Body: string, Metadata: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -2429,12 +2482,12 @@ export def "head-object" [
   --part-number: int # Part number of the object being read. This is a positive integer between 1 and 10,000. Effectively performs a 'ranged' HEAD request for the part specified. Useful querying about the size of the part and the number of parts in this object.
   --x-amz-security-token: string
   --if-match: string # Return the object only if its entity tag (ETag) is the same as the one specified; otherwise, return a 412 (precondition failed) error.
-  --if-modified-since: string # Return the object only if it has been modified since the specified time; otherwise, return a 304 (not modified) error.
+  --if-modified-since: string # Return the object only if it has been modified since the specified time; otherwise, return a 304 (not modified) error. (format: date-time)
   --if-none-match: string # Return the object only if its entity tag (ETag) is different from the one specified; otherwise, return a 304 (not modified) error.
-  --if-unmodified-since: string # Return the object only if it has not been modified since the specified time; otherwise, return a 412 (precondition failed) error.
+  --if-unmodified-since: string # Return the object only if it has not been modified since the specified time; otherwise, return a 412 (precondition failed) error. (format: date-time)
   --range: string # Because HeadObject returns only the metadata for an object, this parameter has no effect.
   --x-amz-server-side-encryption-customer-algorithm: string # Specifies the algorithm to use to when encrypting the object (for example, AES256).
-  --x-amz-server-side-encryption-customer-key: string # Specifies the customer-provided encryption key for Amazon S3 to use in encrypting data. This value is used to store the object and then it is discarded; Amazon S3 does not store the encryption key. The key must be appropriate for use with the algorithm specified in the x-amz-server-side-encryption-customer-algorithm header.
+  --x-amz-server-side-encryption-customer-key: string # Specifies the customer-provided encryption key for Amazon S3 to use in encrypting data. This value is used to store the object and then it is discarded; Amazon S3 does not store the encryption key. The key must be appropriate for use with the algorithm specified in the x-amz-server-side-encryption-customer-algorithm header. (format: password)
   --x-amz-server-side-encryption-customer-key-md5: string # Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header for a message integrity check to ensure that the encryption key was transmitted without error.
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
@@ -2495,7 +2548,7 @@ export def "put-object" [
   --x-amz-checksum-crc32c: string # This header can be used as a data integrity check to verify that the data received is the same data that was originally sent. This header specifies the base64-encoded, 32-bit CRC32C checksum of the object. For more information, see Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide.
   --x-amz-checksum-sha1: string # This header can be used as a data integrity check to verify that the data received is the same data that was originally sent. This header specifies the base64-encoded, 160-bit SHA-1 digest of the object. For more information, see Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide.
   --x-amz-checksum-sha256: string # This header can be used as a data integrity check to verify that the data received is the same data that was originally sent. This header specifies the base64-encoded, 256-bit SHA-256 digest of the object. For more information, see Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide.
-  --expires: string # The date and time at which the object is no longer cacheable. For more information, see http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.21 (http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.21).
+  --expires: string # The date and time at which the object is no longer cacheable. For more information, see http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.21 (http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.21). (format: date-time)
   --x-amz-grant-full-control: string # Gives the grantee READ, READ_ACP, and WRITE_ACP permissions on the object. This action is not supported by Amazon S3 on Outposts.
   --x-amz-grant-read: string # Allows grantee to read the object data and its metadata. This action is not supported by Amazon S3 on Outposts.
   --x-amz-grant-read-acp: string # Allows grantee to read the object ACL. This action is not supported by Amazon S3 on Outposts.
@@ -2504,15 +2557,15 @@ export def "put-object" [
   --x-amz-storage-class: string@x-amz-storage-class-completer # By default, Amazon S3 uses the STANDARD Storage Class to store newly created objects. The STANDARD storage class provides high durability and high availability. Depending on performance needs, you can specify a different Storage Class. Amazon S3 on Outposts only uses the OUTPOSTS Storage Class. For more information, see Storage Classes (https://docs.aws.amazon.com/AmazonS3/latest/dev/storage-class-intro.html) in the Amazon S3 User Guide.
   --x-amz-website-redirect-location: string # If the bucket is configured as a website, redirects requests for this object to another object in the same bucket or to an external URL. Amazon S3 stores the value of this header in the object metadata. For information about object metadata, see Object Key and Metadata (https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingMetadata.html). In the following example, the request header sets the redirect to an object (anotherPage.html) in the same bucket: x-amz-website-redirect-location: /anotherPage.html In the following example, the request header sets the object redirect to another website: x-amz-website-redirect-location: http://www.example.com/ For more information about website hosting in Amazon S3, see Hosting Websites on Amazon S3 (https://docs.aws.amazon.com/AmazonS3/latest/dev/WebsiteHosting.html) and How to Configure Website Page Redirects (https://docs.aws.amazon.com/AmazonS3/latest/dev/how-to-page-redirect.html).
   --x-amz-server-side-encryption-customer-algorithm: string # Specifies the algorithm to use to when encrypting the object (for example, AES256).
-  --x-amz-server-side-encryption-customer-key: string # Specifies the customer-provided encryption key for Amazon S3 to use in encrypting data. This value is used to store the object and then it is discarded; Amazon S3 does not store the encryption key. The key must be appropriate for use with the algorithm specified in the x-amz-server-side-encryption-customer-algorithm header.
+  --x-amz-server-side-encryption-customer-key: string # Specifies the customer-provided encryption key for Amazon S3 to use in encrypting data. This value is used to store the object and then it is discarded; Amazon S3 does not store the encryption key. The key must be appropriate for use with the algorithm specified in the x-amz-server-side-encryption-customer-algorithm header. (format: password)
   --x-amz-server-side-encryption-customer-key-md5: string # Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header for a message integrity check to ensure that the encryption key was transmitted without error.
-  --x-amz-server-side-encryption-aws-kms-key-id: string # If x-amz-server-side-encryption is present and has the value of aws:kms, this header specifies the ID of the Amazon Web Services Key Management Service (Amazon Web Services KMS) symmetrical customer managed key that was used for the object. If you specify x-amz-server-side-encryption:aws:kms, but do not provide x-amz-server-side-encryption-aws-kms-key-id, Amazon S3 uses the Amazon Web Services managed key to protect the data. If the KMS key does not exist in the same account issuing the command, you must use the full ARN and not just the ID.
-  --x-amz-server-side-encryption-context: string # Specifies the Amazon Web Services KMS Encryption Context to use for object encryption. The value of this header is a base64-encoded UTF-8 string holding JSON with the encryption context key-value pairs.
+  --x-amz-server-side-encryption-aws-kms-key-id: string # If x-amz-server-side-encryption is present and has the value of aws:kms, this header specifies the ID of the Amazon Web Services Key Management Service (Amazon Web Services KMS) symmetrical customer managed key that was used for the object. If you specify x-amz-server-side-encryption:aws:kms, but do not provide x-amz-server-side-encryption-aws-kms-key-id, Amazon S3 uses the Amazon Web Services managed key to protect the data. If the KMS key does not exist in the same account issuing the command, you must use the full ARN and not just the ID. (format: password)
+  --x-amz-server-side-encryption-context: string # Specifies the Amazon Web Services KMS Encryption Context to use for object encryption. The value of this header is a base64-encoded UTF-8 string holding JSON with the encryption context key-value pairs. (format: password)
   --x-amz-server-side-encryption-bucket-key-enabled: oneof<nothing, bool> # Specifies whether Amazon S3 should use an S3 Bucket Key for object encryption with server-side encryption using AWS KMS (SSE-KMS). Setting this header to true causes Amazon S3 to use an S3 Bucket Key for object encryption with SSE-KMS. Specifying this header with a PUT action doesn’t affect bucket-level settings for S3 Bucket Key.
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-tagging: string # The tag-set for the object. The tag-set must be encoded as URL Query parameters. (For example, "Key1=Value1")
   --x-amz-object-lock-mode: string@x-amz-object-lock-mode-completer # The Object Lock mode that you want to apply to this object.
-  --x-amz-object-lock-retain-until-date: string # The date and time when you want this object's Object Lock to expire. Must be formatted as a timestamp parameter.
+  --x-amz-object-lock-retain-until-date: string # The date and time when you want this object's Object Lock to expire. Must be formatted as a timestamp parameter. (format: date-time)
   --x-amz-object-lock-legal-hold: string@x-amz-object-lock-legal-hold-completer # Specifies whether a legal hold will be applied to this object. For more information about S3 Object Lock, see Object Lock (https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lock.html).
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
@@ -2562,7 +2615,7 @@ export def "delete-object-tagging" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --version-id: string # The versionId of the object that the tag-set will be removed from.
-  --tagging: oneof<nothing, bool> # allows empty value
+  --tagging: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
 ]: nothing -> any {
@@ -2570,6 +2623,7 @@ export def "delete-object-tagging" [
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
+  let tagging = ($tagging | default true)
   let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "tagging" $tagging "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -2607,15 +2661,16 @@ export def "get-object-tagging" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --version-id: string # The versionId of the object for which to get the tagging information.
-  --tagging: oneof<nothing, bool> # allows empty value
+  --tagging: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --x-amz-request-payer: string@x-amz-request-payer-completer
-]: nothing -> record<TagSet: record> {
+]: nothing -> record<TagSet: table<Key: string, Value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
+  let tagging = ($tagging | default true)
   let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "tagging" $tagging "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -2653,7 +2708,7 @@ export def "put-object-tagging" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --version-id: string # The versionId of the object that the tag-set will be added to.
-  --tagging: oneof<nothing, bool> # allows empty value
+  --tagging: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --content-md5: string # The MD5 hash for the request body. For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding x-amz-checksum or x-amz-trailer header sent. Otherwise, Amazon S3 fails the request with the HTTP status code 400 Bad Request. For more information, see Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide. If you provide an individual checksum, Amazon S3 ignores any provided ChecksumAlgorithm parameter.
@@ -2666,6 +2721,7 @@ export def "put-object-tagging" [
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
+  let tagging = ($tagging | default true)
   let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "tagging" $tagging "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let req_body = $body
@@ -2704,7 +2760,7 @@ export def "delete-objects" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --delete: oneof<nothing, bool> # allows empty value
+  --delete: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-mfa: string # The concatenation of the authentication device's serial number, a space, and the value that is displayed on your authentication device. Required to permanently delete a versioned object if versioning is configured with MFA delete enabled.
   --x-amz-request-payer: string@x-amz-request-payer-completer
@@ -2712,11 +2768,12 @@ export def "delete-objects" [
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding x-amz-checksum or x-amz-trailer header sent. Otherwise, Amazon S3 fails the request with the HTTP status code 400 Bad Request. For more information, see Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide. If you provide an individual checksum, Amazon S3 ignores any provided ChecksumAlgorithm parameter. This checksum algorithm must be the same for all parts and it match the checksum value supplied in the CreateMultipartUpload request.
   --body: any
-]: any -> record<Deleted: record, Errors: record> {
+]: any -> record<Deleted: table<Key: string, VersionId: string, DeleteMarker: bool, DeleteMarkerVersionId: string>, Errors: table<Key: string, VersionId: string, Code: string, Message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let delete = ($delete | default true)
   let qp = [(serialize-qp "delete" $delete "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
@@ -2754,13 +2811,14 @@ export def "delete-public-access-block" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --public-access-block: oneof<nothing, bool> # allows empty value
+  --public-access-block: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let public_access_block = ($public_access_block | default true)
   let qp = [(serialize-qp "publicAccessBlock" $public_access_block "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2796,13 +2854,14 @@ export def "get-public-access-block" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --public-access-block: oneof<nothing, bool> # allows empty value
+  --public-access-block: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> record<PublicAccessBlockConfiguration: record<BlockPublicAcls: record, IgnorePublicAcls: record, BlockPublicPolicy: record, RestrictPublicBuckets: record>> {
+]: nothing -> record<PublicAccessBlockConfiguration: record<BlockPublicAcls: bool, IgnorePublicAcls: bool, BlockPublicPolicy: bool, RestrictPublicBuckets: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let public_access_block = ($public_access_block | default true)
   let qp = [(serialize-qp "publicAccessBlock" $public_access_block "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -2838,7 +2897,7 @@ export def "put-public-access-block" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --public-access-block: oneof<nothing, bool> # allows empty value
+  --public-access-block: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --content-md5: string # The MD5 hash of the PutPublicAccessBlock request body. For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding x-amz-checksum or x-amz-trailer header sent. Otherwise, Amazon S3 fails the request with the HTTP status code 400 Bad Request. For more information, see Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide. If you provide an individual checksum, Amazon S3 ignores any provided ChecksumAlgorithm parameter.
@@ -2849,6 +2908,7 @@ export def "put-public-access-block" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let public_access_block = ($public_access_block | default true)
   let qp = [(serialize-qp "publicAccessBlock" $public_access_block "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
@@ -2886,13 +2946,14 @@ export def "get-bucket-accelerate-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accelerate: oneof<nothing, bool> # allows empty value
+  --accelerate: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> record<Status: record> {
+]: nothing -> record<Status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let accelerate = ($accelerate | default true)
   let qp = [(serialize-qp "accelerate" $accelerate "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -2928,7 +2989,7 @@ export def "put-bucket-accelerate-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accelerate: oneof<nothing, bool> # allows empty value
+  --accelerate: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding x-amz-checksum or x-amz-trailer header sent. Otherwise, Amazon S3 fails the request with the HTTP status code 400 Bad Request. For more information, see Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide. If you provide an individual checksum, Amazon S3 ignores any provided ChecksumAlgorithm parameter.
@@ -2938,6 +2999,7 @@ export def "put-bucket-accelerate-configuration" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let accelerate = ($accelerate | default true)
   let qp = [(serialize-qp "accelerate" $accelerate "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
@@ -2976,13 +3038,14 @@ export def "get-bucket-acl" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --acl: oneof<nothing, bool> # allows empty value
+  --acl: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> record<Owner: record<DisplayName: record, ID: record>, Grants: record> {
+]: nothing -> record<Owner: record<DisplayName: string, ID: string>, Grants: table<Grantee: record, Permission: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let acl = ($acl | default true)
   let qp = [(serialize-qp "acl" $acl "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -3019,7 +3082,7 @@ export def "put-bucket-acl" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --acl: oneof<nothing, bool> # allows empty value
+  --acl: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-acl: string@x-amz-acl-completer-1 # The canned ACL to apply to the bucket.
   --content-md5: string # The base64-encoded 128-bit MD5 digest of the data. This header must be used as a message integrity check to verify that the request body was not corrupted in transit. For more information, go to RFC 1864. (http://www.ietf.org/rfc/rfc1864.txt) For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.
@@ -3036,6 +3099,7 @@ export def "put-bucket-acl" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let acl = ($acl | default true)
   let qp = [(serialize-qp "acl" $acl "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
@@ -3076,13 +3140,14 @@ export def "get-bucket-lifecycle" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lifecycle: oneof<nothing, bool> # allows empty value
+  --lifecycle: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> record<Rules: record> {
+]: nothing -> record<Rules: table<Expiration: record, ID: string, Prefix: string, Status: string, Transition: record, NoncurrentVersionTransition: record, NoncurrentVersionExpiration: record, AbortIncompleteMultipartUpload: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let lifecycle = ($lifecycle | default true)
   let qp = [(serialize-qp "lifecycle" $lifecycle "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -3121,7 +3186,7 @@ export def "put-bucket-lifecycle" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lifecycle: oneof<nothing, bool> # allows empty value
+  --lifecycle: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --content-md5: string # For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding x-amz-checksum or x-amz-trailer header sent. Otherwise, Amazon S3 fails the request with the HTTP status code 400 Bad Request. For more information, see Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide. If you provide an individual checksum, Amazon S3 ignores any provided ChecksumAlgorithm parameter.
@@ -3132,6 +3197,7 @@ export def "put-bucket-lifecycle" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let lifecycle = ($lifecycle | default true)
   let qp = [(serialize-qp "lifecycle" $lifecycle "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
@@ -3170,13 +3236,14 @@ export def "get-bucket-location" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --location: oneof<nothing, bool> # allows empty value
+  --location: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> record<LocationConstraint: record> {
+]: nothing -> record<LocationConstraint: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let location = ($location | default true)
   let qp = [(serialize-qp "location" $location "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -3213,13 +3280,14 @@ export def "get-bucket-logging" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --logging: oneof<nothing, bool> # allows empty value
+  --logging: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> record<LoggingEnabled: record<TargetBucket: record, TargetGrants: record, TargetPrefix: record>> {
+]: nothing -> record<LoggingEnabled: record<TargetBucket: string, TargetGrants: list<record>, TargetPrefix: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let logging = ($logging | default true)
   let qp = [(serialize-qp "logging" $logging "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -3256,7 +3324,7 @@ export def "put-bucket-logging" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --logging: oneof<nothing, bool> # allows empty value
+  --logging: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --content-md5: string # The MD5 hash of the PutBucketLogging request body. For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding x-amz-checksum or x-amz-trailer header sent. Otherwise, Amazon S3 fails the request with the HTTP status code 400 Bad Request. For more information, see Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide. If you provide an individual checksum, Amazon S3 ignores any provided ChecksumAlgorithm parameter.
@@ -3267,6 +3335,7 @@ export def "put-bucket-logging" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let logging = ($logging | default true)
   let qp = [(serialize-qp "logging" $logging "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
@@ -3304,13 +3373,14 @@ export def "get-bucket-notification-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --notification: oneof<nothing, bool> # allows empty value
+  --notification: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> record<TopicConfigurations: record, QueueConfigurations: record, LambdaFunctionConfigurations: record, EventBridgeConfiguration: record> {
+]: nothing -> record<TopicConfigurations: table<Id: string, TopicArn: string, Events: list, Filter: record>, QueueConfigurations: table<Id: string, QueueArn: string, Events: list, Filter: record>, LambdaFunctionConfigurations: table<Id: string, LambdaFunctionArn: string, Events: list, Filter: record>, EventBridgeConfiguration: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let notification = ($notification | default true)
   let qp = [(serialize-qp "notification" $notification "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -3346,7 +3416,7 @@ export def "put-bucket-notification-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --notification: oneof<nothing, bool> # allows empty value
+  --notification: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --x-amz-skip-destination-validation: oneof<nothing, bool> # Skips validation of Amazon SQS, Amazon SNS, and Lambda destinations. True or false value.
@@ -3356,6 +3426,7 @@ export def "put-bucket-notification-configuration" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let notification = ($notification | default true)
   let qp = [(serialize-qp "notification" $notification "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
@@ -3396,13 +3467,14 @@ export def "get-bucket-notification" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --notification: oneof<nothing, bool> # allows empty value
+  --notification: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> record<TopicConfiguration: record<Id: string, Events: record, Event: record, Topic: record>, QueueConfiguration: record<Id: string, Event: record, Events: record, Queue: record>, CloudFunctionConfiguration: record<Id: string, Event: record, Events: record, CloudFunction: record, InvocationRole: record>> {
+]: nothing -> record<TopicConfiguration: record<Id: string, Events: list<string>, Event: string, Topic: string>, QueueConfiguration: record<Id: string, Event: string, Events: list<string>, Queue: string>, CloudFunctionConfiguration: record<Id: string, Event: string, Events: list<string>, CloudFunction: string, InvocationRole: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let notification = ($notification | default true)
   let qp = [(serialize-qp "notification" $notification "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -3441,7 +3513,7 @@ export def "put-bucket-notification" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --notification: oneof<nothing, bool> # allows empty value
+  --notification: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --content-md5: string # The MD5 hash of the PutPublicAccessBlock request body. For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding x-amz-checksum or x-amz-trailer header sent. Otherwise, Amazon S3 fails the request with the HTTP status code 400 Bad Request. For more information, see Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide. If you provide an individual checksum, Amazon S3 ignores any provided ChecksumAlgorithm parameter.
@@ -3452,6 +3524,7 @@ export def "put-bucket-notification" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let notification = ($notification | default true)
   let qp = [(serialize-qp "notification" $notification "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
@@ -3489,13 +3562,14 @@ export def "get-bucket-policy-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --policy-status: oneof<nothing, bool> # allows empty value
+  --policy-status: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> record<PolicyStatus: record<IsPublic: record>> {
+]: nothing -> record<PolicyStatus: record<IsPublic: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let policy_status = ($policy_status | default true)
   let qp = [(serialize-qp "policyStatus" $policy_status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -3532,13 +3606,14 @@ export def "get-bucket-request-payment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --request-payment: oneof<nothing, bool> # allows empty value
+  --request-payment: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> record<Payer: record> {
+]: nothing -> record<Payer: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let request_payment = ($request_payment | default true)
   let qp = [(serialize-qp "requestPayment" $request_payment "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -3575,7 +3650,7 @@ export def "put-bucket-request-payment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --request-payment: oneof<nothing, bool> # allows empty value
+  --request-payment: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --content-md5: string # The base64-encoded 128-bit MD5 digest of the data. You must use this header as a message integrity check to verify that the request body was not corrupted in transit. For more information, see RFC 1864 (http://www.ietf.org/rfc/rfc1864.txt). For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding x-amz-checksum or x-amz-trailer header sent. Otherwise, Amazon S3 fails the request with the HTTP status code 400 Bad Request. For more information, see Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide. If you provide an individual checksum, Amazon S3 ignores any provided ChecksumAlgorithm parameter.
@@ -3586,6 +3661,7 @@ export def "put-bucket-request-payment" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let request_payment = ($request_payment | default true)
   let qp = [(serialize-qp "requestPayment" $request_payment "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
@@ -3624,13 +3700,14 @@ export def "get-bucket-versioning" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --versioning: oneof<nothing, bool> # allows empty value
+  --versioning: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> record<Status: record, MFADelete: record> {
+]: nothing -> record<Status: string, MFADelete: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let versioning = ($versioning | default true)
   let qp = [(serialize-qp "versioning" $versioning "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -3667,7 +3744,7 @@ export def "put-bucket-versioning" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --versioning: oneof<nothing, bool> # allows empty value
+  --versioning: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --content-md5: string # >The base64-encoded 128-bit MD5 digest of the data. You must use this header as a message integrity check to verify that the request body was not corrupted in transit. For more information, see RFC 1864 (http://www.ietf.org/rfc/rfc1864.txt). For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding x-amz-checksum or x-amz-trailer header sent. Otherwise, Amazon S3 fails the request with the HTTP status code 400 Bad Request. For more information, see Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide. If you provide an individual checksum, Amazon S3 ignores any provided ChecksumAlgorithm parameter.
@@ -3679,6 +3756,7 @@ export def "put-bucket-versioning" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let versioning = ($versioning | default true)
   let qp = [(serialize-qp "versioning" $versioning "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
@@ -3719,15 +3797,16 @@ export def "get-object-acl" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --version-id: string # VersionId used to reference a specific version of the object.
-  --acl: oneof<nothing, bool> # allows empty value
+  --acl: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> record<Owner: record<DisplayName: record, ID: record>, Grants: record> {
+]: nothing -> record<Owner: record<DisplayName: string, ID: string>, Grants: table<Grantee: record, Permission: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
+  let acl = ($acl | default true)
   let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "acl" $acl "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -3766,7 +3845,7 @@ export def "put-object-acl" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --version-id: string # VersionId used to reference a specific version of the object.
-  --acl: oneof<nothing, bool> # allows empty value
+  --acl: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-acl: string@x-amz-acl-completer # The canned ACL to apply to the object. For more information, see Canned ACL (https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html#CannedACL).
   --content-md5: string # The base64-encoded 128-bit MD5 digest of the data. This header must be used as a message integrity check to verify that the request body was not corrupted in transit. For more information, go to RFC 1864.> (http://www.ietf.org/rfc/rfc1864.txt) For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.
@@ -3785,6 +3864,7 @@ export def "put-object-acl" [
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
+  let acl = ($acl | default true)
   let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "acl" $acl "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let req_body = $body
@@ -3824,21 +3904,23 @@ export def "get-object-attributes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --version-id: string # The version ID used to reference a specific version of the object.
-  --attributes: oneof<nothing, bool> # allows empty value
+  --attributes: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-max-parts: int # Sets the maximum number of parts to return.
   --x-amz-part-number-marker: int # Specifies the part after which listing should begin. Only parts with higher part numbers will be listed.
   --x-amz-server-side-encryption-customer-algorithm: string # Specifies the algorithm to use when encrypting the object (for example, AES256).
-  --x-amz-server-side-encryption-customer-key: string # Specifies the customer-provided encryption key for Amazon S3 to use in encrypting data. This value is used to store the object and then it is discarded; Amazon S3 does not store the encryption key. The key must be appropriate for use with the algorithm specified in the x-amz-server-side-encryption-customer-algorithm header.
+  --x-amz-server-side-encryption-customer-key: string # Specifies the customer-provided encryption key for Amazon S3 to use in encrypting data. This value is used to store the object and then it is discarded; Amazon S3 does not store the encryption key. The key must be appropriate for use with the algorithm specified in the x-amz-server-side-encryption-customer-algorithm header. (format: password)
   --x-amz-server-side-encryption-customer-key-md5: string # Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header for a message integrity check to ensure that the encryption key was transmitted without error.
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-  --x-amz-object-attributes: list # An XML header that specifies the fields at the root level that you want returned in the response. Fields that you do not specify are not returned.
-]: nothing -> record<ETag: record, Checksum: record<ChecksumCRC32: record, ChecksumCRC32C: record, ChecksumSHA1: record, ChecksumSHA256: record>, ObjectParts: record<TotalPartsCount: record, PartNumberMarker: record, NextPartNumberMarker: record, MaxParts: record, IsTruncated: record, Parts: record>, StorageClass: record, ObjectSize: record> {
+  --x-amz-object-attributes: list # An XML header that specifies the fields at the root level that you want returned in the response. Fields that you do not specify are not returned. (required)
+]: nothing -> record<ETag: string, Checksum: record<ChecksumCRC32: string, ChecksumCRC32C: string, ChecksumSHA1: string, ChecksumSHA256: string>, ObjectParts: record<TotalPartsCount: int, PartNumberMarker: int, NextPartNumberMarker: int, MaxParts: int, IsTruncated: bool, Parts: list<record>>, StorageClass: string, ObjectSize: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
+  let attributes = ($attributes | default true)
+  if ($x_amz_object_attributes == null) { error make --unspanned { msg: "required header parameter 'x-amz-object-attributes' missing: pass --x-amz-object-attributes" } }
   let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "attributes" $attributes "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -3876,15 +3958,16 @@ export def "get-object-legal-hold" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --version-id: string # The version ID of the object whose legal hold status you want to retrieve.
-  --legal-hold: oneof<nothing, bool> # allows empty value
+  --legal-hold: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> record<LegalHold: record<Status: record>> {
+]: nothing -> record<LegalHold: record<Status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
+  let legal_hold = ($legal_hold | default true)
   let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "legal-hold" $legal_hold "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -3922,7 +4005,7 @@ export def "put-object-legal-hold" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --version-id: string # The version ID of the object that you want to place a legal hold on.
-  --legal-hold: oneof<nothing, bool> # allows empty value
+  --legal-hold: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --content-md5: string # The MD5 hash for the request body. For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.
@@ -3935,6 +4018,7 @@ export def "put-object-legal-hold" [
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
+  let legal_hold = ($legal_hold | default true)
   let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "legal-hold" $legal_hold "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let req_body = $body
@@ -3972,13 +4056,14 @@ export def "get-object-lock-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --object-lock: oneof<nothing, bool> # allows empty value
+  --object-lock: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> record<ObjectLockConfiguration: record<ObjectLockEnabled: record, Rule: record<DefaultRetention: record>>> {
+]: nothing -> record<ObjectLockConfiguration: record<ObjectLockEnabled: string, Rule: record<DefaultRetention: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let object_lock = ($object_lock | default true)
   let qp = [(serialize-qp "object-lock" $object_lock "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -4014,7 +4099,7 @@ export def "put-object-lock-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --object-lock: oneof<nothing, bool> # allows empty value
+  --object-lock: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-bucket-object-lock-token: string # A token to allow Object Lock to be enabled for an existing bucket.
@@ -4027,6 +4112,7 @@ export def "put-object-lock-configuration" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let object_lock = ($object_lock | default true)
   let qp = [(serialize-qp "object-lock" $object_lock "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
@@ -4066,15 +4152,16 @@ export def "get-object-retention" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --version-id: string # The version ID for the object whose retention settings you want to retrieve.
-  --retention: oneof<nothing, bool> # allows empty value
+  --retention: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> record<Retention: record<Mode: record, RetainUntilDate: record>> {
+]: nothing -> record<Retention: record<Mode: string, RetainUntilDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
+  let retention = ($retention | default true)
   let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "retention" $retention "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -4112,7 +4199,7 @@ export def "put-object-retention" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --version-id: string # The version ID for the object that you want to apply this Object Retention configuration to.
-  --retention: oneof<nothing, bool> # allows empty value
+  --retention: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-bypass-governance-retention: oneof<nothing, bool> # Indicates whether this action should bypass Governance-mode restrictions.
@@ -4126,6 +4213,7 @@ export def "put-object-retention" [
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
+  let retention = ($retention | default true)
   let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "retention" $retention "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let req_body = $body
@@ -4165,15 +4253,16 @@ export def "get-object-torrent" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --torrent: oneof<nothing, bool> # allows empty value
+  --torrent: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> record<Body: record> {
+]: nothing -> record<Body: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
+  let torrent = ($torrent | default true)
   let qp = [(serialize-qp "torrent" $torrent "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -4210,13 +4299,14 @@ export def "list-bucket-analytics-configurations" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --continuation-token: string # The ContinuationToken that represents a placeholder from where this request should begin.
-  --analytics: oneof<nothing, bool> # allows empty value
+  --analytics: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> record<IsTruncated: record, ContinuationToken: record, NextContinuationToken: record, AnalyticsConfigurationList: record> {
+]: nothing -> record<IsTruncated: bool, ContinuationToken: string, NextContinuationToken: string, AnalyticsConfigurationList: table<Id: string, Filter: record, StorageClassAnalysis: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let analytics = ($analytics | default true)
   let qp = [(serialize-qp "continuation-token" $continuation_token "scalar") (serialize-qp "analytics" $analytics "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -4253,12 +4343,13 @@ export def "list-bucket-intelligent-tiering-configurations" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --continuation-token: string # The ContinuationToken that represents a placeholder from where this request should begin.
-  --intelligent-tiering: oneof<nothing, bool> # allows empty value
+  --intelligent-tiering: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
-]: nothing -> record<IsTruncated: record, ContinuationToken: record, NextContinuationToken: record, IntelligentTieringConfigurationList: record> {
+]: nothing -> record<IsTruncated: bool, ContinuationToken: string, NextContinuationToken: string, IntelligentTieringConfigurationList: table<Id: string, Filter: record, Status: string, Tierings: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let intelligent_tiering = ($intelligent_tiering | default true)
   let qp = [(serialize-qp "continuation-token" $continuation_token "scalar") (serialize-qp "intelligent-tiering" $intelligent_tiering "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -4295,13 +4386,14 @@ export def "list-bucket-inventory-configurations" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --continuation-token: string # The marker used to continue an inventory configuration listing that has been truncated. Use the NextContinuationToken from a previously truncated list response to continue the listing. The continuation token is an opaque value that Amazon S3 understands.
-  --inventory: oneof<nothing, bool> # allows empty value
+  --inventory: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> record<ContinuationToken: record, InventoryConfigurationList: record, IsTruncated: record, NextContinuationToken: record> {
+]: nothing -> record<ContinuationToken: string, InventoryConfigurationList: table<Destination: record, IsEnabled: bool, Filter: record, Id: string, IncludedObjectVersions: string, OptionalFields: list, Schedule: record>, IsTruncated: bool, NextContinuationToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let inventory = ($inventory | default true)
   let qp = [(serialize-qp "continuation-token" $continuation_token "scalar") (serialize-qp "inventory" $inventory "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -4338,13 +4430,14 @@ export def "list-bucket-metrics-configurations" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --continuation-token: string # The marker that is used to continue a metrics configuration listing that has been truncated. Use the NextContinuationToken from a previously truncated list response to continue the listing. The continuation token is an opaque value that Amazon S3 understands.
-  --metrics: oneof<nothing, bool> # allows empty value
+  --metrics: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> record<IsTruncated: record, ContinuationToken: record, NextContinuationToken: record, MetricsConfigurationList: record> {
+]: nothing -> record<IsTruncated: bool, ContinuationToken: string, NextContinuationToken: string, MetricsConfigurationList: table<Id: string, Filter: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let metrics = ($metrics | default true)
   let qp = [(serialize-qp "continuation-token" $continuation_token "scalar") (serialize-qp "metrics" $metrics "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -4381,7 +4474,7 @@ export def "list-buckets" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-amz-security-token: string
-]: nothing -> record<Buckets: record, Owner: record<DisplayName: record, ID: record>> {
+]: nothing -> record<Buckets: table<Name: string, CreationDate: string>, Owner: record<DisplayName: string, ID: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/" $auth.query)
@@ -4428,13 +4521,14 @@ export def "list-multipart-uploads" [
   --max-uploads-2: string # Pagination limit (disambiguated-2)
   --key-marker-2: string # Pagination token (disambiguated-2)
   --upload-id-marker-2: string # Pagination token (disambiguated-2)
-  --uploads: oneof<nothing, bool> # allows empty value
+  --uploads: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> record<Bucket: record, KeyMarker: record, UploadIdMarker: record, NextKeyMarker: record, Prefix: record, Delimiter: record, NextUploadIdMarker: record, MaxUploads: record, IsTruncated: record, Uploads: record, CommonPrefixes: record, EncodingType: record> {
+]: nothing -> record<Bucket: string, KeyMarker: string, UploadIdMarker: string, NextKeyMarker: string, Prefix: string, Delimiter: string, NextUploadIdMarker: string, MaxUploads: int, IsTruncated: bool, Uploads: table<UploadId: string, Key: string, Initiated: string, StorageClass: string, Owner: record, Initiator: record, ChecksumAlgorithm: string>, CommonPrefixes: table<Prefix: string>, EncodingType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let uploads = ($uploads | default true)
   let qp = [(serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "encoding-type" $encoding_type "scalar") (serialize-qp "key-marker" $key_marker "scalar") (serialize-qp "max-uploads" $max_uploads "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "upload-id-marker" $upload_id_marker "scalar") (serialize-qp "MaxUploads" $max_uploads_2 "scalar") (serialize-qp "KeyMarker" $key_marker_2 "scalar") (serialize-qp "UploadIdMarker" $upload_id_marker_2 "scalar") (serialize-qp "uploads" $uploads "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -4480,13 +4574,14 @@ export def "list-object-versions" [
   --max-keys-2: string # Pagination limit (disambiguated-2)
   --key-marker-2: string # Pagination token (disambiguated-2)
   --version-id-marker-2: string # Pagination token (disambiguated-2)
-  --versions: oneof<nothing, bool> # allows empty value
+  --versions: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> record<IsTruncated: record, KeyMarker: record, VersionIdMarker: record, NextKeyMarker: record, NextVersionIdMarker: record, Versions: record, DeleteMarkers: record, Name: record, Prefix: record, Delimiter: record, MaxKeys: record, CommonPrefixes: record, EncodingType: record> {
+]: nothing -> record<IsTruncated: bool, KeyMarker: string, VersionIdMarker: string, NextKeyMarker: string, NextVersionIdMarker: string, Versions: table<ETag: string, ChecksumAlgorithm: list, Size: int, StorageClass: string, Key: string, VersionId: string, IsLatest: bool, LastModified: string, Owner: record>, DeleteMarkers: table<Owner: record, Key: string, VersionId: string, IsLatest: bool, LastModified: string>, Name: string, Prefix: string, Delimiter: string, MaxKeys: int, CommonPrefixes: table<Prefix: string>, EncodingType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let versions = ($versions | default true)
   let qp = [(serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "encoding-type" $encoding_type "scalar") (serialize-qp "key-marker" $key_marker "scalar") (serialize-qp "max-keys" $max_keys "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "version-id-marker" $version_id_marker "scalar") (serialize-qp "MaxKeys" $max_keys_2 "scalar") (serialize-qp "KeyMarker" $key_marker_2 "scalar") (serialize-qp "VersionIdMarker" $version_id_marker_2 "scalar") (serialize-qp "versions" $versions "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -4531,14 +4626,15 @@ export def "list-objects-v2" [
   --start-after: string # StartAfter is where you want Amazon S3 to start listing from. Amazon S3 starts listing after this specified key. StartAfter can be any key in the bucket.
   --max-keys-2: string # Pagination limit (disambiguated-2)
   --continuation-token-2: string # Pagination token (disambiguated-2)
-  --list-type: string@list-type-completer
+  --list-type: string@list-type-completer # required
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer # Confirms that the requester knows that she or he will be charged for the list objects request in V2 style. Bucket owners need not specify this parameter in their requests.
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> record<IsTruncated: record, Contents: record, Name: record, Prefix: record, Delimiter: record, MaxKeys: record, CommonPrefixes: record, EncodingType: record, KeyCount: record, ContinuationToken: record, NextContinuationToken: record, StartAfter: record> {
+]: nothing -> record<IsTruncated: bool, Contents: table<Key: string, LastModified: string, ETag: string, ChecksumAlgorithm: list, Size: int, StorageClass: string, Owner: record>, Name: string, Prefix: string, Delimiter: string, MaxKeys: int, CommonPrefixes: table<Prefix: string>, EncodingType: string, KeyCount: int, ContinuationToken: string, NextContinuationToken: string, StartAfter: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
+  let list_type = ($list_type | default "2")
   let qp = [(serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "encoding-type" $encoding_type "scalar") (serialize-qp "max-keys" $max_keys "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "continuation-token" $continuation_token "scalar") (serialize-qp "fetch-owner" $fetch_owner "scalar") (serialize-qp "start-after" $start_after "scalar") (serialize-qp "MaxKeys" $max_keys_2 "scalar") (serialize-qp "ContinuationToken" $continuation_token_2 "scalar") (serialize-qp "list-type" $list_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -4577,7 +4673,7 @@ export def "restore-object" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --version-id: string # VersionId used to reference a specific version of the object.
-  --restore: oneof<nothing, bool> # allows empty value
+  --restore: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding x-amz-checksum or x-amz-trailer header sent. Otherwise, Amazon S3 fails the request with the HTTP status code 400 Bad Request. For more information, see Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide. If you provide an individual checksum, Amazon S3 ignores any provided ChecksumAlgorithm parameter.
@@ -4589,6 +4685,7 @@ export def "restore-object" [
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
+  let restore = ($restore | default true)
   let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "restore" $restore "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let req_body = $body
@@ -4627,20 +4724,22 @@ export def "select-object-content" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --select: oneof<nothing, bool> # allows empty value
-  --select-type: string@select-type-completer
+  --select: oneof<nothing, bool> # required, allows empty value
+  --select-type: string@select-type-completer # required
   --x-amz-security-token: string
   --x-amz-server-side-encryption-customer-algorithm: string # The server-side encryption (SSE) algorithm used to encrypt the object. This parameter is needed only when the object was created using a checksum algorithm. For more information, see Protecting data using SSE-C keys (https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html) in the Amazon S3 User Guide.
-  --x-amz-server-side-encryption-customer-key: string # The server-side encryption (SSE) customer managed key. This parameter is needed only when the object was created using a checksum algorithm. For more information, see Protecting data using SSE-C keys (https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html) in the Amazon S3 User Guide.
+  --x-amz-server-side-encryption-customer-key: string # The server-side encryption (SSE) customer managed key. This parameter is needed only when the object was created using a checksum algorithm. For more information, see Protecting data using SSE-C keys (https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html) in the Amazon S3 User Guide. (format: password)
   --x-amz-server-side-encryption-customer-key-md5: string # The MD5 server-side encryption (SSE) customer managed key. This parameter is needed only when the object was created using a checksum algorithm. For more information, see Protecting data using SSE-C keys (https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html) in the Amazon S3 User Guide.
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
-]: any -> record<Payload: record<Records: record<Payload: record>, Stats: record<Details: record>, Progress: record<Details: record>, Cont: record, End: record>> {
+]: any -> record<Payload: record<Records: record<Payload: string>, Stats: record<Details: record>, Progress: record<Details: record>, Cont: record, End: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
+  let select = ($select | default true)
+  let select_type = ($select_type | default "2")
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "select-type" $select_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let req_body = $body
@@ -4680,8 +4779,8 @@ export def "upload-part" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --part-number: int # Part number of part being uploaded. This is a positive integer between 1 and 10,000.
-  --upload-id: string # Upload ID identifying the multipart upload whose part is being uploaded.
+  --part-number: int # Part number of part being uploaded. This is a positive integer between 1 and 10,000. (required)
+  --upload-id: string # Upload ID identifying the multipart upload whose part is being uploaded. (required)
   --x-amz-security-token: string
   --content-length: int # Size of the body in bytes. This parameter is useful when the size of the body cannot be determined automatically.
   --content-md5: string # The base64-encoded 128-bit MD5 digest of the part data. This parameter is auto-populated when using the command from the CLI. This parameter is required if object lock parameters are specified.
@@ -4691,7 +4790,7 @@ export def "upload-part" [
   --x-amz-checksum-sha1: string # This header can be used as a data integrity check to verify that the data received is the same data that was originally sent. This header specifies the base64-encoded, 160-bit SHA-1 digest of the object. For more information, see Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide.
   --x-amz-checksum-sha256: string # This header can be used as a data integrity check to verify that the data received is the same data that was originally sent. This header specifies the base64-encoded, 256-bit SHA-256 digest of the object. For more information, see Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide.
   --x-amz-server-side-encryption-customer-algorithm: string # Specifies the algorithm to use to when encrypting the object (for example, AES256).
-  --x-amz-server-side-encryption-customer-key: string # Specifies the customer-provided encryption key for Amazon S3 to use in encrypting data. This value is used to store the object and then it is discarded; Amazon S3 does not store the encryption key. The key must be appropriate for use with the algorithm specified in the x-amz-server-side-encryption-customer-algorithm header. This must be the same encryption key specified in the initiate multipart upload request.
+  --x-amz-server-side-encryption-customer-key: string # Specifies the customer-provided encryption key for Amazon S3 to use in encrypting data. This value is used to store the object and then it is discarded; Amazon S3 does not store the encryption key. The key must be appropriate for use with the algorithm specified in the x-amz-server-side-encryption-customer-algorithm header. This must be the same encryption key specified in the initiate multipart upload request. (format: password)
   --x-amz-server-side-encryption-customer-key-md5: string # Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header for a message integrity check to ensure that the encryption key was transmitted without error.
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
@@ -4702,6 +4801,8 @@ export def "upload-part" [
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
+  if ($part_number == null) { error make --unspanned { msg: "required query parameter 'partNumber' missing: pass --part-number" } }
+  if ($upload_id == null) { error make --unspanned { msg: "required query parameter 'uploadId' missing: pass --upload-id" } }
   let qp = [(serialize-qp "partNumber" $part_number "scalar") (serialize-qp "uploadId" $upload_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let req_body = $body
@@ -4741,29 +4842,32 @@ export def "upload-part-copy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --part-number: int # Part number of part being copied. This is a positive integer between 1 and 10,000.
-  --upload-id: string # Upload ID identifying the multipart upload whose part is being copied.
+  --part-number: int # Part number of part being copied. This is a positive integer between 1 and 10,000. (required)
+  --upload-id: string # Upload ID identifying the multipart upload whose part is being copied. (required)
   --x-amz-security-token: string
-  --x-amz-copy-source: string # Specifies the source object for the copy operation. You specify the value in one of two formats, depending on whether you want to access the source object through an access point (https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-points.html): For objects not accessed through an access point, specify the name of the source bucket and key of the source object, separated by a slash (/). For example, to copy the object reports/january.pdf from the bucket awsexamplebucket, use awsexamplebucket/reports/january.pdf. The value must be URL-encoded. For objects accessed through access points, specify the Amazon Resource Name (ARN) of the object as accessed through the access point, in the format arn:aws:s3:<Region>:<account-id>:accesspoint/<access-point-name>/object/<key>. For example, to copy the object reports/january.pdf through access point my-access-point owned by account 123456789012 in Region us-west-2, use the URL encoding of arn:aws:s3:us-west-2:123456789012:accesspoint/my-access-point/object/reports/january.pdf. The value must be URL encoded. Amazon S3 supports copy operations using access points only when the source and destination buckets are in the same Amazon Web Services Region. Alternatively, for objects accessed through Amazon S3 on Outposts, specify the ARN of the object as accessed in the format arn:aws:s3-outposts:<Region>:<account-id>:outpost/<outpost-id>/object/<key>. For example, to copy the object reports/january.pdf through outpost my-outpost owned by account 123456789012 in Region us-west-2, use the URL encoding of arn:aws:s3-outposts:us-west-2:123456789012:outpost/my-outpost/object/reports/january.pdf. The value must be URL-encoded. To copy a specific version of an object, append ?versionId=<version-id> to the value (for example, awsexamplebucket/reports/january.pdf?versionId=QUpfdndhfd8438MNFDN93jdnJFkdmqnh893). If you don't specify a version ID, Amazon S3 copies the latest version of the source object.
+  --x-amz-copy-source: string # Specifies the source object for the copy operation. You specify the value in one of two formats, depending on whether you want to access the source object through an access point (https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-points.html): For objects not accessed through an access point, specify the name of the source bucket and key of the source object, separated by a slash (/). For example, to copy the object reports/january.pdf from the bucket awsexamplebucket, use awsexamplebucket/reports/january.pdf. The value must be URL-encoded. For objects accessed through access points, specify the Amazon Resource Name (ARN) of the object as accessed through the access point, in the format arn:aws:s3:<Region>:<account-id>:accesspoint/<access-point-name>/object/<key>. For example, to copy the object reports/january.pdf through access point my-access-point owned by account 123456789012 in Region us-west-2, use the URL encoding of arn:aws:s3:us-west-2:123456789012:accesspoint/my-access-point/object/reports/january.pdf. The value must be URL encoded. Amazon S3 supports copy operations using access points only when the source and destination buckets are in the same Amazon Web Services Region. Alternatively, for objects accessed through Amazon S3 on Outposts, specify the ARN of the object as accessed in the format arn:aws:s3-outposts:<Region>:<account-id>:outpost/<outpost-id>/object/<key>. For example, to copy the object reports/january.pdf through outpost my-outpost owned by account 123456789012 in Region us-west-2, use the URL encoding of arn:aws:s3-outposts:us-west-2:123456789012:outpost/my-outpost/object/reports/january.pdf. The value must be URL-encoded. To copy a specific version of an object, append ?versionId=<version-id> to the value (for example, awsexamplebucket/reports/january.pdf?versionId=QUpfdndhfd8438MNFDN93jdnJFkdmqnh893). If you don't specify a version ID, Amazon S3 copies the latest version of the source object. (required)
   --x-amz-copy-source-if-match: string # Copies the object if its entity tag (ETag) matches the specified tag.
-  --x-amz-copy-source-if-modified-since: string # Copies the object if it has been modified since the specified time.
+  --x-amz-copy-source-if-modified-since: string # Copies the object if it has been modified since the specified time. (format: date-time)
   --x-amz-copy-source-if-none-match: string # Copies the object if its entity tag (ETag) is different than the specified ETag.
-  --x-amz-copy-source-if-unmodified-since: string # Copies the object if it hasn't been modified since the specified time.
+  --x-amz-copy-source-if-unmodified-since: string # Copies the object if it hasn't been modified since the specified time. (format: date-time)
   --x-amz-copy-source-range: string # The range of bytes to copy from the source object. The range value must use the form bytes=first-last, where the first and last are the zero-based byte offsets to copy. For example, bytes=0-9 indicates that you want to copy the first 10 bytes of the source. You can copy a range only if the source object is greater than 5 MB.
   --x-amz-server-side-encryption-customer-algorithm: string # Specifies the algorithm to use to when encrypting the object (for example, AES256).
-  --x-amz-server-side-encryption-customer-key: string # Specifies the customer-provided encryption key for Amazon S3 to use in encrypting data. This value is used to store the object and then it is discarded; Amazon S3 does not store the encryption key. The key must be appropriate for use with the algorithm specified in the x-amz-server-side-encryption-customer-algorithm header. This must be the same encryption key specified in the initiate multipart upload request.
+  --x-amz-server-side-encryption-customer-key: string # Specifies the customer-provided encryption key for Amazon S3 to use in encrypting data. This value is used to store the object and then it is discarded; Amazon S3 does not store the encryption key. The key must be appropriate for use with the algorithm specified in the x-amz-server-side-encryption-customer-algorithm header. This must be the same encryption key specified in the initiate multipart upload request. (format: password)
   --x-amz-server-side-encryption-customer-key-md5: string # Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header for a message integrity check to ensure that the encryption key was transmitted without error.
   --x-amz-copy-source-server-side-encryption-customer-algorithm: string # Specifies the algorithm to use when decrypting the source object (for example, AES256).
-  --x-amz-copy-source-server-side-encryption-customer-key: string # Specifies the customer-provided encryption key for Amazon S3 to use to decrypt the source object. The encryption key provided in this header must be one that was used when the source object was created.
+  --x-amz-copy-source-server-side-encryption-customer-key: string # Specifies the customer-provided encryption key for Amazon S3 to use to decrypt the source object. The encryption key provided in this header must be one that was used when the source object was created. (format: password)
   --x-amz-copy-source-server-side-encryption-customer-key-md5: string # Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header for a message integrity check to ensure that the encryption key was transmitted without error.
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected destination bucket owner. If the destination bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --x-amz-source-expected-bucket-owner: string # The account ID of the expected source bucket owner. If the source bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> record<CopyPartResult: record<ETag: record, LastModified: record, ChecksumCRC32: record, ChecksumCRC32C: record, ChecksumSHA1: record, ChecksumSHA256: record>> {
+]: nothing -> record<CopyPartResult: record<ETag: string, LastModified: string, ChecksumCRC32: string, ChecksumCRC32C: string, ChecksumSHA1: string, ChecksumSHA256: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
+  if ($part_number == null) { error make --unspanned { msg: "required query parameter 'partNumber' missing: pass --part-number" } }
+  if ($upload_id == null) { error make --unspanned { msg: "required query parameter 'uploadId' missing: pass --upload-id" } }
+  if ($x_amz_copy_source == null) { error make --unspanned { msg: "required header parameter 'x-amz-copy-source' missing: pass --x-amz-copy-source" } }
   let qp = [(serialize-qp "partNumber" $part_number "scalar") (serialize-qp "uploadId" $upload_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let accept_val = "text/xml"
@@ -4799,8 +4903,8 @@ export def "write-get-object-response" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-amz-security-token: string
-  --x-amz-request-route: string # Route prefix to the HTTP URL generated.
-  --x-amz-request-token: string # A single use encrypted token that maps WriteGetObjectResponse to the end user GetObject request.
+  --x-amz-request-route: string # Route prefix to the HTTP URL generated. (required)
+  --x-amz-request-token: string # A single use encrypted token that maps WriteGetObjectResponse to the end user GetObject request. (required)
   --x-amz-fwd-status: int # The integer status code for an HTTP response of a corresponding GetObject request. Status Codes 200 - OK 206 - Partial Content 304 - Not Modified 400 - Bad Request 401 - Unauthorized 403 - Forbidden 404 - Not Found 405 - Method Not Allowed 409 - Conflict 411 - Length Required 412 - Precondition Failed 416 - Range Not Satisfiable 500 - Internal Server Error 503 - Service Unavailable
   --x-amz-fwd-error-code: string # A string that uniquely identifies an error condition. Returned in the <Code> tag of the error XML response for a corresponding GetObject call. Cannot be used with a successful StatusCode header or when the transformed object is provided in the body. All error codes from S3 are sentence-cased. The regular expression (regex) value is "^[A-Z][a-zA-Z]+$".
   --x-amz-fwd-error-message: string # Contains a generic description of the error condition. Returned in the <Message> tag of the error XML response for a corresponding GetObject call. Cannot be used with a successful StatusCode header or when the transformed object is provided in body.
@@ -4818,20 +4922,20 @@ export def "write-get-object-response" [
   --x-amz-fwd-header-x-amz-checksum-sha256: string # This header can be used as a data integrity check to verify that the data received is the same data that was originally sent. This specifies the base64-encoded, 256-bit SHA-256 digest of the object returned by the Object Lambda function. This may not match the checksum for the object stored in Amazon S3. Amazon S3 will perform validation of the checksum values only when the original GetObject request required checksum validation. For more information about checksums, see Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide. Only one checksum header can be specified at a time. If you supply multiple checksum headers, this request will fail.
   --x-amz-fwd-header-x-amz-delete-marker: oneof<nothing, bool> # Specifies whether an object stored in Amazon S3 is (true) or is not (false) a delete marker.
   --x-amz-fwd-header-e-tag: string # An opaque identifier assigned by a web server to a specific version of a resource found at a URL.
-  --x-amz-fwd-header-expires: string # The date and time at which the object is no longer cacheable.
+  --x-amz-fwd-header-expires: string # The date and time at which the object is no longer cacheable. (format: date-time)
   --x-amz-fwd-header-x-amz-expiration: string # If the object expiration is configured (see PUT Bucket lifecycle), the response includes this header. It includes the expiry-date and rule-id key-value pairs that provide the object expiration information. The value of the rule-id is URL-encoded.
-  --x-amz-fwd-header-last-modified: string # The date and time that the object was last modified.
+  --x-amz-fwd-header-last-modified: string # The date and time that the object was last modified. (format: date-time)
   --x-amz-fwd-header-x-amz-missing-meta: int # Set to the number of metadata entries not returned in x-amz-meta headers. This can happen if you create metadata using an API like SOAP that supports more flexible metadata than the REST API. For example, using SOAP, you can create metadata whose values are not legal HTTP headers.
   --x-amz-fwd-header-x-amz-object-lock-mode: string@x-amz-fwd-header-x-amz-object-lock-mode-completer # Indicates whether an object stored in Amazon S3 has Object Lock enabled. For more information about S3 Object Lock, see Object Lock (https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-lock.html).
   --x-amz-fwd-header-x-amz-object-lock-legal-hold: string@x-amz-fwd-header-x-amz-object-lock-legal-hold-completer # Indicates whether an object stored in Amazon S3 has an active legal hold.
-  --x-amz-fwd-header-x-amz-object-lock-retain-until-date: string # The date and time when Object Lock is configured to expire.
+  --x-amz-fwd-header-x-amz-object-lock-retain-until-date: string # The date and time when Object Lock is configured to expire. (format: date-time)
   --x-amz-fwd-header-x-amz-mp-parts-count: int # The count of parts this object has.
   --x-amz-fwd-header-x-amz-replication-status: string@x-amz-fwd-header-x-amz-replication-status-completer # Indicates if request involves bucket that is either a source or destination in a Replication rule. For more information about S3 Replication, see Replication (https://docs.aws.amazon.com/AmazonS3/latest/userguide/replication.html).
   --x-amz-fwd-header-x-amz-request-charged: string@x-amz-fwd-header-x-amz-request-charged-completer
   --x-amz-fwd-header-x-amz-restore: string # Provides information about object restoration operation and expiration time of the restored object copy.
   --x-amz-fwd-header-x-amz-server-side-encryption: string@x-amz-fwd-header-x-amz-server-side-encryption-completer # The server-side encryption algorithm used when storing requested object in Amazon S3 (for example, AES256, aws:kms).
   --x-amz-fwd-header-x-amz-server-side-encryption-customer-algorithm: string # Encryption algorithm used if server-side encryption with a customer-provided encryption key was specified for object stored in Amazon S3.
-  --x-amz-fwd-header-x-amz-server-side-encryption-aws-kms-key-id: string # If present, specifies the ID of the Amazon Web Services Key Management Service (Amazon Web Services KMS) symmetric customer managed key that was used for stored in Amazon S3 object.
+  --x-amz-fwd-header-x-amz-server-side-encryption-aws-kms-key-id: string # If present, specifies the ID of the Amazon Web Services Key Management Service (Amazon Web Services KMS) symmetric customer managed key that was used for stored in Amazon S3 object. (format: password)
   --x-amz-fwd-header-x-amz-server-side-encryption-customer-key-md5: string # 128-bit MD5 digest of customer-provided encryption key used in Amazon S3 to encrypt data stored in S3. For more information, see Protecting data using server-side encryption with customer-provided encryption keys (SSE-C) (https://docs.aws.amazon.com/AmazonS3/latest/userguide/ServerSideEncryptionCustomerKeys.html).
   --x-amz-fwd-header-x-amz-storage-class: string@x-amz-fwd-header-x-amz-storage-class-completer # Provides storage class information of the object. Amazon S3 returns this header for all objects except for S3 Standard storage class objects. For more information, see Storage Classes (https://docs.aws.amazon.com/AmazonS3/latest/dev/storage-class-intro.html).
   --x-amz-fwd-header-x-amz-tagging-count: int # The number of tags, if any, on the object.
@@ -4842,6 +4946,8 @@ export def "write-get-object-response" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_request_route == null) { error make --unspanned { msg: "required header parameter 'x-amz-request-route' missing: pass --x-amz-request-route" } }
+  if ($x_amz_request_token == null) { error make --unspanned { msg: "required header parameter 'x-amz-request-token' missing: pass --x-amz-request-token" } }
   let full_url = (build-url $base "/WriteGetObjectResponse" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }

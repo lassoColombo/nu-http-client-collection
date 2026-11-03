@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -96,15 +96,20 @@ def base-url-completer [] { ["http://forecast.us-east-1.amazonaws.com" "http://f
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def optimization-metric-completer [] { ["AverageWeightedQuantileLoss" "MAPE" "MASE" "RMSE" "WAPE"] }
 def x-amz-target-completer [] { ["AmazonForecast.CreateAutoPredictor"] }
+def domain-completer [] { ["CUSTOM" "EC2_CAPACITY" "INVENTORY_PLANNING" "METRICS" "RETAIL" "WEB_TRAFFIC" "WORK_FORCE"] }
+def dataset-type-completer [] { ["ITEM_METADATA" "RELATED_TIME_SERIES" "TARGET_TIME_SERIES"] }
 def x-amz-target-completer-1 [] { ["AmazonForecast.CreateDataset"] }
 def x-amz-target-completer-2 [] { ["AmazonForecast.CreateDatasetGroup"] }
+def import-mode-completer [] { ["FULL" "INCREMENTAL"] }
 def x-amz-target-completer-3 [] { ["AmazonForecast.CreateDatasetImportJob"] }
 def x-amz-target-completer-4 [] { ["AmazonForecast.CreateExplainability"] }
 def x-amz-target-completer-5 [] { ["AmazonForecast.CreateExplainabilityExport"] }
 def x-amz-target-completer-6 [] { ["AmazonForecast.CreateForecast"] }
 def x-amz-target-completer-7 [] { ["AmazonForecast.CreateForecastExportJob"] }
 def x-amz-target-completer-8 [] { ["AmazonForecast.CreateMonitor"] }
+def auto-ml-override-strategy-completer [] { ["AccuracyOptimized" "LatencyOptimized"] }
 def x-amz-target-completer-9 [] { ["AmazonForecast.CreatePredictor"] }
 def x-amz-target-completer-10 [] { ["AmazonForecast.CreatePredictorBacktestExportJob"] }
 def x-amz-target-completer-11 [] { ["AmazonForecast.CreateWhatIfAnalysis"] }
@@ -187,7 +192,11 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateAutoPredictor
-# --EncryptionConfig shape: {RoleArn: any, KMSKeyArn: any}
+# --DataConfig shape: {DatasetGroupArn: string, AttributeConfigs?: list, AdditionalDatasets?: list}
+# --EncryptionConfig shape: {RoleArn: string, KMSKeyArn: string}
+# --Tags item shape: {Key: string, Value: string}
+# --MonitorConfig shape: {MonitorName: string}
+# --TimeAlignmentBoundary shape: {Month?: "JANUARY"|"FEBRUARY"|"MARCH"|"APRIL"|"MAY"|"JUNE"|"JULY"|"AUGUST"|"SEPTEMBER"|"OCTOBER"|"NOVEMBER"|"DECEMBER", DayOfMonth?: int, DayOfWeek?: "MONDAY"|"TUESDAY"|"WEDNESDAY"|"THURSDAY"|"FRIDAY"|"SATURDAY"|"SUNDAY", Hour?: int}
 export def "create-auto-predictor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -205,24 +214,25 @@ export def "create-auto-predictor" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  predictor_name: any
-  --forecast-horizon: any
-  --forecast-types: any
-  --forecast-dimensions: any
-  --forecast-frequency: any
-  --data-config: any
-  --encryption-config: record # An Key Management Service (KMS) key and an Identity and Access Management (IAM) role that Amazon Forecast can assume to access the key. You can specify this optional object in the CreateDataset and CreatePredictor requests. — shape: {RoleArn: any, KMSKeyArn: any}
-  --reference-predictor-arn: any
-  --optimization-metric: any
-  --explain-predictor: any
-  --tags: any
-  --monitor-config: any
-  --time-alignment-boundary: any
-]: any -> record<PredictorArn: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  predictor_name: string # A unique name for the predictor
+  --forecast-horizon: int # The number of time-steps that the model predicts. The forecast horizon is also called the prediction length. The maximum forecast horizon is the lesser of 500 time-steps or 1/4 of the TARGET_TIME_SERIES dataset length. If you are retraining an existing AutoPredictor, then the maximum forecast horizon is the lesser of 500 time-steps or 1/3 of the TARGET_TIME_SERIES dataset length. If you are upgrading to an AutoPredictor or retraining an existing AutoPredictor, you cannot update the forecast horizon parameter. You can meet this requirement by providing longer time-series in the dataset.
+  --forecast-types: list<string> # The forecast types used to train a predictor. You can specify up to five forecast types. Forecast types can be quantiles from 0.01 to 0.99, by increments of 0.01 or higher. You can also specify the mean forecast with mean.
+  --forecast-dimensions: list<string> # An array of dimension (field) names that specify how to group the generated forecast. For example, if you are generating forecasts for item sales across all your stores, and your dataset contains a store_id field, you would specify store_id as a dimension to group sales forecasts for each store.
+  --forecast-frequency: string # The frequency of predictions in a forecast. Valid intervals are an integer followed by Y (Year), M (Month), W (Week), D (Day), H (Hour), and min (Minute). For example, "1D" indicates every day and "15min" indicates every 15 minutes. You cannot specify a value that would overlap with the next larger frequency. That means, for example, you cannot specify a frequency of 60 minutes, because that is equivalent to 1 hour. The valid values for each frequency are the following: Minute - 1-59 Hour - 1-23 Day - 1-6 Week - 1-4 Month - 1-11 Year - 1 Thus, if you want every other week forecasts, specify "2W". Or, if you want quarterly forecasts, you specify "3M". The frequency must be greater than or equal to the TARGET_TIME_SERIES dataset frequency. When a RELATED_TIME_SERIES dataset is provided, the frequency must be equal to the RELATED_TIME_SERIES dataset frequency.
+  --data-config: record # The data configuration for your dataset group and any additional datasets. — shape: {DatasetGroupArn: string, AttributeConfigs?: list, AdditionalDatasets?: list}
+  --encryption-config: record # An Key Management Service (KMS) key and an Identity and Access Management (IAM) role that Amazon Forecast can assume to access the key. You can specify this optional object in the CreateDataset and CreatePredictor requests. — shape: {RoleArn: string, KMSKeyArn: string}
+  --reference-predictor-arn: string # The ARN of the predictor to retrain or upgrade. This parameter is only used when retraining or upgrading a predictor. When creating a new predictor, do not specify a value for this parameter. When upgrading or retraining a predictor, only specify values for the ReferencePredictorArn and PredictorName. The value for PredictorName must be a unique predictor name.
+  --optimization-metric: string@optimization-metric-completer # The accuracy metric used to optimize the predictor.
+  --explain-predictor: oneof<nothing, bool> # Create an Explainability resource for the predictor.
+  --tags: list # Optional metadata to help you categorize and organize your predictors. Each tag consists of a key and an optional value, both of which you define. Tag keys and values are case sensitive. The following restrictions apply to tags: For each resource, each tag key must be unique and each tag key must have one value. Maximum number of tags per resource: 50. Maximum key length: 128 Unicode characters in UTF-8. Maximum value length: 256 Unicode characters in UTF-8. Accepted characters: all letters and numbers, spaces representable in UTF-8, and + - = . _ : / @. If your tagging schema is used across other services and resources, the character restrictions of those services also apply. Key prefixes cannot include any upper or lowercase combination of aws: or AWS:. Values can have this prefix. If a tag value has aws as its prefix but the key does not, Forecast considers it to be a user tag and will count against the limit of 50 tags. Tags with only the key prefix of aws do not count against your tags per resource limit. You cannot edit or delete tag keys with this prefix. — item shape: {Key: string, Value: string}
+  --monitor-config: record # The configuration details for the predictor monitor. — shape: {MonitorName: string}
+  --time-alignment-boundary: record # The time boundary Forecast uses to align and aggregate your data to match your forecast frequency. Provide the unit of time and the time boundary as a key value pair. If you don't provide a time boundary, Forecast uses a set of Default Time Boundaries (https://docs.aws.amazon.com/forecast/latest/dg/data-aggregation.html#default-time-boundaries). For more information about aggregation, see Data Aggregation for Different Forecast Frequencies (https://docs.aws.amazon.com/forecast/latest/dg/data-aggregation.html). For more information setting a custom time boundary, see Specifying a Time Boundary (https://docs.aws.amazon.com/forecast/latest/dg/data-aggregation.html#specifying-time-boundary). — shape: {Month?: "JANUARY"|"FEBRUARY"|"MARCH"|"APRIL"|"MAY"|"JUNE"|"JULY"|"AUGUST"|"SEPTEMBER"|"OCTOBER"|"NOVEMBER"|"DECEMBER", DayOfMonth?: int, DayOfWeek?: "MONDAY"|"TUESDAY"|"WEDNESDAY"|"THURSDAY"|"FRIDAY"|"SATURDAY"|"SUNDAY", Hour?: int}
+]: any -> record<PredictorArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.CreateAutoPredictor")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"PredictorName": $predictor_name, "ForecastHorizon": $forecast_horizon, "ForecastTypes": $forecast_types, "ForecastDimensions": $forecast_dimensions, "ForecastFrequency": $forecast_frequency, "DataConfig": $data_config, "EncryptionConfig": $encryption_config, "ReferencePredictorArn": $reference_predictor_arn, "OptimizationMetric": $optimization_metric, "ExplainPredictor": $explain_predictor, "Tags": $tags, "MonitorConfig": $monitor_config, "TimeAlignmentBoundary": $time_alignment_boundary} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -248,6 +258,9 @@ export def "create-auto-predictor" [
 #
 # POST /
 # operationId: CreateDataset
+# --Schema shape: {Attributes?: list}
+# --EncryptionConfig shape: {RoleArn: string, KMSKeyArn: string}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-dataset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -265,18 +278,19 @@ export def "create-dataset" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  dataset_name: any
-  domain: any
-  dataset_type: any
-  --data-frequency: any
-  schema: any
-  --encryption-config: any
-  --tags: any
-]: any -> record<DatasetArn: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  dataset_name: string # A name for the dataset.
+  domain: string@domain-completer # The domain associated with the dataset. When you add a dataset to a dataset group, this value and the value specified for the Domain parameter of the CreateDatasetGroup (https://docs.aws.amazon.com/forecast/latest/dg/API_CreateDatasetGroup.html) operation must match. The Domain and DatasetType that you choose determine the fields that must be present in the training data that you import to the dataset. For example, if you choose the RETAIL domain and TARGET_TIME_SERIES as the DatasetType, Amazon Forecast requires item_id, timestamp, and demand fields to be present in your data. For more information, see Importing datasets (https://docs.aws.amazon.com/forecast/latest/dg/howitworks-datasets-groups.html).
+  dataset_type: string@dataset-type-completer # The dataset type. Valid values depend on the chosen Domain.
+  --data-frequency: string # The frequency of data collection. This parameter is required for RELATED_TIME_SERIES datasets. Valid intervals are an integer followed by Y (Year), M (Month), W (Week), D (Day), H (Hour), and min (Minute). For example, "1D" indicates every day and "15min" indicates every 15 minutes. You cannot specify a value that would overlap with the next larger frequency. That means, for example, you cannot specify a frequency of 60 minutes, because that is equivalent to 1 hour. The valid values for each frequency are the following: Minute - 1-59 Hour - 1-23 Day - 1-6 Week - 1-4 Month - 1-11 Year - 1 Thus, if you want every other week forecasts, specify "2W". Or, if you want quarterly forecasts, you specify "3M".
+  schema: record # Defines the fields of a dataset. — shape: {Attributes?: list}
+  --encryption-config: record # An Key Management Service (KMS) key and an Identity and Access Management (IAM) role that Amazon Forecast can assume to access the key. You can specify this optional object in the CreateDataset and CreatePredictor requests. — shape: {RoleArn: string, KMSKeyArn: string}
+  --tags: list # The optional metadata that you apply to the dataset to help you categorize and organize them. Each tag consists of a key and an optional value, both of which you define. The following basic restrictions apply to tags: Maximum number of tags per resource - 50. For each resource, each tag key must be unique, and each tag key can have only one value. Maximum key length - 128 Unicode characters in UTF-8. Maximum value length - 256 Unicode characters in UTF-8. If your tagging schema is used across multiple services and resources, remember that other services may have restrictions on allowed characters. Generally allowed characters are: letters, numbers, and spaces representable in UTF-8, and the following characters: + - = . _ : / @. Tag keys and values are case sensitive. Do not use aws:, AWS:, or any upper or lowercase combination of such as a prefix for keys as it is reserved for Amazon Web Services use. You cannot edit or delete tag keys with this prefix. Values can have this prefix. If a tag value has aws as its prefix but the key does not, then Forecast considers it to be a user tag and will count against the limit of 50 tags. Tags with only the key prefix of aws do not count against your tags per resource limit. — item shape: {Key: string, Value: string}
+]: any -> record<DatasetArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.CreateDataset")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DatasetName": $dataset_name, "Domain": $domain, "DatasetType": $dataset_type, "DataFrequency": $data_frequency, "Schema": $schema, "EncryptionConfig": $encryption_config, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -302,6 +316,7 @@ export def "create-dataset" [
 #
 # POST /
 # operationId: CreateDatasetGroup
+# --Tags item shape: {Key: string, Value: string}
 export def "create-dataset-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -319,15 +334,16 @@ export def "create-dataset-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  dataset_group_name: any
-  domain: any
-  --dataset-arns: any
-  --tags: any
-]: any -> record<DatasetGroupArn: record> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  dataset_group_name: string # A name for the dataset group.
+  domain: string@domain-completer # The domain associated with the dataset group. When you add a dataset to a dataset group, this value and the value specified for the Domain parameter of the CreateDataset (https://docs.aws.amazon.com/forecast/latest/dg/API_CreateDataset.html) operation must match. The Domain and DatasetType that you choose determine the fields that must be present in training data that you import to a dataset. For example, if you choose the RETAIL domain and TARGET_TIME_SERIES as the DatasetType, Amazon Forecast requires that item_id, timestamp, and demand fields are present in your data. For more information, see Dataset groups (https://docs.aws.amazon.com/forecast/latest/dg/howitworks-datasets-groups.html).
+  --dataset-arns: list<string> # An array of Amazon Resource Names (ARNs) of the datasets that you want to include in the dataset group.
+  --tags: list # The optional metadata that you apply to the dataset group to help you categorize and organize them. Each tag consists of a key and an optional value, both of which you define. The following basic restrictions apply to tags: Maximum number of tags per resource - 50. For each resource, each tag key must be unique, and each tag key can have only one value. Maximum key length - 128 Unicode characters in UTF-8. Maximum value length - 256 Unicode characters in UTF-8. If your tagging schema is used across multiple services and resources, remember that other services may have restrictions on allowed characters. Generally allowed characters are: letters, numbers, and spaces representable in UTF-8, and the following characters: + - = . _ : / @. Tag keys and values are case sensitive. Do not use aws:, AWS:, or any upper or lowercase combination of such as a prefix for keys as it is reserved for Amazon Web Services use. You cannot edit or delete tag keys with this prefix. Values can have this prefix. If a tag value has aws as its prefix but the key does not, then Forecast considers it to be a user tag and will count against the limit of 50 tags. Tags with only the key prefix of aws do not count against your tags per resource limit. — item shape: {Key: string, Value: string}
+]: any -> record<DatasetGroupArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.CreateDatasetGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DatasetGroupName": $dataset_group_name, "Domain": $domain, "DatasetArns": $dataset_arns, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -353,6 +369,8 @@ export def "create-dataset-group" [
 #
 # POST /
 # operationId: CreateDatasetImportJob
+# --DataSource shape: {S3Config: record}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-dataset-import-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -370,21 +388,22 @@ export def "create-dataset-import-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  dataset_import_job_name: any
-  dataset_arn: any
-  data_source: any
-  --timestamp-format: any
-  --time-zone: any
-  --use-geolocation-for-time-zone: any
-  --geolocation-format: any
-  --tags: any
-  --format: any
-  --import-mode: any
-]: any -> record<DatasetImportJobArn: record> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  dataset_import_job_name: string # The name for the dataset import job. We recommend including the current timestamp in the name, for example, 20190721DatasetImport. This can help you avoid getting a ResourceAlreadyExistsException exception.
+  dataset_arn: string # The Amazon Resource Name (ARN) of the Amazon Forecast dataset that you want to import data to.
+  data_source: record # The source of your data, an Identity and Access Management (IAM) role that allows Amazon Forecast to access the data and, optionally, an Key Management Service (KMS) key. — shape: {S3Config: record}
+  --timestamp-format: string # The format of timestamps in the dataset. The format that you specify depends on the DataFrequency specified when the dataset was created. The following formats are supported "yyyy-MM-dd" For the following data frequencies: Y, M, W, and D "yyyy-MM-dd HH:mm:ss" For the following data frequencies: H, 30min, 15min, and 1min; and optionally, for: Y, M, W, and D If the format isn't specified, Amazon Forecast expects the format to be "yyyy-MM-dd HH:mm:ss".
+  --time-zone: string # A single time zone for every item in your dataset. This option is ideal for datasets with all timestamps within a single time zone, or if all timestamps are normalized to a single time zone. Refer to the Joda-Time API (http://joda-time.sourceforge.net/timezones.html) for a complete list of valid time zone names.
+  --use-geolocation-for-time-zone: oneof<nothing, bool> # Automatically derive time zone information from the geolocation attribute. This option is ideal for datasets that contain timestamps in multiple time zones and those timestamps are expressed in local time.
+  --geolocation-format: string # The format of the geolocation attribute. The geolocation attribute can be formatted in one of two ways: LAT_LONG - the latitude and longitude in decimal format (Example: 47.61_-122.33). CC_POSTALCODE (US Only) - the country code (US), followed by the 5-digit ZIP code (Example: US_98121).
+  --tags: list # The optional metadata that you apply to the dataset import job to help you categorize and organize them. Each tag consists of a key and an optional value, both of which you define. The following basic restrictions apply to tags: Maximum number of tags per resource - 50. For each resource, each tag key must be unique, and each tag key can have only one value. Maximum key length - 128 Unicode characters in UTF-8. Maximum value length - 256 Unicode characters in UTF-8. If your tagging schema is used across multiple services and resources, remember that other services may have restrictions on allowed characters. Generally allowed characters are: letters, numbers, and spaces representable in UTF-8, and the following characters: + - = . _ : / @. Tag keys and values are case sensitive. Do not use aws:, AWS:, or any upper or lowercase combination of such as a prefix for keys as it is reserved for Amazon Web Services use. You cannot edit or delete tag keys with this prefix. Values can have this prefix. If a tag value has aws as its prefix but the key does not, then Forecast considers it to be a user tag and will count against the limit of 50 tags. Tags with only the key prefix of aws do not count against your tags per resource limit. — item shape: {Key: string, Value: string}
+  --format: string # The format of the imported data, CSV or PARQUET. The default value is CSV.
+  --import-mode: string@import-mode-completer # Specifies whether the dataset import job is a FULL or INCREMENTAL import. A FULL dataset import replaces all of the existing data with the newly imported data. An INCREMENTAL import appends the imported data to the existing data.
+]: any -> record<DatasetImportJobArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.CreateDatasetImportJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DatasetImportJobName": $dataset_import_job_name, "DatasetArn": $dataset_arn, "DataSource": $data_source, "TimestampFormat": $timestamp_format, "TimeZone": $time_zone, "UseGeolocationForTimeZone": $use_geolocation_for_time_zone, "GeolocationFormat": $geolocation_format, "Tags": $tags, "Format": $format, "ImportMode": $import_mode} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -410,8 +429,10 @@ export def "create-dataset-import-job" [
 #
 # POST /
 # operationId: CreateExplainability
-# --DataSource shape: {S3Config: any}
-# --Schema shape: {Attributes?: any}
+# --ExplainabilityConfig shape: {TimeSeriesGranularity: "ALL"|"SPECIFIC", TimePointGranularity: "ALL"|"SPECIFIC"}
+# --DataSource shape: {S3Config: record}
+# --Schema shape: {Attributes?: list}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-explainability" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -429,20 +450,21 @@ export def "create-explainability" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  explainability_name: any
-  resource_arn: any
-  explainability_config: any
-  --data-source: record # The source of your data, an Identity and Access Management (IAM) role that allows Amazon Forecast to access the data and, optionally, an Key Management Service (KMS) key. — shape: {S3Config: any}
-  --schema: record # Defines the fields of a dataset. — shape: {Attributes?: any}
-  --enable-visualization: any
-  --start-date-time: any
-  --end-date-time: any
-  --tags: any
-]: any -> record<ExplainabilityArn: record> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  explainability_name: string # A unique name for the Explainability.
+  resource_arn: string # The Amazon Resource Name (ARN) of the Predictor or Forecast used to create the Explainability.
+  explainability_config: record # The ExplainabilityConfig data type defines the number of time series and time points included in CreateExplainability. If you provide a predictor ARN for ResourceArn, you must set both TimePointGranularity and TimeSeriesGranularity to “ALL”. When creating Predictor Explainability, Amazon Forecast considers all time series and time points. If you provide a forecast ARN for ResourceArn, you can set TimePointGranularity and TimeSeriesGranularity to either “ALL” or “Specific”. — shape: {TimeSeriesGranularity: "ALL"|"SPECIFIC", TimePointGranularity: "ALL"|"SPECIFIC"}
+  --data-source: record # The source of your data, an Identity and Access Management (IAM) role that allows Amazon Forecast to access the data and, optionally, an Key Management Service (KMS) key. — shape: {S3Config: record}
+  --schema: record # Defines the fields of a dataset. — shape: {Attributes?: list}
+  --enable-visualization: oneof<nothing, bool> # Create an Explainability visualization that is viewable within the Amazon Web Services console.
+  --start-date-time: string # If TimePointGranularity is set to SPECIFIC, define the first point for the Explainability. Use the following timestamp format: yyyy-MM-ddTHH:mm:ss (example: 2015-01-01T20:00:00)
+  --end-date-time: string # If TimePointGranularity is set to SPECIFIC, define the last time point for the Explainability. Use the following timestamp format: yyyy-MM-ddTHH:mm:ss (example: 2015-01-01T20:00:00)
+  --tags: list # Optional metadata to help you categorize and organize your resources. Each tag consists of a key and an optional value, both of which you define. Tag keys and values are case sensitive. The following restrictions apply to tags: For each resource, each tag key must be unique and each tag key must have one value. Maximum number of tags per resource: 50. Maximum key length: 128 Unicode characters in UTF-8. Maximum value length: 256 Unicode characters in UTF-8. Accepted characters: all letters and numbers, spaces representable in UTF-8, and + - = . _ : / @. If your tagging schema is used across other services and resources, the character restrictions of those services also apply. Key prefixes cannot include any upper or lowercase combination of aws: or AWS:. Values can have this prefix. If a tag value has aws as its prefix but the key does not, Forecast considers it to be a user tag and will count against the limit of 50 tags. Tags with only the key prefix of aws do not count against your tags per resource limit. You cannot edit or delete tag keys with this prefix. — item shape: {Key: string, Value: string}
+]: any -> record<ExplainabilityArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.CreateExplainability")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ExplainabilityName": $explainability_name, "ResourceArn": $resource_arn, "ExplainabilityConfig": $explainability_config, "DataSource": $data_source, "Schema": $schema, "EnableVisualization": $enable_visualization, "StartDateTime": $start_date_time, "EndDateTime": $end_date_time, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -468,7 +490,8 @@ export def "create-explainability" [
 #
 # POST /
 # operationId: CreateExplainabilityExport
-# --Destination shape: {S3Config: any}
+# --Destination shape: {S3Config: record}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-explainability-export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -486,16 +509,17 @@ export def "create-explainability-export" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  explainability_export_name: any
-  explainability_arn: any
-  destination: record # The destination for an export job. Provide an S3 path, an Identity and Access Management (IAM) role that allows Amazon Forecast to access the location, and an Key Management Service (KMS) key (optional). — shape: {S3Config: any}
-  --tags: any
-  --format: any
-]: any -> record<ExplainabilityExportArn: record> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  explainability_export_name: string # A unique name for the Explainability export.
+  explainability_arn: string # The Amazon Resource Name (ARN) of the Explainability to export.
+  destination: record # The destination for an export job. Provide an S3 path, an Identity and Access Management (IAM) role that allows Amazon Forecast to access the location, and an Key Management Service (KMS) key (optional). — shape: {S3Config: record}
+  --tags: list # Optional metadata to help you categorize and organize your resources. Each tag consists of a key and an optional value, both of which you define. Tag keys and values are case sensitive. The following restrictions apply to tags: For each resource, each tag key must be unique and each tag key must have one value. Maximum number of tags per resource: 50. Maximum key length: 128 Unicode characters in UTF-8. Maximum value length: 256 Unicode characters in UTF-8. Accepted characters: all letters and numbers, spaces representable in UTF-8, and + - = . _ : / @. If your tagging schema is used across other services and resources, the character restrictions of those services also apply. Key prefixes cannot include any upper or lowercase combination of aws: or AWS:. Values can have this prefix. If a tag value has aws as its prefix but the key does not, Forecast considers it to be a user tag and will count against the limit of 50 tags. Tags with only the key prefix of aws do not count against your tags per resource limit. You cannot edit or delete tag keys with this prefix. — item shape: {Key: string, Value: string}
+  --format: string # The format of the exported data, CSV or PARQUET.
+]: any -> record<ExplainabilityExportArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.CreateExplainabilityExport")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ExplainabilityExportName": $explainability_export_name, "ExplainabilityArn": $explainability_arn, "Destination": $destination, "Tags": $tags, "Format": $format} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -521,6 +545,8 @@ export def "create-explainability-export" [
 #
 # POST /
 # operationId: CreateForecast
+# --Tags item shape: {Key: string, Value: string}
+# --TimeSeriesSelector shape: {TimeSeriesIdentifiers?: record}
 export def "create-forecast" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -538,16 +564,17 @@ export def "create-forecast" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  forecast_name: any
-  predictor_arn: any
-  --forecast-types: any
-  --tags: any
-  --time-series-selector: any
-]: any -> record<ForecastArn: record> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  forecast_name: string # A name for the forecast.
+  predictor_arn: string # The Amazon Resource Name (ARN) of the predictor to use to generate the forecast.
+  --forecast-types: list<string> # The quantiles at which probabilistic forecasts are generated. You can currently specify up to 5 quantiles per forecast. Accepted values include 0.01 to 0.99 (increments of .01 only) and mean. The mean forecast is different from the median (0.50) when the distribution is not symmetric (for example, Beta and Negative Binomial). The default quantiles are the quantiles you specified during predictor creation. If you didn't specify quantiles, the default values are ["0.1", "0.5", "0.9"].
+  --tags: list # The optional metadata that you apply to the forecast to help you categorize and organize them. Each tag consists of a key and an optional value, both of which you define. The following basic restrictions apply to tags: Maximum number of tags per resource - 50. For each resource, each tag key must be unique, and each tag key can have only one value. Maximum key length - 128 Unicode characters in UTF-8. Maximum value length - 256 Unicode characters in UTF-8. If your tagging schema is used across multiple services and resources, remember that other services may have restrictions on allowed characters. Generally allowed characters are: letters, numbers, and spaces representable in UTF-8, and the following characters: + - = . _ : / @. Tag keys and values are case sensitive. Do not use aws:, AWS:, or any upper or lowercase combination of such as a prefix for keys as it is reserved for Amazon Web Services use. You cannot edit or delete tag keys with this prefix. Values can have this prefix. If a tag value has aws as its prefix but the key does not, then Forecast considers it to be a user tag and will count against the limit of 50 tags. Tags with only the key prefix of aws do not count against your tags per resource limit. — item shape: {Key: string, Value: string}
+  --time-series-selector: record # Defines the set of time series that are used to create the forecasts in a TimeSeriesIdentifiers object. The TimeSeriesIdentifiers object needs the following information: DataSource Format Schema — shape: {TimeSeriesIdentifiers?: record}
+]: any -> record<ForecastArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.CreateForecast")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ForecastName": $forecast_name, "PredictorArn": $predictor_arn, "ForecastTypes": $forecast_types, "Tags": $tags, "TimeSeriesSelector": $time_series_selector} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -573,6 +600,8 @@ export def "create-forecast" [
 #
 # POST /
 # operationId: CreateForecastExportJob
+# --Destination shape: {S3Config: record}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-forecast-export-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -590,16 +619,17 @@ export def "create-forecast-export-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  forecast_export_job_name: any
-  forecast_arn: any
-  destination: any
-  --tags: any
-  --format: any
-]: any -> record<ForecastExportJobArn: record> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  forecast_export_job_name: string # The name for the forecast export job.
+  forecast_arn: string # The Amazon Resource Name (ARN) of the forecast that you want to export.
+  destination: record # The destination for an export job. Provide an S3 path, an Identity and Access Management (IAM) role that allows Amazon Forecast to access the location, and an Key Management Service (KMS) key (optional). — shape: {S3Config: record}
+  --tags: list # The optional metadata that you apply to the forecast export job to help you categorize and organize them. Each tag consists of a key and an optional value, both of which you define. The following basic restrictions apply to tags: Maximum number of tags per resource - 50. For each resource, each tag key must be unique, and each tag key can have only one value. Maximum key length - 128 Unicode characters in UTF-8. Maximum value length - 256 Unicode characters in UTF-8. If your tagging schema is used across multiple services and resources, remember that other services may have restrictions on allowed characters. Generally allowed characters are: letters, numbers, and spaces representable in UTF-8, and the following characters: + - = . _ : / @. Tag keys and values are case sensitive. Do not use aws:, AWS:, or any upper or lowercase combination of such as a prefix for keys as it is reserved for Amazon Web Services use. You cannot edit or delete tag keys with this prefix. Values can have this prefix. If a tag value has aws as its prefix but the key does not, then Forecast considers it to be a user tag and will count against the limit of 50 tags. Tags with only the key prefix of aws do not count against your tags per resource limit. — item shape: {Key: string, Value: string}
+  --format: string # The format of the exported data, CSV or PARQUET. The default value is CSV.
+]: any -> record<ForecastExportJobArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.CreateForecastExportJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ForecastExportJobName": $forecast_export_job_name, "ForecastArn": $forecast_arn, "Destination": $destination, "Tags": $tags, "Format": $format} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -625,6 +655,7 @@ export def "create-forecast-export-job" [
 #
 # POST /
 # operationId: CreateMonitor
+# --Tags item shape: {Key: string, Value: string}
 export def "create-monitor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -642,14 +673,15 @@ export def "create-monitor" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  monitor_name: any
-  resource_arn: any
-  --tags: any
-]: any -> record<MonitorArn: record> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  monitor_name: string # The name of the monitor resource.
+  resource_arn: string # The Amazon Resource Name (ARN) of the predictor to monitor.
+  --tags: list # A list of tags (https://docs.aws.amazon.com/forecast/latest/dg/tagging-forecast-resources.html) to apply to the monitor resource. — item shape: {Key: string, Value: string}
+]: any -> record<MonitorArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.CreateMonitor")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"MonitorName": $monitor_name, "ResourceArn": $resource_arn, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -675,6 +707,12 @@ export def "create-monitor" [
 #
 # POST /
 # operationId: CreatePredictor
+# --EvaluationParameters shape: {NumberOfBacktestWindows?: int, BackTestWindowOffset?: int}
+# --HPOConfig shape: {ParameterRanges?: record}
+# --InputDataConfig shape: {DatasetGroupArn: string, SupplementaryFeatures?: list}
+# --FeaturizationConfig shape: {ForecastFrequency: string, ForecastDimensions?: list<string>, Featurizations?: list}
+# --EncryptionConfig shape: {RoleArn: string, KMSKeyArn: string}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-predictor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -692,26 +730,27 @@ export def "create-predictor" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  predictor_name: any
-  --algorithm-arn: any
-  forecast_horizon: any
-  --forecast-types: any
-  --perform-auto-ml: any
-  --auto-ml-override-strategy: any
-  --perform-hpo: any
-  --training-parameters: any
-  --evaluation-parameters: any
-  --hpo-config: any
-  input_data_config: any
-  featurization_config: any
-  --encryption-config: any
-  --tags: any
-  --optimization-metric: any
-]: any -> record<PredictorArn: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  predictor_name: string # A name for the predictor.
+  --algorithm-arn: string # The Amazon Resource Name (ARN) of the algorithm to use for model training. Required if PerformAutoML is not set to true. Supported algorithms: arn:aws:forecast:::algorithm/ARIMA arn:aws:forecast:::algorithm/CNN-QR arn:aws:forecast:::algorithm/Deep_AR_Plus arn:aws:forecast:::algorithm/ETS arn:aws:forecast:::algorithm/NPTS arn:aws:forecast:::algorithm/Prophet
+  forecast_horizon: int # Specifies the number of time-steps that the model is trained to predict. The forecast horizon is also called the prediction length. For example, if you configure a dataset for daily data collection (using the DataFrequency parameter of the CreateDataset operation) and set the forecast horizon to 10, the model returns predictions for 10 days. The maximum forecast horizon is the lesser of 500 time-steps or 1/3 of the TARGET_TIME_SERIES dataset length.
+  --forecast-types: list<string> # Specifies the forecast types used to train a predictor. You can specify up to five forecast types. Forecast types can be quantiles from 0.01 to 0.99, by increments of 0.01 or higher. You can also specify the mean forecast with mean. The default value is ["0.10", "0.50", "0.9"].
+  --perform-auto-ml: oneof<nothing, bool> # Whether to perform AutoML. When Amazon Forecast performs AutoML, it evaluates the algorithms it provides and chooses the best algorithm and configuration for your training dataset. The default value is false. In this case, you are required to specify an algorithm. Set PerformAutoML to true to have Amazon Forecast perform AutoML. This is a good option if you aren't sure which algorithm is suitable for your training data. In this case, PerformHPO must be false.
+  --auto-ml-override-strategy: string@auto-ml-override-strategy-completer # The LatencyOptimized AutoML override strategy is only available in private beta. Contact Amazon Web Services Support or your account manager to learn more about access privileges. Used to overide the default AutoML strategy, which is to optimize predictor accuracy. To apply an AutoML strategy that minimizes training time, use LatencyOptimized. This parameter is only valid for predictors trained using AutoML.
+  --perform-hpo: oneof<nothing, bool> # Whether to perform hyperparameter optimization (HPO). HPO finds optimal hyperparameter values for your training data. The process of performing HPO is known as running a hyperparameter tuning job. The default value is false. In this case, Amazon Forecast uses default hyperparameter values from the chosen algorithm. To override the default values, set PerformHPO to true and, optionally, supply the HyperParameterTuningJobConfig object. The tuning job specifies a metric to optimize, which hyperparameters participate in tuning, and the valid range for each tunable hyperparameter. In this case, you are required to specify an algorithm and PerformAutoML must be false. The following algorithms support HPO: DeepAR+ CNN-QR
+  --training-parameters: record # The hyperparameters to override for model training. The hyperparameters that you can override are listed in the individual algorithms. For the list of supported algorithms, see aws-forecast-choosing-recipes.
+  --evaluation-parameters: record # Parameters that define how to split a dataset into training data and testing data, and the number of iterations to perform. These parameters are specified in the predefined algorithms but you can override them in the CreatePredictor request. — shape: {NumberOfBacktestWindows?: int, BackTestWindowOffset?: int}
+  --hpo-config: record # Configuration information for a hyperparameter tuning job. You specify this object in the CreatePredictor request. A hyperparameter is a parameter that governs the model training process. You set hyperparameters before training starts, unlike model parameters, which are determined during training. The values of the hyperparameters effect which values are chosen for the model parameters. In a hyperparameter tuning job, Amazon Forecast chooses the set of hyperparameter values that optimize a specified metric. Forecast accomplishes this by running many training jobs over a range of hyperparameter values. The optimum set of values depends on the algorithm, the training data, and the specified metric objective. — shape: {ParameterRanges?: record}
+  input_data_config: record # This object belongs to the CreatePredictor operation. If you created your predictor with CreateAutoPredictor, see DataConfig. The data used to train a predictor. The data includes a dataset group and any supplementary features. You specify this object in the CreatePredictor request. — shape: {DatasetGroupArn: string, SupplementaryFeatures?: list}
+  featurization_config: record # This object belongs to the CreatePredictor operation. If you created your predictor with CreateAutoPredictor, see AttributeConfig. In a CreatePredictor operation, the specified algorithm trains a model using the specified dataset group. You can optionally tell the operation to modify data fields prior to training a model. These modifications are referred to as featurization. You define featurization using the FeaturizationConfig object. You specify an array of transformations, one for each field that you want to featurize. You then include the FeaturizationConfig object in your CreatePredictor request. Amazon Forecast applies the featurization to the TARGET_TIME_SERIES and RELATED_TIME_SERIES datasets before model training. You can create multiple featurization configurations. For example, you might call the CreatePredictor operation twice by specifying different featurization configurations. — shape: {ForecastFrequency: string, ForecastDimensions?: list<string>, Featurizations?: list}
+  --encryption-config: record # An Key Management Service (KMS) key and an Identity and Access Management (IAM) role that Amazon Forecast can assume to access the key. You can specify this optional object in the CreateDataset and CreatePredictor requests. — shape: {RoleArn: string, KMSKeyArn: string}
+  --tags: list # The optional metadata that you apply to the predictor to help you categorize and organize them. Each tag consists of a key and an optional value, both of which you define. The following basic restrictions apply to tags: Maximum number of tags per resource - 50. For each resource, each tag key must be unique, and each tag key can have only one value. Maximum key length - 128 Unicode characters in UTF-8. Maximum value length - 256 Unicode characters in UTF-8. If your tagging schema is used across multiple services and resources, remember that other services may have restrictions on allowed characters. Generally allowed characters are: letters, numbers, and spaces representable in UTF-8, and the following characters: + - = . _ : / @. Tag keys and values are case sensitive. Do not use aws:, AWS:, or any upper or lowercase combination of such as a prefix for keys as it is reserved for Amazon Web Services use. You cannot edit or delete tag keys with this prefix. Values can have this prefix. If a tag value has aws as its prefix but the key does not, then Forecast considers it to be a user tag and will count against the limit of 50 tags. Tags with only the key prefix of aws do not count against your tags per resource limit. — item shape: {Key: string, Value: string}
+  --optimization-metric: string@optimization-metric-completer # The accuracy metric used to optimize the predictor.
+]: any -> record<PredictorArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.CreatePredictor")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"PredictorName": $predictor_name, "AlgorithmArn": $algorithm_arn, "ForecastHorizon": $forecast_horizon, "ForecastTypes": $forecast_types, "PerformAutoML": $perform_auto_ml, "AutoMLOverrideStrategy": $auto_ml_override_strategy, "PerformHPO": $perform_hpo, "TrainingParameters": $training_parameters, "EvaluationParameters": $evaluation_parameters, "HPOConfig": $hpo_config, "InputDataConfig": $input_data_config, "FeaturizationConfig": $featurization_config, "EncryptionConfig": $encryption_config, "Tags": $tags, "OptimizationMetric": $optimization_metric} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -737,7 +776,8 @@ export def "create-predictor" [
 #
 # POST /
 # operationId: CreatePredictorBacktestExportJob
-# --Destination shape: {S3Config: any}
+# --Destination shape: {S3Config: record}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-predictor-backtest-export-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -755,16 +795,17 @@ export def "create-predictor-backtest-export-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  predictor_backtest_export_job_name: any
-  predictor_arn: any
-  destination: record # The destination for an export job. Provide an S3 path, an Identity and Access Management (IAM) role that allows Amazon Forecast to access the location, and an Key Management Service (KMS) key (optional). — shape: {S3Config: any}
-  --tags: any
-  --format: any
-]: any -> record<PredictorBacktestExportJobArn: record> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  predictor_backtest_export_job_name: string # The name for the backtest export job.
+  predictor_arn: string # The Amazon Resource Name (ARN) of the predictor that you want to export.
+  destination: record # The destination for an export job. Provide an S3 path, an Identity and Access Management (IAM) role that allows Amazon Forecast to access the location, and an Key Management Service (KMS) key (optional). — shape: {S3Config: record}
+  --tags: list # Optional metadata to help you categorize and organize your backtests. Each tag consists of a key and an optional value, both of which you define. Tag keys and values are case sensitive. The following restrictions apply to tags: For each resource, each tag key must be unique and each tag key must have one value. Maximum number of tags per resource: 50. Maximum key length: 128 Unicode characters in UTF-8. Maximum value length: 256 Unicode characters in UTF-8. Accepted characters: all letters and numbers, spaces representable in UTF-8, and + - = . _ : / @. If your tagging schema is used across other services and resources, the character restrictions of those services also apply. Key prefixes cannot include any upper or lowercase combination of aws: or AWS:. Values can have this prefix. If a tag value has aws as its prefix but the key does not, Forecast considers it to be a user tag and will count against the limit of 50 tags. Tags with only the key prefix of aws do not count against your tags per resource limit. You cannot edit or delete tag keys with this prefix. — item shape: {Key: string, Value: string}
+  --format: string # The format of the exported data, CSV or PARQUET. The default value is CSV.
+]: any -> record<PredictorBacktestExportJobArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.CreatePredictorBacktestExportJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"PredictorBacktestExportJobName": $predictor_backtest_export_job_name, "PredictorArn": $predictor_arn, "Destination": $destination, "Tags": $tags, "Format": $format} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -790,6 +831,8 @@ export def "create-predictor-backtest-export-job" [
 #
 # POST /
 # operationId: CreateWhatIfAnalysis
+# --TimeSeriesSelector shape: {TimeSeriesIdentifiers?: record}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-what-if-analysis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -807,15 +850,16 @@ export def "create-what-if-analysis" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  what_if_analysis_name: any
-  forecast_arn: any
-  --time-series-selector: any
-  --tags: any
-]: any -> record<WhatIfAnalysisArn: record> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  what_if_analysis_name: string # The name of the what-if analysis. Each name must be unique.
+  forecast_arn: string # The Amazon Resource Name (ARN) of the baseline forecast.
+  --time-series-selector: record # Defines the set of time series that are used to create the forecasts in a TimeSeriesIdentifiers object. The TimeSeriesIdentifiers object needs the following information: DataSource Format Schema — shape: {TimeSeriesIdentifiers?: record}
+  --tags: list # A list of tags (https://docs.aws.amazon.com/forecast/latest/dg/tagging-forecast-resources.html) to apply to the what if forecast. — item shape: {Key: string, Value: string}
+]: any -> record<WhatIfAnalysisArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.CreateWhatIfAnalysis")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"WhatIfAnalysisName": $what_if_analysis_name, "ForecastArn": $forecast_arn, "TimeSeriesSelector": $time_series_selector, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -841,6 +885,9 @@ export def "create-what-if-analysis" [
 #
 # POST /
 # operationId: CreateWhatIfForecast
+# --TimeSeriesTransformations item shape: {Action?: record, TimeSeriesConditions?: list}
+# --TimeSeriesReplacementsDataSource shape: {S3Config: record, Schema: record, Format?: string, TimestampFormat?: string}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-what-if-forecast" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -858,16 +905,17 @@ export def "create-what-if-forecast" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  what_if_forecast_name: any
-  what_if_analysis_arn: any
-  --time-series-transformations: any
-  --time-series-replacements-data-source: any
-  --tags: any
-]: any -> record<WhatIfForecastArn: record> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  what_if_forecast_name: string # The name of the what-if forecast. Names must be unique within each what-if analysis.
+  what_if_analysis_arn: string # The Amazon Resource Name (ARN) of the what-if analysis.
+  --time-series-transformations: list # The transformations that are applied to the baseline time series. Each transformation contains an action and a set of conditions. An action is applied only when all conditions are met. If no conditions are provided, the action is applied to all items. — item shape: {Action?: record, TimeSeriesConditions?: list}
+  --time-series-replacements-data-source: record # A replacement dataset is a modified version of the baseline related time series that contains only the values that you want to include in a what-if forecast. The replacement dataset must contain the forecast dimensions and item identifiers in the baseline related time series as well as at least 1 changed time series. This dataset is merged with the baseline related time series to create a transformed dataset that is used for the what-if forecast. — shape: {S3Config: record, Schema: record, Format?: string, TimestampFormat?: string}
+  --tags: list # A list of tags (https://docs.aws.amazon.com/forecast/latest/dg/tagging-forecast-resources.html) to apply to the what if forecast. — item shape: {Key: string, Value: string}
+]: any -> record<WhatIfForecastArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.CreateWhatIfForecast")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"WhatIfForecastName": $what_if_forecast_name, "WhatIfAnalysisArn": $what_if_analysis_arn, "TimeSeriesTransformations": $time_series_transformations, "TimeSeriesReplacementsDataSource": $time_series_replacements_data_source, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -893,6 +941,8 @@ export def "create-what-if-forecast" [
 #
 # POST /
 # operationId: CreateWhatIfForecastExport
+# --Destination shape: {S3Config: record}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-what-if-forecast-export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -910,16 +960,17 @@ export def "create-what-if-forecast-export" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  what_if_forecast_export_name: any
-  what_if_forecast_arns: any
-  destination: any
-  --tags: any
-  --format: any
-]: any -> record<WhatIfForecastExportArn: record> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  what_if_forecast_export_name: string # The name of the what-if forecast to export.
+  what_if_forecast_arns: list<string> # The list of what-if forecast Amazon Resource Names (ARNs) to export.
+  destination: record # The destination for an export job. Provide an S3 path, an Identity and Access Management (IAM) role that allows Amazon Forecast to access the location, and an Key Management Service (KMS) key (optional). — shape: {S3Config: record}
+  --tags: list # A list of tags (https://docs.aws.amazon.com/forecast/latest/dg/tagging-forecast-resources.html) to apply to the what if forecast. — item shape: {Key: string, Value: string}
+  --format: string # The format of the exported data, CSV or PARQUET.
+]: any -> record<WhatIfForecastExportArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.CreateWhatIfForecastExport")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"WhatIfForecastExportName": $what_if_forecast_export_name, "WhatIfForecastArns": $what_if_forecast_arns, "Destination": $destination, "Tags": $tags, "Format": $format} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -962,12 +1013,13 @@ export def "delete-dataset" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  dataset_arn: any
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  dataset_arn: string # The Amazon Resource Name (ARN) of the dataset to delete.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.DeleteDataset")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DatasetArn": $dataset_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1010,12 +1062,13 @@ export def "delete-dataset-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  dataset_group_arn: any
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  dataset_group_arn: string # The Amazon Resource Name (ARN) of the dataset group to delete.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.DeleteDatasetGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DatasetGroupArn": $dataset_group_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1058,12 +1111,13 @@ export def "delete-dataset-import-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  dataset_import_job_arn: any
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  dataset_import_job_arn: string # The Amazon Resource Name (ARN) of the dataset import job to delete.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.DeleteDatasetImportJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DatasetImportJobArn": $dataset_import_job_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1106,12 +1160,13 @@ export def "delete-explainability" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  explainability_arn: any
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  explainability_arn: string # The Amazon Resource Name (ARN) of the Explainability resource to delete.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.DeleteExplainability")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ExplainabilityArn": $explainability_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1154,12 +1209,13 @@ export def "delete-explainability-export" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  explainability_export_arn: any
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  explainability_export_arn: string # The Amazon Resource Name (ARN) of the Explainability export to delete.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.DeleteExplainabilityExport")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ExplainabilityExportArn": $explainability_export_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1202,12 +1258,13 @@ export def "delete-forecast" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  forecast_arn: any
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  forecast_arn: string # The Amazon Resource Name (ARN) of the forecast to delete.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.DeleteForecast")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ForecastArn": $forecast_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1250,12 +1307,13 @@ export def "delete-forecast-export-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  forecast_export_job_arn: any
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  forecast_export_job_arn: string # The Amazon Resource Name (ARN) of the forecast export job to delete.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.DeleteForecastExportJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ForecastExportJobArn": $forecast_export_job_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1298,12 +1356,13 @@ export def "delete-monitor" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  monitor_arn: any
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  monitor_arn: string # The Amazon Resource Name (ARN) of the monitor resource to delete.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.DeleteMonitor")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"MonitorArn": $monitor_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1346,12 +1405,13 @@ export def "delete-predictor" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  predictor_arn: any
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  predictor_arn: string # The Amazon Resource Name (ARN) of the predictor to delete.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.DeletePredictor")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"PredictorArn": $predictor_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1394,12 +1454,13 @@ export def "delete-predictor-backtest-export-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  predictor_backtest_export_job_arn: any
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  predictor_backtest_export_job_arn: string # The Amazon Resource Name (ARN) of the predictor backtest export job to delete.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.DeletePredictorBacktestExportJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"PredictorBacktestExportJobArn": $predictor_backtest_export_job_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1442,12 +1503,13 @@ export def "delete-resource-tree" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  resource_arn: any
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the parent resource to delete. All child resources of the parent resource will also be deleted.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.DeleteResourceTree")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1490,12 +1552,13 @@ export def "delete-what-if-analysis" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  what_if_analysis_arn: any
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  what_if_analysis_arn: string # The Amazon Resource Name (ARN) of the what-if analysis that you want to delete.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.DeleteWhatIfAnalysis")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"WhatIfAnalysisArn": $what_if_analysis_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1538,12 +1601,13 @@ export def "delete-what-if-forecast" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-26
-  what_if_forecast_arn: any
+  --x-amz-target: string@x-amz-target-completer-26 # required
+  what_if_forecast_arn: string # The Amazon Resource Name (ARN) of the what-if forecast that you want to delete.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.DeleteWhatIfForecast")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"WhatIfForecastArn": $what_if_forecast_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1586,12 +1650,13 @@ export def "delete-what-if-forecast-export" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-27
-  what_if_forecast_export_arn: any
+  --x-amz-target: string@x-amz-target-completer-27 # required
+  what_if_forecast_export_arn: string # The Amazon Resource Name (ARN) of the what-if forecast export that you want to delete.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.DeleteWhatIfForecastExport")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"WhatIfForecastExportArn": $what_if_forecast_export_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1634,12 +1699,13 @@ export def "describe-auto-predictor" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-28
-  predictor_arn: any
-]: any -> record<PredictorArn: record, PredictorName: record, ForecastHorizon: record, ForecastTypes: record, ForecastFrequency: record, ForecastDimensions: record, DatasetImportJobArns: record, DataConfig: record<DatasetGroupArn: record, AttributeConfigs: record, AdditionalDatasets: record>, EncryptionConfig: record<RoleArn: record, KMSKeyArn: record>, ReferencePredictorSummary: record<Arn: record, State: record>, EstimatedTimeRemainingInMinutes: record, Status: record, Message: record, CreationTime: record, LastModificationTime: record, OptimizationMetric: record, ExplainabilityInfo: record<ExplainabilityArn: record, Status: record>, MonitorInfo: record<MonitorArn: record, Status: record>, TimeAlignmentBoundary: record<Month: record, DayOfMonth: record, DayOfWeek: record, Hour: record>> {
+  --x-amz-target: string@x-amz-target-completer-28 # required
+  predictor_arn: string # The Amazon Resource Name (ARN) of the predictor.
+]: any -> record<PredictorArn: string, PredictorName: string, ForecastHorizon: int, ForecastTypes: list<string>, ForecastFrequency: string, ForecastDimensions: list<string>, DatasetImportJobArns: list<string>, DataConfig: record<DatasetGroupArn: string, AttributeConfigs: list<record>, AdditionalDatasets: list<record>>, EncryptionConfig: record<RoleArn: string, KMSKeyArn: string>, ReferencePredictorSummary: record<Arn: string, State: string>, EstimatedTimeRemainingInMinutes: int, Status: string, Message: string, CreationTime: string, LastModificationTime: string, OptimizationMetric: string, ExplainabilityInfo: record<ExplainabilityArn: string, Status: string>, MonitorInfo: record<MonitorArn: string, Status: string>, TimeAlignmentBoundary: record<Month: string, DayOfMonth: int, DayOfWeek: string, Hour: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.DescribeAutoPredictor")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"PredictorArn": $predictor_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1682,12 +1748,13 @@ export def "describe-dataset" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-29
-  dataset_arn: any
-]: any -> record<DatasetArn: record, DatasetName: record, Domain: record, DatasetType: record, DataFrequency: record, Schema: record<Attributes: record>, EncryptionConfig: record<RoleArn: record, KMSKeyArn: record>, Status: record, CreationTime: record, LastModificationTime: record> {
+  --x-amz-target: string@x-amz-target-completer-29 # required
+  dataset_arn: string # The Amazon Resource Name (ARN) of the dataset.
+]: any -> record<DatasetArn: string, DatasetName: string, Domain: string, DatasetType: string, DataFrequency: string, Schema: record<Attributes: list<record>>, EncryptionConfig: record<RoleArn: string, KMSKeyArn: string>, Status: string, CreationTime: string, LastModificationTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.DescribeDataset")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DatasetArn": $dataset_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1730,12 +1797,13 @@ export def "describe-dataset-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-30
-  dataset_group_arn: any
-]: any -> record<DatasetGroupName: record, DatasetGroupArn: record, DatasetArns: record, Domain: record, Status: record, CreationTime: record, LastModificationTime: record> {
+  --x-amz-target: string@x-amz-target-completer-30 # required
+  dataset_group_arn: string # The Amazon Resource Name (ARN) of the dataset group.
+]: any -> record<DatasetGroupName: string, DatasetGroupArn: string, DatasetArns: list<string>, Domain: string, Status: string, CreationTime: string, LastModificationTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.DescribeDatasetGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DatasetGroupArn": $dataset_group_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1778,12 +1846,13 @@ export def "describe-dataset-import-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-31
-  dataset_import_job_arn: any
-]: any -> record<DatasetImportJobName: record, DatasetImportJobArn: record, DatasetArn: record, TimestampFormat: record, TimeZone: record, UseGeolocationForTimeZone: record, GeolocationFormat: record, DataSource: record<S3Config: record<Path: record, RoleArn: record, KMSKeyArn: record>>, EstimatedTimeRemainingInMinutes: record, FieldStatistics: record, DataSize: record, Status: record, Message: record, CreationTime: record, LastModificationTime: record, Format: record, ImportMode: record> {
+  --x-amz-target: string@x-amz-target-completer-31 # required
+  dataset_import_job_arn: string # The Amazon Resource Name (ARN) of the dataset import job.
+]: any -> record<DatasetImportJobName: string, DatasetImportJobArn: string, DatasetArn: string, TimestampFormat: string, TimeZone: string, UseGeolocationForTimeZone: bool, GeolocationFormat: string, DataSource: record<S3Config: record<Path: string, RoleArn: string, KMSKeyArn: string>>, EstimatedTimeRemainingInMinutes: int, FieldStatistics: record, DataSize: float, Status: string, Message: string, CreationTime: string, LastModificationTime: string, Format: string, ImportMode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.DescribeDatasetImportJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DatasetImportJobArn": $dataset_import_job_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1826,12 +1895,13 @@ export def "describe-explainability" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-32
-  explainability_arn: any
-]: any -> record<ExplainabilityArn: record, ExplainabilityName: record, ResourceArn: record, ExplainabilityConfig: record<TimeSeriesGranularity: record, TimePointGranularity: record>, EnableVisualization: record, DataSource: record<S3Config: record<Path: record, RoleArn: record, KMSKeyArn: record>>, Schema: record<Attributes: record>, StartDateTime: record, EndDateTime: record, EstimatedTimeRemainingInMinutes: record, Message: record, Status: record, CreationTime: record, LastModificationTime: record> {
+  --x-amz-target: string@x-amz-target-completer-32 # required
+  explainability_arn: string # The Amazon Resource Name (ARN) of the Explaianability to describe.
+]: any -> record<ExplainabilityArn: string, ExplainabilityName: string, ResourceArn: string, ExplainabilityConfig: record<TimeSeriesGranularity: string, TimePointGranularity: string>, EnableVisualization: bool, DataSource: record<S3Config: record<Path: string, RoleArn: string, KMSKeyArn: string>>, Schema: record<Attributes: list<record>>, StartDateTime: string, EndDateTime: string, EstimatedTimeRemainingInMinutes: int, Message: string, Status: string, CreationTime: string, LastModificationTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.DescribeExplainability")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ExplainabilityArn": $explainability_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1874,12 +1944,13 @@ export def "describe-explainability-export" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-33
-  explainability_export_arn: any
-]: any -> record<ExplainabilityExportArn: record, ExplainabilityExportName: record, ExplainabilityArn: record, Destination: record<S3Config: record<Path: record, RoleArn: record, KMSKeyArn: record>>, Message: record, Status: record, CreationTime: record, LastModificationTime: record, Format: record> {
+  --x-amz-target: string@x-amz-target-completer-33 # required
+  explainability_export_arn: string # The Amazon Resource Name (ARN) of the Explainability export.
+]: any -> record<ExplainabilityExportArn: string, ExplainabilityExportName: string, ExplainabilityArn: string, Destination: record<S3Config: record<Path: string, RoleArn: string, KMSKeyArn: string>>, Message: string, Status: string, CreationTime: string, LastModificationTime: string, Format: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.DescribeExplainabilityExport")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ExplainabilityExportArn": $explainability_export_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1922,12 +1993,13 @@ export def "describe-forecast" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-34
-  forecast_arn: any
-]: any -> record<ForecastArn: record, ForecastName: record, ForecastTypes: record, PredictorArn: record, DatasetGroupArn: record, EstimatedTimeRemainingInMinutes: record, Status: record, Message: record, CreationTime: record, LastModificationTime: record, TimeSeriesSelector: record<TimeSeriesIdentifiers: record<DataSource: record, Schema: record, Format: record>>> {
+  --x-amz-target: string@x-amz-target-completer-34 # required
+  forecast_arn: string # The Amazon Resource Name (ARN) of the forecast.
+]: any -> record<ForecastArn: string, ForecastName: string, ForecastTypes: list<string>, PredictorArn: string, DatasetGroupArn: string, EstimatedTimeRemainingInMinutes: int, Status: string, Message: string, CreationTime: string, LastModificationTime: string, TimeSeriesSelector: record<TimeSeriesIdentifiers: record<DataSource: record, Schema: record, Format: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.DescribeForecast")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ForecastArn": $forecast_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1970,12 +2042,13 @@ export def "describe-forecast-export-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-35
-  forecast_export_job_arn: any
-]: any -> record<ForecastExportJobArn: record, ForecastExportJobName: record, ForecastArn: record, Destination: record<S3Config: record<Path: record, RoleArn: record, KMSKeyArn: record>>, Message: record, Status: record, CreationTime: record, LastModificationTime: record, Format: record> {
+  --x-amz-target: string@x-amz-target-completer-35 # required
+  forecast_export_job_arn: string # The Amazon Resource Name (ARN) of the forecast export job.
+]: any -> record<ForecastExportJobArn: string, ForecastExportJobName: string, ForecastArn: string, Destination: record<S3Config: record<Path: string, RoleArn: string, KMSKeyArn: string>>, Message: string, Status: string, CreationTime: string, LastModificationTime: string, Format: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.DescribeForecastExportJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ForecastExportJobArn": $forecast_export_job_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2018,12 +2091,13 @@ export def "describe-monitor" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-36
-  monitor_arn: any
-]: any -> record<MonitorName: record, MonitorArn: record, ResourceArn: record, Status: record, LastEvaluationTime: record, LastEvaluationState: record, Baseline: record<PredictorBaseline: record<BaselineMetrics: record>>, Message: record, CreationTime: record, LastModificationTime: record, EstimatedEvaluationTimeRemainingInMinutes: record> {
+  --x-amz-target: string@x-amz-target-completer-36 # required
+  monitor_arn: string # The Amazon Resource Name (ARN) of the monitor resource to describe.
+]: any -> record<MonitorName: string, MonitorArn: string, ResourceArn: string, Status: string, LastEvaluationTime: string, LastEvaluationState: string, Baseline: record<PredictorBaseline: record<BaselineMetrics: list>>, Message: string, CreationTime: string, LastModificationTime: string, EstimatedEvaluationTimeRemainingInMinutes: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.DescribeMonitor")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"MonitorArn": $monitor_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2066,12 +2140,13 @@ export def "describe-predictor" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-37
-  predictor_arn: any
-]: any -> record<PredictorArn: record, PredictorName: record, AlgorithmArn: record, AutoMLAlgorithmArns: record, ForecastHorizon: record, ForecastTypes: record, PerformAutoML: record, AutoMLOverrideStrategy: record, PerformHPO: record, TrainingParameters: record, EvaluationParameters: record<NumberOfBacktestWindows: record, BackTestWindowOffset: record>, HPOConfig: record<ParameterRanges: record<CategoricalParameterRanges: record, ContinuousParameterRanges: record, IntegerParameterRanges: record>>, InputDataConfig: record<DatasetGroupArn: record, SupplementaryFeatures: record>, FeaturizationConfig: record<ForecastFrequency: record, ForecastDimensions: record, Featurizations: record>, EncryptionConfig: record<RoleArn: record, KMSKeyArn: record>, PredictorExecutionDetails: record<PredictorExecutions: record>, EstimatedTimeRemainingInMinutes: record, IsAutoPredictor: record, DatasetImportJobArns: record, Status: record, Message: record, CreationTime: record, LastModificationTime: record, OptimizationMetric: record> {
+  --x-amz-target: string@x-amz-target-completer-37 # required
+  predictor_arn: string # The Amazon Resource Name (ARN) of the predictor that you want information about.
+]: any -> record<PredictorArn: string, PredictorName: string, AlgorithmArn: string, AutoMLAlgorithmArns: list<string>, ForecastHorizon: int, ForecastTypes: list<string>, PerformAutoML: bool, AutoMLOverrideStrategy: string, PerformHPO: bool, TrainingParameters: record, EvaluationParameters: record<NumberOfBacktestWindows: int, BackTestWindowOffset: int>, HPOConfig: record<ParameterRanges: record<CategoricalParameterRanges: list, ContinuousParameterRanges: list, IntegerParameterRanges: list>>, InputDataConfig: record<DatasetGroupArn: string, SupplementaryFeatures: list<record>>, FeaturizationConfig: record<ForecastFrequency: string, ForecastDimensions: list<string>, Featurizations: list<record>>, EncryptionConfig: record<RoleArn: string, KMSKeyArn: string>, PredictorExecutionDetails: record<PredictorExecutions: list<record>>, EstimatedTimeRemainingInMinutes: int, IsAutoPredictor: bool, DatasetImportJobArns: list<string>, Status: string, Message: string, CreationTime: string, LastModificationTime: string, OptimizationMetric: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.DescribePredictor")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"PredictorArn": $predictor_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2114,12 +2189,13 @@ export def "describe-predictor-backtest-export-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-38
-  predictor_backtest_export_job_arn: any
-]: any -> record<PredictorBacktestExportJobArn: record, PredictorBacktestExportJobName: record, PredictorArn: record, Destination: record<S3Config: record<Path: record, RoleArn: record, KMSKeyArn: record>>, Message: record, Status: record, CreationTime: record, LastModificationTime: record, Format: record> {
+  --x-amz-target: string@x-amz-target-completer-38 # required
+  predictor_backtest_export_job_arn: string # The Amazon Resource Name (ARN) of the predictor backtest export job.
+]: any -> record<PredictorBacktestExportJobArn: string, PredictorBacktestExportJobName: string, PredictorArn: string, Destination: record<S3Config: record<Path: string, RoleArn: string, KMSKeyArn: string>>, Message: string, Status: string, CreationTime: string, LastModificationTime: string, Format: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.DescribePredictorBacktestExportJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"PredictorBacktestExportJobArn": $predictor_backtest_export_job_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2162,12 +2238,13 @@ export def "describe-what-if-analysis" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-39
-  what_if_analysis_arn: any
-]: any -> record<WhatIfAnalysisName: record, WhatIfAnalysisArn: record, ForecastArn: record, EstimatedTimeRemainingInMinutes: record, Status: record, Message: record, CreationTime: record, LastModificationTime: record, TimeSeriesSelector: record<TimeSeriesIdentifiers: record<DataSource: record, Schema: record, Format: record>>> {
+  --x-amz-target: string@x-amz-target-completer-39 # required
+  what_if_analysis_arn: string # The Amazon Resource Name (ARN) of the what-if analysis that you are interested in.
+]: any -> record<WhatIfAnalysisName: string, WhatIfAnalysisArn: string, ForecastArn: string, EstimatedTimeRemainingInMinutes: int, Status: string, Message: string, CreationTime: string, LastModificationTime: string, TimeSeriesSelector: record<TimeSeriesIdentifiers: record<DataSource: record, Schema: record, Format: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.DescribeWhatIfAnalysis")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"WhatIfAnalysisArn": $what_if_analysis_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2210,12 +2287,13 @@ export def "describe-what-if-forecast" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-40
-  what_if_forecast_arn: any
-]: any -> record<WhatIfForecastName: record, WhatIfForecastArn: record, WhatIfAnalysisArn: record, EstimatedTimeRemainingInMinutes: record, Status: record, Message: record, CreationTime: record, LastModificationTime: record, TimeSeriesTransformations: record, TimeSeriesReplacementsDataSource: record<S3Config: record<Path: record, RoleArn: record, KMSKeyArn: record>, Schema: record<Attributes: record>, Format: record, TimestampFormat: record>, ForecastTypes: record> {
+  --x-amz-target: string@x-amz-target-completer-40 # required
+  what_if_forecast_arn: string # The Amazon Resource Name (ARN) of the what-if forecast that you are interested in.
+]: any -> record<WhatIfForecastName: string, WhatIfForecastArn: string, WhatIfAnalysisArn: string, EstimatedTimeRemainingInMinutes: int, Status: string, Message: string, CreationTime: string, LastModificationTime: string, TimeSeriesTransformations: table<Action: record, TimeSeriesConditions: list>, TimeSeriesReplacementsDataSource: record<S3Config: record<Path: string, RoleArn: string, KMSKeyArn: string>, Schema: record<Attributes: list>, Format: string, TimestampFormat: string>, ForecastTypes: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.DescribeWhatIfForecast")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"WhatIfForecastArn": $what_if_forecast_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2258,12 +2336,13 @@ export def "describe-what-if-forecast-export" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-41
-  what_if_forecast_export_arn: any
-]: any -> record<WhatIfForecastExportArn: record, WhatIfForecastExportName: record, WhatIfForecastArns: record, Destination: record<S3Config: record<Path: record, RoleArn: record, KMSKeyArn: record>>, Message: record, Status: record, CreationTime: record, EstimatedTimeRemainingInMinutes: record, LastModificationTime: record, Format: record> {
+  --x-amz-target: string@x-amz-target-completer-41 # required
+  what_if_forecast_export_arn: string # The Amazon Resource Name (ARN) of the what-if forecast export that you are interested in.
+]: any -> record<WhatIfForecastExportArn: string, WhatIfForecastExportName: string, WhatIfForecastArns: list<string>, Destination: record<S3Config: record<Path: string, RoleArn: string, KMSKeyArn: string>>, Message: string, Status: string, CreationTime: string, EstimatedTimeRemainingInMinutes: int, LastModificationTime: string, Format: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.DescribeWhatIfForecastExport")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"WhatIfForecastExportArn": $what_if_forecast_export_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2306,12 +2385,13 @@ export def "get-accuracy-metrics" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-42
-  predictor_arn: any
-]: any -> record<PredictorEvaluationResults: record, IsAutoPredictor: record, AutoMLOverrideStrategy: record, OptimizationMetric: record> {
+  --x-amz-target: string@x-amz-target-completer-42 # required
+  predictor_arn: string # The Amazon Resource Name (ARN) of the predictor to get metrics for.
+]: any -> record<PredictorEvaluationResults: table<AlgorithmArn: string, TestWindows: list>, IsAutoPredictor: bool, AutoMLOverrideStrategy: string, OptimizationMetric: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.GetAccuracyMetrics")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"PredictorArn": $predictor_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2356,13 +2436,14 @@ export def "list-dataset-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-43
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<DatasetGroups: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-43 # required
+  --next-token-body: string # If the result of the previous request was truncated, the response includes a NextToken. To retrieve the next set of results, use the token in the next request. Tokens expire after 24 hours. (body field)
+  --max-results-body: int # The number of items to return in the response. (body field)
+]: any -> record<DatasetGroups: table<DatasetGroupArn: string, DatasetGroupName: string, CreationTime: string, LastModificationTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.ListDatasetGroups")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -2389,6 +2470,7 @@ export def "list-dataset-groups" [
 #
 # POST /
 # operationId: ListDatasetImportJobs
+# --Filters item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
 export def "list-dataset-import-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2408,14 +2490,15 @@ export def "list-dataset-import-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-44
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --filters: any
-]: any -> record<DatasetImportJobs: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-44 # required
+  --next-token-body: string # If the result of the previous request was truncated, the response includes a NextToken. To retrieve the next set of results, use the token in the next request. Tokens expire after 24 hours. (body field)
+  --max-results-body: int # The number of items to return in the response. (body field)
+  --filters: list # An array of filters. For each filter, you provide a condition and a match statement. The condition is either IS or IS_NOT, which specifies whether to include or exclude the datasets that match the statement from the list, respectively. The match statement consists of a key and a value. Filter properties Condition - The condition to apply. Valid values are IS and IS_NOT. To include the datasets that match the statement, specify IS. To exclude matching datasets, specify IS_NOT. Key - The name of the parameter to filter on. Valid values are DatasetArn and Status. Value - The value to match. For example, to list all dataset import jobs whose status is ACTIVE, you specify the following filter: "Filters": [ { "Condition": "IS", "Key": "Status", "Value": "ACTIVE" } ] — item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
+]: any -> record<DatasetImportJobs: table<DatasetImportJobArn: string, DatasetImportJobName: string, DataSource: record, Status: string, Message: string, CreationTime: string, LastModificationTime: string, ImportMode: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.ListDatasetImportJobs")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "Filters": $filters} | compact
@@ -2461,13 +2544,14 @@ export def "list-datasets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-45
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<Datasets: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-45 # required
+  --next-token-body: string # If the result of the previous request was truncated, the response includes a NextToken. To retrieve the next set of results, use the token in the next request. Tokens expire after 24 hours. (body field)
+  --max-results-body: int # The number of items to return in the response. (body field)
+]: any -> record<Datasets: table<DatasetArn: string, DatasetName: string, DatasetType: string, Domain: string, CreationTime: string, LastModificationTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.ListDatasets")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -2494,6 +2578,7 @@ export def "list-datasets" [
 #
 # POST /
 # operationId: ListExplainabilities
+# --Filters item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
 export def "list-explainabilities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2513,14 +2598,15 @@ export def "list-explainabilities" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-46
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --filters: any
-]: any -> record<Explainabilities: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-46 # required
+  --next-token-body: string # If the result of the previous request was truncated, the response includes a NextToken. To retrieve the next set of results, use the token in the next request. Tokens expire after 24 hours. (body field)
+  --max-results-body: int # The number of items returned in the response. (body field)
+  --filters: list # An array of filters. For each filter, provide a condition and a match statement. The condition is either IS or IS_NOT, which specifies whether to include or exclude the resources that match the statement from the list. The match statement consists of a key and a value. Filter properties Condition - The condition to apply. Valid values are IS and IS_NOT. Key - The name of the parameter to filter on. Valid values are ResourceArn and Status. Value - The value to match. — item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
+]: any -> record<Explainabilities: table<ExplainabilityArn: string, ExplainabilityName: string, ResourceArn: string, ExplainabilityConfig: record, Status: string, Message: string, CreationTime: string, LastModificationTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.ListExplainabilities")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "Filters": $filters} | compact
@@ -2547,6 +2633,7 @@ export def "list-explainabilities" [
 #
 # POST /
 # operationId: ListExplainabilityExports
+# --Filters item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
 export def "list-explainability-exports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2566,14 +2653,15 @@ export def "list-explainability-exports" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-47
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --filters: any
-]: any -> record<ExplainabilityExports: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-47 # required
+  --next-token-body: string # If the result of the previous request was truncated, the response includes a NextToken. To retrieve the next set of results, use the token in the next request. Tokens expire after 24 hours. (body field)
+  --max-results-body: int # The number of items to return in the response. (body field)
+  --filters: list # An array of filters. For each filter, provide a condition and a match statement. The condition is either IS or IS_NOT, which specifies whether to include or exclude resources that match the statement from the list. The match statement consists of a key and a value. Filter properties Condition - The condition to apply. Valid values are IS and IS_NOT. Key - The name of the parameter to filter on. Valid values are ResourceArn and Status. Value - The value to match. — item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
+]: any -> record<ExplainabilityExports: table<ExplainabilityExportArn: string, ExplainabilityExportName: string, Destination: record, Status: string, Message: string, CreationTime: string, LastModificationTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.ListExplainabilityExports")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "Filters": $filters} | compact
@@ -2600,6 +2688,7 @@ export def "list-explainability-exports" [
 #
 # POST /
 # operationId: ListForecastExportJobs
+# --Filters item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
 export def "list-forecast-export-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2619,14 +2708,15 @@ export def "list-forecast-export-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-48
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --filters: any
-]: any -> record<ForecastExportJobs: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-48 # required
+  --next-token-body: string # If the result of the previous request was truncated, the response includes a NextToken. To retrieve the next set of results, use the token in the next request. Tokens expire after 24 hours. (body field)
+  --max-results-body: int # The number of items to return in the response. (body field)
+  --filters: list # An array of filters. For each filter, you provide a condition and a match statement. The condition is either IS or IS_NOT, which specifies whether to include or exclude the forecast export jobs that match the statement from the list, respectively. The match statement consists of a key and a value. Filter properties Condition - The condition to apply. Valid values are IS and IS_NOT. To include the forecast export jobs that match the statement, specify IS. To exclude matching forecast export jobs, specify IS_NOT. Key - The name of the parameter to filter on. Valid values are ForecastArn and Status. Value - The value to match. For example, to list all jobs that export a forecast named electricityforecast, specify the following filter: "Filters": [ { "Condition": "IS", "Key": "ForecastArn", "Value": "arn:aws:forecast:us-west-2:<acct-id>:forecast/electricityforecast" } ] — item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
+]: any -> record<ForecastExportJobs: table<ForecastExportJobArn: string, ForecastExportJobName: string, Destination: record, Status: string, Message: string, CreationTime: string, LastModificationTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.ListForecastExportJobs")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "Filters": $filters} | compact
@@ -2653,6 +2743,7 @@ export def "list-forecast-export-jobs" [
 #
 # POST /
 # operationId: ListForecasts
+# --Filters item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
 export def "list-forecasts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2672,14 +2763,15 @@ export def "list-forecasts" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-49
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --filters: any
-]: any -> record<Forecasts: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-49 # required
+  --next-token-body: string # If the result of the previous request was truncated, the response includes a NextToken. To retrieve the next set of results, use the token in the next request. Tokens expire after 24 hours. (body field)
+  --max-results-body: int # The number of items to return in the response. (body field)
+  --filters: list # An array of filters. For each filter, you provide a condition and a match statement. The condition is either IS or IS_NOT, which specifies whether to include or exclude the forecasts that match the statement from the list, respectively. The match statement consists of a key and a value. Filter properties Condition - The condition to apply. Valid values are IS and IS_NOT. To include the forecasts that match the statement, specify IS. To exclude matching forecasts, specify IS_NOT. Key - The name of the parameter to filter on. Valid values are DatasetGroupArn, PredictorArn, and Status. Value - The value to match. For example, to list all forecasts whose status is not ACTIVE, you would specify: "Filters": [ { "Condition": "IS_NOT", "Key": "Status", "Value": "ACTIVE" } ] — item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
+]: any -> record<Forecasts: table<ForecastArn: string, ForecastName: string, PredictorArn: string, CreatedUsingAutoPredictor: bool, DatasetGroupArn: string, Status: string, Message: string, CreationTime: string, LastModificationTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.ListForecasts")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "Filters": $filters} | compact
@@ -2706,6 +2798,7 @@ export def "list-forecasts" [
 #
 # POST /
 # operationId: ListMonitorEvaluations
+# --Filters item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
 export def "list-monitor-evaluations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2725,15 +2818,16 @@ export def "list-monitor-evaluations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-50
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  monitor_arn: any
-  --filters: any
-]: any -> record<NextToken: record, PredictorMonitorEvaluations: record> {
+  --x-amz-target: string@x-amz-target-completer-50 # required
+  --next-token-body: string # If the result of the previous request was truncated, the response includes a NextToken. To retrieve the next set of results, use the token in the next request. Tokens expire after 24 hours. (body field)
+  --max-results-body: int # The maximum number of monitoring results to return. (body field)
+  monitor_arn: string # The Amazon Resource Name (ARN) of the monitor resource to get results from.
+  --filters: list # An array of filters. For each filter, provide a condition and a match statement. The condition is either IS or IS_NOT, which specifies whether to include or exclude the resources that match the statement from the list. The match statement consists of a key and a value. Filter properties Condition - The condition to apply. Valid values are IS and IS_NOT. Key - The name of the parameter to filter on. The only valid value is EvaluationState. Value - The value to match. Valid values are only SUCCESS or FAILURE. For example, to list only successful monitor evaluations, you would specify: "Filters": [ { "Condition": "IS", "Key": "EvaluationState", "Value": "SUCCESS" } ] — item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
+]: any -> record<NextToken: string, PredictorMonitorEvaluations: table<ResourceArn: string, MonitorArn: string, EvaluationTime: string, EvaluationState: string, WindowStartDatetime: string, WindowEndDatetime: string, PredictorEvent: record, MonitorDataSource: record, MetricResults: list, NumItemsEvaluated: int, Message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.ListMonitorEvaluations")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "MonitorArn": $monitor_arn, "Filters": $filters} | compact
@@ -2760,6 +2854,7 @@ export def "list-monitor-evaluations" [
 #
 # POST /
 # operationId: ListMonitors
+# --Filters item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
 export def "list-monitors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2779,14 +2874,15 @@ export def "list-monitors" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-51
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --filters: any
-]: any -> record<Monitors: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-51 # required
+  --next-token-body: string # If the result of the previous request was truncated, the response includes a NextToken. To retrieve the next set of results, use the token in the next request. Tokens expire after 24 hours. (body field)
+  --max-results-body: int # The maximum number of monitors to include in the response. (body field)
+  --filters: list # An array of filters. For each filter, provide a condition and a match statement. The condition is either IS or IS_NOT, which specifies whether to include or exclude the resources that match the statement from the list. The match statement consists of a key and a value. Filter properties Condition - The condition to apply. Valid values are IS and IS_NOT. Key - The name of the parameter to filter on. The only valid value is Status. Value - The value to match. For example, to list all monitors who's status is ACTIVE, you would specify: "Filters": [ { "Condition": "IS", "Key": "Status", "Value": "ACTIVE" } ] — item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
+]: any -> record<Monitors: table<MonitorArn: string, MonitorName: string, ResourceArn: string, Status: string, CreationTime: string, LastModificationTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.ListMonitors")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "Filters": $filters} | compact
@@ -2813,6 +2909,7 @@ export def "list-monitors" [
 #
 # POST /
 # operationId: ListPredictorBacktestExportJobs
+# --Filters item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
 export def "list-predictor-backtest-export-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2832,14 +2929,15 @@ export def "list-predictor-backtest-export-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-52
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --filters: any
-]: any -> record<PredictorBacktestExportJobs: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-52 # required
+  --next-token-body: string # If the result of the previous request was truncated, the response includes a NextToken. To retrieve the next set of results, use the token in the next request. Tokens expire after 24 hours. (body field)
+  --max-results-body: int # The number of items to return in the response. (body field)
+  --filters: list # An array of filters. For each filter, provide a condition and a match statement. The condition is either IS or IS_NOT, which specifies whether to include or exclude the predictor backtest export jobs that match the statement from the list. The match statement consists of a key and a value. Filter properties Condition - The condition to apply. Valid values are IS and IS_NOT. To include the predictor backtest export jobs that match the statement, specify IS. To exclude matching predictor backtest export jobs, specify IS_NOT. Key - The name of the parameter to filter on. Valid values are PredictorArn and Status. Value - The value to match. — item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
+]: any -> record<PredictorBacktestExportJobs: table<PredictorBacktestExportJobArn: string, PredictorBacktestExportJobName: string, Destination: record, Status: string, Message: string, CreationTime: string, LastModificationTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.ListPredictorBacktestExportJobs")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "Filters": $filters} | compact
@@ -2866,6 +2964,7 @@ export def "list-predictor-backtest-export-jobs" [
 #
 # POST /
 # operationId: ListPredictors
+# --Filters item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
 export def "list-predictors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2885,14 +2984,15 @@ export def "list-predictors" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-53
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --filters: any
-]: any -> record<Predictors: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-53 # required
+  --next-token-body: string # If the result of the previous request was truncated, the response includes a NextToken. To retrieve the next set of results, use the token in the next request. Tokens expire after 24 hours. (body field)
+  --max-results-body: int # The number of items to return in the response. (body field)
+  --filters: list # An array of filters. For each filter, you provide a condition and a match statement. The condition is either IS or IS_NOT, which specifies whether to include or exclude the predictors that match the statement from the list, respectively. The match statement consists of a key and a value. Filter properties Condition - The condition to apply. Valid values are IS and IS_NOT. To include the predictors that match the statement, specify IS. To exclude matching predictors, specify IS_NOT. Key - The name of the parameter to filter on. Valid values are DatasetGroupArn and Status. Value - The value to match. For example, to list all predictors whose status is ACTIVE, you would specify: "Filters": [ { "Condition": "IS", "Key": "Status", "Value": "ACTIVE" } ] — item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
+]: any -> record<Predictors: table<PredictorArn: string, PredictorName: string, DatasetGroupArn: string, IsAutoPredictor: bool, ReferencePredictorSummary: record, Status: string, Message: string, CreationTime: string, LastModificationTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.ListPredictors")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "Filters": $filters} | compact
@@ -2936,12 +3036,13 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-54
-  resource_arn: any
-]: any -> record<Tags: record> {
+  --x-amz-target: string@x-amz-target-completer-54 # required
+  resource_arn: string # The Amazon Resource Name (ARN) that identifies the resource for which to list the tags.
+]: any -> record<Tags: table<Key: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.ListTagsForResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2967,6 +3068,7 @@ export def "list-tags-for-resource" [
 #
 # POST /
 # operationId: ListWhatIfAnalyses
+# --Filters item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
 export def "list-what-if-analyses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2986,14 +3088,15 @@ export def "list-what-if-analyses" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-55
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --filters: any
-]: any -> record<WhatIfAnalyses: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-55 # required
+  --next-token-body: string # If the result of the previous request was truncated, the response includes a NextToken. To retrieve the next set of results, use the token in the next request. Tokens expire after 24 hours. (body field)
+  --max-results-body: int # The number of items to return in the response. (body field)
+  --filters: list # An array of filters. For each filter, you provide a condition and a match statement. The condition is either IS or IS_NOT, which specifies whether to include or exclude the what-if analysis jobs that match the statement from the list, respectively. The match statement consists of a key and a value. Filter properties Condition - The condition to apply. Valid values are IS and IS_NOT. To include the what-if analysis jobs that match the statement, specify IS. To exclude matching what-if analysis jobs, specify IS_NOT. Key - The name of the parameter to filter on. Valid values are WhatIfAnalysisArn and Status. Value - The value to match. For example, to list all jobs that export a forecast named electricityWhatIf, specify the following filter: "Filters": [ { "Condition": "IS", "Key": "WhatIfAnalysisArn", "Value": "arn:aws:forecast:us-west-2:<acct-id>:forecast/electricityWhatIf" } ] — item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
+]: any -> record<WhatIfAnalyses: table<WhatIfAnalysisArn: string, WhatIfAnalysisName: string, ForecastArn: string, Status: string, Message: string, CreationTime: string, LastModificationTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.ListWhatIfAnalyses")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "Filters": $filters} | compact
@@ -3020,6 +3123,7 @@ export def "list-what-if-analyses" [
 #
 # POST /
 # operationId: ListWhatIfForecastExports
+# --Filters item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
 export def "list-what-if-forecast-exports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3039,14 +3143,15 @@ export def "list-what-if-forecast-exports" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-56
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --filters: any
-]: any -> record<WhatIfForecastExports: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-56 # required
+  --next-token-body: string # If the result of the previous request was truncated, the response includes a NextToken. To retrieve the next set of results, use the token in the next&#x2028; request. Tokens expire after 24 hours. (body field)
+  --max-results-body: int # The number of items to return in the response. (body field)
+  --filters: list # An array of filters. For each filter, you provide a condition and a match statement. The condition is either IS or IS_NOT, which specifies whether to include or exclude the what-if forecast export jobs that match the statement from the list, respectively. The match statement consists of a key and a value. Filter properties Condition - The condition to apply. Valid values are IS and IS_NOT. To include the forecast export jobs that match the statement, specify IS. To exclude matching forecast export jobs, specify IS_NOT. Key - The name of the parameter to filter on. Valid values are WhatIfForecastExportArn and Status. Value - The value to match. For example, to list all jobs that export a forecast named electricityWIFExport, specify the following filter: "Filters": [ { "Condition": "IS", "Key": "WhatIfForecastExportArn", "Value": "arn:aws:forecast:us-west-2:<acct-id>:forecast/electricityWIFExport" } ] — item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
+]: any -> record<WhatIfForecastExports: table<WhatIfForecastExportArn: string, WhatIfForecastArns: list, WhatIfForecastExportName: string, Destination: record, Status: string, Message: string, CreationTime: string, LastModificationTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.ListWhatIfForecastExports")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "Filters": $filters} | compact
@@ -3073,6 +3178,7 @@ export def "list-what-if-forecast-exports" [
 #
 # POST /
 # operationId: ListWhatIfForecasts
+# --Filters item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
 export def "list-what-if-forecasts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3092,14 +3198,15 @@ export def "list-what-if-forecasts" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-57
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --filters: any
-]: any -> record<WhatIfForecasts: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-57 # required
+  --next-token-body: string # If the result of the previous request was truncated, the response includes a NextToken. To retrieve the next set of results, use the token in the next&#x2028; request. Tokens expire after 24 hours. (body field)
+  --max-results-body: int # The number of items to return in the response. (body field)
+  --filters: list # An array of filters. For each filter, you provide a condition and a match statement. The condition is either IS or IS_NOT, which specifies whether to include or exclude the what-if forecast export jobs that match the statement from the list, respectively. The match statement consists of a key and a value. Filter properties Condition - The condition to apply. Valid values are IS and IS_NOT. To include the forecast export jobs that match the statement, specify IS. To exclude matching forecast export jobs, specify IS_NOT. Key - The name of the parameter to filter on. Valid values are WhatIfForecastArn and Status. Value - The value to match. For example, to list all jobs that export a forecast named electricityWhatIfForecast, specify the following filter: "Filters": [ { "Condition": "IS", "Key": "WhatIfForecastArn", "Value": "arn:aws:forecast:us-west-2:<acct-id>:forecast/electricityWhatIfForecast" } ] — item shape: {Key: string, Value: string, Condition: "IS"|"IS_NOT"}
+]: any -> record<WhatIfForecasts: table<WhatIfForecastArn: string, WhatIfForecastName: string, WhatIfAnalysisArn: string, Status: string, Message: string, CreationTime: string, LastModificationTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.ListWhatIfForecasts")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "Filters": $filters} | compact
@@ -3143,12 +3250,13 @@ export def "resume-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-58
-  resource_arn: any
+  --x-amz-target: string@x-amz-target-completer-58 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the monitor resource to resume.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.ResumeResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3191,12 +3299,13 @@ export def "stop-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-59
-  resource_arn: any
+  --x-amz-target: string@x-amz-target-completer-59 # required
+  resource_arn: string # The Amazon Resource Name (ARN) that identifies the resource to stop. The supported ARNs are DatasetImportJobArn, PredictorArn, PredictorBacktestExportJobArn, ForecastArn, ForecastExportJobArn, ExplainabilityArn, and ExplainabilityExportArn.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.StopResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3222,6 +3331,7 @@ export def "stop-resource" [
 #
 # POST /
 # operationId: TagResource
+# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3239,13 +3349,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-60
-  resource_arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-60 # required
+  resource_arn: string # The Amazon Resource Name (ARN) that identifies the resource for which to list the tags.
+  tags: list # The tags to add to the resource. A tag is an array of key-value pairs. The following basic restrictions apply to tags: Maximum number of tags per resource - 50. For each resource, each tag key must be unique, and each tag key can have only one value. Maximum key length - 128 Unicode characters in UTF-8. Maximum value length - 256 Unicode characters in UTF-8. If your tagging schema is used across multiple services and resources, remember that other services may have restrictions on allowed characters. Generally allowed characters are: letters, numbers, and spaces representable in UTF-8, and the following characters: + - = . _ : / @. Tag keys and values are case sensitive. Do not use aws:, AWS:, or any upper or lowercase combination of such as a prefix for keys as it is reserved for Amazon Web Services use. You cannot edit or delete tag keys with this prefix. Values can have this prefix. If a tag value has aws as its prefix but the key does not, then Forecast considers it to be a user tag and will count against the limit of 50 tags. Tags with only the key prefix of aws do not count against your tags per resource limit. — item shape: {Key: string, Value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3288,13 +3399,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-61
-  resource_arn: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-61 # required
+  resource_arn: string # The Amazon Resource Name (ARN) that identifies the resource for which to list the tags.
+  tag_keys: list<string> # The keys of the tags to be removed.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3337,13 +3449,14 @@ export def "update-dataset-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-62
-  dataset_group_arn: any
-  dataset_arns: any
+  --x-amz-target: string@x-amz-target-completer-62 # required
+  dataset_group_arn: string # The ARN of the dataset group.
+  dataset_arns: list<string> # An array of the Amazon Resource Names (ARNs) of the datasets to add to the dataset group.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonForecast.UpdateDatasetGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DatasetGroupArn": $dataset_group_arn, "DatasetArns": $dataset_arns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

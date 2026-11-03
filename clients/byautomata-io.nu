@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-api-key" => { {scheme: $scheme, headers: {x-api-key: $token_val}, query: "", location: "header"} }
+    "x-api-key" => { {scheme: $scheme, headers: {"x-api-key": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -137,10 +137,11 @@ export def "get-contentpro-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --terms: string # We provide information about related companies and articles based on the search terms you provide. Separate search terms with commas. Ex. https://api.byautomata.io/contentpro-search?terms=cloud+computing,enterprise,security
+  --terms: string # We provide information about related companies and articles based on the search terms you provide. Separate search terms with commas. Ex. https://api.byautomata.io/contentpro-search?terms=cloud+computing,enterprise,security (required)
 ]: nothing -> record<calls_per_month: string, count_remaining: string, data: table<article: record, company: record, snippets: record>, renewal_date: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($terms == null) { error make --unspanned { msg: "required query parameter 'terms' missing: pass --terms" } }
   let qp = [(serialize-qp "terms" $terms "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/contentpro-search" $qp $auth.query)
   let accept_val = "application/json"
@@ -209,11 +210,12 @@ export def "get-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --terms: string # We provide information about related companies based on the search terms you provide. Separate search terms with commas. Ex. https://api.byautomata.io/search?link=cloud+computing,enterprise,security
+  --terms: string # We provide information about related companies based on the search terms you provide. Separate search terms with commas. Ex. https://api.byautomata.io/search?link=cloud+computing,enterprise,security (required)
   --page: string # Page number of search results. Ex. https://api.byautomata.io/search?page=0&link=cloud+computing,enterprise,security (default: 0)
 ]: nothing -> record<calls_per_month: string, companies: table<companyName: string, description: string, employee: string, industry: string, linkedin: string, snippets: list, title: string, twitter: string, website: string>, count_remaining: string, renewal_date: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($terms == null) { error make --unspanned { msg: "required query parameter 'terms' missing: pass --terms" } }
   let qp = [(serialize-qp "terms" $terms "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search" $qp $auth.query)
   let accept_val = "application/json"
@@ -245,11 +247,12 @@ export def "get-similar" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --link: string # We'll provide information about related companies based on the site you provide. If a LinkedIn page is sent, we will try to identify the company related to the page. Ex. https://api.byautomata.io/similar?link=ibm.com
+  --link: string # We'll provide information about related companies based on the site you provide. If a LinkedIn page is sent, we will try to identify the company related to the page. Ex. https://api.byautomata.io/similar?link=ibm.com (required)
   --page: string # Page number of search results. Ex. https://api.byautomata.io/similar?link=ibm.com&page=1 (default: 0)
 ]: nothing -> record<calls_per_month: string, companies: table<companyName: string, description: string, employee: string, industry: string, linkedin: string, title: string, twitter: string, website: string>, count_remaining: string, input_company: record<companyName: string, country: string, employee: string, industry: string, linkedin: string, twitter: string, website: string>, renewal_date: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($link == null) { error make --unspanned { msg: "required query parameter 'link' missing: pass --link" } }
   let qp = [(serialize-qp "link" $link "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/similar" $qp $auth.query)
   let accept_val = "application/json"

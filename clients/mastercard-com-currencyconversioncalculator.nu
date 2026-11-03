@@ -131,14 +131,18 @@ export def "get-conversion-detail-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fx-date: string # Date of the requested FX rates.
-  --trans-curr: string # Currency of the transaction.
-  --crdhld-bill-curr: string # Cardholder billing currency.
+  --fx-date: string # Date of the requested FX rates. (required)
+  --trans-curr: string # Currency of the transaction. (required)
+  --crdhld-bill-curr: string # Cardholder billing currency. (required)
   --bank-fee: float # Additional fees imposed by the bank. (format: double)
-  --trans-amt: float # Amount in the transaction currency. (format: double)
+  --trans-amt: float # Amount in the transaction currency. (required, format: double)
 ]: nothing -> record<data: record<bankFee: float, conversionRate: float, crdhldBillAmt: float, crdhldBillCurr: string, errorCode: string, errorMessage: string, fxDate: string, transAmt: float, transCurr: string>, date: string, description: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($fx_date == null) { error make --unspanned { msg: "required query parameter 'fxDate' missing: pass --fx-date" } }
+  if ($trans_curr == null) { error make --unspanned { msg: "required query parameter 'transCurr' missing: pass --trans-curr" } }
+  if ($crdhld_bill_curr == null) { error make --unspanned { msg: "required query parameter 'crdhldBillCurr' missing: pass --crdhld-bill-curr" } }
+  if ($trans_amt == null) { error make --unspanned { msg: "required query parameter 'transAmt' missing: pass --trans-amt" } }
   let qp = [(serialize-qp "fxDate" $fx_date "scalar") (serialize-qp "transCurr" $trans_curr "scalar") (serialize-qp "crdhldBillCurr" $crdhld_bill_curr "scalar") (serialize-qp "bankFee" $bank_fee "scalar") (serialize-qp "transAmt" $trans_amt "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/conversion-rate" $qp $auth.query)
   let accept_val = "application/json;charset=UTF-8"

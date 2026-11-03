@@ -1,4 +1,4 @@
-# Auto-generated client for Cloud Storage JSON API vv1
+# Auto-generated client for Cloud Storage JSON API v1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/storage/v1/openapi.json
 # Auth: --token flag or $env.CLOUD_STORAGE_JSON_API_TOKEN
 
@@ -12,20 +12,10 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
-}
-
-# Merge multiple auth records (AND-form security: every scheme must be sent).
-def merge-auth [parts: list]: nothing -> record {
-  let active = ($parts | where {|p| $p.location != "none" })
-  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
-  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
-  let locs = ($active | each {|p| $p.location } | uniq)
-  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
-  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
 # Serialize a single query parameter based on collection style
@@ -165,8 +155,8 @@ export def commands []: nothing -> table {
 # operationId: storage.buckets.list
 export def "storage-buckets-list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -181,15 +171,16 @@ export def "storage-buckets-list" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --upload-type: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --user-ip: string # Deprecated. Please use quotaUser instead.
-  --project: string # A valid API project identifier.
+  --project: string # A valid API project identifier. (required)
   --max-results: int # Maximum number of buckets to return in a single response. The service will use this parameter or 1,000 items, whichever is smaller.
   --page-token: string # A previously-returned page token representing part of the larger set of results to view.
   --prefix: string # Filter results to buckets whose names begin with this prefix.
   --projection: string@projection-completer # Set of properties to return. Defaults to noAcl.
   --user-project: string # The project to be billed for this request.
 ]: nothing -> record<items: table<acl: list, autoclass: record, billing: record, cors: list, customPlacementConfig: record, defaultEventBasedHold: bool, defaultObjectAcl: list, encryption: record, etag: string, iamConfiguration: record, id: string, kind: string, labels: record, lifecycle: record, location: string, locationType: string, logging: record, metageneration: string, name: string, owner: record, projectNumber: string, retentionPolicy: record, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record, website: record>, kind: string, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project == null) { error make --unspanned { msg: "required query parameter 'project' missing: pass --project" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/b" $qp $auth.query)
   let accept_val = "application/json"
@@ -228,8 +219,8 @@ export def "storage-buckets-list" [
 # --website shape: {mainPageSuffix?: string, notFoundPage?: string}
 export def "storage-buckets-insert" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -244,7 +235,7 @@ export def "storage-buckets-insert" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --upload-type: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --user-ip: string # Deprecated. Please use quotaUser instead.
-  --project: string # A valid API project identifier.
+  --project: string # A valid API project identifier. (required)
   --predefined-acl: string@predefined-acl-completer # Apply a predefined set of access controls to this bucket.
   --predefined-default-object-acl: string@predefined-default-object-acl-completer # Apply a predefined set of default object access controls to this bucket.
   --projection: string@projection-completer # Set of properties to return. Defaults to noAcl, unless the bucket resource specifies acl or defaultObjectAcl properties, when it defaults to full.
@@ -281,8 +272,9 @@ export def "storage-buckets-insert" [
   --website: record # The bucket's website configuration, controlling how the service behaves when accessing bucket contents as a web site. See the Static Website Examples for more information. — shape: {mainPageSuffix?: string, notFoundPage?: string}
 ]: any -> record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, autoclass: record<enabled: bool, toggleTime: string>, billing: record<requesterPays: bool>, cors: table<maxAgeSeconds: int, method: list, origin: list, responseHeader: list>, customPlacementConfig: record<dataLocations: list<string>>, defaultEventBasedHold: bool, defaultObjectAcl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, encryption: record<defaultKmsKeyName: string>, etag: string, iamConfiguration: record<bucketPolicyOnly: record<enabled: bool, lockedTime: string>, publicAccessPrevention: string, uniformBucketLevelAccess: record<enabled: bool, lockedTime: string>>, id: string, kind: string, labels: record, lifecycle: record<rule: list<record>>, location: string, locationType: string, logging: record<logBucket: string, logObjectPrefix: string>, metageneration: string, name: string, owner: record<entity: string, entityId: string>, projectNumber: string, retentionPolicy: record<effectiveTime: string, isLocked: bool, retentionPeriod: string>, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record<enabled: bool>, website: record<mainPageSuffix: string, notFoundPage: string>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project == null) { error make --unspanned { msg: "required query parameter 'project' missing: pass --project" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "predefinedAcl" $predefined_acl "scalar") (serialize-qp "predefinedDefaultObjectAcl" $predefined_default_object_acl "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/b" $qp $auth.query)
   let req_body = {"acl": $acl, "autoclass": $autoclass, "billing": $billing, "cors": $cors, "customPlacementConfig": $custom_placement_config, "defaultEventBasedHold": $default_event_based_hold, "defaultObjectAcl": $default_object_acl, "encryption": $encryption, "etag": $etag, "iamConfiguration": $iam_configuration, "id": $id, "kind": $kind, "labels": $labels, "lifecycle": $lifecycle, "location": $location, "locationType": $location_type, "logging": $logging, "metageneration": $metageneration, "name": $name, "owner": $owner, "projectNumber": $project_number, "retentionPolicy": $retention_policy, "rpo": $rpo, "satisfiesPZS": $satisfies_pzs, "selfLink": $self_link, "storageClass": $storage_class, "timeCreated": $time_created, "updated": $updated, "versioning": $versioning, "website": $website} | compact
@@ -310,8 +302,8 @@ export def "storage-buckets-insert" [
 export def "storage-buckets-delete" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -330,7 +322,7 @@ export def "storage-buckets-delete" [
   --if-metageneration-not-match: string # If set, only deletes the bucket if its metageneration does not match this value.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
 ]: nothing -> any {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
@@ -358,8 +350,8 @@ export def "storage-buckets-delete" [
 export def "storage-buckets-get" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -379,7 +371,7 @@ export def "storage-buckets-get" [
   --projection: string@projection-completer # Set of properties to return. Defaults to noAcl.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
 ]: nothing -> record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, autoclass: record<enabled: bool, toggleTime: string>, billing: record<requesterPays: bool>, cors: table<maxAgeSeconds: int, method: list, origin: list, responseHeader: list>, customPlacementConfig: record<dataLocations: list<string>>, defaultEventBasedHold: bool, defaultObjectAcl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, encryption: record<defaultKmsKeyName: string>, etag: string, iamConfiguration: record<bucketPolicyOnly: record<enabled: bool, lockedTime: string>, publicAccessPrevention: string, uniformBucketLevelAccess: record<enabled: bool, lockedTime: string>>, id: string, kind: string, labels: record, lifecycle: record<rule: list<record>>, location: string, locationType: string, logging: record<logBucket: string, logObjectPrefix: string>, metageneration: string, name: string, owner: record<entity: string, entityId: string>, projectNumber: string, retentionPolicy: record<effectiveTime: string, isLocked: bool, retentionPeriod: string>, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record<enabled: bool>, website: record<mainPageSuffix: string, notFoundPage: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
@@ -421,8 +413,8 @@ export def "storage-buckets-get" [
 export def "storage-buckets-patch" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -475,7 +467,7 @@ export def "storage-buckets-patch" [
   --website: record # The bucket's website configuration, controlling how the service behaves when accessing bucket contents as a web site. See the Static Website Examples for more information. — shape: {mainPageSuffix?: string, notFoundPage?: string}
 ]: any -> record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, autoclass: record<enabled: bool, toggleTime: string>, billing: record<requesterPays: bool>, cors: table<maxAgeSeconds: int, method: list, origin: list, responseHeader: list>, customPlacementConfig: record<dataLocations: list<string>>, defaultEventBasedHold: bool, defaultObjectAcl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, encryption: record<defaultKmsKeyName: string>, etag: string, iamConfiguration: record<bucketPolicyOnly: record<enabled: bool, lockedTime: string>, publicAccessPrevention: string, uniformBucketLevelAccess: record<enabled: bool, lockedTime: string>>, id: string, kind: string, labels: record, lifecycle: record<rule: list<record>>, location: string, locationType: string, logging: record<logBucket: string, logObjectPrefix: string>, metageneration: string, name: string, owner: record<entity: string, entityId: string>, projectNumber: string, retentionPolicy: record<effectiveTime: string, isLocked: bool, retentionPeriod: string>, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record<enabled: bool>, website: record<mainPageSuffix: string, notFoundPage: string>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "predefinedAcl" $predefined_acl "scalar") (serialize-qp "predefinedDefaultObjectAcl" $predefined_default_object_acl "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
@@ -519,8 +511,8 @@ export def "storage-buckets-patch" [
 export def "storage-buckets-update" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -573,7 +565,7 @@ export def "storage-buckets-update" [
   --website: record # The bucket's website configuration, controlling how the service behaves when accessing bucket contents as a web site. See the Static Website Examples for more information. — shape: {mainPageSuffix?: string, notFoundPage?: string}
 ]: any -> record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, autoclass: record<enabled: bool, toggleTime: string>, billing: record<requesterPays: bool>, cors: table<maxAgeSeconds: int, method: list, origin: list, responseHeader: list>, customPlacementConfig: record<dataLocations: list<string>>, defaultEventBasedHold: bool, defaultObjectAcl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, encryption: record<defaultKmsKeyName: string>, etag: string, iamConfiguration: record<bucketPolicyOnly: record<enabled: bool, lockedTime: string>, publicAccessPrevention: string, uniformBucketLevelAccess: record<enabled: bool, lockedTime: string>>, id: string, kind: string, labels: record, lifecycle: record<rule: list<record>>, location: string, locationType: string, logging: record<logBucket: string, logObjectPrefix: string>, metageneration: string, name: string, owner: record<entity: string, entityId: string>, projectNumber: string, retentionPolicy: record<effectiveTime: string, isLocked: bool, retentionPeriod: string>, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record<enabled: bool>, website: record<mainPageSuffix: string, notFoundPage: string>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "predefinedAcl" $predefined_acl "scalar") (serialize-qp "predefinedDefaultObjectAcl" $predefined_default_object_acl "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
@@ -603,8 +595,8 @@ export def "storage-buckets-update" [
 export def "storage-bucket-access-controls-list" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -621,7 +613,7 @@ export def "storage-bucket-access-controls-list" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
 ]: nothing -> record<items: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, kind: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
@@ -650,8 +642,8 @@ export def "storage-bucket-access-controls-list" [
 export def "storage-bucket-access-controls-insert" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -680,7 +672,7 @@ export def "storage-bucket-access-controls-insert" [
   --self-link: string # The link to this access-control entry.
 ]: any -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
@@ -711,8 +703,8 @@ export def "storage-bucket-access-controls-delete" [
   bucket: string
   entity: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -729,7 +721,7 @@ export def "storage-bucket-access-controls-delete" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
 ]: nothing -> any {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   if ($entity | is-empty) { error make --unspanned { msg: "path parameter 'entity' must be non-empty" } }
@@ -759,8 +751,8 @@ export def "storage-bucket-access-controls-get" [
   bucket: string
   entity: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -777,7 +769,7 @@ export def "storage-bucket-access-controls-get" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
 ]: nothing -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   if ($entity | is-empty) { error make --unspanned { msg: "path parameter 'entity' must be non-empty" } }
@@ -808,8 +800,8 @@ export def "storage-bucket-access-controls-patch" [
   bucket: string
   entity: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -838,7 +830,7 @@ export def "storage-bucket-access-controls-patch" [
   --self-link: string # The link to this access-control entry.
 ]: any -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   if ($entity | is-empty) { error make --unspanned { msg: "path parameter 'entity' must be non-empty" } }
@@ -871,8 +863,8 @@ export def "storage-bucket-access-controls-update" [
   bucket: string
   entity: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -901,7 +893,7 @@ export def "storage-bucket-access-controls-update" [
   --self-link: string # The link to this access-control entry.
 ]: any -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   if ($entity | is-empty) { error make --unspanned { msg: "path parameter 'entity' must be non-empty" } }
@@ -932,8 +924,8 @@ export def "storage-bucket-access-controls-update" [
 export def "storage-default-object-access-controls-list" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -952,7 +944,7 @@ export def "storage-default-object-access-controls-list" [
   --if-metageneration-not-match: string # If present, only return default ACL listing if the bucket's current metageneration does not match the given value.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
 ]: nothing -> record<items: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, kind: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
@@ -981,8 +973,8 @@ export def "storage-default-object-access-controls-list" [
 export def "storage-default-object-access-controls-insert" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1013,7 +1005,7 @@ export def "storage-default-object-access-controls-insert" [
   --self-link: string # The link to this access-control entry.
 ]: any -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
@@ -1044,8 +1036,8 @@ export def "storage-default-object-access-controls-delete" [
   bucket: string
   entity: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1062,7 +1054,7 @@ export def "storage-default-object-access-controls-delete" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
 ]: nothing -> any {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   if ($entity | is-empty) { error make --unspanned { msg: "path parameter 'entity' must be non-empty" } }
@@ -1092,8 +1084,8 @@ export def "storage-default-object-access-controls-get" [
   bucket: string
   entity: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1110,7 +1102,7 @@ export def "storage-default-object-access-controls-get" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
 ]: nothing -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   if ($entity | is-empty) { error make --unspanned { msg: "path parameter 'entity' must be non-empty" } }
@@ -1141,8 +1133,8 @@ export def "storage-default-object-access-controls-patch" [
   bucket: string
   entity: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1173,7 +1165,7 @@ export def "storage-default-object-access-controls-patch" [
   --self-link: string # The link to this access-control entry.
 ]: any -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   if ($entity | is-empty) { error make --unspanned { msg: "path parameter 'entity' must be non-empty" } }
@@ -1206,8 +1198,8 @@ export def "storage-default-object-access-controls-update" [
   bucket: string
   entity: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1238,7 +1230,7 @@ export def "storage-default-object-access-controls-update" [
   --self-link: string # The link to this access-control entry.
 ]: any -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   if ($entity | is-empty) { error make --unspanned { msg: "path parameter 'entity' must be non-empty" } }
@@ -1269,8 +1261,8 @@ export def "storage-default-object-access-controls-update" [
 export def "storage-buckets-get-iam-policy" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1288,7 +1280,7 @@ export def "storage-buckets-get-iam-policy" [
   --options-requested-policy-version: int # The IAM policy format version to be returned. If the optionsRequestedPolicyVersion is for an older version that doesn't support part of the requested IAM policy, the request fails.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
 ]: nothing -> record<bindings: table<condition: record, members: list, role: string>, etag: string, kind: string, resourceId: string, version: int> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "optionsRequestedPolicyVersion" $options_requested_policy_version "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
@@ -1317,8 +1309,8 @@ export def "storage-buckets-get-iam-policy" [
 export def "storage-buckets-set-iam-policy" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1341,7 +1333,7 @@ export def "storage-buckets-set-iam-policy" [
   --version: int # The IAM policy format version. (format: int32)
 ]: any -> record<bindings: table<condition: record, members: list, role: string>, etag: string, kind: string, resourceId: string, version: int> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
@@ -1371,8 +1363,8 @@ export def "storage-buckets-set-iam-policy" [
 export def "storage-buckets-test-iam-permissions" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1387,12 +1379,13 @@ export def "storage-buckets-test-iam-permissions" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --upload-type: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --user-ip: string # Deprecated. Please use quotaUser instead.
-  --permissions: list<string> # Permissions to test.
+  --permissions: list<string> # Permissions to test. (required)
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
 ]: nothing -> record<kind: string, permissions: list<string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
+  if ($permissions == null) { error make --unspanned { msg: "required query parameter 'permissions' missing: pass --permissions" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "permissions" $permissions "multi") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/iam/testPermissions") $qp $auth.query)
   let accept_val = "application/json"
@@ -1418,8 +1411,8 @@ export def "storage-buckets-test-iam-permissions" [
 export def "storage-buckets-lock-retention-policy" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1434,12 +1427,13 @@ export def "storage-buckets-lock-retention-policy" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --upload-type: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --user-ip: string # Deprecated. Please use quotaUser instead.
-  --if-metageneration-match: string # Makes the operation conditional on whether bucket's current metageneration matches the given value.
+  --if-metageneration-match: string # Makes the operation conditional on whether bucket's current metageneration matches the given value. (required)
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
 ]: nothing -> record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, autoclass: record<enabled: bool, toggleTime: string>, billing: record<requesterPays: bool>, cors: table<maxAgeSeconds: int, method: list, origin: list, responseHeader: list>, customPlacementConfig: record<dataLocations: list<string>>, defaultEventBasedHold: bool, defaultObjectAcl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, encryption: record<defaultKmsKeyName: string>, etag: string, iamConfiguration: record<bucketPolicyOnly: record<enabled: bool, lockedTime: string>, publicAccessPrevention: string, uniformBucketLevelAccess: record<enabled: bool, lockedTime: string>>, id: string, kind: string, labels: record, lifecycle: record<rule: list<record>>, location: string, locationType: string, logging: record<logBucket: string, logObjectPrefix: string>, metageneration: string, name: string, owner: record<entity: string, entityId: string>, projectNumber: string, retentionPolicy: record<effectiveTime: string, isLocked: bool, retentionPeriod: string>, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record<enabled: bool>, website: record<mainPageSuffix: string, notFoundPage: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
+  if ($if_metageneration_match == null) { error make --unspanned { msg: "required query parameter 'ifMetagenerationMatch' missing: pass --if-metageneration-match" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/lockRetentionPolicy") $qp $auth.query)
   let accept_val = "application/json"
@@ -1465,8 +1459,8 @@ export def "storage-buckets-lock-retention-policy" [
 export def "storage-notifications-list" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1483,7 +1477,7 @@ export def "storage-notifications-list" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
 ]: nothing -> record<items: table<custom_attributes: record, etag: string, event_types: list, id: string, kind: string, object_name_prefix: string, payload_format: string, selfLink: string, topic: string>, kind: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
@@ -1511,8 +1505,8 @@ export def "storage-notifications-list" [
 export def "storage-notifications-insert" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1539,7 +1533,7 @@ export def "storage-notifications-insert" [
   --topic: string # The Cloud PubSub topic to which this subscription publishes. Formatted as: '//pubsub.googleapis.com/projects/{project-identifier}/topics/{my-topic}'
 ]: any -> record<custom_attributes: record, etag: string, event_types: list<string>, id: string, kind: string, object_name_prefix: string, payload_format: string, selfLink: string, topic: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
@@ -1570,8 +1564,8 @@ export def "storage-notifications-delete" [
   bucket: string
   notification: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1588,7 +1582,7 @@ export def "storage-notifications-delete" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
 ]: nothing -> any {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   if ($notification | is-empty) { error make --unspanned { msg: "path parameter 'notification' must be non-empty" } }
@@ -1618,8 +1612,8 @@ export def "storage-notifications-get" [
   bucket: string
   notification: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1636,7 +1630,7 @@ export def "storage-notifications-get" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
 ]: nothing -> record<custom_attributes: record, etag: string, event_types: list<string>, id: string, kind: string, object_name_prefix: string, payload_format: string, selfLink: string, topic: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   if ($notification | is-empty) { error make --unspanned { msg: "path parameter 'notification' must be non-empty" } }
@@ -1665,8 +1659,8 @@ export def "storage-notifications-get" [
 export def "storage-objects-list" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1693,7 +1687,7 @@ export def "storage-objects-list" [
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
   --versions: oneof<nothing, bool> # If true, lists all versions of an object as distinct results. The default is false. For more information, see Object Versioning.
 ]: nothing -> record<items: table<acl: list, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>, kind: string, nextPageToken: string, prefixes: list<string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "endOffset" $end_offset "scalar") (serialize-qp "includeTrailingDelimiter" $include_trailing_delimiter "scalar") (serialize-qp "matchGlob" $match_glob "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "startOffset" $start_offset "scalar") (serialize-qp "userProject" $user_project "scalar") (serialize-qp "versions" $versions "scalar")] | flatten | str join "&"
@@ -1721,8 +1715,8 @@ export def "storage-objects-list" [
 export def "storage-objects-insert" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1750,7 +1744,7 @@ export def "storage-objects-insert" [
   --body: any
 ]: any -> record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "contentEncoding" $content_encoding "scalar") (serialize-qp "ifGenerationMatch" $if_generation_match "scalar") (serialize-qp "ifGenerationNotMatch" $if_generation_not_match "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "kmsKeyName" $kms_key_name "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "predefinedAcl" $predefined_acl "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
@@ -1780,8 +1774,8 @@ export def "storage-objects-insert" [
 export def "storage-objects-watch-all" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1818,7 +1812,7 @@ export def "storage-objects-watch-all" [
   --type: string # The type of delivery mechanism used for this channel.
 ]: any -> record<address: string, expiration: string, id: string, kind: string, params: record, payload: bool, resourceId: string, resourceUri: string, token: string, type: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "endOffset" $end_offset "scalar") (serialize-qp "includeTrailingDelimiter" $include_trailing_delimiter "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "startOffset" $start_offset "scalar") (serialize-qp "userProject" $user_project "scalar") (serialize-qp "versions" $versions "scalar")] | flatten | str join "&"
@@ -1849,8 +1843,8 @@ export def "storage-objects-delete" [
   bucket: string
   object: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1872,7 +1866,7 @@ export def "storage-objects-delete" [
   --if-metageneration-not-match: string # Makes the operation conditional on whether the object's current metageneration does not match the given value.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
 ]: nothing -> any {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
@@ -1902,8 +1896,8 @@ export def "storage-objects-get" [
   bucket: string
   object: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1926,7 +1920,7 @@ export def "storage-objects-get" [
   --projection: string@projection-completer # Set of properties to return. Defaults to noAcl.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
 ]: nothing -> record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
@@ -1959,8 +1953,8 @@ export def "storage-objects-patch" [
   bucket: string
   object: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2017,7 +2011,7 @@ export def "storage-objects-patch" [
   --updated: string # The modification time of the object metadata in RFC 3339 format. Set initially to object creation time and then updated whenever any metadata of the object changes. This includes changes made by a requester, such as modifying custom metadata, as well as changes made by Cloud Storage on behalf of a requester, such as changing the storage class based on an Object Lifecycle Configuration. (format: date-time)
 ]: any -> record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
@@ -2052,8 +2046,8 @@ export def "storage-objects-update" [
   bucket: string
   object: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2110,7 +2104,7 @@ export def "storage-objects-update" [
   --updated: string # The modification time of the object metadata in RFC 3339 format. Set initially to object creation time and then updated whenever any metadata of the object changes. This includes changes made by a requester, such as modifying custom metadata, as well as changes made by Cloud Storage on behalf of a requester, such as changing the storage class based on an Object Lifecycle Configuration. (format: date-time)
 ]: any -> record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
@@ -2142,8 +2136,8 @@ export def "storage-object-access-controls-list" [
   bucket: string
   object: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2161,7 +2155,7 @@ export def "storage-object-access-controls-list" [
   --generation: string # If present, selects a specific revision of this object (as opposed to the latest version, the default).
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
 ]: nothing -> record<items: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, kind: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
@@ -2192,8 +2186,8 @@ export def "storage-object-access-controls-insert" [
   bucket: string
   object: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2225,7 +2219,7 @@ export def "storage-object-access-controls-insert" [
   --self-link: string # The link to this access-control entry.
 ]: any -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
@@ -2258,8 +2252,8 @@ export def "storage-object-access-controls-delete" [
   object: string
   entity: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2277,7 +2271,7 @@ export def "storage-object-access-controls-delete" [
   --generation: string # If present, selects a specific revision of this object (as opposed to the latest version, the default).
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
 ]: nothing -> any {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
@@ -2309,8 +2303,8 @@ export def "storage-object-access-controls-get" [
   object: string
   entity: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2328,7 +2322,7 @@ export def "storage-object-access-controls-get" [
   --generation: string # If present, selects a specific revision of this object (as opposed to the latest version, the default).
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
 ]: nothing -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
@@ -2361,8 +2355,8 @@ export def "storage-object-access-controls-patch" [
   object: string
   entity: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2394,7 +2388,7 @@ export def "storage-object-access-controls-patch" [
   --self-link: string # The link to this access-control entry.
 ]: any -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
@@ -2429,8 +2423,8 @@ export def "storage-object-access-controls-update" [
   object: string
   entity: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2462,7 +2456,7 @@ export def "storage-object-access-controls-update" [
   --self-link: string # The link to this access-control entry.
 ]: any -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
@@ -2495,8 +2489,8 @@ export def "storage-objects-get-iam-policy" [
   bucket: string
   object: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2514,7 +2508,7 @@ export def "storage-objects-get-iam-policy" [
   --generation: string # If present, selects a specific revision of this object (as opposed to the latest version, the default).
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
 ]: nothing -> record<bindings: table<condition: record, members: list, role: string>, etag: string, kind: string, resourceId: string, version: int> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
@@ -2545,8 +2539,8 @@ export def "storage-objects-set-iam-policy" [
   bucket: string
   object: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2570,7 +2564,7 @@ export def "storage-objects-set-iam-policy" [
   --version: int # The IAM policy format version. (format: int32)
 ]: any -> record<bindings: table<condition: record, members: list, role: string>, etag: string, kind: string, resourceId: string, version: int> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
@@ -2602,8 +2596,8 @@ export def "storage-objects-test-iam-permissions" [
   bucket: string
   object: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2618,14 +2612,15 @@ export def "storage-objects-test-iam-permissions" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --upload-type: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --user-ip: string # Deprecated. Please use quotaUser instead.
-  --permissions: list<string> # Permissions to test.
+  --permissions: list<string> # Permissions to test. (required)
   --generation: string # If present, selects a specific revision of this object (as opposed to the latest version, the default).
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
 ]: nothing -> record<kind: string, permissions: list<string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
+  if ($permissions == null) { error make --unspanned { msg: "required query parameter 'permissions' missing: pass --permissions" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "permissions" $permissions "multi") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object)} | format pattern "/b/{bucket}/o/{object}/iam/testPermissions") $qp $auth.query)
   let accept_val = "application/json"
@@ -2654,8 +2649,8 @@ export def "storage-objects-compose" [
   destination_bucket: string
   destination_object: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2680,7 +2675,7 @@ export def "storage-objects-compose" [
   --source-objects: list # The list of source objects that will be concatenated into a single object. — item shape: {generation?: string, name?: string, objectPreconditions?: record}
 ]: any -> record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($destination_bucket | is-empty) { error make --unspanned { msg: "path parameter 'destinationBucket' must be non-empty" } }
   if ($destination_object | is-empty) { error make --unspanned { msg: "path parameter 'destinationObject' must be non-empty" } }
@@ -2717,8 +2712,8 @@ export def "storage-objects-copy" [
   destination_bucket: string
   destination_object: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2780,7 +2775,7 @@ export def "storage-objects-copy" [
   --updated: string # The modification time of the object metadata in RFC 3339 format. Set initially to object creation time and then updated whenever any metadata of the object changes. This includes changes made by a requester, such as modifying custom metadata, as well as changes made by Cloud Storage on behalf of a requester, such as changing the storage class based on an Object Lifecycle Configuration. (format: date-time)
 ]: any -> record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source_bucket | is-empty) { error make --unspanned { msg: "path parameter 'sourceBucket' must be non-empty" } }
   if ($source_object | is-empty) { error make --unspanned { msg: "path parameter 'sourceObject' must be non-empty" } }
@@ -2819,8 +2814,8 @@ export def "storage-objects-rewrite" [
   destination_bucket: string
   destination_object: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2884,7 +2879,7 @@ export def "storage-objects-rewrite" [
   --updated: string # The modification time of the object metadata in RFC 3339 format. Set initially to object creation time and then updated whenever any metadata of the object changes. This includes changes made by a requester, such as modifying custom metadata, as well as changes made by Cloud Storage on behalf of a requester, such as changing the storage class based on an Object Lifecycle Configuration. (format: date-time)
 ]: any -> record<done: bool, kind: string, objectSize: string, resource: record<acl: list<record>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>, rewriteToken: string, totalBytesRewritten: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source_bucket | is-empty) { error make --unspanned { msg: "path parameter 'sourceBucket' must be non-empty" } }
   if ($source_object | is-empty) { error make --unspanned { msg: "path parameter 'sourceObject' must be non-empty" } }
@@ -2916,8 +2911,8 @@ export def "storage-objects-rewrite" [
 # operationId: storage.channels.stop
 export def "storage-channels-stop" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2944,7 +2939,7 @@ export def "storage-channels-stop" [
   --type: string # The type of delivery mechanism used for this channel.
 ]: any -> any {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/channels/stop" $qp $auth.query)
@@ -2973,8 +2968,8 @@ export def "storage-channels-stop" [
 export def "storage-projects-hmac-keys-list" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2995,7 +2990,7 @@ export def "storage-projects-hmac-keys-list" [
   --show-deleted-keys: oneof<nothing, bool> # Whether or not to show keys in the DELETED state.
   --user-project: string # The project to be billed for this request.
 ]: nothing -> record<items: table<accessId: string, etag: string, id: string, kind: string, projectId: string, selfLink: string, serviceAccountEmail: string, state: string, timeCreated: string, updated: string>, kind: string, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "serviceAccountEmail" $service_account_email "scalar") (serialize-qp "showDeletedKeys" $show_deleted_keys "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
@@ -3023,8 +3018,8 @@ export def "storage-projects-hmac-keys-list" [
 export def "storage-projects-hmac-keys-create" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3039,12 +3034,13 @@ export def "storage-projects-hmac-keys-create" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --upload-type: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --user-ip: string # Deprecated. Please use quotaUser instead.
-  --service-account-email: string # Email address of the service account.
+  --service-account-email: string # Email address of the service account. (required)
   --user-project: string # The project to be billed for this request.
 ]: nothing -> record<kind: string, metadata: record<accessId: string, etag: string, id: string, kind: string, projectId: string, selfLink: string, serviceAccountEmail: string, state: string, timeCreated: string, updated: string>, secret: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
+  if ($service_account_email == null) { error make --unspanned { msg: "required query parameter 'serviceAccountEmail' missing: pass --service-account-email" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "serviceAccountEmail" $service_account_email "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/hmacKeys") $qp $auth.query)
   let accept_val = "application/json"
@@ -3071,8 +3067,8 @@ export def "storage-projects-hmac-keys-delete" [
   project_id: string
   access_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3089,7 +3085,7 @@ export def "storage-projects-hmac-keys-delete" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --user-project: string # The project to be billed for this request.
 ]: nothing -> any {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($access_id | is-empty) { error make --unspanned { msg: "path parameter 'accessId' must be non-empty" } }
@@ -3119,8 +3115,8 @@ export def "storage-projects-hmac-keys-get" [
   project_id: string
   access_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3137,7 +3133,7 @@ export def "storage-projects-hmac-keys-get" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --user-project: string # The project to be billed for this request.
 ]: nothing -> record<accessId: string, etag: string, id: string, kind: string, projectId: string, selfLink: string, serviceAccountEmail: string, state: string, timeCreated: string, updated: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($access_id | is-empty) { error make --unspanned { msg: "path parameter 'accessId' must be non-empty" } }
@@ -3167,8 +3163,8 @@ export def "storage-projects-hmac-keys-update" [
   project_id: string
   access_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3196,7 +3192,7 @@ export def "storage-projects-hmac-keys-update" [
   --updated: string # The last modification time of the HMAC key metadata in RFC 3339 format. (format: date-time)
 ]: any -> record<accessId: string, etag: string, id: string, kind: string, projectId: string, selfLink: string, serviceAccountEmail: string, state: string, timeCreated: string, updated: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($access_id | is-empty) { error make --unspanned { msg: "path parameter 'accessId' must be non-empty" } }
@@ -3227,8 +3223,8 @@ export def "storage-projects-hmac-keys-update" [
 export def "storage-projects-service-account-get" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3245,7 +3241,7 @@ export def "storage-projects-service-account-get" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --user-project: string # The project to be billed for this request.
 ]: nothing -> record<email_address: string, kind: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_STORAGE_JSON_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"

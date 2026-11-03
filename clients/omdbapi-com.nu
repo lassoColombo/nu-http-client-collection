@@ -144,13 +144,14 @@ export def "get-om-db-search" [
   --type: string@type-completer # Type of result to return.
   --plot: string@plot-completer # Return short or full plot. (default: short)
   --tomatoes: oneof<nothing, bool> # Include Rotten Tomatoes ratings. (default: false)
-  --r: string@r-completer # The data type to return. (default: json)
+  --r: string@r-completer # The data type to return. (required, default: json)
   --v: int # API version (reserved for future use). (default: 1)
   --page: int # Page number to return. (format: int32, default: 1)
   --callback: string # JSONP callback name.
 ]: nothing -> record<Actors: string, Awards: string, BoxOffice: string, Country: string, DVD: string, Director: string, Genre: string, Language: string, Metascore: string, Plot: string, Poster: string, Production: string, Rated: string, Released: string, Response: string, Runtime: string, Search: table<Poster: string, Title: string, Type: string, Year: string, imdbID: string>, Title: string, Type: string, Website: string, Writer: string, Year: string, imdbID: string, imdbRating: string, imdbVotes: string, tomatoConsensus: string, tomatoFresh: string, tomatoImage: string, tomatoMeter: string, tomatoRating: string, tomatoReviews: string, tomatoRotten: string, tomatoURL: string, tomatoUserMeter: string, tomatoUserRating: string, tomatoUserReviews: string, totalResults: string, totalSeasons: string> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  let r = ($r | default "json")
   let qp = [(serialize-qp "t" $t "scalar") (serialize-qp "i" $i "scalar") (serialize-qp "s" $s "scalar") (serialize-qp "y" $y "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "plot" $plot "scalar") (serialize-qp "tomatoes" $tomatoes "scalar") (serialize-qp "r" $r "scalar") (serialize-qp "v" $v "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = ($accept | default "application/json")

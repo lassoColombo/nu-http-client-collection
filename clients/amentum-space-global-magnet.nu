@@ -131,13 +131,17 @@ export def "app-api-wmm-endpoints-wmm-magnetic-field" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --altitude: float # Geodetic Altitude 0 km to 600 km. (e.g. 10)
-  --latitude: float # Geodetic Latitude. -90 deg (S) to 90 deg (N). (e.g. 80)
-  --longitude: float # Geodetic Longitude. -180 deg (W) to 180 deg (E). (e.g. 100)
-  --year: float # Year as a decimal in the range 2015-2025 (2017.5 would be half way through 2017). (e.g. 2020.5)
+  --altitude: float # Geodetic Altitude 0 km to 600 km. (required, e.g. 10)
+  --latitude: float # Geodetic Latitude. -90 deg (S) to 90 deg (N). (required, e.g. 80)
+  --longitude: float # Geodetic Longitude. -180 deg (W) to 180 deg (E). (required, e.g. 100)
+  --year: float # Year as a decimal in the range 2015-2025 (2017.5 would be half way through 2017). (required, e.g. 2020.5)
 ]: nothing -> record<declination: record<units: string, value: float>, grid_variation: record<units: string, value: float>, inclination: record<units: string, value: float>, total_intensity: record<units: string, value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($altitude == null) { error make --unspanned { msg: "required query parameter 'altitude' missing: pass --altitude" } }
+  if ($latitude == null) { error make --unspanned { msg: "required query parameter 'latitude' missing: pass --latitude" } }
+  if ($longitude == null) { error make --unspanned { msg: "required query parameter 'longitude' missing: pass --longitude" } }
+  if ($year == null) { error make --unspanned { msg: "required query parameter 'year' missing: pass --year" } }
   let qp = [(serialize-qp "altitude" $altitude "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "year" $year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/magnetic_field" $qp $auth.query)
   let accept_val = "application/json"

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -113,6 +113,7 @@ def x-amz-target-completer-13 [] { ["DataPipeline.RemoveTags"] }
 def x-amz-target-completer-14 [] { ["DataPipeline.ReportTaskProgress"] }
 def x-amz-target-completer-15 [] { ["DataPipeline.ReportTaskRunnerHeartbeat"] }
 def x-amz-target-completer-16 [] { ["DataPipeline.SetStatus"] }
+def task-status-completer [] { ["FAILED" "FALSE" "FINISHED"] }
 def x-amz-target-completer-17 [] { ["DataPipeline.SetTaskStatus"] }
 def x-amz-target-completer-18 [] { ["DataPipeline.ValidatePipelineDefinition"] }
 
@@ -143,6 +144,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: ActivatePipeline
+# --parameterValues item shape: {id: string, stringValue: string}
 export def "activate-pipeline" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -160,14 +162,15 @@ export def "activate-pipeline" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  pipeline_id: any
-  --parameter-values: any
-  --start-timestamp: any
+  --x-amz-target: string@x-amz-target-completer # required
+  pipeline_id: string # The ID of the pipeline.
+  --parameter-values: list # A list of parameter values to pass to the pipeline at activation. — item shape: {id: string, stringValue: string}
+  --start-timestamp: string # The date and time to resume the pipeline. By default, the pipeline resumes from the last completed execution. (format: date-time)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DataPipeline.ActivatePipeline")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"pipelineId": $pipeline_id, "parameterValues": $parameter_values, "startTimestamp": $start_timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -193,6 +196,7 @@ export def "activate-pipeline" [
 #
 # POST /
 # operationId: AddTags
+# --tags item shape: {key: string, value: string}
 export def "add-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -210,13 +214,14 @@ export def "add-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  pipeline_id: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  pipeline_id: string # The ID of the pipeline.
+  tags: list # The tags to add, as key/value pairs. — item shape: {key: string, value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DataPipeline.AddTags")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"pipelineId": $pipeline_id, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -242,6 +247,7 @@ export def "add-tags" [
 #
 # POST /
 # operationId: CreatePipeline
+# --tags item shape: {key: string, value: string}
 export def "create-pipeline" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -259,15 +265,16 @@ export def "create-pipeline" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  name: any
-  unique_id: any
-  --description: any
-  --tags: any
-]: any -> record<pipelineId: record> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  name: string # The name for the pipeline. You can use the same name for multiple pipelines associated with your AWS account, because AWS Data Pipeline assigns each pipeline a unique pipeline identifier.
+  unique_id: string # A unique identifier. This identifier is not the same as the pipeline identifier assigned by AWS Data Pipeline. You are responsible for defining the format and ensuring the uniqueness of this identifier. You use this parameter to ensure idempotency during repeated calls to CreatePipeline. For example, if the first call to CreatePipeline does not succeed, you can pass in the same unique identifier and pipeline name combination on a subsequent call to CreatePipeline. CreatePipeline ensures that if a pipeline already exists with the same name and unique identifier, a new pipeline is not created. Instead, you'll receive the pipeline identifier from the previous attempt. The uniqueness of the name and unique identifier combination is scoped to the AWS account or IAM user credentials.
+  --description: string # The description for the pipeline.
+  --tags: list # A list of tags to associate with the pipeline at creation. Tags let you control access to pipelines. For more information, see Controlling User Access to Pipelines (http://docs.aws.amazon.com/datapipeline/latest/DeveloperGuide/dp-control-access.html) in the AWS Data Pipeline Developer Guide. — item shape: {key: string, value: string}
+]: any -> record<pipelineId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DataPipeline.CreatePipeline")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name, "uniqueId": $unique_id, "description": $description, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -310,13 +317,14 @@ export def "deactivate-pipeline" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  pipeline_id: any
-  --cancel-active: any
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  pipeline_id: string # The ID of the pipeline.
+  --cancel-active: oneof<nothing, bool> # Indicates whether to cancel any running objects. The default is true, which sets the state of any running objects to CANCELED. If this value is false, the pipeline is deactivated after all running objects finish.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DataPipeline.DeactivatePipeline")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"pipelineId": $pipeline_id, "cancelActive": $cancel_active} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -359,12 +367,13 @@ export def "delete-pipeline" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  pipeline_id: any
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  pipeline_id: string # The ID of the pipeline.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DataPipeline.DeletePipeline")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"pipelineId": $pipeline_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -408,15 +417,16 @@ export def "describe-objects" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  pipeline_id: any
-  object_ids: any
-  --evaluate-expressions: any
-  --marker-body: any #  (body field)
-]: any -> record<pipelineObjects: record, marker: record, hasMoreResults: record> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  pipeline_id: string # The ID of the pipeline that contains the object definitions.
+  object_ids: list<string> # The IDs of the pipeline objects that contain the definitions to be described. You can pass as many as 25 identifiers in a single call to DescribeObjects.
+  --evaluate-expressions: oneof<nothing, bool> # Indicates whether any expressions in the object should be evaluated when the object descriptions are returned.
+  --marker-body: string # The starting point for the results to be returned. For the first call, this value should be empty. As long as there are more results, continue to call DescribeObjects with the marker value from the previous call to retrieve the next set of results. (body field)
+]: any -> record<pipelineObjects: table<id: string, name: string, fields: list>, marker: string, hasMoreResults: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DataPipeline.DescribeObjects")
   let qp = [(serialize-qp "marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"pipelineId": $pipeline_id, "objectIds": $object_ids, "evaluateExpressions": $evaluate_expressions, "marker": $marker_body} | compact
@@ -460,12 +470,13 @@ export def "describe-pipelines" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  pipeline_ids: any
-]: any -> record<pipelineDescriptionList: record> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  pipeline_ids: list<string> # The IDs of the pipelines to describe. You can pass as many as 25 identifiers in a single call. To obtain pipeline IDs, call ListPipelines.
+]: any -> record<pipelineDescriptionList: table<pipelineId: string, name: string, fields: list, description: string, tags: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DataPipeline.DescribePipelines")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"pipelineIds": $pipeline_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -508,14 +519,15 @@ export def "evaluate-expression" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  pipeline_id: any
-  object_id: any
-  expression: any
-]: any -> record<evaluatedExpression: record> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  pipeline_id: string # The ID of the pipeline.
+  object_id: string # The ID of the object.
+  expression: string # The expression to evaluate.
+]: any -> record<evaluatedExpression: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DataPipeline.EvaluateExpression")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"pipelineId": $pipeline_id, "objectId": $object_id, "expression": $expression} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -558,13 +570,14 @@ export def "get-pipeline-definition" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  pipeline_id: any
-  --version: any
-]: any -> record<pipelineObjects: record, parameterObjects: record, parameterValues: record> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  pipeline_id: string # The ID of the pipeline.
+  --version: string # The version of the pipeline definition to retrieve. Set this parameter to latest (default) to use the last definition saved to the pipeline or active to use the last definition that was activated.
+]: any -> record<pipelineObjects: table<id: string, name: string, fields: list>, parameterObjects: table<id: string, attributes: list>, parameterValues: table<id: string, stringValue: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DataPipeline.GetPipelineDefinition")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"pipelineId": $pipeline_id, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -608,12 +621,13 @@ export def "list-pipelines" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  --marker-body: any #  (body field)
-]: any -> record<pipelineIdList: record, marker: record, hasMoreResults: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  --marker-body: string # The starting point for the results to be returned. For the first call, this value should be empty. As long as there are more results, continue to call ListPipelines with the marker value from the previous call to retrieve the next set of results. (body field)
+]: any -> record<pipelineIdList: table<id: string, name: string>, marker: string, hasMoreResults: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DataPipeline.ListPipelines")
   let qp = [(serialize-qp "marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"marker": $marker_body} | compact
@@ -640,6 +654,7 @@ export def "list-pipelines" [
 #
 # POST /
 # operationId: PollForTask
+# --instanceIdentity shape: {document?: string, signature?: string}
 export def "poll-for-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -657,14 +672,15 @@ export def "poll-for-task" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  worker_group: any
-  --hostname: any
-  --instance-identity: any
-]: any -> record<taskObject: record<taskId: record, pipelineId: record, attemptId: record, objects: record>> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  worker_group: string # The type of task the task runner is configured to accept and process. The worker group is set as a field on objects in the pipeline when they are created. You can only specify a single value for workerGroup in the call to PollForTask. There are no wildcard values permitted in workerGroup; the string must be an exact, case-sensitive, match.
+  --hostname: string # The public DNS name of the calling task runner.
+  --instance-identity: record # Identity information for the EC2 instance that is hosting the task runner. You can get this value by calling a metadata URI from the EC2 instance. For more information, see Instance Metadata (http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/AESDG-chapter-instancedata.html) in the Amazon Elastic Compute Cloud User Guide. Passing in this value proves that your task runner is running on an EC2 instance, and ensures the proper AWS Data Pipeline service charges are applied to your pipeline. — shape: {document?: string, signature?: string}
+]: any -> record<taskObject: record<taskId: string, pipelineId: string, attemptId: string, objects: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DataPipeline.PollForTask")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"workerGroup": $worker_group, "hostname": $hostname, "instanceIdentity": $instance_identity} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -690,6 +706,9 @@ export def "poll-for-task" [
 #
 # POST /
 # operationId: PutPipelineDefinition
+# --pipelineObjects item shape: {id: string, name: string, fields: list}
+# --parameterObjects item shape: {id: string, attributes: list}
+# --parameterValues item shape: {id: string, stringValue: string}
 export def "put-pipeline-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -707,15 +726,16 @@ export def "put-pipeline-definition" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  pipeline_id: any
-  pipeline_objects: any
-  --parameter-objects: any
-  --parameter-values: any
-]: any -> record<validationErrors: record, validationWarnings: record, errored: record> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  pipeline_id: string # The ID of the pipeline.
+  pipeline_objects: list # The objects that define the pipeline. These objects overwrite the existing pipeline definition. — item shape: {id: string, name: string, fields: list}
+  --parameter-objects: list # The parameter objects used with the pipeline. — item shape: {id: string, attributes: list}
+  --parameter-values: list # The parameter values used with the pipeline. — item shape: {id: string, stringValue: string}
+]: any -> record<validationErrors: table<id: string, errors: list>, validationWarnings: table<id: string, warnings: list>, errored: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DataPipeline.PutPipelineDefinition")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"pipelineId": $pipeline_id, "pipelineObjects": $pipeline_objects, "parameterObjects": $parameter_objects, "parameterValues": $parameter_values} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -741,6 +761,7 @@ export def "put-pipeline-definition" [
 #
 # POST /
 # operationId: QueryObjects
+# --query shape: {selectors?: list}
 export def "query-objects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -760,16 +781,17 @@ export def "query-objects" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  pipeline_id: any
-  --query: any
-  sphere: any
-  --marker-body: any #  (body field)
-  --limit-body: any #  (body field)
-]: any -> record<ids: record, marker: record, hasMoreResults: record> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  pipeline_id: string # The ID of the pipeline.
+  --query: record # Defines the query to run against an object. — shape: {selectors?: list}
+  sphere: string # Indicates whether the query applies to components or instances. The possible values are: COMPONENT, INSTANCE, and ATTEMPT.
+  --marker-body: string # The starting point for the results to be returned. For the first call, this value should be empty. As long as there are more results, continue to call QueryObjects with the marker value from the previous call to retrieve the next set of results. (body field)
+  --limit-body: int # The maximum number of object names that QueryObjects will return in a single call. The default value is 100. (body field)
+]: any -> record<ids: list<string>, marker: string, hasMoreResults: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DataPipeline.QueryObjects")
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"pipelineId": $pipeline_id, "query": $query, "sphere": $sphere, "marker": $marker_body, "limit": $limit_body} | compact
@@ -813,13 +835,14 @@ export def "remove-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  pipeline_id: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  pipeline_id: string # The ID of the pipeline.
+  tag_keys: list<string> # The keys of the tags to remove.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DataPipeline.RemoveTags")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"pipelineId": $pipeline_id, "tagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -845,6 +868,7 @@ export def "remove-tags" [
 #
 # POST /
 # operationId: ReportTaskProgress
+# --fields item shape: {key: string, stringValue?: string, refValue?: string}
 export def "report-task-progress" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -862,13 +886,14 @@ export def "report-task-progress" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  task_id: any
-  --fields: any
-]: any -> record<canceled: record> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  task_id: string # The ID of the task assigned to the task runner. This value is provided in the response for PollForTask.
+  --fields: list # Key-value pairs that define the properties of the ReportTaskProgressInput object. — item shape: {key: string, stringValue?: string, refValue?: string}
+]: any -> record<canceled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DataPipeline.ReportTaskProgress")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"taskId": $task_id, "fields": $fields} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -911,14 +936,15 @@ export def "report-task-runner-heartbeat" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  taskrunner_id: any
-  --worker-group: any
-  --hostname: any
-]: any -> record<terminate: record> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  taskrunner_id: string # The ID of the task runner. This value should be unique across your AWS account. In the case of AWS Data Pipeline Task Runner launched on a resource managed by AWS Data Pipeline, the web service provides a unique identifier when it launches the application. If you have written a custom task runner, you should assign a unique identifier for the task runner.
+  --worker-group: string # The type of task the task runner is configured to accept and process. The worker group is set as a field on objects in the pipeline when they are created. You can only specify a single value for workerGroup. There are no wildcard values permitted in workerGroup; the string must be an exact, case-sensitive, match.
+  --hostname: string # The public DNS name of the task runner.
+]: any -> record<terminate: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DataPipeline.ReportTaskRunnerHeartbeat")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"taskrunnerId": $taskrunner_id, "workerGroup": $worker_group, "hostname": $hostname} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -961,14 +987,15 @@ export def "set-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  pipeline_id: any
-  object_ids: any
-  status: any
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  pipeline_id: string # The ID of the pipeline that contains the objects.
+  object_ids: list<string> # The IDs of the objects. The corresponding objects can be either physical or components, but not a mix of both types.
+  status: string # The status to be set on all the objects specified in objectIds. For components, use PAUSE or RESUME. For instances, use TRY_CANCEL, RERUN, or MARK_FINISHED.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DataPipeline.SetStatus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"pipelineId": $pipeline_id, "objectIds": $object_ids, "status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1011,16 +1038,17 @@ export def "set-task-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  task_id: any
-  task_status: any
-  --error-id: any
-  --error-message: any
-  --error-stack-trace: any
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  task_id: string # The ID of the task assigned to the task runner. This value is provided in the response for PollForTask.
+  task_status: string@task-status-completer # If FINISHED, the task successfully completed. If FAILED, the task ended unsuccessfully. Preconditions use false.
+  --error-id: string # If an error occurred during the task, this value specifies the error code. This value is set on the physical attempt object. It is used to display error information to the user. It should not start with string "Service_" which is reserved by the system.
+  --error-message: string # If an error occurred during the task, this value specifies a text description of the error. This value is set on the physical attempt object. It is used to display error information to the user. The web service does not parse this value.
+  --error-stack-trace: string # If an error occurred during the task, this value specifies the stack trace associated with the error. This value is set on the physical attempt object. It is used to display error information to the user. The web service does not parse this value.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DataPipeline.SetTaskStatus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"taskId": $task_id, "taskStatus": $task_status, "errorId": $error_id, "errorMessage": $error_message, "errorStackTrace": $error_stack_trace} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1046,6 +1074,9 @@ export def "set-task-status" [
 #
 # POST /
 # operationId: ValidatePipelineDefinition
+# --pipelineObjects item shape: {id: string, name: string, fields: list}
+# --parameterObjects item shape: {id: string, attributes: list}
+# --parameterValues item shape: {id: string, stringValue: string}
 export def "validate-pipeline-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1063,15 +1094,16 @@ export def "validate-pipeline-definition" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  pipeline_id: any
-  pipeline_objects: any
-  --parameter-objects: any
-  --parameter-values: any
-]: any -> record<validationErrors: record, validationWarnings: record, errored: record> {
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  pipeline_id: string # The ID of the pipeline.
+  pipeline_objects: list # The objects that define the pipeline changes to validate against the pipeline. — item shape: {id: string, name: string, fields: list}
+  --parameter-objects: list # The parameter objects used with the pipeline. — item shape: {id: string, attributes: list}
+  --parameter-values: list # The parameter values used with the pipeline. — item shape: {id: string, stringValue: string}
+]: any -> record<validationErrors: table<id: string, errors: list>, validationWarnings: table<id: string, warnings: list>, errored: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DataPipeline.ValidatePipelineDefinition")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"pipelineId": $pipeline_id, "pipelineObjects": $pipeline_objects, "parameterObjects": $parameter_objects, "parameterValues": $parameter_values} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

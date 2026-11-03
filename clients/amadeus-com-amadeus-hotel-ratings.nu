@@ -131,10 +131,11 @@ export def "get-sentiments-by-hotel-ids" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hotel-ids: list<string> # Comma-separated list of Amadeus Hotel Ids (max. 3) . Amadeus Hotel Ids are found in the Hotel Search response (parameter name is 'hotelId'). (e.g. [TELONMFS])
-]: nothing -> any {
+  --hotel-ids: list<string> # Comma-separated list of Amadeus Hotel Ids (max. 3) . Amadeus Hotel Ids are found in the Hotel Search response (parameter name is 'hotelId'). (required, e.g. [TELONMFS])
+]: nothing -> record<data: table<hotelId: string, numberOfRatings: int, numberOfReviews: int, overallRating: int, sentiments: record, type: string>, meta: record<count: int, links: record<first: string, last: string, next: string, previous: string, self: string, up: string>>, warnings: table<code: int, detail: string, documentation: string, source: record, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hotel_ids == null) { error make --unspanned { msg: "required query parameter 'hotelIds' missing: pass --hotel-ids" } }
   let qp = [(serialize-qp "hotelIds" $hotel_ids "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/e-reputation/hotel-sentiments" $qp $auth.query)
   let accept_val = "application/vnd.amadeus+json"

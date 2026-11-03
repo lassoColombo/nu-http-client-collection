@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -97,7 +97,9 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def x-amz-target-completer [] { ["AWSLookoutEquipmentFrontendService.CreateDataset"] }
+def data-upload-frequency-completer [] { ["PT10M" "PT15M" "PT1H" "PT30M" "PT5M"] }
 def x-amz-target-completer-1 [] { ["AWSLookoutEquipmentFrontendService.CreateInferenceScheduler"] }
+def rating-completer [] { ["ANOMALY" "NEUTRAL" "NO_ANOMALY"] }
 def x-amz-target-completer-2 [] { ["AWSLookoutEquipmentFrontendService.CreateLabel"] }
 def x-amz-target-completer-3 [] { ["AWSLookoutEquipmentFrontendService.CreateLabelGroup"] }
 def x-amz-target-completer-4 [] { ["AWSLookoutEquipmentFrontendService.CreateModel"] }
@@ -112,10 +114,12 @@ def x-amz-target-completer-12 [] { ["AWSLookoutEquipmentFrontendService.Describe
 def x-amz-target-completer-13 [] { ["AWSLookoutEquipmentFrontendService.DescribeLabel"] }
 def x-amz-target-completer-14 [] { ["AWSLookoutEquipmentFrontendService.DescribeLabelGroup"] }
 def x-amz-target-completer-15 [] { ["AWSLookoutEquipmentFrontendService.DescribeModel"] }
+def status-completer [] { ["FAILED" "IN_PROGRESS" "SUCCESS"] }
 def x-amz-target-completer-16 [] { ["AWSLookoutEquipmentFrontendService.ListDataIngestionJobs"] }
 def x-amz-target-completer-17 [] { ["AWSLookoutEquipmentFrontendService.ListDatasets"] }
 def x-amz-target-completer-18 [] { ["AWSLookoutEquipmentFrontendService.ListInferenceEvents"] }
 def x-amz-target-completer-19 [] { ["AWSLookoutEquipmentFrontendService.ListInferenceExecutions"] }
+def status-completer-1 [] { ["PENDING" "RUNNING" "STOPPED" "STOPPING"] }
 def x-amz-target-completer-20 [] { ["AWSLookoutEquipmentFrontendService.ListInferenceSchedulers"] }
 def x-amz-target-completer-21 [] { ["AWSLookoutEquipmentFrontendService.ListLabelGroups"] }
 def x-amz-target-completer-22 [] { ["AWSLookoutEquipmentFrontendService.ListLabels"] }
@@ -157,6 +161,8 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateDataset
+# --DatasetSchema shape: {InlineDataSchema?: string}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-dataset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -174,16 +180,17 @@ export def "create-dataset" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  dataset_name: any
-  --dataset-schema: any
-  --server-side-kms-key-id: any
-  client_token: any
-  --tags: any
-]: any -> record<DatasetName: record, DatasetArn: record, Status: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  dataset_name: string # The name of the dataset being created.
+  --dataset-schema: record # Provides information about the data schema used with the given dataset. — shape: {InlineDataSchema?: string}
+  --server-side-kms-key-id: string # Provides the identifier of the KMS key used to encrypt dataset data by Amazon Lookout for Equipment.
+  client_token: string # A unique identifier for the request. If you do not set the client request token, Amazon Lookout for Equipment generates one.
+  --tags: list # Any tags associated with the ingested data described in the dataset. — item shape: {Key: string, Value: string}
+]: any -> record<DatasetName: string, DatasetArn: string, Status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.CreateDataset")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DatasetName": $dataset_name, "DatasetSchema": $dataset_schema, "ServerSideKmsKeyId": $server_side_kms_key_id, "ClientToken": $client_token, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -209,6 +216,9 @@ export def "create-dataset" [
 #
 # POST /
 # operationId: CreateInferenceScheduler
+# --DataInputConfiguration shape: {S3InputConfiguration?: record, InputTimeZoneOffset?: string, InferenceInputNameConfiguration?: record}
+# --DataOutputConfiguration shape: {S3OutputConfiguration: record, KmsKeyId?: string}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-inference-scheduler" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -226,21 +236,22 @@ export def "create-inference-scheduler" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  model_name: any
-  inference_scheduler_name: any
-  --data-delay-offset-in-minutes: any
-  data_upload_frequency: any
-  data_input_configuration: any
-  data_output_configuration: any
-  role_arn: any
-  --server-side-kms-key-id: any
-  client_token: any
-  --tags: any
-]: any -> record<InferenceSchedulerArn: record, InferenceSchedulerName: record, Status: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  model_name: string # The name of the previously trained ML model being used to create the inference scheduler.
+  inference_scheduler_name: string # The name of the inference scheduler being created.
+  --data-delay-offset-in-minutes: int # The interval (in minutes) of planned delay at the start of each inference segment. For example, if inference is set to run every ten minutes, the delay is set to five minutes and the time is 09:08. The inference scheduler will wake up at the configured interval (which, without a delay configured, would be 09:10) plus the additional five minute delay time (so 09:15) to check your Amazon S3 bucket. The delay provides a buffer for you to upload data at the same frequency, so that you don't have to stop and restart the scheduler when uploading new data. For more information, see Understanding the inference process (https://docs.aws.amazon.com/lookout-for-equipment/latest/ug/understanding-inference-process.html).
+  data_upload_frequency: string@data-upload-frequency-completer # How often data is uploaded to the source Amazon S3 bucket for the input data. The value chosen is the length of time between data uploads. For instance, if you select 5 minutes, Amazon Lookout for Equipment will upload the real-time data to the source bucket once every 5 minutes. This frequency also determines how often Amazon Lookout for Equipment runs inference on your data. For more information, see Understanding the inference process (https://docs.aws.amazon.com/lookout-for-equipment/latest/ug/understanding-inference-process.html).
+  data_input_configuration: record # Specifies configuration information for the input data for the inference, including Amazon S3 location of input data.. — shape: {S3InputConfiguration?: record, InputTimeZoneOffset?: string, InferenceInputNameConfiguration?: record}
+  data_output_configuration: record # Specifies configuration information for the output results from for the inference, including KMS key ID and output S3 location. — shape: {S3OutputConfiguration: record, KmsKeyId?: string}
+  role_arn: string # The Amazon Resource Name (ARN) of a role with permission to access the data source being used for the inference.
+  --server-side-kms-key-id: string # Provides the identifier of the KMS key used to encrypt inference scheduler data by Amazon Lookout for Equipment.
+  client_token: string # A unique identifier for the request. If you do not set the client request token, Amazon Lookout for Equipment generates one.
+  --tags: list # Any tags associated with the inference scheduler. — item shape: {Key: string, Value: string}
+]: any -> record<InferenceSchedulerArn: string, InferenceSchedulerName: string, Status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.CreateInferenceScheduler")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ModelName": $model_name, "InferenceSchedulerName": $inference_scheduler_name, "DataDelayOffsetInMinutes": $data_delay_offset_in_minutes, "DataUploadFrequency": $data_upload_frequency, "DataInputConfiguration": $data_input_configuration, "DataOutputConfiguration": $data_output_configuration, "RoleArn": $role_arn, "ServerSideKmsKeyId": $server_side_kms_key_id, "ClientToken": $client_token, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -283,19 +294,20 @@ export def "create-label" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  label_group_name: any
-  start_time: any
-  end_time: any
-  rating: any
-  --fault-code: any
-  --notes: any
-  --equipment: any
-  client_token: any
-]: any -> record<LabelId: record> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  label_group_name: string # The name of a group of labels. Data in this field will be retained for service usage. Follow best practices for the security of your data.
+  start_time: string # The start time of the labeled event. (format: date-time)
+  end_time: string # The end time of the labeled event. (format: date-time)
+  rating: string@rating-completer # Indicates whether a labeled event represents an anomaly.
+  --fault-code: string # Provides additional information about the label. The fault code must be defined in the FaultCodes attribute of the label group. Data in this field will be retained for service usage. Follow best practices for the security of your data.
+  --notes: string # Metadata providing additional information about the label. Data in this field will be retained for service usage. Follow best practices for the security of your data.
+  --equipment: string # Indicates that a label pertains to a particular piece of equipment. Data in this field will be retained for service usage. Follow best practices for the security of your data.
+  client_token: string # A unique identifier for the request to create a label. If you do not set the client request token, Lookout for Equipment generates one.
+]: any -> record<LabelId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.CreateLabel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LabelGroupName": $label_group_name, "StartTime": $start_time, "EndTime": $end_time, "Rating": $rating, "FaultCode": $fault_code, "Notes": $notes, "Equipment": $equipment, "ClientToken": $client_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -321,6 +333,7 @@ export def "create-label" [
 #
 # POST /
 # operationId: CreateLabelGroup
+# --Tags item shape: {Key: string, Value: string}
 export def "create-label-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -338,15 +351,16 @@ export def "create-label-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  label_group_name: any
-  --fault-codes: any
-  client_token: any
-  --tags: any
-]: any -> record<LabelGroupName: record, LabelGroupArn: record> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  label_group_name: string # Names a group of labels. Data in this field will be retained for service usage. Follow best practices for the security of your data.
+  --fault-codes: list<string> # The acceptable fault codes (indicating the type of anomaly associated with the label) that can be used with this label group. Data in this field will be retained for service usage. Follow best practices for the security of your data.
+  client_token: string # A unique identifier for the request to create a label group. If you do not set the client request token, Lookout for Equipment generates one.
+  --tags: list # Tags that provide metadata about the label group you are creating. Data in this field will be retained for service usage. Follow best practices for the security of your data. — item shape: {Key: string, Value: string}
+]: any -> record<LabelGroupName: string, LabelGroupArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.CreateLabelGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LabelGroupName": $label_group_name, "FaultCodes": $fault_codes, "ClientToken": $client_token, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -372,6 +386,10 @@ export def "create-label-group" [
 #
 # POST /
 # operationId: CreateModel
+# --DatasetSchema shape: {InlineDataSchema?: string}
+# --LabelsInputConfiguration shape: {S3InputConfiguration?: record, LabelGroupName?: string}
+# --DataPreProcessingConfiguration shape: {TargetSamplingRate?: "PT1S"|"PT5S"|"PT10S"|"PT15S"|"PT30S"|"PT1M"|"PT5M"|"PT10M"|"PT15M"|"PT30M"|"PT1H"}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -389,25 +407,26 @@ export def "create-model" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  model_name: any
-  dataset_name: any
-  --dataset-schema: any
-  --labels-input-configuration: any
-  client_token: any
-  --training-data-start-time: any
-  --training-data-end-time: any
-  --evaluation-data-start-time: any
-  --evaluation-data-end-time: any
-  --role-arn: any
-  --data-pre-processing-configuration: any
-  --server-side-kms-key-id: any
-  --tags: any
-  --off-condition: any
-]: any -> record<ModelArn: record, Status: record> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  model_name: string # The name for the ML model to be created.
+  dataset_name: string # The name of the dataset for the ML model being created.
+  --dataset-schema: record # Provides information about the data schema used with the given dataset. — shape: {InlineDataSchema?: string}
+  --labels-input-configuration: record # Contains the configuration information for the S3 location being used to hold label data. — shape: {S3InputConfiguration?: record, LabelGroupName?: string}
+  client_token: string # A unique identifier for the request. If you do not set the client request token, Amazon Lookout for Equipment generates one.
+  --training-data-start-time: string # Indicates the time reference in the dataset that should be used to begin the subset of training data for the ML model. (format: date-time)
+  --training-data-end-time: string # Indicates the time reference in the dataset that should be used to end the subset of training data for the ML model. (format: date-time)
+  --evaluation-data-start-time: string # Indicates the time reference in the dataset that should be used to begin the subset of evaluation data for the ML model. (format: date-time)
+  --evaluation-data-end-time: string # Indicates the time reference in the dataset that should be used to end the subset of evaluation data for the ML model. (format: date-time)
+  --role-arn: string # The Amazon Resource Name (ARN) of a role with permission to access the data source being used to create the ML model.
+  --data-pre-processing-configuration: record # The configuration is the TargetSamplingRate, which is the sampling rate of the data after post processing by Amazon Lookout for Equipment. For example, if you provide data that has been collected at a 1 second level and you want the system to resample the data at a 1 minute rate before training, the TargetSamplingRate is 1 minute. When providing a value for the TargetSamplingRate, you must attach the prefix "PT" to the rate you want. The value for a 1 second rate is therefore PT1S, the value for a 15 minute rate is PT15M, and the value for a 1 hour rate is PT1H — shape: {TargetSamplingRate?: "PT1S"|"PT5S"|"PT10S"|"PT15S"|"PT30S"|"PT1M"|"PT5M"|"PT10M"|"PT15M"|"PT30M"|"PT1H"}
+  --server-side-kms-key-id: string # Provides the identifier of the KMS key used to encrypt model data by Amazon Lookout for Equipment.
+  --tags: list # Any tags associated with the ML model being created. — item shape: {Key: string, Value: string}
+  --off-condition: string # Indicates that the asset associated with this sensor has been shut off. As long as this condition is met, Lookout for Equipment will not use data from this asset for training, evaluation, or inference.
+]: any -> record<ModelArn: string, Status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.CreateModel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ModelName": $model_name, "DatasetName": $dataset_name, "DatasetSchema": $dataset_schema, "LabelsInputConfiguration": $labels_input_configuration, "ClientToken": $client_token, "TrainingDataStartTime": $training_data_start_time, "TrainingDataEndTime": $training_data_end_time, "EvaluationDataStartTime": $evaluation_data_start_time, "EvaluationDataEndTime": $evaluation_data_end_time, "RoleArn": $role_arn, "DataPreProcessingConfiguration": $data_pre_processing_configuration, "ServerSideKmsKeyId": $server_side_kms_key_id, "Tags": $tags, "OffCondition": $off_condition} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -450,12 +469,13 @@ export def "delete-dataset" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  dataset_name: any
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  dataset_name: string # The name of the dataset to be deleted.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.DeleteDataset")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DatasetName": $dataset_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -498,12 +518,13 @@ export def "delete-inference-scheduler" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  inference_scheduler_name: any
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  inference_scheduler_name: string # The name of the inference scheduler to be deleted.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.DeleteInferenceScheduler")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InferenceSchedulerName": $inference_scheduler_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -546,13 +567,14 @@ export def "delete-label" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  label_group_name: any
-  label_id: any
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  label_group_name: string # The name of the label group that contains the label that you want to delete. Data in this field will be retained for service usage. Follow best practices for the security of your data.
+  label_id: string # The ID of the label that you want to delete.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.DeleteLabel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LabelGroupName": $label_group_name, "LabelId": $label_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -595,12 +617,13 @@ export def "delete-label-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  label_group_name: any
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  label_group_name: string # The name of the label group that you want to delete. Data in this field will be retained for service usage. Follow best practices for the security of your data.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.DeleteLabelGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LabelGroupName": $label_group_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -643,12 +666,13 @@ export def "delete-model" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  model_name: any
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  model_name: string # The name of the ML model to be deleted.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.DeleteModel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ModelName": $model_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -691,12 +715,13 @@ export def "describe-data-ingestion-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  job_id: any
-]: any -> record<JobId: record, DatasetArn: record, IngestionInputConfiguration: record<S3InputConfiguration: record<Bucket: record, Prefix: record, KeyPattern: record>>, RoleArn: record, CreatedAt: record, Status: record, FailedReason: record, DataQualitySummary: record<InsufficientSensorData: record<MissingCompleteSensorData: record, SensorsWithShortDateRange: record>, MissingSensorData: record<AffectedSensorCount: record, TotalNumberOfMissingValues: record>, InvalidSensorData: record<AffectedSensorCount: record, TotalNumberOfInvalidValues: record>, UnsupportedTimestamps: record<TotalNumberOfUnsupportedTimestamps: record>, DuplicateTimestamps: record<TotalNumberOfDuplicateTimestamps: record>>, IngestedFilesSummary: record<TotalNumberOfFiles: record, IngestedNumberOfFiles: record, DiscardedFiles: record>, StatusDetail: record, IngestedDataSize: record, DataStartTime: record, DataEndTime: record> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  job_id: string # The job ID of the data ingestion job.
+]: any -> record<JobId: string, DatasetArn: string, IngestionInputConfiguration: record<S3InputConfiguration: record<Bucket: string, Prefix: string, KeyPattern: string>>, RoleArn: string, CreatedAt: string, Status: string, FailedReason: string, DataQualitySummary: record<InsufficientSensorData: record<MissingCompleteSensorData: record, SensorsWithShortDateRange: record>, MissingSensorData: record<AffectedSensorCount: int, TotalNumberOfMissingValues: int>, InvalidSensorData: record<AffectedSensorCount: int, TotalNumberOfInvalidValues: int>, UnsupportedTimestamps: record<TotalNumberOfUnsupportedTimestamps: int>, DuplicateTimestamps: record<TotalNumberOfDuplicateTimestamps: int>>, IngestedFilesSummary: record<TotalNumberOfFiles: int, IngestedNumberOfFiles: int, DiscardedFiles: list<record>>, StatusDetail: string, IngestedDataSize: int, DataStartTime: string, DataEndTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.DescribeDataIngestionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -739,12 +764,13 @@ export def "describe-dataset" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  dataset_name: any
-]: any -> record<DatasetName: record, DatasetArn: record, CreatedAt: record, LastUpdatedAt: record, Status: record, Schema: record, ServerSideKmsKeyId: record, IngestionInputConfiguration: record<S3InputConfiguration: record<Bucket: record, Prefix: record, KeyPattern: record>>, DataQualitySummary: record<InsufficientSensorData: record<MissingCompleteSensorData: record, SensorsWithShortDateRange: record>, MissingSensorData: record<AffectedSensorCount: record, TotalNumberOfMissingValues: record>, InvalidSensorData: record<AffectedSensorCount: record, TotalNumberOfInvalidValues: record>, UnsupportedTimestamps: record<TotalNumberOfUnsupportedTimestamps: record>, DuplicateTimestamps: record<TotalNumberOfDuplicateTimestamps: record>>, IngestedFilesSummary: record<TotalNumberOfFiles: record, IngestedNumberOfFiles: record, DiscardedFiles: record>, RoleArn: record, DataStartTime: record, DataEndTime: record> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  dataset_name: string # The name of the dataset to be described.
+]: any -> record<DatasetName: string, DatasetArn: string, CreatedAt: string, LastUpdatedAt: string, Status: string, Schema: string, ServerSideKmsKeyId: string, IngestionInputConfiguration: record<S3InputConfiguration: record<Bucket: string, Prefix: string, KeyPattern: string>>, DataQualitySummary: record<InsufficientSensorData: record<MissingCompleteSensorData: record, SensorsWithShortDateRange: record>, MissingSensorData: record<AffectedSensorCount: int, TotalNumberOfMissingValues: int>, InvalidSensorData: record<AffectedSensorCount: int, TotalNumberOfInvalidValues: int>, UnsupportedTimestamps: record<TotalNumberOfUnsupportedTimestamps: int>, DuplicateTimestamps: record<TotalNumberOfDuplicateTimestamps: int>>, IngestedFilesSummary: record<TotalNumberOfFiles: int, IngestedNumberOfFiles: int, DiscardedFiles: list<record>>, RoleArn: string, DataStartTime: string, DataEndTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.DescribeDataset")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DatasetName": $dataset_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -787,12 +813,13 @@ export def "describe-inference-scheduler" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  inference_scheduler_name: any
-]: any -> record<ModelArn: record, ModelName: record, InferenceSchedulerName: record, InferenceSchedulerArn: record, Status: record, DataDelayOffsetInMinutes: record, DataUploadFrequency: record, CreatedAt: record, UpdatedAt: record, DataInputConfiguration: record<S3InputConfiguration: record<Bucket: record, Prefix: record>, InputTimeZoneOffset: record, InferenceInputNameConfiguration: record<TimestampFormat: record, ComponentTimestampDelimiter: record>>, DataOutputConfiguration: record<S3OutputConfiguration: record<Bucket: record, Prefix: record>, KmsKeyId: record>, RoleArn: record, ServerSideKmsKeyId: record, LatestInferenceResult: record> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  inference_scheduler_name: string # The name of the inference scheduler being described.
+]: any -> record<ModelArn: string, ModelName: string, InferenceSchedulerName: string, InferenceSchedulerArn: string, Status: string, DataDelayOffsetInMinutes: int, DataUploadFrequency: string, CreatedAt: string, UpdatedAt: string, DataInputConfiguration: record<S3InputConfiguration: record<Bucket: string, Prefix: string>, InputTimeZoneOffset: string, InferenceInputNameConfiguration: record<TimestampFormat: string, ComponentTimestampDelimiter: string>>, DataOutputConfiguration: record<S3OutputConfiguration: record<Bucket: string, Prefix: string>, KmsKeyId: string>, RoleArn: string, ServerSideKmsKeyId: string, LatestInferenceResult: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.DescribeInferenceScheduler")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InferenceSchedulerName": $inference_scheduler_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -835,13 +862,14 @@ export def "describe-label" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  label_group_name: any
-  label_id: any
-]: any -> record<LabelGroupName: record, LabelGroupArn: record, LabelId: record, StartTime: record, EndTime: record, Rating: record, FaultCode: record, Notes: record, Equipment: record, CreatedAt: record> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  label_group_name: string # Returns the name of the group containing the label.
+  label_id: string # Returns the ID of the label.
+]: any -> record<LabelGroupName: string, LabelGroupArn: string, LabelId: string, StartTime: string, EndTime: string, Rating: string, FaultCode: string, Notes: string, Equipment: string, CreatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.DescribeLabel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LabelGroupName": $label_group_name, "LabelId": $label_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -884,12 +912,13 @@ export def "describe-label-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  label_group_name: any
-]: any -> record<LabelGroupName: record, LabelGroupArn: record, FaultCodes: record, CreatedAt: record, UpdatedAt: record> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  label_group_name: string # Returns the name of the label group.
+]: any -> record<LabelGroupName: string, LabelGroupArn: string, FaultCodes: list<string>, CreatedAt: string, UpdatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.DescribeLabelGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LabelGroupName": $label_group_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -932,12 +961,13 @@ export def "describe-model" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  model_name: any
-]: any -> record<ModelName: record, ModelArn: record, DatasetName: record, DatasetArn: record, Schema: record, LabelsInputConfiguration: record<S3InputConfiguration: record<Bucket: record, Prefix: record>, LabelGroupName: record>, TrainingDataStartTime: record, TrainingDataEndTime: record, EvaluationDataStartTime: record, EvaluationDataEndTime: record, RoleArn: record, DataPreProcessingConfiguration: record<TargetSamplingRate: record>, Status: record, TrainingExecutionStartTime: record, TrainingExecutionEndTime: record, FailedReason: record, ModelMetrics: record, LastUpdatedTime: record, CreatedAt: record, ServerSideKmsKeyId: record, OffCondition: record> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  model_name: string # The name of the ML model to be described.
+]: any -> record<ModelName: string, ModelArn: string, DatasetName: string, DatasetArn: string, Schema: string, LabelsInputConfiguration: record<S3InputConfiguration: record<Bucket: string, Prefix: string>, LabelGroupName: string>, TrainingDataStartTime: string, TrainingDataEndTime: string, EvaluationDataStartTime: string, EvaluationDataEndTime: string, RoleArn: string, DataPreProcessingConfiguration: record<TargetSamplingRate: string>, Status: string, TrainingExecutionStartTime: string, TrainingExecutionEndTime: string, FailedReason: string, ModelMetrics: string, LastUpdatedTime: string, CreatedAt: string, ServerSideKmsKeyId: string, OffCondition: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.DescribeModel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ModelName": $model_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -982,15 +1012,16 @@ export def "list-data-ingestion-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  --dataset-name: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --status: any
-]: any -> record<NextToken: record, DataIngestionJobSummaries: record> {
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  --dataset-name: string # The name of the dataset being used for the data ingestion job.
+  --next-token-body: string # An opaque pagination token indicating where to continue the listing of data ingestion jobs. (body field)
+  --max-results-body: int # Specifies the maximum number of data ingestion jobs to list. (body field)
+  --status: string@status-completer # Indicates the status of the data ingestion job.
+]: any -> record<NextToken: string, DataIngestionJobSummaries: table<JobId: string, DatasetName: string, DatasetArn: string, IngestionInputConfiguration: record, Status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.ListDataIngestionJobs")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"DatasetName": $dataset_name, "NextToken": $next_token_body, "MaxResults": $max_results_body, "Status": $status} | compact
@@ -1036,14 +1067,15 @@ export def "list-datasets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --dataset-name-begins-with: any
-]: any -> record<NextToken: record, DatasetSummaries: record> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  --next-token-body: string # An opaque pagination token indicating where to continue the listing of datasets. (body field)
+  --max-results-body: int # Specifies the maximum number of datasets to list. (body field)
+  --dataset-name-begins-with: string # The beginning of the name of the datasets to be listed.
+]: any -> record<NextToken: string, DatasetSummaries: table<DatasetName: string, DatasetArn: string, Status: string, CreatedAt: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.ListDatasets")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "DatasetNameBeginsWith": $dataset_name_begins_with} | compact
@@ -1089,16 +1121,17 @@ export def "list-inference-events" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  inference_scheduler_name: any
-  interval_start_time: any
-  interval_end_time: any
-]: any -> record<NextToken: record, InferenceEventSummaries: record> {
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  --next-token-body: string # An opaque pagination token indicating where to continue the listing of inference events. (body field)
+  --max-results-body: int # Specifies the maximum number of inference events to list. (body field)
+  inference_scheduler_name: string # The name of the inference scheduler for the inference events listed.
+  interval_start_time: string # Lookout for Equipment will return all the inference events with an end time equal to or greater than the start time given. (format: date-time)
+  interval_end_time: string # Returns all the inference events with an end start time equal to or greater than less than the end time given (format: date-time)
+]: any -> record<NextToken: string, InferenceEventSummaries: table<InferenceSchedulerArn: string, InferenceSchedulerName: string, EventStartTime: string, EventEndTime: string, Diagnostics: string, EventDurationInSeconds: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.ListInferenceEvents")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "InferenceSchedulerName": $inference_scheduler_name, "IntervalStartTime": $interval_start_time, "IntervalEndTime": $interval_end_time} | compact
@@ -1144,17 +1177,18 @@ export def "list-inference-executions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  inference_scheduler_name: any
-  --data-start-time-after: any
-  --data-end-time-before: any
-  --status: any
-]: any -> record<NextToken: record, InferenceExecutionSummaries: record> {
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  --next-token-body: string # An opaque pagination token indicating where to continue the listing of inference executions. (body field)
+  --max-results-body: int # Specifies the maximum number of inference executions to list. (body field)
+  inference_scheduler_name: string # The name of the inference scheduler for the inference execution listed.
+  --data-start-time-after: string # The time reference in the inferenced dataset after which Amazon Lookout for Equipment started the inference execution. (format: date-time)
+  --data-end-time-before: string # The time reference in the inferenced dataset before which Amazon Lookout for Equipment stopped the inference execution. (format: date-time)
+  --status: string@status-completer # The status of the inference execution.
+]: any -> record<NextToken: string, InferenceExecutionSummaries: table<ModelName: string, ModelArn: string, InferenceSchedulerName: string, InferenceSchedulerArn: string, ScheduledStartTime: string, DataStartTime: string, DataEndTime: string, DataInputConfiguration: record, DataOutputConfiguration: record, CustomerResultObject: record, Status: string, FailedReason: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.ListInferenceExecutions")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "InferenceSchedulerName": $inference_scheduler_name, "DataStartTimeAfter": $data_start_time_after, "DataEndTimeBefore": $data_end_time_before, "Status": $status} | compact
@@ -1200,16 +1234,17 @@ export def "list-inference-schedulers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --inference-scheduler-name-begins-with: any
-  --model-name: any
-  --status: any
-]: any -> record<NextToken: record, InferenceSchedulerSummaries: record> {
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  --next-token-body: string # An opaque pagination token indicating where to continue the listing of inference schedulers. (body field)
+  --max-results-body: int # Specifies the maximum number of inference schedulers to list. (body field)
+  --inference-scheduler-name-begins-with: string # The beginning of the name of the inference schedulers to be listed.
+  --model-name: string # The name of the ML model used by the inference scheduler to be listed.
+  --status: string@status-completer-1 # Specifies the current status of the inference schedulers to list.
+]: any -> record<NextToken: string, InferenceSchedulerSummaries: table<ModelName: string, ModelArn: string, InferenceSchedulerName: string, InferenceSchedulerArn: string, Status: string, DataDelayOffsetInMinutes: int, DataUploadFrequency: string, LatestInferenceResult: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.ListInferenceSchedulers")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "InferenceSchedulerNameBeginsWith": $inference_scheduler_name_begins_with, "ModelName": $model_name, "Status": $status} | compact
@@ -1255,14 +1290,15 @@ export def "list-label-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  --label-group-name-begins-with: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<NextToken: record, LabelGroupSummaries: record> {
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  --label-group-name-begins-with: string # The beginning of the name of the label groups to be listed.
+  --next-token-body: string # An opaque pagination token indicating where to continue the listing of label groups. (body field)
+  --max-results-body: int # Specifies the maximum number of label groups to list. (body field)
+]: any -> record<NextToken: string, LabelGroupSummaries: table<LabelGroupName: string, LabelGroupArn: string, CreatedAt: string, UpdatedAt: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.ListLabelGroups")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"LabelGroupNameBeginsWith": $label_group_name_begins_with, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -1308,18 +1344,19 @@ export def "list-labels" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  label_group_name: any
-  --interval-start-time: any
-  --interval-end-time: any
-  --fault-code: any
-  --equipment: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<NextToken: record, LabelSummaries: record> {
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  label_group_name: string # Retruns the name of the label group.
+  --interval-start-time: string # Returns all the labels with a end time equal to or later than the start time given. (format: date-time)
+  --interval-end-time: string # Returns all labels with a start time earlier than the end time given. (format: date-time)
+  --fault-code: string # Returns labels with a particular fault code.
+  --equipment: string # Lists the labels that pertain to a particular piece of equipment.
+  --next-token-body: string # An opaque pagination token indicating where to continue the listing of label groups. (body field)
+  --max-results-body: int # Specifies the maximum number of labels to list. (body field)
+]: any -> record<NextToken: string, LabelSummaries: table<LabelGroupName: string, LabelId: string, LabelGroupArn: string, StartTime: string, EndTime: string, Rating: string, FaultCode: string, Equipment: string, CreatedAt: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.ListLabels")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"LabelGroupName": $label_group_name, "IntervalStartTime": $interval_start_time, "IntervalEndTime": $interval_end_time, "FaultCode": $fault_code, "Equipment": $equipment, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -1365,16 +1402,17 @@ export def "list-models" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --status: any
-  --model-name-begins-with: any
-  --dataset-name-begins-with: any
-]: any -> record<NextToken: record, ModelSummaries: record> {
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  --next-token-body: string # An opaque pagination token indicating where to continue the listing of ML models. (body field)
+  --max-results-body: int # Specifies the maximum number of ML models to list. (body field)
+  --status: string@status-completer # The status of the ML model.
+  --model-name-begins-with: string # The beginning of the name of the ML models being listed.
+  --dataset-name-begins-with: string # The beginning of the name of the dataset of the ML models to be listed.
+]: any -> record<NextToken: string, ModelSummaries: table<ModelName: string, ModelArn: string, DatasetName: string, DatasetArn: string, Status: string, CreatedAt: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.ListModels")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "Status": $status, "ModelNameBeginsWith": $model_name_begins_with, "DatasetNameBeginsWith": $dataset_name_begins_with} | compact
@@ -1420,15 +1458,16 @@ export def "list-sensor-statistics" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  dataset_name: any
-  --ingestion-job-id: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<SensorStatisticsSummaries: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  dataset_name: string # The name of the dataset associated with the list of Sensor Statistics.
+  --ingestion-job-id: string # The ingestion job id associated with the list of Sensor Statistics. To get sensor statistics for a particular ingestion job id, both dataset name and ingestion job id must be submitted as inputs.
+  --max-results-body: int # Specifies the maximum number of sensors for which to retrieve statistics. (body field)
+  --next-token-body: string # An opaque pagination token indicating where to continue the listing of sensor statistics. (body field)
+]: any -> record<SensorStatisticsSummaries: table<ComponentName: string, SensorName: string, DataExists: bool, MissingValues: record, InvalidValues: record, InvalidDateEntries: record, DuplicateTimestamps: record, CategoricalValues: record, MultipleOperatingModes: record, LargeTimestampGaps: record, MonotonicValues: record, DataStartTime: string, DataEndTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.ListSensorStatistics")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"DatasetName": $dataset_name, "IngestionJobId": $ingestion_job_id, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -1472,12 +1511,13 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  resource_arn: any
-]: any -> record<Tags: record> {
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the resource (such as the dataset or model) that is the focus of the ListTagsForResource operation.
+]: any -> record<Tags: table<Key: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.ListTagsForResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1503,6 +1543,7 @@ export def "list-tags-for-resource" [
 #
 # POST /
 # operationId: StartDataIngestionJob
+# --IngestionInputConfiguration shape: {S3InputConfiguration: record}
 export def "start-data-ingestion-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1520,15 +1561,16 @@ export def "start-data-ingestion-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-26
-  dataset_name: any
-  ingestion_input_configuration: any
-  role_arn: any
-  client_token: any
-]: any -> record<JobId: record, Status: record> {
+  --x-amz-target: string@x-amz-target-completer-26 # required
+  dataset_name: string # The name of the dataset being used by the data ingestion job.
+  ingestion_input_configuration: record # Specifies configuration information for the input data for the data ingestion job, including input data S3 location. — shape: {S3InputConfiguration: record}
+  role_arn: string # The Amazon Resource Name (ARN) of a role with permission to access the data source for the data ingestion job.
+  client_token: string # A unique identifier for the request. If you do not set the client request token, Amazon Lookout for Equipment generates one.
+]: any -> record<JobId: string, Status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.StartDataIngestionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DatasetName": $dataset_name, "IngestionInputConfiguration": $ingestion_input_configuration, "RoleArn": $role_arn, "ClientToken": $client_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1571,12 +1613,13 @@ export def "start-inference-scheduler" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-27
-  inference_scheduler_name: any
-]: any -> record<ModelArn: record, ModelName: record, InferenceSchedulerName: record, InferenceSchedulerArn: record, Status: record> {
+  --x-amz-target: string@x-amz-target-completer-27 # required
+  inference_scheduler_name: string # The name of the inference scheduler to be started.
+]: any -> record<ModelArn: string, ModelName: string, InferenceSchedulerName: string, InferenceSchedulerArn: string, Status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.StartInferenceScheduler")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InferenceSchedulerName": $inference_scheduler_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1619,12 +1662,13 @@ export def "stop-inference-scheduler" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-28
-  inference_scheduler_name: any
-]: any -> record<ModelArn: record, ModelName: record, InferenceSchedulerName: record, InferenceSchedulerArn: record, Status: record> {
+  --x-amz-target: string@x-amz-target-completer-28 # required
+  inference_scheduler_name: string # The name of the inference scheduler to be stopped.
+]: any -> record<ModelArn: string, ModelName: string, InferenceSchedulerName: string, InferenceSchedulerArn: string, Status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.StopInferenceScheduler")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InferenceSchedulerName": $inference_scheduler_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1650,6 +1694,7 @@ export def "stop-inference-scheduler" [
 #
 # POST /
 # operationId: TagResource
+# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1667,13 +1712,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-29
-  resource_arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-29 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the specific resource to which the tag should be associated.
+  tags: list # The tag or tags to be associated with a specific resource. Both the tag key and value are specified. — item shape: {Key: string, Value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1716,13 +1762,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-30
-  resource_arn: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-30 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the resource to which the tag is currently associated.
+  tag_keys: list<string> # Specifies the key of the tag to be removed from a specified resource.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1748,6 +1795,8 @@ export def "untag-resource" [
 #
 # POST /
 # operationId: UpdateInferenceScheduler
+# --DataInputConfiguration shape: {S3InputConfiguration?: record, InputTimeZoneOffset?: string, InferenceInputNameConfiguration?: record}
+# --DataOutputConfiguration shape: {S3OutputConfiguration: record, KmsKeyId?: string}
 export def "update-inference-scheduler" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1765,17 +1814,18 @@ export def "update-inference-scheduler" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-31
-  inference_scheduler_name: any
-  --data-delay-offset-in-minutes: any
-  --data-upload-frequency: any
-  --data-input-configuration: any
-  --data-output-configuration: any
-  --role-arn: any
+  --x-amz-target: string@x-amz-target-completer-31 # required
+  inference_scheduler_name: string # The name of the inference scheduler to be updated.
+  --data-delay-offset-in-minutes: int # A period of time (in minutes) by which inference on the data is delayed after the data starts. For instance, if you select an offset delay time of five minutes, inference will not begin on the data until the first data measurement after the five minute mark. For example, if five minutes is selected, the inference scheduler will wake up at the configured frequency with the additional five minute delay time to check the customer S3 bucket. The customer can upload data at the same frequency and they don't need to stop and restart the scheduler when uploading new data.
+  --data-upload-frequency: string@data-upload-frequency-completer # How often data is uploaded to the source S3 bucket for the input data. The value chosen is the length of time between data uploads. For instance, if you select 5 minutes, Amazon Lookout for Equipment will upload the real-time data to the source bucket once every 5 minutes. This frequency also determines how often Amazon Lookout for Equipment starts a scheduled inference on your data. In this example, it starts once every 5 minutes.
+  --data-input-configuration: record # Specifies configuration information for the input data for the inference, including Amazon S3 location of input data.. — shape: {S3InputConfiguration?: record, InputTimeZoneOffset?: string, InferenceInputNameConfiguration?: record}
+  --data-output-configuration: record # Specifies configuration information for the output results from for the inference, including KMS key ID and output S3 location. — shape: {S3OutputConfiguration: record, KmsKeyId?: string}
+  --role-arn: string # The Amazon Resource Name (ARN) of a role with permission to access the data source for the inference scheduler.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.UpdateInferenceScheduler")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InferenceSchedulerName": $inference_scheduler_name, "DataDelayOffsetInMinutes": $data_delay_offset_in_minutes, "DataUploadFrequency": $data_upload_frequency, "DataInputConfiguration": $data_input_configuration, "DataOutputConfiguration": $data_output_configuration, "RoleArn": $role_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1818,13 +1868,14 @@ export def "update-label-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-32
-  label_group_name: any
-  --fault-codes: any
+  --x-amz-target: string@x-amz-target-completer-32 # required
+  label_group_name: string # The name of the label group to be updated.
+  --fault-codes: list<string> # Updates the code indicating the type of anomaly associated with the label. Data in this field will be retained for service usage. Follow best practices for the security of your data.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.UpdateLabelGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LabelGroupName": $label_group_name, "FaultCodes": $fault_codes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

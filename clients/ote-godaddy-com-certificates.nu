@@ -157,7 +157,7 @@ export def "certificate-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-market-id: string # Setting locale for communications such as emails and error messages
+  --x-market-id: string # Setting locale for communications such as emails and error messages (default: Default locale for shopper account)
   --callback-url: string # Required if client would like to receive stateful actions via callback during certificate lifecyle
   --common-name: string # Name to be secured in certificate. If provided, CN field in CSR will be ignored.
   contact: any # shape: {email: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, phone: string, suffix?: string}
@@ -210,7 +210,7 @@ export def "certificate-validate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-market-id: string # Setting locale for communications such as emails and error messages
+  --x-market-id: string # Setting locale for communications such as emails and error messages (default: Default locale for shopper account)
   --callback-url: string # Required if client would like to receive stateful actions via callback during certificate lifecyle
   --common-name: string # Name to be secured in certificate. If provided, CN field in CSR will be ignored.
   contact: any # shape: {email: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, phone: string, suffix?: string}
@@ -406,11 +406,12 @@ export def "certificate-callback-replace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --callback-url: string # Callback url registered/replaced to receive stateful actions
+  --callback-url: string # Callback url registered/replaced to receive stateful actions (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($certificate_id | is-empty) { error make --unspanned { msg: "path parameter 'certificateId' must be non-empty" } }
+  if ($callback_url == null) { error make --unspanned { msg: "required query parameter 'callbackUrl' missing: pass --callback-url" } }
   let qp = [(serialize-qp "callbackUrl" $callback_url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({certificate_id: (encode-path-segment $certificate_id)} | format pattern "/v1/certificates/{certificate_id}/callback") $qp $auth.query)
   let accept_val = "application/json"
@@ -873,11 +874,12 @@ export def "certificate-get-entitlement" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --entitlement-id: string # Entitlement id to lookup
+  --entitlement-id: string # Entitlement id to lookup (required)
   --latest: oneof<nothing, bool> # Fetch only the most recent certificate (default: true)
 ]: nothing -> table<certificateId: string, commonName: string, contact: record<email: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, phone: string, suffix: string>, createdAt: string, deniedReason: string, organization: record<address: record, assumedName: string, jurisdictionOfIncorporation: record, name: string, phone: string, registrationAgent: string, registrationNumber: string>, period: int, productType: string, progress: int, revokedAt: string, rootType: string, serialNumber: string, serialNumberHex: string, slotSize: string, status: string, subjectAlternativeNames: list<record>, validEnd: string, validStart: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($entitlement_id == null) { error make --unspanned { msg: "required query parameter 'entitlementId' missing: pass --entitlement-id" } }
   let qp = [(serialize-qp "entitlementId" $entitlement_id "scalar") (serialize-qp "latest" $latest "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/certificates" $qp $auth.query)
   let accept_val = "application/json"
@@ -910,10 +912,11 @@ export def "certificate-download-entitlement" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --entitlement-id: string # Entitlement id to download
+  --entitlement-id: string # Entitlement id to download (required)
 ]: nothing -> record<pems: record<certificate: string, cross: string, intermediate: string, root: string>, serialNumber: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($entitlement_id == null) { error make --unspanned { msg: "required query parameter 'entitlementId' missing: pass --entitlement-id" } }
   let qp = [(serialize-qp "entitlementId" $entitlement_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/certificates/download" $qp $auth.query)
   let accept_val = "application/json"

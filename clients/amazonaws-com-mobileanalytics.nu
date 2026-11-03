@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 #
 # POST /2014-06-05/events
 # operationId: PutEvents
-# --events item shape: {eventType: any, timestamp: any, session?: any, version?: any, attributes?: any, metrics?: any}
+# --events item shape: {eventType: string, timestamp: string, session?: record, version?: string, attributes?: record, metrics?: record}
 export def "put-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -141,13 +141,14 @@ export def "put-events" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-client-context: string # The client context including the client ID, app title, app version and package name.
+  --x-amz-client-context: string # The client context including the client ID, app title, app version and package name. (required)
   --x-amz-client-context-encoding: string # The encoding used for the client context.
-  events: list # An array of Event JSON objects — item shape: {eventType: any, timestamp: any, session?: any, version?: any, attributes?: any, metrics?: any}
+  events: list # An array of Event JSON objects — item shape: {eventType: string, timestamp: string, session?: record, version?: string, attributes?: record, metrics?: record}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_client_context == null) { error make --unspanned { msg: "required header parameter 'x-amz-Client-Context' missing: pass --x-amz-client-context" } }
   let full_url = (build-url $base "/2014-06-05/events" $auth.query)
   let req_body = {"events": $events} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

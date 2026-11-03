@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "api_key" => { {scheme: $scheme, headers: {api_key: $token_val}, query: "", location: "header"} }
+    "api_key" => { {scheme: $scheme, headers: {"api_key": $token_val}, query: "", location: "header"} }
     "query-api_key" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "api_key")=(encode-path-segment $token_val)", location: "query"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -95,6 +95,8 @@ def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: 
 def base-url-completer [] { ["http://api.wmata.com/StationPrediction.svc" "https://api.wmata.com/StationPrediction.svc"] }
 def auth-scheme-completer [] { ["api_key" "query-api_key"] }
 
+# Completers for enum parameters
+def station-codes-completer [] { ["All" "B03"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -124,7 +126,7 @@ export def commands []: nothing -> table {
 # GET /GetPrediction/{StationCodes}
 # operationId: 547636a6f918230da8553640
 export def "547636a6f918230da8553640" [
-  station_codes: string
+  station_codes: string@station-codes-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,7 +162,7 @@ export def "547636a6f918230da8553640" [
 # GET /json/GetPrediction/{StationCodes}
 # operationId: 547636a6f918230da855363f
 export def "547636a6f918230da855363f" [
-  station_codes: string
+  station_codes: string@station-codes-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

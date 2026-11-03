@@ -1,4 +1,4 @@
-# Auto-generated client for versionhistory.googleapis.com API vv1
+# Auto-generated client for versionhistory.googleapis.com API v1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/versionhistory/v1/openapi.json
 # Auth: --token flag or $env.VERSIONHISTORY_GOOGLEAPIS_COM_API_TOKEN
 

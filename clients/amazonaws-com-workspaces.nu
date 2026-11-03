@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -129,6 +129,7 @@ def x-amz-target-completer-29 [] { ["WorkspacesService.DescribeTags"] }
 def x-amz-target-completer-30 [] { ["WorkspacesService.DescribeWorkspaceBundles"] }
 def x-amz-target-completer-31 [] { ["WorkspacesService.DescribeWorkspaceDirectories"] }
 def x-amz-target-completer-32 [] { ["WorkspacesService.DescribeWorkspaceImagePermissions"] }
+def image-type-completer [] { ["OWNED" "SHARED"] }
 def x-amz-target-completer-33 [] { ["WorkspacesService.DescribeWorkspaceImages"] }
 def x-amz-target-completer-34 [] { ["WorkspacesService.DescribeWorkspaceSnapshots"] }
 def x-amz-target-completer-35 [] { ["WorkspacesService.DescribeWorkspaces"] }
@@ -136,9 +137,11 @@ def x-amz-target-completer-36 [] { ["WorkspacesService.DescribeWorkspacesConnect
 def x-amz-target-completer-37 [] { ["WorkspacesService.DisassociateConnectionAlias"] }
 def x-amz-target-completer-38 [] { ["WorkspacesService.DisassociateIpGroups"] }
 def x-amz-target-completer-39 [] { ["WorkspacesService.ImportClientBranding"] }
+def ingestion-process-completer [] { ["BYOL_GRAPHICS" "BYOL_GRAPHICSPRO" "BYOL_GRAPHICS_G4DN" "BYOL_GRAPHICS_G4DN_BYOP" "BYOL_REGULAR" "BYOL_REGULAR_BYOP" "BYOL_REGULAR_WSP"] }
 def x-amz-target-completer-40 [] { ["WorkspacesService.ImportWorkspaceImage"] }
 def x-amz-target-completer-41 [] { ["WorkspacesService.ListAvailableManagementCidrRanges"] }
 def x-amz-target-completer-42 [] { ["WorkspacesService.MigrateWorkspace"] }
+def dedicated-tenancy-support-completer [] { ["ENABLED"] }
 def x-amz-target-completer-43 [] { ["WorkspacesService.ModifyAccount"] }
 def x-amz-target-completer-44 [] { ["WorkspacesService.ModifyCertificateBasedAuthProperties"] }
 def x-amz-target-completer-45 [] { ["WorkspacesService.ModifyClientProperties"] }
@@ -147,9 +150,11 @@ def x-amz-target-completer-47 [] { ["WorkspacesService.ModifySelfservicePermissi
 def x-amz-target-completer-48 [] { ["WorkspacesService.ModifyWorkspaceAccessProperties"] }
 def x-amz-target-completer-49 [] { ["WorkspacesService.ModifyWorkspaceCreationProperties"] }
 def x-amz-target-completer-50 [] { ["WorkspacesService.ModifyWorkspaceProperties"] }
+def workspace-state-completer [] { ["ADMIN_MAINTENANCE" "AVAILABLE"] }
 def x-amz-target-completer-51 [] { ["WorkspacesService.ModifyWorkspaceState"] }
 def x-amz-target-completer-52 [] { ["WorkspacesService.RebootWorkspaces"] }
 def x-amz-target-completer-53 [] { ["WorkspacesService.RebuildWorkspaces"] }
+def tenancy-completer [] { ["DEDICATED" "SHARED"] }
 def x-amz-target-completer-54 [] { ["WorkspacesService.RegisterWorkspaceDirectory"] }
 def x-amz-target-completer-55 [] { ["WorkspacesService.RestoreWorkspace"] }
 def x-amz-target-completer-56 [] { ["WorkspacesService.RevokeIpRules"] }
@@ -206,13 +211,14 @@ export def "associate-connection-alias" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  alias_id: any
-  resource_id: any
-]: any -> record<ConnectionIdentifier: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  alias_id: string # The identifier of the connection alias.
+  resource_id: string # The identifier of the directory to associate the connection alias with.
+]: any -> record<ConnectionIdentifier: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.AssociateConnectionAlias")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AliasId": $alias_id, "ResourceId": $resource_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -255,13 +261,14 @@ export def "associate-ip-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  directory_id: any
-  group_ids: any
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  directory_id: string # The identifier of the directory.
+  group_ids: list<string> # The identifiers of one or more IP access control groups.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.AssociateIpGroups")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id, "GroupIds": $group_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -287,6 +294,7 @@ export def "associate-ip-groups" [
 #
 # POST /
 # operationId: AuthorizeIpRules
+# --UserRules item shape: {ipRule?: string, ruleDesc?: string}
 export def "authorize-ip-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -304,13 +312,14 @@ export def "authorize-ip-rules" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  group_id: any
-  user_rules: any
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  group_id: string # The identifier of the group.
+  user_rules: list # The rules to add to the group. — item shape: {ipRule?: string, ruleDesc?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.AuthorizeIpRules")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GroupId": $group_id, "UserRules": $user_rules} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -336,6 +345,7 @@ export def "authorize-ip-rules" [
 #
 # POST /
 # operationId: CopyWorkspaceImage
+# --Tags item shape: {Key: string, Value?: string}
 export def "copy-workspace-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -353,16 +363,17 @@ export def "copy-workspace-image" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  name: any
-  --description: any
-  source_image_id: any
-  source_region: any
-  --tags: any
-]: any -> record<ImageId: record> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  name: string # The name of the image.
+  --description: string # A description of the image.
+  source_image_id: string # The identifier of the source image.
+  source_region: string # The identifier of the source Region.
+  --tags: list # The tags for the image. — item shape: {Key: string, Value?: string}
+]: any -> record<ImageId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.CopyWorkspaceImage")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Description": $description, "SourceImageId": $source_image_id, "SourceRegion": $source_region, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -405,14 +416,15 @@ export def "create-connect-client-add-in" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  resource_id: any
-  name: any
-  url: any
-]: any -> record<AddInId: record> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  resource_id: string # The directory identifier for which to configure the client add-in.
+  name: string # The name of the client add-in.
+  url: string # The endpoint URL of the Amazon Connect client add-in.
+]: any -> record<AddInId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.CreateConnectClientAddIn")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceId": $resource_id, "Name": $name, "URL": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -438,6 +450,7 @@ export def "create-connect-client-add-in" [
 #
 # POST /
 # operationId: CreateConnectionAlias
+# --Tags item shape: {Key: string, Value?: string}
 export def "create-connection-alias" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -455,13 +468,14 @@ export def "create-connection-alias" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  connection_string: any
-  --tags: any
-]: any -> record<AliasId: record> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  connection_string: string # A connection string in the form of a fully qualified domain name (FQDN), such as www.example.com. After you create a connection string, it is always associated to your Amazon Web Services account. You cannot recreate the same connection string with a different account, even if you delete all instances of it from the original account. The connection string is globally reserved for your account.
+  --tags: list # The tags to associate with the connection alias. — item shape: {Key: string, Value?: string}
+]: any -> record<AliasId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.CreateConnectionAlias")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConnectionString": $connection_string, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -487,6 +501,8 @@ export def "create-connection-alias" [
 #
 # POST /
 # operationId: CreateIpGroup
+# --UserRules item shape: {ipRule?: string, ruleDesc?: string}
+# --Tags item shape: {Key: string, Value?: string}
 export def "create-ip-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -504,15 +520,16 @@ export def "create-ip-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  group_name: any
-  --group-desc: any
-  --user-rules: any
-  --tags: any
-]: any -> record<GroupId: record> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  group_name: string # The name of the group.
+  --group-desc: string # The description of the group.
+  --user-rules: list # The rules to add to the group. — item shape: {ipRule?: string, ruleDesc?: string}
+  --tags: list # The tags. Each WorkSpaces resource can have a maximum of 50 tags. — item shape: {Key: string, Value?: string}
+]: any -> record<GroupId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.CreateIpGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GroupName": $group_name, "GroupDesc": $group_desc, "UserRules": $user_rules, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -538,6 +555,7 @@ export def "create-ip-group" [
 #
 # POST /
 # operationId: CreateStandbyWorkspaces
+# --StandbyWorkspaces item shape: {PrimaryWorkspaceId: string, VolumeEncryptionKey?: string, DirectoryId: string, Tags?: list}
 export def "create-standby-workspaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -555,13 +573,14 @@ export def "create-standby-workspaces" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  primary_region: any
-  standby_workspaces: any
-]: any -> record<FailedStandbyRequests: record, PendingStandbyRequests: record> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  primary_region: string # The Region of the primary WorkSpace.
+  standby_workspaces: list # Information about the standby WorkSpace to be created. — item shape: {PrimaryWorkspaceId: string, VolumeEncryptionKey?: string, DirectoryId: string, Tags?: list}
+]: any -> record<FailedStandbyRequests: table<StandbyWorkspaceRequest: record, ErrorCode: string, ErrorMessage: string>, PendingStandbyRequests: table<UserName: string, DirectoryId: string, State: string, WorkspaceId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.CreateStandbyWorkspaces")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"PrimaryRegion": $primary_region, "StandbyWorkspaces": $standby_workspaces} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -587,6 +606,7 @@ export def "create-standby-workspaces" [
 #
 # POST /
 # operationId: CreateTags
+# --Tags item shape: {Key: string, Value?: string}
 export def "create-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -604,13 +624,14 @@ export def "create-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  resource_id: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  resource_id: string # The identifier of the WorkSpaces resource. The supported resource types are WorkSpaces, registered directories, images, custom bundles, IP access control groups, and connection aliases.
+  tags: list # The tags. Each WorkSpaces resource can have a maximum of 50 tags. — item shape: {Key: string, Value?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.CreateTags")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceId": $resource_id, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -636,6 +657,7 @@ export def "create-tags" [
 #
 # POST /
 # operationId: CreateUpdatedWorkspaceImage
+# --Tags item shape: {Key: string, Value?: string}
 export def "create-updated-workspace-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -653,15 +675,16 @@ export def "create-updated-workspace-image" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  name: any
-  description: any
-  source_image_id: any
-  --tags: any
-]: any -> record<ImageId: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  name: string # The name of the new updated WorkSpace image.
+  description: string # A description of whether updates for the WorkSpace image are available.
+  source_image_id: string # The identifier of the source WorkSpace image.
+  --tags: list # The tags that you want to add to the new updated WorkSpace image. To add tags at the same time when you're creating the updated image, you must create an IAM policy that grants your IAM user permissions to use workspaces:CreateTags. — item shape: {Key: string, Value?: string}
+]: any -> record<ImageId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.CreateUpdatedWorkspaceImage")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Description": $description, "SourceImageId": $source_image_id, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -687,9 +710,10 @@ export def "create-updated-workspace-image" [
 #
 # POST /
 # operationId: CreateWorkspaceBundle
-# --ComputeType shape: {Name?: any}
-# --UserStorage shape: {Capacity?: any}
-# --RootStorage shape: {Capacity?: any}
+# --ComputeType shape: {Name?: "VALUE"|"STANDARD"|"PERFORMANCE"|"POWER"|"GRAPHICS"|"POWERPRO"|"GRAPHICSPRO"|"GRAPHICS_G4DN"|"GRAPHICSPRO_G4DN"}
+# --UserStorage shape: {Capacity?: string}
+# --RootStorage shape: {Capacity?: string}
+# --Tags item shape: {Key: string, Value?: string}
 export def "create-workspace-bundle" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -707,18 +731,19 @@ export def "create-workspace-bundle" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  bundle_name: any
-  bundle_description: any
-  image_id: any
-  compute_type: record # Describes the compute type of the bundle. — shape: {Name?: any}
-  user_storage: record # Describes the user volume for a WorkSpace bundle. — shape: {Capacity?: any}
-  --root-storage: record # Describes the root volume for a WorkSpace bundle. — shape: {Capacity?: any}
-  --tags: any
-]: any -> record<WorkspaceBundle: record<BundleId: record, Name: record, Owner: record, Description: record, ImageId: record, RootStorage: record<Capacity: record>, UserStorage: record<Capacity: record>, ComputeType: record<Name: record>, LastUpdatedTime: record, CreationTime: record, State: record, BundleType: record>> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  bundle_name: string # The name of the bundle.
+  bundle_description: string # The description of the bundle.
+  image_id: string # The identifier of the image that is used to create the bundle.
+  compute_type: record # Describes the compute type of the bundle. — shape: {Name?: "VALUE"|"STANDARD"|"PERFORMANCE"|"POWER"|"GRAPHICS"|"POWERPRO"|"GRAPHICSPRO"|"GRAPHICS_G4DN"|"GRAPHICSPRO_G4DN"}
+  user_storage: record # Describes the user volume for a WorkSpace bundle. — shape: {Capacity?: string}
+  --root-storage: record # Describes the root volume for a WorkSpace bundle. — shape: {Capacity?: string}
+  --tags: list # The tags associated with the bundle. To add tags at the same time when you're creating the bundle, you must create an IAM policy that grants your IAM user permissions to use workspaces:CreateTags. — item shape: {Key: string, Value?: string}
+]: any -> record<WorkspaceBundle: record<BundleId: string, Name: string, Owner: string, Description: string, ImageId: string, RootStorage: record<Capacity: string>, UserStorage: record<Capacity: string>, ComputeType: record<Name: string>, LastUpdatedTime: string, CreationTime: string, State: string, BundleType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.CreateWorkspaceBundle")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"BundleName": $bundle_name, "BundleDescription": $bundle_description, "ImageId": $image_id, "ComputeType": $compute_type, "UserStorage": $user_storage, "RootStorage": $root_storage, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -744,6 +769,7 @@ export def "create-workspace-bundle" [
 #
 # POST /
 # operationId: CreateWorkspaceImage
+# --Tags item shape: {Key: string, Value?: string}
 export def "create-workspace-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -761,15 +787,16 @@ export def "create-workspace-image" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  name: any
-  description: any
-  workspace_id: any
-  --tags: any
-]: any -> record<ImageId: record, Name: record, Description: record, OperatingSystem: record<Type: record>, State: record, RequiredTenancy: record, Created: record, OwnerAccountId: record> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  name: string # The name of the new WorkSpace image.
+  description: string # The description of the new WorkSpace image.
+  workspace_id: string # The identifier of the source WorkSpace
+  --tags: list # The tags that you want to add to the new WorkSpace image. To add tags when you're creating the image, you must create an IAM policy that grants your IAM user permission to use workspaces:CreateTags. — item shape: {Key: string, Value?: string}
+]: any -> record<ImageId: string, Name: string, Description: string, OperatingSystem: record<Type: string>, State: string, RequiredTenancy: string, Created: string, OwnerAccountId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.CreateWorkspaceImage")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Description": $description, "WorkspaceId": $workspace_id, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -795,6 +822,7 @@ export def "create-workspace-image" [
 #
 # POST /
 # operationId: CreateWorkspaces
+# --Workspaces item shape: {DirectoryId: string, UserName: string, BundleId: string, VolumeEncryptionKey?: string, UserVolumeEncryptionEnabled?: bool, RootVolumeEncryptionEnabled?: bool, WorkspaceProperties?: record, Tags?: list}
 export def "create-workspaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -812,12 +840,13 @@ export def "create-workspaces" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  workspaces: any
-]: any -> record<FailedRequests: record, PendingRequests: record> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  workspaces: list # The WorkSpaces to create. You can specify up to 25 WorkSpaces. — item shape: {DirectoryId: string, UserName: string, BundleId: string, VolumeEncryptionKey?: string, UserVolumeEncryptionEnabled?: bool, RootVolumeEncryptionEnabled?: bool, WorkspaceProperties?: record, Tags?: list}
+]: any -> record<FailedRequests: table<WorkspaceRequest: record, ErrorCode: string, ErrorMessage: string>, PendingRequests: table<WorkspaceId: string, DirectoryId: string, UserName: string, IpAddress: string, State: string, BundleId: string, SubnetId: string, ErrorMessage: string, ErrorCode: string, ComputerName: string, VolumeEncryptionKey: string, UserVolumeEncryptionEnabled: bool, RootVolumeEncryptionEnabled: bool, WorkspaceProperties: record, ModificationStates: list, RelatedWorkspaces: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.CreateWorkspaces")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Workspaces": $workspaces} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -860,13 +889,14 @@ export def "delete-client-branding" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  resource_id: any
-  platforms: any
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  resource_id: string # The directory identifier of the WorkSpace for which you want to delete client branding.
+  platforms: list<string> # The device type for which you want to delete client branding.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.DeleteClientBranding")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceId": $resource_id, "Platforms": $platforms} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -909,13 +939,14 @@ export def "delete-connect-client-add-in" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  add_in_id: any
-  resource_id: any
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  add_in_id: string # The identifier of the client add-in to delete.
+  resource_id: string # The directory identifier for which the client add-in is configured.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.DeleteConnectClientAddIn")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AddInId": $add_in_id, "ResourceId": $resource_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -958,12 +989,13 @@ export def "delete-connection-alias" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  alias_id: any
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  alias_id: string # The identifier of the connection alias to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.DeleteConnectionAlias")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AliasId": $alias_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1006,12 +1038,13 @@ export def "delete-ip-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  group_id: any
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  group_id: string # The identifier of the IP access control group.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.DeleteIpGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GroupId": $group_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1054,13 +1087,14 @@ export def "delete-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  resource_id: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  resource_id: string # The identifier of the WorkSpaces resource. The supported resource types are WorkSpaces, registered directories, images, custom bundles, IP access control groups, and connection aliases.
+  tag_keys: list<string> # The tag keys.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.DeleteTags")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceId": $resource_id, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1103,12 +1137,13 @@ export def "delete-workspace-bundle" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  --bundle-id: any
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  --bundle-id: string # The identifier of the bundle.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.DeleteWorkspaceBundle")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"BundleId": $bundle_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1151,12 +1186,13 @@ export def "delete-workspace-image" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  image_id: any
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  image_id: string # The identifier of the image.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.DeleteWorkspaceImage")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ImageId": $image_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1199,12 +1235,13 @@ export def "deregister-workspace-directory" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  directory_id: any
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  directory_id: string # The identifier of the directory. If any WorkSpaces are registered to this directory, you must remove them before you deregister the directory, or you will receive an OperationNotSupportedException error.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.DeregisterWorkspaceDirectory")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1247,12 +1284,13 @@ export def "describe-account" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
+  --x-amz-target: string@x-amz-target-completer-21 # required
   --body: record
-]: any -> record<DedicatedTenancySupport: record, DedicatedTenancyManagementCidrRange: record> {
+]: any -> record<DedicatedTenancySupport: string, DedicatedTenancyManagementCidrRange: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.DescribeAccount")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1295,12 +1333,13 @@ export def "describe-account-modifications" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  --next-token: any
-]: any -> record<AccountModifications: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  --next-token: string # If you received a NextToken from a previous call that was paginated, provide this token to receive the next set of results.
+]: any -> record<AccountModifications: table<ModificationState: string, DedicatedTenancySupport: string, DedicatedTenancyManagementCidrRange: string, StartTime: string, ErrorCode: string, ErrorMessage: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.DescribeAccountModifications")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"NextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1343,12 +1382,13 @@ export def "describe-client-branding" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  resource_id: any
-]: any -> record<DeviceTypeWindows: record<LogoUrl: record, SupportEmail: record, SupportLink: record, ForgotPasswordLink: record, LoginMessage: record>, DeviceTypeOsx: record<LogoUrl: record, SupportEmail: record, SupportLink: record, ForgotPasswordLink: record, LoginMessage: record>, DeviceTypeAndroid: record<LogoUrl: record, SupportEmail: record, SupportLink: record, ForgotPasswordLink: record, LoginMessage: record>, DeviceTypeIos: record<LogoUrl: record, Logo2xUrl: record, Logo3xUrl: record, SupportEmail: record, SupportLink: record, ForgotPasswordLink: record, LoginMessage: record>, DeviceTypeLinux: record<LogoUrl: record, SupportEmail: record, SupportLink: record, ForgotPasswordLink: record, LoginMessage: record>, DeviceTypeWeb: record<LogoUrl: record, SupportEmail: record, SupportLink: record, ForgotPasswordLink: record, LoginMessage: record>> {
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  resource_id: string # The directory identifier of the WorkSpace for which you want to view client branding information.
+]: any -> record<DeviceTypeWindows: record<LogoUrl: string, SupportEmail: string, SupportLink: string, ForgotPasswordLink: string, LoginMessage: record>, DeviceTypeOsx: record<LogoUrl: string, SupportEmail: string, SupportLink: string, ForgotPasswordLink: string, LoginMessage: record>, DeviceTypeAndroid: record<LogoUrl: string, SupportEmail: string, SupportLink: string, ForgotPasswordLink: string, LoginMessage: record>, DeviceTypeIos: record<LogoUrl: string, Logo2xUrl: string, Logo3xUrl: string, SupportEmail: string, SupportLink: string, ForgotPasswordLink: string, LoginMessage: record>, DeviceTypeLinux: record<LogoUrl: string, SupportEmail: string, SupportLink: string, ForgotPasswordLink: string, LoginMessage: record>, DeviceTypeWeb: record<LogoUrl: string, SupportEmail: string, SupportLink: string, ForgotPasswordLink: string, LoginMessage: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.DescribeClientBranding")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceId": $resource_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1391,12 +1431,13 @@ export def "describe-client-properties" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  resource_ids: any
-]: any -> record<ClientPropertiesList: record> {
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  resource_ids: list<string> # The resource identifier, in the form of directory IDs.
+]: any -> record<ClientPropertiesList: table<ResourceId: string, ClientProperties: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.DescribeClientProperties")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceIds": $resource_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1439,14 +1480,15 @@ export def "describe-connect-client-add-ins" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  resource_id: any
-  --next-token: any
-  --max-results: any
-]: any -> record<AddIns: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  resource_id: string # The directory identifier for which the client add-in is configured.
+  --next-token: string # If you received a NextToken from a previous call that was paginated, provide this token to receive the next set of results.
+  --max-results: int # The maximum number of items to return.
+]: any -> record<AddIns: table<AddInId: string, ResourceId: string, Name: string, URL: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.DescribeConnectClientAddIns")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceId": $resource_id, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1489,14 +1531,15 @@ export def "describe-connection-alias-permissions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-26
-  alias_id: any
-  --next-token: any
-  --max-results: any
-]: any -> record<AliasId: record, ConnectionAliasPermissions: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-26 # required
+  alias_id: string # The identifier of the connection alias.
+  --next-token: string # If you received a NextToken from a previous call that was paginated, provide this token to receive the next set of results.
+  --max-results: int # The maximum number of results to return.
+]: any -> record<AliasId: string, ConnectionAliasPermissions: table<SharedAccountId: string, AllowAssociation: bool>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.DescribeConnectionAliasPermissions")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AliasId": $alias_id, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1539,15 +1582,16 @@ export def "describe-connection-aliases" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-27
-  --alias-ids: any
-  --resource-id: any
-  --limit: any
-  --next-token: any
-]: any -> record<ConnectionAliases: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-27 # required
+  --alias-ids: list<string> # The identifiers of the connection aliases to describe.
+  --resource-id: string # The identifier of the directory associated with the connection alias.
+  --limit: int # The maximum number of connection aliases to return.
+  --next-token: string # If you received a NextToken from a previous call that was paginated, provide this token to receive the next set of results.
+]: any -> record<ConnectionAliases: table<ConnectionString: string, AliasId: string, State: string, OwnerAccountId: string, Associations: list>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.DescribeConnectionAliases")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AliasIds": $alias_ids, "ResourceId": $resource_id, "Limit": $limit, "NextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1590,14 +1634,15 @@ export def "describe-ip-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-28
-  --group-ids: any
-  --next-token: any
-  --max-results: any
-]: any -> record<Result: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-28 # required
+  --group-ids: list<string> # The identifiers of one or more IP access control groups.
+  --next-token: string # If you received a NextToken from a previous call that was paginated, provide this token to receive the next set of results.
+  --max-results: int # The maximum number of items to return.
+]: any -> record<Result: table<groupId: string, groupName: string, groupDesc: string, userRules: list>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.DescribeIpGroups")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GroupIds": $group_ids, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1640,12 +1685,13 @@ export def "describe-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-29
-  resource_id: any
-]: any -> record<TagList: record> {
+  --x-amz-target: string@x-amz-target-completer-29 # required
+  resource_id: string # The identifier of the WorkSpaces resource. The supported resource types are WorkSpaces, registered directories, images, custom bundles, IP access control groups, and connection aliases.
+]: any -> record<TagList: table<Key: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.DescribeTags")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceId": $resource_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1689,14 +1735,15 @@ export def "describe-workspace-bundles" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-30
-  --bundle-ids: any
-  --owner: any
-  --next-token-body: any #  (body field)
-]: any -> record<Bundles: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-30 # required
+  --bundle-ids: list<string> # The identifiers of the bundles. You cannot combine this parameter with any other filter.
+  --owner: string # The owner of the bundles. You cannot combine this parameter with any other filter. To describe the bundles provided by Amazon Web Services, specify AMAZON. To describe the bundles that belong to your account, don't specify a value.
+  --next-token-body: string # The token for the next set of results. (You received this token from a previous call.) (body field)
+]: any -> record<Bundles: table<BundleId: string, Name: string, Owner: string, Description: string, ImageId: string, RootStorage: record, UserStorage: record, ComputeType: record, LastUpdatedTime: string, CreationTime: string, State: string, BundleType: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.DescribeWorkspaceBundles")
   let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"BundleIds": $bundle_ids, "Owner": $owner, "NextToken": $next_token_body} | compact
@@ -1741,14 +1788,15 @@ export def "describe-workspace-directories" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-31
-  --directory-ids: any
-  --limit: any
-  --next-token-body: any #  (body field)
-]: any -> record<Directories: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-31 # required
+  --directory-ids: list<string> # The identifiers of the directories. If the value is null, all directories are retrieved.
+  --limit: int # The maximum number of directories to return.
+  --next-token-body: string # If you received a NextToken from a previous call that was paginated, provide this token to receive the next set of results. (body field)
+]: any -> record<Directories: table<DirectoryId: string, Alias: string, DirectoryName: string, RegistrationCode: string, SubnetIds: list, DnsIpAddresses: list, CustomerUserName: string, IamRoleId: string, DirectoryType: string, WorkspaceSecurityGroupId: string, State: string, WorkspaceCreationProperties: record, ipGroupIds: list, WorkspaceAccessProperties: record, Tenancy: string, SelfservicePermissions: record, SamlProperties: record, CertificateBasedAuthProperties: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.DescribeWorkspaceDirectories")
   let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"DirectoryIds": $directory_ids, "Limit": $limit, "NextToken": $next_token_body} | compact
@@ -1792,14 +1840,15 @@ export def "describe-workspace-image-permissions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-32
-  image_id: any
-  --next-token: any
-  --max-results: any
-]: any -> record<ImageId: record, ImagePermissions: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-32 # required
+  image_id: string # The identifier of the image.
+  --next-token: string # If you received a NextToken from a previous call that was paginated, provide this token to receive the next set of results.
+  --max-results: int # The maximum number of items to return.
+]: any -> record<ImageId: string, ImagePermissions: table<SharedAccountId: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.DescribeWorkspaceImagePermissions")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ImageId": $image_id, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1842,15 +1891,16 @@ export def "describe-workspace-images" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-33
-  --image-ids: any
-  --image-type: any
-  --next-token: any
-  --max-results: any
-]: any -> record<Images: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-33 # required
+  --image-ids: list<string> # The identifier of the image.
+  --image-type: string@image-type-completer # The type (owned or shared) of the image.
+  --next-token: string # If you received a NextToken from a previous call that was paginated, provide this token to receive the next set of results.
+  --max-results: int # The maximum number of items to return.
+]: any -> record<Images: table<ImageId: string, Name: string, Description: string, OperatingSystem: record, State: string, RequiredTenancy: string, ErrorCode: string, ErrorMessage: string, Created: string, OwnerAccountId: string, Updates: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.DescribeWorkspaceImages")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ImageIds": $image_ids, "ImageType": $image_type, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1893,12 +1943,13 @@ export def "describe-workspace-snapshots" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-34
-  workspace_id: any
-]: any -> record<RebuildSnapshots: record, RestoreSnapshots: record> {
+  --x-amz-target: string@x-amz-target-completer-34 # required
+  workspace_id: string # The identifier of the WorkSpace.
+]: any -> record<RebuildSnapshots: table<SnapshotTime: string>, RestoreSnapshots: table<SnapshotTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.DescribeWorkspaceSnapshots")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"WorkspaceId": $workspace_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1943,17 +1994,18 @@ export def "describe-workspaces" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-35
-  --workspace-ids: any
-  --directory-id: any
-  --user-name: any
-  --bundle-id: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<Workspaces: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-35 # required
+  --workspace-ids: list<string> # The identifiers of the WorkSpaces. You cannot combine this parameter with any other filter. Because the CreateWorkspaces operation is asynchronous, the identifier it returns is not immediately available. If you immediately call DescribeWorkspaces with this identifier, no information is returned.
+  --directory-id: string # The identifier of the directory. In addition, you can optionally specify a specific directory user (see UserName). You cannot combine this parameter with any other filter.
+  --user-name: string # The name of the directory user. You must specify this parameter with DirectoryId.
+  --bundle-id: string # The identifier of the bundle. All WorkSpaces that are created from this bundle are retrieved. You cannot combine this parameter with any other filter.
+  --limit-body: int # The maximum number of items to return. (body field)
+  --next-token-body: string # If you received a NextToken from a previous call that was paginated, provide this token to receive the next set of results. (body field)
+]: any -> record<Workspaces: table<WorkspaceId: string, DirectoryId: string, UserName: string, IpAddress: string, State: string, BundleId: string, SubnetId: string, ErrorMessage: string, ErrorCode: string, ComputerName: string, VolumeEncryptionKey: string, UserVolumeEncryptionEnabled: bool, RootVolumeEncryptionEnabled: bool, WorkspaceProperties: record, ModificationStates: list, RelatedWorkspaces: list>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.DescribeWorkspaces")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"WorkspaceIds": $workspace_ids, "DirectoryId": $directory_id, "UserName": $user_name, "BundleId": $bundle_id, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -1997,13 +2049,14 @@ export def "describe-workspaces-connection-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-36
-  --workspace-ids: any
-  --next-token: any
-]: any -> record<WorkspacesConnectionStatus: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-36 # required
+  --workspace-ids: list<string> # The identifiers of the WorkSpaces. You can specify up to 25 WorkSpaces.
+  --next-token: string # If you received a NextToken from a previous call that was paginated, provide this token to receive the next set of results.
+]: any -> record<WorkspacesConnectionStatus: table<WorkspaceId: string, ConnectionState: string, ConnectionStateCheckTimestamp: string, LastKnownUserConnectionTimestamp: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.DescribeWorkspacesConnectionStatus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"WorkspaceIds": $workspace_ids, "NextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2046,12 +2099,13 @@ export def "disassociate-connection-alias" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-37
-  alias_id: any
+  --x-amz-target: string@x-amz-target-completer-37 # required
+  alias_id: string # The identifier of the connection alias to disassociate.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.DisassociateConnectionAlias")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AliasId": $alias_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2094,13 +2148,14 @@ export def "disassociate-ip-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-38
-  directory_id: any
-  group_ids: any
+  --x-amz-target: string@x-amz-target-completer-38 # required
+  directory_id: string # The identifier of the directory.
+  group_ids: list<string> # The identifiers of one or more IP access control groups.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.DisassociateIpGroups")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id, "GroupIds": $group_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2126,6 +2181,12 @@ export def "disassociate-ip-groups" [
 #
 # POST /
 # operationId: ImportClientBranding
+# --DeviceTypeWindows shape: {Logo?: string, SupportEmail?: string, SupportLink?: string, ForgotPasswordLink?: string, LoginMessage?: record}
+# --DeviceTypeOsx shape: {Logo?: string, SupportEmail?: string, SupportLink?: string, ForgotPasswordLink?: string, LoginMessage?: record}
+# --DeviceTypeAndroid shape: {Logo?: string, SupportEmail?: string, SupportLink?: string, ForgotPasswordLink?: string, LoginMessage?: record}
+# --DeviceTypeIos shape: {Logo?: string, Logo2x?: string, Logo3x?: string, SupportEmail?: string, SupportLink?: string, ForgotPasswordLink?: string, LoginMessage?: record}
+# --DeviceTypeLinux shape: {Logo?: string, SupportEmail?: string, SupportLink?: string, ForgotPasswordLink?: string, LoginMessage?: record}
+# --DeviceTypeWeb shape: {Logo?: string, SupportEmail?: string, SupportLink?: string, ForgotPasswordLink?: string, LoginMessage?: record}
 export def "import-client-branding" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2143,18 +2204,19 @@ export def "import-client-branding" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-39
-  resource_id: any
-  --device-type-windows: any
-  --device-type-osx: any
-  --device-type-android: any
-  --device-type-ios: any
-  --device-type-linux: any
-  --device-type-web: any
-]: any -> record<DeviceTypeWindows: record<LogoUrl: record, SupportEmail: record, SupportLink: record, ForgotPasswordLink: record, LoginMessage: record>, DeviceTypeOsx: record<LogoUrl: record, SupportEmail: record, SupportLink: record, ForgotPasswordLink: record, LoginMessage: record>, DeviceTypeAndroid: record<LogoUrl: record, SupportEmail: record, SupportLink: record, ForgotPasswordLink: record, LoginMessage: record>, DeviceTypeIos: record<LogoUrl: record, Logo2xUrl: record, Logo3xUrl: record, SupportEmail: record, SupportLink: record, ForgotPasswordLink: record, LoginMessage: record>, DeviceTypeLinux: record<LogoUrl: record, SupportEmail: record, SupportLink: record, ForgotPasswordLink: record, LoginMessage: record>, DeviceTypeWeb: record<LogoUrl: record, SupportEmail: record, SupportLink: record, ForgotPasswordLink: record, LoginMessage: record>> {
+  --x-amz-target: string@x-amz-target-completer-39 # required
+  resource_id: string # The directory identifier of the WorkSpace for which you want to import client branding.
+  --device-type-windows: record # The default client branding attributes to be imported. These attributes display on the client login screen. Client branding attributes are public facing. Ensure that you do not include sensitive information. — shape: {Logo?: string, SupportEmail?: string, SupportLink?: string, ForgotPasswordLink?: string, LoginMessage?: record}
+  --device-type-osx: record # The default client branding attributes to be imported. These attributes display on the client login screen. Client branding attributes are public facing. Ensure that you do not include sensitive information. — shape: {Logo?: string, SupportEmail?: string, SupportLink?: string, ForgotPasswordLink?: string, LoginMessage?: record}
+  --device-type-android: record # The default client branding attributes to be imported. These attributes display on the client login screen. Client branding attributes are public facing. Ensure that you do not include sensitive information. — shape: {Logo?: string, SupportEmail?: string, SupportLink?: string, ForgotPasswordLink?: string, LoginMessage?: record}
+  --device-type-ios: record # The client branding attributes to import for iOS device types. These attributes are displayed on the iOS client login screen. Client branding attributes are public facing. Ensure you do not include sensitive information. — shape: {Logo?: string, Logo2x?: string, Logo3x?: string, SupportEmail?: string, SupportLink?: string, ForgotPasswordLink?: string, LoginMessage?: record}
+  --device-type-linux: record # The default client branding attributes to be imported. These attributes display on the client login screen. Client branding attributes are public facing. Ensure that you do not include sensitive information. — shape: {Logo?: string, SupportEmail?: string, SupportLink?: string, ForgotPasswordLink?: string, LoginMessage?: record}
+  --device-type-web: record # The default client branding attributes to be imported. These attributes display on the client login screen. Client branding attributes are public facing. Ensure that you do not include sensitive information. — shape: {Logo?: string, SupportEmail?: string, SupportLink?: string, ForgotPasswordLink?: string, LoginMessage?: record}
+]: any -> record<DeviceTypeWindows: record<LogoUrl: string, SupportEmail: string, SupportLink: string, ForgotPasswordLink: string, LoginMessage: record>, DeviceTypeOsx: record<LogoUrl: string, SupportEmail: string, SupportLink: string, ForgotPasswordLink: string, LoginMessage: record>, DeviceTypeAndroid: record<LogoUrl: string, SupportEmail: string, SupportLink: string, ForgotPasswordLink: string, LoginMessage: record>, DeviceTypeIos: record<LogoUrl: string, Logo2xUrl: string, Logo3xUrl: string, SupportEmail: string, SupportLink: string, ForgotPasswordLink: string, LoginMessage: record>, DeviceTypeLinux: record<LogoUrl: string, SupportEmail: string, SupportLink: string, ForgotPasswordLink: string, LoginMessage: record>, DeviceTypeWeb: record<LogoUrl: string, SupportEmail: string, SupportLink: string, ForgotPasswordLink: string, LoginMessage: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.ImportClientBranding")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceId": $resource_id, "DeviceTypeWindows": $device_type_windows, "DeviceTypeOsx": $device_type_osx, "DeviceTypeAndroid": $device_type_android, "DeviceTypeIos": $device_type_ios, "DeviceTypeLinux": $device_type_linux, "DeviceTypeWeb": $device_type_web} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2180,6 +2242,7 @@ export def "import-client-branding" [
 #
 # POST /
 # operationId: ImportWorkspaceImage
+# --Tags item shape: {Key: string, Value?: string}
 export def "import-workspace-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2197,17 +2260,18 @@ export def "import-workspace-image" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-40
-  ec2_image_id: any
-  ingestion_process: any
-  image_name: any
-  image_description: any
-  --tags: any
-  --applications: any
-]: any -> record<ImageId: record> {
+  --x-amz-target: string@x-amz-target-completer-40 # required
+  ec2_image_id: string # The identifier of the EC2 image.
+  ingestion_process: string@ingestion-process-completer # The ingestion process to be used when importing the image, depending on which protocol you want to use for your BYOL Workspace image, either PCoIP, WorkSpaces Streaming Protocol (WSP), or bring your own protocol (BYOP). To use WSP, specify a value that ends in _WSP. To use PCoIP, specify a value that does not end in _WSP. To use BYOP, specify a value that ends in _BYOP. For non-GPU-enabled bundles (bundles other than Graphics or GraphicsPro), specify BYOL_REGULAR, BYOL_REGULAR_WSP, or BYOL_REGULAR_BYOP, depending on the protocol. The BYOL_REGULAR_BYOP and BYOL_GRAPHICS_G4DN_BYOP values are only supported by Amazon WorkSpaces Core. Contact your account team to be allow-listed to use these values. For more information, see Amazon WorkSpaces Core (http://aws.amazon.com/workspaces/core/).
+  image_name: string # The name of the WorkSpace image.
+  image_description: string # The description of the WorkSpace image.
+  --tags: list # The tags. Each WorkSpaces resource can have a maximum of 50 tags. — item shape: {Key: string, Value?: string}
+  --applications: list<string> # If specified, the version of Microsoft Office to subscribe to. Valid only for Windows 10 BYOL images. For more information about subscribing to Office for BYOL images, see Bring Your Own Windows Desktop Licenses (https://docs.aws.amazon.com/workspaces/latest/adminguide/byol-windows-images.html). Although this parameter is an array, only one item is allowed at this time.
+]: any -> record<ImageId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.ImportWorkspaceImage")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Ec2ImageId": $ec2_image_id, "IngestionProcess": $ingestion_process, "ImageName": $image_name, "ImageDescription": $image_description, "Tags": $tags, "Applications": $applications} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2250,14 +2314,15 @@ export def "list-available-management-cidr-ranges" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-41
-  management_cidr_range_constraint: any
-  --max-results: any
-  --next-token: any
-]: any -> record<ManagementCidrRanges: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-41 # required
+  management_cidr_range_constraint: string # The IP address range to search. Specify an IP address range that is compatible with your network and in CIDR notation (that is, specify the range as an IPv4 CIDR block).
+  --max-results: int # The maximum number of items to return.
+  --next-token: string # If you received a NextToken from a previous call that was paginated, provide this token to receive the next set of results.
+]: any -> record<ManagementCidrRanges: list<string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.ListAvailableManagementCidrRanges")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ManagementCidrRangeConstraint": $management_cidr_range_constraint, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2300,13 +2365,14 @@ export def "migrate-workspace" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-42
-  source_workspace_id: any
-  bundle_id: any
-]: any -> record<SourceWorkspaceId: record, TargetWorkspaceId: record> {
+  --x-amz-target: string@x-amz-target-completer-42 # required
+  source_workspace_id: string # The identifier of the WorkSpace to migrate from.
+  bundle_id: string # The identifier of the target bundle type to migrate the WorkSpace to.
+]: any -> record<SourceWorkspaceId: string, TargetWorkspaceId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.MigrateWorkspace")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SourceWorkspaceId": $source_workspace_id, "BundleId": $bundle_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2349,13 +2415,14 @@ export def "modify-account" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-43
-  --dedicated-tenancy-support: any
-  --dedicated-tenancy-management-cidr-range: any
+  --x-amz-target: string@x-amz-target-completer-43 # required
+  --dedicated-tenancy-support: string@dedicated-tenancy-support-completer # The status of BYOL.
+  --dedicated-tenancy-management-cidr-range: string # The IP address range, specified as an IPv4 CIDR block, for the management network interface. Specify an IP address range that is compatible with your network and in CIDR notation (that is, specify the range as an IPv4 CIDR block). The CIDR block size must be /16 (for example, 203.0.113.25/16). It must also be specified as available by the ListAvailableManagementCidrRanges operation.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.ModifyAccount")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DedicatedTenancySupport": $dedicated_tenancy_support, "DedicatedTenancyManagementCidrRange": $dedicated_tenancy_management_cidr_range} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2381,6 +2448,7 @@ export def "modify-account" [
 #
 # POST /
 # operationId: ModifyCertificateBasedAuthProperties
+# --CertificateBasedAuthProperties shape: {Status?: "DISABLED"|"ENABLED", CertificateAuthorityArn?: string}
 export def "modify-certificate-based-auth-properties" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2398,14 +2466,15 @@ export def "modify-certificate-based-auth-properties" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-44
-  resource_id: any
-  --certificate-based-auth-properties: any
-  --properties-to-delete: any
+  --x-amz-target: string@x-amz-target-completer-44 # required
+  resource_id: string # The resource identifiers, in the form of directory IDs.
+  --certificate-based-auth-properties: record # Describes the properties of the certificate-based authentication you want to use with your WorkSpaces. — shape: {Status?: "DISABLED"|"ENABLED", CertificateAuthorityArn?: string}
+  --properties-to-delete: list<string> # The properties of the certificate-based authentication you want to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.ModifyCertificateBasedAuthProperties")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceId": $resource_id, "CertificateBasedAuthProperties": $certificate_based_auth_properties, "PropertiesToDelete": $properties_to_delete} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2431,6 +2500,7 @@ export def "modify-certificate-based-auth-properties" [
 #
 # POST /
 # operationId: ModifyClientProperties
+# --ClientProperties shape: {ReconnectEnabled?: "ENABLED"|"DISABLED", LogUploadEnabled?: "ENABLED"|"DISABLED"}
 export def "modify-client-properties" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2448,13 +2518,14 @@ export def "modify-client-properties" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-45
-  resource_id: any
-  client_properties: any
+  --x-amz-target: string@x-amz-target-completer-45 # required
+  resource_id: string # The resource identifiers, in the form of directory IDs.
+  client_properties: record # Describes an Amazon WorkSpaces client. — shape: {ReconnectEnabled?: "ENABLED"|"DISABLED", LogUploadEnabled?: "ENABLED"|"DISABLED"}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.ModifyClientProperties")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceId": $resource_id, "ClientProperties": $client_properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2480,6 +2551,7 @@ export def "modify-client-properties" [
 #
 # POST /
 # operationId: ModifySamlProperties
+# --SamlProperties shape: {Status?: "DISABLED"|"ENABLED"|"ENABLED_WITH_DIRECTORY_LOGIN_FALLBACK", UserAccessUrl?: string, RelayStateParameterName?: string}
 export def "modify-saml-properties" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2497,14 +2569,15 @@ export def "modify-saml-properties" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-46
-  resource_id: any
-  --saml-properties: any
-  --properties-to-delete: any
+  --x-amz-target: string@x-amz-target-completer-46 # required
+  resource_id: string # The directory identifier for which you want to configure SAML properties.
+  --saml-properties: record # Describes the enablement status, user access URL, and relay state parameter name that are used for configuring federation with an SAML 2.0 identity provider. — shape: {Status?: "DISABLED"|"ENABLED"|"ENABLED_WITH_DIRECTORY_LOGIN_FALLBACK", UserAccessUrl?: string, RelayStateParameterName?: string}
+  --properties-to-delete: list<string> # The SAML properties to delete as part of your request. Specify one of the following options: SAML_PROPERTIES_USER_ACCESS_URL to delete the user access URL. SAML_PROPERTIES_RELAY_STATE_PARAMETER_NAME to delete the relay state parameter name.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.ModifySamlProperties")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceId": $resource_id, "SamlProperties": $saml_properties, "PropertiesToDelete": $properties_to_delete} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2530,6 +2603,7 @@ export def "modify-saml-properties" [
 #
 # POST /
 # operationId: ModifySelfservicePermissions
+# --SelfservicePermissions shape: {RestartWorkspace?: "ENABLED"|"DISABLED", IncreaseVolumeSize?: "ENABLED"|"DISABLED", ChangeComputeType?: "ENABLED"|"DISABLED", SwitchRunningMode?: "ENABLED"|"DISABLED", RebuildWorkspace?: "ENABLED"|"DISABLED"}
 export def "modify-selfservice-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2547,13 +2621,14 @@ export def "modify-selfservice-permissions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-47
-  resource_id: any
-  selfservice_permissions: any
+  --x-amz-target: string@x-amz-target-completer-47 # required
+  resource_id: string # The identifier of the directory.
+  selfservice_permissions: record # Describes the self-service permissions for a directory. For more information, see Enable Self-Service WorkSpace Management Capabilities for Your Users (https://docs.aws.amazon.com/workspaces/latest/adminguide/enable-user-self-service-workspace-management.html). — shape: {RestartWorkspace?: "ENABLED"|"DISABLED", IncreaseVolumeSize?: "ENABLED"|"DISABLED", ChangeComputeType?: "ENABLED"|"DISABLED", SwitchRunningMode?: "ENABLED"|"DISABLED", RebuildWorkspace?: "ENABLED"|"DISABLED"}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.ModifySelfservicePermissions")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceId": $resource_id, "SelfservicePermissions": $selfservice_permissions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2579,6 +2654,7 @@ export def "modify-selfservice-permissions" [
 #
 # POST /
 # operationId: ModifyWorkspaceAccessProperties
+# --WorkspaceAccessProperties shape: {DeviceTypeWindows?: "ALLOW"|"DENY", DeviceTypeOsx?: "ALLOW"|"DENY", DeviceTypeWeb?: "ALLOW"|"DENY", DeviceTypeIos?: "ALLOW"|"DENY", DeviceTypeAndroid?: "ALLOW"|"DENY", DeviceTypeChromeOs?: "ALLOW"|"DENY", DeviceTypeZeroClient?: "ALLOW"|"DENY", DeviceTypeLinux?: "ALLOW"|"DENY"}
 export def "modify-workspace-access-properties" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2596,13 +2672,14 @@ export def "modify-workspace-access-properties" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-48
-  resource_id: any
-  workspace_access_properties: any
+  --x-amz-target: string@x-amz-target-completer-48 # required
+  resource_id: string # The identifier of the directory.
+  workspace_access_properties: record # The device types and operating systems that can be used to access a WorkSpace. For more information, see Amazon WorkSpaces Client Network Requirements (https://docs.aws.amazon.com/workspaces/latest/adminguide/workspaces-network-requirements.html). — shape: {DeviceTypeWindows?: "ALLOW"|"DENY", DeviceTypeOsx?: "ALLOW"|"DENY", DeviceTypeWeb?: "ALLOW"|"DENY", DeviceTypeIos?: "ALLOW"|"DENY", DeviceTypeAndroid?: "ALLOW"|"DENY", DeviceTypeChromeOs?: "ALLOW"|"DENY", DeviceTypeZeroClient?: "ALLOW"|"DENY", DeviceTypeLinux?: "ALLOW"|"DENY"}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.ModifyWorkspaceAccessProperties")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceId": $resource_id, "WorkspaceAccessProperties": $workspace_access_properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2628,6 +2705,7 @@ export def "modify-workspace-access-properties" [
 #
 # POST /
 # operationId: ModifyWorkspaceCreationProperties
+# --WorkspaceCreationProperties shape: {EnableWorkDocs?: bool, EnableInternetAccess?: bool, DefaultOu?: string, CustomSecurityGroupId?: string, UserEnabledAsLocalAdministrator?: bool, EnableMaintenanceMode?: bool}
 export def "modify-workspace-creation-properties" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2645,13 +2723,14 @@ export def "modify-workspace-creation-properties" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-49
-  resource_id: any
-  workspace_creation_properties: any
+  --x-amz-target: string@x-amz-target-completer-49 # required
+  resource_id: string # The identifier of the directory.
+  workspace_creation_properties: record # Describes the default properties that are used for creating WorkSpaces. For more information, see Update Directory Details for Your WorkSpaces (https://docs.aws.amazon.com/workspaces/latest/adminguide/update-directory-details.html). — shape: {EnableWorkDocs?: bool, EnableInternetAccess?: bool, DefaultOu?: string, CustomSecurityGroupId?: string, UserEnabledAsLocalAdministrator?: bool, EnableMaintenanceMode?: bool}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.ModifyWorkspaceCreationProperties")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceId": $resource_id, "WorkspaceCreationProperties": $workspace_creation_properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2677,6 +2756,7 @@ export def "modify-workspace-creation-properties" [
 #
 # POST /
 # operationId: ModifyWorkspaceProperties
+# --WorkspaceProperties shape: {RunningMode?: "AUTO_STOP"|"ALWAYS_ON"|"MANUAL", RunningModeAutoStopTimeoutInMinutes?: int, RootVolumeSizeGib?: int, UserVolumeSizeGib?: int, ComputeTypeName?: "VALUE"|"STANDARD"|"PERFORMANCE"|"POWER"|"GRAPHICS"|"POWERPRO"|"GRAPHICSPRO"|"GRAPHICS_G4DN"|"GRAPHICSPRO_G4DN", Protocols?: list<string>}
 export def "modify-workspace-properties" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2694,13 +2774,14 @@ export def "modify-workspace-properties" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-50
-  workspace_id: any
-  workspace_properties: any
+  --x-amz-target: string@x-amz-target-completer-50 # required
+  workspace_id: string # The identifier of the WorkSpace.
+  workspace_properties: record # Describes a WorkSpace. — shape: {RunningMode?: "AUTO_STOP"|"ALWAYS_ON"|"MANUAL", RunningModeAutoStopTimeoutInMinutes?: int, RootVolumeSizeGib?: int, UserVolumeSizeGib?: int, ComputeTypeName?: "VALUE"|"STANDARD"|"PERFORMANCE"|"POWER"|"GRAPHICS"|"POWERPRO"|"GRAPHICSPRO"|"GRAPHICS_G4DN"|"GRAPHICSPRO_G4DN", Protocols?: list<string>}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.ModifyWorkspaceProperties")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"WorkspaceId": $workspace_id, "WorkspaceProperties": $workspace_properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2743,13 +2824,14 @@ export def "modify-workspace-state" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-51
-  workspace_id: any
-  workspace_state: any
+  --x-amz-target: string@x-amz-target-completer-51 # required
+  workspace_id: string # The identifier of the WorkSpace.
+  workspace_state: string@workspace-state-completer # The WorkSpace state.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.ModifyWorkspaceState")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"WorkspaceId": $workspace_id, "WorkspaceState": $workspace_state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2775,6 +2857,7 @@ export def "modify-workspace-state" [
 #
 # POST /
 # operationId: RebootWorkspaces
+# --RebootWorkspaceRequests item shape: {WorkspaceId: string}
 export def "reboot-workspaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2792,12 +2875,13 @@ export def "reboot-workspaces" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-52
-  reboot_workspace_requests: any
-]: any -> record<FailedRequests: record> {
+  --x-amz-target: string@x-amz-target-completer-52 # required
+  reboot_workspace_requests: list # The WorkSpaces to reboot. You can specify up to 25 WorkSpaces. — item shape: {WorkspaceId: string}
+]: any -> record<FailedRequests: table<WorkspaceId: string, ErrorCode: string, ErrorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.RebootWorkspaces")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RebootWorkspaceRequests": $reboot_workspace_requests} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2823,6 +2907,7 @@ export def "reboot-workspaces" [
 #
 # POST /
 # operationId: RebuildWorkspaces
+# --RebuildWorkspaceRequests item shape: {WorkspaceId: string}
 export def "rebuild-workspaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2840,12 +2925,13 @@ export def "rebuild-workspaces" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-53
-  rebuild_workspace_requests: any
-]: any -> record<FailedRequests: record> {
+  --x-amz-target: string@x-amz-target-completer-53 # required
+  rebuild_workspace_requests: list # The WorkSpace to rebuild. You can specify a single WorkSpace. — item shape: {WorkspaceId: string}
+]: any -> record<FailedRequests: table<WorkspaceId: string, ErrorCode: string, ErrorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.RebuildWorkspaces")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RebuildWorkspaceRequests": $rebuild_workspace_requests} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2871,6 +2957,7 @@ export def "rebuild-workspaces" [
 #
 # POST /
 # operationId: RegisterWorkspaceDirectory
+# --Tags item shape: {Key: string, Value?: string}
 export def "register-workspace-directory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2888,20 +2975,22 @@ export def "register-workspace-directory" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-54
-  directory_id: any
-  --subnet-ids: any
-  enable_work_docs: any
-  --enable-self-service: any
-  --tenancy: any
-  --tags: any
+  --x-amz-target: string@x-amz-target-completer-54 # required
+  directory_id: string # The identifier of the directory. You cannot register a directory if it does not have a status of Active. If the directory does not have a status of Active, you will receive an InvalidResourceStateException error. If you have already registered the maximum number of directories that you can register with Amazon WorkSpaces, you will receive a ResourceLimitExceededException error. Deregister directories that you are not using for WorkSpaces, and try again.
+  --subnet-ids: list<string> # The identifiers of the subnets for your virtual private cloud (VPC). Make sure that the subnets are in supported Availability Zones. The subnets must also be in separate Availability Zones. If these conditions are not met, you will receive an OperationNotSupportedException error.
+  --enable-work-docs: oneof<nothing, bool> # Indicates whether Amazon WorkDocs is enabled or disabled. If you have enabled this parameter and WorkDocs is not available in the Region, you will receive an OperationNotSupportedException error. Set EnableWorkDocs to disabled, and try again.
+  --enable-self-service: oneof<nothing, bool> # Indicates whether self-service capabilities are enabled or disabled.
+  --tenancy: string@tenancy-completer # Indicates whether your WorkSpace directory is dedicated or shared. To use Bring Your Own License (BYOL) images, this value must be set to DEDICATED and your Amazon Web Services account must be enabled for BYOL. If your account has not been enabled for BYOL, you will receive an InvalidParameterValuesException error. For more information about BYOL images, see Bring Your Own Windows Desktop Images (https://docs.aws.amazon.com/workspaces/latest/adminguide/byol-windows-images.html).
+  --tags: list # The tags associated with the directory. — item shape: {Key: string, Value?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.RegisterWorkspaceDirectory")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DirectoryId": $directory_id, "SubnetIds": $subnet_ids, "EnableWorkDocs": $enable_work_docs, "EnableSelfService": $enable_self_service, "Tenancy": $tenancy, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "EnableWorkDocs") == null) { error make --unspanned { msg: "required body field 'EnableWorkDocs' missing: pass --enable-work-docs or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
@@ -2941,12 +3030,13 @@ export def "restore-workspace" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-55
-  workspace_id: any
+  --x-amz-target: string@x-amz-target-completer-55 # required
+  workspace_id: string # The identifier of the WorkSpace.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.RestoreWorkspace")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"WorkspaceId": $workspace_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2989,13 +3079,14 @@ export def "revoke-ip-rules" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-56
-  group_id: any
-  user_rules: any
+  --x-amz-target: string@x-amz-target-completer-56 # required
+  group_id: string # The identifier of the group.
+  user_rules: list<string> # The rules to remove from the group.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.RevokeIpRules")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GroupId": $group_id, "UserRules": $user_rules} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3021,6 +3112,7 @@ export def "revoke-ip-rules" [
 #
 # POST /
 # operationId: StartWorkspaces
+# --StartWorkspaceRequests item shape: {WorkspaceId?: string}
 export def "start-workspaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3038,12 +3130,13 @@ export def "start-workspaces" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-57
-  start_workspace_requests: any
-]: any -> record<FailedRequests: record> {
+  --x-amz-target: string@x-amz-target-completer-57 # required
+  start_workspace_requests: list # The WorkSpaces to start. You can specify up to 25 WorkSpaces. — item shape: {WorkspaceId?: string}
+]: any -> record<FailedRequests: table<WorkspaceId: string, ErrorCode: string, ErrorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.StartWorkspaces")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StartWorkspaceRequests": $start_workspace_requests} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3069,6 +3162,7 @@ export def "start-workspaces" [
 #
 # POST /
 # operationId: StopWorkspaces
+# --StopWorkspaceRequests item shape: {WorkspaceId?: string}
 export def "stop-workspaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3086,12 +3180,13 @@ export def "stop-workspaces" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-58
-  stop_workspace_requests: any
-]: any -> record<FailedRequests: record> {
+  --x-amz-target: string@x-amz-target-completer-58 # required
+  stop_workspace_requests: list # The WorkSpaces to stop. You can specify up to 25 WorkSpaces. — item shape: {WorkspaceId?: string}
+]: any -> record<FailedRequests: table<WorkspaceId: string, ErrorCode: string, ErrorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.StopWorkspaces")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StopWorkspaceRequests": $stop_workspace_requests} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3117,6 +3212,7 @@ export def "stop-workspaces" [
 #
 # POST /
 # operationId: TerminateWorkspaces
+# --TerminateWorkspaceRequests item shape: {WorkspaceId: string}
 export def "terminate-workspaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3134,12 +3230,13 @@ export def "terminate-workspaces" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-59
-  terminate_workspace_requests: any
-]: any -> record<FailedRequests: record> {
+  --x-amz-target: string@x-amz-target-completer-59 # required
+  terminate_workspace_requests: list # The WorkSpaces to terminate. You can specify up to 25 WorkSpaces. — item shape: {WorkspaceId: string}
+]: any -> record<FailedRequests: table<WorkspaceId: string, ErrorCode: string, ErrorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.TerminateWorkspaces")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TerminateWorkspaceRequests": $terminate_workspace_requests} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3182,15 +3279,16 @@ export def "update-connect-client-add-in" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-60
-  add_in_id: any
-  resource_id: any
-  --name: any
-  --url: any
+  --x-amz-target: string@x-amz-target-completer-60 # required
+  add_in_id: string # The identifier of the client add-in to update.
+  resource_id: string # The directory identifier for which the client add-in is configured.
+  --name: string # The name of the client add-in.
+  --url: string # The endpoint URL of the Amazon Connect client add-in.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.UpdateConnectClientAddIn")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AddInId": $add_in_id, "ResourceId": $resource_id, "Name": $name, "URL": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3216,6 +3314,7 @@ export def "update-connect-client-add-in" [
 #
 # POST /
 # operationId: UpdateConnectionAliasPermission
+# --ConnectionAliasPermission shape: {SharedAccountId: string, AllowAssociation: bool}
 export def "update-connection-alias-permission" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3233,13 +3332,14 @@ export def "update-connection-alias-permission" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-61
-  alias_id: any
-  connection_alias_permission: any
+  --x-amz-target: string@x-amz-target-completer-61 # required
+  alias_id: string # The identifier of the connection alias that you want to update permissions for.
+  connection_alias_permission: record # Describes the permissions for a connection alias. Connection aliases are used for cross-Region redirection. For more information, see Cross-Region Redirection for Amazon WorkSpaces (https://docs.aws.amazon.com/workspaces/latest/adminguide/cross-region-redirection.html). — shape: {SharedAccountId: string, AllowAssociation: bool}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.UpdateConnectionAliasPermission")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AliasId": $alias_id, "ConnectionAliasPermission": $connection_alias_permission} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3265,6 +3365,7 @@ export def "update-connection-alias-permission" [
 #
 # POST /
 # operationId: UpdateRulesOfIpGroup
+# --UserRules item shape: {ipRule?: string, ruleDesc?: string}
 export def "update-rules-of-ip-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3282,13 +3383,14 @@ export def "update-rules-of-ip-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-62
-  group_id: any
-  user_rules: any
+  --x-amz-target: string@x-amz-target-completer-62 # required
+  group_id: string # The identifier of the group.
+  user_rules: list # One or more rules. — item shape: {ipRule?: string, ruleDesc?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.UpdateRulesOfIpGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GroupId": $group_id, "UserRules": $user_rules} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3331,13 +3433,14 @@ export def "update-workspace-bundle" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-63
-  --bundle-id: any
-  --image-id: any
+  --x-amz-target: string@x-amz-target-completer-63 # required
+  --bundle-id: string # The identifier of the bundle.
+  --image-id: string # The identifier of the image.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.UpdateWorkspaceBundle")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"BundleId": $bundle_id, "ImageId": $image_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3380,17 +3483,19 @@ export def "update-workspace-image-permission" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-64
-  image_id: any
-  allow_copy_image: any
-  shared_account_id: any
+  --x-amz-target: string@x-amz-target-completer-64 # required
+  image_id: string # The identifier of the image.
+  --allow-copy-image: oneof<nothing, bool> # The permission to copy the image. This permission can be revoked only after an image has been shared.
+  shared_account_id: string # The identifier of the Amazon Web Services account to share or unshare the image with. Before sharing the image, confirm that you are sharing to the correct Amazon Web Services account ID.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "WorkspacesService.UpdateWorkspaceImagePermission")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ImageId": $image_id, "AllowCopyImage": $allow_copy_image, "SharedAccountId": $shared_account_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "AllowCopyImage") == null) { error make --unspanned { msg: "required body field 'AllowCopyImage' missing: pass --allow-copy-image or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact

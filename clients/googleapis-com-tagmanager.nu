@@ -1,4 +1,4 @@
-# Auto-generated client for Tag Manager API vv2
+# Auto-generated client for Tag Manager API v2
 # Source: https://api.apis.guru/v2/specs/googleapis.com/tagmanager/v2/openapi.json
 # Auth: --token flag or $env.TAG_MANAGER_API_TOKEN
 
@@ -12,20 +12,10 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
-}
-
-# Merge multiple auth records (AND-form security: every scheme must be sent).
-def merge-auth [parts: list]: nothing -> record {
-  let active = ($parts | where {|p| $p.location != "none" })
-  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
-  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
-  let locs = ($active | each {|p| $p.location } | uniq)
-  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
-  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
 # Serialize a single query parameter based on collection style
@@ -161,8 +151,8 @@ export def commands []: nothing -> table {
 # operationId: tagmanager.accounts.list
 export def "tagmanager-accounts-list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -183,7 +173,7 @@ export def "tagmanager-accounts-list" [
   --include-google-tags: oneof<nothing, bool> # Also retrieve accounts associated with Google Tag when true.
   --page-token: string # Continuation token for fetching the next page of results.
 ]: nothing -> record<account: table<accountId: string, features: record, fingerprint: string, name: string, path: string, shareData: bool, tagManagerUrl: string>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "includeGoogleTags" $include_google_tags "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tagmanager/v2/accounts" $qp $auth.query)
@@ -209,8 +199,8 @@ export def "tagmanager-accounts-list" [
 # operationId: tagmanager.accounts.containers.lookup
 export def "tagmanager-accounts-containers-lookup" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -230,7 +220,7 @@ export def "tagmanager-accounts-containers-lookup" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --destination-id: string # Destination ID linked to a GTM Container, e.g. AW-123456789. Example: accounts/containers:lookup?destination_id={destination_id}.
 ]: nothing -> record<accountId: string, containerId: string, domainName: list<string>, features: record<supportBuiltInVariables: bool, supportClients: bool, supportEnvironments: bool, supportFolders: bool, supportGtagConfigs: bool, supportTags: bool, supportTemplates: bool, supportTriggers: bool, supportUserPermissions: bool, supportVariables: bool, supportVersions: bool, supportWorkspaces: bool, supportZones: bool>, fingerprint: string, name: string, notes: string, path: string, publicId: string, tagIds: list<string>, tagManagerUrl: string, taggingServerUrls: list<string>, usageContext: list<string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "destinationId" $destination_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tagmanager/v2/accounts/containers:lookup" $qp $auth.query)
@@ -257,8 +247,8 @@ export def "tagmanager-accounts-containers-lookup" [
 export def "tagmanager-accounts-containers-workspaces-built-in-variables-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -278,7 +268,7 @@ export def "tagmanager-accounts-containers-workspaces-built-in-variables-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-token: string # Continuation token for fetching the next page of results.
 ]: nothing -> record<builtInVariable: table<accountId: string, containerId: string, name: string, path: string, type: string, workspaceId: string>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -306,8 +296,8 @@ export def "tagmanager-accounts-containers-workspaces-built-in-variables-list" [
 export def "tagmanager-accounts-containers-workspaces-built-in-variables-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -327,7 +317,7 @@ export def "tagmanager-accounts-containers-workspaces-built-in-variables-create"
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --type: list<string> # The types of built-in variables to enable.
 ]: nothing -> record<builtInVariable: table<accountId: string, containerId: string, name: string, path: string, type: string, workspaceId: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "type" $type "multi")] | flatten | str join "&"
@@ -355,8 +345,8 @@ export def "tagmanager-accounts-containers-workspaces-built-in-variables-create"
 export def "tagmanager-accounts-containers-workspaces-clients-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -376,7 +366,7 @@ export def "tagmanager-accounts-containers-workspaces-clients-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-token: string # Continuation token for fetching the next page of results.
 ]: nothing -> record<client: table<accountId: string, clientId: string, containerId: string, fingerprint: string, name: string, notes: string, parameter: list, parentFolderId: string, path: string, priority: int, tagManagerUrl: string, type: string, workspaceId: string>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -405,8 +395,8 @@ export def "tagmanager-accounts-containers-workspaces-clients-list" [
 export def "tagmanager-accounts-containers-workspaces-clients-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -439,7 +429,7 @@ export def "tagmanager-accounts-containers-workspaces-clients-create" [
   --workspace-id: string # GTM Workspace ID.
 ]: any -> record<accountId: string, clientId: string, containerId: string, fingerprint: string, name: string, notes: string, parameter: table<key: string, list: list, map: list, type: string, value: string>, parentFolderId: string, path: string, priority: int, tagManagerUrl: string, type: string, workspaceId: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -469,8 +459,8 @@ export def "tagmanager-accounts-containers-workspaces-clients-create" [
 export def "tagmanager-accounts-containers-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -490,7 +480,7 @@ export def "tagmanager-accounts-containers-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-token: string # Continuation token for fetching the next page of results.
 ]: nothing -> record<container: table<accountId: string, containerId: string, domainName: list, features: record, fingerprint: string, name: string, notes: string, path: string, publicId: string, tagIds: list, tagManagerUrl: string, taggingServerUrls: list, usageContext: list>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -519,8 +509,8 @@ export def "tagmanager-accounts-containers-list" [
 export def "tagmanager-accounts-containers-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -553,7 +543,7 @@ export def "tagmanager-accounts-containers-create" [
   --usage-context: list<string> # List of Usage Contexts for the Container. Valid values include: web, android, or ios. @mutable tagmanager.accounts.containers.create @mutable tagmanager.accounts.containers.update
 ]: any -> record<accountId: string, containerId: string, domainName: list<string>, features: record<supportBuiltInVariables: bool, supportClients: bool, supportEnvironments: bool, supportFolders: bool, supportGtagConfigs: bool, supportTags: bool, supportTemplates: bool, supportTriggers: bool, supportUserPermissions: bool, supportVariables: bool, supportVersions: bool, supportWorkspaces: bool, supportZones: bool>, fingerprint: string, name: string, notes: string, path: string, publicId: string, tagIds: list<string>, tagManagerUrl: string, taggingServerUrls: list<string>, usageContext: list<string>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -583,8 +573,8 @@ export def "tagmanager-accounts-containers-create" [
 export def "tagmanager-accounts-containers-destinations-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -603,7 +593,7 @@ export def "tagmanager-accounts-containers-destinations-list" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<destination: table<accountId: string, containerId: string, destinationId: string, destinationLinkId: string, fingerprint: string, name: string, path: string, tagManagerUrl: string>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -631,8 +621,8 @@ export def "tagmanager-accounts-containers-destinations-list" [
 export def "tagmanager-accounts-containers-destinations-link" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -653,7 +643,7 @@ export def "tagmanager-accounts-containers-destinations-link" [
   --allow-user-permission-feature-update: oneof<nothing, bool> # Must be set to true to allow features.user_permissions to change from false to true. If this operation causes an update but this bit is false, the operation will fail.
   --destination-id: string # Destination ID to be linked to the current container.
 ]: nothing -> record<accountId: string, containerId: string, destinationId: string, destinationLinkId: string, fingerprint: string, name: string, path: string, tagManagerUrl: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "allowUserPermissionFeatureUpdate" $allow_user_permission_feature_update "scalar") (serialize-qp "destinationId" $destination_id "scalar")] | flatten | str join "&"
@@ -681,8 +671,8 @@ export def "tagmanager-accounts-containers-destinations-link" [
 export def "tagmanager-accounts-containers-environments-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -702,7 +692,7 @@ export def "tagmanager-accounts-containers-environments-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-token: string # Continuation token for fetching the next page of results.
 ]: nothing -> record<environment: table<accountId: string, authorizationCode: string, authorizationTimestamp: string, containerId: string, containerVersionId: string, description: string, enableDebug: bool, environmentId: string, fingerprint: string, name: string, path: string, tagManagerUrl: string, type: string, url: string, workspaceId: string>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -730,8 +720,8 @@ export def "tagmanager-accounts-containers-environments-list" [
 export def "tagmanager-accounts-containers-environments-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -766,7 +756,7 @@ export def "tagmanager-accounts-containers-environments-create" [
   --workspace-id: string # Represents a link to a quick preview of a workspace.
 ]: any -> record<accountId: string, authorizationCode: string, authorizationTimestamp: string, containerId: string, containerVersionId: string, description: string, enableDebug: bool, environmentId: string, fingerprint: string, name: string, path: string, tagManagerUrl: string, type: string, url: string, workspaceId: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -796,8 +786,8 @@ export def "tagmanager-accounts-containers-environments-create" [
 export def "tagmanager-accounts-containers-workspaces-folders-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -817,7 +807,7 @@ export def "tagmanager-accounts-containers-workspaces-folders-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-token: string # Continuation token for fetching the next page of results.
 ]: nothing -> record<folder: table<accountId: string, containerId: string, fingerprint: string, folderId: string, name: string, notes: string, path: string, tagManagerUrl: string, workspaceId: string>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -845,8 +835,8 @@ export def "tagmanager-accounts-containers-workspaces-folders-list" [
 export def "tagmanager-accounts-containers-workspaces-folders-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -875,7 +865,7 @@ export def "tagmanager-accounts-containers-workspaces-folders-create" [
   --workspace-id: string # GTM Workspace ID.
 ]: any -> record<accountId: string, containerId: string, fingerprint: string, folderId: string, name: string, notes: string, path: string, tagManagerUrl: string, workspaceId: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -905,8 +895,8 @@ export def "tagmanager-accounts-containers-workspaces-folders-create" [
 export def "tagmanager-accounts-containers-workspaces-gtag-config-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -926,7 +916,7 @@ export def "tagmanager-accounts-containers-workspaces-gtag-config-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-token: string # Continuation token for fetching the next page of results.
 ]: nothing -> record<gtagConfig: table<accountId: string, containerId: string, fingerprint: string, gtagConfigId: string, parameter: list, path: string, tagManagerUrl: string, type: string, workspaceId: string>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -955,8 +945,8 @@ export def "tagmanager-accounts-containers-workspaces-gtag-config-list" [
 export def "tagmanager-accounts-containers-workspaces-gtag-config-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -985,7 +975,7 @@ export def "tagmanager-accounts-containers-workspaces-gtag-config-create" [
   --workspace-id: string # Google tag workspace ID. Only used by GTM containers. Set to 0 otherwise.
 ]: any -> record<accountId: string, containerId: string, fingerprint: string, gtagConfigId: string, parameter: table<key: string, list: list, map: list, type: string, value: string>, path: string, tagManagerUrl: string, type: string, workspaceId: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1015,8 +1005,8 @@ export def "tagmanager-accounts-containers-workspaces-gtag-config-create" [
 export def "tagmanager-accounts-containers-workspaces-tags-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1036,7 +1026,7 @@ export def "tagmanager-accounts-containers-workspaces-tags-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-token: string # Continuation token for fetching the next page of results.
 ]: nothing -> record<nextPageToken: string, tag: table<accountId: string, blockingRuleId: list, blockingTriggerId: list, consentSettings: record, containerId: string, fingerprint: string, firingRuleId: list, firingTriggerId: list, liveOnly: bool, monitoringMetadata: record, monitoringMetadataTagNameKey: string, name: string, notes: string, parameter: list, parentFolderId: string, path: string, paused: bool, priority: record, scheduleEndMs: string, scheduleStartMs: string, setupTag: list, tagFiringOption: string, tagId: string, tagManagerUrl: string, teardownTag: list, type: string, workspaceId: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -1070,8 +1060,8 @@ export def "tagmanager-accounts-containers-workspaces-tags-list" [
 export def "tagmanager-accounts-containers-workspaces-tags-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1118,7 +1108,7 @@ export def "tagmanager-accounts-containers-workspaces-tags-create" [
   --workspace-id: string # GTM Workspace ID.
 ]: any -> record<accountId: string, blockingRuleId: list<string>, blockingTriggerId: list<string>, consentSettings: record<consentStatus: string, consentType: record<key: string, list: list, map: list, type: string, value: string>>, containerId: string, fingerprint: string, firingRuleId: list<string>, firingTriggerId: list<string>, liveOnly: bool, monitoringMetadata: record<key: string, list: list<any>, map: list<any>, type: string, value: string>, monitoringMetadataTagNameKey: string, name: string, notes: string, parameter: table<key: string, list: list, map: list, type: string, value: string>, parentFolderId: string, path: string, paused: bool, priority: record<key: string, list: list<any>, map: list<any>, type: string, value: string>, scheduleEndMs: string, scheduleStartMs: string, setupTag: table<stopOnSetupFailure: bool, tagName: string>, tagFiringOption: string, tagId: string, tagManagerUrl: string, teardownTag: table<stopTeardownOnFailure: bool, tagName: string>, type: string, workspaceId: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1148,8 +1138,8 @@ export def "tagmanager-accounts-containers-workspaces-tags-create" [
 export def "tagmanager-accounts-containers-workspaces-templates-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1169,7 +1159,7 @@ export def "tagmanager-accounts-containers-workspaces-templates-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-token: string # Continuation token for fetching the next page of results.
 ]: nothing -> record<nextPageToken: string, template: table<accountId: string, containerId: string, fingerprint: string, galleryReference: record, name: string, path: string, tagManagerUrl: string, templateData: string, templateId: string, workspaceId: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -1198,8 +1188,8 @@ export def "tagmanager-accounts-containers-workspaces-templates-list" [
 export def "tagmanager-accounts-containers-workspaces-templates-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1229,7 +1219,7 @@ export def "tagmanager-accounts-containers-workspaces-templates-create" [
   --workspace-id: string # GTM Workspace ID.
 ]: any -> record<accountId: string, containerId: string, fingerprint: string, galleryReference: record<host: string, isModified: bool, owner: string, repository: string, signature: string, version: string>, name: string, path: string, tagManagerUrl: string, templateData: string, templateId: string, workspaceId: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1259,8 +1249,8 @@ export def "tagmanager-accounts-containers-workspaces-templates-create" [
 export def "tagmanager-accounts-containers-workspaces-triggers-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1280,7 +1270,7 @@ export def "tagmanager-accounts-containers-workspaces-triggers-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-token: string # Continuation token for fetching the next page of results.
 ]: nothing -> record<nextPageToken: string, trigger: table<accountId: string, autoEventFilter: list, checkValidation: record, containerId: string, continuousTimeMinMilliseconds: record, customEventFilter: list, eventName: record, filter: list, fingerprint: string, horizontalScrollPercentageList: record, interval: record, intervalSeconds: record, limit: record, maxTimerLengthSeconds: record, name: string, notes: string, parameter: list, parentFolderId: string, path: string, selector: record, tagManagerUrl: string, totalTimeMinMilliseconds: record, triggerId: string, type: string, uniqueTriggerId: record, verticalScrollPercentageList: record, visibilitySelector: record, visiblePercentageMax: record, visiblePercentageMin: record, waitForTags: record, waitForTagsTimeout: record, workspaceId: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -1329,8 +1319,8 @@ export def "tagmanager-accounts-containers-workspaces-triggers-list" [
 export def "tagmanager-accounts-containers-workspaces-triggers-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1382,7 +1372,7 @@ export def "tagmanager-accounts-containers-workspaces-triggers-create" [
   --workspace-id: string # GTM Workspace ID.
 ]: any -> record<accountId: string, autoEventFilter: table<parameter: list, type: string>, checkValidation: record<key: string, list: list<any>, map: list<any>, type: string, value: string>, containerId: string, continuousTimeMinMilliseconds: record<key: string, list: list<any>, map: list<any>, type: string, value: string>, customEventFilter: table<parameter: list, type: string>, eventName: record<key: string, list: list<any>, map: list<any>, type: string, value: string>, filter: table<parameter: list, type: string>, fingerprint: string, horizontalScrollPercentageList: record<key: string, list: list<any>, map: list<any>, type: string, value: string>, interval: record<key: string, list: list<any>, map: list<any>, type: string, value: string>, intervalSeconds: record<key: string, list: list<any>, map: list<any>, type: string, value: string>, limit: record<key: string, list: list<any>, map: list<any>, type: string, value: string>, maxTimerLengthSeconds: record<key: string, list: list<any>, map: list<any>, type: string, value: string>, name: string, notes: string, parameter: table<key: string, list: list, map: list, type: string, value: string>, parentFolderId: string, path: string, selector: record<key: string, list: list<any>, map: list<any>, type: string, value: string>, tagManagerUrl: string, totalTimeMinMilliseconds: record<key: string, list: list<any>, map: list<any>, type: string, value: string>, triggerId: string, type: string, uniqueTriggerId: record<key: string, list: list<any>, map: list<any>, type: string, value: string>, verticalScrollPercentageList: record<key: string, list: list<any>, map: list<any>, type: string, value: string>, visibilitySelector: record<key: string, list: list<any>, map: list<any>, type: string, value: string>, visiblePercentageMax: record<key: string, list: list<any>, map: list<any>, type: string, value: string>, visiblePercentageMin: record<key: string, list: list<any>, map: list<any>, type: string, value: string>, waitForTags: record<key: string, list: list<any>, map: list<any>, type: string, value: string>, waitForTagsTimeout: record<key: string, list: list<any>, map: list<any>, type: string, value: string>, workspaceId: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1412,8 +1402,8 @@ export def "tagmanager-accounts-containers-workspaces-triggers-create" [
 export def "tagmanager-accounts-user-permissions-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1433,7 +1423,7 @@ export def "tagmanager-accounts-user-permissions-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-token: string # Continuation token for fetching the next page of results.
 ]: nothing -> record<nextPageToken: string, userPermission: table<accountAccess: record, accountId: string, containerAccess: list, emailAddress: string, path: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -1463,8 +1453,8 @@ export def "tagmanager-accounts-user-permissions-list" [
 export def "tagmanager-accounts-user-permissions-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1489,7 +1479,7 @@ export def "tagmanager-accounts-user-permissions-create" [
   --path: string # GTM UserPermission's API relative path.
 ]: any -> record<accountAccess: record<permission: string>, accountId: string, containerAccess: table<containerId: string, permission: string>, emailAddress: string, path: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1519,8 +1509,8 @@ export def "tagmanager-accounts-user-permissions-create" [
 export def "tagmanager-accounts-containers-workspaces-variables-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1540,7 +1530,7 @@ export def "tagmanager-accounts-containers-workspaces-variables-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-token: string # Continuation token for fetching the next page of results.
 ]: nothing -> record<nextPageToken: string, variable: table<accountId: string, containerId: string, disablingTriggerId: list, enablingTriggerId: list, fingerprint: string, formatValue: record, name: string, notes: string, parameter: list, parentFolderId: string, path: string, scheduleEndMs: string, scheduleStartMs: string, tagManagerUrl: string, type: string, variableId: string, workspaceId: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -1570,8 +1560,8 @@ export def "tagmanager-accounts-containers-workspaces-variables-list" [
 export def "tagmanager-accounts-containers-workspaces-variables-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1608,7 +1598,7 @@ export def "tagmanager-accounts-containers-workspaces-variables-create" [
   --workspace-id: string # GTM Workspace ID.
 ]: any -> record<accountId: string, containerId: string, disablingTriggerId: list<string>, enablingTriggerId: list<string>, fingerprint: string, formatValue: record<caseConversionType: string, convertFalseToValue: record<key: string, list: list, map: list, type: string, value: string>, convertNullToValue: record<key: string, list: list, map: list, type: string, value: string>, convertTrueToValue: record<key: string, list: list, map: list, type: string, value: string>, convertUndefinedToValue: record<key: string, list: list, map: list, type: string, value: string>>, name: string, notes: string, parameter: table<key: string, list: list, map: list, type: string, value: string>, parentFolderId: string, path: string, scheduleEndMs: string, scheduleStartMs: string, tagManagerUrl: string, type: string, variableId: string, workspaceId: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1638,8 +1628,8 @@ export def "tagmanager-accounts-containers-workspaces-variables-create" [
 export def "tagmanager-accounts-containers-version-headers-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1660,7 +1650,7 @@ export def "tagmanager-accounts-containers-version-headers-list" [
   --include-deleted: oneof<nothing, bool> # Also retrieve deleted (archived) versions when true.
   --page-token: string # Continuation token for fetching the next page of results.
 ]: nothing -> record<containerVersionHeader: table<accountId: string, containerId: string, containerVersionId: string, deleted: bool, name: string, numClients: string, numCustomTemplates: string, numGtagConfigs: string, numMacros: string, numRules: string, numTags: string, numTransformations: string, numTriggers: string, numVariables: string, numZones: string, path: string>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -1688,8 +1678,8 @@ export def "tagmanager-accounts-containers-version-headers-list" [
 export def "tagmanager-accounts-containers-version-headers-latest" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1708,7 +1698,7 @@ export def "tagmanager-accounts-containers-version-headers-latest" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accountId: string, containerId: string, containerVersionId: string, deleted: bool, name: string, numClients: string, numCustomTemplates: string, numGtagConfigs: string, numMacros: string, numRules: string, numTags: string, numTransformations: string, numTriggers: string, numVariables: string, numZones: string, path: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1736,8 +1726,8 @@ export def "tagmanager-accounts-containers-version-headers-latest" [
 export def "tagmanager-accounts-containers-versions-live" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1756,7 +1746,7 @@ export def "tagmanager-accounts-containers-versions-live" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accountId: string, builtInVariable: table<accountId: string, containerId: string, name: string, path: string, type: string, workspaceId: string>, client: table<accountId: string, clientId: string, containerId: string, fingerprint: string, name: string, notes: string, parameter: list, parentFolderId: string, path: string, priority: int, tagManagerUrl: string, type: string, workspaceId: string>, container: record<accountId: string, containerId: string, domainName: list<string>, features: record<supportBuiltInVariables: bool, supportClients: bool, supportEnvironments: bool, supportFolders: bool, supportGtagConfigs: bool, supportTags: bool, supportTemplates: bool, supportTriggers: bool, supportUserPermissions: bool, supportVariables: bool, supportVersions: bool, supportWorkspaces: bool, supportZones: bool>, fingerprint: string, name: string, notes: string, path: string, publicId: string, tagIds: list<string>, tagManagerUrl: string, taggingServerUrls: list<string>, usageContext: list<string>>, containerId: string, containerVersionId: string, customTemplate: table<accountId: string, containerId: string, fingerprint: string, galleryReference: record, name: string, path: string, tagManagerUrl: string, templateData: string, templateId: string, workspaceId: string>, deleted: bool, description: string, fingerprint: string, folder: table<accountId: string, containerId: string, fingerprint: string, folderId: string, name: string, notes: string, path: string, tagManagerUrl: string, workspaceId: string>, gtagConfig: table<accountId: string, containerId: string, fingerprint: string, gtagConfigId: string, parameter: list, path: string, tagManagerUrl: string, type: string, workspaceId: string>, name: string, path: string, tag: table<accountId: string, blockingRuleId: list, blockingTriggerId: list, consentSettings: record, containerId: string, fingerprint: string, firingRuleId: list, firingTriggerId: list, liveOnly: bool, monitoringMetadata: record, monitoringMetadataTagNameKey: string, name: string, notes: string, parameter: list, parentFolderId: string, path: string, paused: bool, priority: record, scheduleEndMs: string, scheduleStartMs: string, setupTag: list, tagFiringOption: string, tagId: string, tagManagerUrl: string, teardownTag: list, type: string, workspaceId: string>, tagManagerUrl: string, trigger: table<accountId: string, autoEventFilter: list, checkValidation: record, containerId: string, continuousTimeMinMilliseconds: record, customEventFilter: list, eventName: record, filter: list, fingerprint: string, horizontalScrollPercentageList: record, interval: record, intervalSeconds: record, limit: record, maxTimerLengthSeconds: record, name: string, notes: string, parameter: list, parentFolderId: string, path: string, selector: record, tagManagerUrl: string, totalTimeMinMilliseconds: record, triggerId: string, type: string, uniqueTriggerId: record, verticalScrollPercentageList: record, visibilitySelector: record, visiblePercentageMax: record, visiblePercentageMin: record, waitForTags: record, waitForTagsTimeout: record, workspaceId: string>, variable: table<accountId: string, containerId: string, disablingTriggerId: list, enablingTriggerId: list, fingerprint: string, formatValue: record, name: string, notes: string, parameter: list, parentFolderId: string, path: string, scheduleEndMs: string, scheduleStartMs: string, tagManagerUrl: string, type: string, variableId: string, workspaceId: string>, zone: table<accountId: string, boundary: record, childContainer: list, containerId: string, fingerprint: string, name: string, notes: string, path: string, tagManagerUrl: string, typeRestriction: record, workspaceId: string, zoneId: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1784,8 +1774,8 @@ export def "tagmanager-accounts-containers-versions-live" [
 export def "tagmanager-accounts-containers-workspaces-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1805,7 +1795,7 @@ export def "tagmanager-accounts-containers-workspaces-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-token: string # Continuation token for fetching the next page of results.
 ]: nothing -> record<nextPageToken: string, workspace: table<accountId: string, containerId: string, description: string, fingerprint: string, name: string, path: string, tagManagerUrl: string, workspaceId: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -1833,8 +1823,8 @@ export def "tagmanager-accounts-containers-workspaces-list" [
 export def "tagmanager-accounts-containers-workspaces-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1862,7 +1852,7 @@ export def "tagmanager-accounts-containers-workspaces-create" [
   --workspace-id: string # The Workspace ID uniquely identifies the GTM Workspace.
 ]: any -> record<accountId: string, containerId: string, description: string, fingerprint: string, name: string, path: string, tagManagerUrl: string, workspaceId: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1892,8 +1882,8 @@ export def "tagmanager-accounts-containers-workspaces-create" [
 export def "tagmanager-accounts-containers-workspaces-zones-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1913,7 +1903,7 @@ export def "tagmanager-accounts-containers-workspaces-zones-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-token: string # Continuation token for fetching the next page of results.
 ]: nothing -> record<nextPageToken: string, zone: table<accountId: string, boundary: record, childContainer: list, containerId: string, fingerprint: string, name: string, notes: string, path: string, tagManagerUrl: string, typeRestriction: record, workspaceId: string, zoneId: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -1944,8 +1934,8 @@ export def "tagmanager-accounts-containers-workspaces-zones-list" [
 export def "tagmanager-accounts-containers-workspaces-zones-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1977,7 +1967,7 @@ export def "tagmanager-accounts-containers-workspaces-zones-create" [
   --zone-id: string # The Zone ID uniquely identifies the GTM Zone.
 ]: any -> record<accountId: string, boundary: record<condition: list<record>, customEvaluationTriggerId: list<string>>, childContainer: table<nickname: string, publicId: string>, containerId: string, fingerprint: string, name: string, notes: string, path: string, tagManagerUrl: string, typeRestriction: record<enable: bool, whitelistedTypeId: list<string>>, workspaceId: string, zoneId: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -2007,8 +1997,8 @@ export def "tagmanager-accounts-containers-workspaces-zones-create" [
 export def "tagmanager-accounts-user-permissions-delete" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2028,7 +2018,7 @@ export def "tagmanager-accounts-user-permissions-delete" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --type: list<string> # The types of built-in variables to delete.
 ]: nothing -> any {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "type" $type "multi")] | flatten | str join "&"
@@ -2056,8 +2046,8 @@ export def "tagmanager-accounts-user-permissions-delete" [
 export def "tagmanager-accounts-user-permissions-get" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2077,7 +2067,7 @@ export def "tagmanager-accounts-user-permissions-get" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --container-version-id: string # The GTM ContainerVersion ID. Specify published to retrieve the currently published version.
 ]: nothing -> record<accountAccess: record<permission: string>, accountId: string, containerAccess: table<containerId: string, permission: string>, emailAddress: string, path: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "containerVersionId" $container_version_id "scalar")] | flatten | str join "&"
@@ -2107,8 +2097,8 @@ export def "tagmanager-accounts-user-permissions-get" [
 export def "tagmanager-accounts-user-permissions-update" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2134,7 +2124,7 @@ export def "tagmanager-accounts-user-permissions-update" [
   --body-path: string # GTM UserPermission's API relative path.
 ]: any -> record<accountAccess: record<permission: string>, accountId: string, containerAccess: table<containerId: string, permission: string>, emailAddress: string, path: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "fingerprint" $fingerprint "scalar")] | flatten | str join "&"
@@ -2164,8 +2154,8 @@ export def "tagmanager-accounts-user-permissions-update" [
 export def "tagmanager-accounts-containers-workspaces-built-in-variables-revert" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2185,7 +2175,7 @@ export def "tagmanager-accounts-containers-workspaces-built-in-variables-revert"
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --type: string@type-completer-2 # The type of built-in variable to revert.
 ]: nothing -> record<enabled: bool> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
@@ -2213,8 +2203,8 @@ export def "tagmanager-accounts-containers-workspaces-built-in-variables-revert"
 export def "tagmanager-accounts-containers-workspaces-get-status" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2233,7 +2223,7 @@ export def "tagmanager-accounts-containers-workspaces-get-status" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<mergeConflict: table<entityInBaseVersion: record, entityInWorkspace: record>, workspaceChange: table<changeStatus: string, client: record, folder: record, tag: record, trigger: record, variable: record>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -2261,8 +2251,8 @@ export def "tagmanager-accounts-containers-workspaces-get-status" [
 export def "tagmanager-accounts-containers-combine" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2284,7 +2274,7 @@ export def "tagmanager-accounts-containers-combine" [
   --container-id: string # ID of container that will be merged into the current container.
   --setting-source: string@setting-source-completer # Specify the source of config setting after combine
 ]: nothing -> record<accountId: string, containerId: string, domainName: list<string>, features: record<supportBuiltInVariables: bool, supportClients: bool, supportEnvironments: bool, supportFolders: bool, supportGtagConfigs: bool, supportTags: bool, supportTemplates: bool, supportTriggers: bool, supportUserPermissions: bool, supportVariables: bool, supportVersions: bool, supportWorkspaces: bool, supportZones: bool>, fingerprint: string, name: string, notes: string, path: string, publicId: string, tagIds: list<string>, tagManagerUrl: string, taggingServerUrls: list<string>, usageContext: list<string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "allowUserPermissionFeatureUpdate" $allow_user_permission_feature_update "scalar") (serialize-qp "containerId" $container_id "scalar") (serialize-qp "settingSource" $setting_source "scalar")] | flatten | str join "&"
@@ -2312,8 +2302,8 @@ export def "tagmanager-accounts-containers-combine" [
 export def "tagmanager-accounts-containers-workspaces-create-version" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2335,7 +2325,7 @@ export def "tagmanager-accounts-containers-workspaces-create-version" [
   --notes: string # The notes of the container version to be created.
 ]: any -> record<compilerError: bool, containerVersion: record<accountId: string, builtInVariable: list<record>, client: list<record>, container: record<accountId: string, containerId: string, domainName: list, features: record, fingerprint: string, name: string, notes: string, path: string, publicId: string, tagIds: list, tagManagerUrl: string, taggingServerUrls: list, usageContext: list>, containerId: string, containerVersionId: string, customTemplate: list<record>, deleted: bool, description: string, fingerprint: string, folder: list<record>, gtagConfig: list<record>, name: string, path: string, tag: list<record>, tagManagerUrl: string, trigger: list<record>, variable: list<record>, zone: list<record>>, newWorkspacePath: string, syncStatus: record<mergeConflict: bool, syncError: bool>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -2365,8 +2355,8 @@ export def "tagmanager-accounts-containers-workspaces-create-version" [
 export def "tagmanager-accounts-containers-workspaces-folders-entities" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2386,7 +2376,7 @@ export def "tagmanager-accounts-containers-workspaces-folders-entities" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-token: string # Continuation token for fetching the next page of results.
 ]: nothing -> record<nextPageToken: string, tag: table<accountId: string, blockingRuleId: list, blockingTriggerId: list, consentSettings: record, containerId: string, fingerprint: string, firingRuleId: list, firingTriggerId: list, liveOnly: bool, monitoringMetadata: record, monitoringMetadataTagNameKey: string, name: string, notes: string, parameter: list, parentFolderId: string, path: string, paused: bool, priority: record, scheduleEndMs: string, scheduleStartMs: string, setupTag: list, tagFiringOption: string, tagId: string, tagManagerUrl: string, teardownTag: list, type: string, workspaceId: string>, trigger: table<accountId: string, autoEventFilter: list, checkValidation: record, containerId: string, continuousTimeMinMilliseconds: record, customEventFilter: list, eventName: record, filter: list, fingerprint: string, horizontalScrollPercentageList: record, interval: record, intervalSeconds: record, limit: record, maxTimerLengthSeconds: record, name: string, notes: string, parameter: list, parentFolderId: string, path: string, selector: record, tagManagerUrl: string, totalTimeMinMilliseconds: record, triggerId: string, type: string, uniqueTriggerId: record, verticalScrollPercentageList: record, visibilitySelector: record, visiblePercentageMax: record, visiblePercentageMin: record, waitForTags: record, waitForTagsTimeout: record, workspaceId: string>, variable: table<accountId: string, containerId: string, disablingTriggerId: list, enablingTriggerId: list, fingerprint: string, formatValue: record, name: string, notes: string, parameter: list, parentFolderId: string, path: string, scheduleEndMs: string, scheduleStartMs: string, tagManagerUrl: string, type: string, variableId: string, workspaceId: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -2414,8 +2404,8 @@ export def "tagmanager-accounts-containers-workspaces-folders-entities" [
 export def "tagmanager-accounts-containers-workspaces-folders-move-entities-to-folder" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2447,7 +2437,7 @@ export def "tagmanager-accounts-containers-workspaces-folders-move-entities-to-f
   --workspace-id: string # GTM Workspace ID.
 ]: any -> any {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "tagId" $tag_id "multi") (serialize-qp "triggerId" $trigger_id "multi") (serialize-qp "variableId" $variable_id "multi")] | flatten | str join "&"
@@ -2477,8 +2467,8 @@ export def "tagmanager-accounts-containers-workspaces-folders-move-entities-to-f
 export def "tagmanager-accounts-containers-move-tag-id" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2503,7 +2493,7 @@ export def "tagmanager-accounts-containers-move-tag-id" [
   --tag-id: string # Tag ID to be removed from the current Container.
   --tag-name: string # The name for the newly created tag.
 ]: nothing -> record<accountId: string, containerId: string, domainName: list<string>, features: record<supportBuiltInVariables: bool, supportClients: bool, supportEnvironments: bool, supportFolders: bool, supportGtagConfigs: bool, supportTags: bool, supportTemplates: bool, supportTriggers: bool, supportUserPermissions: bool, supportVariables: bool, supportVersions: bool, supportWorkspaces: bool, supportZones: bool>, fingerprint: string, name: string, notes: string, path: string, publicId: string, tagIds: list<string>, tagManagerUrl: string, taggingServerUrls: list<string>, usageContext: list<string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "allowUserPermissionFeatureUpdate" $allow_user_permission_feature_update "scalar") (serialize-qp "copySettings" $copy_settings "scalar") (serialize-qp "copyTermsOfService" $copy_terms_of_service "scalar") (serialize-qp "copyUsers" $copy_users "scalar") (serialize-qp "tagId" $tag_id "scalar") (serialize-qp "tagName" $tag_name "scalar")] | flatten | str join "&"
@@ -2531,8 +2521,8 @@ export def "tagmanager-accounts-containers-move-tag-id" [
 export def "tagmanager-accounts-containers-versions-publish" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2552,7 +2542,7 @@ export def "tagmanager-accounts-containers-versions-publish" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --fingerprint: string # When provided, this fingerprint must match the fingerprint of the container version in storage.
 ]: nothing -> record<compilerError: bool, containerVersion: record<accountId: string, builtInVariable: list<record>, client: list<record>, container: record<accountId: string, containerId: string, domainName: list, features: record, fingerprint: string, name: string, notes: string, path: string, publicId: string, tagIds: list, tagManagerUrl: string, taggingServerUrls: list, usageContext: list>, containerId: string, containerVersionId: string, customTemplate: list<record>, deleted: bool, description: string, fingerprint: string, folder: list<record>, gtagConfig: list<record>, name: string, path: string, tag: list<record>, tagManagerUrl: string, trigger: list<record>, variable: list<record>, zone: list<record>>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "fingerprint" $fingerprint "scalar")] | flatten | str join "&"
@@ -2580,8 +2570,8 @@ export def "tagmanager-accounts-containers-versions-publish" [
 export def "tagmanager-accounts-containers-workspaces-quick-preview" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2600,7 +2590,7 @@ export def "tagmanager-accounts-containers-workspaces-quick-preview" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<compilerError: bool, containerVersion: record<accountId: string, builtInVariable: list<record>, client: list<record>, container: record<accountId: string, containerId: string, domainName: list, features: record, fingerprint: string, name: string, notes: string, path: string, publicId: string, tagIds: list, tagManagerUrl: string, taggingServerUrls: list, usageContext: list>, containerId: string, containerVersionId: string, customTemplate: list<record>, deleted: bool, description: string, fingerprint: string, folder: list<record>, gtagConfig: list<record>, name: string, path: string, tag: list<record>, tagManagerUrl: string, trigger: list<record>, variable: list<record>, zone: list<record>>, syncStatus: record<mergeConflict: bool, syncError: bool>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -2628,8 +2618,8 @@ export def "tagmanager-accounts-containers-workspaces-quick-preview" [
 export def "tagmanager-accounts-containers-environments-reauthorize" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2664,7 +2654,7 @@ export def "tagmanager-accounts-containers-environments-reauthorize" [
   --workspace-id: string # Represents a link to a quick preview of a workspace.
 ]: any -> record<accountId: string, authorizationCode: string, authorizationTimestamp: string, containerId: string, containerVersionId: string, description: string, enableDebug: bool, environmentId: string, fingerprint: string, name: string, path: string, tagManagerUrl: string, type: string, url: string, workspaceId: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -2699,8 +2689,8 @@ export def "tagmanager-accounts-containers-environments-reauthorize" [
 export def "tagmanager-accounts-containers-workspaces-resolve-conflict" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2727,7 +2717,7 @@ export def "tagmanager-accounts-containers-workspaces-resolve-conflict" [
   --variable: record # Represents a Google Tag Manager Variable. — shape: {accountId?: string, containerId?: string, disablingTriggerId?: list<string>, enablingTriggerId?: list<string>, fingerprint?: string, formatValue?: record, name?: string, notes?: string, parameter?: list, parentFolderId?: string, path?: string, scheduleEndMs?: string, scheduleStartMs?: string, tagManagerUrl?: string, type?: string, variableId?: string, workspaceId?: string}
 ]: any -> any {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "fingerprint" $fingerprint "scalar")] | flatten | str join "&"
@@ -2757,8 +2747,8 @@ export def "tagmanager-accounts-containers-workspaces-resolve-conflict" [
 export def "tagmanager-accounts-containers-workspaces-zones-revert" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2778,7 +2768,7 @@ export def "tagmanager-accounts-containers-workspaces-zones-revert" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --fingerprint: string # When provided, this fingerprint must match the fingerprint of the zone in storage.
 ]: nothing -> record<zone: record<accountId: string, boundary: record<condition: list, customEvaluationTriggerId: list>, childContainer: list<record>, containerId: string, fingerprint: string, name: string, notes: string, path: string, tagManagerUrl: string, typeRestriction: record<enable: bool, whitelistedTypeId: list>, workspaceId: string, zoneId: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "fingerprint" $fingerprint "scalar")] | flatten | str join "&"
@@ -2806,8 +2796,8 @@ export def "tagmanager-accounts-containers-workspaces-zones-revert" [
 export def "tagmanager-accounts-containers-versions-set-latest" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2826,7 +2816,7 @@ export def "tagmanager-accounts-containers-versions-set-latest" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accountId: string, builtInVariable: table<accountId: string, containerId: string, name: string, path: string, type: string, workspaceId: string>, client: table<accountId: string, clientId: string, containerId: string, fingerprint: string, name: string, notes: string, parameter: list, parentFolderId: string, path: string, priority: int, tagManagerUrl: string, type: string, workspaceId: string>, container: record<accountId: string, containerId: string, domainName: list<string>, features: record<supportBuiltInVariables: bool, supportClients: bool, supportEnvironments: bool, supportFolders: bool, supportGtagConfigs: bool, supportTags: bool, supportTemplates: bool, supportTriggers: bool, supportUserPermissions: bool, supportVariables: bool, supportVersions: bool, supportWorkspaces: bool, supportZones: bool>, fingerprint: string, name: string, notes: string, path: string, publicId: string, tagIds: list<string>, tagManagerUrl: string, taggingServerUrls: list<string>, usageContext: list<string>>, containerId: string, containerVersionId: string, customTemplate: table<accountId: string, containerId: string, fingerprint: string, galleryReference: record, name: string, path: string, tagManagerUrl: string, templateData: string, templateId: string, workspaceId: string>, deleted: bool, description: string, fingerprint: string, folder: table<accountId: string, containerId: string, fingerprint: string, folderId: string, name: string, notes: string, path: string, tagManagerUrl: string, workspaceId: string>, gtagConfig: table<accountId: string, containerId: string, fingerprint: string, gtagConfigId: string, parameter: list, path: string, tagManagerUrl: string, type: string, workspaceId: string>, name: string, path: string, tag: table<accountId: string, blockingRuleId: list, blockingTriggerId: list, consentSettings: record, containerId: string, fingerprint: string, firingRuleId: list, firingTriggerId: list, liveOnly: bool, monitoringMetadata: record, monitoringMetadataTagNameKey: string, name: string, notes: string, parameter: list, parentFolderId: string, path: string, paused: bool, priority: record, scheduleEndMs: string, scheduleStartMs: string, setupTag: list, tagFiringOption: string, tagId: string, tagManagerUrl: string, teardownTag: list, type: string, workspaceId: string>, tagManagerUrl: string, trigger: table<accountId: string, autoEventFilter: list, checkValidation: record, containerId: string, continuousTimeMinMilliseconds: record, customEventFilter: list, eventName: record, filter: list, fingerprint: string, horizontalScrollPercentageList: record, interval: record, intervalSeconds: record, limit: record, maxTimerLengthSeconds: record, name: string, notes: string, parameter: list, parentFolderId: string, path: string, selector: record, tagManagerUrl: string, totalTimeMinMilliseconds: record, triggerId: string, type: string, uniqueTriggerId: record, verticalScrollPercentageList: record, visibilitySelector: record, visiblePercentageMax: record, visiblePercentageMin: record, waitForTags: record, waitForTagsTimeout: record, workspaceId: string>, variable: table<accountId: string, containerId: string, disablingTriggerId: list, enablingTriggerId: list, fingerprint: string, formatValue: record, name: string, notes: string, parameter: list, parentFolderId: string, path: string, scheduleEndMs: string, scheduleStartMs: string, tagManagerUrl: string, type: string, variableId: string, workspaceId: string>, zone: table<accountId: string, boundary: record, childContainer: list, containerId: string, fingerprint: string, name: string, notes: string, path: string, tagManagerUrl: string, typeRestriction: record, workspaceId: string, zoneId: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -2854,8 +2844,8 @@ export def "tagmanager-accounts-containers-versions-set-latest" [
 export def "tagmanager-accounts-containers-snippet" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2874,7 +2864,7 @@ export def "tagmanager-accounts-containers-snippet" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<snippet: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -2902,8 +2892,8 @@ export def "tagmanager-accounts-containers-snippet" [
 export def "tagmanager-accounts-containers-workspaces-sync" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2922,7 +2912,7 @@ export def "tagmanager-accounts-containers-workspaces-sync" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<mergeConflict: table<entityInBaseVersion: record, entityInWorkspace: record>, syncStatus: record<mergeConflict: bool, syncError: bool>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -2950,8 +2940,8 @@ export def "tagmanager-accounts-containers-workspaces-sync" [
 export def "tagmanager-accounts-containers-versions-undelete" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2970,7 +2960,7 @@ export def "tagmanager-accounts-containers-versions-undelete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accountId: string, builtInVariable: table<accountId: string, containerId: string, name: string, path: string, type: string, workspaceId: string>, client: table<accountId: string, clientId: string, containerId: string, fingerprint: string, name: string, notes: string, parameter: list, parentFolderId: string, path: string, priority: int, tagManagerUrl: string, type: string, workspaceId: string>, container: record<accountId: string, containerId: string, domainName: list<string>, features: record<supportBuiltInVariables: bool, supportClients: bool, supportEnvironments: bool, supportFolders: bool, supportGtagConfigs: bool, supportTags: bool, supportTemplates: bool, supportTriggers: bool, supportUserPermissions: bool, supportVariables: bool, supportVersions: bool, supportWorkspaces: bool, supportZones: bool>, fingerprint: string, name: string, notes: string, path: string, publicId: string, tagIds: list<string>, tagManagerUrl: string, taggingServerUrls: list<string>, usageContext: list<string>>, containerId: string, containerVersionId: string, customTemplate: table<accountId: string, containerId: string, fingerprint: string, galleryReference: record, name: string, path: string, tagManagerUrl: string, templateData: string, templateId: string, workspaceId: string>, deleted: bool, description: string, fingerprint: string, folder: table<accountId: string, containerId: string, fingerprint: string, folderId: string, name: string, notes: string, path: string, tagManagerUrl: string, workspaceId: string>, gtagConfig: table<accountId: string, containerId: string, fingerprint: string, gtagConfigId: string, parameter: list, path: string, tagManagerUrl: string, type: string, workspaceId: string>, name: string, path: string, tag: table<accountId: string, blockingRuleId: list, blockingTriggerId: list, consentSettings: record, containerId: string, fingerprint: string, firingRuleId: list, firingTriggerId: list, liveOnly: bool, monitoringMetadata: record, monitoringMetadataTagNameKey: string, name: string, notes: string, parameter: list, parentFolderId: string, path: string, paused: bool, priority: record, scheduleEndMs: string, scheduleStartMs: string, setupTag: list, tagFiringOption: string, tagId: string, tagManagerUrl: string, teardownTag: list, type: string, workspaceId: string>, tagManagerUrl: string, trigger: table<accountId: string, autoEventFilter: list, checkValidation: record, containerId: string, continuousTimeMinMilliseconds: record, customEventFilter: list, eventName: record, filter: list, fingerprint: string, horizontalScrollPercentageList: record, interval: record, intervalSeconds: record, limit: record, maxTimerLengthSeconds: record, name: string, notes: string, parameter: list, parentFolderId: string, path: string, selector: record, tagManagerUrl: string, totalTimeMinMilliseconds: record, triggerId: string, type: string, uniqueTriggerId: record, verticalScrollPercentageList: record, visibilitySelector: record, visiblePercentageMax: record, visiblePercentageMin: record, waitForTags: record, waitForTagsTimeout: record, workspaceId: string>, variable: table<accountId: string, containerId: string, disablingTriggerId: list, enablingTriggerId: list, fingerprint: string, formatValue: record, name: string, notes: string, parameter: list, parentFolderId: string, path: string, scheduleEndMs: string, scheduleStartMs: string, tagManagerUrl: string, type: string, variableId: string, workspaceId: string>, zone: table<accountId: string, boundary: record, childContainer: list, containerId: string, fingerprint: string, name: string, notes: string, path: string, tagManagerUrl: string, typeRestriction: record, workspaceId: string, zoneId: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o TAG_MANAGER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o TAG_MANAGER_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"

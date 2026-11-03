@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -153,29 +153,36 @@ export def "get-cancel-job" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --aws-access-key-id: string
-  --action: string
-  --signature-method: string
-  --signature-version: string
-  --timestamp: string
-  --version: string
-  --signature: string
-  --job-id: string
+  --aws-access-key-id: string # required
+  --signature-method: string # required
+  --signature-version: string # required
+  --timestamp: string # required
+  --signature: string # required
+  --job-id: string # required
   --api-version: string
-  --operation: string@operation-completer
-  --action-2: string@action-completer #  (disambiguated-2)
-  --version-2: string@version-completer #  (disambiguated-2)
+  --operation: string@operation-completer # required
+  --action: string@action-completer # required
+  --version: string@version-completer # required
 ]: nothing -> record<Success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "JobId" $job_id "scalar") (serialize-qp "APIVersion" $api_version "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
+  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
+  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
+  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
+  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
+  if ($job_id == null) { error make --unspanned { msg: "required query parameter 'JobId' missing: pass --job-id" } }
+  let operation = ($operation | default "CancelJob")
+  let action = ($action | default "CancelJob")
+  let version = ($version | default "2010-06-01")
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "JobId" $job_id "scalar") (serialize-qp "APIVersion" $api_version "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "JobId": $job_id, "APIVersion": $api_version, "Operation": $operation, "Action": $action_2, "Version": $version_2} | compact)
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "JobId": $job_id, "APIVersion": $api_version, "Operation": $operation, "Action": $action, "Version": $version} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -200,22 +207,28 @@ export def "post-cancel-job" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --aws-access-key-id: string
-  --action: string
-  --signature-method: string
-  --signature-version: string
-  --timestamp: string
-  --version: string
-  --signature: string
-  --operation: string@operation-completer
-  --action-2: string@action-completer #  (disambiguated-2)
-  --version-2: string@version-completer #  (disambiguated-2)
+  --aws-access-key-id: string # required
+  --signature-method: string # required
+  --signature-version: string # required
+  --timestamp: string # required
+  --signature: string # required
+  --operation: string@operation-completer # required
+  --action: string@action-completer # required
+  --version: string@version-completer # required
   --body: any
 ]: any -> record<Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
+  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
+  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
+  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
+  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
+  let operation = ($operation | default "CancelJob")
+  let action = ($action | default "CancelJob")
+  let version = ($version | default "2010-06-01")
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -224,7 +237,7 @@ export def "post-cancel-job" [
   let req = {
     method: "post"
     url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "Operation": $operation, "Action": $action_2, "Version": $version_2} | compact)
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "Operation": $operation, "Action": $action, "Version": $version} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "text/xml"
@@ -249,32 +262,41 @@ export def "get-create-job" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --aws-access-key-id: string
-  --action: string
-  --signature-method: string
-  --signature-version: string
-  --timestamp: string
-  --version: string
-  --signature: string
-  --job-type: string@job-type-completer
-  --manifest: string
+  --aws-access-key-id: string # required
+  --signature-method: string # required
+  --signature-version: string # required
+  --timestamp: string # required
+  --signature: string # required
+  --job-type: string@job-type-completer # required
+  --manifest: string # required
   --manifest-addendum: string
-  --validate-only: oneof<nothing, bool>
+  --validate-only: oneof<nothing, bool> # required
   --api-version: string
-  --operation: string@operation-completer-1
-  --action-2: string@action-completer-1 #  (disambiguated-2)
-  --version-2: string@version-completer #  (disambiguated-2)
+  --operation: string@operation-completer-1 # required
+  --action: string@action-completer-1 # required
+  --version: string@version-completer # required
 ]: nothing -> record<JobId: string, JobType: string, Signature: string, SignatureFileContents: string, WarningMessage: string, ArtifactList: table<Description: string, URL: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "JobType" $job_type "scalar") (serialize-qp "Manifest" $manifest "scalar") (serialize-qp "ManifestAddendum" $manifest_addendum "scalar") (serialize-qp "ValidateOnly" $validate_only "scalar") (serialize-qp "APIVersion" $api_version "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
+  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
+  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
+  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
+  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
+  if ($job_type == null) { error make --unspanned { msg: "required query parameter 'JobType' missing: pass --job-type" } }
+  if ($manifest == null) { error make --unspanned { msg: "required query parameter 'Manifest' missing: pass --manifest" } }
+  if ($validate_only == null) { error make --unspanned { msg: "required query parameter 'ValidateOnly' missing: pass --validate-only" } }
+  let operation = ($operation | default "CreateJob")
+  let action = ($action | default "CreateJob")
+  let version = ($version | default "2010-06-01")
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "JobType" $job_type "scalar") (serialize-qp "Manifest" $manifest "scalar") (serialize-qp "ManifestAddendum" $manifest_addendum "scalar") (serialize-qp "ValidateOnly" $validate_only "scalar") (serialize-qp "APIVersion" $api_version "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "JobType": $job_type, "Manifest": $manifest, "ManifestAddendum": $manifest_addendum, "ValidateOnly": $validate_only, "APIVersion": $api_version, "Operation": $operation, "Action": $action_2, "Version": $version_2} | compact)
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "JobType": $job_type, "Manifest": $manifest, "ManifestAddendum": $manifest_addendum, "ValidateOnly": $validate_only, "APIVersion": $api_version, "Operation": $operation, "Action": $action, "Version": $version} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -299,22 +321,28 @@ export def "post-create-job" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --aws-access-key-id: string
-  --action: string
-  --signature-method: string
-  --signature-version: string
-  --timestamp: string
-  --version: string
-  --signature: string
-  --operation: string@operation-completer-1
-  --action-2: string@action-completer-1 #  (disambiguated-2)
-  --version-2: string@version-completer #  (disambiguated-2)
+  --aws-access-key-id: string # required
+  --signature-method: string # required
+  --signature-version: string # required
+  --timestamp: string # required
+  --signature: string # required
+  --operation: string@operation-completer-1 # required
+  --action: string@action-completer-1 # required
+  --version: string@version-completer # required
   --body: any
 ]: any -> record<JobId: string, JobType: string, Signature: string, SignatureFileContents: string, WarningMessage: string, ArtifactList: table<Description: string, URL: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
+  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
+  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
+  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
+  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
+  let operation = ($operation | default "CreateJob")
+  let action = ($action | default "CreateJob")
+  let version = ($version | default "2010-06-01")
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -323,7 +351,7 @@ export def "post-create-job" [
   let req = {
     method: "post"
     url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "Operation": $operation, "Action": $action_2, "Version": $version_2} | compact)
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "Operation": $operation, "Action": $action, "Version": $version} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "text/xml"
@@ -348,14 +376,12 @@ export def "get-get-shipping-label" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --aws-access-key-id: string
-  --action: string
-  --signature-method: string
-  --signature-version: string
-  --timestamp: string
-  --version: string
-  --signature: string
-  --job-ids: list
+  --aws-access-key-id: string # required
+  --signature-method: string # required
+  --signature-version: string # required
+  --timestamp: string # required
+  --signature: string # required
+  --job-ids: list # required
   --name: string
   --company: string
   --phone-number: string
@@ -367,20 +393,29 @@ export def "get-get-shipping-label" [
   --street2: string
   --street3: string
   --api-version: string
-  --operation: string@operation-completer-2
-  --action-2: string@action-completer-2 #  (disambiguated-2)
-  --version-2: string@version-completer #  (disambiguated-2)
+  --operation: string@operation-completer-2 # required
+  --action: string@action-completer-2 # required
+  --version: string@version-completer # required
 ]: nothing -> record<ShippingLabelURL: string, Warning: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "jobIds" $job_ids "multi") (serialize-qp "name" $name "scalar") (serialize-qp "company" $company "scalar") (serialize-qp "phoneNumber" $phone_number "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "stateOrProvince" $state_or_province "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "postalCode" $postal_code "scalar") (serialize-qp "street1" $street1 "scalar") (serialize-qp "street2" $street2 "scalar") (serialize-qp "street3" $street3 "scalar") (serialize-qp "APIVersion" $api_version "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
+  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
+  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
+  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
+  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
+  if ($job_ids == null) { error make --unspanned { msg: "required query parameter 'jobIds' missing: pass --job-ids" } }
+  let operation = ($operation | default "GetShippingLabel")
+  let action = ($action | default "GetShippingLabel")
+  let version = ($version | default "2010-06-01")
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "jobIds" $job_ids "multi") (serialize-qp "name" $name "scalar") (serialize-qp "company" $company "scalar") (serialize-qp "phoneNumber" $phone_number "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "stateOrProvince" $state_or_province "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "postalCode" $postal_code "scalar") (serialize-qp "street1" $street1 "scalar") (serialize-qp "street2" $street2 "scalar") (serialize-qp "street3" $street3 "scalar") (serialize-qp "APIVersion" $api_version "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "jobIds": $job_ids, "name": $name, "company": $company, "phoneNumber": $phone_number, "country": $country, "stateOrProvince": $state_or_province, "city": $city, "postalCode": $postal_code, "street1": $street1, "street2": $street2, "street3": $street3, "APIVersion": $api_version, "Operation": $operation, "Action": $action_2, "Version": $version_2} | compact)
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "jobIds": $job_ids, "name": $name, "company": $company, "phoneNumber": $phone_number, "country": $country, "stateOrProvince": $state_or_province, "city": $city, "postalCode": $postal_code, "street1": $street1, "street2": $street2, "street3": $street3, "APIVersion": $api_version, "Operation": $operation, "Action": $action, "Version": $version} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -405,22 +440,28 @@ export def "post-get-shipping-label" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --aws-access-key-id: string
-  --action: string
-  --signature-method: string
-  --signature-version: string
-  --timestamp: string
-  --version: string
-  --signature: string
-  --operation: string@operation-completer-2
-  --action-2: string@action-completer-2 #  (disambiguated-2)
-  --version-2: string@version-completer #  (disambiguated-2)
+  --aws-access-key-id: string # required
+  --signature-method: string # required
+  --signature-version: string # required
+  --timestamp: string # required
+  --signature: string # required
+  --operation: string@operation-completer-2 # required
+  --action: string@action-completer-2 # required
+  --version: string@version-completer # required
   --body: any
 ]: any -> record<ShippingLabelURL: string, Warning: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
+  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
+  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
+  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
+  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
+  let operation = ($operation | default "GetShippingLabel")
+  let action = ($action | default "GetShippingLabel")
+  let version = ($version | default "2010-06-01")
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -429,7 +470,7 @@ export def "post-get-shipping-label" [
   let req = {
     method: "post"
     url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "Operation": $operation, "Action": $action_2, "Version": $version_2} | compact)
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "Operation": $operation, "Action": $action, "Version": $version} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "text/xml"
@@ -454,29 +495,36 @@ export def "get-get-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --aws-access-key-id: string
-  --action: string
-  --signature-method: string
-  --signature-version: string
-  --timestamp: string
-  --version: string
-  --signature: string
-  --job-id: string
+  --aws-access-key-id: string # required
+  --signature-method: string # required
+  --signature-version: string # required
+  --timestamp: string # required
+  --signature: string # required
+  --job-id: string # required
   --api-version: string
-  --operation: string@operation-completer-3
-  --action-2: string@action-completer-3 #  (disambiguated-2)
-  --version-2: string@version-completer #  (disambiguated-2)
+  --operation: string@operation-completer-3 # required
+  --action: string@action-completer-3 # required
+  --version: string@version-completer # required
 ]: nothing -> record<JobId: string, JobType: string, LocationCode: string, LocationMessage: string, ProgressCode: string, ProgressMessage: string, Carrier: string, TrackingNumber: string, LogBucket: string, LogKey: string, ErrorCount: int, Signature: string, SignatureFileContents: string, CurrentManifest: string, CreationDate: string, ArtifactList: table<Description: string, URL: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "JobId" $job_id "scalar") (serialize-qp "APIVersion" $api_version "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
+  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
+  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
+  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
+  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
+  if ($job_id == null) { error make --unspanned { msg: "required query parameter 'JobId' missing: pass --job-id" } }
+  let operation = ($operation | default "GetStatus")
+  let action = ($action | default "GetStatus")
+  let version = ($version | default "2010-06-01")
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "JobId" $job_id "scalar") (serialize-qp "APIVersion" $api_version "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "JobId": $job_id, "APIVersion": $api_version, "Operation": $operation, "Action": $action_2, "Version": $version_2} | compact)
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "JobId": $job_id, "APIVersion": $api_version, "Operation": $operation, "Action": $action, "Version": $version} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -501,22 +549,28 @@ export def "post-get-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --aws-access-key-id: string
-  --action: string
-  --signature-method: string
-  --signature-version: string
-  --timestamp: string
-  --version: string
-  --signature: string
-  --operation: string@operation-completer-3
-  --action-2: string@action-completer-3 #  (disambiguated-2)
-  --version-2: string@version-completer #  (disambiguated-2)
+  --aws-access-key-id: string # required
+  --signature-method: string # required
+  --signature-version: string # required
+  --timestamp: string # required
+  --signature: string # required
+  --operation: string@operation-completer-3 # required
+  --action: string@action-completer-3 # required
+  --version: string@version-completer # required
   --body: any
 ]: any -> record<JobId: string, JobType: string, LocationCode: string, LocationMessage: string, ProgressCode: string, ProgressMessage: string, Carrier: string, TrackingNumber: string, LogBucket: string, LogKey: string, ErrorCount: int, Signature: string, SignatureFileContents: string, CurrentManifest: string, CreationDate: string, ArtifactList: table<Description: string, URL: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
+  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
+  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
+  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
+  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
+  let operation = ($operation | default "GetStatus")
+  let action = ($action | default "GetStatus")
+  let version = ($version | default "2010-06-01")
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -525,7 +579,7 @@ export def "post-get-status" [
   let req = {
     method: "post"
     url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "Operation": $operation, "Action": $action_2, "Version": $version_2} | compact)
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "Operation": $operation, "Action": $action, "Version": $version} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "text/xml"
@@ -550,30 +604,36 @@ export def "get-list-jobs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --aws-access-key-id: string
-  --action: string
-  --signature-method: string
-  --signature-version: string
-  --timestamp: string
-  --version: string
-  --signature: string
+  --aws-access-key-id: string # required
+  --signature-method: string # required
+  --signature-version: string # required
+  --timestamp: string # required
+  --signature: string # required
   --max-jobs: int
   --marker: string
   --api-version: string
-  --operation: string@operation-completer-4
-  --action-2: string@action-completer-4 #  (disambiguated-2)
-  --version-2: string@version-completer #  (disambiguated-2)
+  --operation: string@operation-completer-4 # required
+  --action: string@action-completer-4 # required
+  --version: string@version-completer # required
 ]: nothing -> record<Jobs: table<JobId: string, CreationDate: string, IsCanceled: bool, JobType: string>, IsTruncated: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "MaxJobs" $max_jobs "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "APIVersion" $api_version "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
+  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
+  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
+  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
+  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
+  let operation = ($operation | default "ListJobs")
+  let action = ($action | default "ListJobs")
+  let version = ($version | default "2010-06-01")
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "MaxJobs" $max_jobs "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "APIVersion" $api_version "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "MaxJobs": $max_jobs, "Marker": $marker, "APIVersion": $api_version, "Operation": $operation, "Action": $action_2, "Version": $version_2} | compact)
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "MaxJobs": $max_jobs, "Marker": $marker, "APIVersion": $api_version, "Operation": $operation, "Action": $action, "Version": $version} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -598,24 +658,30 @@ export def "post-list-jobs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --aws-access-key-id: string
-  --action: string
-  --signature-method: string
-  --signature-version: string
-  --timestamp: string
-  --version: string
-  --signature: string
+  --aws-access-key-id: string # required
+  --signature-method: string # required
+  --signature-version: string # required
+  --timestamp: string # required
+  --signature: string # required
   --max-jobs: string # Pagination limit
   --marker: string # Pagination token
-  --operation: string@operation-completer-4
-  --action-2: string@action-completer-4 #  (disambiguated-2)
-  --version-2: string@version-completer #  (disambiguated-2)
+  --operation: string@operation-completer-4 # required
+  --action: string@action-completer-4 # required
+  --version: string@version-completer # required
   --body: any
 ]: any -> record<Jobs: table<JobId: string, CreationDate: string, IsCanceled: bool, JobType: string>, IsTruncated: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "MaxJobs" $max_jobs "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
+  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
+  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
+  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
+  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
+  let operation = ($operation | default "ListJobs")
+  let action = ($action | default "ListJobs")
+  let version = ($version | default "2010-06-01")
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "MaxJobs" $max_jobs "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -624,7 +690,7 @@ export def "post-list-jobs" [
   let req = {
     method: "post"
     url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "MaxJobs": $max_jobs, "Marker": $marker, "Operation": $operation, "Action": $action_2, "Version": $version_2} | compact)
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "MaxJobs": $max_jobs, "Marker": $marker, "Operation": $operation, "Action": $action, "Version": $version} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "text/xml"
@@ -649,32 +715,42 @@ export def "get-update-job" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --aws-access-key-id: string
-  --action: string
-  --signature-method: string
-  --signature-version: string
-  --timestamp: string
-  --version: string
-  --signature: string
-  --job-id: string
-  --manifest: string
-  --job-type: string@job-type-completer
-  --validate-only: oneof<nothing, bool>
+  --aws-access-key-id: string # required
+  --signature-method: string # required
+  --signature-version: string # required
+  --timestamp: string # required
+  --signature: string # required
+  --job-id: string # required
+  --manifest: string # required
+  --job-type: string@job-type-completer # required
+  --validate-only: oneof<nothing, bool> # required
   --api-version: string
-  --operation: string@operation-completer-5
-  --action-2: string@action-completer-5 #  (disambiguated-2)
-  --version-2: string@version-completer #  (disambiguated-2)
+  --operation: string@operation-completer-5 # required
+  --action: string@action-completer-5 # required
+  --version: string@version-completer # required
 ]: nothing -> record<Success: bool, WarningMessage: string, ArtifactList: table<Description: string, URL: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "JobId" $job_id "scalar") (serialize-qp "Manifest" $manifest "scalar") (serialize-qp "JobType" $job_type "scalar") (serialize-qp "ValidateOnly" $validate_only "scalar") (serialize-qp "APIVersion" $api_version "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
+  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
+  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
+  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
+  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
+  if ($job_id == null) { error make --unspanned { msg: "required query parameter 'JobId' missing: pass --job-id" } }
+  if ($manifest == null) { error make --unspanned { msg: "required query parameter 'Manifest' missing: pass --manifest" } }
+  if ($job_type == null) { error make --unspanned { msg: "required query parameter 'JobType' missing: pass --job-type" } }
+  if ($validate_only == null) { error make --unspanned { msg: "required query parameter 'ValidateOnly' missing: pass --validate-only" } }
+  let operation = ($operation | default "UpdateJob")
+  let action = ($action | default "UpdateJob")
+  let version = ($version | default "2010-06-01")
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "JobId" $job_id "scalar") (serialize-qp "Manifest" $manifest "scalar") (serialize-qp "JobType" $job_type "scalar") (serialize-qp "ValidateOnly" $validate_only "scalar") (serialize-qp "APIVersion" $api_version "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "JobId": $job_id, "Manifest": $manifest, "JobType": $job_type, "ValidateOnly": $validate_only, "APIVersion": $api_version, "Operation": $operation, "Action": $action_2, "Version": $version_2} | compact)
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "JobId": $job_id, "Manifest": $manifest, "JobType": $job_type, "ValidateOnly": $validate_only, "APIVersion": $api_version, "Operation": $operation, "Action": $action, "Version": $version} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -699,22 +775,28 @@ export def "post-update-job" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --aws-access-key-id: string
-  --action: string
-  --signature-method: string
-  --signature-version: string
-  --timestamp: string
-  --version: string
-  --signature: string
-  --operation: string@operation-completer-5
-  --action-2: string@action-completer-5 #  (disambiguated-2)
-  --version-2: string@version-completer #  (disambiguated-2)
+  --aws-access-key-id: string # required
+  --signature-method: string # required
+  --signature-version: string # required
+  --timestamp: string # required
+  --signature: string # required
+  --operation: string@operation-completer-5 # required
+  --action: string@action-completer-5 # required
+  --version: string@version-completer # required
   --body: any
 ]: any -> record<Success: bool, WarningMessage: string, ArtifactList: table<Description: string, URL: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
+  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
+  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
+  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
+  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
+  let operation = ($operation | default "UpdateJob")
+  let action = ($action | default "UpdateJob")
+  let version = ($version | default "2010-06-01")
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -723,7 +805,7 @@ export def "post-update-job" [
   let req = {
     method: "post"
     url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "Operation": $operation, "Action": $action_2, "Version": $version_2} | compact)
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "Operation": $operation, "Action": $action, "Version": $version} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "text/xml"

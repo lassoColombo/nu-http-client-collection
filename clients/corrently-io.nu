@@ -910,7 +910,7 @@ export def "prepare-transaction" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --account: string # Stromkonto account address of sender
   --signature: string # Signature per Stromkonto setting (might be simple email confirmation link)
-  --body-to: string # Stromkonto account address of reciever
+  --to: string # Stromkonto account address of reciever
   --value: int # Amount to transfer (in Watthours for electricity, or pcs for trees)
   --variation: string@variation-completer
 ]: any -> any {
@@ -918,7 +918,7 @@ export def "prepare-transaction" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/stromkonto/prepareTransaction" $auth.query)
-  let req_body = {"account": $account, "signature": $signature, "to": $body_to, "value": $value, "variation": $variation} | compact
+  let req_body = {"account": $account, "signature": $signature, "to": $to, "value": $value, "variation": $variation} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

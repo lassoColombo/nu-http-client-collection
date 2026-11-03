@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -261,7 +261,7 @@ export def "get-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Job: record<AccelerationSettings: record<Mode: record>, AccelerationStatus: record, Arn: record, BillingTagsSource: record, ClientRequestToken: record, CreatedAt: record, CurrentPhase: record, ErrorCode: record, ErrorMessage: record, HopDestinations: record, Id: record, JobPercentComplete: record, JobTemplate: record, Messages: record<Info: record, Warning: record>, OutputGroupDetails: record, Priority: record, Queue: record, QueueTransitions: record, RetryCount: record, Role: record, Settings: record<AdAvailOffset: record, AvailBlanking: record, Esam: record, ExtendedDataServices: record, Inputs: record, KantarWatermark: record, MotionImageInserter: record, NielsenConfiguration: record, NielsenNonLinearWatermark: record, OutputGroups: record, TimecodeConfig: record, TimedMetadataInsertion: record>, SimulateReservedQueue: record, Status: record, StatusUpdateInterval: record, Timing: record<FinishTime: record, StartTime: record, SubmitTime: record>, UserMetadata: record, Warnings: record>> {
+]: nothing -> record<Job: record<AccelerationSettings: record<Mode: string>, AccelerationStatus: string, Arn: string, BillingTagsSource: string, ClientRequestToken: string, CreatedAt: string, CurrentPhase: string, ErrorCode: int, ErrorMessage: string, HopDestinations: list<record>, Id: string, JobPercentComplete: int, JobTemplate: string, Messages: record<Info: list, Warning: list>, OutputGroupDetails: list<record>, Priority: int, Queue: string, QueueTransitions: list<record>, RetryCount: int, Role: string, Settings: record<AdAvailOffset: int, AvailBlanking: record, Esam: record, ExtendedDataServices: record, Inputs: list, KantarWatermark: record, MotionImageInserter: record, NielsenConfiguration: record, NielsenNonLinearWatermark: record, OutputGroups: list, TimecodeConfig: record, TimedMetadataInsertion: record>, SimulateReservedQueue: string, Status: string, StatusUpdateInterval: string, Timing: record<FinishTime: string, StartTime: string, SubmitTime: string>, UserMetadata: record, Warnings: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -288,9 +288,9 @@ export def "get-job" [
 #
 # POST /2017-08-29/jobs
 # operationId: CreateJob
-# --accelerationSettings shape: {Mode?: any}
-# --hopDestinations item shape: {Priority?: any, Queue?: any, WaitMinutes?: any}
-# --settings shape: {AdAvailOffset?: any, AvailBlanking?: any, Esam?: any, ExtendedDataServices?: any, Inputs?: any, KantarWatermark?: any, MotionImageInserter?: any, NielsenConfiguration?: any, NielsenNonLinearWatermark?: any, OutputGroups?: any, TimecodeConfig?: any, TimedMetadataInsertion?: any}
+# --accelerationSettings shape: {Mode?: "DISABLED"|"ENABLED"|"PREFERRED"}
+# --hopDestinations item shape: {Priority?: int, Queue?: string, WaitMinutes?: int}
+# --settings shape: {AdAvailOffset?: int, AvailBlanking?: record, Esam?: record, ExtendedDataServices?: record, Inputs?: list, KantarWatermark?: record, MotionImageInserter?: record, NielsenConfiguration?: record, NielsenNonLinearWatermark?: record, OutputGroups?: list, TimecodeConfig?: record, TimedMetadataInsertion?: record}
 export def "create-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -308,20 +308,20 @@ export def "create-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --acceleration-settings: record # Accelerated transcoding can significantly speed up jobs with long, visually complex content. — shape: {Mode?: any}
+  --acceleration-settings: record # Accelerated transcoding can significantly speed up jobs with long, visually complex content. — shape: {Mode?: "DISABLED"|"ENABLED"|"PREFERRED"}
   --billing-tags-source: string@billing-tags-source-completer # The tag type that AWS Billing and Cost Management will use to sort your AWS Elemental MediaConvert costs on any billing report that you set up.
   --client-request-token: string # Prevent duplicate jobs from being created and ensure idempotency for your requests. A client request token can be any string that includes up to 64 ASCII characters. If you reuse a client request token within one minute of a successful request, the API returns the job details of the original request instead. For more information see https://docs.aws.amazon.com/mediaconvert/latest/apireference/idempotency.html.
-  --hop-destinations: list # Optional. Use queue hopping to avoid overly long waits in the backlog of the queue that you submit your job to. Specify an alternate queue and the maximum time that your job will wait in the initial queue before hopping. For more information about this feature, see the AWS Elemental MediaConvert User Guide. — item shape: {Priority?: any, Queue?: any, WaitMinutes?: any}
+  --hop-destinations: list # Optional. Use queue hopping to avoid overly long waits in the backlog of the queue that you submit your job to. Specify an alternate queue and the maximum time that your job will wait in the initial queue before hopping. For more information about this feature, see the AWS Elemental MediaConvert User Guide. — item shape: {Priority?: int, Queue?: string, WaitMinutes?: int}
   --job-template: string # Optional. When you create a job, you can either specify a job template or specify the transcoding settings individually.
   --priority: int # Optional. Specify the relative priority for this job. In any given queue, the service begins processing the job with the highest value first. When more than one job has the same priority, the service begins processing the job that you submitted first. If you don't specify a priority, the service uses the default value 0.
   --queue: string # Optional. When you create a job, you can specify a queue to send it to. If you don't specify, the job will go to the default queue. For more about queues, see the User Guide topic at https://docs.aws.amazon.com/mediaconvert/latest/ug/what-is.html.
   role: string # Required. The IAM role you use for creating this job. For details about permissions, see the User Guide topic at the User Guide at https://docs.aws.amazon.com/mediaconvert/latest/ug/iam-role.html.
-  settings: record # JobSettings contains all the transcode settings for a job. — shape: {AdAvailOffset?: any, AvailBlanking?: any, Esam?: any, ExtendedDataServices?: any, Inputs?: any, KantarWatermark?: any, MotionImageInserter?: any, NielsenConfiguration?: any, NielsenNonLinearWatermark?: any, OutputGroups?: any, TimecodeConfig?: any, TimedMetadataInsertion?: any}
+  settings: record # JobSettings contains all the transcode settings for a job. — shape: {AdAvailOffset?: int, AvailBlanking?: record, Esam?: record, ExtendedDataServices?: record, Inputs?: list, KantarWatermark?: record, MotionImageInserter?: record, NielsenConfiguration?: record, NielsenNonLinearWatermark?: record, OutputGroups?: list, TimecodeConfig?: record, TimedMetadataInsertion?: record}
   --simulate-reserved-queue: string@simulate-reserved-queue-completer # Enable this setting when you run a test job to estimate how many reserved transcoding slots (RTS) you need. When this is enabled, MediaConvert runs your job from an on-demand queue with similar performance to what you will see with one RTS in a reserved queue. This setting is disabled by default.
   --status-update-interval: string@status-update-interval-completer # Specify how often MediaConvert sends STATUS_UPDATE events to Amazon CloudWatch Events. Set the interval, in seconds, between status updates. MediaConvert sends an update at this interval from the time the service begins processing your job to the time it completes the transcode or encounters an error.
   --tags: record # Optional. The tags that you want to add to the resource. You can tag resources with a key-value pair or with only a key. Use standard AWS tags on your job for automatic integration with AWS services and for custom integrations and workflows.
   --user-metadata: record # Optional. User-defined metadata that you want to associate with an MediaConvert job. You specify metadata in key/value pairs. Use only for existing integrations or workflows that rely on job metadata tags. Otherwise, we recommend that you use standard AWS tags.
-]: any -> record<Job: record<AccelerationSettings: record<Mode: record>, AccelerationStatus: record, Arn: record, BillingTagsSource: record, ClientRequestToken: record, CreatedAt: record, CurrentPhase: record, ErrorCode: record, ErrorMessage: record, HopDestinations: record, Id: record, JobPercentComplete: record, JobTemplate: record, Messages: record<Info: record, Warning: record>, OutputGroupDetails: record, Priority: record, Queue: record, QueueTransitions: record, RetryCount: record, Role: record, Settings: record<AdAvailOffset: record, AvailBlanking: record, Esam: record, ExtendedDataServices: record, Inputs: record, KantarWatermark: record, MotionImageInserter: record, NielsenConfiguration: record, NielsenNonLinearWatermark: record, OutputGroups: record, TimecodeConfig: record, TimedMetadataInsertion: record>, SimulateReservedQueue: record, Status: record, StatusUpdateInterval: record, Timing: record<FinishTime: record, StartTime: record, SubmitTime: record>, UserMetadata: record, Warnings: record>> {
+]: any -> record<Job: record<AccelerationSettings: record<Mode: string>, AccelerationStatus: string, Arn: string, BillingTagsSource: string, ClientRequestToken: string, CreatedAt: string, CurrentPhase: string, ErrorCode: int, ErrorMessage: string, HopDestinations: list<record>, Id: string, JobPercentComplete: int, JobTemplate: string, Messages: record<Info: list, Warning: list>, OutputGroupDetails: list<record>, Priority: int, Queue: string, QueueTransitions: list<record>, RetryCount: int, Role: string, Settings: record<AdAvailOffset: int, AvailBlanking: record, Esam: record, ExtendedDataServices: record, Inputs: list, KantarWatermark: record, MotionImageInserter: record, NielsenConfiguration: record, NielsenNonLinearWatermark: record, OutputGroups: list, TimecodeConfig: record, TimedMetadataInsertion: record>, SimulateReservedQueue: string, Status: string, StatusUpdateInterval: string, Timing: record<FinishTime: string, StartTime: string, SubmitTime: string>, UserMetadata: record, Warnings: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -374,7 +374,7 @@ export def "list-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Jobs: record, NextToken: record> {
+]: nothing -> record<Jobs: table<AccelerationSettings: record, AccelerationStatus: string, Arn: string, BillingTagsSource: string, ClientRequestToken: string, CreatedAt: string, CurrentPhase: string, ErrorCode: int, ErrorMessage: string, HopDestinations: list, Id: string, JobPercentComplete: int, JobTemplate: string, Messages: record, OutputGroupDetails: list, Priority: int, Queue: string, QueueTransitions: list, RetryCount: int, Role: string, Settings: record, SimulateReservedQueue: string, Status: string, StatusUpdateInterval: string, Timing: record, UserMetadata: record, Warnings: list>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "queue" $queue "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -401,9 +401,9 @@ export def "list-jobs" [
 #
 # POST /2017-08-29/jobTemplates
 # operationId: CreateJobTemplate
-# --accelerationSettings shape: {Mode?: any}
-# --hopDestinations item shape: {Priority?: any, Queue?: any, WaitMinutes?: any}
-# --settings shape: {AdAvailOffset?: any, AvailBlanking?: any, Esam?: any, ExtendedDataServices?: any, Inputs?: any, KantarWatermark?: any, MotionImageInserter?: any, NielsenConfiguration?: any, NielsenNonLinearWatermark?: any, OutputGroups?: any, TimecodeConfig?: any, TimedMetadataInsertion?: any}
+# --accelerationSettings shape: {Mode?: "DISABLED"|"ENABLED"|"PREFERRED"}
+# --hopDestinations item shape: {Priority?: int, Queue?: string, WaitMinutes?: int}
+# --settings shape: {AdAvailOffset?: int, AvailBlanking?: record, Esam?: record, ExtendedDataServices?: record, Inputs?: list, KantarWatermark?: record, MotionImageInserter?: record, NielsenConfiguration?: record, NielsenNonLinearWatermark?: record, OutputGroups?: list, TimecodeConfig?: record, TimedMetadataInsertion?: record}
 export def "create-job-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -421,17 +421,17 @@ export def "create-job-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --acceleration-settings: record # Accelerated transcoding can significantly speed up jobs with long, visually complex content. — shape: {Mode?: any}
+  --acceleration-settings: record # Accelerated transcoding can significantly speed up jobs with long, visually complex content. — shape: {Mode?: "DISABLED"|"ENABLED"|"PREFERRED"}
   --category: string # Optional. A category for the job template you are creating
   --description: string # Optional. A description of the job template you are creating.
-  --hop-destinations: list # Optional. Use queue hopping to avoid overly long waits in the backlog of the queue that you submit your job to. Specify an alternate queue and the maximum time that your job will wait in the initial queue before hopping. For more information about this feature, see the AWS Elemental MediaConvert User Guide. — item shape: {Priority?: any, Queue?: any, WaitMinutes?: any}
+  --hop-destinations: list # Optional. Use queue hopping to avoid overly long waits in the backlog of the queue that you submit your job to. Specify an alternate queue and the maximum time that your job will wait in the initial queue before hopping. For more information about this feature, see the AWS Elemental MediaConvert User Guide. — item shape: {Priority?: int, Queue?: string, WaitMinutes?: int}
   name: string # The name of the job template you are creating.
   --priority: int # Specify the relative priority for this job. In any given queue, the service begins processing the job with the highest value first. When more than one job has the same priority, the service begins processing the job that you submitted first. If you don't specify a priority, the service uses the default value 0.
   --queue: string # Optional. The queue that jobs created from this template are assigned to. If you don't specify this, jobs will go to the default queue.
-  settings: record # JobTemplateSettings contains all the transcode settings saved in the template that will be applied to jobs created from it. — shape: {AdAvailOffset?: any, AvailBlanking?: any, Esam?: any, ExtendedDataServices?: any, Inputs?: any, KantarWatermark?: any, MotionImageInserter?: any, NielsenConfiguration?: any, NielsenNonLinearWatermark?: any, OutputGroups?: any, TimecodeConfig?: any, TimedMetadataInsertion?: any}
+  settings: record # JobTemplateSettings contains all the transcode settings saved in the template that will be applied to jobs created from it. — shape: {AdAvailOffset?: int, AvailBlanking?: record, Esam?: record, ExtendedDataServices?: record, Inputs?: list, KantarWatermark?: record, MotionImageInserter?: record, NielsenConfiguration?: record, NielsenNonLinearWatermark?: record, OutputGroups?: list, TimecodeConfig?: record, TimedMetadataInsertion?: record}
   --status-update-interval: string@status-update-interval-completer # Specify how often MediaConvert sends STATUS_UPDATE events to Amazon CloudWatch Events. Set the interval, in seconds, between status updates. MediaConvert sends an update at this interval from the time the service begins processing your job to the time it completes the transcode or encounters an error.
   --tags: record # The tags that you want to add to the resource. You can tag resources with a key-value pair or with only a key.
-]: any -> record<JobTemplate: record<AccelerationSettings: record<Mode: record>, Arn: record, Category: record, CreatedAt: record, Description: record, HopDestinations: record, LastUpdated: record, Name: record, Priority: record, Queue: record, Settings: record<AdAvailOffset: record, AvailBlanking: record, Esam: record, ExtendedDataServices: record, Inputs: record, KantarWatermark: record, MotionImageInserter: record, NielsenConfiguration: record, NielsenNonLinearWatermark: record, OutputGroups: record, TimecodeConfig: record, TimedMetadataInsertion: record>, StatusUpdateInterval: record, Type: record>> {
+]: any -> record<JobTemplate: record<AccelerationSettings: record<Mode: string>, Arn: string, Category: string, CreatedAt: string, Description: string, HopDestinations: list<record>, LastUpdated: string, Name: string, Priority: int, Queue: string, Settings: record<AdAvailOffset: int, AvailBlanking: record, Esam: record, ExtendedDataServices: record, Inputs: list, KantarWatermark: record, MotionImageInserter: record, NielsenConfiguration: record, NielsenNonLinearWatermark: record, OutputGroups: list, TimecodeConfig: record, TimedMetadataInsertion: record>, StatusUpdateInterval: string, Type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -484,7 +484,7 @@ export def "list-job-templates" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<JobTemplates: record, NextToken: record> {
+]: nothing -> record<JobTemplates: table<AccelerationSettings: record, Arn: string, Category: string, CreatedAt: string, Description: string, HopDestinations: list, LastUpdated: string, Name: string, Priority: int, Queue: string, Settings: record, StatusUpdateInterval: string, Type: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "category" $category "scalar") (serialize-qp "listBy" $list_by "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -511,7 +511,7 @@ export def "list-job-templates" [
 #
 # POST /2017-08-29/presets
 # operationId: CreatePreset
-# --settings shape: {AudioDescriptions?: any, CaptionDescriptions?: any, ContainerSettings?: any, VideoDescription?: any}
+# --settings shape: {AudioDescriptions?: list, CaptionDescriptions?: list, ContainerSettings?: record, VideoDescription?: record}
 export def "create-preset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -532,9 +532,9 @@ export def "create-preset" [
   --category: string # Optional. A category for the preset you are creating.
   --description: string # Optional. A description of the preset you are creating.
   name: string # The name of the preset you are creating.
-  settings: record # Settings for preset — shape: {AudioDescriptions?: any, CaptionDescriptions?: any, ContainerSettings?: any, VideoDescription?: any}
+  settings: record # Settings for preset — shape: {AudioDescriptions?: list, CaptionDescriptions?: list, ContainerSettings?: record, VideoDescription?: record}
   --tags: record # The tags that you want to add to the resource. You can tag resources with a key-value pair or with only a key.
-]: any -> record<Preset: record<Arn: record, Category: record, CreatedAt: record, Description: record, LastUpdated: record, Name: record, Settings: record<AudioDescriptions: record, CaptionDescriptions: record, ContainerSettings: record, VideoDescription: record>, Type: record>> {
+]: any -> record<Preset: record<Arn: string, Category: string, CreatedAt: string, Description: string, LastUpdated: string, Name: string, Settings: record<AudioDescriptions: list, CaptionDescriptions: list, ContainerSettings: record, VideoDescription: record>, Type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -587,7 +587,7 @@ export def "list-presets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: record, Presets: record> {
+]: nothing -> record<NextToken: string, Presets: table<Arn: string, Category: string, CreatedAt: string, Description: string, LastUpdated: string, Name: string, Settings: record, Type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "category" $category "scalar") (serialize-qp "listBy" $list_by "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -614,7 +614,7 @@ export def "list-presets" [
 #
 # POST /2017-08-29/queues
 # operationId: CreateQueue
-# --reservationPlanSettings shape: {Commitment?: any, RenewalType?: any, ReservedSlots?: any}
+# --reservationPlanSettings shape: {Commitment?: "ONE_YEAR", RenewalType?: "AUTO_RENEW"|"EXPIRE", ReservedSlots?: int}
 export def "create-queue" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -635,10 +635,10 @@ export def "create-queue" [
   --description: string # Optional. A description of the queue that you are creating.
   name: string # The name of the queue that you are creating.
   --pricing-plan: string@pricing-plan-completer # Specifies whether the pricing plan for the queue is on-demand or reserved. For on-demand, you pay per minute, billed in increments of .01 minute. For reserved, you pay for the transcoding capacity of the entire queue, regardless of how much or how little you use it. Reserved pricing requires a 12-month commitment.
-  --reservation-plan-settings: record # Details about the pricing plan for your reserved queue. Required for reserved queues and not applicable to on-demand queues. — shape: {Commitment?: any, RenewalType?: any, ReservedSlots?: any}
+  --reservation-plan-settings: record # Details about the pricing plan for your reserved queue. Required for reserved queues and not applicable to on-demand queues. — shape: {Commitment?: "ONE_YEAR", RenewalType?: "AUTO_RENEW"|"EXPIRE", ReservedSlots?: int}
   --status: string@status-completer-1 # Queues can be ACTIVE or PAUSED. If you pause a queue, jobs in that queue won't begin. Jobs that are running when you pause a queue continue to run until they finish or result in an error.
   --tags: record # The tags that you want to add to the resource. You can tag resources with a key-value pair or with only a key.
-]: any -> record<Queue: record<Arn: record, CreatedAt: record, Description: record, LastUpdated: record, Name: record, PricingPlan: record, ProgressingJobsCount: record, ReservationPlan: record<Commitment: record, ExpiresAt: record, PurchasedAt: record, RenewalType: record, ReservedSlots: record, Status: record>, Status: record, SubmittedJobsCount: record, Type: record>> {
+]: any -> record<Queue: record<Arn: string, CreatedAt: string, Description: string, LastUpdated: string, Name: string, PricingPlan: string, ProgressingJobsCount: int, ReservationPlan: record<Commitment: string, ExpiresAt: string, PurchasedAt: string, RenewalType: string, ReservedSlots: int, Status: string>, Status: string, SubmittedJobsCount: int, Type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -690,7 +690,7 @@ export def "list-queues" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: record, Queues: record> {
+]: nothing -> record<NextToken: string, Queues: table<Arn: string, CreatedAt: string, Description: string, LastUpdated: string, Name: string, PricingPlan: string, ProgressingJobsCount: int, ReservationPlan: record, Status: string, SubmittedJobsCount: int, Type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "listBy" $list_by "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -780,7 +780,7 @@ export def "get-job-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<JobTemplate: record<AccelerationSettings: record<Mode: record>, Arn: record, Category: record, CreatedAt: record, Description: record, HopDestinations: record, LastUpdated: record, Name: record, Priority: record, Queue: record, Settings: record<AdAvailOffset: record, AvailBlanking: record, Esam: record, ExtendedDataServices: record, Inputs: record, KantarWatermark: record, MotionImageInserter: record, NielsenConfiguration: record, NielsenNonLinearWatermark: record, OutputGroups: record, TimecodeConfig: record, TimedMetadataInsertion: record>, StatusUpdateInterval: record, Type: record>> {
+]: nothing -> record<JobTemplate: record<AccelerationSettings: record<Mode: string>, Arn: string, Category: string, CreatedAt: string, Description: string, HopDestinations: list<record>, LastUpdated: string, Name: string, Priority: int, Queue: string, Settings: record<AdAvailOffset: int, AvailBlanking: record, Esam: record, ExtendedDataServices: record, Inputs: list, KantarWatermark: record, MotionImageInserter: record, NielsenConfiguration: record, NielsenNonLinearWatermark: record, OutputGroups: list, TimecodeConfig: record, TimedMetadataInsertion: record>, StatusUpdateInterval: string, Type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -807,9 +807,9 @@ export def "get-job-template" [
 #
 # PUT /2017-08-29/jobTemplates/{name}
 # operationId: UpdateJobTemplate
-# --accelerationSettings shape: {Mode?: any}
-# --hopDestinations item shape: {Priority?: any, Queue?: any, WaitMinutes?: any}
-# --settings shape: {AdAvailOffset?: any, AvailBlanking?: any, Esam?: any, ExtendedDataServices?: any, Inputs?: any, KantarWatermark?: any, MotionImageInserter?: any, NielsenConfiguration?: any, NielsenNonLinearWatermark?: any, OutputGroups?: any, TimecodeConfig?: any, TimedMetadataInsertion?: any}
+# --accelerationSettings shape: {Mode?: "DISABLED"|"ENABLED"|"PREFERRED"}
+# --hopDestinations item shape: {Priority?: int, Queue?: string, WaitMinutes?: int}
+# --settings shape: {AdAvailOffset?: int, AvailBlanking?: record, Esam?: record, ExtendedDataServices?: record, Inputs?: list, KantarWatermark?: record, MotionImageInserter?: record, NielsenConfiguration?: record, NielsenNonLinearWatermark?: record, OutputGroups?: list, TimecodeConfig?: record, TimedMetadataInsertion?: record}
 export def "update-job-template" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -828,15 +828,15 @@ export def "update-job-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --acceleration-settings: record # Accelerated transcoding can significantly speed up jobs with long, visually complex content. — shape: {Mode?: any}
+  --acceleration-settings: record # Accelerated transcoding can significantly speed up jobs with long, visually complex content. — shape: {Mode?: "DISABLED"|"ENABLED"|"PREFERRED"}
   --category: string # The new category for the job template, if you are changing it.
   --description: string # The new description for the job template, if you are changing it.
-  --hop-destinations: list # Optional list of hop destinations. — item shape: {Priority?: any, Queue?: any, WaitMinutes?: any}
+  --hop-destinations: list # Optional list of hop destinations. — item shape: {Priority?: int, Queue?: string, WaitMinutes?: int}
   --priority: int # Specify the relative priority for this job. In any given queue, the service begins processing the job with the highest value first. When more than one job has the same priority, the service begins processing the job that you submitted first. If you don't specify a priority, the service uses the default value 0.
   --queue: string # The new queue for the job template, if you are changing it.
-  --settings: record # JobTemplateSettings contains all the transcode settings saved in the template that will be applied to jobs created from it. — shape: {AdAvailOffset?: any, AvailBlanking?: any, Esam?: any, ExtendedDataServices?: any, Inputs?: any, KantarWatermark?: any, MotionImageInserter?: any, NielsenConfiguration?: any, NielsenNonLinearWatermark?: any, OutputGroups?: any, TimecodeConfig?: any, TimedMetadataInsertion?: any}
+  --settings: record # JobTemplateSettings contains all the transcode settings saved in the template that will be applied to jobs created from it. — shape: {AdAvailOffset?: int, AvailBlanking?: record, Esam?: record, ExtendedDataServices?: record, Inputs?: list, KantarWatermark?: record, MotionImageInserter?: record, NielsenConfiguration?: record, NielsenNonLinearWatermark?: record, OutputGroups?: list, TimecodeConfig?: record, TimedMetadataInsertion?: record}
   --status-update-interval: string@status-update-interval-completer # Specify how often MediaConvert sends STATUS_UPDATE events to Amazon CloudWatch Events. Set the interval, in seconds, between status updates. MediaConvert sends an update at this interval from the time the service begins processing your job to the time it completes the transcode or encounters an error.
-]: any -> record<JobTemplate: record<AccelerationSettings: record<Mode: record>, Arn: record, Category: record, CreatedAt: record, Description: record, HopDestinations: record, LastUpdated: record, Name: record, Priority: record, Queue: record, Settings: record<AdAvailOffset: record, AvailBlanking: record, Esam: record, ExtendedDataServices: record, Inputs: record, KantarWatermark: record, MotionImageInserter: record, NielsenConfiguration: record, NielsenNonLinearWatermark: record, OutputGroups: record, TimecodeConfig: record, TimedMetadataInsertion: record>, StatusUpdateInterval: record, Type: record>> {
+]: any -> record<JobTemplate: record<AccelerationSettings: record<Mode: string>, Arn: string, Category: string, CreatedAt: string, Description: string, HopDestinations: list<record>, LastUpdated: string, Name: string, Priority: int, Queue: string, Settings: record<AdAvailOffset: int, AvailBlanking: record, Esam: record, ExtendedDataServices: record, Inputs: list, KantarWatermark: record, MotionImageInserter: record, NielsenConfiguration: record, NielsenNonLinearWatermark: record, OutputGroups: list, TimecodeConfig: record, TimedMetadataInsertion: record>, StatusUpdateInterval: string, Type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -926,7 +926,7 @@ export def "get-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Policy: record<HttpInputs: record, HttpsInputs: record, S3Inputs: record>> {
+]: nothing -> record<Policy: record<HttpInputs: string, HttpsInputs: string, S3Inputs: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2017-08-29/policy" $auth.query)
@@ -952,7 +952,7 @@ export def "get-policy" [
 #
 # PUT /2017-08-29/policy
 # operationId: PutPolicy
-# --policy shape: {HttpInputs?: any, HttpsInputs?: any, S3Inputs?: any}
+# --policy shape: {HttpInputs?: "ALLOWED"|"DISALLOWED", HttpsInputs?: "ALLOWED"|"DISALLOWED", S3Inputs?: "ALLOWED"|"DISALLOWED"}
 export def "put-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -970,8 +970,8 @@ export def "put-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  policy: record # A policy configures behavior that you allow or disallow for your account. For information about MediaConvert policies, see the user guide at http://docs.aws.amazon.com/mediaconvert/latest/ug/what-is.html — shape: {HttpInputs?: any, HttpsInputs?: any, S3Inputs?: any}
-]: any -> record<Policy: record<HttpInputs: record, HttpsInputs: record, S3Inputs: record>> {
+  policy: record # A policy configures behavior that you allow or disallow for your account. For information about MediaConvert policies, see the user guide at http://docs.aws.amazon.com/mediaconvert/latest/ug/what-is.html — shape: {HttpInputs?: "ALLOWED"|"DISALLOWED", HttpsInputs?: "ALLOWED"|"DISALLOWED", S3Inputs?: "ALLOWED"|"DISALLOWED"}
+]: any -> record<Policy: record<HttpInputs: string, HttpsInputs: string, S3Inputs: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1063,7 +1063,7 @@ export def "get-preset" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Preset: record<Arn: record, Category: record, CreatedAt: record, Description: record, LastUpdated: record, Name: record, Settings: record<AudioDescriptions: record, CaptionDescriptions: record, ContainerSettings: record, VideoDescription: record>, Type: record>> {
+]: nothing -> record<Preset: record<Arn: string, Category: string, CreatedAt: string, Description: string, LastUpdated: string, Name: string, Settings: record<AudioDescriptions: list, CaptionDescriptions: list, ContainerSettings: record, VideoDescription: record>, Type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1090,7 +1090,7 @@ export def "get-preset" [
 #
 # PUT /2017-08-29/presets/{name}
 # operationId: UpdatePreset
-# --settings shape: {AudioDescriptions?: any, CaptionDescriptions?: any, ContainerSettings?: any, VideoDescription?: any}
+# --settings shape: {AudioDescriptions?: list, CaptionDescriptions?: list, ContainerSettings?: record, VideoDescription?: record}
 export def "update-preset" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1111,8 +1111,8 @@ export def "update-preset" [
   --x-amz-signed-headers: string
   --category: string # The new category for the preset, if you are changing it.
   --description: string # The new description for the preset, if you are changing it.
-  --settings: record # Settings for preset — shape: {AudioDescriptions?: any, CaptionDescriptions?: any, ContainerSettings?: any, VideoDescription?: any}
-]: any -> record<Preset: record<Arn: record, Category: record, CreatedAt: record, Description: record, LastUpdated: record, Name: record, Settings: record<AudioDescriptions: record, CaptionDescriptions: record, ContainerSettings: record, VideoDescription: record>, Type: record>> {
+  --settings: record # Settings for preset — shape: {AudioDescriptions?: list, CaptionDescriptions?: list, ContainerSettings?: record, VideoDescription?: record}
+]: any -> record<Preset: record<Arn: string, Category: string, CreatedAt: string, Description: string, LastUpdated: string, Name: string, Settings: record<AudioDescriptions: list, CaptionDescriptions: list, ContainerSettings: record, VideoDescription: record>, Type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1205,7 +1205,7 @@ export def "get-queue" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Queue: record<Arn: record, CreatedAt: record, Description: record, LastUpdated: record, Name: record, PricingPlan: record, ProgressingJobsCount: record, ReservationPlan: record<Commitment: record, ExpiresAt: record, PurchasedAt: record, RenewalType: record, ReservedSlots: record, Status: record>, Status: record, SubmittedJobsCount: record, Type: record>> {
+]: nothing -> record<Queue: record<Arn: string, CreatedAt: string, Description: string, LastUpdated: string, Name: string, PricingPlan: string, ProgressingJobsCount: int, ReservationPlan: record<Commitment: string, ExpiresAt: string, PurchasedAt: string, RenewalType: string, ReservedSlots: int, Status: string>, Status: string, SubmittedJobsCount: int, Type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1232,7 +1232,7 @@ export def "get-queue" [
 #
 # PUT /2017-08-29/queues/{name}
 # operationId: UpdateQueue
-# --reservationPlanSettings shape: {Commitment?: any, RenewalType?: any, ReservedSlots?: any}
+# --reservationPlanSettings shape: {Commitment?: "ONE_YEAR", RenewalType?: "AUTO_RENEW"|"EXPIRE", ReservedSlots?: int}
 export def "update-queue" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1252,9 +1252,9 @@ export def "update-queue" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --description: string # The new description for the queue, if you are changing it.
-  --reservation-plan-settings: record # Details about the pricing plan for your reserved queue. Required for reserved queues and not applicable to on-demand queues. — shape: {Commitment?: any, RenewalType?: any, ReservedSlots?: any}
+  --reservation-plan-settings: record # Details about the pricing plan for your reserved queue. Required for reserved queues and not applicable to on-demand queues. — shape: {Commitment?: "ONE_YEAR", RenewalType?: "AUTO_RENEW"|"EXPIRE", ReservedSlots?: int}
   --status: string@status-completer-1 # Queues can be ACTIVE or PAUSED. If you pause a queue, jobs in that queue won't begin. Jobs that are running when you pause a queue continue to run until they finish or result in an error.
-]: any -> record<Queue: record<Arn: record, CreatedAt: record, Description: record, LastUpdated: record, Name: record, PricingPlan: record, ProgressingJobsCount: record, ReservationPlan: record<Commitment: record, ExpiresAt: record, PurchasedAt: record, RenewalType: record, ReservedSlots: record, Status: record>, Status: record, SubmittedJobsCount: record, Type: record>> {
+]: any -> record<Queue: record<Arn: string, CreatedAt: string, Description: string, LastUpdated: string, Name: string, PricingPlan: string, ProgressingJobsCount: int, ReservationPlan: record<Commitment: string, ExpiresAt: string, PurchasedAt: string, RenewalType: string, ReservedSlots: int, Status: string>, Status: string, SubmittedJobsCount: int, Type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1306,7 +1306,7 @@ export def "describe-endpoints" [
   --max-results-body: int # Optional. Max number of endpoints, up to twenty, that will be returned at one time. (body field)
   --mode: string@mode-completer # Optional field, defaults to DEFAULT. Specify DEFAULT for this operation to return your endpoints if any exist, or to create an endpoint for you and return it if one doesn't already exist. Specify GET_ONLY to return your endpoints if any exist, or an empty list if none exist.
   --next-token-body: string # Use this string, provided with the response to a previous request, to request the next batch of endpoints. (body field)
-]: any -> record<Endpoints: record, NextToken: record> {
+]: any -> record<Endpoints: table<Url: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1399,7 +1399,7 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ResourceTags: record<Arn: record, Tags: record>> {
+]: nothing -> record<ResourceTags: record<Arn: string, Tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($arn | is-empty) { error make --unspanned { msg: "path parameter 'arn' must be non-empty" } }

@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-op" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -120,7 +120,7 @@ export def commands []: nothing -> table {
 # Lookup WHOIS information
 #
 # GET /
-export def "get" [
+export def "get-op" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -130,12 +130,14 @@ export def "get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain: string # Domain name for lookup purpose.
-  --key: string # API key.
+  --domain: string # Domain name for lookup purpose. (required)
+  --key: string # API key. (required)
   --format: string # Returns the API response in json (default) or xml format.
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain == null) { error make --unspanned { msg: "required query parameter 'domain' missing: pass --domain" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/html; charset=UTF-8"

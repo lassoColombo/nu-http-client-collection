@@ -96,6 +96,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # Completers for enum parameters
 def federal-completer [] { ["0" "1" "false" "true"] }
 def optional-completer [] { ["0" "1" "false" "true"] }
+def province-id-completer [] { ["AB" "BC" "MB" "NB" "NL" "NS" "NT" "NU" "ON" "PE" "QC" "SK" "YT"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -273,7 +274,7 @@ export def "provinces" [
 # GET /api/v1/provinces/{provinceId}
 # operationId: Province
 export def "province" [
-  province_id: string
+  province_id: string@province-id-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

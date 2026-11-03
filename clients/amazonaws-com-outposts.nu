@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -205,7 +205,7 @@ export def "cancel-order" [
 #
 # POST /orders
 # operationId: CreateOrder
-# --LineItems item shape: {CatalogItemId?: any, Quantity?: any}
+# --LineItems item shape: {CatalogItemId?: string, Quantity?: int}
 export def "create-order" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -224,10 +224,10 @@ export def "create-order" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   outpost_identifier: string # The ID or the Amazon Resource Name (ARN) of the Outpost.
-  line_items: list # The line items that make up the order. — item shape: {CatalogItemId?: any, Quantity?: any}
+  line_items: list # The line items that make up the order. — item shape: {CatalogItemId?: string, Quantity?: int}
   payment_option: string@payment-option-completer # The payment option.
   --payment-term: string@payment-term-completer # The payment terms.
-]: any -> record<Order: record<OutpostId: record, OrderId: record, Status: record, LineItems: record, PaymentOption: record, OrderSubmissionDate: record, OrderFulfilledDate: record, PaymentTerm: record, OrderType: record>> {
+]: any -> record<Order: record<OutpostId: string, OrderId: string, Status: string, LineItems: list<record>, PaymentOption: string, OrderSubmissionDate: string, OrderFulfilledDate: string, PaymentTerm: string, OrderType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -280,7 +280,7 @@ export def "create-outpost" [
   --availability-zone-id: string # The ID of the Availability Zone.
   --tags: record # The tags to apply to the Outpost.
   --supported-hardware-type: string@supported-hardware-type-completer # The type of hardware for this Outpost.
-]: any -> record<Outpost: record<OutpostId: record, OwnerId: string, OutpostArn: string, SiteId: string, Name: string, Description: string, LifeCycleStatus: string, AvailabilityZone: string, AvailabilityZoneId: string, Tags: record, SiteArn: string, SupportedHardwareType: record>> {
+]: any -> record<Outpost: record<OutpostId: string, OwnerId: string, OutpostArn: string, SiteId: string, Name: string, Description: string, LifeCycleStatus: string, AvailabilityZone: string, AvailabilityZoneId: string, Tags: record, SiteArn: string, SupportedHardwareType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -331,7 +331,7 @@ export def "list-outposts" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Outposts: table<OutpostId: record, OwnerId: string, OutpostArn: string, SiteId: string, Name: string, Description: string, LifeCycleStatus: string, AvailabilityZone: string, AvailabilityZoneId: string, Tags: record, SiteArn: string, SupportedHardwareType: record>, NextToken: string> {
+]: nothing -> record<Outposts: table<OutpostId: string, OwnerId: string, OutpostArn: string, SiteId: string, Name: string, Description: string, LifeCycleStatus: string, AvailabilityZone: string, AvailabilityZoneId: string, Tags: record, SiteArn: string, SupportedHardwareType: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "LifeCycleStatusFilter" $life_cycle_status_filter "multi") (serialize-qp "AvailabilityZoneFilter" $availability_zone_filter "multi") (serialize-qp "AvailabilityZoneIdFilter" $availability_zone_id_filter "multi")] | flatten | str join "&"
@@ -358,9 +358,9 @@ export def "list-outposts" [
 #
 # POST /sites
 # operationId: CreateSite
-# --OperatingAddress shape: {ContactName?: any, ContactPhoneNumber?: any, AddressLine1?: any, AddressLine2?: any, AddressLine3?: any, City?: any, StateOrRegion?: any, DistrictOrCounty?: any, PostalCode?: any, CountryCode?: any, Municipality?: any}
-# --ShippingAddress shape: {ContactName?: any, ContactPhoneNumber?: any, AddressLine1?: any, AddressLine2?: any, AddressLine3?: any, City?: any, StateOrRegion?: any, DistrictOrCounty?: any, PostalCode?: any, CountryCode?: any, Municipality?: any}
-# --RackPhysicalProperties shape: {PowerDrawKva?: any, PowerPhase?: any, PowerConnector?: any, PowerFeedDrop?: any, UplinkGbps?: any, UplinkCount?: any, FiberOpticCableType?: any, OpticalStandard?: any, MaximumSupportedWeightLbs?: any}
+# --OperatingAddress shape: {ContactName?: string, ContactPhoneNumber?: string, AddressLine1?: string, AddressLine2?: string, AddressLine3?: string, City?: string, StateOrRegion?: string, DistrictOrCounty?: string, PostalCode?: string, CountryCode?: string, Municipality?: string}
+# --ShippingAddress shape: {ContactName?: string, ContactPhoneNumber?: string, AddressLine1?: string, AddressLine2?: string, AddressLine3?: string, City?: string, StateOrRegion?: string, DistrictOrCounty?: string, PostalCode?: string, CountryCode?: string, Municipality?: string}
+# --RackPhysicalProperties shape: {PowerDrawKva?: "POWER_5_KVA"|"POWER_10_KVA"|"POWER_15_KVA"|"POWER_30_KVA", PowerPhase?: "SINGLE_PHASE"|"THREE_PHASE", PowerConnector?: "L6_30P"|"IEC309"|"AH530P7W"|"AH532P6W", PowerFeedDrop?: "ABOVE_RACK"|"BELOW_RACK", UplinkGbps?: "UPLINK_1G"|"UPLINK_10G"|"UPLINK_40G"|"UPLINK_100G", UplinkCount?: "UPLINK_COUNT_1"|"UPLINK_COUNT_2"|"UPLINK_COUNT_3"|"UPLINK_COUNT_4"|"UPLINK_COUNT_5"|"UPLINK_COUNT_6"|"UPLINK_COUNT_7"|"UPLINK_COUNT_8"|"UPLINK_COUNT_12"|"UPLINK_COUNT_16", ... (3 more fields)}
 export def "create-site" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -382,10 +382,10 @@ export def "create-site" [
   --description: string # The description of the site.
   --notes: string # Additional information that you provide about site access requirements, electrician scheduling, personal protective equipment, or regulation of equipment materials that could affect your installation process.
   --tags: record # The tags to apply to a site.
-  --operating-address: record # Information about an address. — shape: {ContactName?: any, ContactPhoneNumber?: any, AddressLine1?: any, AddressLine2?: any, AddressLine3?: any, City?: any, StateOrRegion?: any, DistrictOrCounty?: any, PostalCode?: any, CountryCode?: any, Municipality?: any}
-  --shipping-address: record # Information about an address. — shape: {ContactName?: any, ContactPhoneNumber?: any, AddressLine1?: any, AddressLine2?: any, AddressLine3?: any, City?: any, StateOrRegion?: any, DistrictOrCounty?: any, PostalCode?: any, CountryCode?: any, Municipality?: any}
-  --rack-physical-properties: record # Information about the physical and logistical details for racks at sites. For more information about hardware requirements for racks, see Network readiness checklist (https://docs.aws.amazon.com/outposts/latest/userguide/outposts-requirements.html#checklist) in the Amazon Web Services Outposts User Guide. — shape: {PowerDrawKva?: any, PowerPhase?: any, PowerConnector?: any, PowerFeedDrop?: any, UplinkGbps?: any, UplinkCount?: any, FiberOpticCableType?: any, OpticalStandard?: any, MaximumSupportedWeightLbs?: any}
-]: any -> record<Site: record<SiteId: string, AccountId: string, Name: string, Description: string, Tags: record, SiteArn: string, Notes: record, OperatingAddressCountryCode: record, OperatingAddressStateOrRegion: record, OperatingAddressCity: record, RackPhysicalProperties: record<PowerDrawKva: record, PowerPhase: record, PowerConnector: record, PowerFeedDrop: record, UplinkGbps: record, UplinkCount: record, FiberOpticCableType: record, OpticalStandard: record, MaximumSupportedWeightLbs: record>>> {
+  --operating-address: record # Information about an address. — shape: {ContactName?: string, ContactPhoneNumber?: string, AddressLine1?: string, AddressLine2?: string, AddressLine3?: string, City?: string, StateOrRegion?: string, DistrictOrCounty?: string, PostalCode?: string, CountryCode?: string, Municipality?: string}
+  --shipping-address: record # Information about an address. — shape: {ContactName?: string, ContactPhoneNumber?: string, AddressLine1?: string, AddressLine2?: string, AddressLine3?: string, City?: string, StateOrRegion?: string, DistrictOrCounty?: string, PostalCode?: string, CountryCode?: string, Municipality?: string}
+  --rack-physical-properties: record # Information about the physical and logistical details for racks at sites. For more information about hardware requirements for racks, see Network readiness checklist (https://docs.aws.amazon.com/outposts/latest/userguide/outposts-requirements.html#checklist) in the Amazon Web Services Outposts User Guide. — shape: {PowerDrawKva?: "POWER_5_KVA"|"POWER_10_KVA"|"POWER_15_KVA"|"POWER_30_KVA", PowerPhase?: "SINGLE_PHASE"|"THREE_PHASE", PowerConnector?: "L6_30P"|"IEC309"|"AH530P7W"|"AH532P6W", PowerFeedDrop?: "ABOVE_RACK"|"BELOW_RACK", UplinkGbps?: "UPLINK_1G"|"UPLINK_10G"|"UPLINK_40G"|"UPLINK_100G", UplinkCount?: "UPLINK_COUNT_1"|"UPLINK_COUNT_2"|"UPLINK_COUNT_3"|"UPLINK_COUNT_4"|"UPLINK_COUNT_5"|"UPLINK_COUNT_6"|"UPLINK_COUNT_7"|"UPLINK_COUNT_8"|"UPLINK_COUNT_12"|"UPLINK_COUNT_16", ... (3 more fields)}
+]: any -> record<Site: record<SiteId: string, AccountId: string, Name: string, Description: string, Tags: record, SiteArn: string, Notes: string, OperatingAddressCountryCode: string, OperatingAddressStateOrRegion: string, OperatingAddressCity: string, RackPhysicalProperties: record<PowerDrawKva: string, PowerPhase: string, PowerConnector: string, PowerFeedDrop: string, UplinkGbps: string, UplinkCount: string, FiberOpticCableType: string, OpticalStandard: string, MaximumSupportedWeightLbs: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -436,7 +436,7 @@ export def "list-sites" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Sites: table<SiteId: string, AccountId: string, Name: string, Description: string, Tags: record, SiteArn: string, Notes: record, OperatingAddressCountryCode: record, OperatingAddressStateOrRegion: record, OperatingAddressCity: record, RackPhysicalProperties: record>, NextToken: string> {
+]: nothing -> record<Sites: table<SiteId: string, AccountId: string, Name: string, Description: string, Tags: record, SiteArn: string, Notes: string, OperatingAddressCountryCode: string, OperatingAddressStateOrRegion: string, OperatingAddressCity: string, RackPhysicalProperties: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "OperatingAddressCountryCodeFilter" $operating_address_country_code_filter "multi") (serialize-qp "OperatingAddressStateOrRegionFilter" $operating_address_state_or_region_filter "multi") (serialize-qp "OperatingAddressCityFilter" $operating_address_city_filter "multi")] | flatten | str join "&"
@@ -526,7 +526,7 @@ export def "get-outpost" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Outpost: record<OutpostId: record, OwnerId: string, OutpostArn: string, SiteId: string, Name: string, Description: string, LifeCycleStatus: string, AvailabilityZone: string, AvailabilityZoneId: string, Tags: record, SiteArn: string, SupportedHardwareType: record>> {
+]: nothing -> record<Outpost: record<OutpostId: string, OwnerId: string, OutpostArn: string, SiteId: string, Name: string, Description: string, LifeCycleStatus: string, AvailabilityZone: string, AvailabilityZoneId: string, Tags: record, SiteArn: string, SupportedHardwareType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($outpost_id | is-empty) { error make --unspanned { msg: "path parameter 'OutpostId' must be non-empty" } }
@@ -574,7 +574,7 @@ export def "update-outpost" [
   --name: string # The name of the Outpost.
   --description: string # The description of the Outpost.
   --supported-hardware-type: string@supported-hardware-type-completer # The type of hardware for this Outpost.
-]: any -> record<Outpost: record<OutpostId: record, OwnerId: string, OutpostArn: string, SiteId: string, Name: string, Description: string, LifeCycleStatus: string, AvailabilityZone: string, AvailabilityZoneId: string, Tags: record, SiteArn: string, SupportedHardwareType: record>> {
+]: any -> record<Outpost: record<OutpostId: string, OwnerId: string, OutpostArn: string, SiteId: string, Name: string, Description: string, LifeCycleStatus: string, AvailabilityZone: string, AvailabilityZoneId: string, Tags: record, SiteArn: string, SupportedHardwareType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -667,7 +667,7 @@ export def "get-site" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Site: record<SiteId: string, AccountId: string, Name: string, Description: string, Tags: record, SiteArn: string, Notes: record, OperatingAddressCountryCode: record, OperatingAddressStateOrRegion: record, OperatingAddressCity: record, RackPhysicalProperties: record<PowerDrawKva: record, PowerPhase: record, PowerConnector: record, PowerFeedDrop: record, UplinkGbps: record, UplinkCount: record, FiberOpticCableType: record, OpticalStandard: record, MaximumSupportedWeightLbs: record>>> {
+]: nothing -> record<Site: record<SiteId: string, AccountId: string, Name: string, Description: string, Tags: record, SiteArn: string, Notes: string, OperatingAddressCountryCode: string, OperatingAddressStateOrRegion: string, OperatingAddressCity: string, RackPhysicalProperties: record<PowerDrawKva: string, PowerPhase: string, PowerConnector: string, PowerFeedDrop: string, UplinkGbps: string, UplinkCount: string, FiberOpticCableType: string, OpticalStandard: string, MaximumSupportedWeightLbs: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($site_id | is-empty) { error make --unspanned { msg: "path parameter 'SiteId' must be non-empty" } }
@@ -715,7 +715,7 @@ export def "update-site" [
   --name: string # The name of the site.
   --description: string # The description of the site.
   --notes: string # Notes about a site.
-]: any -> record<Site: record<SiteId: string, AccountId: string, Name: string, Description: string, Tags: record, SiteArn: string, Notes: record, OperatingAddressCountryCode: record, OperatingAddressStateOrRegion: record, OperatingAddressCity: record, RackPhysicalProperties: record<PowerDrawKva: record, PowerPhase: record, PowerConnector: record, PowerFeedDrop: record, UplinkGbps: record, UplinkCount: record, FiberOpticCableType: record, OpticalStandard: record, MaximumSupportedWeightLbs: record>>> {
+]: any -> record<Site: record<SiteId: string, AccountId: string, Name: string, Description: string, Tags: record, SiteArn: string, Notes: string, OperatingAddressCountryCode: string, OperatingAddressStateOrRegion: string, OperatingAddressCity: string, RackPhysicalProperties: record<PowerDrawKva: string, PowerPhase: string, PowerConnector: string, PowerFeedDrop: string, UplinkGbps: string, UplinkCount: string, FiberOpticCableType: string, OpticalStandard: string, MaximumSupportedWeightLbs: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -763,7 +763,7 @@ export def "get-catalog-item" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CatalogItem: record<CatalogItemId: record, ItemStatus: record, EC2Capacities: record, PowerKva: record, WeightLbs: record, SupportedUplinkGbps: record, SupportedStorage: record>> {
+]: nothing -> record<CatalogItem: record<CatalogItemId: string, ItemStatus: string, EC2Capacities: list<record>, PowerKva: float, WeightLbs: int, SupportedUplinkGbps: list<int>, SupportedStorage: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($catalog_item_id | is-empty) { error make --unspanned { msg: "path parameter 'CatalogItemId' must be non-empty" } }
@@ -808,7 +808,7 @@ export def "get-connection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ConnectionId: record, ConnectionDetails: record<ClientPublicKey: record, ServerPublicKey: record, ServerEndpoint: record, ClientTunnelAddress: record, ServerTunnelAddress: record, AllowedIps: record>> {
+]: nothing -> record<ConnectionId: string, ConnectionDetails: record<ClientPublicKey: string, ServerPublicKey: string, ServerEndpoint: string, ClientTunnelAddress: string, ServerTunnelAddress: string, AllowedIps: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'ConnectionId' must be non-empty" } }
@@ -853,7 +853,7 @@ export def "get-order" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Order: record<OutpostId: record, OrderId: record, Status: record, LineItems: record, PaymentOption: record, OrderSubmissionDate: record, OrderFulfilledDate: record, PaymentTerm: record, OrderType: record>> {
+]: nothing -> record<Order: record<OutpostId: string, OrderId: string, Status: string, LineItems: list<record>, PaymentOption: string, OrderSubmissionDate: string, OrderFulfilledDate: string, PaymentTerm: string, OrderType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'OrderId' must be non-empty" } }
@@ -900,7 +900,7 @@ export def "get-outpost-instance-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<InstanceTypes: table<InstanceType: string>, NextToken: string, OutpostId: record, OutpostArn: string> {
+]: nothing -> record<InstanceTypes: table<InstanceType: string>, NextToken: string, OutpostId: string, OutpostArn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($outpost_id | is-empty) { error make --unspanned { msg: "path parameter 'OutpostId' must be non-empty" } }
@@ -939,7 +939,7 @@ export def "get-site-address" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --address-type: string@address-type-completer # The type of the address you request.
+  --address-type: string@address-type-completer # The type of the address you request. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -947,10 +947,11 @@ export def "get-site-address" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<SiteId: string, AddressType: record, Address: record<ContactName: record, ContactPhoneNumber: record, AddressLine1: record, AddressLine2: record, AddressLine3: record, City: record, StateOrRegion: record, DistrictOrCounty: record, PostalCode: record, CountryCode: record, Municipality: record>> {
+]: nothing -> record<SiteId: string, AddressType: string, Address: record<ContactName: string, ContactPhoneNumber: string, AddressLine1: string, AddressLine2: string, AddressLine3: string, City: string, StateOrRegion: string, DistrictOrCounty: string, PostalCode: string, CountryCode: string, Municipality: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($site_id | is-empty) { error make --unspanned { msg: "path parameter 'SiteId' must be non-empty" } }
+  if ($address_type == null) { error make --unspanned { msg: "required query parameter 'AddressType' missing: pass --address-type" } }
   let qp = [(serialize-qp "AddressType" $address_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({site_id: (encode-path-segment $site_id)} | format pattern "/sites/{site_id}/address") $qp $auth.query)
   let accept_val = "application/json"
@@ -997,7 +998,7 @@ export def "list-assets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Assets: record, NextToken: string> {
+]: nothing -> record<Assets: table<AssetId: string, RackId: string, AssetType: string, ComputeAttributes: record, AssetLocation: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($outpost_id | is-empty) { error make --unspanned { msg: "path parameter 'OutpostId' must be non-empty" } }
@@ -1047,7 +1048,7 @@ export def "list-catalog-items" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CatalogItems: record, NextToken: string> {
+]: nothing -> record<CatalogItems: table<CatalogItemId: string, ItemStatus: string, EC2Capacities: list, PowerKva: float, WeightLbs: int, SupportedUplinkGbps: list, SupportedStorage: list>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "ItemClassFilter" $item_class_filter "multi") (serialize-qp "SupportedStorageFilter" $supported_storage_filter "multi") (serialize-qp "EC2FamilyFilter" $ec2_family_filter "multi")] | flatten | str join "&"
@@ -1094,7 +1095,7 @@ export def "list-orders" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Orders: record, NextToken: string> {
+]: nothing -> record<Orders: table<OutpostId: string, OrderId: string, OrderType: string, Status: string, LineItemCountsByStatus: record, OrderSubmissionDate: string, OrderFulfilledDate: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "OutpostIdentifierFilter" $outpost_identifier_filter "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar")] | flatten | str join "&"
@@ -1236,7 +1237,7 @@ export def "start-connection" [
   asset_id: string # The ID of the Outpost server.
   client_public_key: string # The public key of the client.
   network_interface_device_index: int # The device index of the network interface on the Outpost server.
-]: any -> record<ConnectionId: record, UnderlayIpAddress: record> {
+]: any -> record<ConnectionId: string, UnderlayIpAddress: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1276,7 +1277,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # The tag keys.
+  --tag-keys: list # The tag keys. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1288,6 +1289,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'ResourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1312,7 +1314,7 @@ export def "untag-resource" [
 #
 # PUT /sites/{SiteId}/address
 # operationId: UpdateSiteAddress
-# --Address shape: {ContactName?: any, ContactPhoneNumber?: any, AddressLine1?: any, AddressLine2?: any, AddressLine3?: any, City?: any, StateOrRegion?: any, DistrictOrCounty?: any, PostalCode?: any, CountryCode?: any, Municipality?: any}
+# --Address shape: {ContactName?: string, ContactPhoneNumber?: string, AddressLine1?: string, AddressLine2?: string, AddressLine3?: string, City?: string, StateOrRegion?: string, DistrictOrCounty?: string, PostalCode?: string, CountryCode?: string, Municipality?: string}
 export def "update-site-address" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1332,8 +1334,8 @@ export def "update-site-address" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   address_type: string@address-type-completer # The type of the address.
-  address: record # Information about an address. — shape: {ContactName?: any, ContactPhoneNumber?: any, AddressLine1?: any, AddressLine2?: any, AddressLine3?: any, City?: any, StateOrRegion?: any, DistrictOrCounty?: any, PostalCode?: any, CountryCode?: any, Municipality?: any}
-]: any -> record<AddressType: record, Address: record<ContactName: record, ContactPhoneNumber: record, AddressLine1: record, AddressLine2: record, AddressLine3: record, City: record, StateOrRegion: record, DistrictOrCounty: record, PostalCode: record, CountryCode: record, Municipality: record>> {
+  address: record # Information about an address. — shape: {ContactName?: string, ContactPhoneNumber?: string, AddressLine1?: string, AddressLine2?: string, AddressLine3?: string, City?: string, StateOrRegion?: string, DistrictOrCounty?: string, PostalCode?: string, CountryCode?: string, Municipality?: string}
+]: any -> record<AddressType: string, Address: record<ContactName: string, ContactPhoneNumber: string, AddressLine1: string, AddressLine2: string, AddressLine3: string, City: string, StateOrRegion: string, DistrictOrCounty: string, PostalCode: string, CountryCode: string, Municipality: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1390,7 +1392,7 @@ export def "update-site-rack-physical-properties" [
   --fiber-optic-cable-type: string@fiber-optic-cable-type-completer # The type of fiber that you will use to attach the Outpost to your network.
   --optical-standard: string@optical-standard-completer # The type of optical standard that you will use to attach the Outpost to your network. This field is dependent on uplink speed, fiber type, and distance to the upstream device. For more information about networking requirements for racks, see Network (https://docs.aws.amazon.com/outposts/latest/userguide/outposts-requirements.html#facility-networking) in the Amazon Web Services Outposts User Guide. OPTIC_10GBASE_SR: 10GBASE-SR OPTIC_10GBASE_IR: 10GBASE-IR OPTIC_10GBASE_LR: 10GBASE-LR OPTIC_40GBASE_SR: 40GBASE-SR OPTIC_40GBASE_ESR: 40GBASE-ESR OPTIC_40GBASE_IR4_LR4L: 40GBASE-IR (LR4L) OPTIC_40GBASE_LR4: 40GBASE-LR4 OPTIC_100GBASE_SR4: 100GBASE-SR4 OPTIC_100GBASE_CWDM4: 100GBASE-CWDM4 OPTIC_100GBASE_LR4: 100GBASE-LR4 OPTIC_100G_PSM4_MSA: 100G PSM4 MSA OPTIC_1000BASE_LX: 1000Base-LX OPTIC_1000BASE_SX : 1000Base-SX
   --maximum-supported-weight-lbs: string@maximum-supported-weight-lbs-completer # The maximum rack weight that this site can support. NO_LIMIT is over 2000lbs.
-]: any -> record<Site: record<SiteId: string, AccountId: string, Name: string, Description: string, Tags: record, SiteArn: string, Notes: record, OperatingAddressCountryCode: record, OperatingAddressStateOrRegion: record, OperatingAddressCity: record, RackPhysicalProperties: record<PowerDrawKva: record, PowerPhase: record, PowerConnector: record, PowerFeedDrop: record, UplinkGbps: record, UplinkCount: record, FiberOpticCableType: record, OpticalStandard: record, MaximumSupportedWeightLbs: record>>> {
+]: any -> record<Site: record<SiteId: string, AccountId: string, Name: string, Description: string, Tags: record, SiteArn: string, Notes: string, OperatingAddressCountryCode: string, OperatingAddressStateOrRegion: string, OperatingAddressCity: string, RackPhysicalProperties: record<PowerDrawKva: string, PowerPhase: string, PowerConnector: string, PowerFeedDrop: string, UplinkGbps: string, UplinkCount: string, FiberOpticCableType: string, OpticalStandard: string, MaximumSupportedWeightLbs: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

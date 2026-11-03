@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -97,6 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def x-amz-target-completer [] { ["AWSStepFunctions.CreateActivity"] }
+def type-completer [] { ["EXPRESS" "STANDARD"] }
 def x-amz-target-completer-1 [] { ["AWSStepFunctions.CreateStateMachine"] }
 def x-amz-target-completer-2 [] { ["AWSStepFunctions.DeleteActivity"] }
 def x-amz-target-completer-3 [] { ["AWSStepFunctions.DeleteStateMachine"] }
@@ -108,6 +109,7 @@ def x-amz-target-completer-8 [] { ["AWSStepFunctions.DescribeStateMachineForExec
 def x-amz-target-completer-9 [] { ["AWSStepFunctions.GetActivityTask"] }
 def x-amz-target-completer-10 [] { ["AWSStepFunctions.GetExecutionHistory"] }
 def x-amz-target-completer-11 [] { ["AWSStepFunctions.ListActivities"] }
+def status-filter-completer [] { ["ABORTED" "FAILED" "RUNNING" "SUCCEEDED" "TIMED_OUT"] }
 def x-amz-target-completer-12 [] { ["AWSStepFunctions.ListExecutions"] }
 def x-amz-target-completer-13 [] { ["AWSStepFunctions.ListMapRuns"] }
 def x-amz-target-completer-14 [] { ["AWSStepFunctions.ListStateMachines"] }
@@ -150,6 +152,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateActivity
+# --tags item shape: {key?: string, value?: string}
 export def "create-activity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -167,13 +170,14 @@ export def "create-activity" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  name: any
-  --tags: any
-]: any -> record<activityArn: record, creationDate: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  name: string # The name of the activity to create. This name must be unique for your Amazon Web Services account and region for 90 days. For more information, see Limits Related to State Machine Executions (https://docs.aws.amazon.com/step-functions/latest/dg/limits.html#service-limits-state-machine-executions) in the Step Functions Developer Guide. A name must not contain: white space brackets < > { } [ ] wildcard characters ? * special characters " # % \ ^ | ~ ` $ & , ; : / control characters (U+0000-001F, U+007F-009F) To enable logging with CloudWatch Logs, the name should only contain 0-9, A-Z, a-z, - and _.
+  --tags: list # The list of tags to add to a resource. An array of key-value pairs. For more information, see Using Cost Allocation Tags (https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/cost-alloc-tags.html) in the Amazon Web Services Billing and Cost Management User Guide, and Controlling Access Using IAM Tags (https://docs.aws.amazon.com/IAM/latest/UserGuide/access_iam-tags.html). Tags may only contain Unicode letters, digits, white space, or these symbols: _ . : / = + - @. — item shape: {key?: string, value?: string}
+]: any -> record<activityArn: string, creationDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSStepFunctions.CreateActivity")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -199,6 +203,9 @@ export def "create-activity" [
 #
 # POST /
 # operationId: CreateStateMachine
+# --loggingConfiguration shape: {level?: "ALL"|"ERROR"|"FATAL"|"OFF", includeExecutionData?: bool, destinations?: list}
+# --tags item shape: {key?: string, value?: string}
+# --tracingConfiguration shape: {enabled?: bool}
 export def "create-state-machine" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -216,18 +223,19 @@ export def "create-state-machine" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  name: any
-  definition: any
-  role_arn: any
-  --type: any
-  --logging-configuration: any
-  --tags: any
-  --tracing-configuration: any
-]: any -> record<stateMachineArn: record, creationDate: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  name: string # The name of the state machine. A name must not contain: white space brackets < > { } [ ] wildcard characters ? * special characters " # % \ ^ | ~ ` $ & , ; : / control characters (U+0000-001F, U+007F-009F) To enable logging with CloudWatch Logs, the name should only contain 0-9, A-Z, a-z, - and _.
+  definition: string # The Amazon States Language definition of the state machine. See Amazon States Language (https://docs.aws.amazon.com/step-functions/latest/dg/concepts-amazon-states-language.html). (format: password)
+  role_arn: string # The Amazon Resource Name (ARN) of the IAM role to use for this state machine.
+  --type: string@type-completer # Determines whether a Standard or Express state machine is created. The default is STANDARD. You cannot update the type of a state machine once it has been created.
+  --logging-configuration: record # The LoggingConfiguration data type is used to set CloudWatch Logs options. — shape: {level?: "ALL"|"ERROR"|"FATAL"|"OFF", includeExecutionData?: bool, destinations?: list}
+  --tags: list # Tags to be added when creating a state machine. An array of key-value pairs. For more information, see Using Cost Allocation Tags (https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/cost-alloc-tags.html) in the Amazon Web Services Billing and Cost Management User Guide, and Controlling Access Using IAM Tags (https://docs.aws.amazon.com/IAM/latest/UserGuide/access_iam-tags.html). Tags may only contain Unicode letters, digits, white space, or these symbols: _ . : / = + - @. — item shape: {key?: string, value?: string}
+  --tracing-configuration: record # Selects whether or not the state machine's X-Ray tracing is enabled. Default is false — shape: {enabled?: bool}
+]: any -> record<stateMachineArn: string, creationDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSStepFunctions.CreateStateMachine")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name, "definition": $definition, "roleArn": $role_arn, "type": $type, "loggingConfiguration": $logging_configuration, "tags": $tags, "tracingConfiguration": $tracing_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -270,12 +278,13 @@ export def "delete-activity" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  activity_arn: any
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  activity_arn: string # The Amazon Resource Name (ARN) of the activity to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSStepFunctions.DeleteActivity")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"activityArn": $activity_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -318,12 +327,13 @@ export def "delete-state-machine" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  state_machine_arn: any
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  state_machine_arn: string # The Amazon Resource Name (ARN) of the state machine to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSStepFunctions.DeleteStateMachine")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"stateMachineArn": $state_machine_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -366,12 +376,13 @@ export def "describe-activity" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  activity_arn: any
-]: any -> record<activityArn: record, name: record, creationDate: record> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  activity_arn: string # The Amazon Resource Name (ARN) of the activity to describe.
+]: any -> record<activityArn: string, name: string, creationDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSStepFunctions.DescribeActivity")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"activityArn": $activity_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -414,12 +425,13 @@ export def "describe-execution" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  execution_arn: any
-]: any -> record<executionArn: record, stateMachineArn: record, name: record, status: record, startDate: record, stopDate: record, input: record, inputDetails: record<included: record>, output: record, outputDetails: record<included: record>, traceHeader: record, mapRunArn: record, error: record, cause: record> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  execution_arn: string # The Amazon Resource Name (ARN) of the execution to describe.
+]: any -> record<executionArn: string, stateMachineArn: string, name: string, status: string, startDate: string, stopDate: string, input: string, inputDetails: record<included: bool>, output: string, outputDetails: record<included: bool>, traceHeader: string, mapRunArn: string, error: string, cause: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSStepFunctions.DescribeExecution")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"executionArn": $execution_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -462,12 +474,13 @@ export def "describe-map-run" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  map_run_arn: any
-]: any -> record<mapRunArn: record, executionArn: record, status: record, startDate: record, stopDate: record, maxConcurrency: record, toleratedFailurePercentage: record, toleratedFailureCount: record, itemCounts: record<pending: record, running: record, succeeded: record, failed: record, timedOut: record, aborted: record, total: record, resultsWritten: record>, executionCounts: record<pending: record, running: record, succeeded: record, failed: record, timedOut: record, aborted: record, total: record, resultsWritten: record>> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  map_run_arn: string # The Amazon Resource Name (ARN) that identifies a Map Run.
+]: any -> record<mapRunArn: string, executionArn: string, status: string, startDate: string, stopDate: string, maxConcurrency: int, toleratedFailurePercentage: float, toleratedFailureCount: int, itemCounts: record<pending: int, running: int, succeeded: int, failed: int, timedOut: int, aborted: int, total: int, resultsWritten: int>, executionCounts: record<pending: int, running: int, succeeded: int, failed: int, timedOut: int, aborted: int, total: int, resultsWritten: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSStepFunctions.DescribeMapRun")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"mapRunArn": $map_run_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -510,12 +523,13 @@ export def "describe-state-machine" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  state_machine_arn: any
-]: any -> record<stateMachineArn: record, name: record, status: record, definition: record, roleArn: record, type: record, creationDate: record, loggingConfiguration: record<level: record, includeExecutionData: record, destinations: record>, tracingConfiguration: record<enabled: record>, label: record> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  state_machine_arn: string # The Amazon Resource Name (ARN) of the state machine to describe.
+]: any -> record<stateMachineArn: string, name: string, status: string, definition: string, roleArn: string, type: string, creationDate: string, loggingConfiguration: record<level: string, includeExecutionData: bool, destinations: list<record>>, tracingConfiguration: record<enabled: bool>, label: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSStepFunctions.DescribeStateMachine")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"stateMachineArn": $state_machine_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -558,12 +572,13 @@ export def "describe-state-machine-for-execution" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  execution_arn: any
-]: any -> record<stateMachineArn: record, name: record, definition: record, roleArn: record, updateDate: record, loggingConfiguration: record<level: record, includeExecutionData: record, destinations: record>, tracingConfiguration: record<enabled: record>, mapRunArn: record, label: record> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  execution_arn: string # The Amazon Resource Name (ARN) of the execution you want state machine information for.
+]: any -> record<stateMachineArn: string, name: string, definition: string, roleArn: string, updateDate: string, loggingConfiguration: record<level: string, includeExecutionData: bool, destinations: list<record>>, tracingConfiguration: record<enabled: bool>, mapRunArn: string, label: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSStepFunctions.DescribeStateMachineForExecution")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"executionArn": $execution_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -606,13 +621,14 @@ export def "get-activity-task" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  activity_arn: any
-  --worker-name: any
-]: any -> record<taskToken: record, input: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  activity_arn: string # The Amazon Resource Name (ARN) of the activity to retrieve tasks from (assigned when you create the task using CreateActivity.)
+  --worker-name: string # You can provide an arbitrary name in order to identify the worker that the task is assigned to. This name is used when it is logged in the execution history.
+]: any -> record<taskToken: string, input: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSStepFunctions.GetActivityTask")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"activityArn": $activity_arn, "workerName": $worker_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -657,16 +673,17 @@ export def "get-execution-history" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  execution_arn: any
-  --max-results-body: any #  (body field)
-  --reverse-order: any
-  --next-token-body: any #  (body field)
-  --include-execution-data: any
-]: any -> record<events: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  execution_arn: string # The Amazon Resource Name (ARN) of the execution.
+  --max-results-body: int # The maximum number of results that are returned per call. You can use nextToken to obtain further pages of results. The default is 100 and the maximum allowed page size is 1000. A value of 0 uses the default. This is only an upper limit. The actual number of results returned per call might be fewer than the specified maximum. (body field)
+  --reverse-order: oneof<nothing, bool> # Lists events in descending order of their timeStamp.
+  --next-token-body: string # If nextToken is returned, there are more results available. The value of nextToken is a unique pagination token for each page. Make the call again using the returned token to retrieve the next page. Keep all other arguments unchanged. Each pagination token expires after 24 hours. Using an expired pagination token will return an HTTP 400 InvalidToken error. (body field)
+  --include-execution-data: oneof<nothing, bool> # You can select whether execution data (input or output of a history event) is returned. The default is true.
+]: any -> record<events: table<timestamp: string, type: string, id: int, previousEventId: int, activityFailedEventDetails: record, activityScheduleFailedEventDetails: record, activityScheduledEventDetails: record, activityStartedEventDetails: record, activitySucceededEventDetails: record, activityTimedOutEventDetails: record, taskFailedEventDetails: record, taskScheduledEventDetails: record, taskStartFailedEventDetails: record, taskStartedEventDetails: record, taskSubmitFailedEventDetails: record, taskSubmittedEventDetails: record, taskSucceededEventDetails: record, taskTimedOutEventDetails: record, executionFailedEventDetails: record, executionStartedEventDetails: record, executionSucceededEventDetails: record, executionAbortedEventDetails: record, executionTimedOutEventDetails: record, mapStateStartedEventDetails: record, mapIterationStartedEventDetails: record, mapIterationSucceededEventDetails: record, mapIterationFailedEventDetails: record, mapIterationAbortedEventDetails: record, lambdaFunctionFailedEventDetails: record, lambdaFunctionScheduleFailedEventDetails: record, lambdaFunctionScheduledEventDetails: record, lambdaFunctionStartFailedEventDetails: record, lambdaFunctionSucceededEventDetails: record, lambdaFunctionTimedOutEventDetails: record, stateEnteredEventDetails: record, stateExitedEventDetails: record, mapRunStartedEventDetails: record, mapRunFailedEventDetails: record>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSStepFunctions.GetExecutionHistory")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"executionArn": $execution_arn, "maxResults": $max_results_body, "reverseOrder": $reverse_order, "nextToken": $next_token_body, "includeExecutionData": $include_execution_data} | compact
@@ -712,13 +729,14 @@ export def "list-activities" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<activities: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  --max-results-body: int # The maximum number of results that are returned per call. You can use nextToken to obtain further pages of results. The default is 100 and the maximum allowed page size is 1000. A value of 0 uses the default. This is only an upper limit. The actual number of results returned per call might be fewer than the specified maximum. (body field)
+  --next-token-body: string # If nextToken is returned, there are more results available. The value of nextToken is a unique pagination token for each page. Make the call again using the returned token to retrieve the next page. Keep all other arguments unchanged. Each pagination token expires after 24 hours. Using an expired pagination token will return an HTTP 400 InvalidToken error. (body field)
+]: any -> record<activities: table<activityArn: string, name: string, creationDate: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSStepFunctions.ListActivities")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"maxResults": $max_results_body, "nextToken": $next_token_body} | compact
@@ -764,16 +782,17 @@ export def "list-executions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  --state-machine-arn: any
-  --status-filter: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-  --map-run-arn: any
-]: any -> record<executions: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  --state-machine-arn: string # The Amazon Resource Name (ARN) of the state machine whose executions is listed. You can specify either a mapRunArn or a stateMachineArn, but not both.
+  --status-filter: string@status-filter-completer # If specified, only list the executions whose current execution status matches the given filter.
+  --max-results-body: int # The maximum number of results that are returned per call. You can use nextToken to obtain further pages of results. The default is 100 and the maximum allowed page size is 1000. A value of 0 uses the default. This is only an upper limit. The actual number of results returned per call might be fewer than the specified maximum. (body field)
+  --next-token-body: string # If nextToken is returned, there are more results available. The value of nextToken is a unique pagination token for each page. Make the call again using the returned token to retrieve the next page. Keep all other arguments unchanged. Each pagination token expires after 24 hours. Using an expired pagination token will return an HTTP 400 InvalidToken error. (body field)
+  --map-run-arn: string # The Amazon Resource Name (ARN) of the Map Run that started the child workflow executions. If the mapRunArn field is specified, a list of all of the child workflow executions started by a Map Run is returned. For more information, see Examining Map Run (https://docs.aws.amazon.com/step-functions/latest/dg/concepts-examine-map-run.html) in the Step Functions Developer Guide. You can specify either a mapRunArn or a stateMachineArn, but not both.
+]: any -> record<executions: table<executionArn: string, stateMachineArn: string, name: string, status: string, startDate: string, stopDate: string, mapRunArn: string, itemCount: int>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSStepFunctions.ListExecutions")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"stateMachineArn": $state_machine_arn, "statusFilter": $status_filter, "maxResults": $max_results_body, "nextToken": $next_token_body, "mapRunArn": $map_run_arn} | compact
@@ -819,14 +838,15 @@ export def "list-map-runs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  execution_arn: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<mapRuns: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  execution_arn: string # The Amazon Resource Name (ARN) of the execution for which the Map Runs must be listed.
+  --max-results-body: int # The maximum number of results that are returned per call. You can use nextToken to obtain further pages of results. The default is 100 and the maximum allowed page size is 1000. A value of 0 uses the default. This is only an upper limit. The actual number of results returned per call might be fewer than the specified maximum. (body field)
+  --next-token-body: string # If nextToken is returned, there are more results available. The value of nextToken is a unique pagination token for each page. Make the call again using the returned token to retrieve the next page. Keep all other arguments unchanged. Each pagination token expires after 24 hours. Using an expired pagination token will return an HTTP 400 InvalidToken error. (body field)
+]: any -> record<mapRuns: table<executionArn: string, mapRunArn: string, stateMachineArn: string, startDate: string, stopDate: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSStepFunctions.ListMapRuns")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"executionArn": $execution_arn, "maxResults": $max_results_body, "nextToken": $next_token_body} | compact
@@ -872,13 +892,14 @@ export def "list-state-machines" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<stateMachines: table<stateMachineArn: record, name: record, type: record, creationDate: record>, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  --max-results-body: int # The maximum number of results that are returned per call. You can use nextToken to obtain further pages of results. The default is 100 and the maximum allowed page size is 1000. A value of 0 uses the default. This is only an upper limit. The actual number of results returned per call might be fewer than the specified maximum. (body field)
+  --next-token-body: string # If nextToken is returned, there are more results available. The value of nextToken is a unique pagination token for each page. Make the call again using the returned token to retrieve the next page. Keep all other arguments unchanged. Each pagination token expires after 24 hours. Using an expired pagination token will return an HTTP 400 InvalidToken error. (body field)
+]: any -> record<stateMachines: table<stateMachineArn: string, name: string, type: string, creationDate: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSStepFunctions.ListStateMachines")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"maxResults": $max_results_body, "nextToken": $next_token_body} | compact
@@ -922,12 +943,13 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  resource_arn: any
-]: any -> record<tags: record> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  resource_arn: string # The Amazon Resource Name (ARN) for the Step Functions state machine or activity.
+]: any -> record<tags: table<key: string, value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSStepFunctions.ListTagsForResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceArn": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -970,16 +992,17 @@ export def "send-task-failure" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  task_token: any
-  --body-error: any
-  --cause: any
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  task_token: string # The token that represents this task. Task tokens are generated by Step Functions when tasks are assigned to a worker, or in the context object (https://docs.aws.amazon.com/step-functions/latest/dg/input-output-contextobject.html) when a workflow enters a task state. See GetActivityTaskOutput$taskToken.
+  --error: string # The error code of the failure. (format: password)
+  --cause: string # A more detailed explanation of the cause of the failure. (format: password)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSStepFunctions.SendTaskFailure")
   let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"taskToken": $task_token, "error": $body_error, "cause": $cause} | compact
+  let req_body = {"taskToken": $task_token, "error": $error, "cause": $cause} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1020,12 +1043,13 @@ export def "send-task-heartbeat" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  task_token: any
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  task_token: string # The token that represents this task. Task tokens are generated by Step Functions when tasks are assigned to a worker, or in the context object (https://docs.aws.amazon.com/step-functions/latest/dg/input-output-contextobject.html) when a workflow enters a task state. See GetActivityTaskOutput$taskToken.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSStepFunctions.SendTaskHeartbeat")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"taskToken": $task_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1068,13 +1092,14 @@ export def "send-task-success" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  task_token: any
-  output: any
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  task_token: string # The token that represents this task. Task tokens are generated by Step Functions when tasks are assigned to a worker, or in the context object (https://docs.aws.amazon.com/step-functions/latest/dg/input-output-contextobject.html) when a workflow enters a task state. See GetActivityTaskOutput$taskToken.
+  output: string # The JSON output of the task. Length constraints apply to the payload size, and are expressed as bytes in UTF-8 encoding. (format: password)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSStepFunctions.SendTaskSuccess")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"taskToken": $task_token, "output": $output} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1117,17 +1142,18 @@ export def "start-execution" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  state_machine_arn: any
-  --name: any
-  --input: any
-  --trace-header: any
-]: any -> record<executionArn: record, startDate: record> {
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  state_machine_arn: string # The Amazon Resource Name (ARN) of the state machine to execute.
+  --name: string # The name of the execution. This name must be unique for your Amazon Web Services account, region, and state machine for 90 days. For more information, see Limits Related to State Machine Executions (https://docs.aws.amazon.com/step-functions/latest/dg/limits.html#service-limits-state-machine-executions) in the Step Functions Developer Guide. A name must not contain: white space brackets < > { } [ ] wildcard characters ? * special characters " # % \ ^ | ~ ` $ & , ; : / control characters (U+0000-001F, U+007F-009F) To enable logging with CloudWatch Logs, the name should only contain 0-9, A-Z, a-z, - and _.
+  --body-input: string # The string that contains the JSON input data for the execution, for example: "input": "{\"first_name\" : \"test\"}" If you don't include any JSON input data, you still must include the two braces, for example: "input": "{}" Length constraints apply to the payload size, and are expressed as bytes in UTF-8 encoding. (format: password)
+  --trace-header: string # Passes the X-Ray trace header. The trace header can also be passed in the request payload.
+]: any -> record<executionArn: string, startDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSStepFunctions.StartExecution")
   let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"stateMachineArn": $state_machine_arn, "name": $name, "input": $input, "traceHeader": $trace_header} | compact
+  let req_body = {"stateMachineArn": $state_machine_arn, "name": $name, "input": $body_input, "traceHeader": $trace_header} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1168,17 +1194,18 @@ export def "start-sync-execution" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  state_machine_arn: any
-  --name: any
-  --input: any
-  --trace-header: any
-]: any -> record<executionArn: record, stateMachineArn: record, name: record, startDate: record, stopDate: record, status: record, error: record, cause: record, input: record, inputDetails: record<included: record>, output: record, outputDetails: record<included: record>, traceHeader: record, billingDetails: record<billedMemoryUsedInMB: record, billedDurationInMilliseconds: record>> {
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  state_machine_arn: string # The Amazon Resource Name (ARN) of the state machine to execute.
+  --name: string # The name of the execution.
+  --body-input: string # The string that contains the JSON input data for the execution, for example: "input": "{\"first_name\" : \"test\"}" If you don't include any JSON input data, you still must include the two braces, for example: "input": "{}" Length constraints apply to the payload size, and are expressed as bytes in UTF-8 encoding. (format: password)
+  --trace-header: string # Passes the X-Ray trace header. The trace header can also be passed in the request payload.
+]: any -> record<executionArn: string, stateMachineArn: string, name: string, startDate: string, stopDate: string, status: string, error: string, cause: string, input: string, inputDetails: record<included: bool>, output: string, outputDetails: record<included: bool>, traceHeader: string, billingDetails: record<billedMemoryUsedInMB: int, billedDurationInMilliseconds: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSStepFunctions.StartSyncExecution")
   let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"stateMachineArn": $state_machine_arn, "name": $name, "input": $input, "traceHeader": $trace_header} | compact
+  let req_body = {"stateMachineArn": $state_machine_arn, "name": $name, "input": $body_input, "traceHeader": $trace_header} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1219,16 +1246,17 @@ export def "stop-execution" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  execution_arn: any
-  --body-error: any
-  --cause: any
-]: any -> record<stopDate: record> {
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  execution_arn: string # The Amazon Resource Name (ARN) of the execution to stop.
+  --error: string # The error code of the failure. (format: password)
+  --cause: string # A more detailed explanation of the cause of the failure. (format: password)
+]: any -> record<stopDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSStepFunctions.StopExecution")
   let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"executionArn": $execution_arn, "error": $body_error, "cause": $cause} | compact
+  let req_body = {"executionArn": $execution_arn, "error": $error, "cause": $cause} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1252,6 +1280,7 @@ export def "stop-execution" [
 #
 # POST /
 # operationId: TagResource
+# --tags item shape: {key?: string, value?: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1269,13 +1298,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  resource_arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  resource_arn: string # The Amazon Resource Name (ARN) for the Step Functions state machine or activity.
+  tags: list # The list of tags to add to a resource. Tags may only contain Unicode letters, digits, white space, or these symbols: _ . : / = + - @. — item shape: {key?: string, value?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSStepFunctions.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceArn": $resource_arn, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1318,13 +1348,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  resource_arn: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  resource_arn: string # The Amazon Resource Name (ARN) for the Step Functions state machine or activity.
+  tag_keys: list<string> # The list of tags to remove from the resource.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSStepFunctions.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceArn": $resource_arn, "tagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1367,15 +1398,16 @@ export def "update-map-run" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  map_run_arn: any
-  --max-concurrency: any
-  --tolerated-failure-percentage: any
-  --tolerated-failure-count: any
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  map_run_arn: string # The Amazon Resource Name (ARN) of a Map Run.
+  --max-concurrency: int # The maximum number of child workflow executions that can be specified to run in parallel for the Map Run at the same time.
+  --tolerated-failure-percentage: float # The maximum percentage of failed items before the Map Run fails. (format: float)
+  --tolerated-failure-count: int # The maximum number of failed items before the Map Run fails.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSStepFunctions.UpdateMapRun")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"mapRunArn": $map_run_arn, "maxConcurrency": $max_concurrency, "toleratedFailurePercentage": $tolerated_failure_percentage, "toleratedFailureCount": $tolerated_failure_count} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1401,6 +1433,8 @@ export def "update-map-run" [
 #
 # POST /
 # operationId: UpdateStateMachine
+# --loggingConfiguration shape: {level?: "ALL"|"ERROR"|"FATAL"|"OFF", includeExecutionData?: bool, destinations?: list}
+# --tracingConfiguration shape: {enabled?: bool}
 export def "update-state-machine" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1418,16 +1452,17 @@ export def "update-state-machine" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  state_machine_arn: any
-  --definition: any
-  --role-arn: any
-  --logging-configuration: any
-  --tracing-configuration: any
-]: any -> record<updateDate: record> {
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  state_machine_arn: string # The Amazon Resource Name (ARN) of the state machine.
+  --definition: string # The Amazon States Language definition of the state machine. See Amazon States Language (https://docs.aws.amazon.com/step-functions/latest/dg/concepts-amazon-states-language.html). (format: password)
+  --role-arn: string # The Amazon Resource Name (ARN) of the IAM role of the state machine.
+  --logging-configuration: record # The LoggingConfiguration data type is used to set CloudWatch Logs options. — shape: {level?: "ALL"|"ERROR"|"FATAL"|"OFF", includeExecutionData?: bool, destinations?: list}
+  --tracing-configuration: record # Selects whether or not the state machine's X-Ray tracing is enabled. Default is false — shape: {enabled?: bool}
+]: any -> record<updateDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSStepFunctions.UpdateStateMachine")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"stateMachineArn": $state_machine_arn, "definition": $definition, "roleArn": $role_arn, "loggingConfiguration": $logging_configuration, "tracingConfiguration": $tracing_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

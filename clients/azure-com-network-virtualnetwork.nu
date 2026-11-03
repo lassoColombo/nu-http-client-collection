@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -157,11 +157,12 @@ export def "virtual-networks-list-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/virtualNetworks") $qp $auth.query)
   let accept_val = "application/json"
@@ -196,12 +197,13 @@ export def "virtual-networks-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualNetworks") $qp $auth.query)
   let accept_val = "application/json"
@@ -237,13 +239,14 @@ export def "virtual-networks-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_network_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualNetworkName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_network_name: (encode-path-segment $virtual_network_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualNetworks/{virtual_network_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -279,7 +282,7 @@ export def "virtual-networks-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --expand: string # Expands referenced resources.
 ]: nothing -> record<etag: string, properties: record<addressSpace: record<addressPrefixes: list>, bgpCommunities: record<regionalCommunity: string, virtualNetworkCommunity: string>, ddosProtectionPlan: record<id: string>, dhcpOptions: record<dnsServers: list>, enableDdosProtection: bool, enableVmProtection: bool, provisioningState: string, resourceGuid: string, subnets: list<record>, virtualNetworkPeerings: list<record>>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -287,6 +290,7 @@ export def "virtual-networks-get" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_network_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualNetworkName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_network_name: (encode-path-segment $virtual_network_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualNetworks/{virtual_network_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -322,7 +326,7 @@ export def "virtual-networks-update-tags" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --tags: record # Resource tags.
 ]: any -> record<etag: string, properties: record<addressSpace: record<addressPrefixes: list>, bgpCommunities: record<regionalCommunity: string, virtualNetworkCommunity: string>, ddosProtectionPlan: record<id: string>, dhcpOptions: record<dnsServers: list>, enableDdosProtection: bool, enableVmProtection: bool, provisioningState: string, resourceGuid: string, subnets: list<record>, virtualNetworkPeerings: list<record>>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
@@ -331,6 +335,7 @@ export def "virtual-networks-update-tags" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_network_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualNetworkName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_network_name: (encode-path-segment $virtual_network_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualNetworks/{virtual_network_name}") $qp $auth.query)
   let req_body = {"tags": $tags} | compact
@@ -369,7 +374,7 @@ export def "virtual-networks-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --etag: string # A unique read-only string that changes whenever the resource is updated.
   --properties: any # Properties of the virtual network. — shape: {addressSpace?: any, bgpCommunities?: any, ddosProtectionPlan?: any, dhcpOptions?: any, enableDdosProtection?: bool, enableVmProtection?: bool, resourceGuid?: string, subnets?: list, virtualNetworkPeerings?: list}
   --id: string # Resource ID.
@@ -382,6 +387,7 @@ export def "virtual-networks-create-or-update" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_network_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualNetworkName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_network_name: (encode-path-segment $virtual_network_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualNetworks/{virtual_network_name}") $qp $auth.query)
   let req_body = {"etag": $etag, "properties": $properties, "id": $id, "location": $location, "tags": $tags} | compact
@@ -419,14 +425,16 @@ export def "virtual-networks-check-ip-address-availability" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ip-address: string # The private IP address to be verified.
-  --api-version: string # Client API version.
+  --ip-address: string # The private IP address to be verified. (required)
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<available: bool, availableIPAddresses: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_network_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualNetworkName' must be non-empty" } }
+  if ($ip_address == null) { error make --unspanned { msg: "required query parameter 'ipAddress' missing: pass --ip-address" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "ipAddress" $ip_address "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_network_name: (encode-path-segment $virtual_network_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualNetworks/{virtual_network_name}/CheckIPAddressAvailability") $qp $auth.query)
   let accept_val = "application/json"
@@ -462,13 +470,14 @@ export def "subnets-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, name: string, properties: record, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_network_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualNetworkName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_network_name: (encode-path-segment $virtual_network_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualNetworks/{virtual_network_name}/subnets") $qp $auth.query)
   let accept_val = "application/json"
@@ -505,7 +514,7 @@ export def "subnets-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -513,6 +522,7 @@ export def "subnets-delete" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_network_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualNetworkName' must be non-empty" } }
   if ($subnet_name | is-empty) { error make --unspanned { msg: "path parameter 'subnetName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_network_name: (encode-path-segment $virtual_network_name), subnet_name: (encode-path-segment $subnet_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualNetworks/{virtual_network_name}/subnets/{subnet_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -549,7 +559,7 @@ export def "subnets-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --expand: string # Expands referenced resources.
 ]: nothing -> record<etag: string, name: string, properties: record<addressPrefix: string, addressPrefixes: list<string>, delegations: list<record>, ipConfigurationProfiles: list<any>, ipConfigurations: list<any>, natGateway: record<id: string>, networkSecurityGroup: any, privateEndpointNetworkPolicies: string, privateEndpoints: list<any>, privateLinkServiceNetworkPolicies: string, provisioningState: string, purpose: string, resourceNavigationLinks: list<record>, routeTable: any, serviceAssociationLinks: list<record>, serviceEndpointPolicies: list<any>, serviceEndpoints: list<record>>, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -558,6 +568,7 @@ export def "subnets-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_network_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualNetworkName' must be non-empty" } }
   if ($subnet_name | is-empty) { error make --unspanned { msg: "path parameter 'subnetName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_network_name: (encode-path-segment $virtual_network_name), subnet_name: (encode-path-segment $subnet_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualNetworks/{virtual_network_name}/subnets/{subnet_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -595,7 +606,7 @@ export def "subnets-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --etag: string # A unique read-only string that changes whenever the resource is updated.
   --name: string # The name of the resource that is unique within a resource group. This name can be used to access the resource.
   --properties: any # Properties of the subnet. — shape: {addressPrefix?: string, addressPrefixes?: list<string>, delegations?: list, natGateway?: any, networkSecurityGroup?: any, privateEndpointNetworkPolicies?: string, privateLinkServiceNetworkPolicies?: string, resourceNavigationLinks?: list, routeTable?: any, serviceAssociationLinks?: list, serviceEndpointPolicies?: list, serviceEndpoints?: list}
@@ -608,6 +619,7 @@ export def "subnets-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_network_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualNetworkName' must be non-empty" } }
   if ($subnet_name | is-empty) { error make --unspanned { msg: "path parameter 'subnetName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_network_name: (encode-path-segment $virtual_network_name), subnet_name: (encode-path-segment $subnet_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualNetworks/{virtual_network_name}/subnets/{subnet_name}") $qp $auth.query)
   let req_body = {"etag": $etag, "name": $name, "properties": $properties, "id": $id} | compact
@@ -647,7 +659,7 @@ export def "subnets-prepare-network-policies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --network-intent-policy-configurations: list # A list of NetworkIntentPolicyConfiguration. — item shape: {networkIntentPolicyName?: string, sourceNetworkIntentPolicy?: any}
   --service-name: string # The name of the service for which subnet is being prepared for.
 ]: any -> any {
@@ -658,6 +670,7 @@ export def "subnets-prepare-network-policies" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_network_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualNetworkName' must be non-empty" } }
   if ($subnet_name | is-empty) { error make --unspanned { msg: "path parameter 'subnetName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_network_name: (encode-path-segment $virtual_network_name), subnet_name: (encode-path-segment $subnet_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualNetworks/{virtual_network_name}/subnets/{subnet_name}/PrepareNetworkPolicies") $qp $auth.query)
   let req_body = {"networkIntentPolicyConfigurations": $network_intent_policy_configurations, "serviceName": $service_name} | compact
@@ -696,7 +709,7 @@ export def "resource-navigation-links-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -704,6 +717,7 @@ export def "resource-navigation-links-list" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_network_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualNetworkName' must be non-empty" } }
   if ($subnet_name | is-empty) { error make --unspanned { msg: "path parameter 'subnetName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_network_name: (encode-path-segment $virtual_network_name), subnet_name: (encode-path-segment $subnet_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualNetworks/{virtual_network_name}/subnets/{subnet_name}/ResourceNavigationLinks") $qp $auth.query)
   let accept_val = "application/json"
@@ -740,7 +754,7 @@ export def "service-association-links-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, name: string, properties: record, type: string, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -748,6 +762,7 @@ export def "service-association-links-list" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_network_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualNetworkName' must be non-empty" } }
   if ($subnet_name | is-empty) { error make --unspanned { msg: "path parameter 'subnetName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_network_name: (encode-path-segment $virtual_network_name), subnet_name: (encode-path-segment $subnet_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualNetworks/{virtual_network_name}/subnets/{subnet_name}/ServiceAssociationLinks") $qp $auth.query)
   let accept_val = "application/json"
@@ -784,7 +799,7 @@ export def "subnets-unprepare-network-policies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --service-name: string # The name of the service for which subnet is being unprepared for.
 ]: any -> any {
   let input = $in
@@ -794,6 +809,7 @@ export def "subnets-unprepare-network-policies" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_network_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualNetworkName' must be non-empty" } }
   if ($subnet_name | is-empty) { error make --unspanned { msg: "path parameter 'subnetName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_network_name: (encode-path-segment $virtual_network_name), subnet_name: (encode-path-segment $subnet_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualNetworks/{virtual_network_name}/subnets/{subnet_name}/UnprepareNetworkPolicies") $qp $auth.query)
   let req_body = {"serviceName": $service_name} | compact
@@ -831,13 +847,14 @@ export def "virtual-networks-list-usage" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<currentValue: float, id: string, limit: float, name: record, unit: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_network_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualNetworkName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_network_name: (encode-path-segment $virtual_network_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualNetworks/{virtual_network_name}/usages") $qp $auth.query)
   let accept_val = "application/json"
@@ -873,13 +890,14 @@ export def "virtual-network-peerings-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, name: string, properties: record, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_network_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualNetworkName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_network_name: (encode-path-segment $virtual_network_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualNetworks/{virtual_network_name}/virtualNetworkPeerings") $qp $auth.query)
   let accept_val = "application/json"
@@ -916,7 +934,7 @@ export def "virtual-network-peerings-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -924,6 +942,7 @@ export def "virtual-network-peerings-delete" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_network_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualNetworkName' must be non-empty" } }
   if ($virtual_network_peering_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualNetworkPeeringName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_network_name: (encode-path-segment $virtual_network_name), virtual_network_peering_name: (encode-path-segment $virtual_network_peering_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualNetworks/{virtual_network_name}/virtualNetworkPeerings/{virtual_network_peering_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -960,7 +979,7 @@ export def "virtual-network-peerings-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<etag: string, name: string, properties: record<allowForwardedTraffic: bool, allowGatewayTransit: bool, allowVirtualNetworkAccess: bool, peeringState: string, provisioningState: string, remoteAddressSpace: record<addressPrefixes: list>, remoteVirtualNetwork: record<id: string>, useRemoteGateways: bool>, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -968,6 +987,7 @@ export def "virtual-network-peerings-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_network_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualNetworkName' must be non-empty" } }
   if ($virtual_network_peering_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualNetworkPeeringName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_network_name: (encode-path-segment $virtual_network_name), virtual_network_peering_name: (encode-path-segment $virtual_network_peering_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualNetworks/{virtual_network_name}/virtualNetworkPeerings/{virtual_network_peering_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1005,7 +1025,7 @@ export def "virtual-network-peerings-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --etag: string # A unique read-only string that changes whenever the resource is updated.
   --name: string # The name of the resource that is unique within a resource group. This name can be used to access the resource.
   --properties: any # Properties of the virtual network peering. — shape: {allowForwardedTraffic?: bool, allowGatewayTransit?: bool, allowVirtualNetworkAccess?: bool, peeringState?: "Initiated"|"Connected"|"Disconnected", remoteAddressSpace?: any, remoteVirtualNetwork?: any, useRemoteGateways?: bool}
@@ -1018,6 +1038,7 @@ export def "virtual-network-peerings-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_network_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualNetworkName' must be non-empty" } }
   if ($virtual_network_peering_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualNetworkPeeringName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_network_name: (encode-path-segment $virtual_network_name), virtual_network_peering_name: (encode-path-segment $virtual_network_peering_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualNetworks/{virtual_network_name}/virtualNetworkPeerings/{virtual_network_peering_name}") $qp $auth.query)
   let req_body = {"etag": $etag, "name": $name, "properties": $properties, "id": $id} | compact

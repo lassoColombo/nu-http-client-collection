@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -164,7 +164,7 @@ export def "associate-service-role-to-account" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   role_arn: string # The Amazon Resource Name (ARN) of the service role to associate with IoT Greengrass for your Amazon Web Services account in this Amazon Web Services Region.
-]: any -> record<associatedAt: record> {
+]: any -> record<associatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -210,7 +210,7 @@ export def "disassociate-service-role-from-account" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<disassociatedAt: record> {
+]: nothing -> record<disassociatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/greengrass/servicerole" $auth.query)
@@ -253,7 +253,7 @@ export def "get-service-role-for-account" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<associatedAt: record, roleArn: record> {
+]: nothing -> record<associatedAt: string, roleArn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/greengrass/servicerole" $auth.query)
@@ -279,7 +279,7 @@ export def "get-service-role-for-account" [
 #
 # POST /greengrass/v2/coreDevices/{coreDeviceThingName}/associateClientDevices
 # operationId: BatchAssociateClientDeviceWithCoreDevice
-# --entries item shape: {thingName: any}
+# --entries item shape: {thingName: string}
 export def "batch-associate-client-device-with-core-device" [
   core_device_thing_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -298,8 +298,8 @@ export def "batch-associate-client-device-with-core-device" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --entries: list # The list of client devices to associate. — item shape: {thingName: any}
-]: any -> record<errorEntries: record> {
+  --entries: list # The list of client devices to associate. — item shape: {thingName: string}
+]: any -> record<errorEntries: table<thingName: string, code: string, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -329,7 +329,7 @@ export def "batch-associate-client-device-with-core-device" [
 #
 # POST /greengrass/v2/coreDevices/{coreDeviceThingName}/disassociateClientDevices
 # operationId: BatchDisassociateClientDeviceFromCoreDevice
-# --entries item shape: {thingName: any}
+# --entries item shape: {thingName: string}
 export def "batch-disassociate-client-device-from-core-device" [
   core_device_thing_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -348,8 +348,8 @@ export def "batch-disassociate-client-device-from-core-device" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --entries: list # The list of client devices to disassociate. — item shape: {thingName: any}
-]: any -> record<errorEntries: record> {
+  --entries: list # The list of client devices to disassociate. — item shape: {thingName: string}
+]: any -> record<errorEntries: table<thingName: string, code: string, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -397,7 +397,7 @@ export def "cancel-deployment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<message: record> {
+]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($deployment_id | is-empty) { error make --unspanned { msg: "path parameter 'deploymentId' must be non-empty" } }
@@ -424,7 +424,7 @@ export def "cancel-deployment" [
 #
 # POST /greengrass/v2/createComponentVersion
 # operationId: CreateComponentVersion
-# --lambdaFunction shape: {lambdaArn?: any, componentName?: any, componentVersion?: any, componentPlatforms?: any, componentDependencies?: any, componentLambdaParameters?: any}
+# --lambdaFunction shape: {lambdaArn?: string, componentName?: string, componentVersion?: string, componentPlatforms?: list, componentDependencies?: record, componentLambdaParameters?: record}
 export def "create-component-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -443,10 +443,10 @@ export def "create-component-version" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --inline-recipe: string # The recipe to use to create the component. The recipe defines the component's metadata, parameters, dependencies, lifecycle, artifacts, and platform compatibility. You must specify either inlineRecipe or lambdaFunction.
-  --lambda-function: record # Contains information about an Lambda function to import to create a component. — shape: {lambdaArn?: any, componentName?: any, componentVersion?: any, componentPlatforms?: any, componentDependencies?: any, componentLambdaParameters?: any}
+  --lambda-function: record # Contains information about an Lambda function to import to create a component. — shape: {lambdaArn?: string, componentName?: string, componentVersion?: string, componentPlatforms?: list, componentDependencies?: record, componentLambdaParameters?: record}
   --tags: record # A list of key-value pairs that contain metadata for the resource. For more information, see Tag your resources (https://docs.aws.amazon.com/greengrass/v2/developerguide/tag-resources.html) in the IoT Greengrass V2 Developer Guide.
   --client-token: string # A unique, case-sensitive identifier that you can provide to ensure that the request is idempotent. Idempotency means that the request is successfully processed only once, even if you send the request multiple times. When a request succeeds, and you specify the same client token for subsequent successful requests, the IoT Greengrass V2 service returns the successful response that it caches from the previous request. IoT Greengrass V2 caches successful responses for idempotent requests for up to 8 hours.
-]: any -> record<arn: record, componentName: record, componentVersion: record, creationTimestamp: record, status: record<componentState: record, message: record, errors: record, vendorGuidance: record, vendorGuidanceMessage: record>> {
+]: any -> record<arn: string, componentName: string, componentVersion: string, creationTimestamp: string, status: record<componentState: string, message: string, errors: record, vendorGuidance: string, vendorGuidanceMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -475,8 +475,8 @@ export def "create-component-version" [
 #
 # POST /greengrass/v2/deployments
 # operationId: CreateDeployment
-# --iotJobConfiguration shape: {jobExecutionsRolloutConfig?: any, abortConfig?: any, timeoutConfig?: any}
-# --deploymentPolicies shape: {failureHandlingPolicy?: any, componentUpdatePolicy?: any, configurationValidationPolicy?: any}
+# --iotJobConfiguration shape: {jobExecutionsRolloutConfig?: record, abortConfig?: record, timeoutConfig?: record}
+# --deploymentPolicies shape: {failureHandlingPolicy?: "ROLLBACK"|"DO_NOTHING", componentUpdatePolicy?: record, configurationValidationPolicy?: record}
 export def "create-deployment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -497,12 +497,12 @@ export def "create-deployment" [
   target_arn: string # The ARN (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) of the target IoT thing or thing group. When creating a subdeployment, the targetARN can only be a thing group.
   --deployment-name: string # The name of the deployment.
   --components: record # The components to deploy. This is a dictionary, where each key is the name of a component, and each key's value is the version and configuration to deploy for that component.
-  --iot-job-configuration: record # Contains information about an IoT job configuration. — shape: {jobExecutionsRolloutConfig?: any, abortConfig?: any, timeoutConfig?: any}
-  --deployment-policies: record # Contains information about policies that define how a deployment updates components and handles failure. — shape: {failureHandlingPolicy?: any, componentUpdatePolicy?: any, configurationValidationPolicy?: any}
+  --iot-job-configuration: record # Contains information about an IoT job configuration. — shape: {jobExecutionsRolloutConfig?: record, abortConfig?: record, timeoutConfig?: record}
+  --deployment-policies: record # Contains information about policies that define how a deployment updates components and handles failure. — shape: {failureHandlingPolicy?: "ROLLBACK"|"DO_NOTHING", componentUpdatePolicy?: record, configurationValidationPolicy?: record}
   --parent-target-arn: string # The parent deployment's target ARN (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) within a subdeployment.
   --tags: record # A list of key-value pairs that contain metadata for the resource. For more information, see Tag your resources (https://docs.aws.amazon.com/greengrass/v2/developerguide/tag-resources.html) in the IoT Greengrass V2 Developer Guide.
   --client-token: string # A unique, case-sensitive identifier that you can provide to ensure that the request is idempotent. Idempotency means that the request is successfully processed only once, even if you send the request multiple times. When a request succeeds, and you specify the same client token for subsequent successful requests, the IoT Greengrass V2 service returns the successful response that it caches from the previous request. IoT Greengrass V2 caches successful responses for idempotent requests for up to 8 hours.
-]: any -> record<deploymentId: record, iotJobId: record, iotJobArn: record> {
+]: any -> record<deploymentId: string, iotJobId: string, iotJobArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -553,7 +553,7 @@ export def "list-deployments" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<deployments: record, nextToken: record> {
+]: nothing -> record<deployments: table<targetArn: string, revisionId: string, deploymentId: string, deploymentName: string, creationTimestamp: string, deploymentStatus: string, isLatestForTarget: bool, parentTargetArn: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "targetArn" $target_arn "scalar") (serialize-qp "historyFilter" $history_filter "scalar") (serialize-qp "parentTargetArn" $parent_target_arn "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -644,7 +644,7 @@ export def "get-component" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<recipeOutputFormat: record, recipe: record, tags: record> {
+]: nothing -> record<recipeOutputFormat: string, recipe: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($arn | is-empty) { error make --unspanned { msg: "path parameter 'arn' must be non-empty" } }
@@ -735,7 +735,7 @@ export def "get-core-device" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<coreDeviceThingName: record, coreVersion: record, platform: record, architecture: record, status: record, lastStatusUpdateTimestamp: record, tags: record> {
+]: nothing -> record<coreDeviceThingName: string, coreVersion: string, platform: string, architecture: string, status: string, lastStatusUpdateTimestamp: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($core_device_thing_name | is-empty) { error make --unspanned { msg: "path parameter 'coreDeviceThingName' must be non-empty" } }
@@ -825,7 +825,7 @@ export def "get-deployment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<targetArn: record, revisionId: record, deploymentId: record, deploymentName: record, deploymentStatus: record, iotJobId: record, iotJobArn: record, components: record, deploymentPolicies: record<failureHandlingPolicy: record, componentUpdatePolicy: record<timeoutInSeconds: record, action: record>, configurationValidationPolicy: record<timeoutInSeconds: record>>, iotJobConfiguration: record<jobExecutionsRolloutConfig: record<exponentialRate: record, maximumPerMinute: record>, abortConfig: record<criteriaList: record>, timeoutConfig: record<inProgressTimeoutInMinutes: record>>, creationTimestamp: record, isLatestForTarget: record, parentTargetArn: record, tags: record> {
+]: nothing -> record<targetArn: string, revisionId: string, deploymentId: string, deploymentName: string, deploymentStatus: string, iotJobId: string, iotJobArn: string, components: record, deploymentPolicies: record<failureHandlingPolicy: string, componentUpdatePolicy: record<timeoutInSeconds: int, action: string>, configurationValidationPolicy: record<timeoutInSeconds: int>>, iotJobConfiguration: record<jobExecutionsRolloutConfig: record<exponentialRate: record, maximumPerMinute: int>, abortConfig: record<criteriaList: list>, timeoutConfig: record<inProgressTimeoutInMinutes: int>>, creationTimestamp: string, isLatestForTarget: bool, parentTargetArn: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($deployment_id | is-empty) { error make --unspanned { msg: "path parameter 'deploymentId' must be non-empty" } }
@@ -870,7 +870,7 @@ export def "describe-component" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<arn: record, componentName: record, componentVersion: record, creationTimestamp: record, publisher: record, description: record, status: record<componentState: record, message: record, errors: record, vendorGuidance: record, vendorGuidanceMessage: record>, platforms: record, tags: record> {
+]: nothing -> record<arn: string, componentName: string, componentVersion: string, creationTimestamp: string, publisher: string, description: string, status: record<componentState: string, message: string, errors: record, vendorGuidance: string, vendorGuidanceMessage: string>, platforms: table<name: string, attributes: record>, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($arn | is-empty) { error make --unspanned { msg: "path parameter 'arn' must be non-empty" } }
@@ -916,7 +916,7 @@ export def "get-component-version-artifact" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<preSignedUrl: record> {
+]: nothing -> record<preSignedUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($arn | is-empty) { error make --unspanned { msg: "path parameter 'arn' must be non-empty" } }
@@ -962,7 +962,7 @@ export def "get-connectivity-info" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<connectivityInfo: record, message: record> {
+]: nothing -> record<connectivityInfo: table<id: string, hostAddress: string, portNumber: int, metadata: string>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($thing_name | is-empty) { error make --unspanned { msg: "path parameter 'thingName' must be non-empty" } }
@@ -989,7 +989,7 @@ export def "get-connectivity-info" [
 #
 # PUT /greengrass/things/{thingName}/connectivityInfo
 # operationId: UpdateConnectivityInfo
-# --ConnectivityInfo item shape: {id?: any, hostAddress?: any, portNumber?: any, metadata?: any}
+# --ConnectivityInfo item shape: {id?: string, hostAddress?: string, portNumber?: int, metadata?: string}
 export def "update-connectivity-info" [
   thing_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1008,8 +1008,8 @@ export def "update-connectivity-info" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  connectivity_info: list # The connectivity information for the core device. — item shape: {id?: any, hostAddress?: any, portNumber?: any, metadata?: any}
-]: any -> record<version: record, message: record> {
+  connectivity_info: list # The connectivity information for the core device. — item shape: {id?: string, hostAddress?: string, portNumber?: int, metadata?: string}
+]: any -> record<version: string, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1059,7 +1059,7 @@ export def "list-client-devices-associated-with-core-device" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<associatedClientDevices: record, nextToken: record> {
+]: nothing -> record<associatedClientDevices: table<thingName: string, associationTimestamp: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($core_device_thing_name | is-empty) { error make --unspanned { msg: "path parameter 'coreDeviceThingName' must be non-empty" } }
@@ -1107,7 +1107,7 @@ export def "list-component-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<componentVersions: record, nextToken: record> {
+]: nothing -> record<componentVersions: table<componentName: string, componentVersion: string, arn: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($arn | is-empty) { error make --unspanned { msg: "path parameter 'arn' must be non-empty" } }
@@ -1155,7 +1155,7 @@ export def "list-components" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<components: record, nextToken: record> {
+]: nothing -> record<components: table<arn: string, componentName: string, latestVersion: record>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "scope" $scope "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -1203,7 +1203,7 @@ export def "list-core-devices" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<coreDevices: record, nextToken: record> {
+]: nothing -> record<coreDevices: table<coreDeviceThingName: string, status: string, lastStatusUpdateTimestamp: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "thingGroupArn" $thing_group_arn "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -1250,7 +1250,7 @@ export def "list-effective-deployments" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<effectiveDeployments: record, nextToken: record> {
+]: nothing -> record<effectiveDeployments: table<deploymentId: string, deploymentName: string, iotJobId: string, iotJobArn: string, description: string, targetArn: string, coreDeviceExecutionStatus: string, reason: string, creationTimestamp: string, modifiedTimestamp: string, statusDetails: record>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($core_device_thing_name | is-empty) { error make --unspanned { msg: "path parameter 'coreDeviceThingName' must be non-empty" } }
@@ -1299,7 +1299,7 @@ export def "list-installed-components" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<installedComponents: record, nextToken: record> {
+]: nothing -> record<installedComponents: table<componentName: string, componentVersion: string, lifecycleState: string, lifecycleStateDetails: string, isRoot: bool, lastStatusChangeTimestamp: string, lastReportedTimestamp: string, lastInstallationSource: string, lifecycleStatusCodes: list>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($core_device_thing_name | is-empty) { error make --unspanned { msg: "path parameter 'coreDeviceThingName' must be non-empty" } }
@@ -1421,8 +1421,8 @@ export def "tag-resource" [
 #
 # POST /greengrass/v2/resolveComponentCandidates
 # operationId: ResolveComponentCandidates
-# --platform shape: {name?: any, attributes?: any}
-# --componentCandidates item shape: {componentName?: any, componentVersion?: any, versionRequirements?: any}
+# --platform shape: {name?: string, attributes?: record}
+# --componentCandidates item shape: {componentName?: string, componentVersion?: string, versionRequirements?: record}
 export def "resolve-component-candidates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1440,9 +1440,9 @@ export def "resolve-component-candidates" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --platform: record # Contains information about a platform that a component supports. — shape: {name?: any, attributes?: any}
-  --component-candidates: list # The list of components to resolve. — item shape: {componentName?: any, componentVersion?: any, versionRequirements?: any}
-]: any -> record<resolvedComponentVersions: record> {
+  --platform: record # Contains information about a platform that a component supports. — shape: {name?: string, attributes?: record}
+  --component-candidates: list # The list of components to resolve. — item shape: {componentName?: string, componentVersion?: string, versionRequirements?: record}
+]: any -> record<resolvedComponentVersions: table<arn: string, componentName: string, componentVersion: string, recipe: string, vendorGuidance: string, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1482,7 +1482,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # A list of keys for tags to remove from the resource.
+  --tag-keys: list # A list of keys for tags to remove from the resource. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1494,6 +1494,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"

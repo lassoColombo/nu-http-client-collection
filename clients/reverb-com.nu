@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -502,7 +502,7 @@ export def "get-comparison-shopping-pages-id-listings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --condition: string # Condition of the listing
+  --condition: string # Condition of the listing (required)
   --page: int # default: 1
   --per-page: int # default: 24
   --offset: int
@@ -510,6 +510,7 @@ export def "get-comparison-shopping-pages-id-listings" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($condition == null) { error make --unspanned { msg: "required query parameter 'condition' missing: pass --condition" } }
   let qp = [(serialize-qp "condition" $condition "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/comparison_shopping_pages/{id}/listings") $qp $auth.query)
   let accept_val = "application/json"
@@ -4473,6 +4474,7 @@ export def "post-my-orders-selling-id-ship" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/my/orders/selling/{id}/ship") $auth.query)
   let req_body = {"provider": $provider, "send_notification": $send_notification, "tracking_number": $tracking_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "send_notification") == null) { error make --unspanned { msg: "required body field 'send_notification' missing: pass --send-notification or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {

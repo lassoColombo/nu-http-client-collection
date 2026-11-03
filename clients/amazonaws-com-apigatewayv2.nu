@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 #
 # POST /v2/apis
 # operationId: CreateApi
-# --corsConfiguration shape: {AllowCredentials?: any, AllowHeaders?: any, AllowMethods?: any, AllowOrigins?: any, ExposeHeaders?: any, MaxAge?: any}
+# --corsConfiguration shape: {AllowCredentials?: bool, AllowHeaders?: list<string>, AllowMethods?: list<string>, AllowOrigins?: list<string>, ExposeHeaders?: list<string>, MaxAge?: int}
 export def "create-api" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -173,7 +173,7 @@ export def "create-api" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --api-key-selection-expression: string # An expression used to extract information at runtime. See Selection Expressions (https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-websocket-api-selection-expressions.html#apigateway-websocket-api-apikey-selection-expressions) for more information.
-  --cors-configuration: record # Represents a CORS configuration. Supported only for HTTP APIs. See Configuring CORS (https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-cors.html) for more information. — shape: {AllowCredentials?: any, AllowHeaders?: any, AllowMethods?: any, AllowOrigins?: any, ExposeHeaders?: any, MaxAge?: any}
+  --cors-configuration: record # Represents a CORS configuration. Supported only for HTTP APIs. See Configuring CORS (https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-cors.html) for more information. — shape: {AllowCredentials?: bool, AllowHeaders?: list<string>, AllowMethods?: list<string>, AllowOrigins?: list<string>, ExposeHeaders?: list<string>, MaxAge?: int}
   --credentials-arn: string # Represents an Amazon Resource Name (ARN).
   --description: string # A string with a length between [0-1024].
   --disable-schema-validation: oneof<nothing, bool> # Avoid validating models when creating a deployment. Supported only for WebSocket APIs.
@@ -185,7 +185,7 @@ export def "create-api" [
   --tags: record # Represents a collection of tags associated with the resource.
   --target: string # A string representation of a URI with a length between [1-2048].
   --version: string # A string with a length between [1-64].
-]: any -> record<ApiEndpoint: record, ApiGatewayManaged: record, ApiId: record, ApiKeySelectionExpression: record, CorsConfiguration: record<AllowCredentials: record, AllowHeaders: record, AllowMethods: record, AllowOrigins: record, ExposeHeaders: record, MaxAge: record>, CreatedDate: record, Description: record, DisableSchemaValidation: record, DisableExecuteApiEndpoint: record, ImportInfo: record, Name: record, ProtocolType: record, RouteSelectionExpression: record, Tags: record, Version: record, Warnings: record> {
+]: any -> record<ApiEndpoint: string, ApiGatewayManaged: bool, ApiId: string, ApiKeySelectionExpression: string, CorsConfiguration: record<AllowCredentials: bool, AllowHeaders: list<string>, AllowMethods: list<string>, AllowOrigins: list<string>, ExposeHeaders: list<string>, MaxAge: int>, CreatedDate: string, Description: string, DisableSchemaValidation: bool, DisableExecuteApiEndpoint: bool, ImportInfo: list<string>, Name: string, ProtocolType: string, RouteSelectionExpression: string, Tags: record, Version: string, Warnings: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -233,7 +233,7 @@ export def "get-apis" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Items: record, NextToken: record> {
+]: nothing -> record<Items: table<ApiEndpoint: string, ApiGatewayManaged: bool, ApiId: string, ApiKeySelectionExpression: string, CorsConfiguration: record, CreatedDate: string, Description: string, DisableSchemaValidation: bool, DisableExecuteApiEndpoint: bool, ImportInfo: list, Name: string, ProtocolType: string, RouteSelectionExpression: string, Tags: record, Version: string, Warnings: list>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -280,7 +280,7 @@ export def "import-api" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   body: string # The OpenAPI definition. Supported only for HTTP APIs.
-]: any -> record<ApiEndpoint: record, ApiGatewayManaged: record, ApiId: record, ApiKeySelectionExpression: record, CorsConfiguration: record<AllowCredentials: record, AllowHeaders: record, AllowMethods: record, AllowOrigins: record, ExposeHeaders: record, MaxAge: record>, CreatedDate: record, Description: record, DisableSchemaValidation: record, DisableExecuteApiEndpoint: record, ImportInfo: record, Name: record, ProtocolType: record, RouteSelectionExpression: record, Tags: record, Version: record, Warnings: record> {
+]: any -> record<ApiEndpoint: string, ApiGatewayManaged: bool, ApiId: string, ApiKeySelectionExpression: string, CorsConfiguration: record<AllowCredentials: bool, AllowHeaders: list<string>, AllowMethods: list<string>, AllowOrigins: list<string>, ExposeHeaders: list<string>, MaxAge: int>, CreatedDate: string, Description: string, DisableSchemaValidation: bool, DisableExecuteApiEndpoint: bool, ImportInfo: list<string>, Name: string, ProtocolType: string, RouteSelectionExpression: string, Tags: record, Version: string, Warnings: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -331,7 +331,7 @@ export def "create-api-mapping" [
   api_id: string # The identifier.
   --api-mapping-key: string # After evaluating a selection expression, the result is compared against one or more selection keys to find a matching key. See Selection Expressions (https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-websocket-api-selection-expressions.html#apigateway-websocket-api-apikey-selection-expressions) for a list of expressions and each expression's associated selection key type.
   stage: string # A string with a length between [1-128].
-]: any -> record<ApiId: record, ApiMappingId: record, ApiMappingKey: record, Stage: record> {
+]: any -> record<ApiId: string, ApiMappingId: string, ApiMappingKey: string, Stage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -381,7 +381,7 @@ export def "get-api-mappings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Items: record, NextToken: record> {
+]: nothing -> record<Items: table<ApiId: string, ApiMappingId: string, ApiMappingKey: string, Stage: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
@@ -409,7 +409,7 @@ export def "get-api-mappings" [
 #
 # POST /v2/apis/{apiId}/authorizers
 # operationId: CreateAuthorizer
-# --jwtConfiguration shape: {Audience?: any, Issuer?: any}
+# --jwtConfiguration shape: {Audience?: list<string>, Issuer?: string}
 export def "create-authorizer" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -436,9 +436,9 @@ export def "create-authorizer" [
   --enable-simple-responses: oneof<nothing, bool> # Specifies whether a Lambda authorizer returns a response in a simple format. By default, a Lambda authorizer must return an IAM policy. If enabled, the Lambda authorizer can return a boolean value instead of an IAM policy. Supported only for HTTP APIs. To learn more, see Working with AWS Lambda authorizers for HTTP APIs (https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-lambda-authorizer.html)
   identity_source: list<string> # The identity source for which authorization is requested. For the REQUEST authorizer, this is required when authorization caching is enabled. The value is a comma-separated string of one or more mapping expressions of the specified request parameters. For example, if an Auth header, a Name query string parameter are defined as identity sources, this value is $method.request.header.Auth, $method.request.querystring.Name. These parameters will be used to derive the authorization caching key and to perform runtime validation of the REQUEST authorizer by verifying all of the identity-related request parameters are present, not null and non-empty. Only when this is true does the authorizer invoke the authorizer Lambda function, otherwise, it returns a 401 Unauthorized response without calling the Lambda function. The valid value is a string of comma-separated mapping expressions of the specified request parameters. When the authorization caching is not enabled, this property is optional.
   --identity-validation-expression: string # A string with a length between [0-1024].
-  --jwt-configuration: record # Represents the configuration of a JWT authorizer. Required for the JWT authorizer type. Supported only for HTTP APIs. — shape: {Audience?: any, Issuer?: any}
+  --jwt-configuration: record # Represents the configuration of a JWT authorizer. Required for the JWT authorizer type. Supported only for HTTP APIs. — shape: {Audience?: list<string>, Issuer?: string}
   name: string # A string with a length between [1-128].
-]: any -> record<AuthorizerCredentialsArn: record, AuthorizerId: record, AuthorizerPayloadFormatVersion: record, AuthorizerResultTtlInSeconds: record, AuthorizerType: record, AuthorizerUri: record, EnableSimpleResponses: record, IdentitySource: record, IdentityValidationExpression: record, JwtConfiguration: record<Audience: record, Issuer: record>, Name: record> {
+]: any -> record<AuthorizerCredentialsArn: string, AuthorizerId: string, AuthorizerPayloadFormatVersion: string, AuthorizerResultTtlInSeconds: int, AuthorizerType: string, AuthorizerUri: string, EnableSimpleResponses: bool, IdentitySource: list<string>, IdentityValidationExpression: string, JwtConfiguration: record<Audience: list<string>, Issuer: string>, Name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -488,7 +488,7 @@ export def "get-authorizers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Items: record, NextToken: record> {
+]: nothing -> record<Items: table<AuthorizerCredentialsArn: string, AuthorizerId: string, AuthorizerPayloadFormatVersion: string, AuthorizerResultTtlInSeconds: int, AuthorizerType: string, AuthorizerUri: string, EnableSimpleResponses: bool, IdentitySource: list, IdentityValidationExpression: string, JwtConfiguration: record, Name: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
@@ -536,7 +536,7 @@ export def "create-deployment" [
   --x-amz-signed-headers: string
   --description: string # A string with a length between [0-1024].
   --stage-name: string # A string with a length between [1-128].
-]: any -> record<AutoDeployed: record, CreatedDate: record, DeploymentId: record, DeploymentStatus: record, DeploymentStatusMessage: record, Description: record> {
+]: any -> record<AutoDeployed: bool, CreatedDate: string, DeploymentId: string, DeploymentStatus: string, DeploymentStatusMessage: string, Description: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -586,7 +586,7 @@ export def "get-deployments" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Items: record, NextToken: record> {
+]: nothing -> record<Items: table<AutoDeployed: bool, CreatedDate: string, DeploymentId: string, DeploymentStatus: string, DeploymentStatusMessage: string, Description: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
@@ -614,8 +614,8 @@ export def "get-deployments" [
 #
 # POST /v2/domainnames
 # operationId: CreateDomainName
-# --domainNameConfigurations item shape: {ApiGatewayDomainName?: any, CertificateArn?: any, CertificateName?: any, CertificateUploadDate?: any, DomainNameStatus?: any, DomainNameStatusMessage?: any, EndpointType?: any, HostedZoneId?: any, SecurityPolicy?: any, OwnershipVerificationCertificateArn?: any}
-# --mutualTlsAuthentication shape: {TruststoreUri?: any, TruststoreVersion?: any}
+# --domainNameConfigurations item shape: {ApiGatewayDomainName?: string, CertificateArn?: string, CertificateName?: string, CertificateUploadDate?: string, DomainNameStatus?: "AVAILABLE"|"UPDATING"|"PENDING_CERTIFICATE_REIMPORT"|"PENDING_OWNERSHIP_VERIFICATION", DomainNameStatusMessage?: string, EndpointType?: "REGIONAL"|"EDGE", HostedZoneId?: string, SecurityPolicy?: "TLS_1_0"|"TLS_1_2", OwnershipVerificationCertificateArn?: string}
+# --mutualTlsAuthentication shape: {TruststoreUri?: string, TruststoreVersion?: string}
 export def "create-domain-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -634,10 +634,10 @@ export def "create-domain-name" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   domain_name: string # A string with a length between [1-512].
-  --domain-name-configurations: list # The domain name configurations. — item shape: {ApiGatewayDomainName?: any, CertificateArn?: any, CertificateName?: any, CertificateUploadDate?: any, DomainNameStatus?: any, DomainNameStatusMessage?: any, EndpointType?: any, HostedZoneId?: any, SecurityPolicy?: any, OwnershipVerificationCertificateArn?: any}
-  --mutual-tls-authentication: record # The mutual TLS authentication configuration for a custom domain name. — shape: {TruststoreUri?: any, TruststoreVersion?: any}
+  --domain-name-configurations: list # The domain name configurations. — item shape: {ApiGatewayDomainName?: string, CertificateArn?: string, CertificateName?: string, CertificateUploadDate?: string, DomainNameStatus?: "AVAILABLE"|"UPDATING"|"PENDING_CERTIFICATE_REIMPORT"|"PENDING_OWNERSHIP_VERIFICATION", DomainNameStatusMessage?: string, EndpointType?: "REGIONAL"|"EDGE", HostedZoneId?: string, SecurityPolicy?: "TLS_1_0"|"TLS_1_2", OwnershipVerificationCertificateArn?: string}
+  --mutual-tls-authentication: record # The mutual TLS authentication configuration for a custom domain name. — shape: {TruststoreUri?: string, TruststoreVersion?: string}
   --tags: record # Represents a collection of tags associated with the resource.
-]: any -> record<ApiMappingSelectionExpression: record, DomainName: record, DomainNameConfigurations: record, MutualTlsAuthentication: record<TruststoreUri: record, TruststoreVersion: record, TruststoreWarnings: record>, Tags: record> {
+]: any -> record<ApiMappingSelectionExpression: string, DomainName: string, DomainNameConfigurations: table<ApiGatewayDomainName: string, CertificateArn: string, CertificateName: string, CertificateUploadDate: string, DomainNameStatus: string, DomainNameStatusMessage: string, EndpointType: string, HostedZoneId: string, SecurityPolicy: string, OwnershipVerificationCertificateArn: string>, MutualTlsAuthentication: record<TruststoreUri: string, TruststoreVersion: string, TruststoreWarnings: list<string>>, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -685,7 +685,7 @@ export def "get-domain-names" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Items: record, NextToken: record> {
+]: nothing -> record<Items: table<ApiMappingSelectionExpression: string, DomainName: string, DomainNameConfigurations: list, MutualTlsAuthentication: record, Tags: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -712,7 +712,7 @@ export def "get-domain-names" [
 #
 # POST /v2/apis/{apiId}/integrations
 # operationId: CreateIntegration
-# --tlsConfig shape: {ServerNameToVerify?: any}
+# --tlsConfig shape: {ServerNameToVerify?: string}
 export def "create-integration" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -747,8 +747,8 @@ export def "create-integration" [
   --response-parameters: record # Supported only for HTTP APIs. You use response parameters to transform the HTTP response from a backend integration before returning the response to clients.
   --template-selection-expression: string # An expression used to extract information at runtime. See Selection Expressions (https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-websocket-api-selection-expressions.html#apigateway-websocket-api-apikey-selection-expressions) for more information.
   --timeout-in-millis: int # An integer with a value between [50-30000].
-  --tls-config: record # The TLS configuration for a private integration. If you specify a TLS configuration, private integration traffic uses the HTTPS protocol. Supported only for HTTP APIs. — shape: {ServerNameToVerify?: any}
-]: any -> record<ApiGatewayManaged: record, ConnectionId: record, ConnectionType: record, ContentHandlingStrategy: record, CredentialsArn: record, Description: record, IntegrationId: record, IntegrationMethod: record, IntegrationResponseSelectionExpression: record, IntegrationSubtype: record, IntegrationType: record, IntegrationUri: record, PassthroughBehavior: record, PayloadFormatVersion: record, RequestParameters: record, RequestTemplates: record, ResponseParameters: record, TemplateSelectionExpression: record, TimeoutInMillis: record, TlsConfig: record<ServerNameToVerify: record>> {
+  --tls-config: record # The TLS configuration for a private integration. If you specify a TLS configuration, private integration traffic uses the HTTPS protocol. Supported only for HTTP APIs. — shape: {ServerNameToVerify?: string}
+]: any -> record<ApiGatewayManaged: bool, ConnectionId: string, ConnectionType: string, ContentHandlingStrategy: string, CredentialsArn: string, Description: string, IntegrationId: string, IntegrationMethod: string, IntegrationResponseSelectionExpression: string, IntegrationSubtype: string, IntegrationType: string, IntegrationUri: string, PassthroughBehavior: string, PayloadFormatVersion: string, RequestParameters: record, RequestTemplates: record, ResponseParameters: record, TemplateSelectionExpression: string, TimeoutInMillis: int, TlsConfig: record<ServerNameToVerify: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -798,7 +798,7 @@ export def "get-integrations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Items: record, NextToken: record> {
+]: nothing -> record<Items: table<ApiGatewayManaged: bool, ConnectionId: string, ConnectionType: string, ContentHandlingStrategy: string, CredentialsArn: string, Description: string, IntegrationId: string, IntegrationMethod: string, IntegrationResponseSelectionExpression: string, IntegrationSubtype: string, IntegrationType: string, IntegrationUri: string, PassthroughBehavior: string, PayloadFormatVersion: string, RequestParameters: record, RequestTemplates: record, ResponseParameters: record, TemplateSelectionExpression: string, TimeoutInMillis: int, TlsConfig: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
@@ -850,7 +850,7 @@ export def "create-integration-response" [
   --response-parameters: record # For WebSocket APIs, a key-value map specifying request parameters that are passed from the method request to the backend. The key is an integration request parameter name and the associated value is a method request parameter value or static value that must be enclosed within single quotes and pre-encoded as required by the backend. The method request parameter value must match the pattern of method.request.{location}.{name} , where {location} is querystring, path, or header; and {name} must be a valid and unique method request parameter name. For HTTP API integrations with a specified integrationSubtype, request parameters are a key-value map specifying parameters that are passed to AWS_PROXY integrations. You can provide static values, or map request data, stage variables, or context variables that are evaluated at runtime. To learn more, see Working with AWS service integrations for HTTP APIs (https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-develop-integrations-aws-services.html). For HTTP API integrations without a specified integrationSubtype request parameters are a key-value map specifying how to transform HTTP requests before sending them to the backend. The key should follow the pattern <action>:<header|querystring|path>.<location> where action can be append, overwrite or remove. For values, you can provide static values, or map request data, stage variables, or context variables that are evaluated at runtime. To learn more, see Transforming API requests and responses (https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-parameter-mapping.html).
   --response-templates: record # A mapping of identifier keys to templates. The value is an actual template script. The key is typically a SelectionKey which is chosen based on evaluating a selection expression.
   --template-selection-expression: string # An expression used to extract information at runtime. See Selection Expressions (https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-websocket-api-selection-expressions.html#apigateway-websocket-api-apikey-selection-expressions) for more information.
-]: any -> record<ContentHandlingStrategy: record, IntegrationResponseId: record, IntegrationResponseKey: record, ResponseParameters: record, ResponseTemplates: record, TemplateSelectionExpression: record> {
+]: any -> record<ContentHandlingStrategy: string, IntegrationResponseId: string, IntegrationResponseKey: string, ResponseParameters: record, ResponseTemplates: record, TemplateSelectionExpression: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -902,7 +902,7 @@ export def "get-integration-responses" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Items: record, NextToken: record> {
+]: nothing -> record<Items: table<ContentHandlingStrategy: string, IntegrationResponseId: string, IntegrationResponseKey: string, ResponseParameters: record, ResponseTemplates: record, TemplateSelectionExpression: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
@@ -953,7 +953,7 @@ export def "create-model" [
   --description: string # A string with a length between [0-1024].
   name: string # A string with a length between [1-128].
   schema: string # A string with a length between [0-32768].
-]: any -> record<ContentType: record, Description: record, ModelId: record, Name: record, Schema: record> {
+]: any -> record<ContentType: string, Description: string, ModelId: string, Name: string, Schema: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1003,7 +1003,7 @@ export def "get-models" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Items: record, NextToken: record> {
+]: nothing -> record<Items: table<ContentType: string, Description: string, ModelId: string, Name: string, Schema: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
@@ -1060,7 +1060,7 @@ export def "create-route" [
   route_key: string # After evaluating a selection expression, the result is compared against one or more selection keys to find a matching key. See Selection Expressions (https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-websocket-api-selection-expressions.html#apigateway-websocket-api-apikey-selection-expressions) for a list of expressions and each expression's associated selection key type.
   --route-response-selection-expression: string # An expression used to extract information at runtime. See Selection Expressions (https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-websocket-api-selection-expressions.html#apigateway-websocket-api-apikey-selection-expressions) for more information.
   --target: string # A string with a length between [1-128].
-]: any -> record<ApiGatewayManaged: record, ApiKeyRequired: record, AuthorizationScopes: record, AuthorizationType: record, AuthorizerId: record, ModelSelectionExpression: record, OperationName: record, RequestModels: record, RequestParameters: record, RouteId: record, RouteKey: record, RouteResponseSelectionExpression: record, Target: record> {
+]: any -> record<ApiGatewayManaged: bool, ApiKeyRequired: bool, AuthorizationScopes: list<string>, AuthorizationType: string, AuthorizerId: string, ModelSelectionExpression: string, OperationName: string, RequestModels: record, RequestParameters: record, RouteId: string, RouteKey: string, RouteResponseSelectionExpression: string, Target: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1110,7 +1110,7 @@ export def "get-routes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Items: record, NextToken: record> {
+]: nothing -> record<Items: table<ApiGatewayManaged: bool, ApiKeyRequired: bool, AuthorizationScopes: list, AuthorizationType: string, AuthorizerId: string, ModelSelectionExpression: string, OperationName: string, RequestModels: record, RequestParameters: record, RouteId: string, RouteKey: string, RouteResponseSelectionExpression: string, Target: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
@@ -1161,7 +1161,7 @@ export def "create-route-response" [
   --response-models: record # The route models.
   --response-parameters: record # The route parameters.
   route_response_key: string # After evaluating a selection expression, the result is compared against one or more selection keys to find a matching key. See Selection Expressions (https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-websocket-api-selection-expressions.html#apigateway-websocket-api-apikey-selection-expressions) for a list of expressions and each expression's associated selection key type.
-]: any -> record<ModelSelectionExpression: record, ResponseModels: record, ResponseParameters: record, RouteResponseId: record, RouteResponseKey: record> {
+]: any -> record<ModelSelectionExpression: string, ResponseModels: record, ResponseParameters: record, RouteResponseId: string, RouteResponseKey: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1213,7 +1213,7 @@ export def "get-route-responses" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Items: record, NextToken: record> {
+]: nothing -> record<Items: table<ModelSelectionExpression: string, ResponseModels: record, ResponseParameters: record, RouteResponseId: string, RouteResponseKey: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
@@ -1242,8 +1242,8 @@ export def "get-route-responses" [
 #
 # POST /v2/apis/{apiId}/stages
 # operationId: CreateStage
-# --accessLogSettings shape: {DestinationArn?: any, Format?: any}
-# --defaultRouteSettings shape: {DataTraceEnabled?: any, DetailedMetricsEnabled?: any, LoggingLevel?: any, ThrottlingBurstLimit?: any, ThrottlingRateLimit?: any}
+# --accessLogSettings shape: {DestinationArn?: string, Format?: string}
+# --defaultRouteSettings shape: {DataTraceEnabled?: bool, DetailedMetricsEnabled?: bool, LoggingLevel?: "ERROR"|"INFO"|"OFF", ThrottlingBurstLimit?: int, ThrottlingRateLimit?: float}
 export def "create-stage" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1262,17 +1262,17 @@ export def "create-stage" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --access-log-settings: record # Settings for logging access in a stage. — shape: {DestinationArn?: any, Format?: any}
+  --access-log-settings: record # Settings for logging access in a stage. — shape: {DestinationArn?: string, Format?: string}
   --auto-deploy: oneof<nothing, bool> # Specifies whether updates to an API automatically trigger a new deployment. The default value is false.
   --client-certificate-id: string # The identifier.
-  --default-route-settings: record # Represents a collection of route settings. — shape: {DataTraceEnabled?: any, DetailedMetricsEnabled?: any, LoggingLevel?: any, ThrottlingBurstLimit?: any, ThrottlingRateLimit?: any}
+  --default-route-settings: record # Represents a collection of route settings. — shape: {DataTraceEnabled?: bool, DetailedMetricsEnabled?: bool, LoggingLevel?: "ERROR"|"INFO"|"OFF", ThrottlingBurstLimit?: int, ThrottlingRateLimit?: float}
   --deployment-id: string # The identifier.
   --description: string # A string with a length between [0-1024].
   --route-settings: record # The route settings map.
   stage_name: string # A string with a length between [1-128].
   --stage-variables: record # The stage variable map.
   --tags: record # Represents a collection of tags associated with the resource.
-]: any -> record<AccessLogSettings: record<DestinationArn: record, Format: record>, ApiGatewayManaged: record, AutoDeploy: record, ClientCertificateId: record, CreatedDate: record, DefaultRouteSettings: record<DataTraceEnabled: record, DetailedMetricsEnabled: record, LoggingLevel: record, ThrottlingBurstLimit: record, ThrottlingRateLimit: record>, DeploymentId: record, Description: record, LastDeploymentStatusMessage: record, LastUpdatedDate: record, RouteSettings: record, StageName: record, StageVariables: record, Tags: record> {
+]: any -> record<AccessLogSettings: record<DestinationArn: string, Format: string>, ApiGatewayManaged: bool, AutoDeploy: bool, ClientCertificateId: string, CreatedDate: string, DefaultRouteSettings: record<DataTraceEnabled: bool, DetailedMetricsEnabled: bool, LoggingLevel: string, ThrottlingBurstLimit: int, ThrottlingRateLimit: float>, DeploymentId: string, Description: string, LastDeploymentStatusMessage: string, LastUpdatedDate: string, RouteSettings: record, StageName: string, StageVariables: record, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1322,7 +1322,7 @@ export def "get-stages" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Items: record, NextToken: record> {
+]: nothing -> record<Items: table<AccessLogSettings: record, ApiGatewayManaged: bool, AutoDeploy: bool, ClientCertificateId: string, CreatedDate: string, DefaultRouteSettings: record, DeploymentId: string, Description: string, LastDeploymentStatusMessage: string, LastUpdatedDate: string, RouteSettings: record, StageName: string, StageVariables: record, Tags: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
@@ -1371,7 +1371,7 @@ export def "create-vpc-link" [
   --security-group-ids: list<string> # A list of security group IDs for the VPC link.
   subnet_ids: list<string> # A list of subnet IDs to include in the VPC link.
   --tags: record # Represents a collection of tags associated with the resource.
-]: any -> record<CreatedDate: record, Name: record, SecurityGroupIds: record, SubnetIds: record, Tags: record, VpcLinkId: record, VpcLinkStatus: record, VpcLinkStatusMessage: record, VpcLinkVersion: record> {
+]: any -> record<CreatedDate: string, Name: string, SecurityGroupIds: list<string>, SubnetIds: list<string>, Tags: record, VpcLinkId: string, VpcLinkStatus: string, VpcLinkStatusMessage: string, VpcLinkVersion: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1419,7 +1419,7 @@ export def "get-vpc-links" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Items: record, NextToken: record> {
+]: nothing -> record<Items: table<CreatedDate: string, Name: string, SecurityGroupIds: list, SubnetIds: list, Tags: record, VpcLinkId: string, VpcLinkStatus: string, VpcLinkStatusMessage: string, VpcLinkVersion: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -1556,7 +1556,7 @@ export def "get-api" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ApiEndpoint: record, ApiGatewayManaged: record, ApiId: record, ApiKeySelectionExpression: record, CorsConfiguration: record<AllowCredentials: record, AllowHeaders: record, AllowMethods: record, AllowOrigins: record, ExposeHeaders: record, MaxAge: record>, CreatedDate: record, Description: record, DisableSchemaValidation: record, DisableExecuteApiEndpoint: record, ImportInfo: record, Name: record, ProtocolType: record, RouteSelectionExpression: record, Tags: record, Version: record, Warnings: record> {
+]: nothing -> record<ApiEndpoint: string, ApiGatewayManaged: bool, ApiId: string, ApiKeySelectionExpression: string, CorsConfiguration: record<AllowCredentials: bool, AllowHeaders: list<string>, AllowMethods: list<string>, AllowOrigins: list<string>, ExposeHeaders: list<string>, MaxAge: int>, CreatedDate: string, Description: string, DisableSchemaValidation: bool, DisableExecuteApiEndpoint: bool, ImportInfo: list<string>, Name: string, ProtocolType: string, RouteSelectionExpression: string, Tags: record, Version: string, Warnings: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
@@ -1604,7 +1604,7 @@ export def "reimport-api" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   body: string # The OpenAPI definition. Supported only for HTTP APIs.
-]: any -> record<ApiEndpoint: record, ApiGatewayManaged: record, ApiId: record, ApiKeySelectionExpression: record, CorsConfiguration: record<AllowCredentials: record, AllowHeaders: record, AllowMethods: record, AllowOrigins: record, ExposeHeaders: record, MaxAge: record>, CreatedDate: record, Description: record, DisableSchemaValidation: record, DisableExecuteApiEndpoint: record, ImportInfo: record, Name: record, ProtocolType: record, RouteSelectionExpression: record, Tags: record, Version: record, Warnings: record> {
+]: any -> record<ApiEndpoint: string, ApiGatewayManaged: bool, ApiId: string, ApiKeySelectionExpression: string, CorsConfiguration: record<AllowCredentials: bool, AllowHeaders: list<string>, AllowMethods: list<string>, AllowOrigins: list<string>, ExposeHeaders: list<string>, MaxAge: int>, CreatedDate: string, Description: string, DisableSchemaValidation: bool, DisableExecuteApiEndpoint: bool, ImportInfo: list<string>, Name: string, ProtocolType: string, RouteSelectionExpression: string, Tags: record, Version: string, Warnings: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1635,7 +1635,7 @@ export def "reimport-api" [
 #
 # PATCH /v2/apis/{apiId}
 # operationId: UpdateApi
-# --corsConfiguration shape: {AllowCredentials?: any, AllowHeaders?: any, AllowMethods?: any, AllowOrigins?: any, ExposeHeaders?: any, MaxAge?: any}
+# --corsConfiguration shape: {AllowCredentials?: bool, AllowHeaders?: list<string>, AllowMethods?: list<string>, AllowOrigins?: list<string>, ExposeHeaders?: list<string>, MaxAge?: int}
 export def "update-api" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1655,7 +1655,7 @@ export def "update-api" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --api-key-selection-expression: string # An expression used to extract information at runtime. See Selection Expressions (https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-websocket-api-selection-expressions.html#apigateway-websocket-api-apikey-selection-expressions) for more information.
-  --cors-configuration: record # Represents a CORS configuration. Supported only for HTTP APIs. See Configuring CORS (https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-cors.html) for more information. — shape: {AllowCredentials?: any, AllowHeaders?: any, AllowMethods?: any, AllowOrigins?: any, ExposeHeaders?: any, MaxAge?: any}
+  --cors-configuration: record # Represents a CORS configuration. Supported only for HTTP APIs. See Configuring CORS (https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-cors.html) for more information. — shape: {AllowCredentials?: bool, AllowHeaders?: list<string>, AllowMethods?: list<string>, AllowOrigins?: list<string>, ExposeHeaders?: list<string>, MaxAge?: int}
   --credentials-arn: string # Represents an Amazon Resource Name (ARN).
   --description: string # A string with a length between [0-1024].
   --disable-schema-validation: oneof<nothing, bool> # Avoid validating models when creating a deployment. Supported only for WebSocket APIs.
@@ -1665,7 +1665,7 @@ export def "update-api" [
   --route-selection-expression: string # An expression used to extract information at runtime. See Selection Expressions (https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-websocket-api-selection-expressions.html#apigateway-websocket-api-apikey-selection-expressions) for more information.
   --target: string # A string representation of a URI with a length between [1-2048].
   --version: string # A string with a length between [1-64].
-]: any -> record<ApiEndpoint: record, ApiGatewayManaged: record, ApiId: record, ApiKeySelectionExpression: record, CorsConfiguration: record<AllowCredentials: record, AllowHeaders: record, AllowMethods: record, AllowOrigins: record, ExposeHeaders: record, MaxAge: record>, CreatedDate: record, Description: record, DisableSchemaValidation: record, DisableExecuteApiEndpoint: record, ImportInfo: record, Name: record, ProtocolType: record, RouteSelectionExpression: record, Tags: record, Version: record, Warnings: record> {
+]: any -> record<ApiEndpoint: string, ApiGatewayManaged: bool, ApiId: string, ApiKeySelectionExpression: string, CorsConfiguration: record<AllowCredentials: bool, AllowHeaders: list<string>, AllowMethods: list<string>, AllowOrigins: list<string>, ExposeHeaders: list<string>, MaxAge: int>, CreatedDate: string, Description: string, DisableSchemaValidation: bool, DisableExecuteApiEndpoint: bool, ImportInfo: list<string>, Name: string, ProtocolType: string, RouteSelectionExpression: string, Tags: record, Version: string, Warnings: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1761,7 +1761,7 @@ export def "get-api-mapping" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ApiId: record, ApiMappingId: record, ApiMappingKey: record, Stage: record> {
+]: nothing -> record<ApiId: string, ApiMappingId: string, ApiMappingKey: string, Stage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
@@ -1811,7 +1811,7 @@ export def "update-api-mapping" [
   api_id: string # The identifier.
   --api-mapping-key: string # After evaluating a selection expression, the result is compared against one or more selection keys to find a matching key. See Selection Expressions (https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-websocket-api-selection-expressions.html#apigateway-websocket-api-apikey-selection-expressions) for a list of expressions and each expression's associated selection key type.
   --stage: string # A string with a length between [1-128].
-]: any -> record<ApiId: record, ApiMappingId: record, ApiMappingKey: record, Stage: record> {
+]: any -> record<ApiId: string, ApiMappingId: string, ApiMappingKey: string, Stage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1908,7 +1908,7 @@ export def "get-authorizer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AuthorizerCredentialsArn: record, AuthorizerId: record, AuthorizerPayloadFormatVersion: record, AuthorizerResultTtlInSeconds: record, AuthorizerType: record, AuthorizerUri: record, EnableSimpleResponses: record, IdentitySource: record, IdentityValidationExpression: record, JwtConfiguration: record<Audience: record, Issuer: record>, Name: record> {
+]: nothing -> record<AuthorizerCredentialsArn: string, AuthorizerId: string, AuthorizerPayloadFormatVersion: string, AuthorizerResultTtlInSeconds: int, AuthorizerType: string, AuthorizerUri: string, EnableSimpleResponses: bool, IdentitySource: list<string>, IdentityValidationExpression: string, JwtConfiguration: record<Audience: list<string>, Issuer: string>, Name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
@@ -1936,7 +1936,7 @@ export def "get-authorizer" [
 #
 # PATCH /v2/apis/{apiId}/authorizers/{authorizerId}
 # operationId: UpdateAuthorizer
-# --jwtConfiguration shape: {Audience?: any, Issuer?: any}
+# --jwtConfiguration shape: {Audience?: list<string>, Issuer?: string}
 export def "update-authorizer" [
   api_id: string
   authorizer_id: string
@@ -1964,9 +1964,9 @@ export def "update-authorizer" [
   --enable-simple-responses: oneof<nothing, bool> # Specifies whether a Lambda authorizer returns a response in a simple format. By default, a Lambda authorizer must return an IAM policy. If enabled, the Lambda authorizer can return a boolean value instead of an IAM policy. Supported only for HTTP APIs. To learn more, see Working with AWS Lambda authorizers for HTTP APIs (https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-lambda-authorizer.html)
   --identity-source: list<string> # The identity source for which authorization is requested. For the REQUEST authorizer, this is required when authorization caching is enabled. The value is a comma-separated string of one or more mapping expressions of the specified request parameters. For example, if an Auth header, a Name query string parameter are defined as identity sources, this value is $method.request.header.Auth, $method.request.querystring.Name. These parameters will be used to derive the authorization caching key and to perform runtime validation of the REQUEST authorizer by verifying all of the identity-related request parameters are present, not null and non-empty. Only when this is true does the authorizer invoke the authorizer Lambda function, otherwise, it returns a 401 Unauthorized response without calling the Lambda function. The valid value is a string of comma-separated mapping expressions of the specified request parameters. When the authorization caching is not enabled, this property is optional.
   --identity-validation-expression: string # A string with a length between [0-1024].
-  --jwt-configuration: record # Represents the configuration of a JWT authorizer. Required for the JWT authorizer type. Supported only for HTTP APIs. — shape: {Audience?: any, Issuer?: any}
+  --jwt-configuration: record # Represents the configuration of a JWT authorizer. Required for the JWT authorizer type. Supported only for HTTP APIs. — shape: {Audience?: list<string>, Issuer?: string}
   --name: string # A string with a length between [1-128].
-]: any -> record<AuthorizerCredentialsArn: record, AuthorizerId: record, AuthorizerPayloadFormatVersion: record, AuthorizerResultTtlInSeconds: record, AuthorizerType: record, AuthorizerUri: record, EnableSimpleResponses: record, IdentitySource: record, IdentityValidationExpression: record, JwtConfiguration: record<Audience: record, Issuer: record>, Name: record> {
+]: any -> record<AuthorizerCredentialsArn: string, AuthorizerId: string, AuthorizerPayloadFormatVersion: string, AuthorizerResultTtlInSeconds: int, AuthorizerType: string, AuthorizerUri: string, EnableSimpleResponses: bool, IdentitySource: list<string>, IdentityValidationExpression: string, JwtConfiguration: record<Audience: list<string>, Issuer: string>, Name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2108,7 +2108,7 @@ export def "get-deployment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AutoDeployed: record, CreatedDate: record, DeploymentId: record, DeploymentStatus: record, DeploymentStatusMessage: record, Description: record> {
+]: nothing -> record<AutoDeployed: bool, CreatedDate: string, DeploymentId: string, DeploymentStatus: string, DeploymentStatusMessage: string, Description: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
@@ -2156,7 +2156,7 @@ export def "update-deployment" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --description: string # A string with a length between [0-1024].
-]: any -> record<AutoDeployed: record, CreatedDate: record, DeploymentId: record, DeploymentStatus: record, DeploymentStatusMessage: record, Description: record> {
+]: any -> record<AutoDeployed: bool, CreatedDate: string, DeploymentId: string, DeploymentStatus: string, DeploymentStatusMessage: string, Description: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2250,7 +2250,7 @@ export def "get-domain-name" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ApiMappingSelectionExpression: record, DomainName: record, DomainNameConfigurations: record, MutualTlsAuthentication: record<TruststoreUri: record, TruststoreVersion: record, TruststoreWarnings: record>, Tags: record> {
+]: nothing -> record<ApiMappingSelectionExpression: string, DomainName: string, DomainNameConfigurations: table<ApiGatewayDomainName: string, CertificateArn: string, CertificateName: string, CertificateUploadDate: string, DomainNameStatus: string, DomainNameStatusMessage: string, EndpointType: string, HostedZoneId: string, SecurityPolicy: string, OwnershipVerificationCertificateArn: string>, MutualTlsAuthentication: record<TruststoreUri: string, TruststoreVersion: string, TruststoreWarnings: list<string>>, Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
@@ -2277,8 +2277,8 @@ export def "get-domain-name" [
 #
 # PATCH /v2/domainnames/{domainName}
 # operationId: UpdateDomainName
-# --domainNameConfigurations item shape: {ApiGatewayDomainName?: any, CertificateArn?: any, CertificateName?: any, CertificateUploadDate?: any, DomainNameStatus?: any, DomainNameStatusMessage?: any, EndpointType?: any, HostedZoneId?: any, SecurityPolicy?: any, OwnershipVerificationCertificateArn?: any}
-# --mutualTlsAuthentication shape: {TruststoreUri?: any, TruststoreVersion?: any}
+# --domainNameConfigurations item shape: {ApiGatewayDomainName?: string, CertificateArn?: string, CertificateName?: string, CertificateUploadDate?: string, DomainNameStatus?: "AVAILABLE"|"UPDATING"|"PENDING_CERTIFICATE_REIMPORT"|"PENDING_OWNERSHIP_VERIFICATION", DomainNameStatusMessage?: string, EndpointType?: "REGIONAL"|"EDGE", HostedZoneId?: string, SecurityPolicy?: "TLS_1_0"|"TLS_1_2", OwnershipVerificationCertificateArn?: string}
+# --mutualTlsAuthentication shape: {TruststoreUri?: string, TruststoreVersion?: string}
 export def "update-domain-name" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2297,9 +2297,9 @@ export def "update-domain-name" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --domain-name-configurations: list # The domain name configurations. — item shape: {ApiGatewayDomainName?: any, CertificateArn?: any, CertificateName?: any, CertificateUploadDate?: any, DomainNameStatus?: any, DomainNameStatusMessage?: any, EndpointType?: any, HostedZoneId?: any, SecurityPolicy?: any, OwnershipVerificationCertificateArn?: any}
-  --mutual-tls-authentication: record # The mutual TLS authentication configuration for a custom domain name. — shape: {TruststoreUri?: any, TruststoreVersion?: any}
-]: any -> record<ApiMappingSelectionExpression: record, DomainName: record, DomainNameConfigurations: record, MutualTlsAuthentication: record<TruststoreUri: record, TruststoreVersion: record, TruststoreWarnings: record>, Tags: record> {
+  --domain-name-configurations: list # The domain name configurations. — item shape: {ApiGatewayDomainName?: string, CertificateArn?: string, CertificateName?: string, CertificateUploadDate?: string, DomainNameStatus?: "AVAILABLE"|"UPDATING"|"PENDING_CERTIFICATE_REIMPORT"|"PENDING_OWNERSHIP_VERIFICATION", DomainNameStatusMessage?: string, EndpointType?: "REGIONAL"|"EDGE", HostedZoneId?: string, SecurityPolicy?: "TLS_1_0"|"TLS_1_2", OwnershipVerificationCertificateArn?: string}
+  --mutual-tls-authentication: record # The mutual TLS authentication configuration for a custom domain name. — shape: {TruststoreUri?: string, TruststoreVersion?: string}
+]: any -> record<ApiMappingSelectionExpression: string, DomainName: string, DomainNameConfigurations: table<ApiGatewayDomainName: string, CertificateArn: string, CertificateName: string, CertificateUploadDate: string, DomainNameStatus: string, DomainNameStatusMessage: string, EndpointType: string, HostedZoneId: string, SecurityPolicy: string, OwnershipVerificationCertificateArn: string>, MutualTlsAuthentication: record<TruststoreUri: string, TruststoreVersion: string, TruststoreWarnings: list<string>>, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2395,7 +2395,7 @@ export def "get-integration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ApiGatewayManaged: record, ConnectionId: record, ConnectionType: record, ContentHandlingStrategy: record, CredentialsArn: record, Description: record, IntegrationId: record, IntegrationMethod: record, IntegrationResponseSelectionExpression: record, IntegrationSubtype: record, IntegrationType: record, IntegrationUri: record, PassthroughBehavior: record, PayloadFormatVersion: record, RequestParameters: record, RequestTemplates: record, ResponseParameters: record, TemplateSelectionExpression: record, TimeoutInMillis: record, TlsConfig: record<ServerNameToVerify: record>> {
+]: nothing -> record<ApiGatewayManaged: bool, ConnectionId: string, ConnectionType: string, ContentHandlingStrategy: string, CredentialsArn: string, Description: string, IntegrationId: string, IntegrationMethod: string, IntegrationResponseSelectionExpression: string, IntegrationSubtype: string, IntegrationType: string, IntegrationUri: string, PassthroughBehavior: string, PayloadFormatVersion: string, RequestParameters: record, RequestTemplates: record, ResponseParameters: record, TemplateSelectionExpression: string, TimeoutInMillis: int, TlsConfig: record<ServerNameToVerify: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
@@ -2423,7 +2423,7 @@ export def "get-integration" [
 #
 # PATCH /v2/apis/{apiId}/integrations/{integrationId}
 # operationId: UpdateIntegration
-# --tlsConfig shape: {ServerNameToVerify?: any}
+# --tlsConfig shape: {ServerNameToVerify?: string}
 export def "update-integration" [
   api_id: string
   integration_id: string
@@ -2459,8 +2459,8 @@ export def "update-integration" [
   --response-parameters: record # Supported only for HTTP APIs. You use response parameters to transform the HTTP response from a backend integration before returning the response to clients.
   --template-selection-expression: string # An expression used to extract information at runtime. See Selection Expressions (https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-websocket-api-selection-expressions.html#apigateway-websocket-api-apikey-selection-expressions) for more information.
   --timeout-in-millis: int # An integer with a value between [50-30000].
-  --tls-config: record # The TLS configuration for a private integration. If you specify a TLS configuration, private integration traffic uses the HTTPS protocol. Supported only for HTTP APIs. — shape: {ServerNameToVerify?: any}
-]: any -> record<ApiGatewayManaged: record, ConnectionId: record, ConnectionType: record, ContentHandlingStrategy: record, CredentialsArn: record, Description: record, IntegrationId: record, IntegrationMethod: record, IntegrationResponseSelectionExpression: record, IntegrationSubtype: record, IntegrationType: record, IntegrationUri: record, PassthroughBehavior: record, PayloadFormatVersion: record, RequestParameters: record, RequestTemplates: record, ResponseParameters: record, TemplateSelectionExpression: record, TimeoutInMillis: record, TlsConfig: record<ServerNameToVerify: record>> {
+  --tls-config: record # The TLS configuration for a private integration. If you specify a TLS configuration, private integration traffic uses the HTTPS protocol. Supported only for HTTP APIs. — shape: {ServerNameToVerify?: string}
+]: any -> record<ApiGatewayManaged: bool, ConnectionId: string, ConnectionType: string, ContentHandlingStrategy: string, CredentialsArn: string, Description: string, IntegrationId: string, IntegrationMethod: string, IntegrationResponseSelectionExpression: string, IntegrationSubtype: string, IntegrationType: string, IntegrationUri: string, PassthroughBehavior: string, PayloadFormatVersion: string, RequestParameters: record, RequestTemplates: record, ResponseParameters: record, TemplateSelectionExpression: string, TimeoutInMillis: int, TlsConfig: record<ServerNameToVerify: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2560,7 +2560,7 @@ export def "get-integration-response" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ContentHandlingStrategy: record, IntegrationResponseId: record, IntegrationResponseKey: record, ResponseParameters: record, ResponseTemplates: record, TemplateSelectionExpression: record> {
+]: nothing -> record<ContentHandlingStrategy: string, IntegrationResponseId: string, IntegrationResponseKey: string, ResponseParameters: record, ResponseTemplates: record, TemplateSelectionExpression: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
@@ -2614,7 +2614,7 @@ export def "update-integration-response" [
   --response-parameters: record # For WebSocket APIs, a key-value map specifying request parameters that are passed from the method request to the backend. The key is an integration request parameter name and the associated value is a method request parameter value or static value that must be enclosed within single quotes and pre-encoded as required by the backend. The method request parameter value must match the pattern of method.request.{location}.{name} , where {location} is querystring, path, or header; and {name} must be a valid and unique method request parameter name. For HTTP API integrations with a specified integrationSubtype, request parameters are a key-value map specifying parameters that are passed to AWS_PROXY integrations. You can provide static values, or map request data, stage variables, or context variables that are evaluated at runtime. To learn more, see Working with AWS service integrations for HTTP APIs (https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-develop-integrations-aws-services.html). For HTTP API integrations without a specified integrationSubtype request parameters are a key-value map specifying how to transform HTTP requests before sending them to the backend. The key should follow the pattern <action>:<header|querystring|path>.<location> where action can be append, overwrite or remove. For values, you can provide static values, or map request data, stage variables, or context variables that are evaluated at runtime. To learn more, see Transforming API requests and responses (https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-parameter-mapping.html).
   --response-templates: record # A mapping of identifier keys to templates. The value is an actual template script. The key is typically a SelectionKey which is chosen based on evaluating a selection expression.
   --template-selection-expression: string # An expression used to extract information at runtime. See Selection Expressions (https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-websocket-api-selection-expressions.html#apigateway-websocket-api-apikey-selection-expressions) for more information.
-]: any -> record<ContentHandlingStrategy: record, IntegrationResponseId: record, IntegrationResponseKey: record, ResponseParameters: record, ResponseTemplates: record, TemplateSelectionExpression: record> {
+]: any -> record<ContentHandlingStrategy: string, IntegrationResponseId: string, IntegrationResponseKey: string, ResponseParameters: record, ResponseTemplates: record, TemplateSelectionExpression: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2712,7 +2712,7 @@ export def "get-model" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ContentType: record, Description: record, ModelId: record, Name: record, Schema: record> {
+]: nothing -> record<ContentType: string, Description: string, ModelId: string, Name: string, Schema: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
@@ -2763,7 +2763,7 @@ export def "update-model" [
   --description: string # A string with a length between [0-1024].
   --name: string # A string with a length between [1-128].
   --schema: string # A string with a length between [0-32768].
-]: any -> record<ContentType: record, Description: record, ModelId: record, Name: record, Schema: record> {
+]: any -> record<ContentType: string, Description: string, ModelId: string, Name: string, Schema: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2860,7 +2860,7 @@ export def "get-route" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ApiGatewayManaged: record, ApiKeyRequired: record, AuthorizationScopes: record, AuthorizationType: record, AuthorizerId: record, ModelSelectionExpression: record, OperationName: record, RequestModels: record, RequestParameters: record, RouteId: record, RouteKey: record, RouteResponseSelectionExpression: record, Target: record> {
+]: nothing -> record<ApiGatewayManaged: bool, ApiKeyRequired: bool, AuthorizationScopes: list<string>, AuthorizationType: string, AuthorizerId: string, ModelSelectionExpression: string, OperationName: string, RequestModels: record, RequestParameters: record, RouteId: string, RouteKey: string, RouteResponseSelectionExpression: string, Target: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
@@ -2918,7 +2918,7 @@ export def "update-route" [
   --route-key: string # After evaluating a selection expression, the result is compared against one or more selection keys to find a matching key. See Selection Expressions (https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-websocket-api-selection-expressions.html#apigateway-websocket-api-apikey-selection-expressions) for a list of expressions and each expression's associated selection key type.
   --route-response-selection-expression: string # An expression used to extract information at runtime. See Selection Expressions (https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-websocket-api-selection-expressions.html#apigateway-websocket-api-apikey-selection-expressions) for more information.
   --target: string # A string with a length between [1-128].
-]: any -> record<ApiGatewayManaged: record, ApiKeyRequired: record, AuthorizationScopes: record, AuthorizationType: record, AuthorizerId: record, ModelSelectionExpression: record, OperationName: record, RequestModels: record, RequestParameters: record, RouteId: record, RouteKey: record, RouteResponseSelectionExpression: record, Target: record> {
+]: any -> record<ApiGatewayManaged: bool, ApiKeyRequired: bool, AuthorizationScopes: list<string>, AuthorizationType: string, AuthorizerId: string, ModelSelectionExpression: string, OperationName: string, RequestModels: record, RequestParameters: record, RouteId: string, RouteKey: string, RouteResponseSelectionExpression: string, Target: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3067,7 +3067,7 @@ export def "get-route-response" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ModelSelectionExpression: record, ResponseModels: record, ResponseParameters: record, RouteResponseId: record, RouteResponseKey: record> {
+]: nothing -> record<ModelSelectionExpression: string, ResponseModels: record, ResponseParameters: record, RouteResponseId: string, RouteResponseKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
@@ -3120,7 +3120,7 @@ export def "update-route-response" [
   --response-models: record # The route models.
   --response-parameters: record # The route parameters.
   --route-response-key: string # After evaluating a selection expression, the result is compared against one or more selection keys to find a matching key. See Selection Expressions (https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-websocket-api-selection-expressions.html#apigateway-websocket-api-apikey-selection-expressions) for a list of expressions and each expression's associated selection key type.
-]: any -> record<ModelSelectionExpression: record, ResponseModels: record, ResponseParameters: record, RouteResponseId: record, RouteResponseKey: record> {
+]: any -> record<ModelSelectionExpression: string, ResponseModels: record, ResponseParameters: record, RouteResponseId: string, RouteResponseKey: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3267,7 +3267,7 @@ export def "get-stage" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AccessLogSettings: record<DestinationArn: record, Format: record>, ApiGatewayManaged: record, AutoDeploy: record, ClientCertificateId: record, CreatedDate: record, DefaultRouteSettings: record<DataTraceEnabled: record, DetailedMetricsEnabled: record, LoggingLevel: record, ThrottlingBurstLimit: record, ThrottlingRateLimit: record>, DeploymentId: record, Description: record, LastDeploymentStatusMessage: record, LastUpdatedDate: record, RouteSettings: record, StageName: record, StageVariables: record, Tags: record> {
+]: nothing -> record<AccessLogSettings: record<DestinationArn: string, Format: string>, ApiGatewayManaged: bool, AutoDeploy: bool, ClientCertificateId: string, CreatedDate: string, DefaultRouteSettings: record<DataTraceEnabled: bool, DetailedMetricsEnabled: bool, LoggingLevel: string, ThrottlingBurstLimit: int, ThrottlingRateLimit: float>, DeploymentId: string, Description: string, LastDeploymentStatusMessage: string, LastUpdatedDate: string, RouteSettings: record, StageName: string, StageVariables: record, Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
@@ -3295,8 +3295,8 @@ export def "get-stage" [
 #
 # PATCH /v2/apis/{apiId}/stages/{stageName}
 # operationId: UpdateStage
-# --accessLogSettings shape: {DestinationArn?: any, Format?: any}
-# --defaultRouteSettings shape: {DataTraceEnabled?: any, DetailedMetricsEnabled?: any, LoggingLevel?: any, ThrottlingBurstLimit?: any, ThrottlingRateLimit?: any}
+# --accessLogSettings shape: {DestinationArn?: string, Format?: string}
+# --defaultRouteSettings shape: {DataTraceEnabled?: bool, DetailedMetricsEnabled?: bool, LoggingLevel?: "ERROR"|"INFO"|"OFF", ThrottlingBurstLimit?: int, ThrottlingRateLimit?: float}
 export def "update-stage" [
   api_id: string
   stage_name: string
@@ -3316,15 +3316,15 @@ export def "update-stage" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --access-log-settings: record # Settings for logging access in a stage. — shape: {DestinationArn?: any, Format?: any}
+  --access-log-settings: record # Settings for logging access in a stage. — shape: {DestinationArn?: string, Format?: string}
   --auto-deploy: oneof<nothing, bool> # Specifies whether updates to an API automatically trigger a new deployment. The default value is false.
   --client-certificate-id: string # The identifier.
-  --default-route-settings: record # Represents a collection of route settings. — shape: {DataTraceEnabled?: any, DetailedMetricsEnabled?: any, LoggingLevel?: any, ThrottlingBurstLimit?: any, ThrottlingRateLimit?: any}
+  --default-route-settings: record # Represents a collection of route settings. — shape: {DataTraceEnabled?: bool, DetailedMetricsEnabled?: bool, LoggingLevel?: "ERROR"|"INFO"|"OFF", ThrottlingBurstLimit?: int, ThrottlingRateLimit?: float}
   --deployment-id: string # The identifier.
   --description: string # A string with a length between [0-1024].
   --route-settings: record # The route settings map.
   --stage-variables: record # The stage variable map.
-]: any -> record<AccessLogSettings: record<DestinationArn: record, Format: record>, ApiGatewayManaged: record, AutoDeploy: record, ClientCertificateId: record, CreatedDate: record, DefaultRouteSettings: record<DataTraceEnabled: record, DetailedMetricsEnabled: record, LoggingLevel: record, ThrottlingBurstLimit: record, ThrottlingRateLimit: record>, DeploymentId: record, Description: record, LastDeploymentStatusMessage: record, LastUpdatedDate: record, RouteSettings: record, StageName: record, StageVariables: record, Tags: record> {
+]: any -> record<AccessLogSettings: record<DestinationArn: string, Format: string>, ApiGatewayManaged: bool, AutoDeploy: bool, ClientCertificateId: string, CreatedDate: string, DefaultRouteSettings: record<DataTraceEnabled: bool, DetailedMetricsEnabled: bool, LoggingLevel: string, ThrottlingBurstLimit: int, ThrottlingRateLimit: float>, DeploymentId: string, Description: string, LastDeploymentStatusMessage: string, LastUpdatedDate: string, RouteSettings: record, StageName: string, StageVariables: record, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3418,7 +3418,7 @@ export def "get-vpc-link" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CreatedDate: record, Name: record, SecurityGroupIds: record, SubnetIds: record, Tags: record, VpcLinkId: record, VpcLinkStatus: record, VpcLinkStatusMessage: record, VpcLinkVersion: record> {
+]: nothing -> record<CreatedDate: string, Name: string, SecurityGroupIds: list<string>, SubnetIds: list<string>, Tags: record, VpcLinkId: string, VpcLinkStatus: string, VpcLinkStatusMessage: string, VpcLinkVersion: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($vpc_link_id | is-empty) { error make --unspanned { msg: "path parameter 'vpcLinkId' must be non-empty" } }
@@ -3464,7 +3464,7 @@ export def "update-vpc-link" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --name: string # A string with a length between [1-128].
-]: any -> record<CreatedDate: record, Name: record, SecurityGroupIds: record, SubnetIds: record, Tags: record, VpcLinkId: record, VpcLinkStatus: record, VpcLinkStatusMessage: record, VpcLinkVersion: record> {
+]: any -> record<CreatedDate: string, Name: string, SecurityGroupIds: list<string>, SubnetIds: list<string>, Tags: record, VpcLinkId: string, VpcLinkStatus: string, VpcLinkStatusMessage: string, VpcLinkVersion: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3507,7 +3507,7 @@ export def "export-api" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --export-version: string # The version of the API Gateway export algorithm. API Gateway uses the latest version by default. Currently, the only supported version is 1.0.
   --include-extensions: oneof<nothing, bool> # Specifies whether to include API Gateway extensions (https://docs.aws.amazon.com//apigateway/latest/developerguide/api-gateway-swagger-extensions.html) in the exported API definition. API Gateway extensions are included by default.
-  --output-type: string # The output type of the exported definition file. Valid values are JSON and YAML.
+  --output-type: string # The output type of the exported definition file. Valid values are JSON and YAML. (required)
   --stage-name: string # The name of the API stage to export. If you don't specify this property, a representation of the latest API configuration is exported.
   --x-amz-content-sha256: string
   --x-amz-date: string
@@ -3521,6 +3521,7 @@ export def "export-api" [
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
   if ($specification | is-empty) { error make --unspanned { msg: "path parameter 'specification' must be non-empty" } }
+  if ($output_type == null) { error make --unspanned { msg: "required query parameter 'outputType' missing: pass --output-type" } }
   let qp = [(serialize-qp "exportVersion" $export_version "scalar") (serialize-qp "includeExtensions" $include_extensions "scalar") (serialize-qp "outputType" $output_type "scalar") (serialize-qp "stageName" $stage_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({api_id: (encode-path-segment $api_id), specification: (encode-path-segment $specification)} | format pattern "/v2/apis/{api_id}/exports/{specification}") $qp $auth.query)
   let accept_val = "application/json"
@@ -3611,7 +3612,7 @@ export def "get-model-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Value: record> {
+]: nothing -> record<Value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
@@ -3744,7 +3745,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # The Tag keys to delete
+  --tag-keys: list # The Tag keys to delete (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3756,6 +3757,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resource-arn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/v2/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"

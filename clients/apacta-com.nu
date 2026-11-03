@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-auth-token" => { {scheme: $scheme, headers: {X-Auth-Token: $token_val}, query: "", location: "header"} }
+    "x-auth-token" => { {scheme: $scheme, headers: {"X-Auth-Token": $token_val}, query: "", location: "header"} }
     "query-api_token" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "api_token")=(encode-path-segment $token_val)", location: "query"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -911,11 +911,12 @@ export def "get-companies-company-id-form-templates" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --form-template-id: string
+  --form-template-id: string # required
 ]: nothing -> record<data: list<any>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'company_id' must be non-empty" } }
+  if ($form_template_id == null) { error make --unspanned { msg: "required query parameter 'form_template_id' missing: pass --form-template-id" } }
   let qp = [(serialize-qp "form_template_id" $form_template_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/form_templates/") $qp $auth.query)
   let accept_val = "application/json"
@@ -986,12 +987,13 @@ export def "get-companies-company-id-form-templates-form-template-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string
+  --id: string # required
 ]: nothing -> record<data: list<any>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'company_id' must be non-empty" } }
   if ($form_template_id | is-empty) { error make --unspanned { msg: "path parameter 'form_template_id' must be non-empty" } }
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), form_template_id: (encode-path-segment $form_template_id)} | format pattern "/companies/{company_id}/form_templates/{form_template_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1285,12 +1287,13 @@ export def "delete-companies-company-id-price-margins-price-margins-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --price-margin-id: string
+  --price-margin-id: string # required
 ]: nothing -> record<data: list<string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'company_id' must be non-empty" } }
   if ($price_margins_id | is-empty) { error make --unspanned { msg: "path parameter 'price_margins_id' must be non-empty" } }
+  if ($price_margin_id == null) { error make --unspanned { msg: "required query parameter 'price_margin_id' missing: pass --price-margin-id" } }
   let qp = [(serialize-qp "price_margin_id" $price_margin_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), price_margins_id: (encode-path-segment $price_margins_id)} | format pattern "/companies/{company_id}/price_margins/{price_margins_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2482,19 +2485,19 @@ export def "get-driving-types" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-  --qp-sort: string
+  --sort: string
   --direction: string
 ]: nothing -> record<data: table<company_id: string, created: string, created_by_id: string, deleted: string, employee_price: float, erp_id: string, id: string, invoice_price: float, modified: string, modified_by_id: string, name: string, salary_id: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_token"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "direction" $direction "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/driving_types" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"q": $q, "sort": $qp_sort, "direction": $direction} | compact)
+    query: ({"q": $q, "sort": $sort, "direction": $direction} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2637,11 +2640,12 @@ export def "get-driving-types-driving-type-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-driving-type-id: string
+  --qp-driving-type-id: string # required
 ]: nothing -> record<company_id: string, created: string, created_by_id: string, deleted: string, employee_price: float, erp_id: string, id: string, invoice_price: float, modified: string, modified_by_id: string, name: string, salary_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($driving_type_id | is-empty) { error make --unspanned { msg: "path parameter 'driving_type_id' must be non-empty" } }
+  if ($qp_driving_type_id == null) { error make --unspanned { msg: "required query parameter 'driving_type_id' missing: pass --qp-driving-type-id" } }
   let qp = [(serialize-qp "driving_type_id" $qp_driving_type_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({driving_type_id: (encode-path-segment $driving_type_id)} | format pattern "/driving_types/{driving_type_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2709,11 +2713,13 @@ export def "get-employee-hours" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --date-from: string # Date formatted as Y-m-d (2016-06-28)
-  --date-to: string # Date formatted as Y-m-d (2016-06-28)
+  --date-from: string # Date formatted as Y-m-d (2016-06-28) (required)
+  --date-to: string # Date formatted as Y-m-d (2016-06-28) (required)
 ]: nothing -> record<data: table<form_date: string, form_id: string, project_name: string, total_hours: int, working_description: string, working_description_full: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($date_from == null) { error make --unspanned { msg: "required query parameter 'date_from' missing: pass --date-from" } }
+  if ($date_to == null) { error make --unspanned { msg: "required query parameter 'date_to' missing: pass --date-to" } }
   let qp = [(serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/employee_hours" $qp $auth.query)
   let accept_val = "application/json"
@@ -2831,12 +2837,15 @@ export def "get-events-is-user-free" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-id: string # format: uuid
-  --start: string # format: dateTime
-  --end: string # format: dateTime
+  --user-id: string # required, format: uuid
+  --start: string # required, format: dateTime
+  --end: string # required, format: dateTime
 ]: nothing -> record<result: bool, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id == null) { error make --unspanned { msg: "required query parameter 'user_id' missing: pass --user-id" } }
+  if ($start == null) { error make --unspanned { msg: "required query parameter 'start' missing: pass --start" } }
+  if ($end == null) { error make --unspanned { msg: "required query parameter 'end' missing: pass --end" } }
   let qp = [(serialize-qp "user_id" $user_id "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/events/is_user_free" $qp $auth.query)
   let accept_val = "application/json"
@@ -3020,8 +3029,8 @@ export def "post-expense-files" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -3466,11 +3475,13 @@ export def "get-expenses-highest-amount" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --gt-created: string # Used to filter time range (format: date)
-  --lt-created: string # Used to filter time range (format: date)
+  --gt-created: string # Used to filter time range (required, format: date)
+  --lt-created: string # Used to filter time range (required, format: date)
 ]: nothing -> record<data: table<highest_amount: float>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($gt_created == null) { error make --unspanned { msg: "required query parameter 'gt_created' missing: pass --gt-created" } }
+  if ($lt_created == null) { error make --unspanned { msg: "required query parameter 'lt_created' missing: pass --lt-created" } }
   let qp = [(serialize-qp "gt_created" $gt_created "scalar") (serialize-qp "lt_created" $lt_created "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/expenses/highest_amount" $qp $auth.query)
   let accept_val = "application/json"
@@ -4715,8 +4726,8 @@ export def "post-invoice-line-text-template" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["image"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["image"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -4827,8 +4838,8 @@ export def "post-invoice-line-text-template-invoice-line-text-template-id" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["image"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["image"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -4869,8 +4880,8 @@ export def "post-invoice-line-texts" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["image"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["image"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -4911,8 +4922,8 @@ export def "post-invoice-line-texts-invoice-line-text-id" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["image"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["image"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -5564,6 +5575,7 @@ export def "create-invoice-file" [
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/invoices/{invoice_id}/files") $auth.query)
   let req_body = {"file_id": $file_id, "invoice_id": $body_invoice_id, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "invoice_id") == null) { error make --unspanned { msg: "required body field 'invoice_id' missing: pass --body-invoice-id or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
@@ -7301,7 +7313,7 @@ export def "post-products-product-id-variants" [
 # DELETE /products/{product_id}/variants/{variant_type}/{variant_id}
 export def "delete-products-product-id-variants-variant-type-variant-id" [
   product_id: string
-  variant_type: string
+  variant_type: string@variant-type-completer
   variant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7697,7 +7709,7 @@ export def "get-projects" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --show-all: oneof<nothing, bool> # Unless this is set to `true` only open projects will be shown (default: false)
-  --qp-sort: string # Sort projects by `not_invoiced_amount`
+  --sort: string # Sort projects by `not_invoiced_amount`
   --direction: string
   --contact-id: string # Used to filter on the `contact_id` of the projects (format: uuid)
   --company-id: string # Used to filter on the `company_id` of the projects (format: uuid)
@@ -7718,14 +7730,14 @@ export def "get-projects" [
 ]: nothing -> record<data: table<city_id: string, company_id: string, contact_id: string, created: string, created_by_id: string, deleted: string, description: string, end_time: string, erp_project_id: string, erp_task_id: string, full_name: string, has_final_invoice: bool, id: string, is_fixed_price: bool, is_offer: string, is_rotten: string, latitude: string, longitude: string, modified: string, name: string, not_invoiced_amount: float, offer_id: string, parent_id: string, pre_calculation_id: string, products_total_cost_price: float, project_image_url: string, project_number: float, project_status_id: string, shared_project_id: string, start_time: string, street_name: string, thumbnail: string, total_sales_price: float, working_hours_total_cost_price: float>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "show_all" $show_all "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "contact_id" $contact_id "scalar") (serialize-qp "company_id" $company_id "scalar") (serialize-qp "project_status_id" $project_status_id "scalar") (serialize-qp "project_status_ids" $project_status_ids "csv") (serialize-qp "name" $name "scalar") (serialize-qp "erp_project_id" $erp_project_id "scalar") (serialize-qp "erp_task_id" $erp_task_id "scalar") (serialize-qp "start_time_gte" $start_time_gte "scalar") (serialize-qp "start_time_lte" $start_time_lte "scalar") (serialize-qp "start_time_eq" $start_time_eq "scalar") (serialize-qp "event_start[][gt]" $event_start_gt "scalar") (serialize-qp "event_start[][lt]" $event_start_lt "scalar") (serialize-qp "event_start[][eq]" $event_start_eq "scalar") (serialize-qp "event_end[][gt]" $event_end_gt "scalar") (serialize-qp "event_end[][lt]" $event_end_lt "scalar") (serialize-qp "event_end[][eq]" $event_end_eq "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "show_all" $show_all "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "contact_id" $contact_id "scalar") (serialize-qp "company_id" $company_id "scalar") (serialize-qp "project_status_id" $project_status_id "scalar") (serialize-qp "project_status_ids" $project_status_ids "csv") (serialize-qp "name" $name "scalar") (serialize-qp "erp_project_id" $erp_project_id "scalar") (serialize-qp "erp_task_id" $erp_task_id "scalar") (serialize-qp "start_time_gte" $start_time_gte "scalar") (serialize-qp "start_time_lte" $start_time_lte "scalar") (serialize-qp "start_time_eq" $start_time_eq "scalar") (serialize-qp "event_start[][gt]" $event_start_gt "scalar") (serialize-qp "event_start[][lt]" $event_start_lt "scalar") (serialize-qp "event_start[][eq]" $event_start_eq "scalar") (serialize-qp "event_end[][gt]" $event_end_gt "scalar") (serialize-qp "event_end[][lt]" $event_end_lt "scalar") (serialize-qp "event_end[][eq]" $event_end_eq "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/projects" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"show_all": $show_all, "sort": $qp_sort, "direction": $direction, "contact_id": $contact_id, "company_id": $company_id, "project_status_id": $project_status_id, "project_status_ids": $project_status_ids, "name": $name, "erp_project_id": $erp_project_id, "erp_task_id": $erp_task_id, "start_time_gte": $start_time_gte, "start_time_lte": $start_time_lte, "start_time_eq": $start_time_eq, "event_start[][gt]": $event_start_gt, "event_start[][lt]": $event_start_lt, "event_start[][eq]": $event_start_eq, "event_end[][gt]": $event_end_gt, "event_end[][lt]": $event_end_lt, "event_end[][eq]": $event_end_eq} | compact)
+    query: ({"show_all": $show_all, "sort": $sort, "direction": $direction, "contact_id": $contact_id, "company_id": $company_id, "project_status_id": $project_status_id, "project_status_ids": $project_status_ids, "name": $name, "erp_project_id": $erp_project_id, "erp_task_id": $erp_task_id, "start_time_gte": $start_time_gte, "start_time_lte": $start_time_lte, "start_time_eq": $start_time_eq, "event_start[][gt]": $event_start_gt, "event_start[][lt]": $event_start_lt, "event_start[][eq]": $event_start_eq, "event_end[][gt]": $event_end_gt, "event_end[][lt]": $event_end_lt, "event_end[][eq]": $event_end_eq} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -8173,8 +8185,8 @@ export def "post-projects-project-id-project-files" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -10225,8 +10237,8 @@ export def "post-users-user-id-upload-image" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["image"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["image"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url

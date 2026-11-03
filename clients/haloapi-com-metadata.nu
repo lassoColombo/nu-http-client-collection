@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {Ocp-Apim-Subscription-Key: $token_val}, query: "", location: "header"} }
+    "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {"Ocp-Apim-Subscription-Key": $token_val}, query: "", location: "header"} }
     "query-subscription-key" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "subscription-key")=(encode-path-segment $token_val)", location: "query"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -133,7 +133,7 @@ export def "halo-5-campaign-missions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata. (default: en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -170,7 +170,7 @@ export def "halo-5-commendations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata. (default: en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -207,7 +207,7 @@ export def "halo-5-company-commendations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata. (default: en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -244,7 +244,7 @@ export def "halo-5-csr-designations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata. (default: en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -281,7 +281,7 @@ export def "halo-5-enemies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata. (default: en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -318,7 +318,7 @@ export def "halo-5-flexible-stats" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata. (default: en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -355,7 +355,7 @@ export def "halo-5-game-base-variants" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata. (default: en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -393,7 +393,7 @@ export def "halo-5-game-variant" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata. (default: en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -431,7 +431,7 @@ export def "halo-5-impulses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata. (default: en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -469,7 +469,7 @@ export def "halo-5-map-variant" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata. (default: en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -507,7 +507,7 @@ export def "halo-5-maps" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata. (default: en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -544,7 +544,7 @@ export def "halo-5-medals" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata. (default: en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -581,7 +581,7 @@ export def "halo-5-playlists" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata. (default: en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -619,7 +619,7 @@ export def "halo-5-requisition-pack" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata. (default: en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -658,7 +658,7 @@ export def "halo-5-requisition" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata. (default: en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -696,7 +696,7 @@ export def "halo-5-seasons" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata. (default: en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -733,7 +733,7 @@ export def "halo-5-skulls" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata. (default: en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -770,7 +770,7 @@ export def "halo-5-spartan-ranks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata. (default: en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -807,7 +807,7 @@ export def "halo-5-team-colors" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata. (default: en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -844,7 +844,7 @@ export def "halo-5-vehicles" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata. (default: en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -881,7 +881,7 @@ export def "halo-5-weapons" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata. (default: en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -919,7 +919,7 @@ export def "halo-wars-2-campaign-levels" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-at: float # When specified, this indicates the index of the item to start at. When omitted, 0 is assumed. When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
-  --accept-language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata. (default: en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -994,7 +994,7 @@ export def "halo-wars-2-card-keywords" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-at: float # When specified, this indicates the index of the item to start at. When omitted, 0 is assumed. When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
-  --accept-language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata. (default: en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1033,7 +1033,7 @@ export def "halo-wars-2-cards" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-at: float # When specified, this indicates the index of the item to start at. When omitted, 0 is assumed. When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
-  --accept-language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata. (default: en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1072,7 +1072,7 @@ export def "halo-wars-2-csr-designations" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-at: float # When specified, this indicates the index of the item to start at. When omitted, 0 is assumed. When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
-  --accept-language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata. (default: en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1111,7 +1111,7 @@ export def "halo-wars-2-difficulties" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-at: float # When specified, this indicates the index of the item to start at. When omitted, 0 is assumed. When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
-  --accept-language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata. (default: en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1186,7 +1186,7 @@ export def "halo-wars-2-game-objects" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-at: float # When specified, this indicates the index of the item to start at. When omitted, 0 is assumed. When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
-  --accept-language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata. (default: en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1225,7 +1225,7 @@ export def "halo-wars-2-leader-powers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-at: float # When specified, this indicates the index of the item to start at. When omitted, 0 is assumed. When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
-  --accept-language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata. (default: en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1264,7 +1264,7 @@ export def "halo-wars-2-leaders" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-at: float # When specified, this indicates the index of the item to start at. When omitted, 0 is assumed. When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
-  --accept-language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata. (default: en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1303,7 +1303,7 @@ export def "halo-wars-2-maps" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-at: float # When specified, this indicates the index of the item to start at. When omitted, 0 is assumed. When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
-  --accept-language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata. (default: en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1342,7 +1342,7 @@ export def "halo-wars-2-packs" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-at: float # When specified, this indicates the index of the item to start at. When omitted, 0 is assumed. When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
-  --accept-language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata. (default: en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1381,7 +1381,7 @@ export def "halo-wars-2-playlists" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-at: float # When specified, this indicates the index of the item to start at. When omitted, 0 is assumed. When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
-  --accept-language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata. (default: en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1420,7 +1420,7 @@ export def "halo-wars-2-seasons" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-at: float # When specified, this indicates the index of the item to start at. When omitted, 0 is assumed. When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
-  --accept-language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata. (default: en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1459,7 +1459,7 @@ export def "halo-wars-2-spartan-ranks" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-at: float # When specified, this indicates the index of the item to start at. When omitted, 0 is assumed. When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
-  --accept-language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata. (default: en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1498,7 +1498,7 @@ export def "halo-wars-2-techs" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-at: float # When specified, this indicates the index of the item to start at. When omitted, 0 is assumed. When the value contains a non-digit or is not a multiple of 100, HTTP 400 ("Bad Request") is returned.
-  --accept-language: string # The desired language for the Metadata.
+  --accept-language: string # The desired language for the Metadata. (default: en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)

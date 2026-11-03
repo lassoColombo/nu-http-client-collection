@@ -171,19 +171,19 @@ export def "get-actions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: int # Can be used multiple times, the response will contain only Actions with specified IDs
-  --qp-sort: string@sort-completer # Can be used multiple times.
+  --sort: string@sort-completer # Can be used multiple times.
   --status: string@status-completer # Can be used multiple times, the response will contain only Actions with specified statuses
 ]: nothing -> record<actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/actions" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"id": $id, "sort": $qp_sort, "status": $status} | compact)
+    query: ({"id": $id, "sort": $sort, "status": $status} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -242,21 +242,21 @@ export def "get-certificates" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-sort: string@sort-completer-1 # Can be used multiple times.
+  --sort: string@sort-completer-1 # Can be used multiple times.
   --name: string # Can be used to filter resources by their name. The response will only contain the resources matching the specified name
   --label-selector: string # Can be used to filter resources by labels. The response will only contain resources matching the label selector.
   --type: string@type-completer # Can be used multiple times. The response will only contain Certificates matching the type.
 ]: nothing -> record<certificates: table<certificate: string, created: string, domain_names: list, fingerprint: string, id: int, labels: record, name: string, not_valid_after: string, not_valid_before: string, status: record, type: string, used_by: list>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "label_selector" $label_selector "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "label_selector" $label_selector "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/certificates" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sort": $qp_sort, "name": $name, "label_selector": $label_selector, "type": $type} | compact)
+    query: ({"sort": $sort, "name": $name, "label_selector": $label_selector, "type": $type} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -433,20 +433,20 @@ export def "get-certificates-id-actions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-sort: string@sort-completer # Can be used multiple times.
+  --sort: string@sort-completer # Can be used multiple times.
   --status: string@status-completer # Can be used multiple times, the response will contain only Actions with specified statuses
 ]: nothing -> record<actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/certificates/{id}/actions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sort": $qp_sort, "status": $status} | compact)
+    query: ({"sort": $sort, "status": $status} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -612,20 +612,20 @@ export def "get-firewalls" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-sort: string@sort-completer-1 # Can be used multiple times.
+  --sort: string@sort-completer-1 # Can be used multiple times.
   --name: string # Can be used to filter resources by their name. The response will only contain the resources matching the specified name
   --label-selector: string # Can be used to filter resources by labels. The response will only contain resources matching the label selector.
 ]: nothing -> record<firewalls: table<applied_to: list, created: string, id: int, labels: record, name: string, rules: list>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "label_selector" $label_selector "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "label_selector" $label_selector "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/firewalls" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sort": $qp_sort, "name": $name, "label_selector": $label_selector} | compact)
+    query: ({"sort": $sort, "name": $name, "label_selector": $label_selector} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -802,20 +802,20 @@ export def "get-firewalls-id-actions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-sort: string@sort-completer # Can be used multiple times.
+  --sort: string@sort-completer # Can be used multiple times.
   --status: string@status-completer # Can be used multiple times, the response will contain only Actions with specified statuses
 ]: nothing -> record<actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/firewalls/{id}/actions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sort": $qp_sort, "status": $status} | compact)
+    query: ({"sort": $sort, "status": $status} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -998,18 +998,18 @@ export def "get-floating-ips" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Can be used to filter Floating IPs by their name. The response will only contain the Floating IP matching the specified name.
   --label-selector: string # Can be used to filter Floating IPs by labels. The response will only contain Floating IPs matching the label selector.
-  --qp-sort: string@sort-completer-2 # Can be used multiple times. Choices id id:asc id:desc created created:asc created:desc
+  --sort: string@sort-completer-2 # Can be used multiple times. Choices id id:asc id:desc created created:asc created:desc
 ]: nothing -> record<floating_ips: table<blocked: bool, created: string, description: string, dns_ptr: list, home_location: record, id: int, ip: string, labels: record, name: string, protection: record, server: int, type: string>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "label_selector" $label_selector "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "label_selector" $label_selector "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/floating_ips" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"name": $name, "label_selector": $label_selector, "sort": $qp_sort} | compact)
+    query: ({"name": $name, "label_selector": $label_selector, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1187,20 +1187,20 @@ export def "get-floating-ips-id-actions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-sort: string@sort-completer # Can be used multiple times.
+  --sort: string@sort-completer # Can be used multiple times.
   --status: string@status-completer # Can be used multiple times, the response will contain only Actions with specified statuses
 ]: nothing -> record<actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/floating_ips/{id}/actions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sort": $qp_sort, "status": $status} | compact)
+    query: ({"sort": $sort, "status": $status} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1414,7 +1414,7 @@ export def "get-images" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-sort: string@sort-completer-1 # Can be used multiple times.
+  --sort: string@sort-completer-1 # Can be used multiple times.
   --type: string@type-completer-2 # Can be used multiple times.
   --status: string@status-completer-1 # Can be used multiple times. The response will only contain Images matching the status.
   --bound-to: string # Can be used multiple times. Server ID linked to the Image. Only available for Images of type `backup`
@@ -1424,14 +1424,14 @@ export def "get-images" [
 ]: nothing -> record<images: table<bound_to: int, created: string, created_from: record, deleted: string, deprecated: string, description: string, disk_size: float, id: int, image_size: float, labels: record, name: string, os_flavor: string, os_version: string, protection: record, rapid_deploy: bool, status: string, type: string>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "bound_to" $bound_to "scalar") (serialize-qp "include_deprecated" $include_deprecated "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "label_selector" $label_selector "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "bound_to" $bound_to "scalar") (serialize-qp "include_deprecated" $include_deprecated "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "label_selector" $label_selector "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/images" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sort": $qp_sort, "type": $type, "status": $status, "bound_to": $bound_to, "include_deprecated": $include_deprecated, "name": $name, "label_selector": $label_selector} | compact)
+    query: ({"sort": $sort, "type": $type, "status": $status, "bound_to": $bound_to, "include_deprecated": $include_deprecated, "name": $name, "label_selector": $label_selector} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1567,20 +1567,20 @@ export def "get-images-id-actions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-sort: string@sort-completer # Can be used multiple times.
+  --sort: string@sort-completer # Can be used multiple times.
   --status: string@status-completer # Can be used multiple times, the response will contain only Actions with specified statuses
 ]: nothing -> record<actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/images/{id}/actions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sort": $qp_sort, "status": $status} | compact)
+    query: ({"sort": $sort, "status": $status} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1820,20 +1820,20 @@ export def "get-load-balancers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-sort: string@sort-completer-1 # Can be used multiple times.
+  --sort: string@sort-completer-1 # Can be used multiple times.
   --name: string # Can be used to filter resources by their name. The response will only contain the resources matching the specified name
   --label-selector: string # Can be used to filter resources by labels. The response will only contain resources matching the label selector.
 ]: nothing -> record<load_balancers: table<algorithm: record, created: string, id: int, included_traffic: int, ingoing_traffic: int, labels: record, load_balancer_type: record, location: record, name: string, outgoing_traffic: int, private_net: list, protection: record, public_net: record, services: list, targets: list>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "label_selector" $label_selector "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "label_selector" $label_selector "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/load_balancers" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sort": $qp_sort, "name": $name, "label_selector": $label_selector} | compact)
+    query: ({"sort": $sort, "name": $name, "label_selector": $label_selector} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2018,20 +2018,20 @@ export def "get-load-balancers-id-actions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-sort: string@sort-completer # Can be used multiple times.
+  --sort: string@sort-completer # Can be used multiple times.
   --status: string@status-completer # Can be used multiple times, the response will contain only Actions with specified statuses
 ]: nothing -> record<actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/load_balancers/{id}/actions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sort": $qp_sort, "status": $status} | compact)
+    query: ({"sort": $sort, "status": $status} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2072,6 +2072,7 @@ export def "post-load-balancers-id-actions-add-service" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/load_balancers/{id}/actions/add_service") $auth.query)
   let req_body = {"destination_port": $destination_port, "health_check": $health_check, "http": $http, "listen_port": $listen_port, "protocol": $protocol, "proxyprotocol": $proxyprotocol} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "proxyprotocol") == null) { error make --unspanned { msg: "required body field 'proxyprotocol' missing: pass --proxyprotocol or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2554,6 +2555,7 @@ export def "post-load-balancers-id-actions-update-service" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/load_balancers/{id}/actions/update_service") $auth.query)
   let req_body = {"destination_port": $destination_port, "health_check": $health_check, "http": $http, "listen_port": $listen_port, "protocol": $protocol, "proxyprotocol": $proxyprotocol} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "proxyprotocol") == null) { error make --unspanned { msg: "required body field 'proxyprotocol' missing: pass --proxyprotocol or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2621,14 +2623,17 @@ export def "get-load-balancers-id-metrics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --type: string@type-completer-6 # Type of metrics to get
-  --start: string # Start of period to get Metrics for (in ISO-8601 format)
-  --end: string # End of period to get Metrics for (in ISO-8601 format)
+  --type: string@type-completer-6 # Type of metrics to get (required)
+  --start: string # Start of period to get Metrics for (in ISO-8601 format) (required)
+  --end: string # End of period to get Metrics for (in ISO-8601 format) (required)
   --step: string # Resolution of results in seconds
 ]: nothing -> record<metrics: record<end: string, start: string, step: float, time_series: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($type == null) { error make --unspanned { msg: "required query parameter 'type' missing: pass --type" } }
+  if ($start == null) { error make --unspanned { msg: "required query parameter 'start' missing: pass --start" } }
+  if ($end == null) { error make --unspanned { msg: "required query parameter 'end' missing: pass --end" } }
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "step" $step "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/load_balancers/{id}/metrics") $qp $auth.query)
   let accept_val = "application/json"
@@ -2922,20 +2927,20 @@ export def "get-networks-id-actions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-sort: string@sort-completer # Can be used multiple times.
+  --sort: string@sort-completer # Can be used multiple times.
   --status: string@status-completer # Can be used multiple times, the response will contain only Actions with specified statuses
 ]: nothing -> record<actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/networks/{id}/actions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sort": $qp_sort, "status": $status} | compact)
+    query: ({"sort": $sort, "status": $status} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3235,21 +3240,21 @@ export def "get-placement-groups" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-sort: string@sort-completer-1 # Can be used multiple times.
+  --sort: string@sort-completer-1 # Can be used multiple times.
   --name: string # Can be used to filter resources by their name. The response will only contain the resources matching the specified name
   --label-selector: string # Can be used to filter resources by labels. The response will only contain resources matching the label selector.
   --type: string@type-completer-8 # Can be used multiple times. The response will only contain PlacementGroups matching the type.
 ]: nothing -> record<meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>, placement_groups: table<created: string, id: int, labels: record, name: string, servers: list, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "label_selector" $label_selector "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "label_selector" $label_selector "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/placement_groups" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sort": $qp_sort, "name": $name, "label_selector": $label_selector, "type": $type} | compact)
+    query: ({"sort": $sort, "name": $name, "label_selector": $label_selector, "type": $type} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3458,18 +3463,18 @@ export def "get-primary-ips" [
   --name: string # Can be used to filter resources by their name. The response will only contain the resources matching the specified name
   --label-selector: string # Can be used to filter resources by labels. The response will only contain resources matching the label selector.
   --ip: string # Can be used to filter resources by their ip. The response will only contain the resources matching the specified ip. (e.g. 127.0.0.1)
-  --qp-sort: string@sort-completer-2 # Can be used multiple times. Choices id id:asc id:desc created created:asc created:desc
+  --sort: string@sort-completer-2 # Can be used multiple times. Choices id id:asc id:desc created created:asc created:desc
 ]: nothing -> record<meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>, primary_ips: table<assignee_id: int, assignee_type: string, auto_delete: bool, blocked: bool, created: string, datacenter: record, dns_ptr: list, id: int, ip: string, labels: record, name: string, protection: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "label_selector" $label_selector "scalar") (serialize-qp "ip" $ip "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "label_selector" $label_selector "scalar") (serialize-qp "ip" $ip "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/primary_ips" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"name": $name, "label_selector": $label_selector, "ip": $ip, "sort": $qp_sort} | compact)
+    query: ({"name": $name, "label_selector": $label_selector, "ip": $ip, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3873,19 +3878,19 @@ export def "get-servers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Can be used to filter resources by their name. The response will only contain the resources matching the specified name
   --label-selector: string # Can be used to filter resources by labels. The response will only contain resources matching the label selector.
-  --qp-sort: string@sort-completer-1 # Can be used multiple times.
+  --sort: string@sort-completer-1 # Can be used multiple times.
   --status: string@status-completer-2 # Can be used multiple times. The response will only contain Server matching the status
 ]: nothing -> record<meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>, servers: table<backup_window: string, created: string, datacenter: record, id: int, image: record, included_traffic: float, ingoing_traffic: float, iso: record, labels: record, load_balancers: list, locked: bool, name: string, outgoing_traffic: float, placement_group: record, primary_disk_size: float, private_net: list, protection: record, public_net: record, rescue_enabled: bool, server_type: record, status: string, volumes: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "label_selector" $label_selector "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "label_selector" $label_selector "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/servers" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"name": $name, "label_selector": $label_selector, "sort": $qp_sort, "status": $status} | compact)
+    query: ({"name": $name, "label_selector": $label_selector, "sort": $sort, "status": $status} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4073,20 +4078,20 @@ export def "get-servers-id-actions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-sort: string@sort-completer # Can be used multiple times.
+  --sort: string@sort-completer # Can be used multiple times.
   --status: string@status-completer # Can be used multiple times, the response will contain only Actions with specified statuses
 ]: nothing -> record<actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/servers/{id}/actions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sort": $qp_sort, "status": $status} | compact)
+    query: ({"sort": $sort, "status": $status} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4360,6 +4365,7 @@ export def "post-servers-id-actions-change-type" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/servers/{id}/actions/change_type") $auth.query)
   let req_body = {"server_type": $server_type, "upgrade_disk": $upgrade_disk} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "upgrade_disk") == null) { error make --unspanned { msg: "required body field 'upgrade_disk' missing: pass --upgrade-disk or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -5007,14 +5013,17 @@ export def "get-servers-id-metrics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --type: string@type-completer-11 # Type of metrics to get
-  --start: string # Start of period to get Metrics for (in ISO-8601 format)
-  --end: string # End of period to get Metrics for (in ISO-8601 format)
+  --type: string@type-completer-11 # Type of metrics to get (required)
+  --start: string # Start of period to get Metrics for (in ISO-8601 format) (required)
+  --end: string # End of period to get Metrics for (in ISO-8601 format) (required)
   --step: string # Resolution of results in seconds
 ]: nothing -> record<metrics: record<end: string, start: string, step: float, time_series: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($type == null) { error make --unspanned { msg: "required query parameter 'type' missing: pass --type" } }
+  if ($start == null) { error make --unspanned { msg: "required query parameter 'start' missing: pass --start" } }
+  if ($end == null) { error make --unspanned { msg: "required query parameter 'end' missing: pass --end" } }
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "step" $step "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/servers/{id}/metrics") $qp $auth.query)
   let accept_val = "application/json"
@@ -5046,21 +5055,21 @@ export def "get-ssh-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-sort: string@sort-completer-3 # Can be used multiple times.
+  --sort: string@sort-completer-3 # Can be used multiple times.
   --name: string # Can be used to filter resources by their name. The response will only contain the resources matching the specified name
   --fingerprint: string # Can be used to filter SSH keys by their fingerprint. The response will only contain the SSH key matching the specified fingerprint.
   --label-selector: string # Can be used to filter resources by labels. The response will only contain resources matching the label selector.
 ]: nothing -> record<meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>, ssh_keys: table<created: string, fingerprint: string, id: int, labels: record, name: string, public_key: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "fingerprint" $fingerprint "scalar") (serialize-qp "label_selector" $label_selector "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "fingerprint" $fingerprint "scalar") (serialize-qp "label_selector" $label_selector "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ssh_keys" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sort": $qp_sort, "name": $name, "fingerprint": $fingerprint, "label_selector": $label_selector} | compact)
+    query: ({"sort": $sort, "name": $name, "fingerprint": $fingerprint, "label_selector": $label_selector} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -5234,20 +5243,20 @@ export def "get-volumes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer-1 # Can be used multiple times. The response will only contain Volumes matching the status.
-  --qp-sort: string@sort-completer-1 # Can be used multiple times.
+  --sort: string@sort-completer-1 # Can be used multiple times.
   --name: string # Can be used to filter resources by their name. The response will only contain the resources matching the specified name
   --label-selector: string # Can be used to filter resources by labels. The response will only contain resources matching the label selector.
 ]: nothing -> record<meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>, volumes: table<created: string, format: string, id: int, labels: record, linux_device: string, location: record, name: string, protection: record, server: int, size: float, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "label_selector" $label_selector "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "label_selector" $label_selector "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/volumes" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"status": $status, "sort": $qp_sort, "name": $name, "label_selector": $label_selector} | compact)
+    query: ({"status": $status, "sort": $sort, "name": $name, "label_selector": $label_selector} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -5426,20 +5435,20 @@ export def "get-volumes-id-actions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-sort: string@sort-completer # Can be used multiple times.
+  --sort: string@sort-completer # Can be used multiple times.
   --status: string@status-completer # Can be used multiple times, the response will contain only Actions with specified statuses
 ]: nothing -> record<actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/volumes/{id}/actions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sort": $qp_sort, "status": $status} | compact)
+    query: ({"sort": $sort, "status": $status} | compact)
     headers: $auth.headers
     body: null
     content_type: null

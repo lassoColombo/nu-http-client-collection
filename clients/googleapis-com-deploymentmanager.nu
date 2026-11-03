@@ -1,4 +1,4 @@
-# Auto-generated client for Cloud Deployment Manager V2 API vv2beta
+# Auto-generated client for Cloud Deployment Manager V2 API v2beta
 # Source: https://api.apis.guru/v2/specs/googleapis.com/deploymentmanager/v2beta/openapi.json
 # Auth: --token flag or $env.CLOUD_DEPLOYMENT_MANAGER_V2_API_TOKEN
 
@@ -12,20 +12,10 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
-}
-
-# Merge multiple auth records (AND-form security: every scheme must be sent).
-def merge-auth [parts: list]: nothing -> record {
-  let active = ($parts | where {|p| $p.location != "none" })
-  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
-  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
-  let locs = ($active | each {|p| $p.location } | uniq)
-  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
-  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
 # Serialize a single query parameter based on collection style
@@ -165,8 +155,8 @@ export def commands []: nothing -> table {
 export def "deploymentmanager-composite-types-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -189,7 +179,7 @@ export def "deploymentmanager-composite-types-list" [
   --order-by: string # Sorts list results by a certain order. By default, results are returned in alphanumerical order based on the resource name. You can also sort results in descending order based on the creation timestamp using `orderBy="creationTimestamp desc"`. This sorts results based on the `creationTimestamp` field in reverse chronological order (newest result first). Use this to sort resources like operations so that the newest operation is returned first. Currently, only sorting by `name` or `creationTimestamp desc` is supported.
   --page-token: string # Specifies a page token to use. Set `pageToken` to the `nextPageToken` returned by a previous list request to get the next page of results.
 ]: nothing -> record<compositeTypes: table<description: string, id: string, insertTime: string, labels: list, name: string, operation: record, selfLink: string, status: string, templateContents: record>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -220,8 +210,8 @@ export def "deploymentmanager-composite-types-list" [
 export def "deploymentmanager-composite-types-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -250,7 +240,7 @@ export def "deploymentmanager-composite-types-insert" [
   --template-contents: record # Files that make up the template contents of a template type. — shape: {imports?: list, interpreter?: "UNKNOWN_INTERPRETER"|"PYTHON"|"JINJA", mainTemplate?: string, schema?: string, template?: string}
 ]: any -> record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -281,8 +271,8 @@ export def "deploymentmanager-composite-types-delete" [
   project: string
   composite_type: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -301,7 +291,7 @@ export def "deploymentmanager-composite-types-delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($composite_type | is-empty) { error make --unspanned { msg: "path parameter 'compositeType' must be non-empty" } }
@@ -331,8 +321,8 @@ export def "deploymentmanager-composite-types-get" [
   project: string
   composite_type: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -351,7 +341,7 @@ export def "deploymentmanager-composite-types-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<description: string, id: string, insertTime: string, labels: table<key: string, value: string>, name: string, operation: record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: list<record>, zone: string>, selfLink: string, status: string, templateContents: record<imports: list<record>, interpreter: string, mainTemplate: string, schema: string, template: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($composite_type | is-empty) { error make --unspanned { msg: "path parameter 'compositeType' must be non-empty" } }
@@ -384,8 +374,8 @@ export def "deploymentmanager-composite-types-patch" [
   project: string
   composite_type: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -414,7 +404,7 @@ export def "deploymentmanager-composite-types-patch" [
   --template-contents: record # Files that make up the template contents of a template type. — shape: {imports?: list, interpreter?: "UNKNOWN_INTERPRETER"|"PYTHON"|"JINJA", mainTemplate?: string, schema?: string, template?: string}
 ]: any -> record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($composite_type | is-empty) { error make --unspanned { msg: "path parameter 'compositeType' must be non-empty" } }
@@ -449,8 +439,8 @@ export def "deploymentmanager-composite-types-update" [
   project: string
   composite_type: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -479,7 +469,7 @@ export def "deploymentmanager-composite-types-update" [
   --template-contents: record # Files that make up the template contents of a template type. — shape: {imports?: list, interpreter?: "UNKNOWN_INTERPRETER"|"PYTHON"|"JINJA", mainTemplate?: string, schema?: string, template?: string}
 ]: any -> record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($composite_type | is-empty) { error make --unspanned { msg: "path parameter 'compositeType' must be non-empty" } }
@@ -510,8 +500,8 @@ export def "deploymentmanager-composite-types-update" [
 export def "deploymentmanager-deployments-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -534,7 +524,7 @@ export def "deploymentmanager-deployments-list" [
   --order-by: string # Sorts list results by a certain order. By default, results are returned in alphanumerical order based on the resource name. You can also sort results in descending order based on the creation timestamp using `orderBy="creationTimestamp desc"`. This sorts results based on the `creationTimestamp` field in reverse chronological order (newest result first). Use this to sort resources like operations so that the newest operation is returned first. Currently, only sorting by `name` or `creationTimestamp desc` is supported.
   --page-token: string # Specifies a page token to use. Set `pageToken` to the `nextPageToken` returned by a previous list request to get the next page of results.
 ]: nothing -> record<deployments: table<description: string, fingerprint: string, id: string, insertTime: string, labels: list, manifest: string, name: string, operation: record, selfLink: string, target: record, update: record, updateTime: string>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -566,8 +556,8 @@ export def "deploymentmanager-deployments-list" [
 export def "deploymentmanager-deployments-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -601,7 +591,7 @@ export def "deploymentmanager-deployments-insert" [
   --update-time: string # Output only. Update timestamp in RFC3339 text format.
 ]: any -> record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "createPolicy" $create_policy "scalar") (serialize-qp "preview" $preview "scalar")] | flatten | str join "&"
@@ -632,8 +622,8 @@ export def "deploymentmanager-deployments-delete" [
   project: string
   deployment: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -653,7 +643,7 @@ export def "deploymentmanager-deployments-delete" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --delete-policy: string@delete-policy-completer # Sets the policy to use for deleting resources.
 ]: nothing -> record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($deployment | is-empty) { error make --unspanned { msg: "path parameter 'deployment' must be non-empty" } }
@@ -683,8 +673,8 @@ export def "deploymentmanager-deployments-get" [
   project: string
   deployment: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -703,7 +693,7 @@ export def "deploymentmanager-deployments-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<description: string, fingerprint: string, id: string, insertTime: string, labels: table<key: string, value: string>, manifest: string, name: string, operation: record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: list<record>, zone: string>, selfLink: string, target: record<config: record<content: string>, imports: list<record>>, update: record<description: string, labels: list<record>, manifest: string>, updateTime: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($deployment | is-empty) { error make --unspanned { msg: "path parameter 'deployment' must be non-empty" } }
@@ -737,8 +727,8 @@ export def "deploymentmanager-deployments-patch" [
   project: string
   deployment: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -773,7 +763,7 @@ export def "deploymentmanager-deployments-patch" [
   --update-time: string # Output only. Update timestamp in RFC3339 text format.
 ]: any -> record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($deployment | is-empty) { error make --unspanned { msg: "path parameter 'deployment' must be non-empty" } }
@@ -809,8 +799,8 @@ export def "deploymentmanager-deployments-update" [
   project: string
   deployment: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -845,7 +835,7 @@ export def "deploymentmanager-deployments-update" [
   --update-time: string # Output only. Update timestamp in RFC3339 text format.
 ]: any -> record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($deployment | is-empty) { error make --unspanned { msg: "path parameter 'deployment' must be non-empty" } }
@@ -877,8 +867,8 @@ export def "deploymentmanager-deployments-cancel-preview" [
   project: string
   deployment: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -899,7 +889,7 @@ export def "deploymentmanager-deployments-cancel-preview" [
   --fingerprint: string # Specifies a fingerprint for `cancelPreview()` requests. A fingerprint is a randomly generated value that must be provided in `cancelPreview()` requests to perform optimistic locking. This ensures optimistic concurrency so that the deployment does not have conflicting requests (e.g. if someone attempts to make a new update request while another user attempts to cancel a preview, this would prevent one of the requests). The fingerprint is initially generated by Deployment Manager and changes after every request to modify a deployment. To get the latest fingerprint value, perform a `get()` request on the deployment. (format: byte)
 ]: any -> record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($deployment | is-empty) { error make --unspanned { msg: "path parameter 'deployment' must be non-empty" } }
@@ -931,8 +921,8 @@ export def "deploymentmanager-manifests-list" [
   project: string
   deployment: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -955,7 +945,7 @@ export def "deploymentmanager-manifests-list" [
   --order-by: string # Sorts list results by a certain order. By default, results are returned in alphanumerical order based on the resource name. You can also sort results in descending order based on the creation timestamp using `orderBy="creationTimestamp desc"`. This sorts results based on the `creationTimestamp` field in reverse chronological order (newest result first). Use this to sort resources like operations so that the newest operation is returned first. Currently, only sorting by `name` or `creationTimestamp desc` is supported.
   --page-token: string # Specifies a page token to use. Set `pageToken` to the `nextPageToken` returned by a previous list request to get the next page of results.
 ]: nothing -> record<manifests: table<config: record, expandedConfig: string, id: string, imports: list, insertTime: string, layout: string, manifestSizeBytes: string, manifestSizeLimitBytes: string, name: string, selfLink: string>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($deployment | is-empty) { error make --unspanned { msg: "path parameter 'deployment' must be non-empty" } }
@@ -986,8 +976,8 @@ export def "deploymentmanager-manifests-get" [
   deployment: string
   manifest: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1006,7 +996,7 @@ export def "deploymentmanager-manifests-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<config: record<content: string>, expandedConfig: string, id: string, imports: table<content: string, name: string>, insertTime: string, layout: string, manifestSizeBytes: string, manifestSizeLimitBytes: string, name: string, selfLink: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($deployment | is-empty) { error make --unspanned { msg: "path parameter 'deployment' must be non-empty" } }
@@ -1037,8 +1027,8 @@ export def "deploymentmanager-resources-list" [
   project: string
   deployment: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1061,7 +1051,7 @@ export def "deploymentmanager-resources-list" [
   --order-by: string # Sorts list results by a certain order. By default, results are returned in alphanumerical order based on the resource name. You can also sort results in descending order based on the creation timestamp using `orderBy="creationTimestamp desc"`. This sorts results based on the `creationTimestamp` field in reverse chronological order (newest result first). Use this to sort resources like operations so that the newest operation is returned first. Currently, only sorting by `name` or `creationTimestamp desc` is supported.
   --page-token: string # Specifies a page token to use. Set `pageToken` to the `nextPageToken` returned by a previous list request to get the next page of results.
 ]: nothing -> record<nextPageToken: string, resources: table<accessControl: record, finalProperties: string, id: string, insertTime: string, manifest: string, name: string, properties: string, type: string, update: record, updateTime: string, url: string, warnings: list>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($deployment | is-empty) { error make --unspanned { msg: "path parameter 'deployment' must be non-empty" } }
@@ -1092,8 +1082,8 @@ export def "deploymentmanager-resources-get" [
   deployment: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1112,7 +1102,7 @@ export def "deploymentmanager-resources-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accessControl: record<gcpIamPolicy: string>, finalProperties: string, id: string, insertTime: string, manifest: string, name: string, properties: string, type: string, update: record<accessControl: record<gcpIamPolicy: string>, error: record<errors: list>, finalProperties: string, intent: string, manifest: string, properties: string, state: string, warnings: list<record>>, updateTime: string, url: string, warnings: table<code: string, data: list, message: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($deployment | is-empty) { error make --unspanned { msg: "path parameter 'deployment' must be non-empty" } }
@@ -1143,8 +1133,8 @@ export def "deploymentmanager-deployments-stop" [
   project: string
   deployment: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1165,7 +1155,7 @@ export def "deploymentmanager-deployments-stop" [
   --fingerprint: string # Specifies a fingerprint for `stop()` requests. A fingerprint is a randomly generated value that must be provided in `stop()` requests to perform optimistic locking. This ensures optimistic concurrency so that the deployment does not have conflicting requests (e.g. if someone attempts to make a new update request while another user attempts to stop an ongoing update request, this would prevent a collision). The fingerprint is initially generated by Deployment Manager and changes after every request to modify a deployment. To get the latest fingerprint value, perform a `get()` request on the deployment. (format: byte)
 ]: any -> record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($deployment | is-empty) { error make --unspanned { msg: "path parameter 'deployment' must be non-empty" } }
@@ -1197,8 +1187,8 @@ export def "deploymentmanager-deployments-get-iam-policy" [
   project: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1218,7 +1208,7 @@ export def "deploymentmanager-deployments-get-iam-policy" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --options-requested-policy-version: int # Requested IAM Policy version.
 ]: nothing -> record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($resource | is-empty) { error make --unspanned { msg: "path parameter 'resource' must be non-empty" } }
@@ -1250,8 +1240,8 @@ export def "deploymentmanager-deployments-set-iam-policy" [
   project: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1274,7 +1264,7 @@ export def "deploymentmanager-deployments-set-iam-policy" [
   --policy: record # An Identity and Access Management (IAM) policy, which specifies access controls for Google Cloud resources. A `Policy` is a collection of `bindings`. A `binding` binds one or more `members`, or principals, to a single `role`. Principals can be user accounts, service accounts, Google groups, and domains (such as G Suite). A `role` is a named list of permissions; each `role` can be an IAM predefined role or a user-created custom role. For some types of Google Cloud resources, a `binding` can also specify a `condition`, which is a logical expression that allows access to a resource only if the expression evaluates to `true`. A condition can add constraints based on attributes of the request, the resource, or both. To learn which resources support conditions in their IAM policies, see the [IAM documentation](https://cloud.google.com/iam/help/conditions/resource-policies). **JSON example:** { "bindings": [ { "role": "roles/resourcemanager.organizationAdmin", "members": [ "user:mike@example.com", "group:admins@example.com", "domain:google.com", "serviceAccount:my-project-id@appspot.gserviceaccount.com" ] }, { "role": "roles/resourcemanager.organizationViewer", "members": [ "user:eve@example.com" ], "condition": { "title": "expirable access", "description": "Does not grant access after Sep 2020", "expression": "request.time < timestamp('2020-10-01T00:00:00.000Z')", } } ], "etag": "BwWWja0YfJA=", "version": 3 } **YAML example:** bindings: - members: - user:mike@example.com - group:admins@example.com - domain:google.com - serviceAccount:my-project-id@appspot.gserviceaccount.com role: roles/resourcemanager.organizationAdmin - members: - user:eve@example.com role: roles/resourcemanager.organizationViewer condition: title: expirable access description: Does not grant access after Sep 2020 expression: request.time < timestamp('2020-10-01T00:00:00.000Z') etag: BwWWja0YfJA= version: 3 For a description of IAM and its features, see the [IAM documentation](https://cloud.google.com/iam/docs/). — shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
 ]: any -> record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($resource | is-empty) { error make --unspanned { msg: "path parameter 'resource' must be non-empty" } }
@@ -1306,8 +1296,8 @@ export def "deploymentmanager-deployments-test-iam-permissions" [
   project: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1328,7 +1318,7 @@ export def "deploymentmanager-deployments-test-iam-permissions" [
   --permissions: list<string> # The set of permissions to check for the 'resource'. Permissions with wildcards (such as '*' or 'storage.*') are not allowed.
 ]: any -> record<permissions: list<string>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($resource | is-empty) { error make --unspanned { msg: "path parameter 'resource' must be non-empty" } }
@@ -1359,8 +1349,8 @@ export def "deploymentmanager-deployments-test-iam-permissions" [
 export def "deploymentmanager-operations-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1383,7 +1373,7 @@ export def "deploymentmanager-operations-list" [
   --order-by: string # Sorts list results by a certain order. By default, results are returned in alphanumerical order based on the resource name. You can also sort results in descending order based on the creation timestamp using `orderBy="creationTimestamp desc"`. This sorts results based on the `creationTimestamp` field in reverse chronological order (newest result first). Use this to sort resources like operations so that the newest operation is returned first. Currently, only sorting by `name` or `creationTimestamp desc` is supported.
   --page-token: string # Specifies a page token to use. Set `pageToken` to the `nextPageToken` returned by a previous list request to get the next page of results.
 ]: nothing -> record<nextPageToken: string, operations: table<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: list, zone: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -1412,8 +1402,8 @@ export def "deploymentmanager-operations-get" [
   project: string
   operation: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1432,7 +1422,7 @@ export def "deploymentmanager-operations-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($operation | is-empty) { error make --unspanned { msg: "path parameter 'operation' must be non-empty" } }
@@ -1461,8 +1451,8 @@ export def "deploymentmanager-operations-get" [
 export def "deploymentmanager-type-providers-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1485,7 +1475,7 @@ export def "deploymentmanager-type-providers-list" [
   --order-by: string # Sorts list results by a certain order. By default, results are returned in alphanumerical order based on the resource name. You can also sort results in descending order based on the creation timestamp using `orderBy="creationTimestamp desc"`. This sorts results based on the `creationTimestamp` field in reverse chronological order (newest result first). Use this to sort resources like operations so that the newest operation is returned first. Currently, only sorting by `name` or `creationTimestamp desc` is supported.
   --page-token: string # Specifies a page token to use. Set `pageToken` to the `nextPageToken` returned by a previous list request to get the next page of results.
 ]: nothing -> record<nextPageToken: string, typeProviders: table<collectionOverrides: list, credential: record, customCertificateAuthorityRoots: list, description: string, descriptorUrl: string, id: string, insertTime: string, labels: list, name: string, operation: record, options: record, selfLink: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -1518,8 +1508,8 @@ export def "deploymentmanager-type-providers-list" [
 export def "deploymentmanager-type-providers-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1551,7 +1541,7 @@ export def "deploymentmanager-type-providers-insert" [
   --self-link: string # Output only. Self link for the type provider.
 ]: any -> record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1582,8 +1572,8 @@ export def "deploymentmanager-type-providers-delete" [
   project: string
   type_provider: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1602,7 +1592,7 @@ export def "deploymentmanager-type-providers-delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($type_provider | is-empty) { error make --unspanned { msg: "path parameter 'typeProvider' must be non-empty" } }
@@ -1632,8 +1622,8 @@ export def "deploymentmanager-type-providers-get" [
   project: string
   type_provider: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1652,7 +1642,7 @@ export def "deploymentmanager-type-providers-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<collectionOverrides: table<collection: string, options: record>, credential: record<basicAuth: record<password: string, user: string>, serviceAccount: record<email: string>, useProjectDefault: bool>, customCertificateAuthorityRoots: list<string>, description: string, descriptorUrl: string, id: string, insertTime: string, labels: table<key: string, value: string>, name: string, operation: record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: list<record>, zone: string>, options: record<asyncOptions: list<record>, inputMappings: list<record>, validationOptions: record<schemaValidation: string, undeclaredProperties: string>, virtualProperties: string>, selfLink: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($type_provider | is-empty) { error make --unspanned { msg: "path parameter 'typeProvider' must be non-empty" } }
@@ -1687,8 +1677,8 @@ export def "deploymentmanager-type-providers-patch" [
   project: string
   type_provider: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1720,7 +1710,7 @@ export def "deploymentmanager-type-providers-patch" [
   --self-link: string # Output only. Self link for the type provider.
 ]: any -> record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($type_provider | is-empty) { error make --unspanned { msg: "path parameter 'typeProvider' must be non-empty" } }
@@ -1757,8 +1747,8 @@ export def "deploymentmanager-type-providers-update" [
   project: string
   type_provider: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1790,7 +1780,7 @@ export def "deploymentmanager-type-providers-update" [
   --self-link: string # Output only. Self link for the type provider.
 ]: any -> record<clientOperationId: string, creationTimestamp: string, description: string, endTime: string, error: record<errors: list<record>>, httpErrorMessage: string, httpErrorStatusCode: int, id: string, insertTime: string, kind: string, name: string, operationGroupId: string, operationType: string, progress: int, region: string, selfLink: string, startTime: string, status: string, statusMessage: string, targetId: string, targetLink: string, user: string, warnings: table<code: string, data: list, message: string>, zone: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($type_provider | is-empty) { error make --unspanned { msg: "path parameter 'typeProvider' must be non-empty" } }
@@ -1822,8 +1812,8 @@ export def "deploymentmanager-type-providers-list-types" [
   project: string
   type_provider: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1846,7 +1836,7 @@ export def "deploymentmanager-type-providers-list-types" [
   --order-by: string # Sorts list results by a certain order. By default, results are returned in alphanumerical order based on the resource name. You can also sort results in descending order based on the creation timestamp using `orderBy="creationTimestamp desc"`. This sorts results based on the `creationTimestamp` field in reverse chronological order (newest result first). Use this to sort resources like operations so that the newest operation is returned first. Currently, only sorting by `name` or `creationTimestamp desc` is supported.
   --page-token: string # Specifies a page token to use. Set `pageToken` to the `nextPageToken` returned by a previous list request to get the next page of results.
 ]: nothing -> record<nextPageToken: string, types: table<description: string, documentationLink: string, kind: string, name: string, schema: record, selfLink: string, title: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($type_provider | is-empty) { error make --unspanned { msg: "path parameter 'typeProvider' must be non-empty" } }
@@ -1877,8 +1867,8 @@ export def "deploymentmanager-type-providers-get-type" [
   type_provider: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1897,7 +1887,7 @@ export def "deploymentmanager-type-providers-get-type" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<description: string, documentationLink: string, kind: string, name: string, schema: record<input: string, output: string>, selfLink: string, title: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($type_provider | is-empty) { error make --unspanned { msg: "path parameter 'typeProvider' must be non-empty" } }
@@ -1927,8 +1917,8 @@ export def "deploymentmanager-type-providers-get-type" [
 export def "deploymentmanager-types-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1951,7 +1941,7 @@ export def "deploymentmanager-types-list" [
   --order-by: string # Sorts list results by a certain order. By default, results are returned in alphanumerical order based on the resource name. You can also sort results in descending order based on the creation timestamp using `orderBy="creationTimestamp desc"`. This sorts results based on the `creationTimestamp` field in reverse chronological order (newest result first). Use this to sort resources like operations so that the newest operation is returned first. Currently, only sorting by `name` or `creationTimestamp desc` is supported.
   --page-token: string # Specifies a page token to use. Set `pageToken` to the `nextPageToken` returned by a previous list request to get the next page of results.
 ]: nothing -> record<nextPageToken: string, types: table<base: record, description: string, id: string, insertTime: string, labels: list, name: string, operation: record, selfLink: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DEPLOYMENT_MANAGER_V2_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"

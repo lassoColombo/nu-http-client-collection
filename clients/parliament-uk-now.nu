@@ -1,4 +1,4 @@
-# Auto-generated client for Annunciator content API vv1
+# Auto-generated client for Annunciator content API v1
 # Source: https://api.apis.guru/v2/specs/parliament.uk/now/v1/openapi.json
 # Auth: --token flag or $env.ANNUNCIATOR_CONTENT_API_TOKEN
 
@@ -94,6 +94,7 @@ def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def annunciator-completer [] { ["CommonsMain" "LordsMain"] }
 def accept-completer [] { ["application/json" "text/json" "text/plain"] }
 
 # List all available API commands with their parameters
@@ -123,7 +124,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/Message/message/{annunciator}/current
 export def "get-api-message-message-annunciator-current" [
-  annunciator: string
+  annunciator: string@annunciator-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,7 +160,7 @@ export def "get-api-message-message-annunciator-current" [
 #
 # GET /api/Message/message/{annunciator}/{date}
 export def "get-api-message-message-annunciator-date" [
-  annunciator: string
+  annunciator: string@annunciator-completer
   date: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

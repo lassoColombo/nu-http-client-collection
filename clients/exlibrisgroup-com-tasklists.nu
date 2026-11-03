@@ -187,10 +187,11 @@ export def "post-almaws-v1-task-lists-printouts" [
   --status: string # Printout status. Optional. Valid values are: Printed, Pending, Canceled. (default: ALL)
   --printer-id: string # Printout Printer (default: ALL)
   --printout-id: string # A list of Printout IDs (for example: 123,456,778) from 1 to the limit of 100 Optional. Use of this option overrides all of the filtering parameters (default: ALL)
-  --op: string # The operation to perform on the printout. Currently, the options are: 'mark_as_printed','mark_as_canceled'
+  --op: string # The operation to perform on the printout. Currently, the options are: 'mark_as_printed','mark_as_canceled' (required)
 ]: nothing -> record<printout: table<date: string, id: string, letter: string, link: string, printer: record, printout: string, size: string, source: string, status: record>, total_record_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($op == null) { error make --unspanned { msg: "required query parameter 'op' missing: pass --op" } }
   let qp = [(serialize-qp "letter" $letter "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "printer_id" $printer_id "scalar") (serialize-qp "printout_id" $printout_id "scalar") (serialize-qp "op" $op "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/almaws/v1/task-lists/printouts" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -262,11 +263,12 @@ export def "post-almaws-v1-task-lists-printouts-1" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --op: string # The operation to perform on the printout. Currently, the options are 'mark_as_printed','mark_as_canceled'
+  --op: string # The operation to perform on the printout. Currently, the options are 'mark_as_printed','mark_as_canceled' (required)
 ]: nothing -> record<date: string, id: string, letter: string, link: string, printer: record<desc: string, value: string>, printout: string, size: string, source: string, status: record<desc: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($printout_id | is-empty) { error make --unspanned { msg: "path parameter 'printout_id' must be non-empty" } }
+  if ($op == null) { error make --unspanned { msg: "required query parameter 'op' missing: pass --op" } }
   let qp = [(serialize-qp "op" $op "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({printout_id: (encode-path-segment $printout_id)} | format pattern "/almaws/v1/task-lists/printouts/{printout_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -300,19 +302,21 @@ export def "get-almaws-v1-task-lists-requested-resources" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --library: string # The library of the given circulation desk or department where the resources are located. Mandatory.
-  --circ-desk: string # The circulation desk where the action is being performed. Mandatory.
-  --location: string # The location code. Optional. (default: )
+  --library: string # The library of the given circulation desk or department where the resources are located. Mandatory. (required)
+  --circ-desk: string # The circulation desk where the action is being performed. Mandatory. (required)
+  --location: string # The location code. Optional. (default: "")
   --order-by: string # The order in which to retrieve the results: location/call_number (default). (default: call_number)
   --direction: string # The order direction in which to retrieve the results. Optional. (default: asc)
-  --pickup-inst: string # The pickup institution. Optional. (default: )
-  --reported: string # Show reported results: Y/N. Optional. (default: )
-  --printed: string # Show printed results: Y/N. Optional. (default: )
+  --pickup-inst: string # The pickup institution. Optional. (default: "")
+  --reported: string # Show reported results: Y/N. Optional. (default: "")
+  --printed: string # Show printed results: Y/N. Optional. (default: "")
   --limit: int # Limits the number of results. Optional. Valid values are 0-100. Default value: 10. (default: 10)
   --offset: int # Offset of the results returned. Optional. Default value: 0, which means that the first results will be returned. (default: 0)
 ]: nothing -> record<requested_resource: table<location: record, request: list, resource_metadata: record>, total_record_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($library == null) { error make --unspanned { msg: "required query parameter 'library' missing: pass --library" } }
+  if ($circ_desk == null) { error make --unspanned { msg: "required query parameter 'circ_desk' missing: pass --circ-desk" } }
   let qp = [(serialize-qp "library" $library "scalar") (serialize-qp "circ_desk" $circ_desk "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "pickup_inst" $pickup_inst "scalar") (serialize-qp "reported" $reported "scalar") (serialize-qp "printed" $printed "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/almaws/v1/task-lists/requested-resources" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -346,13 +350,13 @@ export def "post-almaws-v1-task-lists-requested-resources" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --library: string # The library of the given circulation desk or department where the resources are located. Mandatory. (default: )
-  --circ-desk: string # The circulation desk where the action is being performed. Mandatory. (default: )
-  --op: string # Operation to be preformed on the list of given requests. Currently the only supported action is 'mark_reported'. Mandatory. (default: )
-  --location: string # The location code. Optional. (default: )
-  --pickup-inst: string # The pickup institution. Optional. (default: )
-  --reported: string # Show reported results: Y/N. Optional. (default: )
-  --printed: string # Show printed results: Y/N. Optional. (default: )
+  --library: string # The library of the given circulation desk or department where the resources are located. Mandatory. (default: "")
+  --circ-desk: string # The circulation desk where the action is being performed. Mandatory. (default: "")
+  --op: string # Operation to be preformed on the list of given requests. Currently the only supported action is 'mark_reported'. Mandatory. (default: "")
+  --location: string # The location code. Optional. (default: "")
+  --pickup-inst: string # The pickup institution. Optional. (default: "")
+  --reported: string # Show reported results: Y/N. Optional. (default: "")
+  --printed: string # Show printed results: Y/N. Optional. (default: "")
 ]: nothing -> record<requested_resource: table<location: record, request: list, resource_metadata: record>, total_record_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -389,13 +393,13 @@ export def "get-almaws-v1-task-lists-rs-lending-requests" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --library: string # The resource sharing library for which lending requests should be retrieved. Mandatory. List of possible libraries can be retrieved using the [GET /almaws/v1/conf/libraries API](https://developers.exlibrisgroup.com/alma/apis/conf/GET/gwPcGly021p29HpB7XTI4Dp4I8TKv6CAxBlD4LyRaVE=/37088dc9-c685-4641-bc7f-60b5ca7cabed). (default: )
-  --status: string # The status of lending requests to retrieve. Optional. List of possible statuses can be retrieved using the [GET almaws/v1/conf/code-tables/MandatoryLendingWorkflowSteps API](https://developers.exlibrisgroup.com/alma/apis/conf/GET/gwPcGly021p29HpB7XTI4K7cQ0vuYHLS4NSgDGmcRpRYqx5hIMRTng9SIKO5Vof+/37088dc9-c685-4641-bc7f-60b5ca7cabed) and the [GET almaws/v1/conf/code-tables/OptionalLendingWorkflowSteps API](https://developers.exlibrisgroup.com/alma/apis/conf/GET/gwPcGly021p29HpB7XTI4K7cQ0vuYHLS4NSgDGmcRpRYqx5hIMRTng9SIKO5Vof+/37088dc9-c685-4641-bc7f-60b5ca7cabed). (default: )
-  --printed: string # The 'printed' value of lending requests to retrieve. Optional. Possible values: Y, N. (default: )
-  --reported: string # The 'reported' value of lending requests to retrieve. Optional. Possible values: Y, N. (default: )
-  --partner: string # The partner value. Only lending requests from this partner should be retrieved. Optional. List of possible partners can be retrieved using the [GET almaws/v1/partners API](https://developers.exlibrisgroup.com/alma/apis/partners/GET/gwPcGly021piAVNPLaef7suP1zfa6Lui/8883ef41-c3b8-4792-9ff8-cb6b729d6e07). (default: )
-  --requested-format: string # Requested format of the resource. Optional. List of possible formats can be retrieved using the [GET almaws/v1/conf/code-tables/RequestFormats API](https://developers.exlibrisgroup.com/alma/apis/conf/GET/gwPcGly021p29HpB7XTI4K7cQ0vuYHLS4NSgDGmcRpRYqx5hIMRTng9SIKO5Vof+/37088dc9-c685-4641-bc7f-60b5ca7cabed). (default: )
-  --supplied-format: string # Supplied Format of the resource. Optional. List of possible formats can be retrieved using the [GET almaws/v1/conf/code-tables/RequestFormats API](https://developers.exlibrisgroup.com/alma/apis/conf/GET/gwPcGly021p29HpB7XTI4K7cQ0vuYHLS4NSgDGmcRpRYqx5hIMRTng9SIKO5Vof+/37088dc9-c685-4641-bc7f-60b5ca7cabed). (default: )
+  --library: string # The resource sharing library for which lending requests should be retrieved. Mandatory. List of possible libraries can be retrieved using the [GET /almaws/v1/conf/libraries API](https://developers.exlibrisgroup.com/alma/apis/conf/GET/gwPcGly021p29HpB7XTI4Dp4I8TKv6CAxBlD4LyRaVE=/37088dc9-c685-4641-bc7f-60b5ca7cabed). (default: "")
+  --status: string # The status of lending requests to retrieve. Optional. List of possible statuses can be retrieved using the [GET almaws/v1/conf/code-tables/MandatoryLendingWorkflowSteps API](https://developers.exlibrisgroup.com/alma/apis/conf/GET/gwPcGly021p29HpB7XTI4K7cQ0vuYHLS4NSgDGmcRpRYqx5hIMRTng9SIKO5Vof+/37088dc9-c685-4641-bc7f-60b5ca7cabed) and the [GET almaws/v1/conf/code-tables/OptionalLendingWorkflowSteps API](https://developers.exlibrisgroup.com/alma/apis/conf/GET/gwPcGly021p29HpB7XTI4K7cQ0vuYHLS4NSgDGmcRpRYqx5hIMRTng9SIKO5Vof+/37088dc9-c685-4641-bc7f-60b5ca7cabed). (default: "")
+  --printed: string # The 'printed' value of lending requests to retrieve. Optional. Possible values: Y, N. (default: "")
+  --reported: string # The 'reported' value of lending requests to retrieve. Optional. Possible values: Y, N. (default: "")
+  --partner: string # The partner value. Only lending requests from this partner should be retrieved. Optional. List of possible partners can be retrieved using the [GET almaws/v1/partners API](https://developers.exlibrisgroup.com/alma/apis/partners/GET/gwPcGly021piAVNPLaef7suP1zfa6Lui/8883ef41-c3b8-4792-9ff8-cb6b729d6e07). (default: "")
+  --requested-format: string # Requested format of the resource. Optional. List of possible formats can be retrieved using the [GET almaws/v1/conf/code-tables/RequestFormats API](https://developers.exlibrisgroup.com/alma/apis/conf/GET/gwPcGly021p29HpB7XTI4K7cQ0vuYHLS4NSgDGmcRpRYqx5hIMRTng9SIKO5Vof+/37088dc9-c685-4641-bc7f-60b5ca7cabed). (default: "")
+  --supplied-format: string # Supplied Format of the resource. Optional. List of possible formats can be retrieved using the [GET almaws/v1/conf/code-tables/RequestFormats API](https://developers.exlibrisgroup.com/alma/apis/conf/GET/gwPcGly021p29HpB7XTI4K7cQ0vuYHLS4NSgDGmcRpRYqx5hIMRTng9SIKO5Vof+/37088dc9-c685-4641-bc7f-60b5ca7cabed). (default: "")
 ]: nothing -> record<total_record_count: int, user_resource_sharing_request: table<additional_barcode: list, additional_person_name: string, agree_to_copyright_terms: bool, allow_other_formats: bool, author: string, author_initials: string, barcode: string, bib_note: string, call_number: string, chapter: string, chapter_author: string, chapter_title: string, citation_type: record, copyright_status: record, created_date: string, created_time: string, doi: string, edition: string, editor: string, end_page: string, external_id: string, format: record, fund: record, has_active_notes: bool, isbn: string, issn: string, issue: string, journal_title: string, last_interest_date: string, last_modified_date: string, last_modified_time: string, lcc_number: string, level_of_service: record, lost_damaged_fee: record, maximum_fee: float, mms_id: string, need_patron_info: bool, note: string, oclc_number: string, other_standard_id: string, owner: string, pages: string, part: string, partner: record, pickup_location: record, pickup_location_type: string, place_of_publication: string, pmid: string, preferred_send_method: record, printed: bool, publisher: string, reading_room: record, receive_cost: record, remote_record_id: string, reported: bool, request_cost: record, request_id: string, requested_language: record, requested_media: string, requester: record, rs_note: list, series_title_number: string, shipping_cost: record, source: string, specific_edition: bool, start_page: string, status: record, supplied_format: record, text_email: string, text_postal_1: string, text_postal_2: string, text_postal_3: string, text_postal_4: string, title: string, use_alternative_address: bool, user_request: record, volume: string, willing_to_pay: bool, year: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -432,14 +436,14 @@ export def "post-almaws-v1-task-lists-rs-lending-requests" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --library: string # The resource sharing library from which lending requests should be retrieved. Mandatory. List of possible libraries can be retrieved using the [GET /almaws/v1/conf/libraries API](https://developers.exlibrisgroup.com/alma/apis/conf/GET/gwPcGly021p29HpB7XTI4Dp4I8TKv6CAxBlD4LyRaVE=/37088dc9-c685-4641-bc7f-60b5ca7cabed). (default: )
-  --op: string # Operation to be preformed on the list of given requests. Currently the only supported action is 'mark_reported'. Mandatory. (default: )
-  --status: string # The status of lending requests to retrieve. Optional. List of possible statuses can be retrieved using the [GET almaws/v1/conf/code-tables/MandatoryLendingWorkflowSteps API](https://developers.exlibrisgroup.com/alma/apis/conf/GET/gwPcGly021p29HpB7XTI4K7cQ0vuYHLS4NSgDGmcRpRYqx5hIMRTng9SIKO5Vof+/37088dc9-c685-4641-bc7f-60b5ca7cabed).and the [GET almaws/v1/conf/code-tables/OptionalLendingWorkflowSteps API](https://developers.exlibrisgroup.com/alma/apis/conf/GET/gwPcGly021p29HpB7XTI4K7cQ0vuYHLS4NSgDGmcRpRYqx5hIMRTng9SIKO5Vof+/37088dc9-c685-4641-bc7f-60b5ca7cabed). (default: )
-  --printed: string # The 'printed' value of lending requests to retrieve. Optional. Possible values: Y, N. (default: )
-  --reported: string # The 'reported' value of lending requests to retrieve. Optional. Possible values: Y, N. (default: )
-  --partner: string # The partner value. Only lending requests from this partner should be. Optional. List of possible partners can be retrieved using the [GET almaws/v1/partners API](https://developers.exlibrisgroup.com/alma/apis/partners/GET/gwPcGly021piAVNPLaef7suP1zfa6Lui/8883ef41-c3b8-4792-9ff8-cb6b729d6e07). (default: )
-  --requested-format: string # Requested format of the resource. Optional. List of possible formats can be retrieved using the [GET almaws/v1/conf/code-tables/RequestFormats API](https://developers.exlibrisgroup.com/alma/apis/conf/GET/gwPcGly021p29HpB7XTI4K7cQ0vuYHLS4NSgDGmcRpRYqx5hIMRTng9SIKO5Vof+/37088dc9-c685-4641-bc7f-60b5ca7cabed). (default: )
-  --supplied-format: string # Supplied Format of the resource. Optional. List of possible formats can be retrieved using the [GET almaws/v1/conf/code-tables/RequestFormats API](https://developers.exlibrisgroup.com/alma/apis/conf/GET/gwPcGly021p29HpB7XTI4K7cQ0vuYHLS4NSgDGmcRpRYqx5hIMRTng9SIKO5Vof+/37088dc9-c685-4641-bc7f-60b5ca7cabed). (default: )
+  --library: string # The resource sharing library from which lending requests should be retrieved. Mandatory. List of possible libraries can be retrieved using the [GET /almaws/v1/conf/libraries API](https://developers.exlibrisgroup.com/alma/apis/conf/GET/gwPcGly021p29HpB7XTI4Dp4I8TKv6CAxBlD4LyRaVE=/37088dc9-c685-4641-bc7f-60b5ca7cabed). (default: "")
+  --op: string # Operation to be preformed on the list of given requests. Currently the only supported action is 'mark_reported'. Mandatory. (default: "")
+  --status: string # The status of lending requests to retrieve. Optional. List of possible statuses can be retrieved using the [GET almaws/v1/conf/code-tables/MandatoryLendingWorkflowSteps API](https://developers.exlibrisgroup.com/alma/apis/conf/GET/gwPcGly021p29HpB7XTI4K7cQ0vuYHLS4NSgDGmcRpRYqx5hIMRTng9SIKO5Vof+/37088dc9-c685-4641-bc7f-60b5ca7cabed).and the [GET almaws/v1/conf/code-tables/OptionalLendingWorkflowSteps API](https://developers.exlibrisgroup.com/alma/apis/conf/GET/gwPcGly021p29HpB7XTI4K7cQ0vuYHLS4NSgDGmcRpRYqx5hIMRTng9SIKO5Vof+/37088dc9-c685-4641-bc7f-60b5ca7cabed). (default: "")
+  --printed: string # The 'printed' value of lending requests to retrieve. Optional. Possible values: Y, N. (default: "")
+  --reported: string # The 'reported' value of lending requests to retrieve. Optional. Possible values: Y, N. (default: "")
+  --partner: string # The partner value. Only lending requests from this partner should be. Optional. List of possible partners can be retrieved using the [GET almaws/v1/partners API](https://developers.exlibrisgroup.com/alma/apis/partners/GET/gwPcGly021piAVNPLaef7suP1zfa6Lui/8883ef41-c3b8-4792-9ff8-cb6b729d6e07). (default: "")
+  --requested-format: string # Requested format of the resource. Optional. List of possible formats can be retrieved using the [GET almaws/v1/conf/code-tables/RequestFormats API](https://developers.exlibrisgroup.com/alma/apis/conf/GET/gwPcGly021p29HpB7XTI4K7cQ0vuYHLS4NSgDGmcRpRYqx5hIMRTng9SIKO5Vof+/37088dc9-c685-4641-bc7f-60b5ca7cabed). (default: "")
+  --supplied-format: string # Supplied Format of the resource. Optional. List of possible formats can be retrieved using the [GET almaws/v1/conf/code-tables/RequestFormats API](https://developers.exlibrisgroup.com/alma/apis/conf/GET/gwPcGly021p29HpB7XTI4K7cQ0vuYHLS4NSgDGmcRpRYqx5hIMRTng9SIKO5Vof+/37088dc9-c685-4641-bc7f-60b5ca7cabed). (default: "")
 ]: nothing -> record<additional_barcode: list<string>, additional_person_name: string, agree_to_copyright_terms: bool, allow_other_formats: bool, author: string, author_initials: string, barcode: string, bib_note: string, call_number: string, chapter: string, chapter_author: string, chapter_title: string, citation_type: record<desc: string, value: string>, copyright_status: record<desc: string, value: string>, created_date: string, created_time: string, doi: string, edition: string, editor: string, end_page: string, external_id: string, format: record<desc: string, value: string>, fund: record<desc: string, value: string>, has_active_notes: bool, isbn: string, issn: string, issue: string, journal_title: string, last_interest_date: string, last_modified_date: string, last_modified_time: string, lcc_number: string, level_of_service: record<desc: string, value: string>, lost_damaged_fee: record<currency: record<desc: string, value: string>, sum: float>, maximum_fee: float, mms_id: string, need_patron_info: bool, note: string, oclc_number: string, other_standard_id: string, owner: string, pages: string, part: string, partner: record<desc: string, value: string>, pickup_location: record<desc: string, value: string>, pickup_location_type: string, place_of_publication: string, pmid: string, preferred_send_method: record<desc: string, value: string>, printed: bool, publisher: string, reading_room: record<desc: string, value: string>, receive_cost: record<currency: record<desc: string, value: string>, sum: float>, remote_record_id: string, reported: bool, request_cost: record<currency: record<desc: string, value: string>, sum: float>, request_id: string, requested_language: record<desc: string, value: string>, requested_media: string, requester: record<desc: string, value: string>, rs_note: table<content: string, created_by: string, created_date: string>, series_title_number: string, shipping_cost: record<currency: record<desc: string, value: string>, sum: float>, source: string, specific_edition: bool, start_page: string, status: record<desc: string, value: string>, supplied_format: record<desc: string, value: string>, text_email: string, text_postal_1: string, text_postal_2: string, text_postal_3: string, text_postal_4: string, title: string, use_alternative_address: bool, user_request: record<link: string, value: string>, volume: string, willing_to_pay: bool, year: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)

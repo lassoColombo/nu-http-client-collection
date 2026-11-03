@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -187,8 +187,8 @@ export def "cancel-job" [
 #
 # POST /v1/createcomputeenvironment
 # operationId: CreateComputeEnvironment
-# --computeResources shape: {type?: any, allocationStrategy?: any, minvCpus?: any, maxvCpus?: any, desiredvCpus?: any, instanceTypes?: any, imageId?: any, subnets?: any, securityGroupIds?: any, ec2KeyPair?: any, instanceRole?: any, tags?: any, placementGroup?: any, bidPercentage?: any, spotIamFleetRole?: any, launchTemplate?: any, ec2Configuration?: any}
-# --eksConfiguration shape: {eksClusterArn?: any, kubernetesNamespace?: any}
+# --computeResources shape: {type?: "EC2"|"SPOT"|"FARGATE"|"FARGATE_SPOT", allocationStrategy?: "BEST_FIT"|"BEST_FIT_PROGRESSIVE"|"SPOT_CAPACITY_OPTIMIZED", minvCpus?: int, maxvCpus?: int, desiredvCpus?: int, instanceTypes?: list<string>, imageId?: string, subnets?: list<string>, securityGroupIds?: list<string>, ec2KeyPair?: string, instanceRole?: string, tags?: record, placementGroup?: string, bidPercentage?: int, spotIamFleetRole?: string, launchTemplate?: record, ec2Configuration?: list}
+# --eksConfiguration shape: {eksClusterArn?: string, kubernetesNamespace?: string}
 export def "create-compute-environment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -210,11 +210,11 @@ export def "create-compute-environment" [
   type: string@type-completer # The type of the compute environment: MANAGED or UNMANAGED. For more information, see Compute Environments (https://docs.aws.amazon.com/batch/latest/userguide/compute_environments.html) in the Batch User Guide.
   --state: string@state-completer # The state of the compute environment. If the state is ENABLED, then the compute environment accepts jobs from a queue and can scale out automatically based on queues. If the state is ENABLED, then the Batch scheduler can attempt to place jobs from an associated job queue on the compute resources within the environment. If the compute environment is managed, then it can scale its instances out or in automatically, based on the job queue demand. If the state is DISABLED, then the Batch scheduler doesn't attempt to place jobs within the environment. Jobs in a STARTING or RUNNING state continue to progress normally. Managed compute environments in the DISABLED state don't scale out. Compute environments in a DISABLED state may continue to incur billing charges. To prevent additional charges, turn off and then delete the compute environment. For more information, see State (https://docs.aws.amazon.com/batch/latest/userguide/compute_environment_parameters.html#compute_environment_state) in the Batch User Guide. When an instance is idle, the instance scales down to the minvCpus value. However, the instance size doesn't change. For example, consider a c5.8xlarge instance with a minvCpus value of 4 and a desiredvCpus value of 36. This instance doesn't scale down to a c5.large instance.
   --unmanagedv-cpus: int # The maximum number of vCPUs for an unmanaged compute environment. This parameter is only used for fair share scheduling to reserve vCPU capacity for new share identifiers. If this parameter isn't provided for a fair share job queue, no vCPU capacity is reserved. This parameter is only supported when the type parameter is set to UNMANAGED.
-  --compute-resources: record # An object that represents an Batch compute resource. For more information, see Compute environments (https://docs.aws.amazon.com/batch/latest/userguide/compute_environments.html) in the Batch User Guide. — shape: {type?: any, allocationStrategy?: any, minvCpus?: any, maxvCpus?: any, desiredvCpus?: any, instanceTypes?: any, imageId?: any, subnets?: any, securityGroupIds?: any, ec2KeyPair?: any, instanceRole?: any, tags?: any, placementGroup?: any, bidPercentage?: any, spotIamFleetRole?: any, launchTemplate?: any, ec2Configuration?: any}
+  --compute-resources: record # An object that represents an Batch compute resource. For more information, see Compute environments (https://docs.aws.amazon.com/batch/latest/userguide/compute_environments.html) in the Batch User Guide. — shape: {type?: "EC2"|"SPOT"|"FARGATE"|"FARGATE_SPOT", allocationStrategy?: "BEST_FIT"|"BEST_FIT_PROGRESSIVE"|"SPOT_CAPACITY_OPTIMIZED", minvCpus?: int, maxvCpus?: int, desiredvCpus?: int, instanceTypes?: list<string>, imageId?: string, subnets?: list<string>, securityGroupIds?: list<string>, ec2KeyPair?: string, instanceRole?: string, tags?: record, placementGroup?: string, bidPercentage?: int, spotIamFleetRole?: string, launchTemplate?: record, ec2Configuration?: list}
   --service-role: string # The full Amazon Resource Name (ARN) of the IAM role that allows Batch to make calls to other Amazon Web Services services on your behalf. For more information, see Batch service IAM role (https://docs.aws.amazon.com/batch/latest/userguide/service_IAM_role.html) in the Batch User Guide. If your account already created the Batch service-linked role, that role is used by default for your compute environment unless you specify a different role here. If the Batch service-linked role doesn't exist in your account, and no role is specified here, the service attempts to create the Batch service-linked role in your account. If your specified role has a path other than /, then you must specify either the full role ARN (recommended) or prefix the role name with the path. For example, if a role with the name bar has a path of /foo/, specify /foo/bar as the role name. For more information, see Friendly names and paths (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_identifiers.html#identifiers-friendly-names) in the IAM User Guide. Depending on how you created your Batch service role, its ARN might contain the service-role path prefix. When you only specify the name of the service role, Batch assumes that your ARN doesn't use the service-role path prefix. Because of this, we recommend that you specify the full ARN of your service role when you create compute environments.
   --tags: record # The tags that you apply to the compute environment to help you categorize and organize your resources. Each tag consists of a key and an optional value. For more information, see Tagging Amazon Web Services Resources (https://docs.aws.amazon.com/general/latest/gr/aws_tagging.html) in Amazon Web Services General Reference. These tags can be updated or removed using the TagResource (https://docs.aws.amazon.com/batch/latest/APIReference/API_TagResource.html) and UntagResource (https://docs.aws.amazon.com/batch/latest/APIReference/API_UntagResource.html) API operations. These tags don't propagate to the underlying compute resources.
-  --eks-configuration: record # Configuration for the Amazon EKS cluster that supports the Batch compute environment. The cluster must exist before the compute environment can be created. — shape: {eksClusterArn?: any, kubernetesNamespace?: any}
-]: any -> record<computeEnvironmentName: record, computeEnvironmentArn: record> {
+  --eks-configuration: record # Configuration for the Amazon EKS cluster that supports the Batch compute environment. The cluster must exist before the compute environment can be created. — shape: {eksClusterArn?: string, kubernetesNamespace?: string}
+]: any -> record<computeEnvironmentName: string, computeEnvironmentArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -243,7 +243,7 @@ export def "create-compute-environment" [
 #
 # POST /v1/createjobqueue
 # operationId: CreateJobQueue
-# --computeEnvironmentOrder item shape: {order: any, computeEnvironment: any}
+# --computeEnvironmentOrder item shape: {order: int, computeEnvironment: string}
 export def "create-job-queue" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -265,9 +265,9 @@ export def "create-job-queue" [
   --state: string@state-completer # The state of the job queue. If the job queue state is ENABLED, it is able to accept jobs. If the job queue state is DISABLED, new jobs can't be added to the queue, but jobs already in the queue can finish.
   --scheduling-policy-arn: string # The Amazon Resource Name (ARN) of the fair share scheduling policy. If this parameter is specified, the job queue uses a fair share scheduling policy. If this parameter isn't specified, the job queue uses a first in, first out (FIFO) scheduling policy. After a job queue is created, you can replace but can't remove the fair share scheduling policy. The format is aws:Partition:batch:Region:Account:scheduling-policy/Name . An example is aws:aws:batch:us-west-2:123456789012:scheduling-policy/MySchedulingPolicy.
   priority: int # The priority of the job queue. Job queues with a higher priority (or a higher integer value for the priority parameter) are evaluated first when associated with the same compute environment. Priority is determined in descending order. For example, a job queue with a priority value of 10 is given scheduling preference over a job queue with a priority value of 1. All of the compute environments must be either EC2 (EC2 or SPOT) or Fargate (FARGATE or FARGATE_SPOT); EC2 and Fargate compute environments can't be mixed.
-  compute_environment_order: list # The set of compute environments mapped to a job queue and their order relative to each other. The job scheduler uses this parameter to determine which compute environment runs a specific job. Compute environments must be in the VALID state before you can associate them with a job queue. You can associate up to three compute environments with a job queue. All of the compute environments must be either EC2 (EC2 or SPOT) or Fargate (FARGATE or FARGATE_SPOT); EC2 and Fargate compute environments can't be mixed. All compute environments that are associated with a job queue must share the same architecture. Batch doesn't support mixing compute environment architecture types in a single job queue. — item shape: {order: any, computeEnvironment: any}
+  compute_environment_order: list # The set of compute environments mapped to a job queue and their order relative to each other. The job scheduler uses this parameter to determine which compute environment runs a specific job. Compute environments must be in the VALID state before you can associate them with a job queue. You can associate up to three compute environments with a job queue. All of the compute environments must be either EC2 (EC2 or SPOT) or Fargate (FARGATE or FARGATE_SPOT); EC2 and Fargate compute environments can't be mixed. All compute environments that are associated with a job queue must share the same architecture. Batch doesn't support mixing compute environment architecture types in a single job queue. — item shape: {order: int, computeEnvironment: string}
   --tags: record # The tags that you apply to the job queue to help you categorize and organize your resources. Each tag consists of a key and an optional value. For more information, see Tagging your Batch resources (https://docs.aws.amazon.com/batch/latest/userguide/using-tags.html) in Batch User Guide.
-]: any -> record<jobQueueName: record, jobQueueArn: record> {
+]: any -> record<jobQueueName: string, jobQueueArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -296,7 +296,7 @@ export def "create-job-queue" [
 #
 # POST /v1/createschedulingpolicy
 # operationId: CreateSchedulingPolicy
-# --fairsharePolicy shape: {shareDecaySeconds?: any, computeReservation?: any, shareDistribution?: any}
+# --fairsharePolicy shape: {shareDecaySeconds?: int, computeReservation?: int, shareDistribution?: list}
 export def "create-scheduling-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -315,9 +315,9 @@ export def "create-scheduling-policy" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   name: string # The name of the scheduling policy. It can be up to 128 letters long. It can contain uppercase and lowercase letters, numbers, hyphens (-), and underscores (_).
-  --fairshare-policy: record # The fair share policy for a scheduling policy. — shape: {shareDecaySeconds?: any, computeReservation?: any, shareDistribution?: any}
+  --fairshare-policy: record # The fair share policy for a scheduling policy. — shape: {shareDecaySeconds?: int, computeReservation?: int, shareDistribution?: list}
   --tags: record # The tags that you apply to the scheduling policy to help you categorize and organize your resources. Each tag consists of a key and an optional value. For more information, see Tagging Amazon Web Services Resources (https://docs.aws.amazon.com/general/latest/gr/aws_tagging.html) in Amazon Web Services General Reference. These tags can be updated or removed using the TagResource (https://docs.aws.amazon.com/batch/latest/APIReference/API_TagResource.html) and UntagResource (https://docs.aws.amazon.com/batch/latest/APIReference/API_UntagResource.html) API operations.
-]: any -> record<name: record, arn: record> {
+]: any -> record<name: string, arn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -556,7 +556,7 @@ export def "describe-compute-environments" [
   --compute-environments: list<string> # A list of up to 100 compute environment names or full Amazon Resource Name (ARN) entries.
   --max-results-body: int # The maximum number of cluster results returned by DescribeComputeEnvironments in paginated output. When this parameter is used, DescribeComputeEnvironments only returns maxResults results in a single page along with a nextToken response element. The remaining results of the initial request can be seen by sending another DescribeComputeEnvironments request with the returned nextToken value. This value can be between 1 and 100. If this parameter isn't used, then DescribeComputeEnvironments returns up to 100 results and a nextToken value if applicable. (body field)
   --next-token-body: string # The nextToken value returned from a previous paginated DescribeComputeEnvironments request where maxResults was used and the results exceeded the value of that parameter. Pagination continues from the end of the previous results that returned the nextToken value. This value is null when there are no more results to return. Treat this token as an opaque identifier that's only used to retrieve the next items in a list and not for other programmatic purposes. (body field)
-]: any -> record<computeEnvironments: record, nextToken: record> {
+]: any -> record<computeEnvironments: table<computeEnvironmentName: string, computeEnvironmentArn: string, unmanagedvCpus: int, ecsClusterArn: string, tags: record, type: string, state: string, status: string, statusReason: string, computeResources: record, serviceRole: string, updatePolicy: record, eksConfiguration: record, containerOrchestrationType: string, uuid: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -610,7 +610,7 @@ export def "describe-job-definitions" [
   --job-definition-name: string # The name of the job definition to describe.
   --status: string # The status used to filter job definitions.
   --next-token-body: string # The nextToken value returned from a previous paginated DescribeJobDefinitions request where maxResults was used and the results exceeded the value of that parameter. Pagination continues from the end of the previous results that returned the nextToken value. This value is null when there are no more results to return. Treat this token as an opaque identifier that's only used to retrieve the next items in a list and not for other programmatic purposes. (body field)
-]: any -> record<jobDefinitions: record, nextToken: record> {
+]: any -> record<jobDefinitions: table<jobDefinitionName: string, jobDefinitionArn: string, revision: int, status: string, type: string, schedulingPriority: int, parameters: record, retryStrategy: record, containerProperties: record, timeout: record, nodeProperties: record, tags: record, propagateTags: bool, platformCapabilities: list, eksProperties: record, containerOrchestrationType: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -662,7 +662,7 @@ export def "describe-job-queues" [
   --job-queues: list<string> # A list of up to 100 queue names or full queue Amazon Resource Name (ARN) entries.
   --max-results-body: int # The maximum number of results returned by DescribeJobQueues in paginated output. When this parameter is used, DescribeJobQueues only returns maxResults results in a single page and a nextToken response element. The remaining results of the initial request can be seen by sending another DescribeJobQueues request with the returned nextToken value. This value can be between 1 and 100. If this parameter isn't used, then DescribeJobQueues returns up to 100 results and a nextToken value if applicable. (body field)
   --next-token-body: string # The nextToken value returned from a previous paginated DescribeJobQueues request where maxResults was used and the results exceeded the value of that parameter. Pagination continues from the end of the previous results that returned the nextToken value. This value is null when there are no more results to return. Treat this token as an opaque identifier that's only used to retrieve the next items in a list and not for other programmatic purposes. (body field)
-]: any -> record<jobQueues: record, nextToken: record> {
+]: any -> record<jobQueues: table<jobQueueName: string, jobQueueArn: string, state: string, schedulingPolicyArn: string, status: string, statusReason: string, priority: int, computeEnvironmentOrder: list, tags: record>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -710,7 +710,7 @@ export def "describe-jobs" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   jobs: list<string> # A list of up to 100 job IDs.
-]: any -> record<jobs: record> {
+]: any -> record<jobs: table<jobArn: string, jobName: string, jobId: string, jobQueue: string, status: string, shareIdentifier: string, schedulingPriority: int, attempts: list, statusReason: string, createdAt: int, retryStrategy: record, startedAt: int, stoppedAt: int, dependsOn: list, jobDefinition: string, parameters: record, container: record, nodeDetails: record, nodeProperties: record, arrayProperties: record, timeout: record, tags: record, propagateTags: bool, platformCapabilities: list, eksProperties: record, eksAttempts: list, isCancelled: bool, isTerminated: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -757,7 +757,7 @@ export def "describe-scheduling-policies" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   arns: list<string> # A list of up to 100 scheduling policy Amazon Resource Name (ARN) entries.
-]: any -> record<schedulingPolicies: record> {
+]: any -> record<schedulingPolicies: table<name: string, arn: string, fairsharePolicy: record, tags: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -786,7 +786,7 @@ export def "describe-scheduling-policies" [
 #
 # POST /v1/listjobs
 # operationId: ListJobs
-# --filters item shape: {name?: any, values?: any}
+# --filters item shape: {name?: string, values?: list<string>}
 export def "list-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -812,8 +812,8 @@ export def "list-jobs" [
   --job-status: string@job-status-completer # The job status used to filter jobs in the specified queue. If the filters parameter is specified, the jobStatus parameter is ignored and jobs with any status are returned. If you don't specify a status, only RUNNING jobs are returned.
   --max-results-body: int # The maximum number of results returned by ListJobs in paginated output. When this parameter is used, ListJobs only returns maxResults results in a single page and a nextToken response element. The remaining results of the initial request can be seen by sending another ListJobs request with the returned nextToken value. This value can be between 1 and 100. If this parameter isn't used, then ListJobs returns up to 100 results and a nextToken value if applicable. (body field)
   --next-token-body: string # The nextToken value returned from a previous paginated ListJobs request where maxResults was used and the results exceeded the value of that parameter. Pagination continues from the end of the previous results that returned the nextToken value. This value is null when there are no more results to return. Treat this token as an opaque identifier that's only used to retrieve the next items in a list and not for other programmatic purposes. (body field)
-  --filters: list # The filter to apply to the query. Only one filter can be used at a time. When the filter is used, jobStatus is ignored. The filter doesn't apply to child jobs in an array or multi-node parallel (MNP) jobs. The results are sorted by the createdAt field, with the most recent jobs being first. JOB_NAME The value of the filter is a case-insensitive match for the job name. If the value ends with an asterisk (*), the filter matches any job name that begins with the string before the '*'. This corresponds to the jobName value. For example, test1 matches both Test1 and test1, and test1* matches both test1 and Test10. When the JOB_NAME filter is used, the results are grouped by the job name and version. JOB_DEFINITION The value for the filter is the name or Amazon Resource Name (ARN) of the job definition. This corresponds to the jobDefinition value. The value is case sensitive. When the value for the filter is the job definition name, the results include all the jobs that used any revision of that job definition name. If the value ends with an asterisk (*), the filter matches any job definition name that begins with the string before the '*'. For example, jd1 matches only jd1, and jd1* matches both jd1 and jd1A. The version of the job definition that's used doesn't affect the sort order. When the JOB_DEFINITION filter is used and the ARN is used (which is in the form arn:${Partition}:batch:${Region}:${Account}:job-definition/${JobDefinitionName}:${Revision}), the results include jobs that used the specified revision of the job definition. Asterisk (*) isn't supported when the ARN is used. BEFORE_CREATED_AT The value for the filter is the time that's before the job was created. This corresponds to the createdAt value. The value is a string representation of the number of milliseconds since 00:00:00 UTC (midnight) on January 1, 1970. AFTER_CREATED_AT The value for the filter is the time that's after the job was created. This corresponds to the createdAt value. The value is a string representation of the number of milliseconds since 00:00:00 UTC (midnight) on January 1, 1970. — item shape: {name?: any, values?: any}
-]: any -> record<jobSummaryList: record, nextToken: record> {
+  --filters: list # The filter to apply to the query. Only one filter can be used at a time. When the filter is used, jobStatus is ignored. The filter doesn't apply to child jobs in an array or multi-node parallel (MNP) jobs. The results are sorted by the createdAt field, with the most recent jobs being first. JOB_NAME The value of the filter is a case-insensitive match for the job name. If the value ends with an asterisk (*), the filter matches any job name that begins with the string before the '*'. This corresponds to the jobName value. For example, test1 matches both Test1 and test1, and test1* matches both test1 and Test10. When the JOB_NAME filter is used, the results are grouped by the job name and version. JOB_DEFINITION The value for the filter is the name or Amazon Resource Name (ARN) of the job definition. This corresponds to the jobDefinition value. The value is case sensitive. When the value for the filter is the job definition name, the results include all the jobs that used any revision of that job definition name. If the value ends with an asterisk (*), the filter matches any job definition name that begins with the string before the '*'. For example, jd1 matches only jd1, and jd1* matches both jd1 and jd1A. The version of the job definition that's used doesn't affect the sort order. When the JOB_DEFINITION filter is used and the ARN is used (which is in the form arn:${Partition}:batch:${Region}:${Account}:job-definition/${JobDefinitionName}:${Revision}), the results include jobs that used the specified revision of the job definition. Asterisk (*) isn't supported when the ARN is used. BEFORE_CREATED_AT The value for the filter is the time that's before the job was created. This corresponds to the createdAt value. The value is a string representation of the number of milliseconds since 00:00:00 UTC (midnight) on January 1, 1970. AFTER_CREATED_AT The value for the filter is the time that's after the job was created. This corresponds to the createdAt value. The value is a string representation of the number of milliseconds since 00:00:00 UTC (midnight) on January 1, 1970. — item shape: {name?: string, values?: list<string>}
+]: any -> record<jobSummaryList: table<jobArn: string, jobId: string, jobName: string, createdAt: int, status: string, statusReason: string, startedAt: int, stoppedAt: int, container: record, arrayProperties: record, nodeProperties: record, jobDefinition: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -864,7 +864,7 @@ export def "list-scheduling-policies" [
   --x-amz-signed-headers: string
   --max-results-body: int # The maximum number of results that's returned by ListSchedulingPolicies in paginated output. When this parameter is used, ListSchedulingPolicies only returns maxResults results in a single page and a nextToken response element. You can see the remaining results of the initial request by sending another ListSchedulingPolicies request with the returned nextToken value. This value can be between 1 and 100. If this parameter isn't used, ListSchedulingPolicies returns up to 100 results and a nextToken value if applicable. (body field)
   --next-token-body: string # The nextToken value that's returned from a previous paginated ListSchedulingPolicies request where maxResults was used and the results exceeded the value of that parameter. Pagination continues from the end of the previous results that returned the nextToken value. This value is null when there are no more results to return. Treat this token as an opaque identifier that's only used to retrieve the next items in a list and not for other programmatic purposes. (body field)
-]: any -> record<schedulingPolicies: record, nextToken: record> {
+]: any -> record<schedulingPolicies: table<arn: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -988,11 +988,11 @@ export def "tag-resource" [
 #
 # POST /v1/registerjobdefinition
 # operationId: RegisterJobDefinition
-# --containerProperties shape: {image?: any, vcpus?: any, memory?: any, command?: any, jobRoleArn?: any, executionRoleArn?: any, volumes?: any, environment?: any, mountPoints?: any, readonlyRootFilesystem?: any, privileged?: any, ulimits?: any, user?: any, instanceType?: any, resourceRequirements?: any, linuxParameters?: any, logConfiguration?: any, secrets?: any, networkConfiguration?: any, fargatePlatformConfiguration?: any, ephemeralStorage?: any}
-# --nodeProperties shape: {numNodes?: any, mainNode?: any, nodeRangeProperties?: any}
-# --retryStrategy shape: {attempts?: any, evaluateOnExit?: any}
-# --timeout shape: {attemptDurationSeconds?: any}
-# --eksProperties shape: {podProperties?: any}
+# --containerProperties shape: {image?: string, vcpus?: int, memory?: int, command?: list<string>, jobRoleArn?: string, executionRoleArn?: string, volumes?: list, environment?: list, mountPoints?: list, readonlyRootFilesystem?: bool, privileged?: bool, ulimits?: list, user?: string, instanceType?: string, resourceRequirements?: list, linuxParameters?: record, logConfiguration?: record, secrets?: list, networkConfiguration?: record, fargatePlatformConfiguration?: record, ephemeralStorage?: record}
+# --nodeProperties shape: {numNodes?: int, mainNode?: int, nodeRangeProperties?: list}
+# --retryStrategy shape: {attempts?: int, evaluateOnExit?: list}
+# --timeout shape: {attemptDurationSeconds?: int}
+# --eksProperties shape: {podProperties?: record}
 export def "register-job-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1014,15 +1014,15 @@ export def "register-job-definition" [
   type: string@type-completer-1 # The type of job definition. For more information about multi-node parallel jobs, see Creating a multi-node parallel job definition (https://docs.aws.amazon.com/batch/latest/userguide/multi-node-job-def.html) in the Batch User Guide. If the job is run on Fargate resources, then multinode isn't supported.
   --parameters: record # Default parameter substitution placeholders to set in the job definition. Parameters are specified as a key-value pair mapping. Parameters in a SubmitJob request override any corresponding parameter defaults from the job definition.
   --scheduling-priority: int # The scheduling priority for jobs that are submitted with this job definition. This only affects jobs in job queues with a fair share policy. Jobs with a higher scheduling priority are scheduled before jobs with a lower scheduling priority. The minimum supported value is 0 and the maximum supported value is 9999.
-  --container-properties: record # Container properties are used for Amazon ECS based job definitions. These properties to describe the container that's launched as part of a job. — shape: {image?: any, vcpus?: any, memory?: any, command?: any, jobRoleArn?: any, executionRoleArn?: any, volumes?: any, environment?: any, mountPoints?: any, readonlyRootFilesystem?: any, privileged?: any, ulimits?: any, user?: any, instanceType?: any, resourceRequirements?: any, linuxParameters?: any, logConfiguration?: any, secrets?: any, networkConfiguration?: any, fargatePlatformConfiguration?: any, ephemeralStorage?: any}
-  --node-properties: record # An object that represents the node properties of a multi-node parallel job. Node properties can't be specified for Amazon EKS based job definitions. — shape: {numNodes?: any, mainNode?: any, nodeRangeProperties?: any}
-  --retry-strategy: record # The retry strategy that's associated with a job. For more information, see Automated job retries (https://docs.aws.amazon.com/batch/latest/userguide/job_retries.html) in the Batch User Guide. — shape: {attempts?: any, evaluateOnExit?: any}
+  --container-properties: record # Container properties are used for Amazon ECS based job definitions. These properties to describe the container that's launched as part of a job. — shape: {image?: string, vcpus?: int, memory?: int, command?: list<string>, jobRoleArn?: string, executionRoleArn?: string, volumes?: list, environment?: list, mountPoints?: list, readonlyRootFilesystem?: bool, privileged?: bool, ulimits?: list, user?: string, instanceType?: string, resourceRequirements?: list, linuxParameters?: record, logConfiguration?: record, secrets?: list, networkConfiguration?: record, fargatePlatformConfiguration?: record, ephemeralStorage?: record}
+  --node-properties: record # An object that represents the node properties of a multi-node parallel job. Node properties can't be specified for Amazon EKS based job definitions. — shape: {numNodes?: int, mainNode?: int, nodeRangeProperties?: list}
+  --retry-strategy: record # The retry strategy that's associated with a job. For more information, see Automated job retries (https://docs.aws.amazon.com/batch/latest/userguide/job_retries.html) in the Batch User Guide. — shape: {attempts?: int, evaluateOnExit?: list}
   --propagate-tags: oneof<nothing, bool> # Specifies whether to propagate the tags from the job or job definition to the corresponding Amazon ECS task. If no value is specified, the tags are not propagated. Tags can only be propagated to the tasks during task creation. For tags with the same name, job tags are given priority over job definitions tags. If the total number of combined tags from the job and job definition is over 50, the job is moved to the FAILED state. If the job runs on Amazon EKS resources, then you must not specify propagateTags.
-  --timeout: record # An object that represents a job timeout configuration. — shape: {attemptDurationSeconds?: any}
+  --timeout: record # An object that represents a job timeout configuration. — shape: {attemptDurationSeconds?: int}
   --tags: record # The tags that you apply to the job definition to help you categorize and organize your resources. Each tag consists of a key and an optional value. For more information, see Tagging Amazon Web Services Resources (https://docs.aws.amazon.com/batch/latest/userguide/using-tags.html) in Batch User Guide.
   --platform-capabilities: list<string> # The platform capabilities required by the job definition. If no value is specified, it defaults to EC2. To run the job on Fargate resources, specify FARGATE. If the job runs on Amazon EKS resources, then you must not specify platformCapabilities.
-  --eks-properties: record # An object that contains the properties for the Kubernetes resources of a job. — shape: {podProperties?: any}
-]: any -> record<jobDefinitionName: record, jobDefinitionArn: record, revision: record> {
+  --eks-properties: record # An object that contains the properties for the Kubernetes resources of a job. — shape: {podProperties?: record}
+]: any -> record<jobDefinitionName: string, jobDefinitionArn: string, revision: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1051,13 +1051,13 @@ export def "register-job-definition" [
 #
 # POST /v1/submitjob
 # operationId: SubmitJob
-# --arrayProperties shape: {size?: any}
-# --dependsOn item shape: {jobId?: any, type?: any}
-# --containerOverrides shape: {vcpus?: any, memory?: any, command?: any, instanceType?: any, environment?: any, resourceRequirements?: any}
-# --nodeOverrides shape: {numNodes?: any, nodePropertyOverrides?: any}
-# --retryStrategy shape: {attempts?: any, evaluateOnExit?: any}
-# --timeout shape: {attemptDurationSeconds?: any}
-# --eksPropertiesOverride shape: {podProperties?: any}
+# --arrayProperties shape: {size?: int}
+# --dependsOn item shape: {jobId?: string, type?: "N_TO_N"|"SEQUENTIAL"}
+# --containerOverrides shape: {vcpus?: int, memory?: int, command?: list<string>, instanceType?: string, environment?: list, resourceRequirements?: list}
+# --nodeOverrides shape: {numNodes?: int, nodePropertyOverrides?: list}
+# --retryStrategy shape: {attempts?: int, evaluateOnExit?: list}
+# --timeout shape: {attemptDurationSeconds?: int}
+# --eksPropertiesOverride shape: {podProperties?: record}
 export def "submit-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1079,18 +1079,18 @@ export def "submit-job" [
   job_queue: string # The job queue where the job is submitted. You can specify either the name or the Amazon Resource Name (ARN) of the queue.
   --share-identifier: string # The share identifier for the job. If the job queue doesn't have a scheduling policy, then this parameter must not be specified. If the job queue has a scheduling policy, then this parameter must be specified.
   --scheduling-priority-override: int # The scheduling priority for the job. This only affects jobs in job queues with a fair share policy. Jobs with a higher scheduling priority are scheduled before jobs with a lower scheduling priority. This overrides any scheduling priority in the job definition. The minimum supported value is 0 and the maximum supported value is 9999.
-  --array-properties: record # An object that represents an Batch array job. — shape: {size?: any}
-  --depends-on: list # A list of dependencies for the job. A job can depend upon a maximum of 20 jobs. You can specify a SEQUENTIAL type dependency without specifying a job ID for array jobs so that each child array job completes sequentially, starting at index 0. You can also specify an N_TO_N type dependency with a job ID for array jobs. In that case, each index child of this job must wait for the corresponding index child of each dependency to complete before it can begin. — item shape: {jobId?: any, type?: any}
+  --array-properties: record # An object that represents an Batch array job. — shape: {size?: int}
+  --depends-on: list # A list of dependencies for the job. A job can depend upon a maximum of 20 jobs. You can specify a SEQUENTIAL type dependency without specifying a job ID for array jobs so that each child array job completes sequentially, starting at index 0. You can also specify an N_TO_N type dependency with a job ID for array jobs. In that case, each index child of this job must wait for the corresponding index child of each dependency to complete before it can begin. — item shape: {jobId?: string, type?: "N_TO_N"|"SEQUENTIAL"}
   job_definition: string # The job definition used by this job. This value can be one of definition-name, definition-name:revision, or the Amazon Resource Name (ARN) for the job definition, with or without the revision (arn:aws:batch:region:account:job-definition/definition-name:revision , or arn:aws:batch:region:account:job-definition/definition-name ). If the revision is not specified, then the latest active revision is used.
   --parameters: record # Additional parameters passed to the job that replace parameter substitution placeholders that are set in the job definition. Parameters are specified as a key and value pair mapping. Parameters in a SubmitJob request override any corresponding parameter defaults from the job definition.
-  --container-overrides: record # The overrides that should be sent to a container. — shape: {vcpus?: any, memory?: any, command?: any, instanceType?: any, environment?: any, resourceRequirements?: any}
-  --node-overrides: record # An object that represents any node overrides to a job definition that's used in a SubmitJob API operation. This parameter isn't applicable to jobs that are running on Fargate resources. Don't provide it for these jobs. Rather, use containerOverrides instead. — shape: {numNodes?: any, nodePropertyOverrides?: any}
-  --retry-strategy: record # The retry strategy that's associated with a job. For more information, see Automated job retries (https://docs.aws.amazon.com/batch/latest/userguide/job_retries.html) in the Batch User Guide. — shape: {attempts?: any, evaluateOnExit?: any}
+  --container-overrides: record # The overrides that should be sent to a container. — shape: {vcpus?: int, memory?: int, command?: list<string>, instanceType?: string, environment?: list, resourceRequirements?: list}
+  --node-overrides: record # An object that represents any node overrides to a job definition that's used in a SubmitJob API operation. This parameter isn't applicable to jobs that are running on Fargate resources. Don't provide it for these jobs. Rather, use containerOverrides instead. — shape: {numNodes?: int, nodePropertyOverrides?: list}
+  --retry-strategy: record # The retry strategy that's associated with a job. For more information, see Automated job retries (https://docs.aws.amazon.com/batch/latest/userguide/job_retries.html) in the Batch User Guide. — shape: {attempts?: int, evaluateOnExit?: list}
   --propagate-tags: oneof<nothing, bool> # Specifies whether to propagate the tags from the job or job definition to the corresponding Amazon ECS task. If no value is specified, the tags aren't propagated. Tags can only be propagated to the tasks during task creation. For tags with the same name, job tags are given priority over job definitions tags. If the total number of combined tags from the job and job definition is over 50, the job is moved to the FAILED state. When specified, this overrides the tag propagation setting in the job definition.
-  --timeout: record # An object that represents a job timeout configuration. — shape: {attemptDurationSeconds?: any}
+  --timeout: record # An object that represents a job timeout configuration. — shape: {attemptDurationSeconds?: int}
   --tags: record # The tags that you apply to the job request to help you categorize and organize your resources. Each tag consists of a key and an optional value. For more information, see Tagging Amazon Web Services Resources (https://docs.aws.amazon.com/general/latest/gr/aws_tagging.html) in Amazon Web Services General Reference.
-  --eks-properties-override: record # An object that contains overrides for the Kubernetes resources of a job. — shape: {podProperties?: any}
-]: any -> record<jobArn: record, jobName: record, jobId: record> {
+  --eks-properties-override: record # An object that contains overrides for the Kubernetes resources of a job. — shape: {podProperties?: record}
+]: any -> record<jobArn: string, jobName: string, jobId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1178,7 +1178,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # The keys of the tags to be removed.
+  --tag-keys: list # The keys of the tags to be removed. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1190,6 +1190,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/v1/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1214,8 +1215,8 @@ export def "untag-resource" [
 #
 # POST /v1/updatecomputeenvironment
 # operationId: UpdateComputeEnvironment
-# --computeResources shape: {minvCpus?: any, maxvCpus?: any, desiredvCpus?: any, subnets?: any, securityGroupIds?: any, allocationStrategy?: any, instanceTypes?: any, ec2KeyPair?: any, instanceRole?: any, tags?: any, placementGroup?: any, bidPercentage?: any, launchTemplate?: any, ec2Configuration?: any, updateToLatestImageVersion?: any, type?: any, imageId?: any}
-# --updatePolicy shape: {terminateJobsOnUpdate?: any, jobExecutionTimeoutMinutes?: any}
+# --computeResources shape: {minvCpus?: int, maxvCpus?: int, desiredvCpus?: int, subnets?: list<string>, securityGroupIds?: list<string>, allocationStrategy?: "BEST_FIT_PROGRESSIVE"|"SPOT_CAPACITY_OPTIMIZED", instanceTypes?: list<string>, ec2KeyPair?: string, instanceRole?: string, tags?: record, placementGroup?: string, bidPercentage?: int, launchTemplate?: record, ec2Configuration?: list, updateToLatestImageVersion?: bool, type?: "EC2"|"SPOT"|"FARGATE"|"FARGATE_SPOT", imageId?: string}
+# --updatePolicy shape: {terminateJobsOnUpdate?: bool, jobExecutionTimeoutMinutes?: int}
 export def "update-compute-environment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1236,10 +1237,10 @@ export def "update-compute-environment" [
   compute_environment: string # The name or full Amazon Resource Name (ARN) of the compute environment to update.
   --state: string@state-completer # The state of the compute environment. Compute environments in the ENABLED state can accept jobs from a queue and scale in or out automatically based on the workload demand of its associated queues. If the state is ENABLED, then the Batch scheduler can attempt to place jobs from an associated job queue on the compute resources within the environment. If the compute environment is managed, then it can scale its instances out or in automatically, based on the job queue demand. If the state is DISABLED, then the Batch scheduler doesn't attempt to place jobs within the environment. Jobs in a STARTING or RUNNING state continue to progress normally. Managed compute environments in the DISABLED state don't scale out. Compute environments in a DISABLED state may continue to incur billing charges. To prevent additional charges, turn off and then delete the compute environment. For more information, see State (https://docs.aws.amazon.com/batch/latest/userguide/compute_environment_parameters.html#compute_environment_state) in the Batch User Guide. When an instance is idle, the instance scales down to the minvCpus value. However, the instance size doesn't change. For example, consider a c5.8xlarge instance with a minvCpus value of 4 and a desiredvCpus value of 36. This instance doesn't scale down to a c5.large instance.
   --unmanagedv-cpus: int # The maximum number of vCPUs expected to be used for an unmanaged compute environment. Don't specify this parameter for a managed compute environment. This parameter is only used for fair share scheduling to reserve vCPU capacity for new share identifiers. If this parameter isn't provided for a fair share job queue, no vCPU capacity is reserved.
-  --compute-resources: record # An object that represents the attributes of a compute environment that can be updated. For more information, see Updating compute environments (https://docs.aws.amazon.com/batch/latest/userguide/updating-compute-environments.html) in the Batch User Guide. — shape: {minvCpus?: any, maxvCpus?: any, desiredvCpus?: any, subnets?: any, securityGroupIds?: any, allocationStrategy?: any, instanceTypes?: any, ec2KeyPair?: any, instanceRole?: any, tags?: any, placementGroup?: any, bidPercentage?: any, launchTemplate?: any, ec2Configuration?: any, updateToLatestImageVersion?: any, type?: any, imageId?: any}
+  --compute-resources: record # An object that represents the attributes of a compute environment that can be updated. For more information, see Updating compute environments (https://docs.aws.amazon.com/batch/latest/userguide/updating-compute-environments.html) in the Batch User Guide. — shape: {minvCpus?: int, maxvCpus?: int, desiredvCpus?: int, subnets?: list<string>, securityGroupIds?: list<string>, allocationStrategy?: "BEST_FIT_PROGRESSIVE"|"SPOT_CAPACITY_OPTIMIZED", instanceTypes?: list<string>, ec2KeyPair?: string, instanceRole?: string, tags?: record, placementGroup?: string, bidPercentage?: int, launchTemplate?: record, ec2Configuration?: list, updateToLatestImageVersion?: bool, type?: "EC2"|"SPOT"|"FARGATE"|"FARGATE_SPOT", imageId?: string}
   --service-role: string # The full Amazon Resource Name (ARN) of the IAM role that allows Batch to make calls to other Amazon Web Services services on your behalf. For more information, see Batch service IAM role (https://docs.aws.amazon.com/batch/latest/userguide/service_IAM_role.html) in the Batch User Guide. If the compute environment has a service-linked role, it can't be changed to use a regular IAM role. Likewise, if the compute environment has a regular IAM role, it can't be changed to use a service-linked role. To update the parameters for the compute environment that require an infrastructure update to change, the AWSServiceRoleForBatch service-linked role must be used. For more information, see Updating compute environments (https://docs.aws.amazon.com/batch/latest/userguide/updating-compute-environments.html) in the Batch User Guide. If your specified role has a path other than /, then you must either specify the full role ARN (recommended) or prefix the role name with the path. Depending on how you created your Batch service role, its ARN might contain the service-role path prefix. When you only specify the name of the service role, Batch assumes that your ARN doesn't use the service-role path prefix. Because of this, we recommend that you specify the full ARN of your service role when you create compute environments.
-  --update-policy: record # Specifies the infrastructure update policy for the compute environment. For more information about infrastructure updates, see Updating compute environments (https://docs.aws.amazon.com/batch/latest/userguide/updating-compute-environments.html) in the Batch User Guide. — shape: {terminateJobsOnUpdate?: any, jobExecutionTimeoutMinutes?: any}
-]: any -> record<computeEnvironmentName: record, computeEnvironmentArn: record> {
+  --update-policy: record # Specifies the infrastructure update policy for the compute environment. For more information about infrastructure updates, see Updating compute environments (https://docs.aws.amazon.com/batch/latest/userguide/updating-compute-environments.html) in the Batch User Guide. — shape: {terminateJobsOnUpdate?: bool, jobExecutionTimeoutMinutes?: int}
+]: any -> record<computeEnvironmentName: string, computeEnvironmentArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1268,7 +1269,7 @@ export def "update-compute-environment" [
 #
 # POST /v1/updatejobqueue
 # operationId: UpdateJobQueue
-# --computeEnvironmentOrder item shape: {order: any, computeEnvironment: any}
+# --computeEnvironmentOrder item shape: {order: int, computeEnvironment: string}
 export def "update-job-queue" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1290,8 +1291,8 @@ export def "update-job-queue" [
   --state: string@state-completer # Describes the queue's ability to accept new jobs. If the job queue state is ENABLED, it can accept jobs. If the job queue state is DISABLED, new jobs can't be added to the queue, but jobs already in the queue can finish.
   --scheduling-policy-arn: string # Amazon Resource Name (ARN) of the fair share scheduling policy. Once a job queue is created, the fair share scheduling policy can be replaced but not removed. The format is aws:Partition:batch:Region:Account:scheduling-policy/Name . For example, aws:aws:batch:us-west-2:123456789012:scheduling-policy/MySchedulingPolicy.
   --priority: int # The priority of the job queue. Job queues with a higher priority (or a higher integer value for the priority parameter) are evaluated first when associated with the same compute environment. Priority is determined in descending order. For example, a job queue with a priority value of 10 is given scheduling preference over a job queue with a priority value of 1. All of the compute environments must be either EC2 (EC2 or SPOT) or Fargate (FARGATE or FARGATE_SPOT). EC2 and Fargate compute environments can't be mixed.
-  --compute-environment-order: list # Details the set of compute environments mapped to a job queue and their order relative to each other. This is one of the parameters used by the job scheduler to determine which compute environment runs a given job. Compute environments must be in the VALID state before you can associate them with a job queue. All of the compute environments must be either EC2 (EC2 or SPOT) or Fargate (FARGATE or FARGATE_SPOT). EC2 and Fargate compute environments can't be mixed. All compute environments that are associated with a job queue must share the same architecture. Batch doesn't support mixing compute environment architecture types in a single job queue. — item shape: {order: any, computeEnvironment: any}
-]: any -> record<jobQueueName: record, jobQueueArn: record> {
+  --compute-environment-order: list # Details the set of compute environments mapped to a job queue and their order relative to each other. This is one of the parameters used by the job scheduler to determine which compute environment runs a given job. Compute environments must be in the VALID state before you can associate them with a job queue. All of the compute environments must be either EC2 (EC2 or SPOT) or Fargate (FARGATE or FARGATE_SPOT). EC2 and Fargate compute environments can't be mixed. All compute environments that are associated with a job queue must share the same architecture. Batch doesn't support mixing compute environment architecture types in a single job queue. — item shape: {order: int, computeEnvironment: string}
+]: any -> record<jobQueueName: string, jobQueueArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1320,7 +1321,7 @@ export def "update-job-queue" [
 #
 # POST /v1/updateschedulingpolicy
 # operationId: UpdateSchedulingPolicy
-# --fairsharePolicy shape: {shareDecaySeconds?: any, computeReservation?: any, shareDistribution?: any}
+# --fairsharePolicy shape: {shareDecaySeconds?: int, computeReservation?: int, shareDistribution?: list}
 export def "update-scheduling-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1339,7 +1340,7 @@ export def "update-scheduling-policy" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   arn: string # The Amazon Resource Name (ARN) of the scheduling policy to update.
-  --fairshare-policy: record # The fair share policy for a scheduling policy. — shape: {shareDecaySeconds?: any, computeReservation?: any, shareDistribution?: any}
+  --fairshare-policy: record # The fair share policy for a scheduling policy. — shape: {shareDecaySeconds?: int, computeReservation?: int, shareDistribution?: list}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

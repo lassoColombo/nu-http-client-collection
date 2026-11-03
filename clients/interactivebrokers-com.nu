@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "portal" => { {scheme: $scheme, headers: {portal: $token_val}, query: "", location: "header"} }
+    "portal" => { {scheme: $scheme, headers: {"portal": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -153,10 +153,11 @@ export def "get-accounts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --account: string # Account Number
+  --account: string # Account Number (required)
 ]: nothing -> record<accounts: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "portal"))
   let base = ($base_url | default $BASE_URL)
+  if ($account == null) { error make --unspanned { msg: "required query parameter 'account' missing: pass --account" } }
   let qp = [(serialize-qp "account" $account "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/accounts" $qp $auth.query)
   let accept_val = "application/json"

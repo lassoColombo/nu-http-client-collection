@@ -95,6 +95,7 @@ def base-url-completer [] { ["http://api.nytimes.com/svc/semantic/v2/concept" "h
 def auth-scheme-completer [] { ["query-api-key"] }
 
 # Completers for enum parameters
+def concept-type-completer [] { ["nytd_des" "nytd_geo" "nytd_org" "nytd_per"] }
 def fields-completer [] { ["all" "article_list" "combinations" "geocodes" "links" "pages" "scope_notes" "search_api_query" "taxonomy" "ticker_symbol"] }
 
 # List all available API commands with their parameters
@@ -122,7 +123,7 @@ export def commands []: nothing -> table {
 
 # GET /name/{concept-type}/{specific-concept}.json
 export def "get-name-concept-type-specific-concept-json" [
-  concept_type: string
+  concept_type: string@concept-type-completer
   specific_concept: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -134,12 +135,13 @@ export def "get-name-concept-type-specific-concept-json" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string@fields-completer # "all" or comma-separated list of specific optional fields: pages, ticker_symbol, links, taxonomy, combinations, geocodes, article_list, scope_notes, search_api_query Optional fields are returned in result_set. They are briefly explained here: pages: A list of topic pages associated with a specific concept. ticker_symbol: If this concept is a publicly traded company, this field contains the ticker symbol. links: A list of links from this concept to external data resources. taxonomy: For descriptor concepts, this field returns a list of taxonomic relations to other concepts. combinations: For descriptor concepts, this field returns a list of the specific meanings tis concept takes on when combined with other concepts. geocodes: For geographic concepts, the full GIS record from geonames. article_list: A list of up to 10 articles associated with this concept. scope_notes: Scope notes contains clarifications and meaning definitions that explicate the relationship between the concept and an article. search_api_query: Returns the request one would need to submit to the Article Search API to obtain a list of articles annotated with this concept.
-  --query: string # Precedes the search term string. Used in a Search Query. Except for <specific_concept_name>, Search Query will take the required parameters listed above (<concept_type>, <concept_uri>, <article_uri>) as an optional_parameter in addition to the query=<query_term>.
+  --query: string # Precedes the search term string. Used in a Search Query. Except for <specific_concept_name>, Search Query will take the required parameters listed above (<concept_type>, <concept_uri>, <article_uri>) as an optional_parameter in addition to the query=<query_term>. (required)
 ]: nothing -> record<copyright: string, num_results: int, results: table<ancestors: list, article_list: record, combinations: list, concept_created: string, concept_id: int, concept_name: string, concept_status: string, concept_type: string, concept_updated: string, descendants: list, is_times_tag: int, links: list, scope_notes: list, search_api_query: string, taxonomy: list, vernacular: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($concept_type | is-empty) { error make --unspanned { msg: "path parameter 'concept-type' must be non-empty" } }
   if ($specific_concept | is-empty) { error make --unspanned { msg: "path parameter 'specific-concept' must be non-empty" } }
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({concept_type: (encode-path-segment $concept_type), specific_concept: (encode-path-segment $specific_concept)} | format pattern "/name/{concept_type}/{specific_concept}.json") $qp $auth.query)
   let accept_val = "application/json"
@@ -169,12 +171,13 @@ export def "get-search-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query: string # Precedes the search term string. Used in a Search Query. Except for <specific_concept_name>, Search Query will take the required parameters listed above (<concept_type>, <concept_uri>, <article_uri>) as an optional_parameter in addition to the query=<query_term>.
+  --query: string # Precedes the search term string. Used in a Search Query. Except for <specific_concept_name>, Search Query will take the required parameters listed above (<concept_type>, <concept_uri>, <article_uri>) as an optional_parameter in addition to the query=<query_term>. (required)
   --offset: int # Integer value for the index count from the first concept to the last concept, sorted alphabetically. Used in a Search Query. A Search Query will return up to 10 concepts in its results. (default: 10)
   --fields: string@fields-completer # "all" or comma-separated list of specific optional fields: pages, ticker_symbol, links, taxonomy, combinations, geocodes, article_list, scope_notes, search_api_query Optional fields are returned in result_set. They are briefly explained here: pages: A list of topic pages associated with a specific concept. ticker_symbol: If this concept is a publicly traded company, this field contains the ticker symbol. links: A list of links from this concept to external data resources. taxonomy: For descriptor concepts, this field returns a list of taxonomic relations to other concepts. combinations: For descriptor concepts, this field returns a list of the specific meanings tis concept takes on when combined with other concepts. geocodes: For geographic concepts, the full GIS record from geonames. article_list: A list of up to 10 articles associated with this concept. scope_notes: Scope notes contains clarifications and meaning definitions that explicate the relationship between the concept and an article. search_api_query: Returns the request one would need to submit to the Article Search API to obtain a list of articles annotated with this concept.
 ]: nothing -> record<copyright: string, num_results: int, results: table<concept_created: string, concept_id: int, concept_name: string, concept_status: string, concept_type: string, concept_updated: string, is_times_tag: int, vernacular: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search.json" $qp $auth.query)
   let accept_val = "application/json"

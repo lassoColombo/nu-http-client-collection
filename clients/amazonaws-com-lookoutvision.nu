@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # POST /2020-11-20/projects/{projectName}/datasets
 # operationId: CreateDataset
-# --DatasetSource shape: {GroundTruthManifest?: any}
+# --DatasetSource shape: {GroundTruthManifest?: record}
 export def "create-dataset" [
   project_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -161,8 +161,8 @@ export def "create-dataset" [
   --x-amz-signed-headers: string
   --x-amzn-client-token: string # ClientToken is an idempotency token that ensures a call to CreateDataset completes only once. You choose the value to pass. For example, An issue might prevent you from getting a response from CreateDataset. In this case, safely retry your call to CreateDataset by using the same ClientToken parameter value. If you don't supply a value for ClientToken, the AWS SDK you are using inserts a value for you. This prevents retries after a network error from making multiple dataset creation requests. You'll need to provide your own value for other use cases. An error occurs if the other input parameters are not the same as in the first request. Using a different value for ClientToken is considered a new call to CreateDataset. An idempotency token is active for 8 hours.
   dataset_type: string # The type of the dataset. Specify train for a training dataset. Specify test for a test dataset.
-  --dataset-source: record # Information about the location of a manifest file that Amazon Lookout for Vision uses to to create a dataset. — shape: {GroundTruthManifest?: any}
-]: any -> record<DatasetMetadata: record<DatasetType: record, CreationTimestamp: record, Status: record, StatusMessage: record>> {
+  --dataset-source: record # Information about the location of a manifest file that Amazon Lookout for Vision uses to to create a dataset. — shape: {GroundTruthManifest?: record}
+]: any -> record<DatasetMetadata: record<DatasetType: string, CreationTimestamp: string, Status: string, StatusMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -192,8 +192,8 @@ export def "create-dataset" [
 #
 # POST /2020-11-20/projects/{projectName}/models
 # operationId: CreateModel
-# --OutputConfig shape: {S3Location?: any}
-# --Tags item shape: {Key: any, Value: any}
+# --OutputConfig shape: {S3Location?: record}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-model" [
   project_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -214,10 +214,10 @@ export def "create-model" [
   --x-amz-signed-headers: string
   --x-amzn-client-token: string # ClientToken is an idempotency token that ensures a call to CreateModel completes only once. You choose the value to pass. For example, An issue might prevent you from getting a response from CreateModel. In this case, safely retry your call to CreateModel by using the same ClientToken parameter value. If you don't supply a value for ClientToken, the AWS SDK you are using inserts a value for you. This prevents retries after a network error from starting multiple training jobs. You'll need to provide your own value for other use cases. An error occurs if the other input parameters are not the same as in the first request. Using a different value for ClientToken is considered a new call to CreateModel. An idempotency token is active for 8 hours.
   --description: string # A description for the version of the model.
-  output_config: record # The S3 location where Amazon Lookout for Vision saves model training files. — shape: {S3Location?: any}
+  output_config: record # The S3 location where Amazon Lookout for Vision saves model training files. — shape: {S3Location?: record}
   --kms-key-id: string # The identifier for your AWS KMS key. The key is used to encrypt training and test images copied into the service for model training. Your source images are unaffected. If this parameter is not specified, the copied images are encrypted by a key that AWS owns and manages.
-  --tags: list # A set of tags (key-value pairs) that you want to attach to the model. — item shape: {Key: any, Value: any}
-]: any -> record<ModelMetadata: record<CreationTimestamp: record, ModelVersion: record, ModelArn: record, Description: record, Status: record, StatusMessage: record, Performance: record<F1Score: record, Recall: record, Precision: record>>> {
+  --tags: list # A set of tags (key-value pairs) that you want to attach to the model. — item shape: {Key: string, Value: string}
+]: any -> record<ModelMetadata: record<CreationTimestamp: string, ModelVersion: string, ModelArn: string, Description: string, Status: string, StatusMessage: string, Performance: record<F1Score: float, Recall: float, Precision: float>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -269,7 +269,7 @@ export def "list-models" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Models: record, NextToken: record> {
+]: nothing -> record<Models: table<CreationTimestamp: string, ModelVersion: string, ModelArn: string, Description: string, Status: string, StatusMessage: string, Performance: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
@@ -316,7 +316,7 @@ export def "create-project" [
   --x-amz-signed-headers: string
   --x-amzn-client-token: string # ClientToken is an idempotency token that ensures a call to CreateProject completes only once. You choose the value to pass. For example, An issue might prevent you from getting a response from CreateProject. In this case, safely retry your call to CreateProject by using the same ClientToken parameter value. If you don't supply a value for ClientToken, the AWS SDK you are using inserts a value for you. This prevents retries after a network error from making multiple project creation requests. You'll need to provide your own value for other use cases. An error occurs if the other input parameters are not the same as in the first request. Using a different value for ClientToken is considered a new call to CreateProject. An idempotency token is active for 8 hours.
   project_name: string # The name for the project.
-]: any -> record<ProjectMetadata: record<ProjectArn: record, ProjectName: record, CreationTimestamp: record>> {
+]: any -> record<ProjectMetadata: record<ProjectArn: string, ProjectName: string, CreationTimestamp: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -366,7 +366,7 @@ export def "list-projects" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Projects: record, NextToken: record> {
+]: nothing -> record<Projects: table<ProjectArn: string, ProjectName: string, CreationTimestamp: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -460,7 +460,7 @@ export def "describe-dataset" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DatasetDescription: record<ProjectName: record, DatasetType: record, CreationTimestamp: record, LastUpdatedTimestamp: record, Status: record, StatusMessage: record, ImageStats: record<Total: record, Labeled: record, Normal: record, Anomaly: record>>> {
+]: nothing -> record<DatasetDescription: record<ProjectName: string, DatasetType: string, CreationTimestamp: string, LastUpdatedTimestamp: string, Status: string, StatusMessage: string, ImageStats: record<Total: int, Labeled: int, Normal: int, Anomaly: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
@@ -508,7 +508,7 @@ export def "delete-model" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amzn-client-token: string # ClientToken is an idempotency token that ensures a call to DeleteModel completes only once. You choose the value to pass. For example, an issue might prevent you from getting a response from DeleteModel. In this case, safely retry your call to DeleteModel by using the same ClientToken parameter value. If you don't supply a value for ClientToken, the AWS SDK you are using inserts a value for you. This prevents retries after a network error from making multiple model deletion requests. You'll need to provide your own value for other use cases. An error occurs if the other input parameters are not the same as in the first request. Using a different value for ClientToken is considered a new call to DeleteModel. An idempotency token is active for 8 hours.
-]: nothing -> record<ModelArn: record> {
+]: nothing -> record<ModelArn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
@@ -555,7 +555,7 @@ export def "describe-model" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ModelDescription: record<ModelVersion: record, ModelArn: record, CreationTimestamp: record, Description: record, Status: record, StatusMessage: record, Performance: record<F1Score: record, Recall: record, Precision: record>, OutputConfig: record<S3Location: record>, EvaluationManifest: record<Bucket: record, Key: record>, EvaluationResult: record<Bucket: record, Key: record>, EvaluationEndTimestamp: record, KmsKeyId: record, MinInferenceUnits: record, MaxInferenceUnits: record>> {
+]: nothing -> record<ModelDescription: record<ModelVersion: string, ModelArn: string, CreationTimestamp: string, Description: string, Status: string, StatusMessage: string, Performance: record<F1Score: float, Recall: float, Precision: float>, OutputConfig: record<S3Location: record>, EvaluationManifest: record<Bucket: string, Key: string>, EvaluationResult: record<Bucket: string, Key: string>, EvaluationEndTimestamp: string, KmsKeyId: string, MinInferenceUnits: int, MaxInferenceUnits: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
@@ -602,7 +602,7 @@ export def "delete-project" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amzn-client-token: string # ClientToken is an idempotency token that ensures a call to DeleteProject completes only once. You choose the value to pass. For example, An issue might prevent you from getting a response from DeleteProject. In this case, safely retry your call to DeleteProject by using the same ClientToken parameter value. If you don't supply a value for ClientToken, the AWS SDK you are using inserts a value for you. This prevents retries after a network error from making multiple project deletion requests. You'll need to provide your own value for other use cases. An error occurs if the other input parameters are not the same as in the first request. Using a different value for ClientToken is considered a new call to DeleteProject. An idempotency token is active for 8 hours.
-]: nothing -> record<ProjectArn: record> {
+]: nothing -> record<ProjectArn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
@@ -647,7 +647,7 @@ export def "describe-project" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ProjectDescription: record<ProjectArn: record, ProjectName: record, CreationTimestamp: record, Datasets: record>> {
+]: nothing -> record<ProjectDescription: record<ProjectArn: string, ProjectName: string, CreationTimestamp: string, Datasets: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
@@ -693,7 +693,7 @@ export def "describe-model-packaging-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ModelPackagingDescription: record<JobName: record, ProjectName: record, ModelVersion: record, ModelPackagingConfiguration: record<Greengrass: record>, ModelPackagingJobDescription: record, ModelPackagingMethod: record, ModelPackagingOutputDetails: record<Greengrass: record>, Status: record, StatusMessage: record, CreationTimestamp: record, LastUpdatedTimestamp: record>> {
+]: nothing -> record<ModelPackagingDescription: record<JobName: string, ProjectName: string, ModelVersion: string, ModelPackagingConfiguration: record<Greengrass: record>, ModelPackagingJobDescription: string, ModelPackagingMethod: string, ModelPackagingOutputDetails: record<Greengrass: record>, Status: string, StatusMessage: string, CreationTimestamp: string, LastUpdatedTimestamp: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
@@ -740,9 +740,9 @@ export def "detect-anomalies" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --content-type: string # The type of the image passed in Body. Valid values are image/png (PNG format images) and image/jpeg (JPG format images).
+  --content-type: string # The type of the image passed in Body. Valid values are image/png (PNG format images) and image/jpeg (JPG format images). (required)
   body: string # The unencrypted image bytes that you want to analyze.
-]: any -> record<DetectAnomalyResult: record<Source: record<Type: record>, IsAnomalous: record, Confidence: record, Anomalies: record, AnomalyMask: record>> {
+]: any -> record<DetectAnomalyResult: record<Source: record<Type: string>, IsAnomalous: bool, Confidence: float, Anomalies: list<record>, AnomalyMask: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -803,7 +803,7 @@ export def "list-dataset-entries" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DatasetEntries: record, NextToken: record> {
+]: nothing -> record<DatasetEntries: list<string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
@@ -853,7 +853,7 @@ export def "update-dataset-entries" [
   --x-amz-signed-headers: string
   --x-amzn-client-token: string # ClientToken is an idempotency token that ensures a call to UpdateDatasetEntries completes only once. You choose the value to pass. For example, An issue might prevent you from getting a response from UpdateDatasetEntries. In this case, safely retry your call to UpdateDatasetEntries by using the same ClientToken parameter value. If you don't supply a value for ClientToken, the AWS SDK you are using inserts a value for you. This prevents retries after a network error from making multiple updates with the same dataset entries. You'll need to provide your own value for other use cases. An error occurs if the other input parameters are not the same as in the first request. Using a different value for ClientToken is considered a new call to UpdateDatasetEntries. An idempotency token is active for 8 hours.
   changes: string # The entries to add to the dataset.
-]: any -> record<Status: record> {
+]: any -> record<Status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -906,7 +906,7 @@ export def "list-model-packaging-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ModelPackagingJobs: record, NextToken: record> {
+]: nothing -> record<ModelPackagingJobs: table<JobName: string, ProjectName: string, ModelVersion: string, ModelPackagingJobDescription: string, ModelPackagingMethod: string, Status: string, StatusMessage: string, CreationTimestamp: string, LastUpdatedTimestamp: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
@@ -934,7 +934,7 @@ export def "list-model-packaging-jobs" [
 #
 # POST /2020-11-20/projects/{projectName}/modelpackagingjobs
 # operationId: StartModelPackagingJob
-# --Configuration shape: {Greengrass?: any}
+# --Configuration shape: {Greengrass?: record}
 export def "start-model-packaging-job" [
   project_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -956,9 +956,9 @@ export def "start-model-packaging-job" [
   --x-amzn-client-token: string # ClientToken is an idempotency token that ensures a call to StartModelPackagingJob completes only once. You choose the value to pass. For example, An issue might prevent you from getting a response from StartModelPackagingJob. In this case, safely retry your call to StartModelPackagingJob by using the same ClientToken parameter value. If you don't supply a value for ClientToken, the AWS SDK you are using inserts a value for you. This prevents retries after a network error from making multiple dataset creation requests. You'll need to provide your own value for other use cases. An error occurs if the other input parameters are not the same as in the first request. Using a different value for ClientToken is considered a new call to StartModelPackagingJob. An idempotency token is active for 8 hours.
   model_version: string # The version of the model within the project that you want to package.
   --job-name: string # A name for the model packaging job. If you don't supply a value, the service creates a job name for you.
-  configuration: record # Configuration information for a Amazon Lookout for Vision model packaging job. For more information, see StartModelPackagingJob. — shape: {Greengrass?: any}
+  configuration: record # Configuration information for a Amazon Lookout for Vision model packaging job. For more information, see StartModelPackagingJob. — shape: {Greengrass?: record}
   --description: string # A description for the model packaging job.
-]: any -> record<JobName: record> {
+]: any -> record<JobName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1006,7 +1006,7 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Tags: record> {
+]: nothing -> record<Tags: table<Key: string, Value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
@@ -1033,7 +1033,7 @@ export def "list-tags-for-resource" [
 #
 # POST /2020-11-20/tags/{resourceArn}
 # operationId: TagResource
-# --Tags item shape: {Key: any, Value: any}
+# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1052,7 +1052,7 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  tags: list # The key-value tags to assign to the model. — item shape: {Key: any, Value: any}
+  tags: list # The key-value tags to assign to the model. — item shape: {Key: string, Value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1105,7 +1105,7 @@ export def "start-model" [
   --x-amzn-client-token: string # ClientToken is an idempotency token that ensures a call to StartModel completes only once. You choose the value to pass. For example, An issue might prevent you from getting a response from StartModel. In this case, safely retry your call to StartModel by using the same ClientToken parameter value. If you don't supply a value for ClientToken, the AWS SDK you are using inserts a value for you. This prevents retries after a network error from making multiple start requests. You'll need to provide your own value for other use cases. An error occurs if the other input parameters are not the same as in the first request. Using a different value for ClientToken is considered a new call to StartModel. An idempotency token is active for 8 hours.
   min_inference_units: int # The minimum number of inference units to use. A single inference unit represents 1 hour of processing. Use a higher number to increase the TPS throughput of your model. You are charged for the number of inference units that you use.
   --max-inference-units: int # The maximum number of inference units to use for auto-scaling the model. If you don't specify a value, Amazon Lookout for Vision doesn't auto-scale the model.
-]: any -> record<Status: record> {
+]: any -> record<Status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1156,7 +1156,7 @@ export def "stop-model" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amzn-client-token: string # ClientToken is an idempotency token that ensures a call to StopModel completes only once. You choose the value to pass. For example, An issue might prevent you from getting a response from StopModel. In this case, safely retry your call to StopModel by using the same ClientToken parameter value. If you don't supply a value for ClientToken, the AWS SDK you are using inserts a value for you. This prevents retries after a network error from making multiple stop requests. You'll need to provide your own value for other use cases. An error occurs if the other input parameters are not the same as in the first request. Using a different value for ClientToken is considered a new call to StopModel. An idempotency token is active for 8 hours.
-]: nothing -> record<Status: record> {
+]: nothing -> record<Status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
@@ -1195,7 +1195,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # A list of the keys of the tags that you want to remove.
+  --tag-keys: list # A list of the keys of the tags that you want to remove. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1207,6 +1207,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/2020-11-20/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"

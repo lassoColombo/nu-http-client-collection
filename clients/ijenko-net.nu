@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "access-token" => { {scheme: $scheme, headers: {Access-Token: $token_val}, query: "", location: "header"} }
+    "access-token" => { {scheme: $scheme, headers: {"Access-Token": $token_val}, query: "", location: "header"} }
     "query-token" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "token")=(encode-path-segment $token_val)", location: "query"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -564,7 +564,7 @@ export def "user-get-metadata" [
 # PATCH /account/users/{userId}/metadata
 # operationId: User.patchMetadata
 export def "user-patch-metadata" [
-  user_id: any
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -913,7 +913,7 @@ export def "device-get-metadata" [
 # PATCH /devices/{deviceId}/metadata
 # operationId: Device.patchMetadata
 export def "device-patch-metadata" [
-  device_id: any
+  device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -965,14 +965,15 @@ export def "device-run" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --functionalities: string # Functionality selector: Functionality tags or functionality class (optionally, '@' followed by a endpoint in decimal) or '*' for all. Multiple values are separated by '|' and are interpreted as « OR ».
+  --functionalities: string # Functionality selector: Functionality tags or functionality class (optionally, '@' followed by a endpoint in decimal) or '*' for all. Multiple values are separated by '|' and are interpreted as « OR ». (required)
   --body: list
-]: any -> any {
+]: any -> table<functionality: string, result: list<any>, status: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
   if ($action | is-empty) { error make --unspanned { msg: "path parameter 'action' must be non-empty" } }
+  if ($functionalities == null) { error make --unspanned { msg: "required query parameter 'functionalities' missing: pass --functionalities" } }
   let qp = [(serialize-qp "functionalities" $functionalities "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({device_id: (encode-path-segment $device_id), action: (encode-path-segment $action)} | format pattern "/devices/{device_id}/run/{action}") $qp $auth.query)
   let req_body = $body
@@ -1034,7 +1035,7 @@ export def "device-get-tags" [
 # PATCH /devices/{deviceId}/tags
 # operationId: Device.patchTags
 export def "device-patch-tags" [
-  device_id: any
+  device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1151,7 +1152,7 @@ export def "functionality-patch" [
 # GET /functionalities/{functionalityId}/attributes
 # operationId: Functionality.values
 export def "functionality-values" [
-  functionality_id: any
+  functionality_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1162,21 +1163,21 @@ export def "functionality-values" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --names: list<string> # One or multiple *Attribute* names separated by commas
-  --qp-from: string # Beginning of the time interval. (format: date-time)
-  --qp-to: string # End of the interval. Default: now. (format: date-time)
+  --from: string # Beginning of the time interval. (format: date-time)
+  --to: string # End of the interval. Default: now. (format: date-time)
   --surround: oneof<nothing, bool> # If true, return also one value before from and one value after to
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   if ($functionality_id | is-empty) { error make --unspanned { msg: "path parameter 'functionalityId' must be non-empty" } }
-  let qp = [(serialize-qp "names" $names "csv") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "surround" $surround "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "names" $names "csv") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "surround" $surround "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({functionality_id: (encode-path-segment $functionality_id)} | format pattern "/functionalities/{functionality_id}/attributes") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"names": $names, "from": $qp_from, "to": $qp_to, "surround": $surround} | compact)
+    query: ({"names": $names, "from": $from, "to": $to, "surround": $surround} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1308,7 +1309,7 @@ export def "functionality-get-metadata" [
 # PATCH /functionalities/{functionalityId}/metadata
 # operationId: Functionality.patchMetadata
 export def "functionality-patch-metadata" [
-  functionality_id: any
+  functionality_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1427,7 +1428,7 @@ export def "functionality-get-tags" [
 # PATCH /functionalities/{functionalityId}/tags
 # operationId: Functionality.patchTags
 export def "functionality-patch-tags" [
-  functionality_id: any
+  functionality_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1690,7 +1691,7 @@ export def "notification-get-metadata" [
 # PATCH /notifications/{notificationId}/metadata
 # operationId: Notification.patchMetadata
 export def "notification-patch-metadata" [
-  notification_id: any
+  notification_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1944,6 +1945,7 @@ export def "place-open-pairing" [
   let full_url = (build-url $base ({place_id: (encode-path-segment $place_id), bus_id: (encode-path-segment $bus_id)} | format pattern "/places/{place_id}/buses/{bus_id}/pairing") $auth.query)
   let req_body = {"duration": $duration, "enabled": $enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "enabled") == null) { error make --unspanned { msg: "required body field 'enabled' missing: pass --enabled or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1965,7 +1967,7 @@ export def "place-open-pairing" [
 # GET /places/{placeId}/devices
 # operationId: Place.devices
 export def "place-devices" [
-  place_id: any
+  place_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2004,7 +2006,7 @@ export def "place-devices" [
 # GET /places/{placeId}/electricity/autonomy
 # operationId: Place.Electricity.autonomy
 export def "place-electricity-autonomy" [
-  place_id: any
+  place_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2014,12 +2016,14 @@ export def "place-electricity-autonomy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --when: string # A time part of the time span. (format: date-time)
-  --span: string@span-completer # Timespan: H (hour), D (day), Wmo (week starting on Monday), Wsu (week starting on Sunday), M (month), Y (year)
+  --when: string # A time part of the time span. (required, format: date-time)
+  --span: string@span-completer # Timespan: H (hour), D (day), Wmo (week starting on Monday), Wsu (week starting on Sunday), M (month), Y (year) (required)
 ]: nothing -> record<autonomy: float, code: int, from: string, message: string, to: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   if ($place_id | is-empty) { error make --unspanned { msg: "path parameter 'placeId' must be non-empty" } }
+  if ($when == null) { error make --unspanned { msg: "required query parameter 'when' missing: pass --when" } }
+  if ($span == null) { error make --unspanned { msg: "required query parameter 'span' missing: pass --span" } }
   let qp = [(serialize-qp "when" $when "scalar") (serialize-qp "span" $span "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({place_id: (encode-path-segment $place_id)} | format pattern "/places/{place_id}/electricity/autonomy") $qp $auth.query)
   let accept_val = "application/json"
@@ -2053,11 +2057,12 @@ export def "place-electricity-get-flows" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --flows: list<string> # Names of the flows requested
+  --flows: list<string> # Names of the flows requested (required)
 ]: nothing -> record<code: int, flows: record<battery_charge: list<record>, battery_discharge: list<record>, battery_grid: list<record>, elec_drawn: list<record>, elec_feed_in: list<record>, elec_from_household: list<record>, elec_local: list<record>, elec_to_pv: list<record>, elec_total_gen: list<record>, elec_total_usage: list<record>, elec_usage: list<record>>, message: string, missing: record<battery_charge: bool, battery_discharge: bool, battery_grid: bool, elec_drawn: bool, elec_feed_in: bool, elec_from_household: bool, elec_local: bool, elec_to_pv: bool, elec_total_gen: bool, elec_total_usage: bool, elec_usage: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   if ($place_id | is-empty) { error make --unspanned { msg: "path parameter 'placeId' must be non-empty" } }
+  if ($flows == null) { error make --unspanned { msg: "required query parameter 'flows' missing: pass --flows" } }
   let qp = [(serialize-qp "flows" $flows "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({place_id: (encode-path-segment $place_id)} | format pattern "/places/{place_id}/electricity/flows") $qp $auth.query)
   let accept_val = "application/json"
@@ -2117,7 +2122,7 @@ export def "place-electricity-get-flows-setup" [
 # GET /places/{placeId}/electricity/self-consumption
 # operationId: Place.Electricity.selfConsumption
 export def "place-electricity-self-consumption" [
-  place_id: any
+  place_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2127,12 +2132,14 @@ export def "place-electricity-self-consumption" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --when: string # A time part of the time span. (format: date-time)
-  --span: string@span-completer # Timespan: H (hour), D (day), Wmo (week starting on Monday), Wsu (week starting on Sunday), M (month), Y (year)
+  --when: string # A time part of the time span. (required, format: date-time)
+  --span: string@span-completer # Timespan: H (hour), D (day), Wmo (week starting on Monday), Wsu (week starting on Sunday), M (month), Y (year) (required)
 ]: nothing -> record<code: int, from: string, message: string, selfConsumption: float, to: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   if ($place_id | is-empty) { error make --unspanned { msg: "path parameter 'placeId' must be non-empty" } }
+  if ($when == null) { error make --unspanned { msg: "required query parameter 'when' missing: pass --when" } }
+  if ($span == null) { error make --unspanned { msg: "required query parameter 'span' missing: pass --span" } }
   let qp = [(serialize-qp "when" $when "scalar") (serialize-qp "span" $span "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({place_id: (encode-path-segment $place_id)} | format pattern "/places/{place_id}/electricity/self-consumption") $qp $auth.query)
   let accept_val = "application/json"
@@ -2156,7 +2163,7 @@ export def "place-electricity-self-consumption" [
 # GET /places/{placeId}/functionalities
 # operationId: Place.functionalities
 export def "place-functionalities" [
-  place_id: any
+  place_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2166,19 +2173,21 @@ export def "place-functionalities" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --devices: string # Devices selector. Device tags or device classes or device ids or '*' for any. Multiple values are separated by '|' and interpreted as « OR ».
+  --functionalities: string # Functionality selector: Functionality tags or functionality class (optionally, '@' followed by a endpoint in decimal) or '*' for all. Multiple values are separated by '|' and are interpreted as « OR ».
   --embed-metadata: list<string> # Request to include the given keys of metadata in the response. If a key doesn't exist on the resource it is ignored. **Note:** This only applies to the top level resources.
 ]: nothing -> table<class: string, device: string, endpoint: int, id: string, metadata: record, name: string, tags: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   if ($place_id | is-empty) { error make --unspanned { msg: "path parameter 'placeId' must be non-empty" } }
-  let qp = [(serialize-qp "embed-metadata" $embed_metadata "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "devices" $devices "scalar") (serialize-qp "functionalities" $functionalities "scalar") (serialize-qp "embed-metadata" $embed_metadata "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({place_id: (encode-path-segment $place_id)} | format pattern "/places/{place_id}/functionalities") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"embed-metadata": $embed_metadata} | compact)
+    query: ({"devices": $devices, "functionalities": $functionalities, "embed-metadata": $embed_metadata} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2230,7 +2239,7 @@ export def "place-get-metadata" [
 # PATCH /places/{placeId}/metadata
 # operationId: Place.patchMetadata
 export def "place-patch-metadata" [
-  place_id: any
+  place_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2271,7 +2280,7 @@ export def "place-patch-metadata" [
 # GET /places/{placeId}/notifications
 # operationId: Place.notifications
 export def "place-notifications" [
-  place_id: any
+  place_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2352,7 +2361,7 @@ export def "place-new-notification" [
 # GET /places/{placeId}/programs
 # operationId: Place.programs
 export def "place-programs" [
-  place_id: any
+  place_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2444,15 +2453,17 @@ export def "place-run" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --devices: string # Devices selector. Device tags or device classes or device ids or '*' for any. Multiple values are separated by '|' and interpreted as « OR ».
-  --functionalities: string # Functionality selector: Functionality tags or functionality class (optionally, '@' followed by a endpoint in decimal) or '*' for all. Multiple values are separated by '|' and are interpreted as « OR ».
+  --devices: string # Devices selector. Device tags or device classes or device ids or '*' for any. Multiple values are separated by '|' and interpreted as « OR ». (required)
+  --functionalities: string # Functionality selector: Functionality tags or functionality class (optionally, '@' followed by a endpoint in decimal) or '*' for all. Multiple values are separated by '|' and are interpreted as « OR ». (required)
   --body: list
-]: any -> any {
+]: any -> table<functionality: string, result: list<any>, status: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   if ($place_id | is-empty) { error make --unspanned { msg: "path parameter 'placeId' must be non-empty" } }
   if ($action | is-empty) { error make --unspanned { msg: "path parameter 'action' must be non-empty" } }
+  if ($devices == null) { error make --unspanned { msg: "required query parameter 'devices' missing: pass --devices" } }
+  if ($functionalities == null) { error make --unspanned { msg: "required query parameter 'functionalities' missing: pass --functionalities" } }
   let qp = [(serialize-qp "devices" $devices "scalar") (serialize-qp "functionalities" $functionalities "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({place_id: (encode-path-segment $place_id), action: (encode-path-segment $action)} | format pattern "/places/{place_id}/run/{action}") $qp $auth.query)
   let req_body = $body
@@ -2592,7 +2603,7 @@ export def "program-patch" [
 # GET /programs/{programId}/log
 # operationId: Program.log
 export def "program-log" [
-  program_id: any
+  program_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2602,20 +2613,21 @@ export def "program-log" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-from: string # Beginning of the time interval. (format: date-time)
-  --qp-to: string # End of the interval. Default: now. (format: date-time)
+  --from: string # Beginning of the time interval. (required, format: date-time)
+  --to: string # End of the interval. Default: now. (format: date-time)
 ]: nothing -> table<actions: list<record>, errors: list<string>, notifications: list<string>, when: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   if ($program_id | is-empty) { error make --unspanned { msg: "path parameter 'programId' must be non-empty" } }
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({program_id: (encode-path-segment $program_id)} | format pattern "/programs/{program_id}/log") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to} | compact)
+    query: ({"from": $from, "to": $to} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2667,7 +2679,7 @@ export def "program-get-metadata" [
 # PATCH /programs/{programId}/metadata
 # operationId: Program.patchMetadata
 export def "program-patch-metadata" [
-  program_id: any
+  program_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

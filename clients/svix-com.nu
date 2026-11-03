@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -162,7 +162,7 @@ export def "list-applications-api-v1-app-get" [
   --iterator: string # nullable, e.g. app_1srOrx2ZWZBpBUvZwXKQmoEYga2
   --limit: int # default: 50
   --order: string # default: descending
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
 ]: nothing -> record<data: table<createdAt: string, id: string, metadata: record, name: string, rateLimit: int, uid: string, updatedAt: string>, done: bool, iterator: string, prevIterator: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -201,7 +201,7 @@ export def "create-application-api-v1-app-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --get-if-exists: oneof<nothing, bool> # Get an existing application, or create a new one if doesn't exist. It's two separate functions in the libs. (default: false)
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
   --metadata: record # nullable
   name: string # e.g. My first application
   --rate-limit: int # nullable, e.g. 1000
@@ -247,7 +247,7 @@ export def "delete-application-api-v1-app-app-id-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -286,7 +286,7 @@ export def "get-application-api-v1-app-app-id-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
 ]: nothing -> record<createdAt: string, id: string, metadata: record, name: string, rateLimit: int, uid: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -325,7 +325,7 @@ export def "update-application-api-v1-app-app-id-put" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
   --metadata: record # nullable
   name: string # e.g. My first application
   --rate-limit: int # nullable, e.g. 1000
@@ -380,7 +380,7 @@ export def "list-attempts-by-endpoint-api-v1-app-app-id-attempt-endpoint-endpoin
   --channel: string # nullable, e.g. project_1337
   --before: string # nullable, format: date-time
   --after: string # nullable, format: date-time
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
 ]: nothing -> record<data: table<endpointId: string, id: string, msgId: string, response: string, responseStatusCode: int, status: int, timestamp: string, triggerType: int, url: string>, done: bool, iterator: string, prevIterator: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -431,7 +431,7 @@ export def "list-attempts-by-msg-api-v1-app-app-id-attempt-msg-msg-id-get" [
   --channel: string # nullable, e.g. project_1337
   --before: string # nullable, format: date-time
   --after: string # nullable, format: date-time
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
 ]: nothing -> record<data: table<endpointId: string, id: string, msgId: string, response: string, responseStatusCode: int, status: int, timestamp: string, triggerType: int, url: string>, done: bool, iterator: string, prevIterator: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -475,7 +475,7 @@ export def "list-endpoints-api-v1-app-app-id-endpoint-get" [
   --iterator: string # nullable, e.g. ep_1srOrx2ZWZBpBUvZwXKQmoEYga2
   --limit: int # default: 50
   --order: string # default: descending
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
 ]: nothing -> record<data: table<channels: list, createdAt: string, description: string, disabled: bool, filterTypes: list, id: string, metadata: record, rateLimit: int, uid: string, updatedAt: string, url: string, version: int>, done: bool, iterator: string, prevIterator: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -515,9 +515,9 @@ export def "create-endpoint-api-v1-app-app-id-endpoint-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
   --channels: list<string> # List of message channels this endpoint listens to (omit for all) (nullable, e.g. [project_123, group_2])
-  --description: string # default: , e.g. An example endpoint name
+  --description: string # default: "", e.g. An example endpoint name
   --disabled: oneof<nothing, bool> # default: false, e.g. false
   --filter-types: list<string> # nullable, e.g. [user.signup, user.deleted]
   --metadata: record # nullable
@@ -568,7 +568,7 @@ export def "delete-endpoint-api-v1-app-app-id-endpoint-endpoint-id-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -609,7 +609,7 @@ export def "get-endpoint-api-v1-app-app-id-endpoint-endpoint-id-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
 ]: nothing -> record<channels: list<string>, createdAt: string, description: string, disabled: bool, filterTypes: list<string>, id: string, metadata: record, rateLimit: int, uid: string, updatedAt: string, url: string, version: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -650,9 +650,9 @@ export def "update-endpoint-api-v1-app-app-id-endpoint-endpoint-id-put" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
   --channels: list<string> # List of message channels this endpoint listens to (omit for all) (nullable, e.g. [project_123, group_2])
-  --description: string # default: , e.g. An example endpoint name
+  --description: string # default: "", e.g. An example endpoint name
   --disabled: oneof<nothing, bool> # default: false, e.g. false
   --filter-types: list<string> # nullable, e.g. [user.signup, user.deleted]
   --metadata: record # nullable
@@ -703,7 +703,7 @@ export def "get-endpoint-headers-api-v1-app-app-id-endpoint-endpoint-id-headers-
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
 ]: nothing -> record<headers: record, sensitive: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -744,7 +744,7 @@ export def "patch-endpoint-headers-api-v1-app-app-id-endpoint-endpoint-id-header
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
   headers: record # e.g. {X-Example: 123, X-Foobar: Bar}
 ]: any -> any {
   let input = $in
@@ -789,7 +789,7 @@ export def "update-endpoint-headers-api-v1-app-app-id-endpoint-endpoint-id-heade
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
   headers: record # e.g. {X-Example: 123, X-Foobar: Bar}
 ]: any -> any {
   let input = $in
@@ -840,7 +840,7 @@ export def "list-attempted-messages-api-v1-app-app-id-endpoint-endpoint-id-msg-g
   --status: int@status-completer
   --before: string # nullable, format: date-time
   --after: string # nullable, format: date-time
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
 ]: nothing -> record<data: table<channels: list, eventId: string, eventType: string, id: string, nextAttempt: string, payload: record, status: int, timestamp: string>, done: bool, iterator: string, prevIterator: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -882,7 +882,7 @@ export def "recover-failed-webhooks-api-v1-app-app-id-endpoint-endpoint-id-recov
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
   since: string # format: date-time
   --until: string # nullable, format: date-time
 ]: any -> record<id: string, status: string, task: string> {
@@ -928,7 +928,7 @@ export def "replay-missing-webhooks-api-v1-app-app-id-endpoint-endpoint-id-repla
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
   since: string # format: date-time
   --until: string # nullable, format: date-time
 ]: any -> record<id: string, status: string, task: string> {
@@ -974,7 +974,7 @@ export def "get-endpoint-secret-api-v1-app-app-id-endpoint-endpoint-id-secret-ge
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
 ]: nothing -> record<key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1015,7 +1015,7 @@ export def "rotate-endpoint-secret-api-v1-app-app-id-endpoint-endpoint-id-secret
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
   --key: string # The endpoint's verification secret. If `null` is passed, a secret is automatically generated. Format: `base64` encoded random bytes optionally prefixed with `whsec_`. Recommended size: 24. (nullable, e.g. whsec_C2FVsBQIhrscChlQIMV+b5sSYspob7oD)
 ]: any -> any {
   let input = $in
@@ -1062,7 +1062,7 @@ export def "get-endpoint-stats-api-v1-app-app-id-endpoint-endpoint-id-stats-get"
   --dry-run(-n) # Return the request that would be sent without executing it
   --since: string # nullable, format: date-time
   --until: string # nullable, format: date-time
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
 ]: nothing -> record<fail: int, pending: int, sending: int, success: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1104,7 +1104,7 @@ export def "get-endpoint-transformation-api-v1-app-app-id-endpoint-endpoint-id-t
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
 ]: nothing -> record<code: string, enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1145,7 +1145,7 @@ export def "set-endpoint-transformation-api-v1-app-app-id-endpoint-endpoint-id-t
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
   --code: string # nullable
   --enabled: oneof<nothing, bool> # default: false
 ]: any -> any {
@@ -1192,7 +1192,7 @@ export def "list-integrations-api-v1-app-app-id-integration-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --iterator: string # nullable, e.g. integ_1srOrx2ZWZBpBUvZwXKQmoEYga2
   --limit: int # default: 50
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
 ]: nothing -> record<data: table<createdAt: string, id: string, name: string, updatedAt: string>, done: bool, iterator: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1232,7 +1232,7 @@ export def "create-integration-api-v1-app-app-id-integration-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
   name: string # e.g. Example Integration
 ]: any -> record<createdAt: string, id: string, name: string, updatedAt: string> {
   let input = $in
@@ -1276,7 +1276,7 @@ export def "delete-integration-api-v1-app-app-id-integration-integ-id-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1317,7 +1317,7 @@ export def "get-integration-api-v1-app-app-id-integration-integ-id-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
 ]: nothing -> record<createdAt: string, id: string, name: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1358,7 +1358,7 @@ export def "update-integration-api-v1-app-app-id-integration-integ-id-put" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
   name: string # e.g. Example Integration
 ]: any -> record<createdAt: string, id: string, name: string, updatedAt: string> {
   let input = $in
@@ -1403,7 +1403,7 @@ export def "get-integration-key-api-v1-app-app-id-integration-integ-id-key-get" 
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
 ]: nothing -> record<key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1444,7 +1444,7 @@ export def "rotate-integration-key-api-v1-app-app-id-integration-integ-id-key-ro
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
 ]: nothing -> record<key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1490,7 +1490,7 @@ export def "list-messages-api-v1-app-app-id-msg-get" [
   --channel: string # nullable, e.g. project_1337
   --before: string # nullable, format: date-time
   --after: string # nullable, format: date-time
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
 ]: nothing -> record<data: table<channels: list, eventId: string, eventType: string, id: string, payload: record, timestamp: string>, done: bool, iterator: string, prevIterator: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1532,7 +1532,7 @@ export def "create-message-api-v1-app-app-id-msg-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --with-content: oneof<nothing, bool> # default: true
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
   --application: record # shape: {metadata?: record, name: string, rateLimit?: int, uid?: string}
   --channels: list<string> # List of free-form identifiers that endpoints can filter by (nullable, e.g. [project_123, group_2])
   --event-id: string # Optional unique identifier for the message (nullable, e.g. evt_pNZKtWg8Azow)
@@ -1582,7 +1582,7 @@ export def "get-message-api-v1-app-app-id-msg-msg-id-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
 ]: nothing -> record<channels: list<string>, eventId: string, eventType: string, id: string, payload: record, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1633,7 +1633,7 @@ export def "list-attempts-api-v1-app-app-id-msg-msg-id-attempt-get" [
   --status: int@status-completer
   --before: string # nullable, format: date-time
   --after: string # nullable, format: date-time
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
 ]: nothing -> record<data: table<endpointId: string, id: string, msgId: string, response: string, responseStatusCode: int, status: int, timestamp: string, triggerType: int, url: string>, done: bool, iterator: string, prevIterator: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1676,7 +1676,7 @@ export def "get-attempt-api-v1-app-app-id-msg-msg-id-attempt-attempt-id-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
 ]: nothing -> record<endpointId: string, id: string, msgId: string, response: string, responseStatusCode: int, status: int, timestamp: string, triggerType: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1719,7 +1719,7 @@ export def "expunge-attempt-content-api-v1-app-app-id-msg-msg-id-attempt-attempt
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1761,7 +1761,7 @@ export def "expunge-message-payload-api-v1-app-app-id-msg-msg-id-content-delete"
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1804,7 +1804,7 @@ export def "list-attempted-destinations-api-v1-app-app-id-msg-msg-id-endpoint-ge
   --dry-run(-n) # Return the request that would be sent without executing it
   --iterator: string # nullable, e.g. msgep_1srOrx2ZWZBpBUvZwXKQmoEYga2
   --limit: int # default: 50
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
 ]: nothing -> record<data: table<channels: list, createdAt: string, description: string, disabled: bool, filterTypes: list, id: string, metadata: record, nextAttempt: string, rateLimit: int, status: int, uid: string, url: string, version: int>, done: bool, iterator: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1856,7 +1856,7 @@ export def "list-attempts-for-endpoint-api-v1-app-app-id-msg-msg-id-endpoint-end
   --status: int@status-completer
   --before: string # nullable, format: date-time
   --after: string # nullable, format: date-time
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
 ]: nothing -> record<data: table<endpointId: string, id: string, msgId: string, response: string, responseStatusCode: int, status: int, timestamp: string, triggerType: int, url: string>, done: bool, iterator: string, prevIterator: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1900,7 +1900,7 @@ export def "resend-webhook-api-v1-app-app-id-msg-msg-id-endpoint-endpoint-id-res
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1941,7 +1941,7 @@ export def "get-app-portal-access-api-v1-auth-app-portal-access-app-id-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
   --feature-flags: list<string> # default: [], e.g. []
 ]: any -> record<token: string, url: string> {
   let input = $in
@@ -1984,7 +1984,7 @@ export def "expire-all-api-v1-auth-app-app-id-expire-all-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
   --expiry: int # How many seconds until the old key is expired. (nullable, e.g. 60)
 ]: any -> any {
   let input = $in
@@ -2029,7 +2029,7 @@ export def "get-dashboard-access-api-v1-auth-dashboard-access-app-id-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
 ]: nothing -> record<token: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2067,7 +2067,7 @@ export def "logout-api-v1-auth-logout-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2107,7 +2107,7 @@ export def "list-background-tasks-api-v1-background-task-get" [
   --iterator: string # nullable, e.g. qtask_1srOrx2ZWZBpBUvZwXKQmoEYga2
   --limit: int # default: 50
   --order: string # default: descending
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
 ]: nothing -> record<data: table<data: record, id: string, status: string, task: string>, done: bool, iterator: string, prevIterator: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2146,7 +2146,7 @@ export def "get-background-task-api-v1-background-task-task-id-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
 ]: nothing -> record<data: record, id: string, status: string, task: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2188,7 +2188,7 @@ export def "list-event-types-api-v1-event-type-get" [
   --limit: int # default: 50
   --with-content: oneof<nothing, bool> # default: false
   --include-archived: oneof<nothing, bool> # default: false
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
 ]: nothing -> record<data: table<archived: bool, createdAt: string, description: string, featureFlag: string, name: string, schemas: record, updatedAt: string>, done: bool, iterator: string, prevIterator: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2226,7 +2226,7 @@ export def "create-event-type-api-v1-event-type-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
   --archived: oneof<nothing, bool> # default: false, e.g. false
   description: string # e.g. A user has signed up
   --feature-flag: string # nullable, e.g. cool-new-feature
@@ -2273,7 +2273,7 @@ export def "delete-event-type-api-v1-event-type-event-type-name-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expunge: oneof<nothing, bool> # default: false
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2313,7 +2313,7 @@ export def "get-event-type-api-v1-event-type-event-type-name-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
 ]: nothing -> record<archived: bool, createdAt: string, description: string, featureFlag: string, name: string, schemas: record, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2352,7 +2352,7 @@ export def "update-event-type-api-v1-event-type-event-type-name-put" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
   --archived: oneof<nothing, bool> # default: false, e.g. false
   description: string # e.g. A user has signed up
   --feature-flag: string # nullable, e.g. cool-new-feature
@@ -2397,7 +2397,7 @@ export def "health-api-v1-health-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --idempotency-key: string # The request's idempotency key
+  --idempotency-key: string # The request's idempotency key (nullable)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -142,7 +142,7 @@ export def "containers-migration-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # REST Api Version.
+  --api-version: string # REST Api Version. (required)
 ]: nothing -> record<containerName: string, destinationShareName: string, failureReason: string, jobId: string, migrationStatus: string, sourceShareName: string, storageAccountName: string, subEntitiesCompleted: int, subEntitiesFailed: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -150,6 +150,7 @@ export def "containers-migration-status" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($farm_id | is-empty) { error make --unspanned { msg: "path parameter 'farmId' must be non-empty" } }
   if ($operation_id | is-empty) { error make --unspanned { msg: "path parameter 'operationId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), farm_id: (encode-path-segment $farm_id), operation_id: (encode-path-segment $operation_id)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Storage.Admin/farms/{farm_id}/shares/operationresults/{operation_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -186,7 +187,7 @@ export def "containers-cancel-migration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # REST Api Version.
+  --api-version: string # REST Api Version. (required)
 ]: nothing -> record<containerName: string, destinationShareName: string, failureReason: string, jobId: string, migrationStatus: string, sourceShareName: string, storageAccountName: string, subEntitiesCompleted: int, subEntitiesFailed: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -194,6 +195,7 @@ export def "containers-cancel-migration" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($farm_id | is-empty) { error make --unspanned { msg: "path parameter 'farmId' must be non-empty" } }
   if ($operation_id | is-empty) { error make --unspanned { msg: "path parameter 'operationId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), farm_id: (encode-path-segment $farm_id), operation_id: (encode-path-segment $operation_id)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Storage.Admin/farms/{farm_id}/shares/operationresults/{operation_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -230,8 +232,8 @@ export def "containers-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # REST Api Version.
-  --intent: string # The container migration intent.
+  --api-version: string # REST Api Version. (required)
+  --intent: string # The container migration intent. (required)
   --max-count: int # The maximum number of containers. (format: int32)
   --start-index: int # The starting index the resource provider uses. (format: int32)
 ]: nothing -> table<accountid: string, accountname: string, containerState: string, containerid: int, containername: string, sharename: string, usedBytesInPrimaryVolume: int> {
@@ -241,6 +243,8 @@ export def "containers-list" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($farm_id | is-empty) { error make --unspanned { msg: "path parameter 'farmId' must be non-empty" } }
   if ($share_name | is-empty) { error make --unspanned { msg: "path parameter 'shareName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  if ($intent == null) { error make --unspanned { msg: "required query parameter 'Intent' missing: pass --intent" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "Intent" $intent "scalar") (serialize-qp "MaxCount" $max_count "scalar") (serialize-qp "StartIndex" $start_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), farm_id: (encode-path-segment $farm_id), share_name: (encode-path-segment $share_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Storage.Admin/farms/{farm_id}/shares/{share_name}/containers") $qp $auth.query)
   let accept_val = "application/json"
@@ -277,14 +281,15 @@ export def "containers-list-destination-shares" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # REST Api Version.
-]: nothing -> table<properties: record<freeCapacity: int, healthStatus: string, shareName: string, totalCapacity: int, uncPath: string, usedCapacity: int>> {
+  --api-version: string # REST Api Version. (required)
+]: nothing -> table<properties: record<freeCapacity: int, healthStatus: string, shareName: string, totalCapacity: int, uncPath: string, usedCapacity: int>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($farm_id | is-empty) { error make --unspanned { msg: "path parameter 'farmId' must be non-empty" } }
   if ($share_name | is-empty) { error make --unspanned { msg: "path parameter 'shareName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), farm_id: (encode-path-segment $farm_id), share_name: (encode-path-segment $share_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Storage.Admin/farms/{farm_id}/shares/{share_name}/destinationshares") $qp $auth.query)
   let accept_val = "application/json"
@@ -321,7 +326,7 @@ export def "containers-migrate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # REST Api Version.
+  --api-version: string # REST Api Version. (required)
   container_name: string # The name of the container to be migrated.
   destination_share_unc_path: string # The UNC path of the destination share for migration.
   storage_account_name: string # The name of the storage account where the container locates.
@@ -333,6 +338,7 @@ export def "containers-migrate" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($farm_id | is-empty) { error make --unspanned { msg: "path parameter 'farmId' must be non-empty" } }
   if ($share_name | is-empty) { error make --unspanned { msg: "path parameter 'shareName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), farm_id: (encode-path-segment $farm_id), share_name: (encode-path-segment $share_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Storage.Admin/farms/{farm_id}/shares/{share_name}/migrate") $qp $auth.query)
   let req_body = {"containerName": $container_name, "destinationShareUncPath": $destination_share_unc_path, "storageAccountName": $storage_account_name} | compact

@@ -354,22 +354,22 @@ export def "audit-logs-get-audit-logs" [
   --action: string # action name one of ["repo.tag.push", ...]. Optional parameter to filter specific audit log actions.
   --name: string # name. Optional parameter to filter audit log events to a specific name. For repository events, this is the name of the repository. For organization events, this is the name of the organization. For team member events, this is the username of the team member.
   --actor: string # actor name. Optional parameter to filter audit log events to the specific user who triggered the event.
-  --qp-from: string # Start of the time window you wish to query audit events for. (format: date-time)
-  --qp-to: string # End of the time window you wish to query audit events for. (format: date-time)
+  --from: string # Start of the time window you wish to query audit events for. (format: date-time)
+  --to: string # End of the time window you wish to query audit events for. (format: date-time)
   --page: int # page - specify page number. Page number to get. (format: int32, default: 1)
   --page-size: int # page_size - specify page size. Number of events to return per page. (format: int32, default: 25)
 ]: nothing -> record<logs: table<account: string, action: string, action_description: string, actor: string, data: record, name: string, timestamp: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account | is-empty) { error make --unspanned { msg: "path parameter 'account' must be non-empty" } }
-  let qp = [(serialize-qp "action" $action "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "actor" $actor "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "action" $action "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "actor" $actor "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account: (encode-path-segment $account)} | format pattern "/v2/auditlogs/{account}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"action": $action, "name": $name, "actor": $actor, "from": $qp_from, "to": $qp_to, "page": $page, "page_size": $page_size} | compact)
+    query: ({"action": $action, "name": $name, "actor": $actor, "from": $from, "to": $to, "page": $page, "page_size": $page_size} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -593,8 +593,8 @@ export def "get-namespaces-repositories-images-tags" [
 #
 # GET /v2/namespaces/{namespace}/repositories/{repository}/tags
 export def "get-v2-namespaces-namespace-repositories-repository-tags" [
-  namespace: any
-  repository: any
+  namespace: string
+  repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -606,7 +606,7 @@ export def "get-v2-namespaces-namespace-repositories-repository-tags" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number to get. Defaults to 1.
   --page-size: int # Number of items to get per page. Defaults to 10. Max of 100.
-]: nothing -> any {
+]: nothing -> record<count: int, next: string, previous: string, results: table<creator: int, full_size: int, id: int, images: record, last_updated: string, last_updater: int, last_updater_username: string, name: string, repository: int, status: string, tag_last_pulled: string, tag_last_pushed: string, v2: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -682,7 +682,7 @@ export def "get-v2-namespaces-namespace-repositories-repository-tags-tag" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<creator: int, full_size: int, id: int, images: record<architecture: string, digest: string, features: string, last_pulled: string, last_pushed: string, layers: list<record>, os: string, os_features: string, os_version: string, size: int, status: string, variant: string>, last_updated: string, last_updater: int, last_updater_username: string, name: string, repository: int, status: string, tag_last_pulled: string, tag_last_pushed: string, v2: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -782,6 +782,7 @@ export def "get-v2-orgs-name-settings" [
 # Update organization settings
 #
 # PUT /v2/orgs/{name}/settings
+# --restricted_images shape: {allow_official_images: bool, allow_verified_publishers: bool, enabled: bool}
 export def "put-v2-orgs-name-settings" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -793,7 +794,7 @@ export def "put-v2-orgs-name-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  restricted_images: any
+  restricted_images: record # shape: {allow_official_images: bool, allow_verified_publishers: bool, enabled: bool}
 ]: any -> record<restricted_images: record<allow_official_images: bool, allow_verified_publishers: bool, enabled: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -831,11 +832,11 @@ export def "get-v2-scim-2-0-resource-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<resources: table<description: string, endpoint: string, id: string, name: string, schema: string, schemas: list>, schemas: list<string>, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/scim/2.0/ResourceTypes" $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/scim+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -865,12 +866,12 @@ export def "get-v2-scim-2-0-resource-types-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<description: string, endpoint: string, id: string, name: string, schema: string, schemas: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/scim/2.0/ResourceTypes/{name}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/scim+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -899,11 +900,11 @@ export def "get-v2-scim-2-0-schemas" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<resources: table<attributes: list, description: string, id: string, name: string, schemas: list>, schemas: list<string>, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/scim/2.0/Schemas" $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/scim+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -933,12 +934,12 @@ export def "get-v2-scim-2-0-schemas-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<attributes: table<caseExact: bool, description: string, multiValued: bool, mutability: string, name: string, required: bool, returned: string, type: string, uniqueness: string, subAttributes: list>, description: string, id: string, name: string, schemas: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/scim/2.0/Schemas/{id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/scim+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -967,11 +968,11 @@ export def "get-v2-scim-2-0-service-provider-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<authenticationSchemes: record<description: string, name: string, specUri: string, type: string>, bulk: record<maxOperations: int, maxPayloadSize: int, supported: bool>, changePassword: record<supported: bool>, documentationUri: string, etag: record<supported: bool>, filter: record<maxResults: int, supported: bool>, patch: record<supported: bool>, schemas: list<string>, sort: record<supported: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/scim/2.0/ServiceProviderConfig" $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/scim+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -1006,12 +1007,12 @@ export def "get-v2-scim-2-0-users" [
   --attributes: string # Comma delimited list of attributes to limit to in the response. (e.g. userName,displayName)
   --sort-order: string@sort-order-completer
   --sort-by: string # User attribute to sort by. (e.g. userName)
-]: nothing -> any {
+]: nothing -> record<itemsPerPage: int, resources: table<active: bool, displayName: string, emails: list, groups: list, id: string, meta: record, name: record, schemas: list, userName: string>, schemas: list<string>, startIndex: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "startIndex" $start_index "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "attributes" $attributes "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "sortBy" $sort_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/scim/2.0/Users" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/scim+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -1041,14 +1042,14 @@ export def "post-v2-scim-2-0-users" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<active: bool, displayName: string, emails: table<display: string, primary: bool, value: string>, groups: table<display: string, value: string>, id: string, meta: record<created: string, lastModified: string, location: string, resourceType: string>, name: record<familyName: string, givenName: string>, schemas: list<string>, userName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/scim/2.0/Users" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = "application/scim+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -1078,12 +1079,12 @@ export def "get-v2-scim-2-0-users-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<active: bool, displayName: string, emails: table<display: string, primary: bool, value: string>, groups: table<display: string, value: string>, id: string, meta: record<created: string, lastModified: string, location: string, resourceType: string>, name: record<familyName: string, givenName: string>, schemas: list<string>, userName: string> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/scim/2.0/Users/{id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/scim+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -1114,7 +1115,7 @@ export def "put-v2-scim-2-0-users-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<active: bool, displayName: string, emails: table<display: string, primary: bool, value: string>, groups: table<display: string, value: string>, id: string, meta: record<created: string, lastModified: string, location: string, resourceType: string>, name: record<familyName: string, givenName: string>, schemas: list<string>, userName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -1122,7 +1123,7 @@ export def "put-v2-scim-2-0-users-id" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/scim/2.0/Users/{id}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = "application/scim+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "put"

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -96,7 +96,11 @@ def base-url-completer [] { ["http://acm-pca.us-east-1.amazonaws.com" "http://ac
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def certificate-authority-type-completer [] { ["ROOT" "SUBORDINATE"] }
+def key-storage-security-standard-completer [] { ["FIPS_140_2_LEVEL_2_OR_HIGHER" "FIPS_140_2_LEVEL_3_OR_HIGHER"] }
+def usage-mode-completer [] { ["GENERAL_PURPOSE" "SHORT_LIVED_CERTIFICATE"] }
 def x-amz-target-completer [] { ["ACMPrivateCA.CreateCertificateAuthority"] }
+def audit-report-response-format-completer [] { ["CSV" "JSON"] }
 def x-amz-target-completer-1 [] { ["ACMPrivateCA.CreateCertificateAuthorityAuditReport"] }
 def x-amz-target-completer-2 [] { ["ACMPrivateCA.CreatePermission"] }
 def x-amz-target-completer-3 [] { ["ACMPrivateCA.DeleteCertificateAuthority"] }
@@ -109,15 +113,19 @@ def x-amz-target-completer-9 [] { ["ACMPrivateCA.GetCertificateAuthorityCertific
 def x-amz-target-completer-10 [] { ["ACMPrivateCA.GetCertificateAuthorityCsr"] }
 def x-amz-target-completer-11 [] { ["ACMPrivateCA.GetPolicy"] }
 def x-amz-target-completer-12 [] { ["ACMPrivateCA.ImportCertificateAuthorityCertificate"] }
+def signing-algorithm-completer [] { ["SHA256WITHECDSA" "SHA256WITHRSA" "SHA384WITHECDSA" "SHA384WITHRSA" "SHA512WITHECDSA" "SHA512WITHRSA"] }
 def x-amz-target-completer-13 [] { ["ACMPrivateCA.IssueCertificate"] }
+def resource-owner-completer [] { ["OTHER_ACCOUNTS" "SELF"] }
 def x-amz-target-completer-14 [] { ["ACMPrivateCA.ListCertificateAuthorities"] }
 def x-amz-target-completer-15 [] { ["ACMPrivateCA.ListPermissions"] }
 def x-amz-target-completer-16 [] { ["ACMPrivateCA.ListTags"] }
 def x-amz-target-completer-17 [] { ["ACMPrivateCA.PutPolicy"] }
 def x-amz-target-completer-18 [] { ["ACMPrivateCA.RestoreCertificateAuthority"] }
+def revocation-reason-completer [] { ["AFFILIATION_CHANGED" "A_A_COMPROMISE" "CERTIFICATE_AUTHORITY_COMPROMISE" "CESSATION_OF_OPERATION" "KEY_COMPROMISE" "PRIVILEGE_WITHDRAWN" "SUPERSEDED" "UNSPECIFIED"] }
 def x-amz-target-completer-19 [] { ["ACMPrivateCA.RevokeCertificate"] }
 def x-amz-target-completer-20 [] { ["ACMPrivateCA.TagCertificateAuthority"] }
 def x-amz-target-completer-21 [] { ["ACMPrivateCA.UntagCertificateAuthority"] }
+def status-completer [] { ["ACTIVE" "CREATING" "DELETED" "DISABLED" "EXPIRED" "FAILED" "PENDING_CERTIFICATE"] }
 def x-amz-target-completer-22 [] { ["ACMPrivateCA.UpdateCertificateAuthority"] }
 
 # List all available API commands with their parameters
@@ -147,6 +155,9 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateCertificateAuthority
+# --CertificateAuthorityConfiguration shape: {KeyAlgorithm: "RSA_2048"|"RSA_4096"|"EC_prime256v1"|"EC_secp384r1", SigningAlgorithm: "SHA256WITHECDSA"|"SHA384WITHECDSA"|"SHA512WITHECDSA"|"SHA256WITHRSA"|"SHA384WITHRSA"|"SHA512WITHRSA", Subject: record, CsrExtensions?: record}
+# --RevocationConfiguration shape: {CrlConfiguration?: record, OcspConfiguration?: record}
+# --Tags item shape: {Key: string, Value?: string}
 export def "create-certificate-authority" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -164,18 +175,19 @@ export def "create-certificate-authority" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  certificate_authority_configuration: any
-  --revocation-configuration: any
-  certificate_authority_type: any
-  --idempotency-token: any
-  --key-storage-security-standard: any
-  --tags: any
-  --usage-mode: any
-]: any -> record<CertificateAuthorityArn: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  certificate_authority_configuration: record # Contains configuration information for your private certificate authority (CA). This includes information about the class of public key algorithm and the key pair that your private CA creates when it issues a certificate. It also includes the signature algorithm that it uses when issuing certificates, and its X.500 distinguished name. You must specify this information when you call the CreateCertificateAuthority (https://docs.aws.amazon.com/privateca/latest/APIReference/API_CreateCertificateAuthority.html) action. — shape: {KeyAlgorithm: "RSA_2048"|"RSA_4096"|"EC_prime256v1"|"EC_secp384r1", SigningAlgorithm: "SHA256WITHECDSA"|"SHA384WITHECDSA"|"SHA512WITHECDSA"|"SHA256WITHRSA"|"SHA384WITHRSA"|"SHA512WITHRSA", Subject: record, CsrExtensions?: record}
+  --revocation-configuration: record # Certificate revocation information used by the CreateCertificateAuthority (https://docs.aws.amazon.com/privateca/latest/APIReference/API_CreateCertificateAuthority.html) and UpdateCertificateAuthority (https://docs.aws.amazon.com/privateca/latest/APIReference/API_UpdateCertificateAuthority.html) actions. Your private certificate authority (CA) can configure Online Certificate Status Protocol (OCSP) support and/or maintain a certificate revocation list (CRL). OCSP returns validation information about certificates as requested by clients, and a CRL contains an updated list of certificates revoked by your CA. For more information, see RevokeCertificate (https://docs.aws.amazon.com/privateca/latest/APIReference/API_RevokeCertificate.html) and Setting up a certificate revocation method (https://docs.aws.amazon.com/privateca/latest/userguide/revocation-setup.html) in the Amazon Web Services Private Certificate Authority User Guide. — shape: {CrlConfiguration?: record, OcspConfiguration?: record}
+  certificate_authority_type: string@certificate-authority-type-completer # The type of the certificate authority.
+  --idempotency-token: string # Custom string that can be used to distinguish between calls to the CreateCertificateAuthority action. Idempotency tokens for CreateCertificateAuthority time out after five minutes. Therefore, if you call CreateCertificateAuthority multiple times with the same idempotency token within five minutes, Amazon Web Services Private CA recognizes that you are requesting only certificate authority and will issue only one. If you change the idempotency token for each call, Amazon Web Services Private CA recognizes that you are requesting multiple certificate authorities.
+  --key-storage-security-standard: string@key-storage-security-standard-completer # Specifies a cryptographic key management compliance standard used for handling CA keys. Default: FIPS_140_2_LEVEL_3_OR_HIGHER Note: FIPS_140_2_LEVEL_3_OR_HIGHER is not supported in the following Regions: ap-northeast-3 ap-southeast-3 When creating a CA in these Regions, you must provide FIPS_140_2_LEVEL_2_OR_HIGHER as the argument for KeyStorageSecurityStandard. Failure to do this results in an InvalidArgsException with the message, "A certificate authority cannot be created in this region with the specified security standard."
+  --tags: list # Key-value pairs that will be attached to the new private CA. You can associate up to 50 tags with a private CA. For information using tags with IAM to manage permissions, see Controlling Access Using IAM Tags (https://docs.aws.amazon.com/IAM/latest/UserGuide/access_iam-tags.html). — item shape: {Key: string, Value?: string}
+  --usage-mode: string@usage-mode-completer # Specifies whether the CA issues general-purpose certificates that typically require a revocation mechanism, or short-lived certificates that may optionally omit revocation because they expire quickly. Short-lived certificate validity is limited to seven days. The default value is GENERAL_PURPOSE.
+]: any -> record<CertificateAuthorityArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ACMPrivateCA.CreateCertificateAuthority")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"CertificateAuthorityConfiguration": $certificate_authority_configuration, "RevocationConfiguration": $revocation_configuration, "CertificateAuthorityType": $certificate_authority_type, "IdempotencyToken": $idempotency_token, "KeyStorageSecurityStandard": $key_storage_security_standard, "Tags": $tags, "UsageMode": $usage_mode} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -218,14 +230,15 @@ export def "create-certificate-authority-audit-report" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  certificate_authority_arn: any
-  s3_bucket_name: any
-  audit_report_response_format: any
-]: any -> record<AuditReportId: record, S3Key: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  certificate_authority_arn: string # The Amazon Resource Name (ARN) of the CA to be audited. This is of the form: arn:aws:acm-pca:region:account:certificate-authority/12345678-1234-1234-1234-123456789012 .
+  s3_bucket_name: string # The name of the S3 bucket that will contain the audit report.
+  audit_report_response_format: string@audit-report-response-format-completer # The format in which to create the report. This can be either JSON or CSV.
+]: any -> record<AuditReportId: string, S3Key: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ACMPrivateCA.CreateCertificateAuthorityAuditReport")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"CertificateAuthorityArn": $certificate_authority_arn, "S3BucketName": $s3_bucket_name, "AuditReportResponseFormat": $audit_report_response_format} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -268,15 +281,16 @@ export def "create-permission" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  certificate_authority_arn: any
-  principal: any
-  --source-account: any
-  actions: any
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  certificate_authority_arn: string # The Amazon Resource Name (ARN) of the CA that grants the permissions. You can find the ARN by calling the ListCertificateAuthorities (https://docs.aws.amazon.com/privateca/latest/APIReference/API_ListCertificateAuthorities.html) action. This must have the following form: arn:aws:acm-pca:region:account:certificate-authority/12345678-1234-1234-1234-123456789012 .
+  principal: string # The Amazon Web Services service or identity that receives the permission. At this time, the only valid principal is acm.amazonaws.com.
+  --source-account: string # The ID of the calling account.
+  actions: list<string> # The actions that the specified Amazon Web Services service principal can use. These include IssueCertificate, GetCertificate, and ListPermissions.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ACMPrivateCA.CreatePermission")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"CertificateAuthorityArn": $certificate_authority_arn, "Principal": $principal, "SourceAccount": $source_account, "Actions": $actions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -319,13 +333,14 @@ export def "delete-certificate-authority" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  certificate_authority_arn: any
-  --permanent-deletion-time-in-days: any
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  certificate_authority_arn: string # The Amazon Resource Name (ARN) that was returned when you called CreateCertificateAuthority (https://docs.aws.amazon.com/privateca/latest/APIReference/API_CreateCertificateAuthority.html). This must have the following form: arn:aws:acm-pca:region:account:certificate-authority/12345678-1234-1234-1234-123456789012 .
+  --permanent-deletion-time-in-days: int # The number of days to make a CA restorable after it has been deleted. This can be anywhere from 7 to 30 days, with 30 being the default.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ACMPrivateCA.DeleteCertificateAuthority")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"CertificateAuthorityArn": $certificate_authority_arn, "PermanentDeletionTimeInDays": $permanent_deletion_time_in_days} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -368,14 +383,15 @@ export def "delete-permission" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  certificate_authority_arn: any
-  principal: any
-  --source-account: any
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  certificate_authority_arn: string # The Amazon Resource Number (ARN) of the private CA that issued the permissions. You can find the CA's ARN by calling the ListCertificateAuthorities (https://docs.aws.amazon.com/privateca/latest/APIReference/API_ListCertificateAuthorities.html) action. This must have the following form: arn:aws:acm-pca:region:account:certificate-authority/12345678-1234-1234-1234-123456789012 .
+  principal: string # The Amazon Web Services service or identity that will have its CA permissions revoked. At this time, the only valid service principal is acm.amazonaws.com
+  --source-account: string # The Amazon Web Services account that calls this action.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ACMPrivateCA.DeletePermission")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"CertificateAuthorityArn": $certificate_authority_arn, "Principal": $principal, "SourceAccount": $source_account} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -418,12 +434,13 @@ export def "delete-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  resource_arn: any
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  resource_arn: string # The Amazon Resource Number (ARN) of the private CA that will have its policy deleted. You can find the CA's ARN by calling the ListCertificateAuthorities (https://docs.aws.amazon.com/privateca/latest/APIReference/API_ListCertificateAuthorities.html) action. The ARN value must have the form arn:aws:acm-pca:region:account:certificate-authority/01234567-89ab-cdef-0123-0123456789ab.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ACMPrivateCA.DeletePolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -466,12 +483,13 @@ export def "describe-certificate-authority" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  certificate_authority_arn: any
-]: any -> record<CertificateAuthority: record<Arn: record, OwnerAccount: record, CreatedAt: record, LastStateChangeAt: record, Type: record, Serial: record, Status: record, NotBefore: record, NotAfter: record, FailureReason: record, CertificateAuthorityConfiguration: record<KeyAlgorithm: record, SigningAlgorithm: record, Subject: record, CsrExtensions: record>, RevocationConfiguration: record<CrlConfiguration: record, OcspConfiguration: record>, RestorableUntil: record, KeyStorageSecurityStandard: record, UsageMode: record>> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  certificate_authority_arn: string # The Amazon Resource Name (ARN) that was returned when you called CreateCertificateAuthority (https://docs.aws.amazon.com/privateca/latest/APIReference/API_CreateCertificateAuthority.html). This must be of the form: arn:aws:acm-pca:region:account:certificate-authority/12345678-1234-1234-1234-123456789012 .
+]: any -> record<CertificateAuthority: record<Arn: string, OwnerAccount: string, CreatedAt: string, LastStateChangeAt: string, Type: string, Serial: string, Status: string, NotBefore: string, NotAfter: string, FailureReason: string, CertificateAuthorityConfiguration: record<KeyAlgorithm: string, SigningAlgorithm: string, Subject: record, CsrExtensions: record>, RevocationConfiguration: record<CrlConfiguration: record, OcspConfiguration: record>, RestorableUntil: string, KeyStorageSecurityStandard: string, UsageMode: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ACMPrivateCA.DescribeCertificateAuthority")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"CertificateAuthorityArn": $certificate_authority_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -514,13 +532,14 @@ export def "describe-certificate-authority-audit-report" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  certificate_authority_arn: any
-  audit_report_id: any
-]: any -> record<AuditReportStatus: record, S3BucketName: record, S3Key: record, CreatedAt: record> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  certificate_authority_arn: string # The Amazon Resource Name (ARN) of the private CA. This must be of the form: arn:aws:acm-pca:region:account:certificate-authority/12345678-1234-1234-1234-123456789012 .
+  audit_report_id: string # The report ID returned by calling the CreateCertificateAuthorityAuditReport (https://docs.aws.amazon.com/privateca/latest/APIReference/API_CreateCertificateAuthorityAuditReport.html) action.
+]: any -> record<AuditReportStatus: string, S3BucketName: string, S3Key: string, CreatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ACMPrivateCA.DescribeCertificateAuthorityAuditReport")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"CertificateAuthorityArn": $certificate_authority_arn, "AuditReportId": $audit_report_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -563,13 +582,14 @@ export def "get-certificate" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  certificate_authority_arn: any
-  certificate_arn: any
-]: any -> record<Certificate: record, CertificateChain: record> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  certificate_authority_arn: string # The Amazon Resource Name (ARN) that was returned when you called CreateCertificateAuthority (https://docs.aws.amazon.com/privateca/latest/APIReference/API_CreateCertificateAuthority.html). This must be of the form: arn:aws:acm-pca:region:account:certificate-authority/12345678-1234-1234-1234-123456789012 .
+  certificate_arn: string # The ARN of the issued certificate. The ARN contains the certificate serial number and must be in the following form: arn:aws:acm-pca:region:account:certificate-authority/12345678-1234-1234-1234-123456789012/certificate/286535153982981100925020015808220737245
+]: any -> record<Certificate: string, CertificateChain: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ACMPrivateCA.GetCertificate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"CertificateAuthorityArn": $certificate_authority_arn, "CertificateArn": $certificate_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -612,12 +632,13 @@ export def "get-certificate-authority-certificate" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  certificate_authority_arn: any
-]: any -> record<Certificate: record, CertificateChain: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  certificate_authority_arn: string # The Amazon Resource Name (ARN) of your private CA. This is of the form: arn:aws:acm-pca:region:account:certificate-authority/12345678-1234-1234-1234-123456789012 .
+]: any -> record<Certificate: string, CertificateChain: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ACMPrivateCA.GetCertificateAuthorityCertificate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"CertificateAuthorityArn": $certificate_authority_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -660,12 +681,13 @@ export def "get-certificate-authority-csr" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  certificate_authority_arn: any
-]: any -> record<Csr: record> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  certificate_authority_arn: string # The Amazon Resource Name (ARN) that was returned when you called the CreateCertificateAuthority (https://docs.aws.amazon.com/privateca/latest/APIReference/API_CreateCertificateAuthority.html) action. This must be of the form: arn:aws:acm-pca:region:account:certificate-authority/12345678-1234-1234-1234-123456789012
+]: any -> record<Csr: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ACMPrivateCA.GetCertificateAuthorityCsr")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"CertificateAuthorityArn": $certificate_authority_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -708,12 +730,13 @@ export def "get-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  resource_arn: any
-]: any -> record<Policy: record> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  resource_arn: string # The Amazon Resource Number (ARN) of the private CA that will have its policy retrieved. You can find the CA's ARN by calling the ListCertificateAuthorities action.
+]: any -> record<Policy: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ACMPrivateCA.GetPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -756,14 +779,15 @@ export def "import-certificate-authority-certificate" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  certificate_authority_arn: any
-  certificate: any
-  --certificate-chain: any
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  certificate_authority_arn: string # The Amazon Resource Name (ARN) that was returned when you called CreateCertificateAuthority (https://docs.aws.amazon.com/privateca/latest/APIReference/API_CreateCertificateAuthority.html). This must be of the form: arn:aws:acm-pca:region:account:certificate-authority/12345678-1234-1234-1234-123456789012
+  certificate: string # The PEM-encoded certificate for a private CA. This may be a self-signed certificate in the case of a root CA, or it may be signed by another CA that you control.
+  --certificate-chain: string # A PEM-encoded file that contains all of your certificates, other than the certificate you're importing, chaining up to your root CA. Your Amazon Web Services Private CA-hosted or on-premises root certificate is the last in the chain, and each certificate in the chain signs the one preceding. This parameter must be supplied when you import a subordinate CA. When you import a root CA, there is no chain.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ACMPrivateCA.ImportCertificateAuthorityCertificate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"CertificateAuthorityArn": $certificate_authority_arn, "Certificate": $certificate, "CertificateChain": $certificate_chain} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -789,6 +813,9 @@ export def "import-certificate-authority-certificate" [
 #
 # POST /
 # operationId: IssueCertificate
+# --ApiPassthrough shape: {Extensions?: record, Subject?: record}
+# --Validity shape: {Value: int, Type: "END_DATE"|"ABSOLUTE"|"DAYS"|"MONTHS"|"YEARS"}
+# --ValidityNotBefore shape: {Value: int, Type: "END_DATE"|"ABSOLUTE"|"DAYS"|"MONTHS"|"YEARS"}
 export def "issue-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -806,19 +833,20 @@ export def "issue-certificate" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  --api-passthrough: any
-  certificate_authority_arn: any
-  csr: any
-  signing_algorithm: any
-  --template-arn: any
-  validity: any
-  --validity-not-before: any
-  --idempotency-token: any
-]: any -> record<CertificateArn: record> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  --api-passthrough: record # Contains X.509 certificate information to be placed in an issued certificate. An APIPassthrough or APICSRPassthrough template variant must be selected, or else this parameter is ignored. If conflicting or duplicate certificate information is supplied from other sources, Amazon Web Services Private CA applies order of operation rules (https://docs.aws.amazon.com/privateca/latest/userguide/UsingTemplates.html#template-order-of-operations) to determine what information is used. — shape: {Extensions?: record, Subject?: record}
+  certificate_authority_arn: string # The Amazon Resource Name (ARN) that was returned when you called CreateCertificateAuthority (https://docs.aws.amazon.com/privateca/latest/APIReference/API_CreateCertificateAuthority.html). This must be of the form: arn:aws:acm-pca:region:account:certificate-authority/12345678-1234-1234-1234-123456789012
+  csr: string # The certificate signing request (CSR) for the certificate you want to issue. As an example, you can use the following OpenSSL command to create the CSR and a 2048 bit RSA private key. openssl req -new -newkey rsa:2048 -days 365 -keyout private/test_cert_priv_key.pem -out csr/test_cert_.csr If you have a configuration file, you can then use the following OpenSSL command. The usr_cert block in the configuration file contains your X509 version 3 extensions. openssl req -new -config openssl_rsa.cnf -extensions usr_cert -newkey rsa:2048 -days 365 -keyout private/test_cert_priv_key.pem -out csr/test_cert_.csr Note: A CSR must provide either a subject name or a subject alternative name or the request will be rejected.
+  signing_algorithm: string@signing-algorithm-completer # The name of the algorithm that will be used to sign the certificate to be issued. This parameter should not be confused with the SigningAlgorithm parameter used to sign a CSR in the CreateCertificateAuthority action. The specified signing algorithm family (RSA or ECDSA) much match the algorithm family of the CA's secret key.
+  --template-arn: string # Specifies a custom configuration template to use when issuing a certificate. If this parameter is not provided, Amazon Web Services Private CA defaults to the EndEntityCertificate/V1 template. For CA certificates, you should choose the shortest path length that meets your needs. The path length is indicated by the PathLenN portion of the ARN, where N is the CA depth (https://docs.aws.amazon.com/privateca/latest/userguide/PcaTerms.html#terms-cadepth). Note: The CA depth configured on a subordinate CA certificate must not exceed the limit set by its parents in the CA hierarchy. For a list of TemplateArn values supported by Amazon Web Services Private CA, see Understanding Certificate Templates (https://docs.aws.amazon.com/privateca/latest/userguide/UsingTemplates.html).
+  validity: record # Validity specifies the period of time during which a certificate is valid. Validity can be expressed as an explicit date and time when the validity of a certificate starts or expires, or as a span of time after issuance, stated in days, months, or years. For more information, see Validity (https://tools.ietf.org/html/rfc5280#section-4.1.2.5) in RFC 5280. Amazon Web Services Private CA API consumes the Validity data type differently in two distinct parameters of the IssueCertificate action. The required parameter IssueCertificate:Validity specifies the end of a certificate's validity period. The optional parameter IssueCertificate:ValidityNotBefore specifies a customized starting time for the validity period. — shape: {Value: int, Type: "END_DATE"|"ABSOLUTE"|"DAYS"|"MONTHS"|"YEARS"}
+  --validity-not-before: record # Validity specifies the period of time during which a certificate is valid. Validity can be expressed as an explicit date and time when the validity of a certificate starts or expires, or as a span of time after issuance, stated in days, months, or years. For more information, see Validity (https://tools.ietf.org/html/rfc5280#section-4.1.2.5) in RFC 5280. Amazon Web Services Private CA API consumes the Validity data type differently in two distinct parameters of the IssueCertificate action. The required parameter IssueCertificate:Validity specifies the end of a certificate's validity period. The optional parameter IssueCertificate:ValidityNotBefore specifies a customized starting time for the validity period. — shape: {Value: int, Type: "END_DATE"|"ABSOLUTE"|"DAYS"|"MONTHS"|"YEARS"}
+  --idempotency-token: string # Alphanumeric string that can be used to distinguish between calls to the IssueCertificate action. Idempotency tokens for IssueCertificate time out after one minute. Therefore, if you call IssueCertificate multiple times with the same idempotency token within one minute, Amazon Web Services Private CA recognizes that you are requesting only one certificate and will issue only one. If you change the idempotency token for each call, Amazon Web Services Private CA recognizes that you are requesting multiple certificates.
+]: any -> record<CertificateArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ACMPrivateCA.IssueCertificate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ApiPassthrough": $api_passthrough, "CertificateAuthorityArn": $certificate_authority_arn, "Csr": $csr, "SigningAlgorithm": $signing_algorithm, "TemplateArn": $template_arn, "Validity": $validity, "ValidityNotBefore": $validity_not_before, "IdempotencyToken": $idempotency_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -863,14 +891,15 @@ export def "list-certificate-authorities" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --resource-owner: any
-]: any -> record<CertificateAuthorities: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  --next-token-body: string # Use this parameter when paginating results in a subsequent request after you receive a response with truncated results. Set it to the value of the NextToken parameter from the response you just received. (body field)
+  --max-results-body: int # Use this parameter when paginating results to specify the maximum number of items to return in the response on each page. If additional items exist beyond the number you specify, the NextToken element is sent in the response. Use this NextToken value in a subsequent request to retrieve additional items. (body field)
+  --resource-owner: string@resource-owner-completer # Use this parameter to filter the returned set of certificate authorities based on their owner. The default is SELF.
+]: any -> record<CertificateAuthorities: table<Arn: string, OwnerAccount: string, CreatedAt: string, LastStateChangeAt: string, Type: string, Serial: string, Status: string, NotBefore: string, NotAfter: string, FailureReason: string, CertificateAuthorityConfiguration: record, RevocationConfiguration: record, RestorableUntil: string, KeyStorageSecurityStandard: string, UsageMode: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ACMPrivateCA.ListCertificateAuthorities")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "ResourceOwner": $resource_owner} | compact
@@ -916,14 +945,15 @@ export def "list-permissions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  certificate_authority_arn: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<Permissions: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  certificate_authority_arn: string # The Amazon Resource Number (ARN) of the private CA to inspect. You can find the ARN by calling the ListCertificateAuthorities (https://docs.aws.amazon.com/privateca/latest/APIReference/API_ListCertificateAuthorities.html) action. This must be of the form: arn:aws:acm-pca:region:account:certificate-authority/12345678-1234-1234-1234-123456789012 You can get a private CA's ARN by running the ListCertificateAuthorities (https://docs.aws.amazon.com/privateca/latest/APIReference/API_ListCertificateAuthorities.html) action.
+  --next-token-body: string # When paginating results, use this parameter in a subsequent request after you receive a response with truncated results. Set it to the value of NextToken from the response you just received. (body field)
+  --max-results-body: int # When paginating results, use this parameter to specify the maximum number of items to return in the response. If additional items exist beyond the number you specify, the NextToken element is sent in the response. Use this NextToken value in a subsequent request to retrieve additional items. (body field)
+]: any -> record<Permissions: table<CertificateAuthorityArn: string, CreatedAt: string, Principal: string, SourceAccount: string, Actions: list, Policy: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ACMPrivateCA.ListPermissions")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"CertificateAuthorityArn": $certificate_authority_arn, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -969,14 +999,15 @@ export def "list-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  certificate_authority_arn: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<Tags: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  certificate_authority_arn: string # The Amazon Resource Name (ARN) that was returned when you called the CreateCertificateAuthority (https://docs.aws.amazon.com/privateca/latest/APIReference/API_CreateCertificateAuthority.html) action. This must be of the form: arn:aws:acm-pca:region:account:certificate-authority/12345678-1234-1234-1234-123456789012
+  --next-token-body: string # Use this parameter when paginating results in a subsequent request after you receive a response with truncated results. Set it to the value of NextToken from the response you just received. (body field)
+  --max-results-body: int # Use this parameter when paginating results to specify the maximum number of items to return in the response. If additional items exist beyond the number you specify, the NextToken element is sent in the response. Use this NextToken value in a subsequent request to retrieve additional items. (body field)
+]: any -> record<Tags: table<Key: string, Value: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ACMPrivateCA.ListTags")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"CertificateAuthorityArn": $certificate_authority_arn, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -1020,13 +1051,14 @@ export def "put-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  resource_arn: any
-  policy: any
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  resource_arn: string # The Amazon Resource Number (ARN) of the private CA to associate with the policy. The ARN of the CA can be found by calling the ListCertificateAuthorities (https://docs.aws.amazon.com/privateca/latest/APIReference/API_ListCertificateAuthorities.html) action.
+  policy: string # The path and file name of a JSON-formatted IAM policy to attach to the specified private CA resource. If this policy does not contain all required statements or if it includes any statement that is not allowed, the PutPolicy action returns an InvalidPolicyException. For information about IAM policy and statement structure, see Overview of JSON Policies (https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html#access_policies-json).
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ACMPrivateCA.PutPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "Policy": $policy} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1069,12 +1101,13 @@ export def "restore-certificate-authority" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  certificate_authority_arn: any
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  certificate_authority_arn: string # The Amazon Resource Name (ARN) that was returned when you called the CreateCertificateAuthority (https://docs.aws.amazon.com/privateca/latest/APIReference/API_CreateCertificateAuthority.html) action. This must be of the form: arn:aws:acm-pca:region:account:certificate-authority/12345678-1234-1234-1234-123456789012
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ACMPrivateCA.RestoreCertificateAuthority")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"CertificateAuthorityArn": $certificate_authority_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1117,14 +1150,15 @@ export def "revoke-certificate" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  certificate_authority_arn: any
-  certificate_serial: any
-  revocation_reason: any
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  certificate_authority_arn: string # Amazon Resource Name (ARN) of the private CA that issued the certificate to be revoked. This must be of the form: arn:aws:acm-pca:region:account:certificate-authority/12345678-1234-1234-1234-123456789012
+  certificate_serial: string # Serial number of the certificate to be revoked. This must be in hexadecimal format. You can retrieve the serial number by calling GetCertificate (https://docs.aws.amazon.com/privateca/latest/APIReference/API_GetCertificate.html) with the Amazon Resource Name (ARN) of the certificate you want and the ARN of your private CA. The GetCertificate action retrieves the certificate in the PEM format. You can use the following OpenSSL command to list the certificate in text format and copy the hexadecimal serial number. openssl x509 -in file_path -text -noout You can also copy the serial number from the console or use the DescribeCertificate (https://docs.aws.amazon.com/acm/latest/APIReference/API_DescribeCertificate.html) action in the Certificate Manager API Reference.
+  revocation_reason: string@revocation-reason-completer # Specifies why you revoked the certificate.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ACMPrivateCA.RevokeCertificate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"CertificateAuthorityArn": $certificate_authority_arn, "CertificateSerial": $certificate_serial, "RevocationReason": $revocation_reason} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1150,6 +1184,7 @@ export def "revoke-certificate" [
 #
 # POST /
 # operationId: TagCertificateAuthority
+# --Tags item shape: {Key: string, Value?: string}
 export def "tag-certificate-authority" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1167,13 +1202,14 @@ export def "tag-certificate-authority" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  certificate_authority_arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  certificate_authority_arn: string # The Amazon Resource Name (ARN) that was returned when you called CreateCertificateAuthority (https://docs.aws.amazon.com/privateca/latest/APIReference/API_CreateCertificateAuthority.html). This must be of the form: arn:aws:acm-pca:region:account:certificate-authority/12345678-1234-1234-1234-123456789012
+  tags: list # List of tags to be associated with the CA. — item shape: {Key: string, Value?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ACMPrivateCA.TagCertificateAuthority")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"CertificateAuthorityArn": $certificate_authority_arn, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1199,6 +1235,7 @@ export def "tag-certificate-authority" [
 #
 # POST /
 # operationId: UntagCertificateAuthority
+# --Tags item shape: {Key: string, Value?: string}
 export def "untag-certificate-authority" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1216,13 +1253,14 @@ export def "untag-certificate-authority" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  certificate_authority_arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  certificate_authority_arn: string # The Amazon Resource Name (ARN) that was returned when you called CreateCertificateAuthority (https://docs.aws.amazon.com/privateca/latest/APIReference/API_CreateCertificateAuthority.html). This must be of the form: arn:aws:acm-pca:region:account:certificate-authority/12345678-1234-1234-1234-123456789012
+  tags: list # List of tags to be removed from the CA. — item shape: {Key: string, Value?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ACMPrivateCA.UntagCertificateAuthority")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"CertificateAuthorityArn": $certificate_authority_arn, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1248,6 +1286,7 @@ export def "untag-certificate-authority" [
 #
 # POST /
 # operationId: UpdateCertificateAuthority
+# --RevocationConfiguration shape: {CrlConfiguration?: record, OcspConfiguration?: record}
 export def "update-certificate-authority" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1265,14 +1304,15 @@ export def "update-certificate-authority" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  certificate_authority_arn: any
-  --revocation-configuration: any
-  --status: any
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  certificate_authority_arn: string # Amazon Resource Name (ARN) of the private CA that issued the certificate to be revoked. This must be of the form: arn:aws:acm-pca:region:account:certificate-authority/12345678-1234-1234-1234-123456789012
+  --revocation-configuration: record # Certificate revocation information used by the CreateCertificateAuthority (https://docs.aws.amazon.com/privateca/latest/APIReference/API_CreateCertificateAuthority.html) and UpdateCertificateAuthority (https://docs.aws.amazon.com/privateca/latest/APIReference/API_UpdateCertificateAuthority.html) actions. Your private certificate authority (CA) can configure Online Certificate Status Protocol (OCSP) support and/or maintain a certificate revocation list (CRL). OCSP returns validation information about certificates as requested by clients, and a CRL contains an updated list of certificates revoked by your CA. For more information, see RevokeCertificate (https://docs.aws.amazon.com/privateca/latest/APIReference/API_RevokeCertificate.html) and Setting up a certificate revocation method (https://docs.aws.amazon.com/privateca/latest/userguide/revocation-setup.html) in the Amazon Web Services Private Certificate Authority User Guide. — shape: {CrlConfiguration?: record, OcspConfiguration?: record}
+  --status: string@status-completer # Status of your private CA.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ACMPrivateCA.UpdateCertificateAuthority")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"CertificateAuthorityArn": $certificate_authority_arn, "RevocationConfiguration": $revocation_configuration, "Status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -155,14 +155,15 @@ export def "complete-snapshot" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-changed-blocks-count: int # The number of blocks that were written to the snapshot.
+  --x-amz-changed-blocks-count: int # The number of blocks that were written to the snapshot. (required)
   --x-amz-checksum: string # An aggregated Base-64 SHA256 checksum based on the checksums of each written block. To generate the aggregated checksum using the linear aggregation method, arrange the checksums for each written block in ascending order of their block index, concatenate them to form a single string, and then generate the checksum on the entire string using the SHA256 algorithm.
   --x-amz-checksum-algorithm: string@x-amz-checksum-algorithm-completer # The algorithm used to generate the checksum. Currently, the only supported algorithm is SHA256.
   --x-amz-checksum-aggregation-method: string@x-amz-checksum-aggregation-method-completer # The aggregation method used to generate the checksum. Currently, the only supported aggregation method is LINEAR.
-]: nothing -> record<Status: record> {
+]: nothing -> record<Status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($snapshot_id | is-empty) { error make --unspanned { msg: "path parameter 'snapshotId' must be non-empty" } }
+  if ($x_amz_changed_blocks_count == null) { error make --unspanned { msg: "required header parameter 'x-amz-ChangedBlocksCount' missing: pass --x-amz-changed-blocks-count" } }
   let full_url = (build-url $base ({snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/snapshots/completion/{snapshot_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -198,7 +199,7 @@ export def "get-snapshot-block" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --block-token: string # The block token of the block from which to get data. You can obtain the BlockToken by running the ListChangedBlocks or ListSnapshotBlocks operations.
+  --block-token: string # The block token of the block from which to get data. You can obtain the BlockToken by running the ListChangedBlocks or ListSnapshotBlocks operations. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -206,11 +207,12 @@ export def "get-snapshot-block" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<BlockData: record> {
+]: nothing -> record<BlockData: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($snapshot_id | is-empty) { error make --unspanned { msg: "path parameter 'snapshotId' must be non-empty" } }
   if ($block_index | is-empty) { error make --unspanned { msg: "path parameter 'blockIndex' must be non-empty" } }
+  if ($block_token == null) { error make --unspanned { msg: "required query parameter 'blockToken' missing: pass --block-token" } }
   let qp = [(serialize-qp "blockToken" $block_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({snapshot_id: (encode-path-segment $snapshot_id), block_index: (encode-path-segment $block_index)} | format pattern "/snapshots/{snapshot_id}/blocks/{block_index}") $qp $auth.query)
   let accept_val = "application/json"
@@ -259,7 +261,7 @@ export def "list-changed-blocks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ChangedBlocks: record, ExpiryTime: record, VolumeSize: record, BlockSize: record, NextToken: record> {
+]: nothing -> record<ChangedBlocks: table<BlockIndex: int, FirstBlockToken: string, SecondBlockToken: string>, ExpiryTime: string, VolumeSize: int, BlockSize: int, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($second_snapshot_id | is-empty) { error make --unspanned { msg: "path parameter 'secondSnapshotId' must be non-empty" } }
@@ -310,7 +312,7 @@ export def "list-snapshot-blocks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Blocks: record, ExpiryTime: record, VolumeSize: record, BlockSize: record, NextToken: record> {
+]: nothing -> record<Blocks: table<BlockIndex: int, BlockToken: string>, ExpiryTime: string, VolumeSize: int, BlockSize: int, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($snapshot_id | is-empty) { error make --unspanned { msg: "path parameter 'snapshotId' must be non-empty" } }
@@ -357,10 +359,10 @@ export def "put-snapshot-block" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-length: int # The size of the data to write to the block, in bytes. Currently, the only supported size is 524288 bytes. Valid values: 524288
+  --x-amz-data-length: int # The size of the data to write to the block, in bytes. Currently, the only supported size is 524288 bytes. Valid values: 524288 (required)
   --x-amz-progress: int # The progress of the write process, as a percentage.
-  --x-amz-checksum: string # A Base64-encoded SHA256 checksum of the data. Only SHA256 checksums are supported.
-  --x-amz-checksum-algorithm: string@x-amz-checksum-algorithm-completer # The algorithm used to generate the checksum. Currently, the only supported algorithm is SHA256.
+  --x-amz-checksum: string # A Base64-encoded SHA256 checksum of the data. Only SHA256 checksums are supported. (required)
+  --x-amz-checksum-algorithm: string@x-amz-checksum-algorithm-completer # The algorithm used to generate the checksum. Currently, the only supported algorithm is SHA256. (required)
   block_data: string # The data to write to the block. The block data is not signed as part of the Signature Version 4 signing process. As a result, you must generate and provide a Base64-encoded SHA256 checksum for the block data using the x-amz-Checksum header. Also, you must specify the checksum algorithm using the x-amz-Checksum-Algorithm header. The checksum that you provide is part of the Signature Version 4 signing process. It is validated against a checksum generated by Amazon EBS to ensure the validity and authenticity of the data. If the checksums do not correspond, the request fails. For more information, see Using checksums with the EBS direct APIs (https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ebs-accessing-snapshot.html#ebsapis-using-checksums) in the Amazon Elastic Compute Cloud User Guide. (format: password)
 ]: any -> record {
   let input = $in
@@ -368,6 +370,9 @@ export def "put-snapshot-block" [
   let base = ($base_url | default $BASE_URL)
   if ($snapshot_id | is-empty) { error make --unspanned { msg: "path parameter 'snapshotId' must be non-empty" } }
   if ($block_index | is-empty) { error make --unspanned { msg: "path parameter 'blockIndex' must be non-empty" } }
+  if ($x_amz_data_length == null) { error make --unspanned { msg: "required header parameter 'x-amz-Data-Length' missing: pass --x-amz-data-length" } }
+  if ($x_amz_checksum == null) { error make --unspanned { msg: "required header parameter 'x-amz-Checksum' missing: pass --x-amz-checksum" } }
+  let x_amz_checksum_algorithm = ($x_amz_checksum_algorithm | default "SHA256")
   let full_url = (build-url $base ({snapshot_id: (encode-path-segment $snapshot_id), block_index: (encode-path-segment $block_index)} | format pattern "/snapshots/{snapshot_id}/blocks/{block_index}") $auth.query)
   let req_body = {"BlockData": $block_data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -393,7 +398,7 @@ export def "put-snapshot-block" [
 #
 # POST /snapshots
 # operationId: StartSnapshot
-# --Tags item shape: {Key?: any, Value?: any}
+# --Tags item shape: {Key?: string, Value?: string}
 export def "start-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -413,13 +418,13 @@ export def "start-snapshot" [
   --x-amz-signed-headers: string
   volume_size: int # The size of the volume, in GiB. The maximum size is 65536 GiB (64 TiB).
   --parent-snapshot-id: string # The ID of the parent snapshot. If there is no parent snapshot, or if you are creating the first snapshot for an on-premises volume, omit this parameter. You can't specify ParentSnapshotId and Encrypted in the same request. If you specify both parameters, the request fails with ValidationException. The encryption status of the snapshot depends on the values that you specify for Encrypted, KmsKeyArn, and ParentSnapshotId, and whether your Amazon Web Services account is enabled for encryption by default (https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/EBSEncryption.html#encryption-by-default). For more information, see Using encryption (https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ebsapis-using-encryption.html) in the Amazon Elastic Compute Cloud User Guide. If you specify an encrypted parent snapshot, you must have permission to use the KMS key that was used to encrypt the parent snapshot. For more information, see Permissions to use Key Management Service keys (https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ebsapi-permissions.html#ebsapi-kms-permissions) in the Amazon Elastic Compute Cloud User Guide.
-  --tags: list # The tags to apply to the snapshot. — item shape: {Key?: any, Value?: any}
+  --tags: list # The tags to apply to the snapshot. — item shape: {Key?: string, Value?: string}
   --description: string # A description for the snapshot.
   --client-token: string # A unique, case-sensitive identifier that you provide to ensure the idempotency of the request. Idempotency ensures that an API request completes only once. With an idempotent request, if the original request completes successfully. The subsequent retries with the same client token return the result from the original successful request and they have no additional effect. If you do not specify a client token, one is automatically generated by the Amazon Web Services SDK. For more information, see Idempotency for StartSnapshot API (https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ebs-direct-api-idempotency.html) in the Amazon Elastic Compute Cloud User Guide.
   --encrypted: oneof<nothing, bool> # Indicates whether to encrypt the snapshot. You can't specify Encrypted and ParentSnapshotId in the same request. If you specify both parameters, the request fails with ValidationException. The encryption status of the snapshot depends on the values that you specify for Encrypted, KmsKeyArn, and ParentSnapshotId, and whether your Amazon Web Services account is enabled for encryption by default (https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/EBSEncryption.html#encryption-by-default). For more information, see Using encryption (https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ebsapis-using-encryption.html) in the Amazon Elastic Compute Cloud User Guide. To create an encrypted snapshot, you must have permission to use the KMS key. For more information, see Permissions to use Key Management Service keys (https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ebsapi-permissions.html#ebsapi-kms-permissions) in the Amazon Elastic Compute Cloud User Guide.
   --kms-key-arn: string # The Amazon Resource Name (ARN) of the Key Management Service (KMS) key to be used to encrypt the snapshot. The encryption status of the snapshot depends on the values that you specify for Encrypted, KmsKeyArn, and ParentSnapshotId, and whether your Amazon Web Services account is enabled for encryption by default (https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/EBSEncryption.html#encryption-by-default). For more information, see Using encryption (https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ebsapis-using-encryption.html) in the Amazon Elastic Compute Cloud User Guide. To create an encrypted snapshot, you must have permission to use the KMS key. For more information, see Permissions to use Key Management Service keys (https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ebsapi-permissions.html#ebsapi-kms-permissions) in the Amazon Elastic Compute Cloud User Guide. (format: password)
   --timeout: int # The amount of time (in minutes) after which the snapshot is automatically cancelled if: No blocks are written to the snapshot. The snapshot is not completed after writing the last block of data. If no value is specified, the timeout defaults to 60 minutes.
-]: any -> record<Description: record, SnapshotId: record, OwnerId: record, Status: record, StartTime: record, VolumeSize: record, BlockSize: record, Tags: record, ParentSnapshotId: record, KmsKeyArn: record> {
+]: any -> record<Description: string, SnapshotId: string, OwnerId: string, Status: string, StartTime: string, VolumeSize: int, BlockSize: int, Tags: table<Key: string, Value: string>, ParentSnapshotId: string, KmsKeyArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

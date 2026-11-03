@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -161,7 +161,7 @@ export def "registries-generate-credentials" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
+  --api-version: string # The client API version. (required)
   --expiry: string # The expiry date of the generated credentials after which the credentials become invalid. (format: date-time)
   --name: string@name-completer # Specifies name of the password which should be regenerated if any -- password1 or password2.
   --token-id: string # The resource ID of the token for which credentials have to be generated.
@@ -172,6 +172,7 @@ export def "registries-generate-credentials" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($registry_name | is-empty) { error make --unspanned { msg: "path parameter 'registryName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), registry_name: (encode-path-segment $registry_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/generateCredentials") $qp $auth.query)
   let req_body = {"expiry": $expiry, "name": $name, "tokenId": $token_id} | compact
@@ -209,13 +210,14 @@ export def "scope-maps-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # The client API version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($registry_name | is-empty) { error make --unspanned { msg: "path parameter 'registryName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), registry_name: (encode-path-segment $registry_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/scopeMaps") $qp $auth.query)
   let accept_val = "application/json"
@@ -252,7 +254,7 @@ export def "scope-maps-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
+  --api-version: string # The client API version. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -260,6 +262,7 @@ export def "scope-maps-delete" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($registry_name | is-empty) { error make --unspanned { msg: "path parameter 'registryName' must be non-empty" } }
   if ($scope_map_name | is-empty) { error make --unspanned { msg: "path parameter 'scopeMapName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), registry_name: (encode-path-segment $registry_name), scope_map_name: (encode-path-segment $scope_map_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/scopeMaps/{scope_map_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -296,14 +299,15 @@ export def "scope-maps-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
-]: nothing -> record<properties: record<actions: list<string>, creationDate: string, description: string, provisioningState: string, type: string>> {
+  --api-version: string # The client API version. (required)
+]: nothing -> record<properties: record<actions: list<string>, creationDate: string, description: string, provisioningState: string, type: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($registry_name | is-empty) { error make --unspanned { msg: "path parameter 'registryName' must be non-empty" } }
   if ($scope_map_name | is-empty) { error make --unspanned { msg: "path parameter 'scopeMapName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), registry_name: (encode-path-segment $registry_name), scope_map_name: (encode-path-segment $scope_map_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/scopeMaps/{scope_map_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -341,9 +345,9 @@ export def "scope-maps-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
+  --api-version: string # The client API version. (required)
   --properties: record # The update parameters for scope map properties. — shape: {actions?: list<string>, description?: string}
-]: any -> record<properties: record<actions: list<string>, creationDate: string, description: string, provisioningState: string, type: string>> {
+]: any -> record<properties: record<actions: list<string>, creationDate: string, description: string, provisioningState: string, type: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -351,6 +355,7 @@ export def "scope-maps-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($registry_name | is-empty) { error make --unspanned { msg: "path parameter 'registryName' must be non-empty" } }
   if ($scope_map_name | is-empty) { error make --unspanned { msg: "path parameter 'scopeMapName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), registry_name: (encode-path-segment $registry_name), scope_map_name: (encode-path-segment $scope_map_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/scopeMaps/{scope_map_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -390,9 +395,9 @@ export def "scope-maps-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
+  --api-version: string # The client API version. (required)
   --properties: record # The properties of a scope map. — shape: {actions: list<string>, description?: string}
-]: any -> record<properties: record<actions: list<string>, creationDate: string, description: string, provisioningState: string, type: string>> {
+]: any -> record<properties: record<actions: list<string>, creationDate: string, description: string, provisioningState: string, type: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -400,6 +405,7 @@ export def "scope-maps-create" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($registry_name | is-empty) { error make --unspanned { msg: "path parameter 'registryName' must be non-empty" } }
   if ($scope_map_name | is-empty) { error make --unspanned { msg: "path parameter 'scopeMapName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), registry_name: (encode-path-segment $registry_name), scope_map_name: (encode-path-segment $scope_map_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/scopeMaps/{scope_map_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -437,13 +443,14 @@ export def "tokens-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # The client API version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($registry_name | is-empty) { error make --unspanned { msg: "path parameter 'registryName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), registry_name: (encode-path-segment $registry_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/tokens") $qp $auth.query)
   let accept_val = "application/json"
@@ -480,7 +487,7 @@ export def "tokens-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
+  --api-version: string # The client API version. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -488,6 +495,7 @@ export def "tokens-delete" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($registry_name | is-empty) { error make --unspanned { msg: "path parameter 'registryName' must be non-empty" } }
   if ($token_name | is-empty) { error make --unspanned { msg: "path parameter 'tokenName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), registry_name: (encode-path-segment $registry_name), token_name: (encode-path-segment $token_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/tokens/{token_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -524,14 +532,15 @@ export def "tokens-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
-]: nothing -> record<properties: record<creationDate: string, credentials: record<certificates: list, passwords: list>, objectId: string, provisioningState: string, scopeMapId: string, status: string>> {
+  --api-version: string # The client API version. (required)
+]: nothing -> record<properties: record<creationDate: string, credentials: record<certificates: list, passwords: list>, objectId: string, provisioningState: string, scopeMapId: string, status: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($registry_name | is-empty) { error make --unspanned { msg: "path parameter 'registryName' must be non-empty" } }
   if ($token_name | is-empty) { error make --unspanned { msg: "path parameter 'tokenName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), registry_name: (encode-path-segment $registry_name), token_name: (encode-path-segment $token_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/tokens/{token_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -569,9 +578,9 @@ export def "tokens-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
+  --api-version: string # The client API version. (required)
   --properties: record # The parameters for updating token properties. — shape: {credentials?: record, scopeMapId?: string, status?: "enabled"|"disabled"}
-]: any -> record<properties: record<creationDate: string, credentials: record<certificates: list, passwords: list>, objectId: string, provisioningState: string, scopeMapId: string, status: string>> {
+]: any -> record<properties: record<creationDate: string, credentials: record<certificates: list, passwords: list>, objectId: string, provisioningState: string, scopeMapId: string, status: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -579,6 +588,7 @@ export def "tokens-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($registry_name | is-empty) { error make --unspanned { msg: "path parameter 'registryName' must be non-empty" } }
   if ($token_name | is-empty) { error make --unspanned { msg: "path parameter 'tokenName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), registry_name: (encode-path-segment $registry_name), token_name: (encode-path-segment $token_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/tokens/{token_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -618,9 +628,9 @@ export def "tokens-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
+  --api-version: string # The client API version. (required)
   --properties: record # The properties of a token. — shape: {credentials?: record, objectId?: string, scopeMapId?: string, status?: "enabled"|"disabled"}
-]: any -> record<properties: record<creationDate: string, credentials: record<certificates: list, passwords: list>, objectId: string, provisioningState: string, scopeMapId: string, status: string>> {
+]: any -> record<properties: record<creationDate: string, credentials: record<certificates: list, passwords: list>, objectId: string, provisioningState: string, scopeMapId: string, status: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -628,6 +638,7 @@ export def "tokens-create" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($registry_name | is-empty) { error make --unspanned { msg: "path parameter 'registryName' must be non-empty" } }
   if ($token_name | is-empty) { error make --unspanned { msg: "path parameter 'tokenName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), registry_name: (encode-path-segment $registry_name), token_name: (encode-path-segment $token_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/tokens/{token_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact

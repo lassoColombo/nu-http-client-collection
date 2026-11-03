@@ -254,7 +254,7 @@ export def "registry-delete-api" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --force: oneof<nothing, bool> # If set to true, any child resources will also be deleted. (Otherwise, the request will only work if there are no child resources.)
-]: nothing -> record<code: int, details: table<_type: string>, message: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
@@ -490,7 +490,7 @@ export def "registry-delete-api-deployment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --force: oneof<nothing, bool> # If set to true, any child resources will also be deleted. (Otherwise, the request will only work if there are no child resources.)
-]: nothing -> record<code: int, details: table<_type: string>, message: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
@@ -910,7 +910,7 @@ export def "registry-delete-api-version" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --force: oneof<nothing, bool> # If set to true, any child resources will also be deleted. (Otherwise, the request will only work if there are no child resources.)
-]: nothing -> record<code: int, details: table<_type: string>, message: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
@@ -1152,7 +1152,7 @@ export def "registry-delete-api-spec" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --force: oneof<nothing, bool> # If set to true, any child resources will also be deleted. (Otherwise, the request will only work if there are no child resources.)
-]: nothing -> record<code: int, details: table<_type: string>, message: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
@@ -1344,7 +1344,7 @@ export def "registry-get-api-spec-contents" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<code: int, details: table<_type: string>, message: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
@@ -1619,7 +1619,7 @@ export def "registry-delete-artifact" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: int, details: table<_type: string>, message: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
@@ -1746,7 +1746,7 @@ export def "registry-get-artifact-contents" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<code: int, details: table<_type: string>, message: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }

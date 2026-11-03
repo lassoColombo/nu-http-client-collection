@@ -183,10 +183,11 @@ export def "get-extorgunit" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --extid: string # The external id of the organization unit (format: extid)
+  --extid: string # The external id of the organization unit (required, format: extid)
 ]: nothing -> record<externalId: string, id: int, name: string, parentId: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($extid == null) { error make --unspanned { msg: "required query parameter 'extid' missing: pass --extid" } }
   let qp = [(serialize-qp "extid" $extid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/extorgunit" $qp $auth.query)
   let accept_val = "application/json"
@@ -218,10 +219,11 @@ export def "get-extparticipation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --extid: string # The external id of the participation (format: extid)
+  --extid: string # The external id of the participation (required, format: extid)
 ]: nothing -> record<accessLink: string, activated: bool, activitiesCompleted: float, activitiesTotal: float, errorMessage: string, expiration: string, externalId: string, firstAccess: string, firstActivation: string, firstMail: string, id: int, inError: bool, lastAccess: string, lastActivation: string, lastMail: string, projectId: int, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($extid == null) { error make --unspanned { msg: "required query parameter 'extid' missing: pass --extid" } }
   let qp = [(serialize-qp "extid" $extid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/extparticipation" $qp $auth.query)
   let accept_val = "application/json"
@@ -253,10 +255,11 @@ export def "get-extproject" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --extid: string # The external id of the organization unit (format: extid)
+  --extid: string # The external id of the organization unit (required, format: extid)
 ]: nothing -> record<adminUrl: string, country: string, created: string, createdBy: string, designId: int, externalId: string, id: int, locale: string, name: string, note: string, orgId: int, status: string, timezone: string, userDescription: string, userTitle: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($extid == null) { error make --unspanned { msg: "required query parameter 'extid' missing: pass --extid" } }
   let qp = [(serialize-qp "extid" $extid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/extproject" $qp $auth.query)
   let accept_val = "application/json"
@@ -288,10 +291,11 @@ export def "get-extuser" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --extid: string # The external id of the user (format: extid)
+  --extid: string # The external id of the user (required, format: extid)
 ]: nothing -> record<authorizationPossible: bool, displayName: string, externalId: string, firstLogin: string, firstName: string, hardLock: bool, homeOrg: int, id: string, lastLogin: string, lastName: string, locked: bool, prefs: record<locale: string>, primaryEmail: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($extid == null) { error make --unspanned { msg: "required query parameter 'extid' missing: pass --extid" } }
   let qp = [(serialize-qp "extid" $extid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/extuser" $qp $auth.query)
   let accept_val = "application/json"
@@ -508,7 +512,7 @@ export def "patch-orgunits-orgid" [
   --display-name: string # The name shown for the organization unit (e.g. Sample Corp)
   --external-id: string # The external id (foreign key). Must not exceed 255 characters.
   --parent: float # A Organization Unit id of the parent Organization Unit (optional). (format: id64, e.g. 1234)
-]: any -> record<code: int, field: string, message: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -629,7 +633,7 @@ export def "delete-orgunits-orgid-projects-projectid" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: int, field: string, message: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($orgid | is-empty) { error make --unspanned { msg: "path parameter 'orgid' must be non-empty" } }
@@ -791,7 +795,7 @@ export def "post-orgunits-orgid-projects-projectid-participants" [
   --email: string # The email of the user. If no user exists with the specified email a user will be created with default values and the specified email. (format: email, e.g. user@example.com)
   --extid: string # An optional external id for the participation
   --userid: string # format: uuid, e.g. 81590981-1e05-4fd5-aa15-15bc4b06cf7f
-]: any -> record<code: int, field: string, message: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -832,7 +836,7 @@ export def "delete-orgunits-orgid-projects-projectid-participants-participant-id
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: int, field: string, message: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($orgid | is-empty) { error make --unspanned { msg: "path parameter 'orgid' must be non-empty" } }
@@ -871,7 +875,7 @@ export def "post-orgunits-orgid-projects-projectid-participants-participant-id-a
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: int, field: string, message: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($orgid | is-empty) { error make --unspanned { msg: "path parameter 'orgid' must be non-empty" } }
@@ -1176,7 +1180,7 @@ export def "delete-orgunits-orgid-usergroups-groupid-members-uuid" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: int, field: string, message: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($orgid | is-empty) { error make --unspanned { msg: "path parameter 'orgid' must be non-empty" } }
@@ -1336,7 +1340,7 @@ export def "patch-users-userid" [
   --last-name: any # The last name (surname) of the user (format: string, e.g. Doe)
   --locale: string # The user's preferred language/locale setting. Affects date and number formatting. (format: locale, e.g. en-US)
   --primary-email: string # The primary email for the user. Used for communication from the platform. (e.g. jane.doe@example.com)
-]: any -> record<code: int, field: string, message: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1363,7 +1367,7 @@ export def "patch-users-userid" [
 # User profile picture
 #
 # GET /users/{userid}/pic?key={APIKEY}
-export def "get-users-userid-pickey-apikey" [
+export def "get-users-userid-pic-key-apikey" [
   userid: string
   apikey: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1375,12 +1379,12 @@ export def "get-users-userid-pickey-apikey" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: int, field: string, message: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($userid | is-empty) { error make --unspanned { msg: "path parameter 'userid' must be non-empty" } }
   if ($apikey | is-empty) { error make --unspanned { msg: "path parameter 'APIKEY' must be non-empty" } }
-  let full_url = (build-url $base ({userid: (encode-path-segment $userid), apikey: (encode-path-segment $apikey)} | format pattern "/users/{userid}/pic?key={apikey}") $auth.query)
+  let full_url = (build-url $base ({userid: (encode-path-segment $userid), apikey: (encode-path-segment $apikey)} | format pattern "/users/{userid}/pic") "key={APIKEY}" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {

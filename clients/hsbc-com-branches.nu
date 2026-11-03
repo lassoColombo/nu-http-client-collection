@@ -237,12 +237,13 @@ export def "get-x-open-banking-v2-2-branches-geo-location-lat-latitude-long-long
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --radius: float # Number of miles (1 to 10) as an integer. Default = 1
+  --radius: float # Number of miles (1 to 10) as an integer. Default = 1 (required)
 ]: nothing -> record<data: table<Brand: list>, meta: record<Agreement: string, LastUpdated: string, License: string, TermsOfUse: string, TotalResults: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($latitude | is-empty) { error make --unspanned { msg: "path parameter 'latitude' must be non-empty" } }
   if ($longitude | is-empty) { error make --unspanned { msg: "path parameter 'longitude' must be non-empty" } }
+  if ($radius == null) { error make --unspanned { msg: "required query parameter 'radius' missing: pass --radius" } }
   let qp = [(serialize-qp "radius" $radius "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({latitude: (encode-path-segment $latitude), longitude: (encode-path-segment $longitude)} | format pattern "/x-open-banking/v2.2/branches/geo-location/lat/{latitude}/long/{longitude}") $qp $auth.query)
   let accept_val = "application/prs.openbanking.opendata.v2.2+json"

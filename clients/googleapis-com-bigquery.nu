@@ -1,4 +1,4 @@
-# Auto-generated client for BigQuery API vv2
+# Auto-generated client for BigQuery API v2
 # Source: https://api.apis.guru/v2/specs/googleapis.com/bigquery/v2/openapi.json
 # Auth: --token flag or $env.BIGQUERY_API_TOKEN
 
@@ -12,20 +12,10 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
-}
-
-# Merge multiple auth records (AND-form security: every scheme must be sent).
-def merge-auth [parts: list]: nothing -> record {
-  let active = ($parts | where {|p| $p.location != "none" })
-  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
-  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
-  let locs = ($active | each {|p| $p.location } | uniq)
-  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
-  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
 # Serialize a single query parameter based on collection style
@@ -165,8 +155,8 @@ export def commands []: nothing -> table {
 # operationId: bigquery.projects.list
 export def "bigquery-projects-list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -183,7 +173,7 @@ export def "bigquery-projects-list" [
   --max-results: int # Maximum number of results to return
   --page-token: string # Page token, returned by a previous call, to request the next page of results
 ]: nothing -> record<etag: string, kind: string, nextPageToken: string, projects: table<friendlyName: string, id: string, kind: string, numericId: string, projectReference: record>, totalItems: int> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BIGQUERY_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BIGQUERY_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/projects" $qp $auth.query)
@@ -210,8 +200,8 @@ export def "bigquery-projects-list" [
 export def "bigquery-datasets-list" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -230,7 +220,7 @@ export def "bigquery-datasets-list" [
   --max-results: int # The maximum number of results to return
   --page-token: string # Page token, returned by a previous call, to request the next page of results
 ]: nothing -> record<datasets: table<datasetReference: record, friendlyName: string, id: string, kind: string, labels: record, location: string>, etag: string, kind: string, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BIGQUERY_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BIGQUERY_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "all" $all "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -262,8 +252,8 @@ export def "bigquery-datasets-list" [
 export def "bigquery-datasets-insert" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -301,7 +291,7 @@ export def "bigquery-datasets-insert" [
   --tags: list # [Optional]The tags associated with this dataset. Tag keys are globally unique. — item shape: {tagKey?: string, tagValue?: string}
 ]: any -> record<access: table<dataset: record, domain: string, groupByEmail: string, iamMember: string, role: string, routine: record, specialGroup: string, userByEmail: string, view: record>, creationTime: string, datasetReference: record<datasetId: string, projectId: string>, defaultCollation: string, defaultEncryptionConfiguration: record<kmsKeyName: string>, defaultPartitionExpirationMs: string, defaultRoundingMode: string, defaultTableExpirationMs: string, description: string, etag: string, friendlyName: string, id: string, isCaseInsensitive: bool, kind: string, labels: record, lastModifiedTime: string, location: string, maxTimeTravelHours: string, satisfiesPzs: bool, selfLink: string, storageBillingModel: string, tags: table<tagKey: string, tagValue: string>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BIGQUERY_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BIGQUERY_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
@@ -332,8 +322,8 @@ export def "bigquery-datasets-delete" [
   project_id: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -349,7 +339,7 @@ export def "bigquery-datasets-delete" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --delete-contents: oneof<nothing, bool> # If True, delete all the tables in the dataset. If False and the dataset contains tables, the request will fail. Default is False
 ]: nothing -> any {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BIGQUERY_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BIGQUERY_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -379,8 +369,8 @@ export def "bigquery-datasets-get" [
   project_id: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -395,7 +385,7 @@ export def "bigquery-datasets-get" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<access: table<dataset: record, domain: string, groupByEmail: string, iamMember: string, role: string, routine: record, specialGroup: string, userByEmail: string, view: record>, creationTime: string, datasetReference: record<datasetId: string, projectId: string>, defaultCollation: string, defaultEncryptionConfiguration: record<kmsKeyName: string>, defaultPartitionExpirationMs: string, defaultRoundingMode: string, defaultTableExpirationMs: string, description: string, etag: string, friendlyName: string, id: string, isCaseInsensitive: bool, kind: string, labels: record, lastModifiedTime: string, location: string, maxTimeTravelHours: string, satisfiesPzs: bool, selfLink: string, storageBillingModel: string, tags: table<tagKey: string, tagValue: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BIGQUERY_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BIGQUERY_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -429,8 +419,8 @@ export def "bigquery-datasets-patch" [
   project_id: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -468,7 +458,7 @@ export def "bigquery-datasets-patch" [
   --tags: list # [Optional]The tags associated with this dataset. Tag keys are globally unique. — item shape: {tagKey?: string, tagValue?: string}
 ]: any -> record<access: table<dataset: record, domain: string, groupByEmail: string, iamMember: string, role: string, routine: record, specialGroup: string, userByEmail: string, view: record>, creationTime: string, datasetReference: record<datasetId: string, projectId: string>, defaultCollation: string, defaultEncryptionConfiguration: record<kmsKeyName: string>, defaultPartitionExpirationMs: string, defaultRoundingMode: string, defaultTableExpirationMs: string, description: string, etag: string, friendlyName: string, id: string, isCaseInsensitive: bool, kind: string, labels: record, lastModifiedTime: string, location: string, maxTimeTravelHours: string, satisfiesPzs: bool, selfLink: string, storageBillingModel: string, tags: table<tagKey: string, tagValue: string>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BIGQUERY_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BIGQUERY_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -504,8 +494,8 @@ export def "bigquery-datasets-update" [
   project_id: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -543,7 +533,7 @@ export def "bigquery-datasets-update" [
   --tags: list # [Optional]The tags associated with this dataset. Tag keys are globally unique. — item shape: {tagKey?: string, tagValue?: string}
 ]: any -> record<access: table<dataset: record, domain: string, groupByEmail: string, iamMember: string, role: string, routine: record, specialGroup: string, userByEmail: string, view: record>, creationTime: string, datasetReference: record<datasetId: string, projectId: string>, defaultCollation: string, defaultEncryptionConfiguration: record<kmsKeyName: string>, defaultPartitionExpirationMs: string, defaultRoundingMode: string, defaultTableExpirationMs: string, description: string, etag: string, friendlyName: string, id: string, isCaseInsensitive: bool, kind: string, labels: record, lastModifiedTime: string, location: string, maxTimeTravelHours: string, satisfiesPzs: bool, selfLink: string, storageBillingModel: string, tags: table<tagKey: string, tagValue: string>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BIGQUERY_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BIGQUERY_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -575,8 +565,8 @@ export def "bigquery-models-list" [
   project_id: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -593,7 +583,7 @@ export def "bigquery-models-list" [
   --max-results: int # The maximum number of results to return in a single response page. Leverage the page tokens to iterate through the entire collection.
   --page-token: string # Page token, returned by a previous call to request the next page of results
 ]: nothing -> record<models: table<bestTrialId: string, creationTime: string, defaultTrialId: string, description: string, encryptionConfiguration: record, etag: string, expirationTime: string, featureColumns: list, friendlyName: string, hparamSearchSpaces: record, hparamTrials: list, labelColumns: list, labels: record, lastModifiedTime: string, location: string, modelReference: record, modelType: string, optimalTrialIds: list, trainingRuns: list>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BIGQUERY_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BIGQUERY_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -624,8 +614,8 @@ export def "bigquery-models-delete" [
   dataset_id: string
   model_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -640,7 +630,7 @@ export def "bigquery-models-delete" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BIGQUERY_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BIGQUERY_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -672,8 +662,8 @@ export def "bigquery-models-get" [
   dataset_id: string
   model_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -688,7 +678,7 @@ export def "bigquery-models-get" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<bestTrialId: string, creationTime: string, defaultTrialId: string, description: string, encryptionConfiguration: record<kmsKeyName: string>, etag: string, expirationTime: string, featureColumns: table<name: string, type: record>, friendlyName: string, hparamSearchSpaces: record<activationFn: record<candidates: list>, batchSize: record<candidates: record, range: record>, boosterType: record<candidates: list>, colsampleBylevel: record<candidates: record, range: record>, colsampleBynode: record<candidates: record, range: record>, colsampleBytree: record<candidates: record, range: record>, dartNormalizeType: record<candidates: list>, dropout: record<candidates: record, range: record>, hiddenUnits: record<candidates: list>, l1Reg: record<candidates: record, range: record>, l2Reg: record<candidates: record, range: record>, learnRate: record<candidates: record, range: record>, maxTreeDepth: record<candidates: record, range: record>, minSplitLoss: record<candidates: record, range: record>, minTreeChildWeight: record<candidates: record, range: record>, numClusters: record<candidates: record, range: record>, numFactors: record<candidates: record, range: record>, numParallelTree: record<candidates: record, range: record>, optimizer: record<candidates: list>, subsample: record<candidates: record, range: record>, treeMethod: record<candidates: list>, walsAlpha: record<candidates: record, range: record>>, hparamTrials: table<endTimeMs: string, errorMessage: string, evalLoss: float, evaluationMetrics: record, hparamTuningEvaluationMetrics: record, hparams: record, startTimeMs: string, status: string, trainingLoss: float, trialId: string>, labelColumns: table<name: string, type: record>, labels: record, lastModifiedTime: string, location: string, modelReference: record<datasetId: string, modelId: string, projectId: string>, modelType: string, optimalTrialIds: list<string>, trainingRuns: table<classLevelGlobalExplanations: list, dataSplitResult: record, evaluationMetrics: record, modelLevelGlobalExplanation: record, results: list, startTime: string, trainingOptions: record, trainingStartTime: string, vertexAiModelId: string, vertexAiModelVersion: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BIGQUERY_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BIGQUERY_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -727,8 +717,8 @@ export def "bigquery-models-patch" [
   dataset_id: string
   model_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -753,7 +743,7 @@ export def "bigquery-models-patch" [
   --training-runs: list # Information for all training runs in increasing order of start_time. — item shape: {dataSplitResult?: record, evaluationMetrics?: record, modelLevelGlobalExplanation?: record, trainingOptions?: record, vertexAiModelId?: string}
 ]: any -> record<bestTrialId: string, creationTime: string, defaultTrialId: string, description: string, encryptionConfiguration: record<kmsKeyName: string>, etag: string, expirationTime: string, featureColumns: table<name: string, type: record>, friendlyName: string, hparamSearchSpaces: record<activationFn: record<candidates: list>, batchSize: record<candidates: record, range: record>, boosterType: record<candidates: list>, colsampleBylevel: record<candidates: record, range: record>, colsampleBynode: record<candidates: record, range: record>, colsampleBytree: record<candidates: record, range: record>, dartNormalizeType: record<candidates: list>, dropout: record<candidates: record, range: record>, hiddenUnits: record<candidates: list>, l1Reg: record<candidates: record, range: record>, l2Reg: record<candidates: record, range: record>, learnRate: record<candidates: record, range: record>, maxTreeDepth: record<candidates: record, range: record>, minSplitLoss: record<candidates: record, range: record>, minTreeChildWeight: record<candidates: record, range: record>, numClusters: record<candidates: record, range: record>, numFactors: record<candidates: record, range: record>, numParallelTree: record<candidates: record, range: record>, optimizer: record<candidates: list>, subsample: record<candidates: record, range: record>, treeMethod: record<candidates: list>, walsAlpha: record<candidates: record, range: record>>, hparamTrials: table<endTimeMs: string, errorMessage: string, evalLoss: float, evaluationMetrics: record, hparamTuningEvaluationMetrics: record, hparams: record, startTimeMs: string, status: string, trainingLoss: float, trialId: string>, labelColumns: table<name: string, type: record>, labels: record, lastModifiedTime: string, location: string, modelReference: record<datasetId: string, modelId: string, projectId: string>, modelType: string, optimalTrialIds: list<string>, trainingRuns: table<classLevelGlobalExplanations: list, dataSplitResult: record, evaluationMetrics: record, modelLevelGlobalExplanation: record, results: list, startTime: string, trainingOptions: record, trainingStartTime: string, vertexAiModelId: string, vertexAiModelVersion: string>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BIGQUERY_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BIGQUERY_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -786,8 +776,8 @@ export def "bigquery-routines-list" [
   project_id: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -806,7 +796,7 @@ export def "bigquery-routines-list" [
   --page-token: string # Page token, returned by a previous call, to request the next page of results
   --read-mask: string # If set, then only the Routine fields in the field mask, as well as project_id, dataset_id and routine_id, are returned in the response. If unset, then the following Routine fields are returned: etag, project_id, dataset_id, routine_id, routine_type, creation_time, last_modified_time, and language.
 ]: nothing -> record<nextPageToken: string, routines: table<arguments: list, creationTime: string, definitionBody: string, description: string, determinismLevel: string, etag: string, importedLibraries: list, language: string, lastModifiedTime: string, remoteFunctionOptions: record, returnTableType: record, returnType: record, routineReference: record, routineType: string, sparkOptions: record, strictMode: bool>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BIGQUERY_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BIGQUERY_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -842,8 +832,8 @@ export def "bigquery-routines-insert" [
   project_id: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -872,7 +862,7 @@ export def "bigquery-routines-insert" [
   --strict-mode: oneof<nothing, bool> # Optional. Can be set for procedures only. If true (default), the definition body will be validated in the creation and the updates of the procedure. For procedures with an argument of ANY TYPE, the definition body validtion is not supported at creation/update time, and thus this field must be set to false explicitly.
 ]: any -> record<arguments: table<argumentKind: string, dataType: record, mode: string, name: string>, creationTime: string, definitionBody: string, description: string, determinismLevel: string, etag: string, importedLibraries: list<string>, language: string, lastModifiedTime: string, remoteFunctionOptions: record<connection: string, endpoint: string, maxBatchingRows: string, userDefinedContext: record>, returnTableType: record<columns: list<record>>, returnType: record<arrayElementType: any, structType: record<fields: list>, typeKind: string>, routineReference: record<datasetId: string, projectId: string, routineId: string>, routineType: string, sparkOptions: record<archiveUris: list<string>, connection: string, containerImage: string, fileUris: list<string>, jarUris: list<string>, mainClass: string, mainFileUri: string, properties: record, pyFileUris: list<string>, runtimeVersion: string>, strictMode: bool> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BIGQUERY_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BIGQUERY_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -905,8 +895,8 @@ export def "bigquery-routines-delete" [
   dataset_id: string
   routine_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -921,7 +911,7 @@ export def "bigquery-routines-delete" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BIGQUERY_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BIGQUERY_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -953,8 +943,8 @@ export def "bigquery-routines-get" [
   dataset_id: string
   routine_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -970,7 +960,7 @@ export def "bigquery-routines-get" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --read-mask: string # If set, only the Routine fields in the field mask are returned in the response. If unset, all Routine fields are returned.
 ]: nothing -> record<arguments: table<argumentKind: string, dataType: record, mode: string, name: string>, creationTime: string, definitionBody: string, description: string, determinismLevel: string, etag: string, importedLibraries: list<string>, language: string, lastModifiedTime: string, remoteFunctionOptions: record<connection: string, endpoint: string, maxBatchingRows: string, userDefinedContext: record>, returnTableType: record<columns: list<record>>, returnType: record<arrayElementType: any, structType: record<fields: list>, typeKind: string>, routineReference: record<datasetId: string, projectId: string, routineId: string>, routineType: string, sparkOptions: record<archiveUris: list<string>, connection: string, containerImage: string, fileUris: list<string>, jarUris: list<string>, mainClass: string, mainFileUri: string, properties: record, pyFileUris: list<string>, runtimeVersion: string>, strictMode: bool> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BIGQUERY_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BIGQUERY_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -1008,8 +998,8 @@ export def "bigquery-routines-update" [
   dataset_id: string
   routine_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1038,7 +1028,7 @@ export def "bigquery-routines-update" [
   --strict-mode: oneof<nothing, bool> # Optional. Can be set for procedures only. If true (default), the definition body will be validated in the creation and the updates of the procedure. For procedures with an argument of ANY TYPE, the definition body validtion is not supported at creation/update time, and thus this field must be set to false explicitly.
 ]: any -> record<arguments: table<argumentKind: string, dataType: record, mode: string, name: string>, creationTime: string, definitionBody: string, description: string, determinismLevel: string, etag: string, importedLibraries: list<string>, language: string, lastModifiedTime: string, remoteFunctionOptions: record<connection: string, endpoint: string, maxBatchingRows: string, userDefinedContext: record>, returnTableType: record<columns: list<record>>, returnType: record<arrayElementType: any, structType: record<fields: list>, typeKind: string>, routineReference: record<datasetId: string, projectId: string, routineId: string>, routineType: string, sparkOptions: record<archiveUris: list<string>, connection: string, containerImage: string, fileUris: list<string>, jarUris: list<string>, mainClass: string, mainFileUri: string, properties: record, pyFileUris: list<string>, runtimeVersion: string>, strictMode: bool> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BIGQUERY_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BIGQUERY_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -1071,8 +1061,8 @@ export def "bigquery-tables-list" [
   project_id: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1089,7 +1079,7 @@ export def "bigquery-tables-list" [
   --max-results: int # Maximum number of results to return
   --page-token: string # Page token, returned by a previous call, to request the next page of results
 ]: nothing -> record<etag: string, kind: string, nextPageToken: string, tables: table<clustering: record, creationTime: string, expirationTime: string, friendlyName: string, id: string, kind: string, labels: record, rangePartitioning: record, tableReference: record, timePartitioning: record, type: string, view: record>, totalItems: int> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BIGQUERY_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BIGQUERY_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -1132,8 +1122,8 @@ export def "bigquery-tables-insert" [
   project_id: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1190,7 +1180,7 @@ export def "bigquery-tables-insert" [
   --view: record # shape: {query?: string, useExplicitColumnNames?: bool, useLegacySql?: bool, userDefinedFunctionResources?: list}
 ]: any -> record<cloneDefinition: record<baseTableReference: record<datasetId: string, projectId: string, tableId: string>, cloneTime: string>, clustering: record<fields: list<string>>, creationTime: string, defaultCollation: string, defaultRoundingMode: string, description: string, encryptionConfiguration: record<kmsKeyName: string>, etag: string, expirationTime: string, externalDataConfiguration: record<autodetect: bool, avroOptions: record<useAvroLogicalTypes: bool>, bigtableOptions: record<columnFamilies: list, ignoreUnspecifiedColumnFamilies: bool, readRowkeyAsString: bool>, compression: string, connectionId: string, csvOptions: record<allowJaggedRows: bool, allowQuotedNewlines: bool, encoding: string, fieldDelimiter: string, null_marker: string, preserveAsciiControlCharacters: bool, quote: string, skipLeadingRows: string>, decimalTargetTypes: list<string>, googleSheetsOptions: record<range: string, skipLeadingRows: string>, hivePartitioningOptions: record<mode: string, requirePartitionFilter: bool, sourceUriPrefix: string>, ignoreUnknownValues: bool, maxBadRecords: int, metadataCacheMode: string, objectMetadata: string, parquetOptions: record<enableListInference: bool, enumAsString: bool>, referenceFileSchemaUri: string, schema: record<fields: list>, sourceFormat: string, sourceUris: list<string>>, friendlyName: string, id: string, kind: string, labels: record, lastModifiedTime: string, location: string, materializedView: record<allow_non_incremental_definition: bool, enableRefresh: bool, lastRefreshTime: string, maxStaleness: string, query: string, refreshIntervalMs: string>, maxStaleness: string, model: record<modelOptions: record<labels: list, lossType: string, modelType: string>, trainingRuns: list<record>>, numBytes: string, numLongTermBytes: string, numPhysicalBytes: string, numRows: string, num_active_logical_bytes: string, num_active_physical_bytes: string, num_long_term_logical_bytes: string, num_long_term_physical_bytes: string, num_partitions: string, num_time_travel_physical_bytes: string, num_total_logical_bytes: string, num_total_physical_bytes: string, rangePartitioning: record<field: string, range: record<end: string, interval: string, start: string>>, requirePartitionFilter: bool, schema: record<fields: list<record>>, selfLink: string, snapshotDefinition: record<baseTableReference: record<datasetId: string, projectId: string, tableId: string>, snapshotTime: string>, streamingBuffer: record<estimatedBytes: string, estimatedRows: string, oldestEntryTime: string>, tableReference: record<datasetId: string, projectId: string, tableId: string>, timePartitioning: record<expirationMs: string, field: string, requirePartitionFilter: bool, type: string>, type: string, view: record<query: string, useExplicitColumnNames: bool, useLegacySql: bool, userDefinedFunctionResources: list<record>>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BIGQUERY_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BIGQUERY_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -1223,8 +1213,8 @@ export def "bigquery-tables-delete" [
   dataset_id: string
   table_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1239,7 +1229,7 @@ export def "bigquery-tables-delete" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BIGQUERY_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BIGQUERY_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -1271,8 +1261,8 @@ export def "bigquery-tables-get" [
   dataset_id: string
   table_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1289,7 +1279,7 @@ export def "bigquery-tables-get" [
   --selected-fields: string # List of fields to return (comma-separated). If unspecified, all fields are returned
   --view: string@view-completer # Specifies the view that determines which table information is returned. By default, basic table information and storage statistics (STORAGE_STATS) are returned.
 ]: nothing -> record<cloneDefinition: record<baseTableReference: record<datasetId: string, projectId: string, tableId: string>, cloneTime: string>, clustering: record<fields: list<string>>, creationTime: string, defaultCollation: string, defaultRoundingMode: string, description: string, encryptionConfiguration: record<kmsKeyName: string>, etag: string, expirationTime: string, externalDataConfiguration: record<autodetect: bool, avroOptions: record<useAvroLogicalTypes: bool>, bigtableOptions: record<columnFamilies: list, ignoreUnspecifiedColumnFamilies: bool, readRowkeyAsString: bool>, compression: string, connectionId: string, csvOptions: record<allowJaggedRows: bool, allowQuotedNewlines: bool, encoding: string, fieldDelimiter: string, null_marker: string, preserveAsciiControlCharacters: bool, quote: string, skipLeadingRows: string>, decimalTargetTypes: list<string>, googleSheetsOptions: record<range: string, skipLeadingRows: string>, hivePartitioningOptions: record<mode: string, requirePartitionFilter: bool, sourceUriPrefix: string>, ignoreUnknownValues: bool, maxBadRecords: int, metadataCacheMode: string, objectMetadata: string, parquetOptions: record<enableListInference: bool, enumAsString: bool>, referenceFileSchemaUri: string, schema: record<fields: list>, sourceFormat: string, sourceUris: list<string>>, friendlyName: string, id: string, kind: string, labels: record, lastModifiedTime: string, location: string, materializedView: record<allow_non_incremental_definition: bool, enableRefresh: bool, lastRefreshTime: string, maxStaleness: string, query: string, refreshIntervalMs: string>, maxStaleness: string, model: record<modelOptions: record<labels: list, lossType: string, modelType: string>, trainingRuns: list<record>>, numBytes: string, numLongTermBytes: string, numPhysicalBytes: string, numRows: string, num_active_logical_bytes: string, num_active_physical_bytes: string, num_long_term_logical_bytes: string, num_long_term_physical_bytes: string, num_partitions: string, num_time_travel_physical_bytes: string, num_total_logical_bytes: string, num_total_physical_bytes: string, rangePartitioning: record<field: string, range: record<end: string, interval: string, start: string>>, requirePartitionFilter: bool, schema: record<fields: list<record>>, selfLink: string, snapshotDefinition: record<baseTableReference: record<datasetId: string, projectId: string, tableId: string>, snapshotTime: string>, streamingBuffer: record<estimatedBytes: string, estimatedRows: string, oldestEntryTime: string>, tableReference: record<datasetId: string, projectId: string, tableId: string>, timePartitioning: record<expirationMs: string, field: string, requirePartitionFilter: bool, type: string>, type: string, view: record<query: string, useExplicitColumnNames: bool, useLegacySql: bool, userDefinedFunctionResources: list<record>>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BIGQUERY_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BIGQUERY_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -1334,8 +1324,8 @@ export def "bigquery-tables-patch" [
   dataset_id: string
   table_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1393,7 +1383,7 @@ export def "bigquery-tables-patch" [
   --view: record # shape: {query?: string, useExplicitColumnNames?: bool, useLegacySql?: bool, userDefinedFunctionResources?: list}
 ]: any -> record<cloneDefinition: record<baseTableReference: record<datasetId: string, projectId: string, tableId: string>, cloneTime: string>, clustering: record<fields: list<string>>, creationTime: string, defaultCollation: string, defaultRoundingMode: string, description: string, encryptionConfiguration: record<kmsKeyName: string>, etag: string, expirationTime: string, externalDataConfiguration: record<autodetect: bool, avroOptions: record<useAvroLogicalTypes: bool>, bigtableOptions: record<columnFamilies: list, ignoreUnspecifiedColumnFamilies: bool, readRowkeyAsString: bool>, compression: string, connectionId: string, csvOptions: record<allowJaggedRows: bool, allowQuotedNewlines: bool, encoding: string, fieldDelimiter: string, null_marker: string, preserveAsciiControlCharacters: bool, quote: string, skipLeadingRows: string>, decimalTargetTypes: list<string>, googleSheetsOptions: record<range: string, skipLeadingRows: string>, hivePartitioningOptions: record<mode: string, requirePartitionFilter: bool, sourceUriPrefix: string>, ignoreUnknownValues: bool, maxBadRecords: int, metadataCacheMode: string, objectMetadata: string, parquetOptions: record<enableListInference: bool, enumAsString: bool>, referenceFileSchemaUri: string, schema: record<fields: list>, sourceFormat: string, sourceUris: list<string>>, friendlyName: string, id: string, kind: string, labels: record, lastModifiedTime: string, location: string, materializedView: record<allow_non_incremental_definition: bool, enableRefresh: bool, lastRefreshTime: string, maxStaleness: string, query: string, refreshIntervalMs: string>, maxStaleness: string, model: record<modelOptions: record<labels: list, lossType: string, modelType: string>, trainingRuns: list<record>>, numBytes: string, numLongTermBytes: string, numPhysicalBytes: string, numRows: string, num_active_logical_bytes: string, num_active_physical_bytes: string, num_long_term_logical_bytes: string, num_long_term_physical_bytes: string, num_partitions: string, num_time_travel_physical_bytes: string, num_total_logical_bytes: string, num_total_physical_bytes: string, rangePartitioning: record<field: string, range: record<end: string, interval: string, start: string>>, requirePartitionFilter: bool, schema: record<fields: list<record>>, selfLink: string, snapshotDefinition: record<baseTableReference: record<datasetId: string, projectId: string, tableId: string>, snapshotTime: string>, streamingBuffer: record<estimatedBytes: string, estimatedRows: string, oldestEntryTime: string>, tableReference: record<datasetId: string, projectId: string, tableId: string>, timePartitioning: record<expirationMs: string, field: string, requirePartitionFilter: bool, type: string>, type: string, view: record<query: string, useExplicitColumnNames: bool, useLegacySql: bool, userDefinedFunctionResources: list<record>>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BIGQUERY_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BIGQUERY_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -1440,8 +1430,8 @@ export def "bigquery-tables-update" [
   dataset_id: string
   table_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1499,7 +1489,7 @@ export def "bigquery-tables-update" [
   --view: record # shape: {query?: string, useExplicitColumnNames?: bool, useLegacySql?: bool, userDefinedFunctionResources?: list}
 ]: any -> record<cloneDefinition: record<baseTableReference: record<datasetId: string, projectId: string, tableId: string>, cloneTime: string>, clustering: record<fields: list<string>>, creationTime: string, defaultCollation: string, defaultRoundingMode: string, description: string, encryptionConfiguration: record<kmsKeyName: string>, etag: string, expirationTime: string, externalDataConfiguration: record<autodetect: bool, avroOptions: record<useAvroLogicalTypes: bool>, bigtableOptions: record<columnFamilies: list, ignoreUnspecifiedColumnFamilies: bool, readRowkeyAsString: bool>, compression: string, connectionId: string, csvOptions: record<allowJaggedRows: bool, allowQuotedNewlines: bool, encoding: string, fieldDelimiter: string, null_marker: string, preserveAsciiControlCharacters: bool, quote: string, skipLeadingRows: string>, decimalTargetTypes: list<string>, googleSheetsOptions: record<range: string, skipLeadingRows: string>, hivePartitioningOptions: record<mode: string, requirePartitionFilter: bool, sourceUriPrefix: string>, ignoreUnknownValues: bool, maxBadRecords: int, metadataCacheMode: string, objectMetadata: string, parquetOptions: record<enableListInference: bool, enumAsString: bool>, referenceFileSchemaUri: string, schema: record<fields: list>, sourceFormat: string, sourceUris: list<string>>, friendlyName: string, id: string, kind: string, labels: record, lastModifiedTime: string, location: string, materializedView: record<allow_non_incremental_definition: bool, enableRefresh: bool, lastRefreshTime: string, maxStaleness: string, query: string, refreshIntervalMs: string>, maxStaleness: string, model: record<modelOptions: record<labels: list, lossType: string, modelType: string>, trainingRuns: list<record>>, numBytes: string, numLongTermBytes: string, numPhysicalBytes: string, numRows: string, num_active_logical_bytes: string, num_active_physical_bytes: string, num_long_term_logical_bytes: string, num_long_term_physical_bytes: string, num_partitions: string, num_time_travel_physical_bytes: string, num_total_logical_bytes: string, num_total_physical_bytes: string, rangePartitioning: record<field: string, range: record<end: string, interval: string, start: string>>, requirePartitionFilter: bool, schema: record<fields: list<record>>, selfLink: string, snapshotDefinition: record<baseTableReference: record<datasetId: string, projectId: string, tableId: string>, snapshotTime: string>, streamingBuffer: record<estimatedBytes: string, estimatedRows: string, oldestEntryTime: string>, tableReference: record<datasetId: string, projectId: string, tableId: string>, timePartitioning: record<expirationMs: string, field: string, requirePartitionFilter: bool, type: string>, type: string, view: record<query: string, useExplicitColumnNames: bool, useLegacySql: bool, userDefinedFunctionResources: list<record>>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BIGQUERY_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BIGQUERY_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -1533,8 +1523,8 @@ export def "bigquery-tabledata-list" [
   dataset_id: string
   table_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1553,7 +1543,7 @@ export def "bigquery-tabledata-list" [
   --selected-fields: string # List of fields to return (comma-separated). If unspecified, all fields are returned
   --start-index: string # Zero-based index of the starting row to read
 ]: nothing -> record<etag: string, kind: string, pageToken: string, rows: table<f: list>, totalRows: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BIGQUERY_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BIGQUERY_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -1586,8 +1576,8 @@ export def "bigquery-tabledata-insert-all" [
   dataset_id: string
   table_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1608,7 +1598,7 @@ export def "bigquery-tabledata-insert-all" [
   --template-suffix: string # If specified, treats the destination table as a base template, and inserts the rows into an instance table named "{destination}{templateSuffix}". BigQuery will manage creation of the instance table, using the schema of the base template table. See https://cloud.google.com/bigquery/streaming-data-into-bigquery#template-tables for considerations when working with templates tables.
 ]: any -> record<insertErrors: table<errors: list, index: int>, kind: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BIGQUERY_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BIGQUERY_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -1642,8 +1632,8 @@ export def "bigquery-row-access-policies-list" [
   dataset_id: string
   table_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1660,7 +1650,7 @@ export def "bigquery-row-access-policies-list" [
   --page-size: int # The maximum number of results to return in a single response page. Leverage the page tokens to iterate through the entire collection.
   --page-token: string # Page token, returned by a previous call, to request the next page of results.
 ]: nothing -> record<nextPageToken: string, rowAccessPolicies: table<creationTime: string, etag: string, filterPredicate: string, lastModifiedTime: string, rowAccessPolicyReference: record>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BIGQUERY_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BIGQUERY_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'datasetId' must be non-empty" } }
@@ -1690,8 +1680,8 @@ export def "bigquery-row-access-policies-list" [
 export def "bigquery-jobs-list" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1714,7 +1704,7 @@ export def "bigquery-jobs-list" [
   --projection: string@projection-completer # Restrict information returned to a set of selected fields
   --state-filter: list<string> # Filter for job state
 ]: nothing -> record<etag: string, jobs: table<configuration: record, errorResult: record, id: string, jobReference: record, kind: string, state: string, statistics: record, status: record, user_email: string>, kind: string, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BIGQUERY_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BIGQUERY_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "allUsers" $all_users "scalar") (serialize-qp "maxCreationTime" $max_creation_time "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "minCreationTime" $min_creation_time "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "parentJobId" $parent_job_id "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "stateFilter" $state_filter "multi")] | flatten | str join "&"
@@ -1742,8 +1732,8 @@ export def "bigquery-jobs-list" [
 export def "bigquery-jobs-insert" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1760,7 +1750,7 @@ export def "bigquery-jobs-insert" [
   --body: any
 ]: any -> record<configuration: record<copy: record<createDisposition: string, destinationEncryptionConfiguration: record, destinationExpirationTime: any, destinationTable: record, operationType: string, sourceTable: record, sourceTables: list, writeDisposition: string>, dryRun: bool, extract: record<compression: string, destinationFormat: string, destinationUri: string, destinationUris: list, fieldDelimiter: string, printHeader: bool, sourceModel: record, sourceTable: record, useAvroLogicalTypes: bool>, jobTimeoutMs: string, jobType: string, labels: record, load: record<allowJaggedRows: bool, allowQuotedNewlines: bool, autodetect: bool, clustering: record, connectionProperties: list, createDisposition: string, createSession: bool, decimalTargetTypes: list, destinationEncryptionConfiguration: record, destinationTable: record, destinationTableProperties: record, encoding: string, fieldDelimiter: string, hivePartitioningOptions: record, ignoreUnknownValues: bool, jsonExtension: string, maxBadRecords: int, nullMarker: string, parquetOptions: record, preserveAsciiControlCharacters: bool, projectionFields: list, quote: string, rangePartitioning: record, referenceFileSchemaUri: string, schema: record, schemaInline: string, schemaInlineFormat: string, schemaUpdateOptions: list, skipLeadingRows: int, sourceFormat: string, sourceUris: list, timePartitioning: record, useAvroLogicalTypes: bool, writeDisposition: string>, query: record<allowLargeResults: bool, clustering: record, connectionProperties: list, continuous: bool, createDisposition: string, createSession: bool, defaultDataset: record, destinationEncryptionConfiguration: record, destinationTable: record, flattenResults: bool, maximumBillingTier: int, maximumBytesBilled: string, parameterMode: string, preserveNulls: bool, priority: string, query: string, queryParameters: list, rangePartitioning: record, schemaUpdateOptions: list, tableDefinitions: record, timePartitioning: record, useLegacySql: bool, useQueryCache: bool, userDefinedFunctionResources: list, writeDisposition: string>>, etag: string, id: string, jobReference: record<jobId: string, location: string, projectId: string>, kind: string, selfLink: string, statistics: record<completionRatio: float, copy: record<copied_logical_bytes: string, copied_rows: string>, creationTime: string, dataMaskingStatistics: record<dataMaskingApplied: bool>, endTime: string, extract: record<destinationUriFileCounts: list, inputBytes: string>, load: record<badRecords: string, inputFileBytes: string, inputFiles: string, outputBytes: string, outputRows: string>, numChildJobs: string, parentJobId: string, query: record<biEngineStatistics: record, billingTier: int, cacheHit: bool, ddlAffectedRowAccessPolicyCount: string, ddlDestinationTable: record, ddlOperationPerformed: string, ddlTargetDataset: record, ddlTargetRoutine: record, ddlTargetRowAccessPolicy: record, ddlTargetTable: record, dmlStats: record, estimatedBytesProcessed: string, mlStatistics: record, modelTraining: record, modelTrainingCurrentIteration: int, modelTrainingExpectedTotalIteration: string, numDmlAffectedRows: string, queryPlan: list, referencedRoutines: list, referencedTables: list, reservationUsage: list, schema: record, searchStatistics: record, sparkStatistics: record, statementType: string, timeline: list, totalBytesBilled: string, totalBytesProcessed: string, totalBytesProcessedAccuracy: string, totalPartitionsProcessed: string, totalSlotMs: string, transferredBytes: string, undeclaredQueryParameters: list>, quotaDeferments: list<string>, reservationUsage: list<record>, reservation_id: string, rowLevelSecurityStatistics: record<rowLevelSecurityApplied: bool>, scriptStatistics: record<evaluationKind: string, stackFrames: list>, sessionInfo: record<sessionId: string>, startTime: string, totalBytesProcessed: string, totalSlotMs: string, transactionInfo: record<transactionId: string>>, status: record<errorResult: record<debugInfo: string, location: string, message: string, reason: string>, errors: list<record>, state: string>, user_email: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BIGQUERY_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BIGQUERY_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
@@ -1791,8 +1781,8 @@ export def "bigquery-jobs-get" [
   project_id: string
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1808,7 +1798,7 @@ export def "bigquery-jobs-get" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --location: string # The geographic location of the job. Required except for US and EU. See details at https://cloud.google.com/bigquery/docs/locations#specifying_your_location.
 ]: nothing -> record<configuration: record<copy: record<createDisposition: string, destinationEncryptionConfiguration: record, destinationExpirationTime: any, destinationTable: record, operationType: string, sourceTable: record, sourceTables: list, writeDisposition: string>, dryRun: bool, extract: record<compression: string, destinationFormat: string, destinationUri: string, destinationUris: list, fieldDelimiter: string, printHeader: bool, sourceModel: record, sourceTable: record, useAvroLogicalTypes: bool>, jobTimeoutMs: string, jobType: string, labels: record, load: record<allowJaggedRows: bool, allowQuotedNewlines: bool, autodetect: bool, clustering: record, connectionProperties: list, createDisposition: string, createSession: bool, decimalTargetTypes: list, destinationEncryptionConfiguration: record, destinationTable: record, destinationTableProperties: record, encoding: string, fieldDelimiter: string, hivePartitioningOptions: record, ignoreUnknownValues: bool, jsonExtension: string, maxBadRecords: int, nullMarker: string, parquetOptions: record, preserveAsciiControlCharacters: bool, projectionFields: list, quote: string, rangePartitioning: record, referenceFileSchemaUri: string, schema: record, schemaInline: string, schemaInlineFormat: string, schemaUpdateOptions: list, skipLeadingRows: int, sourceFormat: string, sourceUris: list, timePartitioning: record, useAvroLogicalTypes: bool, writeDisposition: string>, query: record<allowLargeResults: bool, clustering: record, connectionProperties: list, continuous: bool, createDisposition: string, createSession: bool, defaultDataset: record, destinationEncryptionConfiguration: record, destinationTable: record, flattenResults: bool, maximumBillingTier: int, maximumBytesBilled: string, parameterMode: string, preserveNulls: bool, priority: string, query: string, queryParameters: list, rangePartitioning: record, schemaUpdateOptions: list, tableDefinitions: record, timePartitioning: record, useLegacySql: bool, useQueryCache: bool, userDefinedFunctionResources: list, writeDisposition: string>>, etag: string, id: string, jobReference: record<jobId: string, location: string, projectId: string>, kind: string, selfLink: string, statistics: record<completionRatio: float, copy: record<copied_logical_bytes: string, copied_rows: string>, creationTime: string, dataMaskingStatistics: record<dataMaskingApplied: bool>, endTime: string, extract: record<destinationUriFileCounts: list, inputBytes: string>, load: record<badRecords: string, inputFileBytes: string, inputFiles: string, outputBytes: string, outputRows: string>, numChildJobs: string, parentJobId: string, query: record<biEngineStatistics: record, billingTier: int, cacheHit: bool, ddlAffectedRowAccessPolicyCount: string, ddlDestinationTable: record, ddlOperationPerformed: string, ddlTargetDataset: record, ddlTargetRoutine: record, ddlTargetRowAccessPolicy: record, ddlTargetTable: record, dmlStats: record, estimatedBytesProcessed: string, mlStatistics: record, modelTraining: record, modelTrainingCurrentIteration: int, modelTrainingExpectedTotalIteration: string, numDmlAffectedRows: string, queryPlan: list, referencedRoutines: list, referencedTables: list, reservationUsage: list, schema: record, searchStatistics: record, sparkStatistics: record, statementType: string, timeline: list, totalBytesBilled: string, totalBytesProcessed: string, totalBytesProcessedAccuracy: string, totalPartitionsProcessed: string, totalSlotMs: string, transferredBytes: string, undeclaredQueryParameters: list>, quotaDeferments: list<string>, reservationUsage: list<record>, reservation_id: string, rowLevelSecurityStatistics: record<rowLevelSecurityApplied: bool>, scriptStatistics: record<evaluationKind: string, stackFrames: list>, sessionInfo: record<sessionId: string>, startTime: string, totalBytesProcessed: string, totalSlotMs: string, transactionInfo: record<transactionId: string>>, status: record<errorResult: record<debugInfo: string, location: string, message: string, reason: string>, errors: list<record>, state: string>, user_email: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BIGQUERY_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BIGQUERY_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
@@ -1838,8 +1828,8 @@ export def "bigquery-jobs-cancel" [
   project_id: string
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1855,7 +1845,7 @@ export def "bigquery-jobs-cancel" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --location: string # The geographic location of the job. Required except for US and EU. See details at https://cloud.google.com/bigquery/docs/locations#specifying_your_location.
 ]: nothing -> record<job: record<configuration: record<copy: record, dryRun: bool, extract: record, jobTimeoutMs: string, jobType: string, labels: record, load: record, query: record>, etag: string, id: string, jobReference: record<jobId: string, location: string, projectId: string>, kind: string, selfLink: string, statistics: record<completionRatio: float, copy: record, creationTime: string, dataMaskingStatistics: record, endTime: string, extract: record, load: record, numChildJobs: string, parentJobId: string, query: record, quotaDeferments: list, reservationUsage: list, reservation_id: string, rowLevelSecurityStatistics: record, scriptStatistics: record, sessionInfo: record, startTime: string, totalBytesProcessed: string, totalSlotMs: string, transactionInfo: record>, status: record<errorResult: record, errors: list, state: string>, user_email: string>, kind: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BIGQUERY_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BIGQUERY_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
@@ -1885,8 +1875,8 @@ export def "bigquery-jobs-delete" [
   project_id: string
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1902,7 +1892,7 @@ export def "bigquery-jobs-delete" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --location: string # The geographic location of the job. Required. See details at: https://cloud.google.com/bigquery/docs/locations#specifying_your_location.
 ]: nothing -> any {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BIGQUERY_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BIGQUERY_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
@@ -1934,8 +1924,8 @@ export def "bigquery-jobs-delete" [
 export def "bigquery-jobs-query" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1969,7 +1959,7 @@ export def "bigquery-jobs-query" [
   --use-query-cache: oneof<nothing, bool> # [Optional] Whether to look for the result in the query cache. The query cache is a best-effort cache that will be flushed whenever tables in the query are modified. The default value is true. (default: true)
 ]: any -> record<cacheHit: bool, dmlStats: record<deletedRowCount: string, insertedRowCount: string, updatedRowCount: string>, errors: table<debugInfo: string, location: string, message: string, reason: string>, jobComplete: bool, jobReference: record<jobId: string, location: string, projectId: string>, kind: string, numDmlAffectedRows: string, pageToken: string, rows: table<f: list>, schema: record<fields: list<record>>, sessionInfo: record<sessionId: string>, totalBytesProcessed: string, totalRows: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BIGQUERY_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BIGQUERY_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
@@ -2000,8 +1990,8 @@ export def "bigquery-jobs-get-query-results" [
   project_id: string
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2021,7 +2011,7 @@ export def "bigquery-jobs-get-query-results" [
   --start-index: string # Zero-based index of the starting row
   --timeout-ms: int # How long to wait for the query to complete, in milliseconds, before returning. Default is 10 seconds. If the timeout passes before the job completes, the 'jobComplete' field in the response will be false
 ]: nothing -> record<cacheHit: bool, errors: table<debugInfo: string, location: string, message: string, reason: string>, etag: string, jobComplete: bool, jobReference: record<jobId: string, location: string, projectId: string>, kind: string, numDmlAffectedRows: string, pageToken: string, rows: table<f: list>, schema: record<fields: list<record>>, totalBytesProcessed: string, totalRows: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BIGQUERY_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BIGQUERY_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
@@ -2050,8 +2040,8 @@ export def "bigquery-jobs-get-query-results" [
 export def "bigquery-projects-get-service-account" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2066,7 +2056,7 @@ export def "bigquery-projects-get-service-account" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<email: string, kind: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BIGQUERY_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BIGQUERY_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
@@ -2095,8 +2085,8 @@ export def "bigquery-projects-get-service-account" [
 export def "bigquery-tables-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2113,7 +2103,7 @@ export def "bigquery-tables-get-iam-policy" [
   --options: record # Encapsulates settings provided to GetIamPolicy. — shape: {requestedPolicyVersion?: int}
 ]: any -> record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BIGQUERY_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BIGQUERY_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource | is-empty) { error make --unspanned { msg: "path parameter 'resource' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
@@ -2144,8 +2134,8 @@ export def "bigquery-tables-get-iam-policy" [
 export def "bigquery-tables-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2163,7 +2153,7 @@ export def "bigquery-tables-set-iam-policy" [
   --update-mask: string # OPTIONAL: A FieldMask specifying which fields of the policy to modify. Only the fields in the mask will be modified. If no mask is provided, the following default mask is used: `paths: "bindings, etag"` (format: google-fieldmask)
 ]: any -> record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BIGQUERY_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BIGQUERY_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource | is-empty) { error make --unspanned { msg: "path parameter 'resource' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
@@ -2193,8 +2183,8 @@ export def "bigquery-tables-set-iam-policy" [
 export def "bigquery-tables-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2211,7 +2201,7 @@ export def "bigquery-tables-test-iam-permissions" [
   --permissions: list<string> # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
 ]: any -> record<permissions: list<string>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o BIGQUERY_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o BIGQUERY_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource | is-empty) { error make --unspanned { msg: "path parameter 'resource' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"

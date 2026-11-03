@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "training-key" => { {scheme: $scheme, headers: {Training-Key: $token_val}, query: "", location: "header"} }
+    "training-key" => { {scheme: $scheme, headers: {"Training-Key": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -297,7 +297,7 @@ export def "create-project" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --name: string # Name of the project.
+  --name: string # Name of the project. (required)
   --description: string # The description of the project.
   --domain-id: string # The id of the domain to use for this project. Defaults to General. (format: uuid)
   --classification-type: string@classification-type-completer # The type of classifier to create for this project.
@@ -305,6 +305,7 @@ export def "create-project" [
 ]: nothing -> record<created: string, description: string, drModeEnabled: bool, id: string, lastModified: string, name: string, settings: record<classificationType: string, detectionParameters: string, domainId: string, imageProcessingSettings: record<augmentationMethods: record>, targetExportPlatforms: list<string>, useNegativeSet: bool>, status: string, thumbnailUri: string> {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "domainId" $domain_id "scalar") (serialize-qp "classificationType" $classification_type "scalar") (serialize-qp "targetExportPlatforms" $target_export_platforms "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/projects" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -338,10 +339,11 @@ export def "import-project" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-token: string # Token generated from the export project call.
+  --qp-token: string # Token generated from the export project call. (required)
 ]: nothing -> record<created: string, description: string, drModeEnabled: bool, id: string, lastModified: string, name: string, settings: record<classificationType: string, detectionParameters: string, domainId: string, imageProcessingSettings: record<augmentationMethods: record>, targetExportPlatforms: list<string>, useNegativeSet: bool>, status: string, thumbnailUri: string> {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/projects/import" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -375,7 +377,7 @@ export def "delete-project" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, message: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -534,7 +536,7 @@ export def "delete-images" [
   --image-ids: list<string> # Ids of the images to be deleted. Limited to 256 images per batch.
   --all-images: oneof<nothing, bool> # Flag to specify delete all images, specify this flag or a list of images. Using this flag will return a 202 response to indicate the images are being deleted.
   --all-iterations: oneof<nothing, bool> # Removes these images from all iterations, not just the current workspace. Using this flag will return a 202 response to indicate the images are being deleted.
-]: nothing -> record<code: string, message: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -585,8 +587,8 @@ export def "create-images-from-data" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["imageData"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["imageData"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -742,11 +744,12 @@ export def "delete-image-regions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --region-ids: list<string> # Regions to delete. Limited to 64.
-]: nothing -> record<code: string, message: string> {
+  --region-ids: list<string> # Regions to delete. Limited to 64. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
+  if ($region_ids == null) { error make --unspanned { msg: "required query parameter 'regionIds' missing: pass --region-ids" } }
   let qp = [(serialize-qp "regionIds" $region_ids "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/images/regions") $qp $auth.query)
   let accept_val = "*/*"
@@ -823,7 +826,7 @@ export def "query-suggested-images" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --iteration-id: string # IterationId to use for the suggested tags and regions. (format: uuid)
+  --iteration-id: string # IterationId to use for the suggested tags and regions. (required, format: uuid)
   --continuation: string # Continuation Id for database pagination. Initially null but later used to paginate.
   --max-count: int # Maximum number of results you want to be returned in the response. (format: int32)
   --session: string # SessionId for database query. Initially set to null but later used to paginate.
@@ -835,6 +838,7 @@ export def "query-suggested-images" [
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
+  if ($iteration_id == null) { error make --unspanned { msg: "required query parameter 'iterationId' missing: pass --iteration-id" } }
   let qp = [(serialize-qp "iterationId" $iteration_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/images/suggested") $qp $auth.query)
   let req_body = {"continuation": $continuation, "maxCount": $max_count, "session": $session, "sortBy": $sort_by, "tagIds": $tag_ids, "threshold": $threshold} | compact
@@ -871,7 +875,7 @@ export def "query-suggested-image-count" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --iteration-id: string # IterationId to use for the suggested tags and regions. (format: uuid)
+  --iteration-id: string # IterationId to use for the suggested tags and regions. (required, format: uuid)
   --tag-ids: list<string> # Existing TagIds in project to get suggested tags count for.
   --threshold: float # Confidence threshold to filter suggested tags on. (format: double)
 ]: any -> record {
@@ -879,6 +883,7 @@ export def "query-suggested-image-count" [
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
+  if ($iteration_id == null) { error make --unspanned { msg: "required query parameter 'iterationId' missing: pass --iteration-id" } }
   let qp = [(serialize-qp "iterationId" $iteration_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/images/suggested/count") $qp $auth.query)
   let req_body = {"tagIds": $tag_ids, "threshold": $threshold} | compact
@@ -997,12 +1002,14 @@ export def "delete-image-tags" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --image-ids: list<string> # Image ids. Limited to 64 images.
-  --tag-ids: list<string> # Tags to be deleted from the specified images. Limited to 20 tags.
-]: nothing -> record<code: string, message: string> {
+  --image-ids: list<string> # Image ids. Limited to 64 images. (required)
+  --tag-ids: list<string> # Tags to be deleted from the specified images. Limited to 20 tags. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
+  if ($image_ids == null) { error make --unspanned { msg: "required query parameter 'imageIds' missing: pass --image-ids" } }
+  if ($tag_ids == null) { error make --unspanned { msg: "required query parameter 'tagIds' missing: pass --tag-ids" } }
   let qp = [(serialize-qp "imageIds" $image_ids "csv") (serialize-qp "tagIds" $tag_ids "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/images/tags") $qp $auth.query)
   let accept_val = "*/*"
@@ -1278,7 +1285,7 @@ export def "delete-iteration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, message: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -1438,13 +1445,14 @@ export def "export-iteration" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --platform: string@platform-completer # The target platform.
+  --platform: string@platform-completer # The target platform. (required)
   --flavor: string@flavor-completer # The flavor of the target platform.
 ]: nothing -> record<downloadUri: string, flavor: string, newerVersionAvailable: bool, platform: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($iteration_id | is-empty) { error make --unspanned { msg: "path parameter 'iterationId' must be non-empty" } }
+  if ($platform == null) { error make --unspanned { msg: "required query parameter 'platform' missing: pass --platform" } }
   let qp = [(serialize-qp "platform" $platform "scalar") (serialize-qp "flavor" $flavor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), iteration_id: (encode-path-segment $iteration_id)} | format pattern "/projects/{project_id}/iterations/{iteration_id}/export") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1606,7 +1614,7 @@ export def "unpublish-iteration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, message: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -1645,13 +1653,15 @@ export def "publish-iteration" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --publish-name: string # The name to give the published iteration.
-  --prediction-id: string # The id of the prediction resource to publish to.
+  --publish-name: string # The name to give the published iteration. (required)
+  --prediction-id: string # The id of the prediction resource to publish to. (required)
 ]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($iteration_id | is-empty) { error make --unspanned { msg: "path parameter 'iterationId' must be non-empty" } }
+  if ($publish_name == null) { error make --unspanned { msg: "required query parameter 'publishName' missing: pass --publish-name" } }
+  if ($prediction_id == null) { error make --unspanned { msg: "required query parameter 'predictionId' missing: pass --prediction-id" } }
   let qp = [(serialize-qp "publishName" $publish_name "scalar") (serialize-qp "predictionId" $prediction_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), iteration_id: (encode-path-segment $iteration_id)} | format pattern "/projects/{project_id}/iterations/{iteration_id}/publish") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1685,11 +1695,12 @@ export def "delete-prediction" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list<string> # The prediction ids. Limited to 64.
-]: nothing -> record<code: string, message: string> {
+  --ids: list<string> # The prediction ids. Limited to 64. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
   let qp = [(serialize-qp "ids" $ids "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/predictions") $qp $auth.query)
   let accept_val = "*/*"
@@ -1788,8 +1799,8 @@ export def "quick-test-image" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["imageData"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["imageData"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -1903,13 +1914,14 @@ export def "create-tag" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --name: string # The tag name.
+  --name: string # The tag name. (required)
   --description: string # Optional description for the tag.
   --type: string@type-completer # Optional type for the tag.
 ]: nothing -> record<description: string, id: string, imageCount: int, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/tags") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1944,7 +1956,7 @@ export def "delete-tag" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, message: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -2068,12 +2080,14 @@ export def "suggest-tags-and-regions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --iteration-id: string # IterationId to use for tag and region suggestion. (format: uuid)
-  --image-ids: list<string> # Array of image ids tag suggestion are needed for. Use GetUntaggedImages API to get imageIds.
+  --iteration-id: string # IterationId to use for tag and region suggestion. (required, format: uuid)
+  --image-ids: list<string> # Array of image ids tag suggestion are needed for. Use GetUntaggedImages API to get imageIds. (required)
 ]: nothing -> table<created: string, id: string, iteration: string, predictionUncertainty: float, predictions: list<record>, project: string> {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
+  if ($iteration_id == null) { error make --unspanned { msg: "required query parameter 'iterationId' missing: pass --iteration-id" } }
+  if ($image_ids == null) { error make --unspanned { msg: "required query parameter 'imageIds' missing: pass --image-ids" } }
   let qp = [(serialize-qp "iterationId" $iteration_id "scalar") (serialize-qp "imageIds" $image_ids "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/tagsandregions/suggestions") $qp $auth.query)
   let accept_val = ($accept | default "application/json")

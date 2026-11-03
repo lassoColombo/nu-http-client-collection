@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -143,13 +143,14 @@ export def "dsc-compilation-job-list-by-automation-account" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # The filter to apply on the operation.
-  --api-version: string # Client Api Version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($automation_account_name | is-empty) { error make --unspanned { msg: "path parameter 'automationAccountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), automation_account_name: (encode-path-segment $automation_account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/compilationjobs") $qp $auth.query)
   let accept_val = "application/json"
@@ -187,14 +188,15 @@ export def "dsc-compilation-job-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<configuration: record<name: string>, creationTime: string, endTime: string, exception: string, jobId: string, lastModifiedTime: string, lastStatusModifiedTime: string, parameters: record, provisioningState: string, runOn: string, startTime: string, startedBy: string, status: string, statusDetails: string>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<configuration: record<name: string>, creationTime: string, endTime: string, exception: string, jobId: string, lastModifiedTime: string, lastStatusModifiedTime: string, parameters: record, provisioningState: string, runOn: string, startTime: string, startedBy: string, status: string, statusDetails: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($automation_account_name | is-empty) { error make --unspanned { msg: "path parameter 'automationAccountName' must be non-empty" } }
   if ($compilation_job_name | is-empty) { error make --unspanned { msg: "path parameter 'compilationJobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), automation_account_name: (encode-path-segment $automation_account_name), compilation_job_name: (encode-path-segment $compilation_job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/compilationjobs/{compilation_job_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -233,12 +235,12 @@ export def "dsc-compilation-job-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --location: string # Gets or sets the location of the resource.
   --name: string # Gets or sets name of the resource.
   properties: any # The parameters supplied to the create compilation job operation. — shape: {configuration: any, incrementNodeConfigurationBuild?: bool, parameters?: record}
   --tags: record # Gets or sets the tags attached to the resource.
-]: any -> record<properties: record<configuration: record<name: string>, creationTime: string, endTime: string, exception: string, jobId: string, lastModifiedTime: string, lastStatusModifiedTime: string, parameters: record, provisioningState: string, runOn: string, startTime: string, startedBy: string, status: string, statusDetails: string>> {
+]: any -> record<properties: record<configuration: record<name: string>, creationTime: string, endTime: string, exception: string, jobId: string, lastModifiedTime: string, lastStatusModifiedTime: string, parameters: record, provisioningState: string, runOn: string, startTime: string, startedBy: string, status: string, statusDetails: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -246,6 +248,7 @@ export def "dsc-compilation-job-create" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($automation_account_name | is-empty) { error make --unspanned { msg: "path parameter 'automationAccountName' must be non-empty" } }
   if ($compilation_job_name | is-empty) { error make --unspanned { msg: "path parameter 'compilationJobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), automation_account_name: (encode-path-segment $automation_account_name), compilation_job_name: (encode-path-segment $compilation_job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/compilationjobs/{compilation_job_name}") $qp $auth.query)
   let req_body = {"location": $location, "name": $name, "properties": $properties, "tags": $tags} | compact
@@ -285,7 +288,7 @@ export def "dsc-compilation-job-stream-list-by-job" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<nextLink: string, value: table<id: string, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -293,6 +296,7 @@ export def "dsc-compilation-job-stream-list-by-job" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($automation_account_name | is-empty) { error make --unspanned { msg: "path parameter 'automationAccountName' must be non-empty" } }
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), automation_account_name: (encode-path-segment $automation_account_name), job_id: (encode-path-segment $job_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/compilationjobs/{job_id}/streams") $qp $auth.query)
   let accept_val = "application/json"
@@ -331,7 +335,7 @@ export def "dsc-compilation-job-get-stream" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<id: string, properties: record<jobStreamId: string, streamText: string, streamType: string, summary: string, time: string, value: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -340,6 +344,7 @@ export def "dsc-compilation-job-get-stream" [
   if ($automation_account_name | is-empty) { error make --unspanned { msg: "path parameter 'automationAccountName' must be non-empty" } }
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   if ($job_stream_id | is-empty) { error make --unspanned { msg: "path parameter 'jobStreamId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), automation_account_name: (encode-path-segment $automation_account_name), job_id: (encode-path-segment $job_id), job_stream_id: (encode-path-segment $job_stream_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/compilationjobs/{job_id}/streams/{job_stream_id}") $qp $auth.query)
   let accept_val = "application/json"

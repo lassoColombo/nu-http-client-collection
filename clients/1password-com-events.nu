@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -138,7 +138,7 @@ export def "get-auth-introspect" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<Features: list<string>, IssuedAt: string, UUID: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/auth/introspect" $auth.query)
@@ -176,7 +176,7 @@ export def "get-item-usages" [
   --end-time: string # format: date-time, e.g. 2020-06-11T16:32:50-03:00
   --limit: float
   --start-time: string # format: date-time, e.g. 2020-06-11T16:32:50-03:00
-]: any -> any {
+]: any -> record<items: table<action: any, client: record, item_uuid: string, timestamp: string, used_version: int, user: record, uuid: string, vault_uuid: string>, cursor: string, has_more: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -217,7 +217,7 @@ export def "get-sign-in-attempts" [
   --end-time: string # format: date-time, e.g. 2020-06-11T16:32:50-03:00
   --limit: float
   --start-time: string # format: date-time, e.g. 2020-06-11T16:32:50-03:00
-]: any -> any {
+]: any -> record<items: table<category: string, client: record, country: string, details: record, session_uuid: string, target_user: record, timestamp: string, type: string, uuid: string>, cursor: string, has_more: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

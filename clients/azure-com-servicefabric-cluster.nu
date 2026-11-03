@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -114,6 +114,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def api-version-completer [] { ["2019-03-01-preview"] }
+def environment-completer [] { ["Linux" "Windows"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -152,10 +153,11 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the Service Fabric resource provider API
+  --api-version: string # The version of the Service Fabric resource provider API (required)
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string, nextLink: string, origin: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.ServiceFabric/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -189,11 +191,12 @@ export def "clusters-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # The version of the Service Fabric resource provider API. This is a required parameter and it's value must be "2019-03-01-preview" for this specification. (default: 2019-03-01-preview)
-]: nothing -> record<nextLink: string, value: list<record>> {
+  --api-version: string@api-version-completer # The version of the Service Fabric resource provider API. This is a required parameter and it's value must be "2019-03-01-preview" for this specification. (required, default: 2019-03-01-preview)
+]: nothing -> record<nextLink: string, value: table<etag: string, id: string, location: string, name: string, tags: record, type: string, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  let api_version = ($api_version | default "2019-03-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.ServiceFabric/clusters") $qp $auth.query)
   let accept_val = "application/json"
@@ -228,12 +231,13 @@ export def "cluster-versions-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # The version of the Service Fabric resource provider API. This is a required parameter and it's value must be "2019-03-01-preview" for this specification. (default: 2019-03-01-preview)
+  --api-version: string@api-version-completer # The version of the Service Fabric resource provider API. This is a required parameter and it's value must be "2019-03-01-preview" for this specification. (required, default: 2019-03-01-preview)
 ]: nothing -> record<nextLink: string, value: table<id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  let api_version = ($api_version | default "2019-03-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.ServiceFabric/locations/{location}/clusterVersions") $qp $auth.query)
   let accept_val = "application/json"
@@ -269,13 +273,14 @@ export def "cluster-versions-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # The version of the Service Fabric resource provider API. This is a required parameter and it's value must be "2019-03-01-preview" for this specification. (default: 2019-03-01-preview)
+  --api-version: string@api-version-completer # The version of the Service Fabric resource provider API. This is a required parameter and it's value must be "2019-03-01-preview" for this specification. (required, default: 2019-03-01-preview)
 ]: nothing -> record<nextLink: string, value: table<id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
   if ($cluster_version | is-empty) { error make --unspanned { msg: "path parameter 'clusterVersion' must be non-empty" } }
+  let api_version = ($api_version | default "2019-03-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location), cluster_version: (encode-path-segment $cluster_version)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.ServiceFabric/locations/{location}/clusterVersions/{cluster_version}") $qp $auth.query)
   let accept_val = "application/json"
@@ -301,7 +306,7 @@ export def "cluster-versions-get" [
 export def "cluster-versions-list-by-environment" [
   subscription_id: string
   location: string
-  environment: string
+  environment: string@environment-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -311,13 +316,14 @@ export def "cluster-versions-list-by-environment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # The version of the Service Fabric resource provider API. This is a required parameter and it's value must be "2019-03-01-preview" for this specification. (default: 2019-03-01-preview)
+  --api-version: string@api-version-completer # The version of the Service Fabric resource provider API. This is a required parameter and it's value must be "2019-03-01-preview" for this specification. (required, default: 2019-03-01-preview)
 ]: nothing -> record<nextLink: string, value: table<id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
   if ($environment | is-empty) { error make --unspanned { msg: "path parameter 'environment' must be non-empty" } }
+  let api_version = ($api_version | default "2019-03-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location), environment: (encode-path-segment $environment)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.ServiceFabric/locations/{location}/environments/{environment}/clusterVersions") $qp $auth.query)
   let accept_val = "application/json"
@@ -343,7 +349,7 @@ export def "cluster-versions-list-by-environment" [
 export def "cluster-versions-get-by-environment" [
   subscription_id: string
   location: string
-  environment: string
+  environment: string@environment-completer
   cluster_version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -354,7 +360,7 @@ export def "cluster-versions-get-by-environment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # The version of the Service Fabric resource provider API. This is a required parameter and it's value must be "2019-03-01-preview" for this specification. (default: 2019-03-01-preview)
+  --api-version: string@api-version-completer # The version of the Service Fabric resource provider API. This is a required parameter and it's value must be "2019-03-01-preview" for this specification. (required, default: 2019-03-01-preview)
 ]: nothing -> record<nextLink: string, value: table<id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -362,6 +368,7 @@ export def "cluster-versions-get-by-environment" [
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
   if ($environment | is-empty) { error make --unspanned { msg: "path parameter 'environment' must be non-empty" } }
   if ($cluster_version | is-empty) { error make --unspanned { msg: "path parameter 'clusterVersion' must be non-empty" } }
+  let api_version = ($api_version | default "2019-03-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location), environment: (encode-path-segment $environment), cluster_version: (encode-path-segment $cluster_version)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.ServiceFabric/locations/{location}/environments/{environment}/clusterVersions/{cluster_version}") $qp $auth.query)
   let accept_val = "application/json"
@@ -397,13 +404,14 @@ export def "clusters-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # The version of the Service Fabric resource provider API. This is a required parameter and it's value must be "2019-03-01-preview" for this specification. (default: 2019-03-01-preview)
-]: nothing -> record<error: record<code: string, message: string>> {
+  --api-version: string@api-version-completer # The version of the Service Fabric resource provider API. This is a required parameter and it's value must be "2019-03-01-preview" for this specification. (required, default: 2019-03-01-preview)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($cluster_name | is-empty) { error make --unspanned { msg: "path parameter 'clusterName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-03-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabric/clusters/{cluster_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -439,13 +447,14 @@ export def "clusters-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # The version of the Service Fabric resource provider API. This is a required parameter and it's value must be "2019-03-01-preview" for this specification. (default: 2019-03-01-preview)
-]: nothing -> record {
+  --api-version: string@api-version-completer # The version of the Service Fabric resource provider API. This is a required parameter and it's value must be "2019-03-01-preview" for this specification. (required, default: 2019-03-01-preview)
+]: nothing -> record<etag: string, id: string, location: string, name: string, tags: record, type: string, properties: record<addOnFeatures: list<string>, availableClusterVersions: list<record>, azureActiveDirectory: record<clientApplication: string, clusterApplication: string, tenantId: string>, certificate: record<thumbprint: string, thumbprintSecondary: string, x509StoreName: string>, certificateCommonNames: record<commonNames: list, x509StoreName: string>, clientCertificateCommonNames: list<record>, clientCertificateThumbprints: list<record>, clusterCodeVersion: string, clusterEndpoint: string, clusterId: string, clusterState: string, diagnosticsStorageAccountConfig: record<blobEndpoint: string, protectedAccountKeyName: string, queueEndpoint: string, storageAccountName: string, tableEndpoint: string>, eventStoreServiceEnabled: bool, fabricSettings: list<record>, managementEndpoint: string, nodeTypes: list<record>, provisioningState: string, reliabilityLevel: string, reverseProxyCertificate: record<thumbprint: string, thumbprintSecondary: string, x509StoreName: string>, reverseProxyCertificateCommonNames: record<commonNames: list, x509StoreName: string>, upgradeDescription: record<deltaHealthPolicy: record, forceRestart: bool, healthCheckRetryTimeout: string, healthCheckStableDuration: string, healthCheckWaitDuration: string, healthPolicy: record, upgradeDomainTimeout: string, upgradeReplicaSetCheckTimeout: string, upgradeTimeout: string>, upgradeMode: string, vmImage: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($cluster_name | is-empty) { error make --unspanned { msg: "path parameter 'clusterName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-03-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabric/clusters/{cluster_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -482,16 +491,17 @@ export def "clusters-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # The version of the Service Fabric resource provider API. This is a required parameter and it's value must be "2019-03-01-preview" for this specification. (default: 2019-03-01-preview)
+  --api-version: string@api-version-completer # The version of the Service Fabric resource provider API. This is a required parameter and it's value must be "2019-03-01-preview" for this specification. (required, default: 2019-03-01-preview)
   --properties: any # Describes the cluster resource properties that can be updated during PATCH operation. — shape: {addOnFeatures?: list<string>, certificate?: any, certificateCommonNames?: any, clientCertificateCommonNames?: list, clientCertificateThumbprints?: list, clusterCodeVersion?: string, eventStoreServiceEnabled?: bool, fabricSettings?: list, nodeTypes?: list, reliabilityLevel?: "None"|"Bronze"|"Silver"|"Gold"|"Platinum", reverseProxyCertificate?: any, upgradeDescription?: any, upgradeMode?: "Automatic"|"Manual"}
   --tags: record # Cluster update parameters
-]: any -> record {
+]: any -> record<etag: string, id: string, location: string, name: string, tags: record, type: string, properties: record<addOnFeatures: list<string>, availableClusterVersions: list<record>, azureActiveDirectory: record<clientApplication: string, clusterApplication: string, tenantId: string>, certificate: record<thumbprint: string, thumbprintSecondary: string, x509StoreName: string>, certificateCommonNames: record<commonNames: list, x509StoreName: string>, clientCertificateCommonNames: list<record>, clientCertificateThumbprints: list<record>, clusterCodeVersion: string, clusterEndpoint: string, clusterId: string, clusterState: string, diagnosticsStorageAccountConfig: record<blobEndpoint: string, protectedAccountKeyName: string, queueEndpoint: string, storageAccountName: string, tableEndpoint: string>, eventStoreServiceEnabled: bool, fabricSettings: list<record>, managementEndpoint: string, nodeTypes: list<record>, provisioningState: string, reliabilityLevel: string, reverseProxyCertificate: record<thumbprint: string, thumbprintSecondary: string, x509StoreName: string>, reverseProxyCertificateCommonNames: record<commonNames: list, x509StoreName: string>, upgradeDescription: record<deltaHealthPolicy: record, forceRestart: bool, healthCheckRetryTimeout: string, healthCheckStableDuration: string, healthCheckWaitDuration: string, healthPolicy: record, upgradeDomainTimeout: string, upgradeReplicaSetCheckTimeout: string, upgradeTimeout: string>, upgradeMode: string, vmImage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($cluster_name | is-empty) { error make --unspanned { msg: "path parameter 'clusterName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-03-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabric/clusters/{cluster_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -530,17 +540,18 @@ export def "clusters-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # The version of the Service Fabric resource provider API. This is a required parameter and it's value must be "2019-03-01-preview" for this specification. (default: 2019-03-01-preview)
+  --api-version: string@api-version-completer # The version of the Service Fabric resource provider API. This is a required parameter and it's value must be "2019-03-01-preview" for this specification. (required, default: 2019-03-01-preview)
   location: string # Azure resource location.
   --tags: record # Azure resource tags.
   --properties: any # Describes the cluster resource properties. — shape: {addOnFeatures?: list<string>, azureActiveDirectory?: any, certificate?: any, certificateCommonNames?: any, clientCertificateCommonNames?: list, clientCertificateThumbprints?: list, clusterCodeVersion?: string, clusterState?: "WaitingForNodes"|"Deploying"|"BaselineUpgrade"|"UpdatingUserConfiguration"|"UpdatingUserCertificate"|"UpdatingInfrastructure"|"EnforcingClusterVersion"|"UpgradeServiceUnreachable"|"AutoScale"|"Ready", diagnosticsStorageAccountConfig?: any, eventStoreServiceEnabled?: bool, ... (9 more fields)}
-]: any -> record {
+]: any -> record<etag: string, id: string, location: string, name: string, tags: record, type: string, properties: record<addOnFeatures: list<string>, availableClusterVersions: list<record>, azureActiveDirectory: record<clientApplication: string, clusterApplication: string, tenantId: string>, certificate: record<thumbprint: string, thumbprintSecondary: string, x509StoreName: string>, certificateCommonNames: record<commonNames: list, x509StoreName: string>, clientCertificateCommonNames: list<record>, clientCertificateThumbprints: list<record>, clusterCodeVersion: string, clusterEndpoint: string, clusterId: string, clusterState: string, diagnosticsStorageAccountConfig: record<blobEndpoint: string, protectedAccountKeyName: string, queueEndpoint: string, storageAccountName: string, tableEndpoint: string>, eventStoreServiceEnabled: bool, fabricSettings: list<record>, managementEndpoint: string, nodeTypes: list<record>, provisioningState: string, reliabilityLevel: string, reverseProxyCertificate: record<thumbprint: string, thumbprintSecondary: string, x509StoreName: string>, reverseProxyCertificateCommonNames: record<commonNames: list, x509StoreName: string>, upgradeDescription: record<deltaHealthPolicy: record, forceRestart: bool, healthCheckRetryTimeout: string, healthCheckStableDuration: string, healthCheckWaitDuration: string, healthPolicy: record, upgradeDomainTimeout: string, upgradeReplicaSetCheckTimeout: string, upgradeTimeout: string>, upgradeMode: string, vmImage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($cluster_name | is-empty) { error make --unspanned { msg: "path parameter 'clusterName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-03-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceFabric/clusters/{cluster_name}") $qp $auth.query)
   let req_body = {"location": $location, "tags": $tags, "properties": $properties} | compact
@@ -577,12 +588,13 @@ export def "clusters-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # The version of the Service Fabric resource provider API. This is a required parameter and it's value must be "2019-03-01-preview" for this specification. (default: 2019-03-01-preview)
-]: nothing -> record<nextLink: string, value: list<record>> {
+  --api-version: string@api-version-completer # The version of the Service Fabric resource provider API. This is a required parameter and it's value must be "2019-03-01-preview" for this specification. (required, default: 2019-03-01-preview)
+]: nothing -> record<nextLink: string, value: table<etag: string, id: string, location: string, name: string, tags: record, type: string, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  let api_version = ($api_version | default "2019-03-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.ServiceFabric/clusters") $qp $auth.query)
   let accept_val = "application/json"

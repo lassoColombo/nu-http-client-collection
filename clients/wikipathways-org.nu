@@ -138,13 +138,16 @@ export def "post-create-pathway" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --gpml: string # The GPML code for the new pathway
-  --qp-auth: string # The authentication info
-  --username: string # The user name
+  --gpml: string # The GPML code for the new pathway (required)
+  --qp-auth: string # The authentication info (required)
+  --username: string # The user name (required)
   --format: string@format-completer # default: xml
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($gpml == null) { error make --unspanned { msg: "required query parameter 'gpml' missing: pass --gpml" } }
+  if ($qp_auth == null) { error make --unspanned { msg: "required query parameter 'auth' missing: pass --qp-auth" } }
+  if ($username == null) { error make --unspanned { msg: "required query parameter 'username' missing: pass --username" } }
   let qp = [(serialize-qp "gpml" $gpml "scalar") (serialize-qp "auth" $qp_auth "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/createPathway" $qp $auth.query)
   let accept_val = "application/json"
@@ -176,11 +179,12 @@ export def "get-find-interactions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query: string # The name of an entity to find interactions for (e.g. 'P53')
+  --query: string # The name of an entity to find interactions for (e.g. 'P53') (required)
   --format: string@format-completer # default: xml
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/findInteractions" $qp $auth.query)
   let accept_val = "application/json"
@@ -212,11 +216,12 @@ export def "get-find-pathways-by-literature" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query: string # The query, can be a pubmed id, author name or title keyword.
+  --query: string # The query, can be a pubmed id, author name or title keyword. (required)
   --format: string@format-completer # default: xml
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/findPathwaysByLiterature" $qp $auth.query)
   let accept_val = "application/json"
@@ -248,12 +253,13 @@ export def "get-find-pathways-by-text" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query: string # The query, e.g. 'apoptosis'
+  --query: string # The query, e.g. 'apoptosis' (required)
   --species: string # Optional, limit the query by species. Leave
   --format: string@format-completer # default: xml
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "species" $species "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/findPathwaysByText" $qp $auth.query)
   let accept_val = "application/json"
@@ -285,12 +291,13 @@ export def "get-find-pathways-by-xref" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # string
+  --ids: list # string (required)
   --codes: list # string
   --format: string@format-completer # default: xml
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "codes" $codes "csv") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/findPathwaysByXref" $qp $auth.query)
   let accept_val = "application/json"
@@ -322,15 +329,20 @@ export def "get-get-colored-pathway" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pw-id: string # The pathway identifier
-  --revision: string # The revision of the pathway (use '0' for most recent)
-  --graph-id: list # string
-  --color: list # string
-  --file-type: string # The image type (One of 'svg', 'pdf' or 'png').
+  --pw-id: string # The pathway identifier (required)
+  --revision: string # The revision of the pathway (use '0' for most recent) (required)
+  --graph-id: list # string (required)
+  --color: list # string (required)
+  --file-type: string # The image type (One of 'svg', 'pdf' or 'png'). (required)
   --format: string@format-completer # default: xml
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($pw_id == null) { error make --unspanned { msg: "required query parameter 'pwId' missing: pass --pw-id" } }
+  if ($revision == null) { error make --unspanned { msg: "required query parameter 'revision' missing: pass --revision" } }
+  if ($graph_id == null) { error make --unspanned { msg: "required query parameter 'graphId' missing: pass --graph-id" } }
+  if ($color == null) { error make --unspanned { msg: "required query parameter 'color' missing: pass --color" } }
+  if ($file_type == null) { error make --unspanned { msg: "required query parameter 'fileType' missing: pass --file-type" } }
   let qp = [(serialize-qp "pwId" $pw_id "scalar") (serialize-qp "revision" $revision "scalar") (serialize-qp "graphId" $graph_id "csv") (serialize-qp "color" $color "csv") (serialize-qp "fileType" $file_type "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getColoredPathway" $qp $auth.query)
   let accept_val = "application/json"
@@ -362,12 +374,13 @@ export def "get-get-curation-tag-history" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pw-id: string # The pathway identifier
+  --pw-id: string # The pathway identifier (required)
   --timestamp: string # Only include history from after the given date
   --format: string@format-completer # default: xml
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($pw_id == null) { error make --unspanned { msg: "required query parameter 'pwId' missing: pass --pw-id" } }
   let qp = [(serialize-qp "pwId" $pw_id "scalar") (serialize-qp "timestamp" $timestamp "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getCurationTagHistory" $qp $auth.query)
   let accept_val = "application/json"
@@ -399,11 +412,12 @@ export def "get-get-curation-tags" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pw-id: string # The pathway identifier
+  --pw-id: string # The pathway identifier (required)
   --format: string@format-completer # default: xml
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($pw_id == null) { error make --unspanned { msg: "required query parameter 'pwId' missing: pass --pw-id" } }
   let qp = [(serialize-qp "pwId" $pw_id "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getCurationTags" $qp $auth.query)
   let accept_val = "application/json"
@@ -435,11 +449,12 @@ export def "get-get-curation-tags-by-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-name: string # The tag name
+  --tag-name: string # The tag name (required)
   --format: string@format-completer # default: xml
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($tag_name == null) { error make --unspanned { msg: "required query parameter 'tagName' missing: pass --tag-name" } }
   let qp = [(serialize-qp "tagName" $tag_name "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getCurationTagsByName" $qp $auth.query)
   let accept_val = "application/json"
@@ -471,11 +486,12 @@ export def "get-get-ontology-terms-by-pathway" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pw-id: string # The pathway identifier
+  --pw-id: string # The pathway identifier (required)
   --format: string@format-completer # default: xml
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($pw_id == null) { error make --unspanned { msg: "required query parameter 'pwId' missing: pass --pw-id" } }
   let qp = [(serialize-qp "pwId" $pw_id "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getOntologyTermsByPathway" $qp $auth.query)
   let accept_val = "application/json"
@@ -507,12 +523,13 @@ export def "get-get-pathway" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pw-id: string # The pathway identifier
+  --pw-id: string # The pathway identifier (required)
   --revision: int # The revision number of the pathway (use 0 for most recent)
   --format: string@format-completer # default: xml
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($pw_id == null) { error make --unspanned { msg: "required query parameter 'pwId' missing: pass --pw-id" } }
   let qp = [(serialize-qp "pwId" $pw_id "scalar") (serialize-qp "revision" $revision "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getPathway" $qp $auth.query)
   let accept_val = "application/json"
@@ -544,13 +561,15 @@ export def "get-get-pathway-as" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --file-type: string # The file type to convert to, e.g.
-  --pw-id: string # The pathway identifier
+  --file-type: string # The file type to convert to, e.g. (required)
+  --pw-id: string # The pathway identifier (required)
   --revision: int # The revision number of the pathway (use 0 for most recent)
   --format: string@format-completer # default: xml
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($file_type == null) { error make --unspanned { msg: "required query parameter 'fileType' missing: pass --file-type" } }
+  if ($pw_id == null) { error make --unspanned { msg: "required query parameter 'pwId' missing: pass --pw-id" } }
   let qp = [(serialize-qp "fileType" $file_type "scalar") (serialize-qp "pwId" $pw_id "scalar") (serialize-qp "revision" $revision "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getPathwayAs" $qp $auth.query)
   let accept_val = "application/json"
@@ -582,12 +601,14 @@ export def "get-get-pathway-history" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pw-id: string # The pathway identifier
-  --timestamp: string # Limit by time, only history items after the given
+  --pw-id: string # The pathway identifier (required)
+  --timestamp: string # Limit by time, only history items after the given (required)
   --format: string@format-completer # default: xml
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($pw_id == null) { error make --unspanned { msg: "required query parameter 'pwId' missing: pass --pw-id" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'timestamp' missing: pass --timestamp" } }
   let qp = [(serialize-qp "pwId" $pw_id "scalar") (serialize-qp "timestamp" $timestamp "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getPathwayHistory" $qp $auth.query)
   let accept_val = "application/json"
@@ -619,11 +640,12 @@ export def "get-get-pathway-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pw-id: string # The pathway identifier
+  --pw-id: string # The pathway identifier (required)
   --format: string@format-completer # default: xml
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($pw_id == null) { error make --unspanned { msg: "required query parameter 'pwId' missing: pass --pw-id" } }
   let qp = [(serialize-qp "pwId" $pw_id "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getPathwayInfo" $qp $auth.query)
   let accept_val = "application/json"
@@ -655,11 +677,12 @@ export def "get-get-pathways-by-ontology-term" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --term: string # The Ontology term
+  --term: string # The Ontology term (required)
   --format: string@format-completer # default: xml
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($term == null) { error make --unspanned { msg: "required query parameter 'term' missing: pass --term" } }
   let qp = [(serialize-qp "term" $term "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getPathwaysByOntologyTerm" $qp $auth.query)
   let accept_val = "application/json"
@@ -691,11 +714,12 @@ export def "get-get-pathways-by-parent-ontology-term" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --term: string # The Ontology term
+  --term: string # The Ontology term (required)
   --format: string@format-completer # default: xml
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($term == null) { error make --unspanned { msg: "required query parameter 'term' missing: pass --term" } }
   let qp = [(serialize-qp "term" $term "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getPathwaysByParentOntologyTerm" $qp $auth.query)
   let accept_val = "application/json"
@@ -727,11 +751,12 @@ export def "get-get-recent-changes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --timestamp: string # Get the changes after this time
+  --timestamp: string # Get the changes after this time (required)
   --format: string@format-completer # default: xml
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'timestamp' missing: pass --timestamp" } }
   let qp = [(serialize-qp "timestamp" $timestamp "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getRecentChanges" $qp $auth.query)
   let accept_val = "application/json"
@@ -763,11 +788,12 @@ export def "get-get-user-by-orcid" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --orcid: string # string
+  --orcid: string # string (required)
   --format: string@format-completer # default: xml
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($orcid == null) { error make --unspanned { msg: "required query parameter 'orcid' missing: pass --orcid" } }
   let qp = [(serialize-qp "orcid" $orcid "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getUserByOrcid" $qp $auth.query)
   let accept_val = "application/json"
@@ -799,12 +825,14 @@ export def "get-get-xref-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pw-id: string # The pathway identifier.
-  --code: string # The database code to translate to (e.g. 'S' for UniProt).
+  --pw-id: string # The pathway identifier. (required)
+  --code: string # The database code to translate to (e.g. 'S' for UniProt). (required)
   --format: string@format-completer # default: xml
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($pw_id == null) { error make --unspanned { msg: "required query parameter 'pwId' missing: pass --pw-id" } }
+  if ($code == null) { error make --unspanned { msg: "required query parameter 'code' missing: pass --code" } }
   let qp = [(serialize-qp "pwId" $pw_id "scalar") (serialize-qp "code" $code "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getXrefList" $qp $auth.query)
   let accept_val = "application/json"
@@ -907,12 +935,14 @@ export def "get-login" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name: string # The usernameset_include_path(get_include_path().PATH_SEPARATOR.realpath('../includes').PATH_SEPARATOR.realpath('../').PATH_SEPARATOR);
-  --pass: string # The password
+  --name: string # The usernameset_include_path(get_include_path().PATH_SEPARATOR.realpath('../includes').PATH_SEPARATOR.realpath('../').PATH_SEPARATOR); (required)
+  --pass: string # The password (required)
   --format: string@format-completer # default: xml
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
+  if ($pass == null) { error make --unspanned { msg: "required query parameter 'pass' missing: pass --pass" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "pass" $pass "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/login" $qp $auth.query)
   let accept_val = "application/json"
@@ -944,14 +974,18 @@ export def "get-remove-curation-tag" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pw-id: string # The pathway identifier
-  --tag-name: string # The name of the tag to apply
-  --qp-auth: string # The authentication data
-  --username: string # The user name
+  --pw-id: string # The pathway identifier (required)
+  --tag-name: string # The name of the tag to apply (required)
+  --qp-auth: string # The authentication data (required)
+  --username: string # The user name (required)
   --format: string@format-completer # default: xml
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($pw_id == null) { error make --unspanned { msg: "required query parameter 'pwId' missing: pass --pw-id" } }
+  if ($tag_name == null) { error make --unspanned { msg: "required query parameter 'tagName' missing: pass --tag-name" } }
+  if ($qp_auth == null) { error make --unspanned { msg: "required query parameter 'auth' missing: pass --qp-auth" } }
+  if ($username == null) { error make --unspanned { msg: "required query parameter 'username' missing: pass --username" } }
   let qp = [(serialize-qp "pwId" $pw_id "scalar") (serialize-qp "tagName" $tag_name "scalar") (serialize-qp "auth" $qp_auth "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/removeCurationTag" $qp $auth.query)
   let accept_val = "application/json"
@@ -983,14 +1017,18 @@ export def "get-remove-ontology-tag" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pw-id: string # The pathway identifier
-  --term-id: string # The ontology term identifier in the ontology
-  --qp-auth: string # The authentication key
-  --user: string # The username
+  --pw-id: string # The pathway identifier (required)
+  --term-id: string # The ontology term identifier in the ontology (required)
+  --qp-auth: string # The authentication key (required)
+  --user: string # The username (required)
   --format: string@format-completer # default: xml
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($pw_id == null) { error make --unspanned { msg: "required query parameter 'pwId' missing: pass --pw-id" } }
+  if ($term_id == null) { error make --unspanned { msg: "required query parameter 'termId' missing: pass --term-id" } }
+  if ($qp_auth == null) { error make --unspanned { msg: "required query parameter 'auth' missing: pass --qp-auth" } }
+  if ($user == null) { error make --unspanned { msg: "required query parameter 'user' missing: pass --user" } }
   let qp = [(serialize-qp "pwId" $pw_id "scalar") (serialize-qp "termId" $term_id "scalar") (serialize-qp "auth" $qp_auth "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/removeOntologyTag" $qp $auth.query)
   let accept_val = "application/json"
@@ -1022,16 +1060,22 @@ export def "get-save-curation-tag" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pw-id: string # The pathway identifier
-  --tag-name: string # The name of the tag to apply
-  --text: string # string
-  --revision: int # The revision this tag applies to
-  --qp-auth: string # The authentication key
-  --username: string # The user name
+  --pw-id: string # The pathway identifier (required)
+  --tag-name: string # The name of the tag to apply (required)
+  --text: string # string (required)
+  --revision: int # The revision this tag applies to (required)
+  --qp-auth: string # The authentication key (required)
+  --username: string # The user name (required)
   --format: string@format-completer # default: xml
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($pw_id == null) { error make --unspanned { msg: "required query parameter 'pwId' missing: pass --pw-id" } }
+  if ($tag_name == null) { error make --unspanned { msg: "required query parameter 'tagName' missing: pass --tag-name" } }
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
+  if ($revision == null) { error make --unspanned { msg: "required query parameter 'revision' missing: pass --revision" } }
+  if ($qp_auth == null) { error make --unspanned { msg: "required query parameter 'auth' missing: pass --qp-auth" } }
+  if ($username == null) { error make --unspanned { msg: "required query parameter 'username' missing: pass --username" } }
   let qp = [(serialize-qp "pwId" $pw_id "scalar") (serialize-qp "tagName" $tag_name "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "revision" $revision "scalar") (serialize-qp "auth" $qp_auth "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/saveCurationTag" $qp $auth.query)
   let accept_val = "application/json"
@@ -1063,15 +1107,20 @@ export def "get-save-ontology-tag" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pw-id: string # The pathway identifier
-  --term: string # The ontology term to apply
-  --term-id: string # The identifier of the term in the ontology
-  --qp-auth: string # The authentication key
-  --user: string # The username
+  --pw-id: string # The pathway identifier (required)
+  --term: string # The ontology term to apply (required)
+  --term-id: string # The identifier of the term in the ontology (required)
+  --qp-auth: string # The authentication key (required)
+  --user: string # The username (required)
   --format: string@format-completer # default: xml
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($pw_id == null) { error make --unspanned { msg: "required query parameter 'pwId' missing: pass --pw-id" } }
+  if ($term == null) { error make --unspanned { msg: "required query parameter 'term' missing: pass --term" } }
+  if ($term_id == null) { error make --unspanned { msg: "required query parameter 'termId' missing: pass --term-id" } }
+  if ($qp_auth == null) { error make --unspanned { msg: "required query parameter 'auth' missing: pass --qp-auth" } }
+  if ($user == null) { error make --unspanned { msg: "required query parameter 'user' missing: pass --user" } }
   let qp = [(serialize-qp "pwId" $pw_id "scalar") (serialize-qp "term" $term "scalar") (serialize-qp "termId" $term_id "scalar") (serialize-qp "auth" $qp_auth "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/saveOntologyTag" $qp $auth.query)
   let accept_val = "application/json"
@@ -1103,16 +1152,22 @@ export def "get-update-pathway" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pw-id: string # The pathway identifier
-  --description: string # A description of the modifications
-  --gpml: string # The updated GPML code
-  --revision: int # The revision the GPML code is based on
-  --qp-auth: string # The authentication key
-  --username: string # The username
+  --pw-id: string # The pathway identifier (required)
+  --description: string # A description of the modifications (required)
+  --gpml: string # The updated GPML code (required)
+  --revision: int # The revision the GPML code is based on (required)
+  --qp-auth: string # The authentication key (required)
+  --username: string # The username (required)
   --format: string@format-completer # default: xml
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($pw_id == null) { error make --unspanned { msg: "required query parameter 'pwId' missing: pass --pw-id" } }
+  if ($description == null) { error make --unspanned { msg: "required query parameter 'description' missing: pass --description" } }
+  if ($gpml == null) { error make --unspanned { msg: "required query parameter 'gpml' missing: pass --gpml" } }
+  if ($revision == null) { error make --unspanned { msg: "required query parameter 'revision' missing: pass --revision" } }
+  if ($qp_auth == null) { error make --unspanned { msg: "required query parameter 'auth' missing: pass --qp-auth" } }
+  if ($username == null) { error make --unspanned { msg: "required query parameter 'username' missing: pass --username" } }
   let qp = [(serialize-qp "pwId" $pw_id "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "gpml" $gpml "scalar") (serialize-qp "revision" $revision "scalar") (serialize-qp "auth" $qp_auth "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/updatePathway" $qp $auth.query)
   let accept_val = "application/json"

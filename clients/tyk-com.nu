@@ -148,10 +148,11 @@ export def "get-tyk-apis" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-tyk-authorization: string # tyk gateway shared secret
+  --x-tyk-authorization: string # tyk gateway shared secret (required, format: string)
 ]: nothing -> table<api_id: string, auth: record<auth_header_name: string, use_cookie: bool, use_param: bool>, definition: record<key: string, location: string>, enable_jwt: bool, enable_signature_checking: bool, hmac_allowed_clock_skew: float, id: string, jwt_identity_base_field: string, jwt_policy_field_name: string, jwt_signing_method: string, jwt_source: string, name: string, notifications: record<oauth_on_keychange_url: string, shared_secret: string>, oauth_meta: record<allowed_access_types: list, allowed_authorize_types: list, auth_login_redirect: string>, org_id: string, slug: string, uptime_tests: record<CORS: record, active: bool, allowed_ips: list, cache_options: record, check_list: list, config: record, custom_middleware: record, do_not_track: string, domain: string, dont_set_quota_on_create: bool, enable_batch_request_support: bool, enable_ip_whitelisting: bool, event_handlers: record, expire_analytics_after: float, proxy: record, response_processors: list, session_lifetime: float, tags: list>, use_basic_auth: bool, use_keyless: bool, use_oauth2: bool, version_data: record<not_versioned: bool, versions: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_tyk_authorization == null) { error make --unspanned { msg: "required header parameter 'x-tyk-authorization' missing: pass --x-tyk-authorization" } }
   let full_url = (build-url $base "/tyk/apis/" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -248,11 +249,12 @@ export def "delete-tyk-apis-api-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-tyk-authorization: string # tyk gateway shared secret
+  --x-tyk-authorization: string # tyk gateway shared secret (required, format: string)
 ]: nothing -> record<action: string, key: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiID' must be non-empty" } }
+  if ($x_tyk_authorization == null) { error make --unspanned { msg: "required header parameter 'x-tyk-authorization' missing: pass --x-tyk-authorization" } }
   let full_url = (build-url $base ({api_id: (encode-path-segment $api_id)} | format pattern "/tyk/apis/{api_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -286,11 +288,12 @@ export def "get-tyk-apis-api-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-tyk-authorization: string # tyk gateway shared secret
+  --x-tyk-authorization: string # tyk gateway shared secret (required, format: string)
 ]: nothing -> record<api_id: string, auth: record<auth_header_name: string, use_cookie: bool, use_param: bool>, definition: record<key: string, location: string>, enable_jwt: bool, enable_signature_checking: bool, hmac_allowed_clock_skew: float, id: string, jwt_identity_base_field: string, jwt_policy_field_name: string, jwt_signing_method: string, jwt_source: string, name: string, notifications: record<oauth_on_keychange_url: string, shared_secret: string>, oauth_meta: record<allowed_access_types: list<string>, allowed_authorize_types: list<string>, auth_login_redirect: string>, org_id: string, slug: string, uptime_tests: record<CORS: record<allow_credentials: bool, allowed_headers: list, allowed_methods: list, allowed_origins: list, debug: bool, enable: bool, exposed_headers: list, max_age: float, options_passthrough: bool>, active: bool, allowed_ips: list<string>, cache_options: record<cache_all_safe_requests: bool, cache_timeout: float, enable_cache: bool, enable_upstream_cache_control: bool>, check_list: list<record>, config: record<expire_utime_after: float, recheck_wait: float, service_discovery: record>, custom_middleware: record<post: list, pre: list, response: list>, do_not_track: string, domain: string, dont_set_quota_on_create: bool, enable_batch_request_support: bool, enable_ip_whitelisting: bool, event_handlers: record, expire_analytics_after: float, proxy: record<check_host_against_uptime_tests: bool, enable_load_balancing: bool, listen_path: string, preserve_host_header: bool, service_discovery: record, strip_listen_path: bool, target_list: list, target_url: string>, response_processors: list<record>, session_lifetime: float, tags: list<string>>, use_basic_auth: bool, use_keyless: bool, use_oauth2: bool, version_data: record<not_versioned: bool, versions: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiID' must be non-empty" } }
+  if ($x_tyk_authorization == null) { error make --unspanned { msg: "required header parameter 'x-tyk-authorization' missing: pass --x-tyk-authorization" } }
   let full_url = (build-url $base ({api_id: (encode-path-segment $api_id)} | format pattern "/tyk/apis/{api_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -330,7 +333,7 @@ export def "put-tyk-apis-api-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-tyk-authorization: string # tyk gateway shared secret
+  --x-tyk-authorization: string # tyk gateway shared secret (required, format: string)
   --body-api-id: string
   --body-auth: record # shape: {auth_header_name?: string, use_cookie?: bool, use_param?: bool}
   --definition: record # shape: {key?: string, location?: string}
@@ -357,6 +360,7 @@ export def "put-tyk-apis-api-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiID' must be non-empty" } }
+  if ($x_tyk_authorization == null) { error make --unspanned { msg: "required header parameter 'x-tyk-authorization' missing: pass --x-tyk-authorization" } }
   let full_url = (build-url $base ({api_id: (encode-path-segment $api_id)} | format pattern "/tyk/apis/{api_id}") $auth.query)
   let req_body = {"api_id": $body_api_id, "auth": $body_auth, "definition": $definition, "enable_jwt": $enable_jwt, "enable_signature_checking": $enable_signature_checking, "hmac_allowed_clock_skew": $hmac_allowed_clock_skew, "id": $id, "jwt_identity_base_field": $jwt_identity_base_field, "jwt_policy_field_name": $jwt_policy_field_name, "jwt_signing_method": $jwt_signing_method, "jwt_source": $jwt_source, "name": $name, "notifications": $notifications, "oauth_meta": $oauth_meta, "org_id": $org_id, "slug": $slug, "uptime_tests": $uptime_tests, "use_basic_auth": $use_basic_auth, "use_keyless": $use_keyless, "use_oauth2": $use_oauth2, "version_data": $version_data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -391,11 +395,13 @@ export def "get-tyk-health" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-id: string # API ID to query (format: string)
-  --x-tyk-authorization: string # tyk gateway shared secret
+  --api-id: string # API ID to query (required, format: string)
+  --x-tyk-authorization: string # tyk gateway shared secret (required, format: string)
 ]: nothing -> record<average_requests_per_second: float, average_upstream_latency: float, key_failures_per_second: float, quota_violations_per_second: float, throttle_requests_per_second: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_id == null) { error make --unspanned { msg: "required query parameter 'api_id' missing: pass --api-id" } }
+  if ($x_tyk_authorization == null) { error make --unspanned { msg: "required header parameter 'x-tyk-authorization' missing: pass --x-tyk-authorization" } }
   let qp = [(serialize-qp "api_id" $api_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tyk/health/" $qp $auth.query)
   let accept_val = "application/json"
@@ -429,11 +435,13 @@ export def "get-tyk-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-id: string # Back-end to target (format: string)
-  --x-tyk-authorization: string # tyk gateway shared secret
+  --api-id: string # Back-end to target (required, format: string)
+  --x-tyk-authorization: string # tyk gateway shared secret (required, format: string)
 ]: nothing -> record<keys: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_id == null) { error make --unspanned { msg: "required query parameter 'api_id' missing: pass --api-id" } }
+  if ($x_tyk_authorization == null) { error make --unspanned { msg: "required header parameter 'x-tyk-authorization' missing: pass --x-tyk-authorization" } }
   let qp = [(serialize-qp "api_id" $api_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tyk/keys/" $qp $auth.query)
   let accept_val = "application/json"
@@ -471,7 +479,7 @@ export def "post-tyk-keys-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --suppress-reset: float # Adding the `suppress_reset` parameter and setting it to `1`, will cause Tyk to not reset the quota limit that is in the current live quota manager. By default Tyk will reset the quota in the live quota manager (initialising it) when ADDing a key. Adding the `suppress_reset` flag to the URL parameters will avoid this behaviour. (format: integer)
-  --x-tyk-authorization: string # tyk gateway shared secret
+  --x-tyk-authorization: string # tyk gateway shared secret (required, format: string)
   --access-rights: record
   --allowance: float
   --apply-policy-id: string
@@ -496,6 +504,7 @@ export def "post-tyk-keys-create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_tyk_authorization == null) { error make --unspanned { msg: "required header parameter 'x-tyk-authorization' missing: pass --x-tyk-authorization" } }
   let qp = [(serialize-qp "suppress_reset" $suppress_reset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tyk/keys/create" $qp $auth.query)
   let req_body = {"access_rights": $access_rights, "allowance": $allowance, "apply_policy_id": $apply_policy_id, "basic_auth_data": $basic_auth_data, "expires": $expires, "hmac_enabled": $hmac_enabled, "hmac_string": $hmac_string, "is_inactive": $is_inactive, "jwt_data": $jwt_data, "meta_data": $meta_data, "monitor": $monitor, "oauth_client_id": $oauth_client_id, "org_id": $org_id, "per": $per, "quota_max": $quota_max, "quota_remaining": $quota_remaining, "quota_renewal_rate": $quota_renewal_rate, "quota_renews": $quota_renews, "rate": $rate, "tags": $tags} | compact
@@ -532,12 +541,14 @@ export def "delete-tyk-keys-key-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-id: string # Back-end to target (format: string)
-  --x-tyk-authorization: string # tyk gateway shared secret
+  --api-id: string # Back-end to target (required, format: string)
+  --x-tyk-authorization: string # tyk gateway shared secret (required, format: string)
 ]: nothing -> record<action: string, key: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'keyId' must be non-empty" } }
+  if ($api_id == null) { error make --unspanned { msg: "required query parameter 'api_id' missing: pass --api-id" } }
+  if ($x_tyk_authorization == null) { error make --unspanned { msg: "required header parameter 'x-tyk-authorization' missing: pass --x-tyk-authorization" } }
   let qp = [(serialize-qp "api_id" $api_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({key_id: (encode-path-segment $key_id)} | format pattern "/tyk/keys/{key_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -575,7 +586,7 @@ export def "post-tyk-keys-key-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-tyk-authorization: string # tyk gateway shared secret
+  --x-tyk-authorization: string # tyk gateway shared secret (required, format: string)
   --access-rights: record
   --allowance: float
   --apply-policy-id: string
@@ -601,6 +612,7 @@ export def "post-tyk-keys-key-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'keyId' must be non-empty" } }
+  if ($x_tyk_authorization == null) { error make --unspanned { msg: "required header parameter 'x-tyk-authorization' missing: pass --x-tyk-authorization" } }
   let full_url = (build-url $base ({key_id: (encode-path-segment $key_id)} | format pattern "/tyk/keys/{key_id}") $auth.query)
   let req_body = {"access_rights": $access_rights, "allowance": $allowance, "apply_policy_id": $apply_policy_id, "basic_auth_data": $basic_auth_data, "expires": $expires, "hmac_enabled": $hmac_enabled, "hmac_string": $hmac_string, "is_inactive": $is_inactive, "jwt_data": $jwt_data, "meta_data": $meta_data, "monitor": $monitor, "oauth_client_id": $oauth_client_id, "org_id": $org_id, "per": $per, "quota_max": $quota_max, "quota_remaining": $quota_remaining, "quota_renewal_rate": $quota_renewal_rate, "quota_renews": $quota_renews, "rate": $rate, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -640,8 +652,8 @@ export def "put-tyk-keys-key-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --suppress-reset: float # Adding the `suppress_reset` parameter and setting it to `1`, will cause Tyk to not reset the quota limit that is in the current live quota manager. By default Tyk will reset the quota in the live quota manager (initialising it) when ADDing a key. Adding the `suppress_reset` flag to the URL parameters will avoid this behaviour. (format: integer)
-  --api-id: string # Back-end to target (format: string)
-  --x-tyk-authorization: string # tyk gateway shared secret
+  --api-id: string # Back-end to target (required, format: string)
+  --x-tyk-authorization: string # tyk gateway shared secret (required, format: string)
   --access-rights: record
   --allowance: float
   --apply-policy-id: string
@@ -667,6 +679,8 @@ export def "put-tyk-keys-key-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'keyId' must be non-empty" } }
+  if ($api_id == null) { error make --unspanned { msg: "required query parameter 'api_id' missing: pass --api-id" } }
+  if ($x_tyk_authorization == null) { error make --unspanned { msg: "required header parameter 'x-tyk-authorization' missing: pass --x-tyk-authorization" } }
   let qp = [(serialize-qp "suppress_reset" $suppress_reset "scalar") (serialize-qp "api_id" $api_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({key_id: (encode-path-segment $key_id)} | format pattern "/tyk/keys/{key_id}") $qp $auth.query)
   let req_body = {"access_rights": $access_rights, "allowance": $allowance, "apply_policy_id": $apply_policy_id, "basic_auth_data": $basic_auth_data, "expires": $expires, "hmac_enabled": $hmac_enabled, "hmac_string": $hmac_string, "is_inactive": $is_inactive, "jwt_data": $jwt_data, "meta_data": $meta_data, "monitor": $monitor, "oauth_client_id": $oauth_client_id, "org_id": $org_id, "per": $per, "quota_max": $quota_max, "quota_remaining": $quota_remaining, "quota_renewal_rate": $quota_renewal_rate, "quota_renews": $quota_renews, "rate": $rate, "tags": $tags} | compact
@@ -702,7 +716,7 @@ export def "post-tyk-oauth-authorize-client" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-tyk-authorization: string # tyk gateway shared secret
+  --x-tyk-authorization: string # tyk gateway shared secret (required, format: string)
   response_type: string # Should be provided by requesting client as part of authorisation request, this should be either `code` or `token` depending on the methods you have specified for the API
   client_id: string # Should be provided by requesting client as part of authorisation request. The Client ID that is making the request
   redirect_uri: string # Should be provided by requesting client as part of authorisation request. Must match with the record stored with Tyk
@@ -711,6 +725,7 @@ export def "post-tyk-oauth-authorize-client" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_tyk_authorization == null) { error make --unspanned { msg: "required header parameter 'x-tyk-authorization' missing: pass --x-tyk-authorization" } }
   let full_url = (build-url $base "/tyk/oauth/authorize-client/" $auth.query)
   let req_body = {"response_type": $response_type, "client_id": $client_id, "redirect_uri": $redirect_uri, "key_rules": $key_rules} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -746,13 +761,14 @@ export def "post-tyk-oauth-clients-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-tyk-authorization: string # tyk gateway shared secret
+  --x-tyk-authorization: string # tyk gateway shared secret (required, format: string)
   --api-id: string
   --redirect-uri: string
 ]: any -> record<client_id: string, redirect_uri: string, secret: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_tyk_authorization == null) { error make --unspanned { msg: "required header parameter 'x-tyk-authorization' missing: pass --x-tyk-authorization" } }
   let full_url = (build-url $base "/tyk/oauth/clients/create" $auth.query)
   let req_body = {"api_id": $api_id, "redirect_uri": $redirect_uri} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -788,11 +804,12 @@ export def "get-tyk-oauth-clients-api-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-tyk-authorization: string # tyk gateway shared secret
+  --x-tyk-authorization: string # tyk gateway shared secret (required, format: string)
 ]: nothing -> table<client_id: string, redirect_uri: string, secret: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
+  if ($x_tyk_authorization == null) { error make --unspanned { msg: "required header parameter 'x-tyk-authorization' missing: pass --x-tyk-authorization" } }
   let full_url = (build-url $base ({api_id: (encode-path-segment $api_id)} | format pattern "/tyk/oauth/clients/{api_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -827,12 +844,13 @@ export def "delete-tyk-oauth-clients-api-id-client-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-tyk-authorization: string # tyk gateway shared secret
+  --x-tyk-authorization: string # tyk gateway shared secret (required, format: string)
 ]: nothing -> record<action: string, key: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
   if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'clientId' must be non-empty" } }
+  if ($x_tyk_authorization == null) { error make --unspanned { msg: "required header parameter 'x-tyk-authorization' missing: pass --x-tyk-authorization" } }
   let full_url = (build-url $base ({api_id: (encode-path-segment $api_id), client_id: (encode-path-segment $client_id)} | format pattern "/tyk/oauth/clients/{api_id}/{client_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -866,12 +884,14 @@ export def "delete-tyk-oauth-refresh-key-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-id: string # API ID
-  --x-tyk-authorization: string # tyk gateway shared secret
+  --api-id: string # API ID (required)
+  --x-tyk-authorization: string # tyk gateway shared secret (required, format: string)
 ]: nothing -> record<action: string, key: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'keyId' must be non-empty" } }
+  if ($api_id == null) { error make --unspanned { msg: "required query parameter 'apiID' missing: pass --api-id" } }
+  if ($x_tyk_authorization == null) { error make --unspanned { msg: "required header parameter 'x-tyk-authorization' missing: pass --x-tyk-authorization" } }
   let qp = [(serialize-qp "apiID" $api_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({key_id: (encode-path-segment $key_id)} | format pattern "/tyk/oauth/refresh/{key_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -905,10 +925,11 @@ export def "get-tyk-reload" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-tyk-authorization: string # tyk gateway shared secret
+  --x-tyk-authorization: string # tyk gateway shared secret (required, format: string)
 ]: nothing -> record<error: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_tyk_authorization == null) { error make --unspanned { msg: "required header parameter 'x-tyk-authorization' missing: pass --x-tyk-authorization" } }
   let full_url = (build-url $base "/tyk/reload/" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -941,10 +962,11 @@ export def "get-tyk-reload-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-tyk-authorization: string # tyk gateway shared secret
+  --x-tyk-authorization: string # tyk gateway shared secret (required, format: string)
 ]: nothing -> record<error: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_tyk_authorization == null) { error make --unspanned { msg: "required header parameter 'x-tyk-authorization' missing: pass --x-tyk-authorization" } }
   let full_url = (build-url $base "/tyk/reload/group" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

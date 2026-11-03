@@ -172,17 +172,25 @@ export def "get-access-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --oauth-consumer-key: string
-  --oauth-nonce: string
-  --oauth-timestamp: string
-  --oauth-signature-method: string
-  --oauth-version: string
-  --oauth-signature: string
-  --oauth-verifier: string
-  --oauth-token: string
+  --oauth-consumer-key: string # required
+  --oauth-nonce: string # required
+  --oauth-timestamp: string # required
+  --oauth-signature-method: string # required
+  --oauth-version: string # required
+  --oauth-signature: string # required
+  --oauth-verifier: string # required
+  --oauth-token: string # required
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($oauth_consumer_key == null) { error make --unspanned { msg: "required query parameter 'oauth_consumer_key' missing: pass --oauth-consumer-key" } }
+  if ($oauth_nonce == null) { error make --unspanned { msg: "required query parameter 'oauth_nonce' missing: pass --oauth-nonce" } }
+  if ($oauth_timestamp == null) { error make --unspanned { msg: "required query parameter 'oauth_timestamp' missing: pass --oauth-timestamp" } }
+  if ($oauth_signature_method == null) { error make --unspanned { msg: "required query parameter 'oauth_signature_method' missing: pass --oauth-signature-method" } }
+  if ($oauth_version == null) { error make --unspanned { msg: "required query parameter 'oauth_version' missing: pass --oauth-version" } }
+  if ($oauth_signature == null) { error make --unspanned { msg: "required query parameter 'oauth_signature' missing: pass --oauth-signature" } }
+  if ($oauth_verifier == null) { error make --unspanned { msg: "required query parameter 'oauth_verifier' missing: pass --oauth-verifier" } }
+  if ($oauth_token == null) { error make --unspanned { msg: "required query parameter 'oauth_token' missing: pass --oauth-token" } }
   let qp = [(serialize-qp "oauth_consumer_key" $oauth_consumer_key "scalar") (serialize-qp "oauth_nonce" $oauth_nonce "scalar") (serialize-qp "oauth_timestamp" $oauth_timestamp "scalar") (serialize-qp "oauth_signature_method" $oauth_signature_method "scalar") (serialize-qp "oauth_version" $oauth_version "scalar") (serialize-qp "oauth_signature" $oauth_signature "scalar") (serialize-qp "oauth_verifier" $oauth_verifier "scalar") (serialize-qp "oauth_token" $oauth_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/oauth/access_token" $qp $auth.query)
   let accept_val = "application/json"
@@ -215,16 +223,23 @@ export def "get-request-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --oauth-consumer-key: string
-  --oauth-nonce: string
-  --oauth-timestamp: string
-  --oauth-signature-method: string
-  --oauth-version: string
-  --oauth-signature: string
-  --oauth-callback: string
+  --oauth-consumer-key: string # required
+  --oauth-nonce: string # required
+  --oauth-timestamp: string # required
+  --oauth-signature-method: string # required
+  --oauth-version: string # required
+  --oauth-signature: string # required
+  --oauth-callback: string # required
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($oauth_consumer_key == null) { error make --unspanned { msg: "required query parameter 'oauth_consumer_key' missing: pass --oauth-consumer-key" } }
+  if ($oauth_nonce == null) { error make --unspanned { msg: "required query parameter 'oauth_nonce' missing: pass --oauth-nonce" } }
+  if ($oauth_timestamp == null) { error make --unspanned { msg: "required query parameter 'oauth_timestamp' missing: pass --oauth-timestamp" } }
+  if ($oauth_signature_method == null) { error make --unspanned { msg: "required query parameter 'oauth_signature_method' missing: pass --oauth-signature-method" } }
+  if ($oauth_version == null) { error make --unspanned { msg: "required query parameter 'oauth_version' missing: pass --oauth-version" } }
+  if ($oauth_signature == null) { error make --unspanned { msg: "required query parameter 'oauth_signature' missing: pass --oauth-signature" } }
+  if ($oauth_callback == null) { error make --unspanned { msg: "required query parameter 'oauth_callback' missing: pass --oauth-callback" } }
   let qp = [(serialize-qp "oauth_consumer_key" $oauth_consumer_key "scalar") (serialize-qp "oauth_nonce" $oauth_nonce "scalar") (serialize-qp "oauth_timestamp" $oauth_timestamp "scalar") (serialize-qp "oauth_signature_method" $oauth_signature_method "scalar") (serialize-qp "oauth_version" $oauth_version "scalar") (serialize-qp "oauth_signature" $oauth_signature "scalar") (serialize-qp "oauth_callback" $oauth_callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/oauth/request_token" $qp $auth.query)
   let accept_val = "application/json"
@@ -257,14 +272,16 @@ export def "get-favorites-context-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
-  --photo-id: string
+  --api-key: string # required
+  --photo-id: string # required
   --user-id: string
 ]: nothing -> record<count: record<_content: string>, nextphoto: record<farm: string, id: string, is_faved: bool, license: int, media: string, owner: string, safe: bool, secret: string, server: string, thumb: string, title: string, url: string>, prevphoto: record<farm: string, id: string, is_faved: bool, license: int, media: string, owner: string, safe: bool, secret: string, server: string, thumb: string, title: string, url: string>, stat: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
+  if ($photo_id == null) { error make --unspanned { msg: "required query parameter 'photo_id' missing: pass --photo-id" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "photo_id" $photo_id "scalar") (serialize-qp "user_id" $user_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest?method=flickr.favorites.getContext" $qp $auth.query)
+  let full_url = (build-url $base "/rest" "method=flickr.favorites.getContext" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -295,8 +312,8 @@ export def "get-favorites-by-person-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
-  --user-id: string
+  --api-key: string # required
+  --user-id: string # required
   --min-fave-date: float
   --max-fave-date: float
   --page: float
@@ -304,8 +321,10 @@ export def "get-favorites-by-person-id" [
 ]: nothing -> record<page: float, pages: float, perpage: float, photos: table<comments: record, dates: record, dateuploaded: string, description: record, editability: record, farm: string, id: string, isfavorite: bool, license: string, media: string, notes: record, originalsecret: string, owner: record, people: record, permissions: record, publiceditability: record, rotation: string, safe: bool, safety_level: string, secret: string, server: string, tags: record, title: record, urls: record, usage: record, views: string, visibility: record>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
+  if ($user_id == null) { error make --unspanned { msg: "required query parameter 'user_id' missing: pass --user-id" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "user_id" $user_id "scalar") (serialize-qp "min_fave_date" $min_fave_date "scalar") (serialize-qp "max_fave_date" $max_fave_date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest?method=flickr.favorites.getList" $qp $auth.query)
+  let full_url = (build-url $base "/rest" "method=flickr.favorites.getList" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -336,13 +355,15 @@ export def "get-gallery-photos-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
-  --gallery-id: string
+  --api-key: string # required
+  --gallery-id: string # required
 ]: nothing -> record<photos: table<comments: record, dates: record, dateuploaded: string, description: record, editability: record, farm: string, id: string, isfavorite: bool, license: string, media: string, notes: record, originalsecret: string, owner: record, people: record, permissions: record, publiceditability: record, rotation: string, safe: bool, safety_level: string, secret: string, server: string, tags: record, title: record, urls: record, usage: record, views: string, visibility: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
+  if ($gallery_id == null) { error make --unspanned { msg: "required query parameter 'gallery_id' missing: pass --gallery-id" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "gallery_id" $gallery_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest?method=flickr.galleries.getPhotos" $qp $auth.query)
+  let full_url = (build-url $base "/rest" "method=flickr.galleries.getPhotos" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -373,15 +394,18 @@ export def "get-group-topic-replies-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
+  --api-key: string # required
   --group-id: string
-  --topic-id: string
-  --reply-id: string
+  --topic-id: string # required
+  --reply-id: string # required
 ]: nothing -> record<reply: record<author: string, author_is_deleted: bool, author_path_alias: string, authorname: string, can_delete: bool, can_edit: bool, datecreate: string, iconfarm: string, iconserver: string, id: string, is_pro: bool, lastedit: string, message: record<_content: string>>, stat: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
+  if ($topic_id == null) { error make --unspanned { msg: "required query parameter 'topic_id' missing: pass --topic-id" } }
+  if ($reply_id == null) { error make --unspanned { msg: "required query parameter 'reply_id' missing: pass --reply-id" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "topic_id" $topic_id "scalar") (serialize-qp "reply_id" $reply_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest?method=flickr.groups.discuss.replies.getInfo" $qp $auth.query)
+  let full_url = (build-url $base "/rest" "method=flickr.groups.discuss.replies.getInfo" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -412,14 +436,16 @@ export def "get-group-topic-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
+  --api-key: string # required
   --group-id: string
-  --topic-id: string
+  --topic-id: string # required
 ]: nothing -> record<stat: string, topic: record<author: string, author_is_deleted: bool, author_path_alias: string, authorname: string, can_delete: bool, can_edit: bool, can_reply: bool, count_replies: int, datecreate: string, datelastpost: string, iconfarm: string, iconserver: string, id: string, is_locked: bool, is_pro: bool, is_sticky: bool, last_reply: string, lastedit: string, message: record<_content: string>, role: string, subject: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
+  if ($topic_id == null) { error make --unspanned { msg: "required query parameter 'topic_id' missing: pass --topic-id" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "topic_id" $topic_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest?method=flickr.groups.discuss.topics.getInfo" $qp $auth.query)
+  let full_url = (build-url $base "/rest" "method=flickr.groups.discuss.topics.getInfo" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -450,15 +476,16 @@ export def "get-group-discussions-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
+  --api-key: string # required
   --group-id: string
   --page: float
   --per-page: float
 ]: nothing -> record<iconfarm: float, iconserver: float, ispoolmoderated: bool, lang: string, members: float, name: string, page: float, pages: float, per_page: float, privacy: float, topics: table<author: string, author_is_deleted: bool, author_path_alias: string, authorname: string, can_delete: bool, can_edit: bool, can_reply: bool, count_replies: int, datecreate: string, datelastpost: string, iconfarm: string, iconserver: string, id: string, is_locked: bool, is_pro: bool, is_sticky: bool, last_reply: string, lastedit: string, message: record, role: string, subject: string>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest?method=flickr.groups.discuss.topics.getList" $qp $auth.query)
+  let full_url = (build-url $base "/rest" "method=flickr.groups.discuss.topics.getList" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -489,15 +516,16 @@ export def "get-group-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
+  --api-key: string # required
   --group-id: string
   --group-path-alias: string
   --lang: string
 ]: nothing -> record<group: record<blast: record<_content: string, date_blast_added: string, user_id: string>, cover: record<farm: string, id: string, isfamily: bool, isfriend: bool, ispublic: bool, owner: string, secret: string, server: string, title: string, y: string>, coverphoto_farm: string, coverphoto_server: string, coverphoto_url: record<h: string, l: string, s: string, t: string>, description: record<_content: string>, iconfarm: string, iconserver: string, id: string, is_admin: bool, is_member: bool, is_moderator: bool, ispoolmoderated: bool, lang: string, members: record<_content: string>, name: record<_content: string>, path_alias: string, pool_count: record<_content: string>, pool_rows: int, privacy: record<_content: string>, restrictions: record<art_ok: bool, has_geo: bool, images_ok: bool, moderate_ok: bool, photos_ok: bool, restricted_ok: bool, safe_ok: bool, screens_ok: bool, videos_ok: bool>, roles: record<admin: string, member: string, moderator: string>, rules: record<_content: string>, throttle: record<count: int, mode: string, remaining: string>, topic_count: record<_content: string>>, stat: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "group_path_alias" $group_path_alias "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest?method=flickr.groups.getInfo" $qp $auth.query)
+  let full_url = (build-url $base "/rest" "method=flickr.groups.getInfo" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -517,7 +545,7 @@ export def "get-group-by-id" [
 # Returns next and previous photos for a photo in a group pool
 #
 # GET /rest?method=flickr.groups.pools.getContext
-export def "get-restmethodflickr-groups-pools-get-context" [
+export def "get-rest-method-flickr-groups-pools-get-context" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -527,14 +555,16 @@ export def "get-restmethodflickr-groups-pools-get-context" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
-  --photo-id: string
+  --api-key: string # required
+  --photo-id: string # required
   --group-id: string
 ]: nothing -> record<count: record<_content: string>, nextphoto: record<farm: string, id: string, is_faved: bool, license: int, media: string, owner: string, safe: bool, secret: string, server: string, thumb: string, title: string, url: string>, prevphoto: record<farm: string, id: string, is_faved: bool, license: int, media: string, owner: string, safe: bool, secret: string, server: string, thumb: string, title: string, url: string>, stat: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
+  if ($photo_id == null) { error make --unspanned { msg: "required query parameter 'photo_id' missing: pass --photo-id" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "photo_id" $photo_id "scalar") (serialize-qp "group_id" $group_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest?method=flickr.groups.pools.getContext" $qp $auth.query)
+  let full_url = (build-url $base "/rest" "method=flickr.groups.pools.getContext" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -565,13 +595,14 @@ export def "get-group-photos-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
+  --api-key: string # required
   --group-id: string
 ]: nothing -> record<photos: table<comments: record, dates: record, dateuploaded: string, description: record, editability: record, farm: string, id: string, isfavorite: bool, license: string, media: string, notes: record, originalsecret: string, owner: record, people: record, permissions: record, publiceditability: record, rotation: string, safe: bool, safety_level: string, secret: string, server: string, tags: record, title: record, urls: record, usage: record, views: string, visibility: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "group_id" $group_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest?method=flickr.groups.pools.getPhotos" $qp $auth.query)
+  let full_url = (build-url $base "/rest" "method=flickr.groups.pools.getPhotos" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -602,13 +633,14 @@ export def "get-person-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
+  --api-key: string # required
   --user-id: string
 ]: nothing -> record<person: record<can_buy_pro: bool, cover: record<farm: string, id: string, isfamily: bool, isfriend: bool, ispublic: bool, owner: string, secret: string, server: string, title: string, y: string>, coverphoto: record<h: string, l: string, s: string, t: string>, coverphoto_farm: string, coverphoto_server: string, description: record<_content: string>, disable_keyboard_shortcuts: record<_content: string>, expire: bool, has_stats: bool, iconfarm: string, iconserver: string, id: string, is_ad_free: bool, ispro: bool, location: record<_content: string>, mbox_sha1sum: record<_content: string>, mobileurl: record<_content: string>, nsid: string, path_alias: string, photos: record<count: record, firstdate: record, firstdatetaken: record, views: record>, photosurl: record<_content: string>, profileurl: record<_content: string>, realname: record<_content: string>, timezone: record<label: string, offset: string, timezone_id: string>, unread_messages: record<_content: string>, user_secret: string, username: record<_content: string>, yintl: string>, stat: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "user_id" $user_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest?method=flickr.people.getInfo" $qp $auth.query)
+  let full_url = (build-url $base "/rest" "method=flickr.people.getInfo" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -639,8 +671,8 @@ export def "get-media-by-person-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
-  --user-id: string
+  --api-key: string # required
+  --user-id: string # required
   --safe-search: float
   --min-upload-date: float
   --max-upload-date: float
@@ -653,8 +685,10 @@ export def "get-media-by-person-id" [
 ]: nothing -> record<page: float, pages: float, perpage: float, photos: table<comments: record, dates: record, dateuploaded: string, description: record, editability: record, farm: string, id: string, isfavorite: bool, license: string, media: string, notes: record, originalsecret: string, owner: record, people: record, permissions: record, publiceditability: record, rotation: string, safe: bool, safety_level: string, secret: string, server: string, tags: record, title: record, urls: record, usage: record, views: string, visibility: record>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
+  if ($user_id == null) { error make --unspanned { msg: "required query parameter 'user_id' missing: pass --user-id" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "user_id" $user_id "scalar") (serialize-qp "safe_search" $safe_search "scalar") (serialize-qp "min_upload_date" $min_upload_date "scalar") (serialize-qp "max_upload_date" $max_upload_date "scalar") (serialize-qp "min_taken_date" $min_taken_date "scalar") (serialize-qp "max_taken_date" $max_taken_date "scalar") (serialize-qp "content_type" $content_type "scalar") (serialize-qp "privacy_filter" $privacy_filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest?method=flickr.people.getPhotos" $qp $auth.query)
+  let full_url = (build-url $base "/rest" "method=flickr.people.getPhotos" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -685,14 +719,17 @@ export def "get-photolist-context-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
-  --photo-id: string
-  --photolist-id: string
+  --api-key: string # required
+  --photo-id: string # required
+  --photolist-id: string # required
 ]: nothing -> record<count: record<_content: string>, nextphoto: record<farm: string, id: string, is_faved: bool, license: int, media: string, owner: string, safe: bool, secret: string, server: string, thumb: string, title: string, url: string>, prevphoto: record<farm: string, id: string, is_faved: bool, license: int, media: string, owner: string, safe: bool, secret: string, server: string, thumb: string, title: string, url: string>, stat: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
+  if ($photo_id == null) { error make --unspanned { msg: "required query parameter 'photo_id' missing: pass --photo-id" } }
+  if ($photolist_id == null) { error make --unspanned { msg: "required query parameter 'photolist_id' missing: pass --photolist-id" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "photo_id" $photo_id "scalar") (serialize-qp "photolist_id" $photolist_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest?method=flickr.photolist.getContext" $qp $auth.query)
+  let full_url = (build-url $base "/rest" "method=flickr.photolist.getContext" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -723,13 +760,15 @@ export def "get-photostream-context-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
-  --photo-id: string
+  --api-key: string # required
+  --photo-id: string # required
 ]: nothing -> record<count: record<_content: string>, nextphoto: record<farm: string, id: string, is_faved: bool, license: int, media: string, owner: string, safe: bool, secret: string, server: string, thumb: string, title: string, url: string>, prevphoto: record<farm: string, id: string, is_faved: bool, license: int, media: string, owner: string, safe: bool, secret: string, server: string, thumb: string, title: string, url: string>, stat: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
+  if ($photo_id == null) { error make --unspanned { msg: "required query parameter 'photo_id' missing: pass --photo-id" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "photo_id" $photo_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest?method=flickr.photos.getContext" $qp $auth.query)
+  let full_url = (build-url $base "/rest" "method=flickr.photos.getContext" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -760,14 +799,16 @@ export def "get-photo-exif-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
-  --photo-id: string
+  --api-key: string # required
+  --photo-id: string # required
   --secret: string
 ]: nothing -> record<photo: record<camera: string, exif: list<record>, farm: string, id: string, secret: string, server: string>, stat: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
+  if ($photo_id == null) { error make --unspanned { msg: "required query parameter 'photo_id' missing: pass --photo-id" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "photo_id" $photo_id "scalar") (serialize-qp "secret" $secret "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest?method=flickr.photos.getExif" $qp $auth.query)
+  let full_url = (build-url $base "/rest" "method=flickr.photos.getExif" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -798,13 +839,15 @@ export def "get-photo-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
-  --photo-id: string
+  --api-key: string # required
+  --photo-id: string # required
 ]: nothing -> record<photo: record<comments: record<_content: string>, dates: record<lastupdate: string, posted: string, taken: string, takengranularity: string, takenunknown: bool>, dateuploaded: string, description: record<_content: string>, editability: record<canaddmeta: bool, cancomment: bool>, farm: string, id: string, isfavorite: bool, license: string, media: string, notes: record<note: list>, originalsecret: string, owner: record<iconfarm: string, iconserver: string, is_ad_free: bool, ispro: bool, location: string, noindexfollow: bool, nsid: string, path_alias: string, realname: string, username: string>, people: record<haspeople: bool>, permissions: record<permaddmeta: string, permcomment: string>, publiceditability: record<canaddmeta: bool, cancomment: bool>, rotation: string, safe: bool, safety_level: string, secret: string, server: string, tags: record<tag: list>, title: record<_content: string>, urls: record<url: list>, usage: record<canblog: bool, candownload: bool, canprint: bool, canshare: bool>, views: string, visibility: record<isfamily: bool, isfriend: bool, ispublic: bool>>, stat: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
+  if ($photo_id == null) { error make --unspanned { msg: "required query parameter 'photo_id' missing: pass --photo-id" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "photo_id" $photo_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest?method=flickr.photos.getInfo" $qp $auth.query)
+  let full_url = (build-url $base "/rest" "method=flickr.photos.getInfo" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -835,13 +878,15 @@ export def "get-photo-sizes-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
-  --photo-id: string
+  --api-key: string # required
+  --photo-id: string # required
 ]: nothing -> record<sizes: record<canblog: float, candownload: float, canprint: float, sizes: list<record>>, stat: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
+  if ($photo_id == null) { error make --unspanned { msg: "required query parameter 'photo_id' missing: pass --photo-id" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "photo_id" $photo_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest?method=flickr.photos.getSizes" $qp $auth.query)
+  let full_url = (build-url $base "/rest" "method=flickr.photos.getSizes" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -872,12 +917,13 @@ export def "get-license-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
+  --api-key: string # required
 ]: nothing -> record<licenses: record<license: list<record>>, stat: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest?method=flickr.photos.licenses.getInfo" $qp $auth.query)
+  let full_url = (build-url $base "/rest" "method=flickr.photos.licenses.getInfo" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -908,7 +954,7 @@ export def "get-media-by-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
+  --api-key: string # required
   --text: string # A free text search. Photos who's title, description or tags contain the text will be returned. You can exclude results that match a term by prepending it with a - character.
   --tags: string # A comma-delimited list of tags. Photos with one or more of the tags listed will be returned. You can exclude results that match a term by prepending it with a - character.
   --user-id: string # The NSID of the user who's photo to search. If this parameter isn't passed then everybody's public photos will be searched. A value of "me" will search against the calling user's photos for authenticated calls.
@@ -917,7 +963,7 @@ export def "get-media-by-search" [
   --min-taken-date: string # Minimum taken date. Photos with an taken date greater than or equal to this value will be returned. The date can be in the form of a mysql datetime or unix timestamp.
   --max-taken-date: string # Maximum taken date. Photos with an taken date less than or equal to this value will be returned. The date can be in the form of a mysql datetime or unix timestamp.
   --license: string # The license id for photos (for possible values see the flickr.photos.licenses.getInfo method). Multiple licenses may be comma-separated.
-  --qp-sort: string # The order in which to sort returned photos. Deafults to date-posted-desc (unless you are doing a radial geo query, in which case the default sorting is by ascending distance from the point specified). The possible values are: date-posted-asc, date-posted-desc, date-taken-asc, date-taken-desc, interestingness-desc, interestingness-asc, and relevance.
+  --sort: string # The order in which to sort returned photos. Deafults to date-posted-desc (unless you are doing a radial geo query, in which case the default sorting is by ascending distance from the point specified). The possible values are: date-posted-asc, date-posted-desc, date-taken-asc, date-taken-desc, interestingness-desc, interestingness-asc, and relevance.
   --privacy-filter: float # Return photos only matching a certain privacy level. This only applies when making an authenticated call to view photos you own. Valid values are:, 1: public photos, 2: private photos visible to friends, 3: private photos visible to family, 4: private photos visible to friends & family, 5: completely private photos
   --bbox: string # A comma-delimited list of 4 values defining the Bounding Box of the area that will be searched.
   --accuracy: string # Recorded accuracy level of the location information. Current range is 1-16: World level is 1 Country is ~3 Region is ~6 City is ~11 Street is ~16
@@ -944,14 +990,15 @@ export def "get-media-by-search" [
 ]: nothing -> record<page: float, pages: float, perpage: float, photos: table<comments: record, dates: record, dateuploaded: string, description: record, editability: record, farm: string, id: string, isfavorite: bool, license: string, media: string, notes: record, originalsecret: string, owner: record, people: record, permissions: record, publiceditability: record, rotation: string, safe: bool, safety_level: string, secret: string, server: string, tags: record, title: record, urls: record, usage: record, views: string, visibility: record>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "user_id" $user_id "scalar") (serialize-qp "min_upload_date" $min_upload_date "scalar") (serialize-qp "max_upload_date" $max_upload_date "scalar") (serialize-qp "min_taken_date" $min_taken_date "scalar") (serialize-qp "max_taken_date" $max_taken_date "scalar") (serialize-qp "license" $license "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "privacy_filter" $privacy_filter "scalar") (serialize-qp "bbox" $bbox "scalar") (serialize-qp "accuracy" $accuracy "scalar") (serialize-qp "safe_search" $safe_search "scalar") (serialize-qp "content_type" $content_type "scalar") (serialize-qp "machine_tags" $machine_tags "scalar") (serialize-qp "machine_tag_mode" $machine_tag_mode "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "contacts" $contacts "scalar") (serialize-qp "woe_id" $woe_id "scalar") (serialize-qp "place_id" $place_id "scalar") (serialize-qp "media" $media "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "geo_context" $geo_context "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "radius_units" $radius_units "scalar") (serialize-qp "is_commons" $is_commons "scalar") (serialize-qp "in_gallery" $in_gallery "scalar") (serialize-qp "is_getty" $is_getty "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest?method=flickr.photos.search" $qp $auth.query)
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
+  let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "user_id" $user_id "scalar") (serialize-qp "min_upload_date" $min_upload_date "scalar") (serialize-qp "max_upload_date" $max_upload_date "scalar") (serialize-qp "min_taken_date" $min_taken_date "scalar") (serialize-qp "max_taken_date" $max_taken_date "scalar") (serialize-qp "license" $license "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "privacy_filter" $privacy_filter "scalar") (serialize-qp "bbox" $bbox "scalar") (serialize-qp "accuracy" $accuracy "scalar") (serialize-qp "safe_search" $safe_search "scalar") (serialize-qp "content_type" $content_type "scalar") (serialize-qp "machine_tags" $machine_tags "scalar") (serialize-qp "machine_tag_mode" $machine_tag_mode "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "contacts" $contacts "scalar") (serialize-qp "woe_id" $woe_id "scalar") (serialize-qp "place_id" $place_id "scalar") (serialize-qp "media" $media "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "geo_context" $geo_context "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "radius_units" $radius_units "scalar") (serialize-qp "is_commons" $is_commons "scalar") (serialize-qp "in_gallery" $in_gallery "scalar") (serialize-qp "is_getty" $is_getty "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/rest" "method=flickr.photos.search" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"api_key": $api_key, "text": $text, "tags": $tags, "user_id": $user_id, "min_upload_date": $min_upload_date, "max_upload_date": $max_upload_date, "min_taken_date": $min_taken_date, "max_taken_date": $max_taken_date, "license": $license, "sort": $qp_sort, "privacy_filter": $privacy_filter, "bbox": $bbox, "accuracy": $accuracy, "safe_search": $safe_search, "content_type": $content_type, "machine_tags": $machine_tags, "machine_tag_mode": $machine_tag_mode, "group_id": $group_id, "contacts": $contacts, "woe_id": $woe_id, "place_id": $place_id, "media": $media, "has_geo": $has_geo, "geo_context": $geo_context, "lat": $lat, "lon": $lon, "radius": $radius, "radius_units": $radius_units, "is_commons": $is_commons, "in_gallery": $in_gallery, "is_getty": $is_getty, "per_page": $per_page, "page": $page} | compact)
+    query: ({"api_key": $api_key, "text": $text, "tags": $tags, "user_id": $user_id, "min_upload_date": $min_upload_date, "max_upload_date": $max_upload_date, "min_taken_date": $min_taken_date, "max_taken_date": $max_taken_date, "license": $license, "sort": $sort, "privacy_filter": $privacy_filter, "bbox": $bbox, "accuracy": $accuracy, "safe_search": $safe_search, "content_type": $content_type, "machine_tags": $machine_tags, "machine_tag_mode": $machine_tag_mode, "group_id": $group_id, "contacts": $contacts, "woe_id": $woe_id, "place_id": $place_id, "media": $media, "has_geo": $has_geo, "geo_context": $geo_context, "lat": $lat, "lon": $lon, "radius": $radius, "radius_units": $radius_units, "is_commons": $is_commons, "in_gallery": $in_gallery, "is_getty": $is_getty, "per_page": $per_page, "page": $page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -976,14 +1023,16 @@ export def "get-album-context-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
-  --photo-id: string
+  --api-key: string # required
+  --photo-id: string # required
   --photoset-id: string
 ]: nothing -> record<count: record<_content: string>, nextphoto: record<farm: string, id: string, is_faved: bool, license: int, media: string, owner: string, safe: bool, secret: string, server: string, thumb: string, title: string, url: string>, prevphoto: record<farm: string, id: string, is_faved: bool, license: int, media: string, owner: string, safe: bool, secret: string, server: string, thumb: string, title: string, url: string>, stat: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
+  if ($photo_id == null) { error make --unspanned { msg: "required query parameter 'photo_id' missing: pass --photo-id" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "photo_id" $photo_id "scalar") (serialize-qp "photoset_id" $photoset_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest?method=flickr.photosets.getContext" $qp $auth.query)
+  let full_url = (build-url $base "/rest" "method=flickr.photosets.getContext" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1014,15 +1063,17 @@ export def "get-albums-by-person-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
-  --user-id: string
+  --api-key: string # required
+  --user-id: string # required
   --page: float
   --per-page: float
 ]: nothing -> record<page: float, pages: float, perpage: float, photosets: table<can_comment: bool, count_comments: float, count_views: float, date_create: float, date_update: float, description: string, farm: string, id: string, photos: float, primary: string, secret: string, server: string, title: string, videos: float>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
+  if ($user_id == null) { error make --unspanned { msg: "required query parameter 'user_id' missing: pass --user-id" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "user_id" $user_id "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest?method=flickr.photosets.getList" $qp $auth.query)
+  let full_url = (build-url $base "/rest" "method=flickr.photosets.getList" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1053,13 +1104,15 @@ export def "get-album-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
-  --photoset-id: string
+  --api-key: string # required
+  --photoset-id: string # required
 ]: nothing -> record<photoset: table<comments: record, dates: record, dateuploaded: string, description: record, editability: record, farm: string, id: string, isfavorite: bool, license: string, media: string, notes: record, originalsecret: string, owner: record, people: record, permissions: record, publiceditability: record, rotation: string, safe: bool, safety_level: string, secret: string, server: string, tags: record, title: record, urls: record, usage: record, views: string, visibility: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
+  if ($photoset_id == null) { error make --unspanned { msg: "required query parameter 'photoset_id' missing: pass --photoset-id" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "photoset_id" $photoset_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest?method=flickr.photosets.getPhotos" $qp $auth.query)
+  let full_url = (build-url $base "/rest" "method=flickr.photosets.getPhotos" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1080,7 +1133,7 @@ export def "get-album-by-id" [
 #
 # GET /rest?method=flickr.test.echo
 # operationId: echo
-export def "echo" [
+export def "get-rest-method-flickr-test-echo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1090,13 +1143,14 @@ export def "echo" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
+  --api-key: string # required
   --echo: string
 ]: nothing -> record<echo: record<_content: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "echo" $echo "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/rest?method=flickr.test.echo" $qp $auth.query)
+  let full_url = (build-url $base "/rest" "method=flickr.test.echo" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1147,8 +1201,8 @@ export def "upload-photo" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["photo"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["photo"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url

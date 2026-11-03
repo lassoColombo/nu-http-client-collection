@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -153,13 +153,14 @@ export def "export-configurations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
 ]: nothing -> table<ApplicationName: string, ContainerName: string, DestinationAccountId: string, DestinationStorageLocationId: string, DestinationStorageSubscriptionId: string, DestinationType: string, ExportId: string, ExportStatus: string, InstrumentationKey: string, IsUserEnabled: string, LastGapTime: string, LastSuccessTime: string, LastUserUpdate: string, NotificationQueueEnabled: string, PermanentErrorReason: string, RecordTypes: string, ResourceGroup: string, StorageName: string, SubscriptionId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/exportconfiguration") $qp $auth.query)
   let accept_val = "application/json"
@@ -195,7 +196,7 @@ export def "export-configurations-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --destination-account-id: string # The name of destination storage account.
   --destination-address: string # The SAS URL for the destination storage container. It must grant write permission.
   --destination-storage-location-id: string # The location ID of the destination storage container.
@@ -212,6 +213,7 @@ export def "export-configurations-create" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/exportconfiguration") $qp $auth.query)
   let req_body = {"DestinationAccountId": $destination_account_id, "DestinationAddress": $destination_address, "DestinationStorageLocationId": $destination_storage_location_id, "DestinationStorageSubscriptionId": $destination_storage_subscription_id, "DestinationType": $destination_type, "IsEnabled": $is_enabled, "NotificationQueueEnabled": $notification_queue_enabled, "NotificationQueueUri": $notification_queue_uri, "RecordTypes": $record_types} | compact
@@ -250,7 +252,7 @@ export def "export-configurations-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
 ]: nothing -> record<ApplicationName: string, ContainerName: string, DestinationAccountId: string, DestinationStorageLocationId: string, DestinationStorageSubscriptionId: string, DestinationType: string, ExportId: string, ExportStatus: string, InstrumentationKey: string, IsUserEnabled: string, LastGapTime: string, LastSuccessTime: string, LastUserUpdate: string, NotificationQueueEnabled: string, PermanentErrorReason: string, RecordTypes: string, ResourceGroup: string, StorageName: string, SubscriptionId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -258,6 +260,7 @@ export def "export-configurations-delete" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($export_id | is-empty) { error make --unspanned { msg: "path parameter 'exportId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), export_id: (encode-path-segment $export_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/exportconfiguration/{export_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -294,7 +297,7 @@ export def "export-configurations-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
 ]: nothing -> record<ApplicationName: string, ContainerName: string, DestinationAccountId: string, DestinationStorageLocationId: string, DestinationStorageSubscriptionId: string, DestinationType: string, ExportId: string, ExportStatus: string, InstrumentationKey: string, IsUserEnabled: string, LastGapTime: string, LastSuccessTime: string, LastUserUpdate: string, NotificationQueueEnabled: string, PermanentErrorReason: string, RecordTypes: string, ResourceGroup: string, StorageName: string, SubscriptionId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -302,6 +305,7 @@ export def "export-configurations-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($export_id | is-empty) { error make --unspanned { msg: "path parameter 'exportId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), export_id: (encode-path-segment $export_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/exportconfiguration/{export_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -338,7 +342,7 @@ export def "export-configurations-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --destination-account-id: string # The name of destination storage account.
   --destination-address: string # The SAS URL for the destination storage container. It must grant write permission.
   --destination-storage-location-id: string # The location ID of the destination storage container.
@@ -356,6 +360,7 @@ export def "export-configurations-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($export_id | is-empty) { error make --unspanned { msg: "path parameter 'exportId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), export_id: (encode-path-segment $export_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/exportconfiguration/{export_id}") $qp $auth.query)
   let req_body = {"DestinationAccountId": $destination_account_id, "DestinationAddress": $destination_address, "DestinationStorageLocationId": $destination_storage_location_id, "DestinationStorageSubscriptionId": $destination_storage_subscription_id, "DestinationType": $destination_type, "IsEnabled": $is_enabled, "NotificationQueueEnabled": $notification_queue_enabled, "NotificationQueueUri": $notification_queue_uri, "RecordTypes": $record_types} | compact

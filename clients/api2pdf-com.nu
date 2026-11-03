@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "query-apikey" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "apikey")=(encode-path-segment $token_val)", location: "query"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -184,11 +184,12 @@ export def "chrome-from-url-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --url: string # Url of the page to convert to PDF. Must start with http:// or https://.
+  --url: string # Url of the page to convert to PDF. Must start with http:// or https://. (required)
   --output: string # Specify output=json to receive a JSON output. Defaults to PDF file.
 ]: nothing -> record<cost: float, mbIn: float, mbOut: float, pdf: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
   let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "output" $output "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/chrome/url" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -386,11 +387,12 @@ export def "wkhtmltopdf-from-url-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --url: string # Url of the page to convert to PDF. Must start with http:// or https://.
+  --url: string # Url of the page to convert to PDF. Must start with http:// or https://. (required)
   --output: string # Specify output=json to receive a JSON output. Defaults to PDF file.
 ]: nothing -> record<cost: float, mbIn: float, mbOut: float, pdf: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
   let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "output" $output "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/wkhtmltopdf/url" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -465,14 +467,16 @@ export def "zebra-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --format: string # Most common is CODE_39 or QR_CODE
-  --value: string # Specify the text value you want to convert
+  --format: string # Most common is CODE_39 or QR_CODE (required)
+  --value: string # Specify the text value you want to convert (required)
   --showlabel: oneof<nothing, bool> # Show label of text below barcode
   --height: int # Height of the barcode generated image
   --width: int # Width of the barcode generated image
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($format == null) { error make --unspanned { msg: "required query parameter 'format' missing: pass --format" } }
+  if ($value == null) { error make --unspanned { msg: "required query parameter 'value' missing: pass --value" } }
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "value" $value "scalar") (serialize-qp "showlabel" $showlabel "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "width" $width "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/zebra" $qp $auth.query)
   let accept_val = "image/png"

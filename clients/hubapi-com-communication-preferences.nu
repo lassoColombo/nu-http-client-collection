@@ -1,4 +1,4 @@
-# Auto-generated client for Subscriptions vv3
+# Auto-generated client for Subscriptions v3
 # Source: https://api.apis.guru/v2/specs/hubapi.com/communication-preferences/v3/openapi.json
 # Auth: --token flag or $env.SUBSCRIPTIONS_TOKEN
 
@@ -13,8 +13,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "query-hapikey" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "hapikey")=(encode-path-segment $token_val)", location: "query"} }
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "private-app-legacy" => { {scheme: $scheme, headers: {private-app-legacy: $token_val}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "private-app-legacy" => { {scheme: $scheme, headers: {"private-app-legacy": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -103,6 +103,7 @@ def base-url-completer [] { ["https://api.hubapi.com"] }
 def auth-scheme-completer [] { ["query-hapikey" "bearer" "private-app-legacy"] }
 
 # Completers for enum parameters
+def accept-completer [] { ["*/*" "application/json"] }
 def legal-basis-completer [] { ["CONSENT_WITH_NOTICE" "LEGITIMATE_INTEREST_CLIENT" "LEGITIMATE_INTEREST_OTHER" "LEGITIMATE_INTEREST_PQL" "NON_GDPR" "PERFORMANCE_OF_CONTRACT" "PROCESS_AND_STORE"] }
 
 # List all available API commands with their parameters
@@ -142,11 +143,12 @@ export def "get-communication-preferences-v3-definitions-get-page" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
 ]: nothing -> record<subscriptionDefinitions: table<communicationMethod: string, createdAt: string, description: string, id: string, isActive: bool, isDefault: bool, isInternal: bool, name: string, purpose: string, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/communication-preferences/v3/definitions" $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -177,12 +179,13 @@ export def "get-communication-preferences-v3-status-email-get-email-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
 ]: nothing -> record<recipient: string, subscriptionStatuses: table<brandId: int, description: string, id: string, legalBasis: string, legalBasisExplanation: string, name: string, preferenceGroupName: string, sourceOfStatus: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
   if ($email_address | is-empty) { error make --unspanned { msg: "path parameter 'emailAddress' must be non-empty" } }
   let full_url = (build-url $base ({email_address: (encode-path-segment $email_address)} | format pattern "/communication-preferences/v3/status/email/{email_address}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -212,6 +215,7 @@ export def "post-communication-preferences-v3-subscribe-subscribe" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   email_address: string # Contact's email address.
   --legal-basis: string@legal-basis-completer # Legal basis for updating the contact's status (required for GDPR enabled portals).
   --legal-basis-explanation: string # A more detailed explanation to go with the legal basis (required for GDPR enabled portals).
@@ -223,7 +227,7 @@ export def "post-communication-preferences-v3-subscribe-subscribe" [
   let full_url = (build-url $base "/communication-preferences/v3/subscribe" $auth.query)
   let req_body = {"emailAddress": $email_address, "legalBasis": $legal_basis, "legalBasisExplanation": $legal_basis_explanation, "subscriptionId": $subscription_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -253,6 +257,7 @@ export def "post-communication-preferences-v3-unsubscribe-unsubscribe" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   email_address: string # Contact's email address.
   --legal-basis: string@legal-basis-completer # Legal basis for updating the contact's status (required for GDPR enabled portals).
   --legal-basis-explanation: string # A more detailed explanation to go with the legal basis (required for GDPR enabled portals).
@@ -264,7 +269,7 @@ export def "post-communication-preferences-v3-unsubscribe-unsubscribe" [
   let full_url = (build-url $base "/communication-preferences/v3/unsubscribe" $auth.query)
   let req_body = {"emailAddress": $email_address, "legalBasis": $legal_basis, "legalBasisExplanation": $legal_basis_explanation, "subscriptionId": $subscription_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"

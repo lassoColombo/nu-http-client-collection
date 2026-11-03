@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -197,7 +197,7 @@ export def "migrate-projects-delete-migrate-project" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
   --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -205,6 +205,7 @@ export def "migrate-projects-delete-migrate-project" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($migrate_project_name | is-empty) { error make --unspanned { msg: "path parameter 'migrateProjectName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), migrate_project_name: (encode-path-segment $migrate_project_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/migrateProjects/{migrate_project_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -242,13 +243,14 @@ export def "migrate-projects-get-migrate-project" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
 ]: nothing -> record<eTag: string, id: string, location: string, name: string, properties: record<lastSummaryRefreshedTime: string, provisioningState: string, refreshSummaryState: string, registeredTools: list<string>, summary: record>, tags: record<additionalProperties: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($migrate_project_name | is-empty) { error make --unspanned { msg: "path parameter 'migrateProjectName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), migrate_project_name: (encode-path-segment $migrate_project_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/migrateProjects/{migrate_project_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -286,7 +288,7 @@ export def "migrate-projects-patch-migrate-project" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
   --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
   --e-tag: string # Gets or sets the eTag for concurrency control.
   --location: string # Gets or sets the Azure location in which migrate project is created.
@@ -299,6 +301,7 @@ export def "migrate-projects-patch-migrate-project" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($migrate_project_name | is-empty) { error make --unspanned { msg: "path parameter 'migrateProjectName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), migrate_project_name: (encode-path-segment $migrate_project_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/migrateProjects/{migrate_project_name}") $qp $auth.query)
   let req_body = {"eTag": $e_tag, "location": $location, "properties": $properties, "tags": $tags} | compact
@@ -340,7 +343,7 @@ export def "migrate-projects-put-migrate-project" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
   --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
   --e-tag: string # Gets or sets the eTag for concurrency control.
   --location: string # Gets or sets the Azure location in which migrate project is created.
@@ -353,6 +356,7 @@ export def "migrate-projects-put-migrate-project" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($migrate_project_name | is-empty) { error make --unspanned { msg: "path parameter 'migrateProjectName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), migrate_project_name: (encode-path-segment $migrate_project_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/migrateProjects/{migrate_project_name}") $qp $auth.query)
   let req_body = {"eTag": $e_tag, "location": $location, "properties": $properties, "tags": $tags} | compact
@@ -392,7 +396,7 @@ export def "database-instances-enumerate-database-instances" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
   --continuation-token: string # The continuation token.
   --page-size: int # The number of items to be returned in a single page. This value is honored only if it is less than the 100.
   --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
@@ -402,6 +406,7 @@ export def "database-instances-enumerate-database-instances" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($migrate_project_name | is-empty) { error make --unspanned { msg: "path parameter 'migrateProjectName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "continuationToken" $continuation_token "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), migrate_project_name: (encode-path-segment $migrate_project_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/migrateProjects/{migrate_project_name}/databaseInstances") $qp $auth.query)
   let accept_val = "application/json"
@@ -440,7 +445,7 @@ export def "database-instances-get-database-instance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
   --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
 ]: nothing -> record<id: string, name: string, properties: record<discoveryData: list<record>, lastUpdatedTime: string, summary: record>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -449,6 +454,7 @@ export def "database-instances-get-database-instance" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($migrate_project_name | is-empty) { error make --unspanned { msg: "path parameter 'migrateProjectName' must be non-empty" } }
   if ($database_instance_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseInstanceName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), migrate_project_name: (encode-path-segment $migrate_project_name), database_instance_name: (encode-path-segment $database_instance_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/migrateProjects/{migrate_project_name}/databaseInstances/{database_instance_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -486,7 +492,7 @@ export def "databases-enumerate-databases" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
   --continuation-token: string # The continuation token.
   --page-size: int # The number of items to be returned in a single page. This value is honored only if it is less than the 100.
   --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
@@ -496,6 +502,7 @@ export def "databases-enumerate-databases" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($migrate_project_name | is-empty) { error make --unspanned { msg: "path parameter 'migrateProjectName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "continuationToken" $continuation_token "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), migrate_project_name: (encode-path-segment $migrate_project_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/migrateProjects/{migrate_project_name}/databases") $qp $auth.query)
   let accept_val = "application/json"
@@ -534,7 +541,7 @@ export def "databases-get-database" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
   --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
 ]: nothing -> record<id: string, name: string, properties: record<assessmentData: list<record>, lastUpdatedTime: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -543,6 +550,7 @@ export def "databases-get-database" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($migrate_project_name | is-empty) { error make --unspanned { msg: "path parameter 'migrateProjectName' must be non-empty" } }
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), migrate_project_name: (encode-path-segment $migrate_project_name), database_name: (encode-path-segment $database_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/migrateProjects/{migrate_project_name}/databases/{database_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -580,7 +588,7 @@ export def "machines-enumerate-machines" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
   --continuation-token: string # The continuation token.
   --page-size: int # The number of items to be returned in a single page. This value is honored only if it is less than the 100.
 ]: nothing -> record<nextLink: string, value: table<id: string, name: string, properties: record, type: string>> {
@@ -589,6 +597,7 @@ export def "machines-enumerate-machines" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($migrate_project_name | is-empty) { error make --unspanned { msg: "path parameter 'migrateProjectName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "continuationToken" $continuation_token "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), migrate_project_name: (encode-path-segment $migrate_project_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/migrateProjects/{migrate_project_name}/machines") $qp $auth.query)
   let accept_val = "application/json"
@@ -625,7 +634,7 @@ export def "machines-get-machine" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
 ]: nothing -> record<id: string, name: string, properties: record<assessmentData: list<record>, discoveryData: list<record>, lastUpdatedTime: string, migrationData: list<record>>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -633,6 +642,7 @@ export def "machines-get-machine" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($migrate_project_name | is-empty) { error make --unspanned { msg: "path parameter 'migrateProjectName' must be non-empty" } }
   if ($machine_name | is-empty) { error make --unspanned { msg: "path parameter 'machineName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), migrate_project_name: (encode-path-segment $migrate_project_name), machine_name: (encode-path-segment $machine_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/migrateProjects/{migrate_project_name}/machines/{machine_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -668,7 +678,7 @@ export def "events-enumerate-events" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
   --continuation-token: string # The continuation token.
   --page-size: int # The number of items to be returned in a single page. This value is honored only if it is less than the 100.
   --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
@@ -678,6 +688,7 @@ export def "events-enumerate-events" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($migrate_project_name | is-empty) { error make --unspanned { msg: "path parameter 'migrateProjectName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "continuationToken" $continuation_token "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), migrate_project_name: (encode-path-segment $migrate_project_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/migrateProjects/{migrate_project_name}/migrateEvents") $qp $auth.query)
   let accept_val = "application/json"
@@ -716,7 +727,7 @@ export def "events-delete-event" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -724,6 +735,7 @@ export def "events-delete-event" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($migrate_project_name | is-empty) { error make --unspanned { msg: "path parameter 'migrateProjectName' must be non-empty" } }
   if ($event_name | is-empty) { error make --unspanned { msg: "path parameter 'eventName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), migrate_project_name: (encode-path-segment $migrate_project_name), event_name: (encode-path-segment $event_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/migrateProjects/{migrate_project_name}/migrateEvents/{event_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -760,7 +772,7 @@ export def "events-get-event" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
 ]: nothing -> record<id: string, name: string, properties: record<clientRequestId: string, errorCode: string, errorMessage: string, instanceType: string, possibleCauses: string, recommendation: string, solution: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -768,6 +780,7 @@ export def "events-get-event" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($migrate_project_name | is-empty) { error make --unspanned { msg: "path parameter 'migrateProjectName' must be non-empty" } }
   if ($event_name | is-empty) { error make --unspanned { msg: "path parameter 'eventName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), migrate_project_name: (encode-path-segment $migrate_project_name), event_name: (encode-path-segment $event_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/migrateProjects/{migrate_project_name}/migrateEvents/{event_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -803,7 +816,7 @@ export def "migrate-projects-refresh-migrate-project-summary" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
   --goal: string@goal-completer # Gets or sets the goal for which summary needs to be refreshed.
 ]: any -> record<isRefreshed: bool> {
   let input = $in
@@ -812,6 +825,7 @@ export def "migrate-projects-refresh-migrate-project-summary" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($migrate_project_name | is-empty) { error make --unspanned { msg: "path parameter 'migrateProjectName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), migrate_project_name: (encode-path-segment $migrate_project_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/migrateProjects/{migrate_project_name}/refreshSummary") $qp $auth.query)
   let req_body = {"goal": $goal} | compact
@@ -849,7 +863,7 @@ export def "migrate-projects-register-tool" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
   --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
   --tool: string@tool-completer # Gets or sets the tool to be registered.
 ]: any -> record<isRegistered: bool> {
@@ -859,6 +873,7 @@ export def "migrate-projects-register-tool" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($migrate_project_name | is-empty) { error make --unspanned { msg: "path parameter 'migrateProjectName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), migrate_project_name: (encode-path-segment $migrate_project_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/migrateProjects/{migrate_project_name}/registerTool") $qp $auth.query)
   let req_body = {"tool": $tool} | compact
@@ -898,13 +913,14 @@ export def "solutions-enumerate-solutions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
 ]: nothing -> record<nextLink: string, value: table<etag: string, id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($migrate_project_name | is-empty) { error make --unspanned { msg: "path parameter 'migrateProjectName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), migrate_project_name: (encode-path-segment $migrate_project_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/migrateProjects/{migrate_project_name}/solutions") $qp $auth.query)
   let accept_val = "application/json"
@@ -941,7 +957,7 @@ export def "solutions-delete-solution" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
   --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -950,6 +966,7 @@ export def "solutions-delete-solution" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($migrate_project_name | is-empty) { error make --unspanned { msg: "path parameter 'migrateProjectName' must be non-empty" } }
   if ($solution_name | is-empty) { error make --unspanned { msg: "path parameter 'solutionName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), migrate_project_name: (encode-path-segment $migrate_project_name), solution_name: (encode-path-segment $solution_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/migrateProjects/{migrate_project_name}/solutions/{solution_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -988,7 +1005,7 @@ export def "solutions-get-solution" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
 ]: nothing -> record<etag: string, id: string, name: string, properties: record<cleanupState: string, details: record<assessmentCount: int, extendedDetails: record, groupCount: int>, goal: string, purpose: string, status: string, summary: record<instanceType: string>, tool: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -996,6 +1013,7 @@ export def "solutions-get-solution" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($migrate_project_name | is-empty) { error make --unspanned { msg: "path parameter 'migrateProjectName' must be non-empty" } }
   if ($solution_name | is-empty) { error make --unspanned { msg: "path parameter 'solutionName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), migrate_project_name: (encode-path-segment $migrate_project_name), solution_name: (encode-path-segment $solution_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/migrateProjects/{migrate_project_name}/solutions/{solution_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1033,7 +1051,7 @@ export def "solutions-patch-solution" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
   --etag: string # Gets or sets the ETAG for optimistic concurrency control.
   --properties: record # Class for solution properties. — shape: {cleanupState?: "None"|"Started"|"InProgress"|"Completed"|"Failed", details?: record, goal?: "Servers"|"Databases", purpose?: "Discovery"|"Assessment"|"Migration", status?: "Inactive"|"Active", summary?: record, tool?: "ServerDiscovery"|"ServerAssessment"|"ServerMigration"|"Cloudamize"|"Turbonomic"|"Zerto"|"CorentTech"|"ServerAssessmentV1"|"ServerMigration_Replication"|"Carbonite"|"DataMigrationAssistant"|"DatabaseMigrationService"}
 ]: any -> record<etag: string, id: string, name: string, properties: record<cleanupState: string, details: record<assessmentCount: int, extendedDetails: record, groupCount: int>, goal: string, purpose: string, status: string, summary: record<instanceType: string>, tool: string>, type: string> {
@@ -1044,6 +1062,7 @@ export def "solutions-patch-solution" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($migrate_project_name | is-empty) { error make --unspanned { msg: "path parameter 'migrateProjectName' must be non-empty" } }
   if ($solution_name | is-empty) { error make --unspanned { msg: "path parameter 'solutionName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), migrate_project_name: (encode-path-segment $migrate_project_name), solution_name: (encode-path-segment $solution_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/migrateProjects/{migrate_project_name}/solutions/{solution_name}") $qp $auth.query)
   let req_body = {"etag": $etag, "properties": $properties} | compact
@@ -1083,7 +1102,7 @@ export def "solutions-put-solution" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
   --etag: string # Gets or sets the ETAG for optimistic concurrency control.
   --properties: record # Class for solution properties. — shape: {cleanupState?: "None"|"Started"|"InProgress"|"Completed"|"Failed", details?: record, goal?: "Servers"|"Databases", purpose?: "Discovery"|"Assessment"|"Migration", status?: "Inactive"|"Active", summary?: record, tool?: "ServerDiscovery"|"ServerAssessment"|"ServerMigration"|"Cloudamize"|"Turbonomic"|"Zerto"|"CorentTech"|"ServerAssessmentV1"|"ServerMigration_Replication"|"Carbonite"|"DataMigrationAssistant"|"DatabaseMigrationService"}
 ]: any -> record<etag: string, id: string, name: string, properties: record<cleanupState: string, details: record<assessmentCount: int, extendedDetails: record, groupCount: int>, goal: string, purpose: string, status: string, summary: record<instanceType: string>, tool: string>, type: string> {
@@ -1094,6 +1113,7 @@ export def "solutions-put-solution" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($migrate_project_name | is-empty) { error make --unspanned { msg: "path parameter 'migrateProjectName' must be non-empty" } }
   if ($solution_name | is-empty) { error make --unspanned { msg: "path parameter 'solutionName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), migrate_project_name: (encode-path-segment $migrate_project_name), solution_name: (encode-path-segment $solution_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/migrateProjects/{migrate_project_name}/solutions/{solution_name}") $qp $auth.query)
   let req_body = {"etag": $etag, "properties": $properties} | compact
@@ -1132,7 +1152,7 @@ export def "solutions-cleanup-solution-data" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1140,6 +1160,7 @@ export def "solutions-cleanup-solution-data" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($migrate_project_name | is-empty) { error make --unspanned { msg: "path parameter 'migrateProjectName' must be non-empty" } }
   if ($solution_name | is-empty) { error make --unspanned { msg: "path parameter 'solutionName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), migrate_project_name: (encode-path-segment $migrate_project_name), solution_name: (encode-path-segment $solution_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/migrateProjects/{migrate_project_name}/solutions/{solution_name}/cleanupData") $qp $auth.query)
   let accept_val = "application/json"
@@ -1176,7 +1197,7 @@ export def "solutions-get-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
 ]: nothing -> record<publisherSasUri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1184,6 +1205,7 @@ export def "solutions-get-config" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($migrate_project_name | is-empty) { error make --unspanned { msg: "path parameter 'migrateProjectName' must be non-empty" } }
   if ($solution_name | is-empty) { error make --unspanned { msg: "path parameter 'solutionName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), migrate_project_name: (encode-path-segment $migrate_project_name), solution_name: (encode-path-segment $solution_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/migrateProjects/{migrate_project_name}/solutions/{solution_name}/getConfig") $qp $auth.query)
   let accept_val = "application/json"

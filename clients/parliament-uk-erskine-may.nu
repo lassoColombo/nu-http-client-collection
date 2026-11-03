@@ -1,4 +1,4 @@
-# Auto-generated client for Erskine May API vv1
+# Auto-generated client for Erskine May API v1
 # Source: https://api.apis.guru/v2/specs/parliament.uk/erskine-may/v1/openapi.json
 # Auth: --token flag or $env.ERSKINE_MAY_API_TOKEN
 

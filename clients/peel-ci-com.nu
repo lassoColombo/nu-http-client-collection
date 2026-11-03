@@ -131,11 +131,12 @@ export def "get-related-hashtags" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --show-id: string # Unique ID for a show
+  --show-id: string # Unique ID for a show (required)
   --time-window: string # Time window in seconds (default is 2 hours)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($show_id == null) { error make --unspanned { msg: "required query parameter 'showID' missing: pass --show-id" } }
   let qp = [(serialize-qp "showID" $show_id "scalar") (serialize-qp "timeWindow" $time_window "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hashtag/related" $qp $auth.query)
   let accept_val = "application/json"

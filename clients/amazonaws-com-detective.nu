@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -206,7 +206,7 @@ export def "batch-get-graph-member-datasources" [
   --x-amz-signed-headers: string
   graph_arn: string # The ARN of the behavior graph.
   account_ids: list<string> # The list of Amazon Web Services accounts to get data source package information on.
-]: any -> record<MemberDatasources: record, UnprocessedAccounts: record> {
+]: any -> record<MemberDatasources: table<AccountId: string, GraphArn: string, DatasourcePackageIngestHistory: record>, UnprocessedAccounts: table<AccountId: string, Reason: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -253,7 +253,7 @@ export def "batch-get-membership-datasources" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   graph_arns: list<string> # The ARN of the behavior graph.
-]: any -> record<MembershipDatasources: record, UnprocessedGraphs: record> {
+]: any -> record<MembershipDatasources: table<AccountId: string, GraphArn: string, DatasourcePackageIngestHistory: record>, UnprocessedGraphs: table<GraphArn: string, Reason: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -300,7 +300,7 @@ export def "create-graph" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --tags: record # The tags to assign to the new behavior graph. You can add up to 50 tags. For each tag, you provide the tag key and the tag value. Each tag key can contain up to 128 characters. Each tag value can contain up to 256 characters.
-]: any -> record<GraphArn: record> {
+]: any -> record<GraphArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -329,7 +329,7 @@ export def "create-graph" [
 #
 # POST /graph/members
 # operationId: CreateMembers
-# --Accounts item shape: {AccountId: any, EmailAddress: any}
+# --Accounts item shape: {AccountId: string, EmailAddress: string}
 export def "create-members" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -350,8 +350,8 @@ export def "create-members" [
   graph_arn: string # The ARN of the behavior graph.
   --message: string # Customized message text to include in the invitation email message to the invited member accounts.
   --disable-email-notification: oneof<nothing, bool> # if set to true, then the invited accounts do not receive email notifications. By default, this is set to false, and the invited accounts receive email notifications. Organization accounts in the organization behavior graph do not receive email notifications.
-  accounts: list # The list of Amazon Web Services accounts to invite or to enable. You can invite or enable up to 50 accounts at a time. For each invited account, the account list contains the account identifier and the Amazon Web Services account root user email address. For organization accounts in the organization behavior graph, the email address is not required. — item shape: {AccountId: any, EmailAddress: any}
-]: any -> record<Members: record, UnprocessedAccounts: record> {
+  accounts: list # The list of Amazon Web Services accounts to invite or to enable. You can invite or enable up to 50 accounts at a time. For each invited account, the account list contains the account identifier and the Amazon Web Services account root user email address. For organization accounts in the organization behavior graph, the email address is not required. — item shape: {AccountId: string, EmailAddress: string}
+]: any -> record<Members: table<AccountId: string, EmailAddress: string, GraphArn: string, MasterId: string, AdministratorId: string, Status: string, DisabledReason: string, InvitedTime: string, UpdatedTime: string, VolumeUsageInBytes: int, VolumeUsageUpdatedTime: string, PercentOfGraphUtilization: float, PercentOfGraphUtilizationUpdatedTime: string, InvitationType: string, VolumeUsageByDatasourcePackage: record, DatasourcePackageIngestStates: record>, UnprocessedAccounts: table<AccountId: string, Reason: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -446,7 +446,7 @@ export def "delete-members" [
   --x-amz-signed-headers: string
   graph_arn: string # The ARN of the behavior graph to remove members from.
   account_ids: list<string> # The list of Amazon Web Services account identifiers for the member accounts to remove from the behavior graph. You can remove up to 50 member accounts at a time.
-]: any -> record<AccountIds: record, UnprocessedAccounts: record> {
+]: any -> record<AccountIds: list<string>, UnprocessedAccounts: table<AccountId: string, Reason: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -493,7 +493,7 @@ export def "describe-organization-configuration" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   graph_arn: string # The ARN of the organization behavior graph.
-]: any -> record<AutoEnable: record> {
+]: any -> record<AutoEnable: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -678,7 +678,7 @@ export def "get-members" [
   --x-amz-signed-headers: string
   graph_arn: string # The ARN of the behavior graph for which to request the member details.
   account_ids: list<string> # The list of Amazon Web Services account identifiers for the member account for which to return member details. You can request details for up to 50 member accounts at a time. You cannot use GetMembers to retrieve information about member accounts that were removed from the behavior graph.
-]: any -> record<MemberDetails: record, UnprocessedAccounts: record> {
+]: any -> record<MemberDetails: table<AccountId: string, EmailAddress: string, GraphArn: string, MasterId: string, AdministratorId: string, Status: string, DisabledReason: string, InvitedTime: string, UpdatedTime: string, VolumeUsageInBytes: int, VolumeUsageUpdatedTime: string, PercentOfGraphUtilization: float, PercentOfGraphUtilizationUpdatedTime: string, InvitationType: string, VolumeUsageByDatasourcePackage: record, DatasourcePackageIngestStates: record>, UnprocessedAccounts: table<AccountId: string, Reason: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -729,7 +729,7 @@ export def "list-datasource-packages" [
   graph_arn: string # The ARN of the behavior graph.
   --next-token-body: string # For requests to get the next page of results, the pagination token that was returned with the previous set of results. The initial request does not include a pagination token. (body field)
   --max-results-body: int # The maximum number of results to return. (body field)
-]: any -> record<DatasourcePackages: record, NextToken: record> {
+]: any -> record<DatasourcePackages: record, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -780,7 +780,7 @@ export def "list-graphs" [
   --x-amz-signed-headers: string
   --next-token-body: string # For requests to get the next page of results, the pagination token that was returned with the previous set of results. The initial request does not include a pagination token. (body field)
   --max-results-body: int # The maximum number of graphs to return at a time. The total must be less than the overall limit on the number of results to return, which is currently 200. (body field)
-]: any -> record<GraphList: record, NextToken: record> {
+]: any -> record<GraphList: table<Arn: string, CreatedTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -831,7 +831,7 @@ export def "list-invitations" [
   --x-amz-signed-headers: string
   --next-token-body: string # For requests to retrieve the next page of results, the pagination token that was returned with the previous page of results. The initial request does not include a pagination token. (body field)
   --max-results-body: int # The maximum number of behavior graph invitations to return in the response. The total must be less than the overall limit on the number of results to return, which is currently 200. (body field)
-]: any -> record<Invitations: record, NextToken: record> {
+]: any -> record<Invitations: table<AccountId: string, EmailAddress: string, GraphArn: string, MasterId: string, AdministratorId: string, Status: string, DisabledReason: string, InvitedTime: string, UpdatedTime: string, VolumeUsageInBytes: int, VolumeUsageUpdatedTime: string, PercentOfGraphUtilization: float, PercentOfGraphUtilizationUpdatedTime: string, InvitationType: string, VolumeUsageByDatasourcePackage: record, DatasourcePackageIngestStates: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -883,7 +883,7 @@ export def "list-members" [
   graph_arn: string # The ARN of the behavior graph for which to retrieve the list of member accounts.
   --next-token-body: string # For requests to retrieve the next page of member account results, the pagination token that was returned with the previous page of results. The initial request does not include a pagination token. (body field)
   --max-results-body: int # The maximum number of member accounts to include in the response. The total must be less than the overall limit on the number of results to return, which is currently 200. (body field)
-]: any -> record<MemberDetails: record, NextToken: record> {
+]: any -> record<MemberDetails: table<AccountId: string, EmailAddress: string, GraphArn: string, MasterId: string, AdministratorId: string, Status: string, DisabledReason: string, InvitedTime: string, UpdatedTime: string, VolumeUsageInBytes: int, VolumeUsageUpdatedTime: string, PercentOfGraphUtilization: float, PercentOfGraphUtilizationUpdatedTime: string, InvitationType: string, VolumeUsageByDatasourcePackage: record, DatasourcePackageIngestStates: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -934,7 +934,7 @@ export def "list-organization-admin-accounts" [
   --x-amz-signed-headers: string
   --next-token-body: string # For requests to get the next page of results, the pagination token that was returned with the previous set of results. The initial request does not include a pagination token. (body field)
   --max-results-body: int # The maximum number of results to return. (body field)
-]: any -> record<Administrators: record, NextToken: record> {
+]: any -> record<Administrators: table<AccountId: string, GraphArn: string, DelegationTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1164,7 +1164,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # The tag keys of the tags to remove from the behavior graph. You can remove up to 50 tags at a time.
+  --tag-keys: list # The tag keys of the tags to remove from the behavior graph. You can remove up to 50 tags at a time. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1176,6 +1176,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'ResourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"

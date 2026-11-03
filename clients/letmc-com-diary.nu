@@ -1,4 +1,4 @@
-# Auto-generated client for agentOS API V3, Diary Call Group vv3-diary
+# Auto-generated client for agentOS API V3, Diary Call Group v3-diary
 # Source: https://api.apis.guru/v2/specs/letmc.com/diary/v3-diary/openapi.json
 # Auth: --token flag or $env.AGENTOS_API_V3_DIARY_CALL_GROUP_TOKEN
 
@@ -12,8 +12,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "apikey" => { {scheme: $scheme, headers: {ApiKey: $token_val}, query: "", location: "header"} }
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "apikey" => { {scheme: $scheme, headers: {"ApiKey": $token_val}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -163,8 +163,8 @@ export def "diary-controller-get-allocations" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --preferred-date: string # The date to search from (format: date-time)
-  --appointment-type: string # The unique appointment type identifier
+  --preferred-date: string # The date to search from (required, format: date-time)
+  --appointment-type: string # The unique appointment type identifier (required)
   --lettings: oneof<nothing, bool> # Sales or Lettings property?
   --property-identifier: string # The unique property identifier (Sales or Lettings) determines branch and property type
   --branch-id: string # Branch ID to check appointments (required if no property submitted)
@@ -172,6 +172,8 @@ export def "diary-controller-get-allocations" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($preferred_date == null) { error make --unspanned { msg: "required query parameter 'preferredDate' missing: pass --preferred-date" } }
+  if ($appointment_type == null) { error make --unspanned { msg: "required query parameter 'appointmentType' missing: pass --appointment-type" } }
   let qp = [(serialize-qp "preferredDate" $preferred_date "scalar") (serialize-qp "appointmentType" $appointment_type "scalar") (serialize-qp "lettings" $lettings "scalar") (serialize-qp "propertyIdentifier" $property_identifier "scalar") (serialize-qp "branchID" $branch_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v3/diary/{short_name}/allocations") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -206,11 +208,12 @@ export def "diary-controller-delete-appointment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --appointment-id: string # The unique appointment id
+  --appointment-id: string # The unique appointment id (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($appointment_id == null) { error make --unspanned { msg: "required query parameter 'appointmentID' missing: pass --appointment-id" } }
   let qp = [(serialize-qp "appointmentID" $appointment_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v3/diary/{short_name}/appointment") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -245,11 +248,12 @@ export def "diary-controller-get-appointment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --appointment-id: string # Appointment ID
+  --appointment-id: string # Appointment ID (required)
 ]: nothing -> record<AppointmentType: string, Cancelled: bool, Comment: string, CreatedAt: string, CreatedBy: string, ETag: string, End: string, LinkedProperties: table<Address1: string, Address2: string, Address3: string, Address4: string, AddressFlatRoomNumber: string, AddressNumber: string, ETag: string, LatestTenancy: record, MainLandlord: record, OID: string, Postcode: string>, NextRecurringDate: string, OID: string, Recurrence: int, RecurrenceType: string, RemindAt: string, RemindBefore: string, Staff: string, Start: string, Subject: string> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($appointment_id == null) { error make --unspanned { msg: "required query parameter 'appointmentID' missing: pass --appointment-id" } }
   let qp = [(serialize-qp "appointmentID" $appointment_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v3/diary/{short_name}/appointment") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -286,7 +290,7 @@ export def "diary-controller-post-appointment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --property-identifier: list<string> # The unique property identifier (Sales or Lettings)
+  --property-identifier: list<string> # The unique property identifier (Sales or Lettings) (required)
   --lettings: oneof<nothing, bool> # Sales or Lettings property?
   --allocation-details: record # Represents a viewing booking slot — shape: {End?: string, StaffID?: string, StaffName?: string, Start?: string}
   --appointment-type: string # The Appointment Type ID
@@ -298,6 +302,7 @@ export def "diary-controller-post-appointment" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($property_identifier == null) { error make --unspanned { msg: "required query parameter 'propertyIdentifier' missing: pass --property-identifier" } }
   let qp = [(serialize-qp "propertyIdentifier" $property_identifier "multi") (serialize-qp "lettings" $lettings "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v3/diary/{short_name}/appointment") $qp $auth.query)
   let req_body = {"AllocationDetails": $allocation_details, "AppointmentType": $appointment_type, "ExtraComments": $extra_comments, "Guests": $guests, "Subject": $subject} | compact
@@ -336,7 +341,7 @@ export def "diary-controller-put-appointment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --appointment-id: string # The unique appointment id
+  --appointment-id: string # The unique appointment id (required)
   --lettings: oneof<nothing, bool> # Sales or Lettings property?
   --allow-marketing-correspondence: oneof<nothing, bool> # Sales or Lettings property?
   --allocation-details: record # Represents a viewing booking slot — shape: {End?: string, StaffID?: string, StaffName?: string, Start?: string}
@@ -349,6 +354,7 @@ export def "diary-controller-put-appointment" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($appointment_id == null) { error make --unspanned { msg: "required query parameter 'appointmentID' missing: pass --appointment-id" } }
   let qp = [(serialize-qp "appointmentID" $appointment_id "scalar") (serialize-qp "lettings" $lettings "scalar") (serialize-qp "AllowMarketingCorrespondence" $allow_marketing_correspondence "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v3/diary/{short_name}/appointment") $qp $auth.query)
   let req_body = {"AllocationDetails": $allocation_details, "AppointmentType": $appointment_type, "ExtraComments": $extra_comments, "Guests": $guests, "Subject": $subject} | compact
@@ -467,16 +473,22 @@ export def "diary-controller-get-appointments-between-dates" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --branch-id: string # The unique ID of the Branch
-  --start-date: string # The search from date (format: date-time)
-  --end-date: string # The search to date (format: date-time)
-  --appointment-types-to-search: list<string> # The appointment IDs to search for
-  --offset: int # The index of the first item to return (format: int32)
-  --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
+  --branch-id: string # The unique ID of the Branch (required)
+  --start-date: string # The search from date (required, format: date-time)
+  --end-date: string # The search to date (required, format: date-time)
+  --appointment-types-to-search: list<string> # The appointment IDs to search for (required)
+  --offset: int # The index of the first item to return (required, format: int32)
+  --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
 ]: nothing -> record<Count: int, Data: table<AppointmentType: string, Cancelled: bool, Comment: string, CreatedAt: string, CreatedBy: string, ETag: string, End: string, LinkedProperties: list, NextRecurringDate: string, OID: string, Recurrence: int, RecurrenceType: string, RemindAt: string, RemindBefore: string, Staff: string, Start: string, Subject: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($branch_id == null) { error make --unspanned { msg: "required query parameter 'branchID' missing: pass --branch-id" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'startDate' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'endDate' missing: pass --end-date" } }
+  if ($appointment_types_to_search == null) { error make --unspanned { msg: "required query parameter 'appointmentTypesToSearch' missing: pass --appointment-types-to-search" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
   let qp = [(serialize-qp "branchID" $branch_id "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "appointmentTypesToSearch" $appointment_types_to_search "multi") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v3/diary/{short_name}/appointmentsbetweendates") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -511,12 +523,14 @@ export def "diary-controller-get-appointment-types" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --offset: int # The index of the first item to return (format: int32)
-  --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
+  --offset: int # The index of the first item to return (required, format: int32)
+  --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
 ]: nothing -> record<Count: int, Data: table<ETag: string, Name: string, OID: string, SystemType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v3/diary/{short_name}/appointmenttypes") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -551,12 +565,14 @@ export def "company-controller-get-branches" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --offset: int # The index of the first item to return (format: int32)
-  --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
+  --offset: int # The index of the first item to return (required, format: int32)
+  --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
 ]: nothing -> record<Count: int, Data: table<Address1: string, Address2: string, Address3: string, Address4: string, CompanyName: string, County: string, EMailAddress: string, ETag: string, FaxPhone: string, LandPhone: string, Name: string, OID: string, Postcode: string, WebAddress: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v3/diary/{short_name}/company/branches") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -629,14 +645,18 @@ export def "diary-controller-get-recurring-appointments" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --branch-id: string # The unique ID of the Branch
-  --appointment-types-to-search: list<string> # The appointment IDs to search for
-  --offset: int # The index of the first item to return (format: int32)
-  --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
+  --branch-id: string # The unique ID of the Branch (required)
+  --appointment-types-to-search: list<string> # The appointment IDs to search for (required)
+  --offset: int # The index of the first item to return (required, format: int32)
+  --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
 ]: nothing -> record<Count: int, Data: table<AppointmentType: string, Cancelled: bool, Comment: string, CreatedAt: string, CreatedBy: string, ETag: string, End: string, LinkedProperties: list, NextRecurringDate: string, OID: string, Recurrence: int, RecurrenceType: string, RemindAt: string, RemindBefore: string, Staff: string, Start: string, Subject: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($branch_id == null) { error make --unspanned { msg: "required query parameter 'branchID' missing: pass --branch-id" } }
+  if ($appointment_types_to_search == null) { error make --unspanned { msg: "required query parameter 'appointmentTypesToSearch' missing: pass --appointment-types-to-search" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
   let qp = [(serialize-qp "branchID" $branch_id "scalar") (serialize-qp "appointmentTypesToSearch" $appointment_types_to_search "multi") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v3/diary/{short_name}/recurringappointment") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -672,16 +692,21 @@ export def "diary-controller-search-guest" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --forename: string
-  --emailaddress: string
-  --surname: string
-  --offset: int # format: int32
-  --count: int # format: int32
+  --forename: string # required
+  --emailaddress: string # required
+  --surname: string # required
+  --offset: int # required, format: int32
+  --count: int # required, format: int32
 ]: nothing -> record<Count: int, Data: table<ContactMobile: string, EmailAddress: string, Forename: string, OID: string, Surname: string>, Links: table<Href: string, Method: string, Relationship: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($shortname | is-empty) { error make --unspanned { msg: "path parameter 'shortname' must be non-empty" } }
   if ($branch_id | is-empty) { error make --unspanned { msg: "path parameter 'branchID' must be non-empty" } }
+  if ($forename == null) { error make --unspanned { msg: "required query parameter 'forename' missing: pass --forename" } }
+  if ($emailaddress == null) { error make --unspanned { msg: "required query parameter 'emailaddress' missing: pass --emailaddress" } }
+  if ($surname == null) { error make --unspanned { msg: "required query parameter 'surname' missing: pass --surname" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
   let qp = [(serialize-qp "forename" $forename "scalar") (serialize-qp "emailaddress" $emailaddress "scalar") (serialize-qp "surname" $surname "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({shortname: (encode-path-segment $shortname), branch_id: (encode-path-segment $branch_id)} | format pattern "/v3/diary/{shortname}/{branch_id}/guest/search") $qp $auth.query)
   let accept_val = ($accept | default "application/json")

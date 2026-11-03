@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -136,15 +136,16 @@ export def "storage-sub-systems-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2018-10-01)
+  --api-version: string # Client API Version. (required, default: 2018-10-01)
   --filter: string # OData filter parameter.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
   if ($scale_unit | is-empty) { error make --unspanned { msg: "path parameter 'scaleUnit' must be non-empty" } }
+  let api_version = ($api_version | default "2018-10-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), location: (encode-path-segment $location), scale_unit: (encode-path-segment $scale_unit)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Fabric.Admin/fabricLocations/{location}/scaleUnits/{scale_unit}/storageSubSystems") $qp $auth.query)
   let accept_val = "application/json"
@@ -182,8 +183,8 @@ export def "storage-sub-systems-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2018-10-01)
-]: nothing -> record<properties: record<healthStatus: string, operationalStatus: string, rebalanceStatus: string, remainingCapacityGB: int, totalCapacityGB: int>> {
+  --api-version: string # Client API Version. (required, default: 2018-10-01)
+]: nothing -> record<properties: record<healthStatus: string, operationalStatus: string, rebalanceStatus: string, remainingCapacityGB: int, totalCapacityGB: int>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -191,6 +192,7 @@ export def "storage-sub-systems-get" [
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
   if ($scale_unit | is-empty) { error make --unspanned { msg: "path parameter 'scaleUnit' must be non-empty" } }
   if ($storage_sub_system | is-empty) { error make --unspanned { msg: "path parameter 'storageSubSystem' must be non-empty" } }
+  let api_version = ($api_version | default "2018-10-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), location: (encode-path-segment $location), scale_unit: (encode-path-segment $scale_unit), storage_sub_system: (encode-path-segment $storage_sub_system)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Fabric.Admin/fabricLocations/{location}/scaleUnits/{scale_unit}/storageSubSystems/{storage_sub_system}") $qp $auth.query)
   let accept_val = "application/json"

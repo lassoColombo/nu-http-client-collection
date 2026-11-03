@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -96,12 +96,14 @@ def base-url-completer [] { ["http://healthlake.us-east-1.amazonaws.com" "http:/
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def datastore-type-version-completer [] { ["R4"] }
 def x-amz-target-completer [] { ["HealthLake.CreateFHIRDatastore"] }
 def x-amz-target-completer-1 [] { ["HealthLake.DeleteFHIRDatastore"] }
 def x-amz-target-completer-2 [] { ["HealthLake.DescribeFHIRDatastore"] }
 def x-amz-target-completer-3 [] { ["HealthLake.DescribeFHIRExportJob"] }
 def x-amz-target-completer-4 [] { ["HealthLake.DescribeFHIRImportJob"] }
 def x-amz-target-completer-5 [] { ["HealthLake.ListFHIRDatastores"] }
+def job-status-completer [] { ["COMPLETED" "COMPLETED_WITH_ERRORS" "FAILED" "IN_PROGRESS" "SUBMITTED"] }
 def x-amz-target-completer-6 [] { ["HealthLake.ListFHIRExportJobs"] }
 def x-amz-target-completer-7 [] { ["HealthLake.ListFHIRImportJobs"] }
 def x-amz-target-completer-8 [] { ["HealthLake.ListTagsForResource"] }
@@ -137,6 +139,9 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateFHIRDatastore
+# --SseConfiguration shape: {KmsEncryptionConfig: record}
+# --PreloadDataConfig shape: {PreloadDataType: "SYNTHEA"}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-fhir-datastore" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -154,17 +159,18 @@ export def "create-fhir-datastore" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  --datastore-name: any
-  datastore_type_version: any
-  --sse-configuration: any
-  --preload-data-config: any
-  --client-token: any
-  --tags: any
-]: any -> record<DatastoreId: record, DatastoreArn: record, DatastoreStatus: record, DatastoreEndpoint: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  --datastore-name: string # The user generated name for the Data Store.
+  datastore_type_version: string@datastore-type-version-completer # The FHIR version of the Data Store. The only supported version is R4.
+  --sse-configuration: record # The server-side encryption key configuration for a customer provided encryption key. — shape: {KmsEncryptionConfig: record}
+  --preload-data-config: record # The input properties for the preloaded Data Store. Only data preloaded from Synthea is supported. — shape: {PreloadDataType: "SYNTHEA"}
+  --client-token: string # Optional user provided token used for ensuring idempotency.
+  --tags: list # Resource tags that are applied to a Data Store when it is created. — item shape: {Key: string, Value: string}
+]: any -> record<DatastoreId: string, DatastoreArn: string, DatastoreStatus: string, DatastoreEndpoint: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "HealthLake.CreateFHIRDatastore")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DatastoreName": $datastore_name, "DatastoreTypeVersion": $datastore_type_version, "SseConfiguration": $sse_configuration, "PreloadDataConfig": $preload_data_config, "ClientToken": $client_token, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -207,12 +213,13 @@ export def "delete-fhir-datastore" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  --datastore-id: any
-]: any -> record<DatastoreId: record, DatastoreArn: record, DatastoreStatus: record, DatastoreEndpoint: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  --datastore-id: string # The AWS-generated ID for the Data Store to be deleted.
+]: any -> record<DatastoreId: string, DatastoreArn: string, DatastoreStatus: string, DatastoreEndpoint: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "HealthLake.DeleteFHIRDatastore")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DatastoreId": $datastore_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -255,12 +262,13 @@ export def "describe-fhir-datastore" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  --datastore-id: any
-]: any -> record<DatastoreProperties: record<DatastoreId: record, DatastoreArn: record, DatastoreName: record, DatastoreStatus: record, CreatedAt: record, DatastoreTypeVersion: record, DatastoreEndpoint: record, SseConfiguration: record<KmsEncryptionConfig: record>, PreloadDataConfig: record<PreloadDataType: record>>> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  --datastore-id: string # The AWS-generated Data Store id. This is part of the ‘CreateFHIRDatastore’ output.
+]: any -> record<DatastoreProperties: record<DatastoreId: string, DatastoreArn: string, DatastoreName: string, DatastoreStatus: string, CreatedAt: string, DatastoreTypeVersion: string, DatastoreEndpoint: string, SseConfiguration: record<KmsEncryptionConfig: record>, PreloadDataConfig: record<PreloadDataType: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "HealthLake.DescribeFHIRDatastore")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DatastoreId": $datastore_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -303,13 +311,14 @@ export def "describe-fhir-export-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  datastore_id: any
-  job_id: any
-]: any -> record<ExportJobProperties: record<JobId: record, JobName: record, JobStatus: record, SubmitTime: record, EndTime: record, DatastoreId: record, OutputDataConfig: record<S3Configuration: record>, DataAccessRoleArn: record, Message: record>> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  datastore_id: string # The AWS generated ID for the Data Store from which files are being exported from for an export job.
+  job_id: string # The AWS generated ID for an export job.
+]: any -> record<ExportJobProperties: record<JobId: string, JobName: string, JobStatus: string, SubmitTime: string, EndTime: string, DatastoreId: string, OutputDataConfig: record<S3Configuration: record>, DataAccessRoleArn: string, Message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "HealthLake.DescribeFHIRExportJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DatastoreId": $datastore_id, "JobId": $job_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -352,13 +361,14 @@ export def "describe-fhir-import-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  datastore_id: any
-  job_id: any
-]: any -> record<ImportJobProperties: record<JobId: record, JobName: record, JobStatus: record, SubmitTime: record, EndTime: record, DatastoreId: record, InputDataConfig: record<S3Uri: record>, JobOutputDataConfig: record<S3Configuration: record>, DataAccessRoleArn: record, Message: record>> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  datastore_id: string # The AWS-generated ID of the Data Store.
+  job_id: string # The AWS-generated job ID.
+]: any -> record<ImportJobProperties: record<JobId: string, JobName: string, JobStatus: string, SubmitTime: string, EndTime: string, DatastoreId: string, InputDataConfig: record<S3Uri: string>, JobOutputDataConfig: record<S3Configuration: record>, DataAccessRoleArn: string, Message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "HealthLake.DescribeFHIRImportJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DatastoreId": $datastore_id, "JobId": $job_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -384,6 +394,7 @@ export def "describe-fhir-import-job" [
 #
 # POST /
 # operationId: ListFHIRDatastores
+# --Filter shape: {DatastoreName?: string, DatastoreStatus?: "CREATING"|"ACTIVE"|"DELETING"|"DELETED", CreatedBefore?: string, CreatedAfter?: string}
 export def "list-fhir-datastores" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -403,14 +414,15 @@ export def "list-fhir-datastores" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  --filter: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<DatastorePropertiesList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  --filter: record # The filters applied to Data Store query. — shape: {DatastoreName?: string, DatastoreStatus?: "CREATING"|"ACTIVE"|"DELETING"|"DELETED", CreatedBefore?: string, CreatedAfter?: string}
+  --next-token-body: string # Fetches the next page of Data Stores when results are paginated. (body field)
+  --max-results-body: int # The maximum number of Data Stores returned in a single page of a ListFHIRDatastoresRequest call. (body field)
+]: any -> record<DatastorePropertiesList: table<DatastoreId: string, DatastoreArn: string, DatastoreName: string, DatastoreStatus: string, CreatedAt: string, DatastoreTypeVersion: string, DatastoreEndpoint: string, SseConfiguration: record, PreloadDataConfig: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "HealthLake.ListFHIRDatastores")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"Filter": $filter, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -456,18 +468,19 @@ export def "list-fhir-export-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  datastore_id: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --job-name: any
-  --job-status: any
-  --submitted-before: any
-  --submitted-after: any
-]: any -> record<ExportJobPropertiesList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  datastore_id: string # This parameter limits the response to the export job with the specified Data Store ID.
+  --next-token-body: string # A pagination token used to identify the next page of results to return for a ListFHIRExportJobs query. (body field)
+  --max-results-body: int # This parameter limits the number of results returned for a ListFHIRExportJobs to a maximum quantity specified by the user. (body field)
+  --job-name: string # This parameter limits the response to the export job with the specified job name.
+  --job-status: string@job-status-completer # This parameter limits the response to the export jobs with the specified job status.
+  --submitted-before: string # This parameter limits the response to FHIR export jobs submitted before a user specified date. (format: date-time)
+  --submitted-after: string # This parameter limits the response to FHIR export jobs submitted after a user specified date. (format: date-time)
+]: any -> record<ExportJobPropertiesList: table<JobId: string, JobName: string, JobStatus: string, SubmitTime: string, EndTime: string, DatastoreId: string, OutputDataConfig: record, DataAccessRoleArn: string, Message: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "HealthLake.ListFHIRExportJobs")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"DatastoreId": $datastore_id, "NextToken": $next_token_body, "MaxResults": $max_results_body, "JobName": $job_name, "JobStatus": $job_status, "SubmittedBefore": $submitted_before, "SubmittedAfter": $submitted_after} | compact
@@ -513,18 +526,19 @@ export def "list-fhir-import-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  datastore_id: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --job-name: any
-  --job-status: any
-  --submitted-before: any
-  --submitted-after: any
-]: any -> record<ImportJobPropertiesList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  datastore_id: string # This parameter limits the response to the import job with the specified Data Store ID.
+  --next-token-body: string # A pagination token used to identify the next page of results to return for a ListFHIRImportJobs query. (body field)
+  --max-results-body: int # This parameter limits the number of results returned for a ListFHIRImportJobs to a maximum quantity specified by the user. (body field)
+  --job-name: string # This parameter limits the response to the import job with the specified job name.
+  --job-status: string@job-status-completer # This parameter limits the response to the import job with the specified job status.
+  --submitted-before: string # This parameter limits the response to FHIR import jobs submitted before a user specified date. (format: date-time)
+  --submitted-after: string # This parameter limits the response to FHIR import jobs submitted after a user specified date. (format: date-time)
+]: any -> record<ImportJobPropertiesList: table<JobId: string, JobName: string, JobStatus: string, SubmitTime: string, EndTime: string, DatastoreId: string, InputDataConfig: record, JobOutputDataConfig: record, DataAccessRoleArn: string, Message: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "HealthLake.ListFHIRImportJobs")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"DatastoreId": $datastore_id, "NextToken": $next_token_body, "MaxResults": $max_results_body, "JobName": $job_name, "JobStatus": $job_status, "SubmittedBefore": $submitted_before, "SubmittedAfter": $submitted_after} | compact
@@ -568,12 +582,13 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  resource_arn: any
-]: any -> record<Tags: record> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  resource_arn: string # The Amazon Resource Name(ARN) of the Data Store for which tags are being added.
+]: any -> record<Tags: table<Key: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "HealthLake.ListTagsForResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceARN": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -599,6 +614,7 @@ export def "list-tags-for-resource" [
 #
 # POST /
 # operationId: StartFHIRExportJob
+# --OutputDataConfig shape: {S3Configuration?: record}
 export def "start-fhir-export-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -616,16 +632,17 @@ export def "start-fhir-export-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  --job-name: any
-  output_data_config: any
-  datastore_id: any
-  data_access_role_arn: any
-  client_token: any
-]: any -> record<JobId: record, JobStatus: record, DatastoreId: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  --job-name: string # The user generated name for an export job.
+  output_data_config: record # The output data configuration that was supplied when the export job was created. — shape: {S3Configuration?: record}
+  datastore_id: string # The AWS generated ID for the Data Store from which files are being exported for an export job.
+  data_access_role_arn: string # The Amazon Resource Name used during the initiation of the job.
+  client_token: string # An optional user provided token used for ensuring idempotency.
+]: any -> record<JobId: string, JobStatus: string, DatastoreId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "HealthLake.StartFHIRExportJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobName": $job_name, "OutputDataConfig": $output_data_config, "DatastoreId": $datastore_id, "DataAccessRoleArn": $data_access_role_arn, "ClientToken": $client_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -651,7 +668,8 @@ export def "start-fhir-export-job" [
 #
 # POST /
 # operationId: StartFHIRImportJob
-# --JobOutputDataConfig shape: {S3Configuration?: any}
+# --InputDataConfig shape: {S3Uri?: string}
+# --JobOutputDataConfig shape: {S3Configuration?: record}
 export def "start-fhir-import-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -669,17 +687,18 @@ export def "start-fhir-import-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  --job-name: any
-  input_data_config: any
-  job_output_data_config: record # The output data configuration that was supplied when the export job was created. — shape: {S3Configuration?: any}
-  datastore_id: any
-  data_access_role_arn: any
-  client_token: any
-]: any -> record<JobId: record, JobStatus: record, DatastoreId: record> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  --job-name: string # The name of the FHIR Import job in the StartFHIRImport job request.
+  input_data_config: record # The input properties for an import job. — shape: {S3Uri?: string}
+  job_output_data_config: record # The output data configuration that was supplied when the export job was created. — shape: {S3Configuration?: record}
+  datastore_id: string # The AWS-generated Data Store ID.
+  data_access_role_arn: string # The Amazon Resource Name (ARN) that gives Amazon HealthLake access permission.
+  client_token: string # Optional user provided token used for ensuring idempotency.
+]: any -> record<JobId: string, JobStatus: string, DatastoreId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "HealthLake.StartFHIRImportJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobName": $job_name, "InputDataConfig": $input_data_config, "JobOutputDataConfig": $job_output_data_config, "DatastoreId": $datastore_id, "DataAccessRoleArn": $data_access_role_arn, "ClientToken": $client_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -705,6 +724,7 @@ export def "start-fhir-import-job" [
 #
 # POST /
 # operationId: TagResource
+# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -722,13 +742,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  resource_arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  resource_arn: string # The Amazon Resource Name(ARN)that gives Amazon HealthLake access to the Data Store which tags are being added to.
+  tags: list # The user specified key and value pair tags being added to a Data Store. — item shape: {Key: string, Value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "HealthLake.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceARN": $resource_arn, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -771,13 +792,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  resource_arn: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  resource_arn: string # "The Amazon Resource Name(ARN) of the Data Store for which tags are being removed
+  tag_keys: list<string> # The keys for the tags to be removed from the Healthlake Data Store.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "HealthLake.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceARN": $resource_arn, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

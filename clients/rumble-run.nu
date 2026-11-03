@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -1415,6 +1415,7 @@ export def "create-account-scan-template" [
   let full_url = (build-url $base "/account/tasks/templates" $auth.query)
   let req_body = {"acl": $acl, "description": $description, "global": $global, "name": $name, "params": $params} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "global") == null) { error make --unspanned { msg: "required body field 'global' missing: pass --global or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1453,7 +1454,7 @@ export def "update-account-scan-template" [
   --created-by-user-id: string # format: uuid, e.g. e77602e0-3fb8-4734-aef9-fbc6fdcb0fa8
   --cruncher-id: string # format: uuid, e.g. e77602e0-3fb8-4734-aef9-fbc6fdcb0fa8
   --description: string # e.g. My Scan Template
-  --body-error: string # e.g. agent unavailable
+  --error: string # e.g. agent unavailable
   --global: oneof<nothing, bool> # e.g. false
   --grace-period: string # e.g. 4
   --hidden: oneof<nothing, bool> # e.g. false
@@ -1485,8 +1486,9 @@ export def "update-account-scan-template" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/tasks/templates" $auth.query)
-  let req_body = {"acl": $acl, "agent_id": $agent_id, "client_id": $client_id, "created_at": $created_at, "created_by": $created_by, "created_by_user_id": $created_by_user_id, "cruncher_id": $cruncher_id, "description": $description, "error": $body_error, "global": $global, "grace_period": $grace_period, "hidden": $hidden, "hosted_zone_id": $hosted_zone_id, "id": $id, "linked_task_count": $linked_task_count, "name": $name, "organization_id": $organization_id, "params": $params, "parent_id": $parent_id, "recur": $recur, "recur_frequency": $recur_frequency, "recur_last": $recur_last, "recur_last_task_id": $recur_last_task_id, "recur_next": $recur_next, "site_id": $site_id, "size_data": $size_data, "size_results": $size_results, "size_site": $size_site, "source_id": $source_id, "start_time": $start_time, "stats": $stats, "status": $status, "template_id": $template_id, "type": $type, "updated_at": $updated_at} | compact
+  let req_body = {"acl": $acl, "agent_id": $agent_id, "client_id": $client_id, "created_at": $created_at, "created_by": $created_by, "created_by_user_id": $created_by_user_id, "cruncher_id": $cruncher_id, "description": $description, "error": $error, "global": $global, "grace_period": $grace_period, "hidden": $hidden, "hosted_zone_id": $hosted_zone_id, "id": $id, "linked_task_count": $linked_task_count, "name": $name, "organization_id": $organization_id, "params": $params, "parent_id": $parent_id, "recur": $recur, "recur_frequency": $recur_frequency, "recur_last": $recur_last, "recur_last_task_id": $recur_last_task_id, "recur_next": $recur_next, "site_id": $site_id, "size_data": $size_data, "size_results": $size_results, "size_site": $size_site, "source_id": $source_id, "start_time": $start_time, "stats": $stats, "status": $status, "template_id": $template_id, "type": $type, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "global") == null) { error make --unspanned { msg: "required body field 'global' missing: pass --global or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -4059,7 +4061,7 @@ export def "update-task" [
   --created-by-user-id: string # format: uuid, e.g. e77602e0-3fb8-4734-aef9-fbc6fdcb0fa8
   --cruncher-id: string # format: uuid, e.g. e77602e0-3fb8-4734-aef9-fbc6fdcb0fa8
   --description: string # e.g. Scan the headquarters hourly
-  --body-error: string # e.g. agent unavailable
+  --error: string # e.g. agent unavailable
   --hidden: oneof<nothing, bool> # e.g. false
   id: string # format: uuid, e.g. e77602e0-3fb8-4734-aef9-fbc6fdcb0fa8
   --name: string # e.g. Hourly Scan
@@ -4084,7 +4086,7 @@ export def "update-task" [
   let base = ($base_url | default $BASE_URL)
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
   let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/org/tasks/{task_id}") $auth.query)
-  let req_body = {"agent_id": $agent_id, "client_id": $client_id, "created_at": $created_at, "created_by": $created_by, "created_by_user_id": $created_by_user_id, "cruncher_id": $cruncher_id, "description": $description, "error": $body_error, "hidden": $hidden, "id": $id, "name": $name, "organization_id": $organization_id, "params": $params, "parent_id": $parent_id, "recur": $recur, "recur_frequency": $recur_frequency, "recur_last": $recur_last, "recur_last_task_id": $recur_last_task_id, "recur_next": $recur_next, "site_id": $site_id, "start_time": $start_time, "stats": $stats, "status": $status, "template_id": $template_id, "type": $type, "updated_at": $updated_at} | compact
+  let req_body = {"agent_id": $agent_id, "client_id": $client_id, "created_at": $created_at, "created_by": $created_by, "created_by_user_id": $created_by_user_id, "cruncher_id": $cruncher_id, "description": $description, "error": $error, "hidden": $hidden, "id": $id, "name": $name, "organization_id": $organization_id, "params": $params, "parent_id": $parent_id, "recur": $recur, "recur_frequency": $recur_frequency, "recur_last": $recur_last, "recur_last_task_id": $recur_last_task_id, "recur_next": $recur_next, "site_id": $site_id, "start_time": $start_time, "stats": $stats, "status": $status, "template_id": $template_id, "type": $type, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

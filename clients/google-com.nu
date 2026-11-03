@@ -1,4 +1,4 @@
-# Auto-generated client for Travel Partner API vv3
+# Auto-generated client for Travel Partner API v3
 # Source: https://api.apis.guru/v2/specs/google.com/v3/openapi.json
 # Auth: --token flag or $env.TRAVEL_PARTNER_API_TOKEN
 

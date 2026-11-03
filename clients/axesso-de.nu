@@ -131,10 +131,11 @@ export def "request-buy-recommendation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --url: string # The url of the requested product.
+  --url: string # The url of the requested product. (required)
 ]: nothing -> record<buyRecommendations: list<string>, numberOfProducts: int, responseMessage: string, responseStatus: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
   let qp = [(serialize-qp "url" $url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/amz/amazon-lookup-buy-recommendations" $qp $auth.query)
   let accept_val = "application/json"
@@ -167,11 +168,12 @@ export def "request-product" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --url: string # The url of the requested product.
+  --url: string # The url of the requested product. (required)
   --size: string # Size parameter if available.
 ]: nothing -> record<answeredQuestions: int, asin: string, countReview: int, features: list<string>, fulfilledBy: string, manufacturer: string, price: float, priceSaving: string, priceShippingInformation: string, prime: bool, productRating: string, productTitle: string, responseMessage: string, responseStatus: string, retailPrice: float, sizeSelection: list<string>, soldBy: string, warehouseAvailability: string> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
   let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/amz/amazon-lookup-product" $qp $auth.query)
   let accept_val = "application/json"
@@ -204,13 +206,15 @@ export def "keyword-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --keyword: string # keyword to search
-  --domain-code: string # domain for the search
+  --keyword: string # keyword to search (required)
+  --domain-code: string # domain for the search (required)
   --sort-by: string # sort option (default: relevanceblender)
   --number-of-products: int # number of the results (max 20) (default: 20)
 ]: nothing -> record<domainCode: string, foundProducts: list<string>, keyword: string, numberOfProducts: int, responseMessage: string, responseStatus: string, sortStrategy: string> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($keyword == null) { error make --unspanned { msg: "required query parameter 'keyword' missing: pass --keyword" } }
+  if ($domain_code == null) { error make --unspanned { msg: "required query parameter 'domainCode' missing: pass --domain-code" } }
   let qp = [(serialize-qp "keyword" $keyword "scalar") (serialize-qp "domainCode" $domain_code "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "numberOfProducts" $number_of_products "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/amz/amazon-search-by-keyword" $qp $auth.query)
   let accept_val = "application/json"

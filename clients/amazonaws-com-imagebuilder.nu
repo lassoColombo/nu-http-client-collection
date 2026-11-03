@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -167,7 +167,7 @@ export def "cancel-image-creation" [
   --x-amz-signed-headers: string
   image_build_version_arn: string # The Amazon Resource Name (ARN) of the image that you want to cancel creation for.
   client_token: string # Unique, case-sensitive identifier you provide to ensure idempotency of the request. For more information, see Ensuring idempotency (https://docs.aws.amazon.com/AWSEC2/latest/APIReference/Run_Instance_Idempotency.html) in the Amazon EC2 API Reference.
-]: any -> record<requestId: record, clientToken: record, imageBuildVersionArn: record> {
+]: any -> record<requestId: string, clientToken: string, imageBuildVersionArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -224,7 +224,7 @@ export def "create-component" [
   --kms-key-id: string # The ID of the KMS key that is used to encrypt this component.
   --tags: record # The tags that apply to the component.
   client_token: string # The idempotency token of the component.
-]: any -> record<requestId: record, clientToken: record, componentBuildVersionArn: record> {
+]: any -> record<requestId: string, clientToken: string, componentBuildVersionArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -253,9 +253,9 @@ export def "create-component" [
 #
 # PUT /CreateContainerRecipe
 # operationId: CreateContainerRecipe
-# --components item shape: {componentArn: any, parameters?: any}
-# --instanceConfiguration shape: {image?: any, blockDeviceMappings?: any}
-# --targetRepository shape: {service?: any, repositoryName?: any}
+# --components item shape: {componentArn: string, parameters?: list}
+# --instanceConfiguration shape: {image?: string, blockDeviceMappings?: list}
+# --targetRepository shape: {service?: "ECR", repositoryName?: string}
 export def "create-container-recipe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -277,8 +277,8 @@ export def "create-container-recipe" [
   name: string # The name of the container recipe.
   --description: string # The description of the container recipe.
   semantic_version: string # The semantic version of the container recipe. This version follows the semantic version syntax. The semantic version has four nodes: <major>.<minor>.<patch>/<build>. You can assign values for the first three, and can filter on all of them. Assignment: For the first three nodes you can assign any positive integer value, including zero, with an upper limit of 2^30-1, or 1073741823 for each node. Image Builder automatically assigns the build number to the fourth node. Patterns: You can use any numeric pattern that adheres to the assignment requirements for the nodes that you can assign. For example, you might choose a software version pattern, such as 1.0.0, or a date, such as 2021.01.01.
-  components: list # Components for build and test that are included in the container recipe. Recipes require a minimum of one build component, and can have a maximum of 20 build and test components in any combination. — item shape: {componentArn: any, parameters?: any}
-  --instance-configuration: record # Defines a custom base AMI and block device mapping configurations of an instance used for building and testing container images. — shape: {image?: any, blockDeviceMappings?: any}
+  components: list # Components for build and test that are included in the container recipe. Recipes require a minimum of one build component, and can have a maximum of 20 build and test components in any combination. — item shape: {componentArn: string, parameters?: list}
+  --instance-configuration: record # Defines a custom base AMI and block device mapping configurations of an instance used for building and testing container images. — shape: {image?: string, blockDeviceMappings?: list}
   --dockerfile-template-data: string # The Dockerfile template used to build your image as an inline data blob.
   --dockerfile-template-uri: string # The Amazon S3 URI for the Dockerfile that will be used to build your container image.
   --platform-override: string@platform-override-completer # Specifies the operating system platform when you use a custom base image.
@@ -286,10 +286,10 @@ export def "create-container-recipe" [
   parent_image: string # The base image for the container recipe.
   --tags: record # Tags that are attached to the container recipe.
   --working-directory: string # The working directory for use during build and test workflows.
-  target_repository: record # The container repository where the output container image is stored. — shape: {service?: any, repositoryName?: any}
+  target_repository: record # The container repository where the output container image is stored. — shape: {service?: "ECR", repositoryName?: string}
   --kms-key-id: string # Identifies which KMS key is used to encrypt the container image.
   client_token: string # The client token used to make this request idempotent.
-]: any -> record<requestId: record, clientToken: record, containerRecipeArn: record> {
+]: any -> record<requestId: string, clientToken: string, containerRecipeArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -318,7 +318,7 @@ export def "create-container-recipe" [
 #
 # PUT /CreateDistributionConfiguration
 # operationId: CreateDistributionConfiguration
-# --distributions item shape: {region: any, amiDistributionConfiguration?: any, containerDistributionConfiguration?: any, licenseConfigurationArns?: any, launchTemplateConfigurations?: any, s3ExportConfiguration?: any, fastLaunchConfigurations?: any}
+# --distributions item shape: {region: string, amiDistributionConfiguration?: record, containerDistributionConfiguration?: record, licenseConfigurationArns?: list<string>, launchTemplateConfigurations?: list, s3ExportConfiguration?: record, fastLaunchConfigurations?: list}
 export def "create-distribution-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -338,10 +338,10 @@ export def "create-distribution-configuration" [
   --x-amz-signed-headers: string
   name: string # The name of the distribution configuration.
   --description: string # The description of the distribution configuration.
-  distributions: list # The distributions of the distribution configuration. — item shape: {region: any, amiDistributionConfiguration?: any, containerDistributionConfiguration?: any, licenseConfigurationArns?: any, launchTemplateConfigurations?: any, s3ExportConfiguration?: any, fastLaunchConfigurations?: any}
+  distributions: list # The distributions of the distribution configuration. — item shape: {region: string, amiDistributionConfiguration?: record, containerDistributionConfiguration?: record, licenseConfigurationArns?: list<string>, launchTemplateConfigurations?: list, s3ExportConfiguration?: record, fastLaunchConfigurations?: list}
   --tags: record # The tags of the distribution configuration.
   client_token: string # The idempotency token of the distribution configuration.
-]: any -> record<requestId: record, clientToken: record, distributionConfigurationArn: record> {
+]: any -> record<requestId: string, clientToken: string, distributionConfigurationArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -370,8 +370,8 @@ export def "create-distribution-configuration" [
 #
 # PUT /CreateImage
 # operationId: CreateImage
-# --imageTestsConfiguration shape: {imageTestsEnabled?: any, timeoutMinutes?: any}
-# --imageScanningConfiguration shape: {imageScanningEnabled?: any, ecrConfiguration?: any}
+# --imageTestsConfiguration shape: {imageTestsEnabled?: bool, timeoutMinutes?: int}
+# --imageScanningConfiguration shape: {imageScanningEnabled?: bool, ecrConfiguration?: record}
 export def "create-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -393,12 +393,12 @@ export def "create-image" [
   --container-recipe-arn: string # The Amazon Resource Name (ARN) of the container recipe that defines how images are configured and tested.
   --distribution-configuration-arn: string # The Amazon Resource Name (ARN) of the distribution configuration that defines and configures the outputs of your pipeline.
   infrastructure_configuration_arn: string # The Amazon Resource Name (ARN) of the infrastructure configuration that defines the environment in which your image will be built and tested.
-  --image-tests-configuration: record # Configure image tests for your pipeline build. Tests run after building the image, to verify that the AMI or container image is valid before distributing it. — shape: {imageTestsEnabled?: any, timeoutMinutes?: any}
+  --image-tests-configuration: record # Configure image tests for your pipeline build. Tests run after building the image, to verify that the AMI or container image is valid before distributing it. — shape: {imageTestsEnabled?: bool, timeoutMinutes?: int}
   --enhanced-image-metadata-enabled: oneof<nothing, bool> # Collects additional information about the image being created, including the operating system (OS) version and package list. This information is used to enhance the overall experience of using EC2 Image Builder. Enabled by default.
   --tags: record # The tags of the image.
   client_token: string # The idempotency token used to make this request idempotent.
-  --image-scanning-configuration: record # Contains settings for Image Builder image resource and container image scans. — shape: {imageScanningEnabled?: any, ecrConfiguration?: any}
-]: any -> record<requestId: record, clientToken: record, imageBuildVersionArn: record> {
+  --image-scanning-configuration: record # Contains settings for Image Builder image resource and container image scans. — shape: {imageScanningEnabled?: bool, ecrConfiguration?: record}
+]: any -> record<requestId: string, clientToken: string, imageBuildVersionArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -427,9 +427,9 @@ export def "create-image" [
 #
 # PUT /CreateImagePipeline
 # operationId: CreateImagePipeline
-# --imageTestsConfiguration shape: {imageTestsEnabled?: any, timeoutMinutes?: any}
-# --schedule shape: {scheduleExpression?: any, timezone?: any, pipelineExecutionStartCondition?: any}
-# --imageScanningConfiguration shape: {imageScanningEnabled?: any, ecrConfiguration?: any}
+# --imageTestsConfiguration shape: {imageTestsEnabled?: bool, timeoutMinutes?: int}
+# --schedule shape: {scheduleExpression?: string, timezone?: string, pipelineExecutionStartCondition?: "EXPRESSION_MATCH_ONLY"|"EXPRESSION_MATCH_AND_DEPENDENCY_UPDATES_AVAILABLE"}
+# --imageScanningConfiguration shape: {imageScanningEnabled?: bool, ecrConfiguration?: record}
 export def "create-image-pipeline" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -453,14 +453,14 @@ export def "create-image-pipeline" [
   --container-recipe-arn: string # The Amazon Resource Name (ARN) of the container recipe that is used to configure images created by this container pipeline.
   infrastructure_configuration_arn: string # The Amazon Resource Name (ARN) of the infrastructure configuration that will be used to build images created by this image pipeline.
   --distribution-configuration-arn: string # The Amazon Resource Name (ARN) of the distribution configuration that will be used to configure and distribute images created by this image pipeline.
-  --image-tests-configuration: record # Configure image tests for your pipeline build. Tests run after building the image, to verify that the AMI or container image is valid before distributing it. — shape: {imageTestsEnabled?: any, timeoutMinutes?: any}
+  --image-tests-configuration: record # Configure image tests for your pipeline build. Tests run after building the image, to verify that the AMI or container image is valid before distributing it. — shape: {imageTestsEnabled?: bool, timeoutMinutes?: int}
   --enhanced-image-metadata-enabled: oneof<nothing, bool> # Collects additional information about the image being created, including the operating system (OS) version and package list. This information is used to enhance the overall experience of using EC2 Image Builder. Enabled by default.
-  --schedule: record # A schedule configures how often and when a pipeline will automatically create a new image. — shape: {scheduleExpression?: any, timezone?: any, pipelineExecutionStartCondition?: any}
+  --schedule: record # A schedule configures how often and when a pipeline will automatically create a new image. — shape: {scheduleExpression?: string, timezone?: string, pipelineExecutionStartCondition?: "EXPRESSION_MATCH_ONLY"|"EXPRESSION_MATCH_AND_DEPENDENCY_UPDATES_AVAILABLE"}
   --status: string@status-completer # The status of the image pipeline.
   --tags: record # The tags of the image pipeline.
   client_token: string # The idempotency token used to make this request idempotent.
-  --image-scanning-configuration: record # Contains settings for Image Builder image resource and container image scans. — shape: {imageScanningEnabled?: any, ecrConfiguration?: any}
-]: any -> record<requestId: record, clientToken: record, imagePipelineArn: record> {
+  --image-scanning-configuration: record # Contains settings for Image Builder image resource and container image scans. — shape: {imageScanningEnabled?: bool, ecrConfiguration?: record}
+]: any -> record<requestId: string, clientToken: string, imagePipelineArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -489,9 +489,9 @@ export def "create-image-pipeline" [
 #
 # PUT /CreateImageRecipe
 # operationId: CreateImageRecipe
-# --components item shape: {componentArn: any, parameters?: any}
-# --blockDeviceMappings item shape: {deviceName?: any, ebs?: any, virtualName?: any, noDevice?: any}
-# --additionalInstanceConfiguration shape: {systemsManagerAgent?: any, userDataOverride?: any}
+# --components item shape: {componentArn: string, parameters?: list}
+# --blockDeviceMappings item shape: {deviceName?: string, ebs?: record, virtualName?: string, noDevice?: string}
+# --additionalInstanceConfiguration shape: {systemsManagerAgent?: record, userDataOverride?: string}
 export def "create-image-recipe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -512,14 +512,14 @@ export def "create-image-recipe" [
   name: string # The name of the image recipe.
   --description: string # The description of the image recipe.
   semantic_version: string # The semantic version of the image recipe. This version follows the semantic version syntax. The semantic version has four nodes: <major>.<minor>.<patch>/<build>. You can assign values for the first three, and can filter on all of them. Assignment: For the first three nodes you can assign any positive integer value, including zero, with an upper limit of 2^30-1, or 1073741823 for each node. Image Builder automatically assigns the build number to the fourth node. Patterns: You can use any numeric pattern that adheres to the assignment requirements for the nodes that you can assign. For example, you might choose a software version pattern, such as 1.0.0, or a date, such as 2021.01.01.
-  components: list # The components included in the image recipe. — item shape: {componentArn: any, parameters?: any}
+  components: list # The components included in the image recipe. — item shape: {componentArn: string, parameters?: list}
   parent_image: string # The base image of the image recipe. The value of the string can be the ARN of the base image or an AMI ID. The format for the ARN follows this example: arn:aws:imagebuilder:us-west-2:aws:image/windows-server-2016-english-full-base-x86/x.x.x. You can provide the specific version that you want to use, or you can use a wildcard in all of the fields. If you enter an AMI ID for the string value, you must have access to the AMI, and the AMI must be in the same Region in which you are using Image Builder.
-  --block-device-mappings: list # The block device mappings of the image recipe. — item shape: {deviceName?: any, ebs?: any, virtualName?: any, noDevice?: any}
+  --block-device-mappings: list # The block device mappings of the image recipe. — item shape: {deviceName?: string, ebs?: record, virtualName?: string, noDevice?: string}
   --tags: record # The tags of the image recipe.
   --working-directory: string # The working directory used during build and test workflows.
-  --additional-instance-configuration: record # In addition to your infrastructure configuration, these settings provide an extra layer of control over your build instances. You can also specify commands to run on launch for all of your build instances. Image Builder does not automatically install the Systems Manager agent on Windows instances. If your base image includes the Systems Manager agent, then the AMI that you create will also include the agent. For Linux instances, if the base image does not already include the Systems Manager agent, Image Builder installs it. For Linux instances where Image Builder installs the Systems Manager agent, you can choose whether to keep it for the AMI that you create. — shape: {systemsManagerAgent?: any, userDataOverride?: any}
+  --additional-instance-configuration: record # In addition to your infrastructure configuration, these settings provide an extra layer of control over your build instances. You can also specify commands to run on launch for all of your build instances. Image Builder does not automatically install the Systems Manager agent on Windows instances. If your base image includes the Systems Manager agent, then the AMI that you create will also include the agent. For Linux instances, if the base image does not already include the Systems Manager agent, Image Builder installs it. For Linux instances where Image Builder installs the Systems Manager agent, you can choose whether to keep it for the AMI that you create. — shape: {systemsManagerAgent?: record, userDataOverride?: string}
   client_token: string # The idempotency token used to make this request idempotent.
-]: any -> record<requestId: record, clientToken: record, imageRecipeArn: record> {
+]: any -> record<requestId: string, clientToken: string, imageRecipeArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -548,8 +548,8 @@ export def "create-image-recipe" [
 #
 # PUT /CreateInfrastructureConfiguration
 # operationId: CreateInfrastructureConfiguration
-# --logging shape: {s3Logs?: any}
-# --instanceMetadataOptions shape: {httpTokens?: any, httpPutResponseHopLimit?: any}
+# --logging shape: {s3Logs?: record}
+# --instanceMetadataOptions shape: {httpTokens?: string, httpPutResponseHopLimit?: int}
 export def "create-infrastructure-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -573,15 +573,15 @@ export def "create-infrastructure-configuration" [
   instance_profile_name: string # The instance profile to associate with the instance used to customize your Amazon EC2 AMI.
   --security-group-ids: list<string> # The security group IDs to associate with the instance used to customize your Amazon EC2 AMI.
   --subnet-id: string # The subnet ID in which to place the instance used to customize your Amazon EC2 AMI.
-  --logging: record # Logging configuration defines where Image Builder uploads your logs. — shape: {s3Logs?: any}
+  --logging: record # Logging configuration defines where Image Builder uploads your logs. — shape: {s3Logs?: record}
   --key-pair: string # The key pair of the infrastructure configuration. You can use this to log on to and debug the instance used to create your image.
   --terminate-instance-on-failure: oneof<nothing, bool> # The terminate instance on failure setting of the infrastructure configuration. Set to false if you want Image Builder to retain the instance used to configure your AMI if the build or test phase of your workflow fails.
   --sns-topic-arn: string # The Amazon Resource Name (ARN) for the SNS topic to which we send image build event notifications. EC2 Image Builder is unable to send notifications to SNS topics that are encrypted using keys from other accounts. The key that is used to encrypt the SNS topic must reside in the account that the Image Builder service runs under.
   --resource-tags: record # The tags attached to the resource created by Image Builder.
-  --instance-metadata-options: record # The instance metadata options that apply to the HTTP requests that pipeline builds use to launch EC2 build and test instances. For more information about instance metadata options, see Configure the instance metadata options (https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-options.html) in the Amazon EC2 User Guide for Linux instances, or Configure the instance metadata options (https://docs.aws.amazon.com/AWSEC2/latest/WindowsGuide/configuring-instance-metadata-options.html) in the Amazon EC2 Windows Guide for Windows instances. — shape: {httpTokens?: any, httpPutResponseHopLimit?: any}
+  --instance-metadata-options: record # The instance metadata options that apply to the HTTP requests that pipeline builds use to launch EC2 build and test instances. For more information about instance metadata options, see Configure the instance metadata options (https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-options.html) in the Amazon EC2 User Guide for Linux instances, or Configure the instance metadata options (https://docs.aws.amazon.com/AWSEC2/latest/WindowsGuide/configuring-instance-metadata-options.html) in the Amazon EC2 Windows Guide for Windows instances. — shape: {httpTokens?: string, httpPutResponseHopLimit?: int}
   --tags: record # The tags of the infrastructure configuration.
   client_token: string # The idempotency token used to make this request idempotent.
-]: any -> record<requestId: record, clientToken: record, infrastructureConfigurationArn: record> {
+]: any -> record<requestId: string, clientToken: string, infrastructureConfigurationArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -620,7 +620,7 @@ export def "delete-component" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --component-build-version-arn: string # The Amazon Resource Name (ARN) of the component build version to delete.
+  --component-build-version-arn: string # The Amazon Resource Name (ARN) of the component build version to delete. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -628,9 +628,10 @@ export def "delete-component" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<requestId: record, componentBuildVersionArn: record> {
+]: nothing -> record<requestId: string, componentBuildVersionArn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($component_build_version_arn == null) { error make --unspanned { msg: "required query parameter 'componentBuildVersionArn' missing: pass --component-build-version-arn" } }
   let qp = [(serialize-qp "componentBuildVersionArn" $component_build_version_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/DeleteComponent" $qp $auth.query)
   let accept_val = "application/json"
@@ -665,7 +666,7 @@ export def "delete-container-recipe" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --container-recipe-arn: string # The Amazon Resource Name (ARN) of the container recipe to delete.
+  --container-recipe-arn: string # The Amazon Resource Name (ARN) of the container recipe to delete. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -673,9 +674,10 @@ export def "delete-container-recipe" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<requestId: record, containerRecipeArn: record> {
+]: nothing -> record<requestId: string, containerRecipeArn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($container_recipe_arn == null) { error make --unspanned { msg: "required query parameter 'containerRecipeArn' missing: pass --container-recipe-arn" } }
   let qp = [(serialize-qp "containerRecipeArn" $container_recipe_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/DeleteContainerRecipe" $qp $auth.query)
   let accept_val = "application/json"
@@ -710,7 +712,7 @@ export def "delete-distribution-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --distribution-configuration-arn: string # The Amazon Resource Name (ARN) of the distribution configuration to delete.
+  --distribution-configuration-arn: string # The Amazon Resource Name (ARN) of the distribution configuration to delete. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -718,9 +720,10 @@ export def "delete-distribution-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<requestId: record, distributionConfigurationArn: record> {
+]: nothing -> record<requestId: string, distributionConfigurationArn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($distribution_configuration_arn == null) { error make --unspanned { msg: "required query parameter 'distributionConfigurationArn' missing: pass --distribution-configuration-arn" } }
   let qp = [(serialize-qp "distributionConfigurationArn" $distribution_configuration_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/DeleteDistributionConfiguration" $qp $auth.query)
   let accept_val = "application/json"
@@ -755,7 +758,7 @@ export def "delete-image" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --image-build-version-arn: string # The Amazon Resource Name (ARN) of the Image Builder image resource to delete.
+  --image-build-version-arn: string # The Amazon Resource Name (ARN) of the Image Builder image resource to delete. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -763,9 +766,10 @@ export def "delete-image" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<requestId: record, imageBuildVersionArn: record> {
+]: nothing -> record<requestId: string, imageBuildVersionArn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($image_build_version_arn == null) { error make --unspanned { msg: "required query parameter 'imageBuildVersionArn' missing: pass --image-build-version-arn" } }
   let qp = [(serialize-qp "imageBuildVersionArn" $image_build_version_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/DeleteImage" $qp $auth.query)
   let accept_val = "application/json"
@@ -800,7 +804,7 @@ export def "delete-image-pipeline" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --image-pipeline-arn: string # The Amazon Resource Name (ARN) of the image pipeline to delete.
+  --image-pipeline-arn: string # The Amazon Resource Name (ARN) of the image pipeline to delete. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -808,9 +812,10 @@ export def "delete-image-pipeline" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<requestId: record, imagePipelineArn: record> {
+]: nothing -> record<requestId: string, imagePipelineArn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($image_pipeline_arn == null) { error make --unspanned { msg: "required query parameter 'imagePipelineArn' missing: pass --image-pipeline-arn" } }
   let qp = [(serialize-qp "imagePipelineArn" $image_pipeline_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/DeleteImagePipeline" $qp $auth.query)
   let accept_val = "application/json"
@@ -845,7 +850,7 @@ export def "delete-image-recipe" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --image-recipe-arn: string # The Amazon Resource Name (ARN) of the image recipe to delete.
+  --image-recipe-arn: string # The Amazon Resource Name (ARN) of the image recipe to delete. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -853,9 +858,10 @@ export def "delete-image-recipe" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<requestId: record, imageRecipeArn: record> {
+]: nothing -> record<requestId: string, imageRecipeArn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($image_recipe_arn == null) { error make --unspanned { msg: "required query parameter 'imageRecipeArn' missing: pass --image-recipe-arn" } }
   let qp = [(serialize-qp "imageRecipeArn" $image_recipe_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/DeleteImageRecipe" $qp $auth.query)
   let accept_val = "application/json"
@@ -890,7 +896,7 @@ export def "delete-infrastructure-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --infrastructure-configuration-arn: string # The Amazon Resource Name (ARN) of the infrastructure configuration to delete.
+  --infrastructure-configuration-arn: string # The Amazon Resource Name (ARN) of the infrastructure configuration to delete. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -898,9 +904,10 @@ export def "delete-infrastructure-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<requestId: record, infrastructureConfigurationArn: record> {
+]: nothing -> record<requestId: string, infrastructureConfigurationArn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($infrastructure_configuration_arn == null) { error make --unspanned { msg: "required query parameter 'infrastructureConfigurationArn' missing: pass --infrastructure-configuration-arn" } }
   let qp = [(serialize-qp "infrastructureConfigurationArn" $infrastructure_configuration_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/DeleteInfrastructureConfiguration" $qp $auth.query)
   let accept_val = "application/json"
@@ -935,7 +942,7 @@ export def "get-component" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --component-build-version-arn: string # The Amazon Resource Name (ARN) of the component that you want to get. Regex requires the suffix /\d+$.
+  --component-build-version-arn: string # The Amazon Resource Name (ARN) of the component that you want to get. Regex requires the suffix /\d+$. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -943,9 +950,10 @@ export def "get-component" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<requestId: record, component: record<arn: record, name: record, version: record, description: record, changeDescription: record, type: record, platform: record, supportedOsVersions: record, state: record<status: record, reason: record>, parameters: record, owner: record, data: record, kmsKeyId: record, encrypted: record, dateCreated: record, tags: record, publisher: record, obfuscate: record>> {
+]: nothing -> record<requestId: string, component: record<arn: string, name: string, version: string, description: string, changeDescription: string, type: string, platform: string, supportedOsVersions: list<string>, state: record<status: string, reason: string>, parameters: list<record>, owner: string, data: string, kmsKeyId: string, encrypted: bool, dateCreated: string, tags: record, publisher: string, obfuscate: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($component_build_version_arn == null) { error make --unspanned { msg: "required query parameter 'componentBuildVersionArn' missing: pass --component-build-version-arn" } }
   let qp = [(serialize-qp "componentBuildVersionArn" $component_build_version_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/GetComponent" $qp $auth.query)
   let accept_val = "application/json"
@@ -980,7 +988,7 @@ export def "get-component-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --component-arn: string # The Amazon Resource Name (ARN) of the component whose policy you want to retrieve.
+  --component-arn: string # The Amazon Resource Name (ARN) of the component whose policy you want to retrieve. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -988,9 +996,10 @@ export def "get-component-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<requestId: record, policy: record> {
+]: nothing -> record<requestId: string, policy: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($component_arn == null) { error make --unspanned { msg: "required query parameter 'componentArn' missing: pass --component-arn" } }
   let qp = [(serialize-qp "componentArn" $component_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/GetComponentPolicy" $qp $auth.query)
   let accept_val = "application/json"
@@ -1025,7 +1034,7 @@ export def "get-container-recipe" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --container-recipe-arn: string # The Amazon Resource Name (ARN) of the container recipe to retrieve.
+  --container-recipe-arn: string # The Amazon Resource Name (ARN) of the container recipe to retrieve. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1033,9 +1042,10 @@ export def "get-container-recipe" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<requestId: record, containerRecipe: record<arn: record, containerType: record, name: record, description: record, platform: record, owner: record, version: record, components: record, instanceConfiguration: record<image: record, blockDeviceMappings: record>, dockerfileTemplateData: record, kmsKeyId: record, encrypted: record, parentImage: record, dateCreated: record, tags: record, workingDirectory: record, targetRepository: record<service: record, repositoryName: record>>> {
+]: nothing -> record<requestId: string, containerRecipe: record<arn: string, containerType: string, name: string, description: string, platform: string, owner: string, version: string, components: list<record>, instanceConfiguration: record<image: string, blockDeviceMappings: list>, dockerfileTemplateData: string, kmsKeyId: string, encrypted: bool, parentImage: string, dateCreated: string, tags: record, workingDirectory: string, targetRepository: record<service: string, repositoryName: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($container_recipe_arn == null) { error make --unspanned { msg: "required query parameter 'containerRecipeArn' missing: pass --container-recipe-arn" } }
   let qp = [(serialize-qp "containerRecipeArn" $container_recipe_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/GetContainerRecipe" $qp $auth.query)
   let accept_val = "application/json"
@@ -1070,7 +1080,7 @@ export def "get-container-recipe-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --container-recipe-arn: string # The Amazon Resource Name (ARN) of the container recipe for the policy being requested.
+  --container-recipe-arn: string # The Amazon Resource Name (ARN) of the container recipe for the policy being requested. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1078,9 +1088,10 @@ export def "get-container-recipe-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<requestId: record, policy: record> {
+]: nothing -> record<requestId: string, policy: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($container_recipe_arn == null) { error make --unspanned { msg: "required query parameter 'containerRecipeArn' missing: pass --container-recipe-arn" } }
   let qp = [(serialize-qp "containerRecipeArn" $container_recipe_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/GetContainerRecipePolicy" $qp $auth.query)
   let accept_val = "application/json"
@@ -1115,7 +1126,7 @@ export def "get-distribution-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --distribution-configuration-arn: string # The Amazon Resource Name (ARN) of the distribution configuration that you want to retrieve.
+  --distribution-configuration-arn: string # The Amazon Resource Name (ARN) of the distribution configuration that you want to retrieve. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1123,9 +1134,10 @@ export def "get-distribution-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<requestId: record, distributionConfiguration: record<arn: record, name: record, description: record, distributions: record, timeoutMinutes: record, dateCreated: record, dateUpdated: record, tags: record>> {
+]: nothing -> record<requestId: string, distributionConfiguration: record<arn: string, name: string, description: string, distributions: list<record>, timeoutMinutes: int, dateCreated: string, dateUpdated: string, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($distribution_configuration_arn == null) { error make --unspanned { msg: "required query parameter 'distributionConfigurationArn' missing: pass --distribution-configuration-arn" } }
   let qp = [(serialize-qp "distributionConfigurationArn" $distribution_configuration_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/GetDistributionConfiguration" $qp $auth.query)
   let accept_val = "application/json"
@@ -1160,7 +1172,7 @@ export def "get-image" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --image-build-version-arn: string # The Amazon Resource Name (ARN) of the image that you want to get.
+  --image-build-version-arn: string # The Amazon Resource Name (ARN) of the image that you want to get. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1168,9 +1180,10 @@ export def "get-image" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<requestId: record, image: record<arn: record, type: record, name: record, version: record, platform: record, enhancedImageMetadataEnabled: record, osVersion: record, state: record<status: record, reason: record>, imageRecipe: record<arn: record, type: record, name: record, description: record, platform: record, owner: record, version: record, components: record, parentImage: record, blockDeviceMappings: record, dateCreated: record, tags: record, workingDirectory: record, additionalInstanceConfiguration: record>, containerRecipe: record<arn: record, containerType: record, name: record, description: record, platform: record, owner: record, version: record, components: record, instanceConfiguration: record, dockerfileTemplateData: record, kmsKeyId: record, encrypted: record, parentImage: record, dateCreated: record, tags: record, workingDirectory: record, targetRepository: record>, sourcePipelineName: record, sourcePipelineArn: record, infrastructureConfiguration: record<arn: record, name: record, description: record, instanceTypes: record, instanceProfileName: record, securityGroupIds: record, subnetId: record, logging: record, keyPair: record, terminateInstanceOnFailure: record, snsTopicArn: record, dateCreated: record, dateUpdated: record, resourceTags: record, instanceMetadataOptions: record, tags: record>, distributionConfiguration: record<arn: record, name: record, description: record, distributions: record, timeoutMinutes: record, dateCreated: record, dateUpdated: record, tags: record>, imageTestsConfiguration: record<imageTestsEnabled: record, timeoutMinutes: record>, dateCreated: record, outputResources: record<amis: record, containers: record>, tags: record, buildType: record, imageSource: record, scanState: record<status: record, reason: record>, imageScanningConfiguration: record<imageScanningEnabled: record, ecrConfiguration: record>>> {
+]: nothing -> record<requestId: string, image: record<arn: string, type: string, name: string, version: string, platform: string, enhancedImageMetadataEnabled: bool, osVersion: string, state: record<status: string, reason: string>, imageRecipe: record<arn: string, type: string, name: string, description: string, platform: string, owner: string, version: string, components: list, parentImage: string, blockDeviceMappings: list, dateCreated: string, tags: record, workingDirectory: string, additionalInstanceConfiguration: record>, containerRecipe: record<arn: string, containerType: string, name: string, description: string, platform: string, owner: string, version: string, components: list, instanceConfiguration: record, dockerfileTemplateData: string, kmsKeyId: string, encrypted: bool, parentImage: string, dateCreated: string, tags: record, workingDirectory: string, targetRepository: record>, sourcePipelineName: string, sourcePipelineArn: string, infrastructureConfiguration: record<arn: string, name: string, description: string, instanceTypes: list, instanceProfileName: string, securityGroupIds: list, subnetId: string, logging: record, keyPair: string, terminateInstanceOnFailure: bool, snsTopicArn: string, dateCreated: string, dateUpdated: string, resourceTags: record, instanceMetadataOptions: record, tags: record>, distributionConfiguration: record<arn: string, name: string, description: string, distributions: list, timeoutMinutes: int, dateCreated: string, dateUpdated: string, tags: record>, imageTestsConfiguration: record<imageTestsEnabled: bool, timeoutMinutes: int>, dateCreated: string, outputResources: record<amis: list, containers: list>, tags: record, buildType: string, imageSource: string, scanState: record<status: string, reason: string>, imageScanningConfiguration: record<imageScanningEnabled: bool, ecrConfiguration: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($image_build_version_arn == null) { error make --unspanned { msg: "required query parameter 'imageBuildVersionArn' missing: pass --image-build-version-arn" } }
   let qp = [(serialize-qp "imageBuildVersionArn" $image_build_version_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/GetImage" $qp $auth.query)
   let accept_val = "application/json"
@@ -1205,7 +1218,7 @@ export def "get-image-pipeline" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --image-pipeline-arn: string # The Amazon Resource Name (ARN) of the image pipeline that you want to retrieve.
+  --image-pipeline-arn: string # The Amazon Resource Name (ARN) of the image pipeline that you want to retrieve. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1213,9 +1226,10 @@ export def "get-image-pipeline" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<requestId: record, imagePipeline: record<arn: record, name: record, description: record, platform: record, enhancedImageMetadataEnabled: record, imageRecipeArn: record, containerRecipeArn: record, infrastructureConfigurationArn: record, distributionConfigurationArn: record, imageTestsConfiguration: record<imageTestsEnabled: record, timeoutMinutes: record>, schedule: record<scheduleExpression: record, timezone: record, pipelineExecutionStartCondition: record>, status: record, dateCreated: record, dateUpdated: record, dateLastRun: record, dateNextRun: record, tags: record, imageScanningConfiguration: record<imageScanningEnabled: record, ecrConfiguration: record>>> {
+]: nothing -> record<requestId: string, imagePipeline: record<arn: string, name: string, description: string, platform: string, enhancedImageMetadataEnabled: bool, imageRecipeArn: string, containerRecipeArn: string, infrastructureConfigurationArn: string, distributionConfigurationArn: string, imageTestsConfiguration: record<imageTestsEnabled: bool, timeoutMinutes: int>, schedule: record<scheduleExpression: string, timezone: string, pipelineExecutionStartCondition: string>, status: string, dateCreated: string, dateUpdated: string, dateLastRun: string, dateNextRun: string, tags: record, imageScanningConfiguration: record<imageScanningEnabled: bool, ecrConfiguration: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($image_pipeline_arn == null) { error make --unspanned { msg: "required query parameter 'imagePipelineArn' missing: pass --image-pipeline-arn" } }
   let qp = [(serialize-qp "imagePipelineArn" $image_pipeline_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/GetImagePipeline" $qp $auth.query)
   let accept_val = "application/json"
@@ -1250,7 +1264,7 @@ export def "get-image-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --image-arn: string # The Amazon Resource Name (ARN) of the image whose policy you want to retrieve.
+  --image-arn: string # The Amazon Resource Name (ARN) of the image whose policy you want to retrieve. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1258,9 +1272,10 @@ export def "get-image-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<requestId: record, policy: record> {
+]: nothing -> record<requestId: string, policy: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($image_arn == null) { error make --unspanned { msg: "required query parameter 'imageArn' missing: pass --image-arn" } }
   let qp = [(serialize-qp "imageArn" $image_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/GetImagePolicy" $qp $auth.query)
   let accept_val = "application/json"
@@ -1295,7 +1310,7 @@ export def "get-image-recipe" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --image-recipe-arn: string # The Amazon Resource Name (ARN) of the image recipe that you want to retrieve.
+  --image-recipe-arn: string # The Amazon Resource Name (ARN) of the image recipe that you want to retrieve. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1303,9 +1318,10 @@ export def "get-image-recipe" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<requestId: record, imageRecipe: record<arn: record, type: record, name: record, description: record, platform: record, owner: record, version: record, components: record, parentImage: record, blockDeviceMappings: record, dateCreated: record, tags: record, workingDirectory: record, additionalInstanceConfiguration: record<systemsManagerAgent: record, userDataOverride: record>>> {
+]: nothing -> record<requestId: string, imageRecipe: record<arn: string, type: string, name: string, description: string, platform: string, owner: string, version: string, components: list<record>, parentImage: string, blockDeviceMappings: list<record>, dateCreated: string, tags: record, workingDirectory: string, additionalInstanceConfiguration: record<systemsManagerAgent: record, userDataOverride: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($image_recipe_arn == null) { error make --unspanned { msg: "required query parameter 'imageRecipeArn' missing: pass --image-recipe-arn" } }
   let qp = [(serialize-qp "imageRecipeArn" $image_recipe_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/GetImageRecipe" $qp $auth.query)
   let accept_val = "application/json"
@@ -1340,7 +1356,7 @@ export def "get-image-recipe-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --image-recipe-arn: string # The Amazon Resource Name (ARN) of the image recipe whose policy you want to retrieve.
+  --image-recipe-arn: string # The Amazon Resource Name (ARN) of the image recipe whose policy you want to retrieve. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1348,9 +1364,10 @@ export def "get-image-recipe-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<requestId: record, policy: record> {
+]: nothing -> record<requestId: string, policy: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($image_recipe_arn == null) { error make --unspanned { msg: "required query parameter 'imageRecipeArn' missing: pass --image-recipe-arn" } }
   let qp = [(serialize-qp "imageRecipeArn" $image_recipe_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/GetImageRecipePolicy" $qp $auth.query)
   let accept_val = "application/json"
@@ -1385,7 +1402,7 @@ export def "get-infrastructure-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --infrastructure-configuration-arn: string # The Amazon Resource Name (ARN) of the infrastructure configuration that you want to retrieve.
+  --infrastructure-configuration-arn: string # The Amazon Resource Name (ARN) of the infrastructure configuration that you want to retrieve. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1393,9 +1410,10 @@ export def "get-infrastructure-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<requestId: record, infrastructureConfiguration: record<arn: record, name: record, description: record, instanceTypes: record, instanceProfileName: record, securityGroupIds: record, subnetId: record, logging: record<s3Logs: record>, keyPair: record, terminateInstanceOnFailure: record, snsTopicArn: record, dateCreated: record, dateUpdated: record, resourceTags: record, instanceMetadataOptions: record<httpTokens: record, httpPutResponseHopLimit: record>, tags: record>> {
+]: nothing -> record<requestId: string, infrastructureConfiguration: record<arn: string, name: string, description: string, instanceTypes: list<string>, instanceProfileName: string, securityGroupIds: list<string>, subnetId: string, logging: record<s3Logs: record>, keyPair: string, terminateInstanceOnFailure: bool, snsTopicArn: string, dateCreated: string, dateUpdated: string, resourceTags: record, instanceMetadataOptions: record<httpTokens: string, httpPutResponseHopLimit: int>, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($infrastructure_configuration_arn == null) { error make --unspanned { msg: "required query parameter 'infrastructureConfigurationArn' missing: pass --infrastructure-configuration-arn" } }
   let qp = [(serialize-qp "infrastructureConfigurationArn" $infrastructure_configuration_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/GetInfrastructureConfiguration" $qp $auth.query)
   let accept_val = "application/json"
@@ -1430,7 +1448,7 @@ export def "get-workflow-execution" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --workflow-execution-id: string # Use the unique identifier for a runtime instance of the workflow to get runtime details.
+  --workflow-execution-id: string # Use the unique identifier for a runtime instance of the workflow to get runtime details. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1438,9 +1456,10 @@ export def "get-workflow-execution" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<requestId: record, workflowBuildVersionArn: record, workflowExecutionId: record, imageBuildVersionArn: record, type: record, status: record, message: record, totalStepCount: record, totalStepsSucceeded: record, totalStepsFailed: record, totalStepsSkipped: record, startTime: record, endTime: record> {
+]: nothing -> record<requestId: string, workflowBuildVersionArn: string, workflowExecutionId: string, imageBuildVersionArn: string, type: string, status: string, message: string, totalStepCount: int, totalStepsSucceeded: int, totalStepsFailed: int, totalStepsSkipped: int, startTime: string, endTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workflow_execution_id == null) { error make --unspanned { msg: "required query parameter 'workflowExecutionId' missing: pass --workflow-execution-id" } }
   let qp = [(serialize-qp "workflowExecutionId" $workflow_execution_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/GetWorkflowExecution" $qp $auth.query)
   let accept_val = "application/json"
@@ -1475,7 +1494,7 @@ export def "get-workflow-step-execution" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --step-execution-id: string # Use the unique identifier for a specific runtime instance of the workflow step to get runtime details for that step.
+  --step-execution-id: string # Use the unique identifier for a specific runtime instance of the workflow step to get runtime details for that step. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1483,9 +1502,10 @@ export def "get-workflow-step-execution" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<requestId: record, stepExecutionId: record, workflowBuildVersionArn: record, workflowExecutionId: record, imageBuildVersionArn: record, name: record, description: record, action: record, status: record, rollbackStatus: record, message: record, inputs: record, outputs: record, startTime: record, endTime: record, onFailure: record, timeoutSeconds: record> {
+]: nothing -> record<requestId: string, stepExecutionId: string, workflowBuildVersionArn: string, workflowExecutionId: string, imageBuildVersionArn: string, name: string, description: string, action: string, status: string, rollbackStatus: string, message: string, inputs: string, outputs: string, startTime: string, endTime: string, onFailure: string, timeoutSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($step_execution_id == null) { error make --unspanned { msg: "required query parameter 'stepExecutionId' missing: pass --step-execution-id" } }
   let qp = [(serialize-qp "stepExecutionId" $step_execution_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/GetWorkflowStepExecution" $qp $auth.query)
   let accept_val = "application/json"
@@ -1539,7 +1559,7 @@ export def "import-component" [
   --kms-key-id: string # The ID of the KMS key that should be used to encrypt this component.
   --tags: record # The tags of the component.
   client_token: string # The idempotency token of the component.
-]: any -> record<requestId: record, clientToken: record, componentBuildVersionArn: record> {
+]: any -> record<requestId: string, clientToken: string, componentBuildVersionArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1593,7 +1613,7 @@ export def "import-vm-image" [
   vm_import_task_id: string # The importTaskId (API) or ImportTaskId (CLI) from the Amazon EC2 VM import process. Image Builder retrieves information from the import process to pull in the AMI that is created from the VM source as the base image for your recipe.
   --tags: record # Tags that are attached to the import resources.
   client_token: string # Unique, case-sensitive identifier you provide to ensure idempotency of the request. For more information, see Ensuring idempotency (https://docs.aws.amazon.com/AWSEC2/latest/APIReference/Run_Instance_Idempotency.html) in the Amazon EC2 API Reference.
-]: any -> record<requestId: record, imageArn: record, clientToken: record> {
+]: any -> record<requestId: string, imageArn: string, clientToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1644,7 +1664,7 @@ export def "list-component-build-versions" [
   component_version_arn: string # The component version Amazon Resource Name (ARN) whose versions you want to list.
   --max-results-body: int # The maximum items to return in a request. (body field)
   --next-token-body: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response. (body field)
-]: any -> record<requestId: record, componentSummaryList: record, nextToken: record> {
+]: any -> record<requestId: string, componentSummaryList: table<arn: string, name: string, version: string, platform: string, supportedOsVersions: list, state: record, type: string, owner: string, description: string, changeDescription: string, dateCreated: string, tags: record, publisher: string, obfuscate: bool>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1674,7 +1694,7 @@ export def "list-component-build-versions" [
 #
 # POST /ListComponents
 # operationId: ListComponents
-# --filters item shape: {name?: any, values?: any}
+# --filters item shape: {name?: string, values?: list<string>}
 export def "list-components" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1695,11 +1715,11 @@ export def "list-components" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --owner: string@owner-completer # Filters results based on the type of owner for the component. By default, this request returns a list of components that your account owns. To see results for other types of owners, you can specify components that Amazon manages, third party components, or components that other accounts have shared with you.
-  --filters: list # Use the following filters to streamline results: description name platform supportedOsVersion type version — item shape: {name?: any, values?: any}
+  --filters: list # Use the following filters to streamline results: description name platform supportedOsVersion type version — item shape: {name?: string, values?: list<string>}
   --by-name: oneof<nothing, bool> # Returns the list of components for the specified name.
   --max-results-body: int # The maximum items to return in a request. (body field)
   --next-token-body: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response. (body field)
-]: any -> record<requestId: record, componentVersionList: record, nextToken: record> {
+]: any -> record<requestId: string, componentVersionList: table<arn: string, name: string, version: string, description: string, platform: string, supportedOsVersions: list, type: string, owner: string, dateCreated: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1729,7 +1749,7 @@ export def "list-components" [
 #
 # POST /ListContainerRecipes
 # operationId: ListContainerRecipes
-# --filters item shape: {name?: any, values?: any}
+# --filters item shape: {name?: string, values?: list<string>}
 export def "list-container-recipes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1750,10 +1770,10 @@ export def "list-container-recipes" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --owner: string@owner-completer # Returns container recipes belonging to the specified owner, that have been shared with you. You can omit this field to return container recipes belonging to your account.
-  --filters: list # Use the following filters to streamline results: containerType name parentImage platform — item shape: {name?: any, values?: any}
+  --filters: list # Use the following filters to streamline results: containerType name parentImage platform — item shape: {name?: string, values?: list<string>}
   --max-results-body: int # The maximum items to return in a request. (body field)
   --next-token-body: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response. (body field)
-]: any -> record<requestId: record, containerRecipeSummaryList: record, nextToken: record> {
+]: any -> record<requestId: string, containerRecipeSummaryList: table<arn: string, containerType: string, name: string, platform: string, owner: string, parentImage: string, dateCreated: string, tags: record>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1783,7 +1803,7 @@ export def "list-container-recipes" [
 #
 # POST /ListDistributionConfigurations
 # operationId: ListDistributionConfigurations
-# --filters item shape: {name?: any, values?: any}
+# --filters item shape: {name?: string, values?: list<string>}
 export def "list-distribution-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1803,10 +1823,10 @@ export def "list-distribution-configurations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --filters: list # You can filter on name to streamline results. — item shape: {name?: any, values?: any}
+  --filters: list # You can filter on name to streamline results. — item shape: {name?: string, values?: list<string>}
   --max-results-body: int # The maximum items to return in a request. (body field)
   --next-token-body: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response. (body field)
-]: any -> record<requestId: record, distributionConfigurationSummaryList: record, nextToken: record> {
+]: any -> record<requestId: string, distributionConfigurationSummaryList: table<arn: string, name: string, description: string, dateCreated: string, dateUpdated: string, tags: record, regions: list>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1836,7 +1856,7 @@ export def "list-distribution-configurations" [
 #
 # POST /ListImageBuildVersions
 # operationId: ListImageBuildVersions
-# --filters item shape: {name?: any, values?: any}
+# --filters item shape: {name?: string, values?: list<string>}
 export def "list-image-build-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1857,10 +1877,10 @@ export def "list-image-build-versions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   image_version_arn: string # The Amazon Resource Name (ARN) of the image whose build versions you want to retrieve.
-  --filters: list # Use the following filters to streamline results: name osVersion platform type version — item shape: {name?: any, values?: any}
+  --filters: list # Use the following filters to streamline results: name osVersion platform type version — item shape: {name?: string, values?: list<string>}
   --max-results-body: int # The maximum items to return in a request. (body field)
   --next-token-body: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response. (body field)
-]: any -> record<requestId: record, imageSummaryList: record, nextToken: record> {
+]: any -> record<requestId: string, imageSummaryList: table<arn: string, name: string, type: string, version: string, platform: string, osVersion: string, state: record, owner: string, dateCreated: string, outputResources: record, tags: record, buildType: string, imageSource: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1912,7 +1932,7 @@ export def "list-image-packages" [
   image_build_version_arn: string # Filter results for the ListImagePackages request by the Image Build Version ARN
   --max-results-body: int # The maximum items to return in a request. (body field)
   --next-token-body: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response. (body field)
-]: any -> record<requestId: record, imagePackageList: record, nextToken: record> {
+]: any -> record<requestId: string, imagePackageList: table<packageName: string, packageVersion: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1942,7 +1962,7 @@ export def "list-image-packages" [
 #
 # POST /ListImagePipelineImages
 # operationId: ListImagePipelineImages
-# --filters item shape: {name?: any, values?: any}
+# --filters item shape: {name?: string, values?: list<string>}
 export def "list-image-pipeline-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1963,10 +1983,10 @@ export def "list-image-pipeline-images" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   image_pipeline_arn: string # The Amazon Resource Name (ARN) of the image pipeline whose images you want to view.
-  --filters: list # Use the following filters to streamline results: name version — item shape: {name?: any, values?: any}
+  --filters: list # Use the following filters to streamline results: name version — item shape: {name?: string, values?: list<string>}
   --max-results-body: int # The maximum items to return in a request. (body field)
   --next-token-body: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response. (body field)
-]: any -> record<requestId: record, imageSummaryList: record, nextToken: record> {
+]: any -> record<requestId: string, imageSummaryList: table<arn: string, name: string, type: string, version: string, platform: string, osVersion: string, state: record, owner: string, dateCreated: string, outputResources: record, tags: record, buildType: string, imageSource: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1996,7 +2016,7 @@ export def "list-image-pipeline-images" [
 #
 # POST /ListImagePipelines
 # operationId: ListImagePipelines
-# --filters item shape: {name?: any, values?: any}
+# --filters item shape: {name?: string, values?: list<string>}
 export def "list-image-pipelines" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2016,10 +2036,10 @@ export def "list-image-pipelines" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --filters: list # Use the following filters to streamline results: description distributionConfigurationArn imageRecipeArn infrastructureConfigurationArn name status — item shape: {name?: any, values?: any}
+  --filters: list # Use the following filters to streamline results: description distributionConfigurationArn imageRecipeArn infrastructureConfigurationArn name status — item shape: {name?: string, values?: list<string>}
   --max-results-body: int # The maximum items to return in a request. (body field)
   --next-token-body: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response. (body field)
-]: any -> record<requestId: record, imagePipelineList: record, nextToken: record> {
+]: any -> record<requestId: string, imagePipelineList: table<arn: string, name: string, description: string, platform: string, enhancedImageMetadataEnabled: bool, imageRecipeArn: string, containerRecipeArn: string, infrastructureConfigurationArn: string, distributionConfigurationArn: string, imageTestsConfiguration: record, schedule: record, status: string, dateCreated: string, dateUpdated: string, dateLastRun: string, dateNextRun: string, tags: record, imageScanningConfiguration: record>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2049,7 +2069,7 @@ export def "list-image-pipelines" [
 #
 # POST /ListImageRecipes
 # operationId: ListImageRecipes
-# --filters item shape: {name?: any, values?: any}
+# --filters item shape: {name?: string, values?: list<string>}
 export def "list-image-recipes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2070,10 +2090,10 @@ export def "list-image-recipes" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --owner: string@owner-completer # The owner defines which image recipes you want to list. By default, this request will only show image recipes owned by your account. You can use this field to specify if you want to view image recipes owned by yourself, by Amazon, or those image recipes that have been shared with you by other customers.
-  --filters: list # Use the following filters to streamline results: name parentImage platform — item shape: {name?: any, values?: any}
+  --filters: list # Use the following filters to streamline results: name parentImage platform — item shape: {name?: string, values?: list<string>}
   --max-results-body: int # The maximum items to return in a request. (body field)
   --next-token-body: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response. (body field)
-]: any -> record<requestId: record, imageRecipeSummaryList: record, nextToken: record> {
+]: any -> record<requestId: string, imageRecipeSummaryList: table<arn: string, name: string, platform: string, owner: string, parentImage: string, dateCreated: string, tags: record>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2103,7 +2123,7 @@ export def "list-image-recipes" [
 #
 # POST /ListImageScanFindingAggregations
 # operationId: ListImageScanFindingAggregations
-# --filter shape: {name?: any, values?: any}
+# --filter shape: {name?: string, values?: list<string>}
 export def "list-image-scan-finding-aggregations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2122,9 +2142,9 @@ export def "list-image-scan-finding-aggregations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --filter: record # A filter name and value pair that is used to return a more specific list of results from a list operation. Filters can be used to match a set of resources by specific criteria, such as tags, attributes, or IDs. — shape: {name?: any, values?: any}
+  --filter: record # A filter name and value pair that is used to return a more specific list of results from a list operation. Filters can be used to match a set of resources by specific criteria, such as tags, attributes, or IDs. — shape: {name?: string, values?: list<string>}
   --next-token-body: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response. (body field)
-]: any -> record<requestId: record, aggregationType: record, responses: record, nextToken: record> {
+]: any -> record<requestId: string, aggregationType: string, responses: table<accountAggregation: record, imageAggregation: record, imagePipelineAggregation: record, vulnerabilityIdAggregation: record>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2154,7 +2174,7 @@ export def "list-image-scan-finding-aggregations" [
 #
 # POST /ListImageScanFindings
 # operationId: ListImageScanFindings
-# --filters item shape: {name?: any, values?: any}
+# --filters item shape: {name?: string, values?: list<string>}
 export def "list-image-scan-findings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2174,10 +2194,10 @@ export def "list-image-scan-findings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --filters: list # An array of name value pairs that you can use to filter your results. You can use the following filters to streamline results: imageBuildVersionArn imagePipelineArn vulnerabilityId severity If you don't request a filter, then all findings in your account are listed. — item shape: {name?: any, values?: any}
+  --filters: list # An array of name value pairs that you can use to filter your results. You can use the following filters to streamline results: imageBuildVersionArn imagePipelineArn vulnerabilityId severity If you don't request a filter, then all findings in your account are listed. — item shape: {name?: string, values?: list<string>}
   --max-results-body: int # The maximum items to return in a request. (body field)
   --next-token-body: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response. (body field)
-]: any -> record<requestId: record, findings: record, nextToken: record> {
+]: any -> record<requestId: string, findings: table<awsAccountId: string, imageBuildVersionArn: string, imagePipelineArn: string, type: string, description: string, title: string, remediation: record, severity: string, firstObservedAt: string, updatedAt: string, inspectorScore: float, inspectorScoreDetails: record, packageVulnerabilityDetails: record, fixAvailable: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2207,7 +2227,7 @@ export def "list-image-scan-findings" [
 #
 # POST /ListImages
 # operationId: ListImages
-# --filters item shape: {name?: any, values?: any}
+# --filters item shape: {name?: string, values?: list<string>}
 export def "list-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2228,12 +2248,12 @@ export def "list-images" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --owner: string@owner-completer # The owner defines which images you want to list. By default, this request will only show images owned by your account. You can use this field to specify if you want to view images owned by yourself, by Amazon, or those images that have been shared with you by other customers.
-  --filters: list # Use the following filters to streamline results: name osVersion platform type version — item shape: {name?: any, values?: any}
+  --filters: list # Use the following filters to streamline results: name osVersion platform type version — item shape: {name?: string, values?: list<string>}
   --by-name: oneof<nothing, bool> # Requests a list of images with a specific recipe name.
   --max-results-body: int # The maximum items to return in a request. (body field)
   --next-token-body: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response. (body field)
   --include-deprecated: oneof<nothing, bool> # Includes deprecated images in the response list.
-]: any -> record<requestId: record, imageVersionList: record, nextToken: record> {
+]: any -> record<requestId: string, imageVersionList: table<arn: string, name: string, type: string, version: string, platform: string, osVersion: string, owner: string, dateCreated: string, buildType: string, imageSource: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2263,7 +2283,7 @@ export def "list-images" [
 #
 # POST /ListInfrastructureConfigurations
 # operationId: ListInfrastructureConfigurations
-# --filters item shape: {name?: any, values?: any}
+# --filters item shape: {name?: string, values?: list<string>}
 export def "list-infrastructure-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2283,10 +2303,10 @@ export def "list-infrastructure-configurations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --filters: list # You can filter on name to streamline results. — item shape: {name?: any, values?: any}
+  --filters: list # You can filter on name to streamline results. — item shape: {name?: string, values?: list<string>}
   --max-results-body: int # The maximum items to return in a request. (body field)
   --next-token-body: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response. (body field)
-]: any -> record<requestId: record, infrastructureConfigurationSummaryList: record, nextToken: record> {
+]: any -> record<requestId: string, infrastructureConfigurationSummaryList: table<arn: string, name: string, description: string, dateCreated: string, dateUpdated: string, resourceTags: record, tags: record, instanceTypes: list, instanceProfileName: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2432,7 +2452,7 @@ export def "list-workflow-executions" [
   --max-results-body: int # The maximum items to return in a request. (body field)
   --next-token-body: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response. (body field)
   image_build_version_arn: string # List all workflow runtime instances for the specified image build version resource ARN.
-]: any -> record<requestId: record, workflowExecutions: record, imageBuildVersionArn: record, message: record, nextToken: record> {
+]: any -> record<requestId: string, workflowExecutions: table<workflowBuildVersionArn: string, workflowExecutionId: string, type: string, status: string, message: string, totalStepCount: int, totalStepsSucceeded: int, totalStepsFailed: int, totalStepsSkipped: int, startTime: string, endTime: string>, imageBuildVersionArn: string, message: string, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2484,7 +2504,7 @@ export def "list-workflow-step-executions" [
   --max-results-body: int # The maximum items to return in a request. (body field)
   --next-token-body: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response. (body field)
   workflow_execution_id: string # The unique identifier that Image Builder assigned to keep track of runtime details when it ran the workflow.
-]: any -> record<requestId: record, steps: record, workflowBuildVersionArn: record, workflowExecutionId: record, imageBuildVersionArn: record, message: record, nextToken: record> {
+]: any -> record<requestId: string, steps: table<stepExecutionId: string, name: string, description: string, action: string, status: string, rollbackStatus: string, message: string, inputs: string, outputs: string, startTime: string, endTime: string>, workflowBuildVersionArn: string, workflowExecutionId: string, imageBuildVersionArn: string, message: string, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2533,7 +2553,7 @@ export def "put-component-policy" [
   --x-amz-signed-headers: string
   component_arn: string # The Amazon Resource Name (ARN) of the component that this policy should be applied to.
   policy: string # The policy to apply.
-]: any -> record<requestId: record, componentArn: record> {
+]: any -> record<requestId: string, componentArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2581,7 +2601,7 @@ export def "put-container-recipe-policy" [
   --x-amz-signed-headers: string
   container_recipe_arn: string # The Amazon Resource Name (ARN) of the container recipe that this policy should be applied to.
   policy: string # The policy to apply to the container recipe.
-]: any -> record<requestId: record, containerRecipeArn: record> {
+]: any -> record<requestId: string, containerRecipeArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2629,7 +2649,7 @@ export def "put-image-policy" [
   --x-amz-signed-headers: string
   image_arn: string # The Amazon Resource Name (ARN) of the image that this policy should be applied to.
   policy: string # The policy to apply.
-]: any -> record<requestId: record, imageArn: record> {
+]: any -> record<requestId: string, imageArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2677,7 +2697,7 @@ export def "put-image-recipe-policy" [
   --x-amz-signed-headers: string
   image_recipe_arn: string # The Amazon Resource Name (ARN) of the image recipe that this policy should be applied to.
   policy: string # The policy to apply.
-]: any -> record<requestId: record, imageRecipeArn: record> {
+]: any -> record<requestId: string, imageRecipeArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2725,7 +2745,7 @@ export def "start-image-pipeline-execution" [
   --x-amz-signed-headers: string
   image_pipeline_arn: string # The Amazon Resource Name (ARN) of the image pipeline that you want to manually invoke.
   client_token: string # The idempotency token used to make this request idempotent.
-]: any -> record<requestId: record, clientToken: record, imageBuildVersionArn: record> {
+]: any -> record<requestId: string, clientToken: string, imageBuildVersionArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2765,7 +2785,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # The tag keys to remove from the resource.
+  --tag-keys: list # The tag keys to remove from the resource. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2777,6 +2797,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2801,7 +2822,7 @@ export def "untag-resource" [
 #
 # PUT /UpdateDistributionConfiguration
 # operationId: UpdateDistributionConfiguration
-# --distributions item shape: {region: any, amiDistributionConfiguration?: any, containerDistributionConfiguration?: any, licenseConfigurationArns?: any, launchTemplateConfigurations?: any, s3ExportConfiguration?: any, fastLaunchConfigurations?: any}
+# --distributions item shape: {region: string, amiDistributionConfiguration?: record, containerDistributionConfiguration?: record, licenseConfigurationArns?: list<string>, launchTemplateConfigurations?: list, s3ExportConfiguration?: record, fastLaunchConfigurations?: list}
 export def "update-distribution-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2821,9 +2842,9 @@ export def "update-distribution-configuration" [
   --x-amz-signed-headers: string
   distribution_configuration_arn: string # The Amazon Resource Name (ARN) of the distribution configuration that you want to update.
   --description: string # The description of the distribution configuration.
-  distributions: list # The distributions of the distribution configuration. — item shape: {region: any, amiDistributionConfiguration?: any, containerDistributionConfiguration?: any, licenseConfigurationArns?: any, launchTemplateConfigurations?: any, s3ExportConfiguration?: any, fastLaunchConfigurations?: any}
+  distributions: list # The distributions of the distribution configuration. — item shape: {region: string, amiDistributionConfiguration?: record, containerDistributionConfiguration?: record, licenseConfigurationArns?: list<string>, launchTemplateConfigurations?: list, s3ExportConfiguration?: record, fastLaunchConfigurations?: list}
   client_token: string # The idempotency token of the distribution configuration.
-]: any -> record<requestId: record, clientToken: record, distributionConfigurationArn: record> {
+]: any -> record<requestId: string, clientToken: string, distributionConfigurationArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2852,9 +2873,9 @@ export def "update-distribution-configuration" [
 #
 # PUT /UpdateImagePipeline
 # operationId: UpdateImagePipeline
-# --imageTestsConfiguration shape: {imageTestsEnabled?: any, timeoutMinutes?: any}
-# --schedule shape: {scheduleExpression?: any, timezone?: any, pipelineExecutionStartCondition?: any}
-# --imageScanningConfiguration shape: {imageScanningEnabled?: any, ecrConfiguration?: any}
+# --imageTestsConfiguration shape: {imageTestsEnabled?: bool, timeoutMinutes?: int}
+# --schedule shape: {scheduleExpression?: string, timezone?: string, pipelineExecutionStartCondition?: "EXPRESSION_MATCH_ONLY"|"EXPRESSION_MATCH_AND_DEPENDENCY_UPDATES_AVAILABLE"}
+# --imageScanningConfiguration shape: {imageScanningEnabled?: bool, ecrConfiguration?: record}
 export def "update-image-pipeline" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2878,13 +2899,13 @@ export def "update-image-pipeline" [
   --container-recipe-arn: string # The Amazon Resource Name (ARN) of the container pipeline to update.
   infrastructure_configuration_arn: string # The Amazon Resource Name (ARN) of the infrastructure configuration that Image Builder uses to build images that this image pipeline has updated.
   --distribution-configuration-arn: string # The Amazon Resource Name (ARN) of the distribution configuration that Image Builder uses to configure and distribute images that this image pipeline has updated.
-  --image-tests-configuration: record # Configure image tests for your pipeline build. Tests run after building the image, to verify that the AMI or container image is valid before distributing it. — shape: {imageTestsEnabled?: any, timeoutMinutes?: any}
+  --image-tests-configuration: record # Configure image tests for your pipeline build. Tests run after building the image, to verify that the AMI or container image is valid before distributing it. — shape: {imageTestsEnabled?: bool, timeoutMinutes?: int}
   --enhanced-image-metadata-enabled: oneof<nothing, bool> # Collects additional information about the image being created, including the operating system (OS) version and package list. This information is used to enhance the overall experience of using EC2 Image Builder. Enabled by default.
-  --schedule: record # A schedule configures how often and when a pipeline will automatically create a new image. — shape: {scheduleExpression?: any, timezone?: any, pipelineExecutionStartCondition?: any}
+  --schedule: record # A schedule configures how often and when a pipeline will automatically create a new image. — shape: {scheduleExpression?: string, timezone?: string, pipelineExecutionStartCondition?: "EXPRESSION_MATCH_ONLY"|"EXPRESSION_MATCH_AND_DEPENDENCY_UPDATES_AVAILABLE"}
   --status: string@status-completer # The status of the image pipeline.
   client_token: string # The idempotency token used to make this request idempotent.
-  --image-scanning-configuration: record # Contains settings for Image Builder image resource and container image scans. — shape: {imageScanningEnabled?: any, ecrConfiguration?: any}
-]: any -> record<requestId: record, clientToken: record, imagePipelineArn: record> {
+  --image-scanning-configuration: record # Contains settings for Image Builder image resource and container image scans. — shape: {imageScanningEnabled?: bool, ecrConfiguration?: record}
+]: any -> record<requestId: string, clientToken: string, imagePipelineArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2913,8 +2934,8 @@ export def "update-image-pipeline" [
 #
 # PUT /UpdateInfrastructureConfiguration
 # operationId: UpdateInfrastructureConfiguration
-# --logging shape: {s3Logs?: any}
-# --instanceMetadataOptions shape: {httpTokens?: any, httpPutResponseHopLimit?: any}
+# --logging shape: {s3Logs?: record}
+# --instanceMetadataOptions shape: {httpTokens?: string, httpPutResponseHopLimit?: int}
 export def "update-infrastructure-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2938,14 +2959,14 @@ export def "update-infrastructure-configuration" [
   instance_profile_name: string # The instance profile to associate with the instance used to customize your Amazon EC2 AMI.
   --security-group-ids: list<string> # The security group IDs to associate with the instance used to customize your Amazon EC2 AMI.
   --subnet-id: string # The subnet ID to place the instance used to customize your Amazon EC2 AMI in.
-  --logging: record # Logging configuration defines where Image Builder uploads your logs. — shape: {s3Logs?: any}
+  --logging: record # Logging configuration defines where Image Builder uploads your logs. — shape: {s3Logs?: record}
   --key-pair: string # The key pair of the infrastructure configuration. You can use this to log on to and debug the instance used to create your image.
   --terminate-instance-on-failure: oneof<nothing, bool> # The terminate instance on failure setting of the infrastructure configuration. Set to false if you want Image Builder to retain the instance used to configure your AMI if the build or test phase of your workflow fails.
   --sns-topic-arn: string # The Amazon Resource Name (ARN) for the SNS topic to which we send image build event notifications. EC2 Image Builder is unable to send notifications to SNS topics that are encrypted using keys from other accounts. The key that is used to encrypt the SNS topic must reside in the account that the Image Builder service runs under.
   client_token: string # The idempotency token used to make this request idempotent.
   --resource-tags: record # The tags attached to the resource created by Image Builder.
-  --instance-metadata-options: record # The instance metadata options that apply to the HTTP requests that pipeline builds use to launch EC2 build and test instances. For more information about instance metadata options, see Configure the instance metadata options (https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-options.html) in the Amazon EC2 User Guide for Linux instances, or Configure the instance metadata options (https://docs.aws.amazon.com/AWSEC2/latest/WindowsGuide/configuring-instance-metadata-options.html) in the Amazon EC2 Windows Guide for Windows instances. — shape: {httpTokens?: any, httpPutResponseHopLimit?: any}
-]: any -> record<requestId: record, clientToken: record, infrastructureConfigurationArn: record> {
+  --instance-metadata-options: record # The instance metadata options that apply to the HTTP requests that pipeline builds use to launch EC2 build and test instances. For more information about instance metadata options, see Configure the instance metadata options (https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-options.html) in the Amazon EC2 User Guide for Linux instances, or Configure the instance metadata options (https://docs.aws.amazon.com/AWSEC2/latest/WindowsGuide/configuring-instance-metadata-options.html) in the Amazon EC2 Windows Guide for Windows instances. — shape: {httpTokens?: string, httpPutResponseHopLimit?: int}
+]: any -> record<requestId: string, clientToken: string, infrastructureConfigurationArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

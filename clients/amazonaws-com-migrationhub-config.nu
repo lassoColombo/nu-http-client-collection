@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -127,6 +127,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateHomeRegionControl
+# --Target shape: {Type: "ACCOUNT", Id?: string}
 export def "create-home-region-control" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -144,14 +145,15 @@ export def "create-home-region-control" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  home_region: any
-  target: any
-  --body-dry-run: any
-]: any -> record<HomeRegionControl: record<ControlId: record, HomeRegion: record, Target: record<Type: record, Id: record>, RequestedTime: record>> {
+  --x-amz-target: string@x-amz-target-completer # required
+  home_region: string # The name of the home region of the calling account.
+  target: record # The target parameter specifies the identifier to which the home region is applied, which is always an ACCOUNT. It applies the home region to the current ACCOUNT. — shape: {Type: "ACCOUNT", Id?: string}
+  --body-dry-run: oneof<nothing, bool> # Optional Boolean flag to indicate whether any effect should take place. It tests whether the caller has permission to make the call.
+]: any -> record<HomeRegionControl: record<ControlId: string, HomeRegion: string, Target: record<Type: string, Id: string>, RequestedTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSMigrationHubMultiAccountService.CreateHomeRegionControl")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"HomeRegion": $home_region, "Target": $target, "DryRun": $body_dry_run} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -177,6 +179,7 @@ export def "create-home-region-control" [
 #
 # POST /
 # operationId: DescribeHomeRegionControls
+# --Target shape: {Type: "ACCOUNT", Id?: string}
 export def "describe-home-region-controls" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -196,16 +199,17 @@ export def "describe-home-region-controls" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  --control-id: any
-  --home-region: any
-  --target: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<HomeRegionControls: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  --control-id: string # The ControlID is a unique identifier string of your HomeRegionControl object.
+  --home-region: string # The name of the home region you'd like to view.
+  --target: record # The target parameter specifies the identifier to which the home region is applied, which is always an ACCOUNT. It applies the home region to the current ACCOUNT. — shape: {Type: "ACCOUNT", Id?: string}
+  --max-results-body: int # The maximum number of filtering results to display per page. (body field)
+  --next-token-body: string # If a NextToken was returned by a previous call, more results are available. To retrieve the next page of results, make the call again using the returned token in NextToken. (body field)
+]: any -> record<HomeRegionControls: table<ControlId: string, HomeRegion: string, Target: record, RequestedTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSMigrationHubMultiAccountService.DescribeHomeRegionControls")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ControlId": $control_id, "HomeRegion": $home_region, "Target": $target, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -249,12 +253,13 @@ export def "get-home-region" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
+  --x-amz-target: string@x-amz-target-completer-2 # required
   --body: record
-]: any -> record<HomeRegion: record> {
+]: any -> record<HomeRegion: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSMigrationHubMultiAccountService.GetHomeRegion")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

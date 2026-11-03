@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -108,6 +108,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def api-version-completer [] { ["2018-08-31-preview"] }
+def notification-setting-name-completer [] { ["default"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -146,11 +147,12 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # The API version to use for this operation.
+  --api-version: string@api-version-completer # The API version to use for this operation. (required)
   --skiptoken: string # The page-continuation token to use with a paged version of this API.
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string, origin: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let api_version = ($api_version | default "2018-08-31-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.WorkloadMonitor/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -184,7 +186,7 @@ export def "components-summary-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # The API version to use for this operation.
+  --api-version: string@api-version-completer # The API version to use for this operation. (required)
   --select: string # Properties to be returned in the response.
   --filter: string # Filter to be applied on the operation.
   --apply: string # Apply aggregation.
@@ -192,10 +194,11 @@ export def "components-summary-list" [
   --expand: string # Include properties inline in the response.
   --top: string # Limit the result to the specified number of rows.
   --skiptoken: string # The page-continuation token to use with a paged version of this API.
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record>> {
+]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  let api_version = ($api_version | default "2018-08-31-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$apply" $apply "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.WorkloadMonitor/componentsSummary") $qp $auth.query)
   let accept_val = "application/json"
@@ -229,7 +232,7 @@ export def "monitor-instances-summary-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # The API version to use for this operation.
+  --api-version: string@api-version-completer # The API version to use for this operation. (required)
   --select: string # Properties to be returned in the response.
   --filter: string # Filter to be applied on the operation.
   --apply: string # Apply aggregation.
@@ -237,10 +240,11 @@ export def "monitor-instances-summary-list" [
   --expand: string # Include properties inline in the response.
   --top: string # Limit the result to the specified number of rows.
   --skiptoken: string # The page-continuation token to use with a paged version of this API.
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record>> {
+]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  let api_version = ($api_version | default "2018-08-31-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$apply" $apply "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.WorkloadMonitor/monitorInstancesSummary") $qp $auth.query)
   let accept_val = "application/json"
@@ -278,7 +282,7 @@ export def "components-list-by-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # The API version to use for this operation.
+  --api-version: string@api-version-completer # The API version to use for this operation. (required)
   --select: string # Properties to be returned in the response.
   --filter: string # Filter to be applied on the operation.
   --apply: string # Apply aggregation.
@@ -286,7 +290,7 @@ export def "components-list-by-resource" [
   --expand: string # Include properties inline in the response.
   --top: string # Limit the result to the specified number of rows.
   --skiptoken: string # The page-continuation token to use with a paged version of this API.
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record>> {
+]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -294,6 +298,7 @@ export def "components-list-by-resource" [
   if ($resource_namespace | is-empty) { error make --unspanned { msg: "path parameter 'resourceNamespace' must be non-empty" } }
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-08-31-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$apply" $apply "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_namespace: (encode-path-segment $resource_namespace), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/{resource_namespace}/{resource_type}/{resource_name}/providers/Microsoft.WorkloadMonitor/components") $qp $auth.query)
   let accept_val = "application/json"
@@ -332,10 +337,10 @@ export def "components-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # The API version to use for this operation.
+  --api-version: string@api-version-completer # The API version to use for this operation. (required)
   --select: string # Properties to be returned in the response.
   --expand: string # Include properties inline in the response.
-]: nothing -> record<etag: string, properties: record<aggregateProperties: record, children: list<any>, componentName: string, componentTypeGroupCategory: string, componentTypeId: string, componentTypeName: string, healthState: string, healthStateCategory: string, healthStateChangesEndTime: string, healthStateChangesStartTime: string, lastHealthStateChangeTime: string, solutionId: string, vmId: string, vmName: string, vmTags: record, workloadType: string, workspaceId: string>> {
+]: nothing -> record<etag: string, properties: record<aggregateProperties: record, children: list<any>, componentName: string, componentTypeGroupCategory: string, componentTypeId: string, componentTypeName: string, healthState: string, healthStateCategory: string, healthStateChangesEndTime: string, healthStateChangesStartTime: string, lastHealthStateChangeTime: string, solutionId: string, vmId: string, vmName: string, vmTags: record, workloadType: string, workspaceId: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -344,6 +349,7 @@ export def "components-get" [
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($component_id | is-empty) { error make --unspanned { msg: "path parameter 'componentId' must be non-empty" } }
+  let api_version = ($api_version | default "2018-08-31-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_namespace: (encode-path-segment $resource_namespace), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name), component_id: (encode-path-segment $component_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/{resource_namespace}/{resource_type}/{resource_name}/providers/Microsoft.WorkloadMonitor/components/{component_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -381,7 +387,7 @@ export def "monitor-instances-list-by-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # The API version to use for this operation.
+  --api-version: string@api-version-completer # The API version to use for this operation. (required)
   --select: string # Properties to be returned in the response.
   --filter: string # Filter to be applied on the operation.
   --apply: string # Apply aggregation.
@@ -389,7 +395,7 @@ export def "monitor-instances-list-by-resource" [
   --expand: string # Include properties inline in the response.
   --top: string # Limit the result to the specified number of rows.
   --skiptoken: string # The page-continuation token to use with a paged version of this API.
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record>> {
+]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -397,6 +403,7 @@ export def "monitor-instances-list-by-resource" [
   if ($resource_namespace | is-empty) { error make --unspanned { msg: "path parameter 'resourceNamespace' must be non-empty" } }
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-08-31-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$apply" $apply "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_namespace: (encode-path-segment $resource_namespace), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/{resource_namespace}/{resource_type}/{resource_name}/providers/Microsoft.WorkloadMonitor/monitorInstances") $qp $auth.query)
   let accept_val = "application/json"
@@ -435,10 +442,10 @@ export def "monitor-instances-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # The API version to use for this operation.
+  --api-version: string@api-version-completer # The API version to use for this operation. (required)
   --select: string # Properties to be returned in the response.
   --expand: string # Include properties inline in the response.
-]: nothing -> record<etag: string, properties: record<aggregateProperties: record, alertGeneration: string, children: list<any>, componentId: string, componentName: string, componentTypeId: string, componentTypeName: string, healthState: string, healthStateCategory: string, healthStateChanges: list<record>, healthStateChangesEndTime: string, healthStateChangesStartTime: string, lastHealthStateChangeTime: string, monitorCategory: string, monitorId: string, monitorName: string, monitorType: string, solutionId: string, workloadType: string, workspaceId: string>> {
+]: nothing -> record<etag: string, properties: record<aggregateProperties: record, alertGeneration: string, children: list<any>, componentId: string, componentName: string, componentTypeId: string, componentTypeName: string, healthState: string, healthStateCategory: string, healthStateChanges: list<record>, healthStateChangesEndTime: string, healthStateChangesStartTime: string, lastHealthStateChangeTime: string, monitorCategory: string, monitorId: string, monitorName: string, monitorType: string, solutionId: string, workloadType: string, workspaceId: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -447,6 +454,7 @@ export def "monitor-instances-get" [
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($monitor_instance_id | is-empty) { error make --unspanned { msg: "path parameter 'monitorInstanceId' must be non-empty" } }
+  let api_version = ($api_version | default "2018-08-31-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_namespace: (encode-path-segment $resource_namespace), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name), monitor_instance_id: (encode-path-segment $monitor_instance_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/{resource_namespace}/{resource_type}/{resource_name}/providers/Microsoft.WorkloadMonitor/monitorInstances/{monitor_instance_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -484,10 +492,10 @@ export def "monitors-list-by-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # The API version to use for this operation.
+  --api-version: string@api-version-completer # The API version to use for this operation. (required)
   --filter: string # Filter to be applied on the operation.
   --skiptoken: string # The page-continuation token to use with a paged version of this API.
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record>> {
+]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -495,6 +503,7 @@ export def "monitors-list-by-resource" [
   if ($resource_namespace | is-empty) { error make --unspanned { msg: "path parameter 'resourceNamespace' must be non-empty" } }
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-08-31-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_namespace: (encode-path-segment $resource_namespace), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/{resource_namespace}/{resource_type}/{resource_name}/providers/Microsoft.WorkloadMonitor/monitors") $qp $auth.query)
   let accept_val = "application/json"
@@ -533,8 +542,8 @@ export def "monitors-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # The API version to use for this operation.
-]: nothing -> record<etag: string, properties: record<alertGeneration: string, componentTypeDisplayName: string, componentTypeId: string, componentTypeName: string, criteria: list<record>, description: string, documentationURL: string, frequency: int, lookbackDuration: int, monitorCategory: string, monitorDisplayName: string, monitorId: string, monitorName: string, monitorState: string, monitorType: string, parentMonitorDisplayName: string, parentMonitorName: string, signalName: string, signalType: string>> {
+  --api-version: string@api-version-completer # The API version to use for this operation. (required)
+]: nothing -> record<etag: string, properties: record<alertGeneration: string, componentTypeDisplayName: string, componentTypeId: string, componentTypeName: string, criteria: list<record>, description: string, documentationURL: string, frequency: int, lookbackDuration: int, monitorCategory: string, monitorDisplayName: string, monitorId: string, monitorName: string, monitorState: string, monitorType: string, parentMonitorDisplayName: string, parentMonitorName: string, signalName: string, signalType: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -543,6 +552,7 @@ export def "monitors-get" [
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($monitor_id | is-empty) { error make --unspanned { msg: "path parameter 'monitorId' must be non-empty" } }
+  let api_version = ($api_version | default "2018-08-31-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_namespace: (encode-path-segment $resource_namespace), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name), monitor_id: (encode-path-segment $monitor_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/{resource_namespace}/{resource_type}/{resource_name}/providers/Microsoft.WorkloadMonitor/monitors/{monitor_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -581,9 +591,9 @@ export def "monitors-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # The API version to use for this operation.
+  --api-version: string@api-version-completer # The API version to use for this operation. (required)
   --properties: record # Model for properties of a Monitor.
-]: any -> record<etag: string, properties: record<alertGeneration: string, componentTypeDisplayName: string, componentTypeId: string, componentTypeName: string, criteria: list<record>, description: string, documentationURL: string, frequency: int, lookbackDuration: int, monitorCategory: string, monitorDisplayName: string, monitorId: string, monitorName: string, monitorState: string, monitorType: string, parentMonitorDisplayName: string, parentMonitorName: string, signalName: string, signalType: string>> {
+]: any -> record<etag: string, properties: record<alertGeneration: string, componentTypeDisplayName: string, componentTypeId: string, componentTypeName: string, criteria: list<record>, description: string, documentationURL: string, frequency: int, lookbackDuration: int, monitorCategory: string, monitorDisplayName: string, monitorId: string, monitorName: string, monitorState: string, monitorType: string, parentMonitorDisplayName: string, parentMonitorName: string, signalName: string, signalType: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -593,6 +603,7 @@ export def "monitors-update" [
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($monitor_id | is-empty) { error make --unspanned { msg: "path parameter 'monitorId' must be non-empty" } }
+  let api_version = ($api_version | default "2018-08-31-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_namespace: (encode-path-segment $resource_namespace), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name), monitor_id: (encode-path-segment $monitor_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/{resource_namespace}/{resource_type}/{resource_name}/providers/Microsoft.WorkloadMonitor/monitors/{monitor_id}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -632,9 +643,9 @@ export def "notification-settings-list-by-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # The API version to use for this operation.
+  --api-version: string@api-version-completer # The API version to use for this operation. (required)
   --skiptoken: string # The page-continuation token to use with a paged version of this API.
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record>> {
+]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -642,6 +653,7 @@ export def "notification-settings-list-by-resource" [
   if ($resource_namespace | is-empty) { error make --unspanned { msg: "path parameter 'resourceNamespace' must be non-empty" } }
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-08-31-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_namespace: (encode-path-segment $resource_namespace), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/{resource_namespace}/{resource_type}/{resource_name}/providers/Microsoft.WorkloadMonitor/notificationSettings") $qp $auth.query)
   let accept_val = "application/json"
@@ -670,7 +682,7 @@ export def "notification-settings-get" [
   resource_namespace: string
   resource_type: string
   resource_name: string
-  notification_setting_name: string
+  notification_setting_name: string@notification-setting-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -680,8 +692,8 @@ export def "notification-settings-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # The API version to use for this operation.
-]: nothing -> record<etag: string, properties: record<actionGroupResourceIds: list<string>>> {
+  --api-version: string@api-version-completer # The API version to use for this operation. (required)
+]: nothing -> record<etag: string, properties: record<actionGroupResourceIds: list<string>>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -690,6 +702,7 @@ export def "notification-settings-get" [
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($notification_setting_name | is-empty) { error make --unspanned { msg: "path parameter 'notificationSettingName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-08-31-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_namespace: (encode-path-segment $resource_namespace), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name), notification_setting_name: (encode-path-segment $notification_setting_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/{resource_namespace}/{resource_type}/{resource_name}/providers/Microsoft.WorkloadMonitor/notificationSettings/{notification_setting_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -718,7 +731,7 @@ export def "notification-settings-update" [
   resource_namespace: string
   resource_type: string
   resource_name: string
-  notification_setting_name: string
+  notification_setting_name: string@notification-setting-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -728,9 +741,9 @@ export def "notification-settings-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # The API version to use for this operation.
+  --api-version: string@api-version-completer # The API version to use for this operation. (required)
   --properties: record # Model for properties of a NotificationSetting.
-]: any -> record<etag: string, properties: record<actionGroupResourceIds: list<string>>> {
+]: any -> record<etag: string, properties: record<actionGroupResourceIds: list<string>>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -740,6 +753,7 @@ export def "notification-settings-update" [
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceType' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($notification_setting_name | is-empty) { error make --unspanned { msg: "path parameter 'notificationSettingName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-08-31-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_namespace: (encode-path-segment $resource_namespace), resource_type: (encode-path-segment $resource_type), resource_name: (encode-path-segment $resource_name), notification_setting_name: (encode-path-segment $notification_setting_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/{resource_namespace}/{resource_type}/{resource_name}/providers/Microsoft.WorkloadMonitor/notificationSettings/{notification_setting_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact

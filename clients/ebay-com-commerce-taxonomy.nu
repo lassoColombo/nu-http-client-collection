@@ -1,4 +1,4 @@
-# Auto-generated client for Taxonomy API vv1.0.0
+# Auto-generated client for Taxonomy API v1.0.0
 # Source: https://api.apis.guru/v2/specs/ebay.com/commerce-taxonomy/v1.0.0/swagger.json
 # Auth: --token flag or $env.TAXONOMY_API_TOKEN
 
@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -205,11 +205,12 @@ export def "get-category-subtree" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --category-id: string # The unique identifier of the category at the top of the subtree being requested. Note: If the category_id submitted identifies the root node of the tree, this call returns an error. To retrieve the complete tree, use this value with the getCategoryTree call. If the category_id submitted identifies a leaf node of the tree, the call response will contain information about only that leaf node, which is a valid subtree.
+  --category-id: string # The unique identifier of the category at the top of the subtree being requested. Note: If the category_id submitted identifies the root node of the tree, this call returns an error. To retrieve the complete tree, use this value with the getCategoryTree call. If the category_id submitted identifies a leaf node of the tree, the call response will contain information about only that leaf node, which is a valid subtree. (required)
 ]: nothing -> record<categorySubtreeNode: record<category: record<categoryId: string, categoryName: string>, categoryTreeNodeLevel: int, childCategoryTreeNodes: list<any>, leafCategoryTreeNode: bool, parentCategoryTreeNodeHref: string>, categoryTreeId: string, categoryTreeVersion: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($category_tree_id | is-empty) { error make --unspanned { msg: "path parameter 'category_tree_id' must be non-empty" } }
+  if ($category_id == null) { error make --unspanned { msg: "required query parameter 'category_id' missing: pass --category-id" } }
   let qp = [(serialize-qp "category_id" $category_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category_tree_id: (encode-path-segment $category_tree_id)} | format pattern "/category_tree/{category_tree_id}/get_category_subtree") $qp $auth.query)
   let accept_val = "application/json"
@@ -243,11 +244,12 @@ export def "get-category-suggestions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # A quoted string that describes or characterizes the item being offered for sale. The string format is free form, and can contain any combination of phrases or keywords. eBay will parse the string and return suggested categories for the item.
+  --q: string # A quoted string that describes or characterizes the item being offered for sale. The string format is free form, and can contain any combination of phrases or keywords. eBay will parse the string and return suggested categories for the item. (required)
 ]: nothing -> record<categorySuggestions: table<category: record, categoryTreeNodeAncestors: list, categoryTreeNodeLevel: int, relevancy: string>, categoryTreeId: string, categoryTreeVersion: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($category_tree_id | is-empty) { error make --unspanned { msg: "path parameter 'category_tree_id' must be non-empty" } }
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category_tree_id: (encode-path-segment $category_tree_id)} | format pattern "/category_tree/{category_tree_id}/get_category_suggestions") $qp $auth.query)
   let accept_val = "application/json"
@@ -281,11 +283,12 @@ export def "get-compatibility-properties" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --category-id: string # The unique identifier of an eBay category. This eBay category must be a valid eBay category on the specified eBay marketplace, and the category must support parts compatibility for cars, trucks, or motorcyles. The getAutomotivePartsCompatibilityPolicies method of the Selling Metadata API can be used to retrieve all eBay categories for an eBay marketplace that supports parts compatibility cars, trucks, or motorcyles. The getAutomotivePartsCompatibilityPolicies method can also be used to see if one or more specific eBay categories support parts compatibility.
+  --category-id: string # The unique identifier of an eBay category. This eBay category must be a valid eBay category on the specified eBay marketplace, and the category must support parts compatibility for cars, trucks, or motorcyles. The getAutomotivePartsCompatibilityPolicies method of the Selling Metadata API can be used to retrieve all eBay categories for an eBay marketplace that supports parts compatibility cars, trucks, or motorcyles. The getAutomotivePartsCompatibilityPolicies method can also be used to see if one or more specific eBay categories support parts compatibility. (required)
 ]: nothing -> record<compatibilityProperties: table<localizedName: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($category_tree_id | is-empty) { error make --unspanned { msg: "path parameter 'category_tree_id' must be non-empty" } }
+  if ($category_id == null) { error make --unspanned { msg: "required query parameter 'category_id' missing: pass --category-id" } }
   let qp = [(serialize-qp "category_id" $category_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category_tree_id: (encode-path-segment $category_tree_id)} | format pattern "/category_tree/{category_tree_id}/get_compatibility_properties") $qp $auth.query)
   let accept_val = "application/json"
@@ -319,13 +322,15 @@ export def "get-compatibility-property-values" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --compatibility-property: string # One compatible vehicle property applicable to the specified eBay marketplace and eBay category is specified in this required filter. Compatible vehicle properties are returned in the compatibilityProperties.name field of a getCompatibilityProperties response. For example, if you wanted to retrieve all vehicle trims for a 2018 Toyota Camry, you would set this filter as follows: compatibility_property=Trim; and then include the following three name/value filters through one filter parameter: filter=Year:2018,Make:Toyota,Model:Camry. So, putting this all together, your URI would look something like this: GET https://api.ebay.com/commerce/ taxonomy/v1/category_tree/100/ get_compatibility_property_values? category_id=6016&compatibility_property=Trim &filter=filter=Year:2018,Make:Toyota,Model:Camry
-  --category-id: string # The unique identifier of an eBay category. This eBay category must be a valid eBay category on the specified eBay marketplace, and the category must support parts compatibility for cars, trucks, or motorcyles. The getAutomotivePartsCompatibilityPolicies method of the Selling Metadata API can be used to retrieve all eBay categories for an eBay marketplace that supports parts compatibility cars, trucks, or motorcyles. The getAutomotivePartsCompatibilityPolicies method can also be used to see if one or more specific eBay categories support parts compatibility.
+  --compatibility-property: string # One compatible vehicle property applicable to the specified eBay marketplace and eBay category is specified in this required filter. Compatible vehicle properties are returned in the compatibilityProperties.name field of a getCompatibilityProperties response. For example, if you wanted to retrieve all vehicle trims for a 2018 Toyota Camry, you would set this filter as follows: compatibility_property=Trim; and then include the following three name/value filters through one filter parameter: filter=Year:2018,Make:Toyota,Model:Camry. So, putting this all together, your URI would look something like this: GET https://api.ebay.com/commerce/ taxonomy/v1/category_tree/100/ get_compatibility_property_values? category_id=6016&compatibility_property=Trim &filter=filter=Year:2018,Make:Toyota,Model:Camry (required)
+  --category-id: string # The unique identifier of an eBay category. This eBay category must be a valid eBay category on the specified eBay marketplace, and the category must support parts compatibility for cars, trucks, or motorcyles. The getAutomotivePartsCompatibilityPolicies method of the Selling Metadata API can be used to retrieve all eBay categories for an eBay marketplace that supports parts compatibility cars, trucks, or motorcyles. The getAutomotivePartsCompatibilityPolicies method can also be used to see if one or more specific eBay categories support parts compatibility. (required)
   --filter: string # One or more compatible vehicle property name/value pairs are passed in through this query parameter. The compatible vehicle property name and corresponding value are delimited with a colon (:), such as filter=Year:2018, and multiple compatible vehicle property name/value pairs are delimited with a comma (,). For example, if you wanted to retrieve all vehicle trims for a 2018 Toyota Camry, you would set the compatibility_property filter as follows: compatibility_property=Trim; and then include the following three name/value filters through one filter parameter: filter=Year:2018,Make:Toyota,Model:Camry. So, putting this all together, your URI would look something like this: GET https://api.ebay.com/commerce/ taxonomy/v1/category_tree/100/ get_compatibility_property_values? category_id=6016&compatibility_property=Trim &filter=filter=Year:2018,Make:Toyota,Model:Camry For implementation help, refer to eBay API documentation at https://developer.ebay.com/api-docs/commerce/taxonomy/types/txn:ConstraintFilter
 ]: nothing -> record<compatibilityPropertyValues: table<value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($category_tree_id | is-empty) { error make --unspanned { msg: "path parameter 'category_tree_id' must be non-empty" } }
+  if ($compatibility_property == null) { error make --unspanned { msg: "required query parameter 'compatibility_property' missing: pass --compatibility-property" } }
+  if ($category_id == null) { error make --unspanned { msg: "required query parameter 'category_id' missing: pass --category-id" } }
   let qp = [(serialize-qp "compatibility_property" $compatibility_property "scalar") (serialize-qp "category_id" $category_id "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category_tree_id: (encode-path-segment $category_tree_id)} | format pattern "/category_tree/{category_tree_id}/get_compatibility_property_values") $qp $auth.query)
   let accept_val = "application/json"
@@ -359,11 +364,12 @@ export def "get-item-aspects-for-category" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --category-id: string # The unique identifier of the leaf category for which aspects are being requested. Note: If the category_id submitted does not identify a leaf node of the tree, this call returns an error.
+  --category-id: string # The unique identifier of the leaf category for which aspects are being requested. Note: If the category_id submitted does not identify a leaf node of the tree, this call returns an error. (required)
 ]: nothing -> record<aspects: table<aspectConstraint: record, aspectValues: list, localizedAspectName: string, relevanceIndicator: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($category_tree_id | is-empty) { error make --unspanned { msg: "path parameter 'category_tree_id' must be non-empty" } }
+  if ($category_id == null) { error make --unspanned { msg: "required query parameter 'category_id' missing: pass --category-id" } }
   let qp = [(serialize-qp "category_id" $category_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category_tree_id: (encode-path-segment $category_tree_id)} | format pattern "/category_tree/{category_tree_id}/get_item_aspects_for_category") $qp $auth.query)
   let accept_val = "application/json"
@@ -396,11 +402,12 @@ export def "get-default-category-tree-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --marketplace-id: string # The ID of the eBay marketplace for which the category tree ID is being requested. For a list of supported marketplace IDs, see Marketplaces with Default Category Trees.
+  --marketplace-id: string # The ID of the eBay marketplace for which the category tree ID is being requested. For a list of supported marketplace IDs, see Marketplaces with Default Category Trees. (required)
   --accept-language: string # A header used to indicate the natural language the seller prefers for the response. This specifies the language that the seller wants to use when the field values provided in the request body are displayed to consumers. Note: For details, see Accept-Language in HTTP request headers. Valid Values: For EBAY_CA in French: Accept-Language: fr-CA For EBAY_BE in French: Accept-Language: fr-BE
 ]: nothing -> record<categoryTreeId: string, categoryTreeVersion: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($marketplace_id == null) { error make --unspanned { msg: "required query parameter 'marketplace_id' missing: pass --marketplace-id" } }
   let qp = [(serialize-qp "marketplace_id" $marketplace_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/get_default_category_tree_id" $qp $auth.query)
   let accept_val = "application/json"

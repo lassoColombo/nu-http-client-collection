@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -147,11 +147,12 @@ export def "get-order-order-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Authorization token. The Authorization token can be found in your Admin console.
+  --authorization: string # Authorization token. The Authorization token can be found in your Admin console. (required)
 ]: nothing -> record<approvedAt: string, billingAddress: record<address: string, city: string, complement: string, countryId: string, neighbourhood: string, number: string, recipientName: string, reference: string, state: string, zipCode: string>, createdAt: string, customer: record<documentNumber: string, email: string, id: string, name: string, phones: list<record>, type: string>, freight: record<ETA: string, additionalInfo: string, chargedAmount: int, crossDockingTime: int, defaultAmount: int, scheduledPeriod: string, transitTime: int, type: string>, items: table<freight: record, giftWrap: record, id: string, name: string, promotions: list, salePrice: int, sent: bool, skuSellerId: string>, orderId: string, orderMarketplaceId: string, seller: record<id: string, name: string>, shipments: table<courier: record, cte: string, description: string, id: string, invoice: record, items: list, number: string, occurredAt: string, sellerShipmentId: string, status: string, trackingUrl: string>, shippingAddress: record<address: string, city: string, complement: string, countryId: string, neighbourhood: string, number: string, recipientName: string, reference: string, state: string, zipCode: string>, status: string, totalAmount: int, totalDiscountAmount: int, totalItemsAmount: int, totalShippingAmount: int, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/order/{order_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -187,7 +188,7 @@ export def "post-order-order-id-shipment-cancel" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Authorization token. The Authorization token can be found in your Admin console.
+  --authorization: string # Authorization token. The Authorization token can be found in your Admin console. (required)
   --courier: any # shape: {name: string, taxID?: string}
   --cte: string # Conhecimento do Transporte Eletrônico
   info: string # Aditional information about this shippment
@@ -201,6 +202,7 @@ export def "post-order-order-id-shipment-cancel" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/order/{order_id}/shipment/cancel") $auth.query)
   let req_body = {"courier": $courier, "cte": $cte, "info": $info, "items": $items, "number": $number, "occurredAt": $occurred_at, "sellerShipmentId": $seller_shipment_id, "tranckingUrl": $trancking_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -238,7 +240,7 @@ export def "post-order-order-id-shipment-delivered" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Authorization token. The Authorization token can be found in your Admin console.
+  --authorization: string # Authorization token. The Authorization token can be found in your Admin console. (required)
   courier: any # shape: {name: string, taxID?: string}
   --cte: string # Conhecimento do Transporte Eletrônico
   invoice: any # shape: {accessKey: string, cnpj?: string, issuedAt?: string, linkDanfe?: string, linkXml?: string, number: string, serie: string}
@@ -252,6 +254,7 @@ export def "post-order-order-id-shipment-delivered" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/order/{order_id}/shipment/delivered") $auth.query)
   let req_body = {"courier": $courier, "cte": $cte, "invoice": $invoice, "items": $items, "number": $number, "occurredAt": $occurred_at, "sellerShipmentId": $seller_shipment_id, "trackingUrl": $tracking_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -289,7 +292,7 @@ export def "post-order-order-id-shipment-exchange" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Authorization token. The Authorization token can be found in your Admin console.
+  --authorization: string # Authorization token. The Authorization token can be found in your Admin console. (required)
   --courier: any # shape: {name: string, taxID?: string}
   --cte: string # Conhecimento do Transporte Eletrônico
   info: string # Aditional information about this shippment
@@ -303,6 +306,7 @@ export def "post-order-order-id-shipment-exchange" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/order/{order_id}/shipment/exchange") $auth.query)
   let req_body = {"courier": $courier, "cte": $cte, "info": $info, "items": $items, "number": $number, "occurredAt": $occurred_at, "sellerShipmentId": $seller_shipment_id, "tranckingUrl": $trancking_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -340,7 +344,7 @@ export def "post-order-order-id-shipment-return" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Authorization token. The Authorization token can be found in your Admin console.
+  --authorization: string # Authorization token. The Authorization token can be found in your Admin console. (required)
   --courier: any # shape: {name: string, taxID?: string}
   --cte: string # Conhecimento do Transporte Eletrônico
   info: string # Aditional information about this shippment
@@ -354,6 +358,7 @@ export def "post-order-order-id-shipment-return" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/order/{order_id}/shipment/return") $auth.query)
   let req_body = {"courier": $courier, "cte": $cte, "info": $info, "items": $items, "number": $number, "occurredAt": $occurred_at, "sellerShipmentId": $seller_shipment_id, "tranckingUrl": $trancking_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -391,7 +396,7 @@ export def "post-order-order-id-shipment-sent" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Authorization token. The Authorization token can be found in your Admin console.
+  --authorization: string # Authorization token. The Authorization token can be found in your Admin console. (required)
   courier: any # shape: {name: string, taxID?: string}
   --cte: string # Conhecimento do Transporte Eletrônico
   invoice: any # shape: {accessKey: string, cnpj?: string, issuedAt?: string, linkDanfe?: string, linkXml?: string, number: string, serie: string}
@@ -405,6 +410,7 @@ export def "post-order-order-id-shipment-sent" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/order/{order_id}/shipment/sent") $auth.query)
   let req_body = {"courier": $courier, "cte": $cte, "invoice": $invoice, "items": $items, "number": $number, "occurredAt": $occurred_at, "sellerShipmentId": $seller_shipment_id, "trackingUrl": $tracking_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -441,10 +447,11 @@ export def "get-orders" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Number or items to skip when executing query. List starts at zero. If omitted will default to zero. Use this conjuction with `limit` to paginate across the results.
   --limit: int # Number or items to return when executing query. Defaults to 10. Use this conjuction with `offset` to paginate across the results.
-  --authorization: string # Authorization token. The Authorization token can be found in your Admin console.
+  --authorization: string # Authorization token. The Authorization token can be found in your Admin console. (required)
 ]: nothing -> record<metadata: table<key: string, value: string>, orders: table<approvedAt: string, billingAddress: record, createdAt: string, customer: record, freight: record, items: list, orderId: string, orderMarketplaceId: string, seller: record, shipments: list, shippingAddress: record, status: string, totalAmount: int, totalDiscountAmount: int, totalItemsAmount: int, totalShippingAmount: int, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orders" $qp $auth.query)
   let accept_val = "application/json"
@@ -481,10 +488,11 @@ export def "get-orders-shipments-delivered" [
   --status: string # Query by shippment status.
   --offset: int # Number or items to skip when executing query. List starts at zero. If omitted will default to zero. Use this conjuction with `limit` to paginate across the results.
   --limit: int # Number or items to return when executing query. Defaults to 10. Use this conjuction with `offset` to paginate across the results.
-  --authorization: string # Authorization token. The Authorization token can be found in your Admin console.
+  --authorization: string # Authorization token. The Authorization token can be found in your Admin console. (required)
 ]: nothing -> record<metadata: table<key: string, value: string>, shipments: table<errors: list, items: list, shipmentId: string, status: string, trackingUrl: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orders/shipments/delivered" $qp $auth.query)
   let accept_val = "application/json"
@@ -519,12 +527,13 @@ export def "post-orders-shipments-delivered" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Authorization token. The Authorization token can be found in your Admin console.
+  --authorization: string # Authorization token. The Authorization token can be found in your Admin console. (required)
   --shipments: list # item shape: {courier?: any, cte?: string, invoice?: any, items?: list, number?: string, occurredAt?: string, order?: string, sellerShipmentId?: string, status?: string, trackingUrl?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/orders/shipments/delivered" $auth.query)
   let req_body = {"shipments": $shipments} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -562,10 +571,11 @@ export def "get-orders-shipments-shipped" [
   --status: string@status-completer # Product status.
   --offset: int # Number or items to skip when executing query. List starts at zero. If omitted will default to zero. Use this conjuction with `limit` to paginate across the results.
   --limit: int # Number or items to return when executing query. Defaults to 10. Use this conjuction with `offset` to paginate across the results.
-  --authorization: string # Authorization token. The Authorization token can be found in your Admin console.
+  --authorization: string # Authorization token. The Authorization token can be found in your Admin console. (required)
 ]: nothing -> record<metadata: table<key: string, value: string>, shipments: table<errors: list, items: list, shipmentId: string, status: string, trackingUrl: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orders/shipments/shipped" $qp $auth.query)
   let accept_val = "application/json"
@@ -639,10 +649,11 @@ export def "get-orders-status-approved" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Number or items to skip when executing query. List starts at zero. If omitted will default to zero. Use this conjuction with `limit` to paginate across the results.
   --limit: int # Number or items to return when executing query. Defaults to 100, max 200. Use this in conjuction with `offset` to paginate across the results.
-  --authorization: string # Authorization token. The Authorization token can be found in your Admin console.
+  --authorization: string # Authorization token. The Authorization token can be found in your Admin console. (required)
 ]: nothing -> record<metadata: table<key: string, value: string>, orders: table<approvedAt: string, billingAddress: record, createdAt: string, customer: record, freight: record, items: list, orderId: string, orderMarketplaceId: string, seller: record, shipments: list, shippingAddress: record, status: string, totalAmount: int, totalDiscountAmount: int, totalItemsAmount: int, totalShippingAmount: int, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orders/status/approved" $qp $auth.query)
   let accept_val = "application/json"
@@ -678,10 +689,11 @@ export def "get-orders-status-canceled" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Number or items to skip when executing query. List starts at zero. If omitted will default to zero. Use this conjuction with `limit` to paginate across the results.
   --limit: int # Number or items to return when executing query. Default 100, max 250. Use this conjuction with `offset` to paginate across the results. (default: 100)
-  --authorization: string # Authorization token. The Authorization token can be found in your Admin console.
+  --authorization: string # Authorization token. The Authorization token can be found in your Admin console. (required)
 ]: nothing -> record<metadata: table<key: string, value: string>, orders: table<approvedAt: string, billingAddress: record, createdAt: string, customer: record, freight: record, items: list, orderId: string, orderMarketplaceId: string, seller: record, shipments: list, shippingAddress: record, status: string, totalAmount: int, totalDiscountAmount: int, totalItemsAmount: int, totalShippingAmount: int, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orders/status/canceled" $qp $auth.query)
   let accept_val = "application/json"
@@ -717,10 +729,11 @@ export def "get-orders-status-delivered" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Number or items to skip when executing query. List starts at zero. If omitted will default to zero. Use this conjuction with `limit` to paginate across the results.
   --limit: int # Number or items to return when executing query. Defaults to 10. Use this conjuction with `offset` to paginate across the results.
-  --authorization: string # Authorization token. The Authorization token can be found in your Admin console.
+  --authorization: string # Authorization token. The Authorization token can be found in your Admin console. (required)
 ]: nothing -> record<metadata: table<key: string, value: string>, orders: table<approvedAt: string, billingAddress: record, createdAt: string, customer: record, freight: record, items: list, orderId: string, orderMarketplaceId: string, seller: record, shipments: list, shippingAddress: record, status: string, totalAmount: int, totalDiscountAmount: int, totalItemsAmount: int, totalShippingAmount: int, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orders/status/delivered" $qp $auth.query)
   let accept_val = "application/json"
@@ -756,10 +769,11 @@ export def "get-orders-status-new" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Number or items to skip when executing query. List starts at zero. If omitted will default to zero. Use this conjuction with `limit` to paginate across the results.
   --limit: int # Number or items to return when executing query. Defaults to 100. Max 250. Use this conjuction with `offset` to paginate across the results. (default: 100)
-  --authorization: string # Authorization token. The Authorization token can be found in your Admin console.
+  --authorization: string # Authorization token. The Authorization token can be found in your Admin console. (required)
 ]: nothing -> record<metadata: table<key: string, value: string>, orders: table<approvedAt: string, billingAddress: record, createdAt: string, customer: record, freight: record, items: list, orderId: string, orderMarketplaceId: string, seller: record, shipments: list, shippingAddress: record, status: string, totalAmount: int, totalDiscountAmount: int, totalItemsAmount: int, totalShippingAmount: int, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orders/status/new" $qp $auth.query)
   let accept_val = "application/json"
@@ -795,10 +809,11 @@ export def "get-orders-status-partially-delivered" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Number or items to skip when executing query. List starts at zero. If omitted will default to zero. Use this conjuction with `limit` to paginate across the results.
   --limit: int # Number or items to return when executing query. Defaults to 100. Max 250. Use this conjuction with `offset` to paginate across the results. (default: 100)
-  --authorization: string # Authorization token. The Authorization token can be found in your Admin console.
+  --authorization: string # Authorization token. The Authorization token can be found in your Admin console. (required)
 ]: nothing -> record<metadata: table<key: string, value: string>, orders: table<approvedAt: string, billingAddress: record, createdAt: string, customer: record, freight: record, items: list, orderId: string, orderMarketplaceId: string, seller: record, shipments: list, shippingAddress: record, status: string, totalAmount: int, totalDiscountAmount: int, totalItemsAmount: int, totalShippingAmount: int, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orders/status/partiallyDelivered" $qp $auth.query)
   let accept_val = "application/json"
@@ -834,10 +849,11 @@ export def "get-orders-status-partially-sent" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Number or items to skip when executing query. List starts at zero. If omitted will default to zero. Use this conjuction with `limit` to paginate across the results.
   --limit: int # Number or items to return when executing query. Defaults to 100. Use this conjuction with `offset` to paginate across the results.
-  --authorization: string # Authorization token. The Authorization token can be found in your Admin console.
+  --authorization: string # Authorization token. The Authorization token can be found in your Admin console. (required)
 ]: nothing -> record<metadata: table<key: string, value: string>, orders: table<approvedAt: string, billingAddress: record, createdAt: string, customer: record, freight: record, items: list, orderId: string, orderMarketplaceId: string, seller: record, shipments: list, shippingAddress: record, status: string, totalAmount: int, totalDiscountAmount: int, totalItemsAmount: int, totalShippingAmount: int, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orders/status/partiallySent" $qp $auth.query)
   let accept_val = "application/json"
@@ -873,10 +889,11 @@ export def "get-orders-status-sent" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Number or items to skip when executing query. List starts at zero. If omitted will default to zero. Use this conjuction with `limit` to paginate across the results.
   --limit: int # Number or items to return when executing query. Defaults to 10. Use this conjuction with `offset` to paginate across the results.
-  --authorization: string # Authorization token. The Authorization token can be found in your Admin console.
+  --authorization: string # Authorization token. The Authorization token can be found in your Admin console. (required)
 ]: nothing -> record<metadata: table<key: string, value: string>, orders: table<approvedAt: string, billingAddress: record, createdAt: string, customer: record, freight: record, items: list, orderId: string, orderMarketplaceId: string, seller: record, shipments: list, shippingAddress: record, status: string, totalAmount: int, totalDiscountAmount: int, totalItemsAmount: int, totalShippingAmount: int, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orders/status/sent" $qp $auth.query)
   let accept_val = "application/json"
@@ -914,7 +931,7 @@ export def "post-product" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Authorization token. The Authorization token can be found in your Admin console.
+  --authorization: string # Authorization token. The Authorization token can be found in your Admin console. (required)
   attributes: list # List of `key` `value` attributes of this product. This is very important for search and SEO optmization. Include all relevant information — item shape: {name: string, value: string}
   brand: string # Brand name
   categories: list<string> # Array of categories associated with this product
@@ -934,6 +951,7 @@ export def "post-product" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/product" $auth.query)
   let req_body = {"attributes": $attributes, "brand": $brand, "categories": $categories, "description": $description, "dimensions": $dimensions, "giftWrap": $gift_wrap, "gtin": $gtin, "images": $images, "price": $price, "productGroupId": $product_group_id, "productId": $product_id, "skuSellerId": $sku_seller_id, "stock": $stock, "title": $title, "videos": $videos} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -969,11 +987,12 @@ export def "get-product-sku-seller-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Authorization token. The Authorization token can be found in your Admin console.
+  --authorization: string # Authorization token. The Authorization token can be found in your Admin console. (required)
 ]: nothing -> record<attributes: table<name: string, value: string>, brand: string, categories: list<string>, description: string, dimensions: record<height: int, length: int, weight: int, width: int>, errors: table<message: string, skuSellerId: string, type: string>, giftWrap: record<available: bool, messageSupport: bool, value: int>, gtin: list<string>, images: list<string>, price: record<default: int, offer: int>, productGroupId: string, skuSellerId: string, status: string, stock: int, title: string, videos: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sku_seller_id | is-empty) { error make --unspanned { msg: "path parameter 'skuSellerId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({sku_seller_id: (encode-path-segment $sku_seller_id)} | format pattern "/product/{sku_seller_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1011,7 +1030,7 @@ export def "put-product-sku-seller-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Authorization token. The Authorization token can be found in your Admin console.
+  --authorization: string # Authorization token. The Authorization token can be found in your Admin console. (required)
   --attributes: list # List of `key` `value` attributes of this product. This is very important for search and SEO optmization. Include all relevant information — item shape: {name: string, value: string}
   --brand: string # Brand name
   --categories: list<string> # Array of categories associated with this product
@@ -1032,9 +1051,11 @@ export def "put-product-sku-seller-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sku_seller_id | is-empty) { error make --unspanned { msg: "path parameter 'skuSellerId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({sku_seller_id: (encode-path-segment $sku_seller_id)} | format pattern "/product/{sku_seller_id}") $auth.query)
   let req_body = {"attributes": $attributes, "brand": $brand, "categories": $categories, "description": $description, "dimensions": $dimensions, "giftWrap": $gift_wrap, "gtin": $gtin, "images": $images, "price": $price, "productGroupId": $product_group_id, "productId": $product_id, "skuSellerId": $body_sku_seller_id, "stock": $stock, "title": $title, "videos": $videos} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "skuSellerId") == null) { error make --unspanned { msg: "required body field 'skuSellerId' missing: pass --body-sku-seller-id or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"authorization": $authorization} | compact
@@ -1067,7 +1088,7 @@ export def "put-product-sku-seller-id-prices" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Authorization token. The Authorization token can be found in your Admin console.
+  --authorization: string # Authorization token. The Authorization token can be found in your Admin console. (required)
   default: int # List price, also known as MSRP (Manufacturer Suggest Retail Price) or the recommended retail price (RRP). All prices must be provided in cents. No commas or periods are accepeted. For example one dollar should be informed as 100. $1,2345.67 should be informed solely as 1234567
   offer: int # Product price. This is what will be offered to the customer. All prices must be provided in cents. No commas or periods are accepeted. For example one dollar should be informed as 100. $1,2345.67 should be informed solely as 1234567
 ]: any -> any {
@@ -1075,6 +1096,7 @@ export def "put-product-sku-seller-id-prices" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sku_seller_id | is-empty) { error make --unspanned { msg: "path parameter 'skuSellerId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({sku_seller_id: (encode-path-segment $sku_seller_id)} | format pattern "/product/{sku_seller_id}/prices") $auth.query)
   let req_body = {"default": $default, "offer": $offer} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1110,16 +1132,18 @@ export def "put-product-sku-seller-id-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Authorization token. The Authorization token can be found in your Admin console.
+  --authorization: string # Authorization token. The Authorization token can be found in your Admin console. (required)
   --active: oneof<nothing, bool> # Defines if this product is ready for sale. Active `true`, disabled `false`
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sku_seller_id | is-empty) { error make --unspanned { msg: "path parameter 'skuSellerId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({sku_seller_id: (encode-path-segment $sku_seller_id)} | format pattern "/product/{sku_seller_id}/status") $auth.query)
   let req_body = {"active": $active} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "active") == null) { error make --unspanned { msg: "required body field 'active' missing: pass --active or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"authorization": $authorization} | compact
@@ -1152,7 +1176,7 @@ export def "put-product-sku-seller-id-stock" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Authorization token. The Authorization token can be found in your Admin console.
+  --authorization: string # Authorization token. The Authorization token can be found in your Admin console. (required)
   --cross-docking-time: int # Time it will take to manufacture, prepare or setup this product. Time must be provided in seconds. For example 1 day should be informed as 86400. This time will be included in the product ETA informed to the customer (default: 0)
   quantity: int # Stock available
 ]: any -> any {
@@ -1160,6 +1184,7 @@ export def "put-product-sku-seller-id-stock" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sku_seller_id | is-empty) { error make --unspanned { msg: "path parameter 'skuSellerId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({sku_seller_id: (encode-path-segment $sku_seller_id)} | format pattern "/product/{sku_seller_id}/stock") $auth.query)
   let req_body = {"crossDockingTime": $cross_docking_time, "quantity": $quantity} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1196,10 +1221,11 @@ export def "get-products" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Number or items to skip when executing query. List starts at zero. If omitted will default to zero. Use this conjuction with `limit` to paginate across the results.
   --limit: int # Number of items to retun. Defaults to 100. Max alowed is 200. Use this conjuction with `offset` to paginate across the results.
-  --authorization: string # Authorization token. The Authorization token can be found in your Admin console.
+  --authorization: string # Authorization token. The Authorization token can be found in your Admin console. (required)
 ]: nothing -> record<metadata: table<key: string, value: string>, skus: table<attributes: list, brand: string, categories: list, description: string, dimensions: record, errors: list, giftWrap: record, gtin: list, images: list, price: record, productGroupId: string, skuSellerId: string, status: string, stock: int, title: string, videos: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/products" $qp $auth.query)
   let accept_val = "application/json"
@@ -1233,12 +1259,13 @@ export def "post-products" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Authorization token. The Authorization token can be found in your Admin console.
+  --authorization: string # Authorization token. The Authorization token can be found in your Admin console. (required)
   --body: list
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/products" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -1273,12 +1300,13 @@ export def "put-products-prices" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Authorization token. The Authorization token can be found in your Admin console.
+  --authorization: string # Authorization token. The Authorization token can be found in your Admin console. (required)
   --body: list
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/products/prices" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -1315,10 +1343,11 @@ export def "get-products-status" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Number or items to skip when executing query. List starts at zero. If omitted will default to zero. Use this conjuction with `limit` to paginate across the results.
   --limit: int # Number of items to return in this query. Defaults to 250. Maximum 1000. Use this conjuction with `offset` to paginate across the results.
-  --authorization: string # Authorization token. The Authorization token can be found in your Admin console.
+  --authorization: string # Authorization token. The Authorization token can be found in your Admin console. (required)
 ]: nothing -> record<metadata: table<key: string, value: string>, skus: table<errors: list, price: record, skuSellerId: string, status: string, stock: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/products/status" $qp $auth.query)
   let accept_val = "application/json"
@@ -1352,12 +1381,13 @@ export def "put-products-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Authorization token. The Authorization token can be found in your Admin console.
+  --authorization: string # Authorization token. The Authorization token can be found in your Admin console. (required)
   --body: list
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/products/status" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -1394,10 +1424,11 @@ export def "get-products-status-selling" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Number or items to skip when executing query. List starts at zero. If omitted will default to zero. Use this conjuction with `limit` to paginate across the results.
   --limit: int # Number or items to return when executing query. Defaults to 10. Use this conjuction with `offset` to paginate across the results.
-  --authorization: string # Authorization token. The Authorization token can be found in your Admin console.
+  --authorization: string # Authorization token. The Authorization token can be found in your Admin console. (required)
 ]: nothing -> record<metadata: table<key: string, value: string>, sellerItems: table<attributes: list, brand: string, dimensions: record, giftWrap: record, gtin: list, images: list, prices: list, product: record, skuSellerId: string, status: list, stocks: list, title: string, urls: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/products/status/selling" $qp $auth.query)
   let accept_val = "application/json"
@@ -1431,12 +1462,13 @@ export def "put-products-stocks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Authorization token. The Authorization token can be found in your Admin console.
+  --authorization: string # Authorization token. The Authorization token can be found in your Admin console. (required)
   --body: list
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/products/stocks" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -1473,11 +1505,11 @@ export def "post-ticket" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Authorization token. The Authorization token can be found in your Admin console.
+  --authorization: string # Authorization token. The Authorization token can be found in your Admin console. (required)
   body: string # Message to the customer
   --customer: any # shape: {name?: string, phoneNumber?: string}
   --description: string # Trouble ticked brief description
-  --body-from: string # Friendly name of the person sending this message, if not provided the seller `name` will be used
+  from: string # Friendly name of the person sending this message, if not provided the seller `name` will be used
   --message: any # shape: {body: string, visibility: string}
   order_id: string # Unique order Id that this trouble ticket belongs to
   type: string # Trouble ticket type.
@@ -1485,8 +1517,9 @@ export def "post-ticket" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/ticket" $auth.query)
-  let req_body = {"body": $body, "customer": $customer, "description": $description, "from": $body_from, "message": $message, "orderId": $order_id, "type": $type} | compact
+  let req_body = {"body": $body, "customer": $customer, "description": $description, "from": $from, "message": $message, "orderId": $order_id, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1520,7 +1553,7 @@ export def "post-ticket-ticket-id-message" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Authorization token. The Authorization token can be found in your Admin console.
+  --authorization: string # Authorization token. The Authorization token can be found in your Admin console. (required)
   body: string # Message text
   visibility: string # Defines if this message is `CUSTOMER` (customer will receive a copy) or `INTERNAL`
 ]: any -> any {
@@ -1528,6 +1561,7 @@ export def "post-ticket-ticket-id-message" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ticket_id | is-empty) { error make --unspanned { msg: "path parameter 'ticketId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({ticket_id: (encode-path-segment $ticket_id)} | format pattern "/ticket/{ticket_id}/message") $auth.query)
   let req_body = {"body": $body, "visibility": $visibility} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1565,11 +1599,12 @@ export def "get-ticket-ticket-id-messages" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Number or items to skip when executing query. List starts at zero. If omitted will default to zero. Use this conjuction with `limit` to paginate across the results.
   --limit: int # Number or items to return when executing query. Defaults to 10. Use this conjuction with `offset` to paginate across the results.
-  --authorization: string # Authorization token. The Authorization token can be found in your Admin console.
+  --authorization: string # Authorization token. The Authorization token can be found in your Admin console. (required)
 ]: nothing -> record<messages: table<body: string, createdAt: string, id: string, visibility: string>, metadata: table<key: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ticket_id | is-empty) { error make --unspanned { msg: "path parameter 'ticketId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ticket_id: (encode-path-segment $ticket_id)} | format pattern "/ticket/{ticket_id}/messages") $qp $auth.query)
   let accept_val = "application/json"
@@ -1604,13 +1639,14 @@ export def "put-ticket-ticket-id-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Authorization token. The Authorization token can be found in your Admin console.
+  --authorization: string # Authorization token. The Authorization token can be found in your Admin console. (required)
   ticket_status: string # New trouble ticket status. Valid options are `REOPENED`, `CLOSED`
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ticket_id | is-empty) { error make --unspanned { msg: "path parameter 'ticketId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({ticket_id: (encode-path-segment $ticket_id)} | format pattern "/ticket/{ticket_id}/status") $auth.query)
   let req_body = {"ticketStatus": $ticket_status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1648,10 +1684,11 @@ export def "get-tickets" [
   --status: string@status-completer-1 # Query by trouble ticket status
   --offset: int # Number or items to skip when executing query. List starts at zero. If omitted will default to zero. Use this conjuction with `limit` to paginate across the results.
   --limit: int # Number or items to return when executing query. Defaults to 10. Use this conjuction with `offset` to paginate across the results.
-  --authorization: string # Authorization token. The Authorization token can be found in your Admin console.
+  --authorization: string # Authorization token. The Authorization token can be found in your Admin console. (required)
 ]: nothing -> record<metadata: table<key: string, value: string>, tickets: table<closedAt: string, createdAt: string, customer: record, description: string, metadata: list, priority: string, sla: string, status: string, subject: string, ticketId: string, type: string, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tickets" $qp $auth.query)
   let accept_val = "application/json"

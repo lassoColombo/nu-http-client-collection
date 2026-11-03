@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -158,7 +158,7 @@ export def "cancel-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<cancellationStatus: record, jobArn: record> {
+]: nothing -> record<cancellationStatus: string, jobArn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_arn | is-empty) { error make --unspanned { msg: "path parameter 'jobArn' must be non-empty" } }
@@ -204,7 +204,7 @@ export def "cancel-quantum-task" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   client_token: string # The client token associated with the request.
-]: any -> record<cancellationStatus: record, quantumTaskArn: record> {
+]: any -> record<cancellationStatus: string, quantumTaskArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -234,13 +234,13 @@ export def "cancel-quantum-task" [
 #
 # POST /job
 # operationId: CreateJob
-# --algorithmSpecification shape: {containerImage?: any, scriptModeConfig?: any}
-# --checkpointConfig shape: {localPath?: any, s3Uri?: any}
-# --deviceConfig shape: {device?: any}
-# --inputDataConfig item shape: {channelName: any, contentType?: any, dataSource: any}
-# --instanceConfig shape: {instanceCount?: any, instanceType?: any, volumeSizeInGb?: any}
-# --outputDataConfig shape: {kmsKeyId?: any, s3Path?: any}
-# --stoppingCondition shape: {maxRuntimeInSeconds?: any}
+# --algorithmSpecification shape: {containerImage?: record, scriptModeConfig?: record}
+# --checkpointConfig shape: {localPath?: string, s3Uri?: string}
+# --deviceConfig shape: {device?: string}
+# --inputDataConfig item shape: {channelName: string, contentType?: string, dataSource: record}
+# --instanceConfig shape: {instanceCount?: int, ... (2 more fields)}
+# --outputDataConfig shape: {kmsKeyId?: string, s3Path?: string}
+# --stoppingCondition shape: {maxRuntimeInSeconds?: int}
 export def "create-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -258,19 +258,19 @@ export def "create-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  algorithm_specification: record # Defines the Amazon Braket job to be created. Specifies the container image the job uses and the paths to the Python scripts used for entry and training. — shape: {containerImage?: any, scriptModeConfig?: any}
-  --checkpoint-config: record # Contains information about the output locations for job checkpoint data. — shape: {localPath?: any, s3Uri?: any}
+  algorithm_specification: record # Defines the Amazon Braket job to be created. Specifies the container image the job uses and the paths to the Python scripts used for entry and training. — shape: {containerImage?: record, scriptModeConfig?: record}
+  --checkpoint-config: record # Contains information about the output locations for job checkpoint data. — shape: {localPath?: string, s3Uri?: string}
   client_token: string # A unique token that guarantees that the call to this API is idempotent.
-  device_config: record # Configures the quantum processing units (QPUs) or simulator used to create and run an Amazon Braket job. — shape: {device?: any}
+  device_config: record # Configures the quantum processing units (QPUs) or simulator used to create and run an Amazon Braket job. — shape: {device?: string}
   --hyper-parameters: record # Algorithm-specific parameters used by an Amazon Braket job that influence the quality of the training job. The values are set with a string of JSON key:value pairs, where the key is the name of the hyperparameter and the value is the value of th hyperparameter.
-  --input-data-config: list # A list of parameters that specify the name and type of input data and where it is located. — item shape: {channelName: any, contentType?: any, dataSource: any}
-  instance_config: record # Configures the resource instances to use while running the Amazon Braket hybrid job on Amazon Braket. — shape: {instanceCount?: any, instanceType?: any, volumeSizeInGb?: any}
+  --input-data-config: list # A list of parameters that specify the name and type of input data and where it is located. — item shape: {channelName: string, contentType?: string, dataSource: record}
+  instance_config: record # Configures the resource instances to use while running the Amazon Braket hybrid job on Amazon Braket. — shape: {instanceCount?: int, ... (2 more fields)}
   job_name: string # The name of the Amazon Braket job.
-  output_data_config: record # Specifies the path to the S3 location where you want to store job artifacts and the encryption key used to store them. — shape: {kmsKeyId?: any, s3Path?: any}
+  output_data_config: record # Specifies the path to the S3 location where you want to store job artifacts and the encryption key used to store them. — shape: {kmsKeyId?: string, s3Path?: string}
   role_arn: string # The Amazon Resource Name (ARN) of an IAM role that Amazon Braket can assume to perform tasks on behalf of a user. It can access user resources, run an Amazon Braket job container on behalf of user, and output resources to the users' s3 buckets.
-  --stopping-condition: record # Specifies limits for how long an Amazon Braket job can run. — shape: {maxRuntimeInSeconds?: any}
+  --stopping-condition: record # Specifies limits for how long an Amazon Braket job can run. — shape: {maxRuntimeInSeconds?: int}
   --tags: record # A tag object that consists of a key and an optional value, used to manage metadata for Amazon Braket resources.
-]: any -> record<jobArn: record> {
+]: any -> record<jobArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -325,7 +325,7 @@ export def "create-quantum-task" [
   output_s3_key_prefix: string # The key prefix for the location in the S3 bucket to store task results in.
   shots: int # The number of shots to use for the task.
   --tags: record # Tags to be added to the quantum task you're creating.
-]: any -> record<quantumTaskArn: record> {
+]: any -> record<quantumTaskArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -372,7 +372,7 @@ export def "get-device" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<deviceArn: record, deviceCapabilities: record, deviceName: record, deviceStatus: record, deviceType: record, providerName: record> {
+]: nothing -> record<deviceArn: string, deviceCapabilities: string, deviceName: string, deviceStatus: string, deviceType: string, providerName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($device_arn | is-empty) { error make --unspanned { msg: "path parameter 'deviceArn' must be non-empty" } }
@@ -417,7 +417,7 @@ export def "get-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<algorithmSpecification: record<containerImage: record<uri: record>, scriptModeConfig: record<compressionType: record, entryPoint: record, s3Uri: record>>, billableDuration: record, checkpointConfig: record<localPath: record, s3Uri: record>, createdAt: record, deviceConfig: record<device: record>, endedAt: record, events: record, failureReason: record, hyperParameters: record, inputDataConfig: record, instanceConfig: record<instanceCount: record, instanceType: record, volumeSizeInGb: record>, jobArn: record, jobName: record, outputDataConfig: record<kmsKeyId: record, s3Path: record>, roleArn: record, startedAt: record, status: record, stoppingCondition: record<maxRuntimeInSeconds: record>, tags: record> {
+]: nothing -> record<algorithmSpecification: record<containerImage: record<uri: string>, scriptModeConfig: record<compressionType: string, entryPoint: string, s3Uri: string>>, billableDuration: int, checkpointConfig: record<localPath: string, s3Uri: string>, createdAt: string, deviceConfig: record<device: string>, endedAt: string, events: table<eventType: string, message: string, timeOfEvent: string>, failureReason: string, hyperParameters: record, inputDataConfig: table<channelName: string, contentType: string, dataSource: record>, instanceConfig: record<instanceCount: int, instanceType: string, volumeSizeInGb: int>, jobArn: string, jobName: string, outputDataConfig: record<kmsKeyId: string, s3Path: string>, roleArn: string, startedAt: string, status: string, stoppingCondition: record<maxRuntimeInSeconds: int>, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_arn | is-empty) { error make --unspanned { msg: "path parameter 'jobArn' must be non-empty" } }
@@ -462,7 +462,7 @@ export def "get-quantum-task" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<createdAt: record, deviceArn: record, deviceParameters: record, endedAt: record, failureReason: record, jobArn: record, outputS3Bucket: record, outputS3Directory: record, quantumTaskArn: record, shots: record, status: record, tags: record> {
+]: nothing -> record<createdAt: string, deviceArn: string, deviceParameters: string, endedAt: string, failureReason: string, jobArn: string, outputS3Bucket: string, outputS3Directory: string, quantumTaskArn: string, shots: int, status: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($quantum_task_arn | is-empty) { error make --unspanned { msg: "path parameter 'quantumTaskArn' must be non-empty" } }
@@ -583,7 +583,7 @@ export def "tag-resource" [
 #
 # POST /devices
 # operationId: SearchDevices
-# --filters item shape: {name: any, values: any}
+# --filters item shape: {name: string, values: list<string>}
 export def "search-devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -603,10 +603,10 @@ export def "search-devices" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  filters: list # The filter values to use to search for a device. — item shape: {name: any, values: any}
+  filters: list # The filter values to use to search for a device. — item shape: {name: string, values: list<string>}
   --max-results-body: int # The maximum number of results to return in the response. (body field)
   --next-token-body: string # A token used for pagination of results returned in the response. Use the token returned from the previous request continue results where the previous request ended. (body field)
-]: any -> record<devices: record, nextToken: record> {
+]: any -> record<devices: table<deviceArn: string, deviceName: string, deviceStatus: string, deviceType: string, providerName: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -636,7 +636,7 @@ export def "search-devices" [
 #
 # POST /jobs
 # operationId: SearchJobs
-# --filters item shape: {name: any, operator: any, values: any}
+# --filters item shape: {name: string, operator: "LT"|"LTE"|"EQUAL"|"GT"|"GTE"|"BETWEEN"|"CONTAINS", values: list<string>}
 export def "search-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -656,10 +656,10 @@ export def "search-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  filters: list # The filter values to use when searching for a job. — item shape: {name: any, operator: any, values: any}
+  filters: list # The filter values to use when searching for a job. — item shape: {name: string, operator: "LT"|"LTE"|"EQUAL"|"GT"|"GTE"|"BETWEEN"|"CONTAINS", values: list<string>}
   --max-results-body: int # The maximum number of results to return in the response. (body field)
   --next-token-body: string # A token used for pagination of results returned in the response. Use the token returned from the previous request to continue results where the previous request ended. (body field)
-]: any -> record<jobs: record, nextToken: record> {
+]: any -> record<jobs: table<createdAt: string, device: string, endedAt: string, jobArn: string, jobName: string, startedAt: string, status: string, tags: record>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -689,7 +689,7 @@ export def "search-jobs" [
 #
 # POST /quantum-tasks
 # operationId: SearchQuantumTasks
-# --filters item shape: {name: any, operator: any, values: any}
+# --filters item shape: {name: string, operator: "LT"|"LTE"|"EQUAL"|"GT"|"GTE"|"BETWEEN", values: list<string>}
 export def "search-quantum-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -709,10 +709,10 @@ export def "search-quantum-tasks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  filters: list # Array of SearchQuantumTasksFilter objects. — item shape: {name: any, operator: any, values: any}
+  filters: list # Array of SearchQuantumTasksFilter objects. — item shape: {name: string, operator: "LT"|"LTE"|"EQUAL"|"GT"|"GTE"|"BETWEEN", values: list<string>}
   --max-results-body: int # Maximum number of results to return in the response. (body field)
   --next-token-body: string # A token used for pagination of results returned in the response. Use the token returned from the previous request continue results where the previous request ended. (body field)
-]: any -> record<nextToken: record, quantumTasks: record> {
+]: any -> record<nextToken: string, quantumTasks: table<createdAt: string, deviceArn: string, endedAt: string, outputS3Bucket: string, outputS3Directory: string, quantumTaskArn: string, shots: int, status: string, tags: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -753,7 +753,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # Specify the keys for the tags to remove from the resource.
+  --tag-keys: list # Specify the keys for the tags to remove from the resource. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -765,6 +765,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"

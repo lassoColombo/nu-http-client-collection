@@ -151,13 +151,15 @@ export def "retrieve-applications" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # You can find your API key in your [account overview](https://dashboard.nexmo.com/account-overview)
-  --api-secret: string # You can find your API secret in your [account overview](https://dashboard.nexmo.com/account-overview)
+  --api-key: string # You can find your API key in your [account overview](https://dashboard.nexmo.com/account-overview) (required)
+  --api-secret: string # You can find your API secret in your [account overview](https://dashboard.nexmo.com/account-overview) (required)
   --page-size: int # Set the number of items returned on each call to this endpoint. The default is 10 records. (default: 10, e.g. 10)
   --page-index: int # Set the offset from the first page. The default value is `0`. (default: 0, e.g. 0)
 ]: nothing -> record<_embedded: record<applications: list<record>>, _links: record<href: string>, count: int, page_index: int, page_size: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
+  if ($api_secret == null) { error make --unspanned { msg: "required query parameter 'api_secret' missing: pass --api-secret" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "api_secret" $api_secret "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "page_index" $page_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -276,12 +278,14 @@ export def "retrieve-application" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # You can find your API key in your [account overview](https://dashboard.nexmo.com/account-overview)
-  --api-secret: string # You can find your API secret in your [account overview](https://dashboard.nexmo.com/account-overview)
+  --api-key: string # You can find your API key in your [account overview](https://dashboard.nexmo.com/account-overview) (required)
+  --api-secret: string # You can find your API secret in your [account overview](https://dashboard.nexmo.com/account-overview) (required)
 ]: nothing -> record<_links: record<href: string>, id: string, keys: record<public_key: string>, messages: record<webhooks: list<record>>, name: string, voice: record<webhooks: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'app_id' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
+  if ($api_secret == null) { error make --unspanned { msg: "required query parameter 'api_secret' missing: pass --api-secret" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "api_secret" $api_secret "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/{app_id}") $qp $auth.query)
   let accept_val = "application/json"

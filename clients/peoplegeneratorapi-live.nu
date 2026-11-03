@@ -1,4 +1,4 @@
-# Auto-generated client for OpenAPI definition vv0
+# Auto-generated client for OpenAPI definition v0
 # Source: https://api.apis.guru/v2/specs/peoplegeneratorapi.live/v0/openapi.json
 # Auth: --token flag or $env.OPENAPI_DEFINITION_TOKEN
 
@@ -1110,7 +1110,7 @@ export def "income-1" [
 # GET /api/person/job
 #
 # operationId: job
-export def "job" [
+export def "get-api-person-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

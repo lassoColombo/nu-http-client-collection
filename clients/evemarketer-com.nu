@@ -96,6 +96,34 @@ def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: 
   $resp | handle-response $allow_errors $full $ok_codes
 }
 
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
+}
+
 def base-url-completer [] { ["https://api.evemarketer.com/ec"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -136,12 +164,13 @@ export def "get-marketstat" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --typeid: list<int> # TypeID. Multiple TypeIDs can be specified in the following format (up to 200 TypeIDs per request): typeid=34&typeid=35 or typeid=34,35
+  --typeid: list<int> # TypeID. Multiple TypeIDs can be specified in the following format (up to 200 TypeIDs per request): typeid=34&typeid=35 or typeid=34,35 (required)
   --regionlimit: int # Limit the statistics to a single region. (format: int32)
   --usesystem: int # Limit the statistics to a single solar system. (format: int32)
 ]: nothing -> record<marketstat: table<buy: record, sell: record>, method: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($typeid == null) { error make --unspanned { msg: "required query parameter 'typeid' missing: pass --typeid" } }
   let qp = [(serialize-qp "typeid" $typeid "csv") (serialize-qp "regionlimit" $regionlimit "scalar") (serialize-qp "usesystem" $usesystem "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/marketstat" $qp $auth.query)
   let accept_val = "application/xml"
@@ -173,7 +202,7 @@ export def "post-marketstat" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  typeid: list # TypeID. Multiple TypeIDs can be specified in the following format (up to 200 TypeIDs per request): typeid=34&typeid=35 or typeid=34,35
+  typeid: list<int> # TypeID. Multiple TypeIDs can be specified in the following format (up to 200 TypeIDs per request): typeid=34&typeid=35 or typeid=34,35
   --regionlimit: int # Limit the statistics to a single region.
   --usesystem: int # Limit the statistics to a single solar system.
 ]: any -> record<marketstat: table<buy: record, sell: record>, method: string, version: string> {
@@ -181,23 +210,24 @@ export def "post-marketstat" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/marketstat" $auth.query)
-  let req_body = {"typeid": $typeid, "regionlimit": $regionlimit, "usesystem": $usesystem} | compact
+  let req_body = {"typeid": (if ($typeid | describe | str starts-with "list") { $typeid | each { into string } | str join "," } else { $typeid }), "regionlimit": $regionlimit, "usesystem": $usesystem} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
     query: {}
     headers: $auth.headers
     body: $req_body
-    content_type: "application/x-www-form-urlencoded"
+    content_type: $mp.content_type
     timeout: ($max_time | default 30min)
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # JSON Marketstat
@@ -246,12 +276,13 @@ export def "post-marketstat-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --typeid: list<int> # TypeID. Multiple TypeIDs can be specified in the following format (up to 200 TypeIDs per request): typeid=34&typeid=35 or typeid=34,35
+  --typeid: list<int> # TypeID. Multiple TypeIDs can be specified in the following format (up to 200 TypeIDs per request): typeid=34&typeid=35 or typeid=34,35 (required)
   --regionlimit: int # Limit the statistics to a single region. (format: int32)
   --usesystem: int # Limit the statistics to a single region. (format: int32)
 ]: nothing -> table<buy: record<avg: float, fivePercent: float, forQuery: record, generated: int, highToLow: bool, max: float, median: float, min: float, stdDev: float, variance: float, volume: int, wavg: float>, sell: record<avg: float, fivePercent: float, forQuery: record, generated: int, highToLow: bool, max: float, median: float, min: float, stdDev: float, variance: float, volume: int, wavg: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($typeid == null) { error make --unspanned { msg: "required query parameter 'typeid' missing: pass --typeid" } }
   let qp = [(serialize-qp "typeid" $typeid "csv") (serialize-qp "regionlimit" $regionlimit "scalar") (serialize-qp "usesystem" $usesystem "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/marketstat/json" $qp $auth.query)
   let accept_val = "application/json"

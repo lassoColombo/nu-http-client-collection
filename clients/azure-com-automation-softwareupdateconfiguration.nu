@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -148,7 +148,7 @@ export def "software-update-configurations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --filter: string # The filter to apply on the operation.
   --client-request-id: string # Identifies this specific client request.
 ]: nothing -> record<value: table<id: string, name: string, properties: record>> {
@@ -157,6 +157,7 @@ export def "software-update-configurations-list" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($automation_account_name | is-empty) { error make --unspanned { msg: "path parameter 'automationAccountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), automation_account_name: (encode-path-segment $automation_account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/softwareUpdateConfigurations") $qp $auth.query)
   let accept_val = "application/json"
@@ -196,15 +197,16 @@ export def "software-update-configurations-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --client-request-id: string # Identifies this specific client request.
-]: nothing -> record<code: string, message: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($automation_account_name | is-empty) { error make --unspanned { msg: "path parameter 'automationAccountName' must be non-empty" } }
   if ($software_update_configuration_name | is-empty) { error make --unspanned { msg: "path parameter 'softwareUpdateConfigurationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), automation_account_name: (encode-path-segment $automation_account_name), software_update_configuration_name: (encode-path-segment $software_update_configuration_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/softwareUpdateConfigurations/{software_update_configuration_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -244,7 +246,7 @@ export def "software-update-configurations-get-by-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --client-request-id: string # Identifies this specific client request.
 ]: nothing -> record<id: string, name: string, properties: record<createdBy: string, creationTime: string, error: record<code: string, message: string>, lastModifiedBy: string, lastModifiedTime: string, provisioningState: string, scheduleInfo: record<advancedSchedule: record, creationTime: string, description: string, expiryTime: string, expiryTimeOffsetMinutes: float, frequency: string, interval: int, isEnabled: bool, lastModifiedTime: string, nextRun: string, nextRunOffsetMinutes: float, startTime: string, startTimeOffsetMinutes: float, timeZone: string>, tasks: record<postTask: record, preTask: record>, updateConfiguration: record<azureVirtualMachines: list, duration: string, linux: record, nonAzureComputerNames: list, operatingSystem: string, targets: record, windows: record>>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -253,6 +255,7 @@ export def "software-update-configurations-get-by-name" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($automation_account_name | is-empty) { error make --unspanned { msg: "path parameter 'automationAccountName' must be non-empty" } }
   if ($software_update_configuration_name | is-empty) { error make --unspanned { msg: "path parameter 'softwareUpdateConfigurationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), automation_account_name: (encode-path-segment $automation_account_name), software_update_configuration_name: (encode-path-segment $software_update_configuration_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/softwareUpdateConfigurations/{software_update_configuration_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -293,7 +296,7 @@ export def "software-update-configurations-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --client-request-id: string # Identifies this specific client request.
   properties: any # Software update configuration properties. — shape: {error?: record, scheduleInfo: any, tasks?: record, updateConfiguration: record}
 ]: any -> record<id: string, name: string, properties: record<createdBy: string, creationTime: string, error: record<code: string, message: string>, lastModifiedBy: string, lastModifiedTime: string, provisioningState: string, scheduleInfo: record<advancedSchedule: record, creationTime: string, description: string, expiryTime: string, expiryTimeOffsetMinutes: float, frequency: string, interval: int, isEnabled: bool, lastModifiedTime: string, nextRun: string, nextRunOffsetMinutes: float, startTime: string, startTimeOffsetMinutes: float, timeZone: string>, tasks: record<postTask: record, preTask: record>, updateConfiguration: record<azureVirtualMachines: list, duration: string, linux: record, nonAzureComputerNames: list, operatingSystem: string, targets: record, windows: record>>, type: string> {
@@ -304,6 +307,7 @@ export def "software-update-configurations-create" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($automation_account_name | is-empty) { error make --unspanned { msg: "path parameter 'automationAccountName' must be non-empty" } }
   if ($software_update_configuration_name | is-empty) { error make --unspanned { msg: "path parameter 'softwareUpdateConfigurationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), automation_account_name: (encode-path-segment $automation_account_name), software_update_configuration_name: (encode-path-segment $software_update_configuration_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/softwareUpdateConfigurations/{software_update_configuration_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact

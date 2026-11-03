@@ -2028,11 +2028,12 @@ export def "get-redirect-to" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --url: string
+  --url: string # required
   --status-code: int
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
   let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "status_code" $status_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/redirect-to" $qp $auth.query)
   let accept_val = "application/json"

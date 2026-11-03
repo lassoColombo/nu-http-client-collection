@@ -1,4 +1,4 @@
-# Auto-generated client for ticketmaster publish api vv2
+# Auto-generated client for ticketmaster publish api v2
 # Source: https://api.apis.guru/v2/specs/ticketmaster.com/publish/v2/openapi.json
 # Auth: --token flag or $env.TICKETMASTER_PUBLISH_API_TOKEN
 
@@ -145,7 +145,7 @@ export def "publish-attraction" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tmps-correlation-id: string # Unique correlation id to be able to trace the request in our system
+  --tmps-correlation-id: string # Unique correlation id to be able to trace the request in our system (required, default: "")
   --active: oneof<nothing, bool> # Indicate if the entity is active, inactive entity won't appear in Discovery API (default: false)
   --additional-infos: record # Additional informations of the entity - multi-lingual fields (e.g. en-us: additionalInfo)
   --classifications: list # Attraction's classifications — item shape: {genre?: record, primary?: bool, segment?: record, subGenre?: record, subType?: record, type?: record}
@@ -155,7 +155,7 @@ export def "publish-attraction" [
   --names: record # Names of the entity - multi-lingual fields (e.g. en-us: name)
   --references: record # References of this entity in an other system. Reference is the exact same entity (e.g. sourceName: id)
   --relationships: list # Relationships on the entity, like if the entity is a duplicate of another one
-  --body-source: record # Source — shape: {id?: string, name?: string}
+  --source: record # Source — shape: {id?: string, name?: string}
   --test: oneof<nothing, bool> # Indicate if this is a test entity, by default test entities won't appear in discovery API (default: false)
   type: string@type-completer # Type of the entity
   --url: string # URL of a web site detail page of the entity
@@ -164,8 +164,9 @@ export def "publish-attraction" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let tmps_correlation_id = ($tmps_correlation_id | default "")
   let full_url = (build-url $base "/publish/v2/attractions" $auth.query)
-  let req_body = {"active": $active, "additionalInfos": $additional_infos, "classifications": $classifications, "descriptions": $descriptions, "discoverable": $discoverable, "images": $images, "names": $names, "references": $references, "relationships": $relationships, "source": $body_source, "test": $test, "type": $type, "url": $url, "version": $version} | compact
+  let req_body = {"active": $active, "additionalInfos": $additional_infos, "classifications": $classifications, "descriptions": $descriptions, "discoverable": $discoverable, "images": $images, "names": $names, "references": $references, "relationships": $relationships, "source": $source, "test": $test, "type": $type, "url": $url, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -201,20 +202,21 @@ export def "patch-attraction" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tmps-correlation-id: string # Unique correlation id to be able to trace the request in our system
+  --tmps-correlation-id: string # Unique correlation id to be able to trace the request in our system (required, default: "")
   changes: list # List of changes to apply to the related entity — item shape: {from?: string, op: "add"|"remove"|"replace"|"move"|"copy"|"test", path: string, value?: record}
   related_entity_id: string # Id of the entity to apply the augmentation data.
   related_entity_type: string@related-entity-type-completer # The type of the entity to apply the augmentation data.
   --score: float # The confidence (%) level of the accuracy of this augmention data. 100 is the better (format: float)
-  --body-source: string # The source where the augementation data came from
+  source: string # The source where the augementation data came from
   version_number: int # Vesion of this augmentation data. This field is to avoid updating entity with old data. (format: int64)
 ]: any -> record<id: string, ignoredProperties: record, invalidProperties: record, invalidValues: record, missingProperties: record, status: string, unknownProperties: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  let tmps_correlation_id = ($tmps_correlation_id | default "")
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/publish/v2/attractions/{id}") $auth.query)
-  let req_body = {"changes": $changes, "relatedEntityId": $related_entity_id, "relatedEntityType": $related_entity_type, "score": $score, "source": $body_source, "versionNumber": $version_number} | compact
+  let req_body = {"changes": $changes, "relatedEntityId": $related_entity_id, "relatedEntityType": $related_entity_type, "score": $score, "source": $source, "versionNumber": $version_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -251,18 +253,19 @@ export def "publish-attraction-videos" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tmps-correlation-id: string # Unique correlation id to be able to trace the request in our system
+  --tmps-correlation-id: string # Unique correlation id to be able to trace the request in our system (required, default: "")
   --embed-url: string # The url of the embeded video
   licensing_information: record # This class defines an entitlement data on the Publish API — shape: {license: string, regionRestriction?: record}
-  --body-source: record # Source — shape: {id?: string, name?: string}
+  source: record # Source — shape: {id?: string, name?: string}
   url: string # The url of the video
 ]: any -> record<id: string, ignoredProperties: record, invalidProperties: record, invalidValues: record, missingProperties: record, status: string, unknownProperties: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  let tmps_correlation_id = ($tmps_correlation_id | default "")
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/publish/v2/attractions/{id}/videos") $auth.query)
-  let req_body = {"embedUrl": $embed_url, "licensingInformation": $licensing_information, "source": $body_source, "url": $url} | compact
+  let req_body = {"embedUrl": $embed_url, "licensingInformation": $licensing_information, "source": $source, "url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -297,19 +300,20 @@ export def "publish-entitlements" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tmps-correlation-id: string # Unique correlation id to be able to trace the request in our system
+  --tmps-correlation-id: string # Unique correlation id to be able to trace the request in our system (required, default: "")
   data: record # The actual entitlements information to add to the entity
   --related-entity-id: string # Id of the entity to add this extionsion to. If the relatedEntityId is Null, a relatedEntitySource MUST be provided
   --related-entity-source: record # Source — shape: {id?: string, name?: string}
   related_entity_type: string@related-entity-type-completer # The type of the entity to add this entitlement to
-  --body-source: string@source-completer # Source of the extension, where it came from
+  source: string@source-completer # Source of the extension, where it came from
   --version-number: int # Version of the entitlements. Version is to prevent to override an entitlements with an older one (format: int64)
 ]: any -> record<id: string, ignoredProperties: record, invalidProperties: record, invalidValues: record, missingProperties: record, status: string, unknownProperties: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let tmps_correlation_id = ($tmps_correlation_id | default "")
   let full_url = (build-url $base "/publish/v2/entitlements" $auth.query)
-  let req_body = {"data": $data, "relatedEntityId": $related_entity_id, "relatedEntitySource": $related_entity_source, "relatedEntityType": $related_entity_type, "source": $body_source, "versionNumber": $version_number} | compact
+  let req_body = {"data": $data, "relatedEntityId": $related_entity_id, "relatedEntitySource": $related_entity_source, "relatedEntityType": $related_entity_type, "source": $source, "versionNumber": $version_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -355,7 +359,7 @@ export def "publish-event" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tmps-correlation-id: string # Unique correlation id to be able to trace the request in our system
+  --tmps-correlation-id: string # Unique correlation id to be able to trace the request in our system (required, default: "")
   --active: oneof<nothing, bool> # Indicate if the entity is active, inactive entity won't appear in Discovery API (default: false)
   --additional-infos: record # Additional informations of the entity - multi-lingual fields (e.g. en-us: additionalInfo)
   --attractions: list # Ordered Attraction related to the event — item shape: {active?: bool, additionalInfos?: record, classifications?: list, descriptions?: record, discoverable?: bool, images?: list, names?: record, references?: record, relationships?: list, source?: record, test?: bool, type: "event"|"venue"|"attraction", url?: string, version?: int}
@@ -376,7 +380,7 @@ export def "publish-event" [
   --references: record # References of this entity in an other system. Reference is the exact same entity (e.g. sourceName: id)
   --relationships: list # Relationships on the entity, like if the entity is a duplicate of another one
   --sales: record # Event's Sales Dates — shape: {presales?: list, public?: record}
-  --body-source: record # Source — shape: {id?: string, name?: string}
+  --source: record # Source — shape: {id?: string, name?: string}
   --test: oneof<nothing, bool> # Indicate if this is a test entity, by default test entities won't appear in discovery API (default: false)
   type: string@type-completer # Type of the entity
   --units: string
@@ -387,8 +391,9 @@ export def "publish-event" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let tmps_correlation_id = ($tmps_correlation_id | default "")
   let full_url = (build-url $base "/publish/v2/events" $auth.query)
-  let req_body = {"active": $active, "additionalInfos": $additional_infos, "attractions": $attractions, "classifications": $classifications, "dates": $dates, "descriptions": $descriptions, "discoverable": $discoverable, "distance": $distance, "images": $images, "infos": $infos, "location": $location, "names": $names, "place": $place, "pleaseNotes": $please_notes, "priceRanges": $price_ranges, "promoter": $promoter, "publicVisibility": $public_visibility, "references": $references, "relationships": $relationships, "sales": $sales, "source": $body_source, "test": $test, "type": $type, "units": $units, "url": $url, "venue": $venue, "version": $version} | compact
+  let req_body = {"active": $active, "additionalInfos": $additional_infos, "attractions": $attractions, "classifications": $classifications, "dates": $dates, "descriptions": $descriptions, "discoverable": $discoverable, "distance": $distance, "images": $images, "infos": $infos, "location": $location, "names": $names, "place": $place, "pleaseNotes": $please_notes, "priceRanges": $price_ranges, "promoter": $promoter, "publicVisibility": $public_visibility, "references": $references, "relationships": $relationships, "sales": $sales, "source": $source, "test": $test, "type": $type, "units": $units, "url": $url, "venue": $venue, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -424,20 +429,21 @@ export def "patch-event" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tmps-correlation-id: string # Unique correlation id to be able to trace the request in our system
+  --tmps-correlation-id: string # Unique correlation id to be able to trace the request in our system (required, default: "")
   changes: list # List of changes to apply to the related entity — item shape: {from?: string, op: "add"|"remove"|"replace"|"move"|"copy"|"test", path: string, value?: record}
   related_entity_id: string # Id of the entity to apply the augmentation data.
   related_entity_type: string@related-entity-type-completer # The type of the entity to apply the augmentation data.
   --score: float # The confidence (%) level of the accuracy of this augmention data. 100 is the better (format: float)
-  --body-source: string # The source where the augementation data came from
+  source: string # The source where the augementation data came from
   version_number: int # Vesion of this augmentation data. This field is to avoid updating entity with old data. (format: int64)
 ]: any -> record<id: string, ignoredProperties: record, invalidProperties: record, invalidValues: record, missingProperties: record, status: string, unknownProperties: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  let tmps_correlation_id = ($tmps_correlation_id | default "")
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/publish/v2/events/{id}") $auth.query)
-  let req_body = {"changes": $changes, "relatedEntityId": $related_entity_id, "relatedEntityType": $related_entity_type, "score": $score, "source": $body_source, "versionNumber": $version_number} | compact
+  let req_body = {"changes": $changes, "relatedEntityId": $related_entity_id, "relatedEntityType": $related_entity_type, "score": $score, "source": $source, "versionNumber": $version_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -474,18 +480,19 @@ export def "publish-event-videos" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tmps-correlation-id: string # Unique correlation id to be able to trace the request in our system
+  --tmps-correlation-id: string # Unique correlation id to be able to trace the request in our system (required, default: "")
   --embed-url: string # The url of the embeded video
   licensing_information: record # This class defines an entitlement data on the Publish API — shape: {license: string, regionRestriction?: record}
-  --body-source: record # Source — shape: {id?: string, name?: string}
+  source: record # Source — shape: {id?: string, name?: string}
   url: string # The url of the video
 ]: any -> record<id: string, ignoredProperties: record, invalidProperties: record, invalidValues: record, missingProperties: record, status: string, unknownProperties: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  let tmps_correlation_id = ($tmps_correlation_id | default "")
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/publish/v2/events/{id}/videos") $auth.query)
-  let req_body = {"embedUrl": $embed_url, "licensingInformation": $licensing_information, "source": $body_source, "url": $url} | compact
+  let req_body = {"embedUrl": $embed_url, "licensingInformation": $licensing_information, "source": $source, "url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -520,20 +527,21 @@ export def "publish-extension" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tmps-correlation-id: string # Unique correlation id to be able to trace the request in our system
+  --tmps-correlation-id: string # Unique correlation id to be able to trace the request in our system (required, default: "")
   data: record # The actual information to add to the entity
   --related-entity-id: string # Id of the entity to add this extionsion to. If the relatedEntityId is Null, a relatedEntitySource MUST be provided
   --related-entity-source: record # Source — shape: {id?: string, name?: string}
   related_entity_type: string@related-entity-type-completer # The type of the entity to add this extensions to
-  --body-source: string # Source of the extension, where it came from
+  source: string # Source of the extension, where it came from
   type: string # The type of the extension. This represent the data sent
   --version-number: int # Version of the extensions. Version is to prevent to override an extension with an older one (format: int64)
 ]: any -> record<id: string, ignoredProperties: record, invalidProperties: record, invalidValues: record, missingProperties: record, status: string, unknownProperties: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let tmps_correlation_id = ($tmps_correlation_id | default "")
   let full_url = (build-url $base "/publish/v2/extensions" $auth.query)
-  let req_body = {"data": $data, "relatedEntityId": $related_entity_id, "relatedEntitySource": $related_entity_source, "relatedEntityType": $related_entity_type, "source": $body_source, "type": $type, "versionNumber": $version_number} | compact
+  let req_body = {"data": $data, "relatedEntityId": $related_entity_id, "relatedEntitySource": $related_entity_source, "relatedEntityType": $related_entity_type, "source": $source, "type": $type, "versionNumber": $version_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -579,7 +587,7 @@ export def "publish-venue" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tmps-correlation-id: string # Unique correlation id to be able to trace the request in our system
+  --tmps-correlation-id: string # Unique correlation id to be able to trace the request in our system (required, default: "")
   --accessible-seating-details: record # Venue accessible seating details - multi-lingual fields (e.g. en-us:seatingDetails)
   --active: oneof<nothing, bool> # Indicate if the entity is active, inactive entity won't appear in Discovery API (default: false)
   --additional-infos: record # Additional informations of the entity - multi-lingual fields (e.g. en-us: additionalInfo)
@@ -602,7 +610,7 @@ export def "publish-venue" [
   --references: record # References of this entity in an other system. Reference is the exact same entity (e.g. sourceName: id)
   --relationships: list # Relationships on the entity, like if the entity is a duplicate of another one
   --social: record # Social networks data — shape: {twitter?: record}
-  --body-source: record # Source — shape: {id?: string, name?: string}
+  --source: record # Source — shape: {id?: string, name?: string}
   --state: record # State — shape: {names?: record, stateCode?: string}
   --test: oneof<nothing, bool> # Indicate if this is a test entity, by default test entities won't appear in discovery API (default: false)
   --timezone: string # Timezone of the venue
@@ -614,8 +622,9 @@ export def "publish-venue" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let tmps_correlation_id = ($tmps_correlation_id | default "")
   let full_url = (build-url $base "/publish/v2/venues" $auth.query)
-  let req_body = {"accessibleSeatingDetails": $accessible_seating_details, "active": $active, "additionalInfos": $additional_infos, "address": $address, "boxOfficeInfo": $box_office_info, "city": $city, "country": $country, "currency": $currency, "descriptions": $descriptions, "discoverable": $discoverable, "distance": $distance, "dma": $dma, "generalInfo": $general_info, "images": $images, "location": $location, "markets": $markets, "names": $names, "parkingDetails": $parking_details, "postalCode": $postal_code, "references": $references, "relationships": $relationships, "social": $social, "source": $body_source, "state": $state, "test": $test, "timezone": $timezone, "type": $type, "units": $units, "url": $url, "version": $version} | compact
+  let req_body = {"accessibleSeatingDetails": $accessible_seating_details, "active": $active, "additionalInfos": $additional_infos, "address": $address, "boxOfficeInfo": $box_office_info, "city": $city, "country": $country, "currency": $currency, "descriptions": $descriptions, "discoverable": $discoverable, "distance": $distance, "dma": $dma, "generalInfo": $general_info, "images": $images, "location": $location, "markets": $markets, "names": $names, "parkingDetails": $parking_details, "postalCode": $postal_code, "references": $references, "relationships": $relationships, "social": $social, "source": $source, "state": $state, "test": $test, "timezone": $timezone, "type": $type, "units": $units, "url": $url, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -651,20 +660,21 @@ export def "patch-venue" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tmps-correlation-id: string # Unique correlation id to be able to trace the request in our system
+  --tmps-correlation-id: string # Unique correlation id to be able to trace the request in our system (required, default: "")
   changes: list # List of changes to apply to the related entity — item shape: {from?: string, op: "add"|"remove"|"replace"|"move"|"copy"|"test", path: string, value?: record}
   related_entity_id: string # Id of the entity to apply the augmentation data.
   related_entity_type: string@related-entity-type-completer # The type of the entity to apply the augmentation data.
   --score: float # The confidence (%) level of the accuracy of this augmention data. 100 is the better (format: float)
-  --body-source: string # The source where the augementation data came from
+  source: string # The source where the augementation data came from
   version_number: int # Vesion of this augmentation data. This field is to avoid updating entity with old data. (format: int64)
 ]: any -> record<id: string, ignoredProperties: record, invalidProperties: record, invalidValues: record, missingProperties: record, status: string, unknownProperties: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  let tmps_correlation_id = ($tmps_correlation_id | default "")
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/publish/v2/venues/{id}") $auth.query)
-  let req_body = {"changes": $changes, "relatedEntityId": $related_entity_id, "relatedEntityType": $related_entity_type, "score": $score, "source": $body_source, "versionNumber": $version_number} | compact
+  let req_body = {"changes": $changes, "relatedEntityId": $related_entity_id, "relatedEntityType": $related_entity_type, "score": $score, "source": $source, "versionNumber": $version_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

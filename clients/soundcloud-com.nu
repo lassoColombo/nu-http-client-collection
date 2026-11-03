@@ -1,6 +1,8 @@
 # Auto-generated client for SoundCloud Public API Specification v1.0.0
 # Source: https://api.apis.guru/v2/specs/soundcloud.com/1.0.0/openapi.json
 # Auth: --token flag or $env.SOUNDCLOUD_PUBLIC_API_SPECIFICATION_TOKEN
+# Auth (AuthHeader): --token-authheader flag or $env.SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN
+# Auth (ClientId): --token-clientid flag or $env.SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN
 
 const BASE_URL = "https://api.soundcloud.com"
 
@@ -12,7 +14,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "query-client_id" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "client_id")=(encode-path-segment $token_val)", location: "query"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -160,7 +162,7 @@ def track-sharing-completer [] { ["private" "public"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-authheader" "token-clientid"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-connect" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -194,14 +196,18 @@ export def "get-connect" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --client-id: string # The client id belonging to your application (e.g. some client)
-  --redirect-uri: string # The redirect uri you have configured for your application (e.g. https://soundcloud.com)
-  --response-type: string@response-type-completer # It's recommended to use "code" here (e.g. code)
-  --scope: string # Scope (e.g. default)
+  --client-id: string # The client id belonging to your application (required, e.g. some client)
+  --redirect-uri: string # The redirect uri you have configured for your application (required, e.g. https://soundcloud.com)
+  --response-type: string@response-type-completer # It's recommended to use "code" here (required, e.g. code)
+  --scope: string # Scope (required, e.g. default)
   --state: string # Any value included here will be appended to the redirect URI. Use this for CSRF protection. (e.g. encrypted_session_info)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_authheader | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN | default "")) "query-client_id")])
   let base = ($base_url | default $BASE_URL)
+  if ($client_id == null) { error make --unspanned { msg: "required query parameter 'client_id' missing: pass --client-id" } }
+  if ($redirect_uri == null) { error make --unspanned { msg: "required query parameter 'redirect_uri' missing: pass --redirect-uri" } }
+  if ($response_type == null) { error make --unspanned { msg: "required query parameter 'response_type' missing: pass --response-type" } }
+  if ($scope == null) { error make --unspanned { msg: "required query parameter 'scope' missing: pass --scope" } }
   let qp = [(serialize-qp "client_id" $client_id "scalar") (serialize-qp "redirect_uri" $redirect_uri "scalar") (serialize-qp "response_type" $response_type "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "state" $state "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/connect" $qp $auth.query)
   let accept_val = "application/json"
@@ -239,7 +245,7 @@ export def "delete-likes-playlists-playlist-id" [
   let base = ($base_url | default $BASE_URL)
   if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlist_id' must be non-empty" } }
   let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/likes/playlists/{playlist_id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
@@ -274,7 +280,7 @@ export def "post-likes-playlists-playlist-id" [
   let base = ($base_url | default $BASE_URL)
   if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlist_id' must be non-empty" } }
   let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/likes/playlists/{playlist_id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -309,7 +315,7 @@ export def "delete-likes-tracks-track-id" [
   let base = ($base_url | default $BASE_URL)
   if ($track_id | is-empty) { error make --unspanned { msg: "path parameter 'track_id' must be non-empty" } }
   let full_url = (build-url $base ({track_id: (encode-path-segment $track_id)} | format pattern "/likes/tracks/{track_id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
@@ -344,7 +350,7 @@ export def "post-likes-tracks-track-id" [
   let base = ($base_url | default $BASE_URL)
   if ($track_id | is-empty) { error make --unspanned { msg: "path parameter 'track_id' must be non-empty" } }
   let full_url = (build-url $base ({track_id: (encode-path-segment $track_id)} | format pattern "/likes/tracks/{track_id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -373,11 +379,11 @@ export def "get-me" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<avatar_url: string, city: string, country: string, description: string, discogs_name: string, first_name: string, followers_count: int, followings_count: int, full_name: string, id: int, kind: string, last_modified: string, last_name: string, locale: string, myspace_name: string, permalink: string, permalink_url: string, plan: string, playlist_count: int, primary_email_confirmed: bool, private_playlists_count: int, private_tracks_count: int, public_favorites_count: int, quota: record<unlimited_upload_quota: bool, upload_seconds_used: int>, reposts_count: int, subscriptions: list<list<any>>, track_count: int, uri: string, username: string, website: string, website_title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me" $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -408,12 +414,12 @@ export def "get-me-activities" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --access: list<string> # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details. (default: playable,preview)
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
-]: nothing -> any {
+]: nothing -> record<collection: table<created_at: string, origin: record, type: string>, future_href: string, next_href: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "access" $access "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/activities" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -444,12 +450,12 @@ export def "get-me-activities-all-own" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --access: list<string> # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details. (default: playable,preview)
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
-]: nothing -> any {
+]: nothing -> record<collection: table<created_at: string, origin: record, type: string>, future_href: string, next_href: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "access" $access "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/activities/all/own" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -480,12 +486,12 @@ export def "get-me-activities-tracks" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --access: list<string> # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details. (default: playable,preview)
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
-]: nothing -> any {
+]: nothing -> record<collection: table<created_at: string, origin: record, type: string>, future_href: string, next_href: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "access" $access "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/activities/tracks" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -517,12 +523,12 @@ export def "get-me-connections" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
   --offset: int # Offset of first result. Deprecated, use `linked_partitioning` instead. (DEPRECATED, default: 0, e.g. 0)
-]: nothing -> any {
+]: nothing -> table<created_at: string, display_name: string, id: int, kind: string, post_favorite: bool, post_publish: bool, service: string, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/connections" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -552,12 +558,12 @@ export def "get-me-connections-connection-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<created_at: string, display_name: string, id: int, kind: string, post_favorite: bool, post_publish: bool, service: string, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connection_id' must be non-empty" } }
   let full_url = (build-url $base ({connection_id: (encode-path-segment $connection_id)} | format pattern "/me/connections/{connection_id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -629,7 +635,7 @@ export def "get-me-followers" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/followers" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -661,12 +667,12 @@ export def "get-me-followers-follower-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<avatar_url: string, city: string, country: string, created_at: string, description: string, discogs_name: string, first_name: string, followers_count: int, followings_count: int, full_name: string, id: int, kind: string, last_modified: string, last_name: string, myspace_name: string, permalink: string, permalink_url: string, plan: string, playlist_count: int, public_favorites_count: int, reposts_count: int, subscriptions: list<list<any>>, track_count: int, uri: string, username: string, website: string, website_title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($follower_id | is-empty) { error make --unspanned { msg: "path parameter 'follower_id' must be non-empty" } }
   let full_url = (build-url $base ({follower_id: (encode-path-segment $follower_id)} | format pattern "/me/followers/{follower_id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -703,7 +709,7 @@ export def "get-me-followings" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/followings" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -736,12 +742,12 @@ export def "get-me-followings-tracks" [
   --access: list<string> # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details. (default: playable,preview)
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
   --offset: int # Offset of first result. Deprecated, use `linked_partitioning` instead. (DEPRECATED, default: 0, e.g. 0)
-]: nothing -> any {
+]: nothing -> table<access: string, artwork_url: string, available_country_codes: string, bpm: int, comment_count: int, commentable: bool, created_at: string, description: string, download_count: int, download_url: string, downloadable: string, duration: int, embeddable_by: string, favoritings_count: int, genre: string, id: int, isrc: string, key_signature: string, kind: string, label_name: string, license: string, permalink_url: string, playback_count: int, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, reposts_count: int, secret_uri: string, sharing: string, stream_url: string, streamable: bool, tag_list: string, title: string, uri: string, user: record<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, user_favorite: bool, user_playback_count: int, waveform_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "access" $access "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/followings/tracks" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -808,12 +814,12 @@ export def "get-me-followings-user-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<avatar_url: string, city: string, country: string, created_at: string, description: string, discogs_name: string, first_name: string, followers_count: int, followings_count: int, full_name: string, id: int, kind: string, last_modified: string, last_name: string, myspace_name: string, permalink: string, permalink_url: string, plan: string, playlist_count: int, public_favorites_count: int, reposts_count: int, subscriptions: list<list<any>>, track_count: int, uri: string, username: string, website: string, website_title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/me/followings/{user_id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -843,12 +849,12 @@ export def "put-me-followings-user-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<avatar_url: string, city: string, country: string, created_at: string, description: string, discogs_name: string, first_name: string, followers_count: int, followings_count: int, full_name: string, id: int, kind: string, last_modified: string, last_name: string, myspace_name: string, permalink: string, permalink_url: string, plan: string, playlist_count: int, public_favorites_count: int, reposts_count: int, subscriptions: list<list<any>>, track_count: int, uri: string, username: string, website: string, website_title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/me/followings/{user_id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "put"
@@ -884,7 +890,7 @@ export def "get-me-likes-tracks" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "linked_partitioning" $linked_partitioning "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/likes/tracks" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -914,12 +920,12 @@ export def "get-me-playlists" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
-]: nothing -> any {
+]: nothing -> table<artwork_url: string, created_at: string, description: string, downloadable: bool, duration: int, ean: string, embeddable_by: string, genre: string, id: int, kind: string, label: record<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, label_id: int, label_name: string, last_modified: string, license: string, likes_count: int, permalink: string, permalink_url: string, playlist_type: string, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, sharing: string, streamable: bool, tag_list: string, tags: string, title: string, track_count: int, tracks: list<record>, tracks_uri: string, type: string, uri: string, user: record<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, user_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/playlists" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -951,12 +957,12 @@ export def "get-me-playlists-playlist-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<artwork_url: string, created_at: string, description: string, downloadable: bool, duration: int, ean: string, embeddable_by: string, genre: string, id: int, kind: string, label: record<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, label_id: int, label_name: string, last_modified: string, license: string, likes_count: int, permalink: string, permalink_url: string, playlist_type: string, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, sharing: string, streamable: bool, tag_list: string, tags: string, title: string, track_count: int, tracks: table<access: string, artwork_url: string, available_country_codes: string, bpm: int, comment_count: int, commentable: bool, created_at: string, description: string, download_count: int, download_url: string, downloadable: string, duration: int, embeddable_by: string, favoritings_count: int, genre: string, id: int, isrc: string, key_signature: string, kind: string, label_name: string, license: string, permalink_url: string, playback_count: int, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, reposts_count: int, secret_uri: string, sharing: string, stream_url: string, streamable: bool, tag_list: string, title: string, uri: string, user: record, user_favorite: bool, user_playback_count: int, waveform_url: string>, tracks_uri: string, type: string, uri: string, user: record<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, user_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlist_id' must be non-empty" } }
   let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/me/playlists/{playlist_id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -992,7 +998,7 @@ export def "get-me-tracks" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "linked_partitioning" $linked_partitioning "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/tracks" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -1024,12 +1030,12 @@ export def "get-me-tracks-track-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<access: string, artwork_url: string, available_country_codes: string, bpm: int, comment_count: int, commentable: bool, created_at: string, description: string, download_count: int, download_url: string, downloadable: string, duration: int, embeddable_by: string, favoritings_count: int, genre: string, id: int, isrc: string, key_signature: string, kind: string, label_name: string, license: string, permalink_url: string, playback_count: int, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, reposts_count: int, secret_uri: string, sharing: string, stream_url: string, streamable: bool, tag_list: string, title: string, uri: string, user: record<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, user_favorite: bool, user_playback_count: int, waveform_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($track_id | is-empty) { error make --unspanned { msg: "path parameter 'track_id' must be non-empty" } }
   let full_url = (build-url $base ({track_id: (encode-path-segment $track_id)} | format pattern "/me/tracks/{track_id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -1104,7 +1110,7 @@ export def "get-playlists" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # search (e.g. hello)
+  --q: string # search (required, e.g. hello)
   --access: list<string> # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details. (default: playable,preview)
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
   --offset: int # Offset of first result. Deprecated, use `linked_partitioning` instead. (DEPRECATED, default: 0, e.g. 0)
@@ -1112,9 +1118,10 @@ export def "get-playlists" [
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_authheader | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN | default "")) "query-client_id")])
   let base = ($base_url | default $BASE_URL)
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "access" $access "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "linked_partitioning" $linked_partitioning "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/playlists" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -1145,14 +1152,14 @@ export def "post-playlists" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --playlist: record # shape: {description?: string, sharing?: "public"|"private", title?: string, tracks?: list}
-]: any -> any {
+]: any -> record<artwork_url: string, created_at: string, description: string, downloadable: bool, duration: int, ean: string, embeddable_by: string, genre: string, id: int, kind: string, label_id: int, label_name: string, last_modified: string, license: string, permalink: string, permalink_url: string, playlist_type: string, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, sharing: string, streamable: bool, tag_list: string, title: string, track_count: int, tracks: table<artwork_url: string, bpm: int, comment_count: int, commentable: bool, created_at: string, description: string, download_count: int, downloadable: string, duration: int, embeddable_by: string, favoritings_count: int, genre: string, id: int, isrc: string, key_signature: string, kind: string, label_name: string, license: string, permalink_url: string, playback_count: int, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, sharing: string, stream_url: string, streamable: bool, tag_list: string, title: string, uri: string, user: record, user_favorite: bool, user_playback_count: int, waveform_url: string>, type: string, uri: string, user: record<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, user_id: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/playlists" $auth.query)
   let req_body = {"playlist": $playlist} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -1219,13 +1226,13 @@ export def "get-playlists-playlist-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --secret-token: string # A secret token to fetch private playlists/tracks
   --access: list<string> # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details. (default: playable,preview)
-]: nothing -> any {
+]: nothing -> record<artwork_url: string, created_at: string, description: string, downloadable: bool, duration: int, ean: string, embeddable_by: string, genre: string, id: int, kind: string, label: record<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, label_id: int, label_name: string, last_modified: string, license: string, likes_count: int, permalink: string, permalink_url: string, playlist_type: string, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, sharing: string, streamable: bool, tag_list: string, tags: string, title: string, track_count: int, tracks: table<access: string, artwork_url: string, available_country_codes: string, bpm: int, comment_count: int, commentable: bool, created_at: string, description: string, download_count: int, download_url: string, downloadable: string, duration: int, embeddable_by: string, favoritings_count: int, genre: string, id: int, isrc: string, key_signature: string, kind: string, label_name: string, license: string, permalink_url: string, playback_count: int, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, reposts_count: int, secret_uri: string, sharing: string, stream_url: string, streamable: bool, tag_list: string, title: string, uri: string, user: record, user_favorite: bool, user_playback_count: int, waveform_url: string>, tracks_uri: string, type: string, uri: string, user: record<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, user_id: int> {
   let auth = (merge-auth [(build-auth ($token_authheader | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN | default "")) "query-client_id")])
   let base = ($base_url | default $BASE_URL)
   if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlist_id' must be non-empty" } }
   let qp = [(serialize-qp "secret_token" $secret_token "scalar") (serialize-qp "access" $access "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/playlists/{playlist_id}") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -1257,7 +1264,7 @@ export def "put-playlists-playlist-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --playlist: record # shape: {description?: string, sharing?: "public"|"private", title?: string, tracks?: list}
-]: any -> any {
+]: any -> record<artwork_url: string, created_at: string, description: string, downloadable: bool, duration: int, ean: string, embeddable_by: string, genre: string, id: int, kind: string, label_id: int, label_name: string, last_modified: string, license: string, permalink: string, permalink_url: string, playlist_type: string, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, sharing: string, streamable: bool, tag_list: string, title: string, track_count: int, tracks: table<artwork_url: string, bpm: int, comment_count: int, commentable: bool, created_at: string, description: string, download_count: int, downloadable: string, duration: int, embeddable_by: string, favoritings_count: int, genre: string, id: int, isrc: string, key_signature: string, kind: string, label_name: string, license: string, permalink_url: string, playback_count: int, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, sharing: string, stream_url: string, streamable: bool, tag_list: string, title: string, uri: string, user: record, user_favorite: bool, user_playback_count: int, waveform_url: string>, type: string, uri: string, user: record<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, user_id: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1265,7 +1272,7 @@ export def "put-playlists-playlist-id" [
   let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/playlists/{playlist_id}") $auth.query)
   let req_body = {"playlist": $playlist} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "put"
@@ -1296,13 +1303,13 @@ export def "get-playlists-playlist-id-reposters" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
-]: nothing -> any {
+]: nothing -> record<collection: table<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, next_href: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-client_id"))
   let base = ($base_url | default $BASE_URL)
   if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlist_id' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/playlists/{playlist_id}/reposters") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -1341,7 +1348,7 @@ export def "get-playlists-playlist-id-tracks" [
   if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlist_id' must be non-empty" } }
   let qp = [(serialize-qp "secret_token" $secret_token "scalar") (serialize-qp "access" $access "csv") (serialize-qp "linked_partitioning" $linked_partitioning "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/playlists/{playlist_id}/tracks") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -1510,10 +1517,11 @@ export def "get-resolve" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --url: string # SoundCloud URL (e.g. https://soundcloud.com/user-434241656)
+  --url: string # SoundCloud URL (required, e.g. https://soundcloud.com/user-434241656)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_authheader | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN | default "")) "query-client_id")])
   let base = ($base_url | default $BASE_URL)
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
   let qp = [(serialize-qp "url" $url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/resolve" $qp $auth.query)
   let accept_val = "application/json"
@@ -1546,7 +1554,7 @@ export def "get-tracks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # search (e.g. hello)
+  --q: string # search (required, e.g. hello)
   --ids: string # A comma separated list of track ids to filter on (e.g. 1,2,3)
   --genres: string # A comma separated list of genres (e.g. Pop,House)
   --tags: string # A comma separated list of tags (e.g. test)
@@ -1560,9 +1568,10 @@ export def "get-tracks" [
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_authheader | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN | default "")) "query-client_id")])
   let base = ($base_url | default $BASE_URL)
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "ids" $ids "scalar") (serialize-qp "genres" $genres "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "bpm" $bpm "deepObject") (serialize-qp "duration" $duration "deepObject") (serialize-qp "created_at" $created_at "deepObject") (serialize-qp "access" $access "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "linked_partitioning" $linked_partitioning "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tracks" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -1609,17 +1618,17 @@ export def "post-tracks" [
   --track-streamable: oneof<nothing, bool> # default: true
   --track-tag-list: string # The tag_list property contains a list of tags separated by spaces. Multiword tags are quoted in double quotes. We also support machine tags that follow the pattern NAMESPACE:KEY=VALUE. For example: geo:lat=43.555 camel:size=medium “machine:tag=with space” Machine tags are not revealed to the user on the track pages.
   --track-title: string
-]: any -> any {
+]: any -> record<access: string, artwork_url: string, available_country_codes: string, bpm: int, comment_count: int, commentable: bool, created_at: string, description: string, download_count: int, download_url: string, downloadable: string, duration: int, embeddable_by: string, favoritings_count: int, genre: string, id: int, isrc: string, key_signature: string, kind: string, label_name: string, license: string, permalink_url: string, playback_count: int, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, reposts_count: int, secret_uri: string, sharing: string, stream_url: string, streamable: bool, tag_list: string, title: string, uri: string, user: record<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, user_favorite: bool, user_playback_count: int, waveform_url: string> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_authheader | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN | default "")) "query-client_id")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tracks" $auth.query)
   let req_body = {"track[artwork_data]": $track_artwork_data, "track[asset_data]": $track_asset_data, "track[commentable]": $track_commentable, "track[description]": $track_description, "track[downloadable]": $track_downloadable, "track[embeddable_by]": $track_embeddable_by, "track[genre]": $track_genre, "track[isrc]": $track_isrc, "track[label_name]": $track_label_name, "track[license]": $track_license, "track[permalink]": $track_permalink, "track[purchase_url]": $track_purchase_url, "track[release]": $track_release, "track[release_date]": $track_release_date, "track[sharing]": $track_sharing, "track[streamable]": $track_streamable, "track[tag_list]": $track_tag_list, "track[title]": $track_title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["track[artwork_data]" "track[asset_data]"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["track[artwork_data]" "track[asset_data]"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -1684,13 +1693,13 @@ export def "get-tracks-track-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --secret-token: string # A secret token to fetch private playlists/tracks
-]: nothing -> any {
+]: nothing -> record<access: string, artwork_url: string, available_country_codes: string, bpm: int, comment_count: int, commentable: bool, created_at: string, description: string, download_count: int, download_url: string, downloadable: string, duration: int, embeddable_by: string, favoritings_count: int, genre: string, id: int, isrc: string, key_signature: string, kind: string, label_name: string, license: string, permalink_url: string, playback_count: int, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, reposts_count: int, secret_uri: string, sharing: string, stream_url: string, streamable: bool, tag_list: string, title: string, uri: string, user: record<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, user_favorite: bool, user_playback_count: int, waveform_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-client_id"))
   let base = ($base_url | default $BASE_URL)
   if ($track_id | is-empty) { error make --unspanned { msg: "path parameter 'track_id' must be non-empty" } }
   let qp = [(serialize-qp "secret_token" $secret_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({track_id: (encode-path-segment $track_id)} | format pattern "/tracks/{track_id}") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -1722,7 +1731,7 @@ export def "put-tracks-track-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --track: record # shape: {commentable?: bool, description?: string, downloadable?: bool, embeddable_by?: "all"|"me"|"none", genre?: string, isrc?: string, label_name?: string, license?: "no-rights-reserved"|"all-rights-reserved"|"cc-by"|"cc-by-nc"|"cc-by-nd"|"cc-by-sa"|"cc-by-nc-nd"|"cc-by-nc-sa", permalink?: string, purchase_url?: string, release?: string, release_date?: string, sharing?: "public"|"private", streamable?: bool, tag_list?: string, title?: string}
-]: any -> any {
+]: any -> record<access: string, artwork_url: string, available_country_codes: string, bpm: int, comment_count: int, commentable: bool, created_at: string, description: string, download_count: int, download_url: string, downloadable: string, duration: int, embeddable_by: string, favoritings_count: int, genre: string, id: int, isrc: string, key_signature: string, kind: string, label_name: string, license: string, permalink_url: string, playback_count: int, purchase_title: string, purchase_url: string, release: string, release_day: int, release_month: int, release_year: int, reposts_count: int, secret_uri: string, sharing: string, stream_url: string, streamable: bool, tag_list: string, title: string, uri: string, user: record<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, user_favorite: bool, user_playback_count: int, waveform_url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1730,7 +1739,7 @@ export def "put-tracks-track-id" [
   let full_url = (build-url $base ({track_id: (encode-path-segment $track_id)} | format pattern "/tracks/{track_id}") $auth.query)
   let req_body = {"track": $track} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "put"
@@ -1770,7 +1779,7 @@ export def "get-tracks-track-id-comments" [
   if ($track_id | is-empty) { error make --unspanned { msg: "path parameter 'track_id' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "linked_partitioning" $linked_partitioning "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({track_id: (encode-path-segment $track_id)} | format pattern "/tracks/{track_id}/comments") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -1802,7 +1811,7 @@ export def "post-tracks-track-id-comments" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --comment: record # shape: {body: string, timestamp?: any}
-]: any -> any {
+]: any -> record<body: string, created_at: string, id: int, kind: string, timestamp: string, track_id: int, uri: string, user: record<avatar_url: string, followers_count: int, followings_count: int, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, reposts_count: int, uri: string, username: string>, user_id: int> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_authheader | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN | default "")) "query-client_id")])
   let base = ($base_url | default $BASE_URL)
@@ -1810,7 +1819,7 @@ export def "post-tracks-track-id-comments" [
   let full_url = (build-url $base ({track_id: (encode-path-segment $track_id)} | format pattern "/tracks/{track_id}/comments") $auth.query)
   let req_body = {"comment": $comment} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -1843,13 +1852,13 @@ export def "get-tracks-track-id-favoriters" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
   --offset: int # Offset of first result. Deprecated, use `linked_partitioning` instead. (DEPRECATED, default: 0, e.g. 0)
-]: nothing -> any {
+]: nothing -> table<avatar_url: string, city: string, country: string, description: string, discogs_name: string, first_name: string, followers_count: int, followings_count: int, full_name: string, id: int, kind: string, last_modified: string, last_name: string, myspace_name: string, permalink: string, permalink_url: string, plan: string, playlist_count: int, public_favorites_count: int, reposts_count: int, subscriptions: list<list>, track_count: int, uri: string, username: string, website: string, website_title: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-client_id"))
   let base = ($base_url | default $BASE_URL)
   if ($track_id | is-empty) { error make --unspanned { msg: "path parameter 'track_id' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({track_id: (encode-path-segment $track_id)} | format pattern "/tracks/{track_id}/favoriters") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -1890,7 +1899,7 @@ export def "get-tracks-track-id-related" [
   if ($track_id | is-empty) { error make --unspanned { msg: "path parameter 'track_id' must be non-empty" } }
   let qp = [(serialize-qp "access" $access "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "linked_partitioning" $linked_partitioning "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({track_id: (encode-path-segment $track_id)} | format pattern "/tracks/{track_id}/related") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -1921,13 +1930,13 @@ export def "get-tracks-track-id-reposters" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
-]: nothing -> any {
+]: nothing -> record<collection: table<avatar_url: string, created_at: string, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, uri: string, username: string>, next_href: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-client_id"))
   let base = ($base_url | default $BASE_URL)
   if ($track_id | is-empty) { error make --unspanned { msg: "path parameter 'track_id' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({track_id: (encode-path-segment $track_id)} | format pattern "/tracks/{track_id}/reposters") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -1958,13 +1967,13 @@ export def "get-tracks-track-id-streams" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --secret-token: string # A secret token to fetch private playlists/tracks
-]: nothing -> any {
+]: nothing -> record<hls_mp3_128_url: string, hls_opus_64_url: string, http_mp3_128_url: string, preview_mp3_128_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-client_id"))
   let base = ($base_url | default $BASE_URL)
   if ($track_id | is-empty) { error make --unspanned { msg: "path parameter 'track_id' must be non-empty" } }
   let qp = [(serialize-qp "secret_token" $secret_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({track_id: (encode-path-segment $track_id)} | format pattern "/tracks/{track_id}/streams") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -1994,7 +2003,7 @@ export def "get-users" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # search (e.g. hello)
+  --q: string # search (required, e.g. hello)
   --ids: string # A comma separated list of track ids to filter on (e.g. 1,2,3)
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
   --offset: int # Offset of first result. Deprecated, use `linked_partitioning` instead. (DEPRECATED, default: 0, e.g. 0)
@@ -2002,9 +2011,10 @@ export def "get-users" [
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_authheader | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN | default "")) "query-client_id")])
   let base = ($base_url | default $BASE_URL)
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "ids" $ids "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "linked_partitioning" $linked_partitioning "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -2034,12 +2044,12 @@ export def "get-users-user-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<avatar_url: string, city: string, country: string, description: string, discogs_name: string, first_name: string, followers_count: int, followings_count: int, full_name: string, id: int, kind: string, last_modified: string, last_name: string, locale: string, myspace_name: string, permalink: string, permalink_url: string, plan: string, playlist_count: int, primary_email_confirmed: bool, private_playlists_count: int, private_tracks_count: int, public_favorites_count: int, quota: record<unlimited_upload_quota: bool, upload_seconds_used: int>, reposts_count: int, subscriptions: list<list<any>>, track_count: int, uri: string, username: string, website: string, website_title: string> {
   let auth = (merge-auth [(build-auth ($token_authheader | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN | default "")) "query-client_id")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -2072,13 +2082,13 @@ export def "get-users-user-id-comments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
   --offset: int # Offset of first result. Deprecated, use `linked_partitioning` instead. (DEPRECATED, default: 0, e.g. 0)
-]: nothing -> any {
+]: nothing -> table<body: string, created_at: string, id: int, kind: string, timestamp: string, track_id: int, uri: string, user: record<avatar_url: string, followers_count: int, followings_count: int, id: int, kind: string, last_modified: string, permalink: string, permalink_url: string, reposts_count: int, uri: string, username: string>, user_id: int> {
   let auth = (merge-auth [(build-auth ($token_authheader | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN | default "")) "query-client_id")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/comments") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -2118,7 +2128,7 @@ export def "get-users-user-id-favorites" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "linked_partitioning" $linked_partitioning "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/favorites") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -2155,7 +2165,7 @@ export def "get-users-user-id-followers" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/followers") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -2192,7 +2202,7 @@ export def "get-users-user-id-followings" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/followings") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -2225,13 +2235,13 @@ export def "get-users-user-id-followings-following-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<avatar_url: string, city: string, country: string, description: string, discogs_name: string, first_name: string, followers_count: int, followings_count: int, full_name: string, id: int, kind: string, last_modified: string, last_name: string, locale: string, myspace_name: string, permalink: string, permalink_url: string, plan: string, playlist_count: int, primary_email_confirmed: bool, private_playlists_count: int, private_tracks_count: int, public_favorites_count: int, quota: record<unlimited_upload_quota: bool, upload_seconds_used: int>, reposts_count: int, subscriptions: list<list<any>>, track_count: int, uri: string, username: string, website: string, website_title: string> {
   let auth = (merge-auth [(build-auth ($token_authheader | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN | default "")) "query-client_id")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   if ($following_id | is-empty) { error make --unspanned { msg: "path parameter 'following_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), following_id: (encode-path-segment $following_id)} | format pattern "/users/{user_id}/followings/{following_id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -2270,7 +2280,7 @@ export def "get-users-user-id-likes-tracks" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "access" $access "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "linked_partitioning" $linked_partitioning "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/likes/tracks") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -2309,7 +2319,7 @@ export def "get-users-user-id-playlists" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "access" $access "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "linked_partitioning" $linked_partitioning "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/playlists") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -2348,7 +2358,7 @@ export def "get-users-user-id-tracks" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "access" $access "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "linked_partitioning" $linked_partitioning "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/tracks") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -2379,13 +2389,13 @@ export def "get-users-user-id-web-profiles" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
-]: nothing -> any {
+]: nothing -> table<created_at: string, id: int, kind: string, service: string, title: string, url: string, username: string> {
   let auth = (merge-auth [(build-auth ($token_authheader | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN | default "")) "query-client_id")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/web-profiles") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"

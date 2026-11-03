@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -143,11 +143,12 @@ export def "baselines-list" [
   --sensitivities: string # The list of sensitivities (comma separated) to retrieve.
   --filter: string # The **$filter** is used to reduce the set of metric data returned.Example:Metric contains metadata A, B and C.- Return all time series of C where A = a1 and B = b1 or b2**$filter=A eq ‘a1’ and B eq ‘b1’ or B eq ‘b2’ and C eq ‘*’**- Invalid variant:**$filter=A eq ‘a1’ and B eq ‘b1’ and C eq ‘*’ or B = ‘b2’**This is invalid because the logical or operator cannot separate two different metadata names.- Return all time series where A = a1, B = b1 and C = c1:**$filter=A eq ‘a1’ and B eq ‘b1’ and C eq ‘c1’**- Return all time series where A = a1**$filter=A eq ‘a1’ and B eq ‘*’ and C eq ‘*’**.
   --result-type: string@result-type-completer # Allows retrieving only metadata of the baseline. On data request all information is retrieved.
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<value: table<id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_uri | is-empty) { error make --unspanned { msg: "path parameter 'resourceUri' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "metricnames" $metricnames "scalar") (serialize-qp "metricnamespace" $metricnamespace "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "aggregation" $aggregation "scalar") (serialize-qp "sensitivities" $sensitivities "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "resultType" $result_type "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_uri: (encode-path-segment $resource_uri)} | format pattern "/{resource_uri}/providers/microsoft.insights/metricBaselines") $qp $auth.query)
   let accept_val = "application/json"

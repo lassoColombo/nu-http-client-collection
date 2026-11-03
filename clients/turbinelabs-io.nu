@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -186,11 +186,12 @@ export def "delete-admin-user-self-access-token-access-token-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --checksum: string # the current checksum of the user to be modified (e.g. 9cd24183-f848-48f8-6f55-0f07240700b9)
-]: nothing -> record<code: int, fields: string, message: string> {
+  --checksum: string # the current checksum of the user to be modified (required, e.g. 9cd24183-f848-48f8-6f55-0f07240700b9)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token_key | is-empty) { error make --unspanned { msg: "path parameter 'access-token-key' must be non-empty" } }
+  if ($checksum == null) { error make --unspanned { msg: "required query parameter 'checksum' missing: pass --checksum" } }
   let qp = [(serialize-qp "checksum" $checksum "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({access_token_key: (encode-path-segment $access_token_key)} | format pattern "/admin/user/self/access_token/{access_token_key}") $qp $auth.query)
   let accept_val = "application/json"
@@ -615,11 +616,12 @@ export def "delete-cluster-cluster-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --checksum: string # the current checksum of the cluster to be deleted (e.g. 9cd24183-f848-48f8-6f55-0f07240700b9)
+  --checksum: string # the current checksum of the cluster to be deleted (required, e.g. 9cd24183-f848-48f8-6f55-0f07240700b9)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cluster_key | is-empty) { error make --unspanned { msg: "path parameter 'clusterKey' must be non-empty" } }
+  if ($checksum == null) { error make --unspanned { msg: "required query parameter 'checksum' missing: pass --checksum" } }
   let qp = [(serialize-qp "checksum" $checksum "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({cluster_key: (encode-path-segment $cluster_key)} | format pattern "/cluster/{cluster_key}") $qp $auth.query)
   let accept_val = "application/json"
@@ -708,6 +710,7 @@ export def "put-cluster-cluster-key" [
   let full_url = (build-url $base ({cluster_key: (encode-path-segment $cluster_key)} | format pattern "/cluster/{cluster_key}") $auth.query)
   let req_body = {"circuit_breakers": $circuit_breakers, "health_checks": $health_checks, "instances": $instances, "name": $name, "outlier_detection": $outlier_detection, "require_tls": $require_tls, "zone_key": $zone_key, "checksum": $checksum, "cluster_key": $body_cluster_key} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "cluster_key") == null) { error make --unspanned { msg: "required body field 'cluster_key' missing: pass --body-cluster-key or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -781,12 +784,13 @@ export def "delete-cluster-cluster-key-instances-instance-identifier" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --checksum: string # the current checksum of the instance to be deleted (e.g. 9cd24183-f848-48f8-6f55-0f07240700b9)
+  --checksum: string # the current checksum of the instance to be deleted (required, e.g. 9cd24183-f848-48f8-6f55-0f07240700b9)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cluster_key | is-empty) { error make --unspanned { msg: "path parameter 'clusterKey' must be non-empty" } }
   if ($instance_identifier | is-empty) { error make --unspanned { msg: "path parameter 'instanceIdentifier' must be non-empty" } }
+  if ($checksum == null) { error make --unspanned { msg: "required query parameter 'checksum' missing: pass --checksum" } }
   let qp = [(serialize-qp "checksum" $checksum "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({cluster_key: (encode-path-segment $cluster_key), instance_identifier: (encode-path-segment $instance_identifier)} | format pattern "/cluster/{cluster_key}/instances/{instance_identifier}") $qp $auth.query)
   let accept_val = "application/json"
@@ -904,11 +908,12 @@ export def "delete-domain-domain-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --checksum: string # the current checksum of the domain to be deleted (e.g. 9cd24183-f848-48f8-6f55-0f07240700b9)
+  --checksum: string # the current checksum of the domain to be deleted (required, e.g. 9cd24183-f848-48f8-6f55-0f07240700b9)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_key | is-empty) { error make --unspanned { msg: "path parameter 'domainKey' must be non-empty" } }
+  if ($checksum == null) { error make --unspanned { msg: "required query parameter 'checksum' missing: pass --checksum" } }
   let qp = [(serialize-qp "checksum" $checksum "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_key: (encode-path-segment $domain_key)} | format pattern "/domain/{domain_key}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1055,11 +1060,12 @@ export def "delete-listener-listener-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --checksum: string # the current checksum of the listener to be deleted (e.g. 9cd24183-f848-48f8-6f55-0f07240700b9)
+  --checksum: string # the current checksum of the listener to be deleted (required, e.g. 9cd24183-f848-48f8-6f55-0f07240700b9)
 ]: nothing -> record<domain_keys: list<string>, ip: string, name: string, port: int, protocol: string, tracing_config: record<ingress: bool, request_headers_for_tags: list<string>>, zone_key: string, checksum: string, listener_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($listener_key | is-empty) { error make --unspanned { msg: "path parameter 'listenerKey' must be non-empty" } }
+  if ($checksum == null) { error make --unspanned { msg: "required query parameter 'checksum' missing: pass --checksum" } }
   let qp = [(serialize-qp "checksum" $checksum "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({listener_key: (encode-path-segment $listener_key)} | format pattern "/listener/{listener_key}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1145,6 +1151,7 @@ export def "put-listener-listener-key" [
   let full_url = (build-url $base ({listener_key: (encode-path-segment $listener_key)} | format pattern "/listener/{listener_key}") $auth.query)
   let req_body = {"domain_keys": $domain_keys, "ip": $ip, "name": $name, "port": $port, "protocol": $protocol, "tracing_config": $tracing_config, "zone_key": $zone_key, "checksum": $checksum, "listener_key": $body_listener_key} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "listener_key") == null) { error make --unspanned { msg: "required body field 'listener_key' missing: pass --body-listener-key or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1250,11 +1257,12 @@ export def "delete-proxy-proxy-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --checksum: string # the current checksum of the proxy to be deleted (e.g. 9cd24183-f848-48f8-6f55-0f07240700b9)
+  --checksum: string # the current checksum of the proxy to be deleted (required, e.g. 9cd24183-f848-48f8-6f55-0f07240700b9)
 ]: nothing -> record<domain_keys: list<string>, listener_keys: list<string>, name: string, zone_key: string, checksum: string, proxy_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($proxy_key | is-empty) { error make --unspanned { msg: "path parameter 'proxyKey' must be non-empty" } }
+  if ($checksum == null) { error make --unspanned { msg: "required query parameter 'checksum' missing: pass --checksum" } }
   let qp = [(serialize-qp "checksum" $checksum "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({proxy_key: (encode-path-segment $proxy_key)} | format pattern "/proxy/{proxy_key}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1347,6 +1355,7 @@ export def "get-route" [
 #
 # POST /route
 # --cohort_seed shape: {name?: string, type?: "header"|"cookie"|"query", use_zero_value_seed?: bool}
+# --response_data shape: {cookies?: list, headers?: list}
 # --retry_policy shape: {num_retries?: int, per_try_timeout_msec?: int, timeout_msec?: int}
 # --rules item shape: {cohort_seed?: record, constraints?: record, matches?: list, methods?: list<string>, rule_key?: string}
 export def "post-route" [
@@ -1363,7 +1372,7 @@ export def "post-route" [
   --cohort-seed: record # shape: {name?: string, type?: "header"|"cookie"|"query", use_zero_value_seed?: bool}
   domain_key: string
   path: string
-  --response-data: any # When a request is served by this Route annotate the response with the information specified within this ResponseData object. It's possible that multiple response data configurations will apply; if that's the case then the values from Route take precedence over those from a SharedRules object.
+  --response-data: record # When a request is served by this Route annotate the response with the information specified within this ResponseData object. It's possible that multiple response data configurations will apply; if that's the case then the values from Route take precedence over those from a SharedRules object. — shape: {cookies?: list, headers?: list}
   --retry-policy: record # Number of times to retry a request and how long to wait before timing out. — shape: {num_retries?: int, per_try_timeout_msec?: int, timeout_msec?: int}
   --route-key: string
   --rules: list # item shape: {cohort_seed?: record, constraints?: record, matches?: list, methods?: list<string>, rule_key?: string}
@@ -1406,11 +1415,12 @@ export def "delete-route-route-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --checksum: string # the current checksum of the route to be deleted (e.g. 9cd24183-f848-48f8-6f55-0f07240700b9)
+  --checksum: string # the current checksum of the route to be deleted (required, e.g. 9cd24183-f848-48f8-6f55-0f07240700b9)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($route_key | is-empty) { error make --unspanned { msg: "path parameter 'routeKey' must be non-empty" } }
+  if ($checksum == null) { error make --unspanned { msg: "required query parameter 'checksum' missing: pass --checksum" } }
   let qp = [(serialize-qp "checksum" $checksum "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({route_key: (encode-path-segment $route_key)} | format pattern "/route/{route_key}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1468,6 +1478,7 @@ export def "get-route-route-key" [
 #
 # PUT /route/{routeKey}
 # --cohort_seed shape: {name?: string, type?: "header"|"cookie"|"query", use_zero_value_seed?: bool}
+# --response_data shape: {cookies?: list, headers?: list}
 # --retry_policy shape: {num_retries?: int, per_try_timeout_msec?: int, timeout_msec?: int}
 # --rules item shape: {cohort_seed?: record, constraints?: record, matches?: list, methods?: list<string>, rule_key?: string}
 export def "put-route-route-key" [
@@ -1485,7 +1496,7 @@ export def "put-route-route-key" [
   --cohort-seed: record # shape: {name?: string, type?: "header"|"cookie"|"query", use_zero_value_seed?: bool}
   domain_key: string
   path: string
-  --response-data: any # When a request is served by this Route annotate the response with the information specified within this ResponseData object. It's possible that multiple response data configurations will apply; if that's the case then the values from Route take precedence over those from a SharedRules object.
+  --response-data: record # When a request is served by this Route annotate the response with the information specified within this ResponseData object. It's possible that multiple response data configurations will apply; if that's the case then the values from Route take precedence over those from a SharedRules object. — shape: {cookies?: list, headers?: list}
   --retry-policy: record # Number of times to retry a request and how long to wait before timing out. — shape: {num_retries?: int, per_try_timeout_msec?: int, timeout_msec?: int}
   --body-route-key: string
   --rules: list # item shape: {cohort_seed?: record, constraints?: record, matches?: list, methods?: list<string>, rule_key?: string}
@@ -1499,6 +1510,7 @@ export def "put-route-route-key" [
   let full_url = (build-url $base ({route_key: (encode-path-segment $route_key)} | format pattern "/route/{route_key}") $auth.query)
   let req_body = {"checksum": $checksum, "cohort_seed": $cohort_seed, "domain_key": $domain_key, "path": $path, "response_data": $response_data, "retry_policy": $retry_policy, "route_key": $body_route_key, "rules": $rules, "shared_rules_key": $shared_rules_key, "zone_key": $zone_key} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "route_key") == null) { error make --unspanned { msg: "required body field 'route_key' missing: pass --body-route-key or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1556,6 +1568,7 @@ export def "get-shared-rules" [
 # --cohort_seed shape: {name?: string, type?: "header"|"cookie"|"query", use_zero_value_seed?: bool}
 # --default shape: {dark?: list, light: list, tap?: list}
 # --properties item shape: {key?: string, value?: string}
+# --response_data shape: {cookies?: list, headers?: list}
 # --retry_policy shape: {num_retries?: int, per_try_timeout_msec?: int, timeout_msec?: int}
 # --rules item shape: {cohort_seed?: record, constraints?: record, matches?: list, methods?: list<string>, rule_key?: string}
 export def "post-shared-rules" [
@@ -1572,7 +1585,7 @@ export def "post-shared-rules" [
   --cohort-seed: record # shape: {name?: string, type?: "header"|"cookie"|"query", use_zero_value_seed?: bool}
   default: record # shape: {dark?: list, light: list, tap?: list}
   --properties: list # item shape: {key?: string, value?: string}
-  --response-data: any # When a request is served by a Route that is part of this SharedRules group the response is annotated with the information specified within this ResponseData object. It's possible that multiple response data configurations will apply; if that's the case then the values from the applicable Route and ClusterConstarint takes precedence over those specified here.
+  --response-data: record # When a request is served by a Route that is part of this SharedRules group the response is annotated with the information specified within this ResponseData object. It's possible that multiple response data configurations will apply; if that's the case then the values from the applicable Route and ClusterConstarint takes precedence over those specified here. — shape: {cookies?: list, headers?: list}
   --retry-policy: record # Number of times to retry a request and how long to wait before timing out. — shape: {num_retries?: int, per_try_timeout_msec?: int, timeout_msec?: int}
   --rules: list # item shape: {cohort_seed?: record, constraints?: record, matches?: list, methods?: list<string>, rule_key?: string}
   --shared-rules-key: string
@@ -1614,11 +1627,12 @@ export def "delete-shared-rules-shared-rules-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --checksum: string # the current checksum of the shared_rules to be deleted (e.g. 9cd24183-f848-48f8-6f55-0f07240700b9)
+  --checksum: string # the current checksum of the shared_rules to be deleted (required, e.g. 9cd24183-f848-48f8-6f55-0f07240700b9)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($shared_rules_key | is-empty) { error make --unspanned { msg: "path parameter 'sharedRulesKey' must be non-empty" } }
+  if ($checksum == null) { error make --unspanned { msg: "required query parameter 'checksum' missing: pass --checksum" } }
   let qp = [(serialize-qp "checksum" $checksum "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({shared_rules_key: (encode-path-segment $shared_rules_key)} | format pattern "/shared_rules/{shared_rules_key}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1678,6 +1692,7 @@ export def "get-shared-rules-shared-rules-key" [
 # --cohort_seed shape: {name?: string, type?: "header"|"cookie"|"query", use_zero_value_seed?: bool}
 # --default shape: {dark?: list, light: list, tap?: list}
 # --properties item shape: {key?: string, value?: string}
+# --response_data shape: {cookies?: list, headers?: list}
 # --retry_policy shape: {num_retries?: int, per_try_timeout_msec?: int, timeout_msec?: int}
 # --rules item shape: {cohort_seed?: record, constraints?: record, matches?: list, methods?: list<string>, rule_key?: string}
 export def "put-shared-rules-shared-rules-key" [
@@ -1695,7 +1710,7 @@ export def "put-shared-rules-shared-rules-key" [
   --cohort-seed: record # shape: {name?: string, type?: "header"|"cookie"|"query", use_zero_value_seed?: bool}
   default: record # shape: {dark?: list, light: list, tap?: list}
   --properties: list # item shape: {key?: string, value?: string}
-  --response-data: any # When a request is served by a Route that is part of this SharedRules group the response is annotated with the information specified within this ResponseData object. It's possible that multiple response data configurations will apply; if that's the case then the values from the applicable Route and ClusterConstarint takes precedence over those specified here.
+  --response-data: record # When a request is served by a Route that is part of this SharedRules group the response is annotated with the information specified within this ResponseData object. It's possible that multiple response data configurations will apply; if that's the case then the values from the applicable Route and ClusterConstarint takes precedence over those specified here. — shape: {cookies?: list, headers?: list}
   --retry-policy: record # Number of times to retry a request and how long to wait before timing out. — shape: {num_retries?: int, per_try_timeout_msec?: int, timeout_msec?: int}
   --rules: list # item shape: {cohort_seed?: record, constraints?: record, matches?: list, methods?: list<string>, rule_key?: string}
   --body-shared-rules-key: string
@@ -1708,6 +1723,7 @@ export def "put-shared-rules-shared-rules-key" [
   let full_url = (build-url $base ({shared_rules_key: (encode-path-segment $shared_rules_key)} | format pattern "/shared_rules/{shared_rules_key}") $auth.query)
   let req_body = {"checksum": $checksum, "cohort_seed": $cohort_seed, "default": $default, "properties": $properties, "response_data": $response_data, "retry_policy": $retry_policy, "rules": $rules, "shared_rules_key": $body_shared_rules_key, "zone_key": $zone_key} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "shared_rules_key") == null) { error make --unspanned { msg: "required body field 'shared_rules_key' missing: pass --body-shared-rules-key or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1810,11 +1826,12 @@ export def "delete-zone-zone-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --checksum: string # the current checksum of the zone to be deleted (e.g. 9cd24183-f848-48f8-6f55-0f07240700b9)
+  --checksum: string # the current checksum of the zone to be deleted (required, e.g. 9cd24183-f848-48f8-6f55-0f07240700b9)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($zone_key | is-empty) { error make --unspanned { msg: "path parameter 'zoneKey' must be non-empty" } }
+  if ($checksum == null) { error make --unspanned { msg: "required query parameter 'checksum' missing: pass --checksum" } }
   let qp = [(serialize-qp "checksum" $checksum "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({zone_key: (encode-path-segment $zone_key)} | format pattern "/zone/{zone_key}") $qp $auth.query)
   let accept_val = "application/json"

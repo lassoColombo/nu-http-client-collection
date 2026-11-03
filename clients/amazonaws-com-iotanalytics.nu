@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # POST /messages/batch
 # operationId: BatchPutMessage
-# --messages item shape: {messageId: any, payload: any}
+# --messages item shape: {messageId: string, payload: string}
 export def "batch-put-message" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -159,8 +159,8 @@ export def "batch-put-message" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   channel_name: string # The name of the channel where the messages are sent.
-  messages: list # The list of messages to be sent. Each message has the format: { "messageId": "string", "payload": "string"}. The field names of message payloads (data) that you send to IoT Analytics: Must contain only alphanumeric characters and undescores (_). No other special characters are allowed. Must begin with an alphabetic character or single underscore (_). Cannot contain hyphens (-). In regular expression terms: "^[A-Za-z_]([A-Za-z0-9]*|[A-Za-z0-9][A-Za-z0-9_]*)$". Cannot be more than 255 characters. Are case insensitive. (Fields named foo and FOO in the same payload are considered duplicates.) For example, {"temp_01": 29} or {"_temp_01": 29} are valid, but {"temp-01": 29}, {"01_temp": 29} or {"__temp_01": 29} are invalid in message payloads. — item shape: {messageId: any, payload: any}
-]: any -> record<batchPutMessageErrorEntries: record> {
+  messages: list # The list of messages to be sent. Each message has the format: { "messageId": "string", "payload": "string"}. The field names of message payloads (data) that you send to IoT Analytics: Must contain only alphanumeric characters and undescores (_). No other special characters are allowed. Must begin with an alphabetic character or single underscore (_). Cannot contain hyphens (-). In regular expression terms: "^[A-Za-z_]([A-Za-z0-9]*|[A-Za-z0-9][A-Za-z0-9_]*)$". Cannot be more than 255 characters. Are case insensitive. (Fields named foo and FOO in the same payload are considered duplicates.) For example, {"temp_01": 29} or {"_temp_01": 29} are valid, but {"temp-01": 29}, {"01_temp": 29} or {"__temp_01": 29} are invalid in message payloads. — item shape: {messageId: string, payload: string}
+]: any -> record<batchPutMessageErrorEntries: table<messageId: string, errorCode: string, errorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -236,9 +236,9 @@ export def "cancel-pipeline-reprocessing" [
 #
 # POST /channels
 # operationId: CreateChannel
-# --channelStorage shape: {serviceManagedS3?: any, customerManagedS3?: any}
-# --retentionPeriod shape: {unlimited?: any, numberOfDays?: any}
-# --tags item shape: {key: any, value: any}
+# --channelStorage shape: {serviceManagedS3?: record, customerManagedS3?: record}
+# --retentionPeriod shape: {unlimited?: bool, numberOfDays?: int}
+# --tags item shape: {key: string, value: string}
 export def "create-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -257,10 +257,10 @@ export def "create-channel" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   channel_name: string # The name of the channel.
-  --channel-storage: record # Where channel data is stored. You may choose one of serviceManagedS3, customerManagedS3 storage. If not specified, the default is serviceManagedS3. This can't be changed after creation of the channel. — shape: {serviceManagedS3?: any, customerManagedS3?: any}
-  --retention-period: record # How long, in days, message data is kept. — shape: {unlimited?: any, numberOfDays?: any}
-  --tags: list # Metadata which can be used to manage the channel. — item shape: {key: any, value: any}
-]: any -> record<channelName: record, channelArn: record, retentionPeriod: record<unlimited: record, numberOfDays: record>> {
+  --channel-storage: record # Where channel data is stored. You may choose one of serviceManagedS3, customerManagedS3 storage. If not specified, the default is serviceManagedS3. This can't be changed after creation of the channel. — shape: {serviceManagedS3?: record, customerManagedS3?: record}
+  --retention-period: record # How long, in days, message data is kept. — shape: {unlimited?: bool, numberOfDays?: int}
+  --tags: list # Metadata which can be used to manage the channel. — item shape: {key: string, value: string}
+]: any -> record<channelName: string, channelArn: string, retentionPeriod: record<unlimited: bool, numberOfDays: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -308,7 +308,7 @@ export def "list-channels" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<channelSummaries: record, nextToken: record> {
+]: nothing -> record<channelSummaries: table<channelName: string, channelStorage: record, status: string, creationTime: string, lastUpdateTime: string, lastMessageArrivalTime: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -335,13 +335,13 @@ export def "list-channels" [
 #
 # POST /datasets
 # operationId: CreateDataset
-# --actions item shape: {actionName?: any, queryAction?: any, containerAction?: any}
-# --triggers item shape: {schedule?: any, dataset?: any}
-# --contentDeliveryRules item shape: {entryName?: any, destination: any}
-# --retentionPeriod shape: {unlimited?: any, numberOfDays?: any}
-# --versioningConfiguration shape: {unlimited?: any, maxVersions?: any}
-# --tags item shape: {key: any, value: any}
-# --lateDataRules item shape: {ruleName?: any, ruleConfiguration: any}
+# --actions item shape: {actionName?: string, queryAction?: record, containerAction?: record}
+# --triggers item shape: {schedule?: record, dataset?: record}
+# --contentDeliveryRules item shape: {entryName?: string, destination: record}
+# --retentionPeriod shape: {unlimited?: bool, numberOfDays?: int}
+# --versioningConfiguration shape: {unlimited?: bool, maxVersions?: int}
+# --tags item shape: {key: string, value: string}
+# --lateDataRules item shape: {ruleName?: string, ruleConfiguration: record}
 export def "create-dataset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -360,14 +360,14 @@ export def "create-dataset" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   dataset_name: string # The name of the dataset.
-  actions: list # A list of actions that create the dataset contents. — item shape: {actionName?: any, queryAction?: any, containerAction?: any}
-  --triggers: list # A list of triggers. A trigger causes dataset contents to be populated at a specified time interval or when another dataset's contents are created. The list of triggers can be empty or contain up to five DataSetTrigger objects. — item shape: {schedule?: any, dataset?: any}
-  --content-delivery-rules: list # When dataset contents are created, they are delivered to destinations specified here. — item shape: {entryName?: any, destination: any}
-  --retention-period: record # How long, in days, message data is kept. — shape: {unlimited?: any, numberOfDays?: any}
-  --versioning-configuration: record # Information about the versioning of dataset contents. — shape: {unlimited?: any, maxVersions?: any}
-  --tags: list # Metadata which can be used to manage the dataset. — item shape: {key: any, value: any}
-  --late-data-rules: list # A list of data rules that send notifications to CloudWatch, when data arrives late. To specify lateDataRules, the dataset must use a DeltaTimer (https://docs.aws.amazon.com/iotanalytics/latest/APIReference/API_DeltaTime.html) filter. — item shape: {ruleName?: any, ruleConfiguration: any}
-]: any -> record<datasetName: record, datasetArn: record, retentionPeriod: record<unlimited: record, numberOfDays: record>> {
+  actions: list # A list of actions that create the dataset contents. — item shape: {actionName?: string, queryAction?: record, containerAction?: record}
+  --triggers: list # A list of triggers. A trigger causes dataset contents to be populated at a specified time interval or when another dataset's contents are created. The list of triggers can be empty or contain up to five DataSetTrigger objects. — item shape: {schedule?: record, dataset?: record}
+  --content-delivery-rules: list # When dataset contents are created, they are delivered to destinations specified here. — item shape: {entryName?: string, destination: record}
+  --retention-period: record # How long, in days, message data is kept. — shape: {unlimited?: bool, numberOfDays?: int}
+  --versioning-configuration: record # Information about the versioning of dataset contents. — shape: {unlimited?: bool, maxVersions?: int}
+  --tags: list # Metadata which can be used to manage the dataset. — item shape: {key: string, value: string}
+  --late-data-rules: list # A list of data rules that send notifications to CloudWatch, when data arrives late. To specify lateDataRules, the dataset must use a DeltaTimer (https://docs.aws.amazon.com/iotanalytics/latest/APIReference/API_DeltaTime.html) filter. — item shape: {ruleName?: string, ruleConfiguration: record}
+]: any -> record<datasetName: string, datasetArn: string, retentionPeriod: record<unlimited: bool, numberOfDays: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -415,7 +415,7 @@ export def "list-datasets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<datasetSummaries: record, nextToken: record> {
+]: nothing -> record<datasetSummaries: table<datasetName: string, status: string, creationTime: string, lastUpdateTime: string, triggers: list, actions: list>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -461,7 +461,7 @@ export def "create-dataset-content" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --version-id: string # The version ID of the dataset content. To specify versionId for a dataset content, the dataset must use a DeltaTimer (https://docs.aws.amazon.com/iotanalytics/latest/APIReference/API_DeltaTime.html) filter.
-]: any -> record<versionId: record> {
+]: any -> record<versionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -557,7 +557,7 @@ export def "get-dataset-content" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<entries: record, timestamp: record, status: record<state: record, reason: record>> {
+]: nothing -> record<entries: table<entryName: string, dataURI: string>, timestamp: string, status: record<state: string, reason: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dataset_name | is-empty) { error make --unspanned { msg: "path parameter 'datasetName' must be non-empty" } }
@@ -585,11 +585,11 @@ export def "get-dataset-content" [
 #
 # POST /datastores
 # operationId: CreateDatastore
-# --datastoreStorage shape: {serviceManagedS3?: any, customerManagedS3?: any, iotSiteWiseMultiLayerStorage?: any}
-# --retentionPeriod shape: {unlimited?: any, numberOfDays?: any}
-# --tags item shape: {key: any, value: any}
-# --fileFormatConfiguration shape: {jsonConfiguration?: any, parquetConfiguration?: any}
-# --datastorePartitions shape: {partitions?: any}
+# --datastoreStorage shape: {serviceManagedS3?: record, customerManagedS3?: record, iotSiteWiseMultiLayerStorage?: record}
+# --retentionPeriod shape: {unlimited?: bool, numberOfDays?: int}
+# --tags item shape: {key: string, value: string}
+# --fileFormatConfiguration shape: {jsonConfiguration?: record, parquetConfiguration?: record}
+# --datastorePartitions shape: {partitions?: list}
 export def "create-datastore" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -608,12 +608,12 @@ export def "create-datastore" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   datastore_name: string # The name of the data store.
-  --datastore-storage: record # Where data in a data store is stored.. You can choose serviceManagedS3 storage, customerManagedS3 storage, or iotSiteWiseMultiLayerStorage storage. The default is serviceManagedS3. You can't change the choice of Amazon S3 storage after your data store is created. — shape: {serviceManagedS3?: any, customerManagedS3?: any, iotSiteWiseMultiLayerStorage?: any}
-  --retention-period: record # How long, in days, message data is kept. — shape: {unlimited?: any, numberOfDays?: any}
-  --tags: list # Metadata which can be used to manage the data store. — item shape: {key: any, value: any}
-  --file-format-configuration: record # Contains the configuration information of file formats. IoT Analytics data stores support JSON and Parquet (https://parquet.apache.org/). The default file format is JSON. You can specify only one format. You can't change the file format after you create the data store. — shape: {jsonConfiguration?: any, parquetConfiguration?: any}
-  --datastore-partitions: record # Contains information about the partition dimensions in a data store. — shape: {partitions?: any}
-]: any -> record<datastoreName: record, datastoreArn: record, retentionPeriod: record<unlimited: record, numberOfDays: record>> {
+  --datastore-storage: record # Where data in a data store is stored.. You can choose serviceManagedS3 storage, customerManagedS3 storage, or iotSiteWiseMultiLayerStorage storage. The default is serviceManagedS3. You can't change the choice of Amazon S3 storage after your data store is created. — shape: {serviceManagedS3?: record, customerManagedS3?: record, iotSiteWiseMultiLayerStorage?: record}
+  --retention-period: record # How long, in days, message data is kept. — shape: {unlimited?: bool, numberOfDays?: int}
+  --tags: list # Metadata which can be used to manage the data store. — item shape: {key: string, value: string}
+  --file-format-configuration: record # Contains the configuration information of file formats. IoT Analytics data stores support JSON and Parquet (https://parquet.apache.org/). The default file format is JSON. You can specify only one format. You can't change the file format after you create the data store. — shape: {jsonConfiguration?: record, parquetConfiguration?: record}
+  --datastore-partitions: record # Contains information about the partition dimensions in a data store. — shape: {partitions?: list}
+]: any -> record<datastoreName: string, datastoreArn: string, retentionPeriod: record<unlimited: bool, numberOfDays: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -661,7 +661,7 @@ export def "list-datastores" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<datastoreSummaries: record, nextToken: record> {
+]: nothing -> record<datastoreSummaries: table<datastoreName: string, datastoreStorage: record, status: string, creationTime: string, lastUpdateTime: string, lastMessageArrivalTime: string, fileFormatType: string, datastorePartitions: record>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -688,8 +688,8 @@ export def "list-datastores" [
 #
 # POST /pipelines
 # operationId: CreatePipeline
-# --pipelineActivities item shape: {channel?: any, lambda?: any, datastore?: any, addAttributes?: any, removeAttributes?: any, selectAttributes?: any, filter?: any, math?: any, deviceRegistryEnrich?: any, deviceShadowEnrich?: any}
-# --tags item shape: {key: any, value: any}
+# --pipelineActivities item shape: {channel?: record, lambda?: record, datastore?: record, addAttributes?: record, removeAttributes?: record, selectAttributes?: record, filter?: record, math?: record, deviceRegistryEnrich?: record, deviceShadowEnrich?: record}
+# --tags item shape: {key: string, value: string}
 export def "create-pipeline" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -708,9 +708,9 @@ export def "create-pipeline" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   pipeline_name: string # The name of the pipeline.
-  pipeline_activities: list # A list of PipelineActivity objects. Activities perform transformations on your messages, such as removing, renaming or adding message attributes; filtering messages based on attribute values; invoking your Lambda unctions on messages for advanced processing; or performing mathematical transformations to normalize device data. The list can be 2-25 PipelineActivity objects and must contain both a channel and a datastore activity. Each entry in the list must contain only one activity. For example: pipelineActivities = [ { "channel": { ... } }, { "lambda": { ... } }, ... ] — item shape: {channel?: any, lambda?: any, datastore?: any, addAttributes?: any, removeAttributes?: any, selectAttributes?: any, filter?: any, math?: any, deviceRegistryEnrich?: any, deviceShadowEnrich?: any}
-  --tags: list # Metadata which can be used to manage the pipeline. — item shape: {key: any, value: any}
-]: any -> record<pipelineName: record, pipelineArn: record> {
+  pipeline_activities: list # A list of PipelineActivity objects. Activities perform transformations on your messages, such as removing, renaming or adding message attributes; filtering messages based on attribute values; invoking your Lambda unctions on messages for advanced processing; or performing mathematical transformations to normalize device data. The list can be 2-25 PipelineActivity objects and must contain both a channel and a datastore activity. Each entry in the list must contain only one activity. For example: pipelineActivities = [ { "channel": { ... } }, { "lambda": { ... } }, ... ] — item shape: {channel?: record, lambda?: record, datastore?: record, addAttributes?: record, removeAttributes?: record, selectAttributes?: record, filter?: record, math?: record, deviceRegistryEnrich?: record, deviceShadowEnrich?: record}
+  --tags: list # Metadata which can be used to manage the pipeline. — item shape: {key: string, value: string}
+]: any -> record<pipelineName: string, pipelineArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -758,7 +758,7 @@ export def "list-pipelines" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<pipelineSummaries: record, nextToken: record> {
+]: nothing -> record<pipelineSummaries: table<pipelineName: string, reprocessingSummaries: list, creationTime: string, lastUpdateTime: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -849,7 +849,7 @@ export def "describe-channel" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<channel: record<name: record, storage: record<serviceManagedS3: record, customerManagedS3: record>, arn: record, status: record, retentionPeriod: record<unlimited: record, numberOfDays: record>, creationTime: record, lastUpdateTime: record, lastMessageArrivalTime: record>, statistics: record<size: record<estimatedSizeInBytes: record, estimatedOn: record>>> {
+]: nothing -> record<channel: record<name: string, storage: record<serviceManagedS3: record, customerManagedS3: record>, arn: string, status: string, retentionPeriod: record<unlimited: bool, numberOfDays: int>, creationTime: string, lastUpdateTime: string, lastMessageArrivalTime: string>, statistics: record<size: record<estimatedSizeInBytes: float, estimatedOn: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_name | is-empty) { error make --unspanned { msg: "path parameter 'channelName' must be non-empty" } }
@@ -877,8 +877,8 @@ export def "describe-channel" [
 #
 # PUT /channels/{channelName}
 # operationId: UpdateChannel
-# --channelStorage shape: {serviceManagedS3?: any, customerManagedS3?: any}
-# --retentionPeriod shape: {unlimited?: any, numberOfDays?: any}
+# --channelStorage shape: {serviceManagedS3?: record, customerManagedS3?: record}
+# --retentionPeriod shape: {unlimited?: bool, numberOfDays?: int}
 export def "update-channel" [
   channel_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -897,8 +897,8 @@ export def "update-channel" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --channel-storage: record # Where channel data is stored. You may choose one of serviceManagedS3, customerManagedS3 storage. If not specified, the default is serviceManagedS3. This can't be changed after creation of the channel. — shape: {serviceManagedS3?: any, customerManagedS3?: any}
-  --retention-period: record # How long, in days, message data is kept. — shape: {unlimited?: any, numberOfDays?: any}
+  --channel-storage: record # Where channel data is stored. You may choose one of serviceManagedS3, customerManagedS3 storage. If not specified, the default is serviceManagedS3. This can't be changed after creation of the channel. — shape: {serviceManagedS3?: record, customerManagedS3?: record}
+  --retention-period: record # How long, in days, message data is kept. — shape: {unlimited?: bool, numberOfDays?: int}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -992,7 +992,7 @@ export def "describe-dataset" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<dataset: record<name: record, arn: record, actions: record, triggers: record, contentDeliveryRules: record, status: record, creationTime: record, lastUpdateTime: record, retentionPeriod: record<unlimited: record, numberOfDays: record>, versioningConfiguration: record<unlimited: record, maxVersions: record>, lateDataRules: record>> {
+]: nothing -> record<dataset: record<name: string, arn: string, actions: list<record>, triggers: list<record>, contentDeliveryRules: list<record>, status: string, creationTime: string, lastUpdateTime: string, retentionPeriod: record<unlimited: bool, numberOfDays: int>, versioningConfiguration: record<unlimited: bool, maxVersions: int>, lateDataRules: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dataset_name | is-empty) { error make --unspanned { msg: "path parameter 'datasetName' must be non-empty" } }
@@ -1019,12 +1019,12 @@ export def "describe-dataset" [
 #
 # PUT /datasets/{datasetName}
 # operationId: UpdateDataset
-# --actions item shape: {actionName?: any, queryAction?: any, containerAction?: any}
-# --triggers item shape: {schedule?: any, dataset?: any}
-# --contentDeliveryRules item shape: {entryName?: any, destination: any}
-# --retentionPeriod shape: {unlimited?: any, numberOfDays?: any}
-# --versioningConfiguration shape: {unlimited?: any, maxVersions?: any}
-# --lateDataRules item shape: {ruleName?: any, ruleConfiguration: any}
+# --actions item shape: {actionName?: string, queryAction?: record, containerAction?: record}
+# --triggers item shape: {schedule?: record, dataset?: record}
+# --contentDeliveryRules item shape: {entryName?: string, destination: record}
+# --retentionPeriod shape: {unlimited?: bool, numberOfDays?: int}
+# --versioningConfiguration shape: {unlimited?: bool, maxVersions?: int}
+# --lateDataRules item shape: {ruleName?: string, ruleConfiguration: record}
 export def "update-dataset" [
   dataset_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1043,12 +1043,12 @@ export def "update-dataset" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  actions: list # A list of DatasetAction objects. — item shape: {actionName?: any, queryAction?: any, containerAction?: any}
-  --triggers: list # A list of DatasetTrigger objects. The list can be empty or can contain up to five DatasetTrigger objects. — item shape: {schedule?: any, dataset?: any}
-  --content-delivery-rules: list # When dataset contents are created, they are delivered to destinations specified here. — item shape: {entryName?: any, destination: any}
-  --retention-period: record # How long, in days, message data is kept. — shape: {unlimited?: any, numberOfDays?: any}
-  --versioning-configuration: record # Information about the versioning of dataset contents. — shape: {unlimited?: any, maxVersions?: any}
-  --late-data-rules: list # A list of data rules that send notifications to CloudWatch, when data arrives late. To specify lateDataRules, the dataset must use a DeltaTimer (https://docs.aws.amazon.com/iotanalytics/latest/APIReference/API_DeltaTime.html) filter. — item shape: {ruleName?: any, ruleConfiguration: any}
+  actions: list # A list of DatasetAction objects. — item shape: {actionName?: string, queryAction?: record, containerAction?: record}
+  --triggers: list # A list of DatasetTrigger objects. The list can be empty or can contain up to five DatasetTrigger objects. — item shape: {schedule?: record, dataset?: record}
+  --content-delivery-rules: list # When dataset contents are created, they are delivered to destinations specified here. — item shape: {entryName?: string, destination: record}
+  --retention-period: record # How long, in days, message data is kept. — shape: {unlimited?: bool, numberOfDays?: int}
+  --versioning-configuration: record # Information about the versioning of dataset contents. — shape: {unlimited?: bool, maxVersions?: int}
+  --late-data-rules: list # A list of data rules that send notifications to CloudWatch, when data arrives late. To specify lateDataRules, the dataset must use a DeltaTimer (https://docs.aws.amazon.com/iotanalytics/latest/APIReference/API_DeltaTime.html) filter. — item shape: {ruleName?: string, ruleConfiguration: record}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1143,7 +1143,7 @@ export def "describe-datastore" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<datastore: record<name: record, storage: record<serviceManagedS3: record, customerManagedS3: record, iotSiteWiseMultiLayerStorage: record>, arn: record, status: record, retentionPeriod: record<unlimited: record, numberOfDays: record>, creationTime: record, lastUpdateTime: record, lastMessageArrivalTime: record, fileFormatConfiguration: record<jsonConfiguration: record, parquetConfiguration: record>, datastorePartitions: record<partitions: record>>, statistics: record<size: record<estimatedSizeInBytes: record, estimatedOn: record>>> {
+]: nothing -> record<datastore: record<name: string, storage: record<serviceManagedS3: record, customerManagedS3: record, iotSiteWiseMultiLayerStorage: record>, arn: string, status: string, retentionPeriod: record<unlimited: bool, numberOfDays: int>, creationTime: string, lastUpdateTime: string, lastMessageArrivalTime: string, fileFormatConfiguration: record<jsonConfiguration: record, parquetConfiguration: record>, datastorePartitions: record<partitions: list>>, statistics: record<size: record<estimatedSizeInBytes: float, estimatedOn: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($datastore_name | is-empty) { error make --unspanned { msg: "path parameter 'datastoreName' must be non-empty" } }
@@ -1171,9 +1171,9 @@ export def "describe-datastore" [
 #
 # PUT /datastores/{datastoreName}
 # operationId: UpdateDatastore
-# --retentionPeriod shape: {unlimited?: any, numberOfDays?: any}
-# --datastoreStorage shape: {serviceManagedS3?: any, customerManagedS3?: any, iotSiteWiseMultiLayerStorage?: any}
-# --fileFormatConfiguration shape: {jsonConfiguration?: any, parquetConfiguration?: any}
+# --retentionPeriod shape: {unlimited?: bool, numberOfDays?: int}
+# --datastoreStorage shape: {serviceManagedS3?: record, customerManagedS3?: record, iotSiteWiseMultiLayerStorage?: record}
+# --fileFormatConfiguration shape: {jsonConfiguration?: record, parquetConfiguration?: record}
 export def "update-datastore" [
   datastore_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1192,9 +1192,9 @@ export def "update-datastore" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --retention-period: record # How long, in days, message data is kept. — shape: {unlimited?: any, numberOfDays?: any}
-  --datastore-storage: record # Where data in a data store is stored.. You can choose serviceManagedS3 storage, customerManagedS3 storage, or iotSiteWiseMultiLayerStorage storage. The default is serviceManagedS3. You can't change the choice of Amazon S3 storage after your data store is created. — shape: {serviceManagedS3?: any, customerManagedS3?: any, iotSiteWiseMultiLayerStorage?: any}
-  --file-format-configuration: record # Contains the configuration information of file formats. IoT Analytics data stores support JSON and Parquet (https://parquet.apache.org/). The default file format is JSON. You can specify only one format. You can't change the file format after you create the data store. — shape: {jsonConfiguration?: any, parquetConfiguration?: any}
+  --retention-period: record # How long, in days, message data is kept. — shape: {unlimited?: bool, numberOfDays?: int}
+  --datastore-storage: record # Where data in a data store is stored.. You can choose serviceManagedS3 storage, customerManagedS3 storage, or iotSiteWiseMultiLayerStorage storage. The default is serviceManagedS3. You can't change the choice of Amazon S3 storage after your data store is created. — shape: {serviceManagedS3?: record, customerManagedS3?: record, iotSiteWiseMultiLayerStorage?: record}
+  --file-format-configuration: record # Contains the configuration information of file formats. IoT Analytics data stores support JSON and Parquet (https://parquet.apache.org/). The default file format is JSON. You can specify only one format. You can't change the file format after you create the data store. — shape: {jsonConfiguration?: record, parquetConfiguration?: record}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1288,7 +1288,7 @@ export def "describe-pipeline" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<pipeline: record<name: record, arn: record, activities: record, reprocessingSummaries: record, creationTime: record, lastUpdateTime: record>> {
+]: nothing -> record<pipeline: record<name: string, arn: string, activities: list<record>, reprocessingSummaries: list<record>, creationTime: string, lastUpdateTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pipeline_name | is-empty) { error make --unspanned { msg: "path parameter 'pipelineName' must be non-empty" } }
@@ -1315,7 +1315,7 @@ export def "describe-pipeline" [
 #
 # PUT /pipelines/{pipelineName}
 # operationId: UpdatePipeline
-# --pipelineActivities item shape: {channel?: any, lambda?: any, datastore?: any, addAttributes?: any, removeAttributes?: any, selectAttributes?: any, filter?: any, math?: any, deviceRegistryEnrich?: any, deviceShadowEnrich?: any}
+# --pipelineActivities item shape: {channel?: record, lambda?: record, datastore?: record, addAttributes?: record, removeAttributes?: record, selectAttributes?: record, filter?: record, math?: record, deviceRegistryEnrich?: record, deviceShadowEnrich?: record}
 export def "update-pipeline" [
   pipeline_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1334,7 +1334,7 @@ export def "update-pipeline" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  pipeline_activities: list # A list of PipelineActivity objects. Activities perform transformations on your messages, such as removing, renaming or adding message attributes; filtering messages based on attribute values; invoking your Lambda functions on messages for advanced processing; or performing mathematical transformations to normalize device data. The list can be 2-25 PipelineActivity objects and must contain both a channel and a datastore activity. Each entry in the list must contain only one activity. For example: pipelineActivities = [ { "channel": { ... } }, { "lambda": { ... } }, ... ] — item shape: {channel?: any, lambda?: any, datastore?: any, addAttributes?: any, removeAttributes?: any, selectAttributes?: any, filter?: any, math?: any, deviceRegistryEnrich?: any, deviceShadowEnrich?: any}
+  pipeline_activities: list # A list of PipelineActivity objects. Activities perform transformations on your messages, such as removing, renaming or adding message attributes; filtering messages based on attribute values; invoking your Lambda functions on messages for advanced processing; or performing mathematical transformations to normalize device data. The list can be 2-25 PipelineActivity objects and must contain both a channel and a datastore activity. Each entry in the list must contain only one activity. For example: pipelineActivities = [ { "channel": { ... } }, { "lambda": { ... } }, ... ] — item shape: {channel?: record, lambda?: record, datastore?: record, addAttributes?: record, removeAttributes?: record, selectAttributes?: record, filter?: record, math?: record, deviceRegistryEnrich?: record, deviceShadowEnrich?: record}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1382,7 +1382,7 @@ export def "describe-logging-options" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<loggingOptions: record<roleArn: record, level: record, enabled: record>> {
+]: nothing -> record<loggingOptions: record<roleArn: string, level: string, enabled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/logging" $auth.query)
@@ -1408,7 +1408,7 @@ export def "describe-logging-options" [
 #
 # PUT /logging
 # operationId: PutLoggingOptions
-# --loggingOptions shape: {roleArn?: any, level?: any, enabled?: any}
+# --loggingOptions shape: {roleArn?: string, level?: "ERROR", enabled?: bool}
 export def "put-logging-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1426,7 +1426,7 @@ export def "put-logging-options" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  logging_options: record # Information about logging options. — shape: {roleArn?: any, level?: any, enabled?: any}
+  logging_options: record # Information about logging options. — shape: {roleArn?: string, level?: "ERROR", enabled?: bool}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1478,7 +1478,7 @@ export def "list-dataset-contents" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<datasetContentSummaries: record, nextToken: record> {
+]: nothing -> record<datasetContentSummaries: table<version: string, status: record, creationTime: string, scheduleTime: string, completionTime: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dataset_name | is-empty) { error make --unspanned { msg: "path parameter 'datasetName' must be non-empty" } }
@@ -1516,7 +1516,7 @@ export def "list-tags-for-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-arn: string # The ARN of the resource whose tags you want to list.
+  --resource-arn: string # The ARN of the resource whose tags you want to list. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1524,9 +1524,10 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<tags: record> {
+]: nothing -> record<tags: table<key: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'resourceArn' missing: pass --resource-arn" } }
   let qp = [(serialize-qp "resourceArn" $resource_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tags" $qp $auth.query)
   let accept_val = "application/json"
@@ -1551,7 +1552,7 @@ export def "list-tags-for-resource" [
 #
 # POST /tags
 # operationId: TagResource
-# --tags item shape: {key: any, value: any}
+# --tags item shape: {key: string, value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1562,7 +1563,7 @@ export def "tag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-arn: string # The ARN of the resource whose tags you want to modify.
+  --resource-arn: string # The ARN of the resource whose tags you want to modify. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1570,11 +1571,12 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  tags: list # The new or modified tags for the resource. — item shape: {key: any, value: any}
+  tags: list # The new or modified tags for the resource. — item shape: {key: string, value: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'resourceArn' missing: pass --resource-arn" } }
   let qp = [(serialize-qp "resourceArn" $resource_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tags" $qp $auth.query)
   let req_body = {"tags": $tags} | compact
@@ -1601,7 +1603,7 @@ export def "tag-resource" [
 #
 # POST /pipelineactivities/run
 # operationId: RunPipelineActivity
-# --pipelineActivity shape: {channel?: any, lambda?: any, datastore?: any, addAttributes?: any, removeAttributes?: any, selectAttributes?: any, filter?: any, math?: any, deviceRegistryEnrich?: any, deviceShadowEnrich?: any}
+# --pipelineActivity shape: {channel?: record, lambda?: record, datastore?: record, addAttributes?: record, removeAttributes?: record, selectAttributes?: record, filter?: record, math?: record, deviceRegistryEnrich?: record, deviceShadowEnrich?: record}
 export def "run-pipeline-activity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1619,9 +1621,9 @@ export def "run-pipeline-activity" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  pipeline_activity: record # An activity that performs a transformation on a message. — shape: {channel?: any, lambda?: any, datastore?: any, addAttributes?: any, removeAttributes?: any, selectAttributes?: any, filter?: any, math?: any, deviceRegistryEnrich?: any, deviceShadowEnrich?: any}
+  pipeline_activity: record # An activity that performs a transformation on a message. — shape: {channel?: record, lambda?: record, datastore?: record, addAttributes?: record, removeAttributes?: record, selectAttributes?: record, filter?: record, math?: record, deviceRegistryEnrich?: record, deviceShadowEnrich?: record}
   payloads: list<string> # The sample message payloads on which the pipeline activity is run.
-]: any -> record<payloads: record, logResult: record> {
+]: any -> record<payloads: list<string>, logResult: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1671,7 +1673,7 @@ export def "sample-channel-data" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<payloads: record> {
+]: nothing -> record<payloads: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_name | is-empty) { error make --unspanned { msg: "path parameter 'channelName' must be non-empty" } }
@@ -1699,7 +1701,7 @@ export def "sample-channel-data" [
 #
 # POST /pipelines/{pipelineName}/reprocessing
 # operationId: StartPipelineReprocessing
-# --channelMessages shape: {s3Paths?: any}
+# --channelMessages shape: {s3Paths?: list<string>}
 export def "start-pipeline-reprocessing" [
   pipeline_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1720,8 +1722,8 @@ export def "start-pipeline-reprocessing" [
   --x-amz-signed-headers: string
   --start-time: string # The start time (inclusive) of raw message data that is reprocessed. If you specify a value for the startTime parameter, you must not use the channelMessages object. (format: date-time)
   --end-time: string # The end time (exclusive) of raw message data that is reprocessed. If you specify a value for the endTime parameter, you must not use the channelMessages object. (format: date-time)
-  --channel-messages: record # Specifies one or more sets of channel messages. — shape: {s3Paths?: any}
-]: any -> record<reprocessingId: record> {
+  --channel-messages: record # Specifies one or more sets of channel messages. — shape: {s3Paths?: list<string>}
+]: any -> record<reprocessingId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1761,8 +1763,8 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-arn: string # The ARN of the resource whose tags you want to remove.
-  --tag-keys: list # The keys of those tags which you want to remove.
+  --resource-arn: string # The ARN of the resource whose tags you want to remove. (required)
+  --tag-keys: list # The keys of those tags which you want to remove. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1773,6 +1775,8 @@ export def "untag-resource" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'resourceArn' missing: pass --resource-arn" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "resourceArn" $resource_arn "scalar") (serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/tags" $qp $auth.query)
   let accept_val = "application/json"

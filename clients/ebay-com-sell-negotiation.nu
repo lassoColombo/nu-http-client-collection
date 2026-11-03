@@ -1,4 +1,4 @@
-# Auto-generated client for Negotiation API vv1.1.0
+# Auto-generated client for Negotiation API v1.1.0
 # Source: https://api.apis.guru/v2/specs/ebay.com/sell-negotiation/v1.1.0/openapi.json
 # Auth: --token flag or $env.NEGOTIATION_API_TOKEN
 
@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -140,10 +140,11 @@ export def "find-eligible-items" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: string # This query parameter specifies the maximum number of items to return from the result set on a page in the paginated response. Minimum: 1 Maximum: 200 Default: 10
   --offset: string # This query parameter specifies the number of results to skip in the result set before returning the first result in the paginated response. Combine offset with the limit query parameter to control the items returned in the response. For example, if you supply an offset of 0 and a limit of 10, the first page of the response contains the first 10 results from the complete list of items retrieved by the call. If offset is 10 and limit is 20, the first page of the response contains items 11-30 from the complete result set. Default: 0
-  --x-ebay-c-marketplace-id: string # The eBay marketplace on which you want to search for eligible listings. For a complete list of supported marketplaces, see Negotiation API requirements and restrictions.
+  --x-ebay-c-marketplace-id: string # The eBay marketplace on which you want to search for eligible listings. For a complete list of supported marketplaces, see Negotiation API requirements and restrictions. (required)
 ]: nothing -> record<eligibleItems: table<listingId: string>, href: string, limit: int, next: string, offset: int, prev: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_ebay_c_marketplace_id == null) { error make --unspanned { msg: "required header parameter 'X-EBAY-C-MARKETPLACE-ID' missing: pass --x-ebay-c-marketplace-id" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/find_eligible_items" $qp $auth.query)
   let accept_val = "application/json"
@@ -180,7 +181,7 @@ export def "send-offer-to-interested-buyers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-ebay-c-marketplace-id: string # The eBay marketplace on which your listings with "eligible" buyers appear. For a complete list of supported marketplaces, see Negotiation API requirements and restrictions.
+  --x-ebay-c-marketplace-id: string # The eBay marketplace on which your listings with "eligible" buyers appear. For a complete list of supported marketplaces, see Negotiation API requirements and restrictions. (required)
   --allow-counter-offer: oneof<nothing, bool> # If set to true, the buyer is allowed to make a counter-offer to the seller's offer. Note: Currently, you must set this field to false; counter-offers are not supported in this release. Default: false
   --message: string # A seller-defined message related to the offer being made. This message is sent to the list of "interested" buyers. To increase the conversion rate of the offers a seller makes to buyers, eBay recommends you always add a customized message to your offers. Maximum length: 2,000 characters
   --offer-duration: record # A complex type that specifies a period of time using a specified time-measurement unit. — shape: {unit?: string, value?: int}
@@ -189,6 +190,7 @@ export def "send-offer-to-interested-buyers" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_ebay_c_marketplace_id == null) { error make --unspanned { msg: "required header parameter 'X-EBAY-C-MARKETPLACE-ID' missing: pass --x-ebay-c-marketplace-id" } }
   let full_url = (build-url $base "/send_offer_to_interested_buyers" $auth.query)
   let req_body = {"allowCounterOffer": $allow_counter_offer, "message": $message, "offerDuration": $offer_duration, "offeredItems": $offered_items} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

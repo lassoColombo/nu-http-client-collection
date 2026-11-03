@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -1444,6 +1444,7 @@ export def "create-hosted-numbers-hosted-number-order" [
   let full_url = (build-url $base "/HostedNumbers/HostedNumberOrders" $auth.query)
   let req_body = {"AccountSid": $account_sid, "AddressSid": $address_sid, "CcEmails": $cc_emails, "Email": $email, "FriendlyName": $friendly_name, "PhoneNumber": $phone_number, "SmsApplicationSid": $sms_application_sid, "SmsCapability": $sms_capability, "SmsFallbackMethod": $sms_fallback_method, "SmsFallbackUrl": $sms_fallback_url, "SmsMethod": $sms_method, "SmsUrl": $sms_url, "StatusCallbackMethod": $status_callback_method, "StatusCallbackUrl": $status_callback_url, "UniqueName": $unique_name, "VerificationDocumentSid": $verification_document_sid, "VerificationType": $verification_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "SmsCapability") == null) { error make --unspanned { msg: "required body field 'SmsCapability' missing: pass --sms-capability or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
@@ -1893,6 +1894,9 @@ export def "update-sync-document-permission" [
   let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), document_sid: (encode-path-segment $document_sid), identity: (encode-path-segment $identity)} | format pattern "/Sync/Services/{service_sid}/Documents/{document_sid}/Permissions/{identity}") $auth.query)
   let req_body = {"Manage": $manage, "Read": $read, "Write": $write} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "Manage") == null) { error make --unspanned { msg: "required body field 'Manage' missing: pass --manage or pipe a record" } }
+  if (($req_body | get -o "Read") == null) { error make --unspanned { msg: "required body field 'Read' missing: pass --read or pipe a record" } }
+  if (($req_body | get -o "Write") == null) { error make --unspanned { msg: "required body field 'Write' missing: pass --write or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
@@ -2124,7 +2128,7 @@ export def "list-sync-sync-list-item" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --order: string@order-completer
-  --qp-from: string
+  --from: string
   --bounds: string@bounds-completer
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
@@ -2134,14 +2138,14 @@ export def "list-sync-sync-list-item" [
   let base = ($base_url | default "https://preview.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
   if ($list_sid | is-empty) { error make --unspanned { msg: "path parameter 'ListSid' must be non-empty" } }
-  let qp = [(serialize-qp "Order" $order "scalar") (serialize-qp "From" $qp_from "scalar") (serialize-qp "Bounds" $bounds "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Order" $order "scalar") (serialize-qp "From" $from "scalar") (serialize-qp "Bounds" $bounds "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), list_sid: (encode-path-segment $list_sid)} | format pattern "/Sync/Services/{service_sid}/Lists/{list_sid}/Items") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"Order": $order, "From": $qp_from, "Bounds": $bounds, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
+    query: ({"Order": $order, "From": $from, "Bounds": $bounds, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2474,6 +2478,9 @@ export def "update-sync-sync-list-permission" [
   let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), list_sid: (encode-path-segment $list_sid), identity: (encode-path-segment $identity)} | format pattern "/Sync/Services/{service_sid}/Lists/{list_sid}/Permissions/{identity}") $auth.query)
   let req_body = {"Manage": $manage, "Read": $read, "Write": $write} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "Manage") == null) { error make --unspanned { msg: "required body field 'Manage' missing: pass --manage or pipe a record" } }
+  if (($req_body | get -o "Read") == null) { error make --unspanned { msg: "required body field 'Read' missing: pass --read or pipe a record" } }
+  if (($req_body | get -o "Write") == null) { error make --unspanned { msg: "required body field 'Write' missing: pass --write or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
@@ -2660,7 +2667,7 @@ export def "list-sync-sync-map-item" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --order: string@order-completer
-  --qp-from: string
+  --from: string
   --bounds: string@bounds-completer
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
@@ -2670,14 +2677,14 @@ export def "list-sync-sync-map-item" [
   let base = ($base_url | default "https://preview.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
   if ($map_sid | is-empty) { error make --unspanned { msg: "path parameter 'MapSid' must be non-empty" } }
-  let qp = [(serialize-qp "Order" $order "scalar") (serialize-qp "From" $qp_from "scalar") (serialize-qp "Bounds" $bounds "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Order" $order "scalar") (serialize-qp "From" $from "scalar") (serialize-qp "Bounds" $bounds "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), map_sid: (encode-path-segment $map_sid)} | format pattern "/Sync/Services/{service_sid}/Maps/{map_sid}/Items") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"Order": $order, "From": $qp_from, "Bounds": $bounds, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
+    query: ({"Order": $order, "From": $from, "Bounds": $bounds, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3011,6 +3018,9 @@ export def "update-sync-sync-map-permission" [
   let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), map_sid: (encode-path-segment $map_sid), identity: (encode-path-segment $identity)} | format pattern "/Sync/Services/{service_sid}/Maps/{map_sid}/Permissions/{identity}") $auth.query)
   let req_body = {"Manage": $manage, "Read": $read, "Write": $write} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "Manage") == null) { error make --unspanned { msg: "required body field 'Manage' missing: pass --manage or pipe a record" } }
+  if (($req_body | get -o "Read") == null) { error make --unspanned { msg: "required body field 'Read' missing: pass --read or pipe a record" } }
+  if (($req_body | get -o "Write") == null) { error make --unspanned { msg: "required body field 'Write' missing: pass --write or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
@@ -3430,6 +3440,7 @@ export def "create-marketplace-installed-add-on" [
   let full_url = (build-url $base "/marketplace/InstalledAddOns" $auth.query)
   let req_body = {"AcceptTermsOfService": $accept_terms_of_service, "AvailableAddOnSid": $available_add_on_sid, "Configuration": $configuration, "UniqueName": $unique_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "AcceptTermsOfService") == null) { error make --unspanned { msg: "required body field 'AcceptTermsOfService' missing: pass --accept-terms-of-service or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
@@ -3551,6 +3562,7 @@ export def "update-marketplace-installed-add-on-extension" [
   let full_url = (build-url $base ({installed_add_on_sid: (encode-path-segment $installed_add_on_sid), sid: (encode-path-segment $sid)} | format pattern "/marketplace/InstalledAddOns/{installed_add_on_sid}/Extensions/{sid}") $auth.query)
   let req_body = {"Enabled": $enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "Enabled") == null) { error make --unspanned { msg: "required body field 'Enabled' missing: pass --enabled or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })

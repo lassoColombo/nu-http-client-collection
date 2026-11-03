@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -99,11 +99,16 @@ def auth-scheme-completer [] { ["bearer"] }
 def return-consumed-capacity-completer [] { ["INDEXES" "NONE" "TOTAL"] }
 def x-amz-target-completer [] { ["DynamoDB_20120810.BatchExecuteStatement"] }
 def x-amz-target-completer-1 [] { ["DynamoDB_20120810.BatchGetItem"] }
+def return-item-collection-metrics-completer [] { ["NONE" "SIZE"] }
 def x-amz-target-completer-2 [] { ["DynamoDB_20120810.BatchWriteItem"] }
 def x-amz-target-completer-3 [] { ["DynamoDB_20120810.CreateBackup"] }
 def x-amz-target-completer-4 [] { ["DynamoDB_20120810.CreateGlobalTable"] }
+def billing-mode-completer [] { ["PAY_PER_REQUEST" "PROVISIONED"] }
+def table-class-completer [] { ["STANDARD" "STANDARD_INFREQUENT_ACCESS"] }
 def x-amz-target-completer-5 [] { ["DynamoDB_20120810.CreateTable"] }
 def x-amz-target-completer-6 [] { ["DynamoDB_20120810.DeleteBackup"] }
+def conditional-operator-completer [] { ["AND" "OR"] }
+def return-values-completer [] { ["ALL_NEW" "ALL_OLD" "NONE" "UPDATED_NEW" "UPDATED_OLD"] }
 def x-amz-target-completer-7 [] { ["DynamoDB_20120810.DeleteItem"] }
 def x-amz-target-completer-8 [] { ["DynamoDB_20120810.DeleteTable"] }
 def x-amz-target-completer-9 [] { ["DynamoDB_20120810.DescribeBackup"] }
@@ -123,9 +128,14 @@ def x-amz-target-completer-22 [] { ["DynamoDB_20120810.DisableKinesisStreamingDe
 def x-amz-target-completer-23 [] { ["DynamoDB_20120810.EnableKinesisStreamingDestination"] }
 def x-amz-target-completer-24 [] { ["DynamoDB_20120810.ExecuteStatement"] }
 def x-amz-target-completer-25 [] { ["DynamoDB_20120810.ExecuteTransaction"] }
+def s3-sse-algorithm-completer [] { ["AES256" "KMS"] }
+def export-format-completer [] { ["DYNAMODB_JSON" "ION"] }
 def x-amz-target-completer-26 [] { ["DynamoDB_20120810.ExportTableToPointInTime"] }
 def x-amz-target-completer-27 [] { ["DynamoDB_20120810.GetItem"] }
+def input-format-completer [] { ["CSV" "DYNAMODB_JSON" "ION"] }
+def input-compression-type-completer [] { ["GZIP" "NONE" "ZSTD"] }
 def x-amz-target-completer-28 [] { ["DynamoDB_20120810.ImportTable"] }
+def backup-type-completer [] { ["ALL" "AWS_BACKUP" "SYSTEM" "USER"] }
 def x-amz-target-completer-29 [] { ["DynamoDB_20120810.ListBackups"] }
 def x-amz-target-completer-30 [] { ["DynamoDB_20120810.ListContributorInsights"] }
 def x-amz-target-completer-31 [] { ["DynamoDB_20120810.ListExports"] }
@@ -134,7 +144,9 @@ def x-amz-target-completer-33 [] { ["DynamoDB_20120810.ListImports"] }
 def x-amz-target-completer-34 [] { ["DynamoDB_20120810.ListTables"] }
 def x-amz-target-completer-35 [] { ["DynamoDB_20120810.ListTagsOfResource"] }
 def x-amz-target-completer-36 [] { ["DynamoDB_20120810.PutItem"] }
+def select-completer [] { ["ALL_ATTRIBUTES" "ALL_PROJECTED_ATTRIBUTES" "COUNT" "SPECIFIC_ATTRIBUTES"] }
 def x-amz-target-completer-37 [] { ["DynamoDB_20120810.Query"] }
+def billing-mode-override-completer [] { ["PAY_PER_REQUEST" "PROVISIONED"] }
 def x-amz-target-completer-38 [] { ["DynamoDB_20120810.RestoreTableFromBackup"] }
 def x-amz-target-completer-39 [] { ["DynamoDB_20120810.RestoreTableToPointInTime"] }
 def x-amz-target-completer-40 [] { ["DynamoDB_20120810.Scan"] }
@@ -143,8 +155,10 @@ def x-amz-target-completer-42 [] { ["DynamoDB_20120810.TransactGetItems"] }
 def x-amz-target-completer-43 [] { ["DynamoDB_20120810.TransactWriteItems"] }
 def x-amz-target-completer-44 [] { ["DynamoDB_20120810.UntagResource"] }
 def x-amz-target-completer-45 [] { ["DynamoDB_20120810.UpdateContinuousBackups"] }
+def contributor-insights-action-completer [] { ["DISABLE" "ENABLE"] }
 def x-amz-target-completer-46 [] { ["DynamoDB_20120810.UpdateContributorInsights"] }
 def x-amz-target-completer-47 [] { ["DynamoDB_20120810.UpdateGlobalTable"] }
+def global-table-billing-mode-completer [] { ["PAY_PER_REQUEST" "PROVISIONED"] }
 def x-amz-target-completer-48 [] { ["DynamoDB_20120810.UpdateGlobalTableSettings"] }
 def x-amz-target-completer-49 [] { ["DynamoDB_20120810.UpdateItem"] }
 def x-amz-target-completer-50 [] { ["DynamoDB_20120810.UpdateTable"] }
@@ -178,6 +192,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: BatchExecuteStatement
+# --Statements item shape: {Statement: string, Parameters?: list, ConsistentRead?: bool}
 export def "batch-execute-statement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -195,13 +210,14 @@ export def "batch-execute-statement" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  statements: any
+  --x-amz-target: string@x-amz-target-completer # required
+  statements: list # The list of PartiQL statements representing the batch to run. — item shape: {Statement: string, Parameters?: list, ConsistentRead?: bool}
   --return-consumed-capacity: string@return-consumed-capacity-completer # Determines the level of detail about either provisioned or on-demand throughput consumption that is returned in the response: INDEXES - The response includes the aggregate ConsumedCapacity for the operation, together with ConsumedCapacity for each table and secondary index that was accessed. Note that some operations, such as GetItem and BatchGetItem, do not access any indexes at all. In these cases, specifying INDEXES will only return ConsumedCapacity information for table(s). TOTAL - The response includes only the aggregate ConsumedCapacity for the operation. NONE - No ConsumedCapacity details are included in the response.
-]: any -> record<Responses: record, ConsumedCapacity: record> {
+]: any -> record<Responses: table<Error: record, TableName: string, Item: record>, ConsumedCapacity: table<TableName: string, CapacityUnits: float, ReadCapacityUnits: float, WriteCapacityUnits: float, Table: record, LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.BatchExecuteStatement")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Statements": $statements, "ReturnConsumedCapacity": $return_consumed_capacity} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -245,17 +261,19 @@ export def "batch-get-item" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  --request-items-body: any #  (body field)
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  --request-items-body: record # A map of one or more table names and, for each table, a map that describes one or more items to retrieve from that table. Each table name can be used only once per BatchGetItem request. Each element in the map of items to retrieve consists of the following: ConsistentRead - If true, a strongly consistent read is used; if false (the default), an eventually consistent read is used. ExpressionAttributeNames - One or more substitution tokens for attribute names in the ProjectionExpression parameter. The following are some use cases for using ExpressionAttributeNames: To access an attribute whose name conflicts with a DynamoDB reserved word. To create a placeholder for repeating occurrences of an attribute name in an expression. To prevent special characters in an attribute name from being misinterpreted in an expression. Use the # character in an expression to dereference an attribute name. For example, consider the following attribute name: Percentile The name of this attribute conflicts with a reserved word, so it cannot be used directly in an expression. (For the complete list of reserved words, see Reserved Words (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/ReservedWords.html) in the Amazon DynamoDB Developer Guide). To work around this, you could specify the following for ExpressionAttributeNames: {"#P":"Percentile"} You could then use this substitution in an expression, as in this example: #P = :val Tokens that begin with the : character are expression attribute values, which are placeholders for the actual value at runtime. For more information about expression attribute names, see Accessing Item Attributes (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.AccessingItemAttributes.html) in the Amazon DynamoDB Developer Guide. Keys - An array of primary key attribute values that define specific items in the table. For each primary key, you must provide all of the key attributes. For example, with a simple primary key, you only need to provide the partition key value. For a composite key, you must provide both the partition key value and the sort key value. ProjectionExpression - A string that identifies one or more attributes to retrieve from the table. These attributes can include scalars, sets, or elements of a JSON document. The attributes in the expression must be separated by commas. If no attribute names are specified, then all attributes are returned. If any of the requested attributes are not found, they do not appear in the result. For more information, see Accessing Item Attributes (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.AccessingItemAttributes.html) in the Amazon DynamoDB Developer Guide. AttributesToGet - This is a legacy parameter. Use ProjectionExpression instead. For more information, see AttributesToGet (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/LegacyConditionalParameters.AttributesToGet.html) in the Amazon DynamoDB Developer Guide. (body field)
   --return-consumed-capacity: string@return-consumed-capacity-completer # Determines the level of detail about either provisioned or on-demand throughput consumption that is returned in the response: INDEXES - The response includes the aggregate ConsumedCapacity for the operation, together with ConsumedCapacity for each table and secondary index that was accessed. Note that some operations, such as GetItem and BatchGetItem, do not access any indexes at all. In these cases, specifying INDEXES will only return ConsumedCapacity information for table(s). TOTAL - The response includes only the aggregate ConsumedCapacity for the operation. NONE - No ConsumedCapacity details are included in the response.
-]: any -> record<Responses: record, UnprocessedKeys: record, ConsumedCapacity: record> {
+]: any -> record<Responses: record, UnprocessedKeys: record, ConsumedCapacity: table<TableName: string, CapacityUnits: float, ReadCapacityUnits: float, WriteCapacityUnits: float, Table: record, LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.BatchGetItem")
   let qp = [(serialize-qp "RequestItems" $request_items "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"RequestItems": $request_items_body, "ReturnConsumedCapacity": $return_consumed_capacity} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "RequestItems") == null) { error make --unspanned { msg: "required body field 'RequestItems' missing: pass --request-items-body or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
@@ -295,14 +313,15 @@ export def "batch-write-item" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  request_items: any
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  request_items: record # A map of one or more table names and, for each table, a list of operations to be performed (DeleteRequest or PutRequest). Each element in the map consists of the following: DeleteRequest - Perform a DeleteItem operation on the specified item. The item to be deleted is identified by a Key subelement: Key - A map of primary key attribute values that uniquely identify the item. Each entry in this map consists of an attribute name and an attribute value. For each primary key, you must provide all of the key attributes. For example, with a simple primary key, you only need to provide a value for the partition key. For a composite primary key, you must provide values for both the partition key and the sort key. PutRequest - Perform a PutItem operation on the specified item. The item to be put is identified by an Item subelement: Item - A map of attributes and their values. Each entry in this map consists of an attribute name and an attribute value. Attribute values must not be null; string and binary type attributes must have lengths greater than zero; and set type attributes must not be empty. Requests that contain empty values are rejected with a ValidationException exception. If you specify any attributes that are part of an index key, then the data types for those attributes must match those of the schema in the table's attribute definition.
   --return-consumed-capacity: string@return-consumed-capacity-completer # Determines the level of detail about either provisioned or on-demand throughput consumption that is returned in the response: INDEXES - The response includes the aggregate ConsumedCapacity for the operation, together with ConsumedCapacity for each table and secondary index that was accessed. Note that some operations, such as GetItem and BatchGetItem, do not access any indexes at all. In these cases, specifying INDEXES will only return ConsumedCapacity information for table(s). TOTAL - The response includes only the aggregate ConsumedCapacity for the operation. NONE - No ConsumedCapacity details are included in the response.
-  --return-item-collection-metrics: any
-]: any -> record<UnprocessedItems: record, ItemCollectionMetrics: record, ConsumedCapacity: record> {
+  --return-item-collection-metrics: string@return-item-collection-metrics-completer # Determines whether item collection metrics are returned. If set to SIZE, the response includes statistics about item collections, if any, that were modified during the operation are returned in the response. If set to NONE (the default), no statistics are returned.
+]: any -> record<UnprocessedItems: record, ItemCollectionMetrics: record, ConsumedCapacity: table<TableName: string, CapacityUnits: float, ReadCapacityUnits: float, WriteCapacityUnits: float, Table: record, LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.BatchWriteItem")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RequestItems": $request_items, "ReturnConsumedCapacity": $return_consumed_capacity, "ReturnItemCollectionMetrics": $return_item_collection_metrics} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -345,13 +364,14 @@ export def "create-backup" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  table_name: any
-  backup_name: any
-]: any -> record<BackupDetails: record<BackupArn: record, BackupName: record, BackupSizeBytes: record, BackupStatus: record, BackupType: record, BackupCreationDateTime: record, BackupExpiryDateTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  table_name: string # The name of the table.
+  backup_name: string # Specified name for the backup.
+]: any -> record<BackupDetails: record<BackupArn: string, BackupName: string, BackupSizeBytes: int, BackupStatus: string, BackupType: string, BackupCreationDateTime: string, BackupExpiryDateTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.CreateBackup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TableName": $table_name, "BackupName": $backup_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -377,6 +397,7 @@ export def "create-backup" [
 #
 # POST /
 # operationId: CreateGlobalTable
+# --ReplicationGroup item shape: {RegionName?: string}
 export def "create-global-table" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -394,13 +415,14 @@ export def "create-global-table" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  global_table_name: any
-  replication_group: any
-]: any -> record<GlobalTableDescription: record<ReplicationGroup: record, GlobalTableArn: record, CreationDateTime: record, GlobalTableStatus: record, GlobalTableName: record>> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  global_table_name: string # The global table name.
+  replication_group: list # The Regions where the global table needs to be created. — item shape: {RegionName?: string}
+]: any -> record<GlobalTableDescription: record<ReplicationGroup: list<record>, GlobalTableArn: string, CreationDateTime: string, GlobalTableStatus: string, GlobalTableName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.CreateGlobalTable")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GlobalTableName": $global_table_name, "ReplicationGroup": $replication_group} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -426,6 +448,14 @@ export def "create-global-table" [
 #
 # POST /
 # operationId: CreateTable
+# --AttributeDefinitions item shape: {AttributeName: string, AttributeType: "S"|"N"|"B"}
+# --KeySchema item shape: {AttributeName: string, KeyType: "HASH"|"RANGE"}
+# --LocalSecondaryIndexes item shape: {IndexName: string, KeySchema: list, Projection: record}
+# --GlobalSecondaryIndexes item shape: {IndexName: string, KeySchema: list, Projection: record, ProvisionedThroughput?: record}
+# --ProvisionedThroughput shape: {ReadCapacityUnits: int, WriteCapacityUnits: int}
+# --StreamSpecification shape: {StreamEnabled: bool, StreamViewType?: "NEW_IMAGE"|"OLD_IMAGE"|"NEW_AND_OLD_IMAGES"|"KEYS_ONLY"}
+# --SSESpecification shape: {Enabled?: bool, SSEType?: "AES256"|"KMS", KMSMasterKeyId?: string}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-table" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -443,23 +473,24 @@ export def "create-table" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  attribute_definitions: any
-  table_name: any
-  key_schema: any
-  --local-secondary-indexes: any
-  --global-secondary-indexes: any
-  --billing-mode: any
-  --provisioned-throughput: any
-  --stream-specification: any
-  --sse-specification: any
-  --tags: any
-  --table-class: any
-  --deletion-protection-enabled: any
-]: any -> record<TableDescription: record<AttributeDefinitions: record, TableName: record, KeySchema: record, TableStatus: record, CreationDateTime: record, ProvisionedThroughput: record<LastIncreaseDateTime: record, LastDecreaseDateTime: record, NumberOfDecreasesToday: record, ReadCapacityUnits: record, WriteCapacityUnits: record>, TableSizeBytes: record, ItemCount: record, TableArn: record, TableId: record, BillingModeSummary: record<BillingMode: record, LastUpdateToPayPerRequestDateTime: record>, LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record, StreamSpecification: record<StreamEnabled: record, StreamViewType: record>, LatestStreamLabel: record, LatestStreamArn: record, GlobalTableVersion: record, Replicas: record, RestoreSummary: record<SourceBackupArn: record, SourceTableArn: record, RestoreDateTime: record, RestoreInProgress: record>, SSEDescription: record<Status: record, SSEType: record, KMSMasterKeyArn: record, InaccessibleEncryptionDateTime: record>, ArchivalSummary: record<ArchivalDateTime: record, ArchivalReason: record, ArchivalBackupArn: record>, TableClassSummary: record<TableClass: record, LastUpdateDateTime: record>, DeletionProtectionEnabled: record>> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  attribute_definitions: list # An array of attributes that describe the key schema for the table and indexes. — item shape: {AttributeName: string, AttributeType: "S"|"N"|"B"}
+  table_name: string # The name of the table to create.
+  key_schema: list # Specifies the attributes that make up the primary key for a table or an index. The attributes in KeySchema must also be defined in the AttributeDefinitions array. For more information, see Data Model (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DataModel.html) in the Amazon DynamoDB Developer Guide. Each KeySchemaElement in the array is composed of: AttributeName - The name of this key attribute. KeyType - The role that the key attribute will assume: HASH - partition key RANGE - sort key The partition key of an item is also known as its hash attribute. The term "hash attribute" derives from the DynamoDB usage of an internal hash function to evenly distribute data items across partitions, based on their partition key values. The sort key of an item is also known as its range attribute. The term "range attribute" derives from the way DynamoDB stores items with the same partition key physically close together, in sorted order by the sort key value. For a simple primary key (partition key), you must provide exactly one element with a KeyType of HASH. For a composite primary key (partition key and sort key), you must provide exactly two elements, in this order: The first element must have a KeyType of HASH, and the second element must have a KeyType of RANGE. For more information, see Working with Tables (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/WorkingWithTables.html#WorkingWithTables.primary.key) in the Amazon DynamoDB Developer Guide. — item shape: {AttributeName: string, KeyType: "HASH"|"RANGE"}
+  --local-secondary-indexes: list # One or more local secondary indexes (the maximum is 5) to be created on the table. Each index is scoped to a given partition key value. There is a 10 GB size limit per partition key value; otherwise, the size of a local secondary index is unconstrained. Each local secondary index in the array includes the following: IndexName - The name of the local secondary index. Must be unique only for this table. KeySchema - Specifies the key schema for the local secondary index. The key schema must begin with the same partition key as the table. Projection - Specifies attributes that are copied (projected) from the table into the index. These are in addition to the primary key attributes and index key attributes, which are automatically projected. Each attribute specification is composed of: ProjectionType - One of the following: KEYS_ONLY - Only the index and primary keys are projected into the index. INCLUDE - Only the specified table attributes are projected into the index. The list of projected attributes is in NonKeyAttributes. ALL - All of the table attributes are projected into the index. NonKeyAttributes - A list of one or more non-key attribute names that are projected into the secondary index. The total count of attributes provided in NonKeyAttributes, summed across all of the secondary indexes, must not exceed 100. If you project the same attribute into two different indexes, this counts as two distinct attributes when determining the total. — item shape: {IndexName: string, KeySchema: list, Projection: record}
+  --global-secondary-indexes: list # One or more global secondary indexes (the maximum is 20) to be created on the table. Each global secondary index in the array includes the following: IndexName - The name of the global secondary index. Must be unique only for this table. KeySchema - Specifies the key schema for the global secondary index. Projection - Specifies attributes that are copied (projected) from the table into the index. These are in addition to the primary key attributes and index key attributes, which are automatically projected. Each attribute specification is composed of: ProjectionType - One of the following: KEYS_ONLY - Only the index and primary keys are projected into the index. INCLUDE - Only the specified table attributes are projected into the index. The list of projected attributes is in NonKeyAttributes. ALL - All of the table attributes are projected into the index. NonKeyAttributes - A list of one or more non-key attribute names that are projected into the secondary index. The total count of attributes provided in NonKeyAttributes, summed across all of the secondary indexes, must not exceed 100. If you project the same attribute into two different indexes, this counts as two distinct attributes when determining the total. ProvisionedThroughput - The provisioned throughput settings for the global secondary index, consisting of read and write capacity units. — item shape: {IndexName: string, KeySchema: list, Projection: record, ProvisionedThroughput?: record}
+  --billing-mode: string@billing-mode-completer # Controls how you are charged for read and write throughput and how you manage capacity. This setting can be changed later. PROVISIONED - We recommend using PROVISIONED for predictable workloads. PROVISIONED sets the billing mode to Provisioned Mode (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.ReadWriteCapacityMode.html#HowItWorks.ProvisionedThroughput.Manual). PAY_PER_REQUEST - We recommend using PAY_PER_REQUEST for unpredictable workloads. PAY_PER_REQUEST sets the billing mode to On-Demand Mode (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.ReadWriteCapacityMode.html#HowItWorks.OnDemand).
+  --provisioned-throughput: record # Represents the provisioned throughput settings for a specified table or index. The settings can be modified using the UpdateTable operation. For current minimum and maximum provisioned throughput values, see Service, Account, and Table Quotas (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Limits.html) in the Amazon DynamoDB Developer Guide. — shape: {ReadCapacityUnits: int, WriteCapacityUnits: int}
+  --stream-specification: record # Represents the DynamoDB Streams configuration for a table in DynamoDB. — shape: {StreamEnabled: bool, StreamViewType?: "NEW_IMAGE"|"OLD_IMAGE"|"NEW_AND_OLD_IMAGES"|"KEYS_ONLY"}
+  --sse-specification: record # Represents the settings used to enable server-side encryption. — shape: {Enabled?: bool, SSEType?: "AES256"|"KMS", KMSMasterKeyId?: string}
+  --tags: list # A list of key-value pairs to label the table. For more information, see Tagging for DynamoDB (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Tagging.html). — item shape: {Key: string, Value: string}
+  --table-class: string@table-class-completer # The table class of the new table. Valid values are STANDARD and STANDARD_INFREQUENT_ACCESS.
+  --deletion-protection-enabled: oneof<nothing, bool> # Indicates whether deletion protection is to be enabled (true) or disabled (false) on the table.
+]: any -> record<TableDescription: record<AttributeDefinitions: list<record>, TableName: string, KeySchema: list<record>, TableStatus: string, CreationDateTime: string, ProvisionedThroughput: record<LastIncreaseDateTime: string, LastDecreaseDateTime: string, NumberOfDecreasesToday: int, ReadCapacityUnits: int, WriteCapacityUnits: int>, TableSizeBytes: int, ItemCount: int, TableArn: string, TableId: string, BillingModeSummary: record<BillingMode: string, LastUpdateToPayPerRequestDateTime: string>, LocalSecondaryIndexes: list<record>, GlobalSecondaryIndexes: list<record>, StreamSpecification: record<StreamEnabled: bool, StreamViewType: string>, LatestStreamLabel: string, LatestStreamArn: string, GlobalTableVersion: string, Replicas: list<record>, RestoreSummary: record<SourceBackupArn: string, SourceTableArn: string, RestoreDateTime: string, RestoreInProgress: bool>, SSEDescription: record<Status: string, SSEType: string, KMSMasterKeyArn: string, InaccessibleEncryptionDateTime: string>, ArchivalSummary: record<ArchivalDateTime: string, ArchivalReason: string, ArchivalBackupArn: string>, TableClassSummary: record<TableClass: string, LastUpdateDateTime: string>, DeletionProtectionEnabled: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.CreateTable")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AttributeDefinitions": $attribute_definitions, "TableName": $table_name, "KeySchema": $key_schema, "LocalSecondaryIndexes": $local_secondary_indexes, "GlobalSecondaryIndexes": $global_secondary_indexes, "BillingMode": $billing_mode, "ProvisionedThroughput": $provisioned_throughput, "StreamSpecification": $stream_specification, "SSESpecification": $sse_specification, "Tags": $tags, "TableClass": $table_class, "DeletionProtectionEnabled": $deletion_protection_enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -502,12 +533,13 @@ export def "delete-backup" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  backup_arn: any
-]: any -> record<BackupDescription: record<BackupDetails: record<BackupArn: record, BackupName: record, BackupSizeBytes: record, BackupStatus: record, BackupType: record, BackupCreationDateTime: record, BackupExpiryDateTime: record>, SourceTableDetails: record<TableName: record, TableId: record, TableArn: record, TableSizeBytes: record, KeySchema: record, TableCreationDateTime: record, ProvisionedThroughput: record, ItemCount: record, BillingMode: record>, SourceTableFeatureDetails: record<LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record, StreamDescription: record, TimeToLiveDescription: record, SSEDescription: record>>> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  backup_arn: string # The ARN associated with the backup.
+]: any -> record<BackupDescription: record<BackupDetails: record<BackupArn: string, BackupName: string, BackupSizeBytes: int, BackupStatus: string, BackupType: string, BackupCreationDateTime: string, BackupExpiryDateTime: string>, SourceTableDetails: record<TableName: string, TableId: string, TableArn: string, TableSizeBytes: int, KeySchema: list, TableCreationDateTime: string, ProvisionedThroughput: record, ItemCount: int, BillingMode: string>, SourceTableFeatureDetails: record<LocalSecondaryIndexes: list, GlobalSecondaryIndexes: list, StreamDescription: record, TimeToLiveDescription: record, SSEDescription: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.DeleteBackup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"BackupArn": $backup_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -550,21 +582,22 @@ export def "delete-item" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  table_name: any
-  key: any
-  --expected: any
-  --conditional-operator: any
-  --return-values: any
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  table_name: string # The name of the table from which to delete the item.
+  key: record # A map of attribute names to AttributeValue objects, representing the primary key of the item to delete. For the primary key, you must provide all of the key attributes. For example, with a simple primary key, you only need to provide a value for the partition key. For a composite primary key, you must provide values for both the partition key and the sort key.
+  --expected: record # This is a legacy parameter. Use ConditionExpression instead. For more information, see Expected (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/LegacyConditionalParameters.Expected.html) in the Amazon DynamoDB Developer Guide.
+  --conditional-operator: string@conditional-operator-completer # This is a legacy parameter. Use ConditionExpression instead. For more information, see ConditionalOperator (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/LegacyConditionalParameters.ConditionalOperator.html) in the Amazon DynamoDB Developer Guide.
+  --return-values: string@return-values-completer # Use ReturnValues if you want to get the item attributes as they appeared before they were deleted. For DeleteItem, the valid values are: NONE - If ReturnValues is not specified, or if its value is NONE, then nothing is returned. (This setting is the default for ReturnValues.) ALL_OLD - The content of the old item is returned. There is no additional cost associated with requesting a return value aside from the small network and processing overhead of receiving a larger response. No read capacity units are consumed. The ReturnValues parameter is used by several DynamoDB operations; however, DeleteItem does not recognize any values other than NONE or ALL_OLD.
   --return-consumed-capacity: string@return-consumed-capacity-completer # Determines the level of detail about either provisioned or on-demand throughput consumption that is returned in the response: INDEXES - The response includes the aggregate ConsumedCapacity for the operation, together with ConsumedCapacity for each table and secondary index that was accessed. Note that some operations, such as GetItem and BatchGetItem, do not access any indexes at all. In these cases, specifying INDEXES will only return ConsumedCapacity information for table(s). TOTAL - The response includes only the aggregate ConsumedCapacity for the operation. NONE - No ConsumedCapacity details are included in the response.
-  --return-item-collection-metrics: any
-  --condition-expression: any
-  --expression-attribute-names: any
-  --expression-attribute-values: any
-]: any -> record<Attributes: record, ConsumedCapacity: record<TableName: record, CapacityUnits: record, ReadCapacityUnits: record, WriteCapacityUnits: record, Table: record<ReadCapacityUnits: record, WriteCapacityUnits: record, CapacityUnits: record>, LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record>, ItemCollectionMetrics: record<ItemCollectionKey: record, SizeEstimateRangeGB: record>> {
+  --return-item-collection-metrics: string@return-item-collection-metrics-completer # Determines whether item collection metrics are returned. If set to SIZE, the response includes statistics about item collections, if any, that were modified during the operation are returned in the response. If set to NONE (the default), no statistics are returned.
+  --condition-expression: string # A condition that must be satisfied in order for a conditional DeleteItem to succeed. An expression can contain any of the following: Functions: attribute_exists | attribute_not_exists | attribute_type | contains | begins_with | size These function names are case-sensitive. Comparison operators: = | <> | < | > | <= | >= | BETWEEN | IN Logical operators: AND | OR | NOT For more information about condition expressions, see Condition Expressions (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.SpecifyingConditions.html) in the Amazon DynamoDB Developer Guide.
+  --expression-attribute-names: record # One or more substitution tokens for attribute names in an expression. The following are some use cases for using ExpressionAttributeNames: To access an attribute whose name conflicts with a DynamoDB reserved word. To create a placeholder for repeating occurrences of an attribute name in an expression. To prevent special characters in an attribute name from being misinterpreted in an expression. Use the # character in an expression to dereference an attribute name. For example, consider the following attribute name: Percentile The name of this attribute conflicts with a reserved word, so it cannot be used directly in an expression. (For the complete list of reserved words, see Reserved Words (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/ReservedWords.html) in the Amazon DynamoDB Developer Guide). To work around this, you could specify the following for ExpressionAttributeNames: {"#P":"Percentile"} You could then use this substitution in an expression, as in this example: #P = :val Tokens that begin with the : character are expression attribute values, which are placeholders for the actual value at runtime. For more information on expression attribute names, see Specifying Item Attributes (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.AccessingItemAttributes.html) in the Amazon DynamoDB Developer Guide.
+  --expression-attribute-values: record # One or more values that can be substituted in an expression. Use the : (colon) character in an expression to dereference an attribute value. For example, suppose that you wanted to check whether the value of the ProductStatus attribute was one of the following: Available | Backordered | Discontinued You would first need to specify ExpressionAttributeValues as follows: { ":avail":{"S":"Available"}, ":back":{"S":"Backordered"}, ":disc":{"S":"Discontinued"} } You could then use these values in an expression, such as this: ProductStatus IN (:avail, :back, :disc) For more information on expression attribute values, see Condition Expressions (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.SpecifyingConditions.html) in the Amazon DynamoDB Developer Guide.
+]: any -> record<Attributes: record, ConsumedCapacity: record<TableName: string, CapacityUnits: float, ReadCapacityUnits: float, WriteCapacityUnits: float, Table: record<ReadCapacityUnits: float, WriteCapacityUnits: float, CapacityUnits: float>, LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record>, ItemCollectionMetrics: record<ItemCollectionKey: record, SizeEstimateRangeGB: list<float>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.DeleteItem")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TableName": $table_name, "Key": $key, "Expected": $expected, "ConditionalOperator": $conditional_operator, "ReturnValues": $return_values, "ReturnConsumedCapacity": $return_consumed_capacity, "ReturnItemCollectionMetrics": $return_item_collection_metrics, "ConditionExpression": $condition_expression, "ExpressionAttributeNames": $expression_attribute_names, "ExpressionAttributeValues": $expression_attribute_values} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -607,12 +640,13 @@ export def "delete-table" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  table_name: any
-]: any -> record<TableDescription: record<AttributeDefinitions: record, TableName: record, KeySchema: record, TableStatus: record, CreationDateTime: record, ProvisionedThroughput: record<LastIncreaseDateTime: record, LastDecreaseDateTime: record, NumberOfDecreasesToday: record, ReadCapacityUnits: record, WriteCapacityUnits: record>, TableSizeBytes: record, ItemCount: record, TableArn: record, TableId: record, BillingModeSummary: record<BillingMode: record, LastUpdateToPayPerRequestDateTime: record>, LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record, StreamSpecification: record<StreamEnabled: record, StreamViewType: record>, LatestStreamLabel: record, LatestStreamArn: record, GlobalTableVersion: record, Replicas: record, RestoreSummary: record<SourceBackupArn: record, SourceTableArn: record, RestoreDateTime: record, RestoreInProgress: record>, SSEDescription: record<Status: record, SSEType: record, KMSMasterKeyArn: record, InaccessibleEncryptionDateTime: record>, ArchivalSummary: record<ArchivalDateTime: record, ArchivalReason: record, ArchivalBackupArn: record>, TableClassSummary: record<TableClass: record, LastUpdateDateTime: record>, DeletionProtectionEnabled: record>> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  table_name: string # The name of the table to delete.
+]: any -> record<TableDescription: record<AttributeDefinitions: list<record>, TableName: string, KeySchema: list<record>, TableStatus: string, CreationDateTime: string, ProvisionedThroughput: record<LastIncreaseDateTime: string, LastDecreaseDateTime: string, NumberOfDecreasesToday: int, ReadCapacityUnits: int, WriteCapacityUnits: int>, TableSizeBytes: int, ItemCount: int, TableArn: string, TableId: string, BillingModeSummary: record<BillingMode: string, LastUpdateToPayPerRequestDateTime: string>, LocalSecondaryIndexes: list<record>, GlobalSecondaryIndexes: list<record>, StreamSpecification: record<StreamEnabled: bool, StreamViewType: string>, LatestStreamLabel: string, LatestStreamArn: string, GlobalTableVersion: string, Replicas: list<record>, RestoreSummary: record<SourceBackupArn: string, SourceTableArn: string, RestoreDateTime: string, RestoreInProgress: bool>, SSEDescription: record<Status: string, SSEType: string, KMSMasterKeyArn: string, InaccessibleEncryptionDateTime: string>, ArchivalSummary: record<ArchivalDateTime: string, ArchivalReason: string, ArchivalBackupArn: string>, TableClassSummary: record<TableClass: string, LastUpdateDateTime: string>, DeletionProtectionEnabled: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.DeleteTable")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TableName": $table_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -655,12 +689,13 @@ export def "describe-backup" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  backup_arn: any
-]: any -> record<BackupDescription: record<BackupDetails: record<BackupArn: record, BackupName: record, BackupSizeBytes: record, BackupStatus: record, BackupType: record, BackupCreationDateTime: record, BackupExpiryDateTime: record>, SourceTableDetails: record<TableName: record, TableId: record, TableArn: record, TableSizeBytes: record, KeySchema: record, TableCreationDateTime: record, ProvisionedThroughput: record, ItemCount: record, BillingMode: record>, SourceTableFeatureDetails: record<LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record, StreamDescription: record, TimeToLiveDescription: record, SSEDescription: record>>> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  backup_arn: string # The Amazon Resource Name (ARN) associated with the backup.
+]: any -> record<BackupDescription: record<BackupDetails: record<BackupArn: string, BackupName: string, BackupSizeBytes: int, BackupStatus: string, BackupType: string, BackupCreationDateTime: string, BackupExpiryDateTime: string>, SourceTableDetails: record<TableName: string, TableId: string, TableArn: string, TableSizeBytes: int, KeySchema: list, TableCreationDateTime: string, ProvisionedThroughput: record, ItemCount: int, BillingMode: string>, SourceTableFeatureDetails: record<LocalSecondaryIndexes: list, GlobalSecondaryIndexes: list, StreamDescription: record, TimeToLiveDescription: record, SSEDescription: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.DescribeBackup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"BackupArn": $backup_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -703,12 +738,13 @@ export def "describe-continuous-backups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  table_name: any
-]: any -> record<ContinuousBackupsDescription: record<ContinuousBackupsStatus: record, PointInTimeRecoveryDescription: record<PointInTimeRecoveryStatus: record, EarliestRestorableDateTime: record, LatestRestorableDateTime: record>>> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  table_name: string # Name of the table for which the customer wants to check the continuous backups and point in time recovery settings.
+]: any -> record<ContinuousBackupsDescription: record<ContinuousBackupsStatus: string, PointInTimeRecoveryDescription: record<PointInTimeRecoveryStatus: string, EarliestRestorableDateTime: string, LatestRestorableDateTime: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.DescribeContinuousBackups")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TableName": $table_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -751,13 +787,14 @@ export def "describe-contributor-insights" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  table_name: any
-  --index-name: any
-]: any -> record<TableName: record, IndexName: record, ContributorInsightsRuleList: record, ContributorInsightsStatus: record, LastUpdateDateTime: record, FailureException: record<ExceptionName: record, ExceptionDescription: record>> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  table_name: string # The name of the table to describe.
+  --index-name: string # The name of the global secondary index to describe, if applicable.
+]: any -> record<TableName: string, IndexName: string, ContributorInsightsRuleList: list<string>, ContributorInsightsStatus: string, LastUpdateDateTime: string, FailureException: record<ExceptionName: string, ExceptionDescription: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.DescribeContributorInsights")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TableName": $table_name, "IndexName": $index_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -800,12 +837,13 @@ export def "describe-endpoints" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
+  --x-amz-target: string@x-amz-target-completer-12 # required
   --body: record
-]: any -> record<Endpoints: record> {
+]: any -> record<Endpoints: table<Address: string, CachePeriodInMinutes: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.DescribeEndpoints")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -848,12 +886,13 @@ export def "describe-export" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  export_arn: any
-]: any -> record<ExportDescription: record<ExportArn: record, ExportStatus: record, StartTime: record, EndTime: record, ExportManifest: record, TableArn: record, TableId: record, ExportTime: record, ClientToken: record, S3Bucket: record, S3BucketOwner: record, S3Prefix: record, S3SseAlgorithm: record, S3SseKmsKeyId: record, FailureCode: record, FailureMessage: record, ExportFormat: record, BilledSizeBytes: record, ItemCount: record>> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  export_arn: string # The Amazon Resource Name (ARN) associated with the export.
+]: any -> record<ExportDescription: record<ExportArn: string, ExportStatus: string, StartTime: string, EndTime: string, ExportManifest: string, TableArn: string, TableId: string, ExportTime: string, ClientToken: string, S3Bucket: string, S3BucketOwner: string, S3Prefix: string, S3SseAlgorithm: string, S3SseKmsKeyId: string, FailureCode: string, FailureMessage: string, ExportFormat: string, BilledSizeBytes: int, ItemCount: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.DescribeExport")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ExportArn": $export_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -896,12 +935,13 @@ export def "describe-global-table" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  global_table_name: any
-]: any -> record<GlobalTableDescription: record<ReplicationGroup: record, GlobalTableArn: record, CreationDateTime: record, GlobalTableStatus: record, GlobalTableName: record>> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  global_table_name: string # The name of the global table.
+]: any -> record<GlobalTableDescription: record<ReplicationGroup: list<record>, GlobalTableArn: string, CreationDateTime: string, GlobalTableStatus: string, GlobalTableName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.DescribeGlobalTable")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GlobalTableName": $global_table_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -944,12 +984,13 @@ export def "describe-global-table-settings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  global_table_name: any
-]: any -> record<GlobalTableName: record, ReplicaSettings: record> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  global_table_name: string # The name of the global table to describe.
+]: any -> record<GlobalTableName: string, ReplicaSettings: table<RegionName: string, ReplicaStatus: string, ReplicaBillingModeSummary: record, ReplicaProvisionedReadCapacityUnits: int, ReplicaProvisionedReadCapacityAutoScalingSettings: record, ReplicaProvisionedWriteCapacityUnits: int, ReplicaProvisionedWriteCapacityAutoScalingSettings: record, ReplicaGlobalSecondaryIndexSettings: list, ReplicaTableClassSummary: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.DescribeGlobalTableSettings")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GlobalTableName": $global_table_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -992,12 +1033,13 @@ export def "describe-import" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  import_arn: any
-]: any -> record<ImportTableDescription: record<ImportArn: record, ImportStatus: record, TableArn: record, TableId: record, ClientToken: record, S3BucketSource: record<S3BucketOwner: record, S3Bucket: record, S3KeyPrefix: record>, ErrorCount: record, CloudWatchLogGroupArn: record, InputFormat: record, InputFormatOptions: record<Csv: record>, InputCompressionType: record, TableCreationParameters: record<TableName: record, AttributeDefinitions: record, KeySchema: record, BillingMode: record, ProvisionedThroughput: record, SSESpecification: record, GlobalSecondaryIndexes: record>, StartTime: record, EndTime: record, ProcessedSizeBytes: record, ProcessedItemCount: record, ImportedItemCount: record, FailureCode: record, FailureMessage: record>> {
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  import_arn: string # The Amazon Resource Name (ARN) associated with the table you're importing to.
+]: any -> record<ImportTableDescription: record<ImportArn: string, ImportStatus: string, TableArn: string, TableId: string, ClientToken: string, S3BucketSource: record<S3BucketOwner: string, S3Bucket: string, S3KeyPrefix: string>, ErrorCount: int, CloudWatchLogGroupArn: string, InputFormat: string, InputFormatOptions: record<Csv: record>, InputCompressionType: string, TableCreationParameters: record<TableName: string, AttributeDefinitions: list, KeySchema: list, BillingMode: string, ProvisionedThroughput: record, SSESpecification: record, GlobalSecondaryIndexes: list>, StartTime: string, EndTime: string, ProcessedSizeBytes: int, ProcessedItemCount: int, ImportedItemCount: int, FailureCode: string, FailureMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.DescribeImport")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ImportArn": $import_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1040,12 +1082,13 @@ export def "describe-kinesis-streaming-destination" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  table_name: any
-]: any -> record<TableName: record, KinesisDataStreamDestinations: record> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  table_name: string # The name of the table being described.
+]: any -> record<TableName: string, KinesisDataStreamDestinations: table<StreamArn: string, DestinationStatus: string, DestinationStatusDescription: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.DescribeKinesisStreamingDestination")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TableName": $table_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1088,12 +1131,13 @@ export def "describe-limits" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
+  --x-amz-target: string@x-amz-target-completer-18 # required
   --body: record
-]: any -> record<AccountMaxReadCapacityUnits: record, AccountMaxWriteCapacityUnits: record, TableMaxReadCapacityUnits: record, TableMaxWriteCapacityUnits: record> {
+]: any -> record<AccountMaxReadCapacityUnits: int, AccountMaxWriteCapacityUnits: int, TableMaxReadCapacityUnits: int, TableMaxWriteCapacityUnits: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.DescribeLimits")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1136,12 +1180,13 @@ export def "describe-table" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  table_name: any
-]: any -> record<Table: record<AttributeDefinitions: record, TableName: record, KeySchema: record, TableStatus: record, CreationDateTime: record, ProvisionedThroughput: record<LastIncreaseDateTime: record, LastDecreaseDateTime: record, NumberOfDecreasesToday: record, ReadCapacityUnits: record, WriteCapacityUnits: record>, TableSizeBytes: record, ItemCount: record, TableArn: record, TableId: record, BillingModeSummary: record<BillingMode: record, LastUpdateToPayPerRequestDateTime: record>, LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record, StreamSpecification: record<StreamEnabled: record, StreamViewType: record>, LatestStreamLabel: record, LatestStreamArn: record, GlobalTableVersion: record, Replicas: record, RestoreSummary: record<SourceBackupArn: record, SourceTableArn: record, RestoreDateTime: record, RestoreInProgress: record>, SSEDescription: record<Status: record, SSEType: record, KMSMasterKeyArn: record, InaccessibleEncryptionDateTime: record>, ArchivalSummary: record<ArchivalDateTime: record, ArchivalReason: record, ArchivalBackupArn: record>, TableClassSummary: record<TableClass: record, LastUpdateDateTime: record>, DeletionProtectionEnabled: record>> {
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  table_name: string # The name of the table to describe.
+]: any -> record<Table: record<AttributeDefinitions: list<record>, TableName: string, KeySchema: list<record>, TableStatus: string, CreationDateTime: string, ProvisionedThroughput: record<LastIncreaseDateTime: string, LastDecreaseDateTime: string, NumberOfDecreasesToday: int, ReadCapacityUnits: int, WriteCapacityUnits: int>, TableSizeBytes: int, ItemCount: int, TableArn: string, TableId: string, BillingModeSummary: record<BillingMode: string, LastUpdateToPayPerRequestDateTime: string>, LocalSecondaryIndexes: list<record>, GlobalSecondaryIndexes: list<record>, StreamSpecification: record<StreamEnabled: bool, StreamViewType: string>, LatestStreamLabel: string, LatestStreamArn: string, GlobalTableVersion: string, Replicas: list<record>, RestoreSummary: record<SourceBackupArn: string, SourceTableArn: string, RestoreDateTime: string, RestoreInProgress: bool>, SSEDescription: record<Status: string, SSEType: string, KMSMasterKeyArn: string, InaccessibleEncryptionDateTime: string>, ArchivalSummary: record<ArchivalDateTime: string, ArchivalReason: string, ArchivalBackupArn: string>, TableClassSummary: record<TableClass: string, LastUpdateDateTime: string>, DeletionProtectionEnabled: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.DescribeTable")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TableName": $table_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1184,12 +1229,13 @@ export def "describe-table-replica-auto-scaling" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  table_name: any
-]: any -> record<TableAutoScalingDescription: record<TableName: record, TableStatus: record, Replicas: record>> {
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  table_name: string # The name of the table.
+]: any -> record<TableAutoScalingDescription: record<TableName: string, TableStatus: string, Replicas: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.DescribeTableReplicaAutoScaling")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TableName": $table_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1232,12 +1278,13 @@ export def "describe-time-to-live" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  table_name: any
-]: any -> record<TimeToLiveDescription: record<TimeToLiveStatus: record, AttributeName: record>> {
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  table_name: string # The name of the table to be described.
+]: any -> record<TimeToLiveDescription: record<TimeToLiveStatus: string, AttributeName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.DescribeTimeToLive")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TableName": $table_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1280,13 +1327,14 @@ export def "disable-kinesis-streaming-destination" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  table_name: any
-  stream_arn: any
-]: any -> record<TableName: record, StreamArn: record, DestinationStatus: record> {
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  table_name: string # The name of the DynamoDB table.
+  stream_arn: string # The ARN for a Kinesis data stream.
+]: any -> record<TableName: string, StreamArn: string, DestinationStatus: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.DisableKinesisStreamingDestination")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TableName": $table_name, "StreamArn": $stream_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1329,13 +1377,14 @@ export def "enable-kinesis-streaming-destination" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  table_name: any
-  stream_arn: any
-]: any -> record<TableName: record, StreamArn: record, DestinationStatus: record> {
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  table_name: string # The name of the DynamoDB table.
+  stream_arn: string # The ARN for a Kinesis data stream.
+]: any -> record<TableName: string, StreamArn: string, DestinationStatus: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.EnableKinesisStreamingDestination")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TableName": $table_name, "StreamArn": $stream_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1361,6 +1410,7 @@ export def "enable-kinesis-streaming-destination" [
 #
 # POST /
 # operationId: ExecuteStatement
+# --Parameters item shape: {S?: string, N?: string, B?: string, SS?: list<string>, NS?: list<string>, BS?: list<string>, M?: record, L?: list, NULL?: bool, BOOL?: bool}
 export def "execute-statement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1378,17 +1428,18 @@ export def "execute-statement" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  statement: any
-  --parameters: any
-  --consistent-read: any
-  --next-token: any
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  statement: string # The PartiQL statement representing the operation to run.
+  --parameters: list # The parameters for the PartiQL statement, if any. — item shape: {S?: string, N?: string, B?: string, SS?: list<string>, NS?: list<string>, BS?: list<string>, M?: record, L?: list, NULL?: bool, BOOL?: bool}
+  --consistent-read: oneof<nothing, bool> # The consistency of a read operation. If set to true, then a strongly consistent read is used; otherwise, an eventually consistent read is used.
+  --next-token: string # Set this value to get remaining results, if NextToken was returned in the statement response.
   --return-consumed-capacity: string@return-consumed-capacity-completer # Determines the level of detail about either provisioned or on-demand throughput consumption that is returned in the response: INDEXES - The response includes the aggregate ConsumedCapacity for the operation, together with ConsumedCapacity for each table and secondary index that was accessed. Note that some operations, such as GetItem and BatchGetItem, do not access any indexes at all. In these cases, specifying INDEXES will only return ConsumedCapacity information for table(s). TOTAL - The response includes only the aggregate ConsumedCapacity for the operation. NONE - No ConsumedCapacity details are included in the response.
-  --limit: any
-]: any -> record<Items: record, NextToken: record, ConsumedCapacity: record<TableName: record, CapacityUnits: record, ReadCapacityUnits: record, WriteCapacityUnits: record, Table: record<ReadCapacityUnits: record, WriteCapacityUnits: record, CapacityUnits: record>, LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record>, LastEvaluatedKey: record> {
+  --limit: int # The maximum number of items to evaluate (not necessarily the number of matching items). If DynamoDB processes the number of items up to the limit while processing the results, it stops the operation and returns the matching values up to that point, along with a key in LastEvaluatedKey to apply in a subsequent operation so you can pick up where you left off. Also, if the processed dataset size exceeds 1 MB before DynamoDB reaches this limit, it stops the operation and returns the matching values up to the limit, and a key in LastEvaluatedKey to apply in a subsequent operation to continue the operation.
+]: any -> record<Items: list<record>, NextToken: string, ConsumedCapacity: record<TableName: string, CapacityUnits: float, ReadCapacityUnits: float, WriteCapacityUnits: float, Table: record<ReadCapacityUnits: float, WriteCapacityUnits: float, CapacityUnits: float>, LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record>, LastEvaluatedKey: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.ExecuteStatement")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Statement": $statement, "Parameters": $parameters, "ConsistentRead": $consistent_read, "NextToken": $next_token, "ReturnConsumedCapacity": $return_consumed_capacity, "Limit": $limit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1414,6 +1465,7 @@ export def "execute-statement" [
 #
 # POST /
 # operationId: ExecuteTransaction
+# --TransactStatements item shape: {Statement: string, Parameters?: list}
 export def "execute-transaction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1431,14 +1483,15 @@ export def "execute-transaction" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  transact_statements: any
-  --client-request-token: any
-  --return-consumed-capacity: any
-]: any -> record<Responses: record, ConsumedCapacity: record> {
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  transact_statements: list # The list of PartiQL statements representing the transaction to run. — item shape: {Statement: string, Parameters?: list}
+  --client-request-token: string # Set this value to get remaining results, if NextToken was returned in the statement response.
+  --return-consumed-capacity: string@return-consumed-capacity-completer # Determines the level of detail about either provisioned or on-demand throughput consumption that is returned in the response: INDEXES - The response includes the aggregate ConsumedCapacity for the operation, together with ConsumedCapacity for each table and secondary index that was accessed. Note that some operations, such as GetItem and BatchGetItem, do not access any indexes at all. In these cases, specifying INDEXES will only return ConsumedCapacity information for table(s). TOTAL - The response includes only the aggregate ConsumedCapacity for the operation. NONE - No ConsumedCapacity details are included in the response.
+]: any -> record<Responses: table<Item: record>, ConsumedCapacity: table<TableName: string, CapacityUnits: float, ReadCapacityUnits: float, WriteCapacityUnits: float, Table: record, LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.ExecuteTransaction")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TransactStatements": $transact_statements, "ClientRequestToken": $client_request_token, "ReturnConsumedCapacity": $return_consumed_capacity} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1481,20 +1534,21 @@ export def "export-table-to-point-in-time" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-26
-  table_arn: any
-  --export-time: any
-  --client-token: any
-  s3_bucket: any
-  --s3-bucket-owner: any
-  --s3-prefix: any
-  --s3-sse-algorithm: any
-  --s3-sse-kms-key-id: any
-  --export-format: any
-]: any -> record<ExportDescription: record<ExportArn: record, ExportStatus: record, StartTime: record, EndTime: record, ExportManifest: record, TableArn: record, TableId: record, ExportTime: record, ClientToken: record, S3Bucket: record, S3BucketOwner: record, S3Prefix: record, S3SseAlgorithm: record, S3SseKmsKeyId: record, FailureCode: record, FailureMessage: record, ExportFormat: record, BilledSizeBytes: record, ItemCount: record>> {
+  --x-amz-target: string@x-amz-target-completer-26 # required
+  table_arn: string # The Amazon Resource Name (ARN) associated with the table to export.
+  --export-time: string # Time in the past from which to export table data, counted in seconds from the start of the Unix epoch. The table export will be a snapshot of the table's state at this point in time. (format: date-time)
+  --client-token: string # Providing a ClientToken makes the call to ExportTableToPointInTimeInput idempotent, meaning that multiple identical calls have the same effect as one single call. A client token is valid for 8 hours after the first request that uses it is completed. After 8 hours, any request with the same client token is treated as a new request. Do not resubmit the same request with the same client token for more than 8 hours, or the result might not be idempotent. If you submit a request with the same client token but a change in other parameters within the 8-hour idempotency window, DynamoDB returns an ImportConflictException.
+  s3_bucket: string # The name of the Amazon S3 bucket to export the snapshot to.
+  --s3-bucket-owner: string # The ID of the Amazon Web Services account that owns the bucket the export will be stored in.
+  --s3-prefix: string # The Amazon S3 bucket prefix to use as the file name and path of the exported snapshot.
+  --s3-sse-algorithm: string@s3-sse-algorithm-completer # Type of encryption used on the bucket where export data will be stored. Valid values for S3SseAlgorithm are: AES256 - server-side encryption with Amazon S3 managed keys KMS - server-side encryption with KMS managed keys
+  --s3-sse-kms-key-id: string # The ID of the KMS managed key used to encrypt the S3 bucket where export data will be stored (if applicable).
+  --export-format: string@export-format-completer # The format for the exported data. Valid values for ExportFormat are DYNAMODB_JSON or ION.
+]: any -> record<ExportDescription: record<ExportArn: string, ExportStatus: string, StartTime: string, EndTime: string, ExportManifest: string, TableArn: string, TableId: string, ExportTime: string, ClientToken: string, S3Bucket: string, S3BucketOwner: string, S3Prefix: string, S3SseAlgorithm: string, S3SseKmsKeyId: string, FailureCode: string, FailureMessage: string, ExportFormat: string, BilledSizeBytes: int, ItemCount: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.ExportTableToPointInTime")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TableArn": $table_arn, "ExportTime": $export_time, "ClientToken": $client_token, "S3Bucket": $s3_bucket, "S3BucketOwner": $s3_bucket_owner, "S3Prefix": $s3_prefix, "S3SseAlgorithm": $s3_sse_algorithm, "S3SseKmsKeyId": $s3_sse_kms_key_id, "ExportFormat": $export_format} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1537,18 +1591,19 @@ export def "get-item" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-27
-  table_name: any
-  key: any
-  --attributes-to-get: any
-  --consistent-read: any
+  --x-amz-target: string@x-amz-target-completer-27 # required
+  table_name: string # The name of the table containing the requested item.
+  key: record # A map of attribute names to AttributeValue objects, representing the primary key of the item to retrieve. For the primary key, you must provide all of the attributes. For example, with a simple primary key, you only need to provide a value for the partition key. For a composite primary key, you must provide values for both the partition key and the sort key.
+  --attributes-to-get: list<string> # This is a legacy parameter. Use ProjectionExpression instead. For more information, see AttributesToGet (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/LegacyConditionalParameters.AttributesToGet.html) in the Amazon DynamoDB Developer Guide.
+  --consistent-read: oneof<nothing, bool> # Determines the read consistency model: If set to true, then the operation uses strongly consistent reads; otherwise, the operation uses eventually consistent reads.
   --return-consumed-capacity: string@return-consumed-capacity-completer # Determines the level of detail about either provisioned or on-demand throughput consumption that is returned in the response: INDEXES - The response includes the aggregate ConsumedCapacity for the operation, together with ConsumedCapacity for each table and secondary index that was accessed. Note that some operations, such as GetItem and BatchGetItem, do not access any indexes at all. In these cases, specifying INDEXES will only return ConsumedCapacity information for table(s). TOTAL - The response includes only the aggregate ConsumedCapacity for the operation. NONE - No ConsumedCapacity details are included in the response.
-  --projection-expression: any
-  --expression-attribute-names: any
-]: any -> record<Item: record, ConsumedCapacity: record<TableName: record, CapacityUnits: record, ReadCapacityUnits: record, WriteCapacityUnits: record, Table: record<ReadCapacityUnits: record, WriteCapacityUnits: record, CapacityUnits: record>, LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record>> {
+  --projection-expression: string # A string that identifies one or more attributes to retrieve from the table. These attributes can include scalars, sets, or elements of a JSON document. The attributes in the expression must be separated by commas. If no attribute names are specified, then all attributes are returned. If any of the requested attributes are not found, they do not appear in the result. For more information, see Specifying Item Attributes (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.AccessingItemAttributes.html) in the Amazon DynamoDB Developer Guide.
+  --expression-attribute-names: record # One or more substitution tokens for attribute names in an expression. The following are some use cases for using ExpressionAttributeNames: To access an attribute whose name conflicts with a DynamoDB reserved word. To create a placeholder for repeating occurrences of an attribute name in an expression. To prevent special characters in an attribute name from being misinterpreted in an expression. Use the # character in an expression to dereference an attribute name. For example, consider the following attribute name: Percentile The name of this attribute conflicts with a reserved word, so it cannot be used directly in an expression. (For the complete list of reserved words, see Reserved Words (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/ReservedWords.html) in the Amazon DynamoDB Developer Guide). To work around this, you could specify the following for ExpressionAttributeNames: {"#P":"Percentile"} You could then use this substitution in an expression, as in this example: #P = :val Tokens that begin with the : character are expression attribute values, which are placeholders for the actual value at runtime. For more information on expression attribute names, see Specifying Item Attributes (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.AccessingItemAttributes.html) in the Amazon DynamoDB Developer Guide.
+]: any -> record<Item: record, ConsumedCapacity: record<TableName: string, CapacityUnits: float, ReadCapacityUnits: float, WriteCapacityUnits: float, Table: record<ReadCapacityUnits: float, WriteCapacityUnits: float, CapacityUnits: float>, LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.GetItem")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TableName": $table_name, "Key": $key, "AttributesToGet": $attributes_to_get, "ConsistentRead": $consistent_read, "ReturnConsumedCapacity": $return_consumed_capacity, "ProjectionExpression": $projection_expression, "ExpressionAttributeNames": $expression_attribute_names} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1574,6 +1629,9 @@ export def "get-item" [
 #
 # POST /
 # operationId: ImportTable
+# --S3BucketSource shape: {S3BucketOwner?: string, S3Bucket: string, S3KeyPrefix?: string}
+# --InputFormatOptions shape: {Csv?: record}
+# --TableCreationParameters shape: {TableName: string, AttributeDefinitions: list, KeySchema: list, BillingMode?: "PROVISIONED"|"PAY_PER_REQUEST", ProvisionedThroughput?: record, SSESpecification?: record, GlobalSecondaryIndexes?: list}
 export def "import-table" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1591,17 +1649,18 @@ export def "import-table" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-28
-  --client-token: any
-  s3_bucket_source: any
-  input_format: any
-  --input-format-options: any
-  --input-compression-type: any
-  table_creation_parameters: any
-]: any -> record<ImportTableDescription: record<ImportArn: record, ImportStatus: record, TableArn: record, TableId: record, ClientToken: record, S3BucketSource: record<S3BucketOwner: record, S3Bucket: record, S3KeyPrefix: record>, ErrorCount: record, CloudWatchLogGroupArn: record, InputFormat: record, InputFormatOptions: record<Csv: record>, InputCompressionType: record, TableCreationParameters: record<TableName: record, AttributeDefinitions: record, KeySchema: record, BillingMode: record, ProvisionedThroughput: record, SSESpecification: record, GlobalSecondaryIndexes: record>, StartTime: record, EndTime: record, ProcessedSizeBytes: record, ProcessedItemCount: record, ImportedItemCount: record, FailureCode: record, FailureMessage: record>> {
+  --x-amz-target: string@x-amz-target-completer-28 # required
+  --client-token: string # Providing a ClientToken makes the call to ImportTableInput idempotent, meaning that multiple identical calls have the same effect as one single call. A client token is valid for 8 hours after the first request that uses it is completed. After 8 hours, any request with the same client token is treated as a new request. Do not resubmit the same request with the same client token for more than 8 hours, or the result might not be idempotent. If you submit a request with the same client token but a change in other parameters within the 8-hour idempotency window, DynamoDB returns an IdempotentParameterMismatch exception.
+  s3_bucket_source: record # The S3 bucket that is being imported from. — shape: {S3BucketOwner?: string, S3Bucket: string, S3KeyPrefix?: string}
+  input_format: string@input-format-completer # The format of the source data. Valid values for ImportFormat are CSV, DYNAMODB_JSON or ION.
+  --input-format-options: record # The format options for the data that was imported into the target table. There is one value, CsvOption. — shape: {Csv?: record}
+  --input-compression-type: string@input-compression-type-completer # Type of compression to be used on the input coming from the imported table.
+  table_creation_parameters: record # The parameters for the table created as part of the import operation. — shape: {TableName: string, AttributeDefinitions: list, KeySchema: list, BillingMode?: "PROVISIONED"|"PAY_PER_REQUEST", ProvisionedThroughput?: record, SSESpecification?: record, GlobalSecondaryIndexes?: list}
+]: any -> record<ImportTableDescription: record<ImportArn: string, ImportStatus: string, TableArn: string, TableId: string, ClientToken: string, S3BucketSource: record<S3BucketOwner: string, S3Bucket: string, S3KeyPrefix: string>, ErrorCount: int, CloudWatchLogGroupArn: string, InputFormat: string, InputFormatOptions: record<Csv: record>, InputCompressionType: string, TableCreationParameters: record<TableName: string, AttributeDefinitions: list, KeySchema: list, BillingMode: string, ProvisionedThroughput: record, SSESpecification: record, GlobalSecondaryIndexes: list>, StartTime: string, EndTime: string, ProcessedSizeBytes: int, ProcessedItemCount: int, ImportedItemCount: int, FailureCode: string, FailureMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.ImportTable")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClientToken": $client_token, "S3BucketSource": $s3_bucket_source, "InputFormat": $input_format, "InputFormatOptions": $input_format_options, "InputCompressionType": $input_compression_type, "TableCreationParameters": $table_creation_parameters} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1644,17 +1703,18 @@ export def "list-backups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-29
-  --table-name: any
-  --limit: any
-  --time-range-lower-bound: any
-  --time-range-upper-bound: any
-  --exclusive-start-backup-arn: any
-  --backup-type: any
-]: any -> record<BackupSummaries: record, LastEvaluatedBackupArn: record> {
+  --x-amz-target: string@x-amz-target-completer-29 # required
+  --table-name: string # The backups from the table specified by TableName are listed.
+  --limit: int # Maximum number of backups to return at once.
+  --time-range-lower-bound: string # Only backups created after this time are listed. TimeRangeLowerBound is inclusive. (format: date-time)
+  --time-range-upper-bound: string # Only backups created before this time are listed. TimeRangeUpperBound is exclusive. (format: date-time)
+  --exclusive-start-backup-arn: string # LastEvaluatedBackupArn is the Amazon Resource Name (ARN) of the backup last evaluated when the current page of results was returned, inclusive of the current page of results. This value may be specified as the ExclusiveStartBackupArn of a new ListBackups operation in order to fetch the next page of results.
+  --backup-type: string@backup-type-completer # The backups from the table specified by BackupType are listed. Where BackupType can be: USER - On-demand backup created by you. (The default setting if no other backup types are specified.) SYSTEM - On-demand backup automatically created by DynamoDB. ALL - All types of on-demand backups (USER and SYSTEM).
+]: any -> record<BackupSummaries: table<TableName: string, TableId: string, TableArn: string, BackupArn: string, BackupName: string, BackupCreationDateTime: string, BackupExpiryDateTime: string, BackupStatus: string, BackupType: string, BackupSizeBytes: int>, LastEvaluatedBackupArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.ListBackups")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TableName": $table_name, "Limit": $limit, "TimeRangeLowerBound": $time_range_lower_bound, "TimeRangeUpperBound": $time_range_upper_bound, "ExclusiveStartBackupArn": $exclusive_start_backup_arn, "BackupType": $backup_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1699,14 +1759,15 @@ export def "list-contributor-insights" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-30
-  --table-name: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<ContributorInsightsSummaries: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-30 # required
+  --table-name: string # The name of the table.
+  --next-token-body: string # A token to for the desired page, if there is one. (body field)
+  --max-results-body: int # Maximum number of results to return per page. (body field)
+]: any -> record<ContributorInsightsSummaries: table<TableName: string, IndexName: string, ContributorInsightsStatus: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.ListContributorInsights")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"TableName": $table_name, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -1752,14 +1813,15 @@ export def "list-exports" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-31
-  --table-arn: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<ExportSummaries: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-31 # required
+  --table-arn: string # The Amazon Resource Name (ARN) associated with the exported table.
+  --max-results-body: int # Maximum number of results to return per page. (body field)
+  --next-token-body: string # An optional string that, if supplied, must be copied from the output of a previous call to ListExports. When provided in this manner, the API fetches the next page of results. (body field)
+]: any -> record<ExportSummaries: table<ExportArn: string, ExportStatus: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.ListExports")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"TableArn": $table_arn, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -1803,14 +1865,15 @@ export def "list-global-tables" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-32
-  --exclusive-start-global-table-name: any
-  --limit: any
-  --region-name: any
-]: any -> record<GlobalTables: record, LastEvaluatedGlobalTableName: record> {
+  --x-amz-target: string@x-amz-target-completer-32 # required
+  --exclusive-start-global-table-name: string # The first global table name that this operation will evaluate.
+  --limit: int # The maximum number of table names to return, if the parameter is not specified DynamoDB defaults to 100. If the number of global tables DynamoDB finds reaches this limit, it stops the operation and returns the table names collected up to that point, with a table name in the LastEvaluatedGlobalTableName to apply in a subsequent operation to the ExclusiveStartGlobalTableName parameter.
+  --region-name: string # Lists the global tables in a specific Region.
+]: any -> record<GlobalTables: table<GlobalTableName: string, ReplicationGroup: list>, LastEvaluatedGlobalTableName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.ListGlobalTables")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ExclusiveStartGlobalTableName": $exclusive_start_global_table_name, "Limit": $limit, "RegionName": $region_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1855,14 +1918,15 @@ export def "list-imports" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-33
-  --table-arn: any
-  --page-size-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<ImportSummaryList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-33 # required
+  --table-arn: string # The Amazon Resource Name (ARN) associated with the table that was imported to.
+  --page-size-body: int # The number of ImportSummary objects returned in a single page. (body field)
+  --next-token-body: string # An optional string that, if supplied, must be copied from the output of a previous call to ListImports. When provided in this manner, the API fetches the next page of results. (body field)
+]: any -> record<ImportSummaryList: table<ImportArn: string, ImportStatus: string, TableArn: string, S3BucketSource: record, CloudWatchLogGroupArn: string, InputFormat: string, StartTime: string, EndTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.ListImports")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"TableArn": $table_arn, "PageSize": $page_size_body, "NextToken": $next_token_body} | compact
@@ -1908,13 +1972,14 @@ export def "list-tables" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-34
-  --exclusive-start-table-name-body: any #  (body field)
-  --limit-body: any #  (body field)
-]: any -> record<TableNames: record, LastEvaluatedTableName: record> {
+  --x-amz-target: string@x-amz-target-completer-34 # required
+  --exclusive-start-table-name-body: string # The first table name that this operation will evaluate. Use the value that was returned for LastEvaluatedTableName in a previous operation, so that you can obtain the next page of results. (body field)
+  --limit-body: int # A maximum number of table names to return. If this parameter is not specified, the limit is 100. (body field)
+]: any -> record<TableNames: list<string>, LastEvaluatedTableName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.ListTables")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "ExclusiveStartTableName" $exclusive_start_table_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ExclusiveStartTableName": $exclusive_start_table_name_body, "Limit": $limit_body} | compact
@@ -1958,13 +2023,14 @@ export def "list-tags-of-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-35
-  resource_arn: any
-  --next-token: any
-]: any -> record<Tags: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-35 # required
+  resource_arn: string # The Amazon DynamoDB resource with tags to be listed. This value is an Amazon Resource Name (ARN).
+  --next-token: string # An optional string that, if supplied, must be copied from the output of a previous call to ListTagOfResource. When provided in this manner, this API fetches the next page of results.
+]: any -> record<Tags: table<Key: string, Value: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.ListTagsOfResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "NextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2007,21 +2073,22 @@ export def "put-item" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-36
-  table_name: any
-  item: any
-  --expected: any
-  --return-values: any
+  --x-amz-target: string@x-amz-target-completer-36 # required
+  table_name: string # The name of the table to contain the item.
+  item: record # A map of attribute name/value pairs, one for each attribute. Only the primary key attributes are required; you can optionally provide other attribute name-value pairs for the item. You must provide all of the attributes for the primary key. For example, with a simple primary key, you only need to provide a value for the partition key. For a composite primary key, you must provide both values for both the partition key and the sort key. If you specify any attributes that are part of an index key, then the data types for those attributes must match those of the schema in the table's attribute definition. Empty String and Binary attribute values are allowed. Attribute values of type String and Binary must have a length greater than zero if the attribute is used as a key attribute for a table or index. For more information about primary keys, see Primary Key (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html#HowItWorks.CoreComponents.PrimaryKey) in the Amazon DynamoDB Developer Guide. Each element in the Item map is an AttributeValue object.
+  --expected: record # This is a legacy parameter. Use ConditionExpression instead. For more information, see Expected (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/LegacyConditionalParameters.Expected.html) in the Amazon DynamoDB Developer Guide.
+  --return-values: string@return-values-completer # Use ReturnValues if you want to get the item attributes as they appeared before they were updated with the PutItem request. For PutItem, the valid values are: NONE - If ReturnValues is not specified, or if its value is NONE, then nothing is returned. (This setting is the default for ReturnValues.) ALL_OLD - If PutItem overwrote an attribute name-value pair, then the content of the old item is returned. The values returned are strongly consistent. There is no additional cost associated with requesting a return value aside from the small network and processing overhead of receiving a larger response. No read capacity units are consumed. The ReturnValues parameter is used by several DynamoDB operations; however, PutItem does not recognize any values other than NONE or ALL_OLD.
   --return-consumed-capacity: string@return-consumed-capacity-completer # Determines the level of detail about either provisioned or on-demand throughput consumption that is returned in the response: INDEXES - The response includes the aggregate ConsumedCapacity for the operation, together with ConsumedCapacity for each table and secondary index that was accessed. Note that some operations, such as GetItem and BatchGetItem, do not access any indexes at all. In these cases, specifying INDEXES will only return ConsumedCapacity information for table(s). TOTAL - The response includes only the aggregate ConsumedCapacity for the operation. NONE - No ConsumedCapacity details are included in the response.
-  --return-item-collection-metrics: any
-  --conditional-operator: any
-  --condition-expression: any
-  --expression-attribute-names: any
-  --expression-attribute-values: any
-]: any -> record<Attributes: record, ConsumedCapacity: record<TableName: record, CapacityUnits: record, ReadCapacityUnits: record, WriteCapacityUnits: record, Table: record<ReadCapacityUnits: record, WriteCapacityUnits: record, CapacityUnits: record>, LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record>, ItemCollectionMetrics: record<ItemCollectionKey: record, SizeEstimateRangeGB: record>> {
+  --return-item-collection-metrics: string@return-item-collection-metrics-completer # Determines whether item collection metrics are returned. If set to SIZE, the response includes statistics about item collections, if any, that were modified during the operation are returned in the response. If set to NONE (the default), no statistics are returned.
+  --conditional-operator: string@conditional-operator-completer # This is a legacy parameter. Use ConditionExpression instead. For more information, see ConditionalOperator (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/LegacyConditionalParameters.ConditionalOperator.html) in the Amazon DynamoDB Developer Guide.
+  --condition-expression: string # A condition that must be satisfied in order for a conditional PutItem operation to succeed. An expression can contain any of the following: Functions: attribute_exists | attribute_not_exists | attribute_type | contains | begins_with | size These function names are case-sensitive. Comparison operators: = | <> | < | > | <= | >= | BETWEEN | IN Logical operators: AND | OR | NOT For more information on condition expressions, see Condition Expressions (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.SpecifyingConditions.html) in the Amazon DynamoDB Developer Guide.
+  --expression-attribute-names: record # One or more substitution tokens for attribute names in an expression. The following are some use cases for using ExpressionAttributeNames: To access an attribute whose name conflicts with a DynamoDB reserved word. To create a placeholder for repeating occurrences of an attribute name in an expression. To prevent special characters in an attribute name from being misinterpreted in an expression. Use the # character in an expression to dereference an attribute name. For example, consider the following attribute name: Percentile The name of this attribute conflicts with a reserved word, so it cannot be used directly in an expression. (For the complete list of reserved words, see Reserved Words (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/ReservedWords.html) in the Amazon DynamoDB Developer Guide). To work around this, you could specify the following for ExpressionAttributeNames: {"#P":"Percentile"} You could then use this substitution in an expression, as in this example: #P = :val Tokens that begin with the : character are expression attribute values, which are placeholders for the actual value at runtime. For more information on expression attribute names, see Specifying Item Attributes (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.AccessingItemAttributes.html) in the Amazon DynamoDB Developer Guide.
+  --expression-attribute-values: record # One or more values that can be substituted in an expression. Use the : (colon) character in an expression to dereference an attribute value. For example, suppose that you wanted to check whether the value of the ProductStatus attribute was one of the following: Available | Backordered | Discontinued You would first need to specify ExpressionAttributeValues as follows: { ":avail":{"S":"Available"}, ":back":{"S":"Backordered"}, ":disc":{"S":"Discontinued"} } You could then use these values in an expression, such as this: ProductStatus IN (:avail, :back, :disc) For more information on expression attribute values, see Condition Expressions (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.SpecifyingConditions.html) in the Amazon DynamoDB Developer Guide.
+]: any -> record<Attributes: record, ConsumedCapacity: record<TableName: string, CapacityUnits: float, ReadCapacityUnits: float, WriteCapacityUnits: float, Table: record<ReadCapacityUnits: float, WriteCapacityUnits: float, CapacityUnits: float>, LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record>, ItemCollectionMetrics: record<ItemCollectionKey: record, SizeEstimateRangeGB: list<float>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.PutItem")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TableName": $table_name, "Item": $item, "Expected": $expected, "ReturnValues": $return_values, "ReturnConsumedCapacity": $return_consumed_capacity, "ReturnItemCollectionMetrics": $return_item_collection_metrics, "ConditionalOperator": $conditional_operator, "ConditionExpression": $condition_expression, "ExpressionAttributeNames": $expression_attribute_names, "ExpressionAttributeValues": $expression_attribute_values} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2066,28 +2133,29 @@ export def "query" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-37
-  table_name: any
-  --index-name: any
-  --select: any
-  --attributes-to-get: any
-  --limit-body: any #  (body field)
-  --consistent-read: any
-  --key-conditions: any
-  --query-filter: any
-  --conditional-operator: any
-  --scan-index-forward: any
-  --exclusive-start-key-body: any #  (body field)
+  --x-amz-target: string@x-amz-target-completer-37 # required
+  table_name: string # The name of the table containing the requested items.
+  --index-name: string # The name of an index to query. This index can be any local secondary index or global secondary index on the table. Note that if you use the IndexName parameter, you must also provide TableName.
+  --select: string@select-completer # The attributes to be returned in the result. You can retrieve all item attributes, specific item attributes, the count of matching items, or in the case of an index, some or all of the attributes projected into the index. ALL_ATTRIBUTES - Returns all of the item attributes from the specified table or index. If you query a local secondary index, then for each matching item in the index, DynamoDB fetches the entire item from the parent table. If the index is configured to project all item attributes, then all of the data can be obtained from the local secondary index, and no fetching is required. ALL_PROJECTED_ATTRIBUTES - Allowed only when querying an index. Retrieves all attributes that have been projected into the index. If the index is configured to project all attributes, this return value is equivalent to specifying ALL_ATTRIBUTES. COUNT - Returns the number of matching items, rather than the matching items themselves. Note that this uses the same quantity of read capacity units as getting the items, and is subject to the same item size calculations. SPECIFIC_ATTRIBUTES - Returns only the attributes listed in ProjectionExpression. This return value is equivalent to specifying ProjectionExpression without specifying any value for Select. If you query or scan a local secondary index and request only attributes that are projected into that index, the operation will read only the index and not the table. If any of the requested attributes are not projected into the local secondary index, DynamoDB fetches each of these attributes from the parent table. This extra fetching incurs additional throughput cost and latency. If you query or scan a global secondary index, you can only request attributes that are projected into the index. Global secondary index queries cannot fetch attributes from the parent table. If neither Select nor ProjectionExpression are specified, DynamoDB defaults to ALL_ATTRIBUTES when accessing a table, and ALL_PROJECTED_ATTRIBUTES when accessing an index. You cannot use both Select and ProjectionExpression together in a single request, unless the value for Select is SPECIFIC_ATTRIBUTES. (This usage is equivalent to specifying ProjectionExpression without any value for Select.) If you use the ProjectionExpression parameter, then the value for Select can only be SPECIFIC_ATTRIBUTES. Any other value for Select will return an error.
+  --attributes-to-get: list<string> # This is a legacy parameter. Use ProjectionExpression instead. For more information, see AttributesToGet (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/LegacyConditionalParameters.AttributesToGet.html) in the Amazon DynamoDB Developer Guide.
+  --limit-body: int # The maximum number of items to evaluate (not necessarily the number of matching items). If DynamoDB processes the number of items up to the limit while processing the results, it stops the operation and returns the matching values up to that point, and a key in LastEvaluatedKey to apply in a subsequent operation, so that you can pick up where you left off. Also, if the processed dataset size exceeds 1 MB before DynamoDB reaches this limit, it stops the operation and returns the matching values up to the limit, and a key in LastEvaluatedKey to apply in a subsequent operation to continue the operation. For more information, see Query and Scan (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/QueryAndScan.html) in the Amazon DynamoDB Developer Guide. (body field)
+  --consistent-read: oneof<nothing, bool> # Determines the read consistency model: If set to true, then the operation uses strongly consistent reads; otherwise, the operation uses eventually consistent reads. Strongly consistent reads are not supported on global secondary indexes. If you query a global secondary index with ConsistentRead set to true, you will receive a ValidationException.
+  --key-conditions: record # This is a legacy parameter. Use KeyConditionExpression instead. For more information, see KeyConditions (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/LegacyConditionalParameters.KeyConditions.html) in the Amazon DynamoDB Developer Guide.
+  --query-filter: record # This is a legacy parameter. Use FilterExpression instead. For more information, see QueryFilter (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/LegacyConditionalParameters.QueryFilter.html) in the Amazon DynamoDB Developer Guide.
+  --conditional-operator: string@conditional-operator-completer # This is a legacy parameter. Use FilterExpression instead. For more information, see ConditionalOperator (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/LegacyConditionalParameters.ConditionalOperator.html) in the Amazon DynamoDB Developer Guide.
+  --scan-index-forward: oneof<nothing, bool> # Specifies the order for index traversal: If true (default), the traversal is performed in ascending order; if false, the traversal is performed in descending order. Items with the same partition key value are stored in sorted order by sort key. If the sort key data type is Number, the results are stored in numeric order. For type String, the results are stored in order of UTF-8 bytes. For type Binary, DynamoDB treats each byte of the binary data as unsigned. If ScanIndexForward is true, DynamoDB returns the results in the order in which they are stored (by sort key value). This is the default behavior. If ScanIndexForward is false, DynamoDB reads the results in reverse order by sort key value, and then returns the results to the client.
+  --exclusive-start-key-body: record # The primary key of the first item that this operation will evaluate. Use the value that was returned for LastEvaluatedKey in the previous operation. The data type for ExclusiveStartKey must be String, Number, or Binary. No set data types are allowed. (body field)
   --return-consumed-capacity: string@return-consumed-capacity-completer # Determines the level of detail about either provisioned or on-demand throughput consumption that is returned in the response: INDEXES - The response includes the aggregate ConsumedCapacity for the operation, together with ConsumedCapacity for each table and secondary index that was accessed. Note that some operations, such as GetItem and BatchGetItem, do not access any indexes at all. In these cases, specifying INDEXES will only return ConsumedCapacity information for table(s). TOTAL - The response includes only the aggregate ConsumedCapacity for the operation. NONE - No ConsumedCapacity details are included in the response.
-  --projection-expression: any
-  --filter-expression: any
-  --key-condition-expression: any
-  --expression-attribute-names: any
-  --expression-attribute-values: any
-]: any -> record<Items: record, Count: record, ScannedCount: record, LastEvaluatedKey: record, ConsumedCapacity: record<TableName: record, CapacityUnits: record, ReadCapacityUnits: record, WriteCapacityUnits: record, Table: record<ReadCapacityUnits: record, WriteCapacityUnits: record, CapacityUnits: record>, LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record>> {
+  --projection-expression: string # A string that identifies one or more attributes to retrieve from the table. These attributes can include scalars, sets, or elements of a JSON document. The attributes in the expression must be separated by commas. If no attribute names are specified, then all attributes will be returned. If any of the requested attributes are not found, they will not appear in the result. For more information, see Accessing Item Attributes (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.AccessingItemAttributes.html) in the Amazon DynamoDB Developer Guide.
+  --filter-expression: string # A string that contains conditions that DynamoDB applies after the Query operation, but before the data is returned to you. Items that do not satisfy the FilterExpression criteria are not returned. A FilterExpression does not allow key attributes. You cannot define a filter expression based on a partition key or a sort key. A FilterExpression is applied after the items have already been read; the process of filtering does not consume any additional read capacity units. For more information, see Filter Expressions (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/QueryAndScan.html#Query.FilterExpression) in the Amazon DynamoDB Developer Guide.
+  --key-condition-expression: string # The condition that specifies the key values for items to be retrieved by the Query action. The condition must perform an equality test on a single partition key value. The condition can optionally perform one of several comparison tests on a single sort key value. This allows Query to retrieve one item with a given partition key value and sort key value, or several items that have the same partition key value but different sort key values. The partition key equality test is required, and must be specified in the following format: partitionKeyName = :partitionkeyval If you also want to provide a condition for the sort key, it must be combined using AND with the condition for the sort key. Following is an example, using the = comparison operator for the sort key: partitionKeyName = :partitionkeyval AND sortKeyName = :sortkeyval Valid comparisons for the sort key condition are as follows: sortKeyName = :sortkeyval - true if the sort key value is equal to :sortkeyval. sortKeyName < :sortkeyval - true if the sort key value is less than :sortkeyval. sortKeyName <= :sortkeyval - true if the sort key value is less than or equal to :sortkeyval. sortKeyName > :sortkeyval - true if the sort key value is greater than :sortkeyval. sortKeyName >= :sortkeyval - true if the sort key value is greater than or equal to :sortkeyval. sortKeyName BETWEEN :sortkeyval1 AND :sortkeyval2 - true if the sort key value is greater than or equal to :sortkeyval1, and less than or equal to :sortkeyval2. begins_with ( sortKeyName, :sortkeyval ) - true if the sort key value begins with a particular operand. (You cannot use this function with a sort key that is of type Number.) Note that the function name begins_with is case-sensitive. Use the ExpressionAttributeValues parameter to replace tokens such as :partitionval and :sortval with actual values at runtime. You can optionally use the ExpressionAttributeNames parameter to replace the names of the partition key and sort key with placeholder tokens. This option might be necessary if an attribute name conflicts with a DynamoDB reserved word. For example, the following KeyConditionExpression parameter causes an error because Size is a reserved word: Size = :myval To work around this, define a placeholder (such a #S) to represent the attribute name Size. KeyConditionExpression then is as follows: #S = :myval For a list of reserved words, see Reserved Words (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/ReservedWords.html) in the Amazon DynamoDB Developer Guide. For more information on ExpressionAttributeNames and ExpressionAttributeValues, see Using Placeholders for Attribute Names and Values (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/ExpressionPlaceholders.html) in the Amazon DynamoDB Developer Guide.
+  --expression-attribute-names: record # One or more substitution tokens for attribute names in an expression. The following are some use cases for using ExpressionAttributeNames: To access an attribute whose name conflicts with a DynamoDB reserved word. To create a placeholder for repeating occurrences of an attribute name in an expression. To prevent special characters in an attribute name from being misinterpreted in an expression. Use the # character in an expression to dereference an attribute name. For example, consider the following attribute name: Percentile The name of this attribute conflicts with a reserved word, so it cannot be used directly in an expression. (For the complete list of reserved words, see Reserved Words (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/ReservedWords.html) in the Amazon DynamoDB Developer Guide). To work around this, you could specify the following for ExpressionAttributeNames: {"#P":"Percentile"} You could then use this substitution in an expression, as in this example: #P = :val Tokens that begin with the : character are expression attribute values, which are placeholders for the actual value at runtime. For more information on expression attribute names, see Specifying Item Attributes (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.AccessingItemAttributes.html) in the Amazon DynamoDB Developer Guide.
+  --expression-attribute-values: record # One or more values that can be substituted in an expression. Use the : (colon) character in an expression to dereference an attribute value. For example, suppose that you wanted to check whether the value of the ProductStatus attribute was one of the following: Available | Backordered | Discontinued You would first need to specify ExpressionAttributeValues as follows: { ":avail":{"S":"Available"}, ":back":{"S":"Backordered"}, ":disc":{"S":"Discontinued"} } You could then use these values in an expression, such as this: ProductStatus IN (:avail, :back, :disc) For more information on expression attribute values, see Specifying Conditions (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.SpecifyingConditions.html) in the Amazon DynamoDB Developer Guide.
+]: any -> record<Items: list<record>, Count: int, ScannedCount: int, LastEvaluatedKey: record, ConsumedCapacity: record<TableName: string, CapacityUnits: float, ReadCapacityUnits: float, WriteCapacityUnits: float, Table: record<ReadCapacityUnits: float, WriteCapacityUnits: float, CapacityUnits: float>, LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.Query")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "ExclusiveStartKey" $exclusive_start_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"TableName": $table_name, "IndexName": $index_name, "Select": $select, "AttributesToGet": $attributes_to_get, "Limit": $limit_body, "ConsistentRead": $consistent_read, "KeyConditions": $key_conditions, "QueryFilter": $query_filter, "ConditionalOperator": $conditional_operator, "ScanIndexForward": $scan_index_forward, "ExclusiveStartKey": $exclusive_start_key_body, "ReturnConsumedCapacity": $return_consumed_capacity, "ProjectionExpression": $projection_expression, "FilterExpression": $filter_expression, "KeyConditionExpression": $key_condition_expression, "ExpressionAttributeNames": $expression_attribute_names, "ExpressionAttributeValues": $expression_attribute_values} | compact
@@ -2114,6 +2182,10 @@ export def "query" [
 #
 # POST /
 # operationId: RestoreTableFromBackup
+# --GlobalSecondaryIndexOverride item shape: {IndexName: string, KeySchema: list, Projection: record, ProvisionedThroughput?: record}
+# --LocalSecondaryIndexOverride item shape: {IndexName: string, KeySchema: list, Projection: record}
+# --ProvisionedThroughputOverride shape: {ReadCapacityUnits: int, WriteCapacityUnits: int}
+# --SSESpecificationOverride shape: {Enabled?: bool, SSEType?: "AES256"|"KMS", KMSMasterKeyId?: string}
 export def "restore-table-from-backup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2131,18 +2203,19 @@ export def "restore-table-from-backup" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-38
-  target_table_name: any
-  backup_arn: any
-  --billing-mode-override: any
-  --global-secondary-index-override: any
-  --local-secondary-index-override: any
-  --provisioned-throughput-override: any
-  --sse-specification-override: any
-]: any -> record<TableDescription: record<AttributeDefinitions: record, TableName: record, KeySchema: record, TableStatus: record, CreationDateTime: record, ProvisionedThroughput: record<LastIncreaseDateTime: record, LastDecreaseDateTime: record, NumberOfDecreasesToday: record, ReadCapacityUnits: record, WriteCapacityUnits: record>, TableSizeBytes: record, ItemCount: record, TableArn: record, TableId: record, BillingModeSummary: record<BillingMode: record, LastUpdateToPayPerRequestDateTime: record>, LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record, StreamSpecification: record<StreamEnabled: record, StreamViewType: record>, LatestStreamLabel: record, LatestStreamArn: record, GlobalTableVersion: record, Replicas: record, RestoreSummary: record<SourceBackupArn: record, SourceTableArn: record, RestoreDateTime: record, RestoreInProgress: record>, SSEDescription: record<Status: record, SSEType: record, KMSMasterKeyArn: record, InaccessibleEncryptionDateTime: record>, ArchivalSummary: record<ArchivalDateTime: record, ArchivalReason: record, ArchivalBackupArn: record>, TableClassSummary: record<TableClass: record, LastUpdateDateTime: record>, DeletionProtectionEnabled: record>> {
+  --x-amz-target: string@x-amz-target-completer-38 # required
+  target_table_name: string # The name of the new table to which the backup must be restored.
+  backup_arn: string # The Amazon Resource Name (ARN) associated with the backup.
+  --billing-mode-override: string@billing-mode-override-completer # The billing mode of the restored table.
+  --global-secondary-index-override: list # List of global secondary indexes for the restored table. The indexes provided should match existing secondary indexes. You can choose to exclude some or all of the indexes at the time of restore. — item shape: {IndexName: string, KeySchema: list, Projection: record, ProvisionedThroughput?: record}
+  --local-secondary-index-override: list # List of local secondary indexes for the restored table. The indexes provided should match existing secondary indexes. You can choose to exclude some or all of the indexes at the time of restore. — item shape: {IndexName: string, KeySchema: list, Projection: record}
+  --provisioned-throughput-override: record # Represents the provisioned throughput settings for a specified table or index. The settings can be modified using the UpdateTable operation. For current minimum and maximum provisioned throughput values, see Service, Account, and Table Quotas (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Limits.html) in the Amazon DynamoDB Developer Guide. — shape: {ReadCapacityUnits: int, WriteCapacityUnits: int}
+  --sse-specification-override: record # Represents the settings used to enable server-side encryption. — shape: {Enabled?: bool, SSEType?: "AES256"|"KMS", KMSMasterKeyId?: string}
+]: any -> record<TableDescription: record<AttributeDefinitions: list<record>, TableName: string, KeySchema: list<record>, TableStatus: string, CreationDateTime: string, ProvisionedThroughput: record<LastIncreaseDateTime: string, LastDecreaseDateTime: string, NumberOfDecreasesToday: int, ReadCapacityUnits: int, WriteCapacityUnits: int>, TableSizeBytes: int, ItemCount: int, TableArn: string, TableId: string, BillingModeSummary: record<BillingMode: string, LastUpdateToPayPerRequestDateTime: string>, LocalSecondaryIndexes: list<record>, GlobalSecondaryIndexes: list<record>, StreamSpecification: record<StreamEnabled: bool, StreamViewType: string>, LatestStreamLabel: string, LatestStreamArn: string, GlobalTableVersion: string, Replicas: list<record>, RestoreSummary: record<SourceBackupArn: string, SourceTableArn: string, RestoreDateTime: string, RestoreInProgress: bool>, SSEDescription: record<Status: string, SSEType: string, KMSMasterKeyArn: string, InaccessibleEncryptionDateTime: string>, ArchivalSummary: record<ArchivalDateTime: string, ArchivalReason: string, ArchivalBackupArn: string>, TableClassSummary: record<TableClass: string, LastUpdateDateTime: string>, DeletionProtectionEnabled: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.RestoreTableFromBackup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TargetTableName": $target_table_name, "BackupArn": $backup_arn, "BillingModeOverride": $billing_mode_override, "GlobalSecondaryIndexOverride": $global_secondary_index_override, "LocalSecondaryIndexOverride": $local_secondary_index_override, "ProvisionedThroughputOverride": $provisioned_throughput_override, "SSESpecificationOverride": $sse_specification_override} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2168,6 +2241,10 @@ export def "restore-table-from-backup" [
 #
 # POST /
 # operationId: RestoreTableToPointInTime
+# --GlobalSecondaryIndexOverride item shape: {IndexName: string, KeySchema: list, Projection: record, ProvisionedThroughput?: record}
+# --LocalSecondaryIndexOverride item shape: {IndexName: string, KeySchema: list, Projection: record}
+# --ProvisionedThroughputOverride shape: {ReadCapacityUnits: int, WriteCapacityUnits: int}
+# --SSESpecificationOverride shape: {Enabled?: bool, SSEType?: "AES256"|"KMS", KMSMasterKeyId?: string}
 export def "restore-table-to-point-in-time" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2185,21 +2262,22 @@ export def "restore-table-to-point-in-time" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-39
-  --source-table-arn: any
-  --source-table-name: any
-  target_table_name: any
-  --use-latest-restorable-time: any
-  --restore-date-time: any
-  --billing-mode-override: any
-  --global-secondary-index-override: any
-  --local-secondary-index-override: any
-  --provisioned-throughput-override: any
-  --sse-specification-override: any
-]: any -> record<TableDescription: record<AttributeDefinitions: record, TableName: record, KeySchema: record, TableStatus: record, CreationDateTime: record, ProvisionedThroughput: record<LastIncreaseDateTime: record, LastDecreaseDateTime: record, NumberOfDecreasesToday: record, ReadCapacityUnits: record, WriteCapacityUnits: record>, TableSizeBytes: record, ItemCount: record, TableArn: record, TableId: record, BillingModeSummary: record<BillingMode: record, LastUpdateToPayPerRequestDateTime: record>, LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record, StreamSpecification: record<StreamEnabled: record, StreamViewType: record>, LatestStreamLabel: record, LatestStreamArn: record, GlobalTableVersion: record, Replicas: record, RestoreSummary: record<SourceBackupArn: record, SourceTableArn: record, RestoreDateTime: record, RestoreInProgress: record>, SSEDescription: record<Status: record, SSEType: record, KMSMasterKeyArn: record, InaccessibleEncryptionDateTime: record>, ArchivalSummary: record<ArchivalDateTime: record, ArchivalReason: record, ArchivalBackupArn: record>, TableClassSummary: record<TableClass: record, LastUpdateDateTime: record>, DeletionProtectionEnabled: record>> {
+  --x-amz-target: string@x-amz-target-completer-39 # required
+  --source-table-arn: string # The DynamoDB table that will be restored. This value is an Amazon Resource Name (ARN).
+  --source-table-name: string # Name of the source table that is being restored.
+  target_table_name: string # The name of the new table to which it must be restored to.
+  --use-latest-restorable-time: oneof<nothing, bool> # Restore the table to the latest possible time. LatestRestorableDateTime is typically 5 minutes before the current time.
+  --restore-date-time: string # Time in the past to restore the table to. (format: date-time)
+  --billing-mode-override: string@billing-mode-override-completer # The billing mode of the restored table.
+  --global-secondary-index-override: list # List of global secondary indexes for the restored table. The indexes provided should match existing secondary indexes. You can choose to exclude some or all of the indexes at the time of restore. — item shape: {IndexName: string, KeySchema: list, Projection: record, ProvisionedThroughput?: record}
+  --local-secondary-index-override: list # List of local secondary indexes for the restored table. The indexes provided should match existing secondary indexes. You can choose to exclude some or all of the indexes at the time of restore. — item shape: {IndexName: string, KeySchema: list, Projection: record}
+  --provisioned-throughput-override: record # Represents the provisioned throughput settings for a specified table or index. The settings can be modified using the UpdateTable operation. For current minimum and maximum provisioned throughput values, see Service, Account, and Table Quotas (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Limits.html) in the Amazon DynamoDB Developer Guide. — shape: {ReadCapacityUnits: int, WriteCapacityUnits: int}
+  --sse-specification-override: record # Represents the settings used to enable server-side encryption. — shape: {Enabled?: bool, SSEType?: "AES256"|"KMS", KMSMasterKeyId?: string}
+]: any -> record<TableDescription: record<AttributeDefinitions: list<record>, TableName: string, KeySchema: list<record>, TableStatus: string, CreationDateTime: string, ProvisionedThroughput: record<LastIncreaseDateTime: string, LastDecreaseDateTime: string, NumberOfDecreasesToday: int, ReadCapacityUnits: int, WriteCapacityUnits: int>, TableSizeBytes: int, ItemCount: int, TableArn: string, TableId: string, BillingModeSummary: record<BillingMode: string, LastUpdateToPayPerRequestDateTime: string>, LocalSecondaryIndexes: list<record>, GlobalSecondaryIndexes: list<record>, StreamSpecification: record<StreamEnabled: bool, StreamViewType: string>, LatestStreamLabel: string, LatestStreamArn: string, GlobalTableVersion: string, Replicas: list<record>, RestoreSummary: record<SourceBackupArn: string, SourceTableArn: string, RestoreDateTime: string, RestoreInProgress: bool>, SSEDescription: record<Status: string, SSEType: string, KMSMasterKeyArn: string, InaccessibleEncryptionDateTime: string>, ArchivalSummary: record<ArchivalDateTime: string, ArchivalReason: string, ArchivalBackupArn: string>, TableClassSummary: record<TableClass: string, LastUpdateDateTime: string>, DeletionProtectionEnabled: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.RestoreTableToPointInTime")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SourceTableArn": $source_table_arn, "SourceTableName": $source_table_name, "TargetTableName": $target_table_name, "UseLatestRestorableTime": $use_latest_restorable_time, "RestoreDateTime": $restore_date_time, "BillingModeOverride": $billing_mode_override, "GlobalSecondaryIndexOverride": $global_secondary_index_override, "LocalSecondaryIndexOverride": $local_secondary_index_override, "ProvisionedThroughputOverride": $provisioned_throughput_override, "SSESpecificationOverride": $sse_specification_override} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2244,27 +2322,28 @@ export def "scan" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-40
-  table_name: any
-  --index-name: any
-  --attributes-to-get: any
-  --limit-body: any #  (body field)
-  --select: any
-  --scan-filter: any
-  --conditional-operator: any
-  --exclusive-start-key-body: any #  (body field)
+  --x-amz-target: string@x-amz-target-completer-40 # required
+  table_name: string # The name of the table containing the requested items; or, if you provide IndexName, the name of the table to which that index belongs.
+  --index-name: string # The name of a secondary index to scan. This index can be any local secondary index or global secondary index. Note that if you use the IndexName parameter, you must also provide TableName.
+  --attributes-to-get: list<string> # This is a legacy parameter. Use ProjectionExpression instead. For more information, see AttributesToGet (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/LegacyConditionalParameters.AttributesToGet.html) in the Amazon DynamoDB Developer Guide.
+  --limit-body: int # The maximum number of items to evaluate (not necessarily the number of matching items). If DynamoDB processes the number of items up to the limit while processing the results, it stops the operation and returns the matching values up to that point, and a key in LastEvaluatedKey to apply in a subsequent operation, so that you can pick up where you left off. Also, if the processed dataset size exceeds 1 MB before DynamoDB reaches this limit, it stops the operation and returns the matching values up to the limit, and a key in LastEvaluatedKey to apply in a subsequent operation to continue the operation. For more information, see Working with Queries (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/QueryAndScan.html) in the Amazon DynamoDB Developer Guide. (body field)
+  --select: string@select-completer # The attributes to be returned in the result. You can retrieve all item attributes, specific item attributes, the count of matching items, or in the case of an index, some or all of the attributes projected into the index. ALL_ATTRIBUTES - Returns all of the item attributes from the specified table or index. If you query a local secondary index, then for each matching item in the index, DynamoDB fetches the entire item from the parent table. If the index is configured to project all item attributes, then all of the data can be obtained from the local secondary index, and no fetching is required. ALL_PROJECTED_ATTRIBUTES - Allowed only when querying an index. Retrieves all attributes that have been projected into the index. If the index is configured to project all attributes, this return value is equivalent to specifying ALL_ATTRIBUTES. COUNT - Returns the number of matching items, rather than the matching items themselves. Note that this uses the same quantity of read capacity units as getting the items, and is subject to the same item size calculations. SPECIFIC_ATTRIBUTES - Returns only the attributes listed in ProjectionExpression. This return value is equivalent to specifying ProjectionExpression without specifying any value for Select. If you query or scan a local secondary index and request only attributes that are projected into that index, the operation reads only the index and not the table. If any of the requested attributes are not projected into the local secondary index, DynamoDB fetches each of these attributes from the parent table. This extra fetching incurs additional throughput cost and latency. If you query or scan a global secondary index, you can only request attributes that are projected into the index. Global secondary index queries cannot fetch attributes from the parent table. If neither Select nor ProjectionExpression are specified, DynamoDB defaults to ALL_ATTRIBUTES when accessing a table, and ALL_PROJECTED_ATTRIBUTES when accessing an index. You cannot use both Select and ProjectionExpression together in a single request, unless the value for Select is SPECIFIC_ATTRIBUTES. (This usage is equivalent to specifying ProjectionExpression without any value for Select.) If you use the ProjectionExpression parameter, then the value for Select can only be SPECIFIC_ATTRIBUTES. Any other value for Select will return an error.
+  --scan-filter: record # This is a legacy parameter. Use FilterExpression instead. For more information, see ScanFilter (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/LegacyConditionalParameters.ScanFilter.html) in the Amazon DynamoDB Developer Guide.
+  --conditional-operator: string@conditional-operator-completer # This is a legacy parameter. Use FilterExpression instead. For more information, see ConditionalOperator (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/LegacyConditionalParameters.ConditionalOperator.html) in the Amazon DynamoDB Developer Guide.
+  --exclusive-start-key-body: record # The primary key of the first item that this operation will evaluate. Use the value that was returned for LastEvaluatedKey in the previous operation. The data type for ExclusiveStartKey must be String, Number or Binary. No set data types are allowed. In a parallel scan, a Scan request that includes ExclusiveStartKey must specify the same segment whose previous Scan returned the corresponding value of LastEvaluatedKey. (body field)
   --return-consumed-capacity: string@return-consumed-capacity-completer # Determines the level of detail about either provisioned or on-demand throughput consumption that is returned in the response: INDEXES - The response includes the aggregate ConsumedCapacity for the operation, together with ConsumedCapacity for each table and secondary index that was accessed. Note that some operations, such as GetItem and BatchGetItem, do not access any indexes at all. In these cases, specifying INDEXES will only return ConsumedCapacity information for table(s). TOTAL - The response includes only the aggregate ConsumedCapacity for the operation. NONE - No ConsumedCapacity details are included in the response.
-  --total-segments: any
-  --segment: any
-  --projection-expression: any
-  --filter-expression: any
-  --expression-attribute-names: any
-  --expression-attribute-values: any
-  --consistent-read: any
-]: any -> record<Items: record, Count: record, ScannedCount: record, LastEvaluatedKey: record, ConsumedCapacity: record<TableName: record, CapacityUnits: record, ReadCapacityUnits: record, WriteCapacityUnits: record, Table: record<ReadCapacityUnits: record, WriteCapacityUnits: record, CapacityUnits: record>, LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record>> {
+  --total-segments: int # For a parallel Scan request, TotalSegments represents the total number of segments into which the Scan operation will be divided. The value of TotalSegments corresponds to the number of application workers that will perform the parallel scan. For example, if you want to use four application threads to scan a table or an index, specify a TotalSegments value of 4. The value for TotalSegments must be greater than or equal to 1, and less than or equal to 1000000. If you specify a TotalSegments value of 1, the Scan operation will be sequential rather than parallel. If you specify TotalSegments, you must also specify Segment.
+  --segment: int # For a parallel Scan request, Segment identifies an individual segment to be scanned by an application worker. Segment IDs are zero-based, so the first segment is always 0. For example, if you want to use four application threads to scan a table or an index, then the first thread specifies a Segment value of 0, the second thread specifies 1, and so on. The value of LastEvaluatedKey returned from a parallel Scan request must be used as ExclusiveStartKey with the same segment ID in a subsequent Scan operation. The value for Segment must be greater than or equal to 0, and less than the value provided for TotalSegments. If you provide Segment, you must also provide TotalSegments.
+  --projection-expression: string # A string that identifies one or more attributes to retrieve from the specified table or index. These attributes can include scalars, sets, or elements of a JSON document. The attributes in the expression must be separated by commas. If no attribute names are specified, then all attributes will be returned. If any of the requested attributes are not found, they will not appear in the result. For more information, see Specifying Item Attributes (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.AccessingItemAttributes.html) in the Amazon DynamoDB Developer Guide.
+  --filter-expression: string # A string that contains conditions that DynamoDB applies after the Scan operation, but before the data is returned to you. Items that do not satisfy the FilterExpression criteria are not returned. A FilterExpression is applied after the items have already been read; the process of filtering does not consume any additional read capacity units. For more information, see Filter Expressions (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/QueryAndScan.html#Query.FilterExpression) in the Amazon DynamoDB Developer Guide.
+  --expression-attribute-names: record # One or more substitution tokens for attribute names in an expression. The following are some use cases for using ExpressionAttributeNames: To access an attribute whose name conflicts with a DynamoDB reserved word. To create a placeholder for repeating occurrences of an attribute name in an expression. To prevent special characters in an attribute name from being misinterpreted in an expression. Use the # character in an expression to dereference an attribute name. For example, consider the following attribute name: Percentile The name of this attribute conflicts with a reserved word, so it cannot be used directly in an expression. (For the complete list of reserved words, see Reserved Words (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/ReservedWords.html) in the Amazon DynamoDB Developer Guide). To work around this, you could specify the following for ExpressionAttributeNames: {"#P":"Percentile"} You could then use this substitution in an expression, as in this example: #P = :val Tokens that begin with the : character are expression attribute values, which are placeholders for the actual value at runtime. For more information on expression attribute names, see Specifying Item Attributes (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.AccessingItemAttributes.html) in the Amazon DynamoDB Developer Guide.
+  --expression-attribute-values: record # One or more values that can be substituted in an expression. Use the : (colon) character in an expression to dereference an attribute value. For example, suppose that you wanted to check whether the value of the ProductStatus attribute was one of the following: Available | Backordered | Discontinued You would first need to specify ExpressionAttributeValues as follows: { ":avail":{"S":"Available"}, ":back":{"S":"Backordered"}, ":disc":{"S":"Discontinued"} } You could then use these values in an expression, such as this: ProductStatus IN (:avail, :back, :disc) For more information on expression attribute values, see Condition Expressions (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.SpecifyingConditions.html) in the Amazon DynamoDB Developer Guide.
+  --consistent-read: oneof<nothing, bool> # A Boolean value that determines the read consistency model during the scan: If ConsistentRead is false, then the data returned from Scan might not contain the results from other recently completed write operations (PutItem, UpdateItem, or DeleteItem). If ConsistentRead is true, then all of the write operations that completed before the Scan began are guaranteed to be contained in the Scan response. The default setting for ConsistentRead is false. The ConsistentRead parameter is not supported on global secondary indexes. If you scan a global secondary index with ConsistentRead set to true, you will receive a ValidationException.
+]: any -> record<Items: list<record>, Count: int, ScannedCount: int, LastEvaluatedKey: record, ConsumedCapacity: record<TableName: string, CapacityUnits: float, ReadCapacityUnits: float, WriteCapacityUnits: float, Table: record<ReadCapacityUnits: float, WriteCapacityUnits: float, CapacityUnits: float>, LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.Scan")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "ExclusiveStartKey" $exclusive_start_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"TableName": $table_name, "IndexName": $index_name, "AttributesToGet": $attributes_to_get, "Limit": $limit_body, "Select": $select, "ScanFilter": $scan_filter, "ConditionalOperator": $conditional_operator, "ExclusiveStartKey": $exclusive_start_key_body, "ReturnConsumedCapacity": $return_consumed_capacity, "TotalSegments": $total_segments, "Segment": $segment, "ProjectionExpression": $projection_expression, "FilterExpression": $filter_expression, "ExpressionAttributeNames": $expression_attribute_names, "ExpressionAttributeValues": $expression_attribute_values, "ConsistentRead": $consistent_read} | compact
@@ -2291,6 +2370,7 @@ export def "scan" [
 #
 # POST /
 # operationId: TagResource
+# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2308,13 +2388,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-41
-  resource_arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-41 # required
+  resource_arn: string # Identifies the Amazon DynamoDB resource to which tags should be added. This value is an Amazon Resource Name (ARN).
+  tags: list # The tags to be assigned to the Amazon DynamoDB resource. — item shape: {Key: string, Value: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2340,6 +2421,7 @@ export def "tag-resource" [
 #
 # POST /
 # operationId: TransactGetItems
+# --TransactItems item shape: {Get: record}
 export def "transact-get-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2357,13 +2439,14 @@ export def "transact-get-items" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-42
-  transact_items: any
-  --return-consumed-capacity: any
-]: any -> record<ConsumedCapacity: record, Responses: record> {
+  --x-amz-target: string@x-amz-target-completer-42 # required
+  transact_items: list # An ordered array of up to 100 TransactGetItem objects, each of which contains a Get structure. — item shape: {Get: record}
+  --return-consumed-capacity: string@return-consumed-capacity-completer # Determines the level of detail about either provisioned or on-demand throughput consumption that is returned in the response: INDEXES - The response includes the aggregate ConsumedCapacity for the operation, together with ConsumedCapacity for each table and secondary index that was accessed. Note that some operations, such as GetItem and BatchGetItem, do not access any indexes at all. In these cases, specifying INDEXES will only return ConsumedCapacity information for table(s). TOTAL - The response includes only the aggregate ConsumedCapacity for the operation. NONE - No ConsumedCapacity details are included in the response.
+]: any -> record<ConsumedCapacity: table<TableName: string, CapacityUnits: float, ReadCapacityUnits: float, WriteCapacityUnits: float, Table: record, LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record>, Responses: table<Item: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.TransactGetItems")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TransactItems": $transact_items, "ReturnConsumedCapacity": $return_consumed_capacity} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2389,6 +2472,7 @@ export def "transact-get-items" [
 #
 # POST /
 # operationId: TransactWriteItems
+# --TransactItems item shape: {ConditionCheck?: record, Put?: record, Delete?: record, Update?: record}
 export def "transact-write-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2406,15 +2490,16 @@ export def "transact-write-items" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-43
-  transact_items: any
+  --x-amz-target: string@x-amz-target-completer-43 # required
+  transact_items: list # An ordered array of up to 100 TransactWriteItem objects, each of which contains a ConditionCheck, Put, Update, or Delete object. These can operate on items in different tables, but the tables must reside in the same Amazon Web Services account and Region, and no two of them can operate on the same item. — item shape: {ConditionCheck?: record, Put?: record, Delete?: record, Update?: record}
   --return-consumed-capacity: string@return-consumed-capacity-completer # Determines the level of detail about either provisioned or on-demand throughput consumption that is returned in the response: INDEXES - The response includes the aggregate ConsumedCapacity for the operation, together with ConsumedCapacity for each table and secondary index that was accessed. Note that some operations, such as GetItem and BatchGetItem, do not access any indexes at all. In these cases, specifying INDEXES will only return ConsumedCapacity information for table(s). TOTAL - The response includes only the aggregate ConsumedCapacity for the operation. NONE - No ConsumedCapacity details are included in the response.
-  --return-item-collection-metrics: any
-  --client-request-token: any
-]: any -> record<ConsumedCapacity: record, ItemCollectionMetrics: record> {
+  --return-item-collection-metrics: string@return-item-collection-metrics-completer # Determines whether item collection metrics are returned. If set to SIZE, the response includes statistics about item collections (if any), that were modified during the operation and are returned in the response. If set to NONE (the default), no statistics are returned.
+  --client-request-token: string # Providing a ClientRequestToken makes the call to TransactWriteItems idempotent, meaning that multiple identical calls have the same effect as one single call. Although multiple identical calls using the same client request token produce the same result on the server (no side effects), the responses to the calls might not be the same. If the ReturnConsumedCapacity parameter is set, then the initial TransactWriteItems call returns the amount of write capacity units consumed in making the changes. Subsequent TransactWriteItems calls with the same client token return the number of read capacity units consumed in reading the item. A client request token is valid for 10 minutes after the first request that uses it is completed. After 10 minutes, any request with the same client token is treated as a new request. Do not resubmit the same request with the same client token for more than 10 minutes, or the result might not be idempotent. If you submit a request with the same client token but a change in other parameters within the 10-minute idempotency window, DynamoDB returns an IdempotentParameterMismatch exception.
+]: any -> record<ConsumedCapacity: table<TableName: string, CapacityUnits: float, ReadCapacityUnits: float, WriteCapacityUnits: float, Table: record, LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record>, ItemCollectionMetrics: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.TransactWriteItems")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TransactItems": $transact_items, "ReturnConsumedCapacity": $return_consumed_capacity, "ReturnItemCollectionMetrics": $return_item_collection_metrics, "ClientRequestToken": $client_request_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2457,13 +2542,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-44
-  resource_arn: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-44 # required
+  resource_arn: string # The DynamoDB resource that the tags will be removed from. This value is an Amazon Resource Name (ARN).
+  tag_keys: list<string> # A list of tag keys. Existing tags of the resource whose keys are members of this list will be removed from the DynamoDB resource.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2489,6 +2575,7 @@ export def "untag-resource" [
 #
 # POST /
 # operationId: UpdateContinuousBackups
+# --PointInTimeRecoverySpecification shape: {PointInTimeRecoveryEnabled: bool}
 export def "update-continuous-backups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2506,13 +2593,14 @@ export def "update-continuous-backups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-45
-  table_name: any
-  point_in_time_recovery_specification: any
-]: any -> record<ContinuousBackupsDescription: record<ContinuousBackupsStatus: record, PointInTimeRecoveryDescription: record<PointInTimeRecoveryStatus: record, EarliestRestorableDateTime: record, LatestRestorableDateTime: record>>> {
+  --x-amz-target: string@x-amz-target-completer-45 # required
+  table_name: string # The name of the table.
+  point_in_time_recovery_specification: record # Represents the settings used to enable point in time recovery. — shape: {PointInTimeRecoveryEnabled: bool}
+]: any -> record<ContinuousBackupsDescription: record<ContinuousBackupsStatus: string, PointInTimeRecoveryDescription: record<PointInTimeRecoveryStatus: string, EarliestRestorableDateTime: string, LatestRestorableDateTime: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.UpdateContinuousBackups")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TableName": $table_name, "PointInTimeRecoverySpecification": $point_in_time_recovery_specification} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2555,14 +2643,15 @@ export def "update-contributor-insights" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-46
-  table_name: any
-  --index-name: any
-  contributor_insights_action: any
-]: any -> record<TableName: record, IndexName: record, ContributorInsightsStatus: record> {
+  --x-amz-target: string@x-amz-target-completer-46 # required
+  table_name: string # The name of the table.
+  --index-name: string # The global secondary index name, if applicable.
+  contributor_insights_action: string@contributor-insights-action-completer # Represents the contributor insights action.
+]: any -> record<TableName: string, IndexName: string, ContributorInsightsStatus: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.UpdateContributorInsights")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TableName": $table_name, "IndexName": $index_name, "ContributorInsightsAction": $contributor_insights_action} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2588,6 +2677,7 @@ export def "update-contributor-insights" [
 #
 # POST /
 # operationId: UpdateGlobalTable
+# --ReplicaUpdates item shape: {Create?: record, Delete?: record}
 export def "update-global-table" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2605,13 +2695,14 @@ export def "update-global-table" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-47
-  global_table_name: any
-  replica_updates: any
-]: any -> record<GlobalTableDescription: record<ReplicationGroup: record, GlobalTableArn: record, CreationDateTime: record, GlobalTableStatus: record, GlobalTableName: record>> {
+  --x-amz-target: string@x-amz-target-completer-47 # required
+  global_table_name: string # The global table name.
+  replica_updates: list # A list of Regions that should be added or removed from the global table. — item shape: {Create?: record, Delete?: record}
+]: any -> record<GlobalTableDescription: record<ReplicationGroup: list<record>, GlobalTableArn: string, CreationDateTime: string, GlobalTableStatus: string, GlobalTableName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.UpdateGlobalTable")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GlobalTableName": $global_table_name, "ReplicaUpdates": $replica_updates} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2637,6 +2728,9 @@ export def "update-global-table" [
 #
 # POST /
 # operationId: UpdateGlobalTableSettings
+# --GlobalTableProvisionedWriteCapacityAutoScalingSettingsUpdate shape: {MinimumUnits?: int, MaximumUnits?: int, AutoScalingDisabled?: bool, AutoScalingRoleArn?: string, ScalingPolicyUpdate?: record}
+# --GlobalTableGlobalSecondaryIndexSettingsUpdate item shape: {IndexName: string, ProvisionedWriteCapacityUnits?: int, ProvisionedWriteCapacityAutoScalingSettingsUpdate?: record}
+# --ReplicaSettingsUpdate item shape: {RegionName: string, ReplicaProvisionedReadCapacityUnits?: int, ReplicaProvisionedReadCapacityAutoScalingSettingsUpdate?: record, ReplicaGlobalSecondaryIndexSettingsUpdate?: list, ReplicaTableClass?: "STANDARD"|"STANDARD_INFREQUENT_ACCESS"}
 export def "update-global-table-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2654,17 +2748,18 @@ export def "update-global-table-settings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-48
-  global_table_name: any
-  --global-table-billing-mode: any
-  --global-table-provisioned-write-capacity-units: any
-  --global-table-provisioned-write-capacity-auto-scaling-settings-update: any
-  --global-table-global-secondary-index-settings-update: any
-  --replica-settings-update: any
-]: any -> record<GlobalTableName: record, ReplicaSettings: record> {
+  --x-amz-target: string@x-amz-target-completer-48 # required
+  global_table_name: string # The name of the global table
+  --global-table-billing-mode: string@global-table-billing-mode-completer # The billing mode of the global table. If GlobalTableBillingMode is not specified, the global table defaults to PROVISIONED capacity billing mode. PROVISIONED - We recommend using PROVISIONED for predictable workloads. PROVISIONED sets the billing mode to Provisioned Mode (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.ReadWriteCapacityMode.html#HowItWorks.ProvisionedThroughput.Manual). PAY_PER_REQUEST - We recommend using PAY_PER_REQUEST for unpredictable workloads. PAY_PER_REQUEST sets the billing mode to On-Demand Mode (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.ReadWriteCapacityMode.html#HowItWorks.OnDemand).
+  --global-table-provisioned-write-capacity-units: int # The maximum number of writes consumed per second before DynamoDB returns a ThrottlingException.
+  --global-table-provisioned-write-capacity-auto-scaling-settings-update: record # Represents the auto scaling settings to be modified for a global table or global secondary index. — shape: {MinimumUnits?: int, MaximumUnits?: int, AutoScalingDisabled?: bool, AutoScalingRoleArn?: string, ScalingPolicyUpdate?: record}
+  --global-table-global-secondary-index-settings-update: list # Represents the settings of a global secondary index for a global table that will be modified. — item shape: {IndexName: string, ProvisionedWriteCapacityUnits?: int, ProvisionedWriteCapacityAutoScalingSettingsUpdate?: record}
+  --replica-settings-update: list # Represents the settings for a global table in a Region that will be modified. — item shape: {RegionName: string, ReplicaProvisionedReadCapacityUnits?: int, ReplicaProvisionedReadCapacityAutoScalingSettingsUpdate?: record, ReplicaGlobalSecondaryIndexSettingsUpdate?: list, ReplicaTableClass?: "STANDARD"|"STANDARD_INFREQUENT_ACCESS"}
+]: any -> record<GlobalTableName: string, ReplicaSettings: table<RegionName: string, ReplicaStatus: string, ReplicaBillingModeSummary: record, ReplicaProvisionedReadCapacityUnits: int, ReplicaProvisionedReadCapacityAutoScalingSettings: record, ReplicaProvisionedWriteCapacityUnits: int, ReplicaProvisionedWriteCapacityAutoScalingSettings: record, ReplicaGlobalSecondaryIndexSettings: list, ReplicaTableClassSummary: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.UpdateGlobalTableSettings")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GlobalTableName": $global_table_name, "GlobalTableBillingMode": $global_table_billing_mode, "GlobalTableProvisionedWriteCapacityUnits": $global_table_provisioned_write_capacity_units, "GlobalTableProvisionedWriteCapacityAutoScalingSettingsUpdate": $global_table_provisioned_write_capacity_auto_scaling_settings_update, "GlobalTableGlobalSecondaryIndexSettingsUpdate": $global_table_global_secondary_index_settings_update, "ReplicaSettingsUpdate": $replica_settings_update} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2707,23 +2802,24 @@ export def "update-item" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-49
-  table_name: any
-  key: any
-  --attribute-updates: any
-  --expected: any
-  --conditional-operator: any
-  --return-values: any
+  --x-amz-target: string@x-amz-target-completer-49 # required
+  table_name: string # The name of the table containing the item to update.
+  key: record # The primary key of the item to be updated. Each element consists of an attribute name and a value for that attribute. For the primary key, you must provide all of the attributes. For example, with a simple primary key, you only need to provide a value for the partition key. For a composite primary key, you must provide values for both the partition key and the sort key.
+  --attribute-updates: record # This is a legacy parameter. Use UpdateExpression instead. For more information, see AttributeUpdates (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/LegacyConditionalParameters.AttributeUpdates.html) in the Amazon DynamoDB Developer Guide.
+  --expected: record # This is a legacy parameter. Use ConditionExpression instead. For more information, see Expected (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/LegacyConditionalParameters.Expected.html) in the Amazon DynamoDB Developer Guide.
+  --conditional-operator: string@conditional-operator-completer # This is a legacy parameter. Use ConditionExpression instead. For more information, see ConditionalOperator (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/LegacyConditionalParameters.ConditionalOperator.html) in the Amazon DynamoDB Developer Guide.
+  --return-values: string@return-values-completer # Use ReturnValues if you want to get the item attributes as they appear before or after they are successfully updated. For UpdateItem, the valid values are: NONE - If ReturnValues is not specified, or if its value is NONE, then nothing is returned. (This setting is the default for ReturnValues.) ALL_OLD - Returns all of the attributes of the item, as they appeared before the UpdateItem operation. UPDATED_OLD - Returns only the updated attributes, as they appeared before the UpdateItem operation. ALL_NEW - Returns all of the attributes of the item, as they appear after the UpdateItem operation. UPDATED_NEW - Returns only the updated attributes, as they appear after the UpdateItem operation. There is no additional cost associated with requesting a return value aside from the small network and processing overhead of receiving a larger response. No read capacity units are consumed. The values returned are strongly consistent.
   --return-consumed-capacity: string@return-consumed-capacity-completer # Determines the level of detail about either provisioned or on-demand throughput consumption that is returned in the response: INDEXES - The response includes the aggregate ConsumedCapacity for the operation, together with ConsumedCapacity for each table and secondary index that was accessed. Note that some operations, such as GetItem and BatchGetItem, do not access any indexes at all. In these cases, specifying INDEXES will only return ConsumedCapacity information for table(s). TOTAL - The response includes only the aggregate ConsumedCapacity for the operation. NONE - No ConsumedCapacity details are included in the response.
-  --return-item-collection-metrics: any
-  --update-expression: any
-  --condition-expression: any
-  --expression-attribute-names: any
-  --expression-attribute-values: any
-]: any -> record<Attributes: record, ConsumedCapacity: record<TableName: record, CapacityUnits: record, ReadCapacityUnits: record, WriteCapacityUnits: record, Table: record<ReadCapacityUnits: record, WriteCapacityUnits: record, CapacityUnits: record>, LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record>, ItemCollectionMetrics: record<ItemCollectionKey: record, SizeEstimateRangeGB: record>> {
+  --return-item-collection-metrics: string@return-item-collection-metrics-completer # Determines whether item collection metrics are returned. If set to SIZE, the response includes statistics about item collections, if any, that were modified during the operation are returned in the response. If set to NONE (the default), no statistics are returned.
+  --update-expression: string # An expression that defines one or more attributes to be updated, the action to be performed on them, and new values for them. The following action values are available for UpdateExpression. SET - Adds one or more attributes and values to an item. If any of these attributes already exist, they are replaced by the new values. You can also use SET to add or subtract from an attribute that is of type Number. For example: SET myNum = myNum + :val SET supports the following functions: if_not_exists (path, operand) - if the item does not contain an attribute at the specified path, then if_not_exists evaluates to operand; otherwise, it evaluates to path. You can use this function to avoid overwriting an attribute that may already be present in the item. list_append (operand, operand) - evaluates to a list with a new element added to it. You can append the new element to the start or the end of the list by reversing the order of the operands. These function names are case-sensitive. REMOVE - Removes one or more attributes from an item. ADD - Adds the specified value to the item, if the attribute does not already exist. If the attribute does exist, then the behavior of ADD depends on the data type of the attribute: If the existing attribute is a number, and if Value is also a number, then Value is mathematically added to the existing attribute. If Value is a negative number, then it is subtracted from the existing attribute. If you use ADD to increment or decrement a number value for an item that doesn't exist before the update, DynamoDB uses 0 as the initial value. Similarly, if you use ADD for an existing item to increment or decrement an attribute value that doesn't exist before the update, DynamoDB uses 0 as the initial value. For example, suppose that the item you want to update doesn't have an attribute named itemcount, but you decide to ADD the number 3 to this attribute anyway. DynamoDB will create the itemcount attribute, set its initial value to 0, and finally add 3 to it. The result will be a new itemcount attribute in the item, with a value of 3. If the existing data type is a set and if Value is also a set, then Value is added to the existing set. For example, if the attribute value is the set [1,2], and the ADD action specified [3], then the final attribute value is [1,2,3]. An error occurs if an ADD action is specified for a set attribute and the attribute type specified does not match the existing set type. Both sets must have the same primitive data type. For example, if the existing data type is a set of strings, the Value must also be a set of strings. The ADD action only supports Number and set data types. In addition, ADD can only be used on top-level attributes, not nested attributes. DELETE - Deletes an element from a set. If a set of values is specified, then those values are subtracted from the old set. For example, if the attribute value was the set [a,b,c] and the DELETE action specifies [a,c], then the final attribute value is [b]. Specifying an empty set is an error. The DELETE action only supports set data types. In addition, DELETE can only be used on top-level attributes, not nested attributes. You can have many actions in a single expression, such as the following: SET a=:value1, b=:value2 DELETE :value3, :value4, :value5 For more information on update expressions, see Modifying Items and Attributes (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.Modifying.html) in the Amazon DynamoDB Developer Guide.
+  --condition-expression: string # A condition that must be satisfied in order for a conditional update to succeed. An expression can contain any of the following: Functions: attribute_exists | attribute_not_exists | attribute_type | contains | begins_with | size These function names are case-sensitive. Comparison operators: = | <> | < | > | <= | >= | BETWEEN | IN Logical operators: AND | OR | NOT For more information about condition expressions, see Specifying Conditions (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.SpecifyingConditions.html) in the Amazon DynamoDB Developer Guide.
+  --expression-attribute-names: record # One or more substitution tokens for attribute names in an expression. The following are some use cases for using ExpressionAttributeNames: To access an attribute whose name conflicts with a DynamoDB reserved word. To create a placeholder for repeating occurrences of an attribute name in an expression. To prevent special characters in an attribute name from being misinterpreted in an expression. Use the # character in an expression to dereference an attribute name. For example, consider the following attribute name: Percentile The name of this attribute conflicts with a reserved word, so it cannot be used directly in an expression. (For the complete list of reserved words, see Reserved Words (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/ReservedWords.html) in the Amazon DynamoDB Developer Guide.) To work around this, you could specify the following for ExpressionAttributeNames: {"#P":"Percentile"} You could then use this substitution in an expression, as in this example: #P = :val Tokens that begin with the : character are expression attribute values, which are placeholders for the actual value at runtime. For more information about expression attribute names, see Specifying Item Attributes (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.AccessingItemAttributes.html) in the Amazon DynamoDB Developer Guide.
+  --expression-attribute-values: record # One or more values that can be substituted in an expression. Use the : (colon) character in an expression to dereference an attribute value. For example, suppose that you wanted to check whether the value of the ProductStatus attribute was one of the following: Available | Backordered | Discontinued You would first need to specify ExpressionAttributeValues as follows: { ":avail":{"S":"Available"}, ":back":{"S":"Backordered"}, ":disc":{"S":"Discontinued"} } You could then use these values in an expression, such as this: ProductStatus IN (:avail, :back, :disc) For more information on expression attribute values, see Condition Expressions (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.SpecifyingConditions.html) in the Amazon DynamoDB Developer Guide.
+]: any -> record<Attributes: record, ConsumedCapacity: record<TableName: string, CapacityUnits: float, ReadCapacityUnits: float, WriteCapacityUnits: float, Table: record<ReadCapacityUnits: float, WriteCapacityUnits: float, CapacityUnits: float>, LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record>, ItemCollectionMetrics: record<ItemCollectionKey: record, SizeEstimateRangeGB: list<float>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.UpdateItem")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TableName": $table_name, "Key": $key, "AttributeUpdates": $attribute_updates, "Expected": $expected, "ConditionalOperator": $conditional_operator, "ReturnValues": $return_values, "ReturnConsumedCapacity": $return_consumed_capacity, "ReturnItemCollectionMetrics": $return_item_collection_metrics, "UpdateExpression": $update_expression, "ConditionExpression": $condition_expression, "ExpressionAttributeNames": $expression_attribute_names, "ExpressionAttributeValues": $expression_attribute_values} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2749,6 +2845,12 @@ export def "update-item" [
 #
 # POST /
 # operationId: UpdateTable
+# --AttributeDefinitions item shape: {AttributeName: string, AttributeType: "S"|"N"|"B"}
+# --ProvisionedThroughput shape: {ReadCapacityUnits: int, WriteCapacityUnits: int}
+# --GlobalSecondaryIndexUpdates item shape: {Update?: record, Create?: record, Delete?: record}
+# --StreamSpecification shape: {StreamEnabled: bool, StreamViewType?: "NEW_IMAGE"|"OLD_IMAGE"|"NEW_AND_OLD_IMAGES"|"KEYS_ONLY"}
+# --SSESpecification shape: {Enabled?: bool, SSEType?: "AES256"|"KMS", KMSMasterKeyId?: string}
+# --ReplicaUpdates item shape: {Create?: record, Update?: record, Delete?: record}
 export def "update-table" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2766,21 +2868,22 @@ export def "update-table" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-50
-  --attribute-definitions: any
-  table_name: any
-  --billing-mode: any
-  --provisioned-throughput: any
-  --global-secondary-index-updates: any
-  --stream-specification: any
-  --sse-specification: any
-  --replica-updates: any
-  --table-class: any
-  --deletion-protection-enabled: any
-]: any -> record<TableDescription: record<AttributeDefinitions: record, TableName: record, KeySchema: record, TableStatus: record, CreationDateTime: record, ProvisionedThroughput: record<LastIncreaseDateTime: record, LastDecreaseDateTime: record, NumberOfDecreasesToday: record, ReadCapacityUnits: record, WriteCapacityUnits: record>, TableSizeBytes: record, ItemCount: record, TableArn: record, TableId: record, BillingModeSummary: record<BillingMode: record, LastUpdateToPayPerRequestDateTime: record>, LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record, StreamSpecification: record<StreamEnabled: record, StreamViewType: record>, LatestStreamLabel: record, LatestStreamArn: record, GlobalTableVersion: record, Replicas: record, RestoreSummary: record<SourceBackupArn: record, SourceTableArn: record, RestoreDateTime: record, RestoreInProgress: record>, SSEDescription: record<Status: record, SSEType: record, KMSMasterKeyArn: record, InaccessibleEncryptionDateTime: record>, ArchivalSummary: record<ArchivalDateTime: record, ArchivalReason: record, ArchivalBackupArn: record>, TableClassSummary: record<TableClass: record, LastUpdateDateTime: record>, DeletionProtectionEnabled: record>> {
+  --x-amz-target: string@x-amz-target-completer-50 # required
+  --attribute-definitions: list # An array of attributes that describe the key schema for the table and indexes. If you are adding a new global secondary index to the table, AttributeDefinitions must include the key element(s) of the new index. — item shape: {AttributeName: string, AttributeType: "S"|"N"|"B"}
+  table_name: string # The name of the table to be updated.
+  --billing-mode: string@billing-mode-completer # Controls how you are charged for read and write throughput and how you manage capacity. When switching from pay-per-request to provisioned capacity, initial provisioned capacity values must be set. The initial provisioned capacity values are estimated based on the consumed read and write capacity of your table and global secondary indexes over the past 30 minutes. PROVISIONED - We recommend using PROVISIONED for predictable workloads. PROVISIONED sets the billing mode to Provisioned Mode (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.ReadWriteCapacityMode.html#HowItWorks.ProvisionedThroughput.Manual). PAY_PER_REQUEST - We recommend using PAY_PER_REQUEST for unpredictable workloads. PAY_PER_REQUEST sets the billing mode to On-Demand Mode (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.ReadWriteCapacityMode.html#HowItWorks.OnDemand).
+  --provisioned-throughput: record # Represents the provisioned throughput settings for a specified table or index. The settings can be modified using the UpdateTable operation. For current minimum and maximum provisioned throughput values, see Service, Account, and Table Quotas (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Limits.html) in the Amazon DynamoDB Developer Guide. — shape: {ReadCapacityUnits: int, WriteCapacityUnits: int}
+  --global-secondary-index-updates: list # An array of one or more global secondary indexes for the table. For each index in the array, you can request one action: Create - add a new global secondary index to the table. Update - modify the provisioned throughput settings of an existing global secondary index. Delete - remove a global secondary index from the table. You can create or delete only one global secondary index per UpdateTable operation. For more information, see Managing Global Secondary Indexes (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.OnlineOps.html) in the Amazon DynamoDB Developer Guide. — item shape: {Update?: record, Create?: record, Delete?: record}
+  --stream-specification: record # Represents the DynamoDB Streams configuration for a table in DynamoDB. — shape: {StreamEnabled: bool, StreamViewType?: "NEW_IMAGE"|"OLD_IMAGE"|"NEW_AND_OLD_IMAGES"|"KEYS_ONLY"}
+  --sse-specification: record # Represents the settings used to enable server-side encryption. — shape: {Enabled?: bool, SSEType?: "AES256"|"KMS", KMSMasterKeyId?: string}
+  --replica-updates: list # A list of replica update actions (create, delete, or update) for the table. This property only applies to Version 2019.11.21 (Current) (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/globaltables.V2.html) of global tables. — item shape: {Create?: record, Update?: record, Delete?: record}
+  --table-class: string@table-class-completer # The table class of the table to be updated. Valid values are STANDARD and STANDARD_INFREQUENT_ACCESS.
+  --deletion-protection-enabled: oneof<nothing, bool> # Indicates whether deletion protection is to be enabled (true) or disabled (false) on the table.
+]: any -> record<TableDescription: record<AttributeDefinitions: list<record>, TableName: string, KeySchema: list<record>, TableStatus: string, CreationDateTime: string, ProvisionedThroughput: record<LastIncreaseDateTime: string, LastDecreaseDateTime: string, NumberOfDecreasesToday: int, ReadCapacityUnits: int, WriteCapacityUnits: int>, TableSizeBytes: int, ItemCount: int, TableArn: string, TableId: string, BillingModeSummary: record<BillingMode: string, LastUpdateToPayPerRequestDateTime: string>, LocalSecondaryIndexes: list<record>, GlobalSecondaryIndexes: list<record>, StreamSpecification: record<StreamEnabled: bool, StreamViewType: string>, LatestStreamLabel: string, LatestStreamArn: string, GlobalTableVersion: string, Replicas: list<record>, RestoreSummary: record<SourceBackupArn: string, SourceTableArn: string, RestoreDateTime: string, RestoreInProgress: bool>, SSEDescription: record<Status: string, SSEType: string, KMSMasterKeyArn: string, InaccessibleEncryptionDateTime: string>, ArchivalSummary: record<ArchivalDateTime: string, ArchivalReason: string, ArchivalBackupArn: string>, TableClassSummary: record<TableClass: string, LastUpdateDateTime: string>, DeletionProtectionEnabled: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.UpdateTable")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AttributeDefinitions": $attribute_definitions, "TableName": $table_name, "BillingMode": $billing_mode, "ProvisionedThroughput": $provisioned_throughput, "GlobalSecondaryIndexUpdates": $global_secondary_index_updates, "StreamSpecification": $stream_specification, "SSESpecification": $sse_specification, "ReplicaUpdates": $replica_updates, "TableClass": $table_class, "DeletionProtectionEnabled": $deletion_protection_enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2806,7 +2909,9 @@ export def "update-table" [
 #
 # POST /
 # operationId: UpdateTableReplicaAutoScaling
-# --ProvisionedWriteCapacityAutoScalingUpdate shape: {MinimumUnits?: any, MaximumUnits?: any, AutoScalingDisabled?: any, AutoScalingRoleArn?: any, ScalingPolicyUpdate?: any}
+# --GlobalSecondaryIndexUpdates item shape: {IndexName?: string, ProvisionedWriteCapacityAutoScalingUpdate?: record}
+# --ProvisionedWriteCapacityAutoScalingUpdate shape: {MinimumUnits?: int, MaximumUnits?: int, AutoScalingDisabled?: bool, AutoScalingRoleArn?: string, ScalingPolicyUpdate?: record}
+# --ReplicaUpdates item shape: {RegionName: string, ReplicaGlobalSecondaryIndexUpdates?: list, ReplicaProvisionedReadCapacityAutoScalingUpdate?: record}
 export def "update-table-replica-auto-scaling" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2824,15 +2929,16 @@ export def "update-table-replica-auto-scaling" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-51
-  --global-secondary-index-updates: any
-  table_name: any
-  --provisioned-write-capacity-auto-scaling-update: record # Represents the auto scaling settings to be modified for a global table or global secondary index. — shape: {MinimumUnits?: any, MaximumUnits?: any, AutoScalingDisabled?: any, AutoScalingRoleArn?: any, ScalingPolicyUpdate?: any}
-  --replica-updates: any
-]: any -> record<TableAutoScalingDescription: record<TableName: record, TableStatus: record, Replicas: record>> {
+  --x-amz-target: string@x-amz-target-completer-51 # required
+  --global-secondary-index-updates: list # Represents the auto scaling settings of the global secondary indexes of the replica to be updated. — item shape: {IndexName?: string, ProvisionedWriteCapacityAutoScalingUpdate?: record}
+  table_name: string # The name of the global table to be updated.
+  --provisioned-write-capacity-auto-scaling-update: record # Represents the auto scaling settings to be modified for a global table or global secondary index. — shape: {MinimumUnits?: int, MaximumUnits?: int, AutoScalingDisabled?: bool, AutoScalingRoleArn?: string, ScalingPolicyUpdate?: record}
+  --replica-updates: list # Represents the auto scaling settings of replicas of the table that will be modified. — item shape: {RegionName: string, ReplicaGlobalSecondaryIndexUpdates?: list, ReplicaProvisionedReadCapacityAutoScalingUpdate?: record}
+]: any -> record<TableAutoScalingDescription: record<TableName: string, TableStatus: string, Replicas: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.UpdateTableReplicaAutoScaling")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GlobalSecondaryIndexUpdates": $global_secondary_index_updates, "TableName": $table_name, "ProvisionedWriteCapacityAutoScalingUpdate": $provisioned_write_capacity_auto_scaling_update, "ReplicaUpdates": $replica_updates} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2858,6 +2964,7 @@ export def "update-table-replica-auto-scaling" [
 #
 # POST /
 # operationId: UpdateTimeToLive
+# --TimeToLiveSpecification shape: {Enabled: bool, AttributeName: string}
 export def "update-time-to-live" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2875,13 +2982,14 @@ export def "update-time-to-live" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-52
-  table_name: any
-  time_to_live_specification: any
-]: any -> record<TimeToLiveSpecification: record<Enabled: record, AttributeName: record>> {
+  --x-amz-target: string@x-amz-target-completer-52 # required
+  table_name: string # The name of the table to be configured.
+  time_to_live_specification: record # Represents the settings used to enable or disable Time to Live (TTL) for the specified table. — shape: {Enabled: bool, AttributeName: string}
+]: any -> record<TimeToLiveSpecification: record<Enabled: bool, AttributeName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDB_20120810.UpdateTimeToLive")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TableName": $table_name, "TimeToLiveSpecification": $time_to_live_specification} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

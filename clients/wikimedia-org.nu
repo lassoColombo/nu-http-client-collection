@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "cookie" => { {scheme: $scheme, headers: {cookie: $token_val}, query: "", location: "header"} }
+    "cookie" => { {scheme: $scheme, headers: {"cookie": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -102,8 +102,22 @@ def auth-scheme-completer [] { ["cookie"] }
 
 # Completers for enum parameters
 def accept-completer [] { ["application/json; charset=utf-8; profile=\"https://www.mediawiki.org/wiki/Specs/Availability/1.0.1\"" "application/problem+json"] }
+def type-completer [] { ["chem" "inline-tex" "tex"] }
 def accept-completer-1 [] { ["application/json" "application/problem+json"] }
+def format-completer [] { ["mml" "png" "svg"] }
 def accept-completer-2 [] { ["application/mathml+xml" "application/problem+json" "image/png" "image/svg+xml"] }
+def editor-type-completer [] { ["all-editor-types" "anonymous" "group-bot" "name-bot" "user"] }
+def page-type-completer [] { ["all-page-types" "content" "non-content"] }
+def granularity-completer [] { ["daily" "monthly"] }
+def activity-level-completer [] { ["1..4-edits" "100..-edits" "25..99-edits" "5..24-edits" "all-activity-levels"] }
+def access-site-completer [] { ["all-sites" "desktop-site" "mobile-site"] }
+def granularity-completer-1 [] { ["daily" "hourly" "monthly"] }
+def access-completer [] { ["all-access" "desktop" "mobile-app" "mobile-web"] }
+def agent-completer [] { ["all-agents" "spider" "user"] }
+def agent-completer-1 [] { ["all-agents" "bot" "spider" "user"] }
+def provider-completer [] { ["Apertium" "Yandex" "Youdao"] }
+def tool-completer [] { ["dictionary" "mt"] }
+def provider-completer-1 [] { ["Dictd" "JsonDict"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -166,7 +180,7 @@ export def "get-feed-availability" [
 #
 # POST /media/math/check/{type}
 export def "post-media-math-check-type" [
-  type: string
+  type: string@type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,7 +192,7 @@ export def "post-media-math-check-type" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   q: string # The formula to check
-]: any -> record<detail: string, method: string, status: int, title: string, type: string, uri: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
@@ -218,7 +232,7 @@ export def "get-media-math-formula-hash" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> record<detail: string, method: string, status: int, title: string, type: string, uri: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   if ($hash | is-empty) { error make --unspanned { msg: "path parameter 'hash' must be non-empty" } }
@@ -243,7 +257,7 @@ export def "get-media-math-formula-hash" [
 #
 # GET /media/math/render/{format}/{hash}
 export def "get-media-math-render-format-hash" [
-  format: string
+  format: string@format-completer
   hash: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -255,7 +269,7 @@ export def "get-media-math-render-format-hash" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
-]: nothing -> record<detail: string, method: string, status: int, title: string, type: string, uri: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
@@ -282,9 +296,9 @@ export def "get-media-math-render-format-hash" [
 # GET /metrics/bytes-difference/absolute/aggregate/{project}/{editor-type}/{page-type}/{granularity}/{start}/{end}
 export def "get-metrics-bytes-difference-absolute-aggregate-project-editor-type-page-type-granularity-start-end" [
   project: string
-  editor_type: string
-  page_type: string
-  granularity: string
+  editor_type: string@editor-type-completer
+  page_type: string@page-type-completer
+  granularity: string@granularity-completer
   start: string
   end: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -329,8 +343,8 @@ export def "get-metrics-bytes-difference-absolute-aggregate-project-editor-type-
 export def "get-metrics-bytes-difference-absolute-per-page-project-page-title-editor-type-granularity-start-end" [
   project: string
   page_title: string
-  editor_type: string
-  granularity: string
+  editor_type: string@editor-type-completer
+  granularity: string@granularity-completer
   start: string
   end: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -374,9 +388,9 @@ export def "get-metrics-bytes-difference-absolute-per-page-project-page-title-ed
 # GET /metrics/bytes-difference/net/aggregate/{project}/{editor-type}/{page-type}/{granularity}/{start}/{end}
 export def "get-metrics-bytes-difference-net-aggregate-project-editor-type-page-type-granularity-start-end" [
   project: string
-  editor_type: string
-  page_type: string
-  granularity: string
+  editor_type: string@editor-type-completer
+  page_type: string@page-type-completer
+  granularity: string@granularity-completer
   start: string
   end: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -421,8 +435,8 @@ export def "get-metrics-bytes-difference-net-aggregate-project-editor-type-page-
 export def "get-metrics-bytes-difference-net-per-page-project-page-title-editor-type-granularity-start-end" [
   project: string
   page_title: string
-  editor_type: string
-  granularity: string
+  editor_type: string@editor-type-completer
+  granularity: string@granularity-completer
   start: string
   end: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -466,10 +480,10 @@ export def "get-metrics-bytes-difference-net-per-page-project-page-title-editor-
 # GET /metrics/edited-pages/aggregate/{project}/{editor-type}/{page-type}/{activity-level}/{granularity}/{start}/{end}
 export def "get-metrics-edited-pages-aggregate-project-editor-type-page-type-activity-level-granularity-start-end" [
   project: string
-  editor_type: string
-  page_type: string
-  activity_level: string
-  granularity: string
+  editor_type: string@editor-type-completer
+  page_type: string@page-type-completer
+  activity_level: string@activity-level-completer
+  granularity: string@granularity-completer
   start: string
   end: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -514,9 +528,9 @@ export def "get-metrics-edited-pages-aggregate-project-editor-type-page-type-act
 # GET /metrics/edited-pages/new/{project}/{editor-type}/{page-type}/{granularity}/{start}/{end}
 export def "get-metrics-edited-pages-new-project-editor-type-page-type-granularity-start-end" [
   project: string
-  editor_type: string
-  page_type: string
-  granularity: string
+  editor_type: string@editor-type-completer
+  page_type: string@page-type-completer
+  granularity: string@granularity-completer
   start: string
   end: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -560,8 +574,8 @@ export def "get-metrics-edited-pages-new-project-editor-type-page-type-granulari
 # GET /metrics/edited-pages/top-by-absolute-bytes-difference/{project}/{editor-type}/{page-type}/{year}/{month}/{day}
 export def "get-metrics-edited-pages-top-by-absolute-bytes-difference-project-editor-type-page-type-year-month-day" [
   project: string
-  editor_type: string
-  page_type: string
+  editor_type: string@editor-type-completer
+  page_type: string@page-type-completer
   year: string
   month: string
   day: string
@@ -606,8 +620,8 @@ export def "get-metrics-edited-pages-top-by-absolute-bytes-difference-project-ed
 # GET /metrics/edited-pages/top-by-edits/{project}/{editor-type}/{page-type}/{year}/{month}/{day}
 export def "get-metrics-edited-pages-top-by-edits-project-editor-type-page-type-year-month-day" [
   project: string
-  editor_type: string
-  page_type: string
+  editor_type: string@editor-type-completer
+  page_type: string@page-type-completer
   year: string
   month: string
   day: string
@@ -652,8 +666,8 @@ export def "get-metrics-edited-pages-top-by-edits-project-editor-type-page-type-
 # GET /metrics/edited-pages/top-by-net-bytes-difference/{project}/{editor-type}/{page-type}/{year}/{month}/{day}
 export def "get-metrics-edited-pages-top-by-net-bytes-difference-project-editor-type-page-type-year-month-day" [
   project: string
-  editor_type: string
-  page_type: string
+  editor_type: string@editor-type-completer
+  page_type: string@page-type-completer
   year: string
   month: string
   day: string
@@ -698,10 +712,10 @@ export def "get-metrics-edited-pages-top-by-net-bytes-difference-project-editor-
 # GET /metrics/editors/aggregate/{project}/{editor-type}/{page-type}/{activity-level}/{granularity}/{start}/{end}
 export def "get-metrics-editors-aggregate-project-editor-type-page-type-activity-level-granularity-start-end" [
   project: string
-  editor_type: string
-  page_type: string
-  activity_level: string
-  granularity: string
+  editor_type: string@editor-type-completer
+  page_type: string@page-type-completer
+  activity_level: string@activity-level-completer
+  granularity: string@granularity-completer
   start: string
   end: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -746,8 +760,8 @@ export def "get-metrics-editors-aggregate-project-editor-type-page-type-activity
 # GET /metrics/editors/top-by-absolute-bytes-difference/{project}/{editor-type}/{page-type}/{year}/{month}/{day}
 export def "get-metrics-editors-top-by-absolute-bytes-difference-project-editor-type-page-type-year-month-day" [
   project: string
-  editor_type: string
-  page_type: string
+  editor_type: string@editor-type-completer
+  page_type: string@page-type-completer
   year: string
   month: string
   day: string
@@ -792,8 +806,8 @@ export def "get-metrics-editors-top-by-absolute-bytes-difference-project-editor-
 # GET /metrics/editors/top-by-edits/{project}/{editor-type}/{page-type}/{year}/{month}/{day}
 export def "get-metrics-editors-top-by-edits-project-editor-type-page-type-year-month-day" [
   project: string
-  editor_type: string
-  page_type: string
+  editor_type: string@editor-type-completer
+  page_type: string@page-type-completer
   year: string
   month: string
   day: string
@@ -838,8 +852,8 @@ export def "get-metrics-editors-top-by-edits-project-editor-type-page-type-year-
 # GET /metrics/editors/top-by-net-bytes-difference/{project}/{editor-type}/{page-type}/{year}/{month}/{day}
 export def "get-metrics-editors-top-by-net-bytes-difference-project-editor-type-page-type-year-month-day" [
   project: string
-  editor_type: string
-  page_type: string
+  editor_type: string@editor-type-completer
+  page_type: string@page-type-completer
   year: string
   month: string
   day: string
@@ -884,9 +898,9 @@ export def "get-metrics-editors-top-by-net-bytes-difference-project-editor-type-
 # GET /metrics/edits/aggregate/{project}/{editor-type}/{page-type}/{granularity}/{start}/{end}
 export def "get-metrics-edits-aggregate-project-editor-type-page-type-granularity-start-end" [
   project: string
-  editor_type: string
-  page_type: string
-  granularity: string
+  editor_type: string@editor-type-completer
+  page_type: string@page-type-completer
+  granularity: string@granularity-completer
   start: string
   end: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -931,8 +945,8 @@ export def "get-metrics-edits-aggregate-project-editor-type-page-type-granularit
 export def "get-metrics-edits-per-page-project-page-title-editor-type-granularity-start-end" [
   project: string
   page_title: string
-  editor_type: string
-  granularity: string
+  editor_type: string@editor-type-completer
+  granularity: string@granularity-completer
   start: string
   end: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -976,8 +990,8 @@ export def "get-metrics-edits-per-page-project-page-title-editor-type-granularit
 # GET /metrics/legacy/pagecounts/aggregate/{project}/{access-site}/{granularity}/{start}/{end}
 export def "get-metrics-legacy-pagecounts-aggregate-project-access-site-granularity-start-end" [
   project: string
-  access_site: string
-  granularity: string
+  access_site: string@access-site-completer
+  granularity: string@granularity-completer-1
   start: string
   end: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1020,9 +1034,9 @@ export def "get-metrics-legacy-pagecounts-aggregate-project-access-site-granular
 # GET /metrics/pageviews/aggregate/{project}/{access}/{agent}/{granularity}/{start}/{end}
 export def "get-metrics-pageviews-aggregate-project-access-agent-granularity-start-end" [
   project: string
-  access: string
-  agent: string
-  granularity: string
+  access: string@access-completer
+  agent: string@agent-completer
+  granularity: string@granularity-completer-1
   start: string
   end: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1066,10 +1080,10 @@ export def "get-metrics-pageviews-aggregate-project-access-agent-granularity-sta
 # GET /metrics/pageviews/per-article/{project}/{access}/{agent}/{article}/{granularity}/{start}/{end}
 export def "get-metrics-pageviews-per-article-project-access-agent-article-granularity-start-end" [
   project: string
-  access: string
-  agent: string
+  access: string@access-completer
+  agent: string@agent-completer-1
   article: string
-  granularity: string
+  granularity: string@granularity-completer
   start: string
   end: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1114,7 +1128,7 @@ export def "get-metrics-pageviews-per-article-project-access-agent-article-granu
 # GET /metrics/pageviews/top-by-country/{project}/{access}/{year}/{month}
 export def "get-metrics-pageviews-top-by-country-project-access-year-month" [
   project: string
-  access: string
+  access: string@access-completer
   year: string
   month: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1156,7 +1170,7 @@ export def "get-metrics-pageviews-top-by-country-project-access-year-month" [
 # GET /metrics/pageviews/top/{project}/{access}/{year}/{month}/{day}
 export def "get-metrics-pageviews-top-project-access-year-month-day" [
   project: string
-  access: string
+  access: string@access-completer
   year: string
   month: string
   day: string
@@ -1200,7 +1214,7 @@ export def "get-metrics-pageviews-top-project-access-year-month-day" [
 # GET /metrics/registered-users/new/{project}/{granularity}/{start}/{end}
 export def "get-metrics-registered-users-new-project-granularity-start-end" [
   project: string
-  granularity: string
+  granularity: string@granularity-completer
   start: string
   end: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1242,8 +1256,8 @@ export def "get-metrics-registered-users-new-project-granularity-start-end" [
 # GET /metrics/unique-devices/{project}/{access-site}/{granularity}/{start}/{end}
 export def "get-metrics-unique-devices-project-access-site-granularity-start-end" [
   project: string
-  access_site: string
-  granularity: string
+  access_site: string@access-site-completer
+  granularity: string@granularity-completer
   start: string
   end: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1330,7 +1344,7 @@ export def "post-transform-html-from-from-lang-to-to-lang" [
 export def "post-transform-html-from-from-lang-to-to-lang-provider" [
   from_lang: string
   to_lang: string
-  provider: string
+  provider: string@provider-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1444,7 +1458,7 @@ export def "get-transform-list-pair-from-to" [
 #
 # GET /transform/list/tool/{tool}
 export def "get-transform-list-tool-tool" [
-  tool: string
+  tool: string@tool-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1480,7 +1494,7 @@ export def "get-transform-list-tool-tool" [
 #
 # GET /transform/list/tool/{tool}/{from}
 export def "get-transform-list-tool-tool-from" [
-  tool: string
+  tool: string@tool-completer
   from: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1518,7 +1532,7 @@ export def "get-transform-list-tool-tool-from" [
 #
 # GET /transform/list/tool/{tool}/{from}/{to}
 export def "get-transform-list-tool-tool-from-to" [
-  tool: string
+  tool: string@tool-completer
   from: string
   to: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1601,7 +1615,7 @@ export def "get-transform-word-from-from-lang-to-to-lang-word-provider" [
   from_lang: string
   to_lang: string
   word: string
-  provider: string
+  provider: string@provider-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

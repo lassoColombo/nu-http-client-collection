@@ -93,6 +93,8 @@ def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: 
 def base-url-completer [] { ["https://www.healthcare.gov"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def media-type-extension-completer [] { [".json"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -121,7 +123,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/articles{mediaTypeExtension}
 export def "get-api-articles-media-type-extension" [
-  media_type_extension: string
+  media_type_extension: string@media-type-extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -156,7 +158,7 @@ export def "get-api-articles-media-type-extension" [
 #
 # GET /api/blog{mediaTypeExtension}
 export def "get-api-blog-media-type-extension" [
-  media_type_extension: string
+  media_type_extension: string@media-type-extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,7 +193,7 @@ export def "get-api-blog-media-type-extension" [
 #
 # GET /api/glossary{mediaTypeExtension}
 export def "get-api-glossary-media-type-extension" [
-  media_type_extension: string
+  media_type_extension: string@media-type-extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -226,7 +228,7 @@ export def "get-api-glossary-media-type-extension" [
 #
 # GET /api/questions{mediaTypeExtension}
 export def "get-api-questions-media-type-extension" [
-  media_type_extension: string
+  media_type_extension: string@media-type-extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -261,7 +263,7 @@ export def "get-api-questions-media-type-extension" [
 #
 # GET /api/states{mediaTypeExtension}
 export def "get-api-states-media-type-extension" [
-  media_type_extension: string
+  media_type_extension: string@media-type-extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -296,7 +298,7 @@ export def "get-api-states-media-type-extension" [
 #
 # GET /api/topics{mediaTypeExtension}
 export def "get-api-topics-media-type-extension" [
-  media_type_extension: string
+  media_type_extension: string@media-type-extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -332,7 +334,7 @@ export def "get-api-topics-media-type-extension" [
 # GET /blog/{pageName}{mediaTypeExtension}
 export def "get-blog-page-name-media-type-extension" [
   page_name: string
-  media_type_extension: string
+  media_type_extension: string@media-type-extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -369,7 +371,7 @@ export def "get-blog-page-name-media-type-extension" [
 # GET /es/blog/{pageName}{mediaTypeExtension}
 export def "get-es-blog-page-name-media-type-extension" [
   page_name: string
-  media_type_extension: string
+  media_type_extension: string@media-type-extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -406,7 +408,7 @@ export def "get-es-blog-page-name-media-type-extension" [
 # GET /es/glossary/{pageName}{mediaTypeExtension}
 export def "get-es-glossary-page-name-media-type-extension" [
   page_name: string
-  media_type_extension: string
+  media_type_extension: string@media-type-extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -443,7 +445,7 @@ export def "get-es-glossary-page-name-media-type-extension" [
 # GET /es/question/{pageName}{mediaTypeExtension}
 export def "get-es-question-page-name-media-type-extension" [
   page_name: string
-  media_type_extension: string
+  media_type_extension: string@media-type-extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -480,7 +482,7 @@ export def "get-es-question-page-name-media-type-extension" [
 # GET /es/{pageName}{mediaTypeExtension}
 export def "get-es-page-name-media-type-extension" [
   page_name: string
-  media_type_extension: string
+  media_type_extension: string@media-type-extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -517,7 +519,7 @@ export def "get-es-page-name-media-type-extension" [
 # GET /es/{stateName}{mediaTypeExtension}
 export def "get-es-state-name-media-type-extension" [
   state_name: string
-  media_type_extension: string
+  media_type_extension: string@media-type-extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -554,7 +556,7 @@ export def "get-es-state-name-media-type-extension" [
 # GET /glossary/{pageName}{mediaTypeExtension}
 export def "get-glossary-page-name-media-type-extension" [
   page_name: string
-  media_type_extension: string
+  media_type_extension: string@media-type-extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -591,7 +593,7 @@ export def "get-glossary-page-name-media-type-extension" [
 # GET /question/{pageName}{mediaTypeExtension}
 export def "get-question-page-name-media-type-extension" [
   page_name: string
-  media_type_extension: string
+  media_type_extension: string@media-type-extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -628,7 +630,7 @@ export def "get-question-page-name-media-type-extension" [
 # GET /{pageName}{mediaTypeExtension}
 export def "get-page-name-media-type-extension" [
   page_name: string
-  media_type_extension: string
+  media_type_extension: string@media-type-extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -665,7 +667,7 @@ export def "get-page-name-media-type-extension" [
 # GET /{stateName}{mediaTypeExtension}
 export def "get-state-name-media-type-extension" [
   state_name: string
-  media_type_extension: string
+  media_type_extension: string@media-type-extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

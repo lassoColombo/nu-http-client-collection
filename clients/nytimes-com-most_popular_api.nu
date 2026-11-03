@@ -95,6 +95,8 @@ def base-url-completer [] { ["http://api.nytimes.com/svc/mostpopular/v2" "https:
 def auth-scheme-completer [] { ["query-api-key"] }
 
 # Completers for enum parameters
+def section-completer [] { ["Arts" "Automobiles" "Blogs" "Books" "Business Day" "Education" "Fashion & Style" "Food" "Health" "Job Market" "Magazine" "Movies" "Multimedia" "N.Y.%20%2F%20Region" "NYT Now" "Obituaries" "Open" "Opinion" "Public Editor" "Real Estate" "Science" "Sports" "Style" "Sunday Review" "T Magazine" "Technology" "The Upshot" "Theater" "Times Insider" "Today’s Paper" "Travel" "U.S." "World" "Your Money" "all-sections" "membercenter"] }
+def time-period-completer [] { ["1" "30" "7"] }
 def accept-completer [] { ["application/json" "application/xml"] }
 
 # List all available API commands with their parameters
@@ -125,8 +127,8 @@ export def commands []: nothing -> table {
 # GET /mostemailed/{section}/{time-period}.json
 # operationId: GET_mostemailed-section-time-period-json
 export def "get-mostemailed-section-time-period-json" [
-  section: string
-  time_period: string
+  section: string@section-completer
+  time_period: string@time-period-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -164,8 +166,8 @@ export def "get-mostemailed-section-time-period-json" [
 # GET /mostshared/{section}/{time-period}.json
 # operationId: GET_mostshared-section-time-period-json
 export def "get-mostshared-section-time-period-json" [
-  section: string
-  time_period: string
+  section: string@section-completer
+  time_period: string@time-period-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -202,8 +204,8 @@ export def "get-mostshared-section-time-period-json" [
 # GET /mostviewed/{section}/{time-period}.json
 # operationId: GET_mostviewed-section-time-period-json
 export def "get-mostviewed-section-time-period-json" [
-  section: string
-  time_period: string
+  section: string@section-completer
+  time_period: string@time-period-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

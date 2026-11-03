@@ -149,14 +149,16 @@ export def "policy-evaluate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Describes the type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
+  --content-type: string # Describes the type of the content being sent (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand (required, default: application/json)
   context: record # Conditions that the Policy needs to satisfy (default: {brandId: 2000001, discountPercentage: 91.00})
   resource: string # Scope on which this policy must be evaluated (default: vrn:vtex.promotions-alert:aws-us-east-1:kamila:master:/_v/promotions_alert)
 ]: any -> table<id: string, metadata: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/policy-engine/evaluate" $auth.query)
   let req_body = {"context": $context, "resource": $resource} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -194,11 +196,13 @@ export def "policy-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Describes the type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
+  --content-type: string # Describes the type of the content being sent (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand (required, default: application/json)
 ]: nothing -> table<description: string, id: string, name: string, statements: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/policy-engine/policies" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -233,12 +237,14 @@ export def "policy-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Describes the type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
+  --content-type: string # Describes the type of the content being sent (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand (required, default: application/json)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/policy-engine/policies/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -273,12 +279,14 @@ export def "policy-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Describes the type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
+  --content-type: string # Describes the type of the content being sent (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand (required, default: application/json)
 ]: nothing -> table<description: string, id: string, name: string, statements: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/policy-engine/policies/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -314,8 +322,8 @@ export def "policy-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Describes the type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
+  --content-type: string # Describes the type of the content being sent (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand (required, default: application/json)
   description: string # Policy description. This description is only for internal use of identification
   name: string # Policy Name
   statements: list # Requirements to the Policy be applied — item shape: {actions?: list, condition?: record, effect: string, operation?: string, resource?: string}
@@ -324,6 +332,8 @@ export def "policy-create-or-update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/policy-engine/policies/{id}") $auth.query)
   let req_body = {"description": $description, "name": $name, "statements": $statements} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -362,8 +372,8 @@ export def "put-api-policy-engine-policies-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Describes the type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
+  --content-type: string # Describes the type of the content being sent (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand (required, default: application/json)
   description: string # Policy description. This description is only for internal use of identification
   name: string # Policy Name
   statements: list # Requirements to the Policy be applied — item shape: {actions?: list, condition?: record, effect: string, operation?: string, resource?: string}
@@ -372,6 +382,8 @@ export def "put-api-policy-engine-policies-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/policy-engine/policies/{id}") $auth.query)
   let req_body = {"description": $description, "name": $name, "statements": $statements} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

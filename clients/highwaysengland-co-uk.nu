@@ -1,4 +1,4 @@
-# Auto-generated client for Highways England API vv1
+# Auto-generated client for Highways England API v1
 # Source: https://api.apis.guru/v2/specs/highwaysengland.co.uk/v1/openapi.json
 # Auth: --token flag or $env.HIGHWAYS_ENGLAND_API_TOKEN
 
@@ -205,13 +205,16 @@ export def "quality-get-daily-data-quality-for-site" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --site-id: string
-  --start-date: string # The start date of the report in the format ddmmyyyy (i.e 31012016)
-  --end-date: string # The end date of the report in the format ddmmyyyy (i.e 31012016)
+  --site-id: string # required
+  --start-date: string # The start date of the report in the format ddmmyyyy (i.e 31012016) (required)
+  --end-date: string # The end date of the report in the format ddmmyyyy (i.e 31012016) (required)
 ]: nothing -> record<Qualities: table<Date: string, Quality: int>, row_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
+  if ($site_id == null) { error make --unspanned { msg: "required query parameter 'siteId' missing: pass --site-id" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'end_date' missing: pass --end-date" } }
   let qp = [(serialize-qp "siteId" $site_id "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({version: (encode-path-segment $version)} | format pattern "/v{version}/quality/daily") $qp $auth.query)
   let accept_val = "application/json"
@@ -245,13 +248,16 @@ export def "quality-get-overall-data-quality-for-sites" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --sites: string # Get site quality by site id delimited by ,
-  --start-date: string # The start date of the report in the format ddmmyyyy (i.e 31012016)
-  --end-date: string # The end date of the report in the format ddmmyyyy (i.e 31012016)
+  --sites: string # Get site quality by site id delimited by , (required)
+  --start-date: string # The start date of the report in the format ddmmyyyy (i.e 31012016) (required)
+  --end-date: string # The end date of the report in the format ddmmyyyy (i.e 31012016) (required)
 ]: nothing -> record<data_quality: int, end_date: string, row_count: int, sites: string, start_date: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
+  if ($sites == null) { error make --unspanned { msg: "required query parameter 'sites' missing: pass --sites" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'end_date' missing: pass --end-date" } }
   let qp = [(serialize-qp "sites" $sites "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({version: (encode-path-segment $version)} | format pattern "/v{version}/quality/overall") $qp $auth.query)
   let accept_val = "application/json"
@@ -286,17 +292,22 @@ export def "reports-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --sites: string # Comma separated list of site Ids.
-  --start-date: string # The start date of the report in the format ddmmyyyy (i.e 31012016)
-  --end-date: string # The end date of the report in the format ddmmyyyy (i.e 31012016)
-  --page: int # The page offset to return. (format: int32)
-  --page-size: int # The number of rows to return. (format: int32)
+  --sites: string # Comma separated list of site Ids. (required)
+  --start-date: string # The start date of the report in the format ddmmyyyy (i.e 31012016) (required)
+  --end-date: string # The end date of the report in the format ddmmyyyy (i.e 31012016) (required)
+  --page: int # The page offset to return. (required, format: int32)
+  --page-size: int # The number of rows to return. (required, format: int32)
   --report-sub-type-id: int # format: int32
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   if ($report_type | is-empty) { error make --unspanned { msg: "path parameter 'report_type' must be non-empty" } }
+  if ($sites == null) { error make --unspanned { msg: "required query parameter 'sites' missing: pass --sites" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'end_date' missing: pass --end-date" } }
+  if ($page == null) { error make --unspanned { msg: "required query parameter 'page' missing: pass --page" } }
+  if ($page_size == null) { error make --unspanned { msg: "required query parameter 'page_size' missing: pass --page-size" } }
   let qp = [(serialize-qp "sites" $sites "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "reportSubTypeId" $report_sub_type_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({version: (encode-path-segment $version), report_type: (encode-path-segment $report_type)} | format pattern "/v{version}/reports/{report_type}") $qp $auth.query)
   let accept_val = "application/json"
@@ -332,9 +343,9 @@ export def "get-v-version-reports-start-date-to-end-date-report-type" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --sites: string # Comma separated list of site Ids.
-  --page: int # The page offset to return. (format: int32)
-  --page-size: int # The number of rows to return. (format: int32)
+  --sites: string # Comma separated list of site Ids. (required)
+  --page: int # The page offset to return. (required, format: int32)
+  --page-size: int # The number of rows to return. (required, format: int32)
   --report-sub-type-id: int # format: int32
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -343,6 +354,9 @@ export def "get-v-version-reports-start-date-to-end-date-report-type" [
   if ($start_date | is-empty) { error make --unspanned { msg: "path parameter 'start_date' must be non-empty" } }
   if ($end_date | is-empty) { error make --unspanned { msg: "path parameter 'end_date' must be non-empty" } }
   if ($report_type | is-empty) { error make --unspanned { msg: "path parameter 'report_type' must be non-empty" } }
+  if ($sites == null) { error make --unspanned { msg: "required query parameter 'sites' missing: pass --sites" } }
+  if ($page == null) { error make --unspanned { msg: "required query parameter 'page' missing: pass --page" } }
+  if ($page_size == null) { error make --unspanned { msg: "required query parameter 'page_size' missing: pass --page-size" } }
   let qp = [(serialize-qp "sites" $sites "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "reportSubTypeId" $report_sub_type_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({version: (encode-path-segment $version), start_date: (encode-path-segment $start_date), end_date: (encode-path-segment $end_date), report_type: (encode-path-segment $report_type)} | format pattern "/v{version}/reports/{start_date}/to/{end_date}/{report_type}") $qp $auth.query)
   let accept_val = "application/json"

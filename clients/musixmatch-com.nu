@@ -131,10 +131,11 @@ export def "get-album-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # output format: json, jsonp, xml. (default: json)
   --callback: string # jsonp callback
-  --album-id: string # The musiXmatch album id
+  --album-id: string # The musiXmatch album id (required)
 ]: nothing -> record<message: record<body: record<album: record>, header: record<execute_time: float, status_code: float>>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($album_id == null) { error make --unspanned { msg: "required query parameter 'album_id' missing: pass --album-id" } }
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "album_id" $album_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/album.get" $qp $auth.query)
   let accept_val = "application/json"
@@ -166,13 +167,14 @@ export def "get-album-tracks-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # output format: json, jsonp, xml. (default: json)
   --callback: string # jsonp callback
-  --album-id: string # The musiXmatch album id
+  --album-id: string # The musiXmatch album id (required)
   --f-has-lyrics: string # When set, filter only contents with lyrics
   --page: float # Define the page number for paginated results
   --page-size: float # Define the page size for paginated results.Range is 1 to 100.
 ]: nothing -> record<message: record<body: record<track_list: list>, header: record<available: float, execute_time: float, status_code: float>>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($album_id == null) { error make --unspanned { msg: "required query parameter 'album_id' missing: pass --album-id" } }
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "album_id" $album_id "scalar") (serialize-qp "f_has_lyrics" $f_has_lyrics "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/album.tracks.get" $qp $auth.query)
   let accept_val = "application/json"
@@ -204,7 +206,7 @@ export def "get-artist-albums-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # output format: json, jsonp, xml. (default: json)
   --callback: string # jsonp callback
-  --artist-id: string # The musiXmatch artist id
+  --artist-id: string # The musiXmatch artist id (required)
   --s-release-date: string # Sort by release date (asc|desc)
   --g-album-name: string # Group by Album Name
   --page-size: float # Define the page size for paginated results.Range is 1 to 100.
@@ -212,6 +214,7 @@ export def "get-artist-albums-get" [
 ]: nothing -> record<message: record<body: record<album_list: list>, header: record<available: float, execute_time: float, status_code: float>>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($artist_id == null) { error make --unspanned { msg: "required query parameter 'artist_id' missing: pass --artist-id" } }
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "artist_id" $artist_id "scalar") (serialize-qp "s_release_date" $s_release_date "scalar") (serialize-qp "g_album_name" $g_album_name "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/artist.albums.get" $qp $auth.query)
   let accept_val = "application/json"
@@ -243,10 +246,11 @@ export def "get-artist-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # output format: json, jsonp, xml. (default: json)
   --callback: string # jsonp callback
-  --artist-id: string # The musiXmatch artist id
+  --artist-id: string # The musiXmatch artist id (required)
 ]: nothing -> record<message: record<body: record<artist: record>, header: record<execute_time: float, status_code: float>>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($artist_id == null) { error make --unspanned { msg: "required query parameter 'artist_id' missing: pass --artist-id" } }
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "artist_id" $artist_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/artist.get" $qp $auth.query)
   let accept_val = "application/json"
@@ -278,12 +282,13 @@ export def "get-artist-related-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # output format: json, jsonp, xml. (default: json)
   --callback: string # jsonp callback
-  --artist-id: string # The musiXmatch artist id
+  --artist-id: string # The musiXmatch artist id (required)
   --page-size: float # Define the page size for paginated results.Range is 1 to 100.
   --page: float # Define the page number for paginated results
 ]: nothing -> record<message: record<body: record<artist_list: list>, header: record<available: float, execute_time: float, status_code: float>>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($artist_id == null) { error make --unspanned { msg: "required query parameter 'artist_id' missing: pass --artist-id" } }
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "artist_id" $artist_id "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/artist.related.get" $qp $auth.query)
   let accept_val = "application/json"
@@ -540,10 +545,11 @@ export def "get-track-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # output format: json, jsonp, xml. (default: json)
   --callback: string # jsonp callback
-  --track-id: string # The musiXmatch track id
+  --track-id: string # The musiXmatch track id (required)
 ]: nothing -> record<message: record<body: record<track: record>, header: record<execute_time: float, status_code: float>>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($track_id == null) { error make --unspanned { msg: "required query parameter 'track_id' missing: pass --track-id" } }
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "track_id" $track_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/track.get" $qp $auth.query)
   let accept_val = "application/json"
@@ -575,10 +581,11 @@ export def "get-track-lyrics-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # output format: json, jsonp, xml. (default: json)
   --callback: string # jsonp callback
-  --track-id: string # The musiXmatch track id
+  --track-id: string # The musiXmatch track id (required)
 ]: nothing -> record<message: record<body: record<lyrics: record>, header: record<execute_time: float, status_code: float>>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($track_id == null) { error make --unspanned { msg: "required query parameter 'track_id' missing: pass --track-id" } }
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "track_id" $track_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/track.lyrics.get" $qp $auth.query)
   let accept_val = "application/json"
@@ -656,10 +663,11 @@ export def "get-track-snippet-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # output format: json, jsonp, xml. (default: json)
   --callback: string # jsonp callback
-  --track-id: string # The musiXmatch track id
+  --track-id: string # The musiXmatch track id (required)
 ]: nothing -> record<message: record<body: record<snippet: record>, header: record<execute_time: float, status_code: float>>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($track_id == null) { error make --unspanned { msg: "required query parameter 'track_id' missing: pass --track-id" } }
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "track_id" $track_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/track.snippet.get" $qp $auth.query)
   let accept_val = "application/json"
@@ -691,10 +699,11 @@ export def "get-track-subtitle-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # output format: json, jsonp, xml. (default: json)
   --callback: string # jsonp callback
-  --track-id: string # The musiXmatch track id
+  --track-id: string # The musiXmatch track id (required)
 ]: nothing -> record<message: record<body: record<subtitle: record>, header: record<execute_time: float, status_code: float>>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($track_id == null) { error make --unspanned { msg: "required query parameter 'track_id' missing: pass --track-id" } }
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "track_id" $track_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/track.subtitle.get" $qp $auth.query)
   let accept_val = "application/json"

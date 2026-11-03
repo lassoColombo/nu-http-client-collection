@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -114,7 +114,6 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def scaling-mode-completer [] { ["MANAGED" "STANDARD"] }
-def import-destination-type-completer [] { ["CONTACT_LIST" "SUPPRESSION_LIST"] }
 def reason-completer [] { ["BOUNCE" "COMPLAINT"] }
 def mail-type-completer [] { ["MARKETING" "TRANSACTIONAL"] }
 def contact-language-completer [] { ["EN" "JA"] }
@@ -149,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # POST /v2/email/metrics/batch
 # operationId: BatchGetMetricData
-# --Queries item shape: {Id: any, Namespace: any, Metric: any, Dimensions?: any, StartDate: any, EndDate: any}
+# --Queries item shape: {Id: string, Namespace: "VDM", Metric: "SEND"|"COMPLAINT"|"PERMANENT_BOUNCE"|"TRANSIENT_BOUNCE"|"OPEN"|"CLICK"|"DELIVERY"|"DELIVERY_OPEN"|"DELIVERY_CLICK"|"DELIVERY_COMPLAINT", Dimensions?: record, StartDate: string, EndDate: string}
 export def "batch-get-metric-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -167,8 +166,8 @@ export def "batch-get-metric-data" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  queries: list # A list of queries for metrics to be retrieved. — item shape: {Id: any, Namespace: any, Metric: any, Dimensions?: any, StartDate: any, EndDate: any}
-]: any -> record<Results: record, Errors: record> {
+  queries: list # A list of queries for metrics to be retrieved. — item shape: {Id: string, Namespace: "VDM", Metric: "SEND"|"COMPLAINT"|"PERMANENT_BOUNCE"|"TRANSIENT_BOUNCE"|"OPEN"|"CLICK"|"DELIVERY"|"DELIVERY_OPEN"|"DELIVERY_CLICK"|"DELIVERY_COMPLAINT", Dimensions?: record, StartDate: string, EndDate: string}
+]: any -> record<Results: table<Id: string, Timestamps: list, Values: list>, Errors: table<Id: string, Code: string, Message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -197,13 +196,13 @@ export def "batch-get-metric-data" [
 #
 # POST /v2/email/configuration-sets
 # operationId: CreateConfigurationSet
-# --TrackingOptions shape: {CustomRedirectDomain?: any}
-# --DeliveryOptions shape: {TlsPolicy?: any, SendingPoolName?: any}
-# --ReputationOptions shape: {ReputationMetricsEnabled?: any, LastFreshStart?: any}
-# --SendingOptions shape: {SendingEnabled?: any}
-# --Tags item shape: {Key: any, Value: any}
-# --SuppressionOptions shape: {SuppressedReasons?: any}
-# --VdmOptions shape: {DashboardOptions?: any, GuardianOptions?: any}
+# --TrackingOptions shape: {CustomRedirectDomain?: string}
+# --DeliveryOptions shape: {TlsPolicy?: "REQUIRE"|"OPTIONAL", SendingPoolName?: string}
+# --ReputationOptions shape: {ReputationMetricsEnabled?: bool, LastFreshStart?: string}
+# --SendingOptions shape: {SendingEnabled?: bool}
+# --Tags item shape: {Key: string, Value: string}
+# --SuppressionOptions shape: {SuppressedReasons?: list<string>}
+# --VdmOptions shape: {DashboardOptions?: record, GuardianOptions?: record}
 export def "create-configuration-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -222,13 +221,13 @@ export def "create-configuration-set" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   configuration_set_name: string # The name of a configuration set. Configuration sets are groups of rules that you can apply to the emails you send. You apply a configuration set to an email by including a reference to the configuration set in the headers of the email. When you apply a configuration set to an email, all of the rules in that configuration set are applied to the email.
-  --tracking-options: record # An object that defines the tracking options for a configuration set. When you use the Amazon SES API v2 to send an email, it contains an invisible image that's used to track when recipients open your email. If your email contains links, those links are changed slightly in order to track when recipients click them. These images and links include references to a domain operated by Amazon Web Services. You can optionally configure the Amazon SES to use a domain that you operate for these images and links. — shape: {CustomRedirectDomain?: any}
-  --delivery-options: record # Used to associate a configuration set with a dedicated IP pool. — shape: {TlsPolicy?: any, SendingPoolName?: any}
-  --reputation-options: record # Enable or disable collection of reputation metrics for emails that you send using this configuration set in the current Amazon Web Services Region. — shape: {ReputationMetricsEnabled?: any, LastFreshStart?: any}
-  --sending-options: record # Used to enable or disable email sending for messages that use this configuration set in the current Amazon Web Services Region. — shape: {SendingEnabled?: any}
-  --tags: list # An array of objects that define the tags (keys and values) to associate with the configuration set. — item shape: {Key: any, Value: any}
-  --suppression-options: record # An object that contains information about the suppression list preferences for your account. — shape: {SuppressedReasons?: any}
-  --vdm-options: record # An object that defines the VDM settings that apply to emails that you send using the configuration set. — shape: {DashboardOptions?: any, GuardianOptions?: any}
+  --tracking-options: record # An object that defines the tracking options for a configuration set. When you use the Amazon SES API v2 to send an email, it contains an invisible image that's used to track when recipients open your email. If your email contains links, those links are changed slightly in order to track when recipients click them. These images and links include references to a domain operated by Amazon Web Services. You can optionally configure the Amazon SES to use a domain that you operate for these images and links. — shape: {CustomRedirectDomain?: string}
+  --delivery-options: record # Used to associate a configuration set with a dedicated IP pool. — shape: {TlsPolicy?: "REQUIRE"|"OPTIONAL", SendingPoolName?: string}
+  --reputation-options: record # Enable or disable collection of reputation metrics for emails that you send using this configuration set in the current Amazon Web Services Region. — shape: {ReputationMetricsEnabled?: bool, LastFreshStart?: string}
+  --sending-options: record # Used to enable or disable email sending for messages that use this configuration set in the current Amazon Web Services Region. — shape: {SendingEnabled?: bool}
+  --tags: list # An array of objects that define the tags (keys and values) to associate with the configuration set. — item shape: {Key: string, Value: string}
+  --suppression-options: record # An object that contains information about the suppression list preferences for your account. — shape: {SuppressedReasons?: list<string>}
+  --vdm-options: record # An object that defines the VDM settings that apply to emails that you send using the configuration set. — shape: {DashboardOptions?: record, GuardianOptions?: record}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -277,7 +276,7 @@ export def "list-configuration-sets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ConfigurationSets: record, NextToken: record> {
+]: nothing -> record<ConfigurationSets: list<string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "PageSize" $page_size "scalar")] | flatten | str join "&"
@@ -304,7 +303,7 @@ export def "list-configuration-sets" [
 #
 # POST /v2/email/configuration-sets/{ConfigurationSetName}/event-destinations
 # operationId: CreateConfigurationSetEventDestination
-# --EventDestination shape: {Enabled?: any, MatchingEventTypes?: any, KinesisFirehoseDestination?: any, CloudWatchDestination?: any, SnsDestination?: any, PinpointDestination?: any}
+# --EventDestination shape: {Enabled?: bool, MatchingEventTypes?: list<string>, KinesisFirehoseDestination?: record, CloudWatchDestination?: record, SnsDestination?: record, PinpointDestination?: record}
 export def "create-configuration-set-event-destination" [
   configuration_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -324,7 +323,7 @@ export def "create-configuration-set-event-destination" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   event_destination_name: string # The name of an event destination. Events include message sends, deliveries, opens, clicks, bounces, and complaints. Event destinations are places that you can send information about these events to. For example, you can send event data to Amazon SNS to receive notifications when you receive bounces or complaints, or you can use Amazon Kinesis Data Firehose to stream data to Amazon S3 for long-term storage.
-  event_destination: record # An object that defines the event destination. Specifically, it defines which services receive events from emails sent using the configuration set that the event destination is associated with. Also defines the types of events that are sent to the event destination. — shape: {Enabled?: any, MatchingEventTypes?: any, KinesisFirehoseDestination?: any, CloudWatchDestination?: any, SnsDestination?: any, PinpointDestination?: any}
+  event_destination: record # An object that defines the event destination. Specifically, it defines which services receive events from emails sent using the configuration set that the event destination is associated with. Also defines the types of events that are sent to the event destination. — shape: {Enabled?: bool, MatchingEventTypes?: list<string>, KinesisFirehoseDestination?: record, CloudWatchDestination?: record, SnsDestination?: record, PinpointDestination?: record}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -373,7 +372,7 @@ export def "get-configuration-set-event-destinations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EventDestinations: record> {
+]: nothing -> record<EventDestinations: table<Name: string, Enabled: bool, MatchingEventTypes: list, KinesisFirehoseDestination: record, CloudWatchDestination: record, SnsDestination: record, PinpointDestination: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($configuration_set_name | is-empty) { error make --unspanned { msg: "path parameter 'ConfigurationSetName' must be non-empty" } }
@@ -400,7 +399,7 @@ export def "get-configuration-set-event-destinations" [
 #
 # POST /v2/email/contact-lists/{ContactListName}/contacts
 # operationId: CreateContact
-# --TopicPreferences item shape: {TopicName: any, SubscriptionStatus: any}
+# --TopicPreferences item shape: {TopicName: string, SubscriptionStatus: "OPT_IN"|"OPT_OUT"}
 export def "create-contact" [
   contact_list_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -420,7 +419,7 @@ export def "create-contact" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   email_address: string # The contact's email address.
-  --topic-preferences: list # The contact's preferences for being opted-in to or opted-out of topics. — item shape: {TopicName: any, SubscriptionStatus: any}
+  --topic-preferences: list # The contact's preferences for being opted-in to or opted-out of topics. — item shape: {TopicName: string, SubscriptionStatus: "OPT_IN"|"OPT_OUT"}
   --unsubscribe-all: oneof<nothing, bool> # A boolean value status noting if the contact is unsubscribed from all contact list topics.
   --attributes-data: string # The attribute data attached to a contact.
 ]: any -> record {
@@ -453,7 +452,6 @@ export def "create-contact" [
 #
 # GET /v2/email/contact-lists/{ContactListName}/contacts
 # operationId: ListContacts
-# --Filter shape: {FilteredStatus?: any, TopicFilter?: any}
 export def "list-contacts" [
   contact_list_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -474,7 +472,7 @@ export def "list-contacts" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Contacts: record, NextToken: record> {
+]: nothing -> record<Contacts: table<EmailAddress: string, TopicPreferences: list, TopicDefaultPreferences: list, UnsubscribeAll: bool, LastUpdatedTimestamp: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($contact_list_name | is-empty) { error make --unspanned { msg: "path parameter 'ContactListName' must be non-empty" } }
@@ -502,8 +500,8 @@ export def "list-contacts" [
 #
 # POST /v2/email/contact-lists
 # operationId: CreateContactList
-# --Topics item shape: {TopicName: any, DisplayName: any, Description?: any, DefaultSubscriptionStatus: any}
-# --Tags item shape: {Key: any, Value: any}
+# --Topics item shape: {TopicName: string, DisplayName: string, Description?: string, DefaultSubscriptionStatus: "OPT_IN"|"OPT_OUT"}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-contact-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -522,9 +520,9 @@ export def "create-contact-list" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   contact_list_name: string # The name of the contact list.
-  --topics: list # An interest group, theme, or label within a list. A contact list can have multiple topics. — item shape: {TopicName: any, DisplayName: any, Description?: any, DefaultSubscriptionStatus: any}
+  --topics: list # An interest group, theme, or label within a list. A contact list can have multiple topics. — item shape: {TopicName: string, DisplayName: string, Description?: string, DefaultSubscriptionStatus: "OPT_IN"|"OPT_OUT"}
   --description: string # A description of what the contact list is about.
-  --tags: list # The tags associated with a contact list. — item shape: {Key: any, Value: any}
+  --tags: list # The tags associated with a contact list. — item shape: {Key: string, Value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -573,7 +571,7 @@ export def "list-contact-lists" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ContactLists: record, NextToken: record> {
+]: nothing -> record<ContactLists: table<ContactListName: string, LastUpdatedTimestamp: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
@@ -671,7 +669,7 @@ export def "list-custom-verification-email-templates" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CustomVerificationEmailTemplates: record, NextToken: record> {
+]: nothing -> record<CustomVerificationEmailTemplates: table<TemplateName: string, FromEmailAddress: string, TemplateSubject: string, SuccessRedirectionURL: string, FailureRedirectionURL: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "PageSize" $page_size "scalar")] | flatten | str join "&"
@@ -698,7 +696,7 @@ export def "list-custom-verification-email-templates" [
 #
 # POST /v2/email/dedicated-ip-pools
 # operationId: CreateDedicatedIpPool
-# --Tags item shape: {Key: any, Value: any}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-dedicated-ip-pool" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -717,7 +715,7 @@ export def "create-dedicated-ip-pool" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   pool_name: string # The name of a dedicated IP pool.
-  --tags: list # An object that defines the tags (keys and values) that you want to associate with the pool. — item shape: {Key: any, Value: any}
+  --tags: list # An object that defines the tags (keys and values) that you want to associate with the pool. — item shape: {Key: string, Value: string}
   --scaling-mode: string@scaling-mode-completer # The type of scaling mode.
 ]: any -> record {
   let input = $in
@@ -767,7 +765,7 @@ export def "list-dedicated-ip-pools" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DedicatedIpPools: record, NextToken: record> {
+]: nothing -> record<DedicatedIpPools: list<string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "PageSize" $page_size "scalar")] | flatten | str join "&"
@@ -794,8 +792,8 @@ export def "list-dedicated-ip-pools" [
 #
 # POST /v2/email/deliverability-dashboard/test
 # operationId: CreateDeliverabilityTestReport
-# --Content shape: {Simple?: any, Raw?: any, Template?: any}
-# --Tags item shape: {Key: any, Value: any}
+# --Content shape: {Simple?: record, Raw?: record, Template?: record}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-deliverability-test-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -815,9 +813,9 @@ export def "create-deliverability-test-report" [
   --x-amz-signed-headers: string
   --report-name: string # A name that helps you identify a report generated by the Deliverability dashboard.
   from_email_address: string # The email address that the predictive inbox placement test email was sent from.
-  content: record # An object that defines the entire content of the email, including the message headers and the body content. You can create a simple email message, in which you specify the subject and the text and HTML versions of the message body. You can also create raw messages, in which you specify a complete MIME-formatted message. Raw messages can include attachments and custom headers. — shape: {Simple?: any, Raw?: any, Template?: any}
-  --tags: list # An array of objects that define the tags (keys and values) that you want to associate with the predictive inbox placement test. — item shape: {Key: any, Value: any}
-]: any -> record<ReportId: record, DeliverabilityTestStatus: record> {
+  content: record # An object that defines the entire content of the email, including the message headers and the body content. You can create a simple email message, in which you specify the subject and the text and HTML versions of the message body. You can also create raw messages, in which you specify a complete MIME-formatted message. Raw messages can include attachments and custom headers. — shape: {Simple?: record, Raw?: record, Template?: record}
+  --tags: list # An array of objects that define the tags (keys and values) that you want to associate with the predictive inbox placement test. — item shape: {Key: string, Value: string}
+]: any -> record<ReportId: string, DeliverabilityTestStatus: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -846,8 +844,8 @@ export def "create-deliverability-test-report" [
 #
 # POST /v2/email/identities
 # operationId: CreateEmailIdentity
-# --Tags item shape: {Key: any, Value: any}
-# --DkimSigningAttributes shape: {DomainSigningSelector?: any, DomainSigningPrivateKey?: any, NextSigningKeyLength?: any}
+# --Tags item shape: {Key: string, Value: string}
+# --DkimSigningAttributes shape: {DomainSigningSelector?: string, DomainSigningPrivateKey?: string, NextSigningKeyLength?: "RSA_1024_BIT"|"RSA_2048_BIT"}
 export def "create-email-identity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -866,10 +864,10 @@ export def "create-email-identity" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   email_identity: string # The email address or domain to verify.
-  --tags: list # An array of objects that define the tags (keys and values) to associate with the email identity. — item shape: {Key: any, Value: any}
-  --dkim-signing-attributes: record # An object that contains configuration for Bring Your Own DKIM (BYODKIM), or, for Easy DKIM — shape: {DomainSigningSelector?: any, DomainSigningPrivateKey?: any, NextSigningKeyLength?: any}
+  --tags: list # An array of objects that define the tags (keys and values) to associate with the email identity. — item shape: {Key: string, Value: string}
+  --dkim-signing-attributes: record # An object that contains configuration for Bring Your Own DKIM (BYODKIM), or, for Easy DKIM — shape: {DomainSigningSelector?: string, DomainSigningPrivateKey?: string, NextSigningKeyLength?: "RSA_1024_BIT"|"RSA_2048_BIT"}
   --configuration-set-name: string # The name of a configuration set. Configuration sets are groups of rules that you can apply to the emails you send. You apply a configuration set to an email by including a reference to the configuration set in the headers of the email. When you apply a configuration set to an email, all of the rules in that configuration set are applied to the email.
-]: any -> record<IdentityType: record, VerifiedForSendingStatus: record, DkimAttributes: record<SigningEnabled: record, Status: record, Tokens: record, SigningAttributesOrigin: record, NextSigningKeyLength: record, CurrentSigningKeyLength: record, LastKeyGenerationTimestamp: record>> {
+]: any -> record<IdentityType: string, VerifiedForSendingStatus: bool, DkimAttributes: record<SigningEnabled: bool, Status: string, Tokens: list<string>, SigningAttributesOrigin: string, NextSigningKeyLength: string, CurrentSigningKeyLength: string, LastKeyGenerationTimestamp: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -917,7 +915,7 @@ export def "list-email-identities" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EmailIdentities: record, NextToken: record> {
+]: nothing -> record<EmailIdentities: table<IdentityType: string, IdentityName: string, SendingEnabled: bool, VerificationStatus: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "PageSize" $page_size "scalar")] | flatten | str join "&"
@@ -1093,7 +1091,7 @@ export def "update-email-identity-policy" [
 #
 # POST /v2/email/templates
 # operationId: CreateEmailTemplate
-# --TemplateContent shape: {Subject?: any, Text?: any, Html?: any}
+# --TemplateContent shape: {Subject?: string, Text?: string, Html?: string}
 export def "create-email-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1112,7 +1110,7 @@ export def "create-email-template" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   template_name: string # The name of the template. You will refer to this name when you send email using the SendTemplatedEmail or SendBulkTemplatedEmail operations.
-  template_content: record # The content of the email, composed of a subject line, an HTML part, and a text-only part. — shape: {Subject?: any, Text?: any, Html?: any}
+  template_content: record # The content of the email, composed of a subject line, an HTML part, and a text-only part. — shape: {Subject?: string, Text?: string, Html?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1161,7 +1159,7 @@ export def "list-email-templates" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TemplatesMetadata: record, NextToken: record> {
+]: nothing -> record<TemplatesMetadata: table<TemplateName: string, CreatedTimestamp: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "PageSize" $page_size "scalar")] | flatten | str join "&"
@@ -1188,8 +1186,8 @@ export def "list-email-templates" [
 #
 # POST /v2/email/import-jobs
 # operationId: CreateImportJob
-# --ImportDestination shape: {SuppressionListDestination?: any, ContactListDestination?: any}
-# --ImportDataSource shape: {S3Url?: any, DataFormat?: any}
+# --ImportDestination shape: {SuppressionListDestination?: record, ContactListDestination?: record}
+# --ImportDataSource shape: {S3Url?: string, DataFormat?: "CSV"|"JSON"}
 export def "create-import-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1207,9 +1205,9 @@ export def "create-import-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  import_destination: record # An object that contains details about the resource destination the import job is going to target. — shape: {SuppressionListDestination?: any, ContactListDestination?: any}
-  import_data_source: record # An object that contains details about the data source of the import job. — shape: {S3Url?: any, DataFormat?: any}
-]: any -> record<JobId: record> {
+  import_destination: record # An object that contains details about the resource destination the import job is going to target. — shape: {SuppressionListDestination?: record, ContactListDestination?: record}
+  import_data_source: record # An object that contains details about the data source of the import job. — shape: {S3Url?: string, DataFormat?: "CSV"|"JSON"}
+]: any -> record<JobId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1257,7 +1255,7 @@ export def "list-import-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ImportJobs: record, NextToken: record> {
+]: nothing -> record<ImportJobs: table<JobId: string, ImportDestination: record, JobStatus: string, CreatedTimestamp: string, ProcessedRecordsCount: int, FailedRecordsCount: int>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "PageSize" $page_size "scalar")] | flatten | str join "&"
@@ -1347,7 +1345,7 @@ export def "get-configuration-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ConfigurationSetName: record, TrackingOptions: record<CustomRedirectDomain: record>, DeliveryOptions: record<TlsPolicy: record, SendingPoolName: record>, ReputationOptions: record<ReputationMetricsEnabled: record, LastFreshStart: record>, SendingOptions: record<SendingEnabled: record>, Tags: record, SuppressionOptions: record<SuppressedReasons: record>, VdmOptions: record<DashboardOptions: record<EngagementMetrics: record>, GuardianOptions: record<OptimizedSharedDelivery: record>>> {
+]: nothing -> record<ConfigurationSetName: string, TrackingOptions: record<CustomRedirectDomain: string>, DeliveryOptions: record<TlsPolicy: string, SendingPoolName: string>, ReputationOptions: record<ReputationMetricsEnabled: bool, LastFreshStart: string>, SendingOptions: record<SendingEnabled: bool>, Tags: table<Key: string, Value: string>, SuppressionOptions: record<SuppressedReasons: list<string>>, VdmOptions: record<DashboardOptions: record<EngagementMetrics: string>, GuardianOptions: record<OptimizedSharedDelivery: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($configuration_set_name | is-empty) { error make --unspanned { msg: "path parameter 'ConfigurationSetName' must be non-empty" } }
@@ -1421,7 +1419,7 @@ export def "delete-configuration-set-event-destination" [
 #
 # PUT /v2/email/configuration-sets/{ConfigurationSetName}/event-destinations/{EventDestinationName}
 # operationId: UpdateConfigurationSetEventDestination
-# --EventDestination shape: {Enabled?: any, MatchingEventTypes?: any, KinesisFirehoseDestination?: any, CloudWatchDestination?: any, SnsDestination?: any, PinpointDestination?: any}
+# --EventDestination shape: {Enabled?: bool, MatchingEventTypes?: list<string>, KinesisFirehoseDestination?: record, CloudWatchDestination?: record, SnsDestination?: record, PinpointDestination?: record}
 export def "update-configuration-set-event-destination" [
   configuration_set_name: string
   event_destination_name: string
@@ -1441,7 +1439,7 @@ export def "update-configuration-set-event-destination" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  event_destination: record # An object that defines the event destination. Specifically, it defines which services receive events from emails sent using the configuration set that the event destination is associated with. Also defines the types of events that are sent to the event destination. — shape: {Enabled?: any, MatchingEventTypes?: any, KinesisFirehoseDestination?: any, CloudWatchDestination?: any, SnsDestination?: any, PinpointDestination?: any}
+  event_destination: record # An object that defines the event destination. Specifically, it defines which services receive events from emails sent using the configuration set that the event destination is associated with. Also defines the types of events that are sent to the event destination. — shape: {Enabled?: bool, MatchingEventTypes?: list<string>, KinesisFirehoseDestination?: record, CloudWatchDestination?: record, SnsDestination?: record, PinpointDestination?: record}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1539,7 +1537,7 @@ export def "get-contact" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ContactListName: record, EmailAddress: record, TopicPreferences: record, TopicDefaultPreferences: record, UnsubscribeAll: record, AttributesData: record, CreatedTimestamp: record, LastUpdatedTimestamp: record> {
+]: nothing -> record<ContactListName: string, EmailAddress: string, TopicPreferences: table<TopicName: string, SubscriptionStatus: string>, TopicDefaultPreferences: table<TopicName: string, SubscriptionStatus: string>, UnsubscribeAll: bool, AttributesData: string, CreatedTimestamp: string, LastUpdatedTimestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($contact_list_name | is-empty) { error make --unspanned { msg: "path parameter 'ContactListName' must be non-empty" } }
@@ -1567,7 +1565,7 @@ export def "get-contact" [
 #
 # PUT /v2/email/contact-lists/{ContactListName}/contacts/{EmailAddress}
 # operationId: UpdateContact
-# --TopicPreferences item shape: {TopicName: any, SubscriptionStatus: any}
+# --TopicPreferences item shape: {TopicName: string, SubscriptionStatus: "OPT_IN"|"OPT_OUT"}
 export def "update-contact" [
   contact_list_name: string
   email_address: string
@@ -1587,7 +1585,7 @@ export def "update-contact" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --topic-preferences: list # The contact's preference for being opted-in to or opted-out of a topic. — item shape: {TopicName: any, SubscriptionStatus: any}
+  --topic-preferences: list # The contact's preference for being opted-in to or opted-out of a topic. — item shape: {TopicName: string, SubscriptionStatus: "OPT_IN"|"OPT_OUT"}
   --unsubscribe-all: oneof<nothing, bool> # A boolean value status noting if the contact is unsubscribed from all contact list topics.
   --attributes-data: string # The attribute data attached to a contact.
 ]: any -> record {
@@ -1684,7 +1682,7 @@ export def "get-contact-list" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ContactListName: record, Topics: record, Description: record, CreatedTimestamp: record, LastUpdatedTimestamp: record, Tags: record> {
+]: nothing -> record<ContactListName: string, Topics: table<TopicName: string, DisplayName: string, Description: string, DefaultSubscriptionStatus: string>, Description: string, CreatedTimestamp: string, LastUpdatedTimestamp: string, Tags: table<Key: string, Value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($contact_list_name | is-empty) { error make --unspanned { msg: "path parameter 'ContactListName' must be non-empty" } }
@@ -1711,7 +1709,7 @@ export def "get-contact-list" [
 #
 # PUT /v2/email/contact-lists/{ContactListName}
 # operationId: UpdateContactList
-# --Topics item shape: {TopicName: any, DisplayName: any, Description?: any, DefaultSubscriptionStatus: any}
+# --Topics item shape: {TopicName: string, DisplayName: string, Description?: string, DefaultSubscriptionStatus: "OPT_IN"|"OPT_OUT"}
 export def "update-contact-list" [
   contact_list_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1730,7 +1728,7 @@ export def "update-contact-list" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --topics: list # An interest group, theme, or label within a list. A contact list can have multiple topics. — item shape: {TopicName: any, DisplayName: any, Description?: any, DefaultSubscriptionStatus: any}
+  --topics: list # An interest group, theme, or label within a list. A contact list can have multiple topics. — item shape: {TopicName: string, DisplayName: string, Description?: string, DefaultSubscriptionStatus: "OPT_IN"|"OPT_OUT"}
   --description: string # A description of what the contact list is about.
 ]: any -> record {
   let input = $in
@@ -1825,7 +1823,7 @@ export def "get-custom-verification-email-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TemplateName: record, FromEmailAddress: record, TemplateSubject: record, TemplateContent: record, SuccessRedirectionURL: record, FailureRedirectionURL: record> {
+]: nothing -> record<TemplateName: string, FromEmailAddress: string, TemplateSubject: string, TemplateContent: string, SuccessRedirectionURL: string, FailureRedirectionURL: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($template_name | is-empty) { error make --unspanned { msg: "path parameter 'TemplateName' must be non-empty" } }
@@ -1968,7 +1966,7 @@ export def "get-dedicated-ip-pool" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DedicatedIpPool: record<PoolName: record, ScalingMode: record>> {
+]: nothing -> record<DedicatedIpPool: record<PoolName: string, ScalingMode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pool_name | is-empty) { error make --unspanned { msg: "path parameter 'PoolName' must be non-empty" } }
@@ -2058,7 +2056,7 @@ export def "get-email-identity" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<IdentityType: record, FeedbackForwardingStatus: record, VerifiedForSendingStatus: record, DkimAttributes: record<SigningEnabled: record, Status: record, Tokens: record, SigningAttributesOrigin: record, NextSigningKeyLength: record, CurrentSigningKeyLength: record, LastKeyGenerationTimestamp: record>, MailFromAttributes: record<MailFromDomain: record, MailFromDomainStatus: record, BehaviorOnMxFailure: record>, Policies: record, Tags: record, ConfigurationSetName: record, VerificationStatus: record> {
+]: nothing -> record<IdentityType: string, FeedbackForwardingStatus: bool, VerifiedForSendingStatus: bool, DkimAttributes: record<SigningEnabled: bool, Status: string, Tokens: list<string>, SigningAttributesOrigin: string, NextSigningKeyLength: string, CurrentSigningKeyLength: string, LastKeyGenerationTimestamp: string>, MailFromAttributes: record<MailFromDomain: string, MailFromDomainStatus: string, BehaviorOnMxFailure: string>, Policies: record, Tags: table<Key: string, Value: string>, ConfigurationSetName: string, VerificationStatus: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($email_identity | is-empty) { error make --unspanned { msg: "path parameter 'EmailIdentity' must be non-empty" } }
@@ -2148,7 +2146,7 @@ export def "get-email-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TemplateName: record, TemplateContent: record<Subject: record, Text: record, Html: record>> {
+]: nothing -> record<TemplateName: string, TemplateContent: record<Subject: string, Text: string, Html: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($template_name | is-empty) { error make --unspanned { msg: "path parameter 'TemplateName' must be non-empty" } }
@@ -2175,7 +2173,7 @@ export def "get-email-template" [
 #
 # PUT /v2/email/templates/{TemplateName}
 # operationId: UpdateEmailTemplate
-# --TemplateContent shape: {Subject?: any, Text?: any, Html?: any}
+# --TemplateContent shape: {Subject?: string, Text?: string, Html?: string}
 export def "update-email-template" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2194,7 +2192,7 @@ export def "update-email-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  template_content: record # The content of the email, composed of a subject line, an HTML part, and a text-only part. — shape: {Subject?: any, Text?: any, Html?: any}
+  template_content: record # The content of the email, composed of a subject line, an HTML part, and a text-only part. — shape: {Subject?: string, Text?: string, Html?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2288,7 +2286,7 @@ export def "get-suppressed-destination" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<SuppressedDestination: record<EmailAddress: record, Reason: record, LastUpdateTime: record, Attributes: record<MessageId: record, FeedbackId: record>>> {
+]: nothing -> record<SuppressedDestination: record<EmailAddress: string, Reason: string, LastUpdateTime: string, Attributes: record<MessageId: string, FeedbackId: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($email_address | is-empty) { error make --unspanned { msg: "path parameter 'EmailAddress' must be non-empty" } }
@@ -2332,7 +2330,7 @@ export def "get-account" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DedicatedIpAutoWarmupEnabled: record, EnforcementStatus: record, ProductionAccessEnabled: record, SendQuota: record<Max24HourSend: record, MaxSendRate: record, SentLast24Hours: record>, SendingEnabled: record, SuppressionAttributes: record<SuppressedReasons: record>, Details: record<MailType: record, WebsiteURL: record, ContactLanguage: record, UseCaseDescription: record, AdditionalContactEmailAddresses: record, ReviewDetails: record<Status: record, CaseId: record>>, VdmAttributes: record<VdmEnabled: record, DashboardAttributes: record<EngagementMetrics: record>, GuardianAttributes: record<OptimizedSharedDelivery: record>>> {
+]: nothing -> record<DedicatedIpAutoWarmupEnabled: bool, EnforcementStatus: string, ProductionAccessEnabled: bool, SendQuota: record<Max24HourSend: float, MaxSendRate: float, SentLast24Hours: float>, SendingEnabled: bool, SuppressionAttributes: record<SuppressedReasons: list<string>>, Details: record<MailType: string, WebsiteURL: string, ContactLanguage: string, UseCaseDescription: string, AdditionalContactEmailAddresses: list<string>, ReviewDetails: record<Status: string, CaseId: string>>, VdmAttributes: record<VdmEnabled: string, DashboardAttributes: record<EngagementMetrics: string>, GuardianAttributes: record<OptimizedSharedDelivery: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/email/account" $auth.query)
@@ -2368,7 +2366,7 @@ export def "get-blacklist-reports" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --blacklist-item-names: list # A list of IP addresses that you want to retrieve blacklist information about. You can only specify the dedicated IP addresses that you use to send email using Amazon SES or Amazon Pinpoint.
+  --blacklist-item-names: list # A list of IP addresses that you want to retrieve blacklist information about. You can only specify the dedicated IP addresses that you use to send email using Amazon SES or Amazon Pinpoint. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2379,6 +2377,7 @@ export def "get-blacklist-reports" [
 ]: nothing -> record<BlacklistReport: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($blacklist_item_names == null) { error make --unspanned { msg: "required query parameter 'BlacklistItemNames' missing: pass --blacklist-item-names" } }
   let qp = [(serialize-qp "BlacklistItemNames" $blacklist_item_names "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/email/deliverability-dashboard/blacklist-report" $qp $auth.query)
   let accept_val = "application/json"
@@ -2421,7 +2420,7 @@ export def "get-dedicated-ip" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DedicatedIp: record<Ip: record, WarmupStatus: record, WarmupPercentage: record, PoolName: record>> {
+]: nothing -> record<DedicatedIp: record<Ip: string, WarmupStatus: string, WarmupPercentage: int, PoolName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ip | is-empty) { error make --unspanned { msg: "path parameter 'IP' must be non-empty" } }
@@ -2468,7 +2467,7 @@ export def "get-dedicated-ips" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DedicatedIps: record, NextToken: record> {
+]: nothing -> record<DedicatedIps: table<Ip: string, WarmupStatus: string, WarmupPercentage: int, PoolName: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "PoolName" $pool_name "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "PageSize" $page_size "scalar")] | flatten | str join "&"
@@ -2512,7 +2511,7 @@ export def "get-deliverability-dashboard-options" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DashboardEnabled: record, SubscriptionExpiryDate: record, AccountStatus: record, ActiveSubscribedDomains: record, PendingExpirationSubscribedDomains: record> {
+]: nothing -> record<DashboardEnabled: bool, SubscriptionExpiryDate: string, AccountStatus: string, ActiveSubscribedDomains: table<Domain: string, SubscriptionStartDate: string, InboxPlacementTrackingOption: record>, PendingExpirationSubscribedDomains: table<Domain: string, SubscriptionStartDate: string, InboxPlacementTrackingOption: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/email/deliverability-dashboard" $auth.query)
@@ -2538,7 +2537,7 @@ export def "get-deliverability-dashboard-options" [
 #
 # PUT /v2/email/deliverability-dashboard
 # operationId: PutDeliverabilityDashboardOption
-# --SubscribedDomains item shape: {Domain?: any, SubscriptionStartDate?: any, InboxPlacementTrackingOption?: any}
+# --SubscribedDomains item shape: {Domain?: string, SubscriptionStartDate?: string, InboxPlacementTrackingOption?: record}
 export def "put-deliverability-dashboard-option" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2557,7 +2556,7 @@ export def "put-deliverability-dashboard-option" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --dashboard-enabled: oneof<nothing, bool> # Specifies whether to enable the Deliverability dashboard. To enable the dashboard, set this value to true.
-  --subscribed-domains: list # An object that contains information about the Deliverability dashboard subscription for a verified domain that you use to send email and currently has an active Deliverability dashboard subscription. If a Deliverability dashboard subscription is active for a domain, you gain access to reputation, inbox placement, and other metrics for the domain. — item shape: {Domain?: any, SubscriptionStartDate?: any, InboxPlacementTrackingOption?: any}
+  --subscribed-domains: list # An object that contains information about the Deliverability dashboard subscription for a verified domain that you use to send email and currently has an active Deliverability dashboard subscription. If a Deliverability dashboard subscription is active for a domain, you gain access to reputation, inbox placement, and other metrics for the domain. — item shape: {Domain?: string, SubscriptionStartDate?: string, InboxPlacementTrackingOption?: record}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2565,6 +2564,7 @@ export def "put-deliverability-dashboard-option" [
   let full_url = (build-url $base "/v2/email/deliverability-dashboard" $auth.query)
   let req_body = {"DashboardEnabled": $dashboard_enabled, "SubscribedDomains": $subscribed_domains} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "DashboardEnabled") == null) { error make --unspanned { msg: "required body field 'DashboardEnabled' missing: pass --dashboard-enabled or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
@@ -2605,7 +2605,7 @@ export def "get-deliverability-test-report" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DeliverabilityTestReport: record<ReportId: record, ReportName: record, Subject: record, FromEmailAddress: record, CreateDate: record, DeliverabilityTestStatus: record>, OverallPlacement: record<InboxPercentage: record, SpamPercentage: record, MissingPercentage: record, SpfPercentage: record, DkimPercentage: record>, IspPlacements: record, Message: record, Tags: record> {
+]: nothing -> record<DeliverabilityTestReport: record<ReportId: string, ReportName: string, Subject: string, FromEmailAddress: string, CreateDate: string, DeliverabilityTestStatus: string>, OverallPlacement: record<InboxPercentage: float, SpamPercentage: float, MissingPercentage: float, SpfPercentage: float, DkimPercentage: float>, IspPlacements: table<IspName: string, PlacementStatistics: record>, Message: string, Tags: table<Key: string, Value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'ReportId' must be non-empty" } }
@@ -2650,7 +2650,7 @@ export def "get-domain-deliverability-campaign" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DomainDeliverabilityCampaign: record<CampaignId: record, ImageUrl: record, Subject: record, FromAddress: record, SendingIps: record, FirstSeenDateTime: record, LastSeenDateTime: record, InboxCount: record, SpamCount: record, ReadRate: record, DeleteRate: record, ReadDeleteRate: record, ProjectedVolume: record, Esps: record>> {
+]: nothing -> record<DomainDeliverabilityCampaign: record<CampaignId: string, ImageUrl: string, Subject: string, FromAddress: string, SendingIps: list<string>, FirstSeenDateTime: string, LastSeenDateTime: string, InboxCount: int, SpamCount: int, ReadRate: float, DeleteRate: float, ReadDeleteRate: float, ProjectedVolume: int, Esps: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'CampaignId' must be non-empty" } }
@@ -2688,8 +2688,8 @@ export def "get-domain-statistics-report" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start-date: string # The first day (in Unix time) that you want to obtain domain deliverability metrics for. (format: date-time)
-  --end-date: string # The last day (in Unix time) that you want to obtain domain deliverability metrics for. The EndDate that you specify has to be less than or equal to 30 days after the StartDate. (format: date-time)
+  --start-date: string # The first day (in Unix time) that you want to obtain domain deliverability metrics for. (required, format: date-time)
+  --end-date: string # The last day (in Unix time) that you want to obtain domain deliverability metrics for. The EndDate that you specify has to be less than or equal to 30 days after the StartDate. (required, format: date-time)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2697,10 +2697,12 @@ export def "get-domain-statistics-report" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<OverallVolume: record<VolumeStatistics: record<InboxRawCount: record, SpamRawCount: record, ProjectedInbox: record, ProjectedSpam: record>, ReadRatePercent: record, DomainIspPlacements: record>, DailyVolumes: record> {
+]: nothing -> record<OverallVolume: record<VolumeStatistics: record<InboxRawCount: int, SpamRawCount: int, ProjectedInbox: int, ProjectedSpam: int>, ReadRatePercent: float, DomainIspPlacements: list<record>>, DailyVolumes: table<StartDate: string, VolumeStatistics: record, DomainIspPlacements: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'Domain' must be non-empty" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'StartDate' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'EndDate' missing: pass --end-date" } }
   let qp = [(serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/v2/email/deliverability-dashboard/statistics-report/{domain}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2788,7 +2790,7 @@ export def "get-import-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<JobId: record, ImportDestination: record<SuppressionListDestination: record<SuppressionListImportAction: record>, ContactListDestination: record<ContactListName: record, ContactListImportAction: record>>, ImportDataSource: record<S3Url: record, DataFormat: record>, FailureInfo: record<FailedRecordsS3Url: record, ErrorMessage: record>, JobStatus: record, CreatedTimestamp: record, CompletedTimestamp: record, ProcessedRecordsCount: record, FailedRecordsCount: record> {
+]: nothing -> record<JobId: string, ImportDestination: record<SuppressionListDestination: record<SuppressionListImportAction: string>, ContactListDestination: record<ContactListName: string, ContactListImportAction: string>>, ImportDataSource: record<S3Url: string, DataFormat: string>, FailureInfo: record<FailedRecordsS3Url: string, ErrorMessage: string>, JobStatus: string, CreatedTimestamp: string, CompletedTimestamp: string, ProcessedRecordsCount: int, FailedRecordsCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'JobId' must be non-empty" } }
@@ -2834,7 +2836,7 @@ export def "list-deliverability-test-reports" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DeliverabilityTestReports: record, NextToken: record> {
+]: nothing -> record<DeliverabilityTestReports: table<ReportId: string, ReportName: string, Subject: string, FromEmailAddress: string, CreateDate: string, DeliverabilityTestStatus: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "PageSize" $page_size "scalar")] | flatten | str join "&"
@@ -2872,8 +2874,8 @@ export def "list-domain-deliverability-campaigns" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start-date: string # The first day that you want to obtain deliverability data for. (format: date-time)
-  --end-date: string # The last day that you want to obtain deliverability data for. This value has to be less than or equal to 30 days after the value of the StartDate parameter. (format: date-time)
+  --start-date: string # The first day that you want to obtain deliverability data for. (required, format: date-time)
+  --end-date: string # The last day that you want to obtain deliverability data for. This value has to be less than or equal to 30 days after the value of the StartDate parameter. (required, format: date-time)
   --next-token: string # A token that’s returned from a previous call to the ListDomainDeliverabilityCampaigns operation. This token indicates the position of a campaign in the list of campaigns.
   --page-size: int # The maximum number of results to include in response to a single call to the ListDomainDeliverabilityCampaigns operation. If the number of results is larger than the number that you specify in this parameter, the response includes a NextToken element, which you can use to obtain additional results.
   --x-amz-content-sha256: string
@@ -2883,10 +2885,12 @@ export def "list-domain-deliverability-campaigns" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DomainDeliverabilityCampaigns: record, NextToken: record> {
+]: nothing -> record<DomainDeliverabilityCampaigns: table<CampaignId: string, ImageUrl: string, Subject: string, FromAddress: string, SendingIps: list, FirstSeenDateTime: string, LastSeenDateTime: string, InboxCount: int, SpamCount: int, ReadRate: float, DeleteRate: float, ReadDeleteRate: float, ProjectedVolume: int, Esps: list>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscribed_domain | is-empty) { error make --unspanned { msg: "path parameter 'SubscribedDomain' must be non-empty" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'StartDate' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'EndDate' missing: pass --end-date" } }
   let qp = [(serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "PageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscribed_domain: (encode-path-segment $subscribed_domain)} | format pattern "/v2/email/deliverability-dashboard/domains/{subscribed_domain}/campaigns") $qp $auth.query)
   let accept_val = "application/json"
@@ -2933,7 +2937,7 @@ export def "list-recommendations" [
   --filter: record # An object that contains mapping between ListRecommendationsFilterKey and ListRecommendationFilterValue to filter by.
   --next-token-body: string # A token returned from a previous call to ListRecommendations to indicate the position in the list of recommendations. (body field)
   --page-size-body: int # The number of results to show in a single call to ListRecommendations. If the number of results is larger than the number you specified in this parameter, then the response includes a NextToken element, which you can use to obtain additional results. The value you specify has to be at least 1, and can be no more than 100. (body field)
-]: any -> record<Recommendations: record, NextToken: record> {
+]: any -> record<Recommendations: table<ResourceArn: string, Type: string, Description: string, Status: string, CreatedTimestamp: string, LastUpdatedTimestamp: string, Impact: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2985,7 +2989,7 @@ export def "list-suppressed-destinations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<SuppressedDestinationSummaries: record, NextToken: record> {
+]: nothing -> record<SuppressedDestinationSummaries: table<EmailAddress: string, Reason: string, LastUpdateTime: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Reason" $reason "multi") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "PageSize" $page_size "scalar")] | flatten | str join "&"
@@ -3070,7 +3074,7 @@ export def "list-tags-for-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-arn: string # The Amazon Resource Name (ARN) of the resource that you want to retrieve tag information for.
+  --resource-arn: string # The Amazon Resource Name (ARN) of the resource that you want to retrieve tag information for. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3078,9 +3082,10 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Tags: record> {
+]: nothing -> record<Tags: table<Key: string, Value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'ResourceArn' missing: pass --resource-arn" } }
   let qp = [(serialize-qp "ResourceArn" $resource_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/email/tags" $qp $auth.query)
   let accept_val = "application/json"
@@ -3298,7 +3303,7 @@ export def "put-account-suppression-attributes" [
 #
 # PUT /v2/email/account/vdm
 # operationId: PutAccountVdmAttributes
-# --VdmAttributes shape: {VdmEnabled?: any, DashboardAttributes?: any, GuardianAttributes?: any}
+# --VdmAttributes shape: {VdmEnabled?: "ENABLED"|"DISABLED", DashboardAttributes?: record, GuardianAttributes?: record}
 export def "put-account-vdm-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3316,7 +3321,7 @@ export def "put-account-vdm-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  vdm_attributes: record # The VDM attributes that apply to your Amazon SES account. — shape: {VdmEnabled?: any, DashboardAttributes?: any, GuardianAttributes?: any}
+  vdm_attributes: record # The VDM attributes that apply to your Amazon SES account. — shape: {VdmEnabled?: "ENABLED"|"DISABLED", DashboardAttributes?: record, GuardianAttributes?: record}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3592,7 +3597,7 @@ export def "put-configuration-set-tracking-options" [
 #
 # PUT /v2/email/configuration-sets/{ConfigurationSetName}/vdm-options
 # operationId: PutConfigurationSetVdmOptions
-# --VdmOptions shape: {DashboardOptions?: any, GuardianOptions?: any}
+# --VdmOptions shape: {DashboardOptions?: record, GuardianOptions?: record}
 export def "put-configuration-set-vdm-options" [
   configuration_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3611,7 +3616,7 @@ export def "put-configuration-set-vdm-options" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --vdm-options: record # An object that defines the VDM settings that apply to emails that you send using the configuration set. — shape: {DashboardOptions?: any, GuardianOptions?: any}
+  --vdm-options: record # An object that defines the VDM settings that apply to emails that you send using the configuration set. — shape: {DashboardOptions?: record, GuardianOptions?: record}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3837,7 +3842,7 @@ export def "put-email-identity-dkim-attributes" [
 #
 # PUT /v1/email/identities/{EmailIdentity}/dkim/signing
 # operationId: PutEmailIdentityDkimSigningAttributes
-# --SigningAttributes shape: {DomainSigningSelector?: any, DomainSigningPrivateKey?: any, NextSigningKeyLength?: any}
+# --SigningAttributes shape: {DomainSigningSelector?: string, DomainSigningPrivateKey?: string, NextSigningKeyLength?: "RSA_1024_BIT"|"RSA_2048_BIT"}
 export def "put-email-identity-dkim-signing-attributes" [
   email_identity: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3857,8 +3862,8 @@ export def "put-email-identity-dkim-signing-attributes" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   signing_attributes_origin: string@signing-attributes-origin-completer # The method to use to configure DKIM for the identity. There are the following possible values: AWS_SES – Configure DKIM for the identity by using Easy DKIM (https://docs.aws.amazon.com/ses/latest/DeveloperGuide/easy-dkim.html). EXTERNAL – Configure DKIM for the identity by using Bring Your Own DKIM (BYODKIM).
-  --signing-attributes: record # An object that contains configuration for Bring Your Own DKIM (BYODKIM), or, for Easy DKIM — shape: {DomainSigningSelector?: any, DomainSigningPrivateKey?: any, NextSigningKeyLength?: any}
-]: any -> record<DkimStatus: record, DkimTokens: record> {
+  --signing-attributes: record # An object that contains configuration for Bring Your Own DKIM (BYODKIM), or, for Easy DKIM — shape: {DomainSigningSelector?: string, DomainSigningPrivateKey?: string, NextSigningKeyLength?: "RSA_1024_BIT"|"RSA_2048_BIT"}
+]: any -> record<DkimStatus: string, DkimTokens: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3987,9 +3992,9 @@ export def "put-email-identity-mail-from-attributes" [
 #
 # POST /v2/email/outbound-bulk-emails
 # operationId: SendBulkEmail
-# --DefaultEmailTags item shape: {Name: any, Value: any}
-# --DefaultContent shape: {Template?: any}
-# --BulkEmailEntries item shape: {Destination: any, ReplacementTags?: any, ReplacementEmailContent?: any}
+# --DefaultEmailTags item shape: {Name: string, Value: string}
+# --DefaultContent shape: {Template?: record}
+# --BulkEmailEntries item shape: {Destination: record, ReplacementTags?: list, ReplacementEmailContent?: record}
 export def "send-bulk-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4012,11 +4017,11 @@ export def "send-bulk-email" [
   --reply-to-addresses: list<string> # The "Reply-to" email addresses for the message. When the recipient replies to the message, each Reply-to address receives the reply.
   --feedback-forwarding-email-address: string # The address that you want bounce and complaint notifications to be sent to.
   --feedback-forwarding-email-address-identity-arn: string # This parameter is used only for sending authorization. It is the ARN of the identity that is associated with the sending authorization policy that permits you to use the email address specified in the FeedbackForwardingEmailAddress parameter. For example, if the owner of example.com (which has ARN arn:aws:ses:us-east-1:123456789012:identity/example.com) attaches a policy to it that authorizes you to use feedback@example.com, then you would specify the FeedbackForwardingEmailAddressIdentityArn to be arn:aws:ses:us-east-1:123456789012:identity/example.com, and the FeedbackForwardingEmailAddress to be feedback@example.com. For more information about sending authorization, see the Amazon SES Developer Guide (https://docs.aws.amazon.com/ses/latest/DeveloperGuide/sending-authorization.html).
-  --default-email-tags: list # A list of message tags. — item shape: {Name: any, Value: any}
-  default_content: record # An object that contains the body of the message. You can specify a template message. — shape: {Template?: any}
-  bulk_email_entries: list # A list of BulkEmailEntry objects. — item shape: {Destination: any, ReplacementTags?: any, ReplacementEmailContent?: any}
+  --default-email-tags: list # A list of message tags. — item shape: {Name: string, Value: string}
+  default_content: record # An object that contains the body of the message. You can specify a template message. — shape: {Template?: record}
+  bulk_email_entries: list # A list of BulkEmailEntry objects. — item shape: {Destination: record, ReplacementTags?: list, ReplacementEmailContent?: record}
   --configuration-set-name: string # The name of a configuration set. Configuration sets are groups of rules that you can apply to the emails you send. You apply a configuration set to an email by including a reference to the configuration set in the headers of the email. When you apply a configuration set to an email, all of the rules in that configuration set are applied to the email.
-]: any -> record<BulkEmailEntryResults: record> {
+]: any -> record<BulkEmailEntryResults: table<Status: string, Error: string, MessageId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4065,7 +4070,7 @@ export def "send-custom-verification-email" [
   email_address: string # The email address to verify.
   template_name: string # The name of the template. You will refer to this name when you send email using the SendTemplatedEmail or SendBulkTemplatedEmail operations.
   --configuration-set-name: string # The name of a configuration set. Configuration sets are groups of rules that you can apply to the emails you send. You apply a configuration set to an email by including a reference to the configuration set in the headers of the email. When you apply a configuration set to an email, all of the rules in that configuration set are applied to the email.
-]: any -> record<MessageId: record> {
+]: any -> record<MessageId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4094,10 +4099,10 @@ export def "send-custom-verification-email" [
 #
 # POST /v2/email/outbound-emails
 # operationId: SendEmail
-# --Destination shape: {ToAddresses?: any, CcAddresses?: any, BccAddresses?: any}
-# --Content shape: {Simple?: any, Raw?: any, Template?: any}
-# --EmailTags item shape: {Name: any, Value: any}
-# --ListManagementOptions shape: {ContactListName?: any, TopicName?: any}
+# --Destination shape: {ToAddresses?: list<string>, CcAddresses?: list<string>, BccAddresses?: list<string>}
+# --Content shape: {Simple?: record, Raw?: record, Template?: record}
+# --EmailTags item shape: {Name: string, Value: string}
+# --ListManagementOptions shape: {ContactListName?: string, TopicName?: string}
 export def "send-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4117,15 +4122,15 @@ export def "send-email" [
   --x-amz-signed-headers: string
   --from-email-address: string # The email address to use as the "From" address for the email. The address that you specify has to be verified.
   --from-email-address-identity-arn: string # This parameter is used only for sending authorization. It is the ARN of the identity that is associated with the sending authorization policy that permits you to use the email address specified in the FromEmailAddress parameter. For example, if the owner of example.com (which has ARN arn:aws:ses:us-east-1:123456789012:identity/example.com) attaches a policy to it that authorizes you to use sender@example.com, then you would specify the FromEmailAddressIdentityArn to be arn:aws:ses:us-east-1:123456789012:identity/example.com, and the FromEmailAddress to be sender@example.com. For more information about sending authorization, see the Amazon SES Developer Guide (https://docs.aws.amazon.com/ses/latest/DeveloperGuide/sending-authorization.html). For Raw emails, the FromEmailAddressIdentityArn value overrides the X-SES-SOURCE-ARN and X-SES-FROM-ARN headers specified in raw email message content.
-  --destination: record # An object that describes the recipients for an email. Amazon SES does not support the SMTPUTF8 extension, as described in RFC6531 (https://tools.ietf.org/html/rfc6531). For this reason, the local part of a destination email address (the part of the email address that precedes the @ sign) may only contain 7-bit ASCII characters (https://en.wikipedia.org/wiki/Email_address#Local-part). If the domain part of an address (the part after the @ sign) contains non-ASCII characters, they must be encoded using Punycode, as described in RFC3492 (https://tools.ietf.org/html/rfc3492.html). — shape: {ToAddresses?: any, CcAddresses?: any, BccAddresses?: any}
+  --destination: record # An object that describes the recipients for an email. Amazon SES does not support the SMTPUTF8 extension, as described in RFC6531 (https://tools.ietf.org/html/rfc6531). For this reason, the local part of a destination email address (the part of the email address that precedes the @ sign) may only contain 7-bit ASCII characters (https://en.wikipedia.org/wiki/Email_address#Local-part). If the domain part of an address (the part after the @ sign) contains non-ASCII characters, they must be encoded using Punycode, as described in RFC3492 (https://tools.ietf.org/html/rfc3492.html). — shape: {ToAddresses?: list<string>, CcAddresses?: list<string>, BccAddresses?: list<string>}
   --reply-to-addresses: list<string> # The "Reply-to" email addresses for the message. When the recipient replies to the message, each Reply-to address receives the reply.
   --feedback-forwarding-email-address: string # The address that you want bounce and complaint notifications to be sent to.
   --feedback-forwarding-email-address-identity-arn: string # This parameter is used only for sending authorization. It is the ARN of the identity that is associated with the sending authorization policy that permits you to use the email address specified in the FeedbackForwardingEmailAddress parameter. For example, if the owner of example.com (which has ARN arn:aws:ses:us-east-1:123456789012:identity/example.com) attaches a policy to it that authorizes you to use feedback@example.com, then you would specify the FeedbackForwardingEmailAddressIdentityArn to be arn:aws:ses:us-east-1:123456789012:identity/example.com, and the FeedbackForwardingEmailAddress to be feedback@example.com. For more information about sending authorization, see the Amazon SES Developer Guide (https://docs.aws.amazon.com/ses/latest/DeveloperGuide/sending-authorization.html).
-  content: record # An object that defines the entire content of the email, including the message headers and the body content. You can create a simple email message, in which you specify the subject and the text and HTML versions of the message body. You can also create raw messages, in which you specify a complete MIME-formatted message. Raw messages can include attachments and custom headers. — shape: {Simple?: any, Raw?: any, Template?: any}
-  --email-tags: list # A list of message tags. — item shape: {Name: any, Value: any}
+  content: record # An object that defines the entire content of the email, including the message headers and the body content. You can create a simple email message, in which you specify the subject and the text and HTML versions of the message body. You can also create raw messages, in which you specify a complete MIME-formatted message. Raw messages can include attachments and custom headers. — shape: {Simple?: record, Raw?: record, Template?: record}
+  --email-tags: list # A list of message tags. — item shape: {Name: string, Value: string}
   --configuration-set-name: string # The name of a configuration set. Configuration sets are groups of rules that you can apply to the emails you send. You apply a configuration set to an email by including a reference to the configuration set in the headers of the email. When you apply a configuration set to an email, all of the rules in that configuration set are applied to the email.
-  --list-management-options: record # An object used to specify a list or topic to which an email belongs, which will be used when a contact chooses to unsubscribe. — shape: {ContactListName?: any, TopicName?: any}
-]: any -> record<MessageId: record> {
+  --list-management-options: record # An object used to specify a list or topic to which an email belongs, which will be used when a contact chooses to unsubscribe. — shape: {ContactListName?: string, TopicName?: string}
+]: any -> record<MessageId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4154,7 +4159,7 @@ export def "send-email" [
 #
 # POST /v2/email/tags
 # operationId: TagResource
-# --Tags item shape: {Key: any, Value: any}
+# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4173,7 +4178,7 @@ export def "tag-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   resource_arn: string # The Amazon Resource Name (ARN) of the resource that you want to add one or more tags to.
-  tags: list # A list of the tags that you want to add to the resource. A tag consists of a required tag key (Key) and an associated tag value (Value). The maximum length of a tag key is 128 characters. The maximum length of a tag value is 256 characters. — item shape: {Key: any, Value: any}
+  tags: list # A list of the tags that you want to add to the resource. A tag consists of a required tag key (Key) and an associated tag value (Value). The maximum length of a tag key is 128 characters. The maximum length of a tag value is 256 characters. — item shape: {Key: string, Value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4222,7 +4227,7 @@ export def "test-render-email-template" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   template_data: string # An object that defines the values to use for message variables in the template. This object is a set of key-value pairs. Each key defines a message variable in the template. The corresponding value defines the value to use for that variable.
-]: any -> record<RenderedTemplate: record> {
+]: any -> record<RenderedTemplate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4262,8 +4267,8 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-arn: string # The Amazon Resource Name (ARN) of the resource that you want to remove one or more tags from.
-  --tag-keys: list # The tags (tag keys) that you want to remove from the resource. When you specify a tag key, the action removes both that key and its associated tag value. To remove more than one tag from the resource, append the TagKeys parameter and argument for each additional tag to remove, separated by an ampersand. For example: /v2/email/tags?ResourceArn=ResourceArn&TagKeys=Key1&TagKeys=Key2
+  --resource-arn: string # The Amazon Resource Name (ARN) of the resource that you want to remove one or more tags from. (required)
+  --tag-keys: list # The tags (tag keys) that you want to remove from the resource. When you specify a tag key, the action removes both that key and its associated tag value. To remove more than one tag from the resource, append the TagKeys parameter and argument for each additional tag to remove, separated by an ampersand. For example: /v2/email/tags?ResourceArn=ResourceArn&TagKeys=Key1&TagKeys=Key2 (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4274,6 +4279,8 @@ export def "untag-resource" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'ResourceArn' missing: pass --resource-arn" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'TagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "ResourceArn" $resource_arn "scalar") (serialize-qp "TagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/email/tags" $qp $auth.query)
   let accept_val = "application/json"

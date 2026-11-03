@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -104,6 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # Completers for enum parameters
 def authentication-type-completer [] { ["ADPassword" "SQL"] }
 def storage-key-type-completer [] { ["SharedAccessKey" "StorageAccessKey"] }
+def extension-name-completer [] { ["import"] }
 def edition-completer [] { ["Basic" "Business" "BusinessCritical" "DataWarehouse" "Free" "GeneralPurpose" "Hyperscale" "Premium" "PremiumRS" "Standard" "Stretch" "System" "System2" "Web"] }
 def service-objective-name-completer [] { ["Basic" "DS100" "DS1000" "DS1200" "DS1500" "DS200" "DS2000" "DS300" "DS400" "DS500" "DS600" "DW100" "DW1000" "DW10000c" "DW1000c" "DW1200" "DW1500" "DW15000c" "DW1500c" "DW200" "DW2000" "DW2000c" "DW2500c" "DW300" "DW3000" "DW30000c" "DW3000c" "DW400" "DW500" "DW5000c" "DW600" "DW6000" "DW6000c" "DW7500c" "ElasticPool" "Free" "P1" "P11" "P15" "P2" "P3" "P4" "P6" "PRS1" "PRS2" "PRS4" "PRS6" "S0" "S1" "S12" "S2" "S3" "S4" "S6" "S7" "S9" "System" "System0" "System1" "System2" "System2L" "System3" "System3L" "System4" "System4L"] }
 
@@ -148,14 +149,14 @@ export def "databases-export" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
   administrator_login: string # The name of the SQL administrator.
   administrator_login_password: string # The password of the SQL administrator.
   --authentication-type: string@authentication-type-completer # The authentication type. (default: SQL)
   storage_key: string # The storage key to use. If storage key type is SharedAccessKey, it must be preceded with a "?."
   storage_key_type: string@storage-key-type-completer # The type of the storage key to use.
   storage_uri: string # The storage uri to use.
-]: any -> record<properties: record<blobUri: string, databaseName: string, errorMessage: string, lastModifiedTime: string, queuedTime: string, requestId: string, requestType: string, serverName: string, status: string>> {
+]: any -> record<properties: record<blobUri: string, databaseName: string, errorMessage: string, lastModifiedTime: string, queuedTime: string, requestId: string, requestType: string, serverName: string, status: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -163,6 +164,7 @@ export def "databases-export" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), database_name: (encode-path-segment $database_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/databases/{database_name}/export") $qp $auth.query)
   let req_body = {"administratorLogin": $administrator_login, "administratorLoginPassword": $administrator_login_password, "authenticationType": $authentication_type, "storageKey": $storage_key, "storageKeyType": $storage_key_type, "storageUri": $storage_uri} | compact
@@ -193,7 +195,7 @@ export def "databases-create-import-operation" [
   resource_group_name: string
   server_name: string
   database_name: string
-  extension_name: string
+  extension_name: string@extension-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -203,11 +205,11 @@ export def "databases-create-import-operation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
   --name: string # The name of the extension.
   --properties: any # Represents the properties for an import operation — shape: {operationMode: "Import", administratorLogin: string, administratorLoginPassword: string, authenticationType?: "SQL"|"ADPassword", storageKey: string, storageKeyType: "StorageAccessKey"|"SharedAccessKey", storageUri: string}
   --type: string # The type of the extension.
-]: any -> record<properties: record<blobUri: string, databaseName: string, errorMessage: string, lastModifiedTime: string, queuedTime: string, requestId: string, requestType: string, serverName: string, status: string>> {
+]: any -> record<properties: record<blobUri: string, databaseName: string, errorMessage: string, lastModifiedTime: string, queuedTime: string, requestId: string, requestType: string, serverName: string, status: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -216,6 +218,7 @@ export def "databases-create-import-operation" [
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($extension_name | is-empty) { error make --unspanned { msg: "path parameter 'extensionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), database_name: (encode-path-segment $database_name), extension_name: (encode-path-segment $extension_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/databases/{database_name}/extensions/{extension_name}") $qp $auth.query)
   let req_body = {"name": $name, "properties": $properties, "type": $type} | compact
@@ -253,7 +256,7 @@ export def "databases-import" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
   database_name: string # The name of the database to import.
   edition: string@edition-completer # The edition for the database being created. The list of SKUs may vary by region and support offer. To determine the SKUs (including the SKU name, tier/edition, family, and capacity) that are available to your subscription in an Azure region, use the `Capabilities_ListByLocation` REST API or one of the following commands: ```azurecli az sql db list-editions -l -o table ```` ```powershell Get-AzSqlServerServiceObjective -Location ````
   max_size_bytes: string # The maximum size for the newly imported database.
@@ -264,13 +267,14 @@ export def "databases-import" [
   storage_key: string # The storage key to use. If storage key type is SharedAccessKey, it must be preceded with a "?."
   storage_key_type: string@storage-key-type-completer # The type of the storage key to use.
   storage_uri: string # The storage uri to use.
-]: any -> record<properties: record<blobUri: string, databaseName: string, errorMessage: string, lastModifiedTime: string, queuedTime: string, requestId: string, requestType: string, serverName: string, status: string>> {
+]: any -> record<properties: record<blobUri: string, databaseName: string, errorMessage: string, lastModifiedTime: string, queuedTime: string, requestId: string, requestType: string, serverName: string, status: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/import") $qp $auth.query)
   let req_body = {"databaseName": $database_name, "edition": $edition, "maxSizeBytes": $max_size_bytes, "serviceObjectiveName": $service_objective_name, "administratorLogin": $administrator_login, "administratorLoginPassword": $administrator_login_password, "authenticationType": $authentication_type, "storageKey": $storage_key, "storageKeyType": $storage_key_type, "storageUri": $storage_uri} | compact

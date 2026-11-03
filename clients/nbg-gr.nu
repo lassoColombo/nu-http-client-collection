@@ -1,6 +1,8 @@
-# Auto-generated client for Account and Transaction API Specification - UK vv3.1.5
+# Auto-generated client for Account and Transaction API Specification - UK v3.1.5
 # Source: https://api.apis.guru/v2/specs/nbg.gr/v3.1.5/openapi.json
-# Auth: --token flag or $env.ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_TOKEN
+# Auth (Client-Credentials-Token): --token-clientcredentialstoken flag or $env.ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTCREDENTIALSTOKEN_TOKEN
+# Auth (Client-Id): --token-clientid flag or $env.ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTID_TOKEN
+# Auth (Authorization-Code-Token): --token-authorizationcodetoken flag or $env.ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_AUTHORIZATIONCODETOKEN_TOKEN
 
 const BASE_URL = "https://apis.nbg.gr/sandbox/uk.openbanking.accountinfo/oauth2/v3.1.5"
 
@@ -12,8 +14,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "client-id" => { {scheme: $scheme, headers: {Client-Id: $token_val}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "client-id" => { {scheme: $scheme, headers: {"Client-Id": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -128,7 +130,7 @@ def accept-completer [] { ["application/json" "application/json; charset=utf-8"]
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-clientcredentialstoken" "token-clientid" "token-authorizationcodetoken"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-account-access-consents" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -168,13 +170,14 @@ export def "post-account-access-consents" [
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-  --sandbox-id: string # The unique id of the sandbox to be used
+  --sandbox-id: string # The unique id of the sandbox to be used (required)
   data: record # shape: {ExpirationDateTime?: string, Permissions: list<string>, TransactionFromDateTime?: string, TransactionToDateTime?: string}
   risk: record # The Risk section is sent by the initiating party to the ASPSP. It is used to specify additional details for risk scoring for Account Info.
 ]: any -> record<Data: record<ConsentId: string, CreationDateTime: string, ExpirationDateTime: string, Permissions: list<string>, Status: string, StatusUpdateDateTime: string, TransactionFromDateTime: string, TransactionToDateTime: string>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>, Risk: record> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_clientcredentialstoken | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTCREDENTIALSTOKEN_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTID_TOKEN | default "")) "client-id")])
   let base = ($base_url | default $BASE_URL)
+  if ($sandbox_id == null) { error make --unspanned { msg: "required header parameter 'sandbox-id' missing: pass --sandbox-id" } }
   let full_url = (build-url $base "/account-access-consents" $auth.query)
   let req_body = {"Data": $data, "Risk": $risk} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -214,11 +217,12 @@ export def "delete-account-access-consents-consent-id" [
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-  --sandbox-id: string # The unique id of the sandbox to be used
+  --sandbox-id: string # The unique id of the sandbox to be used (required)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_clientcredentialstoken | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTCREDENTIALSTOKEN_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTID_TOKEN | default "")) "client-id")])
   let base = ($base_url | default $BASE_URL)
   if ($consent_id | is-empty) { error make --unspanned { msg: "path parameter 'consentId' must be non-empty" } }
+  if ($sandbox_id == null) { error make --unspanned { msg: "required header parameter 'sandbox-id' missing: pass --sandbox-id" } }
   let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/account-access-consents/{consent_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -257,11 +261,12 @@ export def "get-account-access-consents-consent-id" [
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-  --sandbox-id: string # The unique id of the sandbox to be used
+  --sandbox-id: string # The unique id of the sandbox to be used (required)
 ]: nothing -> record<Data: record<ConsentId: string, CreationDateTime: string, ExpirationDateTime: string, Permissions: list<string>, Status: string, StatusUpdateDateTime: string, TransactionFromDateTime: string, TransactionToDateTime: string>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>, Risk: record> {
   let auth = (merge-auth [(build-auth ($token_clientcredentialstoken | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTCREDENTIALSTOKEN_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTID_TOKEN | default "")) "client-id")])
   let base = ($base_url | default $BASE_URL)
   if ($consent_id | is-empty) { error make --unspanned { msg: "path parameter 'consentId' must be non-empty" } }
+  if ($sandbox_id == null) { error make --unspanned { msg: "required header parameter 'sandbox-id' missing: pass --sandbox-id" } }
   let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/account-access-consents/{consent_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -299,10 +304,11 @@ export def "get-accounts" [
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-  --sandbox-id: string # The unique id of the sandbox to be used
+  --sandbox-id: string # The unique id of the sandbox to be used (required)
 ]: nothing -> record<Data: record<Account: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (merge-auth [(build-auth ($token_authorizationcodetoken | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_AUTHORIZATIONCODETOKEN_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTID_TOKEN | default "")) "client-id")])
   let base = ($base_url | default $BASE_URL)
+  if ($sandbox_id == null) { error make --unspanned { msg: "required header parameter 'sandbox-id' missing: pass --sandbox-id" } }
   let full_url = (build-url $base "/accounts" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -341,11 +347,12 @@ export def "get-accounts-account-id" [
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-  --sandbox-id: string # The unique id of the sandbox to be used
+  --sandbox-id: string # The unique id of the sandbox to be used (required)
 ]: nothing -> record<Data: record<Account: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (merge-auth [(build-auth ($token_authorizationcodetoken | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_AUTHORIZATIONCODETOKEN_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTID_TOKEN | default "")) "client-id")])
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($sandbox_id == null) { error make --unspanned { msg: "required header parameter 'sandbox-id' missing: pass --sandbox-id" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -384,11 +391,12 @@ export def "get-accounts-account-id-balances" [
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-  --sandbox-id: string # The unique id of the sandbox to be used
+  --sandbox-id: string # The unique id of the sandbox to be used (required)
 ]: nothing -> record<Data: record<Balance: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (merge-auth [(build-auth ($token_authorizationcodetoken | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_AUTHORIZATIONCODETOKEN_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTID_TOKEN | default "")) "client-id")])
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($sandbox_id == null) { error make --unspanned { msg: "required header parameter 'sandbox-id' missing: pass --sandbox-id" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/balances") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -427,11 +435,12 @@ export def "get-accounts-account-id-beneficiaries" [
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-  --sandbox-id: string # The unique id of the sandbox to be used
+  --sandbox-id: string # The unique id of the sandbox to be used (required)
 ]: nothing -> record<Data: record<Beneficiary: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (merge-auth [(build-auth ($token_authorizationcodetoken | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_AUTHORIZATIONCODETOKEN_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTID_TOKEN | default "")) "client-id")])
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($sandbox_id == null) { error make --unspanned { msg: "required header parameter 'sandbox-id' missing: pass --sandbox-id" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/beneficiaries") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -470,11 +479,12 @@ export def "get-accounts-account-id-parties" [
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-  --sandbox-id: string # The unique id of the sandbox to be used
+  --sandbox-id: string # The unique id of the sandbox to be used (required)
 ]: nothing -> record<Data: record<Party: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (merge-auth [(build-auth ($token_authorizationcodetoken | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_AUTHORIZATIONCODETOKEN_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTID_TOKEN | default "")) "client-id")])
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($sandbox_id == null) { error make --unspanned { msg: "required header parameter 'sandbox-id' missing: pass --sandbox-id" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/parties") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -513,11 +523,12 @@ export def "get-accounts-account-id-party" [
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-  --sandbox-id: string # The unique id of the sandbox to be used
+  --sandbox-id: string # The unique id of the sandbox to be used (required)
 ]: nothing -> record<Data: record<Party: record<Name: string, PartyId: string>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (merge-auth [(build-auth ($token_authorizationcodetoken | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_AUTHORIZATIONCODETOKEN_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTID_TOKEN | default "")) "client-id")])
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($sandbox_id == null) { error make --unspanned { msg: "required header parameter 'sandbox-id' missing: pass --sandbox-id" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/party") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -556,11 +567,12 @@ export def "get-accounts-account-id-scheduled-payments" [
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-  --sandbox-id: string # The unique id of the sandbox to be used
+  --sandbox-id: string # The unique id of the sandbox to be used (required)
 ]: nothing -> record<Data: record<ScheduledPayment: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (merge-auth [(build-auth ($token_authorizationcodetoken | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_AUTHORIZATIONCODETOKEN_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTID_TOKEN | default "")) "client-id")])
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($sandbox_id == null) { error make --unspanned { msg: "required header parameter 'sandbox-id' missing: pass --sandbox-id" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/scheduled-payments") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -599,11 +611,12 @@ export def "get-accounts-account-id-standing-orders" [
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-  --sandbox-id: string # The unique id of the sandbox to be used
+  --sandbox-id: string # The unique id of the sandbox to be used (required)
 ]: nothing -> record<Data: record<StandingOrder: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (merge-auth [(build-auth ($token_authorizationcodetoken | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_AUTHORIZATIONCODETOKEN_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTID_TOKEN | default "")) "client-id")])
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($sandbox_id == null) { error make --unspanned { msg: "required header parameter 'sandbox-id' missing: pass --sandbox-id" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/standing-orders") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -644,11 +657,12 @@ export def "get-accounts-account-id-statements" [
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-  --sandbox-id: string # The unique id of the sandbox to be used
+  --sandbox-id: string # The unique id of the sandbox to be used (required)
 ]: nothing -> record<Data: record<Statement: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (merge-auth [(build-auth ($token_authorizationcodetoken | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_AUTHORIZATIONCODETOKEN_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTID_TOKEN | default "")) "client-id")])
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($sandbox_id == null) { error make --unspanned { msg: "required header parameter 'sandbox-id' missing: pass --sandbox-id" } }
   let qp = [(serialize-qp "fromStatementDateTime" $from_statement_date_time "scalar") (serialize-qp "toStatementDateTime" $to_statement_date_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/statements") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -689,12 +703,13 @@ export def "get-accounts-account-id-statements-statement-id" [
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-  --sandbox-id: string # The unique id of the sandbox to be used
+  --sandbox-id: string # The unique id of the sandbox to be used (required)
 ]: nothing -> record<Data: record<Statement: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (merge-auth [(build-auth ($token_authorizationcodetoken | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_AUTHORIZATIONCODETOKEN_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTID_TOKEN | default "")) "client-id")])
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($statement_id | is-empty) { error make --unspanned { msg: "path parameter 'statementId' must be non-empty" } }
+  if ($sandbox_id == null) { error make --unspanned { msg: "required header parameter 'sandbox-id' missing: pass --sandbox-id" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), statement_id: (encode-path-segment $statement_id)} | format pattern "/accounts/{account_id}/statements/{statement_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -733,12 +748,13 @@ export def "get-accounts-account-id-statements-statement-id-file" [
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-  --sandbox-id: string # The unique id of the sandbox to be used
+  --sandbox-id: string # The unique id of the sandbox to be used (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (merge-auth [(build-auth ($token_authorizationcodetoken | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_AUTHORIZATIONCODETOKEN_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTID_TOKEN | default "")) "client-id")])
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($statement_id | is-empty) { error make --unspanned { msg: "path parameter 'statementId' must be non-empty" } }
+  if ($sandbox_id == null) { error make --unspanned { msg: "required header parameter 'sandbox-id' missing: pass --sandbox-id" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), statement_id: (encode-path-segment $statement_id)} | format pattern "/accounts/{account_id}/statements/{statement_id}/file") $auth.query)
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -778,12 +794,13 @@ export def "get-accounts-account-id-statements-statement-id-transactions" [
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-  --sandbox-id: string # The unique id of the sandbox to be used
+  --sandbox-id: string # The unique id of the sandbox to be used (required)
 ]: nothing -> record<Data: record<Transaction: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (merge-auth [(build-auth ($token_authorizationcodetoken | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_AUTHORIZATIONCODETOKEN_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTID_TOKEN | default "")) "client-id")])
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($statement_id | is-empty) { error make --unspanned { msg: "path parameter 'statementId' must be non-empty" } }
+  if ($sandbox_id == null) { error make --unspanned { msg: "required header parameter 'sandbox-id' missing: pass --sandbox-id" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), statement_id: (encode-path-segment $statement_id)} | format pattern "/accounts/{account_id}/statements/{statement_id}/transactions") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -824,11 +841,12 @@ export def "get-accounts-account-id-transactions" [
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-  --sandbox-id: string # The unique id of the sandbox to be used
+  --sandbox-id: string # The unique id of the sandbox to be used (required)
 ]: nothing -> record<Data: record<Transaction: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (merge-auth [(build-auth ($token_authorizationcodetoken | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_AUTHORIZATIONCODETOKEN_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTID_TOKEN | default "")) "client-id")])
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($sandbox_id == null) { error make --unspanned { msg: "required header parameter 'sandbox-id' missing: pass --sandbox-id" } }
   let qp = [(serialize-qp "fromBookingDateTime" $from_booking_date_time "scalar") (serialize-qp "toBookingDateTime" $to_booking_date_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/transactions") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -867,10 +885,11 @@ export def "get-party" [
   --x-fapi-customer-ip-address: string # The PSU's IP address if the PSU is currently logged in with the TPP.
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
-  --sandbox-id: string # The unique id of the sandbox to be used
+  --sandbox-id: string # The unique id of the sandbox to be used (required)
 ]: nothing -> record<Data: record<Party: record<Name: string, PartyId: string>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
   let auth = (merge-auth [(build-auth ($token_authorizationcodetoken | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_AUTHORIZATIONCODETOKEN_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTID_TOKEN | default "")) "client-id")])
   let base = ($base_url | default $BASE_URL)
+  if ($sandbox_id == null) { error make --unspanned { msg: "required header parameter 'sandbox-id' missing: pass --sandbox-id" } }
   let full_url = (build-url $base "/party" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

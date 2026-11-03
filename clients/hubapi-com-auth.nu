@@ -1,4 +1,4 @@
-# Auto-generated client for  vv1
+# Auto-generated client for  v1
 # Source: https://api.apis.guru/v2/specs/hubapi.com/auth/v1/openapi.json
 # Auth: --token flag or $env._TOKEN
 
@@ -106,6 +106,7 @@ def base-url-completer [] { ["https://api.hubapi.com"] }
 def auth-scheme-completer [] { ["none"] }
 
 # Completers for enum parameters
+def accept-completer [] { ["*/*" "application/json"] }
 def grant-type-completer [] { ["authorization_code" "refresh_token"] }
 
 # List all available API commands with their parameters
@@ -145,12 +146,13 @@ export def "get-oauth-v1-access-tokens-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
 ]: nothing -> record<app_id: int, expires_in: int, hub_domain: string, hub_id: int, scope_to_scope_group_pks: list<int>, scopes: list<string>, token: string, token_type: string, trial_scope_to_scope_group_pks: list<int>, trial_scopes: list<string>, user: string, user_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/oauth/v1/access-tokens/{token_arg}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -185,7 +187,7 @@ export def "delete-oauth-v1-refresh-tokens-archive" [
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/oauth/v1/refresh-tokens/{token_arg}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
@@ -215,12 +217,13 @@ export def "get-oauth-v1-refresh-tokens-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
 ]: nothing -> record<client_id: string, hub_domain: string, hub_id: int, scopes: list<string>, token: string, token_type: string, user: string, user_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/oauth/v1/refresh-tokens/{token_arg}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -249,6 +252,7 @@ export def "post-oauth-v1-token-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --client-id: string
   --client-secret: string
   --code: string
@@ -262,7 +266,7 @@ export def "post-oauth-v1-token-create" [
   let full_url = (build-url $base "/oauth/v1/token" $auth.query)
   let req_body = {"client_id": $client_id, "client_secret": $client_secret, "code": $code, "grant_type": $grant_type, "redirect_uri": $redirect_uri, "refresh_token": $refresh_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {

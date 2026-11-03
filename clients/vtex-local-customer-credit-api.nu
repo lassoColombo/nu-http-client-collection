@@ -1,6 +1,7 @@
 # Auto-generated client for Customer Credit API v1.0
 # Source: https://api.apis.guru/v2/specs/vtex.local/Customer-Credit-API/1.0/openapi.json
-# Auth: --token flag or $env.CUSTOMER_CREDIT_API_TOKEN
+# Auth (appKey): --token-appkey flag or $env.CUSTOMER_CREDIT_API_APPKEY_TOKEN
+# Auth (appToken): --token-apptoken flag or $env.CUSTOMER_CREDIT_API_APPTOKEN_TOKEN
 
 const BASE_URL = "https://vtex.local"
 
@@ -12,8 +13,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-vtex-api-appkey" => { {scheme: $scheme, headers: {X-VTEX-API-AppKey: $token_val}, query: "", location: "header"} }
-    "x-vtex-api-apptoken" => { {scheme: $scheme, headers: {X-VTEX-API-AppToken: $token_val}, query: "", location: "header"} }
+    "x-vtex-api-appkey" => { {scheme: $scheme, headers: {"X-VTEX-API-AppKey": $token_val}, query: "", location: "header"} }
+    "x-vtex-api-apptoken" => { {scheme: $scheme, headers: {"X-VTEX-API-AppToken": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -126,7 +127,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-appkey" "token-apptoken"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "searchallaccounts" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -161,11 +162,13 @@ export def "searchallaccounts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json)
 ]: nothing -> record<data: table<account: string, balance: float, creditLimit: float, description: string, document: string, documentType: string, email: string, lastUpdate: string>, summary: record<count: int>> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/creditcontrol/accounts" $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -199,8 +202,8 @@ export def "openan-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
   credit_limit: string # default: 500
   description: string # default: example
   document: string # default: 99999999999
@@ -211,6 +214,8 @@ export def "openan-account" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base "/api/creditcontrol/accounts" $auth.query)
   let req_body = {"creditLimit": $credit_limit, "description": $description, "document": $document, "documentType": $document_type, "email": $email, "tolerance": $tolerance} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -249,8 +254,8 @@ export def "openor-change-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
   --credit-limit: int # If the user don't set a credit limit, the system will define 100 for default (default: 100.0)
   --document: string # default: 00221292404
   email: string # default: email@email.com
@@ -260,6 +265,8 @@ export def "openor-change-account" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/api/creditcontrol/accounts/{account_id}") $auth.query)
   let req_body = {"creditLimit": $credit_limit, "document": $document, "email": $email, "id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -298,8 +305,8 @@ export def "closean-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
   --document: string # default: 99999999999
   --document-type: string # default: CPF
   --email: string # default: email@domain.com
@@ -308,6 +315,8 @@ export def "closean-account" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}") $auth.query)
   let req_body = {"document": $document, "documentType": $document_type, "email": $email} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -346,12 +355,14 @@ export def "retrievea-accountby-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json)
 ]: nothing -> record<account: string, balance: float, creditLimit: float, description: string, email: string, lastUpdate: string> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}") $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -386,8 +397,8 @@ export def "updateemailanddescriptionofaaccount" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
   description: string # default: example
   email: string # default: email@domain.com
 ]: any -> oneof<string, record, nothing> {
@@ -395,6 +406,8 @@ export def "updateemailanddescriptionofaaccount" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}") $auth.query)
   let req_body = {"description": $description, "email": $email} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -433,14 +446,16 @@ export def "changecreditlimitofan-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
   value: int # format: number, default: 500.0
 ]: any -> record {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/creditlimit") $auth.query)
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -480,14 +495,16 @@ export def "addanaccount-holder" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
   claims: record # e.g. {email: USER-EMAIL} — shape: {email: string}
 ]: any -> record<data: table<account: string, balance: float, creditLimit: float, description: string, document: string, documentType: string, email: string, lastUpdate: string>, summary: record<count: int>> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/holders") $auth.query)
   let req_body = {"claims": $claims} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -527,13 +544,15 @@ export def "deleteanaccountholder" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json)
 ]: nothing -> record<data: table<account: string, balance: float, creditLimit: float, description: string, document: string, documentType: string, email: string, lastUpdate: string>, summary: record<count: int>> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
   if ($holder_id | is-empty) { error make --unspanned { msg: "path parameter 'holderId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id), holder_id: (encode-path-segment $holder_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/holders/{holder_id}") $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -568,12 +587,14 @@ export def "searchallinvoicesofa-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json)
 ]: nothing -> record<data: table<checkingAccountId: string, createdAt: string, description: string, dueDate: string, id: string, observation: string, originalDueDate: string, paymentLink: string, status: string, updatedAt: string, value: float>, summary: record<count: int, total: float>> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/invoices") $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -609,13 +630,15 @@ export def "cancel-invoice" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json)
 ]: nothing -> record {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/invoices/{invoice_id}") $auth.query)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -651,13 +674,15 @@ export def "retrieve-invoiceby-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json)
 ]: nothing -> record<checkingAccountId: string, createdAt: string, description: string, dueDate: string, id: string, observation: string, originalDueDate: string, paymentLink: string, status: string, updatedAt: string, value: float> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/invoices/{invoice_id}") $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -694,8 +719,8 @@ export def "change-invoice" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --friendly-id: string # Invoice's identification (default: insert identifier here)
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
   observation: string # default: example
   payment_link: string # default: example
   status: string # Invoice's status. It must be completed with "Paid", "Cancelled" or "Open" value. (default: Paid)
@@ -705,6 +730,8 @@ export def "change-invoice" [
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let qp = [(serialize-qp "friendlyId" $friendly_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/invoices/{invoice_id}") $qp $auth.query)
   let req_body = {"observation": $observation, "paymentLink": $payment_link, "status": $status} | compact
@@ -745,8 +772,8 @@ export def "markaninvoiceas-paid" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
   value: string # default: example
 ]: any -> oneof<string, record, nothing> {
   let input = $in
@@ -754,6 +781,8 @@ export def "markaninvoiceas-paid" [
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/invoices/{invoice_id}/payments") $auth.query)
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -793,8 +822,8 @@ export def "postponeaninvoice" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
   due_days: string
 ]: any -> record {
   let input = $in
@@ -802,6 +831,8 @@ export def "postponeaninvoice" [
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/invoices/{invoice_id}/postponement") $auth.query)
   let req_body = {"dueDays": $due_days} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -840,12 +871,14 @@ export def "accountstatements" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json)
 ]: nothing -> record<currentBalance: float, intervalBalance: float, previousBalance: float, statements: table<date: string, description: string, value: float>> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/statements") $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -881,8 +914,8 @@ export def "decreasebalanceofanaccount" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
   value: string # default: -490.0
 ]: any -> any {
   let input = $in
@@ -890,6 +923,8 @@ export def "decreasebalanceofanaccount" [
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
   if ($statement_id | is-empty) { error make --unspanned { msg: "path parameter 'statementId' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id), statement_id: (encode-path-segment $statement_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/statements/{statement_id}") $auth.query)
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -928,14 +963,16 @@ export def "changetoleranceofanaccount" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
   value: float # default: 0.2
 ]: any -> record {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/tolerance") $auth.query)
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -974,8 +1011,8 @@ export def "createa-pre-authorization" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
   expiration_date: string # date in ISO8601 (UTC) dateformat (optional default is 1(one) day) (default: 1)
   installments: string # default: 1
   --settle: oneof<nothing, bool> # default: false
@@ -985,9 +1022,12 @@ export def "createa-pre-authorization" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/transaction") $auth.query)
   let req_body = {"expirationDate": $expiration_date, "installments": $installments, "settle": $settle, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "settle") == null) { error make --unspanned { msg: "required body field 'settle' missing: pass --settle or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
@@ -1024,13 +1064,15 @@ export def "cancela-pre-authorization" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
   if ($transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'transactionId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/transactions/{transaction_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1066,8 +1108,8 @@ export def "createa-pre-authorizationusingid" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
   expiration_date: string # date in ISO8601 (UTC) dateformat (optional default is 1(one) day) (default: 1)
   installments: string # default: 1
   --settle: oneof<nothing, bool> # default: false
@@ -1078,9 +1120,12 @@ export def "createa-pre-authorizationusingid" [
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
   if ($transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'transactionId' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/transactions/{transaction_id}") $auth.query)
   let req_body = {"expirationDate": $expiration_date, "installments": $installments, "settle": $settle, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "settle") == null) { error make --unspanned { msg: "required body field 'settle' missing: pass --settle or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
@@ -1117,8 +1162,8 @@ export def "partialor-total-refunda-settlement" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
   value: string # default: 20
 ]: any -> record<id: string, value: float> {
   let input = $in
@@ -1126,6 +1171,8 @@ export def "partialor-total-refunda-settlement" [
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
   if ($transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'transactionId' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/transactions/{transaction_id}/refunds") $auth.query)
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1165,8 +1212,8 @@ export def "createor-update-settlement" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
   value: string # default: 490.0
 ]: any -> record<id: string, value: float> {
   let input = $in
@@ -1174,6 +1221,8 @@ export def "createor-update-settlement" [
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
   if ($transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'transactionId' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/transactions/{transaction_id}/settlement") $auth.query)
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1211,20 +1260,22 @@ export def "searchallinvoices" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-from: string # default: 
-  --qp-to: string # default: 
+  --from: string # default: ""
+  --to: string # default: ""
   --created-date-from: string # e.g. 
   --created-date-to: string # e.g. 
   --value: float # Invoice's value. It must be completed with a decimal value. (default: 101.22)
   --status: string # Invoice's status. It must be completed with "Paid", "Cancelled" or "Open" value. (default: Paid)
   --friendly-id: string # Invoice's identifier (default: insert identifier here)
   --credit-account-id: string # Credit account's identifier (default: B75F0)
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json)
 ]: nothing -> record<data: table<checkingAccountId: string, createdAt: string, description: string, dueDate: string, id: string, observation: string, originalDueDate: string, paymentLink: string, status: string, updatedAt: string, value: float>, summary: record<count: int, total: float>> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "createdDateFrom" $created_date_from "scalar") (serialize-qp "createdDateTo" $created_date_to "scalar") (serialize-qp "value" $value "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "friendlyId" $friendly_id "scalar") (serialize-qp "creditAccountId" $credit_account_id "scalar")] | flatten | str join "&"
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "createdDateFrom" $created_date_from "scalar") (serialize-qp "createdDateTo" $created_date_to "scalar") (serialize-qp "value" $value "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "friendlyId" $friendly_id "scalar") (serialize-qp "creditAccountId" $credit_account_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/creditcontrol/invoices" $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1233,7 +1284,7 @@ export def "searchallinvoices" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to, "createdDateFrom": $created_date_from, "createdDateTo": $created_date_to, "value": $value, "status": $status, "friendlyId": $friendly_id, "creditAccountId": $credit_account_id} | compact)
+    query: ({"from": $from, "to": $to, "createdDateFrom": $created_date_from, "createdDateTo": $created_date_to, "value": $value, "status": $status, "friendlyId": $friendly_id, "creditAccountId": $credit_account_id} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1258,11 +1309,13 @@ export def "retrievestoreconfiguration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json)
 ]: nothing -> record<dailyInterestRate: float, invoicePostponementLimit: int, taxRate: float, tolerancePercent: float> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/creditcontrol/storeconfig" $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1297,8 +1350,8 @@ export def "createorchangestoreconfiguration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, default: application/json)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, default: application/json)
   --automatic-checking-account-creation-enabled: oneof<nothing, bool> # default: false
   daily_interest_rate: string # default: 0.6
   default_credit_value: string # default: 150.0
@@ -1314,9 +1367,15 @@ export def "createorchangestoreconfiguration" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base "/api/creditcontrol/storeconfig" $auth.query)
   let req_body = {"automaticCheckingAccountCreationEnabled": $automatic_checking_account_creation_enabled, "dailyInterestRate": $daily_interest_rate, "defaultCreditValue": $default_credit_value, "invoicePostponementLimit": $invoice_postponement_limit, "maxPostponementDays": $max_postponement_days, "maxPreAuthorizationGrowthRate": $max_pre_authorization_growth_rate, "myCreditsEnabled": $my_credits_enabled, "notificationsSettings": $notifications_settings, "postponementEnabled": $postponement_enabled, "taxRate": $tax_rate, "toleranceEnabled": $tolerance_enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "automaticCheckingAccountCreationEnabled") == null) { error make --unspanned { msg: "required body field 'automaticCheckingAccountCreationEnabled' missing: pass --automatic-checking-account-creation-enabled or pipe a record" } }
+  if (($req_body | get -o "myCreditsEnabled") == null) { error make --unspanned { msg: "required body field 'myCreditsEnabled' missing: pass --my-credits-enabled or pipe a record" } }
+  if (($req_body | get -o "postponementEnabled") == null) { error make --unspanned { msg: "required body field 'postponementEnabled' missing: pass --postponement-enabled or pipe a record" } }
+  if (($req_body | get -o "toleranceEnabled") == null) { error make --unspanned { msg: "required body field 'toleranceEnabled' missing: pass --tolerance-enabled or pipe a record" } }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact

@@ -139,7 +139,7 @@ export def "get-seatmap-from-order" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --flight-order-id: string # identifier of the order (e.g. MlpZVkFMfFdBVFNPTnwyMDE1LTExLTAy)
   --flight-order-id-2: string # DEPRECATED identifier of the order , kept for backward compatibility (e.g. MlpZVkFMfFdBVFNPTnwyMDE1LTExLTAy) (disambiguated-2)
-]: nothing -> any {
+]: nothing -> record<data: table<aircraft: record, aircraftCabinAmenities: record, arrival: record, availableSeatsCounters: list, carrierCode: string, class: string, decks: list, departure: record, flightOfferId: string, id: string, number: string, operating: record, segmentId: string, self: record, type: string>, dictionaries: record<facilities: record, locations: any, seatCharacteristics: record>, meta: record<count: int, links: record<first: string, last: string, next: string, previous: string, self: string, up: string>>, warnings: table<code: int, detail: string, source: record, status: int, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "flightOrderId" $flight_order_id "scalar") (serialize-qp "flight-orderId" $flight_order_id_2 "scalar")] | flatten | str join "&"
@@ -174,12 +174,13 @@ export def "get-seatmap-from-flight-offer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-http-method-override: string # the HTTP method to apply
+  --x-http-method-override: string # the HTTP method to apply (required, default: GET)
   --body: any
-]: any -> any {
+]: any -> record<data: table<aircraft: record, aircraftCabinAmenities: record, arrival: record, availableSeatsCounters: list, carrierCode: string, class: string, decks: list, departure: record, flightOfferId: string, id: string, number: string, operating: record, segmentId: string, self: record, type: string>, dictionaries: record<facilities: record, locations: any, seatCharacteristics: record>, meta: record<count: int, links: record<first: string, last: string, next: string, previous: string, self: string, up: string>>, warnings: table<code: int, detail: string, source: record, status: int, title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_http_method_override = ($x_http_method_override | default "GET")
   let full_url = (build-url $base "/shopping/seatmaps" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }

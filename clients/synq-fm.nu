@@ -91,6 +91,34 @@ def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: 
   $resp | handle-response $allow_errors $full $ok_codes
 }
 
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
+}
+
 def base-url-completer [] { ["https://api.synq.fm/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -134,7 +162,7 @@ export def "create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   api_key: string
   --userdata: string # Additional metadata that will be associated with the video
-]: any -> any {
+]: any -> record<created_at: string, input: record, outputs: record, state: string, updated_at: string, userdata: record, video_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -143,19 +171,20 @@ export def "create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
     query: {}
     headers: $auth.headers
     body: $req_body
-    content_type: "application/x-www-form-urlencoded"
+    content_type: $mp.content_type
     timeout: ($max_time | default 30min)
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Return details about a video.
@@ -174,7 +203,7 @@ export def "details" [
   --dry-run(-n) # Return the request that would be sent without executing it
   api_key: string
   video_id: string # ID of the video to retrieve the metadata from
-]: any -> any {
+]: any -> record<created_at: string, input: record, outputs: record, state: string, updated_at: string, userdata: record, video_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -183,19 +212,20 @@ export def "details" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
     query: {}
     headers: $auth.headers
     body: $req_body
-    content_type: "application/x-www-form-urlencoded"
+    content_type: $mp.content_type
     timeout: ($max_time | default 30min)
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Perform a JavaScript query to return video objects matching any desired criteria.
@@ -223,19 +253,20 @@ export def "query" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
     query: {}
     headers: $auth.headers
     body: $req_body
-    content_type: "application/x-www-form-urlencoded"
+    content_type: $mp.content_type
     timeout: ($max_time | default 30min)
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Returns urls for streaming.
@@ -263,26 +294,27 @@ export def "stream" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
     query: {}
     headers: $auth.headers
     body: $req_body
-    content_type: "application/x-www-form-urlencoded"
+    content_type: $mp.content_type
     timeout: ($max_time | default 30min)
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Update a video's metadata.
 #
 # POST /video/update
 # operationId: update
-export def "update" [
+export def "post-video-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -294,29 +326,30 @@ export def "update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   api_key: string
   video_id: string # The ID of the video whose metadata will be updated
-  --body-source: string # JavaScript code to execute on the video object.
-]: any -> any {
+  source: string # JavaScript code to execute on the video object.
+]: any -> record<created_at: string, input: record, outputs: record, state: string, updated_at: string, userdata: record, video_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/video/update" $auth.query)
-  let req_body = {"api_key": $api_key, "video_id": $video_id, "source": $body_source} | compact
+  let req_body = {"api_key": $api_key, "video_id": $video_id, "source": $source} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
     query: {}
     headers: $auth.headers
     body: $req_body
-    content_type: "application/x-www-form-urlencoded"
+    content_type: $mp.content_type
     timeout: ($max_time | default 30min)
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Return parameters needed for uploading a video file.
@@ -344,19 +377,20 @@ export def "upload" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
     query: {}
     headers: $auth.headers
     body: $req_body
-    content_type: "application/x-www-form-urlencoded"
+    content_type: $mp.content_type
     timeout: ($max_time | default 30min)
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Return embeddable url to an uploader widget
@@ -385,17 +419,18 @@ export def "uploader" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
     query: {}
     headers: $auth.headers
     body: $req_body
-    content_type: "application/x-www-form-urlencoded"
+    content_type: $mp.content_type
     timeout: ($max_time | default 30min)
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }

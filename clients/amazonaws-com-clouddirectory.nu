@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -135,9 +135,9 @@ export def commands []: nothing -> table {
 #
 # PUT /amazonclouddirectory/2017-01-11/object/facets
 # operationId: AddFacetToObject
-# --SchemaFacet shape: {SchemaArn?: any, FacetName?: any}
-# --ObjectAttributeList item shape: {Key: any, Value: any}
-# --ObjectReference shape: {Selector?: any}
+# --SchemaFacet shape: {SchemaArn?: string, FacetName?: string}
+# --ObjectAttributeList item shape: {Key: record, Value: record}
+# --ObjectReference shape: {Selector?: string}
 export def "add-facet-to-object" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -155,14 +155,15 @@ export def "add-facet-to-object" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory where the object resides. For more information, see arns.
-  schema_facet: record # A facet. — shape: {SchemaArn?: any, FacetName?: any}
-  --object-attribute-list: list # Attributes on the facet that you are adding to the object. — item shape: {Key: any, Value: any}
-  object_reference: record # The reference that identifies an object. — shape: {Selector?: any}
+  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory where the object resides. For more information, see arns. (required)
+  schema_facet: record # A facet. — shape: {SchemaArn?: string, FacetName?: string}
+  --object-attribute-list: list # Attributes on the facet that you are adding to the object. — item shape: {Key: record, Value: record}
+  object_reference: record # The reference that identifies an object. — shape: {Selector?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/facets" $auth.query)
   let req_body = {"SchemaFacet": $schema_facet, "ObjectAttributeList": $object_attribute_list, "ObjectReference": $object_reference} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -205,12 +206,13 @@ export def "apply-schema" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory into which the schema is copied. For more information, see arns.
+  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory into which the schema is copied. For more information, see arns. (required)
   published_schema_arn: string # Published schema Amazon Resource Name (ARN) that needs to be copied. For more information, see arns.
-]: any -> record<AppliedSchemaArn: record, DirectoryArn: record> {
+]: any -> record<AppliedSchemaArn: string, DirectoryArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/schema/apply" $auth.query)
   let req_body = {"PublishedSchemaArn": $published_schema_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -236,8 +238,8 @@ export def "apply-schema" [
 #
 # PUT /amazonclouddirectory/2017-01-11/object/attach
 # operationId: AttachObject
-# --ParentReference shape: {Selector?: any}
-# --ChildReference shape: {Selector?: any}
+# --ParentReference shape: {Selector?: string}
+# --ChildReference shape: {Selector?: string}
 export def "attach-object" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -255,14 +257,15 @@ export def "attach-object" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # Amazon Resource Name (ARN) that is associated with the Directory where both objects reside. For more information, see arns.
-  parent_reference: record # The reference that identifies an object. — shape: {Selector?: any}
-  child_reference: record # The reference that identifies an object. — shape: {Selector?: any}
+  --x-amz-data-partition: string # Amazon Resource Name (ARN) that is associated with the Directory where both objects reside. For more information, see arns. (required)
+  parent_reference: record # The reference that identifies an object. — shape: {Selector?: string}
+  child_reference: record # The reference that identifies an object. — shape: {Selector?: string}
   link_name: string # The link name with which the child object is attached to the parent.
-]: any -> record<AttachedObjectIdentifier: record> {
+]: any -> record<AttachedObjectIdentifier: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/attach" $auth.query)
   let req_body = {"ParentReference": $parent_reference, "ChildReference": $child_reference, "LinkName": $link_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -288,8 +291,8 @@ export def "attach-object" [
 #
 # PUT /amazonclouddirectory/2017-01-11/policy/attach
 # operationId: AttachPolicy
-# --PolicyReference shape: {Selector?: any}
-# --ObjectReference shape: {Selector?: any}
+# --PolicyReference shape: {Selector?: string}
+# --ObjectReference shape: {Selector?: string}
 export def "attach-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -307,13 +310,14 @@ export def "attach-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory where both objects reside. For more information, see arns.
-  policy_reference: record # The reference that identifies an object. — shape: {Selector?: any}
-  object_reference: record # The reference that identifies an object. — shape: {Selector?: any}
+  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory where both objects reside. For more information, see arns. (required)
+  policy_reference: record # The reference that identifies an object. — shape: {Selector?: string}
+  object_reference: record # The reference that identifies an object. — shape: {Selector?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/policy/attach" $auth.query)
   let req_body = {"PolicyReference": $policy_reference, "ObjectReference": $object_reference} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -339,8 +343,8 @@ export def "attach-policy" [
 #
 # PUT /amazonclouddirectory/2017-01-11/index/attach
 # operationId: AttachToIndex
-# --IndexReference shape: {Selector?: any}
-# --TargetReference shape: {Selector?: any}
+# --IndexReference shape: {Selector?: string}
+# --TargetReference shape: {Selector?: string}
 export def "attach-to-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -358,13 +362,14 @@ export def "attach-to-index" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The Amazon Resource Name (ARN) of the directory where the object and index exist.
-  index_reference: record # The reference that identifies an object. — shape: {Selector?: any}
-  target_reference: record # The reference that identifies an object. — shape: {Selector?: any}
-]: any -> record<AttachedObjectIdentifier: record> {
+  --x-amz-data-partition: string # The Amazon Resource Name (ARN) of the directory where the object and index exist. (required)
+  index_reference: record # The reference that identifies an object. — shape: {Selector?: string}
+  target_reference: record # The reference that identifies an object. — shape: {Selector?: string}
+]: any -> record<AttachedObjectIdentifier: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/index/attach" $auth.query)
   let req_body = {"IndexReference": $index_reference, "TargetReference": $target_reference} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -390,10 +395,10 @@ export def "attach-to-index" [
 #
 # PUT /amazonclouddirectory/2017-01-11/typedlink/attach
 # operationId: AttachTypedLink
-# --SourceObjectReference shape: {Selector?: any}
-# --TargetObjectReference shape: {Selector?: any}
-# --TypedLinkFacet shape: {SchemaArn?: any, TypedLinkName?: any}
-# --Attributes item shape: {AttributeName: any, Value: any}
+# --SourceObjectReference shape: {Selector?: string}
+# --TargetObjectReference shape: {Selector?: string}
+# --TypedLinkFacet shape: {SchemaArn?: string, TypedLinkName?: string}
+# --Attributes item shape: {AttributeName: string, Value: record}
 export def "attach-typed-link" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -411,15 +416,16 @@ export def "attach-typed-link" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The Amazon Resource Name (ARN) of the directory where you want to attach the typed link.
-  source_object_reference: record # The reference that identifies an object. — shape: {Selector?: any}
-  target_object_reference: record # The reference that identifies an object. — shape: {Selector?: any}
-  typed_link_facet: record # Identifies the schema Amazon Resource Name (ARN) and facet name for the typed link. — shape: {SchemaArn?: any, TypedLinkName?: any}
-  attributes: list # A set of attributes that are associated with the typed link. — item shape: {AttributeName: any, Value: any}
-]: any -> record<TypedLinkSpecifier: record<TypedLinkFacet: record<SchemaArn: record, TypedLinkName: record>, SourceObjectReference: record<Selector: record>, TargetObjectReference: record<Selector: record>, IdentityAttributeValues: record>> {
+  --x-amz-data-partition: string # The Amazon Resource Name (ARN) of the directory where you want to attach the typed link. (required)
+  source_object_reference: record # The reference that identifies an object. — shape: {Selector?: string}
+  target_object_reference: record # The reference that identifies an object. — shape: {Selector?: string}
+  typed_link_facet: record # Identifies the schema Amazon Resource Name (ARN) and facet name for the typed link. — shape: {SchemaArn?: string, TypedLinkName?: string}
+  attributes: list # A set of attributes that are associated with the typed link. — item shape: {AttributeName: string, Value: record}
+]: any -> record<TypedLinkSpecifier: record<TypedLinkFacet: record<SchemaArn: string, TypedLinkName: string>, SourceObjectReference: record<Selector: string>, TargetObjectReference: record<Selector: string>, IdentityAttributeValues: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/typedlink/attach" $auth.query)
   let req_body = {"SourceObjectReference": $source_object_reference, "TargetObjectReference": $target_object_reference, "TypedLinkFacet": $typed_link_facet, "Attributes": $attributes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -445,7 +451,7 @@ export def "attach-typed-link" [
 #
 # POST /amazonclouddirectory/2017-01-11/batchread
 # operationId: BatchRead
-# --Operations item shape: {ListObjectAttributes?: any, ListObjectChildren?: any, ListAttachedIndices?: any, ListObjectParentPaths?: any, GetObjectInformation?: any, GetObjectAttributes?: any, ListObjectParents?: any, ListObjectPolicies?: any, ListPolicyAttachments?: any, LookupPolicy?: any, ListIndex?: any, ListOutgoingTypedLinks?: any, ListIncomingTypedLinks?: any, GetLinkAttributes?: any}
+# --Operations item shape: {ListObjectAttributes?: record, ListObjectChildren?: record, ListAttachedIndices?: record, ListObjectParentPaths?: record, GetObjectInformation?: record, GetObjectAttributes?: record, ListObjectParents?: record, ListObjectPolicies?: record, ListPolicyAttachments?: record, LookupPolicy?: record, ListIndex?: record, ListOutgoingTypedLinks?: record, ListIncomingTypedLinks?: record, GetLinkAttributes?: record}
 export def "batch-read" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -463,13 +469,14 @@ export def "batch-read" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory. For more information, see arns.
+  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory. For more information, see arns. (required)
   --x-amz-consistency-level: string@x-amz-consistency-level-completer # Represents the manner and timing in which the successful write or update of an object is reflected in a subsequent read operation of that same object.
-  operations: list # A list of operations that are part of the batch. — item shape: {ListObjectAttributes?: any, ListObjectChildren?: any, ListAttachedIndices?: any, ListObjectParentPaths?: any, GetObjectInformation?: any, GetObjectAttributes?: any, ListObjectParents?: any, ListObjectPolicies?: any, ListPolicyAttachments?: any, LookupPolicy?: any, ListIndex?: any, ListOutgoingTypedLinks?: any, ListIncomingTypedLinks?: any, GetLinkAttributes?: any}
-]: any -> record<Responses: record> {
+  operations: list # A list of operations that are part of the batch. — item shape: {ListObjectAttributes?: record, ListObjectChildren?: record, ListAttachedIndices?: record, ListObjectParentPaths?: record, GetObjectInformation?: record, GetObjectAttributes?: record, ListObjectParents?: record, ListObjectPolicies?: record, ListPolicyAttachments?: record, LookupPolicy?: record, ListIndex?: record, ListOutgoingTypedLinks?: record, ListIncomingTypedLinks?: record, GetLinkAttributes?: record}
+]: any -> record<Responses: table<SuccessfulResponse: record, ExceptionResponse: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/batchread" $auth.query)
   let req_body = {"Operations": $operations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -495,7 +502,7 @@ export def "batch-read" [
 #
 # PUT /amazonclouddirectory/2017-01-11/batchwrite
 # operationId: BatchWrite
-# --Operations item shape: {CreateObject?: any, AttachObject?: any, DetachObject?: any, UpdateObjectAttributes?: any, DeleteObject?: any, AddFacetToObject?: any, RemoveFacetFromObject?: any, AttachPolicy?: any, DetachPolicy?: any, CreateIndex?: any, AttachToIndex?: any, DetachFromIndex?: any, AttachTypedLink?: any, DetachTypedLink?: any, UpdateLinkAttributes?: any}
+# --Operations item shape: {CreateObject?: record, AttachObject?: record, DetachObject?: record, UpdateObjectAttributes?: record, DeleteObject?: record, AddFacetToObject?: record, RemoveFacetFromObject?: record, AttachPolicy?: record, DetachPolicy?: record, CreateIndex?: record, AttachToIndex?: record, DetachFromIndex?: record, AttachTypedLink?: record, DetachTypedLink?: record, UpdateLinkAttributes?: record}
 export def "batch-write" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -513,12 +520,13 @@ export def "batch-write" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory. For more information, see arns.
-  operations: list # A list of operations that are part of the batch. — item shape: {CreateObject?: any, AttachObject?: any, DetachObject?: any, UpdateObjectAttributes?: any, DeleteObject?: any, AddFacetToObject?: any, RemoveFacetFromObject?: any, AttachPolicy?: any, DetachPolicy?: any, CreateIndex?: any, AttachToIndex?: any, DetachFromIndex?: any, AttachTypedLink?: any, DetachTypedLink?: any, UpdateLinkAttributes?: any}
-]: any -> record<Responses: record> {
+  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory. For more information, see arns. (required)
+  operations: list # A list of operations that are part of the batch. — item shape: {CreateObject?: record, AttachObject?: record, DetachObject?: record, UpdateObjectAttributes?: record, DeleteObject?: record, AddFacetToObject?: record, RemoveFacetFromObject?: record, AttachPolicy?: record, DetachPolicy?: record, CreateIndex?: record, AttachToIndex?: record, DetachFromIndex?: record, AttachTypedLink?: record, DetachTypedLink?: record, UpdateLinkAttributes?: record}
+]: any -> record<Responses: table<CreateObject: record, AttachObject: record, DetachObject: record, UpdateObjectAttributes: record, DeleteObject: record, AddFacetToObject: record, RemoveFacetFromObject: record, AttachPolicy: record, DetachPolicy: record, CreateIndex: record, AttachToIndex: record, DetachFromIndex: record, AttachTypedLink: record, DetachTypedLink: record, UpdateLinkAttributes: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/batchwrite" $auth.query)
   let req_body = {"Operations": $operations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -561,12 +569,13 @@ export def "create-directory" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The Amazon Resource Name (ARN) of the published schema that will be copied into the data Directory. For more information, see arns.
+  --x-amz-data-partition: string # The Amazon Resource Name (ARN) of the published schema that will be copied into the data Directory. For more information, see arns. (required)
   name: string # The name of the Directory. Should be unique per account, per region.
-]: any -> record<DirectoryArn: record, Name: record, ObjectIdentifier: record, AppliedSchemaArn: record> {
+]: any -> record<DirectoryArn: string, Name: string, ObjectIdentifier: string, AppliedSchemaArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/directory/create" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -592,7 +601,7 @@ export def "create-directory" [
 #
 # PUT /amazonclouddirectory/2017-01-11/facet/create
 # operationId: CreateFacet
-# --Attributes item shape: {Name: any, AttributeDefinition?: any, AttributeReference?: any, RequiredBehavior?: any}
+# --Attributes item shape: {Name: string, AttributeDefinition?: record, AttributeReference?: record, RequiredBehavior?: "REQUIRED_ALWAYS"|"NOT_REQUIRED"}
 export def "create-facet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -610,15 +619,16 @@ export def "create-facet" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The schema ARN in which the new Facet will be created. For more information, see arns.
+  --x-amz-data-partition: string # The schema ARN in which the new Facet will be created. For more information, see arns. (required)
   name: string # The name of the Facet, which is unique for a given schema.
-  --attributes: list # The attributes that are associated with the Facet. — item shape: {Name: any, AttributeDefinition?: any, AttributeReference?: any, RequiredBehavior?: any}
+  --attributes: list # The attributes that are associated with the Facet. — item shape: {Name: string, AttributeDefinition?: record, AttributeReference?: record, RequiredBehavior?: "REQUIRED_ALWAYS"|"NOT_REQUIRED"}
   --object-type: string@object-type-completer # Specifies whether a given object created from this facet is of type node, leaf node, policy or index. Node: Can have multiple children but one parent. Leaf node: Cannot have children but can have multiple parents. Policy: Allows you to store a policy document and policy type. For more information, see Policies (https://docs.aws.amazon.com/clouddirectory/latest/developerguide/key_concepts_directory.html#key_concepts_policies). Index: Can be created with the Index API.
   --facet-style: string@facet-style-completer # There are two different styles that you can define on any given facet, Static and Dynamic. For static facets, all attributes must be defined in the schema. For dynamic facets, attributes can be defined during data plane operations.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/facet/create" $auth.query)
   let req_body = {"Name": $name, "Attributes": $attributes, "ObjectType": $object_type, "FacetStyle": $facet_style} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -644,8 +654,8 @@ export def "create-facet" [
 #
 # PUT /amazonclouddirectory/2017-01-11/index
 # operationId: CreateIndex
-# --OrderedIndexedAttributeList item shape: {SchemaArn: any, FacetName: any, Name: any}
-# --ParentReference shape: {Selector?: any}
+# --OrderedIndexedAttributeList item shape: {SchemaArn: string, FacetName: string, Name: string}
+# --ParentReference shape: {Selector?: string}
 export def "create-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -663,18 +673,20 @@ export def "create-index" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The ARN of the directory where the index should be created.
-  ordered_indexed_attribute_list: list # Specifies the attributes that should be indexed on. Currently only a single attribute is supported. — item shape: {SchemaArn: any, FacetName: any, Name: any}
+  --x-amz-data-partition: string # The ARN of the directory where the index should be created. (required)
+  ordered_indexed_attribute_list: list # Specifies the attributes that should be indexed on. Currently only a single attribute is supported. — item shape: {SchemaArn: string, FacetName: string, Name: string}
   --is-unique: oneof<nothing, bool> # Indicates whether the attribute that is being indexed has unique values or not.
-  --parent-reference: record # The reference that identifies an object. — shape: {Selector?: any}
+  --parent-reference: record # The reference that identifies an object. — shape: {Selector?: string}
   --link-name: string # The name of the link between the parent object and the index object.
-]: any -> record<ObjectIdentifier: record> {
+]: any -> record<ObjectIdentifier: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/index" $auth.query)
   let req_body = {"OrderedIndexedAttributeList": $ordered_indexed_attribute_list, "IsUnique": $is_unique, "ParentReference": $parent_reference, "LinkName": $link_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "IsUnique") == null) { error make --unspanned { msg: "required body field 'IsUnique' missing: pass --is-unique or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
@@ -697,9 +709,9 @@ export def "create-index" [
 #
 # PUT /amazonclouddirectory/2017-01-11/object
 # operationId: CreateObject
-# --SchemaFacets item shape: {SchemaArn?: any, FacetName?: any}
-# --ObjectAttributeList item shape: {Key: any, Value: any}
-# --ParentReference shape: {Selector?: any}
+# --SchemaFacets item shape: {SchemaArn?: string, FacetName?: string}
+# --ObjectAttributeList item shape: {Key: record, Value: record}
+# --ParentReference shape: {Selector?: string}
 export def "create-object" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -717,15 +729,16 @@ export def "create-object" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory in which the object will be created. For more information, see arns.
-  schema_facets: list # A list of schema facets to be associated with the object. Do not provide minor version components. See SchemaFacet for details. — item shape: {SchemaArn?: any, FacetName?: any}
-  --object-attribute-list: list # The attribute map whose attribute ARN contains the key and attribute value as the map value. — item shape: {Key: any, Value: any}
-  --parent-reference: record # The reference that identifies an object. — shape: {Selector?: any}
+  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory in which the object will be created. For more information, see arns. (required)
+  schema_facets: list # A list of schema facets to be associated with the object. Do not provide minor version components. See SchemaFacet for details. — item shape: {SchemaArn?: string, FacetName?: string}
+  --object-attribute-list: list # The attribute map whose attribute ARN contains the key and attribute value as the map value. — item shape: {Key: record, Value: record}
+  --parent-reference: record # The reference that identifies an object. — shape: {Selector?: string}
   --link-name: string # The name of link that is used to attach this object to a parent.
-]: any -> record<ObjectIdentifier: record> {
+]: any -> record<ObjectIdentifier: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object" $auth.query)
   let req_body = {"SchemaFacets": $schema_facets, "ObjectAttributeList": $object_attribute_list, "ParentReference": $parent_reference, "LinkName": $link_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -769,7 +782,7 @@ export def "create-schema" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   name: string # The name that is associated with the schema. This is unique to each account and in each region.
-]: any -> record<SchemaArn: record> {
+]: any -> record<SchemaArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -798,7 +811,7 @@ export def "create-schema" [
 #
 # PUT /amazonclouddirectory/2017-01-11/typedlink/facet/create
 # operationId: CreateTypedLinkFacet
-# --Facet shape: {Name?: any, Attributes?: any, IdentityAttributeOrder?: any}
+# --Facet shape: {Name?: string, Attributes?: list, IdentityAttributeOrder?: list<string>}
 export def "create-typed-link-facet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -816,12 +829,13 @@ export def "create-typed-link-facet" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the schema. For more information, see arns.
-  facet: record # Defines the typed links structure and its attributes. To create a typed link facet, use the CreateTypedLinkFacet API. — shape: {Name?: any, Attributes?: any, IdentityAttributeOrder?: any}
+  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the schema. For more information, see arns. (required)
+  facet: record # Defines the typed links structure and its attributes. To create a typed link facet, use the CreateTypedLinkFacet API. — shape: {Name?: string, Attributes?: list, IdentityAttributeOrder?: list<string>}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/typedlink/facet/create" $auth.query)
   let req_body = {"Facet": $facet} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -864,10 +878,11 @@ export def "delete-directory" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The ARN of the directory to delete.
-]: nothing -> record<DirectoryArn: record> {
+  --x-amz-data-partition: string # The ARN of the directory to delete. (required)
+]: nothing -> record<DirectoryArn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/directory" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -908,12 +923,13 @@ export def "delete-facet" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Facet. For more information, see arns.
+  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Facet. For more information, see arns. (required)
   name: string # The name of the facet to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/facet/delete" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -939,7 +955,7 @@ export def "delete-facet" [
 #
 # PUT /amazonclouddirectory/2017-01-11/object/delete
 # operationId: DeleteObject
-# --ObjectReference shape: {Selector?: any}
+# --ObjectReference shape: {Selector?: string}
 export def "delete-object" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -957,12 +973,13 @@ export def "delete-object" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory where the object resides. For more information, see arns.
-  object_reference: record # The reference that identifies an object. — shape: {Selector?: any}
+  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory where the object resides. For more information, see arns. (required)
+  object_reference: record # The reference that identifies an object. — shape: {Selector?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/delete" $auth.query)
   let req_body = {"ObjectReference": $object_reference} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1005,10 +1022,11 @@ export def "delete-schema" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The Amazon Resource Name (ARN) of the development schema. For more information, see arns.
-]: nothing -> record<SchemaArn: record> {
+  --x-amz-data-partition: string # The Amazon Resource Name (ARN) of the development schema. For more information, see arns. (required)
+]: nothing -> record<SchemaArn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/schema" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1049,12 +1067,13 @@ export def "delete-typed-link-facet" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the schema. For more information, see arns.
+  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the schema. For more information, see arns. (required)
   name: string # The unique name of the typed link facet.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/typedlink/facet/delete" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1080,8 +1099,8 @@ export def "delete-typed-link-facet" [
 #
 # PUT /amazonclouddirectory/2017-01-11/index/detach
 # operationId: DetachFromIndex
-# --IndexReference shape: {Selector?: any}
-# --TargetReference shape: {Selector?: any}
+# --IndexReference shape: {Selector?: string}
+# --TargetReference shape: {Selector?: string}
 export def "detach-from-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1099,13 +1118,14 @@ export def "detach-from-index" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The Amazon Resource Name (ARN) of the directory the index and object exist in.
-  index_reference: record # The reference that identifies an object. — shape: {Selector?: any}
-  target_reference: record # The reference that identifies an object. — shape: {Selector?: any}
-]: any -> record<DetachedObjectIdentifier: record> {
+  --x-amz-data-partition: string # The Amazon Resource Name (ARN) of the directory the index and object exist in. (required)
+  index_reference: record # The reference that identifies an object. — shape: {Selector?: string}
+  target_reference: record # The reference that identifies an object. — shape: {Selector?: string}
+]: any -> record<DetachedObjectIdentifier: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/index/detach" $auth.query)
   let req_body = {"IndexReference": $index_reference, "TargetReference": $target_reference} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1131,7 +1151,7 @@ export def "detach-from-index" [
 #
 # PUT /amazonclouddirectory/2017-01-11/object/detach
 # operationId: DetachObject
-# --ParentReference shape: {Selector?: any}
+# --ParentReference shape: {Selector?: string}
 export def "detach-object" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1149,13 +1169,14 @@ export def "detach-object" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory where objects reside. For more information, see arns.
-  parent_reference: record # The reference that identifies an object. — shape: {Selector?: any}
+  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory where objects reside. For more information, see arns. (required)
+  parent_reference: record # The reference that identifies an object. — shape: {Selector?: string}
   link_name: string # The link name associated with the object that needs to be detached.
-]: any -> record<DetachedObjectIdentifier: record> {
+]: any -> record<DetachedObjectIdentifier: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/detach" $auth.query)
   let req_body = {"ParentReference": $parent_reference, "LinkName": $link_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1181,8 +1202,8 @@ export def "detach-object" [
 #
 # PUT /amazonclouddirectory/2017-01-11/policy/detach
 # operationId: DetachPolicy
-# --PolicyReference shape: {Selector?: any}
-# --ObjectReference shape: {Selector?: any}
+# --PolicyReference shape: {Selector?: string}
+# --ObjectReference shape: {Selector?: string}
 export def "detach-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1200,13 +1221,14 @@ export def "detach-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory where both objects reside. For more information, see arns.
-  policy_reference: record # The reference that identifies an object. — shape: {Selector?: any}
-  object_reference: record # The reference that identifies an object. — shape: {Selector?: any}
+  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory where both objects reside. For more information, see arns. (required)
+  policy_reference: record # The reference that identifies an object. — shape: {Selector?: string}
+  object_reference: record # The reference that identifies an object. — shape: {Selector?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/policy/detach" $auth.query)
   let req_body = {"PolicyReference": $policy_reference, "ObjectReference": $object_reference} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1232,7 +1254,7 @@ export def "detach-policy" [
 #
 # PUT /amazonclouddirectory/2017-01-11/typedlink/detach
 # operationId: DetachTypedLink
-# --TypedLinkSpecifier shape: {TypedLinkFacet?: any, SourceObjectReference?: any, TargetObjectReference?: any, IdentityAttributeValues?: any}
+# --TypedLinkSpecifier shape: {TypedLinkFacet?: record, SourceObjectReference?: record, TargetObjectReference?: record, IdentityAttributeValues?: list}
 export def "detach-typed-link" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1250,12 +1272,13 @@ export def "detach-typed-link" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The Amazon Resource Name (ARN) of the directory where you want to detach the typed link.
-  typed_link_specifier: record # Contains all the information that is used to uniquely identify a typed link. The parameters discussed in this topic are used to uniquely specify the typed link being operated on. The AttachTypedLink API returns a typed link specifier while the DetachTypedLink API accepts one as input. Similarly, the ListIncomingTypedLinks and ListOutgoingTypedLinks API operations provide typed link specifiers as output. You can also construct a typed link specifier from scratch. — shape: {TypedLinkFacet?: any, SourceObjectReference?: any, TargetObjectReference?: any, IdentityAttributeValues?: any}
+  --x-amz-data-partition: string # The Amazon Resource Name (ARN) of the directory where you want to detach the typed link. (required)
+  typed_link_specifier: record # Contains all the information that is used to uniquely identify a typed link. The parameters discussed in this topic are used to uniquely specify the typed link being operated on. The AttachTypedLink API returns a typed link specifier while the DetachTypedLink API accepts one as input. Similarly, the ListIncomingTypedLinks and ListOutgoingTypedLinks API operations provide typed link specifiers as output. You can also construct a typed link specifier from scratch. — shape: {TypedLinkFacet?: record, SourceObjectReference?: record, TargetObjectReference?: record, IdentityAttributeValues?: list}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/typedlink/detach" $auth.query)
   let req_body = {"TypedLinkSpecifier": $typed_link_specifier} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1298,10 +1321,11 @@ export def "disable-directory" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The ARN of the directory to disable.
-]: nothing -> record<DirectoryArn: record> {
+  --x-amz-data-partition: string # The ARN of the directory to disable. (required)
+]: nothing -> record<DirectoryArn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/directory/disable" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1342,10 +1366,11 @@ export def "enable-directory" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The ARN of the directory to enable.
-]: nothing -> record<DirectoryArn: record> {
+  --x-amz-data-partition: string # The ARN of the directory to enable. (required)
+]: nothing -> record<DirectoryArn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/directory/enable" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1387,7 +1412,7 @@ export def "get-applied-schema-version" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   schema_arn: string # The ARN of the applied schema.
-]: any -> record<AppliedSchemaArn: record> {
+]: any -> record<AppliedSchemaArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1433,10 +1458,11 @@ export def "get-directory" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The ARN of the directory.
-]: nothing -> record<Directory: record<Name: record, DirectoryArn: record, State: record, CreationDateTime: record>> {
+  --x-amz-data-partition: string # The ARN of the directory. (required)
+]: nothing -> record<Directory: record<Name: string, DirectoryArn: string, State: string, CreationDateTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/directory/get" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1477,12 +1503,13 @@ export def "get-facet" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Facet. For more information, see arns.
+  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Facet. For more information, see arns. (required)
   name: string # The name of the facet to retrieve.
-]: any -> record<Facet: record<Name: record, ObjectType: record, FacetStyle: record>> {
+]: any -> record<Facet: record<Name: string, ObjectType: string, FacetStyle: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/facet" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1508,7 +1535,7 @@ export def "get-facet" [
 #
 # PUT /amazonclouddirectory/2017-01-11/facet
 # operationId: UpdateFacet
-# --AttributeUpdates item shape: {Attribute?: any, Action?: any}
+# --AttributeUpdates item shape: {Attribute?: record, Action?: "CREATE_OR_UPDATE"|"DELETE"}
 export def "update-facet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1526,14 +1553,15 @@ export def "update-facet" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Facet. For more information, see arns.
+  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Facet. For more information, see arns. (required)
   name: string # The name of the facet.
-  --attribute-updates: list # List of attributes that need to be updated in a given schema Facet. Each attribute is followed by AttributeAction, which specifies the type of update operation to perform. — item shape: {Attribute?: any, Action?: any}
+  --attribute-updates: list # List of attributes that need to be updated in a given schema Facet. Each attribute is followed by AttributeAction, which specifies the type of update operation to perform. — item shape: {Attribute?: record, Action?: "CREATE_OR_UPDATE"|"DELETE"}
   --object-type: string@object-type-completer # The object type that is associated with the facet. See CreateFacetRequest$ObjectType for more details.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/facet" $auth.query)
   let req_body = {"Name": $name, "AttributeUpdates": $attribute_updates, "ObjectType": $object_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1559,7 +1587,7 @@ export def "update-facet" [
 #
 # POST /amazonclouddirectory/2017-01-11/typedlink/attributes/get
 # operationId: GetLinkAttributes
-# --TypedLinkSpecifier shape: {TypedLinkFacet?: any, SourceObjectReference?: any, TargetObjectReference?: any, IdentityAttributeValues?: any}
+# --TypedLinkSpecifier shape: {TypedLinkFacet?: record, SourceObjectReference?: record, TargetObjectReference?: record, IdentityAttributeValues?: list}
 export def "get-link-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1577,14 +1605,15 @@ export def "get-link-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory where the typed link resides. For more information, see arns or Typed Links (https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink).
-  typed_link_specifier: record # Contains all the information that is used to uniquely identify a typed link. The parameters discussed in this topic are used to uniquely specify the typed link being operated on. The AttachTypedLink API returns a typed link specifier while the DetachTypedLink API accepts one as input. Similarly, the ListIncomingTypedLinks and ListOutgoingTypedLinks API operations provide typed link specifiers as output. You can also construct a typed link specifier from scratch. — shape: {TypedLinkFacet?: any, SourceObjectReference?: any, TargetObjectReference?: any, IdentityAttributeValues?: any}
+  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory where the typed link resides. For more information, see arns or Typed Links (https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink). (required)
+  typed_link_specifier: record # Contains all the information that is used to uniquely identify a typed link. The parameters discussed in this topic are used to uniquely specify the typed link being operated on. The AttachTypedLink API returns a typed link specifier while the DetachTypedLink API accepts one as input. Similarly, the ListIncomingTypedLinks and ListOutgoingTypedLinks API operations provide typed link specifiers as output. You can also construct a typed link specifier from scratch. — shape: {TypedLinkFacet?: record, SourceObjectReference?: record, TargetObjectReference?: record, IdentityAttributeValues?: list}
   attribute_names: list<string> # A list of attribute names whose values will be retrieved.
   --consistency-level: string@consistency-level-completer # The consistency level at which to retrieve the attributes on a typed link.
-]: any -> record<Attributes: record> {
+]: any -> record<Attributes: table<Key: record, Value: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/typedlink/attributes/get" $auth.query)
   let req_body = {"TypedLinkSpecifier": $typed_link_specifier, "AttributeNames": $attribute_names, "ConsistencyLevel": $consistency_level} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1610,8 +1639,8 @@ export def "get-link-attributes" [
 #
 # POST /amazonclouddirectory/2017-01-11/object/attributes/get
 # operationId: GetObjectAttributes
-# --ObjectReference shape: {Selector?: any}
-# --SchemaFacet shape: {SchemaArn?: any, FacetName?: any}
+# --ObjectReference shape: {Selector?: string}
+# --SchemaFacet shape: {SchemaArn?: string, FacetName?: string}
 export def "get-object-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1629,15 +1658,16 @@ export def "get-object-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory where the object resides.
+  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory where the object resides. (required)
   --x-amz-consistency-level: string@x-amz-consistency-level-completer # The consistency level at which to retrieve the attributes on an object.
-  object_reference: record # The reference that identifies an object. — shape: {Selector?: any}
-  schema_facet: record # A facet. — shape: {SchemaArn?: any, FacetName?: any}
+  object_reference: record # The reference that identifies an object. — shape: {Selector?: string}
+  schema_facet: record # A facet. — shape: {SchemaArn?: string, FacetName?: string}
   attribute_names: list<string> # List of attribute names whose values will be retrieved.
-]: any -> record<Attributes: record> {
+]: any -> record<Attributes: table<Key: record, Value: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/attributes/get" $auth.query)
   let req_body = {"ObjectReference": $object_reference, "SchemaFacet": $schema_facet, "AttributeNames": $attribute_names} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1663,7 +1693,7 @@ export def "get-object-attributes" [
 #
 # POST /amazonclouddirectory/2017-01-11/object/information
 # operationId: GetObjectInformation
-# --ObjectReference shape: {Selector?: any}
+# --ObjectReference shape: {Selector?: string}
 export def "get-object-information" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1681,13 +1711,14 @@ export def "get-object-information" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The ARN of the directory being retrieved.
+  --x-amz-data-partition: string # The ARN of the directory being retrieved. (required)
   --x-amz-consistency-level: string@x-amz-consistency-level-completer # The consistency level at which to retrieve the object information.
-  object_reference: record # The reference that identifies an object. — shape: {Selector?: any}
-]: any -> record<SchemaFacets: record, ObjectIdentifier: record> {
+  object_reference: record # The reference that identifies an object. — shape: {Selector?: string}
+]: any -> record<SchemaFacets: table<SchemaArn: string, FacetName: string>, ObjectIdentifier: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/information" $auth.query)
   let req_body = {"ObjectReference": $object_reference} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1730,10 +1761,11 @@ export def "get-schema-as-json" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The ARN of the schema to retrieve.
-]: nothing -> record<Name: record, Document: record> {
+  --x-amz-data-partition: string # The ARN of the schema to retrieve. (required)
+]: nothing -> record<Name: string, Document: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/schema/json" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1774,12 +1806,13 @@ export def "put-schema-from-json" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The ARN of the schema to update.
+  --x-amz-data-partition: string # The ARN of the schema to update. (required)
   document: string # The replacement JSON schema.
-]: any -> record<Arn: record> {
+]: any -> record<Arn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/schema/json" $auth.query)
   let req_body = {"Document": $document} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1822,12 +1855,13 @@ export def "get-typed-link-facet-information" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the schema. For more information, see arns.
+  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the schema. For more information, see arns. (required)
   name: string # The unique name of the typed link facet.
-]: any -> record<IdentityAttributeOrder: record> {
+]: any -> record<IdentityAttributeOrder: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/typedlink/facet/get" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1876,7 +1910,7 @@ export def "list-applied-schema-arns" [
   --schema-arn: string # The response for ListAppliedSchemaArns when this parameter is used will list all minor version ARNs for a major version.
   --next-token-body: string # The pagination token. (body field)
   --max-results-body: int # The maximum number of results to retrieve. (body field)
-]: any -> record<SchemaArns: record, NextToken: record> {
+]: any -> record<SchemaArns: list<string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1906,7 +1940,7 @@ export def "list-applied-schema-arns" [
 #
 # POST /amazonclouddirectory/2017-01-11/object/indices
 # operationId: ListAttachedIndices
-# --TargetReference shape: {Selector?: any}
+# --TargetReference shape: {Selector?: string}
 export def "list-attached-indices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1926,15 +1960,16 @@ export def "list-attached-indices" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The ARN of the directory.
+  --x-amz-data-partition: string # The ARN of the directory. (required)
   --x-amz-consistency-level: string@x-amz-consistency-level-completer # The consistency level to use for this operation.
-  target_reference: record # The reference that identifies an object. — shape: {Selector?: any}
+  target_reference: record # The reference that identifies an object. — shape: {Selector?: string}
   --next-token-body: string # The pagination token. (body field)
   --max-results-body: int # The maximum number of results to retrieve. (body field)
-]: any -> record<IndexAttachments: record, NextToken: record> {
+]: any -> record<IndexAttachments: table<IndexedAttributes: list, ObjectIdentifier: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/indices" $qp $auth.query)
   let req_body = {"TargetReference": $target_reference, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -1982,7 +2017,7 @@ export def "list-development-schema-arns" [
   --x-amz-signed-headers: string
   --next-token-body: string # The pagination token. (body field)
   --max-results-body: int # The maximum number of results to retrieve. (body field)
-]: any -> record<SchemaArns: record, NextToken: record> {
+]: any -> record<SchemaArns: list<string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2034,7 +2069,7 @@ export def "list-directories" [
   --next-token-body: string # The pagination token. (body field)
   --max-results-body: int # The maximum number of results to retrieve. (body field)
   --state: string@state-completer # The state of the directories in the list. Can be either Enabled, Disabled, or Deleted.
-]: any -> record<Directories: record, NextToken: record> {
+]: any -> record<Directories: table<Name: string, DirectoryArn: string, State: string, CreationDateTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2083,14 +2118,15 @@ export def "list-facet-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The ARN of the schema where the facet resides.
+  --x-amz-data-partition: string # The ARN of the schema where the facet resides. (required)
   name: string # The name of the facet whose attributes will be retrieved.
   --next-token-body: string # The pagination token. (body field)
   --max-results-body: int # The maximum number of results to retrieve. (body field)
-]: any -> record<Attributes: record, NextToken: record> {
+]: any -> record<Attributes: table<Name: string, AttributeDefinition: record, AttributeReference: record, RequiredBehavior: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/facet/attributes" $qp $auth.query)
   let req_body = {"Name": $name, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -2136,13 +2172,14 @@ export def "list-facet-names" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The Amazon Resource Name (ARN) to retrieve facet names from.
+  --x-amz-data-partition: string # The Amazon Resource Name (ARN) to retrieve facet names from. (required)
   --next-token-body: string # The pagination token. (body field)
   --max-results-body: int # The maximum number of results to retrieve. (body field)
-]: any -> record<FacetNames: record, NextToken: record> {
+]: any -> record<FacetNames: list<string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/facet/list" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -2169,9 +2206,9 @@ export def "list-facet-names" [
 #
 # POST /amazonclouddirectory/2017-01-11/typedlink/incoming
 # operationId: ListIncomingTypedLinks
-# --ObjectReference shape: {Selector?: any}
-# --FilterAttributeRanges item shape: {AttributeName?: any, Range: any}
-# --FilterTypedLink shape: {SchemaArn?: any, TypedLinkName?: any}
+# --ObjectReference shape: {Selector?: string}
+# --FilterAttributeRanges item shape: {AttributeName?: string, Range: record}
+# --FilterTypedLink shape: {SchemaArn?: string, TypedLinkName?: string}
 export def "list-incoming-typed-links" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2189,17 +2226,18 @@ export def "list-incoming-typed-links" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The Amazon Resource Name (ARN) of the directory where you want to list the typed links.
-  object_reference: record # The reference that identifies an object. — shape: {Selector?: any}
-  --filter-attribute-ranges: list # Provides range filters for multiple attributes. When providing ranges to typed link selection, any inexact ranges must be specified at the end. Any attributes that do not have a range specified are presumed to match the entire range. — item shape: {AttributeName?: any, Range: any}
-  --filter-typed-link: record # Identifies the schema Amazon Resource Name (ARN) and facet name for the typed link. — shape: {SchemaArn?: any, TypedLinkName?: any}
+  --x-amz-data-partition: string # The Amazon Resource Name (ARN) of the directory where you want to list the typed links. (required)
+  object_reference: record # The reference that identifies an object. — shape: {Selector?: string}
+  --filter-attribute-ranges: list # Provides range filters for multiple attributes. When providing ranges to typed link selection, any inexact ranges must be specified at the end. Any attributes that do not have a range specified are presumed to match the entire range. — item shape: {AttributeName?: string, Range: record}
+  --filter-typed-link: record # Identifies the schema Amazon Resource Name (ARN) and facet name for the typed link. — shape: {SchemaArn?: string, TypedLinkName?: string}
   --next-token: string # The pagination token.
   --max-results: int # The maximum number of results to retrieve.
   --consistency-level: string@consistency-level-completer # The consistency level to execute the request at.
-]: any -> record<LinkSpecifiers: record, NextToken: record> {
+]: any -> record<LinkSpecifiers: table<TypedLinkFacet: record, SourceObjectReference: record, TargetObjectReference: record, IdentityAttributeValues: list>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/typedlink/incoming" $auth.query)
   let req_body = {"ObjectReference": $object_reference, "FilterAttributeRanges": $filter_attribute_ranges, "FilterTypedLink": $filter_typed_link, "NextToken": $next_token, "MaxResults": $max_results, "ConsistencyLevel": $consistency_level} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2225,8 +2263,8 @@ export def "list-incoming-typed-links" [
 #
 # POST /amazonclouddirectory/2017-01-11/index/targets
 # operationId: ListIndex
-# --RangesOnIndexedValues item shape: {AttributeKey?: any, Range?: any}
-# --IndexReference shape: {Selector?: any}
+# --RangesOnIndexedValues item shape: {AttributeKey?: record, Range?: record}
+# --IndexReference shape: {Selector?: string}
 export def "list-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2246,16 +2284,17 @@ export def "list-index" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The ARN of the directory that the index exists in.
+  --x-amz-data-partition: string # The ARN of the directory that the index exists in. (required)
   --x-amz-consistency-level: string@x-amz-consistency-level-completer # The consistency level to execute the request at.
-  --ranges-on-indexed-values: list # Specifies the ranges of indexed values that you want to query. — item shape: {AttributeKey?: any, Range?: any}
-  index_reference: record # The reference that identifies an object. — shape: {Selector?: any}
+  --ranges-on-indexed-values: list # Specifies the ranges of indexed values that you want to query. — item shape: {AttributeKey?: record, Range?: record}
+  index_reference: record # The reference that identifies an object. — shape: {Selector?: string}
   --max-results-body: int # The maximum number of objects in a single page to retrieve from the index during a request. For more information, see Amazon Cloud Directory Limits (http://docs.aws.amazon.com/clouddirectory/latest/developerguide/limits.html). (body field)
   --next-token-body: string # The pagination token. (body field)
-]: any -> record<IndexAttachments: record, NextToken: record> {
+]: any -> record<IndexAttachments: table<IndexedAttributes: list, ObjectIdentifier: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/index/targets" $qp $auth.query)
   let req_body = {"RangesOnIndexedValues": $ranges_on_indexed_values, "IndexReference": $index_reference, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -2304,7 +2343,7 @@ export def "list-managed-schema-arns" [
   --schema-arn: string # The response for ListManagedSchemaArns. When this parameter is used, all minor version ARNs for a major version are listed.
   --next-token-body: string # The pagination token. (body field)
   --max-results-body: int # The maximum number of results to retrieve. (body field)
-]: any -> record<SchemaArns: record, NextToken: record> {
+]: any -> record<SchemaArns: list<string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2334,8 +2373,8 @@ export def "list-managed-schema-arns" [
 #
 # POST /amazonclouddirectory/2017-01-11/object/attributes
 # operationId: ListObjectAttributes
-# --ObjectReference shape: {Selector?: any}
-# --FacetFilter shape: {SchemaArn?: any, FacetName?: any}
+# --ObjectReference shape: {Selector?: string}
+# --FacetFilter shape: {SchemaArn?: string, FacetName?: string}
 export def "list-object-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2355,16 +2394,17 @@ export def "list-object-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory where the object resides. For more information, see arns.
+  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory where the object resides. For more information, see arns. (required)
   --x-amz-consistency-level: string@x-amz-consistency-level-completer # Represents the manner and timing in which the successful write or update of an object is reflected in a subsequent read operation of that same object.
-  object_reference: record # The reference that identifies an object. — shape: {Selector?: any}
+  object_reference: record # The reference that identifies an object. — shape: {Selector?: string}
   --next-token-body: string # The pagination token. (body field)
   --max-results-body: int # The maximum number of items to be retrieved in a single call. This is an approximate number. (body field)
-  --facet-filter: record # A facet. — shape: {SchemaArn?: any, FacetName?: any}
-]: any -> record<Attributes: record, NextToken: record> {
+  --facet-filter: record # A facet. — shape: {SchemaArn?: string, FacetName?: string}
+]: any -> record<Attributes: table<Key: record, Value: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/attributes" $qp $auth.query)
   let req_body = {"ObjectReference": $object_reference, "NextToken": $next_token_body, "MaxResults": $max_results_body, "FacetFilter": $facet_filter} | compact
@@ -2391,7 +2431,7 @@ export def "list-object-attributes" [
 #
 # POST /amazonclouddirectory/2017-01-11/object/children
 # operationId: ListObjectChildren
-# --ObjectReference shape: {Selector?: any}
+# --ObjectReference shape: {Selector?: string}
 export def "list-object-children" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2411,15 +2451,16 @@ export def "list-object-children" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory where the object resides. For more information, see arns.
+  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory where the object resides. For more information, see arns. (required)
   --x-amz-consistency-level: string@x-amz-consistency-level-completer # Represents the manner and timing in which the successful write or update of an object is reflected in a subsequent read operation of that same object.
-  object_reference: record # The reference that identifies an object. — shape: {Selector?: any}
+  object_reference: record # The reference that identifies an object. — shape: {Selector?: string}
   --next-token-body: string # The pagination token. (body field)
   --max-results-body: int # The maximum number of items to be retrieved in a single call. This is an approximate number. (body field)
-]: any -> record<Children: record, NextToken: record> {
+]: any -> record<Children: record, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/children" $qp $auth.query)
   let req_body = {"ObjectReference": $object_reference, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -2446,7 +2487,7 @@ export def "list-object-children" [
 #
 # POST /amazonclouddirectory/2017-01-11/object/parentpaths
 # operationId: ListObjectParentPaths
-# --ObjectReference shape: {Selector?: any}
+# --ObjectReference shape: {Selector?: string}
 export def "list-object-parent-paths" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2466,14 +2507,15 @@ export def "list-object-parent-paths" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The ARN of the directory to which the parent path applies.
-  object_reference: record # The reference that identifies an object. — shape: {Selector?: any}
+  --x-amz-data-partition: string # The ARN of the directory to which the parent path applies. (required)
+  object_reference: record # The reference that identifies an object. — shape: {Selector?: string}
   --next-token-body: string # The pagination token. (body field)
   --max-results-body: int # The maximum number of items to be retrieved in a single call. This is an approximate number. (body field)
-]: any -> record<PathToObjectIdentifiersList: record, NextToken: record> {
+]: any -> record<PathToObjectIdentifiersList: table<Path: string, ObjectIdentifiers: list>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/parentpaths" $qp $auth.query)
   let req_body = {"ObjectReference": $object_reference, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -2500,7 +2542,7 @@ export def "list-object-parent-paths" [
 #
 # POST /amazonclouddirectory/2017-01-11/object/parent
 # operationId: ListObjectParents
-# --ObjectReference shape: {Selector?: any}
+# --ObjectReference shape: {Selector?: string}
 export def "list-object-parents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2520,16 +2562,17 @@ export def "list-object-parents" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory where the object resides. For more information, see arns.
+  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory where the object resides. For more information, see arns. (required)
   --x-amz-consistency-level: string@x-amz-consistency-level-completer # Represents the manner and timing in which the successful write or update of an object is reflected in a subsequent read operation of that same object.
-  object_reference: record # The reference that identifies an object. — shape: {Selector?: any}
+  object_reference: record # The reference that identifies an object. — shape: {Selector?: string}
   --next-token-body: string # The pagination token. (body field)
   --max-results-body: int # The maximum number of items to be retrieved in a single call. This is an approximate number. (body field)
   --include-all-links-to-each-parent: oneof<nothing, bool> # When set to True, returns all ListObjectParentsResponse$ParentLinks. There could be multiple links between a parent-child pair.
-]: any -> record<Parents: record, NextToken: record, ParentLinks: record> {
+]: any -> record<Parents: record, NextToken: string, ParentLinks: table<ObjectIdentifier: string, LinkName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/parent" $qp $auth.query)
   let req_body = {"ObjectReference": $object_reference, "NextToken": $next_token_body, "MaxResults": $max_results_body, "IncludeAllLinksToEachParent": $include_all_links_to_each_parent} | compact
@@ -2556,7 +2599,7 @@ export def "list-object-parents" [
 #
 # POST /amazonclouddirectory/2017-01-11/object/policy
 # operationId: ListObjectPolicies
-# --ObjectReference shape: {Selector?: any}
+# --ObjectReference shape: {Selector?: string}
 export def "list-object-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2576,15 +2619,16 @@ export def "list-object-policies" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory where objects reside. For more information, see arns.
+  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory where objects reside. For more information, see arns. (required)
   --x-amz-consistency-level: string@x-amz-consistency-level-completer # Represents the manner and timing in which the successful write or update of an object is reflected in a subsequent read operation of that same object.
-  object_reference: record # The reference that identifies an object. — shape: {Selector?: any}
+  object_reference: record # The reference that identifies an object. — shape: {Selector?: string}
   --next-token-body: string # The pagination token. (body field)
   --max-results-body: int # The maximum number of items to be retrieved in a single call. This is an approximate number. (body field)
-]: any -> record<AttachedPolicyIds: record, NextToken: record> {
+]: any -> record<AttachedPolicyIds: list<string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/policy" $qp $auth.query)
   let req_body = {"ObjectReference": $object_reference, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -2611,9 +2655,9 @@ export def "list-object-policies" [
 #
 # POST /amazonclouddirectory/2017-01-11/typedlink/outgoing
 # operationId: ListOutgoingTypedLinks
-# --ObjectReference shape: {Selector?: any}
-# --FilterAttributeRanges item shape: {AttributeName?: any, Range: any}
-# --FilterTypedLink shape: {SchemaArn?: any, TypedLinkName?: any}
+# --ObjectReference shape: {Selector?: string}
+# --FilterAttributeRanges item shape: {AttributeName?: string, Range: record}
+# --FilterTypedLink shape: {SchemaArn?: string, TypedLinkName?: string}
 export def "list-outgoing-typed-links" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2631,17 +2675,18 @@ export def "list-outgoing-typed-links" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The Amazon Resource Name (ARN) of the directory where you want to list the typed links.
-  object_reference: record # The reference that identifies an object. — shape: {Selector?: any}
-  --filter-attribute-ranges: list # Provides range filters for multiple attributes. When providing ranges to typed link selection, any inexact ranges must be specified at the end. Any attributes that do not have a range specified are presumed to match the entire range. — item shape: {AttributeName?: any, Range: any}
-  --filter-typed-link: record # Identifies the schema Amazon Resource Name (ARN) and facet name for the typed link. — shape: {SchemaArn?: any, TypedLinkName?: any}
+  --x-amz-data-partition: string # The Amazon Resource Name (ARN) of the directory where you want to list the typed links. (required)
+  object_reference: record # The reference that identifies an object. — shape: {Selector?: string}
+  --filter-attribute-ranges: list # Provides range filters for multiple attributes. When providing ranges to typed link selection, any inexact ranges must be specified at the end. Any attributes that do not have a range specified are presumed to match the entire range. — item shape: {AttributeName?: string, Range: record}
+  --filter-typed-link: record # Identifies the schema Amazon Resource Name (ARN) and facet name for the typed link. — shape: {SchemaArn?: string, TypedLinkName?: string}
   --next-token: string # The pagination token.
   --max-results: int # The maximum number of results to retrieve.
   --consistency-level: string@consistency-level-completer # The consistency level to execute the request at.
-]: any -> record<TypedLinkSpecifiers: record, NextToken: record> {
+]: any -> record<TypedLinkSpecifiers: table<TypedLinkFacet: record, SourceObjectReference: record, TargetObjectReference: record, IdentityAttributeValues: list>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/typedlink/outgoing" $auth.query)
   let req_body = {"ObjectReference": $object_reference, "FilterAttributeRanges": $filter_attribute_ranges, "FilterTypedLink": $filter_typed_link, "NextToken": $next_token, "MaxResults": $max_results, "ConsistencyLevel": $consistency_level} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2667,7 +2712,7 @@ export def "list-outgoing-typed-links" [
 #
 # POST /amazonclouddirectory/2017-01-11/policy/attachment
 # operationId: ListPolicyAttachments
-# --PolicyReference shape: {Selector?: any}
+# --PolicyReference shape: {Selector?: string}
 export def "list-policy-attachments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2687,15 +2732,16 @@ export def "list-policy-attachments" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory where objects reside. For more information, see arns.
+  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory where objects reside. For more information, see arns. (required)
   --x-amz-consistency-level: string@x-amz-consistency-level-completer # Represents the manner and timing in which the successful write or update of an object is reflected in a subsequent read operation of that same object.
-  policy_reference: record # The reference that identifies an object. — shape: {Selector?: any}
+  policy_reference: record # The reference that identifies an object. — shape: {Selector?: string}
   --next-token-body: string # The pagination token. (body field)
   --max-results-body: int # The maximum number of items to be retrieved in a single call. This is an approximate number. (body field)
-]: any -> record<ObjectIdentifiers: record, NextToken: record> {
+]: any -> record<ObjectIdentifiers: list<string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/policy/attachment" $qp $auth.query)
   let req_body = {"PolicyReference": $policy_reference, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -2744,7 +2790,7 @@ export def "list-published-schema-arns" [
   --schema-arn: string # The response for ListPublishedSchemaArns when this parameter is used will list all minor version ARNs for a major version.
   --next-token-body: string # The pagination token. (body field)
   --max-results-body: int # The maximum number of results to retrieve. (body field)
-]: any -> record<SchemaArns: record, NextToken: record> {
+]: any -> record<SchemaArns: list<string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2796,7 +2842,7 @@ export def "list-tags-for-resource" [
   resource_arn: string # The Amazon Resource Name (ARN) of the resource. Tagging is only supported for directories.
   --next-token-body: string # The pagination token. This is for future use. Currently pagination is not supported for tagging. (body field)
   --max-results-body: int # The MaxResults parameter sets the maximum number of results returned in a single page. This is for future use and is not supported currently. (body field)
-]: any -> record<Tags: record, NextToken: record> {
+]: any -> record<Tags: table<Key: string, Value: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2845,14 +2891,15 @@ export def "list-typed-link-facet-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the schema. For more information, see arns.
+  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the schema. For more information, see arns. (required)
   name: string # The unique name of the typed link facet.
   --next-token-body: string # The pagination token. (body field)
   --max-results-body: int # The maximum number of results to retrieve. (body field)
-]: any -> record<Attributes: record, NextToken: record> {
+]: any -> record<Attributes: table<Name: string, Type: string, DefaultValue: record, IsImmutable: bool, Rules: record, RequiredBehavior: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/typedlink/facet/attributes" $qp $auth.query)
   let req_body = {"Name": $name, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -2898,13 +2945,14 @@ export def "list-typed-link-facet-names" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the schema. For more information, see arns.
+  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the schema. For more information, see arns. (required)
   --next-token-body: string # The pagination token. (body field)
   --max-results-body: int # The maximum number of results to retrieve. (body field)
-]: any -> record<FacetNames: record, NextToken: record> {
+]: any -> record<FacetNames: list<string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/typedlink/facet/list" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -2931,7 +2979,7 @@ export def "list-typed-link-facet-names" [
 #
 # POST /amazonclouddirectory/2017-01-11/policy/lookup
 # operationId: LookupPolicy
-# --ObjectReference shape: {Selector?: any}
+# --ObjectReference shape: {Selector?: string}
 export def "lookup-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2951,14 +2999,15 @@ export def "lookup-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory. For more information, see arns.
-  object_reference: record # The reference that identifies an object. — shape: {Selector?: any}
+  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory. For more information, see arns. (required)
+  object_reference: record # The reference that identifies an object. — shape: {Selector?: string}
   --next-token-body: string # The token to request the next page of results. (body field)
   --max-results-body: int # The maximum number of items to be retrieved in a single call. This is an approximate number. (body field)
-]: any -> record<PolicyToPathList: record, NextToken: record> {
+]: any -> record<PolicyToPathList: table<Path: string, Policies: list>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/policy/lookup" $qp $auth.query)
   let req_body = {"ObjectReference": $object_reference, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -3002,14 +3051,15 @@ export def "publish-schema" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the development schema. For more information, see arns.
+  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the development schema. For more information, see arns. (required)
   version: string # The major version under which the schema will be published. Schemas have both a major and minor version associated with them.
   --minor-version: string # The minor version under which the schema will be published. This parameter is recommended. Schemas have both a major and minor version associated with them.
   --name: string # The new name under which the schema will be published. If this is not provided, the development schema is considered.
-]: any -> record<PublishedSchemaArn: record> {
+]: any -> record<PublishedSchemaArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/schema/publish" $auth.query)
   let req_body = {"Version": $version, "MinorVersion": $minor_version, "Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3035,8 +3085,8 @@ export def "publish-schema" [
 #
 # PUT /amazonclouddirectory/2017-01-11/object/facets/delete
 # operationId: RemoveFacetFromObject
-# --SchemaFacet shape: {SchemaArn?: any, FacetName?: any}
-# --ObjectReference shape: {Selector?: any}
+# --SchemaFacet shape: {SchemaArn?: string, FacetName?: string}
+# --ObjectReference shape: {Selector?: string}
 export def "remove-facet-from-object" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3054,13 +3104,14 @@ export def "remove-facet-from-object" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The ARN of the directory in which the object resides.
-  schema_facet: record # A facet. — shape: {SchemaArn?: any, FacetName?: any}
-  object_reference: record # The reference that identifies an object. — shape: {Selector?: any}
+  --x-amz-data-partition: string # The ARN of the directory in which the object resides. (required)
+  schema_facet: record # A facet. — shape: {SchemaArn?: string, FacetName?: string}
+  object_reference: record # The reference that identifies an object. — shape: {Selector?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/facets/delete" $auth.query)
   let req_body = {"SchemaFacet": $schema_facet, "ObjectReference": $object_reference} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3086,7 +3137,7 @@ export def "remove-facet-from-object" [
 #
 # PUT /amazonclouddirectory/2017-01-11/tags/add
 # operationId: TagResource
-# --Tags item shape: {Key?: any, Value?: any}
+# --Tags item shape: {Key?: string, Value?: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3105,7 +3156,7 @@ export def "tag-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   resource_arn: string # The Amazon Resource Name (ARN) of the resource. Tagging is only supported for directories.
-  tags: list # A list of tag key-value pairs. — item shape: {Key?: any, Value?: any}
+  tags: list # A list of tag key-value pairs. — item shape: {Key?: string, Value?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3183,8 +3234,8 @@ export def "untag-resource" [
 #
 # POST /amazonclouddirectory/2017-01-11/typedlink/attributes/update
 # operationId: UpdateLinkAttributes
-# --TypedLinkSpecifier shape: {TypedLinkFacet?: any, SourceObjectReference?: any, TargetObjectReference?: any, IdentityAttributeValues?: any}
-# --AttributeUpdates item shape: {AttributeKey?: any, AttributeAction?: any}
+# --TypedLinkSpecifier shape: {TypedLinkFacet?: record, SourceObjectReference?: record, TargetObjectReference?: record, IdentityAttributeValues?: list}
+# --AttributeUpdates item shape: {AttributeKey?: record, AttributeAction?: record}
 export def "update-link-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3202,13 +3253,14 @@ export def "update-link-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory where the updated typed link resides. For more information, see arns or Typed Links (https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink).
-  typed_link_specifier: record # Contains all the information that is used to uniquely identify a typed link. The parameters discussed in this topic are used to uniquely specify the typed link being operated on. The AttachTypedLink API returns a typed link specifier while the DetachTypedLink API accepts one as input. Similarly, the ListIncomingTypedLinks and ListOutgoingTypedLinks API operations provide typed link specifiers as output. You can also construct a typed link specifier from scratch. — shape: {TypedLinkFacet?: any, SourceObjectReference?: any, TargetObjectReference?: any, IdentityAttributeValues?: any}
-  attribute_updates: list # The attributes update structure. — item shape: {AttributeKey?: any, AttributeAction?: any}
+  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory where the updated typed link resides. For more information, see arns or Typed Links (https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink). (required)
+  typed_link_specifier: record # Contains all the information that is used to uniquely identify a typed link. The parameters discussed in this topic are used to uniquely specify the typed link being operated on. The AttachTypedLink API returns a typed link specifier while the DetachTypedLink API accepts one as input. Similarly, the ListIncomingTypedLinks and ListOutgoingTypedLinks API operations provide typed link specifiers as output. You can also construct a typed link specifier from scratch. — shape: {TypedLinkFacet?: record, SourceObjectReference?: record, TargetObjectReference?: record, IdentityAttributeValues?: list}
+  attribute_updates: list # The attributes update structure. — item shape: {AttributeKey?: record, AttributeAction?: record}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/typedlink/attributes/update" $auth.query)
   let req_body = {"TypedLinkSpecifier": $typed_link_specifier, "AttributeUpdates": $attribute_updates} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3234,8 +3286,8 @@ export def "update-link-attributes" [
 #
 # PUT /amazonclouddirectory/2017-01-11/object/update
 # operationId: UpdateObjectAttributes
-# --ObjectReference shape: {Selector?: any}
-# --AttributeUpdates item shape: {ObjectAttributeKey?: any, ObjectAttributeAction?: any}
+# --ObjectReference shape: {Selector?: string}
+# --AttributeUpdates item shape: {ObjectAttributeKey?: record, ObjectAttributeAction?: record}
 export def "update-object-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3253,13 +3305,14 @@ export def "update-object-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory where the object resides. For more information, see arns.
-  object_reference: record # The reference that identifies an object. — shape: {Selector?: any}
-  attribute_updates: list # The attributes update structure. — item shape: {ObjectAttributeKey?: any, ObjectAttributeAction?: any}
-]: any -> record<ObjectIdentifier: record> {
+  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory where the object resides. For more information, see arns. (required)
+  object_reference: record # The reference that identifies an object. — shape: {Selector?: string}
+  attribute_updates: list # The attributes update structure. — item shape: {ObjectAttributeKey?: record, ObjectAttributeAction?: record}
+]: any -> record<ObjectIdentifier: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/update" $auth.query)
   let req_body = {"ObjectReference": $object_reference, "AttributeUpdates": $attribute_updates} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3302,12 +3355,13 @@ export def "update-schema" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The Amazon Resource Name (ARN) of the development schema. For more information, see arns.
+  --x-amz-data-partition: string # The Amazon Resource Name (ARN) of the development schema. For more information, see arns. (required)
   name: string # The name of the schema.
-]: any -> record<SchemaArn: record> {
+]: any -> record<SchemaArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/schema/update" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3333,7 +3387,7 @@ export def "update-schema" [
 #
 # PUT /amazonclouddirectory/2017-01-11/typedlink/facet
 # operationId: UpdateTypedLinkFacet
-# --AttributeUpdates item shape: {Attribute: any, Action: any}
+# --AttributeUpdates item shape: {Attribute: record, Action: "CREATE_OR_UPDATE"|"DELETE"}
 export def "update-typed-link-facet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3351,14 +3405,15 @@ export def "update-typed-link-facet" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the schema. For more information, see arns.
+  --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the schema. For more information, see arns. (required)
   name: string # The unique name of the typed link facet.
-  attribute_updates: list # Attributes update structure. — item shape: {Attribute: any, Action: any}
+  attribute_updates: list # Attributes update structure. — item shape: {Attribute: record, Action: "CREATE_OR_UPDATE"|"DELETE"}
   identity_attribute_order: list<string> # The order of identity attributes for the facet, from most significant to least significant. The ability to filter typed links considers the order that the attributes are defined on the typed link facet. When providing ranges to a typed link selection, any inexact ranges must be specified at the end. Any attributes that do not have a range specified are presumed to match the entire range. Filters are interpreted in the order of the attributes on the typed link facet, not the order in which they are supplied to any API calls. For more information about identity attributes, see Typed Links (https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink).
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_data_partition == null) { error make --unspanned { msg: "required header parameter 'x-amz-data-partition' missing: pass --x-amz-data-partition" } }
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/typedlink/facet" $auth.query)
   let req_body = {"Name": $name, "AttributeUpdates": $attribute_updates, "IdentityAttributeOrder": $identity_attribute_order} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3404,7 +3459,7 @@ export def "upgrade-applied-schema" [
   published_schema_arn: string # The revision of the published schema to upgrade the directory to.
   directory_arn: string # The ARN for the directory to which the upgraded schema will be applied.
   --body-dry-run: oneof<nothing, bool> # Used for testing whether the major version schemas are backward compatible or not. If schema compatibility fails, an exception would be thrown else the call would succeed but no changes will be saved. This parameter is optional.
-]: any -> record<UpgradedSchemaArn: record, DirectoryArn: record> {
+]: any -> record<UpgradedSchemaArn: string, DirectoryArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3454,7 +3509,7 @@ export def "upgrade-published-schema" [
   published_schema_arn: string # The ARN of the published schema to be upgraded.
   minor_version: string # Identifies the minor version of the published schema that will be created. This parameter is NOT optional.
   --body-dry-run: oneof<nothing, bool> # Used for testing whether the Development schema provided is backwards compatible, or not, with the publish schema provided by the user to be upgraded. If schema compatibility fails, an exception would be thrown else the call would succeed. This parameter is optional and defaults to false.
-]: any -> record<UpgradedSchemaArn: record> {
+]: any -> record<UpgradedSchemaArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -110,6 +110,7 @@ def x-amz-target-completer-10 [] { ["AWSMigrationHub.ListCreatedArtifacts"] }
 def x-amz-target-completer-11 [] { ["AWSMigrationHub.ListDiscoveredResources"] }
 def x-amz-target-completer-12 [] { ["AWSMigrationHub.ListMigrationTasks"] }
 def x-amz-target-completer-13 [] { ["AWSMigrationHub.ListProgressUpdateStreams"] }
+def status-completer [] { ["COMPLETED" "IN_PROGRESS" "NOT_STARTED"] }
 def x-amz-target-completer-14 [] { ["AWSMigrationHub.NotifyApplicationState"] }
 def x-amz-target-completer-15 [] { ["AWSMigrationHub.NotifyMigrationTaskState"] }
 def x-amz-target-completer-16 [] { ["AWSMigrationHub.PutResourceAttributes"] }
@@ -141,6 +142,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AssociateCreatedArtifact
+# --CreatedArtifact shape: {Name: string, Description?: string}
 export def "associate-created-artifact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -158,15 +160,16 @@ export def "associate-created-artifact" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  progress_update_stream: any
-  migration_task_name: any
-  created_artifact: any
-  --body-dry-run: any
+  --x-amz-target: string@x-amz-target-completer # required
+  progress_update_stream: string # The name of the ProgressUpdateStream.
+  migration_task_name: string # Unique identifier that references the migration task. Do not store personal data in this field.
+  created_artifact: record # An ARN of the AWS cloud resource target receiving the migration (e.g., AMI, EC2 instance, RDS instance, etc.). — shape: {Name: string, Description?: string}
+  --body-dry-run: oneof<nothing, bool> # Optional boolean flag to indicate whether any effect should take place. Used to test if the caller has permission to make the call.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSMigrationHub.AssociateCreatedArtifact")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ProgressUpdateStream": $progress_update_stream, "MigrationTaskName": $migration_task_name, "CreatedArtifact": $created_artifact, "DryRun": $body_dry_run} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -192,6 +195,7 @@ export def "associate-created-artifact" [
 #
 # POST /
 # operationId: AssociateDiscoveredResource
+# --DiscoveredResource shape: {ConfigurationId: string, Description?: string}
 export def "associate-discovered-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -209,15 +213,16 @@ export def "associate-discovered-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  progress_update_stream: any
-  migration_task_name: any
-  discovered_resource: any
-  --body-dry-run: any
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  progress_update_stream: string # The name of the ProgressUpdateStream.
+  migration_task_name: string # The identifier given to the MigrationTask. Do not store personal data in this field.
+  discovered_resource: record # Object representing the on-premises resource being migrated. — shape: {ConfigurationId: string, Description?: string}
+  --body-dry-run: oneof<nothing, bool> # Optional boolean flag to indicate whether any effect should take place. Used to test if the caller has permission to make the call.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSMigrationHub.AssociateDiscoveredResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ProgressUpdateStream": $progress_update_stream, "MigrationTaskName": $migration_task_name, "DiscoveredResource": $discovered_resource, "DryRun": $body_dry_run} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -260,13 +265,14 @@ export def "create-progress-update-stream" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  progress_update_stream_name: any
-  --body-dry-run: any
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  progress_update_stream_name: string # The name of the ProgressUpdateStream. Do not store personal data in this field.
+  --body-dry-run: oneof<nothing, bool> # Optional boolean flag to indicate whether any effect should take place. Used to test if the caller has permission to make the call.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSMigrationHub.CreateProgressUpdateStream")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ProgressUpdateStreamName": $progress_update_stream_name, "DryRun": $body_dry_run} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -309,13 +315,14 @@ export def "delete-progress-update-stream" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  progress_update_stream_name: any
-  --body-dry-run: any
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  progress_update_stream_name: string # The name of the ProgressUpdateStream. Do not store personal data in this field.
+  --body-dry-run: oneof<nothing, bool> # Optional boolean flag to indicate whether any effect should take place. Used to test if the caller has permission to make the call.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSMigrationHub.DeleteProgressUpdateStream")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ProgressUpdateStreamName": $progress_update_stream_name, "DryRun": $body_dry_run} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -358,12 +365,13 @@ export def "describe-application-state" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  application_id: any
-]: any -> record<ApplicationStatus: record, LastUpdatedTime: record> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  application_id: string # The configurationId in Application Discovery Service that uniquely identifies the grouped application.
+]: any -> record<ApplicationStatus: string, LastUpdatedTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSMigrationHub.DescribeApplicationState")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ApplicationId": $application_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -406,13 +414,14 @@ export def "describe-migration-task" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  progress_update_stream: any
-  migration_task_name: any
-]: any -> record<MigrationTask: record<ProgressUpdateStream: record, MigrationTaskName: record, Task: record<Status: record, StatusDetail: record, ProgressPercent: record>, UpdateDateTime: record, ResourceAttributeList: record>> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  progress_update_stream: string # The name of the ProgressUpdateStream.
+  migration_task_name: string # The identifier given to the MigrationTask. Do not store personal data in this field.
+]: any -> record<MigrationTask: record<ProgressUpdateStream: string, MigrationTaskName: string, Task: record<Status: string, StatusDetail: string, ProgressPercent: int>, UpdateDateTime: string, ResourceAttributeList: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSMigrationHub.DescribeMigrationTask")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ProgressUpdateStream": $progress_update_stream, "MigrationTaskName": $migration_task_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -455,15 +464,16 @@ export def "disassociate-created-artifact" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  progress_update_stream: any
-  migration_task_name: any
-  created_artifact_name: any
-  --body-dry-run: any
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  progress_update_stream: string # The name of the ProgressUpdateStream.
+  migration_task_name: string # Unique identifier that references the migration task to be disassociated with the artifact. Do not store personal data in this field.
+  created_artifact_name: string # An ARN of the AWS resource related to the migration (e.g., AMI, EC2 instance, RDS instance, etc.)
+  --body-dry-run: oneof<nothing, bool> # Optional boolean flag to indicate whether any effect should take place. Used to test if the caller has permission to make the call.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSMigrationHub.DisassociateCreatedArtifact")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ProgressUpdateStream": $progress_update_stream, "MigrationTaskName": $migration_task_name, "CreatedArtifactName": $created_artifact_name, "DryRun": $body_dry_run} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -506,15 +516,16 @@ export def "disassociate-discovered-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  progress_update_stream: any
-  migration_task_name: any
-  configuration_id: any
-  --body-dry-run: any
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  progress_update_stream: string # The name of the ProgressUpdateStream.
+  migration_task_name: string # The identifier given to the MigrationTask. Do not store personal data in this field.
+  configuration_id: string # ConfigurationId of the Application Discovery Service resource to be disassociated.
+  --body-dry-run: oneof<nothing, bool> # Optional boolean flag to indicate whether any effect should take place. Used to test if the caller has permission to make the call.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSMigrationHub.DisassociateDiscoveredResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ProgressUpdateStream": $progress_update_stream, "MigrationTaskName": $migration_task_name, "ConfigurationId": $configuration_id, "DryRun": $body_dry_run} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -557,14 +568,15 @@ export def "import-migration-task" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  progress_update_stream: any
-  migration_task_name: any
-  --body-dry-run: any
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  progress_update_stream: string # The name of the ProgressUpdateStream. >
+  migration_task_name: string # Unique identifier that references the migration task. Do not store personal data in this field.
+  --body-dry-run: oneof<nothing, bool> # Optional boolean flag to indicate whether any effect should take place. Used to test if the caller has permission to make the call.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSMigrationHub.ImportMigrationTask")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ProgressUpdateStream": $progress_update_stream, "MigrationTaskName": $migration_task_name, "DryRun": $body_dry_run} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -609,14 +621,15 @@ export def "list-application-states" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  --application-ids: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<ApplicationStateList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  --application-ids: list<string> # The configurationIds from the Application Discovery Service that uniquely identifies your applications.
+  --next-token-body: string # If a NextToken was returned by a previous call, there are more results available. To retrieve the next page of results, make the call again using the returned token in NextToken. (body field)
+  --max-results-body: int # Maximum number of results to be returned per page. (body field)
+]: any -> record<ApplicationStateList: table<ApplicationId: string, ApplicationStatus: string, LastUpdatedTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSMigrationHub.ListApplicationStates")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ApplicationIds": $application_ids, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -662,15 +675,16 @@ export def "list-created-artifacts" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  progress_update_stream: any
-  migration_task_name: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<NextToken: record, CreatedArtifactList: record> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  progress_update_stream: string # The name of the ProgressUpdateStream.
+  migration_task_name: string # Unique identifier that references the migration task. Do not store personal data in this field.
+  --next-token-body: string # If a NextToken was returned by a previous call, there are more results available. To retrieve the next page of results, make the call again using the returned token in NextToken. (body field)
+  --max-results-body: int # Maximum number of results to be returned per page. (body field)
+]: any -> record<NextToken: string, CreatedArtifactList: table<Name: string, Description: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSMigrationHub.ListCreatedArtifacts")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ProgressUpdateStream": $progress_update_stream, "MigrationTaskName": $migration_task_name, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -716,15 +730,16 @@ export def "list-discovered-resources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  progress_update_stream: any
-  migration_task_name: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<NextToken: record, DiscoveredResourceList: record> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  progress_update_stream: string # The name of the ProgressUpdateStream.
+  migration_task_name: string # The name of the MigrationTask. Do not store personal data in this field.
+  --next-token-body: string # If a NextToken was returned by a previous call, there are more results available. To retrieve the next page of results, make the call again using the returned token in NextToken. (body field)
+  --max-results-body: int # The maximum number of results returned per page. (body field)
+]: any -> record<NextToken: string, DiscoveredResourceList: table<ConfigurationId: string, Description: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSMigrationHub.ListDiscoveredResources")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ProgressUpdateStream": $progress_update_stream, "MigrationTaskName": $migration_task_name, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -770,14 +785,15 @@ export def "list-migration-tasks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --resource-name: any
-]: any -> record<NextToken: record, MigrationTaskSummaryList: record> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  --next-token-body: string # If a NextToken was returned by a previous call, there are more results available. To retrieve the next page of results, make the call again using the returned token in NextToken. (body field)
+  --max-results-body: int # Value to specify how many results are returned per page. (body field)
+  --resource-name: string # Filter migration tasks by discovered resource name.
+]: any -> record<NextToken: string, MigrationTaskSummaryList: table<ProgressUpdateStream: string, MigrationTaskName: string, Status: string, ProgressPercent: int, StatusDetail: string, UpdateDateTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSMigrationHub.ListMigrationTasks")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "ResourceName": $resource_name} | compact
@@ -823,13 +839,14 @@ export def "list-progress-update-streams" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<ProgressUpdateStreamSummaryList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  --next-token-body: string # If a NextToken was returned by a previous call, there are more results available. To retrieve the next page of results, make the call again using the returned token in NextToken. (body field)
+  --max-results-body: int # Filter to limit the maximum number of results to list per page. (body field)
+]: any -> record<ProgressUpdateStreamSummaryList: table<ProgressUpdateStreamName: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSMigrationHub.ListProgressUpdateStreams")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -873,15 +890,16 @@ export def "notify-application-state" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  application_id: any
-  status: any
-  --update-date-time: any
-  --body-dry-run: any
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  application_id: string # The configurationId in Application Discovery Service that uniquely identifies the grouped application.
+  status: string@status-completer # Status of the application - Not Started, In-Progress, Complete.
+  --update-date-time: string # The timestamp when the application state changed. (format: date-time)
+  --body-dry-run: oneof<nothing, bool> # Optional boolean flag to indicate whether any effect should take place. Used to test if the caller has permission to make the call.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSMigrationHub.NotifyApplicationState")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ApplicationId": $application_id, "Status": $status, "UpdateDateTime": $update_date_time, "DryRun": $body_dry_run} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -907,6 +925,7 @@ export def "notify-application-state" [
 #
 # POST /
 # operationId: NotifyMigrationTaskState
+# --Task shape: {Status: "NOT_STARTED"|"IN_PROGRESS"|"FAILED"|"COMPLETED", StatusDetail?: string, ProgressPercent?: int}
 export def "notify-migration-task-state" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -924,17 +943,18 @@ export def "notify-migration-task-state" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  progress_update_stream: any
-  migration_task_name: any
-  task: any
-  update_date_time: any
-  next_update_seconds: any
-  --body-dry-run: any
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  progress_update_stream: string # The name of the ProgressUpdateStream.
+  migration_task_name: string # Unique identifier that references the migration task. Do not store personal data in this field.
+  task: record # Task object encapsulating task information. — shape: {Status: "NOT_STARTED"|"IN_PROGRESS"|"FAILED"|"COMPLETED", StatusDetail?: string, ProgressPercent?: int}
+  update_date_time: string # The timestamp when the task was gathered. (format: date-time)
+  next_update_seconds: int # Number of seconds after the UpdateDateTime within which the Migration Hub can expect an update. If Migration Hub does not receive an update within the specified interval, then the migration task will be considered stale.
+  --body-dry-run: oneof<nothing, bool> # Optional boolean flag to indicate whether any effect should take place. Used to test if the caller has permission to make the call.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSMigrationHub.NotifyMigrationTaskState")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ProgressUpdateStream": $progress_update_stream, "MigrationTaskName": $migration_task_name, "Task": $task, "UpdateDateTime": $update_date_time, "NextUpdateSeconds": $next_update_seconds, "DryRun": $body_dry_run} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -960,6 +980,7 @@ export def "notify-migration-task-state" [
 #
 # POST /
 # operationId: PutResourceAttributes
+# --ResourceAttributeList item shape: {Type: "IPV4_ADDRESS"|"IPV6_ADDRESS"|"MAC_ADDRESS"|"FQDN"|"VM_MANAGER_ID"|"VM_MANAGED_OBJECT_REFERENCE"|"VM_NAME"|"VM_PATH"|"BIOS_ID"|"MOTHERBOARD_SERIAL_NUMBER", Value: string}
 export def "put-resource-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -977,15 +998,16 @@ export def "put-resource-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  progress_update_stream: any
-  migration_task_name: any
-  resource_attribute_list: any
-  --body-dry-run: any
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  progress_update_stream: string # The name of the ProgressUpdateStream.
+  migration_task_name: string # Unique identifier that references the migration task. Do not store personal data in this field.
+  resource_attribute_list: list # Information about the resource that is being migrated. This data will be used to map the task to a resource in the Application Discovery Service repository. Takes the object array of ResourceAttribute where the Type field is reserved for the following values: IPV4_ADDRESS | IPV6_ADDRESS | MAC_ADDRESS | FQDN | VM_MANAGER_ID | VM_MANAGED_OBJECT_REFERENCE | VM_NAME | VM_PATH | BIOS_ID | MOTHERBOARD_SERIAL_NUMBER where the identifying value can be a string up to 256 characters. If any "VM" related value is set for a ResourceAttribute object, it is required that VM_MANAGER_ID, as a minimum, is always set. If VM_MANAGER_ID is not set, then all "VM" fields will be discarded and "VM" fields will not be used for matching the migration task to a server in Application Discovery Service repository. See the Example (https://docs.aws.amazon.com/migrationhub/latest/ug/API_PutResourceAttributes.html#API_PutResourceAttributes_Examples) section below for a use case of specifying "VM" related values. If a server you are trying to match has multiple IP or MAC addresses, you should provide as many as you know in separate type/value pairs passed to the ResourceAttributeList parameter to maximize the chances of matching. — item shape: {Type: "IPV4_ADDRESS"|"IPV6_ADDRESS"|"MAC_ADDRESS"|"FQDN"|"VM_MANAGER_ID"|"VM_MANAGED_OBJECT_REFERENCE"|"VM_NAME"|"VM_PATH"|"BIOS_ID"|"MOTHERBOARD_SERIAL_NUMBER", Value: string}
+  --body-dry-run: oneof<nothing, bool> # Optional boolean flag to indicate whether any effect should take place. Used to test if the caller has permission to make the call.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSMigrationHub.PutResourceAttributes")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ProgressUpdateStream": $progress_update_stream, "MigrationTaskName": $migration_task_name, "ResourceAttributeList": $resource_attribute_list, "DryRun": $body_dry_run} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

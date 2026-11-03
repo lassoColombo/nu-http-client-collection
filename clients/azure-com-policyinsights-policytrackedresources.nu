@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -95,6 +95,9 @@ def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: 
 def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def management-groups-namespace-completer [] { ["Microsoft.Management"] }
+def policy-tracked-resources-resource-completer [] { ["default"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -124,9 +127,9 @@ export def commands []: nothing -> table {
 # POST /providers/{managementGroupsNamespace}/managementGroups/{managementGroupName}/providers/Microsoft.PolicyInsights/policyTrackedResources/{policyTrackedResourcesResource}/queryResults
 # operationId: PolicyTrackedResources_ListQueryResultsForManagementGroup
 export def "policy-tracked-resources-list-query-results-for-management-group" [
-  management_groups_namespace: string
+  management_groups_namespace: string@management-groups-namespace-completer
   management_group_name: string
-  policy_tracked_resources_resource: string
+  policy_tracked_resources_resource: string@policy-tracked-resources-resource-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -138,13 +141,14 @@ export def "policy-tracked-resources-list-query-results-for-management-group" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Maximum number of records to return. (format: int32)
   --filter: string # OData filter expression.
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<nextLink: string, value: table<createdBy: record, lastModifiedBy: record, lastUpdateUtc: string, policyDetails: record, trackedResourceId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($management_groups_namespace | is-empty) { error make --unspanned { msg: "path parameter 'managementGroupsNamespace' must be non-empty" } }
   if ($management_group_name | is-empty) { error make --unspanned { msg: "path parameter 'managementGroupName' must be non-empty" } }
   if ($policy_tracked_resources_resource | is-empty) { error make --unspanned { msg: "path parameter 'policyTrackedResourcesResource' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({management_groups_namespace: (encode-path-segment $management_groups_namespace), management_group_name: (encode-path-segment $management_group_name), policy_tracked_resources_resource: (encode-path-segment $policy_tracked_resources_resource)} | format pattern "/providers/{management_groups_namespace}/managementGroups/{management_group_name}/providers/Microsoft.PolicyInsights/policyTrackedResources/{policy_tracked_resources_resource}/queryResults") $qp $auth.query)
   let accept_val = "application/json"
@@ -169,7 +173,7 @@ export def "policy-tracked-resources-list-query-results-for-management-group" [
 # operationId: PolicyTrackedResources_ListQueryResultsForSubscription
 export def "policy-tracked-resources-list-query-results-for-subscription" [
   subscription_id: string
-  policy_tracked_resources_resource: string
+  policy_tracked_resources_resource: string@policy-tracked-resources-resource-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -181,12 +185,13 @@ export def "policy-tracked-resources-list-query-results-for-subscription" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Maximum number of records to return. (format: int32)
   --filter: string # OData filter expression.
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<nextLink: string, value: table<createdBy: record, lastModifiedBy: record, lastUpdateUtc: string, policyDetails: record, trackedResourceId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($policy_tracked_resources_resource | is-empty) { error make --unspanned { msg: "path parameter 'policyTrackedResourcesResource' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), policy_tracked_resources_resource: (encode-path-segment $policy_tracked_resources_resource)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.PolicyInsights/policyTrackedResources/{policy_tracked_resources_resource}/queryResults") $qp $auth.query)
   let accept_val = "application/json"
@@ -212,7 +217,7 @@ export def "policy-tracked-resources-list-query-results-for-subscription" [
 export def "policy-tracked-resources-list-query-results-for-resource-group" [
   subscription_id: string
   resource_group_name: string
-  policy_tracked_resources_resource: string
+  policy_tracked_resources_resource: string@policy-tracked-resources-resource-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -224,13 +229,14 @@ export def "policy-tracked-resources-list-query-results-for-resource-group" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Maximum number of records to return. (format: int32)
   --filter: string # OData filter expression.
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<nextLink: string, value: table<createdBy: record, lastModifiedBy: record, lastUpdateUtc: string, policyDetails: record, trackedResourceId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($policy_tracked_resources_resource | is-empty) { error make --unspanned { msg: "path parameter 'policyTrackedResourcesResource' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), policy_tracked_resources_resource: (encode-path-segment $policy_tracked_resources_resource)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.PolicyInsights/policyTrackedResources/{policy_tracked_resources_resource}/queryResults") $qp $auth.query)
   let accept_val = "application/json"
@@ -255,7 +261,7 @@ export def "policy-tracked-resources-list-query-results-for-resource-group" [
 # operationId: PolicyTrackedResources_ListQueryResultsForResource
 export def "policy-tracked-resources-list-query-results-for-resource" [
   resource_id: string
-  policy_tracked_resources_resource: string
+  policy_tracked_resources_resource: string@policy-tracked-resources-resource-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -267,12 +273,13 @@ export def "policy-tracked-resources-list-query-results-for-resource" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Maximum number of records to return. (format: int32)
   --filter: string # OData filter expression.
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<nextLink: string, value: table<createdBy: record, lastModifiedBy: record, lastUpdateUtc: string, policyDetails: record, trackedResourceId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   if ($policy_tracked_resources_resource | is-empty) { error make --unspanned { msg: "path parameter 'policyTrackedResourcesResource' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id), policy_tracked_resources_resource: (encode-path-segment $policy_tracked_resources_resource)} | format pattern "/{resource_id}/providers/Microsoft.PolicyInsights/policyTrackedResources/{policy_tracked_resources_resource}/queryResults") $qp $auth.query)
   let accept_val = "application/json"

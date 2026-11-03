@@ -159,12 +159,14 @@ export def "get-api-public-v1-alerts-uuid" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> record<ackAuthor: string, ackMsg: string, entityDisplayName: string, entityId: string, messageType: string, monitoringTool: string, raw: string, stateMessage: string, stateStartTime: float, timestamp: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($uuid | is-empty) { error make --unspanned { msg: "path parameter 'uuid' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({uuid: (encode-path-segment $uuid)} | format pattern "/api-public/v1/alerts/{uuid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -197,11 +199,13 @@ export def "get-api-public-v1-incidents" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> record<incidents: table<alertCount: float, currentPhase: string, entityId: string, host: string, incidentNumber: string, lastAlertId: string, lastAlertTime: string, pagedPolicies: list, pagedTeams: list, pagedUsers: list, service: string, startTime: string, transitions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/incidents" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -235,8 +239,8 @@ export def "post-api-public-v1-incidents" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
   details: string
   summary: string
   targets: list # item shape: {slug: string, type: "User"|"EscalationPolicy"}
@@ -245,6 +249,8 @@ export def "post-api-public-v1-incidents" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/incidents" $auth.query)
   let req_body = {"details": $details, "summary": $summary, "targets": $targets, "userName": $user_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -279,8 +285,8 @@ export def "patch-api-public-v1-incidents-ack" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
   incident_names: list<string>
   --message: string
   user_name: string
@@ -288,6 +294,8 @@ export def "patch-api-public-v1-incidents-ack" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/incidents/ack" $auth.query)
   let req_body = {"incidentNames": $incident_names, "message": $message, "userName": $user_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -322,14 +330,16 @@ export def "patch-api-public-v1-incidents-by-user-ack" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
   --message: string
   user_name: string
 ]: any -> record<results: table<cmdAccepted: bool, entityId: string, incidentNumber: string, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/incidents/byUser/ack" $auth.query)
   let req_body = {"message": $message, "userName": $user_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -364,14 +374,16 @@ export def "patch-api-public-v1-incidents-by-user-resolve" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
   --message: string
   user_name: string
 ]: any -> record<results: table<cmdAccepted: bool, entityId: string, incidentNumber: string, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/incidents/byUser/resolve" $auth.query)
   let req_body = {"message": $message, "userName": $user_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -407,14 +419,16 @@ export def "post-api-public-v1-incidents-reroute" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
   reroutes: list # item shape: {incidentNumber: string, targets: list}
   user_name: string
 ]: any -> record<statuses: table<incidentNumber: string, message: string, success: bool, targetStatus: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/incidents/reroute" $auth.query)
   let req_body = {"reroutes": $reroutes, "userName": $user_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -449,8 +463,8 @@ export def "patch-api-public-v1-incidents-resolve" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
   incident_names: list<string>
   --message: string
   user_name: string
@@ -458,6 +472,8 @@ export def "patch-api-public-v1-incidents-resolve" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/incidents/resolve" $auth.query)
   let req_body = {"incidentNames": $incident_names, "message": $message, "userName": $user_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -492,11 +508,13 @@ export def "get-api-public-v1-maintenancemode" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> record<activeInstances: table<instanceId: string, isGlobal: bool, startedAt: float, startedBy: string, targets: list>, companyId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/maintenancemode" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -529,8 +547,8 @@ export def "post-api-public-v1-maintenancemode-start" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
   --names: list<string> # Routing keys that maintenance mode state covers. An empty list indicates global maintenance mode
   --purpose: string # the reason for the maintenance mode
   --type: string@type-completer
@@ -538,6 +556,8 @@ export def "post-api-public-v1-maintenancemode-start" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/maintenancemode/start" $auth.query)
   let req_body = {"names": $names, "purpose": $purpose, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -573,12 +593,14 @@ export def "put-api-public-v1-maintenancemode-maintenancemodeid-end" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> record<activeInstances: table<instanceId: string, isGlobal: bool, startedAt: float, startedBy: string, targets: list>, companyId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($maintenancemodeid | is-empty) { error make --unspanned { msg: "path parameter 'maintenancemodeid' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({maintenancemodeid: (encode-path-segment $maintenancemodeid)} | format pattern "/api-public/v1/maintenancemode/{maintenancemodeid}/end") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -611,11 +633,13 @@ export def "get-api-public-v1-oncall-current" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> record<teamsOnCall: table<onCallNow: list, team: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/oncall/current" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -648,11 +672,13 @@ export def "get-api-public-v1-org-routing-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> record<_selfUrl: string, routingKeys: table<isDefault: bool, routingKey: string, targets: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/org/routing-keys" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -685,11 +711,13 @@ export def "get-api-public-v1-overrides" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> record<_selfUrl: string, overrides: table<assignments: list, end: string, publicId: string, start: string, timezone: string, user: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/overrides" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -722,8 +750,8 @@ export def "post-api-public-v1-overrides" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
   --end: string # The override end time (ISO 8601)
   --start: string # The override start time (ISO 8601)
   --timezone: string
@@ -732,6 +760,8 @@ export def "post-api-public-v1-overrides" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/overrides" $auth.query)
   let req_body = {"end": $end, "start": $start, "timezone": $timezone, "username": $username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -767,12 +797,14 @@ export def "delete-api-public-v1-overrides-public-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($public_id | is-empty) { error make --unspanned { msg: "path parameter 'publicId' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({public_id: (encode-path-segment $public_id)} | format pattern "/api-public/v1/overrides/{public_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -806,12 +838,14 @@ export def "get-api-public-v1-overrides-public-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> record<_selfUrl: string, override: record<assignments: list<record>, end: string, publicId: string, start: string, timezone: string, user: record<firstName: string, lastName: string, username: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($public_id | is-empty) { error make --unspanned { msg: "path parameter 'publicId' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({public_id: (encode-path-segment $public_id)} | format pattern "/api-public/v1/overrides/{public_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -845,12 +879,14 @@ export def "get-api-public-v1-overrides-public-id-assignments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> table<_selfUrl: string, assigned: bool, policy: string, team: string, user: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($public_id | is-empty) { error make --unspanned { msg: "path parameter 'publicId' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({public_id: (encode-path-segment $public_id)} | format pattern "/api-public/v1/overrides/{public_id}/assignments") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -885,13 +921,15 @@ export def "delete-api-public-v1-overrides-public-id-assignments-policy-slug" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> record<_selfUrl: string, assigned: bool, policy: string, team: string, user: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($public_id | is-empty) { error make --unspanned { msg: "path parameter 'publicId' must be non-empty" } }
   if ($policy_slug | is-empty) { error make --unspanned { msg: "path parameter 'policySlug' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({public_id: (encode-path-segment $public_id), policy_slug: (encode-path-segment $policy_slug)} | format pattern "/api-public/v1/overrides/{public_id}/assignments/{policy_slug}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -926,13 +964,15 @@ export def "get-api-public-v1-overrides-public-id-assignments-policy-slug" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> record<_selfUrl: string, assigned: bool, policy: string, team: string, user: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($public_id | is-empty) { error make --unspanned { msg: "path parameter 'publicId' must be non-empty" } }
   if ($policy_slug | is-empty) { error make --unspanned { msg: "path parameter 'policySlug' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({public_id: (encode-path-segment $public_id), policy_slug: (encode-path-segment $policy_slug)} | format pattern "/api-public/v1/overrides/{public_id}/assignments/{policy_slug}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -967,8 +1007,8 @@ export def "put-api-public-v1-overrides-public-id-assignments-policy-slug" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
   policy: string # The policy slug
   --username: string # The username being assinged
 ]: any -> record<_selfUrl: string, assigned: bool, policy: string, team: string, user: string> {
@@ -977,6 +1017,8 @@ export def "put-api-public-v1-overrides-public-id-assignments-policy-slug" [
   let base = ($base_url | default $BASE_URL)
   if ($public_id | is-empty) { error make --unspanned { msg: "path parameter 'publicId' must be non-empty" } }
   if ($policy_slug | is-empty) { error make --unspanned { msg: "path parameter 'policySlug' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({public_id: (encode-path-segment $public_id), policy_slug: (encode-path-segment $policy_slug)} | format pattern "/api-public/v1/overrides/{public_id}/assignments/{policy_slug}") $auth.query)
   let req_body = {"policy": $policy, "username": $username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1011,11 +1053,13 @@ export def "get-api-public-v1-policies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> record<policies: table<policy: record, team: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/policies" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1048,11 +1092,13 @@ export def "get-api-public-v1-policies-types-contacts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> record<_selfUrl: string, contactTypes: table<description: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/policies/types/contacts" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1085,11 +1131,13 @@ export def "get-api-public-v1-policies-types-notifications" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> record<_selfUrl: string, notificationTypes: table<description: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/policies/types/notifications" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1122,11 +1170,13 @@ export def "get-api-public-v1-policies-types-timeouts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> record<_selfUrl: string, timeoutTypes: table<description: string, type: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/policies/types/timeouts" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1160,8 +1210,8 @@ export def "patch-api-public-v1-policies-policy-oncall-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
   from_user: string
   to_user: string
 ]: any -> record<result: string> {
@@ -1169,6 +1219,8 @@ export def "patch-api-public-v1-policies-policy-oncall-user" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($policy | is-empty) { error make --unspanned { msg: "path parameter 'policy' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({policy: (encode-path-segment $policy)} | format pattern "/api-public/v1/policies/{policy}/oncall/user") $auth.query)
   let req_body = {"fromUser": $from_user, "toUser": $to_user} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1204,12 +1256,14 @@ export def "get-api-public-v1-profile-username-policies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> record<_selfUrl: string, steps: table<index: float, rules: list, timeout: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/api-public/v1/profile/{username}/policies") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1244,8 +1298,8 @@ export def "post-api-public-v1-profile-username-policies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
   --rules: list # item shape: {contact?: record, type?: "push"|"email"|"sms"|"phone"}
   --timeout: int@timeout-completer
 ]: any -> record<_selfUrl: string, step: record<index: float, rules: list<record>, timeout: int>> {
@@ -1253,6 +1307,8 @@ export def "post-api-public-v1-profile-username-policies" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/api-public/v1/profile/{username}/policies") $auth.query)
   let req_body = {"rules": $rules, "timeout": $timeout} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1289,13 +1345,15 @@ export def "get-api-public-v1-profile-username-policies-step" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> record<_selfUrl: string, step: record<index: float, rules: list<record>, timeout: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   if ($step | is-empty) { error make --unspanned { msg: "path parameter 'step' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), step: (encode-path-segment $step)} | format pattern "/api-public/v1/profile/{username}/policies/{step}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1331,8 +1389,8 @@ export def "post-api-public-v1-profile-username-policies-step" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
   --contact: record # shape: {id?: float, type?: "email"|"phone"}
   --type: string@type-completer-1 # e.g. email
 ]: any -> record<_selfUrl: string, stepRule: record<contact: record<id: float, type: string>, index: float, type: string>> {
@@ -1341,6 +1399,8 @@ export def "post-api-public-v1-profile-username-policies-step" [
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   if ($step | is-empty) { error make --unspanned { msg: "path parameter 'step' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), step: (encode-path-segment $step)} | format pattern "/api-public/v1/profile/{username}/policies/{step}") $auth.query)
   let req_body = {"contact": $contact, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1378,8 +1438,8 @@ export def "put-api-public-v1-profile-username-policies-step" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
   --rules: list # item shape: {contact?: record, type?: "push"|"email"|"sms"|"phone"}
   --timeout: int@timeout-completer
 ]: any -> record<_selfUrl: string, step: record<index: float, rules: list<record>, timeout: int>> {
@@ -1388,6 +1448,8 @@ export def "put-api-public-v1-profile-username-policies-step" [
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   if ($step | is-empty) { error make --unspanned { msg: "path parameter 'step' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), step: (encode-path-segment $step)} | format pattern "/api-public/v1/profile/{username}/policies/{step}") $auth.query)
   let req_body = {"rules": $rules, "timeout": $timeout} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1425,14 +1487,16 @@ export def "delete-api-public-v1-profile-username-policies-step-rule" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> record<_selfUrl: string, stepRule: record<contact: record<id: float, type: string>, index: float, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   if ($step | is-empty) { error make --unspanned { msg: "path parameter 'step' must be non-empty" } }
   if ($rule | is-empty) { error make --unspanned { msg: "path parameter 'rule' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), step: (encode-path-segment $step), rule: (encode-path-segment $rule)} | format pattern "/api-public/v1/profile/{username}/policies/{step}/{rule}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1468,14 +1532,16 @@ export def "get-api-public-v1-profile-username-policies-step-rule" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> record<_selfUrl: string, stepRule: record<contact: record<id: float, type: string>, index: float, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   if ($step | is-empty) { error make --unspanned { msg: "path parameter 'step' must be non-empty" } }
   if ($rule | is-empty) { error make --unspanned { msg: "path parameter 'rule' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), step: (encode-path-segment $step), rule: (encode-path-segment $rule)} | format pattern "/api-public/v1/profile/{username}/policies/{step}/{rule}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1512,8 +1578,8 @@ export def "put-api-public-v1-profile-username-policies-step-rule" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
   --contact: record # shape: {id?: float, type?: "email"|"phone"}
   --type: string@type-completer-1 # e.g. email
 ]: any -> record<_selfUrl: string, stepRule: record<contact: record<id: float, type: string>, index: float, type: string>> {
@@ -1523,6 +1589,8 @@ export def "put-api-public-v1-profile-username-policies-step-rule" [
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   if ($step | is-empty) { error make --unspanned { msg: "path parameter 'step' must be non-empty" } }
   if ($rule | is-empty) { error make --unspanned { msg: "path parameter 'rule' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), step: (encode-path-segment $step), rule: (encode-path-segment $rule)} | format pattern "/api-public/v1/profile/{username}/policies/{step}/{rule}") $auth.query)
   let req_body = {"contact": $contact, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1557,11 +1625,13 @@ export def "get-api-public-v1-team" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> table<_adminsUrl: string, _membersUrl: string, _policiesUrl: string, _selfUrl: string, isDefaultTeam: bool, memberCount: float, name: string, slug: string, version: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/team" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1594,13 +1664,15 @@ export def "post-api-public-v1-team" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
   name: string
 ]: any -> record<_adminsUrl: string, _membersUrl: string, _policiesUrl: string, _selfUrl: string, isDefaultTeam: bool, memberCount: float, name: string, slug: string, version: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/team" $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1636,12 +1708,14 @@ export def "delete-api-public-v1-team-team" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v1/team/{team}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1675,12 +1749,14 @@ export def "get-api-public-v1-team-team" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> record<_adminsUrl: string, _membersUrl: string, _policiesUrl: string, _selfUrl: string, isDefaultTeam: bool, memberCount: float, name: string, slug: string, version: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v1/team/{team}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1714,14 +1790,16 @@ export def "put-api-public-v1-team-team" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
   name: string
 ]: any -> record<_adminsUrl: string, _membersUrl: string, _policiesUrl: string, _selfUrl: string, isDefaultTeam: bool, memberCount: float, name: string, slug: string, version: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v1/team/{team}") $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1757,12 +1835,14 @@ export def "get-api-public-v1-team-team-admins" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> record<teamAdmins: table<_selfUrl: string, firstName: string, lastName: string, username: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v1/team/{team}/admins") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1796,12 +1876,14 @@ export def "get-api-public-v1-team-team-members" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> record<_selfUrl: string, _teamUrl: string, members: table<firstName: string, lastName: string, username: string, verified: string, version: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v1/team/{team}/members") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1835,14 +1917,16 @@ export def "post-api-public-v1-team-team-members" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
   username: string
 ]: any -> record<_selfUrl: string, _teamUrl: string, members: table<firstName: string, lastName: string, username: string, verified: string, version: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v1/team/{team}/members") $auth.query)
   let req_body = {"username": $username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1879,8 +1963,8 @@ export def "delete-api-public-v1-team-team-members-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
   replacement: string
 ]: any -> any {
   let input = $in
@@ -1888,6 +1972,8 @@ export def "delete-api-public-v1-team-team-members-user" [
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({team: (encode-path-segment $team), user: (encode-path-segment $user)} | format pattern "/api-public/v1/team/{team}/members/{user}") $auth.query)
   let req_body = {"replacement": $replacement} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1928,12 +2014,14 @@ export def "get-api-public-v1-team-team-oncall-schedule" [
   --days-forward: float # Days to include in returned schedule (30 max) (default: 14)
   --days-skip: float # Days to skip before computing schedule to return (90 max) (default: 0)
   --step: float # Step of escalation policy (3 max) (default: 0)
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> record<overrides: table<end: float, orig: string, over: string, start: float>, schedule: table<oncall: string, overrideoncall: string, policyType: string, rolls: list, rotationName: string, shiftName: string, shiftRoll: float>, team: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let qp = [(serialize-qp "daysForward" $days_forward "scalar") (serialize-qp "daysSkip" $days_skip "scalar") (serialize-qp "step" $step "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v1/team/{team}/oncall/schedule") $qp $auth.query)
   let accept_val = "application/json"
@@ -1970,8 +2058,8 @@ export def "patch-api-public-v1-team-team-oncall-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
   from_user: string
   to_user: string
 ]: any -> record<result: string> {
@@ -1979,6 +2067,8 @@ export def "patch-api-public-v1-team-team-oncall-user" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v1/team/{team}/oncall/user") $auth.query)
   let req_body = {"fromUser": $from_user, "toUser": $to_user} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2014,12 +2104,14 @@ export def "get-api-public-v1-team-team-policies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> record<policies: table<name: string, slug: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v1/team/{team}/policies") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2052,11 +2144,13 @@ export def "get-api-public-v1-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> record<_selfUrl: string, users: table<_selfUrl: string, createdAt: string, email: string, firstName: string, lastName: string, passwordLastUpdated: string, username: string, verified: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/user" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2089,8 +2183,8 @@ export def "post-api-public-v1-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
   --admin: oneof<nothing, bool>
   email: string # format: email
   --expiration-hours: float # The validity duration for the invitatation/set password link sent to the added user. (default: 24)
@@ -2101,6 +2195,8 @@ export def "post-api-public-v1-user" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/user" $auth.query)
   let req_body = {"admin": $admin, "email": $email, "expirationHours": $expiration_hours, "firstName": $first_name, "lastName": $last_name, "username": $username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2136,14 +2232,16 @@ export def "delete-api-public-v1-user-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
   --replacement: string # The user to take the place of the deleted user in escalations
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}") $auth.query)
   let req_body = {"replacement": $replacement} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2179,12 +2277,14 @@ export def "get-api-public-v1-user-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> record<_selfUrl: string, createdAt: string, email: string, firstName: string, lastName: string, passwordLastUpdated: string, username: string, verified: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2218,8 +2318,8 @@ export def "put-api-public-v1-user-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
   --admin: oneof<nothing, bool>
   email: string # format: email
   --expiration-hours: float # The validity duration for the invitatation/set password link sent to the added user. (default: 24)
@@ -2231,6 +2331,8 @@ export def "put-api-public-v1-user-user" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}") $auth.query)
   let req_body = {"admin": $admin, "email": $email, "expirationHours": $expiration_hours, "firstName": $first_name, "lastName": $last_name, "username": $username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2266,12 +2368,14 @@ export def "get-api-public-v1-user-user-contact-methods" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> record<devices: table<_selfUrl: string, deviceType: string, extId: string, label: string>, emails: table<_selfUrl: string, deviceType: string, extId: string, label: string>, phones: table<_selfUrl: string, deviceType: string, extId: string, label: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}/contact-methods") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2305,12 +2409,14 @@ export def "get-api-public-v1-user-user-contact-methods-devices" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> table<_selfUrl: string, deviceType: string, extId: string, label: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}/contact-methods/devices") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2345,13 +2451,15 @@ export def "delete-api-public-v1-user-user-contact-methods-devices-contact-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> record<_selfUrl: string, deviceType: string, extId: string, label: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user), contact_id: (encode-path-segment $contact_id)} | format pattern "/api-public/v1/user/{user}/contact-methods/devices/{contact_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2386,13 +2494,15 @@ export def "get-api-public-v1-user-user-contact-methods-devices-contact-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> table<_selfUrl: string, deviceType: string, extId: string, label: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user), contact_id: (encode-path-segment $contact_id)} | format pattern "/api-public/v1/user/{user}/contact-methods/devices/{contact_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2427,8 +2537,8 @@ export def "put-api-public-v1-user-user-contact-methods-devices-contact-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
   --chat-escalation-sound: string
   --device-label: string
   --escalation-notification-sound: string
@@ -2439,6 +2549,8 @@ export def "put-api-public-v1-user-user-contact-methods-devices-contact-id" [
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user), contact_id: (encode-path-segment $contact_id)} | format pattern "/api-public/v1/user/{user}/contact-methods/devices/{contact_id}") $auth.query)
   let req_body = {"chat_escalation_sound": $chat_escalation_sound, "device_label": $device_label, "escalation_notification_sound": $escalation_notification_sound, "resolved_notification_sound": $resolved_notification_sound} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2474,12 +2586,14 @@ export def "get-api-public-v1-user-user-contact-methods-emails" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> table<_selfUrl: string, deviceType: string, extId: string, label: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}/contact-methods/emails") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2513,8 +2627,8 @@ export def "post-api-public-v1-user-user-contact-methods-emails" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
   email: string # format: email
   label: string
   --rank: int
@@ -2523,6 +2637,8 @@ export def "post-api-public-v1-user-user-contact-methods-emails" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}/contact-methods/emails") $auth.query)
   let req_body = {"email": $email, "label": $label, "rank": $rank} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2559,13 +2675,15 @@ export def "delete-api-public-v1-user-user-contact-methods-emails-contact-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> record<_selfUrl: string, deviceType: string, extId: string, label: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user), contact_id: (encode-path-segment $contact_id)} | format pattern "/api-public/v1/user/{user}/contact-methods/emails/{contact_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2600,13 +2718,15 @@ export def "get-api-public-v1-user-user-contact-methods-emails-contact-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> table<_selfUrl: string, deviceType: string, extId: string, label: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user), contact_id: (encode-path-segment $contact_id)} | format pattern "/api-public/v1/user/{user}/contact-methods/emails/{contact_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2640,12 +2760,14 @@ export def "get-api-public-v1-user-user-contact-methods-phones" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> table<_selfUrl: string, deviceType: string, extId: string, label: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}/contact-methods/phones") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2679,8 +2801,8 @@ export def "post-api-public-v1-user-user-contact-methods-phones" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
   label: string
   phone: string
   --rank: int
@@ -2689,6 +2811,8 @@ export def "post-api-public-v1-user-user-contact-methods-phones" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}/contact-methods/phones") $auth.query)
   let req_body = {"label": $label, "phone": $phone, "rank": $rank} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2725,13 +2849,15 @@ export def "delete-api-public-v1-user-user-contact-methods-phones-contact-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> record<_selfUrl: string, deviceType: string, extId: string, label: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user), contact_id: (encode-path-segment $contact_id)} | format pattern "/api-public/v1/user/{user}/contact-methods/phones/{contact_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2766,13 +2892,15 @@ export def "get-api-public-v1-user-user-contact-methods-phones-contact-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> table<_selfUrl: string, deviceType: string, extId: string, label: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user), contact_id: (encode-path-segment $contact_id)} | format pattern "/api-public/v1/user/{user}/contact-methods/phones/{contact_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2811,12 +2939,14 @@ export def "get-api-public-v1-user-user-oncall-schedule" [
   --days-forward: float # Days to include in returned schedule (30 max) (default: 14)
   --days-skip: float # Days to skip before computing schedule to return (90 max) (default: 0)
   --step: float # Step of escalation policy (3 max) (default: 0)
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> table<overrides: list<record>, schedule: list<record>, team: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let qp = [(serialize-qp "daysForward" $days_forward "scalar") (serialize-qp "daysSkip" $days_skip "scalar") (serialize-qp "step" $step "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}/oncall/schedule") $qp $auth.query)
   let accept_val = "application/json"
@@ -2851,12 +2981,14 @@ export def "get-api-public-v1-user-user-policies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> record<policies: table<contactType: string, extId: string, order: int, timeout: int>, userId: int, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}/policies") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2890,12 +3022,14 @@ export def "get-api-public-v1-user-user-teams" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> record<teams: table<_adminsUrl: string, _membersUrl: string, _policiesUrl: string, _selfUrl: string, name: string, slug: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}/teams") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2932,12 +3066,14 @@ export def "get-api-public-v2-team-team-oncall-schedule" [
   --days-forward: float # Days to include in returned schedule (30 max) (default: 14)
   --days-skip: float # Days to skip before computing schedule to return (90 max) (default: 0)
   --step: float # Step of escalation policy (3 max) (default: 0)
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> record<schedules: table<overrides: list, policy: record, schedule: list>, team: record<name: string, slug: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let qp = [(serialize-qp "daysForward" $days_forward "scalar") (serialize-qp "daysSkip" $days_skip "scalar") (serialize-qp "step" $step "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v2/team/{team}/oncall/schedule") $qp $auth.query)
   let accept_val = "application/json"
@@ -2975,12 +3111,14 @@ export def "get-api-public-v2-user-user-oncall-schedule" [
   --days-forward: float # Days to include in returned schedule (30 max) (default: 14)
   --days-skip: float # Days to skip before computing schedule to return (90 max) (default: 0)
   --step: float # Step of escalation policy (3 max) (default: 0)
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> record<teamSchedules: table<schedules: list, team: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let qp = [(serialize-qp "daysForward" $days_forward "scalar") (serialize-qp "daysSkip" $days_skip "scalar") (serialize-qp "step" $step "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v2/user/{user}/oncall/schedule") $qp $auth.query)
   let accept_val = "application/json"
@@ -3025,11 +3163,13 @@ export def "get-api-reporting-v1-incidents" [
   --host: string # The host involved in the incident Multiple values can be separated with commas.
   --service: string # The service involved in the incident (if any) Multiple values can be separated with commas.
   --current-phase: string # The current phase of the incident "resolved", "triggered" or "acknowledged". Multiple values can be separated with commas.
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> table<incidents: list<record>, limit: float, offset: float, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "entityId" $entity_id "scalar") (serialize-qp "incidentNumber" $incident_number "scalar") (serialize-qp "startedAfter" $started_after "scalar") (serialize-qp "startedBefore" $started_before "scalar") (serialize-qp "host" $host "scalar") (serialize-qp "service" $service "scalar") (serialize-qp "currentPhase" $current_phase "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api-reporting/v1/incidents" $qp $auth.query)
   let accept_val = "application/json"
@@ -3067,12 +3207,14 @@ export def "get-api-reporting-v1-team-team-oncall-log" [
   --start: string # Return shift changes occurring after this timestamp. The default is the start of the day at midnight. Specify the timestamp in ISO8601 format (format: date-time)
   --end: string # Return shift changes occurring before this timestamp. The default is the end of the day at 11:59:59. Specify the timestamp in ISO8601 format (format: date-time)
   --user-name: string # The VictorOps user ID. Return shift changes occurring during the interval specified for this user. Without this parameter, all relevant users (with respect to the specified interval) are returned
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> record<end: string, start: string, teamSlug: string, userLogs: table<adjustedTotal: record, log: list, total: record, userId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "userName" $user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-reporting/v1/team/{team}/oncall/log") $qp $auth.query)
   let accept_val = "application/json"
@@ -3116,11 +3258,13 @@ export def "get-api-reporting-v2-incidents" [
   --service: string # The service involved in the incident (if any) Multiple values can be separated with commas.
   --current-phase: string # The current phase of the incident "resolved", "triggered" or "acknowledged". Multiple values can be separated with commas. By default, response contains only "resolved" incidents
   --routing-key: string # The original routing of the incident
-  --x-vo-api-id: string # Your API ID
-  --x-vo-api-key: string # Your API Key
+  --x-vo-api-id: string # Your API ID (required)
+  --x-vo-api-key: string # Your API Key (required)
 ]: nothing -> record<incidents: table<alertCount: float, currentPhase: string, entityId: string, host: string, incidentNumber: string, lastAlertId: string, lastAlertTime: string, pagedPolicies: list, pagedTeams: list, pagedUsers: list, service: string, startTime: string, transitions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_vo_api_id == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Id' missing: pass --x-vo-api-id" } }
+  if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "entityId" $entity_id "scalar") (serialize-qp "incidentNumber" $incident_number "scalar") (serialize-qp "startedAfter" $started_after "scalar") (serialize-qp "startedBefore" $started_before "scalar") (serialize-qp "host" $host "scalar") (serialize-qp "service" $service "scalar") (serialize-qp "currentPhase" $current_phase "scalar") (serialize-qp "routingKey" $routing_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api-reporting/v2/incidents" $qp $auth.query)
   let accept_val = "application/json"

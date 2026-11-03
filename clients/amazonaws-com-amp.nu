@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -160,7 +160,7 @@ export def "create-alert-manager-definition" [
   --x-amz-signed-headers: string
   --client-token: string # An identifier used to ensure the idempotency of a write request.
   data: string # The alert manager definition data.
-]: any -> record<status: record<statusCode: record, statusReason: record>> {
+]: any -> record<status: record<statusCode: string, statusReason: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -255,7 +255,7 @@ export def "describe-alert-manager-definition" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<alertManagerDefinition: record<createdAt: record, data: record, modifiedAt: record, status: record<statusCode: record, statusReason: record>>> {
+]: nothing -> record<alertManagerDefinition: record<createdAt: string, data: string, modifiedAt: string, status: record<statusCode: string, statusReason: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workspace_id | is-empty) { error make --unspanned { msg: "path parameter 'workspaceId' must be non-empty" } }
@@ -302,7 +302,7 @@ export def "put-alert-manager-definition" [
   --x-amz-signed-headers: string
   --client-token: string # An identifier used to ensure the idempotency of a write request.
   data: string # The alert manager definition data.
-]: any -> record<status: record<statusCode: record, statusReason: record>> {
+]: any -> record<status: record<statusCode: string, statusReason: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -352,7 +352,7 @@ export def "create-logging-configuration" [
   --x-amz-signed-headers: string
   --client-token: string # An identifier used to ensure the idempotency of a write request.
   log_group_arn: string # The ARN of the CW log group to which the vended log data will be published.
-]: any -> record<status: record<statusCode: record, statusReason: record>> {
+]: any -> record<status: record<statusCode: string, statusReason: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -447,7 +447,7 @@ export def "describe-logging-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<loggingConfiguration: record<createdAt: record, logGroupArn: record, modifiedAt: record, status: record<statusCode: record, statusReason: record>, workspace: record>> {
+]: nothing -> record<loggingConfiguration: record<createdAt: string, logGroupArn: string, modifiedAt: string, status: record<statusCode: string, statusReason: string>, workspace: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workspace_id | is-empty) { error make --unspanned { msg: "path parameter 'workspaceId' must be non-empty" } }
@@ -494,7 +494,7 @@ export def "update-logging-configuration" [
   --x-amz-signed-headers: string
   --client-token: string # An identifier used to ensure the idempotency of a write request.
   log_group_arn: string # The ARN of the CW log group to which the vended log data will be published.
-]: any -> record<status: record<statusCode: record, statusReason: record>> {
+]: any -> record<status: record<statusCode: string, statusReason: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -546,7 +546,7 @@ export def "create-rule-groups-namespace" [
   data: string # The rule groups namespace data.
   name: string # The namespace name that the rule group belong to.
   --tags: record # The list of tags assigned to the resource.
-]: any -> record<arn: record, name: record, status: record<statusCode: record, statusReason: record>, tags: record> {
+]: any -> record<arn: string, name: string, status: record<statusCode: string, statusReason: string>, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -597,7 +597,7 @@ export def "list-rule-groups-namespaces" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<nextToken: record, ruleGroupsNamespaces: record> {
+]: nothing -> record<nextToken: string, ruleGroupsNamespaces: table<arn: string, createdAt: string, modifiedAt: string, name: string, status: record, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workspace_id | is-empty) { error make --unspanned { msg: "path parameter 'workspaceId' must be non-empty" } }
@@ -645,7 +645,7 @@ export def "create-workspace" [
   --alias: string # A user-assigned workspace alias.
   --client-token: string # An identifier used to ensure the idempotency of a write request.
   --tags: record # The list of tags assigned to the resource.
-]: any -> record<arn: record, status: record<statusCode: record>, tags: record, workspaceId: record> {
+]: any -> record<arn: string, status: record<statusCode: string>, tags: record, workspaceId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -694,7 +694,7 @@ export def "list-workspaces" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<nextToken: record, workspaces: record> {
+]: nothing -> record<nextToken: string, workspaces: table<alias: string, arn: string, createdAt: string, status: record, tags: record, workspaceId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alias" $alias "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -789,7 +789,7 @@ export def "describe-rule-groups-namespace" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ruleGroupsNamespace: record<arn: record, createdAt: record, data: record, modifiedAt: record, name: record, status: record<statusCode: record, statusReason: record>, tags: record>> {
+]: nothing -> record<ruleGroupsNamespace: record<arn: string, createdAt: string, data: string, modifiedAt: string, name: string, status: record<statusCode: string, statusReason: string>, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workspace_id | is-empty) { error make --unspanned { msg: "path parameter 'workspaceId' must be non-empty" } }
@@ -838,7 +838,7 @@ export def "put-rule-groups-namespace" [
   --x-amz-signed-headers: string
   --client-token: string # An identifier used to ensure the idempotency of a write request.
   data: string # The rule groups namespace data.
-]: any -> record<arn: record, name: record, status: record<statusCode: record, statusReason: record>, tags: record> {
+]: any -> record<arn: string, name: string, status: record<statusCode: string, statusReason: string>, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -934,7 +934,7 @@ export def "describe-workspace" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<workspace: record<alias: record, arn: record, createdAt: record, prometheusEndpoint: record, status: record<statusCode: record>, tags: record, workspaceId: record>> {
+]: nothing -> record<workspace: record<alias: string, arn: string, createdAt: string, prometheusEndpoint: string, status: record<statusCode: string>, tags: record, workspaceId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workspace_id | is-empty) { error make --unspanned { msg: "path parameter 'workspaceId' must be non-empty" } }
@@ -1066,7 +1066,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # One or more tag keys
+  --tag-keys: list # One or more tag keys (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1078,6 +1078,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"

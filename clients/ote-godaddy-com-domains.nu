@@ -122,7 +122,12 @@ def accept-completer [] { ["application/javascript" "application/json" "applicat
 def check-type-completer [] { ["FAST" "FULL" "fast" "full"] }
 def entity-type-completer [] { ["ABORIGINAL" "ASSOCIATION" "CITIZEN" "CORPORATION" "EDUCATIONAL" "GOVERNMENT" "HOSPITAL" "INDIAN_BAND" "LEGAL_REPRESENTATIVE" "LIBRARY_ARCHIVE_MUSEUM" "MARK_REGISTERED" "MARK_TRADE" "PARTNERSHIP" "POLITICAL_PARTY" "RESIDENT_PERMANENT" "TRUST" "UNION"] }
 def country-completer [] { ["AC" "AD" "AE" "AF" "AG" "AI" "AL" "AM" "AO" "AQ" "AR" "AS" "AT" "AU" "AW" "AX" "AZ" "BA" "BB" "BD" "BE" "BF" "BG" "BH" "BI" "BJ" "BM" "BN" "BO" "BQ" "BR" "BS" "BT" "BV" "BW" "BY" "BZ" "CA" "CC" "CD" "CF" "CG" "CH" "CI" "CK" "CL" "CM" "CN" "CO" "CR" "CV" "CW" "CX" "CY" "CZ" "DE" "DJ" "DK" "DM" "DO" "DZ" "EC" "EE" "EG" "EH" "ER" "ES" "ET" "FI" "FJ" "FK" "FM" "FO" "FR" "GA" "GB" "GD" "GE" "GF" "GG" "GH" "GI" "GL" "GM" "GN" "GP" "GQ" "GR" "GS" "GT" "GU" "GW" "GY" "HK" "HM" "HN" "HR" "HT" "HU" "ID" "IE" "IL" "IM" "IN" "IO" "IQ" "IS" "IT" "JE" "JM" "JO" "JP" "KE" "KG" "KH" "KI" "KM" "KN" "KR" "KV" "KW" "KY" "KZ" "LA" "LB" "LC" "LI" "LK" "LR" "LS" "LT" "LU" "LV" "LY" "MA" "MC" "MD" "ME" "MG" "MH" "MK" "ML" "MM" "MN" "MO" "MP" "MQ" "MR" "MS" "MT" "MU" "MV" "MW" "MX" "MY" "MZ" "NA" "NC" "NE" "NF" "NG" "NI" "NL" "NO" "NP" "NR" "NU" "NZ" "OM" "PA" "PE" "PF" "PG" "PH" "PK" "PL" "PM" "PN" "PR" "PS" "PT" "PW" "PY" "QA" "RE" "RO" "RS" "RU" "RW" "SA" "SB" "SC" "SE" "SG" "SH" "SI" "SJ" "SK" "SL" "SM" "SN" "SO" "SR" "ST" "SV" "SX" "SZ" "TC" "TD" "TF" "TG" "TH" "TJ" "TK" "TL" "TM" "TN" "TO" "TP" "TR" "TT" "TV" "TW" "TZ" "UA" "UG" "UM" "US" "UY" "UZ" "VA" "VC" "VE" "VG" "VI" "VN" "VU" "WF" "WS" "YE" "YT" "ZA" "ZM" "ZW"] }
-def type-completer [] { ["MASKED" "REDIRECT_PERMANENT" "REDIRECT_TEMPORARY"] }
+def type-completer [] { ["A" "AAAA" "CNAME" "MX" "NS" "SOA" "SRV" "TXT"] }
+def type-completer-1 [] { ["A" "AAAA" "CNAME" "MX" "SRV" "TXT"] }
+def type-completer-2 [] { ["MASKED" "REDIRECT_PERMANENT" "REDIRECT_TEMPORARY"] }
+def type-completer-3 [] { ["AUTO_RENEWAL" "BACKORDER" "BACKORDER_PURCHASE" "EXPIRY" "PREMIUM" "PRIVACY_PURCHASE" "REDEEM" "REGISTER" "RENEW" "TRADE" "TRANSFER"] }
+def type-completer-4 [] { ["AUTH_CODE_PURCHASE" "AUTH_CODE_REGENERATE" "BACKORDER_DELETE" "BACKORDER_PURCHASE" "BACKORDER_UPDATE" "DNSSEC_CREATE" "DNSSEC_DELETE" "DOMAIN_DELETE" "DOMAIN_UPDATE" "DOMAIN_UPDATE_CONTACTS" "DOMAIN_UPDATE_NAME_SERVERS" "MIGRATE" "PRIVACY_DELETE" "PRIVACY_PURCHASE" "REDEEM" "REGISTER" "RENEW" "RENEW_UNDO" "TRADE" "TRADE_CANCEL" "TRADE_PURCHASE" "TRADE_PURCHASE_AUTH_TEXT_MESSAGE" "TRADE_RESEND_AUTH_EMAIL" "TRANSFER" "TRANSFER_IN_CANCEL" "TRANSFER_OUT_ACCEPT" "TRANSFER_OUT_REJECT" "TRANSFER_OUT_REQUESTED" "TRANSIT"] }
+def type-completer-5 [] { ["AUTH_CODE_PURCHASE" "AUTH_CODE_REGENERATE" "AUTO_RENEWAL" "BACKORDER_DELETE" "BACKORDER_PURCHASE" "BACKORDER_UPDATE" "DNSSEC_CREATE" "DNSSEC_DELETE" "DNS_VERIFICATION" "DOMAIN_DELETE" "DOMAIN_UPDATE" "DOMAIN_UPDATE_CONTACTS" "DOMAIN_UPDATE_NAME_SERVERS" "EXPIRY" "ICANN_VERIFICATION" "MIGRATE" "MIGRATE_IN" "PREMIUM" "PRIVACY_DELETE" "PRIVACY_PURCHASE" "REDEEM" "REGISTER" "RENEW" "RENEW_UNDO" "TRADE" "TRADE_CANCEL" "TRADE_PURCHASE" "TRADE_PURCHASE_AUTH_TEXT_MESSAGE" "TRADE_RESEND_AUTH_EMAIL" "TRANSFER" "TRANSFER_IN" "TRANSFER_IN_CANCEL" "TRANSFER_OUT" "TRANSFER_OUT_ACCEPT" "TRANSFER_OUT_REJECT" "TRANSFER_OUT_REQUESTED" "TRANSIT"] }
 def status-completer [] { ["ACTIVE" "CANCELLED"] }
 
 # List all available API commands with their parameters
@@ -208,13 +213,15 @@ export def "get-agreement" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --tlds: list<string> # list of TLDs whose legal agreements are to be retrieved
-  --privacy: oneof<nothing, bool> # Whether or not privacy has been requested
+  --tlds: list<string> # list of TLDs whose legal agreements are to be retrieved (required)
+  --privacy: oneof<nothing, bool> # Whether or not privacy has been requested (required)
   --for-transfer: oneof<nothing, bool> # Whether or not domain tranfer has been requested
-  --x-market-id: string # Unique identifier of the Market used to retrieve/translate Legal Agreements
+  --x-market-id: string # Unique identifier of the Market used to retrieve/translate Legal Agreements (format: bcp-47, default: en-US)
 ]: nothing -> table<agreementKey: string, content: string, title: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($tlds == null) { error make --unspanned { msg: "required query parameter 'tlds' missing: pass --tlds" } }
+  if ($privacy == null) { error make --unspanned { msg: "required query parameter 'privacy' missing: pass --privacy" } }
   let qp = [(serialize-qp "tlds" $tlds "csv") (serialize-qp "privacy" $privacy "scalar") (serialize-qp "forTransfer" $for_transfer "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/domains/agreements" $qp $auth.query)
   let accept_val = ($accept | default "application/javascript")
@@ -250,12 +257,13 @@ export def "available" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --domain: string # Domain name whose availability is to be checked
+  --domain: string # Domain name whose availability is to be checked (required)
   --check-type: string@check-type-completer # Optimize for time ('FAST') or accuracy ('FULL') (default: FAST)
   --for-transfer: oneof<nothing, bool> # Whether or not to include domains available for transfer. If set to True, checkType is ignored (default: false)
 ]: nothing -> record<available: bool, currency: string, definitive: bool, domain: string, period: int, price: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain == null) { error make --unspanned { msg: "required query parameter 'domain' missing: pass --domain" } }
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "checkType" $check_type "scalar") (serialize-qp "forTransfer" $for_transfer "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/domains/available" $qp $auth.query)
   let accept_val = ($accept | default "application/javascript")
@@ -335,7 +343,7 @@ export def "contacts-validate" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --market-id: string # MarketId in which the request is being made, and for which responses should be localized (format: bcp-47, default: en-US)
-  --x-private-label-id: int # PrivateLabelId to operate as, if different from JWT
+  --x-private-label-id: int # PrivateLabelId to operate as, if different from JWT (default: 1)
   --contact-admin: any # shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
   --contact-billing: any # shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
   --contact-presence: any # shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
@@ -429,7 +437,7 @@ export def "purchase" [
 #
 # GET /v1/domains/purchase/schema/{tld}
 # operationId: schema
-export def "schema" [
+export def "get-v1-domains-purchase-schema-tld" [
   tld: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -637,7 +645,7 @@ export def "cancel" [
 #
 # GET /v1/domains/{domain}
 # operationId: get
-export def "get" [
+export def "get-v1-domains-domain" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -678,7 +686,7 @@ export def "get" [
 # PATCH /v1/domains/{domain}
 # operationId: update
 # --consent shape: {agreedAt: string, agreedBy: string, agreementKeys: list<string>}
-export def "update" [
+export def "patch-v1-domains-domain" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -948,7 +956,7 @@ export def "record-replace" [
 # operationId: recordReplaceType
 export def "record-replace-type" [
   domain: string
-  type: string
+  type: string@type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -993,7 +1001,7 @@ export def "record-replace-type" [
 # operationId: recordDeleteTypeName
 export def "record-delete-type-name" [
   domain: string
-  type: string
+  type: string@type-completer-1
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1036,7 +1044,7 @@ export def "record-delete-type-name" [
 # operationId: recordGet
 export def "record-get" [
   domain: string
-  type: string
+  type: string@type-completer
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1083,7 +1091,7 @@ export def "record-get" [
 # operationId: recordReplaceTypeName
 export def "record-replace-type-name" [
   domain: string
-  type: string
+  type: string@type-completer
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1360,7 +1368,7 @@ export def "domains-forwards-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --mask: any # shape: {description?: string, keywords?: string, title?: string}
-  type: string@type-completer # The type of fowarding to implementMASKED - Prevents the forwarded domain or subdomain URL from displaying in the browser's address bar.REDIRECT_PERMANENT* - Redirects to the url you specified in the forwardTo field using a `301 Moved Permanently` HTTP response. The HTTP 301 response code tells user-agents (including search engines) that the location has permanently moved.REDIRECT_TEMPORARY - Redirects to the url you specified in the forwardTo field using a `302 Found` HTTP response. The HTTP 302 response code tells user-agents (including search engines) that the location has temporarily moved. (default: REDIRECT_PERMANENT)
+  type: string@type-completer-2 # The type of fowarding to implementMASKED - Prevents the forwarded domain or subdomain URL from displaying in the browser's address bar.REDIRECT_PERMANENT* - Redirects to the url you specified in the forwardTo field using a `301 Moved Permanently` HTTP response. The HTTP 301 response code tells user-agents (including search engines) that the location has permanently moved.REDIRECT_TEMPORARY - Redirects to the url you specified in the forwardTo field using a `302 Found` HTTP response. The HTTP 302 response code tells user-agents (including search engines) that the location has temporarily moved. (default: REDIRECT_PERMANENT)
   url: string # Forwards http(s) traffic to this destination url (ex. http://www.somedomain.com/) (format: url)
 ]: any -> any {
   let input = $in
@@ -1405,7 +1413,7 @@ export def "domains-forwards-put" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --mask: any # shape: {description?: string, keywords?: string, title?: string}
-  type: string@type-completer # The type of fowarding to implementMASKED - Prevents the forwarded domain or subdomain URL from displaying in the browser's address bar.REDIRECT_PERMANENT* - Redirects to the url you specified in the forwardTo field using a `301 Moved Permanently` HTTP response. The HTTP 301 response code tells user-agents (including search engines) that the location has permanently moved.REDIRECT_TEMPORARY - Redirects to the url you specified in the forwardTo field using a `302 Found` HTTP response. The HTTP 302 response code tells user-agents (including search engines) that the location has temporarily moved. (default: REDIRECT_PERMANENT)
+  type: string@type-completer-2 # The type of fowarding to implementMASKED - Prevents the forwarded domain or subdomain URL from displaying in the browser's address bar.REDIRECT_PERMANENT* - Redirects to the url you specified in the forwardTo field using a `301 Moved Permanently` HTTP response. The HTTP 301 response code tells user-agents (including search engines) that the location has permanently moved.REDIRECT_TEMPORARY - Redirects to the url you specified in the forwardTo field using a `302 Found` HTTP response. The HTTP 302 response code tells user-agents (including search engines) that the location has temporarily moved. (default: REDIRECT_PERMANENT)
   url: string # Forwards http(s) traffic to this destination url (ex. http://www.somedomain.com/) (format: url)
 ]: any -> any {
   let input = $in
@@ -1522,12 +1530,13 @@ export def "put-v2-customers-customer-id-domains-notifications-opt-in" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --types: list<string> # The notification types that should be opted in
+  --types: list<string> # The notification types that should be opted in (required)
   --x-request-id: string # A client provided identifier for tracking this request.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
+  if ($types == null) { error make --unspanned { msg: "required query parameter 'types' missing: pass --types" } }
   let qp = [(serialize-qp "types" $types "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/v2/customers/{customer_id}/domains/notifications/optIn") $qp $auth.query)
   let accept_val = "application/json"
@@ -1553,7 +1562,7 @@ export def "put-v2-customers-customer-id-domains-notifications-opt-in" [
 # GET /v2/customers/{customerId}/domains/notifications/schemas/{type}
 export def "get-v2-customers-customer-id-domains-notifications-schemas-type" [
   customer_id: string
-  type: string
+  type: string@type-completer-3
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1716,7 +1725,7 @@ export def "get-v2-customers-customer-id-domains-domain-actions" [
 export def "delete-v2-customers-customer-id-domains-domain-actions-type" [
   customer_id: string
   domain: string
-  type: string
+  type: string@type-completer-4
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1758,7 +1767,7 @@ export def "delete-v2-customers-customer-id-domains-domain-actions-type" [
 export def "get-v2-customers-customer-id-domains-domain-actions-type" [
   customer_id: string
   domain: string
-  type: string
+  type: string@type-completer-5
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1854,13 +1863,14 @@ export def "post-v2-customers-customer-id-domains-domain-transfer-out" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --registrar: string # Registrar tag to push transfer to
+  --registrar: string # Registrar tag to push transfer to (required)
   --x-request-id: string # A client provided identifier for tracking this request.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
   if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
+  if ($registrar == null) { error make --unspanned { msg: "required query parameter 'registrar' missing: pass --registrar" } }
   let qp = [(serialize-qp "registrar" $registrar "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), domain: (encode-path-segment $domain)} | format pattern "/v2/customers/{customer_id}/domains/{domain}/transferOut") $qp $auth.query)
   let accept_val = "application/json"

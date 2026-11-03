@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -158,10 +158,11 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
 ]: nothing -> record<value: table<display: record, name: string, origin: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.HybridCompute/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -195,11 +196,12 @@ export def "machines-list-by-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<nextLink: string, value: table<identity: record, properties: record, location: string, tags: record>> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> record<nextLink: string, value: table<identity: record, properties: record, location: string, tags: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.HybridCompute/machines") $qp $auth.query)
   let accept_val = "application/json"
@@ -234,12 +236,13 @@ export def "machines-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<nextLink: string, value: table<identity: record, properties: record, location: string, tags: record>> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> record<nextLink: string, value: table<identity: record, properties: record, location: string, tags: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridCompute/machines") $qp $auth.query)
   let accept_val = "application/json"
@@ -275,13 +278,14 @@ export def "machines-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<additionalInfo: table<info: record, type: string>, code: string, details: list<any>, message: string, target: string> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridCompute/machines/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -317,14 +321,15 @@ export def "machines-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --expand: string@expand-completer # The expand expression to apply on the operation.
-]: nothing -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<agentVersion: string, clientPublicKey: string, displayName: string, errorDetails: list<record>, extensions: list<record>, lastStatusChange: string, locationData: record<city: string, countryOrRegion: string, district: string, name: string>, machineFqdn: string, osName: string, osProfile: record<computerName: string>, osVersion: string, provisioningState: string, status: string, vmId: string>, location: string, tags: record> {
+]: nothing -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<agentVersion: string, clientPublicKey: string, displayName: string, errorDetails: list<record>, extensions: list<record>, lastStatusChange: string, locationData: record<city: string, countryOrRegion: string, district: string, name: string>, machineFqdn: string, osName: string, osProfile: record<computerName: string>, osVersion: string, provisioningState: string, status: string, vmId: string>, location: string, tags: record, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridCompute/machines/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -347,6 +352,8 @@ export def "machines-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridCompute/machines/{name}
 # operationId: Machines_Update
+# --identity shape: {type?: "SystemAssigned"}
+# --properties shape: {locationData?: record}
 export def "machines-update" [
   subscription_id: string
   resource_group_name: string
@@ -360,17 +367,18 @@ export def "machines-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-  --identity: any # Hybrid Compute Machine Managed Identity
-  --properties: any # Hybrid Compute Machine properties
+  --api-version: string # The API version to use for this operation. (required)
+  --identity: any # Hybrid Compute Machine Managed Identity — shape: {type?: "SystemAssigned"}
+  --properties: any # Hybrid Compute Machine properties — shape: {locationData?: record}
   --tags: record # Resource tags
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<agentVersion: string, clientPublicKey: string, displayName: string, errorDetails: list<record>, extensions: list<record>, lastStatusChange: string, locationData: record<city: string, countryOrRegion: string, district: string, name: string>, machineFqdn: string, osName: string, osProfile: record<computerName: string>, osVersion: string, provisioningState: string, status: string, vmId: string>, location: string, tags: record> {
+]: any -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<agentVersion: string, clientPublicKey: string, displayName: string, errorDetails: list<record>, extensions: list<record>, lastStatusChange: string, locationData: record<city: string, countryOrRegion: string, district: string, name: string>, machineFqdn: string, osName: string, osProfile: record<computerName: string>, osVersion: string, provisioningState: string, status: string, vmId: string>, location: string, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridCompute/machines/{name}") $qp $auth.query)
   let req_body = {"identity": $identity, "properties": $properties, "tags": $tags} | compact
@@ -395,6 +403,8 @@ export def "machines-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridCompute/machines/{name}
 # operationId: Machines_CreateOrUpdate
+# --identity shape: {type?: "SystemAssigned"}
+# --properties shape: {clientPublicKey?: string, extensions?: list, locationData?: record, osProfile?: any, vmId?: string}
 export def "machines-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -408,18 +418,19 @@ export def "machines-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-  --identity: any
-  --properties: any # Hybrid Compute Machine properties
+  --api-version: string # The API version to use for this operation. (required)
+  --identity: any # Identity for the resource. — shape: {type?: "SystemAssigned"}
+  --properties: any # Hybrid Compute Machine properties — shape: {clientPublicKey?: string, extensions?: list, locationData?: record, osProfile?: any, vmId?: string}
   location: string # The geo-location where the resource lives
   --tags: record # Resource tags.
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<agentVersion: string, clientPublicKey: string, displayName: string, errorDetails: list<record>, extensions: list<record>, lastStatusChange: string, locationData: record<city: string, countryOrRegion: string, district: string, name: string>, machineFqdn: string, osName: string, osProfile: record<computerName: string>, osVersion: string, provisioningState: string, status: string, vmId: string>, location: string, tags: record> {
+]: any -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<agentVersion: string, clientPublicKey: string, displayName: string, errorDetails: list<record>, extensions: list<record>, lastStatusChange: string, locationData: record<city: string, countryOrRegion: string, district: string, name: string>, machineFqdn: string, osName: string, osProfile: record<computerName: string>, osVersion: string, provisioningState: string, status: string, vmId: string>, location: string, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridCompute/machines/{name}") $qp $auth.query)
   let req_body = {"identity": $identity, "properties": $properties, "location": $location, "tags": $tags} | compact
@@ -458,13 +469,14 @@ export def "machine-extensions-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # The expand expression to apply on the operation.
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: record>> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridCompute/machines/{name}/extensions") $qp $auth.query)
   let accept_val = "application/json"
@@ -501,7 +513,7 @@ export def "machine-extensions-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -509,6 +521,7 @@ export def "machine-extensions-delete" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($extension_name | is-empty) { error make --unspanned { msg: "path parameter 'extensionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), extension_name: (encode-path-segment $extension_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridCompute/machines/{name}/extensions/{extension_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -545,14 +558,15 @@ export def "machine-extensions-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<properties: record<autoUpgradeMinorVersion: bool, forceUpdateTag: string, instanceView: record<name: string, status: record, type: string, typeHandlerVersion: string>, protectedSettings: record, provisioningState: string, publisher: string, settings: record, type: string, typeHandlerVersion: string>, location: string, tags: record> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> record<properties: record<autoUpgradeMinorVersion: bool, forceUpdateTag: string, instanceView: record<name: string, status: record, type: string, typeHandlerVersion: string>, protectedSettings: record, provisioningState: string, publisher: string, settings: record, type: string, typeHandlerVersion: string>, location: string, tags: record, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($extension_name | is-empty) { error make --unspanned { msg: "path parameter 'extensionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), extension_name: (encode-path-segment $extension_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridCompute/machines/{name}/extensions/{extension_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -575,6 +589,7 @@ export def "machine-extensions-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridCompute/machines/{name}/extensions/{extensionName}
 # operationId: MachineExtensions_Update
+# --properties shape: {autoUpgradeMinorVersion?: bool, forceUpdateTag?: string, protectedSettings?: record, publisher?: string, settings?: record, type?: string, typeHandlerVersion?: string}
 export def "machine-extensions-update" [
   subscription_id: string
   resource_group_name: string
@@ -589,10 +604,10 @@ export def "machine-extensions-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-  --properties: any # Describes Machine Extension Update Properties.
+  --api-version: string # The API version to use for this operation. (required)
+  --properties: any # Describes Machine Extension Update Properties. — shape: {autoUpgradeMinorVersion?: bool, forceUpdateTag?: string, protectedSettings?: record, publisher?: string, settings?: record, type?: string, typeHandlerVersion?: string}
   --tags: record # Resource tags
-]: any -> record<properties: record<autoUpgradeMinorVersion: bool, forceUpdateTag: string, instanceView: record<name: string, status: record, type: string, typeHandlerVersion: string>, protectedSettings: record, provisioningState: string, publisher: string, settings: record, type: string, typeHandlerVersion: string>, location: string, tags: record> {
+]: any -> record<properties: record<autoUpgradeMinorVersion: bool, forceUpdateTag: string, instanceView: record<name: string, status: record, type: string, typeHandlerVersion: string>, protectedSettings: record, provisioningState: string, publisher: string, settings: record, type: string, typeHandlerVersion: string>, location: string, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -600,6 +615,7 @@ export def "machine-extensions-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($extension_name | is-empty) { error make --unspanned { msg: "path parameter 'extensionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), extension_name: (encode-path-segment $extension_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridCompute/machines/{name}/extensions/{extension_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -624,6 +640,7 @@ export def "machine-extensions-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridCompute/machines/{name}/extensions/{extensionName}
 # operationId: MachineExtensions_CreateOrUpdate
+# --properties shape: {autoUpgradeMinorVersion?: bool, forceUpdateTag?: string, instanceView?: any, protectedSettings?: record, publisher?: string, settings?: record, type?: string, typeHandlerVersion?: string}
 export def "machine-extensions-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -638,11 +655,11 @@ export def "machine-extensions-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-  --properties: any # Describes Machine Extension Properties.
+  --api-version: string # The API version to use for this operation. (required)
+  --properties: any # Describes Machine Extension Properties. — shape: {autoUpgradeMinorVersion?: bool, forceUpdateTag?: string, instanceView?: any, protectedSettings?: record, publisher?: string, settings?: record, type?: string, typeHandlerVersion?: string}
   location: string # The geo-location where the resource lives
   --tags: record # Resource tags.
-]: any -> record<properties: record<autoUpgradeMinorVersion: bool, forceUpdateTag: string, instanceView: record<name: string, status: record, type: string, typeHandlerVersion: string>, protectedSettings: record, provisioningState: string, publisher: string, settings: record, type: string, typeHandlerVersion: string>, location: string, tags: record> {
+]: any -> record<properties: record<autoUpgradeMinorVersion: bool, forceUpdateTag: string, instanceView: record<name: string, status: record, type: string, typeHandlerVersion: string>, protectedSettings: record, provisioningState: string, publisher: string, settings: record, type: string, typeHandlerVersion: string>, location: string, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -650,6 +667,7 @@ export def "machine-extensions-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($extension_name | is-empty) { error make --unspanned { msg: "path parameter 'extensionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), extension_name: (encode-path-segment $extension_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridCompute/machines/{name}/extensions/{extension_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -674,6 +692,7 @@ export def "machine-extensions-create-or-update" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridCompute/machines/{name}/reconnect
 # operationId: Machines_Reconnect
+# --properties shape: {clientPublicKey?: string, vmId?: string}
 export def "machines-reconnect" [
   subscription_id: string
   resource_group_name: string
@@ -687,15 +706,16 @@ export def "machines-reconnect" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-  --properties: any # Hybrid Compute Machine properties
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<agentVersion: string, clientPublicKey: string, displayName: string, errorDetails: list<record>, extensions: list<record>, lastStatusChange: string, locationData: record<city: string, countryOrRegion: string, district: string, name: string>, machineFqdn: string, osName: string, osProfile: record<computerName: string>, osVersion: string, provisioningState: string, status: string, vmId: string>, location: string, tags: record> {
+  --api-version: string # The API version to use for this operation. (required)
+  --properties: any # Hybrid Compute Machine properties — shape: {clientPublicKey?: string, vmId?: string}
+]: any -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<agentVersion: string, clientPublicKey: string, displayName: string, errorDetails: list<record>, extensions: list<record>, lastStatusChange: string, locationData: record<city: string, countryOrRegion: string, district: string, name: string>, machineFqdn: string, osName: string, osProfile: record<computerName: string>, osVersion: string, provisioningState: string, status: string, vmId: string>, location: string, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridCompute/machines/{name}/reconnect") $qp $auth.query)
   let req_body = {"properties": $properties} | compact

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "authentication-token" => { {scheme: $scheme, headers: {Authentication-Token: $token_val}, query: "", location: "header"} }
+    "authentication-token" => { {scheme: $scheme, headers: {"Authentication-Token": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -132,11 +132,13 @@ export def "get-forecast" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lat: float # The latitude for a location. Valid input is a number between -90 and 90.
-  --lng: float # The longitude for a location. Valid input is a number between -180 and 180.
+  --lat: float # The latitude for a location. Valid input is a number between -90 and 90. (required)
+  --lng: float # The longitude for a location. Valid input is a number between -180 and 180. (required)
 ]: nothing -> record<hours: table<airTemperature: list, swellDirection: list, swellHeight: list, swellPeriod: list, time: string, waterTemperature: list, waveDirection: list, waveHeight: list, wavePeriod: list, windDirection: list, windSpeed: list>, meta: record<dailyQuota: int, lat: float, lng: float, requestCount: int>> {
   let auth = (build-auth $token ($auth_scheme | default "authentication-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($lat == null) { error make --unspanned { msg: "required query parameter 'lat' missing: pass --lat" } }
+  if ($lng == null) { error make --unspanned { msg: "required query parameter 'lng' missing: pass --lng" } }
   let qp = [(serialize-qp "lat" $lat "scalar") (serialize-qp "lng" $lng "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/forecast" $qp $auth.query)
   let accept_val = "application/json"

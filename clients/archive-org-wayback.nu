@@ -102,7 +102,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # Completers for enum parameters
 def closest-completer [] { ["after" "before" "either"] }
 def status-code-completer [] { ["200" "201" "202" "203" "204" "205" "206" "300" "301" "302" "303" "304" "305" "306" "307" "308" "400" "401" "402" "403" "404" "405" "406" "407" "408" "409" "410" "411" "412" "413" "414" "415" "416" "417" "418" "421" "426" "428" "429" "431" "500" "501" "502" "503" "504" "505" "506" "507" "511"] }
-def accept-completer [] { ["application/javascript" "application/json"] }
+def accept-completer [] { ["applcation/json" "application/javascript" "application/json"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -139,19 +139,20 @@ export def "get-wayback-v1-available" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --url: string # A single URL to query.
+  --url: string # A single URL to query. (required)
   --timestamp: string # Timestamp requested in ISO 8601 format. The following formats are acceptable: - YYYY - YYYY-MM - YYYY-MM-DD - YYYY-MM-DDTHH:mm:SSz - YYYY-MM-DD:HH:mm+00:00
   --callback: string # Specifies a JavaScript function func, for a JSON-P response. When provided, results are wrapped as `callback(data)`, and the returned MIME type is application/javascript. This causes the caller to automatically run the func with the JSON results as its argument.
   --timeout: float # Timeout is the maximum number of seconds to wait for the availability API to get its underlying results from the CDX server. The default value is 5.0. (default: 5)
   --closest: string@closest-completer # The direction specifies whether to match archived timestamps that are before the provided one, after, or the default either (closest in either direction). Must be before, after, or either. May be overidden by individual requests. (default: either)
   --status-code: int@status-code-completer # HTTP status codes to filter by. Only results with these codes will be returned
   --tag: string # The optional tag can have any value, and is returned with the results; it can be used to help collate input and output values.
-]: nothing -> record<code: int, message: string> {
+]: nothing -> record<results: table<snapshot: record, tag: string, timestamp: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
   let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "timestamp" $timestamp "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "closest" $closest "scalar") (serialize-qp "status_code" $status_code "scalar") (serialize-qp "tag" $tag "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/wayback/v1/available" $qp $auth.query)
-  let accept_val = ($accept | default "application/javascript")
+  let accept_val = ($accept | default "applcation/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -179,7 +180,7 @@ export def "post-wayback-v1-available" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --url: string # A single URL to query.
+  --url: string # A single URL to query. (required)
   --timestamp: string # Timestamp requested in ISO 8601 format. The following formats are acceptable: - YYYY - YYYY-MM - YYYY-MM-DD - YYYY-MM-DDTHH:mm:SSz - YYYY-MM-DD:HH:mm+00:00
   --callback: string # Specifies a JavaScript function func, for a JSON-P response. When provided, results are wrapped as `callback(data)`, and the returned MIME type is application/javascript. This causes the caller to automatically run the func with the JSON results as its argument.
   --timeout: float # Timeout is the maximum number of seconds to wait for the availability API to get its underlying results from the CDX server. The default value is 5.0. (default: 5)
@@ -187,15 +188,16 @@ export def "post-wayback-v1-available" [
   --status-code: int@status-code-completer # HTTP status codes to filter by. Only results with these codes will be returned
   --tag: string # The optional tag can have any value, and is returned with the results; it can be used to help collate input and output values.
   --body: list
-]: any -> record<code: int, message: string> {
+]: any -> record<results: table<snapshot: record, tag: string, timestamp: string, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
   let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "timestamp" $timestamp "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "closest" $closest "scalar") (serialize-qp "status_code" $status_code "scalar") (serialize-qp "tag" $tag "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/wayback/v1/available" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
-  let accept_val = ($accept | default "application/javascript")
+  let accept_val = ($accept | default "applcation/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"

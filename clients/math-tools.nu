@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-mathtools-api-secret" => { {scheme: $scheme, headers: {X-Mathtools-Api-Secret: $token_val}, query: "", location: "header"} }
+    "x-mathtools-api-secret" => { {scheme: $scheme, headers: {"X-Mathtools-Api-Secret": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -131,20 +131,22 @@ export def "get-numbers-base" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --number: int # Number to convert to the target base (format: integer)
-  --qp-from: int # Base of the supplied number (Optional base 10 assumed by default) (format: integer)
-  --qp-to: int # Target base to convert to (format: integer)
+  --number: int # Number to convert to the target base (required, format: integer)
+  --from: int # Base of the supplied number (Optional base 10 assumed by default) (format: integer)
+  --to: int # Target base to convert to (required, format: integer)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-mathtools-api-secret"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  if ($number == null) { error make --unspanned { msg: "required query parameter 'number' missing: pass --number" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/numbers/base" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"number": $number, "from": $qp_from, "to": $qp_to} | compact)
+    query: ({"number": $number, "from": $from, "to": $to} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -168,19 +170,20 @@ export def "get-numbers-base-binary" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --number: int # Number to convert to binary (format: integer)
-  --qp-from: int # Base of the supplied number (Optional base 10 assumed by default) (format: integer)
+  --number: int # Number to convert to binary (required, format: integer)
+  --from: int # Base of the supplied number (Optional base 10 assumed by default) (format: integer)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-mathtools-api-secret"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "from" $qp_from "scalar")] | flatten | str join "&"
+  if ($number == null) { error make --unspanned { msg: "required query parameter 'number' missing: pass --number" } }
+  let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "from" $from "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/numbers/base/binary" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"number": $number, "from": $qp_from} | compact)
+    query: ({"number": $number, "from": $from} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -204,19 +207,20 @@ export def "get-numbers-base-hex" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --number: int # Number to convert to hex (format: integer)
-  --qp-from: int # Base of the supplied number (Optional base 10 assumed by default) (format: integer)
+  --number: int # Number to convert to hex (required, format: integer)
+  --from: int # Base of the supplied number (Optional base 10 assumed by default) (format: integer)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-mathtools-api-secret"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "from" $qp_from "scalar")] | flatten | str join "&"
+  if ($number == null) { error make --unspanned { msg: "required query parameter 'number' missing: pass --number" } }
+  let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "from" $from "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/numbers/base/hex" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"number": $number, "from": $qp_from} | compact)
+    query: ({"number": $number, "from": $from} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -240,19 +244,20 @@ export def "get-numbers-base-octal" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --number: int # Number to convert to octal (format: integer)
-  --qp-from: int # Base of the supplied number (Optional base 10 assumed by default) (format: integer)
+  --number: int # Number to convert to octal (required, format: integer)
+  --from: int # Base of the supplied number (Optional base 10 assumed by default) (format: integer)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-mathtools-api-secret"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "from" $qp_from "scalar")] | flatten | str join "&"
+  if ($number == null) { error make --unspanned { msg: "required query parameter 'number' missing: pass --number" } }
+  let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "from" $from "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/numbers/base/octal" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"number": $number, "from": $qp_from} | compact)
+    query: ({"number": $number, "from": $from} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -348,10 +353,11 @@ export def "get-numbers-fact" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --number: int # Number value (format: integer)
+  --number: int # Number value (required, format: integer)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-mathtools-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($number == null) { error make --unspanned { msg: "required query parameter 'number' missing: pass --number" } }
   let qp = [(serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/numbers/fact" $qp $auth.query)
   let accept_val = "application/json"
@@ -696,19 +702,19 @@ export def "get-numbers-pi" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-from: int # Optional start position (format: integer)
-  --qp-to: int # Optional start position (format: integer)
+  --from: int # Optional start position (format: integer)
+  --to: int # Optional start position (format: integer)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-mathtools-api-secret"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/numbers/pi" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to} | compact)
+    query: ({"from": $from, "to": $to} | compact)
     headers: $auth.headers
     body: null
     content_type: null

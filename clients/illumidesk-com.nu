@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "jwt" => { {scheme: $scheme, headers: {Authorization: $"JWT ($token_val)"}, query: "", location: "header"} }
+    "jwt" => { {scheme: $scheme, headers: {"Authorization": $"JWT ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -155,6 +155,8 @@ def auth-scheme-completer [] { ["jwt" "none"] }
 
 # Completers for enum parameters
 def accept-completer [] { ["application/json" "text/html"] }
+def provider-completer [] { ["github" "google" "slack"] }
+def entity-completer [] { ["billing"] }
 def authorization-grant-type-completer [] { ["authorization-code" "client-credentials" "implicit" "password"] }
 def client-type-completer [] { ["confidential" "public"] }
 def permissions-completer [] { ["read_project" "write_project"] }
@@ -249,6 +251,7 @@ export def "auth-jwt-token-refresh" [
   let full_url = (build-url $base "/auth/jwt-token-refresh/" $auth.query)
   let req_body = {"token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -288,6 +291,7 @@ export def "auth-jwt-token-verify" [
   let full_url = (build-url $base "/auth/jwt-token-verify/" $auth.query)
   let req_body = {"token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -308,7 +312,7 @@ export def "auth-jwt-token-verify" [
 #
 # operationId: oauth_login
 export def "oauth-login" [
-  provider: string
+  provider: string@provider-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -485,6 +489,7 @@ export def "servers-options-server-size-create" [
   let full_url = (build-url $base "/v1/servers/options/server-size/" $auth.query)
   let req_body = {"active": $active, "cpu": $cpu, "memory": $memory, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "active") == null) { error make --unspanned { msg: "required body field 'active' missing: pass --active or pipe a record" } }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -603,6 +608,7 @@ export def "servers-options-server-size-update" [
   let full_url = (build-url $base ({size: (encode-path-segment $size)} | format pattern "/v1/servers/options/server-size/{size}/") $auth.query)
   let req_body = {"active": $active, "cpu": $cpu, "memory": $memory, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "active") == null) { error make --unspanned { msg: "required body field 'active' missing: pass --active or pipe a record" } }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -647,6 +653,7 @@ export def "servers-options-server-size-replace" [
   let full_url = (build-url $base ({size: (encode-path-segment $size)} | format pattern "/v1/servers/options/server-size/{size}/") $auth.query)
   let req_body = {"active": $active, "cpu": $cpu, "memory": $memory, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "active") == null) { error make --unspanned { msg: "required body field 'active' missing: pass --active or pipe a record" } }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2983,6 +2990,7 @@ export def "notifications-update-list" [
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/notifications/") $auth.query)
   let req_body = {"notifications": $notifications, "read": $read} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "read") == null) { error make --unspanned { msg: "required body field 'read' missing: pass --read or pipe a record" } }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3005,7 +3013,7 @@ export def "notifications-update-list" [
 # operationId: notifications_list_entity
 export def "notifications-list-entity" [
   namespace: string
-  entity: string
+  entity: string@entity-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3049,7 +3057,7 @@ export def "notifications-list-entity" [
 # operationId: notifications_update_entity_list
 export def "notifications-update-entity-list" [
   namespace: string
-  entity: string
+  entity: string@entity-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3071,6 +3079,7 @@ export def "notifications-update-entity-list" [
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), entity: (encode-path-segment $entity)} | format pattern "/v1/{namespace}/notifications/entity/{entity}") $auth.query)
   let req_body = {"notifications": $notifications, "read": $read} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "read") == null) { error make --unspanned { msg: "required body field 'read' missing: pass --read or pipe a record" } }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3150,6 +3159,8 @@ export def "notification-settings-update" [
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/notifications/settings/") $auth.query)
   let req_body = {"emails_enabled": $emails_enabled, "enabled": $enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "emails_enabled") == null) { error make --unspanned { msg: "required body field 'emails_enabled' missing: pass --emails-enabled or pipe a record" } }
+  if (($req_body | get -o "enabled") == null) { error make --unspanned { msg: "required body field 'enabled' missing: pass --enabled or pipe a record" } }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3192,6 +3203,8 @@ export def "notification-settings-create" [
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/notifications/settings/") $auth.query)
   let req_body = {"emails_enabled": $emails_enabled, "enabled": $enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "emails_enabled") == null) { error make --unspanned { msg: "required body field 'emails_enabled' missing: pass --emails-enabled or pipe a record" } }
+  if (($req_body | get -o "enabled") == null) { error make --unspanned { msg: "required body field 'enabled' missing: pass --enabled or pipe a record" } }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3214,7 +3227,7 @@ export def "notification-settings-create" [
 # operationId: notification_settings_entity_read
 export def "notification-settings-entity-read" [
   namespace: string
-  entity: string
+  entity: string@entity-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3253,7 +3266,7 @@ export def "notification-settings-entity-read" [
 # operationId: notification_settings_entity_update
 export def "notification-settings-entity-update" [
   namespace: string
-  entity: string
+  entity: string@entity-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3275,6 +3288,8 @@ export def "notification-settings-entity-update" [
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), entity: (encode-path-segment $entity)} | format pattern "/v1/{namespace}/notifications/settings/entity/{entity}") $auth.query)
   let req_body = {"emails_enabled": $emails_enabled, "enabled": $enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "emails_enabled") == null) { error make --unspanned { msg: "required body field 'emails_enabled' missing: pass --emails-enabled or pipe a record" } }
+  if (($req_body | get -o "enabled") == null) { error make --unspanned { msg: "required body field 'enabled' missing: pass --enabled or pipe a record" } }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3297,7 +3312,7 @@ export def "notification-settings-entity-update" [
 # operationId: notification_settings_entity_create
 export def "notification-settings-entity-create" [
   namespace: string
-  entity: string
+  entity: string@entity-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3319,6 +3334,8 @@ export def "notification-settings-entity-create" [
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), entity: (encode-path-segment $entity)} | format pattern "/v1/{namespace}/notifications/settings/entity/{entity}") $auth.query)
   let req_body = {"emails_enabled": $emails_enabled, "enabled": $enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "emails_enabled") == null) { error make --unspanned { msg: "required body field 'emails_enabled' missing: pass --emails-enabled or pipe a record" } }
+  if (($req_body | get -o "enabled") == null) { error make --unspanned { msg: "required body field 'enabled' missing: pass --enabled or pipe a record" } }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3401,6 +3418,7 @@ export def "notification-update" [
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), notification_id: (encode-path-segment $notification_id)} | format pattern "/v1/{namespace}/notifications/{notification_id}") $auth.query)
   let req_body = {"read": $read} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "read") == null) { error make --unspanned { msg: "required body field 'read' missing: pass --read or pipe a record" } }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -4611,8 +4629,8 @@ export def "projects-project-files-create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -4745,8 +4763,8 @@ export def "projects-project-files-update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "patch"
     url: $full_url
@@ -4795,8 +4813,8 @@ export def "projects-project-files-replace" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "put"
     url: $full_url
@@ -6300,7 +6318,7 @@ export def "search" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --q: string # Search string.
+  --q: string # Search string. (required)
   --type: string@type-completer # Limit results to specific types.
   --limit: string # Limit data when getting items.
   --offset: string # Offset data when getting items.
@@ -6308,6 +6326,7 @@ export def "search" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v1/{namespace}/search/") $qp $auth.query)
   let accept_val = ($accept | default "application/json")

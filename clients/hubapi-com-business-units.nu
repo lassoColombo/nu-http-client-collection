@@ -1,4 +1,4 @@
-# Auto-generated client for Business Unit vv3
+# Auto-generated client for Business Unit v3
 # Source: https://api.apis.guru/v2/specs/hubapi.com/business units/v3/openapi.json
 # Auth: --token flag or $env.BUSINESS_UNIT_TOKEN
 
@@ -12,8 +12,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "private-app-legacy" => { {scheme: $scheme, headers: {private-app-legacy: $token_val}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "private-app-legacy" => { {scheme: $scheme, headers: {"private-app-legacy": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -95,6 +95,8 @@ def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: 
 def base-url-completer [] { ["https://api.hubapi.com"] }
 def auth-scheme-completer [] { ["bearer" "private-app-legacy"] }
 
+# Completers for enum parameters
+def accept-completer [] { ["*/*" "application/json"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -134,6 +136,7 @@ export def "get-business-units-v3-business-units-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --properties: list<string> # The names of properties to optionally include in the response body. The only valid value is `logoMetadata`.
   --name: list<string> # The names of Business Units to retrieve. If empty or not provided, then all associated Business Units will be returned.
 ]: nothing -> record<results: table<id: string, logoMetadata: record, name: string>> {
@@ -142,7 +145,7 @@ export def "get-business-units-v3-business-units-user" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let qp = [(serialize-qp "properties" $properties "multi") (serialize-qp "name" $name "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/business-units/v3/business-units/user/{user_id}") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"

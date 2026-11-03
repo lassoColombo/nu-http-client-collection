@@ -114,6 +114,34 @@ def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors
   $resp | handle-response $allow_errors $full $ok_codes
 }
 
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body}.
+# When `$dry_run` is true, file fields are NOT read from disk — they emit
+# an empty-bytes placeholder so callers can inspect the request shape
+# without the file existing on disk.
+def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
+      let filename = ($val | into string | path basename)
+      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  } | compact)
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
+}
+
 def base-url-completer [] { ["https://visagecloud.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -160,11 +188,13 @@ export def "get-account-by-access-key-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # accessKey
-  --secret-key: string # secretKey
+  --access-key: string # accessKey (required)
+  --secret-key: string # secretKey (required)
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/account/account" $qp $auth.query)
   let accept_val = "*/*"
@@ -197,14 +227,16 @@ export def "get-billing-per-account-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # accessKey
-  --secret-key: string # secretKey
+  --access-key: string # accessKey (required)
+  --secret-key: string # secretKey (required)
   --start-date-time: string # startDateTime (format: date-time)
   --end-date-time: string # endDateTime (format: date-time)
   --date-template: string # dateTemplate
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "startDateTime" $start_date_time "scalar") (serialize-qp "endDateTime" $end_date_time "scalar") (serialize-qp "dateTemplate" $date_template "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/account/billing" $qp $auth.query)
   let accept_val = "*/*"
@@ -237,12 +269,15 @@ export def "change-password-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --email: string # email
-  --old-password: string # oldPassword
-  --new-password: string # newPassword
+  --email: string # email (required)
+  --old-password: string # oldPassword (required)
+  --new-password: string # newPassword (required)
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($email == null) { error make --unspanned { msg: "required query parameter 'email' missing: pass --email" } }
+  if ($old_password == null) { error make --unspanned { msg: "required query parameter 'oldPassword' missing: pass --old-password" } }
+  if ($new_password == null) { error make --unspanned { msg: "required query parameter 'newPassword' missing: pass --new-password" } }
   let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "oldPassword" $old_password "scalar") (serialize-qp "newPassword" $new_password "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/account/changePassword" $qp $auth.query)
   let accept_val = "*/*"
@@ -275,11 +310,13 @@ export def "login-with-email-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --email: string # email
-  --password: string # password
+  --email: string # email (required)
+  --password: string # password (required)
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($email == null) { error make --unspanned { msg: "required query parameter 'email' missing: pass --email" } }
+  if ($password == null) { error make --unspanned { msg: "required query parameter 'password' missing: pass --password" } }
   let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "password" $password "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/account/login" $qp $auth.query)
   let accept_val = "*/*"
@@ -312,13 +349,16 @@ export def "compare-faces-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud
-  --face-hashes: list<string> # The IDs of the faces which you want compared, comma-separated
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
+  --face-hashes: list<string> # The IDs of the faces which you want compared, comma-separated (required)
   --show-details: oneof<nothing, bool> # Show details (default: false)
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
+  if ($face_hashes == null) { error make --unspanned { msg: "required query parameter 'faceHashes' missing: pass --face-hashes" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "faceHashes" $face_hashes "multi") (serialize-qp "showDetails" $show_details "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/analysis/compare" $qp $auth.query)
   let accept_val = "application/json"
@@ -351,8 +391,8 @@ export def "perform-analysis-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
   --store-analysis-picture: oneof<nothing, bool> # Boolean value indicating whether you want the picture of the analysis to be stored for later retrieval (default: true)
   --store-face-pictures: oneof<nothing, bool> # Boolean value indicating whether you want the faces inside the picture to be stored for later retrieval (default: true)
   --store-result: oneof<nothing, bool> # Boolean value indicating whether you want the result of the analysis to be stored (default: true)
@@ -369,25 +409,28 @@ export def "perform-analysis-using-post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "storeAnalysisPicture" $store_analysis_picture "scalar") (serialize-qp "storeFacePictures" $store_face_pictures "scalar") (serialize-qp "storeResult" $store_result "scalar") (serialize-qp "retentionTime" $retention_time "scalar") (serialize-qp "pictureURL" $picture_url "scalar") (serialize-qp "algorithmVersion" $algorithm_version "scalar") (serialize-qp "autoRotate" $auto_rotate "scalar") (serialize-qp "skipEXIF" $skip_exif "scalar") (serialize-qp "waitForPictureUpload" $wait_for_picture_upload "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "options" $options "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/analysis/detection" $qp $auth.query)
   let req_body = {"picture": $picture} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
     query: ({"accessKey": $access_key, "secretKey": $secret_key, "storeAnalysisPicture": $store_analysis_picture, "storeFacePictures": $store_face_pictures, "storeResult": $store_result, "retentionTime": $retention_time, "pictureURL": $picture_url, "algorithmVersion": $algorithm_version, "autoRotate": $auto_rotate, "skipEXIF": $skip_exif, "waitForPictureUpload": $wait_for_picture_upload, "filters": $filters, "options": $options} | compact)
     headers: $auth.headers
     body: $req_body
-    content_type: "application/x-www-form-urlencoded"
+    content_type: $mp.content_type
     timeout: ($max_time | default 30min)
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200 201]
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Retrieve the last *count* operations per current account
@@ -404,12 +447,14 @@ export def "retrive-latest-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
   --count: int # How many records to retrieve at a time (format: int32, default: 100)
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/analysis/listLatest" $qp $auth.query)
   let accept_val = "application/json"
@@ -442,13 +487,13 @@ export def "perform-recognition-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
   --store-analysis-picture: oneof<nothing, bool> # Boolean value indicating whether you want the picture of the analysis to be stored for later retrieval (default: true)
   --store-face-pictures: oneof<nothing, bool> # Boolean value indicating whether you want the faces inside the picture to be stored for later retrieval (default: true)
   --store-result: oneof<nothing, bool> # Boolean value indicating whether you want the result of the analysis to be stored (default: true)
   --retention-time: int # How many seconds the results should be retained in stoarage? (format: int32)
-  --collection-id: string # Uniquely identified collection that can store multiple profiles
+  --collection-id: string # Uniquely identified collection that can store multiple profiles (required)
   --labels: list<string> # Labels associated with the given picture or picture URL
   --attribute-filters: list<string>@attribute-filters-completer # Filters that will be applied on the recognition operation
   --picture-url: string # The URL of the picture
@@ -463,25 +508,29 @@ export def "perform-recognition-using-post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
+  if ($collection_id == null) { error make --unspanned { msg: "required query parameter 'collectionId' missing: pass --collection-id" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "storeAnalysisPicture" $store_analysis_picture "scalar") (serialize-qp "storeFacePictures" $store_face_pictures "scalar") (serialize-qp "storeResult" $store_result "scalar") (serialize-qp "retentionTime" $retention_time "scalar") (serialize-qp "collectionId" $collection_id "scalar") (serialize-qp "labels" $labels "multi") (serialize-qp "attributeFilters" $attribute_filters "multi") (serialize-qp "pictureURL" $picture_url "scalar") (serialize-qp "algorithmVersion" $algorithm_version "scalar") (serialize-qp "autoRotate" $auto_rotate "scalar") (serialize-qp "skipEXIF rotation processing" $skip_exif_rotation_processing "scalar") (serialize-qp "waitForPictureUpload" $wait_for_picture_upload "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "options" $options "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/analysis/recognition" $qp $auth.query)
   let req_body = {"picture": $picture} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
     query: ({"accessKey": $access_key, "secretKey": $secret_key, "storeAnalysisPicture": $store_analysis_picture, "storeFacePictures": $store_face_pictures, "storeResult": $store_result, "retentionTime": $retention_time, "collectionId": $collection_id, "labels": $labels, "attributeFilters": $attribute_filters, "pictureURL": $picture_url, "algorithmVersion": $algorithm_version, "autoRotate": $auto_rotate, "skipEXIF rotation processing": $skip_exif_rotation_processing, "waitForPictureUpload": $wait_for_picture_upload, "filters": $filters, "options": $options} | compact)
     headers: $auth.headers
     body: $req_body
-    content_type: "application/x-www-form-urlencoded"
+    content_type: $mp.content_type
     timeout: ($max_time | default 30min)
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200 201]
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Retrieve a complete analysis object including both detection and recognition information
@@ -498,12 +547,15 @@ export def "retrieve-analysis-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud
-  --analysis-id: string # The ID of the analysis for which the data will be retrieved
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
+  --analysis-id: string # The ID of the analysis for which the data will be retrieved (required)
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
+  if ($analysis_id == null) { error make --unspanned { msg: "required query parameter 'analysisId' missing: pass --analysis-id" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "analysisId" $analysis_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/analysis/retrieve" $qp $auth.query)
   let accept_val = "application/json"
@@ -536,8 +588,8 @@ export def "counter-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
   --collection-ids: list<string> # Collection ids
   --stream-ids: list<string> # Stream Ids
   --start-date-time: string # startDateTime (format: date-time)
@@ -551,6 +603,8 @@ export def "counter-using-post" [
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "collectionIds" $collection_ids "multi") (serialize-qp "streamIds" $stream_ids "multi") (serialize-qp "startDateTime" $start_date_time "scalar") (serialize-qp "endDateTime" $end_date_time "scalar") (serialize-qp "visitDuration" $visit_duration "scalar") (serialize-qp "maxIterations" $max_iterations "scalar") (serialize-qp "maxBatchIterations" $max_batch_iterations "scalar") (serialize-qp "minNeighborsMergedPerIteration" $min_neighbors_merged_per_iteration "scalar") (serialize-qp "mergingStep" $merging_step "scalar") (serialize-qp "shuffling" $shuffling "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/analytics/counting" $qp $auth.query)
   let accept_val = "application/json"
@@ -583,16 +637,19 @@ export def "presence-timeseries-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
   --stream-ids: list<string> # Stream Ids
   --start-date-time: string # startDateTime (format: date-time)
   --end-date-time: string # endDateTime (format: date-time)
   --step: int # step (format: int64, default: 3600)
-  --attributes: list<string> # attributes
+  --attributes: list<string> # attributes (required)
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
+  if ($attributes == null) { error make --unspanned { msg: "required query parameter 'attributes' missing: pass --attributes" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "streamIds" $stream_ids "multi") (serialize-qp "startDateTime" $start_date_time "scalar") (serialize-qp "endDateTime" $end_date_time "scalar") (serialize-qp "step" $step "scalar") (serialize-qp "attributes" $attributes "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/analytics/presence/timeseries" $qp $auth.query)
   let accept_val = "application/json"
@@ -625,15 +682,19 @@ export def "presence-total-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud
-  --stream-ids: list<string> # Stream Ids
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
+  --stream-ids: list<string> # Stream Ids (required)
   --start-date-time: string # startDateTime (format: date-time)
   --end-date-time: string # endDateTime (format: date-time)
-  --attributes: list<string> # attributes
+  --attributes: list<string> # attributes (required)
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
+  if ($stream_ids == null) { error make --unspanned { msg: "required query parameter 'streamIds' missing: pass --stream-ids" } }
+  if ($attributes == null) { error make --unspanned { msg: "required query parameter 'attributes' missing: pass --attributes" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "streamIds" $stream_ids "multi") (serialize-qp "startDateTime" $start_date_time "scalar") (serialize-qp "endDateTime" $end_date_time "scalar") (serialize-qp "attributes" $attributes "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/analytics/presence/total" $qp $auth.query)
   let accept_val = "application/json"
@@ -666,12 +727,15 @@ export def "remove-classifer-using-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud
-  --id: string # The id of the classifier that will be removed
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
+  --id: string # The id of the classifier that will be removed (required)
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/classifier/svm" $qp $auth.query)
   let accept_val = "application/json"
@@ -704,12 +768,15 @@ export def "get-classifer-full-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud
-  --id: string # The id of the classifier that you want the status for
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
+  --id: string # The id of the classifier that you want the status for (required)
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/classifier/svm" $qp $auth.query)
   let accept_val = "application/json"
@@ -742,12 +809,12 @@ export def "add-svm-classifier-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud
-  --name: string # The name of the SVM classifier that will be created
-  --collection-ids: list<string> # Collection ids
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
+  --name: string # The name of the SVM classifier that will be created (required)
+  --collection-ids: list<string> # Collection ids (required)
   --preprocessor: string # Preprocessor (default: FeaturePreprocessor)
-  --classification-attribute-name: string # Classification attribute name
+  --classification-attribute-name: string # Classification attribute name (required)
   --consider-view-points: oneof<nothing, bool> # Consider view point (default: false)
   --seed: int # Seed for divididing training and evaluation sets (format: int32, default: 179425537)
   --training-ratio: float # Training ratio (format: double, default: 0.8)
@@ -762,6 +829,11 @@ export def "add-svm-classifier-using-post" [
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
+  if ($collection_ids == null) { error make --unspanned { msg: "required query parameter 'collectionIds' missing: pass --collection-ids" } }
+  if ($classification_attribute_name == null) { error make --unspanned { msg: "required query parameter 'classificationAttributeName' missing: pass --classification-attribute-name" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "collectionIds" $collection_ids "multi") (serialize-qp "preprocessor" $preprocessor "scalar") (serialize-qp "classificationAttributeName" $classification_attribute_name "scalar") (serialize-qp "considerViewPoints" $consider_view_points "scalar") (serialize-qp "seed" $seed "scalar") (serialize-qp "trainingRatio" $training_ratio "scalar") (serialize-qp "probabilityParameter" $probability_parameter "scalar") (serialize-qp "gammaParameter" $gamma_parameter "scalar") (serialize-qp "nuParameter" $nu_parameter "scalar") (serialize-qp "cParameter" $c_parameter "scalar") (serialize-qp "svmTypeParameter" $svm_type_parameter "scalar") (serialize-qp "kernelTypeParameter" $kernel_type_parameter "scalar") (serialize-qp "cacheSizeParameter" $cache_size_parameter "scalar") (serialize-qp "epsParameter" $eps_parameter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/classifier/svm" $qp $auth.query)
   let accept_val = "application/json"
@@ -794,12 +866,15 @@ export def "get-classifer-status-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud
-  --id: string # The id of the classifier that you want the status for
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
+  --id: string # The id of the classifier that you want the status for (required)
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/classifier/svm/status" $qp $auth.query)
   let accept_val = "application/json"
@@ -832,11 +907,13 @@ export def "get-all-collections-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/collection/" $qp $auth.query)
   let accept_val = "application/json"
@@ -874,7 +951,7 @@ export def "add-collection-using-post" [
   name: string # The name of the collection that will be created
   --preload: oneof<nothing, bool> # Defined whether to preload collection
   --evictable: oneof<nothing, bool> # Defined whether the collection can be evicted
-  --purposes: list@purposes-completer # The newly declared purposes of the collection
+  --purposes: list<string>@purposes-completer # The newly declared purposes of the collection
 ]: any -> record<message: string, payload: record, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -915,11 +992,13 @@ export def "get-all-collections2-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/collection/all" $qp $auth.query)
   let accept_val = "application/json"
@@ -954,12 +1033,15 @@ export def "delete-collection2-using-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey provided by VisageCloud
-  --collection-id: string # The id of the collection that will be removed
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey provided by VisageCloud (required)
+  --collection-id: string # The id of the collection that will be removed (required)
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
+  if ($collection_id == null) { error make --unspanned { msg: "required query parameter 'collectionId' missing: pass --collection-id" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "collectionId" $collection_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/collection/collection" $qp $auth.query)
   let accept_val = "application/json"
@@ -994,12 +1076,15 @@ export def "get-collection2-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud
-  --collection-id: string # The id of the collection for which the data will be retrieved
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
+  --collection-id: string # The id of the collection for which the data will be retrieved (required)
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
+  if ($collection_id == null) { error make --unspanned { msg: "required query parameter 'collectionId' missing: pass --collection-id" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "collectionId" $collection_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/collection/collection" $qp $auth.query)
   let accept_val = "application/json"
@@ -1034,15 +1119,18 @@ export def "add-collection2-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud
-  --collection-name: string # The name of the collection that will be created
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
+  --collection-name: string # The name of the collection that will be created (required)
   --preload: oneof<nothing, bool> # Defined whether to preload collection (default: false)
   --evictable: oneof<nothing, bool> # Defined whether the collection can be evicted (default: true)
   --purposes: list<string>@purposes-completer # The newly declared purposes of the collection
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
+  if ($collection_name == null) { error make --unspanned { msg: "required query parameter 'collectionName' missing: pass --collection-name" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "collectionName" $collection_name "scalar") (serialize-qp "preload" $preload "scalar") (serialize-qp "evictable" $evictable "scalar") (serialize-qp "purposes" $purposes "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/collection/collection" $qp $auth.query)
   let accept_val = "application/json"
@@ -1075,12 +1163,15 @@ export def "export-csv-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud
-  --collection-id: string # The id of the collection for which the data will be retrieved
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
+  --collection-id: string # The id of the collection for which the data will be retrieved (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
+  if ($collection_id == null) { error make --unspanned { msg: "required query parameter 'collectionId' missing: pass --collection-id" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "collectionId" $collection_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/collection/export/csv" $qp $auth.query)
   let accept_val = "text/plain"
@@ -1115,13 +1206,17 @@ export def "repurpose-collection-using-put" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey provided by VisageCloud
-  --collection-id: string # The id of the collection for which the data will be retrieved
-  --purposes: list<string>@purposes-completer # The newly declared purposes of the collection
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey provided by VisageCloud (required)
+  --collection-id: string # The id of the collection for which the data will be retrieved (required)
+  --purposes: list<string>@purposes-completer # The newly declared purposes of the collection (required)
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
+  if ($collection_id == null) { error make --unspanned { msg: "required query parameter 'collectionId' missing: pass --collection-id" } }
+  if ($purposes == null) { error make --unspanned { msg: "required query parameter 'purposes' missing: pass --purposes" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "collectionId" $collection_id "scalar") (serialize-qp "purposes" $purposes "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/collection/purpose" $qp $auth.query)
   let accept_val = "application/json"
@@ -1155,12 +1250,14 @@ export def "delete-collection-using-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey provided by VisageCloud
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey provided by VisageCloud (required)
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/collection/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1194,12 +1291,14 @@ export def "get-collection-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/collection/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1233,14 +1332,16 @@ export def "update-collection-using-patch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey provided by VisageCloud
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey provided by VisageCloud (required)
   --name: string # The name of the collection that will be updated
   --purposes: list<string>@purposes-completer # The newly declared purposes of the collection
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "purposes" $purposes "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/collection/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1276,14 +1377,16 @@ export def "update-collection2-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey provided by VisageCloud
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey provided by VisageCloud (required)
   --name: string # The name of the collection that will be updated
   --purposes: list<string>@purposes-completer # The newly declared purposes of the collection
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "purposes" $purposes "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/collection/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1317,12 +1420,14 @@ export def "get-all-collection-profiles-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/collection/{id}/profile") $qp $auth.query)
   let accept_val = "application/json"
@@ -1357,13 +1462,17 @@ export def "remove-classification-attributes-from-profile-using-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey provided by VisageCloud
-  --profile-id: string # The profile associated with the classification attributes
-  --collection-id: string # The collection that contains the profile
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey provided by VisageCloud (required)
+  --profile-id: string # The profile associated with the classification attributes (required)
+  --collection-id: string # The collection that contains the profile (required)
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
+  if ($profile_id == null) { error make --unspanned { msg: "required query parameter 'profileId' missing: pass --profile-id" } }
+  if ($collection_id == null) { error make --unspanned { msg: "required query parameter 'collectionId' missing: pass --collection-id" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "profileId" $profile_id "scalar") (serialize-qp "collectionId" $collection_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/profile/classificationAttributes" $qp $auth.query)
   let accept_val = "*/*"
@@ -1398,13 +1507,17 @@ export def "get-classification-attributes-from-profile-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud
-  --profile-id: string # The profile associated with the classification attributes
-  --collection-id: string # The collection that contains the profile
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
+  --profile-id: string # The profile associated with the classification attributes (required)
+  --collection-id: string # The collection that contains the profile (required)
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
+  if ($profile_id == null) { error make --unspanned { msg: "required query parameter 'profileId' missing: pass --profile-id" } }
+  if ($collection_id == null) { error make --unspanned { msg: "required query parameter 'collectionId' missing: pass --collection-id" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "profileId" $profile_id "scalar") (serialize-qp "collectionId" $collection_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/profile/classificationAttributes" $qp $auth.query)
   let accept_val = "*/*"
@@ -1439,14 +1552,19 @@ export def "map-classification-attributes-to-profile-using-put" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey provided by VisageCloud
-  --profile-id: string # The profile associated with the classification attributes
-  --collection-id: string # The collection that contains the profile
-  --classification-attributes: string # Comma separated key:value classification attributes
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey provided by VisageCloud (required)
+  --profile-id: string # The profile associated with the classification attributes (required)
+  --collection-id: string # The collection that contains the profile (required)
+  --classification-attributes: string # Comma separated key:value classification attributes (required)
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
+  if ($profile_id == null) { error make --unspanned { msg: "required query parameter 'profileId' missing: pass --profile-id" } }
+  if ($collection_id == null) { error make --unspanned { msg: "required query parameter 'collectionId' missing: pass --collection-id" } }
+  if ($classification_attributes == null) { error make --unspanned { msg: "required query parameter 'classificationAttributes' missing: pass --classification-attributes" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "profileId" $profile_id "scalar") (serialize-qp "collectionId" $collection_id "scalar") (serialize-qp "classificationAttributes" $classification_attributes "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/profile/classificationAttributes" $qp $auth.query)
   let accept_val = "*/*"
@@ -1479,13 +1597,17 @@ export def "get-profile-enrollment-status-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud
-  --profile-id: string # The profile that contains the faces
-  --collection-id: string # The collection that contains the profile
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
+  --profile-id: string # The profile that contains the faces (required)
+  --collection-id: string # The collection that contains the profile (required)
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
+  if ($profile_id == null) { error make --unspanned { msg: "required query parameter 'profileId' missing: pass --profile-id" } }
+  if ($collection_id == null) { error make --unspanned { msg: "required query parameter 'collectionId' missing: pass --collection-id" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "profileId" $profile_id "scalar") (serialize-qp "collectionId" $collection_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/profile/enrollmentStatus" $qp $auth.query)
   let accept_val = "application/json"
@@ -1518,14 +1640,19 @@ export def "remove-faces-from-profile-using-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey provided by VisageCloud
-  --face-hashes: string # Comma separated face hashes, that will be removed from a profile
-  --profile-id: string # The profile that contains the face
-  --collection-id: string # The collection that contains the profile
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey provided by VisageCloud (required)
+  --face-hashes: string # Comma separated face hashes, that will be removed from a profile (required)
+  --profile-id: string # The profile that contains the face (required)
+  --collection-id: string # The collection that contains the profile (required)
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
+  if ($face_hashes == null) { error make --unspanned { msg: "required query parameter 'faceHashes' missing: pass --face-hashes" } }
+  if ($profile_id == null) { error make --unspanned { msg: "required query parameter 'profileId' missing: pass --profile-id" } }
+  if ($collection_id == null) { error make --unspanned { msg: "required query parameter 'collectionId' missing: pass --collection-id" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "faceHashes" $face_hashes "scalar") (serialize-qp "profileId" $profile_id "scalar") (serialize-qp "collectionId" $collection_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/profile/map" $qp $auth.query)
   let accept_val = "application/json"
@@ -1558,13 +1685,17 @@ export def "get-faces-from-profile-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud
-  --profile-id: string # The profile that contains the faces
-  --collection-id: string # The collection that contains the profile
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
+  --profile-id: string # The profile that contains the faces (required)
+  --collection-id: string # The collection that contains the profile (required)
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
+  if ($profile_id == null) { error make --unspanned { msg: "required query parameter 'profileId' missing: pass --profile-id" } }
+  if ($collection_id == null) { error make --unspanned { msg: "required query parameter 'collectionId' missing: pass --collection-id" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "profileId" $profile_id "scalar") (serialize-qp "collectionId" $collection_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/profile/map" $qp $auth.query)
   let accept_val = "application/json"
@@ -1597,14 +1728,19 @@ export def "map-faces-to-profile-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey provided by VisageCloud
-  --face-hashes: string # Comma separated face hashes, that will be associated to a profile
-  --profile-id: string # The profile that will store the face
-  --collection-id: string # The collection that contains the profile
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey provided by VisageCloud (required)
+  --face-hashes: string # Comma separated face hashes, that will be associated to a profile (required)
+  --profile-id: string # The profile that will store the face (required)
+  --collection-id: string # The collection that contains the profile (required)
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
+  if ($face_hashes == null) { error make --unspanned { msg: "required query parameter 'faceHashes' missing: pass --face-hashes" } }
+  if ($profile_id == null) { error make --unspanned { msg: "required query parameter 'profileId' missing: pass --profile-id" } }
+  if ($collection_id == null) { error make --unspanned { msg: "required query parameter 'collectionId' missing: pass --collection-id" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "faceHashes" $face_hashes "scalar") (serialize-qp "profileId" $profile_id "scalar") (serialize-qp "collectionId" $collection_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/profile/map" $qp $auth.query)
   let accept_val = "application/json"
@@ -1639,13 +1775,17 @@ export def "delete-profile2-using-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey provided by VisageCloud
-  --collection-id: string # Uniquely identified collection that can store multiple profiles
-  --profile-id: string # The profile id (provide this if you don't have the externalId
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey provided by VisageCloud (required)
+  --collection-id: string # Uniquely identified collection that can store multiple profiles (required)
+  --profile-id: string # The profile id (provide this if you don't have the externalId (required)
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
+  if ($collection_id == null) { error make --unspanned { msg: "required query parameter 'collectionId' missing: pass --collection-id" } }
+  if ($profile_id == null) { error make --unspanned { msg: "required query parameter 'profileId' missing: pass --profile-id" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "collectionId" $collection_id "scalar") (serialize-qp "profileId" $profile_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/profile/profile" $qp $auth.query)
   let accept_val = "application/json"
@@ -1678,9 +1818,9 @@ export def "add-profile-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey provided by VisageCloud
-  --collection-id: string # Uniquely identified collection that can store multiple profiles
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey provided by VisageCloud (required)
+  --collection-id: string # Uniquely identified collection that can store multiple profiles (required)
   --external-id: string # External reference to additional information you don’t want to share with VisageCloud
   --screen-name: string # Human-readable label for the profile
   --labels: list<string> # Allows you to do finer filtering in face recognition
@@ -1689,6 +1829,9 @@ export def "add-profile-using-post" [
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
+  if ($collection_id == null) { error make --unspanned { msg: "required query parameter 'collectionId' missing: pass --collection-id" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "collectionId" $collection_id "scalar") (serialize-qp "externalId" $external_id "scalar") (serialize-qp "screenName" $screen_name "scalar") (serialize-qp "labels" $labels "multi") (serialize-qp "classificationAttributes" $classification_attributes "scalar") (serialize-qp "details" $details "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/profile/profile" $qp $auth.query)
   let accept_val = "application/json"
@@ -1722,13 +1865,16 @@ export def "delete-profile-using-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey provided by VisageCloud
-  --collection-id: string # Uniquely identified collection that can store multiple profiles
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey provided by VisageCloud (required)
+  --collection-id: string # Uniquely identified collection that can store multiple profiles (required)
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
+  if ($collection_id == null) { error make --unspanned { msg: "required query parameter 'collectionId' missing: pass --collection-id" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "collectionId" $collection_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/profile/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1762,14 +1908,17 @@ export def "get-profile-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud
-  --collection-id: string # Uniquely identified collection that can store multiple profiles
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
+  --collection-id: string # Uniquely identified collection that can store multiple profiles (required)
   --with-faces: string # Retrieves the profile with all its associated faces (default: false)
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
+  if ($collection_id == null) { error make --unspanned { msg: "required query parameter 'collectionId' missing: pass --collection-id" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "collectionId" $collection_id "scalar") (serialize-qp "withFaces" $with_faces "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/profile/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1803,9 +1952,9 @@ export def "update-profile-using-patch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud
-  --collection-id: string # Uniquely identified collection that can store multiple profiles
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
+  --collection-id: string # Uniquely identified collection that can store multiple profiles (required)
   --external-id: string # External reference to additional information you don’t want to share with VisageCloud
   --screen-name: string # Human-readable label for the profile
   --labels: list<string> # Allows you to do finer filtering in face recognition
@@ -1815,6 +1964,9 @@ export def "update-profile-using-patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
+  if ($collection_id == null) { error make --unspanned { msg: "required query parameter 'collectionId' missing: pass --collection-id" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "collectionId" $collection_id "scalar") (serialize-qp "externalId" $external_id "scalar") (serialize-qp "screenName" $screen_name "scalar") (serialize-qp "labels" $labels "multi") (serialize-qp "classificationAttributes" $classification_attributes "scalar") (serialize-qp "details" $details "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/profile/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1847,11 +1999,13 @@ export def "streams-by-account-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/stream/all" $qp $auth.query)
   let accept_val = "application/json"
@@ -1884,13 +2038,15 @@ export def "get-last-n-attedance-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
   --stream-ids: list<string> # The id of the stream for which the frames will be retrieved
   --count: int # How many frames to retrieve at a time (format: int32, default: 10)
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "streamIds" $stream_ids "multi") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/stream/attendance" $qp $auth.query)
   let accept_val = "application/json"
@@ -1923,13 +2079,17 @@ export def "cleanup-stream-using-patch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey provided by VisageCloud
-  --stream-id: string # The id of the stream that will be stopped
-  --interval: int # Frames older than interval (seconds) will be cleaned up (format: int32)
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey provided by VisageCloud (required)
+  --stream-id: string # The id of the stream that will be stopped (required)
+  --interval: int # Frames older than interval (seconds) will be cleaned up (required, format: int32)
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
+  if ($stream_id == null) { error make --unspanned { msg: "required query parameter 'streamId' missing: pass --stream-id" } }
+  if ($interval == null) { error make --unspanned { msg: "required query parameter 'interval' missing: pass --interval" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "streamId" $stream_id "scalar") (serialize-qp "interval" $interval "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/stream/cleanup" $qp $auth.query)
   let accept_val = "application/json"
@@ -1962,13 +2122,17 @@ export def "get-frame-image-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud
-  --stream-id: string # The id of the stream for which the frames will be retrieved
-  --timestamp: int # Timestamp of frame to retrieve (format: int64)
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
+  --stream-id: string # The id of the stream for which the frames will be retrieved (required)
+  --timestamp: int # Timestamp of frame to retrieve (required, format: int64)
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
+  if ($stream_id == null) { error make --unspanned { msg: "required query parameter 'streamId' missing: pass --stream-id" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'timestamp' missing: pass --timestamp" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "streamId" $stream_id "scalar") (serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/stream/frameImage" $qp $auth.query)
   let accept_val = "image/jpeg"
@@ -2001,9 +2165,9 @@ export def "get-last-n-frames-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud
-  --stream-id: string # The id of the stream for which the frames will be retrieved
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey or readOnlyKey provided by VisageCloud (required)
+  --stream-id: string # The id of the stream for which the frames will be retrieved (required)
   --count: int # How many frames to retrieve at a time (format: int32, default: 10)
   --collection-id: string # The collection id you want to run recognition against
   --labels: list<string> # Labels associated with the given picture or picture URL
@@ -2011,6 +2175,9 @@ export def "get-last-n-frames-using-get" [
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
+  if ($stream_id == null) { error make --unspanned { msg: "required query parameter 'streamId' missing: pass --stream-id" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "streamId" $stream_id "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "collectionId" $collection_id "scalar") (serialize-qp "labels" $labels "multi") (serialize-qp "attributeFilters" $attribute_filters "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/stream/frames" $qp $auth.query)
   let accept_val = "application/json"
@@ -2043,12 +2210,15 @@ export def "start-stream-using-patch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey provided by VisageCloud
-  --stream-id: string # The id of the stream that will be started
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey provided by VisageCloud (required)
+  --stream-id: string # The id of the stream that will be started (required)
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
+  if ($stream_id == null) { error make --unspanned { msg: "required query parameter 'streamId' missing: pass --stream-id" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "streamId" $stream_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/stream/start" $qp $auth.query)
   let accept_val = "application/json"
@@ -2081,12 +2251,15 @@ export def "stop-stream-using-patch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey provided by VisageCloud
-  --stream-id: string # The id of the stream that will be stopped
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey provided by VisageCloud (required)
+  --stream-id: string # The id of the stream that will be stopped (required)
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
+  if ($stream_id == null) { error make --unspanned { msg: "required query parameter 'streamId' missing: pass --stream-id" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "streamId" $stream_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/stream/stop" $qp $auth.query)
   let accept_val = "application/json"
@@ -2119,10 +2292,10 @@ export def "add-stream-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey provided by VisageCloud
-  --name: string # The name of the stream that will be created
-  --url: string # The url of the stream
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey provided by VisageCloud (required)
+  --name: string # The name of the stream that will be created (required)
+  --url: string # The url of the stream (required)
   --method: string@method-completer # Streaming method (default: WEBRTC_PUSH)
   --username: string # Username
   --password: string # Password
@@ -2137,6 +2310,10 @@ export def "add-stream-using-post" [
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "url" $url "scalar") (serialize-qp "method" $method "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "skipFramesWithNoFaces" $skip_frames_with_no_faces "scalar") (serialize-qp "retentionTime" $retention_time "scalar") (serialize-qp "storeOriginalFrames" $store_original_frames "scalar") (serialize-qp "storeAttendanceFaces" $store_attendance_faces "scalar") (serialize-qp "storeAttendanceFrames" $store_attendance_frames "scalar") (serialize-qp "isActive" $is_active "scalar") (serialize-qp "associatedCollections" $associated_collections "multi") (serialize-qp "attributes" $attributes "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/v1.1/stream/stream" $qp $auth.query)
   let accept_val = "application/json"
@@ -2170,12 +2347,14 @@ export def "remove-stream-using-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey provided by VisageCloud
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey provided by VisageCloud (required)
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/stream/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2209,12 +2388,14 @@ export def "get-stream-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey provided by VisageCloud
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey provided by VisageCloud (required)
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($stream_id | is-empty) { error make --unspanned { msg: "path parameter 'streamId' must be non-empty" } }
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({stream_id: (encode-path-segment $stream_id)} | format pattern "/rest/v1.1/stream/{stream_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2248,8 +2429,8 @@ export def "update-stream-using-patch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access-key: string # The accessKey provided by VisageCloud
-  --secret-key: string # The secretKey provided by VisageCloud
+  --access-key: string # The accessKey provided by VisageCloud (required)
+  --secret-key: string # The secretKey provided by VisageCloud (required)
   --name: string # The name of the stream that will be updated
   --url: string # The url of the stream
   --method: string@method-completer # Streaming method
@@ -2267,6 +2448,8 @@ export def "update-stream-using-patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($stream_id | is-empty) { error make --unspanned { msg: "path parameter 'streamId' must be non-empty" } }
+  if ($access_key == null) { error make --unspanned { msg: "required query parameter 'accessKey' missing: pass --access-key" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secretKey' missing: pass --secret-key" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "url" $url "scalar") (serialize-qp "method" $method "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "skipFramesWithNoFaces" $skip_frames_with_no_faces "scalar") (serialize-qp "retentionTime" $retention_time "scalar") (serialize-qp "storeOriginalFrames" $store_original_frames "scalar") (serialize-qp "storeAttendanceFaces" $store_attendance_faces "scalar") (serialize-qp "storeAttendanceFrames" $store_attendance_frames "scalar") (serialize-qp "isActive" $is_active "scalar") (serialize-qp "associatedCollections" $associated_collections "multi") (serialize-qp "attributes" $attributes "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({stream_id: (encode-path-segment $stream_id)} | format pattern "/rest/v1.1/stream/{stream_id}") $qp $auth.query)
   let accept_val = "application/json"

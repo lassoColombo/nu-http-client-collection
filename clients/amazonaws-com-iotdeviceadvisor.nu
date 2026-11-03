@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # POST /suiteDefinitions
 # operationId: CreateSuiteDefinition
-# --suiteDefinitionConfiguration shape: {suiteDefinitionName?: any, devices?: any, intendedForQualification?: any, isLongDurationTest?: any, rootGroup?: any, devicePermissionRoleArn?: any, protocol?: any}
+# --suiteDefinitionConfiguration shape: {suiteDefinitionName?: string, devices?: list, intendedForQualification?: bool, isLongDurationTest?: bool, rootGroup?: string, devicePermissionRoleArn?: string, protocol?: "MqttV3_1_1"|"MqttV5"}
 export def "create-suite-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -158,9 +158,9 @@ export def "create-suite-definition" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  suite_definition_configuration: record # Gets the suite definition configuration. — shape: {suiteDefinitionName?: any, devices?: any, intendedForQualification?: any, isLongDurationTest?: any, rootGroup?: any, devicePermissionRoleArn?: any, protocol?: any}
+  suite_definition_configuration: record # Gets the suite definition configuration. — shape: {suiteDefinitionName?: string, devices?: list, intendedForQualification?: bool, isLongDurationTest?: bool, rootGroup?: string, devicePermissionRoleArn?: string, protocol?: "MqttV3_1_1"|"MqttV5"}
   --tags: record # The tags to be attached to the suite definition.
-]: any -> record<suiteDefinitionId: record, suiteDefinitionArn: record, suiteDefinitionName: record, createdAt: record> {
+]: any -> record<suiteDefinitionId: string, suiteDefinitionArn: string, suiteDefinitionName: string, createdAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -208,7 +208,7 @@ export def "list-suite-definitions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<suiteDefinitionInformationList: record, nextToken: record> {
+]: nothing -> record<suiteDefinitionInformationList: table<suiteDefinitionId: string, suiteDefinitionName: string, defaultDevices: list, intendedForQualification: bool, isLongDurationTest: bool, protocol: string, createdAt: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -299,7 +299,7 @@ export def "get-suite-definition" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<suiteDefinitionId: record, suiteDefinitionArn: record, suiteDefinitionVersion: record, latestVersion: record, suiteDefinitionConfiguration: record<suiteDefinitionName: record, devices: record, intendedForQualification: record, isLongDurationTest: record, rootGroup: record, devicePermissionRoleArn: record, protocol: record>, createdAt: record, lastModifiedAt: record, tags: record> {
+]: nothing -> record<suiteDefinitionId: string, suiteDefinitionArn: string, suiteDefinitionVersion: string, latestVersion: string, suiteDefinitionConfiguration: record<suiteDefinitionName: string, devices: list<record>, intendedForQualification: bool, isLongDurationTest: bool, rootGroup: string, devicePermissionRoleArn: string, protocol: string>, createdAt: string, lastModifiedAt: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($suite_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'suiteDefinitionId' must be non-empty" } }
@@ -327,7 +327,7 @@ export def "get-suite-definition" [
 #
 # PATCH /suiteDefinitions/{suiteDefinitionId}
 # operationId: UpdateSuiteDefinition
-# --suiteDefinitionConfiguration shape: {suiteDefinitionName?: any, devices?: any, intendedForQualification?: any, isLongDurationTest?: any, rootGroup?: any, devicePermissionRoleArn?: any, protocol?: any}
+# --suiteDefinitionConfiguration shape: {suiteDefinitionName?: string, devices?: list, intendedForQualification?: bool, isLongDurationTest?: bool, rootGroup?: string, devicePermissionRoleArn?: string, protocol?: "MqttV3_1_1"|"MqttV5"}
 export def "update-suite-definition" [
   suite_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -346,8 +346,8 @@ export def "update-suite-definition" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  suite_definition_configuration: record # Gets the suite definition configuration. — shape: {suiteDefinitionName?: any, devices?: any, intendedForQualification?: any, isLongDurationTest?: any, rootGroup?: any, devicePermissionRoleArn?: any, protocol?: any}
-]: any -> record<suiteDefinitionId: record, suiteDefinitionArn: record, suiteDefinitionName: record, suiteDefinitionVersion: record, createdAt: record, lastUpdatedAt: record> {
+  suite_definition_configuration: record # Gets the suite definition configuration. — shape: {suiteDefinitionName?: string, devices?: list, intendedForQualification?: bool, isLongDurationTest?: bool, rootGroup?: string, devicePermissionRoleArn?: string, protocol?: "MqttV3_1_1"|"MqttV5"}
+]: any -> record<suiteDefinitionId: string, suiteDefinitionArn: string, suiteDefinitionName: string, suiteDefinitionVersion: string, createdAt: string, lastUpdatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -396,7 +396,7 @@ export def "get-endpoint" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<endpoint: record> {
+]: nothing -> record<endpoint: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "thingArn" $thing_arn "scalar") (serialize-qp "certificateArn" $certificate_arn "scalar")] | flatten | str join "&"
@@ -442,7 +442,7 @@ export def "get-suite-run" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<suiteDefinitionId: record, suiteDefinitionVersion: record, suiteRunId: record, suiteRunArn: record, suiteRunConfiguration: record<primaryDevice: record<thingArn: record, certificateArn: record>, selectedTestList: record, parallelRun: record>, testResult: record<groups: record>, startTime: record, endTime: record, status: record, errorReason: record, tags: record> {
+]: nothing -> record<suiteDefinitionId: string, suiteDefinitionVersion: string, suiteRunId: string, suiteRunArn: string, suiteRunConfiguration: record<primaryDevice: record<thingArn: string, certificateArn: string>, selectedTestList: list<string>, parallelRun: bool>, testResult: record<groups: list<record>>, startTime: string, endTime: string, status: string, errorReason: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($suite_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'suiteDefinitionId' must be non-empty" } }
@@ -489,7 +489,7 @@ export def "get-suite-run-report" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<qualificationReportDownloadUrl: record> {
+]: nothing -> record<qualificationReportDownloadUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($suite_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'suiteDefinitionId' must be non-empty" } }
@@ -538,7 +538,7 @@ export def "list-suite-runs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<suiteRunsList: record, nextToken: record> {
+]: nothing -> record<suiteRunsList: table<suiteDefinitionId: string, suiteDefinitionVersion: string, suiteDefinitionName: string, suiteRunId: string, createdAt: string, startedAt: string, endAt: string, status: string, passed: int, failed: int>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "suiteDefinitionId" $suite_definition_id "scalar") (serialize-qp "suiteDefinitionVersion" $suite_definition_version "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -659,7 +659,7 @@ export def "tag-resource" [
 #
 # POST /suiteDefinitions/{suiteDefinitionId}/suiteRuns
 # operationId: StartSuiteRun
-# --suiteRunConfiguration shape: {primaryDevice?: any, selectedTestList?: any, parallelRun?: any}
+# --suiteRunConfiguration shape: {primaryDevice?: record, selectedTestList?: list<string>, parallelRun?: bool}
 export def "start-suite-run" [
   suite_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -679,9 +679,9 @@ export def "start-suite-run" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --suite-definition-version: string # Suite definition version of the test suite.
-  suite_run_configuration: record # Gets suite run configuration. — shape: {primaryDevice?: any, selectedTestList?: any, parallelRun?: any}
+  suite_run_configuration: record # Gets suite run configuration. — shape: {primaryDevice?: record, selectedTestList?: list<string>, parallelRun?: bool}
   --tags: record # The tags to be attached to the suite run.
-]: any -> record<suiteRunId: record, suiteRunArn: record, createdAt: record, endpoint: record> {
+]: any -> record<suiteRunId: string, suiteRunArn: string, createdAt: string, endpoint: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -769,7 +769,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # List of tag keys to remove from the IoT Device Advisor resource.
+  --tag-keys: list # List of tag keys to remove from the IoT Device Advisor resource. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -781,6 +781,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"

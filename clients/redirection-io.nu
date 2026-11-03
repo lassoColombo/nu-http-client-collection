@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -320,10 +320,11 @@ export def "agent-legacy-complex-rule-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --project-id: string
+  --project-id: string # required
 ]: nothing -> table<actions: list<string>, changes: list<record>, currentChange: record<action: string, actions: list, author: record, createdAt: string, examples: list, formattedSource: string, id: string, markers: list, matchOnResponseStatus: int, rank: int, ruleId: string, source: string>, examples: list<string>, formattedSource: string, id: string, markers: list<record>, matchOnResponseStatus: int, rank: int, source: string, updatedAt: string, viewCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id == null) { error make --unspanned { msg: "required query parameter 'projectId' missing: pass --project-id" } }
   let qp = [(serialize-qp "projectId" $project_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/agent-rule-complexes" $qp $auth.query)
   let accept_val = ($accept | default "application/ld+json")
@@ -357,10 +358,11 @@ export def "agent-legacy-straight-rule-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --project-id: string
+  --project-id: string # required
 ]: nothing -> table<actions: list<string>, changes: list<record>, currentChange: record<action: string, actions: list, author: record, createdAt: string, examples: list, formattedSource: string, id: string, markers: list, matchOnResponseStatus: int, rank: int, ruleId: string, source: string>, examples: list<string>, formattedSource: string, id: string, markers: list<record>, matchOnResponseStatus: int, rank: int, source: string, updatedAt: string, viewCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id == null) { error make --unspanned { msg: "required query parameter 'projectId' missing: pass --project-id" } }
   let qp = [(serialize-qp "projectId" $project_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/agent-rule-straights" $qp $auth.query)
   let accept_val = ($accept | default "application/ld+json")
@@ -394,10 +396,11 @@ export def "agent-rule-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --project-id: string
+  --project-id: string # required
 ]: nothing -> table<actions: list<string>, changes: list<record>, currentChange: record<action: string, actions: list, author: record, createdAt: string, examples: list, formattedSource: string, id: string, markers: list, matchOnResponseStatus: int, rank: int, ruleId: string, source: string>, examples: list<string>, formattedSource: string, id: string, markers: list<record>, matchOnResponseStatus: int, rank: int, source: string, updatedAt: string, viewCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id == null) { error make --unspanned { msg: "required query parameter 'projectId' missing: pass --project-id" } }
   let qp = [(serialize-qp "projectId" $project_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/agent-rules" $qp $auth.query)
   let accept_val = ($accept | default "application/ld+json")
@@ -434,7 +437,7 @@ export def "get-aggregate-log-collection" [
   --page: int # The collection page number
   --project-id: string
   --created-at: string
-  --qp-source: string
+  --source: string
   --target: string
   --status-code: string
   --referrer: string
@@ -456,14 +459,14 @@ export def "get-aggregate-log-collection" [
 ]: nothing -> table<fixed: bool, id: any, lastOccurrenceAt: string, ruleId: string, source: any, statusCode: int, target: any, viewCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "projectId" $project_id "scalar") (serialize-qp "createdAt" $created_at "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "target" $target "scalar") (serialize-qp "statusCode" $status_code "scalar") (serialize-qp "referrer" $referrer "scalar") (serialize-qp "userAgent" $user_agent "scalar") (serialize-qp "userAgentType" $user_agent_type "scalar") (serialize-qp "simplifiedUserAgent" $simplified_user_agent "scalar") (serialize-qp "ruleId" $rule_id "scalar") (serialize-qp "instanceName" $instance_name "scalar") (serialize-qp "excludeUrls" $exclude_urls "scalar") (serialize-qp "excludeEmptyReferrer" $exclude_empty_referrer "scalar") (serialize-qp "createdAt_gt" $created_at_gt "scalar") (serialize-qp "createdAt_gte" $created_at_gte "scalar") (serialize-qp "createdAt_lt" $created_at_lt "scalar") (serialize-qp "createdAt_lte" $created_at_lte "scalar") (serialize-qp "statusCode_gt" $status_code_gt "scalar") (serialize-qp "statusCode_gte" $status_code_gte "scalar") (serialize-qp "statusCode_lt" $status_code_lt "scalar") (serialize-qp "statusCode_lte" $status_code_lte "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "projectId" $project_id "scalar") (serialize-qp "createdAt" $created_at "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "target" $target "scalar") (serialize-qp "statusCode" $status_code "scalar") (serialize-qp "referrer" $referrer "scalar") (serialize-qp "userAgent" $user_agent "scalar") (serialize-qp "userAgentType" $user_agent_type "scalar") (serialize-qp "simplifiedUserAgent" $simplified_user_agent "scalar") (serialize-qp "ruleId" $rule_id "scalar") (serialize-qp "instanceName" $instance_name "scalar") (serialize-qp "excludeUrls" $exclude_urls "scalar") (serialize-qp "excludeEmptyReferrer" $exclude_empty_referrer "scalar") (serialize-qp "createdAt_gt" $created_at_gt "scalar") (serialize-qp "createdAt_gte" $created_at_gte "scalar") (serialize-qp "createdAt_lt" $created_at_lt "scalar") (serialize-qp "createdAt_lte" $created_at_lte "scalar") (serialize-qp "statusCode_gt" $status_code_gt "scalar") (serialize-qp "statusCode_gte" $status_code_gte "scalar") (serialize-qp "statusCode_lt" $status_code_lt "scalar") (serialize-qp "statusCode_lte" $status_code_lte "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/aggregate-logs" $qp $auth.query)
   let accept_val = ($accept | default "application/ld+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"page": $page, "projectId": $project_id, "createdAt": $created_at, "source": $qp_source, "target": $target, "statusCode": $status_code, "referrer": $referrer, "userAgent": $user_agent, "userAgentType": $user_agent_type, "simplifiedUserAgent": $simplified_user_agent, "ruleId": $rule_id, "instanceName": $instance_name, "excludeUrls": $exclude_urls, "excludeEmptyReferrer": $exclude_empty_referrer, "createdAt_gt": $created_at_gt, "createdAt_gte": $created_at_gte, "createdAt_lt": $created_at_lt, "createdAt_lte": $created_at_lte, "statusCode_gt": $status_code_gt, "statusCode_gte": $status_code_gte, "statusCode_lt": $status_code_lt, "statusCode_lte": $status_code_lte} | compact)
+    query: ({"page": $page, "projectId": $project_id, "createdAt": $created_at, "source": $source, "target": $target, "statusCode": $status_code, "referrer": $referrer, "userAgent": $user_agent, "userAgentType": $user_agent_type, "simplifiedUserAgent": $simplified_user_agent, "ruleId": $rule_id, "instanceName": $instance_name, "excludeUrls": $exclude_urls, "excludeEmptyReferrer": $exclude_empty_referrer, "createdAt_gt": $created_at_gt, "createdAt_gte": $created_at_gte, "createdAt_lt": $created_at_lt, "createdAt_lte": $created_at_lte, "statusCode_gt": $status_code_gt, "statusCode_gte": $status_code_gte, "statusCode_lt": $status_code_lt, "statusCode_lte": $status_code_lte} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -600,13 +603,14 @@ export def "get-crawl-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --project-id: string
+  --project-id: string # required
   --first-url: string
   --sort-created-at: string
   --page: int # The collection page number
 ]: nothing -> table<archived: bool, author: record<name: string>, createdAt: string, error: string, finishedAt: string, firstUrl: string, id: string, stats: list<string>, trigger: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id == null) { error make --unspanned { msg: "required query parameter 'projectId' missing: pass --project-id" } }
   let qp = [(serialize-qp "projectId" $project_id "scalar") (serialize-qp "firstUrl" $first_url "scalar") (serialize-qp "sort[createdAt]" $sort_created_at "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/crawls" $qp $auth.query)
   let accept_val = ($accept | default "application/ld+json")
@@ -660,6 +664,8 @@ export def "post-crawl-collection" [
   let full_url = (build-url $base "/crawls" $auth.query)
   let req_body = {"concurrency": $concurrency, "firstUrl": $first_url, "headers": $headers, "httpBasicPassword": $http_basic_password, "httpBasicUser": $http_basic_user, "maxDepth": $max_depth, "maxDuration": $max_duration, "maxUrls": $max_urls, "otherDomains": $other_domains, "project": $project, "sslCheckingDisabled": $ssl_checking_disabled, "subdomainIncluded": $subdomain_included, "userAgent": $user_agent} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "sslCheckingDisabled") == null) { error make --unspanned { msg: "required body field 'sslCheckingDisabled' missing: pass --ssl-checking-disabled or pipe a record" } }
+  if (($req_body | get -o "subdomainIncluded") == null) { error make --unspanned { msg: "required body field 'subdomainIncluded' missing: pass --subdomain-included or pipe a record" } }
   let accept_val = ($accept | default "application/ld+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -850,12 +856,13 @@ export def "export-rule-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --project-id: string
+  --project-id: string # required
   --sort-id: string
   --sort-view-count: string
 ]: nothing -> table<actions: list<string>, changes: list<record>, currentChange: record<action: string, actions: list, author: record, createdAt: string, examples: list, formattedSource: string, id: string, markers: list, matchOnResponseStatus: int, rank: int, ruleId: string, source: string>, examples: list<string>, formattedSource: string, id: string, markers: list<record>, matchOnResponseStatus: int, rank: int, source: string, updatedAt: string, viewCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id == null) { error make --unspanned { msg: "required query parameter 'projectId' missing: pass --project-id" } }
   let qp = [(serialize-qp "projectId" $project_id "scalar") (serialize-qp "sort[id]" $sort_id "scalar") (serialize-qp "sort[viewCount]" $sort_view_count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/export-rules" $qp $auth.query)
   let accept_val = ($accept | default "application/ld+json")
@@ -1044,11 +1051,12 @@ export def "get-import-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --project-id: string
+  --project-id: string # required
   --page: int # The collection page number
 ]: nothing -> table<author: string, completedAt: string, errorCount: int, id: string, importDuration: int, message: string, project: string, startedAt: string, statusAsText: any, successCount: int, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id == null) { error make --unspanned { msg: "required query parameter 'projectId' missing: pass --project-id" } }
   let qp = [(serialize-qp "projectId" $project_id "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/imports" $qp $auth.query)
   let accept_val = ($accept | default "application/ld+json")
@@ -1159,10 +1167,11 @@ export def "get-instance-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --project-id: string
+  --project-id: string # required
 ]: nothing -> table<agentDuration: int, agentVersion: string, agentVersionStatus: string, config: string, createdAt: string, gone: bool, id: string, lastCompletedAt: string, lastStartedAt: string, live: bool, logging: bool, logsLastFlushedAt: string, message: string, misconfigured: bool, name: string, rulesCount: int, rulesHash: string, stale: bool, status: int, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id == null) { error make --unspanned { msg: "required query parameter 'projectId' missing: pass --project-id" } }
   let qp = [(serialize-qp "projectId" $project_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/instances" $qp $auth.query)
   let accept_val = ($accept | default "application/ld+json")
@@ -1321,11 +1330,13 @@ export def "get-invitation-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --target-id: string
-  --target-type: string
+  --target-id: string # required
+  --target-type: string # required
 ]: nothing -> table<createdAt: string, email: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($target_id == null) { error make --unspanned { msg: "required query parameter 'targetId' missing: pass --target-id" } }
+  if ($target_type == null) { error make --unspanned { msg: "required query parameter 'targetType' missing: pass --target-type" } }
   let qp = [(serialize-qp "targetId" $target_id "scalar") (serialize-qp "targetType" $target_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/invitations" $qp $auth.query)
   let accept_val = ($accept | default "application/ld+json")
@@ -1516,7 +1527,7 @@ export def "get-log-collection" [
   --page: int # The collection page number
   --project-id: string
   --created-at: string
-  --qp-source: string
+  --source: string
   --target: string
   --status-code: string
   --referrer: string
@@ -1538,14 +1549,14 @@ export def "get-log-collection" [
 ]: nothing -> table<createdAt: string, fixed: bool, fixedByVersions: list<string>, fromSmartList: bool, id: any, instanceName: any, method: any, notFixedByVersions: list<string>, proxy: string, referrer: any, ruleId: string, simplifiedUserAgent: any, smartList: string, source: any, statusCode: any, target: any, userAgent: any, userAgentType: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "projectId" $project_id "scalar") (serialize-qp "createdAt" $created_at "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "target" $target "scalar") (serialize-qp "statusCode" $status_code "scalar") (serialize-qp "referrer" $referrer "scalar") (serialize-qp "userAgent" $user_agent "scalar") (serialize-qp "userAgentType" $user_agent_type "scalar") (serialize-qp "simplifiedUserAgent" $simplified_user_agent "scalar") (serialize-qp "ruleId" $rule_id "scalar") (serialize-qp "instanceName" $instance_name "scalar") (serialize-qp "excludeUrls" $exclude_urls "scalar") (serialize-qp "excludeEmptyReferrer" $exclude_empty_referrer "scalar") (serialize-qp "createdAt_gt" $created_at_gt "scalar") (serialize-qp "createdAt_gte" $created_at_gte "scalar") (serialize-qp "createdAt_lt" $created_at_lt "scalar") (serialize-qp "createdAt_lte" $created_at_lte "scalar") (serialize-qp "statusCode_gt" $status_code_gt "scalar") (serialize-qp "statusCode_gte" $status_code_gte "scalar") (serialize-qp "statusCode_lt" $status_code_lt "scalar") (serialize-qp "statusCode_lte" $status_code_lte "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "projectId" $project_id "scalar") (serialize-qp "createdAt" $created_at "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "target" $target "scalar") (serialize-qp "statusCode" $status_code "scalar") (serialize-qp "referrer" $referrer "scalar") (serialize-qp "userAgent" $user_agent "scalar") (serialize-qp "userAgentType" $user_agent_type "scalar") (serialize-qp "simplifiedUserAgent" $simplified_user_agent "scalar") (serialize-qp "ruleId" $rule_id "scalar") (serialize-qp "instanceName" $instance_name "scalar") (serialize-qp "excludeUrls" $exclude_urls "scalar") (serialize-qp "excludeEmptyReferrer" $exclude_empty_referrer "scalar") (serialize-qp "createdAt_gt" $created_at_gt "scalar") (serialize-qp "createdAt_gte" $created_at_gte "scalar") (serialize-qp "createdAt_lt" $created_at_lt "scalar") (serialize-qp "createdAt_lte" $created_at_lte "scalar") (serialize-qp "statusCode_gt" $status_code_gt "scalar") (serialize-qp "statusCode_gte" $status_code_gte "scalar") (serialize-qp "statusCode_lt" $status_code_lt "scalar") (serialize-qp "statusCode_lte" $status_code_lte "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/logs" $qp $auth.query)
   let accept_val = ($accept | default "application/ld+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"page": $page, "projectId": $project_id, "createdAt": $created_at, "source": $qp_source, "target": $target, "statusCode": $status_code, "referrer": $referrer, "userAgent": $user_agent, "userAgentType": $user_agent_type, "simplifiedUserAgent": $simplified_user_agent, "ruleId": $rule_id, "instanceName": $instance_name, "excludeUrls": $exclude_urls, "excludeEmptyReferrer": $exclude_empty_referrer, "createdAt_gt": $created_at_gt, "createdAt_gte": $created_at_gte, "createdAt_lt": $created_at_lt, "createdAt_lte": $created_at_lte, "statusCode_gt": $status_code_gt, "statusCode_gte": $status_code_gte, "statusCode_lt": $status_code_lt, "statusCode_lte": $status_code_lte} | compact)
+    query: ({"page": $page, "projectId": $project_id, "createdAt": $created_at, "source": $source, "target": $target, "statusCode": $status_code, "referrer": $referrer, "userAgent": $user_agent, "userAgentType": $user_agent_type, "simplifiedUserAgent": $simplified_user_agent, "ruleId": $rule_id, "instanceName": $instance_name, "excludeUrls": $exclude_urls, "excludeEmptyReferrer": $exclude_empty_referrer, "createdAt_gt": $created_at_gt, "createdAt_gte": $created_at_gte, "createdAt_lt": $created_at_lt, "createdAt_lte": $created_at_lte, "statusCode_gt": $status_code_gt, "statusCode_gte": $status_code_gte, "statusCode_lt": $status_code_lt, "statusCode_lte": $status_code_lte} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2310,7 +2321,7 @@ export def "get-publish-history-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --project-id: string
+  --project-id: string # required
   --created-at-before: string
   --created-at-strictly-before: string
   --created-at-after: string
@@ -2319,6 +2330,7 @@ export def "get-publish-history-collection" [
 ]: nothing -> table<added: int, author: record<name: string>, createdAt: string, deleted: int, id: string, summary: string, type: string, updated: int, version: record<createdAt: string, current: bool, id: string, isSnapshot: bool, mergedRulesCount: int, name: string, publishedAt: string, working: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id == null) { error make --unspanned { msg: "required query parameter 'projectId' missing: pass --project-id" } }
   let qp = [(serialize-qp "projectId" $project_id "scalar") (serialize-qp "createdAt[before]" $created_at_before "scalar") (serialize-qp "createdAt[strictly_before]" $created_at_strictly_before "scalar") (serialize-qp "createdAt[after]" $created_at_after "scalar") (serialize-qp "createdAt[strictly_after]" $created_at_strictly_after "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/publish-histories" $qp $auth.query)
   let accept_val = ($accept | default "application/ld+json")
@@ -2389,11 +2401,12 @@ export def "get-rule-change-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --version-id: string
+  --version-id: string # required
   --page: int # The collection page number
 ]: nothing -> table<action: string, actions: list<string>, author: record<name: string>, createdAt: string, examples: list<string>, formattedSource: string, id: string, markers: list<record>, matchOnResponseStatus: int, rank: int, ruleId: string, source: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($version_id == null) { error make --unspanned { msg: "required query parameter 'versionId' missing: pass --version-id" } }
   let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rule-changes" $qp $auth.query)
   let accept_val = ($accept | default "application/ld+json")
@@ -2436,13 +2449,13 @@ export def "post-rule-change-collection" [
   --match-on-response-status: int
   rank: int
   --rule-id: string
-  --body-source: string
+  source: string
 ]: any -> record<action: string, actions: list<string>, author: record<name: string>, createdAt: string, examples: list<string>, formattedSource: string, id: string, markers: table<maximumOccurrence: int, minimumOccurrence: int, name: string, options: list, transformers: list, type: string>, matchOnResponseStatus: int, rank: int, ruleId: string, source: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rule-changes" $auth.query)
-  let req_body = {"action": $action, "actions": $actions, "examples": $examples, "formattedSource": $formatted_source, "markers": $markers, "matchOnResponseStatus": $match_on_response_status, "rank": $rank, "ruleId": $rule_id, "source": $body_source} | compact
+  let req_body = {"action": $action, "actions": $actions, "examples": $examples, "formattedSource": $formatted_source, "markers": $markers, "matchOnResponseStatus": $match_on_response_status, "rank": $rank, "ruleId": $rule_id, "source": $source} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/ld+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2548,12 +2561,13 @@ export def "get-rule-set-version-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --project-id: string
+  --project-id: string # required
   --sort-created-at: string
   --page: int # The collection page number
 ]: nothing -> table<createdAt: string, current: bool, id: string, isSnapshot: bool, mergedRulesCount: int, name: string, publishedAt: string, working: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id == null) { error make --unspanned { msg: "required query parameter 'projectId' missing: pass --project-id" } }
   let qp = [(serialize-qp "projectId" $project_id "scalar") (serialize-qp "sort[createdAt]" $sort_created_at "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rule-set-versions" $qp $auth.query)
   let accept_val = ($accept | default "application/ld+json")
@@ -2712,10 +2726,11 @@ export def "get-rule-statistic-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --project-id: string
+  --project-id: string # required
 ]: nothing -> table<id: string, stats: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id == null) { error make --unspanned { msg: "required query parameter 'projectId' missing: pass --project-id" } }
   let qp = [(serialize-qp "projectId" $project_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rule-statistics" $qp $auth.query)
   let accept_val = ($accept | default "application/ld+json")
@@ -2786,13 +2801,14 @@ export def "get-rule-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --project-id: string
+  --project-id: string # required
   --sort-id: string
   --sort-view-count: string
   --page: int # The collection page number
 ]: nothing -> table<actions: list<string>, changes: list<record>, currentChange: record<action: string, actions: list, author: record, createdAt: string, examples: list, formattedSource: string, id: string, markers: list, matchOnResponseStatus: int, rank: int, ruleId: string, source: string>, examples: list<string>, formattedSource: string, id: string, markers: list<record>, matchOnResponseStatus: int, rank: int, source: string, updatedAt: string, viewCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id == null) { error make --unspanned { msg: "required query parameter 'projectId' missing: pass --project-id" } }
   let qp = [(serialize-qp "projectId" $project_id "scalar") (serialize-qp "sort[id]" $sort_id "scalar") (serialize-qp "sort[viewCount]" $sort_view_count "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rules" $qp $auth.query)
   let accept_val = ($accept | default "application/ld+json")
@@ -3280,11 +3296,12 @@ export def "get-user-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --organization-id: string
+  --organization-id: string # required
   --search: string
 ]: nothing -> table<email: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($organization_id == null) { error make --unspanned { msg: "required query parameter 'organizationId' missing: pass --organization-id" } }
   let qp = [(serialize-qp "organizationId" $organization_id "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users" $qp $auth.query)
   let accept_val = ($accept | default "application/ld+json")

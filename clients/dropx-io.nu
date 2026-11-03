@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "access_token" => { {scheme: $scheme, headers: {access_token: $token_val}, query: "", location: "header"} }
+    "access_token" => { {scheme: $scheme, headers: {"access_token": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -131,10 +131,11 @@ export def "get-products" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pids: string # search array of ids
+  --pids: string # search array of ids (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "access_token"))
   let base = ($base_url | default $BASE_URL)
+  if ($pids == null) { error make --unspanned { msg: "required query parameter 'pids' missing: pass --pids" } }
   let qp = [(serialize-qp "pids" $pids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/products/" $qp $auth.query)
   let accept_val = "application/json"
@@ -166,11 +167,12 @@ export def "get-products-link-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --url: string # URL must be a url encoded value
+  --url: string # URL must be a url encoded value (required)
   --providers: string # A valid e commerce website link(eg. www.flipkart.com or http://www.amazon.in) by a ',' seperated values to filter response by required e-commerce providers
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "access_token"))
   let base = ($base_url | default $BASE_URL)
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
   let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "providers" $providers "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/products/link-search" $qp $auth.query)
   let accept_val = "application/json"
@@ -202,11 +204,12 @@ export def "get-products-link-search-v2" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --url: string # URL must be a url encoded value
+  --url: string # URL must be a url encoded value (required)
   --providers: string # A valid e commerce website link(eg. www.flipkart.com or http://www.amazon.in) by a ',' seperated values to filter response by required e-commerce providers
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "access_token"))
   let base = ($base_url | default $BASE_URL)
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
   let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "providers" $providers "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/products/link-search-v2" $qp $auth.query)
   let accept_val = "application/json"
@@ -238,11 +241,12 @@ export def "get-products-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --term: string # search terms giving any title of products that are sold online
+  --term: string # search terms giving any title of products that are sold online (required)
   --providers: string # A valid e commerce website link(eg. www.flipkart.com or http://www.amazon.in) by a ',' seperated values to filter response by required e-commerce providers
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "access_token"))
   let base = ($base_url | default $BASE_URL)
+  if ($term == null) { error make --unspanned { msg: "required query parameter 'term' missing: pass --term" } }
   let qp = [(serialize-qp "term" $term "scalar") (serialize-qp "providers" $providers "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/products/search" $qp $auth.query)
   let accept_val = "application/json"
@@ -274,11 +278,12 @@ export def "get-products-search-v2" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --term: string # search terms giving any title of products that are sold online
+  --term: string # search terms giving any title of products that are sold online (required)
   --providers: string # A valid e commerce website link(eg. www.flipkart.com or http://www.amazon.in) by a ',' seperated values to filter response by required e-commerce providers
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "access_token"))
   let base = ($base_url | default $BASE_URL)
+  if ($term == null) { error make --unspanned { msg: "required query parameter 'term' missing: pass --term" } }
   let qp = [(serialize-qp "term" $term "scalar") (serialize-qp "providers" $providers "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/products/search-v2" $qp $auth.query)
   let accept_val = "application/json"
@@ -310,10 +315,11 @@ export def "get-products-title-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --term: string # search terms giving any title of products that are sold online
+  --term: string # search terms giving any title of products that are sold online (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "access_token"))
   let base = ($base_url | default $BASE_URL)
+  if ($term == null) { error make --unspanned { msg: "required query parameter 'term' missing: pass --term" } }
   let qp = [(serialize-qp "term" $term "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/products/title-search" $qp $auth.query)
   let accept_val = "application/json"

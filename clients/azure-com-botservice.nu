@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -120,6 +120,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def kind-completer [] { ["bot" "designer" "function" "sdk"] }
+def channel-name-completer [] { ["DirectLineChannel" "EmailChannel" "FacebookChannel" "KikChannel" "MsTeamsChannel" "SkypeChannel" "SlackChannel" "SmsChannel" "TelegramChannel" "WebChatChannel"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -158,12 +159,13 @@ export def "enterprise-channels-check-name-availability" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
+  --api-version: string # Version of the API to be used with the client request. (required)
   --name: string # The name of the Enterprise Channel for which availability needs to be checked.
 ]: any -> record<message: string, valid: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.BotService/checkEnterpriseChannelNameAvailability" $qp $auth.query)
   let req_body = {"name": $name} | compact
@@ -198,13 +200,14 @@ export def "bots-get-check-name-availability" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
+  --api-version: string # Version of the API to be used with the client request. (required)
   --name: string # the name of the bot for which availability needs to be checked.
   --type: string # the type of the bot for which availability needs to be checked
 ]: any -> record<message: string, valid: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.BotService/checkNameAvailability" $qp $auth.query)
   let req_body = {"name": $name, "type": $type} | compact
@@ -239,10 +242,11 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
+  --api-version: string # Version of the API to be used with the client request. (required)
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string, origin: string, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.BotService/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -276,11 +280,12 @@ export def "bots-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Version of the API to be used with the client request. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, id: string, kind: string, location: string, name: string, sku: record, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.BotService/botServices") $qp $auth.query)
   let accept_val = "application/json"
@@ -314,11 +319,12 @@ export def "bot-connection-list-service-providers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
+  --api-version: string # Version of the API to be used with the client request. (required)
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.BotService/listAuthServiceProviders") $qp $auth.query)
   let accept_val = "application/json"
@@ -353,12 +359,13 @@ export def "bots-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Version of the API to be used with the client request. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, id: string, kind: string, location: string, name: string, sku: record, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices") $qp $auth.query)
   let accept_val = "application/json"
@@ -394,13 +401,14 @@ export def "bots-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
-]: nothing -> record<error: record<code: string, message: string>> {
+  --api-version: string # Version of the API to be used with the client request. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -436,13 +444,14 @@ export def "bots-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
-]: nothing -> record<properties: record<configuredChannels: list<string>, description: string, developerAppInsightKey: string, developerAppInsightsApiKey: string, developerAppInsightsApplicationId: string, displayName: string, enabledChannels: list<string>, endpoint: string, endpointVersion: string, iconUrl: string, luisAppIds: list<string>, luisKey: string, msaAppId: string>> {
+  --api-version: string # Version of the API to be used with the client request. (required)
+]: nothing -> record<properties: record<configuredChannels: list<string>, description: string, developerAppInsightKey: string, developerAppInsightsApiKey: string, developerAppInsightsApplicationId: string, displayName: string, enabledChannels: list<string>, endpoint: string, endpointVersion: string, iconUrl: string, luisAppIds: list<string>, luisKey: string, msaAppId: string>, etag: string, id: string, kind: string, location: string, name: string, sku: record<name: string, tier: string>, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -480,20 +489,21 @@ export def "bots-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
+  --api-version: string # Version of the API to be used with the client request. (required)
   --properties: any # The parameters to provide for the Bot. — shape: {description?: string, developerAppInsightKey?: string, developerAppInsightsApiKey?: string, developerAppInsightsApplicationId?: string, displayName: string, endpoint: string, iconUrl?: string, luisAppIds?: list<string>, luisKey?: string, msaAppId: string}
   --etag: string # Entity Tag
   --kind: string@kind-completer # Indicates the type of bot service
   --location: string # Specifies the location of the resource.
   --sku: any # The SKU of the cognitive services account. — shape: {name: "F0"|"S1"}
   --tags: record # Contains resource tags defined as key/value pairs.
-]: any -> record<properties: record<configuredChannels: list<string>, description: string, developerAppInsightKey: string, developerAppInsightsApiKey: string, developerAppInsightsApplicationId: string, displayName: string, enabledChannels: list<string>, endpoint: string, endpointVersion: string, iconUrl: string, luisAppIds: list<string>, luisKey: string, msaAppId: string>> {
+]: any -> record<properties: record<configuredChannels: list<string>, description: string, developerAppInsightKey: string, developerAppInsightsApiKey: string, developerAppInsightsApplicationId: string, displayName: string, enabledChannels: list<string>, endpoint: string, endpointVersion: string, iconUrl: string, luisAppIds: list<string>, luisKey: string, msaAppId: string>, etag: string, id: string, kind: string, location: string, name: string, sku: record<name: string, tier: string>, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "etag": $etag, "kind": $kind, "location": $location, "sku": $sku, "tags": $tags} | compact
@@ -533,20 +543,21 @@ export def "bots-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
+  --api-version: string # Version of the API to be used with the client request. (required)
   --properties: any # The parameters to provide for the Bot. — shape: {description?: string, developerAppInsightKey?: string, developerAppInsightsApiKey?: string, developerAppInsightsApplicationId?: string, displayName: string, endpoint: string, iconUrl?: string, luisAppIds?: list<string>, luisKey?: string, msaAppId: string}
   --etag: string # Entity Tag
   --kind: string@kind-completer # Indicates the type of bot service
   --location: string # Specifies the location of the resource.
   --sku: any # The SKU of the cognitive services account. — shape: {name: "F0"|"S1"}
   --tags: record # Contains resource tags defined as key/value pairs.
-]: any -> record<properties: record<configuredChannels: list<string>, description: string, developerAppInsightKey: string, developerAppInsightsApiKey: string, developerAppInsightsApplicationId: string, displayName: string, enabledChannels: list<string>, endpoint: string, endpointVersion: string, iconUrl: string, luisAppIds: list<string>, luisKey: string, msaAppId: string>> {
+]: any -> record<properties: record<configuredChannels: list<string>, description: string, developerAppInsightKey: string, developerAppInsightsApiKey: string, developerAppInsightsApplicationId: string, displayName: string, enabledChannels: list<string>, endpoint: string, endpointVersion: string, iconUrl: string, luisAppIds: list<string>, luisKey: string, msaAppId: string>, etag: string, id: string, kind: string, location: string, name: string, sku: record<name: string, tier: string>, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "etag": $etag, "kind": $kind, "location": $location, "sku": $sku, "tags": $tags} | compact
@@ -585,14 +596,15 @@ export def "bot-connection-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
-]: nothing -> record<error: record<code: string, message: string>> {
+  --api-version: string # Version of the API to be used with the client request. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($connection_name | is-empty) { error make --unspanned { msg: "path parameter 'connectionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), connection_name: (encode-path-segment $connection_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}/Connections/{connection_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -629,14 +641,15 @@ export def "bot-connection-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
-]: nothing -> record<properties: record<clientId: string, clientSecret: string, parameters: list<record>, scopes: string, serviceProviderDisplayName: string, serviceProviderId: string, settingId: string>> {
+  --api-version: string # Version of the API to be used with the client request. (required)
+]: nothing -> record<properties: record<clientId: string, clientSecret: string, parameters: list<record>, scopes: string, serviceProviderDisplayName: string, serviceProviderId: string, settingId: string>, etag: string, id: string, kind: string, location: string, name: string, sku: record<name: string, tier: string>, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($connection_name | is-empty) { error make --unspanned { msg: "path parameter 'connectionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), connection_name: (encode-path-segment $connection_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}/Connections/{connection_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -675,14 +688,14 @@ export def "bot-connection-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
+  --api-version: string # Version of the API to be used with the client request. (required)
   --properties: any # Properties for a Connection Setting Item — shape: {clientId?: string, clientSecret?: string, parameters?: list, scopes?: string, serviceProviderDisplayName?: string, serviceProviderId?: string}
   --etag: string # Entity Tag
   --kind: string@kind-completer # Indicates the type of bot service
   --location: string # Specifies the location of the resource.
   --sku: any # The SKU of the cognitive services account. — shape: {name: "F0"|"S1"}
   --tags: record # Contains resource tags defined as key/value pairs.
-]: any -> record<properties: record<clientId: string, clientSecret: string, parameters: list<record>, scopes: string, serviceProviderDisplayName: string, serviceProviderId: string, settingId: string>> {
+]: any -> record<properties: record<clientId: string, clientSecret: string, parameters: list<record>, scopes: string, serviceProviderDisplayName: string, serviceProviderId: string, settingId: string>, etag: string, id: string, kind: string, location: string, name: string, sku: record<name: string, tier: string>, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -690,6 +703,7 @@ export def "bot-connection-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($connection_name | is-empty) { error make --unspanned { msg: "path parameter 'connectionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), connection_name: (encode-path-segment $connection_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}/Connections/{connection_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "etag": $etag, "kind": $kind, "location": $location, "sku": $sku, "tags": $tags} | compact
@@ -730,14 +744,14 @@ export def "bot-connection-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
+  --api-version: string # Version of the API to be used with the client request. (required)
   --properties: any # Properties for a Connection Setting Item — shape: {clientId?: string, clientSecret?: string, parameters?: list, scopes?: string, serviceProviderDisplayName?: string, serviceProviderId?: string}
   --etag: string # Entity Tag
   --kind: string@kind-completer # Indicates the type of bot service
   --location: string # Specifies the location of the resource.
   --sku: any # The SKU of the cognitive services account. — shape: {name: "F0"|"S1"}
   --tags: record # Contains resource tags defined as key/value pairs.
-]: any -> record<properties: record<clientId: string, clientSecret: string, parameters: list<record>, scopes: string, serviceProviderDisplayName: string, serviceProviderId: string, settingId: string>> {
+]: any -> record<properties: record<clientId: string, clientSecret: string, parameters: list<record>, scopes: string, serviceProviderDisplayName: string, serviceProviderId: string, settingId: string>, etag: string, id: string, kind: string, location: string, name: string, sku: record<name: string, tier: string>, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -745,6 +759,7 @@ export def "bot-connection-create" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($connection_name | is-empty) { error make --unspanned { msg: "path parameter 'connectionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), connection_name: (encode-path-segment $connection_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}/Connections/{connection_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "etag": $etag, "kind": $kind, "location": $location, "sku": $sku, "tags": $tags} | compact
@@ -783,14 +798,15 @@ export def "bot-connection-list-with-secrets" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
-]: nothing -> record<properties: record<clientId: string, clientSecret: string, parameters: list<record>, scopes: string, serviceProviderDisplayName: string, serviceProviderId: string, settingId: string>> {
+  --api-version: string # Version of the API to be used with the client request. (required)
+]: nothing -> record<properties: record<clientId: string, clientSecret: string, parameters: list<record>, scopes: string, serviceProviderDisplayName: string, serviceProviderId: string, settingId: string>, etag: string, id: string, kind: string, location: string, name: string, sku: record<name: string, tier: string>, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($connection_name | is-empty) { error make --unspanned { msg: "path parameter 'connectionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), connection_name: (encode-path-segment $connection_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}/Connections/{connection_name}/listWithSecrets") $qp $auth.query)
   let accept_val = "application/json"
@@ -826,13 +842,14 @@ export def "channels-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Version of the API to be used with the client request. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, id: string, kind: string, location: string, name: string, sku: record, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}/channels") $qp $auth.query)
   let accept_val = "application/json"
@@ -869,14 +886,15 @@ export def "channels-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
-]: nothing -> record<error: record<code: string, message: string>> {
+  --api-version: string # Version of the API to be used with the client request. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($channel_name | is-empty) { error make --unspanned { msg: "path parameter 'channelName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), channel_name: (encode-path-segment $channel_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}/channels/{channel_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -913,14 +931,15 @@ export def "channels-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
-]: nothing -> record<properties: record<channelName: string>> {
+  --api-version: string # Version of the API to be used with the client request. (required)
+]: nothing -> record<properties: record<channelName: string>, etag: string, id: string, kind: string, location: string, name: string, sku: record<name: string, tier: string>, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($channel_name | is-empty) { error make --unspanned { msg: "path parameter 'channelName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), channel_name: (encode-path-segment $channel_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}/channels/{channel_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -949,7 +968,7 @@ export def "channels-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
-  channel_name: string
+  channel_name: string@channel-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -959,14 +978,14 @@ export def "channels-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
+  --api-version: string # Version of the API to be used with the client request. (required)
   --properties: record # Channel definition — shape: {channelName: string}
   --etag: string # Entity Tag
   --kind: string@kind-completer # Indicates the type of bot service
   --location: string # Specifies the location of the resource.
   --sku: any # The SKU of the cognitive services account. — shape: {name: "F0"|"S1"}
   --tags: record # Contains resource tags defined as key/value pairs.
-]: any -> record<properties: record<channelName: string>> {
+]: any -> record<properties: record<channelName: string>, etag: string, id: string, kind: string, location: string, name: string, sku: record<name: string, tier: string>, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -974,6 +993,7 @@ export def "channels-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($channel_name | is-empty) { error make --unspanned { msg: "path parameter 'channelName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), channel_name: (encode-path-segment $channel_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}/channels/{channel_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "etag": $etag, "kind": $kind, "location": $location, "sku": $sku, "tags": $tags} | compact
@@ -1004,7 +1024,7 @@ export def "channels-create" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
-  channel_name: string
+  channel_name: string@channel-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1014,14 +1034,14 @@ export def "channels-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
+  --api-version: string # Version of the API to be used with the client request. (required)
   --properties: record # Channel definition — shape: {channelName: string}
   --etag: string # Entity Tag
   --kind: string@kind-completer # Indicates the type of bot service
   --location: string # Specifies the location of the resource.
   --sku: any # The SKU of the cognitive services account. — shape: {name: "F0"|"S1"}
   --tags: record # Contains resource tags defined as key/value pairs.
-]: any -> record<properties: record<channelName: string>> {
+]: any -> record<properties: record<channelName: string>, etag: string, id: string, kind: string, location: string, name: string, sku: record<name: string, tier: string>, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1029,6 +1049,7 @@ export def "channels-create" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($channel_name | is-empty) { error make --unspanned { msg: "path parameter 'channelName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), channel_name: (encode-path-segment $channel_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}/channels/{channel_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "etag": $etag, "kind": $kind, "location": $location, "sku": $sku, "tags": $tags} | compact
@@ -1057,7 +1078,7 @@ export def "channels-list-with-keys" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
-  channel_name: string
+  channel_name: string@channel-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1067,14 +1088,15 @@ export def "channels-list-with-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
-]: nothing -> record<properties: record<channelName: string>> {
+  --api-version: string # Version of the API to be used with the client request. (required)
+]: nothing -> record<properties: record<channelName: string>, etag: string, id: string, kind: string, location: string, name: string, sku: record<name: string, tier: string>, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($channel_name | is-empty) { error make --unspanned { msg: "path parameter 'channelName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), channel_name: (encode-path-segment $channel_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}/channels/{channel_name}/listChannelWithKeys") $qp $auth.query)
   let accept_val = "application/json"
@@ -1110,13 +1132,14 @@ export def "bot-connection-list-by-bot-service" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Version of the API to be used with the client request. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, id: string, kind: string, location: string, name: string, sku: record, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/botServices/{resource_name}/connections") $qp $auth.query)
   let accept_val = "application/json"
@@ -1151,12 +1174,13 @@ export def "enterprise-channels-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Version of the API to be used with the client request. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, id: string, kind: string, location: string, name: string, sku: record, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/enterpriseChannels") $qp $auth.query)
   let accept_val = "application/json"
@@ -1192,13 +1216,14 @@ export def "enterprise-channels-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
-]: nothing -> record<error: record<code: string, message: string>> {
+  --api-version: string # Version of the API to be used with the client request. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/enterpriseChannels/{resource_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1234,13 +1259,14 @@ export def "enterprise-channels-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
-]: nothing -> record<properties: record<nodes: list<record>, state: string>> {
+  --api-version: string # Version of the API to be used with the client request. (required)
+]: nothing -> record<properties: record<nodes: list<record>, state: string>, etag: string, id: string, kind: string, location: string, name: string, sku: record<name: string, tier: string>, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/enterpriseChannels/{resource_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1278,20 +1304,21 @@ export def "enterprise-channels-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
+  --api-version: string # Version of the API to be used with the client request. (required)
   --properties: any # The parameters to provide for the Enterprise Channel. — shape: {nodes: list, state?: "Creating"|"CreateFailed"|"Started"|"Starting"|"StartFailed"|"Stopped"|"Stopping"|"StopFailed"|"Deleting"|"DeleteFailed"}
   --etag: string # Entity Tag
   --kind: string@kind-completer # Indicates the type of bot service
   --location: string # Specifies the location of the resource.
   --sku: any # The SKU of the cognitive services account. — shape: {name: "F0"|"S1"}
   --tags: record # Contains resource tags defined as key/value pairs.
-]: any -> record<properties: record<nodes: list<record>, state: string>> {
+]: any -> record<properties: record<nodes: list<record>, state: string>, etag: string, id: string, kind: string, location: string, name: string, sku: record<name: string, tier: string>, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/enterpriseChannels/{resource_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "etag": $etag, "kind": $kind, "location": $location, "sku": $sku, "tags": $tags} | compact
@@ -1331,20 +1358,21 @@ export def "enterprise-channels-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request.
+  --api-version: string # Version of the API to be used with the client request. (required)
   --properties: any # The parameters to provide for the Enterprise Channel. — shape: {nodes: list, state?: "Creating"|"CreateFailed"|"Started"|"Starting"|"StartFailed"|"Stopped"|"Stopping"|"StopFailed"|"Deleting"|"DeleteFailed"}
   --etag: string # Entity Tag
   --kind: string@kind-completer # Indicates the type of bot service
   --location: string # Specifies the location of the resource.
   --sku: any # The SKU of the cognitive services account. — shape: {name: "F0"|"S1"}
   --tags: record # Contains resource tags defined as key/value pairs.
-]: any -> record<properties: record<nodes: list<record>, state: string>> {
+]: any -> record<properties: record<nodes: list<record>, state: string>, etag: string, id: string, kind: string, location: string, name: string, sku: record<name: string, tier: string>, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BotService/enterpriseChannels/{resource_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "etag": $etag, "kind": $kind, "location": $location, "sku": $sku, "tags": $tags} | compact

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -160,11 +160,12 @@ export def "applications-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --filter: string # The filters to apply to the operation.
-  --api-version: string # Client API version.
-]: nothing -> record<odata_nextLink: string, value: table<allowGuestsSignIn: bool, allowPassthroughUsers: bool, appId: string, appLogoUrl: string, appPermissions: list, appRoles: list, availableToOtherTenants: bool, displayName: string, errorUrl: string, groupMembershipClaims: string, homepage: string, identifierUris: list, informationalUrls: record, isDeviceOnlyAuthSupported: bool, keyCredentials: list, knownClientApplications: list, logoutUrl: string, oauth2AllowImplicitFlow: bool, oauth2AllowUrlPathMatching: bool, oauth2Permissions: list, oauth2RequirePostResponse: bool, optionalClaims: record, orgRestrictions: list, passwordCredentials: list, preAuthorizedApplications: list, publicClient: bool, publisherDomain: string, replyUrls: list, requiredResourceAccess: list, samlMetadataUrl: string, signInAudience: string, wwwHomepage: string>> {
+  --api-version: string # Client API version. (required)
+]: nothing -> record<odata_nextLink: string, value: table<allowGuestsSignIn: bool, allowPassthroughUsers: bool, appId: string, appLogoUrl: string, appPermissions: list, appRoles: list, availableToOtherTenants: bool, displayName: string, errorUrl: string, groupMembershipClaims: string, homepage: string, identifierUris: list, informationalUrls: record, isDeviceOnlyAuthSupported: bool, keyCredentials: list, knownClientApplications: list, logoutUrl: string, oauth2AllowImplicitFlow: bool, oauth2AllowUrlPathMatching: bool, oauth2Permissions: list, oauth2RequirePostResponse: bool, optionalClaims: record, orgRestrictions: list, passwordCredentials: list, preAuthorizedApplications: list, publicClient: bool, publisherDomain: string, replyUrls: list, requiredResourceAccess: list, samlMetadataUrl: string, signInAudience: string, wwwHomepage: string, deletionTimestamp: string, objectId: string, objectType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/applications") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -207,7 +208,7 @@ export def "applications-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   display_name: string # The display name of the application.
   --identifier-uris: list<string> # A collection of URIs for the application.
   --allow-guests-sign-in: oneof<nothing, bool> # A property on the application to indicate if the application accepts other IDPs or not or partially accepts.
@@ -239,11 +240,12 @@ export def "applications-create" [
   --saml-metadata-url: string # The URL to the SAML metadata for the application.
   --sign-in-audience: string # Audience for signing in to the application (AzureADMyOrganization, AzureADAllOrganizations, AzureADAndMicrosoftAccounts).
   --www-homepage: string # The primary Web page.
-]: any -> record<allowGuestsSignIn: bool, allowPassthroughUsers: bool, appId: string, appLogoUrl: string, appPermissions: list<string>, appRoles: table<allowedMemberTypes: list, description: string, displayName: string, id: string, isEnabled: bool, value: string>, availableToOtherTenants: bool, displayName: string, errorUrl: string, groupMembershipClaims: string, homepage: string, identifierUris: list<string>, informationalUrls: record<marketing: string, privacy: string, support: string, termsOfService: string>, isDeviceOnlyAuthSupported: bool, keyCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, type: string, usage: string, value: string>, knownClientApplications: list<string>, logoutUrl: string, oauth2AllowImplicitFlow: bool, oauth2AllowUrlPathMatching: bool, oauth2Permissions: table<adminConsentDescription: string, adminConsentDisplayName: string, id: string, isEnabled: bool, type: string, userConsentDescription: string, userConsentDisplayName: string, value: string>, oauth2RequirePostResponse: bool, optionalClaims: record<accessToken: list<record>, idToken: list<record>, samlToken: list<record>>, orgRestrictions: list<string>, passwordCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, value: string>, preAuthorizedApplications: table<appId: string, extensions: list, permissions: list>, publicClient: bool, publisherDomain: string, replyUrls: list<string>, requiredResourceAccess: table<resourceAccess: list, resourceAppId: string>, samlMetadataUrl: string, signInAudience: string, wwwHomepage: string> {
+]: any -> record<allowGuestsSignIn: bool, allowPassthroughUsers: bool, appId: string, appLogoUrl: string, appPermissions: list<string>, appRoles: table<allowedMemberTypes: list, description: string, displayName: string, id: string, isEnabled: bool, value: string>, availableToOtherTenants: bool, displayName: string, errorUrl: string, groupMembershipClaims: string, homepage: string, identifierUris: list<string>, informationalUrls: record<marketing: string, privacy: string, support: string, termsOfService: string>, isDeviceOnlyAuthSupported: bool, keyCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, type: string, usage: string, value: string>, knownClientApplications: list<string>, logoutUrl: string, oauth2AllowImplicitFlow: bool, oauth2AllowUrlPathMatching: bool, oauth2Permissions: table<adminConsentDescription: string, adminConsentDisplayName: string, id: string, isEnabled: bool, type: string, userConsentDescription: string, userConsentDisplayName: string, value: string>, oauth2RequirePostResponse: bool, optionalClaims: record<accessToken: list<record>, idToken: list<record>, samlToken: list<record>>, orgRestrictions: list<string>, passwordCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, value: string>, preAuthorizedApplications: table<appId: string, extensions: list, permissions: list>, publicClient: bool, publisherDomain: string, replyUrls: list<string>, requiredResourceAccess: table<resourceAccess: list, resourceAppId: string>, samlMetadataUrl: string, signInAudience: string, wwwHomepage: string, deletionTimestamp: string, objectId: string, objectType: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/applications") $qp $auth.query)
   let req_body = {"displayName": $display_name, "identifierUris": $identifier_uris, "allowGuestsSignIn": $allow_guests_sign_in, "allowPassthroughUsers": $allow_passthrough_users, "appLogoUrl": $app_logo_url, "appPermissions": $app_permissions, "appRoles": $app_roles, "availableToOtherTenants": $available_to_other_tenants, "errorUrl": $error_url, "groupMembershipClaims": $group_membership_claims, "homepage": $homepage, "informationalUrls": $informational_urls, "isDeviceOnlyAuthSupported": $is_device_only_auth_supported, "keyCredentials": $key_credentials, "knownClientApplications": $known_client_applications, "logoutUrl": $logout_url, "oauth2AllowImplicitFlow": $oauth2_allow_implicit_flow, "oauth2AllowUrlPathMatching": $oauth2_allow_url_path_matching, "oauth2Permissions": $oauth2_permissions, "oauth2RequirePostResponse": $oauth2_require_post_response, "optionalClaims": $optional_claims, "orgRestrictions": $org_restrictions, "passwordCredentials": $password_credentials, "preAuthorizedApplications": $pre_authorized_applications, "publicClient": $public_client, "publisherDomain": $publisher_domain, "replyUrls": $reply_urls, "requiredResourceAccess": $required_resource_access, "samlMetadataUrl": $saml_metadata_url, "signInAudience": $sign_in_audience, "wwwHomepage": $www_homepage} | compact
@@ -281,12 +283,13 @@ export def "applications-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
-]: nothing -> record<odata_error: record<code: string, message: record<value: string>>> {
+  --api-version: string # Client API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($application_object_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationObjectId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -322,12 +325,13 @@ export def "applications-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
-]: nothing -> record<allowGuestsSignIn: bool, allowPassthroughUsers: bool, appId: string, appLogoUrl: string, appPermissions: list<string>, appRoles: table<allowedMemberTypes: list, description: string, displayName: string, id: string, isEnabled: bool, value: string>, availableToOtherTenants: bool, displayName: string, errorUrl: string, groupMembershipClaims: string, homepage: string, identifierUris: list<string>, informationalUrls: record<marketing: string, privacy: string, support: string, termsOfService: string>, isDeviceOnlyAuthSupported: bool, keyCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, type: string, usage: string, value: string>, knownClientApplications: list<string>, logoutUrl: string, oauth2AllowImplicitFlow: bool, oauth2AllowUrlPathMatching: bool, oauth2Permissions: table<adminConsentDescription: string, adminConsentDisplayName: string, id: string, isEnabled: bool, type: string, userConsentDescription: string, userConsentDisplayName: string, value: string>, oauth2RequirePostResponse: bool, optionalClaims: record<accessToken: list<record>, idToken: list<record>, samlToken: list<record>>, orgRestrictions: list<string>, passwordCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, value: string>, preAuthorizedApplications: table<appId: string, extensions: list, permissions: list>, publicClient: bool, publisherDomain: string, replyUrls: list<string>, requiredResourceAccess: table<resourceAccess: list, resourceAppId: string>, samlMetadataUrl: string, signInAudience: string, wwwHomepage: string> {
+  --api-version: string # Client API version. (required)
+]: nothing -> record<allowGuestsSignIn: bool, allowPassthroughUsers: bool, appId: string, appLogoUrl: string, appPermissions: list<string>, appRoles: table<allowedMemberTypes: list, description: string, displayName: string, id: string, isEnabled: bool, value: string>, availableToOtherTenants: bool, displayName: string, errorUrl: string, groupMembershipClaims: string, homepage: string, identifierUris: list<string>, informationalUrls: record<marketing: string, privacy: string, support: string, termsOfService: string>, isDeviceOnlyAuthSupported: bool, keyCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, type: string, usage: string, value: string>, knownClientApplications: list<string>, logoutUrl: string, oauth2AllowImplicitFlow: bool, oauth2AllowUrlPathMatching: bool, oauth2Permissions: table<adminConsentDescription: string, adminConsentDisplayName: string, id: string, isEnabled: bool, type: string, userConsentDescription: string, userConsentDisplayName: string, value: string>, oauth2RequirePostResponse: bool, optionalClaims: record<accessToken: list<record>, idToken: list<record>, samlToken: list<record>>, orgRestrictions: list<string>, passwordCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, value: string>, preAuthorizedApplications: table<appId: string, extensions: list, permissions: list>, publicClient: bool, publisherDomain: string, replyUrls: list<string>, requiredResourceAccess: table<resourceAccess: list, resourceAppId: string>, samlMetadataUrl: string, signInAudience: string, wwwHomepage: string, deletionTimestamp: string, objectId: string, objectType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($application_object_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationObjectId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -371,7 +375,7 @@ export def "applications-patch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --display-name: string # The display name of the application.
   --identifier-uris: list<string> # A collection of URIs for the application.
   --allow-guests-sign-in: oneof<nothing, bool> # A property on the application to indicate if the application accepts other IDPs or not or partially accepts.
@@ -403,12 +407,13 @@ export def "applications-patch" [
   --saml-metadata-url: string # The URL to the SAML metadata for the application.
   --sign-in-audience: string # Audience for signing in to the application (AzureADMyOrganization, AzureADAllOrganizations, AzureADAndMicrosoftAccounts).
   --www-homepage: string # The primary Web page.
-]: any -> record<odata_error: record<code: string, message: record<value: string>>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($application_object_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationObjectId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}") $qp $auth.query)
   let req_body = {"displayName": $display_name, "identifierUris": $identifier_uris, "allowGuestsSignIn": $allow_guests_sign_in, "allowPassthroughUsers": $allow_passthrough_users, "appLogoUrl": $app_logo_url, "appPermissions": $app_permissions, "appRoles": $app_roles, "availableToOtherTenants": $available_to_other_tenants, "errorUrl": $error_url, "groupMembershipClaims": $group_membership_claims, "homepage": $homepage, "informationalUrls": $informational_urls, "isDeviceOnlyAuthSupported": $is_device_only_auth_supported, "keyCredentials": $key_credentials, "knownClientApplications": $known_client_applications, "logoutUrl": $logout_url, "oauth2AllowImplicitFlow": $oauth2_allow_implicit_flow, "oauth2AllowUrlPathMatching": $oauth2_allow_url_path_matching, "oauth2Permissions": $oauth2_permissions, "oauth2RequirePostResponse": $oauth2_require_post_response, "optionalClaims": $optional_claims, "orgRestrictions": $org_restrictions, "passwordCredentials": $password_credentials, "preAuthorizedApplications": $pre_authorized_applications, "publicClient": $public_client, "publisherDomain": $publisher_domain, "replyUrls": $reply_urls, "requiredResourceAccess": $required_resource_access, "samlMetadataUrl": $saml_metadata_url, "signInAudience": $sign_in_audience, "wwwHomepage": $www_homepage} | compact
@@ -446,14 +451,15 @@ export def "applications-add-owner" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   url: string # A owner object URL, such as "https://graph.windows.net/0b1f9851-1bf0-433f-aec3-cb9272f093dc/directoryObjects/f260bbc4-c254-447b-94cf-293b5ec434dd", where "0b1f9851-1bf0-433f-aec3-cb9272f093dc" is the tenantId and "f260bbc4-c254-447b-94cf-293b5ec434dd" is the objectId of the owner (user, application, servicePrincipal, group) to be added.
-]: any -> record<odata_error: record<code: string, message: record<value: string>>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($application_object_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationObjectId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}/$links/owners") $qp $auth.query)
   let req_body = {"url": $url} | compact
@@ -492,13 +498,14 @@ export def "applications-remove-owner" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
-]: nothing -> record<odata_error: record<code: string, message: record<value: string>>> {
+  --api-version: string # Client API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($application_object_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationObjectId' must be non-empty" } }
   if ($owner_object_id | is-empty) { error make --unspanned { msg: "path parameter 'ownerObjectId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id), owner_object_id: (encode-path-segment $owner_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}/$links/owners/{owner_object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -534,12 +541,13 @@ export def "applications-list-key-credentials" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<value: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, type: string, usage: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($application_object_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationObjectId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}/keyCredentials") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -576,14 +584,15 @@ export def "applications-update-key-credentials" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   value: list # A collection of KeyCredentials. — item shape: {customKeyIdentifier?: string, endDate?: string, keyId?: string, startDate?: string, type?: string, usage?: string, value?: string}
-]: any -> record<odata_error: record<code: string, message: record<value: string>>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($application_object_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationObjectId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}/keyCredentials") $qp $auth.query)
   let req_body = {"value": $value} | compact
@@ -621,12 +630,13 @@ export def "applications-list-owners" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<odata_nextLink: string, value: table<deletionTimestamp: string, objectId: string, objectType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($application_object_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationObjectId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}/owners") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -662,12 +672,13 @@ export def "applications-list-password-credentials" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<value: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($application_object_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationObjectId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}/passwordCredentials") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -704,14 +715,15 @@ export def "applications-update-password-credentials" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   value: list # A collection of PasswordCredentials. — item shape: {customKeyIdentifier?: string, endDate?: string, keyId?: string, startDate?: string, value?: string}
-]: any -> record<odata_error: record<code: string, message: record<value: string>>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($application_object_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationObjectId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}/passwordCredentials") $qp $auth.query)
   let req_body = {"value": $value} | compact
@@ -749,11 +761,12 @@ export def "deleted-applications-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --filter: string # The filter to apply to the operation.
-  --api-version: string # Client API version.
-]: nothing -> record<odata_nextLink: string, value: table<allowGuestsSignIn: bool, allowPassthroughUsers: bool, appId: string, appLogoUrl: string, appPermissions: list, appRoles: list, availableToOtherTenants: bool, displayName: string, errorUrl: string, groupMembershipClaims: string, homepage: string, identifierUris: list, informationalUrls: record, isDeviceOnlyAuthSupported: bool, keyCredentials: list, knownClientApplications: list, logoutUrl: string, oauth2AllowImplicitFlow: bool, oauth2AllowUrlPathMatching: bool, oauth2Permissions: list, oauth2RequirePostResponse: bool, optionalClaims: record, orgRestrictions: list, passwordCredentials: list, preAuthorizedApplications: list, publicClient: bool, publisherDomain: string, replyUrls: list, requiredResourceAccess: list, samlMetadataUrl: string, signInAudience: string, wwwHomepage: string>> {
+  --api-version: string # Client API version. (required)
+]: nothing -> record<odata_nextLink: string, value: table<allowGuestsSignIn: bool, allowPassthroughUsers: bool, appId: string, appLogoUrl: string, appPermissions: list, appRoles: list, availableToOtherTenants: bool, displayName: string, errorUrl: string, groupMembershipClaims: string, homepage: string, identifierUris: list, informationalUrls: record, isDeviceOnlyAuthSupported: bool, keyCredentials: list, knownClientApplications: list, logoutUrl: string, oauth2AllowImplicitFlow: bool, oauth2AllowUrlPathMatching: bool, oauth2Permissions: list, oauth2RequirePostResponse: bool, optionalClaims: record, orgRestrictions: list, passwordCredentials: list, preAuthorizedApplications: list, publicClient: bool, publisherDomain: string, replyUrls: list, requiredResourceAccess: list, samlMetadataUrl: string, signInAudience: string, wwwHomepage: string, deletionTimestamp: string, objectId: string, objectType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/deletedApplications") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -789,12 +802,13 @@ export def "deleted-applications-hard-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
-]: nothing -> record<odata_error: record<code: string, message: record<value: string>>> {
+  --api-version: string # Client API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($application_object_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationObjectId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/deletedApplications/{application_object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -830,12 +844,13 @@ export def "deleted-applications-restore" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
-]: nothing -> record<allowGuestsSignIn: bool, allowPassthroughUsers: bool, appId: string, appLogoUrl: string, appPermissions: list<string>, appRoles: table<allowedMemberTypes: list, description: string, displayName: string, id: string, isEnabled: bool, value: string>, availableToOtherTenants: bool, displayName: string, errorUrl: string, groupMembershipClaims: string, homepage: string, identifierUris: list<string>, informationalUrls: record<marketing: string, privacy: string, support: string, termsOfService: string>, isDeviceOnlyAuthSupported: bool, keyCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, type: string, usage: string, value: string>, knownClientApplications: list<string>, logoutUrl: string, oauth2AllowImplicitFlow: bool, oauth2AllowUrlPathMatching: bool, oauth2Permissions: table<adminConsentDescription: string, adminConsentDisplayName: string, id: string, isEnabled: bool, type: string, userConsentDescription: string, userConsentDisplayName: string, value: string>, oauth2RequirePostResponse: bool, optionalClaims: record<accessToken: list<record>, idToken: list<record>, samlToken: list<record>>, orgRestrictions: list<string>, passwordCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, value: string>, preAuthorizedApplications: table<appId: string, extensions: list, permissions: list>, publicClient: bool, publisherDomain: string, replyUrls: list<string>, requiredResourceAccess: table<resourceAccess: list, resourceAppId: string>, samlMetadataUrl: string, signInAudience: string, wwwHomepage: string> {
+  --api-version: string # Client API version. (required)
+]: nothing -> record<allowGuestsSignIn: bool, allowPassthroughUsers: bool, appId: string, appLogoUrl: string, appPermissions: list<string>, appRoles: table<allowedMemberTypes: list, description: string, displayName: string, id: string, isEnabled: bool, value: string>, availableToOtherTenants: bool, displayName: string, errorUrl: string, groupMembershipClaims: string, homepage: string, identifierUris: list<string>, informationalUrls: record<marketing: string, privacy: string, support: string, termsOfService: string>, isDeviceOnlyAuthSupported: bool, keyCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, type: string, usage: string, value: string>, knownClientApplications: list<string>, logoutUrl: string, oauth2AllowImplicitFlow: bool, oauth2AllowUrlPathMatching: bool, oauth2Permissions: table<adminConsentDescription: string, adminConsentDisplayName: string, id: string, isEnabled: bool, type: string, userConsentDescription: string, userConsentDisplayName: string, value: string>, oauth2RequirePostResponse: bool, optionalClaims: record<accessToken: list<record>, idToken: list<record>, samlToken: list<record>>, orgRestrictions: list<string>, passwordCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, value: string>, preAuthorizedApplications: table<appId: string, extensions: list, permissions: list>, publicClient: bool, publisherDomain: string, replyUrls: list<string>, requiredResourceAccess: table<resourceAccess: list, resourceAppId: string>, samlMetadataUrl: string, signInAudience: string, wwwHomepage: string, deletionTimestamp: string, objectId: string, objectType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/deletedApplications/{object_id}/restore") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -871,11 +886,12 @@ export def "domains-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --filter: string # The filter to apply to the operation.
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<value: table<authenticationType: string, isDefault: bool, isVerified: bool, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/domains") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -911,12 +927,13 @@ export def "domains-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<authenticationType: string, isDefault: bool, isVerified: bool, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), domain_name: (encode-path-segment $domain_name)} | format pattern "/{tenant_id}/domains/{domain_name}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -951,7 +968,7 @@ export def "objects-get-objects-by-object-ids" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --include-directory-object-references: oneof<nothing, bool> # If true, also searches for object IDs in the partner tenant.
   --object-ids: list<string> # The requested object IDs.
   --types: list<string> # The requested object types.
@@ -960,6 +977,7 @@ export def "objects-get-objects-by-object-ids" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/getObjectsByObjectIds") $qp $auth.query)
   let req_body = {"includeDirectoryObjectReferences": $include_directory_object_references, "objectIds": $object_ids, "types": $types} | compact
@@ -997,11 +1015,12 @@ export def "groups-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --filter: string # The filter to apply to the operation.
-  --api-version: string # Client API version.
-]: nothing -> record<odata_nextLink: string, value: table<displayName: string, mail: string, mailEnabled: bool, mailNickname: string, securityEnabled: bool>> {
+  --api-version: string # Client API version. (required)
+]: nothing -> record<odata_nextLink: string, value: table<displayName: string, mail: string, mailEnabled: bool, mailNickname: string, securityEnabled: bool, deletionTimestamp: string, objectId: string, objectType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/groups") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1036,20 +1055,23 @@ export def "groups-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   display_name: string # Group display name
   --mail-enabled: oneof<nothing, bool> # Whether the group is mail-enabled. Must be false. This is because only pure security groups can be created using the Graph API.
   mail_nickname: string # Mail nickname
   --security-enabled: oneof<nothing, bool> # Whether the group is a security group. Must be true. This is because only pure security groups can be created using the Graph API.
-]: any -> record<displayName: string, mail: string, mailEnabled: bool, mailNickname: string, securityEnabled: bool> {
+]: any -> record<displayName: string, mail: string, mailEnabled: bool, mailNickname: string, securityEnabled: bool, deletionTimestamp: string, objectId: string, objectType: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/groups") $qp $auth.query)
   let req_body = {"displayName": $display_name, "mailEnabled": $mail_enabled, "mailNickname": $mail_nickname, "securityEnabled": $security_enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "mailEnabled") == null) { error make --unspanned { msg: "required body field 'mailEnabled' missing: pass --mail-enabled or pipe a record" } }
+  if (($req_body | get -o "securityEnabled") == null) { error make --unspanned { msg: "required body field 'securityEnabled' missing: pass --security-enabled or pipe a record" } }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1083,14 +1105,15 @@ export def "groups-add-member" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   url: string # A member object URL, such as "https://graph.windows.net/0b1f9851-1bf0-433f-aec3-cb9272f093dc/directoryObjects/f260bbc4-c254-447b-94cf-293b5ec434dd", where "0b1f9851-1bf0-433f-aec3-cb9272f093dc" is the tenantId and "f260bbc4-c254-447b-94cf-293b5ec434dd" is the objectId of the member (user, application, servicePrincipal, group) to be added.
-]: any -> record<odata_error: record<code: string, message: record<value: string>>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($group_object_id | is-empty) { error make --unspanned { msg: "path parameter 'groupObjectId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), group_object_id: (encode-path-segment $group_object_id)} | format pattern "/{tenant_id}/groups/{group_object_id}/$links/members") $qp $auth.query)
   let req_body = {"url": $url} | compact
@@ -1129,13 +1152,14 @@ export def "groups-remove-member" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
-]: nothing -> record<odata_error: record<code: string, message: record<value: string>>> {
+  --api-version: string # Client API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($group_object_id | is-empty) { error make --unspanned { msg: "path parameter 'groupObjectId' must be non-empty" } }
   if ($member_object_id | is-empty) { error make --unspanned { msg: "path parameter 'memberObjectId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), group_object_id: (encode-path-segment $group_object_id), member_object_id: (encode-path-segment $member_object_id)} | format pattern "/{tenant_id}/groups/{group_object_id}/$links/members/{member_object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1171,12 +1195,13 @@ export def "groups-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
-]: nothing -> record<odata_error: record<code: string, message: record<value: string>>> {
+  --api-version: string # Client API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/groups/{object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1212,12 +1237,13 @@ export def "groups-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
-]: nothing -> record<displayName: string, mail: string, mailEnabled: bool, mailNickname: string, securityEnabled: bool> {
+  --api-version: string # Client API version. (required)
+]: nothing -> record<displayName: string, mail: string, mailEnabled: bool, mailNickname: string, securityEnabled: bool, deletionTimestamp: string, objectId: string, objectType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/groups/{object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1253,14 +1279,15 @@ export def "groups-add-owner" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   url: string # A owner object URL, such as "https://graph.windows.net/0b1f9851-1bf0-433f-aec3-cb9272f093dc/directoryObjects/f260bbc4-c254-447b-94cf-293b5ec434dd", where "0b1f9851-1bf0-433f-aec3-cb9272f093dc" is the tenantId and "f260bbc4-c254-447b-94cf-293b5ec434dd" is the objectId of the owner (user, application, servicePrincipal, group) to be added.
-]: any -> record<odata_error: record<code: string, message: record<value: string>>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/groups/{object_id}/$links/owners") $qp $auth.query)
   let req_body = {"url": $url} | compact
@@ -1299,13 +1326,14 @@ export def "groups-remove-owner" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
-]: nothing -> record<odata_error: record<code: string, message: record<value: string>>> {
+  --api-version: string # Client API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
   if ($owner_object_id | is-empty) { error make --unspanned { msg: "path parameter 'ownerObjectId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id), owner_object_id: (encode-path-segment $owner_object_id)} | format pattern "/{tenant_id}/groups/{object_id}/$links/owners/{owner_object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1341,7 +1369,7 @@ export def "groups-get-member-groups" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --security-enabled-only: oneof<nothing, bool> # If true, only membership in security-enabled groups should be checked. Otherwise, membership in all groups should be checked.
 ]: any -> record<value: list<string>> {
   let input = $in
@@ -1349,10 +1377,12 @@ export def "groups-get-member-groups" [
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/groups/{object_id}/getMemberGroups") $qp $auth.query)
   let req_body = {"securityEnabledOnly": $security_enabled_only} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "securityEnabledOnly") == null) { error make --unspanned { msg: "required body field 'securityEnabledOnly' missing: pass --security-enabled-only or pipe a record" } }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1386,12 +1416,13 @@ export def "groups-get-group-members" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<odata_nextLink: string, value: table<deletionTimestamp: string, objectId: string, objectType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/groups/{object_id}/members") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1427,12 +1458,13 @@ export def "groups-list-owners" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<odata_nextLink: string, value: table<deletionTimestamp: string, objectId: string, objectType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/groups/{object_id}/owners") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1467,7 +1499,7 @@ export def "groups-is-member-of" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   group_id: string # The object ID of the group to check.
   member_id: string # The object ID of the contact, group, user, or service principal to check for membership in the specified group.
 ]: any -> record<value: bool> {
@@ -1475,6 +1507,7 @@ export def "groups-is-member-of" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/isMemberOf") $qp $auth.query)
   let req_body = {"groupId": $group_id, "memberId": $member_id} | compact
@@ -1511,11 +1544,12 @@ export def "signed-in-user-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
-]: nothing -> record<accountEnabled: bool, displayName: string, givenName: string, immutableId: string, mail: string, mailNickname: string, signInNames: table<type: string, value: string>, surname: string, usageLocation: string, userPrincipalName: string, userType: string> {
+  --api-version: string # Client API version. (required)
+]: nothing -> record<accountEnabled: bool, displayName: string, givenName: string, immutableId: string, mail: string, mailNickname: string, signInNames: table<type: string, value: string>, surname: string, usageLocation: string, userPrincipalName: string, userType: string, deletionTimestamp: string, objectId: string, objectType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/me") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1550,11 +1584,12 @@ export def "signed-in-user-list-owned-objects" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<odata_nextLink: string, value: table<deletionTimestamp: string, objectId: string, objectType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/me/ownedObjects") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1589,11 +1624,12 @@ export def "o-auth2-permission-grant-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # This is the Service Principal ObjectId associated with the app (e.g. clientId+eq+'61ed44c3-5a1d-4639-a215-07f25129c6c3)
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<odata_nextLink: string, value: table<clientId: string, consentType: string, expiryTime: string, objectId: string, odata_type: string, principalId: string, resourceId: string, scope: string, startTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/oauth2PermissionGrants") $qp $auth.query)
   let accept_val = "application/json"
@@ -1627,7 +1663,7 @@ export def "o-auth2-permission-grant-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --client-id: string # The id of the resource's service principal granted consent to impersonate the user when accessing the resource (represented by the resourceId property).
   --consent-type: string@consent-type-completer # Indicates if consent was provided by the administrator (on behalf of the organization) or by an individual.
   --expiry-time: string # Expiry time for TTL
@@ -1642,6 +1678,7 @@ export def "o-auth2-permission-grant-create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/oauth2PermissionGrants") $qp $auth.query)
   let req_body = {"clientId": $client_id, "consentType": $consent_type, "expiryTime": $expiry_time, "objectId": $object_id, "odata.type": $odata_type, "principalId": $principal_id, "resourceId": $resource_id, "scope": $scope, "startTime": $start_time} | compact
@@ -1679,12 +1716,13 @@ export def "o-auth2-permission-grant-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
-]: nothing -> record<odata_error: record<code: string, message: record<value: string>>> {
+  --api-version: string # Client API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/oauth2PermissionGrants/{object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1720,11 +1758,12 @@ export def "service-principals-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --filter: string # The filter to apply to the operation.
-  --api-version: string # Client API version.
-]: nothing -> record<odata_nextLink: string, value: table<accountEnabled: bool, alternativeNames: list, appDisplayName: string, appId: string, appOwnerTenantId: string, appRoleAssignmentRequired: bool, appRoles: list, displayName: string, errorUrl: string, homepage: string, keyCredentials: list, logoutUrl: string, oauth2Permissions: list, passwordCredentials: list, preferredTokenSigningKeyThumbprint: string, publisherName: string, replyUrls: list, samlMetadataUrl: string, servicePrincipalNames: list, servicePrincipalType: string, tags: list>> {
+  --api-version: string # Client API version. (required)
+]: nothing -> record<odata_nextLink: string, value: table<accountEnabled: bool, alternativeNames: list, appDisplayName: string, appId: string, appOwnerTenantId: string, appRoleAssignmentRequired: bool, appRoles: list, displayName: string, errorUrl: string, homepage: string, keyCredentials: list, logoutUrl: string, oauth2Permissions: list, passwordCredentials: list, preferredTokenSigningKeyThumbprint: string, publisherName: string, replyUrls: list, samlMetadataUrl: string, servicePrincipalNames: list, servicePrincipalType: string, tags: list, deletionTimestamp: string, objectId: string, objectType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/servicePrincipals") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1761,7 +1800,7 @@ export def "service-principals-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   app_id: string # The application ID.
   --account-enabled: oneof<nothing, bool> # whether or not the service principal account is enabled
   --app-role-assignment-required: oneof<nothing, bool> # Specifies whether an AppRoleAssignment to a user or group is required before Azure AD will issue a user or access token to the application.
@@ -1769,11 +1808,12 @@ export def "service-principals-create" [
   --password-credentials: list # The collection of password credentials associated with the service principal. — item shape: {customKeyIdentifier?: string, endDate?: string, keyId?: string, startDate?: string, value?: string}
   --service-principal-type: string # the type of the service principal
   --tags: list<string> # Optional list of tags that you can apply to your service principals. Not nullable.
-]: any -> record<accountEnabled: bool, alternativeNames: list<string>, appDisplayName: string, appId: string, appOwnerTenantId: string, appRoleAssignmentRequired: bool, appRoles: table<allowedMemberTypes: list, description: string, displayName: string, id: string, isEnabled: bool, value: string>, displayName: string, errorUrl: string, homepage: string, keyCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, type: string, usage: string, value: string>, logoutUrl: string, oauth2Permissions: table<adminConsentDescription: string, adminConsentDisplayName: string, id: string, isEnabled: bool, type: string, userConsentDescription: string, userConsentDisplayName: string, value: string>, passwordCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, value: string>, preferredTokenSigningKeyThumbprint: string, publisherName: string, replyUrls: list<string>, samlMetadataUrl: string, servicePrincipalNames: list<string>, servicePrincipalType: string, tags: list<string>> {
+]: any -> record<accountEnabled: bool, alternativeNames: list<string>, appDisplayName: string, appId: string, appOwnerTenantId: string, appRoleAssignmentRequired: bool, appRoles: table<allowedMemberTypes: list, description: string, displayName: string, id: string, isEnabled: bool, value: string>, displayName: string, errorUrl: string, homepage: string, keyCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, type: string, usage: string, value: string>, logoutUrl: string, oauth2Permissions: table<adminConsentDescription: string, adminConsentDisplayName: string, id: string, isEnabled: bool, type: string, userConsentDescription: string, userConsentDisplayName: string, value: string>, passwordCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, value: string>, preferredTokenSigningKeyThumbprint: string, publisherName: string, replyUrls: list<string>, samlMetadataUrl: string, servicePrincipalNames: list<string>, servicePrincipalType: string, tags: list<string>, deletionTimestamp: string, objectId: string, objectType: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/servicePrincipals") $qp $auth.query)
   let req_body = {"appId": $app_id, "accountEnabled": $account_enabled, "appRoleAssignmentRequired": $app_role_assignment_required, "keyCredentials": $key_credentials, "passwordCredentials": $password_credentials, "servicePrincipalType": $service_principal_type, "tags": $tags} | compact
@@ -1811,12 +1851,13 @@ export def "service-principals-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
-]: nothing -> record<odata_error: record<code: string, message: record<value: string>>> {
+  --api-version: string # Client API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1852,12 +1893,13 @@ export def "service-principals-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
-]: nothing -> record<accountEnabled: bool, alternativeNames: list<string>, appDisplayName: string, appId: string, appOwnerTenantId: string, appRoleAssignmentRequired: bool, appRoles: table<allowedMemberTypes: list, description: string, displayName: string, id: string, isEnabled: bool, value: string>, displayName: string, errorUrl: string, homepage: string, keyCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, type: string, usage: string, value: string>, logoutUrl: string, oauth2Permissions: table<adminConsentDescription: string, adminConsentDisplayName: string, id: string, isEnabled: bool, type: string, userConsentDescription: string, userConsentDisplayName: string, value: string>, passwordCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, value: string>, preferredTokenSigningKeyThumbprint: string, publisherName: string, replyUrls: list<string>, samlMetadataUrl: string, servicePrincipalNames: list<string>, servicePrincipalType: string, tags: list<string>> {
+  --api-version: string # Client API version. (required)
+]: nothing -> record<accountEnabled: bool, alternativeNames: list<string>, appDisplayName: string, appId: string, appOwnerTenantId: string, appRoleAssignmentRequired: bool, appRoles: table<allowedMemberTypes: list, description: string, displayName: string, id: string, isEnabled: bool, value: string>, displayName: string, errorUrl: string, homepage: string, keyCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, type: string, usage: string, value: string>, logoutUrl: string, oauth2Permissions: table<adminConsentDescription: string, adminConsentDisplayName: string, id: string, isEnabled: bool, type: string, userConsentDescription: string, userConsentDisplayName: string, value: string>, passwordCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, value: string>, preferredTokenSigningKeyThumbprint: string, publisherName: string, replyUrls: list<string>, samlMetadataUrl: string, servicePrincipalNames: list<string>, servicePrincipalType: string, tags: list<string>, deletionTimestamp: string, objectId: string, objectType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1895,19 +1937,20 @@ export def "service-principals-update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --account-enabled: oneof<nothing, bool> # whether or not the service principal account is enabled
   --app-role-assignment-required: oneof<nothing, bool> # Specifies whether an AppRoleAssignment to a user or group is required before Azure AD will issue a user or access token to the application.
   --key-credentials: list # The collection of key credentials associated with the service principal. — item shape: {customKeyIdentifier?: string, endDate?: string, keyId?: string, startDate?: string, type?: string, usage?: string, value?: string}
   --password-credentials: list # The collection of password credentials associated with the service principal. — item shape: {customKeyIdentifier?: string, endDate?: string, keyId?: string, startDate?: string, value?: string}
   --service-principal-type: string # the type of the service principal
   --tags: list<string> # Optional list of tags that you can apply to your service principals. Not nullable.
-]: any -> record<odata_error: record<code: string, message: record<value: string>>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}") $qp $auth.query)
   let req_body = {"accountEnabled": $account_enabled, "appRoleAssignmentRequired": $app_role_assignment_required, "keyCredentials": $key_credentials, "passwordCredentials": $password_credentials, "servicePrincipalType": $service_principal_type, "tags": $tags} | compact
@@ -1945,14 +1988,15 @@ export def "service-principals-add-owner" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   url: string # A owner object URL, such as "https://graph.windows.net/0b1f9851-1bf0-433f-aec3-cb9272f093dc/directoryObjects/f260bbc4-c254-447b-94cf-293b5ec434dd", where "0b1f9851-1bf0-433f-aec3-cb9272f093dc" is the tenantId and "f260bbc4-c254-447b-94cf-293b5ec434dd" is the objectId of the owner (user, application, servicePrincipal, group) to be added.
-]: any -> record<odata_error: record<code: string, message: record<value: string>>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}/$links/owners") $qp $auth.query)
   let req_body = {"url": $url} | compact
@@ -1991,13 +2035,14 @@ export def "service-principals-remove-owner" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
-]: nothing -> record<odata_error: record<code: string, message: record<value: string>>> {
+  --api-version: string # Client API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
   if ($owner_object_id | is-empty) { error make --unspanned { msg: "path parameter 'ownerObjectId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id), owner_object_id: (encode-path-segment $owner_object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}/$links/owners/{owner_object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2033,12 +2078,13 @@ export def "service-principals-list-app-role-assigned-to" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
-]: nothing -> record<odata_nextLink: string, value: table<id: string, principalDisplayName: string, principalId: string, principalType: string, resourceDisplayName: string, resourceId: string>> {
+  --api-version: string # Client API version. (required)
+]: nothing -> record<odata_nextLink: string, value: table<id: string, principalDisplayName: string, principalId: string, principalType: string, resourceDisplayName: string, resourceId: string, deletionTimestamp: string, objectId: string, objectType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}/appRoleAssignedTo") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2074,12 +2120,13 @@ export def "service-principals-list-app-role-assignments" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
-]: nothing -> record<odata_nextLink: string, value: table<id: string, principalDisplayName: string, principalId: string, principalType: string, resourceDisplayName: string, resourceId: string>> {
+  --api-version: string # Client API version. (required)
+]: nothing -> record<odata_nextLink: string, value: table<id: string, principalDisplayName: string, principalId: string, principalType: string, resourceDisplayName: string, resourceId: string, deletionTimestamp: string, objectId: string, objectType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}/appRoleAssignments") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2115,12 +2162,13 @@ export def "service-principals-list-key-credentials" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<value: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, type: string, usage: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}/keyCredentials") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2157,14 +2205,15 @@ export def "service-principals-update-key-credentials" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   value: list # A collection of KeyCredentials. — item shape: {customKeyIdentifier?: string, endDate?: string, keyId?: string, startDate?: string, type?: string, usage?: string, value?: string}
-]: any -> record<odata_error: record<code: string, message: record<value: string>>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}/keyCredentials") $qp $auth.query)
   let req_body = {"value": $value} | compact
@@ -2202,12 +2251,13 @@ export def "service-principals-list-owners" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<odata_nextLink: string, value: table<deletionTimestamp: string, objectId: string, objectType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}/owners") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2243,12 +2293,13 @@ export def "service-principals-list-password-credentials" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<value: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}/passwordCredentials") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2285,14 +2336,15 @@ export def "service-principals-update-password-credentials" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   value: list # A collection of PasswordCredentials. — item shape: {customKeyIdentifier?: string, endDate?: string, keyId?: string, startDate?: string, value?: string}
-]: any -> record<odata_error: record<code: string, message: record<value: string>>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}/passwordCredentials") $qp $auth.query)
   let req_body = {"value": $value} | compact
@@ -2330,12 +2382,13 @@ export def "applications-get-service-principals-id-by-app-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<odata_metadata: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationID' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_id: (encode-path-segment $application_id)} | format pattern "/{tenant_id}/servicePrincipalsByAppId/{application_id}/objectId") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2373,11 +2426,12 @@ export def "users-list" [
   --filter: string # The filter to apply to the operation.
   --expand: string # The expand value for the operation result.
   --top: int # (Optional) Set the maximum number of results per response. (default: 100)
-  --api-version: string # Client API version.
-]: nothing -> record<odata_nextLink: string, value: table<accountEnabled: bool, displayName: string, givenName: string, immutableId: string, mail: string, mailNickname: string, signInNames: list, surname: string, usageLocation: string, userPrincipalName: string, userType: string>> {
+  --api-version: string # Client API version. (required)
+]: nothing -> record<odata_nextLink: string, value: table<accountEnabled: bool, displayName: string, givenName: string, immutableId: string, mail: string, mailNickname: string, signInNames: list, surname: string, usageLocation: string, userPrincipalName: string, userType: string, deletionTimestamp: string, objectId: string, objectType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/users") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2413,7 +2467,7 @@ export def "users-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --account-enabled: oneof<nothing, bool> # Whether the account is enabled.
   display_name: string # The display name of the user.
   --mail: string # The primary email address of the user.
@@ -2425,15 +2479,17 @@ export def "users-create" [
   --surname: string # The user's surname (family name or last name).
   --usage-location: string # A two letter country code (ISO standard 3166). Required for users that will be assigned licenses due to legal requirement to check for availability of services in countries. Examples include: "US", "JP", and "GB".
   --user-type: string@user-type-completer # A string value that can be used to classify user types in your directory, such as 'Member' and 'Guest'.
-]: any -> record<accountEnabled: bool, displayName: string, givenName: string, immutableId: string, mail: string, mailNickname: string, signInNames: table<type: string, value: string>, surname: string, usageLocation: string, userPrincipalName: string, userType: string> {
+]: any -> record<accountEnabled: bool, displayName: string, givenName: string, immutableId: string, mail: string, mailNickname: string, signInNames: table<type: string, value: string>, surname: string, usageLocation: string, userPrincipalName: string, userType: string, deletionTimestamp: string, objectId: string, objectType: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/users") $qp $auth.query)
   let req_body = {"accountEnabled": $account_enabled, "displayName": $display_name, "mail": $mail, "mailNickname": $mail_nickname, "passwordProfile": $password_profile, "userPrincipalName": $user_principal_name, "givenName": $given_name, "immutableId": $immutable_id, "surname": $surname, "usageLocation": $usage_location, "userType": $user_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "accountEnabled") == null) { error make --unspanned { msg: "required body field 'accountEnabled' missing: pass --account-enabled or pipe a record" } }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2467,7 +2523,7 @@ export def "users-get-member-groups" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --security-enabled-only: oneof<nothing, bool> # If true, only membership in security-enabled groups should be checked. Otherwise, membership in all groups should be checked.
 ]: any -> record<value: list<string>> {
   let input = $in
@@ -2475,10 +2531,12 @@ export def "users-get-member-groups" [
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/users/{object_id}/getMemberGroups") $qp $auth.query)
   let req_body = {"securityEnabledOnly": $security_enabled_only} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "securityEnabledOnly") == null) { error make --unspanned { msg: "required body field 'securityEnabledOnly' missing: pass --security-enabled-only or pipe a record" } }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2512,12 +2570,13 @@ export def "users-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
-]: nothing -> record<odata_error: record<code: string, message: record<value: string>>> {
+  --api-version: string # Client API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($upn_or_object_id | is-empty) { error make --unspanned { msg: "path parameter 'upnOrObjectId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), upn_or_object_id: (encode-path-segment $upn_or_object_id)} | format pattern "/{tenant_id}/users/{upn_or_object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2553,12 +2612,13 @@ export def "users-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
-]: nothing -> record<accountEnabled: bool, displayName: string, givenName: string, immutableId: string, mail: string, mailNickname: string, signInNames: table<type: string, value: string>, surname: string, usageLocation: string, userPrincipalName: string, userType: string> {
+  --api-version: string # Client API version. (required)
+]: nothing -> record<accountEnabled: bool, displayName: string, givenName: string, immutableId: string, mail: string, mailNickname: string, signInNames: table<type: string, value: string>, surname: string, usageLocation: string, userPrincipalName: string, userType: string, deletionTimestamp: string, objectId: string, objectType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($upn_or_object_id | is-empty) { error make --unspanned { msg: "path parameter 'upnOrObjectId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), upn_or_object_id: (encode-path-segment $upn_or_object_id)} | format pattern "/{tenant_id}/users/{upn_or_object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2595,7 +2655,7 @@ export def "users-update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --account-enabled: oneof<nothing, bool> # Whether the account is enabled.
   --display-name: string # The display name of the user.
   --mail: string # The primary email address of the user.
@@ -2607,12 +2667,13 @@ export def "users-update" [
   --surname: string # The user's surname (family name or last name).
   --usage-location: string # A two letter country code (ISO standard 3166). Required for users that will be assigned licenses due to legal requirement to check for availability of services in countries. Examples include: "US", "JP", and "GB".
   --user-type: string@user-type-completer # A string value that can be used to classify user types in your directory, such as 'Member' and 'Guest'.
-]: any -> record<odata_error: record<code: string, message: record<value: string>>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
   if ($upn_or_object_id | is-empty) { error make --unspanned { msg: "path parameter 'upnOrObjectId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), upn_or_object_id: (encode-path-segment $upn_or_object_id)} | format pattern "/{tenant_id}/users/{upn_or_object_id}") $qp $auth.query)
   let req_body = {"accountEnabled": $account_enabled, "displayName": $display_name, "mail": $mail, "mailNickname": $mail_nickname, "passwordProfile": $password_profile, "userPrincipalName": $user_principal_name, "givenName": $given_name, "immutableId": $immutable_id, "surname": $surname, "usageLocation": $usage_location, "userType": $user_type} | compact

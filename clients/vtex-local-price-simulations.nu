@@ -148,16 +148,18 @@ export def "post-v-custom-prices-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Describes the type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
-  --email: any # User's email (default: )
-  --order-type: string # Order type (default: )
-  pricetable: string # Name of the Price Table associated with the scenario (default: )
-  --state: string # Delivery location (default: )
+  --content-type: string # Describes the type of the content being sent (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand (required, default: application/json)
+  --email: any # User's email (default: "")
+  --order-type: string # Order type (default: "")
+  pricetable: string # Name of the Price Table associated with the scenario (default: "")
+  --state: string # Delivery location (default: "")
 ]: any -> record<email: any, id: int, orderType: string, pricetable: string, state: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/_v/custom-prices/rules" $auth.query)
   let req_body = {"email": $email, "orderType": $order_type, "pricetable": $pricetable, "state": $state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -195,12 +197,14 @@ export def "delete-v-custom-prices-rules-price-association-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Describes the type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
+  --content-type: string # Describes the type of the content being sent (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand (required, default: application/json)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($price_association_id | is-empty) { error make --unspanned { msg: "path parameter 'priceAssociationId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({price_association_id: (encode-path-segment $price_association_id)} | format pattern "/_v/custom-prices/rules/{price_association_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -234,12 +238,14 @@ export def "get-v-custom-prices-rules-price-association-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Describes the type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
+  --content-type: string # Describes the type of the content being sent (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand (required, default: application/json)
 ]: nothing -> record<email: any, id: int, orderType: string, pricetable: string, state: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($price_association_id | is-empty) { error make --unspanned { msg: "path parameter 'priceAssociationId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({price_association_id: (encode-path-segment $price_association_id)} | format pattern "/_v/custom-prices/rules/{price_association_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -273,8 +279,8 @@ export def "put-v-custom-prices-rules-price-association-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Describes the type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
+  --content-type: string # Describes the type of the content being sent (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand (required, default: application/json)
   order_type: string # Order type (default: orderType)
   pricetable: string # Name of the Price Table associated with the scenario (default: pricetable1)
   state: string # Delivery location (default: RR)
@@ -283,6 +289,8 @@ export def "put-v-custom-prices-rules-price-association-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($price_association_id | is-empty) { error make --unspanned { msg: "path parameter 'priceAssociationId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({price_association_id: (encode-path-segment $price_association_id)} | format pattern "/_v/custom-prices/rules/{price_association_id}") $auth.query)
   let req_body = {"orderType": $order_type, "pricetable": $pricetable, "state": $state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -319,11 +327,13 @@ export def "get-v-custom-prices-session-schema" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Describes the type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
+  --content-type: string # Describes the type of the content being sent (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand (required, default: application/json)
 ]: nothing -> record<fields: table<name: string, type: string>, useEmail: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/_v/custom-prices/session/schema" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -357,14 +367,16 @@ export def "post-v-custom-prices-session-schema" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Describes the type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
+  --content-type: string # Describes the type of the content being sent (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand (required, default: application/json)
   fields: list # Order Configuration criteria (default: [{name: orderType, type: string}, {name: state, type: string}]) — item shape: {name: string, type: string}
   --use-email: oneof<nothing, bool> # If the custom price should use the user's e-mail to validate it (default: true)
 ]: any -> record<fields: table<name: string, type: string>, useEmail: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/_v/custom-prices/session/schema" $auth.query)
   let req_body = {"fields": $fields, "useEmail": $use_email} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -402,13 +414,15 @@ export def "post-sessions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Describes the type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
+  --content-type: string # Describes the type of the content being sent (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand (required, default: application/json)
   public: record # Object to register session criteria (default: {}) — shape: {customSessionKeys: record}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/sessions/" $auth.query)
   let req_body = {"public": $public} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

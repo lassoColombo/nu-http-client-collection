@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "jwt" => { {scheme: $scheme, headers: {Authorization: $"JWT ($token_val)"}, query: "", location: "header"} }
+    "jwt" => { {scheme: $scheme, headers: {"Authorization": $"JWT ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -166,7 +166,7 @@ export def "post-jwt-auth" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
   username: string # The email for a Client, or the API for a partner product
   password: string # The passowrd for a Client, or the API key for a service
   role: string # The role for which authentication will be made. Value : role_product
@@ -181,19 +181,20 @@ export def "post-jwt-auth" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Fields": $x_fields} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
     query: {}
     headers: $auth.headers
     body: $req_body
-    content_type: "application/x-www-form-urlencoded"
+    content_type: $mp.content_type
     timeout: ($max_time | default 30min)
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Get gene by symbol
@@ -213,7 +214,7 @@ export def "get-client-gene" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> record<molecular_location: record<chromosome_accession: string, start: int, stop: int>, snps: table<chromosome_accession: string, genotyped_alleles: list, location: int, phased: bool, reference_genome: string, snp_id: string>, symbol: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -254,7 +255,7 @@ export def "get-client-snp-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> table<chromosome_accession: string, genotyped_alleles: list<string>, location: int, phased: bool, reference_genome: string, snp_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -295,7 +296,7 @@ export def "post-client-snp-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
   snps: string # JSON-encoded list of snps to be fetched
 ]: any -> table<chromosome_accession: string, genotyped_alleles: list<string>, location: int, phased: bool, reference_genome: string, snp_id: string> {
   let input = $in
@@ -310,19 +311,20 @@ export def "post-client-snp-group" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Fields": $x_fields} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
     query: {}
     headers: $auth.headers
     body: $req_body
-    content_type: "application/x-www-form-urlencoded"
+    content_type: $mp.content_type
     timeout: ($max_time | default 30min)
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Get SNP information
@@ -342,7 +344,7 @@ export def "get-client-snp" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> record<chromosome_accession: string, genotyped_alleles: list<string>, location: int, phased: bool, reference_genome: string, snp_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -383,7 +385,7 @@ export def "get-product" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> record<authorized_scopes: list<string>, email: string, product_uuid: string, redirect_uri: string, snps_authorized: list<string>, snps_authorized_any: bool, snps_min_required: record<min_pct: int, snps: list<string>>, snps_min_required_any: bool> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -422,7 +424,7 @@ export def "get-authorizations-queue" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --seq-num-start: string # The first sequence number from which to fetch (the sequence number of the last processed authorization)
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> table<authorization_uuid: string, client_uuid: string, create_timestamp: int, is_active: bool, order: string, product_uuid: string, report_credentials: list<record>, report_files: list<record>, scopes: record<address: record, dataset: string, email: string, login: string, name: record, sex: string>, sequence_number: int, state: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -462,7 +464,7 @@ export def "get-product-authorization" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> record<authorization_uuid: string, client_uuid: string, create_timestamp: int, is_active: bool, order: string, product_uuid: string, report_credentials: table<authorization_uuid: string, client_password: string, client_username: string, create_timestamp: int, report_credentials_uuid: string, report_url: string>, report_files: table<authorization_uuid: string, create_timestamp: int, file_location: record, report_file_uuid: string>, scopes: record<address: record<address1: string, address2: string, city: string, country: string, phone: string, state: string, zipcode: string>, dataset: string, email: string, login: string, name: record<first_name: string, last_name: string>, sex: string>, sequence_number: int, state: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -541,7 +543,7 @@ export def "post-authorization-result-credentials" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
   --credentials-username: string # Credentials for accessing the result. Includes password, username and url
   --credentials-password: string # Credentials for accessing the result. Includes password, username and url
   --report-url: string # Credentials for accessing the result. Includes password, username and url
@@ -558,19 +560,20 @@ export def "post-authorization-result-credentials" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Fields": $x_fields} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
     query: {}
     headers: $auth.headers
     body: $req_body
-    content_type: "application/x-www-form-urlencoded"
+    content_type: $mp.content_type
     timeout: ($max_time | default 30min)
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200 201]
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200 201]
 }
 
 # Provide a file result to the authorization, e
@@ -590,7 +593,7 @@ export def "post-authorization-result-file" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --original-filename: string # Optional original filename for the report. If not provided, the filename of uploaded file will be used
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
   --file-report: path # A binary file (e.g. pdf) that contains the result of the authorization
 ]: any -> record<authorization_uuid: string, create_timestamp: int, file_location: record<filename_original: string, host: string, path: string>, report_file_uuid: string> {
   let input = $in
@@ -606,8 +609,8 @@ export def "post-authorization-result-file" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Fields": $x_fields} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file_report"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file_report"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -678,7 +681,7 @@ export def "get-gene" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --dbsnp-build: int # The dbSNP build for which to consider snps belonging to the gene. Defaults to 149 (default: 149)
   --reference-genome: string # The reference genome for which gene annotations will be returned. Defaults to GRCh37p13 (default: GRCH37P13)
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> record<chromosome: string, molecular_end_position: int, molecular_start_position: int, parent_accession: string, snp_ids: list<string>, symbol: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -718,7 +721,7 @@ export def "get-reference-genomes-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> table<reference_accession: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -756,7 +759,7 @@ export def "get-reference-genome" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> table<reference_accession: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -796,14 +799,16 @@ export def "get-reference-chromosome" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --range-start: int # Location on the chromosome
-  --range-stop: int # Location on the chromosome
-  --x-fields: string # An optional fields mask
+  --range-start: int # Location on the chromosome (required)
+  --range-stop: int # Location on the chromosome (required)
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> record<sequence: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($genome_build_accession | is-empty) { error make --unspanned { msg: "path parameter 'genomeBuildAccession' must be non-empty" } }
   if ($chromosome_accession | is-empty) { error make --unspanned { msg: "path parameter 'chromosomeAccession' must be non-empty" } }
+  if ($range_start == null) { error make --unspanned { msg: "required query parameter 'range_start' missing: pass --range-start" } }
+  if ($range_stop == null) { error make --unspanned { msg: "required query parameter 'range_stop' missing: pass --range-stop" } }
   let qp = [(serialize-qp "range_start" $range_start "scalar") (serialize-qp "range_stop" $range_stop "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({genome_build_accession: (encode-path-segment $genome_build_accession), chromosome_accession: (encode-path-segment $chromosome_accession)} | format pattern "/reference/genomes/{genome_build_accession}/chromosomes/{chromosome_accession}") $qp $auth.query)
   let accept_val = "application/json"
@@ -841,7 +846,7 @@ export def "get-reference-snp" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --dbsnp-version: int # The dbSNP build. Defaults to 149 (default: 149)
   --grch-version: string # The GRCh build on which to place snips. Defaults to GRCh37p13 (default: GRCH37P13)
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> record<alternative_alleles: list<string>, chromosome: string, chromosome_accession: string, dbsnp_version: int, location: int, reference_allele: string, reference_genome: string, snp_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)

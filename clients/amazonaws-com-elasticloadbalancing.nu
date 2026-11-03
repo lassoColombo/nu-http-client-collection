@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -169,10 +169,10 @@ export def "get-add-tags" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --load-balancer-names: list # The name of the load balancer. You can specify one load balancer only.
-  --tags: list # The tags.
-  --action: string@action-completer
-  --version: string@version-completer
+  --load-balancer-names: list # The name of the load balancer. You can specify one load balancer only. (required)
+  --tags: list # The tags. (required)
+  --action: string@action-completer # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -183,6 +183,10 @@ export def "get-add-tags" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($load_balancer_names == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerNames' missing: pass --load-balancer-names" } }
+  if ($tags == null) { error make --unspanned { msg: "required query parameter 'Tags' missing: pass --tags" } }
+  let action = ($action | default "AddTags")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "LoadBalancerNames" $load_balancer_names "multi") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -217,8 +221,8 @@ export def "post-add-tags" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer
-  --version: string@version-completer
+  --action: string@action-completer # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -231,6 +235,8 @@ export def "post-add-tags" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "AddTags")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -267,10 +273,10 @@ export def "get-apply-security-groups-to-load-balancer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --load-balancer-name: string # The name of the load balancer.
-  --security-groups: list # The IDs of the security groups to associate with the load balancer. Note that you cannot specify the name of the security group.
-  --action: string@action-completer-1
-  --version: string@version-completer
+  --load-balancer-name: string # The name of the load balancer. (required)
+  --security-groups: list # The IDs of the security groups to associate with the load balancer. Note that you cannot specify the name of the security group. (required)
+  --action: string@action-completer-1 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -278,9 +284,13 @@ export def "get-apply-security-groups-to-load-balancer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<SecurityGroups: record> {
+]: nothing -> record<SecurityGroups: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
+  if ($security_groups == null) { error make --unspanned { msg: "required query parameter 'SecurityGroups' missing: pass --security-groups" } }
+  let action = ($action | default "ApplySecurityGroupsToLoadBalancer")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "SecurityGroups" $security_groups "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -315,8 +325,8 @@ export def "post-apply-security-groups-to-load-balancer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-1
-  --version: string@version-completer
+  --action: string@action-completer-1 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -325,10 +335,12 @@ export def "post-apply-security-groups-to-load-balancer" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<SecurityGroups: record> {
+]: any -> record<SecurityGroups: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ApplySecurityGroupsToLoadBalancer")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -365,10 +377,10 @@ export def "get-attach-load-balancer-to-subnets" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --load-balancer-name: string # The name of the load balancer.
-  --subnets: list # The IDs of the subnets to add. You can add only one subnet per Availability Zone.
-  --action: string@action-completer-2
-  --version: string@version-completer
+  --load-balancer-name: string # The name of the load balancer. (required)
+  --subnets: list # The IDs of the subnets to add. You can add only one subnet per Availability Zone. (required)
+  --action: string@action-completer-2 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -376,9 +388,13 @@ export def "get-attach-load-balancer-to-subnets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Subnets: record> {
+]: nothing -> record<Subnets: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
+  if ($subnets == null) { error make --unspanned { msg: "required query parameter 'Subnets' missing: pass --subnets" } }
+  let action = ($action | default "AttachLoadBalancerToSubnets")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "Subnets" $subnets "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -413,8 +429,8 @@ export def "post-attach-load-balancer-to-subnets" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-2
-  --version: string@version-completer
+  --action: string@action-completer-2 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -423,10 +439,12 @@ export def "post-attach-load-balancer-to-subnets" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Subnets: record> {
+]: any -> record<Subnets: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "AttachLoadBalancerToSubnets")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -463,10 +481,10 @@ export def "get-configure-health-check" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --load-balancer-name: string # The name of the load balancer.
-  --health-check: record # The configuration information.
-  --action: string@action-completer-3
-  --version: string@version-completer
+  --load-balancer-name: string # The name of the load balancer. (required)
+  --health-check: record # The configuration information. (required)
+  --action: string@action-completer-3 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -474,9 +492,13 @@ export def "get-configure-health-check" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<HealthCheck: record<Target: record, Interval: record, Timeout: record, UnhealthyThreshold: record, HealthyThreshold: record>> {
+]: nothing -> record<HealthCheck: record<Target: string, Interval: int, Timeout: int, UnhealthyThreshold: int, HealthyThreshold: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
+  if ($health_check == null) { error make --unspanned { msg: "required query parameter 'HealthCheck' missing: pass --health-check" } }
+  let action = ($action | default "ConfigureHealthCheck")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "HealthCheck" $health_check "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -511,8 +533,8 @@ export def "post-configure-health-check" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-3
-  --version: string@version-completer
+  --action: string@action-completer-3 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -521,10 +543,12 @@ export def "post-configure-health-check" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<HealthCheck: record<Target: record, Interval: record, Timeout: record, UnhealthyThreshold: record, HealthyThreshold: record>> {
+]: any -> record<HealthCheck: record<Target: string, Interval: int, Timeout: int, UnhealthyThreshold: int, HealthyThreshold: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ConfigureHealthCheck")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -561,11 +585,11 @@ export def "get-create-app-cookie-stickiness-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --load-balancer-name: string # The name of the load balancer.
-  --policy-name: string # The name of the policy being created. Policy names must consist of alphanumeric characters and dashes (-). This name must be unique within the set of policies for this load balancer.
-  --cookie-name: string # The name of the application cookie used for stickiness.
-  --action: string@action-completer-4
-  --version: string@version-completer
+  --load-balancer-name: string # The name of the load balancer. (required)
+  --policy-name: string # The name of the policy being created. Policy names must consist of alphanumeric characters and dashes (-). This name must be unique within the set of policies for this load balancer. (required)
+  --cookie-name: string # The name of the application cookie used for stickiness. (required)
+  --action: string@action-completer-4 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -576,6 +600,11 @@ export def "get-create-app-cookie-stickiness-policy" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
+  if ($policy_name == null) { error make --unspanned { msg: "required query parameter 'PolicyName' missing: pass --policy-name" } }
+  if ($cookie_name == null) { error make --unspanned { msg: "required query parameter 'CookieName' missing: pass --cookie-name" } }
+  let action = ($action | default "CreateAppCookieStickinessPolicy")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "PolicyName" $policy_name "scalar") (serialize-qp "CookieName" $cookie_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -610,8 +639,8 @@ export def "post-create-app-cookie-stickiness-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-4
-  --version: string@version-completer
+  --action: string@action-completer-4 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -624,6 +653,8 @@ export def "post-create-app-cookie-stickiness-policy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateAppCookieStickinessPolicy")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -660,11 +691,11 @@ export def "get-create-lb-cookie-stickiness-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --load-balancer-name: string # The name of the load balancer.
-  --policy-name: string # The name of the policy being created. Policy names must consist of alphanumeric characters and dashes (-). This name must be unique within the set of policies for this load balancer.
+  --load-balancer-name: string # The name of the load balancer. (required)
+  --policy-name: string # The name of the policy being created. Policy names must consist of alphanumeric characters and dashes (-). This name must be unique within the set of policies for this load balancer. (required)
   --cookie-expiration-period: int # The time period, in seconds, after which the cookie should be considered stale. If you do not specify this parameter, the default value is 0, which indicates that the sticky session should last for the duration of the browser session.
-  --action: string@action-completer-5
-  --version: string@version-completer
+  --action: string@action-completer-5 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -675,6 +706,10 @@ export def "get-create-lb-cookie-stickiness-policy" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
+  if ($policy_name == null) { error make --unspanned { msg: "required query parameter 'PolicyName' missing: pass --policy-name" } }
+  let action = ($action | default "CreateLBCookieStickinessPolicy")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "PolicyName" $policy_name "scalar") (serialize-qp "CookieExpirationPeriod" $cookie_expiration_period "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -709,8 +744,8 @@ export def "post-create-lb-cookie-stickiness-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-5
-  --version: string@version-completer
+  --action: string@action-completer-5 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -723,6 +758,8 @@ export def "post-create-lb-cookie-stickiness-policy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateLBCookieStickinessPolicy")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -759,15 +796,15 @@ export def "get-create-load-balancer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --load-balancer-name: string # The name of the load balancer. This name must be unique within your set of load balancers for the region, must have a maximum of 32 characters, must contain only alphanumeric characters or hyphens, and cannot begin or end with a hyphen.
-  --listeners: list # The listeners. For more information, see Listeners for Your Classic Load Balancer (https://docs.aws.amazon.com/elasticloadbalancing/latest/classic/elb-listener-config.html) in the Classic Load Balancers Guide.
+  --load-balancer-name: string # The name of the load balancer. This name must be unique within your set of load balancers for the region, must have a maximum of 32 characters, must contain only alphanumeric characters or hyphens, and cannot begin or end with a hyphen. (required)
+  --listeners: list # The listeners. For more information, see Listeners for Your Classic Load Balancer (https://docs.aws.amazon.com/elasticloadbalancing/latest/classic/elb-listener-config.html) in the Classic Load Balancers Guide. (required)
   --availability-zones: list # One or more Availability Zones from the same region as the load balancer. You must specify at least one Availability Zone. You can add more Availability Zones after you create the load balancer using EnableAvailabilityZonesForLoadBalancer.
   --subnets: list # The IDs of the subnets in your VPC to attach to the load balancer. Specify one subnet per Availability Zone specified in AvailabilityZones.
   --security-groups: list # The IDs of the security groups to assign to the load balancer.
   --scheme: string # The type of a load balancer. Valid only for load balancers in a VPC. By default, Elastic Load Balancing creates an Internet-facing load balancer with a DNS name that resolves to public IP addresses. For more information about Internet-facing and Internal load balancers, see Load Balancer Scheme (https://docs.aws.amazon.com/elasticloadbalancing/latest/userguide/how-elastic-load-balancing-works.html#load-balancer-scheme) in the Elastic Load Balancing User Guide. Specify internal to create a load balancer with a DNS name that resolves to private IP addresses.
   --tags: list # A list of tags to assign to the load balancer. For more information about tagging your load balancer, see Tag Your Classic Load Balancer (https://docs.aws.amazon.com/elasticloadbalancing/latest/classic/add-remove-tags.html) in the Classic Load Balancers Guide.
-  --action: string@action-completer-6
-  --version: string@version-completer
+  --action: string@action-completer-6 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -775,9 +812,13 @@ export def "get-create-load-balancer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DNSName: record> {
+]: nothing -> record<DNSName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
+  if ($listeners == null) { error make --unspanned { msg: "required query parameter 'Listeners' missing: pass --listeners" } }
+  let action = ($action | default "CreateLoadBalancer")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "Listeners" $listeners "multi") (serialize-qp "AvailabilityZones" $availability_zones "multi") (serialize-qp "Subnets" $subnets "multi") (serialize-qp "SecurityGroups" $security_groups "multi") (serialize-qp "Scheme" $scheme "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -812,8 +853,8 @@ export def "post-create-load-balancer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-6
-  --version: string@version-completer
+  --action: string@action-completer-6 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -822,10 +863,12 @@ export def "post-create-load-balancer" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DNSName: record> {
+]: any -> record<DNSName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateLoadBalancer")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -862,10 +905,10 @@ export def "get-create-load-balancer-listeners" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --load-balancer-name: string # The name of the load balancer.
-  --listeners: list # The listeners.
-  --action: string@action-completer-7
-  --version: string@version-completer
+  --load-balancer-name: string # The name of the load balancer. (required)
+  --listeners: list # The listeners. (required)
+  --action: string@action-completer-7 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -876,6 +919,10 @@ export def "get-create-load-balancer-listeners" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
+  if ($listeners == null) { error make --unspanned { msg: "required query parameter 'Listeners' missing: pass --listeners" } }
+  let action = ($action | default "CreateLoadBalancerListeners")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "Listeners" $listeners "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -910,8 +957,8 @@ export def "post-create-load-balancer-listeners" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-7
-  --version: string@version-completer
+  --action: string@action-completer-7 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -924,6 +971,8 @@ export def "post-create-load-balancer-listeners" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateLoadBalancerListeners")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -960,12 +1009,12 @@ export def "get-create-load-balancer-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --load-balancer-name: string # The name of the load balancer.
-  --policy-name: string # The name of the load balancer policy to be created. This name must be unique within the set of policies for this load balancer.
-  --policy-type-name: string # The name of the base policy type. To get the list of policy types, use DescribeLoadBalancerPolicyTypes.
+  --load-balancer-name: string # The name of the load balancer. (required)
+  --policy-name: string # The name of the load balancer policy to be created. This name must be unique within the set of policies for this load balancer. (required)
+  --policy-type-name: string # The name of the base policy type. To get the list of policy types, use DescribeLoadBalancerPolicyTypes. (required)
   --policy-attributes: list # The policy attributes.
-  --action: string@action-completer-8
-  --version: string@version-completer
+  --action: string@action-completer-8 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -976,6 +1025,11 @@ export def "get-create-load-balancer-policy" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
+  if ($policy_name == null) { error make --unspanned { msg: "required query parameter 'PolicyName' missing: pass --policy-name" } }
+  if ($policy_type_name == null) { error make --unspanned { msg: "required query parameter 'PolicyTypeName' missing: pass --policy-type-name" } }
+  let action = ($action | default "CreateLoadBalancerPolicy")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "PolicyName" $policy_name "scalar") (serialize-qp "PolicyTypeName" $policy_type_name "scalar") (serialize-qp "PolicyAttributes" $policy_attributes "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1010,8 +1064,8 @@ export def "post-create-load-balancer-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-8
-  --version: string@version-completer
+  --action: string@action-completer-8 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1024,6 +1078,8 @@ export def "post-create-load-balancer-policy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateLoadBalancerPolicy")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1060,9 +1116,9 @@ export def "get-delete-load-balancer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --load-balancer-name: string # The name of the load balancer.
-  --action: string@action-completer-9
-  --version: string@version-completer
+  --load-balancer-name: string # The name of the load balancer. (required)
+  --action: string@action-completer-9 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1073,6 +1129,9 @@ export def "get-delete-load-balancer" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
+  let action = ($action | default "DeleteLoadBalancer")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1107,8 +1166,8 @@ export def "post-delete-load-balancer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-9
-  --version: string@version-completer
+  --action: string@action-completer-9 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1121,6 +1180,8 @@ export def "post-delete-load-balancer" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteLoadBalancer")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1157,10 +1218,10 @@ export def "get-delete-load-balancer-listeners" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --load-balancer-name: string # The name of the load balancer.
-  --load-balancer-ports: list # The client port numbers of the listeners.
-  --action: string@action-completer-10
-  --version: string@version-completer
+  --load-balancer-name: string # The name of the load balancer. (required)
+  --load-balancer-ports: list # The client port numbers of the listeners. (required)
+  --action: string@action-completer-10 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1171,6 +1232,10 @@ export def "get-delete-load-balancer-listeners" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
+  if ($load_balancer_ports == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerPorts' missing: pass --load-balancer-ports" } }
+  let action = ($action | default "DeleteLoadBalancerListeners")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "LoadBalancerPorts" $load_balancer_ports "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1205,8 +1270,8 @@ export def "post-delete-load-balancer-listeners" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-10
-  --version: string@version-completer
+  --action: string@action-completer-10 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1219,6 +1284,8 @@ export def "post-delete-load-balancer-listeners" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteLoadBalancerListeners")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1255,10 +1322,10 @@ export def "get-delete-load-balancer-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --load-balancer-name: string # The name of the load balancer.
-  --policy-name: string # The name of the policy.
-  --action: string@action-completer-11
-  --version: string@version-completer
+  --load-balancer-name: string # The name of the load balancer. (required)
+  --policy-name: string # The name of the policy. (required)
+  --action: string@action-completer-11 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1269,6 +1336,10 @@ export def "get-delete-load-balancer-policy" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
+  if ($policy_name == null) { error make --unspanned { msg: "required query parameter 'PolicyName' missing: pass --policy-name" } }
+  let action = ($action | default "DeleteLoadBalancerPolicy")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "PolicyName" $policy_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1303,8 +1374,8 @@ export def "post-delete-load-balancer-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-11
-  --version: string@version-completer
+  --action: string@action-completer-11 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1317,6 +1388,8 @@ export def "post-delete-load-balancer-policy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteLoadBalancerPolicy")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1353,10 +1426,10 @@ export def "get-deregister-instances-from-load-balancer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --load-balancer-name: string # The name of the load balancer.
-  --instances: list # The IDs of the instances.
-  --action: string@action-completer-12
-  --version: string@version-completer
+  --load-balancer-name: string # The name of the load balancer. (required)
+  --instances: list # The IDs of the instances. (required)
+  --action: string@action-completer-12 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1364,9 +1437,13 @@ export def "get-deregister-instances-from-load-balancer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Instances: record> {
+]: nothing -> record<Instances: table<InstanceId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
+  if ($instances == null) { error make --unspanned { msg: "required query parameter 'Instances' missing: pass --instances" } }
+  let action = ($action | default "DeregisterInstancesFromLoadBalancer")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "Instances" $instances "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1401,8 +1478,8 @@ export def "post-deregister-instances-from-load-balancer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-12
-  --version: string@version-completer
+  --action: string@action-completer-12 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1411,10 +1488,12 @@ export def "post-deregister-instances-from-load-balancer" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Instances: record> {
+]: any -> record<Instances: table<InstanceId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeregisterInstancesFromLoadBalancer")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1453,8 +1532,8 @@ export def "get-describe-account-limits" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --marker: string # The marker for the next set of results. (You received this marker from a previous call.)
   --page-size: int # The maximum number of results to return with this call.
-  --action: string@action-completer-13
-  --version: string@version-completer
+  --action: string@action-completer-13 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1462,9 +1541,11 @@ export def "get-describe-account-limits" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Limits: record, NextMarker: record> {
+]: nothing -> record<Limits: table<Name: string, Max: string>, NextMarker: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeAccountLimits")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "Marker" $marker "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1499,8 +1580,8 @@ export def "post-describe-account-limits" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-13
-  --version: string@version-completer
+  --action: string@action-completer-13 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1509,10 +1590,12 @@ export def "post-describe-account-limits" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Limits: record, NextMarker: record> {
+]: any -> record<Limits: table<Name: string, Max: string>, NextMarker: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeAccountLimits")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1549,10 +1632,10 @@ export def "get-describe-instance-health" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --load-balancer-name: string # The name of the load balancer.
+  --load-balancer-name: string # The name of the load balancer. (required)
   --instances: list # The IDs of the instances.
-  --action: string@action-completer-14
-  --version: string@version-completer
+  --action: string@action-completer-14 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1560,9 +1643,12 @@ export def "get-describe-instance-health" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<InstanceStates: record> {
+]: nothing -> record<InstanceStates: table<InstanceId: string, State: string, ReasonCode: string, Description: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
+  let action = ($action | default "DescribeInstanceHealth")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "Instances" $instances "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1597,8 +1683,8 @@ export def "post-describe-instance-health" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-14
-  --version: string@version-completer
+  --action: string@action-completer-14 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1607,10 +1693,12 @@ export def "post-describe-instance-health" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<InstanceStates: record> {
+]: any -> record<InstanceStates: table<InstanceId: string, State: string, ReasonCode: string, Description: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeInstanceHealth")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1647,9 +1735,9 @@ export def "get-describe-load-balancer-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --load-balancer-name: string # The name of the load balancer.
-  --action: string@action-completer-15
-  --version: string@version-completer
+  --load-balancer-name: string # The name of the load balancer. (required)
+  --action: string@action-completer-15 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1657,9 +1745,12 @@ export def "get-describe-load-balancer-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<LoadBalancerAttributes: record<CrossZoneLoadBalancing: record<Enabled: record>, AccessLog: record<Enabled: record, S3BucketName: record, EmitInterval: record, S3BucketPrefix: record>, ConnectionDraining: record<Enabled: record, Timeout: record>, ConnectionSettings: record<IdleTimeout: record>, AdditionalAttributes: record>> {
+]: nothing -> record<LoadBalancerAttributes: record<CrossZoneLoadBalancing: record<Enabled: bool>, AccessLog: record<Enabled: bool, S3BucketName: string, EmitInterval: int, S3BucketPrefix: string>, ConnectionDraining: record<Enabled: bool, Timeout: int>, ConnectionSettings: record<IdleTimeout: int>, AdditionalAttributes: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
+  let action = ($action | default "DescribeLoadBalancerAttributes")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1694,8 +1785,8 @@ export def "post-describe-load-balancer-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-15
-  --version: string@version-completer
+  --action: string@action-completer-15 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1704,10 +1795,12 @@ export def "post-describe-load-balancer-attributes" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<LoadBalancerAttributes: record<CrossZoneLoadBalancing: record<Enabled: record>, AccessLog: record<Enabled: record, S3BucketName: record, EmitInterval: record, S3BucketPrefix: record>, ConnectionDraining: record<Enabled: record, Timeout: record>, ConnectionSettings: record<IdleTimeout: record>, AdditionalAttributes: record>> {
+]: any -> record<LoadBalancerAttributes: record<CrossZoneLoadBalancing: record<Enabled: bool>, AccessLog: record<Enabled: bool, S3BucketName: string, EmitInterval: int, S3BucketPrefix: string>, ConnectionDraining: record<Enabled: bool, Timeout: int>, ConnectionSettings: record<IdleTimeout: int>, AdditionalAttributes: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeLoadBalancerAttributes")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1746,8 +1839,8 @@ export def "get-describe-load-balancer-policies" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --load-balancer-name: string # The name of the load balancer.
   --policy-names: list # The names of the policies.
-  --action: string@action-completer-16
-  --version: string@version-completer
+  --action: string@action-completer-16 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1755,9 +1848,11 @@ export def "get-describe-load-balancer-policies" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PolicyDescriptions: record> {
+]: nothing -> record<PolicyDescriptions: table<PolicyName: string, PolicyTypeName: string, PolicyAttributeDescriptions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeLoadBalancerPolicies")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "PolicyNames" $policy_names "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1792,8 +1887,8 @@ export def "post-describe-load-balancer-policies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-16
-  --version: string@version-completer
+  --action: string@action-completer-16 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1802,10 +1897,12 @@ export def "post-describe-load-balancer-policies" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<PolicyDescriptions: record> {
+]: any -> record<PolicyDescriptions: table<PolicyName: string, PolicyTypeName: string, PolicyAttributeDescriptions: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeLoadBalancerPolicies")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1843,8 +1940,8 @@ export def "get-describe-load-balancer-policy-types" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --policy-type-names: list # The names of the policy types. If no names are specified, describes all policy types defined by Elastic Load Balancing.
-  --action: string@action-completer-17
-  --version: string@version-completer
+  --action: string@action-completer-17 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1852,9 +1949,11 @@ export def "get-describe-load-balancer-policy-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PolicyTypeDescriptions: record> {
+]: nothing -> record<PolicyTypeDescriptions: table<PolicyTypeName: string, Description: string, PolicyAttributeTypeDescriptions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeLoadBalancerPolicyTypes")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "PolicyTypeNames" $policy_type_names "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1889,8 +1988,8 @@ export def "post-describe-load-balancer-policy-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-17
-  --version: string@version-completer
+  --action: string@action-completer-17 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1899,10 +1998,12 @@ export def "post-describe-load-balancer-policy-types" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<PolicyTypeDescriptions: record> {
+]: any -> record<PolicyTypeDescriptions: table<PolicyTypeName: string, Description: string, PolicyAttributeTypeDescriptions: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeLoadBalancerPolicyTypes")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1942,8 +2043,8 @@ export def "get-describe-load-balancers" [
   --load-balancer-names: list # The names of the load balancers.
   --marker: string # The marker for the next set of results. (You received this marker from a previous call.)
   --page-size: int # The maximum number of results to return with this call (a number from 1 to 400). The default is 400.
-  --action: string@action-completer-18
-  --version: string@version-completer
+  --action: string@action-completer-18 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1951,9 +2052,11 @@ export def "get-describe-load-balancers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<LoadBalancerDescriptions: record, NextMarker: record> {
+]: nothing -> record<LoadBalancerDescriptions: table<LoadBalancerName: string, DNSName: string, CanonicalHostedZoneName: string, CanonicalHostedZoneNameID: string, ListenerDescriptions: list, Policies: record, BackendServerDescriptions: list, AvailabilityZones: list, Subnets: list, VPCId: string, Instances: list, HealthCheck: record, SourceSecurityGroup: record, SecurityGroups: list, CreatedTime: string, Scheme: string>, NextMarker: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeLoadBalancers")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "LoadBalancerNames" $load_balancer_names "multi") (serialize-qp "Marker" $marker "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1989,8 +2092,8 @@ export def "post-describe-load-balancers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --marker: string # Pagination token
-  --action: string@action-completer-18
-  --version: string@version-completer
+  --action: string@action-completer-18 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1999,10 +2102,12 @@ export def "post-describe-load-balancers" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<LoadBalancerDescriptions: record, NextMarker: record> {
+]: any -> record<LoadBalancerDescriptions: table<LoadBalancerName: string, DNSName: string, CanonicalHostedZoneName: string, CanonicalHostedZoneNameID: string, ListenerDescriptions: list, Policies: record, BackendServerDescriptions: list, AvailabilityZones: list, Subnets: list, VPCId: string, Instances: list, HealthCheck: record, SourceSecurityGroup: record, SecurityGroups: list, CreatedTime: string, Scheme: string>, NextMarker: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeLoadBalancers")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2039,9 +2144,9 @@ export def "get-describe-tags" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --load-balancer-names: list # The names of the load balancers.
-  --action: string@action-completer-19
-  --version: string@version-completer
+  --load-balancer-names: list # The names of the load balancers. (required)
+  --action: string@action-completer-19 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2049,9 +2154,12 @@ export def "get-describe-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TagDescriptions: record> {
+]: nothing -> record<TagDescriptions: table<LoadBalancerName: string, Tags: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($load_balancer_names == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerNames' missing: pass --load-balancer-names" } }
+  let action = ($action | default "DescribeTags")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "LoadBalancerNames" $load_balancer_names "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2086,8 +2194,8 @@ export def "post-describe-tags" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-19
-  --version: string@version-completer
+  --action: string@action-completer-19 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2096,10 +2204,12 @@ export def "post-describe-tags" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<TagDescriptions: record> {
+]: any -> record<TagDescriptions: table<LoadBalancerName: string, Tags: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeTags")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2136,10 +2246,10 @@ export def "get-detach-load-balancer-from-subnets" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --load-balancer-name: string # The name of the load balancer.
-  --subnets: list # The IDs of the subnets.
-  --action: string@action-completer-20
-  --version: string@version-completer
+  --load-balancer-name: string # The name of the load balancer. (required)
+  --subnets: list # The IDs of the subnets. (required)
+  --action: string@action-completer-20 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2147,9 +2257,13 @@ export def "get-detach-load-balancer-from-subnets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Subnets: record> {
+]: nothing -> record<Subnets: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
+  if ($subnets == null) { error make --unspanned { msg: "required query parameter 'Subnets' missing: pass --subnets" } }
+  let action = ($action | default "DetachLoadBalancerFromSubnets")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "Subnets" $subnets "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2184,8 +2298,8 @@ export def "post-detach-load-balancer-from-subnets" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-20
-  --version: string@version-completer
+  --action: string@action-completer-20 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2194,10 +2308,12 @@ export def "post-detach-load-balancer-from-subnets" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Subnets: record> {
+]: any -> record<Subnets: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DetachLoadBalancerFromSubnets")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2234,10 +2350,10 @@ export def "get-disable-availability-zones-for-load-balancer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --load-balancer-name: string # The name of the load balancer.
-  --availability-zones: list # The Availability Zones.
-  --action: string@action-completer-21
-  --version: string@version-completer
+  --load-balancer-name: string # The name of the load balancer. (required)
+  --availability-zones: list # The Availability Zones. (required)
+  --action: string@action-completer-21 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2245,9 +2361,13 @@ export def "get-disable-availability-zones-for-load-balancer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AvailabilityZones: record> {
+]: nothing -> record<AvailabilityZones: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
+  if ($availability_zones == null) { error make --unspanned { msg: "required query parameter 'AvailabilityZones' missing: pass --availability-zones" } }
+  let action = ($action | default "DisableAvailabilityZonesForLoadBalancer")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "AvailabilityZones" $availability_zones "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2282,8 +2402,8 @@ export def "post-disable-availability-zones-for-load-balancer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-21
-  --version: string@version-completer
+  --action: string@action-completer-21 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2292,10 +2412,12 @@ export def "post-disable-availability-zones-for-load-balancer" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<AvailabilityZones: record> {
+]: any -> record<AvailabilityZones: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DisableAvailabilityZonesForLoadBalancer")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2332,10 +2454,10 @@ export def "get-enable-availability-zones-for-load-balancer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --load-balancer-name: string # The name of the load balancer.
-  --availability-zones: list # The Availability Zones. These must be in the same region as the load balancer.
-  --action: string@action-completer-22
-  --version: string@version-completer
+  --load-balancer-name: string # The name of the load balancer. (required)
+  --availability-zones: list # The Availability Zones. These must be in the same region as the load balancer. (required)
+  --action: string@action-completer-22 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2343,9 +2465,13 @@ export def "get-enable-availability-zones-for-load-balancer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AvailabilityZones: record> {
+]: nothing -> record<AvailabilityZones: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
+  if ($availability_zones == null) { error make --unspanned { msg: "required query parameter 'AvailabilityZones' missing: pass --availability-zones" } }
+  let action = ($action | default "EnableAvailabilityZonesForLoadBalancer")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "AvailabilityZones" $availability_zones "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2380,8 +2506,8 @@ export def "post-enable-availability-zones-for-load-balancer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-22
-  --version: string@version-completer
+  --action: string@action-completer-22 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2390,10 +2516,12 @@ export def "post-enable-availability-zones-for-load-balancer" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<AvailabilityZones: record> {
+]: any -> record<AvailabilityZones: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "EnableAvailabilityZonesForLoadBalancer")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2430,10 +2558,10 @@ export def "get-modify-load-balancer-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --load-balancer-name: string # The name of the load balancer.
-  --load-balancer-attributes: record # The attributes for the load balancer.
-  --action: string@action-completer-23
-  --version: string@version-completer
+  --load-balancer-name: string # The name of the load balancer. (required)
+  --load-balancer-attributes: record # The attributes for the load balancer. (required)
+  --action: string@action-completer-23 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2441,9 +2569,13 @@ export def "get-modify-load-balancer-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<LoadBalancerName: record, LoadBalancerAttributes: record<CrossZoneLoadBalancing: record<Enabled: record>, AccessLog: record<Enabled: record, S3BucketName: record, EmitInterval: record, S3BucketPrefix: record>, ConnectionDraining: record<Enabled: record, Timeout: record>, ConnectionSettings: record<IdleTimeout: record>, AdditionalAttributes: record>> {
+]: nothing -> record<LoadBalancerName: string, LoadBalancerAttributes: record<CrossZoneLoadBalancing: record<Enabled: bool>, AccessLog: record<Enabled: bool, S3BucketName: string, EmitInterval: int, S3BucketPrefix: string>, ConnectionDraining: record<Enabled: bool, Timeout: int>, ConnectionSettings: record<IdleTimeout: int>, AdditionalAttributes: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
+  if ($load_balancer_attributes == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerAttributes' missing: pass --load-balancer-attributes" } }
+  let action = ($action | default "ModifyLoadBalancerAttributes")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "LoadBalancerAttributes" $load_balancer_attributes "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2478,8 +2610,8 @@ export def "post-modify-load-balancer-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-23
-  --version: string@version-completer
+  --action: string@action-completer-23 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2488,10 +2620,12 @@ export def "post-modify-load-balancer-attributes" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<LoadBalancerName: record, LoadBalancerAttributes: record<CrossZoneLoadBalancing: record<Enabled: record>, AccessLog: record<Enabled: record, S3BucketName: record, EmitInterval: record, S3BucketPrefix: record>, ConnectionDraining: record<Enabled: record, Timeout: record>, ConnectionSettings: record<IdleTimeout: record>, AdditionalAttributes: record>> {
+]: any -> record<LoadBalancerName: string, LoadBalancerAttributes: record<CrossZoneLoadBalancing: record<Enabled: bool>, AccessLog: record<Enabled: bool, S3BucketName: string, EmitInterval: int, S3BucketPrefix: string>, ConnectionDraining: record<Enabled: bool, Timeout: int>, ConnectionSettings: record<IdleTimeout: int>, AdditionalAttributes: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ModifyLoadBalancerAttributes")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2528,10 +2662,10 @@ export def "get-register-instances-with-load-balancer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --load-balancer-name: string # The name of the load balancer.
-  --instances: list # The IDs of the instances.
-  --action: string@action-completer-24
-  --version: string@version-completer
+  --load-balancer-name: string # The name of the load balancer. (required)
+  --instances: list # The IDs of the instances. (required)
+  --action: string@action-completer-24 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2539,9 +2673,13 @@ export def "get-register-instances-with-load-balancer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Instances: record> {
+]: nothing -> record<Instances: table<InstanceId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
+  if ($instances == null) { error make --unspanned { msg: "required query parameter 'Instances' missing: pass --instances" } }
+  let action = ($action | default "RegisterInstancesWithLoadBalancer")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "Instances" $instances "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2576,8 +2714,8 @@ export def "post-register-instances-with-load-balancer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-24
-  --version: string@version-completer
+  --action: string@action-completer-24 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2586,10 +2724,12 @@ export def "post-register-instances-with-load-balancer" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Instances: record> {
+]: any -> record<Instances: table<InstanceId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "RegisterInstancesWithLoadBalancer")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2626,10 +2766,10 @@ export def "get-remove-tags" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --load-balancer-names: list # The name of the load balancer. You can specify a maximum of one load balancer name.
-  --tags: list # The list of tag keys to remove.
-  --action: string@action-completer-25
-  --version: string@version-completer
+  --load-balancer-names: list # The name of the load balancer. You can specify a maximum of one load balancer name. (required)
+  --tags: list # The list of tag keys to remove. (required)
+  --action: string@action-completer-25 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2640,6 +2780,10 @@ export def "get-remove-tags" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($load_balancer_names == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerNames' missing: pass --load-balancer-names" } }
+  if ($tags == null) { error make --unspanned { msg: "required query parameter 'Tags' missing: pass --tags" } }
+  let action = ($action | default "RemoveTags")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "LoadBalancerNames" $load_balancer_names "multi") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2674,8 +2818,8 @@ export def "post-remove-tags" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-25
-  --version: string@version-completer
+  --action: string@action-completer-25 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2688,6 +2832,8 @@ export def "post-remove-tags" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "RemoveTags")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2724,11 +2870,11 @@ export def "get-set-load-balancer-listener-ssl-certificate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --load-balancer-name: string # The name of the load balancer.
-  --load-balancer-port: int # The port that uses the specified SSL certificate.
-  --ssl-certificate-id: string # The Amazon Resource Name (ARN) of the SSL certificate.
-  --action: string@action-completer-26
-  --version: string@version-completer
+  --load-balancer-name: string # The name of the load balancer. (required)
+  --load-balancer-port: int # The port that uses the specified SSL certificate. (required)
+  --ssl-certificate-id: string # The Amazon Resource Name (ARN) of the SSL certificate. (required)
+  --action: string@action-completer-26 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2739,6 +2885,11 @@ export def "get-set-load-balancer-listener-ssl-certificate" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
+  if ($load_balancer_port == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerPort' missing: pass --load-balancer-port" } }
+  if ($ssl_certificate_id == null) { error make --unspanned { msg: "required query parameter 'SSLCertificateId' missing: pass --ssl-certificate-id" } }
+  let action = ($action | default "SetLoadBalancerListenerSSLCertificate")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "LoadBalancerPort" $load_balancer_port "scalar") (serialize-qp "SSLCertificateId" $ssl_certificate_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2773,8 +2924,8 @@ export def "post-set-load-balancer-listener-ssl-certificate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-26
-  --version: string@version-completer
+  --action: string@action-completer-26 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2787,6 +2938,8 @@ export def "post-set-load-balancer-listener-ssl-certificate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "SetLoadBalancerListenerSSLCertificate")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2823,11 +2976,11 @@ export def "get-set-load-balancer-policies-for-backend-server" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --load-balancer-name: string # The name of the load balancer.
-  --instance-port: int # The port number associated with the EC2 instance.
-  --policy-names: list # The names of the policies. If the list is empty, then all current polices are removed from the EC2 instance.
-  --action: string@action-completer-27
-  --version: string@version-completer
+  --load-balancer-name: string # The name of the load balancer. (required)
+  --instance-port: int # The port number associated with the EC2 instance. (required)
+  --policy-names: list # The names of the policies. If the list is empty, then all current polices are removed from the EC2 instance. (required)
+  --action: string@action-completer-27 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2838,6 +2991,11 @@ export def "get-set-load-balancer-policies-for-backend-server" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
+  if ($instance_port == null) { error make --unspanned { msg: "required query parameter 'InstancePort' missing: pass --instance-port" } }
+  if ($policy_names == null) { error make --unspanned { msg: "required query parameter 'PolicyNames' missing: pass --policy-names" } }
+  let action = ($action | default "SetLoadBalancerPoliciesForBackendServer")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "InstancePort" $instance_port "scalar") (serialize-qp "PolicyNames" $policy_names "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2872,8 +3030,8 @@ export def "post-set-load-balancer-policies-for-backend-server" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-27
-  --version: string@version-completer
+  --action: string@action-completer-27 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2886,6 +3044,8 @@ export def "post-set-load-balancer-policies-for-backend-server" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "SetLoadBalancerPoliciesForBackendServer")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2922,11 +3082,11 @@ export def "get-set-load-balancer-policies-of-listener" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --load-balancer-name: string # The name of the load balancer.
-  --load-balancer-port: int # The external port of the load balancer.
-  --policy-names: list # The names of the policies. This list must include all policies to be enabled. If you omit a policy that is currently enabled, it is disabled. If the list is empty, all current policies are disabled.
-  --action: string@action-completer-28
-  --version: string@version-completer
+  --load-balancer-name: string # The name of the load balancer. (required)
+  --load-balancer-port: int # The external port of the load balancer. (required)
+  --policy-names: list # The names of the policies. This list must include all policies to be enabled. If you omit a policy that is currently enabled, it is disabled. If the list is empty, all current policies are disabled. (required)
+  --action: string@action-completer-28 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2937,6 +3097,11 @@ export def "get-set-load-balancer-policies-of-listener" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($load_balancer_name == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerName' missing: pass --load-balancer-name" } }
+  if ($load_balancer_port == null) { error make --unspanned { msg: "required query parameter 'LoadBalancerPort' missing: pass --load-balancer-port" } }
+  if ($policy_names == null) { error make --unspanned { msg: "required query parameter 'PolicyNames' missing: pass --policy-names" } }
+  let action = ($action | default "SetLoadBalancerPoliciesOfListener")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "LoadBalancerPort" $load_balancer_port "scalar") (serialize-qp "PolicyNames" $policy_names "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2971,8 +3136,8 @@ export def "post-set-load-balancer-policies-of-listener" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-28
-  --version: string@version-completer
+  --action: string@action-completer-28 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2985,6 +3150,8 @@ export def "post-set-load-balancer-policies-of-listener" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "SetLoadBalancerPoliciesOfListener")
+  let version = ($version | default "2012-06-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body

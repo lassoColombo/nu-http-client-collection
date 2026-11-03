@@ -598,13 +598,13 @@ export def "post-inbound-send-raw-json" [
   --key: string
   --mail-from: string
   --raw-message: string
-  --body-to: list<string>
+  --to: list<string>
 ]: any -> table<email: string, pattern: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inbound/send-raw.json" $auth.query)
-  let req_body = {"client_address": $client_address, "helo": $helo, "key": $key, "mail_from": $mail_from, "raw_message": $raw_message, "to": $body_to} | compact
+  let req_body = {"client_address": $client_address, "helo": $helo, "key": $key, "mail_from": $mail_from, "raw_message": $raw_message, "to": $to} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1287,13 +1287,13 @@ export def "post-messages-list-scheduled-json" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
-  --body-to: string
+  --to: string
 ]: any -> table<_id: string, created_at: string, from_email: string, send_at: string, subject: string, to: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages/list-scheduled.json" $auth.query)
-  let req_body = {"key": $key, "to": $body_to} | compact
+  let req_body = {"key": $key, "to": $to} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1495,13 +1495,13 @@ export def "post-messages-send-raw-json" [
   --raw-message: string
   --return-path-domain: any
   --send-at: string
-  --body-to: list<string>
+  --to: list<string>
 ]: any -> table<_id: string, email: string, reject_reason: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages/send-raw.json" $auth.query)
-  let req_body = {"async": $async, "from_email": $from_email, "from_name": $from_name, "ip_pool": $ip_pool, "key": $key, "raw_message": $raw_message, "return_path_domain": $return_path_domain, "send_at": $send_at, "to": $body_to} | compact
+  let req_body = {"async": $async, "from_email": $from_email, "from_name": $from_name, "ip_pool": $ip_pool, "key": $key, "raw_message": $raw_message, "return_path_domain": $return_path_domain, "send_at": $send_at, "to": $to} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

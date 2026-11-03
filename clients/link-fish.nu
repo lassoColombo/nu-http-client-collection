@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -141,12 +141,13 @@ export def "get-urls-apps" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --url: string # The URL of the website to query
+  --url: string # The URL of the website to query (required)
   --return-urls: oneof<nothing, bool> # Returns app URLs instead of the identifiers (default: false)
   --browser-render: oneof<nothing, bool> # If the page should be fully rendered with a browser to extract data. The request will then cost 5 credits instead of 1! (default: false)
 ]: nothing -> record<android: string, ios: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
   let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "return_urls" $return_urls "scalar") (serialize-qp "browser_render" $browser_render "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Urls/apps" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -179,7 +180,7 @@ export def "get-urls-browser-data" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --url: string # The URL of the website to query
+  --url: string # The URL of the website to query (required)
   --item-format: string@item-format-completer # If the items should be return "normal" with multiple levels or "flat" with just one level and linked instead. (default: normal)
   --simplify-special-types: oneof<nothing, bool> # Some types like "PropertyValue" do save key and value in separate properties which makes the data harder to process. If this option gets set it converts them automatically into the regular key -> value format. (default: false)
   --include-raw-html: oneof<nothing, bool> # Returns additionally also the raw HTML as property "rawHtml". (default: false)
@@ -189,6 +190,7 @@ export def "get-urls-browser-data" [
 ]: nothing -> record<additionalData: record<locality: record<country: string, language: string>>, favicon: string, items: table<_type: string>, screenshot: string, statusCode: string, title: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
   let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "item_format" $item_format "scalar") (serialize-qp "simplify_special_types" $simplify_special_types "scalar") (serialize-qp "include_raw_html" $include_raw_html "scalar") (serialize-qp "screenshot" $screenshot "scalar") (serialize-qp "screenshot_width" $screenshot_width "scalar") (serialize-qp "screenshot_file_format" $screenshot_file_format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Urls/browser-data" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -221,13 +223,14 @@ export def "get-urls-browser-screenshot" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --url: string # The URL of the website to create screenshot of
+  --url: string # The URL of the website to create screenshot of (required)
   --type: string@type-completer # What kind of screenshot should be returned. If it should be a regular 16:9 screenshot or one with the full page height (default: normal)
   --file-format: string@file-format-completer # The file format of the screenshot (default: png)
   --width: int # The widh of the screenshot in pixel. (default: 640)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
   let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "file_format" $file_format "scalar") (serialize-qp "width" $width "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Urls/browser-screenshot" $qp $auth.query)
   let accept_val = ($accept | default "image/png")
@@ -260,7 +263,7 @@ export def "get-urls-data" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --url: string # The URL of the website to query
+  --url: string # The URL of the website to query (required)
   --item-format: string@item-format-completer # If the items should be return "normal" with multiple levels or "flat" with just one level and linked instead. (default: normal)
   --simplify-special-types: oneof<nothing, bool> # Some types like "PropertyValue" do save key and value in separate properties which makes the data harder to process. If this option gets set it converts them automatically into the regular key -> value format. (default: false)
   --include-raw-html: oneof<nothing, bool> # Returns additionally also the raw HTML as property "rawHtml". (default: false)
@@ -268,6 +271,7 @@ export def "get-urls-data" [
 ]: nothing -> record<additionalData: record<locality: record<country: string, language: string>>, favicon: string, items: table<_type: string>, statusCode: string, title: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
   let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "item_format" $item_format "scalar") (serialize-qp "simplify_special_types" $simplify_special_types "scalar") (serialize-qp "include_raw_html" $include_raw_html "scalar") (serialize-qp "browser_render" $browser_render "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Urls/data" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -300,10 +304,11 @@ export def "get-urls-data-raw" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --url: string # The URL to get the data of
+  --url: string # The URL to get the data of (required)
 ]: nothing -> record<data: record, sourceFormat: string, statusCode: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
   let qp = [(serialize-qp "url" $url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Urls/data-raw" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -336,12 +341,13 @@ export def "get-urls-data-tabular" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --url: string # The URL to get the data of
+  --url: string # The URL to get the data of (required)
   --selector: string # CSS selector to define tabular data which should get returned
   --browser-render: oneof<nothing, bool> # If the page should be fully rendered with a browser to extract data. The request will then cost 5 credits instead of 1! (default: false)
 ]: nothing -> record<data: record<data: list<list>, metadata: record>, statusCode: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
   let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "selector" $selector "scalar") (serialize-qp "browser_render" $browser_render "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Urls/data-tabular" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -374,11 +380,12 @@ export def "get-urls-geo-coordinates" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --url: string # The URL of the website to query
+  --url: string # The URL of the website to query (required)
   --browser-render: oneof<nothing, bool> # If the page should be fully rendered with a browser to extract data. The request will then cost 5 credits instead of 1! (default: false)
 ]: nothing -> record<latitude: float, longitude: float, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
   let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "browser_render" $browser_render "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Urls/geo-coordinates" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -411,12 +418,13 @@ export def "get-urls-social-media" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --url: string # The URL of the website to query
+  --url: string # The URL of the website to query (required)
   --return-urls: oneof<nothing, bool> # Returns profile URLs instead of the profile names/ids (default: false)
   --browser-render: oneof<nothing, bool> # If the page should be fully rendered with a browser to extract data. The request will then cost 5 credits instead of 1! (default: false)
 ]: nothing -> record<facebookPage: string, githubUser: string, linkedInCompany: string, twitter: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
   let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "return_urls" $return_urls "scalar") (serialize-qp "browser_render" $browser_render "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Urls/social-media" $qp $auth.query)
   let accept_val = ($accept | default "application/json")

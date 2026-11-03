@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-fungenerators-api-secret" => { {scheme: $scheme, headers: {X-Fungenerators-Api-Secret: $token_val}, query: "", location: "header"} }
+    "x-fungenerators-api-secret" => { {scheme: $scheme, headers: {"X-Fungenerators-Api-Secret": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -171,7 +171,7 @@ export def "get-name-generate" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --category: string # Category to generator names from (format: string)
+  --category: string # Category to generator names from (required, format: string)
   --suggest: string # Suggestion string if supported by this category generator. (format: string)
   --start: int # start. Controls pagination. Relevant only if suggestion is supported (format: integer)
   --limit: int # limit. Controls pagination limit. Relevant only if suggestion is supported (format: integer)
@@ -179,6 +179,7 @@ export def "get-name-generate" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-fungenerators-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($category == null) { error make --unspanned { msg: "required query parameter 'category' missing: pass --category" } }
   let qp = [(serialize-qp "category" $category "scalar") (serialize-qp "suggest" $suggest "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "variation" $variation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/name/generate" $qp $auth.query)
   let accept_val = ($accept | default "application/json")

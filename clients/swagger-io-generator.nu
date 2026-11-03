@@ -99,6 +99,9 @@ def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: 
 def base-url-completer [] { ["https://generator.swagger.io/api"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def language-completer [] { ["ada" "akka-scala" "android" "apex" "bash" "clojure" "cpprest" "csharp" "csharp-dotnet2" "cwiki" "dart" "dart-jaguar" "dynamic-html" "eiffel" "elixir" "elm" "erlang-client" "flash" "go" "groovy" "haskell-http-client" "html" "html2" "java" "javascript" "javascript-closure-angular" "jaxrs-cxf-client" "jmeter" "kotlin" "lua" "objc" "perl" "php" "powershell" "python" "qt5cpp" "r" "ruby" "rust" "scala" "scalaz" "swagger" "swagger-yaml" "swift" "swift3" "swift4" "swift5" "tizen" "typescript-angular" "typescript-angularjs" "typescript-aurelia" "typescript-fetch" "typescript-inversify" "typescript-jquery" "typescript-node" "ue4cpp"] }
+def framework-completer [] { ["ada-server" "aspnetcore" "erlang-server" "finch" "go-server" "haskell" "inflector" "java-pkmst" "java-play-framework" "java-vertx" "jaxrs" "jaxrs-cxf" "jaxrs-cxf-cdi" "jaxrs-resteasy" "jaxrs-resteasy-eap" "jaxrs-spec" "kotlin-server" "lumen" "msf4j" "nancyfx" "nodejs-server" "php-silex" "php-symfony" "pistache-server" "python-flask" "rails5" "restbed" "rust-server" "scala-lagom-server" "scalatra" "sinatra" "slim" "spring" "undertow" "ze-ph"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -162,7 +165,7 @@ export def "client-options" [
 # GET /gen/clients/{language}
 # operationId: getClientOptions
 export def "get-client-options" [
-  language: string
+  language: string@language-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -200,7 +203,7 @@ export def "get-client-options" [
 # --authorizationValue shape: {keyName?: string, type?: string, urlMatcher?: record, value?: string}
 # --securityDefinition shape: {description?: string, type?: string}
 export def "generate-client" [
-  language: string
+  language: string@language-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -315,7 +318,7 @@ export def "server-options" [
 # GET /gen/servers/{framework}
 # operationId: getServerOptions
 export def "get-server-options" [
-  framework: string
+  framework: string@framework-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -353,7 +356,7 @@ export def "get-server-options" [
 # --authorizationValue shape: {keyName?: string, type?: string, urlMatcher?: record, value?: string}
 # --securityDefinition shape: {description?: string, type?: string}
 export def "generate-server-for-language" [
-  framework: string
+  framework: string@framework-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

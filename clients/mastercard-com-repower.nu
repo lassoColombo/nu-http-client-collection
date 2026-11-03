@@ -1,4 +1,4 @@
-# Auto-generated client for rePower vV2
+# Auto-generated client for rePower V2
 # Source: https://api.apis.guru/v2/specs/mastercard.com/Repower/V2/swagger.json
 # Auth: --token flag or $env.REPOWER_TOKEN
 

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -180,20 +180,21 @@ export def "upload-artifact" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --main-artifact: oneof<nothing, bool> # Flag telling if this should be considered as primary or secondary artifact. Default to 'true'
+  --main-artifact: oneof<nothing, bool> # Flag telling if this should be considered as primary or secondary artifact. Default to 'true' (required)
   file: string # The artifact to upload (format: binary)
 ]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($main_artifact == null) { error make --unspanned { msg: "required query parameter 'mainArtifact' missing: pass --main-artifact" } }
   let qp = [(serialize-qp "mainArtifact" $main_artifact "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/artifact/upload" $qp $auth.query)
   let req_body = {"file": $file} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -222,10 +223,11 @@ export def "export-snapshot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --service-ids: list<string> # List of service identifiers to export
+  --service-ids: list<string> # List of service identifiers to export (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($service_ids == null) { error make --unspanned { msg: "required query parameter 'serviceIds' missing: pass --service-ids" } }
   let qp = [(serialize-qp "serviceIds" $service_ids "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/export" $qp $auth.query)
   let accept_val = "application/json"
@@ -302,8 +304,8 @@ export def "import-snapshot" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -1382,10 +1384,11 @@ export def "search-services" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query-map: record # Map of criterion. Key can be simply 'name' with value as the searched string. You can also search by label using keys like 'labels.x' where 'x' is the label and value the label value
+  --query-map: record # Map of criterion. Key can be simply 'name' with value as the searched string. You can also search by label using keys like 'labels.x' where 'x' is the label and value the label value (required)
 ]: nothing -> table<id: string, metadata: record<annotations: record, createdOn: int, labels: record, lastUpdate: int>, name: string, operations: list<record>, type: string, version: string, xmlNS: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($query_map == null) { error make --unspanned { msg: "required query parameter 'queryMap' missing: pass --query-map" } }
   let qp = [(serialize-qp "queryMap" $query_map "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/services/search" $qp $auth.query)
   let accept_val = "application/json"
@@ -1537,7 +1540,7 @@ export def "override-service-operation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --operation-name: string # Name of operation to update
+  --operation-name: string # Name of operation to update (required)
   --default-delay: int # Default delay in milliseconds to apply to mock responses on this operation
   --dispatcher: string # Type of dispatcher to apply for this operation
   --dispatcher-rules: string # Rules of dispatcher for this operation
@@ -1547,6 +1550,7 @@ export def "override-service-operation" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($operation_name == null) { error make --unspanned { msg: "required query parameter 'operationName' missing: pass --operation-name" } }
   let qp = [(serialize-qp "operationName" $operation_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/services/{id}/operation") $qp $auth.query)
   let req_body = {"defaultDelay": $default_delay, "dispatcher": $dispatcher, "dispatcherRules": $dispatcher_rules, "parameterConstraints": $parameter_constraints} | compact
@@ -1735,7 +1739,7 @@ export def "get-events-by-test-case" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> table<eventMessage: record<content: string, headers: list, id: string, mediaType: string, name: string, operationId: string, testCaseId: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1773,7 +1777,7 @@ export def "get-messages-by-test-case" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> table<request: record<content: string, headers: list, id: string, name: string, operationId: string, testCaseId: string>, response: record<content: string, headers: list, id: string, name: string, operationId: string, testCaseId: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

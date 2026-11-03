@@ -12,8 +12,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "oauth" => { {scheme: $scheme, headers: {Authorization: $"Oauth ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "oauth" => { {scheme: $scheme, headers: {"Authorization": $"Oauth ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -162,12 +162,13 @@ export def "list-batch-compliance-jobs" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --type: string@type-completer # Type of Compliance Job to list.
+  --type: string@type-completer # Type of Compliance Job to list. (required)
   --status: string@status-completer # Status of Compliance Job to list.
   --compliance-job-fields: list<string> # A comma separated list of ComplianceJob fields to display. (e.g. [created_at, download_expires_at, download_url, id, name, resumable, status, type, upload_expires_at, upload_url])
 ]: nothing -> record<data: table<created_at: string, download_expires_at: string, download_url: string, id: string, name: string, status: string, type: string, upload_expires_at: string, upload_url: string>, errors: table<detail: string, status: int, title: string, type: string>, meta: record<result_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($type == null) { error make --unspanned { msg: "required query parameter 'type' missing: pass --type" } }
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "compliance_job.fields" $compliance_job_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/compliance/jobs" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -964,7 +965,7 @@ export def "find-spaces-by-ids" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --ids: list<string> # The list of Space IDs to return.
+  --ids: list<string> # The list of Space IDs to return. (required)
   --space-fields: list<string> # A comma separated list of Space fields to display. (e.g. [created_at, creator_id, ended_at, host_ids, id, invited_user_ids, is_ticketed, lang, participant_count, scheduled_start, speaker_ids, started_at, state, subscriber_count, title, topic_ids, updated_at])
   --expansions: list<string> # A comma separated list of fields to expand. (e.g. [creator_id, host_ids, invited_user_ids, speaker_ids, topic_ids])
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
@@ -972,6 +973,7 @@ export def "find-spaces-by-ids" [
 ]: nothing -> record<data: table<created_at: string, creator_id: string, ended_at: string, host_ids: list, id: string, invited_user_ids: list, is_ticketed: bool, lang: string, participant_count: int, scheduled_start: string, speaker_ids: list, started_at: string, state: string, subscriber_count: int, title: string, topics: list, updated_at: string>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
   let qp = [(serialize-qp "ids" $ids "multi") (serialize-qp "space.fields" $space_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "topic.fields" $topic_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/spaces" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1006,7 +1008,7 @@ export def "find-spaces-by-creator-ids" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --user-ids: list # The IDs of Users to search through.
+  --user-ids: list # The IDs of Users to search through. (required)
   --space-fields: list<string> # A comma separated list of Space fields to display. (e.g. [created_at, creator_id, ended_at, host_ids, id, invited_user_ids, is_ticketed, lang, participant_count, scheduled_start, speaker_ids, started_at, state, subscriber_count, title, topic_ids, updated_at])
   --expansions: list<string> # A comma separated list of fields to expand. (e.g. [creator_id, host_ids, invited_user_ids, speaker_ids, topic_ids])
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
@@ -1014,6 +1016,7 @@ export def "find-spaces-by-creator-ids" [
 ]: nothing -> record<data: table<created_at: string, creator_id: string, ended_at: string, host_ids: list, id: string, invited_user_ids: list, is_ticketed: bool, lang: string, participant_count: int, scheduled_start: string, speaker_ids: list, started_at: string, state: string, subscriber_count: int, title: string, topics: list, updated_at: string>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<result_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_ids == null) { error make --unspanned { msg: "required query parameter 'user_ids' missing: pass --user-ids" } }
   let qp = [(serialize-qp "user_ids" $user_ids "multi") (serialize-qp "space.fields" $space_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "topic.fields" $topic_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/spaces/by/creator_ids" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1048,7 +1051,7 @@ export def "search-spaces" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --query: string # The search query. (e.g. crypto)
+  --query: string # The search query. (required, e.g. crypto)
   --state: string@state-completer # The state of Spaces to search for. (default: all)
   --max-results: int # The number of results to return. (format: int32, default: 100)
   --space-fields: list<string> # A comma separated list of Space fields to display. (e.g. [created_at, creator_id, ended_at, host_ids, id, invited_user_ids, is_ticketed, lang, participant_count, scheduled_start, speaker_ids, started_at, state, subscriber_count, title, topic_ids, updated_at])
@@ -1058,6 +1061,7 @@ export def "search-spaces" [
 ]: nothing -> record<data: table<created_at: string, creator_id: string, ended_at: string, host_ids: list, id: string, invited_user_ids: list, is_ticketed: bool, lang: string, participant_count: int, scheduled_start: string, speaker_ids: list, started_at: string, state: string, subscriber_count: int, title: string, topics: list, updated_at: string>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<result_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "space.fields" $space_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "topic.fields" $topic_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/spaces/search" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1225,7 +1229,7 @@ export def "find-tweets-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --ids: list # A comma separated list of Tweet IDs. Up to 100 are allowed in a single request.
+  --ids: list # A comma separated list of Tweet IDs. Up to 100 are allowed in a single request. (required)
   --tweet-fields: list<string> # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
   --expansions: list<string> # A comma separated list of fields to expand. (e.g. [attachments.media_keys, attachments.poll_ids, author_id, edit_history_tweet_ids, entities.mentions.username, geo.place_id, in_reply_to_user_id, referenced_tweets.id, referenced_tweets.id.author_id])
   --media-fields: list<string> # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
@@ -1235,6 +1239,7 @@ export def "find-tweets-by-id" [
 ]: nothing -> record<data: table<attachments: record, author_id: string, context_annotations: list, conversation_id: string, created_at: string, edit_controls: record, edit_history_tweet_ids: list, entities: record, geo: record, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record, organic_metrics: record, possibly_sensitive: bool, promoted_metrics: record, public_metrics: record, referenced_tweets: list, reply_settings: string, source: string, text: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/tweets" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1323,12 +1328,13 @@ export def "get-tweets-compliance-stream" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --backfill-minutes: int # The number of minutes of backfill requested. (format: int32)
-  --partition: int # The partition number. (format: int32)
+  --partition: int # The partition number. (required, format: int32)
   --start-time: string # YYYY-MM-DDTHH:mm:ssZ. The earliest UTC timestamp from which the Tweet Compliance events will be provided. (format: date-time, e.g. 2021-02-01T18:40:40.000Z)
   --end-time: string # YYYY-MM-DDTHH:mm:ssZ. The latest UTC timestamp to which the Tweet Compliance events will be provided. (format: date-time, e.g. 2021-02-14T18:40:40.000Z)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($partition == null) { error make --unspanned { msg: "required query parameter 'partition' missing: pass --partition" } }
   let qp = [(serialize-qp "backfill_minutes" $backfill_minutes "scalar") (serialize-qp "partition" $partition "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/2/tweets/compliance/stream" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1363,7 +1369,7 @@ export def "tweet-counts-full-archive-search" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --query: string # One query/rule/filter for matching Tweets. Refer to https://t.co/rulelength to identify the max query length. (e.g. (from:TwitterDev OR from:TwitterAPI) has:media -is:retweet)
+  --query: string # One query/rule/filter for matching Tweets. Refer to https://t.co/rulelength to identify the max query length. (required, e.g. (from:TwitterDev OR from:TwitterAPI) has:media -is:retweet)
   --start-time: string # YYYY-MM-DDTHH:mm:ssZ. The oldest UTC timestamp (from most recent 7 days) from which the Tweets will be provided. Timestamp is in second granularity and is inclusive (i.e. 12:00:01 includes the first second of the minute). (format: date-time)
   --end-time: string # YYYY-MM-DDTHH:mm:ssZ. The newest, most recent UTC timestamp to which the Tweets will be provided. Timestamp is in second granularity and is exclusive (i.e. 12:00:01 excludes the first second of the minute). (format: date-time)
   --since-id: string # Returns results with a Tweet ID greater than (that is, more recent than) the specified ID. (e.g. 1346889436626259968)
@@ -1375,6 +1381,7 @@ export def "tweet-counts-full-archive-search" [
 ]: nothing -> record<data: table<end: string, start: string, tweet_count: int>, errors: table<detail: string, status: int, title: string, type: string>, meta: record<newest_id: string, next_token: string, oldest_id: string, total_tweet_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "granularity" $granularity "scalar") (serialize-qp "search_count.fields" $search_count_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/tweets/counts/all" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1409,7 +1416,7 @@ export def "tweet-counts-recent-search" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --query: string # One query/rule/filter for matching Tweets. Refer to https://t.co/rulelength to identify the max query length. (e.g. (from:TwitterDev OR from:TwitterAPI) has:media -is:retweet)
+  --query: string # One query/rule/filter for matching Tweets. Refer to https://t.co/rulelength to identify the max query length. (required, e.g. (from:TwitterDev OR from:TwitterAPI) has:media -is:retweet)
   --start-time: string # YYYY-MM-DDTHH:mm:ssZ. The oldest UTC timestamp (from most recent 7 days) from which the Tweets will be provided. Timestamp is in second granularity and is inclusive (i.e. 12:00:01 includes the first second of the minute). (format: date-time)
   --end-time: string # YYYY-MM-DDTHH:mm:ssZ. The newest, most recent UTC timestamp to which the Tweets will be provided. Timestamp is in second granularity and is exclusive (i.e. 12:00:01 excludes the first second of the minute). (format: date-time)
   --since-id: string # Returns results with a Tweet ID greater than (that is, more recent than) the specified ID. (e.g. 1346889436626259968)
@@ -1421,6 +1428,7 @@ export def "tweet-counts-recent-search" [
 ]: nothing -> record<data: table<end: string, start: string, tweet_count: int>, errors: table<detail: string, status: int, title: string, type: string>, meta: record<newest_id: string, next_token: string, oldest_id: string, total_tweet_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "granularity" $granularity "scalar") (serialize-qp "search_count.fields" $search_count_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/tweets/counts/recent" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1455,7 +1463,7 @@ export def "get-tweets-firehose-stream" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --backfill-minutes: int # The number of minutes of backfill requested. (format: int32)
-  --partition: int # The partition number. (format: int32)
+  --partition: int # The partition number. (required, format: int32)
   --start-time: string # YYYY-MM-DDTHH:mm:ssZ. The earliest UTC timestamp to which the Tweets will be provided. (format: date-time, e.g. 2021-02-14T18:40:40.000Z)
   --end-time: string # YYYY-MM-DDTHH:mm:ssZ. The latest UTC timestamp to which the Tweets will be provided. (format: date-time, e.g. 2021-02-14T18:40:40.000Z)
   --tweet-fields: list<string> # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
@@ -1467,6 +1475,7 @@ export def "get-tweets-firehose-stream" [
 ]: nothing -> record<data: record<attachments: record<media_keys: list, poll_ids: list>, author_id: string, context_annotations: list<record>, conversation_id: string, created_at: string, edit_controls: record<editable_until: string, edits_remaining: int, is_edit_eligible: bool>, edit_history_tweet_ids: list<string>, entities: record<annotations: list, cashtags: list, hashtags: list, mentions: list, urls: list>, geo: record<coordinates: record, place_id: string>, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record<impression_count: int>, organic_metrics: record<impression_count: int, like_count: int, reply_count: int, retweet_count: int>, possibly_sensitive: bool, promoted_metrics: record<impression_count: int, like_count: int, reply_count: int, retweet_count: int>, public_metrics: record<impression_count: int, like_count: int, quote_count: int, reply_count: int, retweet_count: int>, referenced_tweets: list<record>, reply_settings: string, source: string, text: string, withheld: record<copyright: bool, country_codes: list, scope: string>>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($partition == null) { error make --unspanned { msg: "required query parameter 'partition' missing: pass --partition" } }
   let qp = [(serialize-qp "backfill_minutes" $backfill_minutes "scalar") (serialize-qp "partition" $partition "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/tweets/firehose/stream" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1584,7 +1593,7 @@ export def "get-tweets-sample10-stream" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --backfill-minutes: int # The number of minutes of backfill requested. (format: int32)
-  --partition: int # The partition number. (format: int32)
+  --partition: int # The partition number. (required, format: int32)
   --start-time: string # YYYY-MM-DDTHH:mm:ssZ. The earliest UTC timestamp to which the Tweets will be provided. (format: date-time, e.g. 2021-02-14T18:40:40.000Z)
   --end-time: string # YYYY-MM-DDTHH:mm:ssZ. The latest UTC timestamp to which the Tweets will be provided. (format: date-time, e.g. 2021-02-14T18:40:40.000Z)
   --tweet-fields: list<string> # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
@@ -1596,6 +1605,7 @@ export def "get-tweets-sample10-stream" [
 ]: nothing -> record<data: record<attachments: record<media_keys: list, poll_ids: list>, author_id: string, context_annotations: list<record>, conversation_id: string, created_at: string, edit_controls: record<editable_until: string, edits_remaining: int, is_edit_eligible: bool>, edit_history_tweet_ids: list<string>, entities: record<annotations: list, cashtags: list, hashtags: list, mentions: list, urls: list>, geo: record<coordinates: record, place_id: string>, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record<impression_count: int>, organic_metrics: record<impression_count: int, like_count: int, reply_count: int, retweet_count: int>, possibly_sensitive: bool, promoted_metrics: record<impression_count: int, like_count: int, reply_count: int, retweet_count: int>, public_metrics: record<impression_count: int, like_count: int, quote_count: int, reply_count: int, retweet_count: int>, referenced_tweets: list<record>, reply_settings: string, source: string, text: string, withheld: record<copyright: bool, country_codes: list, scope: string>>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($partition == null) { error make --unspanned { msg: "required query parameter 'partition' missing: pass --partition" } }
   let qp = [(serialize-qp "backfill_minutes" $backfill_minutes "scalar") (serialize-qp "partition" $partition "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/tweets/sample10/stream" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1630,7 +1640,7 @@ export def "tweets-fullarchive-search" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --query: string # One query/rule/filter for matching Tweets. Refer to https://t.co/rulelength to identify the max query length. (e.g. (from:TwitterDev OR from:TwitterAPI) has:media -is:retweet)
+  --query: string # One query/rule/filter for matching Tweets. Refer to https://t.co/rulelength to identify the max query length. (required, e.g. (from:TwitterDev OR from:TwitterAPI) has:media -is:retweet)
   --start-time: string # YYYY-MM-DDTHH:mm:ssZ. The oldest UTC timestamp from which the Tweets will be provided. Timestamp is in second granularity and is inclusive (i.e. 12:00:01 includes the first second of the minute). (format: date-time)
   --end-time: string # YYYY-MM-DDTHH:mm:ssZ. The newest, most recent UTC timestamp to which the Tweets will be provided. Timestamp is in second granularity and is exclusive (i.e. 12:00:01 excludes the first second of the minute). (format: date-time)
   --since-id: string # Returns results with a Tweet ID greater than (that is, more recent than) the specified ID. (e.g. 1346889436626259968)
@@ -1648,6 +1658,7 @@ export def "tweets-fullarchive-search" [
 ]: nothing -> record<data: table<attachments: record, author_id: string, context_annotations: list, conversation_id: string, created_at: string, edit_controls: record, edit_history_tweet_ids: list, entities: record, geo: record, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record, organic_metrics: record, possibly_sensitive: bool, promoted_metrics: record, public_metrics: record, referenced_tweets: list, reply_settings: string, source: string, text: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<newest_id: string, next_token: string, oldest_id: string, result_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/tweets/search/all" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1682,7 +1693,7 @@ export def "tweets-recent-search" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --query: string # One query/rule/filter for matching Tweets. Refer to https://t.co/rulelength to identify the max query length. (e.g. (from:TwitterDev OR from:TwitterAPI) has:media -is:retweet)
+  --query: string # One query/rule/filter for matching Tweets. Refer to https://t.co/rulelength to identify the max query length. (required, e.g. (from:TwitterDev OR from:TwitterAPI) has:media -is:retweet)
   --start-time: string # YYYY-MM-DDTHH:mm:ssZ. The oldest UTC timestamp from which the Tweets will be provided. Timestamp is in second granularity and is inclusive (i.e. 12:00:01 includes the first second of the minute). (format: date-time)
   --end-time: string # YYYY-MM-DDTHH:mm:ssZ. The newest, most recent UTC timestamp to which the Tweets will be provided. Timestamp is in second granularity and is exclusive (i.e. 12:00:01 excludes the first second of the minute). (format: date-time)
   --since-id: string # Returns results with a Tweet ID greater than (that is, more recent than) the specified ID. (e.g. 1346889436626259968)
@@ -1700,6 +1711,7 @@ export def "tweets-recent-search" [
 ]: nothing -> record<data: table<attachments: record, author_id: string, context_annotations: list, conversation_id: string, created_at: string, edit_controls: record, edit_history_tweet_ids: list, entities: record, geo: record, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record, organic_metrics: record, possibly_sensitive: bool, promoted_metrics: record, public_metrics: record, referenced_tweets: list, reply_settings: string, source: string, text: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<newest_id: string, next_token: string, oldest_id: string, result_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/tweets/search/recent" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2094,6 +2106,7 @@ export def "hide-reply-by-id" [
   let full_url = (build-url $base ({tweet_id: (encode-path-segment $tweet_id)} | format pattern "/2/tweets/{tweet_id}/hidden") $auth.query)
   let req_body = {"hidden": $hidden} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "hidden") == null) { error make --unspanned { msg: "required body field 'hidden' missing: pass --hidden or pipe a record" } }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2126,13 +2139,14 @@ export def "find-users-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --ids: list # A list of User IDs, comma-separated. You can specify up to 100 IDs. (e.g. 2244994945,6253282,12)
+  --ids: list # A list of User IDs, comma-separated. You can specify up to 100 IDs. (required, e.g. 2244994945,6253282,12)
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --expansions: list<string> # A comma separated list of fields to expand. (e.g. [pinned_tweet_id])
   --tweet-fields: list<string> # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
 ]: nothing -> record<data: table<created_at: string, description: string, entities: record, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record, url: string, username: string, verified: bool, verified_type: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/users" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2167,13 +2181,14 @@ export def "find-users-by-username" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --usernames: list<string> # A list of usernames, comma-separated. (e.g. TwitterDev,TwitterAPI)
+  --usernames: list<string> # A list of usernames, comma-separated. (required, e.g. TwitterDev,TwitterAPI)
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --expansions: list<string> # A comma separated list of fields to expand. (e.g. [pinned_tweet_id])
   --tweet-fields: list<string> # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
 ]: nothing -> record<data: table<created_at: string, description: string, entities: record, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record, url: string, username: string, verified: bool, verified_type: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($usernames == null) { error make --unspanned { msg: "required query parameter 'usernames' missing: pass --usernames" } }
   let qp = [(serialize-qp "usernames" $usernames "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/users/by" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2250,12 +2265,13 @@ export def "get-users-compliance-stream" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --backfill-minutes: int # The number of minutes of backfill requested. (format: int32)
-  --partition: int # The partition number. (format: int32)
+  --partition: int # The partition number. (required, format: int32)
   --start-time: string # YYYY-MM-DDTHH:mm:ssZ. The earliest UTC timestamp from which the User Compliance events will be provided. (format: date-time, e.g. 2021-02-01T18:40:40.000Z)
   --end-time: string # YYYY-MM-DDTHH:mm:ssZ. The latest UTC timestamp from which the User Compliance events will be provided. (format: date-time, e.g. 2021-02-01T18:40:40.000Z)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($partition == null) { error make --unspanned { msg: "required query parameter 'partition' missing: pass --partition" } }
   let qp = [(serialize-qp "backfill_minutes" $backfill_minutes "scalar") (serialize-qp "partition" $partition "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/2/users/compliance/stream" $qp $auth.query)
   let accept_val = ($accept | default "application/json")

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -141,11 +141,12 @@ export def "recommendations-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --featured: oneof<nothing, bool> # Specify true to return only the most critical recommendations. The default is false, which returns all recommendations.
   --filter: string # Filter is specified by using OData syntax. Example: $filter=channel eq 'Api' or channel eq 'Notification' and startTime eq 2014-01-01T00:00:00Z and endTime eq 2014-12-31T23:59:59Z and timeGrain eq duration'[PT1H|PT1M|P1D]
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "featured" $featured "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Web/recommendations") $qp $auth.query)
   let accept_val = "application/json"
@@ -179,11 +180,12 @@ export def "recommendations-reset-all-filters" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Web/recommendations/reset") $qp $auth.query)
   let accept_val = "application/json"
@@ -218,12 +220,13 @@ export def "recommendations-disable-recommendation-for-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Web/recommendations/{name}/disable") $qp $auth.query)
   let accept_val = "application/json"
@@ -261,13 +264,14 @@ export def "recommendations-list-history-for-hosting-environment" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expired-only: oneof<nothing, bool> # Specify false to return all recommendations. The default is true, which returns only expired recommendations.
   --filter: string # Filter is specified by using OData syntax. Example: $filter=channel eq 'Api' or channel eq 'Notification' and startTime eq 2014-01-01T00:00:00Z and endTime eq 2014-12-31T23:59:59Z and timeGrain eq duration'[PT1H|PT1M|P1D]
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($hosting_environment_name | is-empty) { error make --unspanned { msg: "path parameter 'hostingEnvironmentName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "expiredOnly" $expired_only "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hosting_environment_name: (encode-path-segment $hosting_environment_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/hostingEnvironments/{hosting_environment_name}/recommendationHistory") $qp $auth.query)
   let accept_val = "application/json"
@@ -305,13 +309,14 @@ export def "recommendations-list-recommended-rules-for-hosting-environment" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --featured: oneof<nothing, bool> # Specify true to return only the most critical recommendations. The default is false, which returns all recommendations.
   --filter: string # Return only channels specified in the filter. Filter is specified by using OData syntax. Example: $filter=channel eq 'Api' or channel eq 'Notification'
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($hosting_environment_name | is-empty) { error make --unspanned { msg: "path parameter 'hostingEnvironmentName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "featured" $featured "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hosting_environment_name: (encode-path-segment $hosting_environment_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/hostingEnvironments/{hosting_environment_name}/recommendations") $qp $auth.query)
   let accept_val = "application/json"
@@ -347,14 +352,16 @@ export def "recommendations-disable-all-for-hosting-environment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --environment-name: string # Name of the app.
-  --api-version: string # API Version
+  --environment-name: string # Name of the app. (required)
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($hosting_environment_name | is-empty) { error make --unspanned { msg: "path parameter 'hostingEnvironmentName' must be non-empty" } }
+  if ($environment_name == null) { error make --unspanned { msg: "required query parameter 'environmentName' missing: pass --environment-name" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "environmentName" $environment_name "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hosting_environment_name: (encode-path-segment $hosting_environment_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/hostingEnvironments/{hosting_environment_name}/recommendations/disable") $qp $auth.query)
   let accept_val = "application/json"
@@ -390,14 +397,16 @@ export def "recommendations-reset-all-filters-for-hosting-environment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --environment-name: string # Name of the app.
-  --api-version: string # API Version
+  --environment-name: string # Name of the app. (required)
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($hosting_environment_name | is-empty) { error make --unspanned { msg: "path parameter 'hostingEnvironmentName' must be non-empty" } }
+  if ($environment_name == null) { error make --unspanned { msg: "required query parameter 'environmentName' missing: pass --environment-name" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "environmentName" $environment_name "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hosting_environment_name: (encode-path-segment $hosting_environment_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/hostingEnvironments/{hosting_environment_name}/recommendations/reset") $qp $auth.query)
   let accept_val = "application/json"
@@ -436,14 +445,15 @@ export def "recommendations-get-rule-details-by-hosting-environment" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --update-seen: oneof<nothing, bool> # Specify true to update the last-seen timestamp of the recommendation object.
   --recommendation-id: string # The GUID of the recommendation object if you query an expired one. You don't need to specify it to query an active entry.
-  --api-version: string # API Version
-]: nothing -> record<properties: record<actionName: string, bladeName: string, categoryTags: list<string>, channels: string, description: string, displayName: string, extensionName: string, forwardLink: string, isDynamic: bool, level: string, message: string, recommendationId: string, recommendationName: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> record<properties: record<actionName: string, bladeName: string, categoryTags: list<string>, channels: string, description: string, displayName: string, extensionName: string, forwardLink: string, isDynamic: bool, level: string, message: string, recommendationId: string, recommendationName: string>, id: string, kind: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($hosting_environment_name | is-empty) { error make --unspanned { msg: "path parameter 'hostingEnvironmentName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "updateSeen" $update_seen "scalar") (serialize-qp "recommendationId" $recommendation_id "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hosting_environment_name: (encode-path-segment $hosting_environment_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/hostingEnvironments/{hosting_environment_name}/recommendations/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -480,8 +490,8 @@ export def "recommendations-disable-recommendation-for-hosting-environment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --environment-name: string # Site name
-  --api-version: string # API Version
+  --environment-name: string # Site name (required)
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -489,6 +499,8 @@ export def "recommendations-disable-recommendation-for-hosting-environment" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($hosting_environment_name | is-empty) { error make --unspanned { msg: "path parameter 'hostingEnvironmentName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($environment_name == null) { error make --unspanned { msg: "required query parameter 'environmentName' missing: pass --environment-name" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "environmentName" $environment_name "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hosting_environment_name: (encode-path-segment $hosting_environment_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/hostingEnvironments/{hosting_environment_name}/recommendations/{name}/disable") $qp $auth.query)
   let accept_val = "application/json"
@@ -526,13 +538,14 @@ export def "recommendations-list-history-for-web-app" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expired-only: oneof<nothing, bool> # Specify false to return all recommendations. The default is true, which returns only expired recommendations.
   --filter: string # Filter is specified by using OData syntax. Example: $filter=channel eq 'Api' or channel eq 'Notification' and startTime eq 2014-01-01T00:00:00Z and endTime eq 2014-12-31T23:59:59Z and timeGrain eq duration'[PT1H|PT1M|P1D]
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($site_name | is-empty) { error make --unspanned { msg: "path parameter 'siteName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "expiredOnly" $expired_only "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), site_name: (encode-path-segment $site_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/recommendationHistory") $qp $auth.query)
   let accept_val = "application/json"
@@ -570,13 +583,14 @@ export def "recommendations-list-recommended-rules-for-web-app" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --featured: oneof<nothing, bool> # Specify true to return only the most critical recommendations. The default is false, which returns all recommendations.
   --filter: string # Return only channels specified in the filter. Filter is specified by using OData syntax. Example: $filter=channel eq 'Api' or channel eq 'Notification'
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($site_name | is-empty) { error make --unspanned { msg: "path parameter 'siteName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "featured" $featured "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), site_name: (encode-path-segment $site_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/recommendations") $qp $auth.query)
   let accept_val = "application/json"
@@ -612,13 +626,14 @@ export def "recommendations-disable-all-for-web-app" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($site_name | is-empty) { error make --unspanned { msg: "path parameter 'siteName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), site_name: (encode-path-segment $site_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/recommendations/disable") $qp $auth.query)
   let accept_val = "application/json"
@@ -654,13 +669,14 @@ export def "recommendations-reset-all-filters-for-web-app" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($site_name | is-empty) { error make --unspanned { msg: "path parameter 'siteName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), site_name: (encode-path-segment $site_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/recommendations/reset") $qp $auth.query)
   let accept_val = "application/json"
@@ -699,14 +715,15 @@ export def "recommendations-get-rule-details-by-web-app" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --update-seen: oneof<nothing, bool> # Specify true to update the last-seen timestamp of the recommendation object.
   --recommendation-id: string # The GUID of the recommendation object if you query an expired one. You don't need to specify it to query an active entry.
-  --api-version: string # API Version
-]: nothing -> record<properties: record<actionName: string, bladeName: string, categoryTags: list<string>, channels: string, description: string, displayName: string, extensionName: string, forwardLink: string, isDynamic: bool, level: string, message: string, recommendationId: string, recommendationName: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> record<properties: record<actionName: string, bladeName: string, categoryTags: list<string>, channels: string, description: string, displayName: string, extensionName: string, forwardLink: string, isDynamic: bool, level: string, message: string, recommendationId: string, recommendationName: string>, id: string, kind: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($site_name | is-empty) { error make --unspanned { msg: "path parameter 'siteName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "updateSeen" $update_seen "scalar") (serialize-qp "recommendationId" $recommendation_id "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), site_name: (encode-path-segment $site_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/recommendations/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -743,7 +760,7 @@ export def "recommendations-disable-recommendation-for-site" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -751,6 +768,7 @@ export def "recommendations-disable-recommendation-for-site" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($site_name | is-empty) { error make --unspanned { msg: "path parameter 'siteName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), site_name: (encode-path-segment $site_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/recommendations/{name}/disable") $qp $auth.query)
   let accept_val = "application/json"

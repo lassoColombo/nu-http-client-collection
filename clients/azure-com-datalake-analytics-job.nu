@@ -152,7 +152,7 @@ export def "job-build" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --name: string # The friendly name of the job to build.
   properties: any # The common Data Lake Analytics job properties for job submission. — shape: {runtimeVersion?: string, script: string, type: string}
   type: string@type-completer # The job type of the current job (Hive, USql, or Scope (for internal use only)).
@@ -160,6 +160,7 @@ export def "job-build" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/buildJob" $qp $auth.query)
   let req_body = {"name": $name, "properties": $properties, "type": $type} | compact
@@ -200,10 +201,11 @@ export def "job-list" [
   --select: string # OData Select statement. Limits the properties on each entry to just those requested, e.g. Categories?$select=CategoryName,Description. Optional.
   --orderby: string # OrderBy clause. One or more comma-separated expressions with an optional "asc" (the default) or "desc" depending on the order you'd like the values sorted, e.g. Categories?$orderby=CategoryName desc. Optional.
   --count: oneof<nothing, bool> # The Boolean value of true or false to request a count of the matching resources included with the resources in the response, e.g. Categories?$count=true. Optional.
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<nextLink: string, value: table<degreeOfParallelism: int, degreeOfParallelismPercent: float, endTime: string, hierarchyQueueNode: string, jobId: string, logFilePatterns: list, logFolder: string, name: string, priority: int, related: record, result: string, startTime: string, state: string, submitTime: string, submitter: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/jobs" $qp $auth.query)
   let accept_val = "application/json"
@@ -237,11 +239,12 @@ export def "job-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<errorMessage: table<description: string, details: string, endOffset: int, errorId: string, filePath: string, helpLink: string, innerError: record, internalDiagnostics: string, lineNumber: int, message: string, resolution: string, severity: string, source: string, startOffset: int>, properties: record<runtimeVersion: string, script: string, type: string>, stateAuditRecords: table<details: string, newState: string, requestedByUser: string, timeStamp: string>, degreeOfParallelism: int, degreeOfParallelismPercent: float, endTime: string, hierarchyQueueNode: string, jobId: string, logFilePatterns: list<string>, logFolder: string, name: string, priority: int, related: record<pipelineId: string, pipelineName: string, pipelineUri: string, recurrenceId: string, recurrenceName: string, runId: string>, result: string, startTime: string, state: string, submitTime: string, submitter: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_identity | is-empty) { error make --unspanned { msg: "path parameter 'jobIdentity' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_identity: (encode-path-segment $job_identity)} | format pattern "/jobs/{job_identity}") $qp $auth.query)
   let accept_val = "application/json"
@@ -275,7 +278,7 @@ export def "job-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --degree-of-parallelism: int # The degree of parallelism used for this job. (format: int32)
   --degree-of-parallelism-percent: float # the degree of parallelism in percentage used for this job. (format: double)
   --priority: int # The priority value for the current job. Lower numbers have a higher priority. By default, a job has a priority of 1000. This must be greater than 0. (format: int32)
@@ -285,6 +288,7 @@ export def "job-update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_identity | is-empty) { error make --unspanned { msg: "path parameter 'jobIdentity' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_identity: (encode-path-segment $job_identity)} | format pattern "/jobs/{job_identity}") $qp $auth.query)
   let req_body = {"degreeOfParallelism": $degree_of_parallelism, "degreeOfParallelismPercent": $degree_of_parallelism_percent, "priority": $priority, "tags": $tags} | compact
@@ -322,7 +326,7 @@ export def "job-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --degree-of-parallelism: int # The degree of parallelism to use for this job. At most one of degreeOfParallelism and degreeOfParallelismPercent should be specified. If none, a default value of 1 will be used for degreeOfParallelism. (format: int32, default: 1)
   --degree-of-parallelism-percent: float # the degree of parallelism in percentage used for this job. At most one of degreeOfParallelism and degreeOfParallelismPercent should be specified. If none, a default value of 1 will be used for degreeOfParallelism. (format: double)
   --log-file-patterns: list<string> # The list of log file name patterns to find in the logFolder. '*' is the only matching character allowed. Example format: jobExecution*.log or *mylog*.txt
@@ -336,6 +340,7 @@ export def "job-create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_identity | is-empty) { error make --unspanned { msg: "path parameter 'jobIdentity' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_identity: (encode-path-segment $job_identity)} | format pattern "/jobs/{job_identity}") $qp $auth.query)
   let req_body = {"degreeOfParallelism": $degree_of_parallelism, "degreeOfParallelismPercent": $degree_of_parallelism_percent, "logFilePatterns": $log_file_patterns, "name": $name, "priority": $priority, "related": $related, "properties": $properties, "type": $type} | compact
@@ -371,11 +376,12 @@ export def "job-cancel" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_identity | is-empty) { error make --unspanned { msg: "path parameter 'jobIdentity' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_identity: (encode-path-segment $job_identity)} | format pattern "/jobs/{job_identity}/CancelJob") $qp $auth.query)
   let accept_val = "application/json"
@@ -409,11 +415,12 @@ export def "job-get-debug-data-path" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<command: string, jobId: string, paths: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_identity | is-empty) { error make --unspanned { msg: "path parameter 'jobIdentity' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_identity: (encode-path-segment $job_identity)} | format pattern "/jobs/{job_identity}/GetDebugDataPath") $qp $auth.query)
   let accept_val = "application/json"
@@ -447,11 +454,12 @@ export def "job-get-statistics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<finalizingTimeUtc: string, lastUpdateTimeUtc: string, stages: table<allocatedContainerCpuCoreCount: record, allocatedContainerMemSize: record, dataRead: int, dataReadCrossPod: int, dataReadIntraPod: int, dataToRead: int, dataWritten: int, duplicateDiscardCount: int, estimatedVertexCpuCoreCount: int, estimatedVertexMemSize: int, estimatedVertexPeakCpuCoreCount: int, failedCount: int, maxDataReadVertex: record, maxExecutionTimeVertex: record, maxPeakMemUsageVertex: record, maxVertexDataRead: int, minVertexDataRead: int, readFailureCount: int, revocationCount: int, runningCount: int, scheduledCount: int, stageName: string, succeededCount: int, tempDataWritten: int, totalCount: int, totalExecutionTime: string, totalFailedTime: string, totalPeakMemUsage: int, totalProgress: int, totalSucceededTime: string, usedVertexCpuCoreCount: record, usedVertexPeakMemSize: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_identity | is-empty) { error make --unspanned { msg: "path parameter 'jobIdentity' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_identity: (encode-path-segment $job_identity)} | format pattern "/jobs/{job_identity}/GetStatistics") $qp $auth.query)
   let accept_val = "application/json"
@@ -485,11 +493,12 @@ export def "job-yield" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_identity | is-empty) { error make --unspanned { msg: "path parameter 'jobIdentity' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_identity: (encode-path-segment $job_identity)} | format pattern "/jobs/{job_identity}/YieldJob") $qp $auth.query)
   let accept_val = "application/json"
@@ -524,10 +533,11 @@ export def "pipeline-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-date-time: string # The start date for when to get the list of pipelines. The startDateTime and endDateTime can be no more than 30 days apart. (format: date-time)
   --end-date-time: string # The end date for when to get the list of pipelines. The startDateTime and endDateTime can be no more than 30 days apart. (format: date-time)
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<nextLink: string, value: table<auHoursCanceled: float, auHoursFailed: float, auHoursSucceeded: float, lastSubmitTime: string, numJobsCanceled: int, numJobsFailed: int, numJobsSucceeded: int, pipelineId: string, pipelineName: string, pipelineUri: string, recurrences: list, runs: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "startDateTime" $start_date_time "scalar") (serialize-qp "endDateTime" $end_date_time "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pipelines" $qp $auth.query)
   let accept_val = "application/json"
@@ -563,11 +573,12 @@ export def "pipeline-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-date-time: string # The start date for when to get the pipeline and aggregate its data. The startDateTime and endDateTime can be no more than 30 days apart. (format: date-time)
   --end-date-time: string # The end date for when to get the pipeline and aggregate its data. The startDateTime and endDateTime can be no more than 30 days apart. (format: date-time)
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<auHoursCanceled: float, auHoursFailed: float, auHoursSucceeded: float, lastSubmitTime: string, numJobsCanceled: int, numJobsFailed: int, numJobsSucceeded: int, pipelineId: string, pipelineName: string, pipelineUri: string, recurrences: list<string>, runs: table<lastSubmitTime: string, runId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pipeline_identity | is-empty) { error make --unspanned { msg: "path parameter 'pipelineIdentity' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "startDateTime" $start_date_time "scalar") (serialize-qp "endDateTime" $end_date_time "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pipeline_identity: (encode-path-segment $pipeline_identity)} | format pattern "/pipelines/{pipeline_identity}") $qp $auth.query)
   let accept_val = "application/json"
@@ -602,10 +613,11 @@ export def "recurrence-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-date-time: string # The start date for when to get the list of recurrences. The startDateTime and endDateTime can be no more than 30 days apart. (format: date-time)
   --end-date-time: string # The end date for when to get the list of recurrences. The startDateTime and endDateTime can be no more than 30 days apart. (format: date-time)
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<nextLink: string, value: table<auHoursCanceled: float, auHoursFailed: float, auHoursSucceeded: float, lastSubmitTime: string, numJobsCanceled: int, numJobsFailed: int, numJobsSucceeded: int, recurrenceId: string, recurrenceName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "startDateTime" $start_date_time "scalar") (serialize-qp "endDateTime" $end_date_time "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recurrences" $qp $auth.query)
   let accept_val = "application/json"
@@ -641,11 +653,12 @@ export def "recurrence-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-date-time: string # The start date for when to get the recurrence and aggregate its data. The startDateTime and endDateTime can be no more than 30 days apart. (format: date-time)
   --end-date-time: string # The end date for when to get recurrence and aggregate its data. The startDateTime and endDateTime can be no more than 30 days apart. (format: date-time)
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<auHoursCanceled: float, auHoursFailed: float, auHoursSucceeded: float, lastSubmitTime: string, numJobsCanceled: int, numJobsFailed: int, numJobsSucceeded: int, recurrenceId: string, recurrenceName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($recurrence_identity | is-empty) { error make --unspanned { msg: "path parameter 'recurrenceIdentity' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "startDateTime" $start_date_time "scalar") (serialize-qp "endDateTime" $end_date_time "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({recurrence_identity: (encode-path-segment $recurrence_identity)} | format pattern "/recurrences/{recurrence_identity}") $qp $auth.query)
   let accept_val = "application/json"

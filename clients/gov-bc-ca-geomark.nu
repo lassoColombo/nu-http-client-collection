@@ -107,6 +107,7 @@ def buffer-cap-completer [] { ["FLAT" "ROUND" "SQUARE"] }
 def format-completer [] { ["geojson" "gml" "gpkg" "json" "kml" "kmz" "shp" "shpz" "wkt" "xml"] }
 def multiple-completer [] { ["false" "true"] }
 def srid-completer [] { ["26907" "26908" "26909" "26910" "26911" "3005" "3857" "4326"] }
+def file-format-extension-completer [] { ["geojson" "gml" "gpkg" "json" "kml" "kmz" "shp" "shpz" "wkt" "xml"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -144,7 +145,7 @@ export def "post-geomarks-copy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --geomark-url: string # One or more geomark URLs or identifiers to create the new geomark from. (e.g. https://apps.gov.bc.ca/pub/geomark/geomarks/gm-abcdefghijklmnopqrstuv0bcislands)
+  --geomark-url: string # One or more geomark URLs or identifiers to create the new geomark from. (required, e.g. https://apps.gov.bc.ca/pub/geomark/geomarks/gm-abcdefghijklmnopqrstuv0bcislands)
   --result-format: string@result-format-completer # The file format the geomark info resource should be returned using. (e.g. json)
   --allow-overlap: oneof<nothing, bool> # Select this option to allow overlapping geometries (default: false)
   --callback: string # The callback function a JSON result format would be wrapped in to support Ajax requests.
@@ -158,6 +159,7 @@ export def "post-geomarks-copy" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($geomark_url == null) { error make --unspanned { msg: "required query parameter 'geomarkUrl' missing: pass --geomark-url" } }
   let qp = [(serialize-qp "geomarkUrl" $geomark_url "scalar") (serialize-qp "resultFormat" $result_format "scalar") (serialize-qp "allowOverlap" $allow_overlap "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "redirectUrl" $redirect_url "scalar") (serialize-qp "failureRedirectUrl" $failure_redirect_url "scalar") (serialize-qp "bufferMetres" $buffer_metres "scalar") (serialize-qp "bufferJoin" $buffer_join "scalar") (serialize-qp "bufferCap" $buffer_cap "scalar") (serialize-qp "bufferMitreLimit" $buffer_mitre_limit "scalar") (serialize-qp "bufferSegments" $buffer_segments "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/geomarks/copy" $qp $auth.query)
   let accept_val = "application/json"
@@ -232,7 +234,7 @@ export def "post-geomarks-new" [
 # GET /geomarks/{geomarkId}.{fileFormatExtension}
 export def "get-geomarks-geomark-id-file-format-extension" [
   geomark_id: string
-  file_format_extension: string
+  file_format_extension: string@file-format-extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -271,7 +273,7 @@ export def "get-geomarks-geomark-id-file-format-extension" [
 # GET /geomarks/{geomarkId}/boundingBox.{fileFormatExtension}
 export def "get-geomarks-geomark-id-bounding-box-file-format-extension" [
   geomark_id: string
-  file_format_extension: string
+  file_format_extension: string@file-format-extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -310,7 +312,7 @@ export def "get-geomarks-geomark-id-bounding-box-file-format-extension" [
 # GET /geomarks/{geomarkId}/feature.{fileFormatExtension}
 export def "get-geomarks-geomark-id-feature-file-format-extension" [
   geomark_id: string
-  file_format_extension: string
+  file_format_extension: string@file-format-extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -349,7 +351,7 @@ export def "get-geomarks-geomark-id-feature-file-format-extension" [
 # GET /geomarks/{geomarkId}/parts.{fileFormatExtension}
 export def "get-geomarks-geomark-id-parts-file-format-extension" [
   geomark_id: string
-  file_format_extension: string
+  file_format_extension: string@file-format-extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -388,7 +390,7 @@ export def "get-geomarks-geomark-id-parts-file-format-extension" [
 # GET /geomarks/{geomarkId}/point.{fileFormatExtension}
 export def "get-geomarks-geomark-id-point-file-format-extension" [
   geomark_id: string
-  file_format_extension: string
+  file_format_extension: string@file-format-extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

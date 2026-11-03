@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -195,13 +195,14 @@ export def "assessment-options-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
   --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
 ]: nothing -> record<reservedInstanceVmFamilies: list<string>, vmFamilies: table<category: list, familyName: string, targetLocations: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($location_name | is-empty) { error make --unspanned { msg: "path parameter 'locationName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-02-02")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location_name: (encode-path-segment $location_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Migrate/locations/{location_name}/assessmentOptions") $qp $auth.query)
   let accept_val = "application/json"
@@ -238,7 +239,7 @@ export def "location-check-name-availability" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
   name: string # The name to check for availability
   type: string@type-completer # The resource type. Must be set to Microsoft.Migrate/projects
 ]: any -> record<message: string, nameAvailable: bool, reason: string> {
@@ -247,6 +248,7 @@ export def "location-check-name-availability" [
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($location_name | is-empty) { error make --unspanned { msg: "path parameter 'locationName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-02-02")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location_name: (encode-path-segment $location_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Migrate/locations/{location_name}/checkNameAvailability") $qp $auth.query)
   let req_body = {"name": $name, "type": $type} | compact
@@ -282,12 +284,13 @@ export def "projects-list-by-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
   --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
 ]: nothing -> record<value: table<eTag: string, id: string, location: string, name: string, properties: record, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  let api_version = ($api_version | default "2018-02-02")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Migrate/projects") $qp $auth.query)
   let accept_val = "application/json"
@@ -325,7 +328,7 @@ export def "assessments-list-by-project" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
   --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
 ]: nothing -> record<value: table<eTag: string, id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -333,6 +336,7 @@ export def "assessments-list-by-project" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-02-02")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), project_name: (encode-path-segment $project_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/projects/{project_name}/assessments") $qp $auth.query)
   let accept_val = "application/json"
@@ -370,7 +374,7 @@ export def "groups-list-by-project" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
   --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
 ]: nothing -> record<value: table<eTag: string, id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -378,6 +382,7 @@ export def "groups-list-by-project" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-02-02")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), project_name: (encode-path-segment $project_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/projects/{project_name}/groups") $qp $auth.query)
   let accept_val = "application/json"
@@ -416,15 +421,16 @@ export def "groups-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
   --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
   if ($group_name | is-empty) { error make --unspanned { msg: "path parameter 'groupName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-02-02")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), project_name: (encode-path-segment $project_name), group_name: (encode-path-segment $group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/projects/{project_name}/groups/{group_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -463,7 +469,7 @@ export def "groups-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
   --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
 ]: nothing -> record<eTag: string, id: string, name: string, properties: record<assessments: list<string>, createdTimestamp: string, machines: list<string>, updatedTimestamp: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -472,6 +478,7 @@ export def "groups-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
   if ($group_name | is-empty) { error make --unspanned { msg: "path parameter 'groupName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-02-02")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), project_name: (encode-path-segment $project_name), group_name: (encode-path-segment $group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/projects/{project_name}/groups/{group_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -511,7 +518,7 @@ export def "groups-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
   --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
   --e-tag: string # For optimistic concurrency control.
   properties: record # Properties of group resource. — shape: {machines: list<string>}
@@ -523,6 +530,7 @@ export def "groups-create" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
   if ($group_name | is-empty) { error make --unspanned { msg: "path parameter 'groupName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-02-02")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), project_name: (encode-path-segment $project_name), group_name: (encode-path-segment $group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/projects/{project_name}/groups/{group_name}") $qp $auth.query)
   let req_body = {"eTag": $e_tag, "properties": $properties} | compact
@@ -563,7 +571,7 @@ export def "assessments-list-by-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
   --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
 ]: nothing -> record<value: table<eTag: string, id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -572,6 +580,7 @@ export def "assessments-list-by-group" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
   if ($group_name | is-empty) { error make --unspanned { msg: "path parameter 'groupName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-02-02")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), project_name: (encode-path-segment $project_name), group_name: (encode-path-segment $group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/projects/{project_name}/groups/{group_name}/assessments") $qp $auth.query)
   let accept_val = "application/json"
@@ -611,9 +620,9 @@ export def "assessments-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
   --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -621,6 +630,7 @@ export def "assessments-delete" [
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
   if ($group_name | is-empty) { error make --unspanned { msg: "path parameter 'groupName' must be non-empty" } }
   if ($assessment_name | is-empty) { error make --unspanned { msg: "path parameter 'assessmentName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-02-02")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), project_name: (encode-path-segment $project_name), group_name: (encode-path-segment $group_name), assessment_name: (encode-path-segment $assessment_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/projects/{project_name}/groups/{group_name}/assessments/{assessment_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -660,7 +670,7 @@ export def "assessments-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
   --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
 ]: nothing -> record<eTag: string, id: string, name: string, properties: record<azureHybridUseBenefit: string, azureLocation: string, azureOfferCode: string, azurePricingTier: string, azureStorageRedundancy: string, confidenceRatingInPercentage: float, createdTimestamp: string, currency: string, discountPercentage: float, monthlyBandwidthCost: float, monthlyComputeCost: float, monthlyStorageCost: float, numberOfMachines: int, percentile: string, pricesTimestamp: string, scalingFactor: float, sizingCriterion: string, stage: string, status: string, timeRange: string, updatedTimestamp: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -670,6 +680,7 @@ export def "assessments-get" [
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
   if ($group_name | is-empty) { error make --unspanned { msg: "path parameter 'groupName' must be non-empty" } }
   if ($assessment_name | is-empty) { error make --unspanned { msg: "path parameter 'assessmentName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-02-02")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), project_name: (encode-path-segment $project_name), group_name: (encode-path-segment $group_name), assessment_name: (encode-path-segment $assessment_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/projects/{project_name}/groups/{group_name}/assessments/{assessment_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -710,7 +721,7 @@ export def "assessments-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
   --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
   --e-tag: string # For optimistic concurrency control.
   properties: record # Properties of an assessment. — shape: {azureHybridUseBenefit: "Unknown"|"Yes"|"No", azureLocation: "Unknown"|"EastAsia"|"SoutheastAsia"|"AustraliaEast"|"AustraliaSoutheast"|"BrazilSouth"|"CanadaCentral"|"CanadaEast"|"WestEurope"|"NorthEurope"|"CentralIndia"|"SouthIndia"|"WestIndia"|"JapanEast"|"JapanWest"|"KoreaCentral"|"KoreaSouth"|"UkWest"|"UkSouth"|"NorthCentralUs"|"EastUs"|"WestUs2"|"SouthCentralUs"|"CentralUs"|"EastUs2"|"WestUs"|"WestCentralUs"|"GermanyCentral"|"GermanyNortheast"|"ChinaNorth"|"ChinaEast", ... (10 more fields)}
@@ -723,6 +734,7 @@ export def "assessments-create" [
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
   if ($group_name | is-empty) { error make --unspanned { msg: "path parameter 'groupName' must be non-empty" } }
   if ($assessment_name | is-empty) { error make --unspanned { msg: "path parameter 'assessmentName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-02-02")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), project_name: (encode-path-segment $project_name), group_name: (encode-path-segment $group_name), assessment_name: (encode-path-segment $assessment_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/projects/{project_name}/groups/{group_name}/assessments/{assessment_name}") $qp $auth.query)
   let req_body = {"eTag": $e_tag, "properties": $properties} | compact
@@ -764,7 +776,7 @@ export def "assessed-machines-list-by-assessment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
   --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
 ]: nothing -> record<value: table<eTag: string, id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -774,6 +786,7 @@ export def "assessed-machines-list-by-assessment" [
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
   if ($group_name | is-empty) { error make --unspanned { msg: "path parameter 'groupName' must be non-empty" } }
   if ($assessment_name | is-empty) { error make --unspanned { msg: "path parameter 'assessmentName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-02-02")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), project_name: (encode-path-segment $project_name), group_name: (encode-path-segment $group_name), assessment_name: (encode-path-segment $assessment_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/projects/{project_name}/groups/{group_name}/assessments/{assessment_name}/assessedMachines") $qp $auth.query)
   let accept_val = "application/json"
@@ -814,7 +827,7 @@ export def "assessed-machines-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
   --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
 ]: nothing -> record<eTag: string, id: string, name: string, properties: record<bootType: string, createdTimestamp: string, datacenterContainer: string, datacenterMachineId: string, datacenterManagementServer: string, datacenterManagementServerId: string, description: string, discoveredTimestamp: string, disks: record, displayName: string, groups: list<string>, megabytesOfMemory: float, megabytesOfMemoryForRecommendedSize: float, monthlyBandwidthCost: float, monthlyComputeCostForRecommendedSize: float, monthlyStorageCost: float, networkAdapters: record, numberOfCores: int, numberOfCoresForRecommendedSize: int, operatingSystem: string, percentageCoresUtilization: float, percentageCoresUtilizationDataPointsExpected: int, percentageCoresUtilizationDataPointsReceived: int, percentageMemoryUtilization: float, percentageMemoryUtilizationDataPointsExpected: int, percentageMemoryUtilizationDataPointsReceived: int, recommendedSize: string, suitability: string, suitabilityExplanation: string, updatedTimestamp: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -825,6 +838,7 @@ export def "assessed-machines-get" [
   if ($group_name | is-empty) { error make --unspanned { msg: "path parameter 'groupName' must be non-empty" } }
   if ($assessment_name | is-empty) { error make --unspanned { msg: "path parameter 'assessmentName' must be non-empty" } }
   if ($assessed_machine_name | is-empty) { error make --unspanned { msg: "path parameter 'assessedMachineName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-02-02")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), project_name: (encode-path-segment $project_name), group_name: (encode-path-segment $group_name), assessment_name: (encode-path-segment $assessment_name), assessed_machine_name: (encode-path-segment $assessed_machine_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/projects/{project_name}/groups/{group_name}/assessments/{assessment_name}/assessedMachines/{assessed_machine_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -864,7 +878,7 @@ export def "assessments-get-report-download-url" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
   --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
 ]: nothing -> record<assessmentReportUrl: string, expirationTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -874,6 +888,7 @@ export def "assessments-get-report-download-url" [
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
   if ($group_name | is-empty) { error make --unspanned { msg: "path parameter 'groupName' must be non-empty" } }
   if ($assessment_name | is-empty) { error make --unspanned { msg: "path parameter 'assessmentName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-02-02")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), project_name: (encode-path-segment $project_name), group_name: (encode-path-segment $group_name), assessment_name: (encode-path-segment $assessment_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/projects/{project_name}/groups/{group_name}/assessments/{assessment_name}/downloadUrl") $qp $auth.query)
   let accept_val = "application/json"
@@ -911,7 +926,7 @@ export def "machines-list-by-project" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
   --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
 ]: nothing -> record<value: table<eTag: string, id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -919,6 +934,7 @@ export def "machines-list-by-project" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-02-02")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), project_name: (encode-path-segment $project_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/projects/{project_name}/machines") $qp $auth.query)
   let accept_val = "application/json"
@@ -957,7 +973,7 @@ export def "machines-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
   --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
 ]: nothing -> record<eTag: string, id: string, name: string, properties: record<bootType: string, createdTimestamp: string, datacenterContainer: string, datacenterMachineId: string, datacenterManagementServer: string, datacenterManagementServerId: string, description: string, discoveredTimestamp: string, disks: record, displayName: string, groups: list<string>, megabytesOfMemory: float, networkAdapters: record, numberOfCores: int, operatingSystem: string, updatedTimestamp: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -966,6 +982,7 @@ export def "machines-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
   if ($machine_name | is-empty) { error make --unspanned { msg: "path parameter 'machineName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-02-02")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), project_name: (encode-path-segment $project_name), machine_name: (encode-path-segment $machine_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/projects/{project_name}/machines/{machine_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1002,13 +1019,14 @@ export def "projects-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
   --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
 ]: nothing -> record<value: table<eTag: string, id: string, location: string, name: string, properties: record, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-02-02")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Migrate/projects") $qp $auth.query)
   let accept_val = "application/json"
@@ -1046,14 +1064,15 @@ export def "projects-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
   --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-02-02")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), project_name: (encode-path-segment $project_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Migrate/projects/{project_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1091,7 +1110,7 @@ export def "projects-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
   --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
 ]: nothing -> record<eTag: string, id: string, location: string, name: string, properties: record<createdTimestamp: string, customerWorkspaceId: string, customerWorkspaceLocation: string, discoveryStatus: string, lastAssessmentTimestamp: string, lastDiscoverySessionId: string, lastDiscoveryTimestamp: string, numberOfAssessments: int, numberOfGroups: int, numberOfMachines: int, provisioningState: string, updatedTimestamp: string>, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1099,6 +1118,7 @@ export def "projects-get" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-02-02")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), project_name: (encode-path-segment $project_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Migrate/projects/{project_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1137,7 +1157,7 @@ export def "projects-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
   --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
   --e-tag: string # For optimistic concurrency control.
   --location: string # Azure location in which project is created.
@@ -1150,6 +1170,7 @@ export def "projects-update" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-02-02")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), project_name: (encode-path-segment $project_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Migrate/projects/{project_name}") $qp $auth.query)
   let req_body = {"eTag": $e_tag, "location": $location, "properties": $properties, "tags": $tags} | compact
@@ -1190,7 +1211,7 @@ export def "projects-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
   --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
   --e-tag: string # For optimistic concurrency control.
   --location: string # Azure location in which project is created.
@@ -1203,6 +1224,7 @@ export def "projects-create" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-02-02")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), project_name: (encode-path-segment $project_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Migrate/projects/{project_name}") $qp $auth.query)
   let req_body = {"eTag": $e_tag, "location": $location, "properties": $properties, "tags": $tags} | compact
@@ -1242,7 +1264,7 @@ export def "projects-get-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
+  --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client. (required)
   --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
 ]: nothing -> record<workspaceId: string, workspaceKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1250,6 +1272,7 @@ export def "projects-get-keys" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-02-02")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), project_name: (encode-path-segment $project_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Migrate/projects/{project_name}/keys") $qp $auth.query)
   let accept_val = "application/json"

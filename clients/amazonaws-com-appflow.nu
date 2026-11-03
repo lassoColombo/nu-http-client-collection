@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -138,7 +138,7 @@ export def commands []: nothing -> table {
 #
 # POST /create-connector-profile
 # operationId: CreateConnectorProfile
-# --connectorProfileConfig shape: {connectorProfileProperties?: any, connectorProfileCredentials?: any}
+# --connectorProfileConfig shape: {connectorProfileProperties?: record, connectorProfileCredentials?: record}
 export def "create-connector-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -161,9 +161,9 @@ export def "create-connector-profile" [
   connector_type: string@connector-type-completer # The type of connector, such as Salesforce, Amplitude, and so on.
   --connector-label: string # The label of the connector. The label is unique for each ConnectorRegistration in your Amazon Web Services account. Only needed if calling for CUSTOMCONNECTOR connector type/.
   connection_mode: string@connection-mode-completer # Indicates the connection mode and specifies whether it is public or private. Private flows use Amazon Web Services PrivateLink to route data over Amazon Web Services infrastructure without exposing it to the public internet.
-  connector_profile_config: record # Defines the connector-specific configuration and credentials for the connector profile. — shape: {connectorProfileProperties?: any, connectorProfileCredentials?: any}
+  connector_profile_config: record # Defines the connector-specific configuration and credentials for the connector profile. — shape: {connectorProfileProperties?: record, connectorProfileCredentials?: record}
   --client-token: string # The clientToken parameter is an idempotency token. It ensures that your CreateConnectorProfile request completes only once. You choose the value to pass. For example, if you don't receive a response from your request, you can safely retry the request with the same clientToken parameter value. If you omit a clientToken value, the Amazon Web Services SDK that you are using inserts a value for you. This way, the SDK can safely retry requests multiple times after a network error. You must provide your own value for other use cases. If you specify input parameters that differ from your first request, an error occurs. If you use a different value for clientToken, Amazon AppFlow considers it a new call to CreateConnectorProfile. The token is active for 8 hours.
-]: any -> record<connectorProfileArn: record> {
+]: any -> record<connectorProfileArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -192,11 +192,11 @@ export def "create-connector-profile" [
 #
 # POST /create-flow
 # operationId: CreateFlow
-# --triggerConfig shape: {triggerType?: any, triggerProperties?: any}
-# --sourceFlowConfig shape: {connectorType?: any, apiVersion?: any, connectorProfileName?: any, sourceConnectorProperties?: any, incrementalPullConfig?: any}
-# --destinationFlowConfigList item shape: {connectorType: any, apiVersion?: any, connectorProfileName?: any, destinationConnectorProperties: any}
-# --tasks item shape: {sourceFields: any, connectorOperator?: any, destinationField?: any, taskType: any, taskProperties?: any}
-# --metadataCatalogConfig shape: {glueDataCatalog?: any}
+# --triggerConfig shape: {triggerType?: "Scheduled"|"Event"|"OnDemand", triggerProperties?: record}
+# --sourceFlowConfig shape: {connectorType?: "Salesforce"|"Singular"|"Slack"|"Redshift"|"S3"|"Marketo"|"Googleanalytics"|"Zendesk"|"Servicenow"|"Datadog"|"Trendmicro"|"Snowflake"|"Dynatrace"|"Infornexus"|"Amplitude"|"Veeva"|"EventBridge"|"LookoutMetrics"|"Upsolver"|"Honeycode"|"CustomerProfiles"|"SAPOData"|"CustomConnector"|"Pardot", apiVersion?: string, connectorProfileName?: string, sourceConnectorProperties?: record, incrementalPullConfig?: record}
+# --destinationFlowConfigList item shape: {connectorType: "Salesforce"|"Singular"|"Slack"|"Redshift"|"S3"|"Marketo"|"Googleanalytics"|"Zendesk"|"Servicenow"|"Datadog"|"Trendmicro"|"Snowflake"|"Dynatrace"|"Infornexus"|"Amplitude"|"Veeva"|"EventBridge"|"LookoutMetrics"|"Upsolver"|"Honeycode"|"CustomerProfiles"|"SAPOData"|"CustomConnector"|"Pardot", apiVersion?: string, connectorProfileName?: string, destinationConnectorProperties: record}
+# --tasks item shape: {sourceFields: list<string>, connectorOperator?: record, destinationField?: string, taskType: "Arithmetic"|"Filter"|"Map"|"Map_all"|"Mask"|"Merge"|"Passthrough"|"Truncate"|"Validate"|"Partition", taskProperties?: record}
+# --metadataCatalogConfig shape: {glueDataCatalog?: record}
 export def "create-flow" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -217,14 +217,14 @@ export def "create-flow" [
   flow_name: string # The specified name of the flow. Spaces are not allowed. Use underscores (_) or hyphens (-) only.
   --description: string # A description of the flow you want to create.
   --kms-arn: string # The ARN (Amazon Resource Name) of the Key Management Service (KMS) key you provide for encryption. This is required if you do not want to use the Amazon AppFlow-managed KMS key. If you don't provide anything here, Amazon AppFlow uses the Amazon AppFlow-managed KMS key.
-  trigger_config: record # The trigger settings that determine how and when Amazon AppFlow runs the specified flow. — shape: {triggerType?: any, triggerProperties?: any}
-  source_flow_config: record # Contains information about the configuration of the source connector used in the flow. — shape: {connectorType?: any, apiVersion?: any, connectorProfileName?: any, sourceConnectorProperties?: any, incrementalPullConfig?: any}
-  destination_flow_config_list: list # The configuration that controls how Amazon AppFlow places data in the destination connector. — item shape: {connectorType: any, apiVersion?: any, connectorProfileName?: any, destinationConnectorProperties: any}
-  tasks: list # A list of tasks that Amazon AppFlow performs while transferring the data in the flow run. — item shape: {sourceFields: any, connectorOperator?: any, destinationField?: any, taskType: any, taskProperties?: any}
+  trigger_config: record # The trigger settings that determine how and when Amazon AppFlow runs the specified flow. — shape: {triggerType?: "Scheduled"|"Event"|"OnDemand", triggerProperties?: record}
+  source_flow_config: record # Contains information about the configuration of the source connector used in the flow. — shape: {connectorType?: "Salesforce"|"Singular"|"Slack"|"Redshift"|"S3"|"Marketo"|"Googleanalytics"|"Zendesk"|"Servicenow"|"Datadog"|"Trendmicro"|"Snowflake"|"Dynatrace"|"Infornexus"|"Amplitude"|"Veeva"|"EventBridge"|"LookoutMetrics"|"Upsolver"|"Honeycode"|"CustomerProfiles"|"SAPOData"|"CustomConnector"|"Pardot", apiVersion?: string, connectorProfileName?: string, sourceConnectorProperties?: record, incrementalPullConfig?: record}
+  destination_flow_config_list: list # The configuration that controls how Amazon AppFlow places data in the destination connector. — item shape: {connectorType: "Salesforce"|"Singular"|"Slack"|"Redshift"|"S3"|"Marketo"|"Googleanalytics"|"Zendesk"|"Servicenow"|"Datadog"|"Trendmicro"|"Snowflake"|"Dynatrace"|"Infornexus"|"Amplitude"|"Veeva"|"EventBridge"|"LookoutMetrics"|"Upsolver"|"Honeycode"|"CustomerProfiles"|"SAPOData"|"CustomConnector"|"Pardot", apiVersion?: string, connectorProfileName?: string, destinationConnectorProperties: record}
+  tasks: list # A list of tasks that Amazon AppFlow performs while transferring the data in the flow run. — item shape: {sourceFields: list<string>, connectorOperator?: record, destinationField?: string, taskType: "Arithmetic"|"Filter"|"Map"|"Map_all"|"Mask"|"Merge"|"Passthrough"|"Truncate"|"Validate"|"Partition", taskProperties?: record}
   --tags: record # The tags used to organize, track, or control access for your flow.
-  --metadata-catalog-config: record # Specifies the configuration that Amazon AppFlow uses when it catalogs your data. When Amazon AppFlow catalogs your data, it stores metadata in a data catalog. — shape: {glueDataCatalog?: any}
+  --metadata-catalog-config: record # Specifies the configuration that Amazon AppFlow uses when it catalogs your data. When Amazon AppFlow catalogs your data, it stores metadata in a data catalog. — shape: {glueDataCatalog?: record}
   --client-token: string # The clientToken parameter is an idempotency token. It ensures that your CreateFlow request completes only once. You choose the value to pass. For example, if you don't receive a response from your request, you can safely retry the request with the same clientToken parameter value. If you omit a clientToken value, the Amazon Web Services SDK that you are using inserts a value for you. This way, the SDK can safely retry requests multiple times after a network error. You must provide your own value for other use cases. If you specify input parameters that differ from your first request, an error occurs. If you use a different value for clientToken, Amazon AppFlow considers it a new call to CreateFlow. The token is active for 8 hours.
-]: any -> record<flowArn: record, flowStatus: record> {
+]: any -> record<flowArn: string, flowStatus: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -368,7 +368,7 @@ export def "describe-connector" [
   --x-amz-signed-headers: string
   connector_type: string@connector-type-completer # The connector type, such as CUSTOMCONNECTOR, Saleforce, Marketo. Please choose CUSTOMCONNECTOR for Lambda based custom connectors.
   --connector-label: string # The label of the connector. The label is unique for each ConnectorRegistration in your Amazon Web Services account. Only needed if calling for CUSTOMCONNECTOR connector type/.
-]: any -> record<connectorConfiguration: record<canUseAsSource: record, canUseAsDestination: record, supportedDestinationConnectors: record, supportedSchedulingFrequencies: record, isPrivateLinkEnabled: record, isPrivateLinkEndpointUrlRequired: record, supportedTriggerTypes: record, connectorMetadata: record<Amplitude: record, Datadog: record, Dynatrace: record, GoogleAnalytics: record, InforNexus: record, Marketo: record, Redshift: record, S3: record, Salesforce: record, ServiceNow: record, Singular: record, Slack: record, Snowflake: record, Trendmicro: record, Veeva: record, Zendesk: record, EventBridge: record, Upsolver: record, CustomerProfiles: record, Honeycode: record, SAPOData: record, Pardot: record>, connectorType: record, connectorLabel: record, connectorDescription: record, connectorOwner: record, connectorName: record, connectorVersion: record, connectorArn: record, connectorModes: record, authenticationConfig: record<isBasicAuthSupported: record, isApiKeyAuthSupported: record, isOAuth2Supported: record, isCustomAuthSupported: record, oAuth2Defaults: record, customAuthConfigs: record>, connectorRuntimeSettings: record, supportedApiVersions: record, supportedOperators: record, supportedWriteOperations: record, connectorProvisioningType: record, connectorProvisioningConfig: record<lambda: record>, logoURL: record, registeredAt: record, registeredBy: record>> {
+]: any -> record<connectorConfiguration: record<canUseAsSource: bool, canUseAsDestination: bool, supportedDestinationConnectors: list<string>, supportedSchedulingFrequencies: list<string>, isPrivateLinkEnabled: bool, isPrivateLinkEndpointUrlRequired: bool, supportedTriggerTypes: list<string>, connectorMetadata: record<Amplitude: record, Datadog: record, Dynatrace: record, GoogleAnalytics: record, InforNexus: record, Marketo: record, Redshift: record, S3: record, Salesforce: record, ServiceNow: record, Singular: record, Slack: record, Snowflake: record, Trendmicro: record, Veeva: record, Zendesk: record, EventBridge: record, Upsolver: record, CustomerProfiles: record, Honeycode: record, SAPOData: record, Pardot: record>, connectorType: string, connectorLabel: string, connectorDescription: string, connectorOwner: string, connectorName: string, connectorVersion: string, connectorArn: string, connectorModes: list<string>, authenticationConfig: record<isBasicAuthSupported: bool, isApiKeyAuthSupported: bool, isOAuth2Supported: bool, isCustomAuthSupported: bool, oAuth2Defaults: record, customAuthConfigs: list>, connectorRuntimeSettings: list<record>, supportedApiVersions: list<string>, supportedOperators: list<string>, supportedWriteOperations: list<string>, connectorProvisioningType: string, connectorProvisioningConfig: record<lambda: record>, logoURL: string, registeredAt: string, registeredBy: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -418,7 +418,7 @@ export def "describe-connector-entity" [
   --connector-type: string@connector-type-completer # The type of connector application, such as Salesforce, Amplitude, and so on.
   --connector-profile-name: string # The name of the connector profile. The name is unique for each ConnectorProfile in the Amazon Web Services account.
   --api-version: string # The version of the API that's used by the connector.
-]: any -> record<connectorEntityFields: record> {
+]: any -> record<connectorEntityFields: table<identifier: string, parentIdentifier: string, label: string, isPrimaryKey: bool, defaultValue: string, isDeprecated: bool, supportedFieldTypeDetails: record, description: string, sourceProperties: record, destinationProperties: record, customProperties: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -471,7 +471,7 @@ export def "describe-connector-profiles" [
   --connector-label: string # The name of the connector. The name is unique for each ConnectorRegistration in your Amazon Web Services account. Only needed if calling for CUSTOMCONNECTOR connector type/.
   --max-results-body: int # Specifies the maximum number of items that should be returned in the result set. The default for maxResults is 20 (for all paginated API operations). (body field)
   --next-token-body: string # The pagination token for the next page of data. (body field)
-]: any -> record<connectorProfileDetails: record, nextToken: record> {
+]: any -> record<connectorProfileDetails: table<connectorProfileArn: string, connectorProfileName: string, connectorType: string, connectorLabel: string, connectionMode: string, credentialsArn: string, connectorProfileProperties: record, createdAt: string, lastUpdatedAt: string, privateConnectionProvisioningState: record>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -523,7 +523,7 @@ export def "describe-connectors" [
   --connector-types: list<string> # The type of connector, such as Salesforce, Amplitude, and so on.
   --max-results-body: int # The maximum number of items that should be returned in the result set. The default is 20. (body field)
   --next-token-body: string # The pagination token for the next page of data. (body field)
-]: any -> record<connectorConfigurations: record, connectors: record, nextToken: record> {
+]: any -> record<connectorConfigurations: record, connectors: table<connectorDescription: string, connectorName: string, connectorOwner: string, connectorVersion: string, applicationType: string, connectorType: string, connectorLabel: string, registeredAt: string, registeredBy: string, connectorProvisioningType: string, connectorModes: list>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -571,7 +571,7 @@ export def "describe-flow" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   flow_name: string # The specified name of the flow. Spaces are not allowed. Use underscores (_) or hyphens (-) only.
-]: any -> record<flowArn: record, description: record, flowName: record, kmsArn: record, flowStatus: record, flowStatusMessage: record, sourceFlowConfig: record<connectorType: record, apiVersion: record, connectorProfileName: record, sourceConnectorProperties: record<Amplitude: record, Datadog: record, Dynatrace: record, GoogleAnalytics: record, InforNexus: record, Marketo: record, S3: record, Salesforce: record, ServiceNow: record, Singular: record, Slack: record, Trendmicro: record, Veeva: record, Zendesk: record, SAPOData: record, CustomConnector: record, Pardot: record>, incrementalPullConfig: record<datetimeTypeFieldName: record>>, destinationFlowConfigList: record, lastRunExecutionDetails: record<mostRecentExecutionMessage: record, mostRecentExecutionTime: record, mostRecentExecutionStatus: record>, triggerConfig: record<triggerType: record, triggerProperties: record<Scheduled: record>>, tasks: record, createdAt: record, lastUpdatedAt: record, createdBy: record, lastUpdatedBy: record, tags: record, metadataCatalogConfig: record<glueDataCatalog: record<roleArn: record, databaseName: record, tablePrefix: record>>, lastRunMetadataCatalogDetails: record, schemaVersion: record> {
+]: any -> record<flowArn: string, description: string, flowName: string, kmsArn: string, flowStatus: string, flowStatusMessage: string, sourceFlowConfig: record<connectorType: string, apiVersion: string, connectorProfileName: string, sourceConnectorProperties: record<Amplitude: record, Datadog: record, Dynatrace: record, GoogleAnalytics: record, InforNexus: record, Marketo: record, S3: record, Salesforce: record, ServiceNow: record, Singular: record, Slack: record, Trendmicro: record, Veeva: record, Zendesk: record, SAPOData: record, CustomConnector: record, Pardot: record>, incrementalPullConfig: record<datetimeTypeFieldName: string>>, destinationFlowConfigList: table<connectorType: string, apiVersion: string, connectorProfileName: string, destinationConnectorProperties: record>, lastRunExecutionDetails: record<mostRecentExecutionMessage: string, mostRecentExecutionTime: string, mostRecentExecutionStatus: string>, triggerConfig: record<triggerType: string, triggerProperties: record<Scheduled: record>>, tasks: table<sourceFields: list, connectorOperator: record, destinationField: string, taskType: string, taskProperties: record>, createdAt: string, lastUpdatedAt: string, createdBy: string, lastUpdatedBy: string, tags: record, metadataCatalogConfig: record<glueDataCatalog: record<roleArn: string, databaseName: string, tablePrefix: string>>, lastRunMetadataCatalogDetails: table<catalogType: string, tableName: string, tableRegistrationOutput: record, partitionRegistrationOutput: record>, schemaVersion: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -622,7 +622,7 @@ export def "describe-flow-execution-records" [
   flow_name: string # The specified name of the flow. Spaces are not allowed. Use underscores (_) or hyphens (-) only.
   --max-results-body: int # Specifies the maximum number of items that should be returned in the result set. The default for maxResults is 20 (for all paginated API operations). (body field)
   --next-token-body: string # The pagination token for the next page of data. (body field)
-]: any -> record<flowExecutions: record, nextToken: record> {
+]: any -> record<flowExecutions: table<executionId: string, executionStatus: string, executionResult: record, startedAt: string, lastUpdatedAt: string, dataPullStartTime: string, dataPullEndTime: string, metadataCatalogDetails: list>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -675,7 +675,7 @@ export def "list-connector-entities" [
   --api-version: string # The version of the API that's used by the connector.
   --max-results: int # The maximum number of items that the operation returns in the response.
   --next-token: string # A token that was provided by your prior ListConnectorEntities operation if the response was too big for the page size. You specify this token to get the next page of results in paginated response.
-]: any -> record<connectorEntityMap: record, nextToken: record> {
+]: any -> record<connectorEntityMap: record, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -725,7 +725,7 @@ export def "list-connectors" [
   --x-amz-signed-headers: string
   --max-results-body: int # Specifies the maximum number of items that should be returned in the result set. The default for maxResults is 20 (for all paginated API operations). (body field)
   --next-token-body: string # The pagination token for the next page of data. (body field)
-]: any -> record<connectors: record, nextToken: record> {
+]: any -> record<connectors: table<connectorDescription: string, connectorName: string, connectorOwner: string, connectorVersion: string, applicationType: string, connectorType: string, connectorLabel: string, registeredAt: string, registeredBy: string, connectorProvisioningType: string, connectorModes: list>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -776,7 +776,7 @@ export def "list-flows" [
   --x-amz-signed-headers: string
   --max-results-body: int # Specifies the maximum number of items that should be returned in the result set. (body field)
   --next-token-body: string # The pagination token for next page of data. (body field)
-]: any -> record<flows: record, nextToken: record> {
+]: any -> record<flows: table<flowArn: string, description: string, flowName: string, flowStatus: string, sourceConnectorType: string, sourceConnectorLabel: string, destinationConnectorType: string, destinationConnectorLabel: string, triggerType: string, createdAt: string, lastUpdatedAt: string, createdBy: string, lastUpdatedBy: string, tags: record, lastRunExecutionDetails: record>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -900,7 +900,7 @@ export def "tag-resource" [
 #
 # POST /register-connector
 # operationId: RegisterConnector
-# --connectorProvisioningConfig shape: {lambda?: any}
+# --connectorProvisioningConfig shape: {lambda?: record}
 export def "register-connector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -921,9 +921,9 @@ export def "register-connector" [
   --connector-label: string # The name of the connector. The name is unique for each ConnectorRegistration in your Amazon Web Services account.
   --description: string # A description about the connector that's being registered.
   --connector-provisioning-type: string@connector-provisioning-type-completer # The type of provisioning that the connector supports, such as Lambda.
-  --connector-provisioning-config: record # Contains information about the configuration of the connector being registered. — shape: {lambda?: any}
+  --connector-provisioning-config: record # Contains information about the configuration of the connector being registered. — shape: {lambda?: record}
   --client-token: string # The clientToken parameter is an idempotency token. It ensures that your RegisterConnector request completes only once. You choose the value to pass. For example, if you don't receive a response from your request, you can safely retry the request with the same clientToken parameter value. If you omit a clientToken value, the Amazon Web Services SDK that you are using inserts a value for you. This way, the SDK can safely retry requests multiple times after a network error. You must provide your own value for other use cases. If you specify input parameters that differ from your first request, an error occurs. If you use a different value for clientToken, Amazon AppFlow considers it a new call to RegisterConnector. The token is active for 8 hours.
-]: any -> record<connectorArn: record> {
+]: any -> record<connectorArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -971,7 +971,7 @@ export def "start-flow" [
   --x-amz-signed-headers: string
   flow_name: string # The specified name of the flow. Spaces are not allowed. Use underscores (_) or hyphens (-) only.
   --client-token: string # The clientToken parameter is an idempotency token. It ensures that your StartFlow request completes only once. You choose the value to pass. For example, if you don't receive a response from your request, you can safely retry the request with the same clientToken parameter value. If you omit a clientToken value, the Amazon Web Services SDK that you are using inserts a value for you. This way, the SDK can safely retry requests multiple times after a network error. You must provide your own value for other use cases. If you specify input parameters that differ from your first request, an error occurs for flows that run on a schedule or based on an event. However, the error doesn't occur for flows that run on demand. You set the conditions that initiate your flow for the triggerConfig parameter. If you use a different value for clientToken, Amazon AppFlow considers it a new call to StartFlow. The token is active for 8 hours.
-]: any -> record<flowArn: record, flowStatus: record, executionId: record> {
+]: any -> record<flowArn: string, flowStatus: string, executionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1018,7 +1018,7 @@ export def "stop-flow" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   flow_name: string # The specified name of the flow. Spaces are not allowed. Use underscores (_) or hyphens (-) only.
-]: any -> record<flowArn: record, flowStatus: record> {
+]: any -> record<flowArn: string, flowStatus: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1106,7 +1106,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # The tag keys associated with the tag that you want to remove from your flow.
+  --tag-keys: list # The tag keys associated with the tag that you want to remove from your flow. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1118,6 +1118,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1142,7 +1143,7 @@ export def "untag-resource" [
 #
 # POST /update-connector-profile
 # operationId: UpdateConnectorProfile
-# --connectorProfileConfig shape: {connectorProfileProperties?: any, connectorProfileCredentials?: any}
+# --connectorProfileConfig shape: {connectorProfileProperties?: record, connectorProfileCredentials?: record}
 export def "update-connector-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1162,9 +1163,9 @@ export def "update-connector-profile" [
   --x-amz-signed-headers: string
   connector_profile_name: string # The name of the connector profile and is unique for each ConnectorProfile in the Amazon Web Services account.
   connection_mode: string@connection-mode-completer # Indicates the connection mode and if it is public or private.
-  connector_profile_config: record # Defines the connector-specific configuration and credentials for the connector profile. — shape: {connectorProfileProperties?: any, connectorProfileCredentials?: any}
+  connector_profile_config: record # Defines the connector-specific configuration and credentials for the connector profile. — shape: {connectorProfileProperties?: record, connectorProfileCredentials?: record}
   --client-token: string # The clientToken parameter is an idempotency token. It ensures that your UpdateConnectorProfile request completes only once. You choose the value to pass. For example, if you don't receive a response from your request, you can safely retry the request with the same clientToken parameter value. If you omit a clientToken value, the Amazon Web Services SDK that you are using inserts a value for you. This way, the SDK can safely retry requests multiple times after a network error. You must provide your own value for other use cases. If you specify input parameters that differ from your first request, an error occurs. If you use a different value for clientToken, Amazon AppFlow considers it a new call to UpdateConnectorProfile. The token is active for 8 hours.
-]: any -> record<connectorProfileArn: record> {
+]: any -> record<connectorProfileArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1193,7 +1194,7 @@ export def "update-connector-profile" [
 #
 # POST /update-connector-registration
 # operationId: UpdateConnectorRegistration
-# --connectorProvisioningConfig shape: {lambda?: any}
+# --connectorProvisioningConfig shape: {lambda?: record}
 export def "update-connector-registration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1213,9 +1214,9 @@ export def "update-connector-registration" [
   --x-amz-signed-headers: string
   connector_label: string # The name of the connector. The name is unique for each connector registration in your AWS account.
   --description: string # A description about the update that you're applying to the connector.
-  --connector-provisioning-config: record # Contains information about the configuration of the connector being registered. — shape: {lambda?: any}
+  --connector-provisioning-config: record # Contains information about the configuration of the connector being registered. — shape: {lambda?: record}
   --client-token: string # The clientToken parameter is an idempotency token. It ensures that your UpdateConnectorRegistration request completes only once. You choose the value to pass. For example, if you don't receive a response from your request, you can safely retry the request with the same clientToken parameter value. If you omit a clientToken value, the Amazon Web Services SDK that you are using inserts a value for you. This way, the SDK can safely retry requests multiple times after a network error. You must provide your own value for other use cases. If you specify input parameters that differ from your first request, an error occurs. If you use a different value for clientToken, Amazon AppFlow considers it a new call to UpdateConnectorRegistration. The token is active for 8 hours.
-]: any -> record<connectorArn: record> {
+]: any -> record<connectorArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1244,11 +1245,11 @@ export def "update-connector-registration" [
 #
 # POST /update-flow
 # operationId: UpdateFlow
-# --triggerConfig shape: {triggerType?: any, triggerProperties?: any}
-# --sourceFlowConfig shape: {connectorType?: any, apiVersion?: any, connectorProfileName?: any, sourceConnectorProperties?: any, incrementalPullConfig?: any}
-# --destinationFlowConfigList item shape: {connectorType: any, apiVersion?: any, connectorProfileName?: any, destinationConnectorProperties: any}
-# --tasks item shape: {sourceFields: any, connectorOperator?: any, destinationField?: any, taskType: any, taskProperties?: any}
-# --metadataCatalogConfig shape: {glueDataCatalog?: any}
+# --triggerConfig shape: {triggerType?: "Scheduled"|"Event"|"OnDemand", triggerProperties?: record}
+# --sourceFlowConfig shape: {connectorType?: "Salesforce"|"Singular"|"Slack"|"Redshift"|"S3"|"Marketo"|"Googleanalytics"|"Zendesk"|"Servicenow"|"Datadog"|"Trendmicro"|"Snowflake"|"Dynatrace"|"Infornexus"|"Amplitude"|"Veeva"|"EventBridge"|"LookoutMetrics"|"Upsolver"|"Honeycode"|"CustomerProfiles"|"SAPOData"|"CustomConnector"|"Pardot", apiVersion?: string, connectorProfileName?: string, sourceConnectorProperties?: record, incrementalPullConfig?: record}
+# --destinationFlowConfigList item shape: {connectorType: "Salesforce"|"Singular"|"Slack"|"Redshift"|"S3"|"Marketo"|"Googleanalytics"|"Zendesk"|"Servicenow"|"Datadog"|"Trendmicro"|"Snowflake"|"Dynatrace"|"Infornexus"|"Amplitude"|"Veeva"|"EventBridge"|"LookoutMetrics"|"Upsolver"|"Honeycode"|"CustomerProfiles"|"SAPOData"|"CustomConnector"|"Pardot", apiVersion?: string, connectorProfileName?: string, destinationConnectorProperties: record}
+# --tasks item shape: {sourceFields: list<string>, connectorOperator?: record, destinationField?: string, taskType: "Arithmetic"|"Filter"|"Map"|"Map_all"|"Mask"|"Merge"|"Passthrough"|"Truncate"|"Validate"|"Partition", taskProperties?: record}
+# --metadataCatalogConfig shape: {glueDataCatalog?: record}
 export def "update-flow" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1268,13 +1269,13 @@ export def "update-flow" [
   --x-amz-signed-headers: string
   flow_name: string # The specified name of the flow. Spaces are not allowed. Use underscores (_) or hyphens (-) only.
   --description: string # A description of the flow.
-  trigger_config: record # The trigger settings that determine how and when Amazon AppFlow runs the specified flow. — shape: {triggerType?: any, triggerProperties?: any}
-  source_flow_config: record # Contains information about the configuration of the source connector used in the flow. — shape: {connectorType?: any, apiVersion?: any, connectorProfileName?: any, sourceConnectorProperties?: any, incrementalPullConfig?: any}
-  destination_flow_config_list: list # The configuration that controls how Amazon AppFlow transfers data to the destination connector. — item shape: {connectorType: any, apiVersion?: any, connectorProfileName?: any, destinationConnectorProperties: any}
-  tasks: list # A list of tasks that Amazon AppFlow performs while transferring the data in the flow run. — item shape: {sourceFields: any, connectorOperator?: any, destinationField?: any, taskType: any, taskProperties?: any}
-  --metadata-catalog-config: record # Specifies the configuration that Amazon AppFlow uses when it catalogs your data. When Amazon AppFlow catalogs your data, it stores metadata in a data catalog. — shape: {glueDataCatalog?: any}
+  trigger_config: record # The trigger settings that determine how and when Amazon AppFlow runs the specified flow. — shape: {triggerType?: "Scheduled"|"Event"|"OnDemand", triggerProperties?: record}
+  source_flow_config: record # Contains information about the configuration of the source connector used in the flow. — shape: {connectorType?: "Salesforce"|"Singular"|"Slack"|"Redshift"|"S3"|"Marketo"|"Googleanalytics"|"Zendesk"|"Servicenow"|"Datadog"|"Trendmicro"|"Snowflake"|"Dynatrace"|"Infornexus"|"Amplitude"|"Veeva"|"EventBridge"|"LookoutMetrics"|"Upsolver"|"Honeycode"|"CustomerProfiles"|"SAPOData"|"CustomConnector"|"Pardot", apiVersion?: string, connectorProfileName?: string, sourceConnectorProperties?: record, incrementalPullConfig?: record}
+  destination_flow_config_list: list # The configuration that controls how Amazon AppFlow transfers data to the destination connector. — item shape: {connectorType: "Salesforce"|"Singular"|"Slack"|"Redshift"|"S3"|"Marketo"|"Googleanalytics"|"Zendesk"|"Servicenow"|"Datadog"|"Trendmicro"|"Snowflake"|"Dynatrace"|"Infornexus"|"Amplitude"|"Veeva"|"EventBridge"|"LookoutMetrics"|"Upsolver"|"Honeycode"|"CustomerProfiles"|"SAPOData"|"CustomConnector"|"Pardot", apiVersion?: string, connectorProfileName?: string, destinationConnectorProperties: record}
+  tasks: list # A list of tasks that Amazon AppFlow performs while transferring the data in the flow run. — item shape: {sourceFields: list<string>, connectorOperator?: record, destinationField?: string, taskType: "Arithmetic"|"Filter"|"Map"|"Map_all"|"Mask"|"Merge"|"Passthrough"|"Truncate"|"Validate"|"Partition", taskProperties?: record}
+  --metadata-catalog-config: record # Specifies the configuration that Amazon AppFlow uses when it catalogs your data. When Amazon AppFlow catalogs your data, it stores metadata in a data catalog. — shape: {glueDataCatalog?: record}
   --client-token: string # The clientToken parameter is an idempotency token. It ensures that your UpdateFlow request completes only once. You choose the value to pass. For example, if you don't receive a response from your request, you can safely retry the request with the same clientToken parameter value. If you omit a clientToken value, the Amazon Web Services SDK that you are using inserts a value for you. This way, the SDK can safely retry requests multiple times after a network error. You must provide your own value for other use cases. If you specify input parameters that differ from your first request, an error occurs. If you use a different value for clientToken, Amazon AppFlow considers it a new call to UpdateFlow. The token is active for 8 hours.
-]: any -> record<flowStatus: record> {
+]: any -> record<flowStatus: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -131,15 +131,17 @@ export def "get-points-of-interest" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --latitude: float # Latitude (decimal coordinates) (format: double, e.g. 41.397158)
-  --longitude: float # Longitude (decimal coordinates) (format: double, e.g. 2.160873)
+  --latitude: float # Latitude (decimal coordinates) (required, format: double, e.g. 41.397158)
+  --longitude: float # Longitude (decimal coordinates) (required, format: double, e.g. 2.160873)
   --radius: int # radius of the search in Kilometer. Can be from 0 to 20, default value is 1 Km. (default: 1)
   --page-limit: int # maximum items in one page (default: 10)
   --page-offset: int # start index of the requested page (default: 0)
   --categories: list<string> # category of the location. Multiple value can be selected using a comma i.e. SIGHTS, SHOPPING
-]: nothing -> any {
+]: nothing -> record<data: table<category: string, geoCode: record, id: string, name: string, rank: string, self: record, subType: string, tags: list, type: string>, meta: record<count: int, links: record<first: string, last: string, next: string, previous: string, self: string, up: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($latitude == null) { error make --unspanned { msg: "required query parameter 'latitude' missing: pass --latitude" } }
+  if ($longitude == null) { error make --unspanned { msg: "required query parameter 'longitude' missing: pass --longitude" } }
   let qp = [(serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "page[limit]" $page_limit "scalar") (serialize-qp "page[offset]" $page_offset "scalar") (serialize-qp "categories" $categories "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/reference-data/locations/pois" $qp $auth.query)
   let accept_val = "application/vnd.amadeus+json"
@@ -172,16 +174,20 @@ export def "get-points-of-interest-by-square" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --north: float # Latitude north of bounding box (decimal coordinates) (format: double, e.g. 41.397158)
-  --west: float # Longitude west of bounding box (decimal coordinates) (format: double, e.g. 2.160873)
-  --south: float # Latitude south of bounding box (decimal coordinates) (format: double, e.g. 41.394582)
-  --east: float # Longitude east of bounding box (decimal coordinates) (format: double, e.g. 2.177181)
+  --north: float # Latitude north of bounding box (decimal coordinates) (required, format: double, e.g. 41.397158)
+  --west: float # Longitude west of bounding box (decimal coordinates) (required, format: double, e.g. 2.160873)
+  --south: float # Latitude south of bounding box (decimal coordinates) (required, format: double, e.g. 41.394582)
+  --east: float # Longitude east of bounding box (decimal coordinates) (required, format: double, e.g. 2.177181)
   --page-limit: int # maximum items in one page (default: 10)
   --page-offset: int # start index of the requested page (default: 0)
   --categories: list<string> # category of the location. Multiple value can be selected using a comma i.e. SIGHTS, SHOPPING
-]: nothing -> any {
+]: nothing -> record<data: table<category: string, geoCode: record, id: string, name: string, rank: string, self: record, subType: string, tags: list, type: string>, meta: record<count: int, links: record<first: string, last: string, next: string, previous: string, self: string, up: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($north == null) { error make --unspanned { msg: "required query parameter 'north' missing: pass --north" } }
+  if ($west == null) { error make --unspanned { msg: "required query parameter 'west' missing: pass --west" } }
+  if ($south == null) { error make --unspanned { msg: "required query parameter 'south' missing: pass --south" } }
+  if ($east == null) { error make --unspanned { msg: "required query parameter 'east' missing: pass --east" } }
   let qp = [(serialize-qp "north" $north "scalar") (serialize-qp "west" $west "scalar") (serialize-qp "south" $south "scalar") (serialize-qp "east" $east "scalar") (serialize-qp "page[limit]" $page_limit "scalar") (serialize-qp "page[offset]" $page_offset "scalar") (serialize-qp "categories" $categories "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/reference-data/locations/pois/by-square" $qp $auth.query)
   let accept_val = "application/vnd.amadeus+json"
@@ -215,7 +221,7 @@ export def "get-point-of-interest" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: record<category: string, geoCode: record<latitude: float, longitude: float>, id: string, name: string, rank: string, self: record<href: string, methods: list>, subType: string, tags: list<string>, type: string>, meta: record<count: int, links: record<first: string, last: string, next: string, previous: string, self: string, up: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pois_id | is-empty) { error make --unspanned { msg: "path parameter 'poisId' must be non-empty" } }

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -139,22 +139,22 @@ export def "list-fax" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-from: string # Retrieve only those faxes sent from this phone number, specified in [E.164](https://www.twilio.com/docs/glossary/what-e164) format.
-  --qp-to: string # Retrieve only those faxes sent to this phone number, specified in [E.164](https://www.twilio.com/docs/glossary/what-e164) format.
+  --from: string # Retrieve only those faxes sent from this phone number, specified in [E.164](https://www.twilio.com/docs/glossary/what-e164) format.
+  --to: string # Retrieve only those faxes sent to this phone number, specified in [E.164](https://www.twilio.com/docs/glossary/what-e164) format.
   --date-created-on-or-before: string # Retrieve only those faxes with a `date_created` that is before or equal to this value, specified in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format. (format: date-time)
   --date-created-after: string # Retrieve only those faxes with a `date_created` that is later than this value, specified in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format. (format: date-time)
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
 ]: nothing -> record<faxes: table<account_sid: string, api_version: string, date_created: string, date_updated: string, direction: string, duration: int, from: string, links: record, media_sid: string, media_url: string, num_pages: int, price: float, price_unit: string, quality: string, sid: string, status: string, to: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://fax.twilio.com")
-  let qp = [(serialize-qp "From" $qp_from "scalar") (serialize-qp "To" $qp_to "scalar") (serialize-qp "DateCreatedOnOrBefore" $date_created_on_or_before "scalar") (serialize-qp "DateCreatedAfter" $date_created_after "scalar") (serialize-qp "PageSize" $page_size "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "From" $from "scalar") (serialize-qp "To" $to "scalar") (serialize-qp "DateCreatedOnOrBefore" $date_created_on_or_before "scalar") (serialize-qp "DateCreatedAfter" $date_created_after "scalar") (serialize-qp "PageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Faxes" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"From": $qp_from, "To": $qp_to, "DateCreatedOnOrBefore": $date_created_on_or_before, "DateCreatedAfter": $date_created_after, "PageSize": $page_size} | compact)
+    query: ({"From": $from, "To": $to, "DateCreatedOnOrBefore": $date_created_on_or_before, "DateCreatedAfter": $date_created_after, "PageSize": $page_size} | compact)
     headers: $auth.headers
     body: null
     content_type: null

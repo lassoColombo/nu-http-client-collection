@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -149,7 +149,7 @@ export def "batch-execute-statement" [
   --schema: string # The name of the database schema. Currently, the schema parameter isn't supported.
   --parameter-sets: list # The parameter set for the batch operation. The SQL statement is executed as many times as the number of parameter sets provided. To execute a SQL statement with no parameters, use one of the following options: Specify one or more empty parameter sets. Use the ExecuteStatement operation instead of the BatchExecuteStatement operation. Array parameters are not supported.
   --transaction-id: string # The identifier of a transaction that was started by using the BeginTransaction operation. Specify the transaction ID of the transaction that you want to include the SQL statement in. If the SQL statement is not part of a transaction, don't set this parameter.
-]: any -> record<updateResults: record> {
+]: any -> record<updateResults: table<generatedFields: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -199,7 +199,7 @@ export def "begin-transaction" [
   secret_arn: string # The name or ARN of the secret that enables access to the DB cluster.
   --database: string # The name of the database.
   --schema: string # The name of the database schema.
-]: any -> record<transactionId: record> {
+]: any -> record<transactionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -248,7 +248,7 @@ export def "commit-transaction" [
   resource_arn: string # The Amazon Resource Name (ARN) of the Aurora Serverless DB cluster.
   secret_arn: string # The name or ARN of the secret that enables access to the DB cluster.
   transaction_id: string # The identifier of the transaction to end and commit.
-]: any -> record<transactionStatus: record> {
+]: any -> record<transactionStatus: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -301,7 +301,7 @@ export def "execute-sql" [
   sql_statements: string # One or more SQL statements to run on the DB cluster. You can separate SQL statements from each other with a semicolon (;). Any valid SQL statement is permitted, including data definition, data manipulation, and commit statements.
   --database: string # The name of the database.
   --schema: string # The name of the database schema.
-]: any -> record<sqlStatementResults: record> {
+]: any -> record<sqlStatementResults: table<resultFrame: record, numberOfRecordsUpdated: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -330,8 +330,8 @@ export def "execute-sql" [
 #
 # POST /Execute
 # operationId: ExecuteStatement
-# --parameters item shape: {name?: any, value?: any, typeHint?: any}
-# --resultSetOptions shape: {decimalReturnType?: any, longReturnType?: any}
+# --parameters item shape: {name?: string, value?: record, typeHint?: "JSON"|"UUID"|"TIMESTAMP"|"DATE"|"TIME"|"DECIMAL"}
+# --resultSetOptions shape: {decimalReturnType?: "STRING"|"DOUBLE_OR_LONG", longReturnType?: "STRING"|"LONG"}
 export def "execute-statement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -354,13 +354,13 @@ export def "execute-statement" [
   sql: string # The SQL statement to run.
   --database: string # The name of the database.
   --schema: string # The name of the database schema. Currently, the schema parameter isn't supported.
-  --parameters: list # The parameters for the SQL statement. Array parameters are not supported. — item shape: {name?: any, value?: any, typeHint?: any}
+  --parameters: list # The parameters for the SQL statement. Array parameters are not supported. — item shape: {name?: string, value?: record, typeHint?: "JSON"|"UUID"|"TIMESTAMP"|"DATE"|"TIME"|"DECIMAL"}
   --transaction-id: string # The identifier of a transaction that was started by using the BeginTransaction operation. Specify the transaction ID of the transaction that you want to include the SQL statement in. If the SQL statement is not part of a transaction, don't set this parameter.
   --include-result-metadata: oneof<nothing, bool> # A value that indicates whether to include metadata in the results.
   --continue-after-timeout: oneof<nothing, bool> # A value that indicates whether to continue running the statement after the call times out. By default, the statement stops running when the call times out. For DDL statements, we recommend continuing to run the statement after the call times out. When a DDL statement terminates before it is finished running, it can result in errors and possibly corrupted data structures.
-  --result-set-options: record # Options that control how the result set is returned. — shape: {decimalReturnType?: any, longReturnType?: any}
+  --result-set-options: record # Options that control how the result set is returned. — shape: {decimalReturnType?: "STRING"|"DOUBLE_OR_LONG", longReturnType?: "STRING"|"LONG"}
   --format-records-as: string@format-records-as-completer # A value that indicates whether to format the result set as a single JSON string. This parameter only applies to SELECT statements and is ignored for other types of statements. Allowed values are NONE and JSON. The default value is NONE. The result is returned in the formattedRecords field. For usage information about the JSON format for result sets, see Using the Data API (https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/data-api.html) in the Amazon Aurora User Guide.
-]: any -> record<records: record, columnMetadata: record, numberOfRecordsUpdated: record, generatedFields: record, formattedRecords: record> {
+]: any -> record<records: list<list<record>>, columnMetadata: table<name: string, type: int, typeName: string, label: string, schemaName: string, tableName: string, isAutoIncrement: bool, isSigned: bool, isCurrency: bool, isCaseSensitive: bool, nullable: int, precision: int, scale: int, arrayBaseColumnType: int>, numberOfRecordsUpdated: int, generatedFields: table<isNull: bool, booleanValue: bool, longValue: int, doubleValue: float, stringValue: string, blobValue: string, arrayValue: record>, formattedRecords: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -409,7 +409,7 @@ export def "rollback-transaction" [
   resource_arn: string # The Amazon Resource Name (ARN) of the Aurora Serverless DB cluster.
   secret_arn: string # The name or ARN of the secret that enables access to the DB cluster.
   transaction_id: string # The identifier of the transaction to roll back.
-]: any -> record<transactionStatus: record> {
+]: any -> record<transactionStatus: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

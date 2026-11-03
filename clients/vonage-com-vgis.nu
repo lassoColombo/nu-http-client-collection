@@ -232,18 +232,18 @@ export def "list-calls" [
   --offset: int # Page number of calls to return (format: int64)
   --size: int # Return this amount of calls in the response (default: 20)
   --order: string@order-completer # Sort in either ascending or descending order (default: ASC)
-  --qp-sort: string # Sort calls by property
+  --sort: string # Sort calls by property
 ]: nothing -> table<accountId: int, answerTime: string, callerId: string, direction: string, duration: int, endTime: string, externalId: string, id: int, phoneNumber: string, startTime: string, state: string, type: string, uciId: int, userId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fromDate" $from_date "scalar") (serialize-qp "toDate" $to_date "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "states" $states "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fromDate" $from_date "scalar") (serialize-qp "toDate" $to_date "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "states" $states "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/self/calls" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"fromDate": $from_date, "toDate": $to_date, "direction": $direction, "states": $states, "offset": $offset, "size": $size, "order": $order, "sort": $qp_sort} | compact)
+    query: ({"fromDate": $from_date, "toDate": $to_date, "direction": $direction, "states": $states, "offset": $offset, "size": $size, "order": $order, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -609,18 +609,18 @@ export def "list-events" [
   --offset: int # Page number of events to return (format: int64)
   --size: int # Return this amount of events in the response (default: 20)
   --order: string@order-completer # Sort in either ascending or descending order' (default: ASC)
-  --qp-sort: string # Sort events by property
+  --sort: string # Sort events by property
 ]: nothing -> table<accountId: int, answerTime: string, callerId: string, direction: string, duration: int, endTime: string, externalId: string, id: int, phoneNumber: string, smsData: string, startTime: string, state: string, type: string, uciId: int, userId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "types" $types "scalar") (serialize-qp "fromDate" $from_date "scalar") (serialize-qp "toDate" $to_date "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "states" $states "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "types" $types "scalar") (serialize-qp "fromDate" $from_date "scalar") (serialize-qp "toDate" $to_date "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "states" $states "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/self/events" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"types": $types, "fromDate": $from_date, "toDate": $to_date, "direction": $direction, "states": $states, "offset": $offset, "size": $size, "order": $order, "sort": $qp_sort} | compact)
+    query: ({"types": $types, "fromDate": $from_date, "toDate": $to_date, "direction": $direction, "states": $states, "offset": $offset, "size": $size, "order": $order, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null

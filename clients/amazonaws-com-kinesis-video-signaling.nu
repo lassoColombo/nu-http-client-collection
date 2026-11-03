@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -146,7 +146,7 @@ export def "get-ice-server-config" [
   --client-id: string # Unique identifier for the viewer. Must be unique within the signaling channel.
   --service: string@service-completer # Specifies the desired service. Currently, TURN is the only valid value.
   --username: string # An optional user ID to be associated with the credentials.
-]: any -> record<IceServerList: record> {
+]: any -> record<IceServerList: table<Uris: list, Username: string, Password: string, Ttl: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -195,7 +195,7 @@ export def "send-alexa-offer-to-master" [
   channel_arn: string # The ARN of the signaling channel by which Alexa and the master peer communicate.
   sender_client_id: string # The unique identifier for the sender client.
   message_payload: string # The base64-encoded SDP offer content.
-]: any -> record<Answer: record> {
+]: any -> record<Answer: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

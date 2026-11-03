@@ -12,8 +12,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-apikey" => { {scheme: $scheme, headers: {X-apikey: $token_val}, query: "", location: "header"} }
-    "x-su" => { {scheme: $scheme, headers: {X-su: $token_val}, query: "", location: "header"} }
+    "x-apikey" => { {scheme: $scheme, headers: {"X-apikey": $token_val}, query: "", location: "header"} }
+    "x-su" => { {scheme: $scheme, headers: {"X-su": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -185,10 +185,11 @@ export def "create-api-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --description: string # Description for the new role
+  --description: string # Description for the new role (required)
 ]: nothing -> record<apikey: string, description: string, role: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($description == null) { error make --unspanned { msg: "required query parameter 'description' missing: pass --description" } }
   let qp = [(serialize-qp "description" $description "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apikeys/" $qp $auth.query)
   let accept_val = "application/json"
@@ -554,6 +555,7 @@ export def "update-server" [
   let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/") $auth.query)
   let req_body = {"accountCount": $account_count, "appandroid": $appandroid, "appios": $appios, "appname": $appname, "appurl": $appurl, "lastLogin": $last_login, "logo": $logo, "owner": $owner, "pinTimeout": $pin_timeout, "pinTransTimeout": $pin_trans_timeout, "pingTime": $ping_time, "serverFlags": $server_flags, "serverName": $server_name, "serverid": $body_serverid, "serverpk": $serverpk, "siteurl": $siteurl, "wsurl": $wsurl} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "serverid") == null) { error make --unspanned { msg: "required body field 'serverid' missing: pass --body-serverid or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -588,19 +590,19 @@ export def "get-all-accounts" [
   --filter: string # Filter users based on an attribute. Takes the format *attributename=attributevalue*. You can filter for multiple values at once, e.g. *group=in:group1,group2*
   --limit: int # Limit the number of results
   --marker: int # Offset in the result list
-  --qp-sort: string # Sort the results by column. You can also specify ascending (default if not specified) or descending, e.g., *column:asc* . You can also sort by multiple columns, e.g., *column1:desc,column2:asc*
+  --sort: string # Sort the results by column. You can also specify ascending (default if not specified) or descending, e.g., *column:asc* . You can also sort by multiple columns, e.g., *column1:desc,column2:asc*
 ]: nothing -> record<accounts: table<blocked: bool, clientVersion: string, created: int, description: string, id: int, lastlogin: int, lastprovoke: int, userid: string>, totalnumber: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
-  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/accounts/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "limit": $limit, "marker": $marker, "sort": $qp_sort} | compact)
+    query: ({"filter": $filter, "limit": $limit, "marker": $marker, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -703,12 +705,13 @@ export def "update-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --blocked: oneof<nothing, bool> # True if the account is blocked
+  --blocked: oneof<nothing, bool> # True if the account is blocked (required)
 ]: nothing -> record<blocked: bool, clientVersion: string, created: int, description: string, id: int, lastlogin: int, lastprovoke: int, userid: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
   if ($accountid | is-empty) { error make --unspanned { msg: "path parameter 'accountid' must be non-empty" } }
+  if ($blocked == null) { error make --unspanned { msg: "required query parameter 'blocked' missing: pass --blocked" } }
   let qp = [(serialize-qp "blocked" $blocked "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), accountid: (encode-path-segment $accountid)} | format pattern "/servers/{serverid}/accounts/{accountid}/") $qp $auth.query)
   let accept_val = "application/json"
@@ -745,7 +748,7 @@ export def "provoke-login-on-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-nonce: string # Base64 encoded nonce to identify the browser/webserver session
+  --x-nonce: string # Base64 encoded nonce to identify the browser/webserver session (required)
   --announceinfo: any # shape: {info?: record, ip?: string, logo?: string, useragent?: string}
   --sessioninfo: any # shape: {info?: record, ip?: string, logo?: string, useragent?: string}
 ]: any -> any {
@@ -754,6 +757,7 @@ export def "provoke-login-on-account" [
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
   if ($accountid | is-empty) { error make --unspanned { msg: "path parameter 'accountid' must be non-empty" } }
+  if ($x_nonce == null) { error make --unspanned { msg: "required header parameter 'X-nonce' missing: pass --x-nonce" } }
   let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), accountid: (encode-path-segment $accountid)} | format pattern "/servers/{serverid}/accounts/{accountid}/provokelogin") $auth.query)
   let req_body = {"announceinfo": $announceinfo, "sessioninfo": $sessioninfo} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -791,12 +795,13 @@ export def "update-account-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --userid: string # User name
+  --userid: string # User name (required)
 ]: nothing -> record<blocked: bool, clientVersion: string, created: int, description: string, id: int, lastlogin: int, lastprovoke: int, userid: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
   if ($accountid | is-empty) { error make --unspanned { msg: "path parameter 'accountid' must be non-empty" } }
+  if ($userid == null) { error make --unspanned { msg: "required query parameter 'userid' missing: pass --userid" } }
   let qp = [(serialize-qp "userid" $userid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), accountid: (encode-path-segment $accountid)} | format pattern "/servers/{serverid}/accounts/{accountid}/user") $qp $auth.query)
   let accept_val = "application/json"
@@ -1364,11 +1369,12 @@ export def "get-session" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-nonce: string # Nonce to identify the browser/webserver session
+  --x-nonce: string # Nonce to identify the browser/webserver session (required)
 ]: nothing -> record<accountid: int, canprovoke: bool, hsid: string, loggedin: bool, loginqrdata: string, pk: string, userid: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
+  if ($x_nonce == null) { error make --unspanned { msg: "required header parameter 'X-nonce' missing: pass --x-nonce" } }
   let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1405,11 +1411,12 @@ export def "get-html-enrol" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name to forward to the nextAuth app for this account
   --userid: string # User name to register this user under
-  --x-nonce: string # Nonce to identify the browser/webserver session
+  --x-nonce: string # Nonce to identify the browser/webserver session (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
+  if ($x_nonce == null) { error make --unspanned { msg: "required header parameter 'X-nonce' missing: pass --x-nonce" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "userid" $userid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/html/enrol") $qp $auth.query)
   let accept_val = "text/html"
@@ -1434,7 +1441,6 @@ export def "get-html-enrol" [
 #
 # GET /servers/{serverid}/sessions/html/footer
 # operationId: getHtmlFooter
-# --sessions item shape: {serverid: string, sessionid: string}
 export def "get-html-footer" [
   serverid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1446,11 +1452,12 @@ export def "get-html-footer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-nonce: string # Nonce to identify the browser/webserver session
+  --x-nonce: string # Nonce to identify the browser/webserver session (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
+  if ($x_nonce == null) { error make --unspanned { msg: "required header parameter 'X-nonce' missing: pass --x-nonce" } }
   let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/html/footer") $auth.query)
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1474,8 +1481,6 @@ export def "get-html-footer" [
 #
 # GET /servers/{serverid}/sessions/html/login
 # operationId: getHtmlLogin
-# --announceinfo shape: {info?: record, ip?: string, logo?: string, useragent?: string}
-# --sessioninfo shape: {info?: record, ip?: string, logo?: string, useragent?: string}
 export def "get-html-login" [
   serverid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1487,11 +1492,12 @@ export def "get-html-login" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-nonce: string # Nonce to identify the browser/webserver session
+  --x-nonce: string # Nonce to identify the browser/webserver session (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
+  if ($x_nonce == null) { error make --unspanned { msg: "required header parameter 'X-nonce' missing: pass --x-nonce" } }
   let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/html/login") $auth.query)
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1526,11 +1532,12 @@ export def "logout" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-nonce: string # Nonce to identify the browser/webserver session
+  --x-nonce: string # Nonce to identify the browser/webserver session (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
+  if ($x_nonce == null) { error make --unspanned { msg: "required header parameter 'X-nonce' missing: pass --x-nonce" } }
   let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/logout") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1567,7 +1574,7 @@ export def "provoke-login" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-nonce: string # Nonce to identify the browser/webserver session
+  --x-nonce: string # Nonce to identify the browser/webserver session (required)
   --announceinfo: any # shape: {info?: record, ip?: string, logo?: string, useragent?: string}
   --sessioninfo: any # shape: {info?: record, ip?: string, logo?: string, useragent?: string}
 ]: any -> any {
@@ -1575,6 +1582,7 @@ export def "provoke-login" [
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
+  if ($x_nonce == null) { error make --unspanned { msg: "required header parameter 'X-nonce' missing: pass --x-nonce" } }
   let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/provokelogin") $auth.query)
   let req_body = {"announceinfo": $announceinfo, "sessioninfo": $sessioninfo} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1611,15 +1619,17 @@ export def "get-qr-enrol" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name: string # Name to forward to the nextAuth app for this account
+  --name: string # Name to forward to the nextAuth app for this account (required)
   --userid: string # User name to register this user under
   --img: string # 'png' for a PNG image, not set for raw data in the qr code
   --s: int # size in pixels of the qr code, defaults to 500
-  --x-nonce: string # Nonce to identify the browser/webserver session
+  --x-nonce: string # Nonce to identify the browser/webserver session (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
+  if ($x_nonce == null) { error make --unspanned { msg: "required header parameter 'X-nonce' missing: pass --x-nonce" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "userid" $userid "scalar") (serialize-qp "img" $img "scalar") (serialize-qp "s" $s "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/qr/enrol") $qp $auth.query)
   let accept_val = "application/octet-stream"
@@ -1644,8 +1654,6 @@ export def "get-qr-enrol" [
 #
 # GET /servers/{serverid}/sessions/qr/login
 # operationId: getQrLogin
-# --announceinfo shape: {info?: record, ip?: string, logo?: string, useragent?: string}
-# --sessioninfo shape: {info?: record, ip?: string, logo?: string, useragent?: string}
 export def "get-qr-login" [
   serverid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1659,11 +1667,12 @@ export def "get-qr-login" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --img: string # "png" for a PNG image, not set for raw data in the qr code
   --s: int # size in pixels of the qr code, defaults to 500
-  --x-nonce: string # Nonce to identify the browser/webserver session
+  --x-nonce: string # Nonce to identify the browser/webserver session (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
+  if ($x_nonce == null) { error make --unspanned { msg: "required header parameter 'X-nonce' missing: pass --x-nonce" } }
   let qp = [(serialize-qp "img" $img "scalar") (serialize-qp "s" $s "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/qr/login") $qp $auth.query)
   let accept_val = "application/octet-stream"
@@ -1699,12 +1708,14 @@ export def "register-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --userid: string # Username to register
-  --x-nonce: string # Nonce to identify the browser/webserver session
+  --userid: string # Username to register (required)
+  --x-nonce: string # Nonce to identify the browser/webserver session (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
+  if ($userid == null) { error make --unspanned { msg: "required query parameter 'userid' missing: pass --userid" } }
+  if ($x_nonce == null) { error make --unspanned { msg: "required header parameter 'X-nonce' missing: pass --x-nonce" } }
   let qp = [(serialize-qp "userid" $userid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/registeruser") $qp $auth.query)
   let accept_val = "application/json"
@@ -1740,7 +1751,7 @@ export def "create-transaction" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-nonce: string # Nonce to identify the browser/webserver session
+  --x-nonce: string # Nonce to identify the browser/webserver session (required)
   --amount: string
   --benificiary: string
   --description: string
@@ -1749,6 +1760,7 @@ export def "create-transaction" [
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
+  if ($x_nonce == null) { error make --unspanned { msg: "required header parameter 'X-nonce' missing: pass --x-nonce" } }
   let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/sessions/transactions") $auth.query)
   let req_body = {"amount": $amount, "benificiary": $benificiary, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1827,19 +1839,19 @@ export def "get-users" [
   --search: string # Search for a username LIKE %search%
   --limit: int # Limit the number of results
   --marker: int # Offset in the result list
-  --qp-sort: string # Sort the results by column. You can also specify ascending (default if not specified) or descending, e.g., *column:asc* . You can also sort by multiple columns, e.g., *column1:desc,column2:asc*
+  --sort: string # Sort the results by column. You can also specify ascending (default if not specified) or descending, e.g., *column:asc* . You can also sort by multiple columns, e.g., *column1:desc,column2:asc*
 ]: nothing -> record<totalnumber: int, users: table<lastlogin: int, numberaccounts: int, userid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
-  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}/users/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "search": $search, "limit": $limit, "marker": $marker, "sort": $qp_sort} | compact)
+    query: ({"filter": $filter, "search": $search, "limit": $limit, "marker": $marker, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1944,20 +1956,20 @@ export def "get-user" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Limit the number of results
   --marker: int # Offset in the result list
-  --qp-sort: string # Sort the results by column. You can also specify ascending (default if not specified) or descending, e.g., *column:asc* . You can also sort by multiple columns, e.g., *column1:desc,column2:asc*
+  --sort: string # Sort the results by column. You can also specify ascending (default if not specified) or descending, e.g., *column:asc* . You can also sort by multiple columns, e.g., *column1:desc,column2:asc*
 ]: nothing -> record<accounts: table<blocked: bool, clientVersion: string, created: int, description: string, id: int, lastlogin: int, lastprovoke: int, userid: string>, totalnumber: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
   if ($userid | is-empty) { error make --unspanned { msg: "path parameter 'userid' must be non-empty" } }
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), userid: (encode-path-segment $userid)} | format pattern "/servers/{serverid}/users/{userid}/accounts") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "marker": $marker, "sort": $qp_sort} | compact)
+    query: ({"limit": $limit, "marker": $marker, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2186,7 +2198,7 @@ export def "provoke-login-on-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-nonce: string # Nonce to identify the browser/webserver session
+  --x-nonce: string # Nonce to identify the browser/webserver session (required)
   --announceinfo: any # shape: {info?: record, ip?: string, logo?: string, useragent?: string}
   --sessioninfo: any # shape: {info?: record, ip?: string, logo?: string, useragent?: string}
 ]: any -> any {
@@ -2195,6 +2207,7 @@ export def "provoke-login-on-user" [
   let base = ($base_url | default $BASE_URL)
   if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
   if ($userid | is-empty) { error make --unspanned { msg: "path parameter 'userid' must be non-empty" } }
+  if ($x_nonce == null) { error make --unspanned { msg: "required header parameter 'X-nonce' missing: pass --x-nonce" } }
   let full_url = (build-url $base ({serverid: (encode-path-segment $serverid), userid: (encode-path-segment $userid)} | format pattern "/servers/{serverid}/users/{userid}/provokelogin") $auth.query)
   let req_body = {"announceinfo": $announceinfo, "sessioninfo": $sessioninfo} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

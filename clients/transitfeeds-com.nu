@@ -136,7 +136,7 @@ export def "get-feed-versions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --key: string # Your personal API key, used for authentication. (default: YOUR_API_KEY)
+  --key: string # Your personal API key, used for authentication. (required, default: YOUR_API_KEY)
   --feed: string # If you only want to retrieve feed versions for a particular feed, include its ID here. You can use the `/getFeeds` call to discover feed IDs.
   --page: int # The page number of results to return. For example, if you specify a `page` of `2` with a `limit` of 10, then results 11-20 are returned. The number of pages available is included in the response. (default: 1)
   --limit: int # The maximum number of results to return.. (default: 10)
@@ -145,6 +145,7 @@ export def "get-feed-versions" [
 ]: nothing -> record<msg: string, results: record<feeds: list<record>, input: string, limit: int, numPages: int, page: int, total: int>, status: string, ts: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let key = ($key | default "YOUR_API_KEY")
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "feed" $feed "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "err" $err "scalar") (serialize-qp "warn" $warn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getFeedVersions" $qp $auth.query)
   let accept_val = "application/json"
@@ -177,7 +178,7 @@ export def "get-feeds" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --key: string # Your personal API key, used for authentication. (default: YOUR_API_KEY)
+  --key: string # Your personal API key, used for authentication. (required, default: YOUR_API_KEY)
   --location: int # This is the unique ID of a location. If specified, feeds will only be returned that belong to this location (and perhaps sub-locations too, depending on the `descendants` value). You can use the `/getLocations` API endpoint to determine location IDs.
   --descendants: int@descendants-completer # If a location is specified in `location`, this flag can be used to control if returned feeds must be assigned directly to the location, or if feeds belonging to sub-locations can also be returned. If `0`, then feeds must be assigned directly to the specified location. (default: 1)
   --page: int # The page number of results to return. For example, if you specify a `page` of `2` with a `limit` of 10, then results 11-20 are returned. The number of pages available is included in the response. (default: 1)
@@ -186,6 +187,7 @@ export def "get-feeds" [
 ]: nothing -> record<msg: string, results: record<feeds: list<record>, input: string, limit: int, numPages: int, page: int, total: int>, status: string, ts: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let key = ($key | default "YOUR_API_KEY")
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "descendants" $descendants "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getFeeds" $qp $auth.query)
   let accept_val = "application/json"
@@ -218,11 +220,13 @@ export def "get-latest-feed-version" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --key: string # Your personal API key, used for authentication. (default: YOUR_API_KEY)
-  --feed: string # The ID of the feed to retrieve the latest feed version for. You can use the `/getFeeds` call to discover feed IDs.
+  --key: string # Your personal API key, used for authentication. (required, default: YOUR_API_KEY)
+  --feed: string # The ID of the feed to retrieve the latest feed version for. You can use the `/getFeeds` call to discover feed IDs. (required)
 ]: nothing -> record<msg: string, results: record<feeds: list<record>, input: string, limit: int, numPages: int, page: int, total: int>, status: string, ts: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let key = ($key | default "YOUR_API_KEY")
+  if ($feed == null) { error make --unspanned { msg: "required query parameter 'feed' missing: pass --feed" } }
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "feed" $feed "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getLatestFeedVersion" $qp $auth.query)
   let accept_val = "application/json"
@@ -255,10 +259,11 @@ export def "get-locations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --key: string # Your personal API key, used for authentication. (default: YOUR_API_KEY)
+  --key: string # Your personal API key, used for authentication. (required, default: YOUR_API_KEY)
 ]: nothing -> record<msg: string, results: record<input: string, locations: list<record>>, status: string, ts: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let key = ($key | default "YOUR_API_KEY")
   let qp = [(serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getLocations" $qp $auth.query)
   let accept_val = "application/json"

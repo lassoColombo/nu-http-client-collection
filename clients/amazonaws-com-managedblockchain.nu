@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -167,7 +167,7 @@ export def "create-accessor" [
   client_request_token: string # This is a unique, case-sensitive identifier that you provide to ensure the idempotency of the operation. An idempotent operation completes no more than once. This identifier is required only if you make a service request directly using an HTTP client. It is generated automatically if you use an Amazon Web Services SDK or the Amazon Web Services CLI.
   accessor_type: string@accessor-type-completer # The type of accessor. Currently, accessor type is restricted to BILLING_TOKEN.
   --tags: record # Tags to assign to the Accessor. Each tag consists of a key and an optional value. You can specify multiple key-value pairs in a single request with an overall maximum of 50 tags allowed per resource. For more information about tags, see Tagging Resources (https://docs.aws.amazon.com/managed-blockchain/latest/ethereum-dev/tagging-resources.html) in the Amazon Managed Blockchain Ethereum Developer Guide, or Tagging Resources (https://docs.aws.amazon.com/managed-blockchain/latest/hyperledger-fabric-dev/tagging-resources.html) in the Amazon Managed Blockchain Hyperledger Fabric Developer Guide.
-]: any -> record<AccessorId: record, BillingToken: record> {
+]: any -> record<AccessorId: string, BillingToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -217,7 +217,7 @@ export def "list-accessors" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Accessors: record, NextToken: record> {
+]: nothing -> record<Accessors: table<Id: string, Type: string, Status: string, CreationDate: string, Arn: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -244,7 +244,7 @@ export def "list-accessors" [
 #
 # POST /networks/{networkId}/members
 # operationId: CreateMember
-# --MemberConfiguration shape: {Name?: any, Description?: any, FrameworkConfiguration?: any, LogPublishingConfiguration?: any, Tags?: any, KmsKeyArn?: any}
+# --MemberConfiguration shape: {Name?: string, Description?: string, FrameworkConfiguration?: record, LogPublishingConfiguration?: record, Tags?: record, KmsKeyArn?: string}
 export def "create-member" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -265,8 +265,8 @@ export def "create-member" [
   --x-amz-signed-headers: string
   client_request_token: string # A unique, case-sensitive identifier that you provide to ensure the idempotency of the operation. An idempotent operation completes no more than one time. This identifier is required only if you make a service request directly using an HTTP client. It is generated automatically if you use an Amazon Web Services SDK or the CLI.
   invitation_id: string # The unique identifier of the invitation that is sent to the member to join the network.
-  member_configuration: record # Configuration properties of the member. Applies only to Hyperledger Fabric. — shape: {Name?: any, Description?: any, FrameworkConfiguration?: any, LogPublishingConfiguration?: any, Tags?: any, KmsKeyArn?: any}
-]: any -> record<MemberId: record> {
+  member_configuration: record # Configuration properties of the member. Applies only to Hyperledger Fabric. — shape: {Name?: string, Description?: string, FrameworkConfiguration?: record, LogPublishingConfiguration?: record, Tags?: record, KmsKeyArn?: string}
+]: any -> record<MemberId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -321,7 +321,7 @@ export def "list-members" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Members: record, NextToken: record> {
+]: nothing -> record<Members: table<Id: string, Name: string, Description: string, Status: string, CreationDate: string, IsOwned: bool, Arn: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -349,9 +349,9 @@ export def "list-members" [
 #
 # POST /networks
 # operationId: CreateNetwork
-# --FrameworkConfiguration shape: {Fabric?: any}
-# --VotingPolicy shape: {ApprovalThresholdPolicy?: any}
-# --MemberConfiguration shape: {Name?: any, Description?: any, FrameworkConfiguration?: any, LogPublishingConfiguration?: any, Tags?: any, KmsKeyArn?: any}
+# --FrameworkConfiguration shape: {Fabric?: record}
+# --VotingPolicy shape: {ApprovalThresholdPolicy?: record}
+# --MemberConfiguration shape: {Name?: string, Description?: string, FrameworkConfiguration?: record, LogPublishingConfiguration?: record, Tags?: record, KmsKeyArn?: string}
 export def "create-network" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -374,11 +374,11 @@ export def "create-network" [
   --description: string # An optional description for the network.
   framework: string@framework-completer # The blockchain framework that the network uses.
   framework_version: string # The version of the blockchain framework that the network uses.
-  --framework-configuration: record # Configuration properties relevant to the network for the blockchain framework that the network uses. — shape: {Fabric?: any}
-  voting_policy: record # The voting rules for the network to decide if a proposal is accepted Applies only to Hyperledger Fabric. — shape: {ApprovalThresholdPolicy?: any}
-  member_configuration: record # Configuration properties of the member. Applies only to Hyperledger Fabric. — shape: {Name?: any, Description?: any, FrameworkConfiguration?: any, LogPublishingConfiguration?: any, Tags?: any, KmsKeyArn?: any}
+  --framework-configuration: record # Configuration properties relevant to the network for the blockchain framework that the network uses. — shape: {Fabric?: record}
+  voting_policy: record # The voting rules for the network to decide if a proposal is accepted Applies only to Hyperledger Fabric. — shape: {ApprovalThresholdPolicy?: record}
+  member_configuration: record # Configuration properties of the member. Applies only to Hyperledger Fabric. — shape: {Name?: string, Description?: string, FrameworkConfiguration?: record, LogPublishingConfiguration?: record, Tags?: record, KmsKeyArn?: string}
   --tags: record # Tags to assign to the network. Each tag consists of a key and an optional value. You can specify multiple key-value pairs in a single request with an overall maximum of 50 tags allowed per resource. For more information about tags, see Tagging Resources (https://docs.aws.amazon.com/managed-blockchain/latest/ethereum-dev/tagging-resources.html) in the Amazon Managed Blockchain Ethereum Developer Guide, or Tagging Resources (https://docs.aws.amazon.com/managed-blockchain/latest/hyperledger-fabric-dev/tagging-resources.html) in the Amazon Managed Blockchain Hyperledger Fabric Developer Guide.
-]: any -> record<NetworkId: record, MemberId: record> {
+]: any -> record<NetworkId: string, MemberId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -431,7 +431,7 @@ export def "list-networks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Networks: record, NextToken: record> {
+]: nothing -> record<Networks: table<Id: string, Name: string, Description: string, Framework: string, FrameworkVersion: string, Status: string, CreationDate: string, Arn: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "framework" $framework "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -458,7 +458,7 @@ export def "list-networks" [
 #
 # POST /networks/{networkId}/nodes
 # operationId: CreateNode
-# --NodeConfiguration shape: {InstanceType?: any, AvailabilityZone?: any, LogPublishingConfiguration?: any, StateDB?: any}
+# --NodeConfiguration shape: {InstanceType?: string, AvailabilityZone?: string, LogPublishingConfiguration?: record, StateDB?: "LevelDB"|"CouchDB"}
 export def "create-node" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -479,9 +479,9 @@ export def "create-node" [
   --x-amz-signed-headers: string
   client_request_token: string # A unique, case-sensitive identifier that you provide to ensure the idempotency of the operation. An idempotent operation completes no more than one time. This identifier is required only if you make a service request directly using an HTTP client. It is generated automatically if you use an Amazon Web Services SDK or the CLI.
   --member-id: string # The unique identifier of the member that owns this node. Applies only to Hyperledger Fabric.
-  node_configuration: record # Configuration properties of a node. — shape: {InstanceType?: any, AvailabilityZone?: any, LogPublishingConfiguration?: any, StateDB?: any}
+  node_configuration: record # Configuration properties of a node. — shape: {InstanceType?: string, AvailabilityZone?: string, LogPublishingConfiguration?: record, StateDB?: "LevelDB"|"CouchDB"}
   --tags: record # Tags to assign to the node. Each tag consists of a key and an optional value. You can specify multiple key-value pairs in a single request with an overall maximum of 50 tags allowed per resource. For more information about tags, see Tagging Resources (https://docs.aws.amazon.com/managed-blockchain/latest/ethereum-dev/tagging-resources.html) in the Amazon Managed Blockchain Ethereum Developer Guide, or Tagging Resources (https://docs.aws.amazon.com/managed-blockchain/latest/hyperledger-fabric-dev/tagging-resources.html) in the Amazon Managed Blockchain Hyperledger Fabric Developer Guide.
-]: any -> record<NodeId: record> {
+]: any -> record<NodeId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -535,7 +535,7 @@ export def "list-nodes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Nodes: record, NextToken: record> {
+]: nothing -> record<Nodes: table<Id: string, Status: string, CreationDate: string, AvailabilityZone: string, InstanceType: string, Arn: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -563,7 +563,7 @@ export def "list-nodes" [
 #
 # POST /networks/{networkId}/proposals
 # operationId: CreateProposal
-# --Actions shape: {Invitations?: any, Removals?: any}
+# --Actions shape: {Invitations?: list, Removals?: list}
 export def "create-proposal" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -584,10 +584,10 @@ export def "create-proposal" [
   --x-amz-signed-headers: string
   client_request_token: string # A unique, case-sensitive identifier that you provide to ensure the idempotency of the operation. An idempotent operation completes no more than one time. This identifier is required only if you make a service request directly using an HTTP client. It is generated automatically if you use an Amazon Web Services SDK or the CLI.
   member_id: string # The unique identifier of the member that is creating the proposal. This identifier is especially useful for identifying the member making the proposal when multiple members exist in a single Amazon Web Services account.
-  actions: record # The actions to carry out if a proposal is APPROVED. Applies only to Hyperledger Fabric. — shape: {Invitations?: any, Removals?: any}
+  actions: record # The actions to carry out if a proposal is APPROVED. Applies only to Hyperledger Fabric. — shape: {Invitations?: list, Removals?: list}
   --description: string # A description for the proposal that is visible to voting members, for example, "Proposal to add Example Corp. as member."
   --tags: record # Tags to assign to the proposal. Each tag consists of a key and an optional value. You can specify multiple key-value pairs in a single request with an overall maximum of 50 tags allowed per resource. For more information about tags, see Tagging Resources (https://docs.aws.amazon.com/managed-blockchain/latest/ethereum-dev/tagging-resources.html) in the Amazon Managed Blockchain Ethereum Developer Guide, or Tagging Resources (https://docs.aws.amazon.com/managed-blockchain/latest/hyperledger-fabric-dev/tagging-resources.html) in the Amazon Managed Blockchain Hyperledger Fabric Developer Guide.
-]: any -> record<ProposalId: record> {
+]: any -> record<ProposalId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -639,7 +639,7 @@ export def "list-proposals" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Proposals: record, NextToken: record> {
+]: nothing -> record<Proposals: table<ProposalId: string, Description: string, ProposedByMemberId: string, ProposedByMemberName: string, Status: string, CreationDate: string, ExpirationDate: string, Arn: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -730,7 +730,7 @@ export def "get-accessor" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Accessor: record<Id: record, Type: record, BillingToken: record, Status: record, CreationDate: record, Arn: record, Tags: record>> {
+]: nothing -> record<Accessor: record<Id: string, Type: string, BillingToken: string, Status: string, CreationDate: string, Arn: string, Tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($accessor_id | is-empty) { error make --unspanned { msg: "path parameter 'AccessorId' must be non-empty" } }
@@ -823,7 +823,7 @@ export def "get-member" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Member: record<NetworkId: record, Id: record, Name: record, Description: record, FrameworkAttributes: record<Fabric: record>, LogPublishingConfiguration: record<Fabric: record>, Status: record, CreationDate: record, Tags: record, Arn: record, KmsKeyArn: record>> {
+]: nothing -> record<Member: record<NetworkId: string, Id: string, Name: string, Description: string, FrameworkAttributes: record<Fabric: record>, LogPublishingConfiguration: record<Fabric: record>, Status: string, CreationDate: string, Tags: record, Arn: string, KmsKeyArn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -851,7 +851,7 @@ export def "get-member" [
 #
 # PATCH /networks/{networkId}/members/{memberId}
 # operationId: UpdateMember
-# --LogPublishingConfiguration shape: {Fabric?: any}
+# --LogPublishingConfiguration shape: {Fabric?: record}
 export def "update-member" [
   network_id: string
   member_id: string
@@ -871,7 +871,7 @@ export def "update-member" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --log-publishing-configuration: record # Configuration properties for logging events associated with a member of a Managed Blockchain network. — shape: {Fabric?: any}
+  --log-publishing-configuration: record # Configuration properties for logging events associated with a member of a Managed Blockchain network. — shape: {Fabric?: record}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -972,7 +972,7 @@ export def "get-node" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Node: record<NetworkId: record, MemberId: record, Id: record, InstanceType: record, AvailabilityZone: record, FrameworkAttributes: record<Fabric: record, Ethereum: record>, LogPublishingConfiguration: record<Fabric: record>, StateDB: record, Status: record, CreationDate: record, Tags: record, Arn: record, KmsKeyArn: record>> {
+]: nothing -> record<Node: record<NetworkId: string, MemberId: string, Id: string, InstanceType: string, AvailabilityZone: string, FrameworkAttributes: record<Fabric: record, Ethereum: record>, LogPublishingConfiguration: record<Fabric: record>, StateDB: string, Status: string, CreationDate: string, Tags: record, Arn: string, KmsKeyArn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -1001,7 +1001,7 @@ export def "get-node" [
 #
 # PATCH /networks/{networkId}/nodes/{nodeId}
 # operationId: UpdateNode
-# --LogPublishingConfiguration shape: {Fabric?: any}
+# --LogPublishingConfiguration shape: {Fabric?: record}
 export def "update-node" [
   network_id: string
   node_id: string
@@ -1022,7 +1022,7 @@ export def "update-node" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --member-id: string # The unique identifier of the member that owns the node. Applies only to Hyperledger Fabric.
-  --log-publishing-configuration: record # Configuration properties for logging events associated with a peer node on a Hyperledger Fabric network on Managed Blockchain. — shape: {Fabric?: any}
+  --log-publishing-configuration: record # Configuration properties for logging events associated with a peer node on a Hyperledger Fabric network on Managed Blockchain. — shape: {Fabric?: record}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1072,7 +1072,7 @@ export def "get-network" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Network: record<Id: record, Name: record, Description: record, Framework: record, FrameworkVersion: record, FrameworkAttributes: record<Fabric: record, Ethereum: record>, VpcEndpointServiceName: record, VotingPolicy: record<ApprovalThresholdPolicy: record>, Status: record, CreationDate: record, Tags: record, Arn: record>> {
+]: nothing -> record<Network: record<Id: string, Name: string, Description: string, Framework: string, FrameworkVersion: string, FrameworkAttributes: record<Fabric: record, Ethereum: record>, VpcEndpointServiceName: string, VotingPolicy: record<ApprovalThresholdPolicy: record>, Status: string, CreationDate: string, Tags: record, Arn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -1118,7 +1118,7 @@ export def "get-proposal" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Proposal: record<ProposalId: record, NetworkId: record, Description: record, Actions: record<Invitations: record, Removals: record>, ProposedByMemberId: record, ProposedByMemberName: record, Status: record, CreationDate: record, ExpirationDate: record, YesVoteCount: record, NoVoteCount: record, OutstandingVoteCount: record, Tags: record, Arn: record>> {
+]: nothing -> record<Proposal: record<ProposalId: string, NetworkId: string, Description: string, Actions: record<Invitations: list, Removals: list>, ProposedByMemberId: string, ProposedByMemberName: string, Status: string, CreationDate: string, ExpirationDate: string, YesVoteCount: int, NoVoteCount: int, OutstandingVoteCount: int, Tags: record, Arn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -1167,7 +1167,7 @@ export def "list-invitations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Invitations: record, NextToken: record> {
+]: nothing -> record<Invitations: table<InvitationId: string, CreationDate: string, ExpirationDate: string, Status: string, NetworkSummary: record, Arn: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -1217,7 +1217,7 @@ export def "list-proposal-votes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ProposalVotes: record, NextToken: record> {
+]: nothing -> record<ProposalVotes: table<Vote: string, MemberName: string, MemberId: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($network_id | is-empty) { error make --unspanned { msg: "path parameter 'networkId' must be non-empty" } }
@@ -1448,7 +1448,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # The tag keys.
+  --tag-keys: list # The tag keys. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1460,6 +1460,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"

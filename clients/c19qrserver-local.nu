@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "token" => { {scheme: $scheme, headers: {token: $token_val}, query: "", location: "header"} }
+    "token" => { {scheme: $scheme, headers: {"token": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -191,13 +191,13 @@ export def "post-login" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # e.g. aijaz@example.org
   --password: string # e.g. hunter2
-  --body-source: string@source-completer
+  --source: string@source-completer
 ]: any -> record<admin: bool, login_id: int, name: string, read_only: bool, token: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/login" $auth.query)
-  let req_body = {"email": $email, "password": $password, "source": $body_source} | compact
+  let req_body = {"email": $email, "password": $password, "source": $source} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

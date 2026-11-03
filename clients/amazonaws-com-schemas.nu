@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -163,7 +163,7 @@ export def "create-discoverer" [
   source_arn: string # The ARN of the event bus.
   --cross-account: oneof<nothing, bool> # Support discovery of schemas in events sent to the bus from another account. (default: true).
   --tags: record # Key-value pairs associated with a resource.
-]: any -> record<Description: record, DiscovererArn: record, DiscovererId: record, SourceArn: record, State: record, CrossAccount: record, Tags: record> {
+]: any -> record<Description: string, DiscovererArn: string, DiscovererId: string, SourceArn: string, State: string, CrossAccount: bool, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -215,7 +215,7 @@ export def "list-discoverers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Discoverers: record, NextToken: record> {
+]: nothing -> record<Discoverers: table<DiscovererArn: string, DiscovererId: string, SourceArn: string, State: string, CrossAccount: bool, Tags: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "discovererIdPrefix" $discoverer_id_prefix "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "sourceArnPrefix" $source_arn_prefix "scalar") (serialize-qp "Limit" $limit_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -262,7 +262,7 @@ export def "create-registry" [
   --x-amz-signed-headers: string
   --description: string # A description of the registry to be created.
   --tags: record # Key-value pairs associated with a resource.
-]: any -> record<Description: record, RegistryArn: record, RegistryName: record, Tags: record> {
+]: any -> record<Description: string, RegistryArn: string, RegistryName: string, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -355,7 +355,7 @@ export def "describe-registry" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Description: record, RegistryArn: record, RegistryName: record, Tags: record> {
+]: nothing -> record<Description: string, RegistryArn: string, RegistryName: string, Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($registry_name | is-empty) { error make --unspanned { msg: "path parameter 'registryName' must be non-empty" } }
@@ -401,7 +401,7 @@ export def "update-registry" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --description: string # The description of the registry to update.
-]: any -> record<Description: record, RegistryArn: record, RegistryName: record, Tags: record> {
+]: any -> record<Description: string, RegistryArn: string, RegistryName: string, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -454,7 +454,7 @@ export def "create-schema" [
   --description: string # A description of the schema.
   --tags: record # Key-value pairs associated with a resource.
   type: string@type-completer # The type of schema.
-]: any -> record<Description: record, LastModified: record, SchemaArn: record, SchemaName: record, SchemaVersion: record, Tags: record, Type: record, VersionCreatedDate: record> {
+]: any -> record<Description: string, LastModified: string, SchemaArn: string, SchemaName: string, SchemaVersion: string, Tags: record, Type: string, VersionCreatedDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -552,7 +552,7 @@ export def "describe-schema" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Content: record, Description: record, LastModified: record, SchemaArn: record, SchemaName: record, SchemaVersion: record, Tags: record, Type: record, VersionCreatedDate: record> {
+]: nothing -> record<Content: string, Description: string, LastModified: string, SchemaArn: string, SchemaName: string, SchemaVersion: string, Tags: record, Type: string, VersionCreatedDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($registry_name | is-empty) { error make --unspanned { msg: "path parameter 'registryName' must be non-empty" } }
@@ -604,7 +604,7 @@ export def "update-schema" [
   --content: string # The source of the schema definition.
   --description: string # The description of the schema.
   --type: string@type-completer # The schema type for the events schema.
-]: any -> record<Description: record, LastModified: record, SchemaArn: record, SchemaName: record, SchemaVersion: record, Tags: record, Type: record, VersionCreatedDate: record> {
+]: any -> record<Description: string, LastModified: string, SchemaArn: string, SchemaName: string, SchemaVersion: string, Tags: record, Type: string, VersionCreatedDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -698,7 +698,7 @@ export def "describe-discoverer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Description: record, DiscovererArn: record, DiscovererId: record, SourceArn: record, State: record, CrossAccount: record, Tags: record> {
+]: nothing -> record<Description: string, DiscovererArn: string, DiscovererId: string, SourceArn: string, State: string, CrossAccount: bool, Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($discoverer_id | is-empty) { error make --unspanned { msg: "path parameter 'discovererId' must be non-empty" } }
@@ -745,7 +745,7 @@ export def "update-discoverer" [
   --x-amz-signed-headers: string
   --description: string # The description of the discoverer to update.
   --cross-account: oneof<nothing, bool> # Support discovery of schemas in events sent to the bus from another account. (default: true)
-]: any -> record<Description: record, DiscovererArn: record, DiscovererId: record, SourceArn: record, State: record, CrossAccount: record, Tags: record> {
+]: any -> record<Description: string, DiscovererArn: string, DiscovererId: string, SourceArn: string, State: string, CrossAccount: bool, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -838,7 +838,7 @@ export def "get-resource-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Policy: record, RevisionId: record> {
+]: nothing -> record<Policy: string, RevisionId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "registryName" $registry_name "scalar")] | flatten | str join "&"
@@ -885,7 +885,7 @@ export def "put-resource-policy" [
   --x-amz-signed-headers: string
   policy: string # The resource-based policy.
   --revision-id: string # The revision ID of the policy.
-]: any -> record<Policy: record, RevisionId: record> {
+]: any -> record<Policy: string, RevisionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -985,7 +985,7 @@ export def "describe-code-binding" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CreationDate: record, LastModified: record, SchemaVersion: record, Status: record> {
+]: nothing -> record<CreationDate: string, LastModified: string, SchemaVersion: string, Status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($registry_name | is-empty) { error make --unspanned { msg: "path parameter 'registryName' must be non-empty" } }
@@ -1036,7 +1036,7 @@ export def "put-code-binding" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CreationDate: record, LastModified: record, SchemaVersion: record, Status: record> {
+]: nothing -> record<CreationDate: string, LastModified: string, SchemaVersion: string, Status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($registry_name | is-empty) { error make --unspanned { msg: "path parameter 'registryName' must be non-empty" } }
@@ -1078,7 +1078,7 @@ export def "export-schema" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --schema-version: string # Specifying this limits the results to only this schema version.
-  --type: string
+  --type: string # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1091,6 +1091,7 @@ export def "export-schema" [
   let base = ($base_url | default $BASE_URL)
   if ($registry_name | is-empty) { error make --unspanned { msg: "path parameter 'registryName' must be non-empty" } }
   if ($schema_name | is-empty) { error make --unspanned { msg: "path parameter 'schemaName' must be non-empty" } }
+  if ($type == null) { error make --unspanned { msg: "required query parameter 'type' missing: pass --type" } }
   let qp = [(serialize-qp "schemaVersion" $schema_version "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({registry_name: (encode-path-segment $registry_name), schema_name: (encode-path-segment $schema_name)} | format pattern "/v1/registries/name/{registry_name}/schemas/name/{schema_name}/export") $qp $auth.query)
   let accept_val = "application/json"
@@ -1185,7 +1186,7 @@ export def "get-discovered-schema" [
   --x-amz-signed-headers: string
   events: list<string> # An array of strings where each string is a JSON event. These are the events that were used to generate the schema. The array includes a single type of event and has a maximum size of 10 events.
   type: string@type-completer # The type of event.
-]: any -> record<Content: record> {
+]: any -> record<Content: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1237,7 +1238,7 @@ export def "list-registries" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: record, Registries: record> {
+]: nothing -> record<NextToken: string, Registries: table<RegistryArn: string, RegistryName: string, Tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "registryNamePrefix" $registry_name_prefix "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "Limit" $limit_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -1287,7 +1288,7 @@ export def "list-schema-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: record, SchemaVersions: record> {
+]: nothing -> record<NextToken: string, SchemaVersions: table<SchemaArn: string, SchemaName: string, SchemaVersion: string, Type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($registry_name | is-empty) { error make --unspanned { msg: "path parameter 'registryName' must be non-empty" } }
@@ -1339,7 +1340,7 @@ export def "list-schemas" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: record, Schemas: record> {
+]: nothing -> record<NextToken: string, Schemas: table<LastModified: string, SchemaArn: string, SchemaName: string, Tags: record, VersionCount: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($registry_name | is-empty) { error make --unspanned { msg: "path parameter 'registryName' must be non-empty" } }
@@ -1472,7 +1473,7 @@ export def "search-schemas" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --keywords: string # Specifying this limits the results to only schemas that include the provided keywords.
+  --keywords: string # Specifying this limits the results to only schemas that include the provided keywords. (required)
   --limit: int
   --next-token: string # The token that specifies the next page of results to return. To request the first page, leave NextToken empty. The token will expire in 24 hours, and cannot be shared with other accounts.
   --limit-2: string # Pagination limit (disambiguated-2)
@@ -1484,10 +1485,11 @@ export def "search-schemas" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: record, Schemas: record> {
+]: nothing -> record<NextToken: string, Schemas: table<RegistryName: string, SchemaArn: string, SchemaName: string, SchemaVersions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($registry_name | is-empty) { error make --unspanned { msg: "path parameter 'registryName' must be non-empty" } }
+  if ($keywords == null) { error make --unspanned { msg: "required query parameter 'keywords' missing: pass --keywords" } }
   let qp = [(serialize-qp "keywords" $keywords "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "Limit" $limit_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({registry_name: (encode-path-segment $registry_name)} | format pattern "/v1/registries/name/{registry_name}/schemas/search") $qp $auth.query)
   let accept_val = "application/json"
@@ -1530,7 +1532,7 @@ export def "start-discoverer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DiscovererId: record, State: record> {
+]: nothing -> record<DiscovererId: string, State: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($discoverer_id | is-empty) { error make --unspanned { msg: "path parameter 'discovererId' must be non-empty" } }
@@ -1575,7 +1577,7 @@ export def "stop-discoverer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DiscovererId: record, State: record> {
+]: nothing -> record<DiscovererId: string, State: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($discoverer_id | is-empty) { error make --unspanned { msg: "path parameter 'discovererId' must be non-empty" } }
@@ -1613,7 +1615,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # Keys of key-value pairs.
+  --tag-keys: list # Keys of key-value pairs. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1625,6 +1627,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resource-arn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"

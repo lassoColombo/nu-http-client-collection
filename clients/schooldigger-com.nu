@@ -1,4 +1,4 @@
-# Auto-generated client for SchoolDigger API V1 vv1
+# Auto-generated client for SchoolDigger API V1 v1
 # Source: https://api.apis.guru/v2/specs/schooldigger.com/v1/swagger.json
 # Auth: --token flag or $env.SCHOOLDIGGER_API_V1_TOKEN
 
@@ -131,7 +131,7 @@ export def "districts-get-all-districts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --st: string # Two character state (e.g. 'CA') - required
+  --st: string # Two character state (e.g. 'CA') - required (required)
   --q: string # Search term - note: will match district name or city (optional)
   --city: string # Search for districts in this city (optional)
   --zip: string # Search for districts in this 5-digit zip code (optional)
@@ -148,11 +148,14 @@ export def "districts-get-all-districts" [
   --per-page: int # Number of districts to retrieve on a page (50 max) (optional, default: 10) (format: int32)
   --sort-by: string # Sort list. Values are: districtname, distance, rank. For descending order, precede with '-' i.e. -districtname (optional, default: districtname)
   --include-unranked-districts-in-rank-sort: oneof<nothing, bool> # If sortBy is 'rank', this boolean determines if districts with no rank are included in the result (optional, default: false)
-  --app-id: string # Your API app id
-  --app-key: string # Your API app key
+  --app-id: string # Your API app id (required)
+  --app-key: string # Your API app key (required)
 ]: nothing -> record<districtList: table<address: record, county: record, distance: float, districtID: string, districtName: string, districtYearlyDetails: list, hasBoundary: bool, highGrade: string, isWithinBoundary: bool, locationIsWithinBoundary: bool, lowGrade: string, numberAlternativeSchools: int, numberHighSchools: int, numberMiddleSchools: int, numberPrimarySchools: int, numberTotalSchools: int, phone: string, rankHistory: list, url: string>, numberOfDistricts: int, numberOfPages: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($st == null) { error make --unspanned { msg: "required query parameter 'st' missing: pass --st" } }
+  if ($app_id == null) { error make --unspanned { msg: "required query parameter 'appID' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required query parameter 'appKey' missing: pass --app-key" } }
   let qp = [(serialize-qp "st" $st "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "nearLatitude" $near_latitude "scalar") (serialize-qp "nearLongitude" $near_longitude "scalar") (serialize-qp "boundaryAddress" $boundary_address "scalar") (serialize-qp "distanceMiles" $distance_miles "scalar") (serialize-qp "isInBoundaryOnly" $is_in_boundary_only "scalar") (serialize-qp "boxLatitudeNW" $box_latitude_nw "scalar") (serialize-qp "boxLongitudeNW" $box_longitude_nw "scalar") (serialize-qp "boxLatitudeSE" $box_latitude_se "scalar") (serialize-qp "boxLongitudeSE" $box_longitude_se "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "perPage" $per_page "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "includeUnrankedDistrictsInRankSort" $include_unranked_districts_in_rank_sort "scalar") (serialize-qp "appID" $app_id "scalar") (serialize-qp "appKey" $app_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/districts" $qp $auth.query)
   let accept_val = "application/json"
@@ -186,12 +189,14 @@ export def "districts-get-district" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --app-id: string # Your API app id
-  --app-key: string # Your API app key
+  --app-id: string # Your API app id (required)
+  --app-key: string # Your API app key (required)
 ]: nothing -> record<address: record<city: string, cityURL: string, html: string, latLong: record<latitude: float, longitude: float>, state: string, stateFull: string, street: string, zip: string, zip4: string, zipURL: string>, boundary: record<hasBoundary: bool, polylineCollection: list<record>>, county: record<countyName: string, countyURL: string>, districtID: string, districtName: string, districtYearlyDetails: table<numberOfAids: float, numberOfCoordsSupervisors: float, numberOfEnglishLanguageLearnerStudents: int, numberOfGuidanceElem: float, numberOfGuidanceSecondary: float, numberOfGuidanceTotal: float, numberOfLEAAdministrators: float, numberOfLEASupportStaff: float, numberOfLibrarians: float, numberOfLibraryStaff: float, numberOfOtherSupportStaff: float, numberOfSchoolAdminSupportStaff: float, numberOfSchoolAdministrators: float, numberOfSpecialEdStudents: int, numberOfStudentSupportStaff: float, numberOfStudents: int, numberOfTeachers: float, numberOfTeachersElementary: float, numberOfTeachersK: float, numberOfTeachersPK: float, numberOfTeachersSecondary: float, year: int>, highGrade: string, isWithinBoundary: bool, lowGrade: string, numberAlternativeSchools: int, numberHighSchools: int, numberMiddleSchools: int, numberPrimarySchools: int, numberTotalSchools: int, phone: string, rankHistory: table<rank: int, rankOf: int, rankScore: float, rankStars: int, rankStatewidePercentage: float, year: int>, testScores: table<districtTestScore: record, grade: string, schoolTestScore: record, stateTestScore: record, subject: string, test: string, tier1: string, tier2: string, tier3: string, tier4: string, tier5: string, year: int>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($app_id == null) { error make --unspanned { msg: "required query parameter 'appID' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required query parameter 'appKey' missing: pass --app-key" } }
   let qp = [(serialize-qp "appID" $app_id "scalar") (serialize-qp "appKey" $app_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/districts/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -228,12 +233,14 @@ export def "rankings-get-rank-district" [
   --year: int # The ranking year (leave blank for most recent year) (format: int32)
   --page: int # Page number to retrieve (optional, default: 1) (format: int32)
   --per-page: int # Number of districts to retrieve on a page (50 max) (optional, default: 10) (format: int32)
-  --app-id: string # Your API app id
-  --app-key: string # Your API app key
+  --app-id: string # Your API app id (required)
+  --app-key: string # Your API app key (required)
 ]: nothing -> record<districtList: table<address: record, county: record, distance: float, districtID: string, districtName: string, districtYearlyDetails: list, hasBoundary: bool, highGrade: string, isWithinBoundary: bool, locationIsWithinBoundary: bool, lowGrade: string, numberAlternativeSchools: int, numberHighSchools: int, numberMiddleSchools: int, numberPrimarySchools: int, numberTotalSchools: int, phone: string, rankHistory: list, url: string>, numberOfDistricts: int, numberOfPages: int, rankCompareYear: int, rankYear: int, rankYearCompare: int, rankYearsAvailable: list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($st | is-empty) { error make --unspanned { msg: "path parameter 'st' must be non-empty" } }
+  if ($app_id == null) { error make --unspanned { msg: "required query parameter 'appID' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required query parameter 'appKey' missing: pass --app-key" } }
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "perPage" $per_page "scalar") (serialize-qp "appID" $app_id "scalar") (serialize-qp "appKey" $app_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({st: (encode-path-segment $st)} | format pattern "/v1/rankings/districts/{st}") $qp $auth.query)
   let accept_val = "application/json"
@@ -271,12 +278,14 @@ export def "rankings-get-rank" [
   --level: string # Level of ranking: 'Elementary', 'Middle', or 'High'
   --page: int # Page number to retrieve (optional, default: 1) (format: int32)
   --per-page: int # Number of schools to retrieve on a page (50 max) (optional, default: 10) (format: int32)
-  --app-id: string # Your API app id
-  --app-key: string # Your API app key
+  --app-id: string # Your API app id (required)
+  --app-key: string # Your API app key (required)
 ]: nothing -> record<numberOfPages: int, numberOfSchools: int, rankYear: int, rankYearCompare: int, rankYearsAvailable: list<int>, schoolList: table<address: record, county: record, distance: float, district: record, hasBoundary: bool, highGrade: string, isCharterSchool: string, isMagnetSchool: string, isPrivate: bool, isTitleISchool: string, isTitleISchoolwideSchool: string, isVirtualSchool: string, locationIsWithinBoundary: bool, lowGrade: string, phone: string, privateCoed: string, privateDays: int, privateHasLibrary: bool, privateHours: float, privateOrientation: string, rankHistory: list, rankMovement: int, schoolLevel: string, schoolName: string, schoolYearlyDetails: list, schoolid: string, url: string, urlCompare: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($st | is-empty) { error make --unspanned { msg: "path parameter 'st' must be non-empty" } }
+  if ($app_id == null) { error make --unspanned { msg: "required query parameter 'appID' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required query parameter 'appKey' missing: pass --app-key" } }
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "level" $level "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "perPage" $per_page "scalar") (serialize-qp "appID" $app_id "scalar") (serialize-qp "appKey" $app_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({st: (encode-path-segment $st)} | format pattern "/v1/rankings/schools/{st}") $qp $auth.query)
   let accept_val = "application/json"
@@ -309,7 +318,7 @@ export def "schools-get-all-schools" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --st: string # Two character state (e.g. 'CA') - required
+  --st: string # Two character state (e.g. 'CA') - required (required)
   --q: string # Search term - note: will match school name or city (optional)
   --q-search-school-name-only: oneof<nothing, bool> # For parameter 'q', only search school names instead of school and city (optional)
   --district-id: string # Search for schools within this district (7 digit district id) (optional)
@@ -334,11 +343,14 @@ export def "schools-get-all-schools" [
   --per-page: int # Number of schools to retrieve on a page (50 max) (optional, default: 10) (format: int32)
   --sort-by: string # Sort list. Values are: schoolname, distance, rank. For descending order, precede with '-' i.e. -schoolname (optional, default: schoolname)
   --include-unranked-schools-in-rank-sort: oneof<nothing, bool> # If sortBy is 'rank', this boolean determines if schools with no rank are included in the result (optional, default: false)
-  --app-id: string # Your API app id
-  --app-key: string # Your API app key
+  --app-id: string # Your API app id (required)
+  --app-key: string # Your API app key (required)
 ]: nothing -> record<numberOfPages: int, numberOfSchools: int, schoolList: table<address: record, county: record, distance: float, district: record, hasBoundary: bool, highGrade: string, isCharterSchool: string, isMagnetSchool: string, isPrivate: bool, isTitleISchool: string, isTitleISchoolwideSchool: string, isVirtualSchool: string, locationIsWithinBoundary: bool, lowGrade: string, phone: string, privateCoed: string, privateDays: int, privateHasLibrary: bool, privateHours: float, privateOrientation: string, rankHistory: list, rankMovement: int, schoolLevel: string, schoolName: string, schoolYearlyDetails: list, schoolid: string, url: string, urlCompare: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($st == null) { error make --unspanned { msg: "required query parameter 'st' missing: pass --st" } }
+  if ($app_id == null) { error make --unspanned { msg: "required query parameter 'appID' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required query parameter 'appKey' missing: pass --app-key" } }
   let qp = [(serialize-qp "st" $st "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "qSearchSchoolNameOnly" $q_search_school_name_only "scalar") (serialize-qp "districtID" $district_id "scalar") (serialize-qp "level" $level "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "isMagnet" $is_magnet "scalar") (serialize-qp "isCharter" $is_charter "scalar") (serialize-qp "isVirtual" $is_virtual "scalar") (serialize-qp "isTitleI" $is_title_i "scalar") (serialize-qp "isTitleISchoolwide" $is_title_i_schoolwide "scalar") (serialize-qp "nearLatitude" $near_latitude "scalar") (serialize-qp "nearLongitude" $near_longitude "scalar") (serialize-qp "boundaryAddress" $boundary_address "scalar") (serialize-qp "distanceMiles" $distance_miles "scalar") (serialize-qp "isInBoundaryOnly" $is_in_boundary_only "scalar") (serialize-qp "boxLatitudeNW" $box_latitude_nw "scalar") (serialize-qp "boxLongitudeNW" $box_longitude_nw "scalar") (serialize-qp "boxLatitudeSE" $box_latitude_se "scalar") (serialize-qp "boxLongitudeSE" $box_longitude_se "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "perPage" $per_page "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "includeUnrankedSchoolsInRankSort" $include_unranked_schools_in_rank_sort "scalar") (serialize-qp "appID" $app_id "scalar") (serialize-qp "appKey" $app_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/schools" $qp $auth.query)
   let accept_val = "application/json"
@@ -372,12 +384,14 @@ export def "schools-get-school10" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --app-id: string # Your API app id
-  --app-key: string # Your API app key
+  --app-id: string # Your API app id (required)
+  --app-key: string # Your API app key (required)
 ]: nothing -> record<address: record<city: string, cityURL: string, html: string, latLong: record<latitude: float, longitude: float>, state: string, stateFull: string, street: string, zip: string, zip4: string, zipURL: string>, boundary: record<hasBoundary: bool, polylineCollection: list<record>>, county: record<countyName: string, countyURL: string>, district: record<districtID: string, districtName: string, rankURL: string, url: string>, highGrade: string, isCharterSchool: string, isMagnetSchool: string, isPrivate: bool, isTitleISchool: string, isTitleISchoolwideSchool: string, isVirtualSchool: string, locale: string, lowGrade: string, phone: string, privateCoed: string, privateDays: int, privateHasLibrary: bool, privateHours: float, privateOrientation: string, rankHistory: table<averageStandardScore: float, rank: int, rankLevel: string, rankOf: int, rankStars: int, rankStatewidePercentage: float, year: int>, rankMovement: int, schoolLevel: string, schoolName: string, schoolYearlyDetails: table<numberOfStudents: int, numberofAfricanAmericanStudents: int, numberofAsianStudents: int, numberofHispanicStudents: int, numberofIndianStudents: int, numberofPacificIslanderStudents: int, numberofTwoOrMoreRaceStudents: int, numberofUnspecifiedRaceStudents: int, numberofWhiteStudents: int, percentFreeDiscLunch: float, percentofAfricanAmericanStudents: float, percentofAsianStudents: float, percentofHispanicStudents: float, percentofIndianStudents: float, percentofPacificIslanderStudents: float, percentofTwoOrMoreRaceStudents: float, percentofUnspecifiedRaceStudents: float, percentofWhiteStudents: float, pupilTeacherRatio: float, teachersFulltime: float, year: int>, schoolid: string, testScores: table<districtTestScore: record, grade: string, schoolTestScore: record, stateTestScore: record, subject: string, test: string, tier1: string, tier2: string, tier3: string, tier4: string, tier5: string, year: int>, url: string, urlCompare: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($app_id == null) { error make --unspanned { msg: "required query parameter 'appID' missing: pass --app-id" } }
+  if ($app_key == null) { error make --unspanned { msg: "required query parameter 'appKey' missing: pass --app-key" } }
   let qp = [(serialize-qp "appID" $app_id "scalar") (serialize-qp "appKey" $app_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/schools/{id}") $qp $auth.query)
   let accept_val = "application/json"

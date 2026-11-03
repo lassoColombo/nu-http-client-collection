@@ -96,6 +96,7 @@ def auth-scheme-completer [] { ["query-apikey"] }
 
 # Completers for enum parameters
 def platform-completer [] { ["android" "c4" "ctv" "fm" "freesat" "ios" "p06" "ps3" "samsung" "yv"] }
+def channel-completer [] { ["4m" "4s" "c4" "e4" "f4" "m4"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -884,7 +885,7 @@ export def "4o-d-programmes-by-title4" [
 # operationId: All_Programmes_by_TX_Date(2)
 export def "all-programmes-by-tx-date2" [
   category: string
-  channel: string
+  channel: string@channel-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -924,7 +925,7 @@ export def "all-programmes-by-tx-date2" [
 # operationId: 4oD_Programmes_by_TX_Date(2)
 export def "4o-d-programmes-by-tx-date2" [
   category: string
-  channel: string
+  channel: string@channel-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -964,7 +965,7 @@ export def "4o-d-programmes-by-tx-date2" [
 # operationId: 4oD_Programmes_by_TX_Date(5)
 export def "4o-d-programmes-by-tx-date5" [
   category: string
-  channel: string
+  channel: string@channel-completer
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1006,7 +1007,7 @@ export def "4o-d-programmes-by-tx-date5" [
 # operationId: Most_Popular_Brands_Feed(3)
 export def "most-popular-brands-feed3" [
   category: string
-  channel: string
+  channel: string@channel-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1046,7 +1047,7 @@ export def "most-popular-brands-feed3" [
 # operationId: Most_Popular_Brands_Feed(7)
 export def "most-popular-brands-feed7" [
   category: string
-  channel: string
+  channel: string@channel-completer
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1088,7 +1089,7 @@ export def "most-popular-brands-feed7" [
 # operationId: 4oD_Programmes_by_Title(2)
 export def "4o-d-programmes-by-title2" [
   category: string
-  channel: string
+  channel: string@channel-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1128,7 +1129,7 @@ export def "4o-d-programmes-by-title2" [
 # operationId: 4oD_Programmes_by_Title(5)
 export def "4o-d-programmes-by-title5" [
   category: string
-  channel: string
+  channel: string@channel-completer
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1170,7 +1171,7 @@ export def "4o-d-programmes-by-title5" [
 # operationId: All_Programmes_by_TX_Date(5)
 export def "all-programmes-by-tx-date5" [
   category: string
-  channel: string
+  channel: string@channel-completer
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1212,7 +1213,7 @@ export def "all-programmes-by-tx-date5" [
 # operationId: All_Programmes_by_Title(2)
 export def "all-programmes-by-title2" [
   category: string
-  channel: string
+  channel: string@channel-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1252,7 +1253,7 @@ export def "all-programmes-by-title2" [
 # operationId: All_Programmes_by_Title(5)
 export def "all-programmes-by-title5" [
   category: string
-  channel: string
+  channel: string@channel-completer
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2153,10 +2154,11 @@ export def "search-feed" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
-  --q: string # The programme name to look for, minimum length: 2 chars.Looking for programme names with special chars might be URL encoded.
+  --q: string # The programme name to look for, minimum length: 2 chars.Looking for programme names with special chars might be URL encoded. (required)
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
   let qp = [(serialize-qp "platform" $platform "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search.atom" $qp $auth.query)
   let accept_val = "application/xml"
@@ -2191,11 +2193,12 @@ export def "search-feed3" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer # The platform to use for the query. Alias 'client'.
-  --q: string # The programme name to look for, minimum length: 2 chars.Looking for programme names with special chars might be URL encoded.
+  --q: string # The programme name to look for, minimum length: 2 chars.Looking for programme names with special chars might be URL encoded. (required)
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($pageno | is-empty) { error make --unspanned { msg: "path parameter 'pageno' must be non-empty" } }
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
   let qp = [(serialize-qp "platform" $platform "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pageno: (encode-path-segment $pageno)} | format pattern "/search/page-{pageno}.atom") $qp $auth.query)
   let accept_val = "application/xml"
@@ -2342,7 +2345,7 @@ export def "tv-listings-feed2" [
   yyyy: string
   mm: string
   dd: string
-  channel: string
+  channel: string@channel-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

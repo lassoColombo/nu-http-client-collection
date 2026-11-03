@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {Ocp-Apim-Subscription-Key: $token_val}, query: "", location: "header"} }
+    "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {"Ocp-Apim-Subscription-Key": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -183,15 +183,15 @@ export def "train-custom-model-async" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-source: string # Source path containing the training documents.
+  source: string # Source path containing the training documents.
   --source-filter: record # Filter to apply to the documents in the source path for training. — shape: {includeSubFolders?: bool, prefix?: string}
   --use-label-file: oneof<nothing, bool> # Use label file for training a model. (default: false)
-]: any -> record<error: record<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/custom/models" $auth.query)
-  let req_body = {"source": $body_source, "sourceFilter": $source_filter, "useLabelFile": $use_label_file} | compact
+  let req_body = {"source": $source, "sourceFilter": $source_filter, "useLabelFile": $use_label_file} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -224,7 +224,7 @@ export def "delete-custom-model" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<error: record<code: string, message: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
@@ -300,7 +300,7 @@ export def "analyze-with-custom-model" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --include-text-details: oneof<nothing, bool> # Include text lines and element references in the result. (default: false)
   --body: record
-]: any -> record<error: record<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -378,7 +378,7 @@ export def "analyze-layout-async" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record<error: record<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -453,7 +453,7 @@ export def "analyze-receipt-async" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --include-text-details: oneof<nothing, bool> # Include text lines and element references in the result. (default: false)
   --body: record
-]: any -> record<error: record<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)

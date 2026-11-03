@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -150,28 +150,35 @@ export def "get-batch-delete-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --aws-access-key-id: string
-  --action: string
-  --signature-method: string
-  --signature-version: string
-  --timestamp: string
-  --version: string
-  --signature: string
-  --domain-name: string # The name of the domain in which the attributes are being deleted.
-  --items: list # A list of items on which to perform the operation.
-  --action-2: string@action-completer #  (disambiguated-2)
-  --version-2: string@version-completer #  (disambiguated-2)
+  --aws-access-key-id: string # required
+  --signature-method: string # required
+  --signature-version: string # required
+  --timestamp: string # required
+  --signature: string # required
+  --domain-name: string # The name of the domain in which the attributes are being deleted. (required)
+  --items: list # A list of items on which to perform the operation. (required)
+  --action: string@action-completer # required
+  --version: string@version-completer # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Items" $items "multi") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
+  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
+  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
+  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
+  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
+  if ($domain_name == null) { error make --unspanned { msg: "required query parameter 'DomainName' missing: pass --domain-name" } }
+  if ($items == null) { error make --unspanned { msg: "required query parameter 'Items' missing: pass --items" } }
+  let action = ($action | default "BatchDeleteAttributes")
+  let version = ($version | default "2009-04-15")
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Items" $items "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "DomainName": $domain_name, "Items": $items, "Action": $action_2, "Version": $version_2} | compact)
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "DomainName": $domain_name, "Items": $items, "Action": $action, "Version": $version} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -196,21 +203,26 @@ export def "post-batch-delete-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --aws-access-key-id: string
-  --action: string
-  --signature-method: string
-  --signature-version: string
-  --timestamp: string
-  --version: string
-  --signature: string
-  --action-2: string@action-completer #  (disambiguated-2)
-  --version-2: string@version-completer #  (disambiguated-2)
+  --aws-access-key-id: string # required
+  --signature-method: string # required
+  --signature-version: string # required
+  --timestamp: string # required
+  --signature: string # required
+  --action: string@action-completer # required
+  --version: string@version-completer # required
   --body: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
+  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
+  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
+  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
+  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
+  let action = ($action | default "BatchDeleteAttributes")
+  let version = ($version | default "2009-04-15")
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -219,7 +231,7 @@ export def "post-batch-delete-attributes" [
   let req = {
     method: "post"
     url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "Action": $action_2, "Version": $version_2} | compact)
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "Action": $action, "Version": $version} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "text/xml"
@@ -244,28 +256,35 @@ export def "get-batch-put-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --aws-access-key-id: string
-  --action: string
-  --signature-method: string
-  --signature-version: string
-  --timestamp: string
-  --version: string
-  --signature: string
-  --domain-name: string # The name of the domain in which the attributes are being stored.
-  --items: list # A list of items on which to perform the operation.
-  --action-2: string@action-completer-1 #  (disambiguated-2)
-  --version-2: string@version-completer #  (disambiguated-2)
+  --aws-access-key-id: string # required
+  --signature-method: string # required
+  --signature-version: string # required
+  --timestamp: string # required
+  --signature: string # required
+  --domain-name: string # The name of the domain in which the attributes are being stored. (required)
+  --items: list # A list of items on which to perform the operation. (required)
+  --action: string@action-completer-1 # required
+  --version: string@version-completer # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Items" $items "multi") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
+  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
+  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
+  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
+  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
+  if ($domain_name == null) { error make --unspanned { msg: "required query parameter 'DomainName' missing: pass --domain-name" } }
+  if ($items == null) { error make --unspanned { msg: "required query parameter 'Items' missing: pass --items" } }
+  let action = ($action | default "BatchPutAttributes")
+  let version = ($version | default "2009-04-15")
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Items" $items "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "DomainName": $domain_name, "Items": $items, "Action": $action_2, "Version": $version_2} | compact)
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "DomainName": $domain_name, "Items": $items, "Action": $action, "Version": $version} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -290,21 +309,26 @@ export def "post-batch-put-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --aws-access-key-id: string
-  --action: string
-  --signature-method: string
-  --signature-version: string
-  --timestamp: string
-  --version: string
-  --signature: string
-  --action-2: string@action-completer-1 #  (disambiguated-2)
-  --version-2: string@version-completer #  (disambiguated-2)
+  --aws-access-key-id: string # required
+  --signature-method: string # required
+  --signature-version: string # required
+  --timestamp: string # required
+  --signature: string # required
+  --action: string@action-completer-1 # required
+  --version: string@version-completer # required
   --body: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
+  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
+  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
+  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
+  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
+  let action = ($action | default "BatchPutAttributes")
+  let version = ($version | default "2009-04-15")
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -313,7 +337,7 @@ export def "post-batch-put-attributes" [
   let req = {
     method: "post"
     url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "Action": $action_2, "Version": $version_2} | compact)
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "Action": $action, "Version": $version} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "text/xml"
@@ -338,27 +362,33 @@ export def "get-create-domain" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --aws-access-key-id: string
-  --action: string
-  --signature-method: string
-  --signature-version: string
-  --timestamp: string
-  --version: string
-  --signature: string
-  --domain-name: string # The name of the domain to create. The name can range between 3 and 255 characters and can contain the following characters: a-z, A-Z, 0-9, '_', '-', and '.'.
-  --action-2: string@action-completer-2 #  (disambiguated-2)
-  --version-2: string@version-completer #  (disambiguated-2)
+  --aws-access-key-id: string # required
+  --signature-method: string # required
+  --signature-version: string # required
+  --timestamp: string # required
+  --signature: string # required
+  --domain-name: string # The name of the domain to create. The name can range between 3 and 255 characters and can contain the following characters: a-z, A-Z, 0-9, '_', '-', and '.'. (required)
+  --action: string@action-completer-2 # required
+  --version: string@version-completer # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
+  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
+  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
+  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
+  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
+  if ($domain_name == null) { error make --unspanned { msg: "required query parameter 'DomainName' missing: pass --domain-name" } }
+  let action = ($action | default "CreateDomain")
+  let version = ($version | default "2009-04-15")
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "DomainName": $domain_name, "Action": $action_2, "Version": $version_2} | compact)
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "DomainName": $domain_name, "Action": $action, "Version": $version} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -383,21 +413,26 @@ export def "post-create-domain" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --aws-access-key-id: string
-  --action: string
-  --signature-method: string
-  --signature-version: string
-  --timestamp: string
-  --version: string
-  --signature: string
-  --action-2: string@action-completer-2 #  (disambiguated-2)
-  --version-2: string@version-completer #  (disambiguated-2)
+  --aws-access-key-id: string # required
+  --signature-method: string # required
+  --signature-version: string # required
+  --timestamp: string # required
+  --signature: string # required
+  --action: string@action-completer-2 # required
+  --version: string@version-completer # required
   --body: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
+  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
+  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
+  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
+  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
+  let action = ($action | default "CreateDomain")
+  let version = ($version | default "2009-04-15")
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -406,7 +441,7 @@ export def "post-create-domain" [
   let req = {
     method: "post"
     url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "Action": $action_2, "Version": $version_2} | compact)
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "Action": $action, "Version": $version} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "text/xml"
@@ -431,30 +466,37 @@ export def "get-delete-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --aws-access-key-id: string
-  --action: string
-  --signature-method: string
-  --signature-version: string
-  --timestamp: string
-  --version: string
-  --signature: string
-  --domain-name: string # The name of the domain in which to perform the operation.
-  --item-name: string # The name of the item. Similar to rows on a spreadsheet, items represent individual objects that contain one or more value-attribute pairs.
+  --aws-access-key-id: string # required
+  --signature-method: string # required
+  --signature-version: string # required
+  --timestamp: string # required
+  --signature: string # required
+  --domain-name: string # The name of the domain in which to perform the operation. (required)
+  --item-name: string # The name of the item. Similar to rows on a spreadsheet, items represent individual objects that contain one or more value-attribute pairs. (required)
   --attributes: list # A list of Attributes. Similar to columns on a spreadsheet, attributes represent categories of data that can be assigned to items.
   --expected: record # The update condition which, if specified, determines whether the specified attributes will be deleted or not. The update condition must be satisfied in order for this request to be processed and the attributes to be deleted.
-  --action-2: string@action-completer-3 #  (disambiguated-2)
-  --version-2: string@version-completer #  (disambiguated-2)
+  --action: string@action-completer-3 # required
+  --version: string@version-completer # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "ItemName" $item_name "scalar") (serialize-qp "Attributes" $attributes "multi") (serialize-qp "Expected" $expected "multi") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
+  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
+  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
+  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
+  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
+  if ($domain_name == null) { error make --unspanned { msg: "required query parameter 'DomainName' missing: pass --domain-name" } }
+  if ($item_name == null) { error make --unspanned { msg: "required query parameter 'ItemName' missing: pass --item-name" } }
+  let action = ($action | default "DeleteAttributes")
+  let version = ($version | default "2009-04-15")
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "ItemName" $item_name "scalar") (serialize-qp "Attributes" $attributes "multi") (serialize-qp "Expected" $expected "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "DomainName": $domain_name, "ItemName": $item_name, "Attributes": $attributes, "Expected": $expected, "Action": $action_2, "Version": $version_2} | compact)
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "DomainName": $domain_name, "ItemName": $item_name, "Attributes": $attributes, "Expected": $expected, "Action": $action, "Version": $version} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -479,21 +521,26 @@ export def "post-delete-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --aws-access-key-id: string
-  --action: string
-  --signature-method: string
-  --signature-version: string
-  --timestamp: string
-  --version: string
-  --signature: string
-  --action-2: string@action-completer-3 #  (disambiguated-2)
-  --version-2: string@version-completer #  (disambiguated-2)
+  --aws-access-key-id: string # required
+  --signature-method: string # required
+  --signature-version: string # required
+  --timestamp: string # required
+  --signature: string # required
+  --action: string@action-completer-3 # required
+  --version: string@version-completer # required
   --body: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
+  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
+  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
+  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
+  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
+  let action = ($action | default "DeleteAttributes")
+  let version = ($version | default "2009-04-15")
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -502,7 +549,7 @@ export def "post-delete-attributes" [
   let req = {
     method: "post"
     url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "Action": $action_2, "Version": $version_2} | compact)
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "Action": $action, "Version": $version} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "text/xml"
@@ -527,27 +574,33 @@ export def "get-delete-domain" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --aws-access-key-id: string
-  --action: string
-  --signature-method: string
-  --signature-version: string
-  --timestamp: string
-  --version: string
-  --signature: string
-  --domain-name: string # The name of the domain to delete.
-  --action-2: string@action-completer-4 #  (disambiguated-2)
-  --version-2: string@version-completer #  (disambiguated-2)
+  --aws-access-key-id: string # required
+  --signature-method: string # required
+  --signature-version: string # required
+  --timestamp: string # required
+  --signature: string # required
+  --domain-name: string # The name of the domain to delete. (required)
+  --action: string@action-completer-4 # required
+  --version: string@version-completer # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
+  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
+  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
+  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
+  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
+  if ($domain_name == null) { error make --unspanned { msg: "required query parameter 'DomainName' missing: pass --domain-name" } }
+  let action = ($action | default "DeleteDomain")
+  let version = ($version | default "2009-04-15")
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "DomainName": $domain_name, "Action": $action_2, "Version": $version_2} | compact)
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "DomainName": $domain_name, "Action": $action, "Version": $version} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -572,21 +625,26 @@ export def "post-delete-domain" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --aws-access-key-id: string
-  --action: string
-  --signature-method: string
-  --signature-version: string
-  --timestamp: string
-  --version: string
-  --signature: string
-  --action-2: string@action-completer-4 #  (disambiguated-2)
-  --version-2: string@version-completer #  (disambiguated-2)
+  --aws-access-key-id: string # required
+  --signature-method: string # required
+  --signature-version: string # required
+  --timestamp: string # required
+  --signature: string # required
+  --action: string@action-completer-4 # required
+  --version: string@version-completer # required
   --body: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
+  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
+  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
+  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
+  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
+  let action = ($action | default "DeleteDomain")
+  let version = ($version | default "2009-04-15")
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -595,7 +653,7 @@ export def "post-delete-domain" [
   let req = {
     method: "post"
     url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "Action": $action_2, "Version": $version_2} | compact)
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "Action": $action, "Version": $version} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "text/xml"
@@ -620,27 +678,33 @@ export def "get-domain-metadata" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --aws-access-key-id: string
-  --action: string
-  --signature-method: string
-  --signature-version: string
-  --timestamp: string
-  --version: string
-  --signature: string
-  --domain-name: string # The name of the domain for which to display the metadata of.
-  --action-2: string@action-completer-5 #  (disambiguated-2)
-  --version-2: string@version-completer #  (disambiguated-2)
-]: nothing -> record<ItemCount: record, ItemNamesSizeBytes: record, AttributeNameCount: record, AttributeNamesSizeBytes: record, AttributeValueCount: record, AttributeValuesSizeBytes: record, Timestamp: record> {
+  --aws-access-key-id: string # required
+  --signature-method: string # required
+  --signature-version: string # required
+  --timestamp: string # required
+  --signature: string # required
+  --domain-name: string # The name of the domain for which to display the metadata of. (required)
+  --action: string@action-completer-5 # required
+  --version: string@version-completer # required
+]: nothing -> record<ItemCount: int, ItemNamesSizeBytes: int, AttributeNameCount: int, AttributeNamesSizeBytes: int, AttributeValueCount: int, AttributeValuesSizeBytes: int, Timestamp: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
+  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
+  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
+  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
+  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
+  if ($domain_name == null) { error make --unspanned { msg: "required query parameter 'DomainName' missing: pass --domain-name" } }
+  let action = ($action | default "DomainMetadata")
+  let version = ($version | default "2009-04-15")
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "DomainName": $domain_name, "Action": $action_2, "Version": $version_2} | compact)
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "DomainName": $domain_name, "Action": $action, "Version": $version} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -665,21 +729,26 @@ export def "post-domain-metadata" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --aws-access-key-id: string
-  --action: string
-  --signature-method: string
-  --signature-version: string
-  --timestamp: string
-  --version: string
-  --signature: string
-  --action-2: string@action-completer-5 #  (disambiguated-2)
-  --version-2: string@version-completer #  (disambiguated-2)
+  --aws-access-key-id: string # required
+  --signature-method: string # required
+  --signature-version: string # required
+  --timestamp: string # required
+  --signature: string # required
+  --action: string@action-completer-5 # required
+  --version: string@version-completer # required
   --body: any
-]: any -> record<ItemCount: record, ItemNamesSizeBytes: record, AttributeNameCount: record, AttributeNamesSizeBytes: record, AttributeValueCount: record, AttributeValuesSizeBytes: record, Timestamp: record> {
+]: any -> record<ItemCount: int, ItemNamesSizeBytes: int, AttributeNameCount: int, AttributeNamesSizeBytes: int, AttributeValueCount: int, AttributeValuesSizeBytes: int, Timestamp: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
+  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
+  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
+  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
+  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
+  let action = ($action | default "DomainMetadata")
+  let version = ($version | default "2009-04-15")
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -688,7 +757,7 @@ export def "post-domain-metadata" [
   let req = {
     method: "post"
     url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "Action": $action_2, "Version": $version_2} | compact)
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "Action": $action, "Version": $version} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "text/xml"
@@ -713,30 +782,37 @@ export def "get-get-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --aws-access-key-id: string
-  --action: string
-  --signature-method: string
-  --signature-version: string
-  --timestamp: string
-  --version: string
-  --signature: string
-  --domain-name: string # The name of the domain in which to perform the operation.
-  --item-name: string # The name of the item.
+  --aws-access-key-id: string # required
+  --signature-method: string # required
+  --signature-version: string # required
+  --timestamp: string # required
+  --signature: string # required
+  --domain-name: string # The name of the domain in which to perform the operation. (required)
+  --item-name: string # The name of the item. (required)
   --attribute-names: list # The names of the attributes.
   --consistent-read: oneof<nothing, bool> # Determines whether or not strong consistency should be enforced when data is read from SimpleDB. If true, any data previously written to SimpleDB will be returned. Otherwise, results will be consistent eventually, and the client may not see data that was written immediately before your read.
-  --action-2: string@action-completer-6 #  (disambiguated-2)
-  --version-2: string@version-completer #  (disambiguated-2)
-]: nothing -> record<Attributes: record> {
+  --action: string@action-completer-6 # required
+  --version: string@version-completer # required
+]: nothing -> record<Attributes: table<Name: string, AlternateNameEncoding: string, Value: string, AlternateValueEncoding: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "ItemName" $item_name "scalar") (serialize-qp "AttributeNames" $attribute_names "multi") (serialize-qp "ConsistentRead" $consistent_read "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
+  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
+  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
+  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
+  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
+  if ($domain_name == null) { error make --unspanned { msg: "required query parameter 'DomainName' missing: pass --domain-name" } }
+  if ($item_name == null) { error make --unspanned { msg: "required query parameter 'ItemName' missing: pass --item-name" } }
+  let action = ($action | default "GetAttributes")
+  let version = ($version | default "2009-04-15")
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "ItemName" $item_name "scalar") (serialize-qp "AttributeNames" $attribute_names "multi") (serialize-qp "ConsistentRead" $consistent_read "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "DomainName": $domain_name, "ItemName": $item_name, "AttributeNames": $attribute_names, "ConsistentRead": $consistent_read, "Action": $action_2, "Version": $version_2} | compact)
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "DomainName": $domain_name, "ItemName": $item_name, "AttributeNames": $attribute_names, "ConsistentRead": $consistent_read, "Action": $action, "Version": $version} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -761,21 +837,26 @@ export def "post-get-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --aws-access-key-id: string
-  --action: string
-  --signature-method: string
-  --signature-version: string
-  --timestamp: string
-  --version: string
-  --signature: string
-  --action-2: string@action-completer-6 #  (disambiguated-2)
-  --version-2: string@version-completer #  (disambiguated-2)
+  --aws-access-key-id: string # required
+  --signature-method: string # required
+  --signature-version: string # required
+  --timestamp: string # required
+  --signature: string # required
+  --action: string@action-completer-6 # required
+  --version: string@version-completer # required
   --body: any
-]: any -> record<Attributes: record> {
+]: any -> record<Attributes: table<Name: string, AlternateNameEncoding: string, Value: string, AlternateValueEncoding: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
+  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
+  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
+  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
+  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
+  let action = ($action | default "GetAttributes")
+  let version = ($version | default "2009-04-15")
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -784,7 +865,7 @@ export def "post-get-attributes" [
   let req = {
     method: "post"
     url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "Action": $action_2, "Version": $version_2} | compact)
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "Action": $action, "Version": $version} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "text/xml"
@@ -809,28 +890,33 @@ export def "get-list-domains" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --aws-access-key-id: string
-  --action: string
-  --signature-method: string
-  --signature-version: string
-  --timestamp: string
-  --version: string
-  --signature: string
+  --aws-access-key-id: string # required
+  --signature-method: string # required
+  --signature-version: string # required
+  --timestamp: string # required
+  --signature: string # required
   --max-number-of-domains: int # The maximum number of domain names you want returned. The range is 1 to 100. The default setting is 100.
   --next-token: string # A string informing Amazon SimpleDB where to start the next list of domain names.
-  --action-2: string@action-completer-7 #  (disambiguated-2)
-  --version-2: string@version-completer #  (disambiguated-2)
-]: nothing -> record<DomainNames: record, NextToken: record> {
+  --action: string@action-completer-7 # required
+  --version: string@version-completer # required
+]: nothing -> record<DomainNames: list<string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "MaxNumberOfDomains" $max_number_of_domains "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
+  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
+  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
+  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
+  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
+  let action = ($action | default "ListDomains")
+  let version = ($version | default "2009-04-15")
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "MaxNumberOfDomains" $max_number_of_domains "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "MaxNumberOfDomains": $max_number_of_domains, "NextToken": $next_token, "Action": $action_2, "Version": $version_2} | compact)
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "MaxNumberOfDomains": $max_number_of_domains, "NextToken": $next_token, "Action": $action, "Version": $version} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -855,23 +941,28 @@ export def "post-list-domains" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --aws-access-key-id: string
-  --action: string
-  --signature-method: string
-  --signature-version: string
-  --timestamp: string
-  --version: string
-  --signature: string
+  --aws-access-key-id: string # required
+  --signature-method: string # required
+  --signature-version: string # required
+  --timestamp: string # required
+  --signature: string # required
   --max-number-of-domains: string # Pagination limit
   --next-token: string # Pagination token
-  --action-2: string@action-completer-7 #  (disambiguated-2)
-  --version-2: string@version-completer #  (disambiguated-2)
+  --action: string@action-completer-7 # required
+  --version: string@version-completer # required
   --body: any
-]: any -> record<DomainNames: record, NextToken: record> {
+]: any -> record<DomainNames: list<string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "MaxNumberOfDomains" $max_number_of_domains "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
+  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
+  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
+  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
+  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
+  let action = ($action | default "ListDomains")
+  let version = ($version | default "2009-04-15")
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "MaxNumberOfDomains" $max_number_of_domains "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -880,7 +971,7 @@ export def "post-list-domains" [
   let req = {
     method: "post"
     url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "MaxNumberOfDomains": $max_number_of_domains, "NextToken": $next_token, "Action": $action_2, "Version": $version_2} | compact)
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "MaxNumberOfDomains": $max_number_of_domains, "NextToken": $next_token, "Action": $action, "Version": $version} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "text/xml"
@@ -905,30 +996,38 @@ export def "get-put-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --aws-access-key-id: string
-  --action: string
-  --signature-method: string
-  --signature-version: string
-  --timestamp: string
-  --version: string
-  --signature: string
-  --domain-name: string # The name of the domain in which to perform the operation.
-  --item-name: string # The name of the item.
-  --attributes: list # The list of attributes.
+  --aws-access-key-id: string # required
+  --signature-method: string # required
+  --signature-version: string # required
+  --timestamp: string # required
+  --signature: string # required
+  --domain-name: string # The name of the domain in which to perform the operation. (required)
+  --item-name: string # The name of the item. (required)
+  --attributes: list # The list of attributes. (required)
   --expected: record # The update condition which, if specified, determines whether the specified attributes will be updated or not. The update condition must be satisfied in order for this request to be processed and the attributes to be updated.
-  --action-2: string@action-completer-8 #  (disambiguated-2)
-  --version-2: string@version-completer #  (disambiguated-2)
+  --action: string@action-completer-8 # required
+  --version: string@version-completer # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "ItemName" $item_name "scalar") (serialize-qp "Attributes" $attributes "multi") (serialize-qp "Expected" $expected "multi") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
+  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
+  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
+  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
+  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
+  if ($domain_name == null) { error make --unspanned { msg: "required query parameter 'DomainName' missing: pass --domain-name" } }
+  if ($item_name == null) { error make --unspanned { msg: "required query parameter 'ItemName' missing: pass --item-name" } }
+  if ($attributes == null) { error make --unspanned { msg: "required query parameter 'Attributes' missing: pass --attributes" } }
+  let action = ($action | default "PutAttributes")
+  let version = ($version | default "2009-04-15")
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "ItemName" $item_name "scalar") (serialize-qp "Attributes" $attributes "multi") (serialize-qp "Expected" $expected "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "DomainName": $domain_name, "ItemName": $item_name, "Attributes": $attributes, "Expected": $expected, "Action": $action_2, "Version": $version_2} | compact)
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "DomainName": $domain_name, "ItemName": $item_name, "Attributes": $attributes, "Expected": $expected, "Action": $action, "Version": $version} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -953,21 +1052,26 @@ export def "post-put-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --aws-access-key-id: string
-  --action: string
-  --signature-method: string
-  --signature-version: string
-  --timestamp: string
-  --version: string
-  --signature: string
-  --action-2: string@action-completer-8 #  (disambiguated-2)
-  --version-2: string@version-completer #  (disambiguated-2)
+  --aws-access-key-id: string # required
+  --signature-method: string # required
+  --signature-version: string # required
+  --timestamp: string # required
+  --signature: string # required
+  --action: string@action-completer-8 # required
+  --version: string@version-completer # required
   --body: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
+  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
+  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
+  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
+  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
+  let action = ($action | default "PutAttributes")
+  let version = ($version | default "2009-04-15")
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -976,7 +1080,7 @@ export def "post-put-attributes" [
   let req = {
     method: "post"
     url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "Action": $action_2, "Version": $version_2} | compact)
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "Action": $action, "Version": $version} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "text/xml"
@@ -1001,29 +1105,35 @@ export def "get-select" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --aws-access-key-id: string
-  --action: string
-  --signature-method: string
-  --signature-version: string
-  --timestamp: string
-  --version: string
-  --signature: string
-  --select-expression: string # The expression used to query the domain.
+  --aws-access-key-id: string # required
+  --signature-method: string # required
+  --signature-version: string # required
+  --timestamp: string # required
+  --signature: string # required
+  --select-expression: string # The expression used to query the domain. (required)
   --next-token: string # A string informing Amazon SimpleDB where to start the next list of ItemNames.
   --consistent-read: oneof<nothing, bool> # Determines whether or not strong consistency should be enforced when data is read from SimpleDB. If true, any data previously written to SimpleDB will be returned. Otherwise, results will be consistent eventually, and the client may not see data that was written immediately before your read.
-  --action-2: string@action-completer-9 #  (disambiguated-2)
-  --version-2: string@version-completer #  (disambiguated-2)
-]: nothing -> record<Items: record, NextToken: record> {
+  --action: string@action-completer-9 # required
+  --version: string@version-completer # required
+]: nothing -> record<Items: table<Name: string, AlternateNameEncoding: string, Attributes: list>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "SelectExpression" $select_expression "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "ConsistentRead" $consistent_read "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
+  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
+  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
+  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
+  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
+  if ($select_expression == null) { error make --unspanned { msg: "required query parameter 'SelectExpression' missing: pass --select-expression" } }
+  let action = ($action | default "Select")
+  let version = ($version | default "2009-04-15")
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "SelectExpression" $select_expression "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "ConsistentRead" $consistent_read "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "SelectExpression": $select_expression, "NextToken": $next_token, "ConsistentRead": $consistent_read, "Action": $action_2, "Version": $version_2} | compact)
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "SelectExpression": $select_expression, "NextToken": $next_token, "ConsistentRead": $consistent_read, "Action": $action, "Version": $version} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1048,22 +1158,27 @@ export def "post-select" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --aws-access-key-id: string
-  --action: string
-  --signature-method: string
-  --signature-version: string
-  --timestamp: string
-  --version: string
-  --signature: string
+  --aws-access-key-id: string # required
+  --signature-method: string # required
+  --signature-version: string # required
+  --timestamp: string # required
+  --signature: string # required
   --next-token: string # Pagination token
-  --action-2: string@action-completer-9 #  (disambiguated-2)
-  --version-2: string@version-completer #  (disambiguated-2)
+  --action: string@action-completer-9 # required
+  --version: string@version-completer # required
   --body: any
-]: any -> record<Items: record, NextToken: record> {
+]: any -> record<Items: table<Name: string, AlternateNameEncoding: string, Attributes: list>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
+  if ($aws_access_key_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccessKeyId' missing: pass --aws-access-key-id" } }
+  if ($signature_method == null) { error make --unspanned { msg: "required query parameter 'SignatureMethod' missing: pass --signature-method" } }
+  if ($signature_version == null) { error make --unspanned { msg: "required query parameter 'SignatureVersion' missing: pass --signature-version" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'Timestamp' missing: pass --timestamp" } }
+  if ($signature == null) { error make --unspanned { msg: "required query parameter 'Signature' missing: pass --signature" } }
+  let action = ($action | default "Select")
+  let version = ($version | default "2009-04-15")
+  let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -1072,7 +1187,7 @@ export def "post-select" [
   let req = {
     method: "post"
     url: $full_url
-    query: ({"AWSAccessKeyId": $aws_access_key_id, "Action": $action, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Version": $version, "Signature": $signature, "NextToken": $next_token, "Action": $action_2, "Version": $version_2} | compact)
+    query: ({"AWSAccessKeyId": $aws_access_key_id, "SignatureMethod": $signature_method, "SignatureVersion": $signature_version, "Timestamp": $timestamp, "Signature": $signature, "NextToken": $next_token, "Action": $action, "Version": $version} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "text/xml"

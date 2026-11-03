@@ -205,7 +205,7 @@ export def "search-gifs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # Search query term or prhase.
+  --q: string # Search query term or prhase. (required)
   --limit: int # The maximum number of records to return. (format: int32, default: 25)
   --offset: int # An optional results offset. (format: int32, default: 0)
   --rating: string # Filters results by specified rating.
@@ -213,6 +213,7 @@ export def "search-gifs" [
 ]: nothing -> record<data: table<bitly_url: string, content_url: string, create_datetime: string, embded_url: string, featured_tags: list, id: string, images: record, import_datetime: string, rating: string, slug: string, source: string, source_post_url: string, source_tld: string, tags: list, trending_datetime: string, type: string, update_datetime: string, url: string, user: record, username: string>, meta: record<msg: string, response_id: string, status: int>, pagination: record<count: int, offset: int, total_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "rating" $rating "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/gifs/search" $qp $auth.query)
   let accept_val = "application/json"
@@ -245,10 +246,11 @@ export def "translate-gif" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --s: string # Search term.
+  --s: string # Search term. (required)
 ]: nothing -> record<data: record<bitly_url: string, content_url: string, create_datetime: string, embded_url: string, featured_tags: list<string>, id: string, images: record<downsized: record, downsized_large: record, downsized_medium: record, downsized_small: record, downsized_still: record, fixed_height: record, fixed_height_downsampled: record, fixed_height_small: record, fixed_height_small_still: record, fixed_height_still: record, fixed_width: record, fixed_width_downsampled: record, fixed_width_small: record, fixed_width_small_still: record, fixed_width_still: record, looping: record, original: record, original_still: record, preview: record, preview_gif: record>, import_datetime: string, rating: string, slug: string, source: string, source_post_url: string, source_tld: string, tags: list<string>, trending_datetime: string, type: string, update_datetime: string, url: string, user: record<avatar_url: string, banner_url: string, display_name: string, profile_url: string, twitter: string, username: string>, username: string>, meta: record<msg: string, response_id: string, status: int>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($s == null) { error make --unspanned { msg: "required query parameter 's' missing: pass --s" } }
   let qp = [(serialize-qp "s" $s "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/gifs/translate" $qp $auth.query)
   let accept_val = "application/json"
@@ -392,7 +394,7 @@ export def "search-stickers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # Search query term or prhase.
+  --q: string # Search query term or prhase. (required)
   --limit: int # The maximum number of records to return. (format: int32, default: 25)
   --offset: int # An optional results offset. (format: int32, default: 0)
   --rating: string # Filters results by specified rating.
@@ -400,6 +402,7 @@ export def "search-stickers" [
 ]: nothing -> record<data: table<bitly_url: string, content_url: string, create_datetime: string, embded_url: string, featured_tags: list, id: string, images: record, import_datetime: string, rating: string, slug: string, source: string, source_post_url: string, source_tld: string, tags: list, trending_datetime: string, type: string, update_datetime: string, url: string, user: record, username: string>, meta: record<msg: string, response_id: string, status: int>, pagination: record<count: int, offset: int, total_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "rating" $rating "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/stickers/search" $qp $auth.query)
   let accept_val = "application/json"
@@ -432,10 +435,11 @@ export def "translate-sticker" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --s: string # Search term.
+  --s: string # Search term. (required)
 ]: nothing -> record<data: record<bitly_url: string, content_url: string, create_datetime: string, embded_url: string, featured_tags: list<string>, id: string, images: record<downsized: record, downsized_large: record, downsized_medium: record, downsized_small: record, downsized_still: record, fixed_height: record, fixed_height_downsampled: record, fixed_height_small: record, fixed_height_small_still: record, fixed_height_still: record, fixed_width: record, fixed_width_downsampled: record, fixed_width_small: record, fixed_width_small_still: record, fixed_width_still: record, looping: record, original: record, original_still: record, preview: record, preview_gif: record>, import_datetime: string, rating: string, slug: string, source: string, source_post_url: string, source_tld: string, tags: list<string>, trending_datetime: string, type: string, update_datetime: string, url: string, user: record<avatar_url: string, banner_url: string, display_name: string, profile_url: string, twitter: string, username: string>, username: string>, meta: record<msg: string, response_id: string, status: int>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($s == null) { error make --unspanned { msg: "required query parameter 's' missing: pass --s" } }
   let qp = [(serialize-qp "s" $s "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/stickers/translate" $qp $auth.query)
   let accept_val = "application/json"

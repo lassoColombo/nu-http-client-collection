@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -151,12 +151,13 @@ export def "iot-security-solution-list-by-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version for the operation
+  --api-version: string # API version for the operation (required)
   --filter: string # Filter the IoT Security solution with OData syntax. Supports filtering by iotHubs.
-]: nothing -> record<nextLink: string, value: table<location: string, properties: record>> {
+]: nothing -> record<nextLink: string, value: table<location: string, properties: record, id: string, name: string, type: string, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/iotSecuritySolutions") $qp $auth.query)
   let accept_val = "application/json"
@@ -191,13 +192,14 @@ export def "iot-security-solution-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version for the operation
+  --api-version: string # API version for the operation (required)
   --filter: string # Filter the IoT Security solution with OData syntax. Supports filtering by iotHubs.
-]: nothing -> record<nextLink: string, value: table<location: string, properties: record>> {
+]: nothing -> record<nextLink: string, value: table<location: string, properties: record, id: string, name: string, type: string, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Security/iotSecuritySolutions") $qp $auth.query)
   let accept_val = "application/json"
@@ -233,13 +235,14 @@ export def "iot-security-solution-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version for the operation
-]: nothing -> record<error: record<code: string, message: string>> {
+  --api-version: string # API version for the operation (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($solution_name | is-empty) { error make --unspanned { msg: "path parameter 'solutionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), solution_name: (encode-path-segment $solution_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Security/iotSecuritySolutions/{solution_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -275,13 +278,14 @@ export def "iot-security-solution-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version for the operation
-]: nothing -> record<location: string, properties: record<autoDiscoveredResources: list<string>, disabledDataSources: list<string>, displayName: string, export: list<string>, iotHubs: list<string>, recommendationsConfiguration: list<record>, status: string, unmaskedIpLoggingStatus: string, userDefinedResources: record<query: string, querySubscriptions: list>, workspace: string>> {
+  --api-version: string # API version for the operation (required)
+]: nothing -> record<location: string, properties: record<autoDiscoveredResources: list<string>, disabledDataSources: list<string>, displayName: string, export: list<string>, iotHubs: list<string>, recommendationsConfiguration: list<record>, status: string, unmaskedIpLoggingStatus: string, userDefinedResources: record<query: string, querySubscriptions: list>, workspace: string>, id: string, name: string, type: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($solution_name | is-empty) { error make --unspanned { msg: "path parameter 'solutionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), solution_name: (encode-path-segment $solution_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Security/iotSecuritySolutions/{solution_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -318,16 +322,17 @@ export def "iot-security-solution-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version for the operation
+  --api-version: string # API version for the operation (required)
   --properties: record # Update Security Solution setting data — shape: {recommendationsConfiguration?: list, userDefinedResources?: record}
   --tags: record # Resource tags
-]: any -> record<location: string, properties: record<autoDiscoveredResources: list<string>, disabledDataSources: list<string>, displayName: string, export: list<string>, iotHubs: list<string>, recommendationsConfiguration: list<record>, status: string, unmaskedIpLoggingStatus: string, userDefinedResources: record<query: string, querySubscriptions: list>, workspace: string>> {
+]: any -> record<location: string, properties: record<autoDiscoveredResources: list<string>, disabledDataSources: list<string>, displayName: string, export: list<string>, iotHubs: list<string>, recommendationsConfiguration: list<record>, status: string, unmaskedIpLoggingStatus: string, userDefinedResources: record<query: string, querySubscriptions: list>, workspace: string>, id: string, name: string, type: string, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($solution_name | is-empty) { error make --unspanned { msg: "path parameter 'solutionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), solution_name: (encode-path-segment $solution_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Security/iotSecuritySolutions/{solution_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -366,17 +371,18 @@ export def "iot-security-solution-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version for the operation
+  --api-version: string # API version for the operation (required)
   --location: string # The resource location.
   --properties: record # Security Solution setting data — shape: {disabledDataSources?: list<string>, displayName: string, export?: list<string>, iotHubs: list<string>, recommendationsConfiguration?: list, status?: "Enabled"|"Disabled", unmaskedIpLoggingStatus?: "Disabled"|"Enabled", userDefinedResources?: record, workspace: string}
   --tags: record # Resource tags
-]: any -> record<location: string, properties: record<autoDiscoveredResources: list<string>, disabledDataSources: list<string>, displayName: string, export: list<string>, iotHubs: list<string>, recommendationsConfiguration: list<record>, status: string, unmaskedIpLoggingStatus: string, userDefinedResources: record<query: string, querySubscriptions: list>, workspace: string>> {
+]: any -> record<location: string, properties: record<autoDiscoveredResources: list<string>, disabledDataSources: list<string>, displayName: string, export: list<string>, iotHubs: list<string>, recommendationsConfiguration: list<record>, status: string, unmaskedIpLoggingStatus: string, userDefinedResources: record<query: string, querySubscriptions: list>, workspace: string>, id: string, name: string, type: string, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($solution_name | is-empty) { error make --unspanned { msg: "path parameter 'solutionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), solution_name: (encode-path-segment $solution_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Security/iotSecuritySolutions/{solution_name}") $qp $auth.query)
   let req_body = {"location": $location, "properties": $properties, "tags": $tags} | compact

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -145,12 +145,12 @@ export def commands []: nothing -> table {
 #
 # POST /v1/brokers
 # operationId: CreateBroker
-# --configuration shape: {Id?: any, Revision?: any}
-# --encryptionOptions shape: {KmsKeyId?: any, UseAwsOwnedKey?: any}
-# --ldapServerMetadata shape: {Hosts?: any, RoleBase?: any, RoleName?: any, RoleSearchMatching?: any, RoleSearchSubtree?: any, ServiceAccountPassword?: any, ServiceAccountUsername?: any, UserBase?: any, UserRoleName?: any, UserSearchMatching?: any, UserSearchSubtree?: any}
-# --logs shape: {Audit?: any, General?: any}
-# --maintenanceWindowStartTime shape: {DayOfWeek?: any, TimeOfDay?: any, TimeZone?: any}
-# --users item shape: {ConsoleAccess?: any, Groups?: any, Password: any, Username: any}
+# --configuration shape: {Id?: string, Revision?: int}
+# --encryptionOptions shape: {KmsKeyId?: string, UseAwsOwnedKey?: bool}
+# --ldapServerMetadata shape: {Hosts?: list<string>, RoleBase?: string, RoleName?: string, RoleSearchMatching?: string, RoleSearchSubtree?: bool, ServiceAccountPassword?: string, ServiceAccountUsername?: string, UserBase?: string, UserRoleName?: string, UserSearchMatching?: string, UserSearchSubtree?: bool}
+# --logs shape: {Audit?: bool, General?: bool}
+# --maintenanceWindowStartTime shape: {DayOfWeek?: "MONDAY"|"TUESDAY"|"WEDNESDAY"|"THURSDAY"|"FRIDAY"|"SATURDAY"|"SUNDAY", TimeOfDay?: string, TimeZone?: string}
+# --users item shape: {ConsoleAccess?: bool, Groups?: list<string>, Password: string, Username: string}
 export def "create-broker" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -171,29 +171,31 @@ export def "create-broker" [
   --authentication-strategy: string@authentication-strategy-completer # Optional. The authentication strategy used to secure the broker. The default is SIMPLE.
   --auto-minor-version-upgrade: oneof<nothing, bool> # Enables automatic upgrades to new minor versions for brokers, as new versions are released and supported by Amazon MQ. Automatic upgrades occur during the scheduled maintenance window of the broker or after a manual broker reboot. Set to true by default, if no value is specified.
   broker_name: string # Required. The broker's name. This value must be unique in your AWS account, 1-50 characters long, must contain only letters, numbers, dashes, and underscores, and must not contain white spaces, brackets, wildcard characters, or special characters.
-  --configuration: record # A list of information about the configuration. Does not apply to RabbitMQ brokers. — shape: {Id?: any, Revision?: any}
+  --configuration: record # A list of information about the configuration. Does not apply to RabbitMQ brokers. — shape: {Id?: string, Revision?: int}
   --creator-request-id: string # The unique ID that the requester receives for the created broker. Amazon MQ passes your ID with the API action. Note: We recommend using a Universally Unique Identifier (UUID) for the creatorRequestId. You may omit the creatorRequestId if your application doesn't require idempotency.
   deployment_mode: string@deployment-mode-completer # The broker's deployment mode.
-  --encryption-options: record # Does not apply to RabbitMQ brokers. Encryption options for the broker. — shape: {KmsKeyId?: any, UseAwsOwnedKey?: any}
+  --encryption-options: record # Does not apply to RabbitMQ brokers. Encryption options for the broker. — shape: {KmsKeyId?: string, UseAwsOwnedKey?: bool}
   engine_type: string@engine-type-completer # The type of broker engine. Amazon MQ supports ActiveMQ and RabbitMQ.
   engine_version: string # Required. The broker engine's version. For a list of supported engine versions, see Supported engines (https://docs.aws.amazon.com//amazon-mq/latest/developer-guide/broker-engine.html).
   host_instance_type: string # Required. The broker's instance type.
-  --ldap-server-metadata: record # Optional. The metadata of the LDAP server used to authenticate and authorize connections to the broker. Does not apply to RabbitMQ brokers. — shape: {Hosts?: any, RoleBase?: any, RoleName?: any, RoleSearchMatching?: any, RoleSearchSubtree?: any, ServiceAccountPassword?: any, ServiceAccountUsername?: any, UserBase?: any, UserRoleName?: any, UserSearchMatching?: any, UserSearchSubtree?: any}
-  --logs: record # The list of information about logs to be enabled for the specified broker. — shape: {Audit?: any, General?: any}
-  --maintenance-window-start-time: record # The scheduled time period relative to UTC during which Amazon MQ begins to apply pending updates or patches to the broker. — shape: {DayOfWeek?: any, TimeOfDay?: any, TimeZone?: any}
+  --ldap-server-metadata: record # Optional. The metadata of the LDAP server used to authenticate and authorize connections to the broker. Does not apply to RabbitMQ brokers. — shape: {Hosts?: list<string>, RoleBase?: string, RoleName?: string, RoleSearchMatching?: string, RoleSearchSubtree?: bool, ServiceAccountPassword?: string, ServiceAccountUsername?: string, UserBase?: string, UserRoleName?: string, UserSearchMatching?: string, UserSearchSubtree?: bool}
+  --logs: record # The list of information about logs to be enabled for the specified broker. — shape: {Audit?: bool, General?: bool}
+  --maintenance-window-start-time: record # The scheduled time period relative to UTC during which Amazon MQ begins to apply pending updates or patches to the broker. — shape: {DayOfWeek?: "MONDAY"|"TUESDAY"|"WEDNESDAY"|"THURSDAY"|"FRIDAY"|"SATURDAY"|"SUNDAY", TimeOfDay?: string, TimeZone?: string}
   --publicly-accessible: oneof<nothing, bool> # Enables connections from applications outside of the VPC that hosts the broker's subnets. Set to false by default, if no value is provided.
   --security-groups: list<string> # The list of rules (1 minimum, 125 maximum) that authorize connections to brokers.
   --storage-type: string@storage-type-completer # The broker's storage type. EFS is not supported for RabbitMQ engine type.
   --subnet-ids: list<string> # The list of groups that define which subnets and IP ranges the broker can use from different Availability Zones. If you specify more than one subnet, the subnets must be in different Availability Zones. Amazon MQ will not be able to create VPC endpoints for your broker with multiple subnets in the same Availability Zone. A SINGLE_INSTANCE deployment requires one subnet (for example, the default subnet). An ACTIVE_STANDBY_MULTI_AZ Amazon MQ for ActiveMQ deployment requires two subnets. A CLUSTER_MULTI_AZ Amazon MQ for RabbitMQ deployment has no subnet requirements when deployed with public accessibility. Deployment without public accessibility requires at least one subnet. If you specify subnets in a shared VPC (https://docs.aws.amazon.com/vpc/latest/userguide/vpc-sharing.html) for a RabbitMQ broker, the associated VPC to which the specified subnets belong must be owned by your AWS account. Amazon MQ will not be able to create VPC endpoints in VPCs that are not owned by your AWS account.
   --tags: record # Create tags when creating the broker.
-  users: list # Required. The list of broker users (persons or applications) who can access queues and topics. This value can contain only alphanumeric characters, dashes, periods, underscores, and tildes (- . _ ~). This value must be 2-100 characters long. Amazon MQ for RabbitMQ When you create an Amazon MQ for RabbitMQ broker, one and only one administrative user is accepted and created when a broker is first provisioned. All subsequent broker users are created by making RabbitMQ API calls directly to brokers or via the RabbitMQ web console. — item shape: {ConsoleAccess?: any, Groups?: any, Password: any, Username: any}
-]: any -> record<BrokerArn: record, BrokerId: record> {
+  users: list # Required. The list of broker users (persons or applications) who can access queues and topics. This value can contain only alphanumeric characters, dashes, periods, underscores, and tildes (- . _ ~). This value must be 2-100 characters long. Amazon MQ for RabbitMQ When you create an Amazon MQ for RabbitMQ broker, one and only one administrative user is accepted and created when a broker is first provisioned. All subsequent broker users are created by making RabbitMQ API calls directly to brokers or via the RabbitMQ web console. — item shape: {ConsoleAccess?: bool, Groups?: list<string>, Password: string, Username: string}
+]: any -> record<BrokerArn: string, BrokerId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/brokers" $auth.query)
   let req_body = {"authenticationStrategy": $authentication_strategy, "autoMinorVersionUpgrade": $auto_minor_version_upgrade, "brokerName": $broker_name, "configuration": $configuration, "creatorRequestId": $creator_request_id, "deploymentMode": $deployment_mode, "encryptionOptions": $encryption_options, "engineType": $engine_type, "engineVersion": $engine_version, "hostInstanceType": $host_instance_type, "ldapServerMetadata": $ldap_server_metadata, "logs": $logs, "maintenanceWindowStartTime": $maintenance_window_start_time, "publiclyAccessible": $publicly_accessible, "securityGroups": $security_groups, "storageType": $storage_type, "subnetIds": $subnet_ids, "tags": $tags, "users": $users} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "autoMinorVersionUpgrade") == null) { error make --unspanned { msg: "required body field 'autoMinorVersionUpgrade' missing: pass --auto-minor-version-upgrade or pipe a record" } }
+  if (($req_body | get -o "publiclyAccessible") == null) { error make --unspanned { msg: "required body field 'publiclyAccessible' missing: pass --publicly-accessible or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
@@ -237,7 +239,7 @@ export def "list-brokers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<BrokerSummaries: record, NextToken: record> {
+]: nothing -> record<BrokerSummaries: table<BrokerArn: string, BrokerId: string, BrokerName: string, BrokerState: string, Created: string, DeploymentMode: string, EngineType: string, HostInstanceType: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -286,7 +288,7 @@ export def "create-configuration" [
   engine_version: string # Required. The broker engine's version. For a list of supported engine versions, see Supported engines (https://docs.aws.amazon.com//amazon-mq/latest/developer-guide/broker-engine.html).
   name: string # Required. The name of the configuration. This value can contain only alphanumeric characters, dashes, periods, underscores, and tildes (- . _ ~). This value must be 1-150 characters long.
   --tags: record # Create tags when creating the configuration.
-]: any -> record<Arn: record, AuthenticationStrategy: record, Created: record, Id: record, LatestRevision: record<Created: record, Description: record, Revision: record>, Name: record> {
+]: any -> record<Arn: string, AuthenticationStrategy: string, Created: string, Id: string, LatestRevision: record<Created: string, Description: string, Revision: int>, Name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -334,7 +336,7 @@ export def "list-configurations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Configurations: record, MaxResults: record, NextToken: record> {
+]: nothing -> record<Configurations: table<Arn: string, AuthenticationStrategy: string, Created: string, Description: string, EngineType: string, EngineVersion: string, Id: string, LatestRevision: record, Name: string, Tags: record>, MaxResults: int, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -574,7 +576,7 @@ export def "describe-user" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<BrokerId: record, ConsoleAccess: record, Groups: record, Pending: record<ConsoleAccess: record, Groups: record, PendingChange: record>, Username: record> {
+]: nothing -> record<BrokerId: string, ConsoleAccess: bool, Groups: list<string>, Pending: record<ConsoleAccess: bool, Groups: list<string>, PendingChange: string>, Username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($broker_id | is-empty) { error make --unspanned { msg: "path parameter 'broker-id' must be non-empty" } }
@@ -673,7 +675,7 @@ export def "delete-broker" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<BrokerId: record> {
+]: nothing -> record<BrokerId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($broker_id | is-empty) { error make --unspanned { msg: "path parameter 'broker-id' must be non-empty" } }
@@ -718,7 +720,7 @@ export def "describe-broker" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ActionsRequired: record, AuthenticationStrategy: record, AutoMinorVersionUpgrade: record, BrokerArn: record, BrokerId: record, BrokerInstances: record, BrokerName: record, BrokerState: record, Configurations: record<Current: record<Id: record, Revision: record>, History: record, Pending: record<Id: record, Revision: record>>, Created: record, DeploymentMode: record, EncryptionOptions: record<KmsKeyId: record, UseAwsOwnedKey: record>, EngineType: record, EngineVersion: record, HostInstanceType: record, LdapServerMetadata: record<Hosts: record, RoleBase: record, RoleName: record, RoleSearchMatching: record, RoleSearchSubtree: record, ServiceAccountUsername: record, UserBase: record, UserRoleName: record, UserSearchMatching: record, UserSearchSubtree: record>, Logs: record<Audit: record, AuditLogGroup: record, General: record, GeneralLogGroup: record, Pending: record<Audit: record, General: record>>, MaintenanceWindowStartTime: record<DayOfWeek: record, TimeOfDay: record, TimeZone: record>, PendingAuthenticationStrategy: record, PendingEngineVersion: record, PendingHostInstanceType: record, PendingLdapServerMetadata: record<Hosts: record, RoleBase: record, RoleName: record, RoleSearchMatching: record, RoleSearchSubtree: record, ServiceAccountUsername: record, UserBase: record, UserRoleName: record, UserSearchMatching: record, UserSearchSubtree: record>, PendingSecurityGroups: record, PubliclyAccessible: record, SecurityGroups: record, StorageType: record, SubnetIds: record, Tags: record, Users: record> {
+]: nothing -> record<ActionsRequired: table<ActionRequiredCode: string, ActionRequiredInfo: string>, AuthenticationStrategy: string, AutoMinorVersionUpgrade: bool, BrokerArn: string, BrokerId: string, BrokerInstances: table<ConsoleURL: string, Endpoints: list, IpAddress: string>, BrokerName: string, BrokerState: string, Configurations: record<Current: record<Id: string, Revision: int>, History: list<record>, Pending: record<Id: string, Revision: int>>, Created: string, DeploymentMode: string, EncryptionOptions: record<KmsKeyId: string, UseAwsOwnedKey: bool>, EngineType: string, EngineVersion: string, HostInstanceType: string, LdapServerMetadata: record<Hosts: list<string>, RoleBase: string, RoleName: string, RoleSearchMatching: string, RoleSearchSubtree: bool, ServiceAccountUsername: string, UserBase: string, UserRoleName: string, UserSearchMatching: string, UserSearchSubtree: bool>, Logs: record<Audit: bool, AuditLogGroup: string, General: bool, GeneralLogGroup: string, Pending: record<Audit: bool, General: bool>>, MaintenanceWindowStartTime: record<DayOfWeek: string, TimeOfDay: string, TimeZone: string>, PendingAuthenticationStrategy: string, PendingEngineVersion: string, PendingHostInstanceType: string, PendingLdapServerMetadata: record<Hosts: list<string>, RoleBase: string, RoleName: string, RoleSearchMatching: string, RoleSearchSubtree: bool, ServiceAccountUsername: string, UserBase: string, UserRoleName: string, UserSearchMatching: string, UserSearchSubtree: bool>, PendingSecurityGroups: list<string>, PubliclyAccessible: bool, SecurityGroups: list<string>, StorageType: string, SubnetIds: list<string>, Tags: record, Users: table<PendingChange: string, Username: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($broker_id | is-empty) { error make --unspanned { msg: "path parameter 'broker-id' must be non-empty" } }
@@ -745,10 +747,10 @@ export def "describe-broker" [
 #
 # PUT /v1/brokers/{broker-id}
 # operationId: UpdateBroker
-# --configuration shape: {Id?: any, Revision?: any}
-# --ldapServerMetadata shape: {Hosts?: any, RoleBase?: any, RoleName?: any, RoleSearchMatching?: any, RoleSearchSubtree?: any, ServiceAccountPassword?: any, ServiceAccountUsername?: any, UserBase?: any, UserRoleName?: any, UserSearchMatching?: any, UserSearchSubtree?: any}
-# --logs shape: {Audit?: any, General?: any}
-# --maintenanceWindowStartTime shape: {DayOfWeek?: any, TimeOfDay?: any, TimeZone?: any}
+# --configuration shape: {Id?: string, Revision?: int}
+# --ldapServerMetadata shape: {Hosts?: list<string>, RoleBase?: string, RoleName?: string, RoleSearchMatching?: string, RoleSearchSubtree?: bool, ServiceAccountPassword?: string, ServiceAccountUsername?: string, UserBase?: string, UserRoleName?: string, UserSearchMatching?: string, UserSearchSubtree?: bool}
+# --logs shape: {Audit?: bool, General?: bool}
+# --maintenanceWindowStartTime shape: {DayOfWeek?: "MONDAY"|"TUESDAY"|"WEDNESDAY"|"THURSDAY"|"FRIDAY"|"SATURDAY"|"SUNDAY", TimeOfDay?: string, TimeZone?: string}
 export def "update-broker" [
   broker_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -769,14 +771,14 @@ export def "update-broker" [
   --x-amz-signed-headers: string
   --authentication-strategy: string@authentication-strategy-completer # Optional. The authentication strategy used to secure the broker. The default is SIMPLE.
   --auto-minor-version-upgrade: oneof<nothing, bool> # Enables automatic upgrades to new minor versions for brokers, as new versions are released and supported by Amazon MQ. Automatic upgrades occur during the scheduled maintenance window of the broker or after a manual broker reboot.
-  --configuration: record # A list of information about the configuration. Does not apply to RabbitMQ brokers. — shape: {Id?: any, Revision?: any}
+  --configuration: record # A list of information about the configuration. Does not apply to RabbitMQ brokers. — shape: {Id?: string, Revision?: int}
   --engine-version: string # The broker engine version. For a list of supported engine versions, see Supported engines (https://docs.aws.amazon.com//amazon-mq/latest/developer-guide/broker-engine.html).
   --host-instance-type: string # The broker's host instance type to upgrade to. For a list of supported instance types, see Broker instance types (https://docs.aws.amazon.com//amazon-mq/latest/developer-guide/broker.html#broker-instance-types).
-  --ldap-server-metadata: record # Optional. The metadata of the LDAP server used to authenticate and authorize connections to the broker. Does not apply to RabbitMQ brokers. — shape: {Hosts?: any, RoleBase?: any, RoleName?: any, RoleSearchMatching?: any, RoleSearchSubtree?: any, ServiceAccountPassword?: any, ServiceAccountUsername?: any, UserBase?: any, UserRoleName?: any, UserSearchMatching?: any, UserSearchSubtree?: any}
-  --logs: record # The list of information about logs to be enabled for the specified broker. — shape: {Audit?: any, General?: any}
-  --maintenance-window-start-time: record # The scheduled time period relative to UTC during which Amazon MQ begins to apply pending updates or patches to the broker. — shape: {DayOfWeek?: any, TimeOfDay?: any, TimeZone?: any}
+  --ldap-server-metadata: record # Optional. The metadata of the LDAP server used to authenticate and authorize connections to the broker. Does not apply to RabbitMQ brokers. — shape: {Hosts?: list<string>, RoleBase?: string, RoleName?: string, RoleSearchMatching?: string, RoleSearchSubtree?: bool, ServiceAccountPassword?: string, ServiceAccountUsername?: string, UserBase?: string, UserRoleName?: string, UserSearchMatching?: string, UserSearchSubtree?: bool}
+  --logs: record # The list of information about logs to be enabled for the specified broker. — shape: {Audit?: bool, General?: bool}
+  --maintenance-window-start-time: record # The scheduled time period relative to UTC during which Amazon MQ begins to apply pending updates or patches to the broker. — shape: {DayOfWeek?: "MONDAY"|"TUESDAY"|"WEDNESDAY"|"THURSDAY"|"FRIDAY"|"SATURDAY"|"SUNDAY", TimeOfDay?: string, TimeZone?: string}
   --security-groups: list<string> # The list of security groups (1 minimum, 5 maximum) that authorizes connections to brokers.
-]: any -> record<AuthenticationStrategy: record, AutoMinorVersionUpgrade: record, BrokerId: record, Configuration: record<Id: record, Revision: record>, EngineVersion: record, HostInstanceType: record, LdapServerMetadata: record<Hosts: record, RoleBase: record, RoleName: record, RoleSearchMatching: record, RoleSearchSubtree: record, ServiceAccountUsername: record, UserBase: record, UserRoleName: record, UserSearchMatching: record, UserSearchSubtree: record>, Logs: record<Audit: record, General: record>, MaintenanceWindowStartTime: record<DayOfWeek: record, TimeOfDay: record, TimeZone: record>, SecurityGroups: record> {
+]: any -> record<AuthenticationStrategy: string, AutoMinorVersionUpgrade: bool, BrokerId: string, Configuration: record<Id: string, Revision: int>, EngineVersion: string, HostInstanceType: string, LdapServerMetadata: record<Hosts: list<string>, RoleBase: string, RoleName: string, RoleSearchMatching: string, RoleSearchSubtree: bool, ServiceAccountUsername: string, UserBase: string, UserRoleName: string, UserSearchMatching: string, UserSearchSubtree: bool>, Logs: record<Audit: bool, General: bool>, MaintenanceWindowStartTime: record<DayOfWeek: string, TimeOfDay: string, TimeZone: string>, SecurityGroups: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -817,7 +819,7 @@ export def "delete-tags" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # An array of tag keys to delete
+  --tag-keys: list # An array of tag keys to delete (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -829,6 +831,7 @@ export def "delete-tags" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resource-arn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/v1/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"
@@ -873,7 +876,7 @@ export def "describe-broker-engine-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<BrokerEngineTypes: record, MaxResults: record, NextToken: record> {
+]: nothing -> record<BrokerEngineTypes: table<EngineType: string, EngineVersions: list>, MaxResults: int, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "engineType" $engine_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -922,7 +925,7 @@ export def "describe-broker-instance-options" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<BrokerInstanceOptions: record, MaxResults: record, NextToken: record> {
+]: nothing -> record<BrokerInstanceOptions: table<AvailabilityZones: list, EngineType: string, HostInstanceType: string, StorageType: string, SupportedDeploymentModes: list, SupportedEngineVersions: list>, MaxResults: int, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "engineType" $engine_type "scalar") (serialize-qp "hostInstanceType" $host_instance_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "storageType" $storage_type "scalar")] | flatten | str join "&"
@@ -967,7 +970,7 @@ export def "describe-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: record, AuthenticationStrategy: record, Created: record, Description: record, EngineType: record, EngineVersion: record, Id: record, LatestRevision: record<Created: record, Description: record, Revision: record>, Name: record, Tags: record> {
+]: nothing -> record<Arn: string, AuthenticationStrategy: string, Created: string, Description: string, EngineType: string, EngineVersion: string, Id: string, LatestRevision: record<Created: string, Description: string, Revision: int>, Name: string, Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($configuration_id | is-empty) { error make --unspanned { msg: "path parameter 'configuration-id' must be non-empty" } }
@@ -1014,7 +1017,7 @@ export def "update-configuration" [
   --x-amz-signed-headers: string
   data: string # Required. The base64-encoded XML configuration.
   --description: string # The description of the configuration.
-]: any -> record<Arn: record, Created: record, Id: record, LatestRevision: record<Created: record, Description: record, Revision: record>, Name: record, Warnings: record> {
+]: any -> record<Arn: string, Created: string, Id: string, LatestRevision: record<Created: string, Description: string, Revision: int>, Name: string, Warnings: table<AttributeName: string, ElementName: string, Reason: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1063,7 +1066,7 @@ export def "describe-configuration-revision" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ConfigurationId: record, Created: record, Data: record, Description: record> {
+]: nothing -> record<ConfigurationId: string, Created: string, Data: string, Description: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($configuration_id | is-empty) { error make --unspanned { msg: "path parameter 'configuration-id' must be non-empty" } }
@@ -1111,7 +1114,7 @@ export def "list-configuration-revisions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ConfigurationId: record, MaxResults: record, NextToken: record, Revisions: record> {
+]: nothing -> record<ConfigurationId: string, MaxResults: int, NextToken: string, Revisions: table<Created: string, Description: string, Revision: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($configuration_id | is-empty) { error make --unspanned { msg: "path parameter 'configuration-id' must be non-empty" } }
@@ -1159,7 +1162,7 @@ export def "list-users" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<BrokerId: record, MaxResults: record, NextToken: record, Users: record> {
+]: nothing -> record<BrokerId: string, MaxResults: int, NextToken: string, Users: table<PendingChange: string, Username: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($broker_id | is-empty) { error make --unspanned { msg: "path parameter 'broker-id' must be non-empty" } }

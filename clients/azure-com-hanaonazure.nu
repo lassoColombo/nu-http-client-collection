@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -156,10 +156,11 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<value: table<display: record, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.HanaOnAzure/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -193,11 +194,12 @@ export def "hana-instances-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.HanaOnAzure/hanaInstances") $qp $auth.query)
   let accept_val = "application/json"
@@ -231,11 +233,12 @@ export def "sap-monitors-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.HanaOnAzure/sapMonitors") $qp $auth.query)
   let accept_val = "application/json"
@@ -270,12 +273,13 @@ export def "hana-instances-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HanaOnAzure/hanaInstances") $qp $auth.query)
   let accept_val = "application/json"
@@ -311,13 +315,14 @@ export def "hana-instances-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
-]: nothing -> record<code: string, message: string> {
+  --api-version: string # Client API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($hana_instance_name | is-empty) { error make --unspanned { msg: "path parameter 'hanaInstanceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hana_instance_name: (encode-path-segment $hana_instance_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HanaOnAzure/hanaInstances/{hana_instance_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -353,13 +358,14 @@ export def "hana-instances-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<properties: record<hanaInstanceId: string, hardwareProfile: record<hanaInstanceSize: string, hardwareType: string>, hwRevision: string, networkProfile: record<circuitId: string, networkInterfaces: list>, osProfile: record<computerName: string, osType: string, sshPublicKey: string, version: string>, partnerNodeId: string, powerState: string, provisioningState: string, proximityPlacementGroup: string, storageProfile: record<nfsIpAddress: string, osDisks: list>>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($hana_instance_name | is-empty) { error make --unspanned { msg: "path parameter 'hanaInstanceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hana_instance_name: (encode-path-segment $hana_instance_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HanaOnAzure/hanaInstances/{hana_instance_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -395,7 +401,7 @@ export def "hana-instances-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --tags: record # Tags field of the HANA instance.
 ]: any -> record<properties: record<hanaInstanceId: string, hardwareProfile: record<hanaInstanceSize: string, hardwareType: string>, hwRevision: string, networkProfile: record<circuitId: string, networkInterfaces: list>, osProfile: record<computerName: string, osType: string, sshPublicKey: string, version: string>, partnerNodeId: string, powerState: string, provisioningState: string, proximityPlacementGroup: string, storageProfile: record<nfsIpAddress: string, osDisks: list>>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
@@ -404,6 +410,7 @@ export def "hana-instances-update" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($hana_instance_name | is-empty) { error make --unspanned { msg: "path parameter 'hanaInstanceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hana_instance_name: (encode-path-segment $hana_instance_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HanaOnAzure/hanaInstances/{hana_instance_name}") $qp $auth.query)
   let req_body = {"tags": $tags} | compact
@@ -442,7 +449,7 @@ export def "hana-instances-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --properties: any # Describes the properties of a HANA instance. — shape: {hardwareProfile?: any, networkProfile?: any, osProfile?: any, partnerNodeId?: string, storageProfile?: any}
   --location: string # Resource location
 ]: any -> record<properties: record<hanaInstanceId: string, hardwareProfile: record<hanaInstanceSize: string, hardwareType: string>, hwRevision: string, networkProfile: record<circuitId: string, networkInterfaces: list>, osProfile: record<computerName: string, osType: string, sshPublicKey: string, version: string>, partnerNodeId: string, powerState: string, provisioningState: string, proximityPlacementGroup: string, storageProfile: record<nfsIpAddress: string, osDisks: list>>, id: string, location: string, name: string, tags: record, type: string> {
@@ -452,6 +459,7 @@ export def "hana-instances-create" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($hana_instance_name | is-empty) { error make --unspanned { msg: "path parameter 'hanaInstanceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hana_instance_name: (encode-path-segment $hana_instance_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HanaOnAzure/hanaInstances/{hana_instance_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location} | compact
@@ -489,13 +497,14 @@ export def "hana-instances-restart" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
-]: nothing -> record<code: string, message: string> {
+  --api-version: string # Client API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($hana_instance_name | is-empty) { error make --unspanned { msg: "path parameter 'hanaInstanceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hana_instance_name: (encode-path-segment $hana_instance_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HanaOnAzure/hanaInstances/{hana_instance_name}/restart") $qp $auth.query)
   let accept_val = "application/json"
@@ -531,13 +540,14 @@ export def "hana-instances-shutdown" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
-]: nothing -> record<code: string, message: string> {
+  --api-version: string # Client API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($hana_instance_name | is-empty) { error make --unspanned { msg: "path parameter 'hanaInstanceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hana_instance_name: (encode-path-segment $hana_instance_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HanaOnAzure/hanaInstances/{hana_instance_name}/shutdown") $qp $auth.query)
   let accept_val = "application/json"
@@ -573,13 +583,14 @@ export def "hana-instances-start" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
-]: nothing -> record<code: string, message: string> {
+  --api-version: string # Client API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($hana_instance_name | is-empty) { error make --unspanned { msg: "path parameter 'hanaInstanceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), hana_instance_name: (encode-path-segment $hana_instance_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HanaOnAzure/hanaInstances/{hana_instance_name}/start") $qp $auth.query)
   let accept_val = "application/json"
@@ -615,13 +626,14 @@ export def "sap-monitors-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
-]: nothing -> record<code: string, message: string> {
+  --api-version: string # Client API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($sap_monitor_name | is-empty) { error make --unspanned { msg: "path parameter 'sapMonitorName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), sap_monitor_name: (encode-path-segment $sap_monitor_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HanaOnAzure/sapMonitors/{sap_monitor_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -657,13 +669,14 @@ export def "sap-monitors-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
 ]: nothing -> record<properties: record<enableCustomerAnalytics: bool, hanaDbCredentialsMsiId: string, hanaDbName: string, hanaDbPassword: string, hanaDbPasswordKeyVaultUrl: string, hanaDbSqlPort: int, hanaDbUsername: string, hanaHostname: string, hanaSubnet: string, keyVaultId: string, logAnalyticsWorkspaceArmId: string, logAnalyticsWorkspaceId: string, logAnalyticsWorkspaceSharedKey: string, managedResourceGroupName: string, provisioningState: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($sap_monitor_name | is-empty) { error make --unspanned { msg: "path parameter 'sapMonitorName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), sap_monitor_name: (encode-path-segment $sap_monitor_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HanaOnAzure/sapMonitors/{sap_monitor_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -699,7 +712,7 @@ export def "sap-monitors-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --tags: record # Tags field of the HANA instance.
 ]: any -> record<properties: record<enableCustomerAnalytics: bool, hanaDbCredentialsMsiId: string, hanaDbName: string, hanaDbPassword: string, hanaDbPasswordKeyVaultUrl: string, hanaDbSqlPort: int, hanaDbUsername: string, hanaHostname: string, hanaSubnet: string, keyVaultId: string, logAnalyticsWorkspaceArmId: string, logAnalyticsWorkspaceId: string, logAnalyticsWorkspaceSharedKey: string, managedResourceGroupName: string, provisioningState: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
@@ -708,6 +721,7 @@ export def "sap-monitors-update" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($sap_monitor_name | is-empty) { error make --unspanned { msg: "path parameter 'sapMonitorName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), sap_monitor_name: (encode-path-segment $sap_monitor_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HanaOnAzure/sapMonitors/{sap_monitor_name}") $qp $auth.query)
   let req_body = {"tags": $tags} | compact
@@ -746,7 +760,7 @@ export def "sap-monitors-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version.
+  --api-version: string # Client API version. (required)
   --properties: any # Describes the properties of a SAP monitor. — shape: {enableCustomerAnalytics?: bool, hanaDbCredentialsMsiId?: string, hanaDbName?: string, hanaDbPassword?: string, hanaDbPasswordKeyVaultUrl?: string, hanaDbSqlPort?: int, hanaDbUsername?: string, hanaHostname?: string, hanaSubnet?: string, keyVaultId?: string, logAnalyticsWorkspaceArmId?: string, logAnalyticsWorkspaceId?: string, logAnalyticsWorkspaceSharedKey?: string}
   --location: string # Resource location
 ]: any -> record<properties: record<enableCustomerAnalytics: bool, hanaDbCredentialsMsiId: string, hanaDbName: string, hanaDbPassword: string, hanaDbPasswordKeyVaultUrl: string, hanaDbSqlPort: int, hanaDbUsername: string, hanaHostname: string, hanaSubnet: string, keyVaultId: string, logAnalyticsWorkspaceArmId: string, logAnalyticsWorkspaceId: string, logAnalyticsWorkspaceSharedKey: string, managedResourceGroupName: string, provisioningState: string>, id: string, location: string, name: string, tags: record, type: string> {
@@ -756,6 +770,7 @@ export def "sap-monitors-create" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($sap_monitor_name | is-empty) { error make --unspanned { msg: "path parameter 'sapMonitorName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), sap_monitor_name: (encode-path-segment $sap_monitor_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HanaOnAzure/sapMonitors/{sap_monitor_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location} | compact

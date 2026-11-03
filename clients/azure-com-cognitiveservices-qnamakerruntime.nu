@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -123,6 +123,7 @@ export def commands []: nothing -> table {
 #
 # POST /knowledgebases/{kbId}/generateAnswer
 # operationId: Runtime_GenerateAnswer
+# --context shape: {previousQnaId?: string, previousUserQuery?: string}
 # --strictFilters item shape: {name: string, value: string}
 export def "runtime-generate-answer" [
   kb_id: string
@@ -135,7 +136,7 @@ export def "runtime-generate-answer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --context: any # Context object with previous QnA's information.
+  --context: record # Context object with previous QnA's information. — shape: {previousQnaId?: string, previousUserQuery?: string}
   --is-test: oneof<nothing, bool> # Query against the test index.
   --qna-id: string # Exact qnaId to fetch from the knowledgebase, this field takes priority over question.
   --question: string # User question to query against the knowledge base.
@@ -185,7 +186,7 @@ export def "runtime-train" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --feedback-records: list # List of feedback records. — item shape: {qnaId?: int, userId?: string, userQuestion?: string}
-]: any -> record<error: record<code: string, details: list<record>, innerError: record<code: string, innerError: any>, message: string, target: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

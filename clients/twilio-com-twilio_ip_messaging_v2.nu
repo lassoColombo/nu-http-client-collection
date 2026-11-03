@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -1067,7 +1067,7 @@ export def "create-message" [
   --body: string
   --date-created: string # format: date-time
   --date-updated: string # format: date-time
-  --body-from: string
+  --from: string
   --last-updated-by: string
   --media-sid: string
 ]: any -> record<account_sid: string, attributes: string, body: string, channel_sid: string, date_created: string, date_updated: string, from: string, index: int, last_updated_by: string, media: any, service_sid: string, sid: string, to: string, type: string, url: string, was_edited: bool> {
@@ -1077,7 +1077,7 @@ export def "create-message" [
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
   if ($channel_sid | is-empty) { error make --unspanned { msg: "path parameter 'ChannelSid' must be non-empty" } }
   let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), channel_sid: (encode-path-segment $channel_sid)} | format pattern "/v2/Services/{service_sid}/Channels/{channel_sid}/Messages") $auth.query)
-  let req_body = {"Attributes": $attributes, "Body": $body, "DateCreated": $date_created, "DateUpdated": $date_updated, "From": $body_from, "LastUpdatedBy": $last_updated_by, "MediaSid": $media_sid} | compact
+  let req_body = {"Attributes": $attributes, "Body": $body, "DateCreated": $date_created, "DateUpdated": $date_updated, "From": $from, "LastUpdatedBy": $last_updated_by, "MediaSid": $media_sid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1200,7 +1200,7 @@ export def "update-message" [
   --body: string
   --date-created: string # format: date-time
   --date-updated: string # format: date-time
-  --body-from: string
+  --from: string
   --last-updated-by: string
 ]: any -> record<account_sid: string, attributes: string, body: string, channel_sid: string, date_created: string, date_updated: string, from: string, index: int, last_updated_by: string, media: any, service_sid: string, sid: string, to: string, type: string, url: string, was_edited: bool> {
   let input = $in
@@ -1210,7 +1210,7 @@ export def "update-message" [
   if ($channel_sid | is-empty) { error make --unspanned { msg: "path parameter 'ChannelSid' must be non-empty" } }
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), channel_sid: (encode-path-segment $channel_sid), sid: (encode-path-segment $sid)} | format pattern "/v2/Services/{service_sid}/Channels/{channel_sid}/Messages/{sid}") $auth.query)
-  let req_body = {"Attributes": $attributes, "Body": $body, "DateCreated": $date_created, "DateUpdated": $date_updated, "From": $body_from, "LastUpdatedBy": $last_updated_by} | compact
+  let req_body = {"Attributes": $attributes, "Body": $body, "DateCreated": $date_created, "DateUpdated": $date_updated, "From": $from, "LastUpdatedBy": $last_updated_by} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -150,10 +150,11 @@ export def "recommendation-metadata-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the API to be used with the client request.
+  --api-version: string # The version of the API to be used with the client request. (required)
 ]: nothing -> record<nextLink: string, value: table<id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Advisor/metadata" $qp $auth.query)
   let accept_val = "application/json"
@@ -187,11 +188,12 @@ export def "recommendation-metadata-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the API to be used with the client request.
+  --api-version: string # The version of the API to be used with the client request. (required)
 ]: nothing -> record<id: string, name: string, properties: record<applicableScenarios: list<string>, dependsOn: list<string>, displayName: string, supportedValues: list<record>>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/providers/Microsoft.Advisor/metadata/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -224,10 +226,11 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the API to be used with the client request.
+  --api-version: string # The version of the API to be used with the client request. (required)
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Advisor/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -261,11 +264,12 @@ export def "configurations-list-by-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the API to be used with the client request.
+  --api-version: string # The version of the API to be used with the client request. (required)
 ]: nothing -> record<nextLink: string, value: table<id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Advisor/configurations") $qp $auth.query)
   let accept_val = "application/json"
@@ -300,7 +304,7 @@ export def "configurations-create-in-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the API to be used with the client request.
+  --api-version: string # The version of the API to be used with the client request. (required)
   --id: string # The resource Id of the configuration resource.
   --name: string # The name of the configuration resource.
   --properties: record # The list of property name/value pairs. — shape: {exclude?: bool, low_cpu_threshold?: string}
@@ -310,6 +314,7 @@ export def "configurations-create-in-subscription" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Advisor/configurations") $qp $auth.query)
   let req_body = {"id": $id, "name": $name, "properties": $properties, "type": $type} | compact
@@ -345,11 +350,12 @@ export def "recommendations-generate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the API to be used with the client request.
+  --api-version: string # The version of the API to be used with the client request. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Advisor/generateRecommendations") $qp $auth.query)
   let accept_val = "application/json"
@@ -384,12 +390,13 @@ export def "recommendations-get-generate-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the API to be used with the client request.
+  --api-version: string # The version of the API to be used with the client request. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($operation_id | is-empty) { error make --unspanned { msg: "path parameter 'operationId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), operation_id: (encode-path-segment $operation_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Advisor/generateRecommendations/{operation_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -423,14 +430,15 @@ export def "recommendations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the API to be used with the client request.
+  --api-version: string # The version of the API to be used with the client request. (required)
   --filter: string # The filter to apply to the recommendations.
   --top: int # The number of recommendations per page if a paged version of this API is being used.
   --skip-token: string # The page-continuation token to use with a paged version of this API.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Advisor/recommendations") $qp $auth.query)
   let accept_val = "application/json"
@@ -464,13 +472,14 @@ export def "suppressions-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the API to be used with the client request.
+  --api-version: string # The version of the API to be used with the client request. (required)
   --top: int # The number of suppressions per page if a paged version of this API is being used. (format: int32)
   --skip-token: string # The page-continuation token to use with a paged version of this API.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Advisor/suppressions") $qp $auth.query)
   let accept_val = "application/json"
@@ -505,12 +514,13 @@ export def "configurations-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the API to be used with the client request.
+  --api-version: string # The version of the API to be used with the client request. (required)
 ]: nothing -> record<nextLink: string, value: table<id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Advisor/configurations") $qp $auth.query)
   let accept_val = "application/json"
@@ -546,7 +556,7 @@ export def "configurations-create-in-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the API to be used with the client request.
+  --api-version: string # The version of the API to be used with the client request. (required)
   --id: string # The resource Id of the configuration resource.
   --name: string # The name of the configuration resource.
   --properties: record # The list of property name/value pairs. — shape: {exclude?: bool, low_cpu_threshold?: string}
@@ -557,6 +567,7 @@ export def "configurations-create-in-resource-group" [
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Advisor/configurations") $qp $auth.query)
   let req_body = {"id": $id, "name": $name, "properties": $properties, "type": $type} | compact
@@ -593,12 +604,13 @@ export def "recommendations-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the API to be used with the client request.
-]: nothing -> record<properties: record<category: string, extendedProperties: record, impact: string, impactedField: string, impactedValue: string, lastUpdated: string, metadata: record, recommendationTypeId: string, risk: string, shortDescription: record<problem: string, solution: string>, suppressionIds: list<string>>> {
+  --api-version: string # The version of the API to be used with the client request. (required)
+]: nothing -> record<properties: record<category: string, extendedProperties: record, impact: string, impactedField: string, impactedValue: string, lastUpdated: string, metadata: record, recommendationTypeId: string, risk: string, shortDescription: record<problem: string, solution: string>, suppressionIds: list<string>>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_uri | is-empty) { error make --unspanned { msg: "path parameter 'resourceUri' must be non-empty" } }
   if ($recommendation_id | is-empty) { error make --unspanned { msg: "path parameter 'recommendationId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_uri: (encode-path-segment $resource_uri), recommendation_id: (encode-path-segment $recommendation_id)} | format pattern "/{resource_uri}/providers/Microsoft.Advisor/recommendations/{recommendation_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -634,13 +646,14 @@ export def "suppressions-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the API to be used with the client request.
+  --api-version: string # The version of the API to be used with the client request. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_uri | is-empty) { error make --unspanned { msg: "path parameter 'resourceUri' must be non-empty" } }
   if ($recommendation_id | is-empty) { error make --unspanned { msg: "path parameter 'recommendationId' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_uri: (encode-path-segment $resource_uri), recommendation_id: (encode-path-segment $recommendation_id), name: (encode-path-segment $name)} | format pattern "/{resource_uri}/providers/Microsoft.Advisor/recommendations/{recommendation_id}/suppressions/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -676,13 +689,14 @@ export def "suppressions-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the API to be used with the client request.
-]: nothing -> record<properties: record<suppressionId: string, ttl: string>> {
+  --api-version: string # The version of the API to be used with the client request. (required)
+]: nothing -> record<properties: record<suppressionId: string, ttl: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_uri | is-empty) { error make --unspanned { msg: "path parameter 'resourceUri' must be non-empty" } }
   if ($recommendation_id | is-empty) { error make --unspanned { msg: "path parameter 'recommendationId' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_uri: (encode-path-segment $resource_uri), recommendation_id: (encode-path-segment $recommendation_id), name: (encode-path-segment $name)} | format pattern "/{resource_uri}/providers/Microsoft.Advisor/recommendations/{recommendation_id}/suppressions/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -719,15 +733,16 @@ export def "suppressions-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The version of the API to be used with the client request.
+  --api-version: string # The version of the API to be used with the client request. (required)
   --properties: record # The properties of the suppression. — shape: {suppressionId?: string, ttl?: string}
-]: any -> record<properties: record<suppressionId: string, ttl: string>> {
+]: any -> record<properties: record<suppressionId: string, ttl: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_uri | is-empty) { error make --unspanned { msg: "path parameter 'resourceUri' must be non-empty" } }
   if ($recommendation_id | is-empty) { error make --unspanned { msg: "path parameter 'recommendationId' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_uri: (encode-path-segment $resource_uri), recommendation_id: (encode-path-segment $recommendation_id), name: (encode-path-segment $name)} | format pattern "/{resource_uri}/providers/Microsoft.Advisor/recommendations/{recommendation_id}/suppressions/{name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact

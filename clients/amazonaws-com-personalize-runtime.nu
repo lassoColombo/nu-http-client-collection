@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -146,7 +146,7 @@ export def "get-personalized-ranking" [
   --context: record # The contextual metadata to use when getting recommendations. Contextual metadata includes any interaction information that might be relevant when getting a user's recommendations, such as the user's current location or device type.
   --filter-arn: string # The Amazon Resource Name (ARN) of a filter you created to include items or exclude items from recommendations for a given user. For more information, see Filtering Recommendations (https://docs.aws.amazon.com/personalize/latest/dg/filter.html).
   --filter-values: record # The values to use when filtering recommendations. For each placeholder parameter in your filter expression, provide the parameter name (in matching case) as a key and the filter value(s) as the corresponding value. Separate multiple values for one parameter with a comma. For filter expressions that use an INCLUDE element to include items, you must provide values for all parameters that are defined in the expression. For filters with expressions that use an EXCLUDE element to exclude items, you can omit the filter-values.In this case, Amazon Personalize doesn't use that portion of the expression to filter recommendations. For more information, see Filtering Recommendations (https://docs.aws.amazon.com/personalize/latest/dg/filter.html).
-]: any -> record<personalizedRanking: record, recommendationId: record> {
+]: any -> record<personalizedRanking: table<itemId: string, score: float, promotionName: string>, recommendationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -175,7 +175,7 @@ export def "get-personalized-ranking" [
 #
 # POST /recommendations
 # operationId: GetRecommendations
-# --promotions item shape: {name?: any, percentPromotedItems?: any, filterArn?: any, filterValues?: any}
+# --promotions item shape: {name?: string, percentPromotedItems?: int, filterArn?: string, filterValues?: record}
 export def "get-recommendations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -201,8 +201,8 @@ export def "get-recommendations" [
   --filter-arn: string # The ARN of the filter to apply to the returned recommendations. For more information, see Filtering Recommendations (https://docs.aws.amazon.com/personalize/latest/dg/filter.html). When using this parameter, be sure the filter resource is ACTIVE.
   --filter-values: record # The values to use when filtering recommendations. For each placeholder parameter in your filter expression, provide the parameter name (in matching case) as a key and the filter value(s) as the corresponding value. Separate multiple values for one parameter with a comma. For filter expressions that use an INCLUDE element to include items, you must provide values for all parameters that are defined in the expression. For filters with expressions that use an EXCLUDE element to exclude items, you can omit the filter-values.In this case, Amazon Personalize doesn't use that portion of the expression to filter recommendations. For more information, see Filtering recommendations and user segments (https://docs.aws.amazon.com/personalize/latest/dg/filter.html).
   --recommender-arn: string # The Amazon Resource Name (ARN) of the recommender to use to get recommendations. Provide a recommender ARN if you created a Domain dataset group with a recommender for a domain use case.
-  --promotions: list # The promotions to apply to the recommendation request. A promotion defines additional business rules that apply to a configurable subset of recommended items. — item shape: {name?: any, percentPromotedItems?: any, filterArn?: any, filterValues?: any}
-]: any -> record<itemList: record, recommendationId: record> {
+  --promotions: list # The promotions to apply to the recommendation request. A promotion defines additional business rules that apply to a configurable subset of recommended items. — item shape: {name?: string, percentPromotedItems?: int, filterArn?: string, filterValues?: record}
+]: any -> record<itemList: table<itemId: string, score: float, promotionName: string>, recommendationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

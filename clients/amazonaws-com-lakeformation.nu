@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -129,8 +129,8 @@ export def commands []: nothing -> table {
 #
 # POST /AddLFTagsToResource
 # operationId: AddLFTagsToResource
-# --Resource shape: {Catalog?: any, Database?: any, Table?: any, TableWithColumns?: any, DataLocation?: any, DataCellsFilter?: any, LFTag?: any, LFTagPolicy?: any}
-# --LFTags item shape: {CatalogId?: any, TagKey: any, TagValues: any}
+# --Resource shape: {Catalog?: record, Database?: record, Table?: record, TableWithColumns?: record, DataLocation?: record, DataCellsFilter?: record, LFTag?: record, LFTagPolicy?: record}
+# --LFTags item shape: {CatalogId?: string, TagKey: string, TagValues: list<string>}
 export def "add-lf-tags-to-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -149,9 +149,9 @@ export def "add-lf-tags-to-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --catalog-id: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment.
-  resource: record # A structure for the resource. — shape: {Catalog?: any, Database?: any, Table?: any, TableWithColumns?: any, DataLocation?: any, DataCellsFilter?: any, LFTag?: any, LFTagPolicy?: any}
-  lf_tags: list # The LF-tags to attach to the resource. — item shape: {CatalogId?: any, TagKey: any, TagValues: any}
-]: any -> record<Failures: record> {
+  resource: record # A structure for the resource. — shape: {Catalog?: record, Database?: record, Table?: record, TableWithColumns?: record, DataLocation?: record, DataCellsFilter?: record, LFTag?: record, LFTagPolicy?: record}
+  lf_tags: list # The LF-tags to attach to the resource. — item shape: {CatalogId?: string, TagKey: string, TagValues: list<string>}
+]: any -> record<Failures: table<LFTag: record, Error: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -201,7 +201,7 @@ export def "assume-decorated-role-with-saml" [
   role_arn: string # The role that represents an IAM principal whose scope down policy allows it to call credential vending APIs such as GetTemporaryTableCredentials. The caller must also have iam:PassRole permission on this role.
   principal_arn: string # The Amazon Resource Name (ARN) of the SAML provider in IAM that describes the IdP.
   --duration-seconds: int # The time period, between 900 and 43,200 seconds, for the timeout of the temporary credentials.
-]: any -> record<AccessKeyId: record, SecretAccessKey: record, SessionToken: record, Expiration: record> {
+]: any -> record<AccessKeyId: string, SecretAccessKey: string, SessionToken: string, Expiration: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -230,7 +230,7 @@ export def "assume-decorated-role-with-saml" [
 #
 # POST /BatchGrantPermissions
 # operationId: BatchGrantPermissions
-# --Entries item shape: {Id: any, Principal?: any, Resource?: any, Permissions?: any, PermissionsWithGrantOption?: any}
+# --Entries item shape: {Id: string, Principal?: record, Resource?: record, Permissions?: list<string>, PermissionsWithGrantOption?: list<string>}
 export def "batch-grant-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -249,8 +249,8 @@ export def "batch-grant-permissions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --catalog-id: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment.
-  entries: list # A list of up to 20 entries for resource permissions to be granted by batch operation to the principal. — item shape: {Id: any, Principal?: any, Resource?: any, Permissions?: any, PermissionsWithGrantOption?: any}
-]: any -> record<Failures: record> {
+  entries: list # A list of up to 20 entries for resource permissions to be granted by batch operation to the principal. — item shape: {Id: string, Principal?: record, Resource?: record, Permissions?: list<string>, PermissionsWithGrantOption?: list<string>}
+]: any -> record<Failures: table<RequestEntry: record, Error: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -279,7 +279,7 @@ export def "batch-grant-permissions" [
 #
 # POST /BatchRevokePermissions
 # operationId: BatchRevokePermissions
-# --Entries item shape: {Id: any, Principal?: any, Resource?: any, Permissions?: any, PermissionsWithGrantOption?: any}
+# --Entries item shape: {Id: string, Principal?: record, Resource?: record, Permissions?: list<string>, PermissionsWithGrantOption?: list<string>}
 export def "batch-revoke-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -298,8 +298,8 @@ export def "batch-revoke-permissions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --catalog-id: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment.
-  entries: list # A list of up to 20 entries for resource permissions to be revoked by batch operation to the principal. — item shape: {Id: any, Principal?: any, Resource?: any, Permissions?: any, PermissionsWithGrantOption?: any}
-]: any -> record<Failures: record> {
+  entries: list # A list of up to 20 entries for resource permissions to be revoked by batch operation to the principal. — item shape: {Id: string, Principal?: record, Resource?: record, Permissions?: list<string>, PermissionsWithGrantOption?: list<string>}
+]: any -> record<Failures: table<RequestEntry: record, Error: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -393,7 +393,7 @@ export def "commit-transaction" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   transaction_id: string # The transaction to commit.
-]: any -> record<TransactionStatus: record> {
+]: any -> record<TransactionStatus: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -422,7 +422,7 @@ export def "commit-transaction" [
 #
 # POST /CreateDataCellsFilter
 # operationId: CreateDataCellsFilter
-# --TableData shape: {TableCatalogId?: any, DatabaseName?: any, TableName?: any, Name?: any, RowFilter?: any, ColumnNames?: any, ColumnWildcard?: any, VersionId?: any}
+# --TableData shape: {TableCatalogId?: string, DatabaseName?: string, TableName?: string, Name?: string, RowFilter?: record, ColumnNames?: list<string>, ColumnWildcard?: record, VersionId?: string}
 export def "create-data-cells-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -440,7 +440,7 @@ export def "create-data-cells-filter" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  table_data: record # A structure that describes certain columns on certain rows. — shape: {TableCatalogId?: any, DatabaseName?: any, TableName?: any, Name?: any, RowFilter?: any, ColumnNames?: any, ColumnWildcard?: any, VersionId?: any}
+  table_data: record # A structure that describes certain columns on certain rows. — shape: {TableCatalogId?: string, DatabaseName?: string, TableName?: string, Name?: string, RowFilter?: record, ColumnNames?: list<string>, ColumnWildcard?: record, VersionId?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -617,7 +617,7 @@ export def "delete-lf-tag" [
 #
 # POST /DeleteObjectsOnCancel
 # operationId: DeleteObjectsOnCancel
-# --Objects item shape: {Uri: any, ETag?: any}
+# --Objects item shape: {Uri: string, ETag?: string}
 export def "delete-objects-on-cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -639,7 +639,7 @@ export def "delete-objects-on-cancel" [
   database_name: string # The database that contains the governed table.
   table_name: string # The name of the governed table.
   transaction_id: string # ID of the transaction that the writes occur in.
-  objects: list # A list of VirtualObject structures, which indicates the Amazon S3 objects to be deleted if the transaction cancels. — item shape: {Uri: any, ETag?: any}
+  objects: list # A list of VirtualObject structures, which indicates the Amazon S3 objects to be deleted if the transaction cancels. — item shape: {Uri: string, ETag?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -734,7 +734,7 @@ export def "describe-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   resource_arn: string # The resource ARN.
-]: any -> record<ResourceInfo: record<ResourceArn: record, RoleArn: record, LastModified: record, WithFederation: record>> {
+]: any -> record<ResourceInfo: record<ResourceArn: string, RoleArn: string, LastModified: string, WithFederation: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -781,7 +781,7 @@ export def "describe-transaction" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   transaction_id: string # The transaction for which to return status.
-]: any -> record<TransactionDescription: record<TransactionId: record, TransactionStatus: record, TransactionStartTime: record, TransactionEndTime: record>> {
+]: any -> record<TransactionDescription: record<TransactionId: string, TransactionStatus: string, TransactionStartTime: string, TransactionEndTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -878,7 +878,7 @@ export def "get-data-cells-filter" [
   database_name: string # A database in the Glue Data Catalog.
   table_name: string # A table in the database.
   name: string # The name given by the user to the data filter cell.
-]: any -> record<DataCellsFilter: record<TableCatalogId: record, DatabaseName: record, TableName: record, Name: record, RowFilter: record<FilterExpression: record, AllRowsWildcard: record>, ColumnNames: record, ColumnWildcard: record<ExcludedColumnNames: record>, VersionId: record>> {
+]: any -> record<DataCellsFilter: record<TableCatalogId: string, DatabaseName: string, TableName: string, Name: string, RowFilter: record<FilterExpression: string, AllRowsWildcard: record>, ColumnNames: list<string>, ColumnWildcard: record<ExcludedColumnNames: list>, VersionId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -925,7 +925,7 @@ export def "get-data-lake-settings" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --catalog-id: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment.
-]: any -> record<DataLakeSettings: record<DataLakeAdmins: record, CreateDatabaseDefaultPermissions: record, CreateTableDefaultPermissions: record, Parameters: record, TrustedResourceOwners: record, AllowExternalDataFiltering: record, ExternalDataFilteringAllowList: record, AuthorizedSessionTagValueList: record>> {
+]: any -> record<DataLakeSettings: record<DataLakeAdmins: list<record>, CreateDatabaseDefaultPermissions: list<record>, CreateTableDefaultPermissions: list<record>, Parameters: record, TrustedResourceOwners: list<string>, AllowExternalDataFiltering: bool, ExternalDataFilteringAllowList: list<record>, AuthorizedSessionTagValueList: list<string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -977,7 +977,7 @@ export def "get-effective-permissions-for-path" [
   resource_arn: string # The Amazon Resource Name (ARN) of the resource for which you want to get permissions.
   --next-token-body: string # A continuation token, if this is not the first call to retrieve this list. (body field)
   --max-results-body: int # The maximum number of results to return. (body field)
-]: any -> record<Permissions: record, NextToken: record> {
+]: any -> record<Permissions: table<Principal: record, Resource: record, Permissions: list, PermissionsWithGrantOption: list, AdditionalDetails: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1026,7 +1026,7 @@ export def "get-lf-tag" [
   --x-amz-signed-headers: string
   --catalog-id: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment.
   tag_key: string # The key-name for the LF-tag.
-]: any -> record<CatalogId: record, TagKey: record, TagValues: record> {
+]: any -> record<CatalogId: string, TagKey: string, TagValues: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1073,7 +1073,7 @@ export def "get-query-state" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   query_id: string # The ID of the plan query operation.
-]: any -> record<Error: record, State: record> {
+]: any -> record<Error: string, State: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1120,7 +1120,7 @@ export def "get-query-statistics" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   query_id: string # The ID of the plan query operation.
-]: any -> record<ExecutionStatistics: record<AverageExecutionTimeMillis: record, DataScannedBytes: record, WorkUnitsExecutedCount: record>, PlanningStatistics: record<EstimatedDataToScanBytes: record, PlanningTimeMillis: record, QueueTimeMillis: record, WorkUnitsGeneratedCount: record>, QuerySubmissionTime: record> {
+]: any -> record<ExecutionStatistics: record<AverageExecutionTimeMillis: int, DataScannedBytes: int, WorkUnitsExecutedCount: int>, PlanningStatistics: record<EstimatedDataToScanBytes: int, PlanningTimeMillis: int, QueueTimeMillis: int, WorkUnitsGeneratedCount: int>, QuerySubmissionTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1149,7 +1149,7 @@ export def "get-query-statistics" [
 #
 # POST /GetResourceLFTags
 # operationId: GetResourceLFTags
-# --Resource shape: {Catalog?: any, Database?: any, Table?: any, TableWithColumns?: any, DataLocation?: any, DataCellsFilter?: any, LFTag?: any, LFTagPolicy?: any}
+# --Resource shape: {Catalog?: record, Database?: record, Table?: record, TableWithColumns?: record, DataLocation?: record, DataCellsFilter?: record, LFTag?: record, LFTagPolicy?: record}
 export def "get-resource-lf-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1168,9 +1168,9 @@ export def "get-resource-lf-tags" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --catalog-id: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment.
-  resource: record # A structure for the resource. — shape: {Catalog?: any, Database?: any, Table?: any, TableWithColumns?: any, DataLocation?: any, DataCellsFilter?: any, LFTag?: any, LFTagPolicy?: any}
+  resource: record # A structure for the resource. — shape: {Catalog?: record, Database?: record, Table?: record, TableWithColumns?: record, DataLocation?: record, DataCellsFilter?: record, LFTag?: record, LFTagPolicy?: record}
   --show-assigned-lf-tags: oneof<nothing, bool> # Indicates whether to show the assigned LF-tags.
-]: any -> record<LFTagOnDatabase: record, LFTagsOnTable: record, LFTagsOnColumns: record> {
+]: any -> record<LFTagOnDatabase: table<CatalogId: string, TagKey: string, TagValues: list>, LFTagsOnTable: table<CatalogId: string, TagKey: string, TagValues: list>, LFTagsOnColumns: table<Name: string, LFTags: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1226,7 +1226,7 @@ export def "get-table-objects" [
   --partition-predicate: string # A predicate to filter the objects returned based on the partition keys defined in the governed table. The comparison operators supported are: =, >, <, >=, <= The logical operators supported are: AND The data types supported are integer, long, date(yyyy-MM-dd), timestamp(yyyy-MM-dd HH:mm:ssXXX or yyyy-MM-dd HH:mm:ss"), string and decimal.
   --max-results-body: int # Specifies how many values to return in a page. (body field)
   --next-token-body: string # A continuation token if this is not the first call to retrieve these objects. (body field)
-]: any -> record<Objects: record, NextToken: record> {
+]: any -> record<Objects: table<PartitionValues: list, Objects: list>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1256,8 +1256,8 @@ export def "get-table-objects" [
 #
 # POST /GetTemporaryGluePartitionCredentials
 # operationId: GetTemporaryGluePartitionCredentials
-# --Partition shape: {Values?: any}
-# --AuditContext shape: {AdditionalAuditContext?: any}
+# --Partition shape: {Values?: list<string>}
+# --AuditContext shape: {AdditionalAuditContext?: string}
 export def "get-temporary-glue-partition-credentials" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1276,12 +1276,12 @@ export def "get-temporary-glue-partition-credentials" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   table_arn: string # The ARN of the partitions' table.
-  partition: record # Contains a list of values defining partitions. — shape: {Values?: any}
+  partition: record # Contains a list of values defining partitions. — shape: {Values?: list<string>}
   --permissions: list<string> # Filters the request based on the user having been granted a list of specified permissions on the requested resource(s).
   --duration-seconds: int # The time period, between 900 and 21,600 seconds, for the timeout of the temporary credentials.
-  --audit-context: record # A structure used to include auditing information on the privileged API. — shape: {AdditionalAuditContext?: any}
+  --audit-context: record # A structure used to include auditing information on the privileged API. — shape: {AdditionalAuditContext?: string}
   supported_permission_types: list<string> # A list of supported permission types for the partition. Valid values are COLUMN_PERMISSION and CELL_FILTER_PERMISSION.
-]: any -> record<AccessKeyId: record, SecretAccessKey: record, SessionToken: record, Expiration: record> {
+]: any -> record<AccessKeyId: string, SecretAccessKey: string, SessionToken: string, Expiration: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1310,7 +1310,7 @@ export def "get-temporary-glue-partition-credentials" [
 #
 # POST /GetTemporaryGlueTableCredentials
 # operationId: GetTemporaryGlueTableCredentials
-# --AuditContext shape: {AdditionalAuditContext?: any}
+# --AuditContext shape: {AdditionalAuditContext?: string}
 export def "get-temporary-glue-table-credentials" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1331,9 +1331,9 @@ export def "get-temporary-glue-table-credentials" [
   table_arn: string # The ARN identifying a table in the Data Catalog for the temporary credentials request.
   --permissions: list<string> # Filters the request based on the user having been granted a list of specified permissions on the requested resource(s).
   --duration-seconds: int # The time period, between 900 and 21,600 seconds, for the timeout of the temporary credentials.
-  --audit-context: record # A structure used to include auditing information on the privileged API. — shape: {AdditionalAuditContext?: any}
+  --audit-context: record # A structure used to include auditing information on the privileged API. — shape: {AdditionalAuditContext?: string}
   supported_permission_types: list<string> # A list of supported permission types for the table. Valid values are COLUMN_PERMISSION and CELL_FILTER_PERMISSION.
-]: any -> record<AccessKeyId: record, SecretAccessKey: record, SessionToken: record, Expiration: record> {
+]: any -> record<AccessKeyId: string, SecretAccessKey: string, SessionToken: string, Expiration: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1382,7 +1382,7 @@ export def "get-work-unit-results" [
   query_id: string # The ID of the plan query operation for which to get results.
   work_unit_id: int # The work unit ID for which to get results. Value generated by enumerating WorkUnitIdMin to WorkUnitIdMax (inclusive) from the WorkUnitRange in the output of GetWorkUnits.
   work_unit_token: string # A work token used to query the execution service. Token output from GetWorkUnits. (format: password)
-]: any -> record<ResultStream: record> {
+]: any -> record<ResultStream: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1433,7 +1433,7 @@ export def "get-work-units" [
   --next-token-body: string # A continuation token, if this is a continuation call. (body field)
   --page-size-body: int # The size of each page to get in the Amazon Web Services service call. This does not affect the number of items returned in the command's output. Setting a smaller page size results in more calls to the Amazon Web Services service, retrieving fewer items in each call. This can help prevent the Amazon Web Services service calls from timing out. (body field)
   query_id: string # The ID of the plan query operation.
-]: any -> record<NextToken: record, QueryId: record, WorkUnitRanges: record> {
+]: any -> record<NextToken: string, QueryId: string, WorkUnitRanges: table<WorkUnitIdMax: int, WorkUnitIdMin: int, WorkUnitToken: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1463,8 +1463,8 @@ export def "get-work-units" [
 #
 # POST /GrantPermissions
 # operationId: GrantPermissions
-# --Principal shape: {DataLakePrincipalIdentifier?: any}
-# --Resource shape: {Catalog?: any, Database?: any, Table?: any, TableWithColumns?: any, DataLocation?: any, DataCellsFilter?: any, LFTag?: any, LFTagPolicy?: any}
+# --Principal shape: {DataLakePrincipalIdentifier?: string}
+# --Resource shape: {Catalog?: record, Database?: record, Table?: record, TableWithColumns?: record, DataLocation?: record, DataCellsFilter?: record, LFTag?: record, LFTagPolicy?: record}
 export def "grant-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1483,8 +1483,8 @@ export def "grant-permissions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --catalog-id: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment.
-  principal: record # The Lake Formation principal. Supported principals are IAM users or IAM roles. — shape: {DataLakePrincipalIdentifier?: any}
-  resource: record # A structure for the resource. — shape: {Catalog?: any, Database?: any, Table?: any, TableWithColumns?: any, DataLocation?: any, DataCellsFilter?: any, LFTag?: any, LFTagPolicy?: any}
+  principal: record # The Lake Formation principal. Supported principals are IAM users or IAM roles. — shape: {DataLakePrincipalIdentifier?: string}
+  resource: record # A structure for the resource. — shape: {Catalog?: record, Database?: record, Table?: record, TableWithColumns?: record, DataLocation?: record, DataCellsFilter?: record, LFTag?: record, LFTagPolicy?: record}
   permissions: list<string> # The permissions granted to the principal on the resource. Lake Formation defines privileges to grant and revoke access to metadata in the Data Catalog and data organized in underlying data storage such as Amazon S3. Lake Formation requires that each principal be authorized to perform a specific task on Lake Formation resources.
   --permissions-with-grant-option: list<string> # Indicates a list of the granted permissions that the principal may pass to other users. These permissions may only be a subset of the permissions granted in the Privileges.
 ]: any -> record {
@@ -1516,7 +1516,7 @@ export def "grant-permissions" [
 #
 # POST /ListDataCellsFilter
 # operationId: ListDataCellsFilter
-# --Table shape: {CatalogId?: any, DatabaseName?: any, Name?: any, TableWildcard?: any}
+# --Table shape: {CatalogId?: string, DatabaseName?: string, Name?: string, TableWildcard?: record}
 export def "list-data-cells-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1536,10 +1536,10 @@ export def "list-data-cells-filter" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --table: record # A structure for the table object. A table is a metadata definition that represents your data. You can Grant and Revoke table privileges to a principal. — shape: {CatalogId?: any, DatabaseName?: any, Name?: any, TableWildcard?: any}
+  --table: record # A structure for the table object. A table is a metadata definition that represents your data. You can Grant and Revoke table privileges to a principal. — shape: {CatalogId?: string, DatabaseName?: string, Name?: string, TableWildcard?: record}
   --next-token-body: string # A continuation token, if this is a continuation call. (body field)
   --max-results-body: int # The maximum size of the response. (body field)
-]: any -> record<DataCellsFilters: record, NextToken: record> {
+]: any -> record<DataCellsFilters: table<TableCatalogId: string, DatabaseName: string, TableName: string, Name: string, RowFilter: record, ColumnNames: list, ColumnWildcard: record, VersionId: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1592,7 +1592,7 @@ export def "list-lf-tags" [
   --resource-share-type: string@resource-share-type-completer # If resource share type is ALL, returns both in-account LF-tags and shared LF-tags that the requester has permission to view. If resource share type is FOREIGN, returns all share LF-tags that the requester can view. If no resource share type is passed, lists LF-tags in the given catalog ID that the requester has permission to view.
   --max-results-body: int # The maximum number of results to return. (body field)
   --next-token-body: string # A continuation token, if this is not the first call to retrieve this list. (body field)
-]: any -> record<LFTags: record, NextToken: record> {
+]: any -> record<LFTags: table<CatalogId: string, TagKey: string, TagValues: list>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1622,8 +1622,8 @@ export def "list-lf-tags" [
 #
 # POST /ListPermissions
 # operationId: ListPermissions
-# --Principal shape: {DataLakePrincipalIdentifier?: any}
-# --Resource shape: {Catalog?: any, Database?: any, Table?: any, TableWithColumns?: any, DataLocation?: any, DataCellsFilter?: any, LFTag?: any, LFTagPolicy?: any}
+# --Principal shape: {DataLakePrincipalIdentifier?: string}
+# --Resource shape: {Catalog?: record, Database?: record, Table?: record, TableWithColumns?: record, DataLocation?: record, DataCellsFilter?: record, LFTag?: record, LFTagPolicy?: record}
 export def "list-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1644,13 +1644,13 @@ export def "list-permissions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --catalog-id: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment.
-  --principal: record # The Lake Formation principal. Supported principals are IAM users or IAM roles. — shape: {DataLakePrincipalIdentifier?: any}
+  --principal: record # The Lake Formation principal. Supported principals are IAM users or IAM roles. — shape: {DataLakePrincipalIdentifier?: string}
   --resource-type: string@resource-type-completer # Specifies a resource type to filter the permissions returned.
-  --resource: record # A structure for the resource. — shape: {Catalog?: any, Database?: any, Table?: any, TableWithColumns?: any, DataLocation?: any, DataCellsFilter?: any, LFTag?: any, LFTagPolicy?: any}
+  --resource: record # A structure for the resource. — shape: {Catalog?: record, Database?: record, Table?: record, TableWithColumns?: record, DataLocation?: record, DataCellsFilter?: record, LFTag?: record, LFTagPolicy?: record}
   --next-token-body: string # A continuation token, if this is not the first call to retrieve this list. (body field)
   --max-results-body: int # The maximum number of results to return. (body field)
   --include-related: string # Indicates that related permissions should be included in the results.
-]: any -> record<PrincipalResourcePermissions: record, NextToken: record> {
+]: any -> record<PrincipalResourcePermissions: table<Principal: record, Resource: record, Permissions: list, PermissionsWithGrantOption: list, AdditionalDetails: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1680,7 +1680,7 @@ export def "list-permissions" [
 #
 # POST /ListResources
 # operationId: ListResources
-# --FilterConditionList item shape: {Field?: any, ComparisonOperator?: any, StringValueList?: any}
+# --FilterConditionList item shape: {Field?: "RESOURCE_ARN"|"ROLE_ARN"|"LAST_MODIFIED", ComparisonOperator?: "EQ"|"NE"|"LE"|"LT"|"GE"|"GT"|"CONTAINS"|"NOT_CONTAINS"|"BEGINS_WITH"|"IN"|"BETWEEN", StringValueList?: list<string>}
 export def "list-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1700,10 +1700,10 @@ export def "list-resources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --filter-condition-list: list # Any applicable row-level and/or column-level filtering conditions for the resources. — item shape: {Field?: any, ComparisonOperator?: any, StringValueList?: any}
+  --filter-condition-list: list # Any applicable row-level and/or column-level filtering conditions for the resources. — item shape: {Field?: "RESOURCE_ARN"|"ROLE_ARN"|"LAST_MODIFIED", ComparisonOperator?: "EQ"|"NE"|"LE"|"LT"|"GE"|"GT"|"CONTAINS"|"NOT_CONTAINS"|"BEGINS_WITH"|"IN"|"BETWEEN", StringValueList?: list<string>}
   --max-results-body: int # The maximum number of resource results. (body field)
   --next-token-body: string # A continuation token, if this is not the first call to retrieve these resources. (body field)
-]: any -> record<ResourceInfoList: record, NextToken: record> {
+]: any -> record<ResourceInfoList: table<ResourceArn: string, RoleArn: string, LastModified: string, WithFederation: bool>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1758,7 +1758,7 @@ export def "list-table-storage-optimizers" [
   --storage-optimizer-type: string@storage-optimizer-type-completer # The specific type of storage optimizers to list. The supported value is compaction.
   --max-results-body: int # The number of storage optimizers to return on each call. (body field)
   --next-token-body: string # A continuation token, if this is a continuation call. (body field)
-]: any -> record<StorageOptimizerList: record, NextToken: record> {
+]: any -> record<StorageOptimizerList: table<StorageOptimizerType: string, Config: record, ErrorMessage: string, Warnings: string, LastRunDetails: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1811,7 +1811,7 @@ export def "list-transactions" [
   --status-filter: string@status-filter-completer # A filter indicating the status of transactions to return. Options are ALL | COMPLETED | COMMITTED | ABORTED | ACTIVE. The default is ALL.
   --max-results-body: int # The maximum number of transactions to return in a single call. (body field)
   --next-token-body: string # A continuation token if this is not the first call to retrieve transactions. (body field)
-]: any -> record<Transactions: record, NextToken: record> {
+]: any -> record<Transactions: table<TransactionId: string, TransactionStatus: string, TransactionStartTime: string, TransactionEndTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1841,7 +1841,7 @@ export def "list-transactions" [
 #
 # POST /PutDataLakeSettings
 # operationId: PutDataLakeSettings
-# --DataLakeSettings shape: {DataLakeAdmins?: any, CreateDatabaseDefaultPermissions?: any, CreateTableDefaultPermissions?: any, Parameters?: any, TrustedResourceOwners?: any, AllowExternalDataFiltering?: any, ExternalDataFilteringAllowList?: any, AuthorizedSessionTagValueList?: any}
+# --DataLakeSettings shape: {DataLakeAdmins?: list, CreateDatabaseDefaultPermissions?: list, CreateTableDefaultPermissions?: list, Parameters?: record, TrustedResourceOwners?: list<string>, AllowExternalDataFiltering?: bool, ExternalDataFilteringAllowList?: list, AuthorizedSessionTagValueList?: list<string>}
 export def "put-data-lake-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1860,7 +1860,7 @@ export def "put-data-lake-settings" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --catalog-id: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment.
-  data_lake_settings: record # A structure representing a list of Lake Formation principals designated as data lake administrators and lists of principal permission entries for default create database and default create table permissions. — shape: {DataLakeAdmins?: any, CreateDatabaseDefaultPermissions?: any, CreateTableDefaultPermissions?: any, Parameters?: any, TrustedResourceOwners?: any, AllowExternalDataFiltering?: any, ExternalDataFilteringAllowList?: any, AuthorizedSessionTagValueList?: any}
+  data_lake_settings: record # A structure representing a list of Lake Formation principals designated as data lake administrators and lists of principal permission entries for default create database and default create table permissions. — shape: {DataLakeAdmins?: list, CreateDatabaseDefaultPermissions?: list, CreateTableDefaultPermissions?: list, Parameters?: record, TrustedResourceOwners?: list<string>, AllowExternalDataFiltering?: bool, ExternalDataFilteringAllowList?: list, AuthorizedSessionTagValueList?: list<string>}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1940,8 +1940,8 @@ export def "register-resource" [
 #
 # POST /RemoveLFTagsFromResource
 # operationId: RemoveLFTagsFromResource
-# --Resource shape: {Catalog?: any, Database?: any, Table?: any, TableWithColumns?: any, DataLocation?: any, DataCellsFilter?: any, LFTag?: any, LFTagPolicy?: any}
-# --LFTags item shape: {CatalogId?: any, TagKey: any, TagValues: any}
+# --Resource shape: {Catalog?: record, Database?: record, Table?: record, TableWithColumns?: record, DataLocation?: record, DataCellsFilter?: record, LFTag?: record, LFTagPolicy?: record}
+# --LFTags item shape: {CatalogId?: string, TagKey: string, TagValues: list<string>}
 export def "remove-lf-tags-from-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1960,9 +1960,9 @@ export def "remove-lf-tags-from-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --catalog-id: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment.
-  resource: record # A structure for the resource. — shape: {Catalog?: any, Database?: any, Table?: any, TableWithColumns?: any, DataLocation?: any, DataCellsFilter?: any, LFTag?: any, LFTagPolicy?: any}
-  lf_tags: list # The LF-tags to be removed from the resource. — item shape: {CatalogId?: any, TagKey: any, TagValues: any}
-]: any -> record<Failures: record> {
+  resource: record # A structure for the resource. — shape: {Catalog?: record, Database?: record, Table?: record, TableWithColumns?: record, DataLocation?: record, DataCellsFilter?: record, LFTag?: record, LFTagPolicy?: record}
+  lf_tags: list # The LF-tags to be removed from the resource. — item shape: {CatalogId?: string, TagKey: string, TagValues: list<string>}
+]: any -> record<Failures: table<LFTag: record, Error: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1991,8 +1991,8 @@ export def "remove-lf-tags-from-resource" [
 #
 # POST /RevokePermissions
 # operationId: RevokePermissions
-# --Principal shape: {DataLakePrincipalIdentifier?: any}
-# --Resource shape: {Catalog?: any, Database?: any, Table?: any, TableWithColumns?: any, DataLocation?: any, DataCellsFilter?: any, LFTag?: any, LFTagPolicy?: any}
+# --Principal shape: {DataLakePrincipalIdentifier?: string}
+# --Resource shape: {Catalog?: record, Database?: record, Table?: record, TableWithColumns?: record, DataLocation?: record, DataCellsFilter?: record, LFTag?: record, LFTagPolicy?: record}
 export def "revoke-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2011,8 +2011,8 @@ export def "revoke-permissions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --catalog-id: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment.
-  principal: record # The Lake Formation principal. Supported principals are IAM users or IAM roles. — shape: {DataLakePrincipalIdentifier?: any}
-  resource: record # A structure for the resource. — shape: {Catalog?: any, Database?: any, Table?: any, TableWithColumns?: any, DataLocation?: any, DataCellsFilter?: any, LFTag?: any, LFTagPolicy?: any}
+  principal: record # The Lake Formation principal. Supported principals are IAM users or IAM roles. — shape: {DataLakePrincipalIdentifier?: string}
+  resource: record # A structure for the resource. — shape: {Catalog?: record, Database?: record, Table?: record, TableWithColumns?: record, DataLocation?: record, DataCellsFilter?: record, LFTag?: record, LFTagPolicy?: record}
   permissions: list<string> # The permissions revoked to the principal on the resource. For information about permissions, see Security and Access Control to Metadata and Data (https://docs.aws.amazon.com/lake-formation/latest/dg/security-data-access.html).
   --permissions-with-grant-option: list<string> # Indicates a list of permissions for which to revoke the grant option allowing the principal to pass permissions to other principals.
 ]: any -> record {
@@ -2044,7 +2044,7 @@ export def "revoke-permissions" [
 #
 # POST /SearchDatabasesByLFTags
 # operationId: SearchDatabasesByLFTags
-# --Expression item shape: {TagKey: any, TagValues: any}
+# --Expression item shape: {TagKey: string, TagValues: list<string>}
 export def "search-databases-by-lf-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2067,8 +2067,8 @@ export def "search-databases-by-lf-tags" [
   --next-token-body: string # A continuation token, if this is not the first call to retrieve this list. (body field)
   --max-results-body: int # The maximum number of results to return. (body field)
   --catalog-id: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment.
-  expression: list # A list of conditions (LFTag structures) to search for in database resources. — item shape: {TagKey: any, TagValues: any}
-]: any -> record<NextToken: record, DatabaseList: record> {
+  expression: list # A list of conditions (LFTag structures) to search for in database resources. — item shape: {TagKey: string, TagValues: list<string>}
+]: any -> record<NextToken: string, DatabaseList: table<Database: record, LFTags: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2098,7 +2098,7 @@ export def "search-databases-by-lf-tags" [
 #
 # POST /SearchTablesByLFTags
 # operationId: SearchTablesByLFTags
-# --Expression item shape: {TagKey: any, TagValues: any}
+# --Expression item shape: {TagKey: string, TagValues: list<string>}
 export def "search-tables-by-lf-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2121,8 +2121,8 @@ export def "search-tables-by-lf-tags" [
   --next-token-body: string # A continuation token, if this is not the first call to retrieve this list. (body field)
   --max-results-body: int # The maximum number of results to return. (body field)
   --catalog-id: string # The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment.
-  expression: list # A list of conditions (LFTag structures) to search for in table resources. — item shape: {TagKey: any, TagValues: any}
-]: any -> record<NextToken: record, TableList: record> {
+  expression: list # A list of conditions (LFTag structures) to search for in table resources. — item shape: {TagKey: string, TagValues: list<string>}
+]: any -> record<NextToken: string, TableList: table<Table: record, LFTagOnDatabase: list, LFTagsOnTable: list, LFTagsOnColumns: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2152,7 +2152,7 @@ export def "search-tables-by-lf-tags" [
 #
 # POST /StartQueryPlanning
 # operationId: StartQueryPlanning
-# --QueryPlanningContext shape: {CatalogId?: any, DatabaseName?: any, QueryAsOfTime?: any, QueryParameters?: any, TransactionId?: any}
+# --QueryPlanningContext shape: {CatalogId?: string, DatabaseName?: string, QueryAsOfTime?: string, QueryParameters?: record, TransactionId?: string}
 export def "start-query-planning" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2170,9 +2170,9 @@ export def "start-query-planning" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  query_planning_context: record # A structure containing information about the query plan. — shape: {CatalogId?: any, DatabaseName?: any, QueryAsOfTime?: any, QueryParameters?: any, TransactionId?: any}
+  query_planning_context: record # A structure containing information about the query plan. — shape: {CatalogId?: string, DatabaseName?: string, QueryAsOfTime?: string, QueryParameters?: record, TransactionId?: string}
   query_string: string # A PartiQL query statement used as an input to the planner service. (format: password)
-]: any -> record<QueryId: record> {
+]: any -> record<QueryId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2219,7 +2219,7 @@ export def "start-transaction" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --transaction-type: string@transaction-type-completer # Indicates whether this transaction should be read only or read and write. Writes made using a read-only transaction ID will be rejected. Read-only transactions do not need to be committed.
-]: any -> record<TransactionId: record> {
+]: any -> record<TransactionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2248,7 +2248,7 @@ export def "start-transaction" [
 #
 # POST /UpdateDataCellsFilter
 # operationId: UpdateDataCellsFilter
-# --TableData shape: {TableCatalogId?: any, DatabaseName?: any, TableName?: any, Name?: any, RowFilter?: any, ColumnNames?: any, ColumnWildcard?: any, VersionId?: any}
+# --TableData shape: {TableCatalogId?: string, DatabaseName?: string, TableName?: string, Name?: string, RowFilter?: record, ColumnNames?: list<string>, ColumnWildcard?: record, VersionId?: string}
 export def "update-data-cells-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2266,7 +2266,7 @@ export def "update-data-cells-filter" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  table_data: record # A structure that describes certain columns on certain rows. — shape: {TableCatalogId?: any, DatabaseName?: any, TableName?: any, Name?: any, RowFilter?: any, ColumnNames?: any, ColumnWildcard?: any, VersionId?: any}
+  table_data: record # A structure that describes certain columns on certain rows. — shape: {TableCatalogId?: string, DatabaseName?: string, TableName?: string, Name?: string, RowFilter?: record, ColumnNames?: list<string>, ColumnWildcard?: record, VersionId?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2395,7 +2395,7 @@ export def "update-resource" [
 #
 # POST /UpdateTableObjects
 # operationId: UpdateTableObjects
-# --WriteOperations item shape: {AddObject?: any, DeleteObject?: any}
+# --WriteOperations item shape: {AddObject?: record, DeleteObject?: record}
 export def "update-table-objects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2417,7 +2417,7 @@ export def "update-table-objects" [
   database_name: string # The database containing the governed table to update.
   table_name: string # The governed table to update.
   --transaction-id: string # The transaction at which to do the write.
-  write_operations: list # A list of WriteOperation objects that define an object to add to or delete from the manifest for a governed table. — item shape: {AddObject?: any, DeleteObject?: any}
+  write_operations: list # A list of WriteOperation objects that define an object to add to or delete from the manifest for a governed table. — item shape: {AddObject?: record, DeleteObject?: record}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2468,7 +2468,7 @@ export def "update-table-storage-optimizer" [
   database_name: string # Name of the database where the table is present.
   table_name: string # Name of the table for which to enable the storage optimizer.
   storage_optimizer_config: record # Name of the table for which to enable the storage optimizer.
-]: any -> record<Result: record> {
+]: any -> record<Result: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

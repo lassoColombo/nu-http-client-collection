@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -158,7 +158,7 @@ export def "create-endpoint" [
   security_group_id: string # The ID of the security group to use with the endpoint.
   --access-type: string@access-type-completer # The type of access for the network connectivity for the Amazon S3 on Outposts endpoint. To use the Amazon Web Services VPC, choose Private. To use the endpoint with an on-premises network, choose CustomerOwnedIp. If you choose CustomerOwnedIp, you must also provide the customer-owned IP address pool (CoIP pool). Private is the default access type value.
   --customer-owned-ipv4-pool: string # The ID of the customer-owned IPv4 address pool (CoIP pool) for the endpoint. IP addresses are allocated from this pool for the endpoint.
-]: any -> record<EndpointArn: record> {
+]: any -> record<EndpointArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -197,8 +197,8 @@ export def "delete-endpoint" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --endpoint-id: string # The ID of the endpoint.
-  --outpost-id: string # The ID of the Outposts.
+  --endpoint-id: string # The ID of the endpoint. (required)
+  --outpost-id: string # The ID of the Outposts. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -209,6 +209,8 @@ export def "delete-endpoint" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($endpoint_id == null) { error make --unspanned { msg: "required query parameter 'endpointId' missing: pass --endpoint-id" } }
+  if ($outpost_id == null) { error make --unspanned { msg: "required query parameter 'outpostId' missing: pass --outpost-id" } }
   let qp = [(serialize-qp "endpointId" $endpoint_id "scalar") (serialize-qp "outpostId" $outpost_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/S3Outposts/DeleteEndpoint" $qp $auth.query)
   let accept_val = "application/json"
@@ -254,7 +256,7 @@ export def "list-endpoints" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Endpoints: record, NextToken: record> {
+]: nothing -> record<Endpoints: table<EndpointArn: string, OutpostsId: string, CidrBlock: string, Status: string, CreationTime: string, NetworkInterfaces: list, VpcId: string, SubnetId: string, SecurityGroupId: string, AccessType: string, CustomerOwnedIpv4Pool: string, FailedReason: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -302,7 +304,7 @@ export def "list-outposts-with-s3" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Outposts: record, NextToken: record> {
+]: nothing -> record<Outposts: table<OutpostArn: string, OutpostId: string, OwnerId: string, CapacityInBytes: int>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -341,7 +343,7 @@ export def "list-shared-endpoints" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # If a previous response from this operation included a NextToken value, you can provide that value here to retrieve the next page of results.
   --max-results: int # The maximum number of endpoints that will be returned in the response.
-  --outpost-id: string # The ID of the Amazon Web Services Outpost.
+  --outpost-id: string # The ID of the Amazon Web Services Outpost. (required)
   --max-results-2: string # Pagination limit (disambiguated-2)
   --next-token-2: string # Pagination token (disambiguated-2)
   --x-amz-content-sha256: string
@@ -351,9 +353,10 @@ export def "list-shared-endpoints" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Endpoints: record, NextToken: record> {
+]: nothing -> record<Endpoints: table<EndpointArn: string, OutpostsId: string, CidrBlock: string, Status: string, CreationTime: string, NetworkInterfaces: list, VpcId: string, SubnetId: string, SecurityGroupId: string, AccessType: string, CustomerOwnedIpv4Pool: string, FailedReason: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($outpost_id == null) { error make --unspanned { msg: "required query parameter 'outpostId' missing: pass --outpost-id" } }
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "outpostId" $outpost_id "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/S3Outposts/ListSharedEndpoints" $qp $auth.query)
   let accept_val = "application/json"

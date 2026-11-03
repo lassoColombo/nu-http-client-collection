@@ -94,9 +94,29 @@ def base-url-completer [] { ["https://od-api-demo.oxforddictionaries.com:443/api
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def source-language-completer [] { ["de" "en" "es" "gu" "hi" "id" "lv" "ms" "nso" "pt" "ro" "sw" "ta" "tn" "ur" "zu"] }
+def source-domains-language-completer [] { ["de" "en" "es" "nso" "pt" "ur" "zu"] }
+def target-domains-language-completer [] { ["de" "es" "id" "ms" "nso" "pt" "ro" "tn" "zu"] }
+def source-language-completer [] { ["de" "en" "es" "gu" "hi" "nso" "pt" "sw" "ta" "ur" "zu"] }
+def source-language-completer-1 [] { ["en" "es"] }
+def source-lang-completer [] { ["en" "es" "fr" "gu" "hi" "lv" "sw" "ta"] }
+def source-lang-completer-1 [] { ["en"] }
+def region-completer [] { ["gb" "us"] }
+def source-translation-language-completer [] { ["de" "en" "es" "id" "ms" "nso" "pt" "tn" "ur" "zu"] }
+def target-translation-language-completer [] { ["de" "es" "id" "ms" "nso" "pt" "ro" "tn" "zu"] }
+def endpoint-completer [] { ["entries" "inflections" "translations"] }
+def source-language-completer-2 [] { ["de" "en" "es" "gu" "hi" "lv" "ms" "nso" "pt" "sw" "ta" "tn" "ur" "zu"] }
+def source-lang-completer-2 [] { ["de" "en" "es" "hi" "nso" "pt" "tn" "zu"] }
+def source-language-completer-3 [] { ["de" "en" "es" "gu" "hi" "id" "lv" "ms" "nso" "pt" "ro" "sw" "ta" "tn" "ur" "zu"] }
 def target-language-completer [] { ["en" "es" "hi" "id" "lv" "ms" "nso" "ro" "sw" "tn" "ur" "zu"] }
+def language-completer [] { ["de" "en" "es" "gu" "hi" "id" "lv" "ms" "nso" "pt" "ro" "sw" "ta" "tn" "ur" "zu"] }
+def source-language-completer-4 [] { ["en"] }
+def source-language-completer-5 [] { ["de" "en" "es" "gu" "hi" "id" "lv" "ms" "pt" "sw" "ta" "ur"] }
+def source-register-language-completer [] { ["de" "en" "es" "id" "ms" "pt" "ur"] }
+def target-register-language-completer [] { ["de" "en" "es" "id" "ms" "nso" "pt" "ro" "tn" "zu"] }
+def source-lang-completer-3 [] { ["en" "es" "gu" "hi" "lv" "sw" "ta"] }
 def prefix-completer [] { ["false" "true"] }
+def source-search-language-completer [] { ["de" "en" "es" "id" "ms" "nso" "pt" "tn" "ur" "zu"] }
+def target-search-language-completer [] { ["de" "es" "id" "ms" "nso" "pt" "ro" "tn" "zu"] }
 def accept-completer [] { ["application/json" "text/csv"] }
 def exact-completer [] { ["false" "true"] }
 
@@ -127,8 +147,8 @@ export def commands []: nothing -> table {
 #
 # GET /domains/{source_domains_language}/{target_domains_language}
 export def "get-domains-source-domains-language-target-domains-language" [
-  source_domains_language: string
-  target_domains_language: string
+  source_domains_language: string@source-domains-language-completer
+  target_domains_language: string@target-domains-language-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -138,13 +158,15 @@ export def "get-domains-source-domains-language-target-domains-language" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --app-id: string # App ID Authentication Parameter
-  --app-key: string # App Key Authentication Parameter
+  --app-id: string # App ID Authentication Parameter (required, default: 5037d509)
+  --app-key: string # App Key Authentication Parameter (required, default: 4dc1aebaa63721f0f8e79a55e2514bc7)
 ]: nothing -> record<metadata: record, results: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source_domains_language | is-empty) { error make --unspanned { msg: "path parameter 'source_domains_language' must be non-empty" } }
   if ($target_domains_language | is-empty) { error make --unspanned { msg: "path parameter 'target_domains_language' must be non-empty" } }
+  let app_id = ($app_id | default "5037d509")
+  let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let full_url = (build-url $base ({source_domains_language: (encode-path-segment $source_domains_language), target_domains_language: (encode-path-segment $target_domains_language)} | format pattern "/domains/{source_domains_language}/{target_domains_language}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -168,7 +190,7 @@ export def "get-domains-source-domains-language-target-domains-language" [
 #
 # GET /domains/{source_language}
 export def "get-domains-source-language" [
-  source_language: string
+  source_language: string@source-language-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,12 +200,14 @@ export def "get-domains-source-language" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --app-id: string # App ID Authentication Parameter
-  --app-key: string # App Key Authentication Parameter
+  --app-id: string # App ID Authentication Parameter (required, default: 5037d509)
+  --app-key: string # App Key Authentication Parameter (required, default: 4dc1aebaa63721f0f8e79a55e2514bc7)
 ]: nothing -> record<metadata: record, results: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source_language | is-empty) { error make --unspanned { msg: "path parameter 'source_language' must be non-empty" } }
+  let app_id = ($app_id | default "5037d509")
+  let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let full_url = (build-url $base ({source_language: (encode-path-segment $source_language)} | format pattern "/domains/{source_language}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -208,7 +232,7 @@ export def "get-domains-source-language" [
 # GET /entries/{source_language}/{word_id}/sentences
 # Docs: https://helloreverb.com/about — find more info here
 export def "get-entries-source-language-word-id-sentences" [
-  source_language: string
+  source_language: string@source-language-completer-1
   word_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -219,13 +243,15 @@ export def "get-entries-source-language-word-id-sentences" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --app-id: string # App ID Authentication Parameter
-  --app-key: string # App Key Authentication Parameter
+  --app-id: string # App ID Authentication Parameter (required, default: 5037d509)
+  --app-key: string # App Key Authentication Parameter (required, default: 4dc1aebaa63721f0f8e79a55e2514bc7)
 ]: nothing -> record<metadata: record, results: table<id: string, language: string, lexicalEntries: list, type: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source_language | is-empty) { error make --unspanned { msg: "path parameter 'source_language' must be non-empty" } }
   if ($word_id | is-empty) { error make --unspanned { msg: "path parameter 'word_id' must be non-empty" } }
+  let app_id = ($app_id | default "5037d509")
+  let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let full_url = (build-url $base ({source_language: (encode-path-segment $source_language), word_id: (encode-path-segment $word_id)} | format pattern "/entries/{source_language}/{word_id}/sentences") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -250,7 +276,7 @@ export def "get-entries-source-language-word-id-sentences" [
 # GET /entries/{source_lang}/{word_id}
 # Docs: https://helloreverb.com/about — find more info here
 export def "get-entries-source-lang-word-id" [
-  source_lang: string
+  source_lang: string@source-lang-completer
   word_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -261,13 +287,15 @@ export def "get-entries-source-lang-word-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --app-id: string # App ID Authentication Parameter
-  --app-key: string # App Key Authentication Parameter
+  --app-id: string # App ID Authentication Parameter (required, default: 5037d509)
+  --app-key: string # App Key Authentication Parameter (required, default: 4dc1aebaa63721f0f8e79a55e2514bc7)
 ]: nothing -> record<metadata: record, results: table<id: string, language: string, lexicalEntries: list, pronunciations: list, type: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source_lang | is-empty) { error make --unspanned { msg: "path parameter 'source_lang' must be non-empty" } }
   if ($word_id | is-empty) { error make --unspanned { msg: "path parameter 'word_id' must be non-empty" } }
+  let app_id = ($app_id | default "5037d509")
+  let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), word_id: (encode-path-segment $word_id)} | format pattern "/entries/{source_lang}/{word_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -292,7 +320,7 @@ export def "get-entries-source-lang-word-id" [
 # GET /entries/{source_lang}/{word_id}/antonyms
 # Docs: https://helloreverb.com/about — find more info here
 export def "get-entries-source-lang-word-id-antonyms" [
-  source_lang: string
+  source_lang: string@source-lang-completer-1
   word_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -303,13 +331,15 @@ export def "get-entries-source-lang-word-id-antonyms" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --app-id: string # App ID Authentication Parameter
-  --app-key: string # App Key Authentication Parameter
+  --app-id: string # App ID Authentication Parameter (required, default: 5037d509)
+  --app-key: string # App Key Authentication Parameter (required, default: 4dc1aebaa63721f0f8e79a55e2514bc7)
 ]: nothing -> record<metadata: record, results: table<id: string, language: string, lexicalEntries: list, type: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source_lang | is-empty) { error make --unspanned { msg: "path parameter 'source_lang' must be non-empty" } }
   if ($word_id | is-empty) { error make --unspanned { msg: "path parameter 'word_id' must be non-empty" } }
+  let app_id = ($app_id | default "5037d509")
+  let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), word_id: (encode-path-segment $word_id)} | format pattern "/entries/{source_lang}/{word_id}/antonyms") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -334,9 +364,9 @@ export def "get-entries-source-lang-word-id-antonyms" [
 # GET /entries/{source_lang}/{word_id}/regions={region}
 # Docs: https://helloreverb.com/about — find more info here
 export def "get-entries-source-lang-word-id-regions-region" [
-  source_lang: string
+  source_lang: string@source-lang-completer-1
   word_id: string
-  region: string
+  region: string@region-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -346,14 +376,16 @@ export def "get-entries-source-lang-word-id-regions-region" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --app-id: string # App ID Authentication Parameter
-  --app-key: string # App Key Authentication Parameter
+  --app-id: string # App ID Authentication Parameter (required, default: 5037d509)
+  --app-key: string # App Key Authentication Parameter (required, default: 4dc1aebaa63721f0f8e79a55e2514bc7)
 ]: nothing -> record<metadata: record, results: table<id: string, language: string, lexicalEntries: list, pronunciations: list, type: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source_lang | is-empty) { error make --unspanned { msg: "path parameter 'source_lang' must be non-empty" } }
   if ($word_id | is-empty) { error make --unspanned { msg: "path parameter 'word_id' must be non-empty" } }
   if ($region | is-empty) { error make --unspanned { msg: "path parameter 'region' must be non-empty" } }
+  let app_id = ($app_id | default "5037d509")
+  let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), word_id: (encode-path-segment $word_id), region: (encode-path-segment $region)} | format pattern "/entries/{source_lang}/{word_id}/regions={region}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -378,7 +410,7 @@ export def "get-entries-source-lang-word-id-regions-region" [
 # GET /entries/{source_lang}/{word_id}/synonyms
 # Docs: https://helloreverb.com/about — find more info here
 export def "get-entries-source-lang-word-id-synonyms" [
-  source_lang: string
+  source_lang: string@source-lang-completer-1
   word_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -389,13 +421,15 @@ export def "get-entries-source-lang-word-id-synonyms" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --app-id: string # App ID Authentication Parameter
-  --app-key: string # App Key Authentication Parameter
+  --app-id: string # App ID Authentication Parameter (required, default: 5037d509)
+  --app-key: string # App Key Authentication Parameter (required, default: 4dc1aebaa63721f0f8e79a55e2514bc7)
 ]: nothing -> record<metadata: record, results: table<id: string, language: string, lexicalEntries: list, type: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source_lang | is-empty) { error make --unspanned { msg: "path parameter 'source_lang' must be non-empty" } }
   if ($word_id | is-empty) { error make --unspanned { msg: "path parameter 'word_id' must be non-empty" } }
+  let app_id = ($app_id | default "5037d509")
+  let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), word_id: (encode-path-segment $word_id)} | format pattern "/entries/{source_lang}/{word_id}/synonyms") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -420,7 +454,7 @@ export def "get-entries-source-lang-word-id-synonyms" [
 # GET /entries/{source_lang}/{word_id}/synonyms;antonyms
 # Docs: https://helloreverb.com/about — find more info here
 export def "get-entries-source-lang-word-id-synonymsantonyms" [
-  source_lang: string
+  source_lang: string@source-lang-completer-1
   word_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -431,13 +465,15 @@ export def "get-entries-source-lang-word-id-synonymsantonyms" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --app-id: string # App ID Authentication Parameter
-  --app-key: string # App Key Authentication Parameter
+  --app-id: string # App ID Authentication Parameter (required, default: 5037d509)
+  --app-key: string # App Key Authentication Parameter (required, default: 4dc1aebaa63721f0f8e79a55e2514bc7)
 ]: nothing -> record<metadata: record, results: table<id: string, language: string, lexicalEntries: list, type: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source_lang | is-empty) { error make --unspanned { msg: "path parameter 'source_lang' must be non-empty" } }
   if ($word_id | is-empty) { error make --unspanned { msg: "path parameter 'word_id' must be non-empty" } }
+  let app_id = ($app_id | default "5037d509")
+  let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), word_id: (encode-path-segment $word_id)} | format pattern "/entries/{source_lang}/{word_id}/synonyms;antonyms") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -461,7 +497,7 @@ export def "get-entries-source-lang-word-id-synonymsantonyms" [
 #
 # GET /entries/{source_lang}/{word_id}/{filters}
 export def "get-entries-source-lang-word-id-filters" [
-  source_lang: string
+  source_lang: string@source-lang-completer
   word_id: string
   filters: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -473,14 +509,16 @@ export def "get-entries-source-lang-word-id-filters" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --app-id: string # App ID Authentication Parameter
-  --app-key: string # App Key Authentication Parameter
+  --app-id: string # App ID Authentication Parameter (required, default: 5037d509)
+  --app-key: string # App Key Authentication Parameter (required, default: 4dc1aebaa63721f0f8e79a55e2514bc7)
 ]: nothing -> record<metadata: record, results: table<id: string, language: string, lexicalEntries: list, pronunciations: list, type: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source_lang | is-empty) { error make --unspanned { msg: "path parameter 'source_lang' must be non-empty" } }
   if ($word_id | is-empty) { error make --unspanned { msg: "path parameter 'word_id' must be non-empty" } }
   if ($filters | is-empty) { error make --unspanned { msg: "path parameter 'filters' must be non-empty" } }
+  let app_id = ($app_id | default "5037d509")
+  let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), word_id: (encode-path-segment $word_id), filters: (encode-path-segment $filters)} | format pattern "/entries/{source_lang}/{word_id}/{filters}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -504,9 +542,9 @@ export def "get-entries-source-lang-word-id-filters" [
 #
 # GET /entries/{source_translation_language}/{word_id}/translations={target_translation_language}
 export def "get-entries-source-translation-language-word-id-translations-target-translation-language" [
-  source_translation_language: string
+  source_translation_language: string@source-translation-language-completer
   word_id: string
-  target_translation_language: string
+  target_translation_language: string@target-translation-language-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -516,14 +554,16 @@ export def "get-entries-source-translation-language-word-id-translations-target-
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --app-id: string # App ID Authentication Parameter
-  --app-key: string # App Key Authentication Parameter
+  --app-id: string # App ID Authentication Parameter (required, default: 5037d509)
+  --app-key: string # App Key Authentication Parameter (required, default: 4dc1aebaa63721f0f8e79a55e2514bc7)
 ]: nothing -> record<metadata: record, results: table<id: string, language: string, lexicalEntries: list, pronunciations: list, type: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source_translation_language | is-empty) { error make --unspanned { msg: "path parameter 'source_translation_language' must be non-empty" } }
   if ($word_id | is-empty) { error make --unspanned { msg: "path parameter 'word_id' must be non-empty" } }
   if ($target_translation_language | is-empty) { error make --unspanned { msg: "path parameter 'target_translation_language' must be non-empty" } }
+  let app_id = ($app_id | default "5037d509")
+  let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let full_url = (build-url $base ({source_translation_language: (encode-path-segment $source_translation_language), word_id: (encode-path-segment $word_id), target_translation_language: (encode-path-segment $target_translation_language)} | format pattern "/entries/{source_translation_language}/{word_id}/translations={target_translation_language}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -556,11 +596,13 @@ export def "get-filters" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --app-id: string # App ID Authentication Parameter
-  --app-key: string # App Key Authentication Parameter
+  --app-id: string # App ID Authentication Parameter (required, default: 5037d509)
+  --app-key: string # App Key Authentication Parameter (required, default: 4dc1aebaa63721f0f8e79a55e2514bc7)
 ]: nothing -> record<metadata: record, results: record<entries: list<string>, inflections: list<string>, translations: list<string>, wordlist: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let app_id = ($app_id | default "5037d509")
+  let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let full_url = (build-url $base "/filters" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -584,7 +626,7 @@ export def "get-filters" [
 #
 # GET /filters/{endpoint}
 export def "get-filters-endpoint" [
-  endpoint: string
+  endpoint: string@endpoint-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -594,12 +636,14 @@ export def "get-filters-endpoint" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --app-id: string # App ID Authentication Parameter
-  --app-key: string # App Key Authentication Parameter
+  --app-id: string # App ID Authentication Parameter (required, default: 5037d509)
+  --app-key: string # App Key Authentication Parameter (required, default: 4dc1aebaa63721f0f8e79a55e2514bc7)
 ]: nothing -> record<metadata: record, results: record<entries: list<string>, inflections: list<string>, translations: list<string>, wordlist: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($endpoint | is-empty) { error make --unspanned { msg: "path parameter 'endpoint' must be non-empty" } }
+  let app_id = ($app_id | default "5037d509")
+  let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let full_url = (build-url $base ({endpoint: (encode-path-segment $endpoint)} | format pattern "/filters/{endpoint}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -623,7 +667,7 @@ export def "get-filters-endpoint" [
 #
 # GET /grammaticalFeatures/{source_language}
 export def "get-grammatical-features-source-language" [
-  source_language: string
+  source_language: string@source-language-completer-2
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -633,12 +677,14 @@ export def "get-grammatical-features-source-language" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --app-id: string # App ID Authentication Parameter
-  --app-key: string # App Key Authentication Parameter
+  --app-id: string # App ID Authentication Parameter (required, default: 5037d509)
+  --app-key: string # App Key Authentication Parameter (required, default: 4dc1aebaa63721f0f8e79a55e2514bc7)
 ]: nothing -> record<metadata: record, results: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source_language | is-empty) { error make --unspanned { msg: "path parameter 'source_language' must be non-empty" } }
+  let app_id = ($app_id | default "5037d509")
+  let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let full_url = (build-url $base ({source_language: (encode-path-segment $source_language)} | format pattern "/grammaticalFeatures/{source_language}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -662,7 +708,7 @@ export def "get-grammatical-features-source-language" [
 #
 # GET /inflections/{source_lang}/{word_id}/{filters}
 export def "get-inflections-source-lang-word-id-filters" [
-  source_lang: string
+  source_lang: string@source-lang-completer-2
   word_id: string
   filters: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -674,14 +720,16 @@ export def "get-inflections-source-lang-word-id-filters" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --app-id: string # App ID Authentication Parameter
-  --app-key: string # App Key Authentication Parameter
+  --app-id: string # App ID Authentication Parameter (required, default: 5037d509)
+  --app-key: string # App Key Authentication Parameter (required, default: 4dc1aebaa63721f0f8e79a55e2514bc7)
 ]: nothing -> record<metadata: record, results: table<id: string, language: string, lexicalEntries: list, type: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source_lang | is-empty) { error make --unspanned { msg: "path parameter 'source_lang' must be non-empty" } }
   if ($word_id | is-empty) { error make --unspanned { msg: "path parameter 'word_id' must be non-empty" } }
   if ($filters | is-empty) { error make --unspanned { msg: "path parameter 'filters' must be non-empty" } }
+  let app_id = ($app_id | default "5037d509")
+  let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), word_id: (encode-path-segment $word_id), filters: (encode-path-segment $filters)} | format pattern "/inflections/{source_lang}/{word_id}/{filters}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -714,13 +762,15 @@ export def "get-languages" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --source-language: string@source-language-completer # IANA language code. If provided output will be filtered by sourceLanguage.
+  --source-language: string@source-language-completer-3 # IANA language code. If provided output will be filtered by sourceLanguage.
   --target-language: string@target-language-completer # IANA language code. If provided output will be filtered by sourceLanguage.
-  --app-id: string # App ID Authentication Parameter
-  --app-key: string # App Key Authentication Parameter
+  --app-id: string # App ID Authentication Parameter (required, default: 5037d509)
+  --app-key: string # App Key Authentication Parameter (required, default: 4dc1aebaa63721f0f8e79a55e2514bc7)
 ]: nothing -> record<metadata: record, results: table<region: string, source: string, sourceLanguage: record, targetLanguage: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let app_id = ($app_id | default "5037d509")
+  let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let qp = [(serialize-qp "sourceLanguage" $source_language "scalar") (serialize-qp "targetLanguage" $target_language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/languages" $qp $auth.query)
   let accept_val = "application/json"
@@ -745,7 +795,7 @@ export def "get-languages" [
 #
 # GET /lexicalcategories/{language}
 export def "get-lexicalcategories-language" [
-  language: string
+  language: string@language-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -755,12 +805,14 @@ export def "get-lexicalcategories-language" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --app-id: string # App ID Authentication Parameter
-  --app-key: string # App Key Authentication Parameter
+  --app-id: string # App ID Authentication Parameter (required, default: 5037d509)
+  --app-key: string # App Key Authentication Parameter (required, default: 4dc1aebaa63721f0f8e79a55e2514bc7)
 ]: nothing -> record<metadata: record, results: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($language | is-empty) { error make --unspanned { msg: "path parameter 'language' must be non-empty" } }
+  let app_id = ($app_id | default "5037d509")
+  let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let full_url = (build-url $base ({language: (encode-path-segment $language)} | format pattern "/lexicalcategories/{language}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -784,7 +836,7 @@ export def "get-lexicalcategories-language" [
 #
 # GET /regions/{source_language}
 export def "get-regions-source-language" [
-  source_language: string
+  source_language: string@source-language-completer-4
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -794,12 +846,14 @@ export def "get-regions-source-language" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --app-id: string # App ID Authentication Parameter
-  --app-key: string # App Key Authentication Parameter
+  --app-id: string # App ID Authentication Parameter (required, default: 5037d509)
+  --app-key: string # App Key Authentication Parameter (required, default: 4dc1aebaa63721f0f8e79a55e2514bc7)
 ]: nothing -> record<metadata: record, results: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source_language | is-empty) { error make --unspanned { msg: "path parameter 'source_language' must be non-empty" } }
+  let app_id = ($app_id | default "5037d509")
+  let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let full_url = (build-url $base ({source_language: (encode-path-segment $source_language)} | format pattern "/regions/{source_language}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -823,7 +877,7 @@ export def "get-regions-source-language" [
 #
 # GET /registers/{source_language}
 export def "get-registers-source-language" [
-  source_language: string
+  source_language: string@source-language-completer-5
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -833,12 +887,14 @@ export def "get-registers-source-language" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --app-id: string # App ID Authentication Parameter
-  --app-key: string # App Key Authentication Parameter
+  --app-id: string # App ID Authentication Parameter (required, default: 5037d509)
+  --app-key: string # App Key Authentication Parameter (required, default: 4dc1aebaa63721f0f8e79a55e2514bc7)
 ]: nothing -> record<metadata: record, results: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source_language | is-empty) { error make --unspanned { msg: "path parameter 'source_language' must be non-empty" } }
+  let app_id = ($app_id | default "5037d509")
+  let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let full_url = (build-url $base ({source_language: (encode-path-segment $source_language)} | format pattern "/registers/{source_language}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -862,8 +918,8 @@ export def "get-registers-source-language" [
 #
 # GET /registers/{source_register_language}/{target_register_language}
 export def "get-registers-source-register-language-target-register-language" [
-  source_register_language: string
-  target_register_language: string
+  source_register_language: string@source-register-language-completer
+  target_register_language: string@target-register-language-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -873,13 +929,15 @@ export def "get-registers-source-register-language-target-register-language" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --app-id: string # App ID Authentication Parameter
-  --app-key: string # App Key Authentication Parameter
+  --app-id: string # App ID Authentication Parameter (required, default: 5037d509)
+  --app-key: string # App Key Authentication Parameter (required, default: 4dc1aebaa63721f0f8e79a55e2514bc7)
 ]: nothing -> record<metadata: record, results: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source_register_language | is-empty) { error make --unspanned { msg: "path parameter 'source_register_language' must be non-empty" } }
   if ($target_register_language | is-empty) { error make --unspanned { msg: "path parameter 'target_register_language' must be non-empty" } }
+  let app_id = ($app_id | default "5037d509")
+  let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let full_url = (build-url $base ({source_register_language: (encode-path-segment $source_register_language), target_register_language: (encode-path-segment $target_register_language)} | format pattern "/registers/{source_register_language}/{target_register_language}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -904,7 +962,7 @@ export def "get-registers-source-register-language-target-register-language" [
 # GET /search/{source_lang}
 # Docs: https://helloreverb.com/about — find more info here
 export def "get-search-source-lang" [
-  source_lang: string
+  source_lang: string@source-lang-completer-3
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -919,12 +977,14 @@ export def "get-search-source-lang" [
   --regions: string # If searching in English, filter words with specific region(s) either 'us' or 'gb'.
   --limit: string # Limit the number of results per response. Default and maximum limit is 5000.
   --offset: string # Offset the start number of the result.
-  --app-id: string # App ID Authentication Parameter
-  --app-key: string # App Key Authentication Parameter
+  --app-id: string # App ID Authentication Parameter (required, default: 5037d509)
+  --app-key: string # App Key Authentication Parameter (required, default: 4dc1aebaa63721f0f8e79a55e2514bc7)
 ]: nothing -> record<metadata: record, results: table<id: string, matchString: string, matchType: string, region: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source_lang | is-empty) { error make --unspanned { msg: "path parameter 'source_lang' must be non-empty" } }
+  let app_id = ($app_id | default "5037d509")
+  let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "regions" $regions "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang)} | format pattern "/search/{source_lang}") $qp $auth.query)
   let accept_val = "application/json"
@@ -950,8 +1010,8 @@ export def "get-search-source-lang" [
 # GET /search/{source_search_language}/translations={target_search_language}
 # Docs: https://helloreverb.com/about — find more info here
 export def "get-search-source-search-language-translations-target-search-language" [
-  source_search_language: string
-  target_search_language: string
+  source_search_language: string@source-search-language-completer
+  target_search_language: string@target-search-language-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -966,13 +1026,15 @@ export def "get-search-source-search-language-translations-target-search-languag
   --regions: string # Filter words with specific region(s) E.g., regions=us. For now gb, us are available for en language.
   --limit: string # Limit the number of results per response. Default and maximum limit is 5000.
   --offset: string # Offset the start number of the result.
-  --app-id: string # App ID Authentication Parameter
-  --app-key: string # App Key Authentication Parameter
+  --app-id: string # App ID Authentication Parameter (required, default: 5037d509)
+  --app-key: string # App Key Authentication Parameter (required, default: 4dc1aebaa63721f0f8e79a55e2514bc7)
 ]: nothing -> record<metadata: record, results: table<id: string, matchString: string, matchType: string, region: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source_search_language | is-empty) { error make --unspanned { msg: "path parameter 'source_search_language' must be non-empty" } }
   if ($target_search_language | is-empty) { error make --unspanned { msg: "path parameter 'target_search_language' must be non-empty" } }
+  let app_id = ($app_id | default "5037d509")
+  let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "regions" $regions "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source_search_language: (encode-path-segment $source_search_language), target_search_language: (encode-path-segment $target_search_language)} | format pattern "/search/{source_search_language}/translations={target_search_language}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1019,18 +1081,20 @@ export def "get-stats-frequency-ngrams-source-lang-corpus-ngram-size" [
   --min-document-frequency: int # Restrict the query to entries that appear in at least `minDocumentFrequency` documents (format: int64)
   --max-document-frequency: int # Restrict the query to entries that appera in at most `maxDocumentFrequency` documents (format: int64)
   --collate: string # collate the results by wordform, trueCase, lemma, lexicalCategory. Multiple values can be separated by commas (e.g., collate=trueCase,lemma,lexicalCategory).
-  --qp-sort: string # sort the resulting list by wordform, trueCase, lemma, lexicalCategory, frequency, normalizedFrequency. Descending order is achieved by prepending the value with the minus sign ('-'). Multiple values can be separated by commas (e.g., sort=lexicalCategory,-frequency)
+  --sort: string # sort the resulting list by wordform, trueCase, lemma, lexicalCategory, frequency, normalizedFrequency. Descending order is achieved by prepending the value with the minus sign ('-'). Multiple values can be separated by commas (e.g., sort=lexicalCategory,-frequency)
   --offset: int # pagination - results offset (format: int64, default: 0)
   --limit: int # pagination - results limit (format: int64, default: 100)
-  --app-id: string # App ID Authentication Parameter
-  --app-key: string # App Key Authentication Parameter
+  --app-id: string # App ID Authentication Parameter (required, default: 5037d509)
+  --app-key: string # App Key Authentication Parameter (required, default: 4dc1aebaa63721f0f8e79a55e2514bc7)
 ]: nothing -> record<metadata: record, results: table<frequency: int, tokens: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source_lang | is-empty) { error make --unspanned { msg: "path parameter 'source_lang' must be non-empty" } }
   if ($corpus | is-empty) { error make --unspanned { msg: "path parameter 'corpus' must be non-empty" } }
   if ($ngram_size | is-empty) { error make --unspanned { msg: "path parameter 'ngram-size' must be non-empty" } }
-  let qp = [(serialize-qp "tokens" $tokens "scalar") (serialize-qp "contains" $contains "scalar") (serialize-qp "punctuation" $punctuation "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "minFrequency" $min_frequency "scalar") (serialize-qp "maxFrequency" $max_frequency "scalar") (serialize-qp "minDocumentFrequency" $min_document_frequency "scalar") (serialize-qp "maxDocumentFrequency" $max_document_frequency "scalar") (serialize-qp "collate" $collate "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let app_id = ($app_id | default "5037d509")
+  let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
+  let qp = [(serialize-qp "tokens" $tokens "scalar") (serialize-qp "contains" $contains "scalar") (serialize-qp "punctuation" $punctuation "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "minFrequency" $min_frequency "scalar") (serialize-qp "maxFrequency" $max_frequency "scalar") (serialize-qp "minDocumentFrequency" $min_document_frequency "scalar") (serialize-qp "maxDocumentFrequency" $max_document_frequency "scalar") (serialize-qp "collate" $collate "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), corpus: (encode-path-segment $corpus), ngram_size: (encode-path-segment $ngram_size)} | format pattern "/stats/frequency/ngrams/{source_lang}/{corpus}/{ngram_size}/") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1039,7 +1103,7 @@ export def "get-stats-frequency-ngrams-source-lang-corpus-ngram-size" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"tokens": $tokens, "contains": $contains, "punctuation": $punctuation, "format": $format, "minFrequency": $min_frequency, "maxFrequency": $max_frequency, "minDocumentFrequency": $min_document_frequency, "maxDocumentFrequency": $max_document_frequency, "collate": $collate, "sort": $qp_sort, "offset": $offset, "limit": $limit} | compact)
+    query: ({"tokens": $tokens, "contains": $contains, "punctuation": $punctuation, "format": $format, "minFrequency": $min_frequency, "maxFrequency": $max_frequency, "minDocumentFrequency": $min_document_frequency, "maxDocumentFrequency": $max_document_frequency, "collate": $collate, "sort": $sort, "offset": $offset, "limit": $limit} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1070,12 +1134,14 @@ export def "get-stats-frequency-word-source-lang" [
   --true-case: string # The written form of the word to look up with normalised case (Books --> books)
   --lemma: string # The lemma of the word to look up (e.g., Book, booked, books all have the lemma "book") (default: test)
   --lexical-category: string # The lexical category of the word(s) to look up (e.g., noun or verb)
-  --app-id: string # App ID Authentication Parameter
-  --app-key: string # App Key Authentication Parameter
+  --app-id: string # App ID Authentication Parameter (required, default: 5037d509)
+  --app-key: string # App Key Authentication Parameter (required, default: 4dc1aebaa63721f0f8e79a55e2514bc7)
 ]: nothing -> record<metadata: record, result: record<frequency: int, lemma: string, lexicalCategory: string, matchCount: int, normalizedFrequency: int, trueCase: string, wordform: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source_lang | is-empty) { error make --unspanned { msg: "path parameter 'source_lang' must be non-empty" } }
+  let app_id = ($app_id | default "5037d509")
+  let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let qp = [(serialize-qp "corpus" $corpus "scalar") (serialize-qp "wordform" $wordform "scalar") (serialize-qp "trueCase" $true_case "scalar") (serialize-qp "lemma" $lemma "scalar") (serialize-qp "lexicalCategory" $lexical_category "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang)} | format pattern "/stats/frequency/word/{source_lang}/") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1117,7 +1183,7 @@ export def "get-stats-frequency-words-source-lang" [
   --lemma: string # The lemma of the word to look up (e.g., Book, booked, books all have the lemma "book") (default: test)
   --lexical-category: string # The lexical category of the word(s) to look up (e.g., adjective or noun)
   --grammatical-features: string # The grammatical features of the word(s) to look up entered as a list of k:v (e.g., degree_type:comparative)
-  --qp-sort: string # sort the resulting list by wordform, trueCase, lemma, lexicalCategory, frequency, normalizedFrequency. Descending order is achieved by prepending the value with the minus sign ('-'). Multiple values can be separated by commas (e.g., sort=lexicalCategory,-frequency)
+  --sort: string # sort the resulting list by wordform, trueCase, lemma, lexicalCategory, frequency, normalizedFrequency. Descending order is achieved by prepending the value with the minus sign ('-'). Multiple values can be separated by commas (e.g., sort=lexicalCategory,-frequency)
   --collate: string # collate the results by wordform, trueCase, lemma, lexicalCategory. Multiple values can be separated by commas (e.g., collate=trueCase,lemma,lexicalCategory).
   --min-frequency: int # Restrict the query to entries with frequency of at least `minFrequency` (format: int64)
   --max-frequency: int # Restrict the query to entries with frequency of at most `maxFrequency` (format: int64)
@@ -1125,13 +1191,15 @@ export def "get-stats-frequency-words-source-lang" [
   --max-normalized-frequency: float # Restrict the query to entries with frequency of at most `maxNormalizedFrequency` (format: float)
   --offset: int # pagination - results offset (format: int64, default: 0)
   --limit: int # pagination - results limit (format: int64, default: 100)
-  --app-id: string # App ID Authentication Parameter
-  --app-key: string # App Key Authentication Parameter
+  --app-id: string # App ID Authentication Parameter (required, default: 5037d509)
+  --app-key: string # App Key Authentication Parameter (required, default: 4dc1aebaa63721f0f8e79a55e2514bc7)
 ]: nothing -> record<metadata: record, results: table<frequency: int, lemma: string, lexicalCategory: string, normalizedFrequency: int, trueCase: string, wordform: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source_lang | is-empty) { error make --unspanned { msg: "path parameter 'source_lang' must be non-empty" } }
-  let qp = [(serialize-qp "corpus" $corpus "scalar") (serialize-qp "wordform" $wordform "scalar") (serialize-qp "trueCase" $true_case "scalar") (serialize-qp "lemma" $lemma "scalar") (serialize-qp "lexicalCategory" $lexical_category "scalar") (serialize-qp "grammaticalFeatures" $grammatical_features "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "collate" $collate "scalar") (serialize-qp "minFrequency" $min_frequency "scalar") (serialize-qp "maxFrequency" $max_frequency "scalar") (serialize-qp "minNormalizedFrequency" $min_normalized_frequency "scalar") (serialize-qp "maxNormalizedFrequency" $max_normalized_frequency "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let app_id = ($app_id | default "5037d509")
+  let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
+  let qp = [(serialize-qp "corpus" $corpus "scalar") (serialize-qp "wordform" $wordform "scalar") (serialize-qp "trueCase" $true_case "scalar") (serialize-qp "lemma" $lemma "scalar") (serialize-qp "lexicalCategory" $lexical_category "scalar") (serialize-qp "grammaticalFeatures" $grammatical_features "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "collate" $collate "scalar") (serialize-qp "minFrequency" $min_frequency "scalar") (serialize-qp "maxFrequency" $max_frequency "scalar") (serialize-qp "minNormalizedFrequency" $min_normalized_frequency "scalar") (serialize-qp "maxNormalizedFrequency" $max_normalized_frequency "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang)} | format pattern "/stats/frequency/words/{source_lang}/") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1140,7 +1208,7 @@ export def "get-stats-frequency-words-source-lang" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"corpus": $corpus, "wordform": $wordform, "trueCase": $true_case, "lemma": $lemma, "lexicalCategory": $lexical_category, "grammaticalFeatures": $grammatical_features, "sort": $qp_sort, "collate": $collate, "minFrequency": $min_frequency, "maxFrequency": $max_frequency, "minNormalizedFrequency": $min_normalized_frequency, "maxNormalizedFrequency": $max_normalized_frequency, "offset": $offset, "limit": $limit} | compact)
+    query: ({"corpus": $corpus, "wordform": $wordform, "trueCase": $true_case, "lemma": $lemma, "lexicalCategory": $lexical_category, "grammaticalFeatures": $grammatical_features, "sort": $sort, "collate": $collate, "minFrequency": $min_frequency, "maxFrequency": $max_frequency, "minNormalizedFrequency": $min_normalized_frequency, "maxNormalizedFrequency": $max_normalized_frequency, "offset": $offset, "limit": $limit} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1155,7 +1223,7 @@ export def "get-stats-frequency-words-source-lang" [
 #
 # GET /wordlist/{source_lang}/{filters_advanced}
 export def "get-wordlist-source-lang-filters-advanced" [
-  source_lang: string
+  source_lang: string@source-lang-completer-3
   filters_advanced: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1174,13 +1242,15 @@ export def "get-wordlist-source-lang-filters-advanced" [
   --exact: oneof<nothing, bool> # If exact=true wordlist returns a list of entries that exactly matches the search string. Otherwise wordlist lists entries that start with prefix string. (default: false)
   --limit: string # Limit the number of results per response. Default and maximum limit is 5000.
   --offset: string # Offset the start number of the result.
-  --app-id: string # App ID Authentication Parameter
-  --app-key: string # App Key Authentication Parameter
+  --app-id: string # App ID Authentication Parameter (required, default: 5037d509)
+  --app-key: string # App Key Authentication Parameter (required, default: 4dc1aebaa63721f0f8e79a55e2514bc7)
 ]: nothing -> record<metadata: record, results: table<id: string, matchString: string, matchType: string, region: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source_lang | is-empty) { error make --unspanned { msg: "path parameter 'source_lang' must be non-empty" } }
   if ($filters_advanced | is-empty) { error make --unspanned { msg: "path parameter 'filters_advanced' must be non-empty" } }
+  let app_id = ($app_id | default "5037d509")
+  let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let qp = [(serialize-qp "exclude" $exclude "scalar") (serialize-qp "exclude_senses" $exclude_senses "scalar") (serialize-qp "exclude_prime_senses" $exclude_prime_senses "scalar") (serialize-qp "word_length" $word_length "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "exact" $exact "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), filters_advanced: (encode-path-segment $filters_advanced)} | format pattern "/wordlist/{source_lang}/{filters_advanced}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1205,7 +1275,7 @@ export def "get-wordlist-source-lang-filters-advanced" [
 #
 # GET /wordlist/{source_lang}/{filters_basic}
 export def "get-wordlist-source-lang-filters-basic" [
-  source_lang: string
+  source_lang: string@source-lang-completer-3
   filters_basic: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1218,13 +1288,15 @@ export def "get-wordlist-source-lang-filters-basic" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: string # Limit the number of results per response. Default and maximum limit is 5000.
   --offset: string # Offset the start number of the result
-  --app-id: string # App ID Authentication Parameter
-  --app-key: string # App Key Authentication Parameter
+  --app-id: string # App ID Authentication Parameter (required, default: 5037d509)
+  --app-key: string # App Key Authentication Parameter (required, default: 4dc1aebaa63721f0f8e79a55e2514bc7)
 ]: nothing -> record<metadata: record, results: table<id: string, matchString: string, matchType: string, region: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source_lang | is-empty) { error make --unspanned { msg: "path parameter 'source_lang' must be non-empty" } }
   if ($filters_basic | is-empty) { error make --unspanned { msg: "path parameter 'filters_basic' must be non-empty" } }
+  let app_id = ($app_id | default "5037d509")
+  let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), filters_basic: (encode-path-segment $filters_basic)} | format pattern "/wordlist/{source_lang}/{filters_basic}") $qp $auth.query)
   let accept_val = "application/json"

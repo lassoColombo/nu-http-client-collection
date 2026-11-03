@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -123,6 +123,7 @@ def type-completer [] { ["stats_notification" "usage_limit"] }
 def aggregated-by-completer [] { ["day" "month" "week"] }
 def editor-completer [] { ["code" "design"] }
 def sort-by-direction-completer [] { ["asc" "desc"] }
+def client-type-completer [] { ["desktop" "phone" "tablet" "webmail"] }
 def delete-contacts-completer [] { ["false" "true"] }
 def country-completer [] { ["CA" "US"] }
 def file-type-completer [] { ["csv" "json"] }
@@ -176,7 +177,7 @@ export def "get-access-settings-activity" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Limits the number of IPs to return. (default: 20)
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<result: table<allowed: bool, auth_method: string, first_at: int, ip: string, last_at: int, location: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -214,7 +215,7 @@ export def "delete-access-settings-whitelist" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --ids: list<int> # An array of the IDs of the IP address that you want to remove from your allow list.
 ]: any -> any {
   let input = $in
@@ -255,7 +256,7 @@ export def "get-access-settings-whitelist" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<result: table<created_at: int, id: int, ip: string, updated_at: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -293,7 +294,7 @@ export def "post-access-settings-whitelist" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   ips: list # An array containing the IP(s) you want to allow. — item shape: {ip: string}
 ]: any -> record<result: table<created_at: int, id: int, ip: string, updated_at: int>> {
   let input = $in
@@ -335,7 +336,7 @@ export def "delete-access-settings-whitelist-rule-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -374,7 +375,7 @@ export def "get-access-settings-whitelist-rule-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<result: table<created_at: int, id: int, ip: string, updated_at: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -413,7 +414,7 @@ export def "get-alerts" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> table<created_at: int, email_to: string, frequency: string, id: int, percentage: int, type: string, updated_at: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -496,7 +497,7 @@ export def "delete-alerts-alert-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -536,7 +537,7 @@ export def "get-alerts-alert-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<created_at: int, email_to: string, frequency: string, id: int, percentage: int, type: string, updated_at: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -575,7 +576,7 @@ export def "patch-alerts-alert-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --email-to: string # The new email address you want your alert to be sent to. Example: test@example.com
   --frequency: string # The new frequency at which to send the stats_notification alert. Example: monthly
   --percentage: int # The new percentage threshold at which the usage_limit alert will be sent. Example: 90
@@ -620,7 +621,7 @@ export def "get-api-keys" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<result: table<api_key_id: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -658,7 +659,7 @@ export def "create-api-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   name: string # The name you will use to describe this API Key.
   --scopes: list<string> # The individual permissions that you are giving to this API Key.
 ]: any -> record<api_key: string, api_key_id: string, name: string, scopes: list<string>> {
@@ -701,7 +702,7 @@ export def "delete-api-keys-api-key-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -740,7 +741,7 @@ export def "get-api-keys-api-key-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<result: table<scopes: list, api_key_id: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -779,7 +780,7 @@ export def "patch-api-keys-api-key-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   name: string # The new name of the API Key.
 ]: any -> record<api_key_id: string, name: string> {
   let input = $in
@@ -822,7 +823,7 @@ export def "put-api-keys-api-key-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   name: string
   --scopes: list<string>
 ]: any -> record<scopes: list<string>, api_key_id: string, name: string> {
@@ -866,7 +867,7 @@ export def "get-asm-groups" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: int
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> table<description: string, id: float, is_default: bool, last_email_sent_at: any, name: string, unsubscribes: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -904,7 +905,7 @@ export def "post-asm-groups" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --description: string # A brief description of your suppression group. Required when creating a group.
   --is-default: oneof<nothing, bool> # Indicates if you would like this to be your default suppression group.
   --name: string # The name of your suppression group. Required when creating a group.
@@ -948,7 +949,7 @@ export def "delete-asm-groups-group-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -987,7 +988,7 @@ export def "get-asm-groups-group-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<description: string, is_default: bool, name: string, id: int, last_email_sent_at: string, unsubscribes: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1026,7 +1027,7 @@ export def "patch-asm-groups-group-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --description: string # A brief description of your suppression group. Required when creating a group.
   --is-default: oneof<nothing, bool> # Indicates if you would like this to be your default suppression group.
   --name: string # The name of your suppression group. Required when creating a group.
@@ -1071,7 +1072,7 @@ export def "get-asm-groups-group-id-suppressions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1110,7 +1111,7 @@ export def "post-asm-groups-group-id-suppressions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   recipient_emails: list<string> # The array of email addresses to add or find.
 ]: any -> record<recipient_emails: list<string>> {
   let input = $in
@@ -1153,7 +1154,7 @@ export def "post-asm-groups-group-id-suppressions-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   recipient_emails: list<string> # The array of email addresses to add or find.
 ]: any -> list<string> {
   let input = $in
@@ -1197,7 +1198,7 @@ export def "delete-asm-groups-group-id-suppressions-email" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1236,7 +1237,7 @@ export def "get-asm-suppressions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> table<created_at: int, email: string, group_id: int, group_name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1273,7 +1274,7 @@ export def "post-asm-suppressions-global" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   recipient_emails: list<string> # The array of email addresses to add or find.
 ]: any -> record<recipient_emails: list<string>> {
   let input = $in
@@ -1315,7 +1316,7 @@ export def "delete-asm-suppressions-global-email" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1354,7 +1355,7 @@ export def "get-asm-suppressions-global-email" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<recipient_email: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1393,7 +1394,7 @@ export def "get-asm-suppressions-email" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<suppressions: table<description: string, id: int, is_default: bool, name: string, suppressed: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1435,12 +1436,13 @@ export def "get-browsers-stats" [
   --limit: int # The number of results to return.
   --offset: int # The point in the list to begin retrieving results.
   --aggregated-by: string@aggregated-by-completer # How to group the statistics. Must be either "day", "week", or "month".
-  --start-date: string # The starting date of the statistics to retrieve. Must follow format YYYY-MM-DD.
+  --start-date: string # The starting date of the statistics to retrieve. Must follow format YYYY-MM-DD. (required)
   --end-date: string # The end date of the statistics to retrieve. Defaults to today. Must follow format YYYY-MM-DD.
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> table<date: string, stats: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
   let qp = [(serialize-qp "browsers" $browsers "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "aggregated_by" $aggregated_by "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/browsers/stats" $qp $auth.query)
   let accept_val = "application/json"
@@ -1477,7 +1479,7 @@ export def "get-campaigns" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of results you would like to receive at a time. (default: 10)
   --offset: int # The index of the first campaign to return, where 0 is the first campaign. (default: 0)
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<result: table<categories: list, custom_unsubscribe_url: string, editor: string, html_content: string, ip_pool: string, list_ids: list, plain_content: string, segment_ids: list, sender_id: int, subject: string, suppression_group_id: int, title: string, id: int, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1515,7 +1517,7 @@ export def "post-campaigns" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --categories: list<string> # The categories you would like associated to this campaign. (nullable)
   --custom-unsubscribe-url: string # This is the url of the custom unsubscribe page that you provide for customers to unsubscribe from your suppression groups. (nullable)
   --editor: string@editor-completer # The editor used in the UI.
@@ -1568,7 +1570,7 @@ export def "delete-campaigns-campaign-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1607,7 +1609,7 @@ export def "get-campaigns-campaign-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<categories: list<string>, custom_unsubscribe_url: string, html_content: string, id: int, ip_pool: string, list_ids: list<int>, plain_content: string, segment_ids: list<int>, sender_id: int, status: string, subject: string, suppression_group_id: int, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1646,7 +1648,7 @@ export def "patch-campaigns-campaign-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   categories: list<string> # The categories you want to tag on this campaign.
   html_content: string # The HTML content of this campaign.
   plain_content: string # The plain content of this campaign.
@@ -1693,7 +1695,7 @@ export def "delete-campaigns-campaign-id-schedules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1732,7 +1734,7 @@ export def "get-campaigns-campaign-id-schedules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<send_at: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1771,7 +1773,7 @@ export def "patch-campaigns-campaign-id-schedules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   send_at: int # format: int64
 ]: any -> record<id: int, send_at: int, status: string> {
   let input = $in
@@ -1814,7 +1816,7 @@ export def "post-campaigns-campaign-id-schedules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   send_at: int # The unix timestamp for the date and time you would like your campaign to be sent out.
 ]: any -> record<id: int, send_at: int, status: string> {
   let input = $in
@@ -1857,7 +1859,7 @@ export def "post-campaigns-campaign-id-schedules-now" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<id: int, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1896,15 +1898,15 @@ export def "post-campaigns-campaign-id-schedules-test" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
-  --body-to: string # The email address that should receive the test campaign. (format: email)
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
+  to: string # The email address that should receive the test campaign. (format: email)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/campaigns/{campaign_id}/schedules/test") $auth.query)
-  let req_body = {"to": $body_to} | compact
+  let req_body = {"to": $to} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1941,7 +1943,7 @@ export def "get-categories" [
   --limit: int # The number of categories to display per page. (default: 50)
   --category: string # Allows you to perform a prefix search on this particular category.
   --offset: int # The point in the list that you would like to begin displaying results. (default: 0)
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> table<category: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1979,16 +1981,18 @@ export def "get-categories-stats" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start-date: string # The starting date of the statistics to retrieve. Must follow format YYYY-MM-DD
+  --start-date: string # The starting date of the statistics to retrieve. Must follow format YYYY-MM-DD (required)
   --end-date: string # The end date of the statistics to retrieve. Defaults to today. Must follow format YYYY-MM-DD.
-  --categories: string # The individual categories that you want to retrieve statistics for. You may include up to 10 different categories.
+  --categories: string # The individual categories that you want to retrieve statistics for. You may include up to 10 different categories. (required)
   --limit: int # The number of results to include. (default: 500)
   --offset: int # The number of results to skip.
   --aggregated-by: string@aggregated-by-completer # How to group the statistics. Must be either "day", "week", or "month".
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> table<date: string, stats: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
+  if ($categories == null) { error make --unspanned { msg: "required query parameter 'categories' missing: pass --categories" } }
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "categories" $categories "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "aggregated_by" $aggregated_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/categories/stats" $qp $auth.query)
   let accept_val = "application/json"
@@ -2025,15 +2029,16 @@ export def "get-categories-stats-sums" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --sort-by-metric: string # The metric that you want to sort by. Must be a single metric. (default: delivered)
   --sort-by-direction: string@sort-by-direction-completer # The direction you want to sort. (default: desc)
-  --start-date: string # The starting date of the statistics to retrieve. Must follow format YYYY-MM-DD.
+  --start-date: string # The starting date of the statistics to retrieve. Must follow format YYYY-MM-DD. (required)
   --end-date: string # The end date of the statistics to retrieve. Defaults to today. Must follow format YYYY-MM-DD.
   --limit: int # Limits the number of results returned. (default: 5)
   --offset: int # The point in the list to begin retrieving results. (default: 0)
   --aggregated-by: string@aggregated-by-completer # How to group the statistics. Must be either "day", "week", or "month".
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<date: string, stats: table<metrics: record, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
   let qp = [(serialize-qp "sort_by_metric" $sort_by_metric "scalar") (serialize-qp "sort_by_direction" $sort_by_direction "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "aggregated_by" $aggregated_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/categories/stats/sums" $qp $auth.query)
   let accept_val = "application/json"
@@ -2068,13 +2073,14 @@ export def "get-clients-stats" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start-date: string # The starting date of the statistics to retrieve. Must follow format YYYY-MM-DD.
+  --start-date: string # The starting date of the statistics to retrieve. Must follow format YYYY-MM-DD. (required)
   --end-date: string # The end date of the statistics to retrieve. Defaults to today. Must follow format YYYY-MM-DD.
   --aggregated-by: string@aggregated-by-completer # How to group the statistics. Must be either "day", "week", or "month".
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> table<date: string, stats: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "aggregated_by" $aggregated_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/clients/stats" $qp $auth.query)
   let accept_val = "application/json"
@@ -2100,7 +2106,7 @@ export def "get-clients-stats" [
 # GET /clients/{client_type}/stats
 # operationId: GET_clients-client_type-stats
 export def "get-clients-client-type-stats" [
-  client_type: string
+  client_type: string@client-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2110,14 +2116,15 @@ export def "get-clients-client-type-stats" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start-date: string # The starting date of the statistics to retrieve. Must follow format YYYY-MM-DD.
+  --start-date: string # The starting date of the statistics to retrieve. Must follow format YYYY-MM-DD. (required)
   --end-date: string # The end date of the statistics to retrieve. Defaults to today. Must follow format YYYY-MM-DD.
   --aggregated-by: string@aggregated-by-completer # How to group the statistics. Must be either "day", "week", or "month".
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> table<date: string, stats: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($client_type | is-empty) { error make --unspanned { msg: "path parameter 'client_type' must be non-empty" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "aggregated_by" $aggregated_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({client_type: (encode-path-segment $client_type)} | format pattern "/clients/{client_type}/stats") $qp $auth.query)
   let accept_val = "application/json"
@@ -2152,7 +2159,7 @@ export def "get-contactdb-custom-fields" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<custom_fields: table<name: string, type: string, id: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2189,7 +2196,7 @@ export def "post-contactdb-custom-fields" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --name: string
   --type: string
 ]: any -> record<name: string, type: string, id: float> {
@@ -2232,7 +2239,7 @@ export def "delete-contactdb-custom-fields-custom-field-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<errors: table<field: string, help: record, message: string>, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2271,7 +2278,7 @@ export def "get-contactdb-custom-fields-custom-field-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<name: string, type: string, id: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2309,7 +2316,7 @@ export def "delete-contactdb-lists" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --body: list
 ]: any -> any {
   let input = $in
@@ -2350,7 +2357,7 @@ export def "get-contactdb-lists" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<lists: table<id: int, name: string, recipient_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2387,7 +2394,7 @@ export def "post-contactdb-lists" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   name: string
 ]: any -> record<id: int, name: string, recipient_count: int> {
   let input = $in
@@ -2430,7 +2437,7 @@ export def "delete-contactdb-lists-list-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --delete-contacts: oneof<nothing, bool> # Adds the ability to delete all contacts on the list in addition to deleting the list.
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --body: record
 ]: any -> any {
   let input = $in
@@ -2475,7 +2482,7 @@ export def "get-contactdb-lists-list-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-list-id: int # The ID of the list to retrieve.
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<id: int, name: string, recipient_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2515,14 +2522,15 @@ export def "patch-contactdb-lists-list-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-list-id: int # The ID of the list you are updating.
-  --on-behalf-of: string
+  --qp-list-id: int # The ID of the list you are updating. (required)
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   name: string # The new name for your list.
 ]: any -> record<id: int, name: string, recipient_count: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'list_id' must be non-empty" } }
+  if ($qp_list_id == null) { error make --unspanned { msg: "required query parameter 'list_id' missing: pass --qp-list-id" } }
   let qp = [(serialize-qp "list_id" $qp_list_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/contactdb/lists/{list_id}") $qp $auth.query)
   let req_body = {"name": $name} | compact
@@ -2562,12 +2570,13 @@ export def "get-contactdb-lists-list-id-recipients" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page index of first recipient to return (must be a positive integer)
   --page-size: int # Number of recipients to return at a time (must be a positive integer between 1 and 1000)
-  --qp-list-id: int # The ID of the list whose recipients you are requesting.
-  --on-behalf-of: string
+  --qp-list-id: int # The ID of the list whose recipients you are requesting. (required)
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<recipients: table<recipients: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'list_id' must be non-empty" } }
+  if ($qp_list_id == null) { error make --unspanned { msg: "required query parameter 'list_id' missing: pass --qp-list-id" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "list_id" $qp_list_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/contactdb/lists/{list_id}/recipients") $qp $auth.query)
   let accept_val = "application/json"
@@ -2603,7 +2612,7 @@ export def "post-contactdb-lists-list-id-recipients" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --body: list
 ]: any -> any {
   let input = $in
@@ -2647,9 +2656,9 @@ export def "delete-contactdb-lists-list-id-recipients-recipient-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-list-id: int # The ID of the list you are taking this recipient away from.
-  --qp-recipient-id: int # The ID of the recipient to take off the list.
-  --on-behalf-of: string
+  --qp-list-id: int # The ID of the list you are taking this recipient away from. (required)
+  --qp-recipient-id: int # The ID of the recipient to take off the list. (required)
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --body: record
 ]: any -> any {
   let input = $in
@@ -2657,6 +2666,8 @@ export def "delete-contactdb-lists-list-id-recipients-recipient-id" [
   let base = ($base_url | default $BASE_URL)
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'list_id' must be non-empty" } }
   if ($recipient_id | is-empty) { error make --unspanned { msg: "path parameter 'recipient_id' must be non-empty" } }
+  if ($qp_list_id == null) { error make --unspanned { msg: "required query parameter 'list_id' missing: pass --qp-list-id" } }
+  if ($qp_recipient_id == null) { error make --unspanned { msg: "required query parameter 'recipient_id' missing: pass --qp-recipient-id" } }
   let qp = [(serialize-qp "list_id" $qp_list_id "scalar") (serialize-qp "recipient_id" $qp_recipient_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({list_id: (encode-path-segment $list_id), recipient_id: (encode-path-segment $recipient_id)} | format pattern "/contactdb/lists/{list_id}/recipients/{recipient_id}") $qp $auth.query)
   let req_body = $body
@@ -2695,7 +2706,7 @@ export def "post-contactdb-lists-list-id-recipients-recipient-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2734,7 +2745,7 @@ export def "delete-contactdb-recipients" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --body: list
 ]: any -> record {
   let input = $in
@@ -2777,7 +2788,7 @@ export def "get-contactdb-recipients" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page index of first recipients to return (must be a positive integer)
   --page-size: int # Number of recipients to return at a time (must be a positive integer between 1 and 1000)
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<recipients: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2815,7 +2826,7 @@ export def "patch-contactdb-recipients" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --body: list
 ]: any -> record<error_count: float, error_indices: list<float>, errors: table<error_indices: list, message: string>, new_count: float, persisted_recipients: list<string>, updated_count: float> {
   let input = $in
@@ -2856,7 +2867,7 @@ export def "post-contactdb-recipients" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --body: list
 ]: any -> record<error_count: float, error_indices: list<float>, errors: table<error_indices: list, message: string>, new_count: float, persisted_recipients: list<string>, updated_count: float> {
   let input = $in
@@ -2897,7 +2908,7 @@ export def "get-contactdb-recipients-billable-count" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<recipient_count: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2934,7 +2945,7 @@ export def "get-contactdb-recipients-count" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<recipient_count: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2972,7 +2983,7 @@ export def "get-contactdb-recipients-search" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --field-name: string
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<recipients: table<recipients: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3050,7 +3061,7 @@ export def "delete-contactdb-recipients-recipient-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3089,7 +3100,7 @@ export def "get-contactdb-recipients-recipient-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<recipients: table<created_at: float, custom_fields: list, email: string, first_name: string, id: string, last_clicked: float, last_emailed: float, last_name: string, last_opened: float, updated_at: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3128,7 +3139,7 @@ export def "get-contactdb-recipients-recipient-id-lists" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<lists: table<id: int, name: string, recipient_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3166,7 +3177,7 @@ export def "get-contactdb-reserved-fields" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<reserved_fields: table<name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3203,7 +3214,7 @@ export def "get-contactdb-segments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<segments: table<conditions: list, list_id: int, name: string, recipient_count: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3241,7 +3252,7 @@ export def "post-contactdb-segments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   conditions: list # The conditions for a recipient to be included in this segment. — item shape: {and_or?: "and"|"or"|"", field: string, operator: "eq"|"ne"|"lt"|"gt"|"contains", value: string}
   --list-id: int # The list id from which to make this segment. Not including this ID will mean your segment is created from the main contactdb rather than a list.
   name: string # The name of this segment.
@@ -3287,7 +3298,7 @@ export def "delete-contactdb-segments-segment-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --delete-contacts: oneof<nothing, bool> # True to delete all contacts matching the segment in addition to deleting the segment
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --body: record
 ]: any -> any {
   let input = $in
@@ -3331,12 +3342,13 @@ export def "get-contactdb-segments-segment-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-segment-id: int # The ID of the segment you want to request.
-  --on-behalf-of: string
+  --qp-segment-id: int # The ID of the segment you want to request. (required)
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<conditions: table<and_or: string, field: string, operator: string, value: string>, list_id: int, name: string, recipient_count: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($segment_id | is-empty) { error make --unspanned { msg: "path parameter 'segment_id' must be non-empty" } }
+  if ($qp_segment_id == null) { error make --unspanned { msg: "required query parameter 'segment_id' missing: pass --qp-segment-id" } }
   let qp = [(serialize-qp "segment_id" $qp_segment_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({segment_id: (encode-path-segment $segment_id)} | format pattern "/contactdb/segments/{segment_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -3374,7 +3386,7 @@ export def "patch-contactdb-segments-segment-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-segment-id: string # The ID of the segment you are updating.
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --conditions: list # The conditions by which this segment should be created. — item shape: {and_or?: "and"|"or"|"", field: string, operator: "eq"|"ne"|"lt"|"gt"|"contains", value: string}
   --list-id: float # The list ID you would like this segment to be built from.
   name: string
@@ -3422,7 +3434,7 @@ export def "get-contactdb-segments-segment-id-recipients" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int
   --page-size: int
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<recipients: table<recipients: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3461,7 +3473,7 @@ export def "get-contactdb-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<status: table<: string, id: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3501,7 +3513,7 @@ export def "list-designs" [
   --page-size: int # number of results to return (default: 100)
   --page-token: string # token corresponding to a specific page of results, as provided by metadata
   --summary: oneof<nothing, bool> # set to false to return all fields (default: true)
-]: nothing -> record<_metadata: record<count: int, next: string, prev: string, self: string>, result: table<created_at: string, id: string, thumbnail_url: string, updated_at: string, editor: string, name: string>> {
+]: nothing -> record<_metadata: record<count: int, next: string, prev: string, self: string>, result: table<created_at: string, id: string, thumbnail_url: string, updated_at: string, editor: string, name: string, categories: list, generate_plain_content: bool, subject: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page_token" $page_token "scalar") (serialize-qp "summary" $summary "scalar")] | flatten | str join "&"
@@ -3539,7 +3551,7 @@ export def "post-designs" [
   --name: string # The name of the new design. (default: Duplicate: <original design name>)
   html_content: string # The HTML content of the Design.
   --plain-content: string # Plain text content of the Design. (default: <generated from html_content if left empty>)
-]: any -> record {
+]: any -> record<created_at: string, id: string, thumbnail_url: string, updated_at: string, editor: string, name: string, categories: list<string>, generate_plain_content: bool, subject: string, html_content: string, plain_content: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3579,7 +3591,7 @@ export def "list-sendgrid-pre-built-designs" [
   --page-size: int # number of results to return (default: 100)
   --page-token: string # token corresponding to a specific page of results, as provided by metadata
   --summary: oneof<nothing, bool> # set to false to return all fields (default: true)
-]: nothing -> record<_metadata: record<count: int, next: string, prev: string, self: string>, result: table<created_at: string, id: string, thumbnail_url: string, updated_at: string, editor: string, name: string>> {
+]: nothing -> record<_metadata: record<count: int, next: string, prev: string, self: string>, result: table<created_at: string, id: string, thumbnail_url: string, updated_at: string, editor: string, name: string, categories: list, generate_plain_content: bool, subject: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page_token" $page_token "scalar") (serialize-qp "summary" $summary "scalar")] | flatten | str join "&"
@@ -3615,7 +3627,7 @@ export def "get-sendgrid-pre-built-design" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> record<created_at: string, id: string, thumbnail_url: string, updated_at: string, editor: string, name: string, categories: list<string>, generate_plain_content: bool, subject: string, html_content: string, plain_content: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3653,7 +3665,7 @@ export def "post-sendgrid-pre-built-design" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --editor: string@editor-completer # The editor used in the UI.
   --name: string # The name of the new design. (default: Duplicate: <original design name>)
-]: any -> record {
+]: any -> record<created_at: string, id: string, thumbnail_url: string, updated_at: string, editor: string, name: string, categories: list<string>, generate_plain_content: bool, subject: string, html_content: string, plain_content: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3728,7 +3740,7 @@ export def "get-design" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> record<created_at: string, id: string, thumbnail_url: string, updated_at: string, editor: string, name: string, categories: list<string>, generate_plain_content: bool, subject: string, html_content: string, plain_content: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3770,7 +3782,7 @@ export def "put-design" [
   --name: string # Name of the Design. (default: My Design)
   --plain-content: string # Plain text content of the Design. (default: <generated from html_content if left empty>)
   --subject: string # Subject of the Design.
-]: any -> record {
+]: any -> record<created_at: string, id: string, thumbnail_url: string, updated_at: string, editor: string, name: string, categories: list<string>, generate_plain_content: bool, subject: string, html_content: string, plain_content: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3811,7 +3823,7 @@ export def "post-design" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --editor: string@editor-completer # The editor used in the UI.
   --name: string # The name of the new design. (default: Duplicate: <original design name>)
-]: any -> record {
+]: any -> record<created_at: string, id: string, thumbnail_url: string, updated_at: string, editor: string, name: string, categories: list<string>, generate_plain_content: bool, subject: string, html_content: string, plain_content: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3852,12 +3864,13 @@ export def "get-devices-stats" [
   --limit: int # The number of results to return.
   --offset: int # The point in the list to begin retrieving results.
   --aggregated-by: string@aggregated-by-completer # How to group the statistics. Must be either "day", "week", or "month".
-  --start-date: string # The starting date of the statistics to retrieve. Must follow format YYYY-MM-DD.
+  --start-date: string # The starting date of the statistics to retrieve. Must follow format YYYY-MM-DD. (required)
   --end-date: string # The end date of the statistics to retrieve. Defaults to today. Must follow format YYYY-MM-DD.
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> table<date: string, stats: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "aggregated_by" $aggregated_by "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/devices/stats" $qp $auth.query)
   let accept_val = "application/json"
@@ -3896,12 +3909,13 @@ export def "get-geo-stats" [
   --limit: int # The number of results to return.
   --offset: int # The point in the list to begin retrieving results.
   --aggregated-by: string@aggregated-by-completer # How to group the statistics. Must be either "day", "week", or "month".
-  --start-date: string # The starting date of the statistics to retrieve. Must follow format YYYY-MM-DD.
+  --start-date: string # The starting date of the statistics to retrieve. Must follow format YYYY-MM-DD. (required)
   --end-date: string # The end date of the statistics to retrieve. Defaults to today. Must follow format YYYY-MM-DD.
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> table<date: string, stats: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "aggregated_by" $aggregated_by "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/geo/stats" $qp $auth.query)
   let accept_val = "application/json"
@@ -4527,7 +4541,7 @@ export def "post-mail-batch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<batch_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4565,7 +4579,7 @@ export def "get-mail-batch-batch-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<batch_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4618,7 +4632,7 @@ export def "post-mail-send" [
   --categories: list<string> # An array of category names for this message. Each category name may not exceed 255 characters.
   content: list # An array where you can specify the content of your email. You can include multiple [MIME types](https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_types) of content, but you must specify at least one MIME type. To include more than one MIME type, add another object to the array containing the `type` and `value` parameters. — item shape: {type: string, value: string}
   --custom-args: string # Values that are specific to the entire send that will be carried along with the email and its activity data. Key/value pairs must be strings. Substitutions will not be made on custom arguments, so any string that is entered into this parameter will be assumed to be the custom argument that you would like to be used. This parameter is overridden by `custom_args` set at the personalizations level. Total `custom_args` size may not exceed 10,000 bytes.
-  --body-from: record # e.g. {email: jane_doe@example.com, name: Jane Doe} — shape: {email: string, name?: string}
+  from: record # e.g. {email: jane_doe@example.com, name: Jane Doe} — shape: {email: string, name?: string}
   --headers: record # An object containing key/value pairs of header names and the value to substitute for them. The key/value pairs must be strings. You must ensure these are properly encoded if they contain unicode characters. These headers cannot be one of the reserved headers.
   --ip-pool-name: string # The IP Pool that you would like to send this email from.
   --mail-settings: record # A collection of different mail settings that you can use to specify how you would like this email to be handled. — shape: {bypass_bounce_management?: record, bypass_list_management?: record, bypass_spam_management?: record, bypass_unsubscribe_management?: record, footer?: record, sandbox_mode?: record}
@@ -4634,7 +4648,7 @@ export def "post-mail-send" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mail/send" $auth.query)
-  let req_body = {"asm": $asm, "attachments": $attachments, "batch_id": $batch_id, "categories": $categories, "content": $content, "custom_args": $custom_args, "from": $body_from, "headers": $headers, "ip_pool_name": $ip_pool_name, "mail_settings": $mail_settings, "personalizations": $personalizations, "reply_to": $reply_to, "reply_to_list": $reply_to_list, "send_at": $send_at, "subject": $subject, "template_id": $template_id, "tracking_settings": $tracking_settings} | compact
+  let req_body = {"asm": $asm, "attachments": $attachments, "batch_id": $batch_id, "categories": $categories, "content": $content, "custom_args": $custom_args, "from": $from, "headers": $headers, "ip_pool_name": $ip_pool_name, "mail_settings": $mail_settings, "personalizations": $personalizations, "reply_to": $reply_to, "reply_to_list": $reply_to_list, "send_at": $send_at, "subject": $subject, "template_id": $template_id, "tracking_settings": $tracking_settings} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4668,7 +4682,7 @@ export def "get-mail-settings" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of settings to return.
   --offset: int # Where in the list of results to begin displaying settings.
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<result: table<description: string, enabled: bool, name: string, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4706,7 +4720,7 @@ export def "get-mail-settings-address-whitelist" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<enabled: bool, list: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4743,7 +4757,7 @@ export def "patch-mail-settings-address-whitelist" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --enabled: oneof<nothing, bool> # Indicates if your email address whitelist is enabled.
   --list: list<string> # Either a single email address that you want whitelisted or a domain, for which all email addresses belonging to this domain will be whitelisted.
 ]: any -> record<enabled: bool, list: list<string>> {
@@ -4785,7 +4799,7 @@ export def "get-mail-settings-bounce-purge" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<enabled: bool, hard_bounces: int, soft_bounces: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4822,7 +4836,7 @@ export def "patch-mail-settings-bounce-purge" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --enabled: oneof<nothing, bool> # Indicates if the bounce purge mail setting is enabled.
   --hard-bounces: int # The number of days after which SendGrid will purge all contacts from your hard bounces suppression lists. (nullable)
   --soft-bounces: int # The number of days after which SendGrid will purge all contacts from your soft bounces suppression lists. (nullable)
@@ -4865,7 +4879,7 @@ export def "get-mail-settings-footer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<enabled: bool, html_content: string, plain_content: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4902,7 +4916,7 @@ export def "patch-mail-settings-footer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --enabled: oneof<nothing, bool> # Indicates if the Footer mail setting is currently enabled.
   --html-content: string # The custom HTML content of your email footer.
   --plain-content: string # The plain text content of your email footer.
@@ -4945,7 +4959,7 @@ export def "get-mail-settings-forward-bounce" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<email: string, enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4982,7 +4996,7 @@ export def "patch-mail-settings-forward-bounce" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --email: string # The email address that you would like your bounce reports forwarded to. (nullable)
   --enabled: oneof<nothing, bool> # Indicates if the bounce forwarding mail setting is enabled.
 ]: any -> record<email: string, enabled: bool> {
@@ -5024,7 +5038,7 @@ export def "get-mail-settings-forward-spam" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<email: string, enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5061,7 +5075,7 @@ export def "patch-mail-settings-forward-spam" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --email: string # The email address where you would like the spam reports to be forwarded.
   --enabled: oneof<nothing, bool> # Indicates if the Forward Spam setting is enabled.
 ]: any -> record<email: string, enabled: bool> {
@@ -5103,7 +5117,7 @@ export def "get-mail-settings-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<enabled: bool, html_content: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5140,7 +5154,7 @@ export def "patch-mail-settings-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --enabled: oneof<nothing, bool> # Indicates if you want to enable the legacy email template mail setting.
   --html-content: string # The new HTML content for your legacy email template.
 ]: any -> record<enabled: bool, html_content: string> {
@@ -5186,12 +5200,13 @@ export def "get-mailbox-providers-stats" [
   --limit: int # The number of results to return.
   --offset: int # The point in the list to begin retrieving results.
   --aggregated-by: string@aggregated-by-completer # How to group the statistics. Must be either "day", "week", or "month".
-  --start-date: string # The starting date of the statistics to retrieve. Must follow format YYYY-MM-DD.
+  --start-date: string # The starting date of the statistics to retrieve. Must follow format YYYY-MM-DD. (required)
   --end-date: string # The end date of the statistics to retrieve. Defaults to today. Must follow format YYYY-MM-DD.
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> table<date: string, stats: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
   let qp = [(serialize-qp "mailbox_providers" $mailbox_providers "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "aggregated_by" $aggregated_by "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/mailbox_providers/stats" $qp $auth.query)
   let accept_val = "application/json"
@@ -6051,11 +6066,12 @@ export def "delete-mc-lists-id-contacts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --contact-ids: string # comma separated list of contact ids
+  --contact-ids: string # comma separated list of contact ids (required)
 ]: nothing -> record<job_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($contact_ids == null) { error make --unspanned { msg: "required query parameter 'contact_ids' missing: pass --contact-ids" } }
   let qp = [(serialize-qp "contact_ids" $contact_ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/marketing/lists/{id}/contacts") $qp $auth.query)
   let accept_val = "application/json"
@@ -6550,12 +6566,12 @@ export def "post-marketing-senders" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   address: string # The physical address of the sender identity.
   --address-2: string # Additional sender identity address information.
   city: string # The city of the sender identity.
   country: string # The country of the sender identity.
-  --body-from: record # shape: {email: string, name: string}
+  from: record # shape: {email: string, name: string}
   nickname: string # A nickname for the sender identity. Not used for sending.
   --reply-to: record # shape: {email: string, name?: string}
   --state: string # The state of the sender identity.
@@ -6565,7 +6581,7 @@ export def "post-marketing-senders" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/marketing/senders" $auth.query)
-  let req_body = {"address": $address, "address_2": $address_2, "city": $city, "country": $country, "from": $body_from, "nickname": $nickname, "reply_to": $reply_to, "state": $state, "zip": $zip} | compact
+  let req_body = {"address": $address, "address_2": $address_2, "city": $city, "country": $country, "from": $from, "nickname": $nickname, "reply_to": $reply_to, "state": $state, "zip": $zip} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7106,8 +7122,8 @@ export def "get-automation-stat" [
   --group-by: list<string> # Automations can have multiple steps. Including `step_id` as a `group_by` metric allows further granularity of stats.
   --step-ids: list<string> # Comma-separated list of `step_ids` that you want the link stats for.
   --aggregated-by: string@aggregated-by-completer-1 # Dictates how the stats are time-sliced. Currently, `"total"` and `"day"` are supported. (default: total)
-  --start-date: string # Format: `YYYY-MM-DD`. If this parameter is included, the stats' start date is included in the search. (format: date, default: )
-  --end-date: string # Format: `YYYY-MM-DD`.If this parameter is included, the stats' end date is included in the search. (format: date, default: )
+  --start-date: string # Format: `YYYY-MM-DD`. If this parameter is included, the stats' start date is included in the search. (format: date, default: "")
+  --end-date: string # Format: `YYYY-MM-DD`.If this parameter is included, the stats' end date is included in the search. (format: date, default: "")
   --timezone: string # [IANA Area/Region](https://en.wikipedia.org/wiki/Tz_database#Names_of_time_zones) string representing the timezone in which the stats are to be presented, e.g., "America/Chicago". (default: UTC)
   --page-size: int # The number of elements you want returned on each page. (default: 50)
   --page-token: string # The stats endpoints are paginated. To get the next page, call the passed `_metadata.next` URL. If `_metadata.prev` doesn't exist, you're at the first page. Similarly, if `_metadata.next` is not present, you're at the last page.
@@ -7265,8 +7281,8 @@ export def "get-singlesend-stat" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --aggregated-by: string@aggregated-by-completer-1 # Dictates how the stats are time-sliced. Currently, `"total"` and `"day"` are supported. (default: total)
-  --start-date: string # Format: `YYYY-MM-DD`. If this parameter is included, the stats' start date is included in the search. (format: date, default: )
-  --end-date: string # Format: `YYYY-MM-DD`.If this parameter is included, the stats' end date is included in the search. (format: date, default: )
+  --start-date: string # Format: `YYYY-MM-DD`. If this parameter is included, the stats' start date is included in the search. (format: date, default: "")
+  --end-date: string # Format: `YYYY-MM-DD`.If this parameter is included, the stats' end date is included in the search. (format: date, default: "")
   --timezone: string # [IANA Area/Region](https://en.wikipedia.org/wiki/Tz_database#Names_of_time_zones) string representing the timezone in which the stats are to be presented, e.g., "America/Chicago". (default: UTC)
   --page-size: int # The number of elements you want returned on each page. (default: 50)
   --page-token: string # The stats endpoints are paginated. To get the next page, call the passed `_metadata.next` URL. If `_metadata.prev` doesn't exist, you're at the first page. Similarly, if `_metadata.next` is not present, you're at the last page.
@@ -7393,14 +7409,16 @@ export def "get-messages" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query: string # Use the query syntax to filter your email activity.
+  --query: string # Use the query syntax to filter your email activity. (required)
   --limit: float # The number of messages returned. This parameter must be greater than 0 and less than or equal to 1000 (default: 10)
   --x-query-id: string
   --x-cursor: string
-  --authorization: string
-]: nothing -> record<messages: table<clicks_count: int, from_email: string, last_event_time: string, msg_id: string, opens_count: int, status: string, subject: string, to_email: string>> {
+  --authorization: string # required, default: Bearer <<YOUR_API_KEY_HERE>>
+]: nothing -> record<messages: table<clicks_count: int, from_email: string, last_event_time: int, msg_id: string, opens_count: int, status: string, subject: string, to_email: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
+  let authorization = ($authorization | default "Bearer <<YOUR_API_KEY_HERE>>")
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/messages" $qp $auth.query)
   let accept_val = "application/json"
@@ -7436,10 +7454,11 @@ export def "post-v3-messages-download" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Uses a SQL like syntax to indicate which messages to include in the CSV
-  --authorization: string
+  --authorization: string # required, default: Bearer <<YOUR_API_KEY_HERE>>
 ]: nothing -> record<message: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let authorization = ($authorization | default "Bearer <<YOUR_API_KEY_HERE>>")
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/messages/download" $qp $auth.query)
   let accept_val = "application/json"
@@ -7475,11 +7494,12 @@ export def "get-v3-messages-download-download-uuid" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string
+  --authorization: string # required, default: Bearer <<YOUR_API_KEY_HERE>>
 ]: nothing -> record<csv: string, presigned_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($download_uuid | is-empty) { error make --unspanned { msg: "path parameter 'download_uuid' must be non-empty" } }
+  let authorization = ($authorization | default "Bearer <<YOUR_API_KEY_HERE>>")
   let full_url = (build-url $base ({download_uuid: (encode-path-segment $download_uuid)} | format pattern "/messages/download/{download_uuid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7514,11 +7534,12 @@ export def "get-v3-messages-msg-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string
+  --authorization: string # required, default: Bearer <<YOUR_API_KEY_HERE>>
 ]: nothing -> record<api_key_id: string, asm_group_id: int, categories: list<string>, events: table<attempt_num: int, bounce_type: string, event_name: string, http_user_agent: string, mx_server: string, processed: string, reason: string, url: string>, from_email: string, msg_id: string, originating_ip: string, outbound_ip: string, outbound_ip_type: string, status: string, subject: string, teammate: string, template_id: string, to_email: string, unique_args: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($msg_id | is-empty) { error make --unspanned { msg: "path parameter 'msg_id' must be non-empty" } }
+  let authorization = ($authorization | default "Bearer <<YOUR_API_KEY_HERE>>")
   let full_url = (build-url $base ({msg_id: (encode-path-segment $msg_id)} | format pattern "/messages/{msg_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7554,7 +7575,7 @@ export def "get-partner-settings" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of settings to return per page.
   --offset: int # The paging offset.
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<result: table<description: string, enabled: bool, name: string, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7592,7 +7613,7 @@ export def "get-partner-settings-new-relic" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<enable_subuser_statistics: bool, enabled: bool, license_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7629,7 +7650,7 @@ export def "patch-partner-settings-new-relic" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --enable-subuser-statistics: oneof<nothing, bool> # Indicates if your subuser statistics will be sent to your New Relic Dashboard.
   --enabled: oneof<nothing, bool> # Indicates if this partner setting is enabled.
   --license-key: string # The license key for your New Relic account.
@@ -7672,7 +7693,7 @@ export def "get-scopes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<scopes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7818,7 +7839,7 @@ export def "get-v3-senders" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<result: table<address: string, address_2: string, city: string, country: string, from: record, nickname: string, reply_to: record, state: string, zip: string, created_at: int, id: int, locked: bool, updated_at: int, verified: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7855,12 +7876,12 @@ export def "post-senders" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   address: string # The physical address of the sender identity.
   --address-2: string # Additional sender identity address information.
   city: string # The city of the sender identity.
   country: string # The country of the sender identity.
-  --body-from: record
+  --from: record
   nickname: string # A nickname for the sender identity. Not used for sending.
   --reply-to: record
   --state: string # The state of the sender identity.
@@ -7870,7 +7891,7 @@ export def "post-senders" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/senders" $auth.query)
-  let req_body = {"address": $address, "address_2": $address_2, "city": $city, "country": $country, "from": $body_from, "nickname": $nickname, "reply_to": $reply_to, "state": $state, "zip": $zip} | compact
+  let req_body = {"address": $address, "address_2": $address_2, "city": $city, "country": $country, "from": $from, "nickname": $nickname, "reply_to": $reply_to, "state": $state, "zip": $zip} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7905,7 +7926,7 @@ export def "delete-v3-senders-sender-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7944,7 +7965,7 @@ export def "get-v3-senders-sender-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<address: string, address_2: string, city: string, country: string, from: record<email: string, name: string>, nickname: string, reply_to: record<email: string, name: string>, state: string, zip: string, created_at: int, id: int, locked: bool, updated_at: int, verified: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7985,12 +8006,12 @@ export def "patch-v3-senders-sender-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --address: string # The physical address of the sender identity.
   --address-2: string # Additional sender identity address information.
   --city: string # The city of the sender identity.
   --country: string # The country of the sender identity.
-  --body-from: record # shape: {email?: string, name?: string}
+  --from: record # shape: {email?: string, name?: string}
   --nickname: string # A nickname for the sender identity. Not used for sending.
   --reply-to: record # shape: {email?: string, name?: string}
   --state: string # The state of the sender identity.
@@ -8001,7 +8022,7 @@ export def "patch-v3-senders-sender-id" [
   let base = ($base_url | default $BASE_URL)
   if ($sender_id | is-empty) { error make --unspanned { msg: "path parameter 'sender_id' must be non-empty" } }
   let full_url = (build-url $base ({sender_id: (encode-path-segment $sender_id)} | format pattern "/senders/{sender_id}") $auth.query)
-  let req_body = {"address": $address, "address_2": $address_2, "city": $city, "country": $country, "from": $body_from, "nickname": $nickname, "reply_to": $reply_to, "state": $state, "zip": $zip} | compact
+  let req_body = {"address": $address, "address_2": $address_2, "city": $city, "country": $country, "from": $from, "nickname": $nickname, "reply_to": $reply_to, "state": $state, "zip": $zip} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8036,7 +8057,7 @@ export def "post-v3-senders-sender-id-resend-verification" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8277,6 +8298,7 @@ export def "post-sso-integrations" [
   let full_url = (build-url $base "/sso/integrations" $auth.query)
   let req_body = {"completed_integration": $completed_integration, "enabled": $enabled, "entity_id": $entity_id, "name": $name, "signin_url": $signin_url, "signout_url": $signout_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "enabled") == null) { error make --unspanned { msg: "required body field 'enabled' missing: pass --enabled or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -8398,6 +8420,7 @@ export def "patch-sso-integrations-id" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sso/integrations/{id}") $qp $auth.query)
   let req_body = {"completed_integration": $completed_integration, "enabled": $enabled, "entity_id": $entity_id, "name": $name, "signin_url": $signin_url, "signout_url": $signout_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "enabled") == null) { error make --unspanned { msg: "required body field 'enabled' missing: pass --enabled or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -8512,7 +8535,7 @@ export def "patch-sso-teammates-username" [
   --is-admin: oneof<nothing, bool>
   --last-name: string
   --scopes: list<string>
-]: any -> record<address: string, address2: string, city: string, company: string, country: string, email: string, phone: string, scopes: list<string>, state: string, user_type: string, website: string, zip: string> {
+]: any -> record<email: string, first_name: string, is_admin: bool, is_read_only: bool, last_name: string, is_sso: bool, username: string, address: string, address2: string, city: string, company: string, country: string, phone: string, scopes: list<string>, state: string, user_type: string, website: string, zip: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8553,12 +8576,13 @@ export def "get-stats" [
   --limit: int # The number of results to return.
   --offset: int # The point in the list to begin retrieving results.
   --aggregated-by: string@aggregated-by-completer # How to group the statistics. Must be either "day", "week", or "month".
-  --start-date: string # The starting date of the statistics to retrieve. Must follow format YYYY-MM-DD.
+  --start-date: string # The starting date of the statistics to retrieve. Must follow format YYYY-MM-DD. (required)
   --end-date: string # The end date of the statistics to retrieve. Defaults to today. Must follow format YYYY-MM-DD.
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> table<date: string, stats: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "aggregated_by" $aggregated_by "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/stats" $qp $auth.query)
   let accept_val = "application/json"
@@ -8711,12 +8735,14 @@ export def "get-subusers-stats" [
   --limit: int # Limits the number of results returned per page.
   --offset: int # The point in the list to begin retrieving results from.
   --aggregated-by: string@aggregated-by-completer # How to group the statistics. Must be either "day", "week", or "month".
-  --subusers: string # The subuser you want to retrieve statistics for. You may include this parameter up to 10 times to retrieve statistics for multiple subusers.
-  --start-date: string # The starting date of the statistics to retrieve. Must follow format YYYY-MM-DD.
+  --subusers: string # The subuser you want to retrieve statistics for. You may include this parameter up to 10 times to retrieve statistics for multiple subusers. (required)
+  --start-date: string # The starting date of the statistics to retrieve. Must follow format YYYY-MM-DD. (required)
   --end-date: string # The end date of the statistics to retrieve. Defaults to today.
 ]: nothing -> record<date: string, stats: table<metrics: record, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($subusers == null) { error make --unspanned { msg: "required query parameter 'subusers' missing: pass --subusers" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "aggregated_by" $aggregated_by "scalar") (serialize-qp "subusers" $subusers "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/subusers/stats" $qp $auth.query)
   let accept_val = "application/json"
@@ -8749,7 +8775,7 @@ export def "get-subusers-stats-monthly" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --date: string # The date of the month to retrieve statistics for. Must be formatted YYYY-MM-DD
+  --date: string # The date of the month to retrieve statistics for. Must be formatted YYYY-MM-DD (required)
   --subuser: string # A substring search of your subusers.
   --sort-by-metric: string@sort-by-metric-completer # The metric that you want to sort by. Metrics that you can sort by are: `blocks`, `bounces`, `clicks`, `delivered`, `opens`, `requests`, `unique_clicks`, `unique_opens`, and `unsubscribes`.' (default: delivered)
   --sort-by-direction: string@sort-by-direction-completer # The direction you want to sort. (default: desc)
@@ -8758,6 +8784,7 @@ export def "get-subusers-stats-monthly" [
 ]: nothing -> record<date: string, stats: table<first_name: string, last_name: string, metrics: record, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($date == null) { error make --unspanned { msg: "required query parameter 'date' missing: pass --date" } }
   let qp = [(serialize-qp "date" $date "scalar") (serialize-qp "subuser" $subuser "scalar") (serialize-qp "sort_by_metric" $sort_by_metric "scalar") (serialize-qp "sort_by_direction" $sort_by_direction "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/subusers/stats/monthly" $qp $auth.query)
   let accept_val = "application/json"
@@ -8791,7 +8818,7 @@ export def "get-subusers-stats-sums" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --sort-by-direction: string@sort-by-direction-completer # The direction you want to sort. (default: desc)
-  --start-date: string # The starting date of the statistics to retrieve. Must follow format YYYY-MM-DD.
+  --start-date: string # The starting date of the statistics to retrieve. Must follow format YYYY-MM-DD. (required)
   --end-date: string # The end date of the statistics to retrieve. Defaults to today. Must follow format YYYY-MM-DD.
   --limit: int # Limits the number of results returned per page. (default: 5)
   --offset: int # The point in the list to begin retrieving results from. (default: 0)
@@ -8800,6 +8827,7 @@ export def "get-subusers-stats-sums" [
 ]: nothing -> record<date: string, stats: table<metrics: record, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
   let qp = [(serialize-qp "sort_by_direction" $sort_by_direction "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "aggregated_by" $aggregated_by "scalar") (serialize-qp "sort_by_metric" $sort_by_metric "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/subusers/stats/sums" $qp $auth.query)
   let accept_val = "application/json"
@@ -9103,7 +9131,7 @@ export def "get-subusers-subuser-name-stats-monthly" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --date: string # The date of the month to retrieve statistics for. Must be formatted YYYY-MM-DD
+  --date: string # The date of the month to retrieve statistics for. Must be formatted YYYY-MM-DD (required)
   --sort-by-metric: string # The metric that you want to sort by. Metrics that you can sort by are: `blocks`, `bounces`, `clicks`, `delivered`, `opens`, `requests`, `unique_clicks`, `unique_opens`, and `unsubscribes`.' (default: delivered)
   --sort-by-direction: string@sort-by-direction-completer # The direction you want to sort. (default: desc)
   --limit: int # Optional field to limit the number of results returned. (default: 5)
@@ -9112,6 +9140,7 @@ export def "get-subusers-subuser-name-stats-monthly" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subuser_name | is-empty) { error make --unspanned { msg: "path parameter 'subuser_name' must be non-empty" } }
+  if ($date == null) { error make --unspanned { msg: "required query parameter 'date' missing: pass --date" } }
   let qp = [(serialize-qp "date" $date "scalar") (serialize-qp "sort_by_metric" $sort_by_metric "scalar") (serialize-qp "sort_by_direction" $sort_by_direction "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subuser_name: (encode-path-segment $subuser_name)} | format pattern "/subusers/{subuser_name}/stats/monthly") $qp $auth.query)
   let accept_val = "application/json"
@@ -9144,7 +9173,7 @@ export def "delete-suppression-blocks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --delete-all: oneof<nothing, bool> # Indicates if you want to delete all blocked email addresses.
   --emails: list<string> # The specific blocked email addresses that you want to delete.
 ]: any -> any {
@@ -9190,7 +9219,7 @@ export def "get-suppression-blocks" [
   --end-time: int # The end of the time range when a blocked email was created (inclusive). This is a unix timestamp.
   --limit: int # Limit the number of results to be displayed per page.
   --offset: int # The point in the list to begin displaying results.
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> table<created: int, email: string, reason: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9229,7 +9258,7 @@ export def "delete-suppression-blocks-email" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9268,7 +9297,7 @@ export def "get-suppression-blocks-email" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> table<created: int, email: string, reason: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9306,7 +9335,7 @@ export def "delete-suppression-bounces" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --delete-all: oneof<nothing, bool> # This parameter allows you to delete **every** email in your bounce list. This should not be used with the emails parameter.
   --emails: list<string> # Delete multiple emails from your bounce list at the same time. This should not be used with the delete_all parameter.
 ]: any -> any {
@@ -9350,11 +9379,12 @@ export def "get-suppression-bounces" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-time: int # Refers start of the time range in unix timestamp when a bounce was created (inclusive).
   --end-time: int # Refers end of the time range in unix timestamp when a bounce was created (inclusive).
-  --hdr-accept: string
-  --on-behalf-of: string
+  --hdr-accept: string # required, default: application/json
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> table<created: float, email: string, reason: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let hdr_accept = ($hdr_accept | default "application/json")
   let qp = [(serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/suppression/bounces" $qp $auth.query)
   let accept_val = "application/json"
@@ -9390,14 +9420,15 @@ export def "delete-suppression-bounces-email" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --email-address: string # The email address you would like to remove from the bounce list. (format: email)
-  --on-behalf-of: string
+  --email-address: string # The email address you would like to remove from the bounce list. (required, format: email)
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($email | is-empty) { error make --unspanned { msg: "path parameter 'email' must be non-empty" } }
+  if ($email_address == null) { error make --unspanned { msg: "required query parameter 'email_address' missing: pass --email-address" } }
   let qp = [(serialize-qp "email_address" $email_address "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({email: (encode-path-segment $email)} | format pattern "/suppression/bounces/{email}") $qp $auth.query)
   let req_body = $body
@@ -9435,7 +9466,7 @@ export def "get-suppression-bounces-email" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> table<created: float, email: string, reason: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9473,7 +9504,7 @@ export def "delete-suppression-invalid-emails" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --delete-all: oneof<nothing, bool> # Indicates if you want to remove all email address from the invalid emails list.
   --emails: list<string> # The list of specific email addresses that you want to remove.
 ]: any -> any {
@@ -9519,7 +9550,7 @@ export def "get-suppression-invalid-emails" [
   --end-time: int # Refers end of the time range in unix timestamp when an invalid email was created (inclusive).
   --limit: int # Limit the number of results to be displayed per page.
   --offset: int # Paging offset. The point in the list to begin displaying results.
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> table<created: int, email: string, reason: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9558,7 +9589,7 @@ export def "delete-suppression-invalid-emails-email" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9597,7 +9628,7 @@ export def "get-suppression-invalid-emails-email" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> table<created: int, email: string, reason: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9635,7 +9666,7 @@ export def "delete-suppression-spam-reports" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --delete-all: oneof<nothing, bool> # Indicates if you want to delete all email addresses on the spam report list.
   --emails: list<string> # A list of specific email addresses that you want to remove from the spam report list.
 ]: any -> any {
@@ -9681,7 +9712,7 @@ export def "get-suppression-spam-reports" [
   --end-time: int # The end of the time range when a spam report was created (inclusive). This is a unix timestamp.
   --limit: int # Limit the number of results to be displayed per page.
   --offset: int # Paging offset. The point in the list to begin displaying results.
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> table<created: int, email: string, ip: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9720,7 +9751,7 @@ export def "delete-suppression-spam-reports-email" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9759,7 +9790,7 @@ export def "get-suppression-spam-reports-email" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> table<created: int, email: string, ip: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9801,7 +9832,7 @@ export def "get-suppression-unsubscribes" [
   --end-time: int # Refers end of the time range in unix timestamp when an unsubscribe email was created (inclusive).
   --limit: int # The number of results to display on each page.
   --offset: int # The point in the list of results to begin displaying global suppressions.
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> table<created: int, email: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9841,7 +9872,7 @@ export def "get-v3-teammates" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of items to return (default: 500)
   --offset: int # Paging offset (default: 0)
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<result: table<address: string, address2: string, city: string, country: string, email: string, first_name: string, is_admin: bool, last_name: string, phone: string, state: string, user_type: string, username: string, website: string, zip: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9879,7 +9910,7 @@ export def "post-v3-teammates" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   email: string # New teammate's email
   --is-admin: oneof<nothing, bool> # Set to true if teammate should be an admin user (default: false)
   scopes: list<string> # Set to specify list of scopes that teammate should have. Should be empty if teammate is an admin.
@@ -9890,6 +9921,7 @@ export def "post-v3-teammates" [
   let full_url = (build-url $base "/teammates" $auth.query)
   let req_body = {"email": $email, "is_admin": $is_admin, "scopes": $scopes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "is_admin") == null) { error make --unspanned { msg: "required body field 'is_admin' missing: pass --is-admin or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"on-behalf-of": $on_behalf_of} | compact
@@ -9922,7 +9954,7 @@ export def "get-v3-teammates-pending" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<result: table<email: string, expiration_date: int, is_admin: bool, scopes: list, token: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9960,7 +9992,7 @@ export def "delete-v3-teammates-pending-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9999,7 +10031,7 @@ export def "post-v3-teammates-pending-token-resend" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<email: string, is_admin: bool, scopes: list<string>, token: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10038,7 +10070,7 @@ export def "delete-v3-teammates-username" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10077,7 +10109,7 @@ export def "get-v3-teammates-username" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<address: string, address2: string, city: string, country: string, email: string, first_name: string, is_admin: bool, last_name: string, phone: string, scopes: list<any>, state: string, user_type: string, username: string, website: string, zip: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10116,7 +10148,7 @@ export def "patch-v3-teammates-username" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --is-admin: oneof<nothing, bool> # Set to True if this teammate should be promoted to an admin user. If True, scopes should be an empty array.
   scopes: list<string> # Provide list of scopes that should be given to teammate. If specifying list of scopes, is_admin should be set to False.
 ]: any -> record<address: string, address2: string, city: string, country: string, email: string, first_name: string, is_admin: bool, last_name: string, phone: string, scopes: list<string>, state: string, user_type: string, username: string, website: string, zip: string> {
@@ -10127,6 +10159,7 @@ export def "patch-v3-teammates-username" [
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/teammates/{username}") $auth.query)
   let req_body = {"is_admin": $is_admin, "scopes": $scopes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "is_admin") == null) { error make --unspanned { msg: "required body field 'is_admin' missing: pass --is-admin or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"on-behalf-of": $on_behalf_of} | compact
@@ -10160,12 +10193,13 @@ export def "get-templates" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --generations: string@generations-completer # Comma-delimited list specifying which generations of templates to return. Options are `legacy`, `dynamic` or `legacy,dynamic`. (default: legacy)
-  --page-size: float # The number of templates to be returned in each page of results
+  --page-size: float # The number of templates to be returned in each page of results (required)
   --page-token: string # A token corresponding to a specific page of results, as provided by metadata
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<_metadata: record<count: int, next: string, prev: string, self: string>, result: table<generation: string, id: string, name: string, updated_at_: string, versions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($page_size == null) { error make --unspanned { msg: "required query parameter 'page_size' missing: pass --page-size" } }
   let qp = [(serialize-qp "generations" $generations "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "page_token" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templates" $qp $auth.query)
   let accept_val = "application/json"
@@ -10200,7 +10234,7 @@ export def "post-templates" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --generation: string@generation-completer # Defines whether the template supports dynamic replacement. (default: legacy)
   name: string # The name for the new transactional template.
 ]: any -> record<generation: string, id: string, name: string, updated_at_: string, versions: table<active: int, editor: string, generate_plain_content: bool, id: string, name: string, subject: string, template_id: string, thumbnail_url: string, updated_at: string>, warning: record<message: string>> {
@@ -10243,7 +10277,7 @@ export def "delete-templates-template-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10282,7 +10316,7 @@ export def "get-templates-template-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<generation: string, id: string, name: string, updated_at_: string, versions: table<active: int, editor: string, generate_plain_content: bool, id: string, name: string, subject: string, template_id: string, thumbnail_url: string, updated_at: string>, warning: record<message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10321,7 +10355,7 @@ export def "patch-templates-template-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --name: string # The name of the transactional template.
 ]: any -> record<generation: string, id: string, name: string, updated_at_: string, versions: table<active: int, editor: string, generate_plain_content: bool, id: string, name: string, subject: string, template_id: string, thumbnail_url: string, updated_at: string>, warning: record<message: string>> {
   let input = $in
@@ -10364,7 +10398,7 @@ export def "post-templates-template-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --name: string # The name for the new transactional template.
 ]: any -> record<generation: string, id: string, name: string, updated_at_: string, versions: table<active: int, editor: string, generate_plain_content: bool, id: string, name: string, subject: string, template_id: string, thumbnail_url: string, updated_at: string>, warning: record<message: string>> {
   let input = $in
@@ -10407,7 +10441,7 @@ export def "post-templates-template-id-versions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --active: int@active-completer # Set the version as the active version associated with the template (0 is inactive, 1 is active). Only one version of a template can be active. The first version created for a template will automatically be set to Active.
   --editor: string@editor-completer # The editor used in the UI.
   --generate-plain-content: oneof<nothing, bool> # If true, plain_content is always generated from html_content. If false, plain_content is not altered. (default: true)
@@ -10458,7 +10492,7 @@ export def "delete-templates-template-id-versions-version-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10499,7 +10533,7 @@ export def "get-templates-template-id-versions-version-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<warnings: table<message: string>, active: int, editor: string, generate_plain_content: bool, html_content: string, name: string, plain_content: string, subject: string, test_data: string, id: string, template_id: string, thumbnail_url: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10540,7 +10574,7 @@ export def "patch-templates-template-id-versions-version-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --active: int@active-completer # Set the version as the active version associated with the template (0 is inactive, 1 is active). Only one version of a template can be active. The first version created for a template will automatically be set to Active.
   --editor: string@editor-completer # The editor used in the UI.
   --generate-plain-content: oneof<nothing, bool> # If true, plain_content is always generated from html_content. If false, plain_content is not altered. (default: true)
@@ -10592,7 +10626,7 @@ export def "post-templates-template-id-versions-version-id-activate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<warnings: table<message: string>, active: int, editor: string, generate_plain_content: bool, html_content: string, name: string, plain_content: string, subject: string, test_data: string, id: string, template_id: string, thumbnail_url: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10631,7 +10665,7 @@ export def "get-tracking-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<result: table<description: string, enabled: bool, name: string, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10668,7 +10702,7 @@ export def "get-tracking-settings-click" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<enable_text: bool, enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10705,7 +10739,7 @@ export def "patch-tracking-settings-click" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --enabled: oneof<nothing, bool> # The setting you want to use for click tracking.
 ]: any -> record<enable_text: bool, enabled: bool> {
   let input = $in
@@ -10746,7 +10780,7 @@ export def "get-tracking-settings-google-analytics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<enabled: bool, utm_campaign: string, utm_content: string, utm_medium: string, utm_source: string, utm_term: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10783,7 +10817,7 @@ export def "patch-tracking-settings-google-analytics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --enabled: oneof<nothing, bool> # Indicates if Google Analytics is enabled.
   --utm-campaign: string # The name of the campaign.
   --utm-content: string # Used to differentiate ads
@@ -10829,7 +10863,7 @@ export def "get-tracking-settings-open" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10866,7 +10900,7 @@ export def "patch-tracking-settings-open" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --enabled: oneof<nothing, bool> # The new status that you want to set for open tracking.
 ]: any -> record<enabled: bool> {
   let input = $in
@@ -10907,7 +10941,7 @@ export def "get-tracking-settings-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<enabled: bool, html_content: string, landing: string, plain_content: string, replace: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10944,7 +10978,7 @@ export def "patch-tracking-settings-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --enabled: oneof<nothing, bool> # Indicates if subscription tracking is enabled.
   --html-content: string # The information and HTML for your unsubscribe link.
   --landing: string # The HTML that will be displayed on the page that your customers will see after clicking unsubscribe, hosted on SendGrid’s server.
@@ -10990,7 +11024,7 @@ export def "get-user-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<reputation: float, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11027,7 +11061,7 @@ export def "get-user-credits" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<last_reset: string, next_reset: string, overage: int, remain: int, reset_frequency: string, total: int, used: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11064,7 +11098,7 @@ export def "get-user-email" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<email: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11101,7 +11135,7 @@ export def "put-user-email" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --email: string # The new email address that you would like to use for your account.
 ]: any -> record<email: string> {
   let input = $in
@@ -11142,7 +11176,7 @@ export def "put-user-password" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   new_password: string # The new password you would like to use for your account.
   old_password: string # The old password for your account.
 ]: any -> record {
@@ -11184,7 +11218,7 @@ export def "get-user-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<address: string, address2: string, city: string, company: string, country: string, first_name: string, last_name: string, phone: string, state: string, website: string, zip: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11221,7 +11255,7 @@ export def "patch-user-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --address: string # The street address for this user profile.
   --address2: string # An optional second line for the street address of this user profile.
   --city: string # The city for the user profile.
@@ -11272,7 +11306,7 @@ export def "get-user-scheduled-sends" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> table<batch_id: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11309,7 +11343,7 @@ export def "post-user-scheduled-sends" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   batch_id: string # The batch ID is the identifier that your scheduled mail sends share.
   status: string@status-completer # The status of the send you would like to implement. This can be pause or cancel. To delete a pause or cancel status see DELETE /v3/user/scheduled_sends/{batch_id} (default: pause)
 ]: any -> record<batch_id: string, status: string> {
@@ -11352,7 +11386,7 @@ export def "delete-user-scheduled-sends-batch-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11391,7 +11425,7 @@ export def "get-user-scheduled-sends-batch-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> table<batch_id: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11430,7 +11464,7 @@ export def "patch-user-scheduled-sends-batch-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   status: string@status-completer # The status you would like the scheduled send to have.
 ]: any -> any {
   let input = $in
@@ -11472,7 +11506,7 @@ export def "get-user-settings-enforced-tls" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<require_tls: bool, require_valid_cert: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11509,7 +11543,7 @@ export def "patch-user-settings-enforced-tls" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --require-tls: oneof<nothing, bool> # Indicates if you want to require your recipients to support TLS.
   --require-valid-cert: oneof<nothing, bool> # Indicates if you want to require your recipients to have a valid certificate.
 ]: any -> record<require_tls: bool, require_valid_cert: bool> {
@@ -11551,7 +11585,7 @@ export def "get-user-username" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<user_id: int, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11588,7 +11622,7 @@ export def "put-user-username" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --username: string # The new username you would like to use for your account.
 ]: any -> record<username: string> {
   let input = $in
@@ -11629,7 +11663,7 @@ export def "get-user-webhooks-event-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<bounce: bool, click: bool, deferred: bool, delivered: bool, dropped: bool, enabled: bool, group_resubscribe: bool, group_unsubscribe: bool, oauth_client_id: string, oauth_token_url: string, open: bool, processed: bool, spam_report: bool, unsubscribe: bool, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11666,7 +11700,7 @@ export def "patch-user-webhooks-event-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --bounce: oneof<nothing, bool> # Receiving server could not or would not accept message.
   --click: oneof<nothing, bool> # Recipient clicked on a link within the message. You need to enable Click Tracking for getting this type of event.
   --deferred: oneof<nothing, bool> # Recipient's email server temporarily rejected message.
@@ -11678,7 +11712,7 @@ export def "patch-user-webhooks-event-settings" [
   --oauth-client-id: string # The client ID Twilio SendGrid sends to your OAuth server or service provider to generate an OAuth access token. When passing data in this field, you must also include the oauth_token_url field.
   --oauth-client-secret: string # This secret is needed only once to create an access token. SendGrid will store this secret, allowing you to update your Client ID and Token URL without passing the secret to SendGrid again. When passing data in this field, you must also include the oauth_client_id and oauth_token_url fields.
   --oauth-token-url: string # The URL where Twilio SendGrid sends the Client ID and Client Secret to generate an access token. This should be your OAuth server or service provider. When passing data in this field, you must also include the oauth_client_id field.
-  --body-open: oneof<nothing, bool> # Recipient has opened the HTML message. You need to enable Open Tracking for getting this type of event.
+  --open: oneof<nothing, bool> # Recipient has opened the HTML message. You need to enable Open Tracking for getting this type of event.
   --processed: oneof<nothing, bool> # Message has been received and is ready to be delivered.
   --spam-report: oneof<nothing, bool> # Recipient marked a message as spam.
   --unsubscribe: oneof<nothing, bool> # Recipient clicked on message's subscription management link. You need to enable Subscription Tracking for getting this type of event.
@@ -11688,8 +11722,20 @@ export def "patch-user-webhooks-event-settings" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/webhooks/event/settings" $auth.query)
-  let req_body = {"bounce": $bounce, "click": $click, "deferred": $deferred, "delivered": $delivered, "dropped": $dropped, "enabled": $enabled, "group_resubscribe": $group_resubscribe, "group_unsubscribe": $group_unsubscribe, "oauth_client_id": $oauth_client_id, "oauth_client_secret": $oauth_client_secret, "oauth_token_url": $oauth_token_url, "open": $body_open, "processed": $processed, "spam_report": $spam_report, "unsubscribe": $unsubscribe, "url": $url} | compact
+  let req_body = {"bounce": $bounce, "click": $click, "deferred": $deferred, "delivered": $delivered, "dropped": $dropped, "enabled": $enabled, "group_resubscribe": $group_resubscribe, "group_unsubscribe": $group_unsubscribe, "oauth_client_id": $oauth_client_id, "oauth_client_secret": $oauth_client_secret, "oauth_token_url": $oauth_token_url, "open": $open, "processed": $processed, "spam_report": $spam_report, "unsubscribe": $unsubscribe, "url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "bounce") == null) { error make --unspanned { msg: "required body field 'bounce' missing: pass --bounce or pipe a record" } }
+  if (($req_body | get -o "click") == null) { error make --unspanned { msg: "required body field 'click' missing: pass --click or pipe a record" } }
+  if (($req_body | get -o "deferred") == null) { error make --unspanned { msg: "required body field 'deferred' missing: pass --deferred or pipe a record" } }
+  if (($req_body | get -o "delivered") == null) { error make --unspanned { msg: "required body field 'delivered' missing: pass --delivered or pipe a record" } }
+  if (($req_body | get -o "dropped") == null) { error make --unspanned { msg: "required body field 'dropped' missing: pass --dropped or pipe a record" } }
+  if (($req_body | get -o "enabled") == null) { error make --unspanned { msg: "required body field 'enabled' missing: pass --enabled or pipe a record" } }
+  if (($req_body | get -o "group_resubscribe") == null) { error make --unspanned { msg: "required body field 'group_resubscribe' missing: pass --group-resubscribe or pipe a record" } }
+  if (($req_body | get -o "group_unsubscribe") == null) { error make --unspanned { msg: "required body field 'group_unsubscribe' missing: pass --group-unsubscribe or pipe a record" } }
+  if (($req_body | get -o "open") == null) { error make --unspanned { msg: "required body field 'open' missing: pass --open or pipe a record" } }
+  if (($req_body | get -o "processed") == null) { error make --unspanned { msg: "required body field 'processed' missing: pass --processed or pipe a record" } }
+  if (($req_body | get -o "spam_report") == null) { error make --unspanned { msg: "required body field 'spam_report' missing: pass --spam-report or pipe a record" } }
+  if (($req_body | get -o "unsubscribe") == null) { error make --unspanned { msg: "required body field 'unsubscribe' missing: pass --unsubscribe or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"on-behalf-of": $on_behalf_of} | compact
@@ -11722,7 +11768,7 @@ export def "get-user-webhooks-event-settings-signed" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<public_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11759,7 +11805,7 @@ export def "patch-user-webhooks-event-settings-signed" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --enabled: oneof<nothing, bool>
 ]: any -> record<public_key: string> {
   let input = $in
@@ -11768,6 +11814,7 @@ export def "patch-user-webhooks-event-settings-signed" [
   let full_url = (build-url $base "/user/webhooks/event/settings/signed" $auth.query)
   let req_body = {"enabled": $enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "enabled") == null) { error make --unspanned { msg: "required body field 'enabled' missing: pass --enabled or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"on-behalf-of": $on_behalf_of} | compact
@@ -11800,7 +11847,7 @@ export def "post-user-webhooks-event-test" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --oauth-client-id: string # The client ID Twilio SendGrid sends to your OAuth server or service provider to generate an OAuth access token. When passing data in this field, you must also include the oauth_client_secret and oauth_token_url fields.
   --oauth-client-secret: string # This secret is needed only once to create an access token. SendGrid will store this secret, allowing you to update your Client ID and Token URL without passing the secret to SendGrid again. When passing data in this field, you must also include the oauth_client_id and oauth_token_url fields.
   --oauth-token-url: string # The URL where Twilio SendGrid sends the Client ID and Client Secret to generate an access token. This should be your OAuth server or service provider. When passing data in this field, you must also include the oauth_client_id and oauth_client_secret fields.
@@ -11844,7 +11891,7 @@ export def "get-user-webhooks-parse-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<result: table<hostname: string, send_raw: bool, spam_check: bool, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11881,7 +11928,7 @@ export def "post-user-webhooks-parse-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --hostname: string # A specific and unique domain or subdomain that you have created to use exclusively to parse your incoming email. For example, `parse.yourdomain.com`.
   --send-raw: oneof<nothing, bool> # Indicates if you would like SendGrid to post the original MIME-type content of your parsed email. When this parameter is set to `true`, SendGrid will send a JSON payload of the content of your email.
   --spam-check: oneof<nothing, bool> # Indicates if you would like SendGrid to check the content parsed from your emails for spam before POSTing them to your domain.
@@ -11926,7 +11973,7 @@ export def "delete-user-webhooks-parse-settings-hostname" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11965,7 +12012,7 @@ export def "get-user-webhooks-parse-settings-hostname" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<hostname: string, send_raw: bool, spam_check: bool, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12004,7 +12051,7 @@ export def "patch-user-webhooks-parse-settings-hostname" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --body-hostname: string # A specific and unique domain or subdomain that you have created to use exclusively to parse your incoming email. For example, `parse.yourdomain.com`.
   --send-raw: oneof<nothing, bool> # Indicates if you would like SendGrid to post the original MIME-type content of your parsed email. When this parameter is set to `true`, SendGrid will send a JSON payload of the content of your email.
   --spam-check: oneof<nothing, bool> # Indicates if you would like SendGrid to check the content parsed from your emails for spam before POSTing them to your domain.
@@ -12052,12 +12099,13 @@ export def "get-user-webhooks-parse-stats" [
   --limit: string # The number of statistics to return on each page.
   --offset: string # The number of statistics to skip.
   --aggregated-by: string@aggregated-by-completer # How you would like the statistics to by grouped.
-  --start-date: string # The starting date of the statistics you want to retrieve. Must be in the format YYYY-MM-DD
+  --start-date: string # The starting date of the statistics you want to retrieve. Must be in the format YYYY-MM-DD (required)
   --end-date: string # The end date of the statistics you want to retrieve. Must be in the format YYYY-MM-DD (default: The day the request is made.)
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> table<date: string, stats: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "aggregated_by" $aggregated_by "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user/webhooks/parse/stats" $qp $auth.query)
   let accept_val = "application/json"
@@ -12093,13 +12141,13 @@ export def "post-validations-email" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   email: string # The email address that you want to validate.
-  --body-source: string # A one-word classifier for where this validation originated.
+  --source: string # A one-word classifier for where this validation originated.
 ]: any -> record<result: record<checks: record<additional: record, domain: record, local_part: record>, email: string, host: string, ip_address: string, local: string, score: float, source: string, suggestion: string, verdict: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/validations/email" $auth.query)
-  let req_body = {"email": $email, "source": $body_source} | compact
+  let req_body = {"email": $email, "source": $source} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12489,7 +12537,7 @@ export def "get-whitelabel-domains" [
   --exclude-subusers: oneof<nothing, bool> # Exclude subuser domains from the result.
   --username: string # The username associated with an authenticated domain.
   --domain: string # Search for authenticated domains.
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> table<automatic_security: bool, custom_spf: bool, default: bool, dns: record<dkim1: record, dkim2: record, mail_cname: record>, domain: string, id: float, ips: list<string>, legacy: bool, subdomain: string, user_id: float, username: string, valid: bool, last_validation_attempt_at: int, subusers: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12527,7 +12575,7 @@ export def "post-whitelabel-domains" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --automatic-security: oneof<nothing, bool> # Whether to allow SendGrid to manage your SPF records, DKIM keys, and DKIM key rotation.
   --custom-dkim-selector: string # Add a custom DKIM selector. Accepts three letters or numbers.
   --custom-spf: oneof<nothing, bool> # Specify whether to use a custom SPF or allow SendGrid to manage your SPF. This option is only available to authenticated domains set up for manual security.
@@ -12576,7 +12624,7 @@ export def "get-whitelabel-domains-default" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string # The domain to find a default authentication.
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> table<automatic_security: bool, custom_spf: bool, default: bool, dns: record<dkim1: record, dkim2: record, mail_cname: record>, domain: string, id: float, ips: list<string>, legacy: bool, subdomain: string, user_id: float, username: string, valid: bool, last_validation_attempt_at: int, subusers: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12650,10 +12698,11 @@ export def "get-whitelabel-domains-subuser" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --username: string # Username for the subuser to find associated authenticated domain.
+  --username: string # Username for the subuser to find associated authenticated domain. (required)
 ]: nothing -> record<automatic_security: bool, custom_spf: bool, default: bool, dns: record<dkim: record<data: string, host: string, type: string, valid: bool>, domain_spf: record<data: string, host: string, type: string, valid: bool>, mail_server: record<data: string, host: string, type: string, valid: bool>, subdomain_spf: record<data: string, host: string, type: string, valid: bool>>, domain: string, id: int, ips: list<any>, legacy: bool, subdomain: string, user_id: int, username: string, valid: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username == null) { error make --unspanned { msg: "required query parameter 'username' missing: pass --username" } }
   let qp = [(serialize-qp "username" $username "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/whitelabel/domains/subuser" $qp $auth.query)
   let accept_val = "application/json"
@@ -12687,7 +12736,7 @@ export def "delete-whitelabel-domains-domain-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12726,7 +12775,7 @@ export def "get-whitelabel-domains-domain-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<automatic_security: bool, custom_spf: bool, default: bool, dns: record<dkim1: record<data: string, host: string, type: string, valid: bool>, dkim2: record<data: string, host: string, type: string, valid: bool>, mail_cname: record<data: string, host: string, type: string, valid: bool>>, domain: string, id: float, ips: list<string>, legacy: bool, subdomain: string, user_id: float, username: string, valid: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12765,7 +12814,7 @@ export def "patch-whitelabel-domains-domain-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --custom-spf: oneof<nothing, bool> # Indicates whether to generate a custom SPF record for manual security. (default: false)
   --default: oneof<nothing, bool> # Indicates whether this is the default authenticated domain. (default: false)
 ]: any -> table<automatic_security: bool, custom_spf: bool, default: bool, dns: record<dkim1: record, dkim2: record, mail_cname: record>, domain: string, id: float, ips: list<string>, legacy: bool, subdomain: string, user_id: float, username: string, valid: bool, last_validation_attempt_at: int, subusers: list<record>> {
@@ -12849,7 +12898,7 @@ export def "post-whitelabel-domains-id-ips" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   ip: string # IP to associate with the domain. Used for manually specifying IPs for custom SPF.
 ]: any -> record<automatic_security: bool, custom_spf: bool, default: bool, dns: record<dkim: record<data: string, host: string, type: string, valid: bool>, domain_spf: record<data: string, host: string, type: string, valid: bool>, mail_server: record<data: string, host: string, type: string, valid: bool>, subdomain_spf: record<data: string, host: string, type: string, valid: bool>>, domain: string, id: int, ips: list<any>, legacy: bool, subdomain: string, user_id: int, username: string, valid: bool> {
   let input = $in
@@ -12893,7 +12942,7 @@ export def "delete-whitelabel-domains-id-ips-ip" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<automatic_security: bool, custom_spf: bool, default: bool, dns: record<dkim: record<data: string, host: string, type: string, valid: bool>, domain_spf: record<data: string, host: string, type: string, valid: bool>, mail_server: record<data: string, host: string, type: string, valid: bool>, subdomain_spf: record<data: string, host: string, type: string, valid: bool>>, domain: string, id: int, ips: list<any>, legacy: bool, subdomain: string, user_id: int, username: string, valid: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12933,7 +12982,7 @@ export def "post-whitelabel-domains-id-validate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<id: int, valid: bool, validation_results: record<dkim1: record<reason: string, valid: bool>, dkim2: record<reason: string, valid: bool>, mail_cname: record<reason: string, valid: bool>, spf: record<reason: string, valid: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12974,7 +13023,7 @@ export def "get-whitelabel-ips" [
   --limit: int # The maximum number of results to retrieve.
   --offset: int # The point in the list of results to begin retrieving IP addresses from.
   --ip: string # The IP address segment that you'd like to use in a prefix search.
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> table<a_record: record<data: string, host: string, type: string, valid: bool>, domain: string, id: int, ip: string, last_validation_attempt_at: int, legacy: bool, rdns: string, subdomain: string, users: list<record>, valid: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13012,7 +13061,7 @@ export def "post-whitelabel-ips" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   domain: string # The root, or sending, domain that will be used to send message from the IP address.
   ip: string # The IP address for which you want to set up reverse DNS.
   --subdomain: string # The subdomain that will be used to send emails from the IP address. This should be the same as the subdomain used to set up an authenticated domain.
@@ -13056,7 +13105,7 @@ export def "delete-whitelabel-ips-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13095,7 +13144,7 @@ export def "get-whitelabel-ips-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<a_record: record<data: string, host: string, type: string, valid: bool>, domain: string, id: int, ip: string, last_validation_attempt_at: int, legacy: bool, rdns: string, subdomain: string, users: table<user_id: int, username: string>, valid: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13134,7 +13183,7 @@ export def "post-whitelabel-ips-id-validate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<id: int, valid: bool, validation_results: record<a_record: record<reason: string, valid: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13173,7 +13222,7 @@ export def "get-whitelabel-links" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Limits the number of results returned per page.
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> table<default: bool, dns: record<domain_cname: record, owner_cname: record>, domain: string, id: int, legacy: bool, subdomain: string, user_id: int, username: string, valid: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13211,7 +13260,7 @@ export def "post-whitelabel-links" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --default: oneof<nothing, bool> # Indicates if you want to use this link branding as the default or fallback. When setting a new default, the existing default link branding will have its default status removed automatically.
   domain: string # The root domain for the subdomain that you are creating the link branding for. This should match your FROM email address.
   --subdomain: string # The subdomain to create the link branding for. Must be different from the subdomain you used for authenticating your domain.
@@ -13255,7 +13304,7 @@ export def "get-whitelabel-links-default" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string # The domain to match against when finding the default branded link.
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<default: bool, dns: record<domain_cname: record<data: string, host: string, type: string, valid: bool>, owner_cname: record<data: string, host: string, type: string, valid: bool>>, domain: string, id: int, legacy: bool, subdomain: string, user_id: int, username: string, valid: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13293,10 +13342,11 @@ export def "delete-whitelabel-links-subuser" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --username: string # The username of the subuser account that you want to disassociate a branded link from.
+  --username: string # The username of the subuser account that you want to disassociate a branded link from. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username == null) { error make --unspanned { msg: "required query parameter 'username' missing: pass --username" } }
   let qp = [(serialize-qp "username" $username "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/whitelabel/links/subuser" $qp $auth.query)
   let accept_val = "application/json"
@@ -13329,10 +13379,11 @@ export def "get-whitelabel-links-subuser" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --username: string # The username of the subuser to retrieve associated branded links for.
+  --username: string # The username of the subuser to retrieve associated branded links for. (required)
 ]: nothing -> record<default: bool, dns: record<domain_cname: record<data: string, host: string, type: string, valid: bool>, owner_cname: record<data: string, host: string, type: string, valid: bool>>, domain: string, id: int, legacy: bool, subdomain: string, user_id: int, username: string, valid: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username == null) { error make --unspanned { msg: "required query parameter 'username' missing: pass --username" } }
   let qp = [(serialize-qp "username" $username "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/whitelabel/links/subuser" $qp $auth.query)
   let accept_val = "application/json"
@@ -13366,7 +13417,7 @@ export def "delete-whitelabel-links-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13405,7 +13456,7 @@ export def "get-whitelabel-links-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<default: bool, dns: record<domain_cname: record<data: string, host: string, type: string, valid: bool>, owner_cname: record<data: string, host: string, type: string, valid: bool>>, domain: string, id: int, legacy: bool, subdomain: string, user_id: int, username: string, valid: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13444,7 +13495,7 @@ export def "patch-whitelabel-links-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
   --default: oneof<nothing, bool> # Indicates if the branded link is set as the default. When setting a new default, the existing default link branding will have its default status removed automatically.
 ]: any -> record<default: bool, dns: record<domain_cname: record<data: string, host: string, type: string, valid: bool>, owner_cname: record<data: string, host: string, type: string, valid: bool>>, domain: string, id: int, legacy: bool, subdomain: string, user_id: int, username: string, valid: bool> {
   let input = $in
@@ -13487,7 +13538,7 @@ export def "post-whitelabel-links-id-validate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --on-behalf-of: string
+  --on-behalf-of: string # default: The subuser's username. This header generates the API call as if the subuser account was making the call.
 ]: nothing -> record<id: int, valid: bool, validation_results: record<domain_cname: record<reason: string, valid: bool>, owner_cname: record<reason: string, valid: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

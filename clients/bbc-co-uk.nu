@@ -119,21 +119,25 @@ def platform-completer [] { ["app" "responsiveweb"] }
 def vendor-completer [] { ["deezer" "itunes" "spotify" "youtube"] }
 def status-completer [] { ["done" "failed" "pending"] }
 def action-completer [] { ["favourited" "unfavourited"] }
+def type-completer [] { ["clips" "tracks"] }
 def action-completer-1 [] { ["followed" "unfollowed"] }
 def music-context-completer [] { ["events" "ivote" "music" "musicplaylist" "programmes" "radio" "unknown"] }
+def type-completer-1 [] { ["artists" "categories" "genres" "networks" "playlists" "services"] }
 def action-completer-2 [] { ["ended" "heartbeat" "paused" "started"] }
 def resource-type-completer [] { ["clip" "episode"] }
 def rights-completer [] { ["mobile" "web"] }
 def sort-completer-1 [] { ["available_from_date" "available_to_date" "programme_titles"] }
+def type-completer-2 [] { ["clips" "episodes"] }
+def type-completer-3 [] { ["brands" "series"] }
 def sort-completer-2 [] { ["-available_from_date" "-title" "available_from_date" "title"] }
 def coverage-completer [] { ["local" "national" "regional"] }
-def type-completer [] { ["clip" "episode" "episode,clip"] }
+def type-completer-4 [] { ["clip" "episode" "episode,clip"] }
 def distinct-completer [] { ["tleo"] }
 def group-completer [] { ["radio" "tv" "tv,radio"] }
 def media-type-completer [] { ["audio" "audio,video" "video"] }
 def media-set-completer [] { ["android-download-high" "apple-ios-download-high" "iptv-all" "mobile-cellular-main" "mobile-download" "mobile-phone-main" "pc"] }
 def kind-completer-1 [] { ["tleo"] }
-def type-completer-1 [] { ["brand" "clip" "episode" "episode,clip" "series"] }
+def type-completer-5 [] { ["brand" "clip" "episode" "episode,clip" "series"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -175,12 +179,13 @@ export def "get-broadcasts" [
   --limit: int # Paginated results limit
   --service-id: string # Filter by Service ID. E.g. bbc_radio_fourfm
   --date: string # Filter by date. E.g. 2016-06-17
-  --qp-sort: string@sort-completer # Sort by provided query. E.g. 'start_at' sorts in ascending order, and '-start_at' sorts in descending order
-  --x-api-key: string # API_KEY
+  --sort: string@sort-completer # Sort by provided query. E.g. 'start_at' sorts in ascending order, and '-start_at' sorts in descending order
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<_schema: string, limit: int, offset: int, results: table<duration: int, end: string, is_audio_described: bool, is_blanked: bool, is_critical: bool, is_live: bool, is_repeat: bool, is_webcast: bool, pid: string, programme: record, service_id: string, start: string, type: string, version_pid: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "service_id" $service_id "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "service_id" $service_id "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/broadcasts" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -189,7 +194,7 @@ export def "get-broadcasts" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"offset": $offset, "limit": $limit, "service_id": $service_id, "date": $date, "sort": $qp_sort} | compact)
+    query: ({"offset": $offset, "limit": $limit, "service_id": $service_id, "date": $date, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -219,12 +224,13 @@ export def "get-broadcasts-latest" [
   --on-air: string@on-air-completer # Filter what is on air. E.g. 'now' returns current programme being broadcasted.
   --next: string # Filter what will be on air next in minutes. E.g. '240' returns programmes broadcasted in the next four hurs
   --previous: string # Filter what was on air previously in minutes. E.g. '240' returns programmes broadcasted in the previous four hurs
-  --qp-sort: string@sort-completer # Sort by provided query. E.g. 'start_at' sorts in ascending order, and '-start_at' sorts in descending order
-  --x-api-key: string # API_KEY
+  --sort: string@sort-completer # Sort by provided query. E.g. 'start_at' sorts in ascending order, and '-start_at' sorts in descending order
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<_schema: string, limit: int, offset: int, results: table<duration: int, end: string, is_audio_described: bool, is_blanked: bool, is_critical: bool, is_live: bool, is_repeat: bool, is_webcast: bool, pid: string, programme: record, service_id: string, start: string, type: string, version_pid: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "service_id" $service_id "scalar") (serialize-qp "on_air" $on_air "scalar") (serialize-qp "next" $next "scalar") (serialize-qp "previous" $previous "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "service_id" $service_id "scalar") (serialize-qp "on_air" $on_air "scalar") (serialize-qp "next" $next "scalar") (serialize-qp "previous" $previous "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/broadcasts/latest" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -233,7 +239,7 @@ export def "get-broadcasts-latest" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"offset": $offset, "limit": $limit, "service_id": $service_id, "on_air": $on_air, "next": $next, "previous": $previous, "sort": $qp_sort} | compact)
+    query: ({"offset": $offset, "limit": $limit, "service_id": $service_id, "on_air": $on_air, "next": $next, "previous": $previous, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -259,11 +265,12 @@ export def "get-broadcast-by-pid" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-api-key: string # API_KEY
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<_schema: string, limit: int, offset: int, results: table<duration: int, end: string, is_audio_described: bool, is_blanked: bool, is_critical: bool, is_live: bool, is_repeat: bool, is_webcast: bool, pid: string, programme: record, service_id: string, start: string, type: string, version_pid: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let full_url = (build-url $base ({pid: (encode-path-segment $pid)} | format pattern "/broadcasts/{pid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -297,10 +304,11 @@ export def "get-categories" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string@kind-completer # Filter by provided query. E.g. 'promoted' returns promoted categories
-  --x-api-key: string # API_KEY
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<_schema: string, limit: int, offset: int, results: table<category_type: string, child_categories: list, depth: int, id: string, pip_id: string, title: string, type: string, url_key: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let qp = [(serialize-qp "kind" $kind "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/categories" $qp $auth.query)
   let accept_val = "application/json"
@@ -335,11 +343,12 @@ export def "get-categories-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-api-key: string # API_KEY
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<_schema: string, limit: int, offset: int, results: table<category_type: string, child_categories: list, depth: int, id: string, pip_id: string, title: string, type: string, url_key: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/categories/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -376,11 +385,12 @@ export def "get-collection-members" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
-  --x-api-key: string # API_KEY
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<_schema: string, limit: int, offset: int, results: table<pid: string, type: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pid: (encode-path-segment $pid)} | format pattern "/collections/{pid}/members") $qp $auth.query)
   let accept_val = "application/json"
@@ -415,10 +425,11 @@ export def "get-experience-homepage" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-api-key: string # API_KEY
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<_schema: string, data: table<description: string, title: string, type: string, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let full_url = (build-url $base "/experience/homepage" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -457,10 +468,11 @@ export def "get-music-popular-artists" [
   --decomposed: oneof<nothing, bool> # In addition to the overall score, return a list of scores broken down by day N.B Must be used in conjunction with since and/or until and since is >= 31 days
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
-  --x-api-key: string # API_KEY
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<limit: int, method: string, offset: int, repliedAt: string, results: table<gid: string, id: string, imagePid: string, name: string, score: int, sortName: string>, schema: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "decomposed" $decomposed "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/music/popular/artists" $qp $auth.query)
   let accept_val = "application/json"
@@ -499,11 +511,12 @@ export def "get-music-popular-artist-by-id" [
   --since: string # ISO 8601 Date yyyy-mm-dd. Returns items between given time period and now
   --until: string # ISO 8601 Date yyyy-mm-dd. Returns items between given 'since' and 'until' date params
   --decomposed: oneof<nothing, bool> # In addition to the overall score, return a list of scores broken down by day N.B Must be used in conjunction with since and/or until and since is >= 31 days
-  --x-api-key: string # API_KEY
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<limit: int, method: string, offset: int, repliedAt: string, results: table<gid: string, id: string, imagePid: string, name: string, score: int, sortName: string>, schema: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "decomposed" $decomposed "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/music/popular/artists/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -543,10 +556,11 @@ export def "get-music-popular-playlists" [
   --decomposed: oneof<nothing, bool> # In addition to the overall score, return a list of scores broken down by day N.B Must be used in conjunction with since and/or until and since is >= 31 days
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
-  --x-api-key: string # API_KEY
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<limit: int, method: string, offset: int, repliedAt: string, results: table<categories: list, commentsEnabled: bool, description: string, externalPartners: list, genre: string, id: string, imagePid: string, imageUrl: string, kind: string, mood: string, oneOff: bool, playlistPlaybackType: string, score: int, serviceId: string, title: string, updatedAt: string, visibility: string, wideImagePid: string, wideImageUrl: string>, schema: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "decomposed" $decomposed "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/music/popular/playlists" $qp $auth.query)
   let accept_val = "application/json"
@@ -585,11 +599,12 @@ export def "get-music-popular-playlist-by-id" [
   --since: string # ISO 8601 Date yyyy-mm-dd. Returns items between given time period and now
   --until: string # ISO 8601 Date yyyy-mm-dd. Returns items between given 'since' and 'until' date params
   --decomposed: oneof<nothing, bool> # In addition to the overall score, return a list of scores broken down by day N.B Must be used in conjunction with since and/or until and since is >= 31 days
-  --x-api-key: string # API_KEY
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<limit: int, method: string, offset: int, repliedAt: string, results: table<categories: list, commentsEnabled: bool, description: string, externalPartners: list, genre: string, id: string, imagePid: string, imageUrl: string, kind: string, mood: string, oneOff: bool, playlistPlaybackType: string, score: int, serviceId: string, title: string, updatedAt: string, visibility: string, wideImagePid: string, wideImageUrl: string>, schema: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "decomposed" $decomposed "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/music/popular/playlists/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -632,10 +647,11 @@ export def "get-music-popular-tracks" [
   --decomposed: oneof<nothing, bool> # In addition to the overall score, return a list of scores broken down by day N.B Must be used in conjunction with since and/or until and since is >= 31 days
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
-  --x-api-key: string # API_KEY
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<limit: int, method: string, offset: int, repliedAt: string, results: table<album: string, artistGid: string, artistName: string, artists: list, baseTitle: string, classical: bool, id: string, mergedIds: list, preferredMultiplayRecordAudio: record, preferredRecordAudio: record, radioEdit: bool, recordAudio: list, recordImageHref: string, recordImagePid: string, score: int, title: string, type: string>, schema: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "network" $network "scalar") (serialize-qp "programme" $programme "scalar") (serialize-qp "artist" $artist "scalar") (serialize-qp "decomposed" $decomposed "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/music/popular/tracks" $qp $auth.query)
   let accept_val = "application/json"
@@ -677,11 +693,12 @@ export def "get-music-popular-track-by-id" [
   --programme: string # Items with given Programme Pid
   --artist: string # MusicBrainz artist ID
   --decomposed: oneof<nothing, bool> # In addition to the overall score, return a list of scores broken down by day N.B Must be used in conjunction with since and/or until and since is >= 31 days
-  --x-api-key: string # API_KEY
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<limit: int, method: string, offset: int, repliedAt: string, results: table<album: string, artistGid: string, artistName: string, artists: list, baseTitle: string, classical: bool, id: string, mergedIds: list, preferredMultiplayRecordAudio: record, preferredRecordAudio: record, radioEdit: bool, recordAudio: list, recordImageHref: string, recordImagePid: string, score: int, title: string, type: string>, schema: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "network" $network "scalar") (serialize-qp "programme" $programme "scalar") (serialize-qp "artist" $artist "scalar") (serialize-qp "decomposed" $decomposed "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/music/popular/tracks/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -715,14 +732,16 @@ export def "delete-my-categories-follows" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-api-key: string # API_KEY (required)
   category_id: string
   platform: string@platform-completer
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let full_url = (build-url $base "/my/categories/follows" $auth.query)
   let req_body = {"category_id": $category_id, "platform": $platform} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -759,11 +778,13 @@ export def "get-my-categories-follows" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<_schema: string, limit: int, offset: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/my/categories/follows" $qp $auth.query)
   let accept_val = "application/json"
@@ -797,14 +818,16 @@ export def "post-my-categories-follows" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-api-key: string # API_KEY (required)
   category_id: string
   platform: string@platform-completer
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let full_url = (build-url $base "/my/categories/follows" $auth.query)
   let req_body = {"category_id": $category_id, "platform": $platform} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -842,12 +865,15 @@ export def "get-music-export" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<created_at: string, id: string, job_id: string, status: string, vendor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/my/music/export" $qp $auth.query)
   let accept_val = "application/json"
@@ -882,14 +908,18 @@ export def "get-music-export-jobs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --over16: oneof<nothing, bool> # Boolean age check
+  --over16: oneof<nothing, bool> # Boolean age check (required)
   --vendor: string@vendor-completer # Specify Vendor Jobs
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<created_at: string, id: string, job_id: string, status: string, vendor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($over16 == null) { error make --unspanned { msg: "required query parameter 'over16' missing: pass --over16" } }
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let qp = [(serialize-qp "over16" $over16 "scalar") (serialize-qp "vendor" $vendor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/my/music/exports/jobs" $qp $auth.query)
   let accept_val = "application/json"
@@ -924,16 +954,20 @@ export def "post-music-export-job" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --over16: oneof<nothing, bool> # Boolean age check
+  --over16: oneof<nothing, bool> # Boolean age check (required)
   --vendor: string@vendor-completer # Specify Vendor Jobs
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
   --body: list
 ]: any -> record<method: string, replied_at: string, schema: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($over16 == null) { error make --unspanned { msg: "required query parameter 'over16' missing: pass --over16" } }
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let qp = [(serialize-qp "over16" $over16 "scalar") (serialize-qp "vendor" $vendor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/my/music/exports/jobs" $qp $auth.query)
   let req_body = $body
@@ -970,17 +1004,21 @@ export def "get-music-export-tracks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --over16: oneof<nothing, bool> # Boolean age check
+  --over16: oneof<nothing, bool> # Boolean age check (required)
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
   --vendor: string@vendor-completer # Specify Vendor Tracks
   --status: string@status-completer # Specify Track status
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<created_at: string, id: string, job_id: string, status: string, vendor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($over16 == null) { error make --unspanned { msg: "required query parameter 'over16' missing: pass --over16" } }
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let qp = [(serialize-qp "over16" $over16 "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "vendor" $vendor "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/my/music/exports/tracks" $qp $auth.query)
   let accept_val = "application/json"
@@ -1019,12 +1057,15 @@ export def "get-personalised-music-favourites" [
   --limit: int # Paginated results limit
   --action: string@action-completer # Filters activities based on the type of action
   --music-data: oneof<nothing, bool> # Omits music data from the response, defaults to true
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: list, domain: string, id: string, meta_data: record, type: string, urn: string>, schema: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "music-data" $music_data "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/my/music/favourites" $qp $auth.query)
   let accept_val = "application/json"
@@ -1059,14 +1100,17 @@ export def "post-personalised-music-favourites-batch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
   --body: list
 ]: any -> record<limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: list, domain: string, id: string, meta_data: record, type: string, urn: string>, schema: string, total: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let full_url = (build-url $base "/my/music/favourites" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -1102,14 +1146,17 @@ export def "put-personalised-music-favourites-batch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
   --body: list
 ]: any -> record<method: string, replied_at: string, schema: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let full_url = (build-url $base "/my/music/favourites" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -1136,7 +1183,7 @@ export def "put-personalised-music-favourites-batch" [
 # GET /my/music/favourites/{type}
 # operationId: getPersonalisedMusicFavouritesByType
 export def "get-personalised-music-favourites-by-type" [
-  type: string
+  type: string@type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1149,13 +1196,16 @@ export def "get-personalised-music-favourites-by-type" [
   --action: string@action-completer # Filters activities based on the type of action
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: list, domain: string, id: string, meta_data: record, type: string, urn: string>, schema: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let qp = [(serialize-qp "action" $action "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/my/music/favourites/{type}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1181,7 +1231,7 @@ export def "get-personalised-music-favourites-by-type" [
 # DELETE /my/music/favourites/{type}/{id}
 # operationId: deletePersonalisedMusicFavouritesByTypeById
 export def "delete-personalised-music-favourites-by-type-by-id" [
-  type: string
+  type: string@type-completer
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1192,14 +1242,17 @@ export def "delete-personalised-music-favourites-by-type-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<method: string, replied_at: string, schema: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/my/music/favourites/{type}/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1224,7 +1277,7 @@ export def "delete-personalised-music-favourites-by-type-by-id" [
 # GET /my/music/favourites/{type}/{id}
 # operationId: getPersonalisedMusicFavouritesByTypeById
 export def "get-personalised-music-favourites-by-type-by-id" [
-  type: string
+  type: string@type-completer
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1235,14 +1288,17 @@ export def "get-personalised-music-favourites-by-type-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: list, domain: string, id: string, meta_data: record, type: string, urn: string>, schema: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/my/music/favourites/{type}/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1268,7 +1324,7 @@ export def "get-personalised-music-favourites-by-type-by-id" [
 # operationId: postPersonalisedMusicFavouritesByTypeById
 # --meta_data shape: {key: string}
 export def "post-personalised-music-favourites-by-type-by-id" [
-  type: string
+  type: string@type-completer
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1279,9 +1335,9 @@ export def "post-personalised-music-favourites-by-type-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
   action: string
   --added-at: string
   --context: string
@@ -1292,6 +1348,9 @@ export def "post-personalised-music-favourites-by-type-by-id" [
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/my/music/favourites/{type}/{id}") $auth.query)
   let req_body = {"action": $action, "added_at": $added_at, "context": $context, "meta_data": $meta_data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1319,7 +1378,7 @@ export def "post-personalised-music-favourites-by-type-by-id" [
 # operationId: putPersonalisedMusicFavouritesByTypeById
 # --meta_data shape: {key: string}
 export def "put-personalised-music-favourites-by-type-by-id" [
-  type: string
+  type: string@type-completer
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1330,9 +1389,9 @@ export def "put-personalised-music-favourites-by-type-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
   action: string
   --added-at: string
   --context: string
@@ -1343,6 +1402,9 @@ export def "put-personalised-music-favourites-by-type-by-id" [
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/my/music/favourites/{type}/{id}") $auth.query)
   let req_body = {"action": $action, "added_at": $added_at, "context": $context, "meta_data": $meta_data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1384,12 +1446,15 @@ export def "get-personalised-music-follows" [
   --music-within-uk: oneof<nothing, bool> # Specify location to be passed to Music API
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: list, domain: string, id: string, meta_data: record, type: string, urn: string>, schema: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let qp = [(serialize-qp "action" $action "scalar") (serialize-qp "music-data" $music_data "scalar") (serialize-qp "music_context" $music_context "scalar") (serialize-qp "music_within_uk" $music_within_uk "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/my/music/follows" $qp $auth.query)
   let accept_val = "application/json"
@@ -1428,14 +1493,17 @@ export def "post-personalised-music-follows-batch" [
   --music-data: oneof<nothing, bool> # Omits music data from the response, defaults to true
   --music-context: string@music-context-completer # Specify context to be passed to Music API
   --music-within-uk: oneof<nothing, bool> # Specify location to be passed to Music API
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
   --body: list
 ]: any -> record<method: string, replied_at: string, schema: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let qp = [(serialize-qp "action" $action "scalar") (serialize-qp "music-data" $music_data "scalar") (serialize-qp "music_context" $music_context "scalar") (serialize-qp "music_within_uk" $music_within_uk "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/my/music/follows" $qp $auth.query)
   let req_body = $body
@@ -1476,14 +1544,17 @@ export def "put-personalised-music-follows-batch" [
   --music-data: oneof<nothing, bool> # Omits music data from the response, defaults to true
   --music-context: string@music-context-completer # Specify context to be passed to Music API
   --music-within-uk: oneof<nothing, bool> # Specify location to be passed to Music API
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
   --body: list
 ]: any -> record<method: string, replied_at: string, schema: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let qp = [(serialize-qp "action" $action "scalar") (serialize-qp "music-data" $music_data "scalar") (serialize-qp "music_context" $music_context "scalar") (serialize-qp "music_within_uk" $music_within_uk "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/my/music/follows" $qp $auth.query)
   let req_body = $body
@@ -1511,7 +1582,7 @@ export def "put-personalised-music-follows-batch" [
 # GET /my/music/follows/{type}
 # operationId: getPersonalisedMusicFollowsByType
 export def "get-personalised-music-follows-by-type" [
-  type: string
+  type: string@type-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1527,13 +1598,16 @@ export def "get-personalised-music-follows-by-type" [
   --music-within-uk: oneof<nothing, bool> # Specify location to be passed to Music API
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: list, domain: string, id: string, meta_data: record, type: string, urn: string>, schema: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let qp = [(serialize-qp "action" $action "scalar") (serialize-qp "music-data" $music_data "scalar") (serialize-qp "music_context" $music_context "scalar") (serialize-qp "music_within_uk" $music_within_uk "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/my/music/follows/{type}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1559,7 +1633,7 @@ export def "get-personalised-music-follows-by-type" [
 # DELETE /my/music/follows/{type}/{id}
 # operationId: deletePersonalisedMusicFollowsByTypeById
 export def "delete-personalised-music-follows-by-type-by-id" [
-  type: string
+  type: string@type-completer-1
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1573,14 +1647,17 @@ export def "delete-personalised-music-follows-by-type-by-id" [
   --music-data: oneof<nothing, bool> # Omits music data from the response, defaults to true
   --music-context: string@music-context-completer # Specify context to be passed to Music API
   --music-within-uk: oneof<nothing, bool> # Specify location to be passed to Music API
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<method: string, replied_at: string, schema: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let qp = [(serialize-qp "music-data" $music_data "scalar") (serialize-qp "music_context" $music_context "scalar") (serialize-qp "music_within_uk" $music_within_uk "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/my/music/follows/{type}/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1606,7 +1683,7 @@ export def "delete-personalised-music-follows-by-type-by-id" [
 # GET /my/music/follows/{type}/{id}
 # operationId: getPersonalisedMusicFollowsByTypeById
 export def "get-personalised-music-follows-by-type-by-id" [
-  type: string
+  type: string@type-completer-1
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1620,14 +1697,17 @@ export def "get-personalised-music-follows-by-type-by-id" [
   --music-data: oneof<nothing, bool> # Omits music data from the response, defaults to true
   --music-context: string@music-context-completer # Specify context to be passed to Music API
   --music-within-uk: oneof<nothing, bool> # Specify location to be passed to Music API
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: list, domain: string, id: string, meta_data: record, type: string, urn: string>, schema: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let qp = [(serialize-qp "music-data" $music_data "scalar") (serialize-qp "music_context" $music_context "scalar") (serialize-qp "music_within_uk" $music_within_uk "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/my/music/follows/{type}/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1654,7 +1734,7 @@ export def "get-personalised-music-follows-by-type-by-id" [
 # operationId: postPersonalisedMusicFollowsByTypeById
 # --meta_data shape: {key: string}
 export def "post-personalised-music-follows-by-type-by-id" [
-  type: string
+  type: string@type-completer-1
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1668,9 +1748,9 @@ export def "post-personalised-music-follows-by-type-by-id" [
   --music-data: oneof<nothing, bool> # Omits music data from the response, defaults to true
   --music-context: string@music-context-completer # Specify context to be passed to Music API
   --music-within-uk: oneof<nothing, bool> # Specify location to be passed to Music API
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
   action: string
   --added-at: string
   --context: string
@@ -1681,6 +1761,9 @@ export def "post-personalised-music-follows-by-type-by-id" [
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let qp = [(serialize-qp "music-data" $music_data "scalar") (serialize-qp "music_context" $music_context "scalar") (serialize-qp "music_within_uk" $music_within_uk "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/my/music/follows/{type}/{id}") $qp $auth.query)
   let req_body = {"action": $action, "added_at": $added_at, "context": $context, "meta_data": $meta_data} | compact
@@ -1709,7 +1792,7 @@ export def "post-personalised-music-follows-by-type-by-id" [
 # operationId: putPersonalisedMusicFollowsByTypeById
 # --meta_data shape: {key: string}
 export def "put-personalised-music-follows-by-type-by-id" [
-  type: string
+  type: string@type-completer-1
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1723,9 +1806,9 @@ export def "put-personalised-music-follows-by-type-by-id" [
   --music-data: oneof<nothing, bool> # Omits music data from the response, defaults to true
   --music-context: string@music-context-completer # Specify context to be passed to Music API
   --music-within-uk: oneof<nothing, bool> # Specify location to be passed to Music API
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
   action: string
   --added-at: string
   --context: string
@@ -1736,6 +1819,9 @@ export def "put-personalised-music-follows-by-type-by-id" [
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let qp = [(serialize-qp "music-data" $music_data "scalar") (serialize-qp "music_context" $music_context "scalar") (serialize-qp "music_within_uk" $music_within_uk "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/my/music/follows/{type}/{id}") $qp $auth.query)
   let req_body = {"action": $action, "added_at": $added_at, "context": $context, "meta_data": $meta_data} | compact
@@ -1772,12 +1858,15 @@ export def "delete-music-preferences-export" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<method: string, replied_at: string, schema: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let full_url = (build-url $base "/my/music/preferences/export" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1811,12 +1900,15 @@ export def "get-music-preferences-export" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<method: string, replied_at: string, results: table<access_expires_at: string, access_token: string, add_plus_export: bool, authorization_code: string, last_export: string, legacy_state: string, partner_id: string, refresh_token: string, terms: bool, vendor: string>, schema: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let full_url = (build-url $base "/my/music/preferences/export" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1850,9 +1942,9 @@ export def "post-music-preferences-export" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
   access_expires_at: string
   access_token: string
   --add-plus-export: oneof<nothing, bool>
@@ -1867,9 +1959,14 @@ export def "post-music-preferences-export" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let full_url = (build-url $base "/my/music/preferences/export" $auth.query)
   let req_body = {"access_expires_at": $access_expires_at, "access_token": $access_token, "add_plus_export": $add_plus_export, "authorization_code": $authorization_code, "last_export": $last_export, "legacy_state": $legacy_state, "partner_id": $partner_id, "refresh_token": $refresh_token, "terms": $terms, "vendor": $vendor} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "add_plus_export") == null) { error make --unspanned { msg: "required body field 'add_plus_export' missing: pass --add-plus-export or pipe a record" } }
+  if (($req_body | get -o "terms") == null) { error make --unspanned { msg: "required body field 'terms' missing: pass --terms or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
@@ -1893,7 +1990,7 @@ export def "post-music-preferences-export" [
 # DELETE /my/music/preferences/export/{vendor}
 # operationId: deleteMusicPreferencesExportVendor
 export def "delete-music-preferences-export-vendor" [
-  vendor: string
+  vendor: string@vendor-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1903,13 +2000,16 @@ export def "delete-music-preferences-export-vendor" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
-]: nothing -> record<errors: table<message: string, replied_at: int, status: int>, schema: string> {
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($vendor | is-empty) { error make --unspanned { msg: "path parameter 'vendor' must be non-empty" } }
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let full_url = (build-url $base ({vendor: (encode-path-segment $vendor)} | format pattern "/my/music/preferences/export/{vendor}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1934,7 +2034,7 @@ export def "delete-music-preferences-export-vendor" [
 # GET /my/music/preferences/export/{vendor}
 # operationId: getMusicPreferencesExportVendor
 export def "get-music-preferences-export-vendor" [
-  vendor: string
+  vendor: string@vendor-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1944,13 +2044,16 @@ export def "get-music-preferences-export-vendor" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<method: string, replied_at: string, results: table<access_expires_at: string, access_token: string, add_plus_export: bool, authorization_code: string, last_export: string, legacy_state: string, partner_id: string, refresh_token: string, terms: bool, vendor: string>, schema: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($vendor | is-empty) { error make --unspanned { msg: "path parameter 'vendor' must be non-empty" } }
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let full_url = (build-url $base ({vendor: (encode-path-segment $vendor)} | format pattern "/my/music/preferences/export/{vendor}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1975,7 +2078,7 @@ export def "get-music-preferences-export-vendor" [
 # POST /my/music/preferences/export/{vendor}
 # operationId: postMusicPreferencesExportVendor
 export def "post-music-preferences-export-vendor" [
-  vendor: string
+  vendor: string@vendor-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1985,9 +2088,9 @@ export def "post-music-preferences-export-vendor" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
   access_expires_at: string
   access_token: string
   --add-plus-export: oneof<nothing, bool>
@@ -1998,14 +2101,20 @@ export def "post-music-preferences-export-vendor" [
   refresh_token: string
   --terms: oneof<nothing, bool>
   --body-vendor: string
-]: any -> record<errors: table<message: string, replied_at: int, status: int>, schema: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($vendor | is-empty) { error make --unspanned { msg: "path parameter 'vendor' must be non-empty" } }
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let full_url = (build-url $base ({vendor: (encode-path-segment $vendor)} | format pattern "/my/music/preferences/export/{vendor}") $auth.query)
   let req_body = {"access_expires_at": $access_expires_at, "access_token": $access_token, "add_plus_export": $add_plus_export, "authorization_code": $authorization_code, "last_export": $last_export, "legacy_state": $legacy_state, "partner_id": $partner_id, "refresh_token": $refresh_token, "terms": $terms, "vendor": $body_vendor} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "add_plus_export") == null) { error make --unspanned { msg: "required body field 'add_plus_export' missing: pass --add-plus-export or pipe a record" } }
+  if (($req_body | get -o "terms") == null) { error make --unspanned { msg: "required body field 'terms' missing: pass --terms or pipe a record" } }
+  if (($req_body | get -o "vendor") == null) { error make --unspanned { msg: "required body field 'vendor' missing: pass --body-vendor or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
@@ -2029,7 +2138,7 @@ export def "post-music-preferences-export-vendor" [
 # PUT /my/music/preferences/export/{vendor}
 # operationId: putMusicPreferencesExportVendor
 export def "put-music-preferences-export-vendor" [
-  vendor: string
+  vendor: string@vendor-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2039,9 +2148,9 @@ export def "put-music-preferences-export-vendor" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
   access_expires_at: string
   access_token: string
   --add-plus-export: oneof<nothing, bool>
@@ -2052,14 +2161,20 @@ export def "put-music-preferences-export-vendor" [
   refresh_token: string
   --terms: oneof<nothing, bool>
   --body-vendor: string
-]: any -> record<errors: table<message: string, replied_at: int, status: int>, schema: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($vendor | is-empty) { error make --unspanned { msg: "path parameter 'vendor' must be non-empty" } }
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let full_url = (build-url $base ({vendor: (encode-path-segment $vendor)} | format pattern "/my/music/preferences/export/{vendor}") $auth.query)
   let req_body = {"access_expires_at": $access_expires_at, "access_token": $access_token, "add_plus_export": $add_plus_export, "authorization_code": $authorization_code, "last_export": $last_export, "legacy_state": $legacy_state, "partner_id": $partner_id, "refresh_token": $refresh_token, "terms": $terms, "vendor": $body_vendor} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "add_plus_export") == null) { error make --unspanned { msg: "required body field 'add_plus_export' missing: pass --add-plus-export or pipe a record" } }
+  if (($req_body | get -o "terms") == null) { error make --unspanned { msg: "required body field 'terms' missing: pass --terms or pipe a record" } }
+  if (($req_body | get -o "vendor") == null) { error make --unspanned { msg: "required body field 'vendor' missing: pass --body-vendor or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "X-Authentication-Provider": $x_authentication_provider, "X-API-Key": $x_api_key} | compact
@@ -2093,14 +2208,16 @@ export def "delete-my-networks-follows" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-api-key: string # API_KEY (required)
   platform: string@platform-completer
   service_id: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/my/networks/follows" $qp $auth.query)
   let req_body = {"platform": $platform, "service_id": $service_id} | compact
@@ -2138,11 +2255,13 @@ export def "get-my-networks-follows" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<_schema: string, limit: int, offset: int, results: table<created: string, type: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/my/networks/follows" $qp $auth.query)
   let accept_val = "application/json"
@@ -2178,14 +2297,16 @@ export def "post-my-networks-follows" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-api-key: string # API_KEY (required)
   platform: string@platform-completer
   service_id: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/my/networks/follows" $qp $auth.query)
   let req_body = {"platform": $platform, "service_id": $service_id} | compact
@@ -2221,8 +2342,8 @@ export def "post-my-plays" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-api-key: string # API_KEY (required)
   action: string@action-completer-2
   elapsed_time: int
   pid: string
@@ -2232,6 +2353,8 @@ export def "post-my-plays" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let full_url = (build-url $base "/my/plays" $auth.query)
   let req_body = {"action": $action, "elapsed_time": $elapsed_time, "pid": $pid, "resource_type": $resource_type, "version_pid": $version_pid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2267,13 +2390,16 @@ export def "suggest-container" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --previous-pid: string # Clip or Episode PID of the previous or first content item in the Playspace stream.
+  --previous-pid: string # Clip or Episode PID of the previous or first content item in the Playspace stream. (required)
   --previous-container: string # Container ID of the previous container in the Playspace stream.
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<id: string, members: table<description: string, image_url: string, pid: string, title: string, type: string, version_pid: string>, title: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($previous_pid == null) { error make --unspanned { msg: "required query parameter 'previous_pid' missing: pass --previous-pid" } }
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let qp = [(serialize-qp "previous_pid" $previous_pid "scalar") (serialize-qp "previous_container" $previous_container "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/my/playspace/containers/suggested" $qp $auth.query)
   let accept_val = "application/json"
@@ -2309,12 +2435,14 @@ export def "get-container" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<id: string, members: table<description: string, image_url: string, pid: string, title: string, type: string, version_pid: string>, title: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/my/playspace/containers/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2350,12 +2478,15 @@ export def "get-recommendations" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
-  --rights: string@rights-completer # Only return available results for the web/mobile.
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-api-key: string # API_KEY
+  --rights: string@rights-completer # Only return available results for the web/mobile. (required)
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<_schema: string, limit: int, offset: int, results: table<pid: string, type: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($rights == null) { error make --unspanned { msg: "required query parameter 'rights' missing: pass --rights" } }
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "rights" $rights "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/my/programmes/recommendations" $qp $auth.query)
   let accept_val = "application/json"
@@ -2392,15 +2523,18 @@ export def "get-personalised-radio-favourites" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
-  --qp-sort: string@sort-completer-1 # Sort order for Personalised Radio results
+  --sort: string@sort-completer-1 # Sort order for Personalised Radio results
   --show-all-activity: oneof<nothing, bool> # Include items which have been 'soft' unfavourited in response. I.e items with UAS type of 'unfavourited'
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<_schema: string, limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: record, domain: string, id: string, metadata: record, type: string, uas_type: string, urn: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "show_all_activity" $show_all_activity "scalar")] | flatten | str join "&"
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "show_all_activity" $show_all_activity "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/my/radio/favourites" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2409,7 +2543,7 @@ export def "get-personalised-radio-favourites" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"offset": $offset, "limit": $limit, "sort": $qp_sort, "show_all_activity": $show_all_activity} | compact)
+    query: ({"offset": $offset, "limit": $limit, "sort": $sort, "show_all_activity": $show_all_activity} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2434,14 +2568,17 @@ export def "post-personalised-radio-batch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
   --body: list
 ]: any -> record<_schema: string, method: string, replied_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let full_url = (build-url $base "/my/radio/favourites" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -2477,14 +2614,17 @@ export def "put-personalised-radio-batch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
   --body: list
 ]: any -> record<_schema: string, method: string, replied_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let full_url = (build-url $base "/my/radio/favourites" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -2511,7 +2651,7 @@ export def "put-personalised-radio-batch" [
 # GET /my/radio/favourites/{type}
 # operationId: getPersonalisedRadioFavouritesByType
 export def "get-personalised-radio-favourites-by-type" [
-  type: string
+  type: string@type-completer-2
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2521,18 +2661,21 @@ export def "get-personalised-radio-favourites-by-type" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-sort: string@sort-completer-1 # Sort order for Personalised Radio results
+  --sort: string@sort-completer-1 # Sort order for Personalised Radio results
   --show-all-activity: oneof<nothing, bool> # Include items which have been 'soft' unfavourited in response. I.e items with UAS type of 'unfavourited'
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<_schema: string, limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: record, domain: string, id: string, metadata: record, type: string, uas_type: string, urn: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "show_all_activity" $show_all_activity "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
+  let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "show_all_activity" $show_all_activity "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/my/radio/favourites/{type}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2541,7 +2684,7 @@ export def "get-personalised-radio-favourites-by-type" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sort": $qp_sort, "show_all_activity": $show_all_activity, "offset": $offset, "limit": $limit} | compact)
+    query: ({"sort": $sort, "show_all_activity": $show_all_activity, "offset": $offset, "limit": $limit} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2557,7 +2700,7 @@ export def "get-personalised-radio-favourites-by-type" [
 # DELETE /my/radio/favourites/{type}/{pid}
 # operationId: deletePersonalisedRadioByActivityTypeById
 export def "delete-personalised-radio-by-activity-type-by-id" [
-  type: string
+  type: string@type-completer-2
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2568,14 +2711,17 @@ export def "delete-personalised-radio-by-activity-type-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<_schema: string, method: string, replied_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let full_url = (build-url $base ({type: (encode-path-segment $type), pid: (encode-path-segment $pid)} | format pattern "/my/radio/favourites/{type}/{pid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2600,7 +2746,7 @@ export def "delete-personalised-radio-by-activity-type-by-id" [
 # GET /my/radio/favourites/{type}/{pid}
 # operationId: getPersonalisedRadioByActivityTypeById
 export def "get-personalised-radio-by-activity-type-by-id" [
-  type: string
+  type: string@type-completer-2
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2612,14 +2758,17 @@ export def "get-personalised-radio-by-activity-type-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --show-all-activity: oneof<nothing, bool> # Include items which have been 'soft' unfavourited in response. I.e items with UAS type of 'unfavourited'
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<_schema: string, limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: record, domain: string, id: string, metadata: record, type: string, uas_type: string, urn: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let qp = [(serialize-qp "show_all_activity" $show_all_activity "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({type: (encode-path-segment $type), pid: (encode-path-segment $pid)} | format pattern "/my/radio/favourites/{type}/{pid}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2646,7 +2795,7 @@ export def "get-personalised-radio-by-activity-type-by-id" [
 # operationId: postPersonalisedRadioByActivityTypeById
 # --metadata shape: {key: string}
 export def "post-personalised-radio-by-activity-type-by-id" [
-  type: string
+  type: string@type-completer-2
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2657,9 +2806,9 @@ export def "post-personalised-radio-by-activity-type-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
   action: string
   --added-at: string
   --context: string
@@ -2670,6 +2819,9 @@ export def "post-personalised-radio-by-activity-type-by-id" [
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let full_url = (build-url $base ({type: (encode-path-segment $type), pid: (encode-path-segment $pid)} | format pattern "/my/radio/favourites/{type}/{pid}") $auth.query)
   let req_body = {"action": $action, "added_at": $added_at, "context": $context, "metadata": $metadata} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2697,7 +2849,7 @@ export def "post-personalised-radio-by-activity-type-by-id" [
 # operationId: putPersonalisedRadioByActivityTypeById
 # --metadata shape: {key: string}
 export def "put-personalised-radio-by-activity-type-by-id" [
-  type: string
+  type: string@type-completer-2
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2708,9 +2860,9 @@ export def "put-personalised-radio-by-activity-type-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
   action: string
   --added-at: string
   --context: string
@@ -2721,6 +2873,9 @@ export def "put-personalised-radio-by-activity-type-by-id" [
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let full_url = (build-url $base ({type: (encode-path-segment $type), pid: (encode-path-segment $pid)} | format pattern "/my/radio/favourites/{type}/{pid}") $auth.query)
   let req_body = {"action": $action, "added_at": $added_at, "context": $context, "metadata": $metadata} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2758,15 +2913,18 @@ export def "get-personalised-radio-follows" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
-  --qp-sort: string@sort-completer-1 # Sort order for Personalised Radio results
+  --sort: string@sort-completer-1 # Sort order for Personalised Radio results
   --show-all-activity: oneof<nothing, bool> # Include items which have been 'soft' unfollowed in response. I.e items with UAS type of 'unfollowed'
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<_schema: string, limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: record, domain: string, id: string, metadata: record, type: string, uas_type: string, urn: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "show_all_activity" $show_all_activity "scalar")] | flatten | str join "&"
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "show_all_activity" $show_all_activity "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/my/radio/follows" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2775,7 +2933,7 @@ export def "get-personalised-radio-follows" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"offset": $offset, "limit": $limit, "sort": $qp_sort, "show_all_activity": $show_all_activity} | compact)
+    query: ({"offset": $offset, "limit": $limit, "sort": $sort, "show_all_activity": $show_all_activity} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2800,14 +2958,17 @@ export def "post-personalised-radio-follows-batch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
   --body: list
 ]: any -> record<_schema: string, method: string, replied_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let full_url = (build-url $base "/my/radio/follows" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -2843,14 +3004,17 @@ export def "put-personalised-radio-follows-batch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
   --body: list
 ]: any -> record<_schema: string, method: string, replied_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let full_url = (build-url $base "/my/radio/follows" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -2877,7 +3041,7 @@ export def "put-personalised-radio-follows-batch" [
 # GET /my/radio/follows/{type}
 # operationId: getPersonalisedRadioFollowsByType
 export def "get-personalised-radio-follows-by-type" [
-  type: string
+  type: string@type-completer-3
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2887,18 +3051,21 @@ export def "get-personalised-radio-follows-by-type" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-sort: string@sort-completer-1 # Sort order for Personalised Radio results
+  --sort: string@sort-completer-1 # Sort order for Personalised Radio results
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
   --show-all-activity: oneof<nothing, bool> # Include items which have been 'soft' unfollowed in response. I.e items with UAS type of 'unfollowed'
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<_schema: string, limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: record, domain: string, id: string, metadata: record, type: string, uas_type: string, urn: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
-  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "show_all_activity" $show_all_activity "scalar")] | flatten | str join "&"
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
+  let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "show_all_activity" $show_all_activity "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/my/radio/follows/{type}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2907,7 +3074,7 @@ export def "get-personalised-radio-follows-by-type" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sort": $qp_sort, "offset": $offset, "limit": $limit, "show_all_activity": $show_all_activity} | compact)
+    query: ({"sort": $sort, "offset": $offset, "limit": $limit, "show_all_activity": $show_all_activity} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2923,7 +3090,7 @@ export def "get-personalised-radio-follows-by-type" [
 # DELETE /my/radio/follows/{type}/{pid}
 # operationId: deletePersonalisedRadioFollowsByTypeById
 export def "delete-personalised-radio-follows-by-type-by-id" [
-  type: string
+  type: string@type-completer-3
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2934,14 +3101,17 @@ export def "delete-personalised-radio-follows-by-type-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<_schema: string, method: string, replied_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let full_url = (build-url $base ({type: (encode-path-segment $type), pid: (encode-path-segment $pid)} | format pattern "/my/radio/follows/{type}/{pid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2966,7 +3136,7 @@ export def "delete-personalised-radio-follows-by-type-by-id" [
 # GET /my/radio/follows/{type}/{pid}
 # operationId: getPersonalisedRadioFollowsByTypeById
 export def "get-personalised-radio-follows-by-type-by-id" [
-  type: string
+  type: string@type-completer-3
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2977,14 +3147,17 @@ export def "get-personalised-radio-follows-by-type-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<_schema: string, limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: record, domain: string, id: string, metadata: record, type: string, uas_type: string, urn: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let full_url = (build-url $base ({type: (encode-path-segment $type), pid: (encode-path-segment $pid)} | format pattern "/my/radio/follows/{type}/{pid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3010,7 +3183,7 @@ export def "get-personalised-radio-follows-by-type-by-id" [
 # operationId: postPersonalisedRadioFollowsByTypeById
 # --metadata shape: {key: string}
 export def "post-personalised-radio-follows-by-type-by-id" [
-  type: string
+  type: string@type-completer-3
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3021,9 +3194,9 @@ export def "post-personalised-radio-follows-by-type-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
   action: string
   --added-at: string
   --context: string
@@ -3034,6 +3207,9 @@ export def "post-personalised-radio-follows-by-type-by-id" [
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let full_url = (build-url $base ({type: (encode-path-segment $type), pid: (encode-path-segment $pid)} | format pattern "/my/radio/follows/{type}/{pid}") $auth.query)
   let req_body = {"action": $action, "added_at": $added_at, "context": $context, "metadata": $metadata} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3061,7 +3237,7 @@ export def "post-personalised-radio-follows-by-type-by-id" [
 # operationId: putPersonalisedRadioFollowsByTypeById
 # --metadata shape: {key: string}
 export def "put-personalised-radio-follows-by-type-by-id" [
-  type: string
+  type: string@type-completer-3
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3072,9 +3248,9 @@ export def "put-personalised-radio-follows-by-type-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
   action: string
   --added-at: string
   --context: string
@@ -3085,6 +3261,9 @@ export def "put-personalised-radio-follows-by-type-by-id" [
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let full_url = (build-url $base ({type: (encode-path-segment $type), pid: (encode-path-segment $pid)} | format pattern "/my/radio/follows/{type}/{pid}") $auth.query)
   let req_body = {"action": $action, "added_at": $added_at, "context": $context, "metadata": $metadata} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3122,15 +3301,18 @@ export def "get-personalised-radio-plays" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
-  --qp-sort: string@sort-completer-1 # Sort order for Personalised Radio results
+  --sort: string@sort-completer-1 # Sort order for Personalised Radio results
   --show-all-activity: oneof<nothing, bool> # Include expired/unavailable items
-  --authorization: string # Bearer OAUTH_TOKEN
-  --x-authentication-provider: string # Authentication type
-  --x-api-key: string # API_KEY
+  --authorization: string # Bearer OAUTH_TOKEN (required, default: Bearer OAUTH_TOKEN)
+  --x-authentication-provider: string # Authentication type (required, default: idv5)
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<_schema: string, limit: int, method: string, offset: int, replied_at: string, results: table<action: string, activity: string, added_at: string, data: record, domain: string, id: string, metadata: record, type: string, uas_type: string, urn: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "show_all_activity" $show_all_activity "scalar")] | flatten | str join "&"
+  let authorization = ($authorization | default "Bearer OAUTH_TOKEN")
+  let x_authentication_provider = ($x_authentication_provider | default "idv5")
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "show_all_activity" $show_all_activity "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/my/radio/plays" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3139,7 +3321,7 @@ export def "get-personalised-radio-plays" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"offset": $offset, "limit": $limit, "sort": $qp_sort, "show_all_activity": $show_all_activity} | compact)
+    query: ({"offset": $offset, "limit": $limit, "sort": $sort, "show_all_activity": $show_all_activity} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3166,17 +3348,18 @@ export def "get-podcasts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
-  --qp-sort: string@sort-completer-2 # Sort order for Podcasts results
+  --sort: string@sort-completer-2 # Sort order for Podcasts results
   --network: string # Network Master Brand ID (mid)
   --network-url-key: string # Network URL key
   --category: string # Category ID
   --q: string # Search query String
   --coverage: string@coverage-completer # Local, National or Regional Coverage
-  --x-api-key: string # API_KEY
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<_schema: string, limit: int, offset: int, results: table<category_summaries: list, days_available: int, entity_type: string, first_published_date: string, frequency: string, images: list, latest_available_episodes: list, network_summary: record, pid: string, rss_url: string, synopses: record, territory: string, titles: record, total_available_episodes: int, type: string, updated_at: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "network" $network "scalar") (serialize-qp "network_url_key" $network_url_key "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "coverage" $coverage "scalar")] | flatten | str join "&"
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "network" $network "scalar") (serialize-qp "network_url_key" $network_url_key "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "coverage" $coverage "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/podcasts" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3185,7 +3368,7 @@ export def "get-podcasts" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"offset": $offset, "limit": $limit, "sort": $qp_sort, "network": $network, "network_url_key": $network_url_key, "category": $category, "q": $q, "coverage": $coverage} | compact)
+    query: ({"offset": $offset, "limit": $limit, "sort": $sort, "network": $network, "network_url_key": $network_url_key, "category": $category, "q": $q, "coverage": $coverage} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3210,10 +3393,11 @@ export def "get-podcasts-featured" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-api-key: string # API_KEY
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<_schema: string, limit: float, offset: float, results: table<featured_podcasts: list, title: string, type: string>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let full_url = (build-url $base "/podcasts/featured" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3250,11 +3434,12 @@ export def "get-podcast-by-pid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
-  --x-api-key: string # API_KEY
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<_schema: string, limit: int, offset: int, results: table<category_summaries: list, days_available: int, entity_type: string, first_published_date: string, frequency: string, images: list, latest_available_episodes: list, network_summary: record, pid: string, rss_url: string, synopses: record, territory: string, titles: record, total_available_episodes: int, type: string, updated_at: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pid: (encode-path-segment $pid)} | format pattern "/podcasts/{pid}") $qp $auth.query)
   let accept_val = "application/json"
@@ -3292,11 +3477,12 @@ export def "get-podcast-episodes" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Paginated results offset
   --limit: int # Paginated results limit
-  --x-api-key: string # API_KEY
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<_schema: string, limit: float, offset: float, results: table<asset_url: string, available_versions: list, images: list, media_type: string, network_summary: record, pid: string, release_date: string, short_synopsis: string, titles: record, type: string>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pid: (encode-path-segment $pid)} | format pattern "/podcasts/{pid}/episodes") $qp $auth.query)
   let accept_val = "application/json"
@@ -3333,10 +3519,11 @@ export def "get-radio-networks" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --preset: oneof<nothing, bool> # Returns all networks needed for iPlayer Radio responsive web navigation
   --international: oneof<nothing, bool> # Returns all networks available internationally
-  --x-api-key: string # API_KEY
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<_schema: string, limit: int, offset: int, results: table<active: bool, contacts: list, date_ranges: list, group: string, id: string, international: bool, key: string, preset: bool, promoted_category_summaries: list, services: list, short_title: string, sort: int, title: string, type: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let qp = [(serialize-qp "preset" $preset "scalar") (serialize-qp "international" $international "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/radio/networks.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -3371,7 +3558,7 @@ export def "get-popular-episodes-clips" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --type: string@type-completer # Programme type required. Accepts comma separated values
+  --type: string@type-completer-4 # Programme type required. Accepts comma separated values
   --distinct: string@distinct-completer # Filter by deduplication rule. E.g. 'tleo' returns programmes with distinct top level episode objects
   --network: string # Filter by network master brand ID (mid). Accepts comma separated values
   --network-url-key: string # Filter by network URL key. Accepts comma separated values
@@ -3382,10 +3569,11 @@ export def "get-popular-episodes-clips" [
   --container: string # Filter by container. Accepts any pid e.g. brand,series,episode
   --media-set: list@media-set-completer # Filter by media set name. Accepts comma separated combinations of the following: pc,mobile-download,android-download-high,apple-ios-download-high,mobile-cellular-main,mobile-phone-main,iptv-all
   --q: string # Search query String
-  --x-api-key: string # API_KEY
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<_schema: string, limit: int, offset: int, results: table<data: record, id: string, score: int, type: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "distinct" $distinct "scalar") (serialize-qp "network" $network "scalar") (serialize-qp "network_url_key" $network_url_key "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "media_type" $media_type "scalar") (serialize-qp "container" $container "scalar") (serialize-qp "media_set" $media_set "csv") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/radio/popular" $qp $auth.query)
   let accept_val = "application/json"
@@ -3424,14 +3612,15 @@ export def "get-radio-programmes" [
   --network: string # Filter by network master brand ID (mid). Accepts comma separated values
   --network-url-key: string # Filter by network URL key. Accepts comma separated values
   --category: string # Filter by category id. Accepts comma separated values. See /category endpoint below for the type of response provided
-  --qp-sort: string@sort-completer-2 # Sort by provided query. E.g. 'title' sorts in ascending order, and -title sorts in descending order
+  --sort: string@sort-completer-2 # Sort by provided query. E.g. 'title' sorts in ascending order, and -title sorts in descending order
   --container: string # Filter by container. Accepts any brand or series pid
-  --type: string@type-completer-1 # Filter by programme type. Accepts comma separated values
-  --x-api-key: string # API_KEY
+  --type: string@type-completer-5 # Filter by programme type. Accepts comma separated values
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<_schema: string, limit: int, offset: int, results: table<pid: string, type: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "kind" $kind "scalar") (serialize-qp "network" $network "scalar") (serialize-qp "network_url_key" $network_url_key "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "container" $container "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
+  let qp = [(serialize-qp "kind" $kind "scalar") (serialize-qp "network" $network "scalar") (serialize-qp "network_url_key" $network_url_key "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "container" $container "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/radio/programmes" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3440,7 +3629,7 @@ export def "get-radio-programmes" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"kind": $kind, "network": $network, "network_url_key": $network_url_key, "category": $category, "sort": $qp_sort, "container": $container, "type": $type} | compact)
+    query: ({"kind": $kind, "network": $network, "network_url_key": $network_url_key, "category": $category, "sort": $sort, "container": $container, "type": $type} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3466,11 +3655,12 @@ export def "get-radio-programmes-by-pid" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-api-key: string # API_KEY
+  --x-api-key: string # API_KEY (required)
 ]: nothing -> record<_schema: string, limit: int, offset: int, results: table<pid: string, type: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
+  if ($x_api_key == null) { error make --unspanned { msg: "required header parameter 'X-API-Key' missing: pass --x-api-key" } }
   let full_url = (build-url $base ({pid: (encode-path-segment $pid)} | format pattern "/radio/programmes/{pid}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

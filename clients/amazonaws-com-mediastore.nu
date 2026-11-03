@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -145,6 +145,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateContainer
+# --Tags item shape: {Key: string, Value?: string}
 export def "create-container" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -162,13 +163,14 @@ export def "create-container" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  container_name: any
-  --tags: any
-]: any -> record<Container: record<Endpoint: record, CreationTime: record, ARN: record, Name: record, Status: record, AccessLoggingEnabled: record>> {
+  --x-amz-target: string@x-amz-target-completer # required
+  container_name: string # The name for the container. The name must be from 1 to 255 characters. Container names must be unique to your AWS account within a specific region. As an example, you could create a container named movies in every region, as long as you don’t have an existing container with that name.
+  --tags: list # An array of key:value pairs that you define. These values can be anything that you want. Typically, the tag key represents a category (such as "environment") and the tag value represents a specific value within that category (such as "test," "development," or "production"). You can add up to 50 tags to each container. For more information about tagging, including naming and usage conventions, see Tagging Resources in MediaStore (https://docs.aws.amazon.com/mediastore/latest/ug/tagging.html). — item shape: {Key: string, Value?: string}
+]: any -> record<Container: record<Endpoint: string, CreationTime: string, ARN: string, Name: string, Status: string, AccessLoggingEnabled: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MediaStore_20170901.CreateContainer")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContainerName": $container_name, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -211,12 +213,13 @@ export def "delete-container" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  container_name: any
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  container_name: string # The name of the container to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MediaStore_20170901.DeleteContainer")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContainerName": $container_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -259,12 +262,13 @@ export def "delete-container-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  container_name: any
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  container_name: string # The name of the container that holds the policy.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MediaStore_20170901.DeleteContainerPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContainerName": $container_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -307,12 +311,13 @@ export def "delete-cors-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  container_name: any
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  container_name: string # The name of the container to remove the policy from.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MediaStore_20170901.DeleteCorsPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContainerName": $container_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -355,12 +360,13 @@ export def "delete-lifecycle-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  container_name: any
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  container_name: string # The name of the container that holds the object lifecycle policy.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MediaStore_20170901.DeleteLifecyclePolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContainerName": $container_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -403,12 +409,13 @@ export def "delete-metric-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  container_name: any
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  container_name: string # The name of the container that is associated with the metric policy that you want to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MediaStore_20170901.DeleteMetricPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContainerName": $container_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -451,12 +458,13 @@ export def "describe-container" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  --container-name: any
-]: any -> record<Container: record<Endpoint: record, CreationTime: record, ARN: record, Name: record, Status: record, AccessLoggingEnabled: record>> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  --container-name: string # The name of the container to query.
+]: any -> record<Container: record<Endpoint: string, CreationTime: string, ARN: string, Name: string, Status: string, AccessLoggingEnabled: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MediaStore_20170901.DescribeContainer")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContainerName": $container_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -499,12 +507,13 @@ export def "get-container-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  container_name: any
-]: any -> record<Policy: record> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  container_name: string # The name of the container.
+]: any -> record<Policy: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MediaStore_20170901.GetContainerPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContainerName": $container_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -547,12 +556,13 @@ export def "get-cors-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  container_name: any
-]: any -> record<CorsPolicy: record> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  container_name: string # The name of the container that the policy is assigned to.
+]: any -> record<CorsPolicy: table<AllowedOrigins: list, AllowedMethods: list, AllowedHeaders: list, MaxAgeSeconds: int, ExposeHeaders: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MediaStore_20170901.GetCorsPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContainerName": $container_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -595,12 +605,13 @@ export def "get-lifecycle-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  container_name: any
-]: any -> record<LifecyclePolicy: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  container_name: string # The name of the container that the object lifecycle policy is assigned to.
+]: any -> record<LifecyclePolicy: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MediaStore_20170901.GetLifecyclePolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContainerName": $container_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -643,12 +654,13 @@ export def "get-metric-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  container_name: any
-]: any -> record<MetricPolicy: record<ContainerLevelMetrics: record, MetricPolicyRules: record>> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  container_name: string # The name of the container that is associated with the metric policy.
+]: any -> record<MetricPolicy: record<ContainerLevelMetrics: string, MetricPolicyRules: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MediaStore_20170901.GetMetricPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContainerName": $container_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -693,13 +705,14 @@ export def "list-containers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<Containers: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  --next-token-body: string # Only if you used MaxResults in the first command, enter the token (which was included in the previous response) to obtain the next set of containers. This token is included in a response only if there actually are more containers to list. (body field)
+  --max-results-body: int # Enter the maximum number of containers in the response. Use from 1 to 255 characters. (body field)
+]: any -> record<Containers: table<Endpoint: string, CreationTime: string, ARN: string, Name: string, Status: string, AccessLoggingEnabled: bool>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MediaStore_20170901.ListContainers")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -743,12 +756,13 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  resource: any
-]: any -> record<Tags: record> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  resource: string # The Amazon Resource Name (ARN) for the container.
+]: any -> record<Tags: table<Key: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MediaStore_20170901.ListTagsForResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Resource": $resource} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -791,13 +805,14 @@ export def "put-container-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  container_name: any
-  policy: any
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  container_name: string # The name of the container.
+  policy: string # The contents of the policy, which includes the following: One Version tag One Statement tag that contains the standard tags for the policy.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MediaStore_20170901.PutContainerPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContainerName": $container_name, "Policy": $policy} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -823,6 +838,7 @@ export def "put-container-policy" [
 #
 # POST /
 # operationId: PutCorsPolicy
+# --CorsPolicy item shape: {AllowedOrigins: list<string>, AllowedMethods?: list<string>, AllowedHeaders: list<string>, MaxAgeSeconds?: int, ExposeHeaders?: list<string>}
 export def "put-cors-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -840,13 +856,14 @@ export def "put-cors-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  container_name: any
-  cors_policy: any
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  container_name: string # The name of the container that you want to assign the CORS policy to.
+  cors_policy: list # The CORS policy of the container. — item shape: {AllowedOrigins: list<string>, AllowedMethods?: list<string>, AllowedHeaders: list<string>, MaxAgeSeconds?: int, ExposeHeaders?: list<string>}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MediaStore_20170901.PutCorsPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContainerName": $container_name, "CorsPolicy": $cors_policy} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -889,13 +906,14 @@ export def "put-lifecycle-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  container_name: any
-  lifecycle_policy: any
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  container_name: string # The name of the container that you want to assign the object lifecycle policy to.
+  lifecycle_policy: string # The object lifecycle policy to apply to the container.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MediaStore_20170901.PutLifecyclePolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContainerName": $container_name, "LifecyclePolicy": $lifecycle_policy} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -921,6 +939,7 @@ export def "put-lifecycle-policy" [
 #
 # POST /
 # operationId: PutMetricPolicy
+# --MetricPolicy shape: {ContainerLevelMetrics: "ENABLED"|"DISABLED", MetricPolicyRules?: list}
 export def "put-metric-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -938,13 +957,14 @@ export def "put-metric-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  container_name: any
-  metric_policy: any
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  container_name: string # The name of the container that you want to add the metric policy to.
+  metric_policy: record # The metric policy that is associated with the container. A metric policy allows AWS Elemental MediaStore to send metrics to Amazon CloudWatch. In the policy, you must indicate whether you want MediaStore to send container-level metrics. You can also include rules to define groups of objects that you want MediaStore to send object-level metrics for. To view examples of how to construct a metric policy for your use case, see Example Metric Policies (https://docs.aws.amazon.com/mediastore/latest/ug/policies-metric-examples.html). — shape: {ContainerLevelMetrics: "ENABLED"|"DISABLED", MetricPolicyRules?: list}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MediaStore_20170901.PutMetricPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContainerName": $container_name, "MetricPolicy": $metric_policy} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -987,12 +1007,13 @@ export def "start-access-logging" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  container_name: any
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  container_name: string # The name of the container that you want to start access logging on.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MediaStore_20170901.StartAccessLogging")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContainerName": $container_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1035,12 +1056,13 @@ export def "stop-access-logging" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  container_name: any
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  container_name: string # The name of the container that you want to stop access logging on.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MediaStore_20170901.StopAccessLogging")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContainerName": $container_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1066,6 +1088,7 @@ export def "stop-access-logging" [
 #
 # POST /
 # operationId: TagResource
+# --Tags item shape: {Key: string, Value?: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1083,13 +1106,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  resource: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  resource: string # The Amazon Resource Name (ARN) for the container.
+  tags: list # An array of key:value pairs that you want to add to the container. You need to specify only the tags that you want to add or update. For example, suppose a container already has two tags (customer:CompanyA and priority:High). You want to change the priority tag and also add a third tag (type:Contract). For TagResource, you specify the following tags: priority:Medium, type:Contract. The result is that your container has three tags: customer:CompanyA, priority:Medium, and type:Contract. — item shape: {Key: string, Value?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MediaStore_20170901.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Resource": $resource, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1132,13 +1156,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  resource: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  resource: string # The Amazon Resource Name (ARN) for the container.
+  tag_keys: list<string> # A comma-separated list of keys for tags that you want to remove from the container. For example, if your container has two tags (customer:CompanyA and priority:High) and you want to remove one of the tags (priority:High), you specify the key for the tag that you want to remove (priority).
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "MediaStore_20170901.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Resource": $resource, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

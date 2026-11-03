@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -108,6 +108,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def database-state-completer [] { ["All" "Deleted" "Live"] }
+def policy-name-completer [] { ["default"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -150,12 +151,13 @@ export def "long-term-retention-backups-list-by-location" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --only-latest-per-database: oneof<nothing, bool> # Whether or not to only get the latest backup for each database.
   --database-state: string@database-state-completer # Whether to query against just live databases, just deleted databases, or all databases.
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($location_name | is-empty) { error make --unspanned { msg: "path parameter 'locationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "onlyLatestPerDatabase" $only_latest_per_database "scalar") (serialize-qp "databaseState" $database_state "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location_name: (encode-path-segment $location_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Sql/locations/{location_name}/longTermRetentionBackups") $qp $auth.query)
   let accept_val = "application/json"
@@ -193,13 +195,14 @@ export def "long-term-retention-backups-list-by-server" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --only-latest-per-database: oneof<nothing, bool> # Whether or not to only get the latest backup for each database.
   --database-state: string@database-state-completer # Whether to query against just live databases, just deleted databases, or all databases.
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($location_name | is-empty) { error make --unspanned { msg: "path parameter 'locationName' must be non-empty" } }
   if ($long_term_retention_server_name | is-empty) { error make --unspanned { msg: "path parameter 'longTermRetentionServerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "onlyLatestPerDatabase" $only_latest_per_database "scalar") (serialize-qp "databaseState" $database_state "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location_name: (encode-path-segment $location_name), long_term_retention_server_name: (encode-path-segment $long_term_retention_server_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Sql/locations/{location_name}/longTermRetentionServers/{long_term_retention_server_name}/longTermRetentionBackups") $qp $auth.query)
   let accept_val = "application/json"
@@ -238,14 +241,15 @@ export def "long-term-retention-backups-list-by-database" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --only-latest-per-database: oneof<nothing, bool> # Whether or not to only get the latest backup for each database.
   --database-state: string@database-state-completer # Whether to query against just live databases, just deleted databases, or all databases.
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($location_name | is-empty) { error make --unspanned { msg: "path parameter 'locationName' must be non-empty" } }
   if ($long_term_retention_server_name | is-empty) { error make --unspanned { msg: "path parameter 'longTermRetentionServerName' must be non-empty" } }
   if ($long_term_retention_database_name | is-empty) { error make --unspanned { msg: "path parameter 'longTermRetentionDatabaseName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "onlyLatestPerDatabase" $only_latest_per_database "scalar") (serialize-qp "databaseState" $database_state "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location_name: (encode-path-segment $location_name), long_term_retention_server_name: (encode-path-segment $long_term_retention_server_name), long_term_retention_database_name: (encode-path-segment $long_term_retention_database_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Sql/locations/{location_name}/longTermRetentionServers/{long_term_retention_server_name}/longTermRetentionDatabases/{long_term_retention_database_name}/longTermRetentionBackups") $qp $auth.query)
   let accept_val = "application/json"
@@ -283,7 +287,7 @@ export def "long-term-retention-backups-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -292,6 +296,7 @@ export def "long-term-retention-backups-delete" [
   if ($long_term_retention_server_name | is-empty) { error make --unspanned { msg: "path parameter 'longTermRetentionServerName' must be non-empty" } }
   if ($long_term_retention_database_name | is-empty) { error make --unspanned { msg: "path parameter 'longTermRetentionDatabaseName' must be non-empty" } }
   if ($backup_name | is-empty) { error make --unspanned { msg: "path parameter 'backupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location_name: (encode-path-segment $location_name), long_term_retention_server_name: (encode-path-segment $long_term_retention_server_name), long_term_retention_database_name: (encode-path-segment $long_term_retention_database_name), backup_name: (encode-path-segment $backup_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Sql/locations/{location_name}/longTermRetentionServers/{long_term_retention_server_name}/longTermRetentionDatabases/{long_term_retention_database_name}/longTermRetentionBackups/{backup_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -329,8 +334,8 @@ export def "long-term-retention-backups-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<properties: record<backupExpirationTime: string, backupTime: string, databaseDeletionTime: string, databaseName: string, serverCreateTime: string, serverName: string>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<properties: record<backupExpirationTime: string, backupTime: string, databaseDeletionTime: string, databaseName: string, serverCreateTime: string, serverName: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -338,6 +343,7 @@ export def "long-term-retention-backups-get" [
   if ($long_term_retention_server_name | is-empty) { error make --unspanned { msg: "path parameter 'longTermRetentionServerName' must be non-empty" } }
   if ($long_term_retention_database_name | is-empty) { error make --unspanned { msg: "path parameter 'longTermRetentionDatabaseName' must be non-empty" } }
   if ($backup_name | is-empty) { error make --unspanned { msg: "path parameter 'backupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location_name: (encode-path-segment $location_name), long_term_retention_server_name: (encode-path-segment $long_term_retention_server_name), long_term_retention_database_name: (encode-path-segment $long_term_retention_database_name), backup_name: (encode-path-segment $backup_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Sql/locations/{location_name}/longTermRetentionServers/{long_term_retention_server_name}/longTermRetentionDatabases/{long_term_retention_database_name}/longTermRetentionBackups/{backup_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -375,13 +381,14 @@ export def "long-term-retention-backups-list-by-resource-group-location" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --only-latest-per-database: oneof<nothing, bool> # Whether or not to only get the latest backup for each database.
   --database-state: string@database-state-completer # Whether to query against just live databases, just deleted databases, or all databases.
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($location_name | is-empty) { error make --unspanned { msg: "path parameter 'locationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "onlyLatestPerDatabase" $only_latest_per_database "scalar") (serialize-qp "databaseState" $database_state "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), location_name: (encode-path-segment $location_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/locations/{location_name}/longTermRetentionBackups") $qp $auth.query)
   let accept_val = "application/json"
@@ -420,14 +427,15 @@ export def "long-term-retention-backups-list-by-resource-group-server" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --only-latest-per-database: oneof<nothing, bool> # Whether or not to only get the latest backup for each database.
   --database-state: string@database-state-completer # Whether to query against just live databases, just deleted databases, or all databases.
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($location_name | is-empty) { error make --unspanned { msg: "path parameter 'locationName' must be non-empty" } }
   if ($long_term_retention_server_name | is-empty) { error make --unspanned { msg: "path parameter 'longTermRetentionServerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "onlyLatestPerDatabase" $only_latest_per_database "scalar") (serialize-qp "databaseState" $database_state "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), location_name: (encode-path-segment $location_name), long_term_retention_server_name: (encode-path-segment $long_term_retention_server_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/locations/{location_name}/longTermRetentionServers/{long_term_retention_server_name}/longTermRetentionBackups") $qp $auth.query)
   let accept_val = "application/json"
@@ -467,8 +475,8 @@ export def "long-term-retention-backups-list-by-resource-group-database" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --only-latest-per-database: oneof<nothing, bool> # Whether or not to only get the latest backup for each database.
   --database-state: string@database-state-completer # Whether to query against just live databases, just deleted databases, or all databases.
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -476,6 +484,7 @@ export def "long-term-retention-backups-list-by-resource-group-database" [
   if ($location_name | is-empty) { error make --unspanned { msg: "path parameter 'locationName' must be non-empty" } }
   if ($long_term_retention_server_name | is-empty) { error make --unspanned { msg: "path parameter 'longTermRetentionServerName' must be non-empty" } }
   if ($long_term_retention_database_name | is-empty) { error make --unspanned { msg: "path parameter 'longTermRetentionDatabaseName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "onlyLatestPerDatabase" $only_latest_per_database "scalar") (serialize-qp "databaseState" $database_state "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), location_name: (encode-path-segment $location_name), long_term_retention_server_name: (encode-path-segment $long_term_retention_server_name), long_term_retention_database_name: (encode-path-segment $long_term_retention_database_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/locations/{location_name}/longTermRetentionServers/{long_term_retention_server_name}/longTermRetentionDatabases/{long_term_retention_database_name}/longTermRetentionBackups") $qp $auth.query)
   let accept_val = "application/json"
@@ -514,7 +523,7 @@ export def "long-term-retention-backups-delete-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -524,6 +533,7 @@ export def "long-term-retention-backups-delete-by-resource-group" [
   if ($long_term_retention_server_name | is-empty) { error make --unspanned { msg: "path parameter 'longTermRetentionServerName' must be non-empty" } }
   if ($long_term_retention_database_name | is-empty) { error make --unspanned { msg: "path parameter 'longTermRetentionDatabaseName' must be non-empty" } }
   if ($backup_name | is-empty) { error make --unspanned { msg: "path parameter 'backupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), location_name: (encode-path-segment $location_name), long_term_retention_server_name: (encode-path-segment $long_term_retention_server_name), long_term_retention_database_name: (encode-path-segment $long_term_retention_database_name), backup_name: (encode-path-segment $backup_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/locations/{location_name}/longTermRetentionServers/{long_term_retention_server_name}/longTermRetentionDatabases/{long_term_retention_database_name}/longTermRetentionBackups/{backup_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -562,8 +572,8 @@ export def "long-term-retention-backups-get-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<properties: record<backupExpirationTime: string, backupTime: string, databaseDeletionTime: string, databaseName: string, serverCreateTime: string, serverName: string>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<properties: record<backupExpirationTime: string, backupTime: string, databaseDeletionTime: string, databaseName: string, serverCreateTime: string, serverName: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -572,6 +582,7 @@ export def "long-term-retention-backups-get-by-resource-group" [
   if ($long_term_retention_server_name | is-empty) { error make --unspanned { msg: "path parameter 'longTermRetentionServerName' must be non-empty" } }
   if ($long_term_retention_database_name | is-empty) { error make --unspanned { msg: "path parameter 'longTermRetentionDatabaseName' must be non-empty" } }
   if ($backup_name | is-empty) { error make --unspanned { msg: "path parameter 'backupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), location_name: (encode-path-segment $location_name), long_term_retention_server_name: (encode-path-segment $long_term_retention_server_name), long_term_retention_database_name: (encode-path-segment $long_term_retention_database_name), backup_name: (encode-path-segment $backup_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/locations/{location_name}/longTermRetentionServers/{long_term_retention_server_name}/longTermRetentionDatabases/{long_term_retention_database_name}/longTermRetentionBackups/{backup_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -608,14 +619,15 @@ export def "backup-long-term-retention-policies-list-by-database" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<properties: record<monthlyRetention: string, weekOfYear: int, weeklyRetention: string, yearlyRetention: string>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<properties: record<monthlyRetention: string, weekOfYear: int, weeklyRetention: string, yearlyRetention: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), database_name: (encode-path-segment $database_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/databases/{database_name}/backupLongTermRetentionPolicies") $qp $auth.query)
   let accept_val = "application/json"
@@ -643,7 +655,7 @@ export def "backup-long-term-retention-policies-get" [
   resource_group_name: string
   server_name: string
   database_name: string
-  policy_name: string
+  policy_name: string@policy-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -653,8 +665,8 @@ export def "backup-long-term-retention-policies-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<properties: record<monthlyRetention: string, weekOfYear: int, weeklyRetention: string, yearlyRetention: string>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<properties: record<monthlyRetention: string, weekOfYear: int, weeklyRetention: string, yearlyRetention: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -662,6 +674,7 @@ export def "backup-long-term-retention-policies-get" [
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($policy_name | is-empty) { error make --unspanned { msg: "path parameter 'policyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), database_name: (encode-path-segment $database_name), policy_name: (encode-path-segment $policy_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/databases/{database_name}/backupLongTermRetentionPolicies/{policy_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -690,7 +703,7 @@ export def "backup-long-term-retention-policies-create-or-update" [
   resource_group_name: string
   server_name: string
   database_name: string
-  policy_name: string
+  policy_name: string@policy-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -700,9 +713,9 @@ export def "backup-long-term-retention-policies-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
   --properties: record # Properties of a long term retention policy — shape: {monthlyRetention?: string, weekOfYear?: int, weeklyRetention?: string, yearlyRetention?: string}
-]: any -> record<properties: record<monthlyRetention: string, weekOfYear: int, weeklyRetention: string, yearlyRetention: string>> {
+]: any -> record<properties: record<monthlyRetention: string, weekOfYear: int, weeklyRetention: string, yearlyRetention: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -711,6 +724,7 @@ export def "backup-long-term-retention-policies-create-or-update" [
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($policy_name | is-empty) { error make --unspanned { msg: "path parameter 'policyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), database_name: (encode-path-segment $database_name), policy_name: (encode-path-segment $policy_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/databases/{database_name}/backupLongTermRetentionPolicies/{policy_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact

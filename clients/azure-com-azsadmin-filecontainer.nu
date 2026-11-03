@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -147,11 +147,12 @@ export def "file-containers-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2019-01-01)
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client API Version. (required, default: 2019-01-01)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  let api_version = ($api_version | default "2019-01-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Deployment.Admin/locations/global/fileContainers") $qp $auth.query)
   let accept_val = "application/json"
@@ -186,12 +187,13 @@ export def "file-containers-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2019-01-01)
+  --api-version: string # Client API Version. (required, default: 2019-01-01)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($file_container_id | is-empty) { error make --unspanned { msg: "path parameter 'fileContainerId' must be non-empty" } }
+  let api_version = ($api_version | default "2019-01-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), file_container_id: (encode-path-segment $file_container_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Deployment.Admin/locations/global/fileContainers/{file_container_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -226,12 +228,13 @@ export def "file-containers-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2019-01-01)
-]: nothing -> record<properties: record<error: record<code: string, details: list, message: string>, fileContainerId: string, postCopyAction: string, provisioningState: string, sourceUri: string, uri: string>> {
+  --api-version: string # Client API Version. (required, default: 2019-01-01)
+]: nothing -> record<properties: record<error: record<code: string, details: list, message: string>, fileContainerId: string, postCopyAction: string, provisioningState: string, sourceUri: string, uri: string>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($file_container_id | is-empty) { error make --unspanned { msg: "path parameter 'fileContainerId' must be non-empty" } }
+  let api_version = ($api_version | default "2019-01-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), file_container_id: (encode-path-segment $file_container_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Deployment.Admin/locations/global/fileContainers/{file_container_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -266,15 +269,16 @@ export def "file-containers-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2019-01-01)
+  --api-version: string # Client API Version. (required, default: 2019-01-01)
   --post-copy-action: string@post-copy-action-completer # Specifies the file post copy action.
   --source-uri: string # Specifies The remote file location.
-]: any -> record<properties: record<error: record<code: string, details: list, message: string>, fileContainerId: string, postCopyAction: string, provisioningState: string, sourceUri: string, uri: string>> {
+]: any -> record<properties: record<error: record<code: string, details: list, message: string>, fileContainerId: string, postCopyAction: string, provisioningState: string, sourceUri: string, uri: string>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($file_container_id | is-empty) { error make --unspanned { msg: "path parameter 'fileContainerId' must be non-empty" } }
+  let api_version = ($api_version | default "2019-01-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), file_container_id: (encode-path-segment $file_container_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Deployment.Admin/locations/global/fileContainers/{file_container_id}") $qp $auth.query)
   let req_body = {"postCopyAction": $post_copy_action, "sourceUri": $source_uri} | compact

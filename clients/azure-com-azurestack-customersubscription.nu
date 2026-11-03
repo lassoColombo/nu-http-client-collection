@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -147,13 +147,14 @@ export def "customer-subscriptions-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2017-06-01)
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client API Version. (required, default: 2017-06-01)
+]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($registration_name | is-empty) { error make --unspanned { msg: "path parameter 'registrationName' must be non-empty" } }
+  let api_version = ($api_version | default "2017-06-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), registration_name: (encode-path-segment $registration_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.AzureStack/registrations/{registration_name}/customerSubscriptions") $qp $auth.query)
   let accept_val = "application/json"
@@ -190,7 +191,7 @@ export def "customer-subscriptions-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2017-06-01)
+  --api-version: string # Client API Version. (required, default: 2017-06-01)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -198,6 +199,7 @@ export def "customer-subscriptions-delete" [
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($registration_name | is-empty) { error make --unspanned { msg: "path parameter 'registrationName' must be non-empty" } }
   if ($customer_subscription_name | is-empty) { error make --unspanned { msg: "path parameter 'customerSubscriptionName' must be non-empty" } }
+  let api_version = ($api_version | default "2017-06-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), registration_name: (encode-path-segment $registration_name), customer_subscription_name: (encode-path-segment $customer_subscription_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.AzureStack/registrations/{registration_name}/customerSubscriptions/{customer_subscription_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -234,14 +236,15 @@ export def "customer-subscriptions-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2017-06-01)
-]: nothing -> record<properties: record<tenantId: string>> {
+  --api-version: string # Client API Version. (required, default: 2017-06-01)
+]: nothing -> record<properties: record<tenantId: string>, etag: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($registration_name | is-empty) { error make --unspanned { msg: "path parameter 'registrationName' must be non-empty" } }
   if ($customer_subscription_name | is-empty) { error make --unspanned { msg: "path parameter 'customerSubscriptionName' must be non-empty" } }
+  let api_version = ($api_version | default "2017-06-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), registration_name: (encode-path-segment $registration_name), customer_subscription_name: (encode-path-segment $customer_subscription_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.AzureStack/registrations/{registration_name}/customerSubscriptions/{customer_subscription_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -279,10 +282,10 @@ export def "customer-subscriptions-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2017-06-01)
+  --api-version: string # Client API Version. (required, default: 2017-06-01)
   --properties: record # Customer subscription properties. — shape: {tenantId?: string}
   --etag: string # The entity tag used for optimistic concurrency when modifying the resource.
-]: any -> record<properties: record<tenantId: string>> {
+]: any -> record<properties: record<tenantId: string>, etag: string, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -290,6 +293,7 @@ export def "customer-subscriptions-create" [
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($registration_name | is-empty) { error make --unspanned { msg: "path parameter 'registrationName' must be non-empty" } }
   if ($customer_subscription_name | is-empty) { error make --unspanned { msg: "path parameter 'customerSubscriptionName' must be non-empty" } }
+  let api_version = ($api_version | default "2017-06-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), registration_name: (encode-path-segment $registration_name), customer_subscription_name: (encode-path-segment $customer_subscription_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.AzureStack/registrations/{registration_name}/customerSubscriptions/{customer_subscription_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "etag": $etag} | compact

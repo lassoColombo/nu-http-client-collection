@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -126,7 +126,7 @@ export def commands []: nothing -> table {
 #
 # POST /createNotificationRule
 # operationId: CreateNotificationRule
-# --Targets item shape: {TargetType?: any, TargetAddress?: any}
+# --Targets item shape: {TargetType?: string, TargetAddress?: string}
 export def "create-notification-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -147,12 +147,12 @@ export def "create-notification-rule" [
   name: string # The name for the notification rule. Notification rule names must be unique in your Amazon Web Services account. (format: password)
   event_type_ids: list<string> # A list of event types associated with this notification rule. For a list of allowed events, see EventTypeSummary.
   resource: string # The Amazon Resource Name (ARN) of the resource to associate with the notification rule. Supported resources include pipelines in CodePipeline, repositories in CodeCommit, and build projects in CodeBuild.
-  targets: list # A list of Amazon Resource Names (ARNs) of Amazon Simple Notification Service topics and Chatbot clients to associate with the notification rule. — item shape: {TargetType?: any, TargetAddress?: any}
+  targets: list # A list of Amazon Resource Names (ARNs) of Amazon Simple Notification Service topics and Chatbot clients to associate with the notification rule. — item shape: {TargetType?: string, TargetAddress?: string}
   detail_type: string@detail-type-completer # The level of detail to include in the notifications for this resource. BASIC will include only the contents of the event as it would appear in Amazon CloudWatch. FULL will include any supplemental information provided by AWS CodeStar Notifications and/or the service for the resource for which the notification is created.
   --client-request-token: string # A unique, client-generated idempotency token that, when provided in a request, ensures the request cannot be repeated with a changed parameter. If a request with the same parameters is received and a token is included, the request returns information about the initial request that used that token. The Amazon Web Services SDKs prepopulate client request tokens. If you are using an Amazon Web Services SDK, an idempotency token is created for you.
   --tags: record # A list of tags to apply to this notification rule. Key names cannot start with "aws".
   --status: string@status-completer # The status of the notification rule. The default value is ENABLED. If the status is set to DISABLED, notifications aren't sent for the notification rule.
-]: any -> record<Arn: record> {
+]: any -> record<Arn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -199,7 +199,7 @@ export def "delete-notification-rule" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   arn: string # The Amazon Resource Name (ARN) of the notification rule you want to delete.
-]: any -> record<Arn: record> {
+]: any -> record<Arn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -294,7 +294,7 @@ export def "describe-notification-rule" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   arn: string # The Amazon Resource Name (ARN) of the notification rule.
-]: any -> record<Arn: record, Name: record, EventTypes: record, Resource: record, Targets: record, DetailType: record, CreatedBy: record, Status: record, CreatedTimestamp: record, LastModifiedTimestamp: record, Tags: record> {
+]: any -> record<Arn: string, Name: string, EventTypes: table<EventTypeId: string, ServiceName: string, EventTypeName: string, ResourceType: string>, Resource: string, Targets: table<TargetAddress: string, TargetType: string, TargetStatus: string>, DetailType: string, CreatedBy: string, Status: string, CreatedTimestamp: string, LastModifiedTimestamp: string, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -323,7 +323,7 @@ export def "describe-notification-rule" [
 #
 # POST /listEventTypes
 # operationId: ListEventTypes
-# --Filters item shape: {Name: any, Value: any}
+# --Filters item shape: {Name: "RESOURCE_TYPE"|"SERVICE_NAME", Value: string}
 export def "list-event-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -343,10 +343,10 @@ export def "list-event-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --filters: list # The filters to use to return information by service or resource type. — item shape: {Name: any, Value: any}
+  --filters: list # The filters to use to return information by service or resource type. — item shape: {Name: "RESOURCE_TYPE"|"SERVICE_NAME", Value: string}
   --next-token-body: string # An enumeration token that, when provided in a request, returns the next batch of the results. (body field)
   --max-results-body: int # A non-negative integer used to limit the number of returned results. The default number is 50. The maximum number of results that can be returned is 100. (body field)
-]: any -> record<EventTypes: record, NextToken: record> {
+]: any -> record<EventTypes: table<EventTypeId: string, ServiceName: string, EventTypeName: string, ResourceType: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -376,7 +376,7 @@ export def "list-event-types" [
 #
 # POST /listNotificationRules
 # operationId: ListNotificationRules
-# --Filters item shape: {Name: any, Value: any}
+# --Filters item shape: {Name: "EVENT_TYPE_ID"|"CREATED_BY"|"RESOURCE"|"TARGET_ADDRESS", Value: string}
 export def "list-notification-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -396,10 +396,10 @@ export def "list-notification-rules" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --filters: list # The filters to use to return information by service or resource type. For valid values, see ListNotificationRulesFilter. A filter with the same name can appear more than once when used with OR statements. Filters with different names should be applied with AND statements. — item shape: {Name: any, Value: any}
+  --filters: list # The filters to use to return information by service or resource type. For valid values, see ListNotificationRulesFilter. A filter with the same name can appear more than once when used with OR statements. Filters with different names should be applied with AND statements. — item shape: {Name: "EVENT_TYPE_ID"|"CREATED_BY"|"RESOURCE"|"TARGET_ADDRESS", Value: string}
   --next-token-body: string # An enumeration token that, when provided in a request, returns the next batch of the results. (body field)
   --max-results-body: int # A non-negative integer used to limit the number of returned results. The maximum number of results that can be returned is 100. (body field)
-]: any -> record<NextToken: record, NotificationRules: record> {
+]: any -> record<NextToken: string, NotificationRules: table<Id: string, Arn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -476,7 +476,7 @@ export def "list-tags-for-resource" [
 #
 # POST /listTargets
 # operationId: ListTargets
-# --Filters item shape: {Name: any, Value: any}
+# --Filters item shape: {Name: "TARGET_TYPE"|"TARGET_ADDRESS"|"TARGET_STATUS", Value: string}
 export def "list-targets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -496,10 +496,10 @@ export def "list-targets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --filters: list # The filters to use to return information by service or resource type. Valid filters include target type, target address, and target status. A filter with the same name can appear more than once when used with OR statements. Filters with different names should be applied with AND statements. — item shape: {Name: any, Value: any}
+  --filters: list # The filters to use to return information by service or resource type. Valid filters include target type, target address, and target status. A filter with the same name can appear more than once when used with OR statements. Filters with different names should be applied with AND statements. — item shape: {Name: "TARGET_TYPE"|"TARGET_ADDRESS"|"TARGET_STATUS", Value: string}
   --next-token-body: string # An enumeration token that, when provided in a request, returns the next batch of the results. (body field)
   --max-results-body: int # A non-negative integer used to limit the number of returned results. The maximum number of results that can be returned is 100. (body field)
-]: any -> record<Targets: record, NextToken: record> {
+]: any -> record<Targets: table<TargetAddress: string, TargetType: string, TargetStatus: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -529,7 +529,7 @@ export def "list-targets" [
 #
 # POST /subscribe
 # operationId: Subscribe
-# --Target shape: {TargetType?: any, TargetAddress?: any}
+# --Target shape: {TargetType?: string, TargetAddress?: string}
 export def "subscribe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -548,9 +548,9 @@ export def "subscribe" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   arn: string # The Amazon Resource Name (ARN) of the notification rule for which you want to create the association.
-  target: record # Information about the Chatbot topics or Chatbot clients associated with a notification rule. — shape: {TargetType?: any, TargetAddress?: any}
+  target: record # Information about the Chatbot topics or Chatbot clients associated with a notification rule. — shape: {TargetType?: string, TargetAddress?: string}
   --client-request-token: string # An enumeration token that, when provided in a request, returns the next batch of the results.
-]: any -> record<Arn: record> {
+]: any -> record<Arn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -646,7 +646,7 @@ export def "unsubscribe" [
   --x-amz-signed-headers: string
   arn: string # The Amazon Resource Name (ARN) of the notification rule.
   target_address: string # The ARN of the Chatbot topic to unsubscribe from the notification rule. (format: password)
-]: any -> record<Arn: record> {
+]: any -> record<Arn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -686,7 +686,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # The key names of the tags to remove.
+  --tag-keys: list # The key names of the tags to remove. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -698,6 +698,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/untagResource/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"
@@ -722,7 +723,7 @@ export def "untag-resource" [
 #
 # POST /updateNotificationRule
 # operationId: UpdateNotificationRule
-# --Targets item shape: {TargetType?: any, TargetAddress?: any}
+# --Targets item shape: {TargetType?: string, TargetAddress?: string}
 export def "update-notification-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -744,7 +745,7 @@ export def "update-notification-rule" [
   --name: string # The name of the notification rule. (format: password)
   --status: string@status-completer # The status of the notification rule. Valid statuses include enabled (sending notifications) or disabled (not sending notifications).
   --event-type-ids: list<string> # A list of event types associated with this notification rule. For a complete list of event types and IDs, see Notification concepts (https://docs.aws.amazon.com/codestar-notifications/latest/userguide/concepts.html#concepts-api) in the Developer Tools Console User Guide.
-  --targets: list # The address and type of the targets to receive notifications from this notification rule. — item shape: {TargetType?: any, TargetAddress?: any}
+  --targets: list # The address and type of the targets to receive notifications from this notification rule. — item shape: {TargetType?: string, TargetAddress?: string}
   --detail-type: string@detail-type-completer # The level of detail to include in the notifications for this resource. BASIC will include only the contents of the event as it would appear in Amazon CloudWatch. FULL will include any supplemental information provided by AWS CodeStar Notifications and/or the service for the resource for which the notification is created.
 ]: any -> record {
   let input = $in

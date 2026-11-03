@@ -130,11 +130,12 @@ export def "get-events" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain: string # the site the groups belongs to, example: netherlands
+  --domain: string # the site the groups belongs to, example: netherlands (required)
   --limit: string # the number of desired records
 ]: nothing -> record<body: table<created: string, description: string, end_date: string, groups: list, location: record, modified: string, name: string, organizers: list, picture: string, serial: string, start_date: string, uuid: string>, header: record<code: string, error: any, id: int, pagination: record<limit: int, page: int, total: int>, resources: string, status: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain == null) { error make --unspanned { msg: "required query parameter 'domain' missing: pass --domain" } }
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/events" $qp $auth.query)
   let accept_val = "application/json"
@@ -201,11 +202,12 @@ export def "get-groups" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain: string # the site the groups belongs to, example: netherlands
+  --domain: string # the site the groups belongs to, example: netherlands (required)
   --limit: string # the number of desired records
 ]: nothing -> record<body: table<created: string, description: string, group_type: string, location: record, mission: string, modified: string, name: string, picture: string, serial: string, uuid: string>, header: record<code: string, error: any, id: int, pagination: record<limit: int, page: int, total: int>, resources: string, status: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain == null) { error make --unspanned { msg: "required query parameter 'domain' missing: pass --domain" } }
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/groups" $qp $auth.query)
   let accept_val = "application/json"
@@ -272,12 +274,13 @@ export def "get-volunteers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain: string # the site the users are registered on, example: netherlands
+  --domain: string # the site the users are registered on, example: netherlands (required)
   --limit: string # the number of desired records. Default is 5.
   --must-have-default-avatar: oneof<nothing, bool> # 1 or 0. filter on people that have the default avatar or not.
 ]: nothing -> record<body: table<avatar: string, locations: list, uuid: string>, header: record<code: string, error: any, id: int, pagination: record<limit: int, page: int, total: int>, resources: string, status: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain == null) { error make --unspanned { msg: "required query parameter 'domain' missing: pass --domain" } }
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "must_have_default_avatar" $must_have_default_avatar "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/volunteers" $qp $auth.query)
   let accept_val = "application/json"

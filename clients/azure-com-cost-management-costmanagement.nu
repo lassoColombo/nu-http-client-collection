@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -144,10 +144,11 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-04-01-preview
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-04-01-preview (required)
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.CostManagement/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -181,10 +182,11 @@ export def "views-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-04-01-preview
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-04-01-preview (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, eTag: string, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.CostManagement/views" $qp $auth.query)
   let accept_val = "application/json"
@@ -219,11 +221,12 @@ export def "views-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-04-01-preview
-]: nothing -> record<error: record<code: string, details: list<record>, message: string, target: string>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-04-01-preview (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($view_name | is-empty) { error make --unspanned { msg: "path parameter 'viewName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({view_name: (encode-path-segment $view_name)} | format pattern "/providers/Microsoft.CostManagement/views/{view_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -258,11 +261,12 @@ export def "views-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-04-01-preview
-]: nothing -> record<properties: record<accumulated: string, chart: string, createdOn: string, displayName: string, kpis: list<record>, metric: string, modifiedOn: string, pivots: list<record>, query: record<dataset: record, timePeriod: record, timeframe: string, type: string>, scope: string>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-04-01-preview (required)
+]: nothing -> record<properties: record<accumulated: string, chart: string, createdOn: string, displayName: string, kpis: list<record>, metric: string, modifiedOn: string, pivots: list<record>, query: record<dataset: record, timePeriod: record, timeframe: string, type: string>, scope: string>, eTag: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($view_name | is-empty) { error make --unspanned { msg: "path parameter 'viewName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({view_name: (encode-path-segment $view_name)} | format pattern "/providers/Microsoft.CostManagement/views/{view_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -298,14 +302,15 @@ export def "views-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-04-01-preview
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-04-01-preview (required)
   --properties: record # The properties of the view. — shape: {accumulated?: "true"|"false", chart?: "Area"|"Line"|"StackedColumn"|"GroupedColumn"|"Table", displayName?: string, kpis?: list, metric?: "ActualCost"|"AmortizedCost"|"AHUB", pivots?: list, query?: any, scope?: string}
   --e-tag: string # eTag of the resource. To handle concurrent update scenario, this field will be used to determine whether the user is updating the latest version or not.
-]: any -> record<properties: record<accumulated: string, chart: string, createdOn: string, displayName: string, kpis: list<record>, metric: string, modifiedOn: string, pivots: list<record>, query: record<dataset: record, timePeriod: record, timeframe: string, type: string>, scope: string>> {
+]: any -> record<properties: record<accumulated: string, chart: string, createdOn: string, displayName: string, kpis: list<record>, metric: string, modifiedOn: string, pivots: list<record>, query: record<dataset: record, timePeriod: record, timeframe: string, type: string>, scope: string>, eTag: string, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($view_name | is-empty) { error make --unspanned { msg: "path parameter 'viewName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({view_name: (encode-path-segment $view_name)} | format pattern "/providers/Microsoft.CostManagement/views/{view_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "eTag": $e_tag} | compact
@@ -342,11 +347,12 @@ export def "budgets-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-04-01-preview
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-04-01-preview (required)
 ]: nothing -> record<nextLink: string, value: table<properties: record, eTag: string, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope)} | format pattern "/{scope}/providers/Microsoft.CostManagement/budgets") $qp $auth.query)
   let accept_val = "application/json"
@@ -382,12 +388,13 @@ export def "budget-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-04-01-preview
-]: nothing -> record<error: record<code: string, details: list<record>, message: string, target: string>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-04-01-preview (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($budget_name | is-empty) { error make --unspanned { msg: "path parameter 'budgetName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), budget_name: (encode-path-segment $budget_name)} | format pattern "/{scope}/providers/Microsoft.CostManagement/budgets/{budget_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -423,12 +430,13 @@ export def "budget-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-04-01-preview
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-04-01-preview (required)
 ]: nothing -> record<properties: record<amount: float, category: string, currentSpend: record<amount: float, unit: string>, filter: record<and: list, dimension: record, not: any, or: list, tag: record>, notifications: record, timeGrain: string, timePeriod: record<endDate: string, startDate: string>>, eTag: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($budget_name | is-empty) { error make --unspanned { msg: "path parameter 'budgetName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), budget_name: (encode-path-segment $budget_name)} | format pattern "/{scope}/providers/Microsoft.CostManagement/budgets/{budget_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -465,7 +473,7 @@ export def "budget-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-04-01-preview
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-04-01-preview (required)
   --properties: any # The properties of the budget. — shape: {amount: float, category: "Cost"|"Usage", currentSpend?: any, filter?: any, notifications?: record, timeGrain: "Monthly"|"Quarterly"|"Annually", timePeriod: any}
   --e-tag: string # eTag of the resource. To handle concurrent update scenario, this field will be used to determine whether the user is updating the latest version or not.
 ]: any -> record<properties: record<amount: float, category: string, currentSpend: record<amount: float, unit: string>, filter: record<and: list, dimension: record, not: any, or: list, tag: record>, notifications: record, timeGrain: string, timePeriod: record<endDate: string, startDate: string>>, eTag: string, id: string, name: string, type: string> {
@@ -474,6 +482,7 @@ export def "budget-create-or-update" [
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($budget_name | is-empty) { error make --unspanned { msg: "path parameter 'budgetName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), budget_name: (encode-path-segment $budget_name)} | format pattern "/{scope}/providers/Microsoft.CostManagement/budgets/{budget_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "eTag": $e_tag} | compact
@@ -510,11 +519,12 @@ export def "views-list-by-scope" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-04-01-preview
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-04-01-preview (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, eTag: string, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope)} | format pattern "/{scope}/providers/Microsoft.CostManagement/views") $qp $auth.query)
   let accept_val = "application/json"
@@ -550,12 +560,13 @@ export def "views-delete-by-scope" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-04-01-preview
-]: nothing -> record<error: record<code: string, details: list<record>, message: string, target: string>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-04-01-preview (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($view_name | is-empty) { error make --unspanned { msg: "path parameter 'viewName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), view_name: (encode-path-segment $view_name)} | format pattern "/{scope}/providers/Microsoft.CostManagement/views/{view_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -591,12 +602,13 @@ export def "views-get-by-scope" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-04-01-preview
-]: nothing -> record<properties: record<accumulated: string, chart: string, createdOn: string, displayName: string, kpis: list<record>, metric: string, modifiedOn: string, pivots: list<record>, query: record<dataset: record, timePeriod: record, timeframe: string, type: string>, scope: string>> {
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-04-01-preview (required)
+]: nothing -> record<properties: record<accumulated: string, chart: string, createdOn: string, displayName: string, kpis: list<record>, metric: string, modifiedOn: string, pivots: list<record>, query: record<dataset: record, timePeriod: record, timeframe: string, type: string>, scope: string>, eTag: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($view_name | is-empty) { error make --unspanned { msg: "path parameter 'viewName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), view_name: (encode-path-segment $view_name)} | format pattern "/{scope}/providers/Microsoft.CostManagement/views/{view_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -633,15 +645,16 @@ export def "views-create-or-update-by-scope" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. The current version is 2019-04-01-preview
+  --api-version: string # Version of the API to be used with the client request. The current version is 2019-04-01-preview (required)
   --properties: record # The properties of the view. — shape: {accumulated?: "true"|"false", chart?: "Area"|"Line"|"StackedColumn"|"GroupedColumn"|"Table", displayName?: string, kpis?: list, metric?: "ActualCost"|"AmortizedCost"|"AHUB", pivots?: list, query?: any, scope?: string}
   --e-tag: string # eTag of the resource. To handle concurrent update scenario, this field will be used to determine whether the user is updating the latest version or not.
-]: any -> record<properties: record<accumulated: string, chart: string, createdOn: string, displayName: string, kpis: list<record>, metric: string, modifiedOn: string, pivots: list<record>, query: record<dataset: record, timePeriod: record, timeframe: string, type: string>, scope: string>> {
+]: any -> record<properties: record<accumulated: string, chart: string, createdOn: string, displayName: string, kpis: list<record>, metric: string, modifiedOn: string, pivots: list<record>, query: record<dataset: record, timePeriod: record, timeframe: string, type: string>, scope: string>, eTag: string, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($view_name | is-empty) { error make --unspanned { msg: "path parameter 'viewName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), view_name: (encode-path-segment $view_name)} | format pattern "/{scope}/providers/Microsoft.CostManagement/views/{view_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "eTag": $e_tag} | compact

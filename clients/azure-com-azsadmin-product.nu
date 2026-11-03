@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -141,13 +141,14 @@ export def "products-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version. (default: 2016-01-01)
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client Api Version. (required, default: 2016-01-01)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($activation_name | is-empty) { error make --unspanned { msg: "path parameter 'activationName' must be non-empty" } }
+  let api_version = ($api_version | default "2016-01-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), activation_name: (encode-path-segment $activation_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group}/providers/Microsoft.AzureBridge.Admin/activations/{activation_name}/products") $qp $auth.query)
   let accept_val = "application/json"
@@ -184,14 +185,15 @@ export def "products-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version. (default: 2016-01-01)
-]: nothing -> record<properties: record<legalTerms: string, links: list<record>, privacyPolicy: string, provisioningState: string, vmExtensionType: string>> {
+  --api-version: string # Client Api Version. (required, default: 2016-01-01)
+]: nothing -> record<properties: record<legalTerms: string, links: list<record>, privacyPolicy: string, provisioningState: string, vmExtensionType: string, billingPartNumber: string, compatibility: record<description: string, isCompatible: bool, issues: list, message: string>, description: string, displayName: string, galleryItemIdentity: string, iconUris: record<hero: string, large: string, medium: string, small: string, wide: string>, offer: string, offerVersion: string, payloadLength: int, productKind: string, productProperties: record<version: string>, publisherDisplayName: string, publisherIdentifier: string, sku: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($activation_name | is-empty) { error make --unspanned { msg: "path parameter 'activationName' must be non-empty" } }
   if ($product_name | is-empty) { error make --unspanned { msg: "path parameter 'productName' must be non-empty" } }
+  let api_version = ($api_version | default "2016-01-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), activation_name: (encode-path-segment $activation_name), product_name: (encode-path-segment $product_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group}/providers/Microsoft.AzureBridge.Admin/activations/{activation_name}/products/{product_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -228,14 +230,15 @@ export def "products-download" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version. (default: 2016-01-01)
-]: nothing -> record<properties: record<galleryPackageBlobSasUri: string, legalTerms: string, links: list<record>, privacyPolicy: string, productDetailsProperties: record, provisioningState: string, vmExtensionType: string>> {
+  --api-version: string # Client Api Version. (required, default: 2016-01-01)
+]: nothing -> record<properties: record<galleryPackageBlobSasUri: string, legalTerms: string, links: list<record>, privacyPolicy: string, productDetailsProperties: record<computeRole: string, isSystemExtension: bool, sourceBlob: record, supportMultipleExtensions: bool, version: string, vmOsType: string, vmScaleSetEnabled: bool, dataDiskImages: list, osDiskImage: record>, provisioningState: string, vmExtensionType: string, billingPartNumber: string, compatibility: record<description: string, isCompatible: bool, issues: list, message: string>, description: string, displayName: string, galleryItemIdentity: string, iconUris: record<hero: string, large: string, medium: string, small: string, wide: string>, offer: string, offerVersion: string, payloadLength: int, productKind: string, productProperties: record<version: string>, publisherDisplayName: string, publisherIdentifier: string, sku: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroup' must be non-empty" } }
   if ($activation_name | is-empty) { error make --unspanned { msg: "path parameter 'activationName' must be non-empty" } }
   if ($product_name | is-empty) { error make --unspanned { msg: "path parameter 'productName' must be non-empty" } }
+  let api_version = ($api_version | default "2016-01-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group: (encode-path-segment $resource_group), activation_name: (encode-path-segment $activation_name), product_name: (encode-path-segment $product_name)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group}/providers/Microsoft.AzureBridge.Admin/activations/{activation_name}/products/{product_name}/download") $qp $auth.query)
   let accept_val = "application/json"

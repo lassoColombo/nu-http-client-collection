@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -102,6 +102,9 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def frequency-completer [] { ["1mn" "5mn" "60mn"] }
+def list-type-completer [] { ["crawled" "errors"] }
+def medium-completer [] { ["organic" "social"] }
+def source-completer [] { ["all" "aol" "ask" "baidu" "bing" "facebook" "google" "google+" "linkedin" "naver" "pinterest" "reddit" "tumblr" "twitter" "yahoo" "yandex"] }
 def area-completer [] { ["current" "disappeared" "new" "search_engines_orphans"] }
 def area-completer-1 [] { ["current" "new"] }
 def area-completer-2 [] { ["current" "disappeared" "new"] }
@@ -268,13 +271,14 @@ export def "get-crawl-statistics-by-frequency" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # max number of elements to retrieve (format: int32)
-  --frequency: string@frequency-completer # Aggregation frequency
+  --frequency: string@frequency-completer # Aggregation frequency (required)
 ]: nothing -> record<avg_delay: table<count: int, datetime: string>, avg_size: table<count: int, datetime: string>, frequency: string, http_code_2xx: table<count: int, datetime: string>, http_code_3xx: table<count: int, datetime: string>, http_code_4xx: table<count: int, datetime: string>, http_code_5xx: table<count: int, datetime: string>, http_code_xxx: table<count: int, datetime: string>, last_update_date: string, new_urls: table<count: int, datetime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   if ($project_slug | is-empty) { error make --unspanned { msg: "path parameter 'project_slug' must be non-empty" } }
   if ($analysis_slug | is-empty) { error make --unspanned { msg: "path parameter 'analysis_slug' must be non-empty" } }
+  if ($frequency == null) { error make --unspanned { msg: "required query parameter 'frequency' missing: pass --frequency" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "frequency" $frequency "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username), project_slug: (encode-path-segment $project_slug), analysis_slug: (encode-path-segment $analysis_slug)} | format pattern "/analyses/{username}/{project_slug}/{analysis_slug}/crawl_statistics/time") $qp $auth.query)
   let accept_val = "application/json"
@@ -301,7 +305,7 @@ export def "get-crawl-statistics-urls" [
   username: string
   project_slug: string
   analysis_slug: string
-  list_type: string
+  list_type: string@list-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -343,8 +347,8 @@ export def "get-ganalytics-orphan-ur-ls" [
   username: string
   project_slug: string
   analysis_slug: string
-  medium: string
-  source: string
+  medium: string@medium-completer
+  source: string@source-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -696,7 +700,7 @@ export def "get-urls" [
   --size: int # Page Size (format: int32)
   --fields: list<string>
   --filters: record
-  --body-sort: list
+  --sort: list
 ]: any -> record<count: int, next: string, page: int, previous: string, results: list<record>, size: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -706,7 +710,7 @@ export def "get-urls" [
   if ($analysis_slug | is-empty) { error make --unspanned { msg: "path parameter 'analysis_slug' must be non-empty" } }
   let qp = [(serialize-qp "area" $area "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username), project_slug: (encode-path-segment $project_slug), analysis_slug: (encode-path-segment $analysis_slug)} | format pattern "/analyses/{username}/{project_slug}/{analysis_slug}/urls") $qp $auth.query)
-  let req_body = {"fields": $fields, "filters": $filters, "sort": $body_sort} | compact
+  let req_body = {"fields": $fields, "filters": $filters, "sort": $sort} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -875,7 +879,7 @@ export def "create-urls-export" [
   --area: string@area-completer # default: current
   --fields: list<string>
   --filters: record
-  --body-sort: list
+  --sort: list
 ]: any -> record<area: int, date_created: string, job_id: string, job_status: string, job_url: string, nb_results: int, query: record<fields: list<string>, filters: record, sort: list<record>>, results: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -885,7 +889,7 @@ export def "create-urls-export" [
   if ($analysis_slug | is-empty) { error make --unspanned { msg: "path parameter 'analysis_slug' must be non-empty" } }
   let qp = [(serialize-qp "area" $area "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username), project_slug: (encode-path-segment $project_slug), analysis_slug: (encode-path-segment $analysis_slug)} | format pattern "/analyses/{username}/{project_slug}/{analysis_slug}/urls/export") $qp $auth.query)
-  let req_body = {"fields": $fields, "filters": $filters, "sort": $body_sort} | compact
+  let req_body = {"fields": $fields, "filters": $filters, "sort": $sort} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

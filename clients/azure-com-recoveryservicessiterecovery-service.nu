@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -159,13 +159,14 @@ export def "replication-eligibility-results-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<value: table<id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_machine_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualMachineName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_machine_name: (encode-path-segment $virtual_machine_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/virtualMachines/{virtual_machine_name}/providers/Microsoft.RecoveryServices/replicationEligibilityResults") $qp $auth.query)
   let accept_val = "application/json"
@@ -201,13 +202,14 @@ export def "replication-eligibility-results-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<id: string, name: string, properties: record<clientRequestId: string, errors: list<record>>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($virtual_machine_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualMachineName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_machine_name: (encode-path-segment $virtual_machine_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/virtualMachines/{virtual_machine_name}/providers/Microsoft.RecoveryServices/replicationEligibilityResults/default") $qp $auth.query)
   let accept_val = "application/json"
@@ -242,12 +244,13 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string, origin: string, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/operations") $qp $auth.query)
   let accept_val = "application/json"
@@ -283,13 +286,14 @@ export def "replication-alert-settings-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationAlertSettings") $qp $auth.query)
   let accept_val = "application/json"
@@ -326,14 +330,15 @@ export def "replication-alert-settings-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<customEmailAddresses: list<string>, locale: string, sendToOwners: string>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<customEmailAddresses: list<string>, locale: string, sendToOwners: string>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($alert_setting_name | is-empty) { error make --unspanned { msg: "path parameter 'alertSettingName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), alert_setting_name: (encode-path-segment $alert_setting_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationAlertSettings/{alert_setting_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -371,9 +376,9 @@ export def "replication-alert-settings-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: record # Properties of a configure alert request. — shape: {customEmailAddresses?: list<string>, locale?: string, sendToOwners?: string}
-]: any -> record<properties: record<customEmailAddresses: list<string>, locale: string, sendToOwners: string>> {
+]: any -> record<properties: record<customEmailAddresses: list<string>, locale: string, sendToOwners: string>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -381,6 +386,7 @@ export def "replication-alert-settings-create" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($alert_setting_name | is-empty) { error make --unspanned { msg: "path parameter 'alertSettingName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), alert_setting_name: (encode-path-segment $alert_setting_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationAlertSettings/{alert_setting_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -418,14 +424,15 @@ export def "replication-events-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --filter: string # OData filter options.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationEvents") $qp $auth.query)
   let accept_val = "application/json"
@@ -462,14 +469,15 @@ export def "replication-events-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<affectedObjectFriendlyName: string, description: string, eventCode: string, eventSpecificDetails: record<instanceType: string>, eventType: string, fabricId: string, healthErrors: list<record>, providerSpecificDetails: record<instanceType: string>, severity: string, timeOfOccurrence: string>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<affectedObjectFriendlyName: string, description: string, eventCode: string, eventSpecificDetails: record<instanceType: string>, eventType: string, fabricId: string, healthErrors: list<record>, providerSpecificDetails: record<instanceType: string>, severity: string, timeOfOccurrence: string>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($event_name | is-empty) { error make --unspanned { msg: "path parameter 'eventName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), event_name: (encode-path-segment $event_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationEvents/{event_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -505,13 +513,14 @@ export def "replication-fabrics-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics") $qp $auth.query)
   let accept_val = "application/json"
@@ -548,7 +557,7 @@ export def "replication-fabrics-purge" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -556,6 +565,7 @@ export def "replication-fabrics-purge" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -592,14 +602,15 @@ export def "replication-fabrics-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<bcdrState: string, customDetails: record<instanceType: string>, encryptionDetails: record<kekCertExpiryDate: string, kekCertThumbprint: string, kekState: string>, friendlyName: string, health: string, healthErrorDetails: list<record>, internalIdentifier: string, rolloverEncryptionDetails: record<kekCertExpiryDate: string, kekCertThumbprint: string, kekState: string>>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<bcdrState: string, customDetails: record<instanceType: string>, encryptionDetails: record<kekCertExpiryDate: string, kekCertThumbprint: string, kekState: string>, friendlyName: string, health: string, healthErrorDetails: list<record>, internalIdentifier: string, rolloverEncryptionDetails: record<kekCertExpiryDate: string, kekCertThumbprint: string, kekState: string>>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -637,9 +648,9 @@ export def "replication-fabrics-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: record # Properties of site details provided during the time of site creation — shape: {customDetails?: record}
-]: any -> record<properties: record<bcdrState: string, customDetails: record<instanceType: string>, encryptionDetails: record<kekCertExpiryDate: string, kekCertThumbprint: string, kekState: string>, friendlyName: string, health: string, healthErrorDetails: list<record>, internalIdentifier: string, rolloverEncryptionDetails: record<kekCertExpiryDate: string, kekCertThumbprint: string, kekState: string>>> {
+]: any -> record<properties: record<bcdrState: string, customDetails: record<instanceType: string>, encryptionDetails: record<kekCertExpiryDate: string, kekCertThumbprint: string, kekState: string>, friendlyName: string, health: string, healthErrorDetails: list<record>, internalIdentifier: string, rolloverEncryptionDetails: record<kekCertExpiryDate: string, kekCertThumbprint: string, kekState: string>>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -647,6 +658,7 @@ export def "replication-fabrics-create" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -685,14 +697,15 @@ export def "replication-fabrics-check-consistency" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<bcdrState: string, customDetails: record<instanceType: string>, encryptionDetails: record<kekCertExpiryDate: string, kekCertThumbprint: string, kekState: string>, friendlyName: string, health: string, healthErrorDetails: list<record>, internalIdentifier: string, rolloverEncryptionDetails: record<kekCertExpiryDate: string, kekCertThumbprint: string, kekState: string>>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<bcdrState: string, customDetails: record<instanceType: string>, encryptionDetails: record<kekCertExpiryDate: string, kekCertThumbprint: string, kekState: string>, friendlyName: string, health: string, healthErrorDetails: list<record>, internalIdentifier: string, rolloverEncryptionDetails: record<kekCertExpiryDate: string, kekCertThumbprint: string, kekState: string>>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/checkConsistency") $qp $auth.query)
   let accept_val = "application/json"
@@ -729,7 +742,7 @@ export def "replication-fabrics-migrate-to-aad" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -737,6 +750,7 @@ export def "replication-fabrics-migrate-to-aad" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/migratetoaad") $qp $auth.query)
   let accept_val = "application/json"
@@ -774,9 +788,9 @@ export def "replication-fabrics-reassociate-gateway" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: record # The properties of the Failover Process Server request. — shape: {containerName?: string, sourceProcessServerId?: string, targetProcessServerId?: string, updateType?: string, vmsToMigrate?: list<string>}
-]: any -> record<properties: record<bcdrState: string, customDetails: record<instanceType: string>, encryptionDetails: record<kekCertExpiryDate: string, kekCertThumbprint: string, kekState: string>, friendlyName: string, health: string, healthErrorDetails: list<record>, internalIdentifier: string, rolloverEncryptionDetails: record<kekCertExpiryDate: string, kekCertThumbprint: string, kekState: string>>> {
+]: any -> record<properties: record<bcdrState: string, customDetails: record<instanceType: string>, encryptionDetails: record<kekCertExpiryDate: string, kekCertThumbprint: string, kekState: string>, friendlyName: string, health: string, healthErrorDetails: list<record>, internalIdentifier: string, rolloverEncryptionDetails: record<kekCertExpiryDate: string, kekCertThumbprint: string, kekState: string>>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -784,6 +798,7 @@ export def "replication-fabrics-reassociate-gateway" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/reassociateGateway") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -822,7 +837,7 @@ export def "replication-fabrics-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -830,6 +845,7 @@ export def "replication-fabrics-delete" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/remove") $qp $auth.query)
   let accept_val = "application/json"
@@ -867,9 +883,9 @@ export def "replication-fabrics-renew-certificate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: record # Renew Certificate input properties. — shape: {renewCertificateType?: string}
-]: any -> record<properties: record<bcdrState: string, customDetails: record<instanceType: string>, encryptionDetails: record<kekCertExpiryDate: string, kekCertThumbprint: string, kekState: string>, friendlyName: string, health: string, healthErrorDetails: list<record>, internalIdentifier: string, rolloverEncryptionDetails: record<kekCertExpiryDate: string, kekCertThumbprint: string, kekState: string>>> {
+]: any -> record<properties: record<bcdrState: string, customDetails: record<instanceType: string>, encryptionDetails: record<kekCertExpiryDate: string, kekCertThumbprint: string, kekState: string>, friendlyName: string, health: string, healthErrorDetails: list<record>, internalIdentifier: string, rolloverEncryptionDetails: record<kekCertExpiryDate: string, kekCertThumbprint: string, kekState: string>>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -877,6 +893,7 @@ export def "replication-fabrics-renew-certificate" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/renewCertificate") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -915,14 +932,15 @@ export def "replication-logical-networks-list-by-replication-fabrics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationLogicalNetworks") $qp $auth.query)
   let accept_val = "application/json"
@@ -960,8 +978,8 @@ export def "replication-logical-networks-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<friendlyName: string, logicalNetworkDefinitionsStatus: string, logicalNetworkUsage: string, networkVirtualizationStatus: string>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<friendlyName: string, logicalNetworkDefinitionsStatus: string, logicalNetworkUsage: string, networkVirtualizationStatus: string>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -969,6 +987,7 @@ export def "replication-logical-networks-get" [
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($logical_network_name | is-empty) { error make --unspanned { msg: "path parameter 'logicalNetworkName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), logical_network_name: (encode-path-segment $logical_network_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationLogicalNetworks/{logical_network_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1005,14 +1024,15 @@ export def "replication-networks-list-by-replication-fabrics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationNetworks") $qp $auth.query)
   let accept_val = "application/json"
@@ -1050,8 +1070,8 @@ export def "replication-networks-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<fabricType: string, friendlyName: string, networkType: string, subnets: list<record>>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<fabricType: string, friendlyName: string, networkType: string, subnets: list<record>>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1059,6 +1079,7 @@ export def "replication-networks-get" [
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($network_name | is-empty) { error make --unspanned { msg: "path parameter 'networkName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), network_name: (encode-path-segment $network_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationNetworks/{network_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1096,8 +1117,8 @@ export def "replication-network-mappings-list-by-replication-networks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1105,6 +1126,7 @@ export def "replication-network-mappings-list-by-replication-networks" [
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($network_name | is-empty) { error make --unspanned { msg: "path parameter 'networkName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), network_name: (encode-path-segment $network_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationNetworks/{network_name}/replicationNetworkMappings") $qp $auth.query)
   let accept_val = "application/json"
@@ -1143,7 +1165,7 @@ export def "replication-network-mappings-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1153,6 +1175,7 @@ export def "replication-network-mappings-delete" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($network_name | is-empty) { error make --unspanned { msg: "path parameter 'networkName' must be non-empty" } }
   if ($network_mapping_name | is-empty) { error make --unspanned { msg: "path parameter 'networkMappingName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), network_name: (encode-path-segment $network_name), network_mapping_name: (encode-path-segment $network_mapping_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationNetworks/{network_name}/replicationNetworkMappings/{network_mapping_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1191,8 +1214,8 @@ export def "replication-network-mappings-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<fabricSpecificSettings: record<instanceType: string>, primaryFabricFriendlyName: string, primaryNetworkFriendlyName: string, primaryNetworkId: string, recoveryFabricArmId: string, recoveryFabricFriendlyName: string, recoveryNetworkFriendlyName: string, recoveryNetworkId: string, state: string>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<fabricSpecificSettings: record<instanceType: string>, primaryFabricFriendlyName: string, primaryNetworkFriendlyName: string, primaryNetworkId: string, recoveryFabricArmId: string, recoveryFabricFriendlyName: string, recoveryNetworkFriendlyName: string, recoveryNetworkId: string, state: string>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1201,6 +1224,7 @@ export def "replication-network-mappings-get" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($network_name | is-empty) { error make --unspanned { msg: "path parameter 'networkName' must be non-empty" } }
   if ($network_mapping_name | is-empty) { error make --unspanned { msg: "path parameter 'networkMappingName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), network_name: (encode-path-segment $network_name), network_mapping_name: (encode-path-segment $network_mapping_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationNetworks/{network_name}/replicationNetworkMappings/{network_mapping_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1240,9 +1264,9 @@ export def "replication-network-mappings-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: record # Common input details for network mapping operation. — shape: {fabricSpecificDetails?: record, recoveryFabricName?: string, recoveryNetworkId?: string}
-]: any -> record<properties: record<fabricSpecificSettings: record<instanceType: string>, primaryFabricFriendlyName: string, primaryNetworkFriendlyName: string, primaryNetworkId: string, recoveryFabricArmId: string, recoveryFabricFriendlyName: string, recoveryNetworkFriendlyName: string, recoveryNetworkId: string, state: string>> {
+]: any -> record<properties: record<fabricSpecificSettings: record<instanceType: string>, primaryFabricFriendlyName: string, primaryNetworkFriendlyName: string, primaryNetworkId: string, recoveryFabricArmId: string, recoveryFabricFriendlyName: string, recoveryNetworkFriendlyName: string, recoveryNetworkId: string, state: string>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1252,6 +1276,7 @@ export def "replication-network-mappings-update" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($network_name | is-empty) { error make --unspanned { msg: "path parameter 'networkName' must be non-empty" } }
   if ($network_mapping_name | is-empty) { error make --unspanned { msg: "path parameter 'networkMappingName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), network_name: (encode-path-segment $network_name), network_mapping_name: (encode-path-segment $network_mapping_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationNetworks/{network_name}/replicationNetworkMappings/{network_mapping_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -1293,9 +1318,9 @@ export def "replication-network-mappings-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: record # Common input details for network mapping operation. — shape: {fabricSpecificDetails?: record, recoveryFabricName?: string, recoveryNetworkId?: string}
-]: any -> record<properties: record<fabricSpecificSettings: record<instanceType: string>, primaryFabricFriendlyName: string, primaryNetworkFriendlyName: string, primaryNetworkId: string, recoveryFabricArmId: string, recoveryFabricFriendlyName: string, recoveryNetworkFriendlyName: string, recoveryNetworkId: string, state: string>> {
+]: any -> record<properties: record<fabricSpecificSettings: record<instanceType: string>, primaryFabricFriendlyName: string, primaryNetworkFriendlyName: string, primaryNetworkId: string, recoveryFabricArmId: string, recoveryFabricFriendlyName: string, recoveryNetworkFriendlyName: string, recoveryNetworkId: string, state: string>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1305,6 +1330,7 @@ export def "replication-network-mappings-create" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($network_name | is-empty) { error make --unspanned { msg: "path parameter 'networkName' must be non-empty" } }
   if ($network_mapping_name | is-empty) { error make --unspanned { msg: "path parameter 'networkMappingName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), network_name: (encode-path-segment $network_name), network_mapping_name: (encode-path-segment $network_mapping_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationNetworks/{network_name}/replicationNetworkMappings/{network_mapping_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -1343,14 +1369,15 @@ export def "replication-protection-containers-list-by-replication-fabrics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers") $qp $auth.query)
   let accept_val = "application/json"
@@ -1388,8 +1415,8 @@ export def "replication-protection-containers-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<fabricFriendlyName: string, fabricSpecificDetails: record<instanceType: string>, fabricType: string, friendlyName: string, pairingStatus: string, protectedItemCount: int, role: string>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<fabricFriendlyName: string, fabricSpecificDetails: record<instanceType: string>, fabricType: string, friendlyName: string, pairingStatus: string, protectedItemCount: int, role: string>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1397,6 +1424,7 @@ export def "replication-protection-containers-get" [
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1435,9 +1463,9 @@ export def "replication-protection-containers-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: record # Create protection container input properties. — shape: {providerSpecificInput?: list}
-]: any -> record<properties: record<fabricFriendlyName: string, fabricSpecificDetails: record<instanceType: string>, fabricType: string, friendlyName: string, pairingStatus: string, protectedItemCount: int, role: string>> {
+]: any -> record<properties: record<fabricFriendlyName: string, fabricSpecificDetails: record<instanceType: string>, fabricType: string, friendlyName: string, pairingStatus: string, protectedItemCount: int, role: string>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1446,6 +1474,7 @@ export def "replication-protection-containers-create" [
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -1486,9 +1515,9 @@ export def "replication-protection-containers-discover-protectable-item" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: record # Discover protectable item properties. — shape: {friendlyName?: string, ipAddress?: string, osType?: string}
-]: any -> record<properties: record<fabricFriendlyName: string, fabricSpecificDetails: record<instanceType: string>, fabricType: string, friendlyName: string, pairingStatus: string, protectedItemCount: int, role: string>> {
+]: any -> record<properties: record<fabricFriendlyName: string, fabricSpecificDetails: record<instanceType: string>, fabricType: string, friendlyName: string, pairingStatus: string, protectedItemCount: int, role: string>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1497,6 +1526,7 @@ export def "replication-protection-containers-discover-protectable-item" [
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/discoverProtectableItem") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -1536,7 +1566,7 @@ export def "replication-protection-containers-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1545,6 +1575,7 @@ export def "replication-protection-containers-delete" [
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/remove") $qp $auth.query)
   let accept_val = "application/json"
@@ -1582,8 +1613,8 @@ export def "replication-migration-items-list-by-replication-protection-container
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1591,6 +1622,7 @@ export def "replication-migration-items-list-by-replication-protection-container
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationMigrationItems") $qp $auth.query)
   let accept_val = "application/json"
@@ -1629,7 +1661,7 @@ export def "replication-migration-items-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --delete-option: string # The delete option.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1640,6 +1672,7 @@ export def "replication-migration-items-delete" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
   if ($migration_item_name | is-empty) { error make --unspanned { msg: "path parameter 'migrationItemName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "deleteOption" $delete_option "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), migration_item_name: (encode-path-segment $migration_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationMigrationItems/{migration_item_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1678,8 +1711,8 @@ export def "replication-migration-items-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<allowedOperations: list<string>, currentJob: record<jobId: string, jobName: string, startTime: string>, health: string, healthErrors: list<record>, machineName: string, migrationState: string, migrationStateDescription: string, policyFriendlyName: string, policyId: string, providerSpecificDetails: record<instanceType: string>, recoveryServicesProviderId: string, testMigrateState: string, testMigrateStateDescription: string>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<allowedOperations: list<string>, currentJob: record<jobId: string, jobName: string, startTime: string>, health: string, healthErrors: list<record>, machineName: string, migrationState: string, migrationStateDescription: string, policyFriendlyName: string, policyId: string, providerSpecificDetails: record<instanceType: string>, recoveryServicesProviderId: string, testMigrateState: string, testMigrateStateDescription: string>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1688,6 +1721,7 @@ export def "replication-migration-items-get" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
   if ($migration_item_name | is-empty) { error make --unspanned { msg: "path parameter 'migrationItemName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), migration_item_name: (encode-path-segment $migration_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationMigrationItems/{migration_item_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1727,9 +1761,9 @@ export def "replication-migration-items-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: record # Update migration item input properties. — shape: {providerSpecificDetails: record}
-]: any -> record<properties: record<allowedOperations: list<string>, currentJob: record<jobId: string, jobName: string, startTime: string>, health: string, healthErrors: list<record>, machineName: string, migrationState: string, migrationStateDescription: string, policyFriendlyName: string, policyId: string, providerSpecificDetails: record<instanceType: string>, recoveryServicesProviderId: string, testMigrateState: string, testMigrateStateDescription: string>> {
+]: any -> record<properties: record<allowedOperations: list<string>, currentJob: record<jobId: string, jobName: string, startTime: string>, health: string, healthErrors: list<record>, machineName: string, migrationState: string, migrationStateDescription: string, policyFriendlyName: string, policyId: string, providerSpecificDetails: record<instanceType: string>, recoveryServicesProviderId: string, testMigrateState: string, testMigrateStateDescription: string>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1739,6 +1773,7 @@ export def "replication-migration-items-update" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
   if ($migration_item_name | is-empty) { error make --unspanned { msg: "path parameter 'migrationItemName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), migration_item_name: (encode-path-segment $migration_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationMigrationItems/{migration_item_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -1780,9 +1815,9 @@ export def "replication-migration-items-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   properties: record # Enable migration input properties. — shape: {policyId: string, providerSpecificDetails: record}
-]: any -> record<properties: record<allowedOperations: list<string>, currentJob: record<jobId: string, jobName: string, startTime: string>, health: string, healthErrors: list<record>, machineName: string, migrationState: string, migrationStateDescription: string, policyFriendlyName: string, policyId: string, providerSpecificDetails: record<instanceType: string>, recoveryServicesProviderId: string, testMigrateState: string, testMigrateStateDescription: string>> {
+]: any -> record<properties: record<allowedOperations: list<string>, currentJob: record<jobId: string, jobName: string, startTime: string>, health: string, healthErrors: list<record>, machineName: string, migrationState: string, migrationStateDescription: string, policyFriendlyName: string, policyId: string, providerSpecificDetails: record<instanceType: string>, recoveryServicesProviderId: string, testMigrateState: string, testMigrateStateDescription: string>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1792,6 +1827,7 @@ export def "replication-migration-items-create" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
   if ($migration_item_name | is-empty) { error make --unspanned { msg: "path parameter 'migrationItemName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), migration_item_name: (encode-path-segment $migration_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationMigrationItems/{migration_item_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -1833,9 +1869,9 @@ export def "replication-migration-items-migrate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   properties: record # Migrate input properties. — shape: {providerSpecificDetails: record}
-]: any -> record<properties: record<allowedOperations: list<string>, currentJob: record<jobId: string, jobName: string, startTime: string>, health: string, healthErrors: list<record>, machineName: string, migrationState: string, migrationStateDescription: string, policyFriendlyName: string, policyId: string, providerSpecificDetails: record<instanceType: string>, recoveryServicesProviderId: string, testMigrateState: string, testMigrateStateDescription: string>> {
+]: any -> record<properties: record<allowedOperations: list<string>, currentJob: record<jobId: string, jobName: string, startTime: string>, health: string, healthErrors: list<record>, machineName: string, migrationState: string, migrationStateDescription: string, policyFriendlyName: string, policyId: string, providerSpecificDetails: record<instanceType: string>, recoveryServicesProviderId: string, testMigrateState: string, testMigrateStateDescription: string>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1845,6 +1881,7 @@ export def "replication-migration-items-migrate" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
   if ($migration_item_name | is-empty) { error make --unspanned { msg: "path parameter 'migrationItemName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), migration_item_name: (encode-path-segment $migration_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationMigrationItems/{migration_item_name}/migrate") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -1885,8 +1922,8 @@ export def "migration-recovery-points-list-by-replication-migration-items" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1895,6 +1932,7 @@ export def "migration-recovery-points-list-by-replication-migration-items" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
   if ($migration_item_name | is-empty) { error make --unspanned { msg: "path parameter 'migrationItemName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), migration_item_name: (encode-path-segment $migration_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationMigrationItems/{migration_item_name}/migrationRecoveryPoints") $qp $auth.query)
   let accept_val = "application/json"
@@ -1934,8 +1972,8 @@ export def "migration-recovery-points-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<recoveryPointTime: string, recoveryPointType: string>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<recoveryPointTime: string, recoveryPointType: string>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1945,6 +1983,7 @@ export def "migration-recovery-points-get" [
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
   if ($migration_item_name | is-empty) { error make --unspanned { msg: "path parameter 'migrationItemName' must be non-empty" } }
   if ($migration_recovery_point_name | is-empty) { error make --unspanned { msg: "path parameter 'migrationRecoveryPointName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), migration_item_name: (encode-path-segment $migration_item_name), migration_recovery_point_name: (encode-path-segment $migration_recovery_point_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationMigrationItems/{migration_item_name}/migrationRecoveryPoints/{migration_recovery_point_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1984,9 +2023,9 @@ export def "replication-migration-items-test-migrate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   properties: record # Test migrate input properties. — shape: {providerSpecificDetails: record}
-]: any -> record<properties: record<allowedOperations: list<string>, currentJob: record<jobId: string, jobName: string, startTime: string>, health: string, healthErrors: list<record>, machineName: string, migrationState: string, migrationStateDescription: string, policyFriendlyName: string, policyId: string, providerSpecificDetails: record<instanceType: string>, recoveryServicesProviderId: string, testMigrateState: string, testMigrateStateDescription: string>> {
+]: any -> record<properties: record<allowedOperations: list<string>, currentJob: record<jobId: string, jobName: string, startTime: string>, health: string, healthErrors: list<record>, machineName: string, migrationState: string, migrationStateDescription: string, policyFriendlyName: string, policyId: string, providerSpecificDetails: record<instanceType: string>, recoveryServicesProviderId: string, testMigrateState: string, testMigrateStateDescription: string>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1996,6 +2035,7 @@ export def "replication-migration-items-test-migrate" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
   if ($migration_item_name | is-empty) { error make --unspanned { msg: "path parameter 'migrationItemName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), migration_item_name: (encode-path-segment $migration_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationMigrationItems/{migration_item_name}/testMigrate") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -2037,9 +2077,9 @@ export def "replication-migration-items-test-migrate-cleanup" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   properties: record # Test migrate cleanup input properties. — shape: {comments?: string}
-]: any -> record<properties: record<allowedOperations: list<string>, currentJob: record<jobId: string, jobName: string, startTime: string>, health: string, healthErrors: list<record>, machineName: string, migrationState: string, migrationStateDescription: string, policyFriendlyName: string, policyId: string, providerSpecificDetails: record<instanceType: string>, recoveryServicesProviderId: string, testMigrateState: string, testMigrateStateDescription: string>> {
+]: any -> record<properties: record<allowedOperations: list<string>, currentJob: record<jobId: string, jobName: string, startTime: string>, health: string, healthErrors: list<record>, machineName: string, migrationState: string, migrationStateDescription: string, policyFriendlyName: string, policyId: string, providerSpecificDetails: record<instanceType: string>, recoveryServicesProviderId: string, testMigrateState: string, testMigrateStateDescription: string>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2049,6 +2089,7 @@ export def "replication-migration-items-test-migrate-cleanup" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
   if ($migration_item_name | is-empty) { error make --unspanned { msg: "path parameter 'migrationItemName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), migration_item_name: (encode-path-segment $migration_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationMigrationItems/{migration_item_name}/testMigrateCleanup") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -2088,9 +2129,9 @@ export def "replication-protectable-items-list-by-replication-protection-contain
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --filter: string # OData filter options.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2098,6 +2139,7 @@ export def "replication-protectable-items-list-by-replication-protection-contain
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectableItems") $qp $auth.query)
   let accept_val = "application/json"
@@ -2136,8 +2178,8 @@ export def "replication-protectable-items-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<customDetails: record<instanceType: string>, friendlyName: string, protectionReadinessErrors: list<string>, protectionStatus: string, recoveryServicesProviderId: string, replicationProtectedItemId: string, supportedReplicationProviders: list<string>>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<customDetails: record<instanceType: string>, friendlyName: string, protectionReadinessErrors: list<string>, protectionStatus: string, recoveryServicesProviderId: string, replicationProtectedItemId: string, supportedReplicationProviders: list<string>>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2146,6 +2188,7 @@ export def "replication-protectable-items-get" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
   if ($protectable_item_name | is-empty) { error make --unspanned { msg: "path parameter 'protectableItemName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), protectable_item_name: (encode-path-segment $protectable_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectableItems/{protectable_item_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2183,8 +2226,8 @@ export def "replication-protected-items-list-by-replication-protection-container
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2192,6 +2235,7 @@ export def "replication-protected-items-list-by-replication-protection-container
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems") $qp $auth.query)
   let accept_val = "application/json"
@@ -2230,7 +2274,7 @@ export def "replication-protected-items-purge" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2240,6 +2284,7 @@ export def "replication-protected-items-purge" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
   if ($replicated_protected_item_name | is-empty) { error make --unspanned { msg: "path parameter 'replicatedProtectedItemName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replicated_protected_item_name: (encode-path-segment $replicated_protected_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2278,8 +2323,8 @@ export def "replication-protected-items-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<activeLocation: string, allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, failoverHealth: string, failoverRecoveryPointId: string, friendlyName: string, healthErrors: list<record>, lastSuccessfulFailoverTime: string, lastSuccessfulTestFailoverTime: string, policyFriendlyName: string, policyId: string, primaryFabricFriendlyName: string, primaryFabricProvider: string, primaryProtectionContainerFriendlyName: string, protectableItemId: string, protectedItemType: string, protectionState: string, protectionStateDescription: string, providerSpecificDetails: record<instanceType: string>, recoveryContainerId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, recoveryProtectionContainerFriendlyName: string, recoveryServicesProviderId: string, replicationHealth: string, testFailoverState: string, testFailoverStateDescription: string>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<activeLocation: string, allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, failoverHealth: string, failoverRecoveryPointId: string, friendlyName: string, healthErrors: list<record>, lastSuccessfulFailoverTime: string, lastSuccessfulTestFailoverTime: string, policyFriendlyName: string, policyId: string, primaryFabricFriendlyName: string, primaryFabricProvider: string, primaryProtectionContainerFriendlyName: string, protectableItemId: string, protectedItemType: string, protectionState: string, protectionStateDescription: string, providerSpecificDetails: record<instanceType: string>, recoveryContainerId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, recoveryProtectionContainerFriendlyName: string, recoveryServicesProviderId: string, replicationHealth: string, testFailoverState: string, testFailoverStateDescription: string>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2288,6 +2333,7 @@ export def "replication-protected-items-get" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
   if ($replicated_protected_item_name | is-empty) { error make --unspanned { msg: "path parameter 'replicatedProtectedItemName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replicated_protected_item_name: (encode-path-segment $replicated_protected_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2327,9 +2373,9 @@ export def "replication-protected-items-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: record # Update protected item input properties. — shape: {enableRdpOnTargetOption?: string, licenseType?: "NotSpecified"|"NoLicenseType"|"WindowsServer", providerSpecificDetails?: record, recoveryAvailabilitySetId?: string, recoveryAzureVMName?: string, recoveryAzureVMSize?: string, selectedRecoveryAzureNetworkId?: string, selectedSourceNicId?: string, selectedTfoAzureNetworkId?: string, vmNics?: list}
-]: any -> record<properties: record<activeLocation: string, allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, failoverHealth: string, failoverRecoveryPointId: string, friendlyName: string, healthErrors: list<record>, lastSuccessfulFailoverTime: string, lastSuccessfulTestFailoverTime: string, policyFriendlyName: string, policyId: string, primaryFabricFriendlyName: string, primaryFabricProvider: string, primaryProtectionContainerFriendlyName: string, protectableItemId: string, protectedItemType: string, protectionState: string, protectionStateDescription: string, providerSpecificDetails: record<instanceType: string>, recoveryContainerId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, recoveryProtectionContainerFriendlyName: string, recoveryServicesProviderId: string, replicationHealth: string, testFailoverState: string, testFailoverStateDescription: string>> {
+]: any -> record<properties: record<activeLocation: string, allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, failoverHealth: string, failoverRecoveryPointId: string, friendlyName: string, healthErrors: list<record>, lastSuccessfulFailoverTime: string, lastSuccessfulTestFailoverTime: string, policyFriendlyName: string, policyId: string, primaryFabricFriendlyName: string, primaryFabricProvider: string, primaryProtectionContainerFriendlyName: string, protectableItemId: string, protectedItemType: string, protectionState: string, protectionStateDescription: string, providerSpecificDetails: record<instanceType: string>, recoveryContainerId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, recoveryProtectionContainerFriendlyName: string, recoveryServicesProviderId: string, replicationHealth: string, testFailoverState: string, testFailoverStateDescription: string>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2339,6 +2385,7 @@ export def "replication-protected-items-update" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
   if ($replicated_protected_item_name | is-empty) { error make --unspanned { msg: "path parameter 'replicatedProtectedItemName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replicated_protected_item_name: (encode-path-segment $replicated_protected_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -2380,9 +2427,9 @@ export def "replication-protected-items-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: record # Enable protection input properties. — shape: {policyId?: string, protectableItemId?: string, providerSpecificDetails?: record}
-]: any -> record<properties: record<activeLocation: string, allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, failoverHealth: string, failoverRecoveryPointId: string, friendlyName: string, healthErrors: list<record>, lastSuccessfulFailoverTime: string, lastSuccessfulTestFailoverTime: string, policyFriendlyName: string, policyId: string, primaryFabricFriendlyName: string, primaryFabricProvider: string, primaryProtectionContainerFriendlyName: string, protectableItemId: string, protectedItemType: string, protectionState: string, protectionStateDescription: string, providerSpecificDetails: record<instanceType: string>, recoveryContainerId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, recoveryProtectionContainerFriendlyName: string, recoveryServicesProviderId: string, replicationHealth: string, testFailoverState: string, testFailoverStateDescription: string>> {
+]: any -> record<properties: record<activeLocation: string, allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, failoverHealth: string, failoverRecoveryPointId: string, friendlyName: string, healthErrors: list<record>, lastSuccessfulFailoverTime: string, lastSuccessfulTestFailoverTime: string, policyFriendlyName: string, policyId: string, primaryFabricFriendlyName: string, primaryFabricProvider: string, primaryProtectionContainerFriendlyName: string, protectableItemId: string, protectedItemType: string, protectionState: string, protectionStateDescription: string, providerSpecificDetails: record<instanceType: string>, recoveryContainerId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, recoveryProtectionContainerFriendlyName: string, recoveryServicesProviderId: string, replicationHealth: string, testFailoverState: string, testFailoverStateDescription: string>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2392,6 +2439,7 @@ export def "replication-protected-items-create" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
   if ($replicated_protected_item_name | is-empty) { error make --unspanned { msg: "path parameter 'replicatedProtectedItemName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replicated_protected_item_name: (encode-path-segment $replicated_protected_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -2433,9 +2481,9 @@ export def "replication-protected-items-resolve-health-errors" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: record # Resolve health input properties. — shape: {healthErrors?: list}
-]: any -> record<properties: record<activeLocation: string, allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, failoverHealth: string, failoverRecoveryPointId: string, friendlyName: string, healthErrors: list<record>, lastSuccessfulFailoverTime: string, lastSuccessfulTestFailoverTime: string, policyFriendlyName: string, policyId: string, primaryFabricFriendlyName: string, primaryFabricProvider: string, primaryProtectionContainerFriendlyName: string, protectableItemId: string, protectedItemType: string, protectionState: string, protectionStateDescription: string, providerSpecificDetails: record<instanceType: string>, recoveryContainerId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, recoveryProtectionContainerFriendlyName: string, recoveryServicesProviderId: string, replicationHealth: string, testFailoverState: string, testFailoverStateDescription: string>> {
+]: any -> record<properties: record<activeLocation: string, allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, failoverHealth: string, failoverRecoveryPointId: string, friendlyName: string, healthErrors: list<record>, lastSuccessfulFailoverTime: string, lastSuccessfulTestFailoverTime: string, policyFriendlyName: string, policyId: string, primaryFabricFriendlyName: string, primaryFabricProvider: string, primaryProtectionContainerFriendlyName: string, protectableItemId: string, protectedItemType: string, protectionState: string, protectionStateDescription: string, providerSpecificDetails: record<instanceType: string>, recoveryContainerId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, recoveryProtectionContainerFriendlyName: string, recoveryServicesProviderId: string, replicationHealth: string, testFailoverState: string, testFailoverStateDescription: string>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2445,6 +2493,7 @@ export def "replication-protected-items-resolve-health-errors" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
   if ($replicated_protected_item_name | is-empty) { error make --unspanned { msg: "path parameter 'replicatedProtectedItemName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replicated_protected_item_name: (encode-path-segment $replicated_protected_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/ResolveHealthErrors") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -2486,9 +2535,9 @@ export def "replication-protected-items-add-disks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: record # Add Disks input properties. — shape: {providerSpecificDetails?: record}
-]: any -> record<properties: record<activeLocation: string, allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, failoverHealth: string, failoverRecoveryPointId: string, friendlyName: string, healthErrors: list<record>, lastSuccessfulFailoverTime: string, lastSuccessfulTestFailoverTime: string, policyFriendlyName: string, policyId: string, primaryFabricFriendlyName: string, primaryFabricProvider: string, primaryProtectionContainerFriendlyName: string, protectableItemId: string, protectedItemType: string, protectionState: string, protectionStateDescription: string, providerSpecificDetails: record<instanceType: string>, recoveryContainerId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, recoveryProtectionContainerFriendlyName: string, recoveryServicesProviderId: string, replicationHealth: string, testFailoverState: string, testFailoverStateDescription: string>> {
+]: any -> record<properties: record<activeLocation: string, allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, failoverHealth: string, failoverRecoveryPointId: string, friendlyName: string, healthErrors: list<record>, lastSuccessfulFailoverTime: string, lastSuccessfulTestFailoverTime: string, policyFriendlyName: string, policyId: string, primaryFabricFriendlyName: string, primaryFabricProvider: string, primaryProtectionContainerFriendlyName: string, protectableItemId: string, protectedItemType: string, protectionState: string, protectionStateDescription: string, providerSpecificDetails: record<instanceType: string>, recoveryContainerId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, recoveryProtectionContainerFriendlyName: string, recoveryServicesProviderId: string, replicationHealth: string, testFailoverState: string, testFailoverStateDescription: string>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2498,6 +2547,7 @@ export def "replication-protected-items-add-disks" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
   if ($replicated_protected_item_name | is-empty) { error make --unspanned { msg: "path parameter 'replicatedProtectedItemName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replicated_protected_item_name: (encode-path-segment $replicated_protected_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/addDisks") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -2539,9 +2589,9 @@ export def "replication-protected-items-apply-recovery-point" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: record # Input properties to apply recovery point. — shape: {providerSpecificDetails?: record, recoveryPointId?: string}
-]: any -> record<properties: record<activeLocation: string, allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, failoverHealth: string, failoverRecoveryPointId: string, friendlyName: string, healthErrors: list<record>, lastSuccessfulFailoverTime: string, lastSuccessfulTestFailoverTime: string, policyFriendlyName: string, policyId: string, primaryFabricFriendlyName: string, primaryFabricProvider: string, primaryProtectionContainerFriendlyName: string, protectableItemId: string, protectedItemType: string, protectionState: string, protectionStateDescription: string, providerSpecificDetails: record<instanceType: string>, recoveryContainerId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, recoveryProtectionContainerFriendlyName: string, recoveryServicesProviderId: string, replicationHealth: string, testFailoverState: string, testFailoverStateDescription: string>> {
+]: any -> record<properties: record<activeLocation: string, allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, failoverHealth: string, failoverRecoveryPointId: string, friendlyName: string, healthErrors: list<record>, lastSuccessfulFailoverTime: string, lastSuccessfulTestFailoverTime: string, policyFriendlyName: string, policyId: string, primaryFabricFriendlyName: string, primaryFabricProvider: string, primaryProtectionContainerFriendlyName: string, protectableItemId: string, protectedItemType: string, protectionState: string, protectionStateDescription: string, providerSpecificDetails: record<instanceType: string>, recoveryContainerId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, recoveryProtectionContainerFriendlyName: string, recoveryServicesProviderId: string, replicationHealth: string, testFailoverState: string, testFailoverStateDescription: string>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2551,6 +2601,7 @@ export def "replication-protected-items-apply-recovery-point" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
   if ($replicated_protected_item_name | is-empty) { error make --unspanned { msg: "path parameter 'replicatedProtectedItemName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replicated_protected_item_name: (encode-path-segment $replicated_protected_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/applyRecoveryPoint") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -2591,8 +2642,8 @@ export def "replication-protected-items-failover-commit" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<activeLocation: string, allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, failoverHealth: string, failoverRecoveryPointId: string, friendlyName: string, healthErrors: list<record>, lastSuccessfulFailoverTime: string, lastSuccessfulTestFailoverTime: string, policyFriendlyName: string, policyId: string, primaryFabricFriendlyName: string, primaryFabricProvider: string, primaryProtectionContainerFriendlyName: string, protectableItemId: string, protectedItemType: string, protectionState: string, protectionStateDescription: string, providerSpecificDetails: record<instanceType: string>, recoveryContainerId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, recoveryProtectionContainerFriendlyName: string, recoveryServicesProviderId: string, replicationHealth: string, testFailoverState: string, testFailoverStateDescription: string>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<activeLocation: string, allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, failoverHealth: string, failoverRecoveryPointId: string, friendlyName: string, healthErrors: list<record>, lastSuccessfulFailoverTime: string, lastSuccessfulTestFailoverTime: string, policyFriendlyName: string, policyId: string, primaryFabricFriendlyName: string, primaryFabricProvider: string, primaryProtectionContainerFriendlyName: string, protectableItemId: string, protectedItemType: string, protectionState: string, protectionStateDescription: string, providerSpecificDetails: record<instanceType: string>, recoveryContainerId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, recoveryProtectionContainerFriendlyName: string, recoveryServicesProviderId: string, replicationHealth: string, testFailoverState: string, testFailoverStateDescription: string>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2601,6 +2652,7 @@ export def "replication-protected-items-failover-commit" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
   if ($replicated_protected_item_name | is-empty) { error make --unspanned { msg: "path parameter 'replicatedProtectedItemName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replicated_protected_item_name: (encode-path-segment $replicated_protected_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/failoverCommit") $qp $auth.query)
   let accept_val = "application/json"
@@ -2640,9 +2692,9 @@ export def "replication-protected-items-planned-failover" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: record # Input definition for planned failover input properties. — shape: {failoverDirection?: string, providerSpecificDetails?: record}
-]: any -> record<properties: record<activeLocation: string, allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, failoverHealth: string, failoverRecoveryPointId: string, friendlyName: string, healthErrors: list<record>, lastSuccessfulFailoverTime: string, lastSuccessfulTestFailoverTime: string, policyFriendlyName: string, policyId: string, primaryFabricFriendlyName: string, primaryFabricProvider: string, primaryProtectionContainerFriendlyName: string, protectableItemId: string, protectedItemType: string, protectionState: string, protectionStateDescription: string, providerSpecificDetails: record<instanceType: string>, recoveryContainerId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, recoveryProtectionContainerFriendlyName: string, recoveryServicesProviderId: string, replicationHealth: string, testFailoverState: string, testFailoverStateDescription: string>> {
+]: any -> record<properties: record<activeLocation: string, allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, failoverHealth: string, failoverRecoveryPointId: string, friendlyName: string, healthErrors: list<record>, lastSuccessfulFailoverTime: string, lastSuccessfulTestFailoverTime: string, policyFriendlyName: string, policyId: string, primaryFabricFriendlyName: string, primaryFabricProvider: string, primaryProtectionContainerFriendlyName: string, protectableItemId: string, protectedItemType: string, protectionState: string, protectionStateDescription: string, providerSpecificDetails: record<instanceType: string>, recoveryContainerId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, recoveryProtectionContainerFriendlyName: string, recoveryServicesProviderId: string, replicationHealth: string, testFailoverState: string, testFailoverStateDescription: string>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2652,6 +2704,7 @@ export def "replication-protected-items-planned-failover" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
   if ($replicated_protected_item_name | is-empty) { error make --unspanned { msg: "path parameter 'replicatedProtectedItemName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replicated_protected_item_name: (encode-path-segment $replicated_protected_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/plannedFailover") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -2693,9 +2746,9 @@ export def "replication-protected-items-reprotect" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: record # Reverse replication input properties. — shape: {failoverDirection?: string, providerSpecificDetails?: record}
-]: any -> record<properties: record<activeLocation: string, allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, failoverHealth: string, failoverRecoveryPointId: string, friendlyName: string, healthErrors: list<record>, lastSuccessfulFailoverTime: string, lastSuccessfulTestFailoverTime: string, policyFriendlyName: string, policyId: string, primaryFabricFriendlyName: string, primaryFabricProvider: string, primaryProtectionContainerFriendlyName: string, protectableItemId: string, protectedItemType: string, protectionState: string, protectionStateDescription: string, providerSpecificDetails: record<instanceType: string>, recoveryContainerId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, recoveryProtectionContainerFriendlyName: string, recoveryServicesProviderId: string, replicationHealth: string, testFailoverState: string, testFailoverStateDescription: string>> {
+]: any -> record<properties: record<activeLocation: string, allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, failoverHealth: string, failoverRecoveryPointId: string, friendlyName: string, healthErrors: list<record>, lastSuccessfulFailoverTime: string, lastSuccessfulTestFailoverTime: string, policyFriendlyName: string, policyId: string, primaryFabricFriendlyName: string, primaryFabricProvider: string, primaryProtectionContainerFriendlyName: string, protectableItemId: string, protectedItemType: string, protectionState: string, protectionStateDescription: string, providerSpecificDetails: record<instanceType: string>, recoveryContainerId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, recoveryProtectionContainerFriendlyName: string, recoveryServicesProviderId: string, replicationHealth: string, testFailoverState: string, testFailoverStateDescription: string>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2705,6 +2758,7 @@ export def "replication-protected-items-reprotect" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
   if ($replicated_protected_item_name | is-empty) { error make --unspanned { msg: "path parameter 'replicatedProtectedItemName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replicated_protected_item_name: (encode-path-segment $replicated_protected_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/reProtect") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -2745,8 +2799,8 @@ export def "recovery-points-list-by-replication-protected-items" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2755,6 +2809,7 @@ export def "recovery-points-list-by-replication-protected-items" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
   if ($replicated_protected_item_name | is-empty) { error make --unspanned { msg: "path parameter 'replicatedProtectedItemName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replicated_protected_item_name: (encode-path-segment $replicated_protected_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/recoveryPoints") $qp $auth.query)
   let accept_val = "application/json"
@@ -2794,8 +2849,8 @@ export def "recovery-points-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<providerSpecificDetails: record<instanceType: string>, recoveryPointTime: string, recoveryPointType: string>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<providerSpecificDetails: record<instanceType: string>, recoveryPointTime: string, recoveryPointType: string>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2805,6 +2860,7 @@ export def "recovery-points-get" [
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
   if ($replicated_protected_item_name | is-empty) { error make --unspanned { msg: "path parameter 'replicatedProtectedItemName' must be non-empty" } }
   if ($recovery_point_name | is-empty) { error make --unspanned { msg: "path parameter 'recoveryPointName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replicated_protected_item_name: (encode-path-segment $replicated_protected_item_name), recovery_point_name: (encode-path-segment $recovery_point_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/recoveryPoints/{recovery_point_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2844,7 +2900,7 @@ export def "replication-protected-items-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: record # Disable protection input properties. — shape: {disableProtectionReason?: "NotSpecified"|"MigrationComplete", replicationProviderInput?: record}
 ]: any -> any {
   let input = $in
@@ -2856,6 +2912,7 @@ export def "replication-protected-items-delete" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
   if ($replicated_protected_item_name | is-empty) { error make --unspanned { msg: "path parameter 'replicatedProtectedItemName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replicated_protected_item_name: (encode-path-segment $replicated_protected_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/remove") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -2897,9 +2954,9 @@ export def "replication-protected-items-remove-disks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: record # Remove Disk input properties. — shape: {providerSpecificDetails?: record}
-]: any -> record<properties: record<activeLocation: string, allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, failoverHealth: string, failoverRecoveryPointId: string, friendlyName: string, healthErrors: list<record>, lastSuccessfulFailoverTime: string, lastSuccessfulTestFailoverTime: string, policyFriendlyName: string, policyId: string, primaryFabricFriendlyName: string, primaryFabricProvider: string, primaryProtectionContainerFriendlyName: string, protectableItemId: string, protectedItemType: string, protectionState: string, protectionStateDescription: string, providerSpecificDetails: record<instanceType: string>, recoveryContainerId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, recoveryProtectionContainerFriendlyName: string, recoveryServicesProviderId: string, replicationHealth: string, testFailoverState: string, testFailoverStateDescription: string>> {
+]: any -> record<properties: record<activeLocation: string, allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, failoverHealth: string, failoverRecoveryPointId: string, friendlyName: string, healthErrors: list<record>, lastSuccessfulFailoverTime: string, lastSuccessfulTestFailoverTime: string, policyFriendlyName: string, policyId: string, primaryFabricFriendlyName: string, primaryFabricProvider: string, primaryProtectionContainerFriendlyName: string, protectableItemId: string, protectedItemType: string, protectionState: string, protectionStateDescription: string, providerSpecificDetails: record<instanceType: string>, recoveryContainerId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, recoveryProtectionContainerFriendlyName: string, recoveryServicesProviderId: string, replicationHealth: string, testFailoverState: string, testFailoverStateDescription: string>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2909,6 +2966,7 @@ export def "replication-protected-items-remove-disks" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
   if ($replicated_protected_item_name | is-empty) { error make --unspanned { msg: "path parameter 'replicatedProtectedItemName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replicated_protected_item_name: (encode-path-segment $replicated_protected_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/removeDisks") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -2949,8 +3007,8 @@ export def "replication-protected-items-repair-replication" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<activeLocation: string, allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, failoverHealth: string, failoverRecoveryPointId: string, friendlyName: string, healthErrors: list<record>, lastSuccessfulFailoverTime: string, lastSuccessfulTestFailoverTime: string, policyFriendlyName: string, policyId: string, primaryFabricFriendlyName: string, primaryFabricProvider: string, primaryProtectionContainerFriendlyName: string, protectableItemId: string, protectedItemType: string, protectionState: string, protectionStateDescription: string, providerSpecificDetails: record<instanceType: string>, recoveryContainerId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, recoveryProtectionContainerFriendlyName: string, recoveryServicesProviderId: string, replicationHealth: string, testFailoverState: string, testFailoverStateDescription: string>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<activeLocation: string, allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, failoverHealth: string, failoverRecoveryPointId: string, friendlyName: string, healthErrors: list<record>, lastSuccessfulFailoverTime: string, lastSuccessfulTestFailoverTime: string, policyFriendlyName: string, policyId: string, primaryFabricFriendlyName: string, primaryFabricProvider: string, primaryProtectionContainerFriendlyName: string, protectableItemId: string, protectedItemType: string, protectionState: string, protectionStateDescription: string, providerSpecificDetails: record<instanceType: string>, recoveryContainerId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, recoveryProtectionContainerFriendlyName: string, recoveryServicesProviderId: string, replicationHealth: string, testFailoverState: string, testFailoverStateDescription: string>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2959,6 +3017,7 @@ export def "replication-protected-items-repair-replication" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
   if ($replicated_protected_item_name | is-empty) { error make --unspanned { msg: "path parameter 'replicatedProtectedItemName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replicated_protected_item_name: (encode-path-segment $replicated_protected_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/repairReplication") $qp $auth.query)
   let accept_val = "application/json"
@@ -2997,7 +3056,7 @@ export def "target-compute-sizes-list-by-replication-protected-items" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<nextLink: string, value: table<id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3007,6 +3066,7 @@ export def "target-compute-sizes-list-by-replication-protected-items" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
   if ($replicated_protected_item_name | is-empty) { error make --unspanned { msg: "path parameter 'replicatedProtectedItemName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replicated_protected_item_name: (encode-path-segment $replicated_protected_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/targetComputeSizes") $qp $auth.query)
   let accept_val = "application/json"
@@ -3046,9 +3106,9 @@ export def "replication-protected-items-test-failover" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: record # Input definition for planned failover input properties. — shape: {failoverDirection?: string, networkId?: string, networkType?: string, providerSpecificDetails?: record, skipTestFailoverCleanup?: string}
-]: any -> record<properties: record<activeLocation: string, allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, failoverHealth: string, failoverRecoveryPointId: string, friendlyName: string, healthErrors: list<record>, lastSuccessfulFailoverTime: string, lastSuccessfulTestFailoverTime: string, policyFriendlyName: string, policyId: string, primaryFabricFriendlyName: string, primaryFabricProvider: string, primaryProtectionContainerFriendlyName: string, protectableItemId: string, protectedItemType: string, protectionState: string, protectionStateDescription: string, providerSpecificDetails: record<instanceType: string>, recoveryContainerId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, recoveryProtectionContainerFriendlyName: string, recoveryServicesProviderId: string, replicationHealth: string, testFailoverState: string, testFailoverStateDescription: string>> {
+]: any -> record<properties: record<activeLocation: string, allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, failoverHealth: string, failoverRecoveryPointId: string, friendlyName: string, healthErrors: list<record>, lastSuccessfulFailoverTime: string, lastSuccessfulTestFailoverTime: string, policyFriendlyName: string, policyId: string, primaryFabricFriendlyName: string, primaryFabricProvider: string, primaryProtectionContainerFriendlyName: string, protectableItemId: string, protectedItemType: string, protectionState: string, protectionStateDescription: string, providerSpecificDetails: record<instanceType: string>, recoveryContainerId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, recoveryProtectionContainerFriendlyName: string, recoveryServicesProviderId: string, replicationHealth: string, testFailoverState: string, testFailoverStateDescription: string>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3058,6 +3118,7 @@ export def "replication-protected-items-test-failover" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
   if ($replicated_protected_item_name | is-empty) { error make --unspanned { msg: "path parameter 'replicatedProtectedItemName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replicated_protected_item_name: (encode-path-segment $replicated_protected_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/testFailover") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -3099,9 +3160,9 @@ export def "replication-protected-items-test-failover-cleanup" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   properties: record # Input definition for test failover cleanup input properties. — shape: {comments?: string}
-]: any -> record<properties: record<activeLocation: string, allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, failoverHealth: string, failoverRecoveryPointId: string, friendlyName: string, healthErrors: list<record>, lastSuccessfulFailoverTime: string, lastSuccessfulTestFailoverTime: string, policyFriendlyName: string, policyId: string, primaryFabricFriendlyName: string, primaryFabricProvider: string, primaryProtectionContainerFriendlyName: string, protectableItemId: string, protectedItemType: string, protectionState: string, protectionStateDescription: string, providerSpecificDetails: record<instanceType: string>, recoveryContainerId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, recoveryProtectionContainerFriendlyName: string, recoveryServicesProviderId: string, replicationHealth: string, testFailoverState: string, testFailoverStateDescription: string>> {
+]: any -> record<properties: record<activeLocation: string, allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, failoverHealth: string, failoverRecoveryPointId: string, friendlyName: string, healthErrors: list<record>, lastSuccessfulFailoverTime: string, lastSuccessfulTestFailoverTime: string, policyFriendlyName: string, policyId: string, primaryFabricFriendlyName: string, primaryFabricProvider: string, primaryProtectionContainerFriendlyName: string, protectableItemId: string, protectedItemType: string, protectionState: string, protectionStateDescription: string, providerSpecificDetails: record<instanceType: string>, recoveryContainerId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, recoveryProtectionContainerFriendlyName: string, recoveryServicesProviderId: string, replicationHealth: string, testFailoverState: string, testFailoverStateDescription: string>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3111,6 +3172,7 @@ export def "replication-protected-items-test-failover-cleanup" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
   if ($replicated_protected_item_name | is-empty) { error make --unspanned { msg: "path parameter 'replicatedProtectedItemName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replicated_protected_item_name: (encode-path-segment $replicated_protected_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/testFailoverCleanup") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -3152,9 +3214,9 @@ export def "replication-protected-items-unplanned-failover" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: record # Input definition for planned failover input properties. — shape: {failoverDirection?: string, providerSpecificDetails?: record, sourceSiteOperations?: string}
-]: any -> record<properties: record<activeLocation: string, allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, failoverHealth: string, failoverRecoveryPointId: string, friendlyName: string, healthErrors: list<record>, lastSuccessfulFailoverTime: string, lastSuccessfulTestFailoverTime: string, policyFriendlyName: string, policyId: string, primaryFabricFriendlyName: string, primaryFabricProvider: string, primaryProtectionContainerFriendlyName: string, protectableItemId: string, protectedItemType: string, protectionState: string, protectionStateDescription: string, providerSpecificDetails: record<instanceType: string>, recoveryContainerId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, recoveryProtectionContainerFriendlyName: string, recoveryServicesProviderId: string, replicationHealth: string, testFailoverState: string, testFailoverStateDescription: string>> {
+]: any -> record<properties: record<activeLocation: string, allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, failoverHealth: string, failoverRecoveryPointId: string, friendlyName: string, healthErrors: list<record>, lastSuccessfulFailoverTime: string, lastSuccessfulTestFailoverTime: string, policyFriendlyName: string, policyId: string, primaryFabricFriendlyName: string, primaryFabricProvider: string, primaryProtectionContainerFriendlyName: string, protectableItemId: string, protectedItemType: string, protectionState: string, protectionStateDescription: string, providerSpecificDetails: record<instanceType: string>, recoveryContainerId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, recoveryProtectionContainerFriendlyName: string, recoveryServicesProviderId: string, replicationHealth: string, testFailoverState: string, testFailoverStateDescription: string>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3164,6 +3226,7 @@ export def "replication-protected-items-unplanned-failover" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
   if ($replicated_protected_item_name | is-empty) { error make --unspanned { msg: "path parameter 'replicatedProtectedItemName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replicated_protected_item_name: (encode-path-segment $replicated_protected_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/unplannedFailover") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -3205,9 +3268,9 @@ export def "replication-protected-items-update-mobility-service" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: record # The properties of an update mobility service request. — shape: {runAsAccountId?: string}
-]: any -> record<properties: record<activeLocation: string, allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, failoverHealth: string, failoverRecoveryPointId: string, friendlyName: string, healthErrors: list<record>, lastSuccessfulFailoverTime: string, lastSuccessfulTestFailoverTime: string, policyFriendlyName: string, policyId: string, primaryFabricFriendlyName: string, primaryFabricProvider: string, primaryProtectionContainerFriendlyName: string, protectableItemId: string, protectedItemType: string, protectionState: string, protectionStateDescription: string, providerSpecificDetails: record<instanceType: string>, recoveryContainerId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, recoveryProtectionContainerFriendlyName: string, recoveryServicesProviderId: string, replicationHealth: string, testFailoverState: string, testFailoverStateDescription: string>> {
+]: any -> record<properties: record<activeLocation: string, allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, failoverHealth: string, failoverRecoveryPointId: string, friendlyName: string, healthErrors: list<record>, lastSuccessfulFailoverTime: string, lastSuccessfulTestFailoverTime: string, policyFriendlyName: string, policyId: string, primaryFabricFriendlyName: string, primaryFabricProvider: string, primaryProtectionContainerFriendlyName: string, protectableItemId: string, protectedItemType: string, protectionState: string, protectionStateDescription: string, providerSpecificDetails: record<instanceType: string>, recoveryContainerId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, recoveryProtectionContainerFriendlyName: string, recoveryServicesProviderId: string, replicationHealth: string, testFailoverState: string, testFailoverStateDescription: string>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3217,6 +3280,7 @@ export def "replication-protected-items-update-mobility-service" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
   if ($replication_protected_item_name | is-empty) { error make --unspanned { msg: "path parameter 'replicationProtectedItemName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replication_protected_item_name: (encode-path-segment $replication_protected_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replication_protected_item_name}/updateMobilityService") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -3256,8 +3320,8 @@ export def "replication-protection-container-mappings-list-by-replication-protec
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3265,6 +3329,7 @@ export def "replication-protection-container-mappings-list-by-replication-protec
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectionContainerMappings") $qp $auth.query)
   let accept_val = "application/json"
@@ -3303,7 +3368,7 @@ export def "replication-protection-container-mappings-purge" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3313,6 +3378,7 @@ export def "replication-protection-container-mappings-purge" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
   if ($mapping_name | is-empty) { error make --unspanned { msg: "path parameter 'mappingName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), mapping_name: (encode-path-segment $mapping_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectionContainerMappings/{mapping_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -3351,8 +3417,8 @@ export def "replication-protection-container-mappings-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<health: string, healthErrorDetails: list<record>, policyFriendlyName: string, policyId: string, providerSpecificDetails: record<instanceType: string>, sourceFabricFriendlyName: string, sourceProtectionContainerFriendlyName: string, state: string, targetFabricFriendlyName: string, targetProtectionContainerFriendlyName: string, targetProtectionContainerId: string>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<health: string, healthErrorDetails: list<record>, policyFriendlyName: string, policyId: string, providerSpecificDetails: record<instanceType: string>, sourceFabricFriendlyName: string, sourceProtectionContainerFriendlyName: string, state: string, targetFabricFriendlyName: string, targetProtectionContainerFriendlyName: string, targetProtectionContainerId: string>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3361,6 +3427,7 @@ export def "replication-protection-container-mappings-get" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
   if ($mapping_name | is-empty) { error make --unspanned { msg: "path parameter 'mappingName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), mapping_name: (encode-path-segment $mapping_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectionContainerMappings/{mapping_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -3400,9 +3467,9 @@ export def "replication-protection-container-mappings-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: record # Container pairing update input. — shape: {providerSpecificInput?: record}
-]: any -> record<properties: record<health: string, healthErrorDetails: list<record>, policyFriendlyName: string, policyId: string, providerSpecificDetails: record<instanceType: string>, sourceFabricFriendlyName: string, sourceProtectionContainerFriendlyName: string, state: string, targetFabricFriendlyName: string, targetProtectionContainerFriendlyName: string, targetProtectionContainerId: string>> {
+]: any -> record<properties: record<health: string, healthErrorDetails: list<record>, policyFriendlyName: string, policyId: string, providerSpecificDetails: record<instanceType: string>, sourceFabricFriendlyName: string, sourceProtectionContainerFriendlyName: string, state: string, targetFabricFriendlyName: string, targetProtectionContainerFriendlyName: string, targetProtectionContainerId: string>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3412,6 +3479,7 @@ export def "replication-protection-container-mappings-update" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
   if ($mapping_name | is-empty) { error make --unspanned { msg: "path parameter 'mappingName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), mapping_name: (encode-path-segment $mapping_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectionContainerMappings/{mapping_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -3453,9 +3521,9 @@ export def "replication-protection-container-mappings-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: record # Configure pairing input properties. — shape: {policyId?: string, providerSpecificInput?: record, targetProtectionContainerId?: string}
-]: any -> record<properties: record<health: string, healthErrorDetails: list<record>, policyFriendlyName: string, policyId: string, providerSpecificDetails: record<instanceType: string>, sourceFabricFriendlyName: string, sourceProtectionContainerFriendlyName: string, state: string, targetFabricFriendlyName: string, targetProtectionContainerFriendlyName: string, targetProtectionContainerId: string>> {
+]: any -> record<properties: record<health: string, healthErrorDetails: list<record>, policyFriendlyName: string, policyId: string, providerSpecificDetails: record<instanceType: string>, sourceFabricFriendlyName: string, sourceProtectionContainerFriendlyName: string, state: string, targetFabricFriendlyName: string, targetProtectionContainerFriendlyName: string, targetProtectionContainerId: string>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3465,6 +3533,7 @@ export def "replication-protection-container-mappings-create" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
   if ($mapping_name | is-empty) { error make --unspanned { msg: "path parameter 'mappingName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), mapping_name: (encode-path-segment $mapping_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectionContainerMappings/{mapping_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -3506,7 +3575,7 @@ export def "replication-protection-container-mappings-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: record # Unpairing input properties. — shape: {providerSpecificInput?: record}
 ]: any -> any {
   let input = $in
@@ -3518,6 +3587,7 @@ export def "replication-protection-container-mappings-delete" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
   if ($mapping_name | is-empty) { error make --unspanned { msg: "path parameter 'mappingName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), mapping_name: (encode-path-segment $mapping_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectionContainerMappings/{mapping_name}/remove") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -3558,9 +3628,9 @@ export def "replication-protection-containers-switch-protection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: record # Switch protection input properties. — shape: {providerSpecificDetails?: record, replicationProtectedItemName?: string}
-]: any -> record<properties: record<fabricFriendlyName: string, fabricSpecificDetails: record<instanceType: string>, fabricType: string, friendlyName: string, pairingStatus: string, protectedItemCount: int, role: string>> {
+]: any -> record<properties: record<fabricFriendlyName: string, fabricSpecificDetails: record<instanceType: string>, fabricType: string, friendlyName: string, pairingStatus: string, protectedItemCount: int, role: string>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3569,6 +3639,7 @@ export def "replication-protection-containers-switch-protection" [
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($protection_container_name | is-empty) { error make --unspanned { msg: "path parameter 'protectionContainerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/switchprotection") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -3607,14 +3678,15 @@ export def "replication-recovery-services-providers-list-by-replication-fabrics"
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationRecoveryServicesProviders") $qp $auth.query)
   let accept_val = "application/json"
@@ -3652,7 +3724,7 @@ export def "replication-recovery-services-providers-purge" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3661,6 +3733,7 @@ export def "replication-recovery-services-providers-purge" [
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($provider_name | is-empty) { error make --unspanned { msg: "path parameter 'providerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), provider_name: (encode-path-segment $provider_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationRecoveryServicesProviders/{provider_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -3698,8 +3771,8 @@ export def "replication-recovery-services-providers-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<allowedScenarios: list<string>, authenticationIdentityDetails: record<aadAuthority: string, applicationId: string, audience: string, objectId: string, tenantId: string>, connectionStatus: string, draIdentifier: string, fabricFriendlyName: string, fabricType: string, friendlyName: string, healthErrorDetails: list<record>, lastHeartBeat: string, protectedItemCount: int, providerVersion: string, providerVersionDetails: record<expiryDate: string, status: string, version: string>, providerVersionExpiryDate: string, providerVersionState: string, resourceAccessIdentityDetails: record<aadAuthority: string, applicationId: string, audience: string, objectId: string, tenantId: string>, serverVersion: string>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<allowedScenarios: list<string>, authenticationIdentityDetails: record<aadAuthority: string, applicationId: string, audience: string, objectId: string, tenantId: string>, connectionStatus: string, draIdentifier: string, fabricFriendlyName: string, fabricType: string, friendlyName: string, healthErrorDetails: list<record>, lastHeartBeat: string, protectedItemCount: int, providerVersion: string, providerVersionDetails: record<expiryDate: string, status: string, version: string>, providerVersionExpiryDate: string, providerVersionState: string, resourceAccessIdentityDetails: record<aadAuthority: string, applicationId: string, audience: string, objectId: string, tenantId: string>, serverVersion: string>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3707,6 +3780,7 @@ export def "replication-recovery-services-providers-get" [
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($provider_name | is-empty) { error make --unspanned { msg: "path parameter 'providerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), provider_name: (encode-path-segment $provider_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationRecoveryServicesProviders/{provider_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -3745,9 +3819,9 @@ export def "replication-recovery-services-providers-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   properties: record # The properties of an add provider request. — shape: {authenticationIdentityInput: record, machineName: string, resourceAccessIdentityInput: record}
-]: any -> record<properties: record<allowedScenarios: list<string>, authenticationIdentityDetails: record<aadAuthority: string, applicationId: string, audience: string, objectId: string, tenantId: string>, connectionStatus: string, draIdentifier: string, fabricFriendlyName: string, fabricType: string, friendlyName: string, healthErrorDetails: list<record>, lastHeartBeat: string, protectedItemCount: int, providerVersion: string, providerVersionDetails: record<expiryDate: string, status: string, version: string>, providerVersionExpiryDate: string, providerVersionState: string, resourceAccessIdentityDetails: record<aadAuthority: string, applicationId: string, audience: string, objectId: string, tenantId: string>, serverVersion: string>> {
+]: any -> record<properties: record<allowedScenarios: list<string>, authenticationIdentityDetails: record<aadAuthority: string, applicationId: string, audience: string, objectId: string, tenantId: string>, connectionStatus: string, draIdentifier: string, fabricFriendlyName: string, fabricType: string, friendlyName: string, healthErrorDetails: list<record>, lastHeartBeat: string, protectedItemCount: int, providerVersion: string, providerVersionDetails: record<expiryDate: string, status: string, version: string>, providerVersionExpiryDate: string, providerVersionState: string, resourceAccessIdentityDetails: record<aadAuthority: string, applicationId: string, audience: string, objectId: string, tenantId: string>, serverVersion: string>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3756,6 +3830,7 @@ export def "replication-recovery-services-providers-create" [
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($provider_name | is-empty) { error make --unspanned { msg: "path parameter 'providerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), provider_name: (encode-path-segment $provider_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationRecoveryServicesProviders/{provider_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -3795,8 +3870,8 @@ export def "replication-recovery-services-providers-refresh-provider" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<allowedScenarios: list<string>, authenticationIdentityDetails: record<aadAuthority: string, applicationId: string, audience: string, objectId: string, tenantId: string>, connectionStatus: string, draIdentifier: string, fabricFriendlyName: string, fabricType: string, friendlyName: string, healthErrorDetails: list<record>, lastHeartBeat: string, protectedItemCount: int, providerVersion: string, providerVersionDetails: record<expiryDate: string, status: string, version: string>, providerVersionExpiryDate: string, providerVersionState: string, resourceAccessIdentityDetails: record<aadAuthority: string, applicationId: string, audience: string, objectId: string, tenantId: string>, serverVersion: string>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<allowedScenarios: list<string>, authenticationIdentityDetails: record<aadAuthority: string, applicationId: string, audience: string, objectId: string, tenantId: string>, connectionStatus: string, draIdentifier: string, fabricFriendlyName: string, fabricType: string, friendlyName: string, healthErrorDetails: list<record>, lastHeartBeat: string, protectedItemCount: int, providerVersion: string, providerVersionDetails: record<expiryDate: string, status: string, version: string>, providerVersionExpiryDate: string, providerVersionState: string, resourceAccessIdentityDetails: record<aadAuthority: string, applicationId: string, audience: string, objectId: string, tenantId: string>, serverVersion: string>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3804,6 +3879,7 @@ export def "replication-recovery-services-providers-refresh-provider" [
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($provider_name | is-empty) { error make --unspanned { msg: "path parameter 'providerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), provider_name: (encode-path-segment $provider_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationRecoveryServicesProviders/{provider_name}/refreshProvider") $qp $auth.query)
   let accept_val = "application/json"
@@ -3841,7 +3917,7 @@ export def "replication-recovery-services-providers-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3850,6 +3926,7 @@ export def "replication-recovery-services-providers-delete" [
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($provider_name | is-empty) { error make --unspanned { msg: "path parameter 'providerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), provider_name: (encode-path-segment $provider_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationRecoveryServicesProviders/{provider_name}/remove") $qp $auth.query)
   let accept_val = "application/json"
@@ -3886,14 +3963,15 @@ export def "replication-storage-classifications-list-by-replication-fabrics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationStorageClassifications") $qp $auth.query)
   let accept_val = "application/json"
@@ -3931,8 +4009,8 @@ export def "replication-storage-classifications-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<friendlyName: string>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<friendlyName: string>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3940,6 +4018,7 @@ export def "replication-storage-classifications-get" [
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($storage_classification_name | is-empty) { error make --unspanned { msg: "path parameter 'storageClassificationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), storage_classification_name: (encode-path-segment $storage_classification_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationStorageClassifications/{storage_classification_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -3977,8 +4056,8 @@ export def "replication-storage-classification-mappings-list-by-replication-stor
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3986,6 +4065,7 @@ export def "replication-storage-classification-mappings-list-by-replication-stor
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($storage_classification_name | is-empty) { error make --unspanned { msg: "path parameter 'storageClassificationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), storage_classification_name: (encode-path-segment $storage_classification_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationStorageClassifications/{storage_classification_name}/replicationStorageClassificationMappings") $qp $auth.query)
   let accept_val = "application/json"
@@ -4024,7 +4104,7 @@ export def "replication-storage-classification-mappings-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4034,6 +4114,7 @@ export def "replication-storage-classification-mappings-delete" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($storage_classification_name | is-empty) { error make --unspanned { msg: "path parameter 'storageClassificationName' must be non-empty" } }
   if ($storage_classification_mapping_name | is-empty) { error make --unspanned { msg: "path parameter 'storageClassificationMappingName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), storage_classification_name: (encode-path-segment $storage_classification_name), storage_classification_mapping_name: (encode-path-segment $storage_classification_mapping_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationStorageClassifications/{storage_classification_name}/replicationStorageClassificationMappings/{storage_classification_mapping_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -4072,8 +4153,8 @@ export def "replication-storage-classification-mappings-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<targetStorageClassificationId: string>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<targetStorageClassificationId: string>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4082,6 +4163,7 @@ export def "replication-storage-classification-mappings-get" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($storage_classification_name | is-empty) { error make --unspanned { msg: "path parameter 'storageClassificationName' must be non-empty" } }
   if ($storage_classification_mapping_name | is-empty) { error make --unspanned { msg: "path parameter 'storageClassificationMappingName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), storage_classification_name: (encode-path-segment $storage_classification_name), storage_classification_mapping_name: (encode-path-segment $storage_classification_mapping_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationStorageClassifications/{storage_classification_name}/replicationStorageClassificationMappings/{storage_classification_mapping_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -4121,9 +4203,9 @@ export def "replication-storage-classification-mappings-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: record # Storage mapping input properties. — shape: {targetStorageClassificationId?: string}
-]: any -> record<properties: record<targetStorageClassificationId: string>> {
+]: any -> record<properties: record<targetStorageClassificationId: string>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4133,6 +4215,7 @@ export def "replication-storage-classification-mappings-create" [
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($storage_classification_name | is-empty) { error make --unspanned { msg: "path parameter 'storageClassificationName' must be non-empty" } }
   if ($storage_classification_mapping_name | is-empty) { error make --unspanned { msg: "path parameter 'storageClassificationMappingName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), storage_classification_name: (encode-path-segment $storage_classification_name), storage_classification_mapping_name: (encode-path-segment $storage_classification_mapping_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationStorageClassifications/{storage_classification_name}/replicationStorageClassificationMappings/{storage_classification_mapping_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -4171,14 +4254,15 @@ export def "replicationv-centers-list-by-replication-fabrics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationvCenters") $qp $auth.query)
   let accept_val = "application/json"
@@ -4216,7 +4300,7 @@ export def "replicationv-centers-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4225,6 +4309,7 @@ export def "replicationv-centers-delete" [
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($v_center_name | is-empty) { error make --unspanned { msg: "path parameter 'vCenterName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), v_center_name: (encode-path-segment $v_center_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationvCenters/{v_center_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -4262,8 +4347,8 @@ export def "replicationv-centers-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<discoveryStatus: string, fabricArmResourceName: string, friendlyName: string, healthErrors: list<record>, infrastructureId: string, internalId: string, ipAddress: string, lastHeartbeat: string, port: string, processServerId: string, runAsAccountId: string>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<discoveryStatus: string, fabricArmResourceName: string, friendlyName: string, healthErrors: list<record>, infrastructureId: string, internalId: string, ipAddress: string, lastHeartbeat: string, port: string, processServerId: string, runAsAccountId: string>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4271,6 +4356,7 @@ export def "replicationv-centers-get" [
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($v_center_name | is-empty) { error make --unspanned { msg: "path parameter 'vCenterName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), v_center_name: (encode-path-segment $v_center_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationvCenters/{v_center_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -4309,9 +4395,9 @@ export def "replicationv-centers-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: record # The properties of an update vCenter request. — shape: {friendlyName?: string, ipAddress?: string, port?: string, processServerId?: string, runAsAccountId?: string}
-]: any -> record<properties: record<discoveryStatus: string, fabricArmResourceName: string, friendlyName: string, healthErrors: list<record>, infrastructureId: string, internalId: string, ipAddress: string, lastHeartbeat: string, port: string, processServerId: string, runAsAccountId: string>> {
+]: any -> record<properties: record<discoveryStatus: string, fabricArmResourceName: string, friendlyName: string, healthErrors: list<record>, infrastructureId: string, internalId: string, ipAddress: string, lastHeartbeat: string, port: string, processServerId: string, runAsAccountId: string>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4320,6 +4406,7 @@ export def "replicationv-centers-update" [
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($v_center_name | is-empty) { error make --unspanned { msg: "path parameter 'vCenterName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), v_center_name: (encode-path-segment $v_center_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationvCenters/{v_center_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -4360,9 +4447,9 @@ export def "replicationv-centers-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: record # The properties of an add vCenter request. — shape: {friendlyName?: string, ipAddress?: string, port?: string, processServerId?: string, runAsAccountId?: string}
-]: any -> record<properties: record<discoveryStatus: string, fabricArmResourceName: string, friendlyName: string, healthErrors: list<record>, infrastructureId: string, internalId: string, ipAddress: string, lastHeartbeat: string, port: string, processServerId: string, runAsAccountId: string>> {
+]: any -> record<properties: record<discoveryStatus: string, fabricArmResourceName: string, friendlyName: string, healthErrors: list<record>, infrastructureId: string, internalId: string, ipAddress: string, lastHeartbeat: string, port: string, processServerId: string, runAsAccountId: string>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4371,6 +4458,7 @@ export def "replicationv-centers-create" [
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'fabricName' must be non-empty" } }
   if ($v_center_name | is-empty) { error make --unspanned { msg: "path parameter 'vCenterName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), v_center_name: (encode-path-segment $v_center_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationvCenters/{v_center_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -4408,14 +4496,15 @@ export def "replication-jobs-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --filter: string # OData filter options.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationJobs") $qp $auth.query)
   let accept_val = "application/json"
@@ -4451,19 +4540,20 @@ export def "replication-jobs-export" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --affected-object-types: string # The type of objects.
   --end-time: string # Date time to get jobs up to.
   --fabric-id: string # The Id of the fabric to search jobs under.
   --job-status: string # The states of the job to be filtered can be in.
   --start-time: string # Date time to get jobs from.
-]: any -> record<properties: record<activityId: string, allowedActions: list<string>, customDetails: record<affectedObjectDetails: record, instanceType: string>, endTime: string, errors: list<record>, friendlyName: string, scenarioName: string, startTime: string, state: string, stateDescription: string, targetInstanceType: string, targetObjectId: string, targetObjectName: string, tasks: list<record>>> {
+]: any -> record<properties: record<activityId: string, allowedActions: list<string>, customDetails: record<affectedObjectDetails: record, instanceType: string>, endTime: string, errors: list<record>, friendlyName: string, scenarioName: string, startTime: string, state: string, stateDescription: string, targetInstanceType: string, targetObjectId: string, targetObjectName: string, tasks: list<record>>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationJobs/export") $qp $auth.query)
   let req_body = {"affectedObjectTypes": $affected_object_types, "endTime": $end_time, "fabricId": $fabric_id, "jobStatus": $job_status, "startTime": $start_time} | compact
@@ -4502,14 +4592,15 @@ export def "replication-jobs-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<activityId: string, allowedActions: list<string>, customDetails: record<affectedObjectDetails: record, instanceType: string>, endTime: string, errors: list<record>, friendlyName: string, scenarioName: string, startTime: string, state: string, stateDescription: string, targetInstanceType: string, targetObjectId: string, targetObjectName: string, tasks: list<record>>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<activityId: string, allowedActions: list<string>, customDetails: record<affectedObjectDetails: record, instanceType: string>, endTime: string, errors: list<record>, friendlyName: string, scenarioName: string, startTime: string, state: string, stateDescription: string, targetInstanceType: string, targetObjectId: string, targetObjectName: string, tasks: list<record>>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), job_name: (encode-path-segment $job_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationJobs/{job_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -4546,14 +4637,15 @@ export def "replication-jobs-cancel" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<activityId: string, allowedActions: list<string>, customDetails: record<affectedObjectDetails: record, instanceType: string>, endTime: string, errors: list<record>, friendlyName: string, scenarioName: string, startTime: string, state: string, stateDescription: string, targetInstanceType: string, targetObjectId: string, targetObjectName: string, tasks: list<record>>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<activityId: string, allowedActions: list<string>, customDetails: record<affectedObjectDetails: record, instanceType: string>, endTime: string, errors: list<record>, friendlyName: string, scenarioName: string, startTime: string, state: string, stateDescription: string, targetInstanceType: string, targetObjectId: string, targetObjectName: string, tasks: list<record>>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), job_name: (encode-path-segment $job_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationJobs/{job_name}/cancel") $qp $auth.query)
   let accept_val = "application/json"
@@ -4590,14 +4682,15 @@ export def "replication-jobs-restart" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<activityId: string, allowedActions: list<string>, customDetails: record<affectedObjectDetails: record, instanceType: string>, endTime: string, errors: list<record>, friendlyName: string, scenarioName: string, startTime: string, state: string, stateDescription: string, targetInstanceType: string, targetObjectId: string, targetObjectName: string, tasks: list<record>>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<activityId: string, allowedActions: list<string>, customDetails: record<affectedObjectDetails: record, instanceType: string>, endTime: string, errors: list<record>, friendlyName: string, scenarioName: string, startTime: string, state: string, stateDescription: string, targetInstanceType: string, targetObjectId: string, targetObjectName: string, tasks: list<record>>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), job_name: (encode-path-segment $job_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationJobs/{job_name}/restart") $qp $auth.query)
   let accept_val = "application/json"
@@ -4635,9 +4728,9 @@ export def "replication-jobs-resume" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: record # Resume job properties. — shape: {comments?: string}
-]: any -> record<properties: record<activityId: string, allowedActions: list<string>, customDetails: record<affectedObjectDetails: record, instanceType: string>, endTime: string, errors: list<record>, friendlyName: string, scenarioName: string, startTime: string, state: string, stateDescription: string, targetInstanceType: string, targetObjectId: string, targetObjectName: string, tasks: list<record>>> {
+]: any -> record<properties: record<activityId: string, allowedActions: list<string>, customDetails: record<affectedObjectDetails: record, instanceType: string>, endTime: string, errors: list<record>, friendlyName: string, scenarioName: string, startTime: string, state: string, stateDescription: string, targetInstanceType: string, targetObjectId: string, targetObjectName: string, tasks: list<record>>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4645,6 +4738,7 @@ export def "replication-jobs-resume" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), job_name: (encode-path-segment $job_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationJobs/{job_name}/resume") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -4682,15 +4776,16 @@ export def "replication-migration-items-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --skip-token: string # The pagination token.
   --filter: string # OData filter options.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "skipToken" $skip_token "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationMigrationItems") $qp $auth.query)
   let accept_val = "application/json"
@@ -4726,13 +4821,14 @@ export def "replication-network-mappings-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationNetworkMappings") $qp $auth.query)
   let accept_val = "application/json"
@@ -4768,13 +4864,14 @@ export def "replication-networks-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationNetworks") $qp $auth.query)
   let accept_val = "application/json"
@@ -4810,13 +4907,14 @@ export def "replication-policies-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationPolicies") $qp $auth.query)
   let accept_val = "application/json"
@@ -4853,7 +4951,7 @@ export def "replication-policies-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4861,6 +4959,7 @@ export def "replication-policies-delete" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($policy_name | is-empty) { error make --unspanned { msg: "path parameter 'policyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), policy_name: (encode-path-segment $policy_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationPolicies/{policy_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -4897,14 +4996,15 @@ export def "replication-policies-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<friendlyName: string, providerSpecificDetails: record<instanceType: string>>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<friendlyName: string, providerSpecificDetails: record<instanceType: string>>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($policy_name | is-empty) { error make --unspanned { msg: "path parameter 'policyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), policy_name: (encode-path-segment $policy_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationPolicies/{policy_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -4942,9 +5042,9 @@ export def "replication-policies-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: record # Policy update properties. — shape: {replicationProviderSettings?: record}
-]: any -> record<properties: record<friendlyName: string, providerSpecificDetails: record<instanceType: string>>> {
+]: any -> record<properties: record<friendlyName: string, providerSpecificDetails: record<instanceType: string>>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4952,6 +5052,7 @@ export def "replication-policies-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($policy_name | is-empty) { error make --unspanned { msg: "path parameter 'policyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), policy_name: (encode-path-segment $policy_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationPolicies/{policy_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -4991,9 +5092,9 @@ export def "replication-policies-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: record # Policy creation properties. — shape: {providerSpecificInput?: record}
-]: any -> record<properties: record<friendlyName: string, providerSpecificDetails: record<instanceType: string>>> {
+]: any -> record<properties: record<friendlyName: string, providerSpecificDetails: record<instanceType: string>>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5001,6 +5102,7 @@ export def "replication-policies-create" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($policy_name | is-empty) { error make --unspanned { msg: "path parameter 'policyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), policy_name: (encode-path-segment $policy_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationPolicies/{policy_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -5038,15 +5140,16 @@ export def "replication-protected-items-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --skip-token: string # The pagination token. Possible values: "FabricId" or "FabricId_CloudId" or null
   --filter: string # OData filter options.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "skipToken" $skip_token "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationProtectedItems") $qp $auth.query)
   let accept_val = "application/json"
@@ -5082,13 +5185,14 @@ export def "replication-protection-container-mappings-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationProtectionContainerMappings") $qp $auth.query)
   let accept_val = "application/json"
@@ -5124,13 +5228,14 @@ export def "replication-protection-containers-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationProtectionContainers") $qp $auth.query)
   let accept_val = "application/json"
@@ -5166,13 +5271,14 @@ export def "replication-recovery-plans-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationRecoveryPlans") $qp $auth.query)
   let accept_val = "application/json"
@@ -5209,7 +5315,7 @@ export def "replication-recovery-plans-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5217,6 +5323,7 @@ export def "replication-recovery-plans-delete" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($recovery_plan_name | is-empty) { error make --unspanned { msg: "path parameter 'recoveryPlanName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), recovery_plan_name: (encode-path-segment $recovery_plan_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationRecoveryPlans/{recovery_plan_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -5253,14 +5360,15 @@ export def "replication-recovery-plans-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, currentScenarioStatus: string, currentScenarioStatusDescription: string, failoverDeploymentModel: string, friendlyName: string, groups: list<record>, lastPlannedFailoverTime: string, lastTestFailoverTime: string, lastUnplannedFailoverTime: string, primaryFabricFriendlyName: string, primaryFabricId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, replicationProviders: list<string>>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, currentScenarioStatus: string, currentScenarioStatusDescription: string, failoverDeploymentModel: string, friendlyName: string, groups: list<record>, lastPlannedFailoverTime: string, lastTestFailoverTime: string, lastUnplannedFailoverTime: string, primaryFabricFriendlyName: string, primaryFabricId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, replicationProviders: list<string>>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($recovery_plan_name | is-empty) { error make --unspanned { msg: "path parameter 'recoveryPlanName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), recovery_plan_name: (encode-path-segment $recovery_plan_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationRecoveryPlans/{recovery_plan_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -5298,9 +5406,9 @@ export def "replication-recovery-plans-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --properties: record # Recovery plan update properties. — shape: {groups?: list}
-]: any -> record<properties: record<allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, currentScenarioStatus: string, currentScenarioStatusDescription: string, failoverDeploymentModel: string, friendlyName: string, groups: list<record>, lastPlannedFailoverTime: string, lastTestFailoverTime: string, lastUnplannedFailoverTime: string, primaryFabricFriendlyName: string, primaryFabricId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, replicationProviders: list<string>>> {
+]: any -> record<properties: record<allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, currentScenarioStatus: string, currentScenarioStatusDescription: string, failoverDeploymentModel: string, friendlyName: string, groups: list<record>, lastPlannedFailoverTime: string, lastTestFailoverTime: string, lastUnplannedFailoverTime: string, primaryFabricFriendlyName: string, primaryFabricId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, replicationProviders: list<string>>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5308,6 +5416,7 @@ export def "replication-recovery-plans-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($recovery_plan_name | is-empty) { error make --unspanned { msg: "path parameter 'recoveryPlanName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), recovery_plan_name: (encode-path-segment $recovery_plan_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationRecoveryPlans/{recovery_plan_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -5347,9 +5456,9 @@ export def "replication-recovery-plans-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   properties: record # Recovery plan creation properties. — shape: {failoverDeploymentModel?: "NotApplicable"|"Classic"|"ResourceManager", groups: list, primaryFabricId: string, recoveryFabricId: string}
-]: any -> record<properties: record<allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, currentScenarioStatus: string, currentScenarioStatusDescription: string, failoverDeploymentModel: string, friendlyName: string, groups: list<record>, lastPlannedFailoverTime: string, lastTestFailoverTime: string, lastUnplannedFailoverTime: string, primaryFabricFriendlyName: string, primaryFabricId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, replicationProviders: list<string>>> {
+]: any -> record<properties: record<allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, currentScenarioStatus: string, currentScenarioStatusDescription: string, failoverDeploymentModel: string, friendlyName: string, groups: list<record>, lastPlannedFailoverTime: string, lastTestFailoverTime: string, lastUnplannedFailoverTime: string, primaryFabricFriendlyName: string, primaryFabricId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, replicationProviders: list<string>>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5357,6 +5466,7 @@ export def "replication-recovery-plans-create" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($recovery_plan_name | is-empty) { error make --unspanned { msg: "path parameter 'recoveryPlanName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), recovery_plan_name: (encode-path-segment $recovery_plan_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationRecoveryPlans/{recovery_plan_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -5395,14 +5505,15 @@ export def "replication-recovery-plans-failover-commit" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, currentScenarioStatus: string, currentScenarioStatusDescription: string, failoverDeploymentModel: string, friendlyName: string, groups: list<record>, lastPlannedFailoverTime: string, lastTestFailoverTime: string, lastUnplannedFailoverTime: string, primaryFabricFriendlyName: string, primaryFabricId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, replicationProviders: list<string>>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, currentScenarioStatus: string, currentScenarioStatusDescription: string, failoverDeploymentModel: string, friendlyName: string, groups: list<record>, lastPlannedFailoverTime: string, lastTestFailoverTime: string, lastUnplannedFailoverTime: string, primaryFabricFriendlyName: string, primaryFabricId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, replicationProviders: list<string>>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($recovery_plan_name | is-empty) { error make --unspanned { msg: "path parameter 'recoveryPlanName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), recovery_plan_name: (encode-path-segment $recovery_plan_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationRecoveryPlans/{recovery_plan_name}/failoverCommit") $qp $auth.query)
   let accept_val = "application/json"
@@ -5440,9 +5551,9 @@ export def "replication-recovery-plans-planned-failover" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   properties: record # Recovery plan planned failover input properties. — shape: {failoverDirection: "PrimaryToRecovery"|"RecoveryToPrimary", providerSpecificDetails?: list}
-]: any -> record<properties: record<allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, currentScenarioStatus: string, currentScenarioStatusDescription: string, failoverDeploymentModel: string, friendlyName: string, groups: list<record>, lastPlannedFailoverTime: string, lastTestFailoverTime: string, lastUnplannedFailoverTime: string, primaryFabricFriendlyName: string, primaryFabricId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, replicationProviders: list<string>>> {
+]: any -> record<properties: record<allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, currentScenarioStatus: string, currentScenarioStatusDescription: string, failoverDeploymentModel: string, friendlyName: string, groups: list<record>, lastPlannedFailoverTime: string, lastTestFailoverTime: string, lastUnplannedFailoverTime: string, primaryFabricFriendlyName: string, primaryFabricId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, replicationProviders: list<string>>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5450,6 +5561,7 @@ export def "replication-recovery-plans-planned-failover" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($recovery_plan_name | is-empty) { error make --unspanned { msg: "path parameter 'recoveryPlanName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), recovery_plan_name: (encode-path-segment $recovery_plan_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationRecoveryPlans/{recovery_plan_name}/plannedFailover") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -5488,14 +5600,15 @@ export def "replication-recovery-plans-reprotect" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, currentScenarioStatus: string, currentScenarioStatusDescription: string, failoverDeploymentModel: string, friendlyName: string, groups: list<record>, lastPlannedFailoverTime: string, lastTestFailoverTime: string, lastUnplannedFailoverTime: string, primaryFabricFriendlyName: string, primaryFabricId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, replicationProviders: list<string>>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, currentScenarioStatus: string, currentScenarioStatusDescription: string, failoverDeploymentModel: string, friendlyName: string, groups: list<record>, lastPlannedFailoverTime: string, lastTestFailoverTime: string, lastUnplannedFailoverTime: string, primaryFabricFriendlyName: string, primaryFabricId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, replicationProviders: list<string>>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($recovery_plan_name | is-empty) { error make --unspanned { msg: "path parameter 'recoveryPlanName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), recovery_plan_name: (encode-path-segment $recovery_plan_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationRecoveryPlans/{recovery_plan_name}/reProtect") $qp $auth.query)
   let accept_val = "application/json"
@@ -5533,9 +5646,9 @@ export def "replication-recovery-plans-test-failover" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   properties: record # Recovery plan test failover input properties. — shape: {failoverDirection: "PrimaryToRecovery"|"RecoveryToPrimary", networkId?: string, networkType: string, providerSpecificDetails?: list, skipTestFailoverCleanup?: string}
-]: any -> record<properties: record<allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, currentScenarioStatus: string, currentScenarioStatusDescription: string, failoverDeploymentModel: string, friendlyName: string, groups: list<record>, lastPlannedFailoverTime: string, lastTestFailoverTime: string, lastUnplannedFailoverTime: string, primaryFabricFriendlyName: string, primaryFabricId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, replicationProviders: list<string>>> {
+]: any -> record<properties: record<allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, currentScenarioStatus: string, currentScenarioStatusDescription: string, failoverDeploymentModel: string, friendlyName: string, groups: list<record>, lastPlannedFailoverTime: string, lastTestFailoverTime: string, lastUnplannedFailoverTime: string, primaryFabricFriendlyName: string, primaryFabricId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, replicationProviders: list<string>>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5543,6 +5656,7 @@ export def "replication-recovery-plans-test-failover" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($recovery_plan_name | is-empty) { error make --unspanned { msg: "path parameter 'recoveryPlanName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), recovery_plan_name: (encode-path-segment $recovery_plan_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationRecoveryPlans/{recovery_plan_name}/testFailover") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -5582,9 +5696,9 @@ export def "replication-recovery-plans-test-failover-cleanup" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   properties: record # Recovery plan test failover cleanup input properties. — shape: {comments?: string}
-]: any -> record<properties: record<allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, currentScenarioStatus: string, currentScenarioStatusDescription: string, failoverDeploymentModel: string, friendlyName: string, groups: list<record>, lastPlannedFailoverTime: string, lastTestFailoverTime: string, lastUnplannedFailoverTime: string, primaryFabricFriendlyName: string, primaryFabricId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, replicationProviders: list<string>>> {
+]: any -> record<properties: record<allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, currentScenarioStatus: string, currentScenarioStatusDescription: string, failoverDeploymentModel: string, friendlyName: string, groups: list<record>, lastPlannedFailoverTime: string, lastTestFailoverTime: string, lastUnplannedFailoverTime: string, primaryFabricFriendlyName: string, primaryFabricId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, replicationProviders: list<string>>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5592,6 +5706,7 @@ export def "replication-recovery-plans-test-failover-cleanup" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($recovery_plan_name | is-empty) { error make --unspanned { msg: "path parameter 'recoveryPlanName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), recovery_plan_name: (encode-path-segment $recovery_plan_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationRecoveryPlans/{recovery_plan_name}/testFailoverCleanup") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -5631,9 +5746,9 @@ export def "replication-recovery-plans-unplanned-failover" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   properties: record # Recovery plan unplanned failover input properties. — shape: {failoverDirection: "PrimaryToRecovery"|"RecoveryToPrimary", providerSpecificDetails?: list, sourceSiteOperations: "Required"|"NotRequired"}
-]: any -> record<properties: record<allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, currentScenarioStatus: string, currentScenarioStatusDescription: string, failoverDeploymentModel: string, friendlyName: string, groups: list<record>, lastPlannedFailoverTime: string, lastTestFailoverTime: string, lastUnplannedFailoverTime: string, primaryFabricFriendlyName: string, primaryFabricId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, replicationProviders: list<string>>> {
+]: any -> record<properties: record<allowedOperations: list<string>, currentScenario: record<jobId: string, scenarioName: string, startTime: string>, currentScenarioStatus: string, currentScenarioStatusDescription: string, failoverDeploymentModel: string, friendlyName: string, groups: list<record>, lastPlannedFailoverTime: string, lastTestFailoverTime: string, lastUnplannedFailoverTime: string, primaryFabricFriendlyName: string, primaryFabricId: string, recoveryFabricFriendlyName: string, recoveryFabricId: string, replicationProviders: list<string>>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5641,6 +5756,7 @@ export def "replication-recovery-plans-unplanned-failover" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($recovery_plan_name | is-empty) { error make --unspanned { msg: "path parameter 'recoveryPlanName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), recovery_plan_name: (encode-path-segment $recovery_plan_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationRecoveryPlans/{recovery_plan_name}/unplannedFailover") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -5678,13 +5794,14 @@ export def "replication-recovery-services-providers-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationRecoveryServicesProviders") $qp $auth.query)
   let accept_val = "application/json"
@@ -5720,13 +5837,14 @@ export def "replication-storage-classification-mappings-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationStorageClassificationMappings") $qp $auth.query)
   let accept_val = "application/json"
@@ -5762,13 +5880,14 @@ export def "replication-storage-classifications-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationStorageClassifications") $qp $auth.query)
   let accept_val = "application/json"
@@ -5804,13 +5923,14 @@ export def "supported-operating-systems-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<supportedOsList: list<record>>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<supportedOsList: list<record>>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationSupportedOperatingSystems") $qp $auth.query)
   let accept_val = "application/json"
@@ -5846,13 +5966,14 @@ export def "replication-vault-health-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<containersHealth: record<issues: list, resourceCount: int>, fabricsHealth: record<issues: list, resourceCount: int>, protectedItemsHealth: record<issues: list, resourceCount: int>, vaultErrors: list<record>>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<containersHealth: record<issues: list, resourceCount: int>, fabricsHealth: record<issues: list, resourceCount: int>, protectedItemsHealth: record<issues: list, resourceCount: int>, vaultErrors: list<record>>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationVaultHealth") $qp $auth.query)
   let accept_val = "application/json"
@@ -5888,13 +6009,14 @@ export def "replication-vault-health-refresh" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<containersHealth: record<issues: list, resourceCount: int>, fabricsHealth: record<issues: list, resourceCount: int>, protectedItemsHealth: record<issues: list, resourceCount: int>, vaultErrors: list<record>>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<containersHealth: record<issues: list, resourceCount: int>, fabricsHealth: record<issues: list, resourceCount: int>, protectedItemsHealth: record<issues: list, resourceCount: int>, vaultErrors: list<record>>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationVaultHealth/default/refresh") $qp $auth.query)
   let accept_val = "application/json"
@@ -5930,13 +6052,14 @@ export def "replication-vault-setting-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationVaultSettings") $qp $auth.query)
   let accept_val = "application/json"
@@ -5973,14 +6096,15 @@ export def "replication-vault-setting-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<properties: record<migrationSolutionId: string>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<properties: record<migrationSolutionId: string>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($vault_setting_name | is-empty) { error make --unspanned { msg: "path parameter 'vaultSettingName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), vault_setting_name: (encode-path-segment $vault_setting_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationVaultSettings/{vault_setting_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -6018,9 +6142,9 @@ export def "replication-vault-setting-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   properties: record # Input to create vault setting. — shape: {migrationSolutionId: string}
-]: any -> record<properties: record<migrationSolutionId: string>> {
+]: any -> record<properties: record<migrationSolutionId: string>, id: string, location: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6028,6 +6152,7 @@ export def "replication-vault-setting-create" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($vault_setting_name | is-empty) { error make --unspanned { msg: "path parameter 'vaultSettingName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), vault_setting_name: (encode-path-segment $vault_setting_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationVaultSettings/{vault_setting_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -6065,13 +6190,14 @@ export def "replicationv-centers-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationvCenters") $qp $auth.query)
   let accept_val = "application/json"

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -157,16 +157,17 @@ export def "client-groups-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version.
+  --api-version: string # API version. (required)
   --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
   --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
-]: nothing -> record<properties: record<clientsOf: record<id: string, kind: string, name: string, type: string>>, etag: string, kind: string> {
+]: nothing -> record<properties: record<clientsOf: record<id: string, kind: string, name: string, type: string>>, etag: string, kind: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($client_group_name | is-empty) { error make --unspanned { msg: "path parameter 'clientGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), client_group_name: (encode-path-segment $client_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/clientGroups/{client_group_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -203,7 +204,7 @@ export def "client-groups-list-members" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version.
+  --api-version: string # API version. (required)
   --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
   --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
   --top: int # Page size to use. When not specified, the default page size is 100 records. (format: int32)
@@ -214,6 +215,7 @@ export def "client-groups-list-members" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($client_group_name | is-empty) { error make --unspanned { msg: "path parameter 'clientGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), client_group_name: (encode-path-segment $client_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/clientGroups/{client_group_name}/members") $qp $auth.query)
   let accept_val = "application/json"
@@ -250,7 +252,7 @@ export def "client-groups-get-members-count" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version.
+  --api-version: string # API version. (required)
   --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
   --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
 ]: nothing -> record<accuracy: string, count: int, endTime: string, groupId: string, startTime: string> {
@@ -260,6 +262,7 @@ export def "client-groups-get-members-count" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($client_group_name | is-empty) { error make --unspanned { msg: "path parameter 'clientGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), client_group_name: (encode-path-segment $client_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/clientGroups/{client_group_name}/membersCount") $qp $auth.query)
   let accept_val = "application/json"
@@ -296,7 +299,7 @@ export def "maps-generate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version.
+  --api-version: string # API version. (required)
   --end-time: string # Map interval end time. (format: date-time)
   kind: string@kind-completer # The type of map to create.
   --start-time: string # Map interval start time. (format: date-time)
@@ -307,6 +310,7 @@ export def "maps-generate" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/generateMap") $qp $auth.query)
   let req_body = {"endTime": $end_time, "kind": $kind, "startTime": $start_time} | compact
@@ -344,15 +348,16 @@ export def "machine-groups-list-by-workspace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version.
+  --api-version: string # API version. (required)
   --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
   --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, kind: string>> {
+]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, kind: string, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machineGroups") $qp $auth.query)
   let accept_val = "application/json"
@@ -389,17 +394,18 @@ export def "machine-groups-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version.
+  --api-version: string # API version. (required)
   --etag: string # Resource ETAG.
   --properties: record # Resource properties. — shape: {count?: int, displayName: string, groupType?: "unknown"|"azure-cs"|"azure-sf"|"azure-vmss"|"user-static", machines?: list}
   kind: string@kind-completer-1 # Additional resource type qualifier.
-]: any -> record<etag: string, properties: record<count: int, displayName: string, groupType: string, machines: list<record>>, kind: string> {
+]: any -> record<etag: string, properties: record<count: int, displayName: string, groupType: string, machines: list<record>>, kind: string, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machineGroups") $qp $auth.query)
   let req_body = {"etag": $etag, "properties": $properties, "kind": $kind} | compact
@@ -438,14 +444,15 @@ export def "machine-groups-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version.
-]: nothing -> record<error: record<code: string, message: string>> {
+  --api-version: string # API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($machine_group_name | is-empty) { error make --unspanned { msg: "path parameter 'machineGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), machine_group_name: (encode-path-segment $machine_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machineGroups/{machine_group_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -482,16 +489,17 @@ export def "machine-groups-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version.
+  --api-version: string # API version. (required)
   --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
   --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
-]: nothing -> record<etag: string, properties: record<count: int, displayName: string, groupType: string, machines: list<record>>, kind: string> {
+]: nothing -> record<etag: string, properties: record<count: int, displayName: string, groupType: string, machines: list<record>>, kind: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($machine_group_name | is-empty) { error make --unspanned { msg: "path parameter 'machineGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), machine_group_name: (encode-path-segment $machine_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machineGroups/{machine_group_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -529,11 +537,11 @@ export def "machine-groups-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version.
+  --api-version: string # API version. (required)
   --etag: string # Resource ETAG.
   --properties: record # Resource properties. — shape: {count?: int, displayName: string, groupType?: "unknown"|"azure-cs"|"azure-sf"|"azure-vmss"|"user-static", machines?: list}
   kind: string@kind-completer-1 # Additional resource type qualifier.
-]: any -> record<etag: string, properties: record<count: int, displayName: string, groupType: string, machines: list<record>>, kind: string> {
+]: any -> record<etag: string, properties: record<count: int, displayName: string, groupType: string, machines: list<record>>, kind: string, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -541,6 +549,7 @@ export def "machine-groups-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($machine_group_name | is-empty) { error make --unspanned { msg: "path parameter 'machineGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), machine_group_name: (encode-path-segment $machine_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machineGroups/{machine_group_name}") $qp $auth.query)
   let req_body = {"etag": $etag, "properties": $properties, "kind": $kind} | compact
@@ -578,18 +587,19 @@ export def "machines-list-by-workspace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version.
+  --api-version: string # API version. (required)
   --live: oneof<nothing, bool> # Specifies whether to return live resources (true) or inventory resources (false). Defaults to **true**. When retrieving live resources, the start time (`startTime`) and end time (`endTime`) of the desired interval should be included. When retrieving inventory resources, an optional timestamp (`timestamp`) parameter can be specified to return the version of each resource closest (not-after) that timestamp. (default: true)
   --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
   --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
   --timestamp: string # UTC date and time specifying a time instance relative to which to evaluate each machine resource. Only applies when `live=false`. When not specified, the service uses DateTime.UtcNow. (format: date-time)
   --top: int # Page size to use. When not specified, the default page size is 100 records. (format: int32)
-]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, kind: string>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, kind: string, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "live" $live "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "timestamp" $timestamp "scalar") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machines") $qp $auth.query)
   let accept_val = "application/json"
@@ -626,15 +636,16 @@ export def "machines-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version.
+  --api-version: string # API version. (required)
   --timestamp: string # UTC date and time specifying a time instance relative to which to evaluate the machine resource. When not specified, the service uses DateTime.UtcNow. (format: date-time)
-]: nothing -> record<properties: record<agent: record<agentId: string, clockGranularity: int, dependencyAgentId: string, dependencyAgentRevision: string, dependencyAgentVersion: string, rebootStatus: string>, bootTime: string, computerName: string, displayName: string, fullyQualifiedDomainName: string, hosting: record<kind: string, provider: string>, hypervisor: record<hypervisorType: string, nativeHostMachineId: string>, monitoringState: string, networking: record<defaultIpv4Gateways: list, dnsNames: list, ipv4Interfaces: list, ipv6Interfaces: list, macAddresses: list>, operatingSystem: record<bitness: string, family: string, fullName: string>, resources: record<cpuSpeed: int, cpuSpeedAccuracy: string, cpus: int, physicalMemory: int>, timestamp: string, timezone: record<fullName: string>, virtualMachine: record<nativeHostMachineId: string, nativeMachineId: string, virtualMachineName: string, virtualMachineType: string>, virtualizationState: string>, etag: string, kind: string> {
+]: nothing -> record<properties: record<agent: record<agentId: string, clockGranularity: int, dependencyAgentId: string, dependencyAgentRevision: string, dependencyAgentVersion: string, rebootStatus: string>, bootTime: string, computerName: string, displayName: string, fullyQualifiedDomainName: string, hosting: record<kind: string, provider: string>, hypervisor: record<hypervisorType: string, nativeHostMachineId: string>, monitoringState: string, networking: record<defaultIpv4Gateways: list, dnsNames: list, ipv4Interfaces: list, ipv6Interfaces: list, macAddresses: list>, operatingSystem: record<bitness: string, family: string, fullName: string>, resources: record<cpuSpeed: int, cpuSpeedAccuracy: string, cpus: int, physicalMemory: int>, timestamp: string, timezone: record<fullName: string>, virtualMachine: record<nativeHostMachineId: string, nativeMachineId: string, virtualMachineName: string, virtualMachineType: string>, virtualizationState: string>, etag: string, kind: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($machine_name | is-empty) { error make --unspanned { msg: "path parameter 'machineName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), machine_name: (encode-path-segment $machine_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machines/{machine_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -671,16 +682,17 @@ export def "machines-list-connections" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version.
+  --api-version: string # API version. (required)
   --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
   --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
-]: nothing -> record<nextLink: string, value: table<properties: record, kind: string>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, kind: string, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($machine_name | is-empty) { error make --unspanned { msg: "path parameter 'machineName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), machine_name: (encode-path-segment $machine_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machines/{machine_name}/connections") $qp $auth.query)
   let accept_val = "application/json"
@@ -717,7 +729,7 @@ export def "machines-get-liveness" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version.
+  --api-version: string # API version. (required)
   --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
   --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
 ]: nothing -> record<endTime: string, live: bool, startTime: string> {
@@ -727,6 +739,7 @@ export def "machines-get-liveness" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($machine_name | is-empty) { error make --unspanned { msg: "path parameter 'machineName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), machine_name: (encode-path-segment $machine_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machines/{machine_name}/liveness") $qp $auth.query)
   let accept_val = "application/json"
@@ -763,16 +776,17 @@ export def "machines-list-machine-group-membership" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version.
+  --api-version: string # API version. (required)
   --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
   --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, kind: string>> {
+]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, kind: string, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($machine_name | is-empty) { error make --unspanned { msg: "path parameter 'machineName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), machine_name: (encode-path-segment $machine_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machines/{machine_name}/machineGroups") $qp $auth.query)
   let accept_val = "application/json"
@@ -809,16 +823,17 @@ export def "machines-list-ports" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version.
+  --api-version: string # API version. (required)
   --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
   --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
-]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, kind: string>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, kind: string, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($machine_name | is-empty) { error make --unspanned { msg: "path parameter 'machineName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), machine_name: (encode-path-segment $machine_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machines/{machine_name}/ports") $qp $auth.query)
   let accept_val = "application/json"
@@ -856,10 +871,10 @@ export def "ports-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version.
+  --api-version: string # API version. (required)
   --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
   --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
-]: nothing -> record<properties: record<displayName: string, ipAddress: string, machine: record<id: string, kind: string, name: string, type: string>, monitoringState: string, portNumber: int>, etag: string, kind: string> {
+]: nothing -> record<properties: record<displayName: string, ipAddress: string, machine: record<id: string, kind: string, name: string, type: string>, monitoringState: string, portNumber: int>, etag: string, kind: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -867,6 +882,7 @@ export def "ports-get" [
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($machine_name | is-empty) { error make --unspanned { msg: "path parameter 'machineName' must be non-empty" } }
   if ($port_name | is-empty) { error make --unspanned { msg: "path parameter 'portName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), machine_name: (encode-path-segment $machine_name), port_name: (encode-path-segment $port_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machines/{machine_name}/ports/{port_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -904,10 +920,10 @@ export def "ports-list-accepting-processes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version.
+  --api-version: string # API version. (required)
   --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
   --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
-]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, kind: string>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, kind: string, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -915,6 +931,7 @@ export def "ports-list-accepting-processes" [
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($machine_name | is-empty) { error make --unspanned { msg: "path parameter 'machineName' must be non-empty" } }
   if ($port_name | is-empty) { error make --unspanned { msg: "path parameter 'portName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), machine_name: (encode-path-segment $machine_name), port_name: (encode-path-segment $port_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machines/{machine_name}/ports/{port_name}/acceptingProcesses") $qp $auth.query)
   let accept_val = "application/json"
@@ -952,10 +969,10 @@ export def "ports-list-connections" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version.
+  --api-version: string # API version. (required)
   --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
   --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
-]: nothing -> record<nextLink: string, value: table<properties: record, kind: string>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, kind: string, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -963,6 +980,7 @@ export def "ports-list-connections" [
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($machine_name | is-empty) { error make --unspanned { msg: "path parameter 'machineName' must be non-empty" } }
   if ($port_name | is-empty) { error make --unspanned { msg: "path parameter 'portName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), machine_name: (encode-path-segment $machine_name), port_name: (encode-path-segment $port_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machines/{machine_name}/ports/{port_name}/connections") $qp $auth.query)
   let accept_val = "application/json"
@@ -1000,7 +1018,7 @@ export def "ports-get-liveness" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version.
+  --api-version: string # API version. (required)
   --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
   --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
 ]: nothing -> record<endTime: string, live: bool, startTime: string> {
@@ -1011,6 +1029,7 @@ export def "ports-get-liveness" [
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($machine_name | is-empty) { error make --unspanned { msg: "path parameter 'machineName' must be non-empty" } }
   if ($port_name | is-empty) { error make --unspanned { msg: "path parameter 'portName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), machine_name: (encode-path-segment $machine_name), port_name: (encode-path-segment $port_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machines/{machine_name}/ports/{port_name}/liveness") $qp $auth.query)
   let accept_val = "application/json"
@@ -1047,18 +1066,19 @@ export def "machines-list-processes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version.
+  --api-version: string # API version. (required)
   --live: oneof<nothing, bool> # Specifies whether to return live resources (true) or inventory resources (false). Defaults to **true**. When retrieving live resources, the start time (`startTime`) and end time (`endTime`) of the desired interval should be included. When retrieving inventory resources, an optional timestamp (`timestamp`) parameter can be specified to return the version of each resource closest (not-after) that timestamp. (default: true)
   --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
   --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
   --timestamp: string # UTC date and time specifying a time instance relative to which to evaluate all process resource. Only applies when `live=false`. When not specified, the service uses DateTime.UtcNow. (format: date-time)
-]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, kind: string>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, kind: string, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($machine_name | is-empty) { error make --unspanned { msg: "path parameter 'machineName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "live" $live "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), machine_name: (encode-path-segment $machine_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machines/{machine_name}/processes") $qp $auth.query)
   let accept_val = "application/json"
@@ -1096,9 +1116,9 @@ export def "processes-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version.
+  --api-version: string # API version. (required)
   --timestamp: string # UTC date and time specifying a time instance relative to which to evaluate a resource. When not specified, the service uses DateTime.UtcNow. (format: date-time)
-]: nothing -> record<properties: record<acceptorOf: record<id: string, kind: string, name: string, type: string>, clientOf: record<id: string, kind: string, name: string, type: string>, details: record<commandLine: string, companyName: string, description: string, executablePath: string, fileVersion: string, firstPid: int, internalName: string, persistentKey: string, poolId: int, productName: string, productVersion: string, services: list, workingDirectory: string, zoneName: string>, displayName: string, executableName: string, group: string, hosting: record<kind: string, provider: string>, machine: record<id: string, kind: string, name: string, type: string>, monitoringState: string, role: string, startTime: string, timestamp: string, user: record<userDomain: string, userName: string>>, etag: string, kind: string> {
+]: nothing -> record<properties: record<acceptorOf: record<id: string, kind: string, name: string, type: string>, clientOf: record<id: string, kind: string, name: string, type: string>, details: record<commandLine: string, companyName: string, description: string, executablePath: string, fileVersion: string, firstPid: int, internalName: string, persistentKey: string, poolId: int, productName: string, productVersion: string, services: list, workingDirectory: string, zoneName: string>, displayName: string, executableName: string, group: string, hosting: record<kind: string, provider: string>, machine: record<id: string, kind: string, name: string, type: string>, monitoringState: string, role: string, startTime: string, timestamp: string, user: record<userDomain: string, userName: string>>, etag: string, kind: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1106,6 +1126,7 @@ export def "processes-get" [
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($machine_name | is-empty) { error make --unspanned { msg: "path parameter 'machineName' must be non-empty" } }
   if ($process_name | is-empty) { error make --unspanned { msg: "path parameter 'processName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), machine_name: (encode-path-segment $machine_name), process_name: (encode-path-segment $process_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machines/{machine_name}/processes/{process_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1143,10 +1164,10 @@ export def "processes-list-accepting-ports" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version.
+  --api-version: string # API version. (required)
   --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
   --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
-]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, kind: string>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, kind: string, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1154,6 +1175,7 @@ export def "processes-list-accepting-ports" [
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($machine_name | is-empty) { error make --unspanned { msg: "path parameter 'machineName' must be non-empty" } }
   if ($process_name | is-empty) { error make --unspanned { msg: "path parameter 'processName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), machine_name: (encode-path-segment $machine_name), process_name: (encode-path-segment $process_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machines/{machine_name}/processes/{process_name}/acceptingPorts") $qp $auth.query)
   let accept_val = "application/json"
@@ -1191,10 +1213,10 @@ export def "processes-list-connections" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version.
+  --api-version: string # API version. (required)
   --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
   --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
-]: nothing -> record<nextLink: string, value: table<properties: record, kind: string>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, kind: string, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1202,6 +1224,7 @@ export def "processes-list-connections" [
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($machine_name | is-empty) { error make --unspanned { msg: "path parameter 'machineName' must be non-empty" } }
   if ($process_name | is-empty) { error make --unspanned { msg: "path parameter 'processName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), machine_name: (encode-path-segment $machine_name), process_name: (encode-path-segment $process_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machines/{machine_name}/processes/{process_name}/connections") $qp $auth.query)
   let accept_val = "application/json"
@@ -1239,7 +1262,7 @@ export def "processes-get-liveness" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version.
+  --api-version: string # API version. (required)
   --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
   --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
 ]: nothing -> record<endTime: string, live: bool, startTime: string> {
@@ -1250,6 +1273,7 @@ export def "processes-get-liveness" [
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($machine_name | is-empty) { error make --unspanned { msg: "path parameter 'machineName' must be non-empty" } }
   if ($process_name | is-empty) { error make --unspanned { msg: "path parameter 'processName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), machine_name: (encode-path-segment $machine_name), process_name: (encode-path-segment $process_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/machines/{machine_name}/processes/{process_name}/liveness") $qp $auth.query)
   let accept_val = "application/json"
@@ -1285,15 +1309,16 @@ export def "summaries-get-machines" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version.
+  --api-version: string # API version. (required)
   --start-time: string # UTC date and time specifying the start time of an interval. When not specified the service uses DateTime.UtcNow - 10m (format: date-time)
   --end-time: string # UTC date and time specifying the end time of an interval. When not specified the service uses DateTime.UtcNow (format: date-time)
-]: nothing -> record<properties: record<live: int, os: record<linux: int, windows: int>, total: int>> {
+]: nothing -> record<properties: record<live: int, os: record<linux: int, windows: int>, total: int, endTime: string, startTime: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/features/serviceMap/summaries/machines") $qp $auth.query)
   let accept_val = "application/json"

@@ -1,4 +1,4 @@
-# Auto-generated client for Cloud Testing API vv1
+# Auto-generated client for Cloud Testing API v1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/testing/v1/openapi.json
 # Auth: --token flag or $env.CLOUD_TESTING_API_TOKEN
 
@@ -12,20 +12,10 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
-}
-
-# Merge multiple auth records (AND-form security: every scheme must be sent).
-def merge-auth [parts: list]: nothing -> record {
-  let active = ($parts | where {|p| $p.location != "none" })
-  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
-  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
-  let locs = ($active | each {|p| $p.location } | uniq)
-  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
-  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
 # Serialize a single query parameter based on collection style
@@ -116,6 +106,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 def invalid-matrix-details-completer [] { ["BUILT_FOR_IOS_SIMULATOR" "DETAILS_UNAVAILABLE" "DEVICE_ADMIN_RECEIVER" "FORBIDDEN_PERMISSIONS" "INSTRUMENTATION_ORCHESTRATOR_INCOMPATIBLE" "INVALID_APK_PREVIEW_SDK" "INVALID_DIRECTIVE_ACTION" "INVALID_INPUT_APK" "INVALID_MATRIX_DETAILS_UNSPECIFIED" "INVALID_PACKAGE_NAME" "INVALID_RESOURCE_NAME" "INVALID_ROBO_DIRECTIVES" "MALFORMED_APK" "MALFORMED_APP_BUNDLE" "MALFORMED_IPA" "MALFORMED_TEST_APK" "MALFORMED_XC_TEST_ZIP" "MATRIX_TOO_LARGE" "MISSING_URL_SCHEME" "NO_CODE_APK" "NO_INSTRUMENTATION" "NO_LAUNCHER_ACTIVITY" "NO_MANIFEST" "NO_PACKAGE_NAME" "NO_SIGNATURE" "NO_TESTS_IN_XC_TEST_ZIP" "NO_TEST_RUNNER_CLASS" "PLIST_CANNOT_BE_PARSED" "SCENARIO_LABEL_MALFORMED" "SCENARIO_LABEL_NOT_DECLARED" "SCENARIO_NOT_DECLARED" "SERVICE_NOT_ACTIVATED" "TEST_LOOP_INTENT_FILTER_NOT_FOUND" "TEST_NOT_APP_HOSTED" "TEST_ONLY_APK" "TEST_QUOTA_EXCEEDED" "TEST_SAME_AS_APP" "UNKNOWN_PERMISSION_ERROR" "USE_DESTINATION_ARTIFACTS"] }
 def outcome-summary-completer [] { ["FAILURE" "INCONCLUSIVE" "OUTCOME_SUMMARY_UNSPECIFIED" "SKIPPED" "SUCCESS"] }
 def state-completer [] { ["CANCELLED" "ERROR" "FINISHED" "INCOMPATIBLE_ARCHITECTURE" "INCOMPATIBLE_ENVIRONMENT" "INVALID" "PENDING" "RUNNING" "TEST_STATE_UNSPECIFIED" "UNSUPPORTED_ENVIRONMENT" "VALIDATING"] }
+def environment-type-completer [] { ["ANDROID" "DEVICE_IP_BLOCKS" "ENVIRONMENT_TYPE_UNSPECIFIED" "IOS" "NETWORK_CONFIGURATION" "PROVIDED_SOFTWARE"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -146,8 +137,8 @@ export def commands []: nothing -> table {
 # operationId: testing.applicationDetailService.getApkDetails
 export def "testing-application-detail-service-get-apk-details" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -168,7 +159,7 @@ export def "testing-application-detail-service-get-apk-details" [
   --gcs-path: string # A path to a file in Google Cloud Storage. Example: gs://build-app-1414623860166/app%40debug-unaligned.apk These paths are expected to be url encoded (percent encoding)
 ]: any -> record<apkDetail: record<apkManifest: record<applicationLabel: string, intentFilters: list, maxSdkVersion: int, metadata: list, minSdkVersion: int, packageName: string, targetSdkVersion: int, usesFeature: list, usesPermission: list, versionCode: string, versionName: string>>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TESTING_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TESTING_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/applicationDetailService/getApkDetails" $qp $auth.query)
@@ -202,8 +193,8 @@ export def "testing-application-detail-service-get-apk-details" [
 export def "testing-projects-test-matrices-create" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -237,7 +228,7 @@ export def "testing-projects-test-matrices-create" [
   --timestamp: string # Output only. The time this test matrix was initially created. (format: google-datetime)
 ]: any -> record<clientInfo: record<clientInfoDetails: list<record>, name: string>, environmentMatrix: record<androidDeviceList: record<androidDevices: list>, androidMatrix: record<androidModelIds: list, androidVersionIds: list, locales: list, orientations: list>, iosDeviceList: record<iosDevices: list>>, failFast: bool, flakyTestAttempts: int, invalidMatrixDetails: string, outcomeSummary: string, projectId: string, resultStorage: record<googleCloudStorage: record<gcsPath: string>, resultsUrl: string, toolResultsExecution: record<executionId: string, historyId: string, projectId: string>, toolResultsHistory: record<historyId: string, projectId: string>>, state: string, testExecutions: table<environment: record, id: string, matrixId: string, projectId: string, shard: record, state: string, testDetails: record, testSpecification: record, timestamp: string, toolResultsStep: record>, testMatrixId: string, testSpecification: record<androidInstrumentationTest: record<appApk: record, appBundle: record, appPackageId: string, orchestratorOption: string, shardingOption: record, testApk: record, testPackageId: string, testRunnerClass: string, testTargets: list>, androidRoboTest: record<appApk: record, appBundle: record, appInitialActivity: string, appPackageId: string, maxDepth: int, maxSteps: int, roboDirectives: list, roboMode: string, roboScript: record, startingIntents: list>, androidTestLoop: record<appApk: record, appBundle: record, appPackageId: string, scenarioLabels: list, scenarios: list>, disablePerformanceMetrics: bool, disableVideoRecording: bool, iosTestLoop: record<appBundleId: string, appIpa: record, scenarios: list>, iosTestSetup: record<additionalIpas: list, networkProfile: string, pullDirectories: list, pushFiles: list>, iosXcTest: record<appBundleId: string, testSpecialEntitlements: bool, testsZip: record, xcodeVersion: string, xctestrun: record>, testSetup: record<account: record, additionalApks: list, directoriesToPull: list, dontAutograntPermissions: bool, environmentVariables: list, filesToPush: list, networkProfile: string, systrace: record>, testTimeout: string>, timestamp: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TESTING_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TESTING_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "requestId" $request_id "scalar")] | flatten | str join "&"
@@ -268,8 +259,8 @@ export def "testing-projects-test-matrices-get" [
   project_id: string
   test_matrix_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -288,7 +279,7 @@ export def "testing-projects-test-matrices-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<clientInfo: record<clientInfoDetails: list<record>, name: string>, environmentMatrix: record<androidDeviceList: record<androidDevices: list>, androidMatrix: record<androidModelIds: list, androidVersionIds: list, locales: list, orientations: list>, iosDeviceList: record<iosDevices: list>>, failFast: bool, flakyTestAttempts: int, invalidMatrixDetails: string, outcomeSummary: string, projectId: string, resultStorage: record<googleCloudStorage: record<gcsPath: string>, resultsUrl: string, toolResultsExecution: record<executionId: string, historyId: string, projectId: string>, toolResultsHistory: record<historyId: string, projectId: string>>, state: string, testExecutions: table<environment: record, id: string, matrixId: string, projectId: string, shard: record, state: string, testDetails: record, testSpecification: record, timestamp: string, toolResultsStep: record>, testMatrixId: string, testSpecification: record<androidInstrumentationTest: record<appApk: record, appBundle: record, appPackageId: string, orchestratorOption: string, shardingOption: record, testApk: record, testPackageId: string, testRunnerClass: string, testTargets: list>, androidRoboTest: record<appApk: record, appBundle: record, appInitialActivity: string, appPackageId: string, maxDepth: int, maxSteps: int, roboDirectives: list, roboMode: string, roboScript: record, startingIntents: list>, androidTestLoop: record<appApk: record, appBundle: record, appPackageId: string, scenarioLabels: list, scenarios: list>, disablePerformanceMetrics: bool, disableVideoRecording: bool, iosTestLoop: record<appBundleId: string, appIpa: record, scenarios: list>, iosTestSetup: record<additionalIpas: list, networkProfile: string, pullDirectories: list, pushFiles: list>, iosXcTest: record<appBundleId: string, testSpecialEntitlements: bool, testsZip: record, xcodeVersion: string, xctestrun: record>, testSetup: record<account: record, additionalApks: list, directoriesToPull: list, dontAutograntPermissions: bool, environmentVariables: list, filesToPush: list, networkProfile: string, systrace: record>, testTimeout: string>, timestamp: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TESTING_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TESTING_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($test_matrix_id | is-empty) { error make --unspanned { msg: "path parameter 'testMatrixId' must be non-empty" } }
@@ -318,8 +309,8 @@ export def "testing-projects-test-matrices-cancel" [
   project_id: string
   test_matrix_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -338,7 +329,7 @@ export def "testing-projects-test-matrices-cancel" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<testState: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TESTING_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TESTING_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($test_matrix_id | is-empty) { error make --unspanned { msg: "path parameter 'testMatrixId' must be non-empty" } }
@@ -365,10 +356,10 @@ export def "testing-projects-test-matrices-cancel" [
 # GET /v1/testEnvironmentCatalog/{environmentType}
 # operationId: testing.testEnvironmentCatalog.get
 export def "testing-test-environment-catalog-get" [
-  environment_type: string
+  environment_type: string@environment-type-completer
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -388,7 +379,7 @@ export def "testing-test-environment-catalog-get" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --project-id: string # For authorization, the cloud project requesting the TestEnvironmentCatalog.
 ]: nothing -> record<androidDeviceCatalog: record<models: list<record>, runtimeConfiguration: record<locales: list, orientations: list>, versions: list<record>>, deviceIpBlockCatalog: record<ipBlocks: list<record>>, iosDeviceCatalog: record<models: list<record>, runtimeConfiguration: record<locales: list, orientations: list>, versions: list<record>, xcodeVersions: list<record>>, networkConfigurationCatalog: record<configurations: list<record>>, softwareCatalog: record<androidxOrchestratorVersion: string, orchestratorVersion: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TESTING_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TESTING_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($environment_type | is-empty) { error make --unspanned { msg: "path parameter 'environmentType' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "projectId" $project_id "scalar")] | flatten | str join "&"

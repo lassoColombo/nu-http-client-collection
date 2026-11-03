@@ -1,4 +1,4 @@
-# Auto-generated client for Transport for London Unified API vv1
+# Auto-generated client for Transport for London Unified API v1
 # Source: https://api.apis.guru/v2/specs/tfl.gov.uk/v1/openapi.json
 # Auth: --token flag or $env.TRANSPORT_FOR_LONDON_UNIFIED_API_TOKEN
 
@@ -250,10 +250,11 @@ export def "bike-point-search" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --query: string # The search term e.g. "St. James"
+  --query: string # The search term e.g. "St. James" (required)
 ]: nothing -> table<additionalProperties: list<record>, children: list<any>, childrenUrls: list<string>, commonName: string, distance: float, id: string, lat: float, lon: float, placeType: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/BikePoint/Search" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -324,8 +325,8 @@ export def "cabwise-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --lat: float # Latitude (format: double)
-  --lon: float # Longitude (format: double)
+  --lat: float # Latitude (required, format: double)
+  --lon: float # Longitude (required, format: double)
   --optype: string # Operator Type e.g Minicab, Executive, Limousine
   --wc: string # Wheelchair accessible
   --radius: float # The radius of the bounding circle in metres (format: double)
@@ -337,6 +338,8 @@ export def "cabwise-get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($lat == null) { error make --unspanned { msg: "required query parameter 'lat' missing: pass --lat" } }
+  if ($lon == null) { error make --unspanned { msg: "required query parameter 'lon' missing: pass --lon" } }
   let qp = [(serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "optype" $optype "scalar") (serialize-qp "wc" $wc "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "legacyFormat" $legacy_format "scalar") (serialize-qp "forceXml" $force_xml "scalar") (serialize-qp "twentyFourSevenOnly" $twenty_four_seven_only "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Cabwise/search" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -601,7 +604,7 @@ export def "line-meta-severity" [
 # GET /Line/Mode/{modes}
 # operationId: Line_GetByMode
 export def "line-get-by-mode" [
-  modes: list
+  modes: list<string>
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -638,7 +641,7 @@ export def "line-get-by-mode" [
 # GET /Line/Mode/{modes}/Disruption
 # operationId: Line_DisruptionByMode
 export def "line-disruption-by-mode" [
-  modes: list
+  modes: list<string>
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -675,7 +678,7 @@ export def "line-disruption-by-mode" [
 # GET /Line/Mode/{modes}/Route
 # operationId: Line_RouteByMode
 export def "line-route-by-mode" [
-  modes: list
+  modes: list<string>
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -714,7 +717,7 @@ export def "line-route-by-mode" [
 # GET /Line/Mode/{modes}/Status
 # operationId: Line_StatusByMode
 export def "line-status-by-mode" [
-  modes: list
+  modes: list<string>
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -868,7 +871,7 @@ export def "line-status-by-severity" [
 # GET /Line/{ids}
 # operationId: Line_Get
 export def "line-get" [
-  ids: list
+  ids: list<string>
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -905,7 +908,7 @@ export def "line-get" [
 # GET /Line/{ids}/Arrivals/{stopPointId}
 # operationId: Line_Arrivals
 export def "line-arrivals" [
-  ids: list
+  ids: list<string>
   stop_point_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -947,7 +950,7 @@ export def "line-arrivals" [
 # GET /Line/{ids}/Disruption
 # operationId: Line_Disruption
 export def "line-disruption" [
-  ids: list
+  ids: list<string>
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -984,7 +987,7 @@ export def "line-disruption" [
 # GET /Line/{ids}/Route
 # operationId: Line_LineRoutesByIds
 export def "line-line-routes-by-ids" [
-  ids: list
+  ids: list<string>
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1023,7 +1026,7 @@ export def "line-line-routes-by-ids" [
 # GET /Line/{ids}/Status
 # operationId: Line_StatusByIds
 export def "line-status-by-ids" [
-  ids: list
+  ids: list<string>
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1062,7 +1065,7 @@ export def "line-status-by-ids" [
 # GET /Line/{ids}/Status/{StartDate}/to/{EndDate}
 # operationId: Line_Status
 export def "line-status" [
-  ids: list
+  ids: list<string>
   start_date: string
   end_date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1076,8 +1079,8 @@ export def "line-status" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --detail: oneof<nothing, bool> # Include details of the disruptions that are causing the line status including the affected stops and routes
-  --qp-start-date: string
-  --qp-end-date: string
+  --qp-start-date: string # required
+  --qp-end-date: string # required
   --date-range-start-date: string # format: date-time
   --date-range-end-date: string # format: date-time
 ]: nothing -> table<created: string, crowding: record<passengerFlows: list, trainLoadings: list>, disruptions: list<record>, id: string, lineStatuses: list<record>, modeName: string, modified: string, name: string, routeSections: list<record>, serviceTypes: list<record>> {
@@ -1086,6 +1089,8 @@ export def "line-status" [
   if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
   if ($start_date | is-empty) { error make --unspanned { msg: "path parameter 'StartDate' must be non-empty" } }
   if ($end_date | is-empty) { error make --unspanned { msg: "path parameter 'EndDate' must be non-empty" } }
+  if ($qp_start_date == null) { error make --unspanned { msg: "required query parameter 'startDate' missing: pass --qp-start-date" } }
+  if ($qp_end_date == null) { error make --unspanned { msg: "required query parameter 'endDate' missing: pass --qp-end-date" } }
   let qp = [(serialize-qp "detail" $detail "scalar") (serialize-qp "startDate" $qp_start_date "scalar") (serialize-qp "endDate" $qp_end_date "scalar") (serialize-qp "dateRange.startDate" $date_range_start_date "scalar") (serialize-qp "dateRange.endDate" $date_range_end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ids: (encode-path-array $ids), start_date: (encode-path-segment $start_date), end_date: (encode-path-segment $end_date)} | format pattern "/Line/{ids}/Status/{start_date}/to/{end_date}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1110,7 +1115,7 @@ export def "line-status" [
 # operationId: Line_RouteSequence
 export def "line-route-sequence" [
   id: string
-  direction: string
+  direction: string@direction-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1344,7 +1349,7 @@ export def "mode-arrivals" [
 # GET /Occupancy/BikePoints/{ids}
 # operationId: Occupancy_GetBikePointsOccupancies
 export def "occupancy-get-bike-points-occupancies" [
-  ids: list
+  ids: list<string>
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1487,7 +1492,7 @@ export def "occupancy-get-all-charge-connector-status" [
 # GET /Occupancy/ChargeConnector/{ids}
 # operationId: Occupancy_GetChargeConnectorStatus
 export def "occupancy-get-charge-connector-status" [
-  ids: list
+  ids: list<string>
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1583,12 +1588,13 @@ export def "place-get-streets-by-post-code" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-postcode: string
+  --qp-postcode: string # required
   --postcode-input-postcode: string
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($postcode | is-empty) { error make --unspanned { msg: "path parameter 'Postcode' must be non-empty" } }
+  if ($qp_postcode == null) { error make --unspanned { msg: "required query parameter 'postcode' missing: pass --qp-postcode" } }
   let qp = [(serialize-qp "postcode" $qp_postcode "scalar") (serialize-qp "postcodeInput.postcode" $postcode_input_postcode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({postcode: (encode-path-segment $postcode)} | format pattern "/Place/Address/Streets/{postcode}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1692,11 +1698,12 @@ export def "place-search" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --name: string # The name of the place, you can use the /Place/Types/{types} endpoint to get a list of places for a given type including their names.
+  --name: string # The name of the place, you can use the /Place/Types/{types} endpoint to get a list of places for a given type including their names. (required)
   --types: list<string> # A comma-separated list of the types to return. Max. approx 12 types.
 ]: nothing -> table<additionalProperties: list<record>, children: list<any>, childrenUrls: list<string>, commonName: string, distance: float, id: string, lat: float, lon: float, placeType: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "types" $types "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/Place/Search" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1720,7 +1727,7 @@ export def "place-search" [
 # GET /Place/Type/{types}
 # operationId: Place_GetByType
 export def "place-get-by-type" [
-  types: list
+  types: list<string>
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1798,7 +1805,7 @@ export def "place-get" [
 # GET /Place/{type}/At/{Lat}/{Lon}
 # operationId: Place_GetAt
 export def "place-get-at" [
-  type: list
+  type: list<string>
   lat: string
   lon: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1811,16 +1818,20 @@ export def "place-get-at" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-lat: string
-  --qp-lon: string
-  --location-lat: float # format: double
-  --location-lon: float # format: double
+  --qp-lat: string # required
+  --qp-lon: string # required
+  --location-lat: float # required, format: double
+  --location-lon: float # required, format: double
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($lat | is-empty) { error make --unspanned { msg: "path parameter 'Lat' must be non-empty" } }
   if ($lon | is-empty) { error make --unspanned { msg: "path parameter 'Lon' must be non-empty" } }
+  if ($qp_lat == null) { error make --unspanned { msg: "required query parameter 'lat' missing: pass --qp-lat" } }
+  if ($qp_lon == null) { error make --unspanned { msg: "required query parameter 'lon' missing: pass --qp-lon" } }
+  if ($location_lat == null) { error make --unspanned { msg: "required query parameter 'location.lat' missing: pass --location-lat" } }
+  if ($location_lon == null) { error make --unspanned { msg: "required query parameter 'location.lon' missing: pass --location-lon" } }
   let qp = [(serialize-qp "lat" $qp_lat "scalar") (serialize-qp "lon" $qp_lon "scalar") (serialize-qp "location.lat" $location_lat "scalar") (serialize-qp "location.lon" $location_lon "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({type: (encode-path-array $type), lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/Place/{type}/At/{lat}/{lon}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1844,7 +1855,7 @@ export def "place-get-at" [
 # GET /Place/{type}/overlay/{z}/{Lat}/{Lon}/{width}/{height}
 # operationId: Place_GetOverlay
 export def "place-get-overlay" [
-  type: list
+  type: list<string>
   z: int
   lat: string
   lon: string
@@ -1860,10 +1871,10 @@ export def "place-get-overlay" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-lat: string
-  --qp-lon: string
-  --location-lat: float # format: double
-  --location-lon: float # format: double
+  --qp-lat: string # required
+  --qp-lon: string # required
+  --location-lat: float # required, format: double
+  --location-lon: float # required, format: double
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
@@ -1873,6 +1884,10 @@ export def "place-get-overlay" [
   if ($lon | is-empty) { error make --unspanned { msg: "path parameter 'Lon' must be non-empty" } }
   if ($width | is-empty) { error make --unspanned { msg: "path parameter 'width' must be non-empty" } }
   if ($height | is-empty) { error make --unspanned { msg: "path parameter 'height' must be non-empty" } }
+  if ($qp_lat == null) { error make --unspanned { msg: "required query parameter 'lat' missing: pass --qp-lat" } }
+  if ($qp_lon == null) { error make --unspanned { msg: "required query parameter 'lon' missing: pass --qp-lon" } }
+  if ($location_lat == null) { error make --unspanned { msg: "required query parameter 'location.lat' missing: pass --location-lat" } }
+  if ($location_lon == null) { error make --unspanned { msg: "required query parameter 'location.lon' missing: pass --location-lon" } }
   let qp = [(serialize-qp "lat" $qp_lat "scalar") (serialize-qp "lon" $qp_lon "scalar") (serialize-qp "location.lat" $location_lat "scalar") (serialize-qp "location.lon" $location_lon "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({type: (encode-path-array $type), z: (encode-path-segment $z), lat: (encode-path-segment $lat), lon: (encode-path-segment $lon), width: (encode-path-segment $width), height: (encode-path-segment $height)} | format pattern "/Place/{type}/overlay/{z}/{lat}/{lon}/{width}/{height}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2001,7 +2016,7 @@ export def "road-meta-severities" [
 # GET /Road/all/Disruption/{disruptionIds}
 # operationId: Road_DisruptionById
 export def "road-disruption-by-id" [
-  disruption_ids: list
+  disruption_ids: list<string>
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2050,11 +2065,13 @@ export def "road-disrupted-streets" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --start-date: string # Optional, the start time to filter on. (format: date-time)
-  --end-date: string # Optional, The end time to filter on. (format: date-time)
+  --start-date: string # Optional, the start time to filter on. (required, format: date-time)
+  --end-date: string # Optional, The end time to filter on. (required, format: date-time)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'startDate' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'endDate' missing: pass --end-date" } }
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Road/all/Street/Disruption" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2077,7 +2094,7 @@ export def "road-disrupted-streets" [
 #
 # GET /Road/{ids}
 export def "get-road-ids" [
-  ids: list
+  ids: list<string>
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2114,7 +2131,7 @@ export def "get-road-ids" [
 # GET /Road/{ids}/Disruption
 # operationId: Road_Disruption
 export def "road-disruption" [
-  ids: list
+  ids: list<string>
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2156,7 +2173,7 @@ export def "road-disruption" [
 # GET /Road/{ids}/Status
 # operationId: Road_Status
 export def "road-status" [
-  ids: list
+  ids: list<string>
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2206,10 +2223,11 @@ export def "search-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --query: string # The search query
+  --query: string # The search query (required)
 ]: nothing -> record<from: int, matches: table<id: string, lat: float, lon: float, name: string, url: string>, maxScore: float, page: int, pageSize: int, provider: string, query: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Search" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2243,10 +2261,11 @@ export def "search-bus-schedules" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --query: string # The search query
+  --query: string # The search query (required)
 ]: nothing -> record<from: int, matches: table<id: string, lat: float, lon: float, name: string, url: string>, maxScore: float, page: int, pageSize: int, provider: string, query: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Search/BusSchedules" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2385,17 +2404,20 @@ export def "stop-point-get-by-geo-point" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --stop-types: list<string> # a list of stopTypes that should be returned (a list of valid stop types can be obtained from the StopPoint/meta/stoptypes endpoint)
+  --stop-types: list<string> # a list of stopTypes that should be returned (a list of valid stop types can be obtained from the StopPoint/meta/stoptypes endpoint) (required)
   --radius: int # the radius of the bounding circle in metres (default : 200) (format: int32)
   --use-stop-point-hierarchy: oneof<nothing, bool> # Re-arrange the output into a parent/child hierarchy
   --modes: list<string> # the list of modes to search (comma separated mode names e.g. tube,dlr)
   --categories: list<string> # an optional list of comma separated property categories to return in the StopPoint's property bag. If null or empty, all categories of property are returned. Pass the keyword "none" to return no properties (a valid list of categories can be obtained from the /StopPoint/Meta/categories endpoint)
   --return-lines: oneof<nothing, bool> # true to return the lines that each stop point serves as a nested resource
-  --location-lat: float # format: double
-  --location-lon: float # format: double
+  --location-lat: float # required, format: double
+  --location-lon: float # required, format: double
 ]: nothing -> record<centrePoint: list<float>, page: int, pageSize: int, stopPoints: table<accessibilitySummary: string, additionalProperties: list, children: list, childrenUrls: list, commonName: string, distance: float, fullName: string, hubNaptanCode: string, icsCode: string, id: string, indicator: string, individualStopId: string, lat: float, lineGroup: list, lineModeGroups: list, lines: list, lon: float, modes: list, naptanId: string, naptanMode: string, placeType: string, platformName: string, smsCode: string, stationNaptan: string, status: bool, stopLetter: string, stopType: string, url: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($stop_types == null) { error make --unspanned { msg: "required query parameter 'stopTypes' missing: pass --stop-types" } }
+  if ($location_lat == null) { error make --unspanned { msg: "required query parameter 'location.lat' missing: pass --location-lat" } }
+  if ($location_lon == null) { error make --unspanned { msg: "required query parameter 'location.lon' missing: pass --location-lon" } }
   let qp = [(serialize-qp "stopTypes" $stop_types "multi") (serialize-qp "radius" $radius "scalar") (serialize-qp "useStopPointHierarchy" $use_stop_point_hierarchy "scalar") (serialize-qp "modes" $modes "multi") (serialize-qp "categories" $categories "multi") (serialize-qp "returnLines" $return_lines "scalar") (serialize-qp "location.lat" $location_lat "scalar") (serialize-qp "location.lon" $location_lon "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/StopPoint" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2524,7 +2546,7 @@ export def "stop-point-meta-stop-types" [
 # GET /StopPoint/Mode/{modes}
 # operationId: StopPoint_GetByMode
 export def "stop-point-get-by-mode" [
-  modes: list
+  modes: list<string>
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2563,7 +2585,7 @@ export def "stop-point-get-by-mode" [
 # GET /StopPoint/Mode/{modes}/Disruption
 # operationId: StopPoint_DisruptionByMode
 export def "stop-point-disruption-by-mode" [
-  modes: list
+  modes: list<string>
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2611,7 +2633,7 @@ export def "get-stop-point-search" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --query: string # The query string, case-insensitive. Leading and trailing wildcards are applied automatically.
+  --query: string # The query string, case-insensitive. Leading and trailing wildcards are applied automatically. (required)
   --modes: list<string> # An optional, parameter separated list of the modes to filter by
   --fares-only: oneof<nothing, bool> # True to only return stations in that have Fares data available for single fares to another station.
   --max-results: int # An optional result limit, defaulting to and with a maximum of 50. Since children of the stop point heirarchy are returned for matches, it is possible that the flattened result set will contain more than 50 items. (format: int32)
@@ -2621,6 +2643,7 @@ export def "get-stop-point-search" [
 ]: nothing -> record<from: int, matches: table<id: string, lat: float, lon: float, name: string, url: string>, maxScore: float, page: int, pageSize: int, provider: string, query: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "modes" $modes "multi") (serialize-qp "faresOnly" $fares_only "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "lines" $lines "multi") (serialize-qp "includeHubs" $include_hubs "scalar") (serialize-qp "tflOperatedNationalRailStationsOnly" $tfl_operated_national_rail_stations_only "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/StopPoint/Search" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2698,12 +2721,13 @@ export def "stop-point-get-service-types" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --id: string # The Naptan id of the stop
+  --id: string # The Naptan id of the stop (required)
   --line-ids: list<string> # The lines which contain the given Naptan id (all lines relevant to the given stoppoint if empty)
   --modes: list<string> # The modes which the lines are relevant to (all if empty)
 ]: nothing -> table<lineName: string, lineSpecificServiceTypes: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "lineIds" $line_ids "multi") (serialize-qp "modes" $modes "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/StopPoint/ServiceTypes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2766,7 +2790,7 @@ export def "stop-point-get-by-sms" [
 # GET /StopPoint/Type/{types}
 # operationId: StopPoint_GetByType
 export def "stop-point-get-by-type" [
-  types: list
+  types: list<string>
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2803,7 +2827,7 @@ export def "stop-point-get-by-type" [
 # GET /StopPoint/Type/{types}/page/{page}
 # operationId: StopPoint_GetByTypeWithPagination
 export def "stop-point-get-by-type-with-pagination" [
-  types: list
+  types: list<string>
   page: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2842,7 +2866,7 @@ export def "stop-point-get-by-type-with-pagination" [
 # GET /StopPoint/{ids}
 # operationId: StopPoint_Get
 export def "stop-point-get" [
-  ids: list
+  ids: list<string>
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2881,7 +2905,7 @@ export def "stop-point-get" [
 # GET /StopPoint/{ids}/Disruption
 # operationId: StopPoint_Disruption
 export def "stop-point-disruption" [
-  ids: list
+  ids: list<string>
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2933,11 +2957,12 @@ export def "stop-point-arrival-departures" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --line-ids: list<string> # A comma-separated list of line ids e.g. elizabeth, london-overground, thameslink
+  --line-ids: list<string> # A comma-separated list of line ids e.g. elizabeth, london-overground, thameslink (required)
 ]: nothing -> table<cause: string, departureStatus: string, destinationName: string, destinationNaptanId: string, estimatedTimeOfArrival: string, estimatedTimeOfDeparture: string, minutesAndSecondsToArrival: string, minutesAndSecondsToDeparture: string, naptanId: string, platformName: string, scheduledTimeOfArrival: string, scheduledTimeOfDeparture: string, stationName: string, timing: record<countdownServerAdjustment: string, insert: string, read: string, received: string, sent: string, source: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($line_ids == null) { error make --unspanned { msg: "required query parameter 'lineIds' missing: pass --line-ids" } }
   let qp = [(serialize-qp "lineIds" $line_ids "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/StopPoint/{id}/ArrivalDepartures") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3051,12 +3076,13 @@ export def "stop-point-crowding" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --direction: string@direction-completer # The direction of travel. Can be inbound or outbound.
+  --direction: string@direction-completer # The direction of travel. Can be inbound or outbound. (required)
 ]: nothing -> table<accessibilitySummary: string, additionalProperties: list<record>, children: list<record>, childrenUrls: list<string>, commonName: string, distance: float, fullName: string, hubNaptanCode: string, icsCode: string, id: string, indicator: string, individualStopId: string, lat: float, lineGroup: list<record>, lineModeGroups: list<record>, lines: list<record>, lon: float, modes: list<string>, naptanId: string, naptanMode: string, placeType: string, platformName: string, smsCode: string, stationNaptan: string, status: bool, stopLetter: string, stopType: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($line | is-empty) { error make --unspanned { msg: "path parameter 'line' must be non-empty" } }
+  if ($direction == null) { error make --unspanned { msg: "required query parameter 'direction' missing: pass --direction" } }
   let qp = [(serialize-qp "direction" $direction "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), line: (encode-path-segment $line)} | format pattern "/StopPoint/{id}/Crowding/{line}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3170,11 +3196,12 @@ export def "get-stop-point-id-place-types" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --place-types: list<string> # A comcomma-separated value representing the place types.
+  --place-types: list<string> # A comcomma-separated value representing the place types. (required)
 ]: nothing -> table<additionalProperties: list<record>, children: list<any>, childrenUrls: list<string>, commonName: string, distance: float, id: string, lat: float, lon: float, placeType: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($place_types == null) { error make --unspanned { msg: "required query parameter 'placeTypes' missing: pass --place-types" } }
   let qp = [(serialize-qp "placeTypes" $place_types "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/StopPoint/{id}/placeTypes") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3289,13 +3316,13 @@ export def "travel-time-get-compare-overlay" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --scenario-title: string # The title of the scenario.
-  --time-of-day-id: string # The id for the time of day (AM/INTER/PM)
-  --mode-id: string # The id of the mode.
-  --direction: string@direction-completer-1 # The direction of travel.
-  --travel-time-interval: int # The total minutes between the travel time bands (format: int32)
-  --compare-type: string
-  --compare-value: string
+  --scenario-title: string # The title of the scenario. (required)
+  --time-of-day-id: string # The id for the time of day (AM/INTER/PM) (required)
+  --mode-id: string # The id of the mode. (required)
+  --direction: string@direction-completer-1 # The direction of travel. (required)
+  --travel-time-interval: int # The total minutes between the travel time bands (required, format: int32)
+  --compare-type: string # required
+  --compare-value: string # required
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
@@ -3306,6 +3333,13 @@ export def "travel-time-get-compare-overlay" [
   if ($pin_lon | is-empty) { error make --unspanned { msg: "path parameter 'pinLon' must be non-empty" } }
   if ($width | is-empty) { error make --unspanned { msg: "path parameter 'width' must be non-empty" } }
   if ($height | is-empty) { error make --unspanned { msg: "path parameter 'height' must be non-empty" } }
+  if ($scenario_title == null) { error make --unspanned { msg: "required query parameter 'scenarioTitle' missing: pass --scenario-title" } }
+  if ($time_of_day_id == null) { error make --unspanned { msg: "required query parameter 'timeOfDayId' missing: pass --time-of-day-id" } }
+  if ($mode_id == null) { error make --unspanned { msg: "required query parameter 'modeId' missing: pass --mode-id" } }
+  if ($direction == null) { error make --unspanned { msg: "required query parameter 'direction' missing: pass --direction" } }
+  if ($travel_time_interval == null) { error make --unspanned { msg: "required query parameter 'travelTimeInterval' missing: pass --travel-time-interval" } }
+  if ($compare_type == null) { error make --unspanned { msg: "required query parameter 'compareType' missing: pass --compare-type" } }
+  if ($compare_value == null) { error make --unspanned { msg: "required query parameter 'compareValue' missing: pass --compare-value" } }
   let qp = [(serialize-qp "scenarioTitle" $scenario_title "scalar") (serialize-qp "timeOfDayId" $time_of_day_id "scalar") (serialize-qp "modeId" $mode_id "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "travelTimeInterval" $travel_time_interval "scalar") (serialize-qp "compareType" $compare_type "scalar") (serialize-qp "compareValue" $compare_value "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({z: (encode-path-segment $z), map_center_lat: (encode-path-segment $map_center_lat), map_center_lon: (encode-path-segment $map_center_lon), pin_lat: (encode-path-segment $pin_lat), pin_lon: (encode-path-segment $pin_lon), width: (encode-path-segment $width), height: (encode-path-segment $height)} | format pattern "/TravelTimes/compareOverlay/{z}/mapcenter/{map_center_lat}/{map_center_lon}/pinlocation/{pin_lat}/{pin_lon}/dimensions/{width}/{height}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3346,11 +3380,11 @@ export def "travel-time-get-overlay" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --scenario-title: string # The title of the scenario.
-  --time-of-day-id: string # The id for the time of day (AM/INTER/PM)
-  --mode-id: string # The id of the mode.
-  --direction: string@direction-completer-1 # The direction of travel.
-  --travel-time-interval: int # The total minutes between the travel time bands (format: int32)
+  --scenario-title: string # The title of the scenario. (required)
+  --time-of-day-id: string # The id for the time of day (AM/INTER/PM) (required)
+  --mode-id: string # The id of the mode. (required)
+  --direction: string@direction-completer-1 # The direction of travel. (required)
+  --travel-time-interval: int # The total minutes between the travel time bands (required, format: int32)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
@@ -3361,6 +3395,11 @@ export def "travel-time-get-overlay" [
   if ($pin_lon | is-empty) { error make --unspanned { msg: "path parameter 'pinLon' must be non-empty" } }
   if ($width | is-empty) { error make --unspanned { msg: "path parameter 'width' must be non-empty" } }
   if ($height | is-empty) { error make --unspanned { msg: "path parameter 'height' must be non-empty" } }
+  if ($scenario_title == null) { error make --unspanned { msg: "required query parameter 'scenarioTitle' missing: pass --scenario-title" } }
+  if ($time_of_day_id == null) { error make --unspanned { msg: "required query parameter 'timeOfDayId' missing: pass --time-of-day-id" } }
+  if ($mode_id == null) { error make --unspanned { msg: "required query parameter 'modeId' missing: pass --mode-id" } }
+  if ($direction == null) { error make --unspanned { msg: "required query parameter 'direction' missing: pass --direction" } }
+  if ($travel_time_interval == null) { error make --unspanned { msg: "required query parameter 'travelTimeInterval' missing: pass --travel-time-interval" } }
   let qp = [(serialize-qp "scenarioTitle" $scenario_title "scalar") (serialize-qp "timeOfDayId" $time_of_day_id "scalar") (serialize-qp "modeId" $mode_id "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "travelTimeInterval" $travel_time_interval "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({z: (encode-path-segment $z), map_center_lat: (encode-path-segment $map_center_lat), map_center_lon: (encode-path-segment $map_center_lon), pin_lat: (encode-path-segment $pin_lat), pin_lon: (encode-path-segment $pin_lon), width: (encode-path-segment $width), height: (encode-path-segment $height)} | format pattern "/TravelTimes/overlay/{z}/mapcenter/{map_center_lat}/{map_center_lon}/pinlocation/{pin_lat}/{pin_lon}/dimensions/{width}/{height}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3384,7 +3423,7 @@ export def "travel-time-get-overlay" [
 # GET /Vehicle/{ids}/Arrivals
 # operationId: Vehicle_Get
 export def "vehicle-get" [
-  ids: list
+  ids: list<string>
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -352,12 +352,13 @@ export def "write-tag" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --value: string # Value to write to the tag. Must be a string, number, or boolean.
+  --value: string # Value to write to the tag. Must be a string, number, or boolean. (required)
   --index: float # For array tags, the index to write the value to. (format: int32, default: 0)
 ]: nothing -> record<valueType: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($value == null) { error make --unspanned { msg: "required query parameter 'value' missing: pass --value" } }
   let qp = [(serialize-qp "value" $value "scalar") (serialize-qp "index" $index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/data-store/write/{id}") $qp $auth.query)
   let accept_val = "application/json"

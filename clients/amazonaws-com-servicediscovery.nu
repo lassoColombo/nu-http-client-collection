@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -99,10 +99,12 @@ def auth-scheme-completer [] { ["bearer"] }
 def x-amz-target-completer [] { ["Route53AutoNaming_v20170314.CreateHttpNamespace"] }
 def x-amz-target-completer-1 [] { ["Route53AutoNaming_v20170314.CreatePrivateDnsNamespace"] }
 def x-amz-target-completer-2 [] { ["Route53AutoNaming_v20170314.CreatePublicDnsNamespace"] }
+def type-completer [] { ["HTTP"] }
 def x-amz-target-completer-3 [] { ["Route53AutoNaming_v20170314.CreateService"] }
 def x-amz-target-completer-4 [] { ["Route53AutoNaming_v20170314.DeleteNamespace"] }
 def x-amz-target-completer-5 [] { ["Route53AutoNaming_v20170314.DeleteService"] }
 def x-amz-target-completer-6 [] { ["Route53AutoNaming_v20170314.DeregisterInstance"] }
+def health-status-completer [] { ["ALL" "HEALTHY" "HEALTHY_OR_ELSE_ALL" "UNHEALTHY"] }
 def x-amz-target-completer-7 [] { ["Route53AutoNaming_v20170314.DiscoverInstances"] }
 def x-amz-target-completer-8 [] { ["Route53AutoNaming_v20170314.GetInstance"] }
 def x-amz-target-completer-9 [] { ["Route53AutoNaming_v20170314.GetInstancesHealthStatus"] }
@@ -118,6 +120,7 @@ def x-amz-target-completer-18 [] { ["Route53AutoNaming_v20170314.RegisterInstanc
 def x-amz-target-completer-19 [] { ["Route53AutoNaming_v20170314.TagResource"] }
 def x-amz-target-completer-20 [] { ["Route53AutoNaming_v20170314.UntagResource"] }
 def x-amz-target-completer-21 [] { ["Route53AutoNaming_v20170314.UpdateHttpNamespace"] }
+def status-completer [] { ["HEALTHY" "UNHEALTHY"] }
 def x-amz-target-completer-22 [] { ["Route53AutoNaming_v20170314.UpdateInstanceCustomHealthStatus"] }
 def x-amz-target-completer-23 [] { ["Route53AutoNaming_v20170314.UpdatePrivateDnsNamespace"] }
 def x-amz-target-completer-24 [] { ["Route53AutoNaming_v20170314.UpdatePublicDnsNamespace"] }
@@ -150,6 +153,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateHttpNamespace
+# --Tags item shape: {Key: string, Value: string}
 export def "create-http-namespace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -167,15 +171,16 @@ export def "create-http-namespace" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  name: any
-  --creator-request-id: any
-  --description: any
-  --tags: any
-]: any -> record<OperationId: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  name: string # The name that you want to assign to this namespace.
+  --creator-request-id: string # A unique string that identifies the request and that allows failed CreateHttpNamespace requests to be retried without the risk of running the operation twice. CreatorRequestId can be any unique string (for example, a date/time stamp).
+  --description: string # A description for the namespace.
+  --tags: list # The tags to add to the namespace. Each tag consists of a key and an optional value that you define. Tags keys can be up to 128 characters in length, and tag values can be up to 256 characters in length. — item shape: {Key: string, Value: string}
+]: any -> record<OperationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53AutoNaming_v20170314.CreateHttpNamespace")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "CreatorRequestId": $creator_request_id, "Description": $description, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -201,6 +206,8 @@ export def "create-http-namespace" [
 #
 # POST /
 # operationId: CreatePrivateDnsNamespace
+# --Tags item shape: {Key: string, Value: string}
+# --Properties shape: {DnsProperties: record}
 export def "create-private-dns-namespace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -218,17 +225,18 @@ export def "create-private-dns-namespace" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  name: any
-  --creator-request-id: any
-  --description: any
-  vpc: any
-  --tags: any
-  --properties: any
-]: any -> record<OperationId: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  name: string # The name that you want to assign to this namespace. When you create a private DNS namespace, Cloud Map automatically creates an Amazon Route 53 private hosted zone that has the same name as the namespace.
+  --creator-request-id: string # A unique string that identifies the request and that allows failed CreatePrivateDnsNamespace requests to be retried without the risk of running the operation twice. CreatorRequestId can be any unique string (for example, a date/timestamp).
+  --description: string # A description for the namespace.
+  vpc: string # The ID of the Amazon VPC that you want to associate the namespace with.
+  --tags: list # The tags to add to the namespace. Each tag consists of a key and an optional value that you define. Tags keys can be up to 128 characters in length, and tag values can be up to 256 characters in length. — item shape: {Key: string, Value: string}
+  --properties: record # DNS properties for the private DNS namespace. — shape: {DnsProperties: record}
+]: any -> record<OperationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53AutoNaming_v20170314.CreatePrivateDnsNamespace")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "CreatorRequestId": $creator_request_id, "Description": $description, "Vpc": $vpc, "Tags": $tags, "Properties": $properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -254,6 +262,8 @@ export def "create-private-dns-namespace" [
 #
 # POST /
 # operationId: CreatePublicDnsNamespace
+# --Tags item shape: {Key: string, Value: string}
+# --Properties shape: {DnsProperties: record}
 export def "create-public-dns-namespace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -271,16 +281,17 @@ export def "create-public-dns-namespace" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  name: any
-  --creator-request-id: any
-  --description: any
-  --tags: any
-  --properties: any
-]: any -> record<OperationId: record> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  name: string # The name that you want to assign to this namespace. Do not include sensitive information in the name. The name is publicly available using DNS queries.
+  --creator-request-id: string # A unique string that identifies the request and that allows failed CreatePublicDnsNamespace requests to be retried without the risk of running the operation twice. CreatorRequestId can be any unique string (for example, a date/timestamp).
+  --description: string # A description for the namespace.
+  --tags: list # The tags to add to the namespace. Each tag consists of a key and an optional value that you define. Tags keys can be up to 128 characters in length, and tag values can be up to 256 characters in length. — item shape: {Key: string, Value: string}
+  --properties: record # DNS properties for the public DNS namespace. — shape: {DnsProperties: record}
+]: any -> record<OperationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53AutoNaming_v20170314.CreatePublicDnsNamespace")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "CreatorRequestId": $creator_request_id, "Description": $description, "Tags": $tags, "Properties": $properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -306,6 +317,10 @@ export def "create-public-dns-namespace" [
 #
 # POST /
 # operationId: CreateService
+# --DnsConfig shape: {NamespaceId?: string, RoutingPolicy?: "MULTIVALUE"|"WEIGHTED", DnsRecords: list}
+# --HealthCheckConfig shape: {Type: "HTTP"|"HTTPS"|"TCP", ResourcePath?: string, FailureThreshold?: int}
+# --HealthCheckCustomConfig shape: {FailureThreshold?: int}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -323,20 +338,21 @@ export def "create-service" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  name: any
-  --namespace-id: any
-  --creator-request-id: any
-  --description: any
-  --dns-config: any
-  --health-check-config: any
-  --health-check-custom-config: any
-  --tags: any
-  --type: any
-]: any -> record<Service: record<Id: record, Arn: record, Name: record, NamespaceId: record, Description: record, InstanceCount: record, DnsConfig: record<NamespaceId: record, RoutingPolicy: record, DnsRecords: record>, Type: record, HealthCheckConfig: record<Type: record, ResourcePath: record, FailureThreshold: record>, HealthCheckCustomConfig: record<FailureThreshold: record>, CreateDate: record, CreatorRequestId: record>> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  name: string # The name that you want to assign to the service. Do not include sensitive information in the name if the namespace is discoverable by public DNS queries. If you want Cloud Map to create an SRV record when you register an instance and you're using a system that requires a specific SRV format, such as HAProxy (http://www.haproxy.org/), specify the following for Name: Start the name with an underscore (_), such as _exampleservice. End the name with ._protocol, such as ._tcp. When you register an instance, Cloud Map creates an SRV record and assigns a name to the record by concatenating the service name and the namespace name (for example, _exampleservice._tcp.example.com). For services that are accessible by DNS queries, you can't create multiple services with names that differ only by case (such as EXAMPLE and example). Otherwise, these services have the same DNS name and can't be distinguished. However, if you use a namespace that's only accessible by API calls, then you can create services that with names that differ only by case.
+  --namespace-id: string # The ID of the namespace that you want to use to create the service. The namespace ID must be specified, but it can be specified either here or in the DnsConfig object.
+  --creator-request-id: string # A unique string that identifies the request and that allows failed CreateService requests to be retried without the risk of running the operation twice. CreatorRequestId can be any unique string (for example, a date/timestamp).
+  --description: string # A description for the service.
+  --dns-config: record # A complex type that contains information about the Amazon Route 53 DNS records that you want Cloud Map to create when you register an instance. The record types of a service can only be changed by deleting the service and recreating it with a new Dnsconfig. — shape: {NamespaceId?: string, RoutingPolicy?: "MULTIVALUE"|"WEIGHTED", DnsRecords: list}
+  --health-check-config: record # Public DNS and HTTP namespaces only. A complex type that contains settings for an optional health check. If you specify settings for a health check, Cloud Map associates the health check with the records that you specify in DnsConfig. If you specify a health check configuration, you can specify either HealthCheckCustomConfig or HealthCheckConfig but not both. Health checks are basic Route 53 health checks that monitor an Amazon Web Services endpoint. For information about pricing for health checks, see Amazon Route 53 Pricing (http://aws.amazon.com/route53/pricing/). Note the following about configuring health checks. A and AAAA records If DnsConfig includes configurations for both A and AAAA records, Cloud Map creates a health check that uses the IPv4 address to check the health of the resource. If the endpoint tthat's specified by the IPv4 address is unhealthy, Route 53 considers both the A and AAAA records to be unhealthy. CNAME records You can't specify settings for HealthCheckConfig when the DNSConfig includes CNAME for the value of Type. If you do, the CreateService request will fail with an InvalidInput error. Request interval A Route 53 health checker in each health-checking Amazon Web Services Region sends a health check request to an endpoint every 30 seconds. On average, your endpoint receives a health check request about every two seconds. However, health checkers don't coordinate with one another. Therefore, you might sometimes see several requests in one second that's followed by a few seconds with no health checks at all. Health checking regions Health checkers perform checks from all Route 53 health-checking Regions. For a list of the current Regions, see Regions (https://docs.aws.amazon.com/Route53/latest/APIReference/API_HealthCheckConfig.html#Route53-Type-HealthCheckConfig-Regions). Alias records When you register an instance, if you include the AWS_ALIAS_DNS_NAME attribute, Cloud Map creates a Route 53 alias record. Note the following: Route 53 automatically sets EvaluateTargetHealth to true for alias records. When EvaluateTargetHealth is true, the alias record inherits the health of the referenced Amazon Web Services resource. such as an ELB load balancer. For more information, see EvaluateTargetHealth (https://docs.aws.amazon.com/Route53/latest/APIReference/API_AliasTarget.html#Route53-Type-AliasTarget-EvaluateTargetHealth). If you include HealthCheckConfig and then use the service to register an instance that creates an alias record, Route 53 doesn't create the health check. Charges for health checks Health checks are basic Route 53 health checks that monitor an Amazon Web Services endpoint. For information about pricing for health checks, see Amazon Route 53 Pricing (http://aws.amazon.com/route53/pricing/). — shape: {Type: "HTTP"|"HTTPS"|"TCP", ResourcePath?: string, FailureThreshold?: int}
+  --health-check-custom-config: record # A complex type that contains information about an optional custom health check. A custom health check, which requires that you use a third-party health checker to evaluate the health of your resources, is useful in the following circumstances: You can't use a health check that's defined by HealthCheckConfig because the resource isn't available over the internet. For example, you can use a custom health check when the instance is in an Amazon VPC. (To check the health of resources in a VPC, the health checker must also be in the VPC.) You want to use a third-party health checker regardless of where your resources are located. If you specify a health check configuration, you can specify either HealthCheckCustomConfig or HealthCheckConfig but not both. To change the status of a custom health check, submit an UpdateInstanceCustomHealthStatus request. Cloud Map doesn't monitor the status of the resource, it just keeps a record of the status specified in the most recent UpdateInstanceCustomHealthStatus request. Here's how custom health checks work: You create a service. You register an instance. You configure a third-party health checker to monitor the resource that's associated with the new instance. Cloud Map doesn't check the health of the resource directly. The third-party health-checker determines that the resource is unhealthy and notifies your application. Your application submits an UpdateInstanceCustomHealthStatus request. Cloud Map waits for 30 seconds. If another UpdateInstanceCustomHealthStatus request doesn't arrive during that time to change the status back to healthy, Cloud Map stops routing traffic to the resource. — shape: {FailureThreshold?: int}
+  --tags: list # The tags to add to the service. Each tag consists of a key and an optional value that you define. Tags keys can be up to 128 characters in length, and tag values can be up to 256 characters in length. — item shape: {Key: string, Value: string}
+  --type: string@type-completer # If present, specifies that the service instances are only discoverable using the DiscoverInstances API operation. No DNS records is registered for the service instances. The only valid value is HTTP.
+]: any -> record<Service: record<Id: string, Arn: string, Name: string, NamespaceId: string, Description: string, InstanceCount: int, DnsConfig: record<NamespaceId: string, RoutingPolicy: string, DnsRecords: list>, Type: string, HealthCheckConfig: record<Type: string, ResourcePath: string, FailureThreshold: int>, HealthCheckCustomConfig: record<FailureThreshold: int>, CreateDate: string, CreatorRequestId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53AutoNaming_v20170314.CreateService")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "NamespaceId": $namespace_id, "CreatorRequestId": $creator_request_id, "Description": $description, "DnsConfig": $dns_config, "HealthCheckConfig": $health_check_config, "HealthCheckCustomConfig": $health_check_custom_config, "Tags": $tags, "Type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -379,12 +395,13 @@ export def "delete-namespace" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  id: any
-]: any -> record<OperationId: record> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  id: string # The ID of the namespace that you want to delete.
+]: any -> record<OperationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53AutoNaming_v20170314.DeleteNamespace")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -427,12 +444,13 @@ export def "delete-service" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  id: any
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  id: string # The ID of the service that you want to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53AutoNaming_v20170314.DeleteService")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -475,13 +493,14 @@ export def "deregister-instance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  service_id: any
-  instance_id: any
-]: any -> record<OperationId: record> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  service_id: string # The ID of the service that the instance is associated with.
+  instance_id: string # The value that you specified for Id in the RegisterInstance (https://docs.aws.amazon.com/cloud-map/latest/api/API_RegisterInstance.html) request.
+]: any -> record<OperationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53AutoNaming_v20170314.DeregisterInstance")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServiceId": $service_id, "InstanceId": $instance_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -524,17 +543,18 @@ export def "discover-instances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  namespace_name: any
-  service_name: any
-  --max-results: any
-  --query-parameters: any
-  --optional-parameters: any
-  --health-status: any
-]: any -> record<Instances: record> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  namespace_name: string # The HttpName name of the namespace. It's found in the HttpProperties member of the Properties member of the namespace.
+  service_name: string # The name of the service that you specified when you registered the instance.
+  --max-results: int # The maximum number of instances that you want Cloud Map to return in the response to a DiscoverInstances request. If you don't specify a value for MaxResults, Cloud Map returns up to 100 instances.
+  --query-parameters: record # Filters to scope the results based on custom attributes for the instance (for example, {version=v1, az=1a}). Only instances that match all the specified key-value pairs are returned.
+  --optional-parameters: record # Opportunistic filters to scope the results based on custom attributes. If there are instances that match both the filters specified in both the QueryParameters parameter and this parameter, all of these instances are returned. Otherwise, the filters are ignored, and only instances that match the filters that are specified in the QueryParameters parameter are returned.
+  --health-status: string@health-status-completer # The health status of the instances that you want to discover. This parameter is ignored for services that don't have a health check configured, and all instances are returned. HEALTHY Returns healthy instances. UNHEALTHY Returns unhealthy instances. ALL Returns all instances. HEALTHY_OR_ELSE_ALL Returns healthy instances, unless none are reporting a healthy state. In that case, return all instances. This is also called failing open.
+]: any -> record<Instances: table<InstanceId: string, NamespaceName: string, ServiceName: string, HealthStatus: string, Attributes: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53AutoNaming_v20170314.DiscoverInstances")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"NamespaceName": $namespace_name, "ServiceName": $service_name, "MaxResults": $max_results, "QueryParameters": $query_parameters, "OptionalParameters": $optional_parameters, "HealthStatus": $health_status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -577,13 +597,14 @@ export def "get-instance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  service_id: any
-  instance_id: any
-]: any -> record<Instance: record<Id: record, CreatorRequestId: record, Attributes: record>> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  service_id: string # The ID of the service that the instance is associated with.
+  instance_id: string # The ID of the instance that you want to get information about.
+]: any -> record<Instance: record<Id: string, CreatorRequestId: string, Attributes: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53AutoNaming_v20170314.GetInstance")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServiceId": $service_id, "InstanceId": $instance_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -628,15 +649,16 @@ export def "get-instances-health-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  service_id: any
-  --instances: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<Status: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  service_id: string # The ID of the service that the instance is associated with.
+  --instances: list<string> # An array that contains the IDs of all the instances that you want to get the health status for. If you omit Instances, Cloud Map returns the health status for all the instances that are associated with the specified service. To get the IDs for the instances that you've registered by using a specified service, submit a ListInstances (https://docs.aws.amazon.com/cloud-map/latest/api/API_ListInstances.html) request.
+  --max-results-body: int # The maximum number of instances that you want Cloud Map to return in the response to a GetInstancesHealthStatus request. If you don't specify a value for MaxResults, Cloud Map returns up to 100 instances. (body field)
+  --next-token-body: string # For the first GetInstancesHealthStatus request, omit this value. If more than MaxResults instances match the specified criteria, you can submit another GetInstancesHealthStatus request to get the next group of results. Specify the value of NextToken from the previous response in the next request. (body field)
+]: any -> record<Status: record, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53AutoNaming_v20170314.GetInstancesHealthStatus")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ServiceId": $service_id, "Instances": $instances, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -680,12 +702,13 @@ export def "get-namespace" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  id: any
-]: any -> record<Namespace: record<Id: record, Arn: record, Name: record, Type: record, Description: record, ServiceCount: record, Properties: record<DnsProperties: record, HttpProperties: record>, CreateDate: record, CreatorRequestId: record>> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  id: string # The ID of the namespace that you want to get information about.
+]: any -> record<Namespace: record<Id: string, Arn: string, Name: string, Type: string, Description: string, ServiceCount: int, Properties: record<DnsProperties: record, HttpProperties: record>, CreateDate: string, CreatorRequestId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53AutoNaming_v20170314.GetNamespace")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -728,12 +751,13 @@ export def "get-operation" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  operation_id: any
-]: any -> record<Operation: record<Id: record, Type: record, Status: record, ErrorMessage: record, ErrorCode: record, CreateDate: record, UpdateDate: record, Targets: record>> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  operation_id: string # The ID of the operation that you want to get more information about.
+]: any -> record<Operation: record<Id: string, Type: string, Status: string, ErrorMessage: string, ErrorCode: string, CreateDate: string, UpdateDate: string, Targets: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53AutoNaming_v20170314.GetOperation")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OperationId": $operation_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -776,12 +800,13 @@ export def "get-service" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  id: any
-]: any -> record<Service: record<Id: record, Arn: record, Name: record, NamespaceId: record, Description: record, InstanceCount: record, DnsConfig: record<NamespaceId: record, RoutingPolicy: record, DnsRecords: record>, Type: record, HealthCheckConfig: record<Type: record, ResourcePath: record, FailureThreshold: record>, HealthCheckCustomConfig: record<FailureThreshold: record>, CreateDate: record, CreatorRequestId: record>> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  id: string # The ID of the service that you want to get settings for.
+]: any -> record<Service: record<Id: string, Arn: string, Name: string, NamespaceId: string, Description: string, InstanceCount: int, DnsConfig: record<NamespaceId: string, RoutingPolicy: string, DnsRecords: list>, Type: string, HealthCheckConfig: record<Type: string, ResourcePath: string, FailureThreshold: int>, HealthCheckCustomConfig: record<FailureThreshold: int>, CreateDate: string, CreatorRequestId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53AutoNaming_v20170314.GetService")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -826,14 +851,15 @@ export def "list-instances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  service_id: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<Instances: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  service_id: string # The ID of the service that you want to list instances for.
+  --next-token-body: string # For the first ListInstances request, omit this value. If more than MaxResults instances match the specified criteria, you can submit another ListInstances request to get the next group of results. Specify the value of NextToken from the previous response in the next request. (body field)
+  --max-results-body: int # The maximum number of instances that you want Cloud Map to return in the response to a ListInstances request. If you don't specify a value for MaxResults, Cloud Map returns up to 100 instances. (body field)
+]: any -> record<Instances: table<Id: string, Attributes: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53AutoNaming_v20170314.ListInstances")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ServiceId": $service_id, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -860,6 +886,7 @@ export def "list-instances" [
 #
 # POST /
 # operationId: ListNamespaces
+# --Filters item shape: {Name: "TYPE"|"NAME"|"HTTP_NAME", Values: list<string>, Condition?: "EQ"|"IN"|"BETWEEN"|"BEGINS_WITH"}
 export def "list-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -879,14 +906,15 @@ export def "list-namespaces" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --filters: any
-]: any -> record<Namespaces: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  --next-token-body: string # For the first ListNamespaces request, omit this value. If the response contains NextToken, submit another ListNamespaces request to get the next group of results. Specify the value of NextToken from the previous response in the next request. Cloud Map gets MaxResults namespaces and then filters them based on the specified criteria. It's possible that no namespaces in the first MaxResults namespaces matched the specified criteria but that subsequent groups of MaxResults namespaces do contain namespaces that match the criteria. (body field)
+  --max-results-body: int # The maximum number of namespaces that you want Cloud Map to return in the response to a ListNamespaces request. If you don't specify a value for MaxResults, Cloud Map returns up to 100 namespaces. (body field)
+  --filters: list # A complex type that contains specifications for the namespaces that you want to list. If you specify more than one filter, a namespace must match all filters to be returned by ListNamespaces. — item shape: {Name: "TYPE"|"NAME"|"HTTP_NAME", Values: list<string>, Condition?: "EQ"|"IN"|"BETWEEN"|"BEGINS_WITH"}
+]: any -> record<Namespaces: table<Id: string, Arn: string, Name: string, Type: string, Description: string, ServiceCount: int, Properties: record, CreateDate: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53AutoNaming_v20170314.ListNamespaces")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "Filters": $filters} | compact
@@ -913,6 +941,7 @@ export def "list-namespaces" [
 #
 # POST /
 # operationId: ListOperations
+# --Filters item shape: {Name: "NAMESPACE_ID"|"SERVICE_ID"|"STATUS"|"TYPE"|"UPDATE_DATE", Values: list<string>, Condition?: "EQ"|"IN"|"BETWEEN"|"BEGINS_WITH"}
 export def "list-operations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -932,14 +961,15 @@ export def "list-operations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --filters: any
-]: any -> record<Operations: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  --next-token-body: string # For the first ListOperations request, omit this value. If the response contains NextToken, submit another ListOperations request to get the next group of results. Specify the value of NextToken from the previous response in the next request. Cloud Map gets MaxResults operations and then filters them based on the specified criteria. It's possible that no operations in the first MaxResults operations matched the specified criteria but that subsequent groups of MaxResults operations do contain operations that match the criteria. (body field)
+  --max-results-body: int # The maximum number of items that you want Cloud Map to return in the response to a ListOperations request. If you don't specify a value for MaxResults, Cloud Map returns up to 100 operations. (body field)
+  --filters: list # A complex type that contains specifications for the operations that you want to list, for example, operations that you started between a specified start date and end date. If you specify more than one filter, an operation must match all filters to be returned by ListOperations. — item shape: {Name: "NAMESPACE_ID"|"SERVICE_ID"|"STATUS"|"TYPE"|"UPDATE_DATE", Values: list<string>, Condition?: "EQ"|"IN"|"BETWEEN"|"BEGINS_WITH"}
+]: any -> record<Operations: table<Id: string, Status: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53AutoNaming_v20170314.ListOperations")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "Filters": $filters} | compact
@@ -966,6 +996,7 @@ export def "list-operations" [
 #
 # POST /
 # operationId: ListServices
+# --Filters item shape: {Name: "NAMESPACE_ID", Values: list<string>, Condition?: "EQ"|"IN"|"BETWEEN"|"BEGINS_WITH"}
 export def "list-services" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -985,14 +1016,15 @@ export def "list-services" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --filters: any
-]: any -> record<Services: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  --next-token-body: string # For the first ListServices request, omit this value. If the response contains NextToken, submit another ListServices request to get the next group of results. Specify the value of NextToken from the previous response in the next request. Cloud Map gets MaxResults services and then filters them based on the specified criteria. It's possible that no services in the first MaxResults services matched the specified criteria but that subsequent groups of MaxResults services do contain services that match the criteria. (body field)
+  --max-results-body: int # The maximum number of services that you want Cloud Map to return in the response to a ListServices request. If you don't specify a value for MaxResults, Cloud Map returns up to 100 services. (body field)
+  --filters: list # A complex type that contains specifications for the namespaces that you want to list services for. If you specify more than one filter, an operation must match all filters to be returned by ListServices. — item shape: {Name: "NAMESPACE_ID", Values: list<string>, Condition?: "EQ"|"IN"|"BETWEEN"|"BEGINS_WITH"}
+]: any -> record<Services: table<Id: string, Arn: string, Name: string, Type: string, Description: string, InstanceCount: int, DnsConfig: record, HealthCheckConfig: record, HealthCheckCustomConfig: record, CreateDate: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53AutoNaming_v20170314.ListServices")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "Filters": $filters} | compact
@@ -1036,12 +1068,13 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  resource_arn: any
-]: any -> record<Tags: record> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the resource that you want to retrieve tags for.
+]: any -> record<Tags: table<Key: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53AutoNaming_v20170314.ListTagsForResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceARN": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1084,15 +1117,16 @@ export def "register-instance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  service_id: any
-  instance_id: any
-  --creator-request-id: any
-  attributes: any
-]: any -> record<OperationId: record> {
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  service_id: string # The ID of the service that you want to use for settings for the instance.
+  instance_id: string # An identifier that you want to associate with the instance. Note the following: If the service that's specified by ServiceId includes settings for an SRV record, the value of InstanceId is automatically included as part of the value for the SRV record. For more information, see DnsRecord > Type (https://docs.aws.amazon.com/cloud-map/latest/api/API_DnsRecord.html#cloudmap-Type-DnsRecord-Type). You can use this value to update an existing instance. To register a new instance, you must specify a value that's unique among instances that you register by using the same service. If you specify an existing InstanceId and ServiceId, Cloud Map updates the existing DNS records, if any. If there's also an existing health check, Cloud Map deletes the old health check and creates a new one. The health check isn't deleted immediately, so it will still appear for a while if you submit a ListHealthChecks request, for example. Do not include sensitive information in InstanceId if the namespace is discoverable by public DNS queries and any Type member of DnsRecord for the service contains SRV because the InstanceId is discoverable by public DNS queries.
+  --creator-request-id: string # A unique string that identifies the request and that allows failed RegisterInstance requests to be retried without the risk of executing the operation twice. You must use a unique CreatorRequestId string every time you submit a RegisterInstance request if you're registering additional instances for the same namespace and service. CreatorRequestId can be any unique string (for example, a date/time stamp).
+  attributes: record # A string map that contains the following information for the service that you specify in ServiceId: The attributes that apply to the records that are defined in the service. For each attribute, the applicable value. Do not include sensitive information in the attributes if the namespace is discoverable by public DNS queries. Supported attribute keys include the following: AWS_ALIAS_DNS_NAME If you want Cloud Map to create an Amazon Route 53 alias record that routes traffic to an Elastic Load Balancing load balancer, specify the DNS name that's associated with the load balancer. For information about how to get the DNS name, see "DNSName" in the topic AliasTarget (https://docs.aws.amazon.com/Route53/latest/APIReference/API_AliasTarget.html) in the Route 53 API Reference. Note the following: The configuration for the service that's specified by ServiceId must include settings for an A record, an AAAA record, or both. In the service that's specified by ServiceId, the value of RoutingPolicy must be WEIGHTED. If the service that's specified by ServiceId includes HealthCheckConfig settings, Cloud Map will create the Route 53 health check, but it doesn't associate the health check with the alias record. Auto naming currently doesn't support creating alias records that route traffic to Amazon Web Services resources other than Elastic Load Balancing load balancers. If you specify a value for AWS_ALIAS_DNS_NAME, don't specify values for any of the AWS_INSTANCE attributes. AWS_EC2_INSTANCE_ID HTTP namespaces only. The Amazon EC2 instance ID for the instance. If the AWS_EC2_INSTANCE_ID attribute is specified, then the only other attribute that can be specified is AWS_INIT_HEALTH_STATUS. When the AWS_EC2_INSTANCE_ID attribute is specified, then the AWS_INSTANCE_IPV4 attribute will be filled out with the primary private IPv4 address. AWS_INIT_HEALTH_STATUS If the service configuration includes HealthCheckCustomConfig, you can optionally use AWS_INIT_HEALTH_STATUS to specify the initial status of the custom health check, HEALTHY or UNHEALTHY. If you don't specify a value for AWS_INIT_HEALTH_STATUS, the initial status is HEALTHY. AWS_INSTANCE_CNAME If the service configuration includes a CNAME record, the domain name that you want Route 53 to return in response to DNS queries (for example, example.com). This value is required if the service specified by ServiceId includes settings for an CNAME record. AWS_INSTANCE_IPV4 If the service configuration includes an A record, the IPv4 address that you want Route 53 to return in response to DNS queries (for example, 192.0.2.44). This value is required if the service specified by ServiceId includes settings for an A record. If the service includes settings for an SRV record, you must specify a value for AWS_INSTANCE_IPV4, AWS_INSTANCE_IPV6, or both. AWS_INSTANCE_IPV6 If the service configuration includes an AAAA record, the IPv6 address that you want Route 53 to return in response to DNS queries (for example, 2001:0db8:85a3:0000:0000:abcd:0001:2345). This value is required if the service specified by ServiceId includes settings for an AAAA record. If the service includes settings for an SRV record, you must specify a value for AWS_INSTANCE_IPV4, AWS_INSTANCE_IPV6, or both. AWS_INSTANCE_PORT If the service includes an SRV record, the value that you want Route 53 to return for the port. If the service includes HealthCheckConfig, the port on the endpoint that you want Route 53 to send requests to. This value is required if you specified settings for an SRV record or a Route 53 health check when you created the service. Custom attributes You can add up to 30 custom attributes. For each key-value pair, the maximum length of the attribute name is 255 characters, and the maximum length of the attribute value is 1,024 characters. The total size of all provided attributes (sum of all keys and values) must not exceed 5,000 characters.
+]: any -> record<OperationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53AutoNaming_v20170314.RegisterInstance")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServiceId": $service_id, "InstanceId": $instance_id, "CreatorRequestId": $creator_request_id, "Attributes": $attributes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1118,6 +1152,7 @@ export def "register-instance" [
 #
 # POST /
 # operationId: TagResource
+# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1135,13 +1170,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  resource_arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the resource that you want to retrieve tags for.
+  tags: list # The tags to add to the specified resource. Specifying the tag key is required. You can set the value of a tag to an empty string, but you can't set the value of a tag to null. — item shape: {Key: string, Value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53AutoNaming_v20170314.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceARN": $resource_arn, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1184,13 +1220,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  resource_arn: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the resource that you want to retrieve tags for.
+  tag_keys: list<string> # The tag keys to remove from the specified resource.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53AutoNaming_v20170314.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceARN": $resource_arn, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1216,6 +1253,7 @@ export def "untag-resource" [
 #
 # POST /
 # operationId: UpdateHttpNamespace
+# --Namespace shape: {Description: string}
 export def "update-http-namespace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1233,14 +1271,15 @@ export def "update-http-namespace" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  id: any
-  --updater-request-id: any
-  namespace: any
-]: any -> record<OperationId: record> {
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  id: string # The ID of the namespace that you want to update.
+  --updater-request-id: string # A unique string that identifies the request and that allows failed UpdateHttpNamespace requests to be retried without the risk of running the operation twice. UpdaterRequestId can be any unique string (for example, a date/timestamp).
+  namespace: record # Updated properties for the HTTP namespace. — shape: {Description: string}
+]: any -> record<OperationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53AutoNaming_v20170314.UpdateHttpNamespace")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Id": $id, "UpdaterRequestId": $updater_request_id, "Namespace": $namespace} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1283,14 +1322,15 @@ export def "update-instance-custom-health-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  service_id: any
-  instance_id: any
-  status: any
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  service_id: string # The ID of the service that includes the configuration for the custom health check that you want to change the status for.
+  instance_id: string # The ID of the instance that you want to change the health status for.
+  status: string@status-completer # The new status of the instance, HEALTHY or UNHEALTHY.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53AutoNaming_v20170314.UpdateInstanceCustomHealthStatus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServiceId": $service_id, "InstanceId": $instance_id, "Status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1316,6 +1356,7 @@ export def "update-instance-custom-health-status" [
 #
 # POST /
 # operationId: UpdatePrivateDnsNamespace
+# --Namespace shape: {Description?: string, Properties?: record}
 export def "update-private-dns-namespace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1333,14 +1374,15 @@ export def "update-private-dns-namespace" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  id: any
-  --updater-request-id: any
-  namespace: any
-]: any -> record<OperationId: record> {
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  id: string # The ID of the namespace that you want to update.
+  --updater-request-id: string # A unique string that identifies the request and that allows failed UpdatePrivateDnsNamespace requests to be retried without the risk of running the operation twice. UpdaterRequestId can be any unique string (for example, a date/timestamp).
+  namespace: record # Updated properties for the private DNS namespace. — shape: {Description?: string, Properties?: record}
+]: any -> record<OperationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53AutoNaming_v20170314.UpdatePrivateDnsNamespace")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Id": $id, "UpdaterRequestId": $updater_request_id, "Namespace": $namespace} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1366,6 +1408,7 @@ export def "update-private-dns-namespace" [
 #
 # POST /
 # operationId: UpdatePublicDnsNamespace
+# --Namespace shape: {Description?: string, Properties?: record}
 export def "update-public-dns-namespace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1383,14 +1426,15 @@ export def "update-public-dns-namespace" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  id: any
-  --updater-request-id: any
-  namespace: any
-]: any -> record<OperationId: record> {
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  id: string # The ID of the namespace being updated.
+  --updater-request-id: string # A unique string that identifies the request and that allows failed UpdatePublicDnsNamespace requests to be retried without the risk of running the operation twice. UpdaterRequestId can be any unique string (for example, a date/timestamp).
+  namespace: record # Updated properties for the public DNS namespace. — shape: {Description?: string, Properties?: record}
+]: any -> record<OperationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53AutoNaming_v20170314.UpdatePublicDnsNamespace")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Id": $id, "UpdaterRequestId": $updater_request_id, "Namespace": $namespace} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1416,6 +1460,7 @@ export def "update-public-dns-namespace" [
 #
 # POST /
 # operationId: UpdateService
+# --Service shape: {Description?: string, DnsConfig?: record, HealthCheckConfig?: record}
 export def "update-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1433,13 +1478,14 @@ export def "update-service" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  id: any
-  service: any
-]: any -> record<OperationId: record> {
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  id: string # The ID of the service that you want to update.
+  service: record # A complex type that contains changes to an existing service. — shape: {Description?: string, DnsConfig?: record, HealthCheckConfig?: record}
+]: any -> record<OperationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Route53AutoNaming_v20170314.UpdateService")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Id": $id, "Service": $service} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

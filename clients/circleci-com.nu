@@ -1,4 +1,4 @@
-# Auto-generated client for CircleCI REST API vv1
+# Auto-generated client for CircleCI REST API v1
 # Source: https://api.apis.guru/v2/specs/circleci.com/v1/openapi.json
 # Auth: --token flag or $env.CIRCLECI_REST_API_TOKEN
 
@@ -170,8 +170,8 @@ export def "get-me" [
 #
 # GET /project/{username}/{project}
 export def "get-project-username-project" [
-  username: any
-  project: any
+  username: string
+  project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -341,7 +341,7 @@ export def "post-project-username-project-checkout-key" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: string
-]: any -> any {
+]: any -> record<fingerprint: string, preferred: bool, public_key: string, time: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
@@ -421,7 +421,7 @@ export def "get-project-username-project-checkout-key-fingerprint" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<fingerprint: string, preferred: bool, public_key: string, time: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -459,7 +459,7 @@ export def "get-project-username-project-envvar" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<name: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -496,7 +496,7 @@ export def "post-project-username-project-envvar" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<name: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -573,7 +573,7 @@ export def "get-project-username-project-envvar-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<name: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -611,7 +611,7 @@ export def "post-project-username-project-ssh-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string@content-type-completer
+  --content-type: string@content-type-completer # required
   --hostname: string
   --private-key: string
 ]: any -> record<message: string> {
@@ -620,6 +620,7 @@ export def "post-project-username-project-ssh-key" [
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({username: (encode-path-segment $username), project: (encode-path-segment $project)} | format pattern "/project/{username}/{project}/ssh-key") $auth.query)
   let req_body = {"hostname": $hostname, "private_key": $private_key} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

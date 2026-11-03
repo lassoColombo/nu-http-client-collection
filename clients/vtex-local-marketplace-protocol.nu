@@ -1,6 +1,7 @@
 # Auto-generated client for Marketplace Protocol v1.0
 # Source: https://api.apis.guru/v2/specs/vtex.local/Marketplace-Protocol/1.0/openapi.json
-# Auth: --token flag or $env.MARKETPLACE_PROTOCOL_TOKEN
+# Auth (appKey): --token-appkey flag or $env.MARKETPLACE_PROTOCOL_APPKEY_TOKEN
+# Auth (appToken): --token-apptoken flag or $env.MARKETPLACE_PROTOCOL_APPTOKEN_TOKEN
 
 const BASE_URL = "https://vtex.local"
 
@@ -12,8 +13,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-vtex-api-appkey" => { {scheme: $scheme, headers: {X-VTEX-API-AppKey: $token_val}, query: "", location: "header"} }
-    "x-vtex-api-apptoken" => { {scheme: $scheme, headers: {X-VTEX-API-AppToken: $token_val}, query: "", location: "header"} }
+    "x-vtex-api-appkey" => { {scheme: $scheme, headers: {"X-VTEX-API-AppKey": $token_val}, query: "", location: "header"} }
+    "x-vtex-api-apptoken" => { {scheme: $scheme, headers: {"X-VTEX-API-AppToken": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -115,7 +116,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-appkey" "token-apptoken"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "fulfillment-simulation-external-marketplace" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -155,8 +156,8 @@ export def "fulfillment-simulation-external-marketplace" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --affiliate-id: string # The affiliate ID code created by the seller. (default: MNF)
   --sc: int # Trade Policy (Sales Channel) identification. (e.g. 1)
-  --content-type: string # Type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
   --client-profile-data: record # Customer's profile information. — shape: {corporateDocument?: string, corporateName?: string, corporatePhone?: string, customerClass?: string, document?: string, documentType?: string, email?: string, firstName?: string, isCorporate?: bool, lastName?: string, phone?: string, profileCompleteOnLoading?: bool, profileErrorOnLoading?: bool, stateInscription?: string, tradeName?: string}
   --country: string # Three letter ISO code of the country of the shipping address. This value must be sent along with the `postalCode` or `geoCoordinates` values. (e.g. BRA)
   --geo-coordinates: list<float> # Array containing two floats with geocoordinates, first longitude, then latitude. (default: [-47.924747467041016, -15.832582473754883])
@@ -170,6 +171,8 @@ export def "fulfillment-simulation-external-marketplace" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MARKETPLACE_PROTOCOL_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MARKETPLACE_PROTOCOL_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let qp = [(serialize-qp "affiliateId" $affiliate_id "scalar") (serialize-qp "sc" $sc "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/checkout/pub/orderForms/simulation" $qp $auth.query)
   let req_body = {"clientProfileData": $client_profile_data, "country": $country, "geoCoordinates": $geo_coordinates, "isCheckedIn": $is_checked_in, "items": $items, "marketingData": $marketing_data, "postalCode": $postal_code, "selectedSla": $selected_sla, "storeId": $store_id} | compact
@@ -210,14 +213,16 @@ export def "send-category-mapping-vtex-mapper" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Describes the type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
   categories: list # Array with Marketplace parent categories and their information. (default: []) — item shape: {children?: list, id?: string, name?: string}
 ]: any -> any {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MARKETPLACE_PROTOCOL_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MARKETPLACE_PROTOCOL_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/portal.vtexcommercestable.com.br/api/mkp-category-mapper/categories/marketplace/{id}") $auth.query)
   let req_body = {"categories": $categories} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -255,9 +260,9 @@ export def "vtex-mapper-registration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --an: string # Name of the VTEX account. Used as part of the URL. (e.g. accountName)
-  --content-type: string # Describes the type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
+  --an: string # Name of the VTEX account. Used as part of the URL. (required, e.g. accountName)
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
   --category-tree-processing-notification-endpoint: string # The `CategoryTreeProcessingNotificationEndpoint` is optional, and should be an endpoint from the external marketplace, that will be notified after the marketplace's category tree is successfully processed or not. (e.g. https://CategoryTreeProcessingNotificationEndpoint.com/api)
   category_tree_end_point: string # Endpoint that returns categories and attributes according to VTEX Mapper specifications. (e.g. http://api.vtexinternal.com.br/api/{{marketplaceName}}/mapper/categories)
   display_name: string # Marketplace Name, that will be displayed in VTEX Mapper. (e.g. Marketplace A)
@@ -267,6 +272,9 @@ export def "vtex-mapper-registration" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MARKETPLACE_PROTOCOL_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MARKETPLACE_PROTOCOL_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  if ($an == null) { error make --unspanned { msg: "required query parameter 'an' missing: pass --an" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let qp = [(serialize-qp "an" $an "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/portal.vtexcommercestable.com.br/api/mkp-category-mapper/connector/register" $qp $auth.query)
   let req_body = {"CategoryTreeProcessingNotificationEndpoint": $category_tree_processing_notification_endpoint, "categoryTreeEndPoint": $category_tree_end_point, "displayName": $display_name, "mappingEndPoint": $mapping_end_point, "properties": $properties} | compact
@@ -312,9 +320,9 @@ export def "enqueue-new-order" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --an: string # Parameter should indicate the name of the VTEX account where the order is being integrated or updated, meaning the seller responsible for the order. (e.g. apiexamples)
-  --affiliate-id: string # ID identifying the marketplace where the order originates. This ID is configured in the seller's VTEX account, and should be informed to the marketplace. (e.g. MKP)
-  --content-type: string # Describes the type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --affiliate-id: string # ID identifying the marketplace where the order originates. This ID is configured in the seller's VTEX account, and should be informed to the marketplace. (required, e.g. MKP)
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
   --allow-franchises: oneof<nothing, bool> # Boolean indicating whether franchise accounts linked to the main seller should be considered. That is, if the order delivery pickup/SLA can belong to a [franchise account](https://help.vtex.com/en/tutorial/what-is-a-franchise-account--kWQC6RkFSCUFGgY5gSjdl), for example. This field is optional and defaults to `false`. (e.g. false)
   client_profile_data: record # Structure with the customer's information. An order will be identified as corporate if any of the corporate fields are filled out (`corporateDocument`, `corporatePhone`, `corporateName` or `tradeName`). — shape: {corporateDocument: string, corporateName: string, corporatePhone: string, document: string, email: string, firstName: string, lastName: string, phone: string, stateInscription: string, tradeName: string}
   --connector-endpoint: string # String with the connector's base endpoint that will receive notifications about the orders processing results, as well as status updates from VTEX OMS. This field accepts query strings. You can use the models below: - `https://{{externalconnector}}.com` - `https://{{externalconnector.com}}/api/vtex` if you additionaly want to send a relative URL with the endpoint. This field is optional if the connector uses the [App Template](https://developers.vtex.com/vtex-rest-api/docs/external-marketplace-integration-app-template) and authenticates on our request via `VtexIdclientAutCookie`. It is required if the connector is native or does not use the App Template. (e.g. https://{{externalconnector.com}}/api/vtex)
@@ -332,10 +340,14 @@ export def "enqueue-new-order" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MARKETPLACE_PROTOCOL_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MARKETPLACE_PROTOCOL_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
+  if ($affiliate_id == null) { error make --unspanned { msg: "required query parameter 'affiliateId' missing: pass --affiliate-id" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let qp = [(serialize-qp "an" $an "scalar") (serialize-qp "affiliateId" $affiliate_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_name: (encode-path-segment $account_name)} | format pattern "/{account_name}.vtexcommercestable.com.br/api/order-integration/orders") $qp $auth.query)
   let req_body = {"allowFranchises": $allow_franchises, "clientProfileData": $client_profile_data, "connectorEndpoint": $connector_endpoint, "connectorName": $connector_name, "customData": $custom_data, "invoiceData": $invoice_data, "items": $items, "marketplaceOrderId": $marketplace_order_id, "marketplaceOrderStatus": $marketplace_order_status, "marketplacePaymentValue": $marketplace_payment_value, "pickupAccountName": $pickup_account_name, "shippingData": $shipping_data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "allowFranchises") == null) { error make --unspanned { msg: "required body field 'allowFranchises' missing: pass --allow-franchises or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
@@ -372,8 +384,8 @@ export def "update-order-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --an: string # Parameter should indicate the name of the VTEX account where the order is being integrated or updated, meaning the seller responsible for the order. (e.g. apiexamples)
-  --content-type: string # Describes the type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
   connector_endpoint: string # String with the connector's base endpoint that will receive notifications about the orders processing results, as well as status updates from VTEX OMS. This field does not accept query strings. You can use the models below: - `https://{{externalconnector}}.com` - `https://{{externalconnector.com}}/api/vtex` if you additionaly want to send a relative URL with the endpoint. This field is optional if the connector uses the [App Template](https://developers.vtex.com/vtex-rest-api/docs/external-marketplace-integration-app-template) and authenticates on our request via `VtexIdclientAutCookie`. It is required if the connector is native or does not use the App Template. (e.g. https://{{externalconnector.com}}/api/vtex)
   connector_name: string # String with the identifier code of the connector responsible for the order. This field is optional if the connector uses the [App Template](https://developers.vtex.com/vtex-rest-api/docs/external-marketplace-integration-app-template) and authenticates on our request via `VtexIdclientAutCookie`. It is required if the connector is native or does not use the App Template. (e.g. connectorName)
   marketplace_order_id: string # String that indicates the order's ID in the marketplace. (e.g. 7e62fcd3-827b-400d-be8a-f050a79c4976)
@@ -383,6 +395,8 @@ export def "update-order-status" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MARKETPLACE_PROTOCOL_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MARKETPLACE_PROTOCOL_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let qp = [(serialize-qp "an" $an "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_name: (encode-path-segment $account_name)} | format pattern "/{account_name}.vtexcommercestable.com.br/api/order-integration/orders/status") $qp $auth.query)
   let req_body = {"connectorEndpoint": $connector_endpoint, "connectorName": $connector_name, "marketplaceOrderId": $marketplace_order_id, "marketplaceOrderStatus": $marketplace_order_status} | compact
@@ -428,9 +442,9 @@ export def "place-fulfillment-order" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --sc: string # Sales channel. (e.g. 1)
-  --affiliate-id: string # ID identifying the marketplace where the order originates. This ID is configured in the seller's VTEX account, and should be informed to the marketplace. (e.g. MKP)
-  --content-type: string # Type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --affiliate-id: string # ID identifying the marketplace where the order originates. This ID is configured in the seller's VTEX account, and should be informed to the marketplace. (required, e.g. MKP)
+  --content-type: string # Type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
   client_profile_data: record # Customer's profile information. — shape: {corporateDocument?: string, corporateName?: string, corporatePhone?: string, document: string, documentType: string, email: string, firstName: string, isCorporate?: bool, lastName: string, phone?: string, stateInscription?: string, tradeName?: string}
   --is-created-async: oneof<nothing, bool> # Indicates whether an order is created. It must be `true` if an order is being placed with [Price divergence](https://help.vtex.com/en/tutorial/price-divergence-rule--6RlFLhD1rIRRshl83KnCjW#), otherwise the request will not work. (e.g. false)
   items: list # Array of objects containing information on each of the order's items. — item shape: {attachments?: list<string>, bundleItems?: list, commission?: int, freightCommission?: int, id: string, isGift?: bool, itemAttachment?: record, measurementUnit?: string, price?: int, priceTags?: list, quantity: int, seller: string, unitMultiplier?: int}
@@ -447,6 +461,9 @@ export def "place-fulfillment-order" [
   let base = ($base_url | default $BASE_URL)
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($environment | is-empty) { error make --unspanned { msg: "path parameter 'environment' must be non-empty" } }
+  if ($affiliate_id == null) { error make --unspanned { msg: "required query parameter 'affiliateId' missing: pass --affiliate-id" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let qp = [(serialize-qp "sc" $sc "scalar") (serialize-qp "affiliateId" $affiliate_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_name: (encode-path-segment $account_name), environment: (encode-path-segment $environment)} | format pattern "/{account_name}.{environment}.com.br/api/fulfillment/pvt/orders") $qp $auth.query)
   let req_body = {"clientProfileData": $client_profile_data, "isCreatedAsync": $is_created_async, "items": $items, "marketingData": $marketing_data, "marketplaceOrderId": $marketplace_order_id, "marketplacePaymentValue": $marketplace_payment_value, "marketplaceServicesEndpoint": $marketplace_services_endpoint, "openTextField": $open_text_field, "paymentData": $payment_data, "shippingData": $shipping_data} | compact
@@ -489,9 +506,9 @@ export def "authorize-dispatch-for-fulfillment-order" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --sc: string # Sales channel. (e.g. 1)
-  --affiliate-id: string # ID identifying the marketplace where the order originates. This ID is configured in the seller's VTEX account, and should be informed to the marketplace. (e.g. MKP)
-  --content-type: string # Type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --affiliate-id: string # ID identifying the marketplace where the order originates. This ID is configured in the seller's VTEX account, and should be informed to the marketplace. (required, e.g. MKP)
+  --content-type: string # Type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
   --marketplace-order-id: string # ID of the order in the marketplace. It is the same as the `orderId` without the `afilliateId` at the beginning. For instance, if the `orderId` is `"MKP-123"`, the `marketplaceOrderId` is `"123"`. (default: 123)
 ]: any -> any {
   let input = $in
@@ -500,6 +517,9 @@ export def "authorize-dispatch-for-fulfillment-order" [
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($environment | is-empty) { error make --unspanned { msg: "path parameter 'environment' must be non-empty" } }
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
+  if ($affiliate_id == null) { error make --unspanned { msg: "required query parameter 'affiliateId' missing: pass --affiliate-id" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let qp = [(serialize-qp "sc" $sc "scalar") (serialize-qp "affiliateId" $affiliate_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_name: (encode-path-segment $account_name), environment: (encode-path-segment $environment), order_id: (encode-path-segment $order_id)} | format pattern "/{account_name}.{environment}.com.br/api/fulfillment/pvt/orders/{order_id}/fulfill") $qp $auth.query)
   let req_body = {"marketplaceOrderId": $marketplace_order_id} | compact
@@ -540,8 +560,8 @@ export def "fulfillment-simulation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
-  --content-type: string # Describes the type of the content being sent. (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
+  --content-type: string # Describes the type of the content being sent. (required, e.g. application/json)
   --country: string # ISO 3-digit code of the country where the delivery address is located. This field is mandatory, for shopping carts simulations, where both Country and Postal Code are required. This field should be sent as `null` for storefront simulations, where the information is not necessary. (e.g. USA)
   --geo-coordinates: list<string> # Geographic coordinates of the delivery address. This may be used instead of the postalCode, in case the marketplace is configured to accept geolocation. Example of value: `[-22.9443504,-43.1825635]`.
   --items: list # Array containing the cart items. — item shape: {id: string, quantity: int, seller: string}
@@ -594,18 +614,18 @@ export def "order-placement" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-length: string # Length of the request body. (e.g. 2183)
-  --authorization: string # Indicates authorization. (e.g. VTEX key="appKey" token="appToken")
-  --x-vtex-api-appkey: string # VTEX API app key. (e.g. appKey)
-  --x-vtex-api-apptoken: string # VTEX API app token. (e.g. appToken)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
-  --accept-enconding: string # Indicates the types of response enconding the client can understand. (e.g. gzip, deflate)
-  --x-vtex-operation-id: string # VTEX operation ID. (e.g. 8032114b-63e9-4e64-b30c-f7afcf676d7a)
-  --x-forwarded-proto: string # Determines the protocol used by the client in the request. (e.g. https)
-  --x-forwarded-for: string # Identifies the originating IP address of the HTTP client. (e.g. 179.35.30.186, 130.176.35.67, 172.16.247.49)
-  --x-vtex-cache-client-bypass: string # VTEX cache client bypass. (e.g. 1)
-  --content-type: string # Describes the type of the content being sent. (e.g. application/json)
-  --traceparent: string # Identifies the incoming request in a tracing system. (e.g. 00-083c0ca18bc8d94183f333809a70cd64-bf5e9a641e230540-00)
+  --content-length: string # Length of the request body. (required, e.g. 2183)
+  --authorization: string # Indicates authorization. (required, e.g. VTEX key="appKey" token="appToken")
+  --x-vtex-api-appkey: string # VTEX API app key. (required, e.g. appKey)
+  --x-vtex-api-apptoken: string # VTEX API app token. (required, e.g. appToken)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
+  --accept-enconding: string # Indicates the types of response enconding the client can understand. (required, e.g. gzip, deflate)
+  --x-vtex-operation-id: string # VTEX operation ID. (required, e.g. 8032114b-63e9-4e64-b30c-f7afcf676d7a)
+  --x-forwarded-proto: string # Determines the protocol used by the client in the request. (required, e.g. https)
+  --x-forwarded-for: string # Identifies the originating IP address of the HTTP client. (required, e.g. 179.35.30.186, 130.176.35.67, 172.16.247.49)
+  --x-vtex-cache-client-bypass: string # VTEX cache client bypass. (required, e.g. 1)
+  --content-type: string # Describes the type of the content being sent. (required, e.g. application/json)
+  --traceparent: string # Identifies the incoming request in a tracing system. (required, e.g. 00-083c0ca18bc8d94183f333809a70cd64-bf5e9a641e230540-00)
   --client-profile-data: record # Customer's profile information. — shape: {corporateDocument?: string, corporateName?: string, corporatePhone?: string, document: string, documentType: string, email: string, firstName: string, isCorporate: bool, lastName: string, phone?: string, stateInscription?: string, tradeName?: string}
   --items: list # Array of objects containing data about each SKU in the cart. — item shape: {attachments?: list, bundleItems?: list, commission?: int, freightCommission?: int, id?: string, isGift?: bool, itemsAttachment?: list, measurementUnit?: string, price?: int, priceTags?: list, quantity?: int, seller?: string, unitMultiplier?: int}
   --marketing-data: record # Marketing tracking data. If the order has no tracking data, the value will be `null`. — shape: {utmCampaign?: string, utmMedium?: string, utmSource?: string, utmiCampaign?: string, utmiPage?: string, utmiPart?: string}
@@ -620,6 +640,16 @@ export def "order-placement" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MARKETPLACE_PROTOCOL_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MARKETPLACE_PROTOCOL_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($fulfillment_endpoint | is-empty) { error make --unspanned { msg: "path parameter 'fulfillmentEndpoint' must be non-empty" } }
+  if ($content_length == null) { error make --unspanned { msg: "required header parameter 'content-length' missing: pass --content-length" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'authorization' missing: pass --authorization" } }
+  if ($x_vtex_api_appkey == null) { error make --unspanned { msg: "required header parameter 'x-vtex-api-appkey' missing: pass --x-vtex-api-appkey" } }
+  if ($x_vtex_api_apptoken == null) { error make --unspanned { msg: "required header parameter 'x-vtex-api-apptoken' missing: pass --x-vtex-api-apptoken" } }
+  if ($accept_enconding == null) { error make --unspanned { msg: "required header parameter 'accept-enconding' missing: pass --accept-enconding" } }
+  if ($x_vtex_operation_id == null) { error make --unspanned { msg: "required header parameter 'x-vtex-operation-id' missing: pass --x-vtex-operation-id" } }
+  if ($x_forwarded_proto == null) { error make --unspanned { msg: "required header parameter 'x-forwarded-proto' missing: pass --x-forwarded-proto" } }
+  if ($x_forwarded_for == null) { error make --unspanned { msg: "required header parameter 'x-forwarded-for' missing: pass --x-forwarded-for" } }
+  if ($x_vtex_cache_client_bypass == null) { error make --unspanned { msg: "required header parameter 'x-vtex-cache-client-bypass' missing: pass --x-vtex-cache-client-bypass" } }
+  if ($traceparent == null) { error make --unspanned { msg: "required header parameter 'traceparent' missing: pass --traceparent" } }
   let full_url = (build-url $base ({fulfillment_endpoint: (encode-path-segment $fulfillment_endpoint)} | format pattern "/{fulfillment_endpoint}/pvt/orders") $auth.query)
   let req_body = {"clientProfileData": $client_profile_data, "items": $items, "marketingData": $marketing_data, "marketplaceOrderId": $marketplace_order_id, "marketplacePaymentValue": $marketplace_payment_value, "marketplaceServicesEndpoint": $marketplace_services_endpoint, "openTextField": $open_text_field, "paymentData": $payment_data, "shippingData": $shipping_data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -659,8 +689,8 @@ export def "mkp-order-cancellation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
-  --content-type: string # Describes the type of the content being sent. (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
+  --content-type: string # Describes the type of the content being sent. (required, e.g. application/json)
   marketplace_order_id: string # Identifies the order. The seller should use this ID to trigger the cancellation of the corresponding order. (default: 1138342255777-01)
 ]: any -> any {
   let input = $in
@@ -707,8 +737,8 @@ export def "authorize-fulfillment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
-  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
   marketplace_order_id: string # Identifies the order. The seller should use this ID to trigger the fulfillment process of the corresponding order. (e.g. 1138342255777-01)
 ]: any -> any {
   let input = $in
@@ -716,6 +746,7 @@ export def "authorize-fulfillment" [
   let base = ($base_url | default $BASE_URL)
   if ($fulfillment_endpoint | is-empty) { error make --unspanned { msg: "path parameter 'fulfillmentEndpoint' must be non-empty" } }
   if ($seller_order_id | is-empty) { error make --unspanned { msg: "path parameter 'sellerOrderId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({fulfillment_endpoint: (encode-path-segment $fulfillment_endpoint), seller_order_id: (encode-path-segment $seller_order_id)} | format pattern "/{fulfillment_endpoint}/pvt/orders/{seller_order_id}/fulfill") $auth.query)
   let req_body = {"marketplaceOrderId": $marketplace_order_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -755,8 +786,8 @@ export def "cancel-order-in-marketplace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
-  --content-type: string # Describes the type of the content being sent. (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
+  --content-type: string # Describes the type of the content being sent. (required, e.g. application/json)
   reason: string # Insert here the reason for the order's cancellation. (e.g. Product is unavailable)
 ]: any -> any {
   let input = $in
@@ -804,8 +835,8 @@ export def "send-invoice" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
-  --content-type: string # Describes the type of the content being sent. (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
+  --content-type: string # Describes the type of the content being sent. (required, e.g. application/json)
   --courier: string # Courier, if available on invoice. (e.g. courier-example)
   invoice_number: string # Invoice number (e.g. NFe-00002)
   --invoice-value: int # Invoice value. (e.g. 6000)
@@ -860,8 +891,8 @@ export def "send-tracking-information" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
-  --content-type: string # Describes the type of the content being sent. (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
+  --content-type: string # Describes the type of the content being sent. (required, e.g. application/json)
   --courier: string # Courier. (e.g. courier-example)
   --dispatched-date: string # Date of order dispatch. (e.g. 2021-06-09)
   --tracking-number: string # Tracking number. (e.g. 12345678abc)
@@ -914,8 +945,8 @@ export def "update-tracking-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
-  --content-type: string # Describes the type of the content being sent. (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
+  --content-type: string # Describes the type of the content being sent. (required, e.g. application/json)
   --events: list # Array containing information on each tracking event received. — item shape: {city?: string, date?: string, description?: string, state?: string}
   --is-delivered: oneof<nothing, bool> # Indicates if order has been delivered. `false` if it is in transit. (e.g. true)
 ]: any -> any {
@@ -928,6 +959,7 @@ export def "update-tracking-status" [
   let full_url = (build-url $base ({marketplace_services_endpoint: (encode-path-segment $marketplace_services_endpoint), marketplace_order_id: (encode-path-segment $marketplace_order_id), invoice_number: (encode-path-segment $invoice_number)} | format pattern "/{marketplace_services_endpoint}/pvt/orders/{marketplace_order_id}/invoice/{invoice_number}/tracking") $auth.query)
   let req_body = {"events": $events, "isDelivered": $is_delivered} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "isDelivered") == null) { error make --unspanned { msg: "required body field 'isDelivered' missing: pass --is-delivered or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact

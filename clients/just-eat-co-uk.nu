@@ -12,8 +12,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -124,6 +124,8 @@ def auth-scheme-completer [] { ["bearer" "basic" "basic-credentials"] }
 def tenant-completer [] { ["au" "dk" "es" "ie" "it" "no" "nz" "uk"] }
 def account-type-completer [] { ["registered"] }
 def registration-source-completer [] { ["Guest" "Native"] }
+def type-completer [] { ["marketing"] }
+def channel-completer [] { ["email" "push" "sms"] }
 def event-completer [] { ["AtDeliveryAddress" "Delivered" "DriverAssigned" "DriverAtRestaurant" "OnItsWay"] }
 def result-completer [] { ["fail" "success"] }
 def reason-completer [] { ["cust_cancelled_changed_mind" "cust_cancelled_delivery_too_long" "cust_cancelled_made_mistake" "cust_cancelled_other" "delivery_partner_cancelled" "rest_cancelled_customer_absent" "rest_cancelled_customer_requested" "rest_cancelled_declined" "rest_cancelled_drivers_unavailable" "rest_cancelled_fake_order" "rest_cancelled_other" "rest_cancelled_out_of_stock" "rest_cancelled_too_busy" "system_cancelled_other" "system_cancelled_test_order"] }
@@ -275,12 +277,13 @@ export def "get-checkout-tenant-checkout-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-agent: string # Allows the server to identify the application making the request.
+  --user-agent: string # Allows the server to identify the application making the request. (required)
 ]: nothing -> record<customer: record<firstName: string, lastName: string, phoneNumber: string>, fulfilment: record<location: record<address: record, geolocation: record>, time: record<asap: bool, scheduled: record>>, isFulfillable: bool, issues: table<code: string>, restaurant: record<availabilityId: string, id: string>, serviceType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
   if ($checkout_id | is-empty) { error make --unspanned { msg: "path parameter 'checkoutId' must be non-empty" } }
+  if ($user_agent == null) { error make --unspanned { msg: "required header parameter 'User-Agent' missing: pass --user-agent" } }
   let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), checkout_id: (encode-path-segment $checkout_id)} | format pattern "/checkout/{tenant}/{checkout_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -318,7 +321,7 @@ export def "patch-checkout-tenant-checkout-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-agent: string # Allows the server to identify the application making the request.
+  --user-agent: string # Allows the server to identify the application making the request. (required)
   --customer: record # Details of the customer making the purchase. (nullable) — shape: {dateOfBirth?: string, firstName?: string, lastName?: string, phoneNumber?: string}
   --fulfilment: record # How and when the items will be received by the customer. (nullable) — shape: {location?: record, time?: record}
   --notes: list # Instructions about the order that the customer wants to submit. (nullable) — item shape: {note: string, type: "delivery"}
@@ -328,6 +331,7 @@ export def "patch-checkout-tenant-checkout-id" [
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
   if ($checkout_id | is-empty) { error make --unspanned { msg: "path parameter 'checkoutId' must be non-empty" } }
+  if ($user_agent == null) { error make --unspanned { msg: "required header parameter 'User-Agent' missing: pass --user-agent" } }
   let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), checkout_id: (encode-path-segment $checkout_id)} | format pattern "/checkout/{tenant}/{checkout_id}") $auth.query)
   let req_body = {"customer": $customer, "fulfilment": $fulfilment, "notes": $notes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -364,12 +368,13 @@ export def "get-checkout-tenant-checkout-id-fulfilment-availabletimes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-agent: string # Allows the server to identify the application making the request.
+  --user-agent: string # Allows the server to identify the application making the request. (required)
 ]: nothing -> record<asapAvailable: bool, times: table<from: string, to: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
   if ($checkout_id | is-empty) { error make --unspanned { msg: "path parameter 'checkoutId' must be non-empty" } }
+  if ($user_agent == null) { error make --unspanned { msg: "required header parameter 'User-Agent' missing: pass --user-agent" } }
   let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), checkout_id: (encode-path-segment $checkout_id)} | format pattern "/checkout/{tenant}/{checkout_id}/fulfilment/availabletimes") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -403,13 +408,16 @@ export def "get-consumers-tenant" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --email-address: string # Email address of the consumer.
-  --account-type: string@account-type-completer # The account type of the consumer - currently only 'registered' accounts are supported. (default: registered)
-  --count: string # Returns the number of consumers that matches the `emailAddress` and `accountType`. The query value should be empty, e.g. `/consumers/uk/?emailAddress=someone@email.com&accountType=registered&count`.
+  --email-address: string # Email address of the consumer. (required)
+  --account-type: string@account-type-completer # The account type of the consumer - currently only 'registered' accounts are supported. (required, default: registered)
+  --count: string # Returns the number of consumers that matches the `emailAddress` and `accountType`. The query value should be empty, e.g. `/consumers/uk/?emailAddress=someone@email.com&accountType=registered&count`. (required)
 ]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
+  if ($email_address == null) { error make --unspanned { msg: "required query parameter 'emailAddress' missing: pass --email-address" } }
+  let account_type = ($account_type | default "registered")
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
   let qp = [(serialize-qp "emailAddress" $email_address "scalar") (serialize-qp "accountType" $account_type "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant: (encode-path-segment $tenant)} | format pattern "/consumers/{tenant}") $qp $auth.query)
   let accept_val = "text/plain"
@@ -513,7 +521,7 @@ export def "get-consumers-tenant-me-communication-preferences" [
 # GET /consumers/{tenant}/me/communication-preferences/{type}
 export def "get-consumers-tenant-me-communication-preferences-type" [
   tenant: string
-  type: string
+  type: string@type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -550,7 +558,7 @@ export def "get-consumers-tenant-me-communication-preferences-type" [
 # PUT /consumers/{tenant}/me/communication-preferences/{type}
 export def "put-consumers-tenant-me-communication-preferences-type" [
   tenant: string
-  type: string
+  type: string@type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -591,7 +599,7 @@ export def "put-consumers-tenant-me-communication-preferences-type" [
 # DELETE /consumers/{tenant}/me/communication-preferences/{type}/subscribedChannels/{channel}
 export def "delete-consumers-tenant-me-communication-preferences-type-subscribed-channels-channel" [
   tenant: string
-  type: string
+  type: string@type-completer
   channel: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -634,8 +642,8 @@ export def "delete-consumers-tenant-me-communication-preferences-type-subscribed
 # POST /consumers/{tenant}/me/communication-preferences/{type}/subscribedChannels/{channel}
 export def "post-consumers-tenant-me-communication-preferences-type-subscribed-channels-channel" [
   tenant: string
-  type: string
-  channel: string
+  type: string@type-completer
+  channel: string@channel-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -726,14 +734,16 @@ export def "get-delivery-fees-tenant" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --restaurant-ids: list<string> # Restaurant IDs which fees are requested for. e.g. `?restaurantIds=1,2,3,4` (e.g. [1, 2, 3, 4])
-  --delivery-time: string # Delivery date/time when fees are required (ISO8601 format). (format: date-time, e.g. 2019-09-05T12:43:48.431Z)
+  --restaurant-ids: list<string> # Restaurant IDs which fees are requested for. e.g. `?restaurantIds=1,2,3,4` (required, e.g. [1, 2, 3, 4])
+  --delivery-time: string # Delivery date/time when fees are required (ISO8601 format). (required, format: date-time, e.g. 2019-09-05T12:43:48.431Z)
   --zone: string # Postcode or other location name identifying the location to which delivery is required. For use when precise location is not available. This will be removed in future in favour of location. (e.g. BS1)
   --latlong: list<float> # Point to which delivery is required (latitude, longitude). Supply this where possible as support for zone-only based lookups will be removed in future. (e.g. [51.3851513, -2.0841275])
 ]: nothing -> record<restaurants: table<bands: list, minimumOrderValue: float, restaurantId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
+  if ($restaurant_ids == null) { error make --unspanned { msg: "required query parameter 'restaurantIds' missing: pass --restaurant-ids" } }
+  if ($delivery_time == null) { error make --unspanned { msg: "required query parameter 'deliveryTime' missing: pass --delivery-time" } }
   let qp = [(serialize-qp "restaurantIds" $restaurant_ids "csv") (serialize-qp "deliveryTime" $delivery_time "scalar") (serialize-qp "zone" $zone "scalar") (serialize-qp "latlong" $latlong "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant: (encode-path-segment $tenant)} | format pattern "/delivery-fees/{tenant}") $qp $auth.query)
   let accept_val = "application/json"
@@ -767,13 +777,14 @@ export def "get-delivery-estimate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --restaurant-reference: string # The reference of the restaurant to estimate the delivery time from.
+  --restaurant-reference: string # The reference of the restaurant to estimate the delivery time from. (required)
   --to-lat: string # The latitude of the position to estimate the delivery time to.
   --to-lon: string # The longitude of the position to estimate the delivery time to.
   --to-postcode: string # The postcode to estimate the delivery time to.
 ]: nothing -> record<DurationInMinutes: string, RestaurantReference: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($restaurant_reference == null) { error make --unspanned { msg: "required query parameter 'restaurantReference' missing: pass --restaurant-reference" } }
   let qp = [(serialize-qp "restaurantReference" $restaurant_reference "scalar") (serialize-qp "toLat" $to_lat "scalar") (serialize-qp "toLon" $to_lon "scalar") (serialize-qp "toPostcode" $to_postcode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/delivery/estimate" $qp $auth.query)
   let accept_val = "application/json"
@@ -1722,7 +1733,7 @@ export def "put-order-is-ready-for-pickup" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --event: string@event-completer-1
   --timestamp: string # format: date-time
-]: any -> record<Details: string, Message: string, OrderId: string, Timestamp: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1907,7 +1918,7 @@ export def "put-order-requires-delivery-acceptance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> record<errors: table<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1989,7 +2000,7 @@ export def "post-orders" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-je-api-version: float # The api version to use. Version 2.0 is the only available version. (e.g. 2)
+  --x-je-api-version: float # The api version to use. Version 2.0 is the only available version. (default: 1, e.g. 2)
   customer: record # shape: {Address: record, DisplayPhoneNumber?: string, Email?: string, Name: string, PhoneNumber: string}
   --customer-notes: record # e.g. {NoteForDelivery: Red door, NoteForRestaurant: Make it spicy} — shape: {NoteForDelivery?: string, NoteForRestaurant?: string}
   --friendly-order-reference: string
@@ -2682,7 +2693,7 @@ export def "post-orders-tenant-order-id-consumerqueries-lateorder-restaurantresp
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Containing a partner issued API key e.g. `JE-API-KEY ABCDE123456789`
+  --authorization: string # Containing a partner issued API key e.g. `JE-API-KEY ABCDE123456789` (required)
   --additional-delivery-time-to-add-minutes: int # The amount of time to add to the current delivery estimate in minutes
   --late-order-status: string@late-order-status-completer # The updated later order query status
 ]: any -> any {
@@ -2691,6 +2702,7 @@ export def "post-orders-tenant-order-id-consumerqueries-lateorder-restaurantresp
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), order_id: (encode-path-segment $order_id)} | format pattern "/orders/{tenant}/{order_id}/consumerqueries/lateorder/restaurantresponse") $auth.query)
   let req_body = {"additionalDeliveryTimeToAddMinutes": $additional_delivery_time_to_add_minutes, "lateOrderStatus": $late_order_status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2727,7 +2739,7 @@ export def "post-orders-tenant-order-id-consumerqueries-lateordercompensation-re
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Containing a partner issued API key e.g. `JE-API-KEY ABCDE123456789`
+  --authorization: string # Containing a partner issued API key e.g. `JE-API-KEY ABCDE123456789` (required)
   --accepted-amount: int # The monetary amount of compensation granted, in cents/pence. Required when `isAccepted = true`.
   --is-accepted: oneof<nothing, bool> # Flag to indicate whether a compensation request has been accepted or rejected.
   --body-order-id: string # The ID of the late order compensation request that this response relates to.
@@ -2738,6 +2750,7 @@ export def "post-orders-tenant-order-id-consumerqueries-lateordercompensation-re
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), order_id: (encode-path-segment $order_id)} | format pattern "/orders/{tenant}/{order_id}/consumerqueries/lateordercompensation/restaurantresponse") $auth.query)
   let req_body = {"acceptedAmount": $accepted_amount, "isAccepted": $is_accepted, "orderId": $body_order_id, "rejectedReasonCode": $rejected_reason_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2774,7 +2787,7 @@ export def "post-orders-tenant-order-id-restaurantqueries-compensation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Containing a partner issued API key e.g. `JE-API-KEY ABCDE123456789`
+  --authorization: string # Containing a partner issued API key e.g. `JE-API-KEY ABCDE123456789` (required)
   --comments: string # Any other comments to add to the request
   --reason-code: string@reason-code-completer # The reason why compensation is due
 ]: any -> any {
@@ -2783,6 +2796,7 @@ export def "post-orders-tenant-order-id-restaurantqueries-compensation" [
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), order_id: (encode-path-segment $order_id)} | format pattern "/orders/{tenant}/{order_id}/restaurantqueries/compensation") $auth.query)
   let req_body = {"Comments": $comments, "ReasonCode": $reason_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2938,16 +2952,19 @@ export def "search-by-location" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --latitude: float # Filter search results to only include restaurants that deliver to the specified location
-  --longitude: float # Filter search results to only include restaurants that deliver to the specified location
+  --latitude: float # Filter search results to only include restaurants that deliver to the specified location (required)
+  --longitude: float # Filter search results to only include restaurants that deliver to the specified location (required)
   --cuisine: string # Filter search results to only include restaurants that offer the specified cuisine
   --restaurant-name: string # Filter search results to only include restaurants that have a name that matches the specified value
   --brand-name: string # Filter search results to only include restaurants of the specified brand
-  --authorization: string # OAuth2 token issued for logged in consumer or API key issued to partner
+  --authorization: string # OAuth2 token issued for logged in consumer or API key issued to partner (required)
   --accept-tenant: string # A valid country code, e.g. "uk". Filter search results to only include restaurants for the specified country. Required when using OAuth for authentication.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($latitude == null) { error make --unspanned { msg: "required query parameter 'latitude' missing: pass --latitude" } }
+  if ($longitude == null) { error make --unspanned { msg: "required query parameter 'longitude' missing: pass --longitude" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "cuisine" $cuisine "scalar") (serialize-qp "restaurantName" $restaurant_name "scalar") (serialize-qp "brandName" $brand_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/restaurants/bylatlong" $qp $auth.query)
   let accept_val = "application/json"
@@ -3101,13 +3118,14 @@ export def "get-restaurants-tenant-restaurant-id-catalogue-availabilities" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --limit: int # The maximum number of availabilities to fetch. (format: int32)
+  --limit: int # The maximum number of availabilities to fetch. (required, format: int32)
   --after: string # Value representing a cursor - position to use when retrieving the next page of data. If provided, the value of this parameter must be URL encoded.
 ]: nothing -> record<paging: record<cursors: record<after: string>>, availabilities: table<description: string, id: string, name: string, serviceTypes: list, times: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
   if ($restaurant_id | is-empty) { error make --unspanned { msg: "path parameter 'restaurantId' must be non-empty" } }
+  if ($limit == null) { error make --unspanned { msg: "required query parameter 'limit' missing: pass --limit" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), restaurant_id: (encode-path-segment $restaurant_id)} | format pattern "/restaurants/{tenant}/{restaurant_id}/catalogue/availabilities") $qp $auth.query)
   let accept_val = "application/json"
@@ -3141,13 +3159,14 @@ export def "get-restaurants-tenant-restaurant-id-catalogue-categories" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --limit: int # The maximum number of categories to fetch. (format: int32)
+  --limit: int # The maximum number of categories to fetch. (required, format: int32)
   --after: string # Value representing a cursor - position to use when retrieving the next page of data. If provided, the value of this parameter must be URL encoded.
 ]: nothing -> record<paging: record<cursors: record<after: string>>, categories: table<description: string, id: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
   if ($restaurant_id | is-empty) { error make --unspanned { msg: "path parameter 'restaurantId' must be non-empty" } }
+  if ($limit == null) { error make --unspanned { msg: "required query parameter 'limit' missing: pass --limit" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), restaurant_id: (encode-path-segment $restaurant_id)} | format pattern "/restaurants/{tenant}/{restaurant_id}/catalogue/categories") $qp $auth.query)
   let accept_val = "application/json"
@@ -3182,7 +3201,7 @@ export def "get-restaurants-tenant-restaurant-id-catalogue-categories-category-i
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --limit: int # The maximum number of item IDs to fetch. (format: int32)
+  --limit: int # The maximum number of item IDs to fetch. (required, format: int32)
   --after: string # Value representing a cursor - position to use when retrieving the next page of data. If provided, the value of this parameter must be URL encoded.
 ]: nothing -> record<paging: record<cursors: record<after: string>>, itemIds: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3190,6 +3209,7 @@ export def "get-restaurants-tenant-restaurant-id-catalogue-categories-category-i
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
   if ($restaurant_id | is-empty) { error make --unspanned { msg: "path parameter 'restaurantId' must be non-empty" } }
   if ($category_id | is-empty) { error make --unspanned { msg: "path parameter 'categoryId' must be non-empty" } }
+  if ($limit == null) { error make --unspanned { msg: "required query parameter 'limit' missing: pass --limit" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), restaurant_id: (encode-path-segment $restaurant_id), category_id: (encode-path-segment $category_id)} | format pattern "/restaurants/{tenant}/{restaurant_id}/catalogue/categories/{category_id}/items") $qp $auth.query)
   let accept_val = "application/json"
@@ -3223,13 +3243,14 @@ export def "get-restaurants-tenant-restaurant-id-catalogue-items" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --limit: int # The maximum number of menu items to fetch. (format: int32)
+  --limit: int # The maximum number of menu items to fetch. (required, format: int32)
   --after: string # Value representing a cursor - position to use when retrieving the next page of data. If provided, the value of this parameter must be URL encoded.
 ]: nothing -> record<paging: record<cursors: record<after: string>>, items: table<description: string, id: string, labels: list, name: string, requireOtherProducts: bool, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
   if ($restaurant_id | is-empty) { error make --unspanned { msg: "path parameter 'restaurantId' must be non-empty" } }
+  if ($limit == null) { error make --unspanned { msg: "required query parameter 'limit' missing: pass --limit" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), restaurant_id: (encode-path-segment $restaurant_id)} | format pattern "/restaurants/{tenant}/{restaurant_id}/catalogue/items") $qp $auth.query)
   let accept_val = "application/json"
@@ -3264,7 +3285,7 @@ export def "get-restaurants-tenant-restaurant-id-catalogue-items-item-id-dealgro
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --limit: int # The maximum number of menu items to fetch. (format: int32)
+  --limit: int # The maximum number of menu items to fetch. (required, format: int32)
   --after: string # Value representing a cursor - position to use when retrieving the next page of data. If provided, the value of this parameter must be URL encoded.
 ]: nothing -> record<paging: record<cursors: record<after: string>>, dealGroups: table<id: string, name: string, numberOfChoices: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3272,6 +3293,7 @@ export def "get-restaurants-tenant-restaurant-id-catalogue-items-item-id-dealgro
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
   if ($restaurant_id | is-empty) { error make --unspanned { msg: "path parameter 'restaurantId' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  if ($limit == null) { error make --unspanned { msg: "required query parameter 'limit' missing: pass --limit" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), restaurant_id: (encode-path-segment $restaurant_id), item_id: (encode-path-segment $item_id)} | format pattern "/restaurants/{tenant}/{restaurant_id}/catalogue/items/{item_id}/dealgroups") $qp $auth.query)
   let accept_val = "application/json"
@@ -3307,7 +3329,7 @@ export def "get-restaurants-tenant-restaurant-id-catalogue-items-item-id-dealgro
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --limit: int # The maximum number of menu items to fetch. (format: int32)
+  --limit: int # The maximum number of menu items to fetch. (required, format: int32)
   --after: string # Value representing a cursor - position to use when retrieving the next page of data. If provided, the value of this parameter must be URL encoded.
 ]: nothing -> record<paging: record<cursors: record<after: string>>, dealItemVariations: table<additionPrice: float, dealItemVariationId: string, maxChoices: int, minChoices: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3316,6 +3338,7 @@ export def "get-restaurants-tenant-restaurant-id-catalogue-items-item-id-dealgro
   if ($restaurant_id | is-empty) { error make --unspanned { msg: "path parameter 'restaurantId' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   if ($deal_group_id | is-empty) { error make --unspanned { msg: "path parameter 'dealGroupId' must be non-empty" } }
+  if ($limit == null) { error make --unspanned { msg: "required query parameter 'limit' missing: pass --limit" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), restaurant_id: (encode-path-segment $restaurant_id), item_id: (encode-path-segment $item_id), deal_group_id: (encode-path-segment $deal_group_id)} | format pattern "/restaurants/{tenant}/{restaurant_id}/catalogue/items/{item_id}/dealgroups/{deal_group_id}/dealitemvariations") $qp $auth.query)
   let accept_val = "application/json"
@@ -3350,7 +3373,7 @@ export def "get-restaurants-tenant-restaurant-id-catalogue-items-item-id-modifie
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --limit: int # The maximum number of menu items to fetch. (format: int32)
+  --limit: int # The maximum number of menu items to fetch. (required, format: int32)
   --after: string # Value representing a cursor - position to use when retrieving the next page of data. If provided, the value of this parameter must be URL encoded.
 ]: nothing -> record<paging: record<cursors: record<after: string>>, modifierGroups: table<id: string, maxChoices: int, minChoices: int, modifiers: list, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3358,6 +3381,7 @@ export def "get-restaurants-tenant-restaurant-id-catalogue-items-item-id-modifie
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
   if ($restaurant_id | is-empty) { error make --unspanned { msg: "path parameter 'restaurantId' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  if ($limit == null) { error make --unspanned { msg: "required query parameter 'limit' missing: pass --limit" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), restaurant_id: (encode-path-segment $restaurant_id), item_id: (encode-path-segment $item_id)} | format pattern "/restaurants/{tenant}/{restaurant_id}/catalogue/items/{item_id}/modifiergroups") $qp $auth.query)
   let accept_val = "application/json"
@@ -3392,7 +3416,7 @@ export def "get-restaurants-tenant-restaurant-id-catalogue-items-item-id-variati
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --limit: int # The maximum number of menu items to fetch. (format: int32)
+  --limit: int # The maximum number of menu items to fetch. (required, format: int32)
   --after: string # Value representing a cursor - position to use when retrieving the next page of data. If provided, the value of this parameter must be URL encoded.
 ]: nothing -> record<paging: record<cursors: record<after: string>>, variations: table<availabilityIds: list, basePrice: float, dealGroupsIds: list, dealOnly: bool, id: string, kitchenNumber: string, modifierGroupsIds: list, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3400,6 +3424,7 @@ export def "get-restaurants-tenant-restaurant-id-catalogue-items-item-id-variati
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
   if ($restaurant_id | is-empty) { error make --unspanned { msg: "path parameter 'restaurantId' must be non-empty" } }
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  if ($limit == null) { error make --unspanned { msg: "required query parameter 'limit' missing: pass --limit" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), restaurant_id: (encode-path-segment $restaurant_id), item_id: (encode-path-segment $item_id)} | format pattern "/restaurants/{tenant}/{restaurant_id}/catalogue/items/{item_id}/variations") $qp $auth.query)
   let accept_val = "application/json"
@@ -3523,7 +3548,7 @@ export def "post-restaurants-tenant-restaurant-id-customerclaims-id-restaurantre
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Indicates the representation of the request body the client is sending (including version) (e.g. application/json;v=1)
+  --content-type: string # Indicates the representation of the request body the client is sending (including version) (required, e.g. application/json;v=1)
   --decision: string@decision-completer # Decision on the claim
   --items: list # Decisions on the items of a claim (nullable) — item shape: {decision?: "Accepted"|"Rejected", id?: string}
   --justification: record # The reason of the claim rejection and optional comments from the restaurant (nullable, e.g. {comments: The food was packed properly, reason: Other}) — shape: {comments?: string, reason?: "AlreadyRefunded"|"ItemReplaced"|"PartialRefundRequired"|"WasNotMissing"|"WillRedeliver"|"OrderWasHot"|"OrderWasOnTime"|"OrderWasPacked"|"FoodWasIntact"|"AddExtraItem"|"Other"}
@@ -3573,7 +3598,7 @@ export def "put-restaurants-tenant-restaurant-id-customerclaims-id-restaurantres
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Indicates the representation of the request body the client is sending (including version) (e.g. application/json;v=1)
+  --content-type: string # Indicates the representation of the request body the client is sending (including version) (required, e.g. application/json;v=1)
   --comments: string # Comment from the restaurant owner in case they rejected at least one of the items and want to type their own rejection reason (nullable)
   --reason: string@reason-completer-1 # One of the predefined reasons
 ]: any -> any {
@@ -3706,12 +3731,13 @@ export def "get-restaurants-tenant-restaurant-id-menu" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Containing a partner issued API key e.g. Bearer ABCDE123456789
+  --authorization: string # Containing a partner issued API key e.g. Bearer ABCDE123456789 (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
   if ($restaurant_id | is-empty) { error make --unspanned { msg: "path parameter 'restaurantId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), restaurant_id: (encode-path-segment $restaurant_id)} | format pattern "/restaurants/{tenant}/{restaurant_id}/menu") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3750,7 +3776,7 @@ export def "put-menu-for-ingestion" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Containing a partner issued API key e.g. `JE-API-KEY ABCDE123456789`
+  --authorization: string # Containing a partner issued API key e.g. `JE-API-KEY ABCDE123456789` (required)
   --content-type: string # Used to denote the version of the menu payload within the body, will default to latest if not supplied e.g. application/=1.0
   --currency: string # The currency of the items on the menu in ISO 4217 format, i.e. GBP, EUR or AUD
   --description: string # A top level description for the menu.
@@ -3765,6 +3791,7 @@ export def "put-menu-for-ingestion" [
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
   if ($restaurant_id | is-empty) { error make --unspanned { msg: "path parameter 'restaurantId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), restaurant_id: (encode-path-segment $restaurant_id)} | format pattern "/restaurants/{tenant}/{restaurant_id}/menu") $auth.query)
   let req_body = {"currency": $currency, "description": $description, "name": $name, "restaurantId": $body_restaurant_id, "availabilities": $availabilities, "categories": $categories, "items": $items} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3804,12 +3831,13 @@ export def "get-order-times" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # OAuth2 token issued for logged in restaurant
+  --authorization: string # OAuth2 token issued for logged in restaurant (required)
 ]: nothing -> table<dayOfWeek: string, lowerBoundMinutes: int, serviceType: string, upperBoundMinutes: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
   if ($restaurant_id | is-empty) { error make --unspanned { msg: "path parameter 'restaurantId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), restaurant_id: (encode-path-segment $restaurant_id)} | format pattern "/restaurants/{tenant}/{restaurant_id}/ordertimes") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3836,8 +3864,8 @@ export def "get-order-times" [
 export def "update-order-time" [
   tenant: string
   restaurant_id: string
-  day_of_week: string
-  service_type: string
+  day_of_week: string@day-of-week-completer
+  service_type: string@service-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3847,7 +3875,7 @@ export def "update-order-time" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # OAuth2 token issued for logged in restaurant OR API token for third party, in the format `Bearer {api_key}`
+  --authorization: string # OAuth2 token issued for logged in restaurant OR API token for third party, in the format `Bearer {api_key}` (required)
   --lower-bound-minutes: int # Order time lower bound value, in minutes. (format: int32)
   --upper-bound-minutes: int # Order time upper bound value, in minutes. (format: int32)
 ]: any -> any {
@@ -3858,6 +3886,7 @@ export def "update-order-time" [
   if ($restaurant_id | is-empty) { error make --unspanned { msg: "path parameter 'restaurantId' must be non-empty" } }
   if ($day_of_week | is-empty) { error make --unspanned { msg: "path parameter 'dayOfWeek' must be non-empty" } }
   if ($service_type | is-empty) { error make --unspanned { msg: "path parameter 'serviceType' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), restaurant_id: (encode-path-segment $restaurant_id), day_of_week: (encode-path-segment $day_of_week), service_type: (encode-path-segment $service_type)} | format pattern "/restaurants/{tenant}/{restaurant_id}/ordertimes/{day_of_week}/{service_type}") $auth.query)
   let req_body = {"lowerBoundMinutes": $lower_bound_minutes, "upperBoundMinutes": $upper_bound_minutes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3895,7 +3924,7 @@ export def "get-restaurant-service-times" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<serviceTimes: record> {
+]: nothing -> record<serviceTimes: record<friday: record<collection: list, delivery: list>, monday: record<collection: list, delivery: list>, saturday: record<collection: list, delivery: list>, sunday: record<collection: list, delivery: list>, thursday: record<collection: list, delivery: list>, tuesday: record<collection: list, delivery: list>, wednesday: record<collection: list, delivery: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
@@ -3921,7 +3950,7 @@ export def "get-restaurant-service-times" [
 #
 # PUT /restaurants/{tenant}/{restaurantId}/servicetimes
 # operationId: putRestaurantServiceTimes
-# --serviceTimes shape: {friday?: any, monday?: any, saturday?: any, sunday?: any, thursday?: any, tuesday?: any, wednesday?: any}
+# --serviceTimes shape: {friday?: record, monday?: record, saturday?: record, sunday?: record, thursday?: record, tuesday?: record, wednesday?: record}
 export def "put-restaurant-service-times" [
   tenant: string
   restaurant_id: string
@@ -3934,8 +3963,8 @@ export def "put-restaurant-service-times" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --service-times: record # The desired times at which a restaurant is in service — shape: {friday?: any, monday?: any, saturday?: any, sunday?: any, thursday?: any, tuesday?: any, wednesday?: any}
-]: any -> record<serviceTimes: record> {
+  --service-times: record # The desired times at which a restaurant is in service — shape: {friday?: record, monday?: record, saturday?: record, sunday?: record, thursday?: record, tuesday?: record, wednesday?: record}
+]: any -> record<serviceTimes: record<friday: record<collection: list, delivery: list>, monday: record<collection: list, delivery: list>, saturday: record<collection: list, delivery: list>, sunday: record<collection: list, delivery: list>, thursday: record<collection: list, delivery: list>, tuesday: record<collection: list, delivery: list>, wednesday: record<collection: list, delivery: list>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3974,13 +4003,15 @@ export def "get-search-autocomplete-tenant" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --search-term: string # User's search term - at least one character required
-  --latlong: list<float> # The latitude and longitude coordinates of the location in which to search. Specify the coordinates as latitude,longitude. (e.g. [51.501285, -0.1424422])
+  --search-term: string # User's search term - at least one character required (required)
+  --latlong: list<float> # The latitude and longitude coordinates of the location in which to search. Specify the coordinates as latitude,longitude. (required, e.g. [51.501285, -0.1424422])
   --limit: float # Limit the number of auto-completed terms returned by the API. Defaults to 7. Valid values 1 - 10 (format: integer)
 ]: nothing -> record<terms: table<classification: string, term: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
+  if ($search_term == null) { error make --unspanned { msg: "required query parameter 'searchTerm' missing: pass --search-term" } }
+  if ($latlong == null) { error make --unspanned { msg: "required query parameter 'latlong' missing: pass --latlong" } }
   let qp = [(serialize-qp "searchTerm" $search_term "scalar") (serialize-qp "latlong" $latlong "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant: (encode-path-segment $tenant)} | format pattern "/search/autocomplete/{tenant}") $qp $auth.query)
   let accept_val = "application/json"
@@ -4013,13 +4044,15 @@ export def "get-search-restaurants-tenant" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --search-term: string # User's search term.
-  --latlong: list<float> # The latitude and longitude coordinates of the location in which to search. Specify the coordinates as latitude,longitude. (e.g. [51.501285, -0.1424422])
+  --search-term: string # User's search term. (required)
+  --latlong: list<float> # The latitude and longitude coordinates of the location in which to search. Specify the coordinates as latitude,longitude. (required, e.g. [51.501285, -0.1424422])
   --limit: float # Limit the number of restaurants returned by the API. Valid values are numbers between 1 and 500. If not provided, the limit defaults to 300. (format: integer)
 ]: nothing -> record<restaurants: table<isSponsored: bool, products: list, restaurantId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
+  if ($search_term == null) { error make --unspanned { msg: "required query parameter 'searchTerm' missing: pass --search-term" } }
+  if ($latlong == null) { error make --unspanned { msg: "required query parameter 'latlong' missing: pass --latlong" } }
   let qp = [(serialize-qp "searchTerm" $search_term "scalar") (serialize-qp "latlong" $latlong "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant: (encode-path-segment $tenant)} | format pattern "/search/restaurants/{tenant}") $qp $auth.query)
   let accept_val = "application/json"
@@ -4090,8 +4123,8 @@ export def "post-v1-tenant-restaurants-event-offline" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-je-requester: string # Name of the user or system creating the event. Used for auditing purposes
-  --x-je-user-role: string@x-je-user-role-completer
+  --x-je-requester: string # Name of the user or system creating the event. Used for auditing purposes (required)
+  --x-je-user-role: string@x-je-user-role-completer # required
   --allow-restaurant-override: oneof<nothing, bool> # Whether a restaurant should be allowed to delete this event, regardless of who raised it.
   --category: string # A free text category used to group multiple events. This field is not intended to be used by clients. (DEPRECATED)
   --duration: string # Either a timespan in the HH:mm format or `untilTomorrow` (this will be the next day at 4:30 am +/- 10 minutes local time). Note if both duration and `endDate` are specified duration takes precedence.
@@ -4106,9 +4139,12 @@ export def "post-v1-tenant-restaurants-event-offline" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
+  if ($x_je_requester == null) { error make --unspanned { msg: "required header parameter 'X-JE-Requester' missing: pass --x-je-requester" } }
+  if ($x_je_user_role == null) { error make --unspanned { msg: "required header parameter 'X-JE-User-Role' missing: pass --x-je-user-role" } }
   let full_url = (build-url $base ({tenant: (encode-path-segment $tenant)} | format pattern "/v1/{tenant}/restaurants/event/offline") $auth.query)
   let req_body = {"allowRestaurantOverride": $allow_restaurant_override, "category": $category, "duration": $duration, "endDate": $end_date, "legacyTempOfflineType": $legacy_temp_offline_type, "name": $name, "reason": $reason, "restaurantIds": $restaurant_ids, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "allowRestaurantOverride") == null) { error make --unspanned { msg: "required body field 'allowRestaurantOverride' missing: pass --allow-restaurant-override or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-JE-Requester": $x_je_requester, "X-JE-User-Role": $x_je_user_role} | compact
@@ -4142,13 +4178,15 @@ export def "delete-v1-tenant-restaurants-id-event-offline" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-je-requester: string # Name of the user or system creating the event. Used for auditing purposes
-  --x-je-user-role: string@x-je-user-role-completer # The role the user or system creating the event has assumed.
+  --x-je-requester: string # Name of the user or system creating the event. Used for auditing purposes (required)
+  --x-je-user-role: string@x-je-user-role-completer # The role the user or system creating the event has assumed. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($x_je_requester == null) { error make --unspanned { msg: "required header parameter 'X-JE-Requester' missing: pass --x-je-requester" } }
+  if ($x_je_user_role == null) { error make --unspanned { msg: "required header parameter 'X-JE-User-Role' missing: pass --x-je-user-role" } }
   let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), id: (encode-path-segment $id)} | format pattern "/v1/{tenant}/restaurants/{id}/event/offline") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4183,7 +4221,7 @@ export def "post-tenant-orders-order-id-queries-attempteddelivery" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Containing a partner issued API key e.g. `JE-API-KEY ABCDE123456789`
+  --authorization: string # Containing a partner issued API key e.g. `JE-API-KEY ABCDE123456789` (required)
   --reason-code: string@reason-code-completer-1 # The reason the attempted delivery event was created
 ]: any -> any {
   let input = $in
@@ -4191,6 +4229,7 @@ export def "post-tenant-orders-order-id-queries-attempteddelivery" [
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), order_id: (encode-path-segment $order_id)} | format pattern "/{tenant}/orders/{order_id}/queries/attempteddelivery") $auth.query)
   let req_body = {"ReasonCode": $reason_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4227,7 +4266,7 @@ export def "post-tenant-orders-order-id-queries-attempteddelivery-resolution-red
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Containing a partner issued API key e.g. `JE-API-KEY ABCDE123456789`
+  --authorization: string # Containing a partner issued API key e.g. `JE-API-KEY ABCDE123456789` (required)
   --new-due-date: string # Updated due date for delivery of the order (format: date-time)
   --status: string@status-completer # The current status of the order
 ]: any -> any {
@@ -4236,6 +4275,7 @@ export def "post-tenant-orders-order-id-queries-attempteddelivery-resolution-red
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), order_id: (encode-path-segment $order_id)} | format pattern "/{tenant}/orders/{order_id}/queries/attempteddelivery/resolution/redeliverorder") $auth.query)
   let req_body = {"NewDueDate": $new_due_date, "Status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

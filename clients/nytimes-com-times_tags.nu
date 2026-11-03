@@ -131,12 +131,13 @@ export def "get-timestags" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query: string # Your search query
+  --query: string # Your search query (required)
   --filter: string@filter-completer # If you do not specify a value for filter (see the Optional Parameters), your query will be matched to tags in all four Times dictionaries: subject, geographic location, organization and person. To use more than one, separate with commas.
   --max: int # Sets the maximum number of results (default: 10)
 ]: nothing -> list<list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "max" $max "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/timestags" $qp $auth.query)
   let accept_val = "application/json"

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -223,7 +223,7 @@ export def "batch-get-custom-data-identifiers" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --ids: list<string> # An array of custom data identifier IDs, one for each custom data identifier to retrieve information about.
-]: any -> record<customDataIdentifiers: record, notFoundIdentifierIds: record> {
+]: any -> record<customDataIdentifiers: table<arn: string, createdAt: string, deleted: bool, description: string, id: string, name: string>, notFoundIdentifierIds: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -252,7 +252,7 @@ export def "batch-get-custom-data-identifiers" [
 #
 # POST /allow-lists
 # operationId: CreateAllowList
-# --criteria shape: {regex?: any, s3WordsList?: any}
+# --criteria shape: {regex?: string, s3WordsList?: record}
 export def "create-allow-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -271,11 +271,11 @@ export def "create-allow-list" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   client_token: string # A unique, case-sensitive token that you provide to ensure the idempotency of the request.
-  criteria: record # Specifies the criteria for an allow list. The criteria must specify a regular expression (regex) or an S3 object (s3WordsList). It can't specify both. — shape: {regex?: any, s3WordsList?: any}
+  criteria: record # Specifies the criteria for an allow list. The criteria must specify a regular expression (regex) or an S3 object (s3WordsList). It can't specify both. — shape: {regex?: string, s3WordsList?: record}
   --description: string # A custom description of the allow list. The description can contain as many as 512 characters.
   name: string # A custom name for the allow list. The name can contain as many as 128 characters.
   --tags: record # A string-to-string map of key-value pairs that specifies the tags (keys and values) for an Amazon Macie resource.
-]: any -> record<arn: record, id: record> {
+]: any -> record<arn: string, id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -323,7 +323,7 @@ export def "list-allow-lists" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<allowLists: record, nextToken: record> {
+]: nothing -> record<allowLists: table<arn: string, createdAt: string, description: string, id: string, name: string, updatedAt: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -350,8 +350,8 @@ export def "list-allow-lists" [
 #
 # POST /jobs
 # operationId: CreateClassificationJob
-# --s3JobDefinition shape: {bucketCriteria?: any, bucketDefinitions?: any, scoping?: any}
-# --scheduleFrequency shape: {dailySchedule?: any, monthlySchedule?: any, weeklySchedule?: any}
+# --s3JobDefinition shape: {bucketCriteria?: record, bucketDefinitions?: list, scoping?: record}
+# --scheduleFrequency shape: {dailySchedule?: record, monthlySchedule?: record, weeklySchedule?: record}
 export def "create-classification-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -378,11 +378,11 @@ export def "create-classification-job" [
   --managed-data-identifier-ids: list<string> # An array of unique identifiers, one for each managed data identifier for the job to include (use) or exclude (not use) when it analyzes data. Inclusion or exclusion depends on the managed data identifier selection type that you specify for the job (managedDataIdentifierSelector). To retrieve a list of valid values for this property, use the ListManagedDataIdentifiers operation.
   --managed-data-identifier-selector: string@managed-data-identifier-selector-completer # The selection type that determines which managed data identifiers a classification job uses to analyze data. Valid values are:
   name: string # A custom name for the job. The name can contain as many as 500 characters.
-  s3_job_definition: record # Specifies which S3 buckets contain the objects that a classification job analyzes, and the scope of that analysis. The bucket specification can be static (bucketDefinitions) or dynamic (bucketCriteria). If it's static, the job analyzes objects in the same predefined set of buckets each time the job runs. If it's dynamic, the job analyzes objects in any buckets that match the specified criteria each time the job starts to run. — shape: {bucketCriteria?: any, bucketDefinitions?: any, scoping?: any}
+  s3_job_definition: record # Specifies which S3 buckets contain the objects that a classification job analyzes, and the scope of that analysis. The bucket specification can be static (bucketDefinitions) or dynamic (bucketCriteria). If it's static, the job analyzes objects in the same predefined set of buckets each time the job runs. If it's dynamic, the job analyzes objects in any buckets that match the specified criteria each time the job starts to run. — shape: {bucketCriteria?: record, bucketDefinitions?: list, scoping?: record}
   --sampling-percentage: int # The sampling depth, as a percentage, for the job to apply when processing objects. This value determines the percentage of eligible objects that the job analyzes. If this value is less than 100, Amazon Macie selects the objects to analyze at random, up to the specified percentage, and analyzes all the data in those objects.
-  --schedule-frequency: record # Specifies the recurrence pattern for running a classification job. — shape: {dailySchedule?: any, monthlySchedule?: any, weeklySchedule?: any}
+  --schedule-frequency: record # Specifies the recurrence pattern for running a classification job. — shape: {dailySchedule?: record, monthlySchedule?: record, weeklySchedule?: record}
   --tags: record # A string-to-string map of key-value pairs that specifies the tags (keys and values) for an Amazon Macie resource.
-]: any -> record<jobArn: record, jobId: record> {
+]: any -> record<jobArn: string, jobId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -411,7 +411,7 @@ export def "create-classification-job" [
 #
 # POST /custom-data-identifiers
 # operationId: CreateCustomDataIdentifier
-# --severityLevels item shape: {occurrencesThreshold: any, severity: any}
+# --severityLevels item shape: {occurrencesThreshold: int, severity: "LOW"|"MEDIUM"|"HIGH"}
 export def "create-custom-data-identifier" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -436,9 +436,9 @@ export def "create-custom-data-identifier" [
   --maximum-match-distance: int # The maximum number of characters that can exist between the end of at least one complete character sequence specified by the keywords array and the end of the text that matches the regex pattern. If a complete keyword precedes all the text that matches the pattern and the keyword is within the specified distance, Amazon Macie includes the result. The distance can be 1-300 characters. The default value is 50.
   name: string # A custom name for the custom data identifier. The name can contain as many as 128 characters. We strongly recommend that you avoid including any sensitive data in the name of a custom data identifier. Other users of your account might be able to see this name, depending on the actions that they're allowed to perform in Amazon Macie.
   regex: string # The regular expression (regex) that defines the pattern to match. The expression can contain as many as 512 characters.
-  --severity-levels: list # The severity to assign to findings that the custom data identifier produces, based on the number of occurrences of text that matches the custom data identifier's detection criteria. You can specify as many as three SeverityLevel objects in this array, one for each severity: LOW, MEDIUM, or HIGH. If you specify more than one, the occurrences thresholds must be in ascending order by severity, moving from LOW to HIGH. For example, 1 for LOW, 50 for MEDIUM, and 100 for HIGH. If an S3 object contains fewer occurrences than the lowest specified threshold, Amazon Macie doesn't create a finding. If you don't specify any values for this array, Macie creates findings for S3 objects that contain at least one occurrence of text that matches the detection criteria, and Macie automatically assigns the MEDIUM severity to those findings. — item shape: {occurrencesThreshold: any, severity: any}
+  --severity-levels: list # The severity to assign to findings that the custom data identifier produces, based on the number of occurrences of text that matches the custom data identifier's detection criteria. You can specify as many as three SeverityLevel objects in this array, one for each severity: LOW, MEDIUM, or HIGH. If you specify more than one, the occurrences thresholds must be in ascending order by severity, moving from LOW to HIGH. For example, 1 for LOW, 50 for MEDIUM, and 100 for HIGH. If an S3 object contains fewer occurrences than the lowest specified threshold, Amazon Macie doesn't create a finding. If you don't specify any values for this array, Macie creates findings for S3 objects that contain at least one occurrence of text that matches the detection criteria, and Macie automatically assigns the MEDIUM severity to those findings. — item shape: {occurrencesThreshold: int, severity: "LOW"|"MEDIUM"|"HIGH"}
   --tags: record # A string-to-string map of key-value pairs that specifies the tags (keys and values) for an Amazon Macie resource.
-]: any -> record<customDataIdentifierId: record> {
+]: any -> record<customDataIdentifierId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -467,7 +467,7 @@ export def "create-custom-data-identifier" [
 #
 # POST /findingsfilters
 # operationId: CreateFindingsFilter
-# --findingCriteria shape: {criterion?: any}
+# --findingCriteria shape: {criterion?: record}
 export def "create-findings-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -488,11 +488,11 @@ export def "create-findings-filter" [
   action: string@action-completer # The action to perform on findings that match the filter criteria. To suppress (automatically archive) findings that match the criteria, set this value to ARCHIVE. Valid values are:
   --client-token: string # A unique, case-sensitive token that you provide to ensure the idempotency of the request.
   --description: string # A custom description of the filter. The description can contain as many as 512 characters. We strongly recommend that you avoid including any sensitive data in the description of a filter. Other users of your account might be able to see this description, depending on the actions that they're allowed to perform in Amazon Macie.
-  finding_criteria: record # Specifies, as a map, one or more property-based conditions that filter the results of a query for findings. — shape: {criterion?: any}
+  finding_criteria: record # Specifies, as a map, one or more property-based conditions that filter the results of a query for findings. — shape: {criterion?: record}
   name: string # A custom name for the filter. The name must contain at least 3 characters and can contain as many as 64 characters. We strongly recommend that you avoid including any sensitive data in the name of a filter. Other users of your account might be able to see this name, depending on the actions that they're allowed to perform in Amazon Macie.
   --position: int # The position of the filter in the list of saved filters on the Amazon Macie console. This value also determines the order in which the filter is applied to findings, relative to other filters that are also applied to the findings.
   --tags: record # A string-to-string map of key-value pairs that specifies the tags (keys and values) for an Amazon Macie resource.
-]: any -> record<arn: record, id: record> {
+]: any -> record<arn: string, id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -540,7 +540,7 @@ export def "list-findings-filters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<findingsFilterListItems: record, nextToken: record> {
+]: nothing -> record<findingsFilterListItems: table<action: string, arn: string, id: string, name: string, tags: record>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -587,7 +587,7 @@ export def "create-invitations" [
   account_ids: list<string> # An array that lists Amazon Web Services account IDs, one for each account to send the invitation to.
   --disable-email-notification: oneof<nothing, bool> # Specifies whether to send the invitation as an email message. If this value is false, Amazon Macie sends the invitation (as an email message) to the email address that you specified for the recipient's account when you associated the account with your account. The default value is false.
   --message: string # Custom text to include in the email message that contains the invitation. The text can contain as many as 80 alphanumeric characters.
-]: any -> record<unprocessedAccounts: record> {
+]: any -> record<unprocessedAccounts: table<accountId: string, errorCode: string, errorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -635,7 +635,7 @@ export def "list-invitations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<invitations: record, nextToken: record> {
+]: nothing -> record<invitations: table<accountId: string, invitationId: string, invitedAt: string, relationshipStatus: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -662,7 +662,7 @@ export def "list-invitations" [
 #
 # POST /members
 # operationId: CreateMember
-# --account shape: {accountId?: any, email?: any}
+# --account shape: {accountId?: string, email?: string}
 export def "create-member" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -680,9 +680,9 @@ export def "create-member" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  account: record # Specifies the details of an account to associate with an Amazon Macie administrator account. — shape: {accountId?: any, email?: any}
+  account: record # Specifies the details of an account to associate with an Amazon Macie administrator account. — shape: {accountId?: string, email?: string}
   --tags: record # A string-to-string map of key-value pairs that specifies the tags (keys and values) for an Amazon Macie resource.
-]: any -> record<arn: record> {
+]: any -> record<arn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -731,7 +731,7 @@ export def "list-members" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<members: record, nextToken: record> {
+]: nothing -> record<members: table<accountId: string, administratorAccountId: string, arn: string, email: string, invitedAt: string, masterAccountId: string, relationshipStatus: string, tags: record, updatedAt: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "onlyAssociated" $only_associated "scalar")] | flatten | str join "&"
@@ -823,7 +823,7 @@ export def "decline-invitations" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   account_ids: list<string> # An array that lists Amazon Web Services account IDs, one for each account that sent an invitation to decline.
-]: any -> record<unprocessedAccounts: record> {
+]: any -> record<unprocessedAccounts: table<accountId: string, errorCode: string, errorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -917,7 +917,7 @@ export def "get-allow-list" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<arn: record, createdAt: record, criteria: record<regex: record, s3WordsList: record<bucketName: record, objectKey: record>>, description: record, id: record, name: record, status: record<code: record, description: record>, tags: record, updatedAt: record> {
+]: nothing -> record<arn: string, createdAt: string, criteria: record<regex: string, s3WordsList: record<bucketName: string, objectKey: string>>, description: string, id: string, name: string, status: record<code: string, description: string>, tags: record, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -944,7 +944,7 @@ export def "get-allow-list" [
 #
 # PUT /allow-lists/{id}
 # operationId: UpdateAllowList
-# --criteria shape: {regex?: any, s3WordsList?: any}
+# --criteria shape: {regex?: string, s3WordsList?: record}
 export def "update-allow-list" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -963,10 +963,10 @@ export def "update-allow-list" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  criteria: record # Specifies the criteria for an allow list. The criteria must specify a regular expression (regex) or an S3 object (s3WordsList). It can't specify both. — shape: {regex?: any, s3WordsList?: any}
+  criteria: record # Specifies the criteria for an allow list. The criteria must specify a regular expression (regex) or an S3 object (s3WordsList). It can't specify both. — shape: {regex?: string, s3WordsList?: record}
   --description: string # A custom description of the allow list. The description can contain as many as 512 characters.
   name: string # A custom name for the allow list. The name can contain as many as 128 characters.
-]: any -> record<arn: record, id: record> {
+]: any -> record<arn: string, id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1059,7 +1059,7 @@ export def "get-custom-data-identifier" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<arn: record, createdAt: record, deleted: record, description: record, id: record, ignoreWords: record, keywords: record, maximumMatchDistance: record, name: record, regex: record, severityLevels: record, tags: record> {
+]: nothing -> record<arn: string, createdAt: string, deleted: bool, description: string, id: string, ignoreWords: list<string>, keywords: list<string>, maximumMatchDistance: int, name: string, regex: string, severityLevels: table<occurrencesThreshold: int, severity: string>, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1149,7 +1149,7 @@ export def "get-findings-filter" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<action: record, arn: record, description: record, findingCriteria: record<criterion: record>, id: record, name: record, position: record, tags: record> {
+]: nothing -> record<action: string, arn: string, description: string, findingCriteria: record<criterion: record>, id: string, name: string, position: int, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1176,7 +1176,7 @@ export def "get-findings-filter" [
 #
 # PATCH /findingsfilters/{id}
 # operationId: UpdateFindingsFilter
-# --findingCriteria shape: {criterion?: any}
+# --findingCriteria shape: {criterion?: record}
 export def "update-findings-filter" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1198,10 +1198,10 @@ export def "update-findings-filter" [
   --action: string@action-completer # The action to perform on findings that match the filter criteria. To suppress (automatically archive) findings that match the criteria, set this value to ARCHIVE. Valid values are:
   --client-token: string # A unique, case-sensitive token that you provide to ensure the idempotency of the request.
   --description: string # A custom description of the filter. The description can contain as many as 512 characters. We strongly recommend that you avoid including any sensitive data in the description of a filter. Other users of your account might be able to see this description, depending on the actions that they're allowed to perform in Amazon Macie.
-  --finding-criteria: record # Specifies, as a map, one or more property-based conditions that filter the results of a query for findings. — shape: {criterion?: any}
+  --finding-criteria: record # Specifies, as a map, one or more property-based conditions that filter the results of a query for findings. — shape: {criterion?: record}
   --name: string # A custom name for the filter. The name must contain at least 3 characters and can contain as many as 64 characters. We strongly recommend that you avoid including any sensitive data in the name of a filter. Other users of your account might be able to see this name, depending on the actions that they're allowed to perform in Amazon Macie.
   --position: int # The position of the filter in the list of saved filters on the Amazon Macie console. This value also determines the order in which the filter is applied to findings, relative to other filters that are also applied to the findings.
-]: any -> record<arn: record, id: record> {
+]: any -> record<arn: string, id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1249,7 +1249,7 @@ export def "delete-invitations" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   account_ids: list<string> # An array that lists Amazon Web Services account IDs, one for each account that sent an invitation to delete.
-]: any -> record<unprocessedAccounts: record> {
+]: any -> record<unprocessedAccounts: table<accountId: string, errorCode: string, errorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1341,7 +1341,7 @@ export def "get-member" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<accountId: record, administratorAccountId: record, arn: record, email: record, invitedAt: record, masterAccountId: record, relationshipStatus: record, tags: record, updatedAt: record> {
+]: nothing -> record<accountId: string, administratorAccountId: string, arn: string, email: string, invitedAt: string, masterAccountId: string, relationshipStatus: string, tags: record, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1368,7 +1368,7 @@ export def "get-member" [
 #
 # POST /datasources/s3
 # operationId: DescribeBuckets
-# --sortCriteria shape: {attributeName?: any, orderBy?: any}
+# --sortCriteria shape: {attributeName?: string, orderBy?: "ASC"|"DESC"}
 export def "describe-buckets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1391,8 +1391,8 @@ export def "describe-buckets" [
   --criteria: record # Specifies, as a map, one or more property-based conditions that filter the results of a query for information about S3 buckets.
   --max-results-body: int # The maximum number of items to include in each page of the response. The default value is 50. (body field)
   --next-token-body: string # The nextToken string that specifies which page of results to return in a paginated response. (body field)
-  --sort-criteria: record # Specifies criteria for sorting the results of a query for information about S3 buckets. — shape: {attributeName?: any, orderBy?: any}
-]: any -> record<buckets: record, nextToken: record> {
+  --sort-criteria: record # Specifies criteria for sorting the results of a query for information about S3 buckets. — shape: {attributeName?: string, orderBy?: "ASC"|"DESC"}
+]: any -> record<buckets: table<accountId: string, allowsUnencryptedObjectUploads: string, bucketArn: string, bucketCreatedAt: string, bucketName: string, classifiableObjectCount: int, classifiableSizeInBytes: int, errorCode: string, errorMessage: string, jobDetails: record, lastAutomatedDiscoveryTime: string, lastUpdated: string, objectCount: int, objectCountByEncryptionType: record, publicAccess: record, region: string, replicationDetails: record, sensitivityScore: int, serverSideEncryption: record, sharedAccess: string, sizeInBytes: int, sizeInBytesCompressed: int, tags: list, unclassifiableObjectCount: record, unclassifiableObjectSizeInBytes: record, versioning: bool>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1440,7 +1440,7 @@ export def "describe-classification-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<allowListIds: record, clientToken: record, createdAt: record, customDataIdentifierIds: record, description: record, initialRun: record, jobArn: record, jobId: record, jobStatus: record, jobType: record, lastRunErrorStatus: record<code: record>, lastRunTime: record, managedDataIdentifierIds: record, managedDataIdentifierSelector: record, name: record, s3JobDefinition: record<bucketCriteria: record<excludes: record, includes: record>, bucketDefinitions: record, scoping: record<excludes: record, includes: record>>, samplingPercentage: record, scheduleFrequency: record<dailySchedule: record, monthlySchedule: record<dayOfMonth: record>, weeklySchedule: record<dayOfWeek: record>>, statistics: record<approximateNumberOfObjectsToProcess: record, numberOfRuns: record>, tags: record, userPausedDetails: record<jobExpiresAt: record, jobImminentExpirationHealthEventArn: record, jobPausedAt: record>> {
+]: nothing -> record<allowListIds: list<string>, clientToken: string, createdAt: string, customDataIdentifierIds: list<string>, description: string, initialRun: bool, jobArn: string, jobId: string, jobStatus: string, jobType: string, lastRunErrorStatus: record<code: string>, lastRunTime: string, managedDataIdentifierIds: list<string>, managedDataIdentifierSelector: string, name: string, s3JobDefinition: record<bucketCriteria: record<excludes: record, includes: record>, bucketDefinitions: list<record>, scoping: record<excludes: record, includes: record>>, samplingPercentage: int, scheduleFrequency: record<dailySchedule: record, monthlySchedule: record<dayOfMonth: int>, weeklySchedule: record<dayOfWeek: string>>, statistics: record<approximateNumberOfObjectsToProcess: float, numberOfRuns: float>, tags: record, userPausedDetails: record<jobExpiresAt: string, jobImminentExpirationHealthEventArn: string, jobPausedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
@@ -1533,7 +1533,7 @@ export def "describe-organization-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<autoEnable: record, maxAccountLimitReached: record> {
+]: nothing -> record<autoEnable: bool, maxAccountLimitReached: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/configuration" $auth.query)
@@ -1584,6 +1584,7 @@ export def "update-organization-configuration" [
   let full_url = (build-url $base "/admin/configuration" $auth.query)
   let req_body = {"autoEnable": $auto_enable} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "autoEnable") == null) { error make --unspanned { msg: "required body field 'autoEnable' missing: pass --auto-enable or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
@@ -1715,7 +1716,7 @@ export def "get-macie-session" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<createdAt: record, findingPublishingFrequency: record, serviceRole: record, status: record, updatedAt: record> {
+]: nothing -> record<createdAt: string, findingPublishingFrequency: string, serviceRole: string, status: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/macie" $auth.query)
@@ -1799,7 +1800,7 @@ export def "disable-organization-admin-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --admin-account-id: string # The Amazon Web Services account ID of the delegated Amazon Macie administrator account.
+  --admin-account-id: string # The Amazon Web Services account ID of the delegated Amazon Macie administrator account. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1810,6 +1811,7 @@ export def "disable-organization-admin-account" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($admin_account_id == null) { error make --unspanned { msg: "required query parameter 'adminAccountId' missing: pass --admin-account-id" } }
   let qp = [(serialize-qp "adminAccountId" $admin_account_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin" $qp $auth.query)
   let accept_val = "application/json"
@@ -2032,7 +2034,7 @@ export def "list-organization-admin-accounts" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<adminAccounts: record, nextToken: record> {
+]: nothing -> record<adminAccounts: table<accountId: string, status: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -2076,7 +2078,7 @@ export def "get-administrator-account" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<administrator: record<accountId: record, invitationId: record, invitedAt: record, relationshipStatus: record>> {
+]: nothing -> record<administrator: record<accountId: string, invitationId: string, invitedAt: string, relationshipStatus: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/administrator" $auth.query)
@@ -2119,7 +2121,7 @@ export def "get-automated-discovery-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<classificationScopeId: record, disabledAt: record, firstEnabledAt: record, lastUpdatedAt: record, sensitivityInspectionTemplateId: record, status: record> {
+]: nothing -> record<classificationScopeId: string, disabledAt: string, firstEnabledAt: string, lastUpdatedAt: string, sensitivityInspectionTemplateId: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/automated-discovery/configuration" $auth.query)
@@ -2210,7 +2212,7 @@ export def "get-bucket-statistics" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --account-id: string # The unique identifier for the Amazon Web Services account.
-]: any -> record<bucketCount: record, bucketCountByEffectivePermission: record<publiclyAccessible: record, publiclyReadable: record, publiclyWritable: record, unknown: record>, bucketCountByEncryptionType: record<kmsManaged: record, s3Managed: record, unencrypted: record, unknown: record>, bucketCountByObjectEncryptionRequirement: record<allowsUnencryptedObjectUploads: record, deniesUnencryptedObjectUploads: record, unknown: record>, bucketCountBySharedAccessType: record<external: record, internal: record, notShared: record, unknown: record>, bucketStatisticsBySensitivity: record<classificationError: record<classifiableSizeInBytes: record, publiclyAccessibleCount: record, totalCount: record, totalSizeInBytes: record>, notClassified: record<classifiableSizeInBytes: record, publiclyAccessibleCount: record, totalCount: record, totalSizeInBytes: record>, notSensitive: record<classifiableSizeInBytes: record, publiclyAccessibleCount: record, totalCount: record, totalSizeInBytes: record>, sensitive: record<classifiableSizeInBytes: record, publiclyAccessibleCount: record, totalCount: record, totalSizeInBytes: record>>, classifiableObjectCount: record, classifiableSizeInBytes: record, lastUpdated: record, objectCount: record, sizeInBytes: record, sizeInBytesCompressed: record, unclassifiableObjectCount: record<fileType: record, storageClass: record, total: record>, unclassifiableObjectSizeInBytes: record<fileType: record, storageClass: record, total: record>> {
+]: any -> record<bucketCount: int, bucketCountByEffectivePermission: record<publiclyAccessible: int, publiclyReadable: int, publiclyWritable: int, unknown: int>, bucketCountByEncryptionType: record<kmsManaged: int, s3Managed: int, unencrypted: int, unknown: int>, bucketCountByObjectEncryptionRequirement: record<allowsUnencryptedObjectUploads: int, deniesUnencryptedObjectUploads: int, unknown: int>, bucketCountBySharedAccessType: record<external: int, internal: int, notShared: int, unknown: int>, bucketStatisticsBySensitivity: record<classificationError: record<classifiableSizeInBytes: int, publiclyAccessibleCount: int, totalCount: int, totalSizeInBytes: int>, notClassified: record<classifiableSizeInBytes: int, publiclyAccessibleCount: int, totalCount: int, totalSizeInBytes: int>, notSensitive: record<classifiableSizeInBytes: int, publiclyAccessibleCount: int, totalCount: int, totalSizeInBytes: int>, sensitive: record<classifiableSizeInBytes: int, publiclyAccessibleCount: int, totalCount: int, totalSizeInBytes: int>>, classifiableObjectCount: int, classifiableSizeInBytes: int, lastUpdated: string, objectCount: int, sizeInBytes: int, sizeInBytesCompressed: int, unclassifiableObjectCount: record<fileType: int, storageClass: int, total: int>, unclassifiableObjectSizeInBytes: record<fileType: int, storageClass: int, total: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2256,7 +2258,7 @@ export def "get-classification-export-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<configuration: record<s3Destination: record<bucketName: record, keyPrefix: record, kmsKeyArn: record>>> {
+]: nothing -> record<configuration: record<s3Destination: record<bucketName: string, keyPrefix: string, kmsKeyArn: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/classification-export-configuration" $auth.query)
@@ -2282,7 +2284,7 @@ export def "get-classification-export-configuration" [
 #
 # PUT /classification-export-configuration
 # operationId: PutClassificationExportConfiguration
-# --configuration shape: {s3Destination?: any}
+# --configuration shape: {s3Destination?: record}
 export def "put-classification-export-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2300,8 +2302,8 @@ export def "put-classification-export-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  configuration: record # Specifies where to store data classification results, and the encryption settings to use when storing results in that location. The location must be an S3 bucket. — shape: {s3Destination?: any}
-]: any -> record<configuration: record<s3Destination: record<bucketName: record, keyPrefix: record, kmsKeyArn: record>>> {
+  configuration: record # Specifies where to store data classification results, and the encryption settings to use when storing results in that location. The location must be an S3 bucket. — shape: {s3Destination?: record}
+]: any -> record<configuration: record<s3Destination: record<bucketName: string, keyPrefix: string, kmsKeyArn: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2348,7 +2350,7 @@ export def "get-classification-scope" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<id: record, name: record, s3: record<excludes: record<bucketNames: record>>> {
+]: nothing -> record<id: string, name: string, s3: record<excludes: record<bucketNames: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2375,7 +2377,7 @@ export def "get-classification-scope" [
 #
 # PATCH /classification-scopes/{id}
 # operationId: UpdateClassificationScope
-# --s3 shape: {excludes?: any}
+# --s3 shape: {excludes?: record}
 export def "update-classification-scope" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2394,7 +2396,7 @@ export def "update-classification-scope" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --s3: record # Specifies changes to the list of S3 buckets that are excluded from automated sensitive data discovery for an Amazon Macie account. — shape: {excludes?: any}
+  --s3: record # Specifies changes to the list of S3 buckets that are excluded from automated sensitive data discovery for an Amazon Macie account. — shape: {excludes?: record}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2425,8 +2427,8 @@ export def "update-classification-scope" [
 #
 # POST /findings/statistics
 # operationId: GetFindingStatistics
-# --findingCriteria shape: {criterion?: any}
-# --sortCriteria shape: {attributeName?: any, orderBy?: any}
+# --findingCriteria shape: {criterion?: record}
+# --sortCriteria shape: {attributeName?: "groupKey"|"count", orderBy?: "ASC"|"DESC"}
 export def "get-finding-statistics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2444,11 +2446,11 @@ export def "get-finding-statistics" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --finding-criteria: record # Specifies, as a map, one or more property-based conditions that filter the results of a query for findings. — shape: {criterion?: any}
+  --finding-criteria: record # Specifies, as a map, one or more property-based conditions that filter the results of a query for findings. — shape: {criterion?: record}
   group_by: string@group-by-completer # The finding property to use to group the query results. Valid values are: classificationDetails.jobId - The unique identifier for the classification job that produced the finding. resourcesAffected.s3Bucket.name - The name of the S3 bucket that the finding applies to. severity.description - The severity level of the finding, such as High or Medium. type - The type of finding, such as Policy:IAMUser/S3BucketPublic and SensitiveData:S3Object/Personal.
   --size: int # The maximum number of items to include in each page of the response.
-  --sort-criteria: record # Specifies criteria for sorting the results of a query that retrieves aggregated statistical data about findings. — shape: {attributeName?: any, orderBy?: any}
-]: any -> record<countsByGroup: record> {
+  --sort-criteria: record # Specifies criteria for sorting the results of a query that retrieves aggregated statistical data about findings. — shape: {attributeName?: "groupKey"|"count", orderBy?: "ASC"|"DESC"}
+]: any -> record<countsByGroup: table<count: int, groupKey: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2477,7 +2479,7 @@ export def "get-finding-statistics" [
 #
 # POST /findings/describe
 # operationId: GetFindings
-# --sortCriteria shape: {attributeName?: any, orderBy?: any}
+# --sortCriteria shape: {attributeName?: string, orderBy?: "ASC"|"DESC"}
 export def "get-findings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2496,8 +2498,8 @@ export def "get-findings" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   finding_ids: list<string> # An array of strings that lists the unique identifiers for the findings to retrieve. You can specify as many as 50 unique identifiers in this array.
-  --sort-criteria: record # Specifies criteria for sorting the results of a request for findings. — shape: {attributeName?: any, orderBy?: any}
-]: any -> record<findings: record> {
+  --sort-criteria: record # Specifies criteria for sorting the results of a request for findings. — shape: {attributeName?: string, orderBy?: "ASC"|"DESC"}
+]: any -> record<findings: table<accountId: string, archived: bool, category: string, classificationDetails: record, count: int, createdAt: string, description: string, id: string, partition: string, policyDetails: record, region: string, resourcesAffected: record, sample: bool, schemaVersion: string, severity: record, title: string, type: string, updatedAt: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2543,7 +2545,7 @@ export def "get-findings-publication-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<securityHubConfiguration: record<publishClassificationFindings: record, publishPolicyFindings: record>> {
+]: nothing -> record<securityHubConfiguration: record<publishClassificationFindings: bool, publishPolicyFindings: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/findings-publication-configuration" $auth.query)
@@ -2569,7 +2571,7 @@ export def "get-findings-publication-configuration" [
 #
 # PUT /findings-publication-configuration
 # operationId: PutFindingsPublicationConfiguration
-# --securityHubConfiguration shape: {publishClassificationFindings?: any, publishPolicyFindings?: any}
+# --securityHubConfiguration shape: {publishClassificationFindings?: bool, publishPolicyFindings?: bool}
 export def "put-findings-publication-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2588,7 +2590,7 @@ export def "put-findings-publication-configuration" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --client-token: string # A unique, case-sensitive token that you provide to ensure the idempotency of the request.
-  --security-hub-configuration: record # Specifies configuration settings that determine which findings are published to Security Hub automatically. For information about how Macie publishes findings to Security Hub, see Amazon Macie integration with Security Hub (https://docs.aws.amazon.com/macie/latest/user/securityhub-integration.html) in the Amazon Macie User Guide. — shape: {publishClassificationFindings?: any, publishPolicyFindings?: any}
+  --security-hub-configuration: record # Specifies configuration settings that determine which findings are published to Security Hub automatically. For information about how Macie publishes findings to Security Hub, see Amazon Macie integration with Security Hub (https://docs.aws.amazon.com/macie/latest/user/securityhub-integration.html) in the Amazon Macie User Guide. — shape: {publishClassificationFindings?: bool, publishPolicyFindings?: bool}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2635,7 +2637,7 @@ export def "get-invitations-count" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<invitationsCount: record> {
+]: nothing -> record<invitationsCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/invitations/count" $auth.query)
@@ -2678,7 +2680,7 @@ export def "get-master-account" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<master: record<accountId: record, invitationId: record, invitedAt: record, relationshipStatus: record>> {
+]: nothing -> record<master: record<accountId: string, invitationId: string, invitedAt: string, relationshipStatus: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/master" $auth.query)
@@ -2714,7 +2716,7 @@ export def "get-resource-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-arn: string # The Amazon Resource Name (ARN) of the S3 bucket that the request applies to.
+  --resource-arn: string # The Amazon Resource Name (ARN) of the S3 bucket that the request applies to. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2722,9 +2724,10 @@ export def "get-resource-profile" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<profileUpdatedAt: record, sensitivityScore: record, sensitivityScoreOverridden: record, statistics: record<totalBytesClassified: record, totalDetections: record, totalDetectionsSuppressed: record, totalItemsClassified: record, totalItemsSensitive: record, totalItemsSkipped: record, totalItemsSkippedInvalidEncryption: record, totalItemsSkippedInvalidKms: record, totalItemsSkippedPermissionDenied: record>> {
+]: nothing -> record<profileUpdatedAt: string, sensitivityScore: int, sensitivityScoreOverridden: bool, statistics: record<totalBytesClassified: int, totalDetections: int, totalDetectionsSuppressed: int, totalItemsClassified: int, totalItemsSensitive: int, totalItemsSkipped: int, totalItemsSkippedInvalidEncryption: int, totalItemsSkippedInvalidKms: int, totalItemsSkippedPermissionDenied: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'resourceArn' missing: pass --resource-arn" } }
   let qp = [(serialize-qp "resourceArn" $resource_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/resource-profiles" $qp $auth.query)
   let accept_val = "application/json"
@@ -2759,7 +2762,7 @@ export def "update-resource-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-arn: string # The Amazon Resource Name (ARN) of the S3 bucket that the request applies to.
+  --resource-arn: string # The Amazon Resource Name (ARN) of the S3 bucket that the request applies to. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2772,6 +2775,7 @@ export def "update-resource-profile" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'resourceArn' missing: pass --resource-arn" } }
   let qp = [(serialize-qp "resourceArn" $resource_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/resource-profiles" $qp $auth.query)
   let req_body = {"sensitivityScoreOverride": $sensitivity_score_override} | compact
@@ -2815,7 +2819,7 @@ export def "get-reveal-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<configuration: record<kmsKeyId: record, status: record>> {
+]: nothing -> record<configuration: record<kmsKeyId: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/reveal-configuration" $auth.query)
@@ -2841,7 +2845,7 @@ export def "get-reveal-configuration" [
 #
 # PUT /reveal-configuration
 # operationId: UpdateRevealConfiguration
-# --configuration shape: {kmsKeyId?: any, status?: any}
+# --configuration shape: {kmsKeyId?: string, status?: "ENABLED"|"DISABLED"}
 export def "update-reveal-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2859,8 +2863,8 @@ export def "update-reveal-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  configuration: record # Specifies the configuration settings for retrieving occurrences of sensitive data reported by findings, and the status of the configuration for an Amazon Macie account. When you enable the configuration for the first time, your request must specify an Key Management Service (KMS) key. Otherwise, an error occurs. Macie uses the specified key to encrypt the sensitive data that you retrieve. — shape: {kmsKeyId?: any, status?: any}
-]: any -> record<configuration: record<kmsKeyId: record, status: record>> {
+  configuration: record # Specifies the configuration settings for retrieving occurrences of sensitive data reported by findings, and the status of the configuration for an Amazon Macie account. When you enable the configuration for the first time, your request must specify an Key Management Service (KMS) key. Otherwise, an error occurs. Macie uses the specified key to encrypt the sensitive data that you retrieve. — shape: {kmsKeyId?: string, status?: "ENABLED"|"DISABLED"}
+]: any -> record<configuration: record<kmsKeyId: string, status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2907,7 +2911,7 @@ export def "get-sensitive-data-occurrences" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<error: record, sensitiveDataOccurrences: record, status: record> {
+]: nothing -> record<error: string, sensitiveDataOccurrences: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($finding_id | is-empty) { error make --unspanned { msg: "path parameter 'findingId' must be non-empty" } }
@@ -2952,7 +2956,7 @@ export def "get-sensitive-data-occurrences-availability" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<code: record, reasons: record> {
+]: nothing -> record<code: string, reasons: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($finding_id | is-empty) { error make --unspanned { msg: "path parameter 'findingId' must be non-empty" } }
@@ -2997,7 +3001,7 @@ export def "get-sensitivity-inspection-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<description: record, excludes: record<managedDataIdentifierIds: record>, includes: record<allowListIds: record, customDataIdentifierIds: record, managedDataIdentifierIds: record>, name: record, sensitivityInspectionTemplateId: record> {
+]: nothing -> record<description: string, excludes: record<managedDataIdentifierIds: list<string>>, includes: record<allowListIds: list<string>, customDataIdentifierIds: list<string>, managedDataIdentifierIds: list<string>>, name: string, sensitivityInspectionTemplateId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3024,8 +3028,8 @@ export def "get-sensitivity-inspection-template" [
 #
 # PUT /templates/sensitivity-inspections/{id}
 # operationId: UpdateSensitivityInspectionTemplate
-# --excludes shape: {managedDataIdentifierIds?: any}
-# --includes shape: {allowListIds?: any, customDataIdentifierIds?: any, managedDataIdentifierIds?: any}
+# --excludes shape: {managedDataIdentifierIds?: list<string>}
+# --includes shape: {allowListIds?: list<string>, customDataIdentifierIds?: list<string>, managedDataIdentifierIds?: list<string>}
 export def "update-sensitivity-inspection-template" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3045,8 +3049,8 @@ export def "update-sensitivity-inspection-template" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --description: string # A custom description of the template. The description can contain as many as 200 characters.
-  --excludes: record # Specifies managed data identifiers to exclude (not use) when performing automated sensitive data discovery for an Amazon Macie account. For information about the managed data identifiers that Amazon Macie currently provides, see Using managed data identifiers (https://docs.aws.amazon.com/macie/latest/user/managed-data-identifiers.html) in the Amazon Macie User Guide. — shape: {managedDataIdentifierIds?: any}
-  --includes: record # Specifies the allow lists, custom data identifiers, and managed data identifiers to include (use) when performing automated sensitive data discovery for an Amazon Macie account. The configuration must specify at least one custom data identifier or managed data identifier. For information about the managed data identifiers that Amazon Macie currently provides, see Using managed data identifiers (https://docs.aws.amazon.com/macie/latest/user/managed-data-identifiers.html) in the Amazon Macie User Guide. — shape: {allowListIds?: any, customDataIdentifierIds?: any, managedDataIdentifierIds?: any}
+  --excludes: record # Specifies managed data identifiers to exclude (not use) when performing automated sensitive data discovery for an Amazon Macie account. For information about the managed data identifiers that Amazon Macie currently provides, see Using managed data identifiers (https://docs.aws.amazon.com/macie/latest/user/managed-data-identifiers.html) in the Amazon Macie User Guide. — shape: {managedDataIdentifierIds?: list<string>}
+  --includes: record # Specifies the allow lists, custom data identifiers, and managed data identifiers to include (use) when performing automated sensitive data discovery for an Amazon Macie account. The configuration must specify at least one custom data identifier or managed data identifier. For information about the managed data identifiers that Amazon Macie currently provides, see Using managed data identifiers (https://docs.aws.amazon.com/macie/latest/user/managed-data-identifiers.html) in the Amazon Macie User Guide. — shape: {allowListIds?: list<string>, customDataIdentifierIds?: list<string>, managedDataIdentifierIds?: list<string>}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3077,8 +3081,8 @@ export def "update-sensitivity-inspection-template" [
 #
 # POST /usage/statistics
 # operationId: GetUsageStatistics
-# --filterBy item shape: {comparator?: any, key?: any, values?: any}
-# --sortBy shape: {key?: any, orderBy?: any}
+# --filterBy item shape: {comparator?: "GT"|"GTE"|"LT"|"LTE"|"EQ"|"NE"|"CONTAINS", key?: "accountId"|"serviceLimit"|"freeTrialStartDate"|"total", values?: list<string>}
+# --sortBy shape: {key?: "accountId"|"total"|"serviceLimitValue"|"freeTrialStartDate", orderBy?: "ASC"|"DESC"}
 export def "get-usage-statistics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3098,12 +3102,12 @@ export def "get-usage-statistics" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --filter-by: list # An array of objects, one for each condition to use to filter the query results. If you specify more than one condition, Amazon Macie uses an AND operator to join the conditions. — item shape: {comparator?: any, key?: any, values?: any}
+  --filter-by: list # An array of objects, one for each condition to use to filter the query results. If you specify more than one condition, Amazon Macie uses an AND operator to join the conditions. — item shape: {comparator?: "GT"|"GTE"|"LT"|"LTE"|"EQ"|"NE"|"CONTAINS", key?: "accountId"|"serviceLimit"|"freeTrialStartDate"|"total", values?: list<string>}
   --max-results-body: int # The maximum number of items to include in each page of the response. (body field)
   --next-token-body: string # The nextToken string that specifies which page of results to return in a paginated response. (body field)
-  --sort-by: record # Specifies criteria for sorting the results of a query for Amazon Macie account quotas and usage data. — shape: {key?: any, orderBy?: any}
+  --sort-by: record # Specifies criteria for sorting the results of a query for Amazon Macie account quotas and usage data. — shape: {key?: "accountId"|"total"|"serviceLimitValue"|"freeTrialStartDate", orderBy?: "ASC"|"DESC"}
   --time-range: string@time-range-completer # An inclusive time period that Amazon Macie usage data applies to. Possible values are:
-]: any -> record<nextToken: record, records: record, timeRange: record> {
+]: any -> record<nextToken: string, records: table<accountId: string, automatedDiscoveryFreeTrialStartDate: string, freeTrialStartDate: string, usage: list>, timeRange: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3151,7 +3155,7 @@ export def "get-usage-totals" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<timeRange: record, usageTotals: record> {
+]: nothing -> record<timeRange: string, usageTotals: table<currency: string, estimatedCost: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timeRange" $time_range "scalar")] | flatten | str join "&"
@@ -3178,8 +3182,8 @@ export def "get-usage-totals" [
 #
 # POST /jobs/list
 # operationId: ListClassificationJobs
-# --filterCriteria shape: {excludes?: any, includes?: any}
-# --sortCriteria shape: {attributeName?: any, orderBy?: any}
+# --filterCriteria shape: {excludes?: list, includes?: list}
+# --sortCriteria shape: {attributeName?: "createdAt"|"jobStatus"|"name"|"jobType", orderBy?: "ASC"|"DESC"}
 export def "list-classification-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3199,11 +3203,11 @@ export def "list-classification-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --filter-criteria: record # Specifies criteria for filtering the results of a request for information about classification jobs. — shape: {excludes?: any, includes?: any}
+  --filter-criteria: record # Specifies criteria for filtering the results of a request for information about classification jobs. — shape: {excludes?: list, includes?: list}
   --max-results-body: int # The maximum number of items to include in each page of the response. (body field)
   --next-token-body: string # The nextToken string that specifies which page of results to return in a paginated response. (body field)
-  --sort-criteria: record # Specifies criteria for sorting the results of a request for information about classification jobs. — shape: {attributeName?: any, orderBy?: any}
-]: any -> record<items: record, nextToken: record> {
+  --sort-criteria: record # Specifies criteria for sorting the results of a request for information about classification jobs. — shape: {attributeName?: "createdAt"|"jobStatus"|"name"|"jobType", orderBy?: "ASC"|"DESC"}
+]: any -> record<items: table<bucketCriteria: record, bucketDefinitions: list, createdAt: string, jobId: string, jobStatus: string, jobType: string, lastRunErrorStatus: record, name: string, userPausedDetails: record>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3252,7 +3256,7 @@ export def "list-classification-scopes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<classificationScopes: record, nextToken: record> {
+]: nothing -> record<classificationScopes: table<id: string, name: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -3300,7 +3304,7 @@ export def "list-custom-data-identifiers" [
   --x-amz-signed-headers: string
   --max-results-body: int # The maximum number of items to include in each page of the response. (body field)
   --next-token-body: string # The nextToken string that specifies which page of results to return in a paginated response. (body field)
-]: any -> record<items: record, nextToken: record> {
+]: any -> record<items: table<arn: string, createdAt: string, description: string, id: string, name: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3330,8 +3334,8 @@ export def "list-custom-data-identifiers" [
 #
 # POST /findings
 # operationId: ListFindings
-# --findingCriteria shape: {criterion?: any}
-# --sortCriteria shape: {attributeName?: any, orderBy?: any}
+# --findingCriteria shape: {criterion?: record}
+# --sortCriteria shape: {attributeName?: string, orderBy?: "ASC"|"DESC"}
 export def "list-findings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3351,11 +3355,11 @@ export def "list-findings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --finding-criteria: record # Specifies, as a map, one or more property-based conditions that filter the results of a query for findings. — shape: {criterion?: any}
+  --finding-criteria: record # Specifies, as a map, one or more property-based conditions that filter the results of a query for findings. — shape: {criterion?: record}
   --max-results-body: int # The maximum number of items to include in each page of the response. (body field)
   --next-token-body: string # The nextToken string that specifies which page of results to return in a paginated response. (body field)
-  --sort-criteria: record # Specifies criteria for sorting the results of a request for findings. — shape: {attributeName?: any, orderBy?: any}
-]: any -> record<findingIds: record, nextToken: record> {
+  --sort-criteria: record # Specifies criteria for sorting the results of a request for findings. — shape: {attributeName?: string, orderBy?: "ASC"|"DESC"}
+]: any -> record<findingIds: list<string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3404,7 +3408,7 @@ export def "list-managed-data-identifiers" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --next-token-body: string # The nextToken string that specifies which page of results to return in a paginated response. (body field)
-]: any -> record<items: record, nextToken: record> {
+]: any -> record<items: table<category: string, id: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3445,7 +3449,7 @@ export def "list-resource-profile-artifacts" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # The nextToken string that specifies which page of results to return in a paginated response.
-  --resource-arn: string # The Amazon Resource Name (ARN) of the S3 bucket that the request applies to.
+  --resource-arn: string # The Amazon Resource Name (ARN) of the S3 bucket that the request applies to. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3453,9 +3457,10 @@ export def "list-resource-profile-artifacts" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<artifacts: record, nextToken: record> {
+]: nothing -> record<artifacts: table<arn: string, classificationResultStatus: string, sensitive: bool>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'resourceArn' missing: pass --resource-arn" } }
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "resourceArn" $resource_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/resource-profiles/artifacts" $qp $auth.query)
   let accept_val = "application/json"
@@ -3492,7 +3497,7 @@ export def "list-resource-profile-detections" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-results: int # The maximum number of items to include in each page of a paginated response.
   --next-token: string # The nextToken string that specifies which page of results to return in a paginated response.
-  --resource-arn: string # The Amazon Resource Name (ARN) of the S3 bucket that the request applies to.
+  --resource-arn: string # The Amazon Resource Name (ARN) of the S3 bucket that the request applies to. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3500,9 +3505,10 @@ export def "list-resource-profile-detections" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<detections: record, nextToken: record> {
+]: nothing -> record<detections: table<arn: string, count: int, id: string, name: string, suppressed: bool, type: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'resourceArn' missing: pass --resource-arn" } }
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "resourceArn" $resource_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/resource-profiles/detections" $qp $auth.query)
   let accept_val = "application/json"
@@ -3527,7 +3533,7 @@ export def "list-resource-profile-detections" [
 #
 # PATCH /resource-profiles/detections
 # operationId: UpdateResourceProfileDetections
-# --suppressDataIdentifiers item shape: {id?: any, type?: any}
+# --suppressDataIdentifiers item shape: {id?: string, type?: "CUSTOM"|"MANAGED"}
 export def "update-resource-profile-detections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3538,7 +3544,7 @@ export def "update-resource-profile-detections" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-arn: string # The Amazon Resource Name (ARN) of the S3 bucket that the request applies to.
+  --resource-arn: string # The Amazon Resource Name (ARN) of the S3 bucket that the request applies to. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3546,11 +3552,12 @@ export def "update-resource-profile-detections" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --suppress-data-identifiers: list # An array of objects, one for each custom data identifier or managed data identifier that detected the type of sensitive data to start excluding or including in the bucket's score. To start including all sensitive data types in the score, don't specify any values for this array. — item shape: {id?: any, type?: any}
+  --suppress-data-identifiers: list # An array of objects, one for each custom data identifier or managed data identifier that detected the type of sensitive data to start excluding or including in the bucket's score. To start including all sensitive data types in the score, don't specify any values for this array. — item shape: {id?: string, type?: "CUSTOM"|"MANAGED"}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'resourceArn' missing: pass --resource-arn" } }
   let qp = [(serialize-qp "resourceArn" $resource_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/resource-profiles/detections" $qp $auth.query)
   let req_body = {"suppressDataIdentifiers": $suppress_data_identifiers} | compact
@@ -3596,7 +3603,7 @@ export def "list-sensitivity-inspection-templates" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<nextToken: record, sensitivityInspectionTemplates: record> {
+]: nothing -> record<nextToken: string, sensitivityInspectionTemplates: table<id: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -3717,8 +3724,8 @@ export def "tag-resource" [
 #
 # POST /datasources/search-resources
 # operationId: SearchResources
-# --bucketCriteria shape: {excludes?: any, includes?: any}
-# --sortCriteria shape: {attributeName?: any, orderBy?: any}
+# --bucketCriteria shape: {excludes?: record, includes?: record}
+# --sortCriteria shape: {attributeName?: "ACCOUNT_ID"|"RESOURCE_NAME"|"S3_CLASSIFIABLE_OBJECT_COUNT"|"S3_CLASSIFIABLE_SIZE_IN_BYTES", orderBy?: "ASC"|"DESC"}
 export def "search-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3738,11 +3745,11 @@ export def "search-resources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --bucket-criteria: record # Specifies property- and tag-based conditions that define filter criteria for including or excluding S3 buckets from the query results. Exclude conditions take precedence over include conditions. — shape: {excludes?: any, includes?: any}
+  --bucket-criteria: record # Specifies property- and tag-based conditions that define filter criteria for including or excluding S3 buckets from the query results. Exclude conditions take precedence over include conditions. — shape: {excludes?: record, includes?: record}
   --max-results-body: int # The maximum number of items to include in each page of the response. The default value is 50. (body field)
   --next-token-body: string # The nextToken string that specifies which page of results to return in a paginated response. (body field)
-  --sort-criteria: record # Specifies criteria for sorting the results of a query for information about Amazon Web Services resources that Amazon Macie monitors and analyzes. — shape: {attributeName?: any, orderBy?: any}
-]: any -> record<matchingResources: record, nextToken: record> {
+  --sort-criteria: record # Specifies criteria for sorting the results of a query for information about Amazon Web Services resources that Amazon Macie monitors and analyzes. — shape: {attributeName?: "ACCOUNT_ID"|"RESOURCE_NAME"|"S3_CLASSIFIABLE_OBJECT_COUNT"|"S3_CLASSIFIABLE_SIZE_IN_BYTES", orderBy?: "ASC"|"DESC"}
+]: any -> record<matchingResources: table<matchingBucket: record>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3794,7 +3801,7 @@ export def "test-custom-data-identifier" [
   --maximum-match-distance: int # The maximum number of characters that can exist between the end of at least one complete character sequence specified by the keywords array and the end of the text that matches the regex pattern. If a complete keyword precedes all the text that matches the pattern and the keyword is within the specified distance, Amazon Macie includes the result. The distance can be 1-300 characters. The default value is 50.
   regex: string # The regular expression (regex) that defines the pattern to match. The expression can contain as many as 512 characters.
   sample_text: string # The sample text to inspect by using the custom data identifier. The text can contain as many as 1,000 characters.
-]: any -> record<matchCount: record> {
+]: any -> record<matchCount: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3834,7 +3841,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # One or more tags (keys) to remove from the resource. In an HTTP request to remove multiple tags, append the tagKeys parameter and argument for each tag to remove, separated by an ampersand (&).
+  --tag-keys: list # One or more tags (keys) to remove from the resource. In an HTTP request to remove multiple tags, append the tagKeys parameter and argument for each tag to remove, separated by an ampersand (&). (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3846,6 +3853,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"

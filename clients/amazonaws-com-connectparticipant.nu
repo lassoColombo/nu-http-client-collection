@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -143,13 +143,14 @@ export def "complete-attachment-upload" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-bearer: string # The authentication token associated with the participant's connection.
+  --x-amz-bearer: string # The authentication token associated with the participant's connection. (required)
   attachment_ids: list<string> # A list of unique identifiers for the attachments.
   client_token: string # A unique, case-sensitive identifier that you provide to ensure the idempotency of the request. If not provided, the Amazon Web Services SDK populates this field. For more information about idempotency, see Making retries safe with idempotent APIs (https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/).
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_bearer == null) { error make --unspanned { msg: "required header parameter 'X-Amz-Bearer' missing: pass --x-amz-bearer" } }
   let full_url = (build-url $base "/participant/complete-attachment-upload" $auth.query)
   let req_body = {"AttachmentIds": $attachment_ids, "ClientToken": $client_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -192,13 +193,14 @@ export def "create-participant-connection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-bearer: string # This is a header parameter. The ParticipantToken as obtained from StartChatContact (https://docs.aws.amazon.com/connect/latest/APIReference/API_StartChatContact.html) API response.
+  --x-amz-bearer: string # This is a header parameter. The ParticipantToken as obtained from StartChatContact (https://docs.aws.amazon.com/connect/latest/APIReference/API_StartChatContact.html) API response. (required)
   --type: list<string> # Type of connection information required. This can be omitted if ConnectParticipant is true.
   --connect-participant: oneof<nothing, bool> # Amazon Connect Participant is used to mark the participant as connected for customer participant in message streaming, as well as for agent or manager participant in non-streaming chats.
-]: any -> record<Websocket: record<Url: record, ConnectionExpiry: record>, ConnectionCredentials: record<ConnectionToken: record, Expiry: record>> {
+]: any -> record<Websocket: record<Url: string, ConnectionExpiry: string>, ConnectionCredentials: record<ConnectionToken: string, Expiry: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_bearer == null) { error make --unspanned { msg: "required header parameter 'X-Amz-Bearer' missing: pass --x-amz-bearer" } }
   let full_url = (build-url $base "/participant/connection" $auth.query)
   let req_body = {"Type": $type, "ConnectParticipant": $connect_participant} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -241,12 +243,13 @@ export def "disconnect-participant" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-bearer: string # The authentication token associated with the participant's connection.
+  --x-amz-bearer: string # The authentication token associated with the participant's connection. (required)
   --client-token: string # A unique, case-sensitive identifier that you provide to ensure the idempotency of the request. If not provided, the Amazon Web Services SDK populates this field. For more information about idempotency, see Making retries safe with idempotent APIs (https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/).
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_bearer == null) { error make --unspanned { msg: "required header parameter 'X-Amz-Bearer' missing: pass --x-amz-bearer" } }
   let full_url = (build-url $base "/participant/disconnect" $auth.query)
   let req_body = {"ClientToken": $client_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -289,12 +292,13 @@ export def "get-attachment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-bearer: string # The authentication token associated with the participant's connection.
+  --x-amz-bearer: string # The authentication token associated with the participant's connection. (required)
   attachment_id: string # A unique identifier for the attachment.
-]: any -> record<Url: record, UrlExpiry: record> {
+]: any -> record<Url: string, UrlExpiry: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_bearer == null) { error make --unspanned { msg: "required header parameter 'X-Amz-Bearer' missing: pass --x-amz-bearer" } }
   let full_url = (build-url $base "/participant/attachment" $auth.query)
   let req_body = {"AttachmentId": $attachment_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -320,7 +324,7 @@ export def "get-attachment" [
 #
 # POST /participant/transcript
 # operationId: GetTranscript
-# --StartPosition shape: {Id?: any, AbsoluteTime?: any, MostRecent?: any}
+# --StartPosition shape: {Id?: string, AbsoluteTime?: string, MostRecent?: int}
 export def "get-transcript" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -340,17 +344,18 @@ export def "get-transcript" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-bearer: string # The authentication token associated with the participant's connection.
+  --x-amz-bearer: string # The authentication token associated with the participant's connection. (required)
   --contact-id: string # The contactId from the current contact chain for which transcript is needed.
   --max-results-body: int # The maximum number of results to return in the page. Default: 10. (body field)
   --next-token-body: string # The pagination token. Use the value returned previously in the next subsequent request to retrieve the next set of results. (body field)
   --scan-direction: string@scan-direction-completer # The direction from StartPosition from which to retrieve message. Default: BACKWARD when no StartPosition is provided, FORWARD with StartPosition.
   --sort-order: string@sort-order-completer # The sort order for the records. Default: DESCENDING.
-  --start-position: record # A filtering option for where to start. For example, if you sent 100 messages, start with message 50. — shape: {Id?: any, AbsoluteTime?: any, MostRecent?: any}
-]: any -> record<InitialContactId: record, Transcript: record, NextToken: record> {
+  --start-position: record # A filtering option for where to start. For example, if you sent 100 messages, start with message 50. — shape: {Id?: string, AbsoluteTime?: string, MostRecent?: int}
+]: any -> record<InitialContactId: string, Transcript: table<AbsoluteTime: string, Content: string, ContentType: string, Id: string, Type: string, ParticipantId: string, DisplayName: string, ParticipantRole: string, Attachments: list, MessageMetadata: record, RelatedContactId: string, ContactId: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_bearer == null) { error make --unspanned { msg: "required header parameter 'X-Amz-Bearer' missing: pass --x-amz-bearer" } }
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/participant/transcript" $qp $auth.query)
   let req_body = {"ContactId": $contact_id, "MaxResults": $max_results_body, "NextToken": $next_token_body, "ScanDirection": $scan_direction, "SortOrder": $sort_order, "StartPosition": $start_position} | compact
@@ -394,14 +399,15 @@ export def "send-event" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-bearer: string # The authentication token associated with the participant's connection.
+  --x-amz-bearer: string # The authentication token associated with the participant's connection. (required)
   content_type: string # The content type of the request. Supported types are: application/vnd.amazonaws.connect.event.typing application/vnd.amazonaws.connect.event.connection.acknowledged application/vnd.amazonaws.connect.event.message.delivered application/vnd.amazonaws.connect.event.message.read
   --content: string # The content of the event to be sent (for example, message text). For content related to message receipts, this is supported in the form of a JSON string. Sample Content: "{\"messageId\":\"11111111-aaaa-bbbb-cccc-EXAMPLE01234\"}"
   --client-token: string # A unique, case-sensitive identifier that you provide to ensure the idempotency of the request. If not provided, the Amazon Web Services SDK populates this field. For more information about idempotency, see Making retries safe with idempotent APIs (https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/).
-]: any -> record<Id: record, AbsoluteTime: record> {
+]: any -> record<Id: string, AbsoluteTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_bearer == null) { error make --unspanned { msg: "required header parameter 'X-Amz-Bearer' missing: pass --x-amz-bearer" } }
   let full_url = (build-url $base "/participant/event" $auth.query)
   let req_body = {"ContentType": $content_type, "Content": $content, "ClientToken": $client_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -444,14 +450,15 @@ export def "send-message" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-bearer: string # The authentication token associated with the connection.
+  --x-amz-bearer: string # The authentication token associated with the connection. (required)
   content_type: string # The type of the content. Supported types are text/plain, text/markdown, application/json, and application/vnd.amazonaws.connect.message.interactive.response.
   content: string # The content of the message. For text/plain and text/markdown, the Length Constraints are Minimum of 1, Maximum of 1024. For application/json, the Length Constraints are Minimum of 1, Maximum of 12000. For application/vnd.amazonaws.connect.message.interactive.response, the Length Constraints are Minimum of 1, Maximum of 12288.
   --client-token: string # A unique, case-sensitive identifier that you provide to ensure the idempotency of the request. If not provided, the Amazon Web Services SDK populates this field. For more information about idempotency, see Making retries safe with idempotent APIs (https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/).
-]: any -> record<Id: record, AbsoluteTime: record> {
+]: any -> record<Id: string, AbsoluteTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_bearer == null) { error make --unspanned { msg: "required header parameter 'X-Amz-Bearer' missing: pass --x-amz-bearer" } }
   let full_url = (build-url $base "/participant/message" $auth.query)
   let req_body = {"ContentType": $content_type, "Content": $content, "ClientToken": $client_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -494,15 +501,16 @@ export def "start-attachment-upload" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-bearer: string # The authentication token associated with the participant's connection.
+  --x-amz-bearer: string # The authentication token associated with the participant's connection. (required)
   content_type: string # Describes the MIME file type of the attachment. For a list of supported file types, see Feature specifications (https://docs.aws.amazon.com/connect/latest/adminguide/feature-limits.html) in the Amazon Connect Administrator Guide.
   attachment_size_in_bytes: int # The size of the attachment in bytes.
   attachment_name: string # A case-sensitive name of the attachment being uploaded.
   client_token: string # A unique, case-sensitive identifier that you provide to ensure the idempotency of the request. If not provided, the Amazon Web Services SDK populates this field. For more information about idempotency, see Making retries safe with idempotent APIs (https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/).
-]: any -> record<AttachmentId: record, UploadMetadata: record<Url: record, UrlExpiry: record, HeadersToInclude: record>> {
+]: any -> record<AttachmentId: string, UploadMetadata: record<Url: string, UrlExpiry: string, HeadersToInclude: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_bearer == null) { error make --unspanned { msg: "required header parameter 'X-Amz-Bearer' missing: pass --x-amz-bearer" } }
   let full_url = (build-url $base "/participant/start-attachment-upload" $auth.query)
   let req_body = {"ContentType": $content_type, "AttachmentSizeInBytes": $attachment_size_in_bytes, "AttachmentName": $attachment_name, "ClientToken": $client_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

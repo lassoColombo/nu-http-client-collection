@@ -1,4 +1,4 @@
-# Auto-generated client for Patchman-engine API vv1.15.3
+# Auto-generated client for Patchman-engine API v1.15.3
 # Source: https://api.apis.guru/v2/specs/redhat.local/patchman-engine/v1.15.3/openapi.json
 # Auth: --token flag or $env.PATCHMAN_ENGINE_API_TOKEN
 
@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-rh-identity" => { {scheme: $scheme, headers: {x-rh-identity: $token_val}, query: "", location: "header"} }
+    "x-rh-identity" => { {scheme: $scheme, headers: {"x-rh-identity": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -153,7 +153,7 @@ export def "list-advisories" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Limit for paging, set -1 to return all
   --offset: int # Offset for paging
-  --qp-sort: string@sort-completer # Sort field
+  --sort: string@sort-completer # Sort field
   --search: string # Find matching text
   --filter-id: string # Filter
   --filter-description: string # Filter
@@ -168,14 +168,14 @@ export def "list-advisories" [
 ]: nothing -> record<data: table<attributes: record, id: string, type: string>, links: record<first: string, last: string, next: string, previous: string>, meta: record<filter: record, limit: int, offset: int, search: string, sort: list<string>, subtotals: record, total_items: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rh-identity"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filter[id]" $filter_id "scalar") (serialize-qp "filter[description]" $filter_description "scalar") (serialize-qp "filter[public_date]" $filter_public_date "scalar") (serialize-qp "filter[synopsis]" $filter_synopsis "scalar") (serialize-qp "filter[advisory_type]" $filter_advisory_type "scalar") (serialize-qp "filter[severity]" $filter_severity "scalar") (serialize-qp "filter[applicable_systems]" $filter_applicable_systems "scalar") (serialize-qp "tags" $tags "multi") (serialize-qp "filter[system_profile][sap_system]" $filter_system_profile_sap_system "scalar") (serialize-qp "filter[system_profile][sap_sids][in]" $filter_system_profile_sap_sids_in "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filter[id]" $filter_id "scalar") (serialize-qp "filter[description]" $filter_description "scalar") (serialize-qp "filter[public_date]" $filter_public_date "scalar") (serialize-qp "filter[synopsis]" $filter_synopsis "scalar") (serialize-qp "filter[advisory_type]" $filter_advisory_type "scalar") (serialize-qp "filter[severity]" $filter_severity "scalar") (serialize-qp "filter[applicable_systems]" $filter_applicable_systems "scalar") (serialize-qp "tags" $tags "multi") (serialize-qp "filter[system_profile][sap_system]" $filter_system_profile_sap_system "scalar") (serialize-qp "filter[system_profile][sap_sids][in]" $filter_system_profile_sap_sids_in "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/patch/v1/advisories" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "offset": $offset, "sort": $qp_sort, "search": $search, "filter[id]": $filter_id, "filter[description]": $filter_description, "filter[public_date]": $filter_public_date, "filter[synopsis]": $filter_synopsis, "filter[advisory_type]": $filter_advisory_type, "filter[severity]": $filter_severity, "filter[applicable_systems]": $filter_applicable_systems, "tags": $tags, "filter[system_profile][sap_system]": $filter_system_profile_sap_system, "filter[system_profile][sap_sids][in]": $filter_system_profile_sap_sids_in} | compact)
+    query: ({"limit": $limit, "offset": $offset, "sort": $sort, "search": $search, "filter[id]": $filter_id, "filter[description]": $filter_description, "filter[public_date]": $filter_public_date, "filter[synopsis]": $filter_synopsis, "filter[advisory_type]": $filter_advisory_type, "filter[severity]": $filter_severity, "filter[applicable_systems]": $filter_applicable_systems, "tags": $tags, "filter[system_profile][sap_system]": $filter_system_profile_sap_system, "filter[system_profile][sap_sids][in]": $filter_system_profile_sap_sids_in} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -239,7 +239,7 @@ export def "list-advisory-systems" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Limit for paging, set -1 to return all
   --offset: int # Offset for paging
-  --qp-sort: string@sort-completer-1 # Sort field
+  --sort: string@sort-completer-1 # Sort field
   --search: string # Find matching text
   --filter-id: string # Filter
   --filter-insights-id: string # Filter
@@ -262,14 +262,14 @@ export def "list-advisory-systems" [
   let auth = (build-auth $token ($auth_scheme | default "x-rh-identity"))
   let base = ($base_url | default $BASE_URL)
   if ($advisory_id | is-empty) { error make --unspanned { msg: "path parameter 'advisory_id' must be non-empty" } }
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filter[id]" $filter_id "scalar") (serialize-qp "filter[insights_id]" $filter_insights_id "scalar") (serialize-qp "filter[display_name]" $filter_display_name "scalar") (serialize-qp "filter[last_evaluation]" $filter_last_evaluation "scalar") (serialize-qp "filter[last_upload]" $filter_last_upload "scalar") (serialize-qp "filter[rhsa_count]" $filter_rhsa_count "scalar") (serialize-qp "filter[rhba_count]" $filter_rhba_count "scalar") (serialize-qp "filter[rhea_count]" $filter_rhea_count "scalar") (serialize-qp "filter[other_count]" $filter_other_count "scalar") (serialize-qp "filter[stale]" $filter_stale "scalar") (serialize-qp "filter[stale_timestamp]" $filter_stale_timestamp "scalar") (serialize-qp "filter[stale_warning_timestamp]" $filter_stale_warning_timestamp "scalar") (serialize-qp "filter[culled_timestamp]" $filter_culled_timestamp "scalar") (serialize-qp "filter[created]" $filter_created "scalar") (serialize-qp "tags" $tags "multi") (serialize-qp "filter[system_profile][sap_system]" $filter_system_profile_sap_system "scalar") (serialize-qp "filter[system_profile][sap_sids][in]" $filter_system_profile_sap_sids_in "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filter[id]" $filter_id "scalar") (serialize-qp "filter[insights_id]" $filter_insights_id "scalar") (serialize-qp "filter[display_name]" $filter_display_name "scalar") (serialize-qp "filter[last_evaluation]" $filter_last_evaluation "scalar") (serialize-qp "filter[last_upload]" $filter_last_upload "scalar") (serialize-qp "filter[rhsa_count]" $filter_rhsa_count "scalar") (serialize-qp "filter[rhba_count]" $filter_rhba_count "scalar") (serialize-qp "filter[rhea_count]" $filter_rhea_count "scalar") (serialize-qp "filter[other_count]" $filter_other_count "scalar") (serialize-qp "filter[stale]" $filter_stale "scalar") (serialize-qp "filter[stale_timestamp]" $filter_stale_timestamp "scalar") (serialize-qp "filter[stale_warning_timestamp]" $filter_stale_warning_timestamp "scalar") (serialize-qp "filter[culled_timestamp]" $filter_culled_timestamp "scalar") (serialize-qp "filter[created]" $filter_created "scalar") (serialize-qp "tags" $tags "multi") (serialize-qp "filter[system_profile][sap_system]" $filter_system_profile_sap_system "scalar") (serialize-qp "filter[system_profile][sap_sids][in]" $filter_system_profile_sap_sids_in "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({advisory_id: (encode-path-segment $advisory_id)} | format pattern "/api/patch/v1/advisories/{advisory_id}/systems") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "offset": $offset, "sort": $qp_sort, "search": $search, "filter[id]": $filter_id, "filter[insights_id]": $filter_insights_id, "filter[display_name]": $filter_display_name, "filter[last_evaluation]": $filter_last_evaluation, "filter[last_upload]": $filter_last_upload, "filter[rhsa_count]": $filter_rhsa_count, "filter[rhba_count]": $filter_rhba_count, "filter[rhea_count]": $filter_rhea_count, "filter[other_count]": $filter_other_count, "filter[stale]": $filter_stale, "filter[stale_timestamp]": $filter_stale_timestamp, "filter[stale_warning_timestamp]": $filter_stale_warning_timestamp, "filter[culled_timestamp]": $filter_culled_timestamp, "filter[created]": $filter_created, "tags": $tags, "filter[system_profile][sap_system]": $filter_system_profile_sap_system, "filter[system_profile][sap_sids][in]": $filter_system_profile_sap_sids_in} | compact)
+    query: ({"limit": $limit, "offset": $offset, "sort": $sort, "search": $search, "filter[id]": $filter_id, "filter[insights_id]": $filter_insights_id, "filter[display_name]": $filter_display_name, "filter[last_evaluation]": $filter_last_evaluation, "filter[last_upload]": $filter_last_upload, "filter[rhsa_count]": $filter_rhsa_count, "filter[rhba_count]": $filter_rhba_count, "filter[rhea_count]": $filter_rhea_count, "filter[other_count]": $filter_other_count, "filter[stale]": $filter_stale, "filter[stale_timestamp]": $filter_stale_timestamp, "filter[stale_warning_timestamp]": $filter_stale_warning_timestamp, "filter[culled_timestamp]": $filter_culled_timestamp, "filter[created]": $filter_created, "tags": $tags, "filter[system_profile][sap_system]": $filter_system_profile_sap_system, "filter[system_profile][sap_sids][in]": $filter_system_profile_sap_sids_in} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -392,7 +392,7 @@ export def "export-packages" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-sort: string@sort-completer-2 # Sort field
+  --sort: string@sort-completer-2 # Sort field
   --search: string # Find matching text
   --filter-name: string # Filter
   --filter-systems-installed: string # Filter
@@ -401,14 +401,14 @@ export def "export-packages" [
 ]: nothing -> table<name: string, summary: string, systems_installed: int, systems_updatable: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-rh-identity"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filter[name]" $filter_name "scalar") (serialize-qp "filter[systems_installed]" $filter_systems_installed "scalar") (serialize-qp "filter[systems_updatable]" $filter_systems_updatable "scalar") (serialize-qp "filter[summary]" $filter_summary "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filter[name]" $filter_name "scalar") (serialize-qp "filter[systems_installed]" $filter_systems_installed "scalar") (serialize-qp "filter[systems_updatable]" $filter_systems_updatable "scalar") (serialize-qp "filter[summary]" $filter_summary "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/patch/v1/export/packages" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sort": $qp_sort, "search": $search, "filter[name]": $filter_name, "filter[systems_installed]": $filter_systems_installed, "filter[systems_updatable]": $filter_systems_updatable, "filter[summary]": $filter_summary} | compact)
+    query: ({"sort": $sort, "search": $search, "filter[name]": $filter_name, "filter[systems_installed]": $filter_systems_installed, "filter[systems_updatable]": $filter_systems_updatable, "filter[summary]": $filter_summary} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -614,7 +614,7 @@ export def "list-packages" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Limit for paging, set -1 to return all
   --offset: int # Offset for paging
-  --qp-sort: string@sort-completer-2 # Sort field
+  --sort: string@sort-completer-2 # Sort field
   --search: string # Find matching text
   --filter-name: string # Filter
   --filter-systems-installed: string # Filter
@@ -626,14 +626,14 @@ export def "list-packages" [
 ]: nothing -> record<data: table<name: string, summary: string, systems_installed: int, systems_updatable: int>, links: record<first: string, last: string, next: string, previous: string>, meta: record<filter: record, limit: int, offset: int, search: string, sort: list<string>, subtotals: record, total_items: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rh-identity"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filter[name]" $filter_name "scalar") (serialize-qp "filter[systems_installed]" $filter_systems_installed "scalar") (serialize-qp "filter[systems_updatable]" $filter_systems_updatable "scalar") (serialize-qp "filter[summary]" $filter_summary "scalar") (serialize-qp "tags" $tags "multi") (serialize-qp "filter[system_profile][sap_system]" $filter_system_profile_sap_system "scalar") (serialize-qp "filter[system_profile][sap_sids][in]" $filter_system_profile_sap_sids_in "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filter[name]" $filter_name "scalar") (serialize-qp "filter[systems_installed]" $filter_systems_installed "scalar") (serialize-qp "filter[systems_updatable]" $filter_systems_updatable "scalar") (serialize-qp "filter[summary]" $filter_summary "scalar") (serialize-qp "tags" $tags "multi") (serialize-qp "filter[system_profile][sap_system]" $filter_system_profile_sap_system "scalar") (serialize-qp "filter[system_profile][sap_sids][in]" $filter_system_profile_sap_sids_in "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/patch/v1/packages/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "offset": $offset, "sort": $qp_sort, "search": $search, "filter[name]": $filter_name, "filter[systems_installed]": $filter_systems_installed, "filter[systems_updatable]": $filter_systems_updatable, "filter[summary]": $filter_summary, "tags": $tags, "filter[system_profile][sap_system]": $filter_system_profile_sap_system, "filter[system_profile][sap_sids][in]": $filter_system_profile_sap_sids_in} | compact)
+    query: ({"limit": $limit, "offset": $offset, "sort": $sort, "search": $search, "filter[name]": $filter_name, "filter[systems_installed]": $filter_systems_installed, "filter[systems_updatable]": $filter_systems_updatable, "filter[summary]": $filter_summary, "tags": $tags, "filter[system_profile][sap_system]": $filter_system_profile_sap_system, "filter[system_profile][sap_sids][in]": $filter_system_profile_sap_sids_in} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -777,7 +777,7 @@ export def "list-systems" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Limit for paging, set -1 to return all
   --offset: int # Offset for paging
-  --qp-sort: string@sort-completer-3 # Sort field
+  --sort: string@sort-completer-3 # Sort field
   --search: string # Find matching text
   --filter-insights-id: string # Filter
   --filter-id: string # Filter
@@ -801,14 +801,14 @@ export def "list-systems" [
 ]: nothing -> record<data: table<attributes: record, id: string, type: string>, links: record<first: string, last: string, next: string, previous: string>, meta: record<filter: record, limit: int, offset: int, search: string, sort: list<string>, subtotals: record, total_items: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rh-identity"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filter[insights_id]" $filter_insights_id "scalar") (serialize-qp "filter[id]" $filter_id "scalar") (serialize-qp "filter[display_name]" $filter_display_name "scalar") (serialize-qp "filter[last_evaluation]" $filter_last_evaluation "scalar") (serialize-qp "filter[last_upload]" $filter_last_upload "scalar") (serialize-qp "filter[rhsa_count]" $filter_rhsa_count "scalar") (serialize-qp "filter[rhba_count]" $filter_rhba_count "scalar") (serialize-qp "filter[rhea_count]" $filter_rhea_count "scalar") (serialize-qp "filter[other_count]" $filter_other_count "scalar") (serialize-qp "filter[stale]" $filter_stale "scalar") (serialize-qp "filter[packages_installed]" $filter_packages_installed "scalar") (serialize-qp "filter[packages_updatable]" $filter_packages_updatable "scalar") (serialize-qp "filter[stale_timestamp]" $filter_stale_timestamp "scalar") (serialize-qp "filter[stale_warning_timestamp]" $filter_stale_warning_timestamp "scalar") (serialize-qp "filter[culled_timestamp]" $filter_culled_timestamp "scalar") (serialize-qp "filter[created]" $filter_created "scalar") (serialize-qp "tags" $tags "multi") (serialize-qp "filter[system_profile][sap_system]" $filter_system_profile_sap_system "scalar") (serialize-qp "filter[system_profile][sap_sids][in]" $filter_system_profile_sap_sids_in "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filter[insights_id]" $filter_insights_id "scalar") (serialize-qp "filter[id]" $filter_id "scalar") (serialize-qp "filter[display_name]" $filter_display_name "scalar") (serialize-qp "filter[last_evaluation]" $filter_last_evaluation "scalar") (serialize-qp "filter[last_upload]" $filter_last_upload "scalar") (serialize-qp "filter[rhsa_count]" $filter_rhsa_count "scalar") (serialize-qp "filter[rhba_count]" $filter_rhba_count "scalar") (serialize-qp "filter[rhea_count]" $filter_rhea_count "scalar") (serialize-qp "filter[other_count]" $filter_other_count "scalar") (serialize-qp "filter[stale]" $filter_stale "scalar") (serialize-qp "filter[packages_installed]" $filter_packages_installed "scalar") (serialize-qp "filter[packages_updatable]" $filter_packages_updatable "scalar") (serialize-qp "filter[stale_timestamp]" $filter_stale_timestamp "scalar") (serialize-qp "filter[stale_warning_timestamp]" $filter_stale_warning_timestamp "scalar") (serialize-qp "filter[culled_timestamp]" $filter_culled_timestamp "scalar") (serialize-qp "filter[created]" $filter_created "scalar") (serialize-qp "tags" $tags "multi") (serialize-qp "filter[system_profile][sap_system]" $filter_system_profile_sap_system "scalar") (serialize-qp "filter[system_profile][sap_sids][in]" $filter_system_profile_sap_sids_in "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/patch/v1/systems" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "offset": $offset, "sort": $qp_sort, "search": $search, "filter[insights_id]": $filter_insights_id, "filter[id]": $filter_id, "filter[display_name]": $filter_display_name, "filter[last_evaluation]": $filter_last_evaluation, "filter[last_upload]": $filter_last_upload, "filter[rhsa_count]": $filter_rhsa_count, "filter[rhba_count]": $filter_rhba_count, "filter[rhea_count]": $filter_rhea_count, "filter[other_count]": $filter_other_count, "filter[stale]": $filter_stale, "filter[packages_installed]": $filter_packages_installed, "filter[packages_updatable]": $filter_packages_updatable, "filter[stale_timestamp]": $filter_stale_timestamp, "filter[stale_warning_timestamp]": $filter_stale_warning_timestamp, "filter[culled_timestamp]": $filter_culled_timestamp, "filter[created]": $filter_created, "tags": $tags, "filter[system_profile][sap_system]": $filter_system_profile_sap_system, "filter[system_profile][sap_sids][in]": $filter_system_profile_sap_sids_in} | compact)
+    query: ({"limit": $limit, "offset": $offset, "sort": $sort, "search": $search, "filter[insights_id]": $filter_insights_id, "filter[id]": $filter_id, "filter[display_name]": $filter_display_name, "filter[last_evaluation]": $filter_last_evaluation, "filter[last_upload]": $filter_last_upload, "filter[rhsa_count]": $filter_rhsa_count, "filter[rhba_count]": $filter_rhba_count, "filter[rhea_count]": $filter_rhea_count, "filter[other_count]": $filter_other_count, "filter[stale]": $filter_stale, "filter[packages_installed]": $filter_packages_installed, "filter[packages_updatable]": $filter_packages_updatable, "filter[stale_timestamp]": $filter_stale_timestamp, "filter[stale_warning_timestamp]": $filter_stale_warning_timestamp, "filter[culled_timestamp]": $filter_culled_timestamp, "filter[created]": $filter_created, "tags": $tags, "filter[system_profile][sap_system]": $filter_system_profile_sap_system, "filter[system_profile][sap_sids][in]": $filter_system_profile_sap_sids_in} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -908,7 +908,7 @@ export def "list-system-advisories" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Limit for paging, set -1 to return all
   --offset: int # Offset for paging
-  --qp-sort: string@sort-completer-4 # Sort field
+  --sort: string@sort-completer-4 # Sort field
   --search: string # Find matching text
   --filter-id: string # Filter
   --filter-description: string # Filter
@@ -920,14 +920,14 @@ export def "list-system-advisories" [
   let auth = (build-auth $token ($auth_scheme | default "x-rh-identity"))
   let base = ($base_url | default $BASE_URL)
   if ($inventory_id | is-empty) { error make --unspanned { msg: "path parameter 'inventory_id' must be non-empty" } }
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filter[id]" $filter_id "scalar") (serialize-qp "filter[description]" $filter_description "scalar") (serialize-qp "filter[public_date]" $filter_public_date "scalar") (serialize-qp "filter[synopsis]" $filter_synopsis "scalar") (serialize-qp "filter[advisory_type]" $filter_advisory_type "scalar") (serialize-qp "filter[severity]" $filter_severity "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filter[id]" $filter_id "scalar") (serialize-qp "filter[description]" $filter_description "scalar") (serialize-qp "filter[public_date]" $filter_public_date "scalar") (serialize-qp "filter[synopsis]" $filter_synopsis "scalar") (serialize-qp "filter[advisory_type]" $filter_advisory_type "scalar") (serialize-qp "filter[severity]" $filter_severity "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({inventory_id: (encode-path-segment $inventory_id)} | format pattern "/api/patch/v1/systems/{inventory_id}/advisories") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "offset": $offset, "sort": $qp_sort, "search": $search, "filter[id]": $filter_id, "filter[description]": $filter_description, "filter[public_date]": $filter_public_date, "filter[synopsis]": $filter_synopsis, "filter[advisory_type]": $filter_advisory_type, "filter[severity]": $filter_severity} | compact)
+    query: ({"limit": $limit, "offset": $offset, "sort": $sort, "search": $search, "filter[id]": $filter_id, "filter[description]": $filter_description, "filter[public_date]": $filter_public_date, "filter[synopsis]": $filter_synopsis, "filter[advisory_type]": $filter_advisory_type, "filter[severity]": $filter_severity} | compact)
     headers: $auth.headers
     body: null
     content_type: null

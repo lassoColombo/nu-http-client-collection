@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -142,8 +142,8 @@ export def commands []: nothing -> table {
 #
 # PUT /channels/{id}/configure_logs
 # operationId: ConfigureLogs
-# --egressAccessLogs shape: {LogGroupName?: any}
-# --ingressAccessLogs shape: {LogGroupName?: any}
+# --egressAccessLogs shape: {LogGroupName?: string}
+# --ingressAccessLogs shape: {LogGroupName?: string}
 export def "configure-logs" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -162,9 +162,9 @@ export def "configure-logs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --egress-access-logs: record # Configure egress access logging. — shape: {LogGroupName?: any}
-  --ingress-access-logs: record # Configure ingress access logging. — shape: {LogGroupName?: any}
-]: any -> record<Arn: record, CreatedAt: record, Description: record, EgressAccessLogs: record<LogGroupName: record>, HlsIngest: record<IngestEndpoints: record>, Id: record, IngressAccessLogs: record<LogGroupName: record>, Tags: record> {
+  --egress-access-logs: record # Configure egress access logging. — shape: {LogGroupName?: string}
+  --ingress-access-logs: record # Configure ingress access logging. — shape: {LogGroupName?: string}
+]: any -> record<Arn: string, CreatedAt: string, Description: string, EgressAccessLogs: record<LogGroupName: string>, HlsIngest: record<IngestEndpoints: list<record>>, Id: string, IngressAccessLogs: record<LogGroupName: string>, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -214,7 +214,7 @@ export def "create-channel" [
   --description: string # A short text description of the Channel.
   id: string # The ID of the Channel. The ID must be unique within the region and it cannot be changed after a Channel is created.
   --tags: record # A collection of tags associated with a resource
-]: any -> record<Arn: record, CreatedAt: record, Description: record, EgressAccessLogs: record<LogGroupName: record>, HlsIngest: record<IngestEndpoints: record>, Id: record, IngressAccessLogs: record<LogGroupName: record>, Tags: record> {
+]: any -> record<Arn: string, CreatedAt: string, Description: string, EgressAccessLogs: record<LogGroupName: string>, HlsIngest: record<IngestEndpoints: list<record>>, Id: string, IngressAccessLogs: record<LogGroupName: string>, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -264,7 +264,7 @@ export def "list-channels" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Channels: record, NextToken: record> {
+]: nothing -> record<Channels: table<Arn: string, CreatedAt: string, Description: string, EgressAccessLogs: record, HlsIngest: record, Id: string, IngressAccessLogs: record, Tags: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -291,7 +291,7 @@ export def "list-channels" [
 #
 # POST /harvest_jobs
 # operationId: CreateHarvestJob
-# --s3Destination shape: {BucketName?: any, ManifestKey?: any, RoleArn?: any}
+# --s3Destination shape: {BucketName?: string, ManifestKey?: string, RoleArn?: string}
 export def "create-harvest-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -312,9 +312,9 @@ export def "create-harvest-job" [
   end_time: string # The end of the time-window which will be harvested
   id: string # The ID of the HarvestJob. The ID must be unique within the region and it cannot be changed after the HarvestJob is submitted
   origin_endpoint_id: string # The ID of the OriginEndpoint that the HarvestJob will harvest from. This cannot be changed after the HarvestJob is submitted.
-  s3_destination: record # Configuration parameters for where in an S3 bucket to place the harvested content — shape: {BucketName?: any, ManifestKey?: any, RoleArn?: any}
+  s3_destination: record # Configuration parameters for where in an S3 bucket to place the harvested content — shape: {BucketName?: string, ManifestKey?: string, RoleArn?: string}
   start_time: string # The start of the time-window which will be harvested
-]: any -> record<Arn: record, ChannelId: record, CreatedAt: record, EndTime: record, Id: record, OriginEndpointId: record, S3Destination: record<BucketName: record, ManifestKey: record, RoleArn: record>, StartTime: record, Status: record> {
+]: any -> record<Arn: string, ChannelId: string, CreatedAt: string, EndTime: string, Id: string, OriginEndpointId: string, S3Destination: record<BucketName: string, ManifestKey: string, RoleArn: string>, StartTime: string, Status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -366,7 +366,7 @@ export def "list-harvest-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<HarvestJobs: record, NextToken: record> {
+]: nothing -> record<HarvestJobs: table<Arn: string, ChannelId: string, CreatedAt: string, EndTime: string, Id: string, OriginEndpointId: string, S3Destination: record, StartTime: string, Status: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "includeChannelId" $include_channel_id "scalar") (serialize-qp "includeStatus" $include_status "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -393,11 +393,11 @@ export def "list-harvest-jobs" [
 #
 # POST /origin_endpoints
 # operationId: CreateOriginEndpoint
-# --authorization shape: {CdnIdentifierSecret?: any, SecretsRoleArn?: any}
-# --cmafPackage shape: {Encryption?: any, HlsManifests?: any, SegmentDurationSeconds?: any, SegmentPrefix?: any, StreamSelection?: any}
-# --dashPackage shape: {AdTriggers?: any, AdsOnDeliveryRestrictions?: any, Encryption?: any, IncludeIframeOnlyStream?: any, ManifestLayout?: any, ManifestWindowSeconds?: any, MinBufferTimeSeconds?: any, MinUpdatePeriodSeconds?: any, PeriodTriggers?: any, Profile?: any, SegmentDurationSeconds?: any, SegmentTemplateFormat?: any, StreamSelection?: any, SuggestedPresentationDelaySeconds?: any, UtcTiming?: any, UtcTimingUri?: any}
-# --hlsPackage shape: {AdMarkers?: any, AdTriggers?: any, AdsOnDeliveryRestrictions?: any, Encryption?: any, IncludeDvbSubtitles?: any, IncludeIframeOnlyStream?: any, PlaylistType?: any, PlaylistWindowSeconds?: any, ProgramDateTimeIntervalSeconds?: any, SegmentDurationSeconds?: any, StreamSelection?: any, UseAudioRenditionGroup?: any}
-# --mssPackage shape: {Encryption?: any, ManifestWindowSeconds?: any, SegmentDurationSeconds?: any, StreamSelection?: any}
+# --authorization shape: {CdnIdentifierSecret?: string, SecretsRoleArn?: string}
+# --cmafPackage shape: {Encryption?: record, HlsManifests?: list, SegmentDurationSeconds?: int, SegmentPrefix?: string, StreamSelection?: record}
+# --dashPackage shape: {AdTriggers?: list<string>, AdsOnDeliveryRestrictions?: "NONE"|"RESTRICTED"|"UNRESTRICTED"|"BOTH", Encryption?: record, IncludeIframeOnlyStream?: bool, ManifestLayout?: "FULL"|"COMPACT", ManifestWindowSeconds?: int, MinBufferTimeSeconds?: int, MinUpdatePeriodSeconds?: int, PeriodTriggers?: list<string>, Profile?: "NONE"|"HBBTV_1_5"|"HYBRIDCAST"|"DVB_DASH_2014", SegmentDurationSeconds?: int, SegmentTemplateFormat?: "NUMBER_WITH_TIMELINE"|"TIME_WITH_TIMELINE"|"NUMBER_WITH_DURATION", ... (4 more fields)}
+# --hlsPackage shape: {AdMarkers?: "NONE"|"SCTE35_ENHANCED"|"PASSTHROUGH"|"DATERANGE", AdTriggers?: list<string>, AdsOnDeliveryRestrictions?: "NONE"|"RESTRICTED"|"UNRESTRICTED"|"BOTH", Encryption?: record, IncludeDvbSubtitles?: bool, IncludeIframeOnlyStream?: bool, PlaylistType?: "NONE"|"EVENT"|"VOD", PlaylistWindowSeconds?: int, ProgramDateTimeIntervalSeconds?: int, SegmentDurationSeconds?: int, StreamSelection?: record, UseAudioRenditionGroup?: bool}
+# --mssPackage shape: {Encryption?: record, ManifestWindowSeconds?: int, SegmentDurationSeconds?: int, StreamSelection?: record}
 export def "create-origin-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -415,21 +415,21 @@ export def "create-origin-endpoint" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --authorization: record # CDN Authorization credentials — shape: {CdnIdentifierSecret?: any, SecretsRoleArn?: any}
+  --authorization: record # CDN Authorization credentials — shape: {CdnIdentifierSecret?: string, SecretsRoleArn?: string}
   channel_id: string # The ID of the Channel that the OriginEndpoint will be associated with. This cannot be changed after the OriginEndpoint is created.
-  --cmaf-package: record # A Common Media Application Format (CMAF) packaging configuration. — shape: {Encryption?: any, HlsManifests?: any, SegmentDurationSeconds?: any, SegmentPrefix?: any, StreamSelection?: any}
-  --dash-package: record # A Dynamic Adaptive Streaming over HTTP (DASH) packaging configuration. — shape: {AdTriggers?: any, AdsOnDeliveryRestrictions?: any, Encryption?: any, IncludeIframeOnlyStream?: any, ManifestLayout?: any, ManifestWindowSeconds?: any, MinBufferTimeSeconds?: any, MinUpdatePeriodSeconds?: any, PeriodTriggers?: any, Profile?: any, SegmentDurationSeconds?: any, SegmentTemplateFormat?: any, StreamSelection?: any, SuggestedPresentationDelaySeconds?: any, UtcTiming?: any, UtcTimingUri?: any}
+  --cmaf-package: record # A Common Media Application Format (CMAF) packaging configuration. — shape: {Encryption?: record, HlsManifests?: list, SegmentDurationSeconds?: int, SegmentPrefix?: string, StreamSelection?: record}
+  --dash-package: record # A Dynamic Adaptive Streaming over HTTP (DASH) packaging configuration. — shape: {AdTriggers?: list<string>, AdsOnDeliveryRestrictions?: "NONE"|"RESTRICTED"|"UNRESTRICTED"|"BOTH", Encryption?: record, IncludeIframeOnlyStream?: bool, ManifestLayout?: "FULL"|"COMPACT", ManifestWindowSeconds?: int, MinBufferTimeSeconds?: int, MinUpdatePeriodSeconds?: int, PeriodTriggers?: list<string>, Profile?: "NONE"|"HBBTV_1_5"|"HYBRIDCAST"|"DVB_DASH_2014", SegmentDurationSeconds?: int, SegmentTemplateFormat?: "NUMBER_WITH_TIMELINE"|"TIME_WITH_TIMELINE"|"NUMBER_WITH_DURATION", ... (4 more fields)}
   --description: string # A short text description of the OriginEndpoint.
-  --hls-package: record # An HTTP Live Streaming (HLS) packaging configuration. — shape: {AdMarkers?: any, AdTriggers?: any, AdsOnDeliveryRestrictions?: any, Encryption?: any, IncludeDvbSubtitles?: any, IncludeIframeOnlyStream?: any, PlaylistType?: any, PlaylistWindowSeconds?: any, ProgramDateTimeIntervalSeconds?: any, SegmentDurationSeconds?: any, StreamSelection?: any, UseAudioRenditionGroup?: any}
+  --hls-package: record # An HTTP Live Streaming (HLS) packaging configuration. — shape: {AdMarkers?: "NONE"|"SCTE35_ENHANCED"|"PASSTHROUGH"|"DATERANGE", AdTriggers?: list<string>, AdsOnDeliveryRestrictions?: "NONE"|"RESTRICTED"|"UNRESTRICTED"|"BOTH", Encryption?: record, IncludeDvbSubtitles?: bool, IncludeIframeOnlyStream?: bool, PlaylistType?: "NONE"|"EVENT"|"VOD", PlaylistWindowSeconds?: int, ProgramDateTimeIntervalSeconds?: int, SegmentDurationSeconds?: int, StreamSelection?: record, UseAudioRenditionGroup?: bool}
   id: string # The ID of the OriginEndpoint. The ID must be unique within the region and it cannot be changed after the OriginEndpoint is created.
   --manifest-name: string # A short string that will be used as the filename of the OriginEndpoint URL (defaults to "index").
-  --mss-package: record # A Microsoft Smooth Streaming (MSS) packaging configuration. — shape: {Encryption?: any, ManifestWindowSeconds?: any, SegmentDurationSeconds?: any, StreamSelection?: any}
+  --mss-package: record # A Microsoft Smooth Streaming (MSS) packaging configuration. — shape: {Encryption?: record, ManifestWindowSeconds?: int, SegmentDurationSeconds?: int, StreamSelection?: record}
   --origination: string@origination-completer # Control whether origination of video is allowed for this OriginEndpoint. If set to ALLOW, the OriginEndpoint may by requested, pursuant to any other form of access control. If set to DENY, the OriginEndpoint may not be requested. This can be helpful for Live to VOD harvesting, or for temporarily disabling origination
   --startover-window-seconds: int # Maximum duration (seconds) of content to retain for startover playback. If not specified, startover playback will be disabled for the OriginEndpoint.
   --tags: record # A collection of tags associated with a resource
   --time-delay-seconds: int # Amount of delay (seconds) to enforce on the playback of live content. If not specified, there will be no time delay in effect for the OriginEndpoint.
   --whitelist: list<string> # A list of source IP CIDR blocks that will be allowed to access the OriginEndpoint.
-]: any -> record<Arn: record, Authorization: record<CdnIdentifierSecret: record, SecretsRoleArn: record>, ChannelId: record, CmafPackage: record<Encryption: record<ConstantInitializationVector: record, EncryptionMethod: record, KeyRotationIntervalSeconds: record, SpekeKeyProvider: record>, HlsManifests: record, SegmentDurationSeconds: record, SegmentPrefix: record, StreamSelection: record<MaxVideoBitsPerSecond: record, MinVideoBitsPerSecond: record, StreamOrder: record>>, CreatedAt: record, DashPackage: record<AdTriggers: record, AdsOnDeliveryRestrictions: record, Encryption: record<KeyRotationIntervalSeconds: record, SpekeKeyProvider: record>, IncludeIframeOnlyStream: record, ManifestLayout: record, ManifestWindowSeconds: record, MinBufferTimeSeconds: record, MinUpdatePeriodSeconds: record, PeriodTriggers: record, Profile: record, SegmentDurationSeconds: record, SegmentTemplateFormat: record, StreamSelection: record<MaxVideoBitsPerSecond: record, MinVideoBitsPerSecond: record, StreamOrder: record>, SuggestedPresentationDelaySeconds: record, UtcTiming: record, UtcTimingUri: record>, Description: record, HlsPackage: record<AdMarkers: record, AdTriggers: record, AdsOnDeliveryRestrictions: record, Encryption: record<ConstantInitializationVector: record, EncryptionMethod: record, KeyRotationIntervalSeconds: record, RepeatExtXKey: record, SpekeKeyProvider: record>, IncludeDvbSubtitles: record, IncludeIframeOnlyStream: record, PlaylistType: record, PlaylistWindowSeconds: record, ProgramDateTimeIntervalSeconds: record, SegmentDurationSeconds: record, StreamSelection: record<MaxVideoBitsPerSecond: record, MinVideoBitsPerSecond: record, StreamOrder: record>, UseAudioRenditionGroup: record>, Id: record, ManifestName: record, MssPackage: record<Encryption: record<SpekeKeyProvider: record>, ManifestWindowSeconds: record, SegmentDurationSeconds: record, StreamSelection: record<MaxVideoBitsPerSecond: record, MinVideoBitsPerSecond: record, StreamOrder: record>>, Origination: record, StartoverWindowSeconds: record, Tags: record, TimeDelaySeconds: record, Url: record, Whitelist: record> {
+]: any -> record<Arn: string, Authorization: record<CdnIdentifierSecret: string, SecretsRoleArn: string>, ChannelId: string, CmafPackage: record<Encryption: record<ConstantInitializationVector: string, EncryptionMethod: string, KeyRotationIntervalSeconds: int, SpekeKeyProvider: record>, HlsManifests: list<record>, SegmentDurationSeconds: int, SegmentPrefix: string, StreamSelection: record<MaxVideoBitsPerSecond: int, MinVideoBitsPerSecond: int, StreamOrder: string>>, CreatedAt: string, DashPackage: record<AdTriggers: list<string>, AdsOnDeliveryRestrictions: string, Encryption: record<KeyRotationIntervalSeconds: int, SpekeKeyProvider: record>, IncludeIframeOnlyStream: bool, ManifestLayout: string, ManifestWindowSeconds: int, MinBufferTimeSeconds: int, MinUpdatePeriodSeconds: int, PeriodTriggers: list<string>, Profile: string, SegmentDurationSeconds: int, SegmentTemplateFormat: string, StreamSelection: record<MaxVideoBitsPerSecond: int, MinVideoBitsPerSecond: int, StreamOrder: string>, SuggestedPresentationDelaySeconds: int, UtcTiming: string, UtcTimingUri: string>, Description: string, HlsPackage: record<AdMarkers: string, AdTriggers: list<string>, AdsOnDeliveryRestrictions: string, Encryption: record<ConstantInitializationVector: string, EncryptionMethod: string, KeyRotationIntervalSeconds: int, RepeatExtXKey: bool, SpekeKeyProvider: record>, IncludeDvbSubtitles: bool, IncludeIframeOnlyStream: bool, PlaylistType: string, PlaylistWindowSeconds: int, ProgramDateTimeIntervalSeconds: int, SegmentDurationSeconds: int, StreamSelection: record<MaxVideoBitsPerSecond: int, MinVideoBitsPerSecond: int, StreamOrder: string>, UseAudioRenditionGroup: bool>, Id: string, ManifestName: string, MssPackage: record<Encryption: record<SpekeKeyProvider: record>, ManifestWindowSeconds: int, SegmentDurationSeconds: int, StreamSelection: record<MaxVideoBitsPerSecond: int, MinVideoBitsPerSecond: int, StreamOrder: string>>, Origination: string, StartoverWindowSeconds: int, Tags: record, TimeDelaySeconds: int, Url: string, Whitelist: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -480,7 +480,7 @@ export def "list-origin-endpoints" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: record, OriginEndpoints: record> {
+]: nothing -> record<NextToken: string, OriginEndpoints: table<Arn: string, Authorization: record, ChannelId: string, CmafPackage: record, CreatedAt: string, DashPackage: record, Description: string, HlsPackage: record, Id: string, ManifestName: string, MssPackage: record, Origination: string, StartoverWindowSeconds: int, Tags: record, TimeDelaySeconds: int, Url: string, Whitelist: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "channelId" $channel_id "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -570,7 +570,7 @@ export def "describe-channel" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: record, CreatedAt: record, Description: record, EgressAccessLogs: record<LogGroupName: record>, HlsIngest: record<IngestEndpoints: record>, Id: record, IngressAccessLogs: record<LogGroupName: record>, Tags: record> {
+]: nothing -> record<Arn: string, CreatedAt: string, Description: string, EgressAccessLogs: record<LogGroupName: string>, HlsIngest: record<IngestEndpoints: list<record>>, Id: string, IngressAccessLogs: record<LogGroupName: string>, Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -616,7 +616,7 @@ export def "update-channel" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --description: string # A short text description of the Channel.
-]: any -> record<Arn: record, CreatedAt: record, Description: record, EgressAccessLogs: record<LogGroupName: record>, HlsIngest: record<IngestEndpoints: record>, Id: record, IngressAccessLogs: record<LogGroupName: record>, Tags: record> {
+]: any -> record<Arn: string, CreatedAt: string, Description: string, EgressAccessLogs: record<LogGroupName: string>, HlsIngest: record<IngestEndpoints: list<record>>, Id: string, IngressAccessLogs: record<LogGroupName: string>, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -709,7 +709,7 @@ export def "describe-origin-endpoint" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: record, Authorization: record<CdnIdentifierSecret: record, SecretsRoleArn: record>, ChannelId: record, CmafPackage: record<Encryption: record<ConstantInitializationVector: record, EncryptionMethod: record, KeyRotationIntervalSeconds: record, SpekeKeyProvider: record>, HlsManifests: record, SegmentDurationSeconds: record, SegmentPrefix: record, StreamSelection: record<MaxVideoBitsPerSecond: record, MinVideoBitsPerSecond: record, StreamOrder: record>>, CreatedAt: record, DashPackage: record<AdTriggers: record, AdsOnDeliveryRestrictions: record, Encryption: record<KeyRotationIntervalSeconds: record, SpekeKeyProvider: record>, IncludeIframeOnlyStream: record, ManifestLayout: record, ManifestWindowSeconds: record, MinBufferTimeSeconds: record, MinUpdatePeriodSeconds: record, PeriodTriggers: record, Profile: record, SegmentDurationSeconds: record, SegmentTemplateFormat: record, StreamSelection: record<MaxVideoBitsPerSecond: record, MinVideoBitsPerSecond: record, StreamOrder: record>, SuggestedPresentationDelaySeconds: record, UtcTiming: record, UtcTimingUri: record>, Description: record, HlsPackage: record<AdMarkers: record, AdTriggers: record, AdsOnDeliveryRestrictions: record, Encryption: record<ConstantInitializationVector: record, EncryptionMethod: record, KeyRotationIntervalSeconds: record, RepeatExtXKey: record, SpekeKeyProvider: record>, IncludeDvbSubtitles: record, IncludeIframeOnlyStream: record, PlaylistType: record, PlaylistWindowSeconds: record, ProgramDateTimeIntervalSeconds: record, SegmentDurationSeconds: record, StreamSelection: record<MaxVideoBitsPerSecond: record, MinVideoBitsPerSecond: record, StreamOrder: record>, UseAudioRenditionGroup: record>, Id: record, ManifestName: record, MssPackage: record<Encryption: record<SpekeKeyProvider: record>, ManifestWindowSeconds: record, SegmentDurationSeconds: record, StreamSelection: record<MaxVideoBitsPerSecond: record, MinVideoBitsPerSecond: record, StreamOrder: record>>, Origination: record, StartoverWindowSeconds: record, Tags: record, TimeDelaySeconds: record, Url: record, Whitelist: record> {
+]: nothing -> record<Arn: string, Authorization: record<CdnIdentifierSecret: string, SecretsRoleArn: string>, ChannelId: string, CmafPackage: record<Encryption: record<ConstantInitializationVector: string, EncryptionMethod: string, KeyRotationIntervalSeconds: int, SpekeKeyProvider: record>, HlsManifests: list<record>, SegmentDurationSeconds: int, SegmentPrefix: string, StreamSelection: record<MaxVideoBitsPerSecond: int, MinVideoBitsPerSecond: int, StreamOrder: string>>, CreatedAt: string, DashPackage: record<AdTriggers: list<string>, AdsOnDeliveryRestrictions: string, Encryption: record<KeyRotationIntervalSeconds: int, SpekeKeyProvider: record>, IncludeIframeOnlyStream: bool, ManifestLayout: string, ManifestWindowSeconds: int, MinBufferTimeSeconds: int, MinUpdatePeriodSeconds: int, PeriodTriggers: list<string>, Profile: string, SegmentDurationSeconds: int, SegmentTemplateFormat: string, StreamSelection: record<MaxVideoBitsPerSecond: int, MinVideoBitsPerSecond: int, StreamOrder: string>, SuggestedPresentationDelaySeconds: int, UtcTiming: string, UtcTimingUri: string>, Description: string, HlsPackage: record<AdMarkers: string, AdTriggers: list<string>, AdsOnDeliveryRestrictions: string, Encryption: record<ConstantInitializationVector: string, EncryptionMethod: string, KeyRotationIntervalSeconds: int, RepeatExtXKey: bool, SpekeKeyProvider: record>, IncludeDvbSubtitles: bool, IncludeIframeOnlyStream: bool, PlaylistType: string, PlaylistWindowSeconds: int, ProgramDateTimeIntervalSeconds: int, SegmentDurationSeconds: int, StreamSelection: record<MaxVideoBitsPerSecond: int, MinVideoBitsPerSecond: int, StreamOrder: string>, UseAudioRenditionGroup: bool>, Id: string, ManifestName: string, MssPackage: record<Encryption: record<SpekeKeyProvider: record>, ManifestWindowSeconds: int, SegmentDurationSeconds: int, StreamSelection: record<MaxVideoBitsPerSecond: int, MinVideoBitsPerSecond: int, StreamOrder: string>>, Origination: string, StartoverWindowSeconds: int, Tags: record, TimeDelaySeconds: int, Url: string, Whitelist: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -736,11 +736,11 @@ export def "describe-origin-endpoint" [
 #
 # PUT /origin_endpoints/{id}
 # operationId: UpdateOriginEndpoint
-# --authorization shape: {CdnIdentifierSecret?: any, SecretsRoleArn?: any}
-# --cmafPackage shape: {Encryption?: any, HlsManifests?: any, SegmentDurationSeconds?: any, SegmentPrefix?: any, StreamSelection?: any}
-# --dashPackage shape: {AdTriggers?: any, AdsOnDeliveryRestrictions?: any, Encryption?: any, IncludeIframeOnlyStream?: any, ManifestLayout?: any, ManifestWindowSeconds?: any, MinBufferTimeSeconds?: any, MinUpdatePeriodSeconds?: any, PeriodTriggers?: any, Profile?: any, SegmentDurationSeconds?: any, SegmentTemplateFormat?: any, StreamSelection?: any, SuggestedPresentationDelaySeconds?: any, UtcTiming?: any, UtcTimingUri?: any}
-# --hlsPackage shape: {AdMarkers?: any, AdTriggers?: any, AdsOnDeliveryRestrictions?: any, Encryption?: any, IncludeDvbSubtitles?: any, IncludeIframeOnlyStream?: any, PlaylistType?: any, PlaylistWindowSeconds?: any, ProgramDateTimeIntervalSeconds?: any, SegmentDurationSeconds?: any, StreamSelection?: any, UseAudioRenditionGroup?: any}
-# --mssPackage shape: {Encryption?: any, ManifestWindowSeconds?: any, SegmentDurationSeconds?: any, StreamSelection?: any}
+# --authorization shape: {CdnIdentifierSecret?: string, SecretsRoleArn?: string}
+# --cmafPackage shape: {Encryption?: record, HlsManifests?: list, SegmentDurationSeconds?: int, SegmentPrefix?: string, StreamSelection?: record}
+# --dashPackage shape: {AdTriggers?: list<string>, AdsOnDeliveryRestrictions?: "NONE"|"RESTRICTED"|"UNRESTRICTED"|"BOTH", Encryption?: record, IncludeIframeOnlyStream?: bool, ManifestLayout?: "FULL"|"COMPACT", ManifestWindowSeconds?: int, MinBufferTimeSeconds?: int, MinUpdatePeriodSeconds?: int, PeriodTriggers?: list<string>, Profile?: "NONE"|"HBBTV_1_5"|"HYBRIDCAST"|"DVB_DASH_2014", SegmentDurationSeconds?: int, SegmentTemplateFormat?: "NUMBER_WITH_TIMELINE"|"TIME_WITH_TIMELINE"|"NUMBER_WITH_DURATION", ... (4 more fields)}
+# --hlsPackage shape: {AdMarkers?: "NONE"|"SCTE35_ENHANCED"|"PASSTHROUGH"|"DATERANGE", AdTriggers?: list<string>, AdsOnDeliveryRestrictions?: "NONE"|"RESTRICTED"|"UNRESTRICTED"|"BOTH", Encryption?: record, IncludeDvbSubtitles?: bool, IncludeIframeOnlyStream?: bool, PlaylistType?: "NONE"|"EVENT"|"VOD", PlaylistWindowSeconds?: int, ProgramDateTimeIntervalSeconds?: int, SegmentDurationSeconds?: int, StreamSelection?: record, UseAudioRenditionGroup?: bool}
+# --mssPackage shape: {Encryption?: record, ManifestWindowSeconds?: int, SegmentDurationSeconds?: int, StreamSelection?: record}
 export def "update-origin-endpoint" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -759,18 +759,18 @@ export def "update-origin-endpoint" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --authorization: record # CDN Authorization credentials — shape: {CdnIdentifierSecret?: any, SecretsRoleArn?: any}
-  --cmaf-package: record # A Common Media Application Format (CMAF) packaging configuration. — shape: {Encryption?: any, HlsManifests?: any, SegmentDurationSeconds?: any, SegmentPrefix?: any, StreamSelection?: any}
-  --dash-package: record # A Dynamic Adaptive Streaming over HTTP (DASH) packaging configuration. — shape: {AdTriggers?: any, AdsOnDeliveryRestrictions?: any, Encryption?: any, IncludeIframeOnlyStream?: any, ManifestLayout?: any, ManifestWindowSeconds?: any, MinBufferTimeSeconds?: any, MinUpdatePeriodSeconds?: any, PeriodTriggers?: any, Profile?: any, SegmentDurationSeconds?: any, SegmentTemplateFormat?: any, StreamSelection?: any, SuggestedPresentationDelaySeconds?: any, UtcTiming?: any, UtcTimingUri?: any}
+  --authorization: record # CDN Authorization credentials — shape: {CdnIdentifierSecret?: string, SecretsRoleArn?: string}
+  --cmaf-package: record # A Common Media Application Format (CMAF) packaging configuration. — shape: {Encryption?: record, HlsManifests?: list, SegmentDurationSeconds?: int, SegmentPrefix?: string, StreamSelection?: record}
+  --dash-package: record # A Dynamic Adaptive Streaming over HTTP (DASH) packaging configuration. — shape: {AdTriggers?: list<string>, AdsOnDeliveryRestrictions?: "NONE"|"RESTRICTED"|"UNRESTRICTED"|"BOTH", Encryption?: record, IncludeIframeOnlyStream?: bool, ManifestLayout?: "FULL"|"COMPACT", ManifestWindowSeconds?: int, MinBufferTimeSeconds?: int, MinUpdatePeriodSeconds?: int, PeriodTriggers?: list<string>, Profile?: "NONE"|"HBBTV_1_5"|"HYBRIDCAST"|"DVB_DASH_2014", SegmentDurationSeconds?: int, SegmentTemplateFormat?: "NUMBER_WITH_TIMELINE"|"TIME_WITH_TIMELINE"|"NUMBER_WITH_DURATION", ... (4 more fields)}
   --description: string # A short text description of the OriginEndpoint.
-  --hls-package: record # An HTTP Live Streaming (HLS) packaging configuration. — shape: {AdMarkers?: any, AdTriggers?: any, AdsOnDeliveryRestrictions?: any, Encryption?: any, IncludeDvbSubtitles?: any, IncludeIframeOnlyStream?: any, PlaylistType?: any, PlaylistWindowSeconds?: any, ProgramDateTimeIntervalSeconds?: any, SegmentDurationSeconds?: any, StreamSelection?: any, UseAudioRenditionGroup?: any}
+  --hls-package: record # An HTTP Live Streaming (HLS) packaging configuration. — shape: {AdMarkers?: "NONE"|"SCTE35_ENHANCED"|"PASSTHROUGH"|"DATERANGE", AdTriggers?: list<string>, AdsOnDeliveryRestrictions?: "NONE"|"RESTRICTED"|"UNRESTRICTED"|"BOTH", Encryption?: record, IncludeDvbSubtitles?: bool, IncludeIframeOnlyStream?: bool, PlaylistType?: "NONE"|"EVENT"|"VOD", PlaylistWindowSeconds?: int, ProgramDateTimeIntervalSeconds?: int, SegmentDurationSeconds?: int, StreamSelection?: record, UseAudioRenditionGroup?: bool}
   --manifest-name: string # A short string that will be appended to the end of the Endpoint URL.
-  --mss-package: record # A Microsoft Smooth Streaming (MSS) packaging configuration. — shape: {Encryption?: any, ManifestWindowSeconds?: any, SegmentDurationSeconds?: any, StreamSelection?: any}
+  --mss-package: record # A Microsoft Smooth Streaming (MSS) packaging configuration. — shape: {Encryption?: record, ManifestWindowSeconds?: int, SegmentDurationSeconds?: int, StreamSelection?: record}
   --origination: string@origination-completer # Control whether origination of video is allowed for this OriginEndpoint. If set to ALLOW, the OriginEndpoint may by requested, pursuant to any other form of access control. If set to DENY, the OriginEndpoint may not be requested. This can be helpful for Live to VOD harvesting, or for temporarily disabling origination
   --startover-window-seconds: int # Maximum duration (in seconds) of content to retain for startover playback. If not specified, startover playback will be disabled for the OriginEndpoint.
   --time-delay-seconds: int # Amount of delay (in seconds) to enforce on the playback of live content. If not specified, there will be no time delay in effect for the OriginEndpoint.
   --whitelist: list<string> # A list of source IP CIDR blocks that will be allowed to access the OriginEndpoint.
-]: any -> record<Arn: record, Authorization: record<CdnIdentifierSecret: record, SecretsRoleArn: record>, ChannelId: record, CmafPackage: record<Encryption: record<ConstantInitializationVector: record, EncryptionMethod: record, KeyRotationIntervalSeconds: record, SpekeKeyProvider: record>, HlsManifests: record, SegmentDurationSeconds: record, SegmentPrefix: record, StreamSelection: record<MaxVideoBitsPerSecond: record, MinVideoBitsPerSecond: record, StreamOrder: record>>, CreatedAt: record, DashPackage: record<AdTriggers: record, AdsOnDeliveryRestrictions: record, Encryption: record<KeyRotationIntervalSeconds: record, SpekeKeyProvider: record>, IncludeIframeOnlyStream: record, ManifestLayout: record, ManifestWindowSeconds: record, MinBufferTimeSeconds: record, MinUpdatePeriodSeconds: record, PeriodTriggers: record, Profile: record, SegmentDurationSeconds: record, SegmentTemplateFormat: record, StreamSelection: record<MaxVideoBitsPerSecond: record, MinVideoBitsPerSecond: record, StreamOrder: record>, SuggestedPresentationDelaySeconds: record, UtcTiming: record, UtcTimingUri: record>, Description: record, HlsPackage: record<AdMarkers: record, AdTriggers: record, AdsOnDeliveryRestrictions: record, Encryption: record<ConstantInitializationVector: record, EncryptionMethod: record, KeyRotationIntervalSeconds: record, RepeatExtXKey: record, SpekeKeyProvider: record>, IncludeDvbSubtitles: record, IncludeIframeOnlyStream: record, PlaylistType: record, PlaylistWindowSeconds: record, ProgramDateTimeIntervalSeconds: record, SegmentDurationSeconds: record, StreamSelection: record<MaxVideoBitsPerSecond: record, MinVideoBitsPerSecond: record, StreamOrder: record>, UseAudioRenditionGroup: record>, Id: record, ManifestName: record, MssPackage: record<Encryption: record<SpekeKeyProvider: record>, ManifestWindowSeconds: record, SegmentDurationSeconds: record, StreamSelection: record<MaxVideoBitsPerSecond: record, MinVideoBitsPerSecond: record, StreamOrder: record>>, Origination: record, StartoverWindowSeconds: record, Tags: record, TimeDelaySeconds: record, Url: record, Whitelist: record> {
+]: any -> record<Arn: string, Authorization: record<CdnIdentifierSecret: string, SecretsRoleArn: string>, ChannelId: string, CmafPackage: record<Encryption: record<ConstantInitializationVector: string, EncryptionMethod: string, KeyRotationIntervalSeconds: int, SpekeKeyProvider: record>, HlsManifests: list<record>, SegmentDurationSeconds: int, SegmentPrefix: string, StreamSelection: record<MaxVideoBitsPerSecond: int, MinVideoBitsPerSecond: int, StreamOrder: string>>, CreatedAt: string, DashPackage: record<AdTriggers: list<string>, AdsOnDeliveryRestrictions: string, Encryption: record<KeyRotationIntervalSeconds: int, SpekeKeyProvider: record>, IncludeIframeOnlyStream: bool, ManifestLayout: string, ManifestWindowSeconds: int, MinBufferTimeSeconds: int, MinUpdatePeriodSeconds: int, PeriodTriggers: list<string>, Profile: string, SegmentDurationSeconds: int, SegmentTemplateFormat: string, StreamSelection: record<MaxVideoBitsPerSecond: int, MinVideoBitsPerSecond: int, StreamOrder: string>, SuggestedPresentationDelaySeconds: int, UtcTiming: string, UtcTimingUri: string>, Description: string, HlsPackage: record<AdMarkers: string, AdTriggers: list<string>, AdsOnDeliveryRestrictions: string, Encryption: record<ConstantInitializationVector: string, EncryptionMethod: string, KeyRotationIntervalSeconds: int, RepeatExtXKey: bool, SpekeKeyProvider: record>, IncludeDvbSubtitles: bool, IncludeIframeOnlyStream: bool, PlaylistType: string, PlaylistWindowSeconds: int, ProgramDateTimeIntervalSeconds: int, SegmentDurationSeconds: int, StreamSelection: record<MaxVideoBitsPerSecond: int, MinVideoBitsPerSecond: int, StreamOrder: string>, UseAudioRenditionGroup: bool>, Id: string, ManifestName: string, MssPackage: record<Encryption: record<SpekeKeyProvider: record>, ManifestWindowSeconds: int, SegmentDurationSeconds: int, StreamSelection: record<MaxVideoBitsPerSecond: int, MinVideoBitsPerSecond: int, StreamOrder: string>>, Origination: string, StartoverWindowSeconds: int, Tags: record, TimeDelaySeconds: int, Url: string, Whitelist: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -818,7 +818,7 @@ export def "describe-harvest-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: record, ChannelId: record, CreatedAt: record, EndTime: record, Id: record, OriginEndpointId: record, S3Destination: record<BucketName: record, ManifestKey: record, RoleArn: record>, StartTime: record, Status: record> {
+]: nothing -> record<Arn: string, ChannelId: string, CreatedAt: string, EndTime: string, Id: string, OriginEndpointId: string, S3Destination: record<BucketName: string, ManifestKey: string, RoleArn: string>, StartTime: string, Status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -957,7 +957,7 @@ export def "rotate-channel-credentials" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: record, CreatedAt: record, Description: record, EgressAccessLogs: record<LogGroupName: record>, HlsIngest: record<IngestEndpoints: record>, Id: record, IngressAccessLogs: record<LogGroupName: record>, Tags: record> {
+]: nothing -> record<Arn: string, CreatedAt: string, Description: string, EgressAccessLogs: record<LogGroupName: string>, HlsIngest: record<IngestEndpoints: list<record>>, Id: string, IngressAccessLogs: record<LogGroupName: string>, Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1003,7 +1003,7 @@ export def "rotate-ingest-endpoint-credentials" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: record, CreatedAt: record, Description: record, EgressAccessLogs: record<LogGroupName: record>, HlsIngest: record<IngestEndpoints: record>, Id: record, IngressAccessLogs: record<LogGroupName: record>, Tags: record> {
+]: nothing -> record<Arn: string, CreatedAt: string, Description: string, EgressAccessLogs: record<LogGroupName: string>, HlsIngest: record<IngestEndpoints: list<record>>, Id: string, IngressAccessLogs: record<LogGroupName: string>, Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1041,7 +1041,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # The key(s) of tag to be deleted
+  --tag-keys: list # The key(s) of tag to be deleted (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1053,6 +1053,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resource-arn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"

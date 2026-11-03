@@ -99,7 +99,7 @@ def accept-completer [] { ["application/javascript" "application/json" "applicat
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-v1-agreements" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/agreements
 # operationId: get
-export def "get" [
+export def "get-v1-agreements" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,12 +134,13 @@ export def "get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --keys: list<string> # Keys for Agreements whose details are to be retrieved
+  --keys: list<string> # Keys for Agreements whose details are to be retrieved (required)
   --x-private-label-id: int # PrivateLabelId to operate as, if different from JWT
-  --x-market-id: string # Unique identifier of the Market used to retrieve/translate Legal Agreements
+  --x-market-id: string # Unique identifier of the Market used to retrieve/translate Legal Agreements (format: bcp-47, default: en-US)
 ]: nothing -> table<agreementKey: string, content: string, title: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($keys == null) { error make --unspanned { msg: "required query parameter 'keys' missing: pass --keys" } }
   let qp = [(serialize-qp "keys" $keys "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/agreements" $qp $auth.query)
   let accept_val = ($accept | default "application/javascript")

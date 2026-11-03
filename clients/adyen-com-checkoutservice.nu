@@ -12,8 +12,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-api-key" => { {scheme: $scheme, headers: {X-API-Key: $token_val}, query: "", location: "header"} }
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "x-api-key" => { {scheme: $scheme, headers: {"X-API-Key": $token_val}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -1593,12 +1593,14 @@ export def "delete-stored-payment-methods-recurring-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --shopper-reference: string # Your reference to uniquely identify this shopper, for example user ID or account ID. Minimum length: 3 characters. > Your reference must not include personally identifiable information (PII), for example name or email address.
-  --merchant-account: string # Your merchant account.
+  --shopper-reference: string # Your reference to uniquely identify this shopper, for example user ID or account ID. Minimum length: 3 characters. > Your reference must not include personally identifiable information (PII), for example name or email address. (required)
+  --merchant-account: string # Your merchant account. (required)
 ]: nothing -> record<brand: string, expiryMonth: string, expiryYear: string, externalResponseCode: string, externalTokenReference: string, holderName: string, iban: string, id: string, issuerName: string, lastFour: string, name: string, networkTxReference: string, ownerName: string, shopperEmail: string, shopperReference: string, supportedRecurringProcessingModels: list<string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($recurring_id | is-empty) { error make --unspanned { msg: "path parameter 'recurringId' must be non-empty" } }
+  if ($shopper_reference == null) { error make --unspanned { msg: "required query parameter 'shopperReference' missing: pass --shopper-reference" } }
+  if ($merchant_account == null) { error make --unspanned { msg: "required query parameter 'merchantAccount' missing: pass --merchant-account" } }
   let qp = [(serialize-qp "shopperReference" $shopper_reference "scalar") (serialize-qp "merchantAccount" $merchant_account "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({recurring_id: (encode-path-segment $recurring_id)} | format pattern "/storedPaymentMethods/{recurring_id}") $qp $auth.query)
   let accept_val = "application/json"

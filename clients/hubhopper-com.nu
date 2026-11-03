@@ -1,6 +1,7 @@
-# Auto-generated client for Hubhopper Partner Integration API(s) - Production vv5
+# Auto-generated client for Hubhopper Partner Integration API(s) - Production v5
 # Source: https://api.apis.guru/v2/specs/hubhopper.com/v5/swagger.json
-# Auth: --token flag or $env.HUBHOPPER_PARTNER_INTEGRATION_API_S_PRODUCTION_TOKEN
+# Auth (api_key): --token-apikey flag or $env.HUBHOPPER_PARTNER_INTEGRATION_API_S_PRODUCTION_APIKEY_TOKEN
+# Auth (partner_id): --token-partnerid flag or $env.HUBHOPPER_PARTNER_INTEGRATION_API_S_PRODUCTION_PARTNERID_TOKEN
 
 const BASE_URL = "https://apis.hubhopper.com/partner"
 
@@ -12,8 +13,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-api-key" => { {scheme: $scheme, headers: {x-api-key: $token_val}, query: "", location: "header"} }
-    "hhpartnerid" => { {scheme: $scheme, headers: {hhPartnerId: $token_val}, query: "", location: "header"} }
+    "x-api-key" => { {scheme: $scheme, headers: {"x-api-key": $token_val}, query: "", location: "header"} }
+    "hhpartnerid" => { {scheme: $scheme, headers: {"hhPartnerId": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -108,7 +109,7 @@ def auth-scheme-completer [] { ["x-api-key" "hhpartnerid"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-apikey" "token-partnerid"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-categories" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)

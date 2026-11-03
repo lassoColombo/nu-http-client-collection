@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "key" => { {scheme: $scheme, headers: {key: $token_val}, query: "", location: "header"} }
+    "key" => { {scheme: $scheme, headers: {"key": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -140,10 +140,11 @@ export def "delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cid: int # Unique calculation ID number
+  --cid: int # Unique calculation ID number (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "key"))
   let base = ($base_url | default $BASE_URL)
+  if ($cid == null) { error make --unspanned { msg: "required query parameter 'cid' missing: pass --cid" } }
   let qp = [(serialize-qp "cid" $cid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/archive/delete" $qp $auth.query)
   let accept_val = "application/json"
@@ -176,10 +177,11 @@ export def "delete-network" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --nid: string # Network name
+  --nid: string # Network name (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "key"))
   let base = ($base_url | default $BASE_URL)
+  if ($nid == null) { error make --unspanned { msg: "required query parameter 'nid' missing: pass --nid" } }
   let qp = [(serialize-qp "nid" $nid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/archive/delete/network" $qp $auth.query)
   let accept_val = "application/json"
@@ -212,11 +214,13 @@ export def "get-archive-export" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --file: string # Calculation file name
-  --fmt: string@fmt-completer # Raster/Vector file format: KML, KMZ, SHP, GeoTIFF
+  --file: string # Calculation file name (required)
+  --fmt: string@fmt-completer # Raster/Vector file format: KML, KMZ, SHP, GeoTIFF (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "key"))
   let base = ($base_url | default $BASE_URL)
+  if ($file == null) { error make --unspanned { msg: "required query parameter 'file' missing: pass --file" } }
+  if ($fmt == null) { error make --unspanned { msg: "required query parameter 'fmt' missing: pass --fmt" } }
   let qp = [(serialize-qp "file" $file "scalar") (serialize-qp "fmt" $fmt "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/archive/export" $qp $auth.query)
   let accept_val = "application/json"
@@ -380,11 +384,13 @@ export def "interference" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --network: string # Network name eg. Overlapping broadcast stations
-  --name: string # Interference layer name eg. QRM_map
+  --network: string # Network name eg. Overlapping broadcast stations (required)
+  --name: string # Interference layer name eg. QRM_map (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "key"))
   let base = ($base_url | default $BASE_URL)
+  if ($network == null) { error make --unspanned { msg: "required query parameter 'network' missing: pass --network" } }
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
   let qp = [(serialize-qp "network" $network "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/interference" $qp $auth.query)
   let accept_val = "application/json"
@@ -417,11 +423,13 @@ export def "mesh" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --network: string # Network name eg. 100_BLUE_repeaters_nationwide
-  --name: string # Super layer name eg. National_map
+  --network: string # Network name eg. 100_BLUE_repeaters_nationwide (required)
+  --name: string # Super layer name eg. National_map (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "key"))
   let base = ($base_url | default $BASE_URL)
+  if ($network == null) { error make --unspanned { msg: "required query parameter 'network' missing: pass --network" } }
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
   let qp = [(serialize-qp "network" $network "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/mesh" $qp $auth.query)
   let accept_val = "application/json"
@@ -454,15 +462,20 @@ export def "network" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --net: string # Network name
-  --nam: string # Super layer name
-  --lat: float # Latitude in decimal degrees (format: float)
-  --lon: float # Longitude in decimal degrees (format: float)
-  --alt: int # Height above ground level in metres (format: int32)
+  --net: string # Network name (required)
+  --nam: string # Super layer name (required)
+  --lat: float # Latitude in decimal degrees (required, format: float)
+  --lon: float # Longitude in decimal degrees (required, format: float)
+  --alt: int # Height above ground level in metres (required, format: int32)
   --rxg: float # Receiver gain in dBi (format: float)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "key"))
   let base = ($base_url | default $BASE_URL)
+  if ($net == null) { error make --unspanned { msg: "required query parameter 'net' missing: pass --net" } }
+  if ($nam == null) { error make --unspanned { msg: "required query parameter 'nam' missing: pass --nam" } }
+  if ($lat == null) { error make --unspanned { msg: "required query parameter 'lat' missing: pass --lat" } }
+  if ($lon == null) { error make --unspanned { msg: "required query parameter 'lon' missing: pass --lon" } }
+  if ($alt == null) { error make --unspanned { msg: "required query parameter 'alt' missing: pass --alt" } }
   let qp = [(serialize-qp "net" $net "scalar") (serialize-qp "nam" $nam "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "rxg" $rxg "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/network" $qp $auth.query)
   let accept_val = "application/json"
@@ -491,7 +504,7 @@ export def "network" [
 # --output shape: {ber?: int, col?: string, mod?: int, nf?: int, out?: int, rad?: float, res?: int, units?: "metric"|"imperial"}
 # --receiver shape: {alt?: float, lat?: float, lon?: float, rxg?: float, rxs?: float}
 # --transmitter shape: {alt?: float, bwi?: float, frq?: float, lat?: float, lon?: float, txw?: float}
-export def "path" [
+export def "post-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -132,13 +132,16 @@ export def "get-city" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --key: string
-  --lng: float
-  --lat: float
+  --key: string # required
+  --lng: float # required
+  --lat: float # required
   --format: string@format-completer
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
+  if ($lng == null) { error make --unspanned { msg: "required query parameter 'lng' missing: pass --lng" } }
+  if ($lat == null) { error make --unspanned { msg: "required query parameter 'lat' missing: pass --lat" } }
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "lng" $lng "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/city" $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"

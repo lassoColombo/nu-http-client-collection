@@ -1,4 +1,4 @@
-# Auto-generated client for API Discovery Service vv1
+# Auto-generated client for API Discovery Service v1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/discovery/v1/openapi.json
 # Auth: --token flag or $env.API_DISCOVERY_SERVICE_TOKEN
 

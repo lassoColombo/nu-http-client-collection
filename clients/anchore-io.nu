@@ -597,12 +597,13 @@ export def "delete-user-credential" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --credential-type: string@credential-type-completer
+  --credential-type: string@credential-type-completer # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($accountname | is-empty) { error make --unspanned { msg: "path parameter 'accountname' must be non-empty" } }
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
+  let credential_type = ($credential_type | default "password")
   let qp = [(serialize-qp "credential_type" $credential_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({accountname: (encode-path-segment $accountname), username: (encode-path-segment $username)} | format pattern "/accounts/{accountname}/users/{username}/credentials") $qp $auth.query)
   let accept_val = "application/json"
@@ -1282,12 +1283,13 @@ export def "delete-images-async" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --image-digests: list<string>
+  --image-digests: list<string> # required
   --force: oneof<nothing, bool>
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
 ]: nothing -> table<detail: string, digest: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($image_digests == null) { error make --unspanned { msg: "required query parameter 'imageDigests' missing: pass --image-digests" } }
   let qp = [(serialize-qp "imageDigests" $image_digests "csv") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/images" $qp $auth.query)
   let accept_val = "application/json"
@@ -1373,7 +1375,7 @@ export def "add-image" [
   --digest: string # A digest string for an image, maybe a pull string or just a digest. e.g. nginx@sha256:123 or sha256:abc123. If a pull string, it must have same regisry/repo as the tag field. Deprecated in favor of the 'source' field
   --dockerfile: string # Base64 encoded content of the dockerfile for the image, if available. Deprecated in favor of the 'source' field.
   --image-type: string # Optional. The type of image this is adding, defaults to "docker". This can be ommitted until multiple image types are supported.
-  --body-source: record # A set of analysis source types. Only one may be set in any given request. — shape: {archive?: record, digest?: record, import?: record, tag?: record}
+  --source: record # A set of analysis source types. Only one may be set in any given request. — shape: {archive?: record, digest?: record, import?: record, tag?: record}
   --tag: string # Full pullable tag reference for image. e.g. docker.io/nginx:latest. Deprecated in favor of the 'source' field
 ]: any -> table<analysis_status: string, annotations: record, created_at: string, imageDigest: string, image_content: record, image_detail: list<record>, image_status: string, last_updated: string, record_version: string, userId: string> {
   let input = $in
@@ -1381,7 +1383,7 @@ export def "add-image" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "force" $force "scalar") (serialize-qp "autosubscribe" $autosubscribe "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/images" $qp $auth.query)
-  let req_body = {"annotations": $annotations, "created_at": $created_at, "digest": $digest, "dockerfile": $dockerfile, "image_type": $image_type, "source": $body_source, "tag": $tag} | compact
+  let req_body = {"annotations": $annotations, "created_at": $created_at, "digest": $digest, "dockerfile": $dockerfile, "image_type": $image_type, "source": $source, "tag": $tag} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1497,7 +1499,7 @@ export def "get-image-policy-check-by-image-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --policy-id: string
-  --tag: string
+  --tag: string # required
   --detail: oneof<nothing, bool>
   --history: oneof<nothing, bool>
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
@@ -1505,6 +1507,7 @@ export def "get-image-policy-check-by-image-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($image_id | is-empty) { error make --unspanned { msg: "path parameter 'imageId' must be non-empty" } }
+  if ($tag == null) { error make --unspanned { msg: "required query parameter 'tag' missing: pass --tag" } }
   let qp = [(serialize-qp "policyId" $policy_id "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "detail" $detail "scalar") (serialize-qp "history" $history "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({image_id: (encode-path-segment $image_id)} | format pattern "/images/by_id/{image_id}/check") $qp $auth.query)
   let accept_val = "application/json"
@@ -1967,7 +1970,7 @@ export def "get-image-policy-check" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --policy-id: string
-  --tag: string
+  --tag: string # required
   --detail: oneof<nothing, bool>
   --history: oneof<nothing, bool>
   --interactive: oneof<nothing, bool>
@@ -1976,6 +1979,7 @@ export def "get-image-policy-check" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($image_digest | is-empty) { error make --unspanned { msg: "path parameter 'imageDigest' must be non-empty" } }
+  if ($tag == null) { error make --unspanned { msg: "required query parameter 'tag' missing: pass --tag" } }
   let qp = [(serialize-qp "policyId" $policy_id "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "detail" $detail "scalar") (serialize-qp "history" $history "scalar") (serialize-qp "interactive" $interactive "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({image_digest: (encode-path-segment $image_digest)} | format pattern "/images/{image_digest}/check") $qp $auth.query)
   let accept_val = "application/json"
@@ -2419,8 +2423,8 @@ export def "import-image-archive" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["archive_file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["archive_file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -2865,14 +2869,14 @@ export def "import-image-packages" [
   --descriptor: record # shape: {name: string, version: string}
   distro: record # shape: {idLike: string, name: string, version: string}
   --schema: record # shape: {url: string, version: string}
-  --body-source: record # shape: {target: any, type: string}
+  source: record # shape: {target: any, type: string}
 ]: any -> record<created_at: string, digest: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($operation_id | is-empty) { error make --unspanned { msg: "path parameter 'operation_id' must be non-empty" } }
   let full_url = (build-url $base ({operation_id: (encode-path-segment $operation_id)} | format pattern "/imports/images/{operation_id}/packages") $auth.query)
-  let req_body = {"artifactRelationships": $artifact_relationships, "artifacts": $artifacts, "descriptor": $descriptor, "distro": $distro, "schema": $schema, "source": $body_source} | compact
+  let req_body = {"artifactRelationships": $artifact_relationships, "artifacts": $artifacts, "descriptor": $descriptor, "distro": $distro, "schema": $schema, "source": $source} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3247,7 +3251,7 @@ export def "query-images-by-package" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name: string # Name of package to search for (e.g. sed)
+  --name: string # Name of package to search for (e.g. sed) (required)
   --package-type: string # Type of package to filter on (e.g. dpkg)
   --version: string # Version of named package to filter on (e.g. 4.4-1)
   --page: string # The page of results to fetch. Pages start at 1
@@ -3256,6 +3260,7 @@ export def "query-images-by-package" [
 ]: nothing -> record<next_page: string, page: string, returned_count: int, images: table<image: record, packages: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "package_type" $package_type "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/query/images/by_package" $qp $auth.query)
   let accept_val = "application/json"
@@ -3290,7 +3295,7 @@ export def "query-images-by-vulnerability" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --vulnerability-id: string # The ID of the vulnerability to search for within all images stored in anchore-engine (e.g. CVE-1999-0001)
+  --vulnerability-id: string # The ID of the vulnerability to search for within all images stored in anchore-engine (e.g. CVE-1999-0001) (required)
   --namespace: string # Filter results to images within the given vulnerability namespace (e.g. debian:8, ubuntu:14.04)
   --affected-package: string # Filter results to images with vulnable packages with the given package name (e.g. libssl)
   --severity: string@severity-completer # Filter results to vulnerable package/vulnerability with the given severity
@@ -3301,6 +3306,7 @@ export def "query-images-by-vulnerability" [
 ]: nothing -> record<next_page: string, page: string, returned_count: int, images: table<affected_packages: list, image: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($vulnerability_id == null) { error make --unspanned { msg: "required query parameter 'vulnerability_id' missing: pass --vulnerability-id" } }
   let qp = [(serialize-qp "vulnerability_id" $vulnerability_id "scalar") (serialize-qp "namespace" $namespace "scalar") (serialize-qp "affected_package" $affected_package "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "vendor_only" $vendor_only "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/query/images/by_vulnerability" $qp $auth.query)
   let accept_val = "application/json"
@@ -3335,7 +3341,7 @@ export def "query-vulnerabilities" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: list<string> # The ID of the vulnerability (e.g. CVE-1999-0001)
+  --id: list<string> # The ID of the vulnerability (e.g. CVE-1999-0001) (required)
   --affected-package: string # Filter results by specified package name (e.g. sed)
   --affected-package-version: string # Filter results by specified package version (e.g. 4.4-1)
   --page: string # The page of results to fetch. Pages start at 1 (default: 1)
@@ -3344,6 +3350,7 @@ export def "query-vulnerabilities" [
 ]: nothing -> record<next_page: string, page: string, returned_count: int, vulnerabilities: table<affected_packages: list, description: string, id: string, link: string, namespace: string, nvd_data: list, references: list, severity: string, vendor_data: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "csv") (serialize-qp "affected_package" $affected_package "scalar") (serialize-qp "affected_package_version" $affected_package_version "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "namespace" $namespace "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/query/vulnerabilities" $qp $auth.query)
   let accept_val = "application/json"
@@ -3589,13 +3596,14 @@ export def "add-repository" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --repository: string # full repository to add e.g. docker.io/library/alpine
+  --repository: string # full repository to add e.g. docker.io/library/alpine (required)
   --autosubscribe: oneof<nothing, bool> # flag to enable/disable auto tag_update activation when new images from a repo are added
   --dryrun: oneof<nothing, bool> # flag to return tags in the repository without actually watching the repository, default is false
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
 ]: nothing -> table<active: bool, subscription_id: string, subscription_key: string, subscription_type: string, subscription_value: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($repository == null) { error make --unspanned { msg: "required query parameter 'repository' missing: pass --repository" } }
   let qp = [(serialize-qp "repository" $repository "scalar") (serialize-qp "autosubscribe" $autosubscribe "scalar") (serialize-qp "dryrun" $dryrun "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repositories" $qp $auth.query)
   let accept_val = "application/json"
@@ -4084,11 +4092,12 @@ export def "toggle-feed-enabled" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --enabled: oneof<nothing, bool>
+  --enabled: oneof<nothing, bool> # required
 ]: nothing -> record<created_at: string, groups: table<created_at: string, last_sync: string, name: string, record_count: int>, last_full_sync: string, name: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($feed | is-empty) { error make --unspanned { msg: "path parameter 'feed' must be non-empty" } }
+  if ($enabled == null) { error make --unspanned { msg: "required query parameter 'enabled' missing: pass --enabled" } }
   let qp = [(serialize-qp "enabled" $enabled "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({feed: (encode-path-segment $feed)} | format pattern "/system/feeds/{feed}") $qp $auth.query)
   let accept_val = "application/json"
@@ -4161,12 +4170,13 @@ export def "toggle-group-enabled" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --enabled: oneof<nothing, bool>
+  --enabled: oneof<nothing, bool> # required
 ]: nothing -> table<created_at: string, groups: list<record>, last_full_sync: string, name: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($feed | is-empty) { error make --unspanned { msg: "path parameter 'feed' must be non-empty" } }
   if ($group | is-empty) { error make --unspanned { msg: "path parameter 'group' must be non-empty" } }
+  if ($enabled == null) { error make --unspanned { msg: "required query parameter 'enabled' missing: pass --enabled" } }
   let qp = [(serialize-qp "enabled" $enabled "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({feed: (encode-path-segment $feed), group: (encode-path-segment $group)} | format pattern "/system/feeds/{feed}/{group}") $qp $auth.query)
   let accept_val = "application/json"

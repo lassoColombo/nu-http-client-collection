@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -142,11 +142,13 @@ export def "addwebhook" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --url: string # Your webhook callback url
-  --app-type: string # Webhooks are only available for Welcome, enter app_camera.
+  --url: string # Your webhook callback url (required)
+  --app-type: string # Webhooks are only available for Welcome, enter app_camera. (required)
 ]: nothing -> record<status: string, time_exec: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
+  if ($app_type == null) { error make --unspanned { msg: "required query parameter 'app_type' missing: pass --app-type" } }
   let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "app_type" $app_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/addwebhook" $qp $auth.query)
   let accept_val = "application/json"
@@ -179,13 +181,15 @@ export def "createnewschedule" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --device-id: string # The relay id
-  --module-id: string # The thermostat id
+  --device-id: string # The relay id (required)
+  --module-id: string # The thermostat id (required)
   --body: any
 ]: any -> record<body: record<schedule_id: string>, status: string, time_exec: float, time_server: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($device_id == null) { error make --unspanned { msg: "required query parameter 'device_id' missing: pass --device-id" } }
+  if ($module_id == null) { error make --unspanned { msg: "required query parameter 'module_id' missing: pass --module-id" } }
   let qp = [(serialize-qp "device_id" $device_id "scalar") (serialize-qp "module_id" $module_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/createnewschedule" $qp $auth.query)
   let req_body = $body
@@ -260,10 +264,11 @@ export def "dropwebhook" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --app-type: string # For Welcome, use app_camera
+  --app-type: string # For Welcome, use app_camera (required)
 ]: nothing -> record<status: string, time_exec: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($app_type == null) { error make --unspanned { msg: "required query parameter 'app_type' missing: pass --app-type" } }
   let qp = [(serialize-qp "app_type" $app_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dropwebhook" $qp $auth.query)
   let accept_val = "application/json"
@@ -296,11 +301,13 @@ export def "getcamerapicture" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --image-id: string # id of the image (can be retrieved as 'id' in 'face' in Gethomedata, or as 'id' in 'snapshot' in Getnextevents, Getlasteventof and Geteventsuntil)
-  --key: string # Security key to access snapshots.
+  --image-id: string # id of the image (can be retrieved as 'id' in 'face' in Gethomedata, or as 'id' in 'snapshot' in Getnextevents, Getlasteventof and Geteventsuntil) (required)
+  --key: string # Security key to access snapshots. (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($image_id == null) { error make --unspanned { msg: "required query parameter 'image_id' missing: pass --image-id" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "image_id" $image_id "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getcamerapicture" $qp $auth.query)
   let accept_val = "application/json"
@@ -333,11 +340,13 @@ export def "geteventsuntil" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --home-id: string # ID of the Home you're interested in
-  --event-id: string # Your request will retrieve all the events until this one
+  --home-id: string # ID of the Home you're interested in (required)
+  --event-id: string # Your request will retrieve all the events until this one (required)
 ]: nothing -> record<body: record<events_list: list<record>>, status: string, time_exec: float, time_server: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($home_id == null) { error make --unspanned { msg: "required query parameter 'home_id' missing: pass --home-id" } }
+  if ($event_id == null) { error make --unspanned { msg: "required query parameter 'event_id' missing: pass --event-id" } }
   let qp = [(serialize-qp "home_id" $home_id "scalar") (serialize-qp "event_id" $event_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/geteventsuntil" $qp $auth.query)
   let accept_val = "application/json"
@@ -443,12 +452,14 @@ export def "getlasteventof" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --home-id: string # ID of the Home you're interested in
-  --person-id: string # Your request will retrieve all events of the given home until the most recent event of the given person
+  --home-id: string # ID of the Home you're interested in (required)
+  --person-id: string # Your request will retrieve all events of the given home until the most recent event of the given person (required)
   --offset: int # Number of events to retrieve. Default is 30.
 ]: nothing -> record<body: record<events_list: list<record>>, status: string, time_exec: float, time_server: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($home_id == null) { error make --unspanned { msg: "required query parameter 'home_id' missing: pass --home-id" } }
+  if ($person_id == null) { error make --unspanned { msg: "required query parameter 'person_id' missing: pass --person-id" } }
   let qp = [(serialize-qp "home_id" $home_id "scalar") (serialize-qp "person_id" $person_id "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getlasteventof" $qp $auth.query)
   let accept_val = "application/json"
@@ -481,10 +492,10 @@ export def "getmeasure" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --device-id: string # Id of the device whose module's measurements you want to retrieve. This _id can be found in the user's devices field.
+  --device-id: string # Id of the device whose module's measurements you want to retrieve. This _id can be found in the user's devices field. (required)
   --module-id: string # If you don't specify any module_id you will retrieve the device's measurements. If you specify a module_id you will retrieve the module's measurements.
-  --scale: string@scale-completer # Defines the time interval between two measurements. Possible values : max -> every value stored will be returned 30min -> 1 value every 30 minutes 1hour -> 1 value every hour 3hours -> 1 value every 3 hours 1day -> 1 value per day 1week -> 1 value per week 1month -> 1 value per month
-  --type: list<string> # Measures you are interested in. Data you can request depends on the scale. **For Weather Station:** * max -> Temperature (°C), CO2 (ppm), Humidity (%), Pressure (mbar), Noise (db), Rain (mm), WindStrength (km/h), WindAngle (angles), Guststrength (km/h), GustAngle (angles) * 30min, 1hour, 3hours -> Same as above + min_temp, max_temp, min_hum, max_hum, min_pressure, max_pressure, min_noise, max_noise, sum_rain, date_max_gust * 1day, 1week, 1month -> Same as above + date_min_temp, date_max_temp, date_min_hum, date_max_hum, date_min_pressure, date_max_pressure, date_min_noise, date_max_noise, date_min_co2, date_max_co2 **For Thermostat:** * max -> temperature (°C), sp_temperature (°C), boileron (sec), boileroff (sec) * 30min, 1hour, 3hours -> temperature, sp_temperature, min_temp, max_temp, sum_boiler_on, sum_boiler_off * 1day, 1week, 1month -> temperature, min_temp, date_min_temp, max_temp, sum_boiler_on, sum_boiler_off
+  --scale: string@scale-completer # Defines the time interval between two measurements. Possible values : max -> every value stored will be returned 30min -> 1 value every 30 minutes 1hour -> 1 value every hour 3hours -> 1 value every 3 hours 1day -> 1 value per day 1week -> 1 value per week 1month -> 1 value per month (required)
+  --type: list<string> # Measures you are interested in. Data you can request depends on the scale. **For Weather Station:** * max -> Temperature (°C), CO2 (ppm), Humidity (%), Pressure (mbar), Noise (db), Rain (mm), WindStrength (km/h), WindAngle (angles), Guststrength (km/h), GustAngle (angles) * 30min, 1hour, 3hours -> Same as above + min_temp, max_temp, min_hum, max_hum, min_pressure, max_pressure, min_noise, max_noise, sum_rain, date_max_gust * 1day, 1week, 1month -> Same as above + date_min_temp, date_max_temp, date_min_hum, date_max_hum, date_min_pressure, date_max_pressure, date_min_noise, date_max_noise, date_min_co2, date_max_co2 **For Thermostat:** * max -> temperature (°C), sp_temperature (°C), boileron (sec), boileroff (sec) * 30min, 1hour, 3hours -> temperature, sp_temperature, min_temp, max_temp, sum_boiler_on, sum_boiler_off * 1day, 1week, 1month -> temperature, min_temp, date_min_temp, max_temp, sum_boiler_on, sum_boiler_off (required)
   --date-begin: int # Starting timestamp (utc) of the requested measurements. Please note measurement retrieving is limited to 1024 measurements. (format: int32)
   --date-end: string # Ending timestamp (utc) of the request measurements. If you want only the last measurement, do not provide date_begin, and set date_end to `last`.
   --limit: int # Limits the number of measurements returned (default & max is 1024) (format: int32)
@@ -493,6 +504,9 @@ export def "getmeasure" [
 ]: nothing -> record<body: table<beg_time: int, step_time: int, value: list>, status: string, time_exec: float, time_server: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($device_id == null) { error make --unspanned { msg: "required query parameter 'device_id' missing: pass --device-id" } }
+  if ($scale == null) { error make --unspanned { msg: "required query parameter 'scale' missing: pass --scale" } }
+  if ($type == null) { error make --unspanned { msg: "required query parameter 'type' missing: pass --type" } }
   let qp = [(serialize-qp "device_id" $device_id "scalar") (serialize-qp "module_id" $module_id "scalar") (serialize-qp "scale" $scale "scalar") (serialize-qp "type" $type "csv") (serialize-qp "date_begin" $date_begin "scalar") (serialize-qp "date_end" $date_end "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "optimize" $optimize "scalar") (serialize-qp "real_time" $real_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getmeasure" $qp $auth.query)
   let accept_val = "application/json"
@@ -525,12 +539,14 @@ export def "getnextevents" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --home-id: string # ID of the Home you're interested in
-  --event-id: string # Your request will retrieve events occured before this one
+  --home-id: string # ID of the Home you're interested in (required)
+  --event-id: string # Your request will retrieve events occured before this one (required)
   --size: int # Number of events to retrieve. Default is 30.
 ]: nothing -> record<body: record<events_list: list<record>>, status: string, time_exec: float, time_server: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($home_id == null) { error make --unspanned { msg: "required query parameter 'home_id' missing: pass --home-id" } }
+  if ($event_id == null) { error make --unspanned { msg: "required query parameter 'event_id' missing: pass --event-id" } }
   let qp = [(serialize-qp "home_id" $home_id "scalar") (serialize-qp "event_id" $event_id "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getnextevents" $qp $auth.query)
   let accept_val = "application/json"
@@ -563,15 +579,19 @@ export def "getpublicdata" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lat-ne: int # Latitude of the north east corner of the requested area. -85 <= lat_ne <= 85 and lat_ne>lat_sw (format: int32)
-  --lon-ne: int # Longitude of the north east corner of the requested area. -180 <= lon_ne <= 180 and lon_ne>lon_sw (format: int32)
-  --lat-sw: int # Latitude of the south west corner of the requested area. -85 <= lat_sw <= 85 (format: int32)
-  --lon-sw: int # Longitude of the south west corner of the requested area. -180 <= lon_sw <= 180 (format: int32)
+  --lat-ne: int # Latitude of the north east corner of the requested area. -85 <= lat_ne <= 85 and lat_ne>lat_sw (required, format: int32)
+  --lon-ne: int # Longitude of the north east corner of the requested area. -180 <= lon_ne <= 180 and lon_ne>lon_sw (required, format: int32)
+  --lat-sw: int # Latitude of the south west corner of the requested area. -85 <= lat_sw <= 85 (required, format: int32)
+  --lon-sw: int # Longitude of the south west corner of the requested area. -180 <= lon_sw <= 180 (required, format: int32)
   --required-data: list<string> # To filter stations based on relevant measurements you want (e.g. rain will only return stations with rain gauges). Default is no filter. You can find all measurements available on the Thermostat page.
   --filter: oneof<nothing, bool> # True to exclude stations with abnormal temperature measures. Default is false.
 ]: nothing -> record<body: table<_id: string, mark: int, measures: record, module_types: record, modules: list, place: record>, status: string, time_exec: float, time_server: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($lat_ne == null) { error make --unspanned { msg: "required query parameter 'lat_ne' missing: pass --lat-ne" } }
+  if ($lon_ne == null) { error make --unspanned { msg: "required query parameter 'lon_ne' missing: pass --lon-ne" } }
+  if ($lat_sw == null) { error make --unspanned { msg: "required query parameter 'lat_sw' missing: pass --lat-sw" } }
+  if ($lon_sw == null) { error make --unspanned { msg: "required query parameter 'lon_sw' missing: pass --lon-sw" } }
   let qp = [(serialize-qp "lat_ne" $lat_ne "scalar") (serialize-qp "lon_ne" $lon_ne "scalar") (serialize-qp "lat_sw" $lat_sw "scalar") (serialize-qp "lon_sw" $lon_sw "scalar") (serialize-qp "required_data" $required_data "csv") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getpublicdata" $qp $auth.query)
   let accept_val = "application/json"
@@ -679,11 +699,13 @@ export def "getthermstate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --device-id: string # The relay id
-  --module-id: string # The thermostat id
+  --device-id: string # The relay id (required)
+  --module-id: string # The thermostat id (required)
 ]: nothing -> record<body: record<battery_percent: int, battery_vp: int, last_plug_seen: int, last_therm_seen: int, measured: record<setpoint_temp: float, temperature: float, time: int>, plug_connected_boiler: int, rf_status: int, setpoint: record<setpoint_endtime: int, setpoint_mode: string, setpoint_temp: float>, setpoint_order: record<setpoint_endtime: int, setpoint_mode: string, setpoint_temp: float>, therm_orientation: int, therm_program: record<name: string, program_id: string, selected: bool, timetable: list, zones: list>, therm_program_backup: list<record>, therm_program_order: record<name: string, program_id: string, selected: bool, timetable: list, zones: list>, therm_relay_cmd: int, udp_conn: bool, wifi_status: int>, status: string, time_exec: float, time_server: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($device_id == null) { error make --unspanned { msg: "required query parameter 'device_id' missing: pass --device-id" } }
+  if ($module_id == null) { error make --unspanned { msg: "required query parameter 'module_id' missing: pass --module-id" } }
   let qp = [(serialize-qp "device_id" $device_id "scalar") (serialize-qp "module_id" $module_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getthermstate" $qp $auth.query)
   let accept_val = "application/json"
@@ -786,11 +808,12 @@ export def "setpersonsaway" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --home-id: string # ID of the Home you're interested in
+  --home-id: string # ID of the Home you're interested in (required)
   --person-id: string # If a person_id is specified, that person will be set as 'Away'. If no person_id is specified, the Home will be set as 'Empty'.
 ]: nothing -> record<status: string, time_exec: float, time_server: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($home_id == null) { error make --unspanned { msg: "required query parameter 'home_id' missing: pass --home-id" } }
   let qp = [(serialize-qp "home_id" $home_id "scalar") (serialize-qp "person_id" $person_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/setpersonsaway" $qp $auth.query)
   let accept_val = "application/json"
@@ -823,11 +846,13 @@ export def "setpersonshome" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --home-id: string # ID of the Home you're interested in
-  --person-ids: string # List of persons IDs
+  --home-id: string # ID of the Home you're interested in (required)
+  --person-ids: string # List of persons IDs (required)
 ]: nothing -> record<status: string, time_exec: float, time_server: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($home_id == null) { error make --unspanned { msg: "required query parameter 'home_id' missing: pass --home-id" } }
+  if ($person_ids == null) { error make --unspanned { msg: "required query parameter 'person_ids' missing: pass --person-ids" } }
   let qp = [(serialize-qp "home_id" $home_id "scalar") (serialize-qp "person_ids" $person_ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/setpersonshome" $qp $auth.query)
   let accept_val = "application/json"
@@ -860,14 +885,17 @@ export def "setthermpoint" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --device-id: string # The relay id
-  --module-id: string # The thermostat id
-  --setpoint-mode: string@setpoint-mode-completer # Chosen setpoint_mode
+  --device-id: string # The relay id (required)
+  --module-id: string # The thermostat id (required)
+  --setpoint-mode: string@setpoint-mode-completer # Chosen setpoint_mode (required)
   --setpoint-endtime: int # When using the manual or max setpoint_mode, this parameter defines when the setpoint expires. (format: int32)
   --setpoint-temp: float # When using the manual setpoint_mode, this parameter defines the temperature setpoint (in Celcius) to use. (format: float)
 ]: nothing -> record<body: string, status: string, time_exec: float, time_server: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($device_id == null) { error make --unspanned { msg: "required query parameter 'device_id' missing: pass --device-id" } }
+  if ($module_id == null) { error make --unspanned { msg: "required query parameter 'module_id' missing: pass --module-id" } }
+  if ($setpoint_mode == null) { error make --unspanned { msg: "required query parameter 'setpoint_mode' missing: pass --setpoint-mode" } }
   let qp = [(serialize-qp "device_id" $device_id "scalar") (serialize-qp "module_id" $module_id "scalar") (serialize-qp "setpoint_mode" $setpoint_mode "scalar") (serialize-qp "setpoint_endtime" $setpoint_endtime "scalar") (serialize-qp "setpoint_temp" $setpoint_temp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/setthermpoint" $qp $auth.query)
   let accept_val = "application/json"
@@ -900,12 +928,15 @@ export def "switchschedule" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --device-id: string # The relay id
-  --module-id: string # The thermostat id
-  --schedule-id: string # The schedule id. It can be found in the getthermstate response, under the keys `therm_program_backup` and `therm_program`.
+  --device-id: string # The relay id (required)
+  --module-id: string # The thermostat id (required)
+  --schedule-id: string # The schedule id. It can be found in the getthermstate response, under the keys `therm_program_backup` and `therm_program`. (required)
 ]: nothing -> record<body: string, status: string, time_exec: float, time_server: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($device_id == null) { error make --unspanned { msg: "required query parameter 'device_id' missing: pass --device-id" } }
+  if ($module_id == null) { error make --unspanned { msg: "required query parameter 'module_id' missing: pass --module-id" } }
+  if ($schedule_id == null) { error make --unspanned { msg: "required query parameter 'schedule_id' missing: pass --schedule-id" } }
   let qp = [(serialize-qp "device_id" $device_id "scalar") (serialize-qp "module_id" $module_id "scalar") (serialize-qp "schedule_id" $schedule_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/switchschedule" $qp $auth.query)
   let accept_val = "application/json"
@@ -938,13 +969,15 @@ export def "syncschedule" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --device-id: string # The relay id
-  --module-id: string # The thermostat id
+  --device-id: string # The relay id (required)
+  --module-id: string # The thermostat id (required)
   --body: any
 ]: any -> record<body: string, status: string, time_exec: float, time_server: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($device_id == null) { error make --unspanned { msg: "required query parameter 'device_id' missing: pass --device-id" } }
+  if ($module_id == null) { error make --unspanned { msg: "required query parameter 'module_id' missing: pass --module-id" } }
   let qp = [(serialize-qp "device_id" $device_id "scalar") (serialize-qp "module_id" $module_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/syncschedule" $qp $auth.query)
   let req_body = $body

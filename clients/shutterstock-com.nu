@@ -12,8 +12,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -272,10 +272,11 @@ export def "fetch-renders" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: list<string> # One or more render IDs (e.g. [L2w7h9VNFlkzpllSUunSYayenKjN, BeHx3UNXzMBB4dGsC9aa6VxnpcWl])
+  --id: list<string> # One or more render IDs (required, e.g. [L2w7h9VNFlkzpllSUunSYayenKjN, BeHx3UNXzMBB4dGsC9aa6VxnpcWl])
 ]: nothing -> record<audio_renders: table<created_date: string, files: list, id: string, preset: string, progress_percent: int, status: string, timeline: record, updated_date: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/ai/audio/renders" $qp $auth.query)
   let accept_val = "application/json"
@@ -347,12 +348,13 @@ export def "get-track-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: list<string> # One or more audio IDs (e.g. [442583, 434750])
+  --id: list<string> # One or more audio IDs (required, e.g. [442583, 434750])
   --view: string@view-completer # Amount of detail to render in the response (default: minimal, e.g. full)
   --search-id: string # The ID of the search that is related to this request (e.g. 00000000-0000-0000-0000-000000000000)
 ]: nothing -> record<data: table<added_date: string, affiliate_url: string, album: record, artists: list, assets: record, bpm: int, contributor: record, deleted_time: string, description: string, duration: float, genres: list, id: string, instruments: list, is_adult: bool, is_instrumental: bool, isrc: string, keywords: list, language: string, lyrics: string, media_type: string, model_releases: list, moods: list, published_time: string, recording_version: string, releases: list, similar_artists: list, submitted_time: string, title: string, updated_time: string, url: string, vocal_description: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "multi") (serialize-qp "view" $view "scalar") (serialize-qp "search_id" $search_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/audio" $qp $auth.query)
   let accept_val = "application/json"
@@ -618,19 +620,19 @@ export def "get-track-collection-items" [
   --page: int # Page number (default: 1)
   --per-page: int # Number of results per page (default: 100)
   --share-code: string # Code to retrieve the contents of a shared collection
-  --qp-sort: string@sort-completer # Sort order (default: oldest)
+  --sort: string@sort-completer # Sort order (default: oldest)
 ]: nothing -> record<data: table<added_time: string, id: string, media_type: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "share_code" $share_code "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "share_code" $share_code "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/audio/collections/{id}/items") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"page": $page, "per_page": $per_page, "share_code": $share_code, "sort": $qp_sort} | compact)
+    query: ({"page": $page, "per_page": $per_page, "share_code": $share_code, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -772,7 +774,7 @@ export def "get-track-license-list" [
   --license: string # Restrict results by license. Prepending a `-` sign will exclude results by license (e.g. 48433107)
   --page: int # Page number (default: 1)
   --per-page: int # Number of results per page (default: 20)
-  --qp-sort: string@sort-completer # Sort order (default: newest)
+  --sort: string@sort-completer # Sort order (default: newest)
   --username: string # Filter licenses by username of licensee (e.g. aUniqueUsername)
   --start-date: string # Show licenses created on or after the specified date (format: date-time, e.g. 2021-03-29T13:25:13.521Z)
   --end-date: string # Show licenses created before the specified date (format: date-time, e.g. 2021-03-29T13:25:13.521Z)
@@ -781,14 +783,14 @@ export def "get-track-license-list" [
 ]: nothing -> record<data: table<audio: record, download_time: string, id: string, image: record, is_downloadable: bool, license: string, metadata: record, revshare: record, subscription_id: string, user: record, video: record>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "audio_id" $audio_id "scalar") (serialize-qp "license" $license "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "download_availability" $download_availability "scalar") (serialize-qp "team_history" $team_history "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "audio_id" $audio_id "scalar") (serialize-qp "license" $license "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "download_availability" $download_availability "scalar") (serialize-qp "team_history" $team_history "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/audio/licenses" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"audio_id": $audio_id, "license": $license, "page": $page, "per_page": $per_page, "sort": $qp_sort, "username": $username, "start_date": $start_date, "end_date": $end_date, "download_availability": $download_availability, "team_history": $team_history} | compact)
+    query: ({"audio_id": $audio_id, "license": $license, "page": $page, "per_page": $per_page, "sort": $sort, "username": $username, "start_date": $start_date, "end_date": $end_date, "download_availability": $download_availability, "team_history": $team_history} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -942,7 +944,7 @@ export def "search-tracks" [
   --page: int # Page number (default: 1)
   --per-page: int # Number of results per page (default: 20, e.g. 1)
   --query: string # One or more search terms separated by spaces (e.g. drum)
-  --qp-sort: string@sort-completer-1 # Sort by (e.g. score)
+  --sort: string@sort-completer-1 # Sort by (e.g. score)
   --sort-order: string@sort-order-completer # Sort order (default: desc)
   --vocal-description: string # Show tracks with the specified vocal description (male, female) (e.g. female)
   --view: string@view-completer # Amount of detail to render in the response (default: minimal, e.g. full)
@@ -952,14 +954,14 @@ export def "search-tracks" [
 ]: nothing -> record<data: table<added_date: string, affiliate_url: string, album: record, artists: list, assets: record, bpm: int, contributor: record, deleted_time: string, description: string, duration: float, genres: list, id: string, instruments: list, is_adult: bool, is_instrumental: bool, isrc: string, keywords: list, language: string, lyrics: string, media_type: string, model_releases: list, moods: list, published_time: string, recording_version: string, releases: list, similar_artists: list, submitted_time: string, title: string, updated_time: string, url: string, vocal_description: string>, message: string, page: int, per_page: int, search_id: string, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "artists" $artists "multi") (serialize-qp "bpm" $bpm "scalar") (serialize-qp "bpm_from" $bpm_from "scalar") (serialize-qp "bpm_to" $bpm_to "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "duration_from" $duration_from "scalar") (serialize-qp "duration_to" $duration_to "scalar") (serialize-qp "genre" $genre "multi") (serialize-qp "is_instrumental" $is_instrumental "scalar") (serialize-qp "instruments" $instruments "multi") (serialize-qp "moods" $moods "multi") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "vocal_description" $vocal_description "scalar") (serialize-qp "view" $view "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "library" $library "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "artists" $artists "multi") (serialize-qp "bpm" $bpm "scalar") (serialize-qp "bpm_from" $bpm_from "scalar") (serialize-qp "bpm_to" $bpm_to "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "duration_from" $duration_from "scalar") (serialize-qp "duration_to" $duration_to "scalar") (serialize-qp "genre" $genre "multi") (serialize-qp "is_instrumental" $is_instrumental "scalar") (serialize-qp "instruments" $instruments "multi") (serialize-qp "moods" $moods "multi") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "vocal_description" $vocal_description "scalar") (serialize-qp "view" $view "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "library" $library "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/audio/search" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"artists": $artists, "bpm": $bpm, "bpm_from": $bpm_from, "bpm_to": $bpm_to, "duration": $duration, "duration_from": $duration_from, "duration_to": $duration_to, "genre": $genre, "is_instrumental": $is_instrumental, "instruments": $instruments, "moods": $moods, "page": $page, "per_page": $per_page, "query": $query, "sort": $qp_sort, "sort_order": $sort_order, "vocal_description": $vocal_description, "view": $view, "fields": $fields, "library": $library, "language": $language} | compact)
+    query: ({"artists": $artists, "bpm": $bpm, "bpm_from": $bpm_from, "bpm_to": $bpm_to, "duration": $duration, "duration_from": $duration_from, "duration_to": $duration_to, "genre": $genre, "is_instrumental": $is_instrumental, "instruments": $instruments, "moods": $moods, "page": $page, "per_page": $per_page, "query": $query, "sort": $sort, "sort_order": $sort_order, "vocal_description": $vocal_description, "view": $view, "fields": $fields, "library": $library, "language": $language} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1054,7 +1056,7 @@ export def "bulk-search-images" [
   --people-number: int # Show images with the specified number of people (e.g. 2)
   --region: string # Raise or lower search result rankings based on the result's relevance to a specified region; you can provide a country code or an IP address from which the API infers a country (e.g. US)
   --safe: oneof<nothing, bool> # Enable or disable safe search (default: true)
-  --qp-sort: string@sort-completer-2 # Sort by (default: popular)
+  --sort: string@sort-completer-2 # Sort by (default: popular)
   --spellcheck-query: oneof<nothing, bool> # Spellcheck the search query and return results on suggested spellings (default: true)
   --view: string@view-completer # Amount of detail to render in the response (default: minimal)
   --width: int # (Deprecated; use width_from and width_to instead) Show images with the specified width (DEPRECATED)
@@ -1065,7 +1067,7 @@ export def "bulk-search-images" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "added_date" $added_date "scalar") (serialize-qp "added_date_start" $added_date_start "scalar") (serialize-qp "aspect_ratio_min" $aspect_ratio_min "scalar") (serialize-qp "aspect_ratio_max" $aspect_ratio_max "scalar") (serialize-qp "aspect_ratio" $aspect_ratio "scalar") (serialize-qp "added_date_end" $added_date_end "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "contributor" $contributor "multi") (serialize-qp "contributor_country" $contributor_country "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "height_from" $height_from "scalar") (serialize-qp "height_to" $height_to "scalar") (serialize-qp "image_type" $image_type "multi") (serialize-qp "keyword_safe_search" $keyword_safe_search "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "license" $license "multi") (serialize-qp "model" $model "multi") (serialize-qp "orientation" $orientation "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "people_model_released" $people_model_released "scalar") (serialize-qp "people_age" $people_age "scalar") (serialize-qp "people_ethnicity" $people_ethnicity "multi") (serialize-qp "people_gender" $people_gender "scalar") (serialize-qp "people_number" $people_number "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "safe" $safe "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "spellcheck_query" $spellcheck_query "scalar") (serialize-qp "view" $view "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "width_from" $width_from "scalar") (serialize-qp "width_to" $width_to "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "added_date" $added_date "scalar") (serialize-qp "added_date_start" $added_date_start "scalar") (serialize-qp "aspect_ratio_min" $aspect_ratio_min "scalar") (serialize-qp "aspect_ratio_max" $aspect_ratio_max "scalar") (serialize-qp "aspect_ratio" $aspect_ratio "scalar") (serialize-qp "added_date_end" $added_date_end "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "contributor" $contributor "multi") (serialize-qp "contributor_country" $contributor_country "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "height_from" $height_from "scalar") (serialize-qp "height_to" $height_to "scalar") (serialize-qp "image_type" $image_type "multi") (serialize-qp "keyword_safe_search" $keyword_safe_search "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "license" $license "multi") (serialize-qp "model" $model "multi") (serialize-qp "orientation" $orientation "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "people_model_released" $people_model_released "scalar") (serialize-qp "people_age" $people_age "scalar") (serialize-qp "people_ethnicity" $people_ethnicity "multi") (serialize-qp "people_gender" $people_gender "scalar") (serialize-qp "people_number" $people_number "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "safe" $safe "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "spellcheck_query" $spellcheck_query "scalar") (serialize-qp "view" $view "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "width_from" $width_from "scalar") (serialize-qp "width_to" $width_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/bulk_search/images" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -1074,7 +1076,7 @@ export def "bulk-search-images" [
   let req = {
     method: "post"
     url: $full_url
-    query: ({"added_date": $added_date, "added_date_start": $added_date_start, "aspect_ratio_min": $aspect_ratio_min, "aspect_ratio_max": $aspect_ratio_max, "aspect_ratio": $aspect_ratio, "added_date_end": $added_date_end, "category": $category, "color": $color, "contributor": $contributor, "contributor_country": $contributor_country, "fields": $fields, "height": $height, "height_from": $height_from, "height_to": $height_to, "image_type": $image_type, "keyword_safe_search": $keyword_safe_search, "language": $language, "license": $license, "model": $model, "orientation": $orientation, "page": $page, "per_page": $per_page, "people_model_released": $people_model_released, "people_age": $people_age, "people_ethnicity": $people_ethnicity, "people_gender": $people_gender, "people_number": $people_number, "region": $region, "safe": $safe, "sort": $qp_sort, "spellcheck_query": $spellcheck_query, "view": $view, "width": $width, "width_from": $width_from, "width_to": $width_to} | compact)
+    query: ({"added_date": $added_date, "added_date_start": $added_date_start, "aspect_ratio_min": $aspect_ratio_min, "aspect_ratio_max": $aspect_ratio_max, "aspect_ratio": $aspect_ratio, "added_date_end": $added_date_end, "category": $category, "color": $color, "contributor": $contributor, "contributor_country": $contributor_country, "fields": $fields, "height": $height, "height_from": $height_from, "height_to": $height_to, "image_type": $image_type, "keyword_safe_search": $keyword_safe_search, "language": $language, "license": $license, "model": $model, "orientation": $orientation, "page": $page, "per_page": $per_page, "people_model_released": $people_model_released, "people_age": $people_age, "people_ethnicity": $people_ethnicity, "people_gender": $people_gender, "people_number": $people_number, "region": $region, "safe": $safe, "sort": $sort, "spellcheck_query": $spellcheck_query, "view": $view, "width": $width, "width_from": $width_from, "width_to": $width_to} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -1101,19 +1103,19 @@ export def "get-collections" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number (default: 1, e.g. 1)
   --per-page: int # Number of results per page (default: 20, e.g. 20)
-  --qp-sort: string@sort-completer # Sort by (default: newest)
+  --sort: string@sort-completer # Sort by (default: newest)
   --shared: oneof<nothing, bool> # Set to true to omit collections that you own and return only collections that are shared with you (default: false)
 ]: nothing -> record<data: table<cover_asset: record, created_time: string, id: string, name: string, role_assignments: record, total_item_count: float, updated_time: string, visibility: string>, page: float, per_page: float, total_count: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "shared" $shared "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "shared" $shared "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/catalog/collections" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"page": $page, "per_page": $per_page, "sort": $qp_sort, "shared": $shared} | compact)
+    query: ({"page": $page, "per_page": $per_page, "sort": $sort, "shared": $shared} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1340,7 +1342,7 @@ export def "search-catalog" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-sort: string@sort-completer # Sort by (default: newest)
+  --sort: string@sort-completer # Sort by (default: newest)
   --page: int # Page number (default: 1, e.g. 1)
   --per-page: int # Number of results per page (default: 20, e.g. 50)
   --query: string # One or more search terms separated by spaces (e.g. dogs on the beach)
@@ -1349,14 +1351,14 @@ export def "search-catalog" [
 ]: nothing -> record<data: table<asset: record, collection_ids: list, created_time: string, id: string>, page: float, per_page: float, total_count: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "collection_id" $collection_id "multi") (serialize-qp "asset_type" $asset_type "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "collection_id" $collection_id "multi") (serialize-qp "asset_type" $asset_type "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/catalog/search" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sort": $qp_sort, "page": $page, "per_page": $per_page, "query": $query, "collection_id": $collection_id, "asset_type": $asset_type} | compact)
+    query: ({"sort": $sort, "page": $page, "per_page": $per_page, "query": $query, "collection_id": $collection_id, "asset_type": $asset_type} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1381,10 +1383,11 @@ export def "get-contributor-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: list<string> # One or more contributor IDs (e.g. [800506, 1653538])
+  --id: list<string> # One or more contributor IDs (required, e.g. [800506, 1653538])
 ]: nothing -> record<data: table<about: string, contributor_type: list, display_name: string, equipment: list, id: string, location: string, portfolio_url: string, social_media: record, styles: list, subjects: list, website: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/contributors" $qp $auth.query)
   let accept_val = "application/json"
@@ -1454,19 +1457,19 @@ export def "get-contributor-collections-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-sort: string@sort-completer-3 # Sort order
+  --sort: string@sort-completer-3 # Sort order
 ]: nothing -> record<data: table<cover_item: record, created_time: string, id: string, items_updated_time: string, name: string, share_code: string, share_url: string, total_item_count: int, updated_time: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($contributor_id | is-empty) { error make --unspanned { msg: "path parameter 'contributor_id' must be non-empty" } }
-  let qp = [(serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({contributor_id: (encode-path-segment $contributor_id)} | format pattern "/v2/contributors/{contributor_id}/collections") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sort": $qp_sort} | compact)
+    query: ({"sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1533,20 +1536,20 @@ export def "get-contributor-collection-items" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number (default: 1)
   --per-page: int # Number of results per page (default: 20)
-  --qp-sort: string@sort-completer # Sort order
+  --sort: string@sort-completer # Sort order
 ]: nothing -> record<data: table<added_time: string, id: string, media_type: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($contributor_id | is-empty) { error make --unspanned { msg: "path parameter 'contributor_id' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({contributor_id: (encode-path-segment $contributor_id), id: (encode-path-segment $id)} | format pattern "/v2/contributors/{contributor_id}/collections/{id}/items") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"page": $page, "per_page": $per_page, "sort": $qp_sort} | compact)
+    query: ({"page": $page, "per_page": $per_page, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1609,10 +1612,11 @@ export def "get-keywords" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --asset-id: string # The asset ID or upload ID to suggest keywords for (e.g. U6ba16262e3bc2db470b8e3cfa8aaab25)
+  --asset-id: string # The asset ID or upload ID to suggest keywords for (required, e.g. U6ba16262e3bc2db470b8e3cfa8aaab25)
 ]: nothing -> record<data: list<string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($asset_id == null) { error make --unspanned { msg: "required query parameter 'asset_id' missing: pass --asset-id" } }
   let qp = [(serialize-qp "asset_id" $asset_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/cv/keywords" $qp $auth.query)
   let accept_val = "application/json"
@@ -1645,7 +1649,7 @@ export def "get-similar-images" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --asset-id: string # The asset ID or upload ID to find similar images for (e.g. U6ba16262e3bc2db470b8e3cfa8aaab25)
+  --asset-id: string # The asset ID or upload ID to find similar images for (required, e.g. U6ba16262e3bc2db470b8e3cfa8aaab25)
   --license: list<string> # Show only images with the specified license (default: [commercial])
   --safe: oneof<nothing, bool> # Enable or disable safe search (default: true)
   --language: string@language-completer # Language for the keywords and categories in the response (e.g. cs)
@@ -1655,6 +1659,7 @@ export def "get-similar-images" [
 ]: nothing -> record<data: table<added_date: string, affiliate_url: string, aspect: float, assets: record, categories: list, contributor: record, description: string, has_model_release: bool, has_property_release: bool, id: string, image_type: string, insights: record, is_adult: bool, is_editorial: bool, is_illustration: bool, keywords: list, media_type: string, model_releases: list, models: list, releases: list, url: string>, insights: record<label_performance: list<record>>, message: string, page: int, per_page: int, search_id: string, spellcheck_info: record, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($asset_id == null) { error make --unspanned { msg: "required query parameter 'asset_id' missing: pass --asset-id" } }
   let qp = [(serialize-qp "asset_id" $asset_id "scalar") (serialize-qp "license" $license "multi") (serialize-qp "safe" $safe "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/cv/similar/images" $qp $auth.query)
   let accept_val = "application/json"
@@ -1687,7 +1692,7 @@ export def "get-similar-videos" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --asset-id: string # The asset ID or upload ID to find similar videos for (e.g. U6ba16262e3bc2db470b8e3cfa8aaab25)
+  --asset-id: string # The asset ID or upload ID to find similar videos for (required, e.g. U6ba16262e3bc2db470b8e3cfa8aaab25)
   --license: list<string> # Show only videos with the specified license (default: [commercial])
   --safe: oneof<nothing, bool> # Enable or disable safe search (default: true)
   --language: string@language-completer # Language for the keywords and categories in the response (e.g. cs)
@@ -1697,6 +1702,7 @@ export def "get-similar-videos" [
 ]: nothing -> record<data: table<added_date: string, affiliate_url: string, aspect: float, aspect_ratio: string, assets: record, categories: list, contributor: record, description: string, duration: float, has_model_release: bool, has_property_release: bool, id: string, is_adult: bool, is_editorial: bool, keywords: list, media_type: string, models: list, url: string>, message: string, page: int, per_page: int, search_id: string, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($asset_id == null) { error make --unspanned { msg: "required query parameter 'asset_id' missing: pass --asset-id" } }
   let qp = [(serialize-qp "asset_id" $asset_id "scalar") (serialize-qp "license" $license "multi") (serialize-qp "safe" $safe "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/cv/similar/videos" $qp $auth.query)
   let accept_val = "application/json"
@@ -1803,7 +1809,7 @@ export def "get-editorial-image-license-list" [
   --license: string # Show editorial images that are available with the specified license name (e.g. premier_editorial_all_digital)
   --page: int # Page number (default: 1)
   --per-page: int # Number of results per page (default: 20)
-  --qp-sort: string@sort-completer # Sort order (default: newest)
+  --sort: string@sort-completer # Sort order (default: newest)
   --username: string # Filter licenses by username of licensee (e.g. aUniqueUsername)
   --start-date: string # Show licenses created on or after the specified date (format: date-time, e.g. 2021-03-29T13:25:13.521Z)
   --end-date: string # Show licenses created before the specified date (format: date-time, e.g. 2021-03-29T13:25:13.521Z)
@@ -1812,14 +1818,14 @@ export def "get-editorial-image-license-list" [
 ]: nothing -> record<data: table<audio: record, download_time: string, id: string, image: record, is_downloadable: bool, license: string, metadata: record, revshare: record, subscription_id: string, user: record, video: record>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "image_id" $image_id "scalar") (serialize-qp "license" $license "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "download_availability" $download_availability "scalar") (serialize-qp "team_history" $team_history "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "image_id" $image_id "scalar") (serialize-qp "license" $license "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "download_availability" $download_availability "scalar") (serialize-qp "team_history" $team_history "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/editorial/images/licenses" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"image_id": $image_id, "license": $license, "page": $page, "per_page": $per_page, "sort": $qp_sort, "username": $username, "start_date": $start_date, "end_date": $end_date, "download_availability": $download_availability, "team_history": $team_history} | compact)
+    query: ({"image_id": $image_id, "license": $license, "page": $page, "per_page": $per_page, "sort": $sort, "username": $username, "start_date": $start_date, "end_date": $end_date, "download_availability": $download_availability, "team_history": $team_history} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1884,12 +1890,13 @@ export def "get-editorial-image-livefeed-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --country: string # Returns only livefeeds that are available for distribution in a certain country (format: country-code-3, e.g. USA)
+  --country: string # Returns only livefeeds that are available for distribution in a certain country (required, format: country-code-3, e.g. USA)
   --page: int # Page number (default: 1)
   --per-page: int # Number of results per page (default: 20)
 ]: nothing -> record<data: table<cover_item: record, created_time: string, id: string, name: string, total_item_count: int>, message: string, page: int, per_page: int, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/editorial/images/livefeeds" $qp $auth.query)
   let accept_val = "application/json"
@@ -1923,11 +1930,12 @@ export def "get-editorial-image-livefeed" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --country: string # Returns only if the livefeed is available for distribution in a certain country (format: country-code-3, e.g. USA)
+  --country: string # Returns only if the livefeed is available for distribution in a certain country (required, format: country-code-3, e.g. USA)
 ]: nothing -> record<cover_item: record<height: int, id: string, url: string, width: int>, created_time: string, id: string, name: string, total_item_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
   let qp = [(serialize-qp "country" $country "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/editorial/images/livefeeds/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1961,11 +1969,12 @@ export def "get-editorial-image-livefeed-items" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --country: string # Returns only if the livefeed items are available for distribution in a certain country (format: country-code-3, e.g. USA)
+  --country: string # Returns only if the livefeed items are available for distribution in a certain country (required, format: country-code-3, e.g. USA)
 ]: nothing -> record<data: table<aspect: float, assets: record, byline: string, caption: string, categories: list, date_taken: string, description: string, id: string, keywords: list, special_instructions: string, title: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
   let qp = [(serialize-qp "country" $country "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/editorial/images/livefeeds/{id}/items") $qp $auth.query)
   let accept_val = "application/json"
@@ -1999,9 +2008,9 @@ export def "search-editorial-images" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # One or more search terms separated by spaces (e.g. The Academy Awards)
-  --qp-sort: string@sort-completer-4 # Sort by (default: relevant)
+  --sort: string@sort-completer-4 # Sort by (default: relevant)
   --category: string # Show editorial content with each of the specified editorial categories; specify category names in a comma-separated list (e.g. Alone,Performing)
-  --country: string # Show only editorial content that is available for distribution in a certain country (format: country-code-3, e.g. USA)
+  --country: string # Show only editorial content that is available for distribution in a certain country (required, format: country-code-3, e.g. USA)
   --supplier-code: list<string> # Show only editorial content from certain suppliers
   --date-start: string # Show only editorial content generated on or after a specific date (format: date, e.g. 2020-05-29)
   --date-end: string # Show only editorial content generated on or before a specific date (format: date, e.g. 2021-05-29)
@@ -2010,14 +2019,15 @@ export def "search-editorial-images" [
 ]: nothing -> record<data: table<aspect: float, assets: record, byline: string, caption: string, categories: list, date_taken: string, description: string, id: string, keywords: list, special_instructions: string, title: string>, message: string, next: string, page: int, per_page: int, prev: string, search_id: string, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "supplier_code" $supplier_code "multi") (serialize-qp "date_start" $date_start "scalar") (serialize-qp "date_end" $date_end "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "cursor" $cursor "scalar")] | flatten | str join "&"
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "supplier_code" $supplier_code "multi") (serialize-qp "date_start" $date_start "scalar") (serialize-qp "date_end" $date_end "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "cursor" $cursor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/editorial/images/search" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"query": $query, "sort": $qp_sort, "category": $category, "country": $country, "supplier_code": $supplier_code, "date_start": $date_start, "date_end": $date_end, "per_page": $per_page, "cursor": $cursor} | compact)
+    query: ({"query": $query, "sort": $sort, "category": $category, "country": $country, "supplier_code": $supplier_code, "date_start": $date_start, "date_end": $date_end, "per_page": $per_page, "cursor": $cursor} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2042,27 +2052,31 @@ export def "get-updated-editorial-images" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --type: string@type-completer # Specify `addition` to return only images that were added or `edit` to return only images that were edited or deleted (e.g. edit)
-  --date-updated-start: string # Show images images added, edited, or deleted after the specified date. Acceptable range is 1970-01-01T00:00:01 to 2038-01-19T00:00:00. (format: date-time, e.g. 2021-03-29T13:25:13.521Z)
-  --date-updated-end: string # Show images images added, edited, or deleted before the specified date. Acceptable range is 1970-01-01T00:00:01 to 2038-01-19T00:00:00. (format: date-time, e.g. 2021-03-29T13:25:13.521Z)
+  --type: string@type-completer # Specify `addition` to return only images that were added or `edit` to return only images that were edited or deleted (required, e.g. edit)
+  --date-updated-start: string # Show images images added, edited, or deleted after the specified date. Acceptable range is 1970-01-01T00:00:01 to 2038-01-19T00:00:00. (required, format: date-time, e.g. 2021-03-29T13:25:13.521Z)
+  --date-updated-end: string # Show images images added, edited, or deleted before the specified date. Acceptable range is 1970-01-01T00:00:01 to 2038-01-19T00:00:00. (required, format: date-time, e.g. 2021-03-29T13:25:13.521Z)
   --date-taken-start: string # Show images that were taken on or after the specified date; use this parameter if you want recently created images from the collection instead of updated older assets (format: date, e.g. 2020-02-04)
   --date-taken-end: string # Show images that were taken before the specified date (format: date, e.g. 2020-02-05)
   --cursor: string # The cursor of the page with which to start fetching results; this cursor is returned from previous requests (e.g. eyJ2IjoxLCJzIjoyfQ==)
-  --qp-sort: string@sort-completer # Sort by (default: newest, e.g. newest)
+  --sort: string@sort-completer # Sort by (default: newest, e.g. newest)
   --supplier-code: list<string> # Show only editorial content from certain suppliers (e.g. ABC)
-  --country: string # Show only editorial content that is available for distribution in a certain country (format: country-code-3, e.g. USA)
+  --country: string # Show only editorial content that is available for distribution in a certain country (required, format: country-code-3, e.g. USA)
   --per-page: int # Number of results per page (default: 500, e.g. 200)
 ]: nothing -> record<data: table<aspect: float, assets: record, byline: string, caption: string, categories: list, commercial_status: record, created_time: string, date_taken: string, description: string, id: string, keywords: list, rights: record, special_instructions: string, supplier_code: string, title: string, updated_time: string, updates: list>, message: string, next: string, per_page: int, prev: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "date_updated_start" $date_updated_start "scalar") (serialize-qp "date_updated_end" $date_updated_end "scalar") (serialize-qp "date_taken_start" $date_taken_start "scalar") (serialize-qp "date_taken_end" $date_taken_end "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "supplier_code" $supplier_code "multi") (serialize-qp "country" $country "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  if ($type == null) { error make --unspanned { msg: "required query parameter 'type' missing: pass --type" } }
+  if ($date_updated_start == null) { error make --unspanned { msg: "required query parameter 'date_updated_start' missing: pass --date-updated-start" } }
+  if ($date_updated_end == null) { error make --unspanned { msg: "required query parameter 'date_updated_end' missing: pass --date-updated-end" } }
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
+  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "date_updated_start" $date_updated_start "scalar") (serialize-qp "date_updated_end" $date_updated_end "scalar") (serialize-qp "date_taken_start" $date_taken_start "scalar") (serialize-qp "date_taken_end" $date_taken_end "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "supplier_code" $supplier_code "multi") (serialize-qp "country" $country "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/editorial/images/updated" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"type": $type, "date_updated_start": $date_updated_start, "date_updated_end": $date_updated_end, "date_taken_start": $date_taken_start, "date_taken_end": $date_taken_end, "cursor": $cursor, "sort": $qp_sort, "supplier_code": $supplier_code, "country": $country, "per_page": $per_page} | compact)
+    query: ({"type": $type, "date_updated_start": $date_updated_start, "date_updated_end": $date_updated_end, "date_taken_start": $date_taken_start, "date_taken_end": $date_taken_end, "cursor": $cursor, "sort": $sort, "supplier_code": $supplier_code, "country": $country, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2088,11 +2102,12 @@ export def "get-editorial-image" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --country: string # Returns only if the content is available for distribution in a certain country (format: country-code-3, e.g. USA)
+  --country: string # Returns only if the content is available for distribution in a certain country (required, format: country-code-3, e.g. USA)
 ]: nothing -> record<aspect: float, assets: record<medium_jpg: record<display_name: string, dpi: int, file_size: int, format: string, height: int, is_licensable: bool, width: int>, original: record<display_name: string, dpi: int, file_size: int, format: string, height: int, is_licensable: bool, width: int>, small_jpg: record<display_name: string, dpi: int, file_size: int, format: string, height: int, is_licensable: bool, width: int>, thumb_170: record<height: int, url: string, width: int>, thumb_220: record<height: int, url: string, width: int>, watermark_1500: record<height: int, url: string, width: int>, watermark_450: record<height: int, url: string, width: int>>, byline: string, caption: string, categories: table<name: string>, date_taken: string, description: string, id: string, keywords: list<string>, special_instructions: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
   let qp = [(serialize-qp "country" $country "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/editorial/images/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2169,12 +2184,13 @@ export def "get-editorial-livefeed-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --country: string # Returns only livefeeds that are available for distribution in a certain country (format: country-code-3, e.g. USA)
+  --country: string # Returns only livefeeds that are available for distribution in a certain country (required, format: country-code-3, e.g. USA)
   --page: int # Page number (default: 1)
   --per-page: int # Number of results per page (default: 20)
 ]: nothing -> record<data: table<cover_item: record, created_time: string, id: string, name: string, total_item_count: int>, message: string, page: int, per_page: int, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/editorial/livefeeds" $qp $auth.query)
   let accept_val = "application/json"
@@ -2210,11 +2226,12 @@ export def "get-editorial-livefeed" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --country: string # Returns only if the livefeed is available for distribution in a certain country (format: country-code-3, e.g. USA)
+  --country: string # Returns only if the livefeed is available for distribution in a certain country (required, format: country-code-3, e.g. USA)
 ]: nothing -> record<cover_item: record<height: int, id: string, url: string, width: int>, created_time: string, id: string, name: string, total_item_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
   let qp = [(serialize-qp "country" $country "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/editorial/livefeeds/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2250,11 +2267,12 @@ export def "get-editorial-livefeed-items" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --country: string # Returns only if the livefeed items are available for distribution in a certain country (format: country-code-3, e.g. USA)
+  --country: string # Returns only if the livefeed items are available for distribution in a certain country (required, format: country-code-3, e.g. USA)
 ]: nothing -> record<data: table<aspect: float, assets: record, byline: string, caption: string, categories: list, date_taken: string, description: string, id: string, keywords: list, special_instructions: string, title: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
   let qp = [(serialize-qp "country" $country "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/editorial/livefeeds/{id}/items") $qp $auth.query)
   let accept_val = "application/json"
@@ -2290,9 +2308,9 @@ export def "search-editorial" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # One or more search terms separated by spaces
-  --qp-sort: string@sort-completer-4 # Sort by (default: relevant)
+  --sort: string@sort-completer-4 # Sort by (default: relevant)
   --category: string # Show editorial content within a certain editorial category; specify by category name
-  --country: string # Show only editorial content that is available for distribution in a certain country (format: country-code-3, e.g. USA)
+  --country: string # Show only editorial content that is available for distribution in a certain country (required, format: country-code-3, e.g. USA)
   --supplier-code: list<string> # Show only editorial content from certain suppliers
   --date-start: string # Show only editorial content generated on or after a specific date (format: date)
   --date-end: string # Show only editorial content generated on or before a specific date (format: date)
@@ -2301,14 +2319,15 @@ export def "search-editorial" [
 ]: nothing -> record<data: table<aspect: float, assets: record, byline: string, caption: string, categories: list, date_taken: string, description: string, id: string, keywords: list, special_instructions: string, title: string>, message: string, next: string, page: int, per_page: int, prev: string, search_id: string, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "supplier_code" $supplier_code "multi") (serialize-qp "date_start" $date_start "scalar") (serialize-qp "date_end" $date_end "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "cursor" $cursor "scalar")] | flatten | str join "&"
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "supplier_code" $supplier_code "multi") (serialize-qp "date_start" $date_start "scalar") (serialize-qp "date_end" $date_end "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "cursor" $cursor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/editorial/search" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"query": $query, "sort": $qp_sort, "category": $category, "country": $country, "supplier_code": $supplier_code, "date_start": $date_start, "date_end": $date_end, "per_page": $per_page, "cursor": $cursor} | compact)
+    query: ({"query": $query, "sort": $sort, "category": $category, "country": $country, "supplier_code": $supplier_code, "date_start": $date_start, "date_end": $date_end, "per_page": $per_page, "cursor": $cursor} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2335,27 +2354,31 @@ export def "get-updated-editorial-image" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --type: string@type-completer # Specify `addition` to return only images that were added or `edit` to return only images that were edited or deleted (e.g. edit)
-  --date-updated-start: string # Show images images added, edited, or deleted after the specified date. Acceptable range is 1970-01-01T00:00:01 to 2038-01-19T00:00:00. (format: date-time, e.g. 2021-03-29T13:25:13.521Z)
-  --date-updated-end: string # Show images images added, edited, or deleted before the specified date. Acceptable range is 1970-01-01T00:00:01 to 2038-01-19T00:00:00. (format: date-time, e.g. 2021-03-29T13:25:13.521Z)
+  --type: string@type-completer # Specify `addition` to return only images that were added or `edit` to return only images that were edited or deleted (required, e.g. edit)
+  --date-updated-start: string # Show images images added, edited, or deleted after the specified date. Acceptable range is 1970-01-01T00:00:01 to 2038-01-19T00:00:00. (required, format: date-time, e.g. 2021-03-29T13:25:13.521Z)
+  --date-updated-end: string # Show images images added, edited, or deleted before the specified date. Acceptable range is 1970-01-01T00:00:01 to 2038-01-19T00:00:00. (required, format: date-time, e.g. 2021-03-29T13:25:13.521Z)
   --date-taken-start: string # Show images that were taken on or after the specified date; use this parameter if you want recently created images from the collection instead of updated older assets (format: date, e.g. 2020-02-04)
   --date-taken-end: string # Show images that were taken before the specified date (format: date, e.g. 2020-02-05)
   --cursor: string # The cursor of the page with which to start fetching results; this cursor is returned from previous requests (e.g. eyJ2IjoxLCJzIjoyfQ==)
-  --qp-sort: string@sort-completer # Sort by (default: newest, e.g. newest)
+  --sort: string@sort-completer # Sort by (default: newest, e.g. newest)
   --supplier-code: list<string> # Show only editorial content from certain suppliers (e.g. ABC)
-  --country: string # Show only editorial content that is available for distribution in a certain country (format: country-code-3, e.g. USA)
+  --country: string # Show only editorial content that is available for distribution in a certain country (required, format: country-code-3, e.g. USA)
   --per-page: int # Number of results per page (default: 500, e.g. 200)
 ]: nothing -> record<data: table<aspect: float, assets: record, byline: string, caption: string, categories: list, commercial_status: record, created_time: string, date_taken: string, description: string, id: string, keywords: list, rights: record, special_instructions: string, supplier_code: string, title: string, updated_time: string, updates: list>, message: string, next: string, per_page: int, prev: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "date_updated_start" $date_updated_start "scalar") (serialize-qp "date_updated_end" $date_updated_end "scalar") (serialize-qp "date_taken_start" $date_taken_start "scalar") (serialize-qp "date_taken_end" $date_taken_end "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "supplier_code" $supplier_code "multi") (serialize-qp "country" $country "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  if ($type == null) { error make --unspanned { msg: "required query parameter 'type' missing: pass --type" } }
+  if ($date_updated_start == null) { error make --unspanned { msg: "required query parameter 'date_updated_start' missing: pass --date-updated-start" } }
+  if ($date_updated_end == null) { error make --unspanned { msg: "required query parameter 'date_updated_end' missing: pass --date-updated-end" } }
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
+  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "date_updated_start" $date_updated_start "scalar") (serialize-qp "date_updated_end" $date_updated_end "scalar") (serialize-qp "date_taken_start" $date_taken_start "scalar") (serialize-qp "date_taken_end" $date_taken_end "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "supplier_code" $supplier_code "multi") (serialize-qp "country" $country "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/editorial/updated" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"type": $type, "date_updated_start": $date_updated_start, "date_updated_end": $date_updated_end, "date_taken_start": $date_taken_start, "date_taken_end": $date_taken_end, "cursor": $cursor, "sort": $qp_sort, "supplier_code": $supplier_code, "country": $country, "per_page": $per_page} | compact)
+    query: ({"type": $type, "date_updated_start": $date_updated_start, "date_updated_end": $date_updated_end, "date_taken_start": $date_taken_start, "date_taken_end": $date_taken_end, "cursor": $cursor, "sort": $sort, "supplier_code": $supplier_code, "country": $country, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2418,7 +2441,7 @@ export def "get-editorial-video-license-list" [
   --license: string # Show editorial videos that are available with the specified license name (e.g. premier_editorial_all_media)
   --page: int # Page number (default: 1)
   --per-page: int # Number of results per page (default: 20)
-  --qp-sort: string@sort-completer # Sort order (default: newest)
+  --sort: string@sort-completer # Sort order (default: newest)
   --username: string # Filter licenses by username of licensee (e.g. aUniqueUsername)
   --start-date: string # Show licenses created on or after the specified date (format: date-time, e.g. 2021-03-29T13:25:13.521Z)
   --end-date: string # Show licenses created before the specified date (format: date-time, e.g. 2021-03-29T13:25:13.521Z)
@@ -2427,14 +2450,14 @@ export def "get-editorial-video-license-list" [
 ]: nothing -> record<data: table<audio: record, download_time: string, id: string, image: record, is_downloadable: bool, license: string, metadata: record, revshare: record, subscription_id: string, user: record, video: record>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "video_id" $video_id "scalar") (serialize-qp "license" $license "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "download_availability" $download_availability "scalar") (serialize-qp "team_history" $team_history "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "video_id" $video_id "scalar") (serialize-qp "license" $license "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "download_availability" $download_availability "scalar") (serialize-qp "team_history" $team_history "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/editorial/videos/licenses" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"video_id": $video_id, "license": $license, "page": $page, "per_page": $per_page, "sort": $qp_sort, "username": $username, "start_date": $start_date, "end_date": $end_date, "download_availability": $download_availability, "team_history": $team_history} | compact)
+    query: ({"video_id": $video_id, "license": $license, "page": $page, "per_page": $per_page, "sort": $sort, "username": $username, "start_date": $start_date, "end_date": $end_date, "download_availability": $download_availability, "team_history": $team_history} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2500,9 +2523,9 @@ export def "search-editorial-videos" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # One or more search terms separated by spaces (e.g. The Academy Awards)
-  --qp-sort: string@sort-completer-4 # Sort by (default: relevant)
+  --sort: string@sort-completer-4 # Sort by (default: relevant)
   --category: string # Show editorial content with each of the specified editorial categories; specify category names in a comma-separated list (e.g. Alone,Performing)
-  --country: string # Show only editorial video content that is available for distribution in a certain country (format: country-code-3, e.g. USA)
+  --country: string # Show only editorial video content that is available for distribution in a certain country (required, format: country-code-3, e.g. USA)
   --supplier-code: list<string> # Show only editorial video content from certain suppliers
   --date-start: string # Show only editorial video content generated on or after a specific date (format: date, e.g. 2020-05-29)
   --date-end: string # Show only editorial video content generated on or before a specific date (format: date, e.g. 2021-05-29)
@@ -2513,14 +2536,15 @@ export def "search-editorial-videos" [
 ]: nothing -> record<data: table<aspect: float, assets: record, byline: string, caption: string, categories: list, date_taken: string, description: string, id: string, keywords: list, title: string>, message: string, next: string, page: int, per_page: int, prev: string, search_id: string, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "supplier_code" $supplier_code "multi") (serialize-qp "date_start" $date_start "scalar") (serialize-qp "date_end" $date_end "scalar") (serialize-qp "resolution" $resolution "scalar") (serialize-qp "fps" $fps "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "cursor" $cursor "scalar")] | flatten | str join "&"
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "supplier_code" $supplier_code "multi") (serialize-qp "date_start" $date_start "scalar") (serialize-qp "date_end" $date_end "scalar") (serialize-qp "resolution" $resolution "scalar") (serialize-qp "fps" $fps "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "cursor" $cursor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/editorial/videos/search" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"query": $query, "sort": $qp_sort, "category": $category, "country": $country, "supplier_code": $supplier_code, "date_start": $date_start, "date_end": $date_end, "resolution": $resolution, "fps": $fps, "per_page": $per_page, "cursor": $cursor} | compact)
+    query: ({"query": $query, "sort": $sort, "category": $category, "country": $country, "supplier_code": $supplier_code, "date_start": $date_start, "date_end": $date_end, "resolution": $resolution, "fps": $fps, "per_page": $per_page, "cursor": $cursor} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2546,12 +2570,13 @@ export def "get-editorial-video" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --country: string # Returns only if the content is available for distribution in a certain country (format: country-code-3, e.g. USA)
+  --country: string # Returns only if the content is available for distribution in a certain country (required, format: country-code-3, e.g. USA)
   --search-id: string # The ID of the search that is related to this request (e.g. 00000000-0000-0000-0000-000000000000)
 ]: nothing -> record<aspect: float, assets: record<original: record<display_name: string, file_size: int, format: string, fps: float, height: int, is_licensable: bool, width: int>, preview_mp4: record<url: string>, preview_webm: record<url: string>, thumb_jpg: record<url: string>>, byline: string, caption: string, categories: table<name: string>, date_taken: string, description: string, id: string, keywords: list<string>, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "search_id" $search_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/editorial/videos/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2586,12 +2611,13 @@ export def "get-v2-editorial-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --country: string # Returns only if the content is available for distribution in a certain country (format: country-code-3, e.g. USA)
+  --country: string # Returns only if the content is available for distribution in a certain country (required, format: country-code-3, e.g. USA)
   --search-id: string # The ID of the search that is related to this request (e.g. 00000000-0000-0000-0000-000000000000)
 ]: nothing -> record<aspect: float, assets: record<medium_jpg: record<display_name: string, dpi: int, file_size: int, format: string, height: int, is_licensable: bool, width: int>, original: record<display_name: string, dpi: int, file_size: int, format: string, height: int, is_licensable: bool, width: int>, small_jpg: record<display_name: string, dpi: int, file_size: int, format: string, height: int, is_licensable: bool, width: int>, thumb_170: record<height: int, url: string, width: int>, thumb_220: record<height: int, url: string, width: int>, watermark_1500: record<height: int, url: string, width: int>, watermark_450: record<height: int, url: string, width: int>>, byline: string, caption: string, categories: table<name: string>, date_taken: string, description: string, id: string, keywords: list<string>, special_instructions: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "search_id" $search_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/editorial/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2624,12 +2650,13 @@ export def "get-image-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: list<string> # One or more image IDs (e.g. [1110335168, 465011609])
+  --id: list<string> # One or more image IDs (required, e.g. [1110335168, 465011609])
   --view: string@view-completer # Amount of detail to render in the response (default: minimal, e.g. minimal)
   --search-id: string # The ID of the search that is related to this request (e.g. 00000000-0000-0000-0000-000000000000)
 ]: nothing -> record<data: table<added_date: string, affiliate_url: string, aspect: float, assets: record, categories: list, contributor: record, description: string, has_model_release: bool, has_property_release: bool, id: string, image_type: string, insights: record, is_adult: bool, is_editorial: bool, is_illustration: bool, keywords: list, media_type: string, model_releases: list, models: list, releases: list, url: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "multi") (serialize-qp "view" $view "scalar") (serialize-qp "search_id" $search_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/images" $qp $auth.query)
   let accept_val = "application/json"
@@ -3087,19 +3114,19 @@ export def "get-image-collection-items" [
   --page: int # Page number (default: 1)
   --per-page: int # Number of results per page (default: 100)
   --share-code: string # Code to retrieve the contents of a shared collection
-  --qp-sort: string@sort-completer # Sort order (default: oldest)
+  --sort: string@sort-completer # Sort order (default: oldest)
 ]: nothing -> record<data: table<added_time: string, id: string, media_type: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "share_code" $share_code "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "share_code" $share_code "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/images/collections/{id}/items") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"page": $page, "per_page": $per_page, "share_code": $share_code, "sort": $qp_sort} | compact)
+    query: ({"page": $page, "per_page": $per_page, "share_code": $share_code, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3169,7 +3196,7 @@ export def "get-image-license-list" [
   --license: string # Show images that are available with the specified license, such as `standard` or `enhanced`; prepending a `-` sign excludes results from that license (e.g. standard)
   --page: int # Page number (default: 1)
   --per-page: int # Number of results per page (default: 20)
-  --qp-sort: string@sort-completer # Sort order (default: newest)
+  --sort: string@sort-completer # Sort order (default: newest)
   --username: string # Filter licenses by username of licensee (e.g. aUniqueUsername)
   --start-date: string # Show licenses created on or after the specified date (format: date-time, e.g. 2021-03-29T13:25:13.521Z)
   --end-date: string # Show licenses created before the specified date (format: date-time, e.g. 2021-03-29T13:25:13.521Z)
@@ -3178,14 +3205,14 @@ export def "get-image-license-list" [
 ]: nothing -> record<data: table<audio: record, download_time: string, id: string, image: record, is_downloadable: bool, license: string, metadata: record, revshare: record, subscription_id: string, user: record, video: record>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "image_id" $image_id "scalar") (serialize-qp "license" $license "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "download_availability" $download_availability "scalar") (serialize-qp "team_history" $team_history "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "image_id" $image_id "scalar") (serialize-qp "license" $license "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "download_availability" $download_availability "scalar") (serialize-qp "team_history" $team_history "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/images/licenses" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"image_id": $image_id, "license": $license, "page": $page, "per_page": $per_page, "sort": $qp_sort, "username": $username, "start_date": $start_date, "end_date": $end_date, "download_availability": $download_availability, "team_history": $team_history} | compact)
+    query: ({"image_id": $image_id, "license": $license, "page": $page, "per_page": $per_page, "sort": $sort, "username": $username, "start_date": $start_date, "end_date": $end_date, "download_availability": $download_availability, "team_history": $team_history} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3300,12 +3327,13 @@ export def "get-image-recommendations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: list<string> # Image IDs (e.g. [465011609])
+  --id: list<string> # Image IDs (required, e.g. [465011609])
   --max-items: int # Maximum number of results returned in the response (default: 20)
   --safe: oneof<nothing, bool> # Restrict results to safe images (default: true)
 ]: nothing -> record<data: table<id: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "multi") (serialize-qp "max_items" $max_items "scalar") (serialize-qp "safe" $safe "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/images/recommendations" $qp $auth.query)
   let accept_val = "application/json"
@@ -3374,7 +3402,7 @@ export def "search-images" [
   --query: string # One or more search terms separated by spaces; you can use NOT to filter out images that match a term (e.g. dogs on the beach)
   --region: string # Raise or lower search result rankings based on the result's relevance to a specified region; you can provide a country code or an IP address from which the API infers a country (e.g. US)
   --safe: oneof<nothing, bool> # Enable or disable safe search (default: true)
-  --qp-sort: string@sort-completer-2 # Sort by (default: popular)
+  --sort: string@sort-completer-2 # Sort by (default: popular)
   --spellcheck-query: oneof<nothing, bool> # Spellcheck the search query and return results on suggested spellings (default: true)
   --view: string@view-completer # Amount of detail to render in the response (default: minimal)
   --width: int # (Deprecated; use width_from and width_to instead) Show images with the specified width (DEPRECATED)
@@ -3383,14 +3411,14 @@ export def "search-images" [
 ]: nothing -> record<data: table<added_date: string, affiliate_url: string, aspect: float, assets: record, categories: list, contributor: record, description: string, has_model_release: bool, has_property_release: bool, id: string, image_type: string, insights: record, is_adult: bool, is_editorial: bool, is_illustration: bool, keywords: list, media_type: string, model_releases: list, models: list, releases: list, url: string>, insights: record<label_performance: list<record>>, message: string, page: int, per_page: int, search_id: string, spellcheck_info: record, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "added_date" $added_date "scalar") (serialize-qp "added_date_start" $added_date_start "scalar") (serialize-qp "aspect_ratio_min" $aspect_ratio_min "scalar") (serialize-qp "aspect_ratio_max" $aspect_ratio_max "scalar") (serialize-qp "aspect_ratio" $aspect_ratio "scalar") (serialize-qp "ai_search" $ai_search "scalar") (serialize-qp "ai_labels_limit" $ai_labels_limit "scalar") (serialize-qp "ai_industry" $ai_industry "scalar") (serialize-qp "ai_objective" $ai_objective "scalar") (serialize-qp "added_date_end" $added_date_end "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "contributor" $contributor "multi") (serialize-qp "contributor_country" $contributor_country "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "height_from" $height_from "scalar") (serialize-qp "height_to" $height_to "scalar") (serialize-qp "image_type" $image_type "multi") (serialize-qp "keyword_safe_search" $keyword_safe_search "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "license" $license "multi") (serialize-qp "model" $model "multi") (serialize-qp "orientation" $orientation "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "people_model_released" $people_model_released "scalar") (serialize-qp "people_age" $people_age "scalar") (serialize-qp "people_ethnicity" $people_ethnicity "multi") (serialize-qp "people_gender" $people_gender "scalar") (serialize-qp "people_number" $people_number "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "safe" $safe "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "spellcheck_query" $spellcheck_query "scalar") (serialize-qp "view" $view "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "width_from" $width_from "scalar") (serialize-qp "width_to" $width_to "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "added_date" $added_date "scalar") (serialize-qp "added_date_start" $added_date_start "scalar") (serialize-qp "aspect_ratio_min" $aspect_ratio_min "scalar") (serialize-qp "aspect_ratio_max" $aspect_ratio_max "scalar") (serialize-qp "aspect_ratio" $aspect_ratio "scalar") (serialize-qp "ai_search" $ai_search "scalar") (serialize-qp "ai_labels_limit" $ai_labels_limit "scalar") (serialize-qp "ai_industry" $ai_industry "scalar") (serialize-qp "ai_objective" $ai_objective "scalar") (serialize-qp "added_date_end" $added_date_end "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "contributor" $contributor "multi") (serialize-qp "contributor_country" $contributor_country "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "height_from" $height_from "scalar") (serialize-qp "height_to" $height_to "scalar") (serialize-qp "image_type" $image_type "multi") (serialize-qp "keyword_safe_search" $keyword_safe_search "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "license" $license "multi") (serialize-qp "model" $model "multi") (serialize-qp "orientation" $orientation "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "people_model_released" $people_model_released "scalar") (serialize-qp "people_age" $people_age "scalar") (serialize-qp "people_ethnicity" $people_ethnicity "multi") (serialize-qp "people_gender" $people_gender "scalar") (serialize-qp "people_number" $people_number "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "safe" $safe "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "spellcheck_query" $spellcheck_query "scalar") (serialize-qp "view" $view "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "width_from" $width_from "scalar") (serialize-qp "width_to" $width_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/images/search" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"added_date": $added_date, "added_date_start": $added_date_start, "aspect_ratio_min": $aspect_ratio_min, "aspect_ratio_max": $aspect_ratio_max, "aspect_ratio": $aspect_ratio, "ai_search": $ai_search, "ai_labels_limit": $ai_labels_limit, "ai_industry": $ai_industry, "ai_objective": $ai_objective, "added_date_end": $added_date_end, "category": $category, "color": $color, "contributor": $contributor, "contributor_country": $contributor_country, "fields": $fields, "height": $height, "height_from": $height_from, "height_to": $height_to, "image_type": $image_type, "keyword_safe_search": $keyword_safe_search, "language": $language, "license": $license, "model": $model, "orientation": $orientation, "page": $page, "per_page": $per_page, "people_model_released": $people_model_released, "people_age": $people_age, "people_ethnicity": $people_ethnicity, "people_gender": $people_gender, "people_number": $people_number, "query": $query, "region": $region, "safe": $safe, "sort": $qp_sort, "spellcheck_query": $spellcheck_query, "view": $view, "width": $width, "width_from": $width_from, "width_to": $width_to} | compact)
+    query: ({"added_date": $added_date, "added_date_start": $added_date_start, "aspect_ratio_min": $aspect_ratio_min, "aspect_ratio_max": $aspect_ratio_max, "aspect_ratio": $aspect_ratio, "ai_search": $ai_search, "ai_labels_limit": $ai_labels_limit, "ai_industry": $ai_industry, "ai_objective": $ai_objective, "added_date_end": $added_date_end, "category": $category, "color": $color, "contributor": $contributor, "contributor_country": $contributor_country, "fields": $fields, "height": $height, "height_from": $height_from, "height_to": $height_to, "image_type": $image_type, "keyword_safe_search": $keyword_safe_search, "language": $language, "license": $license, "model": $model, "orientation": $orientation, "page": $page, "per_page": $per_page, "people_model_released": $people_model_released, "people_age": $people_age, "people_ethnicity": $people_ethnicity, "people_gender": $people_gender, "people_number": $people_number, "query": $query, "region": $region, "safe": $safe, "sort": $sort, "spellcheck_query": $spellcheck_query, "view": $view, "width": $width, "width_from": $width_from, "width_to": $width_to} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3415,11 +3443,12 @@ export def "get-image-suggestions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query: string # Search term for which you want keyword suggestions (e.g. cats)
+  --query: string # Search term for which you want keyword suggestions (required, e.g. cats)
   --limit: int # Limit the number of suggestions (default: 10)
 ]: nothing -> record<data: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/images/search/suggestions" $qp $auth.query)
   let accept_val = "application/json"
@@ -3496,18 +3525,18 @@ export def "get-updated-images" [
   --interval: string # Show images updated in the specified time period, where the time period is an interval (like SQL INTERVAL) such as 1 DAY, 6 HOUR, or 30 MINUTE; the default is 1 HOUR, which shows images that were updated in the hour preceding the request (default: 1 HOUR)
   --page: int # Page number (default: 1)
   --per-page: int # Number of results per page (default: 100)
-  --qp-sort: string@sort-completer # Sort order (default: newest)
+  --sort: string@sort-completer # Sort order (default: newest)
 ]: nothing -> record<data: table<id: string, updated_time: string, updates: list>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "type" $type "multi") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "type" $type "multi") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/images/updated" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"type": $type, "start_date": $start_date, "end_date": $end_date, "interval": $interval, "page": $page, "per_page": $per_page, "sort": $qp_sort} | compact)
+    query: ({"type": $type, "start_date": $start_date, "end_date": $end_date, "interval": $interval, "page": $page, "per_page": $per_page, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3657,15 +3686,19 @@ export def "authorize" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --client-id: string # Client ID (Consumer Key) of your application (e.g. 6d097450b209c6dcd859)
+  --client-id: string # Client ID (Consumer Key) of your application (required, e.g. 6d097450b209c6dcd859)
   --realm: string@realm-completer # User type to be authorized (usually 'customer') (default: customer, e.g. customer)
-  --redirect-uri: string # The callback URI to send the request to after authorization; must use a host name that is registered with your application (e.g. localhost)
-  --response-type: string@response-type-completer # Type of temporary authorization code that will be used to generate an access code; the only valid value is 'code' (e.g. code)
+  --redirect-uri: string # The callback URI to send the request to after authorization; must use a host name that is registered with your application (required, e.g. localhost)
+  --response-type: string@response-type-completer # Type of temporary authorization code that will be used to generate an access code; the only valid value is 'code' (required, e.g. code)
   --scope: string # Space-separated list of scopes to be authorized (default: user.view, e.g. user.view)
-  --state: string # Unique value used by the calling app to verify the request (e.g. 1540290465000)
+  --state: string # Unique value used by the calling app to verify the request (required, e.g. 1540290465000)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($client_id == null) { error make --unspanned { msg: "required query parameter 'client_id' missing: pass --client-id" } }
+  if ($redirect_uri == null) { error make --unspanned { msg: "required query parameter 'redirect_uri' missing: pass --redirect-uri" } }
+  let response_type = ($response_type | default "code")
+  if ($state == null) { error make --unspanned { msg: "required query parameter 'state' missing: pass --state" } }
   let qp = [(serialize-qp "client_id" $client_id "scalar") (serialize-qp "realm" $realm "scalar") (serialize-qp "redirect_uri" $redirect_uri "scalar") (serialize-qp "response_type" $response_type "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "state" $state "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/oauth/authorize" $qp $auth.query)
   let accept_val = "application/json"
@@ -3698,7 +3731,7 @@ export def "get-sfx-list-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: list<string> # One or more sound effect IDs (e.g. [1110335168, 465011609])
+  --id: list<string> # One or more sound effect IDs (required, e.g. [1110335168, 465011609])
   --view: string@view-completer # Amount of detail to render in the response (default: minimal, e.g. minimal)
   --language: string@language-completer # Language for the keywords and categories in the response (e.g. cs)
   --library: string@library-completer-1 # Which library to fetch from (e.g. shutterstock)
@@ -3706,6 +3739,7 @@ export def "get-sfx-list-details" [
 ]: nothing -> record<data: table<added_date: string, affiliate_url: string, artist: string, assets: record, contributor: record, description: string, duration: float, id: string, keywords: list, media_type: string, releases: list, title: string, updated_time: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "multi") (serialize-qp "view" $view "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "library" $library "scalar") (serialize-qp "search_id" $search_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/sfx" $qp $auth.query)
   let accept_val = "application/json"
@@ -3742,7 +3776,7 @@ export def "get-sfx-license-list" [
   --license: string # Show sound effects that are available with the specified license, such as `standard` or `enhanced`; prepending a `-` sign excludes results from that license (e.g. standard)
   --page: int # Page number (default: 1)
   --per-page: int # Number of results per page (default: 20)
-  --qp-sort: string@sort-completer # Sort order (default: newest)
+  --sort: string@sort-completer # Sort order (default: newest)
   --username: string # Filter licenses by username of licensee (e.g. aUniqueUsername)
   --start-date: string # Show licenses created on or after the specified date (format: date-time, e.g. 2021-03-29T13:25:13.521Z)
   --end-date: string # Show licenses created before the specified date (format: date-time, e.g. 2021-03-29T13:25:13.521Z)
@@ -3752,14 +3786,14 @@ export def "get-sfx-license-list" [
 ]: nothing -> record<data: table<audio: record, download_time: string, id: string, image: record, is_downloadable: bool, license: string, metadata: record, revshare: record, subscription_id: string, user: record, video: record>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sfx_id" $sfx_id "scalar") (serialize-qp "license" $license "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "license_id" $license_id "scalar") (serialize-qp "download_availability" $download_availability "scalar") (serialize-qp "team_history" $team_history "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sfx_id" $sfx_id "scalar") (serialize-qp "license" $license "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "license_id" $license_id "scalar") (serialize-qp "download_availability" $download_availability "scalar") (serialize-qp "team_history" $team_history "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/sfx/licenses" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sfx_id": $sfx_id, "license": $license, "page": $page, "per_page": $per_page, "sort": $qp_sort, "username": $username, "start_date": $start_date, "end_date": $end_date, "license_id": $license_id, "download_availability": $download_availability, "team_history": $team_history} | compact)
+    query: ({"sfx_id": $sfx_id, "license": $license, "page": $page, "per_page": $per_page, "sort": $sort, "username": $username, "start_date": $start_date, "end_date": $end_date, "license_id": $license_id, "download_availability": $download_availability, "team_history": $team_history} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3869,20 +3903,20 @@ export def "search-sfx" [
   --per-page: int # Number of results per page (default: 20, e.g. 1)
   --query: string # One or more search terms separated by spaces (e.g. drum)
   --safe: oneof<nothing, bool> # Enable or disable safe search (default: true)
-  --qp-sort: string@sort-completer-5 # Sort by (default: popular, e.g. popular)
+  --sort: string@sort-completer-5 # Sort by (default: popular, e.g. popular)
   --view: string@view-completer # Amount of detail to render in the response (default: minimal, e.g. full)
   --language: string@language-completer # Set query and result language (uses Accept-Language header if not set) (e.g. cs)
 ]: nothing -> record<data: table<added_date: string, affiliate_url: string, artist: string, assets: record, contributor: record, description: string, duration: float, id: string, keywords: list, media_type: string, releases: list, title: string, updated_time: string, url: string>, message: string, page: int, per_page: int, search_id: string, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "added_date" $added_date "scalar") (serialize-qp "added_date_start" $added_date_start "scalar") (serialize-qp "added_date_end" $added_date_end "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "duration_from" $duration_from "scalar") (serialize-qp "duration_to" $duration_to "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "safe" $safe "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "view" $view "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "added_date" $added_date "scalar") (serialize-qp "added_date_start" $added_date_start "scalar") (serialize-qp "added_date_end" $added_date_end "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "duration_from" $duration_from "scalar") (serialize-qp "duration_to" $duration_to "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "safe" $safe "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "view" $view "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/sfx/search" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"added_date": $added_date, "added_date_start": $added_date_start, "added_date_end": $added_date_end, "duration": $duration, "duration_from": $duration_from, "duration_to": $duration_to, "page": $page, "per_page": $per_page, "query": $query, "safe": $safe, "sort": $qp_sort, "view": $view, "language": $language} | compact)
+    query: ({"added_date": $added_date, "added_date_start": $added_date_start, "added_date_end": $added_date_end, "duration": $duration, "duration_from": $duration_from, "duration_to": $duration_to, "page": $page, "per_page": $per_page, "query": $query, "safe": $safe, "sort": $sort, "view": $view, "language": $language} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3938,7 +3972,7 @@ export def "get-sfx-details" [
 #
 # GET /v2/test
 # operationId: echo
-export def "echo" [
+export def "get-v2-test" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3984,12 +4018,13 @@ export def "validate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: int # Integer ID (e.g. 123)
+  --id: int # Integer ID (required, e.g. 123)
   --tag: list<string> # List of tags
   --user-agent: string # User agent
 ]: nothing -> record<header: record<user_agent: string>, query: record<id: int, tag: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "tag" $tag "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/test/validate" $qp $auth.query)
   let accept_val = "application/json"
@@ -4126,12 +4161,13 @@ export def "get-video-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: list<string> # One or more video IDs (e.g. [639703, 993721])
+  --id: list<string> # One or more video IDs (required, e.g. [639703, 993721])
   --view: string@view-completer # Amount of detail to render in the response (default: minimal)
   --search-id: string # The ID of the search that is related to this request (e.g. 00000000-0000-0000-0000-000000000000)
 ]: nothing -> record<data: table<added_date: string, affiliate_url: string, aspect: float, aspect_ratio: string, assets: record, categories: list, contributor: record, description: string, duration: float, has_model_release: bool, has_property_release: bool, id: string, is_adult: bool, is_editorial: bool, keywords: list, media_type: string, models: list, url: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "multi") (serialize-qp "view" $view "scalar") (serialize-qp "search_id" $search_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/videos" $qp $auth.query)
   let accept_val = "application/json"
@@ -4546,19 +4582,19 @@ export def "get-video-collection-items" [
   --page: int # Page number (default: 1)
   --per-page: int # Number of results per page (default: 100)
   --share-code: string # Code to retrieve the contents of a shared collection
-  --qp-sort: string@sort-completer # Sort order (default: oldest)
+  --sort: string@sort-completer # Sort order (default: oldest)
 ]: nothing -> record<data: table<added_time: string, id: string, media_type: string>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "share_code" $share_code "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "share_code" $share_code "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/videos/collections/{id}/items") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"page": $page, "per_page": $per_page, "share_code": $share_code, "sort": $qp_sort} | compact)
+    query: ({"page": $page, "per_page": $per_page, "share_code": $share_code, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4628,7 +4664,7 @@ export def "get-video-license-list" [
   --license: string # Show videos that are available with the specified license, such as `standard` or `enhanced`; prepending a `-` sign excludes results from that license (e.g. standard)
   --page: int # Page number (default: 1)
   --per-page: int # Number of results per page (default: 20)
-  --qp-sort: string@sort-completer # Sort by oldest or newest videos first (default: newest)
+  --sort: string@sort-completer # Sort by oldest or newest videos first (default: newest)
   --username: string # Filter licenses by username of licensee (e.g. aUniqueUsername)
   --start-date: string # Show licenses created on or after the specified date (format: date-time, e.g. 2021-03-29T13:25:13.521Z)
   --end-date: string # Show licenses created before the specified date (format: date-time, e.g. 2021-03-29T13:25:13.521Z)
@@ -4637,14 +4673,14 @@ export def "get-video-license-list" [
 ]: nothing -> record<data: table<audio: record, download_time: string, id: string, image: record, is_downloadable: bool, license: string, metadata: record, revshare: record, subscription_id: string, user: record, video: record>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "video_id" $video_id "scalar") (serialize-qp "license" $license "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "download_availability" $download_availability "scalar") (serialize-qp "team_history" $team_history "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "video_id" $video_id "scalar") (serialize-qp "license" $license "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "download_availability" $download_availability "scalar") (serialize-qp "team_history" $team_history "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/videos/licenses" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"video_id": $video_id, "license": $license, "page": $page, "per_page": $per_page, "sort": $qp_sort, "username": $username, "start_date": $start_date, "end_date": $end_date, "download_availability": $download_availability, "team_history": $team_history} | compact)
+    query: ({"video_id": $video_id, "license": $license, "page": $page, "per_page": $per_page, "sort": $sort, "username": $username, "start_date": $start_date, "end_date": $end_date, "download_availability": $download_availability, "team_history": $team_history} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4787,19 +4823,19 @@ export def "search-videos" [
   --query: string # One or more search terms separated by spaces; you can use NOT to filter out videos that match a term (e.g. dogs running on the beach)
   --resolution: string@resolution-completer # Show videos with the specified resolution (e.g. 4k)
   --safe: oneof<nothing, bool> # Enable or disable safe search (default: true)
-  --qp-sort: string@sort-completer-2 # Sort by one of these categories (default: popular)
+  --sort: string@sort-completer-2 # Sort by one of these categories (default: popular)
   --view: string@view-completer # Amount of detail to render in the response (default: minimal)
 ]: nothing -> record<data: table<added_date: string, affiliate_url: string, aspect: float, aspect_ratio: string, assets: record, categories: list, contributor: record, description: string, duration: float, has_model_release: bool, has_property_release: bool, id: string, is_adult: bool, is_editorial: bool, keywords: list, media_type: string, models: list, url: string>, message: string, page: int, per_page: int, search_id: string, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "added_date" $added_date "scalar") (serialize-qp "added_date_start" $added_date_start "scalar") (serialize-qp "added_date_end" $added_date_end "scalar") (serialize-qp "aspect_ratio" $aspect_ratio "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "contributor" $contributor "multi") (serialize-qp "contributor_country" $contributor_country "multi") (serialize-qp "duration" $duration "scalar") (serialize-qp "duration_from" $duration_from "scalar") (serialize-qp "duration_to" $duration_to "scalar") (serialize-qp "fps" $fps "scalar") (serialize-qp "fps_from" $fps_from "scalar") (serialize-qp "fps_to" $fps_to "scalar") (serialize-qp "keyword_safe_search" $keyword_safe_search "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "license" $license "multi") (serialize-qp "model" $model "multi") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "people_age" $people_age "scalar") (serialize-qp "people_ethnicity" $people_ethnicity "multi") (serialize-qp "people_gender" $people_gender "scalar") (serialize-qp "people_number" $people_number "scalar") (serialize-qp "people_model_released" $people_model_released "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "resolution" $resolution "scalar") (serialize-qp "safe" $safe "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "added_date" $added_date "scalar") (serialize-qp "added_date_start" $added_date_start "scalar") (serialize-qp "added_date_end" $added_date_end "scalar") (serialize-qp "aspect_ratio" $aspect_ratio "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "contributor" $contributor "multi") (serialize-qp "contributor_country" $contributor_country "multi") (serialize-qp "duration" $duration "scalar") (serialize-qp "duration_from" $duration_from "scalar") (serialize-qp "duration_to" $duration_to "scalar") (serialize-qp "fps" $fps "scalar") (serialize-qp "fps_from" $fps_from "scalar") (serialize-qp "fps_to" $fps_to "scalar") (serialize-qp "keyword_safe_search" $keyword_safe_search "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "license" $license "multi") (serialize-qp "model" $model "multi") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "people_age" $people_age "scalar") (serialize-qp "people_ethnicity" $people_ethnicity "multi") (serialize-qp "people_gender" $people_gender "scalar") (serialize-qp "people_number" $people_number "scalar") (serialize-qp "people_model_released" $people_model_released "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "resolution" $resolution "scalar") (serialize-qp "safe" $safe "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/videos/search" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"added_date": $added_date, "added_date_start": $added_date_start, "added_date_end": $added_date_end, "aspect_ratio": $aspect_ratio, "category": $category, "contributor": $contributor, "contributor_country": $contributor_country, "duration": $duration, "duration_from": $duration_from, "duration_to": $duration_to, "fps": $fps, "fps_from": $fps_from, "fps_to": $fps_to, "keyword_safe_search": $keyword_safe_search, "language": $language, "license": $license, "model": $model, "page": $page, "per_page": $per_page, "people_age": $people_age, "people_ethnicity": $people_ethnicity, "people_gender": $people_gender, "people_number": $people_number, "people_model_released": $people_model_released, "query": $query, "resolution": $resolution, "safe": $safe, "sort": $qp_sort, "view": $view} | compact)
+    query: ({"added_date": $added_date, "added_date_start": $added_date_start, "added_date_end": $added_date_end, "aspect_ratio": $aspect_ratio, "category": $category, "contributor": $contributor, "contributor_country": $contributor_country, "duration": $duration, "duration_from": $duration_from, "duration_to": $duration_to, "fps": $fps, "fps_from": $fps_from, "fps_to": $fps_to, "keyword_safe_search": $keyword_safe_search, "language": $language, "license": $license, "model": $model, "page": $page, "per_page": $per_page, "people_age": $people_age, "people_ethnicity": $people_ethnicity, "people_gender": $people_gender, "people_number": $people_number, "people_model_released": $people_model_released, "query": $query, "resolution": $resolution, "safe": $safe, "sort": $sort, "view": $view} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4824,11 +4860,12 @@ export def "get-video-suggestions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query: string # Search term for which you want keyword suggestions (e.g. cats)
+  --query: string # Search term for which you want keyword suggestions (required, e.g. cats)
   --limit: int # Limit the number of the suggestions (default: 10)
 ]: nothing -> record<data: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/videos/search/suggestions" $qp $auth.query)
   let accept_val = "application/json"
@@ -4866,18 +4903,18 @@ export def "get-updated-videos" [
   --interval: string # Show videos updated in the specified time period, where the time period is an interval (like SQL INTERVAL) such as 1 DAY, 6 HOUR, or 30 MINUTE; the default is 1 HOUR, which shows videos that were updated in the hour preceding the request (default: 1 HOUR)
   --page: int # Page number (default: 1)
   --per-page: int # Number of results per page (default: 100)
-  --qp-sort: string@sort-completer # Sort by oldest or newest videos first (default: newest)
+  --sort: string@sort-completer # Sort by oldest or newest videos first (default: newest)
 ]: nothing -> record<data: table<id: string, updated_time: string, updates: list>, errors: table<code: string, data: string, items: list, message: string, path: string>, message: string, page: int, per_page: int, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/videos/updated" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"start_date": $start_date, "end_date": $end_date, "interval": $interval, "page": $page, "per_page": $per_page, "sort": $qp_sort} | compact)
+    query: ({"start_date": $start_date, "end_date": $end_date, "interval": $interval, "page": $page, "per_page": $per_page, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null

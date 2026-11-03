@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -145,13 +145,13 @@ export def "fetch-all-categories" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --label: string # Find only the categories whose label/short label contains this value.
   --show-ignored: oneof<nothing, bool> # If set to `false`, show only the categories which are not ignored. If set to `true`, show all categories. (default: false)
-  --qp-sort: string@sort-completer # Sort the categories in the corresponding order. (default: order)
+  --sort: string@sort-completer # Sort the categories in the corresponding order. (default: order)
   --page-size: int # Pagination size, i.e. maximum number of items to be displayed in the response. (format: int32, default: 25)
-  --accept-language: string@accept-language-completer # Language used for the translatable labels.
+  --accept-language: string@accept-language-completer # Language used for the translatable labels. (default: en)
 ]: nothing -> table<id: int, ignored: bool, label: string, last_update_timestamp: int, short_label: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "label" $label "scalar") (serialize-qp "show_ignored" $show_ignored "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "label" $label "scalar") (serialize-qp "show_ignored" $show_ignored "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/categories" $qp $auth.query)
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -160,7 +160,7 @@ export def "fetch-all-categories" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"label": $label, "show_ignored": $show_ignored, "sort": $qp_sort, "page_size": $page_size} | compact)
+    query: ({"label": $label, "show_ignored": $show_ignored, "sort": $sort, "page_size": $page_size} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -186,7 +186,7 @@ export def "fetch-one-category" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string@accept-language-completer # Language used for the translatable labels.
+  --accept-language: string@accept-language-completer # Language used for the translatable labels. (default: en)
 ]: nothing -> record<id: int, ignored: bool, label: string, last_update_timestamp: int, short_label: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -226,13 +226,13 @@ export def "fetch-all-channels" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --label: string # Find only the channels whose label contains this value.
   --show-ignored: oneof<nothing, bool> # If set to `false`, show only the channels which are not ignored. If set to `true`, show all channels. (default: false)
-  --qp-sort: string@sort-completer # Sort the channels in the corresponding order. (default: label)
+  --sort: string@sort-completer # Sort the channels in the corresponding order. (default: label)
   --page-size: int # Pagination size, i.e. maximum number of items to be displayed in the response. (format: int32, default: 25)
-  --accept-language: string@accept-language-completer # Language used for the translatable labels.
+  --accept-language: string@accept-language-completer # Language used for the translatable labels. (default: en)
 ]: nothing -> table<id: int, ignored: bool, label: string, last_update_timestamp: int, short_label: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "label" $label "scalar") (serialize-qp "show_ignored" $show_ignored "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "label" $label "scalar") (serialize-qp "show_ignored" $show_ignored "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/channels" $qp $auth.query)
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -241,7 +241,7 @@ export def "fetch-all-channels" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"label": $label, "show_ignored": $show_ignored, "sort": $qp_sort, "page_size": $page_size} | compact)
+    query: ({"label": $label, "show_ignored": $show_ignored, "sort": $sort, "page_size": $page_size} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -267,7 +267,7 @@ export def "fetch-one-channel" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string@accept-language-completer # Language used for the translatable labels.
+  --accept-language: string@accept-language-completer # Language used for the translatable labels. (default: en)
 ]: nothing -> record<id: int, ignored: bool, label: string, last_update_timestamp: int, short_label: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -309,13 +309,13 @@ export def "fetch-all-events" [
   --from-datetime: string # Find only the events starting after this date. (format: date)
   --to-datetime: string # Find only the events starting before this date. (format: date)
   --city: string # Find only the events whose venue city (or metropolitan area) contains this value.
-  --qp-sort: string@sort-completer-1 # Sort the events in the corresponding order. (default: label)
+  --sort: string@sort-completer-1 # Sort the events in the corresponding order. (default: label)
   --page-size: int # Pagination size, i.e. maximum number of items to be displayed in the response. (format: int32, default: 25)
-  --accept-language: string@accept-language-completer # Language used for the translatable labels.
-]: nothing -> any {
+  --accept-language: string@accept-language-completer # Language used for the translatable labels. (default: en)
+]: nothing -> table<break_even: int, cancellation_date: string, contract: record<partner: record, type: record>, costing_capacity: int, creation_timestamp: int, currency: string, datetime: string, free: bool, general_sales_date: string, id: int, input_type: record<id: string, label: string>, label: string, last_update_timestamp: int, max_capacity: int, presales_date: string, series_id: int, sold_out_date: string, venue: record<alternative_labels: list, city: string, country_code: string, creation_timestamp: int, first_address: string, id: int, label: string, last_update_timestamp: int, major_city: string, second_address: string, type: record, zip_code: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "label" $label "scalar") (serialize-qp "from_datetime" $from_datetime "scalar") (serialize-qp "to_datetime" $to_datetime "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "label" $label "scalar") (serialize-qp "from_datetime" $from_datetime "scalar") (serialize-qp "to_datetime" $to_datetime "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/events" $qp $auth.query)
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -324,7 +324,7 @@ export def "fetch-all-events" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"label": $label, "from_datetime": $from_datetime, "to_datetime": $to_datetime, "city": $city, "sort": $qp_sort, "page_size": $page_size} | compact)
+    query: ({"label": $label, "from_datetime": $from_datetime, "to_datetime": $to_datetime, "city": $city, "sort": $sort, "page_size": $page_size} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -350,7 +350,7 @@ export def "fetch-one-event" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string@accept-language-completer # Language used for the translatable labels.
+  --accept-language: string@accept-language-completer # Language used for the translatable labels. (default: en)
 ]: nothing -> record<break_even: int, cancellation_date: string, contract: record<partner: record<id: int, label: string>, type: record<id: string, label: string>>, costing_capacity: int, creation_timestamp: int, currency: string, datetime: string, free: bool, general_sales_date: string, id: int, input_type: record<id: string, label: string>, label: string, last_update_timestamp: int, max_capacity: int, presales_date: string, series_id: int, sold_out_date: string, venue: record<alternative_labels: list<string>, city: string, country_code: string, creation_timestamp: int, first_address: string, id: int, label: string, last_update_timestamp: int, major_city: string, second_address: string, type: record<id: string, label: string>, zip_code: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -390,20 +390,20 @@ export def "fetch-all-events-capacities" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --show-ignored: oneof<nothing, bool> # If set to `false`, show only the [event-]categories which are not ignored. If set to `true`, show everything. (default: false)
-  --qp-sort: string@sort-completer-2 # Sort the capacities in the corresponding order. (default: date)
+  --sort: string@sort-completer-2 # Sort the capacities in the corresponding order. (default: date)
   --page-size: int # Pagination size, i.e. maximum number of items to be displayed in the response. (format: int32, default: 25)
 ]: nothing -> table<date: string, event_categories: list<record>, id: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'event_id' must be non-empty" } }
-  let qp = [(serialize-qp "show_ignored" $show_ignored "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "show_ignored" $show_ignored "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/events/{event_id}/capacities") $qp $auth.query)
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"show_ignored": $show_ignored, "sort": $qp_sort, "page_size": $page_size} | compact)
+    query: ({"show_ignored": $show_ignored, "sort": $sort, "page_size": $page_size} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -630,14 +630,14 @@ export def "fetch-all-events-promotions" [
   --to-date: string # Find only the promotions ending before this date. (format: date)
   --type: string # Find only the promotions whose type is equal to this value.
   --family: string # Find only the promotions whose family is equal to this value.
-  --qp-sort: string@sort-completer-3 # Sort the promotions in the corresponding order. (default: date)
+  --sort: string@sort-completer-3 # Sort the promotions in the corresponding order. (default: date)
   --page-size: int # Pagination size, i.e. maximum number of items to be displayed in the response. (format: int32, default: 25)
-  --accept-language: string@accept-language-completer # Language used for the translatable labels.
-]: nothing -> any {
+  --accept-language: string@accept-language-completer # Language used for the translatable labels. (default: en)
+]: nothing -> table<applied_to: list<record>, comments: string, cost: record<currency: string, exchange: string, quantity: float, state: record, type: record, unit_cost: float, valorized_quantity: float, valorized_unit_cost: float>, end_date: string, file: string, id: int, label: string, start_date: string, supplier: record<id: int, label: string>, type: record<family: record, id: string, label: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'event_id' must be non-empty" } }
-  let qp = [(serialize-qp "label" $label "scalar") (serialize-qp "from_date" $from_date "scalar") (serialize-qp "to_date" $to_date "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "family" $family "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "label" $label "scalar") (serialize-qp "from_date" $from_date "scalar") (serialize-qp "to_date" $to_date "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "family" $family "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/events/{event_id}/promotions") $qp $auth.query)
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -646,7 +646,7 @@ export def "fetch-all-events-promotions" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"label": $label, "from_date": $from_date, "to_date": $to_date, "type": $type, "family": $family, "sort": $qp_sort, "page_size": $page_size} | compact)
+    query: ({"label": $label, "from_date": $from_date, "to_date": $to_date, "type": $type, "family": $family, "sort": $sort, "page_size": $page_size} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -676,20 +676,20 @@ export def "fetch-all-ticket-counts" [
   --to-date: string # Find only the ticket counts before this date. (format: date)
   --show-ignored: oneof<nothing, bool> # If set to `false`, show only the [event-]categories/[event-]price ranges/[event]channels which are not ignored. If set to `true`, show everything. (default: false)
   --show-not-approved: oneof<nothing, bool> # If set to `false`, show only the approved ticket counts. If set to `true`, show all the ticket counts. (default: false)
-  --qp-sort: string@sort-completer-2 # Sort the ticket counts in the corresponding order. (default: date)
+  --sort: string@sort-completer-2 # Sort the ticket counts in the corresponding order. (default: date)
   --page-size: int # Pagination size, i.e. maximum number of items to be displayed in the response. (format: int32, default: 25)
 ]: nothing -> table<approved: bool, comment: string, currency: string, date: string, final: bool, gross: float, id: int, reservations: int, sales: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'event_id' must be non-empty" } }
-  let qp = [(serialize-qp "from_date" $from_date "scalar") (serialize-qp "to_date" $to_date "scalar") (serialize-qp "show_ignored" $show_ignored "scalar") (serialize-qp "show_not_approved" $show_not_approved "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "from_date" $from_date "scalar") (serialize-qp "to_date" $to_date "scalar") (serialize-qp "show_ignored" $show_ignored "scalar") (serialize-qp "show_not_approved" $show_not_approved "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/events/{event_id}/ticket-counts") $qp $auth.query)
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from_date": $from_date, "to_date": $to_date, "show_ignored": $show_ignored, "show_not_approved": $show_not_approved, "sort": $qp_sort, "page_size": $page_size} | compact)
+    query: ({"from_date": $from_date, "to_date": $to_date, "show_ignored": $show_ignored, "show_not_approved": $show_not_approved, "sort": $sort, "page_size": $page_size} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -719,20 +719,20 @@ export def "fetch-all-detailed-ticket-counts" [
   --to-date: string # Find only the ticket counts before this date. (format: date)
   --show-ignored: oneof<nothing, bool> # If set to `false`, show only the [event-]categories/[event-]price ranges/[event]channels which are not ignored. If set to `true`, show everything. (default: false)
   --show-not-approved: oneof<nothing, bool> # If set to `false`, show only the approved ticket counts. If set to `true`, show all the ticket counts. (default: false)
-  --qp-sort: string@sort-completer-2 # Sort the ticket counts in the corresponding order. (default: date)
+  --sort: string@sort-completer-2 # Sort the ticket counts in the corresponding order. (default: date)
   --page-size: int # Pagination size, i.e. maximum number of items to be displayed in the response. (format: int32, default: 25)
 ]: nothing -> table<approved: bool, comment: string, date: string, event_channels: list<record>, final: bool, id: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'event_id' must be non-empty" } }
-  let qp = [(serialize-qp "from_date" $from_date "scalar") (serialize-qp "to_date" $to_date "scalar") (serialize-qp "show_ignored" $show_ignored "scalar") (serialize-qp "show_not_approved" $show_not_approved "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "from_date" $from_date "scalar") (serialize-qp "to_date" $to_date "scalar") (serialize-qp "show_ignored" $show_ignored "scalar") (serialize-qp "show_not_approved" $show_not_approved "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/events/{event_id}/ticket-counts/detailed") $qp $auth.query)
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from_date": $from_date, "to_date": $to_date, "show_ignored": $show_ignored, "show_not_approved": $show_not_approved, "sort": $qp_sort, "page_size": $page_size} | compact)
+    query: ({"from_date": $from_date, "to_date": $to_date, "show_ignored": $show_ignored, "show_not_approved": $show_not_approved, "sort": $sort, "page_size": $page_size} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -839,13 +839,13 @@ export def "fetch-all-price-ranges" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --label: string # Find only the price ranges whose label contains this value.
   --show-ignored: oneof<nothing, bool> # If set to `false`, show only the price ranges which are not ignored. If set to `true`, show all price ranges. (default: false)
-  --qp-sort: string@sort-completer # Sort the price ranges in the corresponding order. (default: label)
+  --sort: string@sort-completer # Sort the price ranges in the corresponding order. (default: label)
   --page-size: int # Pagination size, i.e. maximum number of items to be displayed in the response. (format: int32, default: 25)
-  --accept-language: string@accept-language-completer # Language used for the translatable labels.
+  --accept-language: string@accept-language-completer # Language used for the translatable labels. (default: en)
 ]: nothing -> table<id: int, ignored: bool, label: string, last_update_timestamp: int, short_label: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "label" $label "scalar") (serialize-qp "show_ignored" $show_ignored "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "label" $label "scalar") (serialize-qp "show_ignored" $show_ignored "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/price-ranges" $qp $auth.query)
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -854,7 +854,7 @@ export def "fetch-all-price-ranges" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"label": $label, "show_ignored": $show_ignored, "sort": $qp_sort, "page_size": $page_size} | compact)
+    query: ({"label": $label, "show_ignored": $show_ignored, "sort": $sort, "page_size": $page_size} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -880,7 +880,7 @@ export def "fetch-one-price-range" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string@accept-language-completer # Language used for the translatable labels.
+  --accept-language: string@accept-language-completer # Language used for the translatable labels. (default: en)
 ]: nothing -> record<alternative_labels: list<string>, city: string, country_code: string, creation_timestamp: int, first_address: string, id: int, label: string, last_update_timestamp: int, major_city: string, second_address: string, type: record<id: string, label: string>, zip_code: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -923,13 +923,13 @@ export def "fetch-all-promotions" [
   --to-date: string # Find only the promotions ending before this date. (format: date)
   --type: string # Find only the promotions whose type is equal to this value.
   --family: string # Find only the promotions whose family is equal to this value.
-  --qp-sort: string@sort-completer-3 # Sort the promotions in the corresponding order. (default: date)
+  --sort: string@sort-completer-3 # Sort the promotions in the corresponding order. (default: date)
   --page-size: int # Pagination size, i.e. maximum number of items to be displayed in the response. (format: int32, default: 25)
-  --accept-language: string@accept-language-completer # Language used for the translatable labels.
-]: nothing -> any {
+  --accept-language: string@accept-language-completer # Language used for the translatable labels. (default: en)
+]: nothing -> table<applied_to: list<record>, comments: string, cost: record<currency: string, exchange: string, quantity: float, state: record, type: record, unit_cost: float, valorized_quantity: float, valorized_unit_cost: float>, end_date: string, file: string, id: int, label: string, start_date: string, supplier: record<id: int, label: string>, type: record<family: record, id: string, label: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "label" $label "scalar") (serialize-qp "from_date" $from_date "scalar") (serialize-qp "to_date" $to_date "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "family" $family "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "label" $label "scalar") (serialize-qp "from_date" $from_date "scalar") (serialize-qp "to_date" $to_date "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "family" $family "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/promotions" $qp $auth.query)
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -938,7 +938,7 @@ export def "fetch-all-promotions" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"label": $label, "from_date": $from_date, "to_date": $to_date, "type": $type, "family": $family, "sort": $qp_sort, "page_size": $page_size} | compact)
+    query: ({"label": $label, "from_date": $from_date, "to_date": $to_date, "type": $type, "family": $family, "sort": $sort, "page_size": $page_size} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -964,7 +964,7 @@ export def "fetch-one-promotion" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string@accept-language-completer # Language used for the translatable labels.
+  --accept-language: string@accept-language-completer # Language used for the translatable labels. (default: en)
 ]: nothing -> record<applied_to: table<event_id: int, quantity: float, series_id: int, unit_cost: float, valorized_quantity: float, valorized_unit_cost: float>, comments: string, cost: record<currency: string, exchange: string, quantity: float, state: record<id: string, label: string>, type: record<id: string, label: string>, unit_cost: float, valorized_quantity: float, valorized_unit_cost: float>, end_date: string, file: string, id: int, label: string, start_date: string, supplier: record<id: int, label: string>, type: record<family: record<id: string, label: string>, id: string, label: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1006,13 +1006,13 @@ export def "fetch-all-series" [
   --from-date: string # Find only the series starting after this date. (format: date)
   --to-date: string # Find only the series ending before this date. (format: date)
   --type: string@type-completer # Find only the series whose type is equal to this value.
-  --qp-sort: string@sort-completer-4 # Sort the series in the corresponding order. (default: first_date)
+  --sort: string@sort-completer-4 # Sort the series in the corresponding order. (default: first_date)
   --page-size: int # Pagination size, i.e. maximum number of items to be displayed in the response. (format: int32, default: 25)
-  --accept-language: string@accept-language-completer # Language used for the translatable labels.
+  --accept-language: string@accept-language-completer # Language used for the translatable labels. (default: en)
 ]: nothing -> table<contract: record<partner: record, type: record>, costing_capacity: int, creation_timestamp: int, first_date: string, id: int, label: string, last_date: string, last_update_timestamp: int, type: record<id: string, label: string>, venue: record<alternative_labels: list, city: string, country_code: string, creation_timestamp: int, first_address: string, id: int, label: string, last_update_timestamp: int, major_city: string, second_address: string, type: record, zip_code: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "label" $label "scalar") (serialize-qp "from_date" $from_date "scalar") (serialize-qp "to_date" $to_date "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "label" $label "scalar") (serialize-qp "from_date" $from_date "scalar") (serialize-qp "to_date" $to_date "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/series" $qp $auth.query)
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1021,7 +1021,7 @@ export def "fetch-all-series" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"label": $label, "from_date": $from_date, "to_date": $to_date, "type": $type, "sort": $qp_sort, "page_size": $page_size} | compact)
+    query: ({"label": $label, "from_date": $from_date, "to_date": $to_date, "type": $type, "sort": $sort, "page_size": $page_size} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1047,7 +1047,7 @@ export def "fetch-one-series" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string@accept-language-completer # Language used for the translatable labels.
+  --accept-language: string@accept-language-completer # Language used for the translatable labels. (default: en)
 ]: nothing -> record<contract: record<partner: record<id: int, label: string>, type: record<id: string, label: string>>, costing_capacity: int, creation_timestamp: int, first_date: string, id: int, label: string, last_date: string, last_update_timestamp: int, type: record<id: string, label: string>, venue: record<alternative_labels: list<string>, city: string, country_code: string, creation_timestamp: int, first_address: string, id: int, label: string, last_update_timestamp: int, major_city: string, second_address: string, type: record<id: string, label: string>, zip_code: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1089,14 +1089,14 @@ export def "fetch-all-series-events" [
   --from-datetime: string # Find only the events starting after this date. (format: date)
   --to-datetime: string # Find only the events starting before this date. (format: date)
   --city: string # Find only the events whose venue city (or metropolitan area) contains this value.
-  --qp-sort: string@sort-completer-1 # Sort the events in the corresponding order. (default: label)
+  --sort: string@sort-completer-1 # Sort the events in the corresponding order. (default: label)
   --page-size: int # Pagination size, i.e. maximum number of items to be displayed in the response. (format: int32, default: 25)
-  --accept-language: string@accept-language-completer # Language used for the translatable labels.
-]: nothing -> any {
+  --accept-language: string@accept-language-completer # Language used for the translatable labels. (default: en)
+]: nothing -> table<break_even: int, cancellation_date: string, contract: record<partner: record, type: record>, costing_capacity: int, creation_timestamp: int, currency: string, datetime: string, free: bool, general_sales_date: string, id: int, input_type: record<id: string, label: string>, label: string, last_update_timestamp: int, max_capacity: int, presales_date: string, series_id: int, sold_out_date: string, venue: record<alternative_labels: list, city: string, country_code: string, creation_timestamp: int, first_address: string, id: int, label: string, last_update_timestamp: int, major_city: string, second_address: string, type: record, zip_code: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($series_id | is-empty) { error make --unspanned { msg: "path parameter 'series_id' must be non-empty" } }
-  let qp = [(serialize-qp "from_datetime" $from_datetime "scalar") (serialize-qp "to_datetime" $to_datetime "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "from_datetime" $from_datetime "scalar") (serialize-qp "to_datetime" $to_datetime "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({series_id: (encode-path-segment $series_id)} | format pattern "/series/{series_id}/events") $qp $auth.query)
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1105,7 +1105,7 @@ export def "fetch-all-series-events" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from_datetime": $from_datetime, "to_datetime": $to_datetime, "city": $city, "sort": $qp_sort, "page_size": $page_size} | compact)
+    query: ({"from_datetime": $from_datetime, "to_datetime": $to_datetime, "city": $city, "sort": $sort, "page_size": $page_size} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1136,14 +1136,14 @@ export def "fetch-all-series-promotions" [
   --to-date: string # Find only the promotions ending before this date. (format: date)
   --type: string # Find only the promotions whose type is equal to this value.
   --family: string # Find only the promotions whose family is equal to this value.
-  --qp-sort: string@sort-completer-3 # Sort the promotions in the corresponding order. (default: date)
+  --sort: string@sort-completer-3 # Sort the promotions in the corresponding order. (default: date)
   --page-size: int # Pagination size, i.e. maximum number of items to be displayed in the response. (format: int32, default: 25)
-  --accept-language: string@accept-language-completer # Language used for the translatable labels.
-]: nothing -> any {
+  --accept-language: string@accept-language-completer # Language used for the translatable labels. (default: en)
+]: nothing -> table<applied_to: list<record>, comments: string, cost: record<currency: string, exchange: string, quantity: float, state: record, type: record, unit_cost: float, valorized_quantity: float, valorized_unit_cost: float>, end_date: string, file: string, id: int, label: string, start_date: string, supplier: record<id: int, label: string>, type: record<family: record, id: string, label: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($series_id | is-empty) { error make --unspanned { msg: "path parameter 'series_id' must be non-empty" } }
-  let qp = [(serialize-qp "label" $label "scalar") (serialize-qp "from_date" $from_date "scalar") (serialize-qp "to_date" $to_date "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "family" $family "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "label" $label "scalar") (serialize-qp "from_date" $from_date "scalar") (serialize-qp "to_date" $to_date "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "family" $family "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({series_id: (encode-path-segment $series_id)} | format pattern "/series/{series_id}/promotions") $qp $auth.query)
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1152,7 +1152,7 @@ export def "fetch-all-series-promotions" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"label": $label, "from_date": $from_date, "to_date": $to_date, "type": $type, "family": $family, "sort": $qp_sort, "page_size": $page_size} | compact)
+    query: ({"label": $label, "from_date": $from_date, "to_date": $to_date, "type": $type, "family": $family, "sort": $sort, "page_size": $page_size} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1181,13 +1181,13 @@ export def "fetch-all-venues" [
   --city: string # Find only the venues whose city contains this value.
   --country-code: string # Find only the venues whose country_code is equal to this value.
   --type: string@type-completer-1 # Find only the venues whose type is equal to this value.
-  --qp-sort: string@sort-completer-5 # Sort the venues in the corresponding order. (default: label)
+  --sort: string@sort-completer-5 # Sort the venues in the corresponding order. (default: label)
   --page-size: int # Pagination size, i.e. maximum number of items to be displayed in the response. (format: int32, default: 25)
-  --accept-language: string@accept-language-completer # Language used for the translatable labels.
+  --accept-language: string@accept-language-completer # Language used for the translatable labels. (default: en)
 ]: nothing -> table<alternative_labels: list<string>, city: string, country_code: string, creation_timestamp: int, first_address: string, id: int, label: string, last_update_timestamp: int, major_city: string, second_address: string, type: record<id: string, label: string>, zip_code: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "label" $label "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "country_code" $country_code "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "label" $label "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "country_code" $country_code "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/venues" $qp $auth.query)
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1196,7 +1196,7 @@ export def "fetch-all-venues" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"label": $label, "city": $city, "country_code": $country_code, "type": $type, "sort": $qp_sort, "page_size": $page_size} | compact)
+    query: ({"label": $label, "city": $city, "country_code": $country_code, "type": $type, "sort": $sort, "page_size": $page_size} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1222,7 +1222,7 @@ export def "fetch-one-venue" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-language: string@accept-language-completer # Language used for the translatable labels.
+  --accept-language: string@accept-language-completer # Language used for the translatable labels. (default: en)
 ]: nothing -> record<alternative_labels: list<string>, city: string, country_code: string, creation_timestamp: int, first_address: string, id: int, label: string, last_update_timestamp: int, major_city: string, second_address: string, type: record<id: string, label: string>, zip_code: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1264,14 +1264,14 @@ export def "fetch-all-venues-events" [
   --from-datetime: string # Find only the events starting after this date. (format: date)
   --to-datetime: string # Find only the events starting before this date. (format: date)
   --city: string # Find only the events whose venue city (or metropolitan area) contains this value.
-  --qp-sort: string@sort-completer-1 # Sort the events in the corresponding order. (default: label)
+  --sort: string@sort-completer-1 # Sort the events in the corresponding order. (default: label)
   --page-size: int # Pagination size, i.e. maximum number of items to be displayed in the response. (format: int32, default: 25)
-  --accept-language: string@accept-language-completer # Language used for the translatable labels.
-]: nothing -> any {
+  --accept-language: string@accept-language-completer # Language used for the translatable labels. (default: en)
+]: nothing -> table<break_even: int, cancellation_date: string, contract: record<partner: record, type: record>, costing_capacity: int, creation_timestamp: int, currency: string, datetime: string, free: bool, general_sales_date: string, id: int, input_type: record<id: string, label: string>, label: string, last_update_timestamp: int, max_capacity: int, presales_date: string, series_id: int, sold_out_date: string, venue: record<alternative_labels: list, city: string, country_code: string, creation_timestamp: int, first_address: string, id: int, label: string, last_update_timestamp: int, major_city: string, second_address: string, type: record, zip_code: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($venue_id | is-empty) { error make --unspanned { msg: "path parameter 'venue_id' must be non-empty" } }
-  let qp = [(serialize-qp "from_datetime" $from_datetime "scalar") (serialize-qp "to_datetime" $to_datetime "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "from_datetime" $from_datetime "scalar") (serialize-qp "to_datetime" $to_datetime "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({venue_id: (encode-path-segment $venue_id)} | format pattern "/venues/{venue_id}/events") $qp $auth.query)
   let accept_val = "application/hal+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1280,7 +1280,7 @@ export def "fetch-all-venues-events" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from_datetime": $from_datetime, "to_datetime": $to_datetime, "city": $city, "sort": $qp_sort, "page_size": $page_size} | compact)
+    query: ({"from_datetime": $from_datetime, "to_datetime": $to_datetime, "city": $city, "sort": $sort, "page_size": $page_size} | compact)
     headers: $auth.headers
     body: null
     content_type: null

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -97,8 +97,10 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def x-amz-target-completer [] { ["AWSWAF_20190729.AssociateWebACL"] }
+def scope-completer [] { ["CLOUDFRONT" "REGIONAL"] }
 def x-amz-target-completer-1 [] { ["AWSWAF_20190729.CheckCapacity"] }
 def x-amz-target-completer-2 [] { ["AWSWAF_20190729.CreateAPIKey"] }
+def ip-address-version-completer [] { ["IPV4" "IPV6"] }
 def x-amz-target-completer-3 [] { ["AWSWAF_20190729.CreateIPSet"] }
 def x-amz-target-completer-4 [] { ["AWSWAF_20190729.CreateRegexPatternSet"] }
 def x-amz-target-completer-5 [] { ["AWSWAF_20190729.CreateRuleGroup"] }
@@ -112,6 +114,7 @@ def x-amz-target-completer-12 [] { ["AWSWAF_20190729.DeleteRuleGroup"] }
 def x-amz-target-completer-13 [] { ["AWSWAF_20190729.DeleteWebACL"] }
 def x-amz-target-completer-14 [] { ["AWSWAF_20190729.DescribeManagedRuleGroup"] }
 def x-amz-target-completer-15 [] { ["AWSWAF_20190729.DisassociateWebACL"] }
+def platform-completer [] { ["ANDROID" "IOS"] }
 def x-amz-target-completer-16 [] { ["AWSWAF_20190729.GenerateMobileSdkReleaseUrl"] }
 def x-amz-target-completer-17 [] { ["AWSWAF_20190729.GetDecryptedAPIKey"] }
 def x-amz-target-completer-18 [] { ["AWSWAF_20190729.GetIPSet"] }
@@ -133,6 +136,7 @@ def x-amz-target-completer-33 [] { ["AWSWAF_20190729.ListLoggingConfigurations"]
 def x-amz-target-completer-34 [] { ["AWSWAF_20190729.ListManagedRuleSets"] }
 def x-amz-target-completer-35 [] { ["AWSWAF_20190729.ListMobileSdkReleases"] }
 def x-amz-target-completer-36 [] { ["AWSWAF_20190729.ListRegexPatternSets"] }
+def resource-type-completer [] { ["API_GATEWAY" "APPLICATION_LOAD_BALANCER" "APPSYNC" "APP_RUNNER_SERVICE" "COGNITO_USER_POOL"] }
 def x-amz-target-completer-37 [] { ["AWSWAF_20190729.ListResourcesForWebACL"] }
 def x-amz-target-completer-38 [] { ["AWSWAF_20190729.ListRuleGroups"] }
 def x-amz-target-completer-39 [] { ["AWSWAF_20190729.ListTagsForResource"] }
@@ -192,13 +196,14 @@ export def "associate-web-acl" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  web_acl_arn: any
-  resource_arn: any
+  --x-amz-target: string@x-amz-target-completer # required
+  web_acl_arn: string # The Amazon Resource Name (ARN) of the web ACL that you want to associate with the resource.
+  resource_arn: string # The Amazon Resource Name (ARN) of the resource to associate with the web ACL. The ARN must be in one of the following formats: For an Application Load Balancer: arn:partition:elasticloadbalancing:region:account-id:loadbalancer/app/load-balancer-name/load-balancer-id For an Amazon API Gateway REST API: arn:partition:apigateway:region::/restapis/api-id/stages/stage-name For an AppSync GraphQL API: arn:partition:appsync:region:account-id:apis/GraphQLApiId For an Amazon Cognito user pool: arn:partition:cognito-idp:region:account-id:userpool/user-pool-id For an App Runner service: arn:partition:apprunner:region:account-id:service/apprunner-service-name/apprunner-service-id
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.AssociateWebACL")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"WebACLArn": $web_acl_arn, "ResourceArn": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -224,6 +229,7 @@ export def "associate-web-acl" [
 #
 # POST /
 # operationId: CheckCapacity
+# --Rules item shape: {Name: string, Priority: int, Statement: record, Action?: record, OverrideAction?: record, RuleLabels?: list, VisibilityConfig: record, CaptchaConfig?: record, ChallengeConfig?: record}
 export def "check-capacity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -241,13 +247,14 @@ export def "check-capacity" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  scope: any
-  rules: any
-]: any -> record<Capacity: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  scope: string@scope-completer # Specifies whether this is for an Amazon CloudFront distribution or for a regional application. A regional application can be an Application Load Balancer (ALB), an Amazon API Gateway REST API, an AppSync GraphQL API, an Amazon Cognito user pool, or an App Runner service. To work with CloudFront, you must also specify the Region US East (N. Virginia) as follows: CLI - Specify the Region when you use the CloudFront scope: --scope=CLOUDFRONT --region=us-east-1. API and SDKs - For all calls, use the Region endpoint us-east-1.
+  rules: list # An array of Rule that you're configuring to use in a rule group or web ACL. — item shape: {Name: string, Priority: int, Statement: record, Action?: record, OverrideAction?: record, RuleLabels?: list, VisibilityConfig: record, CaptchaConfig?: record, ChallengeConfig?: record}
+]: any -> record<Capacity: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.CheckCapacity")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Scope": $scope, "Rules": $rules} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -290,13 +297,14 @@ export def "create-api-key" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  scope: any
-  token_domains: any
-]: any -> record<APIKey: record> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  scope: string@scope-completer # Specifies whether this is for an Amazon CloudFront distribution or for a regional application. A regional application can be an Application Load Balancer (ALB), an Amazon API Gateway REST API, an AppSync GraphQL API, an Amazon Cognito user pool, or an App Runner service. To work with CloudFront, you must also specify the Region US East (N. Virginia) as follows: CLI - Specify the Region when you use the CloudFront scope: --scope=CLOUDFRONT --region=us-east-1. API and SDKs - For all calls, use the Region endpoint us-east-1.
+  token_domains: list<string> # The client application domains that you want to use this API key for.
+]: any -> record<APIKey: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.CreateAPIKey")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Scope": $scope, "TokenDomains": $token_domains} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -322,6 +330,7 @@ export def "create-api-key" [
 #
 # POST /
 # operationId: CreateIPSet
+# --Tags item shape: {Key: string, Value: string}
 export def "create-ip-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -339,17 +348,18 @@ export def "create-ip-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  name: any
-  scope: any
-  --description: any
-  ip_address_version: any
-  addresses: any
-  --tags: any
-]: any -> record<Summary: record<Name: record, Id: record, Description: record, LockToken: record, ARN: record>> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  name: string # The name of the IP set. You cannot change the name of an IPSet after you create it.
+  scope: string@scope-completer # Specifies whether this is for an Amazon CloudFront distribution or for a regional application. A regional application can be an Application Load Balancer (ALB), an Amazon API Gateway REST API, an AppSync GraphQL API, an Amazon Cognito user pool, or an App Runner service. To work with CloudFront, you must also specify the Region US East (N. Virginia) as follows: CLI - Specify the Region when you use the CloudFront scope: --scope=CLOUDFRONT --region=us-east-1. API and SDKs - For all calls, use the Region endpoint us-east-1.
+  --description: string # A description of the IP set that helps with identification.
+  ip_address_version: string@ip-address-version-completer # The version of the IP addresses, either IPV4 or IPV6.
+  addresses: list<string> # Contains an array of strings that specifies zero or more IP addresses or blocks of IP addresses. All addresses must be specified using Classless Inter-Domain Routing (CIDR) notation. WAF supports all IPv4 and IPv6 CIDR ranges except for /0. Example address strings: To configure WAF to allow, block, or count requests that originated from the IP address 192.0.2.44, specify 192.0.2.44/32. To configure WAF to allow, block, or count requests that originated from IP addresses from 192.0.2.0 to 192.0.2.255, specify 192.0.2.0/24. To configure WAF to allow, block, or count requests that originated from the IP address 1111:0000:0000:0000:0000:0000:0000:0111, specify 1111:0000:0000:0000:0000:0000:0000:0111/128. To configure WAF to allow, block, or count requests that originated from IP addresses 1111:0000:0000:0000:0000:0000:0000:0000 to 1111:0000:0000:0000:ffff:ffff:ffff:ffff, specify 1111:0000:0000:0000:0000:0000:0000:0000/64. For more information about CIDR notation, see the Wikipedia entry Classless Inter-Domain Routing (https://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing). Example JSON Addresses specifications: Empty array: "Addresses": [] Array with one address: "Addresses": ["192.0.2.44/32"] Array with three addresses: "Addresses": ["192.0.2.44/32", "192.0.2.0/24", "192.0.0.0/16"] INVALID specification: "Addresses": [""] INVALID
+  --tags: list # An array of key:value pairs to associate with the resource. — item shape: {Key: string, Value: string}
+]: any -> record<Summary: record<Name: string, Id: string, Description: string, LockToken: string, ARN: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.CreateIPSet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Scope": $scope, "Description": $description, "IPAddressVersion": $ip_address_version, "Addresses": $addresses, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -375,6 +385,8 @@ export def "create-ip-set" [
 #
 # POST /
 # operationId: CreateRegexPatternSet
+# --RegularExpressionList item shape: {RegexString?: string}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-regex-pattern-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -392,16 +404,17 @@ export def "create-regex-pattern-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  name: any
-  scope: any
-  --description: any
-  regular_expression_list: any
-  --tags: any
-]: any -> record<Summary: record<Name: record, Id: record, Description: record, LockToken: record, ARN: record>> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  name: string # The name of the set. You cannot change the name after you create the set.
+  scope: string@scope-completer # Specifies whether this is for an Amazon CloudFront distribution or for a regional application. A regional application can be an Application Load Balancer (ALB), an Amazon API Gateway REST API, an AppSync GraphQL API, an Amazon Cognito user pool, or an App Runner service. To work with CloudFront, you must also specify the Region US East (N. Virginia) as follows: CLI - Specify the Region when you use the CloudFront scope: --scope=CLOUDFRONT --region=us-east-1. API and SDKs - For all calls, use the Region endpoint us-east-1.
+  --description: string # A description of the set that helps with identification.
+  regular_expression_list: list # Array of regular expression strings. — item shape: {RegexString?: string}
+  --tags: list # An array of key:value pairs to associate with the resource. — item shape: {Key: string, Value: string}
+]: any -> record<Summary: record<Name: string, Id: string, Description: string, LockToken: string, ARN: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.CreateRegexPatternSet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Scope": $scope, "Description": $description, "RegularExpressionList": $regular_expression_list, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -427,6 +440,9 @@ export def "create-regex-pattern-set" [
 #
 # POST /
 # operationId: CreateRuleGroup
+# --Rules item shape: {Name: string, Priority: int, Statement: record, Action?: record, OverrideAction?: record, RuleLabels?: list, VisibilityConfig: record, CaptchaConfig?: record, ChallengeConfig?: record}
+# --VisibilityConfig shape: {SampledRequestsEnabled: bool, CloudWatchMetricsEnabled: bool, MetricName: string}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-rule-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -444,19 +460,20 @@ export def "create-rule-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  name: any
-  scope: any
-  capacity: any
-  --description: any
-  --rules: any
-  visibility_config: any
-  --tags: any
-  --custom-response-bodies: any
-]: any -> record<Summary: record<Name: record, Id: record, Description: record, LockToken: record, ARN: record>> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  name: string # The name of the rule group. You cannot change the name of a rule group after you create it.
+  scope: string@scope-completer # Specifies whether this is for an Amazon CloudFront distribution or for a regional application. A regional application can be an Application Load Balancer (ALB), an Amazon API Gateway REST API, an AppSync GraphQL API, an Amazon Cognito user pool, or an App Runner service. To work with CloudFront, you must also specify the Region US East (N. Virginia) as follows: CLI - Specify the Region when you use the CloudFront scope: --scope=CLOUDFRONT --region=us-east-1. API and SDKs - For all calls, use the Region endpoint us-east-1.
+  capacity: int # The web ACL capacity units (WCUs) required for this rule group. When you create your own rule group, you define this, and you cannot change it after creation. When you add or modify the rules in a rule group, WAF enforces this limit. You can check the capacity for a set of rules using CheckCapacity. WAF uses WCUs to calculate and control the operating resources that are used to run your rules, rule groups, and web ACLs. WAF calculates capacity differently for each rule type, to reflect the relative cost of each rule. Simple rules that cost little to run use fewer WCUs than more complex rules that use more processing power. Rule group capacity is fixed at creation, which helps users plan their web ACL WCU usage when they use a rule group. For more information, see WAF web ACL capacity units (WCU) (https://docs.aws.amazon.com/waf/latest/developerguide/aws-waf-capacity-units.html) in the WAF Developer Guide.
+  --description: string # A description of the rule group that helps with identification.
+  --rules: list # The Rule statements used to identify the web requests that you want to allow, block, or count. Each rule includes one top-level statement that WAF uses to identify matching web requests, and parameters that govern how WAF handles them. — item shape: {Name: string, Priority: int, Statement: record, Action?: record, OverrideAction?: record, RuleLabels?: list, VisibilityConfig: record, CaptchaConfig?: record, ChallengeConfig?: record}
+  visibility_config: record # Defines and enables Amazon CloudWatch metrics and web request sample collection. — shape: {SampledRequestsEnabled: bool, CloudWatchMetricsEnabled: bool, MetricName: string}
+  --tags: list # An array of key:value pairs to associate with the resource. — item shape: {Key: string, Value: string}
+  --custom-response-bodies: record # A map of custom response keys and content bodies. When you create a rule with a block action, you can send a custom response to the web request. You define these for the rule group, and then use them in the rules that you define in the rule group. For information about customizing web requests and responses, see Customizing web requests and responses in WAF (https://docs.aws.amazon.com/waf/latest/developerguide/waf-custom-request-response.html) in the WAF Developer Guide. For information about the limits on count and size for custom request and response settings, see WAF quotas (https://docs.aws.amazon.com/waf/latest/developerguide/limits.html) in the WAF Developer Guide.
+]: any -> record<Summary: record<Name: string, Id: string, Description: string, LockToken: string, ARN: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.CreateRuleGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Scope": $scope, "Capacity": $capacity, "Description": $description, "Rules": $rules, "VisibilityConfig": $visibility_config, "Tags": $tags, "CustomResponseBodies": $custom_response_bodies} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -482,6 +499,13 @@ export def "create-rule-group" [
 #
 # POST /
 # operationId: CreateWebACL
+# --DefaultAction shape: {Block?: record, Allow?: record}
+# --Rules item shape: {Name: string, Priority: int, Statement: record, Action?: record, OverrideAction?: record, RuleLabels?: list, VisibilityConfig: record, CaptchaConfig?: record, ChallengeConfig?: record}
+# --VisibilityConfig shape: {SampledRequestsEnabled: bool, CloudWatchMetricsEnabled: bool, MetricName: string}
+# --Tags item shape: {Key: string, Value: string}
+# --CaptchaConfig shape: {ImmunityTimeProperty?: record}
+# --ChallengeConfig shape: {ImmunityTimeProperty?: record}
+# --AssociationConfig shape: {RequestBody?: record}
 export def "create-web-acl" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -499,23 +523,24 @@ export def "create-web-acl" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  name: any
-  scope: any
-  default_action: any
-  --description: any
-  --rules: any
-  visibility_config: any
-  --tags: any
-  --custom-response-bodies: any
-  --captcha-config: any
-  --challenge-config: any
-  --token-domains: any
-  --association-config: any
-]: any -> record<Summary: record<Name: record, Id: record, Description: record, LockToken: record, ARN: record>> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  name: string # The name of the web ACL. You cannot change the name of a web ACL after you create it.
+  scope: string@scope-completer # Specifies whether this is for an Amazon CloudFront distribution or for a regional application. A regional application can be an Application Load Balancer (ALB), an Amazon API Gateway REST API, an AppSync GraphQL API, an Amazon Cognito user pool, or an App Runner service. To work with CloudFront, you must also specify the Region US East (N. Virginia) as follows: CLI - Specify the Region when you use the CloudFront scope: --scope=CLOUDFRONT --region=us-east-1. API and SDKs - For all calls, use the Region endpoint us-east-1.
+  default_action: record # In a WebACL, this is the action that you want WAF to perform when a web request doesn't match any of the rules in the WebACL. The default action must be a terminating action. — shape: {Block?: record, Allow?: record}
+  --description: string # A description of the web ACL that helps with identification.
+  --rules: list # The Rule statements used to identify the web requests that you want to allow, block, or count. Each rule includes one top-level statement that WAF uses to identify matching web requests, and parameters that govern how WAF handles them. — item shape: {Name: string, Priority: int, Statement: record, Action?: record, OverrideAction?: record, RuleLabels?: list, VisibilityConfig: record, CaptchaConfig?: record, ChallengeConfig?: record}
+  visibility_config: record # Defines and enables Amazon CloudWatch metrics and web request sample collection. — shape: {SampledRequestsEnabled: bool, CloudWatchMetricsEnabled: bool, MetricName: string}
+  --tags: list # An array of key:value pairs to associate with the resource. — item shape: {Key: string, Value: string}
+  --custom-response-bodies: record # A map of custom response keys and content bodies. When you create a rule with a block action, you can send a custom response to the web request. You define these for the web ACL, and then use them in the rules and default actions that you define in the web ACL. For information about customizing web requests and responses, see Customizing web requests and responses in WAF (https://docs.aws.amazon.com/waf/latest/developerguide/waf-custom-request-response.html) in the WAF Developer Guide. For information about the limits on count and size for custom request and response settings, see WAF quotas (https://docs.aws.amazon.com/waf/latest/developerguide/limits.html) in the WAF Developer Guide.
+  --captcha-config: record # Specifies how WAF should handle CAPTCHA evaluations. This is available at the web ACL level and in each rule. — shape: {ImmunityTimeProperty?: record}
+  --challenge-config: record # Specifies how WAF should handle Challenge evaluations. This is available at the web ACL level and in each rule. — shape: {ImmunityTimeProperty?: record}
+  --token-domains: list<string> # Specifies the domains that WAF should accept in a web request token. This enables the use of tokens across multiple protected websites. When WAF provides a token, it uses the domain of the Amazon Web Services resource that the web ACL is protecting. If you don't specify a list of token domains, WAF accepts tokens only for the domain of the protected resource. With a token domain list, WAF accepts the resource's host domain plus all domains in the token domain list, including their prefixed subdomains. Example JSON: "TokenDomains": { "mywebsite.com", "myotherwebsite.com" } Public suffixes aren't allowed. For example, you can't use usa.gov or co.uk as token domains.
+  --association-config: record # Specifies custom configurations for the associations between the web ACL and protected resources. Use this to customize the maximum size of the request body that your protected CloudFront distributions forward to WAF for inspection. The default is 16 KB (16,384 kilobytes). You are charged additional fees when your protected resources forward body sizes that are larger than the default. For more information, see WAF Pricing (http://aws.amazon.com/waf/pricing/). — shape: {RequestBody?: record}
+]: any -> record<Summary: record<Name: string, Id: string, Description: string, LockToken: string, ARN: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.CreateWebACL")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Scope": $scope, "DefaultAction": $default_action, "Description": $description, "Rules": $rules, "VisibilityConfig": $visibility_config, "Tags": $tags, "CustomResponseBodies": $custom_response_bodies, "CaptchaConfig": $captcha_config, "ChallengeConfig": $challenge_config, "TokenDomains": $token_domains, "AssociationConfig": $association_config} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -558,13 +583,14 @@ export def "delete-firewall-manager-rule-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  web_acl_arn: any
-  web_acl_lock_token: any
-]: any -> record<NextWebACLLockToken: record> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  web_acl_arn: string # The Amazon Resource Name (ARN) of the web ACL.
+  web_acl_lock_token: string # A token used for optimistic locking. WAF returns a token to your get and list requests, to mark the state of the entity at the time of the request. To make changes to the entity associated with the token, you provide the token to operations like update and delete. WAF uses the token to ensure that no changes have been made to the entity since you last retrieved it. If a change has been made, the update fails with a WAFOptimisticLockException. If this happens, perform another get, and use the new token returned by that operation.
+]: any -> record<NextWebACLLockToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.DeleteFirewallManagerRuleGroups")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"WebACLArn": $web_acl_arn, "WebACLLockToken": $web_acl_lock_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -607,15 +633,16 @@ export def "delete-ip-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  name: any
-  scope: any
-  id: any
-  lock_token: any
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  name: string # The name of the IP set. You cannot change the name of an IPSet after you create it.
+  scope: string@scope-completer # Specifies whether this is for an Amazon CloudFront distribution or for a regional application. A regional application can be an Application Load Balancer (ALB), an Amazon API Gateway REST API, an AppSync GraphQL API, an Amazon Cognito user pool, or an App Runner service. To work with CloudFront, you must also specify the Region US East (N. Virginia) as follows: CLI - Specify the Region when you use the CloudFront scope: --scope=CLOUDFRONT --region=us-east-1. API and SDKs - For all calls, use the Region endpoint us-east-1.
+  id: string # A unique identifier for the set. This ID is returned in the responses to create and list commands. You provide it to operations like update and delete.
+  lock_token: string # A token used for optimistic locking. WAF returns a token to your get and list requests, to mark the state of the entity at the time of the request. To make changes to the entity associated with the token, you provide the token to operations like update and delete. WAF uses the token to ensure that no changes have been made to the entity since you last retrieved it. If a change has been made, the update fails with a WAFOptimisticLockException. If this happens, perform another get, and use the new token returned by that operation.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.DeleteIPSet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Scope": $scope, "Id": $id, "LockToken": $lock_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -658,12 +685,13 @@ export def "delete-logging-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  resource_arn: any
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the web ACL from which you want to delete the LoggingConfiguration.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.DeleteLoggingConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -706,12 +734,13 @@ export def "delete-permission-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  resource_arn: any
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the rule group from which you want to delete the policy. You must be the owner of the rule group to perform this operation.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.DeletePermissionPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -754,15 +783,16 @@ export def "delete-regex-pattern-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  name: any
-  scope: any
-  id: any
-  lock_token: any
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  name: string # The name of the set. You cannot change the name after you create the set.
+  scope: string@scope-completer # Specifies whether this is for an Amazon CloudFront distribution or for a regional application. A regional application can be an Application Load Balancer (ALB), an Amazon API Gateway REST API, an AppSync GraphQL API, an Amazon Cognito user pool, or an App Runner service. To work with CloudFront, you must also specify the Region US East (N. Virginia) as follows: CLI - Specify the Region when you use the CloudFront scope: --scope=CLOUDFRONT --region=us-east-1. API and SDKs - For all calls, use the Region endpoint us-east-1.
+  id: string # A unique identifier for the set. This ID is returned in the responses to create and list commands. You provide it to operations like update and delete.
+  lock_token: string # A token used for optimistic locking. WAF returns a token to your get and list requests, to mark the state of the entity at the time of the request. To make changes to the entity associated with the token, you provide the token to operations like update and delete. WAF uses the token to ensure that no changes have been made to the entity since you last retrieved it. If a change has been made, the update fails with a WAFOptimisticLockException. If this happens, perform another get, and use the new token returned by that operation.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.DeleteRegexPatternSet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Scope": $scope, "Id": $id, "LockToken": $lock_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -805,15 +835,16 @@ export def "delete-rule-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  name: any
-  scope: any
-  id: any
-  lock_token: any
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  name: string # The name of the rule group. You cannot change the name of a rule group after you create it.
+  scope: string@scope-completer # Specifies whether this is for an Amazon CloudFront distribution or for a regional application. A regional application can be an Application Load Balancer (ALB), an Amazon API Gateway REST API, an AppSync GraphQL API, an Amazon Cognito user pool, or an App Runner service. To work with CloudFront, you must also specify the Region US East (N. Virginia) as follows: CLI - Specify the Region when you use the CloudFront scope: --scope=CLOUDFRONT --region=us-east-1. API and SDKs - For all calls, use the Region endpoint us-east-1.
+  id: string # A unique identifier for the rule group. This ID is returned in the responses to create and list commands. You provide it to operations like update and delete.
+  lock_token: string # A token used for optimistic locking. WAF returns a token to your get and list requests, to mark the state of the entity at the time of the request. To make changes to the entity associated with the token, you provide the token to operations like update and delete. WAF uses the token to ensure that no changes have been made to the entity since you last retrieved it. If a change has been made, the update fails with a WAFOptimisticLockException. If this happens, perform another get, and use the new token returned by that operation.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.DeleteRuleGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Scope": $scope, "Id": $id, "LockToken": $lock_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -856,15 +887,16 @@ export def "delete-web-acl" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  name: any
-  scope: any
-  id: any
-  lock_token: any
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  name: string # The name of the web ACL. You cannot change the name of a web ACL after you create it.
+  scope: string@scope-completer # Specifies whether this is for an Amazon CloudFront distribution or for a regional application. A regional application can be an Application Load Balancer (ALB), an Amazon API Gateway REST API, an AppSync GraphQL API, an Amazon Cognito user pool, or an App Runner service. To work with CloudFront, you must also specify the Region US East (N. Virginia) as follows: CLI - Specify the Region when you use the CloudFront scope: --scope=CLOUDFRONT --region=us-east-1. API and SDKs - For all calls, use the Region endpoint us-east-1.
+  id: string # The unique identifier for the web ACL. This ID is returned in the responses to create and list commands. You provide it to operations like update and delete.
+  lock_token: string # A token used for optimistic locking. WAF returns a token to your get and list requests, to mark the state of the entity at the time of the request. To make changes to the entity associated with the token, you provide the token to operations like update and delete. WAF uses the token to ensure that no changes have been made to the entity since you last retrieved it. If a change has been made, the update fails with a WAFOptimisticLockException. If this happens, perform another get, and use the new token returned by that operation.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.DeleteWebACL")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Scope": $scope, "Id": $id, "LockToken": $lock_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -907,15 +939,16 @@ export def "describe-managed-rule-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  vendor_name: any
-  name: any
-  scope: any
-  --version-name: any
-]: any -> record<VersionName: record, SnsTopicArn: record, Capacity: record, Rules: record, LabelNamespace: record, AvailableLabels: record, ConsumedLabels: record> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  vendor_name: string # The name of the managed rule group vendor. You use this, along with the rule group name, to identify the rule group.
+  name: string # The name of the managed rule group. You use this, along with the vendor name, to identify the rule group.
+  scope: string@scope-completer # Specifies whether this is for an Amazon CloudFront distribution or for a regional application. A regional application can be an Application Load Balancer (ALB), an Amazon API Gateway REST API, an AppSync GraphQL API, an Amazon Cognito user pool, or an App Runner service. To work with CloudFront, you must also specify the Region US East (N. Virginia) as follows: CLI - Specify the Region when you use the CloudFront scope: --scope=CLOUDFRONT --region=us-east-1. API and SDKs - For all calls, use the Region endpoint us-east-1.
+  --version-name: string # The version of the rule group. You can only use a version that is not scheduled for expiration. If you don't provide this, WAF uses the vendor's default version.
+]: any -> record<VersionName: string, SnsTopicArn: string, Capacity: int, Rules: table<Name: string, Action: record>, LabelNamespace: string, AvailableLabels: table<Name: string>, ConsumedLabels: table<Name: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.DescribeManagedRuleGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"VendorName": $vendor_name, "Name": $name, "Scope": $scope, "VersionName": $version_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -958,12 +991,13 @@ export def "disassociate-web-acl" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  resource_arn: any
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the resource to disassociate from the web ACL. The ARN must be in one of the following formats: For an Application Load Balancer: arn:partition:elasticloadbalancing:region:account-id:loadbalancer/app/load-balancer-name/load-balancer-id For an Amazon API Gateway REST API: arn:partition:apigateway:region::/restapis/api-id/stages/stage-name For an AppSync GraphQL API: arn:partition:appsync:region:account-id:apis/GraphQLApiId For an Amazon Cognito user pool: arn:partition:cognito-idp:region:account-id:userpool/user-pool-id For an App Runner service: arn:partition:apprunner:region:account-id:service/apprunner-service-name/apprunner-service-id
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.DisassociateWebACL")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1006,13 +1040,14 @@ export def "generate-mobile-sdk-release-url" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  platform: any
-  release_version: any
-]: any -> record<Url: record> {
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  platform: string@platform-completer # The device platform.
+  release_version: string # The release version. For the latest available version, specify LATEST.
+]: any -> record<Url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.GenerateMobileSdkReleaseUrl")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Platform": $platform, "ReleaseVersion": $release_version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1055,13 +1090,14 @@ export def "get-decrypted-api-key" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  scope: any
-  api_key: any
-]: any -> record<TokenDomains: record, CreationTimestamp: record> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  scope: string@scope-completer # Specifies whether this is for an Amazon CloudFront distribution or for a regional application. A regional application can be an Application Load Balancer (ALB), an Amazon API Gateway REST API, an AppSync GraphQL API, an Amazon Cognito user pool, or an App Runner service. To work with CloudFront, you must also specify the Region US East (N. Virginia) as follows: CLI - Specify the Region when you use the CloudFront scope: --scope=CLOUDFRONT --region=us-east-1. API and SDKs - For all calls, use the Region endpoint us-east-1.
+  api_key: string # The encrypted API key.
+]: any -> record<TokenDomains: list<string>, CreationTimestamp: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.GetDecryptedAPIKey")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Scope": $scope, "APIKey": $api_key} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1104,14 +1140,15 @@ export def "get-ip-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  name: any
-  scope: any
-  id: any
-]: any -> record<IPSet: record<Name: record, Id: record, ARN: record, Description: record, IPAddressVersion: record, Addresses: record>, LockToken: record> {
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  name: string # The name of the IP set. You cannot change the name of an IPSet after you create it.
+  scope: string@scope-completer # Specifies whether this is for an Amazon CloudFront distribution or for a regional application. A regional application can be an Application Load Balancer (ALB), an Amazon API Gateway REST API, an AppSync GraphQL API, an Amazon Cognito user pool, or an App Runner service. To work with CloudFront, you must also specify the Region US East (N. Virginia) as follows: CLI - Specify the Region when you use the CloudFront scope: --scope=CLOUDFRONT --region=us-east-1. API and SDKs - For all calls, use the Region endpoint us-east-1.
+  id: string # A unique identifier for the set. This ID is returned in the responses to create and list commands. You provide it to operations like update and delete.
+]: any -> record<IPSet: record<Name: string, Id: string, ARN: string, Description: string, IPAddressVersion: string, Addresses: list<string>>, LockToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.GetIPSet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Scope": $scope, "Id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1154,12 +1191,13 @@ export def "get-logging-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  resource_arn: any
-]: any -> record<LoggingConfiguration: record<ResourceArn: record, LogDestinationConfigs: record, RedactedFields: record, ManagedByFirewallManager: record, LoggingFilter: record<Filters: record, DefaultBehavior: record>>> {
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the web ACL for which you want to get the LoggingConfiguration.
+]: any -> record<LoggingConfiguration: record<ResourceArn: string, LogDestinationConfigs: list<string>, RedactedFields: list<record>, ManagedByFirewallManager: bool, LoggingFilter: record<Filters: list, DefaultBehavior: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.GetLoggingConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1202,14 +1240,15 @@ export def "get-managed-rule-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  name: any
-  scope: any
-  id: any
-]: any -> record<ManagedRuleSet: record<Name: record, Id: record, ARN: record, Description: record, PublishedVersions: record, RecommendedVersion: record, LabelNamespace: record>, LockToken: record> {
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  name: string # The name of the managed rule set. You use this, along with the rule set ID, to identify the rule set. This name is assigned to the corresponding managed rule group, which your customers can access and use.
+  scope: string@scope-completer # Specifies whether this is for an Amazon CloudFront distribution or for a regional application. A regional application can be an Application Load Balancer (ALB), an Amazon API Gateway REST API, an AppSync GraphQL API, an Amazon Cognito user pool, or an App Runner service. To work with CloudFront, you must also specify the Region US East (N. Virginia) as follows: CLI - Specify the Region when you use the CloudFront scope: --scope=CLOUDFRONT --region=us-east-1. API and SDKs - For all calls, use the Region endpoint us-east-1.
+  id: string # A unique identifier for the managed rule set. The ID is returned in the responses to commands like list. You provide it to operations like get and update.
+]: any -> record<ManagedRuleSet: record<Name: string, Id: string, ARN: string, Description: string, PublishedVersions: record, RecommendedVersion: string, LabelNamespace: string>, LockToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.GetManagedRuleSet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Scope": $scope, "Id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1252,13 +1291,14 @@ export def "get-mobile-sdk-release" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  platform: any
-  release_version: any
-]: any -> record<MobileSdkRelease: record<ReleaseVersion: record, Timestamp: record, ReleaseNotes: record, Tags: record>> {
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  platform: string@platform-completer # The device platform.
+  release_version: string # The release version. For the latest available version, specify LATEST.
+]: any -> record<MobileSdkRelease: record<ReleaseVersion: string, Timestamp: string, ReleaseNotes: string, Tags: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.GetMobileSdkRelease")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Platform": $platform, "ReleaseVersion": $release_version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1301,12 +1341,13 @@ export def "get-permission-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  resource_arn: any
-]: any -> record<Policy: record> {
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the rule group for which you want to get the policy.
+]: any -> record<Policy: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.GetPermissionPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1349,16 +1390,17 @@ export def "get-rate-based-statement-managed-keys" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  scope: any
-  web_acl_name: any
-  web_acl_id: any
-  --rule-group-rule-name: any
-  rule_name: any
-]: any -> record<ManagedKeysIPV4: record<IPAddressVersion: record, Addresses: record>, ManagedKeysIPV6: record<IPAddressVersion: record, Addresses: record>> {
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  scope: string@scope-completer # Specifies whether this is for an Amazon CloudFront distribution or for a regional application. A regional application can be an Application Load Balancer (ALB), an Amazon API Gateway REST API, an AppSync GraphQL API, an Amazon Cognito user pool, or an App Runner service. To work with CloudFront, you must also specify the Region US East (N. Virginia) as follows: CLI - Specify the Region when you use the CloudFront scope: --scope=CLOUDFRONT --region=us-east-1. API and SDKs - For all calls, use the Region endpoint us-east-1.
+  web_acl_name: string # The name of the web ACL. You cannot change the name of a web ACL after you create it.
+  web_acl_id: string # The unique identifier for the web ACL. This ID is returned in the responses to create and list commands. You provide it to operations like update and delete.
+  --rule-group-rule-name: string # The name of the rule group reference statement in your web ACL. This is required only when you have the rate-based rule nested inside a rule group.
+  rule_name: string # The name of the rate-based rule to get the keys for. If you have the rule defined inside a rule group that you're using in your web ACL, also provide the name of the rule group reference statement in the request parameter RuleGroupRuleName.
+]: any -> record<ManagedKeysIPV4: record<IPAddressVersion: string, Addresses: list<string>>, ManagedKeysIPV6: record<IPAddressVersion: string, Addresses: list<string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.GetRateBasedStatementManagedKeys")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Scope": $scope, "WebACLName": $web_acl_name, "WebACLId": $web_acl_id, "RuleGroupRuleName": $rule_group_rule_name, "RuleName": $rule_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1401,14 +1443,15 @@ export def "get-regex-pattern-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  name: any
-  scope: any
-  id: any
-]: any -> record<RegexPatternSet: record<Name: record, Id: record, ARN: record, Description: record, RegularExpressionList: record>, LockToken: record> {
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  name: string # The name of the set. You cannot change the name after you create the set.
+  scope: string@scope-completer # Specifies whether this is for an Amazon CloudFront distribution or for a regional application. A regional application can be an Application Load Balancer (ALB), an Amazon API Gateway REST API, an AppSync GraphQL API, an Amazon Cognito user pool, or an App Runner service. To work with CloudFront, you must also specify the Region US East (N. Virginia) as follows: CLI - Specify the Region when you use the CloudFront scope: --scope=CLOUDFRONT --region=us-east-1. API and SDKs - For all calls, use the Region endpoint us-east-1.
+  id: string # A unique identifier for the set. This ID is returned in the responses to create and list commands. You provide it to operations like update and delete.
+]: any -> record<RegexPatternSet: record<Name: string, Id: string, ARN: string, Description: string, RegularExpressionList: list<record>>, LockToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.GetRegexPatternSet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Scope": $scope, "Id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1451,15 +1494,16 @@ export def "get-rule-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  --name: any
-  --scope: any
-  --id: any
-  --arn: any
-]: any -> record<RuleGroup: record<Name: record, Id: record, Capacity: record, ARN: record, Description: record, Rules: record, VisibilityConfig: record<SampledRequestsEnabled: record, CloudWatchMetricsEnabled: record, MetricName: record>, LabelNamespace: record, CustomResponseBodies: record, AvailableLabels: record, ConsumedLabels: record>, LockToken: record> {
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  --name: string # The name of the rule group. You cannot change the name of a rule group after you create it.
+  --scope: string@scope-completer # Specifies whether this is for an Amazon CloudFront distribution or for a regional application. A regional application can be an Application Load Balancer (ALB), an Amazon API Gateway REST API, an AppSync GraphQL API, an Amazon Cognito user pool, or an App Runner service. To work with CloudFront, you must also specify the Region US East (N. Virginia) as follows: CLI - Specify the Region when you use the CloudFront scope: --scope=CLOUDFRONT --region=us-east-1. API and SDKs - For all calls, use the Region endpoint us-east-1.
+  --id: string # A unique identifier for the rule group. This ID is returned in the responses to create and list commands. You provide it to operations like update and delete.
+  --arn: string # The Amazon Resource Name (ARN) of the entity.
+]: any -> record<RuleGroup: record<Name: string, Id: string, Capacity: int, ARN: string, Description: string, Rules: list<record>, VisibilityConfig: record<SampledRequestsEnabled: bool, CloudWatchMetricsEnabled: bool, MetricName: string>, LabelNamespace: string, CustomResponseBodies: record, AvailableLabels: list<record>, ConsumedLabels: list<record>>, LockToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.GetRuleGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Scope": $scope, "Id": $id, "ARN": $arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1485,6 +1529,7 @@ export def "get-rule-group" [
 #
 # POST /
 # operationId: GetSampledRequests
+# --TimeWindow shape: {StartTime: string, EndTime: string}
 export def "get-sampled-requests" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1502,16 +1547,17 @@ export def "get-sampled-requests" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-26
-  web_acl_arn: any
-  rule_metric_name: any
-  scope: any
-  time_window: any
-  max_items: any
-]: any -> record<SampledRequests: record, PopulationSize: record, TimeWindow: record<StartTime: record, EndTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-26 # required
+  web_acl_arn: string # The Amazon resource name (ARN) of the WebACL for which you want a sample of requests.
+  rule_metric_name: string # The metric name assigned to the Rule or RuleGroup dimension for which you want a sample of requests.
+  scope: string@scope-completer # Specifies whether this is for an Amazon CloudFront distribution or for a regional application. A regional application can be an Application Load Balancer (ALB), an Amazon API Gateway REST API, an AppSync GraphQL API, an Amazon Cognito user pool, or an App Runner service. To work with CloudFront, you must also specify the Region US East (N. Virginia) as follows: CLI - Specify the Region when you use the CloudFront scope: --scope=CLOUDFRONT --region=us-east-1. API and SDKs - For all calls, use the Region endpoint us-east-1.
+  time_window: record # In a GetSampledRequests request, the StartTime and EndTime objects specify the time range for which you want WAF to return a sample of web requests. You must specify the times in Coordinated Universal Time (UTC) format. UTC format includes the special designator, Z. For example, "2016-09-27T14:50Z". You can specify any time range in the previous three hours. In a GetSampledRequests response, the StartTime and EndTime objects specify the time range for which WAF actually returned a sample of web requests. WAF gets the specified number of requests from among the first 5,000 requests that your Amazon Web Services resource receives during the specified time period. If your resource receives more than 5,000 requests during that period, WAF stops sampling after the 5,000th request. In that case, EndTime is the time that WAF received the 5,000th request. — shape: {StartTime: string, EndTime: string}
+  max_items: int # The number of requests that you want WAF to return from among the first 5,000 requests that your Amazon Web Services resource received during the time range. If your resource received fewer requests than the value of MaxItems, GetSampledRequests returns information about all of them.
+]: any -> record<SampledRequests: table<Request: record, Weight: int, Timestamp: string, Action: string, RuleNameWithinRuleGroup: string, RequestHeadersInserted: list, ResponseCodeSent: int, Labels: list, CaptchaResponse: record, ChallengeResponse: record, OverriddenAction: string>, PopulationSize: int, TimeWindow: record<StartTime: string, EndTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.GetSampledRequests")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"WebAclArn": $web_acl_arn, "RuleMetricName": $rule_metric_name, "Scope": $scope, "TimeWindow": $time_window, "MaxItems": $max_items} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1554,14 +1600,15 @@ export def "get-web-acl" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-27
-  name: any
-  scope: any
-  id: any
-]: any -> record<WebACL: record<Name: record, Id: record, ARN: record, DefaultAction: record<Block: record, Allow: record>, Description: record, Rules: record, VisibilityConfig: record<SampledRequestsEnabled: record, CloudWatchMetricsEnabled: record, MetricName: record>, Capacity: record, PreProcessFirewallManagerRuleGroups: record, PostProcessFirewallManagerRuleGroups: record, ManagedByFirewallManager: record, LabelNamespace: record, CustomResponseBodies: record, CaptchaConfig: record<ImmunityTimeProperty: record>, ChallengeConfig: record<ImmunityTimeProperty: record>, TokenDomains: record, AssociationConfig: record<RequestBody: record>>, LockToken: record, ApplicationIntegrationURL: record> {
+  --x-amz-target: string@x-amz-target-completer-27 # required
+  name: string # The name of the web ACL. You cannot change the name of a web ACL after you create it.
+  scope: string@scope-completer # Specifies whether this is for an Amazon CloudFront distribution or for a regional application. A regional application can be an Application Load Balancer (ALB), an Amazon API Gateway REST API, an AppSync GraphQL API, an Amazon Cognito user pool, or an App Runner service. To work with CloudFront, you must also specify the Region US East (N. Virginia) as follows: CLI - Specify the Region when you use the CloudFront scope: --scope=CLOUDFRONT --region=us-east-1. API and SDKs - For all calls, use the Region endpoint us-east-1.
+  id: string # The unique identifier for the web ACL. This ID is returned in the responses to create and list commands. You provide it to operations like update and delete.
+]: any -> record<WebACL: record<Name: string, Id: string, ARN: string, DefaultAction: record<Block: record, Allow: record>, Description: string, Rules: list<record>, VisibilityConfig: record<SampledRequestsEnabled: bool, CloudWatchMetricsEnabled: bool, MetricName: string>, Capacity: int, PreProcessFirewallManagerRuleGroups: list<record>, PostProcessFirewallManagerRuleGroups: list<record>, ManagedByFirewallManager: bool, LabelNamespace: string, CustomResponseBodies: record, CaptchaConfig: record<ImmunityTimeProperty: record>, ChallengeConfig: record<ImmunityTimeProperty: record>, TokenDomains: list<string>, AssociationConfig: record<RequestBody: record>>, LockToken: string, ApplicationIntegrationURL: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.GetWebACL")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Scope": $scope, "Id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1604,12 +1651,13 @@ export def "get-web-acl-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-28
-  resource_arn: any
-]: any -> record<WebACL: record<Name: record, Id: record, ARN: record, DefaultAction: record<Block: record, Allow: record>, Description: record, Rules: record, VisibilityConfig: record<SampledRequestsEnabled: record, CloudWatchMetricsEnabled: record, MetricName: record>, Capacity: record, PreProcessFirewallManagerRuleGroups: record, PostProcessFirewallManagerRuleGroups: record, ManagedByFirewallManager: record, LabelNamespace: record, CustomResponseBodies: record, CaptchaConfig: record<ImmunityTimeProperty: record>, ChallengeConfig: record<ImmunityTimeProperty: record>, TokenDomains: record, AssociationConfig: record<RequestBody: record>>> {
+  --x-amz-target: string@x-amz-target-completer-28 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the resource whose web ACL you want to retrieve. The ARN must be in one of the following formats: For an Application Load Balancer: arn:partition:elasticloadbalancing:region:account-id:loadbalancer/app/load-balancer-name/load-balancer-id For an Amazon API Gateway REST API: arn:partition:apigateway:region::/restapis/api-id/stages/stage-name For an AppSync GraphQL API: arn:partition:appsync:region:account-id:apis/GraphQLApiId For an Amazon Cognito user pool: arn:partition:cognito-idp:region:account-id:userpool/user-pool-id For an App Runner service: arn:partition:apprunner:region:account-id:service/apprunner-service-name/apprunner-service-id
+]: any -> record<WebACL: record<Name: string, Id: string, ARN: string, DefaultAction: record<Block: record, Allow: record>, Description: string, Rules: list<record>, VisibilityConfig: record<SampledRequestsEnabled: bool, CloudWatchMetricsEnabled: bool, MetricName: string>, Capacity: int, PreProcessFirewallManagerRuleGroups: list<record>, PostProcessFirewallManagerRuleGroups: list<record>, ManagedByFirewallManager: bool, LabelNamespace: string, CustomResponseBodies: record, CaptchaConfig: record<ImmunityTimeProperty: record>, ChallengeConfig: record<ImmunityTimeProperty: record>, TokenDomains: list<string>, AssociationConfig: record<RequestBody: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.GetWebACLForResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1652,14 +1700,15 @@ export def "list-api-keys" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-29
-  scope: any
-  --next-marker: any
-  --limit: any
-]: any -> record<NextMarker: record, APIKeySummaries: record, ApplicationIntegrationURL: record> {
+  --x-amz-target: string@x-amz-target-completer-29 # required
+  scope: string@scope-completer # Specifies whether this is for an Amazon CloudFront distribution or for a regional application. A regional application can be an Application Load Balancer (ALB), an Amazon API Gateway REST API, an AppSync GraphQL API, an Amazon Cognito user pool, or an App Runner service. To work with CloudFront, you must also specify the Region US East (N. Virginia) as follows: CLI - Specify the Region when you use the CloudFront scope: --scope=CLOUDFRONT --region=us-east-1. API and SDKs - For all calls, use the Region endpoint us-east-1.
+  --next-marker: string # When you request a list of objects with a Limit setting, if the number of objects that are still available for retrieval exceeds the limit, WAF returns a NextMarker value in the response. To retrieve the next batch of objects, provide the marker from the prior call in your next request.
+  --limit: int # The maximum number of objects that you want WAF to return for this request. If more objects are available, in the response, WAF provides a NextMarker value that you can use in a subsequent call to get the next batch of objects.
+]: any -> record<NextMarker: string, APIKeySummaries: table<TokenDomains: list, APIKey: string, CreationTimestamp: string, Version: int>, ApplicationIntegrationURL: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.ListAPIKeys")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Scope": $scope, "NextMarker": $next_marker, "Limit": $limit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1702,16 +1751,17 @@ export def "list-available-managed-rule-group-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-30
-  vendor_name: any
-  name: any
-  scope: any
-  --next-marker: any
-  --limit: any
-]: any -> record<NextMarker: record, Versions: record, CurrentDefaultVersion: record> {
+  --x-amz-target: string@x-amz-target-completer-30 # required
+  vendor_name: string # The name of the managed rule group vendor. You use this, along with the rule group name, to identify the rule group.
+  name: string # The name of the managed rule group. You use this, along with the vendor name, to identify the rule group.
+  scope: string@scope-completer # Specifies whether this is for an Amazon CloudFront distribution or for a regional application. A regional application can be an Application Load Balancer (ALB), an Amazon API Gateway REST API, an AppSync GraphQL API, an Amazon Cognito user pool, or an App Runner service. To work with CloudFront, you must also specify the Region US East (N. Virginia) as follows: CLI - Specify the Region when you use the CloudFront scope: --scope=CLOUDFRONT --region=us-east-1. API and SDKs - For all calls, use the Region endpoint us-east-1.
+  --next-marker: string # When you request a list of objects with a Limit setting, if the number of objects that are still available for retrieval exceeds the limit, WAF returns a NextMarker value in the response. To retrieve the next batch of objects, provide the marker from the prior call in your next request.
+  --limit: int # The maximum number of objects that you want WAF to return for this request. If more objects are available, in the response, WAF provides a NextMarker value that you can use in a subsequent call to get the next batch of objects.
+]: any -> record<NextMarker: string, Versions: table<Name: string, LastUpdateTimestamp: string>, CurrentDefaultVersion: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.ListAvailableManagedRuleGroupVersions")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"VendorName": $vendor_name, "Name": $name, "Scope": $scope, "NextMarker": $next_marker, "Limit": $limit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1754,14 +1804,15 @@ export def "list-available-managed-rule-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-31
-  scope: any
-  --next-marker: any
-  --limit: any
-]: any -> record<NextMarker: record, ManagedRuleGroups: record> {
+  --x-amz-target: string@x-amz-target-completer-31 # required
+  scope: string@scope-completer # Specifies whether this is for an Amazon CloudFront distribution or for a regional application. A regional application can be an Application Load Balancer (ALB), an Amazon API Gateway REST API, an AppSync GraphQL API, an Amazon Cognito user pool, or an App Runner service. To work with CloudFront, you must also specify the Region US East (N. Virginia) as follows: CLI - Specify the Region when you use the CloudFront scope: --scope=CLOUDFRONT --region=us-east-1. API and SDKs - For all calls, use the Region endpoint us-east-1.
+  --next-marker: string # When you request a list of objects with a Limit setting, if the number of objects that are still available for retrieval exceeds the limit, WAF returns a NextMarker value in the response. To retrieve the next batch of objects, provide the marker from the prior call in your next request.
+  --limit: int # The maximum number of objects that you want WAF to return for this request. If more objects are available, in the response, WAF provides a NextMarker value that you can use in a subsequent call to get the next batch of objects.
+]: any -> record<NextMarker: string, ManagedRuleGroups: table<VendorName: string, Name: string, VersioningSupported: bool, Description: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.ListAvailableManagedRuleGroups")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Scope": $scope, "NextMarker": $next_marker, "Limit": $limit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1804,14 +1855,15 @@ export def "list-ip-sets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-32
-  scope: any
-  --next-marker: any
-  --limit: any
-]: any -> record<NextMarker: record, IPSets: record> {
+  --x-amz-target: string@x-amz-target-completer-32 # required
+  scope: string@scope-completer # Specifies whether this is for an Amazon CloudFront distribution or for a regional application. A regional application can be an Application Load Balancer (ALB), an Amazon API Gateway REST API, an AppSync GraphQL API, an Amazon Cognito user pool, or an App Runner service. To work with CloudFront, you must also specify the Region US East (N. Virginia) as follows: CLI - Specify the Region when you use the CloudFront scope: --scope=CLOUDFRONT --region=us-east-1. API and SDKs - For all calls, use the Region endpoint us-east-1.
+  --next-marker: string # When you request a list of objects with a Limit setting, if the number of objects that are still available for retrieval exceeds the limit, WAF returns a NextMarker value in the response. To retrieve the next batch of objects, provide the marker from the prior call in your next request.
+  --limit: int # The maximum number of objects that you want WAF to return for this request. If more objects are available, in the response, WAF provides a NextMarker value that you can use in a subsequent call to get the next batch of objects.
+]: any -> record<NextMarker: string, IPSets: table<Name: string, Id: string, Description: string, LockToken: string, ARN: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.ListIPSets")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Scope": $scope, "NextMarker": $next_marker, "Limit": $limit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1854,14 +1906,15 @@ export def "list-logging-configurations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-33
-  scope: any
-  --next-marker: any
-  --limit: any
-]: any -> record<LoggingConfigurations: record, NextMarker: record> {
+  --x-amz-target: string@x-amz-target-completer-33 # required
+  scope: string@scope-completer # Specifies whether this is for an Amazon CloudFront distribution or for a regional application. A regional application can be an Application Load Balancer (ALB), an Amazon API Gateway REST API, an AppSync GraphQL API, an Amazon Cognito user pool, or an App Runner service. To work with CloudFront, you must also specify the Region US East (N. Virginia) as follows: CLI - Specify the Region when you use the CloudFront scope: --scope=CLOUDFRONT --region=us-east-1. API and SDKs - For all calls, use the Region endpoint us-east-1.
+  --next-marker: string # When you request a list of objects with a Limit setting, if the number of objects that are still available for retrieval exceeds the limit, WAF returns a NextMarker value in the response. To retrieve the next batch of objects, provide the marker from the prior call in your next request.
+  --limit: int # The maximum number of objects that you want WAF to return for this request. If more objects are available, in the response, WAF provides a NextMarker value that you can use in a subsequent call to get the next batch of objects.
+]: any -> record<LoggingConfigurations: table<ResourceArn: string, LogDestinationConfigs: list, RedactedFields: list, ManagedByFirewallManager: bool, LoggingFilter: record>, NextMarker: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.ListLoggingConfigurations")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Scope": $scope, "NextMarker": $next_marker, "Limit": $limit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1904,14 +1957,15 @@ export def "list-managed-rule-sets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-34
-  scope: any
-  --next-marker: any
-  --limit: any
-]: any -> record<NextMarker: record, ManagedRuleSets: record> {
+  --x-amz-target: string@x-amz-target-completer-34 # required
+  scope: string@scope-completer # Specifies whether this is for an Amazon CloudFront distribution or for a regional application. A regional application can be an Application Load Balancer (ALB), an Amazon API Gateway REST API, an AppSync GraphQL API, an Amazon Cognito user pool, or an App Runner service. To work with CloudFront, you must also specify the Region US East (N. Virginia) as follows: CLI - Specify the Region when you use the CloudFront scope: --scope=CLOUDFRONT --region=us-east-1. API and SDKs - For all calls, use the Region endpoint us-east-1.
+  --next-marker: string # When you request a list of objects with a Limit setting, if the number of objects that are still available for retrieval exceeds the limit, WAF returns a NextMarker value in the response. To retrieve the next batch of objects, provide the marker from the prior call in your next request.
+  --limit: int # The maximum number of objects that you want WAF to return for this request. If more objects are available, in the response, WAF provides a NextMarker value that you can use in a subsequent call to get the next batch of objects.
+]: any -> record<NextMarker: string, ManagedRuleSets: table<Name: string, Id: string, Description: string, LockToken: string, ARN: string, LabelNamespace: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.ListManagedRuleSets")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Scope": $scope, "NextMarker": $next_marker, "Limit": $limit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1954,14 +2008,15 @@ export def "list-mobile-sdk-releases" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-35
-  platform: any
-  --next-marker: any
-  --limit: any
-]: any -> record<ReleaseSummaries: record, NextMarker: record> {
+  --x-amz-target: string@x-amz-target-completer-35 # required
+  platform: string@platform-completer # The device platform to retrieve the list for.
+  --next-marker: string # When you request a list of objects with a Limit setting, if the number of objects that are still available for retrieval exceeds the limit, WAF returns a NextMarker value in the response. To retrieve the next batch of objects, provide the marker from the prior call in your next request.
+  --limit: int # The maximum number of objects that you want WAF to return for this request. If more objects are available, in the response, WAF provides a NextMarker value that you can use in a subsequent call to get the next batch of objects.
+]: any -> record<ReleaseSummaries: table<ReleaseVersion: string, Timestamp: string>, NextMarker: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.ListMobileSdkReleases")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Platform": $platform, "NextMarker": $next_marker, "Limit": $limit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2004,14 +2059,15 @@ export def "list-regex-pattern-sets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-36
-  scope: any
-  --next-marker: any
-  --limit: any
-]: any -> record<NextMarker: record, RegexPatternSets: record> {
+  --x-amz-target: string@x-amz-target-completer-36 # required
+  scope: string@scope-completer # Specifies whether this is for an Amazon CloudFront distribution or for a regional application. A regional application can be an Application Load Balancer (ALB), an Amazon API Gateway REST API, an AppSync GraphQL API, an Amazon Cognito user pool, or an App Runner service. To work with CloudFront, you must also specify the Region US East (N. Virginia) as follows: CLI - Specify the Region when you use the CloudFront scope: --scope=CLOUDFRONT --region=us-east-1. API and SDKs - For all calls, use the Region endpoint us-east-1.
+  --next-marker: string # When you request a list of objects with a Limit setting, if the number of objects that are still available for retrieval exceeds the limit, WAF returns a NextMarker value in the response. To retrieve the next batch of objects, provide the marker from the prior call in your next request.
+  --limit: int # The maximum number of objects that you want WAF to return for this request. If more objects are available, in the response, WAF provides a NextMarker value that you can use in a subsequent call to get the next batch of objects.
+]: any -> record<NextMarker: string, RegexPatternSets: table<Name: string, Id: string, Description: string, LockToken: string, ARN: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.ListRegexPatternSets")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Scope": $scope, "NextMarker": $next_marker, "Limit": $limit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2054,13 +2110,14 @@ export def "list-resources-for-web-acl" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-37
-  web_acl_arn: any
-  --resource-type: any
-]: any -> record<ResourceArns: record> {
+  --x-amz-target: string@x-amz-target-completer-37 # required
+  web_acl_arn: string # The Amazon Resource Name (ARN) of the web ACL.
+  --resource-type: string@resource-type-completer # Used for web ACLs that are scoped for regional applications. A regional application can be an Application Load Balancer (ALB), an Amazon API Gateway REST API, an AppSync GraphQL API, an Amazon Cognito user pool, or an App Runner service. If you don't provide a resource type, the call uses the resource type APPLICATION_LOAD_BALANCER. Default: APPLICATION_LOAD_BALANCER
+]: any -> record<ResourceArns: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.ListResourcesForWebACL")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"WebACLArn": $web_acl_arn, "ResourceType": $resource_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2103,14 +2160,15 @@ export def "list-rule-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-38
-  scope: any
-  --next-marker: any
-  --limit: any
-]: any -> record<NextMarker: record, RuleGroups: record> {
+  --x-amz-target: string@x-amz-target-completer-38 # required
+  scope: string@scope-completer # Specifies whether this is for an Amazon CloudFront distribution or for a regional application. A regional application can be an Application Load Balancer (ALB), an Amazon API Gateway REST API, an AppSync GraphQL API, an Amazon Cognito user pool, or an App Runner service. To work with CloudFront, you must also specify the Region US East (N. Virginia) as follows: CLI - Specify the Region when you use the CloudFront scope: --scope=CLOUDFRONT --region=us-east-1. API and SDKs - For all calls, use the Region endpoint us-east-1.
+  --next-marker: string # When you request a list of objects with a Limit setting, if the number of objects that are still available for retrieval exceeds the limit, WAF returns a NextMarker value in the response. To retrieve the next batch of objects, provide the marker from the prior call in your next request.
+  --limit: int # The maximum number of objects that you want WAF to return for this request. If more objects are available, in the response, WAF provides a NextMarker value that you can use in a subsequent call to get the next batch of objects.
+]: any -> record<NextMarker: string, RuleGroups: table<Name: string, Id: string, Description: string, LockToken: string, ARN: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.ListRuleGroups")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Scope": $scope, "NextMarker": $next_marker, "Limit": $limit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2153,14 +2211,15 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-39
-  --next-marker: any
-  --limit: any
-  resource_arn: any
-]: any -> record<NextMarker: record, TagInfoForResource: record<ResourceARN: record, TagList: record>> {
+  --x-amz-target: string@x-amz-target-completer-39 # required
+  --next-marker: string # When you request a list of objects with a Limit setting, if the number of objects that are still available for retrieval exceeds the limit, WAF returns a NextMarker value in the response. To retrieve the next batch of objects, provide the marker from the prior call in your next request.
+  --limit: int # The maximum number of objects that you want WAF to return for this request. If more objects are available, in the response, WAF provides a NextMarker value that you can use in a subsequent call to get the next batch of objects.
+  resource_arn: string # The Amazon Resource Name (ARN) of the resource.
+]: any -> record<NextMarker: string, TagInfoForResource: record<ResourceARN: string, TagList: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.ListTagsForResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"NextMarker": $next_marker, "Limit": $limit, "ResourceARN": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2203,14 +2262,15 @@ export def "list-web-ac-ls" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-40
-  scope: any
-  --next-marker: any
-  --limit: any
-]: any -> record<NextMarker: record, WebACLs: record> {
+  --x-amz-target: string@x-amz-target-completer-40 # required
+  scope: string@scope-completer # Specifies whether this is for an Amazon CloudFront distribution or for a regional application. A regional application can be an Application Load Balancer (ALB), an Amazon API Gateway REST API, an AppSync GraphQL API, an Amazon Cognito user pool, or an App Runner service. To work with CloudFront, you must also specify the Region US East (N. Virginia) as follows: CLI - Specify the Region when you use the CloudFront scope: --scope=CLOUDFRONT --region=us-east-1. API and SDKs - For all calls, use the Region endpoint us-east-1.
+  --next-marker: string # When you request a list of objects with a Limit setting, if the number of objects that are still available for retrieval exceeds the limit, WAF returns a NextMarker value in the response. To retrieve the next batch of objects, provide the marker from the prior call in your next request.
+  --limit: int # The maximum number of objects that you want WAF to return for this request. If more objects are available, in the response, WAF provides a NextMarker value that you can use in a subsequent call to get the next batch of objects.
+]: any -> record<NextMarker: string, WebACLs: table<Name: string, Id: string, Description: string, LockToken: string, ARN: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.ListWebACLs")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Scope": $scope, "NextMarker": $next_marker, "Limit": $limit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2236,6 +2296,7 @@ export def "list-web-ac-ls" [
 #
 # POST /
 # operationId: PutLoggingConfiguration
+# --LoggingConfiguration shape: {ResourceArn: string, LogDestinationConfigs: list<string>, RedactedFields?: list, ManagedByFirewallManager?: bool, LoggingFilter?: record}
 export def "put-logging-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2253,12 +2314,13 @@ export def "put-logging-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-41
-  logging_configuration: any
-]: any -> record<LoggingConfiguration: record<ResourceArn: record, LogDestinationConfigs: record, RedactedFields: record, ManagedByFirewallManager: record, LoggingFilter: record<Filters: record, DefaultBehavior: record>>> {
+  --x-amz-target: string@x-amz-target-completer-41 # required
+  logging_configuration: record # Defines an association between logging destinations and a web ACL resource, for logging from WAF. As part of the association, you can specify parts of the standard logging fields to keep out of the logs and you can specify filters so that you log only a subset of the logging records. You can define one logging destination per web ACL. You can access information about the traffic that WAF inspects using the following steps: Create your logging destination. You can use an Amazon CloudWatch Logs log group, an Amazon Simple Storage Service (Amazon S3) bucket, or an Amazon Kinesis Data Firehose. The name that you give the destination must start with aws-waf-logs-. Depending on the type of destination, you might need to configure additional settings or permissions. For configuration requirements and pricing information for each destination type, see Logging web ACL traffic (https://docs.aws.amazon.com/waf/latest/developerguide/logging.html) in the WAF Developer Guide. Associate your logging destination to your web ACL using a PutLoggingConfiguration request. When you successfully enable logging using a PutLoggingConfiguration request, WAF creates an additional role or policy that is required to write logs to the logging destination. For an Amazon CloudWatch Logs log group, WAF creates a resource policy on the log group. For an Amazon S3 bucket, WAF creates a bucket policy. For an Amazon Kinesis Data Firehose, WAF creates a service-linked role. For additional information about web ACL logging, see Logging web ACL traffic information (https://docs.aws.amazon.com/waf/latest/developerguide/logging.html) in the WAF Developer Guide. — shape: {ResourceArn: string, LogDestinationConfigs: list<string>, RedactedFields?: list, ManagedByFirewallManager?: bool, LoggingFilter?: record}
+]: any -> record<LoggingConfiguration: record<ResourceArn: string, LogDestinationConfigs: list<string>, RedactedFields: list<record>, ManagedByFirewallManager: bool, LoggingFilter: record<Filters: list, DefaultBehavior: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.PutLoggingConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LoggingConfiguration": $logging_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2301,17 +2363,18 @@ export def "put-managed-rule-set-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-42
-  name: any
-  scope: any
-  id: any
-  lock_token: any
-  --recommended-version: any
-  --versions-to-publish: any
-]: any -> record<NextLockToken: record> {
+  --x-amz-target: string@x-amz-target-completer-42 # required
+  name: string # The name of the managed rule set. You use this, along with the rule set ID, to identify the rule set. This name is assigned to the corresponding managed rule group, which your customers can access and use.
+  scope: string@scope-completer # Specifies whether this is for an Amazon CloudFront distribution or for a regional application. A regional application can be an Application Load Balancer (ALB), an Amazon API Gateway REST API, an AppSync GraphQL API, an Amazon Cognito user pool, or an App Runner service. To work with CloudFront, you must also specify the Region US East (N. Virginia) as follows: CLI - Specify the Region when you use the CloudFront scope: --scope=CLOUDFRONT --region=us-east-1. API and SDKs - For all calls, use the Region endpoint us-east-1.
+  id: string # A unique identifier for the managed rule set. The ID is returned in the responses to commands like list. You provide it to operations like get and update.
+  lock_token: string # A token used for optimistic locking. WAF returns a token to your get and list requests, to mark the state of the entity at the time of the request. To make changes to the entity associated with the token, you provide the token to operations like update and delete. WAF uses the token to ensure that no changes have been made to the entity since you last retrieved it. If a change has been made, the update fails with a WAFOptimisticLockException. If this happens, perform another get, and use the new token returned by that operation.
+  --recommended-version: string # The version of the named managed rule group that you'd like your customers to choose, from among your version offerings.
+  --versions-to-publish: record # The versions of the named managed rule group that you want to offer to your customers.
+]: any -> record<NextLockToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.PutManagedRuleSetVersions")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Scope": $scope, "Id": $id, "LockToken": $lock_token, "RecommendedVersion": $recommended_version, "VersionsToPublish": $versions_to_publish} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2354,13 +2417,14 @@ export def "put-permission-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-43
-  resource_arn: any
-  policy: any
+  --x-amz-target: string@x-amz-target-completer-43 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the RuleGroup to which you want to attach the policy.
+  policy: string # The policy to attach to the specified rule group. The policy specifications must conform to the following: The policy must be composed using IAM Policy version 2012-10-17. The policy must include specifications for Effect, Action, and Principal. Effect must specify Allow. Action must specify wafv2:CreateWebACL, wafv2:UpdateWebACL, and wafv2:PutFirewallManagerRuleGroups and may optionally specify wafv2:GetRuleGroup. WAF rejects any extra actions or wildcard actions in the policy. The policy must not include a Resource parameter. For more information, see IAM Policies (https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html).
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.PutPermissionPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "Policy": $policy} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2386,6 +2450,7 @@ export def "put-permission-policy" [
 #
 # POST /
 # operationId: TagResource
+# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2403,13 +2468,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-44
-  resource_arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-44 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the resource.
+  tags: list # An array of key:value pairs to associate with the resource. — item shape: {Key: string, Value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceARN": $resource_arn, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2452,13 +2518,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-45
-  resource_arn: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-45 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the resource.
+  tag_keys: list<string> # An array of keys identifying the tags to disassociate from the resource.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceARN": $resource_arn, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2501,17 +2568,18 @@ export def "update-ip-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-46
-  name: any
-  scope: any
-  id: any
-  --description: any
-  addresses: any
-  lock_token: any
-]: any -> record<NextLockToken: record> {
+  --x-amz-target: string@x-amz-target-completer-46 # required
+  name: string # The name of the IP set. You cannot change the name of an IPSet after you create it.
+  scope: string@scope-completer # Specifies whether this is for an Amazon CloudFront distribution or for a regional application. A regional application can be an Application Load Balancer (ALB), an Amazon API Gateway REST API, an AppSync GraphQL API, an Amazon Cognito user pool, or an App Runner service. To work with CloudFront, you must also specify the Region US East (N. Virginia) as follows: CLI - Specify the Region when you use the CloudFront scope: --scope=CLOUDFRONT --region=us-east-1. API and SDKs - For all calls, use the Region endpoint us-east-1.
+  id: string # A unique identifier for the set. This ID is returned in the responses to create and list commands. You provide it to operations like update and delete.
+  --description: string # A description of the IP set that helps with identification.
+  addresses: list<string> # Contains an array of strings that specifies zero or more IP addresses or blocks of IP addresses. All addresses must be specified using Classless Inter-Domain Routing (CIDR) notation. WAF supports all IPv4 and IPv6 CIDR ranges except for /0. Example address strings: To configure WAF to allow, block, or count requests that originated from the IP address 192.0.2.44, specify 192.0.2.44/32. To configure WAF to allow, block, or count requests that originated from IP addresses from 192.0.2.0 to 192.0.2.255, specify 192.0.2.0/24. To configure WAF to allow, block, or count requests that originated from the IP address 1111:0000:0000:0000:0000:0000:0000:0111, specify 1111:0000:0000:0000:0000:0000:0000:0111/128. To configure WAF to allow, block, or count requests that originated from IP addresses 1111:0000:0000:0000:0000:0000:0000:0000 to 1111:0000:0000:0000:ffff:ffff:ffff:ffff, specify 1111:0000:0000:0000:0000:0000:0000:0000/64. For more information about CIDR notation, see the Wikipedia entry Classless Inter-Domain Routing (https://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing). Example JSON Addresses specifications: Empty array: "Addresses": [] Array with one address: "Addresses": ["192.0.2.44/32"] Array with three addresses: "Addresses": ["192.0.2.44/32", "192.0.2.0/24", "192.0.0.0/16"] INVALID specification: "Addresses": [""] INVALID
+  lock_token: string # A token used for optimistic locking. WAF returns a token to your get and list requests, to mark the state of the entity at the time of the request. To make changes to the entity associated with the token, you provide the token to operations like update and delete. WAF uses the token to ensure that no changes have been made to the entity since you last retrieved it. If a change has been made, the update fails with a WAFOptimisticLockException. If this happens, perform another get, and use the new token returned by that operation.
+]: any -> record<NextLockToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.UpdateIPSet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Scope": $scope, "Id": $id, "Description": $description, "Addresses": $addresses, "LockToken": $lock_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2554,17 +2622,18 @@ export def "update-managed-rule-set-version-expiry-date" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-47
-  name: any
-  scope: any
-  id: any
-  lock_token: any
-  version_to_expire: any
-  expiry_timestamp: any
-]: any -> record<ExpiringVersion: record, ExpiryTimestamp: record, NextLockToken: record> {
+  --x-amz-target: string@x-amz-target-completer-47 # required
+  name: string # The name of the managed rule set. You use this, along with the rule set ID, to identify the rule set. This name is assigned to the corresponding managed rule group, which your customers can access and use.
+  scope: string@scope-completer # Specifies whether this is for an Amazon CloudFront distribution or for a regional application. A regional application can be an Application Load Balancer (ALB), an Amazon API Gateway REST API, an AppSync GraphQL API, an Amazon Cognito user pool, or an App Runner service. To work with CloudFront, you must also specify the Region US East (N. Virginia) as follows: CLI - Specify the Region when you use the CloudFront scope: --scope=CLOUDFRONT --region=us-east-1. API and SDKs - For all calls, use the Region endpoint us-east-1.
+  id: string # A unique identifier for the managed rule set. The ID is returned in the responses to commands like list. You provide it to operations like get and update.
+  lock_token: string # A token used for optimistic locking. WAF returns a token to your get and list requests, to mark the state of the entity at the time of the request. To make changes to the entity associated with the token, you provide the token to operations like update and delete. WAF uses the token to ensure that no changes have been made to the entity since you last retrieved it. If a change has been made, the update fails with a WAFOptimisticLockException. If this happens, perform another get, and use the new token returned by that operation.
+  version_to_expire: string # The version that you want to remove from your list of offerings for the named managed rule group.
+  expiry_timestamp: string # The time that you want the version to expire. Times are in Coordinated Universal Time (UTC) format. UTC format includes the special designator, Z. For example, "2016-09-27T14:50Z". (format: date-time)
+]: any -> record<ExpiringVersion: string, ExpiryTimestamp: string, NextLockToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.UpdateManagedRuleSetVersionExpiryDate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Scope": $scope, "Id": $id, "LockToken": $lock_token, "VersionToExpire": $version_to_expire, "ExpiryTimestamp": $expiry_timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2590,6 +2659,7 @@ export def "update-managed-rule-set-version-expiry-date" [
 #
 # POST /
 # operationId: UpdateRegexPatternSet
+# --RegularExpressionList item shape: {RegexString?: string}
 export def "update-regex-pattern-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2607,17 +2677,18 @@ export def "update-regex-pattern-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-48
-  name: any
-  scope: any
-  id: any
-  --description: any
-  regular_expression_list: any
-  lock_token: any
-]: any -> record<NextLockToken: record> {
+  --x-amz-target: string@x-amz-target-completer-48 # required
+  name: string # The name of the set. You cannot change the name after you create the set.
+  scope: string@scope-completer # Specifies whether this is for an Amazon CloudFront distribution or for a regional application. A regional application can be an Application Load Balancer (ALB), an Amazon API Gateway REST API, an AppSync GraphQL API, an Amazon Cognito user pool, or an App Runner service. To work with CloudFront, you must also specify the Region US East (N. Virginia) as follows: CLI - Specify the Region when you use the CloudFront scope: --scope=CLOUDFRONT --region=us-east-1. API and SDKs - For all calls, use the Region endpoint us-east-1.
+  id: string # A unique identifier for the set. This ID is returned in the responses to create and list commands. You provide it to operations like update and delete.
+  --description: string # A description of the set that helps with identification.
+  regular_expression_list: list # item shape: {RegexString?: string}
+  lock_token: string # A token used for optimistic locking. WAF returns a token to your get and list requests, to mark the state of the entity at the time of the request. To make changes to the entity associated with the token, you provide the token to operations like update and delete. WAF uses the token to ensure that no changes have been made to the entity since you last retrieved it. If a change has been made, the update fails with a WAFOptimisticLockException. If this happens, perform another get, and use the new token returned by that operation.
+]: any -> record<NextLockToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.UpdateRegexPatternSet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Scope": $scope, "Id": $id, "Description": $description, "RegularExpressionList": $regular_expression_list, "LockToken": $lock_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2643,6 +2714,8 @@ export def "update-regex-pattern-set" [
 #
 # POST /
 # operationId: UpdateRuleGroup
+# --Rules item shape: {Name: string, Priority: int, Statement: record, Action?: record, OverrideAction?: record, RuleLabels?: list, VisibilityConfig: record, CaptchaConfig?: record, ChallengeConfig?: record}
+# --VisibilityConfig shape: {SampledRequestsEnabled: bool, CloudWatchMetricsEnabled: bool, MetricName: string}
 export def "update-rule-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2660,19 +2733,20 @@ export def "update-rule-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-49
-  name: any
-  scope: any
-  id: any
-  --description: any
-  --rules: any
-  visibility_config: any
-  lock_token: any
-  --custom-response-bodies: any
-]: any -> record<NextLockToken: record> {
+  --x-amz-target: string@x-amz-target-completer-49 # required
+  name: string # The name of the rule group. You cannot change the name of a rule group after you create it.
+  scope: string@scope-completer # Specifies whether this is for an Amazon CloudFront distribution or for a regional application. A regional application can be an Application Load Balancer (ALB), an Amazon API Gateway REST API, an AppSync GraphQL API, an Amazon Cognito user pool, or an App Runner service. To work with CloudFront, you must also specify the Region US East (N. Virginia) as follows: CLI - Specify the Region when you use the CloudFront scope: --scope=CLOUDFRONT --region=us-east-1. API and SDKs - For all calls, use the Region endpoint us-east-1.
+  id: string # A unique identifier for the rule group. This ID is returned in the responses to create and list commands. You provide it to operations like update and delete.
+  --description: string # A description of the rule group that helps with identification.
+  --rules: list # The Rule statements used to identify the web requests that you want to allow, block, or count. Each rule includes one top-level statement that WAF uses to identify matching web requests, and parameters that govern how WAF handles them. — item shape: {Name: string, Priority: int, Statement: record, Action?: record, OverrideAction?: record, RuleLabels?: list, VisibilityConfig: record, CaptchaConfig?: record, ChallengeConfig?: record}
+  visibility_config: record # Defines and enables Amazon CloudWatch metrics and web request sample collection. — shape: {SampledRequestsEnabled: bool, CloudWatchMetricsEnabled: bool, MetricName: string}
+  lock_token: string # A token used for optimistic locking. WAF returns a token to your get and list requests, to mark the state of the entity at the time of the request. To make changes to the entity associated with the token, you provide the token to operations like update and delete. WAF uses the token to ensure that no changes have been made to the entity since you last retrieved it. If a change has been made, the update fails with a WAFOptimisticLockException. If this happens, perform another get, and use the new token returned by that operation.
+  --custom-response-bodies: record # A map of custom response keys and content bodies. When you create a rule with a block action, you can send a custom response to the web request. You define these for the rule group, and then use them in the rules that you define in the rule group. For information about customizing web requests and responses, see Customizing web requests and responses in WAF (https://docs.aws.amazon.com/waf/latest/developerguide/waf-custom-request-response.html) in the WAF Developer Guide. For information about the limits on count and size for custom request and response settings, see WAF quotas (https://docs.aws.amazon.com/waf/latest/developerguide/limits.html) in the WAF Developer Guide.
+]: any -> record<NextLockToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.UpdateRuleGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Scope": $scope, "Id": $id, "Description": $description, "Rules": $rules, "VisibilityConfig": $visibility_config, "LockToken": $lock_token, "CustomResponseBodies": $custom_response_bodies} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2698,6 +2772,12 @@ export def "update-rule-group" [
 #
 # POST /
 # operationId: UpdateWebACL
+# --DefaultAction shape: {Block?: record, Allow?: record}
+# --Rules item shape: {Name: string, Priority: int, Statement: record, Action?: record, OverrideAction?: record, RuleLabels?: list, VisibilityConfig: record, CaptchaConfig?: record, ChallengeConfig?: record}
+# --VisibilityConfig shape: {SampledRequestsEnabled: bool, CloudWatchMetricsEnabled: bool, MetricName: string}
+# --CaptchaConfig shape: {ImmunityTimeProperty?: record}
+# --ChallengeConfig shape: {ImmunityTimeProperty?: record}
+# --AssociationConfig shape: {RequestBody?: record}
 export def "update-web-acl" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2715,24 +2795,25 @@ export def "update-web-acl" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-50
-  name: any
-  scope: any
-  id: any
-  default_action: any
-  --description: any
-  --rules: any
-  visibility_config: any
-  lock_token: any
-  --custom-response-bodies: any
-  --captcha-config: any
-  --challenge-config: any
-  --token-domains: any
-  --association-config: any
-]: any -> record<NextLockToken: record> {
+  --x-amz-target: string@x-amz-target-completer-50 # required
+  name: string # The name of the web ACL. You cannot change the name of a web ACL after you create it.
+  scope: string@scope-completer # Specifies whether this is for an Amazon CloudFront distribution or for a regional application. A regional application can be an Application Load Balancer (ALB), an Amazon API Gateway REST API, an AppSync GraphQL API, an Amazon Cognito user pool, or an App Runner service. To work with CloudFront, you must also specify the Region US East (N. Virginia) as follows: CLI - Specify the Region when you use the CloudFront scope: --scope=CLOUDFRONT --region=us-east-1. API and SDKs - For all calls, use the Region endpoint us-east-1.
+  id: string # The unique identifier for the web ACL. This ID is returned in the responses to create and list commands. You provide it to operations like update and delete.
+  default_action: record # In a WebACL, this is the action that you want WAF to perform when a web request doesn't match any of the rules in the WebACL. The default action must be a terminating action. — shape: {Block?: record, Allow?: record}
+  --description: string # A description of the web ACL that helps with identification.
+  --rules: list # The Rule statements used to identify the web requests that you want to allow, block, or count. Each rule includes one top-level statement that WAF uses to identify matching web requests, and parameters that govern how WAF handles them. — item shape: {Name: string, Priority: int, Statement: record, Action?: record, OverrideAction?: record, RuleLabels?: list, VisibilityConfig: record, CaptchaConfig?: record, ChallengeConfig?: record}
+  visibility_config: record # Defines and enables Amazon CloudWatch metrics and web request sample collection. — shape: {SampledRequestsEnabled: bool, CloudWatchMetricsEnabled: bool, MetricName: string}
+  lock_token: string # A token used for optimistic locking. WAF returns a token to your get and list requests, to mark the state of the entity at the time of the request. To make changes to the entity associated with the token, you provide the token to operations like update and delete. WAF uses the token to ensure that no changes have been made to the entity since you last retrieved it. If a change has been made, the update fails with a WAFOptimisticLockException. If this happens, perform another get, and use the new token returned by that operation.
+  --custom-response-bodies: record # A map of custom response keys and content bodies. When you create a rule with a block action, you can send a custom response to the web request. You define these for the web ACL, and then use them in the rules and default actions that you define in the web ACL. For information about customizing web requests and responses, see Customizing web requests and responses in WAF (https://docs.aws.amazon.com/waf/latest/developerguide/waf-custom-request-response.html) in the WAF Developer Guide. For information about the limits on count and size for custom request and response settings, see WAF quotas (https://docs.aws.amazon.com/waf/latest/developerguide/limits.html) in the WAF Developer Guide.
+  --captcha-config: record # Specifies how WAF should handle CAPTCHA evaluations. This is available at the web ACL level and in each rule. — shape: {ImmunityTimeProperty?: record}
+  --challenge-config: record # Specifies how WAF should handle Challenge evaluations. This is available at the web ACL level and in each rule. — shape: {ImmunityTimeProperty?: record}
+  --token-domains: list<string> # Specifies the domains that WAF should accept in a web request token. This enables the use of tokens across multiple protected websites. When WAF provides a token, it uses the domain of the Amazon Web Services resource that the web ACL is protecting. If you don't specify a list of token domains, WAF accepts tokens only for the domain of the protected resource. With a token domain list, WAF accepts the resource's host domain plus all domains in the token domain list, including their prefixed subdomains. Example JSON: "TokenDomains": { "mywebsite.com", "myotherwebsite.com" } Public suffixes aren't allowed. For example, you can't use usa.gov or co.uk as token domains.
+  --association-config: record # Specifies custom configurations for the associations between the web ACL and protected resources. Use this to customize the maximum size of the request body that your protected CloudFront distributions forward to WAF for inspection. The default is 16 KB (16,384 kilobytes). You are charged additional fees when your protected resources forward body sizes that are larger than the default. For more information, see WAF Pricing (http://aws.amazon.com/waf/pricing/). — shape: {RequestBody?: record}
+]: any -> record<NextLockToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSWAF_20190729.UpdateWebACL")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Scope": $scope, "Id": $id, "DefaultAction": $default_action, "Description": $description, "Rules": $rules, "VisibilityConfig": $visibility_config, "LockToken": $lock_token, "CustomResponseBodies": $custom_response_bodies, "CaptchaConfig": $captcha_config, "ChallengeConfig": $challenge_config, "TokenDomains": $token_domains, "AssociationConfig": $association_config} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

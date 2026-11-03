@@ -177,12 +177,13 @@ export def "get-rcra-rest-services-get-download" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string # Output Format Flag. Enter one of the following keywords: - CSV = Facility results formatted as comma delimited file download (default). - GEOJSOND = Facility results formatted as GeoJSON feature collection download.
-  --qid: string # Query ID Selector. Enter the QueryID number from a previously run query.
+  --qid: string # Query ID Selector. Enter the QueryID number from a previously run query. (required)
   --qcolumns: string # Used to customize service output. A list of comma-separated column IDs of output objects that will be returned in the service query object or download. Use the metadata service endpoint for a complete list of Ids and definitions.
   --p-pretty-print: float # Optional flag to request GeoJSON formatted results to be pretty printed. Only provide a numeric value when the output needs to be human readable as pretty printing has a performance cost.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qid == null) { error make --unspanned { msg: "required query parameter 'qid' missing: pass --qid" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "qid" $qid "scalar") (serialize-qp "qcolumns" $qcolumns "scalar") (serialize-qp "p_pretty_print" $p_pretty_print "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rcra_rest_services.get_download" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -786,7 +787,7 @@ export def "get-rcra-rest-services-get-geojson" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string # Output Format Flag. Enter one of the following keywords: - GEOJSON = Facility results formatted as GeoJSON feature collection (default). - GEOJSONP = Facility results formatted as GeoJSON feature collection with Padding. - GEOJSOND = Facility results formatted as GeoJSON feature collection download.
-  --qid: string # Query ID Selector. Enter the QueryID number from a previously run query.
+  --qid: string # Query ID Selector. Enter the QueryID number from a previously run query. (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
   --newsort: float # Output Sort Column. Enter the number of the column on which the data will be sorted. If unpopulated results will sort on the first column.
   --descending: string@descending-completer # Output Sort Column Descending Flag. Enter Y to column identified in the newsort parameter descending. Enter N to use ascending sort order. Used only when newsort parameter is populated.
@@ -795,6 +796,7 @@ export def "get-rcra-rest-services-get-geojson" [
 ]: nothing -> record<features: table<geometry: record, properties: record, type: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qid == null) { error make --unspanned { msg: "required query parameter 'qid' missing: pass --qid" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "qid" $qid "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "newsort" $newsort "scalar") (serialize-qp "descending" $descending "scalar") (serialize-qp "qcolumns" $qcolumns "scalar") (serialize-qp "p_pretty_print" $p_pretty_print "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rcra_rest_services.get_geojson" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -873,11 +875,12 @@ export def "get-rcra-rest-services-get-info-clusters" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string # Output Format Flag. Enter one of the following keywords: - CSV = Facility results formatted as comma delimited file download (default). - GEOJSOND = Facility results formatted as GeoJSON feature collection download.
-  --p-qid: string # Query ID Selector. Enter the QueryID number from a previously run query.
+  --p-qid: string # Query ID Selector. Enter the QueryID number from a previously run query. (required)
   --p-pretty-print: float # Optional flag to request GeoJSON formatted results to be pretty printed. Only provide a numeric value when the output needs to be human readable as pretty printing has a performance cost.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($p_qid == null) { error make --unspanned { msg: "required query parameter 'p_qid' missing: pass --p-qid" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_qid" $p_qid "scalar") (serialize-qp "p_pretty_print" $p_pretty_print "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rcra_rest_services.get_info_clusters" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -952,17 +955,19 @@ export def "get-rcra-rest-services-get-map" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --qid: string # Query ID Selector. Enter the QueryID number from a previously run query.
+  --qid: string # Query ID Selector. Enter the QueryID number from a previously run query. (required)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
   --tablelist: string@tablelist-completer # Table List Flag. Enter a Y to display the first page of facility results.
   --c1-lat: float # Latitude of 1st corner of box that bounds the resulting facilities. The latitude and longitude of both corners of the bounding box must be provided.
   --c1-long: float # Longitude of 1st corner of box that bounds the resulting facilities. The latitude and longitude of both corners of the bounding box must be provided.
   --c2-lat: float # Latitude of 2nd corner of box that bounds the resulting facilities. The latitude and longitude of both corners of the bounding box must be provided.
   --c2-long: float # Longitude of 2nd corner of box that bounds the resulting facilities. The latitude and longitude of both corners of the bounding box must be provided.
-  --p-id: string # Identifier for the service.
+  --p-id: string # Identifier for the service. (required)
 ]: nothing -> record<MapOutput: record<IconBaseURL: string, MapData: list<record>, PopUpBaseURL: string, QueryID: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qid == null) { error make --unspanned { msg: "required query parameter 'qid' missing: pass --qid" } }
+  if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "qid" $qid "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "tablelist" $tablelist "scalar") (serialize-qp "c1_lat" $c1_lat "scalar") (serialize-qp "c1_long" $c1_long "scalar") (serialize-qp "c2_lat" $c2_lat "scalar") (serialize-qp "c2_long" $c2_long "scalar") (serialize-qp "p_id" $p_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rcra_rest_services.get_map" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1043,7 +1048,7 @@ export def "get-rcra-rest-services-get-qid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --qid: string # Query ID Selector. Enter the QueryID number from a previously run query.
+  --qid: string # Query ID Selector. Enter the QueryID number from a previously run query. (required)
   --pageno: float # Indicates the number of the page to display. It is used only when the results are paginated. (default: 1)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
   --newsort: float # Output Sort Column. Enter the number of the column on which the data will be sorted. If unpopulated results will sort on the first column.
@@ -1052,6 +1057,7 @@ export def "get-rcra-rest-services-get-qid" [
 ]: nothing -> record<Results: record<Facilities: list<record>, Message: string, PageNo: string, QueryID: string, QueryRows: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qid == null) { error make --unspanned { msg: "required query parameter 'qid' missing: pass --qid" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "qid" $qid "scalar") (serialize-qp "pageno" $pageno "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "newsort" $newsort "scalar") (serialize-qp "descending" $descending "scalar") (serialize-qp "qcolumns" $qcolumns "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rcra_rest_services.get_qid" $qp $auth.query)
   let accept_val = ($accept | default "application/json")

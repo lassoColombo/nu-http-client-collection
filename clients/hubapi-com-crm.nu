@@ -1,4 +1,4 @@
-# Auto-generated client for CRM cards vv3
+# Auto-generated client for CRM cards v3
 # Source: https://api.apis.guru/v2/specs/hubapi.com/crm/v3/openapi.json
 # Auth: --token flag or $env.CRM_CARDS_TOKEN
 
@@ -112,6 +112,8 @@ def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors
 def base-url-completer [] { ["https://api.hubapi.com"] }
 def auth-scheme-completer [] { ["query-hapikey" "none"] }
 
+# Completers for enum parameters
+def accept-completer [] { ["*/*" "application/json"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -150,11 +152,12 @@ export def "get-crm-v3-extensions-cards-sample-response-get-cards-sample-respons
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
 ]: nothing -> record<allItemsLinkUrl: string, cardLabel: string, responseVersion: string, sections: table<actions: list, id: string, linkUrl: string, title: string, tokens: list>, topLevelActions: record<primary: any, secondary: list<any>, settings: record<height: int, label: string, propertyNamesIncluded: list, type: string, url: string, width: int>>, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/crm/v3/extensions/cards/sample-response" $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -185,12 +188,13 @@ export def "get-crm-v3-extensions-cards-get-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
 ]: nothing -> record<results: table<actions: record, createdAt: string, display: record, fetch: record, id: string, title: string, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/crm/v3/extensions/cards/{app_id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -224,6 +228,7 @@ export def "post-crm-v3-extensions-cards-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   actions: record # Configuration for custom user actions on cards. (e.g. {baseUrls: [https://www.example.com/hubspot]}) — shape: {baseUrls: list<string>}
   display: record # Configuration for displayed info on a card — shape: {properties: list}
   fetch: record # Configuration for this card's data fetch request. — shape: {objectTypes: list, targetUrl: string}
@@ -236,7 +241,7 @@ export def "post-crm-v3-extensions-cards-create" [
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/crm/v3/extensions/cards/{app_id}") $auth.query)
   let req_body = {"actions": $actions, "display": $display, "fetch": $fetch, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -274,7 +279,7 @@ export def "delete-crm-v3-extensions-cards-archive" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($card_id | is-empty) { error make --unspanned { msg: "path parameter 'cardId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), card_id: (encode-path-segment $card_id)} | format pattern "/crm/v3/extensions/cards/{app_id}/{card_id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
@@ -306,13 +311,14 @@ export def "get-crm-v3-extensions-cards-get-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
 ]: nothing -> record<actions: record<baseUrls: list<string>>, createdAt: string, display: record<properties: list<record>>, fetch: record<objectTypes: list<record>, targetUrl: string>, id: string, title: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($card_id | is-empty) { error make --unspanned { msg: "path parameter 'cardId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), card_id: (encode-path-segment $card_id)} | format pattern "/crm/v3/extensions/cards/{app_id}/{card_id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -347,6 +353,7 @@ export def "patch-crm-v3-extensions-cards-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --actions: record # Configuration for custom user actions on cards. (e.g. {baseUrls: [https://www.example.com/hubspot]}) — shape: {baseUrls: list<string>}
   --display: record # Configuration for displayed info on a card — shape: {properties: list}
   --fetch: record # Variant of CardFetchBody with fields as optional for patches — shape: {objectTypes: list, targetUrl?: string}
@@ -360,7 +367,7 @@ export def "patch-crm-v3-extensions-cards-update" [
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), card_id: (encode-path-segment $card_id)} | format pattern "/crm/v3/extensions/cards/{app_id}/{card_id}") $auth.query)
   let req_body = {"actions": $actions, "display": $display, "fetch": $fetch, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "patch"

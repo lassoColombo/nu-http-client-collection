@@ -1,4 +1,4 @@
-# Auto-generated client for Fitbit Plus API vv7.78.1
+# Auto-generated client for Fitbit Plus API v7.78.1
 # Source: https://api.apis.guru/v2/specs/twinehealth.com/v7.78.1/openapi.json
 # Auth: --token flag or $env.FITBIT_PLUS_API_TOKEN
 
@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -708,18 +708,18 @@ export def "fetch-email-histories" [
   --filter-receiver: string # Fitbit Plus user id of email recipient. Required if filter[sender] is not defined.
   --filter-sender: string # Fitbit Plus user id of email sender. Required if filter[receiver] is not defined.
   --filter-email-type: string # Type of email
-  --qp-sort: string@sort-completer # valid sorts: * send_time - ascending by send_time * -send_time - descending by send_time
+  --sort: string@sort-completer # valid sorts: * send_time - ascending by send_time * -send_time - descending by send_time
 ]: nothing -> record<data: table<attributes: record, id: string, relationships: record, type: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[receiver]" $filter_receiver "scalar") (serialize-qp "filter[sender]" $filter_sender "scalar") (serialize-qp "filter[emailType]" $filter_email_type "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[receiver]" $filter_receiver "scalar") (serialize-qp "filter[sender]" $filter_sender "scalar") (serialize-qp "filter[emailType]" $filter_email_type "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/email_history" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter[receiver]": $filter_receiver, "filter[sender]": $filter_sender, "filter[emailType]": $filter_email_type, "sort": $qp_sort} | compact)
+    query: ({"filter[receiver]": $filter_receiver, "filter[sender]": $filter_sender, "filter[emailType]": $filter_email_type, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -780,11 +780,12 @@ export def "fetch-groups" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-organization: string # Organization identifier
+  --filter-organization: string # Organization identifier (required)
   --filter-name: string # Group name
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, type: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($filter_organization == null) { error make --unspanned { msg: "required query parameter 'filter[organization]' missing: pass --filter-organization" } }
   let qp = [(serialize-qp "filter[organization]" $filter_organization "scalar") (serialize-qp "filter[name]" $filter_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/group" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
@@ -1852,7 +1853,7 @@ export def "fetch-patient-health-results" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-patient: string # Filter the patient health results for a specified patient
+  --filter-patient: string # Filter the patient health results for a specified patient (required)
   --filter-actions: string # A comma-separated list of action identifiers
   --filter-start-at: string # Filter results that occurred after the passed ISO date and time string (format: dateTime)
   --filter-end-at: string # Filter results that occurred before the passed ISO date and time string (format: dateTime)
@@ -1866,6 +1867,7 @@ export def "fetch-patient-health-results" [
 ]: nothing -> record<data: table<attributes: record, id: string, relationships: record, type: string>, links: record<last: string, next: string, prev: string, self: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($filter_patient == null) { error make --unspanned { msg: "required query parameter 'filter[patient]' missing: pass --filter-patient" } }
   let qp = [(serialize-qp "filter[patient]" $filter_patient "scalar") (serialize-qp "filter[actions]" $filter_actions "scalar") (serialize-qp "filter[start_at]" $filter_start_at "scalar") (serialize-qp "filter[end_at]" $filter_end_at "scalar") (serialize-qp "filter[threads]" $filter_threads "scalar") (serialize-qp "filter[created_at]" $filter_created_at "scalar") (serialize-qp "filter[updated_at]" $filter_updated_at "scalar") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "page[limit]" $page_limit "scalar") (serialize-qp "page[after]" $page_after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/result" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
@@ -2048,12 +2050,14 @@ export def "fetch-reward-earnings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-groups: string # Group identifiers
-  --filter-patient: string # Patient identifier
+  --filter-groups: string # Group identifiers (required)
+  --filter-patient: string # Patient identifier (required)
   --filter-ready-for-fulfillment: oneof<nothing, bool> # If true, only returns those reward earnings for which ready_for_fulfillment is true and fulfilled_at is null. If false, only returns those reward earnings for which ready_for_fulfillment is false and fulfilled_at is null.
 ]: nothing -> record<data: table<attributes: record, id: string, relationships: record, type: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($filter_groups == null) { error make --unspanned { msg: "required query parameter 'filter[groups]' missing: pass --filter-groups" } }
+  if ($filter_patient == null) { error make --unspanned { msg: "required query parameter 'filter[patient]' missing: pass --filter-patient" } }
   let qp = [(serialize-qp "filter[groups]" $filter_groups "scalar") (serialize-qp "filter[patient]" $filter_patient "scalar") (serialize-qp "filter[ready_for_fulfillment]" $filter_ready_for_fulfillment "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reward_earning" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
@@ -2160,10 +2164,11 @@ export def "fetch-reward-earning-fulfillments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-patient: string # Patient identifier
+  --filter-patient: string # Patient identifier (required)
 ]: nothing -> record<data: table<attributes: record, id: string, relationships: record, type: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($filter_patient == null) { error make --unspanned { msg: "required query parameter 'filter[patient]' missing: pass --filter-patient" } }
   let qp = [(serialize-qp "filter[patient]" $filter_patient "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reward_earning_fulfillment" $qp $auth.query)
   let accept_val = "application/vnd.api+json"

@@ -1,4 +1,4 @@
-# Auto-generated client for agentOS Api V2, Customer Login Call Group vv2-customer
+# Auto-generated client for agentOS Api V2, Customer Login Call Group v2-customer
 # Source: https://api.apis.guru/v2/specs/letmc.com/customer/v2-customer/openapi.json
 # Auth: --token flag or $env.AGENTOS_API_V2_CUSTOMER_LOGIN_CALL_GROUP_TOKEN
 
@@ -12,8 +12,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "apikey" => { {scheme: $scheme, headers: {ApiKey: $token_val}, query: "", location: "header"} }
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "apikey" => { {scheme: $scheme, headers: {"ApiKey": $token_val}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -157,12 +157,14 @@ export def "branch-controller-get-branches" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --offset: int # The index of the first item to return (format: int32)
-  --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
+  --offset: int # The index of the first item to return (required, format: int32)
+  --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
 ]: nothing -> record<Count: int, Data: table<Address1: string, Address2: string, Address3: string, Address4: string, CompanyName: string, County: string, EMailAddress: string, ETag: string, FaxPhone: string, LandPhone: string, Name: string, OID: string, Postcode: string, WebAddress: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/branch/branches") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -235,11 +237,12 @@ export def "landlord-controller-get-accounts" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-token: string # The login token returned from the /session POST call
+  --qp-token: string # The login token returned from the /session POST call (required)
 ]: nothing -> record<AccountBalance: float, LastPayment: string, PaymentHistory: table<Amount: float, Date: string, Description: string, TransactionNumber: int>, Statements: table<Date: string, InvoiceID: string, IsMaintenanceInvoice: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/accounting") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -274,12 +277,14 @@ export def "landlord-controller-get-document" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-token: string # The login token returned from the /session POST call
-  --id: string # The Document ID
+  --qp-token: string # The login token returned from the /session POST call (required)
+  --id: string # The Document ID (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'ID' missing: pass --id" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "ID" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/document") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -314,12 +319,14 @@ export def "landlord-controller-get-invetory-report" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-token: string # The login token returned from the /session POST call
-  --tenancy-id: string # The Tenancy ID
+  --qp-token: string # The login token returned from the /session POST call (required)
+  --tenancy-id: string # The Tenancy ID (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
+  if ($tenancy_id == null) { error make --unspanned { msg: "required query parameter 'tenancyID' missing: pass --tenancy-id" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "tenancyID" $tenancy_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/inventory") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -354,12 +361,14 @@ export def "landlord-controller-get-invoice" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-token: string # The login token returned from the /session POST call
-  --invoice-id: string # The invoice ID to load.
+  --qp-token: string # The login token returned from the /session POST call (required)
+  --invoice-id: string # The invoice ID to load. (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
+  if ($invoice_id == null) { error make --unspanned { msg: "required query parameter 'invoiceID' missing: pass --invoice-id" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "invoiceID" $invoice_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/invoice") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -394,11 +403,12 @@ export def "landlord-controller-get-landlord-crm-entries" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-token: string # The login token returned from the /session POST call
+  --qp-token: string # The login token returned from the /session POST call (required)
 ]: nothing -> table<BranchID: string, GlobalReference: string, Name: string, OID: string> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/landlordcrmentries") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -433,11 +443,12 @@ export def "landlord-controller-get-maintenance-jobs" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-token: string # The login token returned from the /session POST call
+  --qp-token: string # The login token returned from the /session POST call (required)
 ]: nothing -> record<Jobs: table<AssignedTo: string, ClosedDate: string, Description: string, MaintenanceNotes: list, Property: string, Reported: string, Status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/maintenance") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -472,11 +483,12 @@ export def "landlord-controller-get-profit-loss-report" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-token: string # The login token returned from the /session POST call
+  --qp-token: string # The login token returned from the /session POST call (required)
 ]: nothing -> record<DirectCosts: record<Rows: list<record>>, GrossProfitLoss: record<Rows: list<record>>, Income: record<Rows: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/profitloss") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -511,11 +523,12 @@ export def "landlord-controller-get-rent-arrears" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-token: string # The login token returned from the /session POST call
+  --qp-token: string # The login token returned from the /session POST call (required)
 ]: nothing -> record<ChaseNotes: table<Date: string, Note: string, NoteType: string, TenantID: string>, RentCollected: float, RentOutstanding: table<DebtDays: int, OutstandingRent: float, Property: string, Tenant: string, TenantID: string>, TotalRentArrears: float> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/rentarrears") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -550,12 +563,14 @@ export def "landlord-controller-get-sas-report" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-token: string # The login token returned from the /session POST call
-  --year-end: int # The Tax Year End. (format: int32)
+  --qp-token: string # The login token returned from the /session POST call (required)
+  --year-end: int # The Tax Year End. (required, format: int32)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
+  if ($year_end == null) { error make --unspanned { msg: "required query parameter 'yearEnd' missing: pass --year-end" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "yearEnd" $year_end "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/sas") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -590,11 +605,12 @@ export def "landlord-controller-get-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-token: string # The login token returned from the /session POST call
+  --qp-token: string # The login token returned from the /session POST call (required)
 ]: nothing -> record<LinkedAccounts: table<Address: string, Email: string, GlobalReference: string, ID: string, Mobile: string, Name: string, Phone: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/settings") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -629,11 +645,12 @@ export def "landlord-controller-get-summary-details" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-token: string # The login token returned from the /session POST call
+  --qp-token: string # The login token returned from the /session POST call (required)
 ]: nothing -> record<AccountBalance: float, LastPayment: string, Tenancies: table<Bond: float, BranchID: string, Description: string, GlobalReference: string, ID: string, MaintenanceJobs: int, ManagedRent: bool, PropertyAddress: string, Rent: string, RentArrears: float, RentCollected: float, TenancyProperty: string, TenancyState: string>, TotalRentArrears: float> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/summary") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -668,12 +685,14 @@ export def "landlord-controller-get-tenancy" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-token: string # The login token returned from the /session POST call
-  --tenancy-id: string # The Tenancy ID
+  --qp-token: string # The login token returned from the /session POST call (required)
+  --tenancy-id: string # The Tenancy ID (required)
 ]: nothing -> record<ActualEndDate: string, Beds: int, Bond: float, BranchID: string, Certificates: table<Due: string, Files: list, Status: string, Type: string>, Documents: table<FileName: string, FileSize: int, ID: string, MIMEType: string, Note: string>, FixedDate: string, GlobalReference: string, ID: string, Inspections: table<InspectionDate: string, Notes: string>, ManagedRent: bool, Preferences: table<Name: string, Notes: string, Type: string>, PreviousRentAmount: float, PropertyAddress: string, Rent: string, RentAmount: float, StartDate: string, TenancyProperty: string, TenancyState: string, Tenants: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
+  if ($tenancy_id == null) { error make --unspanned { msg: "required query parameter 'tenancyID' missing: pass --tenancy-id" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "tenancyID" $tenancy_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/tenancy") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -708,14 +727,18 @@ export def "landlord-controller-create-maintenance-preference" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-token: string # The login token returned from the /session POST call
-  --tenancy-id: string # The Tenancy ID
-  --name: string # Name of the maintenance preference to add
-  --notes: string # Notes of the maintenance preference to add
+  --qp-token: string # The login token returned from the /session POST call (required)
+  --tenancy-id: string # The Tenancy ID (required)
+  --name: string # Name of the maintenance preference to add (required)
+  --notes: string # Notes of the maintenance preference to add (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
+  if ($tenancy_id == null) { error make --unspanned { msg: "required query parameter 'tenancyID' missing: pass --tenancy-id" } }
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
+  if ($notes == null) { error make --unspanned { msg: "required query parameter 'notes' missing: pass --notes" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "tenancyID" $tenancy_id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "notes" $notes "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/tenancy/maintenance/preference") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -750,12 +773,14 @@ export def "landlord-controller-get-tenancy-agreement-report" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-token: string # The login token returned from the /session POST call
-  --tenancy-id: string # The Tenancy ID
+  --qp-token: string # The login token returned from the /session POST call (required)
+  --tenancy-id: string # The Tenancy ID (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
+  if ($tenancy_id == null) { error make --unspanned { msg: "required query parameter 'tenancyID' missing: pass --tenancy-id" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "tenancyID" $tenancy_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/tenancyagreement") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -790,14 +815,16 @@ export def "photo-controller-get-photo-download" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-token: string # The login token returned from the /session POST call
-  --photo-id: string # The unique ID of the photo on the property
+  --qp-token: string # The login token returned from the /session POST call (required)
+  --photo-id: string # The unique ID of the photo on the property (required)
   --width: int # An optional parameter specifying the image width (format: int32)
   --height: int # An optional parameter specifying the image height (format: int32)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
+  if ($photo_id == null) { error make --unspanned { msg: "required query parameter 'photoID' missing: pass --photo-id" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "photoID" $photo_id "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/photo/download") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -833,14 +860,17 @@ export def "property-controller-get-properties-photos" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-token: string # The login token returned from the /session POST call
-  --offset: int # The index of the first item to return (format: int32)
-  --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
+  --qp-token: string # The login token returned from the /session POST call (required)
+  --offset: int # The index of the first item to return (required, format: int32)
+  --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
 ]: nothing -> record<Count: int, Data: table<ETag: string, FileName: string, OID: string, PhotoType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
   if ($property_id | is-empty) { error make --unspanned { msg: "path parameter 'propertyID' must be non-empty" } }
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), property_id: (encode-path-segment $property_id)} | format pattern "/v2/customer/{short_name}/property/{property_id}/photos") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -874,11 +904,12 @@ export def "session-controller-logout" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # The login token returned from the /session POST call
+  --qp-token: string # The login token returned from the /session POST call (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/session") $qp $auth.query)
   let accept_val = "application/json"
@@ -913,11 +944,12 @@ export def "session-controller-get-session-info" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-token: string # The login token returned from the /session POST call
+  --qp-token: string # The login token returned from the /session POST call (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/session") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -952,12 +984,14 @@ export def "session-controller-login" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --username: string # The user's username.
-  --password: string # The user's password.
+  --username: string # The user's username. (required)
+  --password: string # The user's password. (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($username == null) { error make --unspanned { msg: "required query parameter 'username' missing: pass --username" } }
+  if ($password == null) { error make --unspanned { msg: "required query parameter 'password' missing: pass --password" } }
   let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/session") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -991,17 +1025,23 @@ export def "session-controller-create-landlord-login" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --email: string # The email address of the landlord
-  --title: string # The title of the landlord
-  --forename: string # The forename of the landlord
-  --surname: string # The surname of the landlord
-  --property-address: string # Address of the property linked to the landlord
-  --contact-details: string # Contact details of the landlord
+  --email: string # The email address of the landlord (required)
+  --title: string # The title of the landlord (required)
+  --forename: string # The forename of the landlord (required)
+  --surname: string # The surname of the landlord (required)
+  --property-address: string # Address of the property linked to the landlord (required)
+  --contact-details: string # Contact details of the landlord (required)
   --branch-id: string # (Optional) The branch ID linked to the login. This will determine which in tray the request display in
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($email == null) { error make --unspanned { msg: "required query parameter 'email' missing: pass --email" } }
+  if ($title == null) { error make --unspanned { msg: "required query parameter 'title' missing: pass --title" } }
+  if ($forename == null) { error make --unspanned { msg: "required query parameter 'forename' missing: pass --forename" } }
+  if ($surname == null) { error make --unspanned { msg: "required query parameter 'surname' missing: pass --surname" } }
+  if ($property_address == null) { error make --unspanned { msg: "required query parameter 'propertyAddress' missing: pass --property-address" } }
+  if ($contact_details == null) { error make --unspanned { msg: "required query parameter 'contactDetails' missing: pass --contact-details" } }
   let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "forename" $forename "scalar") (serialize-qp "surname" $surname "scalar") (serialize-qp "propertyAddress" $property_address "scalar") (serialize-qp "contactDetails" $contact_details "scalar") (serialize-qp "branchID" $branch_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/session/createlandlordlogin") $qp $auth.query)
   let accept_val = "application/json"
@@ -1035,13 +1075,16 @@ export def "session-controller-change-password" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # The login token returned from the /session POST call
-  --old-password: string # The customer's existing password.
-  --new-password: string # The customer's new password.
+  --qp-token: string # The login token returned from the /session POST call (required)
+  --old-password: string # The customer's existing password. (required)
+  --new-password: string # The customer's new password. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
+  if ($old_password == null) { error make --unspanned { msg: "required query parameter 'oldPassword' missing: pass --old-password" } }
+  if ($new_password == null) { error make --unspanned { msg: "required query parameter 'newPassword' missing: pass --new-password" } }
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "oldPassword" $old_password "scalar") (serialize-qp "newPassword" $new_password "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/session/password") $qp $auth.query)
   let accept_val = "application/json"
@@ -1075,11 +1118,12 @@ export def "session-controller-reset-password" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --email: string # The login Email Address.
+  --email: string # The login Email Address. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($email == null) { error make --unspanned { msg: "required query parameter 'email' missing: pass --email" } }
   let qp = [(serialize-qp "email" $email "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/session/resetpassword") $qp $auth.query)
   let accept_val = "application/json"

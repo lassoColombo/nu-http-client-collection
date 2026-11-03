@@ -131,11 +131,13 @@ export def "get-category-rated-areas" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --latitude: float # Latitude in decimal coordinates (e.g. 41.397158)
-  --longitude: float # Longitude in decimal coordinates (e.g. 2.160873)
+  --latitude: float # Latitude in decimal coordinates (required, e.g. 41.397158)
+  --longitude: float # Longitude in decimal coordinates (required, e.g. 2.160873)
 ]: nothing -> record<data: table<categoryScores: record, geoCode: record, radius: int, type: string>, meta: record<count: int, links: record<self: string>>, warnings: table<code: int, detail: string, source: record, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($latitude == null) { error make --unspanned { msg: "required query parameter 'latitude' missing: pass --latitude" } }
+  if ($longitude == null) { error make --unspanned { msg: "required query parameter 'longitude' missing: pass --longitude" } }
   let qp = [(serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/location/analytics/category-rated-areas" $qp $auth.query)
   let accept_val = "application/vnd.amadeus+json"

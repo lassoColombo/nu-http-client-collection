@@ -1,6 +1,7 @@
 # Auto-generated client for Profile System v1.0
 # Source: https://api.apis.guru/v2/specs/vtex.local/Profile-System/1.0/openapi.json
-# Auth: --token flag or $env.PROFILE_SYSTEM_TOKEN
+# Auth (appKey): --token-appkey flag or $env.PROFILE_SYSTEM_APPKEY_TOKEN
+# Auth (appToken): --token-apptoken flag or $env.PROFILE_SYSTEM_APPTOKEN_TOKEN
 
 const BASE_URL = "https://vtex.local"
 
@@ -12,8 +13,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-vtex-api-appkey" => { {scheme: $scheme, headers: {X-VTEX-API-AppKey: $token_val}, query: "", location: "header"} }
-    "x-vtex-api-apptoken" => { {scheme: $scheme, headers: {X-VTEX-API-AppToken: $token_val}, query: "", location: "header"} }
+    "x-vtex-api-appkey" => { {scheme: $scheme, headers: {"X-VTEX-API-AppKey": $token_val}, query: "", location: "header"} }
+    "x-vtex-api-apptoken" => { {scheme: $scheme, headers: {"X-VTEX-API-AppToken": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -132,7 +133,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-appkey" "token-apptoken"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-client-profile" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -168,8 +169,8 @@ export def "create-client-profile" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --ttl: int # This parameter sets the the Time To Live (TTL), in days, of the specific document being created or updated with this request. After this period of time from the moment of the request, the document is deleted. By sending this parameter you override the TTL set for the schema. > Currently, the available default document schemas have no TTL. This means that documents are stored indefinitely, unless a TTL is sent when creating or updating. (e.g. 365)
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
   --birth-date: string # Client's birth date in ISO 8601 format. (e.g. 1925-11-17)
   document: string # Client's document. (e.g. 12345678900)
   document_type: string # Type of document informed in `document`. (e.g. CPF)
@@ -219,8 +220,8 @@ export def "create-or-update-profile-schema" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
   description: string # Schema's human readable description. (e.g. This schema describes a b2c customer profile.)
   --document-ttl: int # Document time to live, in days. After this many days from its creation or update, any document cerated from this schema will be deleted. (e.g. 1825)
   properties: record # Object describing each field in your desired schema. In this object, each property is a new object, describing the field according to: `type` (string); `sensitive` (boolean); `pii` (boolean) and; `items.type` (if field is array). — shape: {{fieldName}?: record}
@@ -272,8 +273,8 @@ export def "delete-client-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -313,8 +314,8 @@ export def "get-profile" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`. > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
 ]: nothing -> list<any> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -356,8 +357,8 @@ export def "update-client-profile" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`. > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
   --ttl: int # This parameter sets the the Time To Live (TTL), in days, of the specific document being created or updated with this request. After this period of time from the moment of the request, the document is deleted. By sending this parameter you override the TTL set for the schema. > Currently, the available default document schemas have no TTL. This means that documents are stored indefinitely, unless a TTL is sent when creating or updating. (e.g. 365)
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
   --birth-date: string # Client's birth date in ISO 8601 format. (e.g. 1925-11-17)
   --document: string # Client's document. (e.g. 12345678900)
   --document-type: string # Type of document informed in `document`. (e.g. CPF)
@@ -409,8 +410,8 @@ export def "get-client-addresses" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`. > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
 ]: nothing -> list<any> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -451,8 +452,8 @@ export def "create-client-address" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`. > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
   administrative_area_level1: string # Name of administrative area, such as the state or province. (e.g. RJ)
   --country-code: string # Two letter country code. (e.g. BR)
   country_name: string # Name of the address country. (e.g. Brasil)
@@ -506,8 +507,8 @@ export def "get-unmasked-client-addresses" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`. > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
 ]: nothing -> list<record> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -549,8 +550,8 @@ export def "delete-address" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`. > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -593,8 +594,8 @@ export def "get-address" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`. > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
 ]: nothing -> record {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -637,8 +638,8 @@ export def "update-client-address" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`. > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
   --administrative-area-level1: string # Name of administrative area, such as the state or province. (e.g. RJ)
   --country-code: string # Two letter country code. (e.g. BR)
   --country-name: string # Name of the address country. (e.g. Brasil)
@@ -693,15 +694,16 @@ export def "get-unmasked-address" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --reason: string # Reason for requesting unmasked data. (e.g. data-validation)
+  --reason: string # Reason for requesting unmasked data. (required, e.g. data-validation)
   --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`. > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
 ]: nothing -> record {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($address_id | is-empty) { error make --unspanned { msg: "path parameter 'addressId' must be non-empty" } }
+  if ($reason == null) { error make --unspanned { msg: "required query parameter 'reason' missing: pass --reason" } }
   let qp = [(serialize-qp "reason" $reason "scalar") (serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), address_id: (encode-path-segment $address_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/addresses/{address_id}/unmask") $qp $auth.query)
   let accept_val = "application/json"
@@ -739,16 +741,17 @@ export def "get-address-by-version" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --reason: string # Reason for requesting unmasked data. (e.g. data-validation)
+  --reason: string # Reason for requesting unmasked data. (required, e.g. data-validation)
   --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`. > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
 ]: nothing -> record {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($address_id | is-empty) { error make --unspanned { msg: "path parameter 'addressId' must be non-empty" } }
   if ($address_version_id | is-empty) { error make --unspanned { msg: "path parameter 'addressVersionId' must be non-empty" } }
+  if ($reason == null) { error make --unspanned { msg: "required query parameter 'reason' missing: pass --reason" } }
   let qp = [(serialize-qp "reason" $reason "scalar") (serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), address_id: (encode-path-segment $address_id), address_version_id: (encode-path-segment $address_version_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/addresses/{address_id}/versions/{address_version_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -786,16 +789,17 @@ export def "get-unmasked-address-by-version" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --reason: string # Reason for requesting unmasked data. (e.g. data-validation)
+  --reason: string # Reason for requesting unmasked data. (required, e.g. data-validation)
   --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`. > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
 ]: nothing -> record {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($address_id | is-empty) { error make --unspanned { msg: "path parameter 'addressId' must be non-empty" } }
   if ($address_version_id | is-empty) { error make --unspanned { msg: "path parameter 'addressVersionId' must be non-empty" } }
+  if ($reason == null) { error make --unspanned { msg: "required query parameter 'reason' missing: pass --reason" } }
   let qp = [(serialize-qp "reason" $reason "scalar") (serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), address_id: (encode-path-segment $address_id), address_version_id: (encode-path-segment $address_version_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/addresses/{address_id}/versions/{address_version_id}/unmask") $qp $auth.query)
   let accept_val = "application/json"
@@ -832,8 +836,8 @@ export def "delete-purchase-information" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`. > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -874,8 +878,8 @@ export def "get-purchase-information" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`. > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
 ]: nothing -> list<any> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -916,8 +920,8 @@ export def "update-purchase-information" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`. > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
   --body: record
 ]: any -> record {
   let input = $in
@@ -964,8 +968,8 @@ export def "create-purchase-information" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`. > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
   --body: record
 ]: any -> record {
   let input = $in
@@ -1011,8 +1015,8 @@ export def "get-unmasked-purchase-information" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
 ]: nothing -> list<record> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1051,14 +1055,15 @@ export def "get-unmasked-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --reason: string # Reason for requesting unmasked data. (e.g. data-validation)
+  --reason: string # Reason for requesting unmasked data. (required, e.g. data-validation)
   --alternative-key: string # The `profileId` path parameter may be substituted by other profile fields in this request. When making this request, send the `alternativeKey` parameter with a value equal to the key of the field you wish to use as `profileId`. > Currently, there are two possible values for this parameter: `email` and `document`. (e.g. email)
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
 ]: nothing -> list<any> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
+  if ($reason == null) { error make --unspanned { msg: "required query parameter 'reason' missing: pass --reason" } }
   let qp = [(serialize-qp "reason" $reason "scalar") (serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/unmask") $qp $auth.query)
   let accept_val = "application/json"
@@ -1095,8 +1100,8 @@ export def "get-profile-by-version" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
 ]: nothing -> list<any> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1137,14 +1142,15 @@ export def "get-unmasked-profile-by-version" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --reason: string # Reason for requesting unmasked data. (e.g. data-validation)
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --reason: string # Reason for requesting unmasked data. (required, e.g. data-validation)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
 ]: nothing -> list<any> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($profile_version_id | is-empty) { error make --unspanned { msg: "path parameter 'profileVersionId' must be non-empty" } }
+  if ($reason == null) { error make --unspanned { msg: "required query parameter 'reason' missing: pass --reason" } }
   let qp = [(serialize-qp "reason" $reason "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id), profile_version_id: (encode-path-segment $profile_version_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/versions/{profile_version_id}/unmask") $qp $auth.query)
   let accept_val = "application/json"
@@ -1179,8 +1185,8 @@ export def "create-prospect" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
   --body: record
 ]: any -> record {
   let input = $in
@@ -1224,8 +1230,8 @@ export def "delete-prospect" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1264,8 +1270,8 @@ export def "get-prospect" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
 ]: nothing -> list<any> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1304,8 +1310,8 @@ export def "update-prospect" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
   --body: record
 ]: any -> record {
   let input = $in
@@ -1350,13 +1356,14 @@ export def "get-unmasked-prospect" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --reason: string # Reason for requesting unmasked data. (e.g. data-validation)
-  --content-type: string # Type of the content being sent. (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --reason: string # Reason for requesting unmasked data. (required, e.g. data-validation)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
 ]: nothing -> list<any> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($prospect_id | is-empty) { error make --unspanned { msg: "path parameter 'prospectId' must be non-empty" } }
+  if ($reason == null) { error make --unspanned { msg: "required query parameter 'reason' missing: pass --reason" } }
   let qp = [(serialize-qp "reason" $reason "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({prospect_id: (encode-path-segment $prospect_id)} | format pattern "/api/storage/profile-system/prospects/{prospect_id}/unmask") $qp $auth.query)
   let accept_val = "application/json"

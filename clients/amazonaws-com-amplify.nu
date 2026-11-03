@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -138,8 +138,8 @@ export def commands []: nothing -> table {
 #
 # POST /apps
 # operationId: CreateApp
-# --customRules item shape: {source: any, target: any, status?: any, condition?: any}
-# --autoBranchCreationConfig shape: {stage?: any, framework?: any, enableAutoBuild?: any, environmentVariables?: any, basicAuthCredentials?: any, enableBasicAuth?: any, enablePerformanceMode?: any, buildSpec?: any, enablePullRequestPreview?: any, pullRequestEnvironmentName?: any}
+# --customRules item shape: {source: string, target: string, status?: string, condition?: string}
+# --autoBranchCreationConfig shape: {stage?: "PRODUCTION"|"BETA"|"DEVELOPMENT"|"EXPERIMENTAL"|"PULL_REQUEST", framework?: string, enableAutoBuild?: bool, environmentVariables?: record, basicAuthCredentials?: string, enableBasicAuth?: bool, enablePerformanceMode?: bool, buildSpec?: string, enablePullRequestPreview?: bool, pullRequestEnvironmentName?: string}
 export def "create-app" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -169,14 +169,14 @@ export def "create-app" [
   --enable-branch-auto-deletion: oneof<nothing, bool> # Automatically disconnects a branch in the Amplify Console when you delete a branch from your Git repository.
   --enable-basic-auth: oneof<nothing, bool> # Enables basic authorization for an Amplify app. This will apply to all branches that are part of this app.
   --basic-auth-credentials: string # The credentials for basic authorization for an Amplify app. You must base64-encode the authorization credentials and provide them in the format user:password. (format: password)
-  --custom-rules: list # The custom rewrite and redirect rules for an Amplify app. — item shape: {source: any, target: any, status?: any, condition?: any}
+  --custom-rules: list # The custom rewrite and redirect rules for an Amplify app. — item shape: {source: string, target: string, status?: string, condition?: string}
   --tags: record # The tag for an Amplify app.
   --build-spec: string # The build specification (build spec) file for an Amplify app build. (format: password)
   --custom-headers: string # The custom HTTP headers for an Amplify app.
   --enable-auto-branch-creation: oneof<nothing, bool> # Enables automated branch creation for an Amplify app.
   --auto-branch-creation-patterns: list<string> # The automated branch creation glob patterns for an Amplify app.
-  --auto-branch-creation-config: record # Describes the automated branch creation configuration. — shape: {stage?: any, framework?: any, enableAutoBuild?: any, environmentVariables?: any, basicAuthCredentials?: any, enableBasicAuth?: any, enablePerformanceMode?: any, buildSpec?: any, enablePullRequestPreview?: any, pullRequestEnvironmentName?: any}
-]: any -> record<app: record<appId: record, appArn: record, name: record, tags: record, description: record, repository: record, platform: record, createTime: record, updateTime: record, iamServiceRoleArn: record, environmentVariables: record, defaultDomain: record, enableBranchAutoBuild: record, enableBranchAutoDeletion: record, enableBasicAuth: record, basicAuthCredentials: record, customRules: record, productionBranch: record<lastDeployTime: record, status: record, thumbnailUrl: record, branchName: record>, buildSpec: record, customHeaders: record, enableAutoBranchCreation: record, autoBranchCreationPatterns: record, autoBranchCreationConfig: record<stage: record, framework: record, enableAutoBuild: record, environmentVariables: record, basicAuthCredentials: record, enableBasicAuth: record, enablePerformanceMode: record, buildSpec: record, enablePullRequestPreview: record, pullRequestEnvironmentName: record>, repositoryCloneMethod: record>> {
+  --auto-branch-creation-config: record # Describes the automated branch creation configuration. — shape: {stage?: "PRODUCTION"|"BETA"|"DEVELOPMENT"|"EXPERIMENTAL"|"PULL_REQUEST", framework?: string, enableAutoBuild?: bool, environmentVariables?: record, basicAuthCredentials?: string, enableBasicAuth?: bool, enablePerformanceMode?: bool, buildSpec?: string, enablePullRequestPreview?: bool, pullRequestEnvironmentName?: string}
+]: any -> record<app: record<appId: string, appArn: string, name: string, tags: record, description: string, repository: string, platform: string, createTime: string, updateTime: string, iamServiceRoleArn: string, environmentVariables: record, defaultDomain: string, enableBranchAutoBuild: bool, enableBranchAutoDeletion: bool, enableBasicAuth: bool, basicAuthCredentials: string, customRules: list<record>, productionBranch: record<lastDeployTime: string, status: string, thumbnailUrl: string, branchName: string>, buildSpec: string, customHeaders: string, enableAutoBranchCreation: bool, autoBranchCreationPatterns: list<string>, autoBranchCreationConfig: record<stage: string, framework: string, enableAutoBuild: bool, environmentVariables: record, basicAuthCredentials: string, enableBasicAuth: bool, enablePerformanceMode: bool, buildSpec: string, enablePullRequestPreview: bool, pullRequestEnvironmentName: string>, repositoryCloneMethod: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -224,7 +224,7 @@ export def "list-apps" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<apps: record, nextToken: record> {
+]: nothing -> record<apps: table<appId: string, appArn: string, name: string, tags: record, description: string, repository: string, platform: string, createTime: string, updateTime: string, iamServiceRoleArn: string, environmentVariables: record, defaultDomain: string, enableBranchAutoBuild: bool, enableBranchAutoDeletion: bool, enableBasicAuth: bool, basicAuthCredentials: string, customRules: list, productionBranch: record, buildSpec: string, customHeaders: string, enableAutoBranchCreation: bool, autoBranchCreationPatterns: list, autoBranchCreationConfig: record, repositoryCloneMethod: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -272,7 +272,7 @@ export def "create-backend-environment" [
   environment_name: string # The name for the backend environment.
   --stack-name: string # The AWS CloudFormation stack name of a backend environment.
   --deployment-artifacts: string # The name of deployment artifacts.
-]: any -> record<backendEnvironment: record<backendEnvironmentArn: record, environmentName: record, stackName: record, deploymentArtifacts: record, createTime: record, updateTime: record>> {
+]: any -> record<backendEnvironment: record<backendEnvironmentArn: string, environmentName: string, stackName: string, deploymentArtifacts: string, createTime: string, updateTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -323,7 +323,7 @@ export def "list-backend-environments" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<backendEnvironments: record, nextToken: record> {
+]: nothing -> record<backendEnvironments: table<backendEnvironmentArn: string, environmentName: string, stackName: string, deploymentArtifacts: string, createTime: string, updateTime: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -386,7 +386,7 @@ export def "create-branch" [
   --enable-pull-request-preview: oneof<nothing, bool> # Enables pull request previews for this branch.
   --pull-request-environment-name: string # The Amplify environment name for the pull request.
   --backend-environment-arn: string # The Amazon Resource Name (ARN) for a backend environment that is part of an Amplify app.
-]: any -> record<branch: record<branchArn: record, branchName: record, description: record, tags: record, stage: record, displayName: record, enableNotification: record, createTime: record, updateTime: record, environmentVariables: record, enableAutoBuild: record, customDomains: record, framework: record, activeJobId: record, totalNumberOfJobs: record, enableBasicAuth: record, enablePerformanceMode: record, thumbnailUrl: record, basicAuthCredentials: record, buildSpec: record, ttl: record, associatedResources: record, enablePullRequestPreview: record, pullRequestEnvironmentName: record, destinationBranch: record, sourceBranch: record, backendEnvironmentArn: record>> {
+]: any -> record<branch: record<branchArn: string, branchName: string, description: string, tags: record, stage: string, displayName: string, enableNotification: bool, createTime: string, updateTime: string, environmentVariables: record, enableAutoBuild: bool, customDomains: list<string>, framework: string, activeJobId: string, totalNumberOfJobs: string, enableBasicAuth: bool, enablePerformanceMode: bool, thumbnailUrl: string, basicAuthCredentials: string, buildSpec: string, ttl: string, associatedResources: list<string>, enablePullRequestPreview: bool, pullRequestEnvironmentName: string, destinationBranch: string, sourceBranch: string, backendEnvironmentArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -436,7 +436,7 @@ export def "list-branches" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<branches: record, nextToken: record> {
+]: nothing -> record<branches: table<branchArn: string, branchName: string, description: string, tags: record, stage: string, displayName: string, enableNotification: bool, createTime: string, updateTime: string, environmentVariables: record, enableAutoBuild: bool, customDomains: list, framework: string, activeJobId: string, totalNumberOfJobs: string, enableBasicAuth: bool, enablePerformanceMode: bool, thumbnailUrl: string, basicAuthCredentials: string, buildSpec: string, ttl: string, associatedResources: list, enablePullRequestPreview: bool, pullRequestEnvironmentName: string, destinationBranch: string, sourceBranch: string, backendEnvironmentArn: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -484,7 +484,7 @@ export def "create-deployment" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --file-map: record # An optional file map that contains the file name as the key and the file content md5 hash as the value. If this argument is provided, the service will generate a unique upload URL per file. Otherwise, the service will only generate a single upload URL for the zipped files.
-]: any -> record<jobId: record, fileUploadUrls: record, zipUploadUrl: record> {
+]: any -> record<jobId: string, fileUploadUrls: record, zipUploadUrl: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -515,7 +515,7 @@ export def "create-deployment" [
 #
 # POST /apps/{appId}/domains
 # operationId: CreateDomainAssociation
-# --subDomainSettings item shape: {prefix: any, branchName: any}
+# --subDomainSettings item shape: {prefix: string, branchName: string}
 export def "create-domain-association" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -536,10 +536,10 @@ export def "create-domain-association" [
   --x-amz-signed-headers: string
   domain_name: string # The domain name for the domain association.
   --enable-auto-sub-domain: oneof<nothing, bool> # Enables the automated creation of subdomains for branches.
-  sub_domain_settings: list # The setting for the subdomain. — item shape: {prefix: any, branchName: any}
+  sub_domain_settings: list # The setting for the subdomain. — item shape: {prefix: string, branchName: string}
   --auto-sub-domain-creation-patterns: list<string> # Sets the branch patterns for automatic subdomain creation.
   --auto-sub-domain-iam-role: string # The required AWS Identity and Access Management (IAM) service role for the Amazon Resource Name (ARN) for automatically creating subdomains.
-]: any -> record<domainAssociation: record<domainAssociationArn: record, domainName: record, enableAutoSubDomain: record, autoSubDomainCreationPatterns: record, autoSubDomainIAMRole: record, domainStatus: record, statusReason: record, certificateVerificationDNSRecord: record, subDomains: record>> {
+]: any -> record<domainAssociation: record<domainAssociationArn: string, domainName: string, enableAutoSubDomain: bool, autoSubDomainCreationPatterns: list<string>, autoSubDomainIAMRole: string, domainStatus: string, statusReason: string, certificateVerificationDNSRecord: string, subDomains: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -589,7 +589,7 @@ export def "list-domain-associations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<domainAssociations: record, nextToken: record> {
+]: nothing -> record<domainAssociations: table<domainAssociationArn: string, domainName: string, enableAutoSubDomain: bool, autoSubDomainCreationPatterns: list, autoSubDomainIAMRole: string, domainStatus: string, statusReason: string, certificateVerificationDNSRecord: string, subDomains: list>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -637,7 +637,7 @@ export def "create-webhook" [
   --x-amz-signed-headers: string
   branch_name: string # The name for a branch that is part of an Amplify app.
   --description: string # The description for a webhook.
-]: any -> record<webhook: record<webhookArn: record, webhookId: record, webhookUrl: record, branchName: record, description: record, createTime: record, updateTime: record>> {
+]: any -> record<webhook: record<webhookArn: string, webhookId: string, webhookUrl: string, branchName: string, description: string, createTime: string, updateTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -687,7 +687,7 @@ export def "list-webhooks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<webhooks: record, nextToken: record> {
+]: nothing -> record<webhooks: table<webhookArn: string, webhookId: string, webhookUrl: string, branchName: string, description: string, createTime: string, updateTime: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -733,7 +733,7 @@ export def "delete-app" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<app: record<appId: record, appArn: record, name: record, tags: record, description: record, repository: record, platform: record, createTime: record, updateTime: record, iamServiceRoleArn: record, environmentVariables: record, defaultDomain: record, enableBranchAutoBuild: record, enableBranchAutoDeletion: record, enableBasicAuth: record, basicAuthCredentials: record, customRules: record, productionBranch: record<lastDeployTime: record, status: record, thumbnailUrl: record, branchName: record>, buildSpec: record, customHeaders: record, enableAutoBranchCreation: record, autoBranchCreationPatterns: record, autoBranchCreationConfig: record<stage: record, framework: record, enableAutoBuild: record, environmentVariables: record, basicAuthCredentials: record, enableBasicAuth: record, enablePerformanceMode: record, buildSpec: record, enablePullRequestPreview: record, pullRequestEnvironmentName: record>, repositoryCloneMethod: record>> {
+]: nothing -> record<app: record<appId: string, appArn: string, name: string, tags: record, description: string, repository: string, platform: string, createTime: string, updateTime: string, iamServiceRoleArn: string, environmentVariables: record, defaultDomain: string, enableBranchAutoBuild: bool, enableBranchAutoDeletion: bool, enableBasicAuth: bool, basicAuthCredentials: string, customRules: list<record>, productionBranch: record<lastDeployTime: string, status: string, thumbnailUrl: string, branchName: string>, buildSpec: string, customHeaders: string, enableAutoBranchCreation: bool, autoBranchCreationPatterns: list<string>, autoBranchCreationConfig: record<stage: string, framework: string, enableAutoBuild: bool, environmentVariables: record, basicAuthCredentials: string, enableBasicAuth: bool, enablePerformanceMode: bool, buildSpec: string, enablePullRequestPreview: bool, pullRequestEnvironmentName: string>, repositoryCloneMethod: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -778,7 +778,7 @@ export def "get-app" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<app: record<appId: record, appArn: record, name: record, tags: record, description: record, repository: record, platform: record, createTime: record, updateTime: record, iamServiceRoleArn: record, environmentVariables: record, defaultDomain: record, enableBranchAutoBuild: record, enableBranchAutoDeletion: record, enableBasicAuth: record, basicAuthCredentials: record, customRules: record, productionBranch: record<lastDeployTime: record, status: record, thumbnailUrl: record, branchName: record>, buildSpec: record, customHeaders: record, enableAutoBranchCreation: record, autoBranchCreationPatterns: record, autoBranchCreationConfig: record<stage: record, framework: record, enableAutoBuild: record, environmentVariables: record, basicAuthCredentials: record, enableBasicAuth: record, enablePerformanceMode: record, buildSpec: record, enablePullRequestPreview: record, pullRequestEnvironmentName: record>, repositoryCloneMethod: record>> {
+]: nothing -> record<app: record<appId: string, appArn: string, name: string, tags: record, description: string, repository: string, platform: string, createTime: string, updateTime: string, iamServiceRoleArn: string, environmentVariables: record, defaultDomain: string, enableBranchAutoBuild: bool, enableBranchAutoDeletion: bool, enableBasicAuth: bool, basicAuthCredentials: string, customRules: list<record>, productionBranch: record<lastDeployTime: string, status: string, thumbnailUrl: string, branchName: string>, buildSpec: string, customHeaders: string, enableAutoBranchCreation: bool, autoBranchCreationPatterns: list<string>, autoBranchCreationConfig: record<stage: string, framework: string, enableAutoBuild: bool, environmentVariables: record, basicAuthCredentials: string, enableBasicAuth: bool, enablePerformanceMode: bool, buildSpec: string, enablePullRequestPreview: bool, pullRequestEnvironmentName: string>, repositoryCloneMethod: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -805,8 +805,8 @@ export def "get-app" [
 #
 # POST /apps/{appId}
 # operationId: UpdateApp
-# --customRules item shape: {source: any, target: any, status?: any, condition?: any}
-# --autoBranchCreationConfig shape: {stage?: any, framework?: any, enableAutoBuild?: any, environmentVariables?: any, basicAuthCredentials?: any, enableBasicAuth?: any, enablePerformanceMode?: any, buildSpec?: any, enablePullRequestPreview?: any, pullRequestEnvironmentName?: any}
+# --customRules item shape: {source: string, target: string, status?: string, condition?: string}
+# --autoBranchCreationConfig shape: {stage?: "PRODUCTION"|"BETA"|"DEVELOPMENT"|"EXPERIMENTAL"|"PULL_REQUEST", framework?: string, enableAutoBuild?: bool, environmentVariables?: record, basicAuthCredentials?: string, enableBasicAuth?: bool, enablePerformanceMode?: bool, buildSpec?: string, enablePullRequestPreview?: bool, pullRequestEnvironmentName?: string}
 export def "update-app" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -834,16 +834,16 @@ export def "update-app" [
   --enable-branch-auto-deletion: oneof<nothing, bool> # Automatically disconnects a branch in the Amplify Console when you delete a branch from your Git repository.
   --enable-basic-auth: oneof<nothing, bool> # Enables basic authorization for an Amplify app.
   --basic-auth-credentials: string # The basic authorization credentials for an Amplify app. You must base64-encode the authorization credentials and provide them in the format user:password. (format: password)
-  --custom-rules: list # The custom redirect and rewrite rules for an Amplify app. — item shape: {source: any, target: any, status?: any, condition?: any}
+  --custom-rules: list # The custom redirect and rewrite rules for an Amplify app. — item shape: {source: string, target: string, status?: string, condition?: string}
   --build-spec: string # The build specification (build spec) file for an Amplify app build. (format: password)
   --custom-headers: string # The custom HTTP headers for an Amplify app.
   --enable-auto-branch-creation: oneof<nothing, bool> # Enables automated branch creation for an Amplify app.
   --auto-branch-creation-patterns: list<string> # Describes the automated branch creation glob patterns for an Amplify app.
-  --auto-branch-creation-config: record # Describes the automated branch creation configuration. — shape: {stage?: any, framework?: any, enableAutoBuild?: any, environmentVariables?: any, basicAuthCredentials?: any, enableBasicAuth?: any, enablePerformanceMode?: any, buildSpec?: any, enablePullRequestPreview?: any, pullRequestEnvironmentName?: any}
+  --auto-branch-creation-config: record # Describes the automated branch creation configuration. — shape: {stage?: "PRODUCTION"|"BETA"|"DEVELOPMENT"|"EXPERIMENTAL"|"PULL_REQUEST", framework?: string, enableAutoBuild?: bool, environmentVariables?: record, basicAuthCredentials?: string, enableBasicAuth?: bool, enablePerformanceMode?: bool, buildSpec?: string, enablePullRequestPreview?: bool, pullRequestEnvironmentName?: string}
   --repository: string # The name of the repository for an Amplify app
   --oauth-token: string # The OAuth token for a third-party source control system for an Amplify app. The OAuth token is used to create a webhook and a read-only deploy key using SSH cloning. The OAuth token is not stored. Use oauthToken for repository providers other than GitHub, such as Bitbucket or CodeCommit. To authorize access to GitHub as your repository provider, use accessToken. You must specify either oauthToken or accessToken when you update an app. Existing Amplify apps deployed from a GitHub repository using OAuth continue to work with CI/CD. However, we strongly recommend that you migrate these apps to use the GitHub App. For more information, see Migrating an existing OAuth app to the Amplify GitHub App (https://docs.aws.amazon.com/amplify/latest/UserGuide/setting-up-GitHub-access.html#migrating-to-github-app-auth) in the Amplify User Guide . (format: password)
   --access-token: string # The personal access token for a GitHub repository for an Amplify app. The personal access token is used to authorize access to a GitHub repository using the Amplify GitHub App. The token is not stored. Use accessToken for GitHub repositories only. To authorize access to a repository provider such as Bitbucket or CodeCommit, use oauthToken. You must specify either accessToken or oauthToken when you update an app. Existing Amplify apps deployed from a GitHub repository using OAuth continue to work with CI/CD. However, we strongly recommend that you migrate these apps to use the GitHub App. For more information, see Migrating an existing OAuth app to the Amplify GitHub App (https://docs.aws.amazon.com/amplify/latest/UserGuide/setting-up-GitHub-access.html#migrating-to-github-app-auth) in the Amplify User Guide . (format: password)
-]: any -> record<app: record<appId: record, appArn: record, name: record, tags: record, description: record, repository: record, platform: record, createTime: record, updateTime: record, iamServiceRoleArn: record, environmentVariables: record, defaultDomain: record, enableBranchAutoBuild: record, enableBranchAutoDeletion: record, enableBasicAuth: record, basicAuthCredentials: record, customRules: record, productionBranch: record<lastDeployTime: record, status: record, thumbnailUrl: record, branchName: record>, buildSpec: record, customHeaders: record, enableAutoBranchCreation: record, autoBranchCreationPatterns: record, autoBranchCreationConfig: record<stage: record, framework: record, enableAutoBuild: record, environmentVariables: record, basicAuthCredentials: record, enableBasicAuth: record, enablePerformanceMode: record, buildSpec: record, enablePullRequestPreview: record, pullRequestEnvironmentName: record>, repositoryCloneMethod: record>> {
+]: any -> record<app: record<appId: string, appArn: string, name: string, tags: record, description: string, repository: string, platform: string, createTime: string, updateTime: string, iamServiceRoleArn: string, environmentVariables: record, defaultDomain: string, enableBranchAutoBuild: bool, enableBranchAutoDeletion: bool, enableBasicAuth: bool, basicAuthCredentials: string, customRules: list<record>, productionBranch: record<lastDeployTime: string, status: string, thumbnailUrl: string, branchName: string>, buildSpec: string, customHeaders: string, enableAutoBranchCreation: bool, autoBranchCreationPatterns: list<string>, autoBranchCreationConfig: record<stage: string, framework: string, enableAutoBuild: bool, environmentVariables: record, basicAuthCredentials: string, enableBasicAuth: bool, enablePerformanceMode: bool, buildSpec: string, enablePullRequestPreview: bool, pullRequestEnvironmentName: string>, repositoryCloneMethod: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -892,7 +892,7 @@ export def "delete-backend-environment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<backendEnvironment: record<backendEnvironmentArn: record, environmentName: record, stackName: record, deploymentArtifacts: record, createTime: record, updateTime: record>> {
+]: nothing -> record<backendEnvironment: record<backendEnvironmentArn: string, environmentName: string, stackName: string, deploymentArtifacts: string, createTime: string, updateTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -939,7 +939,7 @@ export def "get-backend-environment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<backendEnvironment: record<backendEnvironmentArn: record, environmentName: record, stackName: record, deploymentArtifacts: record, createTime: record, updateTime: record>> {
+]: nothing -> record<backendEnvironment: record<backendEnvironmentArn: string, environmentName: string, stackName: string, deploymentArtifacts: string, createTime: string, updateTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -986,7 +986,7 @@ export def "delete-branch" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<branch: record<branchArn: record, branchName: record, description: record, tags: record, stage: record, displayName: record, enableNotification: record, createTime: record, updateTime: record, environmentVariables: record, enableAutoBuild: record, customDomains: record, framework: record, activeJobId: record, totalNumberOfJobs: record, enableBasicAuth: record, enablePerformanceMode: record, thumbnailUrl: record, basicAuthCredentials: record, buildSpec: record, ttl: record, associatedResources: record, enablePullRequestPreview: record, pullRequestEnvironmentName: record, destinationBranch: record, sourceBranch: record, backendEnvironmentArn: record>> {
+]: nothing -> record<branch: record<branchArn: string, branchName: string, description: string, tags: record, stage: string, displayName: string, enableNotification: bool, createTime: string, updateTime: string, environmentVariables: record, enableAutoBuild: bool, customDomains: list<string>, framework: string, activeJobId: string, totalNumberOfJobs: string, enableBasicAuth: bool, enablePerformanceMode: bool, thumbnailUrl: string, basicAuthCredentials: string, buildSpec: string, ttl: string, associatedResources: list<string>, enablePullRequestPreview: bool, pullRequestEnvironmentName: string, destinationBranch: string, sourceBranch: string, backendEnvironmentArn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -1033,7 +1033,7 @@ export def "get-branch" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<branch: record<branchArn: record, branchName: record, description: record, tags: record, stage: record, displayName: record, enableNotification: record, createTime: record, updateTime: record, environmentVariables: record, enableAutoBuild: record, customDomains: record, framework: record, activeJobId: record, totalNumberOfJobs: record, enableBasicAuth: record, enablePerformanceMode: record, thumbnailUrl: record, basicAuthCredentials: record, buildSpec: record, ttl: record, associatedResources: record, enablePullRequestPreview: record, pullRequestEnvironmentName: record, destinationBranch: record, sourceBranch: record, backendEnvironmentArn: record>> {
+]: nothing -> record<branch: record<branchArn: string, branchName: string, description: string, tags: record, stage: string, displayName: string, enableNotification: bool, createTime: string, updateTime: string, environmentVariables: record, enableAutoBuild: bool, customDomains: list<string>, framework: string, activeJobId: string, totalNumberOfJobs: string, enableBasicAuth: bool, enablePerformanceMode: bool, thumbnailUrl: string, basicAuthCredentials: string, buildSpec: string, ttl: string, associatedResources: list<string>, enablePullRequestPreview: bool, pullRequestEnvironmentName: string, destinationBranch: string, sourceBranch: string, backendEnvironmentArn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -1095,7 +1095,7 @@ export def "update-branch" [
   --enable-pull-request-preview: oneof<nothing, bool> # Enables pull request previews for this branch.
   --pull-request-environment-name: string # The Amplify environment name for the pull request.
   --backend-environment-arn: string # The Amazon Resource Name (ARN) for a backend environment that is part of an Amplify app.
-]: any -> record<branch: record<branchArn: record, branchName: record, description: record, tags: record, stage: record, displayName: record, enableNotification: record, createTime: record, updateTime: record, environmentVariables: record, enableAutoBuild: record, customDomains: record, framework: record, activeJobId: record, totalNumberOfJobs: record, enableBasicAuth: record, enablePerformanceMode: record, thumbnailUrl: record, basicAuthCredentials: record, buildSpec: record, ttl: record, associatedResources: record, enablePullRequestPreview: record, pullRequestEnvironmentName: record, destinationBranch: record, sourceBranch: record, backendEnvironmentArn: record>> {
+]: any -> record<branch: record<branchArn: string, branchName: string, description: string, tags: record, stage: string, displayName: string, enableNotification: bool, createTime: string, updateTime: string, environmentVariables: record, enableAutoBuild: bool, customDomains: list<string>, framework: string, activeJobId: string, totalNumberOfJobs: string, enableBasicAuth: bool, enablePerformanceMode: bool, thumbnailUrl: string, basicAuthCredentials: string, buildSpec: string, ttl: string, associatedResources: list<string>, enablePullRequestPreview: bool, pullRequestEnvironmentName: string, destinationBranch: string, sourceBranch: string, backendEnvironmentArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1145,7 +1145,7 @@ export def "delete-domain-association" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<domainAssociation: record<domainAssociationArn: record, domainName: record, enableAutoSubDomain: record, autoSubDomainCreationPatterns: record, autoSubDomainIAMRole: record, domainStatus: record, statusReason: record, certificateVerificationDNSRecord: record, subDomains: record>> {
+]: nothing -> record<domainAssociation: record<domainAssociationArn: string, domainName: string, enableAutoSubDomain: bool, autoSubDomainCreationPatterns: list<string>, autoSubDomainIAMRole: string, domainStatus: string, statusReason: string, certificateVerificationDNSRecord: string, subDomains: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -1192,7 +1192,7 @@ export def "get-domain-association" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<domainAssociation: record<domainAssociationArn: record, domainName: record, enableAutoSubDomain: record, autoSubDomainCreationPatterns: record, autoSubDomainIAMRole: record, domainStatus: record, statusReason: record, certificateVerificationDNSRecord: record, subDomains: record>> {
+]: nothing -> record<domainAssociation: record<domainAssociationArn: string, domainName: string, enableAutoSubDomain: bool, autoSubDomainCreationPatterns: list<string>, autoSubDomainIAMRole: string, domainStatus: string, statusReason: string, certificateVerificationDNSRecord: string, subDomains: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -1220,7 +1220,7 @@ export def "get-domain-association" [
 #
 # POST /apps/{appId}/domains/{domainName}
 # operationId: UpdateDomainAssociation
-# --subDomainSettings item shape: {prefix: any, branchName: any}
+# --subDomainSettings item shape: {prefix: string, branchName: string}
 export def "update-domain-association" [
   app_id: string
   domain_name: string
@@ -1241,10 +1241,10 @@ export def "update-domain-association" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --enable-auto-sub-domain: oneof<nothing, bool> # Enables the automated creation of subdomains for branches.
-  --sub-domain-settings: list # Describes the settings for the subdomain. — item shape: {prefix: any, branchName: any}
+  --sub-domain-settings: list # Describes the settings for the subdomain. — item shape: {prefix: string, branchName: string}
   --auto-sub-domain-creation-patterns: list<string> # Sets the branch patterns for automatic subdomain creation.
   --auto-sub-domain-iam-role: string # The required AWS Identity and Access Management (IAM) service role for the Amazon Resource Name (ARN) for automatically creating subdomains.
-]: any -> record<domainAssociation: record<domainAssociationArn: record, domainName: record, enableAutoSubDomain: record, autoSubDomainCreationPatterns: record, autoSubDomainIAMRole: record, domainStatus: record, statusReason: record, certificateVerificationDNSRecord: record, subDomains: record>> {
+]: any -> record<domainAssociation: record<domainAssociationArn: string, domainName: string, enableAutoSubDomain: bool, autoSubDomainCreationPatterns: list<string>, autoSubDomainIAMRole: string, domainStatus: string, statusReason: string, certificateVerificationDNSRecord: string, subDomains: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1295,7 +1295,7 @@ export def "delete-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<jobSummary: record<jobArn: record, jobId: record, commitId: record, commitMessage: record, commitTime: record, startTime: record, status: record, endTime: record, jobType: record>> {
+]: nothing -> record<jobSummary: record<jobArn: string, jobId: string, commitId: string, commitMessage: string, commitTime: string, startTime: string, status: string, endTime: string, jobType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -1344,7 +1344,7 @@ export def "get-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<job: record<summary: record<jobArn: record, jobId: record, commitId: record, commitMessage: record, commitTime: record, startTime: record, status: record, endTime: record, jobType: record>, steps: record>> {
+]: nothing -> record<job: record<summary: record<jobArn: string, jobId: string, commitId: string, commitMessage: string, commitTime: string, startTime: string, status: string, endTime: string, jobType: string>, steps: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -1391,7 +1391,7 @@ export def "delete-webhook" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<webhook: record<webhookArn: record, webhookId: record, webhookUrl: record, branchName: record, description: record, createTime: record, updateTime: record>> {
+]: nothing -> record<webhook: record<webhookArn: string, webhookId: string, webhookUrl: string, branchName: string, description: string, createTime: string, updateTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webhook_id | is-empty) { error make --unspanned { msg: "path parameter 'webhookId' must be non-empty" } }
@@ -1436,7 +1436,7 @@ export def "get-webhook" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<webhook: record<webhookArn: record, webhookId: record, webhookUrl: record, branchName: record, description: record, createTime: record, updateTime: record>> {
+]: nothing -> record<webhook: record<webhookArn: string, webhookId: string, webhookUrl: string, branchName: string, description: string, createTime: string, updateTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webhook_id | is-empty) { error make --unspanned { msg: "path parameter 'webhookId' must be non-empty" } }
@@ -1483,7 +1483,7 @@ export def "update-webhook" [
   --x-amz-signed-headers: string
   --branch-name: string # The name for a branch that is part of an Amplify app.
   --description: string # The description for a webhook.
-]: any -> record<webhook: record<webhookArn: record, webhookId: record, webhookUrl: record, branchName: record, description: record, createTime: record, updateTime: record>> {
+]: any -> record<webhook: record<webhookArn: string, webhookId: string, webhookUrl: string, branchName: string, description: string, createTime: string, updateTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1534,7 +1534,7 @@ export def "generate-access-logs" [
   --start-time: string # The time at which the logs should start. The time range specified is inclusive of the start time. (format: date-time)
   --end-time: string # The time at which the logs should end. The time range specified is inclusive of the end time. (format: date-time)
   domain_name: string # The name of the domain.
-]: any -> record<logUrl: record> {
+]: any -> record<logUrl: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1582,7 +1582,7 @@ export def "get-artifact-url" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<artifactId: record, artifactUrl: record> {
+]: nothing -> record<artifactId: string, artifactUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($artifact_id | is-empty) { error make --unspanned { msg: "path parameter 'artifactId' must be non-empty" } }
@@ -1631,7 +1631,7 @@ export def "list-artifacts" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<artifacts: record, nextToken: record> {
+]: nothing -> record<artifacts: table<artifactFileName: string, artifactId: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -1682,7 +1682,7 @@ export def "list-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<jobSummaries: record, nextToken: record> {
+]: nothing -> record<jobSummaries: table<jobArn: string, jobId: string, commitId: string, commitMessage: string, commitTime: string, startTime: string, status: string, endTime: string, jobType: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -1736,7 +1736,7 @@ export def "start-job" [
   --commit-id: string # The commit ID from a third-party repository provider for the job.
   --commit-message: string # The commit message from a third-party repository provider for the job.
   --commit-time: string # The commit date and time for the job. (format: date-time)
-]: any -> record<jobSummary: record<jobArn: record, jobId: record, commitId: record, commitMessage: record, commitTime: record, startTime: record, status: record, endTime: record, jobType: record>> {
+]: any -> record<jobSummary: record<jobArn: string, jobId: string, commitId: string, commitMessage: string, commitTime: string, startTime: string, status: string, endTime: string, jobType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1882,7 +1882,7 @@ export def "start-deployment" [
   --x-amz-signed-headers: string
   --job-id: string # The job ID for this deployment, generated by the create deployment request.
   --source-url: string # The source URL for this deployment, used when calling start deployment without create deployment. The source URL can be any HTTP GET URL that is publicly accessible and downloads a single .zip file.
-]: any -> record<jobSummary: record<jobArn: record, jobId: record, commitId: record, commitMessage: record, commitTime: record, startTime: record, status: record, endTime: record, jobType: record>> {
+]: any -> record<jobSummary: record<jobArn: string, jobId: string, commitId: string, commitMessage: string, commitTime: string, startTime: string, status: string, endTime: string, jobType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1933,7 +1933,7 @@ export def "stop-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<jobSummary: record<jobArn: record, jobId: record, commitId: record, commitMessage: record, commitTime: record, startTime: record, status: record, endTime: record, jobType: record>> {
+]: nothing -> record<jobSummary: record<jobArn: string, jobId: string, commitId: string, commitMessage: string, commitTime: string, startTime: string, status: string, endTime: string, jobType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -1973,7 +1973,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # The tag keys to use to untag a resource.
+  --tag-keys: list # The tag keys to use to untag a resource. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1985,6 +1985,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"

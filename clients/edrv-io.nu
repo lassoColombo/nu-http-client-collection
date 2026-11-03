@@ -1,4 +1,4 @@
-# Auto-generated client for eDRV API vv1
+# Auto-generated client for eDRV API v1
 # Source: https://api.apis.guru/v2/specs/edrv.io/v1/openapi.json
 # Auth: --token flag or $env.EDRV_API_TOKEN
 
@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -1238,13 +1238,13 @@ export def "post-drivers" [
   firstname: string
   lastname: string
   --phone: record # shape: {home?: string, mobile?: string, work?: string}
-  --body-source: string@source-completer
+  source: string@source-completer
 ]: any -> record<message: string, ok: bool, result: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/drivers" $auth.query)
-  let req_body = {"active": $active, "address": $address, "email": $email, "firstname": $firstname, "lastname": $lastname, "phone": $phone, "source": $body_source} | compact
+  let req_body = {"active": $active, "address": $address, "email": $email, "firstname": $firstname, "lastname": $lastname, "phone": $phone, "source": $source} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1361,7 +1361,7 @@ export def "patch-driver" [
   --firstname: string
   --lastname: string
   --phone: record # shape: {home?: string, mobile?: string, work?: string}
-  --body-source: string
+  --source: string
   --tokens: list
 ]: any -> record<message: string, ok: bool, result: list<any>> {
   let input = $in
@@ -1369,7 +1369,7 @@ export def "patch-driver" [
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/drivers/{id}") $auth.query)
-  let req_body = {"active": $active, "address": $address, "email": $email, "firstname": $firstname, "lastname": $lastname, "phone": $phone, "source": $body_source, "tokens": $tokens} | compact
+  let req_body = {"active": $active, "address": $address, "email": $email, "firstname": $firstname, "lastname": $lastname, "phone": $phone, "source": $source, "tokens": $tokens} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1759,10 +1759,11 @@ export def "get-realtime" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --sec-websocket-protocol: string # The JWT token to use for auth
+  --sec-websocket-protocol: string # The JWT token to use for auth (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($sec_websocket_protocol == null) { error make --unspanned { msg: "required header parameter 'sec-websocket-protocol' missing: pass --sec-websocket-protocol" } }
   let full_url = (build-url $base "/v1/realtime" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1982,6 +1983,7 @@ export def "post-tokens" [
   let full_url = (build-url $base "/v1/tokens" $auth.query)
   let req_body = {"active": $active, "channel": $channel, "driver": $driver, "physicalId": $physical_id, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "active") == null) { error make --unspanned { msg: "required body field 'active' missing: pass --active or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "api_key" => { {scheme: $scheme, headers: {api_key: $token_val}, query: "", location: "header"} }
+    "api_key" => { {scheme: $scheme, headers: {"api_key": $token_val}, query: "", location: "header"} }
     "query-api_key" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "api_key")=(encode-path-segment $token_val)", location: "query"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -179,11 +179,13 @@ export def "5476364f031f5909e4fe3316" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --from-station-code: string@from-station-code-completer # Station code for the origin station. Use the Station List method to return a list of all station codes. (default: N06)
-  --to-station-code: string@to-station-code-completer # Station code for the origin station. Use the Station List method to return a list of all station codes. (default: G05)
+  --from-station-code: string@from-station-code-completer # Station code for the origin station. Use the Station List method to return a list of all station codes. (required, default: N06)
+  --to-station-code: string@to-station-code-completer # Station code for the origin station. Use the Station List method to return a list of all station codes. (required, default: G05)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
+  let from_station_code = ($from_station_code | default "N06")
+  let to_station_code = ($to_station_code | default "G05")
   let qp = [(serialize-qp "FromStationCode" $from_station_code "scalar") (serialize-qp "ToStationCode" $to_station_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Path" $qp $auth.query)
   let accept_val = "application/xml"
@@ -291,10 +293,11 @@ export def "5476364f031f5909e4fe3318" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --station-code: string@station-code-completer # Station code. Use the Station List method to return a list of all station codes. (default: A01)
+  --station-code: string@station-code-completer # Station code. Use the Station List method to return a list of all station codes. (required, default: A01)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
+  let station_code = ($station_code | default "A01")
   let qp = [(serialize-qp "StationCode" $station_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/StationInfo" $qp $auth.query)
   let accept_val = "application/xml"
@@ -469,11 +472,13 @@ export def "5476364f031f5909e4fe330e" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --from-station-code: string@from-station-code-completer # Station code for the origin station. Use the Station List method to return a list of all station codes. (default: N06)
-  --to-station-code: string@to-station-code-completer # Station code for the destination station. Use the Station List method to return a list of all station codes. (default: G05)
+  --from-station-code: string@from-station-code-completer # Station code for the origin station. Use the Station List method to return a list of all station codes. (required, default: N06)
+  --to-station-code: string@to-station-code-completer # Station code for the destination station. Use the Station List method to return a list of all station codes. (required, default: G05)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
+  let from_station_code = ($from_station_code | default "N06")
+  let to_station_code = ($to_station_code | default "G05")
   let qp = [(serialize-qp "FromStationCode" $from_station_code "scalar") (serialize-qp "ToStationCode" $to_station_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/json/jPath" $qp $auth.query)
   let accept_val = "application/json"
@@ -581,10 +586,11 @@ export def "5476364f031f5909e4fe3310" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --station-code: string@station-code-completer # Station code. Use the Station List method to return a list of all station codes. (default: A01)
+  --station-code: string@station-code-completer # Station code. Use the Station List method to return a list of all station codes. (required, default: A01)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
+  let station_code = ($station_code | default "A01")
   let qp = [(serialize-qp "StationCode" $station_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/json/jStationInfo" $qp $auth.query)
   let accept_val = "application/json"

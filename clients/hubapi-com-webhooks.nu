@@ -1,4 +1,4 @@
-# Auto-generated client for Webhooks API vv3
+# Auto-generated client for Webhooks API v3
 # Source: https://api.apis.guru/v2/specs/hubapi.com/webhooks/v3/openapi.json
 # Auth: --token flag or $env.WEBHOOKS_API_TOKEN
 
@@ -119,6 +119,7 @@ def base-url-completer [] { ["https://api.hubapi.com"] }
 def auth-scheme-completer [] { ["query-hapikey"] }
 
 # Completers for enum parameters
+def accept-completer [] { ["*/*" "application/json"] }
 def event-type-completer [] { ["company.creation" "company.deletion" "company.propertyChange" "contact.creation" "contact.deletion" "contact.privacyDeletion" "contact.propertyChange" "conversation.creation" "conversation.deletion" "conversation.newMessage" "conversation.privacyDeletion" "conversation.propertyChange" "deal.creation" "deal.deletion" "deal.propertyChange" "line_item.creation" "line_item.deletion" "line_item.propertyChange" "product.creation" "product.deletion" "product.propertyChange" "ticket.creation" "ticket.deletion" "ticket.propertyChange"] }
 
 # List all available API commands with their parameters
@@ -163,7 +164,7 @@ export def "delete-webhooks-v3-settings-clear" [
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/webhooks/v3/{app_id}/settings") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
@@ -193,12 +194,13 @@ export def "get-webhooks-v3-settings-get-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
 ]: nothing -> record<createdAt: string, targetUrl: string, throttling: record<maxConcurrentRequests: int, period: string>, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/webhooks/v3/{app_id}/settings") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -229,6 +231,7 @@ export def "put-webhooks-v3-settings-configure" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   target_url: string # A publicly available URL for Hubspot to call where event payloads will be delivered. See [link-so-some-doc](#) for details about the format of these event payloads.
   throttling: record # Configuration details for webhook throttling. — shape: {maxConcurrentRequests: int, period: "SECONDLY"|"ROLLING_MINUTE"}
 ]: any -> record<createdAt: string, targetUrl: string, throttling: record<maxConcurrentRequests: int, period: string>, updatedAt: string> {
@@ -239,7 +242,7 @@ export def "put-webhooks-v3-settings-configure" [
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/webhooks/v3/{app_id}/settings") $auth.query)
   let req_body = {"targetUrl": $target_url, "throttling": $throttling} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "put"
@@ -269,12 +272,13 @@ export def "get-webhooks-v3-subscriptions-get-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
 ]: nothing -> record<results: table<active: bool, createdAt: string, eventType: string, id: string, propertyName: string, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/webhooks/v3/{app_id}/subscriptions") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -304,6 +308,7 @@ export def "post-webhooks-v3-subscriptions-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --active: oneof<nothing, bool> # Determines if the subscription is active or paused. Defaults to false.
   event_type: string@event-type-completer # Type of event to listen for. Can be one of `create`, `delete`, `deletedForPrivacy`, or `propertyChange`.
   --property-name: string # The internal name of the property to monitor for changes. Only applies when `eventType` is `propertyChange`.
@@ -315,7 +320,7 @@ export def "post-webhooks-v3-subscriptions-create" [
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/webhooks/v3/{app_id}/subscriptions") $auth.query)
   let req_body = {"active": $active, "eventType": $event_type, "propertyName": $property_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -346,6 +351,7 @@ export def "post-webhooks-v3-subscriptions-batch-update-update-batch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   inputs: list # item shape: {active: bool, id: int}
 ]: any -> record<completedAt: string, links: record, requestedAt: string, results: table<active: bool, createdAt: string, eventType: string, id: string, propertyName: string, updatedAt: string>, startedAt: string, status: string> {
   let input = $in
@@ -355,7 +361,7 @@ export def "post-webhooks-v3-subscriptions-batch-update-update-batch" [
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/webhooks/v3/{app_id}/subscriptions/batch/update") $auth.query)
   let req_body = {"inputs": $inputs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -392,7 +398,7 @@ export def "delete-webhooks-v3-subscriptions-archive" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), subscription_id: (encode-path-segment $subscription_id)} | format pattern "/webhooks/v3/{app_id}/subscriptions/{subscription_id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
@@ -423,13 +429,14 @@ export def "get-webhooks-v3-subscriptions-get-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
 ]: nothing -> record<active: bool, createdAt: string, eventType: string, id: string, propertyName: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), subscription_id: (encode-path-segment $subscription_id)} | format pattern "/webhooks/v3/{app_id}/subscriptions/{subscription_id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -460,6 +467,7 @@ export def "patch-webhooks-v3-subscriptions-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --active: oneof<nothing, bool> # Determines if the subscription is active or paused.
 ]: any -> record<active: bool, createdAt: string, eventType: string, id: string, propertyName: string, updatedAt: string> {
   let input = $in
@@ -470,7 +478,7 @@ export def "patch-webhooks-v3-subscriptions-update" [
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), subscription_id: (encode-path-segment $subscription_id)} | format pattern "/webhooks/v3/{app_id}/subscriptions/{subscription_id}") $auth.query)
   let req_body = {"active": $active} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "patch"

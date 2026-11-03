@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 #
 # POST /workbooks/{workbookId}/tables/{tableId}/rows/batchcreate
 # operationId: BatchCreateTableRows
-# --rowsToCreate item shape: {batchItemId: any, cellsToCreate: any}
+# --rowsToCreate item shape: {batchItemId: string, cellsToCreate: record}
 export def "batch-create-table-rows" [
   workbook_id: string
   table_id: string
@@ -156,9 +156,9 @@ export def "batch-create-table-rows" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  rows_to_create: list # The list of rows to create at the end of the table. Each item in this list needs to have a batch item id to uniquely identify the element in the request and the cells to create for that row. You need to specify at least one item in this list. Note that if one of the column ids in any of the rows in the request does not exist in the table, then the request fails and no updates are made to the table. — item shape: {batchItemId: any, cellsToCreate: any}
+  rows_to_create: list # The list of rows to create at the end of the table. Each item in this list needs to have a batch item id to uniquely identify the element in the request and the cells to create for that row. You need to specify at least one item in this list. Note that if one of the column ids in any of the rows in the request does not exist in the table, then the request fails and no updates are made to the table. — item shape: {batchItemId: string, cellsToCreate: record}
   --client-request-token: string # The request token for performing the batch create operation. Request tokens help to identify duplicate requests. If a call times out or fails due to a transient error like a failed network connection, you can retry the call with the same request token. The service ensures that if the first call using that request token is successfully performed, the second call will not perform the operation again. Note that request tokens are valid only for a few minutes. You cannot use request tokens to dedupe requests spanning hours or days.
-]: any -> record<workbookCursor: record, createdRows: record, failedBatchItems: record> {
+]: any -> record<workbookCursor: int, createdRows: record, failedBatchItems: table<id: string, errorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -210,7 +210,7 @@ export def "batch-delete-table-rows" [
   --x-amz-signed-headers: string
   row_ids: list<string> # The list of row ids to delete from the table. You need to specify at least one row id in this list. Note that if one of the row ids provided in the request does not exist in the table, then the request fails and no rows are deleted from the table.
   --client-request-token: string # The request token for performing the delete action. Request tokens help to identify duplicate requests. If a call times out or fails due to a transient error like a failed network connection, you can retry the call with the same request token. The service ensures that if the first call using that request token is successfully performed, the second call will not perform the action again. Note that request tokens are valid only for a few minutes. You cannot use request tokens to dedupe requests spanning hours or days.
-]: any -> record<workbookCursor: record, failedBatchItems: record> {
+]: any -> record<workbookCursor: int, failedBatchItems: table<id: string, errorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -241,7 +241,7 @@ export def "batch-delete-table-rows" [
 #
 # POST /workbooks/{workbookId}/tables/{tableId}/rows/batchupdate
 # operationId: BatchUpdateTableRows
-# --rowsToUpdate item shape: {rowId: any, cellsToUpdate: any}
+# --rowsToUpdate item shape: {rowId: string, cellsToUpdate: record}
 export def "batch-update-table-rows" [
   workbook_id: string
   table_id: string
@@ -261,9 +261,9 @@ export def "batch-update-table-rows" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  rows_to_update: list # The list of rows to update in the table. Each item in this list needs to contain the row id to update along with the map of column id to cell values for each column in that row that needs to be updated. You need to specify at least one row in this list, and for each row, you need to specify at least one column to update. Note that if one of the row or column ids in the request does not exist in the table, then the request fails and no updates are made to the table. — item shape: {rowId: any, cellsToUpdate: any}
+  rows_to_update: list # The list of rows to update in the table. Each item in this list needs to contain the row id to update along with the map of column id to cell values for each column in that row that needs to be updated. You need to specify at least one row in this list, and for each row, you need to specify at least one column to update. Note that if one of the row or column ids in the request does not exist in the table, then the request fails and no updates are made to the table. — item shape: {rowId: string, cellsToUpdate: record}
   --client-request-token: string # The request token for performing the update action. Request tokens help to identify duplicate requests. If a call times out or fails due to a transient error like a failed network connection, you can retry the call with the same request token. The service ensures that if the first call using that request token is successfully performed, the second call will not perform the action again. Note that request tokens are valid only for a few minutes. You cannot use request tokens to dedupe requests spanning hours or days.
-]: any -> record<workbookCursor: record, failedBatchItems: record> {
+]: any -> record<workbookCursor: int, failedBatchItems: table<id: string, errorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -294,7 +294,7 @@ export def "batch-update-table-rows" [
 #
 # POST /workbooks/{workbookId}/tables/{tableId}/rows/batchupsert
 # operationId: BatchUpsertTableRows
-# --rowsToUpsert item shape: {batchItemId: any, filter: any, cellsToUpdate: any}
+# --rowsToUpsert item shape: {batchItemId: string, filter: record, cellsToUpdate: record}
 export def "batch-upsert-table-rows" [
   workbook_id: string
   table_id: string
@@ -314,9 +314,9 @@ export def "batch-upsert-table-rows" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  rows_to_upsert: list # The list of rows to upsert in the table. Each item in this list needs to have a batch item id to uniquely identify the element in the request, a filter expression to find the rows to update for that element and the cell values to set for each column in the upserted rows. You need to specify at least one item in this list. Note that if one of the filter formulas in the request fails to evaluate because of an error or one of the column ids in any of the rows does not exist in the table, then the request fails and no updates are made to the table. — item shape: {batchItemId: any, filter: any, cellsToUpdate: any}
+  rows_to_upsert: list # The list of rows to upsert in the table. Each item in this list needs to have a batch item id to uniquely identify the element in the request, a filter expression to find the rows to update for that element and the cell values to set for each column in the upserted rows. You need to specify at least one item in this list. Note that if one of the filter formulas in the request fails to evaluate because of an error or one of the column ids in any of the rows does not exist in the table, then the request fails and no updates are made to the table. — item shape: {batchItemId: string, filter: record, cellsToUpdate: record}
   --client-request-token: string # The request token for performing the update action. Request tokens help to identify duplicate requests. If a call times out or fails due to a transient error like a failed network connection, you can retry the call with the same request token. The service ensures that if the first call using that request token is successfully performed, the second call will not perform the action again. Note that request tokens are valid only for a few minutes. You cannot use request tokens to dedupe requests spanning hours or days.
-]: any -> record<rows: record, workbookCursor: record, failedBatchItems: record> {
+]: any -> record<rows: record, workbookCursor: int, failedBatchItems: table<id: string, errorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -367,7 +367,7 @@ export def "describe-table-data-import-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<jobStatus: record, message: record, jobMetadata: record<submitter: record<email: record, userArn: record>, submitTime: record, importOptions: record<destinationOptions: record, delimitedTextOptions: record>, dataSource: record<dataSourceConfig: record>>, errorCode: record> {
+]: nothing -> record<jobStatus: string, message: string, jobMetadata: record<submitter: record<email: string, userArn: string>, submitTime: string, importOptions: record<destinationOptions: record, delimitedTextOptions: record>, dataSource: record<dataSourceConfig: record>>, errorCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workbook_id | is-empty) { error make --unspanned { msg: "path parameter 'workbookId' must be non-empty" } }
@@ -419,7 +419,7 @@ export def "get-screen-data" [
   --variables: record # Variables are optional and are needed only if the screen requires them to render correctly. Variables are specified as a map where the key is the name of the variable as defined on the screen. The value is an object which currently has only one property, rawValue, which holds the value of the variable to be passed to the screen.
   --max-results: int # The number of results to be returned on a single page. Specify a number between 1 and 100. The maximum value is 100. This parameter is optional. If you don't specify this parameter, the default page size is 100.
   --next-token: string # This parameter is optional. If a nextToken is not specified, the API returns the first page of data. Pagination tokens expire after 1 hour. If you use a token that was returned more than an hour back, the API will throw ValidationException.
-]: any -> record<results: record, workbookCursor: record, nextToken: record> {
+]: any -> record<results: record, workbookCursor: int, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -472,7 +472,7 @@ export def "invoke-screen-automation" [
   --variables: record # Variables are specified as a map where the key is the name of the variable as defined on the screen. The value is an object which currently has only one property, rawValue, which holds the value of the variable to be passed to the screen. Any variables defined in a screen are required to be passed in the call.
   --row-id: string # The row ID for the automation if the automation is defined inside a block with source or list.
   --client-request-token: string # The request token for performing the automation action. Request tokens help to identify duplicate requests. If a call times out or fails due to a transient error like a failed network connection, you can retry the call with the same request token. The service ensures that if the first call using that request token is successfully performed, the second call will return the response of the previous call rather than performing the action again. Note that request tokens are valid only for a few minutes. You cannot use request tokens to dedupe requests spanning hours or days.
-]: any -> record<workbookCursor: record> {
+]: any -> record<workbookCursor: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -525,7 +525,7 @@ export def "list-table-columns" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<tableColumns: record, nextToken: record, workbookCursor: record> {
+]: nothing -> record<tableColumns: table<tableColumnId: string, tableColumnName: string, format: string>, nextToken: string, workbookCursor: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workbook_id | is-empty) { error make --unspanned { msg: "path parameter 'workbookId' must be non-empty" } }
@@ -578,7 +578,7 @@ export def "list-table-rows" [
   --row-ids: list<string> # This parameter is optional. If one or more row ids are specified in this list, then only the specified row ids are returned in the result. If no row ids are specified here, then all the rows in the table are returned.
   --max-results-body: int # The maximum number of rows to return in each page of the results. (body field)
   --next-token-body: string # This parameter is optional. If a nextToken is not specified, the API returns the first page of data. Pagination tokens expire after 1 hour. If you use a token that was returned more than an hour back, the API will throw ValidationException. (body field)
-]: any -> record<columnIds: record, rows: record, rowIdsNotFound: record, nextToken: record, workbookCursor: record> {
+]: any -> record<columnIds: list<string>, rows: table<rowId: string, cells: list>, rowIdsNotFound: list<string>, nextToken: string, workbookCursor: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -630,7 +630,7 @@ export def "list-tables" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<tables: record, nextToken: record, workbookCursor: record> {
+]: nothing -> record<tables: table<tableId: string, tableName: string>, nextToken: string, workbookCursor: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workbook_id | is-empty) { error make --unspanned { msg: "path parameter 'workbookId' must be non-empty" } }
@@ -752,7 +752,7 @@ export def "tag-resource" [
 #
 # POST /workbooks/{workbookId}/tables/{tableId}/rows/query
 # operationId: QueryTableRows
-# --filterFormula shape: {formula?: any, contextRowId?: any}
+# --filterFormula shape: {formula?: string, contextRowId?: string}
 export def "query-table-rows" [
   workbook_id: string
   table_id: string
@@ -774,10 +774,10 @@ export def "query-table-rows" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  filter_formula: record # An object that represents a filter formula along with the id of the context row under which the filter function needs to evaluate. — shape: {formula?: any, contextRowId?: any}
+  filter_formula: record # An object that represents a filter formula along with the id of the context row under which the filter function needs to evaluate. — shape: {formula?: string, contextRowId?: string}
   --max-results-body: int # The maximum number of rows to return in each page of the results. (body field)
   --next-token-body: string # This parameter is optional. If a nextToken is not specified, the API returns the first page of data. Pagination tokens expire after 1 hour. If you use a token that was returned more than an hour back, the API will throw ValidationException. (body field)
-]: any -> record<columnIds: record, rows: record, nextToken: record, workbookCursor: record> {
+]: any -> record<columnIds: list<string>, rows: table<rowId: string, cells: list>, nextToken: string, workbookCursor: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -809,8 +809,8 @@ export def "query-table-rows" [
 #
 # POST /workbooks/{workbookId}/tables/{tableId}/import
 # operationId: StartTableDataImportJob
-# --dataSource shape: {dataSourceConfig?: any}
-# --importOptions shape: {destinationOptions?: any, delimitedTextOptions?: any}
+# --dataSource shape: {dataSourceConfig?: record}
+# --importOptions shape: {destinationOptions?: record, delimitedTextOptions?: record}
 export def "start-table-data-import-job" [
   workbook_id: string
   table_id: string
@@ -830,11 +830,11 @@ export def "start-table-data-import-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  data_source: record # An object that has details about the source of the data that was submitted for import. — shape: {dataSourceConfig?: any}
+  data_source: record # An object that has details about the source of the data that was submitted for import. — shape: {dataSourceConfig?: record}
   data_format: string@data-format-completer # The format of the data that is being imported. Currently the only option supported is "DELIMITED_TEXT".
-  import_options: record # An object that contains the options specified by the sumitter of the import request. — shape: {destinationOptions?: any, delimitedTextOptions?: any}
+  import_options: record # An object that contains the options specified by the sumitter of the import request. — shape: {destinationOptions?: record, delimitedTextOptions?: record}
   client_request_token: string # The request token for performing the update action. Request tokens help to identify duplicate requests. If a call times out or fails due to a transient error like a failed network connection, you can retry the call with the same request token. The service ensures that if the first call using that request token is successfully performed, the second call will not perform the action again. Note that request tokens are valid only for a few minutes. You cannot use request tokens to dedupe requests spanning hours or days.
-]: any -> record<jobId: record, jobStatus: record> {
+]: any -> record<jobId: string, jobStatus: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -876,7 +876,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # A list of tag keys to remove from the resource.
+  --tag-keys: list # A list of tag keys to remove from the resource. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -888,6 +888,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"

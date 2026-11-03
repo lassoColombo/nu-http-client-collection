@@ -166,10 +166,11 @@ export def "validate-iban" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --iban: string # The IBAN
+  --iban: string # The IBAN (required)
 ]: nothing -> record<data: record, expremental: int, message: string, result: int, validations: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($iban == null) { error make --unspanned { msg: "required query parameter 'iban' missing: pass --iban" } }
   let qp = [(serialize-qp "iban" $iban "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/validate" $qp $auth.query)
   let accept_val = "application/json"
@@ -202,10 +203,11 @@ export def "validate-iban-basic" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --iban: string # The IBAN
+  --iban: string # The IBAN (required)
 ]: nothing -> record<data: record, expremental: int, message: string, result: int, validations: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($iban == null) { error make --unspanned { msg: "required query parameter 'iban' missing: pass --iban" } }
   let qp = [(serialize-qp "iban" $iban "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/validate-basic" $qp $auth.query)
   let accept_val = "application/json"

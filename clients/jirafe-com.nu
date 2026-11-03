@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -412,6 +412,8 @@ export def "post-product" [
   let full_url = (build-url $base ({site_id: (encode-path-segment $site_id)} | format pattern "/{site_id}/product") $auth.query)
   let req_body = {"ancestors": $ancestors, "attributes": $attributes, "base_product": $base_product, "brand": $brand, "catalog": $catalog, "categories": $categories, "change_date": $change_date, "code": $code, "create_date": $create_date, "id": $id, "images": $images, "is_order": $is_order, "is_sku": $is_sku, "name": $name, "rating": $rating, "urls": $urls, "vendors": $vendors} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "is_order") == null) { error make --unspanned { msg: "required body field 'is_order' missing: pass --is-order or pipe a record" } }
+  if (($req_body | get -o "is_sku") == null) { error make --unspanned { msg: "required body field 'is_sku' missing: pass --is-sku or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {

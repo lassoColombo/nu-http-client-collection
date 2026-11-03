@@ -132,12 +132,14 @@ export def "retrieve-pricing-all-countries" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # Your Nexmo API key.
-  --api-secret: string # Your Nexmo API secret.
+  --api-key: string # Your Nexmo API key. (required)
+  --api-secret: string # Your Nexmo API secret. (required)
 ]: nothing -> record<count: string, countries: table<countryDisplayName: string, countryName: string, currency: string, defaultPrice: string, dialingPrefix: string, networks: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
+  if ($api_secret == null) { error make --unspanned { msg: "required query parameter 'api_secret' missing: pass --api-secret" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "api_secret" $api_secret "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/get-full-pricing/outbound/{type}") $qp $auth.query)
   let accept_val = "application/json"
@@ -171,13 +173,16 @@ export def "retrieve-prefix-pricing" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # Your Nexmo API key.
-  --api-secret: string # Your Nexmo API secret.
-  --prefix: string # The numerical dialing prefix to look up pricing for. Examples include 44, 1 and so on.
+  --api-key: string # Your Nexmo API key. (required)
+  --api-secret: string # Your Nexmo API secret. (required)
+  --prefix: string # The numerical dialing prefix to look up pricing for. Examples include 44, 1 and so on. (required)
 ]: nothing -> record<count: string, countries: table<countryDisplayName: string, countryName: string, currency: string, defaultPrice: string, dialingPrefix: string, networks: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
+  if ($api_secret == null) { error make --unspanned { msg: "required query parameter 'api_secret' missing: pass --api-secret" } }
+  if ($prefix == null) { error make --unspanned { msg: "required query parameter 'prefix' missing: pass --prefix" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "api_secret" $api_secret "scalar") (serialize-qp "prefix" $prefix "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/get-prefix-pricing/outbound/{type}") $qp $auth.query)
   let accept_val = "application/json"
@@ -211,13 +216,16 @@ export def "retrieve-pricing-country" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # Your Nexmo API key.
-  --api-secret: string # Your Nexmo API secret.
-  --country: string # A two letter [country code](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2). For example, `CA`.
+  --api-key: string # Your Nexmo API key. (required)
+  --api-secret: string # Your Nexmo API secret. (required)
+  --country: string # A two letter [country code](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2). For example, `CA`. (required)
 ]: nothing -> record<countryCode: string, countryDisplayName: string, countryName: string, currency: string, defaultPrice: string, dialingPrefix: string, networks: table<currency: string, mcc: string, mnc: string, networkCode: string, networkName: string, price: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
+  if ($api_secret == null) { error make --unspanned { msg: "required query parameter 'api_secret' missing: pass --api-secret" } }
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "api_secret" $api_secret "scalar") (serialize-qp "country" $country "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/get-pricing/outbound/{type}") $qp $auth.query)
   let accept_val = "application/json"

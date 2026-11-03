@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -214,10 +214,10 @@ export def "get-clone-receipt-rule-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rule-set-name: string # The name of the rule set to create. The name must: This value can only contain ASCII letters (a-z, A-Z), numbers (0-9), underscores (_), or dashes (-). Start and end with a letter or number. Contain less than 64 characters.
-  --original-rule-set-name: string # The name of the rule set to clone.
-  --action: string@action-completer
-  --version: string@version-completer
+  --rule-set-name: string # The name of the rule set to create. The name must: This value can only contain ASCII letters (a-z, A-Z), numbers (0-9), underscores (_), or dashes (-). Start and end with a letter or number. Contain less than 64 characters. (required)
+  --original-rule-set-name: string # The name of the rule set to clone. (required)
+  --action: string@action-completer # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -228,6 +228,10 @@ export def "get-clone-receipt-rule-set" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($rule_set_name == null) { error make --unspanned { msg: "required query parameter 'RuleSetName' missing: pass --rule-set-name" } }
+  if ($original_rule_set_name == null) { error make --unspanned { msg: "required query parameter 'OriginalRuleSetName' missing: pass --original-rule-set-name" } }
+  let action = ($action | default "CloneReceiptRuleSet")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "RuleSetName" $rule_set_name "scalar") (serialize-qp "OriginalRuleSetName" $original_rule_set_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -262,8 +266,8 @@ export def "post-clone-receipt-rule-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer
-  --version: string@version-completer
+  --action: string@action-completer # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -276,6 +280,8 @@ export def "post-clone-receipt-rule-set" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CloneReceiptRuleSet")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -312,9 +318,9 @@ export def "get-create-configuration-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --configuration-set: record # A data structure that contains the name of the configuration set.
-  --action: string@action-completer-1
-  --version: string@version-completer
+  --configuration-set: record # A data structure that contains the name of the configuration set. (required)
+  --action: string@action-completer-1 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -325,6 +331,9 @@ export def "get-create-configuration-set" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($configuration_set == null) { error make --unspanned { msg: "required query parameter 'ConfigurationSet' missing: pass --configuration-set" } }
+  let action = ($action | default "CreateConfigurationSet")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "ConfigurationSet" $configuration_set "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -359,8 +368,8 @@ export def "post-create-configuration-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-1
-  --version: string@version-completer
+  --action: string@action-completer-1 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -373,6 +382,8 @@ export def "post-create-configuration-set" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateConfigurationSet")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -409,10 +420,10 @@ export def "get-create-configuration-set-event-destination" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --configuration-set-name: string # The name of the configuration set that the event destination should be associated with.
-  --event-destination: record # An object that describes the AWS service that email sending event information will be published to.
-  --action: string@action-completer-2
-  --version: string@version-completer
+  --configuration-set-name: string # The name of the configuration set that the event destination should be associated with. (required)
+  --event-destination: record # An object that describes the AWS service that email sending event information will be published to. (required)
+  --action: string@action-completer-2 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -423,6 +434,10 @@ export def "get-create-configuration-set-event-destination" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($configuration_set_name == null) { error make --unspanned { msg: "required query parameter 'ConfigurationSetName' missing: pass --configuration-set-name" } }
+  if ($event_destination == null) { error make --unspanned { msg: "required query parameter 'EventDestination' missing: pass --event-destination" } }
+  let action = ($action | default "CreateConfigurationSetEventDestination")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "ConfigurationSetName" $configuration_set_name "scalar") (serialize-qp "EventDestination" $event_destination "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -457,8 +472,8 @@ export def "post-create-configuration-set-event-destination" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-2
-  --version: string@version-completer
+  --action: string@action-completer-2 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -471,6 +486,8 @@ export def "post-create-configuration-set-event-destination" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateConfigurationSetEventDestination")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -507,10 +524,10 @@ export def "get-create-configuration-set-tracking-options" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --configuration-set-name: string # The name of the configuration set that the tracking options should be associated with.
-  --tracking-options: record
-  --action: string@action-completer-3
-  --version: string@version-completer
+  --configuration-set-name: string # The name of the configuration set that the tracking options should be associated with. (required)
+  --tracking-options: record # required
+  --action: string@action-completer-3 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -521,6 +538,10 @@ export def "get-create-configuration-set-tracking-options" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($configuration_set_name == null) { error make --unspanned { msg: "required query parameter 'ConfigurationSetName' missing: pass --configuration-set-name" } }
+  if ($tracking_options == null) { error make --unspanned { msg: "required query parameter 'TrackingOptions' missing: pass --tracking-options" } }
+  let action = ($action | default "CreateConfigurationSetTrackingOptions")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "ConfigurationSetName" $configuration_set_name "scalar") (serialize-qp "TrackingOptions" $tracking_options "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -555,8 +576,8 @@ export def "post-create-configuration-set-tracking-options" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-3
-  --version: string@version-completer
+  --action: string@action-completer-3 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -569,6 +590,8 @@ export def "post-create-configuration-set-tracking-options" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateConfigurationSetTrackingOptions")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -605,14 +628,14 @@ export def "get-create-custom-verification-email-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --template-name: string # The name of the custom verification email template.
-  --from-email-address: string # The email address that the custom verification email is sent from.
-  --template-subject: string # The subject line of the custom verification email.
-  --template-content: string # The content of the custom verification email. The total size of the email must be less than 10 MB. The message body may contain HTML, with some limitations. For more information, see Custom Verification Email Frequently Asked Questions (https://docs.aws.amazon.com/ses/latest/DeveloperGuide/custom-verification-emails.html#custom-verification-emails-faq) in the Amazon SES Developer Guide.
-  --success-redirection-url: string # The URL that the recipient of the verification email is sent to if his or her address is successfully verified.
-  --failure-redirection-url: string # The URL that the recipient of the verification email is sent to if his or her address is not successfully verified.
-  --action: string@action-completer-4
-  --version: string@version-completer
+  --template-name: string # The name of the custom verification email template. (required)
+  --from-email-address: string # The email address that the custom verification email is sent from. (required)
+  --template-subject: string # The subject line of the custom verification email. (required)
+  --template-content: string # The content of the custom verification email. The total size of the email must be less than 10 MB. The message body may contain HTML, with some limitations. For more information, see Custom Verification Email Frequently Asked Questions (https://docs.aws.amazon.com/ses/latest/DeveloperGuide/custom-verification-emails.html#custom-verification-emails-faq) in the Amazon SES Developer Guide. (required)
+  --success-redirection-url: string # The URL that the recipient of the verification email is sent to if his or her address is successfully verified. (required)
+  --failure-redirection-url: string # The URL that the recipient of the verification email is sent to if his or her address is not successfully verified. (required)
+  --action: string@action-completer-4 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -623,6 +646,14 @@ export def "get-create-custom-verification-email-template" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($template_name == null) { error make --unspanned { msg: "required query parameter 'TemplateName' missing: pass --template-name" } }
+  if ($from_email_address == null) { error make --unspanned { msg: "required query parameter 'FromEmailAddress' missing: pass --from-email-address" } }
+  if ($template_subject == null) { error make --unspanned { msg: "required query parameter 'TemplateSubject' missing: pass --template-subject" } }
+  if ($template_content == null) { error make --unspanned { msg: "required query parameter 'TemplateContent' missing: pass --template-content" } }
+  if ($success_redirection_url == null) { error make --unspanned { msg: "required query parameter 'SuccessRedirectionURL' missing: pass --success-redirection-url" } }
+  if ($failure_redirection_url == null) { error make --unspanned { msg: "required query parameter 'FailureRedirectionURL' missing: pass --failure-redirection-url" } }
+  let action = ($action | default "CreateCustomVerificationEmailTemplate")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "TemplateName" $template_name "scalar") (serialize-qp "FromEmailAddress" $from_email_address "scalar") (serialize-qp "TemplateSubject" $template_subject "scalar") (serialize-qp "TemplateContent" $template_content "scalar") (serialize-qp "SuccessRedirectionURL" $success_redirection_url "scalar") (serialize-qp "FailureRedirectionURL" $failure_redirection_url "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -657,8 +688,8 @@ export def "post-create-custom-verification-email-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-4
-  --version: string@version-completer
+  --action: string@action-completer-4 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -671,6 +702,8 @@ export def "post-create-custom-verification-email-template" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateCustomVerificationEmailTemplate")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -707,9 +740,9 @@ export def "get-create-receipt-filter" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter: record # A data structure that describes the IP address filter to create, which consists of a name, an IP address range, and whether to allow or block mail from it.
-  --action: string@action-completer-5
-  --version: string@version-completer
+  --filter: record # A data structure that describes the IP address filter to create, which consists of a name, an IP address range, and whether to allow or block mail from it. (required)
+  --action: string@action-completer-5 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -720,6 +753,9 @@ export def "get-create-receipt-filter" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($filter == null) { error make --unspanned { msg: "required query parameter 'Filter' missing: pass --filter" } }
+  let action = ($action | default "CreateReceiptFilter")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Filter" $filter "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -754,8 +790,8 @@ export def "post-create-receipt-filter" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-5
-  --version: string@version-completer
+  --action: string@action-completer-5 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -768,6 +804,8 @@ export def "post-create-receipt-filter" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateReceiptFilter")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -804,11 +842,11 @@ export def "get-create-receipt-rule" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rule-set-name: string # The name of the rule set that the receipt rule will be added to.
+  --rule-set-name: string # The name of the rule set that the receipt rule will be added to. (required)
   --after: string # The name of an existing rule after which the new rule will be placed. If this parameter is null, the new rule will be inserted at the beginning of the rule list.
-  --rule: record # A data structure that contains the specified rule's name, actions, recipients, domains, enabled status, scan status, and TLS policy.
-  --action: string@action-completer-6
-  --version: string@version-completer
+  --rule: record # A data structure that contains the specified rule's name, actions, recipients, domains, enabled status, scan status, and TLS policy. (required)
+  --action: string@action-completer-6 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -819,6 +857,10 @@ export def "get-create-receipt-rule" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($rule_set_name == null) { error make --unspanned { msg: "required query parameter 'RuleSetName' missing: pass --rule-set-name" } }
+  if ($rule == null) { error make --unspanned { msg: "required query parameter 'Rule' missing: pass --rule" } }
+  let action = ($action | default "CreateReceiptRule")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "RuleSetName" $rule_set_name "scalar") (serialize-qp "After" $after "scalar") (serialize-qp "Rule" $rule "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -853,8 +895,8 @@ export def "post-create-receipt-rule" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-6
-  --version: string@version-completer
+  --action: string@action-completer-6 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -867,6 +909,8 @@ export def "post-create-receipt-rule" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateReceiptRule")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -903,9 +947,9 @@ export def "get-create-receipt-rule-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rule-set-name: string # The name of the rule set to create. The name must: This value can only contain ASCII letters (a-z, A-Z), numbers (0-9), underscores (_), or dashes (-). Start and end with a letter or number. Contain less than 64 characters.
-  --action: string@action-completer-7
-  --version: string@version-completer
+  --rule-set-name: string # The name of the rule set to create. The name must: This value can only contain ASCII letters (a-z, A-Z), numbers (0-9), underscores (_), or dashes (-). Start and end with a letter or number. Contain less than 64 characters. (required)
+  --action: string@action-completer-7 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -916,6 +960,9 @@ export def "get-create-receipt-rule-set" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($rule_set_name == null) { error make --unspanned { msg: "required query parameter 'RuleSetName' missing: pass --rule-set-name" } }
+  let action = ($action | default "CreateReceiptRuleSet")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "RuleSetName" $rule_set_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -950,8 +997,8 @@ export def "post-create-receipt-rule-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-7
-  --version: string@version-completer
+  --action: string@action-completer-7 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -964,6 +1011,8 @@ export def "post-create-receipt-rule-set" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateReceiptRuleSet")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1000,9 +1049,9 @@ export def "get-create-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --template: record # The content of the email, composed of a subject line, an HTML part, and a text-only part.
-  --action: string@action-completer-8
-  --version: string@version-completer
+  --template: record # The content of the email, composed of a subject line, an HTML part, and a text-only part. (required)
+  --action: string@action-completer-8 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1013,6 +1062,9 @@ export def "get-create-template" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($template == null) { error make --unspanned { msg: "required query parameter 'Template' missing: pass --template" } }
+  let action = ($action | default "CreateTemplate")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Template" $template "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1047,8 +1099,8 @@ export def "post-create-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-8
-  --version: string@version-completer
+  --action: string@action-completer-8 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1061,6 +1113,8 @@ export def "post-create-template" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateTemplate")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1097,9 +1151,9 @@ export def "get-delete-configuration-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --configuration-set-name: string # The name of the configuration set to delete.
-  --action: string@action-completer-9
-  --version: string@version-completer
+  --configuration-set-name: string # The name of the configuration set to delete. (required)
+  --action: string@action-completer-9 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1110,6 +1164,9 @@ export def "get-delete-configuration-set" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($configuration_set_name == null) { error make --unspanned { msg: "required query parameter 'ConfigurationSetName' missing: pass --configuration-set-name" } }
+  let action = ($action | default "DeleteConfigurationSet")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "ConfigurationSetName" $configuration_set_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1144,8 +1201,8 @@ export def "post-delete-configuration-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-9
-  --version: string@version-completer
+  --action: string@action-completer-9 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1158,6 +1215,8 @@ export def "post-delete-configuration-set" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteConfigurationSet")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1194,10 +1253,10 @@ export def "get-delete-configuration-set-event-destination" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --configuration-set-name: string # The name of the configuration set from which to delete the event destination.
-  --event-destination-name: string # The name of the event destination to delete.
-  --action: string@action-completer-10
-  --version: string@version-completer
+  --configuration-set-name: string # The name of the configuration set from which to delete the event destination. (required)
+  --event-destination-name: string # The name of the event destination to delete. (required)
+  --action: string@action-completer-10 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1208,6 +1267,10 @@ export def "get-delete-configuration-set-event-destination" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($configuration_set_name == null) { error make --unspanned { msg: "required query parameter 'ConfigurationSetName' missing: pass --configuration-set-name" } }
+  if ($event_destination_name == null) { error make --unspanned { msg: "required query parameter 'EventDestinationName' missing: pass --event-destination-name" } }
+  let action = ($action | default "DeleteConfigurationSetEventDestination")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "ConfigurationSetName" $configuration_set_name "scalar") (serialize-qp "EventDestinationName" $event_destination_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1242,8 +1305,8 @@ export def "post-delete-configuration-set-event-destination" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-10
-  --version: string@version-completer
+  --action: string@action-completer-10 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1256,6 +1319,8 @@ export def "post-delete-configuration-set-event-destination" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteConfigurationSetEventDestination")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1292,9 +1357,9 @@ export def "get-delete-configuration-set-tracking-options" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --configuration-set-name: string # The name of the configuration set from which you want to delete the tracking options.
-  --action: string@action-completer-11
-  --version: string@version-completer
+  --configuration-set-name: string # The name of the configuration set from which you want to delete the tracking options. (required)
+  --action: string@action-completer-11 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1305,6 +1370,9 @@ export def "get-delete-configuration-set-tracking-options" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($configuration_set_name == null) { error make --unspanned { msg: "required query parameter 'ConfigurationSetName' missing: pass --configuration-set-name" } }
+  let action = ($action | default "DeleteConfigurationSetTrackingOptions")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "ConfigurationSetName" $configuration_set_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1339,8 +1407,8 @@ export def "post-delete-configuration-set-tracking-options" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-11
-  --version: string@version-completer
+  --action: string@action-completer-11 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1353,6 +1421,8 @@ export def "post-delete-configuration-set-tracking-options" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteConfigurationSetTrackingOptions")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1389,9 +1459,9 @@ export def "get-delete-custom-verification-email-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --template-name: string # The name of the custom verification email template that you want to delete.
-  --action: string@action-completer-12
-  --version: string@version-completer
+  --template-name: string # The name of the custom verification email template that you want to delete. (required)
+  --action: string@action-completer-12 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1402,6 +1472,9 @@ export def "get-delete-custom-verification-email-template" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($template_name == null) { error make --unspanned { msg: "required query parameter 'TemplateName' missing: pass --template-name" } }
+  let action = ($action | default "DeleteCustomVerificationEmailTemplate")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "TemplateName" $template_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -1436,8 +1509,8 @@ export def "post-delete-custom-verification-email-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-12
-  --version: string@version-completer
+  --action: string@action-completer-12 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1450,6 +1523,8 @@ export def "post-delete-custom-verification-email-template" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteCustomVerificationEmailTemplate")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1486,9 +1561,9 @@ export def "get-delete-identity" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --identity: string # The identity to be removed from the list of identities for the AWS Account.
-  --action: string@action-completer-13
-  --version: string@version-completer
+  --identity: string # The identity to be removed from the list of identities for the AWS Account. (required)
+  --action: string@action-completer-13 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1499,6 +1574,9 @@ export def "get-delete-identity" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($identity == null) { error make --unspanned { msg: "required query parameter 'Identity' missing: pass --identity" } }
+  let action = ($action | default "DeleteIdentity")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Identity" $identity "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1533,8 +1611,8 @@ export def "post-delete-identity" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-13
-  --version: string@version-completer
+  --action: string@action-completer-13 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1547,6 +1625,8 @@ export def "post-delete-identity" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteIdentity")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1583,10 +1663,10 @@ export def "get-delete-identity-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --identity: string # The identity that is associated with the policy that you want to delete. You can specify the identity by using its name or by using its Amazon Resource Name (ARN). Examples: user@example.com, example.com, arn:aws:ses:us-east-1:123456789012:identity/example.com. To successfully call this API, you must own the identity.
-  --policy-name: string # The name of the policy to be deleted.
-  --action: string@action-completer-14
-  --version: string@version-completer
+  --identity: string # The identity that is associated with the policy that you want to delete. You can specify the identity by using its name or by using its Amazon Resource Name (ARN). Examples: user@example.com, example.com, arn:aws:ses:us-east-1:123456789012:identity/example.com. To successfully call this API, you must own the identity. (required)
+  --policy-name: string # The name of the policy to be deleted. (required)
+  --action: string@action-completer-14 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1597,6 +1677,10 @@ export def "get-delete-identity-policy" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($identity == null) { error make --unspanned { msg: "required query parameter 'Identity' missing: pass --identity" } }
+  if ($policy_name == null) { error make --unspanned { msg: "required query parameter 'PolicyName' missing: pass --policy-name" } }
+  let action = ($action | default "DeleteIdentityPolicy")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Identity" $identity "scalar") (serialize-qp "PolicyName" $policy_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1631,8 +1715,8 @@ export def "post-delete-identity-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-14
-  --version: string@version-completer
+  --action: string@action-completer-14 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1645,6 +1729,8 @@ export def "post-delete-identity-policy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteIdentityPolicy")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1681,9 +1767,9 @@ export def "get-delete-receipt-filter" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-name: string # The name of the IP address filter to delete.
-  --action: string@action-completer-15
-  --version: string@version-completer
+  --filter-name: string # The name of the IP address filter to delete. (required)
+  --action: string@action-completer-15 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1694,6 +1780,9 @@ export def "get-delete-receipt-filter" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($filter_name == null) { error make --unspanned { msg: "required query parameter 'FilterName' missing: pass --filter-name" } }
+  let action = ($action | default "DeleteReceiptFilter")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "FilterName" $filter_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1728,8 +1817,8 @@ export def "post-delete-receipt-filter" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-15
-  --version: string@version-completer
+  --action: string@action-completer-15 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1742,6 +1831,8 @@ export def "post-delete-receipt-filter" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteReceiptFilter")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1778,10 +1869,10 @@ export def "get-delete-receipt-rule" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rule-set-name: string # The name of the receipt rule set that contains the receipt rule to delete.
-  --rule-name: string # The name of the receipt rule to delete.
-  --action: string@action-completer-16
-  --version: string@version-completer
+  --rule-set-name: string # The name of the receipt rule set that contains the receipt rule to delete. (required)
+  --rule-name: string # The name of the receipt rule to delete. (required)
+  --action: string@action-completer-16 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1792,6 +1883,10 @@ export def "get-delete-receipt-rule" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($rule_set_name == null) { error make --unspanned { msg: "required query parameter 'RuleSetName' missing: pass --rule-set-name" } }
+  if ($rule_name == null) { error make --unspanned { msg: "required query parameter 'RuleName' missing: pass --rule-name" } }
+  let action = ($action | default "DeleteReceiptRule")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "RuleSetName" $rule_set_name "scalar") (serialize-qp "RuleName" $rule_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1826,8 +1921,8 @@ export def "post-delete-receipt-rule" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-16
-  --version: string@version-completer
+  --action: string@action-completer-16 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1840,6 +1935,8 @@ export def "post-delete-receipt-rule" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteReceiptRule")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1876,9 +1973,9 @@ export def "get-delete-receipt-rule-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rule-set-name: string # The name of the receipt rule set to delete.
-  --action: string@action-completer-17
-  --version: string@version-completer
+  --rule-set-name: string # The name of the receipt rule set to delete. (required)
+  --action: string@action-completer-17 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1889,6 +1986,9 @@ export def "get-delete-receipt-rule-set" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($rule_set_name == null) { error make --unspanned { msg: "required query parameter 'RuleSetName' missing: pass --rule-set-name" } }
+  let action = ($action | default "DeleteReceiptRuleSet")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "RuleSetName" $rule_set_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1923,8 +2023,8 @@ export def "post-delete-receipt-rule-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-17
-  --version: string@version-completer
+  --action: string@action-completer-17 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1937,6 +2037,8 @@ export def "post-delete-receipt-rule-set" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteReceiptRuleSet")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1973,9 +2075,9 @@ export def "get-delete-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --template-name: string # The name of the template to be deleted.
-  --action: string@action-completer-18
-  --version: string@version-completer
+  --template-name: string # The name of the template to be deleted. (required)
+  --action: string@action-completer-18 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1986,6 +2088,9 @@ export def "get-delete-template" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($template_name == null) { error make --unspanned { msg: "required query parameter 'TemplateName' missing: pass --template-name" } }
+  let action = ($action | default "DeleteTemplate")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "TemplateName" $template_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2020,8 +2125,8 @@ export def "post-delete-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-18
-  --version: string@version-completer
+  --action: string@action-completer-18 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2034,6 +2139,8 @@ export def "post-delete-template" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteTemplate")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2070,9 +2177,9 @@ export def "get-delete-verified-email-address" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --email-address: string # An email address to be removed from the list of verified addresses.
-  --action: string@action-completer-19
-  --version: string@version-completer
+  --email-address: string # An email address to be removed from the list of verified addresses. (required)
+  --action: string@action-completer-19 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2083,6 +2190,9 @@ export def "get-delete-verified-email-address" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($email_address == null) { error make --unspanned { msg: "required query parameter 'EmailAddress' missing: pass --email-address" } }
+  let action = ($action | default "DeleteVerifiedEmailAddress")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "EmailAddress" $email_address "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -2117,8 +2227,8 @@ export def "post-delete-verified-email-address" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-19
-  --version: string@version-completer
+  --action: string@action-completer-19 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2131,6 +2241,8 @@ export def "post-delete-verified-email-address" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteVerifiedEmailAddress")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2167,8 +2279,8 @@ export def "get-describe-active-receipt-rule-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-20
-  --version: string@version-completer
+  --action: string@action-completer-20 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2176,9 +2288,11 @@ export def "get-describe-active-receipt-rule-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Metadata: record<Name: record, CreatedTimestamp: record>, Rules: record> {
+]: nothing -> record<Metadata: record<Name: string, CreatedTimestamp: string>, Rules: table<Name: string, Enabled: bool, TlsPolicy: string, Recipients: list, Actions: list, ScanEnabled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeActiveReceiptRuleSet")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2213,8 +2327,8 @@ export def "post-describe-active-receipt-rule-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-20
-  --version: string@version-completer
+  --action: string@action-completer-20 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2223,10 +2337,12 @@ export def "post-describe-active-receipt-rule-set" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Metadata: record<Name: record, CreatedTimestamp: record>, Rules: record> {
+]: any -> record<Metadata: record<Name: string, CreatedTimestamp: string>, Rules: table<Name: string, Enabled: bool, TlsPolicy: string, Recipients: list, Actions: list, ScanEnabled: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeActiveReceiptRuleSet")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2263,10 +2379,10 @@ export def "get-describe-configuration-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --configuration-set-name: string # The name of the configuration set to describe.
+  --configuration-set-name: string # The name of the configuration set to describe. (required)
   --configuration-set-attribute-names: list # A list of configuration set attributes to return.
-  --action: string@action-completer-21
-  --version: string@version-completer
+  --action: string@action-completer-21 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2274,9 +2390,12 @@ export def "get-describe-configuration-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ConfigurationSet: record<Name: record>, EventDestinations: record, TrackingOptions: record<CustomRedirectDomain: record>, DeliveryOptions: record<TlsPolicy: record>, ReputationOptions: record<SendingEnabled: record, ReputationMetricsEnabled: record, LastFreshStart: record>> {
+]: nothing -> record<ConfigurationSet: record<Name: string>, EventDestinations: table<Name: string, Enabled: bool, MatchingEventTypes: list, KinesisFirehoseDestination: record, CloudWatchDestination: record, SNSDestination: record>, TrackingOptions: record<CustomRedirectDomain: string>, DeliveryOptions: record<TlsPolicy: string>, ReputationOptions: record<SendingEnabled: bool, ReputationMetricsEnabled: bool, LastFreshStart: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($configuration_set_name == null) { error make --unspanned { msg: "required query parameter 'ConfigurationSetName' missing: pass --configuration-set-name" } }
+  let action = ($action | default "DescribeConfigurationSet")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "ConfigurationSetName" $configuration_set_name "scalar") (serialize-qp "ConfigurationSetAttributeNames" $configuration_set_attribute_names "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2311,8 +2430,8 @@ export def "post-describe-configuration-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-21
-  --version: string@version-completer
+  --action: string@action-completer-21 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2321,10 +2440,12 @@ export def "post-describe-configuration-set" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ConfigurationSet: record<Name: record>, EventDestinations: record, TrackingOptions: record<CustomRedirectDomain: record>, DeliveryOptions: record<TlsPolicy: record>, ReputationOptions: record<SendingEnabled: record, ReputationMetricsEnabled: record, LastFreshStart: record>> {
+]: any -> record<ConfigurationSet: record<Name: string>, EventDestinations: table<Name: string, Enabled: bool, MatchingEventTypes: list, KinesisFirehoseDestination: record, CloudWatchDestination: record, SNSDestination: record>, TrackingOptions: record<CustomRedirectDomain: string>, DeliveryOptions: record<TlsPolicy: string>, ReputationOptions: record<SendingEnabled: bool, ReputationMetricsEnabled: bool, LastFreshStart: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeConfigurationSet")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2361,10 +2482,10 @@ export def "get-describe-receipt-rule" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rule-set-name: string # The name of the receipt rule set that the receipt rule belongs to.
-  --rule-name: string # The name of the receipt rule.
-  --action: string@action-completer-22
-  --version: string@version-completer
+  --rule-set-name: string # The name of the receipt rule set that the receipt rule belongs to. (required)
+  --rule-name: string # The name of the receipt rule. (required)
+  --action: string@action-completer-22 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2372,9 +2493,13 @@ export def "get-describe-receipt-rule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Rule: record<Name: record, Enabled: record, TlsPolicy: record, Recipients: record, Actions: record, ScanEnabled: record>> {
+]: nothing -> record<Rule: record<Name: string, Enabled: bool, TlsPolicy: string, Recipients: list<string>, Actions: list<record>, ScanEnabled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($rule_set_name == null) { error make --unspanned { msg: "required query parameter 'RuleSetName' missing: pass --rule-set-name" } }
+  if ($rule_name == null) { error make --unspanned { msg: "required query parameter 'RuleName' missing: pass --rule-name" } }
+  let action = ($action | default "DescribeReceiptRule")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "RuleSetName" $rule_set_name "scalar") (serialize-qp "RuleName" $rule_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2409,8 +2534,8 @@ export def "post-describe-receipt-rule" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-22
-  --version: string@version-completer
+  --action: string@action-completer-22 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2419,10 +2544,12 @@ export def "post-describe-receipt-rule" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Rule: record<Name: record, Enabled: record, TlsPolicy: record, Recipients: record, Actions: record, ScanEnabled: record>> {
+]: any -> record<Rule: record<Name: string, Enabled: bool, TlsPolicy: string, Recipients: list<string>, Actions: list<record>, ScanEnabled: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeReceiptRule")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2459,9 +2586,9 @@ export def "get-describe-receipt-rule-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rule-set-name: string # The name of the receipt rule set to describe.
-  --action: string@action-completer-23
-  --version: string@version-completer
+  --rule-set-name: string # The name of the receipt rule set to describe. (required)
+  --action: string@action-completer-23 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2469,9 +2596,12 @@ export def "get-describe-receipt-rule-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Metadata: record<Name: record, CreatedTimestamp: record>, Rules: record> {
+]: nothing -> record<Metadata: record<Name: string, CreatedTimestamp: string>, Rules: table<Name: string, Enabled: bool, TlsPolicy: string, Recipients: list, Actions: list, ScanEnabled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($rule_set_name == null) { error make --unspanned { msg: "required query parameter 'RuleSetName' missing: pass --rule-set-name" } }
+  let action = ($action | default "DescribeReceiptRuleSet")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "RuleSetName" $rule_set_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2506,8 +2636,8 @@ export def "post-describe-receipt-rule-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-23
-  --version: string@version-completer
+  --action: string@action-completer-23 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2516,10 +2646,12 @@ export def "post-describe-receipt-rule-set" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Metadata: record<Name: record, CreatedTimestamp: record>, Rules: record> {
+]: any -> record<Metadata: record<Name: string, CreatedTimestamp: string>, Rules: table<Name: string, Enabled: bool, TlsPolicy: string, Recipients: list, Actions: list, ScanEnabled: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeReceiptRuleSet")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2556,8 +2688,8 @@ export def "get-get-account-sending-enabled" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-24
-  --version: string@version-completer
+  --action: string@action-completer-24 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2565,9 +2697,11 @@ export def "get-get-account-sending-enabled" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Enabled: record> {
+]: nothing -> record<Enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "GetAccountSendingEnabled")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2602,8 +2736,8 @@ export def "post-get-account-sending-enabled" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-24
-  --version: string@version-completer
+  --action: string@action-completer-24 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2611,9 +2745,11 @@ export def "post-get-account-sending-enabled" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Enabled: record> {
+]: nothing -> record<Enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "GetAccountSendingEnabled")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2648,9 +2784,9 @@ export def "get-get-custom-verification-email-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --template-name: string # The name of the custom verification email template that you want to retrieve.
-  --action: string@action-completer-25
-  --version: string@version-completer
+  --template-name: string # The name of the custom verification email template that you want to retrieve. (required)
+  --action: string@action-completer-25 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2658,9 +2794,12 @@ export def "get-get-custom-verification-email-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TemplateName: record, FromEmailAddress: record, TemplateSubject: record, TemplateContent: record, SuccessRedirectionURL: record, FailureRedirectionURL: record> {
+]: nothing -> record<TemplateName: string, FromEmailAddress: string, TemplateSubject: string, TemplateContent: string, SuccessRedirectionURL: string, FailureRedirectionURL: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($template_name == null) { error make --unspanned { msg: "required query parameter 'TemplateName' missing: pass --template-name" } }
+  let action = ($action | default "GetCustomVerificationEmailTemplate")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "TemplateName" $template_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2695,8 +2834,8 @@ export def "post-get-custom-verification-email-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-25
-  --version: string@version-completer
+  --action: string@action-completer-25 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2705,10 +2844,12 @@ export def "post-get-custom-verification-email-template" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<TemplateName: record, FromEmailAddress: record, TemplateSubject: record, TemplateContent: record, SuccessRedirectionURL: record, FailureRedirectionURL: record> {
+]: any -> record<TemplateName: string, FromEmailAddress: string, TemplateSubject: string, TemplateContent: string, SuccessRedirectionURL: string, FailureRedirectionURL: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "GetCustomVerificationEmailTemplate")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2745,9 +2886,9 @@ export def "get-get-identity-dkim-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --identities: list # A list of one or more verified identities - email addresses, domains, or both.
-  --action: string@action-completer-26
-  --version: string@version-completer
+  --identities: list # A list of one or more verified identities - email addresses, domains, or both. (required)
+  --action: string@action-completer-26 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2758,6 +2899,9 @@ export def "get-get-identity-dkim-attributes" [
 ]: nothing -> record<DkimAttributes: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($identities == null) { error make --unspanned { msg: "required query parameter 'Identities' missing: pass --identities" } }
+  let action = ($action | default "GetIdentityDkimAttributes")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Identities" $identities "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2792,8 +2936,8 @@ export def "post-get-identity-dkim-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-26
-  --version: string@version-completer
+  --action: string@action-completer-26 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2806,6 +2950,8 @@ export def "post-get-identity-dkim-attributes" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "GetIdentityDkimAttributes")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2842,9 +2988,9 @@ export def "get-get-identity-mail-from-domain-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --identities: list # A list of one or more identities.
-  --action: string@action-completer-27
-  --version: string@version-completer
+  --identities: list # A list of one or more identities. (required)
+  --action: string@action-completer-27 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2855,6 +3001,9 @@ export def "get-get-identity-mail-from-domain-attributes" [
 ]: nothing -> record<MailFromDomainAttributes: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($identities == null) { error make --unspanned { msg: "required query parameter 'Identities' missing: pass --identities" } }
+  let action = ($action | default "GetIdentityMailFromDomainAttributes")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Identities" $identities "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2889,8 +3038,8 @@ export def "post-get-identity-mail-from-domain-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-27
-  --version: string@version-completer
+  --action: string@action-completer-27 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2903,6 +3052,8 @@ export def "post-get-identity-mail-from-domain-attributes" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "GetIdentityMailFromDomainAttributes")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2939,9 +3090,9 @@ export def "get-get-identity-notification-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --identities: list # A list of one or more identities. You can specify an identity by using its name or by using its Amazon Resource Name (ARN). Examples: user@example.com, example.com, arn:aws:ses:us-east-1:123456789012:identity/example.com.
-  --action: string@action-completer-28
-  --version: string@version-completer
+  --identities: list # A list of one or more identities. You can specify an identity by using its name or by using its Amazon Resource Name (ARN). Examples: user@example.com, example.com, arn:aws:ses:us-east-1:123456789012:identity/example.com. (required)
+  --action: string@action-completer-28 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2952,6 +3103,9 @@ export def "get-get-identity-notification-attributes" [
 ]: nothing -> record<NotificationAttributes: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($identities == null) { error make --unspanned { msg: "required query parameter 'Identities' missing: pass --identities" } }
+  let action = ($action | default "GetIdentityNotificationAttributes")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Identities" $identities "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2986,8 +3140,8 @@ export def "post-get-identity-notification-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-28
-  --version: string@version-completer
+  --action: string@action-completer-28 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3000,6 +3154,8 @@ export def "post-get-identity-notification-attributes" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "GetIdentityNotificationAttributes")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3036,10 +3192,10 @@ export def "get-get-identity-policies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --identity: string # The identity for which the policies will be retrieved. You can specify an identity by using its name or by using its Amazon Resource Name (ARN). Examples: user@example.com, example.com, arn:aws:ses:us-east-1:123456789012:identity/example.com. To successfully call this API, you must own the identity.
-  --policy-names: list # A list of the names of policies to be retrieved. You can retrieve a maximum of 20 policies at a time. If you do not know the names of the policies that are attached to the identity, you can use ListIdentityPolicies.
-  --action: string@action-completer-29
-  --version: string@version-completer
+  --identity: string # The identity for which the policies will be retrieved. You can specify an identity by using its name or by using its Amazon Resource Name (ARN). Examples: user@example.com, example.com, arn:aws:ses:us-east-1:123456789012:identity/example.com. To successfully call this API, you must own the identity. (required)
+  --policy-names: list # A list of the names of policies to be retrieved. You can retrieve a maximum of 20 policies at a time. If you do not know the names of the policies that are attached to the identity, you can use ListIdentityPolicies. (required)
+  --action: string@action-completer-29 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3050,6 +3206,10 @@ export def "get-get-identity-policies" [
 ]: nothing -> record<Policies: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($identity == null) { error make --unspanned { msg: "required query parameter 'Identity' missing: pass --identity" } }
+  if ($policy_names == null) { error make --unspanned { msg: "required query parameter 'PolicyNames' missing: pass --policy-names" } }
+  let action = ($action | default "GetIdentityPolicies")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Identity" $identity "scalar") (serialize-qp "PolicyNames" $policy_names "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3084,8 +3244,8 @@ export def "post-get-identity-policies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-29
-  --version: string@version-completer
+  --action: string@action-completer-29 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3098,6 +3258,8 @@ export def "post-get-identity-policies" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "GetIdentityPolicies")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3134,9 +3296,9 @@ export def "get-get-identity-verification-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --identities: list # A list of identities.
-  --action: string@action-completer-30
-  --version: string@version-completer
+  --identities: list # A list of identities. (required)
+  --action: string@action-completer-30 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3147,6 +3309,9 @@ export def "get-get-identity-verification-attributes" [
 ]: nothing -> record<VerificationAttributes: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($identities == null) { error make --unspanned { msg: "required query parameter 'Identities' missing: pass --identities" } }
+  let action = ($action | default "GetIdentityVerificationAttributes")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Identities" $identities "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3181,8 +3346,8 @@ export def "post-get-identity-verification-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-30
-  --version: string@version-completer
+  --action: string@action-completer-30 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3195,6 +3360,8 @@ export def "post-get-identity-verification-attributes" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "GetIdentityVerificationAttributes")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3231,8 +3398,8 @@ export def "get-get-send-quota" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-31
-  --version: string@version-completer
+  --action: string@action-completer-31 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3240,9 +3407,11 @@ export def "get-get-send-quota" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Max24HourSend: record, MaxSendRate: record, SentLast24Hours: record> {
+]: nothing -> record<Max24HourSend: float, MaxSendRate: float, SentLast24Hours: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "GetSendQuota")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3277,8 +3446,8 @@ export def "post-get-send-quota" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-31
-  --version: string@version-completer
+  --action: string@action-completer-31 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3286,9 +3455,11 @@ export def "post-get-send-quota" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Max24HourSend: record, MaxSendRate: record, SentLast24Hours: record> {
+]: nothing -> record<Max24HourSend: float, MaxSendRate: float, SentLast24Hours: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "GetSendQuota")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3323,8 +3494,8 @@ export def "get-get-send-statistics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-32
-  --version: string@version-completer
+  --action: string@action-completer-32 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3332,9 +3503,11 @@ export def "get-get-send-statistics" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<SendDataPoints: record> {
+]: nothing -> record<SendDataPoints: table<Timestamp: string, DeliveryAttempts: int, Bounces: int, Complaints: int, Rejects: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "GetSendStatistics")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3369,8 +3542,8 @@ export def "post-get-send-statistics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-32
-  --version: string@version-completer
+  --action: string@action-completer-32 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3378,9 +3551,11 @@ export def "post-get-send-statistics" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<SendDataPoints: record> {
+]: nothing -> record<SendDataPoints: table<Timestamp: string, DeliveryAttempts: int, Bounces: int, Complaints: int, Rejects: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "GetSendStatistics")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3415,9 +3590,9 @@ export def "get-get-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --template-name: string # The name of the template you want to retrieve.
-  --action: string@action-completer-33
-  --version: string@version-completer
+  --template-name: string # The name of the template you want to retrieve. (required)
+  --action: string@action-completer-33 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3425,9 +3600,12 @@ export def "get-get-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Template: record<TemplateName: record, SubjectPart: record, TextPart: record, HtmlPart: record>> {
+]: nothing -> record<Template: record<TemplateName: string, SubjectPart: string, TextPart: string, HtmlPart: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($template_name == null) { error make --unspanned { msg: "required query parameter 'TemplateName' missing: pass --template-name" } }
+  let action = ($action | default "GetTemplate")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "TemplateName" $template_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3462,8 +3640,8 @@ export def "post-get-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-33
-  --version: string@version-completer
+  --action: string@action-completer-33 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3472,10 +3650,12 @@ export def "post-get-template" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Template: record<TemplateName: record, SubjectPart: record, TextPart: record, HtmlPart: record>> {
+]: any -> record<Template: record<TemplateName: string, SubjectPart: string, TextPart: string, HtmlPart: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "GetTemplate")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3514,8 +3694,8 @@ export def "get-list-configuration-sets" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # A token returned from a previous call to ListConfigurationSets to indicate the position of the configuration set in the configuration set list.
   --max-items: int # The number of configuration sets to return.
-  --action: string@action-completer-34
-  --version: string@version-completer
+  --action: string@action-completer-34 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3523,9 +3703,11 @@ export def "get-list-configuration-sets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ConfigurationSets: record, NextToken: record> {
+]: nothing -> record<ConfigurationSets: table<Name: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListConfigurationSets")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxItems" $max_items "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3560,8 +3742,8 @@ export def "post-list-configuration-sets" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-34
-  --version: string@version-completer
+  --action: string@action-completer-34 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3570,10 +3752,12 @@ export def "post-list-configuration-sets" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ConfigurationSets: record, NextToken: record> {
+]: any -> record<ConfigurationSets: table<Name: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListConfigurationSets")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3612,8 +3796,8 @@ export def "get-list-custom-verification-email-templates" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # An array the contains the name and creation time stamp for each template in your Amazon SES account.
   --max-results: int # The maximum number of custom verification email templates to return. This value must be at least 1 and less than or equal to 50. If you do not specify a value, or if you specify a value less than 1 or greater than 50, the operation will return up to 50 results.
-  --action: string@action-completer-35
-  --version: string@version-completer
+  --action: string@action-completer-35 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3621,9 +3805,11 @@ export def "get-list-custom-verification-email-templates" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CustomVerificationEmailTemplates: record, NextToken: record> {
+]: nothing -> record<CustomVerificationEmailTemplates: table<TemplateName: string, FromEmailAddress: string, TemplateSubject: string, SuccessRedirectionURL: string, FailureRedirectionURL: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListCustomVerificationEmailTemplates")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3660,8 +3846,8 @@ export def "post-list-custom-verification-email-templates" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-results: string # Pagination limit
   --next-token: string # Pagination token
-  --action: string@action-completer-35
-  --version: string@version-completer
+  --action: string@action-completer-35 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3670,10 +3856,12 @@ export def "post-list-custom-verification-email-templates" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<CustomVerificationEmailTemplates: record, NextToken: record> {
+]: any -> record<CustomVerificationEmailTemplates: table<TemplateName: string, FromEmailAddress: string, TemplateSubject: string, SuccessRedirectionURL: string, FailureRedirectionURL: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListCustomVerificationEmailTemplates")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3713,8 +3901,8 @@ export def "get-list-identities" [
   --identity-type: string@identity-type-completer # The type of the identities to list. Possible values are "EmailAddress" and "Domain". If this parameter is omitted, then all identities will be listed.
   --next-token: string # The token to use for pagination.
   --max-items: int # The maximum number of identities per page. Possible values are 1-1000 inclusive.
-  --action: string@action-completer-36
-  --version: string@version-completer
+  --action: string@action-completer-36 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3722,9 +3910,11 @@ export def "get-list-identities" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Identities: record, NextToken: record> {
+]: nothing -> record<Identities: list<string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListIdentities")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "IdentityType" $identity_type "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxItems" $max_items "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3761,8 +3951,8 @@ export def "post-list-identities" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-items: string # Pagination limit
   --next-token: string # Pagination token
-  --action: string@action-completer-36
-  --version: string@version-completer
+  --action: string@action-completer-36 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3771,10 +3961,12 @@ export def "post-list-identities" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Identities: record, NextToken: record> {
+]: any -> record<Identities: list<string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListIdentities")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "MaxItems" $max_items "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3811,9 +4003,9 @@ export def "get-list-identity-policies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --identity: string # The identity that is associated with the policy for which the policies will be listed. You can specify an identity by using its name or by using its Amazon Resource Name (ARN). Examples: user@example.com, example.com, arn:aws:ses:us-east-1:123456789012:identity/example.com. To successfully call this API, you must own the identity.
-  --action: string@action-completer-37
-  --version: string@version-completer
+  --identity: string # The identity that is associated with the policy for which the policies will be listed. You can specify an identity by using its name or by using its Amazon Resource Name (ARN). Examples: user@example.com, example.com, arn:aws:ses:us-east-1:123456789012:identity/example.com. To successfully call this API, you must own the identity. (required)
+  --action: string@action-completer-37 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3821,9 +4013,12 @@ export def "get-list-identity-policies" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PolicyNames: record> {
+]: nothing -> record<PolicyNames: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($identity == null) { error make --unspanned { msg: "required query parameter 'Identity' missing: pass --identity" } }
+  let action = ($action | default "ListIdentityPolicies")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Identity" $identity "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3858,8 +4053,8 @@ export def "post-list-identity-policies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-37
-  --version: string@version-completer
+  --action: string@action-completer-37 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3868,10 +4063,12 @@ export def "post-list-identity-policies" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<PolicyNames: record> {
+]: any -> record<PolicyNames: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListIdentityPolicies")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3908,8 +4105,8 @@ export def "get-list-receipt-filters" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-38
-  --version: string@version-completer
+  --action: string@action-completer-38 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3917,9 +4114,11 @@ export def "get-list-receipt-filters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Filters: record> {
+]: nothing -> record<Filters: table<Name: string, IpFilter: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListReceiptFilters")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3954,8 +4153,8 @@ export def "post-list-receipt-filters" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-38
-  --version: string@version-completer
+  --action: string@action-completer-38 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3964,10 +4163,12 @@ export def "post-list-receipt-filters" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Filters: record> {
+]: any -> record<Filters: table<Name: string, IpFilter: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListReceiptFilters")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4005,8 +4206,8 @@ export def "get-list-receipt-rule-sets" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # A token returned from a previous call to ListReceiptRuleSets to indicate the position in the receipt rule set list.
-  --action: string@action-completer-39
-  --version: string@version-completer
+  --action: string@action-completer-39 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4014,9 +4215,11 @@ export def "get-list-receipt-rule-sets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<RuleSets: record, NextToken: record> {
+]: nothing -> record<RuleSets: table<Name: string, CreatedTimestamp: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListReceiptRuleSets")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4051,8 +4254,8 @@ export def "post-list-receipt-rule-sets" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-39
-  --version: string@version-completer
+  --action: string@action-completer-39 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4061,10 +4264,12 @@ export def "post-list-receipt-rule-sets" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<RuleSets: record, NextToken: record> {
+]: any -> record<RuleSets: table<Name: string, CreatedTimestamp: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListReceiptRuleSets")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4103,8 +4308,8 @@ export def "get-list-templates" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # A token returned from a previous call to ListTemplates to indicate the position in the list of email templates.
   --max-items: int # The maximum number of templates to return. This value must be at least 1 and less than or equal to 10. If you do not specify a value, or if you specify a value less than 1 or greater than 10, the operation will return up to 10 results.
-  --action: string@action-completer-40
-  --version: string@version-completer
+  --action: string@action-completer-40 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4112,9 +4317,11 @@ export def "get-list-templates" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TemplatesMetadata: record, NextToken: record> {
+]: nothing -> record<TemplatesMetadata: table<Name: string, CreatedTimestamp: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListTemplates")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxItems" $max_items "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4149,8 +4356,8 @@ export def "post-list-templates" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-40
-  --version: string@version-completer
+  --action: string@action-completer-40 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4159,10 +4366,12 @@ export def "post-list-templates" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<TemplatesMetadata: record, NextToken: record> {
+]: any -> record<TemplatesMetadata: table<Name: string, CreatedTimestamp: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListTemplates")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4199,8 +4408,8 @@ export def "get-list-verified-email-addresses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-41
-  --version: string@version-completer
+  --action: string@action-completer-41 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4208,9 +4417,11 @@ export def "get-list-verified-email-addresses" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<VerifiedEmailAddresses: record> {
+]: nothing -> record<VerifiedEmailAddresses: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListVerifiedEmailAddresses")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4245,8 +4456,8 @@ export def "post-list-verified-email-addresses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-41
-  --version: string@version-completer
+  --action: string@action-completer-41 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4254,9 +4465,11 @@ export def "post-list-verified-email-addresses" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<VerifiedEmailAddresses: record> {
+]: nothing -> record<VerifiedEmailAddresses: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListVerifiedEmailAddresses")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4291,10 +4504,10 @@ export def "get-put-configuration-set-delivery-options" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --configuration-set-name: string # The name of the configuration set that you want to specify the delivery options for.
+  --configuration-set-name: string # The name of the configuration set that you want to specify the delivery options for. (required)
   --delivery-options: record # Specifies whether messages that use the configuration set are required to use Transport Layer Security (TLS).
-  --action: string@action-completer-42
-  --version: string@version-completer
+  --action: string@action-completer-42 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4305,6 +4518,9 @@ export def "get-put-configuration-set-delivery-options" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($configuration_set_name == null) { error make --unspanned { msg: "required query parameter 'ConfigurationSetName' missing: pass --configuration-set-name" } }
+  let action = ($action | default "PutConfigurationSetDeliveryOptions")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "ConfigurationSetName" $configuration_set_name "scalar") (serialize-qp "DeliveryOptions" $delivery_options "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4339,8 +4555,8 @@ export def "post-put-configuration-set-delivery-options" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-42
-  --version: string@version-completer
+  --action: string@action-completer-42 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4353,6 +4569,8 @@ export def "post-put-configuration-set-delivery-options" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "PutConfigurationSetDeliveryOptions")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4389,11 +4607,11 @@ export def "get-put-identity-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --identity: string # The identity that the policy will apply to. You can specify an identity by using its name or by using its Amazon Resource Name (ARN). Examples: user@example.com, example.com, arn:aws:ses:us-east-1:123456789012:identity/example.com. To successfully call this API, you must own the identity.
-  --policy-name: string # The name of the policy. The policy name cannot exceed 64 characters and can only include alphanumeric characters, dashes, and underscores.
-  --policy: string # The text of the policy in JSON format. The policy cannot exceed 4 KB. For information about the syntax of sending authorization policies, see the Amazon SES Developer Guide (https://docs.aws.amazon.com/ses/latest/DeveloperGuide/sending-authorization-policies.html).
-  --action: string@action-completer-43
-  --version: string@version-completer
+  --identity: string # The identity that the policy will apply to. You can specify an identity by using its name or by using its Amazon Resource Name (ARN). Examples: user@example.com, example.com, arn:aws:ses:us-east-1:123456789012:identity/example.com. To successfully call this API, you must own the identity. (required)
+  --policy-name: string # The name of the policy. The policy name cannot exceed 64 characters and can only include alphanumeric characters, dashes, and underscores. (required)
+  --policy: string # The text of the policy in JSON format. The policy cannot exceed 4 KB. For information about the syntax of sending authorization policies, see the Amazon SES Developer Guide (https://docs.aws.amazon.com/ses/latest/DeveloperGuide/sending-authorization-policies.html). (required)
+  --action: string@action-completer-43 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4404,6 +4622,11 @@ export def "get-put-identity-policy" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($identity == null) { error make --unspanned { msg: "required query parameter 'Identity' missing: pass --identity" } }
+  if ($policy_name == null) { error make --unspanned { msg: "required query parameter 'PolicyName' missing: pass --policy-name" } }
+  if ($policy == null) { error make --unspanned { msg: "required query parameter 'Policy' missing: pass --policy" } }
+  let action = ($action | default "PutIdentityPolicy")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Identity" $identity "scalar") (serialize-qp "PolicyName" $policy_name "scalar") (serialize-qp "Policy" $policy "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4438,8 +4661,8 @@ export def "post-put-identity-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-43
-  --version: string@version-completer
+  --action: string@action-completer-43 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4452,6 +4675,8 @@ export def "post-put-identity-policy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "PutIdentityPolicy")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4488,10 +4713,10 @@ export def "get-reorder-receipt-rule-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rule-set-name: string # The name of the receipt rule set to reorder.
-  --rule-names: list # A list of the specified receipt rule set's receipt rules in the order that you want to put them.
-  --action: string@action-completer-44
-  --version: string@version-completer
+  --rule-set-name: string # The name of the receipt rule set to reorder. (required)
+  --rule-names: list # A list of the specified receipt rule set's receipt rules in the order that you want to put them. (required)
+  --action: string@action-completer-44 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4502,6 +4727,10 @@ export def "get-reorder-receipt-rule-set" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($rule_set_name == null) { error make --unspanned { msg: "required query parameter 'RuleSetName' missing: pass --rule-set-name" } }
+  if ($rule_names == null) { error make --unspanned { msg: "required query parameter 'RuleNames' missing: pass --rule-names" } }
+  let action = ($action | default "ReorderReceiptRuleSet")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "RuleSetName" $rule_set_name "scalar") (serialize-qp "RuleNames" $rule_names "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4536,8 +4765,8 @@ export def "post-reorder-receipt-rule-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-44
-  --version: string@version-completer
+  --action: string@action-completer-44 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4550,6 +4779,8 @@ export def "post-reorder-receipt-rule-set" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ReorderReceiptRuleSet")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4586,14 +4817,14 @@ export def "get-send-bounce" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --original-message-id: string # The message ID of the message to be bounced.
-  --bounce-sender: string # The address to use in the "From" header of the bounce message. This must be an identity that you have verified with Amazon SES.
+  --original-message-id: string # The message ID of the message to be bounced. (required)
+  --bounce-sender: string # The address to use in the "From" header of the bounce message. This must be an identity that you have verified with Amazon SES. (required)
   --explanation: string # Human-readable text for the bounce message to explain the failure. If not specified, the text will be auto-generated based on the bounced recipient information.
   --message-dsn: record # Message-related DSN fields. If not specified, Amazon SES will choose the values.
-  --bounced-recipient-info-list: list # A list of recipients of the bounced message, including the information required to create the Delivery Status Notifications (DSNs) for the recipients. You must specify at least one BouncedRecipientInfo in the list.
+  --bounced-recipient-info-list: list # A list of recipients of the bounced message, including the information required to create the Delivery Status Notifications (DSNs) for the recipients. You must specify at least one BouncedRecipientInfo in the list. (required)
   --bounce-sender-arn: string # This parameter is used only for sending authorization. It is the ARN of the identity that is associated with the sending authorization policy that permits you to use the address in the "From" header of the bounce. For more information about sending authorization, see the Amazon SES Developer Guide (https://docs.aws.amazon.com/ses/latest/DeveloperGuide/sending-authorization.html).
-  --action: string@action-completer-45
-  --version: string@version-completer
+  --action: string@action-completer-45 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4601,9 +4832,14 @@ export def "get-send-bounce" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<MessageId: record> {
+]: nothing -> record<MessageId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($original_message_id == null) { error make --unspanned { msg: "required query parameter 'OriginalMessageId' missing: pass --original-message-id" } }
+  if ($bounce_sender == null) { error make --unspanned { msg: "required query parameter 'BounceSender' missing: pass --bounce-sender" } }
+  if ($bounced_recipient_info_list == null) { error make --unspanned { msg: "required query parameter 'BouncedRecipientInfoList' missing: pass --bounced-recipient-info-list" } }
+  let action = ($action | default "SendBounce")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "OriginalMessageId" $original_message_id "scalar") (serialize-qp "BounceSender" $bounce_sender "scalar") (serialize-qp "Explanation" $explanation "scalar") (serialize-qp "MessageDsn" $message_dsn "multi") (serialize-qp "BouncedRecipientInfoList" $bounced_recipient_info_list "multi") (serialize-qp "BounceSenderArn" $bounce_sender_arn "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4638,8 +4874,8 @@ export def "post-send-bounce" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-45
-  --version: string@version-completer
+  --action: string@action-completer-45 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4648,10 +4884,12 @@ export def "post-send-bounce" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<MessageId: record> {
+]: any -> record<MessageId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "SendBounce")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4688,19 +4926,19 @@ export def "get-send-bulk-templated-email" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-source: string # The email address that is sending the email. This email address must be either individually verified with Amazon SES, or from a domain that has been verified with Amazon SES. For information about verifying identities, see the Amazon SES Developer Guide (https://docs.aws.amazon.com/ses/latest/DeveloperGuide/verify-addresses-and-domains.html). If you are sending on behalf of another user and have been permitted to do so by a sending authorization policy, then you must also specify the SourceArn parameter. For more information about sending authorization, see the Amazon SES Developer Guide (https://docs.aws.amazon.com/ses/latest/DeveloperGuide/sending-authorization.html). Amazon SES does not support the SMTPUTF8 extension, as described in RFC6531 (https://tools.ietf.org/html/rfc6531). For this reason, the local part of a source email address (the part of the email address that precedes the @ sign) may only contain 7-bit ASCII characters (https://en.wikipedia.org/wiki/Email_address#Local-part). If the domain part of an address (the part after the @ sign) contains non-ASCII characters, they must be encoded using Punycode, as described in RFC3492 (https://tools.ietf.org/html/rfc3492.html). The sender name (also known as the friendly name) may contain non-ASCII characters. These characters must be encoded using MIME encoded-word syntax, as described in RFC 2047 (https://tools.ietf.org/html/rfc2047). MIME encoded-word syntax uses the following form: =?charset?encoding?encoded-text?=.
+  --source: string # The email address that is sending the email. This email address must be either individually verified with Amazon SES, or from a domain that has been verified with Amazon SES. For information about verifying identities, see the Amazon SES Developer Guide (https://docs.aws.amazon.com/ses/latest/DeveloperGuide/verify-addresses-and-domains.html). If you are sending on behalf of another user and have been permitted to do so by a sending authorization policy, then you must also specify the SourceArn parameter. For more information about sending authorization, see the Amazon SES Developer Guide (https://docs.aws.amazon.com/ses/latest/DeveloperGuide/sending-authorization.html). Amazon SES does not support the SMTPUTF8 extension, as described in RFC6531 (https://tools.ietf.org/html/rfc6531). For this reason, the local part of a source email address (the part of the email address that precedes the @ sign) may only contain 7-bit ASCII characters (https://en.wikipedia.org/wiki/Email_address#Local-part). If the domain part of an address (the part after the @ sign) contains non-ASCII characters, they must be encoded using Punycode, as described in RFC3492 (https://tools.ietf.org/html/rfc3492.html). The sender name (also known as the friendly name) may contain non-ASCII characters. These characters must be encoded using MIME encoded-word syntax, as described in RFC 2047 (https://tools.ietf.org/html/rfc2047). MIME encoded-word syntax uses the following form: =?charset?encoding?encoded-text?=. (required)
   --source-arn: string # This parameter is used only for sending authorization. It is the ARN of the identity that is associated with the sending authorization policy that permits you to send for the email address specified in the Source parameter. For example, if the owner of example.com (which has ARN arn:aws:ses:us-east-1:123456789012:identity/example.com) attaches a policy to it that authorizes you to send from user@example.com, then you would specify the SourceArn to be arn:aws:ses:us-east-1:123456789012:identity/example.com, and the Source to be user@example.com. For more information about sending authorization, see the Amazon SES Developer Guide (https://docs.aws.amazon.com/ses/latest/DeveloperGuide/sending-authorization.html).
   --reply-to-addresses: list # The reply-to email address(es) for the message. If the recipient replies to the message, each reply-to address will receive the reply.
   --return-path: string # The email address that bounces and complaints will be forwarded to when feedback forwarding is enabled. If the message cannot be delivered to the recipient, then an error message will be returned from the recipient's ISP; this message will then be forwarded to the email address specified by the ReturnPath parameter. The ReturnPath parameter is never overwritten. This email address must be either individually verified with Amazon SES, or from a domain that has been verified with Amazon SES.
   --return-path-arn: string # This parameter is used only for sending authorization. It is the ARN of the identity that is associated with the sending authorization policy that permits you to use the email address specified in the ReturnPath parameter. For example, if the owner of example.com (which has ARN arn:aws:ses:us-east-1:123456789012:identity/example.com) attaches a policy to it that authorizes you to use feedback@example.com, then you would specify the ReturnPathArn to be arn:aws:ses:us-east-1:123456789012:identity/example.com, and the ReturnPath to be feedback@example.com. For more information about sending authorization, see the Amazon SES Developer Guide (https://docs.aws.amazon.com/ses/latest/DeveloperGuide/sending-authorization.html).
   --configuration-set-name: string # The name of the configuration set to use when you send an email using SendBulkTemplatedEmail.
   --default-tags: list # A list of tags, in the form of name/value pairs, to apply to an email that you send to a destination using SendBulkTemplatedEmail.
-  --template: string # The template to use when sending this email.
+  --template: string # The template to use when sending this email. (required)
   --template-arn: string # The ARN of the template to use when sending this email.
   --default-template-data: string # A list of replacement values to apply to the template when replacement data is not specified in a Destination object. These values act as a default or fallback option when no other data is available. The template data is a JSON object, typically consisting of key-value pairs in which the keys correspond to replacement tags in the email template.
-  --destinations: list # One or more Destination objects. All of the recipients in a Destination will receive the same version of the email. You can specify up to 50 Destination objects within a Destinations array.
-  --action: string@action-completer-46
-  --version: string@version-completer
+  --destinations: list # One or more Destination objects. All of the recipients in a Destination will receive the same version of the email. You can specify up to 50 Destination objects within a Destinations array. (required)
+  --action: string@action-completer-46 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4708,10 +4946,15 @@ export def "get-send-bulk-templated-email" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Status: record> {
+]: nothing -> record<Status: table<Status: string, Error: string, MessageId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Source" $qp_source "scalar") (serialize-qp "SourceArn" $source_arn "scalar") (serialize-qp "ReplyToAddresses" $reply_to_addresses "multi") (serialize-qp "ReturnPath" $return_path "scalar") (serialize-qp "ReturnPathArn" $return_path_arn "scalar") (serialize-qp "ConfigurationSetName" $configuration_set_name "scalar") (serialize-qp "DefaultTags" $default_tags "multi") (serialize-qp "Template" $template "scalar") (serialize-qp "TemplateArn" $template_arn "scalar") (serialize-qp "DefaultTemplateData" $default_template_data "scalar") (serialize-qp "Destinations" $destinations "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
+  if ($source == null) { error make --unspanned { msg: "required query parameter 'Source' missing: pass --source" } }
+  if ($template == null) { error make --unspanned { msg: "required query parameter 'Template' missing: pass --template" } }
+  if ($destinations == null) { error make --unspanned { msg: "required query parameter 'Destinations' missing: pass --destinations" } }
+  let action = ($action | default "SendBulkTemplatedEmail")
+  let version = ($version | default "2010-12-01")
+  let qp = [(serialize-qp "Source" $source "scalar") (serialize-qp "SourceArn" $source_arn "scalar") (serialize-qp "ReplyToAddresses" $reply_to_addresses "multi") (serialize-qp "ReturnPath" $return_path "scalar") (serialize-qp "ReturnPathArn" $return_path_arn "scalar") (serialize-qp "ConfigurationSetName" $configuration_set_name "scalar") (serialize-qp "DefaultTags" $default_tags "multi") (serialize-qp "Template" $template "scalar") (serialize-qp "TemplateArn" $template_arn "scalar") (serialize-qp "DefaultTemplateData" $default_template_data "scalar") (serialize-qp "Destinations" $destinations "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4720,7 +4963,7 @@ export def "get-send-bulk-templated-email" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"Source": $qp_source, "SourceArn": $source_arn, "ReplyToAddresses": $reply_to_addresses, "ReturnPath": $return_path, "ReturnPathArn": $return_path_arn, "ConfigurationSetName": $configuration_set_name, "DefaultTags": $default_tags, "Template": $template, "TemplateArn": $template_arn, "DefaultTemplateData": $default_template_data, "Destinations": $destinations, "Action": $action, "Version": $version} | compact)
+    query: ({"Source": $source, "SourceArn": $source_arn, "ReplyToAddresses": $reply_to_addresses, "ReturnPath": $return_path, "ReturnPathArn": $return_path_arn, "ConfigurationSetName": $configuration_set_name, "DefaultTags": $default_tags, "Template": $template, "TemplateArn": $template_arn, "DefaultTemplateData": $default_template_data, "Destinations": $destinations, "Action": $action, "Version": $version} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4745,8 +4988,8 @@ export def "post-send-bulk-templated-email" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-46
-  --version: string@version-completer
+  --action: string@action-completer-46 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4755,10 +4998,12 @@ export def "post-send-bulk-templated-email" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Status: record> {
+]: any -> record<Status: table<Status: string, Error: string, MessageId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "SendBulkTemplatedEmail")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4795,11 +5040,11 @@ export def "get-send-custom-verification-email" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --email-address: string # The email address to verify.
-  --template-name: string # The name of the custom verification email template to use when sending the verification email.
+  --email-address: string # The email address to verify. (required)
+  --template-name: string # The name of the custom verification email template to use when sending the verification email. (required)
   --configuration-set-name: string # Name of a configuration set to use when sending the verification email.
-  --action: string@action-completer-47
-  --version: string@version-completer
+  --action: string@action-completer-47 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4807,9 +5052,13 @@ export def "get-send-custom-verification-email" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<MessageId: record> {
+]: nothing -> record<MessageId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($email_address == null) { error make --unspanned { msg: "required query parameter 'EmailAddress' missing: pass --email-address" } }
+  if ($template_name == null) { error make --unspanned { msg: "required query parameter 'TemplateName' missing: pass --template-name" } }
+  let action = ($action | default "SendCustomVerificationEmail")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "EmailAddress" $email_address "scalar") (serialize-qp "TemplateName" $template_name "scalar") (serialize-qp "ConfigurationSetName" $configuration_set_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4844,8 +5093,8 @@ export def "post-send-custom-verification-email" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-47
-  --version: string@version-completer
+  --action: string@action-completer-47 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4854,10 +5103,12 @@ export def "post-send-custom-verification-email" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<MessageId: record> {
+]: any -> record<MessageId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "SendCustomVerificationEmail")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4894,17 +5145,17 @@ export def "get-send-email" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-source: string # The email address that is sending the email. This email address must be either individually verified with Amazon SES, or from a domain that has been verified with Amazon SES. For information about verifying identities, see the Amazon SES Developer Guide (https://docs.aws.amazon.com/ses/latest/DeveloperGuide/verify-addresses-and-domains.html). If you are sending on behalf of another user and have been permitted to do so by a sending authorization policy, then you must also specify the SourceArn parameter. For more information about sending authorization, see the Amazon SES Developer Guide (https://docs.aws.amazon.com/ses/latest/DeveloperGuide/sending-authorization.html). Amazon SES does not support the SMTPUTF8 extension, as described in RFC6531 (https://tools.ietf.org/html/rfc6531). For this reason, the local part of a source email address (the part of the email address that precedes the @ sign) may only contain 7-bit ASCII characters (https://en.wikipedia.org/wiki/Email_address#Local-part). If the domain part of an address (the part after the @ sign) contains non-ASCII characters, they must be encoded using Punycode, as described in RFC3492 (https://tools.ietf.org/html/rfc3492.html). The sender name (also known as the friendly name) may contain non-ASCII characters. These characters must be encoded using MIME encoded-word syntax, as described in RFC 2047 (https://tools.ietf.org/html/rfc2047). MIME encoded-word syntax uses the following form: =?charset?encoding?encoded-text?=.
-  --destination: record # The destination for this email, composed of To:, CC:, and BCC: fields.
-  --message: record # The message to be sent.
+  --source: string # The email address that is sending the email. This email address must be either individually verified with Amazon SES, or from a domain that has been verified with Amazon SES. For information about verifying identities, see the Amazon SES Developer Guide (https://docs.aws.amazon.com/ses/latest/DeveloperGuide/verify-addresses-and-domains.html). If you are sending on behalf of another user and have been permitted to do so by a sending authorization policy, then you must also specify the SourceArn parameter. For more information about sending authorization, see the Amazon SES Developer Guide (https://docs.aws.amazon.com/ses/latest/DeveloperGuide/sending-authorization.html). Amazon SES does not support the SMTPUTF8 extension, as described in RFC6531 (https://tools.ietf.org/html/rfc6531). For this reason, the local part of a source email address (the part of the email address that precedes the @ sign) may only contain 7-bit ASCII characters (https://en.wikipedia.org/wiki/Email_address#Local-part). If the domain part of an address (the part after the @ sign) contains non-ASCII characters, they must be encoded using Punycode, as described in RFC3492 (https://tools.ietf.org/html/rfc3492.html). The sender name (also known as the friendly name) may contain non-ASCII characters. These characters must be encoded using MIME encoded-word syntax, as described in RFC 2047 (https://tools.ietf.org/html/rfc2047). MIME encoded-word syntax uses the following form: =?charset?encoding?encoded-text?=. (required)
+  --destination: record # The destination for this email, composed of To:, CC:, and BCC: fields. (required)
+  --message: record # The message to be sent. (required)
   --reply-to-addresses: list # The reply-to email address(es) for the message. If the recipient replies to the message, each reply-to address will receive the reply.
   --return-path: string # The email address that bounces and complaints will be forwarded to when feedback forwarding is enabled. If the message cannot be delivered to the recipient, then an error message will be returned from the recipient's ISP; this message will then be forwarded to the email address specified by the ReturnPath parameter. The ReturnPath parameter is never overwritten. This email address must be either individually verified with Amazon SES, or from a domain that has been verified with Amazon SES.
   --source-arn: string # This parameter is used only for sending authorization. It is the ARN of the identity that is associated with the sending authorization policy that permits you to send for the email address specified in the Source parameter. For example, if the owner of example.com (which has ARN arn:aws:ses:us-east-1:123456789012:identity/example.com) attaches a policy to it that authorizes you to send from user@example.com, then you would specify the SourceArn to be arn:aws:ses:us-east-1:123456789012:identity/example.com, and the Source to be user@example.com. For more information about sending authorization, see the Amazon SES Developer Guide (https://docs.aws.amazon.com/ses/latest/DeveloperGuide/sending-authorization.html).
   --return-path-arn: string # This parameter is used only for sending authorization. It is the ARN of the identity that is associated with the sending authorization policy that permits you to use the email address specified in the ReturnPath parameter. For example, if the owner of example.com (which has ARN arn:aws:ses:us-east-1:123456789012:identity/example.com) attaches a policy to it that authorizes you to use feedback@example.com, then you would specify the ReturnPathArn to be arn:aws:ses:us-east-1:123456789012:identity/example.com, and the ReturnPath to be feedback@example.com. For more information about sending authorization, see the Amazon SES Developer Guide (https://docs.aws.amazon.com/ses/latest/DeveloperGuide/sending-authorization.html).
   --tags: list # A list of tags, in the form of name/value pairs, to apply to an email that you send using SendEmail. Tags correspond to characteristics of the email that you define, so that you can publish email sending events.
   --configuration-set-name: string # The name of the configuration set to use when you send an email using SendEmail.
-  --action: string@action-completer-48
-  --version: string@version-completer
+  --action: string@action-completer-48 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4912,10 +5163,15 @@ export def "get-send-email" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<MessageId: record> {
+]: nothing -> record<MessageId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Source" $qp_source "scalar") (serialize-qp "Destination" $destination "multi") (serialize-qp "Message" $message "multi") (serialize-qp "ReplyToAddresses" $reply_to_addresses "multi") (serialize-qp "ReturnPath" $return_path "scalar") (serialize-qp "SourceArn" $source_arn "scalar") (serialize-qp "ReturnPathArn" $return_path_arn "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "ConfigurationSetName" $configuration_set_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
+  if ($source == null) { error make --unspanned { msg: "required query parameter 'Source' missing: pass --source" } }
+  if ($destination == null) { error make --unspanned { msg: "required query parameter 'Destination' missing: pass --destination" } }
+  if ($message == null) { error make --unspanned { msg: "required query parameter 'Message' missing: pass --message" } }
+  let action = ($action | default "SendEmail")
+  let version = ($version | default "2010-12-01")
+  let qp = [(serialize-qp "Source" $source "scalar") (serialize-qp "Destination" $destination "multi") (serialize-qp "Message" $message "multi") (serialize-qp "ReplyToAddresses" $reply_to_addresses "multi") (serialize-qp "ReturnPath" $return_path "scalar") (serialize-qp "SourceArn" $source_arn "scalar") (serialize-qp "ReturnPathArn" $return_path_arn "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "ConfigurationSetName" $configuration_set_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4924,7 +5180,7 @@ export def "get-send-email" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"Source": $qp_source, "Destination": $destination, "Message": $message, "ReplyToAddresses": $reply_to_addresses, "ReturnPath": $return_path, "SourceArn": $source_arn, "ReturnPathArn": $return_path_arn, "Tags": $tags, "ConfigurationSetName": $configuration_set_name, "Action": $action, "Version": $version} | compact)
+    query: ({"Source": $source, "Destination": $destination, "Message": $message, "ReplyToAddresses": $reply_to_addresses, "ReturnPath": $return_path, "SourceArn": $source_arn, "ReturnPathArn": $return_path_arn, "Tags": $tags, "ConfigurationSetName": $configuration_set_name, "Action": $action, "Version": $version} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4949,8 +5205,8 @@ export def "post-send-email" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-48
-  --version: string@version-completer
+  --action: string@action-completer-48 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4959,10 +5215,12 @@ export def "post-send-email" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<MessageId: record> {
+]: any -> record<MessageId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "SendEmail")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4999,16 +5257,16 @@ export def "get-send-raw-email" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-source: string # The identity's email address. If you do not provide a value for this parameter, you must specify a "From" address in the raw text of the message. (You can also specify both.) Amazon SES does not support the SMTPUTF8 extension, as described inRFC6531 (https://tools.ietf.org/html/rfc6531). For this reason, the local part of a source email address (the part of the email address that precedes the @ sign) may only contain 7-bit ASCII characters (https://en.wikipedia.org/wiki/Email_address#Local-part). If the domain part of an address (the part after the @ sign) contains non-ASCII characters, they must be encoded using Punycode, as described in RFC3492 (https://tools.ietf.org/html/rfc3492.html). The sender name (also known as the friendly name) may contain non-ASCII characters. These characters must be encoded using MIME encoded-word syntax, as described in RFC 2047 (https://tools.ietf.org/html/rfc2047). MIME encoded-word syntax uses the following form: =?charset?encoding?encoded-text?=. If you specify the Source parameter and have feedback forwarding enabled, then bounces and complaints will be sent to this email address. This takes precedence over any Return-Path header that you might include in the raw text of the message.
+  --source: string # The identity's email address. If you do not provide a value for this parameter, you must specify a "From" address in the raw text of the message. (You can also specify both.) Amazon SES does not support the SMTPUTF8 extension, as described inRFC6531 (https://tools.ietf.org/html/rfc6531). For this reason, the local part of a source email address (the part of the email address that precedes the @ sign) may only contain 7-bit ASCII characters (https://en.wikipedia.org/wiki/Email_address#Local-part). If the domain part of an address (the part after the @ sign) contains non-ASCII characters, they must be encoded using Punycode, as described in RFC3492 (https://tools.ietf.org/html/rfc3492.html). The sender name (also known as the friendly name) may contain non-ASCII characters. These characters must be encoded using MIME encoded-word syntax, as described in RFC 2047 (https://tools.ietf.org/html/rfc2047). MIME encoded-word syntax uses the following form: =?charset?encoding?encoded-text?=. If you specify the Source parameter and have feedback forwarding enabled, then bounces and complaints will be sent to this email address. This takes precedence over any Return-Path header that you might include in the raw text of the message.
   --destinations: list # A list of destinations for the message, consisting of To:, CC:, and BCC: addresses.
-  --raw-message: record # The raw email message itself. The message has to meet the following criteria: The message has to contain a header and a body, separated by a blank line. All of the required header fields must be present in the message. Each part of a multipart MIME message must be formatted properly. Attachments must be of a content type that Amazon SES supports. For a list on unsupported content types, see Unsupported Attachment Types (https://docs.aws.amazon.com/ses/latest/DeveloperGuide/mime-types.html) in the Amazon SES Developer Guide. The entire message must be base64-encoded. If any of the MIME parts in your message contain content that is outside of the 7-bit ASCII character range, we highly recommend that you encode that content. For more information, see Sending Raw Email (https://docs.aws.amazon.com/ses/latest/DeveloperGuide/send-email-raw.html) in the Amazon SES Developer Guide. Per RFC 5321 (https://tools.ietf.org/html/rfc5321#section-4.5.3.1.6), the maximum length of each line of text, including the <CRLF>, must not exceed 1,000 characters.
+  --raw-message: record # The raw email message itself. The message has to meet the following criteria: The message has to contain a header and a body, separated by a blank line. All of the required header fields must be present in the message. Each part of a multipart MIME message must be formatted properly. Attachments must be of a content type that Amazon SES supports. For a list on unsupported content types, see Unsupported Attachment Types (https://docs.aws.amazon.com/ses/latest/DeveloperGuide/mime-types.html) in the Amazon SES Developer Guide. The entire message must be base64-encoded. If any of the MIME parts in your message contain content that is outside of the 7-bit ASCII character range, we highly recommend that you encode that content. For more information, see Sending Raw Email (https://docs.aws.amazon.com/ses/latest/DeveloperGuide/send-email-raw.html) in the Amazon SES Developer Guide. Per RFC 5321 (https://tools.ietf.org/html/rfc5321#section-4.5.3.1.6), the maximum length of each line of text, including the <CRLF>, must not exceed 1,000 characters. (required)
   --from-arn: string # This parameter is used only for sending authorization. It is the ARN of the identity that is associated with the sending authorization policy that permits you to specify a particular "From" address in the header of the raw email. Instead of using this parameter, you can use the X-header X-SES-FROM-ARN in the raw message of the email. If you use both the FromArn parameter and the corresponding X-header, Amazon SES uses the value of the FromArn parameter. For information about when to use this parameter, see the description of SendRawEmail in this guide, or see the Amazon SES Developer Guide (https://docs.aws.amazon.com/ses/latest/DeveloperGuide/sending-authorization-delegate-sender-tasks-email.html).
   --source-arn: string # This parameter is used only for sending authorization. It is the ARN of the identity that is associated with the sending authorization policy that permits you to send for the email address specified in the Source parameter. For example, if the owner of example.com (which has ARN arn:aws:ses:us-east-1:123456789012:identity/example.com) attaches a policy to it that authorizes you to send from user@example.com, then you would specify the SourceArn to be arn:aws:ses:us-east-1:123456789012:identity/example.com, and the Source to be user@example.com. Instead of using this parameter, you can use the X-header X-SES-SOURCE-ARN in the raw message of the email. If you use both the SourceArn parameter and the corresponding X-header, Amazon SES uses the value of the SourceArn parameter. For information about when to use this parameter, see the description of SendRawEmail in this guide, or see the Amazon SES Developer Guide (https://docs.aws.amazon.com/ses/latest/DeveloperGuide/sending-authorization-delegate-sender-tasks-email.html).
   --return-path-arn: string # This parameter is used only for sending authorization. It is the ARN of the identity that is associated with the sending authorization policy that permits you to use the email address specified in the ReturnPath parameter. For example, if the owner of example.com (which has ARN arn:aws:ses:us-east-1:123456789012:identity/example.com) attaches a policy to it that authorizes you to use feedback@example.com, then you would specify the ReturnPathArn to be arn:aws:ses:us-east-1:123456789012:identity/example.com, and the ReturnPath to be feedback@example.com. Instead of using this parameter, you can use the X-header X-SES-RETURN-PATH-ARN in the raw message of the email. If you use both the ReturnPathArn parameter and the corresponding X-header, Amazon SES uses the value of the ReturnPathArn parameter. For information about when to use this parameter, see the description of SendRawEmail in this guide, or see the Amazon SES Developer Guide (https://docs.aws.amazon.com/ses/latest/DeveloperGuide/sending-authorization-delegate-sender-tasks-email.html).
   --tags: list # A list of tags, in the form of name/value pairs, to apply to an email that you send using SendRawEmail. Tags correspond to characteristics of the email that you define, so that you can publish email sending events.
   --configuration-set-name: string # The name of the configuration set to use when you send an email using SendRawEmail.
-  --action: string@action-completer-49
-  --version: string@version-completer
+  --action: string@action-completer-49 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5016,10 +5274,13 @@ export def "get-send-raw-email" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<MessageId: record> {
+]: nothing -> record<MessageId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Source" $qp_source "scalar") (serialize-qp "Destinations" $destinations "multi") (serialize-qp "RawMessage" $raw_message "multi") (serialize-qp "FromArn" $from_arn "scalar") (serialize-qp "SourceArn" $source_arn "scalar") (serialize-qp "ReturnPathArn" $return_path_arn "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "ConfigurationSetName" $configuration_set_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
+  if ($raw_message == null) { error make --unspanned { msg: "required query parameter 'RawMessage' missing: pass --raw-message" } }
+  let action = ($action | default "SendRawEmail")
+  let version = ($version | default "2010-12-01")
+  let qp = [(serialize-qp "Source" $source "scalar") (serialize-qp "Destinations" $destinations "multi") (serialize-qp "RawMessage" $raw_message "multi") (serialize-qp "FromArn" $from_arn "scalar") (serialize-qp "SourceArn" $source_arn "scalar") (serialize-qp "ReturnPathArn" $return_path_arn "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "ConfigurationSetName" $configuration_set_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5028,7 +5289,7 @@ export def "get-send-raw-email" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"Source": $qp_source, "Destinations": $destinations, "RawMessage": $raw_message, "FromArn": $from_arn, "SourceArn": $source_arn, "ReturnPathArn": $return_path_arn, "Tags": $tags, "ConfigurationSetName": $configuration_set_name, "Action": $action, "Version": $version} | compact)
+    query: ({"Source": $source, "Destinations": $destinations, "RawMessage": $raw_message, "FromArn": $from_arn, "SourceArn": $source_arn, "ReturnPathArn": $return_path_arn, "Tags": $tags, "ConfigurationSetName": $configuration_set_name, "Action": $action, "Version": $version} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -5053,8 +5314,8 @@ export def "post-send-raw-email" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-49
-  --version: string@version-completer
+  --action: string@action-completer-49 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5063,10 +5324,12 @@ export def "post-send-raw-email" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<MessageId: record> {
+]: any -> record<MessageId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "SendRawEmail")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -5103,19 +5366,19 @@ export def "get-send-templated-email" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-source: string # The email address that is sending the email. This email address must be either individually verified with Amazon SES, or from a domain that has been verified with Amazon SES. For information about verifying identities, see the Amazon SES Developer Guide (https://docs.aws.amazon.com/ses/latest/DeveloperGuide/verify-addresses-and-domains.html). If you are sending on behalf of another user and have been permitted to do so by a sending authorization policy, then you must also specify the SourceArn parameter. For more information about sending authorization, see the Amazon SES Developer Guide (https://docs.aws.amazon.com/ses/latest/DeveloperGuide/sending-authorization.html). Amazon SES does not support the SMTPUTF8 extension, as described in RFC6531 (https://tools.ietf.org/html/rfc6531). For this reason, the local part of a source email address (the part of the email address that precedes the @ sign) may only contain 7-bit ASCII characters (https://en.wikipedia.org/wiki/Email_address#Local-part). If the domain part of an address (the part after the @ sign) contains non-ASCII characters, they must be encoded using Punycode, as described in RFC3492 (https://tools.ietf.org/html/rfc3492.html). The sender name (also known as the friendly name) may contain non-ASCII characters. These characters must be encoded using MIME encoded-word syntax, as described inRFC 2047 (https://tools.ietf.org/html/rfc2047). MIME encoded-word syntax uses the following form: =?charset?encoding?encoded-text?=.
-  --destination: record # The destination for this email, composed of To:, CC:, and BCC: fields. A Destination can include up to 50 recipients across these three fields.
+  --source: string # The email address that is sending the email. This email address must be either individually verified with Amazon SES, or from a domain that has been verified with Amazon SES. For information about verifying identities, see the Amazon SES Developer Guide (https://docs.aws.amazon.com/ses/latest/DeveloperGuide/verify-addresses-and-domains.html). If you are sending on behalf of another user and have been permitted to do so by a sending authorization policy, then you must also specify the SourceArn parameter. For more information about sending authorization, see the Amazon SES Developer Guide (https://docs.aws.amazon.com/ses/latest/DeveloperGuide/sending-authorization.html). Amazon SES does not support the SMTPUTF8 extension, as described in RFC6531 (https://tools.ietf.org/html/rfc6531). For this reason, the local part of a source email address (the part of the email address that precedes the @ sign) may only contain 7-bit ASCII characters (https://en.wikipedia.org/wiki/Email_address#Local-part). If the domain part of an address (the part after the @ sign) contains non-ASCII characters, they must be encoded using Punycode, as described in RFC3492 (https://tools.ietf.org/html/rfc3492.html). The sender name (also known as the friendly name) may contain non-ASCII characters. These characters must be encoded using MIME encoded-word syntax, as described inRFC 2047 (https://tools.ietf.org/html/rfc2047). MIME encoded-word syntax uses the following form: =?charset?encoding?encoded-text?=. (required)
+  --destination: record # The destination for this email, composed of To:, CC:, and BCC: fields. A Destination can include up to 50 recipients across these three fields. (required)
   --reply-to-addresses: list # The reply-to email address(es) for the message. If the recipient replies to the message, each reply-to address will receive the reply.
   --return-path: string # The email address that bounces and complaints will be forwarded to when feedback forwarding is enabled. If the message cannot be delivered to the recipient, then an error message will be returned from the recipient's ISP; this message will then be forwarded to the email address specified by the ReturnPath parameter. The ReturnPath parameter is never overwritten. This email address must be either individually verified with Amazon SES, or from a domain that has been verified with Amazon SES.
   --source-arn: string # This parameter is used only for sending authorization. It is the ARN of the identity that is associated with the sending authorization policy that permits you to send for the email address specified in the Source parameter. For example, if the owner of example.com (which has ARN arn:aws:ses:us-east-1:123456789012:identity/example.com) attaches a policy to it that authorizes you to send from user@example.com, then you would specify the SourceArn to be arn:aws:ses:us-east-1:123456789012:identity/example.com, and the Source to be user@example.com. For more information about sending authorization, see the Amazon SES Developer Guide (https://docs.aws.amazon.com/ses/latest/DeveloperGuide/sending-authorization.html).
   --return-path-arn: string # This parameter is used only for sending authorization. It is the ARN of the identity that is associated with the sending authorization policy that permits you to use the email address specified in the ReturnPath parameter. For example, if the owner of example.com (which has ARN arn:aws:ses:us-east-1:123456789012:identity/example.com) attaches a policy to it that authorizes you to use feedback@example.com, then you would specify the ReturnPathArn to be arn:aws:ses:us-east-1:123456789012:identity/example.com, and the ReturnPath to be feedback@example.com. For more information about sending authorization, see the Amazon SES Developer Guide (https://docs.aws.amazon.com/ses/latest/DeveloperGuide/sending-authorization.html).
   --tags: list # A list of tags, in the form of name/value pairs, to apply to an email that you send using SendTemplatedEmail. Tags correspond to characteristics of the email that you define, so that you can publish email sending events.
   --configuration-set-name: string # The name of the configuration set to use when you send an email using SendTemplatedEmail.
-  --template: string # The template to use when sending this email.
+  --template: string # The template to use when sending this email. (required)
   --template-arn: string # The ARN of the template to use when sending this email.
-  --template-data: string # A list of replacement values to apply to the template. This parameter is a JSON object, typically consisting of key-value pairs in which the keys correspond to replacement tags in the email template.
-  --action: string@action-completer-50
-  --version: string@version-completer
+  --template-data: string # A list of replacement values to apply to the template. This parameter is a JSON object, typically consisting of key-value pairs in which the keys correspond to replacement tags in the email template. (required)
+  --action: string@action-completer-50 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5123,10 +5386,16 @@ export def "get-send-templated-email" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<MessageId: record> {
+]: nothing -> record<MessageId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Source" $qp_source "scalar") (serialize-qp "Destination" $destination "multi") (serialize-qp "ReplyToAddresses" $reply_to_addresses "multi") (serialize-qp "ReturnPath" $return_path "scalar") (serialize-qp "SourceArn" $source_arn "scalar") (serialize-qp "ReturnPathArn" $return_path_arn "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "ConfigurationSetName" $configuration_set_name "scalar") (serialize-qp "Template" $template "scalar") (serialize-qp "TemplateArn" $template_arn "scalar") (serialize-qp "TemplateData" $template_data "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
+  if ($source == null) { error make --unspanned { msg: "required query parameter 'Source' missing: pass --source" } }
+  if ($destination == null) { error make --unspanned { msg: "required query parameter 'Destination' missing: pass --destination" } }
+  if ($template == null) { error make --unspanned { msg: "required query parameter 'Template' missing: pass --template" } }
+  if ($template_data == null) { error make --unspanned { msg: "required query parameter 'TemplateData' missing: pass --template-data" } }
+  let action = ($action | default "SendTemplatedEmail")
+  let version = ($version | default "2010-12-01")
+  let qp = [(serialize-qp "Source" $source "scalar") (serialize-qp "Destination" $destination "multi") (serialize-qp "ReplyToAddresses" $reply_to_addresses "multi") (serialize-qp "ReturnPath" $return_path "scalar") (serialize-qp "SourceArn" $source_arn "scalar") (serialize-qp "ReturnPathArn" $return_path_arn "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "ConfigurationSetName" $configuration_set_name "scalar") (serialize-qp "Template" $template "scalar") (serialize-qp "TemplateArn" $template_arn "scalar") (serialize-qp "TemplateData" $template_data "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5135,7 +5404,7 @@ export def "get-send-templated-email" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"Source": $qp_source, "Destination": $destination, "ReplyToAddresses": $reply_to_addresses, "ReturnPath": $return_path, "SourceArn": $source_arn, "ReturnPathArn": $return_path_arn, "Tags": $tags, "ConfigurationSetName": $configuration_set_name, "Template": $template, "TemplateArn": $template_arn, "TemplateData": $template_data, "Action": $action, "Version": $version} | compact)
+    query: ({"Source": $source, "Destination": $destination, "ReplyToAddresses": $reply_to_addresses, "ReturnPath": $return_path, "SourceArn": $source_arn, "ReturnPathArn": $return_path_arn, "Tags": $tags, "ConfigurationSetName": $configuration_set_name, "Template": $template, "TemplateArn": $template_arn, "TemplateData": $template_data, "Action": $action, "Version": $version} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -5160,8 +5429,8 @@ export def "post-send-templated-email" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-50
-  --version: string@version-completer
+  --action: string@action-completer-50 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5170,10 +5439,12 @@ export def "post-send-templated-email" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<MessageId: record> {
+]: any -> record<MessageId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "SendTemplatedEmail")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -5211,8 +5482,8 @@ export def "get-set-active-receipt-rule-set" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --rule-set-name: string # The name of the receipt rule set to make active. Setting this value to null disables all email receiving.
-  --action: string@action-completer-51
-  --version: string@version-completer
+  --action: string@action-completer-51 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5223,6 +5494,8 @@ export def "get-set-active-receipt-rule-set" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "SetActiveReceiptRuleSet")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "RuleSetName" $rule_set_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -5257,8 +5530,8 @@ export def "post-set-active-receipt-rule-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-51
-  --version: string@version-completer
+  --action: string@action-completer-51 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5271,6 +5544,8 @@ export def "post-set-active-receipt-rule-set" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "SetActiveReceiptRuleSet")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -5307,10 +5582,10 @@ export def "get-set-identity-dkim-enabled" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --identity: string # The identity for which DKIM signing should be enabled or disabled.
-  --dkim-enabled: oneof<nothing, bool> # Sets whether DKIM signing is enabled for an identity. Set to true to enable DKIM signing for this identity; false to disable it.
-  --action: string@action-completer-52
-  --version: string@version-completer
+  --identity: string # The identity for which DKIM signing should be enabled or disabled. (required)
+  --dkim-enabled: oneof<nothing, bool> # Sets whether DKIM signing is enabled for an identity. Set to true to enable DKIM signing for this identity; false to disable it. (required)
+  --action: string@action-completer-52 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5321,6 +5596,10 @@ export def "get-set-identity-dkim-enabled" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($identity == null) { error make --unspanned { msg: "required query parameter 'Identity' missing: pass --identity" } }
+  if ($dkim_enabled == null) { error make --unspanned { msg: "required query parameter 'DkimEnabled' missing: pass --dkim-enabled" } }
+  let action = ($action | default "SetIdentityDkimEnabled")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Identity" $identity "scalar") (serialize-qp "DkimEnabled" $dkim_enabled "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -5355,8 +5634,8 @@ export def "post-set-identity-dkim-enabled" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-52
-  --version: string@version-completer
+  --action: string@action-completer-52 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5369,6 +5648,8 @@ export def "post-set-identity-dkim-enabled" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "SetIdentityDkimEnabled")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -5405,10 +5686,10 @@ export def "get-set-identity-feedback-forwarding-enabled" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --identity: string # The identity for which to set bounce and complaint notification forwarding. Examples: user@example.com, example.com.
-  --forwarding-enabled: oneof<nothing, bool> # Sets whether Amazon SES will forward bounce and complaint notifications as email. true specifies that Amazon SES will forward bounce and complaint notifications as email, in addition to any Amazon SNS topic publishing otherwise specified. false specifies that Amazon SES will publish bounce and complaint notifications only through Amazon SNS. This value can only be set to false when Amazon SNS topics are set for both Bounce and Complaint notification types.
-  --action: string@action-completer-53
-  --version: string@version-completer
+  --identity: string # The identity for which to set bounce and complaint notification forwarding. Examples: user@example.com, example.com. (required)
+  --forwarding-enabled: oneof<nothing, bool> # Sets whether Amazon SES will forward bounce and complaint notifications as email. true specifies that Amazon SES will forward bounce and complaint notifications as email, in addition to any Amazon SNS topic publishing otherwise specified. false specifies that Amazon SES will publish bounce and complaint notifications only through Amazon SNS. This value can only be set to false when Amazon SNS topics are set for both Bounce and Complaint notification types. (required)
+  --action: string@action-completer-53 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5419,6 +5700,10 @@ export def "get-set-identity-feedback-forwarding-enabled" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($identity == null) { error make --unspanned { msg: "required query parameter 'Identity' missing: pass --identity" } }
+  if ($forwarding_enabled == null) { error make --unspanned { msg: "required query parameter 'ForwardingEnabled' missing: pass --forwarding-enabled" } }
+  let action = ($action | default "SetIdentityFeedbackForwardingEnabled")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Identity" $identity "scalar") (serialize-qp "ForwardingEnabled" $forwarding_enabled "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -5453,8 +5738,8 @@ export def "post-set-identity-feedback-forwarding-enabled" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-53
-  --version: string@version-completer
+  --action: string@action-completer-53 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5467,6 +5752,8 @@ export def "post-set-identity-feedback-forwarding-enabled" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "SetIdentityFeedbackForwardingEnabled")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -5503,11 +5790,11 @@ export def "get-set-identity-headers-in-notifications-enabled" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --identity: string # The identity for which to enable or disable headers in notifications. Examples: user@example.com, example.com.
-  --notification-type: string@notification-type-completer # The notification type for which to enable or disable headers in notifications.
-  --enabled: oneof<nothing, bool> # Sets whether Amazon SES includes the original email headers in Amazon SNS notifications of the specified notification type. A value of true specifies that Amazon SES will include headers in notifications, and a value of false specifies that Amazon SES will not include headers in notifications. This value can only be set when NotificationType is already set to use a particular Amazon SNS topic.
-  --action: string@action-completer-54
-  --version: string@version-completer
+  --identity: string # The identity for which to enable or disable headers in notifications. Examples: user@example.com, example.com. (required)
+  --notification-type: string@notification-type-completer # The notification type for which to enable or disable headers in notifications. (required)
+  --enabled: oneof<nothing, bool> # Sets whether Amazon SES includes the original email headers in Amazon SNS notifications of the specified notification type. A value of true specifies that Amazon SES will include headers in notifications, and a value of false specifies that Amazon SES will not include headers in notifications. This value can only be set when NotificationType is already set to use a particular Amazon SNS topic. (required)
+  --action: string@action-completer-54 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5518,6 +5805,11 @@ export def "get-set-identity-headers-in-notifications-enabled" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($identity == null) { error make --unspanned { msg: "required query parameter 'Identity' missing: pass --identity" } }
+  if ($notification_type == null) { error make --unspanned { msg: "required query parameter 'NotificationType' missing: pass --notification-type" } }
+  if ($enabled == null) { error make --unspanned { msg: "required query parameter 'Enabled' missing: pass --enabled" } }
+  let action = ($action | default "SetIdentityHeadersInNotificationsEnabled")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Identity" $identity "scalar") (serialize-qp "NotificationType" $notification_type "scalar") (serialize-qp "Enabled" $enabled "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -5552,8 +5844,8 @@ export def "post-set-identity-headers-in-notifications-enabled" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-54
-  --version: string@version-completer
+  --action: string@action-completer-54 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5566,6 +5858,8 @@ export def "post-set-identity-headers-in-notifications-enabled" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "SetIdentityHeadersInNotificationsEnabled")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -5602,11 +5896,11 @@ export def "get-set-identity-mail-from-domain" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --identity: string # The verified identity for which you want to enable or disable the specified custom MAIL FROM domain.
+  --identity: string # The verified identity for which you want to enable or disable the specified custom MAIL FROM domain. (required)
   --mail-from-domain: string # The custom MAIL FROM domain that you want the verified identity to use. The MAIL FROM domain must 1) be a subdomain of the verified identity, 2) not be used in a "From" address if the MAIL FROM domain is the destination of email feedback forwarding (for more information, see the Amazon SES Developer Guide (https://docs.aws.amazon.com/ses/latest/DeveloperGuide/mail-from.html)), and 3) not be used to receive emails. A value of null disables the custom MAIL FROM setting for the identity.
   --behavior-on-mx-failure: string@behavior-on-mx-failure-completer # The action that you want Amazon SES to take if it cannot successfully read the required MX record when you send an email. If you choose UseDefaultValue, Amazon SES will use amazonses.com (or a subdomain of that) as the MAIL FROM domain. If you choose RejectMessage, Amazon SES will return a MailFromDomainNotVerified error and not send the email. The action specified in BehaviorOnMXFailure is taken when the custom MAIL FROM domain setup is in the Pending, Failed, and TemporaryFailure states.
-  --action: string@action-completer-55
-  --version: string@version-completer
+  --action: string@action-completer-55 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5617,6 +5911,9 @@ export def "get-set-identity-mail-from-domain" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($identity == null) { error make --unspanned { msg: "required query parameter 'Identity' missing: pass --identity" } }
+  let action = ($action | default "SetIdentityMailFromDomain")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Identity" $identity "scalar") (serialize-qp "MailFromDomain" $mail_from_domain "scalar") (serialize-qp "BehaviorOnMXFailure" $behavior_on_mx_failure "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -5651,8 +5948,8 @@ export def "post-set-identity-mail-from-domain" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-55
-  --version: string@version-completer
+  --action: string@action-completer-55 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5665,6 +5962,8 @@ export def "post-set-identity-mail-from-domain" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "SetIdentityMailFromDomain")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -5701,11 +6000,11 @@ export def "get-set-identity-notification-topic" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --identity: string # The identity (email address or domain) that you want to set the Amazon SNS topic for. You can only specify a verified identity for this parameter. You can specify an identity by using its name or by using its Amazon Resource Name (ARN). The following examples are all valid identities: sender@example.com, example.com, arn:aws:ses:us-east-1:123456789012:identity/example.com.
-  --notification-type: string@notification-type-completer # The type of notifications that will be published to the specified Amazon SNS topic.
+  --identity: string # The identity (email address or domain) that you want to set the Amazon SNS topic for. You can only specify a verified identity for this parameter. You can specify an identity by using its name or by using its Amazon Resource Name (ARN). The following examples are all valid identities: sender@example.com, example.com, arn:aws:ses:us-east-1:123456789012:identity/example.com. (required)
+  --notification-type: string@notification-type-completer # The type of notifications that will be published to the specified Amazon SNS topic. (required)
   --sns-topic: string # The Amazon Resource Name (ARN) of the Amazon SNS topic. If the parameter is omitted from the request or a null value is passed, SnsTopic is cleared and publishing is disabled.
-  --action: string@action-completer-56
-  --version: string@version-completer
+  --action: string@action-completer-56 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5716,6 +6015,10 @@ export def "get-set-identity-notification-topic" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($identity == null) { error make --unspanned { msg: "required query parameter 'Identity' missing: pass --identity" } }
+  if ($notification_type == null) { error make --unspanned { msg: "required query parameter 'NotificationType' missing: pass --notification-type" } }
+  let action = ($action | default "SetIdentityNotificationTopic")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Identity" $identity "scalar") (serialize-qp "NotificationType" $notification_type "scalar") (serialize-qp "SnsTopic" $sns_topic "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -5750,8 +6053,8 @@ export def "post-set-identity-notification-topic" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-56
-  --version: string@version-completer
+  --action: string@action-completer-56 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5764,6 +6067,8 @@ export def "post-set-identity-notification-topic" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "SetIdentityNotificationTopic")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -5800,11 +6105,11 @@ export def "get-set-receipt-rule-position" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rule-set-name: string # The name of the receipt rule set that contains the receipt rule to reposition.
-  --rule-name: string # The name of the receipt rule to reposition.
+  --rule-set-name: string # The name of the receipt rule set that contains the receipt rule to reposition. (required)
+  --rule-name: string # The name of the receipt rule to reposition. (required)
   --after: string # The name of the receipt rule after which to place the specified receipt rule.
-  --action: string@action-completer-57
-  --version: string@version-completer
+  --action: string@action-completer-57 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5815,6 +6120,10 @@ export def "get-set-receipt-rule-position" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($rule_set_name == null) { error make --unspanned { msg: "required query parameter 'RuleSetName' missing: pass --rule-set-name" } }
+  if ($rule_name == null) { error make --unspanned { msg: "required query parameter 'RuleName' missing: pass --rule-name" } }
+  let action = ($action | default "SetReceiptRulePosition")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "RuleSetName" $rule_set_name "scalar") (serialize-qp "RuleName" $rule_name "scalar") (serialize-qp "After" $after "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -5849,8 +6158,8 @@ export def "post-set-receipt-rule-position" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-57
-  --version: string@version-completer
+  --action: string@action-completer-57 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5863,6 +6172,8 @@ export def "post-set-receipt-rule-position" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "SetReceiptRulePosition")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -5899,10 +6210,10 @@ export def "get-test-render-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --template-name: string # The name of the template that you want to render.
-  --template-data: string # A list of replacement values to apply to the template. This parameter is a JSON object, typically consisting of key-value pairs in which the keys correspond to replacement tags in the email template.
-  --action: string@action-completer-58
-  --version: string@version-completer
+  --template-name: string # The name of the template that you want to render. (required)
+  --template-data: string # A list of replacement values to apply to the template. This parameter is a JSON object, typically consisting of key-value pairs in which the keys correspond to replacement tags in the email template. (required)
+  --action: string@action-completer-58 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5910,9 +6221,13 @@ export def "get-test-render-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<RenderedTemplate: record> {
+]: nothing -> record<RenderedTemplate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($template_name == null) { error make --unspanned { msg: "required query parameter 'TemplateName' missing: pass --template-name" } }
+  if ($template_data == null) { error make --unspanned { msg: "required query parameter 'TemplateData' missing: pass --template-data" } }
+  let action = ($action | default "TestRenderTemplate")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "TemplateName" $template_name "scalar") (serialize-qp "TemplateData" $template_data "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -5947,8 +6262,8 @@ export def "post-test-render-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-58
-  --version: string@version-completer
+  --action: string@action-completer-58 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5957,10 +6272,12 @@ export def "post-test-render-template" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<RenderedTemplate: record> {
+]: any -> record<RenderedTemplate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "TestRenderTemplate")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -5998,8 +6315,8 @@ export def "get-update-account-sending-enabled" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool> # Describes whether email sending is enabled or disabled for your Amazon SES account in the current AWS Region.
-  --action: string@action-completer-59
-  --version: string@version-completer
+  --action: string@action-completer-59 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6010,6 +6327,8 @@ export def "get-update-account-sending-enabled" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "UpdateAccountSendingEnabled")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Enabled" $enabled "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -6044,8 +6363,8 @@ export def "post-update-account-sending-enabled" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-59
-  --version: string@version-completer
+  --action: string@action-completer-59 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6058,6 +6377,8 @@ export def "post-update-account-sending-enabled" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "UpdateAccountSendingEnabled")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -6094,10 +6415,10 @@ export def "get-update-configuration-set-event-destination" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --configuration-set-name: string # The name of the configuration set that contains the event destination that you want to update.
-  --event-destination: record # The event destination object that you want to apply to the specified configuration set.
-  --action: string@action-completer-60
-  --version: string@version-completer
+  --configuration-set-name: string # The name of the configuration set that contains the event destination that you want to update. (required)
+  --event-destination: record # The event destination object that you want to apply to the specified configuration set. (required)
+  --action: string@action-completer-60 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6108,6 +6429,10 @@ export def "get-update-configuration-set-event-destination" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($configuration_set_name == null) { error make --unspanned { msg: "required query parameter 'ConfigurationSetName' missing: pass --configuration-set-name" } }
+  if ($event_destination == null) { error make --unspanned { msg: "required query parameter 'EventDestination' missing: pass --event-destination" } }
+  let action = ($action | default "UpdateConfigurationSetEventDestination")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "ConfigurationSetName" $configuration_set_name "scalar") (serialize-qp "EventDestination" $event_destination "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -6142,8 +6467,8 @@ export def "post-update-configuration-set-event-destination" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-60
-  --version: string@version-completer
+  --action: string@action-completer-60 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6156,6 +6481,8 @@ export def "post-update-configuration-set-event-destination" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "UpdateConfigurationSetEventDestination")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -6192,10 +6519,10 @@ export def "get-update-configuration-set-reputation-metrics-enabled" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --configuration-set-name: string # The name of the configuration set that you want to update.
-  --enabled: oneof<nothing, bool> # Describes whether or not Amazon SES will publish reputation metrics for the configuration set, such as bounce and complaint rates, to Amazon CloudWatch.
-  --action: string@action-completer-61
-  --version: string@version-completer
+  --configuration-set-name: string # The name of the configuration set that you want to update. (required)
+  --enabled: oneof<nothing, bool> # Describes whether or not Amazon SES will publish reputation metrics for the configuration set, such as bounce and complaint rates, to Amazon CloudWatch. (required)
+  --action: string@action-completer-61 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6206,6 +6533,10 @@ export def "get-update-configuration-set-reputation-metrics-enabled" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($configuration_set_name == null) { error make --unspanned { msg: "required query parameter 'ConfigurationSetName' missing: pass --configuration-set-name" } }
+  if ($enabled == null) { error make --unspanned { msg: "required query parameter 'Enabled' missing: pass --enabled" } }
+  let action = ($action | default "UpdateConfigurationSetReputationMetricsEnabled")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "ConfigurationSetName" $configuration_set_name "scalar") (serialize-qp "Enabled" $enabled "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -6240,8 +6571,8 @@ export def "post-update-configuration-set-reputation-metrics-enabled" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-61
-  --version: string@version-completer
+  --action: string@action-completer-61 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6254,6 +6585,8 @@ export def "post-update-configuration-set-reputation-metrics-enabled" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "UpdateConfigurationSetReputationMetricsEnabled")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -6290,10 +6623,10 @@ export def "get-update-configuration-set-sending-enabled" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --configuration-set-name: string # The name of the configuration set that you want to update.
-  --enabled: oneof<nothing, bool> # Describes whether email sending is enabled or disabled for the configuration set.
-  --action: string@action-completer-62
-  --version: string@version-completer
+  --configuration-set-name: string # The name of the configuration set that you want to update. (required)
+  --enabled: oneof<nothing, bool> # Describes whether email sending is enabled or disabled for the configuration set. (required)
+  --action: string@action-completer-62 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6304,6 +6637,10 @@ export def "get-update-configuration-set-sending-enabled" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($configuration_set_name == null) { error make --unspanned { msg: "required query parameter 'ConfigurationSetName' missing: pass --configuration-set-name" } }
+  if ($enabled == null) { error make --unspanned { msg: "required query parameter 'Enabled' missing: pass --enabled" } }
+  let action = ($action | default "UpdateConfigurationSetSendingEnabled")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "ConfigurationSetName" $configuration_set_name "scalar") (serialize-qp "Enabled" $enabled "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -6338,8 +6675,8 @@ export def "post-update-configuration-set-sending-enabled" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-62
-  --version: string@version-completer
+  --action: string@action-completer-62 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6352,6 +6689,8 @@ export def "post-update-configuration-set-sending-enabled" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "UpdateConfigurationSetSendingEnabled")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -6388,10 +6727,10 @@ export def "get-update-configuration-set-tracking-options" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --configuration-set-name: string # The name of the configuration set for which you want to update the custom tracking domain.
-  --tracking-options: record
-  --action: string@action-completer-63
-  --version: string@version-completer
+  --configuration-set-name: string # The name of the configuration set for which you want to update the custom tracking domain. (required)
+  --tracking-options: record # required
+  --action: string@action-completer-63 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6402,6 +6741,10 @@ export def "get-update-configuration-set-tracking-options" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($configuration_set_name == null) { error make --unspanned { msg: "required query parameter 'ConfigurationSetName' missing: pass --configuration-set-name" } }
+  if ($tracking_options == null) { error make --unspanned { msg: "required query parameter 'TrackingOptions' missing: pass --tracking-options" } }
+  let action = ($action | default "UpdateConfigurationSetTrackingOptions")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "ConfigurationSetName" $configuration_set_name "scalar") (serialize-qp "TrackingOptions" $tracking_options "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -6436,8 +6779,8 @@ export def "post-update-configuration-set-tracking-options" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-63
-  --version: string@version-completer
+  --action: string@action-completer-63 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6450,6 +6793,8 @@ export def "post-update-configuration-set-tracking-options" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "UpdateConfigurationSetTrackingOptions")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -6486,14 +6831,14 @@ export def "get-update-custom-verification-email-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --template-name: string # The name of the custom verification email template that you want to update.
+  --template-name: string # The name of the custom verification email template that you want to update. (required)
   --from-email-address: string # The email address that the custom verification email is sent from.
   --template-subject: string # The subject line of the custom verification email.
   --template-content: string # The content of the custom verification email. The total size of the email must be less than 10 MB. The message body may contain HTML, with some limitations. For more information, see Custom Verification Email Frequently Asked Questions (https://docs.aws.amazon.com/ses/latest/DeveloperGuide/custom-verification-emails.html#custom-verification-emails-faq) in the Amazon SES Developer Guide.
   --success-redirection-url: string # The URL that the recipient of the verification email is sent to if his or her address is successfully verified.
   --failure-redirection-url: string # The URL that the recipient of the verification email is sent to if his or her address is not successfully verified.
-  --action: string@action-completer-64
-  --version: string@version-completer
+  --action: string@action-completer-64 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6504,6 +6849,9 @@ export def "get-update-custom-verification-email-template" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($template_name == null) { error make --unspanned { msg: "required query parameter 'TemplateName' missing: pass --template-name" } }
+  let action = ($action | default "UpdateCustomVerificationEmailTemplate")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "TemplateName" $template_name "scalar") (serialize-qp "FromEmailAddress" $from_email_address "scalar") (serialize-qp "TemplateSubject" $template_subject "scalar") (serialize-qp "TemplateContent" $template_content "scalar") (serialize-qp "SuccessRedirectionURL" $success_redirection_url "scalar") (serialize-qp "FailureRedirectionURL" $failure_redirection_url "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -6538,8 +6886,8 @@ export def "post-update-custom-verification-email-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-64
-  --version: string@version-completer
+  --action: string@action-completer-64 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6552,6 +6900,8 @@ export def "post-update-custom-verification-email-template" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "UpdateCustomVerificationEmailTemplate")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -6588,10 +6938,10 @@ export def "get-update-receipt-rule" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rule-set-name: string # The name of the receipt rule set that the receipt rule belongs to.
-  --rule: record # A data structure that contains the updated receipt rule information.
-  --action: string@action-completer-65
-  --version: string@version-completer
+  --rule-set-name: string # The name of the receipt rule set that the receipt rule belongs to. (required)
+  --rule: record # A data structure that contains the updated receipt rule information. (required)
+  --action: string@action-completer-65 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6602,6 +6952,10 @@ export def "get-update-receipt-rule" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($rule_set_name == null) { error make --unspanned { msg: "required query parameter 'RuleSetName' missing: pass --rule-set-name" } }
+  if ($rule == null) { error make --unspanned { msg: "required query parameter 'Rule' missing: pass --rule" } }
+  let action = ($action | default "UpdateReceiptRule")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "RuleSetName" $rule_set_name "scalar") (serialize-qp "Rule" $rule "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -6636,8 +6990,8 @@ export def "post-update-receipt-rule" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-65
-  --version: string@version-completer
+  --action: string@action-completer-65 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6650,6 +7004,8 @@ export def "post-update-receipt-rule" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "UpdateReceiptRule")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -6686,9 +7042,9 @@ export def "get-update-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --template: record
-  --action: string@action-completer-66
-  --version: string@version-completer
+  --template: record # required
+  --action: string@action-completer-66 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6699,6 +7055,9 @@ export def "get-update-template" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($template == null) { error make --unspanned { msg: "required query parameter 'Template' missing: pass --template" } }
+  let action = ($action | default "UpdateTemplate")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Template" $template "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -6733,8 +7092,8 @@ export def "post-update-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-66
-  --version: string@version-completer
+  --action: string@action-completer-66 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6747,6 +7106,8 @@ export def "post-update-template" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "UpdateTemplate")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -6783,9 +7144,9 @@ export def "get-verify-domain-dkim" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain: string # The name of the domain to be verified for Easy DKIM signing.
-  --action: string@action-completer-67
-  --version: string@version-completer
+  --domain: string # The name of the domain to be verified for Easy DKIM signing. (required)
+  --action: string@action-completer-67 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6793,9 +7154,12 @@ export def "get-verify-domain-dkim" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DkimTokens: record> {
+]: nothing -> record<DkimTokens: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain == null) { error make --unspanned { msg: "required query parameter 'Domain' missing: pass --domain" } }
+  let action = ($action | default "VerifyDomainDkim")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Domain" $domain "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -6830,8 +7194,8 @@ export def "post-verify-domain-dkim" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-67
-  --version: string@version-completer
+  --action: string@action-completer-67 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6840,10 +7204,12 @@ export def "post-verify-domain-dkim" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DkimTokens: record> {
+]: any -> record<DkimTokens: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "VerifyDomainDkim")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -6880,9 +7246,9 @@ export def "get-verify-domain-identity" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain: string # The domain to be verified.
-  --action: string@action-completer-68
-  --version: string@version-completer
+  --domain: string # The domain to be verified. (required)
+  --action: string@action-completer-68 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6890,9 +7256,12 @@ export def "get-verify-domain-identity" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<VerificationToken: record> {
+]: nothing -> record<VerificationToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain == null) { error make --unspanned { msg: "required query parameter 'Domain' missing: pass --domain" } }
+  let action = ($action | default "VerifyDomainIdentity")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Domain" $domain "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -6927,8 +7296,8 @@ export def "post-verify-domain-identity" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-68
-  --version: string@version-completer
+  --action: string@action-completer-68 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6937,10 +7306,12 @@ export def "post-verify-domain-identity" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<VerificationToken: record> {
+]: any -> record<VerificationToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "VerifyDomainIdentity")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -6977,9 +7348,9 @@ export def "get-verify-email-address" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --email-address: string # The email address to be verified.
-  --action: string@action-completer-69
-  --version: string@version-completer
+  --email-address: string # The email address to be verified. (required)
+  --action: string@action-completer-69 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6990,6 +7361,9 @@ export def "get-verify-email-address" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($email_address == null) { error make --unspanned { msg: "required query parameter 'EmailAddress' missing: pass --email-address" } }
+  let action = ($action | default "VerifyEmailAddress")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "EmailAddress" $email_address "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -7024,8 +7398,8 @@ export def "post-verify-email-address" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-69
-  --version: string@version-completer
+  --action: string@action-completer-69 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -7038,6 +7412,8 @@ export def "post-verify-email-address" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "VerifyEmailAddress")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -7074,9 +7450,9 @@ export def "get-verify-email-identity" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --email-address: string # The email address to be verified.
-  --action: string@action-completer-70
-  --version: string@version-completer
+  --email-address: string # The email address to be verified. (required)
+  --action: string@action-completer-70 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -7087,6 +7463,9 @@ export def "get-verify-email-identity" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($email_address == null) { error make --unspanned { msg: "required query parameter 'EmailAddress' missing: pass --email-address" } }
+  let action = ($action | default "VerifyEmailIdentity")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "EmailAddress" $email_address "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -7121,8 +7500,8 @@ export def "post-verify-email-identity" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-70
-  --version: string@version-completer
+  --action: string@action-completer-70 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -7135,6 +7514,8 @@ export def "post-verify-email-identity" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "VerifyEmailIdentity")
+  let version = ($version | default "2010-12-01")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body

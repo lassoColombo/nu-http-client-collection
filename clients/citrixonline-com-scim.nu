@@ -156,10 +156,11 @@ export def "get-groups" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Without a filter, all groups are returned. The filter parameter must be a properly formed SCIM filter using the operator "eq" (equals), "sw" (starts with), or "co" (contains). The filter works for the displayName attribute. Sorting and pagination are supported. For example, GET /Groups?filter=displayName%20eq%20%22Engineering%22&sortBy=displayName&sortOrder=ascending&count=50&startIndex=51
-  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
+  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef' (required)
 ]: nothing -> record<resources: table<displayName: string, id: string, members: list, meta: record>, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Groups" $qp $auth.query)
   let accept_val = "application/json"
@@ -195,13 +196,14 @@ export def "create-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
+  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef' (required)
   display_name: string # The group's display name
   --members: list # An array of members — item shape: {type: "group"|"user", value: string}
 ]: any -> record<displayName: string, id: string, members: table<type: string, value: string>, meta: record<created: string, location: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/Groups" $auth.query)
   let req_body = {"displayName": $display_name, "members": $members} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -238,11 +240,12 @@ export def "delete-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
+  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef' (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_key | is-empty) { error make --unspanned { msg: "path parameter 'groupKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({group_key: (encode-path-segment $group_key)} | format pattern "/Groups/{group_key}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -277,11 +280,12 @@ export def "get-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
+  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef' (required)
 ]: nothing -> record<displayName: string, id: string, members: table<type: string, value: string>, meta: record<created: string, location: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_key | is-empty) { error make --unspanned { msg: "path parameter 'groupKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({group_key: (encode-path-segment $group_key)} | format pattern "/Groups/{group_key}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -317,7 +321,7 @@ export def "update-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
+  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef' (required)
   display_name: string # The group's display name
   --members: list # An array of members — item shape: {type: "group"|"user", value: string}
 ]: any -> record<displayName: string, id: string, members: table<type: string, value: string>, meta: record<created: string, location: string>> {
@@ -325,6 +329,7 @@ export def "update-group" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_key | is-empty) { error make --unspanned { msg: "path parameter 'groupKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({group_key: (encode-path-segment $group_key)} | format pattern "/Groups/{group_key}") $auth.query)
   let req_body = {"displayName": $display_name, "members": $members} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -362,7 +367,7 @@ export def "replace-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
+  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef' (required)
   display_name: string # The group's display name
   --members: list # An array of members — item shape: {type: "group"|"user", value: string}
 ]: any -> record<displayName: string, id: string, members: table<type: string, value: string>, meta: record<created: string, location: string>> {
@@ -370,6 +375,7 @@ export def "replace-group" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_key | is-empty) { error make --unspanned { msg: "path parameter 'groupKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({group_key: (encode-path-segment $group_key)} | format pattern "/Groups/{group_key}") $auth.query)
   let req_body = {"displayName": $display_name, "members": $members} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -405,10 +411,11 @@ export def "get-user-schema" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
+  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef' (required)
 ]: nothing -> record<attributes: table<caseExact: bool, description: string, multiValued: bool, name: string, readOnly: bool, required: bool, schema: string, subAttributes: list, type: string>, description: string, endpoint: string, id: string, name: string, schema: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/Schemas/Users" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -442,10 +449,11 @@ export def "get-service-provider-configs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
+  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef' (required)
 ]: nothing -> record<authenticationSchemes: record<description: string, documentationUrl: string, name: string, specUrl: string>, bulk: record<supported: bool>, changePassword: record<supported: bool>, documentationUrl: string, etag: record<supported: bool>, filter: record<supported: bool>, patch: record<supported: bool>, sort: record<supported: bool>, xmlDataFormat: record<supported: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/ServiceProviderConfigs" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -480,10 +488,11 @@ export def "get-users" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Without a filter, all users in a user domain are returned. The filter parameter must be a properly formed SCIM filter using either the operator eq (equals) or the operator sw (starts with). The filter works for userName, displayName, name.givenName, and name.familyName attributes. For example, /Users?filter=name.familyName%20eq%20%%22Smith%22
-  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
+  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef' (required)
 ]: nothing -> record<resources: table<displayName: string, id: string, locale: string, meta: record, name: record, timezone: string, userName: string>, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Users" $qp $auth.query)
   let accept_val = "application/json"
@@ -519,7 +528,7 @@ export def "create-users" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
+  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef' (required)
   --display-name: string # The user's display name
   --locale: string # The user's language settings
   --name: any # The full name of the user — shape: {familyName: string, givenName: string}
@@ -530,6 +539,7 @@ export def "create-users" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/Users" $auth.query)
   let req_body = {"displayName": $display_name, "locale": $locale, "name": $name, "password": $password, "timezone": $timezone, "userName": $user_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -565,10 +575,11 @@ export def "get-me" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
+  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef' (required)
 ]: nothing -> record<displayName: string, id: string, locale: string, meta: record<created: string, location: string>, name: record<familyName: string, givenName: string>, timezone: string, userName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/Users/me" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -603,7 +614,7 @@ export def "update-me" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
+  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef' (required)
   --display-name: string # The user's display name
   --locale: string # The user's language settings
   --name: any # The full name of the user — shape: {familyName: string, givenName: string}
@@ -614,6 +625,7 @@ export def "update-me" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/Users/me" $auth.query)
   let req_body = {"displayName": $display_name, "locale": $locale, "name": $name, "password": $password, "timezone": $timezone, "userName": $user_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -650,7 +662,7 @@ export def "replace-me" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
+  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef' (required)
   --display-name: string # The user's display name
   --locale: string # The user's language settings
   --name: any # The full name of the user — shape: {familyName: string, givenName: string}
@@ -661,6 +673,7 @@ export def "replace-me" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/Users/me" $auth.query)
   let req_body = {"displayName": $display_name, "locale": $locale, "name": $name, "password": $password, "timezone": $timezone, "userName": $user_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -697,11 +710,12 @@ export def "delete-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
+  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef' (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_key | is-empty) { error make --unspanned { msg: "path parameter 'userKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({user_key: (encode-path-segment $user_key)} | format pattern "/Users/{user_key}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -736,11 +750,12 @@ export def "get-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
+  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef' (required)
 ]: nothing -> record<displayName: string, id: string, locale: string, meta: record<created: string, location: string>, name: record<familyName: string, givenName: string>, timezone: string, userName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_key | is-empty) { error make --unspanned { msg: "path parameter 'userKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({user_key: (encode-path-segment $user_key)} | format pattern "/Users/{user_key}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -776,7 +791,7 @@ export def "update-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
+  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef' (required)
   --display-name: string # The user's display name
   --locale: string # The user's language settings
   --name: any # The full name of the user — shape: {familyName: string, givenName: string}
@@ -788,6 +803,7 @@ export def "update-user" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_key | is-empty) { error make --unspanned { msg: "path parameter 'userKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({user_key: (encode-path-segment $user_key)} | format pattern "/Users/{user_key}") $auth.query)
   let req_body = {"displayName": $display_name, "locale": $locale, "name": $name, "password": $password, "timezone": $timezone, "userName": $user_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -825,7 +841,7 @@ export def "replace-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef'
+  --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef' (required)
   --display-name: string # The user's display name
   --locale: string # The user's language settings
   --name: any # The full name of the user — shape: {familyName: string, givenName: string}
@@ -837,6 +853,7 @@ export def "replace-user" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_key | is-empty) { error make --unspanned { msg: "path parameter 'userKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({user_key: (encode-path-segment $user_key)} | format pattern "/Users/{user_key}") $auth.query)
   let req_body = {"displayName": $display_name, "locale": $locale, "name": $name, "password": $password, "timezone": $timezone, "userName": $user_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

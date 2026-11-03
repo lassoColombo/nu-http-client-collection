@@ -135,10 +135,11 @@ export def "get-food-branded-barcode-php" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --code: string # #### UPC/EAN barcode **Example** > ```&code=0842234000988```
-]: nothing -> any {
+  --code: string # #### UPC/EAN barcode **Example** > ```&code=0842234000988``` (required)
+]: nothing -> record<items: table<allergens: list, barcode: string, brand: string, brand_list: list, categories: list, countries: list, country_details: record, description: string, diet_flags: list, diet_labels: record, has_english_ingredients: bool, ingredient_list: list, ingredients: string, keywords: list, minerals: list, name: string, nutrients: list, package: record, packaging_photos: record, palm_oil_ingredients: list, serving: record, traces: list, vitamins: list>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($code == null) { error make --unspanned { msg: "required query parameter 'code' missing: pass --code" } }
   let qp = [(serialize-qp "code" $code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/branded/barcode.php" $qp $auth.query)
   let accept_val = "application/json"
@@ -170,12 +171,13 @@ export def "get-food-branded-name-php" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name: string # #### Search for branded food items using a general food name keyword. This does not have to exactly match the "official" name for the food. **Example** > ```&name=Starburst```
+  --name: string # #### Search for branded food items using a general food name keyword. This does not have to exactly match the "official" name for the food. **Example** > ```&name=Starburst``` (required)
   --limit: int@limit-completer # #### Set maximum number of records you want the API to return. The default value is "**10**." **Example** > ```&limit=10```
   --page: int # #### This is how you paginate the search result. By default, you will see the first 10 records. You must increment the page number to access the next 10 records, and so on. The default value is "**1**." **Example** > ```&page=1```
-]: nothing -> any {
+]: nothing -> record<items: table<allergens: list, barcode: string, brand: string, brand_list: list, categories: list, countries: list, country_details: record, description: string, diet_flags: list, diet_labels: record, has_english_ingredients: bool, ingredient_list: list, ingredients: string, keywords: list, minerals: list, name: string, nutrients: list, package: record, packaging_photos: record, palm_oil_ingredients: list, serving: record, traces: list, vitamins: list>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/branded/name.php" $qp $auth.query)
   let accept_val = "application/json"
@@ -221,7 +223,7 @@ export def "get-food-branded-search-php" [
   --vitamin: string # #### Filter the search to only include branded foods that contain a specific vitamin. **Example** > ```&vitamin=Biotin```
   --limit: int@limit-completer # #### Set maximum number of records you want the API to return. The default value is "**10**." **Example** > ```&limit=10```
   --page: int # #### This is how you paginate the search result. By default, you will see the first 10 records. You must increment the page number to access the next 10 records, and so on. The default value is "**1**." **Example** > ```&page=1```
-]: nothing -> any {
+]: nothing -> record<items: table<allergens: list, barcode: string, brand: string, brand_list: list, categories: list, countries: list, country_details: record, description: string, diet_flags: list, diet_labels: record, has_english_ingredients: bool, ingredient_list: list, ingredients: string, keywords: list, minerals: list, name: string, nutrients: list, package: record, packaging_photos: record, palm_oil_ingredients: list, serving: record, traces: list, vitamins: list>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "allergen" $allergen "scalar") (serialize-qp "brand" $brand "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "diet" $diet "scalar") (serialize-qp "ingredient" $ingredient "scalar") (serialize-qp "keyword" $keyword "scalar") (serialize-qp "mineral" $mineral "scalar") (serialize-qp "nutrient" $nutrient "scalar") (serialize-qp "palm_oil" $palm_oil "scalar") (serialize-qp "trace" $trace "scalar") (serialize-qp "vitamin" $vitamin "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
@@ -255,11 +257,12 @@ export def "get-food-ingredient-search-php" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --find: string # Search our database for a single ingredient or a specific set of ingredients. **Example #1: Single Ingredient** > ```&find=raw broccoli``` **Example #2: Set of Ingredients** > ```&find=raw broccoli,buttermilk waffle,mashed potatoes``` **Important Notes** * Comma-separated lists cannot contain more than **10 ingredients**. You must perform additional API calls if you are looking up more than 10 ingredients.
+  --find: string # Search our database for a single ingredient or a specific set of ingredients. **Example #1: Single Ingredient** > ```&find=raw broccoli``` **Example #2: Set of Ingredients** > ```&find=raw broccoli,buttermilk waffle,mashed potatoes``` **Important Notes** * Comma-separated lists cannot contain more than **10 ingredients**. You must perform additional API calls if you are looking up more than 10 ingredients. (required)
   --limit: int@limit-completer-1 # #### Set maximum number of records you want the API to return, per search term. The default value is "**1**." **Example** > ```&limit=3```
-]: nothing -> any {
+]: nothing -> record<items: table<calorie_conversion_factor: record, categories: list, common_name: string, components: list, footnote: string, name: string, nutrients: list, portions: list, protein_conversion_factor: float, score: string, search_term: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($find == null) { error make --unspanned { msg: "required query parameter 'find' missing: pass --find" } }
   let qp = [(serialize-qp "find" $find "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/ingredient/search.php" $qp $auth.query)
   let accept_val = "application/json"

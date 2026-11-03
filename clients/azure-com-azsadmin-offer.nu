@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -133,11 +133,12 @@ export def "delegated-provider-offers-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version. (default: 2015-11-01)
+  --api-version: string # Client Api Version. (required, default: 2015-11-01)
 ]: nothing -> record<nextLink: string, value: table<description: string, displayName: string, id: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($delegated_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'delegatedProviderId' must be non-empty" } }
+  let api_version = ($api_version | default "2015-11-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({delegated_provider_id: (encode-path-segment $delegated_provider_id)} | format pattern "/delegatedProviders/{delegated_provider_id}/offers") $qp $auth.query)
   let accept_val = "application/json"
@@ -172,12 +173,13 @@ export def "delegated-provider-offers-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version. (default: 2015-11-01)
+  --api-version: string # Client Api Version. (required, default: 2015-11-01)
 ]: nothing -> record<description: string, displayName: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($delegated_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'delegatedProviderId' must be non-empty" } }
   if ($offer_name | is-empty) { error make --unspanned { msg: "path parameter 'offerName' must be non-empty" } }
+  let api_version = ($api_version | default "2015-11-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({delegated_provider_id: (encode-path-segment $delegated_provider_id), offer_name: (encode-path-segment $offer_name)} | format pattern "/delegatedProviders/{delegated_provider_id}/offers/{offer_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -210,10 +212,11 @@ export def "offers-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version. (default: 2015-11-01)
+  --api-version: string # Client Api Version. (required, default: 2015-11-01)
 ]: nothing -> record<nextLink: string, value: table<description: string, displayName: string, id: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let api_version = ($api_version | default "2015-11-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/offers" $qp $auth.query)
   let accept_val = "application/json"

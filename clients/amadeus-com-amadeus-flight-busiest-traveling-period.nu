@@ -133,12 +133,14 @@ export def "get-air-traffic" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --city-code: string # Code for the city following IATA standard. [IATA table codes](http://www.iata.org/publications/Pages/code-search.aspx) - e.g. BOS for Boston (e.g. MAD)
-  --period: string # time period (year) of the statistics. Year for which the statistic are requested following [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) (e.g. 2017)
+  --city-code: string # Code for the city following IATA standard. [IATA table codes](http://www.iata.org/publications/Pages/code-search.aspx) - e.g. BOS for Boston (required, e.g. MAD)
+  --period: string # time period (year) of the statistics. Year for which the statistic are requested following [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) (required, e.g. 2017)
   --direction: string@direction-completer # Use ARRIVING to have statistics on travelers coming to the city or DEPARTING for statistics on travelers leaving the city. By default, statistics are given on travelers ARRIVING the city. (default: ARRIVING, e.g. ARRIVING)
-]: nothing -> any {
+]: nothing -> record<data: table<analytics: record, period: string, type: string>, meta: record<count: int, links: record<first: string, last: string, next: string, previous: string, self: string, up: string>>, warnings: table<code: int, detail: string, source: record, status: int, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($city_code == null) { error make --unspanned { msg: "required query parameter 'cityCode' missing: pass --city-code" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'period' missing: pass --period" } }
   let qp = [(serialize-qp "cityCode" $city_code "scalar") (serialize-qp "period" $period "scalar") (serialize-qp "direction" $direction "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/travel/analytics/air-traffic/busiest-period" $qp $auth.query)
   let accept_val = "application/vnd.amadeus+json"

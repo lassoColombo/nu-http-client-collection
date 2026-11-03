@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -119,7 +119,9 @@ def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def immutability-policy-name-completer [] { ["default"] }
 def action-completer [] { ["Acquire" "Break" "Change" "Release" "Renew"] }
+def blob-services-name-completer [] { ["default"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -161,13 +163,14 @@ export def "blob-services-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
 ]: nothing -> record<value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/blobServices") $qp $auth.query)
   let accept_val = "application/json"
@@ -203,16 +206,17 @@ export def "blob-containers-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --skip-token: string # Optional. Continuation token for the list operation.
   --maxpagesize: string # Optional. Specified maximum number of containers that can be included in the list.
   --filter: string # Optional. When specified, only container names starting with the filter will be listed.
-]: nothing -> record<nextLink: string, value: table<properties: record, etag: string>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar") (serialize-qp "$maxpagesize" $maxpagesize "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/blobServices/default/containers") $qp $auth.query)
   let accept_val = "application/json"
@@ -249,7 +253,7 @@ export def "blob-containers-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -257,6 +261,7 @@ export def "blob-containers-delete" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($container_name | is-empty) { error make --unspanned { msg: "path parameter 'containerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), container_name: (encode-path-segment $container_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/blobServices/default/containers/{container_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -293,14 +298,15 @@ export def "blob-containers-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<properties: record<hasImmutabilityPolicy: bool, hasLegalHold: bool, immutabilityPolicy: record<etag: string, properties: record, updateHistory: list>, lastModifiedTime: string, leaseDuration: string, leaseState: string, leaseStatus: string, legalHold: record<hasLegalHold: bool, tags: list>, metadata: record, publicAccess: string>, etag: string> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> record<properties: record<hasImmutabilityPolicy: bool, hasLegalHold: bool, immutabilityPolicy: record<etag: string, properties: record, updateHistory: list>, lastModifiedTime: string, leaseDuration: string, leaseState: string, leaseStatus: string, legalHold: record<hasLegalHold: bool, tags: list>, metadata: record, publicAccess: string>, etag: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($container_name | is-empty) { error make --unspanned { msg: "path parameter 'containerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), container_name: (encode-path-segment $container_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/blobServices/default/containers/{container_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -338,9 +344,9 @@ export def "blob-containers-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --properties: any # The properties of a container. — shape: {immutabilityPolicy?: any, legalHold?: any, metadata?: record, publicAccess?: "Container"|"Blob"|"None"}
-]: any -> record<properties: record<hasImmutabilityPolicy: bool, hasLegalHold: bool, immutabilityPolicy: record<etag: string, properties: record, updateHistory: list>, lastModifiedTime: string, leaseDuration: string, leaseState: string, leaseStatus: string, legalHold: record<hasLegalHold: bool, tags: list>, metadata: record, publicAccess: string>, etag: string> {
+]: any -> record<properties: record<hasImmutabilityPolicy: bool, hasLegalHold: bool, immutabilityPolicy: record<etag: string, properties: record, updateHistory: list>, lastModifiedTime: string, leaseDuration: string, leaseState: string, leaseStatus: string, legalHold: record<hasLegalHold: bool, tags: list>, metadata: record, publicAccess: string>, etag: string, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -348,6 +354,7 @@ export def "blob-containers-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($container_name | is-empty) { error make --unspanned { msg: "path parameter 'containerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), container_name: (encode-path-segment $container_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/blobServices/default/containers/{container_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -387,9 +394,9 @@ export def "blob-containers-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --properties: any # The properties of a container. — shape: {immutabilityPolicy?: any, legalHold?: any, metadata?: record, publicAccess?: "Container"|"Blob"|"None"}
-]: any -> record<properties: record<hasImmutabilityPolicy: bool, hasLegalHold: bool, immutabilityPolicy: record<etag: string, properties: record, updateHistory: list>, lastModifiedTime: string, leaseDuration: string, leaseState: string, leaseStatus: string, legalHold: record<hasLegalHold: bool, tags: list>, metadata: record, publicAccess: string>, etag: string> {
+]: any -> record<properties: record<hasImmutabilityPolicy: bool, hasLegalHold: bool, immutabilityPolicy: record<etag: string, properties: record, updateHistory: list>, lastModifiedTime: string, leaseDuration: string, leaseState: string, leaseStatus: string, legalHold: record<hasLegalHold: bool, tags: list>, metadata: record, publicAccess: string>, etag: string, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -397,6 +404,7 @@ export def "blob-containers-create" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($container_name | is-empty) { error make --unspanned { msg: "path parameter 'containerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), container_name: (encode-path-segment $container_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/blobServices/default/containers/{container_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -435,7 +443,7 @@ export def "blob-containers-clear-legal-hold" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   tags: list<string> # Each tag should be 3 to 23 alphanumeric characters and is normalized to lower case at SRP.
 ]: any -> record<hasLegalHold: bool, tags: list<string>> {
   let input = $in
@@ -445,6 +453,7 @@ export def "blob-containers-clear-legal-hold" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($container_name | is-empty) { error make --unspanned { msg: "path parameter 'containerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), container_name: (encode-path-segment $container_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/blobServices/default/containers/{container_name}/clearLegalHold") $qp $auth.query)
   let req_body = {"tags": $tags} | compact
@@ -484,10 +493,10 @@ export def "blob-containers-extend-immutability-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-  --if-match: string # The entity state (ETag) version of the immutability policy to update. A value of "*" can be used to apply the operation only if the immutability policy already exists. If omitted, this operation will always be applied.
+  --api-version: string # The API version to use for this operation. (required)
+  --if-match: string # The entity state (ETag) version of the immutability policy to update. A value of "*" can be used to apply the operation only if the immutability policy already exists. If omitted, this operation will always be applied. (required)
   properties: any # The properties of an ImmutabilityPolicy of a blob container. — shape: {immutabilityPeriodSinceCreationInDays: int}
-]: any -> record<properties: record<immutabilityPeriodSinceCreationInDays: int, state: string>, etag: string> {
+]: any -> record<properties: record<immutabilityPeriodSinceCreationInDays: int, state: string>, etag: string, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -495,6 +504,8 @@ export def "blob-containers-extend-immutability-policy" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($container_name | is-empty) { error make --unspanned { msg: "path parameter 'containerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  if ($if_match == null) { error make --unspanned { msg: "required header parameter 'If-Match' missing: pass --if-match" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), container_name: (encode-path-segment $container_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/blobServices/default/containers/{container_name}/immutabilityPolicies/default/extend") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -535,15 +546,17 @@ export def "blob-containers-lock-immutability-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-  --if-match: string # The entity state (ETag) version of the immutability policy to update. A value of "*" can be used to apply the operation only if the immutability policy already exists. If omitted, this operation will always be applied.
-]: nothing -> record<properties: record<immutabilityPeriodSinceCreationInDays: int, state: string>, etag: string> {
+  --api-version: string # The API version to use for this operation. (required)
+  --if-match: string # The entity state (ETag) version of the immutability policy to update. A value of "*" can be used to apply the operation only if the immutability policy already exists. If omitted, this operation will always be applied. (required)
+]: nothing -> record<properties: record<immutabilityPeriodSinceCreationInDays: int, state: string>, etag: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($container_name | is-empty) { error make --unspanned { msg: "path parameter 'containerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  if ($if_match == null) { error make --unspanned { msg: "required header parameter 'If-Match' missing: pass --if-match" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), container_name: (encode-path-segment $container_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/blobServices/default/containers/{container_name}/immutabilityPolicies/default/lock") $qp $auth.query)
   let accept_val = "application/json"
@@ -573,7 +586,7 @@ export def "blob-containers-delete-immutability-policy" [
   resource_group_name: string
   account_name: string
   container_name: string
-  immutability_policy_name: string
+  immutability_policy_name: string@immutability-policy-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -583,9 +596,9 @@ export def "blob-containers-delete-immutability-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-  --if-match: string # The entity state (ETag) version of the immutability policy to update. A value of "*" can be used to apply the operation only if the immutability policy already exists. If omitted, this operation will always be applied.
-]: nothing -> record<properties: record<immutabilityPeriodSinceCreationInDays: int, state: string>, etag: string> {
+  --api-version: string # The API version to use for this operation. (required)
+  --if-match: string # The entity state (ETag) version of the immutability policy to update. A value of "*" can be used to apply the operation only if the immutability policy already exists. If omitted, this operation will always be applied. (required)
+]: nothing -> record<properties: record<immutabilityPeriodSinceCreationInDays: int, state: string>, etag: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -593,6 +606,8 @@ export def "blob-containers-delete-immutability-policy" [
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($container_name | is-empty) { error make --unspanned { msg: "path parameter 'containerName' must be non-empty" } }
   if ($immutability_policy_name | is-empty) { error make --unspanned { msg: "path parameter 'immutabilityPolicyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  if ($if_match == null) { error make --unspanned { msg: "required header parameter 'If-Match' missing: pass --if-match" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), container_name: (encode-path-segment $container_name), immutability_policy_name: (encode-path-segment $immutability_policy_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/blobServices/default/containers/{container_name}/immutabilityPolicies/{immutability_policy_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -622,7 +637,7 @@ export def "blob-containers-get-immutability-policy" [
   resource_group_name: string
   account_name: string
   container_name: string
-  immutability_policy_name: string
+  immutability_policy_name: string@immutability-policy-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -632,9 +647,9 @@ export def "blob-containers-get-immutability-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --if-match: string # The entity state (ETag) version of the immutability policy to update. A value of "*" can be used to apply the operation only if the immutability policy already exists. If omitted, this operation will always be applied.
-]: nothing -> record<properties: record<immutabilityPeriodSinceCreationInDays: int, state: string>, etag: string> {
+]: nothing -> record<properties: record<immutabilityPeriodSinceCreationInDays: int, state: string>, etag: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -642,6 +657,7 @@ export def "blob-containers-get-immutability-policy" [
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($container_name | is-empty) { error make --unspanned { msg: "path parameter 'containerName' must be non-empty" } }
   if ($immutability_policy_name | is-empty) { error make --unspanned { msg: "path parameter 'immutabilityPolicyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), container_name: (encode-path-segment $container_name), immutability_policy_name: (encode-path-segment $immutability_policy_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/blobServices/default/containers/{container_name}/immutabilityPolicies/{immutability_policy_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -672,7 +688,7 @@ export def "blob-containers-create-or-update-immutability-policy" [
   resource_group_name: string
   account_name: string
   container_name: string
-  immutability_policy_name: string
+  immutability_policy_name: string@immutability-policy-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -682,10 +698,10 @@ export def "blob-containers-create-or-update-immutability-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --if-match: string # The entity state (ETag) version of the immutability policy to update. A value of "*" can be used to apply the operation only if the immutability policy already exists. If omitted, this operation will always be applied.
   properties: any # The properties of an ImmutabilityPolicy of a blob container. — shape: {immutabilityPeriodSinceCreationInDays: int}
-]: any -> record<properties: record<immutabilityPeriodSinceCreationInDays: int, state: string>, etag: string> {
+]: any -> record<properties: record<immutabilityPeriodSinceCreationInDays: int, state: string>, etag: string, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -694,6 +710,7 @@ export def "blob-containers-create-or-update-immutability-policy" [
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($container_name | is-empty) { error make --unspanned { msg: "path parameter 'containerName' must be non-empty" } }
   if ($immutability_policy_name | is-empty) { error make --unspanned { msg: "path parameter 'immutabilityPolicyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), container_name: (encode-path-segment $container_name), immutability_policy_name: (encode-path-segment $immutability_policy_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/blobServices/default/containers/{container_name}/immutabilityPolicies/{immutability_policy_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -734,7 +751,7 @@ export def "blob-containers-lease" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   action: string@action-completer # Specifies the lease action. Can be one of the available actions.
   --break-period: int # Optional. For a break action, proposed duration the lease should continue before it is broken, in seconds, between 0 and 60.
   --lease-duration: int # Required for acquire. Specifies the duration of the lease, in seconds, or negative one (-1) for a lease that never expires.
@@ -748,6 +765,7 @@ export def "blob-containers-lease" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($container_name | is-empty) { error make --unspanned { msg: "path parameter 'containerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), container_name: (encode-path-segment $container_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/blobServices/default/containers/{container_name}/lease") $qp $auth.query)
   let req_body = {"action": $action, "breakPeriod": $break_period, "leaseDuration": $lease_duration, "leaseId": $lease_id, "proposedLeaseId": $proposed_lease_id} | compact
@@ -786,7 +804,7 @@ export def "blob-containers-set-legal-hold" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   tags: list<string> # Each tag should be 3 to 23 alphanumeric characters and is normalized to lower case at SRP.
 ]: any -> record<hasLegalHold: bool, tags: list<string>> {
   let input = $in
@@ -796,6 +814,7 @@ export def "blob-containers-set-legal-hold" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($container_name | is-empty) { error make --unspanned { msg: "path parameter 'containerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), container_name: (encode-path-segment $container_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/blobServices/default/containers/{container_name}/setLegalHold") $qp $auth.query)
   let req_body = {"tags": $tags} | compact
@@ -824,7 +843,7 @@ export def "blob-services-get-service-properties" [
   subscription_id: string
   resource_group_name: string
   account_name: string
-  blob_services_name: string
+  blob_services_name: string@blob-services-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -834,7 +853,7 @@ export def "blob-services-get-service-properties" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
 ]: nothing -> record<properties: record<automaticSnapshotPolicyEnabled: bool, changeFeed: record<enabled: bool>, cors: record<corsRules: list>, defaultServiceVersion: string, deleteRetentionPolicy: record<days: int, enabled: bool>>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -842,6 +861,7 @@ export def "blob-services-get-service-properties" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($blob_services_name | is-empty) { error make --unspanned { msg: "path parameter 'BlobServicesName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), blob_services_name: (encode-path-segment $blob_services_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/blobServices/{blob_services_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -869,7 +889,7 @@ export def "blob-services-set-service-properties" [
   subscription_id: string
   resource_group_name: string
   account_name: string
-  blob_services_name: string
+  blob_services_name: string@blob-services-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -879,7 +899,7 @@ export def "blob-services-set-service-properties" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --properties: any # The properties of a storage account’s Blob service. — shape: {automaticSnapshotPolicyEnabled?: bool, changeFeed?: any, cors?: any, defaultServiceVersion?: string, deleteRetentionPolicy?: any}
 ]: any -> record<properties: record<automaticSnapshotPolicyEnabled: bool, changeFeed: record<enabled: bool>, cors: record<corsRules: list>, defaultServiceVersion: string, deleteRetentionPolicy: record<days: int, enabled: bool>>, id: string, name: string, type: string> {
   let input = $in
@@ -889,6 +909,7 @@ export def "blob-services-set-service-properties" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($blob_services_name | is-empty) { error make --unspanned { msg: "path parameter 'BlobServicesName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), blob_services_name: (encode-path-segment $blob_services_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/blobServices/{blob_services_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -141,14 +141,15 @@ export def "scale-units-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2016-05-01)
+  --api-version: string # Client API Version. (required, default: 2016-05-01)
   --filter: string # OData filter parameter.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  let api_version = ($api_version | default "2016-05-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), location: (encode-path-segment $location)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Fabric.Admin/fabricLocations/{location}/scaleUnits") $qp $auth.query)
   let accept_val = "application/json"
@@ -185,14 +186,15 @@ export def "scale-units-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2016-05-01)
-]: nothing -> record<properties: record<isMultiNode: bool, logicalFaultDomain: int, model: string, nodes: list<string>, scaleUnitType: string, state: string, totalCapacity: record<cores: int, memoryGB: float>>> {
+  --api-version: string # Client API Version. (required, default: 2016-05-01)
+]: nothing -> record<properties: record<isMultiNode: bool, logicalFaultDomain: int, model: string, nodes: list<string>, scaleUnitType: string, state: string, totalCapacity: record<cores: int, memoryGB: float>>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
   if ($scale_unit | is-empty) { error make --unspanned { msg: "path parameter 'scaleUnit' must be non-empty" } }
+  let api_version = ($api_version | default "2016-05-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), location: (encode-path-segment $location), scale_unit: (encode-path-segment $scale_unit)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Fabric.Admin/fabricLocations/{location}/scaleUnits/{scale_unit}") $qp $auth.query)
   let accept_val = "application/json"
@@ -232,7 +234,7 @@ export def "scale-units-create-from-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2016-05-01)
+  --api-version: string # Client API Version. (required, default: 2016-05-01)
   --cluster-name: string # Cluster name for the new scale unit.
   --infrastructure-network: record # A definition of the network received from a new cluster operation. — shape: {subnet?: list<string>, vlanId?: list<string>}
   --net-qos-priority: int # The network QOS priority setting. (format: int32)
@@ -249,6 +251,7 @@ export def "scale-units-create-from-json" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
   if ($scale_unit | is-empty) { error make --unspanned { msg: "path parameter 'scaleUnit' must be non-empty" } }
+  let api_version = ($api_version | default "2016-05-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), location: (encode-path-segment $location), scale_unit: (encode-path-segment $scale_unit)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Fabric.Admin/fabricLocations/{location}/scaleUnits/{scale_unit}/createFromJson") $qp $auth.query)
   let req_body = {"clusterName": $cluster_name, "infrastructureNetwork": $infrastructure_network, "netQosPriority": $net_qos_priority, "physicalNodes": $physical_nodes, "softwareBgpAsn": $software_bgp_asn, "storageNetwork": $storage_network, "torSwitchBgpAsn": $tor_switch_bgp_asn, "torSwitchBgpPeerIp": $tor_switch_bgp_peer_ip} | compact
@@ -288,7 +291,7 @@ export def "scale-units-scale-out" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2016-05-01)
+  --api-version: string # Client API Version. (required, default: 2016-05-01)
   --await-storage-convergence: oneof<nothing, bool> # Flag indicates if the operation should wait for storage to converge before returning.
   --node-list: list # List of nodes in the scale unit. — item shape: {bmcIpv4Address?: string, computerName?: string}
 ]: any -> any {
@@ -299,6 +302,7 @@ export def "scale-units-scale-out" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
   if ($scale_unit | is-empty) { error make --unspanned { msg: "path parameter 'scaleUnit' must be non-empty" } }
+  let api_version = ($api_version | default "2016-05-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), location: (encode-path-segment $location), scale_unit: (encode-path-segment $scale_unit)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Fabric.Admin/fabricLocations/{location}/scaleUnits/{scale_unit}/scaleOut") $qp $auth.query)
   let req_body = {"awaitStorageConvergence": $await_storage_convergence, "nodeList": $node_list} | compact

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -152,7 +152,7 @@ export def "reservation-order-calculate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Supported version for this document is 2019-04-01
+  --api-version: string # Supported version for this document is 2019-04-01 (required)
   --location: string # The Azure Region where the reserved resource lives.
   --properties: record # shape: {appliedScopeType?: "Single"|"Shared", appliedScopes?: list<string>, billingPlan?: "Upfront"|"Monthly", billingScopeId?: string, displayName?: string, quantity?: int, renew?: bool, reservedResourceProperties?: record, reservedResourceType?: "VirtualMachines"|"SqlDatabases"|"SuseLinux"|"CosmosDb"|"RedHat"|"SqlDataWarehouse"|"VMwareCloudSimple"|"RedHatOsa", term?: "P1Y"|"P3Y"}
   --sku: record # shape: {name?: string}
@@ -160,6 +160,7 @@ export def "reservation-order-calculate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Capacity/calculatePrice" $qp $auth.query)
   let req_body = {"location": $location, "properties": $properties, "sku": $sku} | compact
@@ -194,10 +195,11 @@ export def "operation-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Supported version for this document is 2019-04-01
+  --api-version: string # Supported version for this document is 2019-04-01 (required)
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string, origin: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Capacity/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -230,10 +232,11 @@ export def "reservation-order-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Supported version for this document is 2019-04-01
+  --api-version: string # Supported version for this document is 2019-04-01 (required)
 ]: nothing -> record<nextLink: string, value: table<etag: int, id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Capacity/reservationOrders" $qp $auth.query)
   let accept_val = "application/json"
@@ -267,12 +270,13 @@ export def "reservation-order-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Supported version for this document is 2019-04-01
+  --api-version: string # Supported version for this document is 2019-04-01 (required)
   --expand: string # May be used to expand the planInformation.
 ]: nothing -> record<etag: int, id: string, name: string, properties: record<billingPlan: string, createdDateTime: string, displayName: string, expiryDate: string, originalQuantity: int, planInformation: record<nextPaymentDueDate: string, pricingCurrencyTotal: record, startDate: string, transactions: list>, provisioningState: string, requestDateTime: string, reservations: list<record>, term: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($reservation_order_id | is-empty) { error make --unspanned { msg: "path parameter 'reservationOrderId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({reservation_order_id: (encode-path-segment $reservation_order_id)} | format pattern "/providers/Microsoft.Capacity/reservationOrders/{reservation_order_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -308,7 +312,7 @@ export def "reservation-order-purchase" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Supported version for this document is 2019-04-01
+  --api-version: string # Supported version for this document is 2019-04-01 (required)
   --location: string # The Azure Region where the reserved resource lives.
   --properties: record # shape: {appliedScopeType?: "Single"|"Shared", appliedScopes?: list<string>, billingPlan?: "Upfront"|"Monthly", billingScopeId?: string, displayName?: string, quantity?: int, renew?: bool, reservedResourceProperties?: record, reservedResourceType?: "VirtualMachines"|"SqlDatabases"|"SuseLinux"|"CosmosDb"|"RedHat"|"SqlDataWarehouse"|"VMwareCloudSimple"|"RedHatOsa", term?: "P1Y"|"P3Y"}
   --sku: record # shape: {name?: string}
@@ -317,6 +321,7 @@ export def "reservation-order-purchase" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($reservation_order_id | is-empty) { error make --unspanned { msg: "path parameter 'reservationOrderId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({reservation_order_id: (encode-path-segment $reservation_order_id)} | format pattern "/providers/Microsoft.Capacity/reservationOrders/{reservation_order_id}") $qp $auth.query)
   let req_body = {"location": $location, "properties": $properties, "sku": $sku} | compact
@@ -353,13 +358,14 @@ export def "reservation-merge" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Supported version for this document is 2019-04-01
+  --api-version: string # Supported version for this document is 2019-04-01 (required)
   --properties: record # shape: {sources?: list<string>}
 ]: any -> table<etag: int, id: string, location: string, name: string, properties: record<appliedScopeType: string, appliedScopes: list, billingPlan: string, billingScopeId: string, displayName: string, effectiveDateTime: string, expiryDate: string, extendedStatusInfo: record, instanceFlexibility: string, lastUpdatedDateTime: string, mergeProperties: record, provisioningState: string, quantity: int, renew: bool, renewDestination: string, renewProperties: record, renewSource: string, reservedResourceType: string, skuDescription: string, splitProperties: record, term: string>, sku: record<name: string>, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($reservation_order_id | is-empty) { error make --unspanned { msg: "path parameter 'reservationOrderId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({reservation_order_id: (encode-path-segment $reservation_order_id)} | format pattern "/providers/Microsoft.Capacity/reservationOrders/{reservation_order_id}/merge") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -395,11 +401,12 @@ export def "reservation-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Supported version for this document is 2019-04-01
+  --api-version: string # Supported version for this document is 2019-04-01 (required)
 ]: nothing -> record<nextLink: string, value: table<etag: int, id: string, location: string, name: string, properties: record, sku: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($reservation_order_id | is-empty) { error make --unspanned { msg: "path parameter 'reservationOrderId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({reservation_order_id: (encode-path-segment $reservation_order_id)} | format pattern "/providers/Microsoft.Capacity/reservationOrders/{reservation_order_id}/reservations") $qp $auth.query)
   let accept_val = "application/json"
@@ -434,13 +441,14 @@ export def "reservation-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Supported version for this document is 2019-04-01
+  --api-version: string # Supported version for this document is 2019-04-01 (required)
   --expand: string # Supported value of this query is renewProperties
 ]: nothing -> record<etag: int, id: string, location: string, name: string, properties: record<appliedScopeType: string, appliedScopes: list<string>, billingPlan: string, billingScopeId: string, displayName: string, effectiveDateTime: string, expiryDate: string, extendedStatusInfo: record<message: string, statusCode: string>, instanceFlexibility: string, lastUpdatedDateTime: string, mergeProperties: record<mergeDestination: string, mergeSources: list>, provisioningState: string, quantity: int, renew: bool, renewDestination: string, renewProperties: record<billingCurrencyTotal: record, pricingCurrencyTotal: record, purchaseProperties: record>, renewSource: string, reservedResourceType: string, skuDescription: string, splitProperties: record<splitDestinations: list, splitSource: string>, term: string>, sku: record<name: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($reservation_order_id | is-empty) { error make --unspanned { msg: "path parameter 'reservationOrderId' must be non-empty" } }
   if ($reservation_id | is-empty) { error make --unspanned { msg: "path parameter 'reservationId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({reservation_order_id: (encode-path-segment $reservation_order_id), reservation_id: (encode-path-segment $reservation_id)} | format pattern "/providers/Microsoft.Capacity/reservationOrders/{reservation_order_id}/reservations/{reservation_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -476,7 +484,7 @@ export def "reservation-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Supported version for this document is 2019-04-01
+  --api-version: string # Supported version for this document is 2019-04-01 (required)
   --properties: record # shape: {appliedScopeType?: "Single"|"Shared", appliedScopes?: list<string>, instanceFlexibility?: "On"|"Off", name?: string, renew?: bool, renewProperties?: record}
 ]: any -> record<etag: int, id: string, location: string, name: string, properties: record<appliedScopeType: string, appliedScopes: list<string>, billingPlan: string, billingScopeId: string, displayName: string, effectiveDateTime: string, expiryDate: string, extendedStatusInfo: record<message: string, statusCode: string>, instanceFlexibility: string, lastUpdatedDateTime: string, mergeProperties: record<mergeDestination: string, mergeSources: list>, provisioningState: string, quantity: int, renew: bool, renewDestination: string, renewProperties: record<billingCurrencyTotal: record, pricingCurrencyTotal: record, purchaseProperties: record>, renewSource: string, reservedResourceType: string, skuDescription: string, splitProperties: record<splitDestinations: list, splitSource: string>, term: string>, sku: record<name: string>, type: string> {
   let input = $in
@@ -484,6 +492,7 @@ export def "reservation-update" [
   let base = ($base_url | default $BASE_URL)
   if ($reservation_order_id | is-empty) { error make --unspanned { msg: "path parameter 'reservationOrderId' must be non-empty" } }
   if ($reservation_id | is-empty) { error make --unspanned { msg: "path parameter 'reservationId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({reservation_order_id: (encode-path-segment $reservation_order_id), reservation_id: (encode-path-segment $reservation_id)} | format pattern "/providers/Microsoft.Capacity/reservationOrders/{reservation_order_id}/reservations/{reservation_id}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -520,7 +529,7 @@ export def "reservation-available-scopes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Supported version for this document is 2019-04-01
+  --api-version: string # Supported version for this document is 2019-04-01 (required)
   --body: list
 ]: any -> record<properties: record<scopes: list<record>>> {
   let input = $in
@@ -528,6 +537,7 @@ export def "reservation-available-scopes" [
   let base = ($base_url | default $BASE_URL)
   if ($reservation_order_id | is-empty) { error make --unspanned { msg: "path parameter 'reservationOrderId' must be non-empty" } }
   if ($reservation_id | is-empty) { error make --unspanned { msg: "path parameter 'reservationId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({reservation_order_id: (encode-path-segment $reservation_order_id), reservation_id: (encode-path-segment $reservation_id)} | format pattern "/providers/Microsoft.Capacity/reservationOrders/{reservation_order_id}/reservations/{reservation_id}/availableScopes") $qp $auth.query)
   let req_body = $body
@@ -564,12 +574,13 @@ export def "reservation-list-revisions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Supported version for this document is 2019-04-01
+  --api-version: string # Supported version for this document is 2019-04-01 (required)
 ]: nothing -> record<nextLink: string, value: table<etag: int, id: string, location: string, name: string, properties: record, sku: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($reservation_order_id | is-empty) { error make --unspanned { msg: "path parameter 'reservationOrderId' must be non-empty" } }
   if ($reservation_id | is-empty) { error make --unspanned { msg: "path parameter 'reservationId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({reservation_order_id: (encode-path-segment $reservation_order_id), reservation_id: (encode-path-segment $reservation_id)} | format pattern "/providers/Microsoft.Capacity/reservationOrders/{reservation_order_id}/reservations/{reservation_id}/revisions") $qp $auth.query)
   let accept_val = "application/json"
@@ -604,13 +615,14 @@ export def "reservation-split" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Supported version for this document is 2019-04-01
+  --api-version: string # Supported version for this document is 2019-04-01 (required)
   --properties: record # shape: {quantities?: list<int>, reservationId?: string}
 ]: any -> table<etag: int, id: string, location: string, name: string, properties: record<appliedScopeType: string, appliedScopes: list, billingPlan: string, billingScopeId: string, displayName: string, effectiveDateTime: string, expiryDate: string, extendedStatusInfo: record, instanceFlexibility: string, lastUpdatedDateTime: string, mergeProperties: record, provisioningState: string, quantity: int, renew: bool, renewDestination: string, renewProperties: record, renewSource: string, reservedResourceType: string, skuDescription: string, splitProperties: record, term: string>, sku: record<name: string>, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($reservation_order_id | is-empty) { error make --unspanned { msg: "path parameter 'reservationOrderId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({reservation_order_id: (encode-path-segment $reservation_order_id)} | format pattern "/providers/Microsoft.Capacity/reservationOrders/{reservation_order_id}/split") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -646,11 +658,12 @@ export def "get-applied-reservation-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Supported version for this document is 2019-04-01
+  --api-version: string # Supported version for this document is 2019-04-01 (required)
 ]: nothing -> record<id: string, name: string, properties: record<reservationOrderIds: record<nextLink: string, value: list>>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Capacity/appliedReservations") $qp $auth.query)
   let accept_val = "application/json"
@@ -684,13 +697,15 @@ export def "get-catalog" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Supported version for this document is 2019-04-01
-  --reserved-resource-type: string # The type of the resource for which the skus should be provided.
+  --api-version: string # Supported version for this document is 2019-04-01 (required)
+  --reserved-resource-type: string # The type of the resource for which the skus should be provided. (required)
   --location: string # Filters the skus based on the location specified in this parameter. This can be an azure region or global
 ]: nothing -> table<billingPlans: record, locations: list<string>, name: string, resourceType: string, restrictions: list<record>, skuProperties: list<record>, terms: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  if ($reserved_resource_type == null) { error make --unspanned { msg: "required query parameter 'reservedResourceType' missing: pass --reserved-resource-type" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "reservedResourceType" $reserved_resource_type "scalar") (serialize-qp "location" $location "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Capacity/catalogs") $qp $auth.query)
   let accept_val = "application/json"

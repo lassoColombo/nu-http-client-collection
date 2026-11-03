@@ -247,8 +247,8 @@ export def "create-batch" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -277,10 +277,11 @@ export def "get-batch-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: int # batch ID
+  --id: int # batch ID (required)
 ]: nothing -> record<count: int, failed: int, finished: int, id: int, processed: int, started: int, status: string, urls: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/batch/info" $qp $auth.query)
   let accept_val = "application/json"
@@ -313,10 +314,11 @@ export def "get-browser-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: int # browser ID
+  --id: int # browser ID (required)
 ]: nothing -> record<flash: int, id: int, javascript: int, mobile: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/browser/info" $qp $auth.query)
   let accept_val = "application/json"
@@ -383,10 +385,11 @@ export def "get-instance-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: int # instance ID
+  --id: int # instance ID (required)
 ]: nothing -> record<browser: record<flash: int, id: int, javascript: int, mobile: int, name: string>, country: string, height: int, id: int, load: float, screenshot_cost: int, type: string, width: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/instance/info" $qp $auth.query)
   let accept_val = "application/json"
@@ -453,8 +456,8 @@ export def "create-screenshot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --url: string # URL of the page to get a screenshot for
-  --instance-id: int # instance ID to use
+  --url: string # URL of the page to get a screenshot for (required)
+  --instance-id: int # instance ID to use (required)
   --size: string@size-completer # screenshot size - "screen" (default) or "page" (default: screen)
   --cache: int # use a previous screenshot (same URL, same instance) if it was done within <cache_value> seconds. The default value is 24hours. Specify cache=0 if you want a new screenshot. (default: 86400)
   --delay: int # number of seconds to wait after the page has loaded. This is used to let JavaScript run longer before taking the screenshot. Use delay=0 to take screenshots faster. (default: 5)
@@ -482,6 +485,8 @@ export def "create-screenshot" [
 ]: nothing -> record<cookie: string, cost: int, delay: int, details: int, error: string, final_url: string, flash_delay: int, height: int, id: int, instance_id: int, post_data: string, priority: int, referer: string, scale: float, screenshot_url: any, script: string, shared_url: string, size: string, status: string, url: string, width: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
+  if ($instance_id == null) { error make --unspanned { msg: "required query parameter 'instance_id' missing: pass --instance-id" } }
   let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "instance_id" $instance_id "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "cache" $cache "scalar") (serialize-qp "delay" $delay "scalar") (serialize-qp "flash_delay" $flash_delay "scalar") (serialize-qp "screen_width" $screen_width "scalar") (serialize-qp "screen_height" $screen_height "scalar") (serialize-qp "priority" $priority "scalar") (serialize-qp "referer" $referer "scalar") (serialize-qp "post_data" $post_data "scalar") (serialize-qp "cookie" $cookie "scalar") (serialize-qp "script" $script "scalar") (serialize-qp "details" $details "scalar") (serialize-qp "html" $html "scalar") (serialize-qp "max_wait" $max_wait "scalar") (serialize-qp "headers" $headers "scalar") (serialize-qp "shots" $shots "scalar") (serialize-qp "shot_interval" $shot_interval "scalar") (serialize-qp "hosting" $hosting "scalar") (serialize-qp "hosting_height" $hosting_height "scalar") (serialize-qp "hosting_width" $hosting_width "scalar") (serialize-qp "hosting_scale" $hosting_scale "scalar") (serialize-qp "hosting_bucket" $hosting_bucket "scalar") (serialize-qp "hosting_file" $hosting_file "scalar") (serialize-qp "hosting_headers" $hosting_headers "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/screenshot/create" $qp $auth.query)
   let accept_val = "application/json"
@@ -514,11 +519,12 @@ export def "delete-screenshot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: int # screenshot ID
+  --id: int # screenshot ID (required)
   --data: string # data to remove. You can specify multiple of them (separated by a ,): *image* (image files), *url* (url requested), *metadata* (time added, time finished, post data, cookie and referer used for the screenshot), *all* (all data and files) (default: image)
 ]: nothing -> table<id: int, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "data" $data "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/screenshot/delete" $qp $auth.query)
   let accept_val = "application/json"
@@ -551,8 +557,8 @@ export def "host-screenshot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: int # screenshot ID
-  --hosting: string@hosting-completer-1 # hosting option: s3 or browshot
+  --id: int # screenshot ID (required)
+  --hosting: string@hosting-completer-1 # hosting option: s3 or browshot (required)
   --width: int # width of the thumbnail
   --height: int # height of the thumbnail
   --scale: float # scale of the thumbnail (format: double, default: 1)
@@ -562,6 +568,8 @@ export def "host-screenshot" [
 ]: nothing -> table<id: int, status: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  if ($hosting == null) { error make --unspanned { msg: "required query parameter 'hosting' missing: pass --hosting" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "hosting" $hosting "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "scale" $scale "scalar") (serialize-qp "bucket" $bucket "scalar") (serialize-qp "file" $file "scalar") (serialize-qp "headers" $headers "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/screenshot/host" $qp $auth.query)
   let accept_val = "application/json"
@@ -594,10 +602,11 @@ export def "get-html" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: int # screenshot ID
+  --id: int # screenshot ID (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/screenshot/html" $qp $auth.query)
   let accept_val = "text/html"
@@ -630,11 +639,12 @@ export def "get-screenshot-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: int # screenshot ID received from /api/v1/screenshot/create
+  --id: int # screenshot ID received from /api/v1/screenshot/create (required)
   --details: int # level of details about the screenshot and the page (default: 2)
 ]: nothing -> table<cookie: string, cost: int, delay: int, details: int, error: string, final_url: string, flash_delay: int, height: int, id: int, instance_id: int, post_data: string, priority: int, referer: string, scale: float, screenshot_url: any, script: string, shared_url: string, size: string, status: string, url: string, width: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "details" $details "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/screenshot/info" $qp $auth.query)
   let accept_val = "application/json"
@@ -704,8 +714,8 @@ export def "create-multiple-screenshots" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --url: string # URL of the page to get a screenshot for. You can specify multiple url parameters (up to 10).
-  --instance-id: int # instance ID to use. You can specify multiple instance_id parameters (up to 10).
+  --url: string # URL of the page to get a screenshot for. You can specify multiple url parameters (up to 10). (required)
+  --instance-id: int # instance ID to use. You can specify multiple instance_id parameters (up to 10). (required)
   --size: string@size-completer # screenshot size - "screen" (default) or "page" (default: screen)
   --cache: int # use a previous screenshot (same URL, same instance) if it was done within <cache_value> seconds. The default value is 24hours. Specify cache=0 if you want a new screenshot. (default: 86400)
   --delay: int # number of seconds to wait after the page has loaded. This is used to let JavaScript run longer before taking the screenshot. Use delay=0 to take screenshots faster. (default: 5)
@@ -731,6 +741,8 @@ export def "create-multiple-screenshots" [
 ]: nothing -> record<default: float> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
+  if ($instance_id == null) { error make --unspanned { msg: "required query parameter 'instance_id' missing: pass --instance-id" } }
   let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "instance_id" $instance_id "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "cache" $cache "scalar") (serialize-qp "delay" $delay "scalar") (serialize-qp "flash_delay" $flash_delay "scalar") (serialize-qp "screen_width" $screen_width "scalar") (serialize-qp "screen_height" $screen_height "scalar") (serialize-qp "priority" $priority "scalar") (serialize-qp "referer" $referer "scalar") (serialize-qp "post_data" $post_data "scalar") (serialize-qp "cookie" $cookie "scalar") (serialize-qp "script" $script "scalar") (serialize-qp "details" $details "scalar") (serialize-qp "html" $html "scalar") (serialize-qp "max_wait" $max_wait "scalar") (serialize-qp "headers" $headers "scalar") (serialize-qp "hosting" $hosting "scalar") (serialize-qp "hosting_height" $hosting_height "scalar") (serialize-qp "hosting_width" $hosting_width "scalar") (serialize-qp "hosting_scale" $hosting_scale "scalar") (serialize-qp "hosting_bucket" $hosting_bucket "scalar") (serialize-qp "hosting_file" $hosting_file "scalar") (serialize-qp "hosting_headers" $hosting_headers "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/screenshot/multiple" $qp $auth.query)
   let accept_val = "application/json"
@@ -763,12 +775,13 @@ export def "search-screenshot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --url: string # look for a string matching the URL requested
+  --url: string # look for a string matching the URL requested (required)
   --limit: int # maximum number of screenshots' information to return (default: 50)
   --status: string@status-completer # get list of screenshot in a given status (error, finished, in_process)
 ]: nothing -> table<default: float> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
   let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/screenshot/search" $qp $auth.query)
   let accept_val = "application/json"
@@ -801,11 +814,12 @@ export def "share-screenshot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: int # screenshot ID
+  --id: int # screenshot ID (required)
   --note: string # note to add on the sharing page
 ]: nothing -> table<id: int, status: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "note" $note "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/screenshot/share" $qp $auth.query)
   let accept_val = "application/json"
@@ -839,7 +853,7 @@ export def "get-thumbnail" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --id: int # screenshot ID
+  --id: int # screenshot ID (required)
   --width: int # width of the thumbnail
   --height: int # height of the thumbnail
   --scale: float # scale of the thumbnail (format: double, default: 1)
@@ -855,6 +869,7 @@ export def "get-thumbnail" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "scale" $scale "scalar") (serialize-qp "zoom" $zoom "scalar") (serialize-qp "ratio" $ratio "scalar") (serialize-qp "left" $left "scalar") (serialize-qp "right" $right "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "bottom" $bottom "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "shot" $shot "scalar") (serialize-qp "quality" $quality "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/screenshot/thumbnail" $qp $auth.query)
   let accept_val = ($accept | default "image/png")

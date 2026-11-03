@@ -1,4 +1,4 @@
-# Auto-generated client for Text Analytics & Sentiment Analysis API | api.text2data.com vv3.4
+# Auto-generated client for Text Analytics & Sentiment Analysis API | api.text2data.com v3.4
 # Source: https://api.apis.guru/v2/specs/text2data.org/v3.4/swagger.json
 # Auth: --token flag or $env.TEXT_ANALYTICS_SENTIMENT_ANALYSIS_API_API_TEXT2DATA_COM_TOKEN
 

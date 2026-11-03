@@ -175,8 +175,8 @@ export def "post-v0-5-care-contexts-discover" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-hip-id: string # Identifier of the health information provider to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-hip-id: string # Identifier of the health information provider to which the request was intended. (required)
   patient: record # shape: {gender: "M"|"F"|"O"|"U", id: string, name: string, unverifiedIdentifiers?: list, verifiedIdentifiers: list, yearOfBirth: int}
   request_id: string # a nonce, unique for each HTTP request. (format: uuid, e.g. 499a5a4a-7dda-4f20-9b67-e24589627061)
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
@@ -185,6 +185,8 @@ export def "post-v0-5-care-contexts-discover" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_hip_id == null) { error make --unspanned { msg: "required header parameter 'X-HIP-ID' missing: pass --x-hip-id" } }
   let full_url = (build-url $base "/v0.5/care-contexts/discover" $auth.query)
   let req_body = {"patient": $patient, "requestId": $request_id, "timestamp": $timestamp, "transactionId": $transaction_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -222,9 +224,9 @@ export def "post-v0-5-care-contexts-on-discover" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-cm-id: string # Suffix of the consent manager to which the request was intended.
-  --body-error: record # shape: {code?: "1000"|"10001", message?: string}
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-cm-id: string # Suffix of the consent manager to which the request was intended. (required)
+  --error: record # shape: {code?: "1000"|"10001", message?: string}
   --patient: record # shape: {careContexts?: list, display: string, matchedBy?: list<string>, referenceNumber: string}
   request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   resp: record # shape: {requestId: string}
@@ -234,8 +236,10 @@ export def "post-v0-5-care-contexts-on-discover" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_cm_id == null) { error make --unspanned { msg: "required header parameter 'X-CM-ID' missing: pass --x-cm-id" } }
   let full_url = (build-url $base "/v0.5/care-contexts/on-discover" $auth.query)
-  let req_body = {"error": $body_error, "patient": $patient, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp, "transactionId": $transaction_id} | compact
+  let req_body = {"error": $error, "patient": $patient, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp, "transactionId": $transaction_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -303,8 +307,8 @@ export def "post-v0-5-consent-requests-init" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-cm-id: string # Suffix of the consent manager to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-cm-id: string # Suffix of the consent manager to which the request was intended. (required)
   consent: record # shape: {careContexts?: list, hiTypes: list<string>, hip?: record, hiu: record, patient: record, permission: record, purpose: record, requester: record}
   request_id: string # a nonce, unique for each HTTP request. (format: uuid, e.g. 499a5a4a-7dda-4f20-9b67-e24589627061)
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
@@ -312,6 +316,8 @@ export def "post-v0-5-consent-requests-init" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_cm_id == null) { error make --unspanned { msg: "required header parameter 'X-CM-ID' missing: pass --x-cm-id" } }
   let full_url = (build-url $base "/v0.5/consent-requests/init" $auth.query)
   let req_body = {"consent": $consent, "requestId": $request_id, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -349,10 +355,10 @@ export def "post-v0-5-consent-requests-on-init" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-hiu-id: string # Identifier of the health information user to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-hiu-id: string # Identifier of the health information user to which the request was intended. (required)
   --consent-request: record # shape: {id: string}
-  --body-error: record # shape: {code?: "1000"|"10001", message?: string}
+  --error: record # shape: {code?: "1000"|"10001", message?: string}
   request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   resp: record # shape: {requestId: string}
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
@@ -360,8 +366,10 @@ export def "post-v0-5-consent-requests-on-init" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_hiu_id == null) { error make --unspanned { msg: "required header parameter 'X-HIU-ID' missing: pass --x-hiu-id" } }
   let full_url = (build-url $base "/v0.5/consent-requests/on-init" $auth.query)
-  let req_body = {"consentRequest": $consent_request, "error": $body_error, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
+  let req_body = {"consentRequest": $consent_request, "error": $error, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -397,10 +405,10 @@ export def "post-v0-5-consent-requests-on-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-hiu-id: string # Identifier of the health information user to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-hiu-id: string # Identifier of the health information user to which the request was intended. (required)
   --consent-request: record # shape: {consentArtefacts?: list, id: string, status: "GRANTED"|"EXPIRED"|"DENIED"|"REQUESTED"|"REVOKED"}
-  --body-error: record # shape: {code?: "1000"|"10001", message?: string}
+  --error: record # shape: {code?: "1000"|"10001", message?: string}
   request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   resp: record # shape: {requestId: string}
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
@@ -408,8 +416,10 @@ export def "post-v0-5-consent-requests-on-status" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_hiu_id == null) { error make --unspanned { msg: "required header parameter 'X-HIU-ID' missing: pass --x-hiu-id" } }
   let full_url = (build-url $base "/v0.5/consent-requests/on-status" $auth.query)
-  let req_body = {"consentRequest": $consent_request, "error": $body_error, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
+  let req_body = {"consentRequest": $consent_request, "error": $error, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -442,8 +452,8 @@ export def "post-v0-5-consent-requests-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-cm-id: string # Suffix of the consent manager to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-cm-id: string # Suffix of the consent manager to which the request was intended. (required)
   consent_request_id: string
   request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
@@ -451,6 +461,8 @@ export def "post-v0-5-consent-requests-status" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_cm_id == null) { error make --unspanned { msg: "required header parameter 'X-CM-ID' missing: pass --x-cm-id" } }
   let full_url = (build-url $base "/v0.5/consent-requests/status" $auth.query)
   let req_body = {"consentRequestId": $consent_request_id, "requestId": $request_id, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -485,8 +497,8 @@ export def "post-v0-5-consents-fetch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-cm-id: string # Suffix of the consent manager to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-cm-id: string # Suffix of the consent manager to which the request was intended. (required)
   consent_id: string
   request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
@@ -494,6 +506,8 @@ export def "post-v0-5-consents-fetch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_cm_id == null) { error make --unspanned { msg: "required header parameter 'X-CM-ID' missing: pass --x-cm-id" } }
   let full_url = (build-url $base "/v0.5/consents/fetch" $auth.query)
   let req_body = {"consentId": $consent_id, "requestId": $request_id, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -529,8 +543,8 @@ export def "post-v0-5-consents-hip-notify" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-hip-id: string # Identifier of the health information provider to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-hip-id: string # Identifier of the health information provider to which the request was intended. (required)
   notification: record # shape: {consentDetail: record, consentId: string, signature: string, status: "GRANTED"|"EXPIRED"|"DENIED"|"REQUESTED"|"REVOKED"}
   request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
@@ -538,6 +552,8 @@ export def "post-v0-5-consents-hip-notify" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_hip_id == null) { error make --unspanned { msg: "required header parameter 'X-HIP-ID' missing: pass --x-hip-id" } }
   let full_url = (build-url $base "/v0.5/consents/hip/notify" $auth.query)
   let req_body = {"notification": $notification, "requestId": $request_id, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -575,10 +591,10 @@ export def "post-v0-5-consents-hip-on-notify" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-cm-id: string # Suffix of the consent manager to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-cm-id: string # Suffix of the consent manager to which the request was intended. (required)
   --acknowledgement: record # shape: {consentId: string, status: "OK"|"UNKNOWN"}
-  --body-error: record # shape: {code?: "1000"|"10001", message?: string}
+  --error: record # shape: {code?: "1000"|"10001", message?: string}
   request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   resp: record # shape: {requestId: string}
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
@@ -586,8 +602,10 @@ export def "post-v0-5-consents-hip-on-notify" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_cm_id == null) { error make --unspanned { msg: "required header parameter 'X-CM-ID' missing: pass --x-cm-id" } }
   let full_url = (build-url $base "/v0.5/consents/hip/on-notify" $auth.query)
-  let req_body = {"acknowledgement": $acknowledgement, "error": $body_error, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
+  let req_body = {"acknowledgement": $acknowledgement, "error": $error, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -621,8 +639,8 @@ export def "post-v0-5-consents-hiu-notify" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-hiu-id: string # Identifier of the health information user to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-hiu-id: string # Identifier of the health information user to which the request was intended. (required)
   notification: record # shape: {consentArtefacts?: list, consentRequestId: string, status: "GRANTED"|"EXPIRED"|"DENIED"|"REQUESTED"|"REVOKED"}
   request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
@@ -630,6 +648,8 @@ export def "post-v0-5-consents-hiu-notify" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_hiu_id == null) { error make --unspanned { msg: "required header parameter 'X-HIU-ID' missing: pass --x-hiu-id" } }
   let full_url = (build-url $base "/v0.5/consents/hiu/notify" $auth.query)
   let req_body = {"notification": $notification, "requestId": $request_id, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -667,10 +687,10 @@ export def "post-v0-5-consents-hiu-on-notify" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-cm-id: string # Suffix of the consent manager to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-cm-id: string # Suffix of the consent manager to which the request was intended. (required)
   --acknowledgement: list # item shape: {consentId: string, status: "OK"|"UNKNOWN"}
-  --body-error: record # shape: {code?: "1000"|"10001", message?: string}
+  --error: record # shape: {code?: "1000"|"10001", message?: string}
   request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   resp: record # shape: {requestId: string}
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
@@ -678,8 +698,10 @@ export def "post-v0-5-consents-hiu-on-notify" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_cm_id == null) { error make --unspanned { msg: "required header parameter 'X-CM-ID' missing: pass --x-cm-id" } }
   let full_url = (build-url $base "/v0.5/consents/hiu/on-notify" $auth.query)
-  let req_body = {"acknowledgement": $acknowledgement, "error": $body_error, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
+  let req_body = {"acknowledgement": $acknowledgement, "error": $error, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -715,10 +737,10 @@ export def "post-v0-5-consents-on-fetch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-hiu-id: string # Identifier of the health information user to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-hiu-id: string # Identifier of the health information user to which the request was intended. (required)
   --consent: record # shape: {consentDetail: record, signature: string, status: "GRANTED"|"EXPIRED"|"DENIED"|"REQUESTED"|"REVOKED"}
-  --body-error: record # shape: {code?: "1000"|"10001", message?: string}
+  --error: record # shape: {code?: "1000"|"10001", message?: string}
   request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   resp: record # shape: {requestId: string}
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
@@ -726,8 +748,10 @@ export def "post-v0-5-consents-on-fetch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_hiu_id == null) { error make --unspanned { msg: "required header parameter 'X-HIU-ID' missing: pass --x-hiu-id" } }
   let full_url = (build-url $base "/v0.5/consents/on-fetch" $auth.query)
-  let req_body = {"consent": $consent, "error": $body_error, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
+  let req_body = {"consent": $consent, "error": $error, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -763,9 +787,9 @@ export def "post-v0-5-health-information-cm-on-request" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-hiu-id: string # Identifier of the health information user to which the request was intended.
-  --body-error: record # shape: {code?: "1000"|"10001", message?: string}
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-hiu-id: string # Identifier of the health information user to which the request was intended. (required)
+  --error: record # shape: {code?: "1000"|"10001", message?: string}
   --hi-request: record # shape: {sessionStatus: "REQUESTED"|"ACKNOWLEDGED", transactionId: string}
   request_id: string # format: uuid, e.g. a1s2c932-2f70-3ds3-a3b5-2sfd46b12a18d
   resp: record # shape: {requestId: string}
@@ -774,8 +798,10 @@ export def "post-v0-5-health-information-cm-on-request" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_hiu_id == null) { error make --unspanned { msg: "required header parameter 'X-HIU-ID' missing: pass --x-hiu-id" } }
   let full_url = (build-url $base "/v0.5/health-information/cm/on-request" $auth.query)
-  let req_body = {"error": $body_error, "hiRequest": $hi_request, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
+  let req_body = {"error": $error, "hiRequest": $hi_request, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -809,8 +835,8 @@ export def "post-v0-5-health-information-cm-request" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-cm-id: string # Suffix of the consent manager to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-cm-id: string # Suffix of the consent manager to which the request was intended. (required)
   hi_request: record # shape: {consent: record, dataPushUrl: string, dateRange: record, keyMaterial: record}
   request_id: string # format: uuid, e.g. a1s2c932-2f70-3ds3-a3b5-2sfd46b12a18d
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
@@ -818,6 +844,8 @@ export def "post-v0-5-health-information-cm-request" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_cm_id == null) { error make --unspanned { msg: "required header parameter 'X-CM-ID' missing: pass --x-cm-id" } }
   let full_url = (build-url $base "/v0.5/health-information/cm/request" $auth.query)
   let req_body = {"hiRequest": $hi_request, "requestId": $request_id, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -855,9 +883,9 @@ export def "post-v0-5-health-information-hip-on-request" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-cm-id: string # Suffix of the consent manager to which the request was intended.
-  --body-error: record # shape: {code?: "1000"|"10001", message?: string}
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-cm-id: string # Suffix of the consent manager to which the request was intended. (required)
+  --error: record # shape: {code?: "1000"|"10001", message?: string}
   --hi-request: record # shape: {sessionStatus: "ACKNOWLEDGED", transactionId: string}
   request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   resp: record # shape: {requestId: string}
@@ -866,8 +894,10 @@ export def "post-v0-5-health-information-hip-on-request" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_cm_id == null) { error make --unspanned { msg: "required header parameter 'X-CM-ID' missing: pass --x-cm-id" } }
   let full_url = (build-url $base "/v0.5/health-information/hip/on-request" $auth.query)
-  let req_body = {"error": $body_error, "hiRequest": $hi_request, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
+  let req_body = {"error": $error, "hiRequest": $hi_request, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -901,8 +931,8 @@ export def "post-v0-5-health-information-hip-request" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-hip-id: string # Identifier of the health information provider to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-hip-id: string # Identifier of the health information provider to which the request was intended. (required)
   hi_request: record # shape: {consent: record, dataPushUrl: string, dateRange: record, keyMaterial: record}
   request_id: string # format: uuid, e.g. a1s2c932-2f70-3ds3-a3b5-2sfd46b12a18d
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
@@ -911,6 +941,8 @@ export def "post-v0-5-health-information-hip-request" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_hip_id == null) { error make --unspanned { msg: "required header parameter 'X-HIP-ID' missing: pass --x-hip-id" } }
   let full_url = (build-url $base "/v0.5/health-information/hip/request" $auth.query)
   let req_body = {"hiRequest": $hi_request, "requestId": $request_id, "timestamp": $timestamp, "transactionId": $transaction_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -946,8 +978,8 @@ export def "post-v0-5-health-information-notify" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-cm-id: string # Suffix of the consent manager to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-cm-id: string # Suffix of the consent manager to which the request was intended. (required)
   notification: record # shape: {consentId: string, doneAt: string, notifier: record, statusNotification: record, transactionId: string}
   request_id: string # a nonce, unique for each HTTP request. (format: uuid, e.g. 499a5a4a-7dda-4f20-9b67-e24589627061)
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
@@ -955,6 +987,8 @@ export def "post-v0-5-health-information-notify" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_cm_id == null) { error make --unspanned { msg: "required header parameter 'X-CM-ID' missing: pass --x-cm-id" } }
   let full_url = (build-url $base "/v0.5/health-information/notify" $auth.query)
   let req_body = {"notification": $notification, "requestId": $request_id, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1025,11 +1059,12 @@ export def "get-v0-5-hi-services-service-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
 ]: nothing -> record<active: bool, endpoints: table<address: string, connectionType: string, use: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'service-id' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/v0.5/hi-services/{service_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1063,8 +1098,8 @@ export def "post-v0-5-links-link-add-contexts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-cm-id: string # Suffix of the consent manager to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-cm-id: string # Suffix of the consent manager to which the request was intended. (required)
   link: record # shape: {accessToken: string, patient: record}
   request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
@@ -1072,6 +1107,8 @@ export def "post-v0-5-links-link-add-contexts" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_cm_id == null) { error make --unspanned { msg: "required header parameter 'X-CM-ID' missing: pass --x-cm-id" } }
   let full_url = (build-url $base "/v0.5/links/link/add-contexts" $auth.query)
   let req_body = {"link": $link, "requestId": $request_id, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1107,8 +1144,8 @@ export def "post-v0-5-links-link-confirm" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-hip-id: string # Identifier of the health information provider to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-hip-id: string # Identifier of the health information provider to which the request was intended. (required)
   confirmation: record # shape: {linkRefNumber: string, token: string}
   request_id: string # format: uuid
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
@@ -1116,6 +1153,8 @@ export def "post-v0-5-links-link-confirm" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_hip_id == null) { error make --unspanned { msg: "required header parameter 'X-HIP-ID' missing: pass --x-hip-id" } }
   let full_url = (build-url $base "/v0.5/links/link/confirm" $auth.query)
   let req_body = {"confirmation": $confirmation, "requestId": $request_id, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1151,8 +1190,8 @@ export def "post-v0-5-links-link-init" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-hip-id: string # Identifier of the health information provider to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-hip-id: string # Identifier of the health information provider to which the request was intended. (required)
   patient: record # shape: {careContexts: list, id: string, referenceNumber: string}
   request_id: string # format: uuid
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
@@ -1161,6 +1200,8 @@ export def "post-v0-5-links-link-init" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_hip_id == null) { error make --unspanned { msg: "required header parameter 'X-HIP-ID' missing: pass --x-hip-id" } }
   let full_url = (build-url $base "/v0.5/links/link/init" $auth.query)
   let req_body = {"patient": $patient, "requestId": $request_id, "timestamp": $timestamp, "transactionId": $transaction_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1198,10 +1239,10 @@ export def "post-v0-5-links-link-on-add-contexts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-hip-id: string # Identifier of the health information provider to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-hip-id: string # Identifier of the health information provider to which the request was intended. (required)
   --acknowledgement: record # shape: {status: "SUCCESS"}
-  --body-error: record # shape: {code?: "1000"|"10001", message?: string}
+  --error: record # shape: {code?: "1000"|"10001", message?: string}
   request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   resp: record # shape: {requestId: string}
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
@@ -1209,8 +1250,10 @@ export def "post-v0-5-links-link-on-add-contexts" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_hip_id == null) { error make --unspanned { msg: "required header parameter 'X-HIP-ID' missing: pass --x-hip-id" } }
   let full_url = (build-url $base "/v0.5/links/link/on-add-contexts" $auth.query)
-  let req_body = {"acknowledgement": $acknowledgement, "error": $body_error, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
+  let req_body = {"acknowledgement": $acknowledgement, "error": $error, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1246,9 +1289,9 @@ export def "post-v0-5-links-link-on-confirm" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-cm-id: string # Suffix of the consent manager to which the request was intended.
-  --body-error: record # shape: {code?: "1000"|"10001", message?: string}
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-cm-id: string # Suffix of the consent manager to which the request was intended. (required)
+  --error: record # shape: {code?: "1000"|"10001", message?: string}
   --patient: record # shape: {careContexts: list, display: string, referenceNumber: string}
   request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   resp: record # shape: {requestId: string}
@@ -1257,8 +1300,10 @@ export def "post-v0-5-links-link-on-confirm" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_cm_id == null) { error make --unspanned { msg: "required header parameter 'X-CM-ID' missing: pass --x-cm-id" } }
   let full_url = (build-url $base "/v0.5/links/link/on-confirm" $auth.query)
-  let req_body = {"error": $body_error, "patient": $patient, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
+  let req_body = {"error": $error, "patient": $patient, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1294,9 +1339,9 @@ export def "post-v0-5-links-link-on-init" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-cm-id: string # Suffix of the consent manager to which the request was intended.
-  --body-error: record # shape: {code?: "1000"|"10001", message?: string}
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-cm-id: string # Suffix of the consent manager to which the request was intended. (required)
+  --error: record # shape: {code?: "1000"|"10001", message?: string}
   --link: record # shape: {authenticationType: "DIRECT"|"MEDIATED", meta?: record, referenceNumber: string}
   request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   resp: record # shape: {requestId: string}
@@ -1306,8 +1351,10 @@ export def "post-v0-5-links-link-on-init" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_cm_id == null) { error make --unspanned { msg: "required header parameter 'X-CM-ID' missing: pass --x-cm-id" } }
   let full_url = (build-url $base "/v0.5/links/link/on-init" $auth.query)
-  let req_body = {"error": $body_error, "link": $link, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp, "transactionId": $transaction_id} | compact
+  let req_body = {"error": $error, "link": $link, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp, "transactionId": $transaction_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1341,8 +1388,8 @@ export def "post-v0-5-patients-find" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-cm-id: string # Suffix of the consent manager to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-cm-id: string # Suffix of the consent manager to which the request was intended. (required)
   query: record # shape: {patient: record, requester: record}
   request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
@@ -1350,6 +1397,8 @@ export def "post-v0-5-patients-find" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_cm_id == null) { error make --unspanned { msg: "required header parameter 'X-CM-ID' missing: pass --x-cm-id" } }
   let full_url = (build-url $base "/v0.5/patients/find" $auth.query)
   let req_body = {"query": $query, "requestId": $request_id, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1387,8 +1436,8 @@ export def "post-v0-5-patients-on-find" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --body-error: record # shape: {code?: "1000"|"10001", message?: string}
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --error: record # shape: {code?: "1000"|"10001", message?: string}
   --patient: record # shape: {id: string, name: string}
   request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   resp: record # shape: {requestId: string}
@@ -1397,8 +1446,9 @@ export def "post-v0-5-patients-on-find" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/v0.5/patients/on-find" $auth.query)
-  let req_body = {"error": $body_error, "patient": $patient, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
+  let req_body = {"error": $error, "patient": $patient, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1434,10 +1484,10 @@ export def "post-v0-5-patients-profile-on-share" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-cm-id: string # Suffix of the consent manager to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-cm-id: string # Suffix of the consent manager to which the request was intended. (required)
   acknowledgement: record # shape: {healthId: string, status: "SUCCESS"|"FAILURE"}
-  --body-error: record # shape: {code?: "1000"|"10001", message?: string}
+  --error: record # shape: {code?: "1000"|"10001", message?: string}
   request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   resp: record # shape: {requestId: string}
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
@@ -1445,8 +1495,10 @@ export def "post-v0-5-patients-profile-on-share" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_cm_id == null) { error make --unspanned { msg: "required header parameter 'X-CM-ID' missing: pass --x-cm-id" } }
   let full_url = (build-url $base "/v0.5/patients/profile/on-share" $auth.query)
-  let req_body = {"acknowledgement": $acknowledgement, "error": $body_error, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
+  let req_body = {"acknowledgement": $acknowledgement, "error": $error, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1480,8 +1532,8 @@ export def "post-v0-5-patients-profile-share" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-hip-id: string # Identifier of the health information provider to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-hip-id: string # Identifier of the health information provider to which the request was intended. (required)
   patient: record # shape: {hipCode?: string, userDemographics: record}
   request_id: string # a nonce, unique for each HTTP request. (format: uuid, e.g. 499a5a4a-7dda-4f20-9b67-e24589627061)
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
@@ -1489,6 +1541,8 @@ export def "post-v0-5-patients-profile-share" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://your-hrp-server.com")
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_hip_id == null) { error make --unspanned { msg: "required header parameter 'X-HIP-ID' missing: pass --x-hip-id" } }
   let full_url = (build-url $base "/v0.5/patients/profile/share" $auth.query)
   let req_body = {"patient": $patient, "requestId": $request_id, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1524,8 +1578,8 @@ export def "post-v0-5-patients-sms-notify" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-cm-id: string # Suffix of the consent manager to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-cm-id: string # Suffix of the consent manager to which the request was intended. (required)
   notification: record # shape: {careContextInfo: string, deeplinkUrl?: string, hip: record, phoneNo: string, receiverName?: string}
   request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
@@ -1533,6 +1587,8 @@ export def "post-v0-5-patients-sms-notify" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_cm_id == null) { error make --unspanned { msg: "required header parameter 'X-CM-ID' missing: pass --x-cm-id" } }
   let full_url = (build-url $base "/v0.5/patients/sms/notify" $auth.query)
   let req_body = {"notification": $notification, "requestId": $request_id, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1569,9 +1625,9 @@ export def "post-v0-5-patients-sms-on-notify" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-hip-id: string # Identifier of the health information provider to which the request was intended.
-  --body-error: record # shape: {code?: "1000"|"10001", message?: string}
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-hip-id: string # Identifier of the health information provider to which the request was intended. (required)
+  --error: record # shape: {code?: "1000"|"10001", message?: string}
   request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   resp: record # shape: {requestId: string}
   --status: string@status-completer
@@ -1580,8 +1636,10 @@ export def "post-v0-5-patients-sms-on-notify" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_hip_id == null) { error make --unspanned { msg: "required header parameter 'X-HIP-ID' missing: pass --x-hip-id" } }
   let full_url = (build-url $base "/v0.5/patients/sms/on-notify" $auth.query)
-  let req_body = {"error": $body_error, "requestId": $request_id, "resp": $resp, "status": $status, "timestamp": $timestamp} | compact
+  let req_body = {"error": $error, "requestId": $request_id, "resp": $resp, "status": $status, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1656,8 +1714,8 @@ export def "post-v0-5-subscription-requests-cm-init" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-cm-id: string # Suffix of the consent manager to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-cm-id: string # Suffix of the consent manager to which the request was intended. (required)
   request_id: string # a nonce, unique for each HTTP request. (format: uuid, e.g. 499a5a4a-7dda-4f20-9b67-e24589627061)
   subscription: record # shape: {categories: list<string>, hips?: list, hiu: record, patient: record, period: record, purpose: record}
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
@@ -1665,6 +1723,8 @@ export def "post-v0-5-subscription-requests-cm-init" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_cm_id == null) { error make --unspanned { msg: "required header parameter 'X-CM-ID' missing: pass --x-cm-id" } }
   let full_url = (build-url $base "/v0.5/subscription-requests/cm/init" $auth.query)
   let req_body = {"requestId": $request_id, "subscription": $subscription, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1702,9 +1762,9 @@ export def "post-v0-5-subscription-requests-cm-on-init" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-hiu-id: string # Identifier of the health information user to which the request was intended.
-  --body-error: record # shape: {code?: "1000"|"10001", message?: string}
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-hiu-id: string # Identifier of the health information user to which the request was intended. (required)
+  --error: record # shape: {code?: "1000"|"10001", message?: string}
   request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   resp: record # shape: {requestId: string}
   --subscription-request: record # shape: {id: string}
@@ -1713,8 +1773,10 @@ export def "post-v0-5-subscription-requests-cm-on-init" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_hiu_id == null) { error make --unspanned { msg: "required header parameter 'X-HIU-ID' missing: pass --x-hiu-id" } }
   let full_url = (build-url $base "/v0.5/subscription-requests/cm/on-init" $auth.query)
-  let req_body = {"error": $body_error, "requestId": $request_id, "resp": $resp, "subscriptionRequest": $subscription_request, "timestamp": $timestamp} | compact
+  let req_body = {"error": $error, "requestId": $request_id, "resp": $resp, "subscriptionRequest": $subscription_request, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1748,8 +1810,8 @@ export def "post-v0-5-subscription-requests-hiu-notify" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-hiu-id: string # Identifier of the health information user to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-hiu-id: string # Identifier of the health information user to which the request was intended. (required)
   notification: record # shape: {status: "GRANTED"|"DENIED", subscription?: record, subscriptionRequestId?: string}
   request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
@@ -1757,6 +1819,8 @@ export def "post-v0-5-subscription-requests-hiu-notify" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_hiu_id == null) { error make --unspanned { msg: "required header parameter 'X-HIU-ID' missing: pass --x-hiu-id" } }
   let full_url = (build-url $base "/v0.5/subscription-requests/hiu/notify" $auth.query)
   let req_body = {"notification": $notification, "requestId": $request_id, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1794,10 +1858,10 @@ export def "post-v0-5-subscription-requests-hiu-on-notify" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-cm-id: string # Suffix of the consent manager to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-cm-id: string # Suffix of the consent manager to which the request was intended. (required)
   --acknowledgement: record # shape: {status: "OK", subscriptionRequestId: string}
-  --body-error: record # shape: {code?: "1000"|"10001", message?: string}
+  --error: record # shape: {code?: "1000"|"10001", message?: string}
   request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   resp: record # shape: {requestId: string}
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
@@ -1805,8 +1869,10 @@ export def "post-v0-5-subscription-requests-hiu-on-notify" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_cm_id == null) { error make --unspanned { msg: "required header parameter 'X-CM-ID' missing: pass --x-cm-id" } }
   let full_url = (build-url $base "/v0.5/subscription-requests/hiu/on-notify" $auth.query)
-  let req_body = {"acknowledgement": $acknowledgement, "error": $body_error, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
+  let req_body = {"acknowledgement": $acknowledgement, "error": $error, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1840,8 +1906,8 @@ export def "post-v0-5-subscriptions-hiu-notify" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-hiu-id: string # Identifier of the health information user to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-hiu-id: string # Identifier of the health information user to which the request was intended. (required)
   event: record # shape: {category: "LINK", content: record, id: string, published: string, subscriptionId: string}
   request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
@@ -1849,6 +1915,8 @@ export def "post-v0-5-subscriptions-hiu-notify" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_hiu_id == null) { error make --unspanned { msg: "required header parameter 'X-HIU-ID' missing: pass --x-hiu-id" } }
   let full_url = (build-url $base "/v0.5/subscriptions/hiu/notify" $auth.query)
   let req_body = {"event": $event, "requestId": $request_id, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1886,10 +1954,10 @@ export def "post-v0-5-subscriptions-hiu-on-notify" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-cm-id: string # Suffix of the consent manager to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-cm-id: string # Suffix of the consent manager to which the request was intended. (required)
   --acknowledgement: record # shape: {eventId: string, status: "OK"}
-  --body-error: record # shape: {code?: "1000"|"10001", message?: string}
+  --error: record # shape: {code?: "1000"|"10001", message?: string}
   request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   resp: record # shape: {requestId: string}
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
@@ -1897,8 +1965,10 @@ export def "post-v0-5-subscriptions-hiu-on-notify" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_cm_id == null) { error make --unspanned { msg: "required header parameter 'X-CM-ID' missing: pass --x-cm-id" } }
   let full_url = (build-url $base "/v0.5/subscriptions/hiu/on-notify" $auth.query)
-  let req_body = {"acknowledgement": $acknowledgement, "error": $body_error, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
+  let req_body = {"acknowledgement": $acknowledgement, "error": $error, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1932,8 +2002,8 @@ export def "post-v0-5-users-auth-confirm" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-cm-id: string # Suffix of the consent manager to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-cm-id: string # Suffix of the consent manager to which the request was intended. (required)
   credential: record # note, demographic details are only required for demographic auth at this point. — shape: {authCode?: string, demographic?: record}
   request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
@@ -1942,6 +2012,8 @@ export def "post-v0-5-users-auth-confirm" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_cm_id == null) { error make --unspanned { msg: "required header parameter 'X-CM-ID' missing: pass --x-cm-id" } }
   let full_url = (build-url $base "/v0.5/users/auth/confirm" $auth.query)
   let req_body = {"credential": $credential, "requestId": $request_id, "timestamp": $timestamp, "transactionId": $transaction_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1977,8 +2049,8 @@ export def "post-v0-5-users-auth-fetch-modes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-cm-id: string # Suffix of the consent manager to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-cm-id: string # Suffix of the consent manager to which the request was intended. (required)
   query: record # shape: {id: string, purpose: "LINK"|"KYC"|"KYC_AND_LINK", requester: record}
   request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
@@ -1986,6 +2058,8 @@ export def "post-v0-5-users-auth-fetch-modes" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_cm_id == null) { error make --unspanned { msg: "required header parameter 'X-CM-ID' missing: pass --x-cm-id" } }
   let full_url = (build-url $base "/v0.5/users/auth/fetch-modes" $auth.query)
   let req_body = {"query": $query, "requestId": $request_id, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2021,8 +2095,8 @@ export def "post-v0-5-users-auth-init" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-cm-id: string # Suffix of the consent manager to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-cm-id: string # Suffix of the consent manager to which the request was intended. (required)
   query: record # shape: {authMode?: "MOBILE_OTP"|"DIRECT"|"DEMOGRAPHICS"|"AADHAAR_OTP", id: string, purpose: "LINK"|"KYC"|"KYC_AND_LINK", requester: record}
   request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
@@ -2030,6 +2104,8 @@ export def "post-v0-5-users-auth-init" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_cm_id == null) { error make --unspanned { msg: "required header parameter 'X-CM-ID' missing: pass --x-cm-id" } }
   let full_url = (build-url $base "/v0.5/users/auth/init" $auth.query)
   let req_body = {"query": $query, "requestId": $request_id, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2065,9 +2141,9 @@ export def "post-v0-5-users-auth-notify" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-hip-id: string # Identifier of the health information provider to which the request was intended.
-  --x-hiu-id: string # Identifier of the health information user to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-hip-id: string # Identifier of the health information provider to which the request was intended. (required)
+  --x-hiu-id: string # Identifier of the health information user to which the request was intended. (required)
   --body-auth: record # depending on the purpose of auth, as specified in /auth/init, the response may include the following 1. LINK - only returns **accessToken** 2. KYC - only returns **patient** 3. KYC_AND_LINK - returns both **accessToken** and **patient** — shape: {accessToken?: string, patient?: record, status: "GRANTED"|"DENIED", transactionId: string, validity?: record}
   request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
@@ -2075,6 +2151,9 @@ export def "post-v0-5-users-auth-notify" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_hip_id == null) { error make --unspanned { msg: "required header parameter 'X-HIP-ID' missing: pass --x-hip-id" } }
+  if ($x_hiu_id == null) { error make --unspanned { msg: "required header parameter 'X-HIU-ID' missing: pass --x-hiu-id" } }
   let full_url = (build-url $base "/v0.5/users/auth/notify" $auth.query)
   let req_body = {"auth": $body_auth, "requestId": $request_id, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2112,11 +2191,11 @@ export def "post-v0-5-users-auth-on-confirm" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-hip-id: string # Identifier of the health information provider to which the request was intended.
-  --x-hiu-id: string # Identifier of the health information user to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-hip-id: string # Identifier of the health information provider to which the request was intended. (required)
+  --x-hiu-id: string # Identifier of the health information user to which the request was intended. (required)
   --body-auth: record # depending on the purpose of auth, as specified in /auth/init, the response may include the following 1. LINK - only returns **accessToken** 2. KYC - only returns **patient** 3. KYC_AND_LINK - returns both **accessToken** and **patient** — shape: {accessToken?: string, patient?: record, validity?: record}
-  --body-error: record # shape: {code?: "1000"|"10001", message?: string}
+  --error: record # shape: {code?: "1000"|"10001", message?: string}
   request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   resp: record # shape: {requestId: string}
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
@@ -2124,8 +2203,11 @@ export def "post-v0-5-users-auth-on-confirm" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_hip_id == null) { error make --unspanned { msg: "required header parameter 'X-HIP-ID' missing: pass --x-hip-id" } }
+  if ($x_hiu_id == null) { error make --unspanned { msg: "required header parameter 'X-HIU-ID' missing: pass --x-hiu-id" } }
   let full_url = (build-url $base "/v0.5/users/auth/on-confirm" $auth.query)
-  let req_body = {"auth": $body_auth, "error": $body_error, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
+  let req_body = {"auth": $body_auth, "error": $error, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2161,11 +2243,11 @@ export def "post-v0-5-users-auth-on-fetch-modes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-hip-id: string # Identifier of the health information provider to which the request was intended.
-  --x-hiu-id: string # Identifier of the health information user to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-hip-id: string # Identifier of the health information provider to which the request was intended. (required)
+  --x-hiu-id: string # Identifier of the health information user to which the request was intended. (required)
   --body-auth: record # shape: {modes: list<string>, purpose: "LINK"|"KYC"|"KYC_AND_LINK"}
-  --body-error: record # shape: {code?: "1000"|"10001", message?: string}
+  --error: record # shape: {code?: "1000"|"10001", message?: string}
   request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   resp: record # shape: {requestId: string}
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
@@ -2173,8 +2255,11 @@ export def "post-v0-5-users-auth-on-fetch-modes" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_hip_id == null) { error make --unspanned { msg: "required header parameter 'X-HIP-ID' missing: pass --x-hip-id" } }
+  if ($x_hiu_id == null) { error make --unspanned { msg: "required header parameter 'X-HIU-ID' missing: pass --x-hiu-id" } }
   let full_url = (build-url $base "/v0.5/users/auth/on-fetch-modes" $auth.query)
-  let req_body = {"auth": $body_auth, "error": $body_error, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
+  let req_body = {"auth": $body_auth, "error": $error, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2210,11 +2295,11 @@ export def "post-v0-5-users-auth-on-init" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-hip-id: string # Identifier of the health information provider to which the request was intended.
-  --x-hiu-id: string # Identifier of the health information user to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-hip-id: string # Identifier of the health information provider to which the request was intended. (required)
+  --x-hiu-id: string # Identifier of the health information user to which the request was intended. (required)
   --body-auth: record # shape: {meta?: record, mode: "MOBILE_OTP"|"DIRECT"|"DEMOGRAPHICS"|"AADHAAR_OTP", transactionId: string}
-  --body-error: record # shape: {code?: "1000"|"10001", message?: string}
+  --error: record # shape: {code?: "1000"|"10001", message?: string}
   request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   resp: record # shape: {requestId: string}
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
@@ -2222,8 +2307,11 @@ export def "post-v0-5-users-auth-on-init" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_hip_id == null) { error make --unspanned { msg: "required header parameter 'X-HIP-ID' missing: pass --x-hip-id" } }
+  if ($x_hiu_id == null) { error make --unspanned { msg: "required header parameter 'X-HIU-ID' missing: pass --x-hiu-id" } }
   let full_url = (build-url $base "/v0.5/users/auth/on-init" $auth.query)
-  let req_body = {"auth": $body_auth, "error": $body_error, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
+  let req_body = {"auth": $body_auth, "error": $error, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2259,10 +2347,10 @@ export def "post-v0-5-users-auth-on-notify" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token which was issued after successful login with gateway auth server.
-  --x-cm-id: string # Suffix of the consent manager to which the request was intended.
+  --authorization: string # Access token which was issued after successful login with gateway auth server. (required)
+  --x-cm-id: string # Suffix of the consent manager to which the request was intended. (required)
   --acknowledgement: record # shape: {status: "OK"}
-  --body-error: record # shape: {code?: "1000"|"10001", message?: string}
+  --error: record # shape: {code?: "1000"|"10001", message?: string}
   request_id: string # a nonce, unique for each HTTP request (format: uuid, e.g. 5f7a535d-a3fd-416b-b069-c97d021fbacd)
   resp: record # shape: {requestId: string}
   timestamp: string # Date time format in UTC, includes miliseconds YYYY-MM-DDThh:mm:ss.vZ (format: date-time)
@@ -2270,8 +2358,10 @@ export def "post-v0-5-users-auth-on-notify" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  if ($x_cm_id == null) { error make --unspanned { msg: "required header parameter 'X-CM-ID' missing: pass --x-cm-id" } }
   let full_url = (build-url $base "/v0.5/users/auth/on-notify" $auth.query)
-  let req_body = {"acknowledgement": $acknowledgement, "error": $body_error, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
+  let req_body = {"acknowledgement": $acknowledgement, "error": $error, "requestId": $request_id, "resp": $resp, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

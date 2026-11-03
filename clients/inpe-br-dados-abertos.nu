@@ -167,11 +167,12 @@ export def "get-municipios-auxiliar-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pais-id: int # Código do país pelo qual será filtrado o resultado. Ver rotas auxiliares.
+  --pais-id: int # Código do país pelo qual será filtrado o resultado. Ver rotas auxiliares. (required)
   --estado-id: list<int> # Código do estado pelo qual será filtrado o resultado. Ver rotas auxiliares.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($pais_id == null) { error make --unspanned { msg: "required query parameter 'pais_id' missing: pass --pais-id" } }
   let qp = [(serialize-qp "pais_id" $pais_id "scalar") (serialize-qp "estado_id" $estado_id "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/auxiliar/municipios" $qp $auth.query)
   let accept_val = "application/json"
@@ -276,7 +277,7 @@ export def "get-focos-resource" [
   --estado-id: int # Código do estado pelo qual será filtrado o resultado. Ver rotas auxiliares.
   --municipio-id: int # Código do município pelo qual será filtrado o resultado. Ver rotas auxiliares.
   --satelite: list<string> # Nome do satélte pelo qual será filtrado o resultado. Ver rotas auxiliares.
-  --x-fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask (format: mask)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

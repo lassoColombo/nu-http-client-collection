@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -142,8 +142,8 @@ export def commands []: nothing -> table {
 #
 # POST /associations
 # operationId: AssociateRepository
-# --Repository shape: {CodeCommit?: any, Bitbucket?: any, GitHubEnterpriseServer?: any, S3Bucket?: record}
-# --KMSKeyDetails shape: {KMSKeyId?: any, EncryptionOption?: any}
+# --Repository shape: {CodeCommit?: record, Bitbucket?: record, GitHubEnterpriseServer?: record, S3Bucket?: record}
+# --KMSKeyDetails shape: {KMSKeyId?: string, EncryptionOption?: "AWS_OWNED_CMK"|"CUSTOMER_MANAGED_CMK"}
 export def "associate-repository" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -161,11 +161,11 @@ export def "associate-repository" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  repository: record # Information about an associated Amazon Web Services CodeCommit repository or an associated repository that is managed by Amazon Web Services CodeStar Connections (for example, Bitbucket). This Repository object is not used if your source code is in an associated GitHub repository. — shape: {CodeCommit?: any, Bitbucket?: any, GitHubEnterpriseServer?: any, S3Bucket?: record}
+  repository: record # Information about an associated Amazon Web Services CodeCommit repository or an associated repository that is managed by Amazon Web Services CodeStar Connections (for example, Bitbucket). This Repository object is not used if your source code is in an associated GitHub repository. — shape: {CodeCommit?: record, Bitbucket?: record, GitHubEnterpriseServer?: record, S3Bucket?: record}
   --client-request-token: string # Amazon CodeGuru Reviewer uses this value to prevent the accidental creation of duplicate repository associations if there are failures and retries.
   --tags: record # An array of key-value pairs used to tag an associated repository. A tag is a custom attribute label with two parts: A tag key (for example, CostCenter, Environment, Project, or Secret). Tag keys are case sensitive. An optional field known as a tag value (for example, 111122223333, Production, or a team name). Omitting the tag value is the same as using an empty string. Like tag keys, tag values are case sensitive.
-  --kms-key-details: record # An object that contains: The encryption option for a repository association. It is either owned by Amazon Web Services Key Management Service (KMS) (AWS_OWNED_CMK) or customer managed (CUSTOMER_MANAGED_CMK). The ID of the Amazon Web Services KMS key that is associated with a repository association. — shape: {KMSKeyId?: any, EncryptionOption?: any}
-]: any -> record<RepositoryAssociation: record<AssociationId: record, AssociationArn: record, ConnectionArn: record, Name: record, Owner: record, ProviderType: record, State: record, StateReason: record, LastUpdatedTimeStamp: record, CreatedTimeStamp: record, KMSKeyDetails: record<KMSKeyId: record, EncryptionOption: record>, S3RepositoryDetails: record<BucketName: record, CodeArtifacts: record>>, Tags: record> {
+  --kms-key-details: record # An object that contains: The encryption option for a repository association. It is either owned by Amazon Web Services Key Management Service (KMS) (AWS_OWNED_CMK) or customer managed (CUSTOMER_MANAGED_CMK). The ID of the Amazon Web Services KMS key that is associated with a repository association. — shape: {KMSKeyId?: string, EncryptionOption?: "AWS_OWNED_CMK"|"CUSTOMER_MANAGED_CMK"}
+]: any -> record<RepositoryAssociation: record<AssociationId: string, AssociationArn: string, ConnectionArn: string, Name: string, Owner: string, ProviderType: string, State: string, StateReason: string, LastUpdatedTimeStamp: string, CreatedTimeStamp: string, KMSKeyDetails: record<KMSKeyId: string, EncryptionOption: string>, S3RepositoryDetails: record<BucketName: string, CodeArtifacts: record>>, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -217,7 +217,7 @@ export def "list-repository-associations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<RepositoryAssociationSummaries: record, NextToken: record> {
+]: nothing -> record<RepositoryAssociationSummaries: table<AssociationArn: string, ConnectionArn: string, LastUpdatedTimeStamp: string, AssociationId: string, Name: string, Owner: string, ProviderType: string, State: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ProviderType" $provider_type "multi") (serialize-qp "State" $state "multi") (serialize-qp "Name" $name "multi") (serialize-qp "Owner" $owner "multi") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
@@ -244,7 +244,7 @@ export def "list-repository-associations" [
 #
 # POST /codereviews
 # operationId: CreateCodeReview
-# --Type shape: {RepositoryAnalysis?: any, AnalysisTypes?: any}
+# --Type shape: {RepositoryAnalysis?: record, AnalysisTypes?: list<string>}
 export def "create-code-review" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -264,9 +264,9 @@ export def "create-code-review" [
   --x-amz-signed-headers: string
   name: string # The name of the code review. The name of each code review in your Amazon Web Services account must be unique.
   repository_association_arn: string # The Amazon Resource Name (ARN) of the RepositoryAssociation (https://docs.aws.amazon.com/codeguru/latest/reviewer-api/API_RepositoryAssociation.html) object. You can retrieve this ARN by calling ListRepositoryAssociations (https://docs.aws.amazon.com/codeguru/latest/reviewer-api/API_ListRepositoryAssociations.html). A code review can only be created on an associated repository. This is the ARN of the associated repository.
-  type: record # The type of a code review. There are two code review types: PullRequest - A code review that is automatically triggered by a pull request on an associated repository. RepositoryAnalysis - A code review that analyzes all code under a specified branch in an associated repository. The associated repository is specified using its ARN in CreateCodeReview (https://docs.aws.amazon.com/codeguru/latest/reviewer-api/API_CreateCodeReview). — shape: {RepositoryAnalysis?: any, AnalysisTypes?: any}
+  type: record # The type of a code review. There are two code review types: PullRequest - A code review that is automatically triggered by a pull request on an associated repository. RepositoryAnalysis - A code review that analyzes all code under a specified branch in an associated repository. The associated repository is specified using its ARN in CreateCodeReview (https://docs.aws.amazon.com/codeguru/latest/reviewer-api/API_CreateCodeReview). — shape: {RepositoryAnalysis?: record, AnalysisTypes?: list<string>}
   --client-request-token: string # Amazon CodeGuru Reviewer uses this value to prevent the accidental creation of duplicate code reviews if there are failures and retries.
-]: any -> record<CodeReview: record<Name: record, CodeReviewArn: record, RepositoryName: record, Owner: record, ProviderType: record, State: record, StateReason: record, CreatedTimeStamp: record, LastUpdatedTimeStamp: record, Type: record, PullRequestId: record, SourceCodeType: record<CommitDiff: record, RepositoryHead: record, BranchDiff: record, S3BucketRepository: record, RequestMetadata: record>, AssociationArn: record, Metrics: record<MeteredLinesOfCodeCount: record, SuppressedLinesOfCodeCount: record, FindingsCount: record>, AnalysisTypes: record, ConfigFileState: record>> {
+]: any -> record<CodeReview: record<Name: string, CodeReviewArn: string, RepositoryName: string, Owner: string, ProviderType: string, State: string, StateReason: string, CreatedTimeStamp: string, LastUpdatedTimeStamp: string, Type: string, PullRequestId: string, SourceCodeType: record<CommitDiff: record, RepositoryHead: record, BranchDiff: record, S3BucketRepository: record, RequestMetadata: record>, AssociationArn: string, Metrics: record<MeteredLinesOfCodeCount: int, SuppressedLinesOfCodeCount: int, FindingsCount: int>, AnalysisTypes: list<string>, ConfigFileState: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -313,7 +313,7 @@ export def "describe-code-review" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CodeReview: record<Name: record, CodeReviewArn: record, RepositoryName: record, Owner: record, ProviderType: record, State: record, StateReason: record, CreatedTimeStamp: record, LastUpdatedTimeStamp: record, Type: record, PullRequestId: record, SourceCodeType: record<CommitDiff: record, RepositoryHead: record, BranchDiff: record, S3BucketRepository: record, RequestMetadata: record>, AssociationArn: record, Metrics: record<MeteredLinesOfCodeCount: record, SuppressedLinesOfCodeCount: record, FindingsCount: record>, AnalysisTypes: record, ConfigFileState: record>> {
+]: nothing -> record<CodeReview: record<Name: string, CodeReviewArn: string, RepositoryName: string, Owner: string, ProviderType: string, State: string, StateReason: string, CreatedTimeStamp: string, LastUpdatedTimeStamp: string, Type: string, PullRequestId: string, SourceCodeType: record<CommitDiff: record, RepositoryHead: record, BranchDiff: record, S3BucketRepository: record, RequestMetadata: record>, AssociationArn: string, Metrics: record<MeteredLinesOfCodeCount: int, SuppressedLinesOfCodeCount: int, FindingsCount: int>, AnalysisTypes: list<string>, ConfigFileState: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code_review_arn | is-empty) { error make --unspanned { msg: "path parameter 'CodeReviewArn' must be non-empty" } }
@@ -351,7 +351,7 @@ export def "describe-recommendation-feedback" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --recommendation-id: string # The recommendation ID that can be used to track the provided recommendations and then to collect the feedback.
+  --recommendation-id: string # The recommendation ID that can be used to track the provided recommendations and then to collect the feedback. (required)
   --user-id: string # Optional parameter to describe the feedback for a given user. If this is not supplied, it defaults to the user making the request. The UserId is an IAM principal that can be specified as an Amazon Web Services account ID or an Amazon Resource Name (ARN). For more information, see Specifying a Principal (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_principal.html#Principal_specifying) in the Amazon Web Services Identity and Access Management User Guide.
   --x-amz-content-sha256: string
   --x-amz-date: string
@@ -360,10 +360,11 @@ export def "describe-recommendation-feedback" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<RecommendationFeedback: record<CodeReviewArn: record, RecommendationId: record, Reactions: record, UserId: record, CreatedTimeStamp: record, LastUpdatedTimeStamp: record>> {
+]: nothing -> record<RecommendationFeedback: record<CodeReviewArn: string, RecommendationId: string, Reactions: list<string>, UserId: string, CreatedTimeStamp: string, LastUpdatedTimeStamp: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code_review_arn | is-empty) { error make --unspanned { msg: "path parameter 'CodeReviewArn' must be non-empty" } }
+  if ($recommendation_id == null) { error make --unspanned { msg: "required query parameter 'RecommendationId' missing: pass --recommendation-id" } }
   let qp = [(serialize-qp "RecommendationId" $recommendation_id "scalar") (serialize-qp "UserId" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({code_review_arn: (encode-path-segment $code_review_arn)} | format pattern "/feedback/{code_review_arn}") $qp $auth.query)
   let accept_val = "application/json"
@@ -406,7 +407,7 @@ export def "describe-repository-association" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<RepositoryAssociation: record<AssociationId: record, AssociationArn: record, ConnectionArn: record, Name: record, Owner: record, ProviderType: record, State: record, StateReason: record, LastUpdatedTimeStamp: record, CreatedTimeStamp: record, KMSKeyDetails: record<KMSKeyId: record, EncryptionOption: record>, S3RepositoryDetails: record<BucketName: record, CodeArtifacts: record>>, Tags: record> {
+]: nothing -> record<RepositoryAssociation: record<AssociationId: string, AssociationArn: string, ConnectionArn: string, Name: string, Owner: string, ProviderType: string, State: string, StateReason: string, LastUpdatedTimeStamp: string, CreatedTimeStamp: string, KMSKeyDetails: record<KMSKeyId: string, EncryptionOption: string>, S3RepositoryDetails: record<BucketName: string, CodeArtifacts: record>>, Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($association_arn | is-empty) { error make --unspanned { msg: "path parameter 'AssociationArn' must be non-empty" } }
@@ -451,7 +452,7 @@ export def "disassociate-repository" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<RepositoryAssociation: record<AssociationId: record, AssociationArn: record, ConnectionArn: record, Name: record, Owner: record, ProviderType: record, State: record, StateReason: record, LastUpdatedTimeStamp: record, CreatedTimeStamp: record, KMSKeyDetails: record<KMSKeyId: record, EncryptionOption: record>, S3RepositoryDetails: record<BucketName: record, CodeArtifacts: record>>, Tags: record> {
+]: nothing -> record<RepositoryAssociation: record<AssociationId: string, AssociationArn: string, ConnectionArn: string, Name: string, Owner: string, ProviderType: string, State: string, StateReason: string, LastUpdatedTimeStamp: string, CreatedTimeStamp: string, KMSKeyDetails: record<KMSKeyId: string, EncryptionOption: string>, S3RepositoryDetails: record<BucketName: string, CodeArtifacts: record>>, Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($association_arn | is-empty) { error make --unspanned { msg: "path parameter 'AssociationArn' must be non-empty" } }
@@ -491,7 +492,7 @@ export def "list-code-reviews" [
   --provider-types: list # List of provider types for filtering that needs to be applied before displaying the result. For example, providerTypes=[GitHub] lists code reviews from GitHub.
   --states: list # List of states for filtering that needs to be applied before displaying the result. For example, states=[Pending] lists code reviews in the Pending state. The valid code review states are: Completed: The code review is complete. Pending: The code review started and has not completed or failed. Failed: The code review failed. Deleting: The code review is being deleted.
   --repository-names: list # List of repository names for filtering that needs to be applied before displaying the result.
-  --type: string@type-completer # The type of code reviews to list in the response.
+  --type: string@type-completer # The type of code reviews to list in the response. (required)
   --max-results: int # The maximum number of results that are returned per call. The default is 100.
   --next-token: string # If nextToken is returned, there are more results available. The value of nextToken is a unique pagination token for each page. Make the call again using the returned token to retrieve the next page. Keep all other arguments unchanged.
   --x-amz-content-sha256: string
@@ -501,9 +502,10 @@ export def "list-code-reviews" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CodeReviewSummaries: record, NextToken: record> {
+]: nothing -> record<CodeReviewSummaries: table<Name: string, CodeReviewArn: string, RepositoryName: string, Owner: string, ProviderType: string, State: string, CreatedTimeStamp: string, LastUpdatedTimeStamp: string, Type: string, PullRequestId: string, MetricsSummary: record, SourceCodeType: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($type == null) { error make --unspanned { msg: "required query parameter 'Type' missing: pass --type" } }
   let qp = [(serialize-qp "ProviderTypes" $provider_types "multi") (serialize-qp "States" $states "multi") (serialize-qp "RepositoryNames" $repository_names "multi") (serialize-qp "Type" $type "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/codereviews" $qp $auth.query)
   let accept_val = "application/json"
@@ -550,7 +552,7 @@ export def "list-recommendation-feedback" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<RecommendationFeedbackSummaries: record, NextToken: record> {
+]: nothing -> record<RecommendationFeedbackSummaries: table<RecommendationId: string, Reactions: list, UserId: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code_review_arn | is-empty) { error make --unspanned { msg: "path parameter 'CodeReviewArn' must be non-empty" } }
@@ -598,7 +600,7 @@ export def "list-recommendations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<RecommendationSummaries: record, NextToken: record> {
+]: nothing -> record<RecommendationSummaries: table<FilePath: string, RecommendationId: string, StartLine: int, EndLine: int, Description: string, RecommendationCategory: string, RuleMetadata: record, Severity: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code_review_arn | is-empty) { error make --unspanned { msg: "path parameter 'CodeReviewArn' must be non-empty" } }
@@ -780,7 +782,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # A list of the keys for each tag you want to remove from an associated repository.
+  --tag-keys: list # A list of the keys for each tag you want to remove from an associated repository. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -792,6 +794,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"

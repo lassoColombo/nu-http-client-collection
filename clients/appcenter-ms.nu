@@ -1,4 +1,4 @@
-# Auto-generated client for App Center Client vv0.1
+# Auto-generated client for App Center Client v0.1
 # Source: https://api.apis.guru/v2/specs/appcenter.ms/v0.1/openapi.json
 # Auth: --token flag or $env.APP_CENTER_CLIENT_TOKEN
 
@@ -12,8 +12,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-api-token" => { {scheme: $scheme, headers: {X-API-Token: $token_val}, query: "", location: "header"} }
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "x-api-token" => { {scheme: $scheme, headers: {"X-API-Token": $token_val}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -167,6 +167,7 @@ def format-completer [] { ["json" "yaml"] }
 def os-completer-1 [] { ["Android" "Windows" "iOS" "macOS"] }
 def platform-completer-1 [] { ["Java" "Objective-C-Swift" "React-Native" "UWP" "Xamarin"] }
 def status-completer [] { ["cancelling"] }
+def download-type-completer [] { ["build" "bundle" "logs" "mapping" "symbols"] }
 def group-type-completer [] { ["GroupType1" "GroupType2"] }
 def group-status-completer [] { ["closed" "ignored" "open"] }
 def orderby-completer [] { ["count asc" "count desc" "display_id asc" "display_id desc" "impacted_users asc" "impacted_users desc" "last_occurrence asc" "last_occurrence desc"] }
@@ -183,6 +184,7 @@ def format-completer-1 [] { ["json" "txt"] }
 def sort-completer-1 [] { ["deviceName" "errorGroupId" "exceptionClassName" "exceptionFile" "exceptionLine" "exceptionMessage" "exceptionMethod" "osVersion" "timestamp" "userId"] }
 def type-completer-1 [] { ["application_insights_instrumentation_key" "application_insights_linked_subscription" "blob_storage_connection_string" "blob_storage_linked_subscription"] }
 def role-completer [] { ["admin" "collaborator" "member"] }
+def source-host-completer [] { ["bitbucket" "github" "gitlab" "vsts"] }
 def form-completer [] { ["full" "lite"] }
 def status-completer-2 [] { ["all" "processed" "uploaded"] }
 def symbol-type-completer [] { ["AndroidProguard" "Apple" "Breakpad" "JavaScript" "UWP"] }
@@ -554,7 +556,7 @@ export def "apps-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<error: record<code: string, message: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
@@ -677,7 +679,7 @@ export def "analytics-device-counts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start: string # Start date time in data in ISO 8601 date time format. (format: date-time)
+  --start: string # Start date time in data in ISO 8601 date time format. (required, format: date-time)
   --end: string # Last date time in data in ISO 8601 date time format. (format: date-time)
   --versions: list<string> # To select specific application versions
   --app-build: string # Application build number. If build number is specified than multiple versions are not allowed. (format: string)
@@ -686,6 +688,7 @@ export def "analytics-device-counts" [
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'app_name' must be non-empty" } }
+  if ($start == null) { error make --unspanned { msg: "required query parameter 'start' missing: pass --start" } }
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "versions" $versions "pipes") (serialize-qp "app_build" $app_build "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner_name: (encode-path-segment $owner_name), app_name: (encode-path-segment $app_name)} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/active_device_counts") $qp $auth.query)
   let accept_val = "application/json"
@@ -924,7 +927,7 @@ export def "analytics-delete-audience" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<error: record<code: string, message: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
@@ -1092,7 +1095,7 @@ export def "analytics-crash-counts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start: string # Start date time in data in ISO 8601 date time format. (format: date-time)
+  --start: string # Start date time in data in ISO 8601 date time format. (required, format: date-time)
   --end: string # Last date time in data in ISO 8601 date time format. (format: date-time)
   --versions: list<string> # To select specific application versions
 ]: nothing -> record<count: int, crashes: table<count: int, datetime: string>> {
@@ -1100,6 +1103,7 @@ export def "analytics-crash-counts" [
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'app_name' must be non-empty" } }
+  if ($start == null) { error make --unspanned { msg: "required query parameter 'start' missing: pass --start" } }
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "versions" $versions "pipes")] | flatten | str join "&"
   let full_url = (build-url $base ({owner_name: (encode-path-segment $owner_name), app_name: (encode-path-segment $app_name)} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/crash_counts") $qp $auth.query)
   let accept_val = "application/json"
@@ -1180,8 +1184,8 @@ export def "analytics-crash-group-counts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --version: string # format: string
-  --start: string # Start date time in data in ISO 8601 date time format. (format: date-time)
+  --version: string # required, format: string
+  --start: string # Start date time in data in ISO 8601 date time format. (required, format: date-time)
   --end: string # Last date time in data in ISO 8601 date time format. (format: date-time)
 ]: nothing -> record<count: int, crashes: table<count: int, datetime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
@@ -1189,6 +1193,8 @@ export def "analytics-crash-group-counts" [
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'app_name' must be non-empty" } }
   if ($crash_group_id | is-empty) { error make --unspanned { msg: "path parameter 'crash_group_id' must be non-empty" } }
+  if ($version == null) { error make --unspanned { msg: "required query parameter 'version' missing: pass --version" } }
+  if ($start == null) { error make --unspanned { msg: "required query parameter 'start' missing: pass --start" } }
   let qp = [(serialize-qp "version" $version "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner_name: (encode-path-segment $owner_name), app_name: (encode-path-segment $app_name), crash_group_id: (encode-path-segment $crash_group_id)} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/crash_groups/{crash_group_id}/crash_counts") $qp $auth.query)
   let accept_val = "application/json"
@@ -1226,7 +1232,7 @@ export def "analytics-crash-group-model-counts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --version: string # format: string
+  --version: string # required, format: string
   --top: int # The maximum number of results to return. (0 will fetch all results) (format: int64, default: 30)
 ]: nothing -> record<crash_count: int, models: table<crash_count: int, model_name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
@@ -1234,6 +1240,7 @@ export def "analytics-crash-group-model-counts" [
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'app_name' must be non-empty" } }
   if ($crash_group_id | is-empty) { error make --unspanned { msg: "path parameter 'crash_group_id' must be non-empty" } }
+  if ($version == null) { error make --unspanned { msg: "required query parameter 'version' missing: pass --version" } }
   let qp = [(serialize-qp "version" $version "scalar") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner_name: (encode-path-segment $owner_name), app_name: (encode-path-segment $app_name), crash_group_id: (encode-path-segment $crash_group_id)} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/crash_groups/{crash_group_id}/models") $qp $auth.query)
   let accept_val = "application/json"
@@ -1271,7 +1278,7 @@ export def "analytics-crash-group-operating-system-counts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --version: string # format: string
+  --version: string # required, format: string
   --top: int # The maximum number of results to return. (0 will fetch all results) (format: int64, default: 30)
 ]: nothing -> record<crash_count: int, operating_systems: table<crash_count: int, operating_system_name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
@@ -1279,6 +1286,7 @@ export def "analytics-crash-group-operating-system-counts" [
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'app_name' must be non-empty" } }
   if ($crash_group_id | is-empty) { error make --unspanned { msg: "path parameter 'crash_group_id' must be non-empty" } }
+  if ($version == null) { error make --unspanned { msg: "required query parameter 'version' missing: pass --version" } }
   let qp = [(serialize-qp "version" $version "scalar") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner_name: (encode-path-segment $owner_name), app_name: (encode-path-segment $app_name), crash_group_id: (encode-path-segment $crash_group_id)} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/crash_groups/{crash_group_id}/operating_systems") $qp $auth.query)
   let accept_val = "application/json"
@@ -1316,13 +1324,14 @@ export def "analytics-crash-group-totals" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --version: string # format: string
+  --version: string # required, format: string
 ]: nothing -> record<crash_count: int, device_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'app_name' must be non-empty" } }
   if ($crash_group_id | is-empty) { error make --unspanned { msg: "path parameter 'crash_group_id' must be non-empty" } }
+  if ($version == null) { error make --unspanned { msg: "required query parameter 'version' missing: pass --version" } }
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner_name: (encode-path-segment $owner_name), app_name: (encode-path-segment $app_name), crash_group_id: (encode-path-segment $crash_group_id)} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/crash_groups/{crash_group_id}/overall") $qp $auth.query)
   let accept_val = "application/json"
@@ -1359,14 +1368,16 @@ export def "analytics-crash-free-device-percentages" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start: string # Start date time in data in ISO 8601 date time format. (format: date-time)
+  --start: string # Start date time in data in ISO 8601 date time format. (required, format: date-time)
   --end: string # Last date time in data in ISO 8601 date time format. (format: date-time)
-  --version: string # format: string
+  --version: string # required, format: string
 ]: nothing -> record<average_percentage: float, daily_percentages: table<datetime: string, percentage: float>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'app_name' must be non-empty" } }
+  if ($start == null) { error make --unspanned { msg: "required query parameter 'start' missing: pass --start" } }
+  if ($version == null) { error make --unspanned { msg: "required query parameter 'version' missing: pass --version" } }
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner_name: (encode-path-segment $owner_name), app_name: (encode-path-segment $app_name)} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/crashfree_device_percentages") $qp $auth.query)
   let accept_val = "application/json"
@@ -1445,7 +1456,7 @@ export def "analytics-events-delete-logs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<error: record<code: int, message: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
@@ -1484,7 +1495,7 @@ export def "analytics-events" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start: string # Start date time in data in ISO 8601 date time format. (format: date-time)
+  --start: string # Start date time in data in ISO 8601 date time format. (required, format: date-time)
   --end: string # Last date time in data in ISO 8601 date time format. (format: date-time)
   --versions: list<string> # To select specific application versions
   --event-name: list<string> # To select the specific events.
@@ -1497,6 +1508,7 @@ export def "analytics-events" [
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'app_name' must be non-empty" } }
+  if ($start == null) { error make --unspanned { msg: "required query parameter 'start' missing: pass --start" } }
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "versions" $versions "pipes") (serialize-qp "event_name" $event_name "pipes") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$inlinecount" $inlinecount "scalar") (serialize-qp "$orderby" $orderby "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner_name: (encode-path-segment $owner_name), app_name: (encode-path-segment $app_name)} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/events") $qp $auth.query)
   let accept_val = "application/json"
@@ -1532,7 +1544,7 @@ export def "analytics-events-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<error: record<code: int, message: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
@@ -1572,7 +1584,7 @@ export def "analytics-event-per-device-count" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start: string # Start date time in data in ISO 8601 date time format. (format: date-time)
+  --start: string # Start date time in data in ISO 8601 date time format. (required, format: date-time)
   --end: string # Last date time in data in ISO 8601 date time format. (format: date-time)
   --versions: list<string> # To select specific application versions
 ]: nothing -> record<avg_count_per_device: float, count_per_device: table<count: float, datetime: string>, previous_avg_count_per_device: float> {
@@ -1581,6 +1593,7 @@ export def "analytics-event-per-device-count" [
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'app_name' must be non-empty" } }
   if ($event_name | is-empty) { error make --unspanned { msg: "path parameter 'event_name' must be non-empty" } }
+  if ($start == null) { error make --unspanned { msg: "required query parameter 'start' missing: pass --start" } }
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "versions" $versions "pipes")] | flatten | str join "&"
   let full_url = (build-url $base ({owner_name: (encode-path-segment $owner_name), app_name: (encode-path-segment $app_name), event_name: (encode-path-segment $event_name)} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/events/{event_name}/count_per_device") $qp $auth.query)
   let accept_val = "application/json"
@@ -1616,7 +1629,7 @@ export def "analytics-event-per-session-count" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start: string # Start date time in data in ISO 8601 date time format. (format: date-time)
+  --start: string # Start date time in data in ISO 8601 date time format. (required, format: date-time)
   --end: string # Last date time in data in ISO 8601 date time format. (format: date-time)
   --versions: list<string> # To select specific application versions
 ]: nothing -> record<avg_count_per_session: float, count_per_session: table<count: float, datetime: string>, previous_avg_count_per_session: float> {
@@ -1625,6 +1638,7 @@ export def "analytics-event-per-session-count" [
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'app_name' must be non-empty" } }
   if ($event_name | is-empty) { error make --unspanned { msg: "path parameter 'event_name' must be non-empty" } }
+  if ($start == null) { error make --unspanned { msg: "required query parameter 'start' missing: pass --start" } }
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "versions" $versions "pipes")] | flatten | str join "&"
   let full_url = (build-url $base ({owner_name: (encode-path-segment $owner_name), app_name: (encode-path-segment $app_name), event_name: (encode-path-segment $event_name)} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/events/{event_name}/count_per_session") $qp $auth.query)
   let accept_val = "application/json"
@@ -1660,7 +1674,7 @@ export def "analytics-event-device-count" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start: string # Start date time in data in ISO 8601 date time format. (format: date-time)
+  --start: string # Start date time in data in ISO 8601 date time format. (required, format: date-time)
   --end: string # Last date time in data in ISO 8601 date time format. (format: date-time)
   --versions: list<string> # To select specific application versions
 ]: nothing -> record<devices_count: table<count: int, datetime: string>, previous_total_devices_with_event: int, total_devices: int, total_devices_with_event: int> {
@@ -1669,6 +1683,7 @@ export def "analytics-event-device-count" [
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'app_name' must be non-empty" } }
   if ($event_name | is-empty) { error make --unspanned { msg: "path parameter 'event_name' must be non-empty" } }
+  if ($start == null) { error make --unspanned { msg: "required query parameter 'start' missing: pass --start" } }
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "versions" $versions "pipes")] | flatten | str join "&"
   let full_url = (build-url $base ({owner_name: (encode-path-segment $owner_name), app_name: (encode-path-segment $app_name), event_name: (encode-path-segment $event_name)} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/events/{event_name}/device_count") $qp $auth.query)
   let accept_val = "application/json"
@@ -1704,7 +1719,7 @@ export def "analytics-event-count" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start: string # Start date time in data in ISO 8601 date time format. (format: date-time)
+  --start: string # Start date time in data in ISO 8601 date time format. (required, format: date-time)
   --end: string # Last date time in data in ISO 8601 date time format. (format: date-time)
   --versions: list<string> # To select specific application versions
 ]: nothing -> record<count: table<count: int, datetime: string>, previous_total_count: int, total_count: int> {
@@ -1713,6 +1728,7 @@ export def "analytics-event-count" [
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'app_name' must be non-empty" } }
   if ($event_name | is-empty) { error make --unspanned { msg: "path parameter 'event_name' must be non-empty" } }
+  if ($start == null) { error make --unspanned { msg: "required query parameter 'start' missing: pass --start" } }
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "versions" $versions "pipes")] | flatten | str join "&"
   let full_url = (build-url $base ({owner_name: (encode-path-segment $owner_name), app_name: (encode-path-segment $app_name), event_name: (encode-path-segment $event_name)} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/events/{event_name}/event_count") $qp $auth.query)
   let accept_val = "application/json"
@@ -1789,7 +1805,7 @@ export def "analytics-event-property-counts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start: string # Start date time in data in ISO 8601 date time format. (format: date-time)
+  --start: string # Start date time in data in ISO 8601 date time format. (required, format: date-time)
   --end: string # Last date time in data in ISO 8601 date time format. (format: date-time)
   --versions: list<string> # To select specific application versions
   --top: int # The number of property values to return. Set to 0 in order to fetch all results available. (format: int64, default: 10)
@@ -1800,6 +1816,7 @@ export def "analytics-event-property-counts" [
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'app_name' must be non-empty" } }
   if ($event_name | is-empty) { error make --unspanned { msg: "path parameter 'event_name' must be non-empty" } }
   if ($event_property_name | is-empty) { error make --unspanned { msg: "path parameter 'event_property_name' must be non-empty" } }
+  if ($start == null) { error make --unspanned { msg: "required query parameter 'start' missing: pass --start" } }
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "versions" $versions "pipes") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner_name: (encode-path-segment $owner_name), app_name: (encode-path-segment $app_name), event_name: (encode-path-segment $event_name), event_property_name: (encode-path-segment $event_property_name)} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/events/{event_name}/properties/{event_property_name}/counts") $qp $auth.query)
   let accept_val = "application/json"
@@ -1874,7 +1891,7 @@ export def "analytics-language-counts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start: string # Start date time in data in ISO 8601 date time format. (format: date-time)
+  --start: string # Start date time in data in ISO 8601 date time format. (required, format: date-time)
   --end: string # Last date time in data in ISO 8601 date time format. (format: date-time)
   --top: int # The maximum number of results to return. (0 will fetch all results) (format: int64, default: 30)
   --versions: list<string> # To select specific application versions
@@ -1883,6 +1900,7 @@ export def "analytics-language-counts" [
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'app_name' must be non-empty" } }
+  if ($start == null) { error make --unspanned { msg: "required query parameter 'start' missing: pass --start" } }
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "versions" $versions "pipes")] | flatten | str join "&"
   let full_url = (build-url $base ({owner_name: (encode-path-segment $owner_name), app_name: (encode-path-segment $app_name)} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/languages") $qp $auth.query)
   let accept_val = "application/json"
@@ -1957,7 +1975,7 @@ export def "analytics-model-counts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start: string # Start date time in data in ISO 8601 date time format. (format: date-time)
+  --start: string # Start date time in data in ISO 8601 date time format. (required, format: date-time)
   --end: string # Last date time in data in ISO 8601 date time format. (format: date-time)
   --top: int # The maximum number of results to return. (0 will fetch all results) (format: int64, default: 30)
   --versions: list<string> # To select specific application versions
@@ -1966,6 +1984,7 @@ export def "analytics-model-counts" [
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'app_name' must be non-empty" } }
+  if ($start == null) { error make --unspanned { msg: "required query parameter 'start' missing: pass --start" } }
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "versions" $versions "pipes")] | flatten | str join "&"
   let full_url = (build-url $base ({owner_name: (encode-path-segment $owner_name), app_name: (encode-path-segment $app_name)} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/models") $qp $auth.query)
   let accept_val = "application/json"
@@ -2000,7 +2019,7 @@ export def "analytics-operating-system-counts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start: string # Start date time in data in ISO 8601 date time format. (format: date-time)
+  --start: string # Start date time in data in ISO 8601 date time format. (required, format: date-time)
   --end: string # Last date time in data in ISO 8601 date time format. (format: date-time)
   --top: int # The maximum number of results to return. (0 will fetch all results) (format: int64, default: 30)
   --versions: list<string> # To select specific application versions
@@ -2009,6 +2028,7 @@ export def "analytics-operating-system-counts" [
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'app_name' must be non-empty" } }
+  if ($start == null) { error make --unspanned { msg: "required query parameter 'start' missing: pass --start" } }
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "versions" $versions "pipes")] | flatten | str join "&"
   let full_url = (build-url $base ({owner_name: (encode-path-segment $owner_name), app_name: (encode-path-segment $app_name)} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/oses") $qp $auth.query)
   let accept_val = "application/json"
@@ -2043,7 +2063,7 @@ export def "analytics-place-counts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start: string # Start date time in data in ISO 8601 date time format. (format: date-time)
+  --start: string # Start date time in data in ISO 8601 date time format. (required, format: date-time)
   --end: string # Last date time in data in ISO 8601 date time format. (format: date-time)
   --top: int # The maximum number of results to return. (0 will fetch all results) (format: int64, default: 30)
   --versions: list<string> # To select specific application versions
@@ -2052,6 +2072,7 @@ export def "analytics-place-counts" [
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'app_name' must be non-empty" } }
+  if ($start == null) { error make --unspanned { msg: "required query parameter 'start' missing: pass --start" } }
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "versions" $versions "pipes")] | flatten | str join "&"
   let full_url = (build-url $base ({owner_name: (encode-path-segment $owner_name), app_name: (encode-path-segment $app_name)} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/places") $qp $auth.query)
   let accept_val = "application/json"
@@ -2086,7 +2107,7 @@ export def "analytics-session-counts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start: string # Start date time in data in ISO 8601 date time format. (format: date-time)
+  --start: string # Start date time in data in ISO 8601 date time format. (required, format: date-time)
   --end: string # Last date time in data in ISO 8601 date time format. (format: date-time)
   --versions: list<string> # To select specific application versions
 ]: nothing -> table<count: int, datetime: string> {
@@ -2094,6 +2115,7 @@ export def "analytics-session-counts" [
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'app_name' must be non-empty" } }
+  if ($start == null) { error make --unspanned { msg: "required query parameter 'start' missing: pass --start" } }
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "versions" $versions "pipes")] | flatten | str join "&"
   let full_url = (build-url $base ({owner_name: (encode-path-segment $owner_name), app_name: (encode-path-segment $app_name)} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/session_counts") $qp $auth.query)
   let accept_val = "application/json"
@@ -2128,7 +2150,7 @@ export def "analytics-session-durations-distribution" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start: string # Start date time in data in ISO 8601 date time format. (format: date-time)
+  --start: string # Start date time in data in ISO 8601 date time format. (required, format: date-time)
   --end: string # Last date time in data in ISO 8601 date time format. (format: date-time)
   --versions: list<string> # To select specific application versions
 ]: nothing -> record<average_duration: string, distribution: table<bucket: string, count: int>, previous_average_duration: string> {
@@ -2136,6 +2158,7 @@ export def "analytics-session-durations-distribution" [
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'app_name' must be non-empty" } }
+  if ($start == null) { error make --unspanned { msg: "required query parameter 'start' missing: pass --start" } }
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "versions" $versions "pipes")] | flatten | str join "&"
   let full_url = (build-url $base ({owner_name: (encode-path-segment $owner_name), app_name: (encode-path-segment $app_name)} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/session_durations_distribution") $qp $auth.query)
   let accept_val = "application/json"
@@ -2170,7 +2193,7 @@ export def "analytics-per-device-counts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start: string # Start date time in data in ISO 8601 date time format. (format: date-time)
+  --start: string # Start date time in data in ISO 8601 date time format. (required, format: date-time)
   --end: string # Last date time in data in ISO 8601 date time format. (format: date-time)
   --versions: list<string> # To select specific application versions
 ]: nothing -> record<average_sessions_per_user: float, previous_average_sessions_per_user: float, previous_total_count: int, sessions_per_user: table<count: float, datetime: string>, total_count: int> {
@@ -2178,6 +2201,7 @@ export def "analytics-per-device-counts" [
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'app_name' must be non-empty" } }
+  if ($start == null) { error make --unspanned { msg: "required query parameter 'start' missing: pass --start" } }
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "versions" $versions "pipes")] | flatten | str join "&"
   let full_url = (build-url $base ({owner_name: (encode-path-segment $owner_name), app_name: (encode-path-segment $app_name)} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/sessions_per_device") $qp $auth.query)
   let accept_val = "application/json"
@@ -2212,7 +2236,7 @@ export def "analytics-versions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start: string # Start date time in data in ISO 8601 date time format. (format: date-time)
+  --start: string # Start date time in data in ISO 8601 date time format. (required, format: date-time)
   --end: string # Last date time in data in ISO 8601 date time format. (format: date-time)
   --top: int # The maximum number of results to return. (0 will fetch all results) (format: int64, default: 30)
   --versions: list<string> # To select specific application versions
@@ -2221,6 +2245,7 @@ export def "analytics-versions" [
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'app_name' must be non-empty" } }
+  if ($start == null) { error make --unspanned { msg: "required query parameter 'start' missing: pass --start" } }
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "versions" $versions "pipes")] | flatten | str join "&"
   let full_url = (build-url $base ({owner_name: (encode-path-segment $owner_name), app_name: (encode-path-segment $app_name)} | format pattern "/v0.1/apps/{owner_name}/{app_name}/analytics/versions") $qp $auth.query)
   let accept_val = "application/json"
@@ -2377,7 +2402,7 @@ export def "apple-mapping-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: string
-]: any -> record<code: string, message: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -2591,8 +2616,8 @@ export def "apps-update-avatar" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["avatar"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["avatar"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -2662,7 +2687,7 @@ export def "azure-subscription-link-for-app" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   subscription_id: string # The azure subscription id (format: uuid)
-]: any -> record<error: record<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -2704,7 +2729,7 @@ export def "azure-subscription-delete-for-app" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<error: record<code: string, message: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
@@ -3139,8 +3164,8 @@ export def "builds-list-toolset-projects" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --os: string@os-completer-1 # The desired OS for the project scan; normally the same as the app OS
-  --platform: string@platform-completer-1 # The desired platform for the project scan
+  --os: string@os-completer-1 # The desired OS for the project scan; normally the same as the app OS (required)
+  --platform: string@platform-completer-1 # The desired platform for the project scan (required)
   --max-search-depth: int # The depth of the repository to search for project files
 ]: nothing -> record<android: record<androidModules: list<record>, gradleWrapperPath: string>, buildscripts: any, commit: string, javascript: record<javascriptSolutions: list<record>, packageJsonPaths: list<string>>, testcloud: record<projects: list<record>>, uwp: record<uwpSolutions: list<record>>, xamarin: record<xamarinSolutions: list<record>>, xcode: record<xcodeSchemeContainers: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
@@ -3148,6 +3173,8 @@ export def "builds-list-toolset-projects" [
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'app_name' must be non-empty" } }
   if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
+  if ($os == null) { error make --unspanned { msg: "required query parameter 'os' missing: pass --os" } }
+  if ($platform == null) { error make --unspanned { msg: "required query parameter 'platform' missing: pass --platform" } }
   let qp = [(serialize-qp "os" $os "scalar") (serialize-qp "platform" $platform "scalar") (serialize-qp "maxSearchDepth" $max_search_depth "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner_name: (encode-path-segment $owner_name), app_name: (encode-path-segment $app_name), branch: (encode-path-segment $branch)} | format pattern "/v0.1/apps/{owner_name}/{app_name}/branches/{branch}/toolset_projects") $qp $auth.query)
   let accept_val = "application/json"
@@ -3422,7 +3449,7 @@ export def "builds-get-download-uri" [
   owner_name: string
   app_name: string
   build_id: int
-  download_type: string
+  download_type: string@download-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3512,12 +3539,13 @@ export def "commits-list-by-sha-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hashes: list<string> # A collection of commit SHAs comma-delimited
-]: nothing -> list<record> {
+  --hashes: list<string> # A collection of commit SHAs comma-delimited (required)
+]: nothing -> table<sha: string, url: string, commit: record<author: record, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'app_name' must be non-empty" } }
+  if ($hashes == null) { error make --unspanned { msg: "required query parameter 'hashes' missing: pass --hashes" } }
   let qp = [(serialize-qp "hashes" $hashes "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({owner_name: (encode-path-segment $owner_name), app_name: (encode-path-segment $app_name)} | format pattern "/v0.1/apps/{owner_name}/{app_name}/commits/batch") $qp $auth.query)
   let accept_val = "application/json"
@@ -4295,6 +4323,7 @@ export def "code-push-deployments-list" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/deployments
 # operationId: codePushDeployments_create
+# --latest_release shape: {description?: string, is_disabled?: bool, is_mandatory?: bool, rollout?: int, target_binary_range?: string, blob_url?: string, diff_package_map?: record, label?: string, original_deployment?: string, original_label?: string, package_hash?: string, release_method?: "Upload"|"Promote"|"Rollback", released_by?: string, size?: float, upload_time?: int}
 export def "code-push-deployments-create" [
   owner_name: string
   app_name: string
@@ -4308,7 +4337,7 @@ export def "code-push-deployments-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
-  --latest-release: any
+  --latest-release: any # shape: {description?: string, is_disabled?: bool, is_mandatory?: bool, rollout?: int, target_binary_range?: string, blob_url?: string, diff_package_map?: record, label?: string, original_deployment?: string, original_label?: string, package_hash?: string, release_method?: "Upload"|"Promote"|"Rollback", released_by?: string, size?: float, upload_time?: int}
   name: string
 ]: any -> record<key: string, latest_release: record<description: string, is_disabled: bool, is_mandatory: bool, rollout: int, target_binary_range: string, blob_url: string, diff_package_map: record, label: string, original_deployment: string, original_label: string, package_hash: string, release_method: string, released_by: string, size: float, upload_time: int>, name: string> {
   let input = $in
@@ -4353,7 +4382,7 @@ export def "code-push-deployments-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record<message: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -4437,7 +4466,7 @@ export def "code-push-deployments-update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string
-]: any -> record<message: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -4571,7 +4600,7 @@ export def "code-push-deployment-releases-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
@@ -4996,12 +5025,13 @@ export def "missing-symbol-groups-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --top: int # top N elements
+  --top: int # top N elements (required)
 ]: nothing -> record<groups: table<app_build: string, app_id: string, app_ver: string, crash_count: int, error_count: int, last_modified: string, missing_symbols: list, status: string, symbol_group_id: string>, total_crash_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'app_name' must be non-empty" } }
+  if ($top == null) { error make --unspanned { msg: "required query parameter 'top' missing: pass --top" } }
   let qp = [(serialize-qp "top" $top "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner_name: (encode-path-segment $owner_name), app_name: (encode-path-segment $app_name)} | format pattern "/v0.1/apps/{owner_name}/{app_name}/diagnostics/symbol_groups") $qp $auth.query)
   let accept_val = "application/json"
@@ -5196,7 +5226,7 @@ export def "distribution-groups-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<error: record<code: string, message: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
@@ -5620,7 +5650,7 @@ export def "releases-get-latest-by-distribution-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --is-install-page: oneof<nothing, bool> # The check if the request is from Install page
-]: nothing -> record<android_min_api_level: string, app_display_name: string, app_icon_url: string, app_name: string, app_os: string, build: record<branch_name: string, commit_hash: string, commit_message: string>, bundle_identifier: string, can_resign: bool, destination_type: string, destinations: table<id: string, name: string, destination_type: string, display_name: string>, device_family: string, distribution_groups: table<id: string, name: string>, distribution_stores: table<id: string, name: string, publishing_status: string, type: string>, download_url: string, enabled: bool, fingerprint: string, id: int, install_url: string, is_external_build: bool, is_provisioning_profile_syncing: bool, is_udid_provisioned: bool, min_os: string, origin: string, package_hashes: list<string>, provisioning_profile_expiry_date: string, provisioning_profile_name: string, provisioning_profile_type: string, release_notes: string, secondary_download_url: string, short_version: string, size: int, status: string, uploaded_at: string, version: string> {
+]: nothing -> record<android_min_api_level: string, app_display_name: string, app_icon_url: string, app_name: string, app_os: string, build: record<branch_name: string, commit_hash: string, commit_message: string>, bundle_identifier: string, can_resign: bool, destination_type: string, destinations: table<id: string, name: string, is_latest: bool, publishing_status: string, type: string, destination_type: string, display_name: string>, device_family: string, distribution_groups: table<id: string, name: string>, distribution_stores: table<id: string, name: string, publishing_status: string, type: string>, download_url: string, enabled: bool, fingerprint: string, id: int, install_url: string, is_external_build: bool, is_provisioning_profile_syncing: bool, is_udid_provisioned: bool, min_os: string, origin: string, package_hashes: list<string>, provisioning_profile_expiry_date: string, provisioning_profile_name: string, provisioning_profile_type: string, release_notes: string, secondary_download_url: string, short_version: string, size: int, status: string, uploaded_at: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
@@ -5663,7 +5693,7 @@ export def "distribution-groups-resend-invite" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --user-emails: list<string> # The list of emails of the users
-]: any -> record<error: record<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -5792,7 +5822,7 @@ export def "stores-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: string
-]: any -> record<code: string, message: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -5876,7 +5906,7 @@ export def "stores-patch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   service_connection_id: string # Service connection id to updated.
-]: any -> record<code: string, message: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -6001,7 +6031,7 @@ export def "store-releases-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: string
-]: any -> record<code: string, message: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -6130,7 +6160,7 @@ export def "store-release-publish-logs-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, message: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
@@ -6212,8 +6242,8 @@ export def "errors-app-builds-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --version: string
-  --start: string # Start date time in data in ISO 8601 date time format (format: date-time)
+  --version: string # required
+  --start: string # Start date time in data in ISO 8601 date time format (required, format: date-time)
   --end: string # Last date time in data in ISO 8601 date time format (format: date-time)
   --top: int # The maximum number of results to return. (0 will fetch all results till the max number.) (format: int64, default: 30)
   --error-type: string@error-type-completer-1 # Type of error (handled vs unhandled), including All
@@ -6222,6 +6252,8 @@ export def "errors-app-builds-list" [
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'app_name' must be non-empty" } }
+  if ($version == null) { error make --unspanned { msg: "required query parameter 'version' missing: pass --version" } }
+  if ($start == null) { error make --unspanned { msg: "required query parameter 'start' missing: pass --start" } }
   let qp = [(serialize-qp "version" $version "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "errorType" $error_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner_name: (encode-path-segment $owner_name), app_name: (encode-path-segment $app_name)} | format pattern "/v0.1/apps/{owner_name}/{app_name}/errors/availableAppBuilds") $qp $auth.query)
   let accept_val = "application/json"
@@ -6256,7 +6288,7 @@ export def "errors-available-versions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start: string # Start date time in data in ISO 8601 date time format (format: date-time)
+  --start: string # Start date time in data in ISO 8601 date time format (required, format: date-time)
   --end: string # Last date time in data in ISO 8601 date time format (format: date-time)
   --top: int # The maximum number of results to return. (0 will fetch all results till the max number.) (format: int64, default: 30)
   --skip: int # The offset (starting at 0) of the first result to return. This parameter along with limit is used to perform pagination. (format: int64, default: 0)
@@ -6268,6 +6300,7 @@ export def "errors-available-versions" [
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'app_name' must be non-empty" } }
+  if ($start == null) { error make --unspanned { msg: "required query parameter 'start' missing: pass --start" } }
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$inlinecount" $inlinecount "scalar") (serialize-qp "errorType" $error_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner_name: (encode-path-segment $owner_name), app_name: (encode-path-segment $app_name)} | format pattern "/v0.1/apps/{owner_name}/{app_name}/errors/available_versions") $qp $auth.query)
   let accept_val = "application/json"
@@ -6303,7 +6336,7 @@ export def "errors-counts-per-day" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # format: string
-  --start: string # Start date time in data in ISO 8601 date time format (format: date-time)
+  --start: string # Start date time in data in ISO 8601 date time format (required, format: date-time)
   --end: string # Last date time in data in ISO 8601 date time format (format: date-time)
   --app-build: string # app build (format: string)
   --error-type: string@error-type-completer-2 # Type of error (handled vs unhandled), excluding All
@@ -6312,6 +6345,7 @@ export def "errors-counts-per-day" [
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'app_name' must be non-empty" } }
+  if ($start == null) { error make --unspanned { msg: "required query parameter 'start' missing: pass --start" } }
   let qp = [(serialize-qp "version" $version "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "app_build" $app_build "scalar") (serialize-qp "errorType" $error_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner_name: (encode-path-segment $owner_name), app_name: (encode-path-segment $app_name)} | format pattern "/v0.1/apps/{owner_name}/{app_name}/errors/errorCountsPerDay") $qp $auth.query)
   let accept_val = "application/json"
@@ -6349,16 +6383,17 @@ export def "errors-group-list" [
   --version: string # format: string
   --app-build: string # app build (format: string)
   --group-state: string # format: string
-  --start: string # Start date time in data in ISO 8601 date time format (format: date-time)
+  --start: string # Start date time in data in ISO 8601 date time format (required, format: date-time)
   --end: string # Last date time in data in ISO 8601 date time format (format: date-time)
   --orderby: string # controls the sorting order and sorting based on which column (default: count desc)
   --top: int # The maximum number of results to return. (0 will fetch all results till the max number.) (format: int64, default: 30)
   --error-type: string@error-type-completer-1 # Type of error (handled vs unhandled), including All
-]: nothing -> record<errorGroups: list<record>, nextLink: string> {
+]: nothing -> record<errorGroups: table<appBuild: string, appVersion: string, codeRaw: string, count: int, deviceCount: int, errorGroupId: string, exceptionAppCode: bool, exceptionClassMethod: bool, exceptionClassName: string, exceptionFile: string, exceptionLine: string, exceptionMessage: string, exceptionMethod: string, exceptionType: string, firstOccurrence: string, hidden: bool, lastOccurrence: string, reasonFrames: list, annotation: string, state: string>, nextLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'app_name' must be non-empty" } }
+  if ($start == null) { error make --unspanned { msg: "required query parameter 'start' missing: pass --start" } }
   let qp = [(serialize-qp "version" $version "scalar") (serialize-qp "app_build" $app_build "scalar") (serialize-qp "groupState" $group_state "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "errorType" $error_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner_name: (encode-path-segment $owner_name), app_name: (encode-path-segment $app_name)} | format pattern "/v0.1/apps/{owner_name}/{app_name}/errors/errorGroups") $qp $auth.query)
   let accept_val = "application/json"
@@ -6396,22 +6431,22 @@ export def "errors-error-groups-search" [
   --filter: string # A filter as specified in OData notation (format: string)
   --q: string # A query string (format: string)
   --order: string@order-completer # It controls the order of sorting (default: desc)
-  --qp-sort: string@sort-completer # It controls the sort based on specified field (default: matchingReportsCount)
+  --sort: string@sort-completer # It controls the sort based on specified field (default: matchingReportsCount)
   --top: int # The maximum number of results to return (format: int64, default: 100)
   --skip: int # The offset (starting at 0) of the first result to return. This parameter along with limit is used to perform pagination. (format: int64, default: 0)
-]: nothing -> record<errorGroups: list<record>, hasMoreResults: bool> {
+]: nothing -> record<errorGroups: table<appBuild: string, appVersion: string, codeRaw: string, count: int, deviceCount: int, errorGroupId: string, exceptionAppCode: bool, exceptionClassMethod: bool, exceptionClassName: string, exceptionFile: string, exceptionLine: string, exceptionMessage: string, exceptionMethod: string, exceptionType: string, firstOccurrence: string, hidden: bool, lastOccurrence: string, reasonFrames: list, annotation: string, state: string>, hasMoreResults: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'app_name' must be non-empty" } }
-  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner_name: (encode-path-segment $owner_name), app_name: (encode-path-segment $app_name)} | format pattern "/v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/search") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "q": $q, "order": $order, "sort": $qp_sort, "$top": $top, "$skip": $skip} | compact)
+    query: ({"filter": $filter, "q": $q, "order": $order, "sort": $sort, "$top": $top, "$skip": $skip} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -6439,7 +6474,7 @@ export def "errors-group-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<appBuild: string, appVersion: string, codeRaw: string, count: int, deviceCount: int, errorGroupId: string, exceptionAppCode: bool, exceptionClassMethod: bool, exceptionClassName: string, exceptionFile: string, exceptionLine: string, exceptionMessage: string, exceptionMethod: string, exceptionType: string, firstOccurrence: string, hidden: bool, lastOccurrence: string, reasonFrames: table<appCode: bool, classMethod: bool, className: string, codeFormatted: string, codeRaw: string, exceptionType: string, file: string, frameworkName: string, language: string, line: int, method: string, methodParams: string, osExceptionType: string>> {
+]: nothing -> record<appBuild: string, appVersion: string, codeRaw: string, count: int, deviceCount: int, errorGroupId: string, exceptionAppCode: bool, exceptionClassMethod: bool, exceptionClassName: string, exceptionFile: string, exceptionLine: string, exceptionMessage: string, exceptionMethod: string, exceptionType: string, firstOccurrence: string, hidden: bool, lastOccurrence: string, reasonFrames: table<appCode: bool, classMethod: bool, className: string, codeFormatted: string, codeRaw: string, exceptionType: string, file: string, frameworkName: string, language: string, line: int, method: string, methodParams: string, osExceptionType: string>, annotation: string, state: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
@@ -6481,7 +6516,7 @@ export def "errors-update-state" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --annotation: string
   state: string@state-completer
-]: any -> record<appBuild: string, appVersion: string, codeRaw: string, count: int, deviceCount: int, errorGroupId: string, exceptionAppCode: bool, exceptionClassMethod: bool, exceptionClassName: string, exceptionFile: string, exceptionLine: string, exceptionMessage: string, exceptionMethod: string, exceptionType: string, firstOccurrence: string, hidden: bool, lastOccurrence: string, reasonFrames: table<appCode: bool, classMethod: bool, className: string, codeFormatted: string, codeRaw: string, exceptionType: string, file: string, frameworkName: string, language: string, line: int, method: string, methodParams: string, osExceptionType: string>> {
+]: any -> record<appBuild: string, appVersion: string, codeRaw: string, count: int, deviceCount: int, errorGroupId: string, exceptionAppCode: bool, exceptionClassMethod: bool, exceptionClassName: string, exceptionFile: string, exceptionLine: string, exceptionMessage: string, exceptionMethod: string, exceptionType: string, firstOccurrence: string, hidden: bool, lastOccurrence: string, reasonFrames: table<appCode: bool, classMethod: bool, className: string, codeFormatted: string, codeRaw: string, exceptionType: string, file: string, frameworkName: string, language: string, line: int, method: string, methodParams: string, osExceptionType: string>, annotation: string, state: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -6525,7 +6560,7 @@ export def "errors-group-counts-per-day" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # format: string
-  --start: string # Start date time in data in ISO 8601 date time format (format: date-time)
+  --start: string # Start date time in data in ISO 8601 date time format (required, format: date-time)
   --end: string # Last date time in data in ISO 8601 date time format (format: date-time)
 ]: nothing -> record<count: int, errors: table<count: int, datetime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
@@ -6533,6 +6568,7 @@ export def "errors-group-counts-per-day" [
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'app_name' must be non-empty" } }
   if ($error_group_id | is-empty) { error make --unspanned { msg: "path parameter 'errorGroupId' must be non-empty" } }
+  if ($start == null) { error make --unspanned { msg: "required query parameter 'start' missing: pass --start" } }
   let qp = [(serialize-qp "version" $version "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner_name: (encode-path-segment $owner_name), app_name: (encode-path-segment $app_name), error_group_id: (encode-path-segment $error_group_id)} | format pattern "/v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{error_group_id}/errorCountsPerDay") $qp $auth.query)
   let accept_val = "application/json"
@@ -6568,7 +6604,7 @@ export def "errors-group-error-free-device-percentages" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start: string # Start date time in data in ISO 8601 date time format (format: date-time)
+  --start: string # Start date time in data in ISO 8601 date time format (required, format: date-time)
   --end: string # Last date time in data in ISO 8601 date time format (format: date-time)
 ]: nothing -> record<averagePercentage: float, dailyPercentages: table<datetime: string, percentage: float>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
@@ -6576,6 +6612,7 @@ export def "errors-group-error-free-device-percentages" [
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'app_name' must be non-empty" } }
   if ($error_group_id | is-empty) { error make --unspanned { msg: "path parameter 'errorGroupId' must be non-empty" } }
+  if ($start == null) { error make --unspanned { msg: "required query parameter 'start' missing: pass --start" } }
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner_name: (encode-path-segment $owner_name), app_name: (encode-path-segment $app_name), error_group_id: (encode-path-segment $error_group_id)} | format pattern "/v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{error_group_id}/errorfreeDevicePercentages") $qp $auth.query)
   let accept_val = "application/json"
@@ -6611,7 +6648,7 @@ export def "errors-list-for-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start: string # Start date time in data in ISO 8601 date time format (format: date-time)
+  --start: string # Start date time in data in ISO 8601 date time format (required, format: date-time)
   --end: string # Last date time in data in ISO 8601 date time format (format: date-time)
   --top: int # The maximum number of results to return. (0 will fetch all results till the max number.) (format: int64, default: 30)
   --model: string # format: string
@@ -6622,6 +6659,7 @@ export def "errors-list-for-group" [
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'app_name' must be non-empty" } }
   if ($error_group_id | is-empty) { error make --unspanned { msg: "path parameter 'errorGroupId' must be non-empty" } }
+  if ($start == null) { error make --unspanned { msg: "required query parameter 'start' missing: pass --start" } }
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "os" $os "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner_name: (encode-path-segment $owner_name), app_name: (encode-path-segment $app_name), error_group_id: (encode-path-segment $error_group_id)} | format pattern "/v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{error_group_id}/errors") $qp $auth.query)
   let accept_val = "application/json"
@@ -6657,7 +6695,7 @@ export def "errors-latest-error-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<appLaunchTimestamp: string, carrierName: string, jailbreak: bool, name: string, properties: record, reasonFrames: table<appCode: bool, classMethod: bool, className: string, codeFormatted: string, codeRaw: string, exceptionType: string, file: string, frameworkName: string, language: string, line: int, method: string, methodParams: string, osExceptionType: string>> {
+]: nothing -> record<appLaunchTimestamp: string, carrierName: string, jailbreak: bool, name: string, properties: record, reasonFrames: table<appCode: bool, classMethod: bool, className: string, codeFormatted: string, codeRaw: string, exceptionType: string, file: string, frameworkName: string, language: string, line: int, method: string, methodParams: string, osExceptionType: string>, country: string, deviceName: string, errorId: string, hasAttachments: bool, hasBreadcrumbs: bool, language: string, osType: string, osVersion: string, timestamp: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
@@ -6740,7 +6778,7 @@ export def "errors-get-error-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<appLaunchTimestamp: string, carrierName: string, jailbreak: bool, name: string, properties: record, reasonFrames: table<appCode: bool, classMethod: bool, className: string, codeFormatted: string, codeRaw: string, exceptionType: string, file: string, frameworkName: string, language: string, line: int, method: string, methodParams: string, osExceptionType: string>> {
+]: nothing -> record<appLaunchTimestamp: string, carrierName: string, jailbreak: bool, name: string, properties: record, reasonFrames: table<appCode: bool, classMethod: bool, className: string, codeFormatted: string, codeRaw: string, exceptionType: string, file: string, frameworkName: string, language: string, line: int, method: string, methodParams: string, osExceptionType: string>, country: string, deviceName: string, errorId: string, hasAttachments: bool, hasBreadcrumbs: bool, language: string, osType: string, osVersion: string, timestamp: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
@@ -7032,7 +7070,7 @@ export def "errors-error-free-device-percentages" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start: string # Start date time in data in ISO 8601 date time format (format: date-time)
+  --start: string # Start date time in data in ISO 8601 date time format (required, format: date-time)
   --end: string # Last date time in data in ISO 8601 date time format (format: date-time)
   --versions: list<string>
   --app-build: string # app build (format: string)
@@ -7042,6 +7080,7 @@ export def "errors-error-free-device-percentages" [
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'app_name' must be non-empty" } }
+  if ($start == null) { error make --unspanned { msg: "required query parameter 'start' missing: pass --start" } }
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "versions" $versions "pipes") (serialize-qp "app_build" $app_build "scalar") (serialize-qp "errorType" $error_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner_name: (encode-path-segment $owner_name), app_name: (encode-path-segment $app_name)} | format pattern "/v0.1/apps/{owner_name}/{app_name}/errors/errorfreeDevicePercentages") $qp $auth.query)
   let accept_val = "application/json"
@@ -7117,7 +7156,7 @@ export def "errors-error-search" [
   --filter: string # A filter as specified in OData notation (format: string)
   --q: string # A query string (format: string)
   --order: string@order-completer # It controls the order of sorting (default: desc)
-  --qp-sort: string@sort-completer-1 # It controls the sort based on specified field (default: timestamp)
+  --sort: string@sort-completer-1 # It controls the sort based on specified field (default: timestamp)
   --top: int # The maximum number of results to return (format: int64, default: 100)
   --skip: int # The offset (starting at 0) of the first result to return. This parameter along with limit is used to perform pagination. (format: int64, default: 0)
 ]: nothing -> record<errors: table<country: string, deviceName: string, errorId: string, hasAttachments: bool, hasBreadcrumbs: bool, language: string, osType: string, osVersion: string, timestamp: string, userId: string>, hasMoreResults: bool> {
@@ -7125,14 +7164,14 @@ export def "errors-error-search" [
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'app_name' must be non-empty" } }
-  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner_name: (encode-path-segment $owner_name), app_name: (encode-path-segment $app_name)} | format pattern "/v0.1/apps/{owner_name}/{app_name}/errors/search") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "q": $q, "order": $order, "sort": $qp_sort, "$top": $top, "$skip": $skip} | compact)
+    query: ({"filter": $filter, "q": $q, "order": $order, "sort": $sort, "$top": $top, "$skip": $skip} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -7411,7 +7450,7 @@ export def "export-configurations-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<error: record<code: string, message: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
@@ -7540,7 +7579,7 @@ export def "export-configurations-disable" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<error: record<code: string, message: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
@@ -7580,7 +7619,7 @@ export def "export-configurations-enable" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<error: record<code: string, message: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
@@ -7701,7 +7740,7 @@ export def "app-invitations-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --role: string@role-completer # The user's role
   user_email: string # The user's email address
-]: any -> record<error: record<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -7743,7 +7782,7 @@ export def "app-invitations-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<error: record<code: string, message: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
@@ -7784,7 +7823,7 @@ export def "app-invitations-update-permissions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   permissions: list<string> # The permissions the user has for the app in the invitation
-]: any -> record<error: record<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -7830,7 +7869,7 @@ export def "app-invitations-create-by-email" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --role: string@role-completer # The role of the user to be added
-]: any -> record<error: record<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -7872,7 +7911,7 @@ export def "notifications-get-app-email-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> record<request_id: string, eTag: string, enabled: bool, settings: table<default_value: string, event_type: string, value: string>, userId: string, appId: string, user_enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
@@ -8282,7 +8321,7 @@ export def "releases-get-latest-by-user" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --udid: string # when supplied, this call will also check if the given UDID is provisioned. Will be ignored for non-iOS platforms. The value will be returned in the property is_udid_provisioned.
   --is-install-page: oneof<nothing, bool> # The check if the request is from Install page
-]: nothing -> record<android_min_api_level: string, app_display_name: string, app_icon_url: string, app_name: string, app_os: string, build: record<branch_name: string, commit_hash: string, commit_message: string>, bundle_identifier: string, can_resign: bool, destination_type: string, destinations: table<id: string, name: string, destination_type: string, display_name: string>, device_family: string, distribution_groups: table<id: string, name: string>, distribution_stores: table<id: string, name: string, publishing_status: string, type: string>, download_url: string, enabled: bool, fingerprint: string, id: int, install_url: string, is_external_build: bool, is_provisioning_profile_syncing: bool, is_udid_provisioned: bool, min_os: string, origin: string, package_hashes: list<string>, provisioning_profile_expiry_date: string, provisioning_profile_name: string, provisioning_profile_type: string, release_notes: string, secondary_download_url: string, short_version: string, size: int, status: string, uploaded_at: string, version: string> {
+]: nothing -> record<android_min_api_level: string, app_display_name: string, app_icon_url: string, app_name: string, app_os: string, build: record<branch_name: string, commit_hash: string, commit_message: string>, bundle_identifier: string, can_resign: bool, destination_type: string, destinations: table<id: string, name: string, is_latest: bool, publishing_status: string, type: string, destination_type: string, display_name: string>, device_family: string, distribution_groups: table<id: string, name: string>, distribution_stores: table<id: string, name: string, publishing_status: string, type: string>, download_url: string, enabled: bool, fingerprint: string, id: int, install_url: string, is_external_build: bool, is_provisioning_profile_syncing: bool, is_udid_provisioned: bool, min_os: string, origin: string, package_hashes: list<string>, provisioning_profile_expiry_date: string, provisioning_profile_name: string, provisioning_profile_type: string, release_notes: string, secondary_download_url: string, short_version: string, size: int, status: string, uploaded_at: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
@@ -8417,7 +8456,7 @@ export def "releases-add-distribution-group" [
   id: string # Unique id of the release destination (format: uuid)
   --mandatory-update: oneof<nothing, bool> # Flag to mark the release for the provided destinations as mandatory
   --notify-testers: oneof<nothing, bool> # Flag to enable or disable notifications to testers (default: true)
-]: any -> record {
+]: any -> record<id: string, mandatory_update: bool, provisioning_status_url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -8515,6 +8554,7 @@ export def "releases-put-distribution-group" [
   let full_url = (build-url $base ({owner_name: (encode-path-segment $owner_name), app_name: (encode-path-segment $app_name), release_id: (encode-path-segment $release_id), group_id: (encode-path-segment $group_id)} | format pattern "/v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/groups/{group_id}") $auth.query)
   let req_body = {"mandatory_update": $mandatory_update} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "mandatory_update") == null) { error make --unspanned { msg: "required body field 'mandatory_update' missing: pass --mandatory-update or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -8677,7 +8717,7 @@ export def "releases-add-testers" [
   email: string # Tester's email address
   --mandatory-update: oneof<nothing, bool> # Flag to mark the release for the provided destinations as mandatory
   --notify-testers: oneof<nothing, bool> # Flag to enable or disable notifications to testers (default: true)
-]: any -> record {
+]: any -> record<id: string, mandatory_update: bool, provisioning_status_url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -8775,6 +8815,7 @@ export def "releases-put-distribution-tester" [
   let full_url = (build-url $base ({owner_name: (encode-path-segment $owner_name), app_name: (encode-path-segment $app_name), release_id: (encode-path-segment $release_id), tester_id: (encode-path-segment $tester_id)} | format pattern "/v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/testers/{tester_id}") $auth.query)
   let req_body = {"mandatory_update": $mandatory_update} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "mandatory_update") == null) { error make --unspanned { msg: "required body field 'mandatory_update' missing: pass --mandatory-update or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -8890,7 +8931,7 @@ export def "repository-configurations-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include-inactive: oneof<nothing, bool> # Include inactive configurations if none are active
-]: nothing -> table<id: string, state: string, type: string, user_email: string, installation_id: string> {
+]: nothing -> table<id: string, state: string, type: string, user_email: string, installation_id: string, external_user_id: string, repo_id: string, repo_url: string, service_connection_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
@@ -8966,7 +9007,7 @@ export def "repository-configurations-create-or-update" [
 export def "repositories-list" [
   owner_name: string
   app_name: string
-  source_host: string
+  source_host: string@source-host-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11090,7 +11131,7 @@ export def "apps-remove-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<error: record<code: string, message: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
@@ -11131,7 +11172,7 @@ export def "apps-update-user-permissions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   permissions: list<string> # The permissions the user has for the app
-]: any -> record<error: record<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -11442,7 +11483,7 @@ export def "legacy-code-push-acquisition-update-installs-status" [
   --previous-deployment-key: string
   --previous-label-or-app-version: string
   --status: string
-]: any -> record<message: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -11486,7 +11527,7 @@ export def "legacy-code-push-acquisition-update-download-status" [
   --previous-deployment-key: string
   --previous-label-or-app-version: string
   --status: string
-]: any -> record<message: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -11678,7 +11719,7 @@ export def "organizations-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<error: record<code: string, message: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($org_name | is-empty) { error make --unspanned { msg: "path parameter 'org_name' must be non-empty" } }
@@ -11919,8 +11960,8 @@ export def "organization-update-avatar" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["avatar"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["avatar"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -12064,7 +12105,7 @@ export def "distribution-groups-delete-for-org" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<error: record<code: string, message: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($org_name | is-empty) { error make --unspanned { msg: "path parameter 'org_name' must be non-empty" } }
@@ -12430,7 +12471,7 @@ export def "distribution-groups-resend-shared-invite" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --user-emails: list<string> # The list of emails of the users
-]: any -> record<error: record<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -12509,7 +12550,7 @@ export def "org-invitations-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   user_email: string # The user's email address
-]: any -> record<error: record<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -12586,7 +12627,7 @@ export def "org-invitations-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --role: string@role-completer # The user's role
   user_email: string # The user's email address
-]: any -> record<error: record<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -12627,7 +12668,7 @@ export def "org-invitations-update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --role: string@role-completer # The user's role in the organizatiion
-]: any -> record<error: record<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -12669,7 +12710,7 @@ export def "org-invitations-send-new-invitation" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --role: string@role-completer # The role of the user to be added
-]: any -> record<error: record<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -12711,7 +12752,7 @@ export def "org-invitations" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record<error: record<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -12830,7 +12871,7 @@ export def "teams-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<error: record<code: string, message: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($org_name | is-empty) { error make --unspanned { msg: "path parameter 'org_name' must be non-empty" } }
@@ -12948,7 +12989,7 @@ export def "teams-list-apps" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<team_permissions: list<string>> {
+]: nothing -> table<description: string, display_name: string, icon_source: string, icon_url: string, id: string, name: string, os: string, owner: record<avatar_url: string, display_name: string, email: string, id: string, name: string, type: string>, release_type: string, app_secret: string, azure_subscription: record<is_billable: bool, is_billing: bool, is_microsoft_internal: bool, subscription_id: string, subscription_name: string, tenant_id: string>, created_at: string, member_permissions: list<string>, origin: string, platform: string, updated_at: string, team_permissions: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($org_name | is-empty) { error make --unspanned { msg: "path parameter 'org_name' must be non-empty" } }
@@ -12987,7 +13028,7 @@ export def "teams-add-app" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of the app to be added to the distribution group
-]: any -> record<team_permissions: list<string>> {
+]: any -> record<description: string, display_name: string, icon_source: string, icon_url: string, id: string, name: string, os: string, owner: record<avatar_url: string, display_name: string, email: string, id: string, name: string, type: string>, release_type: string, app_secret: string, azure_subscription: record<is_billable: bool, is_billing: bool, is_microsoft_internal: bool, subscription_id: string, subscription_name: string, tenant_id: string>, created_at: string, member_permissions: list<string>, origin: string, platform: string, updated_at: string, team_permissions: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -13029,7 +13070,7 @@ export def "teams-remove-app" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<error: record<code: string, message: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($org_name | is-empty) { error make --unspanned { msg: "path parameter 'org_name' must be non-empty" } }
@@ -13070,7 +13111,7 @@ export def "teams-update-permissions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   permissions: list<string> # The permissions all members of the team have on the app
-]: any -> record<team_permissions: list<string>> {
+]: any -> record<description: string, display_name: string, icon_source: string, icon_url: string, id: string, name: string, os: string, owner: record<avatar_url: string, display_name: string, email: string, id: string, name: string, type: string>, release_type: string, app_secret: string, azure_subscription: record<is_billable: bool, is_billing: bool, is_microsoft_internal: bool, subscription_id: string, subscription_name: string, tenant_id: string>, created_at: string, member_permissions: list<string>, origin: string, platform: string, updated_at: string, team_permissions: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -13193,7 +13234,7 @@ export def "teams-remove-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<error: record<code: string, message: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($org_name | is-empty) { error make --unspanned { msg: "path parameter 'org_name' must be non-empty" } }
@@ -13304,7 +13345,7 @@ export def "users-remove-from-org" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<error: record<code: string, message: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($org_name | is-empty) { error make --unspanned { msg: "path parameter 'org_name' must be non-empty" } }
@@ -13460,12 +13501,13 @@ export def "releases-get-ios-manifest" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # A hash that authorizes the download if it matches the release info.
+  --qp-token: string # A hash that authorizes the download if it matches the release info. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'app_id' must be non-empty" } }
   if ($release_id | is-empty) { error make --unspanned { msg: "path parameter 'release_id' must be non-empty" } }
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), release_id: (encode-path-segment $release_id)} | format pattern "/v0.1/public/apps/{app_id}/releases/{release_id}/ios_manifest") $qp $auth.query)
   let accept_val = "application/json"
@@ -13548,7 +13590,7 @@ export def "code-push-acquisition-update-deploy-status" [
   --previous-deployment-key: string
   --previous-label-or-app-version: string
   --status: string
-]: any -> record<message: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -13592,7 +13634,7 @@ export def "code-push-acquisition-update-download-status" [
   --previous-deployment-key: string
   --previous-label-or-app-version: string
   --status: string
-]: any -> record<message: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -13663,8 +13705,8 @@ export def "code-push-acquisition-update-check" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --deployment-key: string
-  --app-version: string
+  --deployment-key: string # required
+  --app-version: string # required
   --package-hash: string
   --label: string
   --client-unique-id: string
@@ -13674,6 +13716,8 @@ export def "code-push-acquisition-update-check" [
 ]: nothing -> record<update_info: record<description: string, is_disabled: bool, is_mandatory: bool, rollout: int, target_binary_range: string, download_url: string, is_available: bool, label: string, package_hash: string, package_size: float, should_run_binary_version: bool, update_app_version: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($deployment_key == null) { error make --unspanned { msg: "required query parameter 'deployment_key' missing: pass --deployment-key" } }
+  if ($app_version == null) { error make --unspanned { msg: "required query parameter 'app_version' missing: pass --app-version" } }
   let qp = [(serialize-qp "deployment_key" $deployment_key "scalar") (serialize-qp "app_version" $app_version "scalar") (serialize-qp "package_hash" $package_hash "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "client_unique_id" $client_unique_id "scalar") (serialize-qp "is_companion" $is_companion "scalar") (serialize-qp "previous_label_or_app_version" $previous_label_or_app_version "scalar") (serialize-qp "previous_deployment_key" $previous_deployment_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v0.1/public/codepush/update_check" $qp $auth.query)
   let accept_val = "application/json"
@@ -13707,7 +13751,7 @@ export def "builds-webhook" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record<code: string, id: string, message: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -13747,7 +13791,7 @@ export def "releases-get-latest-by-public-distribution-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --is-install-page: oneof<nothing, bool> # The check if the request is from Install page
-]: nothing -> record<android_min_api_level: string, app_display_name: string, app_icon_url: string, app_name: string, app_os: string, build: record<branch_name: string, commit_hash: string, commit_message: string>, bundle_identifier: string, can_resign: bool, destination_type: string, destinations: table<id: string, name: string, destination_type: string, display_name: string>, device_family: string, distribution_groups: table<id: string, name: string>, distribution_stores: table<id: string, name: string, publishing_status: string, type: string>, download_url: string, enabled: bool, fingerprint: string, id: int, install_url: string, is_external_build: bool, is_provisioning_profile_syncing: bool, is_udid_provisioned: bool, min_os: string, origin: string, package_hashes: list<string>, provisioning_profile_expiry_date: string, provisioning_profile_name: string, provisioning_profile_type: string, release_notes: string, secondary_download_url: string, short_version: string, size: int, status: string, uploaded_at: string, version: string> {
+]: nothing -> record<android_min_api_level: string, app_display_name: string, app_icon_url: string, app_name: string, app_os: string, build: record<branch_name: string, commit_hash: string, commit_message: string>, bundle_identifier: string, can_resign: bool, destination_type: string, destinations: table<id: string, name: string, is_latest: bool, publishing_status: string, type: string, destination_type: string, display_name: string>, device_family: string, distribution_groups: table<id: string, name: string>, distribution_stores: table<id: string, name: string, publishing_status: string, type: string>, download_url: string, enabled: bool, fingerprint: string, id: int, install_url: string, is_external_build: bool, is_provisioning_profile_syncing: bool, is_udid_provisioned: bool, min_os: string, origin: string, package_hashes: list<string>, provisioning_profile_expiry_date: string, provisioning_profile_name: string, provisioning_profile_type: string, release_notes: string, secondary_download_url: string, short_version: string, size: int, status: string, uploaded_at: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($app_secret | is-empty) { error make --unspanned { msg: "path parameter 'app_secret' must be non-empty" } }
@@ -13787,7 +13831,7 @@ export def "releases-get-latest-public-release" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<android_min_api_level: string, app_display_name: string, app_icon_url: string, app_name: string, app_os: string, build: record<branch_name: string, commit_hash: string, commit_message: string>, bundle_identifier: string, can_resign: bool, destination_type: string, destinations: table<id: string, name: string, destination_type: string, display_name: string>, device_family: string, distribution_groups: table<id: string, name: string>, distribution_stores: table<id: string, name: string, publishing_status: string, type: string>, download_url: string, enabled: bool, fingerprint: string, id: int, install_url: string, is_external_build: bool, is_provisioning_profile_syncing: bool, is_udid_provisioned: bool, min_os: string, origin: string, package_hashes: list<string>, provisioning_profile_expiry_date: string, provisioning_profile_name: string, provisioning_profile_type: string, release_notes: string, secondary_download_url: string, short_version: string, size: int, status: string, uploaded_at: string, version: string> {
+]: nothing -> record<android_min_api_level: string, app_display_name: string, app_icon_url: string, app_name: string, app_os: string, build: record<branch_name: string, commit_hash: string, commit_message: string>, bundle_identifier: string, can_resign: bool, destination_type: string, destinations: table<id: string, name: string, is_latest: bool, publishing_status: string, type: string, destination_type: string, display_name: string>, device_family: string, distribution_groups: table<id: string, name: string>, distribution_stores: table<id: string, name: string, publishing_status: string, type: string>, download_url: string, enabled: bool, fingerprint: string, id: int, install_url: string, is_external_build: bool, is_provisioning_profile_syncing: bool, is_udid_provisioned: bool, min_os: string, origin: string, package_hashes: list<string>, provisioning_profile_expiry_date: string, provisioning_profile_name: string, provisioning_profile_type: string, release_notes: string, secondary_download_url: string, short_version: string, size: int, status: string, uploaded_at: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($app_secret | is-empty) { error make --unspanned { msg: "path parameter 'app_secret' must be non-empty" } }
@@ -13861,7 +13905,7 @@ export def "releases-get-sparkle-feed" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, message: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($app_secret | is-empty) { error make --unspanned { msg: "path parameter 'app_secret' must be non-empty" } }
@@ -13898,7 +13942,7 @@ export def "releases-get-latest-private-release" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --udid: string # When passing `udid` in the query string, a provisioning check for the given device ID will be done. Will be ignored for non-iOS platforms.
-]: nothing -> record<android_min_api_level: string, app_display_name: string, app_icon_url: string, app_name: string, app_os: string, build: record<branch_name: string, commit_hash: string, commit_message: string>, bundle_identifier: string, can_resign: bool, destination_type: string, destinations: table<id: string, name: string, destination_type: string, display_name: string>, device_family: string, distribution_groups: table<id: string, name: string>, distribution_stores: table<id: string, name: string, publishing_status: string, type: string>, download_url: string, enabled: bool, fingerprint: string, id: int, install_url: string, is_external_build: bool, is_provisioning_profile_syncing: bool, is_udid_provisioned: bool, min_os: string, origin: string, package_hashes: list<string>, provisioning_profile_expiry_date: string, provisioning_profile_name: string, provisioning_profile_type: string, release_notes: string, secondary_download_url: string, short_version: string, size: int, status: string, uploaded_at: string, version: string> {
+]: nothing -> record<android_min_api_level: string, app_display_name: string, app_icon_url: string, app_name: string, app_os: string, build: record<branch_name: string, commit_hash: string, commit_message: string>, bundle_identifier: string, can_resign: bool, destination_type: string, destinations: table<id: string, name: string, is_latest: bool, publishing_status: string, type: string, destination_type: string, display_name: string>, device_family: string, distribution_groups: table<id: string, name: string>, distribution_stores: table<id: string, name: string, publishing_status: string, type: string>, download_url: string, enabled: bool, fingerprint: string, id: int, install_url: string, is_external_build: bool, is_provisioning_profile_syncing: bool, is_udid_provisioned: bool, min_os: string, origin: string, package_hashes: list<string>, provisioning_profile_expiry_date: string, provisioning_profile_name: string, provisioning_profile_type: string, release_notes: string, secondary_download_url: string, short_version: string, size: int, status: string, uploaded_at: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($app_secret | is-empty) { error make --unspanned { msg: "path parameter 'app_secret' must be non-empty" } }
@@ -13937,7 +13981,7 @@ export def "releases-get-latest-by-hash" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --udid: string # When passing `udid` in the query string, a provisioning check for the given device ID will be done. Will be ignored for non-iOS platforms.
-]: nothing -> record<android_min_api_level: string, app_display_name: string, app_icon_url: string, app_name: string, app_os: string, build: record<branch_name: string, commit_hash: string, commit_message: string>, bundle_identifier: string, can_resign: bool, destination_type: string, destinations: table<id: string, name: string, destination_type: string, display_name: string>, device_family: string, distribution_groups: table<id: string, name: string>, distribution_stores: table<id: string, name: string, publishing_status: string, type: string>, download_url: string, enabled: bool, fingerprint: string, id: int, install_url: string, is_external_build: bool, is_provisioning_profile_syncing: bool, is_udid_provisioned: bool, min_os: string, origin: string, package_hashes: list<string>, provisioning_profile_expiry_date: string, provisioning_profile_name: string, provisioning_profile_type: string, release_notes: string, secondary_download_url: string, short_version: string, size: int, status: string, uploaded_at: string, version: string> {
+]: nothing -> record<android_min_api_level: string, app_display_name: string, app_icon_url: string, app_name: string, app_os: string, build: record<branch_name: string, commit_hash: string, commit_message: string>, bundle_identifier: string, can_resign: bool, destination_type: string, destinations: table<id: string, name: string, is_latest: bool, publishing_status: string, type: string, destination_type: string, display_name: string>, device_family: string, distribution_groups: table<id: string, name: string>, distribution_stores: table<id: string, name: string, publishing_status: string, type: string>, download_url: string, enabled: bool, fingerprint: string, id: int, install_url: string, is_external_build: bool, is_provisioning_profile_syncing: bool, is_udid_provisioned: bool, min_os: string, origin: string, package_hashes: list<string>, provisioning_profile_expiry_date: string, provisioning_profile_name: string, provisioning_profile_type: string, release_notes: string, secondary_download_url: string, short_version: string, size: int, status: string, uploaded_at: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($app_secret | is-empty) { error make --unspanned { msg: "path parameter 'app_secret' must be non-empty" } }
@@ -14185,11 +14229,12 @@ export def "data-subject-right-delete-status-request" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --email: string # Email used for delete with x-authz-bypass headers
+  --email: string # Email used for delete with x-authz-bypass headers (required)
 ]: nothing -> record<message: string, sasUrl: string, sasUrlExpired: bool, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
+  if ($email == null) { error make --unspanned { msg: "required query parameter 'email' missing: pass --email" } }
   let qp = [(serialize-qp "email" $email "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/v0.1/user/dsr/delete/{token_arg}") $qp $auth.query)
   let accept_val = "application/json"
@@ -14400,7 +14445,7 @@ export def "app-invitations-accept" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record<error: record<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -14440,7 +14485,7 @@ export def "app-invitations-reject" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record<error: record<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -14479,7 +14524,7 @@ export def "distribution-group-invitations-accept-all" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record<error: record<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -14518,7 +14563,7 @@ export def "org-invitations-accept" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record<error: record<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -14558,7 +14603,7 @@ export def "org-invitations-reject" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record<error: record<code: string, message: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -14629,7 +14674,7 @@ export def "notifications-get-user-email-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> record<request_id: string, eTag: string, enabled: bool, settings: table<default_value: string, event_type: string, value: string>, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v0.1/user/notifications/emailSettings" $auth.query)

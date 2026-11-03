@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -312,7 +312,7 @@ export def "list-placements" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<placements: record, nextToken: record> {
+]: nothing -> record<placements: table<projectName: string, placementName: string, createdDate: string, updatedDate: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
@@ -340,7 +340,7 @@ export def "list-placements" [
 #
 # POST /projects
 # operationId: CreateProject
-# --placementTemplate shape: {defaultAttributes?: any, deviceTemplates?: any}
+# --placementTemplate shape: {defaultAttributes?: record, deviceTemplates?: record}
 export def "create-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -360,7 +360,7 @@ export def "create-project" [
   --x-amz-signed-headers: string
   project_name: string # The name of the project to create.
   --description: string # An optional description for the project.
-  --placement-template: record # An object defining the template for a placement. — shape: {defaultAttributes?: any, deviceTemplates?: any}
+  --placement-template: record # An object defining the template for a placement. — shape: {defaultAttributes?: record, deviceTemplates?: record}
   --tags: record # Optional tags (metadata key/value pairs) to be associated with the project. For example, { {"key1": "value1", "key2": "value2"} }. For more information, see AWS Tagging Strategies (https://aws.amazon.com/answers/account-management/aws-tagging-strategies/).
 ]: any -> record {
   let input = $in
@@ -410,7 +410,7 @@ export def "list-projects" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<projects: record, nextToken: record> {
+]: nothing -> record<projects: table<arn: string, projectName: string, createdDate: string, updatedDate: string, tags: record>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -503,7 +503,7 @@ export def "describe-placement" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<placement: record<projectName: record, placementName: record, attributes: record, createdDate: record, updatedDate: record>> {
+]: nothing -> record<placement: record<projectName: string, placementName: string, attributes: record, createdDate: string, updatedDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
@@ -645,7 +645,7 @@ export def "describe-project" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<project: record<arn: record, projectName: record, description: record, createdDate: record, updatedDate: record, placementTemplate: record<defaultAttributes: record, deviceTemplates: record>, tags: record>> {
+]: nothing -> record<project: record<arn: string, projectName: string, description: string, createdDate: string, updatedDate: string, placementTemplate: record<defaultAttributes: record, deviceTemplates: record>, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
@@ -672,7 +672,7 @@ export def "describe-project" [
 #
 # PUT /projects/{projectName}
 # operationId: UpdateProject
-# --placementTemplate shape: {defaultAttributes?: any, deviceTemplates?: any}
+# --placementTemplate shape: {defaultAttributes?: record, deviceTemplates?: record}
 export def "update-project" [
   project_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -692,7 +692,7 @@ export def "update-project" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --description: string # An optional user-defined description for the project.
-  --placement-template: record # An object defining the template for a placement. — shape: {defaultAttributes?: any, deviceTemplates?: any}
+  --placement-template: record # An object defining the template for a placement. — shape: {defaultAttributes?: record, deviceTemplates?: record}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -875,7 +875,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # The keys of those tags which you want to remove.
+  --tag-keys: list # The keys of those tags which you want to remove. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -887,6 +887,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"

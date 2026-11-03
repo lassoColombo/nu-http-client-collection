@@ -1,4 +1,4 @@
-# Auto-generated client for Zalando Shop vv1.0
+# Auto-generated client for Zalando Shop v1.0
 # Source: https://api.apis.guru/v2/specs/zalando.com/v1.0/swagger.json
 # Auth: --token flag or $env.ZALANDO_SHOP_TOKEN
 
@@ -138,15 +138,15 @@ export def "get-article-reviews" [
   --article-model-id: list<string> # Article model IDs. A list of model SKUs for which the article reviews will be returned. Required if articleId is empty.
   --min-star-rating: string # To get reviews with minimum star rating.
   --max-star-rating: string # To get reviews with maximum star rating.
-  --qp-sort: string@sort-completer # articles are sorted on reviews provided by customers (eg: best) (default: newest)
+  --sort: string@sort-completer # articles are sorted on reviews provided by customers (eg: best) (default: newest)
   --page: string # to request with required page number or pagination
   --page-size: string # to request with required page size in a page
   --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
   --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
-]: nothing -> record {
+]: nothing -> record<content: table<articleId: string, articleModelId: string, articleSizeRatings: record, created: string, customerCity: string, customerCountry: string, customerNickname: string, description: string, helpfulCount: int, language: string, rating: int, recommend: bool, reviewId: string, title: string, unhelpfulCount: int>, page: int, size: int, totalElements: int, totalPages: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "articleId" $article_id "multi") (serialize-qp "articleModelId" $article_model_id "multi") (serialize-qp "minStarRating" $min_star_rating "scalar") (serialize-qp "maxStarRating" $max_star_rating "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "articleId" $article_id "multi") (serialize-qp "articleModelId" $article_model_id "multi") (serialize-qp "minStarRating" $min_star_rating "scalar") (serialize-qp "maxStarRating" $max_star_rating "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/article-reviews" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -155,7 +155,7 @@ export def "get-article-reviews" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"articleId": $article_id, "articleModelId": $article_model_id, "minStarRating": $min_star_rating, "maxStarRating": $max_star_rating, "sort": $qp_sort, "page": $page, "pageSize": $page_size, "fields": $fields} | compact)
+    query: ({"articleId": $article_id, "articleModelId": $article_model_id, "minStarRating": $min_star_rating, "maxStarRating": $max_star_rating, "sort": $sort, "page": $page, "pageSize": $page_size, "fields": $fields} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -179,14 +179,15 @@ export def "get-article-reviews-summaries" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --article-model-id: list<string> # Article model IDs. A list of model SKUs for which the article review summaries will be returned.
+  --article-model-id: list<string> # Article model IDs. A list of model SKUs for which the article review summaries will be returned. (required)
   --page: string # to request with required page number or pagination
   --page-size: string # to request with required page size in a page
   --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
   --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
-]: nothing -> record {
+]: nothing -> record<content: table<articleModelId: string, articleSizeRatings: record, averageStarRating: float, numberOfUserPositiveRecommendations: int, numberOfUserRecommendations: int, numberOfUserReviews: int, starRatingDistribution: record>, page: int, size: int, totalElements: int, totalPages: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($article_model_id == null) { error make --unspanned { msg: "required query parameter 'articleModelId' missing: pass --article-model-id" } }
   let qp = [(serialize-qp "articleModelId" $article_model_id "multi") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/article-reviews-summaries" $qp $auth.query)
   let accept_val = "application/json"
@@ -336,13 +337,13 @@ export def "get-articles" [
   --volume: list<string> # filters by volume
   --page: string # to request with required page number or pagination
   --page-size: string # to request with required page size in a page
-  --qp-sort: string@sort-completer-1 # sorting order (eg: popularity)
+  --sort: string@sort-completer-1 # sorting order (eg: popularity)
   --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
   --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
-]: nothing -> record {
+]: nothing -> record<content: table<activationDate: string, additionalInfos: list, ageGroups: list, attributes: list, available: bool, brand: record, categoryKeys: list, color: string, genders: list, id: string, media: record, modelId: string, name: string, season: string, seasonYear: string, shopUrl: string, tags: list, units: list>, page: int, size: int, totalElements: int, totalPages: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "articleId" $article_id "multi") (serialize-qp "articleModelId" $article_model_id "multi") (serialize-qp "articleUnitId" $article_unit_id "multi") (serialize-qp "activationDate" $activation_date "multi") (serialize-qp "ageGroup" $age_group "multi") (serialize-qp "assortmentArea" $assortment_area "multi") (serialize-qp "brand" $brand "multi") (serialize-qp "brandfamily" $brandfamily "multi") (serialize-qp "category" $category "multi") (serialize-qp "color" $color "multi") (serialize-qp "den" $den "multi") (serialize-qp "filling" $filling "multi") (serialize-qp "fullText" $full_text "scalar") (serialize-qp "gender" $gender "multi") (serialize-qp "heelForm" $heel_form "multi") (serialize-qp "heelHeight" $heel_height "multi") (serialize-qp "length" $length "scalar") (serialize-qp "occasion" $occasion "multi") (serialize-qp "pattern" $pattern "multi") (serialize-qp "price" $price "scalar") (serialize-qp "sale" $sale "csv") (serialize-qp "season" $season "multi") (serialize-qp "shaftHeight" $shaft_height "multi") (serialize-qp "shaftWidth" $shaft_width "multi") (serialize-qp "shirtCollar" $shirt_collar "multi") (serialize-qp "shoeFastener" $shoe_fastener "multi") (serialize-qp "shoeToecap" $shoe_toecap "multi") (serialize-qp "shopArea" $shop_area "multi") (serialize-qp "size" $size "scalar") (serialize-qp "sports" $sports "multi") (serialize-qp "technology" $technology "multi") (serialize-qp "trouserRise" $trouser_rise "multi") (serialize-qp "upperMaterial" $upper_material "multi") (serialize-qp "volume" $volume "multi") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "articleId" $article_id "multi") (serialize-qp "articleModelId" $article_model_id "multi") (serialize-qp "articleUnitId" $article_unit_id "multi") (serialize-qp "activationDate" $activation_date "multi") (serialize-qp "ageGroup" $age_group "multi") (serialize-qp "assortmentArea" $assortment_area "multi") (serialize-qp "brand" $brand "multi") (serialize-qp "brandfamily" $brandfamily "multi") (serialize-qp "category" $category "multi") (serialize-qp "color" $color "multi") (serialize-qp "den" $den "multi") (serialize-qp "filling" $filling "multi") (serialize-qp "fullText" $full_text "scalar") (serialize-qp "gender" $gender "multi") (serialize-qp "heelForm" $heel_form "multi") (serialize-qp "heelHeight" $heel_height "multi") (serialize-qp "length" $length "scalar") (serialize-qp "occasion" $occasion "multi") (serialize-qp "pattern" $pattern "multi") (serialize-qp "price" $price "scalar") (serialize-qp "sale" $sale "csv") (serialize-qp "season" $season "multi") (serialize-qp "shaftHeight" $shaft_height "multi") (serialize-qp "shaftWidth" $shaft_width "multi") (serialize-qp "shirtCollar" $shirt_collar "multi") (serialize-qp "shoeFastener" $shoe_fastener "multi") (serialize-qp "shoeToecap" $shoe_toecap "multi") (serialize-qp "shopArea" $shop_area "multi") (serialize-qp "size" $size "scalar") (serialize-qp "sports" $sports "multi") (serialize-qp "technology" $technology "multi") (serialize-qp "trouserRise" $trouser_rise "multi") (serialize-qp "upperMaterial" $upper_material "multi") (serialize-qp "volume" $volume "multi") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/articles" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -351,7 +352,7 @@ export def "get-articles" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"articleId": $article_id, "articleModelId": $article_model_id, "articleUnitId": $article_unit_id, "activationDate": $activation_date, "ageGroup": $age_group, "assortmentArea": $assortment_area, "brand": $brand, "brandfamily": $brandfamily, "category": $category, "color": $color, "den": $den, "filling": $filling, "fullText": $full_text, "gender": $gender, "heelForm": $heel_form, "heelHeight": $heel_height, "length": $length, "occasion": $occasion, "pattern": $pattern, "price": $price, "sale": $sale, "season": $season, "shaftHeight": $shaft_height, "shaftWidth": $shaft_width, "shirtCollar": $shirt_collar, "shoeFastener": $shoe_fastener, "shoeToecap": $shoe_toecap, "shopArea": $shop_area, "size": $size, "sports": $sports, "technology": $technology, "trouserRise": $trouser_rise, "upperMaterial": $upper_material, "volume": $volume, "page": $page, "pageSize": $page_size, "sort": $qp_sort, "fields": $fields} | compact)
+    query: ({"articleId": $article_id, "articleModelId": $article_model_id, "articleUnitId": $article_unit_id, "activationDate": $activation_date, "ageGroup": $age_group, "assortmentArea": $assortment_area, "brand": $brand, "brandfamily": $brandfamily, "category": $category, "color": $color, "den": $den, "filling": $filling, "fullText": $full_text, "gender": $gender, "heelForm": $heel_form, "heelHeight": $heel_height, "length": $length, "occasion": $occasion, "pattern": $pattern, "price": $price, "sale": $sale, "season": $season, "shaftHeight": $shaft_height, "shaftWidth": $shaft_width, "shirtCollar": $shirt_collar, "shoeFastener": $shoe_fastener, "shoeToecap": $shoe_toecap, "shopArea": $shop_area, "size": $size, "sports": $sports, "technology": $technology, "trouserRise": $trouser_rise, "upperMaterial": $upper_material, "volume": $volume, "page": $page, "pageSize": $page_size, "sort": $sort, "fields": $fields} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -458,16 +459,16 @@ export def "get-articles-article-id-reviews" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --min-star-rating: string # To get reviews with minimum star rating.
   --max-star-rating: string # To get reviews with maximum star rating.
-  --qp-sort: string@sort-completer # articles are sorted on reviews provided by customers (eg: best) (default: newest)
+  --sort: string@sort-completer # articles are sorted on reviews provided by customers (eg: best) (default: newest)
   --page: string # to request with required page number or pagination
   --page-size: string # to request with required page size in a page
   --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
   --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
-]: nothing -> record {
+]: nothing -> record<content: table<articleId: string, articleModelId: string, articleSizeRatings: record, created: string, customerCity: string, customerCountry: string, customerNickname: string, description: string, helpfulCount: int, language: string, rating: int, recommend: bool, reviewId: string, title: string, unhelpfulCount: int>, page: int, size: int, totalElements: int, totalPages: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'articleId' must be non-empty" } }
-  let qp = [(serialize-qp "minStarRating" $min_star_rating "scalar") (serialize-qp "maxStarRating" $max_star_rating "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "minStarRating" $min_star_rating "scalar") (serialize-qp "maxStarRating" $max_star_rating "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/articles/{article_id}/reviews") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -476,7 +477,7 @@ export def "get-articles-article-id-reviews" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"minStarRating": $min_star_rating, "maxStarRating": $max_star_rating, "sort": $qp_sort, "page": $page, "pageSize": $page_size, "fields": $fields} | compact)
+    query: ({"minStarRating": $min_star_rating, "maxStarRating": $max_star_rating, "sort": $sort, "page": $page, "pageSize": $page_size, "fields": $fields} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -630,7 +631,7 @@ export def "get-brands" [
   --page-size: string # to request with required page size in a page
   --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
   --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
-]: nothing -> record {
+]: nothing -> record<content: table<brandFamily: record, key: string, logoLargeUrl: string, logoUrl: string, name: string, shopUrl: string>, page: int, size: int, totalElements: int, totalPages: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "multi") (serialize-qp "name" $name "multi") (serialize-qp "brandFamilyName" $brand_family_name "multi") (serialize-qp "brandFamilyKey" $brand_family_key "multi") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
@@ -719,7 +720,7 @@ export def "get-categories" [
   --page-size: string # to request with required page size in a page
   --fields: list<string> # Comma separated list of fields that should be returned. Fields of subobjects are specified with dots as separator. Fields of objects within lists are specified in the same way. Example: id,name,brand.key,brand.name, units.id,units.size,units.price.formatted
   --accept-language: string@accept-language-completer # Specify which Shop to use. A standard `Accept-Language` header which specifies the shop that should be used. E.g. `de-DE` will use the German shop (as does [https://www.zalando.de](https://www/zalando.de) and `de-AT` will use the Austrian one. The shop choosen will e.g. define the currency used for prices as well as the language for product names and descriptions. Furthermore it will impact which articles are available as they might differ between countries.
-]: nothing -> record {
+]: nothing -> record<content: table<childKeys: list, cid: int, hidden: bool, key: string, name: string, outlet: bool, parentKey: string, suggestedFilters: list, targetGroup: string, type: string>, page: int, size: int, totalElements: int, totalPages: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "multi") (serialize-qp "type" $type "scalar") (serialize-qp "outlet" $outlet "scalar") (serialize-qp "hidden" $hidden "scalar") (serialize-qp "targetGroup" $target_group "scalar") (serialize-qp "key" $key "multi") (serialize-qp "parentKey" $parent_key "multi") (serialize-qp "childKey" $child_key "multi") (serialize-qp "suggestedFilter" $suggested_filter "multi") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
@@ -746,7 +747,7 @@ export def "get-categories" [
 #
 # GET /categories/{key}
 export def "get-categories-key" [
-  key: list
+  key: list<string>
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -967,7 +968,7 @@ export def "get-filters-filter-name" [
 #
 # GET /recommendations/{articleIds}
 export def "get-recommendations-article-ids" [
-  article_ids: list
+  article_ids: list<string>
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

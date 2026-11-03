@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -100,6 +100,9 @@ def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: 
 def base-url-completer [] { ["https://hub.docker.com/api/publisher/analytics/v1" "https://docker.com/1.33" "https://hub.docker.com"] }
 def auth-scheme-completer [] { ["bearer" "none"] }
 
+# Completers for enum parameters
+def timespantype-completer [] { ["months" "weeks"] }
+def dataview-completer [] { ["raw" "repo-summary" "summary"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -237,7 +240,7 @@ export def "get-namespace-years" [
 export def "get-namespace-timespans" [
   namespace: string
   year: int
-  timespantype: string
+  timespantype: string@timespantype-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -277,7 +280,7 @@ export def "get-namespace-timespans" [
 export def "get-namespace-timespan-metadata" [
   namespace: string
   year: int
-  timespantype: string
+  timespantype: string@timespantype-completer
   timespan: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -319,9 +322,9 @@ export def "get-namespace-timespan-metadata" [
 export def "get-namespace-data-by-timespan" [
   namespace: string
   year: int
-  timespantype: string
+  timespantype: string@timespantype-completer
   timespan: int
-  dataview: string
+  dataview: string@dataview-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

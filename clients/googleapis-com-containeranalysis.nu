@@ -1,4 +1,4 @@
-# Auto-generated client for Container Analysis API vv1beta1
+# Auto-generated client for Container Analysis API v1beta1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/containeranalysis/v1beta1/openapi.json
 # Auth: --token flag or $env.CONTAINER_ANALYSIS_API_TOKEN
 
@@ -12,20 +12,10 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
-}
-
-# Merge multiple auth records (AND-form security: every scheme must be sent).
-def merge-auth [parts: list]: nothing -> record {
-  let active = ($parts | where {|p| $p.location != "none" })
-  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
-  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
-  let locs = ($active | each {|p| $p.location } | uniq)
-  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
-  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
 # Serialize a single query parameter based on collection style
@@ -157,8 +147,8 @@ export def commands []: nothing -> table {
 export def "containeranalysis-projects-occurrences-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -177,7 +167,7 @@ export def "containeranalysis-projects-occurrences-delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CONTAINER_ANALYSIS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CONTAINER_ANALYSIS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -205,8 +195,8 @@ export def "containeranalysis-projects-occurrences-delete" [
 export def "containeranalysis-projects-occurrences-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -225,7 +215,7 @@ export def "containeranalysis-projects-occurrences-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<attestation: record<attestation: record<genericSignedAttestation: record, pgpSignedAttestation: record>>, build: record<provenance: record<buildOptions: record, builderVersion: string, builtArtifacts: list, commands: list, createTime: string, creator: string, endTime: string, id: string, logsUri: string, projectId: string, sourceProvenance: record, startTime: string, triggerId: string>, provenanceBytes: string>, createTime: string, deployment: record<deployment: record<address: string, config: string, deployTime: string, platform: string, resourceUri: list, undeployTime: string, userEmail: string>>, derivedImage: record<derivedImage: record<baseResourceUrl: string, distance: int, fingerprint: record, layerInfo: list>>, discovered: record<discovered: record<analysisCompleted: record, analysisError: list, analysisStatus: string, analysisStatusError: record, continuousAnalysis: string, lastAnalysisTime: string>>, envelope: record<payload: string, payloadType: string, signatures: list<record>>, installation: record<installation: record<architecture: string, cpeUri: string, license: record, location: list, name: string, packageType: string, version: record>>, intoto: record<signatures: list<record>, signed: record<byproducts: record, command: list, environment: record, materials: list, products: list>>, kind: string, name: string, noteName: string, remediation: string, resource: record<contentHash: record<type: string, value: string>, name: string, uri: string>, sbom: record<createTime: string, creatorComment: string, creators: list<string>, documentComment: string, externalDocumentRefs: list<string>, id: string, licenseListVersion: string, namespace: string, title: string>, sbomReference: record<payload: record<_type: string, predicate: record, predicateType: string, subject: list>, payloadType: string, signatures: list<record>>, spdxFile: record<attributions: list<string>, comment: string, contributors: list<string>, copyright: string, filesLicenseInfo: list<string>, id: string, licenseConcluded: record<comments: string, expression: string>, notice: string>, spdxPackage: record<comment: string, filename: string, homePage: string, id: string, licenseConcluded: record<comments: string, expression: string>, packageType: string, sourceInfo: string, summaryDescription: string, title: string, version: string>, spdxRelationship: record<comment: string, source: string, target: string, type: string>, updateTime: string, vulnerability: record<cvssScore: float, cvssV2: record<attackComplexity: string, attackVector: string, authentication: string, availabilityImpact: string, baseScore: float, confidentialityImpact: string, exploitabilityScore: float, impactScore: float, integrityImpact: string, privilegesRequired: string, scope: string, userInteraction: string>, cvssV3: record<attackComplexity: string, attackVector: string, authentication: string, availabilityImpact: string, baseScore: float, confidentialityImpact: string, exploitabilityScore: float, impactScore: float, integrityImpact: string, privilegesRequired: string, scope: string, userInteraction: string>, cvssVersion: string, effectiveSeverity: string, longDescription: string, packageIssue: list<record>, relatedUrls: list<record>, severity: string, shortDescription: string, type: string, vexAssessment: record<cve: string, impacts: list, justification: record, noteName: string, relatedUris: list, remediations: list, state: string>>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CONTAINER_ANALYSIS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CONTAINER_ANALYSIS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -268,8 +258,8 @@ export def "containeranalysis-projects-occurrences-get" [
 export def "containeranalysis-projects-occurrences-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -311,7 +301,7 @@ export def "containeranalysis-projects-occurrences-patch" [
   --vulnerability: record # Details of a vulnerability Occurrence. — shape: {cvssScore?: float, cvssV2?: record, cvssV3?: record, cvssVersion?: "CVSS_VERSION_UNSPECIFIED"|"CVSS_VERSION_2"|"CVSS_VERSION_3", effectiveSeverity?: "SEVERITY_UNSPECIFIED"|"MINIMAL"|"LOW"|"MEDIUM"|"HIGH"|"CRITICAL", longDescription?: string, packageIssue?: list, relatedUrls?: list, severity?: "SEVERITY_UNSPECIFIED"|"MINIMAL"|"LOW"|"MEDIUM"|"HIGH"|"CRITICAL", shortDescription?: string, type?: string, vexAssessment?: record}
 ]: any -> record<attestation: record<attestation: record<genericSignedAttestation: record, pgpSignedAttestation: record>>, build: record<provenance: record<buildOptions: record, builderVersion: string, builtArtifacts: list, commands: list, createTime: string, creator: string, endTime: string, id: string, logsUri: string, projectId: string, sourceProvenance: record, startTime: string, triggerId: string>, provenanceBytes: string>, createTime: string, deployment: record<deployment: record<address: string, config: string, deployTime: string, platform: string, resourceUri: list, undeployTime: string, userEmail: string>>, derivedImage: record<derivedImage: record<baseResourceUrl: string, distance: int, fingerprint: record, layerInfo: list>>, discovered: record<discovered: record<analysisCompleted: record, analysisError: list, analysisStatus: string, analysisStatusError: record, continuousAnalysis: string, lastAnalysisTime: string>>, envelope: record<payload: string, payloadType: string, signatures: list<record>>, installation: record<installation: record<architecture: string, cpeUri: string, license: record, location: list, name: string, packageType: string, version: record>>, intoto: record<signatures: list<record>, signed: record<byproducts: record, command: list, environment: record, materials: list, products: list>>, kind: string, name: string, noteName: string, remediation: string, resource: record<contentHash: record<type: string, value: string>, name: string, uri: string>, sbom: record<createTime: string, creatorComment: string, creators: list<string>, documentComment: string, externalDocumentRefs: list<string>, id: string, licenseListVersion: string, namespace: string, title: string>, sbomReference: record<payload: record<_type: string, predicate: record, predicateType: string, subject: list>, payloadType: string, signatures: list<record>>, spdxFile: record<attributions: list<string>, comment: string, contributors: list<string>, copyright: string, filesLicenseInfo: list<string>, id: string, licenseConcluded: record<comments: string, expression: string>, notice: string>, spdxPackage: record<comment: string, filename: string, homePage: string, id: string, licenseConcluded: record<comments: string, expression: string>, packageType: string, sourceInfo: string, summaryDescription: string, title: string, version: string>, spdxRelationship: record<comment: string, source: string, target: string, type: string>, updateTime: string, vulnerability: record<cvssScore: float, cvssV2: record<attackComplexity: string, attackVector: string, authentication: string, availabilityImpact: string, baseScore: float, confidentialityImpact: string, exploitabilityScore: float, impactScore: float, integrityImpact: string, privilegesRequired: string, scope: string, userInteraction: string>, cvssV3: record<attackComplexity: string, attackVector: string, authentication: string, availabilityImpact: string, baseScore: float, confidentialityImpact: string, exploitabilityScore: float, impactScore: float, integrityImpact: string, privilegesRequired: string, scope: string, userInteraction: string>, cvssVersion: string, effectiveSeverity: string, longDescription: string, packageIssue: list<record>, relatedUrls: list<record>, severity: string, shortDescription: string, type: string, vexAssessment: record<cve: string, impacts: list, justification: record, noteName: string, relatedUris: list, remediations: list, state: string>>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CONTAINER_ANALYSIS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CONTAINER_ANALYSIS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
@@ -341,8 +331,8 @@ export def "containeranalysis-projects-occurrences-patch" [
 export def "containeranalysis-projects-occurrences-get-notes" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -361,7 +351,7 @@ export def "containeranalysis-projects-occurrences-get-notes" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<attestationAuthority: record<hint: record<humanReadableName: string>>, baseImage: record<fingerprint: record<v1Name: string, v2Blob: list, v2Name: string>, resourceUrl: string>, build: record<builderVersion: string, signature: record<keyId: string, keyType: string, publicKey: string, signature: string>>, createTime: string, deployable: record<resourceUri: list<string>>, discovery: record<analysisKind: string>, expirationTime: string, intoto: record<expectedCommand: list<string>, expectedMaterials: list<record>, expectedProducts: list<record>, signingKeys: list<record>, stepName: string, threshold: string>, kind: string, longDescription: string, name: string, package: record<architecture: string, cpeUri: string, description: string, digest: list<record>, distribution: list<record>, license: record<comments: string, expression: string>, maintainer: string, name: string, packageType: string, url: string, version: record<epoch: int, inclusive: bool, kind: string, name: string, revision: string>>, relatedNoteNames: list<string>, relatedUrl: table<label: string, url: string>, sbom: record<dataLicence: string, spdxVersion: string>, sbomReference: record<format: string, version: string>, shortDescription: string, spdxFile: record<checksum: list<string>, fileType: string, title: string>, spdxPackage: record<analyzed: bool, attribution: string, checksum: string, copyright: string, detailedDescription: string, downloadLocation: string, externalRefs: list<record>, filesLicenseInfo: list<string>, homePage: string, licenseDeclared: record<comments: string, expression: string>, originator: string, packageType: string, summaryDescription: string, supplier: string, title: string, verificationCode: string, version: string>, spdxRelationship: record<type: string>, updateTime: string, vulnerability: record<cvssScore: float, cvssV2: record<attackComplexity: string, attackVector: string, authentication: string, availabilityImpact: string, baseScore: float, confidentialityImpact: string, exploitabilityScore: float, impactScore: float, integrityImpact: string, privilegesRequired: string, scope: string, userInteraction: string>, cvssV3: record<attackComplexity: string, attackVector: string, availabilityImpact: string, baseScore: float, confidentialityImpact: string, exploitabilityScore: float, impactScore: float, integrityImpact: string, privilegesRequired: string, scope: string, userInteraction: string>, cvssVersion: string, cwe: list<string>, details: list<record>, severity: string, sourceUpdateTime: string, windowsDetails: list<record>>, vulnerabilityAssessment: record<assessment: record<cve: string, impacts: list, justification: record, longDescription: string, relatedUris: list, remediations: list, shortDescription: string, state: string>, languageCode: string, longDescription: string, product: record<genericUri: string, id: string, name: string>, publisher: record<issuingAuthority: string, name: string, publisherNamespace: string>, shortDescription: string, title: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CONTAINER_ANALYSIS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CONTAINER_ANALYSIS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -389,8 +379,8 @@ export def "containeranalysis-projects-occurrences-get-notes" [
 export def "containeranalysis-projects-notes-occurrences-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -412,7 +402,7 @@ export def "containeranalysis-projects-notes-occurrences-list" [
   --page-size: int # Number of occurrences to return in the list.
   --page-token: string # Token to provide to skip to a particular spot in the list.
 ]: nothing -> record<nextPageToken: string, occurrences: table<attestation: record, build: record, createTime: string, deployment: record, derivedImage: record, discovered: record, envelope: record, installation: record, intoto: record, kind: string, name: string, noteName: string, remediation: string, resource: record, sbom: record, sbomReference: record, spdxFile: record, spdxPackage: record, spdxRelationship: record, updateTime: string, vulnerability: record>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CONTAINER_ANALYSIS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CONTAINER_ANALYSIS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -440,8 +430,8 @@ export def "containeranalysis-projects-notes-occurrences-list" [
 export def "containeranalysis-projects-notes-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -463,7 +453,7 @@ export def "containeranalysis-projects-notes-list" [
   --page-size: int # Number of notes to return in the list. Must be positive. Max allowed page size is 1000. If not specified, page size defaults to 20.
   --page-token: string # Token to provide to skip to a particular spot in the list.
 ]: nothing -> record<nextPageToken: string, notes: table<attestationAuthority: record, baseImage: record, build: record, createTime: string, deployable: record, discovery: record, expirationTime: string, intoto: record, kind: string, longDescription: string, name: string, package: record, relatedNoteNames: list, relatedUrl: list, sbom: record, sbomReference: record, shortDescription: string, spdxFile: record, spdxPackage: record, spdxRelationship: record, updateTime: string, vulnerability: record, vulnerabilityAssessment: record>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CONTAINER_ANALYSIS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CONTAINER_ANALYSIS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -506,8 +496,8 @@ export def "containeranalysis-projects-notes-list" [
 export def "containeranalysis-projects-notes-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -551,7 +541,7 @@ export def "containeranalysis-projects-notes-create" [
   --vulnerability-assessment: record # A single VulnerabilityAssessmentNote represents one particular product's vulnerability assessment for one CVE. — shape: {assessment?: record, languageCode?: string, longDescription?: string, product?: record, publisher?: record, shortDescription?: string, title?: string}
 ]: any -> record<attestationAuthority: record<hint: record<humanReadableName: string>>, baseImage: record<fingerprint: record<v1Name: string, v2Blob: list, v2Name: string>, resourceUrl: string>, build: record<builderVersion: string, signature: record<keyId: string, keyType: string, publicKey: string, signature: string>>, createTime: string, deployable: record<resourceUri: list<string>>, discovery: record<analysisKind: string>, expirationTime: string, intoto: record<expectedCommand: list<string>, expectedMaterials: list<record>, expectedProducts: list<record>, signingKeys: list<record>, stepName: string, threshold: string>, kind: string, longDescription: string, name: string, package: record<architecture: string, cpeUri: string, description: string, digest: list<record>, distribution: list<record>, license: record<comments: string, expression: string>, maintainer: string, name: string, packageType: string, url: string, version: record<epoch: int, inclusive: bool, kind: string, name: string, revision: string>>, relatedNoteNames: list<string>, relatedUrl: table<label: string, url: string>, sbom: record<dataLicence: string, spdxVersion: string>, sbomReference: record<format: string, version: string>, shortDescription: string, spdxFile: record<checksum: list<string>, fileType: string, title: string>, spdxPackage: record<analyzed: bool, attribution: string, checksum: string, copyright: string, detailedDescription: string, downloadLocation: string, externalRefs: list<record>, filesLicenseInfo: list<string>, homePage: string, licenseDeclared: record<comments: string, expression: string>, originator: string, packageType: string, summaryDescription: string, supplier: string, title: string, verificationCode: string, version: string>, spdxRelationship: record<type: string>, updateTime: string, vulnerability: record<cvssScore: float, cvssV2: record<attackComplexity: string, attackVector: string, authentication: string, availabilityImpact: string, baseScore: float, confidentialityImpact: string, exploitabilityScore: float, impactScore: float, integrityImpact: string, privilegesRequired: string, scope: string, userInteraction: string>, cvssV3: record<attackComplexity: string, attackVector: string, availabilityImpact: string, baseScore: float, confidentialityImpact: string, exploitabilityScore: float, impactScore: float, integrityImpact: string, privilegesRequired: string, scope: string, userInteraction: string>, cvssVersion: string, cwe: list<string>, details: list<record>, severity: string, sourceUpdateTime: string, windowsDetails: list<record>>, vulnerabilityAssessment: record<assessment: record<cve: string, impacts: list, justification: record, longDescription: string, relatedUris: list, remediations: list, shortDescription: string, state: string>, languageCode: string, longDescription: string, product: record<genericUri: string, id: string, name: string>, publisher: record<issuingAuthority: string, name: string, publisherNamespace: string>, shortDescription: string, title: string>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CONTAINER_ANALYSIS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CONTAINER_ANALYSIS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "noteId" $note_id "scalar")] | flatten | str join "&"
@@ -581,8 +571,8 @@ export def "containeranalysis-projects-notes-create" [
 export def "containeranalysis-projects-notes-batch-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -603,7 +593,7 @@ export def "containeranalysis-projects-notes-batch-create" [
   --notes: record # Required. The notes to create, the key is expected to be the note ID. Max allowed length is 1000.
 ]: any -> record<notes: table<attestationAuthority: record, baseImage: record, build: record, createTime: string, deployable: record, discovery: record, expirationTime: string, intoto: record, kind: string, longDescription: string, name: string, package: record, relatedNoteNames: list, relatedUrl: list, sbom: record, sbomReference: record, shortDescription: string, spdxFile: record, spdxPackage: record, spdxRelationship: record, updateTime: string, vulnerability: record, vulnerabilityAssessment: record>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CONTAINER_ANALYSIS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CONTAINER_ANALYSIS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -633,8 +623,8 @@ export def "containeranalysis-projects-notes-batch-create" [
 export def "containeranalysis-projects-occurrences-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -656,7 +646,7 @@ export def "containeranalysis-projects-occurrences-list" [
   --page-size: int # Number of occurrences to return in the list. Must be positive. Max allowed page size is 1000. If not specified, page size defaults to 20.
   --page-token: string # Token to provide to skip to a particular spot in the list.
 ]: nothing -> record<nextPageToken: string, occurrences: table<attestation: record, build: record, createTime: string, deployment: record, derivedImage: record, discovered: record, envelope: record, installation: record, intoto: record, kind: string, name: string, noteName: string, remediation: string, resource: record, sbom: record, sbomReference: record, spdxFile: record, spdxPackage: record, spdxRelationship: record, updateTime: string, vulnerability: record>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CONTAINER_ANALYSIS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CONTAINER_ANALYSIS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -699,8 +689,8 @@ export def "containeranalysis-projects-occurrences-list" [
 export def "containeranalysis-projects-occurrences-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -741,7 +731,7 @@ export def "containeranalysis-projects-occurrences-create" [
   --vulnerability: record # Details of a vulnerability Occurrence. — shape: {cvssScore?: float, cvssV2?: record, cvssV3?: record, cvssVersion?: "CVSS_VERSION_UNSPECIFIED"|"CVSS_VERSION_2"|"CVSS_VERSION_3", effectiveSeverity?: "SEVERITY_UNSPECIFIED"|"MINIMAL"|"LOW"|"MEDIUM"|"HIGH"|"CRITICAL", longDescription?: string, packageIssue?: list, relatedUrls?: list, severity?: "SEVERITY_UNSPECIFIED"|"MINIMAL"|"LOW"|"MEDIUM"|"HIGH"|"CRITICAL", shortDescription?: string, type?: string, vexAssessment?: record}
 ]: any -> record<attestation: record<attestation: record<genericSignedAttestation: record, pgpSignedAttestation: record>>, build: record<provenance: record<buildOptions: record, builderVersion: string, builtArtifacts: list, commands: list, createTime: string, creator: string, endTime: string, id: string, logsUri: string, projectId: string, sourceProvenance: record, startTime: string, triggerId: string>, provenanceBytes: string>, createTime: string, deployment: record<deployment: record<address: string, config: string, deployTime: string, platform: string, resourceUri: list, undeployTime: string, userEmail: string>>, derivedImage: record<derivedImage: record<baseResourceUrl: string, distance: int, fingerprint: record, layerInfo: list>>, discovered: record<discovered: record<analysisCompleted: record, analysisError: list, analysisStatus: string, analysisStatusError: record, continuousAnalysis: string, lastAnalysisTime: string>>, envelope: record<payload: string, payloadType: string, signatures: list<record>>, installation: record<installation: record<architecture: string, cpeUri: string, license: record, location: list, name: string, packageType: string, version: record>>, intoto: record<signatures: list<record>, signed: record<byproducts: record, command: list, environment: record, materials: list, products: list>>, kind: string, name: string, noteName: string, remediation: string, resource: record<contentHash: record<type: string, value: string>, name: string, uri: string>, sbom: record<createTime: string, creatorComment: string, creators: list<string>, documentComment: string, externalDocumentRefs: list<string>, id: string, licenseListVersion: string, namespace: string, title: string>, sbomReference: record<payload: record<_type: string, predicate: record, predicateType: string, subject: list>, payloadType: string, signatures: list<record>>, spdxFile: record<attributions: list<string>, comment: string, contributors: list<string>, copyright: string, filesLicenseInfo: list<string>, id: string, licenseConcluded: record<comments: string, expression: string>, notice: string>, spdxPackage: record<comment: string, filename: string, homePage: string, id: string, licenseConcluded: record<comments: string, expression: string>, packageType: string, sourceInfo: string, summaryDescription: string, title: string, version: string>, spdxRelationship: record<comment: string, source: string, target: string, type: string>, updateTime: string, vulnerability: record<cvssScore: float, cvssV2: record<attackComplexity: string, attackVector: string, authentication: string, availabilityImpact: string, baseScore: float, confidentialityImpact: string, exploitabilityScore: float, impactScore: float, integrityImpact: string, privilegesRequired: string, scope: string, userInteraction: string>, cvssV3: record<attackComplexity: string, attackVector: string, authentication: string, availabilityImpact: string, baseScore: float, confidentialityImpact: string, exploitabilityScore: float, impactScore: float, integrityImpact: string, privilegesRequired: string, scope: string, userInteraction: string>, cvssVersion: string, effectiveSeverity: string, longDescription: string, packageIssue: list<record>, relatedUrls: list<record>, severity: string, shortDescription: string, type: string, vexAssessment: record<cve: string, impacts: list, justification: record, noteName: string, relatedUris: list, remediations: list, state: string>>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CONTAINER_ANALYSIS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CONTAINER_ANALYSIS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -772,8 +762,8 @@ export def "containeranalysis-projects-occurrences-create" [
 export def "containeranalysis-projects-occurrences-batch-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -794,7 +784,7 @@ export def "containeranalysis-projects-occurrences-batch-create" [
   --occurrences: list # Required. The occurrences to create. Max allowed length is 1000. — item shape: {attestation?: record, build?: record, createTime?: string, deployment?: record, derivedImage?: record, discovered?: record, envelope?: record, installation?: record, intoto?: record, kind?: "NOTE_KIND_UNSPECIFIED"|"VULNERABILITY"|"BUILD"|"IMAGE"|"PACKAGE"|"DEPLOYMENT"|"DISCOVERY"|"ATTESTATION"|"INTOTO"|"SBOM"|"SPDX_PACKAGE"|"SPDX_FILE"|"SPDX_RELATIONSHIP"|"VULNERABILITY_ASSESSMENT"|"SBOM_REFERENCE", name?: string, noteName?: string, remediation?: string, resource?: record, sbom?: record, ... (6 more fields)}
 ]: any -> record<occurrences: table<attestation: record, build: record, createTime: string, deployment: record, derivedImage: record, discovered: record, envelope: record, installation: record, intoto: record, kind: string, name: string, noteName: string, remediation: string, resource: record, sbom: record, sbomReference: record, spdxFile: record, spdxPackage: record, spdxRelationship: record, updateTime: string, vulnerability: record>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CONTAINER_ANALYSIS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CONTAINER_ANALYSIS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -824,8 +814,8 @@ export def "containeranalysis-projects-occurrences-batch-create" [
 export def "containeranalysis-projects-occurrences-get-vulnerability-summary" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -845,7 +835,7 @@ export def "containeranalysis-projects-occurrences-get-vulnerability-summary" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --filter: string # The filter expression.
 ]: nothing -> record<counts: table<fixableCount: string, resource: record, severity: string, totalCount: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CONTAINER_ANALYSIS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CONTAINER_ANALYSIS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
@@ -874,8 +864,8 @@ export def "containeranalysis-projects-occurrences-get-vulnerability-summary" [
 export def "containeranalysis-projects-occurrences-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -896,7 +886,7 @@ export def "containeranalysis-projects-occurrences-get-iam-policy" [
   --options: record # Encapsulates settings provided to GetIamPolicy. — shape: {requestedPolicyVersion?: int}
 ]: any -> record<bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CONTAINER_ANALYSIS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CONTAINER_ANALYSIS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource | is-empty) { error make --unspanned { msg: "path parameter 'resource' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -927,8 +917,8 @@ export def "containeranalysis-projects-occurrences-get-iam-policy" [
 export def "containeranalysis-projects-occurrences-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -949,7 +939,7 @@ export def "containeranalysis-projects-occurrences-set-iam-policy" [
   --policy: record # An Identity and Access Management (IAM) policy, which specifies access controls for Google Cloud resources. A `Policy` is a collection of `bindings`. A `binding` binds one or more `members`, or principals, to a single `role`. Principals can be user accounts, service accounts, Google groups, and domains (such as G Suite). A `role` is a named list of permissions; each `role` can be an IAM predefined role or a user-created custom role. For some types of Google Cloud resources, a `binding` can also specify a `condition`, which is a logical expression that allows access to a resource only if the expression evaluates to `true`. A condition can add constraints based on attributes of the request, the resource, or both. To learn which resources support conditions in their IAM policies, see the [IAM documentation](https://cloud.google.com/iam/help/conditions/resource-policies). **JSON example:** { "bindings": [ { "role": "roles/resourcemanager.organizationAdmin", "members": [ "user:mike@example.com", "group:admins@example.com", "domain:google.com", "serviceAccount:my-project-id@appspot.gserviceaccount.com" ] }, { "role": "roles/resourcemanager.organizationViewer", "members": [ "user:eve@example.com" ], "condition": { "title": "expirable access", "description": "Does not grant access after Sep 2020", "expression": "request.time < timestamp('2020-10-01T00:00:00.000Z')", } } ], "etag": "BwWWja0YfJA=", "version": 3 } **YAML example:** bindings: - members: - user:mike@example.com - group:admins@example.com - domain:google.com - serviceAccount:my-project-id@appspot.gserviceaccount.com role: roles/resourcemanager.organizationAdmin - members: - user:eve@example.com role: roles/resourcemanager.organizationViewer condition: title: expirable access description: Does not grant access after Sep 2020 expression: request.time < timestamp('2020-10-01T00:00:00.000Z') etag: BwWWja0YfJA= version: 3 For a description of IAM and its features, see the [IAM documentation](https://cloud.google.com/iam/docs/). — shape: {bindings?: list, etag?: string, version?: int}
 ]: any -> record<bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CONTAINER_ANALYSIS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CONTAINER_ANALYSIS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource | is-empty) { error make --unspanned { msg: "path parameter 'resource' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -979,8 +969,8 @@ export def "containeranalysis-projects-occurrences-set-iam-policy" [
 export def "containeranalysis-projects-occurrences-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1001,7 +991,7 @@ export def "containeranalysis-projects-occurrences-test-iam-permissions" [
   --permissions: list<string> # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
 ]: any -> record<permissions: list<string>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CONTAINER_ANALYSIS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CONTAINER_ANALYSIS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource | is-empty) { error make --unspanned { msg: "path parameter 'resource' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"

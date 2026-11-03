@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -107,6 +107,7 @@ def base-url-completer [] { ["https://api.codat.io"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def data-type-completer [] { ["accountTransactions" "bankAccounts" "banking-accounts" "banking-transactions"] }
 def report-type-completer [] { ["audit" "enhancedFinancials"] }
 def period-unit-completer [] { ["Day" "Month" "Week" "Year"] }
 
@@ -138,7 +139,7 @@ export def commands []: nothing -> table {
 # GET /companies/{companyId}/reports/enhancedBalanceSheet/accounts
 # operationId: get-accounts-for-enhanced-balance-sheet
 export def "get-accounts-for-enhanced-balance-sheet" [
-  company_id: any
+  company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -148,12 +149,14 @@ export def "get-accounts-for-enhanced-balance-sheet" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --report-date: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (e.g. 29-09-2020)
-  --number-of-periods: int # The number of periods to return. There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods.
+  --report-date: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (required, e.g. 29-09-2020)
+  --number-of-periods: int # The number of periods to return. There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods. (required)
 ]: nothing -> record<reportInfo: record<companyName: string, currency: string, generatedDate: string, reportName: string>, reportItems: table<accountCategory: record, accountId: string, accountName: string, balance: float, date: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
+  if ($report_date == null) { error make --unspanned { msg: "required query parameter 'reportDate' missing: pass --report-date" } }
+  if ($number_of_periods == null) { error make --unspanned { msg: "required query parameter 'numberOfPeriods' missing: pass --number-of-periods" } }
   let qp = [(serialize-qp "reportDate" $report_date "scalar") (serialize-qp "numberOfPeriods" $number_of_periods "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/reports/enhancedBalanceSheet/accounts") $qp $auth.query)
   let accept_val = "application/json"
@@ -177,7 +180,7 @@ export def "get-accounts-for-enhanced-balance-sheet" [
 # GET /companies/{companyId}/reports/enhancedCashFlow/transactions
 # operationId: get-enhanced-cash-flow-transactions
 export def "get-enhanced-cash-flow-transactions" [
-  company_id: any
+  company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,13 +190,14 @@ export def "get-enhanced-cash-flow-transactions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page: int # Page number. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 1, e.g. 1)
+  --page: int # Page number. [Read more](https://docs.codat.io/using-the-api/paging). (required, format: int32, default: 1, e.g. 1)
   --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100, e.g. 100)
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
 ]: nothing -> record<dataSources: table<accounts: list>, reportInfo: record<companyName: string, generatedDate: string, pageNumber: int, pageSize: int, reportName: string, totalResults: int>, reportItems: table<transactions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
+  let page = ($page | default 1)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/reports/enhancedCashFlow/transactions") $qp $auth.query)
   let accept_val = "application/json"
@@ -217,7 +221,7 @@ export def "get-enhanced-cash-flow-transactions" [
 # GET /companies/{companyId}/reports/enhancedInvoices
 # operationId: get-enhanced-invoices-report
 export def "get-enhanced-invoices-report" [
-  company_id: any
+  company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -227,13 +231,14 @@ export def "get-enhanced-invoices-report" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page: int # Page number. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 1, e.g. 1)
+  --page: int # Page number. [Read more](https://docs.codat.io/using-the-api/paging). (required, format: int32, default: 1, e.g. 1)
   --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100, e.g. 100)
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
 ]: nothing -> record<reportInfo: record<companyName: string, generatedDate: string, pageNumber: int, pageSize: int, reportName: string, totalResults: int>, reportItems: table<invoices: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
+  let page = ($page | default 1)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/reports/enhancedInvoices") $qp $auth.query)
   let accept_val = "application/json"
@@ -257,7 +262,7 @@ export def "get-enhanced-invoices-report" [
 # GET /companies/{companyId}/reports/enhancedProfitAndLoss/accounts
 # operationId: get-accounts-for-enhanced-profit-and-loss
 export def "get-accounts-for-enhanced-profit-and-loss" [
-  company_id: any
+  company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -267,12 +272,14 @@ export def "get-accounts-for-enhanced-profit-and-loss" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --report-date: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (e.g. 29-09-2020)
-  --number-of-periods: int # The number of periods to return. There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods.
+  --report-date: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (required, e.g. 29-09-2020)
+  --number-of-periods: int # The number of periods to return. There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods. (required)
 ]: nothing -> record<reportInfo: record<companyName: string, currency: string, generatedDate: string, reportName: string>, reportItems: table<accountCategory: record, accountId: string, accountName: string, balance: float, date: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
+  if ($report_date == null) { error make --unspanned { msg: "required query parameter 'reportDate' missing: pass --report-date" } }
+  if ($number_of_periods == null) { error make --unspanned { msg: "required query parameter 'numberOfPeriods' missing: pass --number-of-periods" } }
   let qp = [(serialize-qp "reportDate" $report_date "scalar") (serialize-qp "numberOfPeriods" $number_of_periods "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/companies/{company_id}/reports/enhancedProfitAndLoss/accounts") $qp $auth.query)
   let accept_val = "application/json"
@@ -332,8 +339,8 @@ export def "list-available-account-categories" [
 # GET /data/companies/{companyId}/assess/dataTypes/{dataType}/dataIntegrity/details
 # operationId: get-data-integrity-details
 export def "get-data-integrity-details" [
-  company_id: any
-  data_type: any
+  company_id: string
+  data_type: string@data-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -343,7 +350,7 @@ export def "get-data-integrity-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page: int # Page number. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 1, e.g. 1)
+  --page: int # Page number. [Read more](https://docs.codat.io/using-the-api/paging). (required, format: int32, default: 1, e.g. 1)
   --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100, e.g. 100)
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
   --order-by: string # Field to order results by. [Read more](https://docs.codat.io/using-the-api/ordering-results). (e.g. -modifiedDate)
@@ -352,6 +359,7 @@ export def "get-data-integrity-details" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($data_type | is-empty) { error make --unspanned { msg: "path parameter 'dataType' must be non-empty" } }
+  let page = ($page | default 1)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), data_type: (encode-path-segment $data_type)} | format pattern "/data/companies/{company_id}/assess/dataTypes/{data_type}/dataIntegrity/details") $qp $auth.query)
   let accept_val = "application/json"
@@ -376,7 +384,7 @@ export def "get-data-integrity-details" [
 # operationId: get-data-integrity-status
 export def "get-data-integrity-status" [
   company_id: string
-  data_type: string
+  data_type: string@data-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -386,7 +394,7 @@ export def "get-data-integrity-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<metadata: list<record>> {
+]: nothing -> record<metadata: table<type: string, amounts: record, connectionIds: record, dates: record, statusInfo: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -413,8 +421,8 @@ export def "get-data-integrity-status" [
 # GET /data/companies/{companyId}/assess/dataTypes/{dataType}/dataIntegrity/summaries
 # operationId: get-data-integrity-summaries
 export def "get-data-integrity-summaries" [
-  company_id: any
-  data_type: any
+  company_id: string
+  data_type: string@data-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -425,7 +433,7 @@ export def "get-data-integrity-summaries" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
-]: nothing -> record<summaries: list<record>> {
+]: nothing -> record<summaries: table<type: string, byAmount: record, byCount: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -453,7 +461,7 @@ export def "get-data-integrity-summaries" [
 # GET /data/companies/{companyId}/assess/excel
 # operationId: get-excel-report-generation-status
 export def "get-excel-report-generation-status" [
-  company_id: any
+  company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -463,11 +471,12 @@ export def "get-excel-report-generation-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --report-type: string@report-type-completer # The type of report you want to generate and download.
+  --report-type: string@report-type-completer # The type of report you want to generate and download. (required)
 ]: nothing -> record<errorMessage: string, fileSize: int, inProgress: bool, lastGenerated: string, lastInvocationId: string, queued: string, reportType: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
+  if ($report_type == null) { error make --unspanned { msg: "required query parameter 'reportType' missing: pass --report-type" } }
   let qp = [(serialize-qp "reportType" $report_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/data/companies/{company_id}/assess/excel") $qp $auth.query)
   let accept_val = "application/json"
@@ -491,7 +500,7 @@ export def "get-excel-report-generation-status" [
 # POST /data/companies/{companyId}/assess/excel
 # operationId: generate-excel-report
 export def "generate-excel-report" [
-  company_id: any
+  company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -501,11 +510,12 @@ export def "generate-excel-report" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --report-type: string@report-type-completer # The type of report you want to generate and download.
+  --report-type: string@report-type-completer # The type of report you want to generate and download. (required)
 ]: nothing -> record<errorMessage: string, fileSize: int, inProgress: bool, lastGenerated: string, lastInvocationId: string, queued: string, reportType: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
+  if ($report_type == null) { error make --unspanned { msg: "required query parameter 'reportType' missing: pass --report-type" } }
   let qp = [(serialize-qp "reportType" $report_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/data/companies/{company_id}/assess/excel") $qp $auth.query)
   let accept_val = "application/json"
@@ -529,7 +539,7 @@ export def "generate-excel-report" [
 # GET /data/companies/{companyId}/assess/excel/download
 # operationId: get-excel-report
 export def "get-excel-report" [
-  company_id: any
+  company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -539,11 +549,12 @@ export def "get-excel-report" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --report-type: string@report-type-completer # The type of report you want to generate and download.
+  --report-type: string@report-type-completer # The type of report you want to generate and download. (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
+  if ($report_type == null) { error make --unspanned { msg: "required query parameter 'reportType' missing: pass --report-type" } }
   let qp = [(serialize-qp "reportType" $report_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/data/companies/{company_id}/assess/excel/download") $qp $auth.query)
   let accept_val = "application/octet-stream"
@@ -569,7 +580,7 @@ export def "get-excel-report" [
 # operationId: download-excel-report
 @deprecated
 export def "download-excel-report" [
-  company_id: any
+  company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -579,11 +590,12 @@ export def "download-excel-report" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --report-type: string@report-type-completer # The type of report you want to generate and download.
+  --report-type: string@report-type-completer # The type of report you want to generate and download. (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
+  if ($report_type == null) { error make --unspanned { msg: "required query parameter 'reportType' missing: pass --report-type" } }
   let qp = [(serialize-qp "reportType" $report_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/data/companies/{company_id}/assess/excel/download") $qp $auth.query)
   let accept_val = "application/octet-stream"
@@ -607,8 +619,8 @@ export def "download-excel-report" [
 # GET /data/companies/{companyId}/connections/{connectionId}/assess/accountingMetrics/marketing
 # operationId: get-accounting-marketing-metrics
 export def "get-accounting-marketing-metrics" [
-  company_id: any
-  connection_id: any
+  company_id: string
+  connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -618,10 +630,10 @@ export def "get-accounting-marketing-metrics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --report-date: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (e.g. 29-09-2020)
-  --period-length: int # The number of months per period. E.g. 2 = 2 months per period.
-  --number-of-periods: int # The number of periods to return. There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods.
-  --period-unit: string@period-unit-completer # The period unit of time returned.
+  --report-date: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (required, e.g. 29-09-2020)
+  --period-length: int # The number of months per period. E.g. 2 = 2 months per period. (required)
+  --number-of-periods: int # The number of periods to return. There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods. (required)
+  --period-unit: string@period-unit-completer # The period unit of time returned. (required)
   --include-display-names: oneof<nothing, bool> # Shows the dimensionDisplayName and itemDisplayName in measures to make the report data human-readable.
   --show-input-values: oneof<nothing, bool> # If set to true, then the system includes the input values within the response.
 ]: nothing -> record<dimensions: table<displayName: string, index: int, items: list, type: string>, errors: table<details: record, message: string, type: string>, measures: table<displayName: string, index: int, type: string, units: string>, reportData: table<components: list, dimension: int, dimensionDisplayName: string, item: int, itemDisplayName: string, measures: list>, reportInfo: record> {
@@ -629,6 +641,10 @@ export def "get-accounting-marketing-metrics" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
+  if ($report_date == null) { error make --unspanned { msg: "required query parameter 'reportDate' missing: pass --report-date" } }
+  if ($period_length == null) { error make --unspanned { msg: "required query parameter 'periodLength' missing: pass --period-length" } }
+  if ($number_of_periods == null) { error make --unspanned { msg: "required query parameter 'numberOfPeriods' missing: pass --number-of-periods" } }
+  if ($period_unit == null) { error make --unspanned { msg: "required query parameter 'periodUnit' missing: pass --period-unit" } }
   let qp = [(serialize-qp "reportDate" $report_date "scalar") (serialize-qp "periodLength" $period_length "scalar") (serialize-qp "numberOfPeriods" $number_of_periods "scalar") (serialize-qp "periodUnit" $period_unit "scalar") (serialize-qp "includeDisplayNames" $include_display_names "scalar") (serialize-qp "showInputValues" $show_input_values "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/data/companies/{company_id}/connections/{connection_id}/assess/accountingMetrics/marketing") $qp $auth.query)
   let accept_val = "application/json"
@@ -654,8 +670,8 @@ export def "get-accounting-marketing-metrics" [
 # operationId: list-accounts-categories
 @deprecated
 export def "list-accounts-categories" [
-  company_id: any
-  connection_id: any
+  company_id: string
+  connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -665,7 +681,7 @@ export def "list-accounts-categories" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page: int # Page number. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 1, e.g. 1)
+  --page: int # Page number. [Read more](https://docs.codat.io/using-the-api/paging). (required, format: int32, default: 1, e.g. 1)
   --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100, e.g. 100)
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
   --order-by: string # Field to order results by. [Read more](https://docs.codat.io/using-the-api/ordering-results). (e.g. -modifiedDate)
@@ -674,6 +690,7 @@ export def "list-accounts-categories" [
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
+  let page = ($page | default 1)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/data/companies/{company_id}/connections/{connection_id}/assess/accounts/categories") $qp $auth.query)
   let accept_val = "application/json"
@@ -712,7 +729,7 @@ export def "update-accounts-categories" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --categories: list # List of confirmed account categories set manually by the user. — item shape: {accountRef?: record, confirmed?: record}
-]: any -> table<accountRef: record<id: string, name: string>, confirmed: record, suggested: record> {
+]: any -> table<accountRef: record<id: string, name: string>, confirmed: record<detailType: string, subtype: string, type: string, modifiedDate: string>, suggested: record<detailType: string, subtype: string, type: string, modifiedDate: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -756,7 +773,7 @@ export def "get-account-category" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<accountRef: record<id: string, name: string>, confirmed: record, suggested: record> {
+]: nothing -> record<accountRef: record<id: string, name: string>, confirmed: record<detailType: string, subtype: string, type: string, modifiedDate: string>, suggested: record<detailType: string, subtype: string, type: string, modifiedDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -800,7 +817,7 @@ export def "update-account-category" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   confirmed: record # shape: {detailType?: string, subtype?: string, type?: string}
-]: any -> record<accountRef: record<id: string, name: string>, confirmed: record, suggested: record> {
+]: any -> record<accountRef: record<id: string, name: string>, confirmed: record<detailType: string, subtype: string, type: string, modifiedDate: string>, suggested: record<detailType: string, subtype: string, type: string, modifiedDate: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -831,8 +848,8 @@ export def "update-account-category" [
 # GET /data/companies/{companyId}/connections/{connectionId}/assess/commerceMetrics/customerRetention
 # operationId: get-commerce-customer-retention-metrics
 export def "get-commerce-customer-retention-metrics" [
-  company_id: any
-  connection_id: any
+  company_id: string
+  connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -842,16 +859,20 @@ export def "get-commerce-customer-retention-metrics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --report-date: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (e.g. 29-09-2020)
-  --period-length: int # The number of months per period. E.g. 2 = 2 months per period.
-  --number-of-periods: int # The number of periods to return. There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods.
-  --period-unit: string@period-unit-completer # The period unit of time returned.
+  --report-date: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (required, e.g. 29-09-2020)
+  --period-length: int # The number of months per period. E.g. 2 = 2 months per period. (required)
+  --number-of-periods: int # The number of periods to return. There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods. (required)
+  --period-unit: string@period-unit-completer # The period unit of time returned. (required)
   --include-display-names: oneof<nothing, bool> # Shows the dimensionDisplayName and itemDisplayName in measures to make the report data human-readable.
 ]: nothing -> record<dimensions: table<displayName: string, index: int, items: list, type: string>, errors: table<details: record, message: string, type: string>, measures: table<displayName: string, index: int, type: string, units: string>, reportData: table<components: list, dimension: int, dimensionDisplayName: string, item: int, itemDisplayName: string, measures: list>, reportInfo: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
+  if ($report_date == null) { error make --unspanned { msg: "required query parameter 'reportDate' missing: pass --report-date" } }
+  if ($period_length == null) { error make --unspanned { msg: "required query parameter 'periodLength' missing: pass --period-length" } }
+  if ($number_of_periods == null) { error make --unspanned { msg: "required query parameter 'numberOfPeriods' missing: pass --number-of-periods" } }
+  if ($period_unit == null) { error make --unspanned { msg: "required query parameter 'periodUnit' missing: pass --period-unit" } }
   let qp = [(serialize-qp "reportDate" $report_date "scalar") (serialize-qp "periodLength" $period_length "scalar") (serialize-qp "numberOfPeriods" $number_of_periods "scalar") (serialize-qp "periodUnit" $period_unit "scalar") (serialize-qp "includeDisplayNames" $include_display_names "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/data/companies/{company_id}/connections/{connection_id}/assess/commerceMetrics/customerRetention") $qp $auth.query)
   let accept_val = "application/json"
@@ -875,8 +896,8 @@ export def "get-commerce-customer-retention-metrics" [
 # GET /data/companies/{companyId}/connections/{connectionId}/assess/commerceMetrics/lifetimeValue
 # operationId: get-commerce-lifetime-value-metrics
 export def "get-commerce-lifetime-value-metrics" [
-  company_id: any
-  connection_id: any
+  company_id: string
+  connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -886,16 +907,20 @@ export def "get-commerce-lifetime-value-metrics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --report-date: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (e.g. 29-09-2020)
-  --period-length: int # The number of months per period. E.g. 2 = 2 months per period.
-  --number-of-periods: int # The number of periods to return. There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods.
-  --period-unit: string@period-unit-completer # The period unit of time returned.
+  --report-date: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (required, e.g. 29-09-2020)
+  --period-length: int # The number of months per period. E.g. 2 = 2 months per period. (required)
+  --number-of-periods: int # The number of periods to return. There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods. (required)
+  --period-unit: string@period-unit-completer # The period unit of time returned. (required)
   --include-display-names: oneof<nothing, bool> # Shows the dimensionDisplayName and itemDisplayName in measures to make the report data human-readable.
 ]: nothing -> record<dimensions: table<displayName: string, index: int, items: list, type: string>, errors: table<details: record, message: string, type: string>, measures: table<displayName: string, index: int, type: string, units: string>, reportData: table<components: list, dimension: int, dimensionDisplayName: string, item: int, itemDisplayName: string, measures: list>, reportInfo: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
+  if ($report_date == null) { error make --unspanned { msg: "required query parameter 'reportDate' missing: pass --report-date" } }
+  if ($period_length == null) { error make --unspanned { msg: "required query parameter 'periodLength' missing: pass --period-length" } }
+  if ($number_of_periods == null) { error make --unspanned { msg: "required query parameter 'numberOfPeriods' missing: pass --number-of-periods" } }
+  if ($period_unit == null) { error make --unspanned { msg: "required query parameter 'periodUnit' missing: pass --period-unit" } }
   let qp = [(serialize-qp "reportDate" $report_date "scalar") (serialize-qp "periodLength" $period_length "scalar") (serialize-qp "numberOfPeriods" $number_of_periods "scalar") (serialize-qp "periodUnit" $period_unit "scalar") (serialize-qp "includeDisplayNames" $include_display_names "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/data/companies/{company_id}/connections/{connection_id}/assess/commerceMetrics/lifetimeValue") $qp $auth.query)
   let accept_val = "application/json"
@@ -919,8 +944,8 @@ export def "get-commerce-lifetime-value-metrics" [
 # GET /data/companies/{companyId}/connections/{connectionId}/assess/commerceMetrics/orders
 # operationId: get-commerce-orders-metrics
 export def "get-commerce-orders-metrics" [
-  company_id: any
-  connection_id: any
+  company_id: string
+  connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -930,16 +955,20 @@ export def "get-commerce-orders-metrics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --report-date: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (e.g. 29-09-2020)
-  --period-length: int # The number of months per period. E.g. 2 = 2 months per period.
-  --number-of-periods: int # The number of periods to return. There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods.
-  --period-unit: string@period-unit-completer # The period unit of time returned.
+  --report-date: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (required, e.g. 29-09-2020)
+  --period-length: int # The number of months per period. E.g. 2 = 2 months per period. (required)
+  --number-of-periods: int # The number of periods to return. There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods. (required)
+  --period-unit: string@period-unit-completer # The period unit of time returned. (required)
   --include-display-names: oneof<nothing, bool> # Shows the dimensionDisplayName and itemDisplayName in measures to make the report data human-readable.
 ]: nothing -> record<dimensions: table<displayName: string, index: int, items: list, type: string>, errors: table<details: record, message: string, type: string>, measures: table<displayName: string, index: int, type: string, units: string>, reportData: table<components: list, dimension: int, dimensionDisplayName: string, item: int, itemDisplayName: string, measures: list>, reportInfo: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
+  if ($report_date == null) { error make --unspanned { msg: "required query parameter 'reportDate' missing: pass --report-date" } }
+  if ($period_length == null) { error make --unspanned { msg: "required query parameter 'periodLength' missing: pass --period-length" } }
+  if ($number_of_periods == null) { error make --unspanned { msg: "required query parameter 'numberOfPeriods' missing: pass --number-of-periods" } }
+  if ($period_unit == null) { error make --unspanned { msg: "required query parameter 'periodUnit' missing: pass --period-unit" } }
   let qp = [(serialize-qp "reportDate" $report_date "scalar") (serialize-qp "periodLength" $period_length "scalar") (serialize-qp "numberOfPeriods" $number_of_periods "scalar") (serialize-qp "periodUnit" $period_unit "scalar") (serialize-qp "includeDisplayNames" $include_display_names "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/data/companies/{company_id}/connections/{connection_id}/assess/commerceMetrics/orders") $qp $auth.query)
   let accept_val = "application/json"
@@ -963,8 +992,8 @@ export def "get-commerce-orders-metrics" [
 # GET /data/companies/{companyId}/connections/{connectionId}/assess/commerceMetrics/refunds
 # operationId: get-commerce-refunds-metrics
 export def "get-commerce-refunds-metrics" [
-  company_id: any
-  connection_id: any
+  company_id: string
+  connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -974,16 +1003,20 @@ export def "get-commerce-refunds-metrics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --report-date: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (e.g. 29-09-2020)
-  --period-length: int # The number of months per period. E.g. 2 = 2 months per period.
-  --number-of-periods: int # The number of periods to return. There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods.
-  --period-unit: string@period-unit-completer # The period unit of time returned.
+  --report-date: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (required, e.g. 29-09-2020)
+  --period-length: int # The number of months per period. E.g. 2 = 2 months per period. (required)
+  --number-of-periods: int # The number of periods to return. There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods. (required)
+  --period-unit: string@period-unit-completer # The period unit of time returned. (required)
   --include-display-names: oneof<nothing, bool> # Shows the dimensionDisplayName and itemDisplayName in measures to make the report data human-readable.
 ]: nothing -> record<dimensions: table<displayName: string, index: int, items: list, type: string>, errors: table<details: record, message: string, type: string>, measures: table<displayName: string, index: int, type: string, units: string>, reportData: table<components: list, dimension: int, dimensionDisplayName: string, item: int, itemDisplayName: string, measures: list>, reportInfo: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
+  if ($report_date == null) { error make --unspanned { msg: "required query parameter 'reportDate' missing: pass --report-date" } }
+  if ($period_length == null) { error make --unspanned { msg: "required query parameter 'periodLength' missing: pass --period-length" } }
+  if ($number_of_periods == null) { error make --unspanned { msg: "required query parameter 'numberOfPeriods' missing: pass --number-of-periods" } }
+  if ($period_unit == null) { error make --unspanned { msg: "required query parameter 'periodUnit' missing: pass --period-unit" } }
   let qp = [(serialize-qp "reportDate" $report_date "scalar") (serialize-qp "periodLength" $period_length "scalar") (serialize-qp "numberOfPeriods" $number_of_periods "scalar") (serialize-qp "periodUnit" $period_unit "scalar") (serialize-qp "includeDisplayNames" $include_display_names "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/data/companies/{company_id}/connections/{connection_id}/assess/commerceMetrics/refunds") $qp $auth.query)
   let accept_val = "application/json"
@@ -1007,8 +1040,8 @@ export def "get-commerce-refunds-metrics" [
 # GET /data/companies/{companyId}/connections/{connectionId}/assess/commerceMetrics/revenue
 # operationId: get-commerce-revenue-metrics
 export def "get-commerce-revenue-metrics" [
-  company_id: any
-  connection_id: any
+  company_id: string
+  connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1018,16 +1051,20 @@ export def "get-commerce-revenue-metrics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --report-date: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (e.g. 29-09-2020)
-  --period-length: int # The number of months per period. E.g. 2 = 2 months per period.
-  --number-of-periods: int # The number of periods to return. There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods.
-  --period-unit: string@period-unit-completer # The period unit of time returned.
+  --report-date: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (required, e.g. 29-09-2020)
+  --period-length: int # The number of months per period. E.g. 2 = 2 months per period. (required)
+  --number-of-periods: int # The number of periods to return. There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods. (required)
+  --period-unit: string@period-unit-completer # The period unit of time returned. (required)
   --include-display-names: oneof<nothing, bool> # Shows the dimensionDisplayName and itemDisplayName in measures to make the report data human-readable.
 ]: nothing -> record<dimensions: table<displayName: string, index: int, items: list, type: string>, errors: table<details: record, message: string, type: string>, measures: table<displayName: string, index: int, type: string, units: string>, reportData: table<components: list, dimension: int, dimensionDisplayName: string, item: int, itemDisplayName: string, measures: list>, reportInfo: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
+  if ($report_date == null) { error make --unspanned { msg: "required query parameter 'reportDate' missing: pass --report-date" } }
+  if ($period_length == null) { error make --unspanned { msg: "required query parameter 'periodLength' missing: pass --period-length" } }
+  if ($number_of_periods == null) { error make --unspanned { msg: "required query parameter 'numberOfPeriods' missing: pass --number-of-periods" } }
+  if ($period_unit == null) { error make --unspanned { msg: "required query parameter 'periodUnit' missing: pass --period-unit" } }
   let qp = [(serialize-qp "reportDate" $report_date "scalar") (serialize-qp "periodLength" $period_length "scalar") (serialize-qp "numberOfPeriods" $number_of_periods "scalar") (serialize-qp "periodUnit" $period_unit "scalar") (serialize-qp "includeDisplayNames" $include_display_names "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/data/companies/{company_id}/connections/{connection_id}/assess/commerceMetrics/revenue") $qp $auth.query)
   let accept_val = "application/json"
@@ -1053,8 +1090,8 @@ export def "get-commerce-revenue-metrics" [
 # operationId: get-enhanced-balance-sheet
 @deprecated
 export def "get-enhanced-balance-sheet" [
-  company_id: any
-  connection_id: any
+  company_id: string
+  connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1064,15 +1101,18 @@ export def "get-enhanced-balance-sheet" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --report-date: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (e.g. 29-09-2020)
-  --period-length: int # The number of months per period. E.g. 2 = 2 months per period.
-  --number-of-periods: int # The number of periods to return. There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods.
+  --report-date: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (required, e.g. 29-09-2020)
+  --period-length: int # The number of months per period. E.g. 2 = 2 months per period. (required)
+  --number-of-periods: int # The number of periods to return. There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods. (required)
   --include-display-names: oneof<nothing, bool> # Shows the dimensionDisplayName and itemDisplayName in measures to make the report data human-readable.
 ]: nothing -> record<dimensions: table<displayName: string, index: int, items: list, type: string>, errors: table<details: record, message: string, type: string>, measures: table<displayName: string, index: int, type: string, units: string>, reportData: table<components: list, dimension: int, dimensionDisplayName: string, item: int, itemDisplayName: string, measures: list>, reportInfo: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
+  if ($report_date == null) { error make --unspanned { msg: "required query parameter 'reportDate' missing: pass --report-date" } }
+  if ($period_length == null) { error make --unspanned { msg: "required query parameter 'periodLength' missing: pass --period-length" } }
+  if ($number_of_periods == null) { error make --unspanned { msg: "required query parameter 'numberOfPeriods' missing: pass --number-of-periods" } }
   let qp = [(serialize-qp "reportDate" $report_date "scalar") (serialize-qp "periodLength" $period_length "scalar") (serialize-qp "numberOfPeriods" $number_of_periods "scalar") (serialize-qp "includeDisplayNames" $include_display_names "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/data/companies/{company_id}/connections/{connection_id}/assess/enhancedBalanceSheet") $qp $auth.query)
   let accept_val = "application/json"
@@ -1098,8 +1138,8 @@ export def "get-enhanced-balance-sheet" [
 # operationId: get-enhanced-profit-and-loss
 @deprecated
 export def "get-enhanced-profit-and-loss" [
-  company_id: any
-  connection_id: any
+  company_id: string
+  connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1109,15 +1149,18 @@ export def "get-enhanced-profit-and-loss" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --report-date: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (e.g. 29-09-2020)
-  --period-length: int # The number of months per period. E.g. 2 = 2 months per period.
-  --number-of-periods: int # The number of periods to return. There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods.
+  --report-date: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (required, e.g. 29-09-2020)
+  --period-length: int # The number of months per period. E.g. 2 = 2 months per period. (required)
+  --number-of-periods: int # The number of periods to return. There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods. (required)
   --include-display-names: oneof<nothing, bool> # Shows the dimensionDisplayName and itemDisplayName in measures to make the report data human-readable.
 ]: nothing -> record<dimensions: table<displayName: string, index: int, items: list, type: string>, errors: table<details: record, message: string, type: string>, measures: table<displayName: string, index: int, type: string, units: string>, reportData: table<components: list, dimension: int, dimensionDisplayName: string, item: int, itemDisplayName: string, measures: list>, reportInfo: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
+  if ($report_date == null) { error make --unspanned { msg: "required query parameter 'reportDate' missing: pass --report-date" } }
+  if ($period_length == null) { error make --unspanned { msg: "required query parameter 'periodLength' missing: pass --period-length" } }
+  if ($number_of_periods == null) { error make --unspanned { msg: "required query parameter 'numberOfPeriods' missing: pass --number-of-periods" } }
   let qp = [(serialize-qp "reportDate" $report_date "scalar") (serialize-qp "periodLength" $period_length "scalar") (serialize-qp "numberOfPeriods" $number_of_periods "scalar") (serialize-qp "includeDisplayNames" $include_display_names "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/data/companies/{company_id}/connections/{connection_id}/assess/enhancedProfitAndLoss") $qp $auth.query)
   let accept_val = "application/json"
@@ -1143,8 +1186,8 @@ export def "get-enhanced-profit-and-loss" [
 # operationId: get-enhanced-financial-metrics
 @deprecated
 export def "get-enhanced-financial-metrics" [
-  company_id: any
-  connection_id: any
+  company_id: string
+  connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1154,15 +1197,18 @@ export def "get-enhanced-financial-metrics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --report-date: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (e.g. 29-09-2020)
-  --period-length: int # The number of months per period. E.g. 2 = 2 months per period.
-  --number-of-periods: int # The number of periods to return. There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods.
+  --report-date: string # The date in which the report is created up to. Users must specify a specific date, however the response will be provided for the full month. (required, e.g. 29-09-2020)
+  --period-length: int # The number of months per period. E.g. 2 = 2 months per period. (required)
+  --number-of-periods: int # The number of periods to return. There will be no pagination as a query parameter, however Codat will limit the number of periods to request to 12 periods. (required)
   --show-metric-inputs: oneof<nothing, bool> # If set to true, then the system includes the input values within the response.
 ]: nothing -> record<currency: string, errors: table<message: string, type: string>, metrics: table<errors: list, key: string, metricUnit: string, name: string, periods: list>, periodUnit: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionId' must be non-empty" } }
+  if ($report_date == null) { error make --unspanned { msg: "required query parameter 'reportDate' missing: pass --report-date" } }
+  if ($period_length == null) { error make --unspanned { msg: "required query parameter 'periodLength' missing: pass --period-length" } }
+  if ($number_of_periods == null) { error make --unspanned { msg: "required query parameter 'numberOfPeriods' missing: pass --number-of-periods" } }
   let qp = [(serialize-qp "reportDate" $report_date "scalar") (serialize-qp "periodLength" $period_length "scalar") (serialize-qp "numberOfPeriods" $number_of_periods "scalar") (serialize-qp "showMetricInputs" $show_metric_inputs "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), connection_id: (encode-path-segment $connection_id)} | format pattern "/data/companies/{company_id}/connections/{connection_id}/assess/financialMetrics") $qp $auth.query)
   let accept_val = "application/json"

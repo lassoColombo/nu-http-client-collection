@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -2208,7 +2208,7 @@ export def "export-history" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($filename | is-empty) { error make --unspanned { msg: "path parameter 'filename' must be non-empty" } }
-  let full_url = (build-url $base ({filename: (encode-path-segment $filename)} | format pattern "/email/history/export?filename={filename}") $auth.query)
+  let full_url = (build-url $base ({filename: (encode-path-segment $filename)} | format pattern "/email/history/export") "filename={filename}" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2422,13 +2422,13 @@ export def "email-price" [
   from_email_address_id: float # The sender's email address id.
   --from-name: string # The sender's name.
   subject: string # The subject of the email.
-  --body-to: list # The recipients of the email. See sample request for more details.
+  to: list # The recipients of the email. See sample request for more details.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/email/price" $auth.query)
-  let req_body = {"attachments": $attachments, "bcc": $bcc, "body": $body, "cc": $cc, "from.email_address_id": $from_email_address_id, "from.name": $from_name, "subject": $subject, "to": $body_to} | compact
+  let req_body = {"attachments": $attachments, "bcc": $bcc, "body": $body, "cc": $cc, "from.email_address_id": $from_email_address_id, "from.name": $from_name, "subject": $subject, "to": $to} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2504,13 +2504,13 @@ export def "email-send" [
   from_email_address_id: float # The sender's email address ID.
   --from-name: string # The sender's name.
   --schedule: float # Leave blank for immediate delivery. Your schedule time as a [unix timestamp](http://help.clicksend.com/what-is-a-unix-timestamp).
-  --body-to: list # The recipients of the email.
+  to: list # The recipients of the email.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/email/send" $auth.query)
-  let req_body = {"attachments": $attachments, "bcc": $bcc, "body": $body, "cc": $cc, "from.email_address_id": $from_email_address_id, "from.name": $from_name, "schedule": $schedule, "to": $body_to} | compact
+  let req_body = {"attachments": $attachments, "bcc": $bcc, "body": $body, "cc": $cc, "from.email_address_id": $from_email_address_id, "from.name": $from_name, "schedule": $schedule, "to": $to} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2774,7 +2774,7 @@ export def "export-fax-history" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($filename | is-empty) { error make --unspanned { msg: "path parameter 'filename' must be non-empty" } }
-  let full_url = (build-url $base ({filename: (encode-path-segment $filename)} | format pattern "/fax/history/export?filename={filename}") $auth.query)
+  let full_url = (build-url $base ({filename: (encode-path-segment $filename)} | format pattern "/fax/history/export") "filename={filename}" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2816,7 +2816,7 @@ export def "get-fax-history" [
   if ($date_to | is-empty) { error make --unspanned { msg: "path parameter 'date_to' must be non-empty" } }
   if ($q | is-empty) { error make --unspanned { msg: "path parameter 'q' must be non-empty" } }
   if ($order_by | is-empty) { error make --unspanned { msg: "path parameter 'order_by' must be non-empty" } }
-  let full_url = (build-url $base ({date_from: (encode-path-segment $date_from), date_to: (encode-path-segment $date_to), q: (encode-path-segment $q), order_by: (encode-path-segment $order_by)} | format pattern "/fax/history?date_from={date_from}&date_to={date_to}&q={q}&order_by={order_by}") $auth.query)
+  let full_url = (build-url $base ({date_from: (encode-path-segment $date_from), date_to: (encode-path-segment $date_to), q: (encode-path-segment $q), order_by: (encode-path-segment $order_by)} | format pattern "/fax/history") "date_from={date_from}&date_to={date_to}&q={q}&order_by={order_by}" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2849,19 +2849,19 @@ export def "post-fax-price" [
   --country: string # Recipient country.
   --custom-string: string # Your reference. Will be passed back with all replies and delivery reports.
   file_url: string # Your URL to your PDF file.
-  --body-from: string # Your sender id. Must be a valid fax number.
+  --from: string # Your sender id. Must be a valid fax number.
   --from-email: string # An email address where the reply should be emailed to.
   --list-id: float # Your list ID if sending to a whole list. Can be used instead of 'to'.
   messages: list # Your messages.
   --schedule: float # Leave blank for immediate delivery. Your schedule time as a [unix timestamp](http://help.clicksend.com/what-is-a-unix-timestamp).
-  --body-source: string # Your method of sending e.g. 'wordpress', 'php', 'c#'.
-  --body-to: string # Recipient number in E.164 format or local format ([more info](https://help.clicksend.com/SMS/what-format-does-the-recipient-phone-number-need-to-be-in)).
+  --source: string # Your method of sending e.g. 'wordpress', 'php', 'c#'.
+  to: string # Recipient number in E.164 format or local format ([more info](https://help.clicksend.com/SMS/what-format-does-the-recipient-phone-number-need-to-be-in)).
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/fax/price" $auth.query)
-  let req_body = {"country": $country, "custom_string": $custom_string, "file_url": $file_url, "from": $body_from, "from_email": $from_email, "list_id": $list_id, "messages": $messages, "schedule": $schedule, "source": $body_source, "to": $body_to} | compact
+  let req_body = {"country": $country, "custom_string": $custom_string, "file_url": $file_url, "from": $from, "from_email": $from_email, "list_id": $list_id, "messages": $messages, "schedule": $schedule, "source": $source, "to": $to} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3042,19 +3042,19 @@ export def "send-fax" [
   --country: string # Recipient country.
   --custom-string: string # Your reference. Will be passed back with all replies and delivery reports.
   file_url: string # Your URL to your PDF file.
-  --body-from: string # Your sender id. Must be a valid fax number.
+  --from: string # Your sender id. Must be a valid fax number.
   --from-email: string # An email address where the reply should be emailed to.
   --list-id: float # Your list ID if sending to a whole list. Can be used instead of 'to'.
   messages: list # Your messages.
   --schedule: float # Leave blank for immediate delivery. Your schedule time as a [unix timestamp](http://help.clicksend.com/what-is-a-unix-timestamp).
-  --body-source: string # Your method of sending e.g. 'wordpress', 'php', 'c#'.
-  --body-to: string # Recipient number in E.164 format or local format ([more info](https://help.clicksend.com/SMS/what-format-does-the-recipient-phone-number-need-to-be-in)).
+  --source: string # Your method of sending e.g. 'wordpress', 'php', 'c#'.
+  to: string # Recipient number in E.164 format or local format ([more info](https://help.clicksend.com/SMS/what-format-does-the-recipient-phone-number-need-to-be-in)).
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/fax/send" $auth.query)
-  let req_body = {"country": $country, "custom_string": $custom_string, "file_url": $file_url, "from": $body_from, "from_email": $from_email, "list_id": $list_id, "messages": $messages, "schedule": $schedule, "source": $body_source, "to": $body_to} | compact
+  let req_body = {"country": $country, "custom_string": $custom_string, "file_url": $file_url, "from": $from, "from_email": $from_email, "list_id": $list_id, "messages": $messages, "schedule": $schedule, "source": $source, "to": $to} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3659,7 +3659,7 @@ export def "export-contacts-list" [
   let base = ($base_url | default $BASE_URL)
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'list_id' must be non-empty" } }
   if ($filename | is-empty) { error make --unspanned { msg: "path parameter 'filename' must be non-empty" } }
-  let full_url = (build-url $base ({list_id: (encode-path-segment $list_id), filename: (encode-path-segment $filename)} | format pattern "/lists/{list_id}/export?filename={filename}") $auth.query)
+  let full_url = (build-url $base ({list_id: (encode-path-segment $list_id), filename: (encode-path-segment $filename)} | format pattern "/lists/{list_id}/export") "filename={filename}" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3924,7 +3924,7 @@ export def "export-mms-history" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($filename | is-empty) { error make --unspanned { msg: "path parameter 'filename' must be non-empty" } }
-  let full_url = (build-url $base ({filename: (encode-path-segment $filename)} | format pattern "/mms/history/export?filename={filename}") $auth.query)
+  let full_url = (build-url $base ({filename: (encode-path-segment $filename)} | format pattern "/mms/history/export") "filename={filename}" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3966,7 +3966,7 @@ export def "get-mms-history" [
   if ($order_by | is-empty) { error make --unspanned { msg: "path parameter 'order_by' must be non-empty" } }
   if ($date_from | is-empty) { error make --unspanned { msg: "path parameter 'date_from' must be non-empty" } }
   if ($date_to | is-empty) { error make --unspanned { msg: "path parameter 'date_to' must be non-empty" } }
-  let full_url = (build-url $base ({q: (encode-path-segment $q), order_by: (encode-path-segment $order_by), date_from: (encode-path-segment $date_from), date_to: (encode-path-segment $date_to)} | format pattern "/mms/history?q={q}&order_by={order_by}&date_from={date_from}&date_to={date_to}") $auth.query)
+  let full_url = (build-url $base ({q: (encode-path-segment $q), order_by: (encode-path-segment $order_by), date_from: (encode-path-segment $date_from), date_to: (encode-path-segment $date_to)} | format pattern "/mms/history") "q={q}&order_by={order_by}&date_from={date_from}&date_to={date_to}" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -4000,20 +4000,20 @@ export def "get-price" [
   body: string # Your message.
   --country: string # Recipient country.
   --custom-string: string # Your reference. Will be passed back with all replies and delivery reports.
-  --body-from: string # Your sender id - [more info](http://help.clicksend.com/SMS/what-is-a-sender-id-or-sender-number).
+  --from: string # Your sender id - [more info](http://help.clicksend.com/SMS/what-is-a-sender-id-or-sender-number).
   --from-email: string # An email address where the reply should be emailed to. If omitted, the reply will be emailed back to the user who sent the outgoing SMS.
   --list-id: float # Your list ID if sending to a whole list. Can be used instead of 'to'.
   media_file: string # Media file you want to send.
   --schedule: float # Leave blank for immediate delivery. Your schedule time as a [unix timestamp](http://help.clicksend.com/what-is-a-unix-timestamp).
-  --body-source: string # Your method of sending e.g. 'wordpress', 'php', 'c#'.
+  --source: string # Your method of sending e.g. 'wordpress', 'php', 'c#'.
   subject: string # Subject line. Maximum 20 characters.
-  --body-to: string # Recipient number in E.164 format or local format ([more info](https://help.clicksend.com/SMS/what-format-does-the-recipient-phone-number-need-to-be-in)).
+  to: string # Recipient number in E.164 format or local format ([more info](https://help.clicksend.com/SMS/what-format-does-the-recipient-phone-number-need-to-be-in)).
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mms/price" $auth.query)
-  let req_body = {"body": $body, "country": $country, "custom_string": $custom_string, "from": $body_from, "from_email": $from_email, "list_id": $list_id, "media_file": $media_file, "schedule": $schedule, "source": $body_source, "subject": $subject, "to": $body_to} | compact
+  let req_body = {"body": $body, "country": $country, "custom_string": $custom_string, "from": $from, "from_email": $from_email, "list_id": $list_id, "media_file": $media_file, "schedule": $schedule, "source": $source, "subject": $subject, "to": $to} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4152,20 +4152,20 @@ export def "send-mms" [
   body: string # Your message.
   --country: string # Recipient country.
   --custom-string: string # Your reference. Will be passed back with all replies and delivery reports.
-  --body-from: string # The number to send from. Either leave blank or use a ClickSend number only.
+  --from: string # The number to send from. Either leave blank or use a ClickSend number only.
   --from-email: string # An email address where the reply should be emailed to. If omitted, the reply will be emailed back to the user who sent the outgoing SMS.
   --list-id: float # Your list ID if sending to a whole list. Can be used instead of 'to'.
   media_file: string # Media file you want to send.
   --schedule: float # Leave blank for immediate delivery. Your schedule time as a [unix timestamp](http://help.clicksend.com/what-is-a-unix-timestamp).
-  --body-source: string # Your method of sending e.g. 'wordpress', 'php', 'c#'.
+  --source: string # Your method of sending e.g. 'wordpress', 'php', 'c#'.
   subject: string # Subject line. Maximum 20 characters.
-  --body-to: string # Recipient number in E.164 format or local format ([more info](https://help.clicksend.com/SMS/what-format-does-the-recipient-phone-number-need-to-be-in)).
+  to: string # Recipient number in E.164 format or local format ([more info](https://help.clicksend.com/SMS/what-format-does-the-recipient-phone-number-need-to-be-in)).
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mms/send" $auth.query)
-  let req_body = {"body": $body, "country": $country, "custom_string": $custom_string, "from": $body_from, "from_email": $from_email, "list_id": $list_id, "media_file": $media_file, "schedule": $schedule, "source": $body_source, "subject": $subject, "to": $body_to} | compact
+  let req_body = {"body": $body, "country": $country, "custom_string": $custom_string, "from": $from, "from_email": $from_email, "list_id": $list_id, "media_file": $media_file, "schedule": $schedule, "source": $source, "subject": $subject, "to": $to} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4312,7 +4312,7 @@ export def "search-dedicated-numbers-by-country" [
   if ($country | is-empty) { error make --unspanned { msg: "path parameter 'country' must be non-empty" } }
   if ($search | is-empty) { error make --unspanned { msg: "path parameter 'search' must be non-empty" } }
   if ($search_type | is-empty) { error make --unspanned { msg: "path parameter 'search_type' must be non-empty" } }
-  let full_url = (build-url $base ({country: (encode-path-segment $country), search: (encode-path-segment $search), search_type: (encode-path-segment $search_type)} | format pattern "/numbers/search/{country}?{search}=1&{search_type}=2") $auth.query)
+  let full_url = (build-url $base ({country: (encode-path-segment $country), search: (encode-path-segment $search), search_type: (encode-path-segment $search_type)} | format pattern "/numbers/search/{country}") "{search}=1&{search_type}=2" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -4382,13 +4382,13 @@ export def "calculate-direct-mail-campaign-price" [
   name: string # Campaign name.
   --schedule: float # Leave blank for immediate delivery. Your schedule time as a [unix timestamp](http://help.clicksend.com/what-is-a-unix-timestamp).
   size: string # Campaign file size. It can be A5 or DL.
-  --body-source: string # Your method of sending e.g. 'wordpress', 'php', 'c#'.
+  --source: string # Your method of sending e.g. 'wordpress', 'php', 'c#'.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/post/direct-mail/campaigns/price" $auth.query)
-  let req_body = {"areas": $areas, "file_urls": $file_urls, "name": $name, "schedule": $schedule, "size": $size, "source": $body_source} | compact
+  let req_body = {"areas": $areas, "file_urls": $file_urls, "name": $name, "schedule": $schedule, "size": $size, "source": $source} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4425,13 +4425,13 @@ export def "create-new-campaign" [
   name: string # Campaign name.
   --schedule: float # Leave blank for immediate delivery. Your schedule time as a [unix timestamp](http://help.clicksend.com/what-is-a-unix-timestamp).
   size: string # Campaign file size. It can be A5 or DL.
-  --body-source: string # Your method of sending e.g. 'wordpress', 'php', 'c#'.
+  --source: string # Your method of sending e.g. 'wordpress', 'php', 'c#'.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/post/direct-mail/campaigns/send" $auth.query)
-  let req_body = {"areas": $areas, "file_urls": $file_urls, "name": $name, "schedule": $schedule, "size": $size, "source": $body_source} | compact
+  let req_body = {"areas": $areas, "file_urls": $file_urls, "name": $name, "schedule": $schedule, "size": $size, "source": $source} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4470,7 +4470,7 @@ export def "search-locations" [
   let base = ($base_url | default $BASE_URL)
   if ($country | is-empty) { error make --unspanned { msg: "path parameter 'country' must be non-empty" } }
   if ($query | is-empty) { error make --unspanned { msg: "path parameter 'query' must be non-empty" } }
-  let full_url = (build-url $base ({country: (encode-path-segment $country), query: (encode-path-segment $query)} | format pattern "/post/direct-mail/locations/search/{country}/?q={query}") $auth.query)
+  let full_url = (build-url $base ({country: (encode-path-segment $country), query: (encode-path-segment $query)} | format pattern "/post/direct-mail/locations/search/{country}/") "q={query}" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -4579,7 +4579,7 @@ export def "export-post-letter-history" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($filename | is-empty) { error make --unspanned { msg: "path parameter 'filename' must be non-empty" } }
-  let full_url = (build-url $base ({filename: (encode-path-segment $filename)} | format pattern "/post/letters/history/export?filename={filename}") $auth.query)
+  let full_url = (build-url $base ({filename: (encode-path-segment $filename)} | format pattern "/post/letters/history/export") "filename={filename}" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -4700,7 +4700,7 @@ export def "export-postcard-history" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($filename | is-empty) { error make --unspanned { msg: "path parameter 'filename' must be non-empty" } }
-  let full_url = (build-url $base ({filename: (encode-path-segment $filename)} | format pattern "/post/postcards/export?filename={filename}") $auth.query)
+  let full_url = (build-url $base ({filename: (encode-path-segment $filename)} | format pattern "/post/postcards/export") "filename={filename}" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -5046,7 +5046,7 @@ export def "get-country-pricing" [
   let base = ($base_url | default $BASE_URL)
   if ($country | is-empty) { error make --unspanned { msg: "path parameter 'country' must be non-empty" } }
   if ($currency | is-empty) { error make --unspanned { msg: "path parameter 'currency' must be non-empty" } }
-  let full_url = (build-url $base ({country: (encode-path-segment $country), currency: (encode-path-segment $currency)} | format pattern "/pricing/{country}?currency={currency}") $auth.query)
+  let full_url = (build-url $base ({country: (encode-path-segment $country), currency: (encode-path-segment $currency)} | format pattern "/pricing/{country}") "currency={currency}" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -5159,7 +5159,7 @@ export def "list-of-packages" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($country | is-empty) { error make --unspanned { msg: "path parameter 'country' must be non-empty" } }
-  let full_url = (build-url $base ({country: (encode-path-segment $country)} | format pattern "/recharge/packages?country={country}") $auth.query)
+  let full_url = (build-url $base ({country: (encode-path-segment $country)} | format pattern "/recharge/packages") "country={country}" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -5735,7 +5735,7 @@ export def "search-contacts-lists" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($q | is-empty) { error make --unspanned { msg: "path parameter 'q' must be non-empty" } }
-  let full_url = (build-url $base ({q: (encode-path-segment $q)} | format pattern "/search/contacts-lists?q={q}") $auth.query)
+  let full_url = (build-url $base ({q: (encode-path-segment $q)} | format pattern "/search/contacts-lists") "q={q}" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -5801,7 +5801,7 @@ export def "calculate-price-for-sms-campaign" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   body: string # Your campaign message.
-  --body-from: string # Your sender id - [more info](http://help.clicksend.com/SMS/what-is-a-sender-id-or-sender-number).
+  --from: string # Your sender id - [more info](http://help.clicksend.com/SMS/what-is-a-sender-id-or-sender-number).
   list_id: float # Your list id.
   name: string # Your campaign name.
 ]: any -> any {
@@ -5809,7 +5809,7 @@ export def "calculate-price-for-sms-campaign" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sms-campaigns/price" $auth.query)
-  let req_body = {"body": $body, "from": $body_from, "list_id": $list_id, "name": $name} | compact
+  let req_body = {"body": $body, "from": $from, "list_id": $list_id, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5842,7 +5842,7 @@ export def "use-short-url" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   body: string # Your campaign message.
-  --body-from: string # Your sender id - [more info](http://help.clicksend.com/SMS/what-is-a-sender-id-or-sender-number).
+  --from: string # Your sender id - [more info](http://help.clicksend.com/SMS/what-is-a-sender-id-or-sender-number).
   list_id: float # Your list id.
   name: string # Your campaign name.
   --schedule: float # Leave blank for immediate delivery. Your schedule time as a [unix timestamp](http://help.clicksend.com/what-is-a-unix-timestamp).
@@ -5852,7 +5852,7 @@ export def "use-short-url" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sms-campaigns/send" $auth.query)
-  let req_body = {"body": $body, "from": $body_from, "list_id": $list_id, "name": $name, "schedule": $schedule, "url_to_shorten": $url_to_shorten} | compact
+  let req_body = {"body": $body, "from": $from, "list_id": $list_id, "name": $name, "schedule": $schedule, "url_to_shorten": $url_to_shorten} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5891,7 +5891,7 @@ export def "link-tracking-export" [
   let base = ($base_url | default $BASE_URL)
   if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
   if ($filename | is-empty) { error make --unspanned { msg: "path parameter 'filename' must be non-empty" } }
-  let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id), filename: (encode-path-segment $filename)} | format pattern "/sms-campaigns/{campaign_id}/link-export?filename={filename}") $auth.query)
+  let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id), filename: (encode-path-segment $filename)} | format pattern "/sms-campaigns/{campaign_id}/link-export") "filename={filename}" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -6032,7 +6032,7 @@ export def "update-an-sms-campaign" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   body: string # Your campaign message.
-  --body-from: string # Your sender id - [more info](http://help.clicksend.com/SMS/what-is-a-sender-id-or-sender-number).
+  --from: string # Your sender id - [more info](http://help.clicksend.com/SMS/what-is-a-sender-id-or-sender-number).
   list_id: float # Your list id.
   name: string # Your campaign name.
   --schedule: float # Leave blank for immediate delivery. Will replace existing schedule (even if left blank). Your schedule time as a [unix timestamp](http://help.clicksend.com/what-is-a-unix-timestamp).
@@ -6042,7 +6042,7 @@ export def "update-an-sms-campaign" [
   let base = ($base_url | default $BASE_URL)
   if ($sms_campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'sms_campaign_id' must be non-empty" } }
   let full_url = (build-url $base ({sms_campaign_id: (encode-path-segment $sms_campaign_id)} | format pattern "/sms-campaigns/{sms_campaign_id}") $auth.query)
-  let req_body = {"body": $body, "from": $body_from, "list_id": $list_id, "name": $name, "schedule": $schedule} | compact
+  let req_body = {"body": $body, "from": $from, "list_id": $list_id, "name": $name, "schedule": $schedule} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6179,13 +6179,13 @@ export def "create-email-to-sms-allowed-address" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   email_address: string # Your email address.
-  --body-from: string # Your sender id - [more info](http://help.clicksend.com/SMS/what-is-a-sender-id-or-sender-number).
+  --from: string # Your sender id - [more info](http://help.clicksend.com/SMS/what-is-a-sender-id-or-sender-number).
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sms/email-sms" $auth.query)
-  let req_body = {"email_address": $email_address, "from": $body_from} | compact
+  let req_body = {"email_address": $email_address, "from": $from} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6475,14 +6475,14 @@ export def "update-email-to-sms-allowed-address" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   email_address: string # Your email address.
-  --body-from: string # Your sender id - [more info](http://help.clicksend.com/SMS/what-is-a-sender-id-or-sender-number).
+  --from: string # Your sender id - [more info](http://help.clicksend.com/SMS/what-is-a-sender-id-or-sender-number).
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($email_address_id | is-empty) { error make --unspanned { msg: "path parameter 'email_address_id' must be non-empty" } }
   let full_url = (build-url $base ({email_address_id: (encode-path-segment $email_address_id)} | format pattern "/sms/email-sms/{email_address_id}") $auth.query)
-  let req_body = {"email_address": $email_address, "from": $body_from} | compact
+  let req_body = {"email_address": $email_address, "from": $from} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6519,7 +6519,7 @@ export def "export-sms-history" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($filename | is-empty) { error make --unspanned { msg: "path parameter 'filename' must be non-empty" } }
-  let full_url = (build-url $base ({filename: (encode-path-segment $filename)} | format pattern "/sms/history/export?filename={filename}") $auth.query)
+  let full_url = (build-url $base ({filename: (encode-path-segment $filename)} | format pattern "/sms/history/export") "filename={filename}" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -6557,7 +6557,7 @@ export def "get-all-history" [
   let base = ($base_url | default $BASE_URL)
   if ($date_from | is-empty) { error make --unspanned { msg: "path parameter 'date_from' must be non-empty" } }
   if ($date_to | is-empty) { error make --unspanned { msg: "path parameter 'date_to' must be non-empty" } }
-  let full_url = (build-url $base ({date_from: (encode-path-segment $date_from), date_to: (encode-path-segment $date_to)} | format pattern "/sms/history?date_from={date_from}&date_to={date_to}") $auth.query)
+  let full_url = (build-url $base ({date_from: (encode-path-segment $date_from), date_to: (encode-path-segment $date_to)} | format pattern "/sms/history") "date_from={date_from}&date_to={date_to}" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -6772,17 +6772,17 @@ export def "post-sms-price" [
   body: string # Your message.
   --country: string # Recipient country.
   --custom-string: string # Your reference. Will be passed back with all replies and delivery reports.
-  --body-from: string # Your sender id - [more info](http://help.clicksend.com/SMS/what-is-a-sender-id-or-sender-number).
+  --from: string # Your sender id - [more info](http://help.clicksend.com/SMS/what-is-a-sender-id-or-sender-number).
   --list-id: float # Your list ID if sending to a whole list. Can be used instead of 'to'.
   --schedule: float # Leave blank for immediate delivery. Your schedule time as a [unix timestamp](http://help.clicksend.com/what-is-a-unix-timestamp).
-  --body-source: string # Your method of sending e.g. 'wordpress', 'php', 'c#'.
-  --body-to: string # Recipient number in E.164 format or local format ([more info](https://help.clicksend.com/SMS/what-format-does-the-recipient-phone-number-need-to-be-in)).
+  --source: string # Your method of sending e.g. 'wordpress', 'php', 'c#'.
+  to: string # Recipient number in E.164 format or local format ([more info](https://help.clicksend.com/SMS/what-format-does-the-recipient-phone-number-need-to-be-in)).
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sms/price" $auth.query)
-  let req_body = {"body": $body, "country": $country, "custom_string": $custom_string, "from": $body_from, "list_id": $list_id, "schedule": $schedule, "source": $body_source, "to": $body_to} | compact
+  let req_body = {"body": $body, "country": $country, "custom_string": $custom_string, "from": $from, "list_id": $list_id, "schedule": $schedule, "source": $source, "to": $to} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6961,18 +6961,18 @@ export def "send-an-sms" [
   body: string # Your message.
   --country: string # Recipient country.
   --custom-string: string # Your reference. Will be passed back with all replies and delivery reports.
-  --body-from: string # Your sender id - [more info](http://help.clicksend.com/SMS/what-is-a-sender-id-or-sender-number).
+  --from: string # Your sender id - [more info](http://help.clicksend.com/SMS/what-is-a-sender-id-or-sender-number).
   --from-email: string # An email address where the reply should be emailed to. If omitted, the reply will be emailed back to the user who sent the outgoing SMS.
   --list-id: float # Your list ID if sending to a whole list. Can be used instead of 'to'.
   --schedule: float # Leave blank for immediate delivery. Your schedule time as a [unix timestamp](http://help.clicksend.com/what-is-a-unix-timestamp).
-  --body-source: string # Your method of sending e.g. 'wordpress', 'php', 'c#'.
-  --body-to: string # Recipient number in E.164 format or local format ([more info](https://help.clicksend.com/SMS/what-format-does-the-recipient-phone-number-need-to-be-in)).
+  --source: string # Your method of sending e.g. 'wordpress', 'php', 'c#'.
+  to: string # Recipient number in E.164 format or local format ([more info](https://help.clicksend.com/SMS/what-format-does-the-recipient-phone-number-need-to-be-in)).
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sms/send" $auth.query)
-  let req_body = {"body": $body, "country": $country, "custom_string": $custom_string, "from": $body_from, "from_email": $from_email, "list_id": $list_id, "schedule": $schedule, "source": $body_source, "to": $body_to} | compact
+  let req_body = {"body": $body, "country": $country, "custom_string": $custom_string, "from": $from, "from_email": $from_email, "list_id": $list_id, "schedule": $schedule, "source": $source, "to": $to} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7524,7 +7524,6 @@ export def "get-timezones" [
 # POST /uploads?convert={convert}
 # operationId: Upload a file
 export def "upload-a-file" [
-  convert: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7535,15 +7534,14 @@ export def "upload-a-file" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content: string # Your file contents encoded in `base64`.
-  --body-convert: string # Conversion type: `fax`, `mms`, `csv` or `post`
+  --convert: string # Conversion type: `fax`, `mms`, `csv` or `post`
   --file: string # Your file.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  if ($convert | is-empty) { error make --unspanned { msg: "path parameter 'convert' must be non-empty" } }
-  let full_url = (build-url $base ({convert: (encode-path-segment $convert)} | format pattern "/uploads?convert={convert}") $auth.query)
-  let req_body = {"content": $content, "convert": $body_convert, "file": $file} | compact
+  let full_url = (build-url $base "/uploads" "convert={convert}" $auth.query)
+  let req_body = {"content": $content, "convert": $convert, "file": $file} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7614,7 +7612,7 @@ export def "export-voice-history" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($filename | is-empty) { error make --unspanned { msg: "path parameter 'filename' must be non-empty" } }
-  let full_url = (build-url $base ({filename: (encode-path-segment $filename)} | format pattern "/voice/history/export?filename={filename}") $auth.query)
+  let full_url = (build-url $base ({filename: (encode-path-segment $filename)} | format pattern "/voice/history/export") "filename={filename}" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -7652,7 +7650,7 @@ export def "get-voice-history" [
   let base = ($base_url | default $BASE_URL)
   if ($date_from | is-empty) { error make --unspanned { msg: "path parameter 'date_from' must be non-empty" } }
   if ($date_to | is-empty) { error make --unspanned { msg: "path parameter 'date_to' must be non-empty" } }
-  let full_url = (build-url $base ({date_from: (encode-path-segment $date_from), date_to: (encode-path-segment $date_to)} | format pattern "/voice/history?date_from={date_from}&date_to={date_to}") $auth.query)
+  let full_url = (build-url $base ({date_from: (encode-path-segment $date_from), date_to: (encode-path-segment $date_to)} | format pattern "/voice/history") "date_from={date_from}&date_to={date_to}" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -7723,15 +7721,15 @@ export def "post-voice-price" [
   --list-id: float # Your list ID if sending to a whole list. Can be used instead of 'to'.
   --require-input: float # Whether you want to receive a keypress from the call recipient (1 for on, 0 [default] for off)
   --schedule: float # Leave blank for immediate delivery. Your schedule time as a [unix timestamp](http://help.clicksend.com/what-is-a-unix-timestamp).
-  --body-source: string # Your method of sending e.g. 'wordpress', 'php', 'c#'.
-  --body-to: string # Recipient number in E.164 format or local format ([more info](https://help.clicksend.com/SMS/what-format-does-the-recipient-phone-number-need-to-be-in)).
+  --source: string # Your method of sending e.g. 'wordpress', 'php', 'c#'.
+  to: string # Recipient number in E.164 format or local format ([more info](https://help.clicksend.com/SMS/what-format-does-the-recipient-phone-number-need-to-be-in)).
   voice: string # Either 'female' or 'male'.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/voice/price" $auth.query)
-  let req_body = {"body": $body, "country": $country, "custom_string": $custom_string, "lang": $lang, "list_id": $list_id, "require_input": $require_input, "schedule": $schedule, "source": $body_source, "to": $body_to, "voice": $voice} | compact
+  let req_body = {"body": $body, "country": $country, "custom_string": $custom_string, "lang": $lang, "list_id": $list_id, "require_input": $require_input, "schedule": $schedule, "source": $source, "to": $to, "voice": $voice} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7839,7 +7837,7 @@ export def "marked-voice-receipts-as-read" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($date_before | is-empty) { error make --unspanned { msg: "path parameter 'date_before' must be non-empty" } }
-  let full_url = (build-url $base ({date_before: (encode-path-segment $date_before)} | format pattern "/voice/receipts-read?date_before={date_before}") $auth.query)
+  let full_url = (build-url $base ({date_before: (encode-path-segment $date_before)} | format pattern "/voice/receipts-read") "date_before={date_before}" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -7914,15 +7912,15 @@ export def "send-a-voice-call" [
   --machine-detection: float # Whether to attempt to detect an answering machine or voicemail service and leave a message (1 for on, 0 [default] for off)
   --require-input: float # Whether you want to receive a keypress from the call recipient (1 for on, 0 [default] for off)
   --schedule: float # Leave blank for immediate delivery. Your schedule time as a [unix timestamp](http://help.clicksend.com/what-is-a-unix-timestamp).
-  --body-source: string # Your method of sending e.g. 'wordpress', 'php', 'c#'.
-  --body-to: string # Recipient number in E.164 format or local format ([more info](https://help.clicksend.com/SMS/what-format-does-the-recipient-phone-number-need-to-be-in)).
+  --source: string # Your method of sending e.g. 'wordpress', 'php', 'c#'.
+  to: string # Recipient number in E.164 format or local format ([more info](https://help.clicksend.com/SMS/what-format-does-the-recipient-phone-number-need-to-be-in)).
   voice: string # Either 'female' or 'male'.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/voice/send" $auth.query)
-  let req_body = {"body": $body, "country": $country, "custom_string": $custom_string, "lang": $lang, "list_id": $list_id, "machine_detection": $machine_detection, "require_input": $require_input, "schedule": $schedule, "source": $body_source, "to": $body_to, "voice": $voice} | compact
+  let req_body = {"body": $body, "country": $country, "custom_string": $custom_string, "lang": $lang, "list_id": $list_id, "machine_detection": $machine_detection, "require_input": $require_input, "schedule": $schedule, "source": $source, "to": $to, "voice": $voice} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

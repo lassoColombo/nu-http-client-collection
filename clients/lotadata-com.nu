@@ -151,10 +151,11 @@ export def "get-events" [
   --within: string # Search within specified geopolitical place id
   --offset: int # Return results starting at specified offset
   --limit: int # Max results to return
-  --fieldset: string@fieldset-completer # Return results starting at specified offset (summary, context, detail) (default: context)
+  --fieldset: string@fieldset-completer # Return results starting at specified offset (summary, context, detail) (required, default: context)
 ]: nothing -> record<events: table<_id: string, _type: string, activity: list, ambience: list, at: record, awayTeam: record, category: list, contactPoint: record, description: string, doorTime: string, duration: string, endApprox: bool, endDate: string, extTaxonomy: list, genre: list, headline: string, homeTeam: record, htmlDescription: string, image: record, inLanguage: record, name: string, noTime: bool, offers: list, onDemand: bool, performer: list, photo: list, startDate: string, superEvent: record, updated: string, url: string, workPerformed: list>, query: record<activity: list<string>, category: list<string>, limit: int>, stats: record<count: int, fieldset: string, runtime: int>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
+  let fieldset = ($fieldset | default "context")
   let qp = [(serialize-qp "category" $category "multi") (serialize-qp "activity" $activity "scalar") (serialize-qp "ambience" $ambience "scalar") (serialize-qp "genre" $genre "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "from_day" $from_day "scalar") (serialize-qp "to_day" $to_day "scalar") (serialize-qp "capacity_min" $capacity_min "scalar") (serialize-qp "capacity_max" $capacity_max "scalar") (serialize-qp "center" $center "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "bbox" $bbox "multi") (serialize-qp "polygon" $polygon "multi") (serialize-qp "within" $within "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fieldset" $fieldset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/events" $qp $auth.query)
   let accept_val = "application/json"
@@ -244,10 +245,11 @@ export def "get-places" [
   --within: string # Search within specified geopolitical place id
   --offset: int # Return results starting at specified offset
   --limit: int # Max results to return
-  --fieldset: string@fieldset-completer-1 # Return results starting at specified offset (summary, context, detail) (default: context)
+  --fieldset: string@fieldset-completer-1 # Return results starting at specified offset (summary, context, detail) (required, default: context)
 ]: nothing -> record<places: table<ambience: list, category: list, contact: record, function: list, openingHours: list, photo: list, _id: string, _type: string, address: record, geo: record, geometry: any, location: record, logo: record, name: string, tag: list>, query: record<address: record<country: string, formatted: string, locality: string, postalCode: string, region: string, street: string, unit: string>, category: list<string>, limit: int>, stats: record<count: int, fieldset: string, runtime: int>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
+  let fieldset = ($fieldset | default "context")
   let qp = [(serialize-qp "category" $category "multi") (serialize-qp "function" $function "multi") (serialize-qp "ambience" $ambience "csv") (serialize-qp "tag" $tag "csv") (serialize-qp "type" $type "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "exact" $exact "scalar") (serialize-qp "capacity_min" $capacity_min "scalar") (serialize-qp "capacity_max" $capacity_max "scalar") (serialize-qp "street" $street "scalar") (serialize-qp "locality" $locality "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "postal_code" $postal_code "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "center" $center "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "bbox" $bbox "multi") (serialize-qp "polygon" $polygon "multi") (serialize-qp "within" $within "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fieldset" $fieldset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/places" $qp $auth.query)
   let accept_val = "application/json"

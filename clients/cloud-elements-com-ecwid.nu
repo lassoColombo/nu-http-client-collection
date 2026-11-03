@@ -190,28 +190,29 @@ export def "create-bulk-download" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
   --api-limit: int # format: int32
   --continue-from-job-id: int # format: int32
   --docs-hub-details: record # shape: {instanceId?: string, path?: string}
   --filter-date-field: string
   --filter-nulls: oneof<nothing, bool>
   format: string@format-completer
-  --body-from: string # format: date-time
+  --from: string # format: date-time
   --limit: int # format: int32
   --notification-url: string
   object_name: string
   --page-size: int # format: int32
   --query: record # shape: {anyKey?: string}
   --select-fields: string
-  --body-to: string # format: date-time
-  --body-where: string
+  --to: string # format: date-time
+  --where: string
 ]: any -> record<id: string, instance_id: float, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/bulk/download" $auth.query)
-  let req_body = {"apiLimit": $api_limit, "continueFromJobId": $continue_from_job_id, "docsHubDetails": $docs_hub_details, "filterDateField": $filter_date_field, "filterNulls": $filter_nulls, "format": $format, "from": $body_from, "limit": $limit, "notificationUrl": $notification_url, "objectName": $object_name, "pageSize": $page_size, "query": $query, "selectFields": $select_fields, "to": $body_to, "where": $body_where} | compact
+  let req_body = {"apiLimit": $api_limit, "continueFromJobId": $continue_from_job_id, "docsHubDetails": $docs_hub_details, "filterDateField": $filter_date_field, "filterNulls": $filter_nulls, "format": $format, "from": $from, "limit": $limit, "notificationUrl": $notification_url, "objectName": $object_name, "pageSize": $page_size, "query": $query, "selectFields": $select_fields, "to": $to, "where": $where} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -245,15 +246,16 @@ export def "get-bulk-jobs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-where: string # The CEQL search expression, or the where clause, without the WHERE keyword, in a typical SQL query. For example to get all upload jobs the expression would be where=job_direction='UPLOAD'. The following fields are valid search fields 'object_name', 'job_status', 'job_direction', 'record_count'
+  --where: string # The CEQL search expression, or the where clause, without the WHERE keyword, in a typical SQL query. For example to get all upload jobs the expression would be where=job_direction='UPLOAD'. The following fields are valid search fields 'object_name', 'job_status', 'job_direction', 'record_count'
   --next-page: string # The next page cursor, taken from the response header: `elements-next-page-token`
   --page-size: int # The page size for pagination, which defaults to 200 if not supplied (format: int64)
   --fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
 ]: nothing -> record<completion_time: int, createdDate: int, error_count: int, fileFormat: string, id: int, instanceId: int, job_direction: string, job_query: string, job_reset_attempt: int, job_state: string, notification_url: string, object_name: string, record_count: int, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/bulk/jobs" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -262,7 +264,7 @@ export def "get-bulk-jobs" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"where": $qp_where, "nextPage": $next_page, "pageSize": $page_size, "fields": $fields} | compact)
+    query: ({"where": $where, "nextPage": $next_page, "pageSize": $page_size, "fields": $fields} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -289,16 +291,17 @@ export def "create-bulk-query" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The CEQL query. When this parameter is omitted, all objects of the given type are returned via the bulk job. Endpoint limiters may still apply.
   --last-run-date: string # The last time this query was run. This is optional. You can also have this parameter in the query and leave this blank - optional eg. '2014-10-06T13:22:17-08:00'
-  --qp-from: string # The created/updated date of the object to filter on - optional eg. '2014-10-06T13:22:17-08:00'
-  --qp-to: string # The created/updated date of the object to filter on - optional eg. '2014-10-06T13:22:17-08:00'
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --from: string # The created/updated date of the object to filter on - optional eg. '2014-10-06T13:22:17-08:00'
+  --to: string # The created/updated date of the object to filter on - optional eg. '2014-10-06T13:22:17-08:00'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
   --elements-async-callback-url: string # The Url to send the notification to when the Job is completed
   --meta-data: string # Optional JSON MetaData that contains callback-payload and fileName, ex: {"callback-payload" : , "fileName" : "{Date format}_Name of the file"}. If the fileName is MyFile then pass metadata as {"fileName" : "{yyyy-MM-dd HH:mm:ss}_MyFile"}. The valid date formats are "yyyy-MM-dd'T'HH:mm:ssXXX", "yyyy-MM-dd'T'HH:mm:ss'Z'", "yyyy-MM-dd'T'HH:mm:ss.SXXX", "yyyy-MM-dd'T'HH:mm:ss.SSSXXX", "yyyy-MM-dd'T'HH:mm:ss.SSSZ", "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", "yyyy-MM-dd HH:mm:ss", "yyyy.MM.dd G 'at' HH:mm:ss z", "h:mm a", "yyyyy.MMMMM.dd GGG hh:mm aaa" and "yyMMddHHmmssZ". callback-payload - is passed back in bulk job notification
 ]: any -> record<id: string, instance_id: float, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "lastRunDate" $last_run_date "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "lastRunDate" $last_run_date "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/bulk/query" $qp $auth.query)
   let req_body = {"metaData": $meta_data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -306,19 +309,20 @@ export def "create-bulk-query" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Elements-Async-Callback-Url": $elements_async_callback_url} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
-    query: ({"q": $q, "lastRunDate": $last_run_date, "from": $qp_from, "to": $qp_to} | compact)
+    query: ({"q": $q, "lastRunDate": $last_run_date, "from": $from, "to": $to} | compact)
     headers: $auth.headers
     body: $req_body
-    content_type: "application/x-www-form-urlencoded"
+    content_type: $mp.content_type
     timeout: ($max_time | default 30min)
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
+  send-post $req $mp.body $insecure $raw $allow_errors $full [200]
 }
 
 # Cancel an asynchronous bulk query job.
@@ -336,11 +340,12 @@ export def "replace-bulk-cancel" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
 ]: nothing -> record<batchId: float, message: string, numOfLeadsProcessed: float, numOfRowsFailed: float, numOfRowsWithWarning: float, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bulk/{id}/cancel") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -378,11 +383,12 @@ export def "get-bulk-errors" [
   --page-size: int # The page size for pagination, which defaults to 200 if not supplied (format: int64)
   --next-page: string # The next page cursor, taken from the response header: `elements-next-page-token`
   --fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bulk/{id}/errors") $qp $auth.query)
   let accept_val = "application/json"
@@ -418,11 +424,12 @@ export def "get-bulk-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
 ]: nothing -> record<batchId: float, message: string, numOfLeadsProcessed: float, numOfRowsFailed: float, numOfRowsWithWarning: float, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bulk/{id}/status") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -459,12 +466,13 @@ export def "get-bulk-by-object-name" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($object_name | is-empty) { error make --unspanned { msg: "path parameter 'objectName' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), object_name: (encode-path-segment $object_name)} | format pattern "/bulk/{id}/{object_name}") $auth.query)
   let accept_val = ($accept | default "text/csv")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -499,7 +507,7 @@ export def "create-bulk-by-object-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
   --elements-async-callback-url: string # The Url to send the notification to when the Job is completed
   --meta-data: string # Optional JSON MetaData that contains callback-payload, path or format, ex: {"path" :<path for the sub resource>, "format": <json/csv>, "callback-payload":<json>}. path - is passed to the endpoint for bulk loading the data into a nested object. Optional JSON Metadata that contains identifierFieldName, action, listId or campaignId. The identifierField name is used for upserts and the optional fields like listId or campaignId. Example: {"listId":"1014","action":"upsert"}. If the Upload format is JSON pass metadata as {"format":"json"}. callback-payload - is passed back in bulk job notification
   --file: path # The file of objects to bulk load. If the JSON file upload, each JSON record should be in a single line
@@ -508,6 +516,7 @@ export def "create-bulk-by-object-name" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($object_name | is-empty) { error make --unspanned { msg: "path parameter 'objectName' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({object_name: (encode-path-segment $object_name)} | format pattern "/bulk/{object_name}") $auth.query)
   let req_body = {"metaData": $meta_data, "file": $file} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -515,8 +524,8 @@ export def "create-bulk-by-object-name" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Elements-Async-Callback-Url": $elements_async_callback_url} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -545,15 +554,16 @@ export def "get-customers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-where: string # The CEQL search expression, or the where clause, without the WHERE keyword, in a typical SQL query (i.e. field='value'). Supported search terms: customer_id and customer_email. All other search criteria are ignored. NOTE: When searching by customer_id, do not quote the value (ex: customer_id=15693430), as the ID is a number rather than a string. When searching by email, quote the value (ex: customer_email='a@b.c'), as the email parameter is a string
+  --where: string # The CEQL search expression, or the where clause, without the WHERE keyword, in a typical SQL query (i.e. field='value'). Supported search terms: customer_id and customer_email. All other search criteria are ignored. NOTE: When searching by customer_id, do not quote the value (ex: customer_id=15693430), as the ID is a number rather than a string. When searching by email, quote the value (ex: customer_email='a@b.c'), as the email parameter is a string
   --page-size: int # The number of results to fetch in a given page. When this parameter is omitted, a maximum of 200 results are returned (format: int64)
   --next-page: string # The next page cursor, taken from the response header: `elements-next-page-token`
   --fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
 ]: nothing -> table<billingPerson: record<city: string, companyName: string, countryCode: string, countryName: string, name: string, phone: string, postalCode: string, stateName: string, stateOrProvinceCode: string, stateOrProvinceName: string, street: string>, customerGroupId: int, customerGroupName: string, email: string, id: int, name: string, registered: string, shippingAddresses: list<record>, taxExempt: bool, taxId: float, taxIdValid: bool, totalOrderCount: float, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customers" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -562,7 +572,7 @@ export def "get-customers" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"where": $qp_where, "pageSize": $page_size, "nextPage": $next_page, "fields": $fields} | compact)
+    query: ({"where": $where, "pageSize": $page_size, "nextPage": $next_page, "fields": $fields} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -589,7 +599,7 @@ export def "create-customer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
   --billing-person: record # shape: {city?: string, companyName?: string, countryCode?: string, countryName?: string, name?: string, phone?: string, postalCode?: string, stateName?: string, stateOrProvinceCode?: string, stateOrProvinceName?: string, street?: string}
   --customer-group-id: int # format: int64
   email: string # customer email
@@ -602,6 +612,7 @@ export def "create-customer" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/customers" $auth.query)
   let req_body = {"billingPerson": $billing_person, "customerGroupId": $customer_group_id, "email": $email, "password": $password, "shippingAddresses": $shipping_addresses, "taxExempt": $tax_exempt, "taxId": $tax_id, "taxIdValid": $tax_id_valid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -638,11 +649,12 @@ export def "delete-customer-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customers/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -677,11 +689,12 @@ export def "get-customer-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
 ]: nothing -> record<billingPerson: record<city: string, companyName: string, countryCode: string, countryName: string, name: string, phone: string, postalCode: string, stateName: string, stateOrProvinceCode: string, stateOrProvinceName: string, street: string>, customerGroupId: int, customerGroupName: string, email: string, id: int, name: string, registered: string, shippingAddresses: table<city: string, companyName: string, countryCode: string, countryName: string, name: string, phone: string, postalCode: string, stateName: string, stateOrProvinceCode: string, stateOrProvinceName: string, street: string>, taxExempt: bool, taxId: float, taxIdValid: bool, totalOrderCount: float, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customers/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -718,7 +731,7 @@ export def "update-customer-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
   --billing-person: record # shape: {city?: string, companyName?: string, countryCode?: string, countryName?: string, name?: string, phone?: string, postalCode?: string, stateName?: string, stateOrProvinceCode?: string, stateOrProvinceName?: string, street?: string}
   --customer-group-id: int # format: int64
   --email: string # customer email
@@ -732,6 +745,7 @@ export def "update-customer-by-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customers/{id}") $auth.query)
   let req_body = {"billingPerson": $billing_person, "customerGroupId": $customer_group_id, "email": $email, "password": $password, "shippingAddresses": $shipping_addresses, "taxExempt": $tax_exempt, "taxId": $tax_id, "taxIdValid": $tax_id_valid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -771,11 +785,12 @@ export def "get-customers-orders" [
   --page-size: int # The number of results to fetch in a given page. When this parameter is omitted, a maximum of 200 results are returned (format: int64)
   --next-page: string # The next page cursor, taken from the response header: `elements-next-page-token`
   --fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
 ]: nothing -> table<additionalInfo: record<google_customer_id: string>, billingPerson: record<city: string, companyName: string, countryCode: string, countryName: string, name: string, phone: string, postalCode: string, stateName: string, stateOrProvinceCode: string, stateOrProvinceName: string, street: string>, couponDiscount: float, createDate: string, createTimestamp: float, customerId: float, customerTaxExempt: bool, customerTaxId: int, customerTaxIdValid: bool, discount: float, email: string, fulfillmentStatus: string, globalReferer: string, handlingFee: record<description: string, name: string, value: float>, hidden: bool, ipAddress: string, items: list<record>, lastChangeDate: string, membershipBasedDiscount: float, orderComments: string, orderNumber: int, paymentMethod: string, paymentModule: string, paymentStatus: string, privateAdminNotes: string, refererUrl: string, refundedAmount: float, refunds: list<record>, reversedTaxApplied: bool, sample: bool, shippingMethod: string, shippingOption: record<estimatedTransitTime: string, isPickup: bool, shippingCarrierName: string, shippingMethodName: string, shippingRate: float>, shippingPerson: record<city: string, companyName: string, countryCode: string, countryName: string, name: string, phone: string, postalCode: string, stateName: string, stateOrProvinceCode: string, stateOrProvinceName: string, street: string>, subtotal: float, tax: float, taxesOnShipping: list<record>, total: float, totalAndMembershipBasedDiscount: float, trackingNumber: string, updateDate: string, updateTimestamp: float, usdTotal: float, vendorNumber: float, vendorOrderNumber: string, volumeDiscount: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customers/{id}/orders") $qp $auth.query)
   let accept_val = "application/json"
@@ -810,11 +825,12 @@ export def "get-objects" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
   --elements-version: string@elements-version-completer # Elements Version to be used for getting metadata, possible options are Hydrogen, Helium. Default value is Hydrogen
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/objects" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -853,11 +869,12 @@ export def "get-objects-object-name-docs" [
   --resolve-references: oneof<nothing, bool> # Optionally resolve swagger references for an inline object definition
   --basic: oneof<nothing, bool> # Include only OpenAPI / Swagger properties in definitions
   --version: string # The element swagger version to get the corresponding element swagger, Passing in "-1" gives latest element swagger (default: -1)
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
 ]: nothing -> record<basePath: string, definitions: record<definition_name: record<properties: record>>, host: string, info: record<contact: record<email: string>, title: string, version: string>, paths: record<_contacts: record<post: record>>, schemes: list<string>, swagger: string, tags: table<name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($object_name | is-empty) { error make --unspanned { msg: "path parameter 'objectName' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "discovery" $discovery "scalar") (serialize-qp "resolveReferences" $resolve_references "scalar") (serialize-qp "basic" $basic "scalar") (serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({object_name: (encode-path-segment $object_name)} | format pattern "/objects/{object_name}/docs") $qp $auth.query)
   let accept_val = "application/json"
@@ -893,12 +910,13 @@ export def "get-objects-object-name-metadata" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
   --elements-version: string@elements-version-completer # Elements Version to be used for getting metadata, possible options are Hydrogen, Helium. Default value is Hydrogen
 ]: nothing -> record<fields: table<mask: string, type: string, vendorDisplayName: string, vendorPath: string, vendorReadOnly: bool, vendorRequired: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($object_name | is-empty) { error make --unspanned { msg: "path parameter 'objectName' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({object_name: (encode-path-segment $object_name)} | format pattern "/objects/{object_name}/metadata") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -932,15 +950,16 @@ export def "get-orders" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-where: string # The CEQL search expression, or the where clause, without the WHERE keyword, in a typical SQL query (i.e. field='value'). Supported search terms: date, from_date, to_date, from_update_date, to_update_date, order, from_order, to_order, customer_id, customer_email and statuses. All other search criteria are ignored
+  --where: string # The CEQL search expression, or the where clause, without the WHERE keyword, in a typical SQL query (i.e. field='value'). Supported search terms: date, from_date, to_date, from_update_date, to_update_date, order, from_order, to_order, customer_id, customer_email and statuses. All other search criteria are ignored
   --page-size: int # The number of results to fetch in a given page. When this parameter is omitted, a maximum of 200 results are returned (format: int64)
   --next-page: string # The next page cursor, taken from the response header: `elements-next-page-token`
   --fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
 ]: nothing -> table<additionalInfo: record<google_customer_id: string>, billingPerson: record<city: string, companyName: string, countryCode: string, countryName: string, name: string, phone: string, postalCode: string, stateName: string, stateOrProvinceCode: string, stateOrProvinceName: string, street: string>, couponDiscount: float, createDate: string, createTimestamp: float, customerId: float, customerTaxExempt: bool, customerTaxId: int, customerTaxIdValid: bool, discount: float, email: string, fulfillmentStatus: string, globalReferer: string, handlingFee: record<description: string, name: string, value: float>, hidden: bool, ipAddress: string, items: list<record>, lastChangeDate: string, membershipBasedDiscount: float, orderComments: string, orderNumber: int, paymentMethod: string, paymentModule: string, paymentStatus: string, privateAdminNotes: string, refererUrl: string, refundedAmount: float, refunds: list<record>, reversedTaxApplied: bool, sample: bool, shippingMethod: string, shippingOption: record<estimatedTransitTime: string, isPickup: bool, shippingCarrierName: string, shippingMethodName: string, shippingRate: float>, shippingPerson: record<city: string, companyName: string, countryCode: string, countryName: string, name: string, phone: string, postalCode: string, stateName: string, stateOrProvinceCode: string, stateOrProvinceName: string, street: string>, subtotal: float, tax: float, taxesOnShipping: list<record>, total: float, totalAndMembershipBasedDiscount: float, trackingNumber: string, updateDate: string, updateTimestamp: float, usdTotal: float, vendorNumber: float, vendorOrderNumber: string, volumeDiscount: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orders" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -949,7 +968,7 @@ export def "get-orders" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"where": $qp_where, "pageSize": $page_size, "nextPage": $next_page, "fields": $fields} | compact)
+    query: ({"where": $where, "pageSize": $page_size, "nextPage": $next_page, "fields": $fields} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -978,7 +997,7 @@ export def "create-order" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
   --billing-person: record # shape: {city?: string, companyName?: string, countryCode?: string, countryName?: string, name?: string, phone?: string, postalCode?: string, stateName?: string, stateOrProvinceCode?: string, stateOrProvinceName?: string, street?: string}
   --coupon-discount: float # format: double
   --customer-id: float # format: double
@@ -1012,6 +1031,7 @@ export def "create-order" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/orders" $auth.query)
   let req_body = {"billingPerson": $billing_person, "couponDiscount": $coupon_discount, "customerId": $customer_id, "customerTaxExempt": $customer_tax_exempt, "customerTaxId": $customer_tax_id, "customerTaxIdValid": $customer_tax_id_valid, "discount": $discount, "email": $email, "fulfillmentStatus": $fulfillment_status, "globalReferer": $global_referer, "hidden": $hidden, "items": $items, "membershipBasedDiscount": $membership_based_discount, "orderComments": $order_comments, "paymentMethod": $payment_method, "paymentModule": $payment_module, "paymentStatus": $payment_status, "privateAdminNotes": $private_admin_notes, "refererUrl": $referer_url, "reversedTaxApplied": $reversed_tax_applied, "sample": $sample, "shippingMethod": $shipping_method, "shippingOption": $shipping_option, "shippingPerson": $shipping_person, "subtotal": $subtotal, "tax": $tax, "total": $total, "totalAndMembershipBasedDiscount": $total_and_membership_based_discount, "volumeDiscount": $volume_discount} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1048,11 +1068,12 @@ export def "delete-order-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/orders/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1087,11 +1108,12 @@ export def "get-order-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
 ]: nothing -> record<additionalInfo: record<google_customer_id: string>, billingPerson: record<city: string, companyName: string, countryCode: string, countryName: string, name: string, phone: string, postalCode: string, stateName: string, stateOrProvinceCode: string, stateOrProvinceName: string, street: string>, couponDiscount: float, createDate: string, createTimestamp: float, customerId: float, customerTaxExempt: bool, customerTaxId: int, customerTaxIdValid: bool, discount: float, email: string, fulfillmentStatus: string, globalReferer: string, handlingFee: record<description: string, name: string, value: float>, hidden: bool, ipAddress: string, items: table<categoryId: int, couponApplied: bool, digital: bool, fixedShippingRate: float, fixedShippingRateOnly: bool, hdThumbnailUrl: string, id: int, imageUrl: string, isShippingRequired: bool, name: string, price: float, productAvailable: bool, productId: int, productPrice: float, quantity: int, quantityInStock: float, shipping: float, sku: string, smallThumbnailUrl: string, tax: float, taxes: list, trackQuantity: bool, weight: float>, lastChangeDate: string, membershipBasedDiscount: float, orderComments: string, orderNumber: int, paymentMethod: string, paymentModule: string, paymentStatus: string, privateAdminNotes: string, refererUrl: string, refundedAmount: float, refunds: table<amount: float, date: string, reason: string, source: string>, reversedTaxApplied: bool, sample: bool, shippingMethod: string, shippingOption: record<estimatedTransitTime: string, isPickup: bool, shippingCarrierName: string, shippingMethodName: string, shippingRate: float>, shippingPerson: record<city: string, companyName: string, countryCode: string, countryName: string, name: string, phone: string, postalCode: string, stateName: string, stateOrProvinceCode: string, stateOrProvinceName: string, street: string>, subtotal: float, tax: float, taxesOnShipping: table<name: string, total: float, value: float>, total: float, totalAndMembershipBasedDiscount: float, trackingNumber: string, updateDate: string, updateTimestamp: float, usdTotal: float, vendorNumber: float, vendorOrderNumber: string, volumeDiscount: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/orders/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1132,7 +1154,7 @@ export def "update-order-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --action: string # An action to perform on the order: cancel, reopen or close. If left blank then the order is updated but no action is taken
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
   --billing-person: record # shape: {city?: string, companyName?: string, countryCode?: string, countryName?: string, name?: string, phone?: string, postalCode?: string, stateName?: string, stateOrProvinceCode?: string, stateOrProvinceName?: string, street?: string}
   --coupon-discount: float # format: double
   --customer-id: float # format: double
@@ -1167,6 +1189,7 @@ export def "update-order-by-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "action" $action "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/orders/{id}") $qp $auth.query)
   let req_body = {"billingPerson": $billing_person, "couponDiscount": $coupon_discount, "customerId": $customer_id, "customerTaxExempt": $customer_tax_exempt, "customerTaxId": $customer_tax_id, "customerTaxIdValid": $customer_tax_id_valid, "discount": $discount, "email": $email, "fulfillmentStatus": $fulfillment_status, "globalReferer": $global_referer, "hidden": $hidden, "items": $items, "membershipBasedDiscount": $membership_based_discount, "orderComments": $order_comments, "paymentModule": $payment_module, "paymentStatus": $payment_status, "privateAdminNotes": $private_admin_notes, "refererUrl": $referer_url, "reversedTaxApplied": $reversed_tax_applied, "sample": $sample, "shippingMethod": $shipping_method, "shippingOption": $shipping_option, "shippingPerson": $shipping_person, "subtotal": $subtotal, "tax": $tax, "taxesOnShipping": $taxes_on_shipping, "total": $total, "totalAndMembershipBasedDiscount": $total_and_membership_based_discount, "volumeDiscount": $volume_discount} | compact
@@ -1207,11 +1230,12 @@ export def "get-orders-payments" [
   --page-size: int # The number of results to fetch in a given page. When this parameter is omitted, a maximum of 200 results are returned (format: int64)
   --next-page: string # The next page cursor, taken from the response header: `elements-next-page-token`
   --fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
 ]: nothing -> table<paymentMethod: string, paymentStatus: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/orders/{order_id}/payments") $qp $auth.query)
   let accept_val = "application/json"
@@ -1250,11 +1274,12 @@ export def "get-orders-refunds" [
   --page-size: int # The number of results to fetch in a given page. When this parameter is omitted, a maximum of 200 results are returned (format: int64)
   --next-page: string # The next page cursor, taken from the response header: `elements-next-page-token`
   --fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
 ]: nothing -> table<paymentMethod: string, paymentStatus: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/orders/{order_id}/refunds") $qp $auth.query)
   let accept_val = "application/json"
@@ -1289,10 +1314,11 @@ export def "get-ping" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
 ]: nothing -> record<dateTime: string, endpoint: string, valid: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/ping" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1326,15 +1352,16 @@ export def "get-products" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-where: string # The CEQL search expression, or the where clause, without the WHERE keyword, in a typical SQL query (i.e. field='value'). Supported search terms: category, hidden_products. All other search criteria are ignored
+  --where: string # The CEQL search expression, or the where clause, without the WHERE keyword, in a typical SQL query (i.e. field='value'). Supported search terms: category, hidden_products. All other search criteria are ignored
   --page-size: int # The number of results to fetch in a given page. When this parameter is omitted, a maximum of 200 results are returned (format: int64)
   --next-page: string # The next page cursor, taken from the response header: `elements-next-page-token`
   --fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
 ]: nothing -> table<attributes: list<record>, borderInfo: record<dominatingColor: record, homogeneity: bool>, categories: list<record>, categoryIds: list<int>, combinations: list<record>, compareAtPrice: float, compareToPrice: float, compareToPriceDiscount: float, compareToPriceDiscountFormatted: string, compareToPriceDiscountPercent: float, compareToPriceDiscountPercentFormatted: string, compareToPriceFormatted: string, createTimestamp: int, created: string, defaultCategoryId: int, defaultCombinationId: float, defaultDisplayedPrice: float, defaultDisplayedPriceFormatted: string, description: string, descriptionTruncated: bool, dimensions: record<height: float, length: float, width: float>, enabled: bool, favorites: record<count: int, displayedCount: string>, files: list<record>, fixedShippingRate: float, fixedShippingRateOnly: bool, galleryImages: list<record>, googleItemCondition: string, hdThumbnailUrl: string, id: int, imageUrl: string, inStock: bool, isSampleProduct: bool, isShippingRequired: bool, media: record<images: list>, name: string, options: list<record>, originalImage: record<alt: string, height: int, thumbnail: string, url: string, width: int>, originalImageUrl: string, price: float, priceInProductList: float, productClassId: int, quantity: int, quantityDelta: int, relatedProducts: record<productIds: list, relatedCategory: record>, seoDescription: string, seoTitle: string, shipping: record<disabledMethods: list, enabledMethods: list, flatRate: float, methodMarkup: float, type: string>, showOnFrontpage: float, sku: string, smallThumbnailUrl: string, tangible: string, tax: record<defaultLocationIncludedTaxRate: float, enabledManualTaxes: list>, taxes: list<record>, thumbnailUrl: string, trackQuantity: string, unlimited: bool, updateTimestamp: int, updated: string, url: string, warningLimit: int, weight: float, wholesalePrices: record<_quantity_: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/products" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1343,7 +1370,7 @@ export def "get-products" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"where": $qp_where, "pageSize": $page_size, "nextPage": $next_page, "fields": $fields} | compact)
+    query: ({"where": $where, "pageSize": $page_size, "nextPage": $next_page, "fields": $fields} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1378,7 +1405,7 @@ export def "create-product" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
   --attributes: list # item shape: {id?: int, internalName?: string, name?: string, value?: string}
   --category-ids: list<int>
   --compare-at-price: float # Product’s sale price displayed strike-out in the customer (format: double)
@@ -1414,6 +1441,7 @@ export def "create-product" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/products" $auth.query)
   let req_body = {"attributes": $attributes, "categoryIds": $category_ids, "compareAtPrice": $compare_at_price, "compareToPrice": $compare_to_price, "created": $created, "defaultCategoryId": $default_category_id, "description": $description, "dimensions": $dimensions, "enabled": $enabled, "favorites": $favorites, "fixedShippingRate": $fixed_shipping_rate, "fixedShippingRateOnly": $fixed_shipping_rate_only, "galleryImages": $gallery_images, "googleItemCondition": $google_item_condition, "isShippingRequired": $is_shipping_required, "name": $name, "options": $options, "price": $price, "productClassId": $product_class_id, "quantity": $quantity, "relatedProducts": $related_products, "seoDescription": $seo_description, "seoTitle": $seo_title, "shipping": $shipping, "showOnFrontpage": $show_on_frontpage, "sku": $sku, "tax": $tax, "taxes": $taxes, "warningLimit": $warning_limit, "weight": $weight, "wholesalePrices": $wholesale_prices} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1450,11 +1478,12 @@ export def "delete-product-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1489,11 +1518,12 @@ export def "get-product-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
 ]: nothing -> record<attributes: table<id: int, internalName: string, name: string, value: string>, borderInfo: record<dominatingColor: record<alpha: float, blue: float, green: float, red: float>, homogeneity: bool>, categories: table<defaultCategory: bool, description: string, enabled: bool, id: int, name: string, originalImageUrl: string, productCount: int, thumbnailUrl: string, url: string>, categoryIds: list<int>, combinations: table<attributes: list, combinationNumber: float, compareToPrice: float, id: float, price: float, quantity: float, sku: string, unlimited: bool, warningLimit: float, weight: float>, compareAtPrice: float, compareToPrice: float, compareToPriceDiscount: float, compareToPriceDiscountFormatted: string, compareToPriceDiscountPercent: float, compareToPriceDiscountPercentFormatted: string, compareToPriceFormatted: string, createTimestamp: int, created: string, defaultCategoryId: int, defaultCombinationId: float, defaultDisplayedPrice: float, defaultDisplayedPriceFormatted: string, description: string, descriptionTruncated: bool, dimensions: record<height: float, length: float, width: float>, enabled: bool, favorites: record<count: int, displayedCount: string>, files: table<adminUrl: string, description: string, id: float, name: string, size: float>, fixedShippingRate: float, fixedShippingRateOnly: bool, galleryImages: table<alt: string, height: int, thumbnail: string, url: string, width: int>, googleItemCondition: string, hdThumbnailUrl: string, id: int, imageUrl: string, inStock: bool, isSampleProduct: bool, isShippingRequired: bool, media: record<images: list<record>>, name: string, options: table<choices: list, defaultChoice: int, name: string, required: bool, type: string>, originalImage: record<alt: string, height: int, thumbnail: string, url: string, width: int>, originalImageUrl: string, price: float, priceInProductList: float, productClassId: int, quantity: int, quantityDelta: int, relatedProducts: record<productIds: list<float>, relatedCategory: record<categoryId: float, enabled: bool, productCount: float>>, seoDescription: string, seoTitle: string, shipping: record<disabledMethods: list<string>, enabledMethods: list<string>, flatRate: float, methodMarkup: float, type: string>, showOnFrontpage: float, sku: string, smallThumbnailUrl: string, tangible: string, tax: record<defaultLocationIncludedTaxRate: float, enabledManualTaxes: list<int>>, taxes: table<name: string, total: float, value: float>, thumbnailUrl: string, trackQuantity: string, unlimited: bool, updateTimestamp: int, updated: string, url: string, warningLimit: int, weight: float, wholesalePrices: record<_quantity_: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1537,7 +1567,7 @@ export def "update-product-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
   --attributes: list # item shape: {id?: int, internalName?: string, name?: string, value?: string}
   --category-ids: list<int>
   --compare-at-price: float # Product’s sale price displayed strike-out in the customer (format: double)
@@ -1572,6 +1602,7 @@ export def "update-product-by-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}") $auth.query)
   let req_body = {"attributes": $attributes, "categoryIds": $category_ids, "compareAtPrice": $compare_at_price, "compareToPrice": $compare_to_price, "defaultCategoryId": $default_category_id, "description": $description, "dimensions": $dimensions, "enabled": $enabled, "fixedShippingRate": $fixed_shipping_rate, "fixedShippingRateOnly": $fixed_shipping_rate_only, "galleryImages": $gallery_images, "googleItemCondition": $google_item_condition, "isShippingRequired": $is_shipping_required, "name": $name, "options": $options, "price": $price, "productClassId": $product_class_id, "quantity": $quantity, "relatedProducts": $related_products, "seoDescription": $seo_description, "seoTitle": $seo_title, "shipping": $shipping, "showOnFrontpage": $show_on_frontpage, "sku": $sku, "tax": $tax, "taxes": $taxes, "warningLimit": $warning_limit, "weight": $weight, "wholesalePrices": $wholesale_prices} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1608,16 +1639,17 @@ export def "get-by-object-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-where: string # The CEQL search expression.
+  --where: string # The CEQL search expression.
   --page-size: int # The page size. Defaults to 200 if not provided. Maximum of 5000. (format: int64)
   --next-page: string # The next page cursor, taken from the response header: `elements-next-page-token`
   --fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
 ]: nothing -> table<objectField: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($object_name | is-empty) { error make --unspanned { msg: "path parameter 'objectName' must be non-empty" } }
-  let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({object_name: (encode-path-segment $object_name)} | format pattern "/{object_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1626,7 +1658,7 @@ export def "get-by-object-name" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"where": $qp_where, "pageSize": $page_size, "nextPage": $next_page, "fields": $fields} | compact)
+    query: ({"where": $where, "pageSize": $page_size, "nextPage": $next_page, "fields": $fields} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1652,13 +1684,14 @@ export def "create-by-object-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
   --object-field: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($object_name | is-empty) { error make --unspanned { msg: "path parameter 'objectName' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({object_name: (encode-path-segment $object_name)} | format pattern "/{object_name}") $auth.query)
   let req_body = {"objectField": $object_field} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1696,12 +1729,13 @@ export def "delete-object-name-by-object-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($object_name | is-empty) { error make --unspanned { msg: "path parameter 'objectName' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id)} | format pattern "/{object_name}/{object_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1738,12 +1772,13 @@ export def "get-object-name-by-object-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
 ]: nothing -> record<objectField: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($object_name | is-empty) { error make --unspanned { msg: "path parameter 'objectName' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id)} | format pattern "/{object_name}/{object_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1779,7 +1814,7 @@ export def "update-object-name-by-object-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
   --object-field: string
 ]: any -> record<objectField: string> {
   let input = $in
@@ -1787,6 +1822,7 @@ export def "update-object-name-by-object-id" [
   let base = ($base_url | default $BASE_URL)
   if ($object_name | is-empty) { error make --unspanned { msg: "path parameter 'objectName' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id)} | format pattern "/{object_name}/{object_id}") $auth.query)
   let req_body = {"objectField": $object_field} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1824,7 +1860,7 @@ export def "replace-object-name-by-object-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
   --object-field: string
 ]: any -> record<objectField: string> {
   let input = $in
@@ -1832,6 +1868,7 @@ export def "replace-object-name-by-object-id" [
   let base = ($base_url | default $BASE_URL)
   if ($object_name | is-empty) { error make --unspanned { msg: "path parameter 'objectName' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id)} | format pattern "/{object_name}/{object_id}") $auth.query)
   let req_body = {"objectField": $object_field} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1870,18 +1907,19 @@ export def "get-object-name-by-child-object-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-where: string # The CEQL search expression.
+  --where: string # The CEQL search expression.
   --page-size: int # The page size. Defaults to 200 if not provided. Maximum of 5000. (format: int64)
   --next-page: string # The next page cursor, taken from the response header: `elements-next-page-token`
   --fields: string # The fields to return on the response. Can be a single field or a comma-separated list of fields
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
 ]: nothing -> table<objectField: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($object_name | is-empty) { error make --unspanned { msg: "path parameter 'objectName' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
   if ($child_object_name | is-empty) { error make --unspanned { msg: "path parameter 'childObjectName' must be non-empty" } }
-  let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
+  let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id), child_object_name: (encode-path-segment $child_object_name)} | format pattern "/{object_name}/{object_id}/{child_object_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1890,7 +1928,7 @@ export def "get-object-name-by-child-object-name" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"where": $qp_where, "pageSize": $page_size, "nextPage": $next_page, "fields": $fields} | compact)
+    query: ({"where": $where, "pageSize": $page_size, "nextPage": $next_page, "fields": $fields} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1918,7 +1956,7 @@ export def "create-object-name-by-child-object-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
   --object-field: string
 ]: any -> any {
   let input = $in
@@ -1927,6 +1965,7 @@ export def "create-object-name-by-child-object-name" [
   if ($object_name | is-empty) { error make --unspanned { msg: "path parameter 'objectName' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
   if ($child_object_name | is-empty) { error make --unspanned { msg: "path parameter 'childObjectName' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id), child_object_name: (encode-path-segment $child_object_name)} | format pattern "/{object_name}/{object_id}/{child_object_name}") $auth.query)
   let req_body = {"objectField": $object_field} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1966,7 +2005,7 @@ export def "delete-object-name-by-child-object-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1974,6 +2013,7 @@ export def "delete-object-name-by-child-object-id" [
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
   if ($child_object_name | is-empty) { error make --unspanned { msg: "path parameter 'childObjectName' must be non-empty" } }
   if ($child_object_id | is-empty) { error make --unspanned { msg: "path parameter 'childObjectId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id), child_object_name: (encode-path-segment $child_object_name), child_object_id: (encode-path-segment $child_object_id)} | format pattern "/{object_name}/{object_id}/{child_object_name}/{child_object_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2011,7 +2051,7 @@ export def "get-object-name-by-child-object-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
 ]: nothing -> record<objectField: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2019,6 +2059,7 @@ export def "get-object-name-by-child-object-id" [
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
   if ($child_object_name | is-empty) { error make --unspanned { msg: "path parameter 'childObjectName' must be non-empty" } }
   if ($child_object_id | is-empty) { error make --unspanned { msg: "path parameter 'childObjectId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id), child_object_name: (encode-path-segment $child_object_name), child_object_id: (encode-path-segment $child_object_id)} | format pattern "/{object_name}/{object_id}/{child_object_name}/{child_object_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2056,7 +2097,7 @@ export def "update-object-name-by-child-object-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
   --object-field: string
 ]: any -> record<objectField: string> {
   let input = $in
@@ -2066,6 +2107,7 @@ export def "update-object-name-by-child-object-id" [
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
   if ($child_object_name | is-empty) { error make --unspanned { msg: "path parameter 'childObjectName' must be non-empty" } }
   if ($child_object_id | is-empty) { error make --unspanned { msg: "path parameter 'childObjectId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id), child_object_name: (encode-path-segment $child_object_name), child_object_id: (encode-path-segment $child_object_id)} | format pattern "/{object_name}/{object_id}/{child_object_name}/{child_object_id}") $auth.query)
   let req_body = {"objectField": $object_field} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2105,7 +2147,7 @@ export def "replace-object-name-by-child-object-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>'
+  --authorization: string # The authorization tokens. The format for the header value is 'Element <token>, User <user secret>' (required)
   --object-field: string
 ]: any -> record<objectField: string> {
   let input = $in
@@ -2115,6 +2157,7 @@ export def "replace-object-name-by-child-object-id" [
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
   if ($child_object_name | is-empty) { error make --unspanned { msg: "path parameter 'childObjectName' must be non-empty" } }
   if ($child_object_id | is-empty) { error make --unspanned { msg: "path parameter 'childObjectId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id), child_object_name: (encode-path-segment $child_object_name), child_object_id: (encode-path-segment $child_object_id)} | format pattern "/{object_name}/{object_id}/{child_object_name}/{child_object_id}") $auth.query)
   let req_body = {"objectField": $object_field} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {Ocp-Apim-Subscription-Key: $token_val}, query: "", location: "header"} }
+    "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {"Ocp-Apim-Subscription-Key": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -118,6 +118,8 @@ def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors
 def base-url-completer [] { ["{Endpoint}/qnamaker/v4.0"] }
 def auth-scheme-completer [] { ["ocp-apim-subscription-key"] }
 
+# Completers for enum parameters
+def environment-completer [] { ["Prod" "Test"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -192,7 +194,7 @@ export def "alterations-replace" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   word_alterations: list # Collection of word alterations. — item shape: {alterations: list<string>}
-]: any -> record<error: record<code: string, details: list<record>, innerError: record<code: string, innerError: any>, message: string, target: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -253,6 +255,7 @@ export def "endpoint-settings-get-settings" [
 #
 # PATCH /endpointSettings
 # operationId: EndpointSettings_UpdateSettings
+# --activeLearning shape: {enable?: string}
 export def "endpoint-settings-update-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -263,7 +266,7 @@ export def "endpoint-settings-update-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --active-learning: any # Active Learning settings of the endpoint.
+  --active-learning: record # Active Learning settings of the endpoint. — shape: {enable?: string}
 ]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
@@ -396,7 +399,7 @@ export def "knowledgebase-list-all" [
 # POST /knowledgebases/create
 # operationId: Knowledgebase_Create
 # --files item shape: {fileName: string, fileUri: string}
-# --qnaList item shape: {answer: string, context?: any, id?: int, metadata?: list, questions: list<string>, source?: string}
+# --qnaList item shape: {answer: string, context?: record, id?: int, metadata?: list, questions: list<string>, source?: string}
 export def "knowledgebase-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -412,7 +415,7 @@ export def "knowledgebase-create" [
   --files: list # List of files from which to Extract Q-A. — item shape: {fileName: string, fileUri: string}
   --language: string # Language of the knowledgebase.
   name: string # Friendly name for the knowledgebase.
-  --qna-list: list # List of Q-A (QnADTO) to be added to the knowledgebase. Q-A Ids are assigned by the service and should be omitted. — item shape: {answer: string, context?: any, id?: int, metadata?: list, questions: list<string>, source?: string}
+  --qna-list: list # List of Q-A (QnADTO) to be added to the knowledgebase. Q-A Ids are assigned by the service and should be omitted. — item shape: {answer: string, context?: record, id?: int, metadata?: list, questions: list<string>, source?: string}
   --urls: list<string> # List of URLs to be used for extracting Q-A.
 ]: any -> record<createdTimestamp: string, errorResponse: record<error: record<code: string, details: list, innerError: record, message: string, target: string>>, lastActionTimestamp: string, operationId: string, operationState: string, resourceLocation: string, userId: string> {
   let input = $in
@@ -452,7 +455,7 @@ export def "knowledgebase-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<error: record<code: string, details: list<record>, innerError: record<code: string, innerError: any>, message: string, target: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($kb_id | is-empty) { error make --unspanned { msg: "path parameter 'kbId' must be non-empty" } }
@@ -513,6 +516,9 @@ export def "knowledgebase-get-details" [
 #
 # PATCH /knowledgebases/{kbId}
 # operationId: Knowledgebase_Update
+# --add shape: {files?: list, qnaList?: list, urls?: list<string>}
+# --delete shape: {ids?: list<int>, sources?: list<string>}
+# --update shape: {name?: string, qnaList?: list, urls?: list<string>}
 export def "knowledgebase-update" [
   kb_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -524,11 +530,11 @@ export def "knowledgebase-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --add: any # An instance of CreateKbInputDTO for add operation
+  --add: record # An instance of CreateKbInputDTO for add operation — shape: {files?: list, qnaList?: list, urls?: list<string>}
   --default-answer-used-for-extraction: string # Text string to be used as the answer in any Q-A which has no extracted answer from the document but has a hierarchy. Required when EnableHierarchicalExtraction field is set to True.
-  --delete: any # An instance of DeleteKbContentsDTO for delete Operation
+  --delete: record # An instance of DeleteKbContentsDTO for delete Operation — shape: {ids?: list<int>, sources?: list<string>}
   --enable-hierarchical-extraction: oneof<nothing, bool> # Enable hierarchical extraction of Q-A from files and urls. The value set during KB creation will be used if this field is not present.
-  --update: any # An instance of UpdateKbContentsDTO for Update Operation
+  --update: record # An instance of UpdateKbContentsDTO for Update Operation — shape: {name?: string, qnaList?: list, urls?: list<string>}
 ]: any -> record<createdTimestamp: string, errorResponse: record<error: record<code: string, details: list, innerError: record, message: string, target: string>>, lastActionTimestamp: string, operationId: string, operationState: string, resourceLocation: string, userId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
@@ -568,7 +574,7 @@ export def "knowledgebase-publish" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<error: record<code: string, details: list<record>, innerError: record<code: string, innerError: any>, message: string, target: string>> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($kb_id | is-empty) { error make --unspanned { msg: "path parameter 'kbId' must be non-empty" } }
@@ -593,7 +599,7 @@ export def "knowledgebase-publish" [
 #
 # PUT /knowledgebases/{kbId}
 # operationId: Knowledgebase_Replace
-# --qnAList item shape: {answer: string, context?: any, id?: int, metadata?: list, questions: list<string>, source?: string}
+# --qnAList item shape: {answer: string, context?: record, id?: int, metadata?: list, questions: list<string>, source?: string}
 export def "knowledgebase-replace" [
   kb_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -605,8 +611,8 @@ export def "knowledgebase-replace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  qn_a_list: list # List of Q-A (QnADTO) to be added to the knowledgebase. Q-A Ids are assigned by the service and should be omitted. — item shape: {answer: string, context?: any, id?: int, metadata?: list, questions: list<string>, source?: string}
-]: any -> record<error: record<code: string, details: list<record>, innerError: record<code: string, innerError: any>, message: string, target: string>> {
+  qn_a_list: list # List of Q-A (QnADTO) to be added to the knowledgebase. Q-A Ids are assigned by the service and should be omitted. — item shape: {answer: string, context?: record, id?: int, metadata?: list, questions: list<string>, source?: string}
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -636,7 +642,7 @@ export def "knowledgebase-replace" [
 # operationId: Knowledgebase_Download
 export def "knowledgebase-download" [
   kb_id: string
-  environment: string
+  environment: string@environment-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

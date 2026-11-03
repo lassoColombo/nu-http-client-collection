@@ -1,4 +1,4 @@
-# Auto-generated client for OpenUV - Global Real-Time UV Index Forecast API vv1
+# Auto-generated client for OpenUV - Global Real-Time UV Index Forecast API v1
 # Source: https://api.apis.guru/v2/specs/openuv.io/v1/openapi.json
 # Auth: --token flag or $env.OPENUV_GLOBAL_REAL_TIME_UV_INDEX_FORECAST_API_TOKEN
 
@@ -130,15 +130,18 @@ export def "get-forecast" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lat: float # latitude, from -90.00 to 90.00 (e.g. 78.67)
-  --lng: float # longitude, from -180.00 to 180.00 (e.g. 115.67)
+  --lat: float # latitude, from -90.00 to 90.00 (required, e.g. 78.67)
+  --lng: float # longitude, from -180.00 to 180.00 (required, e.g. 115.67)
   --alt: float # Altitude in meters, from 0 to 10000m, 0m by default. If provided the altitude correction factor will be applied to clear sky sea level UV Index value. (e.g. 1050)
   --ozone: float # Ozone in du (Dobson Units), from 100 to 550du, the latest forecast from OMI dataset is used by default. (e.g. 304.5)
   --dt: string # UTC datetime in ISO-8601 format, now by default. Use that parameter to get UV Index Forecast for any point in time. (format: date-time, e.g. 2018-02-04T04:39:06.467Z)
-  --x-access-token: string # This header is used to send data that contains your OpenUV API key
+  --x-access-token: string # This header is used to send data that contains your OpenUV API key (required)
 ]: nothing -> list<table<uv: float, uv_time: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($lat == null) { error make --unspanned { msg: "required query parameter 'lat' missing: pass --lat" } }
+  if ($lng == null) { error make --unspanned { msg: "required query parameter 'lng' missing: pass --lng" } }
+  if ($x_access_token == null) { error make --unspanned { msg: "required header parameter 'x-access-token' missing: pass --x-access-token" } }
   let qp = [(serialize-qp "lat" $lat "scalar") (serialize-qp "lng" $lng "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "ozone" $ozone "scalar") (serialize-qp "dt" $dt "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/forecast" $qp $auth.query)
   let accept_val = "application/json"
@@ -172,17 +175,22 @@ export def "get-protection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lat: float # latitude, from -90.00 to 90.00 (e.g. 78.67)
-  --lng: float # longitude, from -180.00 to 180.00 (e.g. 115.67)
-  --qp-from: float # UV Index from value for protection datetime lookup. From 0 to 40. (e.g. 2.5)
-  --qp-to: float # UV Index to value for protection datetime lookup. From 0 to 40. (e.g. 3.6)
+  --lat: float # latitude, from -90.00 to 90.00 (required, e.g. 78.67)
+  --lng: float # longitude, from -180.00 to 180.00 (required, e.g. 115.67)
+  --from: float # UV Index from value for protection datetime lookup. From 0 to 40. (required, e.g. 2.5)
+  --to: float # UV Index to value for protection datetime lookup. From 0 to 40. (required, e.g. 3.6)
   --alt: float # Altitude in meters, from 0 to 10000m, 0m by default. If provided the altitude correction factor will be applied to clear sky sea level UV Index value. (e.g. 1050)
   --ozone: float # Ozone in du (Dobson Units), from 100 to 550du, the latest forecast from OMI dataset is used by default. (e.g. 304.5)
-  --x-access-token: string # This header is used to send data that contains your OpenUV API key
+  --x-access-token: string # This header is used to send data that contains your OpenUV API key (required)
 ]: nothing -> record<ozone: float, ozone_time: string, uv: float, uv_max: float, uv_max_time: string, uv_time: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "lat" $lat "scalar") (serialize-qp "lng" $lng "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "ozone" $ozone "scalar")] | flatten | str join "&"
+  if ($lat == null) { error make --unspanned { msg: "required query parameter 'lat' missing: pass --lat" } }
+  if ($lng == null) { error make --unspanned { msg: "required query parameter 'lng' missing: pass --lng" } }
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  if ($x_access_token == null) { error make --unspanned { msg: "required header parameter 'x-access-token' missing: pass --x-access-token" } }
+  let qp = [(serialize-qp "lat" $lat "scalar") (serialize-qp "lng" $lng "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "ozone" $ozone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/protection" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -191,7 +199,7 @@ export def "get-protection" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"lat": $lat, "lng": $lng, "from": $qp_from, "to": $qp_to, "alt": $alt, "ozone": $ozone} | compact)
+    query: ({"lat": $lat, "lng": $lng, "from": $from, "to": $to, "alt": $alt, "ozone": $ozone} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -215,15 +223,18 @@ export def "get-uv" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lat: float # latitude, from -90.00 to 90.00 (e.g. 78.67)
-  --lng: float # longitude, from -180.00 to 180.00 (e.g. 115.67)
+  --lat: float # latitude, from -90.00 to 90.00 (required, e.g. 78.67)
+  --lng: float # longitude, from -180.00 to 180.00 (required, e.g. 115.67)
   --alt: float # Altitude in meters, from 0 to 10000m, 0m by default. If provided the altitude correction factor will be applied to clear sky sea level UV Index value. (e.g. 1050)
   --ozone: float # Ozone in du (Dobson Units), from 100 to 550du, the latest forecast from OMI dataset is used by default. (e.g. 304.5)
   --dt: string # UTC datetime in ISO-8601 format, now by default. Use that parameter to get UV Index Forecast for any point in time. (format: date-time, e.g. 2018-02-04T04:39:06.467Z)
-  --x-access-token: string # This header is used to send data that contains your OpenUV API key
+  --x-access-token: string # This header is used to send data that contains your OpenUV API key (required)
 ]: nothing -> record<from_time: string, from_uv: float, to_time: string, to_uv: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($lat == null) { error make --unspanned { msg: "required query parameter 'lat' missing: pass --lat" } }
+  if ($lng == null) { error make --unspanned { msg: "required query parameter 'lng' missing: pass --lng" } }
+  if ($x_access_token == null) { error make --unspanned { msg: "required header parameter 'x-access-token' missing: pass --x-access-token" } }
   let qp = [(serialize-qp "lat" $lat "scalar") (serialize-qp "lng" $lng "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "ozone" $ozone "scalar") (serialize-qp "dt" $dt "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/uv" $qp $auth.query)
   let accept_val = "application/json"

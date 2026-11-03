@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -114,8 +114,8 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def action-completer [] { ["START" "STOP"] }
-def resolution-completer [] { ["DAY" "HOUR" "MONTH" "WEEK" "YEAR"] }
 def vendor-completer [] { ["AUDI" "BMW" "HYUNDAI" "NISSAN" "PEUGEOT" "TESLA" "VOLKSWAGEN"] }
+def resolution-completer [] { ["DAY" "HOUR" "MONTH" "WEEK" "YEAR"] }
 def properties-completer [] { ["BATTERY_LEVEL" "IS_CHARGING" "IS_CHARGING_REASONS" "IS_PLUGGED_IN" "LOCATION" "RANGE"] }
 
 # List all available API commands with their parameters
@@ -156,7 +156,7 @@ export def "get-chargers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --field: list<string> # An optional array of Charger fields that should be included in the response, for example: `?field[]=information&field[]=chargeState` By default, no optional fields are included and only the Charger ID will be returned. Response time will generally be slower the more fields you request.
-]: nothing -> list<any> {
+]: nothing -> table<chargeState: record<chargeRate: float, isCharging: bool, isPluggedIn: bool>, id: string, information: record<brand: string, id: string, model: string, year: int>, isReachable: bool, lastSeen: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "field[]" $field "multi")] | flatten | str join "&"
@@ -491,7 +491,7 @@ export def "get-health-vendors" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<displayName: string, status: string, vendor: any> {
+]: nothing -> table<displayName: string, status: string, vendor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/health/vendors" $auth.query)
@@ -525,7 +525,7 @@ export def "get-me" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, linkedVendors: table<isValid: bool, vendor: any>> {
+]: nothing -> record<id: string, linkedVendors: table<isValid: bool, vendor: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me" $auth.query)
@@ -550,7 +550,7 @@ export def "get-me" [
 # DELETE /me/vendors/{vendor}
 # operationId: disconnectVendor
 export def "disconnect-vendor" [
-  vendor: string
+  vendor: string@vendor-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -596,13 +596,14 @@ export def "get-statistics-charging" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --resolution: string@resolution-completer # The unit of time the data will be cut into before aggregate statistics are applied. For instance if you choose DAY, then each item in the returned array will cover 1 day. (default: DAY)
-  --start-date: string # Earliest date to include in the response (format: date)
+  --start-date: string # Earliest date to include in the response (required, format: date)
   --end-date: string # Latest date to include in the response (defaults to current date/time) (format: date)
   --vehicle-id: string # Filter statistics to only include this vehicle
   --charging-location-id: string # Filter statistics to only include this charging location
 ]: nothing -> table<costSum: float, date: string, kw: record<max: float, mean: float, min: float>, kwhSum: float, price: record<max: float, mean: float, min: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'startDate' missing: pass --start-date" } }
   let qp = [(serialize-qp "resolution" $resolution "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "vehicleId" $vehicle_id "scalar") (serialize-qp "chargingLocationId" $charging_location_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/statistics/charging" $qp $auth.query)
   let accept_val = "application/json"
@@ -752,7 +753,7 @@ export def "get-vehicles" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --field: list # An optional array of Vehicle fields that should be included in the response, for example: `?field[]=information&field[]=location` By default, no fields are included and only the Vehicle ID will be returned. Response time may be impacted by which fields you request.
-]: nothing -> list<any> {
+]: nothing -> table<chargeState: record<batteryCapacity: float, batteryLevel: float, chargeLimit: float, chargeRate: float, chargeTimeRemaining: float, isCharging: bool, isChargingReasons: list, isPluggedIn: bool, range: float>, chargingLocationId: string, id: string, information: record<brand: string, id: string, model: string, year: int>, isReachable: bool, lastSeen: string, location: record<lastUpdated: string, latitude: float, longitude: float>, odometer: record<distance: float, lastUpdated: string>, smartChargingPolicy: record<deadline: string, isEnabled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "field[]" $field "multi")] | flatten | str join "&"
@@ -789,7 +790,7 @@ export def "get-vehicles-vehicleid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --field: list<string> # An optional array of Vehicle fields that should be included in the response, for example: `?field[]=information&field[]=location` By default, no fields are included and only the Vehicle ID will be returned. Response time may be impacted by which fields you request.
-]: nothing -> record<chargeState: any, chargingLocationId: string, id: string, information: any, isReachable: bool, lastSeen: string, location: any, odometer: any, smartChargingPolicy: any> {
+]: nothing -> record<chargeState: record<batteryCapacity: float, batteryLevel: float, chargeLimit: float, chargeRate: float, chargeTimeRemaining: float, isCharging: bool, isChargingReasons: list<string>, isPluggedIn: bool, range: float>, chargingLocationId: string, id: string, information: record<brand: string, id: string, model: string, year: int>, isReachable: bool, lastSeen: string, location: record<lastUpdated: string, latitude: float, longitude: float>, odometer: record<distance: float, lastUpdated: string>, smartChargingPolicy: record<deadline: string, isEnabled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($vehicle_id | is-empty) { error make --unspanned { msg: "path parameter 'vehicleId' must be non-empty" } }
@@ -816,7 +817,7 @@ export def "get-vehicles-vehicleid" [
 # GET /vehicles/{vehicleId}/charge-state
 # operationId: getVehicleChargestate
 export def "get-vehicle-chargestate" [
-  vehicle_id: any
+  vehicle_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -852,7 +853,7 @@ export def "get-vehicle-chargestate" [
 # POST /vehicles/{vehicleId}/charging
 # operationId: postVehiclesVehicleidCharging
 export def "post-vehicles-vehicleid-charging" [
-  vehicle_id: any
+  vehicle_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -888,7 +889,7 @@ export def "post-vehicles-vehicleid-charging" [
 # GET /vehicles/{vehicleId}/information
 # operationId: getVehiclesVehicleidInformation
 export def "get-vehicles-vehicleid-information" [
-  vehicle_id: any
+  vehicle_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -924,7 +925,7 @@ export def "get-vehicles-vehicleid-information" [
 # GET /vehicles/{vehicleId}/location
 # operationId: getVehiclesVehicleidLocation
 export def "get-vehicles-vehicleid-location" [
-  vehicle_id: any
+  vehicle_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -960,7 +961,7 @@ export def "get-vehicles-vehicleid-location" [
 # GET /vehicles/{vehicleId}/odometer
 # operationId: getVehiclesVehicleidOdometer
 export def "get-vehicles-vehicleid-odometer" [
-  vehicle_id: any
+  vehicle_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -996,7 +997,7 @@ export def "get-vehicles-vehicleid-odometer" [
 # GET /vehicles/{vehicleId}/smart-charging-policy
 # operationId: getVehiclesVehicleidSmartchargingpolicy
 export def "get-vehicles-vehicleid-smartchargingpolicy" [
-  vehicle_id: any
+  vehicle_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1006,7 +1007,7 @@ export def "get-vehicles-vehicleid-smartchargingpolicy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<deadline: string, isEnabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($vehicle_id | is-empty) { error make --unspanned { msg: "path parameter 'vehicleId' must be non-empty" } }
@@ -1044,7 +1045,7 @@ export def "put-vehicles-vehicleid-smartchargingpolicy" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --deadline: string # The deadline for fully charging the vehicle. Smart charging does not work without setting a deadline. The deadline is expressed as a time on a 24h clock in UTC (e.g. 08:00)
   --is-enabled: oneof<nothing, bool> # When enabled, this vehicle's charging status may be controlled by Smart Charging. (e.g. true)
-]: any -> any {
+]: any -> record<deadline: string, isEnabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1084,7 +1085,7 @@ export def "post-vehicles-vehicleid-watch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --properties: string@properties-completer # Array of vehicle properties to watch (e.g. [LOCATION, BATTERY_LEVEL])
-]: any -> any {
+]: any -> record<properties: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

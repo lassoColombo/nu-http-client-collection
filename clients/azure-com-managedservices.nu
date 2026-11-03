@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -144,10 +144,11 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
 ]: nothing -> record<value: table<display: record, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.ManagedServices/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -182,11 +183,12 @@ export def "registration-assignments-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand-registration-definition: oneof<nothing, bool> # Tells whether to return registration definition details also along with registration assignment details.
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
 ]: nothing -> record<nextLink: string, value: table<id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$expandRegistrationDefinition" $expand_registration_definition "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope)} | format pattern "/{scope}/providers/Microsoft.ManagedServices/registrationAssignments") $qp $auth.query)
   let accept_val = "application/json"
@@ -221,12 +223,13 @@ export def "registration-assignments-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<error: record<code: string, message: string>> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($registration_assignment_id | is-empty) { error make --unspanned { msg: "path parameter 'registrationAssignmentId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), registration_assignment_id: (encode-path-segment $registration_assignment_id)} | format pattern "/{scope}/providers/Microsoft.ManagedServices/registrationAssignments/{registration_assignment_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -262,12 +265,13 @@ export def "registration-assignments-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand-registration-definition: oneof<nothing, bool> # Tells whether to return registration definition details also along with registration assignment details.
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
 ]: nothing -> record<id: string, name: string, properties: record<provisioningState: string, registrationDefinition: record<id: string, name: string, plan: record, properties: record, type: string>, registrationDefinitionId: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($registration_assignment_id | is-empty) { error make --unspanned { msg: "path parameter 'registrationAssignmentId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$expandRegistrationDefinition" $expand_registration_definition "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), registration_assignment_id: (encode-path-segment $registration_assignment_id)} | format pattern "/{scope}/providers/Microsoft.ManagedServices/registrationAssignments/{registration_assignment_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -303,7 +307,7 @@ export def "registration-assignments-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --properties: record # Properties of a registration assignment. — shape: {registrationDefinitionId: string}
 ]: any -> record<id: string, name: string, properties: record<provisioningState: string, registrationDefinition: record<id: string, name: string, plan: record, properties: record, type: string>, registrationDefinitionId: string>, type: string> {
   let input = $in
@@ -311,6 +315,7 @@ export def "registration-assignments-create-or-update" [
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($registration_assignment_id | is-empty) { error make --unspanned { msg: "path parameter 'registrationAssignmentId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), registration_assignment_id: (encode-path-segment $registration_assignment_id)} | format pattern "/{scope}/providers/Microsoft.ManagedServices/registrationAssignments/{registration_assignment_id}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -346,11 +351,12 @@ export def "registration-definitions-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
 ]: nothing -> record<nextLink: string, value: table<id: string, name: string, plan: record, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope)} | format pattern "/{scope}/providers/Microsoft.ManagedServices/registrationDefinitions") $qp $auth.query)
   let accept_val = "application/json"
@@ -385,12 +391,13 @@ export def "registration-definitions-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<error: record<code: string, message: string>> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($registration_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'registrationDefinitionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), registration_definition_id: (encode-path-segment $registration_definition_id)} | format pattern "/{scope}/providers/Microsoft.ManagedServices/registrationDefinitions/{registration_definition_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -425,12 +432,13 @@ export def "registration-definitions-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
 ]: nothing -> record<id: string, name: string, plan: record<name: string, product: string, publisher: string, version: string>, properties: record<authorizations: list<record>, description: string, managedByTenantId: string, managedByTenantName: string, provisioningState: string, registrationDefinitionName: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($registration_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'registrationDefinitionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), registration_definition_id: (encode-path-segment $registration_definition_id)} | format pattern "/{scope}/providers/Microsoft.ManagedServices/registrationDefinitions/{registration_definition_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -467,7 +475,7 @@ export def "registration-definitions-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --plan: record # Plan details for the managed services. — shape: {name: string, product: string, publisher: string, version: string}
   --properties: record # Properties of a registration definition. — shape: {authorizations: list, description?: string, managedByTenantId: string, registrationDefinitionName?: string}
 ]: any -> record<id: string, name: string, plan: record<name: string, product: string, publisher: string, version: string>, properties: record<authorizations: list<record>, description: string, managedByTenantId: string, managedByTenantName: string, provisioningState: string, registrationDefinitionName: string>, type: string> {
@@ -476,6 +484,7 @@ export def "registration-definitions-create-or-update" [
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
   if ($registration_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'registrationDefinitionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope), registration_definition_id: (encode-path-segment $registration_definition_id)} | format pattern "/{scope}/providers/Microsoft.ManagedServices/registrationDefinitions/{registration_definition_id}") $qp $auth.query)
   let req_body = {"plan": $plan, "properties": $properties} | compact

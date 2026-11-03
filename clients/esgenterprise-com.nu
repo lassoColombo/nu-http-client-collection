@@ -131,10 +131,11 @@ export def "get-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # Company name or stock symbol
+  --q: string # Company name or stock symbol (required)
 ]: nothing -> record<company_name: string, environment_score: float, governance_score: float, last_processing_date: string, social_score: float, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search" $qp $auth.query)
   let accept_val = "application/json"

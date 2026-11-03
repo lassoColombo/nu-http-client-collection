@@ -173,15 +173,21 @@ export def "v2get-feed-item-status" [
   --include-details: string # Includes the status details for each item in the feed. Do not set this parameter to true as discrepancies may appear between the header and the item details (the item details may be incorrect). Instead, use the Get a feedItems status. (default: false)
   --offset: string # The object response to start with, where 0 is the first entity that can be requested. It can only be used when includeDetails is set to true. (default: 0)
   --limit: string # The number of items to be returned. Cannot be more than 50 items. Use it only when the includeDetails is set to true. (default: 50)
-  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type
-  --wm-consumer-id: string # Your Consumer ID
-  --wm-sec-timestamp: string # Epoch timestamp
-  --wm-sec-auth-signature: string # Authentication signature
-  --wm-svc-name: string # The Service name
-  --wm-qos-correlation-id: string # A Transaction ID
+  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type (required, default: SWAGGER_CHANNEL_TYPE)
+  --wm-consumer-id: string # Your Consumer ID (required)
+  --wm-sec-timestamp: string # Epoch timestamp (required, default: Auto populated)
+  --wm-sec-auth-signature: string # Authentication signature (required, default: Auto populated)
+  --wm-svc-name: string # The Service name (required, default: Walmart Marketplace)
+  --wm-qos-correlation-id: string # A Transaction ID (required, default: 123456abcdef)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let wm_consumer_channel_type = ($wm_consumer_channel_type | default "SWAGGER_CHANNEL_TYPE")
+  if ($wm_consumer_id == null) { error make --unspanned { msg: "required header parameter 'WM_CONSUMER.ID' missing: pass --wm-consumer-id" } }
+  let wm_sec_timestamp = ($wm_sec_timestamp | default "Auto populated")
+  let wm_sec_auth_signature = ($wm_sec_auth_signature | default "Auto populated")
+  let wm_svc_name = ($wm_svc_name | default "Walmart Marketplace")
+  let wm_qos_correlation_id = ($wm_qos_correlation_id | default "123456abcdef")
   let qp = [(serialize-qp "feedId" $feed_id "scalar") (serialize-qp "includeDetails" $include_details "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/feeds" $qp $auth.query)
   let accept_val = "application/xml"
@@ -217,17 +223,23 @@ export def "v2do-post-multi-part" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --feed-type: string@feed-type-completer # Feed Type (default: item)
-  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type
-  --wm-consumer-id: string # Your Consumer ID
-  --wm-sec-timestamp: string # Epoch timestamp
-  --wm-sec-auth-signature: string # Authentication signature
-  --wm-svc-name: string # The Service name
-  --wm-qos-correlation-id: string # A Transaction ID
+  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type (required, default: SWAGGER_CHANNEL_TYPE)
+  --wm-consumer-id: string # Your Consumer ID (required)
+  --wm-sec-timestamp: string # Epoch timestamp (required, default: Auto populated)
+  --wm-sec-auth-signature: string # Authentication signature (required, default: Auto populated)
+  --wm-svc-name: string # The Service name (required, default: Walmart Marketplace)
+  --wm-qos-correlation-id: string # A Transaction ID (required, default: 123456abcdef)
   file: path # Feed File to upload
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let wm_consumer_channel_type = ($wm_consumer_channel_type | default "SWAGGER_CHANNEL_TYPE")
+  if ($wm_consumer_id == null) { error make --unspanned { msg: "required header parameter 'WM_CONSUMER.ID' missing: pass --wm-consumer-id" } }
+  let wm_sec_timestamp = ($wm_sec_timestamp | default "Auto populated")
+  let wm_sec_auth_signature = ($wm_sec_auth_signature | default "Auto populated")
+  let wm_svc_name = ($wm_svc_name | default "Walmart Marketplace")
+  let wm_qos_correlation_id = ($wm_qos_correlation_id | default "123456abcdef")
   let qp = [(serialize-qp "feedType" $feed_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/feeds" $qp $auth.query)
   let req_body = {"file": $file} | compact
@@ -236,8 +248,8 @@ export def "v2do-post-multi-part" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_CONSUMER.ID": $wm_consumer_id, "WM_SEC.TIMESTAMP": $wm_sec_timestamp, "WM_SEC.AUTH_SIGNATURE": $wm_sec_auth_signature, "WM_SVC.NAME": $wm_svc_name, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -270,16 +282,22 @@ export def "v2get-all-items-status" [
   --include-details: string # Includes details of each entity in the feed. Do not set this parameter to true. (default: false)
   --offset: string # The object response to start with, where 0 is the first entity that can be requested. It can only be used when includeDetails is set to true. (default: 0)
   --limit: string # The number of entities to be returned. It cannot be more than 50 entities. Use it only when the includeDetails is set to true. (default: 50)
-  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type
-  --wm-consumer-id: string # Your Consumer ID
-  --wm-sec-timestamp: string # Epoch timestamp
-  --wm-sec-auth-signature: string # Authentication signature
-  --wm-svc-name: string # The Service name
-  --wm-qos-correlation-id: string # A Transaction ID
+  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type (required, default: SWAGGER_CHANNEL_TYPE)
+  --wm-consumer-id: string # Your Consumer ID (required)
+  --wm-sec-timestamp: string # Epoch timestamp (required, default: Auto populated)
+  --wm-sec-auth-signature: string # Authentication signature (required, default: Auto populated)
+  --wm-svc-name: string # The Service name (required, default: Walmart Marketplace)
+  --wm-qos-correlation-id: string # A Transaction ID (required, default: 123456abcdef)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($feed_id | is-empty) { error make --unspanned { msg: "path parameter 'feedId' must be non-empty" } }
+  let wm_consumer_channel_type = ($wm_consumer_channel_type | default "SWAGGER_CHANNEL_TYPE")
+  if ($wm_consumer_id == null) { error make --unspanned { msg: "required header parameter 'WM_CONSUMER.ID' missing: pass --wm-consumer-id" } }
+  let wm_sec_timestamp = ($wm_sec_timestamp | default "Auto populated")
+  let wm_sec_auth_signature = ($wm_sec_auth_signature | default "Auto populated")
+  let wm_svc_name = ($wm_svc_name | default "Walmart Marketplace")
+  let wm_qos_correlation_id = ($wm_qos_correlation_id | default "123456abcdef")
   let qp = [(serialize-qp "includeDetails" $include_details "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({feed_id: (encode-path-segment $feed_id)} | format pattern "/v2/feeds/{feed_id}") $qp $auth.query)
   let accept_val = "application/xml"
@@ -318,15 +336,21 @@ export def "v3get-feed-item-status" [
   --include-details: string # Includes the status details for each item in the feed. Do not set this parameter to true as discrepancies may appear between the header and the item details (the item details may be incorrect). Instead, use the Get a feedItems status. (default: false)
   --offset: string # The object response to start with, where 0 is the first entity that can be requested. It can only be used when includeDetails is set to true. (default: 0)
   --limit: string # The number of items to be returned. Cannot be more than 50 items. Use it only when the includeDetails is set to true. (default: 50)
-  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type
-  --wm-consumer-id: string # Your Consumer ID
-  --wm-sec-timestamp: string # Epoch timestamp
-  --wm-sec-auth-signature: string # Authentication signature
-  --wm-svc-name: string # The Service name
-  --wm-qos-correlation-id: string # A Transaction ID
+  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type (required, default: SWAGGER_CHANNEL_TYPE)
+  --wm-consumer-id: string # Your Consumer ID (required)
+  --wm-sec-timestamp: string # Epoch timestamp (required, default: Auto populated)
+  --wm-sec-auth-signature: string # Authentication signature (required, default: Auto populated)
+  --wm-svc-name: string # The Service name (required, default: Walmart Marketplace)
+  --wm-qos-correlation-id: string # A Transaction ID (required, default: 123456abcdef)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let wm_consumer_channel_type = ($wm_consumer_channel_type | default "SWAGGER_CHANNEL_TYPE")
+  if ($wm_consumer_id == null) { error make --unspanned { msg: "required header parameter 'WM_CONSUMER.ID' missing: pass --wm-consumer-id" } }
+  let wm_sec_timestamp = ($wm_sec_timestamp | default "Auto populated")
+  let wm_sec_auth_signature = ($wm_sec_auth_signature | default "Auto populated")
+  let wm_svc_name = ($wm_svc_name | default "Walmart Marketplace")
+  let wm_qos_correlation_id = ($wm_qos_correlation_id | default "123456abcdef")
   let qp = [(serialize-qp "feedId" $feed_id "scalar") (serialize-qp "includeDetails" $include_details "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/feeds" $qp $auth.query)
   let accept_val = "application/xml"
@@ -362,17 +386,23 @@ export def "v3do-post-multi-part" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --feed-type: string@feed-type-completer-1 # Feed Type (default: item)
-  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type
-  --wm-consumer-id: string # Your Consumer ID
-  --wm-sec-timestamp: string # Epoch timestamp
-  --wm-sec-auth-signature: string # Authentication signature
-  --wm-svc-name: string # The Service name
-  --wm-qos-correlation-id: string # A Transaction ID
+  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type (required, default: SWAGGER_CHANNEL_TYPE)
+  --wm-consumer-id: string # Your Consumer ID (required)
+  --wm-sec-timestamp: string # Epoch timestamp (required, default: Auto populated)
+  --wm-sec-auth-signature: string # Authentication signature (required, default: Auto populated)
+  --wm-svc-name: string # The Service name (required, default: Walmart Marketplace)
+  --wm-qos-correlation-id: string # A Transaction ID (required, default: 123456abcdef)
   file: path # Feed File to upload
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let wm_consumer_channel_type = ($wm_consumer_channel_type | default "SWAGGER_CHANNEL_TYPE")
+  if ($wm_consumer_id == null) { error make --unspanned { msg: "required header parameter 'WM_CONSUMER.ID' missing: pass --wm-consumer-id" } }
+  let wm_sec_timestamp = ($wm_sec_timestamp | default "Auto populated")
+  let wm_sec_auth_signature = ($wm_sec_auth_signature | default "Auto populated")
+  let wm_svc_name = ($wm_svc_name | default "Walmart Marketplace")
+  let wm_qos_correlation_id = ($wm_qos_correlation_id | default "123456abcdef")
   let qp = [(serialize-qp "feedType" $feed_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/feeds" $qp $auth.query)
   let req_body = {"file": $file} | compact
@@ -381,8 +411,8 @@ export def "v3do-post-multi-part" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_CONSUMER.ID": $wm_consumer_id, "WM_SEC.TIMESTAMP": $wm_sec_timestamp, "WM_SEC.AUTH_SIGNATURE": $wm_sec_auth_signature, "WM_SVC.NAME": $wm_svc_name, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -415,16 +445,22 @@ export def "v3get-all-items-status" [
   --include-details: string # Includes details of each entity in the feed. Do not set this parameter to true. (default: false)
   --offset: string # The object response to start with, where 0 is the first entity that can be requested. It can only be used when includeDetails is set to true. (default: 0)
   --limit: string # The number of entities to be returned. It cannot be more than 50 entities. Use it only when the includeDetails is set to true. (default: 50)
-  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type
-  --wm-consumer-id: string # Your Consumer ID
-  --wm-sec-timestamp: string # Epoch timestamp
-  --wm-sec-auth-signature: string # Authentication signature
-  --wm-svc-name: string # The Service name
-  --wm-qos-correlation-id: string # A Transaction ID
+  --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type (required, default: SWAGGER_CHANNEL_TYPE)
+  --wm-consumer-id: string # Your Consumer ID (required)
+  --wm-sec-timestamp: string # Epoch timestamp (required, default: Auto populated)
+  --wm-sec-auth-signature: string # Authentication signature (required, default: Auto populated)
+  --wm-svc-name: string # The Service name (required, default: Walmart Marketplace)
+  --wm-qos-correlation-id: string # A Transaction ID (required, default: 123456abcdef)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($feed_id | is-empty) { error make --unspanned { msg: "path parameter 'feedId' must be non-empty" } }
+  let wm_consumer_channel_type = ($wm_consumer_channel_type | default "SWAGGER_CHANNEL_TYPE")
+  if ($wm_consumer_id == null) { error make --unspanned { msg: "required header parameter 'WM_CONSUMER.ID' missing: pass --wm-consumer-id" } }
+  let wm_sec_timestamp = ($wm_sec_timestamp | default "Auto populated")
+  let wm_sec_auth_signature = ($wm_sec_auth_signature | default "Auto populated")
+  let wm_svc_name = ($wm_svc_name | default "Walmart Marketplace")
+  let wm_qos_correlation_id = ($wm_qos_correlation_id | default "123456abcdef")
   let qp = [(serialize-qp "includeDetails" $include_details "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({feed_id: (encode-path-segment $feed_id)} | format pattern "/v3/feeds/{feed_id}") $qp $auth.query)
   let accept_val = "application/xml"

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -139,11 +139,12 @@ export def "product-deployments-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2019-01-01)
-]: nothing -> record<nextLink: string, value: table<eTag: string, properties: record>> {
+  --api-version: string # Client API Version. (required, default: 2019-01-01)
+]: nothing -> record<nextLink: string, value: table<eTag: string, properties: record, id: string, location: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  let api_version = ($api_version | default "2019-01-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Deployment.Admin/locations/global/productDeployments") $qp $auth.query)
   let accept_val = "application/json"
@@ -178,12 +179,13 @@ export def "product-deployments-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2019-01-01)
-]: nothing -> record<eTag: string, properties: record<deployment: record<actionPlanInstanceResourceId: string, eTag: string, parameters: string, version: string>, error: record<code: string, details: any, message: string>, externalAccess: record<expirationTime: string, principalId: string>, internalState: record<externalAccessRoleAssignmentId: string, intermediateVaultId: string, intermediateVaultUri: string, jobId: string>, lastSuccessfulDeployment: record<actionPlanInstanceResourceId: string, eTag: string, parameters: string, version: string>, productId: string, provisioningState: string, secretRotation: record<secretRotationPlanInstanceResourceId: string>, status: string, subscriptionId: string>> {
+  --api-version: string # Client API Version. (required, default: 2019-01-01)
+]: nothing -> record<eTag: string, properties: record<deployment: record<actionPlanInstanceResourceId: string, eTag: string, parameters: string, version: string>, error: record<code: string, details: any, message: string>, externalAccess: record<expirationTime: string, principalId: string>, internalState: record<externalAccessRoleAssignmentId: string, intermediateVaultId: string, intermediateVaultUri: string, jobId: string>, lastSuccessfulDeployment: record<actionPlanInstanceResourceId: string, eTag: string, parameters: string, version: string>, productId: string, provisioningState: string, secretRotation: record<secretRotationPlanInstanceResourceId: string>, status: string, subscriptionId: string>, id: string, location: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
+  let api_version = ($api_version | default "2019-01-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), product_id: (encode-path-segment $product_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Deployment.Admin/locations/global/productDeployments/{product_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -218,7 +220,7 @@ export def "product-deployments-boot-strap" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2019-01-01)
+  --api-version: string # Client API Version. (required, default: 2019-01-01)
   --version: string # Generic Version object
 ]: any -> any {
   let input = $in
@@ -226,6 +228,7 @@ export def "product-deployments-boot-strap" [
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
+  let api_version = ($api_version | default "2019-01-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), product_id: (encode-path-segment $product_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Deployment.Admin/locations/global/productDeployments/{product_id}/bootstrap") $qp $auth.query)
   let req_body = {"version": $version} | compact
@@ -262,7 +265,7 @@ export def "product-deployments-deploy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2019-01-01)
+  --api-version: string # Client API Version. (required, default: 2019-01-01)
   --parameters: string # Deployment parameters, value in JToken
   --version: string # Generic Version object
 ]: any -> any {
@@ -271,6 +274,7 @@ export def "product-deployments-deploy" [
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
+  let api_version = ($api_version | default "2019-01-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), product_id: (encode-path-segment $product_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Deployment.Admin/locations/global/productDeployments/{product_id}/deploy") $qp $auth.query)
   let req_body = {"parameters": $parameters, "version": $version} | compact
@@ -307,12 +311,13 @@ export def "product-deployments-lock" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2019-01-01)
+  --api-version: string # Client API Version. (required, default: 2019-01-01)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
+  let api_version = ($api_version | default "2019-01-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), product_id: (encode-path-segment $product_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Deployment.Admin/locations/global/productDeployments/{product_id}/lock") $qp $auth.query)
   let accept_val = "application/json"
@@ -347,12 +352,13 @@ export def "product-deployments-remove" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2019-01-01)
+  --api-version: string # Client API Version. (required, default: 2019-01-01)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
+  let api_version = ($api_version | default "2019-01-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), product_id: (encode-path-segment $product_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Deployment.Admin/locations/global/productDeployments/{product_id}/remove") $qp $auth.query)
   let accept_val = "application/json"
@@ -387,12 +393,13 @@ export def "product-deployments-rotate-secrets" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2019-01-01)
+  --api-version: string # Client API Version. (required, default: 2019-01-01)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
+  let api_version = ($api_version | default "2019-01-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), product_id: (encode-path-segment $product_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Deployment.Admin/locations/global/productDeployments/{product_id}/rotateSecrets") $qp $auth.query)
   let accept_val = "application/json"
@@ -427,7 +434,7 @@ export def "product-deployments-unlock" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2019-01-01)
+  --api-version: string # Client API Version. (required, default: 2019-01-01)
   --duration: string # Duration in TimeSpan format(Define which ISO format)
 ]: any -> any {
   let input = $in
@@ -435,6 +442,7 @@ export def "product-deployments-unlock" [
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
+  let api_version = ($api_version | default "2019-01-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), product_id: (encode-path-segment $product_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Deployment.Admin/locations/global/productDeployments/{product_id}/unlock") $qp $auth.query)
   let req_body = {"duration": $duration} | compact

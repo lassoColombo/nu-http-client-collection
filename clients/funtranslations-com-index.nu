@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-funtranslations-api-secret" => { {scheme: $scheme, headers: {X-Funtranslations-Api-Secret: $token_val}, query: "", location: "header"} }
+    "x-funtranslations-api-secret" => { {scheme: $scheme, headers: {"X-Funtranslations-Api-Secret": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -134,10 +134,11 @@ export def "get-translate-braille" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --text: string # Text to translate (format: string)
+  --text: string # Text to translate (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/braille" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -170,10 +171,11 @@ export def "get-translate-braille-dots" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --text: string # Text to translate (format: string)
+  --text: string # Text to translate (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/braille/dots" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -206,10 +208,11 @@ export def "get-translate-braille-html" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --text: string # Text to translate (format: string)
+  --text: string # Text to translate (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/braille/html" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -242,10 +245,11 @@ export def "get-translate-braille-image" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --text: string # Text to translate (format: string)
+  --text: string # Text to translate (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/braille/image" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -278,10 +282,11 @@ export def "get-translate-braille-unicode" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --text: string # Text to translate (format: string)
+  --text: string # Text to translate (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/braille/unicode" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -314,10 +319,11 @@ export def "get-translate-brooklyn" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --text: string # Text to translate (format: string)
+  --text: string # Text to translate (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/brooklyn" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -350,10 +356,11 @@ export def "get-translate-chef" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --text: string # Text to translate (format: string)
+  --text: string # Text to translate (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/chef" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -386,10 +393,11 @@ export def "get-translate-cheunh" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --text: string # Text to translate (format: string)
+  --text: string # Text to translate (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/cheunh" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -422,10 +430,11 @@ export def "get-translate-cockney" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --text: string # Text to translate (format: string)
+  --text: string # Text to translate (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/cockney" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -458,10 +467,11 @@ export def "get-translate-dolan" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --text: string # Text to translate (format: string)
+  --text: string # Text to translate (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/dolan" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -494,10 +504,11 @@ export def "get-translate-dothraki" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --text: string # Text to translate (format: string)
+  --text: string # Text to translate (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/dothraki" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -530,10 +541,11 @@ export def "get-translate-ermahgerd" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --text: string # Text to translate (format: string)
+  --text: string # Text to translate (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/ermahgerd" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -566,10 +578,11 @@ export def "get-translate-ferblatin" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --text: string # Text to translate (format: string)
+  --text: string # Text to translate (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/ferblatin" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -602,10 +615,11 @@ export def "get-translate-fudd" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --text: string # Text to translate (format: string)
+  --text: string # Text to translate (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/fudd" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -638,10 +652,11 @@ export def "get-translate-gungan" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --text: string # Text to translate (format: string)
+  --text: string # Text to translate (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/gungan" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -674,10 +689,11 @@ export def "get-translate-huttese" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --text: string # Text to translate (format: string)
+  --text: string # Text to translate (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/huttese" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -710,10 +726,11 @@ export def "get-translate-jive" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --text: string # Text to translate (format: string)
+  --text: string # Text to translate (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/jive" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -746,10 +763,11 @@ export def "get-translate-klingon" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --text: string # Text to translate (format: string)
+  --text: string # Text to translate (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/klingon" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -782,10 +800,11 @@ export def "get-translate-mandalorian" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --text: string # Text to translate (format: string)
+  --text: string # Text to translate (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/mandalorian" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -818,10 +837,11 @@ export def "get-translate-minion" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --text: string # Text to translate (format: string)
+  --text: string # Text to translate (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/minion" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -854,10 +874,11 @@ export def "get-translate-morse" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --text: string # Text to translate (format: string)
+  --text: string # Text to translate (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/morse" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -890,12 +911,15 @@ export def "get-translate-morse-audio" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --text: string # Text to translate (format: string)
-  --speed: int # Audio Speed (Words/Minute) (format: integer)
-  --tone: int # Audio Tone Frequency(Hz) (format: integer)
+  --text: string # Text to translate (required, format: string)
+  --speed: int # Audio Speed (Words/Minute) (required, format: integer)
+  --tone: int # Audio Tone Frequency(Hz) (required, format: integer)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
+  if ($speed == null) { error make --unspanned { msg: "required query parameter 'speed' missing: pass --speed" } }
+  if ($tone == null) { error make --unspanned { msg: "required query parameter 'tone' missing: pass --tone" } }
   let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "speed" $speed "scalar") (serialize-qp "tone" $tone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/morse/audio" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -928,10 +952,11 @@ export def "get-translate-morse2english" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --text: string # Text to translate (format: string)
+  --text: string # Text to translate (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/morse2english" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -964,10 +989,11 @@ export def "get-translate-oldenglish" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --text: string # Text to translate (format: string)
+  --text: string # Text to translate (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/oldenglish" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1000,10 +1026,11 @@ export def "get-translate-piglatin" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --text: string # Text to translate (format: string)
+  --text: string # Text to translate (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/piglatin" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1036,10 +1063,11 @@ export def "get-translate-pirate" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --text: string # Text to translate (format: string)
+  --text: string # Text to translate (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/pirate" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1072,10 +1100,11 @@ export def "get-translate-quneya" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --text: string # Text to translate (format: string)
+  --text: string # Text to translate (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/quneya" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1108,10 +1137,11 @@ export def "get-translate-shakespeare" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --text: string # Text to translate (format: string)
+  --text: string # Text to translate (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/shakespeare" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1144,10 +1174,11 @@ export def "get-translate-sindarin" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --text: string # Text to translate (format: string)
+  --text: string # Text to translate (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/sindarin" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1180,10 +1211,11 @@ export def "get-translate-sith" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --text: string # Text to translate (format: string)
+  --text: string # Text to translate (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/sith" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1216,10 +1248,11 @@ export def "get-translate-uk2us" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --text: string # Text to translate (format: string)
+  --text: string # Text to translate (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/uk2us" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1252,10 +1285,11 @@ export def "get-translate-us2uk" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --text: string # Text to translate (format: string)
+  --text: string # Text to translate (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/us2uk" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1288,10 +1322,11 @@ export def "get-translate-valspeak" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --text: string # Text to translate (format: string)
+  --text: string # Text to translate (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/valspeak" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1324,10 +1359,11 @@ export def "get-translate-valyrian" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --text: string # Text to translate (format: string)
+  --text: string # Text to translate (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/valyrian" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1360,10 +1396,11 @@ export def "get-translate-vulcan" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --text: string # Text to translate (format: string)
+  --text: string # Text to translate (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/vulcan" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1396,10 +1433,11 @@ export def "get-translate-yoda" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --text: string # Text to translate (format: string)
+  --text: string # Text to translate (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-funtranslations-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/yoda" $qp $auth.query)
   let accept_val = ($accept | default "application/json")

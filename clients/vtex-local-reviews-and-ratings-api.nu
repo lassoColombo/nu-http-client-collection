@@ -1,6 +1,7 @@
 # Auto-generated client for Reviews and Ratings API v1.0
 # Source: https://api.apis.guru/v2/specs/vtex.local/Reviews-and-Ratings-API/1.0/openapi.json
-# Auth: --token flag or $env.REVIEWS_AND_RATINGS_API_TOKEN
+# Auth (appKey): --token-appkey flag or $env.REVIEWS_AND_RATINGS_API_APPKEY_TOKEN
+# Auth (appToken): --token-apptoken flag or $env.REVIEWS_AND_RATINGS_API_APPTOKEN_TOKEN
 
 const BASE_URL = "https://vtex.local"
 
@@ -12,8 +13,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-vtex-api-appkey" => { {scheme: $scheme, headers: {X-VTEX-API-AppKey: $token_val}, query: "", location: "header"} }
-    "x-vtex-api-apptoken" => { {scheme: $scheme, headers: {X-VTEX-API-AppToken: $token_val}, query: "", location: "header"} }
+    "x-vtex-api-appkey" => { {scheme: $scheme, headers: {"X-VTEX-API-AppKey": $token_val}, query: "", location: "header"} }
+    "x-vtex-api-apptoken" => { {scheme: $scheme, headers: {"X-VTEX-API-AppToken": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -126,7 +127,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-appkey" "token-apptoken"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-product-rating" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -162,12 +163,14 @@ export def "get-product-rating" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Describes the type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
 ]: nothing -> record<average: float, totalCount: float> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o REVIEWS_AND_RATINGS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o REVIEWS_AND_RATINGS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/rating/{product_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -201,8 +204,8 @@ export def "save-review" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Describes the type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
   product_id: string # Product ID.
   rating: int # Customer rating. (format: int32)
   reviewer_name: string # Reviewer name.
@@ -212,6 +215,8 @@ export def "save-review" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o REVIEWS_AND_RATINGS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o REVIEWS_AND_RATINGS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/review" $auth.query)
   let req_body = {"productId": $product_id, "rating": $rating, "reviewerName": $reviewer_name, "text": $text, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -250,12 +255,14 @@ export def "delete-review" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Describes the type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
 ]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o REVIEWS_AND_RATINGS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o REVIEWS_AND_RATINGS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'reviewId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({review_id: (encode-path-segment $review_id)} | format pattern "/review/{review_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -290,12 +297,14 @@ export def "get-reviewby-review-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Describes the type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
 ]: nothing -> record<approved: bool, id: string, locale: string, location: string, pastReviews: string, productId: string, rating: float, reviewDateTime: string, reviewerName: string, searchDate: string, shopperId: string, sku: string, text: string, title: string, verifiedPurchaser: bool> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o REVIEWS_AND_RATINGS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o REVIEWS_AND_RATINGS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'reviewId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({review_id: (encode-path-segment $review_id)} | format pattern "/review/{review_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -330,8 +339,8 @@ export def "edit-review" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Describes the type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
   --locale: string # Review's locale. (nullable)
   product_id: string # Product ID.
   rating: float # Customer rating.
@@ -345,6 +354,8 @@ export def "edit-review" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o REVIEWS_AND_RATINGS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o REVIEWS_AND_RATINGS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'reviewId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({review_id: (encode-path-segment $review_id)} | format pattern "/review/{review_id}") $auth.query)
   let req_body = {"locale": $locale, "productId": $product_id, "rating": $rating, "reviewerName": $reviewer_name, "shopperId": $shopper_id, "text": $text, "title": $title, "verifiedPurchaser": $verified_purchaser} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -382,13 +393,15 @@ export def "delete-multiple-reviews" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Describes the type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
   --body: list
 ]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o REVIEWS_AND_RATINGS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o REVIEWS_AND_RATINGS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/reviews" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -426,18 +439,26 @@ export def "getalistof-reviews" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --search-term: string # Returns Reviews that contain the search term in `productId`, `sku`, `shopperId`, or `reviewerName`. (e.g. search_term)
-  --qp-from: string # Zero base starting record number, `0` is the default value. (e.g. 0)
-  --qp-to: string # Zero base ending record number, `3` is the default value. (e.g. 3)
-  --order-by: string # Case-sensitive fieldName to order records (optionally add `:asc` or `:desc`). (e.g. :asc)
-  --status: oneof<nothing, bool> # Status of the review, approved (`true`) or not (`false`). (e.g. true)
-  --product-id: string # Filter the reviews by product ID. (e.g. 1)
-  --content-type: string # Describes the type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --search-term: string # Returns Reviews that contain the search term in `productId`, `sku`, `shopperId`, or `reviewerName`. (required, e.g. search_term)
+  --from: string # Zero base starting record number, `0` is the default value. (required, e.g. 0)
+  --to: string # Zero base ending record number, `3` is the default value. (required, e.g. 3)
+  --order-by: string # Case-sensitive fieldName to order records (optionally add `:asc` or `:desc`). (required, e.g. :asc)
+  --status: oneof<nothing, bool> # Status of the review, approved (`true`) or not (`false`). (required, e.g. true)
+  --product-id: string # Filter the reviews by product ID. (required, e.g. 1)
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
 ]: nothing -> record<data: table<approved: bool, id: string, locale: string, location: string, pastReviews: string, productId: string, rating: float, reviewDateTime: string, reviewerName: string, searchDate: string, shopperId: string, sku: string, text: string, title: string, verifiedPurchaser: bool>, range: record<from: float, to: float, total: float>> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o REVIEWS_AND_RATINGS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o REVIEWS_AND_RATINGS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "search_term" $search_term "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "product_id" $product_id "scalar")] | flatten | str join "&"
+  if ($search_term == null) { error make --unspanned { msg: "required query parameter 'search_term' missing: pass --search-term" } }
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  if ($order_by == null) { error make --unspanned { msg: "required query parameter 'order_by' missing: pass --order-by" } }
+  if ($status == null) { error make --unspanned { msg: "required query parameter 'status' missing: pass --status" } }
+  if ($product_id == null) { error make --unspanned { msg: "required query parameter 'product_id' missing: pass --product-id" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let qp = [(serialize-qp "search_term" $search_term "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "product_id" $product_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reviews" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -446,7 +467,7 @@ export def "getalistof-reviews" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"search_term": $search_term, "from": $qp_from, "to": $qp_to, "order_by": $order_by, "status": $status, "product_id": $product_id} | compact)
+    query: ({"search_term": $search_term, "from": $from, "to": $to, "order_by": $order_by, "status": $status, "product_id": $product_id} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -471,13 +492,15 @@ export def "save-multiple-reviews" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Describes the type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
   --body: list
 ]: any -> list<string> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o REVIEWS_AND_RATINGS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o REVIEWS_AND_RATINGS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/reviews" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }

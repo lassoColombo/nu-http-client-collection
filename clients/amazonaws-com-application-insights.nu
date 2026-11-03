@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -96,6 +96,7 @@ def base-url-completer [] { ["http://applicationinsights.us-east-1.amazonaws.com
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def grouping-type-completer [] { ["ACCOUNT_BASED"] }
 def x-amz-target-completer [] { ["EC2WindowsBarleyService.CreateApplication"] }
 def x-amz-target-completer-1 [] { ["EC2WindowsBarleyService.CreateComponent"] }
 def x-amz-target-completer-2 [] { ["EC2WindowsBarleyService.CreateLogPattern"] }
@@ -105,6 +106,7 @@ def x-amz-target-completer-5 [] { ["EC2WindowsBarleyService.DeleteLogPattern"] }
 def x-amz-target-completer-6 [] { ["EC2WindowsBarleyService.DescribeApplication"] }
 def x-amz-target-completer-7 [] { ["EC2WindowsBarleyService.DescribeComponent"] }
 def x-amz-target-completer-8 [] { ["EC2WindowsBarleyService.DescribeComponentConfiguration"] }
+def tier-completer [] { ["ACTIVE_DIRECTORY" "CUSTOM" "DEFAULT" "DOT_NET_CORE" "DOT_NET_WEB" "DOT_NET_WEB_TIER" "DOT_NET_WORKER" "JAVA_JMX" "MYSQL" "ORACLE" "POSTGRESQL" "SAP_HANA_HIGH_AVAILABILITY" "SAP_HANA_MULTI_NODE" "SAP_HANA_SINGLE_NODE" "SHAREPOINT" "SQL_SERVER" "SQL_SERVER_ALWAYSON_AVAILABILITY_GROUP" "SQL_SERVER_FAILOVER_CLUSTER_INSTANCE"] }
 def x-amz-target-completer-9 [] { ["EC2WindowsBarleyService.DescribeComponentConfigurationRecommendation"] }
 def x-amz-target-completer-10 [] { ["EC2WindowsBarleyService.DescribeLogPattern"] }
 def x-amz-target-completer-11 [] { ["EC2WindowsBarleyService.DescribeObservation"] }
@@ -112,6 +114,7 @@ def x-amz-target-completer-12 [] { ["EC2WindowsBarleyService.DescribeProblem"] }
 def x-amz-target-completer-13 [] { ["EC2WindowsBarleyService.DescribeProblemObservations"] }
 def x-amz-target-completer-14 [] { ["EC2WindowsBarleyService.ListApplications"] }
 def x-amz-target-completer-15 [] { ["EC2WindowsBarleyService.ListComponents"] }
+def event-status-completer [] { ["ERROR" "INFO" "WARN"] }
 def x-amz-target-completer-16 [] { ["EC2WindowsBarleyService.ListConfigurationHistory"] }
 def x-amz-target-completer-17 [] { ["EC2WindowsBarleyService.ListLogPatternSets"] }
 def x-amz-target-completer-18 [] { ["EC2WindowsBarleyService.ListLogPatterns"] }
@@ -151,6 +154,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateApplication
+# --Tags item shape: {Key: string, Value: string}
 export def "create-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -168,19 +172,20 @@ export def "create-application" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  --resource-group-name: any
-  --ops-center-enabled: any
-  --cwe-monitor-enabled: any
-  --ops-item-sns-topic-arn: any
-  --tags: any
-  --auto-config-enabled: any
-  --auto-create: any
-  --grouping-type: any
-]: any -> record<ApplicationInfo: record<ResourceGroupName: record, LifeCycle: record, OpsItemSNSTopicArn: record, OpsCenterEnabled: record, CWEMonitorEnabled: record, Remarks: record, AutoConfigEnabled: record, DiscoveryType: record>> {
+  --x-amz-target: string@x-amz-target-completer # required
+  --resource-group-name: string # The name of the resource group.
+  --ops-center-enabled: oneof<nothing, bool> # When set to true, creates opsItems for any problems detected on an application.
+  --cwe-monitor-enabled: oneof<nothing, bool> # Indicates whether Application Insights can listen to CloudWatch events for the application resources, such as instance terminated, failed deployment, and others.
+  --ops-item-sns-topic-arn: string # The SNS topic provided to Application Insights that is associated to the created opsItem. Allows you to receive notifications for updates to the opsItem.
+  --tags: list # List of tags to add to the application. tag key (Key) and an associated tag value (Value). The maximum length of a tag key is 128 characters. The maximum length of a tag value is 256 characters. — item shape: {Key: string, Value: string}
+  --auto-config-enabled: oneof<nothing, bool> # Indicates whether Application Insights automatically configures unmonitored resources in the resource group.
+  --auto-create: oneof<nothing, bool> # Configures all of the resources in the resource group by applying the recommended configurations.
+  --grouping-type: string@grouping-type-completer # Application Insights can create applications based on a resource group or on an account. To create an account-based application using all of the resources in the account, set this parameter to ACCOUNT_BASED.
+]: any -> record<ApplicationInfo: record<ResourceGroupName: string, LifeCycle: string, OpsItemSNSTopicArn: string, OpsCenterEnabled: bool, CWEMonitorEnabled: bool, Remarks: string, AutoConfigEnabled: bool, DiscoveryType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "EC2WindowsBarleyService.CreateApplication")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceGroupName": $resource_group_name, "OpsCenterEnabled": $ops_center_enabled, "CWEMonitorEnabled": $cwe_monitor_enabled, "OpsItemSNSTopicArn": $ops_item_sns_topic_arn, "Tags": $tags, "AutoConfigEnabled": $auto_config_enabled, "AutoCreate": $auto_create, "GroupingType": $grouping_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -223,14 +228,15 @@ export def "create-component" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  resource_group_name: any
-  component_name: any
-  resource_list: any
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  resource_group_name: string # The name of the resource group.
+  component_name: string # The name of the component.
+  resource_list: list<string> # The list of resource ARNs that belong to the component.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "EC2WindowsBarleyService.CreateComponent")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceGroupName": $resource_group_name, "ComponentName": $component_name, "ResourceList": $resource_list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -273,16 +279,17 @@ export def "create-log-pattern" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  resource_group_name: any
-  pattern_set_name: any
-  pattern_name: any
-  pattern: any
-  rank: any
-]: any -> record<LogPattern: record<PatternSetName: record, PatternName: record, Pattern: record, Rank: record>, ResourceGroupName: record> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  resource_group_name: string # The name of the resource group.
+  pattern_set_name: string # The name of the log pattern set.
+  pattern_name: string # The name of the log pattern.
+  pattern: string # The log pattern. The pattern must be DFA compatible. Patterns that utilize forward lookahead or backreference constructions are not supported.
+  rank: int # Rank of the log pattern. Must be a value between 1 and 1,000,000. The patterns are sorted by rank, so we recommend that you set your highest priority patterns with the lowest rank. A pattern of rank 1 will be the first to get matched to a log line. A pattern of rank 1,000,000 will be last to get matched. When you configure custom log patterns from the console, a Low severity pattern translates to a 750,000 rank. A Medium severity pattern translates to a 500,000 rank. And a High severity pattern translates to a 250,000 rank. Rank values less than 1 or greater than 1,000,000 are reserved for AWS-provided patterns.
+]: any -> record<LogPattern: record<PatternSetName: string, PatternName: string, Pattern: string, Rank: int>, ResourceGroupName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "EC2WindowsBarleyService.CreateLogPattern")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceGroupName": $resource_group_name, "PatternSetName": $pattern_set_name, "PatternName": $pattern_name, "Pattern": $pattern, "Rank": $rank} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -325,12 +332,13 @@ export def "delete-application" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  resource_group_name: any
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  resource_group_name: string # The name of the resource group.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "EC2WindowsBarleyService.DeleteApplication")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceGroupName": $resource_group_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -373,13 +381,14 @@ export def "delete-component" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  resource_group_name: any
-  component_name: any
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  resource_group_name: string # The name of the resource group.
+  component_name: string # The name of the component.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "EC2WindowsBarleyService.DeleteComponent")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceGroupName": $resource_group_name, "ComponentName": $component_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -422,14 +431,15 @@ export def "delete-log-pattern" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  resource_group_name: any
-  pattern_set_name: any
-  pattern_name: any
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  resource_group_name: string # The name of the resource group.
+  pattern_set_name: string # The name of the log pattern set.
+  pattern_name: string # The name of the log pattern.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "EC2WindowsBarleyService.DeleteLogPattern")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceGroupName": $resource_group_name, "PatternSetName": $pattern_set_name, "PatternName": $pattern_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -472,12 +482,13 @@ export def "describe-application" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  resource_group_name: any
-]: any -> record<ApplicationInfo: record<ResourceGroupName: record, LifeCycle: record, OpsItemSNSTopicArn: record, OpsCenterEnabled: record, CWEMonitorEnabled: record, Remarks: record, AutoConfigEnabled: record, DiscoveryType: record>> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  resource_group_name: string # The name of the resource group.
+]: any -> record<ApplicationInfo: record<ResourceGroupName: string, LifeCycle: string, OpsItemSNSTopicArn: string, OpsCenterEnabled: bool, CWEMonitorEnabled: bool, Remarks: string, AutoConfigEnabled: bool, DiscoveryType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "EC2WindowsBarleyService.DescribeApplication")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceGroupName": $resource_group_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -520,13 +531,14 @@ export def "describe-component" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  resource_group_name: any
-  component_name: any
-]: any -> record<ApplicationComponent: record<ComponentName: record, ComponentRemarks: record, ResourceType: record, OsType: record, Tier: record, Monitor: record, DetectedWorkload: record>, ResourceList: record> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  resource_group_name: string # The name of the resource group.
+  component_name: string # The name of the component.
+]: any -> record<ApplicationComponent: record<ComponentName: string, ComponentRemarks: string, ResourceType: string, OsType: string, Tier: string, Monitor: bool, DetectedWorkload: record>, ResourceList: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "EC2WindowsBarleyService.DescribeComponent")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceGroupName": $resource_group_name, "ComponentName": $component_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -569,13 +581,14 @@ export def "describe-component-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  resource_group_name: any
-  component_name: any
-]: any -> record<Monitor: record, Tier: record, ComponentConfiguration: record> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  resource_group_name: string # The name of the resource group.
+  component_name: string # The name of the component.
+]: any -> record<Monitor: bool, Tier: string, ComponentConfiguration: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "EC2WindowsBarleyService.DescribeComponentConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceGroupName": $resource_group_name, "ComponentName": $component_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -618,14 +631,15 @@ export def "describe-component-configuration-recommendation" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  resource_group_name: any
-  component_name: any
-  tier: any
-]: any -> record<ComponentConfiguration: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  resource_group_name: string # The name of the resource group.
+  component_name: string # The name of the component.
+  tier: string@tier-completer # The tier of the application component.
+]: any -> record<ComponentConfiguration: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "EC2WindowsBarleyService.DescribeComponentConfigurationRecommendation")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceGroupName": $resource_group_name, "ComponentName": $component_name, "Tier": $tier} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -668,14 +682,15 @@ export def "describe-log-pattern" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  resource_group_name: any
-  pattern_set_name: any
-  pattern_name: any
-]: any -> record<ResourceGroupName: record, LogPattern: record<PatternSetName: record, PatternName: record, Pattern: record, Rank: record>> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  resource_group_name: string # The name of the resource group.
+  pattern_set_name: string # The name of the log pattern set.
+  pattern_name: string # The name of the log pattern.
+]: any -> record<ResourceGroupName: string, LogPattern: record<PatternSetName: string, PatternName: string, Pattern: string, Rank: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "EC2WindowsBarleyService.DescribeLogPattern")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceGroupName": $resource_group_name, "PatternSetName": $pattern_set_name, "PatternName": $pattern_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -718,12 +733,13 @@ export def "describe-observation" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  observation_id: any
-]: any -> record<Observation: record<Id: record, StartTime: record, EndTime: record, SourceType: record, SourceARN: record, LogGroup: record, LineTime: record, LogText: record, LogFilter: record, MetricNamespace: record, MetricName: record, Unit: record, Value: record, CloudWatchEventId: record, CloudWatchEventSource: record, CloudWatchEventDetailType: record, HealthEventArn: record, HealthService: record, HealthEventTypeCode: record, HealthEventTypeCategory: record, HealthEventDescription: record, CodeDeployDeploymentId: record, CodeDeployDeploymentGroup: record, CodeDeployState: record, CodeDeployApplication: record, CodeDeployInstanceGroupId: record, Ec2State: record, RdsEventCategories: record, RdsEventMessage: record, S3EventName: record, StatesExecutionArn: record, StatesArn: record, StatesStatus: record, StatesInput: record, EbsEvent: record, EbsResult: record, EbsCause: record, EbsRequestId: record, XRayFaultPercent: record, XRayThrottlePercent: record, XRayErrorPercent: record, XRayRequestCount: record, XRayRequestAverageLatency: record, XRayNodeName: record, XRayNodeType: record>> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  observation_id: string # The ID of the observation.
+]: any -> record<Observation: record<Id: string, StartTime: string, EndTime: string, SourceType: string, SourceARN: string, LogGroup: string, LineTime: string, LogText: string, LogFilter: string, MetricNamespace: string, MetricName: string, Unit: string, Value: float, CloudWatchEventId: string, CloudWatchEventSource: string, CloudWatchEventDetailType: string, HealthEventArn: string, HealthService: string, HealthEventTypeCode: string, HealthEventTypeCategory: string, HealthEventDescription: string, CodeDeployDeploymentId: string, CodeDeployDeploymentGroup: string, CodeDeployState: string, CodeDeployApplication: string, CodeDeployInstanceGroupId: string, Ec2State: string, RdsEventCategories: string, RdsEventMessage: string, S3EventName: string, StatesExecutionArn: string, StatesArn: string, StatesStatus: string, StatesInput: string, EbsEvent: string, EbsResult: string, EbsCause: string, EbsRequestId: string, XRayFaultPercent: int, XRayThrottlePercent: int, XRayErrorPercent: int, XRayRequestCount: int, XRayRequestAverageLatency: int, XRayNodeName: string, XRayNodeType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "EC2WindowsBarleyService.DescribeObservation")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ObservationId": $observation_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -766,12 +782,13 @@ export def "describe-problem" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  problem_id: any
-]: any -> record<Problem: record<Id: record, Title: record, Insights: record, Status: record, AffectedResource: record, StartTime: record, EndTime: record, SeverityLevel: record, ResourceGroupName: record, Feedback: record, RecurringCount: record, LastRecurrenceTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  problem_id: string # The ID of the problem.
+]: any -> record<Problem: record<Id: string, Title: string, Insights: string, Status: string, AffectedResource: string, StartTime: string, EndTime: string, SeverityLevel: string, ResourceGroupName: string, Feedback: record, RecurringCount: int, LastRecurrenceTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "EC2WindowsBarleyService.DescribeProblem")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ProblemId": $problem_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -814,12 +831,13 @@ export def "describe-problem-observations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  problem_id: any
-]: any -> record<RelatedObservations: record<ObservationList: record>> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  problem_id: string # The ID of the problem.
+]: any -> record<RelatedObservations: record<ObservationList: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "EC2WindowsBarleyService.DescribeProblemObservations")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ProblemId": $problem_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -864,13 +882,14 @@ export def "list-applications" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<ApplicationInfoList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  --max-results-body: int # The maximum number of results to return in a single call. To retrieve the remaining results, make another call with the returned NextToken value. (body field)
+  --next-token-body: string # The token to request the next page of results. (body field)
+]: any -> record<ApplicationInfoList: table<ResourceGroupName: string, LifeCycle: string, OpsItemSNSTopicArn: string, OpsCenterEnabled: bool, CWEMonitorEnabled: bool, Remarks: string, AutoConfigEnabled: bool, DiscoveryType: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "EC2WindowsBarleyService.ListApplications")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -916,14 +935,15 @@ export def "list-components" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  resource_group_name: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<ApplicationComponentList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  resource_group_name: string # The name of the resource group.
+  --max-results-body: int # The maximum number of results to return in a single call. To retrieve the remaining results, make another call with the returned NextToken value. (body field)
+  --next-token-body: string # The token to request the next page of results. (body field)
+]: any -> record<ApplicationComponentList: table<ComponentName: string, ComponentRemarks: string, ResourceType: string, OsType: string, Tier: string, Monitor: bool, DetectedWorkload: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "EC2WindowsBarleyService.ListComponents")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ResourceGroupName": $resource_group_name, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -969,17 +989,18 @@ export def "list-configuration-history" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  --resource-group-name: any
-  --start-time: any
-  --end-time: any
-  --event-status: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<EventList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  --resource-group-name: string # Resource group to which the application belongs.
+  --start-time: string # The start time of the event. (format: date-time)
+  --end-time: string # The end time of the event. (format: date-time)
+  --event-status: string@event-status-completer # The status of the configuration update event. Possible values include INFO, WARN, and ERROR.
+  --max-results-body: int # The maximum number of results returned by ListConfigurationHistory in paginated output. When this parameter is used, ListConfigurationHistory returns only MaxResults in a single page along with a NextToken response element. The remaining results of the initial request can be seen by sending another ListConfigurationHistory request with the returned NextToken value. If this parameter is not used, then ListConfigurationHistory returns all results. (body field)
+  --next-token-body: string # The NextToken value returned from a previous paginated ListConfigurationHistory request where MaxResults was used and the results exceeded the value of that parameter. Pagination continues from the end of the previous results that returned the NextToken value. This value is null when there are no more results to return. (body field)
+]: any -> record<EventList: table<MonitoredResourceARN: string, EventStatus: string, EventResourceType: string, EventTime: string, EventDetail: string, EventResourceName: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "EC2WindowsBarleyService.ListConfigurationHistory")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ResourceGroupName": $resource_group_name, "StartTime": $start_time, "EndTime": $end_time, "EventStatus": $event_status, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -1025,14 +1046,15 @@ export def "list-log-pattern-sets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  resource_group_name: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<ResourceGroupName: record, LogPatternSets: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  resource_group_name: string # The name of the resource group.
+  --max-results-body: int # The maximum number of results to return in a single call. To retrieve the remaining results, make another call with the returned NextToken value. (body field)
+  --next-token-body: string # The token to request the next page of results. (body field)
+]: any -> record<ResourceGroupName: string, LogPatternSets: list<string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "EC2WindowsBarleyService.ListLogPatternSets")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ResourceGroupName": $resource_group_name, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -1078,15 +1100,16 @@ export def "list-log-patterns" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  resource_group_name: any
-  --pattern-set-name: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<ResourceGroupName: record, LogPatterns: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  resource_group_name: string # The name of the resource group.
+  --pattern-set-name: string # The name of the log pattern set.
+  --max-results-body: int # The maximum number of results to return in a single call. To retrieve the remaining results, make another call with the returned NextToken value. (body field)
+  --next-token-body: string # The token to request the next page of results. (body field)
+]: any -> record<ResourceGroupName: string, LogPatterns: table<PatternSetName: string, PatternName: string, Pattern: string, Rank: int>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "EC2WindowsBarleyService.ListLogPatterns")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ResourceGroupName": $resource_group_name, "PatternSetName": $pattern_set_name, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -1132,17 +1155,18 @@ export def "list-problems" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  --resource-group-name: any
-  --start-time: any
-  --end-time: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-  --component-name: any
-]: any -> record<ProblemList: record, NextToken: record, ResourceGroupName: record> {
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  --resource-group-name: string # The name of the resource group.
+  --start-time: string # The time when the problem was detected, in epoch seconds. If you don't specify a time frame for the request, problems within the past seven days are returned. (format: date-time)
+  --end-time: string # The time when the problem ended, in epoch seconds. If not specified, problems within the past seven days are returned. (format: date-time)
+  --max-results-body: int # The maximum number of results to return in a single call. To retrieve the remaining results, make another call with the returned NextToken value. (body field)
+  --next-token-body: string # The token to request the next page of results. (body field)
+  --component-name: string # The name of the component.
+]: any -> record<ProblemList: table<Id: string, Title: string, Insights: string, Status: string, AffectedResource: string, StartTime: string, EndTime: string, SeverityLevel: string, ResourceGroupName: string, Feedback: record, RecurringCount: int, LastRecurrenceTime: string>, NextToken: string, ResourceGroupName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "EC2WindowsBarleyService.ListProblems")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ResourceGroupName": $resource_group_name, "StartTime": $start_time, "EndTime": $end_time, "MaxResults": $max_results_body, "NextToken": $next_token_body, "ComponentName": $component_name} | compact
@@ -1186,12 +1210,13 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  resource_arn: any
-]: any -> record<Tags: record> {
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the application that you want to retrieve tag information for.
+]: any -> record<Tags: table<Key: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "EC2WindowsBarleyService.ListTagsForResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceARN": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1217,6 +1242,7 @@ export def "list-tags-for-resource" [
 #
 # POST /
 # operationId: TagResource
+# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1234,13 +1260,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  resource_arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the application that you want to add one or more tags to.
+  tags: list # A list of tags that to add to the application. A tag consists of a required tag key (Key) and an associated tag value (Value). The maximum length of a tag key is 128 characters. The maximum length of a tag value is 256 characters. — item shape: {Key: string, Value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "EC2WindowsBarleyService.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceARN": $resource_arn, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1283,13 +1310,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  resource_arn: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the application that you want to remove one or more tags from.
+  tag_keys: list<string> # The tags (tag keys) that you want to remove from the resource. When you specify a tag key, the action removes both that key and its associated tag value. To remove more than one tag from the application, append the TagKeys parameter and argument for each additional tag to remove, separated by an ampersand.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "EC2WindowsBarleyService.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceARN": $resource_arn, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1332,17 +1360,18 @@ export def "update-application" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  resource_group_name: any
-  --ops-center-enabled: any
-  --cwe-monitor-enabled: any
-  --ops-item-sns-topic-arn: any
-  --remove-sns-topic: any
-  --auto-config-enabled: any
-]: any -> record<ApplicationInfo: record<ResourceGroupName: record, LifeCycle: record, OpsItemSNSTopicArn: record, OpsCenterEnabled: record, CWEMonitorEnabled: record, Remarks: record, AutoConfigEnabled: record, DiscoveryType: record>> {
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  resource_group_name: string # The name of the resource group.
+  --ops-center-enabled: oneof<nothing, bool> # When set to true, creates opsItems for any problems detected on an application.
+  --cwe-monitor-enabled: oneof<nothing, bool> # Indicates whether Application Insights can listen to CloudWatch events for the application resources, such as instance terminated, failed deployment, and others.
+  --ops-item-sns-topic-arn: string # The SNS topic provided to Application Insights that is associated to the created opsItem. Allows you to receive notifications for updates to the opsItem.
+  --remove-sns-topic: oneof<nothing, bool> # Disassociates the SNS topic from the opsItem created for detected problems.
+  --auto-config-enabled: oneof<nothing, bool> # Turns auto-configuration on or off.
+]: any -> record<ApplicationInfo: record<ResourceGroupName: string, LifeCycle: string, OpsItemSNSTopicArn: string, OpsCenterEnabled: bool, CWEMonitorEnabled: bool, Remarks: string, AutoConfigEnabled: bool, DiscoveryType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "EC2WindowsBarleyService.UpdateApplication")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceGroupName": $resource_group_name, "OpsCenterEnabled": $ops_center_enabled, "CWEMonitorEnabled": $cwe_monitor_enabled, "OpsItemSNSTopicArn": $ops_item_sns_topic_arn, "RemoveSNSTopic": $remove_sns_topic, "AutoConfigEnabled": $auto_config_enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1385,15 +1414,16 @@ export def "update-component" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  resource_group_name: any
-  component_name: any
-  --new-component-name: any
-  --resource-list: any
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  resource_group_name: string # The name of the resource group.
+  component_name: string # The name of the component.
+  --new-component-name: string # The new name of the component.
+  --resource-list: list<string> # The list of resource ARNs that belong to the component.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "EC2WindowsBarleyService.UpdateComponent")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceGroupName": $resource_group_name, "ComponentName": $component_name, "NewComponentName": $new_component_name, "ResourceList": $resource_list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1436,17 +1466,18 @@ export def "update-component-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  resource_group_name: any
-  component_name: any
-  --monitor: any
-  --tier: any
-  --component-configuration: any
-  --auto-config-enabled: any
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  resource_group_name: string # The name of the resource group.
+  component_name: string # The name of the component.
+  --monitor: oneof<nothing, bool> # Indicates whether the application component is monitored.
+  --tier: string@tier-completer # The tier of the application component.
+  --component-configuration: string # The configuration settings of the component. The value is the escaped JSON of the configuration. For more information about the JSON format, see Working with JSON (https://docs.aws.amazon.com/sdk-for-javascript/v2/developer-guide/working-with-json.html). You can send a request to DescribeComponentConfigurationRecommendation to see the recommended configuration for a component. For the complete format of the component configuration file, see Component Configuration (https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/component-config.html).
+  --auto-config-enabled: oneof<nothing, bool> # Automatically configures the component by applying the recommended configurations.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "EC2WindowsBarleyService.UpdateComponentConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceGroupName": $resource_group_name, "ComponentName": $component_name, "Monitor": $monitor, "Tier": $tier, "ComponentConfiguration": $component_configuration, "AutoConfigEnabled": $auto_config_enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1489,16 +1520,17 @@ export def "update-log-pattern" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-26
-  resource_group_name: any
-  pattern_set_name: any
-  pattern_name: any
-  --pattern: any
-  --rank: any
-]: any -> record<ResourceGroupName: record, LogPattern: record<PatternSetName: record, PatternName: record, Pattern: record, Rank: record>> {
+  --x-amz-target: string@x-amz-target-completer-26 # required
+  resource_group_name: string # The name of the resource group.
+  pattern_set_name: string # The name of the log pattern set.
+  pattern_name: string # The name of the log pattern.
+  --pattern: string # The log pattern. The pattern must be DFA compatible. Patterns that utilize forward lookahead or backreference constructions are not supported.
+  --rank: int # Rank of the log pattern. Must be a value between 1 and 1,000,000. The patterns are sorted by rank, so we recommend that you set your highest priority patterns with the lowest rank. A pattern of rank 1 will be the first to get matched to a log line. A pattern of rank 1,000,000 will be last to get matched. When you configure custom log patterns from the console, a Low severity pattern translates to a 750,000 rank. A Medium severity pattern translates to a 500,000 rank. And a High severity pattern translates to a 250,000 rank. Rank values less than 1 or greater than 1,000,000 are reserved for AWS-provided patterns.
+]: any -> record<ResourceGroupName: string, LogPattern: record<PatternSetName: string, PatternName: string, Pattern: string, Rank: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "EC2WindowsBarleyService.UpdateLogPattern")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceGroupName": $resource_group_name, "PatternSetName": $pattern_set_name, "PatternName": $pattern_name, "Pattern": $pattern, "Rank": $rank} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

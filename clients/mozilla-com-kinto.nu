@@ -264,7 +264,7 @@ export def "lbheartbeat" [
 # GET /__version__
 #
 # operationId: __version__
-export def "version" [
+export def "get-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -348,10 +348,10 @@ export def "get-buckets" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int
-  --qp-sort: list<string>
+  --sort: list<string>
   --qp-token: string
   --since: int
-  --qp-to: int
+  --to: int
   --before: int
   --id: string
   --last-modified: int
@@ -361,7 +361,7 @@ export def "get-buckets" [
 ]: nothing -> record<data: table<collection_schema: record, group_schema: record, record_schema: record>> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "_limit" $limit "scalar") (serialize-qp "_sort" $qp_sort "csv") (serialize-qp "_token" $qp_token "scalar") (serialize-qp "_since" $since "scalar") (serialize-qp "_to" $qp_to "scalar") (serialize-qp "_before" $before "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "last_modified" $last_modified "scalar") (serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "_limit" $limit "scalar") (serialize-qp "_sort" $sort "csv") (serialize-qp "_token" $qp_token "scalar") (serialize-qp "_since" $since "scalar") (serialize-qp "_to" $to "scalar") (serialize-qp "_before" $before "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "last_modified" $last_modified "scalar") (serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/buckets" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -370,7 +370,7 @@ export def "get-buckets" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"_limit": $limit, "_sort": $qp_sort, "_token": $qp_token, "_since": $since, "_to": $qp_to, "_before": $before, "id": $id, "last_modified": $last_modified, "_fields": $fields} | compact)
+    query: ({"_limit": $limit, "_sort": $sort, "_token": $qp_token, "_since": $since, "_to": $to, "_before": $before, "id": $id, "last_modified": $last_modified, "_fields": $fields} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -395,10 +395,10 @@ export def "get-changess" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int
-  --qp-sort: list<string>
+  --sort: list<string>
   --qp-token: string
   --since: int
-  --qp-to: int
+  --to: int
   --before: int
   --id: string
   --last-modified: int
@@ -408,7 +408,7 @@ export def "get-changess" [
 ]: nothing -> record<data: table<bucket: string, collection: string, host: string>> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "_limit" $limit "scalar") (serialize-qp "_sort" $qp_sort "csv") (serialize-qp "_token" $qp_token "scalar") (serialize-qp "_since" $since "scalar") (serialize-qp "_to" $qp_to "scalar") (serialize-qp "_before" $before "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "last_modified" $last_modified "scalar") (serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "_limit" $limit "scalar") (serialize-qp "_sort" $sort "csv") (serialize-qp "_token" $qp_token "scalar") (serialize-qp "_since" $since "scalar") (serialize-qp "_to" $to "scalar") (serialize-qp "_before" $before "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "last_modified" $last_modified "scalar") (serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/buckets/monitor/collections/changes/records" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -417,7 +417,7 @@ export def "get-changess" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"_limit": $limit, "_sort": $qp_sort, "_token": $qp_token, "_since": $since, "_to": $qp_to, "_before": $before, "id": $id, "last_modified": $last_modified, "_fields": $fields} | compact)
+    query: ({"_limit": $limit, "_sort": $sort, "_token": $qp_token, "_since": $since, "_to": $to, "_before": $before, "id": $id, "last_modified": $last_modified, "_fields": $fields} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -444,7 +444,7 @@ export def "get-collection-changeset" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --since: string
-  --expected: string
+  --expected: string # required
   --limit: int
   --bucket: string
   --collection: string
@@ -453,6 +453,7 @@ export def "get-collection-changeset" [
   let base = ($base_url | default $BASE_URL)
   if ($bid | is-empty) { error make --unspanned { msg: "path parameter 'bid' must be non-empty" } }
   if ($cid | is-empty) { error make --unspanned { msg: "path parameter 'cid' must be non-empty" } }
+  if ($expected == null) { error make --unspanned { msg: "required query parameter '_expected' missing: pass --expected" } }
   let qp = [(serialize-qp "_since" $since "scalar") (serialize-qp "_expected" $expected "scalar") (serialize-qp "_limit" $limit "scalar") (serialize-qp "bucket" $bucket "scalar") (serialize-qp "collection" $collection "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bid: (encode-path-segment $bid), cid: (encode-path-segment $cid)} | format pattern "/buckets/{bid}/collections/{cid}/changeset") $qp $auth.query)
   let accept_val = "application/json"
@@ -486,10 +487,10 @@ export def "get-collections" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int
-  --qp-sort: list<string>
+  --sort: list<string>
   --qp-token: string
   --since: int
-  --qp-to: int
+  --to: int
   --before: int
   --id: string
   --last-modified: int
@@ -500,7 +501,7 @@ export def "get-collections" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket_id | is-empty) { error make --unspanned { msg: "path parameter 'bucket_id' must be non-empty" } }
-  let qp = [(serialize-qp "_limit" $limit "scalar") (serialize-qp "_sort" $qp_sort "csv") (serialize-qp "_token" $qp_token "scalar") (serialize-qp "_since" $since "scalar") (serialize-qp "_to" $qp_to "scalar") (serialize-qp "_before" $before "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "last_modified" $last_modified "scalar") (serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "_limit" $limit "scalar") (serialize-qp "_sort" $sort "csv") (serialize-qp "_token" $qp_token "scalar") (serialize-qp "_since" $since "scalar") (serialize-qp "_to" $to "scalar") (serialize-qp "_before" $before "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "last_modified" $last_modified "scalar") (serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket_id: (encode-path-segment $bucket_id)} | format pattern "/buckets/{bucket_id}/collections") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -509,7 +510,7 @@ export def "get-collections" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"_limit": $limit, "_sort": $qp_sort, "_token": $qp_token, "_since": $since, "_to": $qp_to, "_before": $before, "id": $id, "last_modified": $last_modified, "_fields": $fields} | compact)
+    query: ({"_limit": $limit, "_sort": $sort, "_token": $qp_token, "_since": $since, "_to": $to, "_before": $before, "id": $id, "last_modified": $last_modified, "_fields": $fields} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -536,10 +537,10 @@ export def "get-records" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int
-  --qp-sort: list<string>
+  --sort: list<string>
   --qp-token: string
   --since: int
-  --qp-to: int
+  --to: int
   --before: int
   --id: string
   --last-modified: int
@@ -551,7 +552,7 @@ export def "get-records" [
   let base = ($base_url | default $BASE_URL)
   if ($bucket_id | is-empty) { error make --unspanned { msg: "path parameter 'bucket_id' must be non-empty" } }
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
-  let qp = [(serialize-qp "_limit" $limit "scalar") (serialize-qp "_sort" $qp_sort "csv") (serialize-qp "_token" $qp_token "scalar") (serialize-qp "_since" $since "scalar") (serialize-qp "_to" $qp_to "scalar") (serialize-qp "_before" $before "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "last_modified" $last_modified "scalar") (serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "_limit" $limit "scalar") (serialize-qp "_sort" $sort "csv") (serialize-qp "_token" $qp_token "scalar") (serialize-qp "_since" $since "scalar") (serialize-qp "_to" $to "scalar") (serialize-qp "_before" $before "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "last_modified" $last_modified "scalar") (serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket_id: (encode-path-segment $bucket_id), collection_id: (encode-path-segment $collection_id)} | format pattern "/buckets/{bucket_id}/collections/{collection_id}/records") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -560,7 +561,7 @@ export def "get-records" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"_limit": $limit, "_sort": $qp_sort, "_token": $qp_token, "_since": $since, "_to": $qp_to, "_before": $before, "id": $id, "last_modified": $last_modified, "_fields": $fields} | compact)
+    query: ({"_limit": $limit, "_sort": $sort, "_token": $qp_token, "_since": $since, "_to": $to, "_before": $before, "id": $id, "last_modified": $last_modified, "_fields": $fields} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -752,10 +753,10 @@ export def "get-groups" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int
-  --qp-sort: list<string>
+  --sort: list<string>
   --qp-token: string
   --since: int
-  --qp-to: int
+  --to: int
   --before: int
   --id: string
   --last-modified: int
@@ -766,7 +767,7 @@ export def "get-groups" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket_id | is-empty) { error make --unspanned { msg: "path parameter 'bucket_id' must be non-empty" } }
-  let qp = [(serialize-qp "_limit" $limit "scalar") (serialize-qp "_sort" $qp_sort "csv") (serialize-qp "_token" $qp_token "scalar") (serialize-qp "_since" $since "scalar") (serialize-qp "_to" $qp_to "scalar") (serialize-qp "_before" $before "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "last_modified" $last_modified "scalar") (serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "_limit" $limit "scalar") (serialize-qp "_sort" $sort "csv") (serialize-qp "_token" $qp_token "scalar") (serialize-qp "_since" $since "scalar") (serialize-qp "_to" $to "scalar") (serialize-qp "_before" $before "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "last_modified" $last_modified "scalar") (serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket_id: (encode-path-segment $bucket_id)} | format pattern "/buckets/{bucket_id}/groups") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -775,7 +776,7 @@ export def "get-groups" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"_limit": $limit, "_sort": $qp_sort, "_token": $qp_token, "_since": $since, "_to": $qp_to, "_before": $before, "id": $id, "last_modified": $last_modified, "_fields": $fields} | compact)
+    query: ({"_limit": $limit, "_sort": $sort, "_token": $qp_token, "_since": $since, "_to": $to, "_before": $before, "id": $id, "last_modified": $last_modified, "_fields": $fields} | compact)
     headers: $auth.headers
     body: null
     content_type: null

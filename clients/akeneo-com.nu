@@ -156,8 +156,8 @@ export def "post-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Equal to 'application/json' or 'application/x-www-form-urlencoded', no other value allowed
-  --authorization: string # Equal to 'Basic xx', where 'xx' is the base 64 encoding of the client id and secret. Find out how to generate them in the Client ID/secret generation (/documentation/authentication.html#client-idsecret-generation) section.
+  --content-type: string # Equal to 'application/json' or 'application/x-www-form-urlencoded', no other value allowed (required)
+  --authorization: string # Equal to 'Basic xx', where 'xx' is the base 64 encoding of the client id and secret. Find out how to generate them in the Client ID/secret generation (/documentation/authentication.html#client-idsecret-generation) section. (required)
   grant_type: string # Always equal to "password"
   password: string # Your PIM password
   username: string # Your PIM username
@@ -165,6 +165,7 @@ export def "post-token" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/api/oauth/v1/token" $auth.query)
   let req_body = {"grant_type": $grant_type, "password": $password, "username": $username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -239,7 +240,7 @@ export def "get-asset-categories" [
   --page: int # Number of the page to retrieve when using the `page` pagination method type. Should never be set manually, see Pagination (/documentation/pagination.html#pagination) section (default: 1)
   --limit: int # Number of results by page, see Pagination (/documentation/pagination.html) section (default: 10)
   --with-count: oneof<nothing, bool> # Return the count of items in the response. Be carefull with that, on a big catalog, it can decrease performance in a significative way (default: false)
-]: nothing -> record {
+]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar")] | flatten | str join "&"
@@ -405,6 +406,7 @@ export def "patch-asset-categories-code" [
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/asset-categories/{code}") $auth.query)
   let req_body = {"code": $body_code, "labels": $labels, "parent": $parent} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -436,7 +438,7 @@ export def "get-asset-families" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --search-after: string # Cursor when using the `search_after` pagination method type. Should never be set manually, see Pagination (/documentation/pagination.html) section (default: cursor to the first page)
-]: nothing -> record {
+]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, self: record<href: string>>, _embedded: record<items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search_after" $search_after "scalar")] | flatten | str join "&"
@@ -476,7 +478,7 @@ export def "get-assets" [
   --channel: string # Filter asset values to return scopable asset attributes for the given channel as well as the non localizable/non scopable asset attributes, for more details see the Filter asset values by channel (/documentation/filter.html#asset-values-by-channel) section
   --locales: string # Filter asset values to return localizable attributes for the given locales as well as the non localizable/non scopable asset attributes, for more details see the Filter asset values by locale (/documentation/filter.html#asset-values-by-locale) section
   --search-after: string # Cursor when using the `search_after` pagination method type. Should never be set manually, see Pagination (/documentation/pagination.html) section (default: cursor to the first page)
-]: nothing -> record {
+]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, self: record<href: string>>, _embedded: record<_items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($asset_family_code | is-empty) { error make --unspanned { msg: "path parameter 'asset_family_code' must be non-empty" } }
@@ -644,6 +646,7 @@ export def "patch-asset-code" [
   let full_url = (build-url $base ({asset_family_code: (encode-path-segment $asset_family_code), code: (encode-path-segment $code)} | format pattern "/api/rest/v1/asset-families/{asset_family_code}/assets/{code}") $auth.query)
   let req_body = {"code": $body_code, "created": $created, "updated": $updated, "values": $values} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -804,6 +807,7 @@ export def "patch-asset-attributes-attribute-code-options-code" [
   let full_url = (build-url $base ({asset_family_code: (encode-path-segment $asset_family_code), attribute_code: (encode-path-segment $attribute_code), code: (encode-path-segment $code)} | format pattern "/api/rest/v1/asset-families/{asset_family_code}/attributes/{attribute_code}/options/{code}") $auth.query)
   let req_body = {"code": $body_code, "labels": $labels} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -904,6 +908,7 @@ export def "patch-asset-family-attributes-code" [
   let full_url = (build-url $base ({asset_family_code: (encode-path-segment $asset_family_code), code: (encode-path-segment $code)} | format pattern "/api/rest/v1/asset-families/{asset_family_code}/attributes/{code}") $auth.query)
   let req_body = {"allowed_extensions": $allowed_extensions, "code": $body_code, "decimals_allowed": $decimals_allowed, "is_read_only": $is_read_only, "is_required_for_completeness": $is_required_for_completeness, "is_rich_text_editor": $is_rich_text_editor, "is_textarea": $is_textarea, "labels": $labels, "max_characters": $max_characters, "max_file_size": $max_file_size, "max_value": $max_value, "media_type": $media_type, "min_value": $min_value, "prefix": $prefix, "suffix": $suffix, "type": $type, "validation_regexp": $validation_regexp, "validation_rule": $validation_rule, "value_per_channel": $value_per_channel, "value_per_locale": $value_per_locale} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -989,6 +994,7 @@ export def "patch-asset-family-code" [
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/asset-families/{code}") $auth.query)
   let req_body = {"attribute_as_main_media": $attribute_as_main_media, "code": $body_code, "labels": $labels, "naming_convention": $naming_convention, "product_link_rules": $product_link_rules, "transformations": $transformations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1019,7 +1025,7 @@ export def "post-asset-media-files" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Equal to 'multipart/form-data', no other value allowed
+  --content-type: string # Equal to 'multipart/form-data', no other value allowed (required)
   file: string # The binary of the media file (format: binary)
 ]: any -> any {
   let input = $in
@@ -1101,7 +1107,7 @@ export def "get-asset-tags" [
   --page: int # Number of the page to retrieve when using the `page` pagination method type. Should never be set manually, see Pagination (/documentation/pagination.html#pagination) section (default: 1)
   --limit: int # Number of results by page, see Pagination (/documentation/pagination.html) section (default: 10)
   --with-count: oneof<nothing, bool> # Return the count of items in the response. Be carefull with that, on a big catalog, it can decrease performance in a significative way (default: false)
-]: nothing -> record {
+]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar")] | flatten | str join "&"
@@ -1182,6 +1188,7 @@ export def "patch-asset-tags-code" [
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/asset-tags/{code}") $auth.query)
   let req_body = {"code": $body_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1217,7 +1224,7 @@ export def "get-pam-assets" [
   --search-after: string # Cursor when using the `search_after` pagination method type. Should never be set manually, see Pagination (/documentation/pagination.html) section (default: cursor to the first page)
   --limit: int # Number of results by page, see Pagination (/documentation/pagination.html) section (default: 10)
   --with-count: oneof<nothing, bool> # Return the count of items in the response. Be carefull with that, on a big catalog, it can decrease performance in a significative way (default: false)
-]: nothing -> record {
+]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pagination_type" $pagination_type "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "search_after" $search_after "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar")] | flatten | str join "&"
@@ -1386,7 +1393,7 @@ export def "post-reference-files-locale-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Equal to 'multipart/form-data', no other value allowed
+  --content-type: string # Equal to 'multipart/form-data', no other value allowed (required)
   file: string # The binaries of the file (format: binary)
 ]: any -> record<errors: table<channel: string, locale: string, message: string>, message: string> {
   let input = $in
@@ -1512,7 +1519,7 @@ export def "post-variation-files-channel-code-locale-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Equal to 'multipart/form-data', no other value allowed
+  --content-type: string # Equal to 'multipart/form-data', no other value allowed (required)
   file: string # The binaries of the file (format: binary)
 ]: any -> any {
   let input = $in
@@ -1653,6 +1660,7 @@ export def "patch-pam-assets-code" [
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/assets/{code}") $auth.query)
   let req_body = {"categories": $categories, "code": $body_code, "description": $description, "end_of_use": $end_of_use, "localizable": $localizable, "reference_files": $reference_files, "tags": $tags, "variation_files": $variation_files} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1686,7 +1694,7 @@ export def "association-types-get-list" [
   --page: int # Number of the page to retrieve when using the `page` pagination method type. Should never be set manually, see Pagination (/documentation/pagination.html#pagination) section (default: 1)
   --limit: int # Number of results by page, see Pagination (/documentation/pagination.html) section (default: 10)
   --with-count: oneof<nothing, bool> # Return the count of items in the response. Be carefull with that, on a big catalog, it can decrease performance in a significative way (default: false)
-]: nothing -> record {
+]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar")] | flatten | str join "&"
@@ -1855,6 +1863,7 @@ export def "association-types-patch" [
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/association-types/{code}") $auth.query)
   let req_body = {"code": $body_code, "is_quantified": $is_quantified, "is_two_way": $is_two_way, "labels": $labels} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1889,7 +1898,7 @@ export def "attribute-groups-get-list" [
   --page: int # Number of the page to retrieve when using the `page` pagination method type. Should never be set manually, see Pagination (/documentation/pagination.html#pagination) section (default: 1)
   --limit: int # Number of results by page, see Pagination (/documentation/pagination.html) section (default: 10)
   --with-count: oneof<nothing, bool> # Return the count of items in the response. Be carefull with that, on a big catalog, it can decrease performance in a significative way (default: false)
-]: nothing -> record {
+]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar")] | flatten | str join "&"
@@ -2058,6 +2067,7 @@ export def "attribute-groups-patch" [
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/attribute-groups/{code}") $auth.query)
   let req_body = {"attributes": $attributes, "code": $body_code, "labels": $labels, "sort_order": $sort_order} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2093,7 +2103,7 @@ export def "get-attributes" [
   --limit: int # Number of results by page, see Pagination (/documentation/pagination.html) section (default: 10)
   --with-count: oneof<nothing, bool> # Return the count of items in the response. Be carefull with that, on a big catalog, it can decrease performance in a significative way (default: false)
   --with-table-select-options: oneof<nothing, bool> # Return the options of 'select' column types (of a table attribute) in the response. (Only available since the 7.0 version) (default: false)
-]: nothing -> record {
+]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar") (serialize-qp "with_table_select_options" $with_table_select_options "scalar")] | flatten | str join "&"
@@ -2268,7 +2278,7 @@ export def "get-attributes-attribute-code-options" [
   --page: int # Number of the page to retrieve when using the `page` pagination method type. Should never be set manually, see Pagination (/documentation/pagination.html#pagination) section (default: 1)
   --limit: int # Number of results by page, see Pagination (/documentation/pagination.html) section (default: 10)
   --with-count: oneof<nothing, bool> # Return the count of items in the response. Be carefull with that, on a big catalog, it can decrease performance in a significative way (default: false)
-]: nothing -> record {
+]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attribute_code | is-empty) { error make --unspanned { msg: "path parameter 'attribute_code' must be non-empty" } }
@@ -2446,6 +2456,7 @@ export def "patch-attributes-attribute-code-options-code" [
   let full_url = (build-url $base ({attribute_code: (encode-path-segment $attribute_code), code: (encode-path-segment $code)} | format pattern "/api/rest/v1/attributes/{attribute_code}/options/{code}") $auth.query)
   let req_body = {"attribute": $attribute, "code": $body_code, "labels": $labels, "sort_order": $sort_order} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2554,6 +2565,7 @@ export def "patch-attributes-code" [
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/attributes/{code}") $auth.query)
   let req_body = {"allowed_extensions": $allowed_extensions, "available_locales": $available_locales, "code": $body_code, "date_max": $date_max, "date_min": $date_min, "decimals_allowed": $decimals_allowed, "default_metric_unit": $default_metric_unit, "default_value": $default_value, "group": $group, "group_labels": $group_labels, "labels": $labels, "localizable": $localizable, "max_characters": $max_characters, "max_file_size": $max_file_size, "metric_family": $metric_family, "negative_allowed": $negative_allowed, "number_max": $number_max, "number_min": $number_min, "reference_data_name": $reference_data_name, "scopable": $scopable, "sort_order": $sort_order, "table_configuration": $table_configuration, "type": $type, "unique": $unique, "useable_as_grid_filter": $useable_as_grid_filter, "validation_regexp": $validation_regexp, "validation_rule": $validation_rule, "wysiwyg_enabled": $wysiwyg_enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2586,7 +2598,7 @@ export def "get-app-catalogs" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Number of the page to retrieve when using the `page` pagination method type. Should never be set manually, see Pagination (/documentation/pagination.html#pagination) section (default: 1)
   --limit: int # Number of results by page, see Pagination (/documentation/pagination.html) section (default: 100)
-]: nothing -> record {
+]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -2776,7 +2788,7 @@ export def "get-app-catalog-product-uuids" [
   --limit: int # Number of results by page, see Pagination (/documentation/pagination.html) section (default: 100)
   --updated-before: string # Filter products that have been updated BEFORE the provided date (Only available on Catalogs endpoints) (format: date)
   --updated-after: string # Filter products that have been updated AFTER the provided date (Only available on Catalogs endpoints) (format: date)
-]: nothing -> record {
+]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, self: record<href: string>>, _embedded: record<items: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2817,7 +2829,7 @@ export def "get-app-catalog-products" [
   --limit: int # Number of results by page, see Pagination (/documentation/pagination.html) section (default: 100)
   --updated-before: string # Filter products that have been updated BEFORE the provided date (Only available on Catalogs endpoints) (format: date)
   --updated-after: string # Filter products that have been updated AFTER the provided date (Only available on Catalogs endpoints) (format: date)
-]: nothing -> record {
+]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, self: record<href: string>>, _embedded: record<items: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2897,7 +2909,7 @@ export def "get-categories" [
   --with-count: oneof<nothing, bool> # Return the count of items in the response. Be carefull with that, on a big catalog, it can decrease performance in a significative way (default: false)
   --with-position: oneof<nothing, bool> # Return information about category position into its category tree (only available since the 7.0 version)
   --with-enriched-attributes: oneof<nothing, bool> # Return attribute values of the category (only available on SaaS platforms)
-]: nothing -> record {
+]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar") (serialize-qp "with_position" $with_position "scalar") (serialize-qp "with_enriched_attributes" $with_enriched_attributes "scalar")] | flatten | str join "&"
@@ -3078,6 +3090,7 @@ export def "patch-categories-code" [
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/categories/{code}") $auth.query)
   let req_body = {"code": $body_code, "labels": $labels, "parent": $parent, "position": $position, "updated": $updated, "values": $values} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3147,7 +3160,7 @@ export def "get-channels" [
   --page: int # Number of the page to retrieve when using the `page` pagination method type. Should never be set manually, see Pagination (/documentation/pagination.html#pagination) section (default: 1)
   --limit: int # Number of results by page, see Pagination (/documentation/pagination.html) section (default: 10)
   --with-count: oneof<nothing, bool> # Return the count of items in the response. Be carefull with that, on a big catalog, it can decrease performance in a significative way (default: false)
-]: nothing -> record {
+]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar")] | flatten | str join "&"
@@ -3325,6 +3338,7 @@ export def "channels-patch" [
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/channels/{code}") $auth.query)
   let req_body = {"category_tree": $category_tree, "code": $body_code, "conversion_units": $conversion_units, "currencies": $currencies, "labels": $labels, "locales": $locales} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3358,7 +3372,7 @@ export def "currencies-get-list" [
   --page: int # Number of the page to retrieve when using the `page` pagination method type. Should never be set manually, see Pagination (/documentation/pagination.html#pagination) section (default: 1)
   --limit: int # Number of results by page, see Pagination (/documentation/pagination.html) section (default: 10)
   --with-count: oneof<nothing, bool> # Return the count of items in the response. Be carefull with that, on a big catalog, it can decrease performance in a significative way (default: false)
-]: nothing -> record {
+]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar")] | flatten | str join "&"
@@ -3433,7 +3447,7 @@ export def "get-families" [
   --page: int # Number of the page to retrieve when using the `page` pagination method type. Should never be set manually, see Pagination (/documentation/pagination.html#pagination) section (default: 1)
   --limit: int # Number of results by page, see Pagination (/documentation/pagination.html) section (default: 10)
   --with-count: oneof<nothing, bool> # Return the count of items in the response. Be carefull with that, on a big catalog, it can decrease performance in a significative way (default: false)
-]: nothing -> record {
+]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar")] | flatten | str join "&"
@@ -3611,6 +3625,7 @@ export def "patch-families-code" [
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/families/{code}") $auth.query)
   let req_body = {"attribute_as_image": $attribute_as_image, "attribute_as_label": $attribute_as_label, "attribute_requirements": $attribute_requirements, "attributes": $attributes, "code": $body_code, "labels": $labels} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3645,7 +3660,7 @@ export def "get-families-family-code-variants" [
   --page: int # Number of the page to retrieve when using the `page` pagination method type. Should never be set manually, see Pagination (/documentation/pagination.html#pagination) section (default: 1)
   --limit: int # Number of results by page, see Pagination (/documentation/pagination.html) section (default: 10)
   --with-count: oneof<nothing, bool> # Return the count of items in the response. Be carefull with that, on a big catalog, it can decrease performance in a significative way (default: false)
-]: nothing -> record {
+]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($family_code | is-empty) { error make --unspanned { msg: "path parameter 'family_code' must be non-empty" } }
@@ -3823,6 +3838,7 @@ export def "patch-families-family-code-variants-code" [
   let full_url = (build-url $base ({family_code: (encode-path-segment $family_code), code: (encode-path-segment $code)} | format pattern "/api/rest/v1/families/{family_code}/variants/{code}") $auth.query)
   let req_body = {"code": $body_code, "labels": $labels, "variant_attribute_sets": $variant_attribute_sets} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3857,7 +3873,7 @@ export def "get-locales" [
   --page: int # Number of the page to retrieve when using the `page` pagination method type. Should never be set manually, see Pagination (/documentation/pagination.html#pagination) section (default: 1)
   --limit: int # Number of results by page, see Pagination (/documentation/pagination.html) section (default: 10)
   --with-count: oneof<nothing, bool> # Return the count of items in the response. Be carefull with that, on a big catalog, it can decrease performance in a significative way (default: false)
-]: nothing -> record {
+]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar")] | flatten | str join "&"
@@ -3928,7 +3944,7 @@ export def "measure-families-get-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/measure-families" $auth.query)
@@ -4073,7 +4089,7 @@ export def "get-media-files" [
   --page: int # Number of the page to retrieve when using the `page` pagination method type. Should never be set manually, see Pagination (/documentation/pagination.html#pagination) section (default: 1)
   --limit: int # Number of results by page, see Pagination (/documentation/pagination.html) section (default: 10)
   --with-count: oneof<nothing, bool> # Return the count of items in the response. Be carefull with that, on a big catalog, it can decrease performance in a significative way (default: false)
-]: nothing -> record {
+]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar")] | flatten | str join "&"
@@ -4108,7 +4124,7 @@ export def "post-media-files" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Equal to 'multipart/form-data', no other value allowed
+  --content-type: string # Equal to 'multipart/form-data', no other value allowed (required)
   file: string # The binaries of the file (format: binary)
   --product: string # The product to which the media file will be associated. It is a JSON string that follows this format '{"identifier":"product_identifier", "attribute":"attribute_code", "scope":"channel_code","locale":"locale_code"}'. You have to either use this field or the `product_model` field, but not both at the same time.
   --product-model: string # The product model to which the media file will be associated. It is a JSON string that follows this format '{"code":"product_model_code", "attribute":"attribute_code", "scope":"channel_code","locale":"locale_code"}'. You have to either use this field or the `product` field, but not both at the same time.
@@ -4235,7 +4251,7 @@ export def "get-product-models" [
   --limit: int # Number of results by page, see Pagination (/documentation/pagination.html) section (default: 10)
   --with-count: oneof<nothing, bool> # Return the count of items in the response. Be carefull with that, on a big catalog, it can decrease performance in a significative way (default: false)
   --with-quality-scores: oneof<nothing, bool> # Return product model quality scores in the response. (Only available since the 6.0 version)
-]: nothing -> record {
+]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "locales" $locales "scalar") (serialize-qp "attributes" $attributes "scalar") (serialize-qp "pagination_type" $pagination_type "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "search_after" $search_after "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar") (serialize-qp "with_quality_scores" $with_quality_scores "scalar")] | flatten | str join "&"
@@ -4475,6 +4491,7 @@ export def "patch-product-models-code" [
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/product-models/{code}") $auth.query)
   let req_body = {"associations": $associations, "categories": $categories, "code": $body_code, "created": $created, "family": $family, "family_variant": $family_variant, "metadata": $metadata, "parent": $parent, "quality_scores": $quality_scores, "quantified_associations": $quantified_associations, "updated": $updated, "values": $values} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -4589,7 +4606,7 @@ export def "get-products" [
   --with-attribute-options: oneof<nothing, bool> # Return labels of attribute options in the response. (Only available since the 5.0 version) (default: false)
   --with-quality-scores: oneof<nothing, bool> # Return product quality scores in the response. (Only available since the 5.0 version) (default: false)
   --with-completenesses: oneof<nothing, bool> # Return product completenesses in the response. (Only available since the 6.0 version) (default: false)
-]: nothing -> record {
+]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "locales" $locales "scalar") (serialize-qp "attributes" $attributes "scalar") (serialize-qp "pagination_type" $pagination_type "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "search_after" $search_after "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar") (serialize-qp "with_attribute_options" $with_attribute_options "scalar") (serialize-qp "with_quality_scores" $with_quality_scores "scalar") (serialize-qp "with_completenesses" $with_completenesses "scalar")] | flatten | str join "&"
@@ -4750,7 +4767,7 @@ export def "get-products-uuid" [
   --with-attribute-options: oneof<nothing, bool> # Return labels of attribute options in the response. (Only available since the 5.0 version) (default: false)
   --with-quality-scores: oneof<nothing, bool> # Return product quality scores in the response. (Only available since the 5.0 version) (default: false)
   --with-completenesses: oneof<nothing, bool> # Return product completenesses in the response. (Only available since the 6.0 version) (default: false)
-]: nothing -> record {
+]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "locales" $locales "scalar") (serialize-qp "attributes" $attributes "scalar") (serialize-qp "pagination_type" $pagination_type "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "search_after" $search_after "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar") (serialize-qp "with_attribute_options" $with_attribute_options "scalar") (serialize-qp "with_quality_scores" $with_quality_scores "scalar") (serialize-qp "with_completenesses" $with_completenesses "scalar")] | flatten | str join "&"
@@ -5319,7 +5336,7 @@ export def "get-published-products" [
   --search-after: string # Cursor when using the `search_after` pagination method type. Should never be set manually, see Pagination (/documentation/pagination.html) section (default: cursor to the first page)
   --limit: int # Number of results by page, see Pagination (/documentation/pagination.html) section (default: 10)
   --with-count: oneof<nothing, bool> # Return the count of items in the response. Be carefull with that, on a big catalog, it can decrease performance in a significative way (default: false)
-]: nothing -> record {
+]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "locales" $locales "scalar") (serialize-qp "attributes" $attributes "scalar") (serialize-qp "pagination_type" $pagination_type "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "search_after" $search_after "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar")] | flatten | str join "&"
@@ -5391,7 +5408,7 @@ export def "get-reference-entities" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --search-after: string # Cursor when using the `search_after` pagination method type. Should never be set manually, see Pagination (/documentation/pagination.html) section (default: cursor to the first page)
-]: nothing -> record {
+]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, self: record<href: string>>, _embedded: record<items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search_after" $search_after "scalar")] | flatten | str join "&"
@@ -5426,7 +5443,7 @@ export def "post-reference-entity-media-files" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Equal to 'multipart/form-data', no other value allowed
+  --content-type: string # Equal to 'multipart/form-data', no other value allowed (required)
   file: string # The binary of the media file (format: binary)
 ]: any -> any {
   let input = $in
@@ -5506,7 +5523,7 @@ export def "get-reference-entities-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> record<_links: record<image_download: record<href: string>>, code: string, image: string, labels: record<localeCode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
@@ -5554,6 +5571,7 @@ export def "patch-reference-entity-code" [
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/reference-entities/{code}") $auth.query)
   let req_body = {"code": $body_code, "image": $image, "labels": $labels} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -5714,6 +5732,7 @@ export def "patch-reference-entity-attributes-attribute-code-options-code" [
   let full_url = (build-url $base ({reference_entity_code: (encode-path-segment $reference_entity_code), attribute_code: (encode-path-segment $attribute_code), code: (encode-path-segment $code)} | format pattern "/api/rest/v1/reference-entities/{reference_entity_code}/attributes/{attribute_code}/options/{code}") $auth.query)
   let req_body = {"code": $body_code, "labels": $labels} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -5811,6 +5830,7 @@ export def "patch-reference-entity-attributes-code" [
   let full_url = (build-url $base ({reference_entity_code: (encode-path-segment $reference_entity_code), code: (encode-path-segment $code)} | format pattern "/api/rest/v1/reference-entities/{reference_entity_code}/attributes/{code}") $auth.query)
   let req_body = {"allowed_extensions": $allowed_extensions, "code": $body_code, "decimals_allowed": $decimals_allowed, "is_required_for_completeness": $is_required_for_completeness, "is_rich_text_editor": $is_rich_text_editor, "is_textarea": $is_textarea, "labels": $labels, "max_characters": $max_characters, "max_file_size": $max_file_size, "max_value": $max_value, "min_value": $min_value, "reference_entity_code": $body_reference_entity_code, "type": $type, "validation_regexp": $validation_regexp, "validation_rule": $validation_rule, "value_per_channel": $value_per_channel, "value_per_locale": $value_per_locale} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -5846,7 +5866,7 @@ export def "get-reference-entity-records" [
   --channel: string # Filter attribute values to return scopable attributes for the given channel as well as the non localizable/non scopable attributes, for more details see the Filter attribute values by channel (/documentation/filter.html#record-values-by-channel) section
   --locales: string # Filter attribute values to return localizable attributes for the given locales as well as the non localizable/non scopable attributes, for more details see the Filter attribute values by locale (/documentation/filter.html#record-values-by-locale) section
   --search-after: string # Cursor when using the `search_after` pagination method type. Should never be set manually, see Pagination (/documentation/pagination.html) section (default: cursor to the first page)
-]: nothing -> record {
+]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, self: record<href: string>>, _embedded: record<items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($reference_entity_code | is-empty) { error make --unspanned { msg: "path parameter 'reference_entity_code' must be non-empty" } }
@@ -5976,6 +5996,7 @@ export def "patch-reference-entity-records-code" [
   let full_url = (build-url $base ({reference_entity_code: (encode-path-segment $reference_entity_code), code: (encode-path-segment $code)} | format pattern "/api/rest/v1/reference-entities/{reference_entity_code}/records/{code}") $auth.query)
   let req_body = {"code": $body_code, "created": $created, "updated": $updated, "values": $values} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {

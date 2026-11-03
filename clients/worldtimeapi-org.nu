@@ -130,7 +130,7 @@ export def "get-ip" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<abbreviation: string, client_ip: string, datetime: string, day_of_week: int, day_of_year: int, dst: bool, dst_from: string, dst_offset: int, dst_until: string, raw_offset: int, timezone: string, unixtime: int, utc_datetime: string, utc_offset: string, week_number: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ip" $auth.query)
@@ -163,11 +163,11 @@ export def "get-ip-txt" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ip.txt" $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -197,7 +197,7 @@ export def "get-ip-ipv4" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<abbreviation: string, client_ip: string, datetime: string, day_of_week: int, day_of_year: int, dst: bool, dst_from: string, dst_offset: int, dst_until: string, raw_offset: int, timezone: string, unixtime: int, utc_datetime: string, utc_offset: string, week_number: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ipv4 | is-empty) { error make --unspanned { msg: "path parameter 'ipv4' must be non-empty" } }
@@ -232,12 +232,12 @@ export def "get-ip-ipv4-txt" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ipv4 | is-empty) { error make --unspanned { msg: "path parameter 'ipv4' must be non-empty" } }
   let full_url = (build-url $base ({ipv4: (encode-path-segment $ipv4)} | format pattern "/ip/{ipv4}.txt") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -266,7 +266,7 @@ export def "get-timezone" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/timezone" $auth.query)
@@ -299,11 +299,11 @@ export def "get-timezone-txt" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/timezone.txt" $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -333,7 +333,7 @@ export def "get-timezone-area" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($area | is-empty) { error make --unspanned { msg: "path parameter 'area' must be non-empty" } }
@@ -368,12 +368,12 @@ export def "get-timezone-area-txt" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($area | is-empty) { error make --unspanned { msg: "path parameter 'area' must be non-empty" } }
   let full_url = (build-url $base ({area: (encode-path-segment $area)} | format pattern "/timezone/{area}.txt") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -404,7 +404,7 @@ export def "get-timezone-area-location" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<abbreviation: string, client_ip: string, datetime: string, day_of_week: int, day_of_year: int, dst: bool, dst_from: string, dst_offset: int, dst_until: string, raw_offset: int, timezone: string, unixtime: int, utc_datetime: string, utc_offset: string, week_number: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($area | is-empty) { error make --unspanned { msg: "path parameter 'area' must be non-empty" } }
@@ -441,13 +441,13 @@ export def "get-timezone-area-location-txt" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($area | is-empty) { error make --unspanned { msg: "path parameter 'area' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
   let full_url = (build-url $base ({area: (encode-path-segment $area), location: (encode-path-segment $location)} | format pattern "/timezone/{area}/{location}.txt") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -479,7 +479,7 @@ export def "get-timezone-area-location-region" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<abbreviation: string, client_ip: string, datetime: string, day_of_week: int, day_of_year: int, dst: bool, dst_from: string, dst_offset: int, dst_until: string, raw_offset: int, timezone: string, unixtime: int, utc_datetime: string, utc_offset: string, week_number: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($area | is-empty) { error make --unspanned { msg: "path parameter 'area' must be non-empty" } }
@@ -518,14 +518,14 @@ export def "get-timezone-area-location-region-txt" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($area | is-empty) { error make --unspanned { msg: "path parameter 'area' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
   if ($region | is-empty) { error make --unspanned { msg: "path parameter 'region' must be non-empty" } }
   let full_url = (build-url $base ({area: (encode-path-segment $area), location: (encode-path-segment $location), region: (encode-path-segment $region)} | format pattern "/timezone/{area}/{location}/{region}.txt") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"

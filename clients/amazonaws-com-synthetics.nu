@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -189,11 +189,11 @@ export def "associate-resource" [
 #
 # POST /canary
 # operationId: CreateCanary
-# --Code shape: {S3Bucket?: any, S3Key?: any, S3Version?: any, ZipFile?: any, Handler?: any}
-# --Schedule shape: {Expression?: any, DurationInSeconds?: any}
-# --RunConfig shape: {TimeoutInSeconds?: any, MemoryInMB?: any, ActiveTracing?: any, EnvironmentVariables?: any}
-# --VpcConfig shape: {SubnetIds?: any, SecurityGroupIds?: any}
-# --ArtifactConfig shape: {S3Encryption?: any}
+# --Code shape: {S3Bucket?: string, S3Key?: string, S3Version?: string, ZipFile?: string, Handler?: string}
+# --Schedule shape: {Expression?: string, DurationInSeconds?: int}
+# --RunConfig shape: {TimeoutInSeconds?: int, MemoryInMB?: int, ActiveTracing?: bool, EnvironmentVariables?: record}
+# --VpcConfig shape: {SubnetIds?: list<string>, SecurityGroupIds?: list<string>}
+# --ArtifactConfig shape: {S3Encryption?: record}
 export def "create-canary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -212,18 +212,18 @@ export def "create-canary" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   name: string # The name for this canary. Be sure to give it a descriptive name that distinguishes it from other canaries in your account. Do not include secrets or proprietary information in your canary names. The canary name makes up part of the canary ARN, and the ARN is included in outbound calls over the internet. For more information, see Security Considerations for Synthetics Canaries (https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/servicelens_canaries_security.html).
-  code: record # Use this structure to input your script code for the canary. This structure contains the Lambda handler with the location where the canary should start running the script. If the script is stored in an S3 bucket, the bucket name, key, and version are also included. If the script was passed into the canary directly, the script code is contained in the value of Zipfile. — shape: {S3Bucket?: any, S3Key?: any, S3Version?: any, ZipFile?: any, Handler?: any}
+  code: record # Use this structure to input your script code for the canary. This structure contains the Lambda handler with the location where the canary should start running the script. If the script is stored in an S3 bucket, the bucket name, key, and version are also included. If the script was passed into the canary directly, the script code is contained in the value of Zipfile. — shape: {S3Bucket?: string, S3Key?: string, S3Version?: string, ZipFile?: string, Handler?: string}
   artifact_s3_location: string # The location in Amazon S3 where Synthetics stores artifacts from the test runs of this canary. Artifacts include the log file, screenshots, and HAR files. The name of the S3 bucket can't include a period (.).
   execution_role_arn: string # The ARN of the IAM role to be used to run the canary. This role must already exist, and must include lambda.amazonaws.com as a principal in the trust policy. The role must also have the following permissions: s3:PutObject s3:GetBucketLocation s3:ListAllMyBuckets cloudwatch:PutMetricData logs:CreateLogGroup logs:CreateLogStream logs:PutLogEvents
-  schedule: record # This structure specifies how often a canary is to make runs and the date and time when it should stop making runs. — shape: {Expression?: any, DurationInSeconds?: any}
-  --run-config: record # A structure that contains input information for a canary run. — shape: {TimeoutInSeconds?: any, MemoryInMB?: any, ActiveTracing?: any, EnvironmentVariables?: any}
+  schedule: record # This structure specifies how often a canary is to make runs and the date and time when it should stop making runs. — shape: {Expression?: string, DurationInSeconds?: int}
+  --run-config: record # A structure that contains input information for a canary run. — shape: {TimeoutInSeconds?: int, MemoryInMB?: int, ActiveTracing?: bool, EnvironmentVariables?: record}
   --success-retention-period-in-days: int # The number of days to retain data about successful runs of this canary. If you omit this field, the default of 31 days is used. The valid range is 1 to 455 days.
   --failure-retention-period-in-days: int # The number of days to retain data about failed runs of this canary. If you omit this field, the default of 31 days is used. The valid range is 1 to 455 days.
   runtime_version: string # Specifies the runtime version to use for the canary. For a list of valid runtime versions and more information about runtime versions, see Canary Runtime Versions (https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch_Synthetics_Canaries_Library.html).
-  --vpc-config: record # If this canary is to test an endpoint in a VPC, this structure contains information about the subnets and security groups of the VPC endpoint. For more information, see Running a Canary in a VPC (https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch_Synthetics_Canaries_VPC.html). — shape: {SubnetIds?: any, SecurityGroupIds?: any}
+  --vpc-config: record # If this canary is to test an endpoint in a VPC, this structure contains information about the subnets and security groups of the VPC endpoint. For more information, see Running a Canary in a VPC (https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch_Synthetics_Canaries_VPC.html). — shape: {SubnetIds?: list<string>, SecurityGroupIds?: list<string>}
   --tags: record # A list of key-value pairs to associate with the canary. You can associate as many as 50 tags with a canary. Tags can help you organize and categorize your resources. You can also use them to scope user permissions, by granting a user permission to access or change only the resources that have certain tag values.
-  --artifact-config: record # A structure that contains the configuration for canary artifacts, including the encryption-at-rest settings for artifacts that the canary uploads to Amazon S3. — shape: {S3Encryption?: any}
-]: any -> record<Canary: record<Id: record, Name: record, Code: record<SourceLocationArn: record, Handler: record>, ExecutionRoleArn: record, Schedule: record<Expression: record, DurationInSeconds: record>, RunConfig: record<TimeoutInSeconds: record, MemoryInMB: record, ActiveTracing: record>, SuccessRetentionPeriodInDays: record, FailureRetentionPeriodInDays: record, Status: record<State: record, StateReason: record, StateReasonCode: record>, Timeline: record<Created: record, LastModified: record, LastStarted: record, LastStopped: record>, ArtifactS3Location: record, EngineArn: record, RuntimeVersion: record, VpcConfig: record<VpcId: record, SubnetIds: record, SecurityGroupIds: record>, VisualReference: record<BaseScreenshots: record, BaseCanaryRunId: record>, Tags: record, ArtifactConfig: record<S3Encryption: record>>> {
+  --artifact-config: record # A structure that contains the configuration for canary artifacts, including the encryption-at-rest settings for artifacts that the canary uploads to Amazon S3. — shape: {S3Encryption?: record}
+]: any -> record<Canary: record<Id: string, Name: string, Code: record<SourceLocationArn: string, Handler: string>, ExecutionRoleArn: string, Schedule: record<Expression: string, DurationInSeconds: int>, RunConfig: record<TimeoutInSeconds: int, MemoryInMB: int, ActiveTracing: bool>, SuccessRetentionPeriodInDays: int, FailureRetentionPeriodInDays: int, Status: record<State: string, StateReason: string, StateReasonCode: string>, Timeline: record<Created: string, LastModified: string, LastStarted: string, LastStopped: string>, ArtifactS3Location: string, EngineArn: string, RuntimeVersion: string, VpcConfig: record<VpcId: string, SubnetIds: list, SecurityGroupIds: list>, VisualReference: record<BaseScreenshots: list, BaseCanaryRunId: string>, Tags: record, ArtifactConfig: record<S3Encryption: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -271,7 +271,7 @@ export def "create-group" [
   --x-amz-signed-headers: string
   name: string # The name for the group. It can include any Unicode characters. The names for all groups in your account, across all Regions, must be unique.
   --tags: record # A list of key-value pairs to associate with the group. You can associate as many as 50 tags with a group. Tags can help you organize and categorize your resources. You can also use them to scope user permissions, by granting a user permission to access or change only the resources that have certain tag values.
-]: any -> record<Group: record<Id: record, Name: record, Arn: record, Tags: record, CreatedTime: record, LastModifiedTime: record>> {
+]: any -> record<Group: record<Id: string, Name: string, Arn: string, Tags: record, CreatedTime: string, LastModifiedTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -365,7 +365,7 @@ export def "get-canary" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Canary: record<Id: record, Name: record, Code: record<SourceLocationArn: record, Handler: record>, ExecutionRoleArn: record, Schedule: record<Expression: record, DurationInSeconds: record>, RunConfig: record<TimeoutInSeconds: record, MemoryInMB: record, ActiveTracing: record>, SuccessRetentionPeriodInDays: record, FailureRetentionPeriodInDays: record, Status: record<State: record, StateReason: record, StateReasonCode: record>, Timeline: record<Created: record, LastModified: record, LastStarted: record, LastStopped: record>, ArtifactS3Location: record, EngineArn: record, RuntimeVersion: record, VpcConfig: record<VpcId: record, SubnetIds: record, SecurityGroupIds: record>, VisualReference: record<BaseScreenshots: record, BaseCanaryRunId: record>, Tags: record, ArtifactConfig: record<S3Encryption: record>>> {
+]: nothing -> record<Canary: record<Id: string, Name: string, Code: record<SourceLocationArn: string, Handler: string>, ExecutionRoleArn: string, Schedule: record<Expression: string, DurationInSeconds: int>, RunConfig: record<TimeoutInSeconds: int, MemoryInMB: int, ActiveTracing: bool>, SuccessRetentionPeriodInDays: int, FailureRetentionPeriodInDays: int, Status: record<State: string, StateReason: string, StateReasonCode: string>, Timeline: record<Created: string, LastModified: string, LastStarted: string, LastStopped: string>, ArtifactS3Location: string, EngineArn: string, RuntimeVersion: string, VpcConfig: record<VpcId: string, SubnetIds: list, SecurityGroupIds: list>, VisualReference: record<BaseScreenshots: list, BaseCanaryRunId: string>, Tags: record, ArtifactConfig: record<S3Encryption: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -392,12 +392,12 @@ export def "get-canary" [
 #
 # PATCH /canary/{name}
 # operationId: UpdateCanary
-# --Code shape: {S3Bucket?: any, S3Key?: any, S3Version?: any, ZipFile?: any, Handler?: any}
-# --Schedule shape: {Expression?: any, DurationInSeconds?: any}
-# --RunConfig shape: {TimeoutInSeconds?: any, MemoryInMB?: any, ActiveTracing?: any, EnvironmentVariables?: any}
-# --VpcConfig shape: {SubnetIds?: any, SecurityGroupIds?: any}
-# --VisualReference shape: {BaseScreenshots?: any, BaseCanaryRunId?: any}
-# --ArtifactConfig shape: {S3Encryption?: any}
+# --Code shape: {S3Bucket?: string, S3Key?: string, S3Version?: string, ZipFile?: string, Handler?: string}
+# --Schedule shape: {Expression?: string, DurationInSeconds?: int}
+# --RunConfig shape: {TimeoutInSeconds?: int, MemoryInMB?: int, ActiveTracing?: bool, EnvironmentVariables?: record}
+# --VpcConfig shape: {SubnetIds?: list<string>, SecurityGroupIds?: list<string>}
+# --VisualReference shape: {BaseScreenshots?: list, BaseCanaryRunId?: string}
+# --ArtifactConfig shape: {S3Encryption?: record}
 export def "update-canary" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -416,17 +416,17 @@ export def "update-canary" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --code: record # Use this structure to input your script code for the canary. This structure contains the Lambda handler with the location where the canary should start running the script. If the script is stored in an S3 bucket, the bucket name, key, and version are also included. If the script was passed into the canary directly, the script code is contained in the value of Zipfile. — shape: {S3Bucket?: any, S3Key?: any, S3Version?: any, ZipFile?: any, Handler?: any}
+  --code: record # Use this structure to input your script code for the canary. This structure contains the Lambda handler with the location where the canary should start running the script. If the script is stored in an S3 bucket, the bucket name, key, and version are also included. If the script was passed into the canary directly, the script code is contained in the value of Zipfile. — shape: {S3Bucket?: string, S3Key?: string, S3Version?: string, ZipFile?: string, Handler?: string}
   --execution-role-arn: string # The ARN of the IAM role to be used to run the canary. This role must already exist, and must include lambda.amazonaws.com as a principal in the trust policy. The role must also have the following permissions: s3:PutObject s3:GetBucketLocation s3:ListAllMyBuckets cloudwatch:PutMetricData logs:CreateLogGroup logs:CreateLogStream logs:CreateLogStream
   --runtime-version: string # Specifies the runtime version to use for the canary. For a list of valid runtime versions and for more information about runtime versions, see Canary Runtime Versions (https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch_Synthetics_Canaries_Library.html).
-  --schedule: record # This structure specifies how often a canary is to make runs and the date and time when it should stop making runs. — shape: {Expression?: any, DurationInSeconds?: any}
-  --run-config: record # A structure that contains input information for a canary run. — shape: {TimeoutInSeconds?: any, MemoryInMB?: any, ActiveTracing?: any, EnvironmentVariables?: any}
+  --schedule: record # This structure specifies how often a canary is to make runs and the date and time when it should stop making runs. — shape: {Expression?: string, DurationInSeconds?: int}
+  --run-config: record # A structure that contains input information for a canary run. — shape: {TimeoutInSeconds?: int, MemoryInMB?: int, ActiveTracing?: bool, EnvironmentVariables?: record}
   --success-retention-period-in-days: int # The number of days to retain data about successful runs of this canary.
   --failure-retention-period-in-days: int # The number of days to retain data about failed runs of this canary.
-  --vpc-config: record # If this canary is to test an endpoint in a VPC, this structure contains information about the subnets and security groups of the VPC endpoint. For more information, see Running a Canary in a VPC (https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch_Synthetics_Canaries_VPC.html). — shape: {SubnetIds?: any, SecurityGroupIds?: any}
-  --visual-reference: record # An object that specifies what screenshots to use as a baseline for visual monitoring by this canary. It can optionally also specify parts of the screenshots to ignore during the visual monitoring comparison. Visual monitoring is supported only on canaries running the syn-puppeteer-node-3.2 runtime or later. For more information, see Visual monitoring (https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch_Synthetics_Library_SyntheticsLogger_VisualTesting.html) and Visual monitoring blueprint (https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch_Synthetics_Canaries_Blueprints_VisualTesting.html) — shape: {BaseScreenshots?: any, BaseCanaryRunId?: any}
+  --vpc-config: record # If this canary is to test an endpoint in a VPC, this structure contains information about the subnets and security groups of the VPC endpoint. For more information, see Running a Canary in a VPC (https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch_Synthetics_Canaries_VPC.html). — shape: {SubnetIds?: list<string>, SecurityGroupIds?: list<string>}
+  --visual-reference: record # An object that specifies what screenshots to use as a baseline for visual monitoring by this canary. It can optionally also specify parts of the screenshots to ignore during the visual monitoring comparison. Visual monitoring is supported only on canaries running the syn-puppeteer-node-3.2 runtime or later. For more information, see Visual monitoring (https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch_Synthetics_Library_SyntheticsLogger_VisualTesting.html) and Visual monitoring blueprint (https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch_Synthetics_Canaries_Blueprints_VisualTesting.html) — shape: {BaseScreenshots?: list, BaseCanaryRunId?: string}
   --artifact-s3-location: string # The location in Amazon S3 where Synthetics stores artifacts from the test runs of this canary. Artifacts include the log file, screenshots, and HAR files. The name of the S3 bucket can't include a period (.).
-  --artifact-config: record # A structure that contains the configuration for canary artifacts, including the encryption-at-rest settings for artifacts that the canary uploads to Amazon S3. — shape: {S3Encryption?: any}
+  --artifact-config: record # A structure that contains the configuration for canary artifacts, including the encryption-at-rest settings for artifacts that the canary uploads to Amazon S3. — shape: {S3Encryption?: record}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -520,7 +520,7 @@ export def "get-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Group: record<Id: record, Name: record, Arn: record, Tags: record, CreatedTime: record, LastModifiedTime: record>> {
+]: nothing -> record<Group: record<Id: string, Name: string, Arn: string, Tags: record, CreatedTime: string, LastModifiedTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_identifier | is-empty) { error make --unspanned { msg: "path parameter 'groupIdentifier' must be non-empty" } }
@@ -569,7 +569,7 @@ export def "describe-canaries" [
   --next-token-body: string # A token that indicates that there is more data available. You can use this token in a subsequent operation to retrieve the next set of results. (body field)
   --max-results-body: int # Specify this parameter to limit how many canaries are returned each time you use the DescribeCanaries operation. If you omit this parameter, the default of 100 is used. (body field)
   --names: list<string> # Use this parameter to return only canaries that match the names that you specify here. You can specify as many as five canary names. If you specify this parameter, the operation is successful only if you have authorization to view all the canaries that you specify in your request. If you do not have permission to view any of the canaries, the request fails with a 403 response. You are required to use this parameter if you are logged on to a user or role that has an IAM policy that restricts which canaries that you are allowed to view. For more information, see Limiting a user to viewing specific canaries (https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch_Synthetics_Canaries_Restricted.html).
-]: any -> record<Canaries: record, NextToken: record> {
+]: any -> record<Canaries: table<Id: string, Name: string, Code: record, ExecutionRoleArn: string, Schedule: record, RunConfig: record, SuccessRetentionPeriodInDays: int, FailureRetentionPeriodInDays: int, Status: record, Timeline: record, ArtifactS3Location: string, EngineArn: string, RuntimeVersion: string, VpcConfig: record, VisualReference: record, Tags: record, ArtifactConfig: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -621,7 +621,7 @@ export def "describe-canaries-last-run" [
   --next-token-body: string # A token that indicates that there is more data available. You can use this token in a subsequent DescribeCanariesLastRun operation to retrieve the next set of results. (body field)
   --max-results-body: int # Specify this parameter to limit how many runs are returned each time you use the DescribeLastRun operation. If you omit this parameter, the default of 100 is used. (body field)
   --names: list<string> # Use this parameter to return only canaries that match the names that you specify here. You can specify as many as five canary names. If you specify this parameter, the operation is successful only if you have authorization to view all the canaries that you specify in your request. If you do not have permission to view any of the canaries, the request fails with a 403 response. You are required to use the Names parameter if you are logged on to a user or role that has an IAM policy that restricts which canaries that you are allowed to view. For more information, see Limiting a user to viewing specific canaries (https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch_Synthetics_Canaries_Restricted.html).
-]: any -> record<CanariesLastRun: record, NextToken: record> {
+]: any -> record<CanariesLastRun: table<CanaryName: string, LastRun: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -672,7 +672,7 @@ export def "describe-runtime-versions" [
   --x-amz-signed-headers: string
   --next-token-body: string # A token that indicates that there is more data available. You can use this token in a subsequent DescribeRuntimeVersions operation to retrieve the next set of results. (body field)
   --max-results-body: int # Specify this parameter to limit how many runs are returned each time you use the DescribeRuntimeVersions operation. If you omit this parameter, the default of 100 is used. (body field)
-]: any -> record<RuntimeVersions: record, NextToken: record> {
+]: any -> record<RuntimeVersions: table<VersionName: string, Description: string, ReleaseDate: string, DeprecationDate: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -773,7 +773,7 @@ export def "get-canary-runs" [
   --x-amz-signed-headers: string
   --next-token-body: string # A token that indicates that there is more data available. You can use this token in a subsequent GetCanaryRuns operation to retrieve the next set of results. (body field)
   --max-results-body: int # Specify this parameter to limit how many runs are returned each time you use the GetCanaryRuns operation. If you omit this parameter, the default of 100 is used. (body field)
-]: any -> record<CanaryRuns: record, NextToken: record> {
+]: any -> record<CanaryRuns: table<Id: string, Name: string, Status: record, Timeline: record, ArtifactS3Location: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -826,7 +826,7 @@ export def "list-associated-groups" [
   --x-amz-signed-headers: string
   --next-token-body: string # A token that indicates that there is more data available. You can use this token in a subsequent operation to retrieve the next set of results. (body field)
   --max-results-body: int # Specify this parameter to limit how many groups are returned each time you use the ListAssociatedGroups operation. If you omit this parameter, the default of 20 is used. (body field)
-]: any -> record<Groups: record, NextToken: record> {
+]: any -> record<Groups: table<Id: string, Name: string, Arn: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -879,7 +879,7 @@ export def "list-group-resources" [
   --x-amz-signed-headers: string
   --next-token-body: string # A token that indicates that there is more data available. You can use this token in a subsequent operation to retrieve the next set of results. (body field)
   --max-results-body: int # Specify this parameter to limit how many canary ARNs are returned each time you use the ListGroupResources operation. If you omit this parameter, the default of 20 is used. (body field)
-]: any -> record<Resources: record, NextToken: record> {
+]: any -> record<Resources: list<string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -931,7 +931,7 @@ export def "list-groups" [
   --x-amz-signed-headers: string
   --next-token-body: string # A token that indicates that there is more data available. You can use this token in a subsequent operation to retrieve the next set of results. (body field)
   --max-results-body: int # Specify this parameter to limit how many groups are returned each time you use the ListGroups operation. If you omit this parameter, the default of 20 is used. (body field)
-]: any -> record<Groups: record, NextToken: record> {
+]: any -> record<Groups: table<Id: string, Name: string, Arn: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1156,7 +1156,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # The list of tag keys to remove from the resource.
+  --tag-keys: list # The list of tag keys to remove from the resource. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1168,6 +1168,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"

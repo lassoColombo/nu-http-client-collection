@@ -175,17 +175,21 @@ export def "update-bulk-inventory" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --feed-type: string@feed-type-completer # The feed Type
+  --feed-type: string@feed-type-completer # The feed Type (required)
   --ship-node: string # The shipNode for which the inventory is to be updated. Not required in case of Multi Node Inventory Update Feed (feedType=MP_INVENTORY)
-  --wm-sec-access-token: string # The access token retrieved in the Token API call (e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
+  --wm-sec-access-token: string # The access token retrieved in the Token API call (required, e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
   --wm-consumer-channel-type: string # A unique ID to track the consumer request by channel. Use the Consumer Channel Type received during onboarding
-  --wm-qos-correlation-id: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
-  --wm-svc-name: string # Walmart Service Name (e.g. Walmart Service Name)
+  --wm-qos-correlation-id: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (required, e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
+  --wm-svc-name: string # Walmart Service Name (required, e.g. Walmart Service Name)
   file: string # Feed file to upload (format: binary)
 ]: any -> record<additionalAttributes: record, errors: record, feedId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($feed_type == null) { error make --unspanned { msg: "required query parameter 'feedType' missing: pass --feed-type" } }
+  if ($wm_sec_access_token == null) { error make --unspanned { msg: "required header parameter 'WM_SEC.ACCESS_TOKEN' missing: pass --wm-sec-access-token" } }
+  if ($wm_qos_correlation_id == null) { error make --unspanned { msg: "required header parameter 'WM_QOS.CORRELATION_ID' missing: pass --wm-qos-correlation-id" } }
+  if ($wm_svc_name == null) { error make --unspanned { msg: "required header parameter 'WM_SVC.NAME' missing: pass --wm-svc-name" } }
   let qp = [(serialize-qp "feedType" $feed_type "scalar") (serialize-qp "shipNode" $ship_node "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/feeds" $qp $auth.query)
   let req_body = {"file": $file} | compact
@@ -194,8 +198,8 @@ export def "update-bulk-inventory" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"WM_SEC.ACCESS_TOKEN": $wm_sec_access_token, "WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id, "WM_SVC.NAME": $wm_svc_name} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -229,13 +233,16 @@ export def "get-wfs-inventory" [
   --to-modified-date: string # last inventory modified date - starting range.
   --limit: string # Number of Sku to be returned. Cannot be larger than 300. (default: 10)
   --offset: string # Offset is the number of records you wish to skip before selecting records. (default: 0)
-  --wm-sec-access-token: string # The access token retrieved in the Token API call (e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
+  --wm-sec-access-token: string # The access token retrieved in the Token API call (required, e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
   --wm-consumer-channel-type: string # A unique ID to track the consumer request by channel. Use the Consumer Channel Type received during onboarding
-  --wm-qos-correlation-id: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
-  --wm-svc-name: string # Walmart Service Name (e.g. Walmart Service Name)
+  --wm-qos-correlation-id: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (required, e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
+  --wm-svc-name: string # Walmart Service Name (required, e.g. Walmart Service Name)
 ]: nothing -> record<headers: record<limit: int, offset: int, totalCount: int>, payload: record<inventory: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($wm_sec_access_token == null) { error make --unspanned { msg: "required header parameter 'WM_SEC.ACCESS_TOKEN' missing: pass --wm-sec-access-token" } }
+  if ($wm_qos_correlation_id == null) { error make --unspanned { msg: "required header parameter 'WM_QOS.CORRELATION_ID' missing: pass --wm-qos-correlation-id" } }
+  if ($wm_svc_name == null) { error make --unspanned { msg: "required header parameter 'WM_SVC.NAME' missing: pass --wm-svc-name" } }
   let qp = [(serialize-qp "sku" $sku "scalar") (serialize-qp "fromModifiedDate" $from_modified_date "scalar") (serialize-qp "toModifiedDate" $to_modified_date "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/fulfillment/inventory" $qp $auth.query)
   let accept_val = "application/json"
@@ -272,13 +279,16 @@ export def "get-multi-node-inventory-for-all-sku-and-all-ship-nodes" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: string # The number of items returned. Cannot be more than 50. (default: 10)
   --next-cursor: string # String returned from initial API call to indicate pagination. Specify nextCursor value to retrieve the next 50 items.
-  --wm-sec-access-token: string # The access token retrieved in the Token API call (e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
+  --wm-sec-access-token: string # The access token retrieved in the Token API call (required, e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
   --wm-consumer-channel-type: string # A unique ID to track the consumer request by channel. Use the Consumer Channel Type received during onboarding
-  --wm-qos-correlation-id: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
-  --wm-svc-name: string # Walmart Service Name (e.g. Walmart Service Name)
+  --wm-qos-correlation-id: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (required, e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
+  --wm-svc-name: string # Walmart Service Name (required, e.g. Walmart Service Name)
 ]: nothing -> record<elements: record<inventories: list<record>>, meta: record<nextCursor: string, totalCount: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($wm_sec_access_token == null) { error make --unspanned { msg: "required header parameter 'WM_SEC.ACCESS_TOKEN' missing: pass --wm-sec-access-token" } }
+  if ($wm_qos_correlation_id == null) { error make --unspanned { msg: "required header parameter 'WM_QOS.CORRELATION_ID' missing: pass --wm-qos-correlation-id" } }
+  if ($wm_svc_name == null) { error make --unspanned { msg: "required header parameter 'WM_SVC.NAME' missing: pass --wm-svc-name" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "nextCursor" $next_cursor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/inventories" $qp $auth.query)
   let accept_val = "application/json"
@@ -315,14 +325,17 @@ export def "get-multi-node-inventory-for-sku-and-all-shipnodes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --ship-node: string # ShipNode Id of the ship node for which the inventory is requested
-  --wm-sec-access-token: string # The access token retrieved in the Token API call (e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
+  --wm-sec-access-token: string # The access token retrieved in the Token API call (required, e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
   --wm-consumer-channel-type: string # A unique ID to track the consumer request by channel. Use the Consumer Channel Type received during onboarding
-  --wm-qos-correlation-id: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
-  --wm-svc-name: string # Walmart Service Name (e.g. Walmart Service Name)
+  --wm-qos-correlation-id: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (required, e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
+  --wm-svc-name: string # Walmart Service Name (required, e.g. Walmart Service Name)
 ]: nothing -> record<nodes: table<availToSellQty: record, errors: list, inputQty: record, reservedQty: record, shipNode: string>, sku: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sku | is-empty) { error make --unspanned { msg: "path parameter 'sku' must be non-empty" } }
+  if ($wm_sec_access_token == null) { error make --unspanned { msg: "required header parameter 'WM_SEC.ACCESS_TOKEN' missing: pass --wm-sec-access-token" } }
+  if ($wm_qos_correlation_id == null) { error make --unspanned { msg: "required header parameter 'WM_QOS.CORRELATION_ID' missing: pass --wm-qos-correlation-id" } }
+  if ($wm_svc_name == null) { error make --unspanned { msg: "required header parameter 'WM_SVC.NAME' missing: pass --wm-svc-name" } }
   let qp = [(serialize-qp "shipNode" $ship_node "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({sku: (encode-path-segment $sku)} | format pattern "/v3/inventories/{sku}") $qp $auth.query)
   let accept_val = "application/json"
@@ -359,16 +372,19 @@ export def "update-multi-node-inventory" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --wm-sec-access-token: string # The access token retrieved in the Token API call (e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
+  --wm-sec-access-token: string # The access token retrieved in the Token API call (required, e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
   --wm-consumer-channel-type: string # A unique ID to track the consumer request by channel. Use the Consumer Channel Type received during onboarding
-  --wm-qos-correlation-id: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
-  --wm-svc-name: string # Walmart Service Name (e.g. Walmart Service Name)
+  --wm-qos-correlation-id: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (required, e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
+  --wm-svc-name: string # Walmart Service Name (required, e.g. Walmart Service Name)
   inventories: record # shape: {nodes: list}
 ]: any -> record<nodes: table<errors: list, shipNode: string, status: string>, sku: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sku | is-empty) { error make --unspanned { msg: "path parameter 'sku' must be non-empty" } }
+  if ($wm_sec_access_token == null) { error make --unspanned { msg: "required header parameter 'WM_SEC.ACCESS_TOKEN' missing: pass --wm-sec-access-token" } }
+  if ($wm_qos_correlation_id == null) { error make --unspanned { msg: "required header parameter 'WM_QOS.CORRELATION_ID' missing: pass --wm-qos-correlation-id" } }
+  if ($wm_svc_name == null) { error make --unspanned { msg: "required header parameter 'WM_SVC.NAME' missing: pass --wm-svc-name" } }
   let full_url = (build-url $base ({sku: (encode-path-segment $sku)} | format pattern "/v3/inventories/{sku}") $auth.query)
   let req_body = {"inventories": $inventories} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -405,15 +421,19 @@ export def "get-inventory" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --sku: string # An arbitrary alphanumeric unique ID, specified by the seller, which identifies each item. This will be used by the seller in the XSD file to refer to each item. Special characters in the sku needing encoding are: ':', '/', '?', '#', '[', ']', '@', '!', '$', '&', "'", '(', ')', '*', '+', ',', ';', '=', ‘ ’, '{', '}' as well as '%' itself if it's a part of sku. Make sure to encode space with %20. Other characters don't need to be encoded.
+  --sku: string # An arbitrary alphanumeric unique ID, specified by the seller, which identifies each item. This will be used by the seller in the XSD file to refer to each item. Special characters in the sku needing encoding are: ':', '/', '?', '#', '[', ']', '@', '!', '$', '&', "'", '(', ')', '*', '+', ',', ';', '=', ‘ ’, '{', '}' as well as '%' itself if it's a part of sku. Make sure to encode space with %20. Other characters don't need to be encoded. (required)
   --ship-node: string # The shipNode for which the inventory is requested
-  --wm-sec-access-token: string # The access token retrieved in the Token API call (e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
+  --wm-sec-access-token: string # The access token retrieved in the Token API call (required, e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
   --wm-consumer-channel-type: string # A unique ID to track the consumer request by channel. Use the Consumer Channel Type received during onboarding
-  --wm-qos-correlation-id: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
-  --wm-svc-name: string # Walmart Service Name (e.g. Walmart Service Name)
+  --wm-qos-correlation-id: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (required, e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
+  --wm-svc-name: string # Walmart Service Name (required, e.g. Walmart Service Name)
 ]: nothing -> record<quantity: record<amount: float, unit: string>, sku: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($sku == null) { error make --unspanned { msg: "required query parameter 'sku' missing: pass --sku" } }
+  if ($wm_sec_access_token == null) { error make --unspanned { msg: "required header parameter 'WM_SEC.ACCESS_TOKEN' missing: pass --wm-sec-access-token" } }
+  if ($wm_qos_correlation_id == null) { error make --unspanned { msg: "required header parameter 'WM_QOS.CORRELATION_ID' missing: pass --wm-qos-correlation-id" } }
+  if ($wm_svc_name == null) { error make --unspanned { msg: "required header parameter 'WM_SVC.NAME' missing: pass --wm-svc-name" } }
   let qp = [(serialize-qp "sku" $sku "scalar") (serialize-qp "shipNode" $ship_node "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/inventory" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -450,22 +470,27 @@ export def "update-inventory-for-an-item" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --sku: string # An arbitrary alphanumeric unique ID, specified by the seller, which identifies each item. This will be used by the seller in the XSD file to refer to each item. Special characters in the sku needing encoding are: ':', '/', '?', '#', '[', ']', '@', '!', '$', '&', "'", '(', ')', '*', '+', ',', ';', '=', ‘ ’, '{', '}' as well as '%' itself if it's a part of sku. Make sure to encode space with %20. Other characters don't need to be encoded.
+  --sku: string # An arbitrary alphanumeric unique ID, specified by the seller, which identifies each item. This will be used by the seller in the XSD file to refer to each item. Special characters in the sku needing encoding are: ':', '/', '?', '#', '[', ']', '@', '!', '$', '&', "'", '(', ')', '*', '+', ',', ';', '=', ‘ ’, '{', '}' as well as '%' itself if it's a part of sku. Make sure to encode space with %20. Other characters don't need to be encoded. (required)
   --ship-node: string # The shipNode for which the inventory is to be updated.
-  --wm-sec-access-token: string # The access token retrieved in the Token API call (e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
+  --wm-sec-access-token: string # The access token retrieved in the Token API call (required, e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
   --wm-consumer-channel-type: string # A unique ID to track the consumer request by channel. Use the Consumer Channel Type received during onboarding
-  --wm-qos-correlation-id: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
-  --wm-svc-name: string # Walmart Service Name (e.g. Walmart Service Name)
+  --wm-qos-correlation-id: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (required, e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
+  --wm-svc-name: string # Walmart Service Name (required, e.g. Walmart Service Name)
   quantity: record # Quantity that has been ordered by the customers but not yet shipped — shape: {amount: float, unit: "EACH"}
   --sku-body: string # A seller-provided Product ID. Response will have decoded value. (body field)
 ]: any -> record<quantity: record<amount: float, unit: string>, sku: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($sku == null) { error make --unspanned { msg: "required query parameter 'sku' missing: pass --sku" } }
+  if ($wm_sec_access_token == null) { error make --unspanned { msg: "required header parameter 'WM_SEC.ACCESS_TOKEN' missing: pass --wm-sec-access-token" } }
+  if ($wm_qos_correlation_id == null) { error make --unspanned { msg: "required header parameter 'WM_QOS.CORRELATION_ID' missing: pass --wm-qos-correlation-id" } }
+  if ($wm_svc_name == null) { error make --unspanned { msg: "required header parameter 'WM_SVC.NAME' missing: pass --wm-svc-name" } }
   let qp = [(serialize-qp "sku" $sku "scalar") (serialize-qp "shipNode" $ship_node "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/inventory" $qp $auth.query)
   let req_body = {"quantity": $quantity, "sku": $sku_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "sku") == null) { error make --unspanned { msg: "required body field 'sku' missing: pass --sku-body or pipe a record" } }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"WM_SEC.ACCESS_TOKEN": $wm_sec_access_token, "WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id, "WM_SVC.NAME": $wm_svc_name} | compact

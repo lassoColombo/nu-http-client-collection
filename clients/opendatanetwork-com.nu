@@ -95,6 +95,8 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def format-completer [] { ["google"] }
+def relation-completer [] { ["child" "parent" "peer" "sibling"] }
+def type-completer [] { ["category" "dataset" "entity" "publisher" "question"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -133,12 +135,13 @@ export def "find-all-available-data-for-some-entities" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --entity-id: string # Comma separated list of entity IDs. (e.g. 0100000US,0400000US53)
+  --entity-id: string # Comma separated list of entity IDs. (required, e.g. 0100000US,0400000US53)
   --app-token: string # The [Socrata App Token](https://dev.socrata.com/docs/app-tokens.html) to be used with your request. The `app_token` parameter is required if an app token is not passed via the `X-App-Token` HTTP header. Clients must [register for their own app tokens](https://dev.socrata.com/docs/app-tokens.html). (e.g. cQovpGcdUT1CSzgYk0KPYdAI0)
   --x-app-token: string # e.g. cQovpGcdUT1CSzgYk0KPYdAI0 (e.g. cQovpGcdUT1CSzgYk0KPYdAI0)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($entity_id == null) { error make --unspanned { msg: "required query parameter 'entity_id' missing: pass --entity-id" } }
   let qp = [(serialize-qp "entity_id" $entity_id "scalar") (serialize-qp "app_token" $app_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/data/v1/availability/" $qp $auth.query)
   let accept_val = "application/json"
@@ -174,14 +177,16 @@ export def "get-constraint-permutations-for-entities" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --entity-id: string # Comma separated list of entity IDs. (e.g. 0100000US,0400000US53)
-  --constraint: string # Constraint to use. (e.g. year)
+  --entity-id: string # Comma separated list of entity IDs. (required, e.g. 0100000US,0400000US53)
+  --constraint: string # Constraint to use. (required, e.g. year)
   --app-token: string # The [Socrata App Token](https://dev.socrata.com/docs/app-tokens.html) to be used with your request. The `app_token` parameter is required if an app token is not passed via the `X-App-Token` HTTP header. Clients must [register for their own app tokens](https://dev.socrata.com/docs/app-tokens.html). (e.g. cQovpGcdUT1CSzgYk0KPYdAI0)
   --x-app-token: string # e.g. cQovpGcdUT1CSzgYk0KPYdAI0 (e.g. cQovpGcdUT1CSzgYk0KPYdAI0)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($variable | is-empty) { error make --unspanned { msg: "path parameter 'variable' must be non-empty" } }
+  if ($entity_id == null) { error make --unspanned { msg: "required query parameter 'entity_id' missing: pass --entity-id" } }
+  if ($constraint == null) { error make --unspanned { msg: "required query parameter 'constraint' missing: pass --constraint" } }
   let qp = [(serialize-qp "entity_id" $entity_id "scalar") (serialize-qp "constraint" $constraint "scalar") (serialize-qp "app_token" $app_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({variable: (encode-path-segment $variable)} | format pattern "/data/v1/constraint/{variable}") $qp $auth.query)
   let accept_val = "application/json"
@@ -216,14 +221,16 @@ export def "create-a-map" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --variable: string # A single variable ID. (e.g. demographics.population.count)
-  --entity-id: string # A comma separated list of entity IDs. Entities must have the same type and represent geographical regions. (e.g. 0400000US53,0400000US08)
+  --variable: string # A single variable ID. (required, e.g. demographics.population.count)
+  --entity-id: string # A comma separated list of entity IDs. Entities must have the same type and represent geographical regions. (required, e.g. 0400000US53,0400000US08)
   --constraint: string # Values must be specified for each constraint in the dataset. For example, to generate map data for `demographics.population.count`, you must specify a value for `year` by passing `year=2013`.
   --app-token: string # The [Socrata App Token](https://dev.socrata.com/docs/app-tokens.html) to be used with your request. The `app_token` parameter is required if an app token is not passed via the `X-App-Token` HTTP header. Clients must [register for their own app tokens](https://dev.socrata.com/docs/app-tokens.html). (e.g. cQovpGcdUT1CSzgYk0KPYdAI0)
   --x-app-token: string # e.g. cQovpGcdUT1CSzgYk0KPYdAI0 (e.g. cQovpGcdUT1CSzgYk0KPYdAI0)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($variable == null) { error make --unspanned { msg: "required query parameter 'variable' missing: pass --variable" } }
+  if ($entity_id == null) { error make --unspanned { msg: "required query parameter 'entity_id' missing: pass --entity-id" } }
   let qp = [(serialize-qp "variable" $variable "scalar") (serialize-qp "entity_id" $entity_id "scalar") (serialize-qp "constraint" $constraint "scalar") (serialize-qp "app_token" $app_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/data/v1/map/new" $qp $auth.query)
   let accept_val = "application/json"
@@ -258,7 +265,7 @@ export def "get-values-for-variables" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --variable: string # Comma separated list of variable IDs. Defaults to retrieving all variables. It is also possible to pass in a topic such as `demographics`, or a dataset such as `demographics.population`, which would both be equivalent to specifying `demographics.population.count` and `demographics.population.change`. Note that only variables in the same dataset are allowed. (e.g. demographics.population.count)
+  --variable: string # Comma separated list of variable IDs. Defaults to retrieving all variables. It is also possible to pass in a topic such as `demographics`, or a dataset such as `demographics.population`, which would both be equivalent to specifying `demographics.population.count` and `demographics.population.change`. Note that only variables in the same dataset are allowed. (required, e.g. demographics.population.count)
   --entity-id: string # Comma separated list of entity IDs. Defaults to retrieving all entities. Note that since there is currently no results pagination, retrieving values for all entities may produce incomplete results. (e.g. 0100000US,0400000US53)
   --forecast: float # Number of steps to forecast. Must be an integer between 0 and 20. Forecasts are produced using linear extrapolation on the data. They are only available when retrieving data for a single variable across many numerical constraint options. + Default `0` (e.g. 3)
   --describe: oneof<nothing, bool> # Whether or not to produce a description of the data. Set to `true` to produce a description. Descriptions are not available if no entities are specified. + Default `false` (e.g. false)
@@ -268,6 +275,7 @@ export def "get-values-for-variables" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($variable == null) { error make --unspanned { msg: "required query parameter 'variable' missing: pass --variable" } }
   let qp = [(serialize-qp "variable" $variable "scalar") (serialize-qp "entity_id" $entity_id "scalar") (serialize-qp "forecast" $forecast "scalar") (serialize-qp "describe" $describe "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "app_token" $app_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/data/v1/values" $qp $auth.query)
   let accept_val = "application/json"
@@ -335,7 +343,7 @@ export def "get-entities" [
 # GET /entity/v1/{relation}
 # operationId: Find the relatives of an entity
 export def "find-the-relatives-of-an-entity" [
-  relation: string
+  relation: string@relation-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -345,7 +353,7 @@ export def "find-the-relatives-of-an-entity" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --entity-id: string # ID of the target entity. (e.g. 0400000US53)
+  --entity-id: string # ID of the target entity. (required, e.g. 0400000US53)
   --variable-id: string # If this parameter is included, only entities with data for the given variable will be returned. Note that this may cause the number of entities returned to be less than the specified `limit`. (e.g. demographics.population.seattle)
   --limit: float # Maximum number of entities in each group. Must be an integer from 1 to 1000. (default: 10)
   --app-token: string # The [Socrata App Token](https://dev.socrata.com/docs/app-tokens.html) to be used with your request. The `app_token` parameter is required if an app token is not passed via the `X-App-Token` HTTP header. Clients must [register for their own app tokens](https://dev.socrata.com/docs/app-tokens.html). (e.g. cQovpGcdUT1CSzgYk0KPYdAI0)
@@ -354,6 +362,7 @@ export def "find-the-relatives-of-an-entity" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($relation | is-empty) { error make --unspanned { msg: "path parameter 'relation' must be non-empty" } }
+  if ($entity_id == null) { error make --unspanned { msg: "required query parameter 'entity_id' missing: pass --entity-id" } }
   let qp = [(serialize-qp "entity_id" $entity_id "scalar") (serialize-qp "variable_id" $variable_id "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "app_token" $app_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({relation: (encode-path-segment $relation)} | format pattern "/entity/v1/{relation}") $qp $auth.query)
   let accept_val = "application/json"
@@ -431,7 +440,7 @@ export def "get-questions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query: string # String to search against. (e.g. seattle)
+  --query: string # String to search against. (required, e.g. seattle)
   --limit: float # Maximum number of results to return. Must be an integer from 0 to 50000. (default: 10)
   --offset: float # Number of results to skip. Used for pagination.
   --app-token: string # The [Socrata App Token](https://dev.socrata.com/docs/app-tokens.html) to be used with your request. The `app_token` parameter is required if an app token is not passed via the `X-App-Token` HTTP header. Clients must [register for their own app tokens](https://dev.socrata.com/docs/app-tokens.html). (e.g. cQovpGcdUT1CSzgYk0KPYdAI0)
@@ -439,6 +448,7 @@ export def "get-questions" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "app_token" $app_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search/v1/question" $qp $auth.query)
   let accept_val = "application/json"
@@ -464,7 +474,7 @@ export def "get-questions" [
 # GET /suggest/v1/{type}
 # operationId: Get suggestions
 export def "get-suggestions" [
-  type: string
+  type: string@type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -474,7 +484,7 @@ export def "get-suggestions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query: string # Query to match. (e.g. seattl)
+  --query: string # Query to match. (required, e.g. seattl)
   --limit: float # Maximum number of results to return. Must be an integer from 0 to 100. (default: 5)
   --variable-id: string # This parameter is only available when suggesting entities with `type=entity`. If it is provided, suggestions will be filtered to include only entities that have data for the given variable. If the variable provided is invalid, no entities will be returned. Note that this filtering will increase response time significantly, so it should only be used when necessary. (e.g. demographics.population.count)
   --app-token: string # The [Socrata App Token](https://dev.socrata.com/docs/app-tokens.html) to be used with your request. The `app_token` parameter is required if an app token is not passed via the `X-App-Token` HTTP header. Clients must [register for their own app tokens](https://dev.socrata.com/docs/app-tokens.html). (e.g. cQovpGcdUT1CSzgYk0KPYdAI0)
@@ -483,6 +493,7 @@ export def "get-suggestions" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "variable_id" $variable_id "scalar") (serialize-qp "app_token" $app_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/suggest/v1/{type}") $qp $auth.query)
   let accept_val = "application/json"

@@ -13,7 +13,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "query-auth-token" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "auth-token")=(encode-path-segment $token_val)", location: "query"} }
-    "auth-token" => { {scheme: $scheme, headers: {auth-token: $token_val}, query: "", location: "header"} }
+    "auth-token" => { {scheme: $scheme, headers: {"auth-token": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -417,10 +417,11 @@ export def "get-comments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --case-id: int # case_id
+  --case-id: int # case_id (required)
 ]: nothing -> table<created_at: string, feature_id: int, is_private: bool, text: string, updated_at: string, user_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($case_id == null) { error make --unspanned { msg: "required query parameter 'case_id' missing: pass --case-id" } }
   let qp = [(serialize-qp "case_id" $case_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/comments" $qp $auth.query)
   let accept_val = "application/json"
@@ -746,14 +747,16 @@ export def "get-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --scope: string@scope-completer # Specifies the type of entity being searched for. Must be set to 'feature'
-  --q: string # The search term.
+  --scope: string@scope-completer # Specifies the type of entity being searched for. Must be set to 'feature' (required)
+  --q: string # The search term. (required)
   --status: string@status-completer-1 # A comma seperated list of status values to filter by, if required. Valid values: 'new', 'waiting', 'planned', 'developing', 'released', 'declined'.
   --tags: string # Tags to limit results by - only applies when scope is 'case' or 'feature'. Multiple tags can be provided via comma delimeted string. Tags with contexts can be used. E.g. "....&tags=TagExample,Multi:TagThis,Multi:TagThat".
   --products: string # Products to limit results by. Comma delimeted string of either ids or names. E.g. "...&products=1,2,3" or "...products=Product1,Product2".
 ]: nothing -> table<app_url: string, created_at: string, created_by_user_id: int, declined_at: string, description: string, developing_at: string, effort: int, form_entry: string, id: float, is_private: bool, merged_to_feature_id: int, planned_at: string, products: list<string>, released_at: string, resolution: string, resolved_by_user_id: int, status: string, status_changed_at: string, tags: any, title: string, updated_at: string, updated_by_user_id: int, uploads: list<string>, vendor_id: int, view_count: int, waiting_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
+  let scope = ($scope | default "feature")
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
   let qp = [(serialize-qp "scope" $scope "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "products" $products "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search" $qp $auth.query)
   let accept_val = "application/json"
@@ -785,7 +788,7 @@ export def "get-users" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --role: string@role-completer # role
+  --role: string@role-completer # role (required)
   --account: int # Filter by Account ID, if supplied. Only useful if role param is endUser
   --start: int # Offset to start at (default: 0)
   --limit: int # Limit the number of records returned. Max value can be 300. If limit is set to more than 300 the api will return an error (default: 300)
@@ -794,6 +797,7 @@ export def "get-users" [
 ]: nothing -> table<account: record<id: string, monthly_value: float, name: string, status: string>, created_at: string, email: string, external_id: string, id: string, name: string, roles: string> {
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($role == null) { error make --unspanned { msg: "required query parameter 'role' missing: pass --role" } }
   let qp = [(serialize-qp "role" $role "scalar") (serialize-qp "account" $account "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "order_dir" $order_dir "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users" $qp $auth.query)
   let accept_val = "application/json"

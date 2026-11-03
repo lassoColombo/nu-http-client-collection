@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -138,15 +138,16 @@ export def "get-employees" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-where: string # Filter by an any element (e.g. Status=="ACTIVE")
+  --where: string # Filter by an any element (e.g. Status=="ACTIVE")
   --order: string # Order by an any element (e.g. EmailAddress%20DESC)
   --page: int # e.g. page=1 – Up to 100 employees will be returned in a single API call
-  --xero-tenant-id: string # Xero identifier for Tenant
+  --xero-tenant-id: string # Xero identifier for Tenant (required)
   --if-modified-since: string # Only records created or modified since this timestamp will be returned
 ]: nothing -> record<Employees: table<BankAccounts: list, Classification: string, DateOfBirth: string, Email: string, EmployeeGroupName: string, EmployeeID: string, FirstName: string, Gender: string, HomeAddress: record, IsAuthorisedToApproveLeave: bool, IsAuthorisedToApproveTimesheets: bool, JobTitle: string, LastName: string, LeaveBalances: list, LeaveLines: list, MiddleNames: string, Mobile: string, OpeningBalances: record, OrdinaryEarningsRateID: string, PayTemplate: record, PayrollCalendarID: string, Phone: string, StartDate: string, Status: string, SuperMemberships: list, TaxDeclaration: record, TerminationDate: string, Title: string, TwitterUserName: string, UpdatedDateUTC: string, ValidationErrors: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'Xero-Tenant-Id' missing: pass --xero-tenant-id" } }
+  let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Employees" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -155,7 +156,7 @@ export def "get-employees" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"where": $qp_where, "order": $order, "page": $page} | compact)
+    query: ({"where": $where, "order": $order, "page": $page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -180,12 +181,13 @@ export def "create-employee" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant
+  --xero-tenant-id: string # Xero identifier for Tenant (required)
   --body: list
 ]: any -> record<Employees: table<BankAccounts: list, Classification: string, DateOfBirth: string, Email: string, EmployeeGroupName: string, EmployeeID: string, FirstName: string, Gender: string, HomeAddress: record, IsAuthorisedToApproveLeave: bool, IsAuthorisedToApproveTimesheets: bool, JobTitle: string, LastName: string, LeaveBalances: list, LeaveLines: list, MiddleNames: string, Mobile: string, OpeningBalances: record, OrdinaryEarningsRateID: string, PayTemplate: record, PayrollCalendarID: string, Phone: string, StartDate: string, Status: string, SuperMemberships: list, TaxDeclaration: record, TerminationDate: string, Title: string, TwitterUserName: string, UpdatedDateUTC: string, ValidationErrors: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'Xero-Tenant-Id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base "/Employees" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -222,11 +224,12 @@ export def "get-employee" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant
+  --xero-tenant-id: string # Xero identifier for Tenant (required)
 ]: nothing -> record<Employees: table<BankAccounts: list, Classification: string, DateOfBirth: string, Email: string, EmployeeGroupName: string, EmployeeID: string, FirstName: string, Gender: string, HomeAddress: record, IsAuthorisedToApproveLeave: bool, IsAuthorisedToApproveTimesheets: bool, JobTitle: string, LastName: string, LeaveBalances: list, LeaveLines: list, MiddleNames: string, Mobile: string, OpeningBalances: record, OrdinaryEarningsRateID: string, PayTemplate: record, PayrollCalendarID: string, Phone: string, StartDate: string, Status: string, SuperMemberships: list, TaxDeclaration: record, TerminationDate: string, Title: string, TwitterUserName: string, UpdatedDateUTC: string, ValidationErrors: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployeeID' must be non-empty" } }
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'Xero-Tenant-Id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/Employees/{employee_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -261,13 +264,14 @@ export def "update-employee" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant
+  --xero-tenant-id: string # Xero identifier for Tenant (required)
   --body: list
 ]: any -> record<Employees: table<BankAccounts: list, Classification: string, DateOfBirth: string, Email: string, EmployeeGroupName: string, EmployeeID: string, FirstName: string, Gender: string, HomeAddress: record, IsAuthorisedToApproveLeave: bool, IsAuthorisedToApproveTimesheets: bool, JobTitle: string, LastName: string, LeaveBalances: list, LeaveLines: list, MiddleNames: string, Mobile: string, OpeningBalances: record, OrdinaryEarningsRateID: string, PayTemplate: record, PayrollCalendarID: string, Phone: string, StartDate: string, Status: string, SuperMemberships: list, TaxDeclaration: record, TerminationDate: string, Title: string, TwitterUserName: string, UpdatedDateUTC: string, ValidationErrors: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployeeID' must be non-empty" } }
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'Xero-Tenant-Id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/Employees/{employee_id}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -303,15 +307,16 @@ export def "get-leave-applications" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-where: string # Filter by an any element (e.g. Status=="ACTIVE")
+  --where: string # Filter by an any element (e.g. Status=="ACTIVE")
   --order: string # Order by an any element (e.g. EmailAddress%20DESC)
   --page: int # e.g. page=1 – Up to 100 objects will be returned in a single API call
-  --xero-tenant-id: string # Xero identifier for Tenant
+  --xero-tenant-id: string # Xero identifier for Tenant (required)
   --if-modified-since: string # Only records created or modified since this timestamp will be returned
 ]: nothing -> record<LeaveApplications: table<Description: string, EmployeeID: string, EndDate: string, LeaveApplicationID: string, LeavePeriods: list, LeaveTypeID: string, StartDate: string, Title: string, UpdatedDateUTC: string, ValidationErrors: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'Xero-Tenant-Id' missing: pass --xero-tenant-id" } }
+  let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/LeaveApplications" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -320,7 +325,7 @@ export def "get-leave-applications" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"where": $qp_where, "order": $order, "page": $page} | compact)
+    query: ({"where": $where, "order": $order, "page": $page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -345,12 +350,13 @@ export def "create-leave-application" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant
+  --xero-tenant-id: string # Xero identifier for Tenant (required)
   --body: list
 ]: any -> record<LeaveApplications: table<Description: string, EmployeeID: string, EndDate: string, LeaveApplicationID: string, LeavePeriods: list, LeaveTypeID: string, StartDate: string, Title: string, UpdatedDateUTC: string, ValidationErrors: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'Xero-Tenant-Id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base "/LeaveApplications" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -387,11 +393,12 @@ export def "get-leave-application" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant
+  --xero-tenant-id: string # Xero identifier for Tenant (required)
 ]: nothing -> record<LeaveApplications: table<Description: string, EmployeeID: string, EndDate: string, LeaveApplicationID: string, LeavePeriods: list, LeaveTypeID: string, StartDate: string, Title: string, UpdatedDateUTC: string, ValidationErrors: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($leave_application_id | is-empty) { error make --unspanned { msg: "path parameter 'LeaveApplicationID' must be non-empty" } }
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'Xero-Tenant-Id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({leave_application_id: (encode-path-segment $leave_application_id)} | format pattern "/LeaveApplications/{leave_application_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -426,13 +433,14 @@ export def "update-leave-application" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant
+  --xero-tenant-id: string # Xero identifier for Tenant (required)
   --body: list
 ]: any -> record<LeaveApplications: table<Description: string, EmployeeID: string, EndDate: string, LeaveApplicationID: string, LeavePeriods: list, LeaveTypeID: string, StartDate: string, Title: string, UpdatedDateUTC: string, ValidationErrors: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($leave_application_id | is-empty) { error make --unspanned { msg: "path parameter 'LeaveApplicationID' must be non-empty" } }
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'Xero-Tenant-Id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({leave_application_id: (encode-path-segment $leave_application_id)} | format pattern "/LeaveApplications/{leave_application_id}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -468,15 +476,16 @@ export def "get-pay-items" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-where: string # Filter by an any element (e.g. Status=="ACTIVE")
+  --where: string # Filter by an any element (e.g. Status=="ACTIVE")
   --order: string # Order by an any element (e.g. EmailAddress%20DESC)
   --page: int # e.g. page=1 – Up to 100 objects will be returned in a single API call
-  --xero-tenant-id: string # Xero identifier for Tenant
+  --xero-tenant-id: string # Xero identifier for Tenant (required)
   --if-modified-since: string # Only records created or modified since this timestamp will be returned
 ]: nothing -> record<PayItems: record<DeductionTypes: list<record>, EarningsRates: list<record>, LeaveTypes: list<record>, ReimbursementTypes: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'Xero-Tenant-Id' missing: pass --xero-tenant-id" } }
+  let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/PayItems" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -485,7 +494,7 @@ export def "get-pay-items" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"where": $qp_where, "order": $order, "page": $page} | compact)
+    query: ({"where": $where, "order": $order, "page": $page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -514,7 +523,7 @@ export def "create-pay-item" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant
+  --xero-tenant-id: string # Xero identifier for Tenant (required)
   --deduction-types: list # item shape: {AccountCode?: string, CurrentRecord?: bool, DeductionCategory?: "NONE"|"UNIONFEES"|"WORKPLACEGIVING", DeductionTypeID?: string, IsExemptFromW1?: bool, Name?: string, ReducesSuper?: bool, ReducesTax?: bool}
   --earnings-rates: list # item shape: {AccountCode?: string, AccrueLeave?: bool, AllowanceType?: "CAR"|"TRANSPORT"|"TRAVEL"|"LAUNDRY"|"MEALS"|"JOBKEEPER"|"OTHER", Amount?: float, CurrentRecord?: bool, EarningsRateID?: string, EarningsType?: "FIXED"|"ORDINARYTIMEEARNINGS"|"OVERTIMEEARNINGS"|"ALLOWANCE"|"LUMPSUMD"|"EMPLOYMENTTERMINATIONPAYMENT"|"LUMPSUMA"|"LUMPSUMB"|"BONUSESANDCOMMISSIONS"|"LUMPSUME", EmploymentTerminationPaymentType?: "O"|"R", IsExemptFromSuper?: bool, IsExemptFromTax?: bool, IsReportableAsW1?: bool, ... (5 more fields)}
   --leave-types: list # item shape: {CurrentRecord?: bool, IsPaidLeave?: bool, LeaveLoadingRate?: float, LeaveTypeID?: string, Name?: string, NormalEntitlement?: float, ShowOnPayslip?: bool, TypeOfUnits?: string}
@@ -523,6 +532,7 @@ export def "create-pay-item" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'Xero-Tenant-Id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base "/PayItems" $auth.query)
   let req_body = {"DeductionTypes": $deduction_types, "EarningsRates": $earnings_rates, "LeaveTypes": $leave_types, "ReimbursementTypes": $reimbursement_types} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -558,15 +568,16 @@ export def "get-pay-runs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-where: string # Filter by an any element (e.g. Status=="ACTIVE")
+  --where: string # Filter by an any element (e.g. Status=="ACTIVE")
   --order: string # Order by an any element (e.g. EmailAddress%20DESC)
   --page: int # e.g. page=1 – Up to 100 PayRuns will be returned in a single API call
-  --xero-tenant-id: string # Xero identifier for Tenant
+  --xero-tenant-id: string # Xero identifier for Tenant (required)
   --if-modified-since: string # Only records created or modified since this timestamp will be returned
 ]: nothing -> record<PayRuns: table<Deductions: float, NetPay: float, PayRunID: string, PayRunPeriodEndDate: string, PayRunPeriodStartDate: string, PayRunStatus: string, PaymentDate: string, PayrollCalendarID: string, PayslipMessage: string, Payslips: list, Reimbursement: float, Super: float, Tax: float, UpdatedDateUTC: string, ValidationErrors: list, Wages: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'Xero-Tenant-Id' missing: pass --xero-tenant-id" } }
+  let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/PayRuns" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -575,7 +586,7 @@ export def "get-pay-runs" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"where": $qp_where, "order": $order, "page": $page} | compact)
+    query: ({"where": $where, "order": $order, "page": $page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -600,12 +611,13 @@ export def "create-pay-run" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant
+  --xero-tenant-id: string # Xero identifier for Tenant (required)
   --body: list
 ]: any -> record<PayRuns: table<Deductions: float, NetPay: float, PayRunID: string, PayRunPeriodEndDate: string, PayRunPeriodStartDate: string, PayRunStatus: string, PaymentDate: string, PayrollCalendarID: string, PayslipMessage: string, Payslips: list, Reimbursement: float, Super: float, Tax: float, UpdatedDateUTC: string, ValidationErrors: list, Wages: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'Xero-Tenant-Id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base "/PayRuns" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -642,11 +654,12 @@ export def "get-pay-run" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant
+  --xero-tenant-id: string # Xero identifier for Tenant (required)
 ]: nothing -> record<PayRuns: table<Deductions: float, NetPay: float, PayRunID: string, PayRunPeriodEndDate: string, PayRunPeriodStartDate: string, PayRunStatus: string, PaymentDate: string, PayrollCalendarID: string, PayslipMessage: string, Payslips: list, Reimbursement: float, Super: float, Tax: float, UpdatedDateUTC: string, ValidationErrors: list, Wages: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pay_run_id | is-empty) { error make --unspanned { msg: "path parameter 'PayRunID' must be non-empty" } }
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'Xero-Tenant-Id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({pay_run_id: (encode-path-segment $pay_run_id)} | format pattern "/PayRuns/{pay_run_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -681,13 +694,14 @@ export def "update-pay-run" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant
+  --xero-tenant-id: string # Xero identifier for Tenant (required)
   --body: list
 ]: any -> record<PayRuns: table<Deductions: float, NetPay: float, PayRunID: string, PayRunPeriodEndDate: string, PayRunPeriodStartDate: string, PayRunStatus: string, PaymentDate: string, PayrollCalendarID: string, PayslipMessage: string, Payslips: list, Reimbursement: float, Super: float, Tax: float, UpdatedDateUTC: string, ValidationErrors: list, Wages: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pay_run_id | is-empty) { error make --unspanned { msg: "path parameter 'PayRunID' must be non-empty" } }
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'Xero-Tenant-Id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({pay_run_id: (encode-path-segment $pay_run_id)} | format pattern "/PayRuns/{pay_run_id}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -723,15 +737,16 @@ export def "get-payroll-calendars" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-where: string # Filter by an any element (e.g. Status=="ACTIVE")
+  --where: string # Filter by an any element (e.g. Status=="ACTIVE")
   --order: string # Order by an any element (e.g. EmailAddress%20DESC)
   --page: int # e.g. page=1 – Up to 100 objects will be returned in a single API call
-  --xero-tenant-id: string # Xero identifier for Tenant
+  --xero-tenant-id: string # Xero identifier for Tenant (required)
   --if-modified-since: string # Only records created or modified since this timestamp will be returned
 ]: nothing -> record<PayrollCalendars: table<CalendarType: string, Name: string, PaymentDate: string, PayrollCalendarID: string, StartDate: string, UpdatedDateUTC: string, ValidationErrors: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'Xero-Tenant-Id' missing: pass --xero-tenant-id" } }
+  let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/PayrollCalendars" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -740,7 +755,7 @@ export def "get-payroll-calendars" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"where": $qp_where, "order": $order, "page": $page} | compact)
+    query: ({"where": $where, "order": $order, "page": $page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -765,12 +780,13 @@ export def "create-payroll-calendar" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant
+  --xero-tenant-id: string # Xero identifier for Tenant (required)
   --body: list
 ]: any -> record<PayrollCalendars: table<CalendarType: string, Name: string, PaymentDate: string, PayrollCalendarID: string, StartDate: string, UpdatedDateUTC: string, ValidationErrors: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'Xero-Tenant-Id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base "/PayrollCalendars" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -807,11 +823,12 @@ export def "get-payroll-calendar" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant
+  --xero-tenant-id: string # Xero identifier for Tenant (required)
 ]: nothing -> record<PayrollCalendars: table<CalendarType: string, Name: string, PaymentDate: string, PayrollCalendarID: string, StartDate: string, UpdatedDateUTC: string, ValidationErrors: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payroll_calendar_id | is-empty) { error make --unspanned { msg: "path parameter 'PayrollCalendarID' must be non-empty" } }
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'Xero-Tenant-Id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({payroll_calendar_id: (encode-path-segment $payroll_calendar_id)} | format pattern "/PayrollCalendars/{payroll_calendar_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -846,11 +863,12 @@ export def "get-payslip" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant
+  --xero-tenant-id: string # Xero identifier for Tenant (required)
 ]: nothing -> record<Payslip: record<DeductionLines: list<record>, Deductions: float, EarningsLines: list<record>, EmployeeID: string, FirstName: string, LastName: string, LeaveAccrualLines: list<record>, LeaveEarningsLines: list<record>, NetPay: float, PayslipID: string, ReimbursementLines: list<record>, Reimbursements: float, Super: float, SuperannuationLines: list<record>, Tax: float, TaxLines: list<record>, TimesheetEarningsLines: list<record>, UpdatedDateUTC: string, Wages: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payslip_id | is-empty) { error make --unspanned { msg: "path parameter 'PayslipID' must be non-empty" } }
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'Xero-Tenant-Id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({payslip_id: (encode-path-segment $payslip_id)} | format pattern "/Payslip/{payslip_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -885,13 +903,14 @@ export def "update-payslip" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant
+  --xero-tenant-id: string # Xero identifier for Tenant (required)
   --body: list
 ]: any -> record<Payslips: table<DeductionLines: list, Deductions: float, EarningsLines: list, EmployeeID: string, FirstName: string, LastName: string, LeaveAccrualLines: list, LeaveEarningsLines: list, NetPay: float, PayslipID: string, ReimbursementLines: list, Reimbursements: float, Super: float, SuperannuationLines: list, Tax: float, TaxLines: list, TimesheetEarningsLines: list, UpdatedDateUTC: string, Wages: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payslip_id | is-empty) { error make --unspanned { msg: "path parameter 'PayslipID' must be non-empty" } }
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'Xero-Tenant-Id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({payslip_id: (encode-path-segment $payslip_id)} | format pattern "/Payslip/{payslip_id}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -927,10 +946,11 @@ export def "get-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant
+  --xero-tenant-id: string # Xero identifier for Tenant (required)
 ]: nothing -> record<Settings: record<Accounts: list<record>, DaysInPayrollYear: int, TrackingCategories: record<EmployeeGroups: record, TimesheetCategories: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'Xero-Tenant-Id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base "/Settings" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -966,10 +986,11 @@ export def "get-superfund-products" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --abn: string # The ABN of the Regulated SuperFund (e.g. 40022701955)
   --usi: string # The USI of the Regulated SuperFund (e.g. OSF0001AU)
-  --xero-tenant-id: string # Xero identifier for Tenant
+  --xero-tenant-id: string # Xero identifier for Tenant (required)
 ]: nothing -> record<SuperFundProducts: table<ABN: string, ProductName: string, SPIN: string, USI: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'Xero-Tenant-Id' missing: pass --xero-tenant-id" } }
   let qp = [(serialize-qp "ABN" $abn "scalar") (serialize-qp "USI" $usi "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/SuperfundProducts" $qp $auth.query)
   let accept_val = "application/json"
@@ -1004,15 +1025,16 @@ export def "get-superfunds" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-where: string # Filter by an any element (e.g. Status=="ACTIVE")
+  --where: string # Filter by an any element (e.g. Status=="ACTIVE")
   --order: string # Order by an any element (e.g. EmailAddress%20DESC)
   --page: int # e.g. page=1 – Up to 100 SuperFunds will be returned in a single API call
-  --xero-tenant-id: string # Xero identifier for Tenant
+  --xero-tenant-id: string # Xero identifier for Tenant (required)
   --if-modified-since: string # Only records created or modified since this timestamp will be returned
 ]: nothing -> record<SuperFunds: table<ABN: string, AccountName: string, AccountNumber: string, BSB: string, ElectronicServiceAddress: string, EmployerNumber: string, Name: string, SPIN: string, SuperFundID: string, Type: string, USI: string, UpdatedDateUTC: string, ValidationErrors: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'Xero-Tenant-Id' missing: pass --xero-tenant-id" } }
+  let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Superfunds" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1021,7 +1043,7 @@ export def "get-superfunds" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"where": $qp_where, "order": $order, "page": $page} | compact)
+    query: ({"where": $where, "order": $order, "page": $page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1046,12 +1068,13 @@ export def "create-superfund" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant
+  --xero-tenant-id: string # Xero identifier for Tenant (required)
   --body: list
 ]: any -> record<SuperFunds: table<ABN: string, AccountName: string, AccountNumber: string, BSB: string, ElectronicServiceAddress: string, EmployerNumber: string, Name: string, SPIN: string, SuperFundID: string, Type: string, USI: string, UpdatedDateUTC: string, ValidationErrors: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'Xero-Tenant-Id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base "/Superfunds" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -1088,11 +1111,12 @@ export def "get-superfund" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant
+  --xero-tenant-id: string # Xero identifier for Tenant (required)
 ]: nothing -> record<SuperFunds: table<ABN: string, AccountName: string, AccountNumber: string, BSB: string, ElectronicServiceAddress: string, EmployerNumber: string, Name: string, SPIN: string, SuperFundID: string, Type: string, USI: string, UpdatedDateUTC: string, ValidationErrors: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($super_fund_id | is-empty) { error make --unspanned { msg: "path parameter 'SuperFundID' must be non-empty" } }
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'Xero-Tenant-Id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({super_fund_id: (encode-path-segment $super_fund_id)} | format pattern "/Superfunds/{super_fund_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1127,13 +1151,14 @@ export def "update-superfund" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant
+  --xero-tenant-id: string # Xero identifier for Tenant (required)
   --body: list
 ]: any -> record<SuperFunds: table<ABN: string, AccountName: string, AccountNumber: string, BSB: string, ElectronicServiceAddress: string, EmployerNumber: string, Name: string, SPIN: string, SuperFundID: string, Type: string, USI: string, UpdatedDateUTC: string, ValidationErrors: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($super_fund_id | is-empty) { error make --unspanned { msg: "path parameter 'SuperFundID' must be non-empty" } }
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'Xero-Tenant-Id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({super_fund_id: (encode-path-segment $super_fund_id)} | format pattern "/Superfunds/{super_fund_id}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -1169,15 +1194,16 @@ export def "get-timesheets" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-where: string # Filter by an any element (e.g. Status=="ACTIVE")
+  --where: string # Filter by an any element (e.g. Status=="ACTIVE")
   --order: string # Order by an any element (e.g. EmailAddress%20DESC)
   --page: int # e.g. page=1 – Up to 100 timesheets will be returned in a single API call
-  --xero-tenant-id: string # Xero identifier for Tenant
+  --xero-tenant-id: string # Xero identifier for Tenant (required)
   --if-modified-since: string # Only records created or modified since this timestamp will be returned
 ]: nothing -> record<Timesheets: table<EmployeeID: string, EndDate: string, Hours: float, StartDate: string, Status: string, TimesheetID: string, TimesheetLines: list, UpdatedDateUTC: string, ValidationErrors: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'Xero-Tenant-Id' missing: pass --xero-tenant-id" } }
+  let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Timesheets" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1186,7 +1212,7 @@ export def "get-timesheets" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"where": $qp_where, "order": $order, "page": $page} | compact)
+    query: ({"where": $where, "order": $order, "page": $page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1211,12 +1237,13 @@ export def "create-timesheet" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant
+  --xero-tenant-id: string # Xero identifier for Tenant (required)
   --body: list
 ]: any -> record<Timesheets: table<EmployeeID: string, EndDate: string, Hours: float, StartDate: string, Status: string, TimesheetID: string, TimesheetLines: list, UpdatedDateUTC: string, ValidationErrors: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'Xero-Tenant-Id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base "/Timesheets" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -1253,11 +1280,12 @@ export def "get-timesheet" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant
+  --xero-tenant-id: string # Xero identifier for Tenant (required)
 ]: nothing -> record<Timesheet: record<EmployeeID: string, EndDate: string, Hours: float, StartDate: string, Status: string, TimesheetID: string, TimesheetLines: list<record>, UpdatedDateUTC: string, ValidationErrors: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($timesheet_id | is-empty) { error make --unspanned { msg: "path parameter 'TimesheetID' must be non-empty" } }
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'Xero-Tenant-Id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({timesheet_id: (encode-path-segment $timesheet_id)} | format pattern "/Timesheets/{timesheet_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1292,13 +1320,14 @@ export def "update-timesheet" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant
+  --xero-tenant-id: string # Xero identifier for Tenant (required)
   --body: list
 ]: any -> record<Timesheets: table<EmployeeID: string, EndDate: string, Hours: float, StartDate: string, Status: string, TimesheetID: string, TimesheetLines: list, UpdatedDateUTC: string, ValidationErrors: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($timesheet_id | is-empty) { error make --unspanned { msg: "path parameter 'TimesheetID' must be non-empty" } }
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'Xero-Tenant-Id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({timesheet_id: (encode-path-segment $timesheet_id)} | format pattern "/Timesheets/{timesheet_id}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-jokesone-api-secret" => { {scheme: $scheme, headers: {X-JokesOne-Api-Secret: $token_val}, query: "", location: "header"} }
+    "x-jokesone-api-secret" => { {scheme: $scheme, headers: {"X-JokesOne-Api-Secret": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -228,10 +228,11 @@ export def "delete-joke" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --id: string # Joke ID (format: string)
+  --id: string # Joke ID (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-jokesone-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/joke" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -300,7 +301,7 @@ export def "patch-joke" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --id: string # Joke ID (format: string)
+  --id: string # Joke ID (required, format: string)
   --title: string # title (format: string)
   --text: string # text (format: string)
   --author: string # Joke Author (format: string)
@@ -308,6 +309,7 @@ export def "patch-joke" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-jokesone-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "tags" $tags "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/joke" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -340,13 +342,15 @@ export def "put-joke" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --title: string # Joke Title (format: string)
-  --text: string # Joke Text (format: string)
+  --title: string # Joke Title (required, format: string)
+  --text: string # Joke Text (required, format: string)
   --author: string # Joke Author (format: string)
   --tags: string # Comma Separated tags (format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-jokesone-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($title == null) { error make --unspanned { msg: "required query parameter 'title' missing: pass --title" } }
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
   let qp = [(serialize-qp "title" $title "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "tags" $tags "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/joke" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -379,11 +383,12 @@ export def "get-joke-categories-search" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --query: string # Search Query (format: string)
+  --query: string # Search Query (required, format: string)
   --start: int # Response is paged. This parameter controls where response starts the listing at (format: int32, default: 0)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-jokesone-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "start" $start "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/joke/categories/search" $qp $auth.query)
   let accept_val = ($accept | default "application/xml")
@@ -527,11 +532,13 @@ export def "post-joke-tags-add" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --id: string # Joke ID (format: string)
-  --tags: string # Comma Separated tags (format: string)
+  --id: string # Joke ID (required, format: string)
+  --tags: string # Comma Separated tags (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-jokesone-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  if ($tags == null) { error make --unspanned { msg: "required query parameter 'tags' missing: pass --tags" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "tags" $tags "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/joke/tags/add" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -564,11 +571,13 @@ export def "post-joke-tags-remove" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --id: string # Joke ID (format: string)
-  --tags: string # Comma Separated tags (format: string)
+  --id: string # Joke ID (required, format: string)
+  --tags: string # Comma Separated tags (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-jokesone-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
+  if ($tags == null) { error make --unspanned { msg: "required query parameter 'tags' missing: pass --tags" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "tags" $tags "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/joke/tags/remove" $qp $auth.query)
   let accept_val = ($accept | default "application/json")

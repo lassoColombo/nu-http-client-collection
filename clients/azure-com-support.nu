@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -153,10 +153,11 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Api version
+  --api-version: string # Api version (required)
 ]: nothing -> record<value: table<display: record, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Support/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -189,10 +190,11 @@ export def "services-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Api version
+  --api-version: string # Api version (required)
 ]: nothing -> record<value: table<id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Support/services" $qp $auth.query)
   let accept_val = "application/json"
@@ -226,11 +228,12 @@ export def "services-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Api version
+  --api-version: string # Api version (required)
 ]: nothing -> record<id: string, name: string, properties: record<displayName: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.Support/services/{service_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -264,11 +267,12 @@ export def "problem-classifications-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Api version
+  --api-version: string # Api version (required)
 ]: nothing -> record<value: table<id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.Support/services/{service_name}/problemClassifications") $qp $auth.query)
   let accept_val = "application/json"
@@ -303,12 +307,13 @@ export def "problem-classifications-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Api version
+  --api-version: string # Api version (required)
 ]: nothing -> record<id: string, name: string, properties: record<displayName: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
   if ($problem_classification_name | is-empty) { error make --unspanned { msg: "path parameter 'problemClassificationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), problem_classification_name: (encode-path-segment $problem_classification_name)} | format pattern "/providers/Microsoft.Support/services/{service_name}/problemClassifications/{problem_classification_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -342,7 +347,7 @@ export def "support-tickets-check-name-availability" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Api version
+  --api-version: string # Api version (required)
   name: string # The resource name to validate
   type: string@type-completer # The type of resource
 ]: any -> record<message: string, nameAvailable: bool, reason: string> {
@@ -350,6 +355,7 @@ export def "support-tickets-check-name-availability" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Support/checkNameAvailability") $qp $auth.query)
   let req_body = {"name": $name, "type": $type} | compact
@@ -387,11 +393,12 @@ export def "support-tickets-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # The number of values to return in the collection. Default is 25 and max is 100.
   --filter: string # The filter to apply on the operation. We support 'odata v4.0' filter semantics. Learn more Status filter can only be used with 'eq' operator. For CreatedDate filter, the supported operators are 'gt' and 'ge'. When using both filters, combine them using the logical 'AND'.
-  --api-version: string # Api version
+  --api-version: string # Api version (required)
 ]: nothing -> record<nextLink: string, value: table<id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Support/supportTickets") $qp $auth.query)
   let accept_val = "application/json"
@@ -426,12 +433,13 @@ export def "support-tickets-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Api version
+  --api-version: string # Api version (required)
 ]: nothing -> record<id: string, name: string, properties: record<contactDetails: record<additionalEmailAddresses: list, country: string, firstName: string, lastName: string, phoneNumber: string, preferredContactMethod: string, preferredSupportLanguage: string, preferredTimeZone: string, primaryEmailAddress: string>, createdDate: string, description: string, enrollmentId: string, modifiedDate: string, problemClassificationDisplayName: string, problemClassificationId: string, problemStartTime: string, productionOutage: bool, quotaTicketDetails: record<quotaChangeRequestSubType: string, quotaChangeRequestVersion: string, quotaChangeRequests: list>, require24X7Response: bool, serviceDisplayName: string, serviceId: string, serviceLevelAgreement: record<expirationTime: string, slaMinutes: int, startTime: string>, severity: string, status: string, supportEngineer: record<emailAddress: string>, supportPlanType: string, supportTicketId: string, technicalTicketDetails: record<resourceId: string>, title: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($support_ticket_name | is-empty) { error make --unspanned { msg: "path parameter 'supportTicketName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), support_ticket_name: (encode-path-segment $support_ticket_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Support/supportTickets/{support_ticket_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -467,7 +475,7 @@ export def "support-tickets-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Api version
+  --api-version: string # Api version (required)
   --contact-details: record # Contact information associated with the support ticket. — shape: {additionalEmailAddresses?: list<string>, country?: string, firstName?: string, lastName?: string, phoneNumber?: string, preferredContactMethod?: "email"|"phone", preferredSupportLanguage?: string, preferredTimeZone?: string, primaryEmailAddress?: string}
   --severity: string@severity-completer # Severity level
 ]: any -> record<id: string, name: string, properties: record<contactDetails: record<additionalEmailAddresses: list, country: string, firstName: string, lastName: string, phoneNumber: string, preferredContactMethod: string, preferredSupportLanguage: string, preferredTimeZone: string, primaryEmailAddress: string>, createdDate: string, description: string, enrollmentId: string, modifiedDate: string, problemClassificationDisplayName: string, problemClassificationId: string, problemStartTime: string, productionOutage: bool, quotaTicketDetails: record<quotaChangeRequestSubType: string, quotaChangeRequestVersion: string, quotaChangeRequests: list>, require24X7Response: bool, serviceDisplayName: string, serviceId: string, serviceLevelAgreement: record<expirationTime: string, slaMinutes: int, startTime: string>, severity: string, status: string, supportEngineer: record<emailAddress: string>, supportPlanType: string, supportTicketId: string, technicalTicketDetails: record<resourceId: string>, title: string>, type: string> {
@@ -476,6 +484,7 @@ export def "support-tickets-update" [
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($support_ticket_name | is-empty) { error make --unspanned { msg: "path parameter 'supportTicketName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), support_ticket_name: (encode-path-segment $support_ticket_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Support/supportTickets/{support_ticket_name}") $qp $auth.query)
   let req_body = {"contactDetails": $contact_details, "severity": $severity} | compact
@@ -513,7 +522,7 @@ export def "support-tickets-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Api version
+  --api-version: string # Api version (required)
   --properties: record # Describes the properties of a support ticket. — shape: {contactDetails: record, description: string, problemClassificationId: string, problemStartTime?: string, quotaTicketDetails?: record, require24X7Response?: bool, serviceId: string, serviceLevelAgreement?: record, severity: "minimal"|"moderate"|"critical", supportEngineer?: record, supportTicketId?: string, technicalTicketDetails?: record, title: string}
 ]: any -> record<id: string, name: string, properties: record<contactDetails: record<additionalEmailAddresses: list, country: string, firstName: string, lastName: string, phoneNumber: string, preferredContactMethod: string, preferredSupportLanguage: string, preferredTimeZone: string, primaryEmailAddress: string>, createdDate: string, description: string, enrollmentId: string, modifiedDate: string, problemClassificationDisplayName: string, problemClassificationId: string, problemStartTime: string, productionOutage: bool, quotaTicketDetails: record<quotaChangeRequestSubType: string, quotaChangeRequestVersion: string, quotaChangeRequests: list>, require24X7Response: bool, serviceDisplayName: string, serviceId: string, serviceLevelAgreement: record<expirationTime: string, slaMinutes: int, startTime: string>, severity: string, status: string, supportEngineer: record<emailAddress: string>, supportPlanType: string, supportTicketId: string, technicalTicketDetails: record<resourceId: string>, title: string>, type: string> {
   let input = $in
@@ -521,6 +530,7 @@ export def "support-tickets-create" [
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($support_ticket_name | is-empty) { error make --unspanned { msg: "path parameter 'supportTicketName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), support_ticket_name: (encode-path-segment $support_ticket_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Support/supportTickets/{support_ticket_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -557,7 +567,7 @@ export def "communications-check-name-availability" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Api version
+  --api-version: string # Api version (required)
   name: string # The resource name to validate
   type: string@type-completer # The type of resource
 ]: any -> record<message: string, nameAvailable: bool, reason: string> {
@@ -566,6 +576,7 @@ export def "communications-check-name-availability" [
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($support_ticket_name | is-empty) { error make --unspanned { msg: "path parameter 'supportTicketName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), support_ticket_name: (encode-path-segment $support_ticket_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Support/supportTickets/{support_ticket_name}/checkNameAvailability") $qp $auth.query)
   let req_body = {"name": $name, "type": $type} | compact
@@ -604,12 +615,13 @@ export def "communications-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # The number of values to return in the collection. Default is 10 and max is 10.
   --filter: string # The filter to apply on the operation. You can filter by communicationType and createdDate properties. CommunicationType supports Equals ('eq') operator and createdDate supports Greater Than ('gt') and Greater Than or Equals ('ge') operators. You may combine the CommunicationType and CreatedDate filters by Logical And ('and') operator.
-  --api-version: string # Api version
+  --api-version: string # Api version (required)
 ]: nothing -> record<nextLink: string, value: table<id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($support_ticket_name | is-empty) { error make --unspanned { msg: "path parameter 'supportTicketName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), support_ticket_name: (encode-path-segment $support_ticket_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Support/supportTickets/{support_ticket_name}/communications") $qp $auth.query)
   let accept_val = "application/json"
@@ -645,13 +657,14 @@ export def "communications-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Api version
+  --api-version: string # Api version (required)
 ]: nothing -> record<id: string, name: string, properties: record<body: string, communicationDirection: string, communicationType: string, createdDate: string, sender: string, subject: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($support_ticket_name | is-empty) { error make --unspanned { msg: "path parameter 'supportTicketName' must be non-empty" } }
   if ($communication_name | is-empty) { error make --unspanned { msg: "path parameter 'communicationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), support_ticket_name: (encode-path-segment $support_ticket_name), communication_name: (encode-path-segment $communication_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Support/supportTickets/{support_ticket_name}/communications/{communication_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -688,7 +701,7 @@ export def "communications-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Api version
+  --api-version: string # Api version (required)
   --properties: record # Describes the properties of a communication resource. — shape: {body: string, sender?: string, subject: string}
 ]: any -> record<id: string, name: string, properties: record<body: string, communicationDirection: string, communicationType: string, createdDate: string, sender: string, subject: string>, type: string> {
   let input = $in
@@ -697,6 +710,7 @@ export def "communications-create" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($support_ticket_name | is-empty) { error make --unspanned { msg: "path parameter 'supportTicketName' must be non-empty" } }
   if ($communication_name | is-empty) { error make --unspanned { msg: "path parameter 'communicationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), support_ticket_name: (encode-path-segment $support_ticket_name), communication_name: (encode-path-segment $communication_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Support/supportTickets/{support_ticket_name}/communications/{communication_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact

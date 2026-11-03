@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -147,12 +147,13 @@ export def "job-submit-hive-job" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-name: string # The user name used for running job.
+  --user-name: string # The user name used for running job. (required)
   --body: any
 ]: any -> record<id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_name == null) { error make --unspanned { msg: "required query parameter 'user.name' missing: pass --user-name" } }
   let qp = [(serialize-qp "user.name" $user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templeton/v1/hive" $qp $auth.query)
   let req_body = $body
@@ -187,12 +188,15 @@ export def "job-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-name: string # The user name used for running job.
-  --showall: string@showall-completer # If showall is set to 'true', the request will return all jobs the user has permission to view, not only the jobs belonging to the user.
-  --fields: string@fields-completer # If fields set to '*', the request will return full details of the job. Currently the value can only be '*'.
+  --user-name: string # The user name used for running job. (required)
+  --showall: string@showall-completer # If showall is set to 'true', the request will return all jobs the user has permission to view, not only the jobs belonging to the user. (required)
+  --fields: string@fields-completer # If fields set to '*', the request will return full details of the job. Currently the value can only be '*'. (required)
 ]: nothing -> table<detail: record<callback: record, completed: string, exitValue: int, id: string, msg: record, parentId: string, percentComplete: string, profile: record, status: record, user: string, userargs: record>, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_name == null) { error make --unspanned { msg: "required query parameter 'user.name' missing: pass --user-name" } }
+  let showall = ($showall | default "true")
+  let fields = ($fields | default "*")
   let qp = [(serialize-qp "user.name" $user_name "scalar") (serialize-qp "showall" $showall "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templeton/v1/jobs" $qp $auth.query)
   let accept_val = "application/json"
@@ -226,11 +230,12 @@ export def "job-kill" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-name: string # The user name used for running job.
+  --user-name: string # The user name used for running job. (required)
 ]: nothing -> record<callback: record, completed: string, exitValue: int, id: string, msg: record, parentId: string, percentComplete: string, profile: record<jobFile: string, jobID: record<id: int, jtIdentifier: string>, jobId: string, jobName: string, queueName: string, url: string, user: string>, status: record<cleanupProgress: float, failureInfo: string, finishTime: int, historyFile: string, jobACLs: any, jobComplete: bool, jobFile: string, jobID: record<id: int, jtIdentifier: string>, jobId: string, jobName: string, jobPriority: string, mapProgress: float, neededMem: int, numReservedSlots: int, numUsedSlots: int, priority: string, queue: string, reduceProgress: float, reservedMem: int, retired: bool, runState: int, schedulingInfo: string, setupProgress: float, startTime: int, state: string, trackingUrl: string, uber: bool, usedMem: int, username: string>, user: string, userargs: record<arg: list<string>, callback: record, define: list<string>, enablelog: string, execute: string, file: record, files: record, jar: string, statusdir: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
+  if ($user_name == null) { error make --unspanned { msg: "required query parameter 'user.name' missing: pass --user-name" } }
   let qp = [(serialize-qp "user.name" $user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/templeton/v1/jobs/{job_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -264,12 +269,14 @@ export def "job-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-name: string # The user name used for running job.
-  --fields: string@fields-completer # If fields set to '*', the request will return full details of the job. Currently the value can only be '*'.
+  --user-name: string # The user name used for running job. (required)
+  --fields: string@fields-completer # If fields set to '*', the request will return full details of the job. Currently the value can only be '*'. (required)
 ]: nothing -> record<callback: record, completed: string, exitValue: int, id: string, msg: record, parentId: string, percentComplete: string, profile: record<jobFile: string, jobID: record<id: int, jtIdentifier: string>, jobId: string, jobName: string, queueName: string, url: string, user: string>, status: record<cleanupProgress: float, failureInfo: string, finishTime: int, historyFile: string, jobACLs: any, jobComplete: bool, jobFile: string, jobID: record<id: int, jtIdentifier: string>, jobId: string, jobName: string, jobPriority: string, mapProgress: float, neededMem: int, numReservedSlots: int, numUsedSlots: int, priority: string, queue: string, reduceProgress: float, reservedMem: int, retired: bool, runState: int, schedulingInfo: string, setupProgress: float, startTime: int, state: string, trackingUrl: string, uber: bool, usedMem: int, username: string>, user: string, userargs: record<arg: list<string>, callback: record, define: list<string>, enablelog: string, execute: string, file: record, files: record, jar: string, statusdir: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
+  if ($user_name == null) { error make --unspanned { msg: "required query parameter 'user.name' missing: pass --user-name" } }
+  let fields = ($fields | default "*")
   let qp = [(serialize-qp "user.name" $user_name "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/templeton/v1/jobs/{job_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -302,16 +309,19 @@ export def "job-list-after-job-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-name: string # The user name used for running job.
+  --user-name: string # The user name used for running job. (required)
   --jobid: string # JobId from where to list jobs.
   --numrecords: int # Number of jobs to fetch. (format: int32)
-  --showall: string@showall-completer # If showall is set to 'true', the request will return all jobs the user has permission to view, not only the jobs belonging to the user.
-  --fields: string@fields-completer # If fields set to '*', the request will return full details of the job. Currently the value can only be '*'.
+  --showall: string@showall-completer # If showall is set to 'true', the request will return all jobs the user has permission to view, not only the jobs belonging to the user. (required)
+  --fields: string@fields-completer # If fields set to '*', the request will return full details of the job. Currently the value can only be '*'. (required)
 ]: nothing -> table<detail: record<callback: record, completed: string, exitValue: int, id: string, msg: record, parentId: string, percentComplete: string, profile: record, status: record, user: string, userargs: record>, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_name == null) { error make --unspanned { msg: "required query parameter 'user.name' missing: pass --user-name" } }
+  let showall = ($showall | default "true")
+  let fields = ($fields | default "*")
   let qp = [(serialize-qp "user.name" $user_name "scalar") (serialize-qp "jobid" $jobid "scalar") (serialize-qp "numrecords" $numrecords "scalar") (serialize-qp "showall" $showall "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/templeton/v1/jobs?op=LISTAFTERID" $qp $auth.query)
+  let full_url = (build-url $base "/templeton/v1/jobs" "op=LISTAFTERID" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -342,12 +352,13 @@ export def "job-submit-map-reduce-job" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-name: string # The user name used for running job.
+  --user-name: string # The user name used for running job. (required)
   --body: any
 ]: any -> record<id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_name == null) { error make --unspanned { msg: "required query parameter 'user.name' missing: pass --user-name" } }
   let qp = [(serialize-qp "user.name" $user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templeton/v1/mapreduce/jar" $qp $auth.query)
   let req_body = $body
@@ -382,12 +393,13 @@ export def "job-submit-map-reduce-streaming-job" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-name: string # The user name used for running job.
+  --user-name: string # The user name used for running job. (required)
   --body: any
 ]: any -> record<id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_name == null) { error make --unspanned { msg: "required query parameter 'user.name' missing: pass --user-name" } }
   let qp = [(serialize-qp "user.name" $user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templeton/v1/mapreduce/streaming" $qp $auth.query)
   let req_body = $body
@@ -422,12 +434,13 @@ export def "job-submit-pig-job" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-name: string # The user name used for running job.
+  --user-name: string # The user name used for running job. (required)
   --body: any
 ]: any -> record<id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_name == null) { error make --unspanned { msg: "required query parameter 'user.name' missing: pass --user-name" } }
   let qp = [(serialize-qp "user.name" $user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templeton/v1/pig" $qp $auth.query)
   let req_body = $body
@@ -462,12 +475,13 @@ export def "job-submit-sqoop-job" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-name: string # The user name used for running job.
+  --user-name: string # The user name used for running job. (required)
   --body: any
 ]: any -> record<id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_name == null) { error make --unspanned { msg: "required query parameter 'user.name' missing: pass --user-name" } }
   let qp = [(serialize-qp "user.name" $user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templeton/v1/sqoop" $qp $auth.query)
   let req_body = $body

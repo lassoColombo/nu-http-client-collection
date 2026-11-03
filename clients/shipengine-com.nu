@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "api-key" => { {scheme: $scheme, headers: {API-Key: $token_val}, query: "", location: "header"} }
+    "api-key" => { {scheme: $scheme, headers: {"API-Key": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -122,11 +122,25 @@ def auth-scheme-completer [] { ["api-key"] }
 def status-completer [] { ["archived" "completed" "completed_with_errors" "invalid" "notifying" "open" "processing" "queued"] }
 def sort-by-completer [] { ["created_at" "processed_at" "ship_date"] }
 def accept-completer [] { ["application/json" "text/plain"] }
+def display-scheme-completer [] { ["label" "label_and_qr_code" "qr_code"] }
+def label-format-completer [] { ["pdf" "png" "zpl"] }
+def label-layout-completer [] { ["4x6" "letter"] }
+def carrier-name-completer [] { ["access_worldwide" "amazon_buy_shipping" "amazon_shipping_uk" "apc" "asendia" "australia_post" "canada_post" "dhl_ecommerce" "dhl_express" "dhl_express_au" "dhl_express_ca" "dhl_express_uk" "dpd" "endicia" "fedex" "fedex_uk" "firstmile" "imex" "newgistics" "ontrac" "purolator_canada" "royal_mail" "rr_donnelley" "seko" "sendle" "stamps_com" "ups"] }
+def ancillary-endorsement-completer [] { ["address_service_requested" "change_service_requested" "forwarding_service_requested" "leave_if_no_response" "none" "return_service_requested"] }
+def carrier-name-completer-1 [] { ["dhl_express" "fedex" "newgistics" "ups"] }
 def accept-completer-1 [] { ["application/pdf" "application/zpl" "image/png"] }
+def event-completer [] { ["batch" "carrier_connected" "order_source_refresh_complete" "rate" "report_complete" "sales_orders_imported" "track"] }
 def label-status-completer [] { ["completed" "error" "processing" "voided"] }
 def sort-by-completer-1 [] { ["created_at" "modified_at"] }
+def charge-event-completer [] { ["carrier_default" "on_carrier_acceptance" "on_creation"] }
 def label-download-type-completer [] { ["inline" "url"] }
+def validate-address-completer [] { ["no_validation" "validate_and_clean" "validate_only"] }
+def address-residential-indicator-completer [] { ["no" "unknown" "yes"] }
+def confirmation-completer [] { ["adult_signature" "delivery" "delivery_mailed" "direct_signature" "none" "signature" "verbal_confirmation"] }
 def shipment-status-completer [] { ["cancelled" "label_purchased" "pending" "processing"] }
+def insurance-provider-completer [] { ["carrier" "none" "shipsurance" "third_party"] }
+def order-source-code-completer [] { ["amazon_ca" "amazon_us" "brightpearl" "channel_advisor" "cratejoy" "ebay" "etsy" "groupon_goods" "jane" "magento" "paypal" "seller_active" "shopify" "squarespace" "stitch_labs" "three_dcart" "tophatter" "volusion" "walmart" "woo_commerce"] }
+def origin-type-completer [] { ["drop_off" "pickup"] }
 def redirect-completer [] { ["shipengine-dashboard"] }
 
 # List all available API commands with their parameters
@@ -156,6 +170,7 @@ export def commands []: nothing -> table {
 #
 # PUT /v1/addresses/recognize
 # operationId: parse_address
+# --address shape: {address_line1?: string, address_line2?: string, address_line3?: string, address_residential_indicator?: "unknown"|"yes"|"no", city_locality?: string, company_name?: string, country_code?: string, email?: string, name?: string, phone?: string, postal_code?: string, state_province?: string}
 export def "parse-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -166,9 +181,9 @@ export def "parse-address" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --address: any # You can optionally provide any already-known address values. For example, you may already know the recipient's name, city, and country, and only want to parse the street address into separate lines.
+  --address: record # You can optionally provide any already-known address values. For example, you may already know the recipient's name, city, and country, and only want to parse the street address into separate lines. — shape: {address_line1?: string, address_line2?: string, address_line3?: string, address_residential_indicator?: "unknown"|"yes"|"no", city_locality?: string, company_name?: string, country_code?: string, email?: string, name?: string, phone?: string, postal_code?: string, state_province?: string}
   text: string # The unstructured text that contains address-related entities (e.g. Margie McMiller at 3800 North Lamar suite 200 in austin, tx.  The zip code there is 78652.)
-]: any -> record<address: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: record, city_locality: string, company_name: string, country_code: record, email: string, name: string, phone: string, postal_code: record, state_province: string>, entities: table<end_index: int, result: record, score: float, start_index: int, text: string, type: string>, score: float> {
+]: any -> record<address: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string>, entities: table<end_index: int, result: record, score: float, start_index: int, text: string, type: string>, score: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -206,7 +221,7 @@ export def "validate-address" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> table<matched_address: record, messages: list<record>, original_address: record, status: record> {
+]: any -> table<matched_address: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string>, messages: list<record>, original_address: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string>, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -249,7 +264,7 @@ export def "list-batches" [
   --sort-dir: string # Controls the sort order of the query. (default: desc)
   --batch-number: string # Batch Number
   --sort-by: string@sort-by-completer
-]: nothing -> record<batches: table<batch_errors_url: record, batch_id: record, batch_labels_url: record, batch_notes: string, batch_number: string, batch_shipments_url: record, completed: int, count: int, created_at: record, errors: int, external_batch_id: string, form_download: record, forms: int, label_download: record, label_format: record, label_layout: record, processed_at: record, status: record, warnings: int>, links: record<first: record, last: record, next: record<href: record, type: string>, prev: record<href: record, type: string>>, page: int, pages: int, total: int> {
+]: nothing -> record<batches: table<batch_errors_url: record, batch_id: string, batch_labels_url: record, batch_notes: string, batch_number: string, batch_shipments_url: record, completed: int, count: int, created_at: string, errors: int, external_batch_id: string, form_download: record, forms: int, label_download: record, label_format: string, label_layout: string, processed_at: string, status: string, warnings: int>, links: record<first: record<href: string, type: string>, last: record<href: string, type: string>, next: record<href: string, type: string>, prev: record<href: string, type: string>>, page: int, pages: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "sort_dir" $sort_dir "scalar") (serialize-qp "batch_number" $batch_number "scalar") (serialize-qp "sort_by" $sort_by "scalar")] | flatten | str join "&"
@@ -285,10 +300,10 @@ export def "create-batch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --batch-notes: string # Add custom messages for a particular batch (e.g. This is my batch)
-  --external-batch-id: any # A string that uniquely identifies the external batch
+  --external-batch-id: string # A string that uniquely identifies the external batch
   --rate-ids: list<string> # Array of rate IDs used in the batch
   --shipment-ids: list # Array of shipment IDs used in the batch
-]: any -> record {
+]: any -> record<batch_errors_url: record<href: string, type: string>, batch_id: string, batch_labels_url: record<href: string, type: string>, batch_notes: string, batch_number: string, batch_shipments_url: record<href: string, type: string>, completed: int, count: int, created_at: string, errors: int, external_batch_id: string, form_download: record<href: string, type: string>, forms: int, label_download: record<href: string, pdf: string, png: string, zpl: string>, label_format: string, label_layout: string, processed_at: string, status: string, warnings: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -326,7 +341,7 @@ export def "get-batch-by-external-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> record<batch_errors_url: record<href: string, type: string>, batch_id: string, batch_labels_url: record<href: string, type: string>, batch_notes: string, batch_number: string, batch_shipments_url: record<href: string, type: string>, completed: int, count: int, created_at: string, errors: int, external_batch_id: string, form_download: record<href: string, type: string>, forms: int, label_download: record<href: string, pdf: string, png: string, zpl: string>, label_format: string, label_layout: string, processed_at: string, status: string, warnings: int> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($external_batch_id | is-empty) { error make --unspanned { msg: "path parameter 'external_batch_id' must be non-empty" } }
@@ -399,7 +414,7 @@ export def "get-batch-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> record<batch_errors_url: record<href: string, type: string>, batch_id: string, batch_labels_url: record<href: string, type: string>, batch_notes: string, batch_number: string, batch_shipments_url: record<href: string, type: string>, completed: int, count: int, created_at: string, errors: int, external_batch_id: string, form_download: record<href: string, type: string>, forms: int, label_download: record<href: string, pdf: string, png: string, zpl: string>, label_format: string, label_layout: string, processed_at: string, status: string, warnings: int> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($batch_id | is-empty) { error make --unspanned { msg: "path parameter 'batch_id' must be non-empty" } }
@@ -516,7 +531,7 @@ export def "list-batch-errors" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Return a specific page of results. Defaults to the first page. If set to a number that's greater than the number of pages of results, an empty page is returned. (format: int32, default: 1, e.g. 2)
   --pagesize: int # format: int32
-]: nothing -> record<errors: table<error: string, external_shipment_id: string, shipment_id: record>, links: record<first: record, last: record, next: record<href: record, type: string>, prev: record<href: record, type: string>>> {
+]: nothing -> record<errors: table<error: string, external_shipment_id: string, shipment_id: string>, links: record<first: record<href: string, type: string>, last: record<href: string, type: string>, next: record<href: string, type: string>, prev: record<href: string, type: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($batch_id | is-empty) { error make --unspanned { msg: "path parameter 'batch_id' must be non-empty" } }
@@ -554,10 +569,10 @@ export def "process-batch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --display-scheme: any # The display format that the label should be shown in. (default: label)
-  --label-format: any # default: pdf
-  --label-layout: string # default: 4x6
-  --ship-date: any # The Ship date the batch is being processed for
+  --display-scheme: string@display-scheme-completer # The display format that the label should be shown in. (default: label)
+  --label-format: string@label-format-completer # The possible file formats in which shipping labels can be downloaded. We recommend `pdf` format because it is supported by all carriers, whereas some carriers do not support the `png` or `zpl` formats. |Label Format | Supported Carriers |--------------|----------------------------------- |`pdf` | All carriers |`png` | `fedex` `stamps_com` `ups` `usps` |`zpl` | `access_worldwide` `apc` `asendia` `dhl_global_mail` `dhl_express` `dhl_express_australia` `dhl_express_canada` `dhl_express_worldwide` `dhl_express_uk` `dpd` `endicia` `fedex` `fedex_uk` `firstmile` `imex` `newgistics` `ontrac` `rr_donnelley` `stamps_com` `ups` `usps` (default: pdf)
+  --label-layout: string@label-layout-completer # The available layouts (sizes) in which shipping labels can be downloaded. The label format determines which sizes are supported. `4x6` is supported for all label formats, whereas `letter` (8.5" x 11") is only supported for `pdf` format. (default: 4x6)
+  --ship-date: string # The Ship date the batch is being processed for (format: date-time)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -638,7 +653,7 @@ export def "list-carriers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<carriers: table<account_number: string, balance: float, carrier_code: record, carrier_id: record, friendly_name: string, has_multi_package_supporting_services: bool, nickname: string, options: list, packages: list, primary: bool, requires_funded_amount: bool, services: list, supports_label_messages: bool>, errors: table<error_code: record, error_source: record, error_type: record, message: string>, request_id: record> {
+]: nothing -> record<carriers: table<account_number: string, balance: float, carrier_code: string, carrier_id: string, friendly_name: string, has_multi_package_supporting_services: bool, nickname: string, options: list, packages: list, primary: bool, requires_funded_amount: bool, services: list, supports_label_messages: bool>, errors: table<error_code: string, error_source: string, error_type: string, message: string>, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/carriers" $auth.query)
@@ -673,7 +688,7 @@ export def "get-carrier-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> record<account_number: string, balance: float, carrier_code: string, carrier_id: string, friendly_name: string, has_multi_package_supporting_services: bool, nickname: string, options: table<default_value: string, description: string, name: string>, packages: table<description: string, dimensions: record, name: string, package_code: string, package_id: string>, primary: bool, requires_funded_amount: bool, services: table<carrier_code: string, carrier_id: string, domestic: bool, international: bool, is_multi_package_supported: bool, name: string, service_code: string>, supports_label_messages: bool> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($carrier_id | is-empty) { error make --unspanned { msg: "path parameter 'carrier_id' must be non-empty" } }
@@ -710,8 +725,8 @@ export def "add-funds-to-carrier" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   amount: float # The monetary amount, in the specified currency. (format: double)
-  currency: any
-]: any -> record<balance: record<amount: float, currency: record>> {
+  currency: string # The currencies that are supported by ShipEngine are the ones that specified by ISO 4217: https://www.iso.org/iso-4217-currency-codes.html
+]: any -> record<balance: record<amount: float, currency: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -786,7 +801,7 @@ export def "list-carrier-package-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<packages: table<description: string, dimensions: record, name: string, package_code: record, package_id: record>> {
+]: nothing -> record<packages: table<description: string, dimensions: record, name: string, package_code: string, package_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($carrier_id | is-empty) { error make --unspanned { msg: "path parameter 'carrier_id' must be non-empty" } }
@@ -822,7 +837,7 @@ export def "list-carrier-services" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<services: table<carrier_code: record, carrier_id: record, domestic: bool, international: bool, is_multi_package_supported: bool, name: string, service_code: string>> {
+]: nothing -> record<services: table<carrier_code: string, carrier_id: string, domestic: bool, international: bool, is_multi_package_supported: bool, name: string, service_code: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($carrier_id | is-empty) { error make --unspanned { msg: "path parameter 'carrier_id' must be non-empty" } }
@@ -847,8 +862,9 @@ export def "list-carrier-services" [
 #
 # POST /v1/connections/carriers/{carrier_name}
 # operationId: connect_carrier
+# --invoice shape: {control_id?: string, invoice_amount?: float, invoice_currency_code?: string, invoice_date?: string, invoice_number?: string}
 export def "connect-carrier" [
-  carrier_name: string
+  carrier_name: string@carrier-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -861,7 +877,7 @@ export def "connect-carrier" [
   --nickname: string # The nickname associated with the carrier connection (e.g. Stamps.com)
   --password: string # Access Worldwide Password
   --username: string # Access Worldwide Username
-  --email: any
+  --email: string # An email address. (format: email)
   --merchant-seller-id: string
   --mws-auth-token: string
   --auth-code: string # Amazon UK Shipping auth code.
@@ -871,14 +887,14 @@ export def "connect-carrier" [
   --api-key: string # API key
   --api-secret: string # API secret
   --contract-id: string # Canada Post Account Contract ID
-  --ancillary-endorsement: any
+  --ancillary-endorsement: string@ancillary-endorsement-completer # [Ancillary service endorsements](https://pe.usps.com/text/qsg300/Q507.htm) are used by mailers to request an addressee's new address and to provide the carrier with instructions on how to handle packages that are undeliverable as addressed. | Ancillary Service Endorsement | Description |--------------------------------|----------------------------------------------------- | `none` | No ancillary service is requested. Depending on the carrier servive, the package may be forwarded, returned, or discarded. | `return_service_requested` | The package is returned to the sender. If possible, notification of the new address is is included with the returned package. | `forwarding_service_requested` | Forward the package to the new address, if possible; otherwise, return it to the sender. | `address_service_requested` | Forward the package to the new address, if possible; otherwise, return it to the sender. This is similar to `forwarding_service_requested`, but different restrictions and charges may apply. | `change_service_requested` | The package is discarded. If possible, notification of the new address is sent to the sender. | `leave_if_no_response` |
   --client-id: string # The client id
   --distribution-center: string # The distribution center
   --pickup-number: string # The pickup number
   --registration-id: string
   --software-name: string
   --sold-to: string # Sold To field
-  --country-code: any
+  --country-code: string # A two-letter [ISO 3166-1 country code](https://en.wikipedia.org/wiki/ISO_3166-1)
   --site-id: string # Required if password is provided
   --account: string # Account
   --passphrase: string # Passphrase
@@ -893,27 +909,27 @@ export def "connect-carrier" [
   --phone: string # Phone number
   --postal-code: string # Postal Code
   --state: string # State
-  --mailer-id: any # A string that uniquely identifies the mailer
+  --mailer-id: string # A string that uniquely identifies the mailer
   --profile-name: string # Profile name
   --induction-site: string # Induction site
   --merchant-id: int # Merchant id (format: int32)
   --activation-key: string # Activation key
   --company-name: string # Company name
   --contact-name: string # Contact name
-  --oba-email: any # The oba email address
+  --oba-email: string # The oba email address (format: email)
   --street-line1: string # Street line1
   --street-line2: string # Street line2
   --street-line3: string # Street line3
   --access-key: string # Seko Account Access Key
-  --sendle-id: any # A string that uniquely identifies the sendle
+  --sendle-id: string # A string that uniquely identifies the sendle
   --account-country-code: string # Account country code
   --account-postal-code: string # Account postal code
   --agree-to-technology-agreement: oneof<nothing, bool> # The Agreement to the [UPS Technology Agreement](https://www.ups.com/assets/resources/media/UTA_with_EUR.pdf)
-  --invoice: any # The UPS invoice
+  --invoice: record # The UPS invoice — shape: {control_id?: string, invoice_amount?: float, invoice_currency_code?: string, invoice_date?: string, invoice_number?: string}
   --invoice-amount: float # The invoice amount (format: double)
   --invoice-currency-code: string # The invoice currency code
   --title: string # Title
-]: any -> record<carrier_id: record> {
+]: any -> record<carrier_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -942,7 +958,7 @@ export def "connect-carrier" [
 # DELETE /v1/connections/carriers/{carrier_name}/{carrier_id}
 # operationId: disconnect_carrier
 export def "disconnect-carrier" [
-  carrier_name: string
+  carrier_name: string@carrier-name-completer
   carrier_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -981,7 +997,7 @@ export def "disconnect-carrier" [
 # GET /v1/connections/carriers/{carrier_name}/{carrier_id}/settings
 # operationId: get_carrier_settings
 export def "get-carrier-settings" [
-  carrier_name: string
+  carrier_name: string@carrier-name-completer-1
   carrier_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1019,7 +1035,7 @@ export def "get-carrier-settings" [
 # PUT /v1/connections/carriers/{carrier_name}/{carrier_id}/settings
 # operationId: update_carrier_settings
 export def "update-carrier-settings" [
-  carrier_name: string
+  carrier_name: string@carrier-name-completer-1
   carrier_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1107,7 +1123,7 @@ export def "connect-insurer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  email: any
+  email: string # An email address. (format: email)
   policy_id: string
 ]: any -> record {
   let input = $in
@@ -1190,7 +1206,7 @@ export def "list-webhooks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<event: record, url: record, webhook_id: record> {
+]: nothing -> table<event: string, url: string, webhook_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/environment/webhooks" $auth.query)
@@ -1224,9 +1240,9 @@ export def "create-webhook" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  event: any
-  url: any # The url that the webhook sends the request to (e.g. https://[YOUR ENDPOINT ID].x.requestbin.com)
-]: any -> record {
+  event: string@event-completer # The possible webook event values
+  url: string # The url that the webhook sends the request to (format: url, e.g. https://[YOUR ENDPOINT ID].x.requestbin.com)
+]: any -> record<event: string, url: string, webhook_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1301,7 +1317,7 @@ export def "get-webhook-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> record<event: string, url: string, webhook_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($webhook_id | is-empty) { error make --unspanned { msg: "path parameter 'webhook_id' must be non-empty" } }
@@ -1338,7 +1354,7 @@ export def "update-webhook" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --url: any # The url that the wehbook sends the request (e.g. https://[YOUR ENDPOINT ID].x.requestbin.com)
+  --url: string # The url that the wehbook sends the request (format: url, e.g. https://[YOUR ENDPOINT ID].x.requestbin.com)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -1378,8 +1394,8 @@ export def "add-funds-to-insurance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   amount: float # The monetary amount, in the specified currency. (format: double)
-  currency: any
-]: any -> record {
+  currency: string # The currencies that are supported by ShipEngine are the ones that specified by ISO 4217: https://www.iso.org/iso-4217-currency-codes.html
+]: any -> record<amount: float, currency: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1416,7 +1432,7 @@ export def "get-insurance-balance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> record<amount: float, currency: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/insurance/shipsurance/balance" $auth.query)
@@ -1464,7 +1480,7 @@ export def "list-labels" [
   --page-size: int # The number of results to return per response. (format: int32, default: 25, e.g. 50)
   --sort-dir: string # Controls the sort order of the query. (default: desc)
   --sort-by: string@sort-by-completer-1 # Controls which field the query is sorted by. (default: created_at)
-]: nothing -> record<labels: table<alternative_identifiers: list, batch_id: record, carrier_code: record, carrier_id: record, charge_event: record, created_at: record, display_scheme: record, form_download: record, insurance_claim: record, insurance_cost: record, is_international: bool, is_return_label: bool, label_download: record, label_download_type: record, label_format: record, label_id: record, label_image_id: record, label_layout: record, outbound_label_id: record, package_code: record, packages: list, rma_number: string, service_code: record, ship_date: record, shipment: record, shipment_cost: record, shipment_id: record, status: record, test_label: bool, trackable: bool, tracking_number: string, tracking_status: record, validate_address: record, voided: bool, voided_at: record>> {
+]: nothing -> record<labels: table<alternative_identifiers: list, batch_id: string, carrier_code: string, carrier_id: string, charge_event: string, created_at: string, display_scheme: string, form_download: record, insurance_claim: record, insurance_cost: record, is_international: bool, is_return_label: bool, label_download: record, label_download_type: string, label_format: string, label_id: string, label_image_id: string, label_layout: string, outbound_label_id: string, package_code: string, packages: list, rma_number: string, service_code: string, ship_date: string, shipment: record, shipment_cost: record, shipment_id: string, status: string, test_label: bool, trackable: bool, tracking_number: string, tracking_status: string, validate_address: string, voided: bool, voided_at: string>, links: record<first: record<href: string, type: string>, last: record<href: string, type: string>, next: record<href: string, type: string>, prev: record<href: string, type: string>>, page: int, pages: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "label_status" $label_status "scalar") (serialize-qp "service_code" $service_code "scalar") (serialize-qp "carrier_id" $carrier_id "scalar") (serialize-qp "tracking_number" $tracking_number "scalar") (serialize-qp "batch_id" $batch_id "scalar") (serialize-qp "rate_id" $rate_id "scalar") (serialize-qp "shipment_id" $shipment_id "scalar") (serialize-qp "warehouse_id" $warehouse_id "scalar") (serialize-qp "created_at_start" $created_at_start "scalar") (serialize-qp "created_at_end" $created_at_end "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "sort_dir" $sort_dir "scalar") (serialize-qp "sort_by" $sort_by "scalar")] | flatten | str join "&"
@@ -1490,7 +1506,13 @@ export def "list-labels" [
 # POST /v1/labels
 # operationId: create_label
 # --alternative_identifiers item shape: {type?: string, value?: string}
-# --packages item shape: {content_description?: string, dimensions?: any, external_package_id?: string, insured_value?: any, label_messages?: any, package_code?: any, package_id?: any, weight: any}
+# --form_download shape: {href: string, type?: string}
+# --insurance_claim shape: {href: string, type?: string}
+# --insurance_cost shape: {amount: float, currency: string}
+# --label_download shape: {href?: string, pdf?: string, png?: string, zpl?: string}
+# --packages item shape: {content_description?: string, dimensions?: record, external_package_id?: string, insured_value?: record, label_messages?: record, package_code?: string, package_id?: string, weight: record}
+# --shipment shape: {advanced_options: record, carrier_id: string, confirmation: "none"|"delivery"|"signature"|"adult_signature"|"direct_signature"|"delivery_mailed"|"verbal_confirmation", customs: record, external_order_id?: string, external_shipment_id?: string, insurance_provider: "none"|"shipsurance"|"carrier"|"third_party", items?: list, ... (11 more fields)}
+# --shipment_cost shape: {amount: float, currency: string}
 @deprecated --flag test-label
 export def "create-label" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1504,19 +1526,19 @@ export def "create-label" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ship-from-service-point-id: string # A unique identifier for a carrier drop off point where a merchant plans to deliver packages. This will take precedence over a shipment's ship from address. (nullable, e.g. 614940)
   --ship-to-service-point-id: string # A unique identifier for a carrier service point where the shipment will be delivered by the carrier. This will take precedence over a shipment's ship to address. (nullable, e.g. 614940)
-  --charge-event: any # The label charge event.
-  --display-scheme: any # The display format that the label should be shown in. (default: label)
+  --charge-event: string@charge-event-completer # The label charge event.
+  --display-scheme: string@display-scheme-completer # The display format that the label should be shown in. (default: label)
   --is-return-label: oneof<nothing, bool> # Indicates whether this is a return label. You may also want to set the `rma_number` so you know what is being returned.
-  --label-download-type: any # default: url
-  --label-format: any # The file format that you want the label to be in. We recommend `pdf` format because it is supported by all carriers, whereas some carriers do not support the `png` or `zpl` formats. (default: pdf)
-  --label-image-id: any # The label image resource that was used to create a custom label image. (nullable)
-  --label-layout: any # The layout (size) that you want the label to be in. The `label_format` determines which sizes are allowed. `4x6` is supported for all label formats, whereas `letter` (8.5" x 11") is only supported for `pdf` format. (default: 4x6)
-  --outbound-label-id: any # The `label_id` of the original (outgoing) label that the return label is for. This associates the two labels together, which is required by some carriers.
+  --label-download-type: string@label-download-type-completer # There are two different ways to [download a label](https://www.shipengine.com/docs/labels/downloading/): |Label Download Type | Description |--------------------|------------------------------ |`url` |You will receive a URL, which you can use to download the label in a separate request. The URL will remain valid for 90 days.This is the default if `label_download_type` is unspecified. |`inline` |You will receive the Base64-encoded label as part of the response. No need for a second request to download the label. (default: url)
+  --label-format: string@label-format-completer # The file format that you want the label to be in. We recommend `pdf` format because it is supported by all carriers, whereas some carriers do not support the `png` or `zpl` formats. (default: pdf)
+  --label-image-id: string # The label image resource that was used to create a custom label image. (nullable)
+  --label-layout: string@label-layout-completer # The layout (size) that you want the label to be in. The `label_format` determines which sizes are allowed. `4x6` is supported for all label formats, whereas `letter` (8.5" x 11") is only supported for `pdf` format. (default: 4x6)
+  --outbound-label-id: string # The `label_id` of the original (outgoing) label that the return label is for. This associates the two labels together, which is required by some carriers.
   --rma-number: string # An optional Return Merchandise Authorization number. This field is useful for return labels. You can set it to any string value. (nullable)
-  shipment: any # The shipment information used to generate the label
+  shipment: record # The shipment information used to generate the label — shape: {advanced_options: record, carrier_id: string, confirmation: "none"|"delivery"|"signature"|"adult_signature"|"direct_signature"|"delivery_mailed"|"verbal_confirmation", customs: record, external_order_id?: string, external_shipment_id?: string, insurance_provider: "none"|"shipsurance"|"carrier"|"third_party", items?: list, ... (11 more fields)}
   --test-label: oneof<nothing, bool> # Indicate if this label is being used only for testing purposes. If true, then no charge will be added to your account. (DEPRECATED, default: false)
-  --validate-address: any # default: validate_and_clean
-]: any -> record {
+  --validate-address: string@validate-address-completer # The possible validate address values (default: validate_and_clean)
+]: any -> record<alternative_identifiers: table<type: string, value: string>, batch_id: string, carrier_code: string, carrier_id: string, charge_event: string, created_at: string, display_scheme: string, form_download: record<href: string, type: string>, insurance_claim: record<href: string, type: string>, insurance_cost: record<amount: float, currency: string>, is_international: bool, is_return_label: bool, label_download: record<href: string, pdf: string, png: string, zpl: string>, label_download_type: string, label_format: string, label_id: string, label_image_id: string, label_layout: string, outbound_label_id: string, package_code: string, packages: table<content_description: string, dimensions: record, external_package_id: string, form_download: record, insured_value: record, label_download: record, label_messages: record, package_code: string, package_id: string, sequence: int, tracking_number: string, weight: record>, rma_number: string, service_code: string, ship_date: string, shipment: record<advanced_options: record<bill_to_account: string, bill_to_country_code: string, bill_to_party: string, bill_to_postal_code: string, collect_on_delivery: record, contains_alcohol: bool, custom_field1: string, custom_field2: string, custom_field3: string, delivered_duty_paid: bool, dry_ice: bool, dry_ice_weight: record, fedex_freight: record, freight_class: string, non_machinable: bool, origin_type: string, saturday_delivery: bool, shipper_release: bool, third_party_consignee: bool, use_ups_ground_freight_pricing: bool>, carrier_id: string, confirmation: string, created_at: string, customs: record<contents: string, customs_items: list, non_delivery: string>, external_order_id: string, external_shipment_id: string, insurance_provider: string, items: list<record>, modified_at: string, order_source_code: string, origin_type: string, packages: list<record>, return_to: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string, instructions: string>, service_code: string, ship_date: string, ship_from: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string, instructions: string>, ship_to: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string, instructions: string>, shipment_id: string, shipment_number: string, shipment_status: string, tags: list<record>, tax_identifiers: list<record>, total_weight: record<unit: string, value: float>, warehouse_id: string>, shipment_cost: record<amount: float, currency: string>, shipment_id: string, status: string, test_label: bool, trackable: bool, tracking_number: string, tracking_status: string, validate_address: string, voided: bool, voided_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1555,7 +1577,7 @@ export def "get-label-by-external-shipment-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --label-download-type: string@label-download-type-completer # e.g. url
-]: nothing -> record {
+]: nothing -> record<alternative_identifiers: table<type: string, value: string>, batch_id: string, carrier_code: string, carrier_id: string, charge_event: string, created_at: string, display_scheme: string, form_download: record<href: string, type: string>, insurance_claim: record<href: string, type: string>, insurance_cost: record<amount: float, currency: string>, is_international: bool, is_return_label: bool, label_download: record<href: string, pdf: string, png: string, zpl: string>, label_download_type: string, label_format: string, label_id: string, label_image_id: string, label_layout: string, outbound_label_id: string, package_code: string, packages: table<content_description: string, dimensions: record, external_package_id: string, form_download: record, insured_value: record, label_download: record, label_messages: record, package_code: string, package_id: string, sequence: int, tracking_number: string, weight: record>, rma_number: string, service_code: string, ship_date: string, shipment: record<advanced_options: record<bill_to_account: string, bill_to_country_code: string, bill_to_party: string, bill_to_postal_code: string, collect_on_delivery: record, contains_alcohol: bool, custom_field1: string, custom_field2: string, custom_field3: string, delivered_duty_paid: bool, dry_ice: bool, dry_ice_weight: record, fedex_freight: record, freight_class: string, non_machinable: bool, origin_type: string, saturday_delivery: bool, shipper_release: bool, third_party_consignee: bool, use_ups_ground_freight_pricing: bool>, carrier_id: string, confirmation: string, created_at: string, customs: record<contents: string, customs_items: list, non_delivery: string>, external_order_id: string, external_shipment_id: string, insurance_provider: string, items: list<record>, modified_at: string, order_source_code: string, origin_type: string, packages: list<record>, return_to: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string, instructions: string>, service_code: string, ship_date: string, ship_from: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string, instructions: string>, ship_to: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string, instructions: string>, shipment_id: string, shipment_number: string, shipment_status: string, tags: list<record>, tax_identifiers: list<record>, total_weight: record<unit: string, value: float>, warehouse_id: string>, shipment_cost: record<amount: float, currency: string>, shipment_id: string, status: string, test_label: bool, trackable: bool, tracking_number: string, tracking_status: string, validate_address: string, voided: bool, voided_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($external_shipment_id | is-empty) { error make --unspanned { msg: "path parameter 'external_shipment_id' must be non-empty" } }
@@ -1592,12 +1614,12 @@ export def "create-label-from-rate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --display-scheme: any # The display format that the label should be shown in. (default: label)
-  --label-download-type: any
-  --label-format: any # default: pdf
-  --label-layout: any # default: 4x6
-  --validate-address: any
-]: any -> record {
+  --display-scheme: string@display-scheme-completer # The display format that the label should be shown in. (default: label)
+  --label-download-type: string@label-download-type-completer # There are two different ways to [download a label](https://www.shipengine.com/docs/labels/downloading/): |Label Download Type | Description |--------------------|------------------------------ |`url` |You will receive a URL, which you can use to download the label in a separate request. The URL will remain valid for 90 days.This is the default if `label_download_type` is unspecified. |`inline` |You will receive the Base64-encoded label as part of the response. No need for a second request to download the label.
+  --label-format: string@label-format-completer # The possible file formats in which shipping labels can be downloaded. We recommend `pdf` format because it is supported by all carriers, whereas some carriers do not support the `png` or `zpl` formats. |Label Format | Supported Carriers |--------------|----------------------------------- |`pdf` | All carriers |`png` | `fedex` `stamps_com` `ups` `usps` |`zpl` | `access_worldwide` `apc` `asendia` `dhl_global_mail` `dhl_express` `dhl_express_australia` `dhl_express_canada` `dhl_express_worldwide` `dhl_express_uk` `dpd` `endicia` `fedex` `fedex_uk` `firstmile` `imex` `newgistics` `ontrac` `rr_donnelley` `stamps_com` `ups` `usps` (default: pdf)
+  --label-layout: string@label-layout-completer # The available layouts (sizes) in which shipping labels can be downloaded. The label format determines which sizes are supported. `4x6` is supported for all label formats, whereas `letter` (8.5" x 11") is only supported for `pdf` format. (default: 4x6)
+  --validate-address: string@validate-address-completer # The possible validate address values
+]: any -> record<alternative_identifiers: table<type: string, value: string>, batch_id: string, carrier_code: string, carrier_id: string, charge_event: string, created_at: string, display_scheme: string, form_download: record<href: string, type: string>, insurance_claim: record<href: string, type: string>, insurance_cost: record<amount: float, currency: string>, is_international: bool, is_return_label: bool, label_download: record<href: string, pdf: string, png: string, zpl: string>, label_download_type: string, label_format: string, label_id: string, label_image_id: string, label_layout: string, outbound_label_id: string, package_code: string, packages: table<content_description: string, dimensions: record, external_package_id: string, form_download: record, insured_value: record, label_download: record, label_messages: record, package_code: string, package_id: string, sequence: int, tracking_number: string, weight: record>, rma_number: string, service_code: string, ship_date: string, shipment: record<advanced_options: record<bill_to_account: string, bill_to_country_code: string, bill_to_party: string, bill_to_postal_code: string, collect_on_delivery: record, contains_alcohol: bool, custom_field1: string, custom_field2: string, custom_field3: string, delivered_duty_paid: bool, dry_ice: bool, dry_ice_weight: record, fedex_freight: record, freight_class: string, non_machinable: bool, origin_type: string, saturday_delivery: bool, shipper_release: bool, third_party_consignee: bool, use_ups_ground_freight_pricing: bool>, carrier_id: string, confirmation: string, created_at: string, customs: record<contents: string, customs_items: list, non_delivery: string>, external_order_id: string, external_shipment_id: string, insurance_provider: string, items: list<record>, modified_at: string, order_source_code: string, origin_type: string, packages: list<record>, return_to: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string, instructions: string>, service_code: string, ship_date: string, ship_from: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string, instructions: string>, ship_to: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string, instructions: string>, shipment_id: string, shipment_number: string, shipment_status: string, tags: list<record>, tax_identifiers: list<record>, total_weight: record<unit: string, value: float>, warehouse_id: string>, shipment_cost: record<amount: float, currency: string>, shipment_id: string, status: string, test_label: bool, trackable: bool, tracking_number: string, tracking_status: string, validate_address: string, voided: bool, voided_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1636,12 +1658,12 @@ export def "create-label-from-shipment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --display-scheme: any # The display format that the label should be shown in. (default: label)
-  --label-download-type: any
-  --label-format: any # default: pdf
-  --label-layout: any # default: 4x6
-  --validate-address: any
-]: any -> record {
+  --display-scheme: string@display-scheme-completer # The display format that the label should be shown in. (default: label)
+  --label-download-type: string@label-download-type-completer # There are two different ways to [download a label](https://www.shipengine.com/docs/labels/downloading/): |Label Download Type | Description |--------------------|------------------------------ |`url` |You will receive a URL, which you can use to download the label in a separate request. The URL will remain valid for 90 days.This is the default if `label_download_type` is unspecified. |`inline` |You will receive the Base64-encoded label as part of the response. No need for a second request to download the label.
+  --label-format: string@label-format-completer # The possible file formats in which shipping labels can be downloaded. We recommend `pdf` format because it is supported by all carriers, whereas some carriers do not support the `png` or `zpl` formats. |Label Format | Supported Carriers |--------------|----------------------------------- |`pdf` | All carriers |`png` | `fedex` `stamps_com` `ups` `usps` |`zpl` | `access_worldwide` `apc` `asendia` `dhl_global_mail` `dhl_express` `dhl_express_australia` `dhl_express_canada` `dhl_express_worldwide` `dhl_express_uk` `dpd` `endicia` `fedex` `fedex_uk` `firstmile` `imex` `newgistics` `ontrac` `rr_donnelley` `stamps_com` `ups` `usps` (default: pdf)
+  --label-layout: string@label-layout-completer # The available layouts (sizes) in which shipping labels can be downloaded. The label format determines which sizes are supported. `4x6` is supported for all label formats, whereas `letter` (8.5" x 11") is only supported for `pdf` format. (default: 4x6)
+  --validate-address: string@validate-address-completer # The possible validate address values
+]: any -> record<alternative_identifiers: table<type: string, value: string>, batch_id: string, carrier_code: string, carrier_id: string, charge_event: string, created_at: string, display_scheme: string, form_download: record<href: string, type: string>, insurance_claim: record<href: string, type: string>, insurance_cost: record<amount: float, currency: string>, is_international: bool, is_return_label: bool, label_download: record<href: string, pdf: string, png: string, zpl: string>, label_download_type: string, label_format: string, label_id: string, label_image_id: string, label_layout: string, outbound_label_id: string, package_code: string, packages: table<content_description: string, dimensions: record, external_package_id: string, form_download: record, insured_value: record, label_download: record, label_messages: record, package_code: string, package_id: string, sequence: int, tracking_number: string, weight: record>, rma_number: string, service_code: string, ship_date: string, shipment: record<advanced_options: record<bill_to_account: string, bill_to_country_code: string, bill_to_party: string, bill_to_postal_code: string, collect_on_delivery: record, contains_alcohol: bool, custom_field1: string, custom_field2: string, custom_field3: string, delivered_duty_paid: bool, dry_ice: bool, dry_ice_weight: record, fedex_freight: record, freight_class: string, non_machinable: bool, origin_type: string, saturday_delivery: bool, shipper_release: bool, third_party_consignee: bool, use_ups_ground_freight_pricing: bool>, carrier_id: string, confirmation: string, created_at: string, customs: record<contents: string, customs_items: list, non_delivery: string>, external_order_id: string, external_shipment_id: string, insurance_provider: string, items: list<record>, modified_at: string, order_source_code: string, origin_type: string, packages: list<record>, return_to: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string, instructions: string>, service_code: string, ship_date: string, ship_from: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string, instructions: string>, ship_to: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string, instructions: string>, shipment_id: string, shipment_number: string, shipment_status: string, tags: list<record>, tax_identifiers: list<record>, total_weight: record<unit: string, value: float>, warehouse_id: string>, shipment_cost: record<amount: float, currency: string>, shipment_id: string, status: string, test_label: bool, trackable: bool, tracking_number: string, tracking_status: string, validate_address: string, voided: bool, voided_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1681,7 +1703,7 @@ export def "get-label-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --label-download-type: string@label-download-type-completer # e.g. url
-]: nothing -> record {
+]: nothing -> record<alternative_identifiers: table<type: string, value: string>, batch_id: string, carrier_code: string, carrier_id: string, charge_event: string, created_at: string, display_scheme: string, form_download: record<href: string, type: string>, insurance_claim: record<href: string, type: string>, insurance_cost: record<amount: float, currency: string>, is_international: bool, is_return_label: bool, label_download: record<href: string, pdf: string, png: string, zpl: string>, label_download_type: string, label_format: string, label_id: string, label_image_id: string, label_layout: string, outbound_label_id: string, package_code: string, packages: table<content_description: string, dimensions: record, external_package_id: string, form_download: record, insured_value: record, label_download: record, label_messages: record, package_code: string, package_id: string, sequence: int, tracking_number: string, weight: record>, rma_number: string, service_code: string, ship_date: string, shipment: record<advanced_options: record<bill_to_account: string, bill_to_country_code: string, bill_to_party: string, bill_to_postal_code: string, collect_on_delivery: record, contains_alcohol: bool, custom_field1: string, custom_field2: string, custom_field3: string, delivered_duty_paid: bool, dry_ice: bool, dry_ice_weight: record, fedex_freight: record, freight_class: string, non_machinable: bool, origin_type: string, saturday_delivery: bool, shipper_release: bool, third_party_consignee: bool, use_ups_ground_freight_pricing: bool>, carrier_id: string, confirmation: string, created_at: string, customs: record<contents: string, customs_items: list, non_delivery: string>, external_order_id: string, external_shipment_id: string, insurance_provider: string, items: list<record>, modified_at: string, order_source_code: string, origin_type: string, packages: list<record>, return_to: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string, instructions: string>, service_code: string, ship_date: string, ship_from: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string, instructions: string>, ship_to: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string, instructions: string>, shipment_id: string, shipment_number: string, shipment_status: string, tags: list<record>, tax_identifiers: list<record>, total_weight: record<unit: string, value: float>, warehouse_id: string>, shipment_cost: record<amount: float, currency: string>, shipment_id: string, status: string, test_label: bool, trackable: bool, tracking_number: string, tracking_status: string, validate_address: string, voided: bool, voided_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($label_id | is-empty) { error make --unspanned { msg: "path parameter 'label_id' must be non-empty" } }
@@ -1718,13 +1740,13 @@ export def "create-return-label" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --charge-event: any # The label charge event.
-  --display-scheme: any # The display format that the label should be shown in. (default: label)
-  --label-download-type: any # default: url
-  --label-format: any # The file format that you want the label to be in. We recommend `pdf` format because it is supported by all carriers, whereas some carriers do not support the `png` or `zpl` formats. (default: pdf)
-  --label-image-id: any # The label image resource that was used to create a custom label image. (nullable)
-  --label-layout: any # The layout (size) that you want the label to be in. The `label_format` determines which sizes are allowed. `4x6` is supported for all label formats, whereas `letter` (8.5" x 11") is only supported for `pdf` format. (default: 4x6)
-]: any -> record {
+  --charge-event: string@charge-event-completer # The label charge event.
+  --display-scheme: string@display-scheme-completer # The display format that the label should be shown in. (default: label)
+  --label-download-type: string@label-download-type-completer # There are two different ways to [download a label](https://www.shipengine.com/docs/labels/downloading/): |Label Download Type | Description |--------------------|------------------------------ |`url` |You will receive a URL, which you can use to download the label in a separate request. The URL will remain valid for 90 days.This is the default if `label_download_type` is unspecified. |`inline` |You will receive the Base64-encoded label as part of the response. No need for a second request to download the label. (default: url)
+  --label-format: string@label-format-completer # The file format that you want the label to be in. We recommend `pdf` format because it is supported by all carriers, whereas some carriers do not support the `png` or `zpl` formats. (default: pdf)
+  --label-image-id: string # The label image resource that was used to create a custom label image. (nullable)
+  --label-layout: string@label-layout-completer # The layout (size) that you want the label to be in. The `label_format` determines which sizes are allowed. `4x6` is supported for all label formats, whereas `letter` (8.5" x 11") is only supported for `pdf` format. (default: 4x6)
+]: any -> record<alternative_identifiers: table<type: string, value: string>, batch_id: string, carrier_code: string, carrier_id: string, charge_event: string, created_at: string, display_scheme: string, form_download: record<href: string, type: string>, insurance_claim: record<href: string, type: string>, insurance_cost: record<amount: float, currency: string>, is_international: bool, is_return_label: bool, label_download: record<href: string, pdf: string, png: string, zpl: string>, label_download_type: string, label_format: string, label_id: string, label_image_id: string, label_layout: string, outbound_label_id: string, package_code: string, packages: table<content_description: string, dimensions: record, external_package_id: string, form_download: record, insured_value: record, label_download: record, label_messages: record, package_code: string, package_id: string, sequence: int, tracking_number: string, weight: record>, rma_number: string, service_code: string, ship_date: string, shipment: record<advanced_options: record<bill_to_account: string, bill_to_country_code: string, bill_to_party: string, bill_to_postal_code: string, collect_on_delivery: record, contains_alcohol: bool, custom_field1: string, custom_field2: string, custom_field3: string, delivered_duty_paid: bool, dry_ice: bool, dry_ice_weight: record, fedex_freight: record, freight_class: string, non_machinable: bool, origin_type: string, saturday_delivery: bool, shipper_release: bool, third_party_consignee: bool, use_ups_ground_freight_pricing: bool>, carrier_id: string, confirmation: string, created_at: string, customs: record<contents: string, customs_items: list, non_delivery: string>, external_order_id: string, external_shipment_id: string, insurance_provider: string, items: list<record>, modified_at: string, order_source_code: string, origin_type: string, packages: list<record>, return_to: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string, instructions: string>, service_code: string, ship_date: string, ship_from: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string, instructions: string>, ship_to: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string, instructions: string>, shipment_id: string, shipment_number: string, shipment_status: string, tags: list<record>, tax_identifiers: list<record>, total_weight: record<unit: string, value: float>, warehouse_id: string>, shipment_cost: record<amount: float, currency: string>, shipment_id: string, status: string, test_label: bool, trackable: bool, tracking_number: string, tracking_status: string, validate_address: string, voided: bool, voided_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1763,7 +1785,7 @@ export def "get-tracking-log-from-label" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> record<actual_delivery_date: string, carrier_code: string, carrier_detail_code: string, carrier_id: string, carrier_status_code: string, carrier_status_description: string, estimated_delivery_date: string, events: table<carrier_detail_code: string, carrier_occurred_at: string, carrier_status_code: string, carrier_status_description: string, city_locality: string, company_name: string, country_code: string, description: string, event_code: string, latitude: float, longitude: float, occurred_at: string, postal_code: string, signer: string, state_province: string, status_code: string, status_description: string>, exception_description: string, ship_date: string, status_code: string, status_description: string, tracking_number: string, tracking_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($label_id | is-empty) { error make --unspanned { msg: "path parameter 'label_id' must be non-empty" } }
@@ -1843,7 +1865,7 @@ export def "list-manifests" [
   --page: int # Return a specific page of results. Defaults to the first page. If set to a number that's greater than the number of pages of results, an empty page is returned. (format: int32, default: 1, e.g. 2)
   --page-size: int # The number of results to return per response. (format: int32, default: 25, e.g. 50)
   --label-ids: list<string>
-]: nothing -> record<links: record<first: record, last: record, next: record<href: record, type: string>, prev: record<href: record, type: string>>, manifests: table<carrier_id: record, created_at: string, form_id: record, label_ids: list, manifest_download: record, manifest_id: record, ship_date: string, shipments: int, submission_id: string, warehouse_id: record>, page: int, pages: int, total: int> {
+]: nothing -> record<links: record<first: record<href: string, type: string>, last: record<href: string, type: string>, next: record<href: string, type: string>, prev: record<href: string, type: string>>, manifests: table<carrier_id: string, created_at: string, form_id: string, label_ids: list, manifest_download: record, manifest_id: string, ship_date: string, shipments: int, submission_id: string, warehouse_id: string>, page: int, pages: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "warehouse_id" $warehouse_id "scalar") (serialize-qp "ship_date_start" $ship_date_start "scalar") (serialize-qp "ship_date_end" $ship_date_end "scalar") (serialize-qp "created_at_start" $created_at_start "scalar") (serialize-qp "created_at_end" $created_at_end "scalar") (serialize-qp "carrier_id" $carrier_id "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "label_ids" $label_ids "multi")] | flatten | str join "&"
@@ -1878,12 +1900,12 @@ export def "create-manifest" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --carrier-id: any # A string that uniquely identifies the carrier
+  --carrier-id: string # A string that uniquely identifies the carrier
   --excluded-label-ids: list # The list of label ids to exclude from the manifest
   --label-ids: list # The list of label ids to include for the manifest
   --ship-date: string # The ship date that the shipment will be sent out on (format: date-time, e.g. 2018-09-23T15:00:00.000Z)
-  --warehouse-id: any # A string that uniquely identifies the warehouse
-]: any -> record {
+  --warehouse-id: string # A string that uniquely identifies the warehouse
+]: any -> record<manifests: table<carrier_id: string, created_at: string, form_id: string, label_ids: list, manifest_download: record, manifest_id: string, ship_date: string, shipments: int, submission_id: string, warehouse_id: string>, manifest_requests: table<manifest_request_id: string, status: string>, carrier_id: string, created_at: string, form_id: string, label_ids: list<string>, manifest_download: record<href: string>, manifest_id: string, ship_date: string, shipments: int, submission_id: string, warehouse_id: string, errors: table<error_code: string, error_source: string, error_type: string, message: string>, request_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1921,7 +1943,7 @@ export def "get-manifest-request-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> record<manifests: table<carrier_id: string, created_at: string, form_id: string, label_ids: list, manifest_download: record, manifest_id: string, ship_date: string, shipments: int, submission_id: string, warehouse_id: string>, manifest_requests: table<manifest_request_id: string, status: string>, carrier_id: string, created_at: string, form_id: string, label_ids: list<string>, manifest_download: record<href: string>, manifest_id: string, ship_date: string, shipments: int, submission_id: string, warehouse_id: string, errors: table<error_code: string, error_source: string, error_type: string, message: string>, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($manifest_request_id | is-empty) { error make --unspanned { msg: "path parameter 'manifest_request_id' must be non-empty" } }
@@ -1957,7 +1979,7 @@ export def "get-manifest-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> record<carrier_id: string, created_at: string, form_id: string, label_ids: list<string>, manifest_download: record<href: string>, manifest_id: string, ship_date: string, shipments: int, submission_id: string, warehouse_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($manifest_id | is-empty) { error make --unspanned { msg: "path parameter 'manifest_id' must be non-empty" } }
@@ -1992,7 +2014,7 @@ export def "list-package-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<packages: table<description: string, dimensions: record, name: string, package_code: record, package_id: record>> {
+]: nothing -> record<packages: table<description: string, dimensions: record, name: string, package_code: string, package_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/packages" $auth.query)
@@ -2016,6 +2038,7 @@ export def "list-package-types" [
 #
 # POST /v1/packages
 # operationId: create_package_type
+# --dimensions shape: {height: float, length: float, unit: "inch"|"centimeter", width: float}
 export def "create-package-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2027,11 +2050,11 @@ export def "create-package-type" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # Provides a helpful description for the custom package. (nullable, e.g. Packaging for laptops)
-  --dimensions: any # The custom dimensions for the package.
+  --dimensions: record # The custom dimensions for the package. — shape: {height: float, length: float, unit: "inch"|"centimeter", width: float}
   name: string # e.g. laptop_box
-  package_code: any
-  --package-id: any # A string that uniquely identifies the package.
-]: any -> record {
+  package_code: string # A [package type](https://www.shipengine.com/docs/reference/list-carrier-packages/), such as `thick_envelope`, `small_flat_rate_box`, `large_package`, etc. Use the code `package` for custom or unknown package types.
+  --package-id: string # A string that uniquely identifies the package.
+]: any -> record<description: string, dimensions: record<height: float, length: float, unit: string, width: float>, name: string, package_code: string, package_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2106,7 +2129,7 @@ export def "get-package-type-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> record<description: string, dimensions: record<height: float, length: float, unit: string, width: float>, name: string, package_code: string, package_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($package_id | is-empty) { error make --unspanned { msg: "path parameter 'package_id' must be non-empty" } }
@@ -2131,6 +2154,7 @@ export def "get-package-type-by-id" [
 #
 # PUT /v1/packages/{package_id}
 # operationId: update_package_type
+# --dimensions shape: {height: float, length: float, unit: "inch"|"centimeter", width: float}
 export def "update-package-type" [
   package_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2144,10 +2168,10 @@ export def "update-package-type" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --description: string # Provides a helpful description for the custom package. (nullable, e.g. Packaging for laptops)
-  --dimensions: any # The custom dimensions for the package.
+  --dimensions: record # The custom dimensions for the package. — shape: {height: float, length: float, unit: "inch"|"centimeter", width: float}
   name: string # e.g. laptop_box
-  package_code: any
-  --body-package-id: any # A string that uniquely identifies the package.
+  package_code: string # A [package type](https://www.shipengine.com/docs/reference/list-carrier-packages/), such as `thick_envelope`, `small_flat_rate_box`, `large_package`, etc. Use the code `package` for custom or unknown package types.
+  --body-package-id: string # A string that uniquely identifies the package.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -2192,7 +2216,7 @@ export def "list-scheduled-pickups" [
   --created-at-end: string # Only return scheduled pickups that were created on or before a specific date/time (format: date-time, e.g. 2019-03-12T19:24:13.657Z)
   --page: int # Return a specific page of results. Defaults to the first page. If set to a number that's greater than the number of pages of results, an empty page is returned. (format: int32, default: 1, e.g. 2)
   --page-size: int # The number of results to return per response. (format: int32, default: 25, e.g. 50)
-]: nothing -> record<links: record<first: record, last: record, next: record<href: record, type: string>, prev: record<href: record, type: string>>, page: int, pages: int, pickups: table<cancelled_at: record, carrier_id: record, confirmation_number: string, contact_details: record, created_at: record, label_ids: list, pickup_address: record, pickup_id: record, pickup_notes: string, pickup_window: record, pickup_windows: list, warehouse_id: record>, total: int, errors: table<error_code: record, error_source: record, error_type: record, message: string>, request_id: record> {
+]: nothing -> record<links: record<first: record<href: string, type: string>, last: record<href: string, type: string>, next: record<href: string, type: string>, prev: record<href: string, type: string>>, page: int, pages: int, pickups: table<cancelled_at: string, carrier_id: string, confirmation_number: string, contact_details: record, created_at: string, label_ids: list, pickup_address: record, pickup_id: string, pickup_notes: string, pickup_window: record, pickup_windows: list, warehouse_id: string>, total: int, errors: table<error_code: string, error_source: string, error_type: string, message: string>, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "carrier_id" $carrier_id "scalar") (serialize-qp "warehouse_id" $warehouse_id "scalar") (serialize-qp "created_at_start" $created_at_start "scalar") (serialize-qp "created_at_end" $created_at_end "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -2217,9 +2241,10 @@ export def "list-scheduled-pickups" [
 #
 # POST /v1/pickups
 # operationId: schedule_pickup
-# --contact_details shape: {email: any, name: string, phone: string}
-# --pickup_window shape: {end_at: any, start_at: any}
-# --pickup_windows item shape: {end_at?: any, start_at?: any}
+# --contact_details shape: {email: string, name: string, phone: string}
+# --pickup_address shape: {address_line1: string, address_line2?: string, address_line3?: string, address_residential_indicator: "unknown"|"yes"|"no", city_locality: string, company_name?: string, country_code: string, email?: string, name: string, phone: string, postal_code: string, state_province: string}
+# --pickup_window shape: {end_at: string, start_at: string}
+# --pickup_windows item shape: {end_at?: string, start_at?: string}
 export def "schedule-pickup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2230,11 +2255,11 @@ export def "schedule-pickup" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  contact_details: record # shape: {email: any, name: string, phone: string}
+  contact_details: record # shape: {email: string, name: string, phone: string}
   label_ids: list # Label IDs that will be included in the pickup request
   --pickup-notes: string # Used by some carriers to give special instructions for a package pickup
-  pickup_window: record # The desired time range for the package pickup. — shape: {end_at: any, start_at: any}
-]: any -> record<cancelled_at: record, carrier_id: record, confirmation_number: string, contact_details: record<email: record, name: string, phone: string>, created_at: record, label_ids: list<record>, pickup_address: record, pickup_id: record, pickup_notes: string, pickup_window: record<end_at: record, start_at: record>, pickup_windows: table<end_at: record, start_at: record>, warehouse_id: record, errors: table<error_code: record, error_source: record, error_type: record, message: string>, request_id: record> {
+  pickup_window: record # The desired time range for the package pickup. — shape: {end_at: string, start_at: string}
+]: any -> record<cancelled_at: string, carrier_id: string, confirmation_number: string, contact_details: record<email: string, name: string, phone: string>, created_at: string, label_ids: list<string>, pickup_address: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string>, pickup_id: string, pickup_notes: string, pickup_window: record<end_at: string, start_at: string>, pickup_windows: table<end_at: string, start_at: string>, warehouse_id: string, errors: table<error_code: string, error_source: string, error_type: string, message: string>, request_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2272,7 +2297,7 @@ export def "delete-scheduled-pickup" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<errors: table<error_code: record, error_source: record, error_type: record, message: string>, request_id: record, pickup_id: record> {
+]: nothing -> record<errors: table<error_code: string, error_source: string, error_type: string, message: string>, request_id: string, pickup_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($pickup_id | is-empty) { error make --unspanned { msg: "path parameter 'pickup_id' must be non-empty" } }
@@ -2308,7 +2333,7 @@ export def "get-pickup-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<errors: table<error_code: record, error_source: record, error_type: record, message: string>, request_id: record> {
+]: nothing -> record<cancelled_at: string, carrier_id: string, confirmation_number: string, contact_details: record<email: string, name: string, phone: string>, created_at: string, label_ids: list<string>, pickup_address: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string>, pickup_id: string, pickup_notes: string, pickup_window: record<end_at: string, start_at: string>, pickup_windows: table<end_at: string, start_at: string>, warehouse_id: string, errors: table<error_code: string, error_source: string, error_type: string, message: string>, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($pickup_id | is-empty) { error make --unspanned { msg: "path parameter 'pickup_id' must be non-empty" } }
@@ -2333,6 +2358,8 @@ export def "get-pickup-by-id" [
 #
 # POST /v1/rates
 # operationId: calculate_rates
+# --rate_options shape: {calculate_tax_amount?: bool, carrier_ids: list, is_return?: bool, package_types?: list<string>, preferred_currency?: string, service_codes?: list<string>}
+# --shipment shape: {validate_address?: "no_validation"|"validate_only"|"validate_and_clean", advanced_options?: record, carrier_id: string, confirmation?: "none"|"delivery"|"signature"|"adult_signature"|"direct_signature"|"delivery_mailed"|"verbal_confirmation", customs?: record, external_order_id?: string, external_shipment_id?: string, insurance_provider?: "none"|"shipsurance"|"carrier"|"third_party", items?: list, ... (11 more fields)}
 export def "calculate-rates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2343,10 +2370,10 @@ export def "calculate-rates" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rate-options: any # The rate options
-  shipment_id: any # A string that uniquely identifies the shipment
-  shipment: any # The shipment object
-]: any -> record {
+  --rate-options: record # The rate options — shape: {calculate_tax_amount?: bool, carrier_ids: list, is_return?: bool, package_types?: list<string>, preferred_currency?: string, service_codes?: list<string>}
+  shipment_id: string # A string that uniquely identifies the shipment
+  shipment: record # The shipment object — shape: {validate_address?: "no_validation"|"validate_only"|"validate_and_clean", advanced_options?: record, carrier_id: string, confirmation?: "none"|"delivery"|"signature"|"adult_signature"|"direct_signature"|"delivery_mailed"|"verbal_confirmation", customs?: record, external_order_id?: string, external_shipment_id?: string, insurance_provider?: "none"|"shipsurance"|"carrier"|"third_party", items?: list, ... (11 more fields)}
+]: any -> record<advanced_options: record<bill_to_account: string, bill_to_country_code: string, bill_to_party: string, bill_to_postal_code: string, collect_on_delivery: record<payment_amount: record, payment_type: string>, contains_alcohol: bool, custom_field1: string, custom_field2: string, custom_field3: string, delivered_duty_paid: bool, dry_ice: bool, dry_ice_weight: record<unit: string, value: float>, fedex_freight: record<booking_confirmation: string, shipper_load_and_count: string>, freight_class: string, non_machinable: bool, origin_type: string, saturday_delivery: bool, shipper_release: bool, third_party_consignee: bool, use_ups_ground_freight_pricing: bool>, carrier_id: string, confirmation: string, created_at: string, customs: record<contents: string, customs_items: list<record>, non_delivery: string>, external_order_id: string, external_shipment_id: string, insurance_provider: string, items: table<asin: string, external_order_id: string, external_order_item_id: string, name: string, order_source_code: string, quantity: int, sales_order_id: string, sales_order_item_id: string, sku: string>, modified_at: string, order_source_code: string, origin_type: string, packages: table<content_description: string, dimensions: record, external_package_id: string, form_download: record, insured_value: record, label_download: record, label_messages: record, package_code: string, package_id: string, sequence: int, tracking_number: string, weight: record>, return_to: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string, instructions: string>, service_code: string, ship_date: string, ship_from: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string, instructions: string>, ship_to: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string, instructions: string>, shipment_id: string, shipment_number: string, shipment_status: string, tags: table<name: string>, tax_identifiers: table<identifier_type: string, issuing_authority: string, taxable_entity_type: string, value: string>, total_weight: record<unit: string, value: float>, warehouse_id: string, rate_response: record<created_at: string, errors: list<record>, invalid_rates: list<record>, rate_request_id: string, rates: list<record>, shipment_id: string, status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2373,6 +2400,7 @@ export def "calculate-rates" [
 #
 # POST /v1/rates/bulk
 # operationId: compare_bulk_rates
+# --rate_options shape: {calculate_tax_amount?: bool, carrier_ids: list, is_return?: bool, package_types?: list<string>, preferred_currency?: string, service_codes?: list<string>}
 export def "compare-bulk-rates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2383,10 +2411,10 @@ export def "compare-bulk-rates" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  rate_options: any # The rate options
+  rate_options: record # The rate options — shape: {calculate_tax_amount?: bool, carrier_ids: list, is_return?: bool, package_types?: list<string>, preferred_currency?: string, service_codes?: list<string>}
   --shipment-ids: list # The array of shipment IDs
   --shipments: list # The array of shipments to get bulk rate estimates for
-]: any -> table<created_at: string, errors: list<record>, rate_request_id: record, shipment_id: record, status: record> {
+]: any -> table<created_at: string, errors: list<record>, rate_request_id: string, shipment_id: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2413,6 +2441,8 @@ export def "compare-bulk-rates" [
 #
 # POST /v1/rates/estimate
 # operationId: estimate_rates
+# --dimensions shape: {height: float, length: float, unit: "inch"|"centimeter", width: float}
+# --weight shape: {unit: "pound"|"ounce"|"gram"|"kilogram", value: float}
 @deprecated --flag carrier-id
 export def "estimate-rates" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2424,22 +2454,22 @@ export def "estimate-rates" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --address-residential-indicator: any
-  --confirmation: any
-  --dimensions: any # The dimensions of the package
+  --address-residential-indicator: string@address-residential-indicator-completer # Indicates whether an address is residential.
+  --confirmation: string@confirmation-completer # The possible delivery confirmation values
+  --dimensions: record # The dimensions of the package — shape: {height: float, length: float, unit: "inch"|"centimeter", width: float}
   from_city_locality: string # from postal code (e.g. Austin)
-  from_country_code: any
-  from_postal_code: any
+  from_country_code: string # A two-letter [ISO 3166-1 country code](https://en.wikipedia.org/wiki/ISO_3166-1)
+  from_postal_code: string # postal code
   from_state_province: string # From state province (e.g. Austin)
-  ship_date: string # ship date
+  ship_date: string # ship date (format: date-time)
   to_city_locality: string # The city locality the package is being shipped to (e.g. Austin)
-  to_country_code: any
-  to_postal_code: any
+  to_country_code: string # A two-letter [ISO 3166-1 country code](https://en.wikipedia.org/wiki/ISO_3166-1)
+  to_postal_code: string # postal code
   to_state_province: string # To state province (e.g. Houston)
-  weight: any # The weight of the package
-  --carrier-id: any # A string that uniquely identifies the carrier (DEPRECATED)
+  weight: record # The weight of the package — shape: {unit: "pound"|"ounce"|"gram"|"kilogram", value: float}
+  --carrier-id: string # A string that uniquely identifies the carrier (DEPRECATED)
   --carrier-ids: list<string> # Array of Carrier Ids
-]: any -> table<carrier_code: string, carrier_delivery_days: string, carrier_friendly_name: string, carrier_id: record, carrier_nickname: string, confirmation_amount: record<amount: float, currency: record>, delivery_days: int, error_messages: list<string>, estimated_delivery_date: record, guaranteed_service: bool, insurance_amount: record<amount: float, currency: record>, negotiated_rate: bool, other_amount: record<amount: float, currency: record>, package_type: string, rate_type: record, service_code: string, service_type: string, ship_date: string, shipping_amount: record<amount: float, currency: record>, tax_amount: record<amount: float, currency: record>, trackable: bool, validation_status: record, warning_messages: list<string>, zone: int> {
+]: any -> table<carrier_code: string, carrier_delivery_days: string, carrier_friendly_name: string, carrier_id: string, carrier_nickname: string, confirmation_amount: record<amount: float, currency: string>, delivery_days: int, error_messages: list<string>, estimated_delivery_date: string, guaranteed_service: bool, insurance_amount: record<amount: float, currency: string>, negotiated_rate: bool, other_amount: record<amount: float, currency: string>, package_type: string, rate_type: string, service_code: string, service_type: string, ship_date: string, shipping_amount: record<amount: float, currency: string>, tax_amount: record<amount: float, currency: string>, trackable: bool, validation_status: string, warning_messages: list<string>, zone: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2477,7 +2507,7 @@ export def "get-rate-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> record<carrier_code: string, carrier_delivery_days: string, carrier_friendly_name: string, carrier_id: string, carrier_nickname: string, confirmation_amount: record<amount: float, currency: string>, delivery_days: int, error_messages: list<string>, estimated_delivery_date: string, guaranteed_service: bool, insurance_amount: record<amount: float, currency: string>, negotiated_rate: bool, other_amount: record<amount: float, currency: string>, package_type: string, rate_id: string, rate_type: string, service_code: string, service_type: string, ship_date: string, shipping_amount: record<amount: float, currency: string>, tax_amount: record<amount: float, currency: string>, trackable: bool, validation_status: string, warning_messages: list<string>, zone: int> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($rate_id | is-empty) { error make --unspanned { msg: "path parameter 'rate_id' must be non-empty" } }
@@ -2521,7 +2551,7 @@ export def "service-points-list" [
   --max-results: int # The maximum number of service points to return (format: int32, e.g. 25)
   --providers: list # An array of shipping service providers and service codes — item shape: {carrier_id?: string, service_code?: list<string>}
   --radius: int # Search radius in kilometers (format: int32, e.g. 500)
-]: any -> record<errors: table<error_code: record, error_source: record, error_type: record, message: string>, lat: float, long: float, service_points: table<address_line1: string, carrier_code: string, city_locality: string, company_name: string, country_code: string, distance_in_meters: float, features: list, hours_of_operation: record, lat: float, long: float, phone_number: string, postal_code: string, service_codes: list, service_point_id: string, state_province: string>> {
+]: any -> record<errors: table<error_code: string, error_source: string, error_type: string, message: string>, lat: float, long: float, service_points: table<address_line1: string, carrier_code: string, city_locality: string, company_name: string, country_code: string, distance_in_meters: float, features: list, hours_of_operation: record, lat: float, long: float, phone_number: string, postal_code: string, service_codes: list, service_point_id: string, state_province: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2610,7 +2640,7 @@ export def "list-shipments" [
   --sales-order-id: string # Sales Order ID
   --sort-dir: string # Controls the sort order of the query. (default: desc)
   --sort-by: string@sort-by-completer-1 # e.g. modified_at
-]: nothing -> record<links: record<first: record, last: record, next: record<href: record, type: string>, prev: record<href: record, type: string>>, page: int, pages: int, shipments: list<record>, total: int> {
+]: nothing -> record<links: record<first: record<href: string, type: string>, last: record<href: string, type: string>, next: record<href: string, type: string>, prev: record<href: string, type: string>>, page: int, pages: int, shipments: table<advanced_options: record, carrier_id: string, confirmation: string, created_at: string, customs: record, external_order_id: string, external_shipment_id: string, insurance_provider: string, items: list, modified_at: string, order_source_code: string, origin_type: string, packages: list, return_to: record, service_code: string, ship_date: string, ship_from: record, ship_to: record, shipment_id: string, shipment_number: string, shipment_status: string, tags: list, tax_identifiers: list, total_weight: record, warehouse_id: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "shipment_status" $shipment_status "scalar") (serialize-qp "batch_id" $batch_id "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "created_at_start" $created_at_start "scalar") (serialize-qp "created_at_end" $created_at_end "scalar") (serialize-qp "modified_at_start" $modified_at_start "scalar") (serialize-qp "modified_at_end" $modified_at_end "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "sales_order_id" $sales_order_id "scalar") (serialize-qp "sort_dir" $sort_dir "scalar") (serialize-qp "sort_by" $sort_by "scalar")] | flatten | str join "&"
@@ -2646,7 +2676,7 @@ export def "create-shipments" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   shipments: list # An array of shipments to be created.
-]: any -> record<has_errors: bool, shipments: list<record>> {
+]: any -> record<has_errors: bool, shipments: table<advanced_options: record, carrier_id: string, confirmation: string, created_at: string, customs: record, external_order_id: string, external_shipment_id: string, insurance_provider: string, items: list, modified_at: string, order_source_code: string, origin_type: string, packages: list, return_to: record, service_code: string, ship_date: string, ship_from: record, ship_to: record, shipment_id: string, shipment_number: string, shipment_status: string, tags: list, tax_identifiers: list, total_weight: record, warehouse_id: string, address_validation: record, errors: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2684,7 +2714,7 @@ export def "get-shipment-by-external-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> record<advanced_options: record<bill_to_account: string, bill_to_country_code: string, bill_to_party: string, bill_to_postal_code: string, collect_on_delivery: record<payment_amount: record, payment_type: string>, contains_alcohol: bool, custom_field1: string, custom_field2: string, custom_field3: string, delivered_duty_paid: bool, dry_ice: bool, dry_ice_weight: record<unit: string, value: float>, fedex_freight: record<booking_confirmation: string, shipper_load_and_count: string>, freight_class: string, non_machinable: bool, origin_type: string, saturday_delivery: bool, shipper_release: bool, third_party_consignee: bool, use_ups_ground_freight_pricing: bool>, carrier_id: string, confirmation: string, created_at: string, customs: record<contents: string, customs_items: list<record>, non_delivery: string>, external_order_id: string, external_shipment_id: string, insurance_provider: string, items: table<asin: string, external_order_id: string, external_order_item_id: string, name: string, order_source_code: string, quantity: int, sales_order_id: string, sales_order_item_id: string, sku: string>, modified_at: string, order_source_code: string, origin_type: string, packages: table<content_description: string, dimensions: record, external_package_id: string, form_download: record, insured_value: record, label_download: record, label_messages: record, package_code: string, package_id: string, sequence: int, tracking_number: string, weight: record>, return_to: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string, instructions: string>, service_code: string, ship_date: string, ship_from: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string, instructions: string>, ship_to: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string, instructions: string>, shipment_id: string, shipment_number: string, shipment_status: string, tags: table<name: string>, tax_identifiers: table<identifier_type: string, issuing_authority: string, taxable_entity_type: string, value: string>, total_weight: record<unit: string, value: float>, warehouse_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($external_shipment_id | is-empty) { error make --unspanned { msg: "path parameter 'external_shipment_id' must be non-empty" } }
@@ -2709,6 +2739,7 @@ export def "get-shipment-by-external-id" [
 #
 # PUT /v1/shipments/recognize
 # operationId: parse_shipment
+# --shipment shape: {advanced_options?: record, carrier_id?: string, confirmation?: "none"|"delivery"|"signature"|"adult_signature"|"direct_signature"|"delivery_mailed"|"verbal_confirmation", customs?: record, external_order_id?: string, external_shipment_id?: string, insurance_provider?: "none"|"shipsurance"|"carrier"|"third_party", items?: list, ... (11 more fields)}
 export def "parse-shipment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2719,9 +2750,9 @@ export def "parse-shipment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --shipment: any # You can optionally provide a `shipment` object containing any already-known values. For example, you probably already know the `ship_from` address, and you may also already know what carrier and service you want to use.
+  --shipment: record # You can optionally provide a `shipment` object containing any already-known values. For example, you probably already know the `ship_from` address, and you may also already know what carrier and service you want to use. — shape: {advanced_options?: record, carrier_id?: string, confirmation?: "none"|"delivery"|"signature"|"adult_signature"|"direct_signature"|"delivery_mailed"|"verbal_confirmation", customs?: record, external_order_id?: string, external_shipment_id?: string, insurance_provider?: "none"|"shipsurance"|"carrier"|"third_party", items?: list, ... (11 more fields)}
   text: string # The unstructured text that contains shipping-related entities (e.g. I have a 4oz package that's 5x10x14in, and I need to ship it to Margie McMiller at 3800 North Lamar suite 200 in austin, tx 78652. Please send it via USPS first class and require an adult signature. It also needs to be insured for $400. )
-]: any -> record<entities: table<end_index: int, result: record, score: float, start_index: int, text: string, type: string>, score: float, shipment: record<advanced_options: record<bill_to_account: string, bill_to_country_code: record, bill_to_party: record, bill_to_postal_code: string, collect_on_delivery: record, contains_alcohol: bool, custom_field1: string, custom_field2: string, custom_field3: string, delivered_duty_paid: bool, dry_ice: bool, dry_ice_weight: record, fedex_freight: record, freight_class: string, non_machinable: bool, origin_type: record, saturday_delivery: bool, shipper_release: bool, third_party_consignee: bool, use_ups_ground_freight_pricing: bool>, carrier_id: record, confirmation: record, created_at: record, customs: record<contents: record, customs_items: list, non_delivery: record>, external_order_id: string, external_shipment_id: string, insurance_provider: record, items: list<record>, modified_at: record, order_source_code: record, origin_type: record, packages: list<record>, return_to: record, service_code: record, ship_date: record, ship_from: record, ship_to: record, shipment_id: record, shipment_number: string, shipment_status: record, tags: list<record>, tax_identifiers: list<record>, total_weight: record<unit: record, value: float>, warehouse_id: record>> {
+]: any -> record<entities: table<end_index: int, result: record, score: float, start_index: int, text: string, type: string>, score: float, shipment: record<advanced_options: record<bill_to_account: string, bill_to_country_code: string, bill_to_party: string, bill_to_postal_code: string, collect_on_delivery: record, contains_alcohol: bool, custom_field1: string, custom_field2: string, custom_field3: string, delivered_duty_paid: bool, dry_ice: bool, dry_ice_weight: record, fedex_freight: record, freight_class: string, non_machinable: bool, origin_type: string, saturday_delivery: bool, shipper_release: bool, third_party_consignee: bool, use_ups_ground_freight_pricing: bool>, carrier_id: string, confirmation: string, created_at: string, customs: record<contents: string, customs_items: list, non_delivery: string>, external_order_id: string, external_shipment_id: string, insurance_provider: string, items: list<record>, modified_at: string, order_source_code: string, origin_type: string, packages: list<record>, return_to: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string, instructions: string>, service_code: string, ship_date: string, ship_from: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string, instructions: string>, ship_to: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string, instructions: string>, shipment_id: string, shipment_number: string, shipment_status: string, tags: list<record>, tax_identifiers: list<record>, total_weight: record<unit: string, value: float>, warehouse_id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2759,7 +2790,7 @@ export def "get-shipment-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> record<advanced_options: record<bill_to_account: string, bill_to_country_code: string, bill_to_party: string, bill_to_postal_code: string, collect_on_delivery: record<payment_amount: record, payment_type: string>, contains_alcohol: bool, custom_field1: string, custom_field2: string, custom_field3: string, delivered_duty_paid: bool, dry_ice: bool, dry_ice_weight: record<unit: string, value: float>, fedex_freight: record<booking_confirmation: string, shipper_load_and_count: string>, freight_class: string, non_machinable: bool, origin_type: string, saturday_delivery: bool, shipper_release: bool, third_party_consignee: bool, use_ups_ground_freight_pricing: bool>, carrier_id: string, confirmation: string, created_at: string, customs: record<contents: string, customs_items: list<record>, non_delivery: string>, external_order_id: string, external_shipment_id: string, insurance_provider: string, items: table<asin: string, external_order_id: string, external_order_item_id: string, name: string, order_source_code: string, quantity: int, sales_order_id: string, sales_order_item_id: string, sku: string>, modified_at: string, order_source_code: string, origin_type: string, packages: table<content_description: string, dimensions: record, external_package_id: string, form_download: record, insured_value: record, label_download: record, label_messages: record, package_code: string, package_id: string, sequence: int, tracking_number: string, weight: record>, return_to: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string, instructions: string>, service_code: string, ship_date: string, ship_from: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string, instructions: string>, ship_to: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string, instructions: string>, shipment_id: string, shipment_number: string, shipment_status: string, tags: table<name: string>, tax_identifiers: table<identifier_type: string, issuing_authority: string, taxable_entity_type: string, value: string>, total_weight: record<unit: string, value: float>, warehouse_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($shipment_id | is-empty) { error make --unspanned { msg: "path parameter 'shipment_id' must be non-empty" } }
@@ -2784,10 +2815,16 @@ export def "get-shipment-by-id" [
 #
 # PUT /v1/shipments/{shipment_id}
 # operationId: update_shipment
-# --items item shape: {asin?: string, external_order_id?: string, external_order_item_id?: string, name?: string, order_source_code?: any, quantity?: int, sales_order_id?: string, sales_order_item_id?: string, sku?: string}
-# --packages item shape: {content_description?: string, dimensions?: any, external_package_id?: string, insured_value?: any, label_messages?: any, package_code?: any, package_id?: any, weight: any}
+# --advanced_options shape: {bill_to_account?: string, bill_to_country_code?: string, bill_to_party?: "recipient"|"third_party", bill_to_postal_code?: string, collect_on_delivery?: record, contains_alcohol?: bool, custom_field1?: string, custom_field2?: string, custom_field3?: string, delivered_duty_paid?: bool, dry_ice?: bool, dry_ice_weight?: record, fedex_freight?: record, freight_class?: string, non_machinable?: bool, origin_type?: "pickup"|"drop_off", saturday_delivery?: bool, shipper_release?: bool, ... (2 more fields)}
+# --customs shape: {contents: "merchandise"|"documents"|"gift"|"returned_goods"|"sample", customs_items?: list, non_delivery: "return_to_sender"|"treat_as_abandoned"}
+# --items item shape: {asin?: string, external_order_id?: string, external_order_item_id?: string, name?: string, order_source_code?: "amazon_ca"|"amazon_us"|"brightpearl"|"channel_advisor"|"cratejoy"|"ebay"|"etsy"|"jane"|"groupon_goods"|"magento"|"paypal"|"seller_active"|"shopify"|"stitch_labs"|"squarespace"|"three_dcart"|"tophatter"|"walmart"|"woo_commerce"|"volusion", quantity?: int, sales_order_id?: string, sales_order_item_id?: string, sku?: string}
+# --packages item shape: {content_description?: string, dimensions?: record, external_package_id?: string, insured_value?: record, label_messages?: record, package_code?: string, package_id?: string, weight: record}
+# --return_to shape: {address_line1: string, address_line2?: string, address_line3?: string, address_residential_indicator: "unknown"|"yes"|"no", city_locality: string, company_name?: string, country_code: string, email?: string, name: string, phone: string, postal_code: string, state_province: string, instructions?: string}
+# --ship_from shape: {address_line1: string, address_line2?: string, address_line3?: string, address_residential_indicator: "unknown"|"yes"|"no", city_locality: string, company_name?: string, country_code: string, email?: string, name: string, phone: string, postal_code: string, state_province: string, instructions?: string}
+# --ship_to shape: {address_line1: string, address_line2?: string, address_line3?: string, address_residential_indicator: "unknown"|"yes"|"no", city_locality: string, company_name?: string, country_code: string, email?: string, name: string, phone: string, postal_code: string, state_province: string, instructions?: string}
 # --tags item shape: {name: string}
-# --tax_identifiers item shape: {identifier_type: any, issuing_authority: string, taxable_entity_type: any, value: string}
+# --tax_identifiers item shape: {identifier_type: "vat"|"eori"|"ssn"|"ein"|"tin"|"ioss"|"pan"|"voec", issuing_authority: string, taxable_entity_type: "shipper"|"recipient", value: string}
+# --total_weight shape: {unit: "pound"|"ounce"|"gram"|"kilogram", value: float}
 export def "update-shipment" [
   shipment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2799,27 +2836,27 @@ export def "update-shipment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --advanced-options: any # Advanced shipment options. These are entirely optional.
-  --carrier-id: any # The carrier account that is billed for the shipping charges
-  --confirmation: any # The type of delivery confirmation that is required for this shipment. (default: none)
-  --customs: any # Customs information. This is usually only needed for international shipments. (nullable)
+  --advanced-options: record # Advanced shipment options. These are entirely optional. — shape: {bill_to_account?: string, bill_to_country_code?: string, bill_to_party?: "recipient"|"third_party", bill_to_postal_code?: string, collect_on_delivery?: record, contains_alcohol?: bool, custom_field1?: string, custom_field2?: string, custom_field3?: string, delivered_duty_paid?: bool, dry_ice?: bool, dry_ice_weight?: record, fedex_freight?: record, freight_class?: string, non_machinable?: bool, origin_type?: "pickup"|"drop_off", saturday_delivery?: bool, shipper_release?: bool, ... (2 more fields)}
+  --carrier-id: string # The carrier account that is billed for the shipping charges
+  --confirmation: string@confirmation-completer # The type of delivery confirmation that is required for this shipment. (default: none)
+  --customs: record # Customs information. This is usually only needed for international shipments. (nullable) — shape: {contents: "merchandise"|"documents"|"gift"|"returned_goods"|"sample", customs_items?: list, non_delivery: "return_to_sender"|"treat_as_abandoned"}
   --external-order-id: string # ID that the Order Source assigned (nullable)
   --external-shipment-id: string # A unique user-defined key to identify a shipment. This can be used to retrieve the shipment. > **Warning:** The `external_shipment_id` is limited to 50 characters. Any additional characters will be truncated. (nullable)
-  --insurance-provider: any # The insurance provider to use for any insured packages in the shipment. (default: none)
-  --items: list # Describe the packages included in this shipment as related to potential metadata that was imported from external order sources (default: []) — item shape: {asin?: string, external_order_id?: string, external_order_item_id?: string, name?: string, order_source_code?: any, quantity?: int, sales_order_id?: string, sales_order_item_id?: string, sku?: string}
-  --order-source-code: any
-  --origin-type: any # Indicates if the package will be picked up or dropped off by the carrier (nullable)
-  --packages: list # The packages in the shipment. > **Note:** Some carriers only allow one package per shipment. If you attempt to create a multi-package shipment for a carrier that doesn't allow it, an error will be returned. — item shape: {content_description?: string, dimensions?: any, external_package_id?: string, insured_value?: any, label_messages?: any, package_code?: any, package_id?: any, weight: any}
-  --return-to: any # The return address for this shipment. Defaults to the `ship_from` address.
-  --service-code: any # The [carrier service](https://www.shipengine.com/docs/shipping/use-a-carrier-service/) used to ship the package, such as `fedex_ground`, `usps_first_class_mail`, `flat_rate_envelope`, etc.
-  --ship-date: any # The date that the shipment was (or will be) shippped. ShipEngine will take the day of week into consideration. For example, if the carrier does not operate on Sundays, then a package that would have shipped on Sunday will ship on Monday instead.
-  ship_from: any # The shipment's origin address. If you frequently ship from the same location, consider [creating a warehouse](https://www.shipengine.com/docs/reference/create-warehouse/). Then you can simply specify the `warehouse_id` rather than the complete address each time.
-  ship_to: any # The recipient's mailing address
+  --insurance-provider: string@insurance-provider-completer # The insurance provider to use for any insured packages in the shipment. (default: none)
+  --items: list # Describe the packages included in this shipment as related to potential metadata that was imported from external order sources (default: []) — item shape: {asin?: string, external_order_id?: string, external_order_item_id?: string, name?: string, order_source_code?: "amazon_ca"|"amazon_us"|"brightpearl"|"channel_advisor"|"cratejoy"|"ebay"|"etsy"|"jane"|"groupon_goods"|"magento"|"paypal"|"seller_active"|"shopify"|"stitch_labs"|"squarespace"|"three_dcart"|"tophatter"|"walmart"|"woo_commerce"|"volusion", quantity?: int, sales_order_id?: string, sales_order_item_id?: string, sku?: string}
+  --order-source-code: string@order-source-code-completer # The order sources that are supported by ShipEngine
+  --origin-type: string@origin-type-completer # Indicates if the package will be picked up or dropped off by the carrier (nullable)
+  --packages: list # The packages in the shipment. > **Note:** Some carriers only allow one package per shipment. If you attempt to create a multi-package shipment for a carrier that doesn't allow it, an error will be returned. — item shape: {content_description?: string, dimensions?: record, external_package_id?: string, insured_value?: record, label_messages?: record, package_code?: string, package_id?: string, weight: record}
+  --return-to: record # The return address for this shipment. Defaults to the `ship_from` address. — shape: {address_line1: string, address_line2?: string, address_line3?: string, address_residential_indicator: "unknown"|"yes"|"no", city_locality: string, company_name?: string, country_code: string, email?: string, name: string, phone: string, postal_code: string, state_province: string, instructions?: string}
+  --service-code: string # The [carrier service](https://www.shipengine.com/docs/shipping/use-a-carrier-service/) used to ship the package, such as `fedex_ground`, `usps_first_class_mail`, `flat_rate_envelope`, etc.
+  --ship-date: string # The date that the shipment was (or will be) shippped. ShipEngine will take the day of week into consideration. For example, if the carrier does not operate on Sundays, then a package that would have shipped on Sunday will ship on Monday instead. (format: date-time)
+  ship_from: record # The shipment's origin address. If you frequently ship from the same location, consider [creating a warehouse](https://www.shipengine.com/docs/reference/create-warehouse/). Then you can simply specify the `warehouse_id` rather than the complete address each time. — shape: {address_line1: string, address_line2?: string, address_line3?: string, address_residential_indicator: "unknown"|"yes"|"no", city_locality: string, company_name?: string, country_code: string, email?: string, name: string, phone: string, postal_code: string, state_province: string, instructions?: string}
+  ship_to: record # The recipient's mailing address — shape: {address_line1: string, address_line2?: string, address_line3?: string, address_residential_indicator: "unknown"|"yes"|"no", city_locality: string, company_name?: string, country_code: string, email?: string, name: string, phone: string, postal_code: string, state_province: string, instructions?: string}
   --shipment-number: string # A non-unique user-defined number used to identify a shipment. If undefined, this will match the external_shipment_id of the shipment. > **Warning:** The `shipment_number` is limited to 50 characters. Any additional characters will be truncated. (nullable)
-  --tax-identifiers: list # nullable — item shape: {identifier_type: any, issuing_authority: string, taxable_entity_type: any, value: string}
-  --warehouse-id: any # The [warehouse](https://www.shipengine.com/docs/shipping/ship-from-a-warehouse/) that the shipment is being shipped from. Either `warehouse_id` or `ship_from` must be specified. (nullable)
-  --validate-address: any # default: no_validation
-]: any -> record {
+  --tax-identifiers: list # nullable — item shape: {identifier_type: "vat"|"eori"|"ssn"|"ein"|"tin"|"ioss"|"pan"|"voec", issuing_authority: string, taxable_entity_type: "shipper"|"recipient", value: string}
+  --warehouse-id: string # The [warehouse](https://www.shipengine.com/docs/shipping/ship-from-a-warehouse/) that the shipment is being shipped from. Either `warehouse_id` or `ship_from` must be specified. (nullable)
+  --validate-address: string@validate-address-completer # The possible validate address values (default: no_validation)
+]: any -> record<advanced_options: record<bill_to_account: string, bill_to_country_code: string, bill_to_party: string, bill_to_postal_code: string, collect_on_delivery: record<payment_amount: record, payment_type: string>, contains_alcohol: bool, custom_field1: string, custom_field2: string, custom_field3: string, delivered_duty_paid: bool, dry_ice: bool, dry_ice_weight: record<unit: string, value: float>, fedex_freight: record<booking_confirmation: string, shipper_load_and_count: string>, freight_class: string, non_machinable: bool, origin_type: string, saturday_delivery: bool, shipper_release: bool, third_party_consignee: bool, use_ups_ground_freight_pricing: bool>, carrier_id: string, confirmation: string, created_at: string, customs: record<contents: string, customs_items: list<record>, non_delivery: string>, external_order_id: string, external_shipment_id: string, insurance_provider: string, items: table<asin: string, external_order_id: string, external_order_item_id: string, name: string, order_source_code: string, quantity: int, sales_order_id: string, sales_order_item_id: string, sku: string>, modified_at: string, order_source_code: string, origin_type: string, packages: table<content_description: string, dimensions: record, external_package_id: string, form_download: record, insured_value: record, label_download: record, label_messages: record, package_code: string, package_id: string, sequence: int, tracking_number: string, weight: record>, return_to: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string, instructions: string>, service_code: string, ship_date: string, ship_from: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string, instructions: string>, ship_to: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string, instructions: string>, shipment_id: string, shipment_number: string, shipment_status: string, tags: table<name: string>, tax_identifiers: table<identifier_type: string, issuing_authority: string, taxable_entity_type: string, value: string>, total_weight: record<unit: string, value: float>, warehouse_id: string, address_validation: record<matched_address: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string>, messages: list<record>, original_address: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string>, status: string>, errors: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2896,7 +2933,7 @@ export def "list-shipment-rates" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --created-at-start: string # Used to create a filter for when a resource was created (ex. A shipment that was created after a certain time) (format: date-time, e.g. 2019-03-12T19:24:13.657Z)
-]: nothing -> record {
+]: nothing -> record<created_at: string, errors: table<error_code: string, error_source: string, error_type: string, message: string>, invalid_rates: table<carrier_code: string, carrier_delivery_days: string, carrier_friendly_name: string, carrier_id: string, carrier_nickname: string, confirmation_amount: record, delivery_days: int, error_messages: list, estimated_delivery_date: string, guaranteed_service: bool, insurance_amount: record, negotiated_rate: bool, other_amount: record, package_type: string, rate_id: string, rate_type: string, service_code: string, service_type: string, ship_date: string, shipping_amount: record, tax_amount: record, trackable: bool, validation_status: string, warning_messages: list, zone: int>, rate_request_id: string, rates: table<carrier_code: string, carrier_delivery_days: string, carrier_friendly_name: string, carrier_id: string, carrier_nickname: string, confirmation_amount: record, delivery_days: int, error_messages: list, estimated_delivery_date: string, guaranteed_service: bool, insurance_amount: record, negotiated_rate: bool, other_amount: record, package_type: string, rate_id: string, rate_type: string, service_code: string, service_type: string, ship_date: string, shipping_amount: record, tax_amount: record, trackable: bool, validation_status: string, warning_messages: list, zone: int>, shipment_id: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($shipment_id | is-empty) { error make --unspanned { msg: "path parameter 'shipment_id' must be non-empty" } }
@@ -2973,7 +3010,7 @@ export def "tag-shipment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<shipment_id: record, tag: record<name: string>> {
+]: nothing -> record<shipment_id: string, tag: record<name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($shipment_id | is-empty) { error make --unspanned { msg: "path parameter 'shipment_id' must be non-empty" } }
@@ -3081,7 +3118,7 @@ export def "create-tag" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> record<name: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($tag_name | is-empty) { error make --unspanned { msg: "path parameter 'tag_name' must be non-empty" } }
@@ -3193,7 +3230,7 @@ export def "get-tracking-log" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --carrier-code: string # Carrier code used to retrieve tracking information (e.g. stamps_com)
   --tracking-number: string # The tracking number associated with a shipment (e.g. 9405511899223197428490)
-]: nothing -> record {
+]: nothing -> record<actual_delivery_date: string, carrier_code: string, carrier_detail_code: string, carrier_id: string, carrier_status_code: string, carrier_status_description: string, estimated_delivery_date: string, events: table<carrier_detail_code: string, carrier_occurred_at: string, carrier_status_code: string, carrier_status_description: string, city_locality: string, company_name: string, country_code: string, description: string, event_code: string, latitude: float, longitude: float, occurred_at: string, postal_code: string, signer: string, state_province: string, status_code: string, status_description: string>, exception_description: string, ship_date: string, status_code: string, status_description: string, tracking_number: string, tracking_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "carrier_code" $carrier_code "scalar") (serialize-qp "tracking_number" $tracking_number "scalar")] | flatten | str join "&"
@@ -3304,7 +3341,7 @@ export def "list-warehouses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<warehouses: table<created_at: string, is_default: bool, name: string, origin_address: record, return_address: record, warehouse_id: record>> {
+]: nothing -> record<warehouses: table<created_at: string, is_default: bool, name: string, origin_address: record, return_address: record, warehouse_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/warehouses" $auth.query)
@@ -3328,6 +3365,8 @@ export def "list-warehouses" [
 #
 # POST /v1/warehouses
 # operationId: create_warehouse
+# --origin_address shape: {address_line1: string, address_line2?: string, address_line3?: string, address_residential_indicator: "unknown"|"yes"|"no", city_locality: string, company_name?: string, country_code: string, email?: string, name: string, phone: string, postal_code: string, state_province: string}
+# --return_address shape: {address_line1: string, address_line2?: string, address_line3?: string, address_residential_indicator: "unknown"|"yes"|"no", city_locality: string, company_name?: string, country_code: string, email?: string, name: string, phone: string, postal_code: string, state_province: string}
 export def "create-warehouse" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3340,9 +3379,9 @@ export def "create-warehouse" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --is-default: oneof<nothing, bool> # Designates which single warehouse is the default on the account (nullable, default: false)
   name: string # Name of the warehouse (e.g. Zero Cool HQ)
-  origin_address: any # The origin address of the warehouse
-  --return-address: any # The return address associated with the warehouse
-]: any -> record {
+  origin_address: record # The origin address of the warehouse — shape: {address_line1: string, address_line2?: string, address_line3?: string, address_residential_indicator: "unknown"|"yes"|"no", city_locality: string, company_name?: string, country_code: string, email?: string, name: string, phone: string, postal_code: string, state_province: string}
+  --return-address: record # The return address associated with the warehouse — shape: {address_line1: string, address_line2?: string, address_line3?: string, address_residential_indicator: "unknown"|"yes"|"no", city_locality: string, company_name?: string, country_code: string, email?: string, name: string, phone: string, postal_code: string, state_province: string}
+]: any -> record<created_at: string, is_default: bool, name: string, origin_address: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string>, return_address: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string>, warehouse_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3417,7 +3456,7 @@ export def "get-warehouse-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> record<created_at: string, is_default: bool, name: string, origin_address: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string>, return_address: record<address_line1: string, address_line2: string, address_line3: string, address_residential_indicator: string, city_locality: string, company_name: string, country_code: string, email: string, name: string, phone: string, postal_code: string, state_province: string>, warehouse_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($warehouse_id | is-empty) { error make --unspanned { msg: "path parameter 'warehouse_id' must be non-empty" } }
@@ -3442,6 +3481,8 @@ export def "get-warehouse-by-id" [
 #
 # PUT /v1/warehouses/{warehouse_id}
 # operationId: update_warehouse
+# --origin_address shape: {address_line1: string, address_line2?: string, address_line3?: string, address_residential_indicator: "unknown"|"yes"|"no", city_locality: string, company_name?: string, country_code: string, email?: string, name: string, phone: string, postal_code: string, state_province: string}
+# --return_address shape: {address_line1: string, address_line2?: string, address_line3?: string, address_residential_indicator: "unknown"|"yes"|"no", city_locality: string, company_name?: string, country_code: string, email?: string, name: string, phone: string, postal_code: string, state_province: string}
 export def "update-warehouse" [
   warehouse_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3456,8 +3497,8 @@ export def "update-warehouse" [
   --accept: string@accept-completer # Response content type
   --is-default: oneof<nothing, bool> # Designates which single warehouse is the default on the account (nullable, default: false)
   name: string # Name of the warehouse (e.g. Zero Cool HQ)
-  origin_address: any # The origin address of the warehouse
-  --return-address: any # The return address associated with the warehouse
+  origin_address: record # The origin address of the warehouse — shape: {address_line1: string, address_line2?: string, address_line3?: string, address_residential_indicator: "unknown"|"yes"|"no", city_locality: string, company_name?: string, country_code: string, email?: string, name: string, phone: string, postal_code: string, state_province: string}
+  --return-address: record # The return address associated with the warehouse — shape: {address_line1: string, address_line2?: string, address_line3?: string, address_residential_indicator: "unknown"|"yes"|"no", city_locality: string, company_name?: string, country_code: string, email?: string, name: string, phone: string, postal_code: string, state_province: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))

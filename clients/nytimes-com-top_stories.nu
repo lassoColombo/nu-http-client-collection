@@ -94,6 +94,9 @@ def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: 
 def base-url-completer [] { ["http://api.nytimes.com/svc/topstories/v2" "https://api.nytimes.com/svc/topstories/v2"] }
 def auth-scheme-completer [] { ["query-api-key"] }
 
+# Completers for enum parameters
+def section-completer [] { ["arts" "automobiles" "books" "business" "fashion" "food" "health" "home" "insider" "magazine" "movies" "national" "nyregion" "obituaries" "opinion" "politics" "realestate" "science" "sports" "sundayreview" "technology" "theater" "tmagazine" "travel" "upshot" "world"] }
+def format-completer [] { ["json" "jsonp"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -122,8 +125,8 @@ export def commands []: nothing -> table {
 #
 # GET /{section}.{format}
 export def "get-section-format" [
-  section: string
-  format: string
+  section: string@section-completer
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

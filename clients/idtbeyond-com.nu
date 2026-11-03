@@ -136,11 +136,13 @@ export def "get-iatu-balance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-idt-beyond-app-id: string # Application ID you would like to use
-  --x-idt-beyond-app-key: string # Application KEY you would like to use
+  --x-idt-beyond-app-id: string # Application ID you would like to use (required, default: APP_ID)
+  --x-idt-beyond-app-key: string # Application KEY you would like to use (required, default: APP_KEY)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_idt_beyond_app_id = ($x_idt_beyond_app_id | default "APP_ID")
+  let x_idt_beyond_app_key = ($x_idt_beyond_app_key | default "APP_KEY")
   let full_url = (build-url $base "/iatu/balance" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -173,13 +175,17 @@ export def "get-iatu-charges-reports-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --date-from: string # The beginning date of the search IN YYYY-MM-DD format (America/New_York timezone). '2016-01-28' (default: 2016-01-28)
-  --date-to: string # The ending date of the search IN YYYY-MM-DD format (America/New_York timezone). '2016-01-28' (default: 2016-01-28)
-  --x-idt-beyond-app-id: string # Application ID you would like to use
-  --x-idt-beyond-app-key: string # Application KEY you would like to use
+  --date-from: string # The beginning date of the search IN YYYY-MM-DD format (America/New_York timezone). '2016-01-28' (required, default: 2016-01-28)
+  --date-to: string # The ending date of the search IN YYYY-MM-DD format (America/New_York timezone). '2016-01-28' (required, default: 2016-01-28)
+  --x-idt-beyond-app-id: string # Application ID you would like to use (required, default: APP_ID)
+  --x-idt-beyond-app-key: string # Application KEY you would like to use (required, default: APP_KEY)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let date_from = ($date_from | default "2016-01-28")
+  let date_to = ($date_to | default "2016-01-28")
+  let x_idt_beyond_app_id = ($x_idt_beyond_app_id | default "APP_ID")
+  let x_idt_beyond_app_key = ($x_idt_beyond_app_key | default "APP_KEY")
   let qp = [(serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/iatu/charges/reports/all" $qp $auth.query)
   let accept_val = "application/json"
@@ -213,13 +219,17 @@ export def "get-iatu-charges-reports-all-csv" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --date-from: string # The beginning date of the search IN YYYY-MM-DD format (America/New_York timezone). '2016-01-28' (default: 2016-01-28)
-  --date-to: string # The ending date of the search IN YYYY-MM-DD format (America/New_York timezone). '2016-01-28' (default: 2016-01-28)
-  --x-idt-beyond-app-id: string # Application ID you would like to use
-  --x-idt-beyond-app-key: string # Application KEY you would like to use
+  --date-from: string # The beginning date of the search IN YYYY-MM-DD format (America/New_York timezone). '2016-01-28' (required, default: 2016-01-28)
+  --date-to: string # The ending date of the search IN YYYY-MM-DD format (America/New_York timezone). '2016-01-28' (required, default: 2016-01-28)
+  --x-idt-beyond-app-id: string # Application ID you would like to use (required, default: APP_ID)
+  --x-idt-beyond-app-key: string # Application KEY you would like to use (required, default: APP_KEY)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let date_from = ($date_from | default "2016-01-28")
+  let date_to = ($date_to | default "2016-01-28")
+  let x_idt_beyond_app_id = ($x_idt_beyond_app_id | default "APP_ID")
+  let x_idt_beyond_app_key = ($x_idt_beyond_app_key | default "APP_KEY")
   let qp = [(serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/iatu/charges/reports/all.csv" $qp $auth.query)
   let accept_val = "application/csv"
@@ -253,13 +263,17 @@ export def "get-iatu-number-validator" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --country-code: string # 2-digit code of the country in ISO 3166 format. 'BR' (default: BR)
-  --mobile-number: string # The mobile number you would like to validate. '5521983115555' (default: 5521983115555)
-  --x-idt-beyond-app-id: string # Application ID you would like to use
-  --x-idt-beyond-app-key: string # Application KEY you would like to use
+  --country-code: string # 2-digit code of the country in ISO 3166 format. 'BR' (required, default: BR)
+  --mobile-number: string # The mobile number you would like to validate. '5521983115555' (required, default: 5521983115555)
+  --x-idt-beyond-app-id: string # Application ID you would like to use (required, default: APP_ID)
+  --x-idt-beyond-app-key: string # Application KEY you would like to use (required, default: APP_KEY)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let country_code = ($country_code | default "BR")
+  let mobile_number = ($mobile_number | default "5521983115555")
+  let x_idt_beyond_app_id = ($x_idt_beyond_app_id | default "APP_ID")
+  let x_idt_beyond_app_key = ($x_idt_beyond_app_key | default "APP_KEY")
   let qp = [(serialize-qp "country_code" $country_code "scalar") (serialize-qp "mobile_number" $mobile_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/iatu/number-validator" $qp $auth.query)
   let accept_val = "application/json"
@@ -293,11 +307,13 @@ export def "get-iatu-products-promotions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-idt-beyond-app-id: string # Application ID you would like to use
-  --x-idt-beyond-app-key: string # Application KEY you would like to use
+  --x-idt-beyond-app-id: string # Application ID you would like to use (required, default: APP_ID)
+  --x-idt-beyond-app-key: string # Application KEY you would like to use (required, default: APP_KEY)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_idt_beyond_app_id = ($x_idt_beyond_app_id | default "APP_ID")
+  let x_idt_beyond_app_key = ($x_idt_beyond_app_key | default "APP_KEY")
   let full_url = (build-url $base "/iatu/products/promotions" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -330,11 +346,13 @@ export def "get-iatu-products-reports-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-idt-beyond-app-id: string # Application ID you would like to use
-  --x-idt-beyond-app-key: string # Application KEY you would like to use
+  --x-idt-beyond-app-id: string # Application ID you would like to use (required, default: APP_ID)
+  --x-idt-beyond-app-key: string # Application KEY you would like to use (required, default: APP_KEY)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_idt_beyond_app_id = ($x_idt_beyond_app_id | default "APP_ID")
+  let x_idt_beyond_app_key = ($x_idt_beyond_app_key | default "APP_KEY")
   let full_url = (build-url $base "/iatu/products/reports/all" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -367,11 +385,13 @@ export def "get-iatu-products-reports-all-csv" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-idt-beyond-app-id: string # Application ID you would like to use
-  --x-idt-beyond-app-key: string # Application KEY you would like to use
+  --x-idt-beyond-app-id: string # Application ID you would like to use (required, default: APP_ID)
+  --x-idt-beyond-app-key: string # Application KEY you would like to use (required, default: APP_KEY)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_idt_beyond_app_id = ($x_idt_beyond_app_id | default "APP_ID")
+  let x_idt_beyond_app_key = ($x_idt_beyond_app_key | default "APP_KEY")
   let full_url = (build-url $base "/iatu/products/reports/all.csv" $auth.query)
   let accept_val = "application/csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -404,15 +424,21 @@ export def "get-iatu-products-reports-local-value" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --country-code: string # 2-digit code of the country in ISO 3166 format. 'GT' (default: GT)
-  --carrier-code: string # Name of the mobile carrier. 'Claro' (default: Claro)
-  --amount: int # This is the amount, in cents, of the product you are purchasing. '500' = $5.00 (default: 500)
-  --currency-code: string # The currency code (ISO 4217) on the product you are querying. 'USD' (default: USD)
-  --x-idt-beyond-app-id: string # Application ID you would like to use
-  --x-idt-beyond-app-key: string # Application KEY you would like to use
+  --country-code: string # 2-digit code of the country in ISO 3166 format. 'GT' (required, default: GT)
+  --carrier-code: string # Name of the mobile carrier. 'Claro' (required, default: Claro)
+  --amount: int # This is the amount, in cents, of the product you are purchasing. '500' = $5.00 (required, default: 500)
+  --currency-code: string # The currency code (ISO 4217) on the product you are querying. 'USD' (required, default: USD)
+  --x-idt-beyond-app-id: string # Application ID you would like to use (required, default: APP_ID)
+  --x-idt-beyond-app-key: string # Application KEY you would like to use (required, default: APP_KEY)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let country_code = ($country_code | default "GT")
+  let carrier_code = ($carrier_code | default "Claro")
+  let amount = ($amount | default 500)
+  let currency_code = ($currency_code | default "USD")
+  let x_idt_beyond_app_id = ($x_idt_beyond_app_id | default "APP_ID")
+  let x_idt_beyond_app_key = ($x_idt_beyond_app_key | default "APP_KEY")
   let qp = [(serialize-qp "country_code" $country_code "scalar") (serialize-qp "carrier_code" $carrier_code "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "currency_code" $currency_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/iatu/products/reports/local-value" $qp $auth.query)
   let accept_val = "application/json"
@@ -446,20 +472,22 @@ export def "post-iatu-topups" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-idt-beyond-app-id: string # Application ID you would like to use
-  --x-idt-beyond-app-key: string # Application KEY you would like to use
+  --x-idt-beyond-app-id: string # Application ID you would like to use (required, default: APP_ID)
+  --x-idt-beyond-app-key: string # Application KEY you would like to use (required, default: APP_KEY)
   --amount: int # The amount, in cents, of the product you are purchasing. '500' = $5.00 (default: 500)
   --carrier-code: string # Name of the mobile carrier. 'Claro' (default: Claro)
-  --client-transaction-id: string # UNIQUE 15 char ID you use to track topups. 'trans0123456789' (default: )
+  --client-transaction-id: string # UNIQUE 15 char ID you use to track topups. 'trans0123456789' (default: "")
   --country-code: string # 2-digit code of the country in ISO 3166 format. 'GT' (default: GT)
   --mobile-number: string # Mobile number to topup. VALIDATE prior to submission. '50231234567' (default: 50231234567)
   --plan: string # The Application plan being used. Case-sensitive. 'Sandbox' or 'Production' (default: Sandbox)
-  --product-code: string # Optional code to distinguish one particular product from another. '76560' (default: )
+  --product-code: string # Optional code to distinguish one particular product from another. '76560' (default: "")
   --terminal-id: string # ID for the Terminal used to perform the topup. 'Kiosk 5' (default: Kiosk 5)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_idt_beyond_app_id = ($x_idt_beyond_app_id | default "APP_ID")
+  let x_idt_beyond_app_key = ($x_idt_beyond_app_key | default "APP_KEY")
   let full_url = (build-url $base "/iatu/topups" $auth.query)
   let req_body = {"amount": $amount, "carrier_code": $carrier_code, "client_transaction_id": $client_transaction_id, "country_code": $country_code, "mobile_number": $mobile_number, "plan": $plan, "product_code": $product_code, "terminal_id": $terminal_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -494,8 +522,8 @@ export def "post-iatu-topups-reports" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-idt-beyond-app-id: string # Application ID you would like to use
-  --x-idt-beyond-app-key: string # Application KEY you would like to use
+  --x-idt-beyond-app-id: string # Application ID you would like to use (required, default: APP_ID)
+  --x-idt-beyond-app-key: string # Application KEY you would like to use (required, default: APP_KEY)
   --client-transaction-id: string # The UNIQUE 15 char ID used to track topups. 'trans0123456789' (default: trans0123456789)
   --date-from: string # The beginning date of the search IN YYYY-MM-DD format (America/New_York timezone). Not used in query by to_service_number. '2016-01-28' (default: 2016-01-28)
   --date-to: string # The ending date of the search IN YYYY-MM-DD format (America/New_York timezone). Not used in query by to_service_number. '2016-01-28' (default: 2016-01-28)
@@ -505,6 +533,8 @@ export def "post-iatu-topups-reports" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_idt_beyond_app_id = ($x_idt_beyond_app_id | default "APP_ID")
+  let x_idt_beyond_app_key = ($x_idt_beyond_app_key | default "APP_KEY")
   let full_url = (build-url $base "/iatu/topups/reports" $auth.query)
   let req_body = {"client_transaction_id": $client_transaction_id, "date_from": $date_from, "date_to": $date_to, "to_service_number": $to_service_number, "type_of_report": $type_of_report} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -539,13 +569,17 @@ export def "get-iatu-topups-reports-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --date-from: string # The beginning date of the search IN YYYY-MM-DD format (America/New_York timezone). '2016-01-28' (default: 2016-01-28)
-  --date-to: string # The ending date of the search IN YYYY-MM-DD format (America/New_York timezone). '2016-01-28' (default: 2016-01-28)
-  --x-idt-beyond-app-id: string # Application ID you would like to use
-  --x-idt-beyond-app-key: string # Application KEY you would like to use
+  --date-from: string # The beginning date of the search IN YYYY-MM-DD format (America/New_York timezone). '2016-01-28' (required, default: 2016-01-28)
+  --date-to: string # The ending date of the search IN YYYY-MM-DD format (America/New_York timezone). '2016-01-28' (required, default: 2016-01-28)
+  --x-idt-beyond-app-id: string # Application ID you would like to use (required, default: APP_ID)
+  --x-idt-beyond-app-key: string # Application KEY you would like to use (required, default: APP_KEY)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let date_from = ($date_from | default "2016-01-28")
+  let date_to = ($date_to | default "2016-01-28")
+  let x_idt_beyond_app_id = ($x_idt_beyond_app_id | default "APP_ID")
+  let x_idt_beyond_app_key = ($x_idt_beyond_app_key | default "APP_KEY")
   let qp = [(serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/iatu/topups/reports/all" $qp $auth.query)
   let accept_val = "application/json"
@@ -579,13 +613,17 @@ export def "get-iatu-topups-reports-all-csv" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --date-from: string # The beginning date of the search IN YYYY-MM-DD format (America/New_York timezone). '2016-01-28' (default: 2016-01-28)
-  --date-to: string # The ending date of the search IN YYYY-MM-DD format (America/New_York timezone). '2016-01-28' (default: 2016-01-28)
-  --x-idt-beyond-app-id: string # Application ID you would like to use
-  --x-idt-beyond-app-key: string # Application KEY you would like to use
+  --date-from: string # The beginning date of the search IN YYYY-MM-DD format (America/New_York timezone). '2016-01-28' (required, default: 2016-01-28)
+  --date-to: string # The ending date of the search IN YYYY-MM-DD format (America/New_York timezone). '2016-01-28' (required, default: 2016-01-28)
+  --x-idt-beyond-app-id: string # Application ID you would like to use (required, default: APP_ID)
+  --x-idt-beyond-app-key: string # Application KEY you would like to use (required, default: APP_KEY)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let date_from = ($date_from | default "2016-01-28")
+  let date_to = ($date_to | default "2016-01-28")
+  let x_idt_beyond_app_id = ($x_idt_beyond_app_id | default "APP_ID")
+  let x_idt_beyond_app_key = ($x_idt_beyond_app_key | default "APP_KEY")
   let qp = [(serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/iatu/topups/reports/all.csv" $qp $auth.query)
   let accept_val = "application/csv"
@@ -619,13 +657,17 @@ export def "get-iatu-topups-reports-totals" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --date-from: string # The beginning date of the search IN YYYY-MM-DD format (America/New_York timezone). '2016-01-28' (default: 2016-01-28)
-  --date-to: string # The ending date of the search IN YYYY-MM-DD format (America/New_York timezone). '2016-01-28' (default: 2016-01-28)
-  --x-idt-beyond-app-id: string # Application ID you would like to use
-  --x-idt-beyond-app-key: string # Application KEY you would like to use
+  --date-from: string # The beginning date of the search IN YYYY-MM-DD format (America/New_York timezone). '2016-01-28' (required, default: 2016-01-28)
+  --date-to: string # The ending date of the search IN YYYY-MM-DD format (America/New_York timezone). '2016-01-28' (required, default: 2016-01-28)
+  --x-idt-beyond-app-id: string # Application ID you would like to use (required, default: APP_ID)
+  --x-idt-beyond-app-key: string # Application KEY you would like to use (required, default: APP_KEY)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let date_from = ($date_from | default "2016-01-28")
+  let date_to = ($date_to | default "2016-01-28")
+  let x_idt_beyond_app_id = ($x_idt_beyond_app_id | default "APP_ID")
+  let x_idt_beyond_app_key = ($x_idt_beyond_app_key | default "APP_KEY")
   let qp = [(serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/iatu/topups/reports/totals" $qp $auth.query)
   let accept_val = "application/json"
@@ -659,14 +701,16 @@ export def "post-iatu-topups-reverse" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-idt-beyond-app-id: string # Application ID you would like to use
-  --x-idt-beyond-app-key: string # Application KEY you would like to use
+  --x-idt-beyond-app-id: string # Application ID you would like to use (required, default: APP_ID)
+  --x-idt-beyond-app-key: string # Application KEY you would like to use (required, default: APP_KEY)
   --client-transaction-id: string # UNIQUE 15 char ID you use to track topups. 'trans0123456789' (default: trans0123456789)
   --to-service-number: string # UNIQUE IDT transaction number found in the response of a successful topup request. '0123456789' (default: 123456789)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_idt_beyond_app_id = ($x_idt_beyond_app_id | default "APP_ID")
+  let x_idt_beyond_app_key = ($x_idt_beyond_app_key | default "APP_KEY")
   let full_url = (build-url $base "/iatu/topups/reverse" $auth.query)
   let req_body = {"client_transaction_id": $client_transaction_id, "to_service_number": $to_service_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -701,11 +745,13 @@ export def "get-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-idt-beyond-app-id: string # Application ID you would like to use
-  --x-idt-beyond-app-key: string # Application KEY you would like to use
+  --x-idt-beyond-app-id: string # Application ID you would like to use (required, default: APP_ID)
+  --x-idt-beyond-app-key: string # Application KEY you would like to use (required, default: APP_KEY)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_idt_beyond_app_id = ($x_idt_beyond_app_id | default "APP_ID")
+  let x_idt_beyond_app_key = ($x_idt_beyond_app_key | default "APP_KEY")
   let full_url = (build-url $base "/status" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

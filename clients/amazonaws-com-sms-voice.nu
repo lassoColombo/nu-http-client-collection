@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -206,7 +206,7 @@ export def "list-configuration-sets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ConfigurationSets: record, NextToken: record> {
+]: nothing -> record<ConfigurationSets: list<string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "PageSize" $page_size "scalar")] | flatten | str join "&"
@@ -233,7 +233,7 @@ export def "list-configuration-sets" [
 #
 # POST /v1/sms-voice/configuration-sets/{ConfigurationSetName}/event-destinations
 # operationId: CreateConfigurationSetEventDestination
-# --EventDestination shape: {CloudWatchLogsDestination?: record, Enabled?: any, KinesisFirehoseDestination?: record, MatchingEventTypes?: list<string>, SnsDestination?: record}
+# --EventDestination shape: {CloudWatchLogsDestination?: record, Enabled?: bool, KinesisFirehoseDestination?: record, MatchingEventTypes?: list<string>, SnsDestination?: record}
 export def "create-configuration-set-event-destination" [
   configuration_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -252,7 +252,7 @@ export def "create-configuration-set-event-destination" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --event-destination: record # An object that defines a single event destination. — shape: {CloudWatchLogsDestination?: record, Enabled?: any, KinesisFirehoseDestination?: record, MatchingEventTypes?: list<string>, SnsDestination?: record}
+  --event-destination: record # An object that defines a single event destination. — shape: {CloudWatchLogsDestination?: record, Enabled?: bool, KinesisFirehoseDestination?: record, MatchingEventTypes?: list<string>, SnsDestination?: record}
   --event-destination-name: string # A name that identifies the event destination.
 ]: any -> record {
   let input = $in
@@ -302,7 +302,7 @@ export def "get-configuration-set-event-destinations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EventDestinations: table<CloudWatchLogsDestination: record, Enabled: record, KinesisFirehoseDestination: record, MatchingEventTypes: list, Name: record, SnsDestination: record>> {
+]: nothing -> record<EventDestinations: table<CloudWatchLogsDestination: record, Enabled: bool, KinesisFirehoseDestination: record, MatchingEventTypes: list, Name: string, SnsDestination: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($configuration_set_name | is-empty) { error make --unspanned { msg: "path parameter 'ConfigurationSetName' must be non-empty" } }
@@ -421,7 +421,7 @@ export def "delete-configuration-set-event-destination" [
 #
 # PUT /v1/sms-voice/configuration-sets/{ConfigurationSetName}/event-destinations/{EventDestinationName}
 # operationId: UpdateConfigurationSetEventDestination
-# --EventDestination shape: {CloudWatchLogsDestination?: record, Enabled?: any, KinesisFirehoseDestination?: record, MatchingEventTypes?: list<string>, SnsDestination?: record}
+# --EventDestination shape: {CloudWatchLogsDestination?: record, Enabled?: bool, KinesisFirehoseDestination?: record, MatchingEventTypes?: list<string>, SnsDestination?: record}
 export def "update-configuration-set-event-destination" [
   configuration_set_name: string
   event_destination_name: string
@@ -441,7 +441,7 @@ export def "update-configuration-set-event-destination" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --event-destination: record # An object that defines a single event destination. — shape: {CloudWatchLogsDestination?: record, Enabled?: any, KinesisFirehoseDestination?: record, MatchingEventTypes?: list<string>, SnsDestination?: record}
+  --event-destination: record # An object that defines a single event destination. — shape: {CloudWatchLogsDestination?: record, Enabled?: bool, KinesisFirehoseDestination?: record, MatchingEventTypes?: list<string>, SnsDestination?: record}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -496,7 +496,7 @@ export def "send-voice-message" [
   --content: record # An object that contains a voice message and information about the recipient that you want to send it to. — shape: {CallInstructionsMessage?: record, PlainTextMessage?: record, SSMLMessage?: record}
   --destination-phone-number: string # The phone number that you want to send the voice message to.
   --origination-phone-number: string # The phone number that Amazon Pinpoint should use to send the voice message. This isn't necessarily the phone number that appears on recipients' devices when they receive the message, because you can specify a CallerId parameter in the request.
-]: any -> record<MessageId: record> {
+]: any -> record<MessageId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

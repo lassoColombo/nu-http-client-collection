@@ -197,11 +197,12 @@ export def "delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --audit-client-ip: string # The client IP of the user who originated the request leading to this call.
+  --audit-client-ip: string # The client IP of the user who originated the request leading to this call. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($shopper_id | is-empty) { error make --unspanned { msg: "path parameter 'shopperId' must be non-empty" } }
+  if ($audit_client_ip == null) { error make --unspanned { msg: "required query parameter 'auditClientIp' missing: pass --audit-client-ip" } }
   let qp = [(serialize-qp "auditClientIp" $audit_client_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({shopper_id: (encode-path-segment $shopper_id)} | format pattern "/v1/shoppers/{shopper_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -224,7 +225,7 @@ export def "delete" [
 #
 # GET /v1/shoppers/{shopperId}
 # operationId: get
-export def "get" [
+export def "get-v1-shoppers-shopper-id" [
   shopper_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -263,7 +264,7 @@ export def "get" [
 #
 # POST /v1/shoppers/{shopperId}
 # operationId: update
-export def "update" [
+export def "post-v1-shoppers-shopper-id" [
   shopper_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -360,11 +361,12 @@ export def "get-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --audit-client-ip: string # The client IP of the user who originated the request leading to this call.
+  --audit-client-ip: string # The client IP of the user who originated the request leading to this call. (required)
 ]: nothing -> record<billingState: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($shopper_id | is-empty) { error make --unspanned { msg: "path parameter 'shopperId' must be non-empty" } }
+  if ($audit_client_ip == null) { error make --unspanned { msg: "required query parameter 'auditClientIp' missing: pass --audit-client-ip" } }
   let qp = [(serialize-qp "auditClientIp" $audit_client_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({shopper_id: (encode-path-segment $shopper_id)} | format pattern "/v1/shoppers/{shopper_id}/status") $qp $auth.query)
   let accept_val = ($accept | default "application/javascript")

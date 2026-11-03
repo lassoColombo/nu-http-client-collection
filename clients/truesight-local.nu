@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "cookie" => { {scheme: $scheme, headers: {Cookie: $token_val}, query: "", location: "header"} }
+    "cookie" => { {scheme: $scheme, headers: {"Cookie": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -158,11 +158,12 @@ export def "collect-now" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --monitor-class: string # The Monitor Class of the device. (e.g. MS_HW_FAN)
+  --monitor-class: string # The Monitor Class of the device. (required, e.g. MS_HW_FAN)
 ]: nothing -> record<pslOutput: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
+  if ($monitor_class == null) { error make --unspanned { msg: "required query parameter 'monitorClass' missing: pass --monitor-class" } }
   let qp = [(serialize-qp "monitorClass" $monitor_class "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/hardware/actions/{device_id}/collect-now") $qp $auth.query)
   let accept_val = "*/*"
@@ -280,12 +281,14 @@ export def "remove" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --monitor-class: string # The Monitor Class of the device. (e.g. MS_HW_FAN)
-  --monitor-sid: string # The Monitor SID of the device. (e.g. cisco-c240-imc)
+  --monitor-class: string # The Monitor Class of the device. (required, e.g. MS_HW_FAN)
+  --monitor-sid: string # The Monitor SID of the device. (required, e.g. cisco-c240-imc)
 ]: nothing -> record<pslOutput: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
+  if ($monitor_class == null) { error make --unspanned { msg: "required query parameter 'monitorClass' missing: pass --monitor-class" } }
+  if ($monitor_sid == null) { error make --unspanned { msg: "required query parameter 'monitorSid' missing: pass --monitor-sid" } }
   let qp = [(serialize-qp "monitorClass" $monitor_class "scalar") (serialize-qp "monitorSid" $monitor_sid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/hardware/actions/{device_id}/remove") $qp $auth.query)
   let accept_val = "*/*"
@@ -319,12 +322,14 @@ export def "reset" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --monitor-class: string # The Monitor Class of the device. (e.g. MS_HW_FAN)
-  --monitor-sid: string # The Monitor SID of the device. (e.g. cisco-c240-imc)
+  --monitor-class: string # The Monitor Class of the device. (required, e.g. MS_HW_FAN)
+  --monitor-sid: string # The Monitor SID of the device. (required, e.g. cisco-c240-imc)
 ]: nothing -> record<pslOutput: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
+  if ($monitor_class == null) { error make --unspanned { msg: "required query parameter 'monitorClass' missing: pass --monitor-class" } }
+  if ($monitor_sid == null) { error make --unspanned { msg: "required query parameter 'monitorSid' missing: pass --monitor-sid" } }
   let qp = [(serialize-qp "monitorClass" $monitor_class "scalar") (serialize-qp "monitorSid" $monitor_sid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/hardware/actions/{device_id}/reset-error-count") $qp $auth.query)
   let accept_val = "*/*"
@@ -360,18 +365,18 @@ export def "get-applications" [
   --page: string # The page number to retrieve (first page is 0). (format: int32, default: 0)
   --limit: int # The maximum number of entries per page. (format: int32, default: 100)
   --direction: string@direction-completer # The sorting order (case insensitive). (default: asc)
-  --qp-sort: string # The column to sort by (case insensitive). (default: name)
+  --sort: string # The column to sort by (case insensitive). (default: name)
 ]: nothing -> record<items: list<record>, restrictedRights: bool, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hardware/applications" $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"page": $page, "limit": $limit, "direction": $direction, "sort": $qp_sort} | compact)
+    query: ({"page": $page, "limit": $limit, "direction": $direction, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -471,21 +476,21 @@ export def "get-devices" [
   --page: string # The page number to retrieve (first page is 0). (format: int32, default: 0)
   --limit: int # The maximum number of entries per page. (format: int32, default: 100)
   --direction: string@direction-completer # The sorting order (case insensitive). (default: asc)
-  --qp-sort: string # The column to sort by (case insensitive). (default: name)
+  --sort: string # The column to sort by (case insensitive). (default: name)
   --group-id: string # The ID of the group. (e.g. 0)
   --application-id: string # The ID of the application. (e.g. 0)
   --service-id: string # The ID of the service. (e.g. 0)
 ]: nothing -> record<items: list<record>, restrictedRights: bool, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "applicationId" $application_id "scalar") (serialize-qp "serviceId" $service_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "applicationId" $application_id "scalar") (serialize-qp "serviceId" $service_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hardware/devices" $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"page": $page, "limit": $limit, "direction": $direction, "sort": $qp_sort, "groupId": $group_id, "applicationId": $application_id, "serviceId": $service_id} | compact)
+    query: ({"page": $page, "limit": $limit, "direction": $direction, "sort": $sort, "groupId": $group_id, "applicationId": $application_id, "serviceId": $service_id} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -653,23 +658,25 @@ export def "get-device-parameter-history" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --parameter-name: string # The name of the parameter. (e.g. Power Consumption)
-  --monitor-type: string # The unique name of the Monitor type. (e.g. _PATROL__MS_HW_REPORT)
-  --qp-from: int # Beginning of the period (Epoch time, in seconds). (format: int64, e.g. 1608850800)
-  --qp-to: int # End of the period (Epoch time, in seconds). (format: int64, e.g. 1608850800)
+  --parameter-name: string # The name of the parameter. (required, e.g. Power Consumption)
+  --monitor-type: string # The unique name of the Monitor type. (required, e.g. _PATROL__MS_HW_REPORT)
+  --from: int # Beginning of the period (Epoch time, in seconds). (format: int64, e.g. 1608850800)
+  --to: int # End of the period (Epoch time, in seconds). (format: int64, e.g. 1608850800)
   --monitor-sid: string # The Monitor SID (to filter the list of Monitors). (e.g. cisco-c240-imc)
 ]: nothing -> record<items: list<record>, restrictedRights: bool, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
-  let qp = [(serialize-qp "parameterName" $parameter_name "scalar") (serialize-qp "monitorType" $monitor_type "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "monitorSid" $monitor_sid "scalar")] | flatten | str join "&"
+  if ($parameter_name == null) { error make --unspanned { msg: "required query parameter 'parameterName' missing: pass --parameter-name" } }
+  if ($monitor_type == null) { error make --unspanned { msg: "required query parameter 'monitorType' missing: pass --monitor-type" } }
+  let qp = [(serialize-qp "parameterName" $parameter_name "scalar") (serialize-qp "monitorType" $monitor_type "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "monitorSid" $monitor_sid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/hardware/devices/{device_id}/parameter-history") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"parameterName": $parameter_name, "monitorType": $monitor_type, "from": $qp_from, "to": $qp_to, "monitorSid": $monitor_sid} | compact)
+    query: ({"parameterName": $parameter_name, "monitorType": $monitor_type, "from": $from, "to": $to, "monitorSid": $monitor_sid} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -736,18 +743,18 @@ export def "get-groups" [
   --page: string # The page number to retrieve (first page is 0). (format: int32, default: 0)
   --limit: int # The maximum number of entries per page. (format: int32, default: 100)
   --direction: string@direction-completer # The sorting order (case insensitive). (default: asc)
-  --qp-sort: string # The column to sort by (case insensitive). (default: name)
+  --sort: string # The column to sort by (case insensitive). (default: name)
 ]: nothing -> record<items: list<record>, restrictedRights: bool, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hardware/groups" $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"page": $page, "limit": $limit, "direction": $direction, "sort": $qp_sort} | compact)
+    query: ({"page": $page, "limit": $limit, "direction": $direction, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -854,21 +861,21 @@ export def "get-heating-margin-coverage" [
   --page: string # The page number to retrieve (first page is 0). (format: int32, default: 0)
   --limit: int # The maximum number of entries per page. (format: int32, default: 100)
   --direction: string@direction-completer # The sorting order (case insensitive). (default: asc)
-  --qp-sort: string # The column to sort by (case insensitive). (default: name)
+  --sort: string # The column to sort by (case insensitive). (default: name)
   --group-id: string # The ID of the group. (e.g. 0)
   --application-id: string # The ID of the application. (e.g. 0)
   --service-id: string # The ID of the service. (e.g. 0)
 ]: nothing -> record<items: list<record>, restrictedRights: bool, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "covered" $covered "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "applicationId" $application_id "scalar") (serialize-qp "serviceId" $service_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "covered" $covered "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "applicationId" $application_id "scalar") (serialize-qp "serviceId" $service_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hardware/heating-margin-devices" $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"covered": $covered, "page": $page, "limit": $limit, "direction": $direction, "sort": $qp_sort, "groupId": $group_id, "applicationId": $application_id, "serviceId": $service_id} | compact)
+    query: ({"covered": $covered, "page": $page, "limit": $limit, "direction": $direction, "sort": $sort, "groupId": $group_id, "applicationId": $application_id, "serviceId": $service_id} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -896,19 +903,19 @@ export def "get-history" [
   --group-id: string # The ID of the group. (e.g. 0)
   --application-id: string # The ID of the application. (e.g. 0)
   --service-id: string # The ID of the service. (e.g. 0)
-  --qp-from: int # Beginning of the period (Epoch time, in seconds). (format: int64, e.g. 1608850800)
-  --qp-to: int # End of the period (Epoch time, in seconds). (format: int64, e.g. 1608850800)
+  --from: int # Beginning of the period (Epoch time, in seconds). (format: int64, e.g. 1608850800)
+  --to: int # End of the period (Epoch time, in seconds). (format: int64, e.g. 1608850800)
 ]: nothing -> record<items: list<record>, restrictedRights: bool, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "groupId" $group_id "scalar") (serialize-qp "applicationId" $application_id "scalar") (serialize-qp "serviceId" $service_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "groupId" $group_id "scalar") (serialize-qp "applicationId" $application_id "scalar") (serialize-qp "serviceId" $service_id "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hardware/history" $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"groupId": $group_id, "applicationId": $application_id, "serviceId": $service_id, "from": $qp_from, "to": $qp_to} | compact)
+    query: ({"groupId": $group_id, "applicationId": $application_id, "serviceId": $service_id, "from": $from, "to": $to} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -933,7 +940,7 @@ export def "search-devices" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --search-terms: string # Space-separated search criteria. (e.g. EMC Unity)
+  --search-terms: string # Space-separated search criteria. (required, e.g. EMC Unity)
   --group-id: string # The ID of the group. (e.g. 0)
   --application-id: string # The ID of the application. (e.g. 0)
   --service-id: string # The ID of the service. (e.g. 0)
@@ -942,6 +949,7 @@ export def "search-devices" [
 ]: nothing -> record<items: list<record>, restrictedRights: bool, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
+  if ($search_terms == null) { error make --unspanned { msg: "required query parameter 'searchTerms' missing: pass --search-terms" } }
   let qp = [(serialize-qp "searchTerms" $search_terms "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "applicationId" $application_id "scalar") (serialize-qp "serviceId" $service_id "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hardware/search-devices" $qp $auth.query)
   let accept_val = "*/*"
@@ -977,18 +985,18 @@ export def "get-services" [
   --page: string # The page number to retrieve (first page is 0). (format: int32, default: 0)
   --limit: int # The maximum number of entries per page. (format: int32, default: 100)
   --direction: string@direction-completer # The sorting order (case insensitive). (default: asc)
-  --qp-sort: string # The column to sort by (case insensitive). (default: name)
+  --sort: string # The column to sort by (case insensitive). (default: name)
 ]: nothing -> record<items: list<record>, restrictedRights: bool, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hardware/services" $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"page": $page, "limit": $limit, "direction": $direction, "sort": $qp_sort} | compact)
+    query: ({"page": $page, "limit": $limit, "direction": $direction, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null

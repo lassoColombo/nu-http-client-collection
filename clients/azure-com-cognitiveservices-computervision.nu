@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {Ocp-Apim-Subscription-Key: $token_val}, query: "", location: "header"} }
+    "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {"Ocp-Apim-Subscription-Key": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -224,14 +224,16 @@ export def "generate-thumbnail" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --width: int # Width of the thumbnail. It must be between 1 and 1024. Recommended minimum of 50.
-  --height: int # Height of the thumbnail. It must be between 1 and 1024. Recommended minimum of 50.
+  --width: int # Width of the thumbnail. It must be between 1 and 1024. Recommended minimum of 50. (required)
+  --height: int # Height of the thumbnail. It must be between 1 and 1024. Recommended minimum of 50. (required)
   --smart-cropping: oneof<nothing, bool> # Boolean flag for enabling smart cropping. (default: false)
   url: string # Publicly reachable URL of an image
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($width == null) { error make --unspanned { msg: "required query parameter 'width' missing: pass --width" } }
+  if ($height == null) { error make --unspanned { msg: "required query parameter 'height' missing: pass --height" } }
   let qp = [(serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "smartCropping" $smart_cropping "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/generateThumbnail" $qp $auth.query)
   let req_body = {"url": $url} | compact
@@ -342,13 +344,14 @@ export def "recognize-printed-text" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --detect-orientation: oneof<nothing, bool> # Whether detect the text orientation in the image. With detectOrientation=true the OCR service tries to detect the image orientation and correct it before further processing (e.g. if it's upside-down). (default: true)
+  --detect-orientation: oneof<nothing, bool> # Whether detect the text orientation in the image. With detectOrientation=true the OCR service tries to detect the image orientation and correct it before further processing (e.g. if it's upside-down). (required, default: true)
   --language: string@language-completer-1 # The BCP-47 language code of the text to be detected in the image. The default value is 'unk' (default: unk)
   url: string # Publicly reachable URL of an image
 ]: any -> record<language: string, orientation: string, regions: table<boundingBox: string, lines: list>, textAngle: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  let detect_orientation = ($detect_orientation | default true)
   let qp = [(serialize-qp "detectOrientation" $detect_orientation "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ocr" $qp $auth.query)
   let req_body = {"url": $url} | compact
@@ -385,7 +388,7 @@ export def "recognize-text" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --detect-handwriting: oneof<nothing, bool> # If 'true' is specified, handwriting recognition is performed. If this parameter is set to 'false' or is not specified, printed text recognition is performed. (default: false)
   url: string # Publicly reachable URL of an image
-]: any -> record<code: string, message: string, requestId: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)

@@ -1,4 +1,4 @@
-# Auto-generated client for Google+ API vv1
+# Auto-generated client for Google+ API v1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/plus/v1/openapi.json
 # Auth: --token flag or $env.GOOGLE_API_TOKEN
 
@@ -12,20 +12,10 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
-}
-
-# Merge multiple auth records (AND-form security: every scheme must be sent).
-def merge-auth [parts: list]: nothing -> record {
-  let active = ($parts | where {|p| $p.location != "none" })
-  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
-  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
-  let locs = ($active | each {|p| $p.location } | uniq)
-  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
-  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
 # Serialize a single query parameter based on collection style
@@ -108,6 +98,9 @@ def auth-scheme-completer [] { ["bearer"] }
 def alt-completer [] { ["json"] }
 def order-by-completer [] { ["best" "recent"] }
 def sort-order-completer [] { ["ascending" "descending"] }
+def collection-completer [] { ["plusoners" "resharers"] }
+def collection-completer-1 [] { ["public"] }
+def collection-completer-2 [] { ["connected" "visible"] }
 def order-by-completer-1 [] { ["alphabetical" "best"] }
 
 # List all available API commands with their parameters
@@ -139,8 +132,8 @@ export def commands []: nothing -> table {
 # operationId: plus.activities.search
 export def "plus-activities-search" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -154,14 +147,15 @@ export def "plus-activities-search" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-  --query: string # Full-text search query string.
+  --query: string # Full-text search query string. (required)
   --language: string # Specify the preferred language to search with. See search language codes for available values.
   --max-results: int # The maximum number of activities to include in the response, which is used for paging. For any response, the actual number returned might be less than the specified maxResults.
   --order-by: string@order-by-completer # Specifies how to order search results.
   --page-token: string # The continuation token, which is used to page through large result sets. To get the next page of results, set this parameter to the value of "nextPageToken" from the previous response. This token can be of any length.
 ]: nothing -> record<etag: string, id: string, items: table<access: record, actor: record, address: string, annotation: string, crosspostSource: string, etag: string, geocode: string, id: string, kind: string, location: record, object: record, placeId: string, placeName: string, provider: record, published: string, radius: string, title: string, updated: string, url: string, verb: string>, kind: string, nextLink: string, nextPageToken: string, selfLink: string, title: string, updated: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/activities" $qp $auth.query)
   let accept_val = "application/json"
@@ -187,8 +181,8 @@ export def "plus-activities-search" [
 export def "plus-activities-get" [
   activity_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -203,7 +197,7 @@ export def "plus-activities-get" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<access: record<description: string, items: list<record>, kind: string>, actor: record<clientSpecificActorInfo: record<youtubeActorInfo: record>, displayName: string, id: string, image: record<url: string>, name: record<familyName: string, givenName: string>, url: string, verification: record<adHocVerified: string>>, address: string, annotation: string, crosspostSource: string, etag: string, geocode: string, id: string, kind: string, location: record<address: record<formatted: string>, displayName: string, id: string, kind: string, position: record<latitude: float, longitude: float>>, object: record<actor: record<clientSpecificActorInfo: record, displayName: string, id: string, image: record, url: string, verification: record>, attachments: list<record>, content: string, id: string, objectType: string, originalContent: string, plusoners: record<selfLink: string, totalItems: int>, replies: record<selfLink: string, totalItems: int>, resharers: record<selfLink: string, totalItems: int>, url: string>, placeId: string, placeName: string, provider: record<title: string>, published: string, radius: string, title: string, updated: string, url: string, verb: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($activity_id | is-empty) { error make --unspanned { msg: "path parameter 'activityId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
@@ -231,8 +225,8 @@ export def "plus-activities-get" [
 export def "plus-comments-list" [
   activity_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -250,7 +244,7 @@ export def "plus-comments-list" [
   --page-token: string # The continuation token, which is used to page through large result sets. To get the next page of results, set this parameter to the value of "nextPageToken" from the previous response.
   --sort-order: string@sort-order-completer # The order in which to sort the list of comments.
 ]: nothing -> record<etag: string, id: string, items: table<actor: record, etag: string, id: string, inReplyTo: list, kind: string, object: record, plusoners: record, published: string, selfLink: string, updated: string, verb: string>, kind: string, nextLink: string, nextPageToken: string, title: string, updated: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($activity_id | is-empty) { error make --unspanned { msg: "path parameter 'activityId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
@@ -277,10 +271,10 @@ export def "plus-comments-list" [
 # operationId: plus.people.listByActivity
 export def "plus-people-list-by-activity" [
   activity_id: string
-  collection: string
+  collection: string@collection-completer
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -297,7 +291,7 @@ export def "plus-people-list-by-activity" [
   --max-results: int # The maximum number of people to include in the response, which is used for paging. For any response, the actual number returned might be less than the specified maxResults.
   --page-token: string # The continuation token, which is used to page through large result sets. To get the next page of results, set this parameter to the value of "nextPageToken" from the previous response.
 ]: nothing -> record<etag: string, items: table<aboutMe: string, ageRange: record, birthday: string, braggingRights: string, circledByCount: int, cover: record, currentLocation: string, displayName: string, domain: string, emails: list, etag: string, gender: string, id: string, image: record, isPlusUser: bool, kind: string, language: string, name: record, nickname: string, objectType: string, occupation: string, organizations: list, placesLived: list, plusOneCount: int, relationshipStatus: string, skills: string, tagline: string, url: string, urls: list, verified: bool>, kind: string, nextPageToken: string, selfLink: string, title: string, totalItems: int> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($activity_id | is-empty) { error make --unspanned { msg: "path parameter 'activityId' must be non-empty" } }
   if ($collection | is-empty) { error make --unspanned { msg: "path parameter 'collection' must be non-empty" } }
@@ -326,8 +320,8 @@ export def "plus-people-list-by-activity" [
 export def "plus-comments-get" [
   comment_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -342,7 +336,7 @@ export def "plus-comments-get" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<actor: record<clientSpecificActorInfo: record<youtubeActorInfo: record>, displayName: string, id: string, image: record<url: string>, url: string, verification: record<adHocVerified: string>>, etag: string, id: string, inReplyTo: table<id: string, url: string>, kind: string, object: record<content: string, objectType: string, originalContent: string>, plusoners: record<totalItems: int>, published: string, selfLink: string, updated: string, verb: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'commentId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
@@ -369,8 +363,8 @@ export def "plus-comments-get" [
 # operationId: plus.people.search
 export def "plus-people-search" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -384,13 +378,14 @@ export def "plus-people-search" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-  --query: string # Specify a query string for full text search of public text in all profiles.
+  --query: string # Specify a query string for full text search of public text in all profiles. (required)
   --language: string # Specify the preferred language to search with. See search language codes for available values.
   --max-results: int # The maximum number of people to include in the response, which is used for paging. For any response, the actual number returned might be less than the specified maxResults.
   --page-token: string # The continuation token, which is used to page through large result sets. To get the next page of results, set this parameter to the value of "nextPageToken" from the previous response. This token can be of any length.
 ]: nothing -> record<etag: string, items: table<aboutMe: string, ageRange: record, birthday: string, braggingRights: string, circledByCount: int, cover: record, currentLocation: string, displayName: string, domain: string, emails: list, etag: string, gender: string, id: string, image: record, isPlusUser: bool, kind: string, language: string, name: record, nickname: string, objectType: string, occupation: string, organizations: list, placesLived: list, plusOneCount: int, relationshipStatus: string, skills: string, tagline: string, url: string, urls: list, verified: bool>, kind: string, nextPageToken: string, selfLink: string, title: string, totalItems: int> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/people" $qp $auth.query)
   let accept_val = "application/json"
@@ -416,8 +411,8 @@ export def "plus-people-search" [
 export def "plus-people-get" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -432,7 +427,7 @@ export def "plus-people-get" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<aboutMe: string, ageRange: record<max: int, min: int>, birthday: string, braggingRights: string, circledByCount: int, cover: record<coverInfo: record<leftImageOffset: int, topImageOffset: int>, coverPhoto: record<height: int, url: string, width: int>, layout: string>, currentLocation: string, displayName: string, domain: string, emails: table<type: string, value: string>, etag: string, gender: string, id: string, image: record<isDefault: bool, url: string>, isPlusUser: bool, kind: string, language: string, name: record<familyName: string, formatted: string, givenName: string, honorificPrefix: string, honorificSuffix: string, middleName: string>, nickname: string, objectType: string, occupation: string, organizations: table<department: string, description: string, endDate: string, location: string, name: string, primary: bool, startDate: string, title: string, type: string>, placesLived: table<primary: bool, value: string>, plusOneCount: int, relationshipStatus: string, skills: string, tagline: string, url: string, urls: table<label: string, type: string, value: string>, verified: bool> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
@@ -459,10 +454,10 @@ export def "plus-people-get" [
 # operationId: plus.activities.list
 export def "plus-activities-list" [
   user_id: string
-  collection: string
+  collection: string@collection-completer-1
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -479,7 +474,7 @@ export def "plus-activities-list" [
   --max-results: int # The maximum number of activities to include in the response, which is used for paging. For any response, the actual number returned might be less than the specified maxResults.
   --page-token: string # The continuation token, which is used to page through large result sets. To get the next page of results, set this parameter to the value of "nextPageToken" from the previous response.
 ]: nothing -> record<etag: string, id: string, items: table<access: record, actor: record, address: string, annotation: string, crosspostSource: string, etag: string, geocode: string, id: string, kind: string, location: record, object: record, placeId: string, placeName: string, provider: record, published: string, radius: string, title: string, updated: string, url: string, verb: string>, kind: string, nextLink: string, nextPageToken: string, selfLink: string, title: string, updated: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   if ($collection | is-empty) { error make --unspanned { msg: "path parameter 'collection' must be non-empty" } }
@@ -507,10 +502,10 @@ export def "plus-activities-list" [
 # operationId: plus.people.list
 export def "plus-people-list" [
   user_id: string
-  collection: string
+  collection: string@collection-completer-2
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -528,7 +523,7 @@ export def "plus-people-list" [
   --order-by: string@order-by-completer-1 # The order to return people in.
   --page-token: string # The continuation token, which is used to page through large result sets. To get the next page of results, set this parameter to the value of "nextPageToken" from the previous response.
 ]: nothing -> record<etag: string, items: table<aboutMe: string, ageRange: record, birthday: string, braggingRights: string, circledByCount: int, cover: record, currentLocation: string, displayName: string, domain: string, emails: list, etag: string, gender: string, id: string, image: record, isPlusUser: bool, kind: string, language: string, name: record, nickname: string, objectType: string, occupation: string, organizations: list, placesLived: list, plusOneCount: int, relationshipStatus: string, skills: string, tagline: string, url: string, urls: list, verified: bool>, kind: string, nextPageToken: string, selfLink: string, title: string, totalItems: int> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   if ($collection | is-empty) { error make --unspanned { msg: "path parameter 'collection' must be non-empty" } }

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -141,13 +141,14 @@ export def "server-advisors-list-by-server" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> table<kind: string, location: string, properties: record<advisorStatus: string, autoExecuteStatus: string, autoExecuteStatusInheritedFrom: string, lastChecked: string, recommendationsStatus: string, recommendedActions: list>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> table<kind: string, location: string, properties: record<advisorStatus: string, autoExecuteStatus: string, autoExecuteStatusInheritedFrom: string, lastChecked: string, recommendationsStatus: string, recommendedActions: list>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/advisors") $qp $auth.query)
   let accept_val = "application/json"
@@ -184,14 +185,15 @@ export def "server-advisors-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<kind: string, location: string, properties: record<advisorStatus: string, autoExecuteStatus: string, autoExecuteStatusInheritedFrom: string, lastChecked: string, recommendationsStatus: string, recommendedActions: list<record>>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<kind: string, location: string, properties: record<advisorStatus: string, autoExecuteStatus: string, autoExecuteStatusInheritedFrom: string, lastChecked: string, recommendationsStatus: string, recommendedActions: list<record>>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($advisor_name | is-empty) { error make --unspanned { msg: "path parameter 'advisorName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), advisor_name: (encode-path-segment $advisor_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/advisors/{advisor_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -229,9 +231,9 @@ export def "server-advisors-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
   --properties: record # Properties for a Database, Server or Elastic Pool Advisor. — shape: {autoExecuteStatus: "Enabled"|"Disabled"|"Default"}
-]: any -> record<kind: string, location: string, properties: record<advisorStatus: string, autoExecuteStatus: string, autoExecuteStatusInheritedFrom: string, lastChecked: string, recommendationsStatus: string, recommendedActions: list<record>>> {
+]: any -> record<kind: string, location: string, properties: record<advisorStatus: string, autoExecuteStatus: string, autoExecuteStatusInheritedFrom: string, lastChecked: string, recommendationsStatus: string, recommendedActions: list<record>>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -239,6 +241,7 @@ export def "server-advisors-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($advisor_name | is-empty) { error make --unspanned { msg: "path parameter 'advisorName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), advisor_name: (encode-path-segment $advisor_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/advisors/{advisor_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -277,14 +280,15 @@ export def "database-advisors-list-by-database" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> table<kind: string, location: string, properties: record<advisorStatus: string, autoExecuteStatus: string, autoExecuteStatusInheritedFrom: string, lastChecked: string, recommendationsStatus: string, recommendedActions: list>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> table<kind: string, location: string, properties: record<advisorStatus: string, autoExecuteStatus: string, autoExecuteStatusInheritedFrom: string, lastChecked: string, recommendationsStatus: string, recommendedActions: list>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), database_name: (encode-path-segment $database_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/databases/{database_name}/advisors") $qp $auth.query)
   let accept_val = "application/json"
@@ -322,8 +326,8 @@ export def "database-advisors-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<kind: string, location: string, properties: record<advisorStatus: string, autoExecuteStatus: string, autoExecuteStatusInheritedFrom: string, lastChecked: string, recommendationsStatus: string, recommendedActions: list<record>>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<kind: string, location: string, properties: record<advisorStatus: string, autoExecuteStatus: string, autoExecuteStatusInheritedFrom: string, lastChecked: string, recommendationsStatus: string, recommendedActions: list<record>>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -331,6 +335,7 @@ export def "database-advisors-get" [
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($advisor_name | is-empty) { error make --unspanned { msg: "path parameter 'advisorName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), database_name: (encode-path-segment $database_name), advisor_name: (encode-path-segment $advisor_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/databases/{database_name}/advisors/{advisor_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -369,9 +374,9 @@ export def "database-advisors-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
   --properties: record # Properties for a Database, Server or Elastic Pool Advisor. — shape: {autoExecuteStatus: "Enabled"|"Disabled"|"Default"}
-]: any -> record<kind: string, location: string, properties: record<advisorStatus: string, autoExecuteStatus: string, autoExecuteStatusInheritedFrom: string, lastChecked: string, recommendationsStatus: string, recommendedActions: list<record>>> {
+]: any -> record<kind: string, location: string, properties: record<advisorStatus: string, autoExecuteStatus: string, autoExecuteStatusInheritedFrom: string, lastChecked: string, recommendationsStatus: string, recommendedActions: list<record>>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -380,6 +385,7 @@ export def "database-advisors-update" [
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($advisor_name | is-empty) { error make --unspanned { msg: "path parameter 'advisorName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), database_name: (encode-path-segment $database_name), advisor_name: (encode-path-segment $advisor_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/databases/{database_name}/advisors/{advisor_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -419,8 +425,8 @@ export def "database-recommended-actions-list-by-database-advisor" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> table<kind: string, location: string, properties: record<details: record, errorDetails: record, estimatedImpact: list, executeActionDuration: string, executeActionInitiatedBy: string, executeActionInitiatedTime: string, executeActionStartTime: string, implementationDetails: record, isArchivedAction: bool, isExecutableAction: bool, isRevertableAction: bool, lastRefresh: string, linkedObjects: list, observedImpact: list, recommendationReason: string, revertActionDuration: string, revertActionInitiatedBy: string, revertActionInitiatedTime: string, revertActionStartTime: string, score: int, state: record, timeSeries: list, validSince: string>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> table<kind: string, location: string, properties: record<details: record, errorDetails: record, estimatedImpact: list, executeActionDuration: string, executeActionInitiatedBy: string, executeActionInitiatedTime: string, executeActionStartTime: string, implementationDetails: record, isArchivedAction: bool, isExecutableAction: bool, isRevertableAction: bool, lastRefresh: string, linkedObjects: list, observedImpact: list, recommendationReason: string, revertActionDuration: string, revertActionInitiatedBy: string, revertActionInitiatedTime: string, revertActionStartTime: string, score: int, state: record, timeSeries: list, validSince: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -428,6 +434,7 @@ export def "database-recommended-actions-list-by-database-advisor" [
   if ($server_name | is-empty) { error make --unspanned { msg: "path parameter 'serverName' must be non-empty" } }
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($advisor_name | is-empty) { error make --unspanned { msg: "path parameter 'advisorName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), database_name: (encode-path-segment $database_name), advisor_name: (encode-path-segment $advisor_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/databases/{database_name}/advisors/{advisor_name}/recommendedActions") $qp $auth.query)
   let accept_val = "application/json"
@@ -466,8 +473,8 @@ export def "database-recommended-actions-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
-]: nothing -> record<kind: string, location: string, properties: record<details: record, errorDetails: record<errorCode: string, isRetryable: string>, estimatedImpact: list<record>, executeActionDuration: string, executeActionInitiatedBy: string, executeActionInitiatedTime: string, executeActionStartTime: string, implementationDetails: record<method: string, script: string>, isArchivedAction: bool, isExecutableAction: bool, isRevertableAction: bool, lastRefresh: string, linkedObjects: list<string>, observedImpact: list<record>, recommendationReason: string, revertActionDuration: string, revertActionInitiatedBy: string, revertActionInitiatedTime: string, revertActionStartTime: string, score: int, state: record<actionInitiatedBy: string, currentValue: string, lastModified: string>, timeSeries: list<record>, validSince: string>> {
+  --api-version: string # The API version to use for the request. (required)
+]: nothing -> record<kind: string, location: string, properties: record<details: record, errorDetails: record<errorCode: string, isRetryable: string>, estimatedImpact: list<record>, executeActionDuration: string, executeActionInitiatedBy: string, executeActionInitiatedTime: string, executeActionStartTime: string, implementationDetails: record<method: string, script: string>, isArchivedAction: bool, isExecutableAction: bool, isRevertableAction: bool, lastRefresh: string, linkedObjects: list<string>, observedImpact: list<record>, recommendationReason: string, revertActionDuration: string, revertActionInitiatedBy: string, revertActionInitiatedTime: string, revertActionStartTime: string, score: int, state: record<actionInitiatedBy: string, currentValue: string, lastModified: string>, timeSeries: list<record>, validSince: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -476,6 +483,7 @@ export def "database-recommended-actions-get" [
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($advisor_name | is-empty) { error make --unspanned { msg: "path parameter 'advisorName' must be non-empty" } }
   if ($recommended_action_name | is-empty) { error make --unspanned { msg: "path parameter 'recommendedActionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), database_name: (encode-path-segment $database_name), advisor_name: (encode-path-segment $advisor_name), recommended_action_name: (encode-path-segment $recommended_action_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/databases/{database_name}/advisors/{advisor_name}/recommendedActions/{recommended_action_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -515,9 +523,9 @@ export def "database-recommended-actions-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
   --properties: record # Properties for a Database, Server or Elastic Pool Recommended Action. — shape: {errorDetails?: record, implementationDetails?: record, state: record}
-]: any -> record<kind: string, location: string, properties: record<details: record, errorDetails: record<errorCode: string, isRetryable: string>, estimatedImpact: list<record>, executeActionDuration: string, executeActionInitiatedBy: string, executeActionInitiatedTime: string, executeActionStartTime: string, implementationDetails: record<method: string, script: string>, isArchivedAction: bool, isExecutableAction: bool, isRevertableAction: bool, lastRefresh: string, linkedObjects: list<string>, observedImpact: list<record>, recommendationReason: string, revertActionDuration: string, revertActionInitiatedBy: string, revertActionInitiatedTime: string, revertActionStartTime: string, score: int, state: record<actionInitiatedBy: string, currentValue: string, lastModified: string>, timeSeries: list<record>, validSince: string>> {
+]: any -> record<kind: string, location: string, properties: record<details: record, errorDetails: record<errorCode: string, isRetryable: string>, estimatedImpact: list<record>, executeActionDuration: string, executeActionInitiatedBy: string, executeActionInitiatedTime: string, executeActionStartTime: string, implementationDetails: record<method: string, script: string>, isArchivedAction: bool, isExecutableAction: bool, isRevertableAction: bool, lastRefresh: string, linkedObjects: list<string>, observedImpact: list<record>, recommendationReason: string, revertActionDuration: string, revertActionInitiatedBy: string, revertActionInitiatedTime: string, revertActionStartTime: string, score: int, state: record<actionInitiatedBy: string, currentValue: string, lastModified: string>, timeSeries: list<record>, validSince: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -527,6 +535,7 @@ export def "database-recommended-actions-update" [
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($advisor_name | is-empty) { error make --unspanned { msg: "path parameter 'advisorName' must be non-empty" } }
   if ($recommended_action_name | is-empty) { error make --unspanned { msg: "path parameter 'recommendedActionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), server_name: (encode-path-segment $server_name), database_name: (encode-path-segment $database_name), advisor_name: (encode-path-segment $advisor_name), recommended_action_name: (encode-path-segment $recommended_action_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/databases/{database_name}/advisors/{advisor_name}/recommendedActions/{recommended_action_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact

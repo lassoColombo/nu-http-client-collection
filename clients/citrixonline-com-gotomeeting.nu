@@ -153,10 +153,11 @@ export def "get-groups" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> table<groupName: string, groupkey: int, numOrganizers: int, parentKey: int, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/groups" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -192,11 +193,12 @@ export def "get-groups-group-key-attendees" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Start of date range, in ISO8601 UTC format, e.g. 2015-07-01T22:00:00Z (format: date-time)
   --end-date: string # End of date range, in ISO8601 UTC format, e.g. 2015-07-01T23:00:00Z (format: date-time)
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> table<attendeeEmail: string, attendeeName: string, conferenceCallInfo: string, duration: int, email: string, endTime: string, firstName: string, groupName: string, joinTime: string, lastName: string, leaveTime: string, meetingId: string, meetingInstanceKey: int, meetingType: string, numAttendees: int, organizerKey: string, organizerkey: int, startTime: string, subject: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_key | is-empty) { error make --unspanned { msg: "path parameter 'groupKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({group_key: (encode-path-segment $group_key)} | format pattern "/groups/{group_key}/attendees") $qp $auth.query)
   let accept_val = "application/json"
@@ -231,13 +233,16 @@ export def "get-groups-group-key-historical-meetings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start-date: string # Required start of date range, in ISO8601 UTC format, e.g. 2015-07-01T22:00:00Z (format: date-time)
-  --end-date: string # Required end of date range, in ISO8601 UTC format, e.g. 2015-07-01T23:00:00Z (format: date-time)
-  --authorization: string # Access token
+  --start-date: string # Required start of date range, in ISO8601 UTC format, e.g. 2015-07-01T22:00:00Z (required, format: date-time)
+  --end-date: string # Required end of date range, in ISO8601 UTC format, e.g. 2015-07-01T23:00:00Z (required, format: date-time)
+  --authorization: string # Access token (required)
 ]: nothing -> table<accountKey: string, duration: string, email: string, endTime: string, firstName: string, groupName: string, lastName: string, locale: string, meetingId: string, meetingType: string, numAttendees: string, organizerKey: string, startTime: string, subject: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_key | is-empty) { error make --unspanned { msg: "path parameter 'groupKey' must be non-empty" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'startDate' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'endDate' missing: pass --end-date" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({group_key: (encode-path-segment $group_key)} | format pattern "/groups/{group_key}/historicalMeetings") $qp $auth.query)
   let accept_val = "application/json"
@@ -274,14 +279,18 @@ export def "get-groups-group-key-meetings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --history: oneof<nothing, bool> # When 'true', returns all past meetings within date range
-  --start-date: string # If history=true, required start of date range, in ISO8601 UTC format, e.g. 2015-07-01T22:00:00Z (format: date-time)
-  --end-date: string # If history=true, required end of date range, in ISO8601 UTC format, e.g. 2015-07-01T23:00:00Z (format: date-time)
-  --authorization: string # Access token
+  --history: oneof<nothing, bool> # When 'true', returns all past meetings within date range (required)
+  --start-date: string # If history=true, required start of date range, in ISO8601 UTC format, e.g. 2015-07-01T22:00:00Z (required, format: date-time)
+  --end-date: string # If history=true, required end of date range, in ISO8601 UTC format, e.g. 2015-07-01T23:00:00Z (required, format: date-time)
+  --authorization: string # Access token (required)
 ]: nothing -> table<conferenceCallInfo: string, duration: string, email: string, endTime: string, firstName: string, groupName: string, lastName: string, meetingId: string, meetingInstanceKey: int, meetingType: string, numAttendees: int, organizerKey: string, organizerkey: int, startTime: string, subject: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_key | is-empty) { error make --unspanned { msg: "path parameter 'groupKey' must be non-empty" } }
+  if ($history == null) { error make --unspanned { msg: "required query parameter 'history' missing: pass --history" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'startDate' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'endDate' missing: pass --end-date" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "history" $history "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({group_key: (encode-path-segment $group_key)} | format pattern "/groups/{group_key}/meetings") $qp $auth.query)
   let accept_val = "application/json"
@@ -316,11 +325,12 @@ export def "get-groups-group-key-organizers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> table<email: string, firstName: string, groupId: int, groupName: string, lastName: string, maxNumAttendeesAllowed: int, organizerKey: int, products: list<string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_key | is-empty) { error make --unspanned { msg: "path parameter 'groupKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({group_key: (encode-path-segment $group_key)} | format pattern "/groups/{group_key}/organizers") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -354,7 +364,7 @@ export def "post-groups-group-key-organizers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
   first_name: string # The first name of the organizer
   last_name: string # The surname of the organizer
   organizer_email: string # The email address of the organizer
@@ -364,6 +374,7 @@ export def "post-groups-group-key-organizers" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_key | is-empty) { error make --unspanned { msg: "path parameter 'groupKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({group_key: (encode-path-segment $group_key)} | format pattern "/groups/{group_key}/organizers") $auth.query)
   let req_body = {"firstName": $first_name, "lastName": $last_name, "organizerEmail": $organizer_email, "productType": $product_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -399,11 +410,12 @@ export def "get-groups-group-key-upcoming-meetings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> table<accountKey: string, email: string, endTime: string, firstName: string, groupName: string, lastName: string, locale: string, meetingId: string, meetingType: string, organizerKey: string, passwordRequired: bool, startTime: string, status: string, subject: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_key | is-empty) { error make --unspanned { msg: "path parameter 'groupKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({group_key: (encode-path-segment $group_key)} | format pattern "/groups/{group_key}/upcomingMeetings") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -436,12 +448,15 @@ export def "get-historical-meetings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start-date: string # Required start of date range, in ISO8601 UTC format, e.g. 2015-07-01T22:00:00Z (format: date-time)
-  --end-date: string # Required end of date range, in ISO8601 UTC format, e.g. 2015-07-01T23:00:00Z (format: date-time)
-  --authorization: string # Access token
+  --start-date: string # Required start of date range, in ISO8601 UTC format, e.g. 2015-07-01T22:00:00Z (required, format: date-time)
+  --end-date: string # Required end of date range, in ISO8601 UTC format, e.g. 2015-07-01T23:00:00Z (required, format: date-time)
+  --authorization: string # Access token (required)
 ]: nothing -> table<accountKey: string, conferenceCallInfo: string, duration: string, email: string, endTime: string, firstName: string, lastName: string, locale: string, meetingId: string, meetingType: string, numAttendees: string, organizerKey: string, sessionId: string, startTime: string, subject: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'startDate' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'endDate' missing: pass --end-date" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/historicalMeetings" $qp $auth.query)
   let accept_val = "application/json"
@@ -480,10 +495,11 @@ export def "get-meetings" [
   --history: oneof<nothing, bool> # When 'true', returns all past meetings within date range
   --start-date: string # If history=true, required start of date range, in ISO8601 UTC format, e.g. 2015-07-01T22:00:00Z (format: date-time)
   --end-date: string # If history=true, required end of date range, in ISO8601 UTC format, e.g. 2015-07-01T23:00:00Z (format: date-time)
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> table<conferenceCallInfo: string, date: string, duration: int, email: string, endTime: string, firstName: string, groupName: string, lastName: string, meetingId: int, meetingInstanceKey: int, meetingKey: int, meetingType: string, newMeetingId: string, newOrganizerKey: string, numAttendees: int, organizerKey: string, organizerkey: string, passwordRequired: bool, sessionId: int, startTime: string, status: string, subject: string, uniqueMeetingId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "history" $history "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/meetings" $qp $auth.query)
   let accept_val = "application/json"
@@ -517,7 +533,7 @@ export def "post-meetings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
   conferencecallinfo: string # A required string. Can be one of the following options: PSTN (PSTN only), Free (PSTN and VoIP), Hybrid, (PSTN and VoIP), Private (you provide numbers and access code), or VoIP (VoIP only). You may also enter plain text for numbers and access codes with a limit of 255 characters
   endtime: string # The ending time of the meeting. Required ISO8601 UTC string, e.g. 2015-07-01T23:00:00Z (format: date-time)
   meetingtype: string@meetingtype-completer # The meeting type
@@ -529,9 +545,11 @@ export def "post-meetings" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/meetings" $auth.query)
   let req_body = {"conferencecallinfo": $conferencecallinfo, "endtime": $endtime, "meetingtype": $meetingtype, "passwordrequired": $passwordrequired, "starttime": $starttime, "subject": $subject, "timezonekey": $timezonekey} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "passwordrequired") == null) { error make --unspanned { msg: "required body field 'passwordrequired' missing: pass --passwordrequired or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
@@ -564,11 +582,12 @@ export def "delete-meetings-meeting-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -602,11 +621,12 @@ export def "get-meetings-meeting-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> table<conferenceCallInfo: string, createTime: string, duration: int, endTime: string, maxParticipants: int, meetingId: int, meetingKey: int, meetingType: string, passwordRequired: bool, startTime: string, status: string, subject: string, uniqueMeetingId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -640,7 +660,7 @@ export def "put-meetings-meeting-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
   conferencecallinfo: string # A required string. Can be one of the following options: PSTN (PSTN only), Free (PSTN and VoIP), Hybrid, (PSTN and VoIP), Private (you provide numbers and access code), or VoIP (VoIP only). You may also enter plain text for numbers and access codes with a limit of 255 characters
   endtime: string # The ending time of the meeting. A required ISO8601 UTC string, e.g. 2015-07-01T22:00:00Z (format: date-time)
   meetingtype: string@meetingtype-completer # The meeting type
@@ -653,9 +673,11 @@ export def "put-meetings-meeting-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}") $auth.query)
   let req_body = {"conferencecallinfo": $conferencecallinfo, "endtime": $endtime, "meetingtype": $meetingtype, "passwordrequired": $passwordrequired, "starttime": $starttime, "subject": $subject, "timezonekey": $timezonekey} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "passwordrequired") == null) { error make --unspanned { msg: "required body field 'passwordrequired' missing: pass --passwordrequired or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
@@ -688,11 +710,12 @@ export def "get-meetings-meeting-id-attendees" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> table<attendeeEmail: string, attendeeName: string, conferenceCallInfo: string, duration: int, email: string, endTime: string, firstName: string, groupName: string, joinTime: string, lastName: string, leaveTime: string, meetingId: int, meetingInstanceKey: int, meetingType: string, name: string, numAttendees: int, organizerkey: int, startTime: string, subject: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/attendees") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -726,11 +749,12 @@ export def "get-meetings-meeting-id-start" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> record<hostURL: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/start") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -763,11 +787,13 @@ export def "delete-organizers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --email: string # The email address of the organizer
-  --authorization: string # Access token
+  --email: string # The email address of the organizer (required)
+  --authorization: string # Access token (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($email == null) { error make --unspanned { msg: "required query parameter 'email' missing: pass --email" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "email" $email "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/organizers" $qp $auth.query)
   let accept_val = "application/json"
@@ -802,10 +828,11 @@ export def "get-organizers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # The email address of the organizer
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> table<email: string, firstName: string, groupId: int, groupName: string, lastName: string, maxNumAttendeesAllowed: int, organizerKey: int, products: list<string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "email" $email "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/organizers" $qp $auth.query)
   let accept_val = "application/json"
@@ -839,7 +866,7 @@ export def "post-organizers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
   first_name: string # The first name of the organizer
   last_name: string # The surname of the organizer
   organizer_email: string # The email address of the organizer
@@ -848,6 +875,7 @@ export def "post-organizers" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/organizers" $auth.query)
   let req_body = {"firstName": $first_name, "lastName": $last_name, "organizerEmail": $organizer_email, "productType": $product_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -883,11 +911,12 @@ export def "delete-organizers-organizer-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key)} | format pattern "/organizers/{organizer_key}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -921,11 +950,12 @@ export def "get-organizers-organizer-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> table<email: string, firstName: string, groupId: int, groupName: string, lastName: string, maxNumAttendeesAllowed: int, organizerKey: int, products: list<string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key)} | format pattern "/organizers/{organizer_key}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -959,7 +989,7 @@ export def "put-organizers-organizer-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
   --product-type: string@product-type-completer # The products the organizer has access to, can be 'G2M', 'G2W', 'G2T' or 'OPENVOICE'
   --status: string@status-completer # The status of the organizer can be set to. Use 'suspended' to remove all products. The formerly used status 'active' is now DEPRECATED for this call. To activate the organizer please assign a product. In this case do not pass this parameter
 ]: any -> any {
@@ -967,6 +997,7 @@ export def "put-organizers-organizer-key" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key)} | format pattern "/organizers/{organizer_key}") $auth.query)
   let req_body = {"productType": $product_type, "status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1002,13 +1033,16 @@ export def "get-organizers-organizer-key-attendees" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start-date: string # A required start of date range in ISO8601 UTC format, e.g. 2015-07-01T22:00:00Z (format: date-time)
-  --end-date: string # A required end of date range in ISO8601 UTC format, e.g. 2015-07-01T23:00:00Z (format: date-time)
-  --authorization: string # Access token
+  --start-date: string # A required start of date range in ISO8601 UTC format, e.g. 2015-07-01T22:00:00Z (required, format: date-time)
+  --end-date: string # A required end of date range in ISO8601 UTC format, e.g. 2015-07-01T23:00:00Z (required, format: date-time)
+  --authorization: string # Access token (required)
 ]: nothing -> table<attendeeEmail: string, attendeeName: string, conferenceCallInfo: string, duration: int, email: string, endTime: string, firstName: string, groupName: string, joinTime: string, lastName: string, leaveTime: string, meetingId: int, meetingInstanceKey: int, meetingType: string, name: string, newMeetingId: string, numAttendees: int, organizerkey: int, startTime: string, subject: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'startDate' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'endDate' missing: pass --end-date" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key)} | format pattern "/organizers/{organizer_key}/attendees") $qp $auth.query)
   let accept_val = "application/json"
@@ -1043,13 +1077,16 @@ export def "get-organizers-organizer-key-historical-meetings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start-date: string # Required start of date range, in ISO8601 UTC format, e.g. 2015-07-01T22:00:00Z (format: date-time)
-  --end-date: string # Required end of date range, in ISO8601 UTC format, e.g. 2015-07-01T23:00:00Z (format: date-time)
-  --authorization: string # Access token
+  --start-date: string # Required start of date range, in ISO8601 UTC format, e.g. 2015-07-01T22:00:00Z (required, format: date-time)
+  --end-date: string # Required end of date range, in ISO8601 UTC format, e.g. 2015-07-01T23:00:00Z (required, format: date-time)
+  --authorization: string # Access token (required)
 ]: nothing -> table<accountKey: string, conferenceCallInfo: string, duration: string, email: string, endTime: string, firstName: string, lastName: string, locale: string, meetingId: string, meetingType: string, numAttendees: string, organizerKey: string, sessionId: string, startTime: string, subject: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'startDate' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'endDate' missing: pass --end-date" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key)} | format pattern "/organizers/{organizer_key}/historicalMeetings") $qp $auth.query)
   let accept_val = "application/json"
@@ -1090,11 +1127,12 @@ export def "get-organizers-organizer-key-meetings" [
   --history: oneof<nothing, bool> # When 'true', returns all past meetings within date range
   --start-date: string # If history is 'true', required start of date range, in ISO8601 UTC format, e.g. 2015-07-01T22:00:00Z (format: date-time)
   --end-date: string # If history is 'true', required end of date range, in ISO8601 UTC format, e.g. 2015-07-01T23:00:00Z (format: date-time)
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> table<conferenceCallInfo: string, createTime: string, endTime: string, maxParticipants: int, meetingType: string, meetingid: int, passwordRequired: bool, startTime: string, status: string, subject: string, uniqueMeetingId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "scheduled" $scheduled "scalar") (serialize-qp "history" $history "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key)} | format pattern "/organizers/{organizer_key}/meetings") $qp $auth.query)
   let accept_val = "application/json"
@@ -1129,11 +1167,12 @@ export def "get-organizers-organizer-key-upcoming-meetings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> table<accountKey: string, conferenceCallInfo: string, email: string, endTime: string, firstName: string, lastName: string, locale: string, meetingId: string, meetingType: string, organizerKey: string, passwordRequired: bool, startTime: string, status: string, subject: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizer_key | is-empty) { error make --unspanned { msg: "path parameter 'organizerKey' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({organizer_key: (encode-path-segment $organizer_key)} | format pattern "/organizers/{organizer_key}/upcomingMeetings") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1166,10 +1205,11 @@ export def "get-upcoming-meetings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Access token
+  --authorization: string # Access token (required)
 ]: nothing -> table<accountKey: string, conferenceCallInfo: string, email: string, endTime: string, firstName: string, lastName: string, locale: string, meetingId: string, meetingType: string, organizerKey: string, passwordRequired: bool, startTime: string, status: string, subject: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/upcomingMeetings" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

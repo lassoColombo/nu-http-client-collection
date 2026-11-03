@@ -13,7 +13,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "cookie-brain.sid" => { {scheme: $scheme, headers: {Cookie: $"(encode-path-segment "brain.sid")=(encode-path-segment $token_val)"}, query: "", location: "cookie"} }
-    "x-api-key" => { {scheme: $scheme, headers: {X-Api-Key: $token_val}, query: "", location: "header"} }
+    "x-api-key" => { {scheme: $scheme, headers: {"X-Api-Key": $token_val}, query: "", location: "header"} }
     "query-key" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "key")=(encode-path-segment $token_val)", location: "query"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -226,14 +226,14 @@ export def "get-blobs" [
   --after-id: string # Limits directly on `id`. Marks the start of a range, optionally use `before_id` to set the end. Result output excludes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --before: string # Limits on `time_created`. Marks the end of a range, optionally use `after` to set the start. Result output excludes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --before-id: string # Limits directly on `id`. Marks the end of a range, optionally use `after_id` to set the start. Result output excludes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
-  --qp-from: string # Limits on `time_created`. Marks the start of a range, optionally use `until` to set the end. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
+  --from: string # Limits on `time_created`. Marks the start of a range, optionally use `until` to set the end. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --from-id: string # Limits on `id`. Marks the start of a range, optionally use `until_id` to set the end. Result output includes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --id-only: oneof<nothing, bool> # Removes `url` fields from output and shows `_id` instead of `_url` in references. (default: false, allows empty value)
   --limit: int # Sets the maximum number of returned resources. You may increase this number to large values, keep in mind that query times could become large. We advise you to use the pagination feature whenever you can. (default: 100, e.g. 5)
   --populate: string # Expand a reference into the actual resource (lookup). You may add multiple fields by giving a comma separated value. (e.g. location,item)
   --results-only: oneof<nothing, bool> # Removes response envelope with information about query, only sends back a JSON array with the applicable resources. (default: false, allows empty value)
   --select: string # Select which properties should be returned. You may add multiple fields by giving a comma separated value. Select can also be used together with populate: Specify the resource first, then a period(.) followed by the field.
-  --qp-sort: string # Allows you to sort on on or more fields in the resource. You may append a minus sign (`-`) to request reverse order (new to old). (default: -id, e.g. -move_count,technology)
+  --sort: string # Allows you to sort on on or more fields in the resource. You may append a minus sign (`-`) to request reverse order (new to old). (default: -id, e.g. -move_count,technology)
   --until: string # Limits on `time_created`. Marks the end of a range, optionally use `from` to set the start. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --until-id: string # Limits on `id`. Marks the end of a range, optionally use `from_id` to set the start. Result output includes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --timeout-s: float # Overrides the default query timeout (in seconds). A value of 0 means unlimited. IMPORTANT: using high timeouts in production code is strongly discouraged as it may lead to stability issues. (e.g. 60)
@@ -248,14 +248,14 @@ export def "get-blobs" [
 ]: nothing -> record<count: int, count_current: int, is_limited: bool, next_url: string, query_duration_ms: int, url: string, results: table<blob_key: string, content_type: string, download_url: string, filename: string, hash: string, id: string, time_created: string, time_last_accessed: string, time_updated: string, upload_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "time_updated" $time_updated "scalar") (serialize-qp "hash" $hash "scalar") (serialize-qp "blob_key" $blob_key "scalar") (serialize-qp "content_type" $content_type "scalar") (serialize-qp "filename" $filename "scalar") (serialize-qp "time_last_accessed" $time_last_accessed "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "time_updated" $time_updated "scalar") (serialize-qp "hash" $hash "scalar") (serialize-qp "blob_key" $blob_key "scalar") (serialize-qp "content_type" $content_type "scalar") (serialize-qp "filename" $filename "scalar") (serialize-qp "time_last_accessed" $time_last_accessed "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/blobs" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "hash": $hash, "blob_key": $blob_key, "content_type": $content_type, "filename": $filename, "time_last_accessed": $time_last_accessed} | compact)
+    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "hash": $hash, "blob_key": $blob_key, "content_type": $content_type, "filename": $filename, "time_last_accessed": $time_last_accessed} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -283,7 +283,7 @@ export def "add-blob" [
   --blob-key: string # Unique key to the blob (e.g. foobar)
   --content-type: string # Media type of the resource. Automatically detected when not given in a POST. (e.g. image/png)
   --filename: string # Filename of the blob (e.g. Foo bar)
-]: any -> any {
+]: any -> record<resource: record<id: string, url: string>, status: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
@@ -321,7 +321,7 @@ export def "delete-blob" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<resource: record<id: string, url: string>, status: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -442,8 +442,8 @@ export def "upload-blob-by-id" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -476,13 +476,13 @@ export def "get-events" [
   --after-id: string # Limits directly on `id`. Marks the start of a range, optionally use `before_id` to set the end. Result output excludes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --before: string # Limits on `time_created`. Marks the end of a range, optionally use `after` to set the start. Result output excludes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --before-id: string # Limits directly on `id`. Marks the end of a range, optionally use `after_id` to set the start. Result output excludes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
-  --qp-from: string # Limits on `time_created`. Marks the start of a range, optionally use `until` to set the end. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
+  --from: string # Limits on `time_created`. Marks the start of a range, optionally use `until` to set the end. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --from-id: string # Limits on `id`. Marks the start of a range, optionally use `until_id` to set the end. Result output includes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --id-only: oneof<nothing, bool> # Removes `url` fields from output and shows `_id` instead of `_url` in references. (default: false, allows empty value)
   --limit: int # Sets the maximum number of returned resources. You may increase this number to large values, keep in mind that query times could become large. We advise you to use the pagination feature whenever you can. (default: 100, e.g. 5)
   --populate: string # Expand a reference into the actual resource (lookup). You may add multiple fields by giving a comma separated value. (e.g. location,item)
   --results-only: oneof<nothing, bool> # Removes response envelope with information about query, only sends back a JSON array with the applicable resources. (default: false, allows empty value)
-  --qp-sort: string # Allows you to sort on on or more fields in the resource. You may append a minus sign (`-`) to request reverse order (new to old). (default: -id, e.g. -move_count,technology)
+  --sort: string # Allows you to sort on on or more fields in the resource. You may append a minus sign (`-`) to request reverse order (new to old). (default: -id, e.g. -move_count,technology)
   --until: string # Limits on `time_created`. Marks the end of a range, optionally use `from` to set the start. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --until-id: string # Limits on `id`. Marks the end of a range, optionally use `from_id` to set the start. Result output includes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --timeout-s: float # Overrides the default query timeout (in seconds). A value of 0 means unlimited. IMPORTANT: using high timeouts in production code is strongly discouraged as it may lead to stability issues. (e.g. 60)
@@ -496,14 +496,14 @@ export def "get-events" [
 ]: nothing -> record<count: int, count_current: int, is_limited: bool, next_url: string, query_duration_ms: int, url: string, results: table<id: string, payload: any, time_created: string, time_event: string, time_expire: string, topic: record, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "topic.resource_type" $topic_resource_type "scalar") (serialize-qp "topic.action" $topic_action "scalar") (serialize-qp "topic.resource" $topic_resource "scalar") (serialize-qp "time_event" $time_event "scalar") (serialize-qp "time_expire" $time_expire "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "topic.resource_type" $topic_resource_type "scalar") (serialize-qp "topic.action" $topic_action "scalar") (serialize-qp "topic.resource" $topic_resource "scalar") (serialize-qp "time_event" $time_event "scalar") (serialize-qp "time_expire" $time_expire "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/events" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "topic.resource_type": $topic_resource_type, "topic.action": $topic_action, "topic.resource": $topic_resource, "time_event": $time_event, "time_expire": $time_expire} | compact)
+    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "sort": $sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "topic.resource_type": $topic_resource_type, "topic.action": $topic_action, "topic.resource": $topic_resource, "time_event": $time_event, "time_expire": $time_expire} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -570,7 +570,7 @@ export def "get-items" [
   --before: string # Limits on `time_created`. Marks the end of a range, optionally use `after` to set the start. Result output excludes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --before-id: string # Limits directly on `id`. Marks the end of a range, optionally use `after_id` to set the start. Result output excludes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --before-code: string # Limits directly on `code_hex`. Marks the end of a range, optionally use `after_code` to set the start. Result output excludes the given `code_hex` value. (e.g. e20000000000000000001fff)
-  --qp-from: string # Limits on `time_created`. Marks the start of a range, optionally use `until` to set the end. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
+  --from: string # Limits on `time_created`. Marks the start of a range, optionally use `until` to set the end. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --from-id: string # Limits on `id`. Marks the start of a range, optionally use `until_id` to set the end. Result output includes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --from-code: string # Limits on `code_hex`. Marks the start of a range, optionally use `until_code` to set the end. Result output includes the given `code_hex` value. (e.g. e20000000000000000000000)
   --id-only: oneof<nothing, bool> # Removes `url` fields from output and shows `_id` instead of `_url` in references. (default: false, allows empty value)
@@ -578,7 +578,7 @@ export def "get-items" [
   --populate: string # Expand a reference into the actual resource (lookup). You may add multiple fields by giving a comma separated value. (e.g. location,item)
   --results-only: oneof<nothing, bool> # Removes response envelope with information about query, only sends back a JSON array with the applicable resources. (default: false, allows empty value)
   --select: string # Select which properties should be returned. You may add multiple fields by giving a comma separated value. Select can also be used together with populate: Specify the resource first, then a period(.) followed by the field.
-  --qp-sort: string # Allows you to sort on on or more fields in the resource. You may append a minus sign (`-`) to request reverse order (new to old). (default: -id, e.g. -move_count,technology)
+  --sort: string # Allows you to sort on on or more fields in the resource. You may append a minus sign (`-`) to request reverse order (new to old). (default: -id, e.g. -move_count,technology)
   --until: string # Limits on `time_created`. Marks the end of a range, optionally use `from` to set the start. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --until-id: string # Limits on `id`. Marks the end of a range, optionally use `from_id` to set the start. Result output includes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --timeout-s: float # Overrides the default query timeout (in seconds). A value of 0 means unlimited. IMPORTANT: using high timeouts in production code is strongly discouraged as it may lead to stability issues. (e.g. 60)
@@ -602,14 +602,14 @@ export def "get-items" [
 ]: nothing -> record<count: int, count_current: int, is_limited: bool, next_url: string, query_duration_ms: int, url: string, results: table<config_request: record, custom: any, label: string, location_request: string, metadata: record, code_hex: string, geo_coords: record, id: string, is_present: bool, move_count: int, protocol: string, sets: list, technology: string, time_created: string, time_last_present: string, time_moved: string, time_updated: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "after_code" $after_code "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "before_code" $before_code "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "from_code" $from_code "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "until_code" $until_code "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "time_updated" $time_updated "scalar") (serialize-qp "code_hex" $code_hex "scalar") (serialize-qp "is_present" $is_present "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "metadata" $metadata "scalar") (serialize-qp "move_count" $move_count "scalar") (serialize-qp "protocol" $protocol "scalar") (serialize-qp "sets" $sets "scalar") (serialize-qp "technology" $technology "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "time_last_present" $time_last_present "scalar") (serialize-qp "time_moved" $time_moved "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "after_code" $after_code "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "before_code" $before_code "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "from_code" $from_code "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "until_code" $until_code "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "time_updated" $time_updated "scalar") (serialize-qp "code_hex" $code_hex "scalar") (serialize-qp "is_present" $is_present "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "metadata" $metadata "scalar") (serialize-qp "move_count" $move_count "scalar") (serialize-qp "protocol" $protocol "scalar") (serialize-qp "sets" $sets "scalar") (serialize-qp "technology" $technology "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "time_last_present" $time_last_present "scalar") (serialize-qp "time_moved" $time_moved "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/items" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"after": $after, "after_id": $after_id, "after_code": $after_code, "before": $before, "before_id": $before_id, "before_code": $before_code, "from": $qp_from, "from_id": $from_id, "from_code": $from_code, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "until_code": $until_code, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "code_hex": $code_hex, "is_present": $is_present, "label": $label, "location": $location, "metadata": $metadata, "move_count": $move_count, "protocol": $protocol, "sets": $sets, "technology": $technology, "text": $text, "time_last_present": $time_last_present, "time_moved": $time_moved, "type": $type} | compact)
+    query: ({"after": $after, "after_id": $after_id, "after_code": $after_code, "before": $before, "before_id": $before_id, "before_code": $before_code, "from": $from, "from_id": $from_id, "from_code": $from_code, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "until_code": $until_code, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "code_hex": $code_hex, "is_present": $is_present, "label": $label, "location": $location, "metadata": $metadata, "move_count": $move_count, "protocol": $protocol, "sets": $sets, "technology": $technology, "text": $text, "time_last_present": $time_last_present, "time_moved": $time_moved, "type": $type} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -643,7 +643,7 @@ export def "add-item" [
   --protocol: string@protocol-completer # Type of protocol that was used to decode this item. (e.g. epcgen2)
   --technology: string@technology-completer # Type of technology that was used to detect this item. (e.g. rfid)
   --type: string@type-completer # Type of item. (e.g. tag)
-]: any -> any {
+]: any -> record<resource: record<id: string, url: string>, status: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
@@ -681,7 +681,7 @@ export def "delete-item" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<resource: record<id: string, url: string>, status: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -758,7 +758,7 @@ export def "update-item" [
   --label: string # A name or a label for this resource. This is used in the user interface, may be empty. (e.g. Foo Bar)
   --location-request: string # Instruction for the location engine to forcibly localize the item at the specified location id as soon as possible. Cleared automatically. (e.g. 5b7d6cbd7503c445552a1664)
   --metadata: record # Object of searchable metadata for this resource. Can be freely used to store metadata properties. (e.g. {foo: bar})
-]: any -> any {
+]: any -> record<resource: record<id: string, url: string>, status: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
@@ -800,14 +800,14 @@ export def "get-keys" [
   --after-id: string # Limits directly on `id`. Marks the start of a range, optionally use `before_id` to set the end. Result output excludes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --before: string # Limits on `time_created`. Marks the end of a range, optionally use `after` to set the start. Result output excludes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --before-id: string # Limits directly on `id`. Marks the end of a range, optionally use `after_id` to set the start. Result output excludes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
-  --qp-from: string # Limits on `time_created`. Marks the start of a range, optionally use `until` to set the end. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
+  --from: string # Limits on `time_created`. Marks the start of a range, optionally use `until` to set the end. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --from-id: string # Limits on `id`. Marks the start of a range, optionally use `until_id` to set the end. Result output includes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --id-only: oneof<nothing, bool> # Removes `url` fields from output and shows `_id` instead of `_url` in references. (default: false, allows empty value)
   --limit: int # Sets the maximum number of returned resources. You may increase this number to large values, keep in mind that query times could become large. We advise you to use the pagination feature whenever you can. (default: 100, e.g. 5)
   --populate: string # Expand a reference into the actual resource (lookup). You may add multiple fields by giving a comma separated value. (e.g. location,item)
   --results-only: oneof<nothing, bool> # Removes response envelope with information about query, only sends back a JSON array with the applicable resources. (default: false, allows empty value)
   --select: string # Select which properties should be returned. You may add multiple fields by giving a comma separated value. Select can also be used together with populate: Specify the resource first, then a period(.) followed by the field.
-  --qp-sort: string # Allows you to sort on on or more fields in the resource. You may append a minus sign (`-`) to request reverse order (new to old). (default: -id, e.g. -move_count,technology)
+  --sort: string # Allows you to sort on on or more fields in the resource. You may append a minus sign (`-`) to request reverse order (new to old). (default: -id, e.g. -move_count,technology)
   --until: string # Limits on `time_created`. Marks the end of a range, optionally use `from` to set the start. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --until-id: string # Limits on `id`. Marks the end of a range, optionally use `from_id` to set the start. Result output includes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --timeout-s: float # Overrides the default query timeout (in seconds). A value of 0 means unlimited. IMPORTANT: using high timeouts in production code is strongly discouraged as it may lead to stability issues. (e.g. 60)
@@ -820,14 +820,14 @@ export def "get-keys" [
 ]: nothing -> record<count: int, count_current: int, is_limited: bool, next_url: string, query_duration_ms: int, url: string, results: table<id: string, is_read_only: bool, label: string, secret: string, time_created: string, time_updated: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "time_updated" $time_updated "scalar") (serialize-qp "secret" $secret "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "is_read_only" $is_read_only "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "time_updated" $time_updated "scalar") (serialize-qp "secret" $secret "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "is_read_only" $is_read_only "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/keys" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "secret": $secret, "label": $label, "is_read_only": $is_read_only} | compact)
+    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "secret": $secret, "label": $label, "is_read_only": $is_read_only} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -854,7 +854,7 @@ export def "add-key" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --is-read-only: oneof<nothing, bool> # Whether or not this key can only read and not write.
   --label: string # Custom label for this API key.
-]: any -> any {
+]: any -> record<resource: record<id: string, url: string>, status: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
@@ -892,7 +892,7 @@ export def "delete-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<resource: record<id: string, url: string>, status: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -966,7 +966,7 @@ export def "update-key" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --is-read-only: oneof<nothing, bool> # Whether or not this key can only read and not write.
   --label: string # Custom label for this API key.
-]: any -> any {
+]: any -> record<resource: record<id: string, url: string>, status: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
@@ -1008,14 +1008,14 @@ export def "get-kv-pairs" [
   --after-id: string # Limits directly on `id`. Marks the start of a range, optionally use `before_id` to set the end. Result output excludes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --before: string # Limits on `time_created`. Marks the end of a range, optionally use `after` to set the start. Result output excludes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --before-id: string # Limits directly on `id`. Marks the end of a range, optionally use `after_id` to set the start. Result output excludes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
-  --qp-from: string # Limits on `time_created`. Marks the start of a range, optionally use `until` to set the end. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
+  --from: string # Limits on `time_created`. Marks the start of a range, optionally use `until` to set the end. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --from-id: string # Limits on `id`. Marks the start of a range, optionally use `until_id` to set the end. Result output includes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --id-only: oneof<nothing, bool> # Removes `url` fields from output and shows `_id` instead of `_url` in references. (default: false, allows empty value)
   --limit: int # Sets the maximum number of returned resources. You may increase this number to large values, keep in mind that query times could become large. We advise you to use the pagination feature whenever you can. (default: 100, e.g. 5)
   --populate: string # Expand a reference into the actual resource (lookup). You may add multiple fields by giving a comma separated value. (e.g. location,item)
   --results-only: oneof<nothing, bool> # Removes response envelope with information about query, only sends back a JSON array with the applicable resources. (default: false, allows empty value)
   --select: string # Select which properties should be returned. You may add multiple fields by giving a comma separated value. Select can also be used together with populate: Specify the resource first, then a period(.) followed by the field.
-  --qp-sort: string # Allows you to sort on on or more fields in the resource. You may append a minus sign (`-`) to request reverse order (new to old). (default: -id, e.g. -move_count,technology)
+  --sort: string # Allows you to sort on on or more fields in the resource. You may append a minus sign (`-`) to request reverse order (new to old). (default: -id, e.g. -move_count,technology)
   --until: string # Limits on `time_created`. Marks the end of a range, optionally use `from` to set the start. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --until-id: string # Limits on `id`. Marks the end of a range, optionally use `from_id` to set the start. Result output includes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --timeout-s: float # Overrides the default query timeout (in seconds). A value of 0 means unlimited. IMPORTANT: using high timeouts in production code is strongly discouraged as it may lead to stability issues. (e.g. 60)
@@ -1026,14 +1026,14 @@ export def "get-kv-pairs" [
 ]: nothing -> record<count: int, count_current: int, is_limited: bool, next_url: string, query_duration_ms: int, url: string, results: table<kv_value: any, id: string, kv_key: string, time_created: string, time_updated: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "time_updated" $time_updated "scalar") (serialize-qp "kv_key" $kv_key "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "time_updated" $time_updated "scalar") (serialize-qp "kv_key" $kv_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kvpairs" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "kv_key": $kv_key} | compact)
+    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "kv_key": $kv_key} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1060,7 +1060,7 @@ export def "add-kv-pairs" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --kv-value: any # The value of the key value pair. (nullable, e.g. all the bars)
   --kv-key: string # Unique identifier for the value. (e.g. foo)
-]: any -> any {
+]: any -> record<resource: record<id: string, url: string>, status: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
@@ -1098,7 +1098,7 @@ export def "delete-kv-pair" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<resource: record<id: string, url: string>, status: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1171,7 +1171,7 @@ export def "update-kv-pair" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --kv-value: any # The value of the key value pair. (nullable, e.g. all the bars)
-]: any -> any {
+]: any -> record<resource: record<id: string, url: string>, status: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
@@ -1213,14 +1213,14 @@ export def "get-location-rules" [
   --after-id: string # Limits directly on `id`. Marks the start of a range, optionally use `before_id` to set the end. Result output excludes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --before: string # Limits on `time_created`. Marks the end of a range, optionally use `after` to set the start. Result output excludes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --before-id: string # Limits directly on `id`. Marks the end of a range, optionally use `after_id` to set the start. Result output excludes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
-  --qp-from: string # Limits on `time_created`. Marks the start of a range, optionally use `until` to set the end. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
+  --from: string # Limits on `time_created`. Marks the start of a range, optionally use `until` to set the end. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --from-id: string # Limits on `id`. Marks the start of a range, optionally use `until_id` to set the end. Result output includes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --id-only: oneof<nothing, bool> # Removes `url` fields from output and shows `_id` instead of `_url` in references. (default: false, allows empty value)
   --limit: int # Sets the maximum number of returned resources. You may increase this number to large values, keep in mind that query times could become large. We advise you to use the pagination feature whenever you can. (default: 100, e.g. 5)
   --populate: string # Expand a reference into the actual resource (lookup). You may add multiple fields by giving a comma separated value. (e.g. location,item)
   --results-only: oneof<nothing, bool> # Removes response envelope with information about query, only sends back a JSON array with the applicable resources. (default: false, allows empty value)
   --select: string # Select which properties should be returned. You may add multiple fields by giving a comma separated value. Select can also be used together with populate: Specify the resource first, then a period(.) followed by the field.
-  --qp-sort: string # Allows you to sort on on or more fields in the resource. You may append a minus sign (`-`) to request reverse order (new to old). (default: -id, e.g. -move_count,technology)
+  --sort: string # Allows you to sort on on or more fields in the resource. You may append a minus sign (`-`) to request reverse order (new to old). (default: -id, e.g. -move_count,technology)
   --until: string # Limits on `time_created`. Marks the end of a range, optionally use `from` to set the start. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --until-id: string # Limits on `id`. Marks the end of a range, optionally use `from_id` to set the start. Result output includes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --timeout-s: float # Overrides the default query timeout (in seconds). A value of 0 means unlimited. IMPORTANT: using high timeouts in production code is strongly discouraged as it may lead to stability issues. (e.g. 60)
@@ -1233,14 +1233,14 @@ export def "get-location-rules" [
 ]: nothing -> record<count: int, count_current: int, is_limited: bool, next_url: string, query_duration_ms: int, url: string, results: table<conditions: any, enabled: bool, id: string, label: string, parameters: record, time_created: string, time_updated: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "time_updated" $time_updated "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "enabled" $enabled "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "time_updated" $time_updated "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "enabled" $enabled "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/locationrules" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "label": $label, "type": $type, "enabled": $enabled} | compact)
+    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "label": $label, "type": $type, "enabled": $enabled} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1271,7 +1271,7 @@ export def "add-location-rule" [
   --label: string # A name or a label for this resource. This is used in the user interface, may be empty. (e.g. Foo Bar)
   --parameters: record # Parameters for this rule; depends on the rule type. Refer to the rule type specification for details.
   --type: string@type-completer-1 # The type of location rule to be applied. Allow: items at `conditions.from_location` can only move to `conditions.to_location` and locations allowed in other `allow` rules (destination whitelist). Disallow: items at `conditions.from_location` cannot be moved to `conditions.to_location` and locations disallowed in other `disallow` rules (destination blacklist). Disappeared: items disappearing at `conditions.from_location` will be moved to `parameters.location` after `parameters.time_s` seconds. Debounce: items moves from `conditions.from_location` (and optionally to `conditions.to_location`) will be debounced with a period of `parameters.time_s` seconds, for a maximum of `parameters.max_periods` periods.
-]: any -> any {
+]: any -> record<resource: record<id: string, url: string>, status: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
@@ -1309,7 +1309,7 @@ export def "delete-location-rule" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<resource: record<id: string, url: string>, status: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1387,7 +1387,7 @@ export def "update-location-rule" [
   --label: string # A name or a label for this resource. This is used in the user interface, may be empty. (e.g. Foo Bar)
   --parameters: record # Parameters for this rule; depends on the rule type. Refer to the rule type specification for details.
   --type: string@type-completer-1 # The type of location rule to be applied. Allow: items at `conditions.from_location` can only move to `conditions.to_location` and locations allowed in other `allow` rules (destination whitelist). Disallow: items at `conditions.from_location` cannot be moved to `conditions.to_location` and locations disallowed in other `disallow` rules (destination blacklist). Disappeared: items disappearing at `conditions.from_location` will be moved to `parameters.location` after `parameters.time_s` seconds. Debounce: items moves from `conditions.from_location` (and optionally to `conditions.to_location`) will be debounced with a period of `parameters.time_s` seconds, for a maximum of `parameters.max_periods` periods.
-]: any -> any {
+]: any -> record<resource: record<id: string, url: string>, status: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
@@ -1429,14 +1429,14 @@ export def "get-locations" [
   --after-id: string # Limits directly on `id`. Marks the start of a range, optionally use `before_id` to set the end. Result output excludes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --before: string # Limits on `time_created`. Marks the end of a range, optionally use `after` to set the start. Result output excludes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --before-id: string # Limits directly on `id`. Marks the end of a range, optionally use `after_id` to set the start. Result output excludes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
-  --qp-from: string # Limits on `time_created`. Marks the start of a range, optionally use `until` to set the end. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
+  --from: string # Limits on `time_created`. Marks the start of a range, optionally use `until` to set the end. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --from-id: string # Limits on `id`. Marks the start of a range, optionally use `until_id` to set the end. Result output includes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --id-only: oneof<nothing, bool> # Removes `url` fields from output and shows `_id` instead of `_url` in references. (default: false, allows empty value)
   --limit: int # Sets the maximum number of returned resources. You may increase this number to large values, keep in mind that query times could become large. We advise you to use the pagination feature whenever you can. (default: 100, e.g. 5)
   --populate: string # Expand a reference into the actual resource (lookup). You may add multiple fields by giving a comma separated value. (e.g. location,item)
   --results-only: oneof<nothing, bool> # Removes response envelope with information about query, only sends back a JSON array with the applicable resources. (default: false, allows empty value)
   --select: string # Select which properties should be returned. You may add multiple fields by giving a comma separated value. Select can also be used together with populate: Specify the resource first, then a period(.) followed by the field.
-  --qp-sort: string # Allows you to sort on on or more fields in the resource. You may append a minus sign (`-`) to request reverse order (new to old). (default: -id, e.g. -move_count,technology)
+  --sort: string # Allows you to sort on on or more fields in the resource. You may append a minus sign (`-`) to request reverse order (new to old). (default: -id, e.g. -move_count,technology)
   --until: string # Limits on `time_created`. Marks the end of a range, optionally use `from` to set the start. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --until-id: string # Limits on `id`. Marks the end of a range, optionally use `from_id` to set the start. Result output includes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --timeout-s: float # Overrides the default query timeout (in seconds). A value of 0 means unlimited. IMPORTANT: using high timeouts in production code is strongly discouraged as it may lead to stability issues. (e.g. 60)
@@ -1449,14 +1449,14 @@ export def "get-locations" [
 ]: nothing -> record<count: int, count_current: int, is_limited: bool, next_url: string, query_duration_ms: int, url: string, results: table<custom: any, id: string, label: string, metadata: record, time_created: string, time_updated: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "time_updated" $time_updated "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "metadata" $metadata "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "time_updated" $time_updated "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "metadata" $metadata "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/locations" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "label": $label, "metadata": $metadata, "text": $text} | compact)
+    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "label": $label, "metadata": $metadata, "text": $text} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1484,7 +1484,7 @@ export def "add-location" [
   --custom: any # The `custom` value is only for your custom references, you may use it to save additional attributes. The custom value is not used in any other place. This field may contain any datatype that you like: null (default), string, integer, boolean, object etc... (nullable, e.g. {foo: bar})
   --label: string # A name or a label for this resource. This is used in the user interface, may be empty. (e.g. Foo Bar)
   --metadata: record # Object of searchable metadata for this resource. Can be freely used to store metadata properties. (e.g. {foo: bar})
-]: any -> any {
+]: any -> record<resource: record<id: string, url: string>, status: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
@@ -1522,7 +1522,7 @@ export def "delete-location" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<resource: record<id: string, url: string>, status: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1597,7 +1597,7 @@ export def "update-location" [
   --custom: any # The `custom` value is only for your custom references, you may use it to save additional attributes. The custom value is not used in any other place. This field may contain any datatype that you like: null (default), string, integer, boolean, object etc... (nullable, e.g. {foo: bar})
   --label: string # A name or a label for this resource. This is used in the user interface, may be empty. (e.g. Foo Bar)
   --metadata: record # Object of searchable metadata for this resource. Can be freely used to store metadata properties. (e.g. {foo: bar})
-]: any -> any {
+]: any -> record<resource: record<id: string, url: string>, status: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
@@ -1639,14 +1639,14 @@ export def "get-presences" [
   --after-id: string # Limits directly on `id`. Marks the start of a range, optionally use `before_id` to set the end. Result output excludes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --before: string # Limits on `time_created`. Marks the end of a range, optionally use `after` to set the start. Result output excludes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --before-id: string # Limits directly on `id`. Marks the end of a range, optionally use `after_id` to set the start. Result output excludes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
-  --qp-from: string # Limits on `time_created`. Marks the start of a range, optionally use `until` to set the end. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
+  --from: string # Limits on `time_created`. Marks the start of a range, optionally use `until` to set the end. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --from-id: string # Limits on `id`. Marks the start of a range, optionally use `until_id` to set the end. Result output includes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --id-only: oneof<nothing, bool> # Removes `url` fields from output and shows `_id` instead of `_url` in references. (default: false, allows empty value)
   --limit: int # Sets the maximum number of returned resources. You may increase this number to large values, keep in mind that query times could become large. We advise you to use the pagination feature whenever you can. (default: 100, e.g. 5)
   --populate: string # Expand a reference into the actual resource (lookup). You may add multiple fields by giving a comma separated value. (e.g. location,item)
   --results-only: oneof<nothing, bool> # Removes response envelope with information about query, only sends back a JSON array with the applicable resources. (default: false, allows empty value)
   --select: string # Select which properties should be returned. You may add multiple fields by giving a comma separated value. Select can also be used together with populate: Specify the resource first, then a period(.) followed by the field.
-  --qp-sort: string # Allows you to sort on on or more fields in the resource. You may append a minus sign (`-`) to request reverse order (new to old). (default: -id, e.g. -move_count,technology)
+  --sort: string # Allows you to sort on on or more fields in the resource. You may append a minus sign (`-`) to request reverse order (new to old). (default: -id, e.g. -move_count,technology)
   --until: string # Limits on `time_created`. Marks the end of a range, optionally use `from` to set the start. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --until-id: string # Limits on `id`. Marks the end of a range, optionally use `from_id` to set the start. Result output includes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --timeout-s: float # Overrides the default query timeout (in seconds). A value of 0 means unlimited. IMPORTANT: using high timeouts in production code is strongly discouraged as it may lead to stability issues. (e.g. 60)
@@ -1660,14 +1660,14 @@ export def "get-presences" [
 ]: nothing -> record<count: int, count_current: int, is_limited: bool, next_url: string, query_duration_ms: int, url: string, results: table<id: string, item: record, item_id: string, item_url: string, location: record, location_id: string, location_url: string, proximity: string, technology: string, time_created: string, time_updated: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "time_updated" $time_updated "scalar") (serialize-qp "item" $item "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "proximity" $proximity "scalar") (serialize-qp "technology" $technology "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "time_updated" $time_updated "scalar") (serialize-qp "item" $item "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "proximity" $proximity "scalar") (serialize-qp "technology" $technology "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/presences" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "item": $item, "location": $location, "proximity": $proximity, "technology": $technology} | compact)
+    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "item": $item, "location": $location, "proximity": $proximity, "technology": $technology} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1732,14 +1732,14 @@ export def "get-services" [
   --after-id: string # Limits directly on `id`. Marks the start of a range, optionally use `before_id` to set the end. Result output excludes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --before: string # Limits on `time_created`. Marks the end of a range, optionally use `after` to set the start. Result output excludes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --before-id: string # Limits directly on `id`. Marks the end of a range, optionally use `after_id` to set the start. Result output excludes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
-  --qp-from: string # Limits on `time_created`. Marks the start of a range, optionally use `until` to set the end. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
+  --from: string # Limits on `time_created`. Marks the start of a range, optionally use `until` to set the end. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --from-id: string # Limits on `id`. Marks the start of a range, optionally use `until_id` to set the end. Result output includes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --id-only: oneof<nothing, bool> # Removes `url` fields from output and shows `_id` instead of `_url` in references. (default: false, allows empty value)
   --limit: int # Sets the maximum number of returned resources. You may increase this number to large values, keep in mind that query times could become large. We advise you to use the pagination feature whenever you can. (default: 100, e.g. 5)
   --populate: string # Expand a reference into the actual resource (lookup). You may add multiple fields by giving a comma separated value. (e.g. location,item)
   --results-only: oneof<nothing, bool> # Removes response envelope with information about query, only sends back a JSON array with the applicable resources. (default: false, allows empty value)
   --select: string # Select which properties should be returned. You may add multiple fields by giving a comma separated value. Select can also be used together with populate: Specify the resource first, then a period(.) followed by the field.
-  --qp-sort: string # Allows you to sort on on or more fields in the resource. You may append a minus sign (`-`) to request reverse order (new to old). (default: -id, e.g. -move_count,technology)
+  --sort: string # Allows you to sort on on or more fields in the resource. You may append a minus sign (`-`) to request reverse order (new to old). (default: -id, e.g. -move_count,technology)
   --until: string # Limits on `time_created`. Marks the end of a range, optionally use `from` to set the start. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --until-id: string # Limits on `id`. Marks the end of a range, optionally use `from_id` to set the start. Result output includes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --timeout-s: float # Overrides the default query timeout (in seconds). A value of 0 means unlimited. IMPORTANT: using high timeouts in production code is strongly discouraged as it may lead to stability issues. (e.g. 60)
@@ -1750,14 +1750,14 @@ export def "get-services" [
 ]: nothing -> record<count: int, count_current: int, is_limited: bool, next_url: string, query_duration_ms: int, url: string, results: table<boot_count: int, config: record, config_request: record, id: string, name: string, restart_request: bool, time_created: string, time_updated: string, url: string, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "time_updated" $time_updated "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "time_updated" $time_updated "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/services" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "name": $name} | compact)
+    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "name": $name} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1821,7 +1821,7 @@ export def "update-service" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --config-request: record # Object containing the new configuration. This will be applied automatically when the values are valid. (e.g. {foo: bar})
   --restart-request: oneof<nothing, bool> # Set this to `true` to send a reset request for the specific resource. (e.g. true)
-]: any -> any {
+]: any -> record<resource: record<id: string, url: string>, status: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
@@ -1863,14 +1863,14 @@ export def "get-item-lists" [
   --after-id: string # Limits directly on `id`. Marks the start of a range, optionally use `before_id` to set the end. Result output excludes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --before: string # Limits on `time_created`. Marks the end of a range, optionally use `after` to set the start. Result output excludes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --before-id: string # Limits directly on `id`. Marks the end of a range, optionally use `after_id` to set the start. Result output excludes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
-  --qp-from: string # Limits on `time_created`. Marks the start of a range, optionally use `until` to set the end. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
+  --from: string # Limits on `time_created`. Marks the start of a range, optionally use `until` to set the end. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --from-id: string # Limits on `id`. Marks the start of a range, optionally use `until_id` to set the end. Result output includes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --id-only: oneof<nothing, bool> # Removes `url` fields from output and shows `_id` instead of `_url` in references. (default: false, allows empty value)
   --limit: int # Sets the maximum number of returned resources. You may increase this number to large values, keep in mind that query times could become large. We advise you to use the pagination feature whenever you can. (default: 100, e.g. 5)
   --populate: string # Expand a reference into the actual resource (lookup). You may add multiple fields by giving a comma separated value. (e.g. location,item)
   --results-only: oneof<nothing, bool> # Removes response envelope with information about query, only sends back a JSON array with the applicable resources. (default: false, allows empty value)
   --select: string # Select which properties should be returned. You may add multiple fields by giving a comma separated value. Select can also be used together with populate: Specify the resource first, then a period(.) followed by the field.
-  --qp-sort: string # Allows you to sort on on or more fields in the resource. You may append a minus sign (`-`) to request reverse order (new to old). (default: -id, e.g. -move_count,technology)
+  --sort: string # Allows you to sort on on or more fields in the resource. You may append a minus sign (`-`) to request reverse order (new to old). (default: -id, e.g. -move_count,technology)
   --until: string # Limits on `time_created`. Marks the end of a range, optionally use `from` to set the start. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --until-id: string # Limits on `id`. Marks the end of a range, optionally use `from_id` to set the start. Result output includes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --timeout-s: float # Overrides the default query timeout (in seconds). A value of 0 means unlimited. IMPORTANT: using high timeouts in production code is strongly discouraged as it may lead to stability issues. (e.g. 60)
@@ -1885,14 +1885,14 @@ export def "get-item-lists" [
 ]: nothing -> record<count: int, count_current: int, is_limited: bool, next_url: string, query_duration_ms: int, url: string, results: table<custom: any, id: string, label: string, list: string, metadata: record, sha1: string, time_created: string, time_updated: string, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "time_updated" $time_updated "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "metadata" $metadata "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "total" $total "scalar") (serialize-qp "sha1" $sha1 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "time_updated" $time_updated "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "metadata" $metadata "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "total" $total "scalar") (serialize-qp "sha1" $sha1 "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sets/itemlists" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "label": $label, "metadata": $metadata, "text": $text, "total": $total, "sha1": $sha1} | compact)
+    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "label": $label, "metadata": $metadata, "text": $text, "total": $total, "sha1": $sha1} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1920,7 +1920,7 @@ export def "add-item-list" [
   --custom: any # The `custom` value is only for your custom references, you may use it to save additional attributes. The custom value is not used in any other place. This field may contain any datatype that you like: null (default), string, integer, boolean, object etc... (nullable, e.g. {foo: bar})
   --label: string # A name or a label for this resource. This is used in the user interface, may be empty. (e.g. Foo Bar)
   --metadata: record # Object of searchable metadata for this resource. Can be freely used to store metadata properties. (e.g. {foo: bar})
-]: any -> any {
+]: any -> record<resource: record<id: string, url: string>, status: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
@@ -1958,7 +1958,7 @@ export def "delete-item-set" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<resource: record<id: string, url: string>, status: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2033,7 +2033,7 @@ export def "update-item-list" [
   --custom: any # The `custom` value is only for your custom references, you may use it to save additional attributes. The custom value is not used in any other place. This field may contain any datatype that you like: null (default), string, integer, boolean, object etc... (nullable, e.g. {foo: bar})
   --label: string # A name or a label for this resource. This is used in the user interface, may be empty. (e.g. Foo Bar)
   --metadata: record # Object of searchable metadata for this resource. Can be freely used to store metadata properties. (e.g. {foo: bar})
-]: any -> any {
+]: any -> record<resource: record<id: string, url: string>, status: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
@@ -2109,7 +2109,7 @@ export def "add-item-ids-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> any {
+]: any -> record<status: int, total: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
@@ -2149,7 +2149,7 @@ export def "delete-item-id-from-item-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<status: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2189,14 +2189,14 @@ export def "get-spot-lists" [
   --after-id: string # Limits directly on `id`. Marks the start of a range, optionally use `before_id` to set the end. Result output excludes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --before: string # Limits on `time_created`. Marks the end of a range, optionally use `after` to set the start. Result output excludes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --before-id: string # Limits directly on `id`. Marks the end of a range, optionally use `after_id` to set the start. Result output excludes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
-  --qp-from: string # Limits on `time_created`. Marks the start of a range, optionally use `until` to set the end. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
+  --from: string # Limits on `time_created`. Marks the start of a range, optionally use `until` to set the end. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --from-id: string # Limits on `id`. Marks the start of a range, optionally use `until_id` to set the end. Result output includes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --id-only: oneof<nothing, bool> # Removes `url` fields from output and shows `_id` instead of `_url` in references. (default: false, allows empty value)
   --limit: int # Sets the maximum number of returned resources. You may increase this number to large values, keep in mind that query times could become large. We advise you to use the pagination feature whenever you can. (default: 100, e.g. 5)
   --populate: string # Expand a reference into the actual resource (lookup). You may add multiple fields by giving a comma separated value. (e.g. location,item)
   --results-only: oneof<nothing, bool> # Removes response envelope with information about query, only sends back a JSON array with the applicable resources. (default: false, allows empty value)
   --select: string # Select which properties should be returned. You may add multiple fields by giving a comma separated value. Select can also be used together with populate: Specify the resource first, then a period(.) followed by the field.
-  --qp-sort: string # Allows you to sort on on or more fields in the resource. You may append a minus sign (`-`) to request reverse order (new to old). (default: -id, e.g. -move_count,technology)
+  --sort: string # Allows you to sort on on or more fields in the resource. You may append a minus sign (`-`) to request reverse order (new to old). (default: -id, e.g. -move_count,technology)
   --until: string # Limits on `time_created`. Marks the end of a range, optionally use `from` to set the start. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --until-id: string # Limits on `id`. Marks the end of a range, optionally use `from_id` to set the start. Result output includes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --timeout-s: float # Overrides the default query timeout (in seconds). A value of 0 means unlimited. IMPORTANT: using high timeouts in production code is strongly discouraged as it may lead to stability issues. (e.g. 60)
@@ -2210,14 +2210,14 @@ export def "get-spot-lists" [
 ]: nothing -> record<count: int, count_current: int, is_limited: bool, next_url: string, query_duration_ms: int, url: string, results: table<custom: any, id: string, label: string, list: string, metadata: record, time_created: string, time_updated: string, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "time_updated" $time_updated "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "metadata" $metadata "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "total" $total "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "time_updated" $time_updated "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "metadata" $metadata "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "total" $total "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sets/spotlists" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "label": $label, "metadata": $metadata, "text": $text, "total": $total} | compact)
+    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "label": $label, "metadata": $metadata, "text": $text, "total": $total} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2245,7 +2245,7 @@ export def "add-spot-list" [
   --custom: any # The `custom` value is only for your custom references, you may use it to save additional attributes. The custom value is not used in any other place. This field may contain any datatype that you like: null (default), string, integer, boolean, object etc... (nullable, e.g. {foo: bar})
   --label: string # A name or a label for this resource. This is used in the user interface, may be empty. (e.g. Foo Bar)
   --metadata: record # Object of searchable metadata for this resource. Can be freely used to store metadata properties. (e.g. {foo: bar})
-]: any -> any {
+]: any -> record<resource: record<id: string, url: string>, status: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
@@ -2283,7 +2283,7 @@ export def "delete-spot-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<resource: record<id: string, url: string>, status: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2358,7 +2358,7 @@ export def "update-spot-list" [
   --custom: any # The `custom` value is only for your custom references, you may use it to save additional attributes. The custom value is not used in any other place. This field may contain any datatype that you like: null (default), string, integer, boolean, object etc... (nullable, e.g. {foo: bar})
   --label: string # A name or a label for this resource. This is used in the user interface, may be empty. (e.g. Foo Bar)
   --metadata: record # Object of searchable metadata for this resource. Can be freely used to store metadata properties. (e.g. {foo: bar})
-]: any -> any {
+]: any -> record<resource: record<id: string, url: string>, status: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
@@ -2434,7 +2434,7 @@ export def "add-item-ids-spot-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> any {
+]: any -> record<status: int, total: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
@@ -2474,7 +2474,7 @@ export def "delete-item-id-from-spot-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<status: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2514,14 +2514,14 @@ export def "get-spots" [
   --after-id: string # Limits directly on `id`. Marks the start of a range, optionally use `before_id` to set the end. Result output excludes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --before: string # Limits on `time_created`. Marks the end of a range, optionally use `after` to set the start. Result output excludes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --before-id: string # Limits directly on `id`. Marks the end of a range, optionally use `after_id` to set the start. Result output excludes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
-  --qp-from: string # Limits on `time_created`. Marks the start of a range, optionally use `until` to set the end. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
+  --from: string # Limits on `time_created`. Marks the start of a range, optionally use `until` to set the end. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --from-id: string # Limits on `id`. Marks the start of a range, optionally use `until_id` to set the end. Result output includes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --id-only: oneof<nothing, bool> # Removes `url` fields from output and shows `_id` instead of `_url` in references. (default: false, allows empty value)
   --limit: int # Sets the maximum number of returned resources. You may increase this number to large values, keep in mind that query times could become large. We advise you to use the pagination feature whenever you can. (default: 100, e.g. 5)
   --populate: string # Expand a reference into the actual resource (lookup). You may add multiple fields by giving a comma separated value. (e.g. location,item)
   --results-only: oneof<nothing, bool> # Removes response envelope with information about query, only sends back a JSON array with the applicable resources. (default: false, allows empty value)
   --select: string # Select which properties should be returned. You may add multiple fields by giving a comma separated value. Select can also be used together with populate: Specify the resource first, then a period(.) followed by the field.
-  --qp-sort: string # Allows you to sort on on or more fields in the resource. You may append a minus sign (`-`) to request reverse order (new to old). (default: -id, e.g. -move_count,technology)
+  --sort: string # Allows you to sort on on or more fields in the resource. You may append a minus sign (`-`) to request reverse order (new to old). (default: -id, e.g. -move_count,technology)
   --until: string # Limits on `time_created`. Marks the end of a range, optionally use `from` to set the start. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --until-id: string # Limits on `id`. Marks the end of a range, optionally use `from_id` to set the start. Result output includes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --timeout-s: float # Overrides the default query timeout (in seconds). A value of 0 means unlimited. IMPORTANT: using high timeouts in production code is strongly discouraged as it may lead to stability issues. (e.g. 60)
@@ -2534,14 +2534,14 @@ export def "get-spots" [
 ]: nothing -> record<count: int, count_current: int, is_limited: bool, next_url: string, query_duration_ms: int, url: string, results: table<antenna_report_locations: list, config: record, config_request: record, geo_coords: record, id: string, is_online: bool, request_counter: int, senses: record, senses_request: record, serial_number: int, status: any, time_created: string, time_updated: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "time_updated" $time_updated "scalar") (serialize-qp "is_online" $is_online "scalar") (serialize-qp "request_counter" $request_counter "scalar") (serialize-qp "serial_number" $serial_number "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "time_updated" $time_updated "scalar") (serialize-qp "is_online" $is_online "scalar") (serialize-qp "request_counter" $request_counter "scalar") (serialize-qp "serial_number" $serial_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/spots" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "is_online": $is_online, "request_counter": $request_counter, "serial_number": $serial_number} | compact)
+    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "is_online": $is_online, "request_counter": $request_counter, "serial_number": $serial_number} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2610,7 +2610,7 @@ export def "update-spot" [
   --geo-coords: record # Last known geolocation estimate of this object. Not guaranteed to be included in response. — shape: {lat?: float, lng?: float}
   --senses-request: record # Object containing the new senses configuration. See [Sense & Control](https://intellifi.zendesk.com/hc/en-us/sections/360001568254) documentation for more information. (e.g. {foo: bar})
   --report-location: string # Unique identifier for resource. (e.g. 5b7d6cbd7503c445552a1664)
-]: any -> any {
+]: any -> record<resource: record<id: string, url: string>, status: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
@@ -2686,7 +2686,7 @@ export def "add-spot-set" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --setid: int # Spot set unique identifier. Must be unique within a single device
-]: any -> any {
+]: any -> record<resource: record<id: string, url: string>, status: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
@@ -2765,7 +2765,7 @@ export def "update-spot-set" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --delete: oneof<nothing, bool> # Request to delete a set. Remove request needs to be synchronized to the device, so it may take some time before the resource is being removed.
-]: any -> any {
+]: any -> record<resource: record<id: string, url: string>, status: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
@@ -2837,7 +2837,7 @@ export def "post-spotsets" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --setid: int # Spot set unique identifier. Must be unique within a single device
-]: any -> any {
+]: any -> record<resource: record<id: string, url: string>, status: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
@@ -2910,7 +2910,7 @@ export def "put-spotsets-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --delete: oneof<nothing, bool> # Request to delete a set. Remove request needs to be synchronized to the device, so it may take some time before the resource is being removed.
-]: any -> any {
+]: any -> record<resource: record<id: string, url: string>, status: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
@@ -2952,14 +2952,14 @@ export def "get-subscriptions" [
   --after-id: string # Limits directly on `id`. Marks the start of a range, optionally use `before_id` to set the end. Result output excludes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --before: string # Limits on `time_created`. Marks the end of a range, optionally use `after` to set the start. Result output excludes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --before-id: string # Limits directly on `id`. Marks the end of a range, optionally use `after_id` to set the start. Result output excludes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
-  --qp-from: string # Limits on `time_created`. Marks the start of a range, optionally use `until` to set the end. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
+  --from: string # Limits on `time_created`. Marks the start of a range, optionally use `until` to set the end. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --from-id: string # Limits on `id`. Marks the start of a range, optionally use `until_id` to set the end. Result output includes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --id-only: oneof<nothing, bool> # Removes `url` fields from output and shows `_id` instead of `_url` in references. (default: false, allows empty value)
   --limit: int # Sets the maximum number of returned resources. You may increase this number to large values, keep in mind that query times could become large. We advise you to use the pagination feature whenever you can. (default: 100, e.g. 5)
   --populate: string # Expand a reference into the actual resource (lookup). You may add multiple fields by giving a comma separated value. (e.g. location,item)
   --results-only: oneof<nothing, bool> # Removes response envelope with information about query, only sends back a JSON array with the applicable resources. (default: false, allows empty value)
   --select: string # Select which properties should be returned. You may add multiple fields by giving a comma separated value. Select can also be used together with populate: Specify the resource first, then a period(.) followed by the field.
-  --qp-sort: string # Allows you to sort on on or more fields in the resource. You may append a minus sign (`-`) to request reverse order (new to old). (default: -id, e.g. -move_count,technology)
+  --sort: string # Allows you to sort on on or more fields in the resource. You may append a minus sign (`-`) to request reverse order (new to old). (default: -id, e.g. -move_count,technology)
   --until: string # Limits on `time_created`. Marks the end of a range, optionally use `from` to set the start. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --until-id: string # Limits on `id`. Marks the end of a range, optionally use `from_id` to set the start. Result output includes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --timeout-s: float # Overrides the default query timeout (in seconds). A value of 0 means unlimited. IMPORTANT: using high timeouts in production code is strongly discouraged as it may lead to stability issues. (e.g. 60)
@@ -2974,14 +2974,14 @@ export def "get-subscriptions" [
 ]: nothing -> record<count: int, count_current: int, is_limited: bool, next_url: string, query_duration_ms: int, url: string, results: table<custom: any, database_hold_time_h: int, description: string, events_url: string, id: string, populate_events: bool, target_delivery_last_failure: record, target_delivery_status: record, target_retry: bool, target_url: string, time_created: string, time_updated: string, topic_filter: string, url: string, verify_target_certificate: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "time_updated" $time_updated "scalar") (serialize-qp "topic_filter" $topic_filter "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "database_hold_time_h" $database_hold_time_h "scalar") (serialize-qp "populate_events" $populate_events "scalar") (serialize-qp "verify_target_certificate" $verify_target_certificate "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "time_updated" $time_updated "scalar") (serialize-qp "topic_filter" $topic_filter "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "database_hold_time_h" $database_hold_time_h "scalar") (serialize-qp "populate_events" $populate_events "scalar") (serialize-qp "verify_target_certificate" $verify_target_certificate "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/subscriptions" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "topic_filter": $topic_filter, "description": $description, "database_hold_time_h": $database_hold_time_h, "populate_events": $populate_events, "verify_target_certificate": $verify_target_certificate} | compact)
+    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "topic_filter": $topic_filter, "description": $description, "database_hold_time_h": $database_hold_time_h, "populate_events": $populate_events, "verify_target_certificate": $verify_target_certificate} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3014,7 +3014,7 @@ export def "add-subscription" [
   --target-url: string # Url to an external service that all applicable events are pushed to (webhook). Configure to `null` if you don't wish to use this (default).
   --topic-filter: string # MQTT filter that is applied to all events. Allows you to select and filter events. See [Event filtering](https://intellifi.zendesk.com/hc/en-us/articles/360008791494) for more information (e.g. items/#)
   --verify-target-certificate: oneof<nothing, bool> # Whether or not the `target_url` endpoint TLS certificate is verified to be valid.
-]: any -> any {
+]: any -> record<resource: record<id: string, url: string>, status: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
@@ -3052,7 +3052,7 @@ export def "delete-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<resource: record<id: string, url: string>, status: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3132,7 +3132,7 @@ export def "update-subscription" [
   --target-url: string # Url to an external service that all applicable events are pushed to (webhook). Configure to `null` if you don't wish to use this (default).
   --topic-filter: string # MQTT filter that is applied to all events. Allows you to select and filter events. See [Event filtering](https://intellifi.zendesk.com/hc/en-us/articles/360008791494) for more information (e.g. items/#)
   --verify-target-certificate: oneof<nothing, bool> # Whether or not the `target_url` endpoint TLS certificate is verified to be valid.
-]: any -> any {
+]: any -> record<resource: record<id: string, url: string>, status: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
@@ -3175,14 +3175,14 @@ export def "get-events-for-subscription-by-id" [
   --after-id: string # Limits directly on `id`. Marks the start of a range, optionally use `before_id` to set the end. Result output excludes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --before: string # Limits on `time_created`. Marks the end of a range, optionally use `after` to set the start. Result output excludes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --before-id: string # Limits directly on `id`. Marks the end of a range, optionally use `after_id` to set the start. Result output excludes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
-  --qp-from: string # Limits on `time_created`. Marks the start of a range, optionally use `until` to set the end. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
+  --from: string # Limits on `time_created`. Marks the start of a range, optionally use `until` to set the end. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --from-id: string # Limits on `id`. Marks the start of a range, optionally use `until_id` to set the end. Result output includes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --id-only: oneof<nothing, bool> # Removes `url` fields from output and shows `_id` instead of `_url` in references. (default: false, allows empty value)
   --limit: int # Sets the maximum number of returned resources. You may increase this number to large values, keep in mind that query times could become large. We advise you to use the pagination feature whenever you can. (default: 100, e.g. 5)
   --populate: string # Expand a reference into the actual resource (lookup). You may add multiple fields by giving a comma separated value. (e.g. location,item)
   --results-only: oneof<nothing, bool> # Removes response envelope with information about query, only sends back a JSON array with the applicable resources. (default: false, allows empty value)
   --select: string # Select which properties should be returned. You may add multiple fields by giving a comma separated value. Select can also be used together with populate: Specify the resource first, then a period(.) followed by the field.
-  --qp-sort: string # Allows you to sort on on or more fields in the resource. You may append a minus sign (`-`) to request reverse order (new to old). (default: -id, e.g. -move_count,technology)
+  --sort: string # Allows you to sort on on or more fields in the resource. You may append a minus sign (`-`) to request reverse order (new to old). (default: -id, e.g. -move_count,technology)
   --until: string # Limits on `time_created`. Marks the end of a range, optionally use `from` to set the start. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --until-id: string # Limits on `id`. Marks the end of a range, optionally use `from_id` to set the start. Result output includes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --timeout-s: float # Overrides the default query timeout (in seconds). A value of 0 means unlimited. IMPORTANT: using high timeouts in production code is strongly discouraged as it may lead to stability issues. (e.g. 60)
@@ -3197,14 +3197,14 @@ export def "get-events-for-subscription-by-id" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $qp_id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "topic.resource_type" $topic_resource_type "scalar") (serialize-qp "topic.action" $topic_action "scalar") (serialize-qp "topic.resource" $topic_resource "scalar") (serialize-qp "time_event" $time_event "scalar") (serialize-qp "time_expire" $time_expire "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $qp_id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "topic.resource_type" $topic_resource_type "scalar") (serialize-qp "topic.action" $topic_action "scalar") (serialize-qp "topic.resource" $topic_resource "scalar") (serialize-qp "time_event" $time_event "scalar") (serialize-qp "time_expire" $time_expire "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/subscriptions/{id}/events") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $qp_id, "time_created": $time_created, "topic.resource_type": $topic_resource_type, "topic.action": $topic_action, "topic.resource": $topic_resource, "time_event": $time_event, "time_expire": $time_expire} | compact)
+    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $qp_id, "time_created": $time_created, "topic.resource_type": $topic_resource_type, "topic.action": $topic_action, "topic.resource": $topic_resource, "time_event": $time_event, "time_expire": $time_expire} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3233,14 +3233,14 @@ export def "get-users" [
   --after-id: string # Limits directly on `id`. Marks the start of a range, optionally use `before_id` to set the end. Result output excludes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --before: string # Limits on `time_created`. Marks the end of a range, optionally use `after` to set the start. Result output excludes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --before-id: string # Limits directly on `id`. Marks the end of a range, optionally use `after_id` to set the start. Result output excludes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
-  --qp-from: string # Limits on `time_created`. Marks the start of a range, optionally use `until` to set the end. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
+  --from: string # Limits on `time_created`. Marks the start of a range, optionally use `until` to set the end. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --from-id: string # Limits on `id`. Marks the start of a range, optionally use `until_id` to set the end. Result output includes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --id-only: oneof<nothing, bool> # Removes `url` fields from output and shows `_id` instead of `_url` in references. (default: false, allows empty value)
   --limit: int # Sets the maximum number of returned resources. You may increase this number to large values, keep in mind that query times could become large. We advise you to use the pagination feature whenever you can. (default: 100, e.g. 5)
   --populate: string # Expand a reference into the actual resource (lookup). You may add multiple fields by giving a comma separated value. (e.g. location,item)
   --results-only: oneof<nothing, bool> # Removes response envelope with information about query, only sends back a JSON array with the applicable resources. (default: false, allows empty value)
   --select: string # Select which properties should be returned. You may add multiple fields by giving a comma separated value. Select can also be used together with populate: Specify the resource first, then a period(.) followed by the field.
-  --qp-sort: string # Allows you to sort on on or more fields in the resource. You may append a minus sign (`-`) to request reverse order (new to old). (default: -id, e.g. -move_count,technology)
+  --sort: string # Allows you to sort on on or more fields in the resource. You may append a minus sign (`-`) to request reverse order (new to old). (default: -id, e.g. -move_count,technology)
   --until: string # Limits on `time_created`. Marks the end of a range, optionally use `from` to set the start. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --until-id: string # Limits on `id`. Marks the end of a range, optionally use `from_id` to set the start. Result output includes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --timeout-s: float # Overrides the default query timeout (in seconds). A value of 0 means unlimited. IMPORTANT: using high timeouts in production code is strongly discouraged as it may lead to stability issues. (e.g. 60)
@@ -3255,14 +3255,14 @@ export def "get-users" [
 ]: nothing -> record<count: int, count_current: int, is_limited: bool, next_url: string, query_duration_ms: int, url: string, results: table<email: string, first_name: string, id: string, is_admin: bool, is_locked: bool, last_name: string, password: string, time_created: string, time_updated: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "time_updated" $time_updated "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "is_admin" $is_admin "scalar") (serialize-qp "is_locked" $is_locked "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "time_updated" $time_updated "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "is_admin" $is_admin "scalar") (serialize-qp "is_locked" $is_locked "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "email": $email, "first_name": $first_name, "last_name": $last_name, "is_admin": $is_admin, "is_locked": $is_locked} | compact)
+    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "time_updated": $time_updated, "email": $email, "first_name": $first_name, "last_name": $last_name, "is_admin": $is_admin, "is_locked": $is_locked} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3293,7 +3293,7 @@ export def "add-user" [
   --is-locked: oneof<nothing, bool> # Whether or not this user is locked and can't change the password.
   --last-name: string # Last name (e.g. Bar)
   --password: string # Password of the user (e.g. password1)
-]: any -> any {
+]: any -> record<resource: record<id: string, url: string>, status: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
@@ -3331,7 +3331,7 @@ export def "delete-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<resource: record<id: string, url: string>, status: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3409,7 +3409,7 @@ export def "update-user" [
   --is-locked: oneof<nothing, bool> # Whether or not this user is locked and can't change the password.
   --last-name: string # Last name (e.g. Bar)
   --password: string # Password of the user (e.g. password1)
-]: any -> any {
+]: any -> record<resource: record<id: string, url: string>, status: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)

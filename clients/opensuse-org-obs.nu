@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -268,7 +268,7 @@ export def "get-attribute" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<count: int, entry: table<name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/attribute" $auth.query)
@@ -292,7 +292,7 @@ export def "get-attribute" [
 #
 # DELETE /attribute/{namespace}
 export def "delete-attribute-namespace" [
-  namespace: any
+  namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -302,7 +302,7 @@ export def "delete-attribute-namespace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<code: string, data: list<string>, details: string, summary: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -337,7 +337,7 @@ export def "get-attribute-namespace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<count: int, entry: table<name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -362,7 +362,7 @@ export def "get-attribute-namespace" [
 #
 # DELETE /attribute/{namespace}/_meta
 export def "delete-attribute-namespace-meta" [
-  namespace: any
+  namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -372,12 +372,12 @@ export def "delete-attribute-namespace-meta" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<code: string, data: list<string>, details: string, summary: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/attribute/{namespace}/_meta") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
@@ -397,7 +397,7 @@ export def "delete-attribute-namespace-meta" [
 #
 # GET /attribute/{namespace}/_meta
 export def "get-attribute-namespace-meta" [
-  namespace: any
+  namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -432,7 +432,7 @@ export def "get-attribute-namespace-meta" [
 #
 # POST /attribute/{namespace}/_meta
 export def "post-attribute-namespace-meta" [
-  namespace: any
+  namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -443,7 +443,7 @@ export def "post-attribute-namespace-meta" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<code: string, data: list<string>, details: string, summary: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -451,7 +451,7 @@ export def "post-attribute-namespace-meta" [
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/attribute/{namespace}/_meta") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -471,7 +471,7 @@ export def "post-attribute-namespace-meta" [
 #
 # PUT /attribute/{namespace}/_meta
 export def "put-attribute-namespace-meta" [
-  namespace: any
+  namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -482,7 +482,7 @@ export def "put-attribute-namespace-meta" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<code: string, data: list<string>, details: string, summary: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -490,7 +490,7 @@ export def "put-attribute-namespace-meta" [
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/attribute/{namespace}/_meta") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "put"
@@ -510,7 +510,7 @@ export def "put-attribute-namespace-meta" [
 #
 # DELETE /attribute/{namespace}/{attribute_name}
 export def "delete-attribute-namespace-attribute-name" [
-  namespace: any
+  namespace: string
   attribute_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -521,13 +521,13 @@ export def "delete-attribute-namespace-attribute-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<code: string, data: list<string>, details: string, summary: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($attribute_name | is-empty) { error make --unspanned { msg: "path parameter 'attribute_name' must be non-empty" } }
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), attribute_name: (encode-path-segment $attribute_name)} | format pattern "/attribute/{namespace}/{attribute_name}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
@@ -547,8 +547,8 @@ export def "delete-attribute-namespace-attribute-name" [
 #
 # DELETE /attribute/{namespace}/{attribute_name}/_meta
 export def "delete-attribute-namespace-attribute-name-meta" [
-  namespace: any
-  attribute_name: any
+  namespace: string
+  attribute_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -558,13 +558,13 @@ export def "delete-attribute-namespace-attribute-name-meta" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<code: string, data: list<string>, details: string, summary: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($attribute_name | is-empty) { error make --unspanned { msg: "path parameter 'attribute_name' must be non-empty" } }
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), attribute_name: (encode-path-segment $attribute_name)} | format pattern "/attribute/{namespace}/{attribute_name}/_meta") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
@@ -584,8 +584,8 @@ export def "delete-attribute-namespace-attribute-name-meta" [
 #
 # GET /attribute/{namespace}/{attribute_name}/_meta
 export def "get-attribute-namespace-attribute-name-meta" [
-  namespace: any
-  attribute_name: any
+  namespace: string
+  attribute_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -621,8 +621,8 @@ export def "get-attribute-namespace-attribute-name-meta" [
 #
 # POST /attribute/{namespace}/{attribute_name}/_meta
 export def "post-attribute-namespace-attribute-name-meta" [
-  namespace: any
-  attribute_name: any
+  namespace: string
+  attribute_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -633,7 +633,7 @@ export def "post-attribute-namespace-attribute-name-meta" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<code: string, data: list<string>, details: string, summary: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -642,7 +642,7 @@ export def "post-attribute-namespace-attribute-name-meta" [
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), attribute_name: (encode-path-segment $attribute_name)} | format pattern "/attribute/{namespace}/{attribute_name}/_meta") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -662,8 +662,8 @@ export def "post-attribute-namespace-attribute-name-meta" [
 #
 # PUT /attribute/{namespace}/{attribute_name}/_meta
 export def "put-attribute-namespace-attribute-name-meta" [
-  namespace: any
-  attribute_name: any
+  namespace: string
+  attribute_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -674,7 +674,7 @@ export def "put-attribute-namespace-attribute-name-meta" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<code: string, data: list<string>, details: string, summary: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -683,7 +683,7 @@ export def "put-attribute-namespace-attribute-name-meta" [
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), attribute_name: (encode-path-segment $attribute_name)} | format pattern "/attribute/{namespace}/{attribute_name}/_meta") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "put"
@@ -712,7 +712,7 @@ export def "get-build" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<count: int, entry: table<name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/build" $auth.query)
@@ -746,7 +746,7 @@ export def "get-build-project-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<count: int, entry: table<name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
@@ -771,7 +771,7 @@ export def "get-build-project-name" [
 #
 # POST /build/{project_name}
 export def "post-build-project-name" [
-  project_name: any
+  project_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -784,14 +784,15 @@ export def "post-build-project-name" [
   --package: string # Name of the package. Scope the commands to the specified package. (e.g. firefox)
   --arch: string # Name of the build architecture. Scope the commands to the specified architectures. (e.g. x86_64)
   --repository: string # Name of the repository. Scope the commands to the specified repository. (e.g. openSUSE_Leap_15.2)
-  --cmd: string@cmd-completer # **NOTE**: All commands described below, can be scoped to a package within the project by setting the `package` parameter. * `wipe`: Delete all binaries build by the project. * `restartbuild`: Restart all running build processes inside the project. * `rebuild`: Trigger a rebuild of all packages inside the project. * `abortbuild`: Abort all running build processes for the specified project, marking them as failed. * `killbuild`: Alias for `abortbuild`. * `unpublish`: Delete all published package binaries, for the specified project, from the download repository. * `sendsysrq`: Send a single sysrq character to the kernel of a running build. Character need to be specified through the `sysrq` parameter. Only a subset of debugging requests are supported (eg. 9, t or w).
-]: nothing -> any {
+  --cmd: string@cmd-completer # **NOTE**: All commands described below, can be scoped to a package within the project by setting the `package` parameter. * `wipe`: Delete all binaries build by the project. * `restartbuild`: Restart all running build processes inside the project. * `rebuild`: Trigger a rebuild of all packages inside the project. * `abortbuild`: Abort all running build processes for the specified project, marking them as failed. * `killbuild`: Alias for `abortbuild`. * `unpublish`: Delete all published package binaries, for the specified project, from the download repository. * `sendsysrq`: Send a single sysrq character to the kernel of a running build. Character need to be specified through the `sysrq` parameter. Only a subset of debugging requests are supported (eg. 9, t or w). (required)
+]: nothing -> record<code: string, data: list<string>, details: string, summary: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
+  if ($cmd == null) { error make --unspanned { msg: "required query parameter 'cmd' missing: pass --cmd" } }
   let qp = [(serialize-qp "package" $package "scalar") (serialize-qp "arch" $arch "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "cmd" $cmd "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_name: (encode-path-segment $project_name)} | format pattern "/build/{project_name}") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -811,7 +812,7 @@ export def "post-build-project-name" [
 #
 # GET /build/{project_name}/_result
 export def "get-build-project-name-result" [
-  project_name: any
+  project_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -854,7 +855,7 @@ export def "get-build-project-name-result" [
 #
 # GET /build/{project_name}/{repository_name}
 export def "get-build-project-name-repository-name" [
-  project_name: any
+  project_name: string
   repository_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -865,7 +866,7 @@ export def "get-build-project-name-repository-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<count: int, entry: table<name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
@@ -891,8 +892,8 @@ export def "get-build-project-name-repository-name" [
 #
 # GET /build/{project_name}/{repository_name}/_buildconfig
 export def "get-build-project-name-repository-name-buildconfig" [
-  project_name: any
-  repository_name: any
+  project_name: string
+  repository_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -928,9 +929,9 @@ export def "get-build-project-name-repository-name-buildconfig" [
 #
 # GET /build/{project_name}/{repository_name}/{architecture_name}/_builddepinfo
 export def "get-build-project-name-repository-name-architecture-name-builddepinfo" [
-  project_name: any
-  repository_name: any
-  architecture_name: any
+  project_name: string
+  repository_name: string
+  architecture_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -970,9 +971,9 @@ export def "get-build-project-name-repository-name-architecture-name-builddepinf
 #
 # GET /build/{project_name}/{repository_name}/{architecture_name}/_repository
 export def "get-build-project-name-repository-name-architecture-name-repository" [
-  project_name: any
-  repository_name: any
-  architecture_name: any
+  project_name: string
+  repository_name: string
+  architecture_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1009,9 +1010,9 @@ export def "get-build-project-name-repository-name-architecture-name-repository"
 #
 # GET /build/{project_name}/{repository_name}/{architecture_name}/{package_name}
 export def "get-build-project-name-repository-name-architecture-name-package-name" [
-  project_name: any
-  repository_name: any
-  architecture_name: any
+  project_name: string
+  repository_name: string
+  architecture_name: string
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1022,7 +1023,7 @@ export def "get-build-project-name-repository-name-architecture-name-package-nam
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<binary: table<filename: string, mtime: string, size: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
@@ -1051,10 +1052,10 @@ export def "get-build-project-name-repository-name-architecture-name-package-nam
 # GET /build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_buildinfo
 # operationId: getBuildProjectRepositoryArchPackageBuildinfo
 export def "get-build-project-repository-arch-package-buildinfo" [
-  project_name: any
-  repository_name: any
-  architecture_name: any
-  package_name: any
+  project_name: string
+  repository_name: string
+  architecture_name: string
+  package_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1093,10 +1094,10 @@ export def "get-build-project-repository-arch-package-buildinfo" [
 # GET /build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_history
 # operationId: getBuildProjectRepositoryArchPackageHistory
 export def "get-build-project-repository-arch-package-history" [
-  project_name: any
-  repository_name: any
-  architecture_name: any
-  package_name: any
+  project_name: string
+  repository_name: string
+  architecture_name: string
+  package_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1134,10 +1135,10 @@ export def "get-build-project-repository-arch-package-history" [
 #
 # GET /build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_jobstatus
 export def "get-build-project-name-repository-name-architecture-name-package-name-jobstatus" [
-  project_name: any
-  repository_name: any
-  architecture_name: any
-  package_name: any
+  project_name: string
+  repository_name: string
+  architecture_name: string
+  package_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1176,10 +1177,10 @@ export def "get-build-project-name-repository-name-architecture-name-package-nam
 # GET /build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_log
 # operationId: getBuildProjectRepositoryArchPackageLog
 export def "get-build-project-repository-arch-package-log" [
-  project_name: any
-  repository_name: any
-  architecture_name: any
-  package_name: any
+  project_name: string
+  repository_name: string
+  architecture_name: string
+  package_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1217,10 +1218,10 @@ export def "get-build-project-repository-arch-package-log" [
 #
 # GET /build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_reason
 export def "get-build-project-name-repository-name-architecture-name-package-name-reason" [
-  project_name: any
-  repository_name: any
-  architecture_name: any
-  package_name: any
+  project_name: string
+  repository_name: string
+  architecture_name: string
+  package_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1259,10 +1260,10 @@ export def "get-build-project-name-repository-name-architecture-name-package-nam
 # GET /build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_status
 # operationId: getBuildProjectRepositoryArchPackageStatus
 export def "get-build-project-repository-arch-package-status" [
-  project_name: any
-  repository_name: any
-  architecture_name: any
-  package_name: any
+  project_name: string
+  repository_name: string
+  architecture_name: string
+  package_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1301,10 +1302,10 @@ export def "get-build-project-repository-arch-package-status" [
 # GET /build/{project_name}/{repository_name}/{architecture_name}/{package_name}/{file_name}
 # operationId: getBuildProjectRepositoryArchitecturePackageFile
 export def "get-build-project-repository-architecture-package-file" [
-  project_name: any
-  repository_name: any
-  architecture_name: any
-  package_name: any
+  project_name: string
+  repository_name: string
+  architecture_name: string
+  package_name: string
   file_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1345,11 +1346,11 @@ export def "get-build-project-repository-architecture-package-file" [
 # PUT /build/{project_name}/{repository_name}/{architecture_name}/{package_name}/{file_name}
 # operationId: putBuildProjectRepositoryArchitecturePackageFile
 export def "put-build-project-repository-architecture-package-file" [
-  project_name: any
-  repository_name: any
-  architecture_name: any
-  package_name: list
-  file_name: any
+  project_name: string
+  repository_name: string
+  architecture_name: string
+  package_name: list<string>
+  file_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1360,7 +1361,7 @@ export def "put-build-project-repository-architecture-package-file" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: string
-]: any -> any {
+]: any -> record<code: string, data: list<string>, details: string, summary: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1393,11 +1394,11 @@ export def "put-build-project-repository-architecture-package-file" [
 # GET /build/{project_name}/{repository_name}/{architecture_name}/{package_name}/{file_name}?view=fileinfo
 # operationId: getBuildProjectRepositoryArchitecturePackageFileViewFileinfo
 export def "get-build-project-repository-architecture-package-file-view-fileinfo" [
-  project_name: any
-  repository_name: any
-  architecture_name: any
-  package_name: any
-  file_name: any
+  project_name: string
+  repository_name: string
+  architecture_name: string
+  package_name: string
+  file_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1407,7 +1408,7 @@ export def "get-build-project-repository-architecture-package-file-view-fileinfo
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --view: list<string>
+  --view: list<string> # required
 ]: nothing -> record<arch: string, description: string, filename: string, mtime: string, name: string, provides: list<string>, provides_ext: table<dep: string>, release: string, requires: list<string>, requires_ext: table<dep: string, provided_by: record>, size: string, source: string, summary: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1416,8 +1417,9 @@ export def "get-build-project-repository-architecture-package-file-view-fileinfo
   if ($architecture_name | is-empty) { error make --unspanned { msg: "path parameter 'architecture_name' must be non-empty" } }
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'package_name' must be non-empty" } }
   if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'file_name' must be non-empty" } }
+  if ($view == null) { error make --unspanned { msg: "required query parameter 'view' missing: pass --view" } }
   let qp = [(serialize-qp "view" $view "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name), architecture_name: (encode-path-segment $architecture_name), package_name: (encode-path-segment $package_name), file_name: (encode-path-segment $file_name)} | format pattern "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}/{file_name}?view=fileinfo") $qp $auth.query)
+  let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name), architecture_name: (encode-path-segment $architecture_name), package_name: (encode-path-segment $package_name), file_name: (encode-path-segment $file_name)} | format pattern "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}/{file_name}") "view=fileinfo" $qp $auth.query)
   let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1481,7 +1483,7 @@ export def "put-configuration" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<admin_email: string, allow_user_to_create_home_project: string, anonymous: string, change_password: string, cleanup_empty_projects: string, default_access_disabled: string, description: string, disable_publish_for_branches: string, disallow_group_creation: string, download_on_demand: string, enforce_project_keys: string, gravatar: string, hide_private_options: string, name: string, obs_url: string, registration: string, schedulers: record<arch: list<string>>, title: string, tos_url: string, unlisted_projects_filter: string, unlisted_projects_filter_description: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1551,7 +1553,7 @@ export def "post-distributions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<architecture: list<string>, icon: table<height: int, url: string, width: int>, id: int, link: string, name: string, project: string, reponame: string, repository: string, vendor: string, version: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1588,7 +1590,7 @@ export def "put-distributions-bulk-replace" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<code: string, data: list<string>, details: string, summary: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1624,11 +1626,11 @@ export def "get-distributions-include-remotes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<distribution: table<architecture: list, icon: list, id: int, link: string, name: string, project: string, reponame: string, repository: string, vendor: string, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/distributions/include_remotes" $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -1648,7 +1650,7 @@ export def "get-distributions-include-remotes" [
 #
 # DELETE /distributions/{distribution_id}
 export def "delete-distributions-distribution-id" [
-  distribution_id: any
+  distribution_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1658,7 +1660,7 @@ export def "delete-distributions-distribution-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<code: string, data: list<string>, details: string, summary: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($distribution_id | is-empty) { error make --unspanned { msg: "path parameter 'distribution_id' must be non-empty" } }
@@ -1693,7 +1695,7 @@ export def "get-distributions-distribution-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<architecture: list<string>, icon: table<height: int, url: string, width: int>, id: int, link: string, name: string, project: string, reponame: string, repository: string, vendor: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($distribution_id | is-empty) { error make --unspanned { msg: "path parameter 'distribution_id' must be non-empty" } }
@@ -1718,7 +1720,7 @@ export def "get-distributions-distribution-id" [
 #
 # PUT /distributions/{distribution_id}
 export def "put-distributions-distribution-id" [
-  distribution_id: any
+  distribution_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1766,7 +1768,7 @@ export def "get-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<count: int, entry: table<name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/group" $auth.query)
@@ -1790,7 +1792,7 @@ export def "get-group" [
 #
 # DELETE /group/{group_title}
 export def "delete-group-group-title" [
-  group_title: any
+  group_title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1800,12 +1802,12 @@ export def "delete-group-group-title" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<code: string, data: list<string>, details: string, summary: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($group_title | is-empty) { error make --unspanned { msg: "path parameter 'group_title' must be non-empty" } }
   let full_url = (build-url $base ({group_title: (encode-path-segment $group_title)} | format pattern "/group/{group_title}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
@@ -1860,7 +1862,7 @@ export def "get-group-group-title" [
 #
 # POST /group/{group_title}
 export def "post-group-group-title" [
-  group_title: any
+  group_title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1873,13 +1875,13 @@ export def "post-group-group-title" [
   --cmd: string@cmd-completer-1 # Command to be executed. It takes one of these available values: * `add_user`: add a user to a group. `userid` query parameter must be also used. * `remove_user`: remove a user from a group. `userid` query parameter must be also used. * `set_email`: set email adress of group. `email` query parameter must be also used.
   --userid: string # User login. Used with `cmd=add_user` or `cmd=remove_user`.
   --email: string # Group email. Used with `cmd=set_email`.
-]: nothing -> any {
+]: nothing -> record<code: string, data: list<string>, details: string, summary: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($group_title | is-empty) { error make --unspanned { msg: "path parameter 'group_title' must be non-empty" } }
   let qp = [(serialize-qp "cmd" $cmd "scalar") (serialize-qp "userid" $userid "scalar") (serialize-qp "email" $email "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({group_title: (encode-path-segment $group_title)} | format pattern "/group/{group_title}") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -1899,7 +1901,7 @@ export def "post-group-group-title" [
 #
 # PUT /group/{group_title}
 export def "put-group-group-title" [
-  group_title: any
+  group_title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1910,7 +1912,7 @@ export def "put-group-group-title" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<code: string, data: list<string>, details: string, summary: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1918,7 +1920,7 @@ export def "put-group-group-title" [
   let full_url = (build-url $base ({group_title: (encode-path-segment $group_title)} | format pattern "/group/{group_title}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "put"
@@ -1981,14 +1983,14 @@ export def "post-issue-trackers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<code: string, data: list<string>, details: string, summary: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/issue_trackers" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -2008,7 +2010,7 @@ export def "post-issue-trackers" [
 #
 # DELETE /issue_trackers/{issue_tracker_name}
 export def "delete-issue-trackers-issue-tracker-name" [
-  issue_tracker_name: any
+  issue_tracker_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2018,12 +2020,12 @@ export def "delete-issue-trackers-issue-tracker-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<code: string, data: list<string>, details: string, summary: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($issue_tracker_name | is-empty) { error make --unspanned { msg: "path parameter 'issue_tracker_name' must be non-empty" } }
   let full_url = (build-url $base ({issue_tracker_name: (encode-path-segment $issue_tracker_name)} | format pattern "/issue_trackers/{issue_tracker_name}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
@@ -2053,7 +2055,7 @@ export def "get-issue-trackers-issue-tracker-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<description: string, enable_fetch: string, kind: string, label: string, name: string, regex: string, show_url: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($issue_tracker_name | is-empty) { error make --unspanned { msg: "path parameter 'issue_tracker_name' must be non-empty" } }
@@ -2078,7 +2080,7 @@ export def "get-issue-trackers-issue-tracker-name" [
 #
 # PUT /issue_trackers/{issue_tracker_name}
 export def "put-issue-trackers-issue-tracker-name" [
-  issue_tracker_name: any
+  issue_tracker_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2089,7 +2091,7 @@ export def "put-issue-trackers-issue-tracker-name" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<code: string, data: list<string>, details: string, summary: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2097,7 +2099,7 @@ export def "put-issue-trackers-issue-tracker-name" [
   let full_url = (build-url $base ({issue_tracker_name: (encode-path-segment $issue_tracker_name)} | format pattern "/issue_trackers/{issue_tracker_name}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "put"
@@ -2117,7 +2119,7 @@ export def "put-issue-trackers-issue-tracker-name" [
 #
 # GET /issue_trackers/{issue_tracker_name}/issues/{issue_name}
 export def "get-issue-trackers-issue-tracker-name-issues-issue-name" [
-  issue_tracker_name: any
+  issue_tracker_name: string
   issue_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2164,7 +2166,7 @@ export def "get-person" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --prefix: string # A prefix to filter the people to look for (e.g. Adm)
-]: nothing -> any {
+]: nothing -> record<count: int, entry: table<name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "prefix" $prefix "scalar")] | flatten | str join "&"
@@ -2198,17 +2200,18 @@ export def "post-person" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cmd: string@cmd-completer-2 # The command to execute (e.g. register)
+  --cmd: string@cmd-completer-2 # The command to execute (required, e.g. register)
   --body: any
-]: any -> any {
+]: any -> record<code: string, data: list<string>, details: string, summary: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  let cmd = ($cmd | default "register")
   let qp = [(serialize-qp "cmd" $cmd "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/person" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -2238,14 +2241,14 @@ export def "post-person-register" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<code: string, data: list<string>, details: string, summary: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/person/register" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -2300,7 +2303,7 @@ export def "get-person-login" [
 #
 # POST /person/{login}
 export def "post-person-login" [
-  login: any
+  login: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2310,13 +2313,14 @@ export def "post-person-login" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cmd: string@cmd-completer-3 # The command to execute against the provided person. (e.g. change_password)
+  --cmd: string@cmd-completer-3 # The command to execute against the provided person. (required, e.g. change_password)
   --body: string
-]: any -> any {
+]: any -> record<code: string, data: list<string>, details: string, summary: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($login | is-empty) { error make --unspanned { msg: "path parameter 'login' must be non-empty" } }
+  if ($cmd == null) { error make --unspanned { msg: "required query parameter 'cmd' missing: pass --cmd" } }
   let qp = [(serialize-qp "cmd" $cmd "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({login: (encode-path-segment $login)} | format pattern "/person/{login}") $qp $auth.query)
   let req_body = $body
@@ -2341,7 +2345,7 @@ export def "post-person-login" [
 #
 # PUT /person/{login}
 export def "put-person-login" [
-  login: any
+  login: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2352,7 +2356,7 @@ export def "put-person-login" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<code: string, data: list<string>, details: string, summary: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2360,7 +2364,7 @@ export def "put-person-login" [
   let full_url = (build-url $base ({login: (encode-path-segment $login)} | format pattern "/person/{login}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "put"
@@ -2380,7 +2384,7 @@ export def "put-person-login" [
 #
 # GET /person/{login}/group
 export def "get-person-login-group" [
-  login: any
+  login: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2390,7 +2394,7 @@ export def "get-person-login-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<count: int, entry: table<name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($login | is-empty) { error make --unspanned { msg: "path parameter 'login' must be non-empty" } }
@@ -2415,7 +2419,7 @@ export def "get-person-login-group" [
 #
 # GET /person/{login}/token
 export def "get-person-login-token" [
-  login: any
+  login: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2450,7 +2454,7 @@ export def "get-person-login-token" [
 #
 # POST /person/{login}/token
 export def "post-person-login-token" [
-  login: any
+  login: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2464,7 +2468,7 @@ export def "post-person-login-token" [
   --package: string # Package name. Should be provided, together with the project query parameter, to limit the token to a specific package. (e.g. gchz)
   --operation: string@operation-completer # Operation indicates the kind of token that is going to be created. When operation is not specified, 'runservice' is the default value. (e.g. runservice)
   --scm-token: string # **(Beta/Unstable)** SCM token used in OBS workflows to report back the workflow status, when the operation is workflow. It's normally possible to generate SCM tokens directly on the SCM's website like GitHub or GitLab. (e.g. ghp_fake_token_123)
-]: nothing -> any {
+]: nothing -> record<code: string, data: list<string>, details: string, summary: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($login | is-empty) { error make --unspanned { msg: "path parameter 'login' must be non-empty" } }
@@ -2490,7 +2494,7 @@ export def "post-person-login-token" [
 #
 # DELETE /person/{login}/token/{id}
 export def "delete-person-login-token-id" [
-  login: any
+  login: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2501,7 +2505,7 @@ export def "delete-person-login-token-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<code: string, data: list<string>, details: string, summary: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($login | is-empty) { error make --unspanned { msg: "path parameter 'login' must be non-empty" } }
@@ -2536,7 +2540,7 @@ export def "get-published" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<count: int, entry: table<name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/published" $auth.query)
@@ -2560,7 +2564,7 @@ export def "get-published" [
 #
 # GET /published/{project_name}
 export def "get-published-project-name" [
-  project_name: any
+  project_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2570,7 +2574,7 @@ export def "get-published-project-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<count: int, entry: table<name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
@@ -2595,8 +2599,8 @@ export def "get-published-project-name" [
 #
 # GET /published/{project_name}/{repository_name}
 export def "get-published-project-name-repository-name" [
-  project_name: any
-  repository_name: any
+  project_name: string
+  repository_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2606,7 +2610,7 @@ export def "get-published-project-name-repository-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<count: int, entry: table<name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
@@ -2632,9 +2636,9 @@ export def "get-published-project-name-repository-name" [
 #
 # GET /published/{project_name}/{repository_name}/{architecture_name}
 export def "get-published-project-name-repository-name-architecture-name" [
-  project_name: any
-  repository_name: any
-  architecture_name: any
+  project_name: string
+  repository_name: string
+  architecture_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2644,7 +2648,7 @@ export def "get-published-project-name-repository-name-architecture-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<count: int, entry: table<name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
@@ -2671,9 +2675,9 @@ export def "get-published-project-name-repository-name-architecture-name" [
 #
 # GET /published/{project_name}/{repository_name}/{architecture_name}/{binary_filename}
 export def "get-published-project-name-repository-name-architecture-name-binary-filename" [
-  project_name: any
-  repository_name: any
-  architecture_name: any
+  project_name: string
+  repository_name: string
+  architecture_name: string
   binary_filename: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2712,11 +2716,11 @@ export def "get-published-project-name-repository-name-architecture-name-binary-
 # Generate a ymp pattern that includes the needed repositories to install the given binary.
 #
 # GET /published/{project_name}/{repository_name}/{architecture_name}/{binary_filename}?view=ymp
-export def "get-published-project-name-repository-name-architecture-name-binary-filename-viewymp" [
-  project_name: any
-  repository_name: any
-  architecture_name: any
-  binary_filename: any
+export def "get-published-project-name-repository-name-architecture-name-binary-filename-view-ymp" [
+  project_name: string
+  repository_name: string
+  architecture_name: string
+  binary_filename: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2733,7 +2737,7 @@ export def "get-published-project-name-repository-name-architecture-name-binary-
   if ($repository_name | is-empty) { error make --unspanned { msg: "path parameter 'repository_name' must be non-empty" } }
   if ($architecture_name | is-empty) { error make --unspanned { msg: "path parameter 'architecture_name' must be non-empty" } }
   if ($binary_filename | is-empty) { error make --unspanned { msg: "path parameter 'binary_filename' must be non-empty" } }
-  let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name), architecture_name: (encode-path-segment $architecture_name), binary_filename: (encode-path-segment $binary_filename)} | format pattern "/published/{project_name}/{repository_name}/{architecture_name}/{binary_filename}?view=ymp") $auth.query)
+  let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name), architecture_name: (encode-path-segment $architecture_name), binary_filename: (encode-path-segment $binary_filename)} | format pattern "/published/{project_name}/{repository_name}/{architecture_name}/{binary_filename}") "view=ymp" $auth.query)
   let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2753,9 +2757,9 @@ export def "get-published-project-name-repository-name-architecture-name-binary-
 # Present information about the last publication of the pair project and repository.
 #
 # GET /published/{project_name}/{repository_name}?view=status
-export def "get-published-project-name-repository-name-viewstatus" [
-  project_name: any
-  repository_name: any
+export def "get-published-project-name-repository-name-view-status" [
+  project_name: string
+  repository_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2772,7 +2776,7 @@ export def "get-published-project-name-repository-name-viewstatus" [
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
   if ($repository_name | is-empty) { error make --unspanned { msg: "path parameter 'repository_name' must be non-empty" } }
   let qp = [(serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name)} | format pattern "/published/{project_name}/{repository_name}?view=status") $qp $auth.query)
+  let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name)} | format pattern "/published/{project_name}/{repository_name}") "view=status" $qp $auth.query)
   let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2802,7 +2806,7 @@ export def "get-request" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<count: int, entry: table<name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/request" $auth.query)
@@ -2835,15 +2839,16 @@ export def "post-request" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cmd: string@cmd-completer-4 # This endpoint will refuse the creation of a new request if this parameter is not set.
+  --cmd: string@cmd-completer-4 # This endpoint will refuse the creation of a new request if this parameter is not set. (required)
   --addrevision: string@addrevision-completer # Ask the server to add revisions of the current sources to the request.
   --ignore-delegate: string@ignore-delegate-completer # Enforce a new package instance in a project which has OBS:DelegateRequestTarget set
   --ignore-build-state: string@ignore-build-state-completer # Skip the build state check
   --body: any
-]: any -> any {
+]: any -> record<action: record<options: record<sourceupdate: string>, source: record<package: string, project: string, rev: int>, target: record<package: string, project: string>, type: string>, creator: string, description: string, history: table<comment: string, description: string, when: string, who: string>, id: int, review: list<any>, state: record<comment: string, name: string, when: string, who: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  let cmd = ($cmd | default "create")
   let qp = [(serialize-qp "cmd" $cmd "scalar") (serialize-qp "addrevision" $addrevision "scalar") (serialize-qp "ignore_delegate" $ignore_delegate "scalar") (serialize-qp "ignore_build_state" $ignore_build_state "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/request" $qp $auth.query)
   let req_body = $body
@@ -2868,7 +2873,7 @@ export def "post-request" [
 #
 # DELETE /request/{id}
 export def "delete-request-id" [
-  id: any
+  id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2878,12 +2883,12 @@ export def "delete-request-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<code: string, data: list<string>, details: string, summary: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/request/{id}") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
@@ -2915,13 +2920,13 @@ export def "get-request-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --withhistory: string # Include the request history in the results. (e.g. 1)
   --withfullhistory: string # Includes both, request and review history in the results. (e.g. 1)
-]: nothing -> any {
+]: nothing -> record<action: record<options: record<sourceupdate: string>, source: record<package: string, project: string, rev: int>, target: record<package: string, project: string>, type: string>, creator: string, description: string, history: table<comment: string, description: string, when: string, who: string>, id: int, review: list<any>, state: record<comment: string, name: string, when: string, who: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "withhistory" $withhistory "scalar") (serialize-qp "withfullhistory" $withfullhistory "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/request/{id}") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -2941,7 +2946,7 @@ export def "get-request-id" [
 #
 # POST /request/{id}
 export def "post-request-id" [
-  id: any
+  id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2961,13 +2966,13 @@ export def "post-request-id" [
   --incident: string # Specify the incident number for `setincident`
   --time: string # Specify the time for `setacceptat`
   --comment: string # Add a comment to one of the actions
-]: nothing -> any {
+]: nothing -> record<code: string, data: list<string>, details: string, summary: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "cmd" $cmd "scalar") (serialize-qp "newstate" $newstate "scalar") (serialize-qp "priority" $priority "scalar") (serialize-qp "by_user" $by_user "scalar") (serialize-qp "by_group" $by_group "scalar") (serialize-qp "by_project" $by_project "scalar") (serialize-qp "by_package" $by_package "scalar") (serialize-qp "incident" $incident "scalar") (serialize-qp "time" $time "scalar") (serialize-qp "comment" $comment "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/request/{id}") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
@@ -2987,7 +2992,7 @@ export def "post-request-id" [
 #
 # PUT /request/{id}
 export def "put-request-id" [
-  id: any
+  id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2998,7 +3003,7 @@ export def "put-request-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<action: record<options: record<sourceupdate: string>, source: record<package: string, project: string, rev: int>, target: record<package: string, project: string>, type: string>, creator: string, description: string, history: table<comment: string, description: string, when: string, who: string>, id: int, review: list<any>, state: record<comment: string, name: string, when: string, who: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3006,7 +3011,7 @@ export def "put-request-id" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/request/{id}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "put"
@@ -3025,8 +3030,8 @@ export def "put-request-id" [
 # Get the diff for all packages affected by the request.
 #
 # POST /request/{id}?cmd=diff
-export def "post-request-id-cmddiff" [
-  id: any
+export def "post-request-id-cmd-diff" [
+  id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3040,12 +3045,12 @@ export def "post-request-id-cmddiff" [
   --diff-to-superseded: string # Diff relative to a given superseded request. State the id of the corresponding superseded request. (e.g. 10401)
   --view: string@view-completer-3 # Set this parameter to xml in order to receive a structured diff instead of plain text.
   --withissues: string@withissues-completer # Include parsed issues
-]: nothing -> record<action: record<options: record<sourceupdate: string>, source: record<package: string, project: string, rev: string>, sourcediff: record<files: list, issues: list, key: string, new: any, old: record>, target: record<package: string, project: string>, type: string>, actions: string, id: string> {
+]: nothing -> record<action: record<options: record<sourceupdate: string>, source: record<package: string, project: string, rev: string>, sourcediff: record<files: list, issues: list, key: string, new: record, old: record>, target: record<package: string, project: string>, type: string>, actions: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "diff_to_superseded" $diff_to_superseded "scalar") (serialize-qp "view" $view "scalar") (serialize-qp "withissues" $withissues "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/request/{id}?cmd=diff") $qp $auth.query)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/request/{id}") "cmd=diff" $qp $auth.query)
   let accept_val = ($accept | default "application/xml; charset=utf-8")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3065,7 +3070,7 @@ export def "post-request-id-cmddiff" [
 # Get a collection of requests for a specified target
 #
 # GET /request?view=collection
-export def "get-requestviewcollection" [
+export def "get-request-view-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3085,11 +3090,11 @@ export def "get-requestviewcollection" [
   --withfullhistory: string # Includes both, request and review history in the results. (e.g. 1)
   --limit: int # Limit the results to the specified amount of requests. (e.g. 7)
   --ids: string # Limit the result to specified request id's. Multiple id's can be provided as a comma separated list. (e.g. 15,19,23)
-]: nothing -> record<matches: string, request: list<any>> {
+]: nothing -> record<matches: string, request: table<action: record, creator: string, description: string, history: list, id: int, review: list, state: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user" $user "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "package" $package "scalar") (serialize-qp "states" $states "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "roles" $roles "scalar") (serialize-qp "withhistory" $withhistory "scalar") (serialize-qp "withfullhistory" $withfullhistory "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/request?view=collection" $qp $auth.query)
+  let full_url = (build-url $base "/request" "view=collection" $qp $auth.query)
   let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -3143,7 +3148,7 @@ export def "get-worker-status" [
 #
 # GET /worker/{architecture_name}:{worker_id}
 export def "get-worker-architecture-name-worker-id" [
-  architecture_name: any
+  architecture_name: string
   worker_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3179,7 +3184,7 @@ export def "get-worker-architecture-name-worker-id" [
 # Lists workers which match a constraints filter.
 #
 # POST /worker?cmd=checkconstraints
-export def "post-workercmdcheckconstraints" [
+export def "post-worker-cmd-checkconstraints" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3189,17 +3194,21 @@ export def "post-workercmdcheckconstraints" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --project: string # Project name. (e.g. home:user1)
-  --repository: string # Repository name. (e.g. openSUSE_Tumbleweed)
-  --arch: string # Architecture name. (e.g. x86_64)
-  --package: string # Package name. (e.g. test_package)
+  --project: string # Project name. (required, e.g. home:user1)
+  --repository: string # Repository name. (required, e.g. openSUSE_Tumbleweed)
+  --arch: string # Architecture name. (required, e.g. x86_64)
+  --package: string # Package name. (required, e.g. test_package)
   --body: any
-]: any -> any {
+]: any -> record<count: int, entry: table<name: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($project == null) { error make --unspanned { msg: "required query parameter 'project' missing: pass --project" } }
+  if ($repository == null) { error make --unspanned { msg: "required query parameter 'repository' missing: pass --repository" } }
+  if ($arch == null) { error make --unspanned { msg: "required query parameter 'arch' missing: pass --arch" } }
+  if ($package == null) { error make --unspanned { msg: "required query parameter 'package' missing: pass --package" } }
   let qp = [(serialize-qp "project" $project "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "arch" $arch "scalar") (serialize-qp "package" $package "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/worker?cmd=checkconstraints" $qp $auth.query)
+  let full_url = (build-url $base "/worker" "cmd=checkconstraints" $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/xml; charset=utf-8"

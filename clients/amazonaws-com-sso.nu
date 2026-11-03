@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -138,8 +138,8 @@ export def "get-role-credentials" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --role-name: string # The friendly name of the role that is assigned to the user.
-  --account-id: string # The identifier for the AWS account that is assigned to the user.
+  --role-name: string # The friendly name of the role that is assigned to the user. (required)
+  --account-id: string # The identifier for the AWS account that is assigned to the user. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -147,10 +147,13 @@ export def "get-role-credentials" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-sso-bearer-token: string # The token issued by the CreateToken API call. For more information, see CreateToken (https://docs.aws.amazon.com/singlesignon/latest/OIDCAPIReference/API_CreateToken.html) in the IAM Identity Center OIDC API Reference Guide.
-]: nothing -> record<roleCredentials: record<accessKeyId: record, secretAccessKey: record, sessionToken: record, expiration: record>> {
+  --x-amz-sso-bearer-token: string # The token issued by the CreateToken API call. For more information, see CreateToken (https://docs.aws.amazon.com/singlesignon/latest/OIDCAPIReference/API_CreateToken.html) in the IAM Identity Center OIDC API Reference Guide. (required, format: password)
+]: nothing -> record<roleCredentials: record<accessKeyId: string, secretAccessKey: string, sessionToken: string, expiration: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($role_name == null) { error make --unspanned { msg: "required query parameter 'role_name' missing: pass --role-name" } }
+  if ($account_id == null) { error make --unspanned { msg: "required query parameter 'account_id' missing: pass --account-id" } }
+  if ($x_amz_sso_bearer_token == null) { error make --unspanned { msg: "required header parameter 'x-amz-sso_bearer_token' missing: pass --x-amz-sso-bearer-token" } }
   let qp = [(serialize-qp "role_name" $role_name "scalar") (serialize-qp "account_id" $account_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/federation/credentials" $qp $auth.query)
   let accept_val = "application/json"
@@ -187,7 +190,7 @@ export def "list-account-roles" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # The page token from the previous response output when you request subsequent pages.
   --max-result: int # The number of items that clients can request per page.
-  --account-id: string # The identifier for the AWS account that is assigned to the user.
+  --account-id: string # The identifier for the AWS account that is assigned to the user. (required)
   --max-results: string # Pagination limit
   --next-token-2: string # Pagination token (disambiguated-2)
   --x-amz-content-sha256: string
@@ -197,10 +200,12 @@ export def "list-account-roles" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-sso-bearer-token: string # The token issued by the CreateToken API call. For more information, see CreateToken (https://docs.aws.amazon.com/singlesignon/latest/OIDCAPIReference/API_CreateToken.html) in the IAM Identity Center OIDC API Reference Guide.
-]: nothing -> record<nextToken: record, roleList: record> {
+  --x-amz-sso-bearer-token: string # The token issued by the CreateToken API call. For more information, see CreateToken (https://docs.aws.amazon.com/singlesignon/latest/OIDCAPIReference/API_CreateToken.html) in the IAM Identity Center OIDC API Reference Guide. (required, format: password)
+]: nothing -> record<nextToken: string, roleList: table<roleName: string, accountId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id == null) { error make --unspanned { msg: "required query parameter 'account_id' missing: pass --account-id" } }
+  if ($x_amz_sso_bearer_token == null) { error make --unspanned { msg: "required header parameter 'x-amz-sso_bearer_token' missing: pass --x-amz-sso-bearer-token" } }
   let qp = [(serialize-qp "next_token" $next_token "scalar") (serialize-qp "max_result" $max_result "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token_2 "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/assignment/roles" $qp $auth.query)
   let accept_val = "application/json"
@@ -246,10 +251,11 @@ export def "list-accounts" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-sso-bearer-token: string # The token issued by the CreateToken API call. For more information, see CreateToken (https://docs.aws.amazon.com/singlesignon/latest/OIDCAPIReference/API_CreateToken.html) in the IAM Identity Center OIDC API Reference Guide.
-]: nothing -> record<nextToken: record, accountList: record> {
+  --x-amz-sso-bearer-token: string # The token issued by the CreateToken API call. For more information, see CreateToken (https://docs.aws.amazon.com/singlesignon/latest/OIDCAPIReference/API_CreateToken.html) in the IAM Identity Center OIDC API Reference Guide. (required, format: password)
+]: nothing -> record<nextToken: string, accountList: table<accountId: string, accountName: string, emailAddress: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_sso_bearer_token == null) { error make --unspanned { msg: "required header parameter 'x-amz-sso_bearer_token' missing: pass --x-amz-sso-bearer-token" } }
   let qp = [(serialize-qp "next_token" $next_token "scalar") (serialize-qp "max_result" $max_result "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token_2 "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/assignment/accounts" $qp $auth.query)
   let accept_val = "application/json"
@@ -291,10 +297,11 @@ export def "logout" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-sso-bearer-token: string # The token issued by the CreateToken API call. For more information, see CreateToken (https://docs.aws.amazon.com/singlesignon/latest/OIDCAPIReference/API_CreateToken.html) in the IAM Identity Center OIDC API Reference Guide.
+  --x-amz-sso-bearer-token: string # The token issued by the CreateToken API call. For more information, see CreateToken (https://docs.aws.amazon.com/singlesignon/latest/OIDCAPIReference/API_CreateToken.html) in the IAM Identity Center OIDC API Reference Guide. (required, format: password)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_amz_sso_bearer_token == null) { error make --unspanned { msg: "required header parameter 'x-amz-sso_bearer_token' missing: pass --x-amz-sso-bearer-token" } }
   let full_url = (build-url $base "/logout" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

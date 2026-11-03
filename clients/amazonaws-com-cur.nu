@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -145,12 +145,13 @@ export def "delete-report-definition" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  --report-name: any
+  --x-amz-target: string@x-amz-target-completer # required
+  --report-name: string # The name of the report that you want to create. The name must be unique, is case sensitive, and can't include spaces.
 ]: any -> record<ResponseMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSOrigamiServiceGatewayService.DeleteReportDefinition")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ReportName": $report_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -195,13 +196,14 @@ export def "describe-report-definitions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
+  --x-amz-target: string@x-amz-target-completer-1 # required
   --max-results-body: int # The maximum number of results that AWS returns for the operation. (body field)
   --next-token-body: string # A generic string. (body field)
-]: any -> record<ReportDefinitions: record, NextToken: string> {
+]: any -> record<ReportDefinitions: table<ReportName: string, TimeUnit: string, Format: string, Compression: string, AdditionalSchemaElements: list, S3Bucket: string, S3Prefix: string, S3Region: string, AdditionalArtifacts: list, RefreshClosedReports: bool, ReportVersioning: string, BillingViewArn: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSOrigamiServiceGatewayService.DescribeReportDefinitions")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -228,7 +230,7 @@ export def "describe-report-definitions" [
 #
 # POST /
 # operationId: ModifyReportDefinition
-# --ReportDefinition shape: {ReportName: string, TimeUnit: "HOURLY"|"DAILY"|"MONTHLY", Format: "textORcsv"|"Parquet", Compression: "ZIP"|"GZIP"|"Parquet", AdditionalSchemaElements: any, S3Bucket: string, S3Prefix: string, ... (5 more fields)}
+# --ReportDefinition shape: {ReportName: string, TimeUnit: "HOURLY"|"DAILY"|"MONTHLY", Format: "textORcsv"|"Parquet", Compression: "ZIP"|"GZIP"|"Parquet", AdditionalSchemaElements: list<string>, S3Bucket: string, S3Prefix: string, ... (5 more fields)}
 export def "modify-report-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -246,13 +248,14 @@ export def "modify-report-definition" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
+  --x-amz-target: string@x-amz-target-completer-2 # required
   report_name: string # The name of the report that you want to create. The name must be unique, is case sensitive, and can't include spaces.
-  report_definition: record # The definition of AWS Cost and Usage Report. You can specify the report name, time unit, report format, compression format, S3 bucket, additional artifacts, and schema elements in the definition. — shape: {ReportName: string, TimeUnit: "HOURLY"|"DAILY"|"MONTHLY", Format: "textORcsv"|"Parquet", Compression: "ZIP"|"GZIP"|"Parquet", AdditionalSchemaElements: any, S3Bucket: string, S3Prefix: string, ... (5 more fields)}
+  report_definition: record # The definition of AWS Cost and Usage Report. You can specify the report name, time unit, report format, compression format, S3 bucket, additional artifacts, and schema elements in the definition. — shape: {ReportName: string, TimeUnit: "HOURLY"|"DAILY"|"MONTHLY", Format: "textORcsv"|"Parquet", Compression: "ZIP"|"GZIP"|"Parquet", AdditionalSchemaElements: list<string>, S3Bucket: string, S3Prefix: string, ... (5 more fields)}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSOrigamiServiceGatewayService.ModifyReportDefinition")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ReportName": $report_name, "ReportDefinition": $report_definition} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -278,6 +281,7 @@ export def "modify-report-definition" [
 #
 # POST /
 # operationId: PutReportDefinition
+# --ReportDefinition shape: {ReportName: string, TimeUnit: "HOURLY"|"DAILY"|"MONTHLY", Format: "textORcsv"|"Parquet", Compression: "ZIP"|"GZIP"|"Parquet", AdditionalSchemaElements: list<string>, S3Bucket: string, S3Prefix: string, ... (5 more fields)}
 export def "put-report-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -295,12 +299,13 @@ export def "put-report-definition" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  report_definition: any
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  report_definition: record # The definition of AWS Cost and Usage Report. You can specify the report name, time unit, report format, compression format, S3 bucket, additional artifacts, and schema elements in the definition. — shape: {ReportName: string, TimeUnit: "HOURLY"|"DAILY"|"MONTHLY", Format: "textORcsv"|"Parquet", Compression: "ZIP"|"GZIP"|"Parquet", AdditionalSchemaElements: list<string>, S3Bucket: string, S3Prefix: string, ... (5 more fields)}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSOrigamiServiceGatewayService.PutReportDefinition")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ReportDefinition": $report_definition} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

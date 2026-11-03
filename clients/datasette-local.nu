@@ -1,4 +1,4 @@
-# Auto-generated client for Datasette API vv1
+# Auto-generated client for Datasette API v1
 # Source: https://api.apis.guru/v2/specs/datasette.local/v1/openapi.json
 # Auth: --token flag or $env.DATASETTE_API_TOKEN
 
@@ -133,11 +133,13 @@ export def "query" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --sql: string # The SQL query to be executed
-  --shape: string@shape-completer # The shape of the response data. Must be "array"
+  --sql: string # The SQL query to be executed (required)
+  --shape: string@shape-completer # The shape of the response data. Must be "array" (required)
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($sql == null) { error make --unspanned { msg: "required query parameter 'sql' missing: pass --sql" } }
+  let shape = ($shape | default "array")
   let qp = [(serialize-qp "sql" $sql "scalar") (serialize-qp "_shape" $shape "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/content.json" $qp $auth.query)
   let accept_val = "application/json"

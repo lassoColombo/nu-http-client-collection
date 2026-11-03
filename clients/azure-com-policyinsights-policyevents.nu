@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -100,6 +100,10 @@ def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: 
 def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def management-groups-namespace-completer [] { ["Microsoft.Management"] }
+def policy-events-resource-completer [] { ["default"] }
+def authorization-namespace-completer [] { ["Microsoft.Authorization"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -129,9 +133,9 @@ export def commands []: nothing -> table {
 # POST /providers/{managementGroupsNamespace}/managementGroups/{managementGroupName}/providers/Microsoft.PolicyInsights/policyEvents/{policyEventsResource}/queryResults
 # operationId: PolicyEvents_ListQueryResultsForManagementGroup
 export def "policy-events-list-query-results-for-management-group" [
-  management_groups_namespace: string
+  management_groups_namespace: string@management-groups-namespace-completer
   management_group_name: string
-  policy_events_resource: string
+  policy_events_resource: string@policy-events-resource-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -141,12 +145,12 @@ export def "policy-events-list-query-results-for-management-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version to use with the client requests.
+  --api-version: string # API version to use with the client requests. (required)
   --top: int # Maximum number of records to return. (format: int32)
   --orderby: string # Ordering expression using OData notation. One or more comma-separated column names with an optional "desc" (the default) or "asc", e.g. "$orderby=PolicyAssignmentId, ResourceId asc".
   --select: string # Select expression using OData notation. Limits the columns on each record to just those requested, e.g. "$select=PolicyAssignmentId, ResourceId".
-  --qp-from: string # ISO 8601 formatted timestamp specifying the start time of the interval to query. When not specified, the service uses ($to - 1-day). (format: date-time)
-  --qp-to: string # ISO 8601 formatted timestamp specifying the end time of the interval to query. When not specified, the service uses request time. (format: date-time)
+  --from: string # ISO 8601 formatted timestamp specifying the start time of the interval to query. When not specified, the service uses ($to - 1-day). (format: date-time)
+  --to: string # ISO 8601 formatted timestamp specifying the end time of the interval to query. When not specified, the service uses request time. (format: date-time)
   --filter: string # OData filter expression.
   --apply: string # OData apply expression for aggregations.
 ]: nothing -> record<_odata_context: string, _odata_count: int, value: table<_odata_context: string, _odata_id: string, effectiveParameters: string, isCompliant: bool, managementGroupIds: string, policyAssignmentId: string, policyAssignmentName: string, policyAssignmentOwner: string, policyAssignmentParameters: string, policyAssignmentScope: string, policyDefinitionAction: string, policyDefinitionCategory: string, policyDefinitionId: string, policyDefinitionName: string, policyDefinitionReferenceId: string, policySetDefinitionCategory: string, policySetDefinitionId: string, policySetDefinitionName: string, policySetDefinitionOwner: string, policySetDefinitionParameters: string, principalOid: string, resourceGroup: string, resourceId: string, resourceLocation: string, resourceTags: string, resourceType: string, subscriptionId: string, tenantId: string, timestamp: string>> {
@@ -155,14 +159,15 @@ export def "policy-events-list-query-results-for-management-group" [
   if ($management_groups_namespace | is-empty) { error make --unspanned { msg: "path parameter 'managementGroupsNamespace' must be non-empty" } }
   if ($management_group_name | is-empty) { error make --unspanned { msg: "path parameter 'managementGroupName' must be non-empty" } }
   if ($policy_events_resource | is-empty) { error make --unspanned { msg: "path parameter 'policyEventsResource' must be non-empty" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$from" $qp_from "scalar") (serialize-qp "$to" $qp_to "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$apply" $apply "scalar")] | flatten | str join "&"
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$from" $from "scalar") (serialize-qp "$to" $to "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$apply" $apply "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({management_groups_namespace: (encode-path-segment $management_groups_namespace), management_group_name: (encode-path-segment $management_group_name), policy_events_resource: (encode-path-segment $policy_events_resource)} | format pattern "/providers/{management_groups_namespace}/managementGroups/{management_group_name}/providers/Microsoft.PolicyInsights/policyEvents/{policy_events_resource}/queryResults") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
-    query: ({"api-version": $api_version, "$top": $top, "$orderby": $orderby, "$select": $select, "$from": $qp_from, "$to": $qp_to, "$filter": $filter, "$apply": $apply} | compact)
+    query: ({"api-version": $api_version, "$top": $top, "$orderby": $orderby, "$select": $select, "$from": $from, "$to": $to, "$filter": $filter, "$apply": $apply} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -179,7 +184,7 @@ export def "policy-events-list-query-results-for-management-group" [
 # operationId: PolicyEvents_ListQueryResultsForSubscription
 export def "policy-events-list-query-results-for-subscription" [
   subscription_id: string
-  policy_events_resource: string
+  policy_events_resource: string@policy-events-resource-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -189,12 +194,12 @@ export def "policy-events-list-query-results-for-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version to use with the client requests.
+  --api-version: string # API version to use with the client requests. (required)
   --top: int # Maximum number of records to return. (format: int32)
   --orderby: string # Ordering expression using OData notation. One or more comma-separated column names with an optional "desc" (the default) or "asc", e.g. "$orderby=PolicyAssignmentId, ResourceId asc".
   --select: string # Select expression using OData notation. Limits the columns on each record to just those requested, e.g. "$select=PolicyAssignmentId, ResourceId".
-  --qp-from: string # ISO 8601 formatted timestamp specifying the start time of the interval to query. When not specified, the service uses ($to - 1-day). (format: date-time)
-  --qp-to: string # ISO 8601 formatted timestamp specifying the end time of the interval to query. When not specified, the service uses request time. (format: date-time)
+  --from: string # ISO 8601 formatted timestamp specifying the start time of the interval to query. When not specified, the service uses ($to - 1-day). (format: date-time)
+  --to: string # ISO 8601 formatted timestamp specifying the end time of the interval to query. When not specified, the service uses request time. (format: date-time)
   --filter: string # OData filter expression.
   --apply: string # OData apply expression for aggregations.
 ]: nothing -> record<_odata_context: string, _odata_count: int, value: table<_odata_context: string, _odata_id: string, effectiveParameters: string, isCompliant: bool, managementGroupIds: string, policyAssignmentId: string, policyAssignmentName: string, policyAssignmentOwner: string, policyAssignmentParameters: string, policyAssignmentScope: string, policyDefinitionAction: string, policyDefinitionCategory: string, policyDefinitionId: string, policyDefinitionName: string, policyDefinitionReferenceId: string, policySetDefinitionCategory: string, policySetDefinitionId: string, policySetDefinitionName: string, policySetDefinitionOwner: string, policySetDefinitionParameters: string, principalOid: string, resourceGroup: string, resourceId: string, resourceLocation: string, resourceTags: string, resourceType: string, subscriptionId: string, tenantId: string, timestamp: string>> {
@@ -202,14 +207,15 @@ export def "policy-events-list-query-results-for-subscription" [
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($policy_events_resource | is-empty) { error make --unspanned { msg: "path parameter 'policyEventsResource' must be non-empty" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$from" $qp_from "scalar") (serialize-qp "$to" $qp_to "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$apply" $apply "scalar")] | flatten | str join "&"
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$from" $from "scalar") (serialize-qp "$to" $to "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$apply" $apply "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), policy_events_resource: (encode-path-segment $policy_events_resource)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.PolicyInsights/policyEvents/{policy_events_resource}/queryResults") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
-    query: ({"api-version": $api_version, "$top": $top, "$orderby": $orderby, "$select": $select, "$from": $qp_from, "$to": $qp_to, "$filter": $filter, "$apply": $apply} | compact)
+    query: ({"api-version": $api_version, "$top": $top, "$orderby": $orderby, "$select": $select, "$from": $from, "$to": $to, "$filter": $filter, "$apply": $apply} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -226,9 +232,9 @@ export def "policy-events-list-query-results-for-subscription" [
 # operationId: PolicyEvents_ListQueryResultsForSubscriptionLevelPolicyAssignment
 export def "policy-events-list-query-results-for-subscription-level-policy-assignment" [
   subscription_id: string
-  authorization_namespace: string
+  authorization_namespace: string@authorization-namespace-completer
   policy_assignment_name: string
-  policy_events_resource: string
+  policy_events_resource: string@policy-events-resource-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,12 +244,12 @@ export def "policy-events-list-query-results-for-subscription-level-policy-assig
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version to use with the client requests.
+  --api-version: string # API version to use with the client requests. (required)
   --top: int # Maximum number of records to return. (format: int32)
   --orderby: string # Ordering expression using OData notation. One or more comma-separated column names with an optional "desc" (the default) or "asc", e.g. "$orderby=PolicyAssignmentId, ResourceId asc".
   --select: string # Select expression using OData notation. Limits the columns on each record to just those requested, e.g. "$select=PolicyAssignmentId, ResourceId".
-  --qp-from: string # ISO 8601 formatted timestamp specifying the start time of the interval to query. When not specified, the service uses ($to - 1-day). (format: date-time)
-  --qp-to: string # ISO 8601 formatted timestamp specifying the end time of the interval to query. When not specified, the service uses request time. (format: date-time)
+  --from: string # ISO 8601 formatted timestamp specifying the start time of the interval to query. When not specified, the service uses ($to - 1-day). (format: date-time)
+  --to: string # ISO 8601 formatted timestamp specifying the end time of the interval to query. When not specified, the service uses request time. (format: date-time)
   --filter: string # OData filter expression.
   --apply: string # OData apply expression for aggregations.
 ]: nothing -> record<_odata_context: string, _odata_count: int, value: table<_odata_context: string, _odata_id: string, effectiveParameters: string, isCompliant: bool, managementGroupIds: string, policyAssignmentId: string, policyAssignmentName: string, policyAssignmentOwner: string, policyAssignmentParameters: string, policyAssignmentScope: string, policyDefinitionAction: string, policyDefinitionCategory: string, policyDefinitionId: string, policyDefinitionName: string, policyDefinitionReferenceId: string, policySetDefinitionCategory: string, policySetDefinitionId: string, policySetDefinitionName: string, policySetDefinitionOwner: string, policySetDefinitionParameters: string, principalOid: string, resourceGroup: string, resourceId: string, resourceLocation: string, resourceTags: string, resourceType: string, subscriptionId: string, tenantId: string, timestamp: string>> {
@@ -253,14 +259,15 @@ export def "policy-events-list-query-results-for-subscription-level-policy-assig
   if ($authorization_namespace | is-empty) { error make --unspanned { msg: "path parameter 'authorizationNamespace' must be non-empty" } }
   if ($policy_assignment_name | is-empty) { error make --unspanned { msg: "path parameter 'policyAssignmentName' must be non-empty" } }
   if ($policy_events_resource | is-empty) { error make --unspanned { msg: "path parameter 'policyEventsResource' must be non-empty" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$from" $qp_from "scalar") (serialize-qp "$to" $qp_to "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$apply" $apply "scalar")] | flatten | str join "&"
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$from" $from "scalar") (serialize-qp "$to" $to "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$apply" $apply "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), authorization_namespace: (encode-path-segment $authorization_namespace), policy_assignment_name: (encode-path-segment $policy_assignment_name), policy_events_resource: (encode-path-segment $policy_events_resource)} | format pattern "/subscriptions/{subscription_id}/providers/{authorization_namespace}/policyAssignments/{policy_assignment_name}/providers/Microsoft.PolicyInsights/policyEvents/{policy_events_resource}/queryResults") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
-    query: ({"api-version": $api_version, "$top": $top, "$orderby": $orderby, "$select": $select, "$from": $qp_from, "$to": $qp_to, "$filter": $filter, "$apply": $apply} | compact)
+    query: ({"api-version": $api_version, "$top": $top, "$orderby": $orderby, "$select": $select, "$from": $from, "$to": $to, "$filter": $filter, "$apply": $apply} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -277,9 +284,9 @@ export def "policy-events-list-query-results-for-subscription-level-policy-assig
 # operationId: PolicyEvents_ListQueryResultsForPolicyDefinition
 export def "policy-events-list-query-results-for-policy-definition" [
   subscription_id: string
-  authorization_namespace: string
+  authorization_namespace: string@authorization-namespace-completer
   policy_definition_name: string
-  policy_events_resource: string
+  policy_events_resource: string@policy-events-resource-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -289,12 +296,12 @@ export def "policy-events-list-query-results-for-policy-definition" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version to use with the client requests.
+  --api-version: string # API version to use with the client requests. (required)
   --top: int # Maximum number of records to return. (format: int32)
   --orderby: string # Ordering expression using OData notation. One or more comma-separated column names with an optional "desc" (the default) or "asc", e.g. "$orderby=PolicyAssignmentId, ResourceId asc".
   --select: string # Select expression using OData notation. Limits the columns on each record to just those requested, e.g. "$select=PolicyAssignmentId, ResourceId".
-  --qp-from: string # ISO 8601 formatted timestamp specifying the start time of the interval to query. When not specified, the service uses ($to - 1-day). (format: date-time)
-  --qp-to: string # ISO 8601 formatted timestamp specifying the end time of the interval to query. When not specified, the service uses request time. (format: date-time)
+  --from: string # ISO 8601 formatted timestamp specifying the start time of the interval to query. When not specified, the service uses ($to - 1-day). (format: date-time)
+  --to: string # ISO 8601 formatted timestamp specifying the end time of the interval to query. When not specified, the service uses request time. (format: date-time)
   --filter: string # OData filter expression.
   --apply: string # OData apply expression for aggregations.
 ]: nothing -> record<_odata_context: string, _odata_count: int, value: table<_odata_context: string, _odata_id: string, effectiveParameters: string, isCompliant: bool, managementGroupIds: string, policyAssignmentId: string, policyAssignmentName: string, policyAssignmentOwner: string, policyAssignmentParameters: string, policyAssignmentScope: string, policyDefinitionAction: string, policyDefinitionCategory: string, policyDefinitionId: string, policyDefinitionName: string, policyDefinitionReferenceId: string, policySetDefinitionCategory: string, policySetDefinitionId: string, policySetDefinitionName: string, policySetDefinitionOwner: string, policySetDefinitionParameters: string, principalOid: string, resourceGroup: string, resourceId: string, resourceLocation: string, resourceTags: string, resourceType: string, subscriptionId: string, tenantId: string, timestamp: string>> {
@@ -304,14 +311,15 @@ export def "policy-events-list-query-results-for-policy-definition" [
   if ($authorization_namespace | is-empty) { error make --unspanned { msg: "path parameter 'authorizationNamespace' must be non-empty" } }
   if ($policy_definition_name | is-empty) { error make --unspanned { msg: "path parameter 'policyDefinitionName' must be non-empty" } }
   if ($policy_events_resource | is-empty) { error make --unspanned { msg: "path parameter 'policyEventsResource' must be non-empty" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$from" $qp_from "scalar") (serialize-qp "$to" $qp_to "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$apply" $apply "scalar")] | flatten | str join "&"
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$from" $from "scalar") (serialize-qp "$to" $to "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$apply" $apply "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), authorization_namespace: (encode-path-segment $authorization_namespace), policy_definition_name: (encode-path-segment $policy_definition_name), policy_events_resource: (encode-path-segment $policy_events_resource)} | format pattern "/subscriptions/{subscription_id}/providers/{authorization_namespace}/policyDefinitions/{policy_definition_name}/providers/Microsoft.PolicyInsights/policyEvents/{policy_events_resource}/queryResults") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
-    query: ({"api-version": $api_version, "$top": $top, "$orderby": $orderby, "$select": $select, "$from": $qp_from, "$to": $qp_to, "$filter": $filter, "$apply": $apply} | compact)
+    query: ({"api-version": $api_version, "$top": $top, "$orderby": $orderby, "$select": $select, "$from": $from, "$to": $to, "$filter": $filter, "$apply": $apply} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -328,9 +336,9 @@ export def "policy-events-list-query-results-for-policy-definition" [
 # operationId: PolicyEvents_ListQueryResultsForPolicySetDefinition
 export def "policy-events-list-query-results-for-policy-set-definition" [
   subscription_id: string
-  authorization_namespace: string
+  authorization_namespace: string@authorization-namespace-completer
   policy_set_definition_name: string
-  policy_events_resource: string
+  policy_events_resource: string@policy-events-resource-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -340,12 +348,12 @@ export def "policy-events-list-query-results-for-policy-set-definition" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version to use with the client requests.
+  --api-version: string # API version to use with the client requests. (required)
   --top: int # Maximum number of records to return. (format: int32)
   --orderby: string # Ordering expression using OData notation. One or more comma-separated column names with an optional "desc" (the default) or "asc", e.g. "$orderby=PolicyAssignmentId, ResourceId asc".
   --select: string # Select expression using OData notation. Limits the columns on each record to just those requested, e.g. "$select=PolicyAssignmentId, ResourceId".
-  --qp-from: string # ISO 8601 formatted timestamp specifying the start time of the interval to query. When not specified, the service uses ($to - 1-day). (format: date-time)
-  --qp-to: string # ISO 8601 formatted timestamp specifying the end time of the interval to query. When not specified, the service uses request time. (format: date-time)
+  --from: string # ISO 8601 formatted timestamp specifying the start time of the interval to query. When not specified, the service uses ($to - 1-day). (format: date-time)
+  --to: string # ISO 8601 formatted timestamp specifying the end time of the interval to query. When not specified, the service uses request time. (format: date-time)
   --filter: string # OData filter expression.
   --apply: string # OData apply expression for aggregations.
 ]: nothing -> record<_odata_context: string, _odata_count: int, value: table<_odata_context: string, _odata_id: string, effectiveParameters: string, isCompliant: bool, managementGroupIds: string, policyAssignmentId: string, policyAssignmentName: string, policyAssignmentOwner: string, policyAssignmentParameters: string, policyAssignmentScope: string, policyDefinitionAction: string, policyDefinitionCategory: string, policyDefinitionId: string, policyDefinitionName: string, policyDefinitionReferenceId: string, policySetDefinitionCategory: string, policySetDefinitionId: string, policySetDefinitionName: string, policySetDefinitionOwner: string, policySetDefinitionParameters: string, principalOid: string, resourceGroup: string, resourceId: string, resourceLocation: string, resourceTags: string, resourceType: string, subscriptionId: string, tenantId: string, timestamp: string>> {
@@ -355,14 +363,15 @@ export def "policy-events-list-query-results-for-policy-set-definition" [
   if ($authorization_namespace | is-empty) { error make --unspanned { msg: "path parameter 'authorizationNamespace' must be non-empty" } }
   if ($policy_set_definition_name | is-empty) { error make --unspanned { msg: "path parameter 'policySetDefinitionName' must be non-empty" } }
   if ($policy_events_resource | is-empty) { error make --unspanned { msg: "path parameter 'policyEventsResource' must be non-empty" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$from" $qp_from "scalar") (serialize-qp "$to" $qp_to "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$apply" $apply "scalar")] | flatten | str join "&"
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$from" $from "scalar") (serialize-qp "$to" $to "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$apply" $apply "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), authorization_namespace: (encode-path-segment $authorization_namespace), policy_set_definition_name: (encode-path-segment $policy_set_definition_name), policy_events_resource: (encode-path-segment $policy_events_resource)} | format pattern "/subscriptions/{subscription_id}/providers/{authorization_namespace}/policySetDefinitions/{policy_set_definition_name}/providers/Microsoft.PolicyInsights/policyEvents/{policy_events_resource}/queryResults") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
-    query: ({"api-version": $api_version, "$top": $top, "$orderby": $orderby, "$select": $select, "$from": $qp_from, "$to": $qp_to, "$filter": $filter, "$apply": $apply} | compact)
+    query: ({"api-version": $api_version, "$top": $top, "$orderby": $orderby, "$select": $select, "$from": $from, "$to": $to, "$filter": $filter, "$apply": $apply} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -380,7 +389,7 @@ export def "policy-events-list-query-results-for-policy-set-definition" [
 export def "policy-events-list-query-results-for-resource-group" [
   subscription_id: string
   resource_group_name: string
-  policy_events_resource: string
+  policy_events_resource: string@policy-events-resource-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -390,12 +399,12 @@ export def "policy-events-list-query-results-for-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version to use with the client requests.
+  --api-version: string # API version to use with the client requests. (required)
   --top: int # Maximum number of records to return. (format: int32)
   --orderby: string # Ordering expression using OData notation. One or more comma-separated column names with an optional "desc" (the default) or "asc", e.g. "$orderby=PolicyAssignmentId, ResourceId asc".
   --select: string # Select expression using OData notation. Limits the columns on each record to just those requested, e.g. "$select=PolicyAssignmentId, ResourceId".
-  --qp-from: string # ISO 8601 formatted timestamp specifying the start time of the interval to query. When not specified, the service uses ($to - 1-day). (format: date-time)
-  --qp-to: string # ISO 8601 formatted timestamp specifying the end time of the interval to query. When not specified, the service uses request time. (format: date-time)
+  --from: string # ISO 8601 formatted timestamp specifying the start time of the interval to query. When not specified, the service uses ($to - 1-day). (format: date-time)
+  --to: string # ISO 8601 formatted timestamp specifying the end time of the interval to query. When not specified, the service uses request time. (format: date-time)
   --filter: string # OData filter expression.
   --apply: string # OData apply expression for aggregations.
 ]: nothing -> record<_odata_context: string, _odata_count: int, value: table<_odata_context: string, _odata_id: string, effectiveParameters: string, isCompliant: bool, managementGroupIds: string, policyAssignmentId: string, policyAssignmentName: string, policyAssignmentOwner: string, policyAssignmentParameters: string, policyAssignmentScope: string, policyDefinitionAction: string, policyDefinitionCategory: string, policyDefinitionId: string, policyDefinitionName: string, policyDefinitionReferenceId: string, policySetDefinitionCategory: string, policySetDefinitionId: string, policySetDefinitionName: string, policySetDefinitionOwner: string, policySetDefinitionParameters: string, principalOid: string, resourceGroup: string, resourceId: string, resourceLocation: string, resourceTags: string, resourceType: string, subscriptionId: string, tenantId: string, timestamp: string>> {
@@ -404,14 +413,15 @@ export def "policy-events-list-query-results-for-resource-group" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($policy_events_resource | is-empty) { error make --unspanned { msg: "path parameter 'policyEventsResource' must be non-empty" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$from" $qp_from "scalar") (serialize-qp "$to" $qp_to "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$apply" $apply "scalar")] | flatten | str join "&"
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$from" $from "scalar") (serialize-qp "$to" $to "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$apply" $apply "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), policy_events_resource: (encode-path-segment $policy_events_resource)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.PolicyInsights/policyEvents/{policy_events_resource}/queryResults") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
-    query: ({"api-version": $api_version, "$top": $top, "$orderby": $orderby, "$select": $select, "$from": $qp_from, "$to": $qp_to, "$filter": $filter, "$apply": $apply} | compact)
+    query: ({"api-version": $api_version, "$top": $top, "$orderby": $orderby, "$select": $select, "$from": $from, "$to": $to, "$filter": $filter, "$apply": $apply} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -429,9 +439,9 @@ export def "policy-events-list-query-results-for-resource-group" [
 export def "policy-events-list-query-results-for-resource-group-level-policy-assignment" [
   subscription_id: string
   resource_group_name: string
-  authorization_namespace: string
+  authorization_namespace: string@authorization-namespace-completer
   policy_assignment_name: string
-  policy_events_resource: string
+  policy_events_resource: string@policy-events-resource-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -441,12 +451,12 @@ export def "policy-events-list-query-results-for-resource-group-level-policy-ass
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version to use with the client requests.
+  --api-version: string # API version to use with the client requests. (required)
   --top: int # Maximum number of records to return. (format: int32)
   --orderby: string # Ordering expression using OData notation. One or more comma-separated column names with an optional "desc" (the default) or "asc", e.g. "$orderby=PolicyAssignmentId, ResourceId asc".
   --select: string # Select expression using OData notation. Limits the columns on each record to just those requested, e.g. "$select=PolicyAssignmentId, ResourceId".
-  --qp-from: string # ISO 8601 formatted timestamp specifying the start time of the interval to query. When not specified, the service uses ($to - 1-day). (format: date-time)
-  --qp-to: string # ISO 8601 formatted timestamp specifying the end time of the interval to query. When not specified, the service uses request time. (format: date-time)
+  --from: string # ISO 8601 formatted timestamp specifying the start time of the interval to query. When not specified, the service uses ($to - 1-day). (format: date-time)
+  --to: string # ISO 8601 formatted timestamp specifying the end time of the interval to query. When not specified, the service uses request time. (format: date-time)
   --filter: string # OData filter expression.
   --apply: string # OData apply expression for aggregations.
 ]: nothing -> record<_odata_context: string, _odata_count: int, value: table<_odata_context: string, _odata_id: string, effectiveParameters: string, isCompliant: bool, managementGroupIds: string, policyAssignmentId: string, policyAssignmentName: string, policyAssignmentOwner: string, policyAssignmentParameters: string, policyAssignmentScope: string, policyDefinitionAction: string, policyDefinitionCategory: string, policyDefinitionId: string, policyDefinitionName: string, policyDefinitionReferenceId: string, policySetDefinitionCategory: string, policySetDefinitionId: string, policySetDefinitionName: string, policySetDefinitionOwner: string, policySetDefinitionParameters: string, principalOid: string, resourceGroup: string, resourceId: string, resourceLocation: string, resourceTags: string, resourceType: string, subscriptionId: string, tenantId: string, timestamp: string>> {
@@ -457,14 +467,15 @@ export def "policy-events-list-query-results-for-resource-group-level-policy-ass
   if ($authorization_namespace | is-empty) { error make --unspanned { msg: "path parameter 'authorizationNamespace' must be non-empty" } }
   if ($policy_assignment_name | is-empty) { error make --unspanned { msg: "path parameter 'policyAssignmentName' must be non-empty" } }
   if ($policy_events_resource | is-empty) { error make --unspanned { msg: "path parameter 'policyEventsResource' must be non-empty" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$from" $qp_from "scalar") (serialize-qp "$to" $qp_to "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$apply" $apply "scalar")] | flatten | str join "&"
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$from" $from "scalar") (serialize-qp "$to" $to "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$apply" $apply "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), authorization_namespace: (encode-path-segment $authorization_namespace), policy_assignment_name: (encode-path-segment $policy_assignment_name), policy_events_resource: (encode-path-segment $policy_events_resource)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{authorization_namespace}/policyAssignments/{policy_assignment_name}/providers/Microsoft.PolicyInsights/policyEvents/{policy_events_resource}/queryResults") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
-    query: ({"api-version": $api_version, "$top": $top, "$orderby": $orderby, "$select": $select, "$from": $qp_from, "$to": $qp_to, "$filter": $filter, "$apply": $apply} | compact)
+    query: ({"api-version": $api_version, "$top": $top, "$orderby": $orderby, "$select": $select, "$from": $from, "$to": $to, "$filter": $filter, "$apply": $apply} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -481,7 +492,7 @@ export def "policy-events-list-query-results-for-resource-group-level-policy-ass
 # operationId: PolicyEvents_ListQueryResultsForResource
 export def "policy-events-list-query-results-for-resource" [
   resource_id: string
-  policy_events_resource: string
+  policy_events_resource: string@policy-events-resource-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -491,12 +502,12 @@ export def "policy-events-list-query-results-for-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version to use with the client requests.
+  --api-version: string # API version to use with the client requests. (required)
   --top: int # Maximum number of records to return. (format: int32)
   --orderby: string # Ordering expression using OData notation. One or more comma-separated column names with an optional "desc" (the default) or "asc", e.g. "$orderby=PolicyAssignmentId, ResourceId asc".
   --select: string # Select expression using OData notation. Limits the columns on each record to just those requested, e.g. "$select=PolicyAssignmentId, ResourceId".
-  --qp-from: string # ISO 8601 formatted timestamp specifying the start time of the interval to query. When not specified, the service uses ($to - 1-day). (format: date-time)
-  --qp-to: string # ISO 8601 formatted timestamp specifying the end time of the interval to query. When not specified, the service uses request time. (format: date-time)
+  --from: string # ISO 8601 formatted timestamp specifying the start time of the interval to query. When not specified, the service uses ($to - 1-day). (format: date-time)
+  --to: string # ISO 8601 formatted timestamp specifying the end time of the interval to query. When not specified, the service uses request time. (format: date-time)
   --filter: string # OData filter expression.
   --apply: string # OData apply expression for aggregations.
 ]: nothing -> record<_odata_context: string, _odata_count: int, value: table<_odata_context: string, _odata_id: string, effectiveParameters: string, isCompliant: bool, managementGroupIds: string, policyAssignmentId: string, policyAssignmentName: string, policyAssignmentOwner: string, policyAssignmentParameters: string, policyAssignmentScope: string, policyDefinitionAction: string, policyDefinitionCategory: string, policyDefinitionId: string, policyDefinitionName: string, policyDefinitionReferenceId: string, policySetDefinitionCategory: string, policySetDefinitionId: string, policySetDefinitionName: string, policySetDefinitionOwner: string, policySetDefinitionParameters: string, principalOid: string, resourceGroup: string, resourceId: string, resourceLocation: string, resourceTags: string, resourceType: string, subscriptionId: string, tenantId: string, timestamp: string>> {
@@ -504,14 +515,15 @@ export def "policy-events-list-query-results-for-resource" [
   let base = ($base_url | default $BASE_URL)
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   if ($policy_events_resource | is-empty) { error make --unspanned { msg: "path parameter 'policyEventsResource' must be non-empty" } }
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$from" $qp_from "scalar") (serialize-qp "$to" $qp_to "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$apply" $apply "scalar")] | flatten | str join "&"
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$from" $from "scalar") (serialize-qp "$to" $to "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$apply" $apply "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id), policy_events_resource: (encode-path-segment $policy_events_resource)} | format pattern "/{resource_id}/providers/Microsoft.PolicyInsights/policyEvents/{policy_events_resource}/queryResults") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
-    query: ({"api-version": $api_version, "$top": $top, "$orderby": $orderby, "$select": $select, "$from": $qp_from, "$to": $qp_to, "$filter": $filter, "$apply": $apply} | compact)
+    query: ({"api-version": $api_version, "$top": $top, "$orderby": $orderby, "$select": $select, "$from": $from, "$to": $to, "$filter": $filter, "$apply": $apply} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -537,11 +549,12 @@ export def "policy-events-get-metadata" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version to use with the client requests.
+  --api-version: string # API version to use with the client requests. (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scope: (encode-path-segment $scope)} | format pattern "/{scope}/providers/Microsoft.PolicyInsights/policyEvents/$metadata") $qp $auth.query)
   let accept_val = "application/xml"

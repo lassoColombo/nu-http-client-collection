@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-api-token" => { {scheme: $scheme, headers: {X-API-TOKEN: $token_val}, query: "", location: "header"} }
+    "x-api-token" => { {scheme: $scheme, headers: {"X-API-TOKEN": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -189,10 +189,11 @@ export def "get-distributions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --survey-id: string # The survey for which to load the distributions
+  --survey-id: string # The survey for which to load the distributions (required)
 ]: nothing -> record<meta: record<httpStatus: string, requestId: string>, result: record<elements: list<record>, nextPage: any>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($survey_id == null) { error make --unspanned { msg: "required query parameter 'surveyId' missing: pass --survey-id" } }
   let qp = [(serialize-qp "surveyId" $survey_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/distributions" $qp $auth.query)
   let accept_val = "application/json"
@@ -269,11 +270,12 @@ export def "retrievedistributionlinks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --survey-id: string # ID of the survey (eg: SV_123)
+  --survey-id: string # ID of the survey (eg: SV_123) (required)
 ]: nothing -> record<meta: record<httpStatus: string, requestId: string>, result: record<elements: list<record>, nextPage: any>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($distribution_id | is-empty) { error make --unspanned { msg: "path parameter 'DistributionId' must be non-empty" } }
+  if ($survey_id == null) { error make --unspanned { msg: "required query parameter 'surveyId' missing: pass --survey-id" } }
   let qp = [(serialize-qp "surveyId" $survey_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({distribution_id: (encode-path-segment $distribution_id)} | format pattern "/distributions/{distribution_id}/links") $qp $auth.query)
   let accept_val = "application/json"

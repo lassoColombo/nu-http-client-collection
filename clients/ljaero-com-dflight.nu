@@ -1,4 +1,4 @@
-# Auto-generated client for DFlight API vV 1.0.0
+# Auto-generated client for DFlight API V 1.0.0
 # Source: https://api.apis.guru/v2/specs/ljaero.com/dflight/V 1.0.0/openapi.json
 # Auth: --token flag or $env.DFLIGHT_API_TOKEN
 

@@ -135,14 +135,19 @@ export def "app-api-endpoints-gcr-calculate-dlr-flux" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --year: int # e.g. 2017
-  --month: int # e.g. 1
-  --day: int # e.g. 1
-  --z: float # Particle atomic number (e.g. 6)
-  --energy: float # Particle energy in MeV/n Valid range: [0, 106] MeV/n (e.g. 100)
+  --year: int # required, e.g. 2017
+  --month: int # required, e.g. 1
+  --day: int # required, e.g. 1
+  --z: float # Particle atomic number (required, e.g. 6)
+  --energy: float # Particle energy in MeV/n Valid range: [0, 106] MeV/n (required, e.g. 100)
 ]: nothing -> record<flux: record<units: string, value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($year == null) { error make --unspanned { msg: "required query parameter 'year' missing: pass --year" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'month' missing: pass --month" } }
+  if ($day == null) { error make --unspanned { msg: "required query parameter 'day' missing: pass --day" } }
+  if ($z == null) { error make --unspanned { msg: "required query parameter 'z' missing: pass --z" } }
+  if ($energy == null) { error make --unspanned { msg: "required query parameter 'energy' missing: pass --energy" } }
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "month" $month "scalar") (serialize-qp "day" $day "scalar") (serialize-qp "z" $z "scalar") (serialize-qp "energy" $energy "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/gcr/flux_dlr" $qp $auth.query)
   let accept_val = "application/json"
@@ -175,21 +180,33 @@ export def "app-api-endpoints-trapped-radiation-calculate-flux-mean" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --model: string@model-completer # Which model to use: - Energetic electrons (AE9) - Energetic protons (AP9) - Space plasma model for electrons (SPME) - for hydrogen (SPMH) - for helium (SPMHE) - for oxygen (SPMO) (e.g. AE9)
-  --coord-sys: string@coord-sys-completer # Coordinate system to use: - Geodetic/WGS84 (GDZ) - Geocentric Cartesian (GEO) - Geocentric Earth Inertial (GEI) See "Bhavnani, K. H., & Vancour, R. P. (1991). Coordinate systems for space and geophysical applications" for coord system definitions. (e.g. GEI)
-  --coord-units: string@coord-units-completer # Coordinate units to use: km (KM) or Earth Radii (RE) (e.g. KM)
-  --coord1: float # First coordinate value to specify position. Ordering for GEI, GEO coords:X, Y, Z Ordering for GDZ coords: Alt, Lat, Long Valid ranges for latitude: -90, 90 Valid ranges for longitude: 0, 360 (e.g. 3216.6)
-  --coord2: float # Second coordinate value. (e.g. 35426)
-  --coord3: float # Third coordinate value. (e.g. 603.4)
-  --year: int # e.g. 2017
-  --month: int # e.g. 1
-  --day: int # e.g. 1
-  --hour: int # e.g. 0
-  --minute: int # e.g. 0
-  --second: int # e.g. 0
+  --model: string@model-completer # Which model to use: - Energetic electrons (AE9) - Energetic protons (AP9) - Space plasma model for electrons (SPME) - for hydrogen (SPMH) - for helium (SPMHE) - for oxygen (SPMO) (required, e.g. AE9)
+  --coord-sys: string@coord-sys-completer # Coordinate system to use: - Geodetic/WGS84 (GDZ) - Geocentric Cartesian (GEO) - Geocentric Earth Inertial (GEI) See "Bhavnani, K. H., & Vancour, R. P. (1991). Coordinate systems for space and geophysical applications" for coord system definitions. (required, e.g. GEI)
+  --coord-units: string@coord-units-completer # Coordinate units to use: km (KM) or Earth Radii (RE) (required, e.g. KM)
+  --coord1: float # First coordinate value to specify position. Ordering for GEI, GEO coords:X, Y, Z Ordering for GDZ coords: Alt, Lat, Long Valid ranges for latitude: -90, 90 Valid ranges for longitude: 0, 360 (required, e.g. 3216.6)
+  --coord2: float # Second coordinate value. (required, e.g. 35426)
+  --coord3: float # Third coordinate value. (required, e.g. 603.4)
+  --year: int # required, e.g. 2017
+  --month: int # required, e.g. 1
+  --day: int # required, e.g. 1
+  --hour: int # required, e.g. 0
+  --minute: int # required, e.g. 0
+  --second: int # required, e.g. 0
 ]: nothing -> record<energies: record<data: list<float>, units: string>, flux: record<data: list<float>, units: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($model == null) { error make --unspanned { msg: "required query parameter 'model' missing: pass --model" } }
+  if ($coord_sys == null) { error make --unspanned { msg: "required query parameter 'coord_sys' missing: pass --coord-sys" } }
+  if ($coord_units == null) { error make --unspanned { msg: "required query parameter 'coord_units' missing: pass --coord-units" } }
+  if ($coord1 == null) { error make --unspanned { msg: "required query parameter 'coord1' missing: pass --coord1" } }
+  if ($coord2 == null) { error make --unspanned { msg: "required query parameter 'coord2' missing: pass --coord2" } }
+  if ($coord3 == null) { error make --unspanned { msg: "required query parameter 'coord3' missing: pass --coord3" } }
+  if ($year == null) { error make --unspanned { msg: "required query parameter 'year' missing: pass --year" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'month' missing: pass --month" } }
+  if ($day == null) { error make --unspanned { msg: "required query parameter 'day' missing: pass --day" } }
+  if ($hour == null) { error make --unspanned { msg: "required query parameter 'hour' missing: pass --hour" } }
+  if ($minute == null) { error make --unspanned { msg: "required query parameter 'minute' missing: pass --minute" } }
+  if ($second == null) { error make --unspanned { msg: "required query parameter 'second' missing: pass --second" } }
   let qp = [(serialize-qp "model" $model "scalar") (serialize-qp "coord_sys" $coord_sys "scalar") (serialize-qp "coord_units" $coord_units "scalar") (serialize-qp "coord1" $coord1 "scalar") (serialize-qp "coord2" $coord2 "scalar") (serialize-qp "coord3" $coord3 "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "month" $month "scalar") (serialize-qp "day" $day "scalar") (serialize-qp "hour" $hour "scalar") (serialize-qp "minute" $minute "scalar") (serialize-qp "second" $second "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/trapped/flux_mean" $qp $auth.query)
   let accept_val = "application/json"
@@ -222,22 +239,35 @@ export def "app-api-endpoints-trapped-radiation-calculate-flux-percentile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --model: string@model-completer # Which model to use: - Energetic electrons (AE9) - Energetic protons (AP9) - Space plasma model for electrons (SPME) - for hydrogen (SPMH) - for helium (SPMHE) - for oxygen (SPMO) (e.g. AE9)
-  --coord-sys: string@coord-sys-completer # Coordinate system to use: - Geodetic/WGS84 (GDZ) - Geocentric Cartesian (GEO) - Geocentric Earth Inertial (GEI) See "Bhavnani, K. H., & Vancour, R. P. (1991). Coordinate systems for space and geophysical applications" for coord system definitions. (e.g. GEI)
-  --coord-units: string@coord-units-completer # Coordinate units to use: km (KM) or Earth Radii (RE) (e.g. KM)
-  --coord1: float # First coordinate value to specify position. Ordering for GEI, GEO coords:X, Y, Z Ordering for GDZ coords: Alt, Lat, Long Valid ranges for latitude: -90, 90 Valid ranges for longitude: 0, 360 (e.g. 3216.6)
-  --coord2: float # Second coordinate value. (e.g. 35426)
-  --coord3: float # Third coordinate value. (e.g. 603.4)
-  --year: int # e.g. 2017
-  --month: int # e.g. 1
-  --day: int # e.g. 1
-  --hour: int # e.g. 0
-  --minute: int # e.g. 0
-  --second: int # e.g. 0
-  --percentile: int # Integer percentile at which to calc flux (50 is the median value). (e.g. 50)
+  --model: string@model-completer # Which model to use: - Energetic electrons (AE9) - Energetic protons (AP9) - Space plasma model for electrons (SPME) - for hydrogen (SPMH) - for helium (SPMHE) - for oxygen (SPMO) (required, e.g. AE9)
+  --coord-sys: string@coord-sys-completer # Coordinate system to use: - Geodetic/WGS84 (GDZ) - Geocentric Cartesian (GEO) - Geocentric Earth Inertial (GEI) See "Bhavnani, K. H., & Vancour, R. P. (1991). Coordinate systems for space and geophysical applications" for coord system definitions. (required, e.g. GEI)
+  --coord-units: string@coord-units-completer # Coordinate units to use: km (KM) or Earth Radii (RE) (required, e.g. KM)
+  --coord1: float # First coordinate value to specify position. Ordering for GEI, GEO coords:X, Y, Z Ordering for GDZ coords: Alt, Lat, Long Valid ranges for latitude: -90, 90 Valid ranges for longitude: 0, 360 (required, e.g. 3216.6)
+  --coord2: float # Second coordinate value. (required, e.g. 35426)
+  --coord3: float # Third coordinate value. (required, e.g. 603.4)
+  --year: int # required, e.g. 2017
+  --month: int # required, e.g. 1
+  --day: int # required, e.g. 1
+  --hour: int # required, e.g. 0
+  --minute: int # required, e.g. 0
+  --second: int # required, e.g. 0
+  --percentile: int # Integer percentile at which to calc flux (50 is the median value). (required, e.g. 50)
 ]: nothing -> record<energies: record<data: list<float>, units: string>, flux: record<data: list<float>, units: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($model == null) { error make --unspanned { msg: "required query parameter 'model' missing: pass --model" } }
+  if ($coord_sys == null) { error make --unspanned { msg: "required query parameter 'coord_sys' missing: pass --coord-sys" } }
+  if ($coord_units == null) { error make --unspanned { msg: "required query parameter 'coord_units' missing: pass --coord-units" } }
+  if ($coord1 == null) { error make --unspanned { msg: "required query parameter 'coord1' missing: pass --coord1" } }
+  if ($coord2 == null) { error make --unspanned { msg: "required query parameter 'coord2' missing: pass --coord2" } }
+  if ($coord3 == null) { error make --unspanned { msg: "required query parameter 'coord3' missing: pass --coord3" } }
+  if ($year == null) { error make --unspanned { msg: "required query parameter 'year' missing: pass --year" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'month' missing: pass --month" } }
+  if ($day == null) { error make --unspanned { msg: "required query parameter 'day' missing: pass --day" } }
+  if ($hour == null) { error make --unspanned { msg: "required query parameter 'hour' missing: pass --hour" } }
+  if ($minute == null) { error make --unspanned { msg: "required query parameter 'minute' missing: pass --minute" } }
+  if ($second == null) { error make --unspanned { msg: "required query parameter 'second' missing: pass --second" } }
+  if ($percentile == null) { error make --unspanned { msg: "required query parameter 'percentile' missing: pass --percentile" } }
   let qp = [(serialize-qp "model" $model "scalar") (serialize-qp "coord_sys" $coord_sys "scalar") (serialize-qp "coord_units" $coord_units "scalar") (serialize-qp "coord1" $coord1 "scalar") (serialize-qp "coord2" $coord2 "scalar") (serialize-qp "coord3" $coord3 "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "month" $month "scalar") (serialize-qp "day" $day "scalar") (serialize-qp "hour" $hour "scalar") (serialize-qp "minute" $minute "scalar") (serialize-qp "second" $second "scalar") (serialize-qp "percentile" $percentile "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/trapped/flux_percentile" $qp $auth.query)
   let accept_val = "application/json"

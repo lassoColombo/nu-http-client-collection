@@ -116,6 +116,7 @@ def accept-completer [] { ["application/json" "application/zip"] }
 def level-completer [] { ["CONFIG" "DEBUG" "ERROR" "FINE" "FINER" "FINEST" "INFO" "SEVERE" "TRACE" "WARN" "WARNING"] }
 def role-completer [] { ["ADMIN" "DEVELOPER" "READ_ONLY"] }
 def type-completer [] { ["COMPATIBILITY" "VALIDITY"] }
+def rule-completer [] { ["COMPATIBILITY" "VALIDITY"] }
 def order-completer [] { ["asc" "desc"] }
 def orderby-completer [] { ["createdOn" "name"] }
 def if-exists-completer [] { ["FAIL" "RETURN" "RETURN_OR_UPDATE" "UPDATE"] }
@@ -418,7 +419,7 @@ export def "list-log-configurations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> table<name: string, level: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/loggers" $auth.query)
@@ -453,7 +454,7 @@ export def "remove-log-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> record<name: string, level: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($logger | is-empty) { error make --unspanned { msg: "path parameter 'logger' must be non-empty" } }
@@ -489,7 +490,7 @@ export def "get-log-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> record<name: string, level: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($logger | is-empty) { error make --unspanned { msg: "path parameter 'logger' must be non-empty" } }
@@ -526,7 +527,7 @@ export def "set-log-configuration" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   level: string@level-completer
-]: any -> record {
+]: any -> record<name: string, level: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -848,7 +849,7 @@ export def "create-global-rule" [
 # DELETE /admin/rules/{rule}
 # operationId: deleteGlobalRule
 export def "delete-global-rule" [
-  rule: string
+  rule: string@rule-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -884,7 +885,7 @@ export def "delete-global-rule" [
 # GET /admin/rules/{rule}
 # operationId: getGlobalRuleConfig
 export def "get-global-rule-config" [
-  rule: string
+  rule: string@rule-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -920,7 +921,7 @@ export def "get-global-rule-config" [
 # PUT /admin/rules/{rule}
 # operationId: updateGlobalRuleConfig
 export def "update-global-rule-config" [
-  rule: string
+  rule: string@rule-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1230,7 +1231,7 @@ export def "create-artifact" [
     query: ({"ifExists": $if_exists, "canonical": $canonical} | compact)
     headers: $auth.headers
     body: $req_body
-    content_type: "*/*"
+    content_type: "application/json"
     timeout: ($max_time | default 30min)
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
@@ -1293,14 +1294,14 @@ export def "get-latest-artifact" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --dereference: oneof<nothing, bool> # Allows the user to specify if the content should be dereferenced when being returned
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   if ($artifact_id | is-empty) { error make --unspanned { msg: "path parameter 'artifactId' must be non-empty" } }
   let qp = [(serialize-qp "dereference" $dereference "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), artifact_id: (encode-path-segment $artifact_id)} | format pattern "/groups/{group_id}/artifacts/{artifact_id}") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -1357,7 +1358,7 @@ export def "update-artifact" [
     query: {}
     headers: $auth.headers
     body: $req_body
-    content_type: "*/*"
+    content_type: "application/json"
     timeout: ($max_time | default 30min)
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
@@ -1439,7 +1440,7 @@ export def "get-artifact-version-meta-data-by-content" [
     query: ({"canonical": $canonical} | compact)
     headers: $auth.headers
     body: $req_body
-    content_type: "*/*"
+    content_type: "application/json"
     timeout: ($max_time | default 30min)
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
@@ -1698,7 +1699,7 @@ export def "create-artifact-rule" [
 export def "delete-artifact-rule" [
   group_id: string
   artifact_id: string
-  rule: string
+  rule: string@rule-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1738,7 +1739,7 @@ export def "delete-artifact-rule" [
 export def "get-artifact-rule-config" [
   group_id: string
   artifact_id: string
-  rule: string
+  rule: string@rule-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1778,7 +1779,7 @@ export def "get-artifact-rule-config" [
 export def "update-artifact-rule-config" [
   group_id: string
   artifact_id: string
-  rule: string
+  rule: string@rule-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1892,7 +1893,7 @@ export def "test-update-artifact" [
     query: {}
     headers: $auth.headers
     body: $req_body
-    content_type: "*/*"
+    content_type: "application/json"
     timeout: ($max_time | default 30min)
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
@@ -1982,7 +1983,7 @@ export def "create-artifact-version" [
     query: {}
     headers: $auth.headers
     body: $req_body
-    content_type: "*/*"
+    content_type: "application/json"
     timeout: ($max_time | default 30min)
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
@@ -2008,7 +2009,7 @@ export def "get-artifact-version" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --dereference: oneof<nothing, bool> # Allows the user to specify if the content should be dereferenced when being returned
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -2016,7 +2017,7 @@ export def "get-artifact-version" [
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let qp = [(serialize-qp "dereference" $dereference "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), artifact_id: (encode-path-segment $artifact_id), version: (encode-path-segment $version)} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/versions/{version}") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -2258,12 +2259,12 @@ export def "get-content-by-hash" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($content_hash | is-empty) { error make --unspanned { msg: "path parameter 'contentHash' must be non-empty" } }
   let full_url = (build-url $base ({content_hash: (encode-path-segment $content_hash)} | format pattern "/ids/contentHashes/{content_hash}/") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -2330,12 +2331,12 @@ export def "get-content-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($content_id | is-empty) { error make --unspanned { msg: "path parameter 'contentId' must be non-empty" } }
   let full_url = (build-url $base ({content_id: (encode-path-segment $content_id)} | format pattern "/ids/contentIds/{content_id}/") $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -2403,13 +2404,13 @@ export def "get-content-by-global-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --dereference: oneof<nothing, bool> # Allows the user to specify if the content should be dereferenced when being returned
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($global_id | is-empty) { error make --unspanned { msg: "path parameter 'globalId' must be non-empty" } }
   let qp = [(serialize-qp "dereference" $dereference "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({global_id: (encode-path-segment $global_id)} | format pattern "/ids/globalIds/{global_id}") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -2544,7 +2545,7 @@ export def "search-artifacts-by-content" [
     query: ({"canonical": $canonical, "artifactType": $artifact_type, "offset": $offset, "limit": $limit, "order": $order, "orderby": $orderby} | compact)
     headers: $auth.headers
     body: $req_body
-    content_type: "*/*"
+    content_type: "application/json"
     timeout: ($max_time | default 30min)
     auth: {scheme: $auth.scheme, location: $auth.location}
   }

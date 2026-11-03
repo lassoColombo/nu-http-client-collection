@@ -1,6 +1,7 @@
 # Auto-generated client for Pricing Hub v1.0
 # Source: https://api.apis.guru/v2/specs/vtex.local/Pricing-Hub/1.0/openapi.json
-# Auth: --token flag or $env.PRICING_HUB_TOKEN
+# Auth (appKey): --token-appkey flag or $env.PRICING_HUB_APPKEY_TOKEN
+# Auth (appToken): --token-apptoken flag or $env.PRICING_HUB_APPTOKEN_TOKEN
 
 const BASE_URL = "https://vtex.local"
 
@@ -12,8 +13,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-vtex-api-appkey" => { {scheme: $scheme, headers: {X-VTEX-API-AppKey: $token_val}, query: "", location: "header"} }
-    "x-vtex-api-apptoken" => { {scheme: $scheme, headers: {X-VTEX-API-AppToken: $token_val}, query: "", location: "header"} }
+    "x-vtex-api-appkey" => { {scheme: $scheme, headers: {"X-VTEX-API-AppKey": $token_val}, query: "", location: "header"} }
+    "x-vtex-api-apptoken" => { {scheme: $scheme, headers: {"X-VTEX-API-AppToken": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -115,7 +116,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-appkey" "token-apptoken"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-api-pricing-hub-prices" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -150,11 +151,11 @@ export def "post-api-pricing-hub-prices" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --account-name: string # Name of the VTEX account. Used as part of the URL (default: apiexamples)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
-  --content-type: string # Describes the type of the content being sent
-  --x-vtex-api-app-key: string # The AppKey configured by the merchant
-  --x-vtex-api-app-token: string # The AppToken configured by the merchant
+  --account-name: string # Name of the VTEX account. Used as part of the URL (required, default: apiexamples)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
+  --content-type: string # Describes the type of the content being sent (required, default: application/json)
+  --x-vtex-api-app-key: string # The AppKey configured by the merchant (required, default: {{X-VTEX-API-AppKey}})
+  --x-vtex-api-app-token: string # The AppToken configured by the merchant (required, default: {{X-VTEX-API-AppToken}})
   --utm-campaign: string # Campaign name, represented by the `utm_campaign` value in the URL that led to the order. If there is no value, use `null` (default: summer)
   --utm-internal-campaign: string # Internal campaign name, represented by the `utmi_cp` value in the URL that led to the order. If there is no value, use `null` (default: sale)
   --utm-medium: string # Medium that indicates what type of traffic the customer originated from, represented by the `utm_medium` value in the URL that led to the order. If there is no value, use `null` (default: social)
@@ -166,6 +167,11 @@ export def "post-api-pricing-hub-prices" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PRICING_HUB_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PRICING_HUB_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let account_name = ($account_name | default "apiexamples")
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
+  let x_vtex_api_app_key = ($x_vtex_api_app_key | default "{{X-VTEX-API-AppKey}}")
+  let x_vtex_api_app_token = ($x_vtex_api_app_token | default "{{X-VTEX-API-AppToken}}")
   let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/pricing-hub/prices" $qp $auth.query)
   let req_body = {"UtmCampaign": $utm_campaign, "UtmInternalCampaign": $utm_internal_campaign, "UtmMedium": $utm_medium, "UtmSource": $utm_source, "email": $email, "items": $items, "salesChannel": $sales_channel} | compact
@@ -205,16 +211,20 @@ export def "config-external-price-source" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --an: string # Name of the VTEX account (e.g. apiexamples)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
-  --content-type: string # Describes the type of the content being sent
-  --x-vtex-api-app-key: string # The AppKey configured by the merchant
-  --x-vtex-api-app-token: string # The AppToken configured by the merchant
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
+  --content-type: string # Describes the type of the content being sent (required, default: application/json)
+  --x-vtex-api-app-key: string # The AppKey configured by the merchant (required, default: {{X-VTEX-API-AppKey}})
+  --x-vtex-api-app-token: string # The AppToken configured by the merchant (required, default: {{X-VTEX-API-AppToken}})
   --active: oneof<nothing, bool> # Defines if the external price source is active (`true`) or not (`false`). If not set, the default value will be `false`. (default: false)
   app_name: string # Name of the app that communicates with the external pricing source
 ]: any -> any {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PRICING_HUB_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PRICING_HUB_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
+  let x_vtex_api_app_key = ($x_vtex_api_app_key | default "{{X-VTEX-API-AppKey}}")
+  let x_vtex_api_app_token = ($x_vtex_api_app_token | default "{{X-VTEX-API-AppToken}}")
   let qp = [(serialize-qp "an" $an "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/config" $qp $auth.query)
   let req_body = {"active": $active, "appName": $app_name} | compact

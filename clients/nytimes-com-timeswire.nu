@@ -94,6 +94,8 @@ def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: 
 def base-url-completer [] { ["http://api.nytimes.com/svc/news/v3" "https://api.nytimes.com/svc/news/v3"] }
 def auth-scheme-completer [] { ["query-api-key"] }
 
+# Completers for enum parameters
+def source-completer [] { ["all" "iht" "nyt"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -129,10 +131,11 @@ export def "get-content-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --url: string # The complete URL of a specific news item, URL-encoded or backslash-escaped
+  --url: string # The complete URL of a specific news item, URL-encoded or backslash-escaped (required)
 ]: nothing -> record<copyright: string, num_results: int, results: table<abstract: string, blog_name: string, byline: string, created_date: string, des_facet: list, geo_facet: list, headline: string, item_type: string, kicker: string, material_type_facet: string, multimedia: list, org_facet: string, per_facet: list, published_date: string, related_urls: list, section: string, short_url: string, source: string, subsection: string, thumbnail_standard: string, title: string, updated_date: string, url: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
   let qp = [(serialize-qp "url" $url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/content.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -153,7 +156,7 @@ export def "get-content-json" [
 
 # GET /content/{source}/{section}.json
 export def "get-content-source-section-json" [
-  source: string
+  source: string@source-completer
   section: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -191,7 +194,7 @@ export def "get-content-source-section-json" [
 
 # GET /content/{source}/{section}/{time-period}.json
 export def "get-content-source-section-time-period-json" [
-  source: string
+  source: string@source-completer
   section: string
   time_period: int
   --base-url(-b): string@base-url-completer # API base URL

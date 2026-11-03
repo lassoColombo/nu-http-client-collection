@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -102,6 +102,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def accept-completer [] { ["application/json" "application/vnd.collection.doc+json"] }
+def category-completer [] { ["newscast" "podcast" "story"] }
 def channel-completer [] { ["emailprograms" "emailstories" "followed" "lapsedusersemail" "newscasts" "npr" "ongoing email" "recommended" "shows"] }
 
 # List all available API commands with their parameters
@@ -144,11 +145,12 @@ export def "get-agg-recommendations" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --start-num: int # The result to start with. Allows paging through the episodes of a podcast or program, with the default, `startNum=0`, being the most recent episode. Ignored for programs that publish a rundown. (format: int32, default: 0)
-  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
+  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token. (required)
 ]: nothing -> record<attributes: record<affiliation: string, affiliationMeta: record<daysSinceLastListen: int, following: bool, href: string, id: int, notif_following: list, notif_rated: list, rating: float, title: string>, description: string, provider: string, station: string, title: string, type: string>, errors: list<record>, href: string, items: table<attributes: record, errors: list, href: string, items: list, links: record, version: string>, links: record<binge: list<record>, image: list<record>, more: list<record>, web: list<record>>, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($agg_id | is-empty) { error make --unspanned { msg: "path parameter 'aggId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "startNum" $start_num "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({agg_id: (encode-path-segment $agg_id)} | format pattern "/v2/aggregation/{agg_id}/recommendations") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -185,10 +187,11 @@ export def "get-channels" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --explore-only: oneof<nothing, bool> # If set to `true`, this call will return only channels that should be shown in the client's `Explore` view (default: false)
-  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
+  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token. (required)
 ]: nothing -> record<attributes: record<defaultChannel: string>, errors: list<record>, href: string, items: table<attributes: record, errors: list, href: string, items: list, links: record, version: string>, links: record, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "exploreOnly" $explore_only "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/channels" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -224,10 +227,11 @@ export def "get-history" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
-]: nothing -> any {
+  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token. (required)
+]: nothing -> record<attributes: record, errors: list<record>, href: string, items: table<attributes: record, errors: list, href: string, items: list, links: record, version: string>, links: record, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/v2/history" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -253,7 +257,7 @@ export def "get-history" [
 # operationId: getOrganizationCategory
 export def "get-organization-category" [
   org_id: int
-  category: string
+  category: string@category-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -264,12 +268,13 @@ export def "get-organization-category" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
+  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token. (required)
 ]: nothing -> record<attributes: record<displayType: string, title: string, type: string>, errors: list<record>, href: string, items: table<attributes: record, errors: list, href: string, items: list, links: record, version: string>, links: record<more: list<record>>, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($org_id | is-empty) { error make --unspanned { msg: "path parameter 'orgId' must be non-empty" } }
   if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({org_id: (encode-path-segment $org_id), category: (encode-path-segment $category)} | format pattern "/v2/organizations/{org_id}/categories/{category}/recommendations") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -305,11 +310,12 @@ export def "get-organization-overview" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
+  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token. (required)
 ]: nothing -> record<attributes: record<brand: record<band: string, call: string, frequency: string, marketCity: string, marketState: string, name: string, tagline: string>, home: bool, type: string>, errors: list<record>, href: string, items: table<attributes: record, errors: list, href: string, items: list, links: record, version: string>, links: record<image: list<record>, related: list<record>, web: list<record>>, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($org_id | is-empty) { error make --unspanned { msg: "path parameter 'orgId' must be non-empty" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({org_id: (encode-path-segment $org_id)} | format pattern "/v2/organizations/{org_id}/recommendations") $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -344,10 +350,11 @@ export def "get-promo" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
-]: nothing -> any {
+  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token. (required)
+]: nothing -> record<attributes: record, errors: list<record>, href: string, items: table<attributes: record, errors: list, href: string, items: list, links: record, version: string>, links: record, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/v2/promo/recommendations" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -384,13 +391,14 @@ export def "post-rating" [
   --accept: string@accept-completer # Response content type
   --channel: string@channel-completer # Determines the focus of the recommendations returned. Channel `npr` is recommended for most use cases. (default: npr)
   --recommend: oneof<nothing, bool> # If set to `false`, this call will return a blank document; otherwise it will return a new recommendation object (default: true)
-  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
+  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token. (required)
   --x-advertising-id: string # A device-specific advertising identifier, if possible. Apple's IDFA is an example.
   --body: list
 ]: any -> record<attributes: record, errors: list<record>, href: string, items: table<attributes: record, errors: list, href: string, items: list, links: record, version: string>, links: record, version: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "channel" $channel "scalar") (serialize-qp "recommend" $recommend "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/ratings" $qp $auth.query)
   let req_body = $body
@@ -431,11 +439,12 @@ export def "get-recommendations" [
   --channel: string@channel-completer # Determines the focus of the recommendations returned. Channel `npr` is recommended for most use cases. (default: npr)
   --shared-media-id: string # This media was shared directly with the user; if provided, the service will add this recommendation to the top of the list
   --notified-media-id: string # The user received a push notification about this media; if provided, the service will add this recommendation to the top of the list
-  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
+  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token. (required)
   --x-advertising-id: string # A device-specific advertising identifier, if possible. Apple's IDFA is an example.
-]: nothing -> any {
+]: nothing -> record<attributes: record, errors: list<record>, href: string, items: table<attributes: record, errors: list, href: string, items: list, links: record, version: string>, links: record, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "channel" $channel "scalar") (serialize-qp "sharedMediaId" $shared_media_id "scalar") (serialize-qp "notifiedMediaId" $notified_media_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/recommendations" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -471,11 +480,13 @@ export def "get-search-recommendations" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --search-terms: string # Search terms to search on; can include URL-encoded punctuation
-  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
+  --search-terms: string # Search terms to search on; can include URL-encoded punctuation (required)
+  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token. (required)
 ]: nothing -> record<attributes: record<query: string>, errors: list<record>, href: string, items: table<ifTypeAggregation: record, ifTypeAudio: record, type: string>, links: record, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($search_terms == null) { error make --unspanned { msg: "required query parameter 'searchTerms' missing: pass --search-terms" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "searchTerms" $search_terms "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/search/recommendations" $qp $auth.query)
   let accept_val = ($accept | default "application/json")

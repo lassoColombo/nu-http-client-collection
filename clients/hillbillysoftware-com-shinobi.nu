@@ -1,4 +1,4 @@
-# Auto-generated client for shinobiapi vv1
+# Auto-generated client for shinobiapi v1
 # Source: https://api.apis.guru/v2/specs/hillbillysoftware.com/shinobi/v1/swagger.json
 # Auth: --token flag or $env.SHINOBIAPI_TOKEN
 
@@ -2187,12 +2187,13 @@ export def "tv-show-id-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --id: string # imdbID of show you want info on
+  --id: string # imdbID of show you want info on (required)
 ]: nothing -> record<EpisodeCount: string, EpisodeRuntime: string, Externals: table<ID: string, Name: string>, ID: string, ReleaseYear: string, Seasons: string, ShowImage: string, ShowStatus: string, Synopsis: string, Title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($accesstoken | is-empty) { error make --unspanned { msg: "path parameter 'accesstoken' must be non-empty" } }
   if ($imdb_id | is-empty) { error make --unspanned { msg: "path parameter 'imdbID' must be non-empty" } }
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({accesstoken: (encode-path-segment $accesstoken), imdb_id: (encode-path-segment $imdb_id)} | format pattern "/TV/ByID/{accesstoken}/{imdb_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")

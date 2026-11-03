@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -166,7 +166,7 @@ export def "create-cli-token" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CliToken: record, WebServerHostname: record> {
+]: nothing -> record<CliToken: string, WebServerHostname: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'Name' must be non-empty" } }
@@ -193,8 +193,8 @@ export def "create-cli-token" [
 #
 # PUT /environments/{Name}
 # operationId: CreateEnvironment
-# --LoggingConfiguration shape: {DagProcessingLogs?: any, SchedulerLogs?: any, TaskLogs?: any, WebserverLogs?: any, WorkerLogs?: any}
-# --NetworkConfiguration shape: {SecurityGroupIds?: any, SubnetIds?: any}
+# --LoggingConfiguration shape: {DagProcessingLogs?: record, SchedulerLogs?: record, TaskLogs?: record, WebserverLogs?: record, WorkerLogs?: record}
+# --NetworkConfiguration shape: {SecurityGroupIds?: list<string>, SubnetIds?: list<string>}
 export def "create-environment" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -219,10 +219,10 @@ export def "create-environment" [
   --environment-class: string # The environment class type. Valid values: mw1.small, mw1.medium, mw1.large. For more information, see Amazon MWAA environment class (https://docs.aws.amazon.com/mwaa/latest/userguide/environment-class.html).
   execution_role_arn: string # The Amazon Resource Name (ARN) of the execution role for your environment. An execution role is an Amazon Web Services Identity and Access Management (IAM) role that grants MWAA permission to access Amazon Web Services services and resources used by your environment. For example, arn:aws:iam::123456789:role/my-execution-role. For more information, see Amazon MWAA Execution role (https://docs.aws.amazon.com/mwaa/latest/userguide/mwaa-create-role.html).
   --kms-key: string # The Amazon Web Services Key Management Service (KMS) key to encrypt the data in your environment. You can use an Amazon Web Services owned CMK, or a Customer managed CMK (advanced). For more information, see Create an Amazon MWAA environment (https://docs.aws.amazon.com/mwaa/latest/userguide/create-environment.html).
-  --logging-configuration: record # Defines the Apache Airflow log types to send to CloudWatch Logs. — shape: {DagProcessingLogs?: any, SchedulerLogs?: any, TaskLogs?: any, WebserverLogs?: any, WorkerLogs?: any}
+  --logging-configuration: record # Defines the Apache Airflow log types to send to CloudWatch Logs. — shape: {DagProcessingLogs?: record, SchedulerLogs?: record, TaskLogs?: record, WebserverLogs?: record, WorkerLogs?: record}
   --max-workers: int # The maximum number of workers that you want to run in your environment. MWAA scales the number of Apache Airflow workers up to the number you specify in the MaxWorkers field. For example, 20. When there are no more tasks running, and no more in the queue, MWAA disposes of the extra workers leaving the one worker that is included with your environment, or the number you specify in MinWorkers.
   --min-workers: int # The minimum number of workers that you want to run in your environment. MWAA scales the number of Apache Airflow workers up to the number you specify in the MaxWorkers field. When there are no more tasks running, and no more in the queue, MWAA disposes of the extra workers leaving the worker count you specify in the MinWorkers field. For example, 2.
-  network_configuration: record # Describes the VPC networking components used to secure and enable network traffic between the Amazon Web Services resources for your environment. For more information, see About networking on Amazon MWAA (https://docs.aws.amazon.com/mwaa/latest/userguide/networking-about.html). — shape: {SecurityGroupIds?: any, SubnetIds?: any}
+  network_configuration: record # Describes the VPC networking components used to secure and enable network traffic between the Amazon Web Services resources for your environment. For more information, see About networking on Amazon MWAA (https://docs.aws.amazon.com/mwaa/latest/userguide/networking-about.html). — shape: {SecurityGroupIds?: list<string>, SubnetIds?: list<string>}
   --plugins-s3-object-version: string # The version of the plugins.zip file on your Amazon S3 bucket. You must specify a version each time a plugins.zip file is updated. For more information, see How S3 Versioning works (https://docs.aws.amazon.com/AmazonS3/latest/userguide/versioning-workflows.html).
   --plugins-s3-path: string # The relative path to the plugins.zip file on your Amazon S3 bucket. For example, plugins.zip. If specified, then the plugins.zip version is required. For more information, see Installing custom plugins (https://docs.aws.amazon.com/mwaa/latest/userguide/configuring-dag-import-plugins.html).
   --requirements-s3-object-version: string # The version of the requirements.txt file on your Amazon S3 bucket. You must specify a version each time a requirements.txt file is updated. For more information, see How S3 Versioning works (https://docs.aws.amazon.com/AmazonS3/latest/userguide/versioning-workflows.html).
@@ -234,7 +234,7 @@ export def "create-environment" [
   --tags: record # The key-value tag pairs you want to associate to your environment. For example, "Environment": "Staging". For more information, see Tagging Amazon Web Services resources (https://docs.aws.amazon.com/general/latest/gr/aws_tagging.html).
   --webserver-access-mode: string@webserver-access-mode-completer # The Apache Airflow Web server access mode. For more information, see Apache Airflow access modes (https://docs.aws.amazon.com/mwaa/latest/userguide/configuring-networking.html).
   --weekly-maintenance-window-start: string # The day and time of the week in Coordinated Universal Time (UTC) 24-hour standard time to start weekly maintenance updates of your environment in the following format: DAY:HH:MM. For example: TUE:03:30. You can specify a start time in 30 minute increments only.
-]: any -> record<Arn: record> {
+]: any -> record<Arn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -327,7 +327,7 @@ export def "get-environment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Environment: record<AirflowConfigurationOptions: record, AirflowVersion: record, Arn: record, CreatedAt: record, DagS3Path: record, EnvironmentClass: record, ExecutionRoleArn: record, KmsKey: record, LastUpdate: record<CreatedAt: record, Error: record, Source: record, Status: record>, LoggingConfiguration: record<DagProcessingLogs: record, SchedulerLogs: record, TaskLogs: record, WebserverLogs: record, WorkerLogs: record>, MaxWorkers: record, MinWorkers: record, Name: record, NetworkConfiguration: record<SecurityGroupIds: record, SubnetIds: record>, PluginsS3ObjectVersion: record, PluginsS3Path: record, RequirementsS3ObjectVersion: record, RequirementsS3Path: record, Schedulers: record, ServiceRoleArn: record, SourceBucketArn: record, StartupScriptS3ObjectVersion: record, StartupScriptS3Path: record, Status: record, Tags: record, WebserverAccessMode: record, WebserverUrl: record, WeeklyMaintenanceWindowStart: record>> {
+]: nothing -> record<Environment: record<AirflowConfigurationOptions: record, AirflowVersion: string, Arn: string, CreatedAt: string, DagS3Path: string, EnvironmentClass: string, ExecutionRoleArn: string, KmsKey: string, LastUpdate: record<CreatedAt: string, Error: record, Source: string, Status: string>, LoggingConfiguration: record<DagProcessingLogs: record, SchedulerLogs: record, TaskLogs: record, WebserverLogs: record, WorkerLogs: record>, MaxWorkers: int, MinWorkers: int, Name: string, NetworkConfiguration: record<SecurityGroupIds: list, SubnetIds: list>, PluginsS3ObjectVersion: string, PluginsS3Path: string, RequirementsS3ObjectVersion: string, RequirementsS3Path: string, Schedulers: int, ServiceRoleArn: string, SourceBucketArn: string, StartupScriptS3ObjectVersion: string, StartupScriptS3Path: string, Status: string, Tags: record, WebserverAccessMode: string, WebserverUrl: string, WeeklyMaintenanceWindowStart: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'Name' must be non-empty" } }
@@ -354,8 +354,8 @@ export def "get-environment" [
 #
 # PATCH /environments/{Name}
 # operationId: UpdateEnvironment
-# --LoggingConfiguration shape: {DagProcessingLogs?: any, SchedulerLogs?: any, TaskLogs?: any, WebserverLogs?: any, WorkerLogs?: any}
-# --NetworkConfiguration shape: {SecurityGroupIds?: any}
+# --LoggingConfiguration shape: {DagProcessingLogs?: record, SchedulerLogs?: record, TaskLogs?: record, WebserverLogs?: record, WorkerLogs?: record}
+# --NetworkConfiguration shape: {SecurityGroupIds?: list<string>}
 export def "update-environment" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -379,10 +379,10 @@ export def "update-environment" [
   --dag-s3-path: string # The relative path to the DAGs folder on your Amazon S3 bucket. For example, dags. For more information, see Adding or updating DAGs (https://docs.aws.amazon.com/mwaa/latest/userguide/configuring-dag-folder.html).
   --environment-class: string # The environment class type. Valid values: mw1.small, mw1.medium, mw1.large. For more information, see Amazon MWAA environment class (https://docs.aws.amazon.com/mwaa/latest/userguide/environment-class.html).
   --execution-role-arn: string # The Amazon Resource Name (ARN) of the execution role in IAM that allows MWAA to access Amazon Web Services resources in your environment. For example, arn:aws:iam::123456789:role/my-execution-role. For more information, see Amazon MWAA Execution role (https://docs.aws.amazon.com/mwaa/latest/userguide/mwaa-create-role.html).
-  --logging-configuration: record # Defines the Apache Airflow log types to send to CloudWatch Logs. — shape: {DagProcessingLogs?: any, SchedulerLogs?: any, TaskLogs?: any, WebserverLogs?: any, WorkerLogs?: any}
+  --logging-configuration: record # Defines the Apache Airflow log types to send to CloudWatch Logs. — shape: {DagProcessingLogs?: record, SchedulerLogs?: record, TaskLogs?: record, WebserverLogs?: record, WorkerLogs?: record}
   --max-workers: int # The maximum number of workers that you want to run in your environment. MWAA scales the number of Apache Airflow workers up to the number you specify in the MaxWorkers field. For example, 20. When there are no more tasks running, and no more in the queue, MWAA disposes of the extra workers leaving the one worker that is included with your environment, or the number you specify in MinWorkers.
   --min-workers: int # The minimum number of workers that you want to run in your environment. MWAA scales the number of Apache Airflow workers up to the number you specify in the MaxWorkers field. When there are no more tasks running, and no more in the queue, MWAA disposes of the extra workers leaving the worker count you specify in the MinWorkers field. For example, 2.
-  --network-configuration: record # Defines the VPC networking components used to secure and enable network traffic between the Amazon Web Services resources for your environment. For more information, see About networking on Amazon MWAA (https://docs.aws.amazon.com/mwaa/latest/userguide/networking-about.html). — shape: {SecurityGroupIds?: any}
+  --network-configuration: record # Defines the VPC networking components used to secure and enable network traffic between the Amazon Web Services resources for your environment. For more information, see About networking on Amazon MWAA (https://docs.aws.amazon.com/mwaa/latest/userguide/networking-about.html). — shape: {SecurityGroupIds?: list<string>}
   --plugins-s3-object-version: string # The version of the plugins.zip file on your Amazon S3 bucket. You must specify a version each time a plugins.zip file is updated. For more information, see How S3 Versioning works (https://docs.aws.amazon.com/AmazonS3/latest/userguide/versioning-workflows.html).
   --plugins-s3-path: string # The relative path to the plugins.zip file on your Amazon S3 bucket. For example, plugins.zip. If specified, then the plugins.zip version is required. For more information, see Installing custom plugins (https://docs.aws.amazon.com/mwaa/latest/userguide/configuring-dag-import-plugins.html).
   --requirements-s3-object-version: string # The version of the requirements.txt file on your Amazon S3 bucket. You must specify a version each time a requirements.txt file is updated. For more information, see How S3 Versioning works (https://docs.aws.amazon.com/AmazonS3/latest/userguide/versioning-workflows.html).
@@ -393,7 +393,7 @@ export def "update-environment" [
   --startup-script-s3-path: string # The relative path to the startup shell script in your Amazon S3 bucket. For example, s3://mwaa-environment/startup.sh. Amazon MWAA runs the script as your environment starts, and before running the Apache Airflow process. You can use this script to install dependencies, modify Apache Airflow configuration options, and set environment variables. For more information, see Using a startup script (https://docs.aws.amazon.com/mwaa/latest/userguide/using-startup-script.html).
   --webserver-access-mode: string@webserver-access-mode-completer # The Apache Airflow Web server access mode. For more information, see Apache Airflow access modes (https://docs.aws.amazon.com/mwaa/latest/userguide/configuring-networking.html).
   --weekly-maintenance-window-start: string # The day and time of the week in Coordinated Universal Time (UTC) 24-hour standard time to start weekly maintenance updates of your environment in the following format: DAY:HH:MM. For example: TUE:03:30. You can specify a start time in 30 minute increments only.
-]: any -> record<Arn: record> {
+]: any -> record<Arn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -441,7 +441,7 @@ export def "create-web-login-token" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<WebServerHostname: record, WebToken: record> {
+]: nothing -> record<WebServerHostname: string, WebToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'Name' must be non-empty" } }
@@ -487,7 +487,7 @@ export def "list-environments" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Environments: record, NextToken: record> {
+]: nothing -> record<Environments: list<string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
@@ -608,7 +608,7 @@ export def "tag-resource" [
 #
 # POST /metrics/environments/{EnvironmentName}
 # operationId: PublishMetrics
-# --MetricData item shape: {Dimensions?: any, MetricName: any, StatisticValues?: any, Timestamp: any, Unit?: any, Value?: any}
+# --MetricData item shape: {Dimensions?: list, MetricName: string, StatisticValues?: record, Timestamp: string, Unit?: "Seconds"|"Microseconds"|"Milliseconds"|"Bytes"|"Kilobytes"|"Megabytes"|"Gigabytes"|"Terabytes"|"Bits"|"Kilobits"|"Megabits"|"Gigabits"|"Terabits"|"Percent"|"Count"|"Bytes/Second"|"Kilobytes/Second"|"Megabytes/Second"|"Gigabytes/Second"|"Terabytes/Second"|"Bits/Second"|"Kilobits/Second"|"Megabits/Second"|"Gigabits/Second"|"Terabits/Second"|"Count/Second"|"None", Value?: float}
 export def "publish-metrics" [
   environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -627,7 +627,7 @@ export def "publish-metrics" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  metric_data: list # Internal only. Publishes metrics to Amazon CloudWatch. To learn more about the metrics published to Amazon CloudWatch, see Amazon MWAA performance metrics in Amazon CloudWatch (https://docs.aws.amazon.com/mwaa/latest/userguide/cw-metrics.html). — item shape: {Dimensions?: any, MetricName: any, StatisticValues?: any, Timestamp: any, Unit?: any, Value?: any}
+  metric_data: list # Internal only. Publishes metrics to Amazon CloudWatch. To learn more about the metrics published to Amazon CloudWatch, see Amazon MWAA performance metrics in Amazon CloudWatch (https://docs.aws.amazon.com/mwaa/latest/userguide/cw-metrics.html). — item shape: {Dimensions?: list, MetricName: string, StatisticValues?: record, Timestamp: string, Unit?: "Seconds"|"Microseconds"|"Milliseconds"|"Bytes"|"Kilobytes"|"Megabytes"|"Gigabytes"|"Terabytes"|"Bits"|"Kilobits"|"Megabits"|"Gigabits"|"Terabits"|"Percent"|"Count"|"Bytes/Second"|"Kilobytes/Second"|"Megabytes/Second"|"Gigabytes/Second"|"Terabytes/Second"|"Bits/Second"|"Kilobits/Second"|"Megabits/Second"|"Gigabits/Second"|"Terabits/Second"|"Count/Second"|"None", Value?: float}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -669,7 +669,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # The key-value tag pair you want to remove. For example, "Environment": "Staging".
+  --tag-keys: list # The key-value tag pair you want to remove. For example, "Environment": "Staging". (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -681,6 +681,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'ResourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"

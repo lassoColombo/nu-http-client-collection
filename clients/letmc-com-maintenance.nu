@@ -1,4 +1,4 @@
-# Auto-generated client for agentOS API V3, Maintenance Call Group vv3-maintenance
+# Auto-generated client for agentOS API V3, Maintenance Call Group v3-maintenance
 # Source: https://api.apis.guru/v2/specs/letmc.com/maintenance/v3-maintenance/openapi.json
 # Auth: --token flag or $env.AGENTOS_API_V3_MAINTENANCE_CALL_GROUP_TOKEN
 
@@ -12,8 +12,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "apikey" => { {scheme: $scheme, headers: {ApiKey: $token_val}, query: "", location: "header"} }
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "apikey" => { {scheme: $scheme, headers: {"ApiKey": $token_val}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }

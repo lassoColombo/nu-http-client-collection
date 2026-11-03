@@ -1,4 +1,4 @@
-# Auto-generated client for Firebase Dynamic Links API vv1
+# Auto-generated client for Firebase Dynamic Links API v1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/firebasedynamiclinks/v1/openapi.json
 # Auth: --token flag or $env.FIREBASE_DYNAMIC_LINKS_API_TOKEN
 
@@ -12,20 +12,10 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
-}
-
-# Merge multiple auth records (AND-form security: every scheme must be sent).
-def merge-auth [parts: list]: nothing -> record {
-  let active = ($parts | where {|p| $p.location != "none" })
-  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
-  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
-  let locs = ($active | each {|p| $p.location } | uniq)
-  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
-  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
 # Serialize a single query parameter based on collection style
@@ -146,8 +136,8 @@ export def commands []: nothing -> table {
 # --device shape: {deviceModelName?: string, languageCode?: string, languageCodeFromWebview?: string, languageCodeRaw?: string, screenResolutionHeight?: string, screenResolutionWidth?: string, timezone?: string}
 export def "firebasedynamiclinks-install-attribution" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -175,7 +165,7 @@ export def "firebasedynamiclinks-install-attribution" [
   --visual-style: string@visual-style-completer # Strong match page information. Disambiguates between default UI and custom page to present when strong match succeeds/fails to find cookie.
 ]: any -> record<appMinimumVersion: string, attributionConfidence: string, deepLink: string, externalBrowserDestinationLink: string, fallbackLink: string, invitationId: string, isStrongMatchExecutable: bool, matchMessage: string, requestIpVersion: string, requestedLink: string, resolvedLink: string, utmCampaign: string, utmContent: string, utmMedium: string, utmSource: string, utmTerm: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o FIREBASE_DYNAMIC_LINKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o FIREBASE_DYNAMIC_LINKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/installAttribution" $qp $auth.query)
@@ -205,8 +195,8 @@ export def "firebasedynamiclinks-install-attribution" [
 # --suffix shape: {customSuffix?: string, option?: "OPTION_UNSPECIFIED"|"UNGUESSABLE"|"SHORT"|"CUSTOM"}
 export def "firebasedynamiclinks-managed-short-links-create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -231,7 +221,7 @@ export def "firebasedynamiclinks-managed-short-links-create" [
   --suffix: record # Short Dynamic Link suffix. — shape: {customSuffix?: string, option?: "OPTION_UNSPECIFIED"|"UNGUESSABLE"|"SHORT"|"CUSTOM"}
 ]: any -> record<managedShortLink: record<creationTime: string, flaggedAttribute: list<string>, info: record<analyticsInfo: record, androidInfo: record, desktopInfo: record, domainUriPrefix: string, dynamicLinkDomain: string, iosInfo: record, link: string, navigationInfo: record, socialMetaTagInfo: record>, link: string, linkName: string, visibility: string>, previewLink: string, warning: table<warningCode: string, warningDocumentLink: string, warningMessage: string>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o FIREBASE_DYNAMIC_LINKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o FIREBASE_DYNAMIC_LINKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/managedShortLinks:create" $qp $auth.query)
@@ -259,8 +249,8 @@ export def "firebasedynamiclinks-managed-short-links-create" [
 # operationId: firebasedynamiclinks.reopenAttribution
 export def "firebasedynamiclinks-reopen-attribution" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -283,7 +273,7 @@ export def "firebasedynamiclinks-reopen-attribution" [
   --sdk-version: string # Google SDK version. Version takes the form "$major.$minor.$patch"
 ]: any -> record<deepLink: string, invitationId: string, iosMinAppVersion: string, resolvedLink: string, utmCampaign: string, utmContent: string, utmMedium: string, utmSource: string, utmTerm: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o FIREBASE_DYNAMIC_LINKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o FIREBASE_DYNAMIC_LINKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/reopenAttribution" $qp $auth.query)
@@ -313,8 +303,8 @@ export def "firebasedynamiclinks-reopen-attribution" [
 # --suffix shape: {customSuffix?: string, option?: "OPTION_UNSPECIFIED"|"UNGUESSABLE"|"SHORT"|"CUSTOM"}
 export def "firebasedynamiclinks-short-links-create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -338,7 +328,7 @@ export def "firebasedynamiclinks-short-links-create" [
   --suffix: record # Short Dynamic Link suffix. — shape: {customSuffix?: string, option?: "OPTION_UNSPECIFIED"|"UNGUESSABLE"|"SHORT"|"CUSTOM"}
 ]: any -> record<previewLink: string, shortLink: string, warning: table<warningCode: string, warningDocumentLink: string, warningMessage: string>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o FIREBASE_DYNAMIC_LINKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o FIREBASE_DYNAMIC_LINKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/shortLinks" $qp $auth.query)
@@ -367,8 +357,8 @@ export def "firebasedynamiclinks-short-links-create" [
 export def "firebasedynamiclinks-get-link-stats" [
   dynamic_link: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -389,7 +379,7 @@ export def "firebasedynamiclinks-get-link-stats" [
   --duration-days: string # The span of time requested in days.
   --sdk-version: string # Google SDK version. Version takes the form "$major.$minor.$patch"
 ]: nothing -> record<linkEventStats: table<count: string, event: string, platform: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o FIREBASE_DYNAMIC_LINKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o FIREBASE_DYNAMIC_LINKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dynamic_link | is-empty) { error make --unspanned { msg: "path parameter 'dynamicLink' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "durationDays" $duration_days "scalar") (serialize-qp "sdkVersion" $sdk_version "scalar")] | flatten | str join "&"

@@ -1,4 +1,4 @@
-# Auto-generated client for ConfigCat Public Management API vv1
+# Auto-generated client for ConfigCat Public Management API v1
 # Source: https://api.apis.guru/v2/specs/configcat.com/v1/openapi.json
 # Auth: --token flag or $env.CONFIGCAT_PUBLIC_MANAGEMENT_API_TOKEN
 
@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -122,6 +122,7 @@ def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 # Completers for enum parameters
 def accept-completer [] { ["application/hal+json" "application/json"] }
 def setting-type-completer [] { ["boolean" "double" "int" "string"] }
+def integration-link-type-completer [] { ["jira" "monday" "trello"] }
 def access-type-completer [] { ["custom" "full" "readOnly"] }
 def new-environment-access-type-completer [] { ["full" "none" "readOnly"] }
 def comparator-completer [] { ["contains" "doesNotContain" "isNotOneOf" "isOneOf" "numberDoesNotEqual" "numberEquals" "numberGreater" "numberGreaterOrEquals" "numberLess" "numberLessOrEquals" "semVerGreater" "semVerGreaterOrEquals" "semVerIsNotOneOf" "semVerIsOneOf" "semVerLess" "semVerLessOrEquals" "sensitiveIsNotOneOf" "sensitiveIsOneOf"] }
@@ -668,7 +669,7 @@ export def "update-environment" [
 export def "delete-integration-link" [
   environment_id: string
   setting_id: int
-  integration_link_type: string
+  integration_link_type: string@integration-link-type-completer
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -711,7 +712,7 @@ export def "delete-integration-link" [
 export def "add-or-update-integration-link" [
   environment_id: string
   setting_id: int
-  integration_link_type: string
+  integration_link_type: string@integration-link-type-completer
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -891,7 +892,7 @@ export def "replace-setting-value" [
 # GET /v1/integrationLink/{integrationLinkType}/{key}/details
 # operationId: get-integration-link-details
 export def "get-integration-link-details" [
-  integration_link_type: string
+  integration_link_type: string@integration-link-type-completer
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

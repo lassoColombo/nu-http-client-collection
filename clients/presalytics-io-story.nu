@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -220,7 +220,7 @@ export def "story-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --include-outline: oneof<nothing, bool> # Determines whether a repsonse including story objects should include the story outline. Defaults to true. Useful for speeding up processing times.
   --outline: string
-]: any -> any {
+]: any -> record<created_at: string, created_by: string, id: string, updated_at: string, updated_by: string, collaborators: table<created_at: string, created_by: string, id: string, updated_at: string, updated_by: string, active: bool, email: string, lead_id: int, name: string, permission_type: record, permission_type_id: string, story_id: string, user_id: string>, is_public: bool, ooxml_documents: table<created_at: string, created_by: string, id: string, updated_at: string, updated_by: string, delete_target_on_story_delete: bool, ooxml_automation_id: string, story_id: string>, outline: string, outline_history: table<created_at: string, created_by: string, id: string, updated_at: string, updated_by: string, collaborator_user_id: string, outline: string, revision_number: int, story_id: string>, revision: int, title: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -410,7 +410,7 @@ export def "story-post-file" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --include-outline: oneof<nothing, bool> # Determines whether a repsonse including story objects should include the story outline. Defaults to true. Useful for speeding up processing times.
   --file: list<string>
-]: any -> any {
+]: any -> record<created_at: string, created_by: string, id: string, updated_at: string, updated_by: string, collaborators: table<created_at: string, created_by: string, id: string, updated_at: string, updated_by: string, active: bool, email: string, lead_id: int, name: string, permission_type: record, permission_type_id: string, story_id: string, user_id: string>, is_public: bool, ooxml_documents: table<created_at: string, created_by: string, id: string, updated_at: string, updated_by: string, delete_target_on_story_delete: bool, ooxml_automation_id: string, story_id: string>, outline: string, outline_history: table<created_at: string, created_by: string, id: string, updated_at: string, updated_by: string, collaborator_user_id: string, outline: string, revision_number: int, story_id: string>, revision: int, title: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -420,8 +420,8 @@ export def "story-post-file" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -455,7 +455,7 @@ export def "story-post-file-json" [
   --file: string
   --file-name: string
   --mimetype: string
-]: any -> any {
+]: any -> record<created_at: string, created_by: string, id: string, updated_at: string, updated_by: string, collaborators: table<created_at: string, created_by: string, id: string, updated_at: string, updated_by: string, active: bool, email: string, lead_id: int, name: string, permission_type: record, permission_type_id: string, story_id: string, user_id: string>, is_public: bool, ooxml_documents: table<created_at: string, created_by: string, id: string, updated_at: string, updated_by: string, delete_target_on_story_delete: bool, ooxml_automation_id: string, story_id: string>, outline: string, outline_history: table<created_at: string, created_by: string, id: string, updated_at: string, updated_by: string, collaborator_user_id: string, outline: string, revision_number: int, story_id: string>, revision: int, title: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -864,7 +864,7 @@ export def "story-id-get" [
   --include-outline: oneof<nothing, bool> # Determines whether a repsonse including story objects should include the story outline. Defaults to true. Useful for speeding up processing times.
   --qp-full: oneof<nothing, bool> # Pull a story object with associated collaborator user, permission, and session data(faster if cached from prior api call)
   --refresh-cache: oneof<nothing, bool> # Force the api reload the `Story full` object
-]: nothing -> any {
+]: nothing -> record<created_at: string, created_by: string, id: string, updated_at: string, updated_by: string, collaborators: table<created_at: string, created_by: string, id: string, updated_at: string, updated_by: string, active: bool, email: string, lead_id: int, name: string, permission_type: record, permission_type_id: string, story_id: string, user_id: string>, is_public: bool, ooxml_documents: table<created_at: string, created_by: string, id: string, updated_at: string, updated_by: string, delete_target_on_story_delete: bool, ooxml_automation_id: string, story_id: string>, outline: string, outline_history: table<created_at: string, created_by: string, id: string, updated_at: string, updated_by: string, collaborator_user_id: string, outline: string, revision_number: int, story_id: string>, revision: int, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -890,7 +890,7 @@ export def "story-id-get" [
 #
 # PUT /{id}
 # operationId: story_id_put
-# --collaborators item shape: {created_at?: string, created_by?: string, id?: string, updated_at?: string, updated_by?: string, active?: bool, email?: string, lead_id?: int, name?: string, permission_type?: any, permission_type_id?: string, story_id?: string, user_id?: string}
+# --collaborators item shape: {created_at?: string, created_by?: string, id?: string, updated_at?: string, updated_by?: string, active?: bool, email?: string, lead_id?: int, name?: string, permission_type?: record, permission_type_id?: string, story_id?: string, user_id?: string}
 # --ooxml_documents item shape: {created_at?: string, created_by?: string, id?: string, updated_at?: string, updated_by?: string, delete_target_on_story_delete?: bool, ooxml_automation_id?: string, story_id?: string}
 # --outline_history item shape: {created_at?: string, created_by?: string, id?: string, updated_at?: string, updated_by?: string, collaborator_user_id?: string, outline?: string, revision_number?: int, story_id?: string}
 export def "story-id-put" [
@@ -910,14 +910,14 @@ export def "story-id-put" [
   --body-id: string # format: uuid
   --updated-at: string # format: date-time
   --updated-by: string # format: uuid
-  --collaborators: list # item shape: {created_at?: string, created_by?: string, id?: string, updated_at?: string, updated_by?: string, active?: bool, email?: string, lead_id?: int, name?: string, permission_type?: any, permission_type_id?: string, story_id?: string, user_id?: string}
+  --collaborators: list # item shape: {created_at?: string, created_by?: string, id?: string, updated_at?: string, updated_by?: string, active?: bool, email?: string, lead_id?: int, name?: string, permission_type?: record, permission_type_id?: string, story_id?: string, user_id?: string}
   --is-public: oneof<nothing, bool>
   --ooxml-documents: list # item shape: {created_at?: string, created_by?: string, id?: string, updated_at?: string, updated_by?: string, delete_target_on_story_delete?: bool, ooxml_automation_id?: string, story_id?: string}
   --outline: string # nullable
   --outline-history: list # item shape: {created_at?: string, created_by?: string, id?: string, updated_at?: string, updated_by?: string, collaborator_user_id?: string, outline?: string, revision_number?: int, story_id?: string}
   --revision: int # format: Int32
   --title: string
-]: any -> any {
+]: any -> record<created_at: string, created_by: string, id: string, updated_at: string, updated_by: string, collaborators: table<created_at: string, created_by: string, id: string, updated_at: string, updated_by: string, active: bool, email: string, lead_id: int, name: string, permission_type: record, permission_type_id: string, story_id: string, user_id: string>, is_public: bool, ooxml_documents: table<created_at: string, created_by: string, id: string, updated_at: string, updated_by: string, delete_target_on_story_delete: bool, ooxml_automation_id: string, story_id: string>, outline: string, outline_history: table<created_at: string, created_by: string, id: string, updated_at: string, updated_by: string, collaborator_user_id: string, outline: string, revision_number: int, story_id: string>, revision: int, title: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1218,6 +1218,7 @@ export def "story-id-collaborators-userid-get" [
 #
 # PUT /{id}/collaborators/{story_collaborator_userid}
 # operationId: story_id_collaborators_userid_put
+# --permission_type shape: {created_at?: string, created_by?: string, id?: string, updated_at?: string, updated_by?: string, can_add_collaborators?: bool, can_delete?: bool, can_edit?: bool, can_view?: bool, name?: string}
 export def "story-id-collaborators-userid-put" [
   id: string
   story_collaborator_userid: string
@@ -1239,7 +1240,7 @@ export def "story-id-collaborators-userid-put" [
   --email: string
   --lead-id: int # nullable, format: int32
   --name: string
-  --permission-type: any # A permission type that can be applied to story collaborator
+  --permission-type: record # A permission type that can be applied to story collaborator — shape: {created_at?: string, created_by?: string, id?: string, updated_at?: string, updated_by?: string, can_add_collaborators?: bool, can_delete?: bool, can_edit?: bool, can_view?: bool, name?: string}
   --permission-type-id: string # format: uuid
   --story-id: string # format: uuid
   --user-id: string # format: uuid
@@ -1365,7 +1366,7 @@ export def "story-id-file-post" [
   --obsolete-id: string # A primary key pointing to an obsolete item in the story. Item type is context-dependent (format: uuid)
   --include-outline: oneof<nothing, bool> # Determines whether a repsonse including story objects should include the story outline. Defaults to true. Useful for speeding up processing times.
   --file: list<string>
-]: any -> any {
+]: any -> record<created_at: string, created_by: string, id: string, updated_at: string, updated_by: string, collaborators: table<created_at: string, created_by: string, id: string, updated_at: string, updated_by: string, active: bool, email: string, lead_id: int, name: string, permission_type: record, permission_type_id: string, story_id: string, user_id: string>, is_public: bool, ooxml_documents: table<created_at: string, created_by: string, id: string, updated_at: string, updated_by: string, delete_target_on_story_delete: bool, ooxml_automation_id: string, story_id: string>, outline: string, outline_history: table<created_at: string, created_by: string, id: string, updated_at: string, updated_by: string, collaborator_user_id: string, outline: string, revision_number: int, story_id: string>, revision: int, title: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1376,8 +1377,8 @@ export def "story-id-file-post" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -1787,7 +1788,7 @@ export def "story-id-status-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

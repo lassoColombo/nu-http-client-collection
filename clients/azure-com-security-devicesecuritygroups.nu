@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -145,11 +145,12 @@ export def "device-security-groups-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version for the operation
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API version for the operation (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/{resource_id}/providers/Microsoft.Security/deviceSecurityGroups") $qp $auth.query)
   let accept_val = "application/json"
@@ -184,12 +185,13 @@ export def "device-security-groups-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version for the operation
-]: nothing -> record<error: record<code: string, message: string>> {
+  --api-version: string # API version for the operation (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   if ($device_security_group_name | is-empty) { error make --unspanned { msg: "path parameter 'deviceSecurityGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id), device_security_group_name: (encode-path-segment $device_security_group_name)} | format pattern "/{resource_id}/providers/Microsoft.Security/deviceSecurityGroups/{device_security_group_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -224,12 +226,13 @@ export def "device-security-groups-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version for the operation
-]: nothing -> record<properties: record<allowlistRules: list<record>, denylistRules: list<record>, thresholdRules: list<record>, timeWindowRules: list<record>>> {
+  --api-version: string # API version for the operation (required)
+]: nothing -> record<properties: record<allowlistRules: list<record>, denylistRules: list<record>, thresholdRules: list<record>, timeWindowRules: list<record>>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   if ($device_security_group_name | is-empty) { error make --unspanned { msg: "path parameter 'deviceSecurityGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id), device_security_group_name: (encode-path-segment $device_security_group_name)} | format pattern "/{resource_id}/providers/Microsoft.Security/deviceSecurityGroups/{device_security_group_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -265,14 +268,15 @@ export def "device-security-groups-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version for the operation
+  --api-version: string # API version for the operation (required)
   --properties: record # describes properties of a security group. — shape: {allowlistRules?: list, denylistRules?: list, thresholdRules?: list, timeWindowRules?: list}
-]: any -> record<properties: record<allowlistRules: list<record>, denylistRules: list<record>, thresholdRules: list<record>, timeWindowRules: list<record>>> {
+]: any -> record<properties: record<allowlistRules: list<record>, denylistRules: list<record>, thresholdRules: list<record>, timeWindowRules: list<record>>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   if ($device_security_group_name | is-empty) { error make --unspanned { msg: "path parameter 'deviceSecurityGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id), device_security_group_name: (encode-path-segment $device_security_group_name)} | format pattern "/{resource_id}/providers/Microsoft.Security/deviceSecurityGroups/{device_security_group_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact

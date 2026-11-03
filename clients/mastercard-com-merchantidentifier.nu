@@ -131,7 +131,7 @@ export def "get-merchant-identifiers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --merchant-id: string # Merchant's name as provided by the issuer found on a cardholder statement. __Important: Please remove all spaces before submitting a API request.__ (default: , e.g. DOLIUMPTYLTDWELSHPOOLWA)
+  --merchant-id: string # Merchant's name as provided by the issuer found on a cardholder statement. __Important: Please remove all spaces before submitting a API request.__ (default: "", e.g. DOLIUMPTYLTDWELSHPOOLWA)
   --type: string # Determines how the search is performed. ExactMatch returns either the one merchant that best fits the description or no results at all. FuzzyMatch returns 0-20 merchants that are similar to the transaction descriptor. If Type is not provided, defaults to ExactMatch. Example: FuzzyMatch (default: ExactMatch, e.g. ExactMatch)
 ]: nothing -> record<message: string, returnedMerchants: table<address: record, brandName: string, comment: string, descriptorText: string, legalCorporateName: string, locationId: int, matchConfidenceScore: int, merchantCategory: string, merchantDbaName: string, phoneNumber: string, soleProprietorName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

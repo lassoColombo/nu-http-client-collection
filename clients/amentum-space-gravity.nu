@@ -131,11 +131,13 @@ export def "app-api-egm2008-endpoints-egm2008-calculate-height" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --latitude: float # Geographic latitude (-90 to 90 deg). (e.g. -45)
-  --longitude: float # Geographic longitude (-180 to 180 deg). (e.g. 45)
+  --latitude: float # Geographic latitude (-90 to 90 deg). (required, e.g. -45)
+  --longitude: float # Geographic longitude (-180 to 180 deg). (required, e.g. 45)
 ]: nothing -> record<height: record<units: string, value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($latitude == null) { error make --unspanned { msg: "required query parameter 'latitude' missing: pass --latitude" } }
+  if ($longitude == null) { error make --unspanned { msg: "required query parameter 'longitude' missing: pass --longitude" } }
   let qp = [(serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/egm2008/geoid_height" $qp $auth.query)
   let accept_val = "application/json"
@@ -168,11 +170,13 @@ export def "app-api-egm2008-endpoints-egm2008-calculate-anomaly" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --latitude: float # Geographic latitude (-90 to 90 deg). (e.g. -45)
-  --longitude: float # Geographic longitude (-180 to 180 deg). (e.g. 45)
+  --latitude: float # Geographic latitude (-90 to 90 deg). (required, e.g. -45)
+  --longitude: float # Geographic longitude (-180 to 180 deg). (required, e.g. 45)
 ]: nothing -> record<eta: record<units: string, value: float>, gravity_anomaly: record<units: string, value: float>, xi: record<units: string, value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($latitude == null) { error make --unspanned { msg: "required query parameter 'latitude' missing: pass --latitude" } }
+  if ($longitude == null) { error make --unspanned { msg: "required query parameter 'longitude' missing: pass --longitude" } }
   let qp = [(serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/egm2008/gravity_anomaly" $qp $auth.query)
   let accept_val = "application/json"

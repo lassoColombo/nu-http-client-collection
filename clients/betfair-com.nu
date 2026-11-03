@@ -123,6 +123,10 @@ export def commands []: nothing -> table {
 # This is a socket protocol delimited by CRLF (not http)
 #
 # POST /request
+# --authentication shape: {id?: int, op?: string, appKey?: string, session?: string}
+# --heartbeat shape: {id?: int, op?: string}
+# --marketSubscription shape: {id?: int, op?: string, clk?: string, conflateMs?: int, heartbeatMs?: int, initialClk?: string, marketDataFilter?: any, marketFilter?: any, segmentationEnabled?: bool}
+# --orderSubscriptionMessage shape: {id?: int, op?: string, clk?: string, conflateMs?: int, heartbeatMs?: int, initialClk?: string, orderFilter?: any, segmentationEnabled?: bool}
 export def "post-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -133,11 +137,11 @@ export def "post-request" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authentication: any
-  --heartbeat: any
-  --market-subscription: any
+  --authentication: record # shape: {id?: int, op?: string, appKey?: string, session?: string}
+  --heartbeat: record # shape: {id?: int, op?: string}
+  --market-subscription: record # shape: {id?: int, op?: string, clk?: string, conflateMs?: int, heartbeatMs?: int, initialClk?: string, marketDataFilter?: any, marketFilter?: any, segmentationEnabled?: bool}
   --op-types: string@op-types-completer
-  --order-subscription-message: any
+  --order-subscription-message: record # shape: {id?: int, op?: string, clk?: string, conflateMs?: int, heartbeatMs?: int, initialClk?: string, orderFilter?: any, segmentationEnabled?: bool}
 ]: any -> record<connection: record<id: int, op: string, connectionId: string>, marketChangeMessage: record<id: int, op: string, clk: string, conflateMs: int, ct: string, heartbeatMs: int, initialClk: string, mc: list<record>, pt: int, segmentType: string, status: int>, opTypes: string, orderChangeMessage: record<id: int, op: string, clk: string, conflateMs: int, ct: string, heartbeatMs: int, initialClk: string, oc: list<record>, pt: int, segmentType: string, status: int>, status: record<id: int, op: string, connectionClosed: bool, connectionId: string, connectionsAvailable: int, errorCode: string, errorMessage: string, statusCode: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

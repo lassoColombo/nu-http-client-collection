@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -141,11 +141,16 @@ def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def resource-type-completer [] { ["as" "cidr" "continent" "country" "datacenter" "useragent"] }
 def status-completer [] { ["ACTIVE" "DELETED" "INACTIVE"] }
 def status-completer-1 [] { ["ACTIVE" "INACTIVE"] }
+def code-completer [] { ["afrinic" "apnic" "arin" "iana" "lacnic" "ripencc"] }
+def code-completer-1 [] { ["allocated" "assigned" "available" "reserved"] }
 def ip-protocol-version-completer [] { ["ALL" "IPV4" "IPV6"] }
 def output-format-completer [] { ["AWS-WAF" "CSV" "JSON"] }
 def interval-completer [] { ["HOURLY"] }
+def status-id-completer [] { ["block" "bypass" "challenge" "ignore" "pass"] }
+def time-range-completer [] { ["12H" "180D" "1D" "1H" "30D" "365D" "6H" "7D" "90D"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -174,6 +179,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1/allowlist/private
 # operationId: create_private_allowlist_of_the_user_v1_allowlist_private_post
+# --payload shape: {description: string, name: string, resource_type: "UNKNOWN"|"CIDR"|"COUNTRY"|"CONTINENT"|"AS"|"DATACENTER"|"USERAGENT", tags: list<string>, ttl?: int}
 export def "create-private-allowlist-of-the-user-v1-allowlist-private-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -184,7 +190,7 @@ export def "create-private-allowlist-of-the-user-v1-allowlist-private-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  payload: any # The information needed to create a new allowlist
+  payload: record # The information needed to create a new allowlist — shape: {description: string, name: string, resource_type: "UNKNOWN"|"CIDR"|"COUNTRY"|"CONTINENT"|"AS"|"DATACENTER"|"USERAGENT", tags: list<string>, ttl?: int}
 ]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -247,7 +253,7 @@ export def "get-all-private-allowlists-v1-allowlist-private-all-get" [
 # GET /v1/allowlist/private/all/{resource_type}
 # operationId: get_all_private_allowlists_by_resource_type_v1_allowlist_private_all__resource_type__get
 export def "get-all-private-allowlists-by-resource-type-v1-allowlist-private-all-resource-type-get" [
-  resource_type: string
+  resource_type: string@resource-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -622,7 +628,7 @@ export def "get-all-public-allowlists-v1-allowlist-public-all-get" [
 # GET /v1/allowlist/public/all/{resource_type}
 # operationId: get_all_public_allowlists_by_resource_type_v1_allowlist_public_all__resource_type__get
 export def "get-all-public-allowlists-by-resource-type-v1-allowlist-public-all-resource-type-get" [
-  resource_type: string
+  resource_type: string@resource-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -728,7 +734,7 @@ export def "get-public-allowlists-owned-by-the-user-v1-allowlist-public-owned-ge
 # GET /v1/allowlist/public/owned/{resource_type}
 # operationId: get_all_owned_allowlists_by_resource_type_v1_allowlist_public_owned__resource_type__get
 export def "get-all-owned-allowlists-by-resource-type-v1-allowlist-public-owned-resource-type-get" [
-  resource_type: string
+  resource_type: string@resource-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1025,7 +1031,7 @@ export def "query-registry-names-v1-asn-registry-all-get" [
 # GET /v1/asn/registry/{code}
 # operationId: query_registry_by_the_name_v1_asn_registry__code__get
 export def "query-registry-by-the-name-v1-asn-registry-code-get" [
-  code: string
+  code: string@code-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1095,7 +1101,7 @@ export def "query-status-names-v1-asn-status-all-get" [
 # GET /v1/asn/status/{code}
 # operationId: query_status_by_the_name_v1_asn_status__code__get
 export def "query-status-by-the-name-v1-asn-status-code-get" [
-  code: string
+  code: string@code-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1262,8 +1268,8 @@ export def "assess-ip-set-csv-v1-assess-ip-csv-post" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["csv_file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["csv_file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -1534,6 +1540,7 @@ export def "query-datataset-information-of-the-resource-type-v1-dataset-ip-name-
 #
 # POST /v1/denylist/private
 # operationId: create_private_denylist_of_the_user_v1_denylist_private_post
+# --payload shape: {description: string, name: string, resource_type: "UNKNOWN"|"CIDR"|"COUNTRY"|"CONTINENT"|"AS"|"DATACENTER"|"USERAGENT", tags: list<string>, ttl?: int}
 export def "create-private-denylist-of-the-user-v1-denylist-private-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1544,7 +1551,7 @@ export def "create-private-denylist-of-the-user-v1-denylist-private-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  payload: any # The information needed to create a new denylist
+  payload: record # The information needed to create a new denylist — shape: {description: string, name: string, resource_type: "UNKNOWN"|"CIDR"|"COUNTRY"|"CONTINENT"|"AS"|"DATACENTER"|"USERAGENT", tags: list<string>, ttl?: int}
 ]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1607,7 +1614,7 @@ export def "get-all-private-denylists-v1-denylist-private-all-get" [
 # GET /v1/denylist/private/all/{resource_type}
 # operationId: get_all_private_denylists_by_resource_type_v1_denylist_private_all__resource_type__get
 export def "get-all-private-denylists-by-resource-type-v1-denylist-private-all-resource-type-get" [
-  resource_type: string
+  resource_type: string@resource-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1982,7 +1989,7 @@ export def "get-all-public-denylists-v1-denylist-public-all-get" [
 # GET /v1/denylist/public/all/{resource_type}
 # operationId: get_all_public_denylists_by_resource_type_v1_denylist_public_all__resource_type__get
 export def "get-all-public-denylists-by-resource-type-v1-denylist-public-all-resource-type-get" [
-  resource_type: string
+  resource_type: string@resource-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2088,7 +2095,7 @@ export def "get-public-denylists-owned-by-the-user-v1-denylist-public-owned-get"
 # GET /v1/denylist/public/owned/{resource_type}
 # operationId: get_all_owned_denylists_by_resource_type_v1_denylist_public_owned__resource_type__get
 export def "get-all-owned-denylists-by-resource-type-v1-denylist-public-owned-resource-type-get" [
-  resource_type: string
+  resource_type: string@resource-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2486,8 +2493,8 @@ export def "assess-ip-set-csv-v1-geo-csv-post" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["csv_file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["csv_file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -2627,10 +2634,11 @@ export def "query-origin-information-v1-origin-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query: string # The origin site to query
+  --query: string # The origin site to query (required)
 ]: nothing -> record<actions: string, addresses: string, config: record, cookies: string, created_at: int, logs: string, origin: string, scripts: string, self: string, status: string, token: string, updated_at: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/origin" $qp $auth.query)
   let accept_val = "application/json"
@@ -2702,12 +2710,13 @@ export def "query-origin-address-status-information-v1-origin-addresses-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query: string # The origin site to query
+  --query: string # The origin site to query (required)
   --page: int # The page to be returned (default: 1)
   --page-size: int # The number of items per page (default: 20)
 ]: nothing -> record<addresses: table<address: string, created_at: int, expiry: int, log_id: string, status: string, updated_at: int>, page: int, page_size: int, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/origin/addresses" $qp $auth.query)
   let accept_val = "application/json"
@@ -2774,13 +2783,16 @@ export def "query-origin-traffic-client-v1-origin-client-analysis-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query: string # The origin site to query
-  --interval: string@interval-completer # The data inteval to aggregate the result dataset
-  --from-timestamp: int # A UNIX timestamp in milliseconds to restrict the results of the query to entries logged after or equal to this value.
+  --query: string # The origin site to query (required)
+  --interval: string@interval-completer # The data inteval to aggregate the result dataset (required)
+  --from-timestamp: int # A UNIX timestamp in milliseconds to restrict the results of the query to entries logged after or equal to this value. (required)
   --to-timestamp: int # A UNIX timestamp in milliseconds to restrict the results of the query to entries logged before this value.
 ]: nothing -> record<data: table<client_browser: int, client_crawler: int, client_email: int, client_library: int, client_mobile_browser: int, client_multimedia_player: int, client_offline_browser: int, client_total: int, client_ua_anonymizer: int, client_unrecognized: int, client_validator: int, client_wap_browser: int, crawler_feed_fetcher: int, crawler_link_checker: int, crawler_marketing: int, crawler_screenshot_creator: int, crawler_search_engine_bot: int, crawler_site_monitor: int, crawler_speed_tester: int, crawler_tool: int, crawler_total: int, crawler_uncategorised: int, crawler_unrecognized: int, crawler_virus_scanner: int, crawler_vulnerability_scanner: int, crawler_web_scraper: int, timestamp: int, total: int>, from_timestamp: int, interval: string, self: string, to_timestamp: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
+  let interval = ($interval | default "HOURLY")
+  if ($from_timestamp == null) { error make --unspanned { msg: "required query parameter 'from_timestamp' missing: pass --from-timestamp" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "from_timestamp" $from_timestamp "scalar") (serialize-qp "to_timestamp" $to_timestamp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/origin/client/analysis" $qp $auth.query)
   let accept_val = "application/json"
@@ -2813,12 +2825,13 @@ export def "query-origin-cookie-id-status-information-v1-origin-cookies-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query: string # The origin site to query
+  --query: string # The origin site to query (required)
   --page: int # The page to be returned (default: 1)
   --page-size: int # The number of items per page (default: 20)
 ]: nothing -> record<cookie_ids: table<cookie_id: string, created_at: int, expiry: int, log_id: string, status: string, updated_at: int>, page: int, page_size: int, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/origin/cookies" $qp $auth.query)
   let accept_val = "application/json"
@@ -2851,10 +2864,11 @@ export def "query-origin-scripts-v1-origin-scripts-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query: string # The origin site to query
+  --query: string # The origin site to query (required)
 ]: nothing -> record<detection: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/origin/scripts" $qp $auth.query)
   let accept_val = "application/json"
@@ -2887,13 +2901,14 @@ export def "query-origin-status-v1-origin-status-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query: string # The origin site to query
+  --query: string # The origin site to query (required)
   --address: any # The IP address to query the status
   --cookie-id: string # The cookie id to query the status (format: uuid)
 ]: any -> record<address: record<address: string, created_at: int, expiry: int, log_id: string, status: string, updated_at: int>, cookie_id: record<cookie_id: string, created_at: int, expiry: int, log_id: string, status: string, updated_at: int>, self: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/origin/status" $qp $auth.query)
   let req_body = {"address": $address, "cookie_id": $cookie_id} | compact
@@ -2919,7 +2934,7 @@ export def "query-origin-status-v1-origin-status-post" [
 # GET /v1/origin/status/detail/{status_id}
 # operationId: query_origin_status_detail_v1_origin_status_detail__status_id__get
 export def "query-origin-status-detail-v1-origin-status-detail-status-id-get" [
-  status_id: string
+  status_id: string@status-id-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2998,13 +3013,16 @@ export def "query-origin-traffic-analysis-v1-origin-traffic-analysis-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --query: string # The origin site to query
-  --interval: string@interval-completer # The data inteval to aggregate the result dataset
-  --from-timestamp: int # A UNIX timestamp in milliseconds to restrict the results of the query to entries logged after or equal to this value.
+  --query: string # The origin site to query (required)
+  --interval: string@interval-completer # The data inteval to aggregate the result dataset (required)
+  --from-timestamp: int # A UNIX timestamp in milliseconds to restrict the results of the query to entries logged after or equal to this value. (required)
   --to-timestamp: int # A UNIX timestamp in milliseconds to restrict the results of the query to entries logged before this value.
 ]: nothing -> record<data: table<asn_risky: int, bots: int, datacenters: int, denylists: int, network_country_mismatches: int, score_high: int, timestamp: int, total: int, webdrivers: int>, from_timestamp: int, interval: string, self: string, to_timestamp: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
+  let interval = ($interval | default "HOURLY")
+  if ($from_timestamp == null) { error make --unspanned { msg: "required query parameter 'from_timestamp' missing: pass --from-timestamp" } }
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "from_timestamp" $from_timestamp "scalar") (serialize-qp "to_timestamp" $to_timestamp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/origin/traffic/analysis" $qp $auth.query)
   let accept_val = "application/json"
@@ -3323,7 +3341,7 @@ export def "get-source-info-v1-source-ip-source-get" [
 # operationId: get_source_and_timerange_info_v1_source_ip__source__range__time_range__get
 export def "get-source-and-timerange-info-v1-source-ip-source-range-time-range-get" [
   source: string
-  time_range: string
+  time_range: string@time-range-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3488,8 +3506,8 @@ export def "parse-user-agents-csv-v1-ua-csv-post" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["csv_file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["csv_file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url

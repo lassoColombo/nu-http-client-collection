@@ -95,6 +95,7 @@ def base-url-completer [] { ["https://api.data.gov/regulations/v3"] }
 def auth-scheme-completer [] { ["query-api_key"] }
 
 # Completers for enum parameters
+def response-format-completer [] { ["json" "xml"] }
 def accept-completer [] { ["applicaiton/xml" "application/json"] }
 def counts-only-completer [] { ["0" "1"] }
 def encoded-completer [] { ["0" "1"] }
@@ -136,7 +137,7 @@ export def commands []: nothing -> table {
 # GET /docket.{response_format}
 # operationId: docket
 export def "docket" [
-  response_format: string
+  response_format: string@response-format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -147,11 +148,12 @@ export def "docket" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --docket-id: string # Docket ID (default: EPA-HQ-OAR-2011-0028)
+  --docket-id: string # Docket ID (required, default: EPA-HQ-OAR-2011-0028)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   if ($response_format | is-empty) { error make --unspanned { msg: "path parameter 'response_format' must be non-empty" } }
+  let docket_id = ($docket_id | default "EPA-HQ-OAR-2011-0028")
   let qp = [(serialize-qp "docketId" $docket_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({response_format: (encode-path-segment $response_format)} | format pattern "/docket.{response_format}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -175,7 +177,7 @@ export def "docket" [
 # GET /document.{response_format}
 # operationId: document
 export def "document" [
-  response_format: string
+  response_format: string@response-format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,7 +216,7 @@ export def "document" [
 # GET /documents.{response_format}
 # operationId: documents
 export def "documents" [
-  response_format: string
+  response_format: string@response-format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

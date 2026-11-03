@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -153,7 +153,7 @@ export def "post-following" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
+  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token. (required)
   --days-since-last-listen: int # The number of days since a user last listened to a story from this aggregation. Absent if user never listened to the aggregation. (format: int32)
   --following: oneof<nothing, bool> # Whether or not the user is following the aggregation. When changing affiliation status, the client is expected to toggle this value and then send the entire object back. (default: false)
   href: string # A link to more details about the program from the NPR Story API
@@ -162,13 +162,15 @@ export def "post-following" [
   --notif-rated: list<string> # The topic in Firebase Cloud Messaging to which the device should subscribe if it supports notifications and the user wants notifications about the podcasts they have highly rated.
   --rating: float # The user's average rating for this affiliation on a scale of 0-1. Absent if user never listened to the aggregation. (format: float)
   --title: string # The title for the aggregation (program)
-]: any -> any {
+]: any -> record<attributes: record<affiliations: list<record>, algolia: list<record>, cohort: record<id: string, name: string, public: string, test: string>, email: string, firstName: string, id: string, lastName: string, organizations: list<record>, totalListeningTime: string>, errors: list<record>, href: string, items: list<record>, links: record, version: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/v2/following" $auth.query)
   let req_body = {"daysSinceLastListen": $days_since_last_listen, "following": $following, "href": $href, "id": $id, "notif_following": $notif_following, "notif_rated": $notif_rated, "rating": $rating, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "following") == null) { error make --unspanned { msg: "required body field 'following' missing: pass --following or pipe a record" } }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
@@ -202,12 +204,13 @@ export def "update-stations" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
+  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token. (required)
   --body: list
-]: any -> any {
+]: any -> record<attributes: record<affiliations: list<record>, algolia: list<record>, cohort: record<id: string, name: string, public: string, test: string>, email: string, firstName: string, id: string, lastName: string, organizations: list<record>, totalListeningTime: string>, errors: list<record>, href: string, items: list<record>, links: record, version: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/v2/stations" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -244,10 +247,11 @@ export def "delete-user" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
-]: nothing -> any {
+  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token. (required)
+]: nothing -> record<attributes: record<affiliations: list<record>, algolia: list<record>, cohort: record<id: string, name: string, public: string, test: string>, email: string, firstName: string, id: string, lastName: string, organizations: list<record>, totalListeningTime: string>, errors: list<record>, href: string, items: list<record>, links: record, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/v2/user" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -282,10 +286,11 @@ export def "get-user" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
-]: nothing -> any {
+  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token. (required)
+]: nothing -> record<attributes: record<affiliations: list<record>, algolia: list<record>, cohort: record<id: string, name: string, public: string, test: string>, email: string, firstName: string, id: string, lastName: string, organizations: list<record>, totalListeningTime: string>, errors: list<record>, href: string, items: list<record>, links: record, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/v2/user" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -320,11 +325,13 @@ export def "inherit-from-temp-user" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --temp-user: int # The temporary user's ID before the user registered or logged in
-  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
-]: nothing -> any {
+  --temp-user: int # The temporary user's ID before the user registered or logged in (required)
+  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token. (required)
+]: nothing -> record<attributes: record<affiliations: list<record>, algolia: list<record>, cohort: record<id: string, name: string, public: string, test: string>, email: string, firstName: string, id: string, lastName: string, organizations: list<record>, totalListeningTime: string>, errors: list<record>, href: string, items: list<record>, links: record, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($temp_user == null) { error make --unspanned { msg: "required query parameter 'temp_user' missing: pass --temp-user" } }
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "temp_user" $temp_user "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/user/inherit" $qp $auth.query)
   let accept_val = ($accept | default "application/json")

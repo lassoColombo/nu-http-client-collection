@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -117,6 +117,7 @@ def accept-completer [] { ["application/json" "application/xml"] }
 def provider-completer [] { ["Agent" "AzureBlob" "AzureCS" "AzureWebJob" "BinTray" "FTP" "GitHub" "NuGet" "S3" "SqlDatabase" "WebDeploy" "Webhook"] }
 def repository-authentication-completer [] { ["credentials" "ssh"] }
 def repository-provider-completer [] { ["bitBucket" "git" "gitHub" "gitLab" "kiln" "mercurial" "stash" "subversion" "vso"] }
+def badge-repo-provider-completer [] { ["bitBucket" "gitHub"] }
 def accept-completer-1 [] { ["image/png" "image/svg+xml"] }
 
 # List all available API commands with their parameters
@@ -156,7 +157,7 @@ export def "encrypt-value" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --plain-value: string # default: 
+  --plain-value: string # default: ""
 ]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -316,7 +317,7 @@ export def "start-build" [
   --environment-variables: record
   project_slug: string
   --pull-request-id: int # Can not be used with `branch` or `commitId`
-]: any -> record<branch: string, buildId: int, message: string, version: string, created: string, updated: string, authorName: string, authorUsername: string, buildNumber: int, commitId: string, committed: string, committerName: string, committerUsername: string, finished: string, isTag: bool, jobs: table<allowFailure: bool, artifactsCount: int, compilationErrorsCount: int, compilationMessagesCount: int, compilationWarningsCount: int, failedTestsCount: int, messagesCount: int, osType: string, passedTestsCount: int, testsCount: int>, messageExtended: string, messages: table<category: string, created: string, message: string>, projectId: int, pullRequestId: int, pullRequestName: string, started: string, status: string> {
+]: any -> record<branch: string, buildId: int, message: string, version: string, created: string, updated: string, authorName: string, authorUsername: string, buildNumber: int, commitId: string, committed: string, committerName: string, committerUsername: string, finished: string, isTag: bool, jobs: table<created: string, updated: string, finished: string, jobId: string, name: string, started: string, status: string, allowFailure: bool, artifactsCount: int, compilationErrorsCount: int, compilationMessagesCount: int, compilationWarningsCount: int, failedTestsCount: int, messagesCount: int, osType: string, passedTestsCount: int, testsCount: int>, messageExtended: string, messages: table<category: string, created: string, message: string>, projectId: int, pullRequestId: int, pullRequestName: string, started: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -357,7 +358,7 @@ export def "re-run-build" [
   --accept: string@accept-completer # Response content type
   build_id: int
   --re-run-incomplete: oneof<nothing, bool> # Set `reRunIncomplete` set to `false` (default value) for full build re-run. Set it set to `true` to rerun only failed or cancelled jobs in multijob build.
-]: any -> record<branch: string, buildId: int, message: string, version: string, created: string, updated: string, authorName: string, authorUsername: string, buildNumber: int, commitId: string, committed: string, committerName: string, committerUsername: string, finished: string, isTag: bool, jobs: table<allowFailure: bool, artifactsCount: int, compilationErrorsCount: int, compilationMessagesCount: int, compilationWarningsCount: int, failedTestsCount: int, messagesCount: int, osType: string, passedTestsCount: int, testsCount: int>, messageExtended: string, messages: table<category: string, created: string, message: string>, projectId: int, pullRequestId: int, pullRequestName: string, started: string, status: string> {
+]: any -> record<branch: string, buildId: int, message: string, version: string, created: string, updated: string, authorName: string, authorUsername: string, buildNumber: int, commitId: string, committed: string, committerName: string, committerUsername: string, finished: string, isTag: bool, jobs: table<created: string, updated: string, finished: string, jobId: string, name: string, started: string, status: string, allowFailure: bool, artifactsCount: int, compilationErrorsCount: int, compilationMessagesCount: int, compilationWarningsCount: int, failedTestsCount: int, messagesCount: int, osType: string, passedTestsCount: int, testsCount: int>, messageExtended: string, messages: table<category: string, created: string, message: string>, projectId: int, pullRequestId: int, pullRequestName: string, started: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -597,7 +598,7 @@ export def "start-deployment" [
   environment_name: string
   --environment-variables: record
   project_slug: string
-]: any -> record<build: record<branch: string, buildId: int, message: string, version: string, created: string, updated: string, authorName: string, authorUsername: string, buildNumber: int, commitId: string, committed: string, committerName: string, committerUsername: string, finished: string, isTag: bool, jobs: list<record>, messageExtended: string, messages: list<record>, projectId: int, pullRequestId: int, pullRequestName: string, started: string, status: string>, deploymentId: int, finished: string, started: string, status: string, created: string, updated: string, environment: record<deploymentEnvironmentId: int, name: string, provider: string, created: string, updated: string, accountId: int, projectsMode: int, securityDescriptor: record<accessRightDefinitions: list, roleAces: list>, tags: string>, jobs: table<messagesCount: int>> {
+]: any -> record<build: record<branch: string, buildId: int, message: string, version: string, created: string, updated: string, authorName: string, authorUsername: string, buildNumber: int, commitId: string, committed: string, committerName: string, committerUsername: string, finished: string, isTag: bool, jobs: list<record>, messageExtended: string, messages: list<record>, projectId: int, pullRequestId: int, pullRequestName: string, started: string, status: string>, deploymentId: int, finished: string, started: string, status: string, created: string, updated: string, environment: record<deploymentEnvironmentId: int, name: string, provider: string, created: string, updated: string, accountId: int, projectsMode: int, securityDescriptor: record<accessRightDefinitions: list, roleAces: list>, tags: string>, jobs: table<created: string, updated: string, finished: string, jobId: string, name: string, started: string, status: string, messagesCount: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -754,7 +755,7 @@ export def "add-environment" [
   name: string
   provider: string@provider-completer
   settings: record # shape: {environmentVariables?: list, notifications?: list, providerSettings?: list}
-]: any -> record<environmentAccessKey: string, projects: table<isSelected: bool, name: string, projectId: int>, selectedProjects: list<int>, settings: record<environmentVariables: list<record>, notifications: list<record>, providerSettings: list<record>>> {
+]: any -> record<deploymentEnvironmentId: int, name: string, provider: string, created: string, updated: string, accountId: int, projectsMode: int, securityDescriptor: record<accessRightDefinitions: list<record>, roleAces: list<record>>, tags: string, environmentAccessKey: string, projects: table<isSelected: bool, name: string, projectId: int>, selectedProjects: list<int>, settings: record<environmentVariables: list<record>, notifications: list<record>, providerSettings: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -799,7 +800,7 @@ export def "update-environment" [
   --projects: list # Projects available for selection in UI. Only present in response from getEnvironmentSettings. — item shape: {isSelected: bool, name: string, projectId: int}
   --selected-projects: list<int> # Project IDs of selected projects
   --settings: record # shape: {environmentVariables?: list, notifications?: list, providerSettings?: list}
-]: any -> record<environmentAccessKey: string, projects: table<isSelected: bool, name: string, projectId: int>, selectedProjects: list<int>, settings: record<environmentVariables: list<record>, notifications: list<record>, providerSettings: list<record>>> {
+]: any -> record<deploymentEnvironmentId: int, name: string, provider: string, created: string, updated: string, accountId: int, projectsMode: int, securityDescriptor: record<accessRightDefinitions: list<record>, roleAces: list<record>>, tags: string, environmentAccessKey: string, projects: table<isSelected: bool, name: string, projectId: int>, selectedProjects: list<int>, settings: record<environmentVariables: list<record>, notifications: list<record>, providerSettings: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -915,7 +916,7 @@ export def "get-environment-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<environment: record<environmentAccessKey: string, projects: list<record>, selectedProjects: list<int>, settings: record<environmentVariables: list, notifications: list, providerSettings: list>>> {
+]: nothing -> record<environment: record<deploymentEnvironmentId: int, name: string, provider: string, created: string, updated: string, accountId: int, projectsMode: int, securityDescriptor: record<accessRightDefinitions: list, roleAces: list>, tags: string, environmentAccessKey: string, projects: list<record>, selectedProjects: list<int>, settings: record<environmentVariables: list, notifications: list, providerSettings: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($deployment_environment_id | is-empty) { error make --unspanned { msg: "path parameter 'deploymentEnvironmentId' must be non-empty" } }
@@ -1075,9 +1076,9 @@ export def "update-project" [
 # Docs: https://www.appveyor.com/docs/status-badges/
 # operationId: getPublicProjectStatusBadge
 export def "get-public-project-status-badge" [
-  badge_repo_provider: any
-  repo_account_name: any
-  repo_slug: any
+  badge_repo_provider: string@badge-repo-provider-completer
+  repo_account_name: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1124,7 +1125,7 @@ export def "get-public-project-status-badge" [
 # Docs: https://www.appveyor.com/docs/status-badges/
 # operationId: getProjectStatusBadge
 export def "get-project-status-badge" [
-  status_badge_id: any
+  status_badge_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1168,8 +1169,8 @@ export def "get-project-status-badge" [
 # Docs: https://www.appveyor.com/docs/status-badges/
 # operationId: getProjectBranchStatusBadge
 export def "get-project-branch-status-badge" [
-  status_badge_id: any
-  build_branch: any
+  status_badge_id: string
+  build_branch: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1477,12 +1478,13 @@ export def "get-project-deployments" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --records-number: int # Number of results to include in the response. getProjectDeployments is documented to have a maximum of 20. It currently returns 500 Internal Server Error for recordsNumber <= 5. In the past it has returned 500 Internal Server Error for many different values which did not match the value used by the ci.appveyor.com web interface at the time. As of 2018-09-08, the value used by the web interface is 10.
+  --records-number: int # Number of results to include in the response. getProjectDeployments is documented to have a maximum of 20. It currently returns 500 Internal Server Error for recordsNumber <= 5. In the past it has returned 500 Internal Server Error for many different values which did not match the value used by the ci.appveyor.com web interface at the time. As of 2018-09-08, the value used by the web interface is 10. (required)
 ]: nothing -> record<deployments: table<build: record, deploymentId: int, finished: string, started: string, status: string, environment: record>, project: record<accountName: string, name: string, projectId: int, slug: string, created: string, updated: string, accountId: int, alwaysBuildClosedPullRequests: bool, builds: list<record>, currentBuildId: int, disablePullRequestWebhooks: bool, disablePushWebhooks: bool, enableDeploymentInPullRequests: bool, enableSecureVariablesInPullRequests: bool, enableSecureVariablesInPullRequestsFromSameRepo: bool, isGitHubApp: bool, isPrivate: bool, nuGetFeed: record<created: string, updated: string, accountId: int, id: string, isPrivateProject: bool, name: string, nuGetFeedId: int, projectId: int, publishingEnabled: bool>, repositoryBranch: string, repositoryName: string, repositoryScm: string, repositoryType: string, rollingBuilds: bool, rollingBuildsDoNotCancelRunningBuilds: bool, rollingBuildsOnlyForPullRequests: bool, saveBuildCacheInPullRequests: bool, securityDescriptor: record<accessRightDefinitions: list, roleAces: list>, skipBranchesWithoutAppveyorYml: bool, tags: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($project_slug | is-empty) { error make --unspanned { msg: "path parameter 'projectSlug' must be non-empty" } }
+  if ($records_number == null) { error make --unspanned { msg: "required query parameter 'recordsNumber' missing: pass --records-number" } }
   let qp = [(serialize-qp "recordsNumber" $records_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_name: (encode-path-segment $account_name), project_slug: (encode-path-segment $project_slug)} | format pattern "/projects/{account_name}/{project_slug}/deployments") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1507,8 +1509,8 @@ export def "get-project-deployments" [
 # Docs: https://www.appveyor.com/docs/api/projects-builds/#get-project-history
 # operationId: getProjectHistory
 export def "get-project-history" [
-  account_name: any
-  project_slug: any
+  account_name: string
+  project_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1519,7 +1521,7 @@ export def "get-project-history" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --records-number: int # Number of results to include in the response. getProjectDeployments is documented to have a maximum of 20. It currently returns 500 Internal Server Error for recordsNumber <= 5. In the past it has returned 500 Internal Server Error for many different values which did not match the value used by the ci.appveyor.com web interface at the time. As of 2018-09-08, the value used by the web interface is 10.
+  --records-number: int # Number of results to include in the response. getProjectDeployments is documented to have a maximum of 20. It currently returns 500 Internal Server Error for recordsNumber <= 5. In the past it has returned 500 Internal Server Error for many different values which did not match the value used by the ci.appveyor.com web interface at the time. As of 2018-09-08, the value used by the web interface is 10. (required)
   --start-build-id: int # Maximum `buildId` to include in the results (exclusive).
   --branch: string # Repository Branch
 ]: nothing -> record<builds: table<branch: string, buildId: int, message: string, version: string, created: string, updated: string, authorName: string, authorUsername: string, buildNumber: int, commitId: string, committed: string, committerName: string, committerUsername: string, finished: string, isTag: bool, jobs: list, messageExtended: string, messages: list, projectId: int, pullRequestId: int, pullRequestName: string, started: string, status: string>, project: record<accountName: string, name: string, projectId: int, slug: string, created: string, updated: string, accountId: int, alwaysBuildClosedPullRequests: bool, builds: list<record>, currentBuildId: int, disablePullRequestWebhooks: bool, disablePushWebhooks: bool, enableDeploymentInPullRequests: bool, enableSecureVariablesInPullRequests: bool, enableSecureVariablesInPullRequestsFromSameRepo: bool, isGitHubApp: bool, isPrivate: bool, nuGetFeed: record<created: string, updated: string, accountId: int, id: string, isPrivateProject: bool, name: string, nuGetFeedId: int, projectId: int, publishingEnabled: bool>, repositoryBranch: string, repositoryName: string, repositoryScm: string, repositoryType: string, rollingBuilds: bool, rollingBuildsDoNotCancelRunningBuilds: bool, rollingBuildsOnlyForPullRequests: bool, saveBuildCacheInPullRequests: bool, securityDescriptor: record<accessRightDefinitions: list, roleAces: list>, skipBranchesWithoutAppveyorYml: bool, tags: string>> {
@@ -1527,6 +1529,7 @@ export def "get-project-history" [
   let base = ($base_url | default $BASE_URL)
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($project_slug | is-empty) { error make --unspanned { msg: "path parameter 'projectSlug' must be non-empty" } }
+  if ($records_number == null) { error make --unspanned { msg: "required query parameter 'recordsNumber' missing: pass --records-number" } }
   let qp = [(serialize-qp "recordsNumber" $records_number "scalar") (serialize-qp "startBuildId" $start_build_id "scalar") (serialize-qp "branch" $branch "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_name: (encode-path-segment $account_name), project_slug: (encode-path-segment $project_slug)} | format pattern "/projects/{account_name}/{project_slug}/history") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1563,7 +1566,7 @@ export def "get-project-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<buildClouds: table<value: string>, defaultImageName: string, images: table<buildCloudName: string, buildWorkerImageId: int, name: string, osType: string>, project: record<accountName: string, name: string, projectId: int, slug: string, created: string, updated: string, accountId: int, alwaysBuildClosedPullRequests: bool, builds: list<record>, currentBuildId: int, disablePullRequestWebhooks: bool, disablePushWebhooks: bool, enableDeploymentInPullRequests: bool, enableSecureVariablesInPullRequests: bool, enableSecureVariablesInPullRequestsFromSameRepo: bool, isGitHubApp: bool, isPrivate: bool, nuGetFeed: record<created: string, updated: string, accountId: int, id: string, isPrivateProject: bool, name: string, nuGetFeedId: int, projectId: int, publishingEnabled: bool>, repositoryBranch: string, repositoryName: string, repositoryScm: string, repositoryType: string, rollingBuilds: bool, rollingBuildsDoNotCancelRunningBuilds: bool, rollingBuildsOnlyForPullRequests: bool, saveBuildCacheInPullRequests: bool, securityDescriptor: record<accessRightDefinitions: list, roleAces: list>, skipBranchesWithoutAppveyorYml: bool, tags: string>, settings: record> {
+]: nothing -> record<buildClouds: table<value: string>, defaultImageName: string, images: table<buildCloudName: string, buildWorkerImageId: int, name: string, osType: string>, project: record<accountName: string, name: string, projectId: int, slug: string, created: string, updated: string, accountId: int, alwaysBuildClosedPullRequests: bool, builds: list<record>, currentBuildId: int, disablePullRequestWebhooks: bool, disablePushWebhooks: bool, enableDeploymentInPullRequests: bool, enableSecureVariablesInPullRequests: bool, enableSecureVariablesInPullRequestsFromSameRepo: bool, isGitHubApp: bool, isPrivate: bool, nuGetFeed: record<created: string, updated: string, accountId: int, id: string, isPrivateProject: bool, name: string, nuGetFeedId: int, projectId: int, publishingEnabled: bool>, repositoryBranch: string, repositoryName: string, repositoryScm: string, repositoryType: string, rollingBuilds: bool, rollingBuildsDoNotCancelRunningBuilds: bool, rollingBuildsOnlyForPullRequests: bool, saveBuildCacheInPullRequests: bool, securityDescriptor: record<accessRightDefinitions: list, roleAces: list>, skipBranchesWithoutAppveyorYml: bool, tags: string>, settings: record<accountName: string, name: string, projectId: int, slug: string, created: string, updated: string, accountId: int, alwaysBuildClosedPullRequests: bool, builds: list<record>, currentBuildId: int, disablePullRequestWebhooks: bool, disablePushWebhooks: bool, enableDeploymentInPullRequests: bool, enableSecureVariablesInPullRequests: bool, enableSecureVariablesInPullRequestsFromSameRepo: bool, isGitHubApp: bool, isPrivate: bool, nuGetFeed: record<created: string, updated: string, accountId: int, id: string, isPrivateProject: bool, name: string, nuGetFeedId: int, projectId: int, publishingEnabled: bool>, repositoryBranch: string, repositoryName: string, repositoryScm: string, repositoryType: string, rollingBuilds: bool, rollingBuildsDoNotCancelRunningBuilds: bool, rollingBuildsOnlyForPullRequests: bool, saveBuildCacheInPullRequests: bool, securityDescriptor: record<accessRightDefinitions: list, roleAces: list>, skipBranchesWithoutAppveyorYml: bool, tags: string, buildPriority: int, configuration: record<afterBuildScripts: list, afterDeployScripts: list, afterTestScripts: list, artifacts: list, assemblyFileVersionFormat: string, assemblyInfoFile: string, assemblyInformationalVersionFormat: string, assemblyVersionFormat: string, beforeBuildScripts: list, beforeDeployScripts: list, beforePackageScripts: list, beforeTestScripts: list, branchesMode: string, buildCloud: list, buildMode: string, buildScripts: list, cacheEntries: list, cloneDepth: int, cloneFolder: string, cloneScripts: list, configuration: list, configureNuGetAccountSource: bool, configureNuGetProjectSource: bool, deployMode: string, deployScripts: list, deployments: list, disableNuGetPublishForOctopusPackages: bool, disableNuGetPublishOnPullRequests: bool, doNotIncrementBuildNumberOnPullRequests: bool, dotnetCsprojAssemblyVersionFormat: string, dotnetCsprojFile: string, dotnetCsprojFileVersionFormat: string, dotnetCsprojInformationalVersionFormat: string, dotnetCsprojPackageVersionFormat: string, dotnetCsprojVersionFormat: string, environmentVariables: list, environmentVariablesMatrix: list, excludeBranches: list, forceHttpsClone: bool, hostsEntries: list, hotFixScripts: list, includeBranches: list, includeNuGetReferences: bool, initScripts: list, installScripts: list, matrixAllowFailures: list, matrixExcept: list, matrixExclude: list, matrixFastFinish: bool, matrixOnly: list, maxJobs: int, msBuildInParallel: bool, msBuildProjectFileName: string, msBuildVerbosity: string, notifications: list, onBuildErrorScripts: list, onBuildFinishScripts: list, onBuildSuccessScripts: list, onlyCommitsFiles: list, operatingSystem: list, packageAspNetCoreProjects: bool, packageAzureCloudServiceProjects: bool, packageDotnetConsoleProjects: bool, packageNuGetProjects: bool, packageNuGetSymbols: bool, packageWebApplicationProjects: bool, packageWebApplicationProjectsBeanstalk: bool, packageWebApplicationProjectsOctopus: bool, packageWebApplicationProjectsXCopy: bool, patchAssemblyInfo: bool, patchDotnetCsproj: bool, platform: list, services: list, shallowClone: bool, skipBranchWithPullRequests: bool, skipCommitsFiles: list, skipNonTags: bool, skipTags: bool, stacks: list, testAssemblies: list, testCategories: list, testCategoriesMatrix: list, testCategoriesMode: string, testMode: string, testScripts: list, xamarinRegisterAndroidProduct: bool, xamarinRegisterIosProduct: bool>, customYmlName: string, ignoreAppveyorYml: bool, nextBuildNumber: int, repositoryAuthentication: string, repositoryUsername: string, scheduleCrontabExpression: string, sshPublicKey: string, statusBadgeId: string, versionFormat: string, webhookId: string, webhookUrl: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
@@ -1849,7 +1852,7 @@ export def "add-role" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   name: string
-]: any -> record<groups: table<name: string, permissions: list>> {
+]: any -> record<created: string, updated: string, isSystem: bool, name: string, roleId: int, groups: table<name: string, permissions: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1890,7 +1893,7 @@ export def "update-role" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --groups: list # item shape: {name: "Account"|"BuildEnvironment"|"Deny"|"Environments"|"Projects"|"Roles"|"User"|"Users", permissions: list}
-]: any -> record<groups: table<name: string, permissions: list>> {
+]: any -> record<created: string, updated: string, isSystem: bool, name: string, roleId: int, groups: table<name: string, permissions: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1968,7 +1971,7 @@ export def "get-role" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<groups: table<name: string, permissions: list>> {
+]: nothing -> record<created: string, updated: string, isSystem: bool, name: string, roleId: int, groups: table<name: string, permissions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'roleId' must be non-empty" } }

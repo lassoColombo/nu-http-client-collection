@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-openfigi-apikey" => { {scheme: $scheme, headers: {X-OPENFIGI-APIKEY: $token_val}, query: "", location: "header"} }
+    "x-openfigi-apikey" => { {scheme: $scheme, headers: {"X-OPENFIGI-APIKEY": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -100,6 +100,8 @@ def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: 
 def base-url-completer [] { ["https://api.openfigi.com/v1" "https://api.openfigi.com/v2" "https://api.openfigi.com/v3"] }
 def auth-scheme-completer [] { ["x-openfigi-apikey"] }
 
+# Completers for enum parameters
+def key-completer [] { ["currency" "exchCode" "idType" "marketSecDes" "micCode" "securityType" "securityType2"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -165,7 +167,7 @@ export def "post-mapping" [
 #
 # GET /mapping/values/{key}
 export def "get-mapping-values-key" [
-  key: string
+  key: string@key-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

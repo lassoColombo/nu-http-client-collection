@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -158,10 +158,11 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client API Version.
+  --api-version: string@api-version-completer # Client API Version. (required)
 ]: nothing -> record<nextLink: string, value: table<display: record, isDataAction: bool, name: string, origin: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let api_version = ($api_version | default "2018-06-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Blockchain/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -195,11 +196,12 @@ export def "blockchain-members-list-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client API Version.
-]: nothing -> record<nextLink: string, value: table<properties: record, sku: record>> {
+  --api-version: string@api-version-completer # Client API Version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, sku: record, location: string, tags: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  let api_version = ($api_version | default "2018-06-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Blockchain/blockchainMembers") $qp $auth.query)
   let accept_val = "application/json"
@@ -235,13 +237,14 @@ export def "blockchain-member-operation-results-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client API Version.
+  --api-version: string@api-version-completer # Client API Version. (required)
 ]: nothing -> record<endTime: string, name: string, startTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($location_name | is-empty) { error make --unspanned { msg: "path parameter 'locationName' must be non-empty" } }
   if ($operation_id | is-empty) { error make --unspanned { msg: "path parameter 'operationId' must be non-empty" } }
+  let api_version = ($api_version | default "2018-06-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location_name: (encode-path-segment $location_name), operation_id: (encode-path-segment $operation_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Blockchain/locations/{location_name}/blockchainMemberOperationResults/{operation_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -276,7 +279,7 @@ export def "locations-check-name-availability" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client API Version.
+  --api-version: string@api-version-completer # Client API Version. (required)
   --name: string # Gets or sets the name to check.
   --type: string # Gets or sets the type of the resource to check.
 ]: any -> record<message: string, nameAvailable: bool, reason: string> {
@@ -285,6 +288,7 @@ export def "locations-check-name-availability" [
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($location_name | is-empty) { error make --unspanned { msg: "path parameter 'locationName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-06-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location_name: (encode-path-segment $location_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Blockchain/locations/{location_name}/checkNameAvailability") $qp $auth.query)
   let req_body = {"name": $name, "type": $type} | compact
@@ -321,12 +325,13 @@ export def "locations-list-consortiums" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client API Version.
+  --api-version: string@api-version-completer # Client API Version. (required)
 ]: nothing -> record<value: table<name: string, protocol: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($location_name | is-empty) { error make --unspanned { msg: "path parameter 'locationName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-06-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location_name: (encode-path-segment $location_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Blockchain/locations/{location_name}/listConsortiums") $qp $auth.query)
   let accept_val = "application/json"
@@ -360,11 +365,12 @@ export def "skus-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client API Version.
+  --api-version: string@api-version-completer # Client API Version. (required)
 ]: nothing -> record<value: table<resourceType: string, skus: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  let api_version = ($api_version | default "2018-06-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Blockchain/skus") $qp $auth.query)
   let accept_val = "application/json"
@@ -399,12 +405,13 @@ export def "blockchain-members-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client API Version.
-]: nothing -> record<nextLink: string, value: table<properties: record, sku: record>> {
+  --api-version: string@api-version-completer # Client API Version. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, sku: record, location: string, tags: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-06-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers") $qp $auth.query)
   let accept_val = "application/json"
@@ -440,13 +447,14 @@ export def "blockchain-members-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client API Version.
+  --api-version: string@api-version-completer # Client API Version. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($blockchain_member_name | is-empty) { error make --unspanned { msg: "path parameter 'blockchainMemberName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-06-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), blockchain_member_name: (encode-path-segment $blockchain_member_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -482,13 +490,14 @@ export def "blockchain-members-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client API Version.
-]: nothing -> record<properties: record<consortium: string, consortiumManagementAccountAddress: string, consortiumManagementAccountPassword: string, consortiumMemberDisplayName: string, consortiumRole: string, dns: string, firewallRules: list<record>, password: string, protocol: string, provisioningState: string, publicKey: string, rootContractAddress: string, userName: string, validatorNodesSku: record<capacity: int>>, sku: record<name: string, tier: string>> {
+  --api-version: string@api-version-completer # Client API Version. (required)
+]: nothing -> record<properties: record<consortium: string, consortiumManagementAccountAddress: string, consortiumManagementAccountPassword: string, consortiumMemberDisplayName: string, consortiumRole: string, dns: string, firewallRules: list<record>, password: string, protocol: string, provisioningState: string, publicKey: string, rootContractAddress: string, userName: string, validatorNodesSku: record<capacity: int>>, sku: record<name: string, tier: string>, location: string, tags: record, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($blockchain_member_name | is-empty) { error make --unspanned { msg: "path parameter 'blockchainMemberName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-06-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), blockchain_member_name: (encode-path-segment $blockchain_member_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -525,16 +534,17 @@ export def "blockchain-members-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client API Version.
+  --api-version: string@api-version-completer # Client API Version. (required)
   --properties: record # Update the payload of the blockchain member properties for a blockchain member. — shape: {consortiumManagementAccountPassword?: string, firewallRules?: list, password?: string}
   --tags: record # Tags of the service which is a list of key value pairs that describes the resource.
-]: any -> record<properties: record<consortium: string, consortiumManagementAccountAddress: string, consortiumManagementAccountPassword: string, consortiumMemberDisplayName: string, consortiumRole: string, dns: string, firewallRules: list<record>, password: string, protocol: string, provisioningState: string, publicKey: string, rootContractAddress: string, userName: string, validatorNodesSku: record<capacity: int>>, sku: record<name: string, tier: string>> {
+]: any -> record<properties: record<consortium: string, consortiumManagementAccountAddress: string, consortiumManagementAccountPassword: string, consortiumMemberDisplayName: string, consortiumRole: string, dns: string, firewallRules: list<record>, password: string, protocol: string, provisioningState: string, publicKey: string, rootContractAddress: string, userName: string, validatorNodesSku: record<capacity: int>>, sku: record<name: string, tier: string>, location: string, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($blockchain_member_name | is-empty) { error make --unspanned { msg: "path parameter 'blockchainMemberName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-06-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), blockchain_member_name: (encode-path-segment $blockchain_member_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -574,18 +584,19 @@ export def "blockchain-members-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client API Version.
+  --api-version: string@api-version-completer # Client API Version. (required)
   --properties: record # Payload of the blockchain member properties for a blockchain member. — shape: {consortium?: string, consortiumManagementAccountPassword?: string, consortiumMemberDisplayName?: string, consortiumRole?: string, firewallRules?: list, password?: string, protocol?: "NotSpecified"|"Parity"|"Quorum"|"Corda", validatorNodesSku?: record}
   --sku: record # Blockchain member Sku in payload — shape: {name?: string, tier?: string}
   --location: string # The GEO location of the blockchain service.
   --tags: record # Tags of the service which is a list of key value pairs that describes the resource.
-]: any -> record<properties: record<consortium: string, consortiumManagementAccountAddress: string, consortiumManagementAccountPassword: string, consortiumMemberDisplayName: string, consortiumRole: string, dns: string, firewallRules: list<record>, password: string, protocol: string, provisioningState: string, publicKey: string, rootContractAddress: string, userName: string, validatorNodesSku: record<capacity: int>>, sku: record<name: string, tier: string>> {
+]: any -> record<properties: record<consortium: string, consortiumManagementAccountAddress: string, consortiumManagementAccountPassword: string, consortiumMemberDisplayName: string, consortiumRole: string, dns: string, firewallRules: list<record>, password: string, protocol: string, provisioningState: string, publicKey: string, rootContractAddress: string, userName: string, validatorNodesSku: record<capacity: int>>, sku: record<name: string, tier: string>, location: string, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($blockchain_member_name | is-empty) { error make --unspanned { msg: "path parameter 'blockchainMemberName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-06-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), blockchain_member_name: (encode-path-segment $blockchain_member_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "sku": $sku, "location": $location, "tags": $tags} | compact
@@ -623,13 +634,14 @@ export def "blockchain-members-list-consortium-members" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client API Version.
+  --api-version: string@api-version-completer # Client API Version. (required)
 ]: nothing -> record<nextLink: string, value: table<dateModified: string, displayName: string, joinDate: string, name: string, role: string, status: string, subscriptionId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($blockchain_member_name | is-empty) { error make --unspanned { msg: "path parameter 'blockchainMemberName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-06-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), blockchain_member_name: (encode-path-segment $blockchain_member_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}/consortiumMembers") $qp $auth.query)
   let accept_val = "application/json"
@@ -665,13 +677,14 @@ export def "blockchain-members-list-api-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client API Version.
+  --api-version: string@api-version-completer # Client API Version. (required)
 ]: nothing -> record<keys: table<keyName: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($blockchain_member_name | is-empty) { error make --unspanned { msg: "path parameter 'blockchainMemberName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-06-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), blockchain_member_name: (encode-path-segment $blockchain_member_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}/listApiKeys") $qp $auth.query)
   let accept_val = "application/json"
@@ -707,7 +720,7 @@ export def "blockchain-members-list-regenerate-api-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client API Version.
+  --api-version: string@api-version-completer # Client API Version. (required)
   --key-name: string # Gets or sets the API key name.
   --value: string # Gets or sets the API key value.
 ]: any -> record<keys: table<keyName: string, value: string>> {
@@ -717,6 +730,7 @@ export def "blockchain-members-list-regenerate-api-keys" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($blockchain_member_name | is-empty) { error make --unspanned { msg: "path parameter 'blockchainMemberName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-06-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), blockchain_member_name: (encode-path-segment $blockchain_member_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}/regenerateApiKeys") $qp $auth.query)
   let req_body = {"keyName": $key_name, "value": $value} | compact
@@ -754,13 +768,14 @@ export def "transaction-nodes-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client API Version.
-]: nothing -> record<nextLink: string, value: table<location: string, properties: record>> {
+  --api-version: string@api-version-completer # Client API Version. (required)
+]: nothing -> record<nextLink: string, value: table<location: string, properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($blockchain_member_name | is-empty) { error make --unspanned { msg: "path parameter 'blockchainMemberName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-06-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), blockchain_member_name: (encode-path-segment $blockchain_member_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}/transactionNodes") $qp $auth.query)
   let accept_val = "application/json"
@@ -797,7 +812,7 @@ export def "transaction-nodes-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client API Version.
+  --api-version: string@api-version-completer # Client API Version. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -805,6 +820,7 @@ export def "transaction-nodes-delete" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($blockchain_member_name | is-empty) { error make --unspanned { msg: "path parameter 'blockchainMemberName' must be non-empty" } }
   if ($transaction_node_name | is-empty) { error make --unspanned { msg: "path parameter 'transactionNodeName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-06-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), blockchain_member_name: (encode-path-segment $blockchain_member_name), transaction_node_name: (encode-path-segment $transaction_node_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}/transactionNodes/{transaction_node_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -841,14 +857,15 @@ export def "transaction-nodes-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client API Version.
-]: nothing -> record<location: string, properties: record<dns: string, firewallRules: list<record>, password: string, provisioningState: string, publicKey: string, userName: string>> {
+  --api-version: string@api-version-completer # Client API Version. (required)
+]: nothing -> record<location: string, properties: record<dns: string, firewallRules: list<record>, password: string, provisioningState: string, publicKey: string, userName: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($blockchain_member_name | is-empty) { error make --unspanned { msg: "path parameter 'blockchainMemberName' must be non-empty" } }
   if ($transaction_node_name | is-empty) { error make --unspanned { msg: "path parameter 'transactionNodeName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-06-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), blockchain_member_name: (encode-path-segment $blockchain_member_name), transaction_node_name: (encode-path-segment $transaction_node_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}/transactionNodes/{transaction_node_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -886,9 +903,9 @@ export def "transaction-nodes-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client API Version.
+  --api-version: string@api-version-completer # Client API Version. (required)
   --properties: record # Update the payload of the transaction node properties in the transaction node payload. — shape: {firewallRules?: list, password?: string}
-]: any -> record<location: string, properties: record<dns: string, firewallRules: list<record>, password: string, provisioningState: string, publicKey: string, userName: string>> {
+]: any -> record<location: string, properties: record<dns: string, firewallRules: list<record>, password: string, provisioningState: string, publicKey: string, userName: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -896,6 +913,7 @@ export def "transaction-nodes-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($blockchain_member_name | is-empty) { error make --unspanned { msg: "path parameter 'blockchainMemberName' must be non-empty" } }
   if ($transaction_node_name | is-empty) { error make --unspanned { msg: "path parameter 'transactionNodeName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-06-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), blockchain_member_name: (encode-path-segment $blockchain_member_name), transaction_node_name: (encode-path-segment $transaction_node_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}/transactionNodes/{transaction_node_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -935,10 +953,10 @@ export def "transaction-nodes-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client API Version.
+  --api-version: string@api-version-completer # Client API Version. (required)
   --location: string # Gets or sets the transaction node location.
   --properties: record # Payload of transaction node properties payload in the transaction node payload. — shape: {firewallRules?: list, password?: string}
-]: any -> record<location: string, properties: record<dns: string, firewallRules: list<record>, password: string, provisioningState: string, publicKey: string, userName: string>> {
+]: any -> record<location: string, properties: record<dns: string, firewallRules: list<record>, password: string, provisioningState: string, publicKey: string, userName: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -946,6 +964,7 @@ export def "transaction-nodes-create" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($blockchain_member_name | is-empty) { error make --unspanned { msg: "path parameter 'blockchainMemberName' must be non-empty" } }
   if ($transaction_node_name | is-empty) { error make --unspanned { msg: "path parameter 'transactionNodeName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-06-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), blockchain_member_name: (encode-path-segment $blockchain_member_name), transaction_node_name: (encode-path-segment $transaction_node_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}/transactionNodes/{transaction_node_name}") $qp $auth.query)
   let req_body = {"location": $location, "properties": $properties} | compact
@@ -984,7 +1003,7 @@ export def "transaction-nodes-list-api-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client API Version.
+  --api-version: string@api-version-completer # Client API Version. (required)
 ]: nothing -> record<keys: table<keyName: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -992,6 +1011,7 @@ export def "transaction-nodes-list-api-keys" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($blockchain_member_name | is-empty) { error make --unspanned { msg: "path parameter 'blockchainMemberName' must be non-empty" } }
   if ($transaction_node_name | is-empty) { error make --unspanned { msg: "path parameter 'transactionNodeName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-06-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), blockchain_member_name: (encode-path-segment $blockchain_member_name), transaction_node_name: (encode-path-segment $transaction_node_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}/transactionNodes/{transaction_node_name}/listApiKeys") $qp $auth.query)
   let accept_val = "application/json"
@@ -1028,7 +1048,7 @@ export def "transaction-nodes-list-regenerate-api-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string@api-version-completer # Client API Version.
+  --api-version: string@api-version-completer # Client API Version. (required)
   --key-name: string # Gets or sets the API key name.
   --value: string # Gets or sets the API key value.
 ]: any -> record<keys: table<keyName: string, value: string>> {
@@ -1039,6 +1059,7 @@ export def "transaction-nodes-list-regenerate-api-keys" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($blockchain_member_name | is-empty) { error make --unspanned { msg: "path parameter 'blockchainMemberName' must be non-empty" } }
   if ($transaction_node_name | is-empty) { error make --unspanned { msg: "path parameter 'transactionNodeName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-06-01-preview")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), blockchain_member_name: (encode-path-segment $blockchain_member_name), transaction_node_name: (encode-path-segment $transaction_node_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}/transactionNodes/{transaction_node_name}/regenerateApiKeys") $qp $auth.query)
   let req_body = {"keyName": $key_name, "value": $value} | compact

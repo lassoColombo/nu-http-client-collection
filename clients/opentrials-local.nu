@@ -93,6 +93,8 @@ def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: 
 def base-url-completer [] { ["https://opentrials.local/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def in-param-completer [] { ["location"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -239,7 +241,7 @@ export def "get-document" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<document_category: record<group: string, id: int, name: string>, fda_application: record<active_ingredients: string, drug_name: string, fda_approvals: list<record>, id: string, organisation: record<id: string, name: string, url: string>, type: string, url: string>, file: record, id: string, name: string, source: record<id: string, name: string, source_url: string, terms_and_conditions_url: string, type: string>, source_url: string, trials: table<id: string, public_title: string, url: string>, url: string> {
+]: nothing -> record<document_category: record<group: string, id: int, name: string>, fda_application: record<active_ingredients: string, drug_name: string, fda_approvals: list<record>, id: string, organisation: record<id: string, name: string, url: string>, type: string, url: string>, file: record<documentcloud_id: string, id: string, sha1: string, source_url: string, pages: list<record>>, id: string, name: string, source: record<id: string, name: string, source_url: string, terms_and_conditions_url: string, type: string>, source_url: string, trials: table<id: string, public_title: string, url: string>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -520,7 +522,7 @@ export def "search-trials" [
 # GET /search/autocomplete/{in}
 # operationId: autocomplete
 export def "autocomplete" [
-  in_arg: string
+  in_arg: string@in-param-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -643,7 +645,7 @@ export def "get-trial" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<age_range: record<max_age: string, min_age: string>, brief_summary: string, completion_date: string, conditions: table<id: string, name: string, url: string>, discrepancies: record, documents: table<document_category: record, fda_application: record, file: record, id: string, name: string, source_id: string, source_url: string, trials: list, url: string>, gender: string, has_published_results: bool, id: string, identifiers: record, interventions: table<id: string, name: string, type: string, url: string>, locations: list<record>, organisations: list<record>, persons: list<record>, public_title: string, publications: table<id: string, source_id: string, source_url: string, title: string, url: string>, records: table<id: string, is_primary: bool, last_verification_date: string, source_id: string, url: string>, recruitment_status: string, registration_date: string, results_exemption_date: string, risks_of_bias: table<id: string, risk_of_bias_criteria: list, source_id: string, source_url: string, study_id: string>, source_id: string, sources: record, status: string, study_phase: list<string>, target_sample_size: int, url: string> {
+]: nothing -> record<age_range: record<max_age: string, min_age: string>, brief_summary: string, completion_date: string, conditions: table<id: string, name: string, url: string>, discrepancies: record, documents: table<document_category: record, fda_application: record, file: record, id: string, name: string, source_id: string, source_url: string, trials: list, url: string>, gender: string, has_published_results: bool, id: string, identifiers: record, interventions: table<id: string, name: string, type: string, url: string>, locations: table<id: string, name: string, type: string, role: string>, organisations: table<id: string, name: string, url: string, role: string>, persons: table<id: string, name: string, url: string, role: string>, public_title: string, publications: table<id: string, source_id: string, source_url: string, title: string, url: string>, records: table<id: string, is_primary: bool, last_verification_date: string, source_id: string, url: string>, recruitment_status: string, registration_date: string, results_exemption_date: string, risks_of_bias: table<id: string, risk_of_bias_criteria: list, source_id: string, source_url: string, study_id: string>, source_id: string, sources: record, status: string, study_phase: list<string>, target_sample_size: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

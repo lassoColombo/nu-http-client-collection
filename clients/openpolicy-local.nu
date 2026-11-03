@@ -224,7 +224,7 @@ export def "get-health" [
 # POST /v0/data/{path}
 # operationId: getDocumentWithWebHook
 export def "get-document-with-web-hook" [
-  path: any
+  path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -236,7 +236,7 @@ export def "get-document-with-web-hook" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # If true, response will be in a human-readable format. (e.g. true)
   --body: any
-]: any -> any {
+]: any -> record<result: table<ast: record, id: string, raw: string>, provenance: record<build_commit: string, build_hostname: string, build_timestamp: string, bundles: record, version: string>, metrics: record<counter_server_query_cache_hit: float, timer_query_compile_stage_build_comprehension_index_ns: float, timer_query_compile_stage_check_safety_ns: float, timer_query_compile_stage_check_types_ns: float, timer_query_compile_stage_check_undefined_funcs_ns: float, timer_query_compile_stage_check_unsafe_builtins_ns: float, timer_query_compile_stage_resolve_refs_ns: float, timer_query_compile_stage_rewrite_comprehension_terms_ns: float, timer_query_compile_stage_rewrite_dynamic_terms_ns: float, timer_query_compile_stage_rewrite_expr_terms_ns: float, timer_query_compile_stage_rewrite_local_vars_ns: float, timer_query_compile_stage_rewrite_to_capture_value_ns: float, timer_query_compile_stage_rewrite_with_values_ns: float, timer_rego_input_parse_ns: float, timer_rego_module_compile_ns: float, timer_rego_module_parse_ns: float, timer_rego_query_compile_ns: float, timer_rego_query_eval_ns: float, timer_rego_query_parse_ns: float, timer_server_handler_ns: float, timer_server_read_bytes_ns: float>, explanation: table<locals: list, node: record, op: string, parent_id: float, query_id: float, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -281,7 +281,7 @@ export def "post-compile" [
   --metrics: oneof<nothing, bool> # If true, compiler performance metrics will be returned in the response. (e.g. false)
   --instrument: oneof<nothing, bool> # If true, response will return additional performance metrics in addition to the result and the standard metrics. **Caution:** This can add significant overhead to query evaluation. The recommendation is to only use this parameter if you are debugging a performance problem. (e.g. false)
   --body: record
-]: any -> any {
+]: any -> record<result: table<ast: record, id: string, raw: string>, metrics: record<counter_server_query_cache_hit: float, timer_query_compile_stage_build_comprehension_index_ns: float, timer_query_compile_stage_check_safety_ns: float, timer_query_compile_stage_check_types_ns: float, timer_query_compile_stage_check_undefined_funcs_ns: float, timer_query_compile_stage_check_unsafe_builtins_ns: float, timer_query_compile_stage_resolve_refs_ns: float, timer_query_compile_stage_rewrite_comprehension_terms_ns: float, timer_query_compile_stage_rewrite_dynamic_terms_ns: float, timer_query_compile_stage_rewrite_expr_terms_ns: float, timer_query_compile_stage_rewrite_local_vars_ns: float, timer_query_compile_stage_rewrite_to_capture_value_ns: float, timer_query_compile_stage_rewrite_with_values_ns: float, timer_rego_input_parse_ns: float, timer_rego_module_compile_ns: float, timer_rego_module_parse_ns: float, timer_rego_query_compile_ns: float, timer_rego_query_eval_ns: float, timer_rego_query_parse_ns: float, timer_server_handler_ns: float, timer_server_read_bytes_ns: float>, explanation: table<locals: list, node: record, op: string, parent_id: float, query_id: float, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -320,7 +320,7 @@ export def "get-config" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # If true, response will be in a human-readable format. (e.g. true)
-]: nothing -> any {
+]: nothing -> record<result: record<bundles: record<authz: record>, decision_logs: record<service: string>, default_authorization_decision: string, default_decision: string, keys: record<global_key: record>, labels: record<id: string, version: string>, services: record<acmecorp: record>, status: record<service: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pretty" $pretty "scalar")] | flatten | str join "&"
@@ -382,7 +382,7 @@ export def "delete-document" [
 # GET /v1/data/{path}
 # operationId: getDocument
 export def "get-document" [
-  path: any
+  path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -392,24 +392,24 @@ export def "get-document" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --input: record # Provide the text for an [input document](https://www.openpolicyagent.org/docs/latest/kubernetes-primer/#input-document) in JSON format (e.g. {input: {example: {flag: true}}})
+  --qp-input: record # Provide the text for an [input document](https://www.openpolicyagent.org/docs/latest/kubernetes-primer/#input-document) in JSON format (e.g. {input: {example: {flag: true}}})
   --pretty: oneof<nothing, bool> # If true, response will be in a human-readable format. (e.g. true)
   --provenance: oneof<nothing, bool> # If true, response will include build and version information in addition to the result. (e.g. false)
   --explain: string # If set to *full*, response will include query explanations in addition to the result. (e.g. full)
   --metrics: oneof<nothing, bool> # If true, compiler performance metrics will be returned in the response. (e.g. false)
   --instrument: oneof<nothing, bool> # If true, response will return additional performance metrics in addition to the result and the standard metrics. **Caution:** This can add significant overhead to query evaluation. The recommendation is to only use this parameter if you are debugging a performance problem. (e.g. false)
-]: nothing -> any {
+]: nothing -> record<result: table<ast: record, id: string, raw: string>, provenance: record<build_commit: string, build_hostname: string, build_timestamp: string, bundles: record, version: string>, metrics: record<counter_server_query_cache_hit: float, timer_query_compile_stage_build_comprehension_index_ns: float, timer_query_compile_stage_check_safety_ns: float, timer_query_compile_stage_check_types_ns: float, timer_query_compile_stage_check_undefined_funcs_ns: float, timer_query_compile_stage_check_unsafe_builtins_ns: float, timer_query_compile_stage_resolve_refs_ns: float, timer_query_compile_stage_rewrite_comprehension_terms_ns: float, timer_query_compile_stage_rewrite_dynamic_terms_ns: float, timer_query_compile_stage_rewrite_expr_terms_ns: float, timer_query_compile_stage_rewrite_local_vars_ns: float, timer_query_compile_stage_rewrite_to_capture_value_ns: float, timer_query_compile_stage_rewrite_with_values_ns: float, timer_rego_input_parse_ns: float, timer_rego_module_compile_ns: float, timer_rego_module_parse_ns: float, timer_rego_query_compile_ns: float, timer_rego_query_eval_ns: float, timer_rego_query_parse_ns: float, timer_server_handler_ns: float, timer_server_read_bytes_ns: float>, explanation: table<locals: list, node: record, op: string, parent_id: float, query_id: float, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
-  let qp = [(serialize-qp "input" $input "multi") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "provenance" $provenance "scalar") (serialize-qp "explain" $explain "scalar") (serialize-qp "metrics" $metrics "scalar") (serialize-qp "instrument" $instrument "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "input" $qp_input "multi") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "provenance" $provenance "scalar") (serialize-qp "explain" $explain "scalar") (serialize-qp "metrics" $metrics "scalar") (serialize-qp "instrument" $instrument "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/v1/data/{path}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"input": $input, "pretty": $pretty, "provenance": $provenance, "explain": $explain, "metrics": $metrics, "instrument": $instrument} | compact)
+    query: ({"input": $qp_input, "pretty": $pretty, "provenance": $provenance, "explain": $explain, "metrics": $metrics, "instrument": $instrument} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -465,7 +465,7 @@ export def "patch-document" [
 # POST /v1/data/{path}
 # operationId: getDocumentWithPath
 export def "get-document-with-path" [
-  path: any
+  path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -481,7 +481,7 @@ export def "get-document-with-path" [
   --metrics: oneof<nothing, bool> # If true, compiler performance metrics will be returned in the response. (e.g. false)
   --instrument: oneof<nothing, bool> # If true, response will return additional performance metrics in addition to the result and the standard metrics. **Caution:** This can add significant overhead to query evaluation. The recommendation is to only use this parameter if you are debugging a performance problem. (e.g. false)
   --body: any
-]: any -> any {
+]: any -> record<result: table<ast: record, id: string, raw: string>, provenance: record<build_commit: string, build_hostname: string, build_timestamp: string, bundles: record, version: string>, metrics: record<counter_server_query_cache_hit: float, timer_query_compile_stage_build_comprehension_index_ns: float, timer_query_compile_stage_check_safety_ns: float, timer_query_compile_stage_check_types_ns: float, timer_query_compile_stage_check_undefined_funcs_ns: float, timer_query_compile_stage_check_unsafe_builtins_ns: float, timer_query_compile_stage_resolve_refs_ns: float, timer_query_compile_stage_rewrite_comprehension_terms_ns: float, timer_query_compile_stage_rewrite_dynamic_terms_ns: float, timer_query_compile_stage_rewrite_expr_terms_ns: float, timer_query_compile_stage_rewrite_local_vars_ns: float, timer_query_compile_stage_rewrite_to_capture_value_ns: float, timer_query_compile_stage_rewrite_with_values_ns: float, timer_rego_input_parse_ns: float, timer_rego_module_compile_ns: float, timer_rego_module_parse_ns: float, timer_rego_query_compile_ns: float, timer_rego_query_eval_ns: float, timer_rego_query_parse_ns: float, timer_server_handler_ns: float, timer_server_read_bytes_ns: float>, explanation: table<locals: list, node: record, op: string, parent_id: float, query_id: float, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -511,7 +511,7 @@ export def "get-document-with-path" [
 # PUT /v1/data/{path}
 # operationId: putDocument
 export def "put-document" [
-  path: any
+  path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -564,7 +564,7 @@ export def "get-policies" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # If true, response will be in a human-readable format. (e.g. true)
-]: nothing -> any {
+]: nothing -> record<result: table<ast: record, id: string, raw: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pretty" $pretty "scalar")] | flatten | str join "&"
@@ -590,7 +590,7 @@ export def "get-policies" [
 # DELETE /v1/policies/{id}
 # operationId: deletePolicyModule
 export def "delete-policy-module" [
-  id: any
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -601,7 +601,7 @@ export def "delete-policy-module" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # If true, response will be in a human-readable format. (e.g. true)
-]: nothing -> any {
+]: nothing -> record<result: table<ast: record, id: string, raw: string>, provenance: record<build_commit: string, build_hostname: string, build_timestamp: string, bundles: record, version: string>, metrics: record<counter_server_query_cache_hit: float, timer_query_compile_stage_build_comprehension_index_ns: float, timer_query_compile_stage_check_safety_ns: float, timer_query_compile_stage_check_types_ns: float, timer_query_compile_stage_check_undefined_funcs_ns: float, timer_query_compile_stage_check_unsafe_builtins_ns: float, timer_query_compile_stage_resolve_refs_ns: float, timer_query_compile_stage_rewrite_comprehension_terms_ns: float, timer_query_compile_stage_rewrite_dynamic_terms_ns: float, timer_query_compile_stage_rewrite_expr_terms_ns: float, timer_query_compile_stage_rewrite_local_vars_ns: float, timer_query_compile_stage_rewrite_to_capture_value_ns: float, timer_query_compile_stage_rewrite_with_values_ns: float, timer_rego_input_parse_ns: float, timer_rego_module_compile_ns: float, timer_rego_module_parse_ns: float, timer_rego_query_compile_ns: float, timer_rego_query_eval_ns: float, timer_rego_query_parse_ns: float, timer_server_handler_ns: float, timer_server_read_bytes_ns: float>, explanation: table<locals: list, node: record, op: string, parent_id: float, query_id: float, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -628,7 +628,7 @@ export def "delete-policy-module" [
 # GET /v1/policies/{id}
 # operationId: getPolicyModule
 export def "get-policy-module" [
-  id: any
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -639,7 +639,7 @@ export def "get-policy-module" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # If true, response will be in a human-readable format. (e.g. true)
-]: nothing -> any {
+]: nothing -> record<result: table<ast: record, id: string, raw: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -666,7 +666,7 @@ export def "get-policy-module" [
 # PUT /v1/policies/{id}
 # operationId: putPolicyModule
 export def "put-policy-module" [
-  id: any
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -679,7 +679,7 @@ export def "put-policy-module" [
   --pretty: oneof<nothing, bool> # If true, response will be in a human-readable format. (e.g. true)
   --metrics: oneof<nothing, bool> # If true, compiler performance metrics will be returned in the response. (e.g. false)
   --body: string
-]: any -> any {
+]: any -> record<result: table<ast: record, id: string, raw: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -718,13 +718,14 @@ export def "get-query" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The [URL-encoded](https://www.w3schools.com/tags/ref_urlencode.ASP) ad-hoc query to execute. (e.g. {"query": "data.servers[i].ports[_] = \"p2\"; data.servers[i].name = name"})
+  --q: string # The [URL-encoded](https://www.w3schools.com/tags/ref_urlencode.ASP) ad-hoc query to execute. (required, e.g. {"query": "data.servers[i].ports[_] = \"p2\"; data.servers[i].name = name"})
   --pretty: oneof<nothing, bool> # If true, response will be in a human-readable format. (e.g. true)
   --explain: string # If set to *full*, response will include query explanations in addition to the result. (e.g. full)
   --metrics: oneof<nothing, bool> # If true, compiler performance metrics will be returned in the response. (e.g. false)
-]: nothing -> any {
+]: nothing -> record<result: table<ast: record, id: string, raw: string>, metrics: record<counter_server_query_cache_hit: float, timer_query_compile_stage_build_comprehension_index_ns: float, timer_query_compile_stage_check_safety_ns: float, timer_query_compile_stage_check_types_ns: float, timer_query_compile_stage_check_undefined_funcs_ns: float, timer_query_compile_stage_check_unsafe_builtins_ns: float, timer_query_compile_stage_resolve_refs_ns: float, timer_query_compile_stage_rewrite_comprehension_terms_ns: float, timer_query_compile_stage_rewrite_dynamic_terms_ns: float, timer_query_compile_stage_rewrite_expr_terms_ns: float, timer_query_compile_stage_rewrite_local_vars_ns: float, timer_query_compile_stage_rewrite_to_capture_value_ns: float, timer_query_compile_stage_rewrite_with_values_ns: float, timer_rego_input_parse_ns: float, timer_rego_module_compile_ns: float, timer_rego_module_parse_ns: float, timer_rego_query_compile_ns: float, timer_rego_query_eval_ns: float, timer_rego_query_parse_ns: float, timer_server_handler_ns: float, timer_server_read_bytes_ns: float>, explanation: table<locals: list, node: record, op: string, parent_id: float, query_id: float, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "explain" $explain "scalar") (serialize-qp "metrics" $metrics "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/query" $qp $auth.query)
   let accept_val = "application/json"
@@ -761,7 +762,7 @@ export def "post-query" [
   --explain: string # If set to *full*, response will include query explanations in addition to the result. (e.g. full)
   --metrics: oneof<nothing, bool> # If true, compiler performance metrics will be returned in the response. (e.g. false)
   --body: any
-]: any -> any {
+]: any -> record<result: table<ast: record, id: string, raw: string>, metrics: record<counter_server_query_cache_hit: float, timer_query_compile_stage_build_comprehension_index_ns: float, timer_query_compile_stage_check_safety_ns: float, timer_query_compile_stage_check_types_ns: float, timer_query_compile_stage_check_undefined_funcs_ns: float, timer_query_compile_stage_check_unsafe_builtins_ns: float, timer_query_compile_stage_resolve_refs_ns: float, timer_query_compile_stage_rewrite_comprehension_terms_ns: float, timer_query_compile_stage_rewrite_dynamic_terms_ns: float, timer_query_compile_stage_rewrite_expr_terms_ns: float, timer_query_compile_stage_rewrite_local_vars_ns: float, timer_query_compile_stage_rewrite_to_capture_value_ns: float, timer_query_compile_stage_rewrite_with_values_ns: float, timer_rego_input_parse_ns: float, timer_rego_module_compile_ns: float, timer_rego_module_parse_ns: float, timer_rego_query_compile_ns: float, timer_rego_query_eval_ns: float, timer_rego_query_parse_ns: float, timer_server_handler_ns: float, timer_server_read_bytes_ns: float>, explanation: table<locals: list, node: record, op: string, parent_id: float, query_id: float, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

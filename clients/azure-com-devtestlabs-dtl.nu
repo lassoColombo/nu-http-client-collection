@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -160,10 +160,11 @@ export def "provider-operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.DevTestLab/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -201,11 +202,12 @@ export def "labs-list-by-subscription" [
   --filter: string # The filter to apply to the operation. Example: '$filter=contains(name,'myName')
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DevTestLab/labs") $qp $auth.query)
   let accept_val = "application/json"
@@ -241,13 +243,14 @@ export def "operations-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
 ]: nothing -> record<error: record<code: string, message: string>, status: string, statusCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($location_name | is-empty) { error make --unspanned { msg: "path parameter 'locationName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location_name: (encode-path-segment $location_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DevTestLab/locations/{location_name}/operations/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -285,11 +288,12 @@ export def "global-schedules-list-by-subscription" [
   --filter: string # The filter to apply to the operation. Example: '$filter=contains(name,'myName')
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DevTestLab/schedules") $qp $auth.query)
   let accept_val = "application/json"
@@ -328,12 +332,13 @@ export def "labs-list-by-resource-group" [
   --filter: string # The filter to apply to the operation. Example: '$filter=contains(name,'myName')
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs") $qp $auth.query)
   let accept_val = "application/json"
@@ -373,13 +378,14 @@ export def "artifact-sources-list" [
   --filter: string # The filter to apply to the operation. Example: '$filter=contains(name,'myName')
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/artifactsources") $qp $auth.query)
   let accept_val = "application/json"
@@ -420,14 +426,15 @@ export def "arm-templates-list" [
   --filter: string # The filter to apply to the operation. Example: '$filter=contains(name,'myName')
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($artifact_source_name | is-empty) { error make --unspanned { msg: "path parameter 'artifactSourceName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), artifact_source_name: (encode-path-segment $artifact_source_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/artifactsources/{artifact_source_name}/armtemplates") $qp $auth.query)
   let accept_val = "application/json"
@@ -466,8 +473,8 @@ export def "arm-templates-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($select=displayName)'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<properties: record<contents: record, createdDate: string, description: string, displayName: string, enabled: bool, icon: string, parametersValueFilesInfo: list<record>, publisher: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<properties: record<contents: record, createdDate: string, description: string, displayName: string, enabled: bool, icon: string, parametersValueFilesInfo: list<record>, publisher: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -475,6 +482,7 @@ export def "arm-templates-get" [
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($artifact_source_name | is-empty) { error make --unspanned { msg: "path parameter 'artifactSourceName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), artifact_source_name: (encode-path-segment $artifact_source_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/artifactsources/{artifact_source_name}/armtemplates/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -515,14 +523,15 @@ export def "artifacts-list" [
   --filter: string # The filter to apply to the operation. Example: '$filter=contains(name,'myName')
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($artifact_source_name | is-empty) { error make --unspanned { msg: "path parameter 'artifactSourceName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), artifact_source_name: (encode-path-segment $artifact_source_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/artifactsources/{artifact_source_name}/artifacts") $qp $auth.query)
   let accept_val = "application/json"
@@ -561,8 +570,8 @@ export def "artifacts-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($select=title)'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<properties: record<createdDate: string, description: string, filePath: string, icon: string, parameters: record, publisher: string, targetOsType: string, title: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<properties: record<createdDate: string, description: string, filePath: string, icon: string, parameters: record, publisher: string, targetOsType: string, title: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -570,6 +579,7 @@ export def "artifacts-get" [
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($artifact_source_name | is-empty) { error make --unspanned { msg: "path parameter 'artifactSourceName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), artifact_source_name: (encode-path-segment $artifact_source_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/artifactsources/{artifact_source_name}/artifacts/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -608,7 +618,7 @@ export def "artifacts-generate-arm-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   --file-upload-options: string@file-upload-options-completer # Options for uploading the files for the artifact. UploadFilesAndGenerateSasTokens is the default value.
   --location: string # The location of the virtual machine.
   --parameters: list # The parameters of the ARM template. — item shape: {name?: string, value?: string}
@@ -622,6 +632,7 @@ export def "artifacts-generate-arm-template" [
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($artifact_source_name | is-empty) { error make --unspanned { msg: "path parameter 'artifactSourceName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), artifact_source_name: (encode-path-segment $artifact_source_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/artifactsources/{artifact_source_name}/artifacts/{name}/generateArmTemplate") $qp $auth.query)
   let req_body = {"fileUploadOptions": $file_upload_options, "location": $location, "parameters": $parameters, "virtualMachineName": $virtual_machine_name} | compact
@@ -660,14 +671,15 @@ export def "artifact-sources-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/artifactsources/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -705,14 +717,15 @@ export def "artifact-sources-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($select=displayName)'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<properties: record<armTemplateFolderPath: string, branchRef: string, createdDate: string, displayName: string, folderPath: string, provisioningState: string, securityToken: string, sourceType: string, status: string, uniqueIdentifier: string, uri: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<properties: record<armTemplateFolderPath: string, branchRef: string, createdDate: string, displayName: string, folderPath: string, provisioningState: string, securityToken: string, sourceType: string, status: string, uniqueIdentifier: string, uri: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/artifactsources/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -750,10 +763,10 @@ export def "artifact-sources-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   --properties: record # Properties of an artifact source. — shape: {armTemplateFolderPath?: string, branchRef?: string, displayName?: string, folderPath?: string, securityToken?: string, sourceType?: "VsoGit"|"GitHub", status?: "Enabled"|"Disabled", uri?: string}
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<armTemplateFolderPath: string, branchRef: string, createdDate: string, displayName: string, folderPath: string, provisioningState: string, securityToken: string, sourceType: string, status: string, uniqueIdentifier: string, uri: string>> {
+]: any -> record<properties: record<armTemplateFolderPath: string, branchRef: string, createdDate: string, displayName: string, folderPath: string, provisioningState: string, securityToken: string, sourceType: string, status: string, uniqueIdentifier: string, uri: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -761,6 +774,7 @@ export def "artifact-sources-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/artifactsources/{name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -800,11 +814,11 @@ export def "artifact-sources-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   properties: record # Properties of an artifact source. — shape: {armTemplateFolderPath?: string, branchRef?: string, displayName?: string, folderPath?: string, securityToken?: string, sourceType?: "VsoGit"|"GitHub", status?: "Enabled"|"Disabled", uri?: string}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<armTemplateFolderPath: string, branchRef: string, createdDate: string, displayName: string, folderPath: string, provisioningState: string, securityToken: string, sourceType: string, status: string, uniqueIdentifier: string, uri: string>> {
+]: any -> record<properties: record<armTemplateFolderPath: string, branchRef: string, createdDate: string, displayName: string, folderPath: string, provisioningState: string, securityToken: string, sourceType: string, status: string, uniqueIdentifier: string, uri: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -812,6 +826,7 @@ export def "artifact-sources-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/artifactsources/{name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -851,14 +866,15 @@ export def "costs-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($expand=labCostDetails)'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<properties: record<createdDate: string, currencyCode: string, endDateTime: string, labCostDetails: list<record>, labCostSummary: record<estimatedLabCost: float>, provisioningState: string, resourceCosts: list<record>, startDateTime: string, targetCost: record<costThresholds: list, cycleEndDateTime: string, cycleStartDateTime: string, cycleType: string, status: string, target: int>, uniqueIdentifier: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<properties: record<createdDate: string, currencyCode: string, endDateTime: string, labCostDetails: list<record>, labCostSummary: record<estimatedLabCost: float>, provisioningState: string, resourceCosts: list<record>, startDateTime: string, targetCost: record<costThresholds: list, cycleEndDateTime: string, cycleStartDateTime: string, cycleType: string, status: string, target: int>, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/costs/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -896,11 +912,11 @@ export def "costs-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   properties: record # Properties of a cost item. — shape: {createdDate?: string, currencyCode?: string, endDateTime?: string, labCostSummary?: record, startDateTime?: string, targetCost?: record}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<createdDate: string, currencyCode: string, endDateTime: string, labCostDetails: list<record>, labCostSummary: record<estimatedLabCost: float>, provisioningState: string, resourceCosts: list<record>, startDateTime: string, targetCost: record<costThresholds: list, cycleEndDateTime: string, cycleStartDateTime: string, cycleType: string, status: string, target: int>, uniqueIdentifier: string>> {
+]: any -> record<properties: record<createdDate: string, currencyCode: string, endDateTime: string, labCostDetails: list<record>, labCostSummary: record<estimatedLabCost: float>, provisioningState: string, resourceCosts: list<record>, startDateTime: string, targetCost: record<costThresholds: list, cycleEndDateTime: string, cycleStartDateTime: string, cycleType: string, status: string, target: int>, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -908,6 +924,7 @@ export def "costs-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/costs/{name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -949,13 +966,14 @@ export def "custom-images-list" [
   --filter: string # The filter to apply to the operation. Example: '$filter=contains(name,'myName')
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/customimages") $qp $auth.query)
   let accept_val = "application/json"
@@ -992,14 +1010,15 @@ export def "custom-images-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/customimages/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1037,14 +1056,15 @@ export def "custom-images-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($select=vm)'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<properties: record<author: string, creationDate: string, customImagePlan: record<id: string, offer: string, publisher: string>, dataDiskStorageInfo: list<record>, description: string, isPlanAuthorized: bool, managedImageId: string, managedSnapshotId: string, provisioningState: string, uniqueIdentifier: string, vhd: record<imageName: string, osType: string, sysPrep: bool>, vm: record<linuxOsInfo: record, sourceVmId: string, windowsOsInfo: record>>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<properties: record<author: string, creationDate: string, customImagePlan: record<id: string, offer: string, publisher: string>, dataDiskStorageInfo: list<record>, description: string, isPlanAuthorized: bool, managedImageId: string, managedSnapshotId: string, provisioningState: string, uniqueIdentifier: string, vhd: record<imageName: string, osType: string, sysPrep: bool>, vm: record<linuxOsInfo: record, sourceVmId: string, windowsOsInfo: record>>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/customimages/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1082,10 +1102,10 @@ export def "custom-images-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   --properties: record # Properties of a custom image. — shape: {author?: string, customImagePlan?: record, dataDiskStorageInfo?: list, description?: string, isPlanAuthorized?: bool, managedImageId?: string, managedSnapshotId?: string, vhd?: record, vm?: record}
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<author: string, creationDate: string, customImagePlan: record<id: string, offer: string, publisher: string>, dataDiskStorageInfo: list<record>, description: string, isPlanAuthorized: bool, managedImageId: string, managedSnapshotId: string, provisioningState: string, uniqueIdentifier: string, vhd: record<imageName: string, osType: string, sysPrep: bool>, vm: record<linuxOsInfo: record, sourceVmId: string, windowsOsInfo: record>>> {
+]: any -> record<properties: record<author: string, creationDate: string, customImagePlan: record<id: string, offer: string, publisher: string>, dataDiskStorageInfo: list<record>, description: string, isPlanAuthorized: bool, managedImageId: string, managedSnapshotId: string, provisioningState: string, uniqueIdentifier: string, vhd: record<imageName: string, osType: string, sysPrep: bool>, vm: record<linuxOsInfo: record, sourceVmId: string, windowsOsInfo: record>>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1093,6 +1113,7 @@ export def "custom-images-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/customimages/{name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -1132,11 +1153,11 @@ export def "custom-images-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   properties: record # Properties of a custom image. — shape: {author?: string, customImagePlan?: record, dataDiskStorageInfo?: list, description?: string, isPlanAuthorized?: bool, managedImageId?: string, managedSnapshotId?: string, vhd?: record, vm?: record}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<author: string, creationDate: string, customImagePlan: record<id: string, offer: string, publisher: string>, dataDiskStorageInfo: list<record>, description: string, isPlanAuthorized: bool, managedImageId: string, managedSnapshotId: string, provisioningState: string, uniqueIdentifier: string, vhd: record<imageName: string, osType: string, sysPrep: bool>, vm: record<linuxOsInfo: record, sourceVmId: string, windowsOsInfo: record>>> {
+]: any -> record<properties: record<author: string, creationDate: string, customImagePlan: record<id: string, offer: string, publisher: string>, dataDiskStorageInfo: list<record>, description: string, isPlanAuthorized: bool, managedImageId: string, managedSnapshotId: string, provisioningState: string, uniqueIdentifier: string, vhd: record<imageName: string, osType: string, sysPrep: bool>, vm: record<linuxOsInfo: record, sourceVmId: string, windowsOsInfo: record>>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1144,6 +1165,7 @@ export def "custom-images-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/customimages/{name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -1185,13 +1207,14 @@ export def "formulas-list" [
   --filter: string # The filter to apply to the operation. Example: '$filter=contains(name,'myName')
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/formulas") $qp $auth.query)
   let accept_val = "application/json"
@@ -1228,14 +1251,15 @@ export def "formulas-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/formulas/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1273,14 +1297,15 @@ export def "formulas-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($select=description)'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<properties: record<author: string, creationDate: string, description: string, formulaContent: record<location: string, name: string, properties: record, tags: record>, osType: string, provisioningState: string, uniqueIdentifier: string, vm: record<labVmId: string>>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<properties: record<author: string, creationDate: string, description: string, formulaContent: record<location: string, name: string, properties: record, tags: record>, osType: string, provisioningState: string, uniqueIdentifier: string, vm: record<labVmId: string>>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/formulas/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1318,10 +1343,10 @@ export def "formulas-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   --properties: record # Properties of a formula. — shape: {author?: string, description?: string, formulaContent?: record, osType?: string, vm?: record}
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<author: string, creationDate: string, description: string, formulaContent: record<location: string, name: string, properties: record, tags: record>, osType: string, provisioningState: string, uniqueIdentifier: string, vm: record<labVmId: string>>> {
+]: any -> record<properties: record<author: string, creationDate: string, description: string, formulaContent: record<location: string, name: string, properties: record, tags: record>, osType: string, provisioningState: string, uniqueIdentifier: string, vm: record<labVmId: string>>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1329,6 +1354,7 @@ export def "formulas-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/formulas/{name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -1368,11 +1394,11 @@ export def "formulas-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   properties: record # Properties of a formula. — shape: {author?: string, description?: string, formulaContent?: record, osType?: string, vm?: record}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<author: string, creationDate: string, description: string, formulaContent: record<location: string, name: string, properties: record, tags: record>, osType: string, provisioningState: string, uniqueIdentifier: string, vm: record<labVmId: string>>> {
+]: any -> record<properties: record<author: string, creationDate: string, description: string, formulaContent: record<location: string, name: string, properties: record, tags: record>, osType: string, provisioningState: string, uniqueIdentifier: string, vm: record<labVmId: string>>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1380,6 +1406,7 @@ export def "formulas-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/formulas/{name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -1421,13 +1448,14 @@ export def "gallery-images-list" [
   --filter: string # The filter to apply to the operation. Example: '$filter=contains(name,'myName')
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/galleryimages") $qp $auth.query)
   let accept_val = "application/json"
@@ -1467,13 +1495,14 @@ export def "notification-channels-list" [
   --filter: string # The filter to apply to the operation. Example: '$filter=contains(name,'myName')
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/notificationchannels") $qp $auth.query)
   let accept_val = "application/json"
@@ -1510,14 +1539,15 @@ export def "notification-channels-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/notificationchannels/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1555,14 +1585,15 @@ export def "notification-channels-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($select=webHookUrl)'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<properties: record<createdDate: string, description: string, emailRecipient: string, events: list<record>, notificationLocale: string, provisioningState: string, uniqueIdentifier: string, webHookUrl: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<properties: record<createdDate: string, description: string, emailRecipient: string, events: list<record>, notificationLocale: string, provisioningState: string, uniqueIdentifier: string, webHookUrl: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/notificationchannels/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1600,10 +1631,10 @@ export def "notification-channels-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   --properties: record # Properties of a schedule. — shape: {description?: string, emailRecipient?: string, events?: list, notificationLocale?: string, webHookUrl?: string}
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<createdDate: string, description: string, emailRecipient: string, events: list<record>, notificationLocale: string, provisioningState: string, uniqueIdentifier: string, webHookUrl: string>> {
+]: any -> record<properties: record<createdDate: string, description: string, emailRecipient: string, events: list<record>, notificationLocale: string, provisioningState: string, uniqueIdentifier: string, webHookUrl: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1611,6 +1642,7 @@ export def "notification-channels-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/notificationchannels/{name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -1650,11 +1682,11 @@ export def "notification-channels-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   properties: record # Properties of a schedule. — shape: {description?: string, emailRecipient?: string, events?: list, notificationLocale?: string, webHookUrl?: string}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<createdDate: string, description: string, emailRecipient: string, events: list<record>, notificationLocale: string, provisioningState: string, uniqueIdentifier: string, webHookUrl: string>> {
+]: any -> record<properties: record<createdDate: string, description: string, emailRecipient: string, events: list<record>, notificationLocale: string, provisioningState: string, uniqueIdentifier: string, webHookUrl: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1662,6 +1694,7 @@ export def "notification-channels-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/notificationchannels/{name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -1700,10 +1733,10 @@ export def "notification-channels-notify" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   --event-name: string@event-name-completer # The type of event (i.e. AutoShutdown, Cost)
   --json-payload: string # Properties for the notification in json format.
-]: any -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1711,6 +1744,7 @@ export def "notification-channels-notify" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/notificationchannels/{name}/notify") $qp $auth.query)
   let req_body = {"eventName": $event_name, "jsonPayload": $json_payload} | compact
@@ -1750,7 +1784,7 @@ export def "policy-sets-evaluate-policies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   --policies: list # Policies to evaluate. — item shape: {factData?: string, factName?: string, userObjectId?: string, valueOffset?: string}
 ]: any -> record<results: table<hasError: bool, policyViolations: list>> {
   let input = $in
@@ -1760,6 +1794,7 @@ export def "policy-sets-evaluate-policies" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/policysets/{name}/evaluatePolicies") $qp $auth.query)
   let req_body = {"policies": $policies} | compact
@@ -1802,14 +1837,15 @@ export def "policies-list" [
   --filter: string # The filter to apply to the operation. Example: '$filter=contains(name,'myName')
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($policy_set_name | is-empty) { error make --unspanned { msg: "path parameter 'policySetName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), policy_set_name: (encode-path-segment $policy_set_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/policysets/{policy_set_name}/policies") $qp $auth.query)
   let accept_val = "application/json"
@@ -1847,8 +1883,8 @@ export def "policies-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1856,6 +1892,7 @@ export def "policies-delete" [
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($policy_set_name | is-empty) { error make --unspanned { msg: "path parameter 'policySetName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), policy_set_name: (encode-path-segment $policy_set_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/policysets/{policy_set_name}/policies/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1894,8 +1931,8 @@ export def "policies-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($select=description)'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<properties: record<createdDate: string, description: string, evaluatorType: string, factData: string, factName: string, provisioningState: string, status: string, threshold: string, uniqueIdentifier: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<properties: record<createdDate: string, description: string, evaluatorType: string, factData: string, factName: string, provisioningState: string, status: string, threshold: string, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1903,6 +1940,7 @@ export def "policies-get" [
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($policy_set_name | is-empty) { error make --unspanned { msg: "path parameter 'policySetName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), policy_set_name: (encode-path-segment $policy_set_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/policysets/{policy_set_name}/policies/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1941,10 +1979,10 @@ export def "policies-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   --properties: record # Properties of a Policy. — shape: {description?: string, evaluatorType?: "AllowedValuesPolicy"|"MaxValuePolicy", factData?: string, factName?: "UserOwnedLabVmCount"|"UserOwnedLabPremiumVmCount"|"LabVmCount"|"LabPremiumVmCount"|"LabVmSize"|"GalleryImage"|"UserOwnedLabVmCountInSubnet"|"LabTargetCost"|"EnvironmentTemplate"|"ScheduleEditPermission", status?: "Enabled"|"Disabled", threshold?: string}
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<createdDate: string, description: string, evaluatorType: string, factData: string, factName: string, provisioningState: string, status: string, threshold: string, uniqueIdentifier: string>> {
+]: any -> record<properties: record<createdDate: string, description: string, evaluatorType: string, factData: string, factName: string, provisioningState: string, status: string, threshold: string, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1953,6 +1991,7 @@ export def "policies-update" [
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($policy_set_name | is-empty) { error make --unspanned { msg: "path parameter 'policySetName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), policy_set_name: (encode-path-segment $policy_set_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/policysets/{policy_set_name}/policies/{name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -1993,11 +2032,11 @@ export def "policies-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   properties: record # Properties of a Policy. — shape: {description?: string, evaluatorType?: "AllowedValuesPolicy"|"MaxValuePolicy", factData?: string, factName?: "UserOwnedLabVmCount"|"UserOwnedLabPremiumVmCount"|"LabVmCount"|"LabPremiumVmCount"|"LabVmSize"|"GalleryImage"|"UserOwnedLabVmCountInSubnet"|"LabTargetCost"|"EnvironmentTemplate"|"ScheduleEditPermission", status?: "Enabled"|"Disabled", threshold?: string}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<createdDate: string, description: string, evaluatorType: string, factData: string, factName: string, provisioningState: string, status: string, threshold: string, uniqueIdentifier: string>> {
+]: any -> record<properties: record<createdDate: string, description: string, evaluatorType: string, factData: string, factName: string, provisioningState: string, status: string, threshold: string, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2006,6 +2045,7 @@ export def "policies-create-or-update" [
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($policy_set_name | is-empty) { error make --unspanned { msg: "path parameter 'policySetName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), policy_set_name: (encode-path-segment $policy_set_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/policysets/{policy_set_name}/policies/{name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -2047,13 +2087,14 @@ export def "schedules-list" [
   --filter: string # The filter to apply to the operation. Example: '$filter=contains(name,'myName')
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/schedules") $qp $auth.query)
   let accept_val = "application/json"
@@ -2090,14 +2131,15 @@ export def "schedules-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/schedules/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2135,14 +2177,15 @@ export def "schedules-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($select=status)'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/schedules/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2180,10 +2223,10 @@ export def "schedules-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   --properties: record # Properties of a schedule. — shape: {dailyRecurrence?: record, hourlyRecurrence?: record, notificationSettings?: record, status?: "Enabled"|"Disabled", targetResourceId?: string, taskType?: string, timeZoneId?: string, weeklyRecurrence?: record}
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>> {
+]: any -> record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2191,6 +2234,7 @@ export def "schedules-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/schedules/{name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -2230,11 +2274,11 @@ export def "schedules-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   properties: record # Properties of a schedule. — shape: {dailyRecurrence?: record, hourlyRecurrence?: record, notificationSettings?: record, status?: "Enabled"|"Disabled", targetResourceId?: string, taskType?: string, timeZoneId?: string, weeklyRecurrence?: record}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>> {
+]: any -> record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2242,6 +2286,7 @@ export def "schedules-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/schedules/{name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -2280,14 +2325,15 @@ export def "schedules-execute" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/schedules/{name}/execute") $qp $auth.query)
   let accept_val = "application/json"
@@ -2324,14 +2370,15 @@ export def "schedules-list-applicable" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/schedules/{name}/listApplicable") $qp $auth.query)
   let accept_val = "application/json"
@@ -2368,14 +2415,15 @@ export def "service-runners-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/servicerunners/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2412,14 +2460,15 @@ export def "service-runners-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<identity: record<clientSecretUrl: string, principalId: string, tenantId: string, type: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<identity: record<clientSecretUrl: string, principalId: string, tenantId: string, type: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/servicerunners/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2457,11 +2506,11 @@ export def "service-runners-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   --identity: record # Properties of a managed identity — shape: {clientSecretUrl?: string, principalId?: string, tenantId?: string, type?: string}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
-]: any -> record<identity: record<clientSecretUrl: string, principalId: string, tenantId: string, type: string>> {
+]: any -> record<identity: record<clientSecretUrl: string, principalId: string, tenantId: string, type: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2469,6 +2518,7 @@ export def "service-runners-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/servicerunners/{name}") $qp $auth.query)
   let req_body = {"identity": $identity, "location": $location, "tags": $tags} | compact
@@ -2510,13 +2560,14 @@ export def "users-list" [
   --filter: string # The filter to apply to the operation. Example: '$filter=contains(name,'myName')
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users") $qp $auth.query)
   let accept_val = "application/json"
@@ -2553,14 +2604,15 @@ export def "users-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2598,14 +2650,15 @@ export def "users-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($select=identity)'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<properties: record<createdDate: string, identity: record<appId: string, objectId: string, principalId: string, principalName: string, tenantId: string>, provisioningState: string, secretStore: record<keyVaultId: string, keyVaultUri: string>, uniqueIdentifier: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<properties: record<createdDate: string, identity: record<appId: string, objectId: string, principalId: string, principalName: string, tenantId: string>, provisioningState: string, secretStore: record<keyVaultId: string, keyVaultUri: string>, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2643,10 +2696,10 @@ export def "users-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   --properties: record # Properties of a lab user profile. — shape: {identity?: record, secretStore?: record}
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<createdDate: string, identity: record<appId: string, objectId: string, principalId: string, principalName: string, tenantId: string>, provisioningState: string, secretStore: record<keyVaultId: string, keyVaultUri: string>, uniqueIdentifier: string>> {
+]: any -> record<properties: record<createdDate: string, identity: record<appId: string, objectId: string, principalId: string, principalName: string, tenantId: string>, provisioningState: string, secretStore: record<keyVaultId: string, keyVaultUri: string>, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2654,6 +2707,7 @@ export def "users-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -2693,11 +2747,11 @@ export def "users-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   --properties: record # Properties of a lab user profile. — shape: {identity?: record, secretStore?: record}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<createdDate: string, identity: record<appId: string, objectId: string, principalId: string, principalName: string, tenantId: string>, provisioningState: string, secretStore: record<keyVaultId: string, keyVaultUri: string>, uniqueIdentifier: string>> {
+]: any -> record<properties: record<createdDate: string, identity: record<appId: string, objectId: string, principalId: string, principalName: string, tenantId: string>, provisioningState: string, secretStore: record<keyVaultId: string, keyVaultUri: string>, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2705,6 +2759,7 @@ export def "users-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -2747,14 +2802,15 @@ export def "disks-list" [
   --filter: string # The filter to apply to the operation. Example: '$filter=contains(name,'myName')
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/disks") $qp $auth.query)
   let accept_val = "application/json"
@@ -2792,8 +2848,8 @@ export def "disks-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2801,6 +2857,7 @@ export def "disks-delete" [
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/disks/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2839,8 +2896,8 @@ export def "disks-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($select=diskType)'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<properties: record<createdDate: string, diskBlobName: string, diskSizeGiB: int, diskType: string, diskUri: string, hostCaching: string, leasedByLabVmId: string, managedDiskId: string, provisioningState: string, uniqueIdentifier: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<properties: record<createdDate: string, diskBlobName: string, diskSizeGiB: int, diskType: string, diskUri: string, hostCaching: string, leasedByLabVmId: string, managedDiskId: string, provisioningState: string, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2848,6 +2905,7 @@ export def "disks-get" [
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/disks/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2886,10 +2944,10 @@ export def "disks-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   --properties: record # Properties of a disk. — shape: {diskBlobName?: string, diskSizeGiB?: int, diskType?: "Standard"|"Premium"|"StandardSSD", diskUri?: string, hostCaching?: string, leasedByLabVmId?: string, managedDiskId?: string}
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<createdDate: string, diskBlobName: string, diskSizeGiB: int, diskType: string, diskUri: string, hostCaching: string, leasedByLabVmId: string, managedDiskId: string, provisioningState: string, uniqueIdentifier: string>> {
+]: any -> record<properties: record<createdDate: string, diskBlobName: string, diskSizeGiB: int, diskType: string, diskUri: string, hostCaching: string, leasedByLabVmId: string, managedDiskId: string, provisioningState: string, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2898,6 +2956,7 @@ export def "disks-update" [
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/disks/{name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -2938,11 +2997,11 @@ export def "disks-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   properties: record # Properties of a disk. — shape: {diskBlobName?: string, diskSizeGiB?: int, diskType?: "Standard"|"Premium"|"StandardSSD", diskUri?: string, hostCaching?: string, leasedByLabVmId?: string, managedDiskId?: string}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<createdDate: string, diskBlobName: string, diskSizeGiB: int, diskType: string, diskUri: string, hostCaching: string, leasedByLabVmId: string, managedDiskId: string, provisioningState: string, uniqueIdentifier: string>> {
+]: any -> record<properties: record<createdDate: string, diskBlobName: string, diskSizeGiB: int, diskType: string, diskUri: string, hostCaching: string, leasedByLabVmId: string, managedDiskId: string, provisioningState: string, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2951,6 +3010,7 @@ export def "disks-create-or-update" [
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/disks/{name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -2990,9 +3050,9 @@ export def "disks-attach" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   --leased-by-lab-vm-id: string # The resource ID of the Lab virtual machine to which the disk is attached.
-]: any -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3001,6 +3061,7 @@ export def "disks-attach" [
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/disks/{name}/attach") $qp $auth.query)
   let req_body = {"leasedByLabVmId": $leased_by_lab_vm_id} | compact
@@ -3040,9 +3101,9 @@ export def "disks-detach" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   --leased-by-lab-vm-id: string # The resource ID of the Lab VM to which the disk is attached.
-]: any -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3051,6 +3112,7 @@ export def "disks-detach" [
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/disks/{name}/detach") $qp $auth.query)
   let req_body = {"leasedByLabVmId": $leased_by_lab_vm_id} | compact
@@ -3093,14 +3155,15 @@ export def "environments-list" [
   --filter: string # The filter to apply to the operation. Example: '$filter=contains(name,'myName')
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/environments") $qp $auth.query)
   let accept_val = "application/json"
@@ -3138,8 +3201,8 @@ export def "environments-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3147,6 +3210,7 @@ export def "environments-delete" [
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/environments/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -3185,8 +3249,8 @@ export def "environments-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($select=deploymentProperties)'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<properties: record<armTemplateDisplayName: string, createdByUser: string, deploymentProperties: record<armTemplateId: string, parameters: list>, provisioningState: string, resourceGroupId: string, uniqueIdentifier: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<properties: record<armTemplateDisplayName: string, createdByUser: string, deploymentProperties: record<armTemplateId: string, parameters: list>, provisioningState: string, resourceGroupId: string, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3194,6 +3258,7 @@ export def "environments-get" [
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/environments/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -3232,10 +3297,10 @@ export def "environments-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   --properties: record # Properties of an environment. — shape: {armTemplateDisplayName?: string, deploymentProperties?: record}
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<armTemplateDisplayName: string, createdByUser: string, deploymentProperties: record<armTemplateId: string, parameters: list>, provisioningState: string, resourceGroupId: string, uniqueIdentifier: string>> {
+]: any -> record<properties: record<armTemplateDisplayName: string, createdByUser: string, deploymentProperties: record<armTemplateId: string, parameters: list>, provisioningState: string, resourceGroupId: string, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3244,6 +3309,7 @@ export def "environments-update" [
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/environments/{name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -3284,11 +3350,11 @@ export def "environments-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   properties: record # Properties of an environment. — shape: {armTemplateDisplayName?: string, deploymentProperties?: record}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<armTemplateDisplayName: string, createdByUser: string, deploymentProperties: record<armTemplateId: string, parameters: list>, provisioningState: string, resourceGroupId: string, uniqueIdentifier: string>> {
+]: any -> record<properties: record<armTemplateDisplayName: string, createdByUser: string, deploymentProperties: record<armTemplateId: string, parameters: list>, provisioningState: string, resourceGroupId: string, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3297,6 +3363,7 @@ export def "environments-create-or-update" [
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/environments/{name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -3339,14 +3406,15 @@ export def "secrets-list" [
   --filter: string # The filter to apply to the operation. Example: '$filter=contains(name,'myName')
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/secrets") $qp $auth.query)
   let accept_val = "application/json"
@@ -3384,8 +3452,8 @@ export def "secrets-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3393,6 +3461,7 @@ export def "secrets-delete" [
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/secrets/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -3431,8 +3500,8 @@ export def "secrets-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($select=value)'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<properties: record<provisioningState: string, uniqueIdentifier: string, value: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<properties: record<provisioningState: string, uniqueIdentifier: string, value: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3440,6 +3509,7 @@ export def "secrets-get" [
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/secrets/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -3478,10 +3548,10 @@ export def "secrets-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   --properties: record # Properties of a secret. — shape: {value?: string}
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<provisioningState: string, uniqueIdentifier: string, value: string>> {
+]: any -> record<properties: record<provisioningState: string, uniqueIdentifier: string, value: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3490,6 +3560,7 @@ export def "secrets-update" [
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/secrets/{name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -3530,11 +3601,11 @@ export def "secrets-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   properties: record # Properties of a secret. — shape: {value?: string}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<provisioningState: string, uniqueIdentifier: string, value: string>> {
+]: any -> record<properties: record<provisioningState: string, uniqueIdentifier: string, value: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3543,6 +3614,7 @@ export def "secrets-create-or-update" [
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/secrets/{name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -3585,14 +3657,15 @@ export def "service-fabrics-list" [
   --filter: string # The filter to apply to the operation. Example: '$filter=contains(name,'myName')
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics") $qp $auth.query)
   let accept_val = "application/json"
@@ -3630,8 +3703,8 @@ export def "service-fabrics-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3639,6 +3712,7 @@ export def "service-fabrics-delete" [
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -3677,8 +3751,8 @@ export def "service-fabrics-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($expand=applicableSchedule)'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<properties: record<applicableSchedule: record<properties: record>, environmentId: string, externalServiceFabricId: string, provisioningState: string, uniqueIdentifier: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<properties: record<applicableSchedule: record<properties: record, id: string, location: string, name: string, tags: record, type: string>, environmentId: string, externalServiceFabricId: string, provisioningState: string, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3686,6 +3760,7 @@ export def "service-fabrics-get" [
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -3724,10 +3799,10 @@ export def "service-fabrics-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   --properties: record # Properties of a service fabric. — shape: {environmentId?: string, externalServiceFabricId?: string}
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<applicableSchedule: record<properties: record>, environmentId: string, externalServiceFabricId: string, provisioningState: string, uniqueIdentifier: string>> {
+]: any -> record<properties: record<applicableSchedule: record<properties: record, id: string, location: string, name: string, tags: record, type: string>, environmentId: string, externalServiceFabricId: string, provisioningState: string, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3736,6 +3811,7 @@ export def "service-fabrics-update" [
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics/{name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -3776,11 +3852,11 @@ export def "service-fabrics-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   properties: record # Properties of a service fabric. — shape: {applicableSchedule?: record, environmentId?: string, externalServiceFabricId?: string}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<applicableSchedule: record<properties: record>, environmentId: string, externalServiceFabricId: string, provisioningState: string, uniqueIdentifier: string>> {
+]: any -> record<properties: record<applicableSchedule: record<properties: record, id: string, location: string, name: string, tags: record, type: string>, environmentId: string, externalServiceFabricId: string, provisioningState: string, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3789,6 +3865,7 @@ export def "service-fabrics-create-or-update" [
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics/{name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -3828,8 +3905,8 @@ export def "service-fabrics-list-applicable-schedules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<properties: record<labVmsShutdown: record<properties: record>, labVmsStartup: record<properties: record>>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<properties: record<labVmsShutdown: record<properties: record, id: string, location: string, name: string, tags: record, type: string>, labVmsStartup: record<properties: record, id: string, location: string, name: string, tags: record, type: string>>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3837,6 +3914,7 @@ export def "service-fabrics-list-applicable-schedules" [
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics/{name}/listApplicableSchedules") $qp $auth.query)
   let accept_val = "application/json"
@@ -3874,8 +3952,8 @@ export def "service-fabrics-start" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3883,6 +3961,7 @@ export def "service-fabrics-start" [
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics/{name}/start") $qp $auth.query)
   let accept_val = "application/json"
@@ -3920,8 +3999,8 @@ export def "service-fabrics-stop" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3929,6 +4008,7 @@ export def "service-fabrics-stop" [
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics/{name}/stop") $qp $auth.query)
   let accept_val = "application/json"
@@ -3970,8 +4050,8 @@ export def "service-fabric-schedules-list" [
   --filter: string # The filter to apply to the operation. Example: '$filter=contains(name,'myName')
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3979,6 +4059,7 @@ export def "service-fabric-schedules-list" [
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
   if ($service_fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceFabricName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), service_fabric_name: (encode-path-segment $service_fabric_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics/{service_fabric_name}/schedules") $qp $auth.query)
   let accept_val = "application/json"
@@ -4017,8 +4098,8 @@ export def "service-fabric-schedules-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4027,6 +4108,7 @@ export def "service-fabric-schedules-delete" [
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
   if ($service_fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceFabricName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), service_fabric_name: (encode-path-segment $service_fabric_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics/{service_fabric_name}/schedules/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -4066,8 +4148,8 @@ export def "service-fabric-schedules-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($select=status)'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4076,6 +4158,7 @@ export def "service-fabric-schedules-get" [
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
   if ($service_fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceFabricName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), service_fabric_name: (encode-path-segment $service_fabric_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics/{service_fabric_name}/schedules/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -4115,10 +4198,10 @@ export def "service-fabric-schedules-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   --properties: record # Properties of a schedule. — shape: {dailyRecurrence?: record, hourlyRecurrence?: record, notificationSettings?: record, status?: "Enabled"|"Disabled", targetResourceId?: string, taskType?: string, timeZoneId?: string, weeklyRecurrence?: record}
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>> {
+]: any -> record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4128,6 +4211,7 @@ export def "service-fabric-schedules-update" [
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
   if ($service_fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceFabricName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), service_fabric_name: (encode-path-segment $service_fabric_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics/{service_fabric_name}/schedules/{name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -4169,11 +4253,11 @@ export def "service-fabric-schedules-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   properties: record # Properties of a schedule. — shape: {dailyRecurrence?: record, hourlyRecurrence?: record, notificationSettings?: record, status?: "Enabled"|"Disabled", targetResourceId?: string, taskType?: string, timeZoneId?: string, weeklyRecurrence?: record}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>> {
+]: any -> record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4183,6 +4267,7 @@ export def "service-fabric-schedules-create-or-update" [
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
   if ($service_fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceFabricName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), service_fabric_name: (encode-path-segment $service_fabric_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics/{service_fabric_name}/schedules/{name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -4223,8 +4308,8 @@ export def "service-fabric-schedules-execute" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4233,6 +4318,7 @@ export def "service-fabric-schedules-execute" [
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
   if ($service_fabric_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceFabricName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), user_name: (encode-path-segment $user_name), service_fabric_name: (encode-path-segment $service_fabric_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/users/{user_name}/servicefabrics/{service_fabric_name}/schedules/{name}/execute") $qp $auth.query)
   let accept_val = "application/json"
@@ -4272,13 +4358,14 @@ export def "virtual-machines-list" [
   --filter: string # The filter to apply to the operation. Example: '$filter=contains(name,'myName')
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines") $qp $auth.query)
   let accept_val = "application/json"
@@ -4315,14 +4402,15 @@ export def "virtual-machines-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -4360,14 +4448,15 @@ export def "virtual-machines-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($expand=artifacts,computeVm,networkInterface,applicableSchedule)'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<properties: record<allowClaim: bool, applicableSchedule: record<properties: record>, artifactDeploymentStatus: record<artifactsApplied: int, deploymentStatus: string, totalArtifacts: int>, artifacts: list<record>, computeId: string, computeVm: record<dataDiskIds: list, dataDisks: list, networkInterfaceId: string, osDiskId: string, osType: string, statuses: list, vmSize: string>, createdByUser: string, createdByUserId: string, createdDate: string, customImageId: string, dataDiskParameters: list<record>, disallowPublicIpAddress: bool, environmentId: string, expirationDate: string, fqdn: string, galleryImageReference: record<offer: string, osType: string, publisher: string, sku: string, version: string>, isAuthenticationWithSshKey: bool, labSubnetName: string, labVirtualNetworkId: string, lastKnownPowerState: string, networkInterface: record<dnsName: string, privateIpAddress: string, publicIpAddress: string, publicIpAddressId: string, rdpAuthority: string, sharedPublicIpAddressConfiguration: record, sshAuthority: string, subnetId: string, virtualNetworkId: string>, notes: string, osType: string, ownerObjectId: string, ownerUserPrincipalName: string, password: string, planId: string, provisioningState: string, scheduleParameters: list<record>, size: string, sshKey: string, storageType: string, uniqueIdentifier: string, userName: string, virtualMachineCreationSource: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<properties: record<allowClaim: bool, applicableSchedule: record<properties: record, id: string, location: string, name: string, tags: record, type: string>, artifactDeploymentStatus: record<artifactsApplied: int, deploymentStatus: string, totalArtifacts: int>, artifacts: list<record>, computeId: string, computeVm: record<dataDiskIds: list, dataDisks: list, networkInterfaceId: string, osDiskId: string, osType: string, statuses: list, vmSize: string>, createdByUser: string, createdByUserId: string, createdDate: string, customImageId: string, dataDiskParameters: list<record>, disallowPublicIpAddress: bool, environmentId: string, expirationDate: string, fqdn: string, galleryImageReference: record<offer: string, osType: string, publisher: string, sku: string, version: string>, isAuthenticationWithSshKey: bool, labSubnetName: string, labVirtualNetworkId: string, lastKnownPowerState: string, networkInterface: record<dnsName: string, privateIpAddress: string, publicIpAddress: string, publicIpAddressId: string, rdpAuthority: string, sharedPublicIpAddressConfiguration: record, sshAuthority: string, subnetId: string, virtualNetworkId: string>, notes: string, osType: string, ownerObjectId: string, ownerUserPrincipalName: string, password: string, planId: string, provisioningState: string, scheduleParameters: list<record>, size: string, sshKey: string, storageType: string, uniqueIdentifier: string, userName: string, virtualMachineCreationSource: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -4405,10 +4494,10 @@ export def "virtual-machines-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   --properties: record # Properties of a virtual machine. — shape: {allowClaim?: bool, artifactDeploymentStatus?: record, artifacts?: list, computeId?: string, createdByUser?: string, createdByUserId?: string, createdDate?: string, customImageId?: string, dataDiskParameters?: list, disallowPublicIpAddress?: bool, environmentId?: string, expirationDate?: string, fqdn?: string, galleryImageReference?: record, isAuthenticationWithSshKey?: bool, labSubnetName?: string, labVirtualNetworkId?: string, lastKnownPowerState?: string, networkInterface?: record, ... (12 more fields)}
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<allowClaim: bool, applicableSchedule: record<properties: record>, artifactDeploymentStatus: record<artifactsApplied: int, deploymentStatus: string, totalArtifacts: int>, artifacts: list<record>, computeId: string, computeVm: record<dataDiskIds: list, dataDisks: list, networkInterfaceId: string, osDiskId: string, osType: string, statuses: list, vmSize: string>, createdByUser: string, createdByUserId: string, createdDate: string, customImageId: string, dataDiskParameters: list<record>, disallowPublicIpAddress: bool, environmentId: string, expirationDate: string, fqdn: string, galleryImageReference: record<offer: string, osType: string, publisher: string, sku: string, version: string>, isAuthenticationWithSshKey: bool, labSubnetName: string, labVirtualNetworkId: string, lastKnownPowerState: string, networkInterface: record<dnsName: string, privateIpAddress: string, publicIpAddress: string, publicIpAddressId: string, rdpAuthority: string, sharedPublicIpAddressConfiguration: record, sshAuthority: string, subnetId: string, virtualNetworkId: string>, notes: string, osType: string, ownerObjectId: string, ownerUserPrincipalName: string, password: string, planId: string, provisioningState: string, scheduleParameters: list<record>, size: string, sshKey: string, storageType: string, uniqueIdentifier: string, userName: string, virtualMachineCreationSource: string>> {
+]: any -> record<properties: record<allowClaim: bool, applicableSchedule: record<properties: record, id: string, location: string, name: string, tags: record, type: string>, artifactDeploymentStatus: record<artifactsApplied: int, deploymentStatus: string, totalArtifacts: int>, artifacts: list<record>, computeId: string, computeVm: record<dataDiskIds: list, dataDisks: list, networkInterfaceId: string, osDiskId: string, osType: string, statuses: list, vmSize: string>, createdByUser: string, createdByUserId: string, createdDate: string, customImageId: string, dataDiskParameters: list<record>, disallowPublicIpAddress: bool, environmentId: string, expirationDate: string, fqdn: string, galleryImageReference: record<offer: string, osType: string, publisher: string, sku: string, version: string>, isAuthenticationWithSshKey: bool, labSubnetName: string, labVirtualNetworkId: string, lastKnownPowerState: string, networkInterface: record<dnsName: string, privateIpAddress: string, publicIpAddress: string, publicIpAddressId: string, rdpAuthority: string, sharedPublicIpAddressConfiguration: record, sshAuthority: string, subnetId: string, virtualNetworkId: string>, notes: string, osType: string, ownerObjectId: string, ownerUserPrincipalName: string, password: string, planId: string, provisioningState: string, scheduleParameters: list<record>, size: string, sshKey: string, storageType: string, uniqueIdentifier: string, userName: string, virtualMachineCreationSource: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4416,6 +4505,7 @@ export def "virtual-machines-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -4455,11 +4545,11 @@ export def "virtual-machines-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   properties: record # Properties of a virtual machine. — shape: {allowClaim?: bool, applicableSchedule?: record, artifactDeploymentStatus?: record, artifacts?: list, computeId?: string, computeVm?: record, createdByUser?: string, createdByUserId?: string, createdDate?: string, customImageId?: string, dataDiskParameters?: list, disallowPublicIpAddress?: bool, environmentId?: string, expirationDate?: string, fqdn?: string, galleryImageReference?: record, isAuthenticationWithSshKey?: bool, labSubnetName?: string, labVirtualNetworkId?: string, ... (14 more fields)}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<allowClaim: bool, applicableSchedule: record<properties: record>, artifactDeploymentStatus: record<artifactsApplied: int, deploymentStatus: string, totalArtifacts: int>, artifacts: list<record>, computeId: string, computeVm: record<dataDiskIds: list, dataDisks: list, networkInterfaceId: string, osDiskId: string, osType: string, statuses: list, vmSize: string>, createdByUser: string, createdByUserId: string, createdDate: string, customImageId: string, dataDiskParameters: list<record>, disallowPublicIpAddress: bool, environmentId: string, expirationDate: string, fqdn: string, galleryImageReference: record<offer: string, osType: string, publisher: string, sku: string, version: string>, isAuthenticationWithSshKey: bool, labSubnetName: string, labVirtualNetworkId: string, lastKnownPowerState: string, networkInterface: record<dnsName: string, privateIpAddress: string, publicIpAddress: string, publicIpAddressId: string, rdpAuthority: string, sharedPublicIpAddressConfiguration: record, sshAuthority: string, subnetId: string, virtualNetworkId: string>, notes: string, osType: string, ownerObjectId: string, ownerUserPrincipalName: string, password: string, planId: string, provisioningState: string, scheduleParameters: list<record>, size: string, sshKey: string, storageType: string, uniqueIdentifier: string, userName: string, virtualMachineCreationSource: string>> {
+]: any -> record<properties: record<allowClaim: bool, applicableSchedule: record<properties: record, id: string, location: string, name: string, tags: record, type: string>, artifactDeploymentStatus: record<artifactsApplied: int, deploymentStatus: string, totalArtifacts: int>, artifacts: list<record>, computeId: string, computeVm: record<dataDiskIds: list, dataDisks: list, networkInterfaceId: string, osDiskId: string, osType: string, statuses: list, vmSize: string>, createdByUser: string, createdByUserId: string, createdDate: string, customImageId: string, dataDiskParameters: list<record>, disallowPublicIpAddress: bool, environmentId: string, expirationDate: string, fqdn: string, galleryImageReference: record<offer: string, osType: string, publisher: string, sku: string, version: string>, isAuthenticationWithSshKey: bool, labSubnetName: string, labVirtualNetworkId: string, lastKnownPowerState: string, networkInterface: record<dnsName: string, privateIpAddress: string, publicIpAddress: string, publicIpAddressId: string, rdpAuthority: string, sharedPublicIpAddressConfiguration: record, sshAuthority: string, subnetId: string, virtualNetworkId: string>, notes: string, osType: string, ownerObjectId: string, ownerUserPrincipalName: string, password: string, planId: string, provisioningState: string, scheduleParameters: list<record>, size: string, sshKey: string, storageType: string, uniqueIdentifier: string, userName: string, virtualMachineCreationSource: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4467,6 +4557,7 @@ export def "virtual-machines-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -4506,11 +4597,11 @@ export def "virtual-machines-add-data-disk" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   --attach-new-data-disk-options: record # Properties to attach new disk to the Virtual Machine. — shape: {diskName?: string, diskSizeGiB?: int, diskType?: "Standard"|"Premium"|"StandardSSD"}
   --existing-lab-disk-id: string # Specifies the existing lab disk id to attach to virtual machine.
   --host-caching: string@host-caching-completer # Caching option for a data disk (i.e. None, ReadOnly, ReadWrite).
-]: any -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4518,6 +4609,7 @@ export def "virtual-machines-add-data-disk" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}/addDataDisk") $qp $auth.query)
   let req_body = {"attachNewDataDiskOptions": $attach_new_data_disk_options, "existingLabDiskId": $existing_lab_disk_id, "hostCaching": $host_caching} | compact
@@ -4557,9 +4649,9 @@ export def "virtual-machines-apply-artifacts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   --artifacts: list # The list of artifacts to apply. — item shape: {artifactId?: string, artifactTitle?: string, deploymentStatusMessage?: string, installTime?: string, parameters?: list, status?: string, vmExtensionStatusMessage?: string}
-]: any -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4567,6 +4659,7 @@ export def "virtual-machines-apply-artifacts" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}/applyArtifacts") $qp $auth.query)
   let req_body = {"artifacts": $artifacts} | compact
@@ -4605,14 +4698,15 @@ export def "virtual-machines-claim" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}/claim") $qp $auth.query)
   let accept_val = "application/json"
@@ -4649,9 +4743,9 @@ export def "virtual-machines-detach-data-disk" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   --existing-lab-disk-id: string # Specifies the disk resource ID to detach from virtual machine.
-]: any -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4659,6 +4753,7 @@ export def "virtual-machines-detach-data-disk" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}/detachDataDisk") $qp $auth.query)
   let req_body = {"existingLabDiskId": $existing_lab_disk_id} | compact
@@ -4697,7 +4792,7 @@ export def "virtual-machines-get-rdp-file-contents" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
 ]: nothing -> record<contents: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4705,6 +4800,7 @@ export def "virtual-machines-get-rdp-file-contents" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}/getRdpFileContents") $qp $auth.query)
   let accept_val = "application/json"
@@ -4741,14 +4837,15 @@ export def "virtual-machines-list-applicable-schedules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<properties: record<labVmsShutdown: record<properties: record>, labVmsStartup: record<properties: record>>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<properties: record<labVmsShutdown: record<properties: record, id: string, location: string, name: string, tags: record, type: string>, labVmsStartup: record<properties: record, id: string, location: string, name: string, tags: record, type: string>>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}/listApplicableSchedules") $qp $auth.query)
   let accept_val = "application/json"
@@ -4785,14 +4882,15 @@ export def "virtual-machines-redeploy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}/redeploy") $qp $auth.query)
   let accept_val = "application/json"
@@ -4829,9 +4927,9 @@ export def "virtual-machines-resize" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   --size: string # Specifies the size of the virtual machine.
-]: any -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4839,6 +4937,7 @@ export def "virtual-machines-resize" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}/resize") $qp $auth.query)
   let req_body = {"size": $size} | compact
@@ -4877,14 +4976,15 @@ export def "virtual-machines-restart" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}/restart") $qp $auth.query)
   let accept_val = "application/json"
@@ -4921,14 +5021,15 @@ export def "virtual-machines-start" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}/start") $qp $auth.query)
   let accept_val = "application/json"
@@ -4965,14 +5066,15 @@ export def "virtual-machines-stop" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}/stop") $qp $auth.query)
   let accept_val = "application/json"
@@ -5009,14 +5111,15 @@ export def "virtual-machines-transfer-disks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}/transferDisks") $qp $auth.query)
   let accept_val = "application/json"
@@ -5053,14 +5156,15 @@ export def "virtual-machines-un-claim" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{name}/unClaim") $qp $auth.query)
   let accept_val = "application/json"
@@ -5101,14 +5205,15 @@ export def "virtual-machine-schedules-list" [
   --filter: string # The filter to apply to the operation. Example: '$filter=contains(name,'myName')
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($virtual_machine_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualMachineName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), virtual_machine_name: (encode-path-segment $virtual_machine_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{virtual_machine_name}/schedules") $qp $auth.query)
   let accept_val = "application/json"
@@ -5146,8 +5251,8 @@ export def "virtual-machine-schedules-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -5155,6 +5260,7 @@ export def "virtual-machine-schedules-delete" [
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($virtual_machine_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualMachineName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), virtual_machine_name: (encode-path-segment $virtual_machine_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{virtual_machine_name}/schedules/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -5193,8 +5299,8 @@ export def "virtual-machine-schedules-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($select=status)'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -5202,6 +5308,7 @@ export def "virtual-machine-schedules-get" [
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($virtual_machine_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualMachineName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), virtual_machine_name: (encode-path-segment $virtual_machine_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{virtual_machine_name}/schedules/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -5240,10 +5347,10 @@ export def "virtual-machine-schedules-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   --properties: record # Properties of a schedule. — shape: {dailyRecurrence?: record, hourlyRecurrence?: record, notificationSettings?: record, status?: "Enabled"|"Disabled", targetResourceId?: string, taskType?: string, timeZoneId?: string, weeklyRecurrence?: record}
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>> {
+]: any -> record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5252,6 +5359,7 @@ export def "virtual-machine-schedules-update" [
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($virtual_machine_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualMachineName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), virtual_machine_name: (encode-path-segment $virtual_machine_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{virtual_machine_name}/schedules/{name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -5292,11 +5400,11 @@ export def "virtual-machine-schedules-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   properties: record # Properties of a schedule. — shape: {dailyRecurrence?: record, hourlyRecurrence?: record, notificationSettings?: record, status?: "Enabled"|"Disabled", targetResourceId?: string, taskType?: string, timeZoneId?: string, weeklyRecurrence?: record}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>> {
+]: any -> record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5305,6 +5413,7 @@ export def "virtual-machine-schedules-create-or-update" [
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($virtual_machine_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualMachineName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), virtual_machine_name: (encode-path-segment $virtual_machine_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{virtual_machine_name}/schedules/{name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -5344,8 +5453,8 @@ export def "virtual-machine-schedules-execute" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -5353,6 +5462,7 @@ export def "virtual-machine-schedules-execute" [
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($virtual_machine_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualMachineName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), virtual_machine_name: (encode-path-segment $virtual_machine_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualmachines/{virtual_machine_name}/schedules/{name}/execute") $qp $auth.query)
   let accept_val = "application/json"
@@ -5392,13 +5502,14 @@ export def "virtual-networks-list" [
   --filter: string # The filter to apply to the operation. Example: '$filter=contains(name,'myName')
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualnetworks") $qp $auth.query)
   let accept_val = "application/json"
@@ -5435,14 +5546,15 @@ export def "virtual-networks-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualnetworks/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -5480,14 +5592,15 @@ export def "virtual-networks-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($expand=externalSubnets)'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<properties: record<allowedSubnets: list<record>, createdDate: string, description: string, externalProviderResourceId: string, externalSubnets: list<record>, provisioningState: string, subnetOverrides: list<record>, uniqueIdentifier: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<properties: record<allowedSubnets: list<record>, createdDate: string, description: string, externalProviderResourceId: string, externalSubnets: list<record>, provisioningState: string, subnetOverrides: list<record>, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualnetworks/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -5525,10 +5638,10 @@ export def "virtual-networks-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   --properties: record # Properties of a virtual network. — shape: {allowedSubnets?: list, description?: string, externalProviderResourceId?: string, subnetOverrides?: list}
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<allowedSubnets: list<record>, createdDate: string, description: string, externalProviderResourceId: string, externalSubnets: list<record>, provisioningState: string, subnetOverrides: list<record>, uniqueIdentifier: string>> {
+]: any -> record<properties: record<allowedSubnets: list<record>, createdDate: string, description: string, externalProviderResourceId: string, externalSubnets: list<record>, provisioningState: string, subnetOverrides: list<record>, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5536,6 +5649,7 @@ export def "virtual-networks-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualnetworks/{name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -5575,11 +5689,11 @@ export def "virtual-networks-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   --properties: record # Properties of a virtual network. — shape: {allowedSubnets?: list, description?: string, externalProviderResourceId?: string, subnetOverrides?: list}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<allowedSubnets: list<record>, createdDate: string, description: string, externalProviderResourceId: string, externalSubnets: list<record>, provisioningState: string, subnetOverrides: list<record>, uniqueIdentifier: string>> {
+]: any -> record<properties: record<allowedSubnets: list<record>, createdDate: string, description: string, externalProviderResourceId: string, externalSubnets: list<record>, provisioningState: string, subnetOverrides: list<record>, uniqueIdentifier: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5587,6 +5701,7 @@ export def "virtual-networks-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($lab_name | is-empty) { error make --unspanned { msg: "path parameter 'labName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), lab_name: (encode-path-segment $lab_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{lab_name}/virtualnetworks/{name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -5624,13 +5739,14 @@ export def "labs-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -5667,13 +5783,14 @@ export def "labs-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($select=defaultStorageAccount)'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<properties: record<announcement: record<enabled: string, expirationDate: string, expired: bool, markdown: string, provisioningState: string, title: string, uniqueIdentifier: string>, artifactsStorageAccount: string, createdDate: string, defaultPremiumStorageAccount: string, defaultStorageAccount: string, environmentPermission: string, extendedProperties: record, labStorageType: string, loadBalancerId: string, mandatoryArtifactsResourceIdsLinux: list<string>, mandatoryArtifactsResourceIdsWindows: list<string>, networkSecurityGroupId: string, premiumDataDiskStorageAccount: string, premiumDataDisks: string, provisioningState: string, publicIpId: string, support: record<enabled: string, markdown: string>, uniqueIdentifier: string, vaultName: string, vmCreationResourceGroup: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<properties: record<announcement: record<enabled: string, expirationDate: string, expired: bool, markdown: string, provisioningState: string, title: string, uniqueIdentifier: string>, artifactsStorageAccount: string, createdDate: string, defaultPremiumStorageAccount: string, defaultStorageAccount: string, environmentPermission: string, extendedProperties: record, labStorageType: string, loadBalancerId: string, mandatoryArtifactsResourceIdsLinux: list<string>, mandatoryArtifactsResourceIdsWindows: list<string>, networkSecurityGroupId: string, premiumDataDiskStorageAccount: string, premiumDataDisks: string, provisioningState: string, publicIpId: string, support: record<enabled: string, markdown: string>, uniqueIdentifier: string, vaultName: string, vmCreationResourceGroup: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -5710,16 +5827,17 @@ export def "labs-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   --properties: record # Properties of a lab. — shape: {announcement?: record, environmentPermission?: "Reader"|"Contributor", extendedProperties?: record, labStorageType?: "Standard"|"Premium"|"StandardSSD", mandatoryArtifactsResourceIdsLinux?: list<string>, mandatoryArtifactsResourceIdsWindows?: list<string>, premiumDataDisks?: "Disabled"|"Enabled", support?: record}
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<announcement: record<enabled: string, expirationDate: string, expired: bool, markdown: string, provisioningState: string, title: string, uniqueIdentifier: string>, artifactsStorageAccount: string, createdDate: string, defaultPremiumStorageAccount: string, defaultStorageAccount: string, environmentPermission: string, extendedProperties: record, labStorageType: string, loadBalancerId: string, mandatoryArtifactsResourceIdsLinux: list<string>, mandatoryArtifactsResourceIdsWindows: list<string>, networkSecurityGroupId: string, premiumDataDiskStorageAccount: string, premiumDataDisks: string, provisioningState: string, publicIpId: string, support: record<enabled: string, markdown: string>, uniqueIdentifier: string, vaultName: string, vmCreationResourceGroup: string>> {
+]: any -> record<properties: record<announcement: record<enabled: string, expirationDate: string, expired: bool, markdown: string, provisioningState: string, title: string, uniqueIdentifier: string>, artifactsStorageAccount: string, createdDate: string, defaultPremiumStorageAccount: string, defaultStorageAccount: string, environmentPermission: string, extendedProperties: record, labStorageType: string, loadBalancerId: string, mandatoryArtifactsResourceIdsLinux: list<string>, mandatoryArtifactsResourceIdsWindows: list<string>, networkSecurityGroupId: string, premiumDataDiskStorageAccount: string, premiumDataDisks: string, provisioningState: string, publicIpId: string, support: record<enabled: string, markdown: string>, uniqueIdentifier: string, vaultName: string, vmCreationResourceGroup: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -5758,17 +5876,18 @@ export def "labs-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   --properties: record # Properties of a lab. — shape: {announcement?: record, environmentPermission?: "Reader"|"Contributor", extendedProperties?: record, labStorageType?: "Standard"|"Premium"|"StandardSSD", mandatoryArtifactsResourceIdsLinux?: list<string>, mandatoryArtifactsResourceIdsWindows?: list<string>, premiumDataDisks?: "Disabled"|"Enabled", support?: record}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<announcement: record<enabled: string, expirationDate: string, expired: bool, markdown: string, provisioningState: string, title: string, uniqueIdentifier: string>, artifactsStorageAccount: string, createdDate: string, defaultPremiumStorageAccount: string, defaultStorageAccount: string, environmentPermission: string, extendedProperties: record, labStorageType: string, loadBalancerId: string, mandatoryArtifactsResourceIdsLinux: list<string>, mandatoryArtifactsResourceIdsWindows: list<string>, networkSecurityGroupId: string, premiumDataDiskStorageAccount: string, premiumDataDisks: string, provisioningState: string, publicIpId: string, support: record<enabled: string, markdown: string>, uniqueIdentifier: string, vaultName: string, vmCreationResourceGroup: string>> {
+]: any -> record<properties: record<announcement: record<enabled: string, expirationDate: string, expired: bool, markdown: string, provisioningState: string, title: string, uniqueIdentifier: string>, artifactsStorageAccount: string, createdDate: string, defaultPremiumStorageAccount: string, defaultStorageAccount: string, environmentPermission: string, extendedProperties: record, labStorageType: string, loadBalancerId: string, mandatoryArtifactsResourceIdsLinux: list<string>, mandatoryArtifactsResourceIdsWindows: list<string>, networkSecurityGroupId: string, premiumDataDiskStorageAccount: string, premiumDataDisks: string, provisioningState: string, publicIpId: string, support: record<enabled: string, markdown: string>, uniqueIdentifier: string, vaultName: string, vmCreationResourceGroup: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -5806,13 +5925,14 @@ export def "labs-claim-any-vm" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{name}/claimAnyVm") $qp $auth.query)
   let accept_val = "application/json"
@@ -5849,18 +5969,19 @@ export def "labs-create-environment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   --location: string # The location of the new virtual machine or environment
   --body-name: string # The name of the virtual machine or environment
   --properties: record # Properties for virtual machine creation. — shape: {allowClaim?: bool, artifactDeploymentStatus?: record, artifacts?: list, bulkCreationParameters?: record, computeId?: string, createdByUser?: string, createdByUserId?: string, createdDate?: string, customImageId?: string, dataDiskParameters?: list, disallowPublicIpAddress?: bool, environmentId?: string, expirationDate?: string, fqdn?: string, galleryImageReference?: record, isAuthenticationWithSshKey?: bool, labSubnetName?: string, labVirtualNetworkId?: string, lastKnownPowerState?: string, ... (13 more fields)}
   --tags: record # The tags of the resource.
-]: any -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{name}/createEnvironment") $qp $auth.query)
   let req_body = {"location": $location, "name": $body_name, "properties": $properties, "tags": $tags} | compact
@@ -5898,16 +6019,17 @@ export def "labs-export-resource-usage" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   --blob-storage-absolute-sas-uri: string # The blob storage absolute sas uri with write permission to the container which the usage data needs to be uploaded to.
   --usage-start-date: string # The start time of the usage. If not provided, usage will be reported since the beginning of data collection. (format: date-time)
-]: any -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{name}/exportResourceUsage") $qp $auth.query)
   let req_body = {"blobStorageAbsoluteSasUri": $blob_storage_absolute_sas_uri, "usageStartDate": $usage_start_date} | compact
@@ -5945,7 +6067,7 @@ export def "labs-generate-upload-uri" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   --blob-name: string # The blob name of the upload URI.
 ]: any -> record<uploadUri: string> {
   let input = $in
@@ -5954,6 +6076,7 @@ export def "labs-generate-upload-uri" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{name}/generateUploadUri") $qp $auth.query)
   let req_body = {"blobName": $blob_name} | compact
@@ -5991,16 +6114,17 @@ export def "labs-import-virtual-machine" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   --destination-virtual-machine-name: string # The name of the virtual machine in the destination lab
   --source-virtual-machine-resource-id: string # The full resource ID of the virtual machine to be imported.
-]: any -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{name}/importVirtualMachine") $qp $auth.query)
   let req_body = {"destinationVirtualMachineName": $destination_virtual_machine_name, "sourceVirtualMachineResourceId": $source_virtual_machine_resource_id} | compact
@@ -6038,13 +6162,14 @@ export def "labs-list-vhds" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
 ]: nothing -> record<nextLink: string, value: table<id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/labs/{name}/listVhds") $qp $auth.query)
   let accept_val = "application/json"
@@ -6083,12 +6208,13 @@ export def "global-schedules-list-by-resource-group" [
   --filter: string # The filter to apply to the operation. Example: '$filter=contains(name,'myName')
   --top: int # The maximum number of resources to return from the operation. Example: '$top=10' (format: int32)
   --orderby: string # The ordering expression for the results, using OData notation. Example: '$orderby=name desc'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/schedules") $qp $auth.query)
   let accept_val = "application/json"
@@ -6124,13 +6250,14 @@ export def "global-schedules-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/schedules/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -6167,13 +6294,14 @@ export def "global-schedules-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Specify the $expand query. Example: 'properties($select=status)'
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/schedules/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -6210,16 +6338,17 @@ export def "global-schedules-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   --properties: record # Properties of a schedule. — shape: {dailyRecurrence?: record, hourlyRecurrence?: record, notificationSettings?: record, status?: "Enabled"|"Disabled", targetResourceId?: string, taskType?: string, timeZoneId?: string, weeklyRecurrence?: record}
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>> {
+]: any -> record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/schedules/{name}") $qp $auth.query)
   let req_body = {"properties": $properties, "tags": $tags} | compact
@@ -6258,17 +6387,18 @@ export def "global-schedules-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   properties: record # Properties of a schedule. — shape: {dailyRecurrence?: record, hourlyRecurrence?: record, notificationSettings?: record, status?: "Enabled"|"Disabled", targetResourceId?: string, taskType?: string, timeZoneId?: string, weeklyRecurrence?: record}
   --location: string # The location of the resource.
   --tags: record # The tags of the resource.
-]: any -> record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>> {
+]: any -> record<properties: record<createdDate: string, dailyRecurrence: record<time: string>, hourlyRecurrence: record<minute: int>, notificationSettings: record<emailRecipient: string, notificationLocale: string, status: string, timeInMinutes: int, webhookUrl: string>, provisioningState: string, status: string, targetResourceId: string, taskType: string, timeZoneId: string, uniqueIdentifier: string, weeklyRecurrence: record<time: string, weekdays: list>>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/schedules/{name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -6306,13 +6436,14 @@ export def "global-schedules-execute" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Client API version. (required, default: 2018-09-15)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/schedules/{name}/execute") $qp $auth.query)
   let accept_val = "application/json"
@@ -6348,16 +6479,17 @@ export def "global-schedules-retarget" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-15)
+  --api-version: string # Client API version. (required, default: 2018-09-15)
   --current-resource-id: string # The resource Id of the virtual machine on which the schedule operates
   --target-resource-id: string # The resource Id of the virtual machine that the schedule should be retargeted to
-]: any -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-15")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DevTestLab/schedules/{name}/retarget") $qp $auth.query)
   let req_body = {"currentResourceId": $current_resource_id, "targetResourceId": $target_resource_id} | compact

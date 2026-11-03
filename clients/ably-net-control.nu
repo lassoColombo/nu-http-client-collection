@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -734,7 +734,7 @@ export def "post-apps-app-id-rules" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --request-mode: string@request-mode-completer # This is Single Request mode or Batch Request mode. Single Request mode sends each event separately to the endpoint specified by the rule. Batch Request mode rolls up multiple events into the same request. You can read more about the difference between single and batched events in the Ably documentation (https://ably.com/documentation/general/events#batching). (e.g. single)
   rule_type: string@rule-type-completer # The type of rule. See the documentation (https://ably.com/integrations) for further information.
-  --body-source: record # shape: {channelFilter: string, type: "channel.message"|"channel.presence"|"channel.lifecycle"|"channel.occupancy"}
+  --source: record # shape: {channelFilter: string, type: "channel.message"|"channel.presence"|"channel.lifecycle"|"channel.occupancy"}
   --status: string@status-completer # The status of the rule. Rules can be enabled or disabled. (e.g. enabled)
   --target: record # shape: {enveloped?: bool, format: "json"|"msgpack", headers?: list, signingKeyId?: string, url: string}
   --links: record # nullable
@@ -749,7 +749,7 @@ export def "post-apps-app-id-rules" [
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'app_id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/rules") $auth.query)
-  let req_body = {"requestMode": $request_mode, "ruleType": $rule_type, "source": $body_source, "status": $status, "target": $target, "_links": $links, "appId": $body_app_id, "created": $created, "id": $id, "modified": $modified, "version": $version} | compact
+  let req_body = {"requestMode": $request_mode, "ruleType": $rule_type, "source": $source, "status": $status, "target": $target, "_links": $links, "appId": $body_app_id, "created": $created, "id": $id, "modified": $modified, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -862,7 +862,7 @@ export def "patch-apps-app-id-rules-rule-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --request-mode: string@request-mode-completer # This is Single Request mode or Batch Request mode. Single Request mode sends each event separately to the endpoint specified by the rule. Batch Request mode rolls up multiple events into the same request. You can read more about the difference between single and batched events in the Ably documentation (https://ably.com/documentation/general/events#batching). (e.g. single)
   rule_type: string@rule-type-completer-1 # The type of rule. See the documentation (https://ably.com/integrations) for further information.
-  --body-source: record # shape: {channelFilter: string, type: "channel.message"|"channel.presence"|"channel.lifecycle"|"channel.occupancy"}
+  --source: record # shape: {channelFilter: string, type: "channel.message"|"channel.presence"|"channel.lifecycle"|"channel.occupancy"}
   --status: string@status-completer # The status of the rule. Rules can be enabled or disabled. (e.g. enabled)
   --target: record # shape: {enveloped?: bool, format?: "json"|"msgpack", headers?: list, signingKeyId?: string, url?: string}
 ]: any -> any {
@@ -872,7 +872,7 @@ export def "patch-apps-app-id-rules-rule-id" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'app_id' must be non-empty" } }
   if ($rule_id | is-empty) { error make --unspanned { msg: "path parameter 'rule_id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/apps/{app_id}/rules/{rule_id}") $auth.query)
-  let req_body = {"requestMode": $request_mode, "ruleType": $rule_type, "source": $body_source, "status": $status, "target": $target} | compact
+  let req_body = {"requestMode": $request_mode, "ruleType": $rule_type, "source": $source, "status": $status, "target": $target} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -996,8 +996,8 @@ export def "post-apps-id-pkcs12" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["p12File"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["p12File"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url

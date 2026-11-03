@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -172,11 +172,13 @@ export def "post-cq-actions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorizable-id: string
-  --changelog: string
+  --authorizable-id: string # required
+  --changelog: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorizable_id == null) { error make --unspanned { msg: "required query parameter 'authorizableId' missing: pass --authorizable-id" } }
+  if ($changelog == null) { error make --unspanned { msg: "required query parameter 'changelog' missing: pass --changelog" } }
   let qp = [(serialize-qp "authorizableId" $authorizable_id "scalar") (serialize-qp "changelog" $changelog "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/.cqactions.html" $qp $auth.query)
   let accept_val = "application/json"
@@ -619,13 +621,17 @@ export def "get-query" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --path: string
-  --p-limit: float
-  --1-property: string
-  --1-property-value: string
+  --path: string # required
+  --p-limit: float # required
+  --1-property: string # required
+  --1-property-value: string # required
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
+  if ($p_limit == null) { error make --unspanned { msg: "required query parameter 'p.limit' missing: pass --p-limit" } }
+  if ($1_property == null) { error make --unspanned { msg: "required query parameter '1_property' missing: pass --1-property" } }
+  if ($1_property_value == null) { error make --unspanned { msg: "required query parameter '1_property.value' missing: pass --1-property-value" } }
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "p.limit" $p_limit "scalar") (serialize-qp "1_property" $1_property "scalar") (serialize-qp "1_property.value" $1_property_value "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/bin/querybuilder.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -657,13 +663,17 @@ export def "post-query" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --path: string
-  --p-limit: float
-  --1-property: string
-  --1-property-value: string
+  --path: string # required
+  --p-limit: float # required
+  --1-property: string # required
+  --1-property-value: string # required
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
+  if ($p_limit == null) { error make --unspanned { msg: "required query parameter 'p.limit' missing: pass --p-limit" } }
+  if ($1_property == null) { error make --unspanned { msg: "required query parameter '1_property' missing: pass --1-property" } }
+  if ($1_property_value == null) { error make --unspanned { msg: "required query parameter '1_property.value' missing: pass --1-property-value" } }
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "p.limit" $p_limit "scalar") (serialize-qp "1_property" $1_property "scalar") (serialize-qp "1_property.value" $1_property_value "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/bin/querybuilder.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -695,12 +705,15 @@ export def "post-set-password" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --old: string
-  --plain: string
-  --verify: string
+  --old: string # required
+  --plain: string # required
+  --verify: string # required
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($old == null) { error make --unspanned { msg: "required query parameter 'old' missing: pass --old" } }
+  if ($plain == null) { error make --unspanned { msg: "required query parameter 'plain' missing: pass --plain" } }
+  if ($verify == null) { error make --unspanned { msg: "required query parameter 'verify' missing: pass --verify" } }
   let qp = [(serialize-qp "old" $old "scalar") (serialize-qp "plain" $plain "scalar") (serialize-qp "verify" $verify "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/crx/explorer/ui/setpassword.jsp" $qp $auth.query)
   let accept_val = "text/plain"
@@ -765,10 +778,11 @@ export def "post-package-service" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cmd: string
+  --cmd: string # required
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($cmd == null) { error make --unspanned { msg: "required query parameter 'cmd' missing: pass --cmd" } }
   let qp = [(serialize-qp "cmd" $cmd "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/crx/packmgr/service.jsp" $qp $auth.query)
   let accept_val = "text/xml"
@@ -801,7 +815,7 @@ export def "post-package-service-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cmd: string
+  --cmd: string # required
   --group-name: string
   --package-name: string
   --package-version: string
@@ -814,14 +828,15 @@ export def "post-package-service-json" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
+  if ($cmd == null) { error make --unspanned { msg: "required query parameter 'cmd' missing: pass --cmd" } }
   let qp = [(serialize-qp "cmd" $cmd "scalar") (serialize-qp "groupName" $group_name "scalar") (serialize-qp "packageName" $package_name "scalar") (serialize-qp "packageVersion" $package_version "scalar") (serialize-qp "_charset_" $charset "scalar") (serialize-qp "force" $force "scalar") (serialize-qp "recursive" $recursive "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/crx/packmgr/service/.json/{path}") $qp $auth.query)
   let req_body = {"package": $package} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["package"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["package"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -882,15 +897,19 @@ export def "post-package-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --group-name: string
-  --package-name: string
-  --version: string
-  --path: string
+  --group-name: string # required
+  --package-name: string # required
+  --version: string # required
+  --path: string # required
   --filter: string
   --charset: string
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($group_name == null) { error make --unspanned { msg: "required query parameter 'groupName' missing: pass --group-name" } }
+  if ($package_name == null) { error make --unspanned { msg: "required query parameter 'packageName' missing: pass --package-name" } }
+  if ($version == null) { error make --unspanned { msg: "required query parameter 'version' missing: pass --version" } }
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
   let qp = [(serialize-qp "groupName" $group_name "scalar") (serialize-qp "packageName" $package_name "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "_charset_" $charset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/crx/packmgr/update.jsp" $qp $auth.query)
   let accept_val = "application/json"
@@ -1240,8 +1259,8 @@ export def "post-truststore-pkcs12" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["truststore.p12"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["truststore.p12"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -1335,8 +1354,8 @@ export def "post-authorizables" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorizable-id: string
-  --intermediate-path: string
+  --authorizable-id: string # required
+  --intermediate-path: string # required
   --create-user: string
   --create-group: string
   --rep-password: string
@@ -1344,6 +1363,8 @@ export def "post-authorizables" [
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorizable_id == null) { error make --unspanned { msg: "required query parameter 'authorizableId' missing: pass --authorizable-id" } }
+  if ($intermediate_path == null) { error make --unspanned { msg: "required query parameter 'intermediatePath' missing: pass --intermediate-path" } }
   let qp = [(serialize-qp "authorizableId" $authorizable_id "scalar") (serialize-qp "intermediatePath" $intermediate_path "scalar") (serialize-qp "createUser" $create_user "scalar") (serialize-qp "createGroup" $create_group "scalar") (serialize-qp "rep:password" $rep_password "scalar") (serialize-qp "profile/givenName" $profile_given_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/libs/granite/security/post/authorizables" $qp $auth.query)
   let accept_val = "text/html"
@@ -1375,26 +1396,32 @@ export def "ssl-setup" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --keystore-password: string
-  --keystore-password-confirm: string
-  --truststore-password: string
-  --truststore-password-confirm: string
-  --https-hostname: string
-  --https-port: string
+  --keystore-password: string # required
+  --keystore-password-confirm: string # required
+  --truststore-password: string # required
+  --truststore-password-confirm: string # required
+  --https-hostname: string # required
+  --https-port: string # required
   --certificate-file: string # format: binary
   --privatekey-file: string # format: binary
 ]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($keystore_password == null) { error make --unspanned { msg: "required query parameter 'keystorePassword' missing: pass --keystore-password" } }
+  if ($keystore_password_confirm == null) { error make --unspanned { msg: "required query parameter 'keystorePasswordConfirm' missing: pass --keystore-password-confirm" } }
+  if ($truststore_password == null) { error make --unspanned { msg: "required query parameter 'truststorePassword' missing: pass --truststore-password" } }
+  if ($truststore_password_confirm == null) { error make --unspanned { msg: "required query parameter 'truststorePasswordConfirm' missing: pass --truststore-password-confirm" } }
+  if ($https_hostname == null) { error make --unspanned { msg: "required query parameter 'httpsHostname' missing: pass --https-hostname" } }
+  if ($https_port == null) { error make --unspanned { msg: "required query parameter 'httpsPort' missing: pass --https-port" } }
   let qp = [(serialize-qp "keystorePassword" $keystore_password "scalar") (serialize-qp "keystorePasswordConfirm" $keystore_password_confirm "scalar") (serialize-qp "truststorePassword" $truststore_password "scalar") (serialize-qp "truststorePasswordConfirm" $truststore_password_confirm "scalar") (serialize-qp "httpsHostname" $https_hostname "scalar") (serialize-qp "httpsPort" $https_port "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/libs/granite/security/post/sslSetup.html" $qp $auth.query)
   let req_body = {"certificateFile": $certificate_file, "privatekeyFile": $privatekey_file} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["certificateFile" "privatekeyFile"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["certificateFile" "privatekeyFile"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -1438,8 +1465,8 @@ export def "post-truststore" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["certificate"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["certificate"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -1500,13 +1527,17 @@ export def "post-tree-activation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ignoredeactivated: oneof<nothing, bool>
-  --onlymodified: oneof<nothing, bool>
-  --path: string
-  --cmd: string # default: activate
+  --ignoredeactivated: oneof<nothing, bool> # required
+  --onlymodified: oneof<nothing, bool> # required
+  --path: string # required
+  --cmd: string # required, default: activate
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($ignoredeactivated == null) { error make --unspanned { msg: "required query parameter 'ignoredeactivated' missing: pass --ignoredeactivated" } }
+  if ($onlymodified == null) { error make --unspanned { msg: "required query parameter 'onlymodified' missing: pass --onlymodified" } }
+  if ($path == null) { error make --unspanned { msg: "required query parameter 'path' missing: pass --path" } }
+  let cmd = ($cmd | default "activate")
   let qp = [(serialize-qp "ignoredeactivated" $ignoredeactivated "scalar") (serialize-qp "onlymodified" $onlymodified "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "cmd" $cmd "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/libs/replication/treeactivation.html" $qp $auth.query)
   let accept_val = "application/json"
@@ -1539,11 +1570,12 @@ export def "post-bundle" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string
+  --action: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($action == null) { error make --unspanned { msg: "required query parameter 'action' missing: pass --action" } }
   let qp = [(serialize-qp "action" $action "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/system/console/bundles/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1837,8 +1869,8 @@ export def "post-authorizable-keystore" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["cert-chain" "keyStore" "pk"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["cert-chain" "keyStore" "pk"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -1941,12 +1973,14 @@ export def "post-path" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --jcr-primary-type: string
-  --name: string
+  --jcr-primary-type: string # required
+  --name: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
+  if ($jcr_primary_type == null) { error make --unspanned { msg: "required query parameter 'jcr:primaryType' missing: pass --jcr-primary-type" } }
+  if ($name == null) { error make --unspanned { msg: "required query parameter ':name' missing: pass --name" } }
   let qp = [(serialize-qp "jcr:primaryType" $jcr_primary_type "scalar") (serialize-qp ":name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/{path}/") $qp $auth.query)
   let accept_val = "application/json"
@@ -2069,8 +2103,8 @@ export def "post-node" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url

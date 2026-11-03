@@ -1,6 +1,7 @@
 # Auto-generated client for Nexmo Conversion API v1.0.1
 # Source: https://api.apis.guru/v2/specs/nexmo.com/conversion/1.0.1/openapi.json
-# Auth: --token flag or $env.NEXMO_CONVERSION_API_TOKEN
+# Auth (apiKey): --token-apikey flag or $env.NEXMO_CONVERSION_API_APIKEY_TOKEN
+# Auth (apiSecret): --token-apisecret flag or $env.NEXMO_CONVERSION_API_APISECRET_TOKEN
 
 const BASE_URL = "https://api.nexmo.com/conversions"
 
@@ -112,7 +113,7 @@ def delivered-completer [] { ["0" "1" "false" "true"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-apikey" "token-apisecret"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "sms-conversion" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -147,12 +148,15 @@ export def "sms-conversion" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --message-id: string # The ID you receive in the response to a request. * From the Verify API - use the `event_id` in the response to Verify Check. * From the SMS API - use the `message-id` * From the Text-To-Speech API - use the `call-id` * From the Text-To-Speech-Prompt API - use the `call-id` (e.g. 00A0B0C0)
-  --delivered: string@delivered-completer # Set to _true_ if your user replied to the message you sent. Otherwise, set to _false_. **Note**: for curl, use 0 and 1. (e.g. true)
-  --timestamp: string # When the user completed your call-to-action (e.g. visited your website, installed your app) in [UTC±00:00](https://en.wikipedia.org/wiki/UTC%C2%B100:00) format: _yyyy-MM-dd HH:mm:ss_. If you do not set this parameter, Nexmo uses the time it receives this request. (e.g. 2020-01-01 12:00:00)
+  --message-id: string # The ID you receive in the response to a request. * From the Verify API - use the `event_id` in the response to Verify Check. * From the SMS API - use the `message-id` * From the Text-To-Speech API - use the `call-id` * From the Text-To-Speech-Prompt API - use the `call-id` (required, e.g. 00A0B0C0)
+  --delivered: string@delivered-completer # Set to _true_ if your user replied to the message you sent. Otherwise, set to _false_. **Note**: for curl, use 0 and 1. (required, e.g. true)
+  --timestamp: string # When the user completed your call-to-action (e.g. visited your website, installed your app) in [UTC±00:00](https://en.wikipedia.org/wiki/UTC%C2%B100:00) format: _yyyy-MM-dd HH:mm:ss_. If you do not set this parameter, Nexmo uses the time it receives this request. (required, e.g. 2020-01-01 12:00:00)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEXMO_CONVERSION_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_apisecret | default ($env | get -o NEXMO_CONVERSION_API_APISECRET_TOKEN | default "")) "query-api_secret")])
   let base = ($base_url | default $BASE_URL)
+  if ($message_id == null) { error make --unspanned { msg: "required query parameter 'message-id' missing: pass --message-id" } }
+  if ($delivered == null) { error make --unspanned { msg: "required query parameter 'delivered' missing: pass --delivered" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'timestamp' missing: pass --timestamp" } }
   let qp = [(serialize-qp "message-id" $message_id "scalar") (serialize-qp "delivered" $delivered "scalar") (serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sms" $qp $auth.query)
   let accept_val = "application/json"
@@ -185,12 +189,15 @@ export def "voice-conversion" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --message-id: string # The ID you receive in the response to a request. * From the Verify API - use the `event_id` in the response to Verify Check. * From the SMS API - use the `message-id` * From the Text-To-Speech API - use the `call-id` * From the Text-To-Speech-Prompt API - use the `call-id` (e.g. 00A0B0C0)
-  --delivered: string@delivered-completer # Set to _true_ if your user replied to the message you sent. Otherwise, set to _false_. **Note**: for curl, use 0 and 1. (e.g. true)
-  --timestamp: string # When the user completed your call-to-action (e.g. visited your website, installed your app) in [UTC±00:00](https://en.wikipedia.org/wiki/UTC%C2%B100:00) format: _yyyy-MM-dd HH:mm:ss_. If you do not set this parameter, Nexmo uses the time it receives this request. (e.g. 2020-01-01 12:00:00)
+  --message-id: string # The ID you receive in the response to a request. * From the Verify API - use the `event_id` in the response to Verify Check. * From the SMS API - use the `message-id` * From the Text-To-Speech API - use the `call-id` * From the Text-To-Speech-Prompt API - use the `call-id` (required, e.g. 00A0B0C0)
+  --delivered: string@delivered-completer # Set to _true_ if your user replied to the message you sent. Otherwise, set to _false_. **Note**: for curl, use 0 and 1. (required, e.g. true)
+  --timestamp: string # When the user completed your call-to-action (e.g. visited your website, installed your app) in [UTC±00:00](https://en.wikipedia.org/wiki/UTC%C2%B100:00) format: _yyyy-MM-dd HH:mm:ss_. If you do not set this parameter, Nexmo uses the time it receives this request. (required, e.g. 2020-01-01 12:00:00)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEXMO_CONVERSION_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_apisecret | default ($env | get -o NEXMO_CONVERSION_API_APISECRET_TOKEN | default "")) "query-api_secret")])
   let base = ($base_url | default $BASE_URL)
+  if ($message_id == null) { error make --unspanned { msg: "required query parameter 'message-id' missing: pass --message-id" } }
+  if ($delivered == null) { error make --unspanned { msg: "required query parameter 'delivered' missing: pass --delivered" } }
+  if ($timestamp == null) { error make --unspanned { msg: "required query parameter 'timestamp' missing: pass --timestamp" } }
   let qp = [(serialize-qp "message-id" $message_id "scalar") (serialize-qp "delivered" $delivered "scalar") (serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/voice" $qp $auth.query)
   let accept_val = "application/json"

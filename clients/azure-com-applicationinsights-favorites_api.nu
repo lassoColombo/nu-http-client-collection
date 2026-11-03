@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -156,7 +156,7 @@ export def "favorites-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --favorite-type: string@favorite-type-completer # The type of favorite. Value can be either shared or user. (default: shared)
   --source-type: string@source-type-completer # Source type of favorite to return. When left out, the source type defaults to 'other' (not present in this enum). (allows empty value)
   --can-fetch-content: oneof<nothing, bool> # Flag indicating whether or not to return the full content for each applicable favorite. If false, only return summary content for favorites.
@@ -167,6 +167,7 @@ export def "favorites-list" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "favoriteType" $favorite_type "scalar") (serialize-qp "sourceType" $source_type "scalar") (serialize-qp "canFetchContent" $can_fetch_content "scalar") (serialize-qp "tags" $tags "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/favorites") $qp $auth.query)
   let accept_val = "application/json"
@@ -203,7 +204,7 @@ export def "favorites-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -211,6 +212,7 @@ export def "favorites-delete" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($favorite_id | is-empty) { error make --unspanned { msg: "path parameter 'favoriteId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), favorite_id: (encode-path-segment $favorite_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/favorites/{favorite_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -247,7 +249,7 @@ export def "favorites-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
 ]: nothing -> record<Category: string, Config: string, FavoriteId: string, FavoriteType: string, IsGeneratedFromTemplate: bool, Name: string, SourceType: string, Tags: list<string>, TimeModified: string, UserId: string, Version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -255,6 +257,7 @@ export def "favorites-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($favorite_id | is-empty) { error make --unspanned { msg: "path parameter 'favoriteId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), favorite_id: (encode-path-segment $favorite_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/favorites/{favorite_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -291,7 +294,7 @@ export def "favorites-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --category: string # Favorite category, as defined by the user at creation time.
   --config: string # Configuration of this particular favorite, which are driven by the Azure portal UX. Configuration data is a string containing valid JSON
   --favorite-type: string@favorite-type-completer # Enum indicating if this favorite definition is owned by a specific user or is shared between all users with access to the Application Insights component.
@@ -308,6 +311,7 @@ export def "favorites-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($favorite_id | is-empty) { error make --unspanned { msg: "path parameter 'favoriteId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), favorite_id: (encode-path-segment $favorite_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/favorites/{favorite_id}") $qp $auth.query)
   let req_body = {"Category": $category, "Config": $config, "FavoriteType": $favorite_type, "IsGeneratedFromTemplate": $is_generated_from_template, "Name": $name, "SourceType": $source_type, "Tags": $tags, "Version": $version} | compact
@@ -346,7 +350,7 @@ export def "favorites-add" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --category: string # Favorite category, as defined by the user at creation time.
   --config: string # Configuration of this particular favorite, which are driven by the Azure portal UX. Configuration data is a string containing valid JSON
   --favorite-type: string@favorite-type-completer # Enum indicating if this favorite definition is owned by a specific user or is shared between all users with access to the Application Insights component.
@@ -363,6 +367,7 @@ export def "favorites-add" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   if ($favorite_id | is-empty) { error make --unspanned { msg: "path parameter 'favoriteId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), favorite_id: (encode-path-segment $favorite_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Insights/components/{resource_name}/favorites/{favorite_id}") $qp $auth.query)
   let req_body = {"Category": $category, "Config": $config, "FavoriteType": $favorite_type, "IsGeneratedFromTemplate": $is_generated_from_template, "Name": $name, "SourceType": $source_type, "Tags": $tags, "Version": $version} | compact

@@ -131,12 +131,15 @@ export def "globalpageload" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --license: string # Your Interzoid license API key. Register at www.interzoid.com/register
-  --origin: string # Geographic location to perform the measurement from (Paris, Hong Kong, Seoul, Mumbai, Sao Paolo, London, etc. see API home page for full list)
-  --url: string # specific URL to perform load test time
+  --license: string # Your Interzoid license API key. Register at www.interzoid.com/register (required)
+  --origin: string # Geographic location to perform the measurement from (Paris, Hong Kong, Seoul, Mumbai, Sao Paolo, London, etc. see API home page for full list) (required)
+  --url: string # specific URL to perform load test time (required)
 ]: nothing -> record<Code: string, Contents: string, Credits: string, Origin: string, PageResponseStatus: string, Seconds: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($license == null) { error make --unspanned { msg: "required query parameter 'license' missing: pass --license" } }
+  if ($origin == null) { error make --unspanned { msg: "required query parameter 'origin' missing: pass --origin" } }
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
   let qp = [(serialize-qp "license" $license "scalar") (serialize-qp "origin" $origin "scalar") (serialize-qp "url" $url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/globalpageload" $qp $auth.query)
   let accept_val = "application/json"

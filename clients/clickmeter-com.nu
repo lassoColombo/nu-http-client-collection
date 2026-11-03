@@ -1,4 +1,4 @@
-# Auto-generated client for ClickMeter API vv2
+# Auto-generated client for ClickMeter API v2
 # Source: https://api.apis.guru/v2/specs/clickmeter.com/v2/openapi.json
 # Auth: --token flag or $env.CLICKMETER_API_TOKEN
 
@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-clickmeter-authkey" => { {scheme: $scheme, headers: {X-Clickmeter-AuthKey: $token_val}, query: "", location: "header"} }
+    "x-clickmeter-authkey" => { {scheme: $scheme, headers: {"X-Clickmeter-AuthKey": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -119,21 +119,22 @@ def sort-direction-completer [] { ["asc" "desc"] }
 def time-format-completer [] { ["AmPm" "H24"] }
 def entity-type-completer [] { ["datapoint" "group"] }
 def type-completer [] { ["r" "w"] }
+def type-completer-1 [] { ["datapoint" "group"] }
 def time-frame-completer [] { ["beginning" "currentmonth" "currentyear" "custom" "last120" "last12months" "last180" "last30" "last7" "last90" "lastmonth" "lastyear" "previousmonth" "today" "yesterday"] }
 def group-by-completer [] { ["month" "week"] }
 def status-completer [] { ["active" "deleted"] }
-def type-completer-1 [] { ["tl" "tp"] }
+def type-completer-2 [] { ["tl" "tp"] }
 def status-completer-1 [] { ["active" "deleted" "paused" "spam"] }
 def filter-completer [] { ["" "conversions" "nonuniques" "spiders" "uniques"] }
 def protocol-completer [] { ["Http" "Https"] }
 def timeframe-completer [] { ["currentmonth" "custom" "last120" "last180" "last30" "last7" "last90" "lastmonth" "previousmonth" "yesterday"] }
 def filter-completer-1 [] { ["conversions" "nonuniques" "spiders" "uniques"] }
 def status-completer-2 [] { ["Abuse" "Active" "Deleted" "Paused"] }
-def type-completer-2 [] { ["TrackingLink" "TrackingPixel"] }
-def type-completer-3 [] { ["dedicated" "go" "personal" "system"] }
-def type-completer-4 [] { ["Dedicated" "Go" "Personal" "System"] }
+def type-completer-3 [] { ["TrackingLink" "TrackingPixel"] }
+def type-completer-4 [] { ["dedicated" "go" "personal" "system"] }
+def type-completer-5 [] { ["Dedicated" "Go" "Personal" "System"] }
 def group-by-completer-1 [] { ["active" "deleted"] }
-def type-completer-5 [] { ["dp" "gr" "tl" "tp"] }
+def type-completer-6 [] { ["dp" "gr" "tl" "tp"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -736,7 +737,7 @@ export def "account-get-permissions-count" [
 # POST /account/guests/{guestId}/{type}/permissions/patch
 export def "post-account-guests-guest-id-type-permissions-patch" [
   guest_id: int
-  type: string
+  type: string@type-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -781,7 +782,7 @@ export def "post-account-guests-guest-id-type-permissions-patch" [
 # operationId: Account_PatchPermissions
 export def "account-patch-permissions" [
   guest_id: int
-  type: string
+  type: string@type-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -985,7 +986,7 @@ export def "aggregated-get-statistics-single" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList
+  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList (required)
   --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
   --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --hourly: oneof<nothing, bool> # If using "yesterday" or "today" timeframe you can ask for the hourly detail
@@ -993,6 +994,7 @@ export def "aggregated-get-statistics-single" [
 ]: nothing -> record<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
+  if ($time_frame == null) { error make --unspanned { msg: "required query parameter 'timeFrame' missing: pass --time-frame" } }
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "hourly" $hourly "scalar") (serialize-qp "onlyFavorites" $only_favorites "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/aggregated" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1026,13 +1028,14 @@ export def "aggregated-get-statistics-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList
+  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList (required)
   --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
   --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --group-by: string@group-by-completer # The temporal entity you want to group by ("week"/"month"). If unspecified is "day".
 ]: nothing -> record<entities: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
+  if ($time_frame == null) { error make --unspanned { msg: "required query parameter 'timeFrame' missing: pass --time-frame" } }
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "groupBy" $group_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/aggregated/list" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1066,7 +1069,7 @@ export def "aggregated-get-conversions-summary" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList
+  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList (required)
   --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
   --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --status: string@status-completer # Status of conversion ("deleted"/"active")
@@ -1078,6 +1081,7 @@ export def "aggregated-get-conversions-summary" [
 ]: nothing -> record<count: int, limit: int, offset: int, result: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
+  if ($time_frame == null) { error make --unspanned { msg: "required query parameter 'timeFrame' missing: pass --time-frame" } }
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortDirection" $sort_direction "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "textSearch" $text_search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/aggregated/summary/conversions" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1111,8 +1115,8 @@ export def "aggregated-get-datapoints-summary" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList
-  --type: string@type-completer-1 # Type of datapoint ("tl"/"tp")
+  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList (required)
+  --type: string@type-completer-2 # Type of datapoint ("tl"/"tp") (required)
   --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
   --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --status: string@status-completer-1 # Status of datapoint ("deleted"/"active"/"paused"/"spam")
@@ -1127,6 +1131,8 @@ export def "aggregated-get-datapoints-summary" [
 ]: nothing -> record<count: int, limit: int, offset: int, result: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
+  if ($time_frame == null) { error make --unspanned { msg: "required query parameter 'timeFrame' missing: pass --time-frame" } }
+  if ($type == null) { error make --unspanned { msg: "required query parameter 'type' missing: pass --type" } }
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "favourite" $favourite "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortDirection" $sort_direction "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "textSearch" $text_search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/aggregated/summary/datapoints" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1160,7 +1166,7 @@ export def "aggregated-get-groups-summary" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList
+  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList (required)
   --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
   --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --status: string@status-completer # Status of group ("deleted"/"active")
@@ -1174,6 +1180,7 @@ export def "aggregated-get-groups-summary" [
 ]: nothing -> record<count: int, limit: int, offset: int, result: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
+  if ($time_frame == null) { error make --unspanned { msg: "required query parameter 'timeFrame' missing: pass --time-frame" } }
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "favourite" $favourite "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortDirection" $sort_direction "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "textSearch" $text_search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/aggregated/summary/groups" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1336,7 +1343,7 @@ export def "conversions-get-statistics-all-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList
+  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList (required)
   --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
   --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --status: string@status-completer # Status of conversion ("deleted"/"active")
@@ -1344,6 +1351,7 @@ export def "conversions-get-statistics-all-list" [
 ]: nothing -> record<entities: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
+  if ($time_frame == null) { error make --unspanned { msg: "required query parameter 'timeFrame' missing: pass --time-frame" } }
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "groupBy" $group_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/conversions/aggregated/list" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1539,7 +1547,7 @@ export def "conversions-get-statistics-single" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList
+  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList (required)
   --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
   --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --tag: string # Filter by this tag name
@@ -1549,6 +1557,7 @@ export def "conversions-get-statistics-single" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($conversion_id | is-empty) { error make --unspanned { msg: "path parameter 'conversionId' must be non-empty" } }
+  if ($time_frame == null) { error make --unspanned { msg: "required query parameter 'timeFrame' missing: pass --time-frame" } }
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "favourite" $favourite "scalar") (serialize-qp "hourly" $hourly "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({conversion_id: (encode-path-segment $conversion_id)} | format pattern "/conversions/{conversion_id}/aggregated") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1583,7 +1592,7 @@ export def "conversions-get-statistics-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList
+  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList (required)
   --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
   --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --group-by: string@group-by-completer # The temporal entity you want to group by ("week"/"month"). If unspecified is "day".
@@ -1591,6 +1600,7 @@ export def "conversions-get-statistics-list" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($conversion_id | is-empty) { error make --unspanned { msg: "path parameter 'conversionId' must be non-empty" } }
+  if ($time_frame == null) { error make --unspanned { msg: "required query parameter 'timeFrame' missing: pass --time-frame" } }
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "groupBy" $group_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({conversion_id: (encode-path-segment $conversion_id)} | format pattern "/conversions/{conversion_id}/aggregated/list") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1627,7 +1637,7 @@ export def "conversions-get-datapoints" [
   --accept: string@accept-completer-1 # Response content type
   --offset: int # Offset where to start from (format: int32)
   --limit: int # Limit results to this number (format: int32)
-  --type: string@type-completer-1 # Type of datapoint ("tl"/"tp")
+  --type: string@type-completer-2 # Type of datapoint ("tl"/"tp")
   --status: string@status-completer-1 # Status of datapoint ("deleted"/"active"/"paused"/"spam")
   --tags: string # Filter by this tag name
   --text-search: string # Filter fields by this pattern
@@ -1799,7 +1809,7 @@ export def "conversions-get-hits" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --timeframe: string@timeframe-completer # Timeframe of the request. See list at $timeframeList
+  --timeframe: string@timeframe-completer # Timeframe of the request. See list at $timeframeList (required)
   --limit: int # Limit results to this number (format: int32)
   --offset: string # Offset where to start from (it's the lastKey field in the response object)
   --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
@@ -1809,6 +1819,7 @@ export def "conversions-get-hits" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($conversion_id | is-empty) { error make --unspanned { msg: "path parameter 'conversionId' must be non-empty" } }
+  if ($timeframe == null) { error make --unspanned { msg: "required query parameter 'timeframe' missing: pass --timeframe" } }
   let qp = [(serialize-qp "timeframe" $timeframe "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({conversion_id: (encode-path-segment $conversion_id)} | format pattern "/conversions/{conversion_id}/hits") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1885,7 +1896,7 @@ export def "data-points-get" [
   --accept: string@accept-completer-1 # Response content type
   --offset: int # Where to start when retrieving elements. Default is 0 if not specified. (format: int32, default: 0)
   --limit: int # Maximum elements to retrieve. Default to 20 if not specified. (format: int32, default: 20)
-  --type: string@type-completer-1 # Type of the datapoint ("tp"/"tl")
+  --type: string@type-completer-2 # Type of the datapoint ("tp"/"tl")
   --status: string@status-completer-1 # Status of the datapoint
   --tags: string # A comma separated list of tags you want to filter with.
   --text-search: string # Filter fields by this pattern
@@ -1959,7 +1970,7 @@ export def "data-points-put" [
   --third-conversion-name: string
   --title: string
   --tracking-code: string
-  --type: string@type-completer-2
+  --type: string@type-completer-3
   --type-tl: record # shape: {appendQuery?: bool, browserDestinationItem?: record, destinationMode?: "Simple"|"RandomDestination"|"DestinationByLanguage"|"SpilloverDestination"|"DynamicUrl"|"BrowserDestination"|"DestinationByNation"|"UniqueDestination"|"SequentialDestination"|"WeightedDestination", domainId?: int, encodeUrl?: bool, expirationClicks?: int, expirationDate?: string, firstUrl?: string, goDomainId?: int, hideUrl?: bool, hideUrlTitle?: string, isABTest?: bool, password?: string, pauseAfterClicksExpiration?: bool, ... (14 more fields)}
   --type-tp: record # shape: {parameterNote?: string}
   --write-permited: oneof<nothing, bool>
@@ -2001,8 +2012,8 @@ export def "data-points-get-statistics-aggregated-single" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList
-  --type: string@type-completer-1 # Type of datapoint ("tl"/"tp")
+  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList (required)
+  --type: string@type-completer-2 # Type of datapoint ("tl"/"tp")
   --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
   --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --hourly: oneof<nothing, bool> # If using "yesterday" or "today" timeframe you can ask for the hourly detail
@@ -2012,6 +2023,7 @@ export def "data-points-get-statistics-aggregated-single" [
 ]: nothing -> record<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
+  if ($time_frame == null) { error make --unspanned { msg: "required query parameter 'timeFrame' missing: pass --time-frame" } }
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "hourly" $hourly "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "favourite" $favourite "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/datapoints/aggregated" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2045,8 +2057,8 @@ export def "data-points-get-statistics-all-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --type: string@type-completer-1 # Type of datapoint ("tl"/"tp")
-  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList
+  --type: string@type-completer-2 # Type of datapoint ("tl"/"tp") (required)
+  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList (required)
   --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
   --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --status: string@status-completer-1 # Status of datapoint ("deleted"/"active"/"paused"/"spam")
@@ -2056,6 +2068,8 @@ export def "data-points-get-statistics-all-list" [
 ]: nothing -> record<entities: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
+  if ($type == null) { error make --unspanned { msg: "required query parameter 'type' missing: pass --type" } }
+  if ($time_frame == null) { error make --unspanned { msg: "required query parameter 'timeFrame' missing: pass --time-frame" } }
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "favourite" $favourite "scalar") (serialize-qp "groupBy" $group_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/datapoints/aggregated/list" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2209,7 +2223,7 @@ export def "data-points-count" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --type: string@type-completer-1 # Type of the datapoint ("tp"/"tl")
+  --type: string@type-completer-2 # Type of the datapoint ("tp"/"tl")
   --status: string@status-completer-1 # Status of the datapoint
   --tags: string # A comma separated list of tags you want to filter with.
   --text-search: string # Filter fields by this pattern
@@ -2355,7 +2369,7 @@ export def "data-points-post" [
   --third-conversion-name: string
   --title: string
   --tracking-code: string
-  --type: string@type-completer-2
+  --type: string@type-completer-3
   --type-tl: record # shape: {appendQuery?: bool, browserDestinationItem?: record, destinationMode?: "Simple"|"RandomDestination"|"DestinationByLanguage"|"SpilloverDestination"|"DynamicUrl"|"BrowserDestination"|"DestinationByNation"|"UniqueDestination"|"SequentialDestination"|"WeightedDestination", domainId?: int, encodeUrl?: bool, expirationClicks?: int, expirationDate?: string, firstUrl?: string, goDomainId?: int, hideUrl?: bool, hideUrlTitle?: string, isABTest?: bool, password?: string, pauseAfterClicksExpiration?: bool, ... (14 more fields)}
   --type-tp: record # shape: {parameterNote?: string}
   --write-permited: oneof<nothing, bool>
@@ -2399,7 +2413,7 @@ export def "data-points-get-statistics-single" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList
+  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList (required)
   --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
   --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --hourly: oneof<nothing, bool> # If using "yesterday" or "today" timeframe you can ask for the hourly detail
@@ -2407,6 +2421,7 @@ export def "data-points-get-statistics-single" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($time_frame == null) { error make --unspanned { msg: "required query parameter 'timeFrame' missing: pass --time-frame" } }
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "hourly" $hourly "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/datapoints/{id}/aggregated") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2441,7 +2456,7 @@ export def "data-points-get-statistics-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList
+  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList (required)
   --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
   --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --group-by: string@group-by-completer # The temporal entity you want to group by ("week"/"month"). If unspecified is "day".
@@ -2449,6 +2464,7 @@ export def "data-points-get-statistics-list" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($time_frame == null) { error make --unspanned { msg: "required query parameter 'timeFrame' missing: pass --time-frame" } }
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "groupBy" $group_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/datapoints/{id}/aggregated/list") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2520,7 +2536,7 @@ export def "data-points-get-hits" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --timeframe: string@timeframe-completer # Timeframe of the request. See list at $timeframeList
+  --timeframe: string@timeframe-completer # Timeframe of the request. See list at $timeframeList (required)
   --limit: int # Limit results to this number (format: int32)
   --offset: string # Offset where to start from (it's the lastKey field in the response object)
   --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
@@ -2530,6 +2546,7 @@ export def "data-points-get-hits" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($timeframe == null) { error make --unspanned { msg: "required query parameter 'timeframe' missing: pass --timeframe" } }
   let qp = [(serialize-qp "timeframe" $timeframe "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/datapoints/{id}/hits") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2606,7 +2623,7 @@ export def "domains-get" [
   --accept: string@accept-completer-1 # Response content type
   --offset: int # Offset where to start from (format: int32)
   --limit: int # Limit results to this number (format: int32)
-  --type: string@type-completer-3 # Type of domain ("system"/"go"/"personal"/"dedicated"). If not specified default is "system" (default: system)
+  --type: string@type-completer-4 # Type of domain ("system"/"go"/"personal"/"dedicated"). If not specified default is "system" (default: system)
   --name: string # Filter domains with this anmen
 ]: nothing -> record<entities: table<id: int, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
@@ -2648,7 +2665,7 @@ export def "domains-put" [
   --custom-homepage: string
   --id: int # format: int64
   --name: string
-  --type: string@type-completer-4
+  --type: string@type-completer-5
 ]: any -> record<id: int, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
@@ -2687,7 +2704,7 @@ export def "domains-count" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --type: string@type-completer-3 # Type of domain ("system"/"go"/"personal"/"dedicated"). If not specified default is "system" (default: system)
+  --type: string@type-completer-4 # Type of domain ("system"/"go"/"personal"/"dedicated"). If not specified default is "system" (default: system)
   --name: string # Filter domains with this anmen
 ]: nothing -> record<count: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
@@ -2803,7 +2820,7 @@ export def "domains-update" [
   --custom-homepage: string
   --body-id: int # format: int64
   --name: string
-  --type: string@type-completer-4
+  --type: string@type-completer-5
 ]: any -> record<id: int, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
@@ -2936,7 +2953,7 @@ export def "groups-get-statistics-aggregated-single" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList
+  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList (required)
   --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
   --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --hourly: oneof<nothing, bool> # If using "yesterday" or "today" timeframe you can ask for the hourly detail
@@ -2946,6 +2963,7 @@ export def "groups-get-statistics-aggregated-single" [
 ]: nothing -> record<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
+  if ($time_frame == null) { error make --unspanned { msg: "required query parameter 'timeFrame' missing: pass --time-frame" } }
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "hourly" $hourly "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "favourite" $favourite "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/groups/aggregated" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2979,7 +2997,7 @@ export def "groups-get-statistics-all-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList
+  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList (required)
   --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
   --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --status: string # Status of group ("deleted"/"active")
@@ -2989,6 +3007,7 @@ export def "groups-get-statistics-all-list" [
 ]: nothing -> record<entities: table<activityDay: string, commissionsCost: float, conversionsCost: float, conversionsValue: float, convertedClicks: int, entityData: record, entityId: string, fromDay: string, hourlyBreakDown: record, lastHitDate: string, spiderHitsCount: int, toDay: string, totalClicks: int, totalViews: int, uniqueClicks: int, uniqueConversions: int, uniqueViews: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
+  if ($time_frame == null) { error make --unspanned { msg: "required query parameter 'timeFrame' missing: pass --time-frame" } }
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "favourite" $favourite "scalar") (serialize-qp "groupBy" $group_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/groups/aggregated/list" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3189,7 +3208,7 @@ export def "groups-get-statistics-single" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList
+  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList (required)
   --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
   --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --hourly: oneof<nothing, bool> # If using "yesterday" or "today" timeframe you can ask for the hourly detail
@@ -3197,6 +3216,7 @@ export def "groups-get-statistics-single" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($time_frame == null) { error make --unspanned { msg: "required query parameter 'timeFrame' missing: pass --time-frame" } }
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "hourly" $hourly "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}/aggregated") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3231,7 +3251,7 @@ export def "groups-get-statistics-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList
+  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList (required)
   --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
   --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --group-by: string@group-by-completer # The temporal entity you want to group by ("week"/"month"). If unspecified is "day".
@@ -3239,6 +3259,7 @@ export def "groups-get-statistics-list" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($time_frame == null) { error make --unspanned { msg: "required query parameter 'timeFrame' missing: pass --time-frame" } }
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "groupBy" $group_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}/aggregated/list") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3273,8 +3294,8 @@ export def "groups-get-datapoints-summary" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList
-  --type: string@type-completer-1 # Type of datapoint ("tl"/"tp")
+  --time-frame: string@time-frame-completer # Timeframe of the request. See list at $timeframeList (required)
+  --type: string@type-completer-2 # Type of datapoint ("tl"/"tp")
   --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
   --to-day: string # If using a "custom" timeFrame you can specify the ending day (YYYYMMDD)
   --status: string@status-completer # Status of datapoint ("deleted"/"active"/"paused"/"spam")
@@ -3289,6 +3310,7 @@ export def "groups-get-datapoints-summary" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($time_frame == null) { error make --unspanned { msg: "required query parameter 'timeFrame' missing: pass --time-frame" } }
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "favourite" $favourite "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortDirection" $sort_direction "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "textSearch" $text_search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}/aggregated/summary") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3325,7 +3347,7 @@ export def "groups-get-datapoints" [
   --accept: string@accept-completer-1 # Response content type
   --offset: int # Where to start when retrieving elements. Default is 0 if not specified. (format: int32, default: 0)
   --limit: int # Maximum elements to retrieve. Default to 20 if not specified. (format: int32, default: 20)
-  --type: string@type-completer-1 # Type of the datapoint ("tp"/"tl")
+  --type: string@type-completer-2 # Type of the datapoint ("tp"/"tl")
   --status: string@status-completer-1 # Status of the datapoint
   --tags: string # A comma separated list of tags you want to filter with.
   --text-search: string # Filter fields by this pattern
@@ -3401,7 +3423,7 @@ export def "groups-put-datapoint" [
   --third-conversion-name: string
   --title: string
   --tracking-code: string
-  --type: string@type-completer-2
+  --type: string@type-completer-3
   --type-tl: record # shape: {appendQuery?: bool, browserDestinationItem?: record, destinationMode?: "Simple"|"RandomDestination"|"DestinationByLanguage"|"SpilloverDestination"|"DynamicUrl"|"BrowserDestination"|"DestinationByNation"|"UniqueDestination"|"SequentialDestination"|"WeightedDestination", domainId?: int, encodeUrl?: bool, expirationClicks?: int, expirationDate?: string, firstUrl?: string, goDomainId?: int, hideUrl?: bool, hideUrlTitle?: string, isABTest?: bool, password?: string, pauseAfterClicksExpiration?: bool, ... (14 more fields)}
   --type-tp: record # shape: {parameterNote?: string}
   --write-permited: oneof<nothing, bool>
@@ -3445,7 +3467,7 @@ export def "groups-get-datapoints-count" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --type: string@type-completer-1 # Type of the datapoint ("tp"/"tl")
+  --type: string@type-completer-2 # Type of the datapoint ("tp"/"tl")
   --status: string@status-completer-1 # Status of the datapoint
   --tags: string # A comma separated list of tags you want to filter with.
   --text-search: string # Filter fields by this pattern
@@ -3527,7 +3549,7 @@ export def "groups-get-hits" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --timeframe: string@timeframe-completer # Timeframe of the request. See list at $timeframeList
+  --timeframe: string@timeframe-completer # Timeframe of the request. See list at $timeframeList (required)
   --limit: int # Limit results to this number (format: int32)
   --offset: string # Offset where to start from (it's the lastKey field in the response object)
   --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
@@ -3537,6 +3559,7 @@ export def "groups-get-hits" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($timeframe == null) { error make --unspanned { msg: "required query parameter 'timeframe' missing: pass --timeframe" } }
   let qp = [(serialize-qp "timeframe" $timeframe "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}/hits") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3611,7 +3634,7 @@ export def "hits-get-hits" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --timeframe: string@timeframe-completer # Timeframe of the request. See list at $timeframeList
+  --timeframe: string@timeframe-completer # Timeframe of the request. See list at $timeframeList (required)
   --limit: int # Limit results to this number (format: int32)
   --offset: string # Offset where to start from (it's the lastKey field in the response object)
   --from-day: string # If using a "custom" timeFrame you can specify the starting day (YYYYMMDD)
@@ -3620,6 +3643,7 @@ export def "hits-get-hits" [
 ]: nothing -> record<hits: table<accessTime: string, browser: record, clientLanguage: string, conversion1: record, conversion2: record, conversion3: record, conversion4: record, conversion5: record, conversions: list, entity: record, ip: string, isProxy: string, isSpider: string, isUnique: string, location: record, org: string, os: record, queryParams: string, realDestinationUrl: string, referer: string, source: record, type: string>, lastKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
+  if ($timeframe == null) { error make --unspanned { msg: "required query parameter 'timeframe' missing: pass --timeframe" } }
   let qp = [(serialize-qp "timeframe" $timeframe "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hits" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -4050,7 +4074,7 @@ export def "tags-get" [
   --name: string # Name of the tag
   --datapoints: string # Comma separated list of datapoints id to filter by
   --groups: string # Comma separated list of groups id to filter by
-  --type: string@type-completer-5 # Type of entity related to the tag
+  --type: string@type-completer-6 # Type of entity related to the tag
 ]: nothing -> record<entities: table<id: int, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
@@ -4132,7 +4156,7 @@ export def "tags-count" [
   --name: string # Name of the tag
   --datapoints: string # Comma separated list of datapoints id to filter by
   --groups: string # Comma separated list of groups id to filter by
-  --type: string@type-completer-5 # Type of entity related to the tag
+  --type: string@type-completer-6 # Type of entity related to the tag
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
@@ -4282,7 +4306,7 @@ export def "tags-get-datapoints" [
   --accept: string@accept-completer-1 # Response content type
   --offset: int # Where to start when retrieving elements. Default is 0 if not specified. (format: int32, default: 0)
   --limit: int # Maximum elements to retrieve. Default to 20 if not specified. (format: int32, default: 20)
-  --type: string@type-completer-1 # Type of the datapoint ("tp"/"tl")
+  --type: string@type-completer-2 # Type of the datapoint ("tp"/"tl")
   --status: string@status-completer-1 # Status of the datapoint
   --text-search: string # Filter fields by this pattern
   --created-after: string # Exclude datapoints created before this date (YYYYMMDD)
@@ -4325,7 +4349,7 @@ export def "tags-get-datapoints-count" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --type: string@type-completer-1 # Type of the datapoint ("tp"/"tl")
+  --type: string@type-completer-2 # Type of the datapoint ("tp"/"tl")
   --status: string@status-completer-1 # Status of the datapoint
   --text-search: string # Filter fields by this pattern
   --created-after: string # Exclude datapoints created before this date (YYYYMMDD)

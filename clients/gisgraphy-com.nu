@@ -139,7 +139,7 @@ export def "addressparsing" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --address: string # A postal address.
+  --address: string # A postal address. (required)
   --country: string # The ISO 3166 Alpha 2 code of the country.
   --format: string@format-completer # The output format. (default: XML)
   --callback: string # The callback method name (optional), use to wrap the content into a (alphanumeric) Javascript method. Works only for script output formats (JSON, PHP, Ruby, Python)
@@ -149,6 +149,7 @@ export def "addressparsing" [
 ]: nothing -> record<QTime: int, message: string, numFound: int, parsedAddress: record<POBox: string, POBoxAgency: string, POBoxInfo: string, adm1NameAlternatesLocalized: record, adm2NameAlternatesLocalized: record, block: string, city: string, citySubdivision: string, civicNumberSuffix: string, confidence: string, country: string, countryNameAlternatesLocalized: record, countrycode: string, dependentLocality: string, distance: float, district: string, extraInfo: string, floor: string, geocodinglevel: string, houseNumber: string, houseNumberInfo: string, id: int, lat: float, lng: float, lote: string, name: string, nameAlternatesLocalized: record, postDirection: string, postDirectionIntersection: string, postTown: string, preDirection: string, preDirectionIntersection: string, prefecture: string, quadrant: string, quarter: string, recipientName: string, sector: string, state: string, streetName: string, streetNameIntersection: string, streetType: string, streetTypeIntersection: string, suiteNumber: string, suiteType: string, ward: string, zipCode: string>, result: table<POBox: string, POBoxAgency: string, POBoxInfo: string, adm1NameAlternatesLocalized: record, adm2NameAlternatesLocalized: record, block: string, city: string, citySubdivision: string, civicNumberSuffix: string, confidence: string, country: string, countryNameAlternatesLocalized: record, countrycode: string, dependentLocality: string, distance: float, district: string, extraInfo: string, floor: string, geocodinglevel: string, houseNumber: string, houseNumberInfo: string, id: int, lat: float, lng: float, lote: string, name: string, nameAlternatesLocalized: record, postDirection: string, postDirectionIntersection: string, postTown: string, preDirection: string, preDirectionIntersection: string, prefecture: string, quadrant: string, quarter: string, recipientName: string, sector: string, state: string, streetName: string, streetNameIntersection: string, streetType: string, streetTypeIntersection: string, suiteNumber: string, suiteType: string, ward: string, zipCode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($address == null) { error make --unspanned { msg: "required query parameter 'address' missing: pass --address" } }
   let qp = [(serialize-qp "address" $address "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "indent" $indent "scalar") (serialize-qp "standardize" $standardize "scalar") (serialize-qp "geocode" $geocode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/addressparser/parse" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -182,8 +183,8 @@ export def "fulltxtsearch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --q: string # The searched text : The text for the query can be a zip code, a string or one or more strings
-  --allwordsrequired: oneof<nothing, bool> # Whether the fulltext engine should considers all the words specified as required. Defaults to false (since v 4.0). possible values are true|false (or 'on' when used with the rest service) (default: false)
+  --q: string # The searched text : The text for the query can be a zip code, a string or one or more strings (required)
+  --allwordsrequired: oneof<nothing, bool> # Whether the fulltext engine should considers all the words specified as required. Defaults to false (since v 4.0). possible values are true|false (or 'on' when used with the rest service) (required, default: false)
   --spellchecking: string # The spellchecking (optional) : whether some suggestions should be provided if no results are found
   --lat: float # The latitude (north-south) for the location point to search around. The value is a floating number, between -90 and +90. It uses GPS coordinates (format: double)
   --lng: float # TThe longitude (east-West) for the location point to search around. The value is a floating number between -180 and +180. It uses GPS coordinates. (format: double)
@@ -193,21 +194,23 @@ export def "fulltxtsearch" [
   --country: string # limit the search to the specified ISO 3166 country code. Default : search in all countries
   --lang: string # The language code (optional) : The iso 639 Alpha2 or alpha3 Language Code. Some properties such as the AlternateName AdmNames and countryname belong to a certain language code. The language parameter can limit the output of those fields to a certain language (it only apply when style parameter='style') : If the language code does not exists or is not specified, properties with all the languages are retrieved If it exists, the properties with the specified language code, are retrieved
   --format: string@format-completer-1 # The output format. (default: XML)
-  --qp-from: int # The first pagination index. Numbered from 1. If the number is < 1 or not specified, it will be set to the default value : 1 (format: int32, default: 1)
-  --qp-to: int # The last pagination index. if < 1 or not specified, it will be set to startindex + 10. Max = 10 (can be changed) (format: int32, default: 10)
+  --from: int # The first pagination index. Numbered from 1. If the number is < 1 or not specified, it will be set to the default value : 1 (format: int32, default: 1)
+  --to: int # The last pagination index. if < 1 or not specified, it will be set to startindex + 10. Max = 10 (can be changed) (format: int32, default: 10)
   --callback: string # The callback method name (optional), use to wrap the content into a (alphanumeric) Javascript method. Works only for script output formats (JSON, PHP, Ruby, Python)
   --indent: oneof<nothing, bool> # indents the results.Default to false. Possible values are true or false (or on when used with the rest service. If you use a checkbox in a web form, to indent the results, the value will be 'on' or 'off', so for a simple use : the value of indent can be 'true' or 'on' (default: false)
 ]: nothing -> record<QTime: int, maxScore: float, message: string, numFound: int, result: table<adm1_code: string, adm1_name: string, adm1_names_alternate: list, adm2_code: string, adm2_name: string, adm2_names_alternate: list, adm3_code: string, adm3_name: string, adm4_code: string, adm4_name: string, amenity: string, area: float, capital_name: string, continent: string, country_code: string, country_flag_url: string, country_name: string, country_names_alternate: list, currency_code: string, currency_name: string, elevation: int, feature_class: string, feature_code: string, feature_id: int, fips_code: string, fully_qualified_address: string, fully_qualified_name: string, google_map_url: string, gtopo30: int, house_numbers: list, is_in: string, is_in_adm: string, is_in_place: string, is_in_zip: list, isoalpha2_country_code: string, isoalpha3_country_code: string, lat: float, length: float, level: int, lng: float, municipality: bool, name: string, name_alternates: list, name_ascii: string, one_way: bool, openstreetmap_id: int, openstreetmap_map_url: string, phone_prefix: string, placetype: string, population: int, postal_code_mask: string, postal_code_regex: string, score: float, spoken_languages: list, street_type: string, timezone: string, tld: string, yahoo_map_url: string, zipcodes: list>, resultsSize: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "allwordsrequired" $allwordsrequired "scalar") (serialize-qp "spellchecking" $spellchecking "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "lng" $lng "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "suggest" $suggest "scalar") (serialize-qp "style" $style "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "indent" $indent "scalar")] | flatten | str join "&"
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
+  let allwordsrequired = ($allwordsrequired | default "false")
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "allwordsrequired" $allwordsrequired "scalar") (serialize-qp "spellchecking" $spellchecking "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "lng" $lng "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "suggest" $suggest "scalar") (serialize-qp "style" $style "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "indent" $indent "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/fulltext/search" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"q": $q, "allwordsrequired": $allwordsrequired, "spellchecking": $spellchecking, "lat": $lat, "lng": $lng, "radius": $radius, "suggest": $suggest, "style": $style, "country": $country, "lang": $lang, "format": $format, "from": $qp_from, "to": $qp_to, "callback": $callback, "indent": $indent} | compact)
+    query: ({"q": $q, "allwordsrequired": $allwordsrequired, "spellchecking": $spellchecking, "lat": $lat, "lng": $lng, "radius": $radius, "suggest": $suggest, "style": $style, "country": $country, "lang": $lang, "format": $format, "from": $from, "to": $to, "callback": $callback, "indent": $indent} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -233,25 +236,26 @@ export def "geocode" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --address: string # A postal address, structured or not, a street, a city, a postal code, a country, or a combination.
+  --address: string # A postal address, structured or not, a street, a city, a postal code, a country, or a combination. (required)
   --country: string # The country where the place/address is. It is used to determine the postal address format and to improve performance. It will probably be optional in next version to ease the usability. The value must be the ISO 3166 Alpha 2 code of the country.
   --postal: string # Whether the given address is a postal address. default to false. In other words, if the address follow the specification or if it is a well-formed address as it was written on an envelope. This parameter will enable the parsing of the address by the address parser before geocoding, this way, the relevance will be better because because if parsing is successful, we will know the meaning of each word. Note that you can also specify each field if you already know them.
   --format: string@format-completer # The output format. (default: XML)
-  --qp-from: int # The first pagination index. Numbered from 1. If the number is < 1 or not specified, it will be set to the default value : 1 (format: int32, default: 1)
-  --qp-to: int # The last pagination index. if < 1 or not specified, it will be set to startindex + 10. Max = 10 (can be changed) (format: int32, default: 10)
+  --from: int # The first pagination index. Numbered from 1. If the number is < 1 or not specified, it will be set to the default value : 1 (format: int32, default: 1)
+  --to: int # The last pagination index. if < 1 or not specified, it will be set to startindex + 10. Max = 10 (can be changed) (format: int32, default: 10)
   --callback: string # The callback method name (optional), use to wrap the content into a (alphanumeric) Javascript method. Works only for script output formats (JSON, PHP, Ruby, Python)
   --indent: oneof<nothing, bool> # indents the results. Possible values are true or false (or on when used with the rest service. If you use a checkbox in a web form, to indent the results, the value will be 'on' or 'off', so for a simple use : the value of indent can be 'true' or 'on' (default: false)
 ]: nothing -> record<QTime: int, message: string, numFound: int, parsedAddress: record<POBox: string, POBoxAgency: string, POBoxInfo: string, adm1NameAlternatesLocalized: record, adm2NameAlternatesLocalized: record, block: string, city: string, citySubdivision: string, civicNumberSuffix: string, confidence: string, country: string, countryNameAlternatesLocalized: record, countrycode: string, dependentLocality: string, distance: float, district: string, extraInfo: string, floor: string, geocodinglevel: string, houseNumber: string, houseNumberInfo: string, id: int, lat: float, lng: float, lote: string, name: string, nameAlternatesLocalized: record, postDirection: string, postDirectionIntersection: string, postTown: string, preDirection: string, preDirectionIntersection: string, prefecture: string, quadrant: string, quarter: string, recipientName: string, sector: string, state: string, streetName: string, streetNameIntersection: string, streetType: string, streetTypeIntersection: string, suiteNumber: string, suiteType: string, ward: string, zipCode: string>, result: table<POBox: string, POBoxAgency: string, POBoxInfo: string, adm1NameAlternatesLocalized: record, adm2NameAlternatesLocalized: record, block: string, city: string, citySubdivision: string, civicNumberSuffix: string, confidence: string, country: string, countryNameAlternatesLocalized: record, countrycode: string, dependentLocality: string, distance: float, district: string, extraInfo: string, floor: string, geocodinglevel: string, houseNumber: string, houseNumberInfo: string, id: int, lat: float, lng: float, lote: string, name: string, nameAlternatesLocalized: record, postDirection: string, postDirectionIntersection: string, postTown: string, preDirection: string, preDirectionIntersection: string, prefecture: string, quadrant: string, quarter: string, recipientName: string, sector: string, state: string, streetName: string, streetNameIntersection: string, streetType: string, streetTypeIntersection: string, suiteNumber: string, suiteType: string, ward: string, zipCode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "address" $address "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "postal" $postal "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "indent" $indent "scalar")] | flatten | str join "&"
+  if ($address == null) { error make --unspanned { msg: "required query parameter 'address' missing: pass --address" } }
+  let qp = [(serialize-qp "address" $address "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "postal" $postal "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "indent" $indent "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/geocoding/geocode" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"address": $address, "country": $country, "postal": $postal, "format": $format, "from": $qp_from, "to": $qp_to, "callback": $callback, "indent": $indent} | compact)
+    query: ({"address": $address, "country": $country, "postal": $postal, "format": $format, "from": $from, "to": $to, "callback": $callback, "indent": $indent} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -277,27 +281,29 @@ export def "geoloc" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --lat: float # The latitude (north-south) for the location point to search around. The value is a floating number, between -90 and +90. It uses GPS coordinates (format: double)
-  --lng: float # TThe longitude (east-West) for the location point to search around. The value is a floating number between -180 and +180. It uses GPS coordinates. (format: double)
+  --lat: float # The latitude (north-south) for the location point to search around. The value is a floating number, between -90 and +90. It uses GPS coordinates (required, format: double)
+  --lng: float # TThe longitude (east-West) for the location point to search around. The value is a floating number between -180 and +180. It uses GPS coordinates. (required, format: double)
   --radius: float # distance from the location point in meters we'd like to search around. The value is a number > 0 if it is not specify or incorrect. (format: double, default: 10000)
   --distance: oneof<nothing, bool> # Whether (or not) we want the distance field to be output. This option is useful to improve the performance if we don't care about the distance (e.g : we search for name). Of course, the results won't be sorted by distance. If you use a checkbox in a form to indent the results, the value will be 'on' or 'off', so to simplify the use : the value for the web service can be 'true' or 'on' (default: true)
   --placetype: string # filter search for a given placetype
   --format: string@format-completer # The output format. (default: XML)
-  --qp-from: int # The first pagination index. Numbered from 1. If the number is < 1 or not specified, it will be set to the default value : 1 (format: int32, default: 1)
-  --qp-to: int # The last pagination index. if < 1 or not specified, it will be set to startindex + 10. Max = 10 (can be changed) (format: int32, default: 10)
+  --from: int # The first pagination index. Numbered from 1. If the number is < 1 or not specified, it will be set to the default value : 1 (format: int32, default: 1)
+  --to: int # The last pagination index. if < 1 or not specified, it will be set to startindex + 10. Max = 10 (can be changed) (format: int32, default: 10)
   --callback: string # The callback method name (optional), use to wrap the content into a (alphanumeric) Javascript method. Works only for script output formats (JSON, PHP, Ruby, Python)
   --indent: oneof<nothing, bool> # indents the results.Default to false. Possible values are true or false (or on when used with the rest service. If you use a checkbox in a web form, to indent the results, the value will be 'on' or 'off', so for a simple use : the value of indent can be 'true' or 'on' (default: false)
 ]: nothing -> record<QTime: int, error: string, numFound: int, result: table<adm1Code: string, adm1Name: string, adm2Code: string, adm2Name: string, adm3Code: string, adm3Name: string, adm4Code: string, adm4Name: string, adm5Code: string, adm5Name: string, amenity: string, area: float, asciiName: string, capitalName: string, continent: string, countryCode: string, country_flag_url: string, currencyCode: string, currencyName: string, distance: float, elevation: int, equivalentFipsCode: string, featureClass: string, featureCode: string, featureId: int, fipsCode: string, fullyQualifiedAddress: string, google_map_url: string, gtopo30: int, isIn: string, isInAdm: string, isInPlace: string, isInZip: string, iso3166Alpha2Code: string, iso3166Alpha3Code: string, iso3166NumericCode: string, lat: float, length: float, level: int, lng: float, name: string, oneWay: bool, openstreetmapId: int, openstreetmap_map_url: string, phonePrefix: string, placeType: string, population: int, postalCodeMask: string, postalCodeRegex: string, streetType: string, timezone: string, tld: string, yahoo_map_url: string, zipCodes: list>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "lat" $lat "scalar") (serialize-qp "lng" $lng "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "distance" $distance "scalar") (serialize-qp "placetype" $placetype "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "indent" $indent "scalar")] | flatten | str join "&"
+  if ($lat == null) { error make --unspanned { msg: "required query parameter 'lat' missing: pass --lat" } }
+  if ($lng == null) { error make --unspanned { msg: "required query parameter 'lng' missing: pass --lng" } }
+  let qp = [(serialize-qp "lat" $lat "scalar") (serialize-qp "lng" $lng "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "distance" $distance "scalar") (serialize-qp "placetype" $placetype "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "indent" $indent "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/geoloc/search" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"lat": $lat, "lng": $lng, "radius": $radius, "distance": $distance, "placetype": $placetype, "format": $format, "from": $qp_from, "to": $qp_to, "callback": $callback, "indent": $indent} | compact)
+    query: ({"lat": $lat, "lng": $lng, "radius": $radius, "distance": $distance, "placetype": $placetype, "format": $format, "from": $from, "to": $to, "callback": $callback, "indent": $indent} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -323,24 +329,26 @@ export def "reversegeocode" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --lat: float # The latitude (north-south) for the location point to search around. The value is a floating number, between -90 and +90. It uses GPS coordinates (format: double)
-  --lng: float # TThe longitude (east-West) for the location point to search around. The value is a floating number between -180 and +180. It uses GPS coordinates. (format: double)
+  --lat: float # The latitude (north-south) for the location point to search around. The value is a floating number, between -90 and +90. It uses GPS coordinates (required, format: double)
+  --lng: float # TThe longitude (east-West) for the location point to search around. The value is a floating number between -180 and +180. It uses GPS coordinates. (required, format: double)
   --format: string@format-completer # The output format. (default: XML)
-  --qp-from: int # The first pagination index. Numbered from 1. If the number is < 1 or not specified, it will be set to the default value : 1 (format: int32, default: 1)
-  --qp-to: int # The last pagination index. if < 1 or not specified, it will be set to startindex + 10. Max = 10 (can be changed) (format: int32, default: 10)
+  --from: int # The first pagination index. Numbered from 1. If the number is < 1 or not specified, it will be set to the default value : 1 (format: int32, default: 1)
+  --to: int # The last pagination index. if < 1 or not specified, it will be set to startindex + 10. Max = 10 (can be changed) (format: int32, default: 10)
   --callback: string # The callback method name (optional), use to wrap the content into a (alphanumeric) Javascript method. Works only for script output formats (JSON, PHP, Ruby, Python)
   --indent: oneof<nothing, bool> # indents the results. Possible values are true or false (or on when used with the rest service. If you use a checkbox in a web form, to indent the results, the value will be 'on' or 'off', so for a simple use : the value of indent can be 'true' or 'on' (default: false)
 ]: nothing -> record<QTime: int, message: string, numFound: int, parsedAddress: record<POBox: string, POBoxAgency: string, POBoxInfo: string, adm1NameAlternatesLocalized: record, adm2NameAlternatesLocalized: record, block: string, city: string, citySubdivision: string, civicNumberSuffix: string, confidence: string, country: string, countryNameAlternatesLocalized: record, countrycode: string, dependentLocality: string, distance: float, district: string, extraInfo: string, floor: string, geocodinglevel: string, houseNumber: string, houseNumberInfo: string, id: int, lat: float, lng: float, lote: string, name: string, nameAlternatesLocalized: record, postDirection: string, postDirectionIntersection: string, postTown: string, preDirection: string, preDirectionIntersection: string, prefecture: string, quadrant: string, quarter: string, recipientName: string, sector: string, state: string, streetName: string, streetNameIntersection: string, streetType: string, streetTypeIntersection: string, suiteNumber: string, suiteType: string, ward: string, zipCode: string>, result: table<POBox: string, POBoxAgency: string, POBoxInfo: string, adm1NameAlternatesLocalized: record, adm2NameAlternatesLocalized: record, block: string, city: string, citySubdivision: string, civicNumberSuffix: string, confidence: string, country: string, countryNameAlternatesLocalized: record, countrycode: string, dependentLocality: string, distance: float, district: string, extraInfo: string, floor: string, geocodinglevel: string, houseNumber: string, houseNumberInfo: string, id: int, lat: float, lng: float, lote: string, name: string, nameAlternatesLocalized: record, postDirection: string, postDirectionIntersection: string, postTown: string, preDirection: string, preDirectionIntersection: string, prefecture: string, quadrant: string, quarter: string, recipientName: string, sector: string, state: string, streetName: string, streetNameIntersection: string, streetType: string, streetTypeIntersection: string, suiteNumber: string, suiteType: string, ward: string, zipCode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "lat" $lat "scalar") (serialize-qp "lng" $lng "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "indent" $indent "scalar")] | flatten | str join "&"
+  if ($lat == null) { error make --unspanned { msg: "required query parameter 'lat' missing: pass --lat" } }
+  if ($lng == null) { error make --unspanned { msg: "required query parameter 'lng' missing: pass --lng" } }
+  let qp = [(serialize-qp "lat" $lat "scalar") (serialize-qp "lng" $lng "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "indent" $indent "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reversegeocoding/reversegeocode" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"lat": $lat, "lng": $lng, "format": $format, "from": $qp_from, "to": $qp_to, "callback": $callback, "indent": $indent} | compact)
+    query: ({"lat": $lat, "lng": $lng, "format": $format, "from": $from, "to": $to, "callback": $callback, "indent": $indent} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -366,28 +374,30 @@ export def "streetsearch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --lat: float # The latitude (north-south) for the location point to search around. The value is a floating number, between -90 and +90. It uses GPS coordinates (format: double)
-  --lng: float # TThe longitude (east-West) for the location point to search around. The value is a floating number between -180 and +180. It uses GPS coordinates. (format: double)
+  --lat: float # The latitude (north-south) for the location point to search around. The value is a floating number, between -90 and +90. It uses GPS coordinates (required, format: double)
+  --lng: float # TThe longitude (east-West) for the location point to search around. The value is a floating number between -180 and +180. It uses GPS coordinates. (required, format: double)
   --radius: float # distance from the location point in meters we'd like to search around. The value is a number > 0 if it is not specify or incorrect. (format: double, default: 10000)
   --oneway: oneof<nothing, bool> # whether the street should be a oneWay street (optional) : limit the search to the street that are one way street. If you use a checkbox in a form to indent the results, the value will be 'on' or 'off', so to simplify the use : the value for the web service can be 'true' or 'on' (default: false)
   --distance: oneof<nothing, bool> # Whether (or not) we want the distance field to be output. This option is useful to improve the performance if we don't care about the distance (e.g : we search for name). Of course, the results won't be sorted by distance. If you use a checkbox in a form to indent the results, the value will be 'on' or 'off', so to simplify the use : the value for the web service can be 'true' or 'on' (default: true)
   --streettype: string # filter search with a stret type
   --format: string@format-completer # The output format. (default: XML)
-  --qp-from: int # The first pagination index. Numbered from 1. If the number is < 1 or not specified, it will be set to the default value : 1 (format: int32, default: 1)
-  --qp-to: int # The last pagination index. if < 1 or not specified, it will be set to startindex + 10. Max = 10 (can be changed) (format: int32, default: 10)
+  --from: int # The first pagination index. Numbered from 1. If the number is < 1 or not specified, it will be set to the default value : 1 (format: int32, default: 1)
+  --to: int # The last pagination index. if < 1 or not specified, it will be set to startindex + 10. Max = 10 (can be changed) (format: int32, default: 10)
   --callback: string # The callback method name (optional), use to wrap the content into a (alphanumeric) Javascript method. Works only for script output formats (JSON, PHP, Ruby, Python)
   --indent: oneof<nothing, bool> # indents the results. Possible values are true or false (or on when used with the rest service. If you use a checkbox in a web form, to indent the results, the value will be 'on' or 'off', so for a simple use : the value of indent can be 'true' or 'on' (default: false)
 ]: nothing -> record<QTime: int, error: string, numFound: int, result: table<countryCode: string, distance: float, fullyQualifiedAddress: string, gid: int, isIn: string, isInAdm: string, isInPlace: string, isInZip: string, lat: float, length: float, lng: float, name: string, oneWay: bool, openstreetmapId: int, streetType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "lat" $lat "scalar") (serialize-qp "lng" $lng "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "oneway" $oneway "scalar") (serialize-qp "distance" $distance "scalar") (serialize-qp "streettype" $streettype "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "indent" $indent "scalar")] | flatten | str join "&"
+  if ($lat == null) { error make --unspanned { msg: "required query parameter 'lat' missing: pass --lat" } }
+  if ($lng == null) { error make --unspanned { msg: "required query parameter 'lng' missing: pass --lng" } }
+  let qp = [(serialize-qp "lat" $lat "scalar") (serialize-qp "lng" $lng "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "oneway" $oneway "scalar") (serialize-qp "distance" $distance "scalar") (serialize-qp "streettype" $streettype "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "indent" $indent "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/street/find" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"lat": $lat, "lng": $lng, "radius": $radius, "oneway": $oneway, "distance": $distance, "streettype": $streettype, "format": $format, "from": $qp_from, "to": $qp_to, "callback": $callback, "indent": $indent} | compact)
+    query: ({"lat": $lat, "lng": $lng, "radius": $radius, "oneway": $oneway, "distance": $distance, "streettype": $streettype, "format": $format, "from": $from, "to": $to, "callback": $callback, "indent": $indent} | compact)
     headers: $auth.headers
     body: null
     content_type: null

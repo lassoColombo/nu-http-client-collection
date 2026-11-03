@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -246,7 +246,7 @@ export def "post-api-v2-cddrive-files-content" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-md5: string # If present, the MD5 will be compared against the file received as a message integrity check.
+  --content-md5: string # If present, the MD5 will be compared against the file received as a message integrity check. (format: md5)
   --file: string # The file content being uploaded. (format: binary)
   --name: string # The name of the file, including extension.
   --parent-id: int # The ID of the parent folder or 0 for the root folder. (format: int64)
@@ -261,8 +261,8 @@ export def "post-api-v2-cddrive-files-content" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-MD5": $content_md5} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -361,7 +361,7 @@ export def "get-api-v2-cddrive-files-file-id-content" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --range: string # Can be used to limit the range of bytes retrieved. Only a single byte range in the format ```bytes={start-range}-{end-range}``` is supported.
+  --range: string # Can be used to limit the range of bytes retrieved. Only a single byte range in the format ```bytes={start-range}-{end-range}``` is supported. (format: single byte range)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -550,13 +550,14 @@ export def "get-api-v2-episodes" [
   --id: int # Matches on the ID of the episode. (format: int64)
   --begin-air-date-after: string # Matches on the begin air date of the episode (inclusive). (format: date-time)
   --end-air-date-before: string # Matches on the end air date of the episode (inclusive). (format: date-time)
-  --program-id: int # Matches on the ID of the program that owns the episode. (format: int64)
+  --program-id: int # Matches on the ID of the program that owns the episode. (required, format: int64)
   --page-start: int # The start page of the results to return. The first item is indexed at 0. (format: int32, default: 0)
   --page-size: int # The number of items to return. Must be between 0 and 500, inclusive. (format: int32, default: 500)
   --order-by-id: string@order-by-id-completer # The sort order of the list of episodes, based on episode ID. If unspecified, the episodes are returned in random order. If using paging to iterate through the results, sort order should be specified.
 ]: nothing -> table<beginAirDate: string, beginTransmissionDate: string, createdDate: string, customerId: int, endAirDate: string, endTransmissionDate: string, id: int, lastModifiedDate: string, programId: int, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($program_id == null) { error make --unspanned { msg: "required query parameter 'programId' missing: pass --program-id" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "beginAirDateAfter" $begin_air_date_after "scalar") (serialize-qp "endAirDateBefore" $end_air_date_before "scalar") (serialize-qp "programId" $program_id "scalar") (serialize-qp "pageStart" $page_start "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "orderById" $order_by_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v2/episodes" $qp $auth.query)
   let accept_val = "application/json"
@@ -704,10 +705,11 @@ export def "get-api-v2-pieces" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --episode-id: int # The ID of the episode that owns the piece. (format: int64)
+  --episode-id: int # The ID of the episode that owns the piece. (required, format: int64)
 ]: nothing -> table<contributor: string, createdDate: string, description: string, episodeId: int, fullDescription: string, id: int, imageCdDriveUri: string, imageFileName: string, imageFileSize: int, imageOriginalFileName: string, lastModifiedDate: string, relativeEndTime: int, relativeStartTime: int, segmentNumber: int, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($episode_id == null) { error make --unspanned { msg: "required query parameter 'episodeId' missing: pass --episode-id" } }
   let qp = [(serialize-qp "episodeId" $episode_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v2/pieces" $qp $auth.query)
   let accept_val = "application/json"
@@ -929,7 +931,7 @@ export def "get-api-v2-segments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --episode-id: int # The ID of the episode that owns the segment. (format: int64)
+  --episode-id: int # The ID of the episode that owns the segment. (required, format: int64)
   --segment-number: int # format: int32
   --page-start: int # The start page of the results to return. The first item is indexed at 0. (format: int32, default: 0)
   --page-size: int # The number of items to return. Must be between 0 and 500, inclusive. (format: int32, default: 500)
@@ -937,6 +939,7 @@ export def "get-api-v2-segments" [
 ]: nothing -> table<channels: int, createdDate: string, episodeId: int, fileName: string, fileSize: int, id: int, inCue: string, lastModifiedDate: string, length: int, originalFileName: string, outCue: string, segmentNumber: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($episode_id == null) { error make --unspanned { msg: "required query parameter 'episodeId' missing: pass --episode-id" } }
   let qp = [(serialize-qp "episodeId" $episode_id "scalar") (serialize-qp "segmentNumber" $segment_number "scalar") (serialize-qp "pageStart" $page_start "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "orderById" $order_by_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v2/segments" $qp $auth.query)
   let accept_val = "application/json"

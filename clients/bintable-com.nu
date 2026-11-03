@@ -131,10 +131,11 @@ export def "balance-lookup" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key, which you can get from bintable.com website.
+  --api-key: string # The API key, which you can get from bintable.com website. (required)
 ]: nothing -> table<data: record, message: string, result: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/balance" $qp $auth.query)
   let accept_val = "*/*"
@@ -168,11 +169,12 @@ export def "bin-lookup" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key, which you can get from bintable.com website.
+  --api-key: string # The API key, which you can get from bintable.com website. (required)
 ]: nothing -> table<data: record, message: string, result: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bin | is-empty) { error make --unspanned { msg: "path parameter 'bin' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bin: (encode-path-segment $bin)} | format pattern "/{bin}") $qp $auth.query)
   let accept_val = "application/json"

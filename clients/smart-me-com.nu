@@ -1,4 +1,4 @@
-# Auto-generated client for smart-me vv1
+# Auto-generated client for smart-me v1
 # Source: https://api.apis.guru/v2/specs/smart-me.com/v1/openapi.json
 # Auth: --token flag or $env.SMART_ME_TOKEN
 
@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -498,10 +498,11 @@ export def "device-by-serial-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --serial: int # The Serial Number of the device (format: int64)
+  --serial: int # The Serial Number of the device (required, format: int64)
 ]: nothing -> record<ActivePower: float, ActivePowerL1: float, ActivePowerL2: float, ActivePowerL3: float, ActivePowerUnit: string, ActiveTariff: int, AdditionalMeterSerialNumber: string, AnalogOutput1: int, AnalogOutput2: int, ChargingStationState: string, CounterReading: float, CounterReadingExport: float, CounterReadingImport: float, CounterReadingT1: float, CounterReadingT2: float, CounterReadingT3: float, CounterReadingT4: float, CounterReadingUnit: string, Current: float, CurrentL1: float, CurrentL2: float, CurrentL3: float, DeviceEnergyType: string, DigitalInput1: bool, DigitalInput2: bool, DigitalOutput1: bool, DigitalOutput2: bool, FamilyType: string, FlowRate: float, Id: string, MeterSubType: string, Name: string, PowerFactor: float, PowerFactorL1: float, PowerFactorL2: float, PowerFactorL3: float, Serial: int, SwitchOn: bool, SwitchPhaseL1On: bool, SwitchPhaseL2On: bool, SwitchPhaseL3On: bool, Temperature: float, ValueDate: string, Voltage: float, VoltageL1: float, VoltageL2: float, VoltageL3: float> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($serial == null) { error make --unspanned { msg: "required query parameter 'serial' missing: pass --serial" } }
   let qp = [(serialize-qp "serial" $serial "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/DeviceBySerial" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -672,12 +673,13 @@ export def "devices-put" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --switch-state: oneof<nothing, bool> # The new state of the switch
+  --switch-state: oneof<nothing, bool> # The new state of the switch (required)
   --switch-number: int # The number of the switch if there are multiple (1 for L1, 3 for L3) (format: int32)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($switch_state == null) { error make --unspanned { msg: "required query parameter 'switchState' missing: pass --switch-state" } }
   let qp = [(serialize-qp "switchState" $switch_state "scalar") (serialize-qp "switchNumber" $switch_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Devices/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -711,10 +713,11 @@ export def "devices-by-energy-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --meter-energy-type: string@meter-energy-type-completer
+  --meter-energy-type: string@meter-energy-type-completer # required
 ]: nothing -> table<ActivePower: float, ActivePowerL1: float, ActivePowerL2: float, ActivePowerL3: float, ActivePowerUnit: string, ActiveTariff: int, AdditionalMeterSerialNumber: string, AnalogOutput1: int, AnalogOutput2: int, ChargingStationState: string, CounterReading: float, CounterReadingExport: float, CounterReadingImport: float, CounterReadingT1: float, CounterReadingT2: float, CounterReadingT3: float, CounterReadingT4: float, CounterReadingUnit: string, Current: float, CurrentL1: float, CurrentL2: float, CurrentL3: float, DeviceEnergyType: string, DigitalInput1: bool, DigitalInput2: bool, DigitalOutput1: bool, DigitalOutput2: bool, FamilyType: string, FlowRate: float, Id: string, MeterSubType: string, Name: string, PowerFactor: float, PowerFactorL1: float, PowerFactorL2: float, PowerFactorL3: float, Serial: int, SwitchOn: bool, SwitchPhaseL1On: bool, SwitchPhaseL2On: bool, SwitchPhaseL3On: bool, Temperature: float, ValueDate: string, Voltage: float, VoltageL1: float, VoltageL2: float, VoltageL3: float> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($meter_energy_type == null) { error make --unspanned { msg: "required query parameter 'meterEnergyType' missing: pass --meter-energy-type" } }
   let qp = [(serialize-qp "meterEnergyType" $meter_energy_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/DevicesByEnergy" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -748,10 +751,11 @@ export def "devices-by-sub-type-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --meter-sub-type: string@meter-sub-type-completer
+  --meter-sub-type: string@meter-sub-type-completer # required
 ]: nothing -> table<ActivePower: float, ActivePowerL1: float, ActivePowerL2: float, ActivePowerL3: float, ActivePowerUnit: string, ActiveTariff: int, AdditionalMeterSerialNumber: string, AnalogOutput1: int, AnalogOutput2: int, ChargingStationState: string, CounterReading: float, CounterReadingExport: float, CounterReadingImport: float, CounterReadingT1: float, CounterReadingT2: float, CounterReadingT3: float, CounterReadingT4: float, CounterReadingUnit: string, Current: float, CurrentL1: float, CurrentL2: float, CurrentL3: float, DeviceEnergyType: string, DigitalInput1: bool, DigitalInput2: bool, DigitalOutput1: bool, DigitalOutput2: bool, FamilyType: string, FlowRate: float, Id: string, MeterSubType: string, Name: string, PowerFactor: float, PowerFactorL1: float, PowerFactorL2: float, PowerFactorL3: float, Serial: int, SwitchOn: bool, SwitchPhaseL1On: bool, SwitchPhaseL2On: bool, SwitchPhaseL3On: bool, Temperature: float, ValueDate: string, Voltage: float, VoltageL1: float, VoltageL2: float, VoltageL3: float> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($meter_sub_type == null) { error make --unspanned { msg: "required query parameter 'meterSubType' missing: pass --meter-sub-type" } }
   let qp = [(serialize-qp "meterSubType" $meter_sub_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/DevicesBySubType" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1088,11 +1092,12 @@ export def "meter-values-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --date: string # format: date-time
+  --date: string # required, format: date-time
 ]: nothing -> record<CounterReading: float, CounterReadingExport: float, CounterReadingExportT1: float, CounterReadingExportT2: float, CounterReadingExportT3: float, CounterReadingExportT4: float, CounterReadingImport: float, CounterReadingImportT1: float, CounterReadingImportT2: float, CounterReadingImportT3: float, CounterReadingImportT4: float, CounterReadingT1: float, CounterReadingT2: float, CounterReadingT3: float, CounterReadingT4: float, CounterReadingUnit: string, Date: string, Id: string, Serial: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($date == null) { error make --unspanned { msg: "required query parameter 'date' missing: pass --date" } }
   let qp = [(serialize-qp "date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/MeterValues/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1553,11 +1558,12 @@ export def "values-in-past-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --date: string # the date of the value (format: date-time)
+  --date: string # the date of the value (required, format: date-time)
 ]: nothing -> record<Date: string, DeviceId: string, Values: table<Obis: string, Value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($date == null) { error make --unspanned { msg: "required query parameter 'date' missing: pass --date" } }
   let qp = [(serialize-qp "date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/ValuesInPast/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1592,13 +1598,16 @@ export def "values-in-past-multiple-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --start-date: string # The date when the first value should start (format: date-time)
-  --end-date: string # The date when the last value should start (format: date-time)
-  --interval: int # The interval in minutes betwenn the values. 0 means as fast as possible. Only 1000 values can be get in one call. (format: int32)
+  --start-date: string # The date when the first value should start (required, format: date-time)
+  --end-date: string # The date when the last value should start (required, format: date-time)
+  --interval: int # The interval in minutes betwenn the values. 0 means as fast as possible. Only 1000 values can be get in one call. (required, format: int32)
 ]: nothing -> table<Date: string, DeviceId: string, Values: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'startDate' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'endDate' missing: pass --end-date" } }
+  if ($interval == null) { error make --unspanned { msg: "required query parameter 'interval' missing: pass --interval" } }
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "interval" $interval "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/ValuesInPastMultiple/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1780,10 +1789,11 @@ export def "virtual-meter-calculate-formula-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --formula: string
+  --formula: string # required
 ]: nothing -> record<ActivePower: float, ActivePowerL1: float, ActivePowerL2: float, ActivePowerL3: float, ActivePowerUnit: string, ActiveTariff: int, AdditionalMeterSerialNumber: string, AnalogOutput1: int, AnalogOutput2: int, ChargingStationState: string, CounterReading: float, CounterReadingExport: float, CounterReadingImport: float, CounterReadingT1: float, CounterReadingT2: float, CounterReadingT3: float, CounterReadingT4: float, CounterReadingUnit: string, Current: float, CurrentL1: float, CurrentL2: float, CurrentL3: float, DeviceEnergyType: string, DigitalInput1: bool, DigitalInput2: bool, DigitalOutput1: bool, DigitalOutput2: bool, FamilyType: string, FlowRate: float, Id: string, MeterSubType: string, Name: string, PowerFactor: float, PowerFactorL1: float, PowerFactorL2: float, PowerFactorL3: float, Serial: int, SwitchOn: bool, SwitchPhaseL1On: bool, SwitchPhaseL2On: bool, SwitchPhaseL3On: bool, Temperature: float, ValueDate: string, Voltage: float, VoltageL1: float, VoltageL2: float, VoltageL3: float> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($formula == null) { error make --unspanned { msg: "required query parameter 'formula' missing: pass --formula" } }
   let qp = [(serialize-qp "formula" $formula "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/VirtualMeterCalculateFormula" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1888,12 +1898,15 @@ export def "virtual-tariff-consumption-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --folder-id: string # The ID of the Folder
-  --start-date: string # The start date (UTC) (format: date-time)
-  --end-date: string # The end date (UTC) (format: date-time)
+  --folder-id: string # The ID of the Folder (required)
+  --start-date: string # The start date (UTC) (required, format: date-time)
+  --end-date: string # The end date (UTC) (required, format: date-time)
 ]: nothing -> table<Consumption: float, Currency: string, Name: string, Price: float, TariffType: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($folder_id == null) { error make --unspanned { msg: "required query parameter 'folderId' missing: pass --folder-id" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'startDate' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'endDate' missing: pass --end-date" } }
   let qp = [(serialize-qp "folderId" $folder_id "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/VirtualTariffConsumption" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2000,19 +2013,21 @@ export def "folder-assign-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-source: string # The ID of the meter or folder that should be assign
-  --target: string # The ID of the meter or folder that should be the parent
+  --source: string # The ID of the meter or folder that should be assign (required)
+  --target: string # The ID of the meter or folder that should be the parent (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "source" $qp_source "scalar") (serialize-qp "target" $target "scalar")] | flatten | str join "&"
+  if ($source == null) { error make --unspanned { msg: "required query parameter 'source' missing: pass --source" } }
+  if ($target == null) { error make --unspanned { msg: "required query parameter 'target' missing: pass --target" } }
+  let qp = [(serialize-qp "source" $source "scalar") (serialize-qp "target" $target "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/folder/assign" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
-    query: ({"source": $qp_source, "target": $target} | compact)
+    query: ({"source": $source, "target": $target} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -2160,19 +2175,21 @@ export def "user-to-folder-assign-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-source: string # The ID of the user that should be de-assign
-  --target: string # The ID of the folder
+  --source: string # The ID of the user that should be de-assign (required)
+  --target: string # The ID of the folder (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "source" $qp_source "scalar") (serialize-qp "target" $target "scalar")] | flatten | str join "&"
+  if ($source == null) { error make --unspanned { msg: "required query parameter 'source' missing: pass --source" } }
+  if ($target == null) { error make --unspanned { msg: "required query parameter 'target' missing: pass --target" } }
+  let qp = [(serialize-qp "source" $source "scalar") (serialize-qp "target" $target "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/folder/user/assign" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
-    query: ({"source": $qp_source, "target": $target} | compact)
+    query: ({"source": $source, "target": $target} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -2197,20 +2214,23 @@ export def "user-to-folder-assign-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-source: string # The ID of the user that should be assign
-  --target: string # The ID of the folder that should be the parent
-  --old-folder: string # The ID of the old folder (in case of a drag and drop to a new folder)
+  --source: string # The ID of the user that should be assign (required)
+  --target: string # The ID of the folder that should be the parent (required)
+  --old-folder: string # The ID of the old folder (in case of a drag and drop to a new folder) (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "source" $qp_source "scalar") (serialize-qp "target" $target "scalar") (serialize-qp "oldFolder" $old_folder "scalar")] | flatten | str join "&"
+  if ($source == null) { error make --unspanned { msg: "required query parameter 'source' missing: pass --source" } }
+  if ($target == null) { error make --unspanned { msg: "required query parameter 'target' missing: pass --target" } }
+  if ($old_folder == null) { error make --unspanned { msg: "required query parameter 'oldFolder' missing: pass --old-folder" } }
+  let qp = [(serialize-qp "source" $source "scalar") (serialize-qp "target" $target "scalar") (serialize-qp "oldFolder" $old_folder "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/folder/user/assign" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
-    query: ({"source": $qp_source, "target": $target, "oldFolder": $old_folder} | compact)
+    query: ({"source": $source, "target": $target, "oldFolder": $old_folder} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -2235,14 +2255,17 @@ export def "o-auth-authorize" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --client-id: string
-  --redirect-uri: string
-  --state: string
+  --client-id: string # required
+  --redirect-uri: string # required
+  --state: string # required
   --scope: string
   --client-secret: string
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($client_id == null) { error make --unspanned { msg: "required query parameter 'client_id' missing: pass --client-id" } }
+  if ($redirect_uri == null) { error make --unspanned { msg: "required query parameter 'redirect_uri' missing: pass --redirect-uri" } }
+  if ($state == null) { error make --unspanned { msg: "required query parameter 'state' missing: pass --state" } }
   let qp = [(serialize-qp "client_id" $client_id "scalar") (serialize-qp "redirect_uri" $redirect_uri "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "client_secret" $client_secret "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/oauth/authorize" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2273,14 +2296,17 @@ export def "post-api-oauth-authorize" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --client-id: string
-  --redirect-uri: string
-  --state: string
+  --client-id: string # required
+  --redirect-uri: string # required
+  --state: string # required
   --scope: string
   --client-secret: string
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($client_id == null) { error make --unspanned { msg: "required query parameter 'client_id' missing: pass --client-id" } }
+  if ($redirect_uri == null) { error make --unspanned { msg: "required query parameter 'redirect_uri' missing: pass --redirect-uri" } }
+  if ($state == null) { error make --unspanned { msg: "required query parameter 'state' missing: pass --state" } }
   let qp = [(serialize-qp "client_id" $client_id "scalar") (serialize-qp "redirect_uri" $redirect_uri "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "client_secret" $client_secret "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/oauth/authorize" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -2458,11 +2484,12 @@ export def "pico-loadmanagement-set-dynamic-current-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --current: int # The dynamic current of the group (in mA) (format: int32)
+  --current: int # The dynamic current of the group (in mA) (required, format: int32)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($serial | is-empty) { error make --unspanned { msg: "path parameter 'serial' must be non-empty" } }
+  if ($current == null) { error make --unspanned { msg: "required query parameter 'current' missing: pass --current" } }
   let qp = [(serialize-qp "current" $current "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({serial: (encode-path-segment $serial)} | format pattern "/api/pico/loadmanagementgroup/current/{serial}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")

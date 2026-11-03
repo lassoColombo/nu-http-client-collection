@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -156,10 +156,11 @@ export def "event-logs-all" [
   --cursor: string # Cursor to start from. You can find cursors for next/previous pages in the meta.cursors property of the response. (nullable)
   --limit: int # Number of results to return. Minimum 1, Maximum 200, Default 20 (default: 20)
   --filter: record # Filter results
-  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
-]: nothing -> any {
+  --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+]: nothing -> record<data: table<application_id: string, attempts: list, consumer_id: string, endpoint: string, entity_type: string, event_type: string, execution_attempt: float, http_method: string, id: string, request_body: string, response_body: string, retry_scheduled: bool, service: record, status_code: int, success: bool, timestamp: string, unified_api: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, status: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "deepObject")] | flatten | str join "&"
   let full_url = (build-url $base "/webhook/logs" $qp $auth.query)
   let accept_val = "application/json"
@@ -198,7 +199,7 @@ export def "webhooks-resolve" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --e: string # The name of downstream event when connector does not supply in body or header (e.g. Employees::Events::EmployeeCreated)
   --body: record
-]: any -> any {
+]: any -> record<request_id: string, status: string, status_code: int, timestamp: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -240,10 +241,11 @@ export def "webhooks-all" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Cursor to start from. You can find cursors for next/previous pages in the meta.cursors property of the response. (nullable)
   --limit: int # Number of results to return. Minimum 1, Maximum 200, Default 20 (default: 20)
-  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
-]: nothing -> any {
+  --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+]: nothing -> record<data: table<created_at: string, delivery_url: string, description: string, disabled_reason: string, events: list, execute_base_url: string, id: string, status: string, unified_api: string, updated_at: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, status: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/webhook/webhooks" $qp $auth.query)
   let accept_val = "application/json"
@@ -278,16 +280,17 @@ export def "webhooks-add" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   delivery_url: string # The delivery url of the webhook endpoint. (format: uri, e.g. https://example.com/my/webhook/endpoint)
   --description: string # A description of the object. (nullable, e.g. A description)
   events: list<string> # The list of subscribed events for this webhook. [`*`] indicates that all events are enabled. (e.g. [vault.connection.created, vault.connection.updated])
   status: string@status-completer # The status of the webhook. (e.g. enabled)
   unified_api: string@unified-api-completer # Name of Apideck Unified API (e.g. crm)
-]: any -> any {
+]: any -> record<data: record<created_at: string, delivery_url: string, description: string, disabled_reason: string, events: list<string>, execute_base_url: string, id: string, status: string, unified_api: string, updated_at: string>, status: string, status_code: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
   let full_url = (build-url $base "/webhook/webhooks" $auth.query)
   let req_body = {"delivery_url": $delivery_url, "description": $description, "events": $events, "status": $status, "unified_api": $unified_api} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -324,11 +327,12 @@ export def "webhooks-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
-]: nothing -> any {
+  --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+]: nothing -> record<data: record<created_at: string, delivery_url: string, description: string, disabled_reason: string, events: list<string>, execute_base_url: string, id: string, status: string, unified_api: string, updated_at: string>, status: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/webhook/webhooks/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -363,11 +367,12 @@ export def "webhooks-one" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
-]: nothing -> any {
+  --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+]: nothing -> record<data: record<created_at: string, delivery_url: string, description: string, disabled_reason: string, events: list<string>, execute_base_url: string, id: string, status: string, unified_api: string, updated_at: string>, status: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/webhook/webhooks/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -402,16 +407,17 @@ export def "webhooks-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --delivery-url: string # The delivery url of the webhook endpoint. (format: uri, e.g. https://example.com/my/webhook/endpoint)
   --description: string # A description of the object. (nullable, e.g. A description)
   --events: list<string> # The list of subscribed events for this webhook. [`*`] indicates that all events are enabled. (e.g. [vault.connection.created, vault.connection.updated])
   --status: string@status-completer # The status of the webhook. (e.g. enabled)
-]: any -> any {
+]: any -> record<data: record<created_at: string, delivery_url: string, description: string, disabled_reason: string, events: list<string>, execute_base_url: string, id: string, status: string, unified_api: string, updated_at: string>, status: string, status_code: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/webhook/webhooks/{id}") $auth.query)
   let req_body = {"delivery_url": $delivery_url, "description": $description, "events": $events, "status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -450,7 +456,7 @@ export def "webhooks-execute" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> any {
+]: any -> record<request_id: string, status: string, status_code: int, timestamp: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -494,7 +500,7 @@ export def "webhooks-short-execute" [
   --l-id: string # Unique identifier to used to look up consumer/connection when receiving connector events from downstream. (e.g. eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjA3NWUwNmEzLTUwNzUtNDY3Yi1hNTk5LWVkNmM5YTg5NTYyOCJ9._ppKdmBaCB2RHjBTifMNP2xKNeLBfNPim2CiHSUd0Zg)
   --e: string # The name of downstream event when connector does not supply in body or header (e.g. Employees::Events::EmployeeCreated)
   --body: record
-]: any -> any {
+]: any -> record<request_id: string, status: string, status_code: int, timestamp: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

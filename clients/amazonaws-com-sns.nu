@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -183,12 +183,12 @@ export def "get-add-permission" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --topic-arn: string # The ARN of the topic whose access control policy you wish to modify.
-  --label: string # A unique identifier for the new policy statement.
-  --aws-account-id: list # The Amazon Web Services account IDs of the users (principals) who will be given access to the specified actions. The users must have Amazon Web Services account, but do not need to be signed up for this service.
-  --action-name: list # The action you want to allow for the specified principal(s). Valid values: Any Amazon SNS action name, for example Publish.
-  --action: string@action-completer
-  --version: string@version-completer
+  --topic-arn: string # The ARN of the topic whose access control policy you wish to modify. (required)
+  --label: string # A unique identifier for the new policy statement. (required)
+  --aws-account-id: list # The Amazon Web Services account IDs of the users (principals) who will be given access to the specified actions. The users must have Amazon Web Services account, but do not need to be signed up for this service. (required)
+  --action-name: list # The action you want to allow for the specified principal(s). Valid values: Any Amazon SNS action name, for example Publish. (required)
+  --action: string@action-completer # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -199,6 +199,12 @@ export def "get-add-permission" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($topic_arn == null) { error make --unspanned { msg: "required query parameter 'TopicArn' missing: pass --topic-arn" } }
+  if ($label == null) { error make --unspanned { msg: "required query parameter 'Label' missing: pass --label" } }
+  if ($aws_account_id == null) { error make --unspanned { msg: "required query parameter 'AWSAccountId' missing: pass --aws-account-id" } }
+  if ($action_name == null) { error make --unspanned { msg: "required query parameter 'ActionName' missing: pass --action-name" } }
+  let action = ($action | default "AddPermission")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "TopicArn" $topic_arn "scalar") (serialize-qp "Label" $label "scalar") (serialize-qp "AWSAccountId" $aws_account_id "multi") (serialize-qp "ActionName" $action_name "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -233,8 +239,8 @@ export def "post-add-permission" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer
-  --version: string@version-completer
+  --action: string@action-completer # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -247,6 +253,8 @@ export def "post-add-permission" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "AddPermission")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -283,9 +291,9 @@ export def "get-check-if-phone-number-is-opted-out" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --phone-number: string # The phone number for which you want to check the opt out status.
-  --action: string@action-completer-1
-  --version: string@version-completer
+  --phone-number: string # The phone number for which you want to check the opt out status. (required)
+  --action: string@action-completer-1 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -293,9 +301,12 @@ export def "get-check-if-phone-number-is-opted-out" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<isOptedOut: record> {
+]: nothing -> record<isOptedOut: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($phone_number == null) { error make --unspanned { msg: "required query parameter 'phoneNumber' missing: pass --phone-number" } }
+  let action = ($action | default "CheckIfPhoneNumberIsOptedOut")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "phoneNumber" $phone_number "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -330,8 +341,8 @@ export def "post-check-if-phone-number-is-opted-out" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-1
-  --version: string@version-completer
+  --action: string@action-completer-1 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -340,10 +351,12 @@ export def "post-check-if-phone-number-is-opted-out" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<isOptedOut: record> {
+]: any -> record<isOptedOut: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CheckIfPhoneNumberIsOptedOut")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -380,11 +393,11 @@ export def "get-confirm-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --topic-arn: string # The ARN of the topic for which you wish to confirm a subscription.
-  --qp-token: string # Short-lived token sent to an endpoint during the Subscribe action.
+  --topic-arn: string # The ARN of the topic for which you wish to confirm a subscription. (required)
+  --qp-token: string # Short-lived token sent to an endpoint during the Subscribe action. (required)
   --authenticate-on-unsubscribe: string # Disallows unauthenticated unsubscribes of the subscription. If the value of this parameter is true and the request has an Amazon Web Services signature, then only the topic owner and the subscription owner can unsubscribe the endpoint. The unsubscribe action requires Amazon Web Services authentication.
-  --action: string@action-completer-2
-  --version: string@version-completer
+  --action: string@action-completer-2 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -392,9 +405,13 @@ export def "get-confirm-subscription" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<SubscriptionArn: record> {
+]: nothing -> record<SubscriptionArn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($topic_arn == null) { error make --unspanned { msg: "required query parameter 'TopicArn' missing: pass --topic-arn" } }
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'Token' missing: pass --qp-token" } }
+  let action = ($action | default "ConfirmSubscription")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "TopicArn" $topic_arn "scalar") (serialize-qp "Token" $qp_token "scalar") (serialize-qp "AuthenticateOnUnsubscribe" $authenticate_on_unsubscribe "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -429,8 +446,8 @@ export def "post-confirm-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-2
-  --version: string@version-completer
+  --action: string@action-completer-2 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -439,10 +456,12 @@ export def "post-confirm-subscription" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<SubscriptionArn: record> {
+]: any -> record<SubscriptionArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ConfirmSubscription")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -479,11 +498,11 @@ export def "get-create-platform-application" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name: string # Application names must be made up of only uppercase and lowercase ASCII letters, numbers, underscores, hyphens, and periods, and must be between 1 and 256 characters long.
-  --platform: string # The following platforms are supported: ADM (Amazon Device Messaging), APNS (Apple Push Notification Service), APNS_SANDBOX, and GCM (Firebase Cloud Messaging).
-  --attributes: record # For a list of attributes, see SetPlatformApplicationAttributes (https://docs.aws.amazon.com/sns/latest/api/API_SetPlatformApplicationAttributes.html).
-  --action: string@action-completer-3
-  --version: string@version-completer
+  --name: string # Application names must be made up of only uppercase and lowercase ASCII letters, numbers, underscores, hyphens, and periods, and must be between 1 and 256 characters long. (required)
+  --platform: string # The following platforms are supported: ADM (Amazon Device Messaging), APNS (Apple Push Notification Service), APNS_SANDBOX, and GCM (Firebase Cloud Messaging). (required)
+  --attributes: record # For a list of attributes, see SetPlatformApplicationAttributes (https://docs.aws.amazon.com/sns/latest/api/API_SetPlatformApplicationAttributes.html). (required)
+  --action: string@action-completer-3 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -491,9 +510,14 @@ export def "get-create-platform-application" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PlatformApplicationArn: record> {
+]: nothing -> record<PlatformApplicationArn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'Name' missing: pass --name" } }
+  if ($platform == null) { error make --unspanned { msg: "required query parameter 'Platform' missing: pass --platform" } }
+  if ($attributes == null) { error make --unspanned { msg: "required query parameter 'Attributes' missing: pass --attributes" } }
+  let action = ($action | default "CreatePlatformApplication")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "Name" $name "scalar") (serialize-qp "Platform" $platform "scalar") (serialize-qp "Attributes" $attributes "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -528,8 +552,8 @@ export def "post-create-platform-application" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-3
-  --version: string@version-completer
+  --action: string@action-completer-3 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -538,10 +562,12 @@ export def "post-create-platform-application" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<PlatformApplicationArn: record> {
+]: any -> record<PlatformApplicationArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreatePlatformApplication")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -578,12 +604,12 @@ export def "get-create-platform-endpoint" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --platform-application-arn: string # PlatformApplicationArn returned from CreatePlatformApplication is used to create a an endpoint.
-  --qp-token: string # Unique identifier created by the notification service for an app on a device. The specific name for Token will vary, depending on which notification service is being used. For example, when using APNS as the notification service, you need the device token. Alternatively, when using GCM (Firebase Cloud Messaging) or ADM, the device token equivalent is called the registration ID.
+  --platform-application-arn: string # PlatformApplicationArn returned from CreatePlatformApplication is used to create a an endpoint. (required)
+  --qp-token: string # Unique identifier created by the notification service for an app on a device. The specific name for Token will vary, depending on which notification service is being used. For example, when using APNS as the notification service, you need the device token. Alternatively, when using GCM (Firebase Cloud Messaging) or ADM, the device token equivalent is called the registration ID. (required)
   --custom-user-data: string # Arbitrary user data to associate with the endpoint. Amazon SNS does not use this data. The data must be in UTF-8 format and less than 2KB.
   --attributes: record # For a list of attributes, see SetEndpointAttributes (https://docs.aws.amazon.com/sns/latest/api/API_SetEndpointAttributes.html).
-  --action: string@action-completer-4
-  --version: string@version-completer
+  --action: string@action-completer-4 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -591,9 +617,13 @@ export def "get-create-platform-endpoint" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EndpointArn: record> {
+]: nothing -> record<EndpointArn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($platform_application_arn == null) { error make --unspanned { msg: "required query parameter 'PlatformApplicationArn' missing: pass --platform-application-arn" } }
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'Token' missing: pass --qp-token" } }
+  let action = ($action | default "CreatePlatformEndpoint")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "PlatformApplicationArn" $platform_application_arn "scalar") (serialize-qp "Token" $qp_token "scalar") (serialize-qp "CustomUserData" $custom_user_data "scalar") (serialize-qp "Attributes" $attributes "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -628,8 +658,8 @@ export def "post-create-platform-endpoint" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-4
-  --version: string@version-completer
+  --action: string@action-completer-4 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -638,10 +668,12 @@ export def "post-create-platform-endpoint" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<EndpointArn: record> {
+]: any -> record<EndpointArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreatePlatformEndpoint")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -678,10 +710,10 @@ export def "get-create-sms-sandbox-phone-number" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --phone-number: string # The destination phone number to verify. On verification, Amazon SNS adds this phone number to the list of verified phone numbers that you can send SMS messages to.
+  --phone-number: string # The destination phone number to verify. On verification, Amazon SNS adds this phone number to the list of verified phone numbers that you can send SMS messages to. (required)
   --language-code: string@language-code-completer # The language to use for sending the OTP. The default value is en-US.
-  --action: string@action-completer-5
-  --version: string@version-completer
+  --action: string@action-completer-5 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -692,6 +724,9 @@ export def "get-create-sms-sandbox-phone-number" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($phone_number == null) { error make --unspanned { msg: "required query parameter 'PhoneNumber' missing: pass --phone-number" } }
+  let action = ($action | default "CreateSMSSandboxPhoneNumber")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "PhoneNumber" $phone_number "scalar") (serialize-qp "LanguageCode" $language_code "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -726,8 +761,8 @@ export def "post-create-sms-sandbox-phone-number" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-5
-  --version: string@version-completer
+  --action: string@action-completer-5 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -740,6 +775,8 @@ export def "post-create-sms-sandbox-phone-number" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateSMSSandboxPhoneNumber")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -776,12 +813,12 @@ export def "get-create-topic" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name: string # The name of the topic you want to create. Constraints: Topic names must be made up of only uppercase and lowercase ASCII letters, numbers, underscores, and hyphens, and must be between 1 and 256 characters long. For a FIFO (first-in-first-out) topic, the name must end with the .fifo suffix.
+  --name: string # The name of the topic you want to create. Constraints: Topic names must be made up of only uppercase and lowercase ASCII letters, numbers, underscores, and hyphens, and must be between 1 and 256 characters long. For a FIFO (first-in-first-out) topic, the name must end with the .fifo suffix. (required)
   --attributes: record # A map of attributes with their corresponding values. The following lists the names, descriptions, and values of the special request parameters that the CreateTopic action uses: DeliveryPolicy – The policy that defines how Amazon SNS retries failed deliveries to HTTP/S endpoints. DisplayName – The display name to use for a topic with SMS subscriptions. FifoTopic – Set to true to create a FIFO topic. Policy – The policy that defines who can access your topic. By default, only the topic owner can publish or subscribe to the topic. SignatureVersion – The signature version corresponds to the hashing algorithm used while creating the signature of the notifications, subscription confirmations, or unsubscribe confirmation messages sent by Amazon SNS. By default, SignatureVersion is set to 1. TracingConfig – Tracing mode of an Amazon SNS topic. By default TracingConfig is set to PassThrough, and the topic passes through the tracing header it receives from an Amazon SNS publisher to its subscriptions. If set to Active, Amazon SNS will vend X-Ray segment data to topic owner account if the sampled flag in the tracing header is true. This is only supported on standard topics. The following attribute applies only to server-side encryption (https://docs.aws.amazon.com/sns/latest/dg/sns-server-side-encryption.html): KmsMasterKeyId – The ID of an Amazon Web Services managed customer master key (CMK) for Amazon SNS or a custom CMK. For more information, see Key Terms (https://docs.aws.amazon.com/sns/latest/dg/sns-server-side-encryption.html#sse-key-terms). For more examples, see KeyId (https://docs.aws.amazon.com/kms/latest/APIReference/API_DescribeKey.html#API_DescribeKey_RequestParameters) in the Key Management Service API Reference. The following attributes apply only to FIFO topics (https://docs.aws.amazon.com/sns/latest/dg/sns-fifo-topics.html): FifoTopic – When this is set to true, a FIFO topic is created. ContentBasedDeduplication – Enables content-based deduplication for FIFO topics. By default, ContentBasedDeduplication is set to false. If you create a FIFO topic and this attribute is false, you must specify a value for the MessageDeduplicationId parameter for the Publish (https://docs.aws.amazon.com/sns/latest/api/API_Publish.html) action. When you set ContentBasedDeduplication to true, Amazon SNS uses a SHA-256 hash to generate the MessageDeduplicationId using the body of the message (but not the attributes of the message). (Optional) To override the generated value, you can specify a value for the MessageDeduplicationId parameter for the Publish action.
   --tags: list # The list of tags to add to a new topic. To be able to tag a topic on creation, you must have the sns:CreateTopic and sns:TagResource permissions.
   --data-protection-policy: string # The body of the policy document you want to use for this topic. You can only add one policy per topic. The policy must be in JSON string format. Length Constraints: Maximum length of 30,720.
-  --action: string@action-completer-6
-  --version: string@version-completer
+  --action: string@action-completer-6 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -789,9 +826,12 @@ export def "get-create-topic" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TopicArn: record> {
+]: nothing -> record<TopicArn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'Name' missing: pass --name" } }
+  let action = ($action | default "CreateTopic")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "Name" $name "scalar") (serialize-qp "Attributes" $attributes "multi") (serialize-qp "Tags" $tags "multi") (serialize-qp "DataProtectionPolicy" $data_protection_policy "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -826,8 +866,8 @@ export def "post-create-topic" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-6
-  --version: string@version-completer
+  --action: string@action-completer-6 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -836,10 +876,12 @@ export def "post-create-topic" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<TopicArn: record> {
+]: any -> record<TopicArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateTopic")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -876,9 +918,9 @@ export def "get-delete-endpoint" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --endpoint-arn: string # EndpointArn of endpoint to delete.
-  --action: string@action-completer-7
-  --version: string@version-completer
+  --endpoint-arn: string # EndpointArn of endpoint to delete. (required)
+  --action: string@action-completer-7 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -889,6 +931,9 @@ export def "get-delete-endpoint" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($endpoint_arn == null) { error make --unspanned { msg: "required query parameter 'EndpointArn' missing: pass --endpoint-arn" } }
+  let action = ($action | default "DeleteEndpoint")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "EndpointArn" $endpoint_arn "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -923,8 +968,8 @@ export def "post-delete-endpoint" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-7
-  --version: string@version-completer
+  --action: string@action-completer-7 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -937,6 +982,8 @@ export def "post-delete-endpoint" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteEndpoint")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -973,9 +1020,9 @@ export def "get-delete-platform-application" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --platform-application-arn: string # PlatformApplicationArn of platform application object to delete.
-  --action: string@action-completer-8
-  --version: string@version-completer
+  --platform-application-arn: string # PlatformApplicationArn of platform application object to delete. (required)
+  --action: string@action-completer-8 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -986,6 +1033,9 @@ export def "get-delete-platform-application" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($platform_application_arn == null) { error make --unspanned { msg: "required query parameter 'PlatformApplicationArn' missing: pass --platform-application-arn" } }
+  let action = ($action | default "DeletePlatformApplication")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "PlatformApplicationArn" $platform_application_arn "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -1020,8 +1070,8 @@ export def "post-delete-platform-application" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-8
-  --version: string@version-completer
+  --action: string@action-completer-8 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1034,6 +1084,8 @@ export def "post-delete-platform-application" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeletePlatformApplication")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1070,9 +1122,9 @@ export def "get-delete-sms-sandbox-phone-number" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --phone-number: string # The destination phone number to delete.
-  --action: string@action-completer-9
-  --version: string@version-completer
+  --phone-number: string # The destination phone number to delete. (required)
+  --action: string@action-completer-9 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1083,6 +1135,9 @@ export def "get-delete-sms-sandbox-phone-number" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($phone_number == null) { error make --unspanned { msg: "required query parameter 'PhoneNumber' missing: pass --phone-number" } }
+  let action = ($action | default "DeleteSMSSandboxPhoneNumber")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "PhoneNumber" $phone_number "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1117,8 +1172,8 @@ export def "post-delete-sms-sandbox-phone-number" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-9
-  --version: string@version-completer
+  --action: string@action-completer-9 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1131,6 +1186,8 @@ export def "post-delete-sms-sandbox-phone-number" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteSMSSandboxPhoneNumber")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1167,9 +1224,9 @@ export def "get-delete-topic" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --topic-arn: string # The ARN of the topic you want to delete.
-  --action: string@action-completer-10
-  --version: string@version-completer
+  --topic-arn: string # The ARN of the topic you want to delete. (required)
+  --action: string@action-completer-10 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1180,6 +1237,9 @@ export def "get-delete-topic" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($topic_arn == null) { error make --unspanned { msg: "required query parameter 'TopicArn' missing: pass --topic-arn" } }
+  let action = ($action | default "DeleteTopic")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "TopicArn" $topic_arn "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -1214,8 +1274,8 @@ export def "post-delete-topic" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-10
-  --version: string@version-completer
+  --action: string@action-completer-10 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1228,6 +1288,8 @@ export def "post-delete-topic" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteTopic")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1264,9 +1326,9 @@ export def "get-get-data-protection-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-arn: string # The ARN of the topic whose DataProtectionPolicy you want to get. For more information about ARNs, see Amazon Resource Names (ARNs) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) in the Amazon Web Services General Reference.
-  --action: string@action-completer-11
-  --version: string@version-completer
+  --resource-arn: string # The ARN of the topic whose DataProtectionPolicy you want to get. For more information about ARNs, see Amazon Resource Names (ARNs) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) in the Amazon Web Services General Reference. (required)
+  --action: string@action-completer-11 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1274,9 +1336,12 @@ export def "get-get-data-protection-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DataProtectionPolicy: record> {
+]: nothing -> record<DataProtectionPolicy: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'ResourceArn' missing: pass --resource-arn" } }
+  let action = ($action | default "GetDataProtectionPolicy")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "ResourceArn" $resource_arn "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1311,8 +1376,8 @@ export def "post-get-data-protection-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-11
-  --version: string@version-completer
+  --action: string@action-completer-11 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1321,10 +1386,12 @@ export def "post-get-data-protection-policy" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DataProtectionPolicy: record> {
+]: any -> record<DataProtectionPolicy: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "GetDataProtectionPolicy")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1361,9 +1428,9 @@ export def "get-get-endpoint-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --endpoint-arn: string # EndpointArn for GetEndpointAttributes input.
-  --action: string@action-completer-12
-  --version: string@version-completer
+  --endpoint-arn: string # EndpointArn for GetEndpointAttributes input. (required)
+  --action: string@action-completer-12 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1374,6 +1441,9 @@ export def "get-get-endpoint-attributes" [
 ]: nothing -> record<Attributes: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($endpoint_arn == null) { error make --unspanned { msg: "required query parameter 'EndpointArn' missing: pass --endpoint-arn" } }
+  let action = ($action | default "GetEndpointAttributes")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "EndpointArn" $endpoint_arn "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1408,8 +1478,8 @@ export def "post-get-endpoint-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-12
-  --version: string@version-completer
+  --action: string@action-completer-12 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1422,6 +1492,8 @@ export def "post-get-endpoint-attributes" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "GetEndpointAttributes")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1458,9 +1530,9 @@ export def "get-get-platform-application-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --platform-application-arn: string # PlatformApplicationArn for GetPlatformApplicationAttributesInput.
-  --action: string@action-completer-13
-  --version: string@version-completer
+  --platform-application-arn: string # PlatformApplicationArn for GetPlatformApplicationAttributesInput. (required)
+  --action: string@action-completer-13 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1471,6 +1543,9 @@ export def "get-get-platform-application-attributes" [
 ]: nothing -> record<Attributes: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($platform_application_arn == null) { error make --unspanned { msg: "required query parameter 'PlatformApplicationArn' missing: pass --platform-application-arn" } }
+  let action = ($action | default "GetPlatformApplicationAttributes")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "PlatformApplicationArn" $platform_application_arn "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1505,8 +1580,8 @@ export def "post-get-platform-application-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-13
-  --version: string@version-completer
+  --action: string@action-completer-13 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1519,6 +1594,8 @@ export def "post-get-platform-application-attributes" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "GetPlatformApplicationAttributes")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1556,8 +1633,8 @@ export def "get-get-sms-attributes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --attributes: list # A list of the individual attribute names, such as MonthlySpendLimit, for which you want values. For all attribute names, see SetSMSAttributes (https://docs.aws.amazon.com/sns/latest/api/API_SetSMSAttributes.html). If you don't use this parameter, Amazon SNS returns all SMS attributes.
-  --action: string@action-completer-14
-  --version: string@version-completer
+  --action: string@action-completer-14 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1568,6 +1645,8 @@ export def "get-get-sms-attributes" [
 ]: nothing -> record<attributes: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "GetSMSAttributes")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "attributes" $attributes "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1602,8 +1681,8 @@ export def "post-get-sms-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-14
-  --version: string@version-completer
+  --action: string@action-completer-14 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1616,6 +1695,8 @@ export def "post-get-sms-attributes" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "GetSMSAttributes")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1652,8 +1733,8 @@ export def "get-get-sms-sandbox-account-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-15
-  --version: string@version-completer
+  --action: string@action-completer-15 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1661,9 +1742,11 @@ export def "get-get-sms-sandbox-account-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<IsInSandbox: record> {
+]: nothing -> record<IsInSandbox: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "GetSMSSandboxAccountStatus")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1698,8 +1781,8 @@ export def "post-get-sms-sandbox-account-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-15
-  --version: string@version-completer
+  --action: string@action-completer-15 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1708,10 +1791,12 @@ export def "post-get-sms-sandbox-account-status" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<IsInSandbox: record> {
+]: any -> record<IsInSandbox: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "GetSMSSandboxAccountStatus")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1748,9 +1833,9 @@ export def "get-get-subscription-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --subscription-arn: string # The ARN of the subscription whose properties you want to get.
-  --action: string@action-completer-16
-  --version: string@version-completer
+  --subscription-arn: string # The ARN of the subscription whose properties you want to get. (required)
+  --action: string@action-completer-16 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1761,6 +1846,9 @@ export def "get-get-subscription-attributes" [
 ]: nothing -> record<Attributes: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($subscription_arn == null) { error make --unspanned { msg: "required query parameter 'SubscriptionArn' missing: pass --subscription-arn" } }
+  let action = ($action | default "GetSubscriptionAttributes")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "SubscriptionArn" $subscription_arn "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1795,8 +1883,8 @@ export def "post-get-subscription-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-16
-  --version: string@version-completer
+  --action: string@action-completer-16 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1809,6 +1897,8 @@ export def "post-get-subscription-attributes" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "GetSubscriptionAttributes")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1845,9 +1935,9 @@ export def "get-get-topic-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --topic-arn: string # The ARN of the topic whose properties you want to get.
-  --action: string@action-completer-17
-  --version: string@version-completer
+  --topic-arn: string # The ARN of the topic whose properties you want to get. (required)
+  --action: string@action-completer-17 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1858,6 +1948,9 @@ export def "get-get-topic-attributes" [
 ]: nothing -> record<Attributes: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($topic_arn == null) { error make --unspanned { msg: "required query parameter 'TopicArn' missing: pass --topic-arn" } }
+  let action = ($action | default "GetTopicAttributes")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "TopicArn" $topic_arn "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1892,8 +1985,8 @@ export def "post-get-topic-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-17
-  --version: string@version-completer
+  --action: string@action-completer-17 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1906,6 +1999,8 @@ export def "post-get-topic-attributes" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "GetTopicAttributes")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -1942,10 +2037,10 @@ export def "get-list-endpoints-by-platform-application" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --platform-application-arn: string # PlatformApplicationArn for ListEndpointsByPlatformApplicationInput action.
+  --platform-application-arn: string # PlatformApplicationArn for ListEndpointsByPlatformApplicationInput action. (required)
   --next-token: string # NextToken string is used when calling ListEndpointsByPlatformApplication action to retrieve additional records that are available after the first page results.
-  --action: string@action-completer-18
-  --version: string@version-completer
+  --action: string@action-completer-18 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1953,9 +2048,12 @@ export def "get-list-endpoints-by-platform-application" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Endpoints: record, NextToken: record> {
+]: nothing -> record<Endpoints: table<EndpointArn: string, Attributes: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($platform_application_arn == null) { error make --unspanned { msg: "required query parameter 'PlatformApplicationArn' missing: pass --platform-application-arn" } }
+  let action = ($action | default "ListEndpointsByPlatformApplication")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "PlatformApplicationArn" $platform_application_arn "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -1991,8 +2089,8 @@ export def "post-list-endpoints-by-platform-application" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # Pagination token
-  --action: string@action-completer-18
-  --version: string@version-completer
+  --action: string@action-completer-18 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2001,10 +2099,12 @@ export def "post-list-endpoints-by-platform-application" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Endpoints: record, NextToken: record> {
+]: any -> record<Endpoints: table<EndpointArn: string, Attributes: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListEndpointsByPlatformApplication")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2043,8 +2143,8 @@ export def "get-list-origination-numbers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # Token that the previous ListOriginationNumbers request returns.
   --max-results: int # The maximum number of origination numbers to return.
-  --action: string@action-completer-19
-  --version: string@version-completer
+  --action: string@action-completer-19 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2052,9 +2152,11 @@ export def "get-list-origination-numbers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: record, PhoneNumbers: record> {
+]: nothing -> record<NextToken: string, PhoneNumbers: table<CreatedAt: string, PhoneNumber: string, Status: string, Iso2CountryCode: string, RouteType: string, NumberCapabilities: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListOriginationNumbers")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2091,8 +2193,8 @@ export def "post-list-origination-numbers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-results: string # Pagination limit
   --next-token: string # Pagination token
-  --action: string@action-completer-19
-  --version: string@version-completer
+  --action: string@action-completer-19 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2101,10 +2203,12 @@ export def "post-list-origination-numbers" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<NextToken: record, PhoneNumbers: record> {
+]: any -> record<NextToken: string, PhoneNumbers: table<CreatedAt: string, PhoneNumber: string, Status: string, Iso2CountryCode: string, RouteType: string, NumberCapabilities: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListOriginationNumbers")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2142,8 +2246,8 @@ export def "get-list-phone-numbers-opted-out" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # A NextToken string is used when you call the ListPhoneNumbersOptedOut action to retrieve additional records that are available after the first page of results.
-  --action: string@action-completer-20
-  --version: string@version-completer
+  --action: string@action-completer-20 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2151,9 +2255,11 @@ export def "get-list-phone-numbers-opted-out" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<phoneNumbers: record, nextToken: record> {
+]: nothing -> record<phoneNumbers: list<string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListPhoneNumbersOptedOut")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2189,8 +2295,8 @@ export def "post-list-phone-numbers-opted-out" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # Pagination token
-  --action: string@action-completer-20
-  --version: string@version-completer
+  --action: string@action-completer-20 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2199,10 +2305,12 @@ export def "post-list-phone-numbers-opted-out" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<phoneNumbers: record, nextToken: record> {
+]: any -> record<phoneNumbers: list<string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListPhoneNumbersOptedOut")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2240,8 +2348,8 @@ export def "get-list-platform-applications" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # NextToken string is used when calling ListPlatformApplications action to retrieve additional records that are available after the first page results.
-  --action: string@action-completer-21
-  --version: string@version-completer
+  --action: string@action-completer-21 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2249,9 +2357,11 @@ export def "get-list-platform-applications" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PlatformApplications: record, NextToken: record> {
+]: nothing -> record<PlatformApplications: table<PlatformApplicationArn: string, Attributes: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListPlatformApplications")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2287,8 +2397,8 @@ export def "post-list-platform-applications" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # Pagination token
-  --action: string@action-completer-21
-  --version: string@version-completer
+  --action: string@action-completer-21 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2297,10 +2407,12 @@ export def "post-list-platform-applications" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<PlatformApplications: record, NextToken: record> {
+]: any -> record<PlatformApplications: table<PlatformApplicationArn: string, Attributes: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListPlatformApplications")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2339,8 +2451,8 @@ export def "get-list-sms-sandbox-phone-numbers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # Token that the previous ListSMSSandboxPhoneNumbersInput request returns.
   --max-results: int # The maximum number of phone numbers to return.
-  --action: string@action-completer-22
-  --version: string@version-completer
+  --action: string@action-completer-22 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2348,9 +2460,11 @@ export def "get-list-sms-sandbox-phone-numbers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PhoneNumbers: record, NextToken: record> {
+]: nothing -> record<PhoneNumbers: table<PhoneNumber: string, Status: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListSMSSandboxPhoneNumbers")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2387,8 +2501,8 @@ export def "post-list-sms-sandbox-phone-numbers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-results: string # Pagination limit
   --next-token: string # Pagination token
-  --action: string@action-completer-22
-  --version: string@version-completer
+  --action: string@action-completer-22 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2397,10 +2511,12 @@ export def "post-list-sms-sandbox-phone-numbers" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<PhoneNumbers: record, NextToken: record> {
+]: any -> record<PhoneNumbers: table<PhoneNumber: string, Status: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListSMSSandboxPhoneNumbers")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2438,8 +2554,8 @@ export def "get-list-subscriptions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # Token returned by the previous ListSubscriptions request.
-  --action: string@action-completer-23
-  --version: string@version-completer
+  --action: string@action-completer-23 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2447,9 +2563,11 @@ export def "get-list-subscriptions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Subscriptions: record, NextToken: record> {
+]: nothing -> record<Subscriptions: table<SubscriptionArn: string, Owner: string, Protocol: string, Endpoint: string, TopicArn: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListSubscriptions")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2485,8 +2603,8 @@ export def "post-list-subscriptions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # Pagination token
-  --action: string@action-completer-23
-  --version: string@version-completer
+  --action: string@action-completer-23 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2495,10 +2613,12 @@ export def "post-list-subscriptions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Subscriptions: record, NextToken: record> {
+]: any -> record<Subscriptions: table<SubscriptionArn: string, Owner: string, Protocol: string, Endpoint: string, TopicArn: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListSubscriptions")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2535,10 +2655,10 @@ export def "get-list-subscriptions-by-topic" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --topic-arn: string # The ARN of the topic for which you wish to find subscriptions.
+  --topic-arn: string # The ARN of the topic for which you wish to find subscriptions. (required)
   --next-token: string # Token returned by the previous ListSubscriptionsByTopic request.
-  --action: string@action-completer-24
-  --version: string@version-completer
+  --action: string@action-completer-24 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2546,9 +2666,12 @@ export def "get-list-subscriptions-by-topic" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Subscriptions: record, NextToken: record> {
+]: nothing -> record<Subscriptions: table<SubscriptionArn: string, Owner: string, Protocol: string, Endpoint: string, TopicArn: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($topic_arn == null) { error make --unspanned { msg: "required query parameter 'TopicArn' missing: pass --topic-arn" } }
+  let action = ($action | default "ListSubscriptionsByTopic")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "TopicArn" $topic_arn "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2584,8 +2707,8 @@ export def "post-list-subscriptions-by-topic" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # Pagination token
-  --action: string@action-completer-24
-  --version: string@version-completer
+  --action: string@action-completer-24 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2594,10 +2717,12 @@ export def "post-list-subscriptions-by-topic" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Subscriptions: record, NextToken: record> {
+]: any -> record<Subscriptions: table<SubscriptionArn: string, Owner: string, Protocol: string, Endpoint: string, TopicArn: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListSubscriptionsByTopic")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2634,9 +2759,9 @@ export def "get-list-tags-for-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-arn: string # The ARN of the topic for which to list tags.
-  --action: string@action-completer-25
-  --version: string@version-completer
+  --resource-arn: string # The ARN of the topic for which to list tags. (required)
+  --action: string@action-completer-25 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2644,9 +2769,12 @@ export def "get-list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Tags: record> {
+]: nothing -> record<Tags: table<Key: string, Value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'ResourceArn' missing: pass --resource-arn" } }
+  let action = ($action | default "ListTagsForResource")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "ResourceArn" $resource_arn "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2681,8 +2809,8 @@ export def "post-list-tags-for-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-25
-  --version: string@version-completer
+  --action: string@action-completer-25 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2691,10 +2819,12 @@ export def "post-list-tags-for-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Tags: record> {
+]: any -> record<Tags: table<Key: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListTagsForResource")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2732,8 +2862,8 @@ export def "get-list-topics" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # Token returned by the previous ListTopics request.
-  --action: string@action-completer-26
-  --version: string@version-completer
+  --action: string@action-completer-26 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2741,9 +2871,11 @@ export def "get-list-topics" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Topics: record, NextToken: record> {
+]: nothing -> record<Topics: table<TopicArn: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListTopics")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2779,8 +2911,8 @@ export def "post-list-topics" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # Pagination token
-  --action: string@action-completer-26
-  --version: string@version-completer
+  --action: string@action-completer-26 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2789,10 +2921,12 @@ export def "post-list-topics" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Topics: record, NextToken: record> {
+]: any -> record<Topics: table<TopicArn: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListTopics")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2829,9 +2963,9 @@ export def "get-opt-in-phone-number" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --phone-number: string # The phone number to opt in. Use E.164 format.
-  --action: string@action-completer-27
-  --version: string@version-completer
+  --phone-number: string # The phone number to opt in. Use E.164 format. (required)
+  --action: string@action-completer-27 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2842,6 +2976,9 @@ export def "get-opt-in-phone-number" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($phone_number == null) { error make --unspanned { msg: "required query parameter 'phoneNumber' missing: pass --phone-number" } }
+  let action = ($action | default "OptInPhoneNumber")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "phoneNumber" $phone_number "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2876,8 +3013,8 @@ export def "post-opt-in-phone-number" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-27
-  --version: string@version-completer
+  --action: string@action-completer-27 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2890,6 +3027,8 @@ export def "post-opt-in-phone-number" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "OptInPhoneNumber")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -2929,14 +3068,14 @@ export def "get-publish" [
   --topic-arn: string # The topic you want to publish to. If you don't specify a value for the TopicArn parameter, you must specify a value for the PhoneNumber or TargetArn parameters.
   --target-arn: string # If you don't specify a value for the TargetArn parameter, you must specify a value for the PhoneNumber or TopicArn parameters.
   --phone-number: string # The phone number to which you want to deliver an SMS message. Use E.164 format. If you don't specify a value for the PhoneNumber parameter, you must specify a value for the TargetArn or TopicArn parameters.
-  --message: string # The message you want to send. If you are publishing to a topic and you want to send the same message to all transport protocols, include the text of the message as a String value. If you want to send different messages for each transport protocol, set the value of the MessageStructure parameter to json and use a JSON object for the Message parameter. Constraints: With the exception of SMS, messages must be UTF-8 encoded strings and at most 256 KB in size (262,144 bytes, not 262,144 characters). For SMS, each message can contain up to 140 characters. This character limit depends on the encoding schema. For example, an SMS message can contain 160 GSM characters, 140 ASCII characters, or 70 UCS-2 characters. If you publish a message that exceeds this size limit, Amazon SNS sends the message as multiple messages, each fitting within the size limit. Messages aren't truncated mid-word but are cut off at whole-word boundaries. The total size limit for a single SMS Publish action is 1,600 characters. JSON-specific constraints: Keys in the JSON object that correspond to supported transport protocols must have simple JSON string values. The values will be parsed (unescaped) before they are used in outgoing messages. Outbound notifications are JSON encoded (meaning that the characters will be reescaped for sending). Values have a minimum length of 0 (the empty string, "", is allowed). Values have a maximum length bounded by the overall message size (so, including multiple protocols may limit message sizes). Non-string values will cause the key to be ignored. Keys that do not correspond to supported transport protocols are ignored. Duplicate keys are not allowed. Failure to parse or validate any key or value in the message will cause the Publish call to return an error (no partial delivery).
+  --message: string # The message you want to send. If you are publishing to a topic and you want to send the same message to all transport protocols, include the text of the message as a String value. If you want to send different messages for each transport protocol, set the value of the MessageStructure parameter to json and use a JSON object for the Message parameter. Constraints: With the exception of SMS, messages must be UTF-8 encoded strings and at most 256 KB in size (262,144 bytes, not 262,144 characters). For SMS, each message can contain up to 140 characters. This character limit depends on the encoding schema. For example, an SMS message can contain 160 GSM characters, 140 ASCII characters, or 70 UCS-2 characters. If you publish a message that exceeds this size limit, Amazon SNS sends the message as multiple messages, each fitting within the size limit. Messages aren't truncated mid-word but are cut off at whole-word boundaries. The total size limit for a single SMS Publish action is 1,600 characters. JSON-specific constraints: Keys in the JSON object that correspond to supported transport protocols must have simple JSON string values. The values will be parsed (unescaped) before they are used in outgoing messages. Outbound notifications are JSON encoded (meaning that the characters will be reescaped for sending). Values have a minimum length of 0 (the empty string, "", is allowed). Values have a maximum length bounded by the overall message size (so, including multiple protocols may limit message sizes). Non-string values will cause the key to be ignored. Keys that do not correspond to supported transport protocols are ignored. Duplicate keys are not allowed. Failure to parse or validate any key or value in the message will cause the Publish call to return an error (no partial delivery). (required)
   --subject: string # Optional parameter to be used as the "Subject" line when the message is delivered to email endpoints. This field will also be included, if present, in the standard JSON messages delivered to other endpoints. Constraints: Subjects must be ASCII text that begins with a letter, number, or punctuation mark; must not include line breaks or control characters; and must be less than 100 characters long.
   --message-structure: string # Set MessageStructure to json if you want to send a different message for each protocol. For example, using one publish action, you can send a short message to your SMS subscribers and a longer message to your email subscribers. If you set MessageStructure to json, the value of the Message parameter must: be a syntactically valid JSON object; and contain at least a top-level JSON key of "default" with a value that is a string. You can define other top-level keys that define the message you want to send to a specific transport protocol (e.g., "http"). Valid value: json
   --message-attributes: record # Message attributes for Publish action.
   --message-deduplication-id: string # This parameter applies only to FIFO (first-in-first-out) topics. The MessageDeduplicationId can contain up to 128 alphanumeric characters (a-z, A-Z, 0-9) and punctuation (!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~). Every message must have a unique MessageDeduplicationId, which is a token used for deduplication of sent messages. If a message with a particular MessageDeduplicationId is sent successfully, any message sent with the same MessageDeduplicationId during the 5-minute deduplication interval is treated as a duplicate. If the topic has ContentBasedDeduplication set, the system generates a MessageDeduplicationId based on the contents of the message. Your MessageDeduplicationId overrides the generated one.
   --message-group-id: string # This parameter applies only to FIFO (first-in-first-out) topics. The MessageGroupId can contain up to 128 alphanumeric characters (a-z, A-Z, 0-9) and punctuation (!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~). The MessageGroupId is a tag that specifies that a message belongs to a specific message group. Messages that belong to the same message group are processed in a FIFO manner (however, messages in different message groups might be processed out of order). Every message must include a MessageGroupId.
-  --action: string@action-completer-28
-  --version: string@version-completer
+  --action: string@action-completer-28 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2944,9 +3083,12 @@ export def "get-publish" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<MessageId: record, SequenceNumber: record> {
+]: nothing -> record<MessageId: string, SequenceNumber: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($message == null) { error make --unspanned { msg: "required query parameter 'Message' missing: pass --message" } }
+  let action = ($action | default "Publish")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "TopicArn" $topic_arn "scalar") (serialize-qp "TargetArn" $target_arn "scalar") (serialize-qp "PhoneNumber" $phone_number "scalar") (serialize-qp "Message" $message "scalar") (serialize-qp "Subject" $subject "scalar") (serialize-qp "MessageStructure" $message_structure "scalar") (serialize-qp "MessageAttributes" $message_attributes "multi") (serialize-qp "MessageDeduplicationId" $message_deduplication_id "scalar") (serialize-qp "MessageGroupId" $message_group_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -2981,8 +3123,8 @@ export def "post-publish" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-28
-  --version: string@version-completer
+  --action: string@action-completer-28 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2991,10 +3133,12 @@ export def "post-publish" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<MessageId: record, SequenceNumber: record> {
+]: any -> record<MessageId: string, SequenceNumber: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "Publish")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3031,10 +3175,10 @@ export def "get-publish-batch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --topic-arn: string # The Amazon resource name (ARN) of the topic you want to batch publish to.
-  --publish-batch-request-entries: list # A list of PublishBatch request entries to be sent to the SNS topic.
-  --action: string@action-completer-29
-  --version: string@version-completer
+  --topic-arn: string # The Amazon resource name (ARN) of the topic you want to batch publish to. (required)
+  --publish-batch-request-entries: list # A list of PublishBatch request entries to be sent to the SNS topic. (required)
+  --action: string@action-completer-29 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3042,9 +3186,13 @@ export def "get-publish-batch" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Successful: record, Failed: record> {
+]: nothing -> record<Successful: table<Id: string, MessageId: string, SequenceNumber: string>, Failed: table<Id: string, Code: string, Message: string, SenderFault: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($topic_arn == null) { error make --unspanned { msg: "required query parameter 'TopicArn' missing: pass --topic-arn" } }
+  if ($publish_batch_request_entries == null) { error make --unspanned { msg: "required query parameter 'PublishBatchRequestEntries' missing: pass --publish-batch-request-entries" } }
+  let action = ($action | default "PublishBatch")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "TopicArn" $topic_arn "scalar") (serialize-qp "PublishBatchRequestEntries" $publish_batch_request_entries "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3079,8 +3227,8 @@ export def "post-publish-batch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-29
-  --version: string@version-completer
+  --action: string@action-completer-29 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3089,10 +3237,12 @@ export def "post-publish-batch" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Successful: record, Failed: record> {
+]: any -> record<Successful: table<Id: string, MessageId: string, SequenceNumber: string>, Failed: table<Id: string, Code: string, Message: string, SenderFault: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "PublishBatch")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3129,10 +3279,10 @@ export def "get-put-data-protection-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-arn: string # The ARN of the topic whose DataProtectionPolicy you want to add or update. For more information about ARNs, see Amazon Resource Names (ARNs) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) in the Amazon Web Services General Reference.
-  --data-protection-policy: string # The JSON serialization of the topic's DataProtectionPolicy. The DataProtectionPolicy must be in JSON string format. Length Constraints: Maximum length of 30,720.
-  --action: string@action-completer-30
-  --version: string@version-completer
+  --resource-arn: string # The ARN of the topic whose DataProtectionPolicy you want to add or update. For more information about ARNs, see Amazon Resource Names (ARNs) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) in the Amazon Web Services General Reference. (required)
+  --data-protection-policy: string # The JSON serialization of the topic's DataProtectionPolicy. The DataProtectionPolicy must be in JSON string format. Length Constraints: Maximum length of 30,720. (required)
+  --action: string@action-completer-30 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3143,6 +3293,10 @@ export def "get-put-data-protection-policy" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'ResourceArn' missing: pass --resource-arn" } }
+  if ($data_protection_policy == null) { error make --unspanned { msg: "required query parameter 'DataProtectionPolicy' missing: pass --data-protection-policy" } }
+  let action = ($action | default "PutDataProtectionPolicy")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "ResourceArn" $resource_arn "scalar") (serialize-qp "DataProtectionPolicy" $data_protection_policy "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -3177,8 +3331,8 @@ export def "post-put-data-protection-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-30
-  --version: string@version-completer
+  --action: string@action-completer-30 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3191,6 +3345,8 @@ export def "post-put-data-protection-policy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "PutDataProtectionPolicy")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3227,10 +3383,10 @@ export def "get-remove-permission" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --topic-arn: string # The ARN of the topic whose access control policy you wish to modify.
-  --label: string # The unique label of the statement you want to remove.
-  --action: string@action-completer-31
-  --version: string@version-completer
+  --topic-arn: string # The ARN of the topic whose access control policy you wish to modify. (required)
+  --label: string # The unique label of the statement you want to remove. (required)
+  --action: string@action-completer-31 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3241,6 +3397,10 @@ export def "get-remove-permission" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($topic_arn == null) { error make --unspanned { msg: "required query parameter 'TopicArn' missing: pass --topic-arn" } }
+  if ($label == null) { error make --unspanned { msg: "required query parameter 'Label' missing: pass --label" } }
+  let action = ($action | default "RemovePermission")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "TopicArn" $topic_arn "scalar") (serialize-qp "Label" $label "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -3275,8 +3435,8 @@ export def "post-remove-permission" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-31
-  --version: string@version-completer
+  --action: string@action-completer-31 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3289,6 +3449,8 @@ export def "post-remove-permission" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "RemovePermission")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3325,10 +3487,10 @@ export def "get-set-endpoint-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --endpoint-arn: string # EndpointArn used for SetEndpointAttributes action.
-  --attributes: record # A map of the endpoint attributes. Attributes in this map include the following: CustomUserData – arbitrary user data to associate with the endpoint. Amazon SNS does not use this data. The data must be in UTF-8 format and less than 2KB. Enabled – flag that enables/disables delivery to the endpoint. Amazon SNS will set this to false when a notification service indicates to Amazon SNS that the endpoint is invalid. Users can set it back to true, typically after updating Token. Token – device token, also referred to as a registration id, for an app and mobile device. This is returned from the notification service when an app and mobile device are registered with the notification service.
-  --action: string@action-completer-32
-  --version: string@version-completer
+  --endpoint-arn: string # EndpointArn used for SetEndpointAttributes action. (required)
+  --attributes: record # A map of the endpoint attributes. Attributes in this map include the following: CustomUserData – arbitrary user data to associate with the endpoint. Amazon SNS does not use this data. The data must be in UTF-8 format and less than 2KB. Enabled – flag that enables/disables delivery to the endpoint. Amazon SNS will set this to false when a notification service indicates to Amazon SNS that the endpoint is invalid. Users can set it back to true, typically after updating Token. Token – device token, also referred to as a registration id, for an app and mobile device. This is returned from the notification service when an app and mobile device are registered with the notification service. (required)
+  --action: string@action-completer-32 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3339,6 +3501,10 @@ export def "get-set-endpoint-attributes" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($endpoint_arn == null) { error make --unspanned { msg: "required query parameter 'EndpointArn' missing: pass --endpoint-arn" } }
+  if ($attributes == null) { error make --unspanned { msg: "required query parameter 'Attributes' missing: pass --attributes" } }
+  let action = ($action | default "SetEndpointAttributes")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "EndpointArn" $endpoint_arn "scalar") (serialize-qp "Attributes" $attributes "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -3373,8 +3539,8 @@ export def "post-set-endpoint-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-32
-  --version: string@version-completer
+  --action: string@action-completer-32 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3387,6 +3553,8 @@ export def "post-set-endpoint-attributes" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "SetEndpointAttributes")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3423,10 +3591,10 @@ export def "get-set-platform-application-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --platform-application-arn: string # PlatformApplicationArn for SetPlatformApplicationAttributes action.
-  --attributes: record # A map of the platform application attributes. Attributes in this map include the following: PlatformCredential – The credential received from the notification service. For ADM, PlatformCredentialis client secret. For Apple Services using certificate credentials, PlatformCredential is private key. For Apple Services using token credentials, PlatformCredential is signing key. For GCM (Firebase Cloud Messaging), PlatformCredential is API key. PlatformPrincipal – The principal received from the notification service. For ADM, PlatformPrincipalis client id. For Apple Services using certificate credentials, PlatformPrincipal is SSL certificate. For Apple Services using token credentials, PlatformPrincipal is signing key ID. For GCM (Firebase Cloud Messaging), there is no PlatformPrincipal. EventEndpointCreated – Topic ARN to which EndpointCreated event notifications are sent. EventEndpointDeleted – Topic ARN to which EndpointDeleted event notifications are sent. EventEndpointUpdated – Topic ARN to which EndpointUpdate event notifications are sent. EventDeliveryFailure – Topic ARN to which DeliveryFailure event notifications are sent upon Direct Publish delivery failure (permanent) to one of the application's endpoints. SuccessFeedbackRoleArn – IAM role ARN used to give Amazon SNS write access to use CloudWatch Logs on your behalf. FailureFeedbackRoleArn – IAM role ARN used to give Amazon SNS write access to use CloudWatch Logs on your behalf. SuccessFeedbackSampleRate – Sample rate percentage (0-100) of successfully delivered messages. The following attributes only apply to APNs token-based authentication: ApplePlatformTeamID – The identifier that's assigned to your Apple developer account team. ApplePlatformBundleID – The bundle identifier that's assigned to your iOS app.
-  --action: string@action-completer-33
-  --version: string@version-completer
+  --platform-application-arn: string # PlatformApplicationArn for SetPlatformApplicationAttributes action. (required)
+  --attributes: record # A map of the platform application attributes. Attributes in this map include the following: PlatformCredential – The credential received from the notification service. For ADM, PlatformCredentialis client secret. For Apple Services using certificate credentials, PlatformCredential is private key. For Apple Services using token credentials, PlatformCredential is signing key. For GCM (Firebase Cloud Messaging), PlatformCredential is API key. PlatformPrincipal – The principal received from the notification service. For ADM, PlatformPrincipalis client id. For Apple Services using certificate credentials, PlatformPrincipal is SSL certificate. For Apple Services using token credentials, PlatformPrincipal is signing key ID. For GCM (Firebase Cloud Messaging), there is no PlatformPrincipal. EventEndpointCreated – Topic ARN to which EndpointCreated event notifications are sent. EventEndpointDeleted – Topic ARN to which EndpointDeleted event notifications are sent. EventEndpointUpdated – Topic ARN to which EndpointUpdate event notifications are sent. EventDeliveryFailure – Topic ARN to which DeliveryFailure event notifications are sent upon Direct Publish delivery failure (permanent) to one of the application's endpoints. SuccessFeedbackRoleArn – IAM role ARN used to give Amazon SNS write access to use CloudWatch Logs on your behalf. FailureFeedbackRoleArn – IAM role ARN used to give Amazon SNS write access to use CloudWatch Logs on your behalf. SuccessFeedbackSampleRate – Sample rate percentage (0-100) of successfully delivered messages. The following attributes only apply to APNs token-based authentication: ApplePlatformTeamID – The identifier that's assigned to your Apple developer account team. ApplePlatformBundleID – The bundle identifier that's assigned to your iOS app. (required)
+  --action: string@action-completer-33 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3437,6 +3605,10 @@ export def "get-set-platform-application-attributes" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($platform_application_arn == null) { error make --unspanned { msg: "required query parameter 'PlatformApplicationArn' missing: pass --platform-application-arn" } }
+  if ($attributes == null) { error make --unspanned { msg: "required query parameter 'Attributes' missing: pass --attributes" } }
+  let action = ($action | default "SetPlatformApplicationAttributes")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "PlatformApplicationArn" $platform_application_arn "scalar") (serialize-qp "Attributes" $attributes "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -3471,8 +3643,8 @@ export def "post-set-platform-application-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-33
-  --version: string@version-completer
+  --action: string@action-completer-33 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3485,6 +3657,8 @@ export def "post-set-platform-application-attributes" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "SetPlatformApplicationAttributes")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3521,9 +3695,9 @@ export def "get-set-sms-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --attributes: record # The default settings for sending SMS messages from your Amazon Web Services account. You can set values for the following attribute names: MonthlySpendLimit – The maximum amount in USD that you are willing to spend each month to send SMS messages. When Amazon SNS determines that sending an SMS message would incur a cost that exceeds this limit, it stops sending SMS messages within minutes. Amazon SNS stops sending SMS messages within minutes of the limit being crossed. During that interval, if you continue to send SMS messages, you will incur costs that exceed your limit. By default, the spend limit is set to the maximum allowed by Amazon SNS. If you want to raise the limit, submit an SNS Limit Increase case (https://console.aws.amazon.com/support/home#/case/create?issueType=service-limit-increase&limitType=service-code-sns). For New limit value, enter your desired monthly spend limit. In the Use Case Description field, explain that you are requesting an SMS monthly spend limit increase. DeliveryStatusIAMRole – The ARN of the IAM role that allows Amazon SNS to write logs about SMS deliveries in CloudWatch Logs. For each SMS message that you send, Amazon SNS writes a log that includes the message price, the success or failure status, the reason for failure (if the message failed), the message dwell time, and other information. DeliveryStatusSuccessSamplingRate – The percentage of successful SMS deliveries for which Amazon SNS will write logs in CloudWatch Logs. The value can be an integer from 0 - 100. For example, to write logs only for failed deliveries, set this value to 0. To write logs for 10% of your successful deliveries, set it to 10. DefaultSenderID – A string, such as your business brand, that is displayed as the sender on the receiving device. Support for sender IDs varies by country. The sender ID can be 1 - 11 alphanumeric characters, and it must contain at least one letter. DefaultSMSType – The type of SMS message that you will send by default. You can assign the following values: Promotional – (Default) Noncritical messages, such as marketing messages. Amazon SNS optimizes the message delivery to incur the lowest cost. Transactional – Critical messages that support customer transactions, such as one-time passcodes for multi-factor authentication. Amazon SNS optimizes the message delivery to achieve the highest reliability. UsageReportS3Bucket – The name of the Amazon S3 bucket to receive daily SMS usage reports from Amazon SNS. Each day, Amazon SNS will deliver a usage report as a CSV file to the bucket. The report includes the following information for each SMS message that was successfully delivered by your Amazon Web Services account: Time that the message was published (in UTC) Message ID Destination phone number Message type Delivery status Message price (in USD) Part number (a message is split into multiple parts if it is too long for a single message) Total number of parts To receive the report, the bucket must have a policy that allows the Amazon SNS service principal to perform the s3:PutObject and s3:GetBucketLocation actions. For an example bucket policy and usage report, see Monitoring SMS Activity (https://docs.aws.amazon.com/sns/latest/dg/sms_stats.html) in the Amazon SNS Developer Guide.
-  --action: string@action-completer-34
-  --version: string@version-completer
+  --attributes: record # The default settings for sending SMS messages from your Amazon Web Services account. You can set values for the following attribute names: MonthlySpendLimit – The maximum amount in USD that you are willing to spend each month to send SMS messages. When Amazon SNS determines that sending an SMS message would incur a cost that exceeds this limit, it stops sending SMS messages within minutes. Amazon SNS stops sending SMS messages within minutes of the limit being crossed. During that interval, if you continue to send SMS messages, you will incur costs that exceed your limit. By default, the spend limit is set to the maximum allowed by Amazon SNS. If you want to raise the limit, submit an SNS Limit Increase case (https://console.aws.amazon.com/support/home#/case/create?issueType=service-limit-increase&limitType=service-code-sns). For New limit value, enter your desired monthly spend limit. In the Use Case Description field, explain that you are requesting an SMS monthly spend limit increase. DeliveryStatusIAMRole – The ARN of the IAM role that allows Amazon SNS to write logs about SMS deliveries in CloudWatch Logs. For each SMS message that you send, Amazon SNS writes a log that includes the message price, the success or failure status, the reason for failure (if the message failed), the message dwell time, and other information. DeliveryStatusSuccessSamplingRate – The percentage of successful SMS deliveries for which Amazon SNS will write logs in CloudWatch Logs. The value can be an integer from 0 - 100. For example, to write logs only for failed deliveries, set this value to 0. To write logs for 10% of your successful deliveries, set it to 10. DefaultSenderID – A string, such as your business brand, that is displayed as the sender on the receiving device. Support for sender IDs varies by country. The sender ID can be 1 - 11 alphanumeric characters, and it must contain at least one letter. DefaultSMSType – The type of SMS message that you will send by default. You can assign the following values: Promotional – (Default) Noncritical messages, such as marketing messages. Amazon SNS optimizes the message delivery to incur the lowest cost. Transactional – Critical messages that support customer transactions, such as one-time passcodes for multi-factor authentication. Amazon SNS optimizes the message delivery to achieve the highest reliability. UsageReportS3Bucket – The name of the Amazon S3 bucket to receive daily SMS usage reports from Amazon SNS. Each day, Amazon SNS will deliver a usage report as a CSV file to the bucket. The report includes the following information for each SMS message that was successfully delivered by your Amazon Web Services account: Time that the message was published (in UTC) Message ID Destination phone number Message type Delivery status Message price (in USD) Part number (a message is split into multiple parts if it is too long for a single message) Total number of parts To receive the report, the bucket must have a policy that allows the Amazon SNS service principal to perform the s3:PutObject and s3:GetBucketLocation actions. For an example bucket policy and usage report, see Monitoring SMS Activity (https://docs.aws.amazon.com/sns/latest/dg/sms_stats.html) in the Amazon SNS Developer Guide. (required)
+  --action: string@action-completer-34 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3534,6 +3708,9 @@ export def "get-set-sms-attributes" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($attributes == null) { error make --unspanned { msg: "required query parameter 'attributes' missing: pass --attributes" } }
+  let action = ($action | default "SetSMSAttributes")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "attributes" $attributes "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3568,8 +3745,8 @@ export def "post-set-sms-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-34
-  --version: string@version-completer
+  --action: string@action-completer-34 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3582,6 +3759,8 @@ export def "post-set-sms-attributes" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "SetSMSAttributes")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3618,11 +3797,11 @@ export def "get-set-subscription-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --subscription-arn: string # The ARN of the subscription to modify.
-  --attribute-name: string # A map of attributes with their corresponding values. The following lists the names, descriptions, and values of the special request parameters that this action uses: DeliveryPolicy – The policy that defines how Amazon SNS retries failed deliveries to HTTP/S endpoints. FilterPolicy – The simple JSON object that lets your subscriber receive only a subset of messages, rather than receiving every message published to the topic. FilterPolicyScope – This attribute lets you choose the filtering scope by using one of the following string value types: MessageAttributes (default) – The filter is applied on the message attributes. MessageBody – The filter is applied on the message body. RawMessageDelivery – When set to true, enables raw message delivery to Amazon SQS or HTTP/S endpoints. This eliminates the need for the endpoints to process JSON formatting, which is otherwise created for Amazon SNS metadata. RedrivePolicy – When specified, sends undeliverable messages to the specified Amazon SQS dead-letter queue. Messages that can't be delivered due to client errors (for example, when the subscribed endpoint is unreachable) or server errors (for example, when the service that powers the subscribed endpoint becomes unavailable) are held in the dead-letter queue for further analysis or reprocessing. The following attribute applies only to Amazon Kinesis Data Firehose delivery stream subscriptions: SubscriptionRoleArn – The ARN of the IAM role that has the following: Permission to write to the Kinesis Data Firehose delivery stream Amazon SNS listed as a trusted entity Specifying a valid ARN for this attribute is required for Kinesis Data Firehose delivery stream subscriptions. For more information, see Fanout to Kinesis Data Firehose delivery streams (https://docs.aws.amazon.com/sns/latest/dg/sns-firehose-as-subscriber.html) in the Amazon SNS Developer Guide.
+  --subscription-arn: string # The ARN of the subscription to modify. (required)
+  --attribute-name: string # A map of attributes with their corresponding values. The following lists the names, descriptions, and values of the special request parameters that this action uses: DeliveryPolicy – The policy that defines how Amazon SNS retries failed deliveries to HTTP/S endpoints. FilterPolicy – The simple JSON object that lets your subscriber receive only a subset of messages, rather than receiving every message published to the topic. FilterPolicyScope – This attribute lets you choose the filtering scope by using one of the following string value types: MessageAttributes (default) – The filter is applied on the message attributes. MessageBody – The filter is applied on the message body. RawMessageDelivery – When set to true, enables raw message delivery to Amazon SQS or HTTP/S endpoints. This eliminates the need for the endpoints to process JSON formatting, which is otherwise created for Amazon SNS metadata. RedrivePolicy – When specified, sends undeliverable messages to the specified Amazon SQS dead-letter queue. Messages that can't be delivered due to client errors (for example, when the subscribed endpoint is unreachable) or server errors (for example, when the service that powers the subscribed endpoint becomes unavailable) are held in the dead-letter queue for further analysis or reprocessing. The following attribute applies only to Amazon Kinesis Data Firehose delivery stream subscriptions: SubscriptionRoleArn – The ARN of the IAM role that has the following: Permission to write to the Kinesis Data Firehose delivery stream Amazon SNS listed as a trusted entity Specifying a valid ARN for this attribute is required for Kinesis Data Firehose delivery stream subscriptions. For more information, see Fanout to Kinesis Data Firehose delivery streams (https://docs.aws.amazon.com/sns/latest/dg/sns-firehose-as-subscriber.html) in the Amazon SNS Developer Guide. (required)
   --attribute-value: string # The new value for the attribute in JSON format.
-  --action: string@action-completer-35
-  --version: string@version-completer
+  --action: string@action-completer-35 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3633,6 +3812,10 @@ export def "get-set-subscription-attributes" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($subscription_arn == null) { error make --unspanned { msg: "required query parameter 'SubscriptionArn' missing: pass --subscription-arn" } }
+  if ($attribute_name == null) { error make --unspanned { msg: "required query parameter 'AttributeName' missing: pass --attribute-name" } }
+  let action = ($action | default "SetSubscriptionAttributes")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "SubscriptionArn" $subscription_arn "scalar") (serialize-qp "AttributeName" $attribute_name "scalar") (serialize-qp "AttributeValue" $attribute_value "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -3667,8 +3850,8 @@ export def "post-set-subscription-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-35
-  --version: string@version-completer
+  --action: string@action-completer-35 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3681,6 +3864,8 @@ export def "post-set-subscription-attributes" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "SetSubscriptionAttributes")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3717,11 +3902,11 @@ export def "get-set-topic-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --topic-arn: string # The ARN of the topic to modify.
-  --attribute-name: string # A map of attributes with their corresponding values. The following lists the names, descriptions, and values of the special request parameters that the SetTopicAttributes action uses: ApplicationSuccessFeedbackRoleArn – Indicates failed message delivery status for an Amazon SNS topic that is subscribed to a platform application endpoint. DeliveryPolicy – The policy that defines how Amazon SNS retries failed deliveries to HTTP/S endpoints. DisplayName – The display name to use for a topic with SMS subscriptions. Policy – The policy that defines who can access your topic. By default, only the topic owner can publish or subscribe to the topic. TracingConfig – Tracing mode of an Amazon SNS topic. By default TracingConfig is set to PassThrough, and the topic passes through the tracing header it receives from an Amazon SNS publisher to its subscriptions. If set to Active, Amazon SNS will vend X-Ray segment data to topic owner account if the sampled flag in the tracing header is true. This is only supported on standard topics. HTTP HTTPSuccessFeedbackRoleArn – Indicates successful message delivery status for an Amazon SNS topic that is subscribed to an HTTP endpoint. HTTPSuccessFeedbackSampleRate – Indicates percentage of successful messages to sample for an Amazon SNS topic that is subscribed to an HTTP endpoint. HTTPFailureFeedbackRoleArn – Indicates failed message delivery status for an Amazon SNS topic that is subscribed to an HTTP endpoint. Amazon Kinesis Data Firehose FirehoseSuccessFeedbackRoleArn – Indicates successful message delivery status for an Amazon SNS topic that is subscribed to an Amazon Kinesis Data Firehose endpoint. FirehoseSuccessFeedbackSampleRate – Indicates percentage of successful messages to sample for an Amazon SNS topic that is subscribed to an Amazon Kinesis Data Firehose endpoint. FirehoseFailureFeedbackRoleArn – Indicates failed message delivery status for an Amazon SNS topic that is subscribed to an Amazon Kinesis Data Firehose endpoint. Lambda LambdaSuccessFeedbackRoleArn – Indicates successful message delivery status for an Amazon SNS topic that is subscribed to an Lambda endpoint. LambdaSuccessFeedbackSampleRate – Indicates percentage of successful messages to sample for an Amazon SNS topic that is subscribed to an Lambda endpoint. LambdaFailureFeedbackRoleArn – Indicates failed message delivery status for an Amazon SNS topic that is subscribed to an Lambda endpoint. Platform application endpoint ApplicationSuccessFeedbackRoleArn – Indicates successful message delivery status for an Amazon SNS topic that is subscribed to an Amazon Web Services application endpoint. ApplicationSuccessFeedbackSampleRate – Indicates percentage of successful messages to sample for an Amazon SNS topic that is subscribed to an Amazon Web Services application endpoint. ApplicationFailureFeedbackRoleArn – Indicates failed message delivery status for an Amazon SNS topic that is subscribed to an Amazon Web Services application endpoint. In addition to being able to configure topic attributes for message delivery status of notification messages sent to Amazon SNS application endpoints, you can also configure application attributes for the delivery status of push notification messages sent to push notification services. For example, For more information, see Using Amazon SNS Application Attributes for Message Delivery Status (https://docs.aws.amazon.com/sns/latest/dg/sns-msg-status.html). Amazon SQS SQSSuccessFeedbackRoleArn – Indicates successful message delivery status for an Amazon SNS topic that is subscribed to an Amazon SQS endpoint. SQSSuccessFeedbackSampleRate – Indicates percentage of successful messages to sample for an Amazon SNS topic that is subscribed to an Amazon SQS endpoint. SQSFailureFeedbackRoleArn – Indicates failed message delivery status for an Amazon SNS topic that is subscribed to an Amazon SQS endpoint. The <ENDPOINT>SuccessFeedbackRoleArn and <ENDPOINT>FailureFeedbackRoleArn attributes are used to give Amazon SNS write access to use CloudWatch Logs on your behalf. The <ENDPOINT>SuccessFeedbackSampleRate attribute is for specifying the sample rate percentage (0-100) of successfully delivered messages. After you configure the <ENDPOINT>FailureFeedbackRoleArn attribute, then all failed message deliveries generate CloudWatch Logs. The following attribute applies only to server-side-encryption (https://docs.aws.amazon.com/sns/latest/dg/sns-server-side-encryption.html): KmsMasterKeyId – The ID of an Amazon Web Services managed customer master key (CMK) for Amazon SNS or a custom CMK. For more information, see Key Terms (https://docs.aws.amazon.com/sns/latest/dg/sns-server-side-encryption.html#sse-key-terms). For more examples, see KeyId (https://docs.aws.amazon.com/kms/latest/APIReference/API_DescribeKey.html#API_DescribeKey_RequestParameters) in the Key Management Service API Reference. SignatureVersion – The signature version corresponds to the hashing algorithm used while creating the signature of the notifications, subscription confirmations, or unsubscribe confirmation messages sent by Amazon SNS. By default, SignatureVersion is set to 1. The following attribute applies only to FIFO topics (https://docs.aws.amazon.com/sns/latest/dg/sns-fifo-topics.html): ContentBasedDeduplication – Enables content-based deduplication for FIFO topics. By default, ContentBasedDeduplication is set to false. If you create a FIFO topic and this attribute is false, you must specify a value for the MessageDeduplicationId parameter for the Publish (https://docs.aws.amazon.com/sns/latest/api/API_Publish.html) action. When you set ContentBasedDeduplication to true, Amazon SNS uses a SHA-256 hash to generate the MessageDeduplicationId using the body of the message (but not the attributes of the message). (Optional) To override the generated value, you can specify a value for the MessageDeduplicationId parameter for the Publish action.
+  --topic-arn: string # The ARN of the topic to modify. (required)
+  --attribute-name: string # A map of attributes with their corresponding values. The following lists the names, descriptions, and values of the special request parameters that the SetTopicAttributes action uses: ApplicationSuccessFeedbackRoleArn – Indicates failed message delivery status for an Amazon SNS topic that is subscribed to a platform application endpoint. DeliveryPolicy – The policy that defines how Amazon SNS retries failed deliveries to HTTP/S endpoints. DisplayName – The display name to use for a topic with SMS subscriptions. Policy – The policy that defines who can access your topic. By default, only the topic owner can publish or subscribe to the topic. TracingConfig – Tracing mode of an Amazon SNS topic. By default TracingConfig is set to PassThrough, and the topic passes through the tracing header it receives from an Amazon SNS publisher to its subscriptions. If set to Active, Amazon SNS will vend X-Ray segment data to topic owner account if the sampled flag in the tracing header is true. This is only supported on standard topics. HTTP HTTPSuccessFeedbackRoleArn – Indicates successful message delivery status for an Amazon SNS topic that is subscribed to an HTTP endpoint. HTTPSuccessFeedbackSampleRate – Indicates percentage of successful messages to sample for an Amazon SNS topic that is subscribed to an HTTP endpoint. HTTPFailureFeedbackRoleArn – Indicates failed message delivery status for an Amazon SNS topic that is subscribed to an HTTP endpoint. Amazon Kinesis Data Firehose FirehoseSuccessFeedbackRoleArn – Indicates successful message delivery status for an Amazon SNS topic that is subscribed to an Amazon Kinesis Data Firehose endpoint. FirehoseSuccessFeedbackSampleRate – Indicates percentage of successful messages to sample for an Amazon SNS topic that is subscribed to an Amazon Kinesis Data Firehose endpoint. FirehoseFailureFeedbackRoleArn – Indicates failed message delivery status for an Amazon SNS topic that is subscribed to an Amazon Kinesis Data Firehose endpoint. Lambda LambdaSuccessFeedbackRoleArn – Indicates successful message delivery status for an Amazon SNS topic that is subscribed to an Lambda endpoint. LambdaSuccessFeedbackSampleRate – Indicates percentage of successful messages to sample for an Amazon SNS topic that is subscribed to an Lambda endpoint. LambdaFailureFeedbackRoleArn – Indicates failed message delivery status for an Amazon SNS topic that is subscribed to an Lambda endpoint. Platform application endpoint ApplicationSuccessFeedbackRoleArn – Indicates successful message delivery status for an Amazon SNS topic that is subscribed to an Amazon Web Services application endpoint. ApplicationSuccessFeedbackSampleRate – Indicates percentage of successful messages to sample for an Amazon SNS topic that is subscribed to an Amazon Web Services application endpoint. ApplicationFailureFeedbackRoleArn – Indicates failed message delivery status for an Amazon SNS topic that is subscribed to an Amazon Web Services application endpoint. In addition to being able to configure topic attributes for message delivery status of notification messages sent to Amazon SNS application endpoints, you can also configure application attributes for the delivery status of push notification messages sent to push notification services. For example, For more information, see Using Amazon SNS Application Attributes for Message Delivery Status (https://docs.aws.amazon.com/sns/latest/dg/sns-msg-status.html). Amazon SQS SQSSuccessFeedbackRoleArn – Indicates successful message delivery status for an Amazon SNS topic that is subscribed to an Amazon SQS endpoint. SQSSuccessFeedbackSampleRate – Indicates percentage of successful messages to sample for an Amazon SNS topic that is subscribed to an Amazon SQS endpoint. SQSFailureFeedbackRoleArn – Indicates failed message delivery status for an Amazon SNS topic that is subscribed to an Amazon SQS endpoint. The <ENDPOINT>SuccessFeedbackRoleArn and <ENDPOINT>FailureFeedbackRoleArn attributes are used to give Amazon SNS write access to use CloudWatch Logs on your behalf. The <ENDPOINT>SuccessFeedbackSampleRate attribute is for specifying the sample rate percentage (0-100) of successfully delivered messages. After you configure the <ENDPOINT>FailureFeedbackRoleArn attribute, then all failed message deliveries generate CloudWatch Logs. The following attribute applies only to server-side-encryption (https://docs.aws.amazon.com/sns/latest/dg/sns-server-side-encryption.html): KmsMasterKeyId – The ID of an Amazon Web Services managed customer master key (CMK) for Amazon SNS or a custom CMK. For more information, see Key Terms (https://docs.aws.amazon.com/sns/latest/dg/sns-server-side-encryption.html#sse-key-terms). For more examples, see KeyId (https://docs.aws.amazon.com/kms/latest/APIReference/API_DescribeKey.html#API_DescribeKey_RequestParameters) in the Key Management Service API Reference. SignatureVersion – The signature version corresponds to the hashing algorithm used while creating the signature of the notifications, subscription confirmations, or unsubscribe confirmation messages sent by Amazon SNS. By default, SignatureVersion is set to 1. The following attribute applies only to FIFO topics (https://docs.aws.amazon.com/sns/latest/dg/sns-fifo-topics.html): ContentBasedDeduplication – Enables content-based deduplication for FIFO topics. By default, ContentBasedDeduplication is set to false. If you create a FIFO topic and this attribute is false, you must specify a value for the MessageDeduplicationId parameter for the Publish (https://docs.aws.amazon.com/sns/latest/api/API_Publish.html) action. When you set ContentBasedDeduplication to true, Amazon SNS uses a SHA-256 hash to generate the MessageDeduplicationId using the body of the message (but not the attributes of the message). (Optional) To override the generated value, you can specify a value for the MessageDeduplicationId parameter for the Publish action. (required)
   --attribute-value: string # The new value for the attribute.
-  --action: string@action-completer-36
-  --version: string@version-completer
+  --action: string@action-completer-36 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3732,6 +3917,10 @@ export def "get-set-topic-attributes" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($topic_arn == null) { error make --unspanned { msg: "required query parameter 'TopicArn' missing: pass --topic-arn" } }
+  if ($attribute_name == null) { error make --unspanned { msg: "required query parameter 'AttributeName' missing: pass --attribute-name" } }
+  let action = ($action | default "SetTopicAttributes")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "TopicArn" $topic_arn "scalar") (serialize-qp "AttributeName" $attribute_name "scalar") (serialize-qp "AttributeValue" $attribute_value "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -3766,8 +3955,8 @@ export def "post-set-topic-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-36
-  --version: string@version-completer
+  --action: string@action-completer-36 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3780,6 +3969,8 @@ export def "post-set-topic-attributes" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "SetTopicAttributes")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3816,13 +4007,13 @@ export def "get-subscribe" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --topic-arn: string # The ARN of the topic you want to subscribe to.
-  --protocol: string # The protocol that you want to use. Supported protocols include: http – delivery of JSON-encoded message via HTTP POST https – delivery of JSON-encoded message via HTTPS POST email – delivery of message via SMTP email-json – delivery of JSON-encoded message via SMTP sms – delivery of message via SMS sqs – delivery of JSON-encoded message to an Amazon SQS queue application – delivery of JSON-encoded message to an EndpointArn for a mobile app and device lambda – delivery of JSON-encoded message to an Lambda function firehose – delivery of JSON-encoded message to an Amazon Kinesis Data Firehose delivery stream.
+  --topic-arn: string # The ARN of the topic you want to subscribe to. (required)
+  --protocol: string # The protocol that you want to use. Supported protocols include: http – delivery of JSON-encoded message via HTTP POST https – delivery of JSON-encoded message via HTTPS POST email – delivery of message via SMTP email-json – delivery of JSON-encoded message via SMTP sms – delivery of message via SMS sqs – delivery of JSON-encoded message to an Amazon SQS queue application – delivery of JSON-encoded message to an EndpointArn for a mobile app and device lambda – delivery of JSON-encoded message to an Lambda function firehose – delivery of JSON-encoded message to an Amazon Kinesis Data Firehose delivery stream. (required)
   --endpoint: string # The endpoint that you want to receive notifications. Endpoints vary by protocol: For the http protocol, the (public) endpoint is a URL beginning with http://. For the https protocol, the (public) endpoint is a URL beginning with https://. For the email protocol, the endpoint is an email address. For the email-json protocol, the endpoint is an email address. For the sms protocol, the endpoint is a phone number of an SMS-enabled device. For the sqs protocol, the endpoint is the ARN of an Amazon SQS queue. For the application protocol, the endpoint is the EndpointArn of a mobile app and device. For the lambda protocol, the endpoint is the ARN of an Lambda function. For the firehose protocol, the endpoint is the ARN of an Amazon Kinesis Data Firehose delivery stream.
   --attributes: record # A map of attributes with their corresponding values. The following lists the names, descriptions, and values of the special request parameters that the Subscribe action uses: DeliveryPolicy – The policy that defines how Amazon SNS retries failed deliveries to HTTP/S endpoints. FilterPolicy – The simple JSON object that lets your subscriber receive only a subset of messages, rather than receiving every message published to the topic. FilterPolicyScope – This attribute lets you choose the filtering scope by using one of the following string value types: MessageAttributes (default) – The filter is applied on the message attributes. MessageBody – The filter is applied on the message body. RawMessageDelivery – When set to true, enables raw message delivery to Amazon SQS or HTTP/S endpoints. This eliminates the need for the endpoints to process JSON formatting, which is otherwise created for Amazon SNS metadata. RedrivePolicy – When specified, sends undeliverable messages to the specified Amazon SQS dead-letter queue. Messages that can't be delivered due to client errors (for example, when the subscribed endpoint is unreachable) or server errors (for example, when the service that powers the subscribed endpoint becomes unavailable) are held in the dead-letter queue for further analysis or reprocessing. The following attribute applies only to Amazon Kinesis Data Firehose delivery stream subscriptions: SubscriptionRoleArn – The ARN of the IAM role that has the following: Permission to write to the Kinesis Data Firehose delivery stream Amazon SNS listed as a trusted entity Specifying a valid ARN for this attribute is required for Kinesis Data Firehose delivery stream subscriptions. For more information, see Fanout to Kinesis Data Firehose delivery streams (https://docs.aws.amazon.com/sns/latest/dg/sns-firehose-as-subscriber.html) in the Amazon SNS Developer Guide.
   --return-subscription-arn: oneof<nothing, bool> # Sets whether the response from the Subscribe request includes the subscription ARN, even if the subscription is not yet confirmed. If you set this parameter to true, the response includes the ARN in all cases, even if the subscription is not yet confirmed. In addition to the ARN for confirmed subscriptions, the response also includes the pending subscription ARN value for subscriptions that aren't yet confirmed. A subscription becomes confirmed when the subscriber calls the ConfirmSubscription action with a confirmation token. The default value is false.
-  --action: string@action-completer-37
-  --version: string@version-completer
+  --action: string@action-completer-37 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3830,9 +4021,13 @@ export def "get-subscribe" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<SubscriptionArn: record> {
+]: nothing -> record<SubscriptionArn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($topic_arn == null) { error make --unspanned { msg: "required query parameter 'TopicArn' missing: pass --topic-arn" } }
+  if ($protocol == null) { error make --unspanned { msg: "required query parameter 'Protocol' missing: pass --protocol" } }
+  let action = ($action | default "Subscribe")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "TopicArn" $topic_arn "scalar") (serialize-qp "Protocol" $protocol "scalar") (serialize-qp "Endpoint" $endpoint "scalar") (serialize-qp "Attributes" $attributes "multi") (serialize-qp "ReturnSubscriptionArn" $return_subscription_arn "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3867,8 +4062,8 @@ export def "post-subscribe" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-37
-  --version: string@version-completer
+  --action: string@action-completer-37 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3877,10 +4072,12 @@ export def "post-subscribe" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<SubscriptionArn: record> {
+]: any -> record<SubscriptionArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "Subscribe")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -3917,10 +4114,10 @@ export def "get-tag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-arn: string # The ARN of the topic to which to add tags.
-  --tags: list # The tags to be added to the specified topic. A tag consists of a required key and an optional value.
-  --action: string@action-completer-38
-  --version: string@version-completer
+  --resource-arn: string # The ARN of the topic to which to add tags. (required)
+  --tags: list # The tags to be added to the specified topic. A tag consists of a required key and an optional value. (required)
+  --action: string@action-completer-38 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3931,6 +4128,10 @@ export def "get-tag-resource" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'ResourceArn' missing: pass --resource-arn" } }
+  if ($tags == null) { error make --unspanned { msg: "required query parameter 'Tags' missing: pass --tags" } }
+  let action = ($action | default "TagResource")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "ResourceArn" $resource_arn "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -3965,8 +4166,8 @@ export def "post-tag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-38
-  --version: string@version-completer
+  --action: string@action-completer-38 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3979,6 +4180,8 @@ export def "post-tag-resource" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "TagResource")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4015,9 +4218,9 @@ export def "get-unsubscribe" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --subscription-arn: string # The ARN of the subscription to be deleted.
-  --action: string@action-completer-39
-  --version: string@version-completer
+  --subscription-arn: string # The ARN of the subscription to be deleted. (required)
+  --action: string@action-completer-39 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4028,6 +4231,9 @@ export def "get-unsubscribe" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($subscription_arn == null) { error make --unspanned { msg: "required query parameter 'SubscriptionArn' missing: pass --subscription-arn" } }
+  let action = ($action | default "Unsubscribe")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "SubscriptionArn" $subscription_arn "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
@@ -4062,8 +4268,8 @@ export def "post-unsubscribe" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-39
-  --version: string@version-completer
+  --action: string@action-completer-39 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4076,6 +4282,8 @@ export def "post-unsubscribe" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "Unsubscribe")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4112,10 +4320,10 @@ export def "get-untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-arn: string # The ARN of the topic from which to remove tags.
-  --tag-keys: list # The list of tag keys to remove from the specified topic.
-  --action: string@action-completer-40
-  --version: string@version-completer
+  --resource-arn: string # The ARN of the topic from which to remove tags. (required)
+  --tag-keys: list # The list of tag keys to remove from the specified topic. (required)
+  --action: string@action-completer-40 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4126,6 +4334,10 @@ export def "get-untag-resource" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'ResourceArn' missing: pass --resource-arn" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'TagKeys' missing: pass --tag-keys" } }
+  let action = ($action | default "UntagResource")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "ResourceArn" $resource_arn "scalar") (serialize-qp "TagKeys" $tag_keys "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4160,8 +4372,8 @@ export def "post-untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-40
-  --version: string@version-completer
+  --action: string@action-completer-40 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4174,6 +4386,8 @@ export def "post-untag-resource" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "UntagResource")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
@@ -4210,10 +4424,10 @@ export def "get-verify-sms-sandbox-phone-number" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --phone-number: string # The destination phone number to verify.
-  --one-time-password: string # The OTP sent to the destination number from the CreateSMSSandBoxPhoneNumber call.
-  --action: string@action-completer-41
-  --version: string@version-completer
+  --phone-number: string # The destination phone number to verify. (required)
+  --one-time-password: string # The OTP sent to the destination number from the CreateSMSSandBoxPhoneNumber call. (required)
+  --action: string@action-completer-41 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4224,6 +4438,10 @@ export def "get-verify-sms-sandbox-phone-number" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($phone_number == null) { error make --unspanned { msg: "required query parameter 'PhoneNumber' missing: pass --phone-number" } }
+  if ($one_time_password == null) { error make --unspanned { msg: "required query parameter 'OneTimePassword' missing: pass --one-time-password" } }
+  let action = ($action | default "VerifySMSSandboxPhoneNumber")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "PhoneNumber" $phone_number "scalar") (serialize-qp "OneTimePassword" $one_time_password "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
@@ -4258,8 +4476,8 @@ export def "post-verify-sms-sandbox-phone-number" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-41
-  --version: string@version-completer
+  --action: string@action-completer-41 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4272,6 +4490,8 @@ export def "post-verify-sms-sandbox-phone-number" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "VerifySMSSandboxPhoneNumber")
+  let version = ($version | default "2010-03-31")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body

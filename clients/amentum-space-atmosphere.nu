@@ -131,16 +131,23 @@ export def "app-api-endpoints-jb2008-sample-atmosphere" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --year: int # Year in YYYY format (e.g. 2020)
-  --month: int # Month in MM format (e.g. 5)
-  --day: int # Day in DD format (e.g. 23)
-  --altitude: float # Altitude in (km) (e.g. 300)
-  --geodetic-latitude: float # GeodeticLatitude (deg) -90 to 90 deg (e.g. 42)
-  --geodetic-longitude: float # GeodeticLongitude (deg) 0 to 360 deg (e.g. 42)
-  --utc: float # Coordinated Universal Time (hrs) (e.g. 2)
+  --year: int # Year in YYYY format (required, e.g. 2020)
+  --month: int # Month in MM format (required, e.g. 5)
+  --day: int # Day in DD format (required, e.g. 23)
+  --altitude: float # Altitude in (km) (required, e.g. 300)
+  --geodetic-latitude: float # GeodeticLatitude (deg) -90 to 90 deg (required, e.g. 42)
+  --geodetic-longitude: float # GeodeticLongitude (deg) 0 to 360 deg (required, e.g. 42)
+  --utc: float # Coordinated Universal Time (hrs) (required, e.g. 2)
 ]: nothing -> record<at_alt_temp: record<units: string, value: float>, exospheric_temp: record<units: string, value: float>, total_mass_density: record<units: string, value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($year == null) { error make --unspanned { msg: "required query parameter 'year' missing: pass --year" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'month' missing: pass --month" } }
+  if ($day == null) { error make --unspanned { msg: "required query parameter 'day' missing: pass --day" } }
+  if ($altitude == null) { error make --unspanned { msg: "required query parameter 'altitude' missing: pass --altitude" } }
+  if ($geodetic_latitude == null) { error make --unspanned { msg: "required query parameter 'geodetic_latitude' missing: pass --geodetic-latitude" } }
+  if ($geodetic_longitude == null) { error make --unspanned { msg: "required query parameter 'geodetic_longitude' missing: pass --geodetic-longitude" } }
+  if ($utc == null) { error make --unspanned { msg: "required query parameter 'utc' missing: pass --utc" } }
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "month" $month "scalar") (serialize-qp "day" $day "scalar") (serialize-qp "altitude" $altitude "scalar") (serialize-qp "geodetic_latitude" $geodetic_latitude "scalar") (serialize-qp "geodetic_longitude" $geodetic_longitude "scalar") (serialize-qp "utc" $utc "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/jb2008" $qp $auth.query)
   let accept_val = "application/json"
@@ -173,19 +180,26 @@ export def "app-api-endpoints-nrlmsise00-sample-atmosphere" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --year: int # Year in YYYY format (e.g. 2020)
-  --month: int # Month in MM format (e.g. 5)
-  --day: int # Day in DD format (e.g. 23)
-  --altitude: float # Altitude in (km) (e.g. 300)
-  --geodetic-latitude: float # GeodeticLatitude (deg) -90 to 90 deg (e.g. 42)
-  --geodetic-longitude: float # GeodeticLongitude (deg) 0 to 360 deg (e.g. 42)
-  --utc: float # Coordinated Universal Time (hrs) (e.g. 2)
+  --year: int # Year in YYYY format (required, e.g. 2020)
+  --month: int # Month in MM format (required, e.g. 5)
+  --day: int # Day in DD format (required, e.g. 23)
+  --altitude: float # Altitude in (km) (required, e.g. 300)
+  --geodetic-latitude: float # GeodeticLatitude (deg) -90 to 90 deg (required, e.g. 42)
+  --geodetic-longitude: float # GeodeticLongitude (deg) 0 to 360 deg (required, e.g. 42)
+  --utc: float # Coordinated Universal Time (hrs) (required, e.g. 2)
   --f107a: float # (Optional) 81 day average of F10.7 flux (SFU) centered on the specified day. F107 and F107A values correspond to the 10.7 cm radio flux at the actual distance of Earth from Sun rather than radio flux at 1 AU. F107, F107A, AP effects can be neglected below 80 km. If unspecified, values provided by the US National Oceanic and Atmospheric Administration are retrieved automatically. (e.g. 120)
   --f107: float # (Optional) Daily F10.7 cm radio flux for previous day (SFU). F107 and F107A values correspond to the 10.7 cm radio flux at the actual distance of Earth from Sun rather than radio flux at 1 AU. F107, F107A, AP effects can be neglected below 80 km. If unspecified, values provided by the US National Oceanic and Atmospheric Administration are retrieved automatically. (e.g. 120)
   --ap: float # (Optional) The Ap-index provides a daily average level for geomagnetic activity F107, F107A, AP effects can be neglected below 80 km. If unspecified, the average of values in the 24 hours preceding the date-time are automatically calculated from data provided by GFZ German Research Centre for Geosciences. (e.g. 30)
 ]: nothing -> record<Ar_density: record<units: string, value: float>, H_density: record<units: string, value: float>, He_density: record<units: string, value: float>, N2_density: record<units: string, value: float>, N_density: record<units: string, value: float>, O2_density: record<units: string, value: float>, O_density: record<units: string, value: float>, anomalous_O_density: record<units: string, value: float>, ap: record<value: float>, at_alt_temp: record<units: string, value: float>, exospheric_temp: record<units: string, value: float>, f107: record<units: string, value: float>, f107a: record<units: string, value: float>, total_mass_density: record<units: string, value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($year == null) { error make --unspanned { msg: "required query parameter 'year' missing: pass --year" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'month' missing: pass --month" } }
+  if ($day == null) { error make --unspanned { msg: "required query parameter 'day' missing: pass --day" } }
+  if ($altitude == null) { error make --unspanned { msg: "required query parameter 'altitude' missing: pass --altitude" } }
+  if ($geodetic_latitude == null) { error make --unspanned { msg: "required query parameter 'geodetic_latitude' missing: pass --geodetic-latitude" } }
+  if ($geodetic_longitude == null) { error make --unspanned { msg: "required query parameter 'geodetic_longitude' missing: pass --geodetic-longitude" } }
+  if ($utc == null) { error make --unspanned { msg: "required query parameter 'utc' missing: pass --utc" } }
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "month" $month "scalar") (serialize-qp "day" $day "scalar") (serialize-qp "altitude" $altitude "scalar") (serialize-qp "geodetic_latitude" $geodetic_latitude "scalar") (serialize-qp "geodetic_longitude" $geodetic_longitude "scalar") (serialize-qp "utc" $utc "scalar") (serialize-qp "f107a" $f107a "scalar") (serialize-qp "f107" $f107 "scalar") (serialize-qp "ap" $ap "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nrlmsise00" $qp $auth.query)
   let accept_val = "application/json"
@@ -218,17 +232,25 @@ export def "app-api-wfs-endpoints-wfs-get-values" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --latitude: float # Latitude (deg) -90 to 90 deg (e.g. 42)
-  --longitude: float # Longitude (deg) 0 to 360 deg or -180 to 180 deg (e.g. 42)
-  --altitude: float # Altitude in (km) (e.g. 300)
-  --year: int # Year in YYYY format (e.g. 2020)
-  --month: int # Month in MM format (e.g. 5)
-  --day: int # Day in DD format (e.g. 23)
-  --hour: int # UTC Hour of the day in 24 hour format (e.g. 15)
-  --minute: int # Minute of the given hour (e.g. 10)
+  --latitude: float # Latitude (deg) -90 to 90 deg (required, e.g. 42)
+  --longitude: float # Longitude (deg) 0 to 360 deg or -180 to 180 deg (required, e.g. 42)
+  --altitude: float # Altitude in (km) (required, e.g. 300)
+  --year: int # Year in YYYY format (required, e.g. 2020)
+  --month: int # Month in MM format (required, e.g. 5)
+  --day: int # Day in DD format (required, e.g. 23)
+  --hour: int # UTC Hour of the day in 24 hour format (required, e.g. 15)
+  --minute: int # Minute of the given hour (required, e.g. 10)
 ]: nothing -> record<N2_density: record<units: string, value: float>, O2_density: record<units: string, value: float>, O_density: record<units: string, value: float>, eastward_wind_neutral: record<units: string, value: float>, northward_wind_neutral: record<units: string, value: float>, point: record<altitude: float, latitude: float, longitude: float>, temp_neutral: record<units: string, value: float>, total_mass_density: record<units: string, value: float>, upward_wind_neutral: record<units: string, value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($latitude == null) { error make --unspanned { msg: "required query parameter 'latitude' missing: pass --latitude" } }
+  if ($longitude == null) { error make --unspanned { msg: "required query parameter 'longitude' missing: pass --longitude" } }
+  if ($altitude == null) { error make --unspanned { msg: "required query parameter 'altitude' missing: pass --altitude" } }
+  if ($year == null) { error make --unspanned { msg: "required query parameter 'year' missing: pass --year" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'month' missing: pass --month" } }
+  if ($day == null) { error make --unspanned { msg: "required query parameter 'day' missing: pass --day" } }
+  if ($hour == null) { error make --unspanned { msg: "required query parameter 'hour' missing: pass --hour" } }
+  if ($minute == null) { error make --unspanned { msg: "required query parameter 'minute' missing: pass --minute" } }
   let qp = [(serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "altitude" $altitude "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "month" $month "scalar") (serialize-qp "day" $day "scalar") (serialize-qp "hour" $hour "scalar") (serialize-qp "minute" $minute "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/wam-ipe" $qp $auth.query)
   let accept_val = "application/json"

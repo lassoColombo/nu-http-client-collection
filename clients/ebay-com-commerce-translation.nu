@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -133,16 +133,16 @@ export def "translate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-from: string # The language of the input text. For implementation help, refer to eBay API documentation
+  --from: string # The language of the input text. For implementation help, refer to eBay API documentation
   --text: list<string> # The input text.
-  --body-to: string # The language to use for the translation of th einput text. For implementation help, refer to eBay API documentation
+  --to: string # The language to use for the translation of th einput text. For implementation help, refer to eBay API documentation
   --translation-context: string # The context of the translation. For implementation help, refer to eBay API documentation
 ]: any -> record<translations: table<from: string, originalText: string, to: string, translatedText: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/translate" $auth.query)
-  let req_body = {"from": $body_from, "text": $text, "to": $body_to, "translationContext": $translation_context} | compact
+  let req_body = {"from": $from, "text": $text, "to": $to, "translationContext": $translation_context} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

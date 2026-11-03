@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -135,17 +135,19 @@ export def "reports-list-by-api" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter: string # The filter to apply on the operation.
+  --filter: string # The filter to apply on the operation. (required)
   --top: int # Number of records to return. (format: int32)
   --skip: int # Number of records to skip. (format: int32)
   --orderby: string # OData order by query option.
-  --api-version: string # Version of the API to be used with the client request.
+  --api-version: string # Version of the API to be used with the client request. (required)
 ]: nothing -> record<count: int, nextLink: string, value: table<apiId: string, apiRegion: string, apiTimeAvg: float, apiTimeMax: float, apiTimeMin: float, bandwidth: int, cacheHitCount: int, cacheMissCount: int, callCountBlocked: int, callCountFailed: int, callCountOther: int, callCountSuccess: int, callCountTotal: int, country: string, interval: string, name: string, operationId: string, productId: string, region: string, serviceTimeAvg: float, serviceTimeMax: float, serviceTimeMin: float, subscriptionId: string, timestamp: string, userId: string, zip: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
+  if ($filter == null) { error make --unspanned { msg: "required query parameter '$filter' missing: pass --filter" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ApiManagement/service/{service_name}/reports/byApi") $qp $auth.query)
   let accept_val = "application/json"
@@ -181,16 +183,18 @@ export def "reports-list-by-geo" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter: string # | Field | Usage | Supported operators | Supported functions ||-------------|-------------|-------------|-------------|| timestamp | filter | ge, le | | | country | select | | | | region | select | | | | zip | select | | | | apiRegion | filter | eq | | | userId | filter | eq | | | productId | filter | eq | | | subscriptionId | filter | eq | | | apiId | filter | eq | | | operationId | filter | eq | | | callCountSuccess | select | | | | callCountBlocked | select | | | | callCountFailed | select | | | | callCountOther | select | | | | bandwidth | select, orderBy | | | | cacheHitsCount | select | | | | cacheMissCount | select | | | | apiTimeAvg | select | | | | apiTimeMin | select | | | | apiTimeMax | select | | | | serviceTimeAvg | select | | | | serviceTimeMin | select | | | | serviceTimeMax | select | | |
+  --filter: string # | Field | Usage | Supported operators | Supported functions ||-------------|-------------|-------------|-------------|| timestamp | filter | ge, le | | | country | select | | | | region | select | | | | zip | select | | | | apiRegion | filter | eq | | | userId | filter | eq | | | productId | filter | eq | | | subscriptionId | filter | eq | | | apiId | filter | eq | | | operationId | filter | eq | | | callCountSuccess | select | | | | callCountBlocked | select | | | | callCountFailed | select | | | | callCountOther | select | | | | bandwidth | select, orderBy | | | | cacheHitsCount | select | | | | cacheMissCount | select | | | | apiTimeAvg | select | | | | apiTimeMin | select | | | | apiTimeMax | select | | | | serviceTimeAvg | select | | | | serviceTimeMin | select | | | | serviceTimeMax | select | | | (required)
   --top: int # Number of records to return. (format: int32)
   --skip: int # Number of records to skip. (format: int32)
-  --api-version: string # Version of the API to be used with the client request.
+  --api-version: string # Version of the API to be used with the client request. (required)
 ]: nothing -> record<count: int, nextLink: string, value: table<apiId: string, apiRegion: string, apiTimeAvg: float, apiTimeMax: float, apiTimeMin: float, bandwidth: int, cacheHitCount: int, cacheMissCount: int, callCountBlocked: int, callCountFailed: int, callCountOther: int, callCountSuccess: int, callCountTotal: int, country: string, interval: string, name: string, operationId: string, productId: string, region: string, serviceTimeAvg: float, serviceTimeMax: float, serviceTimeMin: float, subscriptionId: string, timestamp: string, userId: string, zip: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
+  if ($filter == null) { error make --unspanned { msg: "required query parameter '$filter' missing: pass --filter" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ApiManagement/service/{service_name}/reports/byGeo") $qp $auth.query)
   let accept_val = "application/json"
@@ -226,17 +230,19 @@ export def "reports-list-by-operation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter: string # | Field | Usage | Supported operators | Supported functions ||-------------|-------------|-------------|-------------|| timestamp | filter | ge, le | | | displayName | select, orderBy | | | | apiRegion | filter | eq | | | userId | filter | eq | | | productId | filter | eq | | | subscriptionId | filter | eq | | | apiId | filter | eq | | | operationId | select, filter | eq | | | callCountSuccess | select, orderBy | | | | callCountBlocked | select, orderBy | | | | callCountFailed | select, orderBy | | | | callCountOther | select, orderBy | | | | callCountTotal | select, orderBy | | | | bandwidth | select, orderBy | | | | cacheHitsCount | select | | | | cacheMissCount | select | | | | apiTimeAvg | select, orderBy | | | | apiTimeMin | select | | | | apiTimeMax | select | | | | serviceTimeAvg | select | | | | serviceTimeMin | select | | | | serviceTimeMax | select | | |
+  --filter: string # | Field | Usage | Supported operators | Supported functions ||-------------|-------------|-------------|-------------|| timestamp | filter | ge, le | | | displayName | select, orderBy | | | | apiRegion | filter | eq | | | userId | filter | eq | | | productId | filter | eq | | | subscriptionId | filter | eq | | | apiId | filter | eq | | | operationId | select, filter | eq | | | callCountSuccess | select, orderBy | | | | callCountBlocked | select, orderBy | | | | callCountFailed | select, orderBy | | | | callCountOther | select, orderBy | | | | callCountTotal | select, orderBy | | | | bandwidth | select, orderBy | | | | cacheHitsCount | select | | | | cacheMissCount | select | | | | apiTimeAvg | select, orderBy | | | | apiTimeMin | select | | | | apiTimeMax | select | | | | serviceTimeAvg | select | | | | serviceTimeMin | select | | | | serviceTimeMax | select | | | (required)
   --top: int # Number of records to return. (format: int32)
   --skip: int # Number of records to skip. (format: int32)
   --orderby: string # OData order by query option.
-  --api-version: string # Version of the API to be used with the client request.
+  --api-version: string # Version of the API to be used with the client request. (required)
 ]: nothing -> record<count: int, nextLink: string, value: table<apiId: string, apiRegion: string, apiTimeAvg: float, apiTimeMax: float, apiTimeMin: float, bandwidth: int, cacheHitCount: int, cacheMissCount: int, callCountBlocked: int, callCountFailed: int, callCountOther: int, callCountSuccess: int, callCountTotal: int, country: string, interval: string, name: string, operationId: string, productId: string, region: string, serviceTimeAvg: float, serviceTimeMax: float, serviceTimeMin: float, subscriptionId: string, timestamp: string, userId: string, zip: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
+  if ($filter == null) { error make --unspanned { msg: "required query parameter '$filter' missing: pass --filter" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ApiManagement/service/{service_name}/reports/byOperation") $qp $auth.query)
   let accept_val = "application/json"
@@ -272,17 +278,19 @@ export def "reports-list-by-product" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter: string # | Field | Usage | Supported operators | Supported functions ||-------------|-------------|-------------|-------------|| timestamp | filter | ge, le | | | displayName | select, orderBy | | | | apiRegion | filter | eq | | | userId | filter | eq | | | productId | select, filter | eq | | | subscriptionId | filter | eq | | | callCountSuccess | select, orderBy | | | | callCountBlocked | select, orderBy | | | | callCountFailed | select, orderBy | | | | callCountOther | select, orderBy | | | | callCountTotal | select, orderBy | | | | bandwidth | select, orderBy | | | | cacheHitsCount | select | | | | cacheMissCount | select | | | | apiTimeAvg | select, orderBy | | | | apiTimeMin | select | | | | apiTimeMax | select | | | | serviceTimeAvg | select | | | | serviceTimeMin | select | | | | serviceTimeMax | select | | |
+  --filter: string # | Field | Usage | Supported operators | Supported functions ||-------------|-------------|-------------|-------------|| timestamp | filter | ge, le | | | displayName | select, orderBy | | | | apiRegion | filter | eq | | | userId | filter | eq | | | productId | select, filter | eq | | | subscriptionId | filter | eq | | | callCountSuccess | select, orderBy | | | | callCountBlocked | select, orderBy | | | | callCountFailed | select, orderBy | | | | callCountOther | select, orderBy | | | | callCountTotal | select, orderBy | | | | bandwidth | select, orderBy | | | | cacheHitsCount | select | | | | cacheMissCount | select | | | | apiTimeAvg | select, orderBy | | | | apiTimeMin | select | | | | apiTimeMax | select | | | | serviceTimeAvg | select | | | | serviceTimeMin | select | | | | serviceTimeMax | select | | | (required)
   --top: int # Number of records to return. (format: int32)
   --skip: int # Number of records to skip. (format: int32)
   --orderby: string # OData order by query option.
-  --api-version: string # Version of the API to be used with the client request.
+  --api-version: string # Version of the API to be used with the client request. (required)
 ]: nothing -> record<count: int, nextLink: string, value: table<apiId: string, apiRegion: string, apiTimeAvg: float, apiTimeMax: float, apiTimeMin: float, bandwidth: int, cacheHitCount: int, cacheMissCount: int, callCountBlocked: int, callCountFailed: int, callCountOther: int, callCountSuccess: int, callCountTotal: int, country: string, interval: string, name: string, operationId: string, productId: string, region: string, serviceTimeAvg: float, serviceTimeMax: float, serviceTimeMin: float, subscriptionId: string, timestamp: string, userId: string, zip: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
+  if ($filter == null) { error make --unspanned { msg: "required query parameter '$filter' missing: pass --filter" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ApiManagement/service/{service_name}/reports/byProduct") $qp $auth.query)
   let accept_val = "application/json"
@@ -318,16 +326,18 @@ export def "reports-list-by-request" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter: string # | Field | Usage | Supported operators | Supported functions ||-------------|-------------|-------------|-------------|| timestamp | filter | ge, le | | | apiId | filter | eq | | | operationId | filter | eq | | | productId | filter | eq | | | userId | filter | eq | | | apiRegion | filter | eq | | | subscriptionId | filter | eq | |
+  --filter: string # | Field | Usage | Supported operators | Supported functions ||-------------|-------------|-------------|-------------|| timestamp | filter | ge, le | | | apiId | filter | eq | | | operationId | filter | eq | | | productId | filter | eq | | | userId | filter | eq | | | apiRegion | filter | eq | | | subscriptionId | filter | eq | | (required)
   --top: int # Number of records to return. (format: int32)
   --skip: int # Number of records to skip. (format: int32)
-  --api-version: string # Version of the API to be used with the client request.
+  --api-version: string # Version of the API to be used with the client request. (required)
 ]: nothing -> record<count: int, value: table<apiId: string, apiRegion: string, apiTime: float, backendResponseCode: string, cache: string, ipAddress: string, method: string, operationId: string, productId: string, requestId: string, requestSize: int, responseCode: int, responseSize: int, serviceTime: float, subscriptionId: string, timestamp: string, url: string, userId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
+  if ($filter == null) { error make --unspanned { msg: "required query parameter '$filter' missing: pass --filter" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ApiManagement/service/{service_name}/reports/byRequest") $qp $auth.query)
   let accept_val = "application/json"
@@ -363,17 +373,19 @@ export def "reports-list-by-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter: string # | Field | Usage | Supported operators | Supported functions ||-------------|-------------|-------------|-------------|| timestamp | filter | ge, le | | | displayName | select, orderBy | | | | apiRegion | filter | eq | | | userId | select, filter | eq | | | productId | select, filter | eq | | | subscriptionId | select, filter | eq | | | callCountSuccess | select, orderBy | | | | callCountBlocked | select, orderBy | | | | callCountFailed | select, orderBy | | | | callCountOther | select, orderBy | | | | callCountTotal | select, orderBy | | | | bandwidth | select, orderBy | | | | cacheHitsCount | select | | | | cacheMissCount | select | | | | apiTimeAvg | select, orderBy | | | | apiTimeMin | select | | | | apiTimeMax | select | | | | serviceTimeAvg | select | | | | serviceTimeMin | select | | | | serviceTimeMax | select | | |
+  --filter: string # | Field | Usage | Supported operators | Supported functions ||-------------|-------------|-------------|-------------|| timestamp | filter | ge, le | | | displayName | select, orderBy | | | | apiRegion | filter | eq | | | userId | select, filter | eq | | | productId | select, filter | eq | | | subscriptionId | select, filter | eq | | | callCountSuccess | select, orderBy | | | | callCountBlocked | select, orderBy | | | | callCountFailed | select, orderBy | | | | callCountOther | select, orderBy | | | | callCountTotal | select, orderBy | | | | bandwidth | select, orderBy | | | | cacheHitsCount | select | | | | cacheMissCount | select | | | | apiTimeAvg | select, orderBy | | | | apiTimeMin | select | | | | apiTimeMax | select | | | | serviceTimeAvg | select | | | | serviceTimeMin | select | | | | serviceTimeMax | select | | | (required)
   --top: int # Number of records to return. (format: int32)
   --skip: int # Number of records to skip. (format: int32)
   --orderby: string # OData order by query option.
-  --api-version: string # Version of the API to be used with the client request.
+  --api-version: string # Version of the API to be used with the client request. (required)
 ]: nothing -> record<count: int, nextLink: string, value: table<apiId: string, apiRegion: string, apiTimeAvg: float, apiTimeMax: float, apiTimeMin: float, bandwidth: int, cacheHitCount: int, cacheMissCount: int, callCountBlocked: int, callCountFailed: int, callCountOther: int, callCountSuccess: int, callCountTotal: int, country: string, interval: string, name: string, operationId: string, productId: string, region: string, serviceTimeAvg: float, serviceTimeMax: float, serviceTimeMin: float, subscriptionId: string, timestamp: string, userId: string, zip: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
+  if ($filter == null) { error make --unspanned { msg: "required query parameter '$filter' missing: pass --filter" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ApiManagement/service/{service_name}/reports/bySubscription") $qp $auth.query)
   let accept_val = "application/json"
@@ -409,18 +421,21 @@ export def "reports-list-by-time" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter: string # | Field | Usage | Supported operators | Supported functions ||-------------|-------------|-------------|-------------|| timestamp | filter, select | ge, le | | | interval | select | | | | apiRegion | filter | eq | | | userId | filter | eq | | | productId | filter | eq | | | subscriptionId | filter | eq | | | apiId | filter | eq | | | operationId | filter | eq | | | callCountSuccess | select | | | | callCountBlocked | select | | | | callCountFailed | select | | | | callCountOther | select | | | | bandwidth | select, orderBy | | | | cacheHitsCount | select | | | | cacheMissCount | select | | | | apiTimeAvg | select | | | | apiTimeMin | select | | | | apiTimeMax | select | | | | serviceTimeAvg | select | | | | serviceTimeMin | select | | | | serviceTimeMax | select | | |
+  --filter: string # | Field | Usage | Supported operators | Supported functions ||-------------|-------------|-------------|-------------|| timestamp | filter, select | ge, le | | | interval | select | | | | apiRegion | filter | eq | | | userId | filter | eq | | | productId | filter | eq | | | subscriptionId | filter | eq | | | apiId | filter | eq | | | operationId | filter | eq | | | callCountSuccess | select | | | | callCountBlocked | select | | | | callCountFailed | select | | | | callCountOther | select | | | | bandwidth | select, orderBy | | | | cacheHitsCount | select | | | | cacheMissCount | select | | | | apiTimeAvg | select | | | | apiTimeMin | select | | | | apiTimeMax | select | | | | serviceTimeAvg | select | | | | serviceTimeMin | select | | | | serviceTimeMax | select | | | (required)
   --top: int # Number of records to return. (format: int32)
   --skip: int # Number of records to skip. (format: int32)
   --orderby: string # OData order by query option.
-  --interval: string # By time interval. Interval must be multiple of 15 minutes and may not be zero. The value should be in ISO 8601 format (http://en.wikipedia.org/wiki/ISO_8601#Durations).This code can be used to convert TimeSpan to a valid interval string: XmlConvert.ToString(new TimeSpan(hours, minutes, seconds)). (format: duration)
-  --api-version: string # Version of the API to be used with the client request.
+  --interval: string # By time interval. Interval must be multiple of 15 minutes and may not be zero. The value should be in ISO 8601 format (http://en.wikipedia.org/wiki/ISO_8601#Durations).This code can be used to convert TimeSpan to a valid interval string: XmlConvert.ToString(new TimeSpan(hours, minutes, seconds)). (required, format: duration)
+  --api-version: string # Version of the API to be used with the client request. (required)
 ]: nothing -> record<count: int, nextLink: string, value: table<apiId: string, apiRegion: string, apiTimeAvg: float, apiTimeMax: float, apiTimeMin: float, bandwidth: int, cacheHitCount: int, cacheMissCount: int, callCountBlocked: int, callCountFailed: int, callCountOther: int, callCountSuccess: int, callCountTotal: int, country: string, interval: string, name: string, operationId: string, productId: string, region: string, serviceTimeAvg: float, serviceTimeMax: float, serviceTimeMin: float, subscriptionId: string, timestamp: string, userId: string, zip: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
+  if ($filter == null) { error make --unspanned { msg: "required query parameter '$filter' missing: pass --filter" } }
+  if ($interval == null) { error make --unspanned { msg: "required query parameter 'interval' missing: pass --interval" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ApiManagement/service/{service_name}/reports/byTime") $qp $auth.query)
   let accept_val = "application/json"
@@ -456,17 +471,19 @@ export def "reports-list-by-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter: string # | Field | Usage | Supported operators | Supported functions ||-------------|-------------|-------------|-------------|| timestamp | filter | ge, le | | | displayName | select, orderBy | | | | userId | select, filter | eq | | | apiRegion | filter | eq | | | productId | filter | eq | | | subscriptionId | filter | eq | | | apiId | filter | eq | | | operationId | filter | eq | | | callCountSuccess | select, orderBy | | | | callCountBlocked | select, orderBy | | | | callCountFailed | select, orderBy | | | | callCountOther | select, orderBy | | | | callCountTotal | select, orderBy | | | | bandwidth | select, orderBy | | | | cacheHitsCount | select | | | | cacheMissCount | select | | | | apiTimeAvg | select, orderBy | | | | apiTimeMin | select | | | | apiTimeMax | select | | | | serviceTimeAvg | select | | | | serviceTimeMin | select | | | | serviceTimeMax | select | | |
+  --filter: string # | Field | Usage | Supported operators | Supported functions ||-------------|-------------|-------------|-------------|| timestamp | filter | ge, le | | | displayName | select, orderBy | | | | userId | select, filter | eq | | | apiRegion | filter | eq | | | productId | filter | eq | | | subscriptionId | filter | eq | | | apiId | filter | eq | | | operationId | filter | eq | | | callCountSuccess | select, orderBy | | | | callCountBlocked | select, orderBy | | | | callCountFailed | select, orderBy | | | | callCountOther | select, orderBy | | | | callCountTotal | select, orderBy | | | | bandwidth | select, orderBy | | | | cacheHitsCount | select | | | | cacheMissCount | select | | | | apiTimeAvg | select, orderBy | | | | apiTimeMin | select | | | | apiTimeMax | select | | | | serviceTimeAvg | select | | | | serviceTimeMin | select | | | | serviceTimeMax | select | | | (required)
   --top: int # Number of records to return. (format: int32)
   --skip: int # Number of records to skip. (format: int32)
   --orderby: string # OData order by query option.
-  --api-version: string # Version of the API to be used with the client request.
+  --api-version: string # Version of the API to be used with the client request. (required)
 ]: nothing -> record<count: int, nextLink: string, value: table<apiId: string, apiRegion: string, apiTimeAvg: float, apiTimeMax: float, apiTimeMin: float, bandwidth: int, cacheHitCount: int, cacheMissCount: int, callCountBlocked: int, callCountFailed: int, callCountOther: int, callCountSuccess: int, callCountTotal: int, country: string, interval: string, name: string, operationId: string, productId: string, region: string, serviceTimeAvg: float, serviceTimeMax: float, serviceTimeMin: float, subscriptionId: string, timestamp: string, userId: string, zip: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($service_name | is-empty) { error make --unspanned { msg: "path parameter 'serviceName' must be non-empty" } }
+  if ($filter == null) { error make --unspanned { msg: "required query parameter '$filter' missing: pass --filter" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), service_name: (encode-path-segment $service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ApiManagement/service/{service_name}/reports/byUser") $qp $auth.query)
   let accept_val = "application/json"

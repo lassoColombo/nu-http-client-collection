@@ -99,6 +99,9 @@ def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: 
 def base-url-completer [] { ["https://phantauth.net"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def kind-completer [] { ["plain" "registration" "selfie"] }
+def kind-completer-1 [] { ["access" "authorization" "id" "plain" "refresh" "selfie"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -218,7 +221,7 @@ export def "get-client-client-id" [
 # GET /client/{client_id}/token/{kind}
 export def "get-client-client-id-token-kind" [
   client_id: string
-  kind: string
+  kind: string@kind-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -492,7 +495,7 @@ export def "get-user-username" [
 # GET /user/{username}/token/{kind}
 export def "get-user-username-token-kind" [
   username: string
-  kind: string
+  kind: string@kind-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

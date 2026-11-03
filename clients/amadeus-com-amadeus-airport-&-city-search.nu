@@ -134,24 +134,26 @@ export def "get-airport-city-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --sub-type: list<string> # sub type of the location (AIRPORT and/or CITY) (e.g. CITY)
-  --keyword: string # keyword that should represent the start of a word in a city or airport name or code. Supported charaters are: A-Za-z0-9./:-'()" (e.g. MUC)
+  --sub-type: list<string> # sub type of the location (AIRPORT and/or CITY) (required, e.g. CITY)
+  --keyword: string # keyword that should represent the start of a word in a city or airport name or code. Supported charaters are: A-Za-z0-9./:-'()" (required, e.g. MUC)
   --country-code: string # Country code of the location using [ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) code format (e.g. US).
   --page-limit: int # maximum items in one page (default: 10)
   --page-offset: int # start index of the requested page (default: 0)
-  --qp-sort: string@sort-completer # defines on which attribute the sorting will be done: * analytics.travelers.score - sort by the number of travelers by airport or city, the airports and cities with the highest traffic are on top of the results (default: analytics.travelers.score)
+  --sort: string@sort-completer # defines on which attribute the sorting will be done: * analytics.travelers.score - sort by the number of travelers by airport or city, the airports and cities with the highest traffic are on top of the results (default: analytics.travelers.score)
   --view: string@view-completer # select the level of information of the reply: * LIGHT - Gives only the IATACode, name, detailedName, cityName and countryName * FULL - Adds on top of the LIGHT information the timeZoneOffset, geocode, detailed address and travelers.score default option is FULL (default: FULL)
-]: nothing -> any {
+]: nothing -> record<data: table<address: record, analytics: record, category: string, detailedName: string, distance: record, geoCode: record, iataCode: string, id: string, name: string, rank: string, relevance: float, self: record, subType: string, tags: list, timeZoneOffset: string, type: string>, meta: record<count: int, links: record<first: string, last: string, next: string, previous: string, self: string, up: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "subType" $sub_type "csv") (serialize-qp "keyword" $keyword "scalar") (serialize-qp "countryCode" $country_code "scalar") (serialize-qp "page[limit]" $page_limit "scalar") (serialize-qp "page[offset]" $page_offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
+  if ($sub_type == null) { error make --unspanned { msg: "required query parameter 'subType' missing: pass --sub-type" } }
+  if ($keyword == null) { error make --unspanned { msg: "required query parameter 'keyword' missing: pass --keyword" } }
+  let qp = [(serialize-qp "subType" $sub_type "csv") (serialize-qp "keyword" $keyword "scalar") (serialize-qp "countryCode" $country_code "scalar") (serialize-qp "page[limit]" $page_limit "scalar") (serialize-qp "page[offset]" $page_offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reference-data/locations" $qp $auth.query)
   let accept_val = "application/vnd.amadeus+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"subType": $sub_type, "keyword": $keyword, "countryCode": $country_code, "page[limit]": $page_limit, "page[offset]": $page_offset, "sort": $qp_sort, "view": $view} | compact)
+    query: ({"subType": $sub_type, "keyword": $keyword, "countryCode": $country_code, "page[limit]": $page_limit, "page[offset]": $page_offset, "sort": $sort, "view": $view} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -177,7 +179,7 @@ export def "get-airport-city" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: record<address: record<cityCode: string, cityName: string, countryCode: string, countryName: string, regionCode: string, stateCode: string>, analytics: record<travelers: record>, category: string, detailedName: string, distance: record<unit: string, value: int>, geoCode: record<latitude: float, longitude: float>, iataCode: string, id: string, name: string, rank: string, relevance: float, self: record<count: int, href: string, methods: list>, subType: string, tags: list<string>, timeZoneOffset: string, type: string>, meta: record<count: int, links: record<first: string, last: string, next: string, previous: string, self: string, up: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'locationId' must be non-empty" } }

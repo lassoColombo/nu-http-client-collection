@@ -171,16 +171,19 @@ export def "opt-cap-program-in-price" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --wm-sec-access-token: string # The access token retrieved in the Token API call (e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
+  --wm-sec-access-token: string # The access token retrieved in the Token API call (required, e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
   --wm-consumer-channel-type: string # A unique ID to track the consumer request by channel. Use the Consumer Channel Type received during onboarding
-  --wm-qos-correlation-id: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
-  --wm-svc-name: string # Walmart Service Name (e.g. Walmart Service Name)
+  --wm-qos-correlation-id: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (required, e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
+  --wm-svc-name: string # Walmart Service Name (required, e.g. Walmart Service Name)
   --subsidy-enrolled: oneof<nothing, bool> # A Boolean parameter that allows all sellers to completely enroll in or out of the Competitive Price Adjustment program
   --subsidy-preference: oneof<nothing, bool> # A Boolean parameter that determines whether offer level subsidy setting override seller level subsidy setting
 ]: any -> record<martId: string, statusInfo: record<subsidyEnrolled: bool, subsidyPreference: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($wm_sec_access_token == null) { error make --unspanned { msg: "required header parameter 'WM_SEC.ACCESS_TOKEN' missing: pass --wm-sec-access-token" } }
+  if ($wm_qos_correlation_id == null) { error make --unspanned { msg: "required header parameter 'WM_QOS.CORRELATION_ID' missing: pass --wm-qos-correlation-id" } }
+  if ($wm_svc_name == null) { error make --unspanned { msg: "required header parameter 'WM_SVC.NAME' missing: pass --wm-svc-name" } }
   let full_url = (build-url $base "/v3/cppreference" $auth.query)
   let req_body = {"subsidyEnrolled": $subsidy_enrolled, "subsidyPreference": $subsidy_preference} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -217,16 +220,20 @@ export def "price-bulk-uploads" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --feed-type: string@feed-type-completer # The feed Type
-  --wm-sec-access-token: string # The access token retrieved in the Token API call (e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
+  --feed-type: string@feed-type-completer # The feed Type (required)
+  --wm-sec-access-token: string # The access token retrieved in the Token API call (required, e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
   --wm-consumer-channel-type: string # A unique ID to track the consumer request by channel. Use the Consumer Channel Type received during onboarding
-  --wm-qos-correlation-id: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
-  --wm-svc-name: string # Walmart Service Name (e.g. Walmart Service Name)
+  --wm-qos-correlation-id: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (required, e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
+  --wm-svc-name: string # Walmart Service Name (required, e.g. Walmart Service Name)
   file: string # Feed file to upload (format: binary)
 ]: any -> record<additionalAttributes: record, errors: record, feedId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($feed_type == null) { error make --unspanned { msg: "required query parameter 'feedType' missing: pass --feed-type" } }
+  if ($wm_sec_access_token == null) { error make --unspanned { msg: "required header parameter 'WM_SEC.ACCESS_TOKEN' missing: pass --wm-sec-access-token" } }
+  if ($wm_qos_correlation_id == null) { error make --unspanned { msg: "required header parameter 'WM_QOS.CORRELATION_ID' missing: pass --wm-qos-correlation-id" } }
+  if ($wm_svc_name == null) { error make --unspanned { msg: "required header parameter 'WM_SVC.NAME' missing: pass --wm-svc-name" } }
   let qp = [(serialize-qp "feedType" $feed_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/feeds" $qp $auth.query)
   let req_body = {"file": $file} | compact
@@ -235,8 +242,8 @@ export def "price-bulk-uploads" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"WM_SEC.ACCESS_TOKEN": $wm_sec_access_token, "WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id, "WM_SVC.NAME": $wm_svc_name} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -267,10 +274,10 @@ export def "update-price" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --wm-sec-access-token: string # The access token retrieved in the Token API call (e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
+  --wm-sec-access-token: string # The access token retrieved in the Token API call (required, e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
   --wm-consumer-channel-type: string # A unique ID to track the consumer request by channel. Use the Consumer Channel Type received during onboarding
-  --wm-qos-correlation-id: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
-  --wm-svc-name: string # Walmart Service Name (e.g. Walmart Service Name)
+  --wm-qos-correlation-id: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (required, e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
+  --wm-svc-name: string # Walmart Service Name (required, e.g. Walmart Service Name)
   --definitions: record
   --offer-id: string # This is applicable only for promotions
   pricing: list # item shape: {comparisonPrice?: record, comparisonPriceType?: "BASE", currentPrice: record, currentPriceType: "BASE"|"REDUCED"|"CLEARANCE", effectiveDate?: string, expirationDate?: string, priceDisplayCodes?: "CART"|"CHECKOUT", processMode?: "UPSERT"|"DELETE", promoId?: string}
@@ -280,6 +287,9 @@ export def "update-price" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($wm_sec_access_token == null) { error make --unspanned { msg: "required header parameter 'WM_SEC.ACCESS_TOKEN' missing: pass --wm-sec-access-token" } }
+  if ($wm_qos_correlation_id == null) { error make --unspanned { msg: "required header parameter 'WM_QOS.CORRELATION_ID' missing: pass --wm-qos-correlation-id" } }
+  if ($wm_svc_name == null) { error make --unspanned { msg: "required header parameter 'WM_SVC.NAME' missing: pass --wm-svc-name" } }
   let full_url = (build-url $base "/v3/price" $auth.query)
   let req_body = {"definitions": $definitions, "offerId": $offer_id, "pricing": $pricing, "replaceAll": $replace_all, "sku": $sku} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

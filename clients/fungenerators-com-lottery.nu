@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-fungenerators-api-secret" => { {scheme: $scheme, headers: {X-Fungenerators-Api-Secret: $token_val}, query: "", location: "header"} }
+    "x-fungenerators-api-secret" => { {scheme: $scheme, headers: {"X-Fungenerators-Api-Secret": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -168,11 +168,12 @@ export def "get-lottery-draw" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --game: string # Lottery Game Name (format: string)
+  --game: string # Lottery Game Name (required, format: string)
   --count: int # Number of draws (max 5 per request) (format: integer)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-fungenerators-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($game == null) { error make --unspanned { msg: "required query parameter 'game' missing: pass --game" } }
   let qp = [(serialize-qp "game" $game "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/lottery/draw" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -205,10 +206,11 @@ export def "get-lottery-supported" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --country: string # Country Name (format: string)
+  --country: string # Country Name (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-fungenerators-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
   let qp = [(serialize-qp "country" $country "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/lottery/supported" $qp $auth.query)
   let accept_val = ($accept | default "application/json")

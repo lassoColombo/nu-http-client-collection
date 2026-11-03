@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -117,6 +117,7 @@ def target-resolution-completer [] { ["P1D" "PT1H" "PT5M"] }
 def compute-platform-completer [] { ["AWSLambda" "Default"] }
 def order-by-completer [] { ["TimestampAscending" "TimestampDescending"] }
 def period-completer [] { ["P1D" "PT1H" "PT5M"] }
+def action-group-completer [] { ["agentPermissions"] }
 def type-completer [] { ["Negative" "Positive"] }
 
 # List all available API commands with their parameters
@@ -146,7 +147,7 @@ export def commands []: nothing -> table {
 #
 # POST /profilingGroups/{profilingGroupName}/notificationConfiguration
 # operationId: AddNotificationChannels
-# --channels item shape: {eventPublishers: any, id?: any, uri: any}
+# --channels item shape: {eventPublishers: list<string>, id?: string, uri: string}
 export def "add-notification-channels" [
   profiling_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -165,8 +166,8 @@ export def "add-notification-channels" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  channels: list # One or 2 channels to report to when anomalies are detected. — item shape: {eventPublishers: any, id?: any, uri: any}
-]: any -> record<notificationConfiguration: record<channels: record>> {
+  channels: list # One or 2 channels to report to when anomalies are detected. — item shape: {eventPublishers: list<string>, id?: string, uri: string}
+]: any -> record<notificationConfiguration: record<channels: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -214,7 +215,7 @@ export def "get-notification-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<notificationConfiguration: record<channels: record>> {
+]: nothing -> record<notificationConfiguration: record<channels: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($profiling_group_name | is-empty) { error make --unspanned { msg: "path parameter 'profilingGroupName' must be non-empty" } }
@@ -241,7 +242,7 @@ export def "get-notification-configuration" [
 #
 # POST /profilingGroups/{profilingGroupName}/frames/-/metrics
 # operationId: BatchGetFrameMetricData
-# --frameMetrics item shape: {frameName: any, threadStates: any, type: any}
+# --frameMetrics item shape: {frameName: string, threadStates: list<string>, type: "AggregatedRelativeTotalTime"}
 export def "batch-get-frame-metric-data" [
   profiling_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -264,8 +265,8 @@ export def "batch-get-frame-metric-data" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --frame-metrics: list # The details of the metrics that are used to request a time series of values. The metric includes the name of the frame, the aggregation type to calculate the metric value for the frame, and the thread states to use to get the count for the metric value of the frame. — item shape: {frameName: any, threadStates: any, type: any}
-]: any -> record<endTime: record, endTimes: record, frameMetricData: record, resolution: record, startTime: record, unprocessedEndTimes: record> {
+  --frame-metrics: list # The details of the metrics that are used to request a time series of values. The metric includes the name of the frame, the aggregation type to calculate the metric value for the frame, and the thread states to use to get the count for the metric value of the frame. — item shape: {frameName: string, threadStates: list<string>, type: "AggregatedRelativeTotalTime"}
+]: any -> record<endTime: string, endTimes: table<value: string>, frameMetricData: table<frameMetric: record, values: list>, resolution: string, startTime: string, unprocessedEndTimes: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -316,7 +317,7 @@ export def "configure-agent" [
   --x-amz-signed-headers: string
   --fleet-instance-id: string # A universally unique identifier (UUID) for a profiling instance. For example, if the profiling instance is an Amazon EC2 instance, it is the instance ID. If it is an AWS Fargate container, it is the container's task ID.
   --metadata: record # Metadata captured about the compute platform the agent is running on. It includes information about sampling and reporting. The valid fields are: COMPUTE_PLATFORM - The compute platform on which the agent is running AGENT_ID - The ID for an agent instance. AWS_REQUEST_ID - The AWS request ID of a Lambda invocation. EXECUTION_ENVIRONMENT - The execution environment a Lambda function is running on. LAMBDA_FUNCTION_ARN - The Amazon Resource Name (ARN) that is used to invoke a Lambda function. LAMBDA_MEMORY_LIMIT_IN_MB - The memory allocated to a Lambda function. LAMBDA_REMAINING_TIME_IN_MILLISECONDS - The time in milliseconds before execution of a Lambda function times out. LAMBDA_TIME_GAP_BETWEEN_INVOKES_IN_MILLISECONDS - The time in milliseconds between two invocations of a Lambda function. LAMBDA_PREVIOUS_EXECUTION_TIME_IN_MILLISECONDS - The time in milliseconds for the previous Lambda invocation.
-]: any -> record<configuration: record<agentParameters: record, periodInSeconds: record, shouldProfile: record>> {
+]: any -> record<configuration: record<agentParameters: record, periodInSeconds: int, shouldProfile: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -346,7 +347,7 @@ export def "configure-agent" [
 #
 # POST /profilingGroups
 # operationId: CreateProfilingGroup
-# --agentOrchestrationConfig shape: {profilingEnabled?: any}
+# --agentOrchestrationConfig shape: {profilingEnabled?: bool}
 export def "create-profiling-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -357,7 +358,7 @@ export def "create-profiling-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --client-token: string # Amazon CodeGuru Profiler uses this universally unique identifier (UUID) to prevent the accidental creation of duplicate profiling groups if there are failures and retries.
+  --client-token: string # Amazon CodeGuru Profiler uses this universally unique identifier (UUID) to prevent the accidental creation of duplicate profiling groups if there are failures and retries. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -365,14 +366,15 @@ export def "create-profiling-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --agent-orchestration-config: record # Specifies whether profiling is enabled or disabled for a profiling group. It is used by ConfigureAgent (https://docs.aws.amazon.com/codeguru/latest/profiler-api/API_ConfigureAgent.html) to enable or disable profiling for a profiling group. — shape: {profilingEnabled?: any}
+  --agent-orchestration-config: record # Specifies whether profiling is enabled or disabled for a profiling group. It is used by ConfigureAgent (https://docs.aws.amazon.com/codeguru/latest/profiler-api/API_ConfigureAgent.html) to enable or disable profiling for a profiling group. — shape: {profilingEnabled?: bool}
   --compute-platform: string@compute-platform-completer # The compute platform of the profiling group. Use AWSLambda if your application runs on AWS Lambda. Use Default if your application runs on a compute platform that is not AWS Lambda, such an Amazon EC2 instance, an on-premises server, or a different platform. If not specified, Default is used.
   profiling_group_name: string # The name of the profiling group to create.
   --tags: record # A list of tags to add to the created profiling group.
-]: any -> record<profilingGroup: record<agentOrchestrationConfig: record<profilingEnabled: record>, arn: record, computePlatform: record, createdAt: record, name: record, profilingStatus: record<latestAgentOrchestratedAt: record, latestAgentProfileReportedAt: record, latestAggregatedProfile: record>, tags: record, updatedAt: record>> {
+]: any -> record<profilingGroup: record<agentOrchestrationConfig: record<profilingEnabled: bool>, arn: string, computePlatform: string, createdAt: string, name: string, profilingStatus: record<latestAgentOrchestratedAt: string, latestAgentProfileReportedAt: string, latestAggregatedProfile: record>, tags: record, updatedAt: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($client_token == null) { error make --unspanned { msg: "required query parameter 'clientToken' missing: pass --client-token" } }
   let qp = [(serialize-qp "clientToken" $client_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/profilingGroups" $qp $auth.query)
   let req_body = {"agentOrchestrationConfig": $agent_orchestration_config, "computePlatform": $compute_platform, "profilingGroupName": $profiling_group_name, "tags": $tags} | compact
@@ -462,7 +464,7 @@ export def "describe-profiling-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<profilingGroup: record<agentOrchestrationConfig: record<profilingEnabled: record>, arn: record, computePlatform: record, createdAt: record, name: record, profilingStatus: record<latestAgentOrchestratedAt: record, latestAgentProfileReportedAt: record, latestAggregatedProfile: record>, tags: record, updatedAt: record>> {
+]: nothing -> record<profilingGroup: record<agentOrchestrationConfig: record<profilingEnabled: bool>, arn: string, computePlatform: string, createdAt: string, name: string, profilingStatus: record<latestAgentOrchestratedAt: string, latestAgentProfileReportedAt: string, latestAggregatedProfile: record>, tags: record, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($profiling_group_name | is-empty) { error make --unspanned { msg: "path parameter 'profilingGroupName' must be non-empty" } }
@@ -489,7 +491,7 @@ export def "describe-profiling-group" [
 #
 # PUT /profilingGroups/{profilingGroupName}
 # operationId: UpdateProfilingGroup
-# --agentOrchestrationConfig shape: {profilingEnabled?: any}
+# --agentOrchestrationConfig shape: {profilingEnabled?: bool}
 export def "update-profiling-group" [
   profiling_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -508,8 +510,8 @@ export def "update-profiling-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  agent_orchestration_config: record # Specifies whether profiling is enabled or disabled for a profiling group. It is used by ConfigureAgent (https://docs.aws.amazon.com/codeguru/latest/profiler-api/API_ConfigureAgent.html) to enable or disable profiling for a profiling group. — shape: {profilingEnabled?: any}
-]: any -> record<profilingGroup: record<agentOrchestrationConfig: record<profilingEnabled: record>, arn: record, computePlatform: record, createdAt: record, name: record, profilingStatus: record<latestAgentOrchestratedAt: record, latestAgentProfileReportedAt: record, latestAggregatedProfile: record>, tags: record, updatedAt: record>> {
+  agent_orchestration_config: record # Specifies whether profiling is enabled or disabled for a profiling group. It is used by ConfigureAgent (https://docs.aws.amazon.com/codeguru/latest/profiler-api/API_ConfigureAgent.html) to enable or disable profiling for a profiling group. — shape: {profilingEnabled?: bool}
+]: any -> record<profilingGroup: record<agentOrchestrationConfig: record<profilingEnabled: bool>, arn: string, computePlatform: string, createdAt: string, name: string, profilingStatus: record<latestAgentOrchestratedAt: string, latestAgentProfileReportedAt: string, latestAggregatedProfile: record>, tags: record, updatedAt: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -559,7 +561,7 @@ export def "get-findings-report-account-summary" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<nextToken: record, reportSummaries: record> {
+]: nothing -> record<nextToken: string, reportSummaries: table<id: string, profileEndTime: string, profileStartTime: string, profilingGroupName: string, totalNumberOfFindings: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dailyReportsOnly" $daily_reports_only "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -604,7 +606,7 @@ export def "get-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<policy: record, revisionId: record> {
+]: nothing -> record<policy: string, revisionId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($profiling_group_name | is-empty) { error make --unspanned { msg: "path parameter 'profilingGroupName' must be non-empty" } }
@@ -654,7 +656,7 @@ export def "get-profile" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --hdr-accept: string # The format of the returned profiling data. The format maps to the Accept and Content-Type headers of the HTTP request. You can specify one of the following: or the default . <ul> <li> <p> <code>application/json</code> — standard JSON format </p> </li> <li> <p> <code>application/x-amzn-ion</code> — the Amazon Ion data format. For more information, see <a href="http://amzn.github.io/ion-docs/">Amazon Ion</a>. </p> </li> </ul>
-]: nothing -> record<profile: record> {
+]: nothing -> record<profile: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($profiling_group_name | is-empty) { error make --unspanned { msg: "path parameter 'profilingGroupName' must be non-empty" } }
@@ -693,9 +695,9 @@ export def "get-recommendations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --end-time: string # The start time of the profile to get analysis data about. You must specify startTime and endTime. This is specified using the ISO 8601 format. For example, 2020-06-01T13:15:02.001Z represents 1 millisecond past June 1, 2020 1:15:02 PM UTC. (format: date-time)
+  --end-time: string # The start time of the profile to get analysis data about. You must specify startTime and endTime. This is specified using the ISO 8601 format. For example, 2020-06-01T13:15:02.001Z represents 1 millisecond past June 1, 2020 1:15:02 PM UTC. (required, format: date-time)
   --locale: string # The language used to provide analysis. Specify using a string that is one of the following BCP 47 language codes. de-DE - German, Germany en-GB - English, United Kingdom en-US - English, United States es-ES - Spanish, Spain fr-FR - French, France it-IT - Italian, Italy ja-JP - Japanese, Japan ko-KR - Korean, Republic of Korea pt-BR - Portugese, Brazil zh-CN - Chinese, China zh-TW - Chinese, Taiwan
-  --start-time: string # The end time of the profile to get analysis data about. You must specify startTime and endTime. This is specified using the ISO 8601 format. For example, 2020-06-01T13:15:02.001Z represents 1 millisecond past June 1, 2020 1:15:02 PM UTC. (format: date-time)
+  --start-time: string # The end time of the profile to get analysis data about. You must specify startTime and endTime. This is specified using the ISO 8601 format. For example, 2020-06-01T13:15:02.001Z represents 1 millisecond past June 1, 2020 1:15:02 PM UTC. (required, format: date-time)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -703,10 +705,12 @@ export def "get-recommendations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<anomalies: record, profileEndTime: record, profileStartTime: record, profilingGroupName: record, recommendations: record> {
+]: nothing -> record<anomalies: table<instances: list, metric: record, reason: string>, profileEndTime: string, profileStartTime: string, profilingGroupName: string, recommendations: table<allMatchesCount: int, allMatchesSum: float, endTime: string, pattern: record, startTime: string, topMatches: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($profiling_group_name | is-empty) { error make --unspanned { msg: "path parameter 'profilingGroupName' must be non-empty" } }
+  if ($end_time == null) { error make --unspanned { msg: "required query parameter 'endTime' missing: pass --end-time" } }
+  if ($start_time == null) { error make --unspanned { msg: "required query parameter 'startTime' missing: pass --start-time" } }
   let qp = [(serialize-qp "endTime" $end_time "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "startTime" $start_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({profiling_group_name: (encode-path-segment $profiling_group_name)} | format pattern "/internal/profilingGroups/{profiling_group_name}/recommendations") $qp $auth.query)
   let accept_val = "application/json"
@@ -743,10 +747,10 @@ export def "list-findings-reports" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --daily-reports-only: oneof<nothing, bool> # A Boolean value indicating whether to only return reports from daily profiles. If set to True, only analysis data from daily profiles is returned. If set to False, analysis data is returned from smaller time windows (for example, one hour).
-  --end-time: string # The end time of the profile to get analysis data about. You must specify startTime and endTime. This is specified using the ISO 8601 format. For example, 2020-06-01T13:15:02.001Z represents 1 millisecond past June 1, 2020 1:15:02 PM UTC. (format: date-time)
+  --end-time: string # The end time of the profile to get analysis data about. You must specify startTime and endTime. This is specified using the ISO 8601 format. For example, 2020-06-01T13:15:02.001Z represents 1 millisecond past June 1, 2020 1:15:02 PM UTC. (required, format: date-time)
   --max-results: int # The maximum number of report results returned by ListFindingsReports in paginated output. When this parameter is used, ListFindingsReports only returns maxResults results in a single page along with a nextToken response element. The remaining results of the initial request can be seen by sending another ListFindingsReports request with the returned nextToken value.
   --next-token: string # The nextToken value returned from a previous paginated ListFindingsReportsRequest request where maxResults was used and the results exceeded the value of that parameter. Pagination continues from the end of the previous results that returned the nextToken value. This token should be treated as an opaque identifier that is only used to retrieve the next items in a list and not for other programmatic purposes.
-  --start-time: string # The start time of the profile to get analysis data about. You must specify startTime and endTime. This is specified using the ISO 8601 format. For example, 2020-06-01T13:15:02.001Z represents 1 millisecond past June 1, 2020 1:15:02 PM UTC. (format: date-time)
+  --start-time: string # The start time of the profile to get analysis data about. You must specify startTime and endTime. This is specified using the ISO 8601 format. For example, 2020-06-01T13:15:02.001Z represents 1 millisecond past June 1, 2020 1:15:02 PM UTC. (required, format: date-time)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -754,10 +758,12 @@ export def "list-findings-reports" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<findingsReportSummaries: record, nextToken: record> {
+]: nothing -> record<findingsReportSummaries: table<id: string, profileEndTime: string, profileStartTime: string, profilingGroupName: string, totalNumberOfFindings: int>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($profiling_group_name | is-empty) { error make --unspanned { msg: "path parameter 'profilingGroupName' must be non-empty" } }
+  if ($end_time == null) { error make --unspanned { msg: "required query parameter 'endTime' missing: pass --end-time" } }
+  if ($start_time == null) { error make --unspanned { msg: "required query parameter 'startTime' missing: pass --start-time" } }
   let qp = [(serialize-qp "dailyReportsOnly" $daily_reports_only "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "startTime" $start_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({profiling_group_name: (encode-path-segment $profiling_group_name)} | format pattern "/internal/profilingGroups/{profiling_group_name}/findingsReports") $qp $auth.query)
   let accept_val = "application/json"
@@ -793,12 +799,12 @@ export def "list-profile-times" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --end-time: string # The end time of the time range from which to list the profiles. (format: date-time)
+  --end-time: string # The end time of the time range from which to list the profiles. (required, format: date-time)
   --max-results: int # The maximum number of profile time results returned by ListProfileTimes in paginated output. When this parameter is used, ListProfileTimes only returns maxResults results in a single page with a nextToken response element. The remaining results of the initial request can be seen by sending another ListProfileTimes request with the returned nextToken value.
   --next-token: string # The nextToken value returned from a previous paginated ListProfileTimes request where maxResults was used and the results exceeded the value of that parameter. Pagination continues from the end of the previous results that returned the nextToken value. This token should be treated as an opaque identifier that is only used to retrieve the next items in a list and not for other programmatic purposes.
   --order-by: string@order-by-completer # The order (ascending or descending by start time of the profile) to use when listing profiles. Defaults to TIMESTAMP_DESCENDING.
-  --period: string@period-completer # The aggregation period. This specifies the period during which an aggregation profile collects posted agent profiles for a profiling group. There are 3 valid values. P1D — 1 day PT1H — 1 hour PT5M — 5 minutes
-  --start-time: string # The start time of the time range from which to list the profiles. (format: date-time)
+  --period: string@period-completer # The aggregation period. This specifies the period during which an aggregation profile collects posted agent profiles for a profiling group. There are 3 valid values. P1D — 1 day PT1H — 1 hour PT5M — 5 minutes (required)
+  --start-time: string # The start time of the time range from which to list the profiles. (required, format: date-time)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -806,10 +812,13 @@ export def "list-profile-times" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<nextToken: record, profileTimes: record> {
+]: nothing -> record<nextToken: string, profileTimes: table<start: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($profiling_group_name | is-empty) { error make --unspanned { msg: "path parameter 'profilingGroupName' must be non-empty" } }
+  if ($end_time == null) { error make --unspanned { msg: "required query parameter 'endTime' missing: pass --end-time" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'period' missing: pass --period" } }
+  if ($start_time == null) { error make --unspanned { msg: "required query parameter 'startTime' missing: pass --start-time" } }
   let qp = [(serialize-qp "endTime" $end_time "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "period" $period "scalar") (serialize-qp "startTime" $start_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({profiling_group_name: (encode-path-segment $profiling_group_name)} | format pattern "/profilingGroups/{profiling_group_name}/profileTimes") $qp $auth.query)
   let accept_val = "application/json"
@@ -854,7 +863,7 @@ export def "list-profiling-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<nextToken: record, profilingGroupNames: record, profilingGroups: record> {
+]: nothing -> record<nextToken: string, profilingGroupNames: list<string>, profilingGroups: table<agentOrchestrationConfig: record, arn: string, computePlatform: string, createdAt: string, name: string, profilingStatus: record, tags: record, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "includeDescription" $include_description "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -994,7 +1003,7 @@ export def "post-agent-profile" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --content-type: string # The format of the submitted profiling data. The format maps to the Accept and Content-Type headers of the HTTP request. You can specify one of the following: or the default . <ul> <li> <p> <code>application/json</code> — standard JSON format </p> </li> <li> <p> <code>application/x-amzn-ion</code> — the Amazon Ion data format. For more information, see <a href="http://amzn.github.io/ion-docs/">Amazon Ion</a>. </p> </li> </ul>
+  --content-type: string # The format of the submitted profiling data. The format maps to the Accept and Content-Type headers of the HTTP request. You can specify one of the following: or the default . <ul> <li> <p> <code>application/json</code> — standard JSON format </p> </li> <li> <p> <code>application/x-amzn-ion</code> — the Amazon Ion data format. For more information, see <a href="http://amzn.github.io/ion-docs/">Amazon Ion</a>. </p> </li> </ul> (required)
   agent_profile: string # The submitted profiling data.
 ]: any -> any {
   let input = $in
@@ -1031,7 +1040,7 @@ export def "post-agent-profile" [
 # operationId: PutPermission
 export def "put-permission" [
   profiling_group_name: string
-  action_group: string
+  action_group: string@action-group-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1050,7 +1059,7 @@ export def "put-permission" [
   --x-amz-signed-headers: string
   principals: list<string> # A list ARNs for the roles and users you want to grant access to the profiling group. Wildcards are not are supported in the ARNs.
   --revision-id: string # A universally unique identifier (UUID) for the revision of the policy you are adding to the profiling group. Do not specify this when you add permissions to a profiling group for the first time. If a policy already exists on the profiling group, you must specify the revisionId.
-]: any -> record<policy: record, revisionId: record> {
+]: any -> record<policy: string, revisionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1100,7 +1109,7 @@ export def "remove-notification-channel" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<notificationConfiguration: record<channels: record>> {
+]: nothing -> record<notificationConfiguration: record<channels: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($profiling_group_name | is-empty) { error make --unspanned { msg: "path parameter 'profilingGroupName' must be non-empty" } }
@@ -1130,7 +1139,7 @@ export def "remove-notification-channel" [
 # operationId: RemovePermission
 export def "remove-permission" [
   profiling_group_name: string
-  action_group: string
+  action_group: string@action-group-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1140,7 +1149,7 @@ export def "remove-permission" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --revision-id: string # A universally unique identifier (UUID) for the revision of the resource-based policy from which you want to remove permissions.
+  --revision-id: string # A universally unique identifier (UUID) for the revision of the resource-based policy from which you want to remove permissions. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1148,11 +1157,12 @@ export def "remove-permission" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<policy: record, revisionId: record> {
+]: nothing -> record<policy: string, revisionId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($profiling_group_name | is-empty) { error make --unspanned { msg: "path parameter 'profilingGroupName' must be non-empty" } }
   if ($action_group | is-empty) { error make --unspanned { msg: "path parameter 'actionGroup' must be non-empty" } }
+  if ($revision_id == null) { error make --unspanned { msg: "required query parameter 'revisionId' missing: pass --revision-id" } }
   let qp = [(serialize-qp "revisionId" $revision_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({profiling_group_name: (encode-path-segment $profiling_group_name), action_group: (encode-path-segment $action_group)} | format pattern "/profilingGroups/{profiling_group_name}/policy/{action_group}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1240,7 +1250,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # A list of tag keys. Existing tags of resources with keys in this list are removed from the specified resource.
+  --tag-keys: list # A list of tag keys. Existing tags of resources with keys in this list are removed from the specified resource. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1252,6 +1262,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"

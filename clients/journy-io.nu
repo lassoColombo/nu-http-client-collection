@@ -600,10 +600,11 @@ export def "get-tracking-snippet" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain: string # The domain you want to receive a snippet for (format: domain)
+  --domain: string # The domain you want to receive a snippet for (required, format: domain)
 ]: nothing -> record<meta: record<requestId: string, status: float>, data: record<domain: string, snippet: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain == null) { error make --unspanned { msg: "required query parameter 'domain' missing: pass --domain" } }
   let qp = [(serialize-qp "domain" $domain "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tracking/snippet" $qp $auth.query)
   let accept_val = "application/json"

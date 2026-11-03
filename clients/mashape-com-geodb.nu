@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-rapidapi-key" => { {scheme: $scheme, headers: {x-rapidapi-key: $token_val}, query: "", location: "header"} }
+    "x-rapidapi-key" => { {scheme: $scheme, headers: {"x-rapidapi-key": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -147,19 +147,19 @@ export def "find-admin-divisions-using-get" [
   --language-code: string # Display results in this language
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
-  --qp-sort: string # How to sort places. Format: ±SORT_FIELD,±SORT_FIELD where SORT_FIELD = countryCode | elevation | name | population
+  --sort: string # How to sort places. Format: ±SORT_FIELD,±SORT_FIELD where SORT_FIELD = countryCode | elevation | name | population
   --include-deleted: string # Whether to include any divisions marked deleted: ALL | SINCE_YESTERDAY | SINCE_LAST_WEEK | NONE (default: NONE)
-]: nothing -> any {
+]: nothing -> record<errors: table<code: string, message: string>, links: table<href: string, rel: string>, metadata: record<currentOffset: int, totalCount: int>, data: table<country: string, countryCode: string, distance: float, id: int, latitude: float, longitude: float, name: string, population: int, region: string, regionCode: string, type: string, wikiDataId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "location" $location "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "countryIds" $country_ids "scalar") (serialize-qp "excludedCountryIds" $excluded_country_ids "scalar") (serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "location" $location "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "countryIds" $country_ids "scalar") (serialize-qp "excludedCountryIds" $excluded_country_ids "scalar") (serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/geo/adminDivisions" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"location": $location, "radius": $radius, "distanceUnit": $distance_unit, "countryIds": $country_ids, "excludedCountryIds": $excluded_country_ids, "minPopulation": $min_population, "maxPopulation": $max_population, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "timeZoneIds": $time_zone_ids, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $qp_sort, "includeDeleted": $include_deleted} | compact)
+    query: ({"location": $location, "radius": $radius, "distanceUnit": $distance_unit, "countryIds": $country_ids, "excludedCountryIds": $excluded_country_ids, "minPopulation": $min_population, "maxPopulation": $max_population, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "timeZoneIds": $time_zone_ids, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $sort, "includeDeleted": $include_deleted} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -187,7 +187,7 @@ export def "get-admin-division-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ascii-mode: oneof<nothing, bool> # Display results using ASCII characters (default: false)
   --language-code: string # Display results in this language
-]: nothing -> any {
+]: nothing -> record<errors: table<code: string, message: string>, data: record<country: string, countryCode: string, deleted: bool, elevationMeters: int, id: int, latitude: float, longitude: float, name: string, population: int, region: string, regionCode: string, timezone: string, type: string, wikiDataId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($division_id | is-empty) { error make --unspanned { msg: "path parameter 'divisionId' must be non-empty" } }
@@ -239,20 +239,20 @@ export def "find-cities-near-admin-division-using-get" [
   --language-code: string # Display results in this language
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
-  --qp-sort: string # How to sort places. Format: ±SORT_FIELD,±SORT_FIELD where SORT_FIELD = countryCode | elevation | name | population
+  --sort: string # How to sort places. Format: ±SORT_FIELD,±SORT_FIELD where SORT_FIELD = countryCode | elevation | name | population
   --include-deleted: string # Whether to include any divisions marked deleted: ALL | SINCE_YESTERDAY | SINCE_LAST_WEEK | NONE (default: NONE)
-]: nothing -> any {
+]: nothing -> record<errors: table<code: string, message: string>, links: table<href: string, rel: string>, metadata: record<currentOffset: int, totalCount: int>, data: table<country: string, countryCode: string, distance: float, id: int, latitude: float, longitude: float, name: string, population: int, region: string, regionCode: string, type: string, wikiDataId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($division_id | is-empty) { error make --unspanned { msg: "path parameter 'divisionId' must be non-empty" } }
-  let qp = [(serialize-qp "radius" $radius "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "countryIds" $country_ids "scalar") (serialize-qp "excludedCountryIds" $excluded_country_ids "scalar") (serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "radius" $radius "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "countryIds" $country_ids "scalar") (serialize-qp "excludedCountryIds" $excluded_country_ids "scalar") (serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({division_id: (encode-path-segment $division_id)} | format pattern "/geo/adminDivisions/{division_id}/nearbyCities") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"radius": $radius, "distanceUnit": $distance_unit, "countryIds": $country_ids, "excludedCountryIds": $excluded_country_ids, "minPopulation": $min_population, "maxPopulation": $max_population, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "timeZoneIds": $time_zone_ids, "types": $types, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $qp_sort, "includeDeleted": $include_deleted} | compact)
+    query: ({"radius": $radius, "distanceUnit": $distance_unit, "countryIds": $country_ids, "excludedCountryIds": $excluded_country_ids, "minPopulation": $min_population, "maxPopulation": $max_population, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "timeZoneIds": $time_zone_ids, "types": $types, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $sort, "includeDeleted": $include_deleted} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -292,20 +292,20 @@ export def "find-divisions-near-admin-division-using-get" [
   --language-code: string # Display results in this language
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
-  --qp-sort: string # How to sort places. Format: ±SORT_FIELD,±SORT_FIELD where SORT_FIELD = countryCode | elevation | name | population
+  --sort: string # How to sort places. Format: ±SORT_FIELD,±SORT_FIELD where SORT_FIELD = countryCode | elevation | name | population
   --include-deleted: string # Whether to include any divisions marked deleted: ALL | SINCE_YESTERDAY | SINCE_LAST_WEEK | NONE (default: NONE)
-]: nothing -> any {
+]: nothing -> record<errors: table<code: string, message: string>, links: table<href: string, rel: string>, metadata: record<currentOffset: int, totalCount: int>, data: table<country: string, countryCode: string, distance: float, id: int, latitude: float, longitude: float, name: string, population: int, region: string, regionCode: string, type: string, wikiDataId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($division_id | is-empty) { error make --unspanned { msg: "path parameter 'divisionId' must be non-empty" } }
-  let qp = [(serialize-qp "radius" $radius "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "countryIds" $country_ids "scalar") (serialize-qp "excludedCountryIds" $excluded_country_ids "scalar") (serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "radius" $radius "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "countryIds" $country_ids "scalar") (serialize-qp "excludedCountryIds" $excluded_country_ids "scalar") (serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({division_id: (encode-path-segment $division_id)} | format pattern "/geo/adminDivisions/{division_id}/nearbyDivisions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"radius": $radius, "distanceUnit": $distance_unit, "countryIds": $country_ids, "excludedCountryIds": $excluded_country_ids, "minPopulation": $min_population, "maxPopulation": $max_population, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "timeZoneIds": $time_zone_ids, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $qp_sort, "includeDeleted": $include_deleted} | compact)
+    query: ({"radius": $radius, "distanceUnit": $distance_unit, "countryIds": $country_ids, "excludedCountryIds": $excluded_country_ids, "minPopulation": $min_population, "maxPopulation": $max_population, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "timeZoneIds": $time_zone_ids, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $sort, "includeDeleted": $include_deleted} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -346,19 +346,19 @@ export def "find-cities-using-get" [
   --language-code: string # Display results in this language
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
-  --qp-sort: string # How to sort places. Format: ±SORT_FIELD,±SORT_FIELD where SORT_FIELD = countryCode | elevation | name | population
+  --sort: string # How to sort places. Format: ±SORT_FIELD,±SORT_FIELD where SORT_FIELD = countryCode | elevation | name | population
   --include-deleted: string # Whether to include any divisions marked deleted: ALL | SINCE_YESTERDAY | SINCE_LAST_WEEK | NONE (default: NONE)
-]: nothing -> any {
+]: nothing -> record<errors: table<code: string, message: string>, links: table<href: string, rel: string>, metadata: record<currentOffset: int, totalCount: int>, data: table<country: string, countryCode: string, distance: float, id: int, latitude: float, longitude: float, name: string, population: int, region: string, regionCode: string, type: string, wikiDataId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "location" $location "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "countryIds" $country_ids "scalar") (serialize-qp "excludedCountryIds" $excluded_country_ids "scalar") (serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "location" $location "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "countryIds" $country_ids "scalar") (serialize-qp "excludedCountryIds" $excluded_country_ids "scalar") (serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/geo/cities" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"location": $location, "radius": $radius, "distanceUnit": $distance_unit, "countryIds": $country_ids, "excludedCountryIds": $excluded_country_ids, "minPopulation": $min_population, "maxPopulation": $max_population, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "timeZoneIds": $time_zone_ids, "types": $types, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $qp_sort, "includeDeleted": $include_deleted} | compact)
+    query: ({"location": $location, "radius": $radius, "distanceUnit": $distance_unit, "countryIds": $country_ids, "excludedCountryIds": $excluded_country_ids, "minPopulation": $min_population, "maxPopulation": $max_population, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "timeZoneIds": $time_zone_ids, "types": $types, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $sort, "includeDeleted": $include_deleted} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -386,7 +386,7 @@ export def "get-city-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ascii-mode: oneof<nothing, bool> # Display results using ASCII characters (default: false)
   --language-code: string # Display results in this language
-]: nothing -> any {
+]: nothing -> record<errors: table<code: string, message: string>, data: record<country: string, countryCode: string, deleted: bool, elevationMeters: int, id: int, latitude: float, longitude: float, name: string, population: int, region: string, regionCode: string, timezone: string, type: string, wikiDataId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($city_id | is-empty) { error make --unspanned { msg: "path parameter 'cityId' must be non-empty" } }
@@ -423,7 +423,7 @@ export def "get-city-date-time-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<errors: table<code: string, message: string>, data: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($city_id | is-empty) { error make --unspanned { msg: "path parameter 'cityId' must be non-empty" } }
@@ -459,12 +459,13 @@ export def "get-city-distance-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --to-city-id: string # Distance to this city
+  --to-city-id: string # Distance to this city (required)
   --distance-unit: string # The unit of distance: MI | KM (default: MI)
-]: nothing -> any {
+]: nothing -> record<errors: table<code: string, message: string>, data: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($city_id | is-empty) { error make --unspanned { msg: "path parameter 'cityId' must be non-empty" } }
+  if ($to_city_id == null) { error make --unspanned { msg: "required query parameter 'toCityId' missing: pass --to-city-id" } }
   let qp = [(serialize-qp "toCityId" $to_city_id "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/geo/cities/{city_id}/distance") $qp $auth.query)
   let accept_val = "application/json"
@@ -500,7 +501,7 @@ export def "get-city-located-in-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ascii-mode: oneof<nothing, bool> # Display results using ASCII characters (default: false)
   --language-code: string # Display results in this language
-]: nothing -> any {
+]: nothing -> record<errors: table<code: string, message: string>, data: record<country: string, countryCode: string, deleted: bool, elevationMeters: int, id: int, latitude: float, longitude: float, name: string, population: int, region: string, regionCode: string, timezone: string, type: string, wikiDataId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($city_id | is-empty) { error make --unspanned { msg: "path parameter 'cityId' must be non-empty" } }
@@ -552,20 +553,20 @@ export def "find-cities-near-city-using-get" [
   --language-code: string # Display results in this language
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
-  --qp-sort: string # How to sort places. Format: ±SORT_FIELD,±SORT_FIELD where SORT_FIELD = countryCode | elevation | name | population
+  --sort: string # How to sort places. Format: ±SORT_FIELD,±SORT_FIELD where SORT_FIELD = countryCode | elevation | name | population
   --include-deleted: string # Whether to include any divisions marked deleted: ALL | SINCE_YESTERDAY | SINCE_LAST_WEEK | NONE (default: NONE)
-]: nothing -> any {
+]: nothing -> record<errors: table<code: string, message: string>, links: table<href: string, rel: string>, metadata: record<currentOffset: int, totalCount: int>, data: table<country: string, countryCode: string, distance: float, id: int, latitude: float, longitude: float, name: string, population: int, region: string, regionCode: string, type: string, wikiDataId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($city_id | is-empty) { error make --unspanned { msg: "path parameter 'cityId' must be non-empty" } }
-  let qp = [(serialize-qp "radius" $radius "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "countryIds" $country_ids "scalar") (serialize-qp "excludedCountryIds" $excluded_country_ids "scalar") (serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "radius" $radius "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "countryIds" $country_ids "scalar") (serialize-qp "excludedCountryIds" $excluded_country_ids "scalar") (serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/geo/cities/{city_id}/nearbyCities") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"radius": $radius, "distanceUnit": $distance_unit, "countryIds": $country_ids, "excludedCountryIds": $excluded_country_ids, "minPopulation": $min_population, "maxPopulation": $max_population, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "timeZoneIds": $time_zone_ids, "types": $types, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $qp_sort, "includeDeleted": $include_deleted} | compact)
+    query: ({"radius": $radius, "distanceUnit": $distance_unit, "countryIds": $country_ids, "excludedCountryIds": $excluded_country_ids, "minPopulation": $min_population, "maxPopulation": $max_population, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "timeZoneIds": $time_zone_ids, "types": $types, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $sort, "includeDeleted": $include_deleted} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -591,7 +592,7 @@ export def "get-city-time-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<errors: table<code: string, message: string>, data: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($city_id | is-empty) { error make --unspanned { msg: "path parameter 'cityId' must be non-empty" } }
@@ -634,18 +635,18 @@ export def "get-countries-using-get" [
   --language-code: string # Display results in this language
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
-  --qp-sort: string # How to sort countries. Format: ±SORT_FIELD where SORT_FIELD = code | name
-]: nothing -> any {
+  --sort: string # How to sort countries. Format: ±SORT_FIELD where SORT_FIELD = code | name
+]: nothing -> record<errors: table<code: string, message: string>, links: table<href: string, rel: string>, metadata: record<currentOffset: int, totalCount: int>, data: table<code: string, currencyCodes: list, name: string, wikiDataId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "currencyCode" $currency_code "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "currencyCode" $currency_code "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/geo/countries" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"currencyCode": $currency_code, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $qp_sort} | compact)
+    query: ({"currencyCode": $currency_code, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -673,7 +674,7 @@ export def "get-country-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ascii-mode: oneof<nothing, bool> # Display results using ASCII characters (default: false)
   --language-code: string # Display results in this language
-]: nothing -> any {
+]: nothing -> record<errors: table<code: string, message: string>, data: record<callingCode: string, code: string, currencyCodes: list<string>, flagImageUri: string, name: string, numRegions: int, wikiDataId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($country_id | is-empty) { error make --unspanned { msg: "path parameter 'countryId' must be non-empty" } }
@@ -717,19 +718,19 @@ export def "get-regions-using-get" [
   --language-code: string # Display results in this language
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
-  --qp-sort: string # How to sort regions. Format: ±SORT_FIELD where SORT_FIELD = fipsCode | isoCode | name
-]: nothing -> any {
+  --sort: string # How to sort regions. Format: ±SORT_FIELD where SORT_FIELD = fipsCode | isoCode | name
+]: nothing -> record<errors: table<code: string, message: string>, links: table<href: string, rel: string>, metadata: record<currentOffset: int, totalCount: int>, data: table<countryCode: string, fipsCode: string, isoCode: string, name: string, wikiDataId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($country_id | is-empty) { error make --unspanned { msg: "path parameter 'countryId' must be non-empty" } }
-  let qp = [(serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({country_id: (encode-path-segment $country_id)} | format pattern "/geo/countries/{country_id}/regions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $qp_sort} | compact)
+    query: ({"namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -758,7 +759,7 @@ export def "get-region-using-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ascii-mode: oneof<nothing, bool> # Display results using ASCII characters (default: false)
   --language-code: string # Display results in this language
-]: nothing -> any {
+]: nothing -> record<errors: table<code: string, message: string>, data: record<capital: string, countryCode: string, fipsCode: string, isoCode: string, name: string, numCities: int, wikiDataId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($country_id | is-empty) { error make --unspanned { msg: "path parameter 'countryId' must be non-empty" } }
@@ -807,21 +808,21 @@ export def "find-region-divisions-using-get" [
   --language-code: string # Display results in this language
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
-  --qp-sort: string # How to sort place results. 'Format: ±SORT_FIELD,±SORT_FIELD' where SORT_FIELD = elevation | name | population
+  --sort: string # How to sort place results. 'Format: ±SORT_FIELD,±SORT_FIELD' where SORT_FIELD = elevation | name | population
   --include-deleted: string # Whether to include any divisions marked deleted: ALL | SINCE_YESTERDAY | SINCE_LAST_WEEK | NONE (default: NONE)
-]: nothing -> any {
+]: nothing -> record<errors: table<code: string, message: string>, links: table<href: string, rel: string>, metadata: record<currentOffset: int, totalCount: int>, data: table<country: string, countryCode: string, distance: float, id: int, latitude: float, longitude: float, name: string, population: int, region: string, regionCode: string, type: string, wikiDataId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($country_id | is-empty) { error make --unspanned { msg: "path parameter 'countryId' must be non-empty" } }
   if ($region_code | is-empty) { error make --unspanned { msg: "path parameter 'regionCode' must be non-empty" } }
-  let qp = [(serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({country_id: (encode-path-segment $country_id), region_code: (encode-path-segment $region_code)} | format pattern "/geo/countries/{country_id}/regions/{region_code}/adminDivisions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"minPopulation": $min_population, "maxPopulation": $max_population, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "timeZoneIds": $time_zone_ids, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $qp_sort, "includeDeleted": $include_deleted} | compact)
+    query: ({"minPopulation": $min_population, "maxPopulation": $max_population, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "timeZoneIds": $time_zone_ids, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $sort, "includeDeleted": $include_deleted} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -859,21 +860,21 @@ export def "find-region-cities-using-get" [
   --language-code: string # Display results in this language
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
-  --qp-sort: string # How to sort place results. 'Format: ±SORT_FIELD,±SORT_FIELD' where SORT_FIELD = elevation | name | population
+  --sort: string # How to sort place results. 'Format: ±SORT_FIELD,±SORT_FIELD' where SORT_FIELD = elevation | name | population
   --include-deleted: string # Whether to include any divisions marked deleted: ALL | SINCE_YESTERDAY | SINCE_LAST_WEEK | NONE (default: NONE)
-]: nothing -> any {
+]: nothing -> record<errors: table<code: string, message: string>, links: table<href: string, rel: string>, metadata: record<currentOffset: int, totalCount: int>, data: table<country: string, countryCode: string, distance: float, id: int, latitude: float, longitude: float, name: string, population: int, region: string, regionCode: string, type: string, wikiDataId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($country_id | is-empty) { error make --unspanned { msg: "path parameter 'countryId' must be non-empty" } }
   if ($region_code | is-empty) { error make --unspanned { msg: "path parameter 'regionCode' must be non-empty" } }
-  let qp = [(serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({country_id: (encode-path-segment $country_id), region_code: (encode-path-segment $region_code)} | format pattern "/geo/countries/{country_id}/regions/{region_code}/cities") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"minPopulation": $min_population, "maxPopulation": $max_population, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "timeZoneIds": $time_zone_ids, "types": $types, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $qp_sort, "includeDeleted": $include_deleted} | compact)
+    query: ({"minPopulation": $min_population, "maxPopulation": $max_population, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "timeZoneIds": $time_zone_ids, "types": $types, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $sort, "includeDeleted": $include_deleted} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -914,20 +915,20 @@ export def "find-cities-near-location-using-get" [
   --language-code: string # Display results in this language
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
-  --qp-sort: string # How to sort places. Format: ±SORT_FIELD,±SORT_FIELD where SORT_FIELD = countryCode | elevation | name | population
+  --sort: string # How to sort places. Format: ±SORT_FIELD,±SORT_FIELD where SORT_FIELD = countryCode | elevation | name | population
   --include-deleted: string # Whether to include any divisions marked deleted: ALL | SINCE_YESTERDAY | SINCE_LAST_WEEK | NONE (default: NONE)
-]: nothing -> any {
+]: nothing -> record<errors: table<code: string, message: string>, links: table<href: string, rel: string>, metadata: record<currentOffset: int, totalCount: int>, data: table<country: string, countryCode: string, distance: float, id: int, latitude: float, longitude: float, name: string, population: int, region: string, regionCode: string, type: string, wikiDataId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'locationId' must be non-empty" } }
-  let qp = [(serialize-qp "radius" $radius "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "countryIds" $country_ids "scalar") (serialize-qp "excludedCountryIds" $excluded_country_ids "scalar") (serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "radius" $radius "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "countryIds" $country_ids "scalar") (serialize-qp "excludedCountryIds" $excluded_country_ids "scalar") (serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({location_id: (encode-path-segment $location_id)} | format pattern "/geo/locations/{location_id}/nearbyCities") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"radius": $radius, "distanceUnit": $distance_unit, "countryIds": $country_ids, "excludedCountryIds": $excluded_country_ids, "minPopulation": $min_population, "maxPopulation": $max_population, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "timeZoneIds": $time_zone_ids, "types": $types, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $qp_sort, "includeDeleted": $include_deleted} | compact)
+    query: ({"radius": $radius, "distanceUnit": $distance_unit, "countryIds": $country_ids, "excludedCountryIds": $excluded_country_ids, "minPopulation": $min_population, "maxPopulation": $max_population, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "timeZoneIds": $time_zone_ids, "types": $types, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $sort, "includeDeleted": $include_deleted} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -967,20 +968,20 @@ export def "find-divisions-near-location-using-get" [
   --language-code: string # Display results in this language
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
-  --qp-sort: string # How to sort places. Format: ±SORT_FIELD,±SORT_FIELD where SORT_FIELD = countryCode | elevation | name | population
+  --sort: string # How to sort places. Format: ±SORT_FIELD,±SORT_FIELD where SORT_FIELD = countryCode | elevation | name | population
   --include-deleted: string # Whether to include any divisions marked deleted: ALL | SINCE_YESTERDAY | SINCE_LAST_WEEK | NONE (default: NONE)
-]: nothing -> any {
+]: nothing -> record<errors: table<code: string, message: string>, links: table<href: string, rel: string>, metadata: record<currentOffset: int, totalCount: int>, data: table<country: string, countryCode: string, distance: float, id: int, latitude: float, longitude: float, name: string, population: int, region: string, regionCode: string, type: string, wikiDataId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'locationId' must be non-empty" } }
-  let qp = [(serialize-qp "radius" $radius "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "countryIds" $country_ids "scalar") (serialize-qp "excludedCountryIds" $excluded_country_ids "scalar") (serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "radius" $radius "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "countryIds" $country_ids "scalar") (serialize-qp "excludedCountryIds" $excluded_country_ids "scalar") (serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({location_id: (encode-path-segment $location_id)} | format pattern "/geo/locations/{location_id}/nearbyDivisions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"radius": $radius, "distanceUnit": $distance_unit, "countryIds": $country_ids, "excludedCountryIds": $excluded_country_ids, "minPopulation": $min_population, "maxPopulation": $max_population, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "timeZoneIds": $time_zone_ids, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $qp_sort, "includeDeleted": $include_deleted} | compact)
+    query: ({"radius": $radius, "distanceUnit": $distance_unit, "countryIds": $country_ids, "excludedCountryIds": $excluded_country_ids, "minPopulation": $min_population, "maxPopulation": $max_population, "namePrefix": $name_prefix, "namePrefixDefaultLangResults": $name_prefix_default_lang_results, "timeZoneIds": $time_zone_ids, "asciiMode": $ascii_mode, "hateoasMode": $hateoas_mode, "languageCode": $language_code, "limit": $limit, "offset": $offset, "sort": $sort, "includeDeleted": $include_deleted} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1005,13 +1006,14 @@ export def "get-currencies-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --country-id: string # Currencies for this country id
+  --country-id: string # Currencies for this country id (required)
   --hateoas-mode: oneof<nothing, bool> # Include HATEOAS-style links in results (default: true)
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
-]: nothing -> any {
+]: nothing -> record<errors: table<code: string, message: string>, links: table<href: string, rel: string>, metadata: record<currentOffset: int, totalCount: int>, data: table<code: string, countryCodes: list, symbol: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($country_id == null) { error make --unspanned { msg: "required query parameter 'countryId' missing: pass --country-id" } }
   let qp = [(serialize-qp "countryId" $country_id "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/locale/currencies" $qp $auth.query)
   let accept_val = "application/json"
@@ -1047,7 +1049,7 @@ export def "get-languages-using-get" [
   --hateoas-mode: oneof<nothing, bool> # Include HATEOAS-style links in results (default: true)
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
-]: nothing -> any {
+]: nothing -> record<errors: table<code: string, message: string>, links: table<href: string, rel: string>, metadata: record<currentOffset: int, totalCount: int>, data: table<code: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -1085,7 +1087,7 @@ export def "get-locales-using-get" [
   --hateoas-mode: oneof<nothing, bool> # Include HATEOAS-style links in results (default: true)
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
-]: nothing -> any {
+]: nothing -> record<errors: table<code: string, message: string>, links: table<href: string, rel: string>, metadata: record<currentOffset: int, totalCount: int>, data: table<code: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -1123,7 +1125,7 @@ export def "get-timezones-using-get" [
   --hateoas-mode: oneof<nothing, bool> # Include HATEOAS-style links in results (default: true)
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
-]: nothing -> any {
+]: nothing -> record<errors: table<code: string, message: string>, links: table<href: string, rel: string>, metadata: record<currentOffset: int, totalCount: int>, data: table<id: string, name: string, rawUtcOffsetHours: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -1159,7 +1161,7 @@ export def "get-time-zone-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<errors: table<code: string, message: string>, id: string, name: string, rawUtcOffsetHours: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($zone_id | is-empty) { error make --unspanned { msg: "path parameter 'zoneId' must be non-empty" } }
@@ -1195,7 +1197,7 @@ export def "get-time-zone-date-time-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<errors: table<code: string, message: string>, data: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($zone_id | is-empty) { error make --unspanned { msg: "path parameter 'zoneId' must be non-empty" } }
@@ -1231,7 +1233,7 @@ export def "get-time-zone-time-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<errors: table<code: string, message: string>, data: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
   let base = ($base_url | default $BASE_URL)
   if ($zone_id | is-empty) { error make --unspanned { msg: "path parameter 'zoneId' must be non-empty" } }

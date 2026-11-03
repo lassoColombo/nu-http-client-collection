@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -139,9 +139,12 @@ def x-amz-target-completer-39 [] { ["StarlingDoveService.DescribeRemediationConf
 def x-amz-target-completer-40 [] { ["StarlingDoveService.DescribeRemediationExceptions"] }
 def x-amz-target-completer-41 [] { ["StarlingDoveService.DescribeRemediationExecutionStatus"] }
 def x-amz-target-completer-42 [] { ["StarlingDoveService.DescribeRetentionConfigurations"] }
+def compliance-type-completer [] { ["COMPLIANT" "INSUFFICIENT_DATA" "NON_COMPLIANT" "NOT_APPLICABLE"] }
 def x-amz-target-completer-43 [] { ["StarlingDoveService.GetAggregateComplianceDetailsByConfigRule"] }
+def group-by-key-completer [] { ["ACCOUNT_ID" "AWS_REGION"] }
 def x-amz-target-completer-44 [] { ["StarlingDoveService.GetAggregateConfigRuleComplianceSummary"] }
 def x-amz-target-completer-45 [] { ["StarlingDoveService.GetAggregateConformancePackComplianceSummary"] }
+def group-by-key-completer-1 [] { ["ACCOUNT_ID" "AWS_REGION" "RESOURCE_TYPE"] }
 def x-amz-target-completer-46 [] { ["StarlingDoveService.GetAggregateDiscoveredResourceCounts"] }
 def x-amz-target-completer-47 [] { ["StarlingDoveService.GetAggregateResourceConfig"] }
 def x-amz-target-completer-48 [] { ["StarlingDoveService.GetComplianceDetailsByConfigRule"] }
@@ -155,10 +158,14 @@ def x-amz-target-completer-55 [] { ["StarlingDoveService.GetDiscoveredResourceCo
 def x-amz-target-completer-56 [] { ["StarlingDoveService.GetOrganizationConfigRuleDetailedStatus"] }
 def x-amz-target-completer-57 [] { ["StarlingDoveService.GetOrganizationConformancePackDetailedStatus"] }
 def x-amz-target-completer-58 [] { ["StarlingDoveService.GetOrganizationCustomRulePolicy"] }
+def resource-type-completer [] { ["AWS::ACM::Certificate" "AWS::AccessAnalyzer::Analyzer" "AWS::AmazonMQ::Broker" "AWS::ApiGateway::RestApi" "AWS::ApiGateway::Stage" "AWS::ApiGatewayV2::Api" "AWS::ApiGatewayV2::Stage" "AWS::AppConfig::Application" "AWS::AppConfig::ConfigurationProfile" "AWS::AppConfig::Environment" "AWS::AppStream::DirectoryConfig" "AWS::AppSync::GraphQLApi" "AWS::Athena::DataCatalog" "AWS::Athena::WorkGroup" "AWS::AutoScaling::AutoScalingGroup" "AWS::AutoScaling::LaunchConfiguration" "AWS::AutoScaling::ScalingPolicy" "AWS::AutoScaling::ScheduledAction" "AWS::AutoScaling::WarmPool" "AWS::Backup::BackupPlan" "AWS::Backup::BackupSelection" "AWS::Backup::BackupVault" "AWS::Backup::RecoveryPoint" "AWS::Backup::ReportPlan" "AWS::Batch::ComputeEnvironment" "AWS::Batch::JobQueue" "AWS::Budgets::BudgetsAction" "AWS::Cloud9::EnvironmentEC2" "AWS::CloudFormation::Stack" "AWS::CloudFront::Distribution" "AWS::CloudFront::StreamingDistribution" "AWS::CloudTrail::Trail" "AWS::CloudWatch::Alarm" "AWS::CodeBuild::Project" "AWS::CodeDeploy::Application" "AWS::CodeDeploy::DeploymentConfig" "AWS::CodeDeploy::DeploymentGroup" "AWS::CodeGuruReviewer::RepositoryAssociation" "AWS::CodePipeline::Pipeline" "AWS::Config::ConformancePackCompliance" "AWS::Config::ResourceCompliance" "AWS::Connect::PhoneNumber" "AWS::CustomerProfiles::Domain" "AWS::DMS::Certificate" "AWS::DMS::EventSubscription" "AWS::DMS::ReplicationSubnetGroup" "AWS::DataSync::LocationEFS" "AWS::DataSync::LocationFSxLustre" "AWS::DataSync::LocationFSxWindows" "AWS::DataSync::LocationHDFS" "AWS::DataSync::LocationNFS" "AWS::DataSync::LocationObjectStorage" "AWS::DataSync::LocationS3" "AWS::DataSync::LocationSMB" "AWS::DataSync::Task" "AWS::Detective::Graph" "AWS::DeviceFarm::TestGridProject" "AWS::DynamoDB::Table" "AWS::EC2::CustomerGateway" "AWS::EC2::DHCPOptions" "AWS::EC2::EIP" "AWS::EC2::EgressOnlyInternetGateway" "AWS::EC2::FlowLog" "AWS::EC2::Host" "AWS::EC2::IPAM" "AWS::EC2::Instance" "AWS::EC2::InternetGateway" "AWS::EC2::LaunchTemplate" "AWS::EC2::NatGateway" "AWS::EC2::NetworkAcl" "AWS::EC2::NetworkInsightsAccessScopeAnalysis" "AWS::EC2::NetworkInsightsPath" "AWS::EC2::NetworkInterface" "AWS::EC2::RegisteredHAInstance" "AWS::EC2::RouteTable" "AWS::EC2::SecurityGroup" "AWS::EC2::Subnet" "AWS::EC2::TrafficMirrorFilter" "AWS::EC2::TrafficMirrorSession" "AWS::EC2::TrafficMirrorTarget" "AWS::EC2::TransitGateway" "AWS::EC2::TransitGatewayAttachment" "AWS::EC2::TransitGatewayRouteTable" "AWS::EC2::VPC" "AWS::EC2::VPCEndpoint" "AWS::EC2::VPCEndpointService" "AWS::EC2::VPCPeeringConnection" "AWS::EC2::VPNConnection" "AWS::EC2::VPNGateway" "AWS::EC2::Volume" "AWS::ECR::PublicRepository" "AWS::ECR::RegistryPolicy" "AWS::ECR::Repository" "AWS::ECS::Cluster" "AWS::ECS::Service" "AWS::ECS::TaskDefinition" "AWS::EFS::AccessPoint" "AWS::EFS::FileSystem" "AWS::EKS::Addon" "AWS::EKS::Cluster" "AWS::EKS::FargateProfile" "AWS::EKS::IdentityProviderConfig" "AWS::EMR::SecurityConfiguration" "AWS::ElasticBeanstalk::Application" "AWS::ElasticBeanstalk::ApplicationVersion" "AWS::ElasticBeanstalk::Environment" "AWS::ElasticLoadBalancing::LoadBalancer" "AWS::ElasticLoadBalancingV2::Listener" "AWS::ElasticLoadBalancingV2::LoadBalancer" "AWS::Elasticsearch::Domain" "AWS::EventSchemas::Discoverer" "AWS::EventSchemas::Registry" "AWS::EventSchemas::RegistryPolicy" "AWS::EventSchemas::Schema" "AWS::Events::ApiDestination" "AWS::Events::Archive" "AWS::Events::Connection" "AWS::Events::Endpoint" "AWS::Events::EventBus" "AWS::Events::Rule" "AWS::FIS::ExperimentTemplate" "AWS::FraudDetector::EntityType" "AWS::FraudDetector::Label" "AWS::FraudDetector::Outcome" "AWS::FraudDetector::Variable" "AWS::GlobalAccelerator::Accelerator" "AWS::GlobalAccelerator::EndpointGroup" "AWS::GlobalAccelerator::Listener" "AWS::Glue::Classifier" "AWS::Glue::Job" "AWS::Glue::MLTransform" "AWS::GuardDuty::Detector" "AWS::GuardDuty::Filter" "AWS::GuardDuty::IPSet" "AWS::GuardDuty::ThreatIntelSet" "AWS::HealthLake::FHIRDatastore" "AWS::IAM::Group" "AWS::IAM::Policy" "AWS::IAM::Role" "AWS::IAM::User" "AWS::IVS::Channel" "AWS::IVS::PlaybackKeyPair" "AWS::IVS::RecordingConfiguration" "AWS::ImageBuilder::ContainerRecipe" "AWS::ImageBuilder::DistributionConfiguration" "AWS::ImageBuilder::InfrastructureConfiguration" "AWS::IoT::AccountAuditConfiguration" "AWS::IoT::Authorizer" "AWS::IoT::CustomMetric" "AWS::IoT::Dimension" "AWS::IoT::MitigationAction" "AWS::IoT::Policy" "AWS::IoT::RoleAlias" "AWS::IoT::ScheduledAudit" "AWS::IoT::SecurityProfile" "AWS::IoTAnalytics::Channel" "AWS::IoTAnalytics::Dataset" "AWS::IoTAnalytics::Datastore" "AWS::IoTAnalytics::Pipeline" "AWS::IoTEvents::AlarmModel" "AWS::IoTEvents::DetectorModel" "AWS::IoTEvents::Input" "AWS::IoTSiteWise::AssetModel" "AWS::IoTSiteWise::Dashboard" "AWS::IoTSiteWise::Gateway" "AWS::IoTSiteWise::Portal" "AWS::IoTSiteWise::Project" "AWS::IoTTwinMaker::Entity" "AWS::IoTTwinMaker::Scene" "AWS::IoTTwinMaker::Workspace" "AWS::KMS::Key" "AWS::Kinesis::Stream" "AWS::Kinesis::StreamConsumer" "AWS::KinesisAnalyticsV2::Application" "AWS::KinesisVideo::SignalingChannel" "AWS::Lambda::Function" "AWS::Lex::Bot" "AWS::Lex::BotAlias" "AWS::Lightsail::Bucket" "AWS::Lightsail::Certificate" "AWS::Lightsail::Disk" "AWS::Lightsail::StaticIp" "AWS::LookoutMetrics::Alert" "AWS::LookoutVision::Project" "AWS::MSK::Cluster" "AWS::MediaPackage::PackagingConfiguration" "AWS::MediaPackage::PackagingGroup" "AWS::NetworkFirewall::Firewall" "AWS::NetworkFirewall::FirewallPolicy" "AWS::NetworkFirewall::RuleGroup" "AWS::NetworkManager::TransitGatewayRegistration" "AWS::OpenSearch::Domain" "AWS::Pinpoint::ApplicationSettings" "AWS::Pinpoint::Segment" "AWS::QLDB::Ledger" "AWS::RDS::DBCluster" "AWS::RDS::DBClusterSnapshot" "AWS::RDS::DBInstance" "AWS::RDS::DBSecurityGroup" "AWS::RDS::DBSnapshot" "AWS::RDS::DBSubnetGroup" "AWS::RDS::EventSubscription" "AWS::RDS::GlobalCluster" "AWS::RUM::AppMonitor" "AWS::Redshift::Cluster" "AWS::Redshift::ClusterParameterGroup" "AWS::Redshift::ClusterSecurityGroup" "AWS::Redshift::ClusterSnapshot" "AWS::Redshift::ClusterSubnetGroup" "AWS::Redshift::EventSubscription" "AWS::ResilienceHub::ResiliencyPolicy" "AWS::RoboMaker::RobotApplication" "AWS::RoboMaker::RobotApplicationVersion" "AWS::RoboMaker::SimulationApplication" "AWS::Route53::HostedZone" "AWS::Route53RecoveryControl::Cluster" "AWS::Route53RecoveryControl::ControlPanel" "AWS::Route53RecoveryControl::RoutingControl" "AWS::Route53RecoveryControl::SafetyRule" "AWS::Route53RecoveryReadiness::Cell" "AWS::Route53RecoveryReadiness::ReadinessCheck" "AWS::Route53RecoveryReadiness::RecoveryGroup" "AWS::Route53RecoveryReadiness::ResourceSet" "AWS::Route53Resolver::FirewallDomainList" "AWS::Route53Resolver::ResolverEndpoint" "AWS::Route53Resolver::ResolverRule" "AWS::Route53Resolver::ResolverRuleAssociation" "AWS::S3::AccountPublicAccessBlock" "AWS::S3::Bucket" "AWS::S3::MultiRegionAccessPoint" "AWS::S3::StorageLens" "AWS::SES::ConfigurationSet" "AWS::SES::ContactList" "AWS::SES::ReceiptFilter" "AWS::SES::ReceiptRuleSet" "AWS::SES::Template" "AWS::SNS::Topic" "AWS::SQS::Queue" "AWS::SSM::AssociationCompliance" "AWS::SSM::FileData" "AWS::SSM::ManagedInstanceInventory" "AWS::SSM::PatchCompliance" "AWS::SageMaker::CodeRepository" "AWS::SageMaker::Model" "AWS::SageMaker::NotebookInstanceLifecycleConfig" "AWS::SageMaker::Workteam" "AWS::SecretsManager::Secret" "AWS::ServiceCatalog::CloudFormationProduct" "AWS::ServiceCatalog::CloudFormationProvisionedProduct" "AWS::ServiceCatalog::Portfolio" "AWS::ServiceDiscovery::HttpNamespace" "AWS::ServiceDiscovery::PublicDnsNamespace" "AWS::ServiceDiscovery::Service" "AWS::Shield::Protection" "AWS::ShieldRegional::Protection" "AWS::StepFunctions::Activity" "AWS::StepFunctions::StateMachine" "AWS::Transfer::Workflow" "AWS::WAF::RateBasedRule" "AWS::WAF::Rule" "AWS::WAF::RuleGroup" "AWS::WAF::WebACL" "AWS::WAFRegional::RateBasedRule" "AWS::WAFRegional::Rule" "AWS::WAFRegional::RuleGroup" "AWS::WAFRegional::WebACL" "AWS::WAFv2::IPSet" "AWS::WAFv2::ManagedRuleSet" "AWS::WAFv2::RegexPatternSet" "AWS::WAFv2::RuleGroup" "AWS::WAFv2::WebACL" "AWS::WorkSpaces::ConnectionAlias" "AWS::WorkSpaces::Workspace" "AWS::XRay::EncryptionConfig"] }
+def chronological-order-completer [] { ["Forward" "Reverse"] }
 def x-amz-target-completer-59 [] { ["StarlingDoveService.GetResourceConfigHistory"] }
 def x-amz-target-completer-60 [] { ["StarlingDoveService.GetResourceEvaluationSummary"] }
 def x-amz-target-completer-61 [] { ["StarlingDoveService.GetStoredQuery"] }
 def x-amz-target-completer-62 [] { ["StarlingDoveService.ListAggregateDiscoveredResources"] }
+def sort-order-completer [] { ["ASCENDING" "DESCENDING"] }
+def sort-by-completer [] { ["SCORE"] }
 def x-amz-target-completer-63 [] { ["StarlingDoveService.ListConformancePackComplianceScores"] }
 def x-amz-target-completer-64 [] { ["StarlingDoveService.ListDiscoveredResources"] }
 def x-amz-target-completer-65 [] { ["StarlingDoveService.ListResourceEvaluations"] }
@@ -184,6 +191,7 @@ def x-amz-target-completer-84 [] { ["StarlingDoveService.SelectResourceConfig"] 
 def x-amz-target-completer-85 [] { ["StarlingDoveService.StartConfigRulesEvaluation"] }
 def x-amz-target-completer-86 [] { ["StarlingDoveService.StartConfigurationRecorder"] }
 def x-amz-target-completer-87 [] { ["StarlingDoveService.StartRemediationExecution"] }
+def evaluation-mode-completer [] { ["DETECTIVE" "PROACTIVE"] }
 def x-amz-target-completer-88 [] { ["StarlingDoveService.StartResourceEvaluation"] }
 def x-amz-target-completer-89 [] { ["StarlingDoveService.StopConfigurationRecorder"] }
 def x-amz-target-completer-90 [] { ["StarlingDoveService.TagResource"] }
@@ -216,6 +224,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: BatchGetAggregateResourceConfig
+# --ResourceIdentifiers item shape: {SourceAccountId: string, SourceRegion: string, ResourceId: string, ... (2 more fields)}
 export def "batch-get-aggregate-resource-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -233,13 +242,14 @@ export def "batch-get-aggregate-resource-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  configuration_aggregator_name: any
-  resource_identifiers: any
-]: any -> record<BaseConfigurationItems: record, UnprocessedResourceIdentifiers: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  configuration_aggregator_name: string # The name of the configuration aggregator.
+  resource_identifiers: list # A list of aggregate ResourceIdentifiers objects. — item shape: {SourceAccountId: string, SourceRegion: string, ResourceId: string, ... (2 more fields)}
+]: any -> record<BaseConfigurationItems: table<version: string, accountId: string, configurationItemCaptureTime: string, configurationItemStatus: string, configurationStateId: string, arn: string, resourceType: string, resourceId: string, resourceName: string, awsRegion: string, availabilityZone: string, resourceCreationTime: string, configuration: string, supplementaryConfiguration: record>, UnprocessedResourceIdentifiers: table<SourceAccountId: string, SourceRegion: string, ResourceId: string, ResourceType: string, ResourceName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.BatchGetAggregateResourceConfig")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "ResourceIdentifiers": $resource_identifiers} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -265,6 +275,7 @@ export def "batch-get-aggregate-resource-config" [
 #
 # POST /
 # operationId: BatchGetResourceConfig
+# --resourceKeys item shape: {resourceType: "AWS::EC2::CustomerGateway"|"AWS::EC2::EIP"|"AWS::EC2::Host"|"AWS::EC2::Instance"|"AWS::EC2::InternetGateway"|"AWS::EC2::NetworkAcl"|"AWS::EC2::NetworkInterface"|"AWS::EC2::RouteTable"|"AWS::EC2::SecurityGroup"|"AWS::EC2::Subnet"|"AWS::CloudTrail::Trail"|"AWS::EC2::Volume"|"AWS::EC2::VPC"|"AWS::EC2::VPNConnection"|"AWS::EC2::VPNGateway"|"AWS::EC2::RegisteredHAInstance"|"AWS::EC2::NatGateway"|"AWS::EC2::EgressOnlyInternetGateway"|"AWS::EC2::VPCEndpoint"|"AWS::EC2::VPCEndpointService"|"AWS::EC2::FlowLog"|"AWS::EC2::VPCPeeringConnection"|"AWS::Elasticsearch::Domain"|"AWS::IAM::Group"|"AWS::IAM::Policy"|"AWS::IAM::Role"|"AWS::IAM::User"|"AWS::ElasticLoadBalancingV2::LoadBalancer"|"AWS::ACM::Certificate"|"AWS::RDS::DBInstance"|"AWS::RDS::DBSubnetGroup"|"AWS::RDS::DBSecurityGroup"|"AWS::RDS::DBSnapshot"|"AWS::RDS::DBCluster"|"AWS::RDS::DBClusterSnapshot"|"AWS::RDS::EventSubscription"|"AWS::S3::Bucket"|"AWS::S3::AccountPublicAccessBlock"|"AWS::Redshift::Cluster"|"AWS::Redshift::ClusterSnapshot"|"AWS::Redshift::ClusterParameterGroup"|"AWS::Redshift::ClusterSecurityGroup"|"AWS::Redshift::ClusterSubnetGroup"|"AWS::Redshift::EventSubscription"|"AWS::SSM::ManagedInstanceInventory"|"AWS::CloudWatch::Alarm"|"AWS::CloudFormation::Stack"|"AWS::ElasticLoadBalancing::LoadBalancer"|"AWS::AutoScaling::AutoScalingGroup"|"AWS::AutoScaling::LaunchConfiguration"|"AWS::AutoScaling::ScalingPolicy"|"AWS::AutoScaling::ScheduledAction"|"AWS::DynamoDB::Table"|"AWS::CodeBuild::Project"|"AWS::WAF::RateBasedRule"|"AWS::WAF::Rule"|"AWS::WAF::RuleGroup"|"AWS::WAF::WebACL"|"AWS::WAFRegional::RateBasedRule"|"AWS::WAFRegional::Rule"|"AWS::WAFRegional::RuleGroup"|"AWS::WAFRegional::WebACL"|"AWS::CloudFront::Distribution"|"AWS::CloudFront::StreamingDistribution"|"AWS::Lambda::Function"|"AWS::NetworkFirewall::Firewall"|"AWS::NetworkFirewall::FirewallPolicy"|"AWS::NetworkFirewall::RuleGroup"|"AWS::ElasticBeanstalk::Application"|"AWS::ElasticBeanstalk::ApplicationVersion"|"AWS::ElasticBeanstalk::Environment"|"AWS::WAFv2::WebACL"|"AWS::WAFv2::RuleGroup"|"AWS::WAFv2::IPSet"|"AWS::WAFv2::RegexPatternSet"|"AWS::WAFv2::ManagedRuleSet"|"AWS::XRay::EncryptionConfig"|"AWS::SSM::AssociationCompliance"|"AWS::SSM::PatchCompliance"|"AWS::Shield::Protection"|"AWS::ShieldRegional::Protection"|"AWS::Config::ConformancePackCompliance"|"AWS::Config::ResourceCompliance"|"AWS::ApiGateway::Stage"|"AWS::ApiGateway::RestApi"|"AWS::ApiGatewayV2::Stage"|"AWS::ApiGatewayV2::Api"|"AWS::CodePipeline::Pipeline"|"AWS::ServiceCatalog::CloudFormationProvisionedProduct"|"AWS::ServiceCatalog::CloudFormationProduct"|"AWS::ServiceCatalog::Portfolio"|"AWS::SQS::Queue"|"AWS::KMS::Key"|"AWS::QLDB::Ledger"|"AWS::SecretsManager::Secret"|"AWS::SNS::Topic"|"AWS::SSM::FileData"|"AWS::Backup::BackupPlan"|"AWS::Backup::BackupSelection"|"AWS::Backup::BackupVault"|"AWS::Backup::RecoveryPoint"|"AWS::ECR::Repository"|"AWS::ECS::Cluster"|"AWS::ECS::Service"|"AWS::ECS::TaskDefinition"|"AWS::EFS::AccessPoint"|"AWS::EFS::FileSystem"|"AWS::EKS::Cluster"|"AWS::OpenSearch::Domain"|"AWS::EC2::TransitGateway"|"AWS::Kinesis::Stream"|"AWS::Kinesis::StreamConsumer"|"AWS::CodeDeploy::Application"|"AWS::CodeDeploy::DeploymentConfig"|"AWS::CodeDeploy::DeploymentGroup"|"AWS::EC2::LaunchTemplate"|"AWS::ECR::PublicRepository"|"AWS::GuardDuty::Detector"|"AWS::EMR::SecurityConfiguration"|"AWS::SageMaker::CodeRepository"|"AWS::Route53Resolver::ResolverEndpoint"|"AWS::Route53Resolver::ResolverRule"|"AWS::Route53Resolver::ResolverRuleAssociation"|"AWS::DMS::ReplicationSubnetGroup"|"AWS::DMS::EventSubscription"|"AWS::MSK::Cluster"|"AWS::StepFunctions::Activity"|"AWS::WorkSpaces::Workspace"|"AWS::WorkSpaces::ConnectionAlias"|"AWS::SageMaker::Model"|"AWS::ElasticLoadBalancingV2::Listener"|"AWS::StepFunctions::StateMachine"|"AWS::Batch::JobQueue"|"AWS::Batch::ComputeEnvironment"|"AWS::AccessAnalyzer::Analyzer"|"AWS::Athena::WorkGroup"|"AWS::Athena::DataCatalog"|"AWS::Detective::Graph"|"AWS::GlobalAccelerator::Accelerator"|"AWS::GlobalAccelerator::EndpointGroup"|"AWS::GlobalAccelerator::Listener"|"AWS::EC2::TransitGatewayAttachment"|"AWS::EC2::TransitGatewayRouteTable"|"AWS::DMS::Certificate"|"AWS::AppConfig::Application"|"AWS::AppSync::GraphQLApi"|"AWS::DataSync::LocationSMB"|"AWS::DataSync::LocationFSxLustre"|"AWS::DataSync::LocationS3"|"AWS::DataSync::LocationEFS"|"AWS::DataSync::Task"|"AWS::DataSync::LocationNFS"|"AWS::EC2::NetworkInsightsAccessScopeAnalysis"|"AWS::EKS::FargateProfile"|"AWS::Glue::Job"|"AWS::GuardDuty::ThreatIntelSet"|"AWS::GuardDuty::IPSet"|"AWS::SageMaker::Workteam"|"AWS::SageMaker::NotebookInstanceLifecycleConfig"|"AWS::ServiceDiscovery::Service"|"AWS::ServiceDiscovery::PublicDnsNamespace"|"AWS::SES::ContactList"|"AWS::SES::ConfigurationSet"|"AWS::Route53::HostedZone"|"AWS::IoTEvents::Input"|"AWS::IoTEvents::DetectorModel"|"AWS::IoTEvents::AlarmModel"|"AWS::ServiceDiscovery::HttpNamespace"|"AWS::Events::EventBus"|"AWS::ImageBuilder::ContainerRecipe"|"AWS::ImageBuilder::DistributionConfiguration"|"AWS::ImageBuilder::InfrastructureConfiguration"|"AWS::DataSync::LocationObjectStorage"|"AWS::DataSync::LocationHDFS"|"AWS::Glue::Classifier"|"AWS::Route53RecoveryReadiness::Cell"|"AWS::Route53RecoveryReadiness::ReadinessCheck"|"AWS::ECR::RegistryPolicy"|"AWS::Backup::ReportPlan"|"AWS::Lightsail::Certificate"|"AWS::RUM::AppMonitor"|"AWS::Events::Endpoint"|"AWS::SES::ReceiptRuleSet"|"AWS::Events::Archive"|"AWS::Events::ApiDestination"|"AWS::Lightsail::Disk"|"AWS::FIS::ExperimentTemplate"|"AWS::DataSync::LocationFSxWindows"|"AWS::SES::ReceiptFilter"|"AWS::GuardDuty::Filter"|"AWS::SES::Template"|"AWS::AmazonMQ::Broker"|"AWS::AppConfig::Environment"|"AWS::AppConfig::ConfigurationProfile"|"AWS::Cloud9::EnvironmentEC2"|"AWS::EventSchemas::Registry"|"AWS::EventSchemas::RegistryPolicy"|"AWS::EventSchemas::Discoverer"|"AWS::FraudDetector::Label"|"AWS::FraudDetector::EntityType"|"AWS::FraudDetector::Variable"|"AWS::FraudDetector::Outcome"|"AWS::IoT::Authorizer"|"AWS::IoT::SecurityProfile"|"AWS::IoT::RoleAlias"|"AWS::IoT::Dimension"|"AWS::IoTAnalytics::Datastore"|"AWS::Lightsail::Bucket"|"AWS::Lightsail::StaticIp"|"AWS::MediaPackage::PackagingGroup"|"AWS::Route53RecoveryReadiness::RecoveryGroup"|"AWS::ResilienceHub::ResiliencyPolicy"|"AWS::Transfer::Workflow"|"AWS::EKS::IdentityProviderConfig"|"AWS::EKS::Addon"|"AWS::Glue::MLTransform"|"AWS::IoT::Policy"|"AWS::IoT::MitigationAction"|"AWS::IoTTwinMaker::Workspace"|"AWS::IoTTwinMaker::Entity"|"AWS::IoTAnalytics::Dataset"|"AWS::IoTAnalytics::Pipeline"|"AWS::IoTAnalytics::Channel"|"AWS::IoTSiteWise::Dashboard"|"AWS::IoTSiteWise::Project"|"AWS::IoTSiteWise::Portal"|"AWS::IoTSiteWise::AssetModel"|"AWS::IVS::Channel"|"AWS::IVS::RecordingConfiguration"|"AWS::IVS::PlaybackKeyPair"|"AWS::KinesisAnalyticsV2::Application"|"AWS::RDS::GlobalCluster"|"AWS::S3::MultiRegionAccessPoint"|"AWS::DeviceFarm::TestGridProject"|"AWS::Budgets::BudgetsAction"|"AWS::Lex::Bot"|"AWS::CodeGuruReviewer::RepositoryAssociation"|"AWS::IoT::CustomMetric"|"AWS::Route53Resolver::FirewallDomainList"|"AWS::RoboMaker::RobotApplicationVersion"|"AWS::EC2::TrafficMirrorSession"|"AWS::IoTSiteWise::Gateway"|"AWS::Lex::BotAlias"|"AWS::LookoutMetrics::Alert"|"AWS::IoT::AccountAuditConfiguration"|"AWS::EC2::TrafficMirrorTarget"|"AWS::S3::StorageLens"|"AWS::IoT::ScheduledAudit"|"AWS::Events::Connection"|"AWS::EventSchemas::Schema"|"AWS::MediaPackage::PackagingConfiguration"|"AWS::KinesisVideo::SignalingChannel"|"AWS::AppStream::DirectoryConfig"|"AWS::LookoutVision::Project"|"AWS::Route53RecoveryControl::Cluster"|"AWS::Route53RecoveryControl::SafetyRule"|"AWS::Route53RecoveryControl::ControlPanel"|"AWS::Route53RecoveryControl::RoutingControl"|"AWS::Route53RecoveryReadiness::ResourceSet"|"AWS::RoboMaker::SimulationApplication"|"AWS::RoboMaker::RobotApplication"|"AWS::HealthLake::FHIRDatastore"|"AWS::Pinpoint::Segment"|"AWS::Pinpoint::ApplicationSettings"|"AWS::Events::Rule"|"AWS::EC2::DHCPOptions"|"AWS::EC2::NetworkInsightsPath"|"AWS::EC2::TrafficMirrorFilter"|"AWS::EC2::IPAM"|"AWS::IoTTwinMaker::Scene"|"AWS::NetworkManager::TransitGatewayRegistration"|"AWS::CustomerProfiles::Domain"|"AWS::AutoScaling::WarmPool"|"AWS::Connect::PhoneNumber", ... (1 more fields)}
 export def "batch-get-resource-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -282,12 +293,13 @@ export def "batch-get-resource-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  resource_keys: any
-]: any -> record<baseConfigurationItems: record, unprocessedResourceKeys: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  resource_keys: list # A list of resource keys to be processed with the current request. Each element in the list consists of the resource type and resource ID. — item shape: {resourceType: "AWS::EC2::CustomerGateway"|"AWS::EC2::EIP"|"AWS::EC2::Host"|"AWS::EC2::Instance"|"AWS::EC2::InternetGateway"|"AWS::EC2::NetworkAcl"|"AWS::EC2::NetworkInterface"|"AWS::EC2::RouteTable"|"AWS::EC2::SecurityGroup"|"AWS::EC2::Subnet"|"AWS::CloudTrail::Trail"|"AWS::EC2::Volume"|"AWS::EC2::VPC"|"AWS::EC2::VPNConnection"|"AWS::EC2::VPNGateway"|"AWS::EC2::RegisteredHAInstance"|"AWS::EC2::NatGateway"|"AWS::EC2::EgressOnlyInternetGateway"|"AWS::EC2::VPCEndpoint"|"AWS::EC2::VPCEndpointService"|"AWS::EC2::FlowLog"|"AWS::EC2::VPCPeeringConnection"|"AWS::Elasticsearch::Domain"|"AWS::IAM::Group"|"AWS::IAM::Policy"|"AWS::IAM::Role"|"AWS::IAM::User"|"AWS::ElasticLoadBalancingV2::LoadBalancer"|"AWS::ACM::Certificate"|"AWS::RDS::DBInstance"|"AWS::RDS::DBSubnetGroup"|"AWS::RDS::DBSecurityGroup"|"AWS::RDS::DBSnapshot"|"AWS::RDS::DBCluster"|"AWS::RDS::DBClusterSnapshot"|"AWS::RDS::EventSubscription"|"AWS::S3::Bucket"|"AWS::S3::AccountPublicAccessBlock"|"AWS::Redshift::Cluster"|"AWS::Redshift::ClusterSnapshot"|"AWS::Redshift::ClusterParameterGroup"|"AWS::Redshift::ClusterSecurityGroup"|"AWS::Redshift::ClusterSubnetGroup"|"AWS::Redshift::EventSubscription"|"AWS::SSM::ManagedInstanceInventory"|"AWS::CloudWatch::Alarm"|"AWS::CloudFormation::Stack"|"AWS::ElasticLoadBalancing::LoadBalancer"|"AWS::AutoScaling::AutoScalingGroup"|"AWS::AutoScaling::LaunchConfiguration"|"AWS::AutoScaling::ScalingPolicy"|"AWS::AutoScaling::ScheduledAction"|"AWS::DynamoDB::Table"|"AWS::CodeBuild::Project"|"AWS::WAF::RateBasedRule"|"AWS::WAF::Rule"|"AWS::WAF::RuleGroup"|"AWS::WAF::WebACL"|"AWS::WAFRegional::RateBasedRule"|"AWS::WAFRegional::Rule"|"AWS::WAFRegional::RuleGroup"|"AWS::WAFRegional::WebACL"|"AWS::CloudFront::Distribution"|"AWS::CloudFront::StreamingDistribution"|"AWS::Lambda::Function"|"AWS::NetworkFirewall::Firewall"|"AWS::NetworkFirewall::FirewallPolicy"|"AWS::NetworkFirewall::RuleGroup"|"AWS::ElasticBeanstalk::Application"|"AWS::ElasticBeanstalk::ApplicationVersion"|"AWS::ElasticBeanstalk::Environment"|"AWS::WAFv2::WebACL"|"AWS::WAFv2::RuleGroup"|"AWS::WAFv2::IPSet"|"AWS::WAFv2::RegexPatternSet"|"AWS::WAFv2::ManagedRuleSet"|"AWS::XRay::EncryptionConfig"|"AWS::SSM::AssociationCompliance"|"AWS::SSM::PatchCompliance"|"AWS::Shield::Protection"|"AWS::ShieldRegional::Protection"|"AWS::Config::ConformancePackCompliance"|"AWS::Config::ResourceCompliance"|"AWS::ApiGateway::Stage"|"AWS::ApiGateway::RestApi"|"AWS::ApiGatewayV2::Stage"|"AWS::ApiGatewayV2::Api"|"AWS::CodePipeline::Pipeline"|"AWS::ServiceCatalog::CloudFormationProvisionedProduct"|"AWS::ServiceCatalog::CloudFormationProduct"|"AWS::ServiceCatalog::Portfolio"|"AWS::SQS::Queue"|"AWS::KMS::Key"|"AWS::QLDB::Ledger"|"AWS::SecretsManager::Secret"|"AWS::SNS::Topic"|"AWS::SSM::FileData"|"AWS::Backup::BackupPlan"|"AWS::Backup::BackupSelection"|"AWS::Backup::BackupVault"|"AWS::Backup::RecoveryPoint"|"AWS::ECR::Repository"|"AWS::ECS::Cluster"|"AWS::ECS::Service"|"AWS::ECS::TaskDefinition"|"AWS::EFS::AccessPoint"|"AWS::EFS::FileSystem"|"AWS::EKS::Cluster"|"AWS::OpenSearch::Domain"|"AWS::EC2::TransitGateway"|"AWS::Kinesis::Stream"|"AWS::Kinesis::StreamConsumer"|"AWS::CodeDeploy::Application"|"AWS::CodeDeploy::DeploymentConfig"|"AWS::CodeDeploy::DeploymentGroup"|"AWS::EC2::LaunchTemplate"|"AWS::ECR::PublicRepository"|"AWS::GuardDuty::Detector"|"AWS::EMR::SecurityConfiguration"|"AWS::SageMaker::CodeRepository"|"AWS::Route53Resolver::ResolverEndpoint"|"AWS::Route53Resolver::ResolverRule"|"AWS::Route53Resolver::ResolverRuleAssociation"|"AWS::DMS::ReplicationSubnetGroup"|"AWS::DMS::EventSubscription"|"AWS::MSK::Cluster"|"AWS::StepFunctions::Activity"|"AWS::WorkSpaces::Workspace"|"AWS::WorkSpaces::ConnectionAlias"|"AWS::SageMaker::Model"|"AWS::ElasticLoadBalancingV2::Listener"|"AWS::StepFunctions::StateMachine"|"AWS::Batch::JobQueue"|"AWS::Batch::ComputeEnvironment"|"AWS::AccessAnalyzer::Analyzer"|"AWS::Athena::WorkGroup"|"AWS::Athena::DataCatalog"|"AWS::Detective::Graph"|"AWS::GlobalAccelerator::Accelerator"|"AWS::GlobalAccelerator::EndpointGroup"|"AWS::GlobalAccelerator::Listener"|"AWS::EC2::TransitGatewayAttachment"|"AWS::EC2::TransitGatewayRouteTable"|"AWS::DMS::Certificate"|"AWS::AppConfig::Application"|"AWS::AppSync::GraphQLApi"|"AWS::DataSync::LocationSMB"|"AWS::DataSync::LocationFSxLustre"|"AWS::DataSync::LocationS3"|"AWS::DataSync::LocationEFS"|"AWS::DataSync::Task"|"AWS::DataSync::LocationNFS"|"AWS::EC2::NetworkInsightsAccessScopeAnalysis"|"AWS::EKS::FargateProfile"|"AWS::Glue::Job"|"AWS::GuardDuty::ThreatIntelSet"|"AWS::GuardDuty::IPSet"|"AWS::SageMaker::Workteam"|"AWS::SageMaker::NotebookInstanceLifecycleConfig"|"AWS::ServiceDiscovery::Service"|"AWS::ServiceDiscovery::PublicDnsNamespace"|"AWS::SES::ContactList"|"AWS::SES::ConfigurationSet"|"AWS::Route53::HostedZone"|"AWS::IoTEvents::Input"|"AWS::IoTEvents::DetectorModel"|"AWS::IoTEvents::AlarmModel"|"AWS::ServiceDiscovery::HttpNamespace"|"AWS::Events::EventBus"|"AWS::ImageBuilder::ContainerRecipe"|"AWS::ImageBuilder::DistributionConfiguration"|"AWS::ImageBuilder::InfrastructureConfiguration"|"AWS::DataSync::LocationObjectStorage"|"AWS::DataSync::LocationHDFS"|"AWS::Glue::Classifier"|"AWS::Route53RecoveryReadiness::Cell"|"AWS::Route53RecoveryReadiness::ReadinessCheck"|"AWS::ECR::RegistryPolicy"|"AWS::Backup::ReportPlan"|"AWS::Lightsail::Certificate"|"AWS::RUM::AppMonitor"|"AWS::Events::Endpoint"|"AWS::SES::ReceiptRuleSet"|"AWS::Events::Archive"|"AWS::Events::ApiDestination"|"AWS::Lightsail::Disk"|"AWS::FIS::ExperimentTemplate"|"AWS::DataSync::LocationFSxWindows"|"AWS::SES::ReceiptFilter"|"AWS::GuardDuty::Filter"|"AWS::SES::Template"|"AWS::AmazonMQ::Broker"|"AWS::AppConfig::Environment"|"AWS::AppConfig::ConfigurationProfile"|"AWS::Cloud9::EnvironmentEC2"|"AWS::EventSchemas::Registry"|"AWS::EventSchemas::RegistryPolicy"|"AWS::EventSchemas::Discoverer"|"AWS::FraudDetector::Label"|"AWS::FraudDetector::EntityType"|"AWS::FraudDetector::Variable"|"AWS::FraudDetector::Outcome"|"AWS::IoT::Authorizer"|"AWS::IoT::SecurityProfile"|"AWS::IoT::RoleAlias"|"AWS::IoT::Dimension"|"AWS::IoTAnalytics::Datastore"|"AWS::Lightsail::Bucket"|"AWS::Lightsail::StaticIp"|"AWS::MediaPackage::PackagingGroup"|"AWS::Route53RecoveryReadiness::RecoveryGroup"|"AWS::ResilienceHub::ResiliencyPolicy"|"AWS::Transfer::Workflow"|"AWS::EKS::IdentityProviderConfig"|"AWS::EKS::Addon"|"AWS::Glue::MLTransform"|"AWS::IoT::Policy"|"AWS::IoT::MitigationAction"|"AWS::IoTTwinMaker::Workspace"|"AWS::IoTTwinMaker::Entity"|"AWS::IoTAnalytics::Dataset"|"AWS::IoTAnalytics::Pipeline"|"AWS::IoTAnalytics::Channel"|"AWS::IoTSiteWise::Dashboard"|"AWS::IoTSiteWise::Project"|"AWS::IoTSiteWise::Portal"|"AWS::IoTSiteWise::AssetModel"|"AWS::IVS::Channel"|"AWS::IVS::RecordingConfiguration"|"AWS::IVS::PlaybackKeyPair"|"AWS::KinesisAnalyticsV2::Application"|"AWS::RDS::GlobalCluster"|"AWS::S3::MultiRegionAccessPoint"|"AWS::DeviceFarm::TestGridProject"|"AWS::Budgets::BudgetsAction"|"AWS::Lex::Bot"|"AWS::CodeGuruReviewer::RepositoryAssociation"|"AWS::IoT::CustomMetric"|"AWS::Route53Resolver::FirewallDomainList"|"AWS::RoboMaker::RobotApplicationVersion"|"AWS::EC2::TrafficMirrorSession"|"AWS::IoTSiteWise::Gateway"|"AWS::Lex::BotAlias"|"AWS::LookoutMetrics::Alert"|"AWS::IoT::AccountAuditConfiguration"|"AWS::EC2::TrafficMirrorTarget"|"AWS::S3::StorageLens"|"AWS::IoT::ScheduledAudit"|"AWS::Events::Connection"|"AWS::EventSchemas::Schema"|"AWS::MediaPackage::PackagingConfiguration"|"AWS::KinesisVideo::SignalingChannel"|"AWS::AppStream::DirectoryConfig"|"AWS::LookoutVision::Project"|"AWS::Route53RecoveryControl::Cluster"|"AWS::Route53RecoveryControl::SafetyRule"|"AWS::Route53RecoveryControl::ControlPanel"|"AWS::Route53RecoveryControl::RoutingControl"|"AWS::Route53RecoveryReadiness::ResourceSet"|"AWS::RoboMaker::SimulationApplication"|"AWS::RoboMaker::RobotApplication"|"AWS::HealthLake::FHIRDatastore"|"AWS::Pinpoint::Segment"|"AWS::Pinpoint::ApplicationSettings"|"AWS::Events::Rule"|"AWS::EC2::DHCPOptions"|"AWS::EC2::NetworkInsightsPath"|"AWS::EC2::TrafficMirrorFilter"|"AWS::EC2::IPAM"|"AWS::IoTTwinMaker::Scene"|"AWS::NetworkManager::TransitGatewayRegistration"|"AWS::CustomerProfiles::Domain"|"AWS::AutoScaling::WarmPool"|"AWS::Connect::PhoneNumber", ... (1 more fields)}
+]: any -> record<baseConfigurationItems: table<version: string, accountId: string, configurationItemCaptureTime: string, configurationItemStatus: string, configurationStateId: string, arn: string, resourceType: string, resourceId: string, resourceName: string, awsRegion: string, availabilityZone: string, resourceCreationTime: string, configuration: string, supplementaryConfiguration: record>, unprocessedResourceKeys: table<resourceType: string, resourceId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.BatchGetResourceConfig")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceKeys": $resource_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -330,13 +342,14 @@ export def "delete-aggregation-authorization" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  authorized_account_id: any
-  authorized_aws_region: any
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  authorized_account_id: string # The 12-digit account ID of the account authorized to aggregate data.
+  authorized_aws_region: string # The region authorized to collect aggregated data.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DeleteAggregationAuthorization")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AuthorizedAccountId": $authorized_account_id, "AuthorizedAwsRegion": $authorized_aws_region} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -379,12 +392,13 @@ export def "delete-config-rule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  config_rule_name: any
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  config_rule_name: string # The name of the Config rule that you want to delete.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DeleteConfigRule")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigRuleName": $config_rule_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -427,12 +441,13 @@ export def "delete-configuration-aggregator" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  configuration_aggregator_name: any
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  configuration_aggregator_name: string # The name of the configuration aggregator.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DeleteConfigurationAggregator")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigurationAggregatorName": $configuration_aggregator_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -475,12 +490,13 @@ export def "delete-configuration-recorder" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  configuration_recorder_name: any
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  configuration_recorder_name: string # The name of the configuration recorder to be deleted. You can retrieve the name of your configuration recorder by using the DescribeConfigurationRecorders action.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DeleteConfigurationRecorder")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigurationRecorderName": $configuration_recorder_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -523,12 +539,13 @@ export def "delete-conformance-pack" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  conformance_pack_name: any
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  conformance_pack_name: string # Name of the conformance pack you want to delete.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DeleteConformancePack")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConformancePackName": $conformance_pack_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -571,12 +588,13 @@ export def "delete-delivery-channel" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  delivery_channel_name: any
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  delivery_channel_name: string # The name of the delivery channel to delete.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DeleteDeliveryChannel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DeliveryChannelName": $delivery_channel_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -619,12 +637,13 @@ export def "delete-evaluation-results" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  config_rule_name: any
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  config_rule_name: string # The name of the Config rule for which you want to delete the evaluation results.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DeleteEvaluationResults")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigRuleName": $config_rule_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -667,12 +686,13 @@ export def "delete-organization-config-rule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  organization_config_rule_name: any
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  organization_config_rule_name: string # The name of organization Config rule that you want to delete.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DeleteOrganizationConfigRule")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationConfigRuleName": $organization_config_rule_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -715,12 +735,13 @@ export def "delete-organization-conformance-pack" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  organization_conformance_pack_name: any
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  organization_conformance_pack_name: string # The name of organization conformance pack that you want to delete.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DeleteOrganizationConformancePack")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationConformancePackName": $organization_conformance_pack_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -763,13 +784,14 @@ export def "delete-pending-aggregation-request" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  requester_account_id: any
-  requester_aws_region: any
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  requester_account_id: string # The 12-digit account ID of the account requesting to aggregate data.
+  requester_aws_region: string # The region requesting to aggregate data.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DeletePendingAggregationRequest")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RequesterAccountId": $requester_account_id, "RequesterAwsRegion": $requester_aws_region} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -812,13 +834,14 @@ export def "delete-remediation-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  config_rule_name: any
-  --resource-type: any
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  config_rule_name: string # The name of the Config rule for which you want to delete remediation configuration.
+  --resource-type: string # The type of a resource.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DeleteRemediationConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigRuleName": $config_rule_name, "ResourceType": $resource_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -844,6 +867,7 @@ export def "delete-remediation-configuration" [
 #
 # POST /
 # operationId: DeleteRemediationExceptions
+# --ResourceKeys item shape: {ResourceType?: string, ResourceId?: string}
 export def "delete-remediation-exceptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -861,13 +885,14 @@ export def "delete-remediation-exceptions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  config_rule_name: any
-  resource_keys: any
-]: any -> record<FailedBatches: record> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  config_rule_name: string # The name of the Config rule for which you want to delete remediation exception configuration.
+  resource_keys: list # An exception list of resource exception keys to be processed with the current request. Config adds exception for each resource key. For example, Config adds 3 exceptions for 3 resource keys. — item shape: {ResourceType?: string, ResourceId?: string}
+]: any -> record<FailedBatches: table<FailureMessage: string, FailedItems: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DeleteRemediationExceptions")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigRuleName": $config_rule_name, "ResourceKeys": $resource_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -910,13 +935,14 @@ export def "delete-resource-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  resource_type: any
-  resource_id: any
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  resource_type: string # The type of the resource.
+  resource_id: string # Unique identifier of the resource.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DeleteResourceConfig")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceType": $resource_type, "ResourceId": $resource_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -959,12 +985,13 @@ export def "delete-retention-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  retention_configuration_name: any
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  retention_configuration_name: string # The name of the retention configuration to delete.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DeleteRetentionConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RetentionConfigurationName": $retention_configuration_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1007,12 +1034,13 @@ export def "delete-stored-query" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  query_name: any
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  query_name: string # The name of the query that you want to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DeleteStoredQuery")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"QueryName": $query_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1055,12 +1083,13 @@ export def "deliver-config-snapshot" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  delivery_channel_name: any
-]: any -> record<configSnapshotId: record> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  delivery_channel_name: string # The name of the delivery channel through which the snapshot is delivered.
+]: any -> record<configSnapshotId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DeliverConfigSnapshot")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"deliveryChannelName": $delivery_channel_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1086,6 +1115,7 @@ export def "deliver-config-snapshot" [
 #
 # POST /
 # operationId: DescribeAggregateComplianceByConfigRules
+# --Filters shape: {ConfigRuleName?: string, ComplianceType?: "COMPLIANT"|"NON_COMPLIANT"|"NOT_APPLICABLE"|"INSUFFICIENT_DATA", AccountId?: string, AwsRegion?: string}
 export def "describe-aggregate-compliance-by-config-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1105,15 +1135,16 @@ export def "describe-aggregate-compliance-by-config-rules" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  configuration_aggregator_name: any
-  --filters: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<AggregateComplianceByConfigRules: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  configuration_aggregator_name: string # The name of the configuration aggregator.
+  --filters: record # Filters the compliance results based on account ID, region, compliance type, and rule name. — shape: {ConfigRuleName?: string, ComplianceType?: "COMPLIANT"|"NON_COMPLIANT"|"NOT_APPLICABLE"|"INSUFFICIENT_DATA", AccountId?: string, AwsRegion?: string}
+  --limit-body: int # The maximum number of evaluation results returned on each page. The default is maximum. If you specify 0, Config uses the default. (body field)
+  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+]: any -> record<AggregateComplianceByConfigRules: table<ConfigRuleName: string, Compliance: record, AccountId: string, AwsRegion: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeAggregateComplianceByConfigRules")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "Filters": $filters, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -1140,6 +1171,7 @@ export def "describe-aggregate-compliance-by-config-rules" [
 #
 # POST /
 # operationId: DescribeAggregateComplianceByConformancePacks
+# --Filters shape: {ConformancePackName?: string, ComplianceType?: "COMPLIANT"|"NON_COMPLIANT"|"INSUFFICIENT_DATA", AccountId?: string, AwsRegion?: string}
 export def "describe-aggregate-compliance-by-conformance-packs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1159,15 +1191,16 @@ export def "describe-aggregate-compliance-by-conformance-packs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  configuration_aggregator_name: any
-  --filters: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<AggregateComplianceByConformancePacks: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  configuration_aggregator_name: string # The name of the configuration aggregator.
+  --filters: record # Filters the conformance packs based on an account ID, region, compliance type, and the name of the conformance pack. — shape: {ConformancePackName?: string, ComplianceType?: "COMPLIANT"|"NON_COMPLIANT"|"INSUFFICIENT_DATA", AccountId?: string, AwsRegion?: string}
+  --limit-body: int # The maximum number of conformance packs compliance details returned on each page. The default is maximum. If you specify 0, Config uses the default. (body field)
+  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+]: any -> record<AggregateComplianceByConformancePacks: table<ConformancePackName: string, Compliance: record, AccountId: string, AwsRegion: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeAggregateComplianceByConformancePacks")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "Filters": $filters, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -1213,13 +1246,14 @@ export def "describe-aggregation-authorizations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<AggregationAuthorizations: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  --limit-body: int # The maximum number of AggregationAuthorizations returned on each page. The default is maximum. If you specify 0, Config uses the default. (body field)
+  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+]: any -> record<AggregationAuthorizations: table<AggregationAuthorizationArn: string, AuthorizedAccountId: string, AuthorizedAwsRegion: string, CreationTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeAggregationAuthorizations")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -1264,14 +1298,15 @@ export def "describe-compliance-by-config-rule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  --config-rule-names: any
-  --compliance-types: any
-  --next-token-body: any #  (body field)
-]: any -> record<ComplianceByConfigRules: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  --config-rule-names: list<string> # Specify one or more Config rule names to filter the results by rule.
+  --compliance-types: list<string> # Filters the results by compliance.
+  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+]: any -> record<ComplianceByConfigRules: table<ConfigRuleName: string, Compliance: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeComplianceByConfigRule")
   let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ConfigRuleNames": $config_rule_names, "ComplianceTypes": $compliance_types, "NextToken": $next_token_body} | compact
@@ -1317,16 +1352,17 @@ export def "describe-compliance-by-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  --resource-type: any
-  --resource-id: any
-  --compliance-types: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<ComplianceByResources: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  --resource-type: string # The types of Amazon Web Services resources for which you want compliance information (for example, AWS::EC2::Instance). For this action, you can specify that the resource type is an Amazon Web Services account by specifying AWS::::Account.
+  --resource-id: string # The ID of the Amazon Web Services resource for which you want compliance information. You can specify only one resource ID. If you specify a resource ID, you must also specify a type for ResourceType.
+  --compliance-types: list<string> # Filters the results by compliance.
+  --limit-body: int # The maximum number of evaluation results returned on each page. The default is 10. You cannot specify a number greater than 100. If you specify 0, Config uses the default. (body field)
+  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+]: any -> record<ComplianceByResources: table<ResourceType: string, ResourceId: string, Compliance: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeComplianceByResource")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ResourceType": $resource_type, "ResourceId": $resource_id, "ComplianceTypes": $compliance_types, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -1372,14 +1408,15 @@ export def "describe-config-rule-evaluation-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  --config-rule-names: any
-  --next-token-body: any #  (body field)
-  --limit-body: any #  (body field)
-]: any -> record<ConfigRulesEvaluationStatus: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  --config-rule-names: list<string> # The name of the Config managed rules for which you want status information. If you do not specify any names, Config returns status information for all Config managed rules that you use.
+  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+  --limit-body: int # The number of rule evaluation results that you want returned. This parameter is required if the rule limit for your account is more than the default of 150 rules. For information about requesting a rule limit increase, see Config Limits (http://docs.aws.amazon.com/general/latest/gr/aws_service_limits.html#limits_config) in the Amazon Web Services General Reference Guide. (body field)
+]: any -> record<ConfigRulesEvaluationStatus: table<ConfigRuleName: string, ConfigRuleArn: string, ConfigRuleId: string, LastSuccessfulInvocationTime: string, LastFailedInvocationTime: string, LastSuccessfulEvaluationTime: string, LastFailedEvaluationTime: string, FirstActivatedTime: string, LastDeactivatedTime: string, LastErrorCode: string, LastErrorMessage: string, FirstEvaluationStarted: bool, LastDebugLogDeliveryStatus: string, LastDebugLogDeliveryStatusReason: string, LastDebugLogDeliveryTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeConfigRuleEvaluationStatus")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ConfigRuleNames": $config_rule_names, "NextToken": $next_token_body, "Limit": $limit_body} | compact
@@ -1406,6 +1443,7 @@ export def "describe-config-rule-evaluation-status" [
 #
 # POST /
 # operationId: DescribeConfigRules
+# --Filters shape: {EvaluationMode?: "DETECTIVE"|"PROACTIVE"}
 export def "describe-config-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1424,14 +1462,15 @@ export def "describe-config-rules" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  --config-rule-names: any
-  --next-token-body: any #  (body field)
-  --filters: any
-]: any -> record<ConfigRules: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  --config-rule-names: list<string> # The names of the Config rules for which you want details. If you do not specify any names, Config returns details for all your rules.
+  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+  --filters: record # Returns a filtered list of Detective or Proactive Config rules. By default, if the filter is not defined, this API returns an unfiltered list. For more information on Detective or Proactive Config rules, see Evaluation Mode (https://docs.aws.amazon.com/config/latest/developerguide/evaluate-config-rules.html) in the Config Developer Guide. — shape: {EvaluationMode?: "DETECTIVE"|"PROACTIVE"}
+]: any -> record<ConfigRules: table<ConfigRuleName: string, ConfigRuleArn: string, ConfigRuleId: string, Description: string, Scope: record, Source: record, InputParameters: string, MaximumExecutionFrequency: string, ConfigRuleState: string, CreatedBy: string, EvaluationModes: list>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeConfigRules")
   let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ConfigRuleNames": $config_rule_names, "NextToken": $next_token_body, "Filters": $filters} | compact
@@ -1477,15 +1516,16 @@ export def "describe-configuration-aggregator-sources-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  configuration_aggregator_name: any
-  --update-status: any
-  --next-token-body: any #  (body field)
-  --limit-body: any #  (body field)
-]: any -> record<AggregatedSourceStatusList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  configuration_aggregator_name: string # The name of the configuration aggregator.
+  --update-status: list<string> # Filters the status type. Valid value FAILED indicates errors while moving data. Valid value SUCCEEDED indicates the data was successfully moved. Valid value OUTDATED indicates the data is not the most recent.
+  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+  --limit-body: int # The maximum number of AggregatorSourceStatus returned on each page. The default is maximum. If you specify 0, Config uses the default. (body field)
+]: any -> record<AggregatedSourceStatusList: table<SourceId: string, SourceType: string, AwsRegion: string, LastUpdateStatus: string, LastUpdateTime: string, LastErrorCode: string, LastErrorMessage: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeConfigurationAggregatorSourcesStatus")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "UpdateStatus": $update_status, "NextToken": $next_token_body, "Limit": $limit_body} | compact
@@ -1531,14 +1571,15 @@ export def "describe-configuration-aggregators" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-26
-  --configuration-aggregator-names: any
-  --next-token-body: any #  (body field)
-  --limit-body: any #  (body field)
-]: any -> record<ConfigurationAggregators: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-26 # required
+  --configuration-aggregator-names: list<string> # The name of the configuration aggregators.
+  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+  --limit-body: int # The maximum number of configuration aggregators returned on each page. The default is maximum. If you specify 0, Config uses the default. (body field)
+]: any -> record<ConfigurationAggregators: table<ConfigurationAggregatorName: string, ConfigurationAggregatorArn: string, AccountAggregationSources: list, OrganizationAggregationSource: record, CreationTime: string, LastUpdatedTime: string, CreatedBy: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeConfigurationAggregators")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ConfigurationAggregatorNames": $configuration_aggregator_names, "NextToken": $next_token_body, "Limit": $limit_body} | compact
@@ -1582,12 +1623,13 @@ export def "describe-configuration-recorder-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-27
-  --configuration-recorder-names: any
-]: any -> record<ConfigurationRecordersStatus: record> {
+  --x-amz-target: string@x-amz-target-completer-27 # required
+  --configuration-recorder-names: list<string> # The name(s) of the configuration recorder. If the name is not specified, the action returns the current status of all the configuration recorders associated with the account.
+]: any -> record<ConfigurationRecordersStatus: table<name: string, lastStartTime: string, lastStopTime: string, recording: bool, lastStatus: string, lastErrorCode: string, lastErrorMessage: string, lastStatusChangeTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeConfigurationRecorderStatus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigurationRecorderNames": $configuration_recorder_names} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1630,12 +1672,13 @@ export def "describe-configuration-recorders" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-28
-  --configuration-recorder-names: any
-]: any -> record<ConfigurationRecorders: record> {
+  --x-amz-target: string@x-amz-target-completer-28 # required
+  --configuration-recorder-names: list<string> # A list of configuration recorder names.
+]: any -> record<ConfigurationRecorders: table<name: string, roleARN: string, recordingGroup: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeConfigurationRecorders")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigurationRecorderNames": $configuration_recorder_names} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1661,6 +1704,7 @@ export def "describe-configuration-recorders" [
 #
 # POST /
 # operationId: DescribeConformancePackCompliance
+# --Filters shape: {ConfigRuleNames?: list<string>, ComplianceType?: "COMPLIANT"|"NON_COMPLIANT"|"INSUFFICIENT_DATA"}
 export def "describe-conformance-pack-compliance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1680,15 +1724,16 @@ export def "describe-conformance-pack-compliance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-29
-  conformance_pack_name: any
-  --filters: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<ConformancePackName: record, ConformancePackRuleComplianceList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-29 # required
+  conformance_pack_name: string # Name of the conformance pack.
+  --filters: record # Filters the conformance pack by compliance types and Config rule names. — shape: {ConfigRuleNames?: list<string>, ComplianceType?: "COMPLIANT"|"NON_COMPLIANT"|"INSUFFICIENT_DATA"}
+  --limit-body: int # The maximum number of Config rules within a conformance pack are returned on each page. (body field)
+  --next-token-body: string # The nextToken string returned in a previous request that you use to request the next page of results in a paginated response. (body field)
+]: any -> record<ConformancePackName: string, ConformancePackRuleComplianceList: table<ConfigRuleName: string, ComplianceType: string, Controls: list>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeConformancePackCompliance")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ConformancePackName": $conformance_pack_name, "Filters": $filters, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -1734,14 +1779,15 @@ export def "describe-conformance-pack-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-30
-  --conformance-pack-names: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<ConformancePackStatusDetails: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-30 # required
+  --conformance-pack-names: list<string> # Comma-separated list of conformance pack names.
+  --limit-body: int # The maximum number of conformance packs status returned on each page. (body field)
+  --next-token-body: string # The nextToken string returned in a previous request that you use to request the next page of results in a paginated response. (body field)
+]: any -> record<ConformancePackStatusDetails: table<ConformancePackName: string, ConformancePackId: string, ConformancePackArn: string, ConformancePackState: string, StackArn: string, ConformancePackStatusReason: string, LastUpdateRequestedTime: string, LastUpdateCompletedTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeConformancePackStatus")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ConformancePackNames": $conformance_pack_names, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -1787,14 +1833,15 @@ export def "describe-conformance-packs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-31
-  --conformance-pack-names: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<ConformancePackDetails: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-31 # required
+  --conformance-pack-names: list<string> # Comma-separated list of conformance pack names for which you want details. If you do not specify any names, Config returns details for all your conformance packs.
+  --limit-body: int # The maximum number of conformance packs returned on each page. (body field)
+  --next-token-body: string # The nextToken string returned in a previous request that you use to request the next page of results in a paginated response. (body field)
+]: any -> record<ConformancePackDetails: table<ConformancePackName: string, ConformancePackArn: string, ConformancePackId: string, DeliveryS3Bucket: string, DeliveryS3KeyPrefix: string, ConformancePackInputParameters: list, LastUpdateRequestedTime: string, CreatedBy: string, TemplateSSMDocumentDetails: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeConformancePacks")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ConformancePackNames": $conformance_pack_names, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -1838,12 +1885,13 @@ export def "describe-delivery-channel-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-32
-  --delivery-channel-names: any
-]: any -> record<DeliveryChannelsStatus: record> {
+  --x-amz-target: string@x-amz-target-completer-32 # required
+  --delivery-channel-names: list<string> # A list of delivery channel names.
+]: any -> record<DeliveryChannelsStatus: table<name: string, configSnapshotDeliveryInfo: record, configHistoryDeliveryInfo: record, configStreamDeliveryInfo: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeDeliveryChannelStatus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DeliveryChannelNames": $delivery_channel_names} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1886,12 +1934,13 @@ export def "describe-delivery-channels" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-33
-  --delivery-channel-names: any
-]: any -> record<DeliveryChannels: record> {
+  --x-amz-target: string@x-amz-target-completer-33 # required
+  --delivery-channel-names: list<string> # A list of delivery channel names.
+]: any -> record<DeliveryChannels: table<name: string, s3BucketName: string, s3KeyPrefix: string, s3KmsKeyArn: string, snsTopicARN: string, configSnapshotDeliveryProperties: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeDeliveryChannels")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DeliveryChannelNames": $delivery_channel_names} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1936,14 +1985,15 @@ export def "describe-organization-config-rule-statuses" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-34
-  --organization-config-rule-names: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<OrganizationConfigRuleStatuses: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-34 # required
+  --organization-config-rule-names: list<string> # The names of organization Config rules for which you want status details. If you do not specify any names, Config returns details for all your organization Config rules.
+  --limit-body: int # The maximum number of OrganizationConfigRuleStatuses returned on each page. If you do no specify a number, Config uses the default. The default is 100. (body field)
+  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+]: any -> record<OrganizationConfigRuleStatuses: table<OrganizationConfigRuleName: string, OrganizationRuleStatus: string, ErrorCode: string, ErrorMessage: string, LastUpdateTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeOrganizationConfigRuleStatuses")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"OrganizationConfigRuleNames": $organization_config_rule_names, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -1989,14 +2039,15 @@ export def "describe-organization-config-rules" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-35
-  --organization-config-rule-names: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<OrganizationConfigRules: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-35 # required
+  --organization-config-rule-names: list<string> # The names of organization Config rules for which you want details. If you do not specify any names, Config returns details for all your organization Config rules.
+  --limit-body: int # The maximum number of organization Config rules returned on each page. If you do no specify a number, Config uses the default. The default is 100. (body field)
+  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+]: any -> record<OrganizationConfigRules: table<OrganizationConfigRuleName: string, OrganizationConfigRuleArn: string, OrganizationManagedRuleMetadata: record, OrganizationCustomRuleMetadata: record, ExcludedAccounts: list, LastUpdateTime: string, OrganizationCustomPolicyRuleMetadata: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeOrganizationConfigRules")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"OrganizationConfigRuleNames": $organization_config_rule_names, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -2042,14 +2093,15 @@ export def "describe-organization-conformance-pack-statuses" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-36
-  --organization-conformance-pack-names: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<OrganizationConformancePackStatuses: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-36 # required
+  --organization-conformance-pack-names: list<string> # The names of organization conformance packs for which you want status details. If you do not specify any names, Config returns details for all your organization conformance packs.
+  --limit-body: int # The maximum number of OrganizationConformancePackStatuses returned on each page. If you do no specify a number, Config uses the default. The default is 100. (body field)
+  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+]: any -> record<OrganizationConformancePackStatuses: table<OrganizationConformancePackName: string, Status: string, ErrorCode: string, ErrorMessage: string, LastUpdateTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeOrganizationConformancePackStatuses")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"OrganizationConformancePackNames": $organization_conformance_pack_names, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -2095,14 +2147,15 @@ export def "describe-organization-conformance-packs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-37
-  --organization-conformance-pack-names: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<OrganizationConformancePacks: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-37 # required
+  --organization-conformance-pack-names: list<string> # The name that you assign to an organization conformance pack.
+  --limit-body: int # The maximum number of organization config packs returned on each page. If you do no specify a number, Config uses the default. The default is 100. (body field)
+  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+]: any -> record<OrganizationConformancePacks: table<OrganizationConformancePackName: string, OrganizationConformancePackArn: string, DeliveryS3Bucket: string, DeliveryS3KeyPrefix: string, ConformancePackInputParameters: list, ExcludedAccounts: list, LastUpdateTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeOrganizationConformancePacks")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"OrganizationConformancePackNames": $organization_conformance_pack_names, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -2148,13 +2201,14 @@ export def "describe-pending-aggregation-requests" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-38
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<PendingAggregationRequests: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-38 # required
+  --limit-body: int # The maximum number of evaluation results returned on each page. The default is maximum. If you specify 0, Config uses the default. (body field)
+  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+]: any -> record<PendingAggregationRequests: table<RequesterAccountId: string, RequesterAwsRegion: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribePendingAggregationRequests")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -2198,12 +2252,13 @@ export def "describe-remediation-configurations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-39
-  config_rule_names: any
-]: any -> record<RemediationConfigurations: record> {
+  --x-amz-target: string@x-amz-target-completer-39 # required
+  config_rule_names: list<string> # A list of Config rule names of remediation configurations for which you want details.
+]: any -> record<RemediationConfigurations: table<ConfigRuleName: string, TargetType: string, TargetId: string, TargetVersion: string, Parameters: record, ResourceType: string, Automatic: bool, ExecutionControls: record, MaximumAutomaticAttempts: int, RetryAttemptSeconds: int, Arn: string, CreatedByService: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeRemediationConfigurations")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigRuleNames": $config_rule_names} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2229,6 +2284,7 @@ export def "describe-remediation-configurations" [
 #
 # POST /
 # operationId: DescribeRemediationExceptions
+# --ResourceKeys item shape: {ResourceType?: string, ResourceId?: string}
 export def "describe-remediation-exceptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2248,15 +2304,16 @@ export def "describe-remediation-exceptions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-40
-  config_rule_name: any
-  --resource-keys: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<RemediationExceptions: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-40 # required
+  config_rule_name: string # The name of the Config rule.
+  --resource-keys: list # An exception list of resource exception keys to be processed with the current request. Config adds exception for each resource key. For example, Config adds 3 exceptions for 3 resource keys. — item shape: {ResourceType?: string, ResourceId?: string}
+  --limit-body: int # The maximum number of RemediationExceptionResourceKey returned on each page. The default is 25. If you specify 0, Config uses the default. (body field)
+  --next-token-body: string # The nextToken string returned in a previous request that you use to request the next page of results in a paginated response. (body field)
+]: any -> record<RemediationExceptions: table<ConfigRuleName: string, ResourceType: string, ResourceId: string, Message: string, ExpirationTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeRemediationExceptions")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ConfigRuleName": $config_rule_name, "ResourceKeys": $resource_keys, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -2283,6 +2340,7 @@ export def "describe-remediation-exceptions" [
 #
 # POST /
 # operationId: DescribeRemediationExecutionStatus
+# --ResourceKeys item shape: {resourceType: "AWS::EC2::CustomerGateway"|"AWS::EC2::EIP"|"AWS::EC2::Host"|"AWS::EC2::Instance"|"AWS::EC2::InternetGateway"|"AWS::EC2::NetworkAcl"|"AWS::EC2::NetworkInterface"|"AWS::EC2::RouteTable"|"AWS::EC2::SecurityGroup"|"AWS::EC2::Subnet"|"AWS::CloudTrail::Trail"|"AWS::EC2::Volume"|"AWS::EC2::VPC"|"AWS::EC2::VPNConnection"|"AWS::EC2::VPNGateway"|"AWS::EC2::RegisteredHAInstance"|"AWS::EC2::NatGateway"|"AWS::EC2::EgressOnlyInternetGateway"|"AWS::EC2::VPCEndpoint"|"AWS::EC2::VPCEndpointService"|"AWS::EC2::FlowLog"|"AWS::EC2::VPCPeeringConnection"|"AWS::Elasticsearch::Domain"|"AWS::IAM::Group"|"AWS::IAM::Policy"|"AWS::IAM::Role"|"AWS::IAM::User"|"AWS::ElasticLoadBalancingV2::LoadBalancer"|"AWS::ACM::Certificate"|"AWS::RDS::DBInstance"|"AWS::RDS::DBSubnetGroup"|"AWS::RDS::DBSecurityGroup"|"AWS::RDS::DBSnapshot"|"AWS::RDS::DBCluster"|"AWS::RDS::DBClusterSnapshot"|"AWS::RDS::EventSubscription"|"AWS::S3::Bucket"|"AWS::S3::AccountPublicAccessBlock"|"AWS::Redshift::Cluster"|"AWS::Redshift::ClusterSnapshot"|"AWS::Redshift::ClusterParameterGroup"|"AWS::Redshift::ClusterSecurityGroup"|"AWS::Redshift::ClusterSubnetGroup"|"AWS::Redshift::EventSubscription"|"AWS::SSM::ManagedInstanceInventory"|"AWS::CloudWatch::Alarm"|"AWS::CloudFormation::Stack"|"AWS::ElasticLoadBalancing::LoadBalancer"|"AWS::AutoScaling::AutoScalingGroup"|"AWS::AutoScaling::LaunchConfiguration"|"AWS::AutoScaling::ScalingPolicy"|"AWS::AutoScaling::ScheduledAction"|"AWS::DynamoDB::Table"|"AWS::CodeBuild::Project"|"AWS::WAF::RateBasedRule"|"AWS::WAF::Rule"|"AWS::WAF::RuleGroup"|"AWS::WAF::WebACL"|"AWS::WAFRegional::RateBasedRule"|"AWS::WAFRegional::Rule"|"AWS::WAFRegional::RuleGroup"|"AWS::WAFRegional::WebACL"|"AWS::CloudFront::Distribution"|"AWS::CloudFront::StreamingDistribution"|"AWS::Lambda::Function"|"AWS::NetworkFirewall::Firewall"|"AWS::NetworkFirewall::FirewallPolicy"|"AWS::NetworkFirewall::RuleGroup"|"AWS::ElasticBeanstalk::Application"|"AWS::ElasticBeanstalk::ApplicationVersion"|"AWS::ElasticBeanstalk::Environment"|"AWS::WAFv2::WebACL"|"AWS::WAFv2::RuleGroup"|"AWS::WAFv2::IPSet"|"AWS::WAFv2::RegexPatternSet"|"AWS::WAFv2::ManagedRuleSet"|"AWS::XRay::EncryptionConfig"|"AWS::SSM::AssociationCompliance"|"AWS::SSM::PatchCompliance"|"AWS::Shield::Protection"|"AWS::ShieldRegional::Protection"|"AWS::Config::ConformancePackCompliance"|"AWS::Config::ResourceCompliance"|"AWS::ApiGateway::Stage"|"AWS::ApiGateway::RestApi"|"AWS::ApiGatewayV2::Stage"|"AWS::ApiGatewayV2::Api"|"AWS::CodePipeline::Pipeline"|"AWS::ServiceCatalog::CloudFormationProvisionedProduct"|"AWS::ServiceCatalog::CloudFormationProduct"|"AWS::ServiceCatalog::Portfolio"|"AWS::SQS::Queue"|"AWS::KMS::Key"|"AWS::QLDB::Ledger"|"AWS::SecretsManager::Secret"|"AWS::SNS::Topic"|"AWS::SSM::FileData"|"AWS::Backup::BackupPlan"|"AWS::Backup::BackupSelection"|"AWS::Backup::BackupVault"|"AWS::Backup::RecoveryPoint"|"AWS::ECR::Repository"|"AWS::ECS::Cluster"|"AWS::ECS::Service"|"AWS::ECS::TaskDefinition"|"AWS::EFS::AccessPoint"|"AWS::EFS::FileSystem"|"AWS::EKS::Cluster"|"AWS::OpenSearch::Domain"|"AWS::EC2::TransitGateway"|"AWS::Kinesis::Stream"|"AWS::Kinesis::StreamConsumer"|"AWS::CodeDeploy::Application"|"AWS::CodeDeploy::DeploymentConfig"|"AWS::CodeDeploy::DeploymentGroup"|"AWS::EC2::LaunchTemplate"|"AWS::ECR::PublicRepository"|"AWS::GuardDuty::Detector"|"AWS::EMR::SecurityConfiguration"|"AWS::SageMaker::CodeRepository"|"AWS::Route53Resolver::ResolverEndpoint"|"AWS::Route53Resolver::ResolverRule"|"AWS::Route53Resolver::ResolverRuleAssociation"|"AWS::DMS::ReplicationSubnetGroup"|"AWS::DMS::EventSubscription"|"AWS::MSK::Cluster"|"AWS::StepFunctions::Activity"|"AWS::WorkSpaces::Workspace"|"AWS::WorkSpaces::ConnectionAlias"|"AWS::SageMaker::Model"|"AWS::ElasticLoadBalancingV2::Listener"|"AWS::StepFunctions::StateMachine"|"AWS::Batch::JobQueue"|"AWS::Batch::ComputeEnvironment"|"AWS::AccessAnalyzer::Analyzer"|"AWS::Athena::WorkGroup"|"AWS::Athena::DataCatalog"|"AWS::Detective::Graph"|"AWS::GlobalAccelerator::Accelerator"|"AWS::GlobalAccelerator::EndpointGroup"|"AWS::GlobalAccelerator::Listener"|"AWS::EC2::TransitGatewayAttachment"|"AWS::EC2::TransitGatewayRouteTable"|"AWS::DMS::Certificate"|"AWS::AppConfig::Application"|"AWS::AppSync::GraphQLApi"|"AWS::DataSync::LocationSMB"|"AWS::DataSync::LocationFSxLustre"|"AWS::DataSync::LocationS3"|"AWS::DataSync::LocationEFS"|"AWS::DataSync::Task"|"AWS::DataSync::LocationNFS"|"AWS::EC2::NetworkInsightsAccessScopeAnalysis"|"AWS::EKS::FargateProfile"|"AWS::Glue::Job"|"AWS::GuardDuty::ThreatIntelSet"|"AWS::GuardDuty::IPSet"|"AWS::SageMaker::Workteam"|"AWS::SageMaker::NotebookInstanceLifecycleConfig"|"AWS::ServiceDiscovery::Service"|"AWS::ServiceDiscovery::PublicDnsNamespace"|"AWS::SES::ContactList"|"AWS::SES::ConfigurationSet"|"AWS::Route53::HostedZone"|"AWS::IoTEvents::Input"|"AWS::IoTEvents::DetectorModel"|"AWS::IoTEvents::AlarmModel"|"AWS::ServiceDiscovery::HttpNamespace"|"AWS::Events::EventBus"|"AWS::ImageBuilder::ContainerRecipe"|"AWS::ImageBuilder::DistributionConfiguration"|"AWS::ImageBuilder::InfrastructureConfiguration"|"AWS::DataSync::LocationObjectStorage"|"AWS::DataSync::LocationHDFS"|"AWS::Glue::Classifier"|"AWS::Route53RecoveryReadiness::Cell"|"AWS::Route53RecoveryReadiness::ReadinessCheck"|"AWS::ECR::RegistryPolicy"|"AWS::Backup::ReportPlan"|"AWS::Lightsail::Certificate"|"AWS::RUM::AppMonitor"|"AWS::Events::Endpoint"|"AWS::SES::ReceiptRuleSet"|"AWS::Events::Archive"|"AWS::Events::ApiDestination"|"AWS::Lightsail::Disk"|"AWS::FIS::ExperimentTemplate"|"AWS::DataSync::LocationFSxWindows"|"AWS::SES::ReceiptFilter"|"AWS::GuardDuty::Filter"|"AWS::SES::Template"|"AWS::AmazonMQ::Broker"|"AWS::AppConfig::Environment"|"AWS::AppConfig::ConfigurationProfile"|"AWS::Cloud9::EnvironmentEC2"|"AWS::EventSchemas::Registry"|"AWS::EventSchemas::RegistryPolicy"|"AWS::EventSchemas::Discoverer"|"AWS::FraudDetector::Label"|"AWS::FraudDetector::EntityType"|"AWS::FraudDetector::Variable"|"AWS::FraudDetector::Outcome"|"AWS::IoT::Authorizer"|"AWS::IoT::SecurityProfile"|"AWS::IoT::RoleAlias"|"AWS::IoT::Dimension"|"AWS::IoTAnalytics::Datastore"|"AWS::Lightsail::Bucket"|"AWS::Lightsail::StaticIp"|"AWS::MediaPackage::PackagingGroup"|"AWS::Route53RecoveryReadiness::RecoveryGroup"|"AWS::ResilienceHub::ResiliencyPolicy"|"AWS::Transfer::Workflow"|"AWS::EKS::IdentityProviderConfig"|"AWS::EKS::Addon"|"AWS::Glue::MLTransform"|"AWS::IoT::Policy"|"AWS::IoT::MitigationAction"|"AWS::IoTTwinMaker::Workspace"|"AWS::IoTTwinMaker::Entity"|"AWS::IoTAnalytics::Dataset"|"AWS::IoTAnalytics::Pipeline"|"AWS::IoTAnalytics::Channel"|"AWS::IoTSiteWise::Dashboard"|"AWS::IoTSiteWise::Project"|"AWS::IoTSiteWise::Portal"|"AWS::IoTSiteWise::AssetModel"|"AWS::IVS::Channel"|"AWS::IVS::RecordingConfiguration"|"AWS::IVS::PlaybackKeyPair"|"AWS::KinesisAnalyticsV2::Application"|"AWS::RDS::GlobalCluster"|"AWS::S3::MultiRegionAccessPoint"|"AWS::DeviceFarm::TestGridProject"|"AWS::Budgets::BudgetsAction"|"AWS::Lex::Bot"|"AWS::CodeGuruReviewer::RepositoryAssociation"|"AWS::IoT::CustomMetric"|"AWS::Route53Resolver::FirewallDomainList"|"AWS::RoboMaker::RobotApplicationVersion"|"AWS::EC2::TrafficMirrorSession"|"AWS::IoTSiteWise::Gateway"|"AWS::Lex::BotAlias"|"AWS::LookoutMetrics::Alert"|"AWS::IoT::AccountAuditConfiguration"|"AWS::EC2::TrafficMirrorTarget"|"AWS::S3::StorageLens"|"AWS::IoT::ScheduledAudit"|"AWS::Events::Connection"|"AWS::EventSchemas::Schema"|"AWS::MediaPackage::PackagingConfiguration"|"AWS::KinesisVideo::SignalingChannel"|"AWS::AppStream::DirectoryConfig"|"AWS::LookoutVision::Project"|"AWS::Route53RecoveryControl::Cluster"|"AWS::Route53RecoveryControl::SafetyRule"|"AWS::Route53RecoveryControl::ControlPanel"|"AWS::Route53RecoveryControl::RoutingControl"|"AWS::Route53RecoveryReadiness::ResourceSet"|"AWS::RoboMaker::SimulationApplication"|"AWS::RoboMaker::RobotApplication"|"AWS::HealthLake::FHIRDatastore"|"AWS::Pinpoint::Segment"|"AWS::Pinpoint::ApplicationSettings"|"AWS::Events::Rule"|"AWS::EC2::DHCPOptions"|"AWS::EC2::NetworkInsightsPath"|"AWS::EC2::TrafficMirrorFilter"|"AWS::EC2::IPAM"|"AWS::IoTTwinMaker::Scene"|"AWS::NetworkManager::TransitGatewayRegistration"|"AWS::CustomerProfiles::Domain"|"AWS::AutoScaling::WarmPool"|"AWS::Connect::PhoneNumber", ... (1 more fields)}
 export def "describe-remediation-execution-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2302,15 +2360,16 @@ export def "describe-remediation-execution-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-41
-  config_rule_name: any
-  --resource-keys: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<RemediationExecutionStatuses: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-41 # required
+  config_rule_name: string # A list of Config rule names.
+  --resource-keys: list # A list of resource keys to be processed with the current request. Each element in the list consists of the resource type and resource ID. — item shape: {resourceType: "AWS::EC2::CustomerGateway"|"AWS::EC2::EIP"|"AWS::EC2::Host"|"AWS::EC2::Instance"|"AWS::EC2::InternetGateway"|"AWS::EC2::NetworkAcl"|"AWS::EC2::NetworkInterface"|"AWS::EC2::RouteTable"|"AWS::EC2::SecurityGroup"|"AWS::EC2::Subnet"|"AWS::CloudTrail::Trail"|"AWS::EC2::Volume"|"AWS::EC2::VPC"|"AWS::EC2::VPNConnection"|"AWS::EC2::VPNGateway"|"AWS::EC2::RegisteredHAInstance"|"AWS::EC2::NatGateway"|"AWS::EC2::EgressOnlyInternetGateway"|"AWS::EC2::VPCEndpoint"|"AWS::EC2::VPCEndpointService"|"AWS::EC2::FlowLog"|"AWS::EC2::VPCPeeringConnection"|"AWS::Elasticsearch::Domain"|"AWS::IAM::Group"|"AWS::IAM::Policy"|"AWS::IAM::Role"|"AWS::IAM::User"|"AWS::ElasticLoadBalancingV2::LoadBalancer"|"AWS::ACM::Certificate"|"AWS::RDS::DBInstance"|"AWS::RDS::DBSubnetGroup"|"AWS::RDS::DBSecurityGroup"|"AWS::RDS::DBSnapshot"|"AWS::RDS::DBCluster"|"AWS::RDS::DBClusterSnapshot"|"AWS::RDS::EventSubscription"|"AWS::S3::Bucket"|"AWS::S3::AccountPublicAccessBlock"|"AWS::Redshift::Cluster"|"AWS::Redshift::ClusterSnapshot"|"AWS::Redshift::ClusterParameterGroup"|"AWS::Redshift::ClusterSecurityGroup"|"AWS::Redshift::ClusterSubnetGroup"|"AWS::Redshift::EventSubscription"|"AWS::SSM::ManagedInstanceInventory"|"AWS::CloudWatch::Alarm"|"AWS::CloudFormation::Stack"|"AWS::ElasticLoadBalancing::LoadBalancer"|"AWS::AutoScaling::AutoScalingGroup"|"AWS::AutoScaling::LaunchConfiguration"|"AWS::AutoScaling::ScalingPolicy"|"AWS::AutoScaling::ScheduledAction"|"AWS::DynamoDB::Table"|"AWS::CodeBuild::Project"|"AWS::WAF::RateBasedRule"|"AWS::WAF::Rule"|"AWS::WAF::RuleGroup"|"AWS::WAF::WebACL"|"AWS::WAFRegional::RateBasedRule"|"AWS::WAFRegional::Rule"|"AWS::WAFRegional::RuleGroup"|"AWS::WAFRegional::WebACL"|"AWS::CloudFront::Distribution"|"AWS::CloudFront::StreamingDistribution"|"AWS::Lambda::Function"|"AWS::NetworkFirewall::Firewall"|"AWS::NetworkFirewall::FirewallPolicy"|"AWS::NetworkFirewall::RuleGroup"|"AWS::ElasticBeanstalk::Application"|"AWS::ElasticBeanstalk::ApplicationVersion"|"AWS::ElasticBeanstalk::Environment"|"AWS::WAFv2::WebACL"|"AWS::WAFv2::RuleGroup"|"AWS::WAFv2::IPSet"|"AWS::WAFv2::RegexPatternSet"|"AWS::WAFv2::ManagedRuleSet"|"AWS::XRay::EncryptionConfig"|"AWS::SSM::AssociationCompliance"|"AWS::SSM::PatchCompliance"|"AWS::Shield::Protection"|"AWS::ShieldRegional::Protection"|"AWS::Config::ConformancePackCompliance"|"AWS::Config::ResourceCompliance"|"AWS::ApiGateway::Stage"|"AWS::ApiGateway::RestApi"|"AWS::ApiGatewayV2::Stage"|"AWS::ApiGatewayV2::Api"|"AWS::CodePipeline::Pipeline"|"AWS::ServiceCatalog::CloudFormationProvisionedProduct"|"AWS::ServiceCatalog::CloudFormationProduct"|"AWS::ServiceCatalog::Portfolio"|"AWS::SQS::Queue"|"AWS::KMS::Key"|"AWS::QLDB::Ledger"|"AWS::SecretsManager::Secret"|"AWS::SNS::Topic"|"AWS::SSM::FileData"|"AWS::Backup::BackupPlan"|"AWS::Backup::BackupSelection"|"AWS::Backup::BackupVault"|"AWS::Backup::RecoveryPoint"|"AWS::ECR::Repository"|"AWS::ECS::Cluster"|"AWS::ECS::Service"|"AWS::ECS::TaskDefinition"|"AWS::EFS::AccessPoint"|"AWS::EFS::FileSystem"|"AWS::EKS::Cluster"|"AWS::OpenSearch::Domain"|"AWS::EC2::TransitGateway"|"AWS::Kinesis::Stream"|"AWS::Kinesis::StreamConsumer"|"AWS::CodeDeploy::Application"|"AWS::CodeDeploy::DeploymentConfig"|"AWS::CodeDeploy::DeploymentGroup"|"AWS::EC2::LaunchTemplate"|"AWS::ECR::PublicRepository"|"AWS::GuardDuty::Detector"|"AWS::EMR::SecurityConfiguration"|"AWS::SageMaker::CodeRepository"|"AWS::Route53Resolver::ResolverEndpoint"|"AWS::Route53Resolver::ResolverRule"|"AWS::Route53Resolver::ResolverRuleAssociation"|"AWS::DMS::ReplicationSubnetGroup"|"AWS::DMS::EventSubscription"|"AWS::MSK::Cluster"|"AWS::StepFunctions::Activity"|"AWS::WorkSpaces::Workspace"|"AWS::WorkSpaces::ConnectionAlias"|"AWS::SageMaker::Model"|"AWS::ElasticLoadBalancingV2::Listener"|"AWS::StepFunctions::StateMachine"|"AWS::Batch::JobQueue"|"AWS::Batch::ComputeEnvironment"|"AWS::AccessAnalyzer::Analyzer"|"AWS::Athena::WorkGroup"|"AWS::Athena::DataCatalog"|"AWS::Detective::Graph"|"AWS::GlobalAccelerator::Accelerator"|"AWS::GlobalAccelerator::EndpointGroup"|"AWS::GlobalAccelerator::Listener"|"AWS::EC2::TransitGatewayAttachment"|"AWS::EC2::TransitGatewayRouteTable"|"AWS::DMS::Certificate"|"AWS::AppConfig::Application"|"AWS::AppSync::GraphQLApi"|"AWS::DataSync::LocationSMB"|"AWS::DataSync::LocationFSxLustre"|"AWS::DataSync::LocationS3"|"AWS::DataSync::LocationEFS"|"AWS::DataSync::Task"|"AWS::DataSync::LocationNFS"|"AWS::EC2::NetworkInsightsAccessScopeAnalysis"|"AWS::EKS::FargateProfile"|"AWS::Glue::Job"|"AWS::GuardDuty::ThreatIntelSet"|"AWS::GuardDuty::IPSet"|"AWS::SageMaker::Workteam"|"AWS::SageMaker::NotebookInstanceLifecycleConfig"|"AWS::ServiceDiscovery::Service"|"AWS::ServiceDiscovery::PublicDnsNamespace"|"AWS::SES::ContactList"|"AWS::SES::ConfigurationSet"|"AWS::Route53::HostedZone"|"AWS::IoTEvents::Input"|"AWS::IoTEvents::DetectorModel"|"AWS::IoTEvents::AlarmModel"|"AWS::ServiceDiscovery::HttpNamespace"|"AWS::Events::EventBus"|"AWS::ImageBuilder::ContainerRecipe"|"AWS::ImageBuilder::DistributionConfiguration"|"AWS::ImageBuilder::InfrastructureConfiguration"|"AWS::DataSync::LocationObjectStorage"|"AWS::DataSync::LocationHDFS"|"AWS::Glue::Classifier"|"AWS::Route53RecoveryReadiness::Cell"|"AWS::Route53RecoveryReadiness::ReadinessCheck"|"AWS::ECR::RegistryPolicy"|"AWS::Backup::ReportPlan"|"AWS::Lightsail::Certificate"|"AWS::RUM::AppMonitor"|"AWS::Events::Endpoint"|"AWS::SES::ReceiptRuleSet"|"AWS::Events::Archive"|"AWS::Events::ApiDestination"|"AWS::Lightsail::Disk"|"AWS::FIS::ExperimentTemplate"|"AWS::DataSync::LocationFSxWindows"|"AWS::SES::ReceiptFilter"|"AWS::GuardDuty::Filter"|"AWS::SES::Template"|"AWS::AmazonMQ::Broker"|"AWS::AppConfig::Environment"|"AWS::AppConfig::ConfigurationProfile"|"AWS::Cloud9::EnvironmentEC2"|"AWS::EventSchemas::Registry"|"AWS::EventSchemas::RegistryPolicy"|"AWS::EventSchemas::Discoverer"|"AWS::FraudDetector::Label"|"AWS::FraudDetector::EntityType"|"AWS::FraudDetector::Variable"|"AWS::FraudDetector::Outcome"|"AWS::IoT::Authorizer"|"AWS::IoT::SecurityProfile"|"AWS::IoT::RoleAlias"|"AWS::IoT::Dimension"|"AWS::IoTAnalytics::Datastore"|"AWS::Lightsail::Bucket"|"AWS::Lightsail::StaticIp"|"AWS::MediaPackage::PackagingGroup"|"AWS::Route53RecoveryReadiness::RecoveryGroup"|"AWS::ResilienceHub::ResiliencyPolicy"|"AWS::Transfer::Workflow"|"AWS::EKS::IdentityProviderConfig"|"AWS::EKS::Addon"|"AWS::Glue::MLTransform"|"AWS::IoT::Policy"|"AWS::IoT::MitigationAction"|"AWS::IoTTwinMaker::Workspace"|"AWS::IoTTwinMaker::Entity"|"AWS::IoTAnalytics::Dataset"|"AWS::IoTAnalytics::Pipeline"|"AWS::IoTAnalytics::Channel"|"AWS::IoTSiteWise::Dashboard"|"AWS::IoTSiteWise::Project"|"AWS::IoTSiteWise::Portal"|"AWS::IoTSiteWise::AssetModel"|"AWS::IVS::Channel"|"AWS::IVS::RecordingConfiguration"|"AWS::IVS::PlaybackKeyPair"|"AWS::KinesisAnalyticsV2::Application"|"AWS::RDS::GlobalCluster"|"AWS::S3::MultiRegionAccessPoint"|"AWS::DeviceFarm::TestGridProject"|"AWS::Budgets::BudgetsAction"|"AWS::Lex::Bot"|"AWS::CodeGuruReviewer::RepositoryAssociation"|"AWS::IoT::CustomMetric"|"AWS::Route53Resolver::FirewallDomainList"|"AWS::RoboMaker::RobotApplicationVersion"|"AWS::EC2::TrafficMirrorSession"|"AWS::IoTSiteWise::Gateway"|"AWS::Lex::BotAlias"|"AWS::LookoutMetrics::Alert"|"AWS::IoT::AccountAuditConfiguration"|"AWS::EC2::TrafficMirrorTarget"|"AWS::S3::StorageLens"|"AWS::IoT::ScheduledAudit"|"AWS::Events::Connection"|"AWS::EventSchemas::Schema"|"AWS::MediaPackage::PackagingConfiguration"|"AWS::KinesisVideo::SignalingChannel"|"AWS::AppStream::DirectoryConfig"|"AWS::LookoutVision::Project"|"AWS::Route53RecoveryControl::Cluster"|"AWS::Route53RecoveryControl::SafetyRule"|"AWS::Route53RecoveryControl::ControlPanel"|"AWS::Route53RecoveryControl::RoutingControl"|"AWS::Route53RecoveryReadiness::ResourceSet"|"AWS::RoboMaker::SimulationApplication"|"AWS::RoboMaker::RobotApplication"|"AWS::HealthLake::FHIRDatastore"|"AWS::Pinpoint::Segment"|"AWS::Pinpoint::ApplicationSettings"|"AWS::Events::Rule"|"AWS::EC2::DHCPOptions"|"AWS::EC2::NetworkInsightsPath"|"AWS::EC2::TrafficMirrorFilter"|"AWS::EC2::IPAM"|"AWS::IoTTwinMaker::Scene"|"AWS::NetworkManager::TransitGatewayRegistration"|"AWS::CustomerProfiles::Domain"|"AWS::AutoScaling::WarmPool"|"AWS::Connect::PhoneNumber", ... (1 more fields)}
+  --limit-body: int # The maximum number of RemediationExecutionStatuses returned on each page. The default is maximum. If you specify 0, Config uses the default. (body field)
+  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+]: any -> record<RemediationExecutionStatuses: table<ResourceKey: record, State: string, StepDetails: list, InvocationTime: string, LastUpdatedTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeRemediationExecutionStatus")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ConfigRuleName": $config_rule_name, "ResourceKeys": $resource_keys, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -2355,13 +2414,14 @@ export def "describe-retention-configurations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-42
-  --retention-configuration-names: any
-  --next-token-body: any #  (body field)
-]: any -> record<RetentionConfigurations: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-42 # required
+  --retention-configuration-names: list<string> # A list of names of retention configurations for which you want details. If you do not specify a name, Config returns details for all the retention configurations for that account. Currently, Config supports only one retention configuration per region in your account.
+  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+]: any -> record<RetentionConfigurations: table<Name: string, RetentionPeriodInDays: int>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeRetentionConfigurations")
   let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"RetentionConfigurationNames": $retention_configuration_names, "NextToken": $next_token_body} | compact
@@ -2407,18 +2467,19 @@ export def "get-aggregate-compliance-details-by-config-rule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-43
-  configuration_aggregator_name: any
-  config_rule_name: any
-  account_id: any
-  aws_region: any
-  --compliance-type: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<AggregateEvaluationResults: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-43 # required
+  configuration_aggregator_name: string # The name of the configuration aggregator.
+  config_rule_name: string # The name of the Config rule for which you want compliance information.
+  account_id: string # The 12-digit account ID of the source account.
+  aws_region: string # The source region from where the data is aggregated.
+  --compliance-type: string@compliance-type-completer # The resource compliance status. For the GetAggregateComplianceDetailsByConfigRuleRequest data type, Config supports only the COMPLIANT and NON_COMPLIANT. Config does not support the NOT_APPLICABLE and INSUFFICIENT_DATA values.
+  --limit-body: int # The maximum number of evaluation results returned on each page. The default is 50. You cannot specify a number greater than 100. If you specify 0, Config uses the default. (body field)
+  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+]: any -> record<AggregateEvaluationResults: table<EvaluationResultIdentifier: record, ComplianceType: string, ResultRecordedTime: string, ConfigRuleInvokedTime: string, Annotation: string, AccountId: string, AwsRegion: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.GetAggregateComplianceDetailsByConfigRule")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "ConfigRuleName": $config_rule_name, "AccountId": $account_id, "AwsRegion": $aws_region, "ComplianceType": $compliance_type, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -2445,6 +2506,7 @@ export def "get-aggregate-compliance-details-by-config-rule" [
 #
 # POST /
 # operationId: GetAggregateConfigRuleComplianceSummary
+# --Filters shape: {AccountId?: string, AwsRegion?: string}
 export def "get-aggregate-config-rule-compliance-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2464,16 +2526,17 @@ export def "get-aggregate-config-rule-compliance-summary" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-44
-  configuration_aggregator_name: any
-  --filters: any
-  --group-by-key: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<GroupByKey: record, AggregateComplianceCounts: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-44 # required
+  configuration_aggregator_name: string # The name of the configuration aggregator.
+  --filters: record # Filters the results based on the account IDs and regions. — shape: {AccountId?: string, AwsRegion?: string}
+  --group-by-key: string@group-by-key-completer # Groups the result based on ACCOUNT_ID or AWS_REGION.
+  --limit-body: int # The maximum number of evaluation results returned on each page. The default is 1000. You cannot specify a number greater than 1000. If you specify 0, Config uses the default. (body field)
+  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+]: any -> record<GroupByKey: string, AggregateComplianceCounts: table<GroupName: string, ComplianceSummary: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.GetAggregateConfigRuleComplianceSummary")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "Filters": $filters, "GroupByKey": $group_by_key, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -2500,6 +2563,7 @@ export def "get-aggregate-config-rule-compliance-summary" [
 #
 # POST /
 # operationId: GetAggregateConformancePackComplianceSummary
+# --Filters shape: {AccountId?: string, AwsRegion?: string}
 export def "get-aggregate-conformance-pack-compliance-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2519,16 +2583,17 @@ export def "get-aggregate-conformance-pack-compliance-summary" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-45
-  configuration_aggregator_name: any
-  --filters: any
-  --group-by-key: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<AggregateConformancePackComplianceSummaries: record, GroupByKey: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-45 # required
+  configuration_aggregator_name: string # The name of the configuration aggregator.
+  --filters: record # Filters the results based on account ID and region. — shape: {AccountId?: string, AwsRegion?: string}
+  --group-by-key: string@group-by-key-completer # Groups the result based on Amazon Web Services account ID or Amazon Web Services Region.
+  --limit-body: int # The maximum number of results returned on each page. The default is maximum. If you specify 0, Config uses the default. (body field)
+  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+]: any -> record<AggregateConformancePackComplianceSummaries: table<ComplianceSummary: record, GroupName: string>, GroupByKey: string, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.GetAggregateConformancePackComplianceSummary")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "Filters": $filters, "GroupByKey": $group_by_key, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -2555,6 +2620,7 @@ export def "get-aggregate-conformance-pack-compliance-summary" [
 #
 # POST /
 # operationId: GetAggregateDiscoveredResourceCounts
+# --Filters shape: {ResourceType?: "AWS::EC2::CustomerGateway"|"AWS::EC2::EIP"|"AWS::EC2::Host"|"AWS::EC2::Instance"|"AWS::EC2::InternetGateway"|"AWS::EC2::NetworkAcl"|"AWS::EC2::NetworkInterface"|"AWS::EC2::RouteTable"|"AWS::EC2::SecurityGroup"|"AWS::EC2::Subnet"|"AWS::CloudTrail::Trail"|"AWS::EC2::Volume"|"AWS::EC2::VPC"|"AWS::EC2::VPNConnection"|"AWS::EC2::VPNGateway"|"AWS::EC2::RegisteredHAInstance"|"AWS::EC2::NatGateway"|"AWS::EC2::EgressOnlyInternetGateway"|"AWS::EC2::VPCEndpoint"|"AWS::EC2::VPCEndpointService"|"AWS::EC2::FlowLog"|"AWS::EC2::VPCPeeringConnection"|"AWS::Elasticsearch::Domain"|"AWS::IAM::Group"|"AWS::IAM::Policy"|"AWS::IAM::Role"|"AWS::IAM::User"|"AWS::ElasticLoadBalancingV2::LoadBalancer"|"AWS::ACM::Certificate"|"AWS::RDS::DBInstance"|"AWS::RDS::DBSubnetGroup"|"AWS::RDS::DBSecurityGroup"|"AWS::RDS::DBSnapshot"|"AWS::RDS::DBCluster"|"AWS::RDS::DBClusterSnapshot"|"AWS::RDS::EventSubscription"|"AWS::S3::Bucket"|"AWS::S3::AccountPublicAccessBlock"|"AWS::Redshift::Cluster"|"AWS::Redshift::ClusterSnapshot"|"AWS::Redshift::ClusterParameterGroup"|"AWS::Redshift::ClusterSecurityGroup"|"AWS::Redshift::ClusterSubnetGroup"|"AWS::Redshift::EventSubscription"|"AWS::SSM::ManagedInstanceInventory"|"AWS::CloudWatch::Alarm"|"AWS::CloudFormation::Stack"|"AWS::ElasticLoadBalancing::LoadBalancer"|"AWS::AutoScaling::AutoScalingGroup"|"AWS::AutoScaling::LaunchConfiguration"|"AWS::AutoScaling::ScalingPolicy"|"AWS::AutoScaling::ScheduledAction"|"AWS::DynamoDB::Table"|"AWS::CodeBuild::Project"|"AWS::WAF::RateBasedRule"|"AWS::WAF::Rule"|"AWS::WAF::RuleGroup"|"AWS::WAF::WebACL"|"AWS::WAFRegional::RateBasedRule"|"AWS::WAFRegional::Rule"|"AWS::WAFRegional::RuleGroup"|"AWS::WAFRegional::WebACL"|"AWS::CloudFront::Distribution"|"AWS::CloudFront::StreamingDistribution"|"AWS::Lambda::Function"|"AWS::NetworkFirewall::Firewall"|"AWS::NetworkFirewall::FirewallPolicy"|"AWS::NetworkFirewall::RuleGroup"|"AWS::ElasticBeanstalk::Application"|"AWS::ElasticBeanstalk::ApplicationVersion"|"AWS::ElasticBeanstalk::Environment"|"AWS::WAFv2::WebACL"|"AWS::WAFv2::RuleGroup"|"AWS::WAFv2::IPSet"|"AWS::WAFv2::RegexPatternSet"|"AWS::WAFv2::ManagedRuleSet"|"AWS::XRay::EncryptionConfig"|"AWS::SSM::AssociationCompliance"|"AWS::SSM::PatchCompliance"|"AWS::Shield::Protection"|"AWS::ShieldRegional::Protection"|"AWS::Config::ConformancePackCompliance"|"AWS::Config::ResourceCompliance"|"AWS::ApiGateway::Stage"|"AWS::ApiGateway::RestApi"|"AWS::ApiGatewayV2::Stage"|"AWS::ApiGatewayV2::Api"|"AWS::CodePipeline::Pipeline"|"AWS::ServiceCatalog::CloudFormationProvisionedProduct"|"AWS::ServiceCatalog::CloudFormationProduct"|"AWS::ServiceCatalog::Portfolio"|"AWS::SQS::Queue"|"AWS::KMS::Key"|"AWS::QLDB::Ledger"|"AWS::SecretsManager::Secret"|"AWS::SNS::Topic"|"AWS::SSM::FileData"|"AWS::Backup::BackupPlan"|"AWS::Backup::BackupSelection"|"AWS::Backup::BackupVault"|"AWS::Backup::RecoveryPoint"|"AWS::ECR::Repository"|"AWS::ECS::Cluster"|"AWS::ECS::Service"|"AWS::ECS::TaskDefinition"|"AWS::EFS::AccessPoint"|"AWS::EFS::FileSystem"|"AWS::EKS::Cluster"|"AWS::OpenSearch::Domain"|"AWS::EC2::TransitGateway"|"AWS::Kinesis::Stream"|"AWS::Kinesis::StreamConsumer"|"AWS::CodeDeploy::Application"|"AWS::CodeDeploy::DeploymentConfig"|"AWS::CodeDeploy::DeploymentGroup"|"AWS::EC2::LaunchTemplate"|"AWS::ECR::PublicRepository"|"AWS::GuardDuty::Detector"|"AWS::EMR::SecurityConfiguration"|"AWS::SageMaker::CodeRepository"|"AWS::Route53Resolver::ResolverEndpoint"|"AWS::Route53Resolver::ResolverRule"|"AWS::Route53Resolver::ResolverRuleAssociation"|"AWS::DMS::ReplicationSubnetGroup"|"AWS::DMS::EventSubscription"|"AWS::MSK::Cluster"|"AWS::StepFunctions::Activity"|"AWS::WorkSpaces::Workspace"|"AWS::WorkSpaces::ConnectionAlias"|"AWS::SageMaker::Model"|"AWS::ElasticLoadBalancingV2::Listener"|"AWS::StepFunctions::StateMachine"|"AWS::Batch::JobQueue"|"AWS::Batch::ComputeEnvironment"|"AWS::AccessAnalyzer::Analyzer"|"AWS::Athena::WorkGroup"|"AWS::Athena::DataCatalog"|"AWS::Detective::Graph"|"AWS::GlobalAccelerator::Accelerator"|"AWS::GlobalAccelerator::EndpointGroup"|"AWS::GlobalAccelerator::Listener"|"AWS::EC2::TransitGatewayAttachment"|"AWS::EC2::TransitGatewayRouteTable"|"AWS::DMS::Certificate"|"AWS::AppConfig::Application"|"AWS::AppSync::GraphQLApi"|"AWS::DataSync::LocationSMB"|"AWS::DataSync::LocationFSxLustre"|"AWS::DataSync::LocationS3"|"AWS::DataSync::LocationEFS"|"AWS::DataSync::Task"|"AWS::DataSync::LocationNFS"|"AWS::EC2::NetworkInsightsAccessScopeAnalysis"|"AWS::EKS::FargateProfile"|"AWS::Glue::Job"|"AWS::GuardDuty::ThreatIntelSet"|"AWS::GuardDuty::IPSet"|"AWS::SageMaker::Workteam"|"AWS::SageMaker::NotebookInstanceLifecycleConfig"|"AWS::ServiceDiscovery::Service"|"AWS::ServiceDiscovery::PublicDnsNamespace"|"AWS::SES::ContactList"|"AWS::SES::ConfigurationSet"|"AWS::Route53::HostedZone"|"AWS::IoTEvents::Input"|"AWS::IoTEvents::DetectorModel"|"AWS::IoTEvents::AlarmModel"|"AWS::ServiceDiscovery::HttpNamespace"|"AWS::Events::EventBus"|"AWS::ImageBuilder::ContainerRecipe"|"AWS::ImageBuilder::DistributionConfiguration"|"AWS::ImageBuilder::InfrastructureConfiguration"|"AWS::DataSync::LocationObjectStorage"|"AWS::DataSync::LocationHDFS"|"AWS::Glue::Classifier"|"AWS::Route53RecoveryReadiness::Cell"|"AWS::Route53RecoveryReadiness::ReadinessCheck"|"AWS::ECR::RegistryPolicy"|"AWS::Backup::ReportPlan"|"AWS::Lightsail::Certificate"|"AWS::RUM::AppMonitor"|"AWS::Events::Endpoint"|"AWS::SES::ReceiptRuleSet"|"AWS::Events::Archive"|"AWS::Events::ApiDestination"|"AWS::Lightsail::Disk"|"AWS::FIS::ExperimentTemplate"|"AWS::DataSync::LocationFSxWindows"|"AWS::SES::ReceiptFilter"|"AWS::GuardDuty::Filter"|"AWS::SES::Template"|"AWS::AmazonMQ::Broker"|"AWS::AppConfig::Environment"|"AWS::AppConfig::ConfigurationProfile"|"AWS::Cloud9::EnvironmentEC2"|"AWS::EventSchemas::Registry"|"AWS::EventSchemas::RegistryPolicy"|"AWS::EventSchemas::Discoverer"|"AWS::FraudDetector::Label"|"AWS::FraudDetector::EntityType"|"AWS::FraudDetector::Variable"|"AWS::FraudDetector::Outcome"|"AWS::IoT::Authorizer"|"AWS::IoT::SecurityProfile"|"AWS::IoT::RoleAlias"|"AWS::IoT::Dimension"|"AWS::IoTAnalytics::Datastore"|"AWS::Lightsail::Bucket"|"AWS::Lightsail::StaticIp"|"AWS::MediaPackage::PackagingGroup"|"AWS::Route53RecoveryReadiness::RecoveryGroup"|"AWS::ResilienceHub::ResiliencyPolicy"|"AWS::Transfer::Workflow"|"AWS::EKS::IdentityProviderConfig"|"AWS::EKS::Addon"|"AWS::Glue::MLTransform"|"AWS::IoT::Policy"|"AWS::IoT::MitigationAction"|"AWS::IoTTwinMaker::Workspace"|"AWS::IoTTwinMaker::Entity"|"AWS::IoTAnalytics::Dataset"|"AWS::IoTAnalytics::Pipeline"|"AWS::IoTAnalytics::Channel"|"AWS::IoTSiteWise::Dashboard"|"AWS::IoTSiteWise::Project"|"AWS::IoTSiteWise::Portal"|"AWS::IoTSiteWise::AssetModel"|"AWS::IVS::Channel"|"AWS::IVS::RecordingConfiguration"|"AWS::IVS::PlaybackKeyPair"|"AWS::KinesisAnalyticsV2::Application"|"AWS::RDS::GlobalCluster"|"AWS::S3::MultiRegionAccessPoint"|"AWS::DeviceFarm::TestGridProject"|"AWS::Budgets::BudgetsAction"|"AWS::Lex::Bot"|"AWS::CodeGuruReviewer::RepositoryAssociation"|"AWS::IoT::CustomMetric"|"AWS::Route53Resolver::FirewallDomainList"|"AWS::RoboMaker::RobotApplicationVersion"|"AWS::EC2::TrafficMirrorSession"|"AWS::IoTSiteWise::Gateway"|"AWS::Lex::BotAlias"|"AWS::LookoutMetrics::Alert"|"AWS::IoT::AccountAuditConfiguration"|"AWS::EC2::TrafficMirrorTarget"|"AWS::S3::StorageLens"|"AWS::IoT::ScheduledAudit"|"AWS::Events::Connection"|"AWS::EventSchemas::Schema"|"AWS::MediaPackage::PackagingConfiguration"|"AWS::KinesisVideo::SignalingChannel"|"AWS::AppStream::DirectoryConfig"|"AWS::LookoutVision::Project"|"AWS::Route53RecoveryControl::Cluster"|"AWS::Route53RecoveryControl::SafetyRule"|"AWS::Route53RecoveryControl::ControlPanel"|"AWS::Route53RecoveryControl::RoutingControl"|"AWS::Route53RecoveryReadiness::ResourceSet"|"AWS::RoboMaker::SimulationApplication"|"AWS::RoboMaker::RobotApplication"|"AWS::HealthLake::FHIRDatastore"|"AWS::Pinpoint::Segment"|"AWS::Pinpoint::ApplicationSettings"|"AWS::Events::Rule"|"AWS::EC2::DHCPOptions"|"AWS::EC2::NetworkInsightsPath"|"AWS::EC2::TrafficMirrorFilter"|"AWS::EC2::IPAM"|"AWS::IoTTwinMaker::Scene"|"AWS::NetworkManager::TransitGatewayRegistration"|"AWS::CustomerProfiles::Domain"|"AWS::AutoScaling::WarmPool"|"AWS::Connect::PhoneNumber", ... (2 more fields)}
 export def "get-aggregate-discovered-resource-counts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2574,16 +2640,17 @@ export def "get-aggregate-discovered-resource-counts" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-46
-  configuration_aggregator_name: any
-  --filters: any
-  --group-by-key: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<TotalDiscoveredResources: record, GroupByKey: record, GroupedResourceCounts: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-46 # required
+  configuration_aggregator_name: string # The name of the configuration aggregator.
+  --filters: record # Filters the resource count based on account ID, region, and resource type. — shape: {ResourceType?: "AWS::EC2::CustomerGateway"|"AWS::EC2::EIP"|"AWS::EC2::Host"|"AWS::EC2::Instance"|"AWS::EC2::InternetGateway"|"AWS::EC2::NetworkAcl"|"AWS::EC2::NetworkInterface"|"AWS::EC2::RouteTable"|"AWS::EC2::SecurityGroup"|"AWS::EC2::Subnet"|"AWS::CloudTrail::Trail"|"AWS::EC2::Volume"|"AWS::EC2::VPC"|"AWS::EC2::VPNConnection"|"AWS::EC2::VPNGateway"|"AWS::EC2::RegisteredHAInstance"|"AWS::EC2::NatGateway"|"AWS::EC2::EgressOnlyInternetGateway"|"AWS::EC2::VPCEndpoint"|"AWS::EC2::VPCEndpointService"|"AWS::EC2::FlowLog"|"AWS::EC2::VPCPeeringConnection"|"AWS::Elasticsearch::Domain"|"AWS::IAM::Group"|"AWS::IAM::Policy"|"AWS::IAM::Role"|"AWS::IAM::User"|"AWS::ElasticLoadBalancingV2::LoadBalancer"|"AWS::ACM::Certificate"|"AWS::RDS::DBInstance"|"AWS::RDS::DBSubnetGroup"|"AWS::RDS::DBSecurityGroup"|"AWS::RDS::DBSnapshot"|"AWS::RDS::DBCluster"|"AWS::RDS::DBClusterSnapshot"|"AWS::RDS::EventSubscription"|"AWS::S3::Bucket"|"AWS::S3::AccountPublicAccessBlock"|"AWS::Redshift::Cluster"|"AWS::Redshift::ClusterSnapshot"|"AWS::Redshift::ClusterParameterGroup"|"AWS::Redshift::ClusterSecurityGroup"|"AWS::Redshift::ClusterSubnetGroup"|"AWS::Redshift::EventSubscription"|"AWS::SSM::ManagedInstanceInventory"|"AWS::CloudWatch::Alarm"|"AWS::CloudFormation::Stack"|"AWS::ElasticLoadBalancing::LoadBalancer"|"AWS::AutoScaling::AutoScalingGroup"|"AWS::AutoScaling::LaunchConfiguration"|"AWS::AutoScaling::ScalingPolicy"|"AWS::AutoScaling::ScheduledAction"|"AWS::DynamoDB::Table"|"AWS::CodeBuild::Project"|"AWS::WAF::RateBasedRule"|"AWS::WAF::Rule"|"AWS::WAF::RuleGroup"|"AWS::WAF::WebACL"|"AWS::WAFRegional::RateBasedRule"|"AWS::WAFRegional::Rule"|"AWS::WAFRegional::RuleGroup"|"AWS::WAFRegional::WebACL"|"AWS::CloudFront::Distribution"|"AWS::CloudFront::StreamingDistribution"|"AWS::Lambda::Function"|"AWS::NetworkFirewall::Firewall"|"AWS::NetworkFirewall::FirewallPolicy"|"AWS::NetworkFirewall::RuleGroup"|"AWS::ElasticBeanstalk::Application"|"AWS::ElasticBeanstalk::ApplicationVersion"|"AWS::ElasticBeanstalk::Environment"|"AWS::WAFv2::WebACL"|"AWS::WAFv2::RuleGroup"|"AWS::WAFv2::IPSet"|"AWS::WAFv2::RegexPatternSet"|"AWS::WAFv2::ManagedRuleSet"|"AWS::XRay::EncryptionConfig"|"AWS::SSM::AssociationCompliance"|"AWS::SSM::PatchCompliance"|"AWS::Shield::Protection"|"AWS::ShieldRegional::Protection"|"AWS::Config::ConformancePackCompliance"|"AWS::Config::ResourceCompliance"|"AWS::ApiGateway::Stage"|"AWS::ApiGateway::RestApi"|"AWS::ApiGatewayV2::Stage"|"AWS::ApiGatewayV2::Api"|"AWS::CodePipeline::Pipeline"|"AWS::ServiceCatalog::CloudFormationProvisionedProduct"|"AWS::ServiceCatalog::CloudFormationProduct"|"AWS::ServiceCatalog::Portfolio"|"AWS::SQS::Queue"|"AWS::KMS::Key"|"AWS::QLDB::Ledger"|"AWS::SecretsManager::Secret"|"AWS::SNS::Topic"|"AWS::SSM::FileData"|"AWS::Backup::BackupPlan"|"AWS::Backup::BackupSelection"|"AWS::Backup::BackupVault"|"AWS::Backup::RecoveryPoint"|"AWS::ECR::Repository"|"AWS::ECS::Cluster"|"AWS::ECS::Service"|"AWS::ECS::TaskDefinition"|"AWS::EFS::AccessPoint"|"AWS::EFS::FileSystem"|"AWS::EKS::Cluster"|"AWS::OpenSearch::Domain"|"AWS::EC2::TransitGateway"|"AWS::Kinesis::Stream"|"AWS::Kinesis::StreamConsumer"|"AWS::CodeDeploy::Application"|"AWS::CodeDeploy::DeploymentConfig"|"AWS::CodeDeploy::DeploymentGroup"|"AWS::EC2::LaunchTemplate"|"AWS::ECR::PublicRepository"|"AWS::GuardDuty::Detector"|"AWS::EMR::SecurityConfiguration"|"AWS::SageMaker::CodeRepository"|"AWS::Route53Resolver::ResolverEndpoint"|"AWS::Route53Resolver::ResolverRule"|"AWS::Route53Resolver::ResolverRuleAssociation"|"AWS::DMS::ReplicationSubnetGroup"|"AWS::DMS::EventSubscription"|"AWS::MSK::Cluster"|"AWS::StepFunctions::Activity"|"AWS::WorkSpaces::Workspace"|"AWS::WorkSpaces::ConnectionAlias"|"AWS::SageMaker::Model"|"AWS::ElasticLoadBalancingV2::Listener"|"AWS::StepFunctions::StateMachine"|"AWS::Batch::JobQueue"|"AWS::Batch::ComputeEnvironment"|"AWS::AccessAnalyzer::Analyzer"|"AWS::Athena::WorkGroup"|"AWS::Athena::DataCatalog"|"AWS::Detective::Graph"|"AWS::GlobalAccelerator::Accelerator"|"AWS::GlobalAccelerator::EndpointGroup"|"AWS::GlobalAccelerator::Listener"|"AWS::EC2::TransitGatewayAttachment"|"AWS::EC2::TransitGatewayRouteTable"|"AWS::DMS::Certificate"|"AWS::AppConfig::Application"|"AWS::AppSync::GraphQLApi"|"AWS::DataSync::LocationSMB"|"AWS::DataSync::LocationFSxLustre"|"AWS::DataSync::LocationS3"|"AWS::DataSync::LocationEFS"|"AWS::DataSync::Task"|"AWS::DataSync::LocationNFS"|"AWS::EC2::NetworkInsightsAccessScopeAnalysis"|"AWS::EKS::FargateProfile"|"AWS::Glue::Job"|"AWS::GuardDuty::ThreatIntelSet"|"AWS::GuardDuty::IPSet"|"AWS::SageMaker::Workteam"|"AWS::SageMaker::NotebookInstanceLifecycleConfig"|"AWS::ServiceDiscovery::Service"|"AWS::ServiceDiscovery::PublicDnsNamespace"|"AWS::SES::ContactList"|"AWS::SES::ConfigurationSet"|"AWS::Route53::HostedZone"|"AWS::IoTEvents::Input"|"AWS::IoTEvents::DetectorModel"|"AWS::IoTEvents::AlarmModel"|"AWS::ServiceDiscovery::HttpNamespace"|"AWS::Events::EventBus"|"AWS::ImageBuilder::ContainerRecipe"|"AWS::ImageBuilder::DistributionConfiguration"|"AWS::ImageBuilder::InfrastructureConfiguration"|"AWS::DataSync::LocationObjectStorage"|"AWS::DataSync::LocationHDFS"|"AWS::Glue::Classifier"|"AWS::Route53RecoveryReadiness::Cell"|"AWS::Route53RecoveryReadiness::ReadinessCheck"|"AWS::ECR::RegistryPolicy"|"AWS::Backup::ReportPlan"|"AWS::Lightsail::Certificate"|"AWS::RUM::AppMonitor"|"AWS::Events::Endpoint"|"AWS::SES::ReceiptRuleSet"|"AWS::Events::Archive"|"AWS::Events::ApiDestination"|"AWS::Lightsail::Disk"|"AWS::FIS::ExperimentTemplate"|"AWS::DataSync::LocationFSxWindows"|"AWS::SES::ReceiptFilter"|"AWS::GuardDuty::Filter"|"AWS::SES::Template"|"AWS::AmazonMQ::Broker"|"AWS::AppConfig::Environment"|"AWS::AppConfig::ConfigurationProfile"|"AWS::Cloud9::EnvironmentEC2"|"AWS::EventSchemas::Registry"|"AWS::EventSchemas::RegistryPolicy"|"AWS::EventSchemas::Discoverer"|"AWS::FraudDetector::Label"|"AWS::FraudDetector::EntityType"|"AWS::FraudDetector::Variable"|"AWS::FraudDetector::Outcome"|"AWS::IoT::Authorizer"|"AWS::IoT::SecurityProfile"|"AWS::IoT::RoleAlias"|"AWS::IoT::Dimension"|"AWS::IoTAnalytics::Datastore"|"AWS::Lightsail::Bucket"|"AWS::Lightsail::StaticIp"|"AWS::MediaPackage::PackagingGroup"|"AWS::Route53RecoveryReadiness::RecoveryGroup"|"AWS::ResilienceHub::ResiliencyPolicy"|"AWS::Transfer::Workflow"|"AWS::EKS::IdentityProviderConfig"|"AWS::EKS::Addon"|"AWS::Glue::MLTransform"|"AWS::IoT::Policy"|"AWS::IoT::MitigationAction"|"AWS::IoTTwinMaker::Workspace"|"AWS::IoTTwinMaker::Entity"|"AWS::IoTAnalytics::Dataset"|"AWS::IoTAnalytics::Pipeline"|"AWS::IoTAnalytics::Channel"|"AWS::IoTSiteWise::Dashboard"|"AWS::IoTSiteWise::Project"|"AWS::IoTSiteWise::Portal"|"AWS::IoTSiteWise::AssetModel"|"AWS::IVS::Channel"|"AWS::IVS::RecordingConfiguration"|"AWS::IVS::PlaybackKeyPair"|"AWS::KinesisAnalyticsV2::Application"|"AWS::RDS::GlobalCluster"|"AWS::S3::MultiRegionAccessPoint"|"AWS::DeviceFarm::TestGridProject"|"AWS::Budgets::BudgetsAction"|"AWS::Lex::Bot"|"AWS::CodeGuruReviewer::RepositoryAssociation"|"AWS::IoT::CustomMetric"|"AWS::Route53Resolver::FirewallDomainList"|"AWS::RoboMaker::RobotApplicationVersion"|"AWS::EC2::TrafficMirrorSession"|"AWS::IoTSiteWise::Gateway"|"AWS::Lex::BotAlias"|"AWS::LookoutMetrics::Alert"|"AWS::IoT::AccountAuditConfiguration"|"AWS::EC2::TrafficMirrorTarget"|"AWS::S3::StorageLens"|"AWS::IoT::ScheduledAudit"|"AWS::Events::Connection"|"AWS::EventSchemas::Schema"|"AWS::MediaPackage::PackagingConfiguration"|"AWS::KinesisVideo::SignalingChannel"|"AWS::AppStream::DirectoryConfig"|"AWS::LookoutVision::Project"|"AWS::Route53RecoveryControl::Cluster"|"AWS::Route53RecoveryControl::SafetyRule"|"AWS::Route53RecoveryControl::ControlPanel"|"AWS::Route53RecoveryControl::RoutingControl"|"AWS::Route53RecoveryReadiness::ResourceSet"|"AWS::RoboMaker::SimulationApplication"|"AWS::RoboMaker::RobotApplication"|"AWS::HealthLake::FHIRDatastore"|"AWS::Pinpoint::Segment"|"AWS::Pinpoint::ApplicationSettings"|"AWS::Events::Rule"|"AWS::EC2::DHCPOptions"|"AWS::EC2::NetworkInsightsPath"|"AWS::EC2::TrafficMirrorFilter"|"AWS::EC2::IPAM"|"AWS::IoTTwinMaker::Scene"|"AWS::NetworkManager::TransitGatewayRegistration"|"AWS::CustomerProfiles::Domain"|"AWS::AutoScaling::WarmPool"|"AWS::Connect::PhoneNumber", ... (2 more fields)}
+  --group-by-key: string@group-by-key-completer-1 # The key to group the resource counts.
+  --limit-body: int # The maximum number of GroupedResourceCount objects returned on each page. The default is 1000. You cannot specify a number greater than 1000. If you specify 0, Config uses the default. (body field)
+  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+]: any -> record<TotalDiscoveredResources: int, GroupByKey: string, GroupedResourceCounts: table<GroupName: string, ResourceCount: int>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.GetAggregateDiscoveredResourceCounts")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "Filters": $filters, "GroupByKey": $group_by_key, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -2610,6 +2677,7 @@ export def "get-aggregate-discovered-resource-counts" [
 #
 # POST /
 # operationId: GetAggregateResourceConfig
+# --ResourceIdentifier shape: {SourceAccountId: string, SourceRegion: string, ResourceId: string, ... (2 more fields)}
 export def "get-aggregate-resource-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2627,13 +2695,14 @@ export def "get-aggregate-resource-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-47
-  configuration_aggregator_name: any
-  resource_identifier: any
-]: any -> record<ConfigurationItem: record<version: record, accountId: record, configurationItemCaptureTime: record, configurationItemStatus: record, configurationStateId: record, configurationItemMD5Hash: record, arn: record, resourceType: record, resourceId: record, resourceName: record, awsRegion: record, availabilityZone: record, resourceCreationTime: record, tags: record, relatedEvents: record, relationships: record, configuration: record, supplementaryConfiguration: record>> {
+  --x-amz-target: string@x-amz-target-completer-47 # required
+  configuration_aggregator_name: string # The name of the configuration aggregator.
+  resource_identifier: record # The details that identify a resource that is collected by Config aggregator, including the resource type, ID, (if available) the custom resource name, the source account, and source region. — shape: {SourceAccountId: string, SourceRegion: string, ResourceId: string, ... (2 more fields)}
+]: any -> record<ConfigurationItem: record<version: string, accountId: string, configurationItemCaptureTime: string, configurationItemStatus: string, configurationStateId: string, configurationItemMD5Hash: string, arn: string, resourceType: string, resourceId: string, resourceName: string, awsRegion: string, availabilityZone: string, resourceCreationTime: string, tags: record, relatedEvents: list<string>, relationships: list<record>, configuration: string, supplementaryConfiguration: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.GetAggregateResourceConfig")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "ResourceIdentifier": $resource_identifier} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2678,15 +2747,16 @@ export def "get-compliance-details-by-config-rule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-48
-  config_rule_name: any
-  --compliance-types: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<EvaluationResults: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-48 # required
+  config_rule_name: string # The name of the Config rule for which you want compliance information.
+  --compliance-types: list<string> # Filters the results by compliance. INSUFFICIENT_DATA is a valid ComplianceType that is returned when an Config rule cannot be evaluated. However, INSUFFICIENT_DATA cannot be used as a ComplianceType for filtering results.
+  --limit-body: int # The maximum number of evaluation results returned on each page. The default is 10. You cannot specify a number greater than 100. If you specify 0, Config uses the default. (body field)
+  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+]: any -> record<EvaluationResults: table<EvaluationResultIdentifier: record, ComplianceType: string, ResultRecordedTime: string, ConfigRuleInvokedTime: string, Annotation: string, ResultToken: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.GetComplianceDetailsByConfigRule")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ConfigRuleName": $config_rule_name, "ComplianceTypes": $compliance_types, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -2731,16 +2801,17 @@ export def "get-compliance-details-by-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-49
-  --resource-type: any
-  --resource-id: any
-  --compliance-types: any
-  --next-token-body: any #  (body field)
-  --resource-evaluation-id: any
-]: any -> record<EvaluationResults: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-49 # required
+  --resource-type: string # The type of the Amazon Web Services resource for which you want compliance information.
+  --resource-id: string # The ID of the Amazon Web Services resource for which you want compliance information.
+  --compliance-types: list<string> # Filters the results by compliance. INSUFFICIENT_DATA is a valid ComplianceType that is returned when an Config rule cannot be evaluated. However, INSUFFICIENT_DATA cannot be used as a ComplianceType for filtering results.
+  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+  --resource-evaluation-id: string # The unique ID of Amazon Web Services resource execution for which you want to retrieve evaluation results. You need to only provide either a ResourceEvaluationID or a ResourceID and ResourceType.
+]: any -> record<EvaluationResults: table<EvaluationResultIdentifier: record, ComplianceType: string, ResultRecordedTime: string, ConfigRuleInvokedTime: string, Annotation: string, ResultToken: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.GetComplianceDetailsByResource")
   let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ResourceType": $resource_type, "ResourceId": $resource_id, "ComplianceTypes": $compliance_types, "NextToken": $next_token_body, "ResourceEvaluationId": $resource_evaluation_id} | compact
@@ -2784,10 +2855,11 @@ export def "get-compliance-summary-by-config-rule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-50
-]: nothing -> record<ComplianceSummary: record<CompliantResourceCount: record<CappedCount: record, CapExceeded: record>, NonCompliantResourceCount: record<CappedCount: record, CapExceeded: record>, ComplianceSummaryTimestamp: record>> {
+  --x-amz-target: string@x-amz-target-completer-50 # required
+]: nothing -> record<ComplianceSummary: record<CompliantResourceCount: record<CappedCount: int, CapExceeded: bool>, NonCompliantResourceCount: record<CappedCount: int, CapExceeded: bool>, ComplianceSummaryTimestamp: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.GetComplianceSummaryByConfigRule")
   let full_url = (build-url $base "/" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2828,12 +2900,13 @@ export def "get-compliance-summary-by-resource-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-51
-  --resource-types: any
-]: any -> record<ComplianceSummariesByResourceType: record> {
+  --x-amz-target: string@x-amz-target-completer-51 # required
+  --resource-types: list<string> # Specify one or more resource types to get the number of resources that are compliant and the number that are noncompliant for each resource type. For this request, you can specify an Amazon Web Services resource type such as AWS::EC2::Instance. You can specify that the resource type is an Amazon Web Services account by specifying AWS::::Account.
+]: any -> record<ComplianceSummariesByResourceType: table<ResourceType: string, ComplianceSummary: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.GetComplianceSummaryByResourceType")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceTypes": $resource_types} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2859,6 +2932,7 @@ export def "get-compliance-summary-by-resource-type" [
 #
 # POST /
 # operationId: GetConformancePackComplianceDetails
+# --Filters shape: {ConfigRuleNames?: list<string>, ComplianceType?: "COMPLIANT"|"NON_COMPLIANT"|"INSUFFICIENT_DATA", ResourceType?: string, ResourceIds?: list<string>}
 export def "get-conformance-pack-compliance-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2878,15 +2952,16 @@ export def "get-conformance-pack-compliance-details" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-52
-  conformance_pack_name: any
-  --filters: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<ConformancePackName: record, ConformancePackRuleEvaluationResults: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-52 # required
+  conformance_pack_name: string # Name of the conformance pack.
+  --filters: record # Filters a conformance pack by Config rule names, compliance types, Amazon Web Services resource types, and resource IDs. — shape: {ConfigRuleNames?: list<string>, ComplianceType?: "COMPLIANT"|"NON_COMPLIANT"|"INSUFFICIENT_DATA", ResourceType?: string, ResourceIds?: list<string>}
+  --limit-body: int # The maximum number of evaluation results returned on each page. If you do no specify a number, Config uses the default. The default is 100. (body field)
+  --next-token-body: string # The nextToken string returned in a previous request that you use to request the next page of results in a paginated response. (body field)
+]: any -> record<ConformancePackName: string, ConformancePackRuleEvaluationResults: table<ComplianceType: string, EvaluationResultIdentifier: record, ConfigRuleInvokedTime: string, ResultRecordedTime: string, Annotation: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.GetConformancePackComplianceDetails")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ConformancePackName": $conformance_pack_name, "Filters": $filters, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -2932,14 +3007,15 @@ export def "get-conformance-pack-compliance-summary" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-53
-  conformance_pack_names: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<ConformancePackComplianceSummaryList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-53 # required
+  conformance_pack_names: list<string> # Names of conformance packs.
+  --limit-body: int # The maximum number of conformance packs returned on each page. (body field)
+  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+]: any -> record<ConformancePackComplianceSummaryList: table<ConformancePackName: string, ConformancePackComplianceStatus: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.GetConformancePackComplianceSummary")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ConformancePackNames": $conformance_pack_names, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -2983,12 +3059,13 @@ export def "get-custom-rule-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-54
-  --config-rule-name: any
-]: any -> record<PolicyText: record> {
+  --x-amz-target: string@x-amz-target-completer-54 # required
+  --config-rule-name: string # The name of your Config Custom Policy rule.
+]: any -> record<PolicyText: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.GetCustomRulePolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigRuleName": $config_rule_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3033,14 +3110,15 @@ export def "get-discovered-resource-counts" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-55
-  --resource-types: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<totalDiscoveredResources: record, resourceCounts: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-55 # required
+  --resource-types: list<string> # The comma-separated list that specifies the resource types that you want Config to return (for example, "AWS::EC2::Instance", "AWS::IAM::User"). If a value for resourceTypes is not specified, Config returns all resource types that Config is recording in the region for your account. If the configuration recorder is turned off, Config returns an empty list of ResourceCount objects. If the configuration recorder is not recording a specific resource type (for example, S3 buckets), that resource type is not returned in the list of ResourceCount objects.
+  --limit-body: int # The maximum number of ResourceCount objects returned on each page. The default is 100. You cannot specify a number greater than 100. If you specify 0, Config uses the default. (body field)
+  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+]: any -> record<totalDiscoveredResources: int, resourceCounts: table<resourceType: string, count: int>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.GetDiscoveredResourceCounts")
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"resourceTypes": $resource_types, "limit": $limit_body, "nextToken": $next_token_body} | compact
@@ -3067,6 +3145,7 @@ export def "get-discovered-resource-counts" [
 #
 # POST /
 # operationId: GetOrganizationConfigRuleDetailedStatus
+# --Filters shape: {AccountId?: string, MemberAccountRuleStatus?: "CREATE_SUCCESSFUL"|"CREATE_IN_PROGRESS"|"CREATE_FAILED"|"DELETE_SUCCESSFUL"|"DELETE_FAILED"|"DELETE_IN_PROGRESS"|"UPDATE_SUCCESSFUL"|"UPDATE_IN_PROGRESS"|"UPDATE_FAILED"}
 export def "get-organization-config-rule-detailed-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3086,15 +3165,16 @@ export def "get-organization-config-rule-detailed-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-56
-  organization_config_rule_name: any
-  --filters: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<OrganizationConfigRuleDetailedStatus: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-56 # required
+  organization_config_rule_name: string # The name of your organization Config rule for which you want status details for member accounts.
+  --filters: record # Status filter object to filter results based on specific member account ID or status type for an organization Config rule. — shape: {AccountId?: string, MemberAccountRuleStatus?: "CREATE_SUCCESSFUL"|"CREATE_IN_PROGRESS"|"CREATE_FAILED"|"DELETE_SUCCESSFUL"|"DELETE_FAILED"|"DELETE_IN_PROGRESS"|"UPDATE_SUCCESSFUL"|"UPDATE_IN_PROGRESS"|"UPDATE_FAILED"}
+  --limit-body: int # The maximum number of OrganizationConfigRuleDetailedStatus returned on each page. If you do not specify a number, Config uses the default. The default is 100. (body field)
+  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+]: any -> record<OrganizationConfigRuleDetailedStatus: table<AccountId: string, ConfigRuleName: string, MemberAccountRuleStatus: string, ErrorCode: string, ErrorMessage: string, LastUpdateTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.GetOrganizationConfigRuleDetailedStatus")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"OrganizationConfigRuleName": $organization_config_rule_name, "Filters": $filters, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -3121,6 +3201,7 @@ export def "get-organization-config-rule-detailed-status" [
 #
 # POST /
 # operationId: GetOrganizationConformancePackDetailedStatus
+# --Filters shape: {AccountId?: string, Status?: "CREATE_SUCCESSFUL"|"CREATE_IN_PROGRESS"|"CREATE_FAILED"|"DELETE_SUCCESSFUL"|"DELETE_FAILED"|"DELETE_IN_PROGRESS"|"UPDATE_SUCCESSFUL"|"UPDATE_IN_PROGRESS"|"UPDATE_FAILED"}
 export def "get-organization-conformance-pack-detailed-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3140,15 +3221,16 @@ export def "get-organization-conformance-pack-detailed-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-57
-  organization_conformance_pack_name: any
-  --filters: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<OrganizationConformancePackDetailedStatuses: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-57 # required
+  organization_conformance_pack_name: string # The name of organization conformance pack for which you want status details for member accounts.
+  --filters: record # Status filter object to filter results based on specific member account ID or status type for an organization conformance pack. — shape: {AccountId?: string, Status?: "CREATE_SUCCESSFUL"|"CREATE_IN_PROGRESS"|"CREATE_FAILED"|"DELETE_SUCCESSFUL"|"DELETE_FAILED"|"DELETE_IN_PROGRESS"|"UPDATE_SUCCESSFUL"|"UPDATE_IN_PROGRESS"|"UPDATE_FAILED"}
+  --limit-body: int # The maximum number of OrganizationConformancePackDetailedStatuses returned on each page. If you do not specify a number, Config uses the default. The default is 100. (body field)
+  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+]: any -> record<OrganizationConformancePackDetailedStatuses: table<AccountId: string, ConformancePackName: string, Status: string, ErrorCode: string, ErrorMessage: string, LastUpdateTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.GetOrganizationConformancePackDetailedStatus")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"OrganizationConformancePackName": $organization_conformance_pack_name, "Filters": $filters, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -3192,12 +3274,13 @@ export def "get-organization-custom-rule-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-58
-  organization_config_rule_name: any
-]: any -> record<PolicyText: record> {
+  --x-amz-target: string@x-amz-target-completer-58 # required
+  organization_config_rule_name: string # The name of your organization Config Custom Policy rule.
+]: any -> record<PolicyText: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.GetOrganizationCustomRulePolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationConfigRuleName": $organization_config_rule_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3242,18 +3325,19 @@ export def "get-resource-config-history" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-59
-  resource_type: any
-  resource_id: any
-  --later-time: any
-  --earlier-time: any
-  --chronological-order: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<configurationItems: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-59 # required
+  resource_type: string@resource-type-completer # The resource type.
+  resource_id: string # The ID of the resource (for example., sg-xxxxxx).
+  --later-time: string # The time stamp that indicates a later time. If not specified, current time is taken. (format: date-time)
+  --earlier-time: string # The time stamp that indicates an earlier time. If not specified, the action returns paginated results that contain configuration items that start when the first configuration item was recorded. (format: date-time)
+  --chronological-order: string@chronological-order-completer # The chronological order for configuration items listed. By default, the results are listed in reverse chronological order.
+  --limit-body: int # The maximum number of configuration items returned on each page. The default is 10. You cannot specify a number greater than 100. If you specify 0, Config uses the default. (body field)
+  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+]: any -> record<configurationItems: table<version: string, accountId: string, configurationItemCaptureTime: string, configurationItemStatus: string, configurationStateId: string, configurationItemMD5Hash: string, arn: string, resourceType: string, resourceId: string, resourceName: string, awsRegion: string, availabilityZone: string, resourceCreationTime: string, tags: record, relatedEvents: list, relationships: list, configuration: string, supplementaryConfiguration: record>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.GetResourceConfigHistory")
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"resourceType": $resource_type, "resourceId": $resource_id, "laterTime": $later_time, "earlierTime": $earlier_time, "chronologicalOrder": $chronological_order, "limit": $limit_body, "nextToken": $next_token_body} | compact
@@ -3297,12 +3381,13 @@ export def "get-resource-evaluation-summary" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-60
-  resource_evaluation_id: any
-]: any -> record<ResourceEvaluationId: record, EvaluationMode: record, EvaluationStatus: record<Status: record, FailureReason: record>, EvaluationStartTimestamp: record, Compliance: record, EvaluationContext: record<EvaluationContextIdentifier: record>, ResourceDetails: record<ResourceId: record, ResourceType: record, ResourceConfiguration: record, ResourceConfigurationSchemaType: record>> {
+  --x-amz-target: string@x-amz-target-completer-60 # required
+  resource_evaluation_id: string # The unique ResourceEvaluationId of Amazon Web Services resource execution for which you want to retrieve the evaluation summary.
+]: any -> record<ResourceEvaluationId: string, EvaluationMode: string, EvaluationStatus: record<Status: string, FailureReason: string>, EvaluationStartTimestamp: string, Compliance: string, EvaluationContext: record<EvaluationContextIdentifier: string>, ResourceDetails: record<ResourceId: string, ResourceType: string, ResourceConfiguration: string, ResourceConfigurationSchemaType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.GetResourceEvaluationSummary")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceEvaluationId": $resource_evaluation_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3345,12 +3430,13 @@ export def "get-stored-query" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-61
-  query_name: any
-]: any -> record<StoredQuery: record<QueryId: record, QueryArn: record, QueryName: record, Description: record, Expression: record>> {
+  --x-amz-target: string@x-amz-target-completer-61 # required
+  query_name: string # The name of the query.
+]: any -> record<StoredQuery: record<QueryId: string, QueryArn: string, QueryName: string, Description: string, Expression: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.GetStoredQuery")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"QueryName": $query_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3376,6 +3462,7 @@ export def "get-stored-query" [
 #
 # POST /
 # operationId: ListAggregateDiscoveredResources
+# --Filters shape: {AccountId?: string, ResourceId?: string, ResourceName?: string, Region?: string}
 export def "list-aggregate-discovered-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3395,16 +3482,17 @@ export def "list-aggregate-discovered-resources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-62
-  configuration_aggregator_name: any
-  resource_type: any
-  --filters: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<ResourceIdentifiers: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-62 # required
+  configuration_aggregator_name: string # The name of the configuration aggregator.
+  resource_type: string@resource-type-completer # The type of resources that you want Config to list in the response.
+  --filters: record # Filters the results by resource account ID, region, resource ID, and resource name. — shape: {AccountId?: string, ResourceId?: string, ResourceName?: string, Region?: string}
+  --limit-body: int # The maximum number of resource identifiers returned on each page. You cannot specify a number greater than 100. If you specify 0, Config uses the default. (body field)
+  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+]: any -> record<ResourceIdentifiers: table<SourceAccountId: string, SourceRegion: string, ResourceId: string, ResourceType: string, ResourceName: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.ListAggregateDiscoveredResources")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "ResourceType": $resource_type, "Filters": $filters, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -3431,6 +3519,7 @@ export def "list-aggregate-discovered-resources" [
 #
 # POST /
 # operationId: ListConformancePackComplianceScores
+# --Filters shape: {ConformancePackNames: list<string>}
 export def "list-conformance-pack-compliance-scores" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3450,16 +3539,17 @@ export def "list-conformance-pack-compliance-scores" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-63
-  --filters: any
-  --sort-order: any
-  --sort-by: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<NextToken: record, ConformancePackComplianceScores: record> {
+  --x-amz-target: string@x-amz-target-completer-63 # required
+  --filters: record # A list of filters to apply to the conformance pack compliance score result set. — shape: {ConformancePackNames: list<string>}
+  --sort-order: string@sort-order-completer # Determines the order in which conformance pack compliance scores are sorted. Either in ascending or descending order. By default, conformance pack compliance scores are sorted in alphabetical order by name of the conformance pack. Conformance pack compliance scores are sorted in reverse alphabetical order if you enter DESCENDING. You can sort conformance pack compliance scores by the numerical value of the compliance score by entering SCORE in the SortBy action. When compliance scores are sorted by SCORE, conformance packs with a compliance score of INSUFFICIENT_DATA will be last when sorting by ascending order and first when sorting by descending order.
+  --sort-by: string@sort-by-completer # Sorts your conformance pack compliance scores in either ascending or descending order, depending on SortOrder. By default, conformance pack compliance scores are sorted in alphabetical order by name of the conformance pack. Enter SCORE, to sort conformance pack compliance scores by the numerical value of the compliance score.
+  --limit-body: int # The maximum number of conformance pack compliance scores returned on each page. (body field)
+  --next-token-body: string # The nextToken string in a prior request that you can use to get the paginated response for the next set of conformance pack compliance scores. (body field)
+]: any -> record<NextToken: string, ConformancePackComplianceScores: table<Score: string, ConformancePackName: string, LastUpdatedTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.ListConformancePackComplianceScores")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"Filters": $filters, "SortOrder": $sort_order, "SortBy": $sort_by, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -3505,17 +3595,18 @@ export def "list-discovered-resources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-64
-  resource_type: any
-  --resource-ids: any
-  --resource-name: any
-  --limit-body: any #  (body field)
-  --include-deleted-resources: any
-  --next-token-body: any #  (body field)
-]: any -> record<resourceIdentifiers: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-64 # required
+  resource_type: string@resource-type-completer # The type of resources that you want Config to list in the response.
+  --resource-ids: list<string> # The IDs of only those resources that you want Config to list in the response. If you do not specify this parameter, Config lists all resources of the specified type that it has discovered. You can list a minimum of 1 resourceID and a maximum of 20 resourceIds.
+  --resource-name: string # The custom name of only those resources that you want Config to list in the response. If you do not specify this parameter, Config lists all resources of the specified type that it has discovered.
+  --limit-body: int # The maximum number of resource identifiers returned on each page. The default is 100. You cannot specify a number greater than 100. If you specify 0, Config uses the default. (body field)
+  --include-deleted-resources: oneof<nothing, bool> # Specifies whether Config includes deleted resources in the results. By default, deleted resources are not included.
+  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+]: any -> record<resourceIdentifiers: table<resourceType: string, resourceId: string, resourceName: string, resourceDeletionTime: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.ListDiscoveredResources")
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"resourceType": $resource_type, "resourceIds": $resource_ids, "resourceName": $resource_name, "limit": $limit_body, "includeDeletedResources": $include_deleted_resources, "nextToken": $next_token_body} | compact
@@ -3542,6 +3633,7 @@ export def "list-discovered-resources" [
 #
 # POST /
 # operationId: ListResourceEvaluations
+# --Filters shape: {EvaluationMode?: "DETECTIVE"|"PROACTIVE", TimeWindow?: record, EvaluationContextIdentifier?: string}
 export def "list-resource-evaluations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3561,14 +3653,15 @@ export def "list-resource-evaluations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-65
-  --filters: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<ResourceEvaluations: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-65 # required
+  --filters: record # Returns details of a resource evaluation based on the selected filter. — shape: {EvaluationMode?: "DETECTIVE"|"PROACTIVE", TimeWindow?: record, EvaluationContextIdentifier?: string}
+  --limit-body: int # The maximum number of evaluations returned on each page. The default is 10. You cannot specify a number greater than 100. If you specify 0, Config uses the default. (body field)
+  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+]: any -> record<ResourceEvaluations: table<ResourceEvaluationId: string, EvaluationMode: string, EvaluationStartTimestamp: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.ListResourceEvaluations")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"Filters": $filters, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -3614,13 +3707,14 @@ export def "list-stored-queries" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-66
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<StoredQueryMetadata: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-66 # required
+  --next-token-body: string # The nextToken string returned in a previous request that you use to request the next page of results in a paginated response. (body field)
+  --max-results-body: int # The maximum number of results to be returned with a single call. (body field)
+]: any -> record<StoredQueryMetadata: table<QueryId: string, QueryArn: string, QueryName: string, Description: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.ListStoredQueries")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -3666,14 +3760,15 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-67
-  resource_arn: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<Tags: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-67 # required
+  resource_arn: string # The Amazon Resource Name (ARN) that identifies the resource for which to list the tags. Currently, the supported resources are ConfigRule, ConfigurationAggregator and AggregatorAuthorization.
+  --limit-body: int # The maximum number of tags returned on each page. The limit maximum is 50. You cannot specify a number greater than 50. If you specify 0, Config uses the default. (body field)
+  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+]: any -> record<Tags: table<Key: string, Value: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.ListTagsForResource")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -3700,6 +3795,7 @@ export def "list-tags-for-resource" [
 #
 # POST /
 # operationId: PutAggregationAuthorization
+# --Tags item shape: {Key?: string, Value?: string}
 export def "put-aggregation-authorization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3717,14 +3813,15 @@ export def "put-aggregation-authorization" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-68
-  authorized_account_id: any
-  authorized_aws_region: any
-  --tags: any
-]: any -> record<AggregationAuthorization: record<AggregationAuthorizationArn: record, AuthorizedAccountId: record, AuthorizedAwsRegion: record, CreationTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-68 # required
+  authorized_account_id: string # The 12-digit account ID of the account authorized to aggregate data.
+  authorized_aws_region: string # The region authorized to collect aggregated data.
+  --tags: list # An array of tag object. — item shape: {Key?: string, Value?: string}
+]: any -> record<AggregationAuthorization: record<AggregationAuthorizationArn: string, AuthorizedAccountId: string, AuthorizedAwsRegion: string, CreationTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.PutAggregationAuthorization")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AuthorizedAccountId": $authorized_account_id, "AuthorizedAwsRegion": $authorized_aws_region, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3750,6 +3847,8 @@ export def "put-aggregation-authorization" [
 #
 # POST /
 # operationId: PutConfigRule
+# --ConfigRule shape: {ConfigRuleName?: string, ConfigRuleArn?: string, ConfigRuleId?: string, Description?: string, Scope?: record, Source: record, InputParameters?: string, MaximumExecutionFrequency?: "One_Hour"|"Three_Hours"|"Six_Hours"|"Twelve_Hours"|"TwentyFour_Hours", ConfigRuleState?: "ACTIVE"|"DELETING"|"DELETING_RESULTS"|"EVALUATING", CreatedBy?: string, EvaluationModes?: list}
+# --Tags item shape: {Key?: string, Value?: string}
 export def "put-config-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3767,13 +3866,14 @@ export def "put-config-rule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-69
-  config_rule: any
-  --tags: any
+  --x-amz-target: string@x-amz-target-completer-69 # required
+  config_rule: record # Config rules evaluate the configuration settings of your Amazon Web Services resources. A rule can run when Config detects a configuration change to an Amazon Web Services resource or at a periodic frequency that you choose (for example, every 24 hours). There are two types of rules: Config Managed Rules and Config Custom Rules. Config Managed Rules are predefined, customizable rules created by Config. For a list of managed rules, see List of Config Managed Rules (https://docs.aws.amazon.com/config/latest/developerguide/managed-rules-by-aws-config.html). Config Custom Rules are rules that you create from scratch. There are two ways to create Config custom rules: with Lambda functions ( Lambda Developer Guide (https://docs.aws.amazon.com/config/latest/developerguide/gettingstarted-concepts.html#gettingstarted-concepts-function)) and with Guard (Guard GitHub Repository (https://github.com/aws-cloudformation/cloudformation-guard)), a policy-as-code language. Config custom rules created with Lambda are called Config Custom Lambda Rules and Config custom rules created with Guard are called Config Custom Policy Rules. For more information about developing and using Config rules, see Evaluating Resource with Config Rules (https://docs.aws.amazon.com/config/latest/developerguide/evaluate-config.html) in the Config Developer Guide. You can use the Amazon Web Services CLI and Amazon Web Services SDKs if you want to create a rule that triggers evaluations for your resources when Config delivers the configuration snapshot. For more information, see ConfigSnapshotDeliveryProperties. — shape: {ConfigRuleName?: string, ConfigRuleArn?: string, ConfigRuleId?: string, Description?: string, Scope?: record, Source: record, InputParameters?: string, MaximumExecutionFrequency?: "One_Hour"|"Three_Hours"|"Six_Hours"|"Twelve_Hours"|"TwentyFour_Hours", ConfigRuleState?: "ACTIVE"|"DELETING"|"DELETING_RESULTS"|"EVALUATING", CreatedBy?: string, EvaluationModes?: list}
+  --tags: list # An array of tag object. — item shape: {Key?: string, Value?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.PutConfigRule")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigRule": $config_rule, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3799,6 +3899,9 @@ export def "put-config-rule" [
 #
 # POST /
 # operationId: PutConfigurationAggregator
+# --AccountAggregationSources item shape: {AccountIds: list<string>, AllAwsRegions?: bool, AwsRegions?: list<string>}
+# --OrganizationAggregationSource shape: {RoleArn: string, AwsRegions?: list<string>, AllAwsRegions?: bool}
+# --Tags item shape: {Key?: string, Value?: string}
 export def "put-configuration-aggregator" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3816,15 +3919,16 @@ export def "put-configuration-aggregator" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-70
-  configuration_aggregator_name: any
-  --account-aggregation-sources: any
-  --organization-aggregation-source: any
-  --tags: any
-]: any -> record<ConfigurationAggregator: record<ConfigurationAggregatorName: record, ConfigurationAggregatorArn: record, AccountAggregationSources: record, OrganizationAggregationSource: record<RoleArn: record, AwsRegions: record, AllAwsRegions: record>, CreationTime: record, LastUpdatedTime: record, CreatedBy: record>> {
+  --x-amz-target: string@x-amz-target-completer-70 # required
+  configuration_aggregator_name: string # The name of the configuration aggregator.
+  --account-aggregation-sources: list # A list of AccountAggregationSource object. — item shape: {AccountIds: list<string>, AllAwsRegions?: bool, AwsRegions?: list<string>}
+  --organization-aggregation-source: record # This object contains regions to set up the aggregator and an IAM role to retrieve organization details. — shape: {RoleArn: string, AwsRegions?: list<string>, AllAwsRegions?: bool}
+  --tags: list # An array of tag object. — item shape: {Key?: string, Value?: string}
+]: any -> record<ConfigurationAggregator: record<ConfigurationAggregatorName: string, ConfigurationAggregatorArn: string, AccountAggregationSources: list<record>, OrganizationAggregationSource: record<RoleArn: string, AwsRegions: list, AllAwsRegions: bool>, CreationTime: string, LastUpdatedTime: string, CreatedBy: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.PutConfigurationAggregator")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "AccountAggregationSources": $account_aggregation_sources, "OrganizationAggregationSource": $organization_aggregation_source, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3850,6 +3954,7 @@ export def "put-configuration-aggregator" [
 #
 # POST /
 # operationId: PutConfigurationRecorder
+# --ConfigurationRecorder shape: {name?: string, roleARN?: string, recordingGroup?: record}
 export def "put-configuration-recorder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3867,12 +3972,13 @@ export def "put-configuration-recorder" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-71
-  configuration_recorder: any
+  --x-amz-target: string@x-amz-target-completer-71 # required
+  configuration_recorder: record # An object that represents the recording of configuration changes of an Amazon Web Services resource. — shape: {name?: string, roleARN?: string, recordingGroup?: record}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.PutConfigurationRecorder")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigurationRecorder": $configuration_recorder} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3898,6 +4004,8 @@ export def "put-configuration-recorder" [
 #
 # POST /
 # operationId: PutConformancePack
+# --ConformancePackInputParameters item shape: {ParameterName: string, ParameterValue: string}
+# --TemplateSSMDocumentDetails shape: {DocumentName: string, DocumentVersion?: string}
 export def "put-conformance-pack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3915,18 +4023,19 @@ export def "put-conformance-pack" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-72
-  conformance_pack_name: any
-  --template-s3-uri: any
-  --template-body: any
-  --delivery-s3-bucket: any
-  --delivery-s3-key-prefix: any
-  --conformance-pack-input-parameters: any
-  --template-ssm-document-details: any
-]: any -> record<ConformancePackArn: record> {
+  --x-amz-target: string@x-amz-target-completer-72 # required
+  conformance_pack_name: string # The unique name of the conformance pack you want to deploy.
+  --template-s3-uri: string # The location of the file containing the template body (s3://bucketname/prefix). The uri must point to a conformance pack template (max size: 300 KB) that is located in an Amazon S3 bucket in the same Region as the conformance pack. You must have access to read Amazon S3 bucket.
+  --template-body: string # A string containing the full conformance pack template body. The structure containing the template body has a minimum length of 1 byte and a maximum length of 51,200 bytes. You can use a YAML template with two resource types: Config rule (AWS::Config::ConfigRule) and remediation action (AWS::Config::RemediationConfiguration).
+  --delivery-s3-bucket: string # The name of the Amazon S3 bucket where Config stores conformance pack templates. This field is optional.
+  --delivery-s3-key-prefix: string # The prefix for the Amazon S3 bucket. This field is optional.
+  --conformance-pack-input-parameters: list # A list of ConformancePackInputParameter objects. — item shape: {ParameterName: string, ParameterValue: string}
+  --template-ssm-document-details: record # This API allows you to create a conformance pack template with an Amazon Web Services Systems Manager document (SSM document). To deploy a conformance pack using an SSM document, first create an SSM document with conformance pack content, and then provide the DocumentName in the PutConformancePack API (https://docs.aws.amazon.com/config/latest/APIReference/API_PutConformancePack.html). You can also provide the DocumentVersion. The TemplateSSMDocumentDetails object contains the name of the SSM document and the version of the SSM document. — shape: {DocumentName: string, DocumentVersion?: string}
+]: any -> record<ConformancePackArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.PutConformancePack")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConformancePackName": $conformance_pack_name, "TemplateS3Uri": $template_s3_uri, "TemplateBody": $template_body, "DeliveryS3Bucket": $delivery_s3_bucket, "DeliveryS3KeyPrefix": $delivery_s3_key_prefix, "ConformancePackInputParameters": $conformance_pack_input_parameters, "TemplateSSMDocumentDetails": $template_ssm_document_details} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3952,6 +4061,7 @@ export def "put-conformance-pack" [
 #
 # POST /
 # operationId: PutDeliveryChannel
+# --DeliveryChannel shape: {name?: string, s3BucketName?: string, s3KeyPrefix?: string, s3KmsKeyArn?: string, snsTopicARN?: string, configSnapshotDeliveryProperties?: record}
 export def "put-delivery-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3969,12 +4079,13 @@ export def "put-delivery-channel" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-73
-  delivery_channel: any
+  --x-amz-target: string@x-amz-target-completer-73 # required
+  delivery_channel: record # The channel through which Config delivers notifications and updated configuration states. — shape: {name?: string, s3BucketName?: string, s3KeyPrefix?: string, s3KmsKeyArn?: string, snsTopicARN?: string, configSnapshotDeliveryProperties?: record}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.PutDeliveryChannel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DeliveryChannel": $delivery_channel} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4000,6 +4111,7 @@ export def "put-delivery-channel" [
 #
 # POST /
 # operationId: PutEvaluations
+# --Evaluations item shape: {ComplianceResourceType: string, ComplianceResourceId: string, ComplianceType: "COMPLIANT"|"NON_COMPLIANT"|"NOT_APPLICABLE"|"INSUFFICIENT_DATA", Annotation?: string, OrderingTimestamp: string}
 export def "put-evaluations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4017,14 +4129,15 @@ export def "put-evaluations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-74
-  --evaluations: any
-  result_token: any
-  --test-mode: any
-]: any -> record<FailedEvaluations: record> {
+  --x-amz-target: string@x-amz-target-completer-74 # required
+  --evaluations: list # The assessments that the Lambda function performs. Each evaluation identifies an Amazon Web Services resource and indicates whether it complies with the Config rule that invokes the Lambda function. — item shape: {ComplianceResourceType: string, ComplianceResourceId: string, ComplianceType: "COMPLIANT"|"NON_COMPLIANT"|"NOT_APPLICABLE"|"INSUFFICIENT_DATA", Annotation?: string, OrderingTimestamp: string}
+  result_token: string # An encrypted token that associates an evaluation with an Config rule. Identifies the rule and the event that triggered the evaluation.
+  --test-mode: oneof<nothing, bool> # Use this parameter to specify a test run for PutEvaluations. You can verify whether your Lambda function will deliver evaluation results to Config. No updates occur to your existing evaluations, and evaluation results are not sent to Config. When TestMode is true, PutEvaluations doesn't require a valid value for the ResultToken parameter, but the value cannot be null.
+]: any -> record<FailedEvaluations: table<ComplianceResourceType: string, ComplianceResourceId: string, ComplianceType: string, Annotation: string, OrderingTimestamp: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.PutEvaluations")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Evaluations": $evaluations, "ResultToken": $result_token, "TestMode": $test_mode} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4050,6 +4163,7 @@ export def "put-evaluations" [
 #
 # POST /
 # operationId: PutExternalEvaluation
+# --ExternalEvaluation shape: {ComplianceResourceType: string, ComplianceResourceId: string, ComplianceType: "COMPLIANT"|"NON_COMPLIANT"|"NOT_APPLICABLE"|"INSUFFICIENT_DATA", Annotation?: string, OrderingTimestamp: string}
 export def "put-external-evaluation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4067,13 +4181,14 @@ export def "put-external-evaluation" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-75
-  config_rule_name: any
-  external_evaluation: any
+  --x-amz-target: string@x-amz-target-completer-75 # required
+  config_rule_name: string # The name of the Config rule.
+  external_evaluation: record # Identifies an Amazon Web Services resource and indicates whether it complies with the Config rule that it was evaluated against. — shape: {ComplianceResourceType: string, ComplianceResourceId: string, ComplianceType: "COMPLIANT"|"NON_COMPLIANT"|"NOT_APPLICABLE"|"INSUFFICIENT_DATA", Annotation?: string, OrderingTimestamp: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.PutExternalEvaluation")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigRuleName": $config_rule_name, "ExternalEvaluation": $external_evaluation} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4099,6 +4214,9 @@ export def "put-external-evaluation" [
 #
 # POST /
 # operationId: PutOrganizationConfigRule
+# --OrganizationManagedRuleMetadata shape: {Description?: string, RuleIdentifier: string, InputParameters?: string, MaximumExecutionFrequency?: "One_Hour"|"Three_Hours"|"Six_Hours"|"Twelve_Hours"|"TwentyFour_Hours", ResourceTypesScope?: list<string>, ResourceIdScope?: string, TagKeyScope?: string, TagValueScope?: string}
+# --OrganizationCustomRuleMetadata shape: {Description?: string, LambdaFunctionArn: string, OrganizationConfigRuleTriggerTypes: list<string>, InputParameters?: string, MaximumExecutionFrequency?: "One_Hour"|"Three_Hours"|"Six_Hours"|"Twelve_Hours"|"TwentyFour_Hours", ResourceTypesScope?: list<string>, ResourceIdScope?: string, TagKeyScope?: string, TagValueScope?: string}
+# --OrganizationCustomPolicyRuleMetadata shape: {Description?: string, OrganizationConfigRuleTriggerTypes?: list<string>, InputParameters?: string, MaximumExecutionFrequency?: "One_Hour"|"Three_Hours"|"Six_Hours"|"Twelve_Hours"|"TwentyFour_Hours", ResourceTypesScope?: list<string>, ResourceIdScope?: string, TagKeyScope?: string, TagValueScope?: string, PolicyRuntime: string, PolicyText: string, DebugLogDeliveryAccounts?: list<string>}
 export def "put-organization-config-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4116,16 +4234,17 @@ export def "put-organization-config-rule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-76
-  organization_config_rule_name: any
-  --organization-managed-rule-metadata: any
-  --organization-custom-rule-metadata: any
-  --excluded-accounts: any
-  --organization-custom-policy-rule-metadata: any
-]: any -> record<OrganizationConfigRuleArn: record> {
+  --x-amz-target: string@x-amz-target-completer-76 # required
+  organization_config_rule_name: string # The name that you assign to an organization Config rule.
+  --organization-managed-rule-metadata: record # An object that specifies organization managed rule metadata such as resource type and ID of Amazon Web Services resource along with the rule identifier. It also provides the frequency with which you want Config to run evaluations for the rule if the trigger type is periodic. — shape: {Description?: string, RuleIdentifier: string, InputParameters?: string, MaximumExecutionFrequency?: "One_Hour"|"Three_Hours"|"Six_Hours"|"Twelve_Hours"|"TwentyFour_Hours", ResourceTypesScope?: list<string>, ResourceIdScope?: string, TagKeyScope?: string, TagValueScope?: string}
+  --organization-custom-rule-metadata: record # An object that specifies organization custom rule metadata such as resource type, resource ID of Amazon Web Services resource, Lambda function ARN, and organization trigger types that trigger Config to evaluate your Amazon Web Services resources against a rule. It also provides the frequency with which you want Config to run evaluations for the rule if the trigger type is periodic. — shape: {Description?: string, LambdaFunctionArn: string, OrganizationConfigRuleTriggerTypes: list<string>, InputParameters?: string, MaximumExecutionFrequency?: "One_Hour"|"Three_Hours"|"Six_Hours"|"Twelve_Hours"|"TwentyFour_Hours", ResourceTypesScope?: list<string>, ResourceIdScope?: string, TagKeyScope?: string, TagValueScope?: string}
+  --excluded-accounts: list<string> # A comma-separated list of accounts that you want to exclude from an organization Config rule.
+  --organization-custom-policy-rule-metadata: record # An object that specifies metadata for your organization's Config Custom Policy rule. The metadata includes the runtime system in use, which accounts have debug logging enabled, and other custom rule metadata, such as resource type, resource ID of Amazon Web Services resource, and organization trigger types that initiate Config to evaluate Amazon Web Services resources against a rule. — shape: {Description?: string, OrganizationConfigRuleTriggerTypes?: list<string>, InputParameters?: string, MaximumExecutionFrequency?: "One_Hour"|"Three_Hours"|"Six_Hours"|"Twelve_Hours"|"TwentyFour_Hours", ResourceTypesScope?: list<string>, ResourceIdScope?: string, TagKeyScope?: string, TagValueScope?: string, PolicyRuntime: string, PolicyText: string, DebugLogDeliveryAccounts?: list<string>}
+]: any -> record<OrganizationConfigRuleArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.PutOrganizationConfigRule")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationConfigRuleName": $organization_config_rule_name, "OrganizationManagedRuleMetadata": $organization_managed_rule_metadata, "OrganizationCustomRuleMetadata": $organization_custom_rule_metadata, "ExcludedAccounts": $excluded_accounts, "OrganizationCustomPolicyRuleMetadata": $organization_custom_policy_rule_metadata} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4151,6 +4270,7 @@ export def "put-organization-config-rule" [
 #
 # POST /
 # operationId: PutOrganizationConformancePack
+# --ConformancePackInputParameters item shape: {ParameterName: string, ParameterValue: string}
 export def "put-organization-conformance-pack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4168,18 +4288,19 @@ export def "put-organization-conformance-pack" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-77
-  organization_conformance_pack_name: any
-  --template-s3-uri: any
-  --template-body: any
-  --delivery-s3-bucket: any
-  --delivery-s3-key-prefix: any
-  --conformance-pack-input-parameters: any
-  --excluded-accounts: any
-]: any -> record<OrganizationConformancePackArn: record> {
+  --x-amz-target: string@x-amz-target-completer-77 # required
+  organization_conformance_pack_name: string # Name of the organization conformance pack you want to create.
+  --template-s3-uri: string # Location of file containing the template body. The uri must point to the conformance pack template (max size: 300 KB). You must have access to read Amazon S3 bucket.
+  --template-body: string # A string containing full conformance pack template body. Structure containing the template body with a minimum length of 1 byte and a maximum length of 51,200 bytes.
+  --delivery-s3-bucket: string # The name of the Amazon S3 bucket where Config stores conformance pack templates. This field is optional. If used, it must be prefixed with awsconfigconforms.
+  --delivery-s3-key-prefix: string # The prefix for the Amazon S3 bucket. This field is optional.
+  --conformance-pack-input-parameters: list # A list of ConformancePackInputParameter objects. — item shape: {ParameterName: string, ParameterValue: string}
+  --excluded-accounts: list<string> # A list of Amazon Web Services accounts to be excluded from an organization conformance pack while deploying a conformance pack.
+]: any -> record<OrganizationConformancePackArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.PutOrganizationConformancePack")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationConformancePackName": $organization_conformance_pack_name, "TemplateS3Uri": $template_s3_uri, "TemplateBody": $template_body, "DeliveryS3Bucket": $delivery_s3_bucket, "DeliveryS3KeyPrefix": $delivery_s3_key_prefix, "ConformancePackInputParameters": $conformance_pack_input_parameters, "ExcludedAccounts": $excluded_accounts} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4205,6 +4326,7 @@ export def "put-organization-conformance-pack" [
 #
 # POST /
 # operationId: PutRemediationConfigurations
+# --RemediationConfigurations item shape: {ConfigRuleName: string, TargetType: "SSM_DOCUMENT", TargetId: string, TargetVersion?: string, Parameters?: record, ResourceType?: string, Automatic?: bool, ExecutionControls?: record, MaximumAutomaticAttempts?: int, RetryAttemptSeconds?: int, Arn?: string, CreatedByService?: string}
 export def "put-remediation-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4222,12 +4344,13 @@ export def "put-remediation-configurations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-78
-  remediation_configurations: any
-]: any -> record<FailedBatches: record> {
+  --x-amz-target: string@x-amz-target-completer-78 # required
+  remediation_configurations: list # A list of remediation configuration objects. — item shape: {ConfigRuleName: string, TargetType: "SSM_DOCUMENT", TargetId: string, TargetVersion?: string, Parameters?: record, ResourceType?: string, Automatic?: bool, ExecutionControls?: record, MaximumAutomaticAttempts?: int, RetryAttemptSeconds?: int, Arn?: string, CreatedByService?: string}
+]: any -> record<FailedBatches: table<FailureMessage: string, FailedItems: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.PutRemediationConfigurations")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RemediationConfigurations": $remediation_configurations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4253,6 +4376,7 @@ export def "put-remediation-configurations" [
 #
 # POST /
 # operationId: PutRemediationExceptions
+# --ResourceKeys item shape: {ResourceType?: string, ResourceId?: string}
 export def "put-remediation-exceptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4270,15 +4394,16 @@ export def "put-remediation-exceptions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-79
-  config_rule_name: any
-  resource_keys: any
-  --message: any
-  --expiration-time: any
-]: any -> record<FailedBatches: record> {
+  --x-amz-target: string@x-amz-target-completer-79 # required
+  config_rule_name: string # The name of the Config rule for which you want to create remediation exception.
+  resource_keys: list # An exception list of resource exception keys to be processed with the current request. Config adds exception for each resource key. For example, Config adds 3 exceptions for 3 resource keys. — item shape: {ResourceType?: string, ResourceId?: string}
+  --message: string # The message contains an explanation of the exception.
+  --expiration-time: string # The exception is automatically deleted after the expiration date. (format: date-time)
+]: any -> record<FailedBatches: table<FailureMessage: string, FailedItems: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.PutRemediationExceptions")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigRuleName": $config_rule_name, "ResourceKeys": $resource_keys, "Message": $message, "ExpirationTime": $expiration_time} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4321,17 +4446,18 @@ export def "put-resource-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-80
-  resource_type: any
-  schema_version_id: any
-  resource_id: any
-  --resource-name: any
-  configuration: any
-  --tags: any
+  --x-amz-target: string@x-amz-target-completer-80 # required
+  resource_type: string # The type of the resource. The custom resource type must be registered with CloudFormation. You cannot use the organization names “amzn”, “amazon”, “alexa”, “custom” with custom resource types. It is the first part of the ResourceType up to the first ::.
+  schema_version_id: string # Version of the schema registered for the ResourceType in CloudFormation.
+  resource_id: string # Unique identifier of the resource.
+  --resource-name: string # Name of the resource.
+  configuration: string # The configuration object of the resource in valid JSON format. It must match the schema registered with CloudFormation. The configuration JSON must not exceed 64 KB.
+  --tags: record # Tags associated with the resource. This field is not to be confused with the Amazon Web Services-wide tag feature for Amazon Web Services resources. Tags for PutResourceConfig are tags that you supply for the configuration items of your custom resources.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.PutResourceConfig")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceType": $resource_type, "SchemaVersionId": $schema_version_id, "ResourceId": $resource_id, "ResourceName": $resource_name, "Configuration": $configuration, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4374,12 +4500,13 @@ export def "put-retention-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-81
-  retention_period_in_days: any
-]: any -> record<RetentionConfiguration: record<Name: record, RetentionPeriodInDays: record>> {
+  --x-amz-target: string@x-amz-target-completer-81 # required
+  retention_period_in_days: int # Number of days Config stores your historical information. Currently, only applicable to the configuration item history.
+]: any -> record<RetentionConfiguration: record<Name: string, RetentionPeriodInDays: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.PutRetentionConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RetentionPeriodInDays": $retention_period_in_days} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4405,6 +4532,8 @@ export def "put-retention-configuration" [
 #
 # POST /
 # operationId: PutStoredQuery
+# --StoredQuery shape: {QueryId?: string, QueryArn?: string, QueryName: string, Description?: string, Expression?: string}
+# --Tags item shape: {Key?: string, Value?: string}
 export def "put-stored-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4422,13 +4551,14 @@ export def "put-stored-query" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-82
-  stored_query: any
-  --tags: any
-]: any -> record<QueryArn: record> {
+  --x-amz-target: string@x-amz-target-completer-82 # required
+  stored_query: record # Provides the details of a stored query. — shape: {QueryId?: string, QueryArn?: string, QueryName: string, Description?: string, Expression?: string}
+  --tags: list # A list of Tags object. — item shape: {Key?: string, Value?: string}
+]: any -> record<QueryArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.PutStoredQuery")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StoredQuery": $stored_query, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4473,16 +4603,17 @@ export def "select-aggregate-resource-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-83
-  expression: any
-  configuration_aggregator_name: any
-  --limit-body: any #  (body field)
-  --max-results: any
-  --next-token-body: any #  (body field)
-]: any -> record<Results: record, QueryInfo: record<SelectFields: record>, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-83 # required
+  expression: string # The SQL query SELECT command.
+  configuration_aggregator_name: string # The name of the configuration aggregator.
+  --limit-body: int # The maximum number of query results returned on each page. (body field)
+  --max-results: int # The maximum number of query results returned on each page. Config also allows the Limit request parameter.
+  --next-token-body: string # The nextToken string returned in a previous request that you use to request the next page of results in a paginated response. (body field)
+]: any -> record<Results: list<string>, QueryInfo: record<SelectFields: list<record>>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.SelectAggregateResourceConfig")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"Expression": $expression, "ConfigurationAggregatorName": $configuration_aggregator_name, "Limit": $limit_body, "MaxResults": $max_results, "NextToken": $next_token_body} | compact
@@ -4528,14 +4659,15 @@ export def "select-resource-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-84
-  expression: any
-  --limit-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<Results: record, QueryInfo: record<SelectFields: record>, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-84 # required
+  expression: string # The SQL query SELECT command.
+  --limit-body: int # The maximum number of query results returned on each page. (body field)
+  --next-token-body: string # The nextToken string returned in a previous request that you use to request the next page of results in a paginated response. (body field)
+]: any -> record<Results: list<string>, QueryInfo: record<SelectFields: list<record>>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.SelectResourceConfig")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"Expression": $expression, "Limit": $limit_body, "NextToken": $next_token_body} | compact
@@ -4579,12 +4711,13 @@ export def "start-config-rules-evaluation" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-85
-  --config-rule-names: any
+  --x-amz-target: string@x-amz-target-completer-85 # required
+  --config-rule-names: list<string> # The list of names of Config rules that you want to run evaluations for.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.StartConfigRulesEvaluation")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigRuleNames": $config_rule_names} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4627,12 +4760,13 @@ export def "start-configuration-recorder" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-86
-  configuration_recorder_name: any
+  --x-amz-target: string@x-amz-target-completer-86 # required
+  configuration_recorder_name: string # The name of the recorder object that records each configuration change made to the resources.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.StartConfigurationRecorder")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigurationRecorderName": $configuration_recorder_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4658,6 +4792,7 @@ export def "start-configuration-recorder" [
 #
 # POST /
 # operationId: StartRemediationExecution
+# --ResourceKeys item shape: {resourceType: "AWS::EC2::CustomerGateway"|"AWS::EC2::EIP"|"AWS::EC2::Host"|"AWS::EC2::Instance"|"AWS::EC2::InternetGateway"|"AWS::EC2::NetworkAcl"|"AWS::EC2::NetworkInterface"|"AWS::EC2::RouteTable"|"AWS::EC2::SecurityGroup"|"AWS::EC2::Subnet"|"AWS::CloudTrail::Trail"|"AWS::EC2::Volume"|"AWS::EC2::VPC"|"AWS::EC2::VPNConnection"|"AWS::EC2::VPNGateway"|"AWS::EC2::RegisteredHAInstance"|"AWS::EC2::NatGateway"|"AWS::EC2::EgressOnlyInternetGateway"|"AWS::EC2::VPCEndpoint"|"AWS::EC2::VPCEndpointService"|"AWS::EC2::FlowLog"|"AWS::EC2::VPCPeeringConnection"|"AWS::Elasticsearch::Domain"|"AWS::IAM::Group"|"AWS::IAM::Policy"|"AWS::IAM::Role"|"AWS::IAM::User"|"AWS::ElasticLoadBalancingV2::LoadBalancer"|"AWS::ACM::Certificate"|"AWS::RDS::DBInstance"|"AWS::RDS::DBSubnetGroup"|"AWS::RDS::DBSecurityGroup"|"AWS::RDS::DBSnapshot"|"AWS::RDS::DBCluster"|"AWS::RDS::DBClusterSnapshot"|"AWS::RDS::EventSubscription"|"AWS::S3::Bucket"|"AWS::S3::AccountPublicAccessBlock"|"AWS::Redshift::Cluster"|"AWS::Redshift::ClusterSnapshot"|"AWS::Redshift::ClusterParameterGroup"|"AWS::Redshift::ClusterSecurityGroup"|"AWS::Redshift::ClusterSubnetGroup"|"AWS::Redshift::EventSubscription"|"AWS::SSM::ManagedInstanceInventory"|"AWS::CloudWatch::Alarm"|"AWS::CloudFormation::Stack"|"AWS::ElasticLoadBalancing::LoadBalancer"|"AWS::AutoScaling::AutoScalingGroup"|"AWS::AutoScaling::LaunchConfiguration"|"AWS::AutoScaling::ScalingPolicy"|"AWS::AutoScaling::ScheduledAction"|"AWS::DynamoDB::Table"|"AWS::CodeBuild::Project"|"AWS::WAF::RateBasedRule"|"AWS::WAF::Rule"|"AWS::WAF::RuleGroup"|"AWS::WAF::WebACL"|"AWS::WAFRegional::RateBasedRule"|"AWS::WAFRegional::Rule"|"AWS::WAFRegional::RuleGroup"|"AWS::WAFRegional::WebACL"|"AWS::CloudFront::Distribution"|"AWS::CloudFront::StreamingDistribution"|"AWS::Lambda::Function"|"AWS::NetworkFirewall::Firewall"|"AWS::NetworkFirewall::FirewallPolicy"|"AWS::NetworkFirewall::RuleGroup"|"AWS::ElasticBeanstalk::Application"|"AWS::ElasticBeanstalk::ApplicationVersion"|"AWS::ElasticBeanstalk::Environment"|"AWS::WAFv2::WebACL"|"AWS::WAFv2::RuleGroup"|"AWS::WAFv2::IPSet"|"AWS::WAFv2::RegexPatternSet"|"AWS::WAFv2::ManagedRuleSet"|"AWS::XRay::EncryptionConfig"|"AWS::SSM::AssociationCompliance"|"AWS::SSM::PatchCompliance"|"AWS::Shield::Protection"|"AWS::ShieldRegional::Protection"|"AWS::Config::ConformancePackCompliance"|"AWS::Config::ResourceCompliance"|"AWS::ApiGateway::Stage"|"AWS::ApiGateway::RestApi"|"AWS::ApiGatewayV2::Stage"|"AWS::ApiGatewayV2::Api"|"AWS::CodePipeline::Pipeline"|"AWS::ServiceCatalog::CloudFormationProvisionedProduct"|"AWS::ServiceCatalog::CloudFormationProduct"|"AWS::ServiceCatalog::Portfolio"|"AWS::SQS::Queue"|"AWS::KMS::Key"|"AWS::QLDB::Ledger"|"AWS::SecretsManager::Secret"|"AWS::SNS::Topic"|"AWS::SSM::FileData"|"AWS::Backup::BackupPlan"|"AWS::Backup::BackupSelection"|"AWS::Backup::BackupVault"|"AWS::Backup::RecoveryPoint"|"AWS::ECR::Repository"|"AWS::ECS::Cluster"|"AWS::ECS::Service"|"AWS::ECS::TaskDefinition"|"AWS::EFS::AccessPoint"|"AWS::EFS::FileSystem"|"AWS::EKS::Cluster"|"AWS::OpenSearch::Domain"|"AWS::EC2::TransitGateway"|"AWS::Kinesis::Stream"|"AWS::Kinesis::StreamConsumer"|"AWS::CodeDeploy::Application"|"AWS::CodeDeploy::DeploymentConfig"|"AWS::CodeDeploy::DeploymentGroup"|"AWS::EC2::LaunchTemplate"|"AWS::ECR::PublicRepository"|"AWS::GuardDuty::Detector"|"AWS::EMR::SecurityConfiguration"|"AWS::SageMaker::CodeRepository"|"AWS::Route53Resolver::ResolverEndpoint"|"AWS::Route53Resolver::ResolverRule"|"AWS::Route53Resolver::ResolverRuleAssociation"|"AWS::DMS::ReplicationSubnetGroup"|"AWS::DMS::EventSubscription"|"AWS::MSK::Cluster"|"AWS::StepFunctions::Activity"|"AWS::WorkSpaces::Workspace"|"AWS::WorkSpaces::ConnectionAlias"|"AWS::SageMaker::Model"|"AWS::ElasticLoadBalancingV2::Listener"|"AWS::StepFunctions::StateMachine"|"AWS::Batch::JobQueue"|"AWS::Batch::ComputeEnvironment"|"AWS::AccessAnalyzer::Analyzer"|"AWS::Athena::WorkGroup"|"AWS::Athena::DataCatalog"|"AWS::Detective::Graph"|"AWS::GlobalAccelerator::Accelerator"|"AWS::GlobalAccelerator::EndpointGroup"|"AWS::GlobalAccelerator::Listener"|"AWS::EC2::TransitGatewayAttachment"|"AWS::EC2::TransitGatewayRouteTable"|"AWS::DMS::Certificate"|"AWS::AppConfig::Application"|"AWS::AppSync::GraphQLApi"|"AWS::DataSync::LocationSMB"|"AWS::DataSync::LocationFSxLustre"|"AWS::DataSync::LocationS3"|"AWS::DataSync::LocationEFS"|"AWS::DataSync::Task"|"AWS::DataSync::LocationNFS"|"AWS::EC2::NetworkInsightsAccessScopeAnalysis"|"AWS::EKS::FargateProfile"|"AWS::Glue::Job"|"AWS::GuardDuty::ThreatIntelSet"|"AWS::GuardDuty::IPSet"|"AWS::SageMaker::Workteam"|"AWS::SageMaker::NotebookInstanceLifecycleConfig"|"AWS::ServiceDiscovery::Service"|"AWS::ServiceDiscovery::PublicDnsNamespace"|"AWS::SES::ContactList"|"AWS::SES::ConfigurationSet"|"AWS::Route53::HostedZone"|"AWS::IoTEvents::Input"|"AWS::IoTEvents::DetectorModel"|"AWS::IoTEvents::AlarmModel"|"AWS::ServiceDiscovery::HttpNamespace"|"AWS::Events::EventBus"|"AWS::ImageBuilder::ContainerRecipe"|"AWS::ImageBuilder::DistributionConfiguration"|"AWS::ImageBuilder::InfrastructureConfiguration"|"AWS::DataSync::LocationObjectStorage"|"AWS::DataSync::LocationHDFS"|"AWS::Glue::Classifier"|"AWS::Route53RecoveryReadiness::Cell"|"AWS::Route53RecoveryReadiness::ReadinessCheck"|"AWS::ECR::RegistryPolicy"|"AWS::Backup::ReportPlan"|"AWS::Lightsail::Certificate"|"AWS::RUM::AppMonitor"|"AWS::Events::Endpoint"|"AWS::SES::ReceiptRuleSet"|"AWS::Events::Archive"|"AWS::Events::ApiDestination"|"AWS::Lightsail::Disk"|"AWS::FIS::ExperimentTemplate"|"AWS::DataSync::LocationFSxWindows"|"AWS::SES::ReceiptFilter"|"AWS::GuardDuty::Filter"|"AWS::SES::Template"|"AWS::AmazonMQ::Broker"|"AWS::AppConfig::Environment"|"AWS::AppConfig::ConfigurationProfile"|"AWS::Cloud9::EnvironmentEC2"|"AWS::EventSchemas::Registry"|"AWS::EventSchemas::RegistryPolicy"|"AWS::EventSchemas::Discoverer"|"AWS::FraudDetector::Label"|"AWS::FraudDetector::EntityType"|"AWS::FraudDetector::Variable"|"AWS::FraudDetector::Outcome"|"AWS::IoT::Authorizer"|"AWS::IoT::SecurityProfile"|"AWS::IoT::RoleAlias"|"AWS::IoT::Dimension"|"AWS::IoTAnalytics::Datastore"|"AWS::Lightsail::Bucket"|"AWS::Lightsail::StaticIp"|"AWS::MediaPackage::PackagingGroup"|"AWS::Route53RecoveryReadiness::RecoveryGroup"|"AWS::ResilienceHub::ResiliencyPolicy"|"AWS::Transfer::Workflow"|"AWS::EKS::IdentityProviderConfig"|"AWS::EKS::Addon"|"AWS::Glue::MLTransform"|"AWS::IoT::Policy"|"AWS::IoT::MitigationAction"|"AWS::IoTTwinMaker::Workspace"|"AWS::IoTTwinMaker::Entity"|"AWS::IoTAnalytics::Dataset"|"AWS::IoTAnalytics::Pipeline"|"AWS::IoTAnalytics::Channel"|"AWS::IoTSiteWise::Dashboard"|"AWS::IoTSiteWise::Project"|"AWS::IoTSiteWise::Portal"|"AWS::IoTSiteWise::AssetModel"|"AWS::IVS::Channel"|"AWS::IVS::RecordingConfiguration"|"AWS::IVS::PlaybackKeyPair"|"AWS::KinesisAnalyticsV2::Application"|"AWS::RDS::GlobalCluster"|"AWS::S3::MultiRegionAccessPoint"|"AWS::DeviceFarm::TestGridProject"|"AWS::Budgets::BudgetsAction"|"AWS::Lex::Bot"|"AWS::CodeGuruReviewer::RepositoryAssociation"|"AWS::IoT::CustomMetric"|"AWS::Route53Resolver::FirewallDomainList"|"AWS::RoboMaker::RobotApplicationVersion"|"AWS::EC2::TrafficMirrorSession"|"AWS::IoTSiteWise::Gateway"|"AWS::Lex::BotAlias"|"AWS::LookoutMetrics::Alert"|"AWS::IoT::AccountAuditConfiguration"|"AWS::EC2::TrafficMirrorTarget"|"AWS::S3::StorageLens"|"AWS::IoT::ScheduledAudit"|"AWS::Events::Connection"|"AWS::EventSchemas::Schema"|"AWS::MediaPackage::PackagingConfiguration"|"AWS::KinesisVideo::SignalingChannel"|"AWS::AppStream::DirectoryConfig"|"AWS::LookoutVision::Project"|"AWS::Route53RecoveryControl::Cluster"|"AWS::Route53RecoveryControl::SafetyRule"|"AWS::Route53RecoveryControl::ControlPanel"|"AWS::Route53RecoveryControl::RoutingControl"|"AWS::Route53RecoveryReadiness::ResourceSet"|"AWS::RoboMaker::SimulationApplication"|"AWS::RoboMaker::RobotApplication"|"AWS::HealthLake::FHIRDatastore"|"AWS::Pinpoint::Segment"|"AWS::Pinpoint::ApplicationSettings"|"AWS::Events::Rule"|"AWS::EC2::DHCPOptions"|"AWS::EC2::NetworkInsightsPath"|"AWS::EC2::TrafficMirrorFilter"|"AWS::EC2::IPAM"|"AWS::IoTTwinMaker::Scene"|"AWS::NetworkManager::TransitGatewayRegistration"|"AWS::CustomerProfiles::Domain"|"AWS::AutoScaling::WarmPool"|"AWS::Connect::PhoneNumber", ... (1 more fields)}
 export def "start-remediation-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4675,13 +4810,14 @@ export def "start-remediation-execution" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-87
-  config_rule_name: any
-  resource_keys: any
-]: any -> record<FailureMessage: record, FailedItems: record> {
+  --x-amz-target: string@x-amz-target-completer-87 # required
+  config_rule_name: string # The list of names of Config rules that you want to run remediation execution for.
+  resource_keys: list # A list of resource keys to be processed with the current request. Each element in the list consists of the resource type and resource ID. — item shape: {resourceType: "AWS::EC2::CustomerGateway"|"AWS::EC2::EIP"|"AWS::EC2::Host"|"AWS::EC2::Instance"|"AWS::EC2::InternetGateway"|"AWS::EC2::NetworkAcl"|"AWS::EC2::NetworkInterface"|"AWS::EC2::RouteTable"|"AWS::EC2::SecurityGroup"|"AWS::EC2::Subnet"|"AWS::CloudTrail::Trail"|"AWS::EC2::Volume"|"AWS::EC2::VPC"|"AWS::EC2::VPNConnection"|"AWS::EC2::VPNGateway"|"AWS::EC2::RegisteredHAInstance"|"AWS::EC2::NatGateway"|"AWS::EC2::EgressOnlyInternetGateway"|"AWS::EC2::VPCEndpoint"|"AWS::EC2::VPCEndpointService"|"AWS::EC2::FlowLog"|"AWS::EC2::VPCPeeringConnection"|"AWS::Elasticsearch::Domain"|"AWS::IAM::Group"|"AWS::IAM::Policy"|"AWS::IAM::Role"|"AWS::IAM::User"|"AWS::ElasticLoadBalancingV2::LoadBalancer"|"AWS::ACM::Certificate"|"AWS::RDS::DBInstance"|"AWS::RDS::DBSubnetGroup"|"AWS::RDS::DBSecurityGroup"|"AWS::RDS::DBSnapshot"|"AWS::RDS::DBCluster"|"AWS::RDS::DBClusterSnapshot"|"AWS::RDS::EventSubscription"|"AWS::S3::Bucket"|"AWS::S3::AccountPublicAccessBlock"|"AWS::Redshift::Cluster"|"AWS::Redshift::ClusterSnapshot"|"AWS::Redshift::ClusterParameterGroup"|"AWS::Redshift::ClusterSecurityGroup"|"AWS::Redshift::ClusterSubnetGroup"|"AWS::Redshift::EventSubscription"|"AWS::SSM::ManagedInstanceInventory"|"AWS::CloudWatch::Alarm"|"AWS::CloudFormation::Stack"|"AWS::ElasticLoadBalancing::LoadBalancer"|"AWS::AutoScaling::AutoScalingGroup"|"AWS::AutoScaling::LaunchConfiguration"|"AWS::AutoScaling::ScalingPolicy"|"AWS::AutoScaling::ScheduledAction"|"AWS::DynamoDB::Table"|"AWS::CodeBuild::Project"|"AWS::WAF::RateBasedRule"|"AWS::WAF::Rule"|"AWS::WAF::RuleGroup"|"AWS::WAF::WebACL"|"AWS::WAFRegional::RateBasedRule"|"AWS::WAFRegional::Rule"|"AWS::WAFRegional::RuleGroup"|"AWS::WAFRegional::WebACL"|"AWS::CloudFront::Distribution"|"AWS::CloudFront::StreamingDistribution"|"AWS::Lambda::Function"|"AWS::NetworkFirewall::Firewall"|"AWS::NetworkFirewall::FirewallPolicy"|"AWS::NetworkFirewall::RuleGroup"|"AWS::ElasticBeanstalk::Application"|"AWS::ElasticBeanstalk::ApplicationVersion"|"AWS::ElasticBeanstalk::Environment"|"AWS::WAFv2::WebACL"|"AWS::WAFv2::RuleGroup"|"AWS::WAFv2::IPSet"|"AWS::WAFv2::RegexPatternSet"|"AWS::WAFv2::ManagedRuleSet"|"AWS::XRay::EncryptionConfig"|"AWS::SSM::AssociationCompliance"|"AWS::SSM::PatchCompliance"|"AWS::Shield::Protection"|"AWS::ShieldRegional::Protection"|"AWS::Config::ConformancePackCompliance"|"AWS::Config::ResourceCompliance"|"AWS::ApiGateway::Stage"|"AWS::ApiGateway::RestApi"|"AWS::ApiGatewayV2::Stage"|"AWS::ApiGatewayV2::Api"|"AWS::CodePipeline::Pipeline"|"AWS::ServiceCatalog::CloudFormationProvisionedProduct"|"AWS::ServiceCatalog::CloudFormationProduct"|"AWS::ServiceCatalog::Portfolio"|"AWS::SQS::Queue"|"AWS::KMS::Key"|"AWS::QLDB::Ledger"|"AWS::SecretsManager::Secret"|"AWS::SNS::Topic"|"AWS::SSM::FileData"|"AWS::Backup::BackupPlan"|"AWS::Backup::BackupSelection"|"AWS::Backup::BackupVault"|"AWS::Backup::RecoveryPoint"|"AWS::ECR::Repository"|"AWS::ECS::Cluster"|"AWS::ECS::Service"|"AWS::ECS::TaskDefinition"|"AWS::EFS::AccessPoint"|"AWS::EFS::FileSystem"|"AWS::EKS::Cluster"|"AWS::OpenSearch::Domain"|"AWS::EC2::TransitGateway"|"AWS::Kinesis::Stream"|"AWS::Kinesis::StreamConsumer"|"AWS::CodeDeploy::Application"|"AWS::CodeDeploy::DeploymentConfig"|"AWS::CodeDeploy::DeploymentGroup"|"AWS::EC2::LaunchTemplate"|"AWS::ECR::PublicRepository"|"AWS::GuardDuty::Detector"|"AWS::EMR::SecurityConfiguration"|"AWS::SageMaker::CodeRepository"|"AWS::Route53Resolver::ResolverEndpoint"|"AWS::Route53Resolver::ResolverRule"|"AWS::Route53Resolver::ResolverRuleAssociation"|"AWS::DMS::ReplicationSubnetGroup"|"AWS::DMS::EventSubscription"|"AWS::MSK::Cluster"|"AWS::StepFunctions::Activity"|"AWS::WorkSpaces::Workspace"|"AWS::WorkSpaces::ConnectionAlias"|"AWS::SageMaker::Model"|"AWS::ElasticLoadBalancingV2::Listener"|"AWS::StepFunctions::StateMachine"|"AWS::Batch::JobQueue"|"AWS::Batch::ComputeEnvironment"|"AWS::AccessAnalyzer::Analyzer"|"AWS::Athena::WorkGroup"|"AWS::Athena::DataCatalog"|"AWS::Detective::Graph"|"AWS::GlobalAccelerator::Accelerator"|"AWS::GlobalAccelerator::EndpointGroup"|"AWS::GlobalAccelerator::Listener"|"AWS::EC2::TransitGatewayAttachment"|"AWS::EC2::TransitGatewayRouteTable"|"AWS::DMS::Certificate"|"AWS::AppConfig::Application"|"AWS::AppSync::GraphQLApi"|"AWS::DataSync::LocationSMB"|"AWS::DataSync::LocationFSxLustre"|"AWS::DataSync::LocationS3"|"AWS::DataSync::LocationEFS"|"AWS::DataSync::Task"|"AWS::DataSync::LocationNFS"|"AWS::EC2::NetworkInsightsAccessScopeAnalysis"|"AWS::EKS::FargateProfile"|"AWS::Glue::Job"|"AWS::GuardDuty::ThreatIntelSet"|"AWS::GuardDuty::IPSet"|"AWS::SageMaker::Workteam"|"AWS::SageMaker::NotebookInstanceLifecycleConfig"|"AWS::ServiceDiscovery::Service"|"AWS::ServiceDiscovery::PublicDnsNamespace"|"AWS::SES::ContactList"|"AWS::SES::ConfigurationSet"|"AWS::Route53::HostedZone"|"AWS::IoTEvents::Input"|"AWS::IoTEvents::DetectorModel"|"AWS::IoTEvents::AlarmModel"|"AWS::ServiceDiscovery::HttpNamespace"|"AWS::Events::EventBus"|"AWS::ImageBuilder::ContainerRecipe"|"AWS::ImageBuilder::DistributionConfiguration"|"AWS::ImageBuilder::InfrastructureConfiguration"|"AWS::DataSync::LocationObjectStorage"|"AWS::DataSync::LocationHDFS"|"AWS::Glue::Classifier"|"AWS::Route53RecoveryReadiness::Cell"|"AWS::Route53RecoveryReadiness::ReadinessCheck"|"AWS::ECR::RegistryPolicy"|"AWS::Backup::ReportPlan"|"AWS::Lightsail::Certificate"|"AWS::RUM::AppMonitor"|"AWS::Events::Endpoint"|"AWS::SES::ReceiptRuleSet"|"AWS::Events::Archive"|"AWS::Events::ApiDestination"|"AWS::Lightsail::Disk"|"AWS::FIS::ExperimentTemplate"|"AWS::DataSync::LocationFSxWindows"|"AWS::SES::ReceiptFilter"|"AWS::GuardDuty::Filter"|"AWS::SES::Template"|"AWS::AmazonMQ::Broker"|"AWS::AppConfig::Environment"|"AWS::AppConfig::ConfigurationProfile"|"AWS::Cloud9::EnvironmentEC2"|"AWS::EventSchemas::Registry"|"AWS::EventSchemas::RegistryPolicy"|"AWS::EventSchemas::Discoverer"|"AWS::FraudDetector::Label"|"AWS::FraudDetector::EntityType"|"AWS::FraudDetector::Variable"|"AWS::FraudDetector::Outcome"|"AWS::IoT::Authorizer"|"AWS::IoT::SecurityProfile"|"AWS::IoT::RoleAlias"|"AWS::IoT::Dimension"|"AWS::IoTAnalytics::Datastore"|"AWS::Lightsail::Bucket"|"AWS::Lightsail::StaticIp"|"AWS::MediaPackage::PackagingGroup"|"AWS::Route53RecoveryReadiness::RecoveryGroup"|"AWS::ResilienceHub::ResiliencyPolicy"|"AWS::Transfer::Workflow"|"AWS::EKS::IdentityProviderConfig"|"AWS::EKS::Addon"|"AWS::Glue::MLTransform"|"AWS::IoT::Policy"|"AWS::IoT::MitigationAction"|"AWS::IoTTwinMaker::Workspace"|"AWS::IoTTwinMaker::Entity"|"AWS::IoTAnalytics::Dataset"|"AWS::IoTAnalytics::Pipeline"|"AWS::IoTAnalytics::Channel"|"AWS::IoTSiteWise::Dashboard"|"AWS::IoTSiteWise::Project"|"AWS::IoTSiteWise::Portal"|"AWS::IoTSiteWise::AssetModel"|"AWS::IVS::Channel"|"AWS::IVS::RecordingConfiguration"|"AWS::IVS::PlaybackKeyPair"|"AWS::KinesisAnalyticsV2::Application"|"AWS::RDS::GlobalCluster"|"AWS::S3::MultiRegionAccessPoint"|"AWS::DeviceFarm::TestGridProject"|"AWS::Budgets::BudgetsAction"|"AWS::Lex::Bot"|"AWS::CodeGuruReviewer::RepositoryAssociation"|"AWS::IoT::CustomMetric"|"AWS::Route53Resolver::FirewallDomainList"|"AWS::RoboMaker::RobotApplicationVersion"|"AWS::EC2::TrafficMirrorSession"|"AWS::IoTSiteWise::Gateway"|"AWS::Lex::BotAlias"|"AWS::LookoutMetrics::Alert"|"AWS::IoT::AccountAuditConfiguration"|"AWS::EC2::TrafficMirrorTarget"|"AWS::S3::StorageLens"|"AWS::IoT::ScheduledAudit"|"AWS::Events::Connection"|"AWS::EventSchemas::Schema"|"AWS::MediaPackage::PackagingConfiguration"|"AWS::KinesisVideo::SignalingChannel"|"AWS::AppStream::DirectoryConfig"|"AWS::LookoutVision::Project"|"AWS::Route53RecoveryControl::Cluster"|"AWS::Route53RecoveryControl::SafetyRule"|"AWS::Route53RecoveryControl::ControlPanel"|"AWS::Route53RecoveryControl::RoutingControl"|"AWS::Route53RecoveryReadiness::ResourceSet"|"AWS::RoboMaker::SimulationApplication"|"AWS::RoboMaker::RobotApplication"|"AWS::HealthLake::FHIRDatastore"|"AWS::Pinpoint::Segment"|"AWS::Pinpoint::ApplicationSettings"|"AWS::Events::Rule"|"AWS::EC2::DHCPOptions"|"AWS::EC2::NetworkInsightsPath"|"AWS::EC2::TrafficMirrorFilter"|"AWS::EC2::IPAM"|"AWS::IoTTwinMaker::Scene"|"AWS::NetworkManager::TransitGatewayRegistration"|"AWS::CustomerProfiles::Domain"|"AWS::AutoScaling::WarmPool"|"AWS::Connect::PhoneNumber", ... (1 more fields)}
+]: any -> record<FailureMessage: string, FailedItems: table<resourceType: string, resourceId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.StartRemediationExecution")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigRuleName": $config_rule_name, "ResourceKeys": $resource_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4707,6 +4843,8 @@ export def "start-remediation-execution" [
 #
 # POST /
 # operationId: StartResourceEvaluation
+# --ResourceDetails shape: {ResourceId: string, ResourceType: string, ResourceConfiguration: string, ResourceConfigurationSchemaType?: "CFN_RESOURCE_SCHEMA"}
+# --EvaluationContext shape: {EvaluationContextIdentifier?: string}
 export def "start-resource-evaluation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4724,16 +4862,17 @@ export def "start-resource-evaluation" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-88
-  resource_details: any
-  --evaluation-context: any
-  evaluation_mode: any
-  --evaluation-timeout: any
-  --client-token: any
-]: any -> record<ResourceEvaluationId: record> {
+  --x-amz-target: string@x-amz-target-completer-88 # required
+  resource_details: record # Returns information about the resource being evaluated. — shape: {ResourceId: string, ResourceType: string, ResourceConfiguration: string, ResourceConfigurationSchemaType?: "CFN_RESOURCE_SCHEMA"}
+  --evaluation-context: record # Use EvaluationContext to group independently initiated proactive resource evaluations. For example, CFN Stack. If you want to check just a resource definition, you do not need to provide evaluation context. — shape: {EvaluationContextIdentifier?: string}
+  evaluation_mode: string@evaluation-mode-completer # The mode of an evaluation. The valid values for this API are DETECTIVE and PROACTIVE.
+  --evaluation-timeout: int # The timeout for an evaluation. The default is 900 seconds. You cannot specify a number greater than 3600. If you specify 0, Config uses the default.
+  --client-token: string # A client token is a unique, case-sensitive string of up to 64 ASCII characters. To make an idempotent API request using one of these actions, specify a client token in the request. Avoid reusing the same client token for other API requests. If you retry a request that completed successfully using the same client token and the same parameters, the retry succeeds without performing any further actions. If you retry a successful request using the same client token, but one or more of the parameters are different, other than the Region or Availability Zone, the retry fails with an IdempotentParameterMismatch error.
+]: any -> record<ResourceEvaluationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.StartResourceEvaluation")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceDetails": $resource_details, "EvaluationContext": $evaluation_context, "EvaluationMode": $evaluation_mode, "EvaluationTimeout": $evaluation_timeout, "ClientToken": $client_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4776,12 +4915,13 @@ export def "stop-configuration-recorder" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-89
-  configuration_recorder_name: any
+  --x-amz-target: string@x-amz-target-completer-89 # required
+  configuration_recorder_name: string # The name of the recorder object that records each configuration change made to the resources.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.StopConfigurationRecorder")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigurationRecorderName": $configuration_recorder_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4807,6 +4947,7 @@ export def "stop-configuration-recorder" [
 #
 # POST /
 # operationId: TagResource
+# --Tags item shape: {Key?: string, Value?: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4824,13 +4965,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-90
-  resource_arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-90 # required
+  resource_arn: string # The Amazon Resource Name (ARN) that identifies the resource for which to list the tags. Currently, the supported resources are ConfigRule, ConfigurationAggregator and AggregatorAuthorization.
+  tags: list # An array of tag object. — item shape: {Key?: string, Value?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4873,13 +5015,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-91
-  resource_arn: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-91 # required
+  resource_arn: string # The Amazon Resource Name (ARN) that identifies the resource for which to list the tags. Currently, the supported resources are ConfigRule, ConfigurationAggregator and AggregatorAuthorization.
+  tag_keys: list<string> # The keys of the tags to be removed.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "StarlingDoveService.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

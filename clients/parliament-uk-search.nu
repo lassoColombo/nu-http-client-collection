@@ -93,6 +93,9 @@ def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: 
 def base-url-completer [] { ["https://api.parliament.uk/search"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def accept-completer [] { ["application/atom+xml" "application/json" "application/rss+xml" "text/html"] }
+def extension-completer [] { ["atom" "html" "json" "rss"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -165,7 +168,8 @@ export def "get-query" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string
+  --accept: string@accept-completer # Response content type
+  --q: string # required
   --start: float
   --count: float
   --subdomains: string
@@ -173,9 +177,10 @@ export def "get-query" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "subdomains" $subdomains "scalar") (serialize-qp "inUrlPrefixes" $in_url_prefixes "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/query" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/atom+xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
@@ -196,7 +201,7 @@ export def "get-query" [
 # GET /query.{extension}
 # Docs: https://github.com/dewitt/opensearch/blob/master/opensearch-1-1-draft-6.md#opensearch-response-elements — OpenSearch github repository
 export def "get-query-extension" [
-  extension: string
+  extension: string@extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -206,7 +211,8 @@ export def "get-query-extension" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string
+  --accept: string@accept-completer # Response content type
+  --q: string # required
   --start: float
   --count: float
   --subdomains: string
@@ -215,9 +221,10 @@ export def "get-query-extension" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($extension | is-empty) { error make --unspanned { msg: "path parameter 'extension' must be non-empty" } }
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "subdomains" $subdomains "scalar") (serialize-qp "inUrlPrefixes" $in_url_prefixes "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({extension: (encode-path-segment $extension)} | format pattern "/query.{extension}") $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/atom+xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"

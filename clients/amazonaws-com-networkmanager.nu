@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -164,7 +164,7 @@ export def "accept-attachment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Attachment: record<CoreNetworkId: record, CoreNetworkArn: record, AttachmentId: record, OwnerAccountId: record, AttachmentType: record, State: record, EdgeLocation: record, ResourceArn: record, AttachmentPolicyRuleNumber: record, SegmentName: record, Tags: record, ProposedSegmentChange: record<Tags: record, AttachmentPolicyRuleNumber: record, SegmentName: record>, CreatedAt: record, UpdatedAt: record>> {
+]: nothing -> record<Attachment: record<CoreNetworkId: string, CoreNetworkArn: string, AttachmentId: string, OwnerAccountId: string, AttachmentType: string, State: string, EdgeLocation: string, ResourceArn: string, AttachmentPolicyRuleNumber: int, SegmentName: string, Tags: list<record>, ProposedSegmentChange: record<Tags: list, AttachmentPolicyRuleNumber: int, SegmentName: string>, CreatedAt: string, UpdatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentId' must be non-empty" } }
@@ -212,7 +212,7 @@ export def "associate-connect-peer" [
   connect_peer_id: string # The ID of the Connect peer.
   device_id: string # The ID of the device.
   --link-id: string # The ID of the link.
-]: any -> record<ConnectPeerAssociation: record<ConnectPeerId: record, GlobalNetworkId: record, DeviceId: record, LinkId: record, State: record>> {
+]: any -> record<ConnectPeerAssociation: record<ConnectPeerId: string, GlobalNetworkId: string, DeviceId: string, LinkId: string, State: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -265,7 +265,7 @@ export def "get-connect-peer-associations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ConnectPeerAssociations: record, NextToken: record> {
+]: nothing -> record<ConnectPeerAssociations: table<ConnectPeerId: string, GlobalNetworkId: string, DeviceId: string, LinkId: string, State: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($global_network_id | is-empty) { error make --unspanned { msg: "path parameter 'globalNetworkId' must be non-empty" } }
@@ -314,7 +314,7 @@ export def "associate-customer-gateway" [
   customer_gateway_arn: string # The Amazon Resource Name (ARN) of the customer gateway.
   device_id: string # The ID of the device.
   --link-id: string # The ID of the link.
-]: any -> record<CustomerGatewayAssociation: record<CustomerGatewayArn: record, GlobalNetworkId: record, DeviceId: record, LinkId: record, State: record>> {
+]: any -> record<CustomerGatewayAssociation: record<CustomerGatewayArn: string, GlobalNetworkId: string, DeviceId: string, LinkId: string, State: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -367,7 +367,7 @@ export def "get-customer-gateway-associations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CustomerGatewayAssociations: record, NextToken: record> {
+]: nothing -> record<CustomerGatewayAssociations: table<CustomerGatewayArn: string, GlobalNetworkId: string, DeviceId: string, LinkId: string, State: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($global_network_id | is-empty) { error make --unspanned { msg: "path parameter 'globalNetworkId' must be non-empty" } }
@@ -415,7 +415,7 @@ export def "associate-link" [
   --x-amz-signed-headers: string
   device_id: string # The ID of the device.
   link_id: string # The ID of the link.
-]: any -> record<LinkAssociation: record<GlobalNetworkId: record, DeviceId: record, LinkId: record, LinkAssociationState: record>> {
+]: any -> record<LinkAssociation: record<GlobalNetworkId: string, DeviceId: string, LinkId: string, LinkAssociationState: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -469,7 +469,7 @@ export def "get-link-associations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<LinkAssociations: record, NextToken: record> {
+]: nothing -> record<LinkAssociations: table<GlobalNetworkId: string, DeviceId: string, LinkId: string, LinkAssociationState: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($global_network_id | is-empty) { error make --unspanned { msg: "path parameter 'globalNetworkId' must be non-empty" } }
@@ -518,7 +518,7 @@ export def "associate-transit-gateway-connect-peer" [
   transit_gateway_connect_peer_arn: string # The Amazon Resource Name (ARN) of the Connect peer.
   device_id: string # The ID of the device.
   --link-id: string # The ID of the link.
-]: any -> record<TransitGatewayConnectPeerAssociation: record<TransitGatewayConnectPeerArn: record, GlobalNetworkId: record, DeviceId: record, LinkId: record, State: record>> {
+]: any -> record<TransitGatewayConnectPeerAssociation: record<TransitGatewayConnectPeerArn: string, GlobalNetworkId: string, DeviceId: string, LinkId: string, State: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -571,7 +571,7 @@ export def "get-transit-gateway-connect-peer-associations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TransitGatewayConnectPeerAssociations: record, NextToken: record> {
+]: nothing -> record<TransitGatewayConnectPeerAssociations: table<TransitGatewayConnectPeerArn: string, GlobalNetworkId: string, DeviceId: string, LinkId: string, State: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($global_network_id | is-empty) { error make --unspanned { msg: "path parameter 'globalNetworkId' must be non-empty" } }
@@ -599,8 +599,8 @@ export def "get-transit-gateway-connect-peer-associations" [
 #
 # POST /connect-attachments
 # operationId: CreateConnectAttachment
-# --Options shape: {Protocol?: any}
-# --Tags item shape: {Key?: any, Value?: any}
+# --Options shape: {Protocol?: "GRE"}
+# --Tags item shape: {Key?: string, Value?: string}
 export def "create-connect-attachment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -621,10 +621,10 @@ export def "create-connect-attachment" [
   core_network_id: string # The ID of a core network where you want to create the attachment.
   edge_location: string # The Region where the edge is located.
   transport_attachment_id: string # The ID of the attachment between the two connections.
-  options: record # Describes a core network Connect attachment options. — shape: {Protocol?: any}
-  --tags: list # The list of key-value tags associated with the request. — item shape: {Key?: any, Value?: any}
+  options: record # Describes a core network Connect attachment options. — shape: {Protocol?: "GRE"}
+  --tags: list # The list of key-value tags associated with the request. — item shape: {Key?: string, Value?: string}
   --client-token: string # The client token associated with the request.
-]: any -> record<ConnectAttachment: record<Attachment: record<CoreNetworkId: record, CoreNetworkArn: record, AttachmentId: record, OwnerAccountId: record, AttachmentType: record, State: record, EdgeLocation: record, ResourceArn: record, AttachmentPolicyRuleNumber: record, SegmentName: record, Tags: record, ProposedSegmentChange: record, CreatedAt: record, UpdatedAt: record>, TransportAttachmentId: record, Options: record<Protocol: record>>> {
+]: any -> record<ConnectAttachment: record<Attachment: record<CoreNetworkId: string, CoreNetworkArn: string, AttachmentId: string, OwnerAccountId: string, AttachmentType: string, State: string, EdgeLocation: string, ResourceArn: string, AttachmentPolicyRuleNumber: int, SegmentName: string, Tags: list, ProposedSegmentChange: record, CreatedAt: string, UpdatedAt: string>, TransportAttachmentId: string, Options: record<Protocol: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -653,8 +653,8 @@ export def "create-connect-attachment" [
 #
 # POST /connect-peers
 # operationId: CreateConnectPeer
-# --BgpOptions shape: {PeerAsn?: any}
-# --Tags item shape: {Key?: any, Value?: any}
+# --BgpOptions shape: {PeerAsn?: int}
+# --Tags item shape: {Key?: string, Value?: string}
 export def "create-connect-peer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -675,11 +675,11 @@ export def "create-connect-peer" [
   connect_attachment_id: string # The ID of the connection attachment.
   --core-network-address: string # A Connect peer core network address.
   peer_address: string # The Connect peer address.
-  --bgp-options: record # Describes the BGP options. — shape: {PeerAsn?: any}
+  --bgp-options: record # Describes the BGP options. — shape: {PeerAsn?: int}
   inside_cidr_blocks: list<string> # The inside IP addresses used for BGP peering.
-  --tags: list # The tags associated with the peer request. — item shape: {Key?: any, Value?: any}
+  --tags: list # The tags associated with the peer request. — item shape: {Key?: string, Value?: string}
   --client-token: string # The client token associated with the request.
-]: any -> record<ConnectPeer: record<CoreNetworkId: record, ConnectAttachmentId: record, ConnectPeerId: record, EdgeLocation: record, State: record, CreatedAt: record, Configuration: record<CoreNetworkAddress: record, PeerAddress: record, InsideCidrBlocks: record, Protocol: record, BgpConfigurations: record>, Tags: record>> {
+]: any -> record<ConnectPeer: record<CoreNetworkId: string, ConnectAttachmentId: string, ConnectPeerId: string, EdgeLocation: string, State: string, CreatedAt: string, Configuration: record<CoreNetworkAddress: string, PeerAddress: string, InsideCidrBlocks: list, Protocol: string, BgpConfigurations: list>, Tags: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -731,7 +731,7 @@ export def "list-connect-peers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ConnectPeers: record, NextToken: record> {
+]: nothing -> record<ConnectPeers: table<CoreNetworkId: string, ConnectAttachmentId: string, ConnectPeerId: string, EdgeLocation: string, ConnectPeerState: string, CreatedAt: string, Tags: list>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "coreNetworkId" $core_network_id "scalar") (serialize-qp "connectAttachmentId" $connect_attachment_id "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -758,7 +758,7 @@ export def "list-connect-peers" [
 #
 # POST /global-networks/{globalNetworkId}/connections
 # operationId: CreateConnection
-# --Tags item shape: {Key?: any, Value?: any}
+# --Tags item shape: {Key?: string, Value?: string}
 export def "create-connection" [
   global_network_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -782,8 +782,8 @@ export def "create-connection" [
   --link-id: string # The ID of the link for the first device.
   --connected-link-id: string # The ID of the link for the second device.
   --description: string # A description of the connection. Length Constraints: Maximum length of 256 characters.
-  --tags: list # The tags to apply to the resource during creation. — item shape: {Key?: any, Value?: any}
-]: any -> record<Connection: record<ConnectionId: record, ConnectionArn: record, GlobalNetworkId: record, DeviceId: record, ConnectedDeviceId: record, LinkId: record, ConnectedLinkId: record, Description: record, CreatedAt: record, State: record, Tags: record>> {
+  --tags: list # The tags to apply to the resource during creation. — item shape: {Key?: string, Value?: string}
+]: any -> record<Connection: record<ConnectionId: string, ConnectionArn: string, GlobalNetworkId: string, DeviceId: string, ConnectedDeviceId: string, LinkId: string, ConnectedLinkId: string, Description: string, CreatedAt: string, State: string, Tags: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -837,7 +837,7 @@ export def "get-connections" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Connections: record, NextToken: record> {
+]: nothing -> record<Connections: table<ConnectionId: string, ConnectionArn: string, GlobalNetworkId: string, DeviceId: string, ConnectedDeviceId: string, LinkId: string, ConnectedLinkId: string, Description: string, CreatedAt: string, State: string, Tags: list>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($global_network_id | is-empty) { error make --unspanned { msg: "path parameter 'globalNetworkId' must be non-empty" } }
@@ -865,7 +865,7 @@ export def "get-connections" [
 #
 # POST /core-networks
 # operationId: CreateCoreNetwork
-# --Tags item shape: {Key?: any, Value?: any}
+# --Tags item shape: {Key?: string, Value?: string}
 export def "create-core-network" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -885,10 +885,10 @@ export def "create-core-network" [
   --x-amz-signed-headers: string
   global_network_id: string # The ID of the global network that a core network will be a part of.
   --description: string # The description of a core network.
-  --tags: list # Key-value tags associated with a core network request. — item shape: {Key?: any, Value?: any}
+  --tags: list # Key-value tags associated with a core network request. — item shape: {Key?: string, Value?: string}
   --policy-document: string # The policy document for creating a core network.
   --client-token: string # The client token associated with a core network request.
-]: any -> record<CoreNetwork: record<GlobalNetworkId: record, CoreNetworkId: record, CoreNetworkArn: record, Description: record, CreatedAt: record, State: record, Segments: record, Edges: record, Tags: record>> {
+]: any -> record<CoreNetwork: record<GlobalNetworkId: string, CoreNetworkId: string, CoreNetworkArn: string, Description: string, CreatedAt: string, State: string, Segments: list<record>, Edges: list<record>, Tags: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -938,7 +938,7 @@ export def "list-core-networks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CoreNetworks: record, NextToken: record> {
+]: nothing -> record<CoreNetworks: table<CoreNetworkId: string, CoreNetworkArn: string, GlobalNetworkId: string, OwnerAccountId: string, State: string, Description: string, Tags: list>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -965,9 +965,9 @@ export def "list-core-networks" [
 #
 # POST /global-networks/{globalNetworkId}/devices
 # operationId: CreateDevice
-# --AWSLocation shape: {Zone?: any, SubnetArn?: any}
-# --Location shape: {Address?: any, Latitude?: any, Longitude?: any}
-# --Tags item shape: {Key?: any, Value?: any}
+# --AWSLocation shape: {Zone?: string, SubnetArn?: string}
+# --Location shape: {Address?: string, Latitude?: string, Longitude?: string}
+# --Tags item shape: {Key?: string, Value?: string}
 export def "create-device" [
   global_network_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -986,16 +986,16 @@ export def "create-device" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --aws-location: record # Specifies a location in Amazon Web Services. — shape: {Zone?: any, SubnetArn?: any}
+  --aws-location: record # Specifies a location in Amazon Web Services. — shape: {Zone?: string, SubnetArn?: string}
   --description: string # A description of the device. Constraints: Maximum length of 256 characters.
   --type: string # The type of the device.
   --vendor: string # The vendor of the device. Constraints: Maximum length of 128 characters.
   --model: string # The model of the device. Constraints: Maximum length of 128 characters.
   --serial-number: string # The serial number of the device. Constraints: Maximum length of 128 characters.
-  --location: record # Describes a location. — shape: {Address?: any, Latitude?: any, Longitude?: any}
+  --location: record # Describes a location. — shape: {Address?: string, Latitude?: string, Longitude?: string}
   --site-id: string # The ID of the site.
-  --tags: list # The tags to apply to the resource during creation. — item shape: {Key?: any, Value?: any}
-]: any -> record<Device: record<DeviceId: record, DeviceArn: record, GlobalNetworkId: record, AWSLocation: record<Zone: record, SubnetArn: record>, Description: record, Type: record, Vendor: record, Model: record, SerialNumber: record, Location: record<Address: record, Latitude: record, Longitude: record>, SiteId: record, CreatedAt: record, State: record, Tags: record>> {
+  --tags: list # The tags to apply to the resource during creation. — item shape: {Key?: string, Value?: string}
+]: any -> record<Device: record<DeviceId: string, DeviceArn: string, GlobalNetworkId: string, AWSLocation: record<Zone: string, SubnetArn: string>, Description: string, Type: string, Vendor: string, Model: string, SerialNumber: string, Location: record<Address: string, Latitude: string, Longitude: string>, SiteId: string, CreatedAt: string, State: string, Tags: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1049,7 +1049,7 @@ export def "get-devices" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Devices: record, NextToken: record> {
+]: nothing -> record<Devices: table<DeviceId: string, DeviceArn: string, GlobalNetworkId: string, AWSLocation: record, Description: string, Type: string, Vendor: string, Model: string, SerialNumber: string, Location: record, SiteId: string, CreatedAt: string, State: string, Tags: list>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($global_network_id | is-empty) { error make --unspanned { msg: "path parameter 'globalNetworkId' must be non-empty" } }
@@ -1077,7 +1077,7 @@ export def "get-devices" [
 #
 # POST /global-networks
 # operationId: CreateGlobalNetwork
-# --Tags item shape: {Key?: any, Value?: any}
+# --Tags item shape: {Key?: string, Value?: string}
 export def "create-global-network" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1096,8 +1096,8 @@ export def "create-global-network" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --description: string # A description of the global network. Constraints: Maximum length of 256 characters.
-  --tags: list # The tags to apply to the resource during creation. — item shape: {Key?: any, Value?: any}
-]: any -> record<GlobalNetwork: record<GlobalNetworkId: record, GlobalNetworkArn: record, Description: record, CreatedAt: record, State: record, Tags: record>> {
+  --tags: list # The tags to apply to the resource during creation. — item shape: {Key?: string, Value?: string}
+]: any -> record<GlobalNetwork: record<GlobalNetworkId: string, GlobalNetworkArn: string, Description: string, CreatedAt: string, State: string, Tags: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1148,7 +1148,7 @@ export def "describe-global-networks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<GlobalNetworks: record, NextToken: record> {
+]: nothing -> record<GlobalNetworks: table<GlobalNetworkId: string, GlobalNetworkArn: string, Description: string, CreatedAt: string, State: string, Tags: list>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "globalNetworkIds" $global_network_ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -1175,8 +1175,8 @@ export def "describe-global-networks" [
 #
 # POST /global-networks/{globalNetworkId}/links
 # operationId: CreateLink
-# --Bandwidth shape: {UploadSpeed?: any, DownloadSpeed?: any}
-# --Tags item shape: {Key?: any, Value?: any}
+# --Bandwidth shape: {UploadSpeed?: int, DownloadSpeed?: int}
+# --Tags item shape: {Key?: string, Value?: string}
 export def "create-link" [
   global_network_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1197,11 +1197,11 @@ export def "create-link" [
   --x-amz-signed-headers: string
   --description: string # A description of the link. Constraints: Maximum length of 256 characters.
   --type: string # The type of the link. Constraints: Maximum length of 128 characters. Cannot include the following characters: | \ ^
-  bandwidth: record # Describes bandwidth information. — shape: {UploadSpeed?: any, DownloadSpeed?: any}
+  bandwidth: record # Describes bandwidth information. — shape: {UploadSpeed?: int, DownloadSpeed?: int}
   --provider: string # The provider of the link. Constraints: Maximum length of 128 characters. Cannot include the following characters: | \ ^
   site_id: string # The ID of the site.
-  --tags: list # The tags to apply to the resource during creation. — item shape: {Key?: any, Value?: any}
-]: any -> record<Link: record<LinkId: record, LinkArn: record, GlobalNetworkId: record, SiteId: record, Description: record, Type: record, Bandwidth: record<UploadSpeed: record, DownloadSpeed: record>, Provider: record, CreatedAt: record, State: record, Tags: record>> {
+  --tags: list # The tags to apply to the resource during creation. — item shape: {Key?: string, Value?: string}
+]: any -> record<Link: record<LinkId: string, LinkArn: string, GlobalNetworkId: string, SiteId: string, Description: string, Type: string, Bandwidth: record<UploadSpeed: int, DownloadSpeed: int>, Provider: string, CreatedAt: string, State: string, Tags: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1257,7 +1257,7 @@ export def "get-links" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Links: record, NextToken: record> {
+]: nothing -> record<Links: table<LinkId: string, LinkArn: string, GlobalNetworkId: string, SiteId: string, Description: string, Type: string, Bandwidth: record, Provider: string, CreatedAt: string, State: string, Tags: list>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($global_network_id | is-empty) { error make --unspanned { msg: "path parameter 'globalNetworkId' must be non-empty" } }
@@ -1285,8 +1285,8 @@ export def "get-links" [
 #
 # POST /global-networks/{globalNetworkId}/sites
 # operationId: CreateSite
-# --Location shape: {Address?: any, Latitude?: any, Longitude?: any}
-# --Tags item shape: {Key?: any, Value?: any}
+# --Location shape: {Address?: string, Latitude?: string, Longitude?: string}
+# --Tags item shape: {Key?: string, Value?: string}
 export def "create-site" [
   global_network_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1306,9 +1306,9 @@ export def "create-site" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --description: string # A description of your site. Constraints: Maximum length of 256 characters.
-  --location: record # Describes a location. — shape: {Address?: any, Latitude?: any, Longitude?: any}
-  --tags: list # The tags to apply to the resource during creation. — item shape: {Key?: any, Value?: any}
-]: any -> record<Site: record<SiteId: record, SiteArn: record, GlobalNetworkId: record, Description: record, Location: record<Address: record, Latitude: record, Longitude: record>, CreatedAt: record, State: record, Tags: record>> {
+  --location: record # Describes a location. — shape: {Address?: string, Latitude?: string, Longitude?: string}
+  --tags: list # The tags to apply to the resource during creation. — item shape: {Key?: string, Value?: string}
+]: any -> record<Site: record<SiteId: string, SiteArn: string, GlobalNetworkId: string, Description: string, Location: record<Address: string, Latitude: string, Longitude: string>, CreatedAt: string, State: string, Tags: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1361,7 +1361,7 @@ export def "get-sites" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Sites: record, NextToken: record> {
+]: nothing -> record<Sites: table<SiteId: string, SiteArn: string, GlobalNetworkId: string, Description: string, Location: record, CreatedAt: string, State: string, Tags: list>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($global_network_id | is-empty) { error make --unspanned { msg: "path parameter 'globalNetworkId' must be non-empty" } }
@@ -1389,7 +1389,7 @@ export def "get-sites" [
 #
 # POST /site-to-site-vpn-attachments
 # operationId: CreateSiteToSiteVpnAttachment
-# --Tags item shape: {Key?: any, Value?: any}
+# --Tags item shape: {Key?: string, Value?: string}
 export def "create-site-to-site-vpn-attachment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1409,9 +1409,9 @@ export def "create-site-to-site-vpn-attachment" [
   --x-amz-signed-headers: string
   core_network_id: string # The ID of a core network where you're creating a site-to-site VPN attachment.
   vpn_connection_arn: string # The ARN identifying the VPN attachment.
-  --tags: list # The tags associated with the request. — item shape: {Key?: any, Value?: any}
+  --tags: list # The tags associated with the request. — item shape: {Key?: string, Value?: string}
   --client-token: string # The client token associated with the request.
-]: any -> record<SiteToSiteVpnAttachment: record<Attachment: record<CoreNetworkId: record, CoreNetworkArn: record, AttachmentId: record, OwnerAccountId: record, AttachmentType: record, State: record, EdgeLocation: record, ResourceArn: record, AttachmentPolicyRuleNumber: record, SegmentName: record, Tags: record, ProposedSegmentChange: record, CreatedAt: record, UpdatedAt: record>, VpnConnectionArn: record>> {
+]: any -> record<SiteToSiteVpnAttachment: record<Attachment: record<CoreNetworkId: string, CoreNetworkArn: string, AttachmentId: string, OwnerAccountId: string, AttachmentType: string, State: string, EdgeLocation: string, ResourceArn: string, AttachmentPolicyRuleNumber: int, SegmentName: string, Tags: list, ProposedSegmentChange: record, CreatedAt: string, UpdatedAt: string>, VpnConnectionArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1440,7 +1440,7 @@ export def "create-site-to-site-vpn-attachment" [
 #
 # POST /transit-gateway-peerings
 # operationId: CreateTransitGatewayPeering
-# --Tags item shape: {Key?: any, Value?: any}
+# --Tags item shape: {Key?: string, Value?: string}
 export def "create-transit-gateway-peering" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1460,9 +1460,9 @@ export def "create-transit-gateway-peering" [
   --x-amz-signed-headers: string
   core_network_id: string # The ID of a core network.
   transit_gateway_arn: string # The ARN of the transit gateway for the peering request.
-  --tags: list # The list of key-value tags associated with the request. — item shape: {Key?: any, Value?: any}
+  --tags: list # The list of key-value tags associated with the request. — item shape: {Key?: string, Value?: string}
   --client-token: string # The client token associated with the request.
-]: any -> record<TransitGatewayPeering: record<Peering: record<CoreNetworkId: record, CoreNetworkArn: record, PeeringId: record, OwnerAccountId: record, PeeringType: record, State: record, EdgeLocation: record, ResourceArn: record, Tags: record, CreatedAt: record>, TransitGatewayArn: record, TransitGatewayPeeringAttachmentId: record>> {
+]: any -> record<TransitGatewayPeering: record<Peering: record<CoreNetworkId: string, CoreNetworkArn: string, PeeringId: string, OwnerAccountId: string, PeeringType: string, State: string, EdgeLocation: string, ResourceArn: string, Tags: list, CreatedAt: string>, TransitGatewayArn: string, TransitGatewayPeeringAttachmentId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1491,7 +1491,7 @@ export def "create-transit-gateway-peering" [
 #
 # POST /transit-gateway-route-table-attachments
 # operationId: CreateTransitGatewayRouteTableAttachment
-# --Tags item shape: {Key?: any, Value?: any}
+# --Tags item shape: {Key?: string, Value?: string}
 export def "create-transit-gateway-route-table-attachment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1511,9 +1511,9 @@ export def "create-transit-gateway-route-table-attachment" [
   --x-amz-signed-headers: string
   peering_id: string # The ID of the peer for the
   transit_gateway_route_table_arn: string # The ARN of the transit gateway route table for the attachment request. For example, "TransitGatewayRouteTableArn": "arn:aws:ec2:us-west-2:123456789012:transit-gateway-route-table/tgw-rtb-9876543210123456".
-  --tags: list # The list of key-value tags associated with the request. — item shape: {Key?: any, Value?: any}
+  --tags: list # The list of key-value tags associated with the request. — item shape: {Key?: string, Value?: string}
   --client-token: string # The client token associated with the request.
-]: any -> record<TransitGatewayRouteTableAttachment: record<Attachment: record<CoreNetworkId: record, CoreNetworkArn: record, AttachmentId: record, OwnerAccountId: record, AttachmentType: record, State: record, EdgeLocation: record, ResourceArn: record, AttachmentPolicyRuleNumber: record, SegmentName: record, Tags: record, ProposedSegmentChange: record, CreatedAt: record, UpdatedAt: record>, PeeringId: record, TransitGatewayRouteTableArn: record>> {
+]: any -> record<TransitGatewayRouteTableAttachment: record<Attachment: record<CoreNetworkId: string, CoreNetworkArn: string, AttachmentId: string, OwnerAccountId: string, AttachmentType: string, State: string, EdgeLocation: string, ResourceArn: string, AttachmentPolicyRuleNumber: int, SegmentName: string, Tags: list, ProposedSegmentChange: record, CreatedAt: string, UpdatedAt: string>, PeeringId: string, TransitGatewayRouteTableArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1542,8 +1542,8 @@ export def "create-transit-gateway-route-table-attachment" [
 #
 # POST /vpc-attachments
 # operationId: CreateVpcAttachment
-# --Options shape: {Ipv6Support?: any, ApplianceModeSupport?: any}
-# --Tags item shape: {Key?: any, Value?: any}
+# --Options shape: {Ipv6Support?: bool, ApplianceModeSupport?: bool}
+# --Tags item shape: {Key?: string, Value?: string}
 export def "create-vpc-attachment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1564,10 +1564,10 @@ export def "create-vpc-attachment" [
   core_network_id: string # The ID of a core network for the VPC attachment.
   vpc_arn: string # The ARN of the VPC.
   subnet_arns: list<string> # The subnet ARN of the VPC attachment.
-  --options: record # Describes the VPC options. — shape: {Ipv6Support?: any, ApplianceModeSupport?: any}
-  --tags: list # The key-value tags associated with the request. — item shape: {Key?: any, Value?: any}
+  --options: record # Describes the VPC options. — shape: {Ipv6Support?: bool, ApplianceModeSupport?: bool}
+  --tags: list # The key-value tags associated with the request. — item shape: {Key?: string, Value?: string}
   --client-token: string # The client token associated with the request.
-]: any -> record<VpcAttachment: record<Attachment: record<CoreNetworkId: record, CoreNetworkArn: record, AttachmentId: record, OwnerAccountId: record, AttachmentType: record, State: record, EdgeLocation: record, ResourceArn: record, AttachmentPolicyRuleNumber: record, SegmentName: record, Tags: record, ProposedSegmentChange: record, CreatedAt: record, UpdatedAt: record>, SubnetArns: record, Options: record<Ipv6Support: record, ApplianceModeSupport: record>>> {
+]: any -> record<VpcAttachment: record<Attachment: record<CoreNetworkId: string, CoreNetworkArn: string, AttachmentId: string, OwnerAccountId: string, AttachmentType: string, State: string, EdgeLocation: string, ResourceArn: string, AttachmentPolicyRuleNumber: int, SegmentName: string, Tags: list, ProposedSegmentChange: record, CreatedAt: string, UpdatedAt: string>, SubnetArns: list<string>, Options: record<Ipv6Support: bool, ApplianceModeSupport: bool>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1614,7 +1614,7 @@ export def "delete-attachment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Attachment: record<CoreNetworkId: record, CoreNetworkArn: record, AttachmentId: record, OwnerAccountId: record, AttachmentType: record, State: record, EdgeLocation: record, ResourceArn: record, AttachmentPolicyRuleNumber: record, SegmentName: record, Tags: record, ProposedSegmentChange: record<Tags: record, AttachmentPolicyRuleNumber: record, SegmentName: record>, CreatedAt: record, UpdatedAt: record>> {
+]: nothing -> record<Attachment: record<CoreNetworkId: string, CoreNetworkArn: string, AttachmentId: string, OwnerAccountId: string, AttachmentType: string, State: string, EdgeLocation: string, ResourceArn: string, AttachmentPolicyRuleNumber: int, SegmentName: string, Tags: list<record>, ProposedSegmentChange: record<Tags: list, AttachmentPolicyRuleNumber: int, SegmentName: string>, CreatedAt: string, UpdatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentId' must be non-empty" } }
@@ -1659,7 +1659,7 @@ export def "delete-connect-peer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ConnectPeer: record<CoreNetworkId: record, ConnectAttachmentId: record, ConnectPeerId: record, EdgeLocation: record, State: record, CreatedAt: record, Configuration: record<CoreNetworkAddress: record, PeerAddress: record, InsideCidrBlocks: record, Protocol: record, BgpConfigurations: record>, Tags: record>> {
+]: nothing -> record<ConnectPeer: record<CoreNetworkId: string, ConnectAttachmentId: string, ConnectPeerId: string, EdgeLocation: string, State: string, CreatedAt: string, Configuration: record<CoreNetworkAddress: string, PeerAddress: string, InsideCidrBlocks: list, Protocol: string, BgpConfigurations: list>, Tags: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($connect_peer_id | is-empty) { error make --unspanned { msg: "path parameter 'connectPeerId' must be non-empty" } }
@@ -1704,7 +1704,7 @@ export def "get-connect-peer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ConnectPeer: record<CoreNetworkId: record, ConnectAttachmentId: record, ConnectPeerId: record, EdgeLocation: record, State: record, CreatedAt: record, Configuration: record<CoreNetworkAddress: record, PeerAddress: record, InsideCidrBlocks: record, Protocol: record, BgpConfigurations: record>, Tags: record>> {
+]: nothing -> record<ConnectPeer: record<CoreNetworkId: string, ConnectAttachmentId: string, ConnectPeerId: string, EdgeLocation: string, State: string, CreatedAt: string, Configuration: record<CoreNetworkAddress: string, PeerAddress: string, InsideCidrBlocks: list, Protocol: string, BgpConfigurations: list>, Tags: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($connect_peer_id | is-empty) { error make --unspanned { msg: "path parameter 'connectPeerId' must be non-empty" } }
@@ -1750,7 +1750,7 @@ export def "delete-connection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Connection: record<ConnectionId: record, ConnectionArn: record, GlobalNetworkId: record, DeviceId: record, ConnectedDeviceId: record, LinkId: record, ConnectedLinkId: record, Description: record, CreatedAt: record, State: record, Tags: record>> {
+]: nothing -> record<Connection: record<ConnectionId: string, ConnectionArn: string, GlobalNetworkId: string, DeviceId: string, ConnectedDeviceId: string, LinkId: string, ConnectedLinkId: string, Description: string, CreatedAt: string, State: string, Tags: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($global_network_id | is-empty) { error make --unspanned { msg: "path parameter 'globalNetworkId' must be non-empty" } }
@@ -1800,7 +1800,7 @@ export def "update-connection" [
   --link-id: string # The ID of the link for the first device in the connection.
   --connected-link-id: string # The ID of the link for the second device in the connection.
   --description: string # A description of the connection. Length Constraints: Maximum length of 256 characters.
-]: any -> record<Connection: record<ConnectionId: record, ConnectionArn: record, GlobalNetworkId: record, DeviceId: record, ConnectedDeviceId: record, LinkId: record, ConnectedLinkId: record, Description: record, CreatedAt: record, State: record, Tags: record>> {
+]: any -> record<Connection: record<ConnectionId: string, ConnectionArn: string, GlobalNetworkId: string, DeviceId: string, ConnectedDeviceId: string, LinkId: string, ConnectedLinkId: string, Description: string, CreatedAt: string, State: string, Tags: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1849,7 +1849,7 @@ export def "delete-core-network" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CoreNetwork: record<GlobalNetworkId: record, CoreNetworkId: record, CoreNetworkArn: record, Description: record, CreatedAt: record, State: record, Segments: record, Edges: record, Tags: record>> {
+]: nothing -> record<CoreNetwork: record<GlobalNetworkId: string, CoreNetworkId: string, CoreNetworkArn: string, Description: string, CreatedAt: string, State: string, Segments: list<record>, Edges: list<record>, Tags: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($core_network_id | is-empty) { error make --unspanned { msg: "path parameter 'coreNetworkId' must be non-empty" } }
@@ -1894,7 +1894,7 @@ export def "get-core-network" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CoreNetwork: record<GlobalNetworkId: record, CoreNetworkId: record, CoreNetworkArn: record, Description: record, CreatedAt: record, State: record, Segments: record, Edges: record, Tags: record>> {
+]: nothing -> record<CoreNetwork: record<GlobalNetworkId: string, CoreNetworkId: string, CoreNetworkArn: string, Description: string, CreatedAt: string, State: string, Segments: list<record>, Edges: list<record>, Tags: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($core_network_id | is-empty) { error make --unspanned { msg: "path parameter 'coreNetworkId' must be non-empty" } }
@@ -1940,7 +1940,7 @@ export def "update-core-network" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --description: string # The description of the update.
-]: any -> record<CoreNetwork: record<GlobalNetworkId: record, CoreNetworkId: record, CoreNetworkArn: record, Description: record, CreatedAt: record, State: record, Segments: record, Edges: record, Tags: record>> {
+]: any -> record<CoreNetwork: record<GlobalNetworkId: string, CoreNetworkId: string, CoreNetworkArn: string, Description: string, CreatedAt: string, State: string, Segments: list<record>, Edges: list<record>, Tags: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1989,7 +1989,7 @@ export def "delete-core-network-policy-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CoreNetworkPolicy: record<CoreNetworkId: record, PolicyVersionId: record, Alias: record, Description: record, CreatedAt: record, ChangeSetState: record, PolicyErrors: record, PolicyDocument: record>> {
+]: nothing -> record<CoreNetworkPolicy: record<CoreNetworkId: string, PolicyVersionId: int, Alias: string, Description: string, CreatedAt: string, ChangeSetState: string, PolicyErrors: list<record>, PolicyDocument: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($core_network_id | is-empty) { error make --unspanned { msg: "path parameter 'coreNetworkId' must be non-empty" } }
@@ -2036,7 +2036,7 @@ export def "delete-device" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Device: record<DeviceId: record, DeviceArn: record, GlobalNetworkId: record, AWSLocation: record<Zone: record, SubnetArn: record>, Description: record, Type: record, Vendor: record, Model: record, SerialNumber: record, Location: record<Address: record, Latitude: record, Longitude: record>, SiteId: record, CreatedAt: record, State: record, Tags: record>> {
+]: nothing -> record<Device: record<DeviceId: string, DeviceArn: string, GlobalNetworkId: string, AWSLocation: record<Zone: string, SubnetArn: string>, Description: string, Type: string, Vendor: string, Model: string, SerialNumber: string, Location: record<Address: string, Latitude: string, Longitude: string>, SiteId: string, CreatedAt: string, State: string, Tags: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($global_network_id | is-empty) { error make --unspanned { msg: "path parameter 'globalNetworkId' must be non-empty" } }
@@ -2064,8 +2064,8 @@ export def "delete-device" [
 #
 # PATCH /global-networks/{globalNetworkId}/devices/{deviceId}
 # operationId: UpdateDevice
-# --AWSLocation shape: {Zone?: any, SubnetArn?: any}
-# --Location shape: {Address?: any, Latitude?: any, Longitude?: any}
+# --AWSLocation shape: {Zone?: string, SubnetArn?: string}
+# --Location shape: {Address?: string, Latitude?: string, Longitude?: string}
 export def "update-device" [
   global_network_id: string
   device_id: string
@@ -2085,15 +2085,15 @@ export def "update-device" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --aws-location: record # Specifies a location in Amazon Web Services. — shape: {Zone?: any, SubnetArn?: any}
+  --aws-location: record # Specifies a location in Amazon Web Services. — shape: {Zone?: string, SubnetArn?: string}
   --description: string # A description of the device. Constraints: Maximum length of 256 characters.
   --type: string # The type of the device.
   --vendor: string # The vendor of the device. Constraints: Maximum length of 128 characters.
   --model: string # The model of the device. Constraints: Maximum length of 128 characters.
   --serial-number: string # The serial number of the device. Constraints: Maximum length of 128 characters.
-  --location: record # Describes a location. — shape: {Address?: any, Latitude?: any, Longitude?: any}
+  --location: record # Describes a location. — shape: {Address?: string, Latitude?: string, Longitude?: string}
   --site-id: string # The ID of the site.
-]: any -> record<Device: record<DeviceId: record, DeviceArn: record, GlobalNetworkId: record, AWSLocation: record<Zone: record, SubnetArn: record>, Description: record, Type: record, Vendor: record, Model: record, SerialNumber: record, Location: record<Address: record, Latitude: record, Longitude: record>, SiteId: record, CreatedAt: record, State: record, Tags: record>> {
+]: any -> record<Device: record<DeviceId: string, DeviceArn: string, GlobalNetworkId: string, AWSLocation: record<Zone: string, SubnetArn: string>, Description: string, Type: string, Vendor: string, Model: string, SerialNumber: string, Location: record<Address: string, Latitude: string, Longitude: string>, SiteId: string, CreatedAt: string, State: string, Tags: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2142,7 +2142,7 @@ export def "delete-global-network" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<GlobalNetwork: record<GlobalNetworkId: record, GlobalNetworkArn: record, Description: record, CreatedAt: record, State: record, Tags: record>> {
+]: nothing -> record<GlobalNetwork: record<GlobalNetworkId: string, GlobalNetworkArn: string, Description: string, CreatedAt: string, State: string, Tags: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($global_network_id | is-empty) { error make --unspanned { msg: "path parameter 'globalNetworkId' must be non-empty" } }
@@ -2188,7 +2188,7 @@ export def "update-global-network" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --description: string # A description of the global network. Constraints: Maximum length of 256 characters.
-]: any -> record<GlobalNetwork: record<GlobalNetworkId: record, GlobalNetworkArn: record, Description: record, CreatedAt: record, State: record, Tags: record>> {
+]: any -> record<GlobalNetwork: record<GlobalNetworkId: string, GlobalNetworkArn: string, Description: string, CreatedAt: string, State: string, Tags: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2237,7 +2237,7 @@ export def "delete-link" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Link: record<LinkId: record, LinkArn: record, GlobalNetworkId: record, SiteId: record, Description: record, Type: record, Bandwidth: record<UploadSpeed: record, DownloadSpeed: record>, Provider: record, CreatedAt: record, State: record, Tags: record>> {
+]: nothing -> record<Link: record<LinkId: string, LinkArn: string, GlobalNetworkId: string, SiteId: string, Description: string, Type: string, Bandwidth: record<UploadSpeed: int, DownloadSpeed: int>, Provider: string, CreatedAt: string, State: string, Tags: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($global_network_id | is-empty) { error make --unspanned { msg: "path parameter 'globalNetworkId' must be non-empty" } }
@@ -2265,7 +2265,7 @@ export def "delete-link" [
 #
 # PATCH /global-networks/{globalNetworkId}/links/{linkId}
 # operationId: UpdateLink
-# --Bandwidth shape: {UploadSpeed?: any, DownloadSpeed?: any}
+# --Bandwidth shape: {UploadSpeed?: int, DownloadSpeed?: int}
 export def "update-link" [
   global_network_id: string
   link_id: string
@@ -2287,9 +2287,9 @@ export def "update-link" [
   --x-amz-signed-headers: string
   --description: string # A description of the link. Constraints: Maximum length of 256 characters.
   --type: string # The type of the link. Constraints: Maximum length of 128 characters.
-  --bandwidth: record # Describes bandwidth information. — shape: {UploadSpeed?: any, DownloadSpeed?: any}
+  --bandwidth: record # Describes bandwidth information. — shape: {UploadSpeed?: int, DownloadSpeed?: int}
   --provider: string # The provider of the link. Constraints: Maximum length of 128 characters.
-]: any -> record<Link: record<LinkId: record, LinkArn: record, GlobalNetworkId: record, SiteId: record, Description: record, Type: record, Bandwidth: record<UploadSpeed: record, DownloadSpeed: record>, Provider: record, CreatedAt: record, State: record, Tags: record>> {
+]: any -> record<Link: record<LinkId: string, LinkArn: string, GlobalNetworkId: string, SiteId: string, Description: string, Type: string, Bandwidth: record<UploadSpeed: int, DownloadSpeed: int>, Provider: string, CreatedAt: string, State: string, Tags: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2338,7 +2338,7 @@ export def "delete-peering" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Peering: record<CoreNetworkId: record, CoreNetworkArn: record, PeeringId: record, OwnerAccountId: record, PeeringType: record, State: record, EdgeLocation: record, ResourceArn: record, Tags: record, CreatedAt: record>> {
+]: nothing -> record<Peering: record<CoreNetworkId: string, CoreNetworkArn: string, PeeringId: string, OwnerAccountId: string, PeeringType: string, State: string, EdgeLocation: string, ResourceArn: string, Tags: list<record>, CreatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($peering_id | is-empty) { error make --unspanned { msg: "path parameter 'peeringId' must be non-empty" } }
@@ -2428,7 +2428,7 @@ export def "get-resource-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PolicyDocument: record> {
+]: nothing -> record<PolicyDocument: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
@@ -2523,7 +2523,7 @@ export def "delete-site" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Site: record<SiteId: record, SiteArn: record, GlobalNetworkId: record, Description: record, Location: record<Address: record, Latitude: record, Longitude: record>, CreatedAt: record, State: record, Tags: record>> {
+]: nothing -> record<Site: record<SiteId: string, SiteArn: string, GlobalNetworkId: string, Description: string, Location: record<Address: string, Latitude: string, Longitude: string>, CreatedAt: string, State: string, Tags: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($global_network_id | is-empty) { error make --unspanned { msg: "path parameter 'globalNetworkId' must be non-empty" } }
@@ -2551,7 +2551,7 @@ export def "delete-site" [
 #
 # PATCH /global-networks/{globalNetworkId}/sites/{siteId}
 # operationId: UpdateSite
-# --Location shape: {Address?: any, Latitude?: any, Longitude?: any}
+# --Location shape: {Address?: string, Latitude?: string, Longitude?: string}
 export def "update-site" [
   global_network_id: string
   site_id: string
@@ -2572,8 +2572,8 @@ export def "update-site" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --description: string # A description of your site. Constraints: Maximum length of 256 characters.
-  --location: record # Describes a location. — shape: {Address?: any, Latitude?: any, Longitude?: any}
-]: any -> record<Site: record<SiteId: record, SiteArn: record, GlobalNetworkId: record, Description: record, Location: record<Address: record, Latitude: record, Longitude: record>, CreatedAt: record, State: record, Tags: record>> {
+  --location: record # Describes a location. — shape: {Address?: string, Latitude?: string, Longitude?: string}
+]: any -> record<Site: record<SiteId: string, SiteArn: string, GlobalNetworkId: string, Description: string, Location: record<Address: string, Latitude: string, Longitude: string>, CreatedAt: string, State: string, Tags: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2623,7 +2623,7 @@ export def "deregister-transit-gateway" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TransitGatewayRegistration: record<GlobalNetworkId: record, TransitGatewayArn: record, State: record<Code: record, Message: record>>> {
+]: nothing -> record<TransitGatewayRegistration: record<GlobalNetworkId: string, TransitGatewayArn: string, State: record<Code: string, Message: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($global_network_id | is-empty) { error make --unspanned { msg: "path parameter 'globalNetworkId' must be non-empty" } }
@@ -2670,7 +2670,7 @@ export def "disassociate-connect-peer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ConnectPeerAssociation: record<ConnectPeerId: record, GlobalNetworkId: record, DeviceId: record, LinkId: record, State: record>> {
+]: nothing -> record<ConnectPeerAssociation: record<ConnectPeerId: string, GlobalNetworkId: string, DeviceId: string, LinkId: string, State: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($global_network_id | is-empty) { error make --unspanned { msg: "path parameter 'globalNetworkId' must be non-empty" } }
@@ -2717,7 +2717,7 @@ export def "disassociate-customer-gateway" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CustomerGatewayAssociation: record<CustomerGatewayArn: record, GlobalNetworkId: record, DeviceId: record, LinkId: record, State: record>> {
+]: nothing -> record<CustomerGatewayAssociation: record<CustomerGatewayArn: string, GlobalNetworkId: string, DeviceId: string, LinkId: string, State: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($global_network_id | is-empty) { error make --unspanned { msg: "path parameter 'globalNetworkId' must be non-empty" } }
@@ -2756,8 +2756,8 @@ export def "disassociate-link" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --device-id: string # The ID of the device.
-  --link-id: string # The ID of the link.
+  --device-id: string # The ID of the device. (required)
+  --link-id: string # The ID of the link. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2765,10 +2765,12 @@ export def "disassociate-link" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<LinkAssociation: record<GlobalNetworkId: record, DeviceId: record, LinkId: record, LinkAssociationState: record>> {
+]: nothing -> record<LinkAssociation: record<GlobalNetworkId: string, DeviceId: string, LinkId: string, LinkAssociationState: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($global_network_id | is-empty) { error make --unspanned { msg: "path parameter 'globalNetworkId' must be non-empty" } }
+  if ($device_id == null) { error make --unspanned { msg: "required query parameter 'deviceId' missing: pass --device-id" } }
+  if ($link_id == null) { error make --unspanned { msg: "required query parameter 'linkId' missing: pass --link-id" } }
   let qp = [(serialize-qp "deviceId" $device_id "scalar") (serialize-qp "linkId" $link_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({global_network_id: (encode-path-segment $global_network_id)} | format pattern "/global-networks/{global_network_id}/link-associations") $qp $auth.query)
   let accept_val = "application/json"
@@ -2812,7 +2814,7 @@ export def "disassociate-transit-gateway-connect-peer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TransitGatewayConnectPeerAssociation: record<TransitGatewayConnectPeerArn: record, GlobalNetworkId: record, DeviceId: record, LinkId: record, State: record>> {
+]: nothing -> record<TransitGatewayConnectPeerAssociation: record<TransitGatewayConnectPeerArn: string, GlobalNetworkId: string, DeviceId: string, LinkId: string, State: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($global_network_id | is-empty) { error make --unspanned { msg: "path parameter 'globalNetworkId' must be non-empty" } }
@@ -2905,7 +2907,7 @@ export def "get-connect-attachment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ConnectAttachment: record<Attachment: record<CoreNetworkId: record, CoreNetworkArn: record, AttachmentId: record, OwnerAccountId: record, AttachmentType: record, State: record, EdgeLocation: record, ResourceArn: record, AttachmentPolicyRuleNumber: record, SegmentName: record, Tags: record, ProposedSegmentChange: record, CreatedAt: record, UpdatedAt: record>, TransportAttachmentId: record, Options: record<Protocol: record>>> {
+]: nothing -> record<ConnectAttachment: record<Attachment: record<CoreNetworkId: string, CoreNetworkArn: string, AttachmentId: string, OwnerAccountId: string, AttachmentType: string, State: string, EdgeLocation: string, ResourceArn: string, AttachmentPolicyRuleNumber: int, SegmentName: string, Tags: list, ProposedSegmentChange: record, CreatedAt: string, UpdatedAt: string>, TransportAttachmentId: string, Options: record<Protocol: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentId' must be non-empty" } }
@@ -2955,7 +2957,7 @@ export def "get-core-network-change-events" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CoreNetworkChangeEvents: record, NextToken: record> {
+]: nothing -> record<CoreNetworkChangeEvents: table<Type: string, Action: string, IdentifierPath: string, EventTime: string, Status: string, Values: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($core_network_id | is-empty) { error make --unspanned { msg: "path parameter 'coreNetworkId' must be non-empty" } }
@@ -3007,7 +3009,7 @@ export def "get-core-network-change-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CoreNetworkChanges: record, NextToken: record> {
+]: nothing -> record<CoreNetworkChanges: table<Type: string, Action: string, Identifier: string, PreviousValues: record, NewValues: record, IdentifierPath: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($core_network_id | is-empty) { error make --unspanned { msg: "path parameter 'coreNetworkId' must be non-empty" } }
@@ -3056,7 +3058,7 @@ export def "get-core-network-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CoreNetworkPolicy: record<CoreNetworkId: record, PolicyVersionId: record, Alias: record, Description: record, CreatedAt: record, ChangeSetState: record, PolicyErrors: record, PolicyDocument: record>> {
+]: nothing -> record<CoreNetworkPolicy: record<CoreNetworkId: string, PolicyVersionId: int, Alias: string, Description: string, CreatedAt: string, ChangeSetState: string, PolicyErrors: list<record>, PolicyDocument: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($core_network_id | is-empty) { error make --unspanned { msg: "path parameter 'coreNetworkId' must be non-empty" } }
@@ -3106,7 +3108,7 @@ export def "put-core-network-policy" [
   --description: string # a core network policy description.
   --latest-version-id: int # The ID of a core network policy.
   --client-token: string # The client token associated with the request.
-]: any -> record<CoreNetworkPolicy: record<CoreNetworkId: record, PolicyVersionId: record, Alias: record, Description: record, CreatedAt: record, ChangeSetState: record, PolicyErrors: record, PolicyDocument: record>> {
+]: any -> record<CoreNetworkPolicy: record<CoreNetworkId: string, PolicyVersionId: int, Alias: string, Description: string, CreatedAt: string, ChangeSetState: string, PolicyErrors: list<record>, PolicyDocument: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3159,7 +3161,7 @@ export def "get-network-resource-counts" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NetworkResourceCounts: record, NextToken: record> {
+]: nothing -> record<NetworkResourceCounts: table<ResourceType: string, Count: int>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($global_network_id | is-empty) { error make --unspanned { msg: "path parameter 'globalNetworkId' must be non-empty" } }
@@ -3215,7 +3217,7 @@ export def "get-network-resource-relationships" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Relationships: record, NextToken: record> {
+]: nothing -> record<Relationships: table<From: string, To: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($global_network_id | is-empty) { error make --unspanned { msg: "path parameter 'globalNetworkId' must be non-empty" } }
@@ -3271,7 +3273,7 @@ export def "get-network-resources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NetworkResources: record, NextToken: record> {
+]: nothing -> record<NetworkResources: table<RegisteredGatewayArn: string, CoreNetworkId: string, AwsRegion: string, AccountId: string, ResourceType: string, ResourceId: string, ResourceArn: string, Definition: string, DefinitionTimestamp: string, Tags: list, Metadata: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($global_network_id | is-empty) { error make --unspanned { msg: "path parameter 'globalNetworkId' must be non-empty" } }
@@ -3299,7 +3301,7 @@ export def "get-network-resources" [
 #
 # POST /global-networks/{globalNetworkId}/network-routes
 # operationId: GetNetworkRoutes
-# --RouteTableIdentifier shape: {TransitGatewayRouteTableArn?: any, CoreNetworkSegmentEdge?: any}
+# --RouteTableIdentifier shape: {TransitGatewayRouteTableArn?: string, CoreNetworkSegmentEdge?: record}
 export def "get-network-routes" [
   global_network_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3318,7 +3320,7 @@ export def "get-network-routes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  route_table_identifier: record # Describes a route table. — shape: {TransitGatewayRouteTableArn?: any, CoreNetworkSegmentEdge?: any}
+  route_table_identifier: record # Describes a route table. — shape: {TransitGatewayRouteTableArn?: string, CoreNetworkSegmentEdge?: record}
   --exact-cidr-matches: list<string> # An exact CIDR block.
   --longest-prefix-matches: list<string> # The most specific route that matches the traffic (longest prefix match).
   --subnet-of-matches: list<string> # The routes with a subnet that match the specified CIDR filter.
@@ -3327,7 +3329,7 @@ export def "get-network-routes" [
   --states: list<string> # The route states.
   --types: list<string> # The route types.
   --destination-filters: record # Filter by route table destination. Possible Values: TRANSIT_GATEWAY_ATTACHMENT_ID, RESOURCE_ID, or RESOURCE_TYPE.
-]: any -> record<RouteTableArn: record, CoreNetworkSegmentEdge: record<CoreNetworkId: record, SegmentName: record, EdgeLocation: record>, RouteTableType: record, RouteTableTimestamp: record, NetworkRoutes: record> {
+]: any -> record<RouteTableArn: string, CoreNetworkSegmentEdge: record<CoreNetworkId: string, SegmentName: string, EdgeLocation: string>, RouteTableType: string, RouteTableTimestamp: string, NetworkRoutes: table<DestinationCidrBlock: string, Destinations: list, PrefixListId: string, State: string, Type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3385,7 +3387,7 @@ export def "get-network-telemetry" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NetworkTelemetry: record, NextToken: record> {
+]: nothing -> record<NetworkTelemetry: table<RegisteredGatewayArn: string, CoreNetworkId: string, AwsRegion: string, AccountId: string, ResourceType: string, ResourceId: string, ResourceArn: string, Address: string, Health: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($global_network_id | is-empty) { error make --unspanned { msg: "path parameter 'globalNetworkId' must be non-empty" } }
@@ -3432,7 +3434,7 @@ export def "get-route-analysis" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<RouteAnalysis: record<GlobalNetworkId: record, OwnerAccountId: record, RouteAnalysisId: record, StartTimestamp: record, Status: record, Source: record<TransitGatewayAttachmentArn: record, TransitGatewayArn: record, IpAddress: record>, Destination: record<TransitGatewayAttachmentArn: record, TransitGatewayArn: record, IpAddress: record>, IncludeReturnPath: record, UseMiddleboxes: record, ForwardPath: record<CompletionStatus: record, Path: record>, ReturnPath: record<CompletionStatus: record, Path: record>>> {
+]: nothing -> record<RouteAnalysis: record<GlobalNetworkId: string, OwnerAccountId: string, RouteAnalysisId: string, StartTimestamp: string, Status: string, Source: record<TransitGatewayAttachmentArn: string, TransitGatewayArn: string, IpAddress: string>, Destination: record<TransitGatewayAttachmentArn: string, TransitGatewayArn: string, IpAddress: string>, IncludeReturnPath: bool, UseMiddleboxes: bool, ForwardPath: record<CompletionStatus: record, Path: list>, ReturnPath: record<CompletionStatus: record, Path: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($global_network_id | is-empty) { error make --unspanned { msg: "path parameter 'globalNetworkId' must be non-empty" } }
@@ -3478,7 +3480,7 @@ export def "get-site-to-site-vpn-attachment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<SiteToSiteVpnAttachment: record<Attachment: record<CoreNetworkId: record, CoreNetworkArn: record, AttachmentId: record, OwnerAccountId: record, AttachmentType: record, State: record, EdgeLocation: record, ResourceArn: record, AttachmentPolicyRuleNumber: record, SegmentName: record, Tags: record, ProposedSegmentChange: record, CreatedAt: record, UpdatedAt: record>, VpnConnectionArn: record>> {
+]: nothing -> record<SiteToSiteVpnAttachment: record<Attachment: record<CoreNetworkId: string, CoreNetworkArn: string, AttachmentId: string, OwnerAccountId: string, AttachmentType: string, State: string, EdgeLocation: string, ResourceArn: string, AttachmentPolicyRuleNumber: int, SegmentName: string, Tags: list, ProposedSegmentChange: record, CreatedAt: string, UpdatedAt: string>, VpnConnectionArn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentId' must be non-empty" } }
@@ -3523,7 +3525,7 @@ export def "get-transit-gateway-peering" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TransitGatewayPeering: record<Peering: record<CoreNetworkId: record, CoreNetworkArn: record, PeeringId: record, OwnerAccountId: record, PeeringType: record, State: record, EdgeLocation: record, ResourceArn: record, Tags: record, CreatedAt: record>, TransitGatewayArn: record, TransitGatewayPeeringAttachmentId: record>> {
+]: nothing -> record<TransitGatewayPeering: record<Peering: record<CoreNetworkId: string, CoreNetworkArn: string, PeeringId: string, OwnerAccountId: string, PeeringType: string, State: string, EdgeLocation: string, ResourceArn: string, Tags: list, CreatedAt: string>, TransitGatewayArn: string, TransitGatewayPeeringAttachmentId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($peering_id | is-empty) { error make --unspanned { msg: "path parameter 'peeringId' must be non-empty" } }
@@ -3573,7 +3575,7 @@ export def "get-transit-gateway-registrations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TransitGatewayRegistrations: record, NextToken: record> {
+]: nothing -> record<TransitGatewayRegistrations: table<GlobalNetworkId: string, TransitGatewayArn: string, State: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($global_network_id | is-empty) { error make --unspanned { msg: "path parameter 'globalNetworkId' must be non-empty" } }
@@ -3620,7 +3622,7 @@ export def "register-transit-gateway" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   transit_gateway_arn: string # The Amazon Resource Name (ARN) of the transit gateway.
-]: any -> record<TransitGatewayRegistration: record<GlobalNetworkId: record, TransitGatewayArn: record, State: record<Code: record, Message: record>>> {
+]: any -> record<TransitGatewayRegistration: record<GlobalNetworkId: string, TransitGatewayArn: string, State: record<Code: string, Message: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3668,7 +3670,7 @@ export def "get-transit-gateway-route-table-attachment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TransitGatewayRouteTableAttachment: record<Attachment: record<CoreNetworkId: record, CoreNetworkArn: record, AttachmentId: record, OwnerAccountId: record, AttachmentType: record, State: record, EdgeLocation: record, ResourceArn: record, AttachmentPolicyRuleNumber: record, SegmentName: record, Tags: record, ProposedSegmentChange: record, CreatedAt: record, UpdatedAt: record>, PeeringId: record, TransitGatewayRouteTableArn: record>> {
+]: nothing -> record<TransitGatewayRouteTableAttachment: record<Attachment: record<CoreNetworkId: string, CoreNetworkArn: string, AttachmentId: string, OwnerAccountId: string, AttachmentType: string, State: string, EdgeLocation: string, ResourceArn: string, AttachmentPolicyRuleNumber: int, SegmentName: string, Tags: list, ProposedSegmentChange: record, CreatedAt: string, UpdatedAt: string>, PeeringId: string, TransitGatewayRouteTableArn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentId' must be non-empty" } }
@@ -3713,7 +3715,7 @@ export def "get-vpc-attachment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<VpcAttachment: record<Attachment: record<CoreNetworkId: record, CoreNetworkArn: record, AttachmentId: record, OwnerAccountId: record, AttachmentType: record, State: record, EdgeLocation: record, ResourceArn: record, AttachmentPolicyRuleNumber: record, SegmentName: record, Tags: record, ProposedSegmentChange: record, CreatedAt: record, UpdatedAt: record>, SubnetArns: record, Options: record<Ipv6Support: record, ApplianceModeSupport: record>>> {
+]: nothing -> record<VpcAttachment: record<Attachment: record<CoreNetworkId: string, CoreNetworkArn: string, AttachmentId: string, OwnerAccountId: string, AttachmentType: string, State: string, EdgeLocation: string, ResourceArn: string, AttachmentPolicyRuleNumber: int, SegmentName: string, Tags: list, ProposedSegmentChange: record, CreatedAt: string, UpdatedAt: string>, SubnetArns: list<string>, Options: record<Ipv6Support: bool, ApplianceModeSupport: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentId' must be non-empty" } }
@@ -3740,7 +3742,7 @@ export def "get-vpc-attachment" [
 #
 # PATCH /vpc-attachments/{attachmentId}
 # operationId: UpdateVpcAttachment
-# --Options shape: {Ipv6Support?: any, ApplianceModeSupport?: any}
+# --Options shape: {Ipv6Support?: bool, ApplianceModeSupport?: bool}
 export def "update-vpc-attachment" [
   attachment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3761,8 +3763,8 @@ export def "update-vpc-attachment" [
   --x-amz-signed-headers: string
   --add-subnet-arns: list<string> # Adds a subnet ARN to the VPC attachment.
   --remove-subnet-arns: list<string> # Removes a subnet ARN from the attachment.
-  --options: record # Describes the VPC options. — shape: {Ipv6Support?: any, ApplianceModeSupport?: any}
-]: any -> record<VpcAttachment: record<Attachment: record<CoreNetworkId: record, CoreNetworkArn: record, AttachmentId: record, OwnerAccountId: record, AttachmentType: record, State: record, EdgeLocation: record, ResourceArn: record, AttachmentPolicyRuleNumber: record, SegmentName: record, Tags: record, ProposedSegmentChange: record, CreatedAt: record, UpdatedAt: record>, SubnetArns: record, Options: record<Ipv6Support: record, ApplianceModeSupport: record>>> {
+  --options: record # Describes the VPC options. — shape: {Ipv6Support?: bool, ApplianceModeSupport?: bool}
+]: any -> record<VpcAttachment: record<Attachment: record<CoreNetworkId: string, CoreNetworkArn: string, AttachmentId: string, OwnerAccountId: string, AttachmentType: string, State: string, EdgeLocation: string, ResourceArn: string, AttachmentPolicyRuleNumber: int, SegmentName: string, Tags: list, ProposedSegmentChange: record, CreatedAt: string, UpdatedAt: string>, SubnetArns: list<string>, Options: record<Ipv6Support: bool, ApplianceModeSupport: bool>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3817,7 +3819,7 @@ export def "list-attachments" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Attachments: record, NextToken: record> {
+]: nothing -> record<Attachments: table<CoreNetworkId: string, CoreNetworkArn: string, AttachmentId: string, OwnerAccountId: string, AttachmentType: string, State: string, EdgeLocation: string, ResourceArn: string, AttachmentPolicyRuleNumber: int, SegmentName: string, Tags: list, ProposedSegmentChange: record, CreatedAt: string, UpdatedAt: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "coreNetworkId" $core_network_id "scalar") (serialize-qp "attachmentType" $attachment_type "scalar") (serialize-qp "edgeLocation" $edge_location "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -3866,7 +3868,7 @@ export def "list-core-network-policy-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CoreNetworkPolicyVersions: record, NextToken: record> {
+]: nothing -> record<CoreNetworkPolicyVersions: table<CoreNetworkId: string, PolicyVersionId: int, Alias: string, Description: string, CreatedAt: string, ChangeSetState: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($core_network_id | is-empty) { error make --unspanned { msg: "path parameter 'coreNetworkId' must be non-empty" } }
@@ -3913,7 +3915,7 @@ export def "list-organization-service-access-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<OrganizationStatus: record<OrganizationId: record, OrganizationAwsServiceAccessStatus: record, SLRDeploymentStatus: record, AccountStatusList: record>, NextToken: record> {
+]: nothing -> record<OrganizationStatus: record<OrganizationId: string, OrganizationAwsServiceAccessStatus: string, SLRDeploymentStatus: string, AccountStatusList: list<record>>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -3958,7 +3960,7 @@ export def "start-organization-service-access-update" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   action: string # The action to take for the update request. This can be either ENABLE or DISABLE.
-]: any -> record<OrganizationStatus: record<OrganizationId: record, OrganizationAwsServiceAccessStatus: record, SLRDeploymentStatus: record, AccountStatusList: record>> {
+]: any -> record<OrganizationStatus: record<OrganizationId: string, OrganizationAwsServiceAccessStatus: string, SLRDeploymentStatus: string, AccountStatusList: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4012,7 +4014,7 @@ export def "list-peerings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Peerings: record, NextToken: record> {
+]: nothing -> record<Peerings: table<CoreNetworkId: string, CoreNetworkArn: string, PeeringId: string, OwnerAccountId: string, PeeringType: string, State: string, EdgeLocation: string, ResourceArn: string, Tags: list, CreatedAt: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "coreNetworkId" $core_network_id "scalar") (serialize-qp "peeringType" $peering_type "scalar") (serialize-qp "edgeLocation" $edge_location "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -4057,7 +4059,7 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TagList: record> {
+]: nothing -> record<TagList: table<Key: string, Value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
@@ -4084,7 +4086,7 @@ export def "list-tags-for-resource" [
 #
 # POST /tags/{resourceArn}
 # operationId: TagResource
-# --Tags item shape: {Key?: any, Value?: any}
+# --Tags item shape: {Key?: string, Value?: string}
 export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4103,7 +4105,7 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  tags: list # The tags to apply to the specified resource. — item shape: {Key?: any, Value?: any}
+  tags: list # The tags to apply to the specified resource. — item shape: {Key?: string, Value?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4152,7 +4154,7 @@ export def "reject-attachment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Attachment: record<CoreNetworkId: record, CoreNetworkArn: record, AttachmentId: record, OwnerAccountId: record, AttachmentType: record, State: record, EdgeLocation: record, ResourceArn: record, AttachmentPolicyRuleNumber: record, SegmentName: record, Tags: record, ProposedSegmentChange: record<Tags: record, AttachmentPolicyRuleNumber: record, SegmentName: record>, CreatedAt: record, UpdatedAt: record>> {
+]: nothing -> record<Attachment: record<CoreNetworkId: string, CoreNetworkArn: string, AttachmentId: string, OwnerAccountId: string, AttachmentType: string, State: string, EdgeLocation: string, ResourceArn: string, AttachmentPolicyRuleNumber: int, SegmentName: string, Tags: list<record>, ProposedSegmentChange: record<Tags: list, AttachmentPolicyRuleNumber: int, SegmentName: string>, CreatedAt: string, UpdatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentId' must be non-empty" } }
@@ -4198,7 +4200,7 @@ export def "restore-core-network-policy-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CoreNetworkPolicy: record<CoreNetworkId: record, PolicyVersionId: record, Alias: record, Description: record, CreatedAt: record, ChangeSetState: record, PolicyErrors: record, PolicyDocument: record>> {
+]: nothing -> record<CoreNetworkPolicy: record<CoreNetworkId: string, PolicyVersionId: int, Alias: string, Description: string, CreatedAt: string, ChangeSetState: string, PolicyErrors: list<record>, PolicyDocument: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($core_network_id | is-empty) { error make --unspanned { msg: "path parameter 'coreNetworkId' must be non-empty" } }
@@ -4226,8 +4228,8 @@ export def "restore-core-network-policy-version" [
 #
 # POST /global-networks/{globalNetworkId}/route-analyses
 # operationId: StartRouteAnalysis
-# --Source shape: {TransitGatewayAttachmentArn?: any, IpAddress?: any}
-# --Destination shape: {TransitGatewayAttachmentArn?: any, IpAddress?: any}
+# --Source shape: {TransitGatewayAttachmentArn?: string, IpAddress?: string}
+# --Destination shape: {TransitGatewayAttachmentArn?: string, IpAddress?: string}
 export def "start-route-analysis" [
   global_network_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4246,17 +4248,17 @@ export def "start-route-analysis" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --body-source: record # Describes a source or a destination. — shape: {TransitGatewayAttachmentArn?: any, IpAddress?: any}
-  destination: record # Describes a source or a destination. — shape: {TransitGatewayAttachmentArn?: any, IpAddress?: any}
+  source: record # Describes a source or a destination. — shape: {TransitGatewayAttachmentArn?: string, IpAddress?: string}
+  destination: record # Describes a source or a destination. — shape: {TransitGatewayAttachmentArn?: string, IpAddress?: string}
   --include-return-path: oneof<nothing, bool> # Indicates whether to analyze the return path. The default is false.
   --use-middleboxes: oneof<nothing, bool> # Indicates whether to include the location of middlebox appliances in the route analysis. The default is false.
-]: any -> record<RouteAnalysis: record<GlobalNetworkId: record, OwnerAccountId: record, RouteAnalysisId: record, StartTimestamp: record, Status: record, Source: record<TransitGatewayAttachmentArn: record, TransitGatewayArn: record, IpAddress: record>, Destination: record<TransitGatewayAttachmentArn: record, TransitGatewayArn: record, IpAddress: record>, IncludeReturnPath: record, UseMiddleboxes: record, ForwardPath: record<CompletionStatus: record, Path: record>, ReturnPath: record<CompletionStatus: record, Path: record>>> {
+]: any -> record<RouteAnalysis: record<GlobalNetworkId: string, OwnerAccountId: string, RouteAnalysisId: string, StartTimestamp: string, Status: string, Source: record<TransitGatewayAttachmentArn: string, TransitGatewayArn: string, IpAddress: string>, Destination: record<TransitGatewayAttachmentArn: string, TransitGatewayArn: string, IpAddress: string>, IncludeReturnPath: bool, UseMiddleboxes: bool, ForwardPath: record<CompletionStatus: record, Path: list>, ReturnPath: record<CompletionStatus: record, Path: list>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($global_network_id | is-empty) { error make --unspanned { msg: "path parameter 'globalNetworkId' must be non-empty" } }
   let full_url = (build-url $base ({global_network_id: (encode-path-segment $global_network_id)} | format pattern "/global-networks/{global_network_id}/route-analyses") $auth.query)
-  let req_body = {"Source": $body_source, "Destination": $destination, "IncludeReturnPath": $include_return_path, "UseMiddleboxes": $use_middleboxes} | compact
+  let req_body = {"Source": $source, "Destination": $destination, "IncludeReturnPath": $include_return_path, "UseMiddleboxes": $use_middleboxes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4291,7 +4293,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # The tag keys to remove from the specified resource.
+  --tag-keys: list # The tag keys to remove from the specified resource. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4303,6 +4305,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"
@@ -4347,7 +4350,7 @@ export def "update-network-resource-metadata" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   metadata: record # The resource metadata.
-]: any -> record<ResourceArn: record, Metadata: record> {
+]: any -> record<ResourceArn: string, Metadata: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

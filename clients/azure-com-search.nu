@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -120,6 +120,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def type-completer [] { ["searchServices"] }
+def key-kind-completer [] { ["primary" "secondary"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -158,10 +159,11 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for each request. The current version is 2015-08-19.
+  --api-version: string # The API version to use for each request. The current version is 2015-08-19. (required)
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Search/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -196,8 +198,8 @@ export def "services-check-name-availability" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for each request. The current version is 2015-08-19.
-  --x-ms-client-request-id: string # A client-generated GUID value that identifies this request. If specified, this will be included in response information as a way to track the request.
+  --api-version: string # The API version to use for each request. The current version is 2015-08-19. (required)
+  --x-ms-client-request-id: string # A client-generated GUID value that identifies this request. If specified, this will be included in response information as a way to track the request. (format: uuid)
   name: string # The Search service name to validate. Search service names must only contain lowercase letters, digits or dashes, cannot use dash as the first two or last one characters, cannot contain consecutive dashes, and must be between 2 and 60 characters in length.
   type: string@type-completer # The type of the resource whose name is to be validated. This value must always be 'searchServices'.
 ]: any -> record<message: string, nameAvailable: bool, reason: string> {
@@ -205,6 +207,7 @@ export def "services-check-name-availability" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Search/checkNameAvailability") $qp $auth.query)
   let req_body = {"name": $name, "type": $type} | compact
@@ -243,12 +246,13 @@ export def "services-list-by-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for each request. The current version is 2015-08-19.
-  --x-ms-client-request-id: string # A client-generated GUID value that identifies this request. If specified, this will be included in response information as a way to track the request.
+  --api-version: string # The API version to use for each request. The current version is 2015-08-19. (required)
+  --x-ms-client-request-id: string # A client-generated GUID value that identifies this request. If specified, this will be included in response information as a way to track the request. (format: uuid)
 ]: nothing -> record<value: table<properties: record, sku: record, id: string, identity: record, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Search/searchServices") $qp $auth.query)
   let accept_val = "application/json"
@@ -286,13 +290,14 @@ export def "services-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for each request. The current version is 2015-08-19.
-  --x-ms-client-request-id: string # A client-generated GUID value that identifies this request. If specified, this will be included in response information as a way to track the request.
+  --api-version: string # The API version to use for each request. The current version is 2015-08-19. (required)
+  --x-ms-client-request-id: string # A client-generated GUID value that identifies this request. If specified, this will be included in response information as a way to track the request. (format: uuid)
 ]: nothing -> record<value: table<properties: record, sku: record, id: string, identity: record, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Search/searchServices") $qp $auth.query)
   let accept_val = "application/json"
@@ -331,14 +336,15 @@ export def "services-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for each request. The current version is 2015-08-19.
-  --x-ms-client-request-id: string # A client-generated GUID value that identifies this request. If specified, this will be included in response information as a way to track the request.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # The API version to use for each request. The current version is 2015-08-19. (required)
+  --x-ms-client-request-id: string # A client-generated GUID value that identifies this request. If specified, this will be included in response information as a way to track the request. (format: uuid)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($search_service_name | is-empty) { error make --unspanned { msg: "path parameter 'searchServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), search_service_name: (encode-path-segment $search_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Search/searchServices/{search_service_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -377,14 +383,15 @@ export def "services-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for each request. The current version is 2015-08-19.
-  --x-ms-client-request-id: string # A client-generated GUID value that identifies this request. If specified, this will be included in response information as a way to track the request.
+  --api-version: string # The API version to use for each request. The current version is 2015-08-19. (required)
+  --x-ms-client-request-id: string # A client-generated GUID value that identifies this request. If specified, this will be included in response information as a way to track the request. (format: uuid)
 ]: nothing -> record<properties: record<hostingMode: string, partitionCount: int, provisioningState: string, replicaCount: int, status: string, statusDetails: string>, sku: record<name: string>, id: string, identity: record<principalId: string, tenantId: string, type: string>, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($search_service_name | is-empty) { error make --unspanned { msg: "path parameter 'searchServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), search_service_name: (encode-path-segment $search_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Search/searchServices/{search_service_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -426,8 +433,8 @@ export def "services-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for each request. The current version is 2015-08-19.
-  --x-ms-client-request-id: string # A client-generated GUID value that identifies this request. If specified, this will be included in response information as a way to track the request.
+  --api-version: string # The API version to use for each request. The current version is 2015-08-19. (required)
+  --x-ms-client-request-id: string # A client-generated GUID value that identifies this request. If specified, this will be included in response information as a way to track the request. (format: uuid)
   --properties: any # Properties of the Search service. — shape: {hostingMode?: "default"|"highDensity", partitionCount?: int, replicaCount?: int}
   --sku: any # Defines the SKU of an Azure Search Service, which determines price tier and capacity limits. — shape: {name?: "free"|"basic"|"standard"|"standard2"|"standard3"|"storage_optimized_l1"|"storage_optimized_l2"}
   --identity: any # Identity for the resource. — shape: {type: "None"|"SystemAssigned"}
@@ -440,6 +447,7 @@ export def "services-update" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($search_service_name | is-empty) { error make --unspanned { msg: "path parameter 'searchServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), search_service_name: (encode-path-segment $search_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Search/searchServices/{search_service_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "sku": $sku, "identity": $identity, "location": $location, "tags": $tags} | compact
@@ -483,8 +491,8 @@ export def "services-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for each request. The current version is 2015-08-19.
-  --x-ms-client-request-id: string # A client-generated GUID value that identifies this request. If specified, this will be included in response information as a way to track the request.
+  --api-version: string # The API version to use for each request. The current version is 2015-08-19. (required)
+  --x-ms-client-request-id: string # A client-generated GUID value that identifies this request. If specified, this will be included in response information as a way to track the request. (format: uuid)
   --properties: any # Properties of the Search service. — shape: {hostingMode?: "default"|"highDensity", partitionCount?: int, replicaCount?: int}
   --sku: any # Defines the SKU of an Azure Search Service, which determines price tier and capacity limits. — shape: {name?: "free"|"basic"|"standard"|"standard2"|"standard3"|"storage_optimized_l1"|"storage_optimized_l2"}
   --identity: any # Identity for the resource. — shape: {type: "None"|"SystemAssigned"}
@@ -497,6 +505,7 @@ export def "services-create-or-update" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($search_service_name | is-empty) { error make --unspanned { msg: "path parameter 'searchServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), search_service_name: (encode-path-segment $search_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Search/searchServices/{search_service_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "sku": $sku, "identity": $identity, "location": $location, "tags": $tags} | compact
@@ -538,8 +547,8 @@ export def "query-keys-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for each request. The current version is 2015-08-19.
-  --x-ms-client-request-id: string # A client-generated GUID value that identifies this request. If specified, this will be included in response information as a way to track the request.
+  --api-version: string # The API version to use for each request. The current version is 2015-08-19. (required)
+  --x-ms-client-request-id: string # A client-generated GUID value that identifies this request. If specified, this will be included in response information as a way to track the request. (format: uuid)
 ]: nothing -> record<key: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -547,6 +556,7 @@ export def "query-keys-create" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($search_service_name | is-empty) { error make --unspanned { msg: "path parameter 'searchServiceName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), search_service_name: (encode-path-segment $search_service_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Search/searchServices/{search_service_name}/createQueryKey/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -586,15 +596,16 @@ export def "query-keys-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for each request. The current version is 2015-08-19.
-  --x-ms-client-request-id: string # A client-generated GUID value that identifies this request. If specified, this will be included in response information as a way to track the request.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # The API version to use for each request. The current version is 2015-08-19. (required)
+  --x-ms-client-request-id: string # A client-generated GUID value that identifies this request. If specified, this will be included in response information as a way to track the request. (format: uuid)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($search_service_name | is-empty) { error make --unspanned { msg: "path parameter 'searchServiceName' must be non-empty" } }
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), search_service_name: (encode-path-segment $search_service_name), key: (encode-path-segment $key)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Search/searchServices/{search_service_name}/deleteQueryKey/{key}") $qp $auth.query)
   let accept_val = "application/json"
@@ -633,14 +644,15 @@ export def "admin-keys-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for each request. The current version is 2015-08-19.
-  --x-ms-client-request-id: string # A client-generated GUID value that identifies this request. If specified, this will be included in response information as a way to track the request.
+  --api-version: string # The API version to use for each request. The current version is 2015-08-19. (required)
+  --x-ms-client-request-id: string # A client-generated GUID value that identifies this request. If specified, this will be included in response information as a way to track the request. (format: uuid)
 ]: nothing -> record<primaryKey: string, secondaryKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($search_service_name | is-empty) { error make --unspanned { msg: "path parameter 'searchServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), search_service_name: (encode-path-segment $search_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Search/searchServices/{search_service_name}/listAdminKeys") $qp $auth.query)
   let accept_val = "application/json"
@@ -679,14 +691,15 @@ export def "query-keys-list-by-search-service" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for each request. The current version is 2015-08-19.
-  --x-ms-client-request-id: string # A client-generated GUID value that identifies this request. If specified, this will be included in response information as a way to track the request.
+  --api-version: string # The API version to use for each request. The current version is 2015-08-19. (required)
+  --x-ms-client-request-id: string # A client-generated GUID value that identifies this request. If specified, this will be included in response information as a way to track the request. (format: uuid)
 ]: nothing -> record<value: table<key: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($search_service_name | is-empty) { error make --unspanned { msg: "path parameter 'searchServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), search_service_name: (encode-path-segment $search_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Search/searchServices/{search_service_name}/listQueryKeys") $qp $auth.query)
   let accept_val = "application/json"
@@ -716,7 +729,7 @@ export def "admin-keys-regenerate" [
   subscription_id: string
   resource_group_name: string
   search_service_name: string
-  key_kind: string
+  key_kind: string@key-kind-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -726,8 +739,8 @@ export def "admin-keys-regenerate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for each request. The current version is 2015-08-19.
-  --x-ms-client-request-id: string # A client-generated GUID value that identifies this request. If specified, this will be included in response information as a way to track the request.
+  --api-version: string # The API version to use for each request. The current version is 2015-08-19. (required)
+  --x-ms-client-request-id: string # A client-generated GUID value that identifies this request. If specified, this will be included in response information as a way to track the request. (format: uuid)
 ]: nothing -> record<primaryKey: string, secondaryKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -735,6 +748,7 @@ export def "admin-keys-regenerate" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($search_service_name | is-empty) { error make --unspanned { msg: "path parameter 'searchServiceName' must be non-empty" } }
   if ($key_kind | is-empty) { error make --unspanned { msg: "path parameter 'keyKind' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), search_service_name: (encode-path-segment $search_service_name), key_kind: (encode-path-segment $key_kind)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Search/searchServices/{search_service_name}/regenerateAdminKey/{key_kind}") $qp $auth.query)
   let accept_val = "application/json"

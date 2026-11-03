@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "api-key" => { {scheme: $scheme, headers: {Api-Key: $token_val}, query: "", location: "header"} }
+    "api-key" => { {scheme: $scheme, headers: {"Api-Key": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -188,13 +188,13 @@ export def "create-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The unique name of a collection. (format: CollectionName, e.g. example)
-  --body-source: string # The unique name of an index. (format: IndexName, e.g. example)
+  source: string # The unique name of an index. (format: IndexName, e.g. example)
 ]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/collections" $auth.query)
-  let req_body = {"name": $name, "source": $body_source} | compact
+  let req_body = {"name": $name, "source": $source} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -646,7 +646,7 @@ export def "fetch" [
 # POST /vectors/update
 # operationId: Update
 # --sparseValues shape: {indices: list<int>, values: list<float>}
-export def "update" [
+export def "post-vectors-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -689,7 +689,7 @@ export def "update" [
 # POST /vectors/upsert
 # operationId: Upsert
 # --vectors item shape: {id?: string, metadata?: record, sparseValues?: record, values?: list<float>}
-export def "upsert" [
+export def "post-vectors-upsert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

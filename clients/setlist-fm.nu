@@ -251,18 +251,18 @@ export def "resource-1-0-search-artists-get-artists-get" [
   --artist-name: string # the artist's name
   --artist-tmid: int # the artist's Ticketmaster Identifier (tmid)
   --p: int # the number of the result page you'd like to have (default: 1)
-  --qp-sort: string # the sort of the result, either sortName (default) or relevance (default: sortName)
+  --sort: string # the sort of the result, either sortName (default) or relevance (default: sortName)
 ]: nothing -> record<artist: table<disambiguation: string, mbid: string, name: string, sortName: string, tmid: float, url: string>, itemsPerPage: float, page: float, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "artistMbid" $artist_mbid "scalar") (serialize-qp "artistName" $artist_name "scalar") (serialize-qp "artistTmid" $artist_tmid "scalar") (serialize-qp "p" $p "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "artistMbid" $artist_mbid "scalar") (serialize-qp "artistName" $artist_name "scalar") (serialize-qp "artistTmid" $artist_tmid "scalar") (serialize-qp "p" $p "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/1.0/search/artists" $qp $auth.query)
   let accept_val = ($accept | default "application/xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"artistMbid": $artist_mbid, "artistName": $artist_name, "artistTmid": $artist_tmid, "p": $p, "sort": $qp_sort} | compact)
+    query: ({"artistMbid": $artist_mbid, "artistName": $artist_name, "artistTmid": $artist_tmid, "p": $p, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null

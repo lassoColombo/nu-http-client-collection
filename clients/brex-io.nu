@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "user_key" => { {scheme: $scheme, headers: {user_key: $token_val}, query: "", location: "header"} }
+    "user_key" => { {scheme: $scheme, headers: {"user_key": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -102,7 +102,9 @@ def auth-scheme-completer [] { ["user_key"] }
 
 # Completers for enum parameters
 def lang-completer [] { ["" "EN" "OG"] }
+def dataset-completer [] { ["" "full" "master" "mini" "refresh"] }
 def lang-completer-1 [] { ["" "EN" "ES" "FR"] }
+def type-completer [] { ["" "B" "P"] }
 def accept-completer [] { ["application/json" "application/pdf"] }
 
 # List all available API commands with their parameters
@@ -257,7 +259,7 @@ export def "company-deepsearch-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<address: list<string>, country: string, dateOfIncorporation: string, extraData: record, formattedAddress: list<string>, id: string, legalForm: string, managingDirectors: list<string>, name: string, registrationNumber: string, requestTime: int, secretaries: list<string>, sicNaceCodes: list<string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($country | is-empty) { error make --unspanned { msg: "path parameter 'country' must be non-empty" } }
@@ -295,7 +297,7 @@ export def "company-deepsearch-number" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<address: list<string>, country: string, dateOfIncorporation: string, extraData: record, formattedAddress: list<string>, id: string, legalForm: string, managingDirectors: list<string>, name: string, registrationNumber: string, requestTime: int, secretaries: list<string>, sicNaceCodes: list<string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($country | is-empty) { error make --unspanned { msg: "path parameter 'country' must be non-empty" } }
@@ -365,7 +367,7 @@ export def "company-monitor-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<callbackCount: int, callbackUrl: string, created: string, monitorStatus: string, notificationId: string, subjectId: string> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/company/monitoring/list" $auth.query)
@@ -400,7 +402,7 @@ export def "company-monitor-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<callbackCount: int, callbackUrl: string, created: string, monitorStatus: string, notificationId: string, subjectId: string> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -438,7 +440,7 @@ export def "company-monitor-register" [
   --dry-run(-n) # Return the request that would be sent without executing it
   callback_url: string # Callback URL
   change_type: string # ChangeType to monitor
-]: any -> any {
+]: any -> record<monitorStatus: string, notificationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
@@ -513,7 +515,7 @@ export def "company-notification-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<callbackCount: int, callbackUrl: string, created: string, monitorStatus: string, notificationId: string, subjectId: string> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/company/notification/list" $auth.query)
@@ -548,7 +550,7 @@ export def "company-notification-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<callbackCount: int, callbackUrl: string, created: any, monitorStatus: string, notificationId: string, subjectId: string> {
+]: nothing -> table<callbackCount: int, callbackUrl: string, created: string, monitorStatus: string, notificationId: string, subjectId: string> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -703,7 +705,7 @@ export def "company-search-number" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # number of search results (format: int64)
-]: nothing -> any {
+]: nothing -> table<address: list<string>, country: string, dateOfIncorporation: string, extraData: record, formattedAddress: list<string>, id: string, legalForm: string, managingDirectors: list<string>, name: string, registrationNumber: string, requestTime: int, secretaries: list<string>, sicNaceCodes: list<string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($country | is-empty) { error make --unspanned { msg: "path parameter 'country' must be non-empty" } }
@@ -747,7 +749,7 @@ export def "company-alternative-search" [
   --phone: string # Company contact phone number
   --url: string # Company url
   --vat: string # Company VAT number
-]: any -> any {
+]: any -> table<address: list<string>, country: string, dateOfIncorporation: string, extraData: record, formattedAddress: list<string>, id: string, legalForm: string, managingDirectors: list<string>, name: string, registrationNumber: string, requestTime: int, secretaries: list<string>, sicNaceCodes: list<string>, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
@@ -790,7 +792,7 @@ export def "company-id-announcements" [
   --limit: int # limit of announcements in response (default 10) (format: int32)
   --offset: int # to paginate through results (default 0) (format: int32)
   --data: oneof<nothing, bool> # If this parameter is set to false, you will only receive ids, and no additional data about announcements and no hits to the metric will be counted. (and potentially minimizing your costs) (format: )
-]: nothing -> any {
+]: nothing -> table<countryCode: string, id: string, registrationNumber: string, structured: string, text: string, time: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -829,7 +831,7 @@ export def "company-id-super" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --lang: string@lang-completer # Optional data translation (only available in limited jurisdictions) (format: string)
-]: nothing -> any {
+]: nothing -> table<address: list<string>, country: string, dateOfIncorporation: string, extraData: record, formattedAddress: list<string>, id: string, legalForm: string, managingDirectors: list<string>, name: string, registrationNumber: string, requestTime: int, secretaries: list<string>, sicNaceCodes: list<string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -858,7 +860,7 @@ export def "company-id-super" [
 # operationId: CompanyIdDataset
 export def "company-id-dataset" [
   id: string
-  dataset: string
+  dataset: string@dataset-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -870,7 +872,7 @@ export def "company-id-dataset" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --check-stock-listing: oneof<nothing, bool> # Try to retrieve additional stock information for this company. (Only available on refresh)
   --lang: string@lang-completer-1 # Optional data translation (only available in limited jurisdictions) (format: string)
-]: nothing -> any {
+]: nothing -> record<address: list<string>, country: string, dateOfIncorporation: string, extraData: record, formattedAddress: list<string>, id: string, legalForm: string, managingDirectors: list<string>, name: string, registrationNumber: string, requestTime: int, secretaries: list<string>, sicNaceCodes: list<string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -907,10 +909,11 @@ export def "ein-verification-basic" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ein: string # Nine letter EIN number with or without hyphens (format: string)
+  --ein: string # Nine letter EIN number with or without hyphens (required, format: string)
 ]: nothing -> record<confidence_score: string, confidence_score_explanation: string, dba_score: string, dba_score_explanation: string, ein: string, irs_score: string, irs_score_explanation: string, timestamp: float, validationStatus: bool> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($ein == null) { error make --unspanned { msg: "required query parameter 'ein' missing: pass --ein" } }
   let qp = [(serialize-qp "ein" $ein "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/ein-verification/basic-check" $qp $auth.query)
   let accept_val = "application/json"
@@ -943,10 +946,11 @@ export def "ein-verification-comprehensive" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ein: string # Nine letter EIN number with or without hyphens (format: string)
+  --ein: string # Nine letter EIN number with or without hyphens (required, format: string)
 ]: nothing -> record<ein: string, matched_ein_companies: table<address: list, company_score: float, company_score_explanation: string, confidence_score: float, confidence_score_explanation: string, dba_score: string, dba_score_explanation: string, ein: string, formattedAddress: list, irs_score: string, irs_score_explanation: string, name: string, provided_status: string, provided_status_explanation: string>, timestamp: float, validationStatus: bool> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($ein == null) { error make --unspanned { msg: "required query parameter 'ein' missing: pass --ein" } }
   let qp = [(serialize-qp "ein" $ein "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/ein-verification/comprehensive-check" $qp $auth.query)
   let accept_val = "application/json"
@@ -979,13 +983,14 @@ export def "ein-verification-lookup" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name: string # Business name of the company (format: string)
+  --name: string # Business name of the company (required, format: string)
   --state: string # Optional state parameter to improve results. (Two letter code for example CA or US-CA for California) (format: string)
   --zip: string # Optional zip code parameter to improve results. (Zip is preferred over state) (format: string)
   --tight: oneof<nothing, bool> # Optional parameter to do tight matching. (Only the best match will be returned rather then the top 5)
 ]: nothing -> record<matched_ein_companies: table<address: list, company_score: float, company_score_explanation: string, confidence_score: float, confidence_score_explanation: string, dba_score: string, dba_score_explanation: string, ein: string, formattedAddress: list, irs_score: string, irs_score_explanation: string, name: string, provided_status: string, provided_status_explanation: string>, searchterm_name: string, searchterm_state: string, searchterm_zip: string, tight_search: bool, timestamp: float> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "tight" $tight "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/ein-verification/lookup" $qp $auth.query)
   let accept_val = "application/json"
@@ -1182,7 +1187,7 @@ export def "pep-monitor-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<active: bool, caseId: string, created: any, identifier: string, structured: string, updated: string, webhook: string> {
+]: nothing -> table<active: bool, caseId: string, created: string, identifier: string, structured: string, updated: string, webhook: string> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/pepsanction/monitor/list" $auth.query)
@@ -1217,7 +1222,7 @@ export def "pep-monitor-unregister" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<active: bool, caseId: string, created: string, identifier: string, structured: string, updated: string, webhook: string> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1254,7 +1259,7 @@ export def "pep-monitor-update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --webhook: string # If Monitoring is enabled this parameter is required. This is where updates will be sent to (e.g. null)
-]: any -> record<active: bool, caseId: string, created: any, identifier: string, structured: string, updated: string, webhook: string> {
+]: any -> record<active: bool, caseId: string, created: string, identifier: string, structured: string, updated: string, webhook: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
@@ -1284,7 +1289,7 @@ export def "pep-monitor-update" [
 # POST /api/v1/pepsanction/order/{type}/{search}
 # operationId: PepOrder
 export def "pep-order" [
-  type: string
+  type: string@type-completer
   search: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1311,7 +1316,7 @@ export def "pep-order" [
   --smart-match: oneof<nothing, bool> # Optional parameter for enabling SmartMatch to retrieve more results (e.g. false)
   --watchlists: string # Optional parameter for selecting only specific watch lists. By default all lists are queried (e.g. SANCTIONS,FINANCE,TERRORISM,CRIME,SMAGOV,OFAC,MEDICAL)
   --webhook: string # If Monitoring is enabled this parameter is required. This is where updates will be sent to (e.g. null)
-]: any -> any {
+]: any -> record<availability: string, category: string, countryCode: string, description: string, hasOptions: bool, options: list<string>, price: float, provider: string, sku: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
@@ -1352,8 +1357,8 @@ export def "pep-retrieve" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string@accept-completer # The type (pdf or json) in which the check should be returned
-]: nothing -> record<listsChecked: string, results: record<Excerpts: string, ResultsURL: string, SearchType: string, SourceAgency: string, SourceEntity: string, SourceID: int, SourceName: string, SourceType: string>, search: string, status: string, timestamp: any, type: string> {
+  --hdr-accept: string@accept-completer # The type (pdf or json) in which the check should be returned (format: string, default: application/json)
+]: nothing -> record<listsChecked: string, results: record<Excerpts: string, ResultsURL: string, SearchType: string, SourceAgency: string, SourceEntity: string, SourceID: int, SourceName: string, SourceType: string>, search: string, status: string, timestamp: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1465,7 +1470,7 @@ export def "product-notifier" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<callback: string, identity: string, lastCallTime: string, lastResponseCode: int, notifierType: string, productOrderIdentity: string> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($notifier_id | is-empty) { error make --unspanned { msg: "path parameter 'notifierId' must be non-empty" } }
@@ -1503,7 +1508,7 @@ export def "product-notifier-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<callback: string, identity: string, lastCallTime: any, lastResponseCode: int, notifierType: string, productOrderIdentity: string> {
+]: nothing -> record<callback: string, identity: string, lastCallTime: string, lastResponseCode: int, notifierType: string, productOrderIdentity: string> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
@@ -1553,7 +1558,7 @@ export def "product-order-concierge" [
   --register-data: oneof<nothing, bool> # If you want register data of the company to be retrieved (e.g. false)
   --register-number: string # Registration number of the company for which a document should be ordered. (Not required if subjectId is given) (e.g. null)
   --subject-id: string # Kompanyid of the company you want to place the order for (e.g. null)
-]: any -> any {
+]: any -> record<identity: string, option: string, ordered: string, owner: string, price: float, sku: string, status: string, subjectId: string, subjectValue: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
@@ -1597,7 +1602,7 @@ export def "product-order-ubo" [
   --levels: string # Define a threshold for different levels of crawling (e.g. 25,50)
   --strategy: string # Choose a matching strategy. Available options (FULL,LEVELS) (e.g. FULL)
   subject_id: string # KYC API Id (32 byte hexid) of the company you want to place the order for (e.g. null)
-]: any -> any {
+]: any -> record<identity: string, option: string, ordered: string, owner: string, price: float, sku: string, status: string, subjectId: string, subjectValue: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
@@ -1638,7 +1643,7 @@ export def "product-order-with-option" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<identity: string, option: string, ordered: string, owner: string, price: float, sku: string, status: string, subjectId: string, subjectValue: string> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($sku | is-empty) { error make --unspanned { msg: "path parameter 'sku' must be non-empty" } }
@@ -1677,7 +1682,7 @@ export def "product-order" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<identity: string, option: string, ordered: any, owner: string, price: float, sku: string, status: string, subjectId: string, subjectValue: string> {
+]: nothing -> record<identity: string, option: string, ordered: string, owner: string, price: float, sku: string, status: string, subjectId: string, subjectValue: string> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($sku | is-empty) { error make --unspanned { msg: "path parameter 'sku' must be non-empty" } }
@@ -1750,7 +1755,7 @@ export def "product-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<identity: string, option: string, ordered: string, owner: string, price: float, sku: string, status: string, subjectId: string, subjectValue: string> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
@@ -1788,7 +1793,7 @@ export def "product-update-action" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --credits: float # Specify an amount of credits which should be added to the order (e.g. 100)
-]: any -> any {
+]: any -> record<identity: string, option: string, ordered: string, owner: string, price: float, sku: string, status: string, subjectId: string, subjectValue: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
@@ -1966,11 +1971,13 @@ export def "tin-verification-basic-check" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tin: string # Nine letter TIN number with or without hyphens (format: string)
-  --name: string # Company Name (format: string)
+  --tin: string # Nine letter TIN number with or without hyphens (required, format: string)
+  --name: string # Company Name (required, format: string)
 ]: nothing -> record<matchStatus: string, name: string, possibleMatch: string, tin: string, validationStatus: string> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($tin == null) { error make --unspanned { msg: "required query parameter 'tin' missing: pass --tin" } }
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
   let qp = [(serialize-qp "tin" $tin "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/tin-verification/basic-check" $qp $auth.query)
   let accept_val = "application/json"
@@ -2003,12 +2010,14 @@ export def "tin-verification-comprehensive-check" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tin: string # Nine letter TIN number with or without hyphens (format: string)
-  --name: string # Company Name (format: string)
+  --tin: string # Nine letter TIN number with or without hyphens (required, format: string)
+  --name: string # Company Name (required, format: string)
   --threshold: int # The percentage of minimum similarity threshold for company matching (optional, default: 70%) (format: int64)
-]: nothing -> record<einResult: string, matchedCompanies: any, tinResult: string> {
+]: nothing -> record<einResult: string, matchedCompanies: table<address: list, country: string, dateOfIncorporation: string, extraData: record, formattedAddress: list, id: string, legalForm: string, managingDirectors: list, name: string, registrationNumber: string, requestTime: int, secretaries: list, sicNaceCodes: list, status: string>, tinResult: string> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($tin == null) { error make --unspanned { msg: "required query parameter 'tin' missing: pass --tin" } }
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
   let qp = [(serialize-qp "tin" $tin "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "threshold" $threshold "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/tin-verification/comprehensive-check" $qp $auth.query)
   let accept_val = "application/json"
@@ -2041,10 +2050,11 @@ export def "tin-verification-name-lookup" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tin: string # Nine letter TIN number with or without hyphens (format: string)
+  --tin: string # Nine letter TIN number with or without hyphens (required, format: string)
 ]: nothing -> record<matchStatus: string, possibleMatch: string, tin: string> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($tin == null) { error make --unspanned { msg: "required query parameter 'tin' missing: pass --tin" } }
   let qp = [(serialize-qp "tin" $tin "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/tin-verification/name-lookup" $qp $auth.query)
   let accept_val = "application/json"
@@ -2082,7 +2092,7 @@ export def "vat-basic" [
   --company-name: string # Company name
   --company-number: string # official company number
   vat_number: string # VAT number to validate
-]: any -> record<candidate: list<any>, company: any, confidenceScore: float, validationStatus: bool> {
+]: any -> record<candidate: table<address: list, country: string, dateOfIncorporation: string, extraData: record, formattedAddress: list, id: string, legalForm: string, managingDirectors: list, name: string, registrationNumber: string, requestTime: int, secretaries: list, sicNaceCodes: list, status: string>, company: record<address: list<string>, country: string, dateOfIncorporation: string, extraData: record, formattedAddress: list<string>, id: string, legalForm: string, managingDirectors: list<string>, name: string, registrationNumber: string, requestTime: int, secretaries: list<string>, sicNaceCodes: list<string>, status: string>, confidenceScore: float, validationStatus: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
@@ -2126,7 +2136,7 @@ export def "vat-comprehensive" [
   --company-name: string # Company name
   --company-number: string # official company number
   vat_number: string # VAT number to validate
-]: any -> any {
+]: any -> record<candidate: table<address: list, country: string, dateOfIncorporation: string, extraData: record, formattedAddress: list, id: string, legalForm: string, managingDirectors: list, name: string, registrationNumber: string, requestTime: int, secretaries: list, sicNaceCodes: list, status: string>, company: record<address: list<string>, country: string, dateOfIncorporation: string, extraData: record, formattedAddress: list<string>, id: string, legalForm: string, managingDirectors: list<string>, name: string, registrationNumber: string, requestTime: int, secretaries: list<string>, sicNaceCodes: list<string>, status: string>, confidenceScore: float, validationStatus: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
@@ -2210,7 +2220,7 @@ export def "vat-lookup" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --address: string # Company address (e.g. null)
   name: string # Company name (e.g. null)
-]: any -> record<matches: table<company: any, vat: string>, searchterm_address: string, searchterm_country: string, searchterm_name: string, timestamp: int> {
+]: any -> record<matches: table<company: record, vat: string>, searchterm_address: string, searchterm_country: string, searchterm_name: string, timestamp: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)

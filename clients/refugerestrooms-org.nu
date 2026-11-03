@@ -177,12 +177,15 @@ export def "get-v1-restrooms-by-date" [
   --ada: oneof<nothing, bool> # Only return restrooms that are ADA accessible.
   --unisex: oneof<nothing, bool> # Only return restrooms that are unisex.
   --updated: oneof<nothing, bool> # Return restroom records updated (rather than created) since given date
-  --day: int # Day (format: int32)
-  --month: int # Month (format: int32)
-  --year: int # Year (format: int32)
+  --day: int # Day (required, format: int32)
+  --month: int # Month (required, format: int32)
+  --year: int # Year (required, format: int32)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($day == null) { error make --unspanned { msg: "required query parameter 'day' missing: pass --day" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'month' missing: pass --month" } }
+  if ($year == null) { error make --unspanned { msg: "required query parameter 'year' missing: pass --year" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "ada" $ada "scalar") (serialize-qp "unisex" $unisex "scalar") (serialize-qp "updated" $updated "scalar") (serialize-qp "day" $day "scalar") (serialize-qp "month" $month "scalar") (serialize-qp "year" $year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/restrooms/by_date" $qp $auth.query)
   let accept_val = "application/json"
@@ -220,11 +223,13 @@ export def "get-v1-restrooms-by-location" [
   --offset: int # Pad a number of results. (format: int32, default: 0)
   --ada: oneof<nothing, bool> # Only return restrooms that are ADA accessible.
   --unisex: oneof<nothing, bool> # Only return restrooms that are unisex.
-  --lat: float # latitude (format: float)
-  --lng: float # longitude (format: float)
+  --lat: float # latitude (required, format: float)
+  --lng: float # longitude (required, format: float)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($lat == null) { error make --unspanned { msg: "required query parameter 'lat' missing: pass --lat" } }
+  if ($lng == null) { error make --unspanned { msg: "required query parameter 'lng' missing: pass --lng" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "ada" $ada "scalar") (serialize-qp "unisex" $unisex "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "lng" $lng "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/restrooms/by_location" $qp $auth.query)
   let accept_val = "application/json"
@@ -262,10 +267,11 @@ export def "get-v1-restrooms-search" [
   --offset: int # Pad a number of results. (format: int32, default: 0)
   --ada: oneof<nothing, bool> # Only return restrooms that are ADA accessible.
   --unisex: oneof<nothing, bool> # Only return restrooms that are unisex.
-  --query: string # Your search query.
+  --query: string # Your search query. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "ada" $ada "scalar") (serialize-qp "unisex" $unisex "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/restrooms/search" $qp $auth.query)
   let accept_val = "application/json"

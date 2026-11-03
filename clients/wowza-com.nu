@@ -12,8 +12,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "wsc-access-key" => { {scheme: $scheme, headers: {wsc-access-key: $token_val}, query: "", location: "header"} }
-    "wsc-api-key" => { {scheme: $scheme, headers: {wsc-api-key: $token_val}, query: "", location: "header"} }
+    "wsc-access-key" => { {scheme: $scheme, headers: {"wsc-access-key": $token_val}, query: "", location: "header"} }
+    "wsc-api-key" => { {scheme: $scheme, headers: {"wsc-api-key": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -1957,21 +1957,21 @@ export def "show-stream-target-metrics-historic" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-from: string # The start of the range of time used to aggregate the metrics. Express the value by using the ISO 8601 standard of YYYY-MM-DDTHH:MM:SSZ where HH is a 24-hour clock in UTC.
-  --qp-to: string # The end of the range of time used to aggregate the metrics. Express the value by using the ISO 8601 standard of YYYY-MM-DDTHH:MM:SSZ where HH is a 24-hour clock in UTC.
+  --from: string # The start of the range of time used to aggregate the metrics. Express the value by using the ISO 8601 standard of YYYY-MM-DDTHH:MM:SSZ where HH is a 24-hour clock in UTC.
+  --to: string # The end of the range of time used to aggregate the metrics. Express the value by using the ISO 8601 standard of YYYY-MM-DDTHH:MM:SSZ where HH is a 24-hour clock in UTC.
   --interval: string@interval-completer # The length of time for a block of metrics. The default is **10m** (10 minutes).
 ]: nothing -> record<id: string, interval: string, metrics: table<average_bytes_in: float, average_total_connections: float, created_at: string, dropped_connections: int, maximum_total_connections: int, minimum_total_connections: int, new_connections: int>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "interval" $interval "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "interval" $interval "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/stream_targets/{id}/metrics/historic") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to, "interval": $interval} | compact)
+    query: ({"from": $from, "to": $to, "interval": $interval} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3855,21 +3855,21 @@ export def "show-uptime-metrics-historic" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # A comma-separated list of fields to return.
-  --qp-from: string # The start of the range of time used to aggregate the metrics. Express the value by using the ISO 8601 standard of YYYY-MM-DDTHH:MM:SSZ where HH is a 24-hour clock in UTC.
-  --qp-to: string # The end of the range of time used to aggregate the metrics. Express the value by using the ISO 8601 standard of YYYY-MM-DDTHH:MM:SSZ where HH is a 24-hour clock in UTC.
+  --from: string # The start of the range of time used to aggregate the metrics. Express the value by using the ISO 8601 standard of YYYY-MM-DDTHH:MM:SSZ where HH is a 24-hour clock in UTC.
+  --to: string # The end of the range of time used to aggregate the metrics. Express the value by using the ISO 8601 standard of YYYY-MM-DDTHH:MM:SSZ where HH is a 24-hour clock in UTC.
 ]: nothing -> record<historic: table<audio_codec: record, bits_in_rate: record, bits_out_rate: record, cpu_idle: record, created_at: string, frame_rate: record, height: record, keyframe_interval: record, video_codec: record, width: record>, limits: record<fields: string, from: string, to: string>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($transcoder_id | is-empty) { error make --unspanned { msg: "path parameter 'transcoder_id' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({transcoder_id: (encode-path-segment $transcoder_id), id: (encode-path-segment $id)} | format pattern "/transcoders/{transcoder_id}/uptimes/{id}/metrics/historic") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"fields": $fields, "from": $qp_from, "to": $qp_to} | compact)
+    query: ({"fields": $fields, "from": $from, "to": $to} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3894,19 +3894,19 @@ export def "usage-network-stream-sources-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-from: string # The start of the range of time you want to view. Specify YYYY-MM-DD HH:MM:SS where HH is a 24-hour clock in UTC. The from default is the last billing date. (format: date-time)
-  --qp-to: string # The end of the range of time you want to view. Specify YYYY-MM-DD HH:MM:SS where HH is a 24-hour clock in UTC. The to default is the end of the current day. (format: date-time)
+  --from: string # The start of the range of time you want to view. Specify YYYY-MM-DD HH:MM:SS where HH is a 24-hour clock in UTC. The from default is the last billing date. (format: date-time)
+  --to: string # The end of the range of time you want to view. Specify YYYY-MM-DD HH:MM:SS where HH is a 24-hour clock in UTC. The to default is the end of the current day. (format: date-time)
 ]: nothing -> record<stream_sources: table<bytes_billed: int, bytes_used: int, deleted: bool, id: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/usage/network/stream_sources" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to} | compact)
+    query: ({"from": $from, "to": $to} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3931,19 +3931,19 @@ export def "usage-network-stream-targets-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-from: string # The start of the range of time you want to view. Specify YYYY-MM-DD HH:MM:SS where HH is a 24-hour clock in UTC. The from default is the last billing date. (format: date-time)
-  --qp-to: string # The end of the range of time you want to view. Specify YYYY-MM-DD HH:MM:SS where HH is a 24-hour clock in UTC. The to default is the end of the current day. (format: date-time)
+  --from: string # The start of the range of time you want to view. Specify YYYY-MM-DD HH:MM:SS where HH is a 24-hour clock in UTC. The from default is the last billing date. (format: date-time)
+  --to: string # The end of the range of time you want to view. Specify YYYY-MM-DD HH:MM:SS where HH is a 24-hour clock in UTC. The to default is the end of the current day. (format: date-time)
 ]: nothing -> record<stream_targets: record<bytes_billed: int, bytes_used: int, deleted: bool, id: string, name: string, protocols: record<zones: record>>, total: record<bytes_billed: int, bytes_used: int, protocols: record<zones: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/usage/network/stream_targets" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to} | compact)
+    query: ({"from": $from, "to": $to} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3968,21 +3968,21 @@ export def "usage-network-transcoders-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-from: string # The start of the range of time you want to view. Specify YYYY-MM-DD HH:MM:SS where HH is a 24-hour clock in UTC. The from default is the last billing date. (format: date-time)
-  --qp-to: string # The end of the range of time you want to view. Specify YYYY-MM-DD HH:MM:SS where HH is a 24-hour clock in UTC. The to default is the end of the current day. (format: date-time)
+  --from: string # The start of the range of time you want to view. Specify YYYY-MM-DD HH:MM:SS where HH is a 24-hour clock in UTC. The from default is the last billing date. (format: date-time)
+  --to: string # The end of the range of time you want to view. Specify YYYY-MM-DD HH:MM:SS where HH is a 24-hour clock in UTC. The to default is the end of the current day. (format: date-time)
   --transcoder-type: string@transcoder-type-completer # The type of transcoder. The default is transcoded.
   --billing-mode: string@billing-mode-completer # The billing mode for the transcoder. The default is pay_as_you_go.
 ]: nothing -> record<transcoders: table<bytes_billed: int, bytes_used: int, deleted: bool, id: int, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "transcoder_type" $transcoder_type "scalar") (serialize-qp "billing_mode" $billing_mode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "transcoder_type" $transcoder_type "scalar") (serialize-qp "billing_mode" $billing_mode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/usage/network/transcoders" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to, "transcoder_type": $transcoder_type, "billing_mode": $billing_mode} | compact)
+    query: ({"from": $from, "to": $to, "transcoder_type": $transcoder_type, "billing_mode": $billing_mode} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4007,19 +4007,19 @@ export def "usage-storage-peak-recording-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-from: string # The start of the range of time you want to view. Specify YYYY-MM-DD HH:MM:SS where HH is a 24-hour clock in UTC. The from default is the last billing date. (format: date-time)
-  --qp-to: string # The end of the range of time you want to view. Specify YYYY-MM-DD HH:MM:SS where HH is a 24-hour clock in UTC. The to default is the end of the current day. (format: date-time)
+  --from: string # The start of the range of time you want to view. Specify YYYY-MM-DD HH:MM:SS where HH is a 24-hour clock in UTC. The from default is the last billing date. (format: date-time)
+  --to: string # The end of the range of time you want to view. Specify YYYY-MM-DD HH:MM:SS where HH is a 24-hour clock in UTC. The to default is the end of the current day. (format: date-time)
 ]: nothing -> record<peak_recording: record<bytes_total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/usage/storage/peak_recording" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to} | compact)
+    query: ({"from": $from, "to": $to} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4044,21 +4044,21 @@ export def "usage-time-transcoders-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-from: string # The start of the range of time you want to view. Specify YYYY-MM-DD HH:MM:SS where HH is a 24-hour clock in UTC. The from default is the last billing date. (format: date-time)
-  --qp-to: string # The end of the range of time you want to view. Specify YYYY-MM-DD HH:MM:SS where HH is a 24-hour clock in UTC. The to default is the end of the current day. (format: date-time)
+  --from: string # The start of the range of time you want to view. Specify YYYY-MM-DD HH:MM:SS where HH is a 24-hour clock in UTC. The from default is the last billing date. (format: date-time)
+  --to: string # The end of the range of time you want to view. Specify YYYY-MM-DD HH:MM:SS where HH is a 24-hour clock in UTC. The to default is the end of the current day. (format: date-time)
   --transcoder-type: string@transcoder-type-completer # The type of transcoder. The default is transcoded.
   --billing-mode: string@billing-mode-completer # The billing mode for the transcoder. The default is pay_as_you_go.
 ]: nothing -> record<transcoders: table<deleted: bool, id: int, name: string, seconds_billed: int, seconds_used: int>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "transcoder_type" $transcoder_type "scalar") (serialize-qp "billing_mode" $billing_mode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "transcoder_type" $transcoder_type "scalar") (serialize-qp "billing_mode" $billing_mode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/usage/time/transcoders" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to, "transcoder_type": $transcoder_type, "billing_mode": $billing_mode} | compact)
+    query: ({"from": $from, "to": $to, "transcoder_type": $transcoder_type, "billing_mode": $billing_mode} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4084,20 +4084,20 @@ export def "show-viewer-data-stream-target" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-from: string # The start of the range of time you want to view. Specify YYYY-MM-DD HH:MM:SS where HH is a 24-hour clock in UTC. The from default is the last billing date. (format: date-time)
-  --qp-to: string # The end of the range of time you want to view. Specify YYYY-MM-DD HH:MM:SS where HH is a 24-hour clock in UTC. The to default is the end of the current day. (format: date-time)
+  --from: string # The start of the range of time you want to view. Specify YYYY-MM-DD HH:MM:SS where HH is a 24-hour clock in UTC. The from default is the last billing date. (format: date-time)
+  --to: string # The end of the range of time you want to view. Specify YYYY-MM-DD HH:MM:SS where HH is a 24-hour clock in UTC. The to default is the end of the current day. (format: date-time)
 ]: nothing -> record<stream_target: record<countries: list<record>, country_list: list<string>, percentage_viewers: int, percentage_viewing_time: int, protocols: list<record>, rendition_list: list<string>, renditions: list<record>, seconds_avg_viewing_time: int, seconds_total_viewing_time: int, total_unique_viewers: int>> {
   let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/usage/viewer_data/stream_targets/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to} | compact)
+    query: ({"from": $from, "to": $to} | compact)
     headers: $auth.headers
     body: null
     content_type: null

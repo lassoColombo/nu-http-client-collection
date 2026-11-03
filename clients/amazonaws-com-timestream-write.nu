@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -105,6 +105,7 @@ def x-amz-target-completer-5 [] { ["Timestream_20181101.DescribeBatchLoadTask"] 
 def x-amz-target-completer-6 [] { ["Timestream_20181101.DescribeDatabase"] }
 def x-amz-target-completer-7 [] { ["Timestream_20181101.DescribeEndpoints"] }
 def x-amz-target-completer-8 [] { ["Timestream_20181101.DescribeTable"] }
+def task-status-completer [] { ["CREATED" "FAILED" "IN_PROGRESS" "PENDING_RESUME" "PROGRESS_STOPPED" "SUCCEEDED"] }
 def x-amz-target-completer-9 [] { ["Timestream_20181101.ListBatchLoadTasks"] }
 def x-amz-target-completer-10 [] { ["Timestream_20181101.ListDatabases"] }
 def x-amz-target-completer-11 [] { ["Timestream_20181101.ListTables"] }
@@ -143,8 +144,9 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateBatchLoadTask
-# --DataModelConfiguration shape: {DataModel?: any, DataModelS3Configuration?: any}
-# --ReportConfiguration shape: {ReportS3Configuration?: any}
+# --DataModelConfiguration shape: {DataModel?: record, DataModelS3Configuration?: record}
+# --DataSourceConfiguration shape: {DataSourceS3Configuration: record, CsvConfiguration?: record, DataFormat: "CSV"}
+# --ReportConfiguration shape: {ReportS3Configuration?: record}
 export def "create-batch-load-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -162,18 +164,19 @@ export def "create-batch-load-task" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  --client-token: any
-  --data-model-configuration: record # shape: {DataModel?: any, DataModelS3Configuration?: any}
-  data_source_configuration: any
-  report_configuration: record # Report configuration for a batch load task. This contains details about where error reports are stored. — shape: {ReportS3Configuration?: any}
-  target_database_name: any
-  target_table_name: any
-  --record-version: any
-]: any -> record<TaskId: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  --client-token: string # format: password
+  --data-model-configuration: record # shape: {DataModel?: record, DataModelS3Configuration?: record}
+  data_source_configuration: record # Defines configuration details about the data source. — shape: {DataSourceS3Configuration: record, CsvConfiguration?: record, DataFormat: "CSV"}
+  report_configuration: record # Report configuration for a batch load task. This contains details about where error reports are stored. — shape: {ReportS3Configuration?: record}
+  target_database_name: string # Target Timestream database for a batch load task.
+  target_table_name: string # Target Timestream table for a batch load task.
+  --record-version: int
+]: any -> record<TaskId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Timestream_20181101.CreateBatchLoadTask")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClientToken": $client_token, "DataModelConfiguration": $data_model_configuration, "DataSourceConfiguration": $data_source_configuration, "ReportConfiguration": $report_configuration, "TargetDatabaseName": $target_database_name, "TargetTableName": $target_table_name, "RecordVersion": $record_version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -199,6 +202,7 @@ export def "create-batch-load-task" [
 #
 # POST /
 # operationId: CreateDatabase
+# --Tags item shape: {Key: string, Value: string}
 export def "create-database" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -216,14 +220,15 @@ export def "create-database" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  database_name: any
-  --kms-key-id: any
-  --tags: any
-]: any -> record<Database: record<Arn: record, DatabaseName: record, TableCount: record, KmsKeyId: record, CreationTime: record, LastUpdatedTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  database_name: string # The name of the Timestream database.
+  --kms-key-id: string # The KMS key for the database. If the KMS key is not specified, the database will be encrypted with a Timestream managed KMS key located in your account. For more information, see Amazon Web Services managed keys (https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#aws-managed-cmk).
+  --tags: list # A list of key-value pairs to label the table. — item shape: {Key: string, Value: string}
+]: any -> record<Database: record<Arn: string, DatabaseName: string, TableCount: int, KmsKeyId: string, CreationTime: string, LastUpdatedTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Timestream_20181101.CreateDatabase")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DatabaseName": $database_name, "KmsKeyId": $kms_key_id, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -249,6 +254,9 @@ export def "create-database" [
 #
 # POST /
 # operationId: CreateTable
+# --RetentionProperties shape: {MemoryStoreRetentionPeriodInHours: int, MagneticStoreRetentionPeriodInDays: int}
+# --Tags item shape: {Key: string, Value: string}
+# --MagneticStoreWriteProperties shape: {EnableMagneticStoreWrites: bool, MagneticStoreRejectedDataLocation?: record}
 export def "create-table" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -266,16 +274,17 @@ export def "create-table" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  database_name: any
-  table_name: any
-  --retention-properties: any
-  --tags: any
-  --magnetic-store-write-properties: any
-]: any -> record<Table: record<Arn: record, TableName: record, DatabaseName: record, TableStatus: record, RetentionProperties: record<MemoryStoreRetentionPeriodInHours: record, MagneticStoreRetentionPeriodInDays: record>, CreationTime: record, LastUpdatedTime: record, MagneticStoreWriteProperties: record<EnableMagneticStoreWrites: record, MagneticStoreRejectedDataLocation: record>>> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  database_name: string # The name of the Timestream database.
+  table_name: string # The name of the Timestream table.
+  --retention-properties: record # Retention properties contain the duration for which your time-series data must be stored in the magnetic store and the memory store. — shape: {MemoryStoreRetentionPeriodInHours: int, MagneticStoreRetentionPeriodInDays: int}
+  --tags: list # A list of key-value pairs to label the table. — item shape: {Key: string, Value: string}
+  --magnetic-store-write-properties: record # The set of properties on a table for configuring magnetic store writes. — shape: {EnableMagneticStoreWrites: bool, MagneticStoreRejectedDataLocation?: record}
+]: any -> record<Table: record<Arn: string, TableName: string, DatabaseName: string, TableStatus: string, RetentionProperties: record<MemoryStoreRetentionPeriodInHours: int, MagneticStoreRetentionPeriodInDays: int>, CreationTime: string, LastUpdatedTime: string, MagneticStoreWriteProperties: record<EnableMagneticStoreWrites: bool, MagneticStoreRejectedDataLocation: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Timestream_20181101.CreateTable")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DatabaseName": $database_name, "TableName": $table_name, "RetentionProperties": $retention_properties, "Tags": $tags, "MagneticStoreWriteProperties": $magnetic_store_write_properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -318,12 +327,13 @@ export def "delete-database" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  database_name: any
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  database_name: string # The name of the Timestream database to be deleted.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Timestream_20181101.DeleteDatabase")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DatabaseName": $database_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -366,13 +376,14 @@ export def "delete-table" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  database_name: any
-  table_name: any
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  database_name: string # The name of the database where the Timestream database is to be deleted.
+  table_name: string # The name of the Timestream table to be deleted.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Timestream_20181101.DeleteTable")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DatabaseName": $database_name, "TableName": $table_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -415,12 +426,13 @@ export def "describe-batch-load-task" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  task_id: any
-]: any -> record<BatchLoadTaskDescription: record<TaskId: record, ErrorMessage: record, DataSourceConfiguration: record<DataSourceS3Configuration: record, CsvConfiguration: record, DataFormat: record>, ProgressReport: record<RecordsProcessed: record, RecordsIngested: record, ParseFailures: record, RecordIngestionFailures: record, FileFailures: record, BytesMetered: record>, ReportConfiguration: record<ReportS3Configuration: record>, DataModelConfiguration: record<DataModel: record, DataModelS3Configuration: record>, TargetDatabaseName: record, TargetTableName: record, TaskStatus: record, RecordVersion: record, CreationTime: record, LastUpdatedTime: record, ResumableUntil: record>> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  task_id: string # The ID of the batch load task.
+]: any -> record<BatchLoadTaskDescription: record<TaskId: string, ErrorMessage: string, DataSourceConfiguration: record<DataSourceS3Configuration: record, CsvConfiguration: record, DataFormat: string>, ProgressReport: record<RecordsProcessed: int, RecordsIngested: int, ParseFailures: int, RecordIngestionFailures: int, FileFailures: int, BytesMetered: int>, ReportConfiguration: record<ReportS3Configuration: record>, DataModelConfiguration: record<DataModel: record, DataModelS3Configuration: record>, TargetDatabaseName: string, TargetTableName: string, TaskStatus: string, RecordVersion: int, CreationTime: string, LastUpdatedTime: string, ResumableUntil: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Timestream_20181101.DescribeBatchLoadTask")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TaskId": $task_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -463,12 +475,13 @@ export def "describe-database" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  database_name: any
-]: any -> record<Database: record<Arn: record, DatabaseName: record, TableCount: record, KmsKeyId: record, CreationTime: record, LastUpdatedTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  database_name: string # The name of the Timestream database.
+]: any -> record<Database: record<Arn: string, DatabaseName: string, TableCount: int, KmsKeyId: string, CreationTime: string, LastUpdatedTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Timestream_20181101.DescribeDatabase")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DatabaseName": $database_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -511,12 +524,13 @@ export def "describe-endpoints" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
+  --x-amz-target: string@x-amz-target-completer-7 # required
   --body: record
-]: any -> record<Endpoints: record> {
+]: any -> record<Endpoints: table<Address: string, CachePeriodInMinutes: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Timestream_20181101.DescribeEndpoints")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -559,13 +573,14 @@ export def "describe-table" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  database_name: any
-  table_name: any
-]: any -> record<Table: record<Arn: record, TableName: record, DatabaseName: record, TableStatus: record, RetentionProperties: record<MemoryStoreRetentionPeriodInHours: record, MagneticStoreRetentionPeriodInDays: record>, CreationTime: record, LastUpdatedTime: record, MagneticStoreWriteProperties: record<EnableMagneticStoreWrites: record, MagneticStoreRejectedDataLocation: record>>> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  database_name: string # The name of the Timestream database.
+  table_name: string # The name of the Timestream table.
+]: any -> record<Table: record<Arn: string, TableName: string, DatabaseName: string, TableStatus: string, RetentionProperties: record<MemoryStoreRetentionPeriodInHours: int, MagneticStoreRetentionPeriodInDays: int>, CreationTime: string, LastUpdatedTime: string, MagneticStoreWriteProperties: record<EnableMagneticStoreWrites: bool, MagneticStoreRejectedDataLocation: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Timestream_20181101.DescribeTable")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DatabaseName": $database_name, "TableName": $table_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -610,14 +625,15 @@ export def "list-batch-load-tasks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --task-status: any
-]: any -> record<NextToken: record, BatchLoadTasks: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  --next-token-body: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response. (body field)
+  --max-results-body: int # The total number of items to return in the output. If the total number of items available is more than the value specified, a NextToken is provided in the output. To resume pagination, provide the NextToken value as argument of a subsequent API invocation. (body field)
+  --task-status: string@task-status-completer # Status of the batch load task.
+]: any -> record<NextToken: string, BatchLoadTasks: table<TaskId: string, TaskStatus: string, DatabaseName: string, TableName: string, CreationTime: string, LastUpdatedTime: string, ResumableUntil: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Timestream_20181101.ListBatchLoadTasks")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "TaskStatus": $task_status} | compact
@@ -663,13 +679,14 @@ export def "list-databases" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<Databases: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  --next-token-body: string # The pagination token. To resume pagination, provide the NextToken value as argument of a subsequent API invocation. (body field)
+  --max-results-body: int # The total number of items to return in the output. If the total number of items available is more than the value specified, a NextToken is provided in the output. To resume pagination, provide the NextToken value as argument of a subsequent API invocation. (body field)
+]: any -> record<Databases: table<Arn: string, DatabaseName: string, TableCount: int, KmsKeyId: string, CreationTime: string, LastUpdatedTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Timestream_20181101.ListDatabases")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -715,14 +732,15 @@ export def "list-tables" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  --database-name: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<Tables: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  --database-name: string # The name of the Timestream database.
+  --next-token-body: string # The pagination token. To resume pagination, provide the NextToken value as argument of a subsequent API invocation. (body field)
+  --max-results-body: int # The total number of items to return in the output. If the total number of items available is more than the value specified, a NextToken is provided in the output. To resume pagination, provide the NextToken value as argument of a subsequent API invocation. (body field)
+]: any -> record<Tables: table<Arn: string, TableName: string, DatabaseName: string, TableStatus: string, RetentionProperties: record, CreationTime: string, LastUpdatedTime: string, MagneticStoreWriteProperties: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Timestream_20181101.ListTables")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"DatabaseName": $database_name, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -766,12 +784,13 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  resource_arn: any
-]: any -> record<Tags: record> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  resource_arn: string # The Timestream resource with tags to be listed. This value is an Amazon Resource Name (ARN).
+]: any -> record<Tags: table<Key: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Timestream_20181101.ListTagsForResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceARN": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -813,12 +832,13 @@ export def "resume-batch-load-task" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  task_id: any
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  task_id: string # The ID of the batch load task to resume.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Timestream_20181101.ResumeBatchLoadTask")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TaskId": $task_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -844,6 +864,7 @@ export def "resume-batch-load-task" [
 #
 # POST /
 # operationId: TagResource
+# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -861,13 +882,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  resource_arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  resource_arn: string # Identifies the Timestream resource to which tags should be added. This value is an Amazon Resource Name (ARN).
+  tags: list # The tags to be assigned to the Timestream resource. — item shape: {Key: string, Value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Timestream_20181101.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceARN": $resource_arn, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -910,13 +932,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  resource_arn: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  resource_arn: string # The Timestream resource that the tags will be removed from. This value is an Amazon Resource Name (ARN).
+  tag_keys: list<string> # A list of tags keys. Existing tags of the resource whose keys are members of this list will be removed from the Timestream resource.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Timestream_20181101.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceARN": $resource_arn, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -959,13 +982,14 @@ export def "update-database" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  database_name: any
-  kms_key_id: any
-]: any -> record<Database: record<Arn: record, DatabaseName: record, TableCount: record, KmsKeyId: record, CreationTime: record, LastUpdatedTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  database_name: string # The name of the database.
+  kms_key_id: string # The identifier of the new KMS key (KmsKeyId) to be used to encrypt the data stored in the database. If the KmsKeyId currently registered with the database is the same as the KmsKeyId in the request, there will not be any update. You can specify the KmsKeyId using any of the following: Key ID: 1234abcd-12ab-34cd-56ef-1234567890ab Key ARN: arn:aws:kms:us-east-1:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab Alias name: alias/ExampleAlias Alias ARN: arn:aws:kms:us-east-1:111122223333:alias/ExampleAlias
+]: any -> record<Database: record<Arn: string, DatabaseName: string, TableCount: int, KmsKeyId: string, CreationTime: string, LastUpdatedTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Timestream_20181101.UpdateDatabase")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DatabaseName": $database_name, "KmsKeyId": $kms_key_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -991,6 +1015,8 @@ export def "update-database" [
 #
 # POST /
 # operationId: UpdateTable
+# --RetentionProperties shape: {MemoryStoreRetentionPeriodInHours: int, MagneticStoreRetentionPeriodInDays: int}
+# --MagneticStoreWriteProperties shape: {EnableMagneticStoreWrites: bool, MagneticStoreRejectedDataLocation?: record}
 export def "update-table" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1008,15 +1034,16 @@ export def "update-table" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  database_name: any
-  table_name: any
-  --retention-properties: any
-  --magnetic-store-write-properties: any
-]: any -> record<Table: record<Arn: record, TableName: record, DatabaseName: record, TableStatus: record, RetentionProperties: record<MemoryStoreRetentionPeriodInHours: record, MagneticStoreRetentionPeriodInDays: record>, CreationTime: record, LastUpdatedTime: record, MagneticStoreWriteProperties: record<EnableMagneticStoreWrites: record, MagneticStoreRejectedDataLocation: record>>> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  database_name: string # The name of the Timestream database.
+  table_name: string # The name of the Timestream table.
+  --retention-properties: record # Retention properties contain the duration for which your time-series data must be stored in the magnetic store and the memory store. — shape: {MemoryStoreRetentionPeriodInHours: int, MagneticStoreRetentionPeriodInDays: int}
+  --magnetic-store-write-properties: record # The set of properties on a table for configuring magnetic store writes. — shape: {EnableMagneticStoreWrites: bool, MagneticStoreRejectedDataLocation?: record}
+]: any -> record<Table: record<Arn: string, TableName: string, DatabaseName: string, TableStatus: string, RetentionProperties: record<MemoryStoreRetentionPeriodInHours: int, MagneticStoreRetentionPeriodInDays: int>, CreationTime: string, LastUpdatedTime: string, MagneticStoreWriteProperties: record<EnableMagneticStoreWrites: bool, MagneticStoreRejectedDataLocation: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Timestream_20181101.UpdateTable")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DatabaseName": $database_name, "TableName": $table_name, "RetentionProperties": $retention_properties, "MagneticStoreWriteProperties": $magnetic_store_write_properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1042,6 +1069,8 @@ export def "update-table" [
 #
 # POST /
 # operationId: WriteRecords
+# --CommonAttributes shape: {Dimensions?: list, MeasureName?: string, MeasureValue?: string, MeasureValueType?: "DOUBLE"|"BIGINT"|"VARCHAR"|"BOOLEAN"|"TIMESTAMP"|"MULTI", Time?: string, TimeUnit?: "MILLISECONDS"|"SECONDS"|"MICROSECONDS"|"NANOSECONDS", Version?: int, MeasureValues?: list}
+# --Records item shape: {Dimensions?: list, MeasureName?: string, MeasureValue?: string, MeasureValueType?: "DOUBLE"|"BIGINT"|"VARCHAR"|"BOOLEAN"|"TIMESTAMP"|"MULTI", Time?: string, TimeUnit?: "MILLISECONDS"|"SECONDS"|"MICROSECONDS"|"NANOSECONDS", Version?: int, MeasureValues?: list}
 export def "write-records" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1059,15 +1088,16 @@ export def "write-records" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  database_name: any
-  table_name: any
-  --common-attributes: any
-  records: any
-]: any -> record<RecordsIngested: record<Total: record, MemoryStore: record, MagneticStore: record>> {
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  database_name: string # The name of the Timestream database.
+  table_name: string # The name of the Timestream table.
+  --common-attributes: record # Represents a time-series data point being written into Timestream. Each record contains an array of dimensions. Dimensions represent the metadata attributes of a time-series data point, such as the instance name or Availability Zone of an EC2 instance. A record also contains the measure name, which is the name of the measure being collected (for example, the CPU utilization of an EC2 instance). Additionally, a record contains the measure value and the value type, which is the data type of the measure value. Also, the record contains the timestamp of when the measure was collected and the timestamp unit, which represents the granularity of the timestamp. Records have a Version field, which is a 64-bit long that you can use for updating data points. Writes of a duplicate record with the same dimension, timestamp, and measure name but different measure value will only succeed if the Version attribute of the record in the write request is higher than that of the existing record. Timestream defaults to a Version of 1 for records without the Version field. — shape: {Dimensions?: list, MeasureName?: string, MeasureValue?: string, MeasureValueType?: "DOUBLE"|"BIGINT"|"VARCHAR"|"BOOLEAN"|"TIMESTAMP"|"MULTI", Time?: string, TimeUnit?: "MILLISECONDS"|"SECONDS"|"MICROSECONDS"|"NANOSECONDS", Version?: int, MeasureValues?: list}
+  records: list # An array of records that contain the unique measure, dimension, time, and version attributes for each time-series data point. — item shape: {Dimensions?: list, MeasureName?: string, MeasureValue?: string, MeasureValueType?: "DOUBLE"|"BIGINT"|"VARCHAR"|"BOOLEAN"|"TIMESTAMP"|"MULTI", Time?: string, TimeUnit?: "MILLISECONDS"|"SECONDS"|"MICROSECONDS"|"NANOSECONDS", Version?: int, MeasureValues?: list}
+]: any -> record<RecordsIngested: record<Total: int, MemoryStore: int, MagneticStore: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Timestream_20181101.WriteRecords")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DatabaseName": $database_name, "TableName": $table_name, "CommonAttributes": $common_attributes, "Records": $records} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

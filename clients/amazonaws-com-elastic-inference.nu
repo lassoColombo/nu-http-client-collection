@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -155,7 +155,7 @@ export def "describe-accelerator-offerings" [
   --x-amz-signed-headers: string
   location_type: string@location-type-completer # The location type that you want to describe accelerator type offerings for. It can assume the following values: region: will return the accelerator type offering at the regional level. availability-zone: will return the accelerator type offering at the availability zone level. availability-zone-id: will return the accelerator type offering at the availability zone level returning the availability zone id.
   --accelerator-types: list<string> # The list of accelerator types to describe.
-]: any -> record<acceleratorTypeOfferings: record> {
+]: any -> record<acceleratorTypeOfferings: table<acceleratorType: string, locationType: string, location: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -201,7 +201,7 @@ export def "describe-accelerator-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<acceleratorTypes: record> {
+]: nothing -> record<acceleratorTypes: table<acceleratorTypeName: string, memoryInfo: record, throughputInfo: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/describe-accelerator-types" $auth.query)
@@ -227,7 +227,7 @@ export def "describe-accelerator-types" [
 #
 # POST /describe-accelerators
 # operationId: DescribeAccelerators
-# --filters item shape: {name?: any, values?: any}
+# --filters item shape: {name?: string, values?: list<string>}
 export def "describe-accelerators" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -248,10 +248,10 @@ export def "describe-accelerators" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --accelerator-ids: list<string> # The IDs of the accelerators to describe.
-  --filters: list # One or more filters. Filter names and values are case-sensitive. Valid filter names are: accelerator-types: can provide a list of accelerator type names to filter for. instance-id: can provide a list of EC2 instance ids to filter for. — item shape: {name?: any, values?: any}
+  --filters: list # One or more filters. Filter names and values are case-sensitive. Valid filter names are: accelerator-types: can provide a list of accelerator type names to filter for. instance-id: can provide a list of EC2 instance ids to filter for. — item shape: {name?: string, values?: list<string>}
   --max-results-body: int # The total number of items to return in the command's output. If the total number of items available is more than the value specified, a NextToken is provided in the command's output. To resume pagination, provide the NextToken value in the starting-token argument of a subsequent command. Do not use the NextToken response element directly outside of the AWS CLI. (body field)
   --next-token-body: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response. (body field)
-]: any -> record<acceleratorSet: record, nextToken: record> {
+]: any -> record<acceleratorSet: table<acceleratorHealth: record, acceleratorType: string, acceleratorId: string, availabilityZone: string, attachedResource: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -386,7 +386,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # The list of tags to remove from the Elastic Inference Accelerator.
+  --tag-keys: list # The list of tags to remove from the Elastic Inference Accelerator. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -398,6 +398,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"

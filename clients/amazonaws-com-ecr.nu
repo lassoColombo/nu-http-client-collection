@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -102,6 +102,7 @@ def x-amz-target-completer-2 [] { ["AmazonEC2ContainerRegistry_V20150921.BatchGe
 def x-amz-target-completer-3 [] { ["AmazonEC2ContainerRegistry_V20150921.BatchGetRepositoryScanningConfiguration"] }
 def x-amz-target-completer-4 [] { ["AmazonEC2ContainerRegistry_V20150921.CompleteLayerUpload"] }
 def x-amz-target-completer-5 [] { ["AmazonEC2ContainerRegistry_V20150921.CreatePullThroughCacheRule"] }
+def image-tag-mutability-completer [] { ["IMMUTABLE" "MUTABLE"] }
 def x-amz-target-completer-6 [] { ["AmazonEC2ContainerRegistry_V20150921.CreateRepository"] }
 def x-amz-target-completer-7 [] { ["AmazonEC2ContainerRegistry_V20150921.DeleteLifecyclePolicy"] }
 def x-amz-target-completer-8 [] { ["AmazonEC2ContainerRegistry_V20150921.DeletePullThroughCacheRule"] }
@@ -129,6 +130,7 @@ def x-amz-target-completer-29 [] { ["AmazonEC2ContainerRegistry_V20150921.PutIma
 def x-amz-target-completer-30 [] { ["AmazonEC2ContainerRegistry_V20150921.PutImageTagMutability"] }
 def x-amz-target-completer-31 [] { ["AmazonEC2ContainerRegistry_V20150921.PutLifecyclePolicy"] }
 def x-amz-target-completer-32 [] { ["AmazonEC2ContainerRegistry_V20150921.PutRegistryPolicy"] }
+def scan-type-completer [] { ["BASIC" "ENHANCED"] }
 def x-amz-target-completer-33 [] { ["AmazonEC2ContainerRegistry_V20150921.PutRegistryScanningConfiguration"] }
 def x-amz-target-completer-34 [] { ["AmazonEC2ContainerRegistry_V20150921.PutReplicationConfiguration"] }
 def x-amz-target-completer-35 [] { ["AmazonEC2ContainerRegistry_V20150921.SetRepositoryPolicy"] }
@@ -182,14 +184,15 @@ export def "batch-check-layer-availability" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  --registry-id: any
-  repository_name: any
-  layer_digests: any
-]: any -> record<layers: record, failures: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  --registry-id: string # The Amazon Web Services account ID associated with the registry that contains the image layers to check. If you do not specify a registry, the default registry is assumed.
+  repository_name: string # The name of the repository that is associated with the image layers to check.
+  layer_digests: list<string> # The digests of the image layers to check.
+]: any -> record<layers: table<layerDigest: string, layerAvailability: string, layerSize: int, mediaType: string>, failures: table<layerDigest: string, failureCode: string, failureReason: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.BatchCheckLayerAvailability")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"registryId": $registry_id, "repositoryName": $repository_name, "layerDigests": $layer_digests} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -215,6 +218,7 @@ export def "batch-check-layer-availability" [
 #
 # POST /
 # operationId: BatchDeleteImage
+# --imageIds item shape: {imageDigest?: string, imageTag?: string}
 export def "batch-delete-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -232,14 +236,15 @@ export def "batch-delete-image" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  --registry-id: any
-  repository_name: any
-  image_ids: any
-]: any -> record<imageIds: record, failures: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  --registry-id: string # The Amazon Web Services account ID associated with the registry that contains the image to delete. If you do not specify a registry, the default registry is assumed.
+  repository_name: string # The repository that contains the image to delete.
+  image_ids: list # A list of image ID references that correspond to images to delete. The format of the imageIds reference is imageTag=tag or imageDigest=digest. — item shape: {imageDigest?: string, imageTag?: string}
+]: any -> record<imageIds: table<imageDigest: string, imageTag: string>, failures: table<imageId: record, failureCode: string, failureReason: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.BatchDeleteImage")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"registryId": $registry_id, "repositoryName": $repository_name, "imageIds": $image_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -265,6 +270,7 @@ export def "batch-delete-image" [
 #
 # POST /
 # operationId: BatchGetImage
+# --imageIds item shape: {imageDigest?: string, imageTag?: string}
 export def "batch-get-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -282,15 +288,16 @@ export def "batch-get-image" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  --registry-id: any
-  repository_name: any
-  image_ids: any
-  --accepted-media-types: any
-]: any -> record<images: record, failures: record> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  --registry-id: string # The Amazon Web Services account ID associated with the registry that contains the images to describe. If you do not specify a registry, the default registry is assumed.
+  repository_name: string # The repository that contains the images to describe.
+  image_ids: list # A list of image ID references that correspond to images to describe. The format of the imageIds reference is imageTag=tag or imageDigest=digest. — item shape: {imageDigest?: string, imageTag?: string}
+  --accepted-media-types: list<string> # The accepted media types for the request. Valid values: application/vnd.docker.distribution.manifest.v1+json | application/vnd.docker.distribution.manifest.v2+json | application/vnd.oci.image.manifest.v1+json
+]: any -> record<images: table<registryId: string, repositoryName: string, imageId: record, imageManifest: string, imageManifestMediaType: string>, failures: table<imageId: record, failureCode: string, failureReason: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.BatchGetImage")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"registryId": $registry_id, "repositoryName": $repository_name, "imageIds": $image_ids, "acceptedMediaTypes": $accepted_media_types} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -333,12 +340,13 @@ export def "batch-get-repository-scanning-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  repository_names: any
-]: any -> record<scanningConfigurations: record, failures: record> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  repository_names: list<string> # One or more repository names to get the scanning configuration for.
+]: any -> record<scanningConfigurations: table<repositoryArn: string, repositoryName: string, scanOnPush: bool, scanFrequency: string, appliedScanFilters: list>, failures: table<repositoryName: string, failureCode: string, failureReason: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.BatchGetRepositoryScanningConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"repositoryNames": $repository_names} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -381,15 +389,16 @@ export def "complete-layer-upload" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  --registry-id: any
-  repository_name: any
-  upload_id: any
-  layer_digests: any
-]: any -> record<registryId: record, repositoryName: record, uploadId: record, layerDigest: record> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  --registry-id: string # The Amazon Web Services account ID associated with the registry to which to upload layers. If you do not specify a registry, the default registry is assumed.
+  repository_name: string # The name of the repository to associate with the image layer.
+  upload_id: string # The upload ID from a previous InitiateLayerUpload operation to associate with the image layer.
+  layer_digests: list<string> # The sha256 digest of the image layer.
+]: any -> record<registryId: string, repositoryName: string, uploadId: string, layerDigest: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.CompleteLayerUpload")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"registryId": $registry_id, "repositoryName": $repository_name, "uploadId": $upload_id, "layerDigests": $layer_digests} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -432,14 +441,15 @@ export def "create-pull-through-cache-rule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  ecr_repository_prefix: any
-  upstream_registry_url: any
-  --registry-id: any
-]: any -> record<ecrRepositoryPrefix: record, upstreamRegistryUrl: record, createdAt: record, registryId: record> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  ecr_repository_prefix: string # The repository name prefix to use when caching images from the source registry.
+  upstream_registry_url: string # The registry URL of the upstream public registry to use as the source for the pull through cache rule.
+  --registry-id: string # The Amazon Web Services account ID associated with the registry to create the pull through cache rule for. If you do not specify a registry, the default registry is assumed.
+]: any -> record<ecrRepositoryPrefix: string, upstreamRegistryUrl: string, createdAt: string, registryId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.CreatePullThroughCacheRule")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ecrRepositoryPrefix": $ecr_repository_prefix, "upstreamRegistryUrl": $upstream_registry_url, "registryId": $registry_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -465,6 +475,9 @@ export def "create-pull-through-cache-rule" [
 #
 # POST /
 # operationId: CreateRepository
+# --tags item shape: {Key?: string, Value?: string}
+# --imageScanningConfiguration shape: {scanOnPush?: bool}
+# --encryptionConfiguration shape: {encryptionType: "AES256"|"KMS", kmsKey?: string}
 export def "create-repository" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -482,17 +495,18 @@ export def "create-repository" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  --registry-id: any
-  repository_name: any
-  --tags: any
-  --image-tag-mutability: any
-  --image-scanning-configuration: any
-  --encryption-configuration: any
-]: any -> record<repository: record<repositoryArn: record, registryId: record, repositoryName: record, repositoryUri: record, createdAt: record, imageTagMutability: record, imageScanningConfiguration: record<scanOnPush: record>, encryptionConfiguration: record<encryptionType: record, kmsKey: record>>> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  --registry-id: string # The Amazon Web Services account ID associated with the registry to create the repository. If you do not specify a registry, the default registry is assumed.
+  repository_name: string # The name to use for the repository. The repository name may be specified on its own (such as nginx-web-app) or it can be prepended with a namespace to group the repository into a category (such as project-a/nginx-web-app).
+  --tags: list # The metadata that you apply to the repository to help you categorize and organize them. Each tag consists of a key and an optional value, both of which you define. Tag keys can have a maximum character length of 128 characters, and tag values can have a maximum length of 256 characters. — item shape: {Key?: string, Value?: string}
+  --image-tag-mutability: string@image-tag-mutability-completer # The tag mutability setting for the repository. If this parameter is omitted, the default setting of MUTABLE will be used which will allow image tags to be overwritten. If IMMUTABLE is specified, all image tags within the repository will be immutable which will prevent them from being overwritten.
+  --image-scanning-configuration: record # The image scanning configuration for a repository. — shape: {scanOnPush?: bool}
+  --encryption-configuration: record # The encryption configuration for the repository. This determines how the contents of your repository are encrypted at rest. By default, when no encryption configuration is set or the AES256 encryption type is used, Amazon ECR uses server-side encryption with Amazon S3-managed encryption keys which encrypts your data at rest using an AES-256 encryption algorithm. This does not require any action on your part. For more control over the encryption of the contents of your repository, you can use server-side encryption with Key Management Service key stored in Key Management Service (KMS) to encrypt your images. For more information, see Amazon ECR encryption at rest (https://docs.aws.amazon.com/AmazonECR/latest/userguide/encryption-at-rest.html) in the Amazon Elastic Container Registry User Guide. — shape: {encryptionType: "AES256"|"KMS", kmsKey?: string}
+]: any -> record<repository: record<repositoryArn: string, registryId: string, repositoryName: string, repositoryUri: string, createdAt: string, imageTagMutability: string, imageScanningConfiguration: record<scanOnPush: bool>, encryptionConfiguration: record<encryptionType: string, kmsKey: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.CreateRepository")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"registryId": $registry_id, "repositoryName": $repository_name, "tags": $tags, "imageTagMutability": $image_tag_mutability, "imageScanningConfiguration": $image_scanning_configuration, "encryptionConfiguration": $encryption_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -535,13 +549,14 @@ export def "delete-lifecycle-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  --registry-id: any
-  repository_name: any
-]: any -> record<registryId: record, repositoryName: record, lifecyclePolicyText: record, lastEvaluatedAt: record> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  --registry-id: string # The Amazon Web Services account ID associated with the registry that contains the repository. If you do not specify a registry, the default registry is assumed.
+  repository_name: string # The name of the repository.
+]: any -> record<registryId: string, repositoryName: string, lifecyclePolicyText: string, lastEvaluatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.DeleteLifecyclePolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"registryId": $registry_id, "repositoryName": $repository_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -584,13 +599,14 @@ export def "delete-pull-through-cache-rule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  ecr_repository_prefix: any
-  --registry-id: any
-]: any -> record<ecrRepositoryPrefix: record, upstreamRegistryUrl: record, createdAt: record, registryId: record> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  ecr_repository_prefix: string # The Amazon ECR repository prefix associated with the pull through cache rule to delete.
+  --registry-id: string # The Amazon Web Services account ID associated with the registry that contains the pull through cache rule. If you do not specify a registry, the default registry is assumed.
+]: any -> record<ecrRepositoryPrefix: string, upstreamRegistryUrl: string, createdAt: string, registryId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.DeletePullThroughCacheRule")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ecrRepositoryPrefix": $ecr_repository_prefix, "registryId": $registry_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -633,12 +649,13 @@ export def "delete-registry-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
+  --x-amz-target: string@x-amz-target-completer-9 # required
   --body: record
-]: any -> record<registryId: record, policyText: record> {
+]: any -> record<registryId: string, policyText: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.DeleteRegistryPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -681,14 +698,15 @@ export def "delete-repository" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  --registry-id: any
-  repository_name: any
-  --force: any
-]: any -> record<repository: record<repositoryArn: record, registryId: record, repositoryName: record, repositoryUri: record, createdAt: record, imageTagMutability: record, imageScanningConfiguration: record<scanOnPush: record>, encryptionConfiguration: record<encryptionType: record, kmsKey: record>>> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  --registry-id: string # The Amazon Web Services account ID associated with the registry that contains the repository to delete. If you do not specify a registry, the default registry is assumed.
+  repository_name: string # The name of the repository to delete.
+  --force: oneof<nothing, bool> # If a repository contains images, forces the deletion.
+]: any -> record<repository: record<repositoryArn: string, registryId: string, repositoryName: string, repositoryUri: string, createdAt: string, imageTagMutability: string, imageScanningConfiguration: record<scanOnPush: bool>, encryptionConfiguration: record<encryptionType: string, kmsKey: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.DeleteRepository")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"registryId": $registry_id, "repositoryName": $repository_name, "force": $force} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -731,13 +749,14 @@ export def "delete-repository-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  --registry-id: any
-  repository_name: any
-]: any -> record<registryId: record, repositoryName: record, policyText: record> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  --registry-id: string # The Amazon Web Services account ID associated with the registry that contains the repository policy to delete. If you do not specify a registry, the default registry is assumed.
+  repository_name: string # The name of the repository that is associated with the repository policy to delete.
+]: any -> record<registryId: string, repositoryName: string, policyText: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.DeleteRepositoryPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"registryId": $registry_id, "repositoryName": $repository_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -763,7 +782,7 @@ export def "delete-repository-policy" [
 #
 # POST /
 # operationId: DescribeImageReplicationStatus
-# --imageId shape: {imageDigest?: any, imageTag?: any}
+# --imageId shape: {imageDigest?: string, imageTag?: string}
 export def "describe-image-replication-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -781,14 +800,15 @@ export def "describe-image-replication-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  repository_name: any
-  image_id: record # An object with identifying information for an image in an Amazon ECR repository. — shape: {imageDigest?: any, imageTag?: any}
-  --registry-id: any
-]: any -> record<repositoryName: record, imageId: record<imageDigest: record, imageTag: record>, replicationStatuses: record> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  repository_name: string # The name of the repository that the image is in.
+  image_id: record # An object with identifying information for an image in an Amazon ECR repository. — shape: {imageDigest?: string, imageTag?: string}
+  --registry-id: string # The Amazon Web Services account ID associated with the registry. If you do not specify a registry, the default registry is assumed.
+]: any -> record<repositoryName: string, imageId: record<imageDigest: string, imageTag: string>, replicationStatuses: table<region: string, registryId: string, status: string, failureCode: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.DescribeImageReplicationStatus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"repositoryName": $repository_name, "imageId": $image_id, "registryId": $registry_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -814,7 +834,7 @@ export def "describe-image-replication-status" [
 #
 # POST /
 # operationId: DescribeImageScanFindings
-# --imageId shape: {imageDigest?: any, imageTag?: any}
+# --imageId shape: {imageDigest?: string, imageTag?: string}
 export def "describe-image-scan-findings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -834,16 +854,17 @@ export def "describe-image-scan-findings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  --registry-id: any
-  repository_name: any
-  image_id: record # An object with identifying information for an image in an Amazon ECR repository. — shape: {imageDigest?: any, imageTag?: any}
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<registryId: record, repositoryName: record, imageId: record<imageDigest: record, imageTag: record>, imageScanStatus: record<status: record, description: record>, imageScanFindings: record<imageScanCompletedAt: record, vulnerabilitySourceUpdatedAt: record, findingSeverityCounts: record, findings: record, enhancedFindings: record>, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  --registry-id: string # The Amazon Web Services account ID associated with the registry that contains the repository in which to describe the image scan findings for. If you do not specify a registry, the default registry is assumed.
+  repository_name: string # The repository for the image for which to describe the scan findings.
+  image_id: record # An object with identifying information for an image in an Amazon ECR repository. — shape: {imageDigest?: string, imageTag?: string}
+  --next-token-body: string # The nextToken value returned from a previous paginated DescribeImageScanFindings request where maxResults was used and the results exceeded the value of that parameter. Pagination continues from the end of the previous results that returned the nextToken value. This value is null when there are no more results to return. (body field)
+  --max-results-body: int # The maximum number of image scan results returned by DescribeImageScanFindings in paginated output. When this parameter is used, DescribeImageScanFindings only returns maxResults results in a single page along with a nextToken response element. The remaining results of the initial request can be seen by sending another DescribeImageScanFindings request with the returned nextToken value. This value can be between 1 and 1000. If this parameter is not used, then DescribeImageScanFindings returns up to 100 results and a nextToken value, if applicable. (body field)
+]: any -> record<registryId: string, repositoryName: string, imageId: record<imageDigest: string, imageTag: string>, imageScanStatus: record<status: string, description: string>, imageScanFindings: record<imageScanCompletedAt: string, vulnerabilitySourceUpdatedAt: string, findingSeverityCounts: record, findings: list<record>, enhancedFindings: list<record>>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.DescribeImageScanFindings")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"registryId": $registry_id, "repositoryName": $repository_name, "imageId": $image_id, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -870,6 +891,8 @@ export def "describe-image-scan-findings" [
 #
 # POST /
 # operationId: DescribeImages
+# --imageIds item shape: {imageDigest?: string, imageTag?: string}
+# --filter shape: {tagStatus?: "TAGGED"|"UNTAGGED"|"ANY"}
 export def "describe-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -889,17 +912,18 @@ export def "describe-images" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  --registry-id: any
-  repository_name: any
-  --image-ids: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --filter: any
-]: any -> record<imageDetails: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  --registry-id: string # The Amazon Web Services account ID associated with the registry that contains the repository in which to describe images. If you do not specify a registry, the default registry is assumed.
+  repository_name: string # The repository that contains the images to describe.
+  --image-ids: list # The list of image IDs for the requested repository. — item shape: {imageDigest?: string, imageTag?: string}
+  --next-token-body: string # The nextToken value returned from a previous paginated DescribeImages request where maxResults was used and the results exceeded the value of that parameter. Pagination continues from the end of the previous results that returned the nextToken value. This value is null when there are no more results to return. This option cannot be used when you specify images with imageIds. (body field)
+  --max-results-body: int # The maximum number of repository results returned by DescribeImages in paginated output. When this parameter is used, DescribeImages only returns maxResults results in a single page along with a nextToken response element. The remaining results of the initial request can be seen by sending another DescribeImages request with the returned nextToken value. This value can be between 1 and 1000. If this parameter is not used, then DescribeImages returns up to 100 results and a nextToken value, if applicable. This option cannot be used when you specify images with imageIds. (body field)
+  --filter: record # An object representing a filter on a DescribeImages operation. — shape: {tagStatus?: "TAGGED"|"UNTAGGED"|"ANY"}
+]: any -> record<imageDetails: table<registryId: string, repositoryName: string, imageDigest: string, imageTags: list, imageSizeInBytes: int, imagePushedAt: string, imageScanStatus: record, imageScanFindingsSummary: record, imageManifestMediaType: string, artifactMediaType: string, lastRecordedPullTime: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.DescribeImages")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"registryId": $registry_id, "repositoryName": $repository_name, "imageIds": $image_ids, "nextToken": $next_token_body, "maxResults": $max_results_body, "filter": $filter} | compact
@@ -945,15 +969,16 @@ export def "describe-pull-through-cache-rules" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  --registry-id: any
-  --ecr-repository-prefixes: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<pullThroughCacheRules: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  --registry-id: string # The Amazon Web Services account ID associated with the registry to return the pull through cache rules for. If you do not specify a registry, the default registry is assumed.
+  --ecr-repository-prefixes: list<string> # The Amazon ECR repository prefixes associated with the pull through cache rules to return. If no repository prefix value is specified, all pull through cache rules are returned.
+  --next-token-body: string # The nextToken value returned from a previous paginated DescribePullThroughCacheRulesRequest request where maxResults was used and the results exceeded the value of that parameter. Pagination continues from the end of the previous results that returned the nextToken value. This value is null when there are no more results to return. (body field)
+  --max-results-body: int # The maximum number of pull through cache rules returned by DescribePullThroughCacheRulesRequest in paginated output. When this parameter is used, DescribePullThroughCacheRulesRequest only returns maxResults results in a single page along with a nextToken response element. The remaining results of the initial request can be seen by sending another DescribePullThroughCacheRulesRequest request with the returned nextToken value. This value can be between 1 and 1000. If this parameter is not used, then DescribePullThroughCacheRulesRequest returns up to 100 results and a nextToken value, if applicable. (body field)
+]: any -> record<pullThroughCacheRules: table<ecrRepositoryPrefix: string, upstreamRegistryUrl: string, createdAt: string, registryId: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.DescribePullThroughCacheRules")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"registryId": $registry_id, "ecrRepositoryPrefixes": $ecr_repository_prefixes, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -997,12 +1022,13 @@ export def "describe-registry" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
+  --x-amz-target: string@x-amz-target-completer-16 # required
   --body: record
-]: any -> record<registryId: record, replicationConfiguration: record<rules: record>> {
+]: any -> record<registryId: string, replicationConfiguration: record<rules: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.DescribeRegistry")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1047,15 +1073,16 @@ export def "describe-repositories" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  --registry-id: any
-  --repository-names: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<repositories: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  --registry-id: string # The Amazon Web Services account ID associated with the registry that contains the repositories to be described. If you do not specify a registry, the default registry is assumed.
+  --repository-names: list<string> # A list of repositories to describe. If this parameter is omitted, then all repositories in a registry are described.
+  --next-token-body: string # The nextToken value returned from a previous paginated DescribeRepositories request where maxResults was used and the results exceeded the value of that parameter. Pagination continues from the end of the previous results that returned the nextToken value. This value is null when there are no more results to return. This option cannot be used when you specify repositories with repositoryNames. This token should be treated as an opaque identifier that is only used to retrieve the next items in a list and not for other programmatic purposes. (body field)
+  --max-results-body: int # The maximum number of repository results returned by DescribeRepositories in paginated output. When this parameter is used, DescribeRepositories only returns maxResults results in a single page along with a nextToken response element. The remaining results of the initial request can be seen by sending another DescribeRepositories request with the returned nextToken value. This value can be between 1 and 1000. If this parameter is not used, then DescribeRepositories returns up to 100 results and a nextToken value, if applicable. This option cannot be used when you specify repositories with repositoryNames. (body field)
+]: any -> record<repositories: table<repositoryArn: string, registryId: string, repositoryName: string, repositoryUri: string, createdAt: string, imageTagMutability: string, imageScanningConfiguration: record, encryptionConfiguration: record>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.DescribeRepositories")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"registryId": $registry_id, "repositoryNames": $repository_names, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -1099,12 +1126,13 @@ export def "get-authorization-token" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  --registry-ids: any
-]: any -> record<authorizationData: record> {
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  --registry-ids: list<string> # A list of Amazon Web Services account IDs that are associated with the registries for which to get AuthorizationData objects. If you do not specify a registry, the default registry is assumed.This field is deprecated. The returned authorization token can be used to access any Amazon ECR registry that the IAM principal has access to, specifying a registry ID doesn't change the permissions scope of the authorization token.
+]: any -> record<authorizationData: table<authorizationToken: string, expiresAt: string, proxyEndpoint: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.GetAuthorizationToken")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"registryIds": $registry_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1147,14 +1175,15 @@ export def "get-download-url-for-layer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  --registry-id: any
-  repository_name: any
-  layer_digest: any
-]: any -> record<downloadUrl: record, layerDigest: record> {
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  --registry-id: string # The Amazon Web Services account ID associated with the registry that contains the image layer to download. If you do not specify a registry, the default registry is assumed.
+  repository_name: string # The name of the repository that is associated with the image layer to download.
+  layer_digest: string # The digest of the image layer to download.
+]: any -> record<downloadUrl: string, layerDigest: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.GetDownloadUrlForLayer")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"registryId": $registry_id, "repositoryName": $repository_name, "layerDigest": $layer_digest} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1197,13 +1226,14 @@ export def "get-lifecycle-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  --registry-id: any
-  repository_name: any
-]: any -> record<registryId: record, repositoryName: record, lifecyclePolicyText: record, lastEvaluatedAt: record> {
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  --registry-id: string # The Amazon Web Services account ID associated with the registry that contains the repository. If you do not specify a registry, the default registry is assumed.
+  repository_name: string # The name of the repository.
+]: any -> record<registryId: string, repositoryName: string, lifecyclePolicyText: string, lastEvaluatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.GetLifecyclePolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"registryId": $registry_id, "repositoryName": $repository_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1229,6 +1259,8 @@ export def "get-lifecycle-policy" [
 #
 # POST /
 # operationId: GetLifecyclePolicyPreview
+# --imageIds item shape: {imageDigest?: string, imageTag?: string}
+# --filter shape: {tagStatus?: "TAGGED"|"UNTAGGED"|"ANY"}
 export def "get-lifecycle-policy-preview" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1248,17 +1280,18 @@ export def "get-lifecycle-policy-preview" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  --registry-id: any
-  repository_name: any
-  --image-ids: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --filter: any
-]: any -> record<registryId: record, repositoryName: record, lifecyclePolicyText: record, status: record, nextToken: record, previewResults: record, summary: record<expiringImageTotalCount: record>> {
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  --registry-id: string # The Amazon Web Services account ID associated with the registry that contains the repository. If you do not specify a registry, the default registry is assumed.
+  repository_name: string # The name of the repository.
+  --image-ids: list # The list of imageIDs to be included. — item shape: {imageDigest?: string, imageTag?: string}
+  --next-token-body: string # The nextToken value returned from a previous paginated&#x2028; GetLifecyclePolicyPreviewRequest request where maxResults was used and the&#x2028; results exceeded the value of that parameter. Pagination continues from the end of the&#x2028; previous results that returned the nextToken value. This value is&#x2028; null when there are no more results to return. This option cannot be used when you specify images with imageIds. (body field)
+  --max-results-body: int # The maximum number of repository results returned by GetLifecyclePolicyPreviewRequest in&#x2028; paginated output. When this parameter is used, GetLifecyclePolicyPreviewRequest only returns&#x2028; maxResults results in a single page along with a nextToken&#x2028; response element. The remaining results of the initial request can be seen by sending&#x2028; another GetLifecyclePolicyPreviewRequest request with the returned nextToken&#x2028; value. This value can be between 1 and 1000. If this&#x2028; parameter is not used, then GetLifecyclePolicyPreviewRequest returns up to&#x2028; 100 results and a nextToken value, if&#x2028; applicable. This option cannot be used when you specify images with imageIds. (body field)
+  --filter: record # The filter for the lifecycle policy preview. — shape: {tagStatus?: "TAGGED"|"UNTAGGED"|"ANY"}
+]: any -> record<registryId: string, repositoryName: string, lifecyclePolicyText: string, status: string, nextToken: string, previewResults: table<imageTags: list, imageDigest: string, imagePushedAt: string, action: record, appliedRulePriority: int>, summary: record<expiringImageTotalCount: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.GetLifecyclePolicyPreview")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"registryId": $registry_id, "repositoryName": $repository_name, "imageIds": $image_ids, "nextToken": $next_token_body, "maxResults": $max_results_body, "filter": $filter} | compact
@@ -1302,12 +1335,13 @@ export def "get-registry-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
+  --x-amz-target: string@x-amz-target-completer-22 # required
   --body: record
-]: any -> record<registryId: record, policyText: record> {
+]: any -> record<registryId: string, policyText: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.GetRegistryPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1350,12 +1384,13 @@ export def "get-registry-scanning-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
+  --x-amz-target: string@x-amz-target-completer-23 # required
   --body: record
-]: any -> record<registryId: record, scanningConfiguration: record<scanType: record, rules: record>> {
+]: any -> record<registryId: string, scanningConfiguration: record<scanType: string, rules: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.GetRegistryScanningConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1398,13 +1433,14 @@ export def "get-repository-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  --registry-id: any
-  repository_name: any
-]: any -> record<registryId: record, repositoryName: record, policyText: record> {
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  --registry-id: string # The Amazon Web Services account ID associated with the registry that contains the repository. If you do not specify a registry, the default registry is assumed.
+  repository_name: string # The name of the repository with the policy to retrieve.
+]: any -> record<registryId: string, repositoryName: string, policyText: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.GetRepositoryPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"registryId": $registry_id, "repositoryName": $repository_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1447,13 +1483,14 @@ export def "initiate-layer-upload" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  --registry-id: any
-  repository_name: any
-]: any -> record<uploadId: record, partSize: record> {
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  --registry-id: string # The Amazon Web Services account ID associated with the registry to which you intend to upload layers. If you do not specify a registry, the default registry is assumed.
+  repository_name: string # The name of the repository to which you intend to upload layers.
+]: any -> record<uploadId: string, partSize: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.InitiateLayerUpload")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"registryId": $registry_id, "repositoryName": $repository_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1479,6 +1516,7 @@ export def "initiate-layer-upload" [
 #
 # POST /
 # operationId: ListImages
+# --filter shape: {tagStatus?: "TAGGED"|"UNTAGGED"|"ANY"}
 export def "list-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1498,16 +1536,17 @@ export def "list-images" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-26
-  --registry-id: any
-  repository_name: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --filter: any
-]: any -> record<imageIds: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-26 # required
+  --registry-id: string # The Amazon Web Services account ID associated with the registry that contains the repository in which to list images. If you do not specify a registry, the default registry is assumed.
+  repository_name: string # The repository with image IDs to be listed.
+  --next-token-body: string # The nextToken value returned from a previous paginated ListImages request where maxResults was used and the results exceeded the value of that parameter. Pagination continues from the end of the previous results that returned the nextToken value. This value is null when there are no more results to return. This token should be treated as an opaque identifier that is only used to retrieve the next items in a list and not for other programmatic purposes. (body field)
+  --max-results-body: int # The maximum number of image results returned by ListImages in paginated output. When this parameter is used, ListImages only returns maxResults results in a single page along with a nextToken response element. The remaining results of the initial request can be seen by sending another ListImages request with the returned nextToken value. This value can be between 1 and 1000. If this parameter is not used, then ListImages returns up to 100 results and a nextToken value, if applicable. (body field)
+  --filter: record # An object representing a filter on a ListImages operation. — shape: {tagStatus?: "TAGGED"|"UNTAGGED"|"ANY"}
+]: any -> record<imageIds: table<imageDigest: string, imageTag: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.ListImages")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"registryId": $registry_id, "repositoryName": $repository_name, "nextToken": $next_token_body, "maxResults": $max_results_body, "filter": $filter} | compact
@@ -1551,12 +1590,13 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-27
-  resource_arn: any
-]: any -> record<tags: record> {
+  --x-amz-target: string@x-amz-target-completer-27 # required
+  resource_arn: string # The Amazon Resource Name (ARN) that identifies the resource for which to list the tags. Currently, the only supported resource is an Amazon ECR repository.
+]: any -> record<tags: table<Key: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.ListTagsForResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceArn": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1599,17 +1639,18 @@ export def "put-image" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-28
-  --registry-id: any
-  repository_name: any
-  image_manifest: any
-  --image-manifest-media-type: any
-  --image-tag: any
-  --image-digest: any
-]: any -> record<image: record<registryId: record, repositoryName: record, imageId: record<imageDigest: record, imageTag: record>, imageManifest: record, imageManifestMediaType: record>> {
+  --x-amz-target: string@x-amz-target-completer-28 # required
+  --registry-id: string # The Amazon Web Services account ID associated with the registry that contains the repository in which to put the image. If you do not specify a registry, the default registry is assumed.
+  repository_name: string # The name of the repository in which to put the image.
+  image_manifest: string # The image manifest corresponding to the image to be uploaded.
+  --image-manifest-media-type: string # The media type of the image manifest. If you push an image manifest that does not contain the mediaType field, you must specify the imageManifestMediaType in the request.
+  --image-tag: string # The tag to associate with the image. This parameter is required for images that use the Docker Image Manifest V2 Schema 2 or Open Container Initiative (OCI) formats.
+  --image-digest: string # The image digest of the image manifest corresponding to the image.
+]: any -> record<image: record<registryId: string, repositoryName: string, imageId: record<imageDigest: string, imageTag: string>, imageManifest: string, imageManifestMediaType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.PutImage")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"registryId": $registry_id, "repositoryName": $repository_name, "imageManifest": $image_manifest, "imageManifestMediaType": $image_manifest_media_type, "imageTag": $image_tag, "imageDigest": $image_digest} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1635,6 +1676,7 @@ export def "put-image" [
 #
 # POST /
 # operationId: PutImageScanningConfiguration
+# --imageScanningConfiguration shape: {scanOnPush?: bool}
 export def "put-image-scanning-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1652,14 +1694,15 @@ export def "put-image-scanning-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-29
-  --registry-id: any
-  repository_name: any
-  image_scanning_configuration: any
-]: any -> record<registryId: record, repositoryName: record, imageScanningConfiguration: record<scanOnPush: record>> {
+  --x-amz-target: string@x-amz-target-completer-29 # required
+  --registry-id: string # The Amazon Web Services account ID associated with the registry that contains the repository in which to update the image scanning configuration setting. If you do not specify a registry, the default registry is assumed.
+  repository_name: string # The name of the repository in which to update the image scanning configuration setting.
+  image_scanning_configuration: record # The image scanning configuration for a repository. — shape: {scanOnPush?: bool}
+]: any -> record<registryId: string, repositoryName: string, imageScanningConfiguration: record<scanOnPush: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.PutImageScanningConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"registryId": $registry_id, "repositoryName": $repository_name, "imageScanningConfiguration": $image_scanning_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1702,14 +1745,15 @@ export def "put-image-tag-mutability" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-30
-  --registry-id: any
-  repository_name: any
-  image_tag_mutability: any
-]: any -> record<registryId: record, repositoryName: record, imageTagMutability: record> {
+  --x-amz-target: string@x-amz-target-completer-30 # required
+  --registry-id: string # The Amazon Web Services account ID associated with the registry that contains the repository in which to update the image tag mutability settings. If you do not specify a registry, the default registry is assumed.
+  repository_name: string # The name of the repository in which to update the image tag mutability settings.
+  image_tag_mutability: string@image-tag-mutability-completer # The tag mutability setting for the repository. If MUTABLE is specified, image tags can be overwritten. If IMMUTABLE is specified, all image tags within the repository will be immutable which will prevent them from being overwritten.
+]: any -> record<registryId: string, repositoryName: string, imageTagMutability: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.PutImageTagMutability")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"registryId": $registry_id, "repositoryName": $repository_name, "imageTagMutability": $image_tag_mutability} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1752,14 +1796,15 @@ export def "put-lifecycle-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-31
-  --registry-id: any
-  repository_name: any
-  lifecycle_policy_text: any
-]: any -> record<registryId: record, repositoryName: record, lifecyclePolicyText: record> {
+  --x-amz-target: string@x-amz-target-completer-31 # required
+  --registry-id: string # The Amazon Web Services account ID associated with the registry that contains the repository. If you do&#x2028; not specify a registry, the default registry is assumed.
+  repository_name: string # The name of the repository to receive the policy.
+  lifecycle_policy_text: string # The JSON repository policy text to apply to the repository.
+]: any -> record<registryId: string, repositoryName: string, lifecyclePolicyText: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.PutLifecyclePolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"registryId": $registry_id, "repositoryName": $repository_name, "lifecyclePolicyText": $lifecycle_policy_text} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1802,12 +1847,13 @@ export def "put-registry-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-32
-  policy_text: any
-]: any -> record<registryId: record, policyText: record> {
+  --x-amz-target: string@x-amz-target-completer-32 # required
+  policy_text: string # The JSON policy text to apply to your registry. The policy text follows the same format as IAM policy text. For more information, see Registry permissions (https://docs.aws.amazon.com/AmazonECR/latest/userguide/registry-permissions.html) in the Amazon Elastic Container Registry User Guide.
+]: any -> record<registryId: string, policyText: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.PutRegistryPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"policyText": $policy_text} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1833,6 +1879,7 @@ export def "put-registry-policy" [
 #
 # POST /
 # operationId: PutRegistryScanningConfiguration
+# --rules item shape: {scanFrequency: "SCAN_ON_PUSH"|"CONTINUOUS_SCAN"|"MANUAL", repositoryFilters: list}
 export def "put-registry-scanning-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1850,13 +1897,14 @@ export def "put-registry-scanning-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-33
-  --scan-type: any
-  --rules: any
-]: any -> record<registryScanningConfiguration: record<scanType: record, rules: record>> {
+  --x-amz-target: string@x-amz-target-completer-33 # required
+  --scan-type: string@scan-type-completer # The scanning type to set for the registry. When a registry scanning configuration is not defined, by default the BASIC scan type is used. When basic scanning is used, you may specify filters to determine which individual repositories, or all repositories, are scanned when new images are pushed to those repositories. Alternatively, you can do manual scans of images with basic scanning. When the ENHANCED scan type is set, Amazon Inspector provides automated vulnerability scanning. You may choose between continuous scanning or scan on push and you may specify filters to determine which individual repositories, or all repositories, are scanned.
+  --rules: list # The scanning rules to use for the registry. A scanning rule is used to determine which repository filters are used and at what frequency scanning will occur. — item shape: {scanFrequency: "SCAN_ON_PUSH"|"CONTINUOUS_SCAN"|"MANUAL", repositoryFilters: list}
+]: any -> record<registryScanningConfiguration: record<scanType: string, rules: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.PutRegistryScanningConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"scanType": $scan_type, "rules": $rules} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1882,6 +1930,7 @@ export def "put-registry-scanning-configuration" [
 #
 # POST /
 # operationId: PutReplicationConfiguration
+# --replicationConfiguration shape: {rules: list}
 export def "put-replication-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1899,12 +1948,13 @@ export def "put-replication-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-34
-  replication_configuration: any
-]: any -> record<replicationConfiguration: record<rules: record>> {
+  --x-amz-target: string@x-amz-target-completer-34 # required
+  replication_configuration: record # The replication configuration for a registry. — shape: {rules: list}
+]: any -> record<replicationConfiguration: record<rules: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.PutReplicationConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"replicationConfiguration": $replication_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1947,15 +1997,16 @@ export def "set-repository-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-35
-  --registry-id: any
-  repository_name: any
-  policy_text: any
-  --force: any
-]: any -> record<registryId: record, repositoryName: record, policyText: record> {
+  --x-amz-target: string@x-amz-target-completer-35 # required
+  --registry-id: string # The Amazon Web Services account ID associated with the registry that contains the repository. If you do not specify a registry, the default registry is assumed.
+  repository_name: string # The name of the repository to receive the policy.
+  policy_text: string # The JSON repository policy text to apply to the repository. For more information, see Amazon ECR repository policies (https://docs.aws.amazon.com/AmazonECR/latest/userguide/repository-policy-examples.html) in the Amazon Elastic Container Registry User Guide.
+  --force: oneof<nothing, bool> # If the policy you are attempting to set on a repository policy would prevent you from setting another policy in the future, you must force the SetRepositoryPolicy operation. This is intended to prevent accidental repository lock outs.
+]: any -> record<registryId: string, repositoryName: string, policyText: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.SetRepositoryPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"registryId": $registry_id, "repositoryName": $repository_name, "policyText": $policy_text, "force": $force} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1981,7 +2032,7 @@ export def "set-repository-policy" [
 #
 # POST /
 # operationId: StartImageScan
-# --imageId shape: {imageDigest?: any, imageTag?: any}
+# --imageId shape: {imageDigest?: string, imageTag?: string}
 export def "start-image-scan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1999,14 +2050,15 @@ export def "start-image-scan" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-36
-  --registry-id: any
-  repository_name: any
-  image_id: record # An object with identifying information for an image in an Amazon ECR repository. — shape: {imageDigest?: any, imageTag?: any}
-]: any -> record<registryId: record, repositoryName: record, imageId: record<imageDigest: record, imageTag: record>, imageScanStatus: record<status: record, description: record>> {
+  --x-amz-target: string@x-amz-target-completer-36 # required
+  --registry-id: string # The Amazon Web Services account ID associated with the registry that contains the repository in which to start an image scan request. If you do not specify a registry, the default registry is assumed.
+  repository_name: string # The name of the repository that contains the images to scan.
+  image_id: record # An object with identifying information for an image in an Amazon ECR repository. — shape: {imageDigest?: string, imageTag?: string}
+]: any -> record<registryId: string, repositoryName: string, imageId: record<imageDigest: string, imageTag: string>, imageScanStatus: record<status: string, description: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.StartImageScan")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"registryId": $registry_id, "repositoryName": $repository_name, "imageId": $image_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2049,14 +2101,15 @@ export def "start-lifecycle-policy-preview" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-37
-  --registry-id: any
-  repository_name: any
-  --lifecycle-policy-text: any
-]: any -> record<registryId: record, repositoryName: record, lifecyclePolicyText: record, status: record> {
+  --x-amz-target: string@x-amz-target-completer-37 # required
+  --registry-id: string # The Amazon Web Services account ID associated with the registry that contains the repository. If you do not specify a registry, the default registry is assumed.
+  repository_name: string # The name of the repository to be evaluated.
+  --lifecycle-policy-text: string # The policy to be evaluated against. If you do not specify a policy, the current policy for the repository is used.
+]: any -> record<registryId: string, repositoryName: string, lifecyclePolicyText: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.StartLifecyclePolicyPreview")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"registryId": $registry_id, "repositoryName": $repository_name, "lifecyclePolicyText": $lifecycle_policy_text} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2082,6 +2135,7 @@ export def "start-lifecycle-policy-preview" [
 #
 # POST /
 # operationId: TagResource
+# --tags item shape: {Key?: string, Value?: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2099,13 +2153,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-38
-  resource_arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-38 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the the resource to which to add tags. Currently, the only supported resource is an Amazon ECR repository.
+  tags: list # The tags to add to the resource. A tag is an array of key-value pairs. Tag keys can have a maximum character length of 128 characters, and tag values can have a maximum length of 256 characters. — item shape: {Key?: string, Value?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceArn": $resource_arn, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2148,13 +2203,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-39
-  resource_arn: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-39 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the resource from which to remove tags. Currently, the only supported resource is an Amazon ECR repository.
+  tag_keys: list<string> # The keys of the tags to be removed.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceArn": $resource_arn, "tagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2197,17 +2253,18 @@ export def "upload-layer-part" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-40
-  --registry-id: any
-  repository_name: any
-  upload_id: any
-  part_first_byte: any
-  part_last_byte: any
-  layer_part_blob: any
-]: any -> record<registryId: record, repositoryName: record, uploadId: record, lastByteReceived: record> {
+  --x-amz-target: string@x-amz-target-completer-40 # required
+  --registry-id: string # The Amazon Web Services account ID associated with the registry to which you are uploading layer parts. If you do not specify a registry, the default registry is assumed.
+  repository_name: string # The name of the repository to which you are uploading layer parts.
+  upload_id: string # The upload ID from a previous InitiateLayerUpload operation to associate with the layer part upload.
+  part_first_byte: int # The position of the first byte of the layer part witin the overall image layer.
+  part_last_byte: int # The position of the last byte of the layer part within the overall image layer.
+  layer_part_blob: string # The base64-encoded layer part payload.
+]: any -> record<registryId: string, repositoryName: string, uploadId: string, lastByteReceived: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonEC2ContainerRegistry_V20150921.UploadLayerPart")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"registryId": $registry_id, "repositoryName": $repository_name, "uploadId": $upload_id, "partFirstByte": $part_first_byte, "partLastByte": $part_last_byte, "layerPartBlob": $layer_part_blob} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

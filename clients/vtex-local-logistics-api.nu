@@ -1,6 +1,7 @@
 # Auto-generated client for Logistics API v1.0
 # Source: https://api.apis.guru/v2/specs/vtex.local/Logistics-API/1.0/openapi.json
-# Auth: --token flag or $env.LOGISTICS_API_TOKEN
+# Auth (appKey): --token-appkey flag or $env.LOGISTICS_API_APPKEY_TOKEN
+# Auth (appToken): --token-apptoken flag or $env.LOGISTICS_API_APPTOKEN_TOKEN
 
 const BASE_URL = "https://vtex.local"
 
@@ -12,8 +13,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-vtex-api-appkey" => { {scheme: $scheme, headers: {X-VTEX-API-AppKey: $token_val}, query: "", location: "header"} }
-    "x-vtex-api-apptoken" => { {scheme: $scheme, headers: {X-VTEX-API-AppToken: $token_val}, query: "", location: "header"} }
+    "x-vtex-api-appkey" => { {scheme: $scheme, headers: {"X-VTEX-API-AppKey": $token_val}, query: "", location: "header"} }
+    "x-vtex-api-apptoken" => { {scheme: $scheme, headers: {"X-VTEX-API-AppToken": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -126,7 +127,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-appkey" "token-apptoken"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-api-logistics-capacity-resources-carrier-capacity-type-shipping-policy-id-time-frames" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -162,15 +163,18 @@ export def "get-api-logistics-capacity-resources-carrier-capacity-type-shipping-
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --range-start: string # Starting date of time range (e.g. yyyy-mm-dd)
-  --range-end: string # End date of time range. (e.g. yyyy-mm-dd)
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (e.g. application/vnd.vtex.availability.v1+json)
+  --range-start: string # Starting date of time range (required, e.g. yyyy-mm-dd)
+  --range-end: string # End date of time range. (required, e.g. yyyy-mm-dd)
+  --content-type: string # Type of the content being sent (required, default: application/json; charset=utf-8)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, e.g. application/vnd.vtex.availability.v1+json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($capacity_type | is-empty) { error make --unspanned { msg: "path parameter 'capacityType' must be non-empty" } }
   if ($shipping_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'shippingPolicyId' must be non-empty" } }
+  if ($range_start == null) { error make --unspanned { msg: "required query parameter 'rangeStart' missing: pass --range-start" } }
+  if ($range_end == null) { error make --unspanned { msg: "required query parameter 'rangeEnd' missing: pass --range-end" } }
+  let content_type = ($content_type | default "application/json; charset=utf-8")
   let qp = [(serialize-qp "rangeStart" $range_start "scalar") (serialize-qp "rangeEnd" $range_end "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({capacity_type: (encode-path-segment $capacity_type), shipping_policy_id: (encode-path-segment $shipping_policy_id)} | format pattern "/api/logistics-capacity/resources/carrier@{capacity_type}@{shipping_policy_id}/time-frames") $qp $auth.query)
   let accept_val = "application/json"
@@ -209,8 +213,8 @@ export def "get-api-logistics-capacity-resources-carrier-capacity-type-shipping-
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (e.g. application/vnd.vtex.availability.v1+json)
+  --content-type: string # Type of the content being sent (required, default: application/json; charset=utf-8)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, e.g. application/vnd.vtex.availability.v1+json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -219,6 +223,7 @@ export def "get-api-logistics-capacity-resources-carrier-capacity-type-shipping-
   if ($window_day | is-empty) { error make --unspanned { msg: "path parameter 'windowDay' must be non-empty" } }
   if ($window_start_time | is-empty) { error make --unspanned { msg: "path parameter 'windowStartTime' must be non-empty" } }
   if ($window_end_time | is-empty) { error make --unspanned { msg: "path parameter 'windowEndTime' must be non-empty" } }
+  let content_type = ($content_type | default "application/json; charset=utf-8")
   let full_url = (build-url $base ({capacity_type: (encode-path-segment $capacity_type), shipping_policy_id: (encode-path-segment $shipping_policy_id), window_day: (encode-path-segment $window_day), window_start_time: (encode-path-segment $window_start_time), window_end_time: (encode-path-segment $window_end_time)} | format pattern "/api/logistics-capacity/resources/carrier@{capacity_type}@{shipping_policy_id}/time-frames/{window_day}F{window_start_time}T{window_end_time}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -253,14 +258,16 @@ export def "add-blocked-delivery-windows" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
   --body: string
 ]: any -> any {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($carrier_id | is-empty) { error make --unspanned { msg: "path parameter 'carrierId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({carrier_id: (encode-path-segment $carrier_id)} | format pattern "/api/logistics/pvt/configuration/carriers/{carrier_id}/adddayofweekblocked") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -299,12 +306,14 @@ export def "retrieve-blocked-delivery-windows" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json; charset=utf-8)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($carrier_id | is-empty) { error make --unspanned { msg: "path parameter 'carrierId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json; charset=utf-8")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({carrier_id: (encode-path-segment $carrier_id)} | format pattern "/api/logistics/pvt/configuration/carriers/{carrier_id}/getdayofweekblocked") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -339,14 +348,16 @@ export def "remove-blocked-delivery-windows" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
   --body: string
 ]: any -> any {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($carrier_id | is-empty) { error make --unspanned { msg: "path parameter 'carrierId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({carrier_id: (encode-path-segment $carrier_id)} | format pattern "/api/logistics/pvt/configuration/carriers/{carrier_id}/removedayofweekblocked") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -384,11 +395,13 @@ export def "all-docks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json; charset=utf-8)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
 ]: nothing -> table<dockTimeFake: string, freightTableIds: list<string>, id: string, name: string, pickupStoreInfo: record<additionalInfo: string, address: string, dockId: string, friendlyName: string, isPickupStore: bool, storeId: string>, priority: int, salesChannel: string, salesChannels: list<string>, timeFakeOverhead: string, wmsEndPoint: string> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let content_type = ($content_type | default "application/json; charset=utf-8")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/logistics/pvt/configuration/docks" $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -423,8 +436,8 @@ export def "create-update-dock" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json; charset=utf-8)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
   address: record # e.g. {city: Rio de Janeiro, complement: , coordinates: [[-43.18228090000002, -22.9460398]], country: {acronym: BRA, name: Brazil}, neighborhood: Catete, number: 100, postalCode: 22220070, state: RJ, street: Artur Bernardes Street} — shape: {city: string, complement: string, coordinates: list, country: record, neighborhood: string, number: string, postalCode: string, state: string, street: string}
   dock_time_fake: string
   freight_table_ids: list<string>
@@ -439,6 +452,8 @@ export def "create-update-dock" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let content_type = ($content_type | default "application/json; charset=utf-8")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/logistics/pvt/configuration/docks" $auth.query)
   let req_body = {"address": $address, "dockTimeFake": $dock_time_fake, "freightTableIds": $freight_table_ids, "id": $id, "name": $name, "priority": $priority, "salesChannel": $sales_channel, "salesChannels": $sales_channels, "timeFakeOverhead": $time_fake_overhead, "wmsEndPoint": $wms_end_point} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -477,12 +492,14 @@ export def "dock" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json; charset=utf-8)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($dock_id | is-empty) { error make --unspanned { msg: "path parameter 'dockId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json; charset=utf-8")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({dock_id: (encode-path-segment $dock_id)} | format pattern "/api/logistics/pvt/configuration/docks/{dock_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -517,12 +534,14 @@ export def "dock-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json; charset=utf-8)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
 ]: nothing -> record<dockTimeFake: string, freightTableIds: list<string>, id: string, name: string, pickupStoreInfo: record<additionalInfo: string, address: string, dockId: string, friendlyName: string, isPickupStore: bool, storeId: string>, priority: int, salesChannel: string, salesChannels: list<string>, timeFakeOverhead: string, wmsEndPoint: string> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($dock_id | is-empty) { error make --unspanned { msg: "path parameter 'dockId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json; charset=utf-8")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({dock_id: (encode-path-segment $dock_id)} | format pattern "/api/logistics/pvt/configuration/docks/{dock_id}") $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -557,12 +576,14 @@ export def "activate-dock" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($dock_id | is-empty) { error make --unspanned { msg: "path parameter 'dockId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({dock_id: (encode-path-segment $dock_id)} | format pattern "/api/logistics/pvt/configuration/docks/{dock_id}/activation") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -597,12 +618,14 @@ export def "deactivate-dock" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($dock_id | is-empty) { error make --unspanned { msg: "path parameter 'dockId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({dock_id: (encode-path-segment $dock_id)} | format pattern "/api/logistics/pvt/configuration/docks/{dock_id}/deactivation") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -637,14 +660,16 @@ export def "create-update-freight-values" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json; charset=utf-8)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
   --body: list
 ]: any -> any {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($carrier_id | is-empty) { error make --unspanned { msg: "path parameter 'carrierId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json; charset=utf-8")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({carrier_id: (encode-path-segment $carrier_id)} | format pattern "/api/logistics/pvt/configuration/freights/{carrier_id}/values/update") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -684,13 +709,15 @@ export def "freight-values" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json; charset=utf-8)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
 ]: nothing -> table<absoluteMoneyCost: float, country: string, maxVolume: float, minimumValueInsurance: float, operationType: int, polygon: string, pricePercent: float, pricePercentByWeight: float, restrictedFreights: list<string>, timeCost: string, weightEnd: float, weightStart: float, zipCodeEnd: string, zipCodeStart: string> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($carrier_id | is-empty) { error make --unspanned { msg: "path parameter 'carrierId' must be non-empty" } }
   if ($cep | is-empty) { error make --unspanned { msg: "path parameter 'cep' must be non-empty" } }
+  let content_type = ($content_type | default "application/json; charset=utf-8")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({carrier_id: (encode-path-segment $carrier_id), cep: (encode-path-segment $cep)} | format pattern "/api/logistics/pvt/configuration/freights/{carrier_id}/{cep}/values") $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -724,13 +751,17 @@ export def "paged-polygons" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page: string # e.g. {{page}}
-  --per-page: string # e.g. {{perPage}}
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --page: string # required, e.g. {{page}}
+  --per-page: string # required, e.g. {{perPage}}
+  --content-type: string # Type of the content being sent (required, default: application/json; charset=utf-8)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  if ($page == null) { error make --unspanned { msg: "required query parameter 'page' missing: pass --page" } }
+  if ($per_page == null) { error make --unspanned { msg: "required query parameter 'perPage' missing: pass --per-page" } }
+  let content_type = ($content_type | default "application/json; charset=utf-8")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "perPage" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/logistics/pvt/configuration/geoshape" $qp $auth.query)
   let accept_val = "application/json"
@@ -766,14 +797,16 @@ export def "create-update-polygon" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json; charset=utf-8)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
   geo_shape: record # shape: {coordinates: list}
   name: string
 ]: any -> any {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let content_type = ($content_type | default "application/json; charset=utf-8")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/logistics/pvt/configuration/geoshape" $auth.query)
   let req_body = {"geoShape": $geo_shape, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -812,12 +845,14 @@ export def "delete-polygon" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json; charset=utf-8)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($polygon_name | is-empty) { error make --unspanned { msg: "path parameter 'polygonName' must be non-empty" } }
+  let content_type = ($content_type | default "application/json; charset=utf-8")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({polygon_name: (encode-path-segment $polygon_name)} | format pattern "/api/logistics/pvt/configuration/geoshape/{polygon_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -852,12 +887,14 @@ export def "polygonby-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json; charset=utf-8)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($polygon_name | is-empty) { error make --unspanned { msg: "path parameter 'polygonName' must be non-empty" } }
+  let content_type = ($content_type | default "application/json; charset=utf-8")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({polygon_name: (encode-path-segment $polygon_name)} | format pattern "/api/logistics/pvt/configuration/geoshape/{polygon_name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -891,11 +928,13 @@ export def "all-holidays" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json; charset=utf-8)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let content_type = ($content_type | default "application/json; charset=utf-8")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/logistics/pvt/configuration/holidays" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -930,12 +969,14 @@ export def "holiday" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json; charset=utf-8)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($holiday_id | is-empty) { error make --unspanned { msg: "path parameter 'holidayId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json; charset=utf-8")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({holiday_id: (encode-path-segment $holiday_id)} | format pattern "/api/logistics/pvt/configuration/holidays/{holiday_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -970,12 +1011,14 @@ export def "holiday-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json; charset=utf-8)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($holiday_id | is-empty) { error make --unspanned { msg: "path parameter 'holidayId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json; charset=utf-8")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({holiday_id: (encode-path-segment $holiday_id)} | format pattern "/api/logistics/pvt/configuration/holidays/{holiday_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1010,8 +1053,8 @@ export def "create-update-holiday" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
-  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
+  --content-type: string # Type of the content being sent (required, default: application/json; charset=utf-8)
   name: string
   start_date: string
 ]: any -> any {
@@ -1019,6 +1062,8 @@ export def "create-update-holiday" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($holiday_id | is-empty) { error make --unspanned { msg: "path parameter 'holidayId' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json; charset=utf-8")
   let full_url = (build-url $base ({holiday_id: (encode-path-segment $holiday_id)} | format pattern "/api/logistics/pvt/configuration/holidays/{holiday_id}") $auth.query)
   let req_body = {"name": $name, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1056,11 +1101,13 @@ export def "list-all-pickup-ppoints" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json; charset=utf-8)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
 ]: nothing -> table<accountGroupId: string, accountOwnerId: string, accountOwnerName: string, address: record<city: string, complement: string, country: record, location: record, neighborhood: string, number: string, postalCode: string, state: string, street: string>, businessHours: list<record>, description: string, distance: float, formatted_address: string, id: string, instructions: string, isActive: bool, isThirdPartyPickup: bool, name: string, originalId: string, parentAccountName: string, pickupHolidays: list<string>, seller: string, tagsLabel: list<string>> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let content_type = ($content_type | default "application/json; charset=utf-8")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/logistics/pvt/configuration/pickuppoints" $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1094,14 +1141,19 @@ export def "getpaged" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page: string # e.g. {{pageNumber}}
-  --page-size: string # e.g. {{pageSize}}
-  --keyword: string # e.g. 
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --page: string # required, e.g. {{pageNumber}}
+  --page-size: string # required, e.g. {{pageSize}}
+  --keyword: string # required, e.g. 
+  --content-type: string # Type of the content being sent (required, default: application/json; charset=utf-8)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  if ($page == null) { error make --unspanned { msg: "required query parameter 'page' missing: pass --page" } }
+  if ($page_size == null) { error make --unspanned { msg: "required query parameter 'pageSize' missing: pass --page-size" } }
+  if ($keyword == null) { error make --unspanned { msg: "required query parameter 'keyword' missing: pass --keyword" } }
+  let content_type = ($content_type | default "application/json; charset=utf-8")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "keyword" $keyword "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/logistics/pvt/configuration/pickuppoints/_search" $qp $auth.query)
   let accept_val = "application/json"
@@ -1137,12 +1189,14 @@ export def "delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json; charset=utf-8)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($pickup_point_id | is-empty) { error make --unspanned { msg: "path parameter 'pickupPointId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json; charset=utf-8")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({pickup_point_id: (encode-path-segment $pickup_point_id)} | format pattern "/api/logistics/pvt/configuration/pickuppoints/{pickup_point_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1177,12 +1231,14 @@ export def "get-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json; charset=utf-8)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
 ]: nothing -> record<address: record<city: string, complement: string, country: record<acronym: string, name: string>, location: record<latitude: float, longitude: float>, neighborhood: string, number: string, postalCode: string, state: string, street: string>, businessHours: table<closingTime: string, dayOfWeek: int, openingTime: string>, description: string, formatted_address: string, id: string, instructions: string, isActive: bool, name: string, warehouseId: string> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($pickup_point_id | is-empty) { error make --unspanned { msg: "path parameter 'pickupPointId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json; charset=utf-8")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({pickup_point_id: (encode-path-segment $pickup_point_id)} | format pattern "/api/logistics/pvt/configuration/pickuppoints/{pickup_point_id}") $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1219,8 +1275,8 @@ export def "create-update-pickup-point" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json; charset=utf-8)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
   address: record # e.g. {city: Rio de Janeiro, complement: , country: {acronym: BRA, name: Brazil}, location: {latitude: -22.974477767944336, longitude: -43.18672561645508}, neighborhood: Copacabana, number: , postalCode: 22070002, reference: Grey building, state: RJ, street: Avenida Atl├óntica} — shape: {city: string, complement: string, country: record, location: record, neighborhood: string, number: string, postalCode: string, reference: string, state: string, street: string}
   business_hours: list # item shape: {closingTime: string, dayOfWeek: int, openingTime: string}
   description: string # Pickup point description. (e.g. Pickup your items in our store.)
@@ -1236,9 +1292,12 @@ export def "create-update-pickup-point" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($pickup_point_id | is-empty) { error make --unspanned { msg: "path parameter 'pickupPointId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json; charset=utf-8")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({pickup_point_id: (encode-path-segment $pickup_point_id)} | format pattern "/api/logistics/pvt/configuration/pickuppoints/{pickup_point_id}") $auth.query)
   let req_body = {"address": $address, "businessHours": $business_hours, "description": $description, "formatted_address": $formatted_address, "id": $id, "instructions": $instructions, "isActive": $is_active, "isThirdPartyPickup": $is_third_party_pickup, "name": $name, "tagsLabel": $tags_label} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "isActive") == null) { error make --unspanned { msg: "required body field 'isActive' missing: pass --is-active or pipe a record" } }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
@@ -1273,11 +1332,13 @@ export def "all-warehouses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json; charset=utf-8)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
 ]: nothing -> table<id: string, isActive: bool, name: string, pickupPointIds: list<any>, priority: int, warehouseDocks: list<record>> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let content_type = ($content_type | default "application/json; charset=utf-8")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/logistics/pvt/configuration/warehouses" $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1312,8 +1373,8 @@ export def "create-update-warehouse" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
-  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
+  --content-type: string # Type of the content being sent (required, default: application/json; charset=utf-8)
   id: string
   name: string
   warehouse_docks: list # item shape: {cost: string, costToDisplay: string, dockId: string, name: string, time: string, translateDays: string}
@@ -1321,6 +1382,8 @@ export def "create-update-warehouse" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json; charset=utf-8")
   let full_url = (build-url $base "/api/logistics/pvt/configuration/warehouses" $auth.query)
   let req_body = {"id": $id, "name": $name, "warehouseDocks": $warehouse_docks} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1359,12 +1422,14 @@ export def "remove-warehouse" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json; charset=utf-8)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($warehouse_id | is-empty) { error make --unspanned { msg: "path parameter 'warehouseId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json; charset=utf-8")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({warehouse_id: (encode-path-segment $warehouse_id)} | format pattern "/api/logistics/pvt/configuration/warehouses/{warehouse_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1399,12 +1464,14 @@ export def "warehouse-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json; charset=utf-8)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
 ]: nothing -> record<id: string, isActive: bool, name: string, pickupPointIds: list<any>, priority: int, warehouseDocks: table<cost: float, dockId: string, time: string>> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($warehouse_id | is-empty) { error make --unspanned { msg: "path parameter 'warehouseId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json; charset=utf-8")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({warehouse_id: (encode-path-segment $warehouse_id)} | format pattern "/api/logistics/pvt/configuration/warehouses/{warehouse_id}") $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1439,12 +1506,14 @@ export def "activate-warehouse" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($warehouse_id | is-empty) { error make --unspanned { msg: "path parameter 'warehouseId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({warehouse_id: (encode-path-segment $warehouse_id)} | format pattern "/api/logistics/pvt/configuration/warehouses/{warehouse_id}/activation") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1479,12 +1548,14 @@ export def "deactivate-warehouse" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($warehouse_id | is-empty) { error make --unspanned { msg: "path parameter 'warehouseId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({warehouse_id: (encode-path-segment $warehouse_id)} | format pattern "/api/logistics/pvt/configuration/warehouses/{warehouse_id}/deactivation") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1520,13 +1591,15 @@ export def "getinventorywithdispatchedreservations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json; charset=utf-8)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
 ]: nothing -> table<availableQuantity: int, dispatchedReservationsQuantity: int, isUnlimitedQuantity: bool, quantity: int, skuId: string, totalReservedQuantity: int, warehouseId: string> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   if ($warehouse_id | is-empty) { error make --unspanned { msg: "path parameter 'warehouseId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json; charset=utf-8")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), warehouse_id: (encode-path-segment $warehouse_id)} | format pattern "/api/logistics/pvt/inventory/items/{item_id}/warehouses/{warehouse_id}/dispatched") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1562,13 +1635,15 @@ export def "inventoryperdock" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json; charset=utf-8)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
 ]: nothing -> table<availableQuantity: int, dateOfSupplyUtc: string, deliveryChannel: list<string>, dockId: string, isUnlimited: bool, keepSellingAfterExpiration: bool, reservedQuantity: int, salesChannel: list<string>, skuId: string, timeToRefill: string, totalQuantity: int, transfer: string, warehouseId: string> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($sku_id | is-empty) { error make --unspanned { msg: "path parameter 'skuId' must be non-empty" } }
   if ($dock_id | is-empty) { error make --unspanned { msg: "path parameter 'dockId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json; charset=utf-8")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id), dock_id: (encode-path-segment $dock_id)} | format pattern "/api/logistics/pvt/inventory/items/{sku_id}/docks/{dock_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1605,14 +1680,16 @@ export def "inventoryperdockandwarehouse" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json; charset=utf-8)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
 ]: nothing -> table<availableQuantity: int, dateOfSupplyUtc: string, deliveryChannel: list<string>, dockId: string, isUnlimited: bool, keepSellingAfterExpiration: bool, reservedQuantity: int, salesChannel: list<string>, skuId: string, timeToRefill: string, totalQuantity: int, transfer: string, warehouseId: string> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($sku_id | is-empty) { error make --unspanned { msg: "path parameter 'skuId' must be non-empty" } }
   if ($dock_id | is-empty) { error make --unspanned { msg: "path parameter 'dockId' must be non-empty" } }
   if ($warehouse_id | is-empty) { error make --unspanned { msg: "path parameter 'warehouseId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json; charset=utf-8")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id), dock_id: (encode-path-segment $dock_id), warehouse_id: (encode-path-segment $warehouse_id)} | format pattern "/api/logistics/pvt/inventory/items/{sku_id}/docks/{dock_id}/warehouses/{warehouse_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1648,13 +1725,15 @@ export def "inventoryperwarehouse" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json; charset=utf-8)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
 ]: nothing -> table<availableQuantity: int, dateOfSupplyUtc: string, deliveryChannel: list<string>, dockId: string, isUnlimited: bool, keepSellingAfterExpiration: bool, reservedQuantity: int, salesChannel: list<string>, skuId: string, timeToRefill: string, totalQuantity: int, transfer: string, warehouseId: string> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($sku_id | is-empty) { error make --unspanned { msg: "path parameter 'skuId' must be non-empty" } }
   if ($warehouse_id | is-empty) { error make --unspanned { msg: "path parameter 'warehouseId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json; charset=utf-8")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id), warehouse_id: (encode-path-segment $warehouse_id)} | format pattern "/api/logistics/pvt/inventory/items/{sku_id}/warehouses/{warehouse_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1690,8 +1769,8 @@ export def "get-supply-lots" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (e.g. application/json)
-  --content-type: string # Type of the content being sent. (e.g. application/json; charset=utf-8)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
+  --content-type: string # Type of the content being sent. (required, e.g. application/json; charset=utf-8)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1733,8 +1812,8 @@ export def "save-supply-lot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
-  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
+  --content-type: string # Type of the content being sent (required, default: application/json; charset=utf-8)
   date_of_supply_utc: string
   --keep-selling-after-expiration: oneof<nothing, bool>
   quantity: float
@@ -1745,9 +1824,12 @@ export def "save-supply-lot" [
   if ($sku_id | is-empty) { error make --unspanned { msg: "path parameter 'skuId' must be non-empty" } }
   if ($warehouse_id | is-empty) { error make --unspanned { msg: "path parameter 'warehouseId' must be non-empty" } }
   if ($supply_lot_id | is-empty) { error make --unspanned { msg: "path parameter 'supplyLotId' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json; charset=utf-8")
   let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id), warehouse_id: (encode-path-segment $warehouse_id), supply_lot_id: (encode-path-segment $supply_lot_id)} | format pattern "/api/logistics/pvt/inventory/items/{sku_id}/warehouses/{warehouse_id}/supplyLots/{supply_lot_id}") $auth.query)
   let req_body = {"dateOfSupplyUtc": $date_of_supply_utc, "keepSellingAfterExpiration": $keep_selling_after_expiration, "quantity": $quantity} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "keepSellingAfterExpiration") == null) { error make --unspanned { msg: "required body field 'keepSellingAfterExpiration' missing: pass --keep-selling-after-expiration or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
@@ -1785,14 +1867,16 @@ export def "transfer-supply-lot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
-  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
+  --content-type: string # Type of the content being sent (required, default: application/json; charset=utf-8)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($sku_id | is-empty) { error make --unspanned { msg: "path parameter 'skuId' must be non-empty" } }
   if ($warehouse_id | is-empty) { error make --unspanned { msg: "path parameter 'warehouseId' must be non-empty" } }
   if ($supply_lot_id | is-empty) { error make --unspanned { msg: "path parameter 'supplyLotId' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json; charset=utf-8")
   let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id), warehouse_id: (encode-path-segment $warehouse_id), supply_lot_id: (encode-path-segment $supply_lot_id)} | format pattern "/api/logistics/pvt/inventory/items/{sku_id}/warehouses/{warehouse_id}/supplyLots/{supply_lot_id}/transfer") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1827,8 +1911,8 @@ export def "create-reservation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --content-type: string # Type of the content being sent. (required, default: application/json; charset=utf-8)
   autorization_expiration_ttl: string
   delivery_item_options: list # item shape: {aditionalTimeBlockedDays: string, deliveryWindows: list<string>, dockId: string, dockTime: string, item: record, listPrice: float, location: record, promotionalPrice: float, slaType: string, slaTypeName: string, timeToDockPlusDockTime: string, totalTime: string, transitTime: string, wareHouseId: string}
   --lock-id: string # nullable
@@ -1837,6 +1921,8 @@ export def "create-reservation" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json; charset=utf-8")
   let full_url = (build-url $base "/api/logistics/pvt/inventory/reservations" $auth.query)
   let req_body = {"autorizationExpirationTTL": $autorization_expiration_ttl, "deliveryItemOptions": $delivery_item_options, "lockId": $lock_id, "salesChannel": $sales_channel} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1875,12 +1961,14 @@ export def "reservation-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json; charset=utf-8)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
 ]: nothing -> record<AuthorizedDateUtc: string, CanceledDateUtc: string, ConfirmedDateUtc: string, Errors: list<string>, IsSucess: bool, LastUpdateDateUtc: string, LockId: string, MaximumConfirmationDateUtc: string, PickupPointItemOptions: string, ReservationDateUtc: string, SalesChannel: string, SlaRequest: table<deliveryWindows: string, dockId: string, dockTime: string, freightTableId: string, freightTableName: string, item: record, listPrice: float, location: record, pickupStoreInfo: string, promotionalPrice: float, slaType: string, slaTypeName: string, timeToDockPlusDockTime: string, totalTime: string, transitTime: string, wareHouseId: string, wmsEndPoint: string>, Status: int> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($reservation_id | is-empty) { error make --unspanned { msg: "path parameter 'reservationId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json; charset=utf-8")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({reservation_id: (encode-path-segment $reservation_id)} | format pattern "/api/logistics/pvt/inventory/reservations/{reservation_id}") $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1915,12 +2003,14 @@ export def "acknowledgment-reservation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json; charset=utf-8)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($reservation_id | is-empty) { error make --unspanned { msg: "path parameter 'reservationId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json; charset=utf-8")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({reservation_id: (encode-path-segment $reservation_id)} | format pattern "/api/logistics/pvt/inventory/reservations/{reservation_id}/acknowledge") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1955,12 +2045,14 @@ export def "cancel-reservation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json; charset=utf-8)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($reservation_id | is-empty) { error make --unspanned { msg: "path parameter 'reservationId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json; charset=utf-8")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({reservation_id: (encode-path-segment $reservation_id)} | format pattern "/api/logistics/pvt/inventory/reservations/{reservation_id}/cancel") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1995,12 +2087,14 @@ export def "confirm-reservation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json; charset=utf-8)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($reservation_id | is-empty) { error make --unspanned { msg: "path parameter 'reservationId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json; charset=utf-8")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({reservation_id: (encode-path-segment $reservation_id)} | format pattern "/api/logistics/pvt/inventory/reservations/{reservation_id}/confirm") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2036,13 +2130,15 @@ export def "reservationby-warehouseand-sku" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json; charset=utf-8)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($warehouse_id | is-empty) { error make --unspanned { msg: "path parameter 'warehouseId' must be non-empty" } }
   if ($sku_id | is-empty) { error make --unspanned { msg: "path parameter 'skuId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json; charset=utf-8")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({warehouse_id: (encode-path-segment $warehouse_id), sku_id: (encode-path-segment $sku_id)} | format pattern "/api/logistics/pvt/inventory/reservations/{warehouse_id}/{sku_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2077,12 +2173,14 @@ export def "inventory-by-sku" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json; charset=utf-8)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
 ]: nothing -> record<balance: table<hasUnlimitedQuantity: bool, reservedQuantity: int, totalQuantity: int, warehouseId: string, warehouseName: string>, skuId: string> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($sku_id | is-empty) { error make --unspanned { msg: "path parameter 'skuId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json; charset=utf-8")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id)} | format pattern "/api/logistics/pvt/inventory/skus/{sku_id}") $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2118,8 +2216,8 @@ export def "update-inventory-by-skuand-warehouse" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --content-type: string # Type of the content being sent. (required, default: application/json; charset=utf-8)
   --date-utc-on-balance-system: string # Defines the corresponding moment to the informed warehouse. It is useful due to the liberation of handling order reservations. When requested as `null`, this value will be the date/time of the request. Its format is `DateTimeOffset`, as in `yyyy-mm-dd-Thh:mm:ss`. For example: `2022-03-15T00:52:16`. (e.g. null)
   quantity: int # format: int32
   time_to_refill_deprecated: string
@@ -2130,9 +2228,12 @@ export def "update-inventory-by-skuand-warehouse" [
   let base = ($base_url | default $BASE_URL)
   if ($sku_id | is-empty) { error make --unspanned { msg: "path parameter 'skuId' must be non-empty" } }
   if ($warehouse_id | is-empty) { error make --unspanned { msg: "path parameter 'warehouseId' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json; charset=utf-8")
   let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id), warehouse_id: (encode-path-segment $warehouse_id)} | format pattern "/api/logistics/pvt/inventory/skus/{sku_id}/warehouses/{warehouse_id}") $auth.query)
   let req_body = {"dateUtcOnBalanceSystem": $date_utc_on_balance_system, "quantity": $quantity, "timeToRefill (deprecated)": $time_to_refill_deprecated, "unlimitedQuantity": $unlimited_quantity} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "unlimitedQuantity") == null) { error make --unspanned { msg: "required body field 'unlimitedQuantity' missing: pass --unlimited-quantity or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
@@ -2166,13 +2267,17 @@ export def "get-api-logistics-pvt-shipping-policies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page: string # Desired number of pages to retrieve information from your Shipping Policies. (e.g. page)
-  --per-page: string # Desired number of items per page, to retrieve information from your Shipping Policies. (e.g. perPage)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
-  --content-type: string # Type of the content being sent
+  --page: string # Desired number of pages to retrieve information from your Shipping Policies. (required, e.g. page)
+  --per-page: string # Desired number of items per page, to retrieve information from your Shipping Policies. (required, e.g. perPage)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
+  --content-type: string # Type of the content being sent (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  if ($page == null) { error make --unspanned { msg: "required query parameter 'page' missing: pass --page" } }
+  if ($per_page == null) { error make --unspanned { msg: "required query parameter 'perPage' missing: pass --per-page" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "perPage" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/logistics/pvt/shipping-policies" $qp $auth.query)
   let accept_val = "application/json"
@@ -2214,8 +2319,8 @@ export def "post-api-logistics-pvt-shipping-policies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
-  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
+  --content-type: string # Type of the content being sent (required, default: application/json)
   business_hour_settings: record # Business hour configuration. (e.g. {carrierBusinessHours: [{closingTime: 18:59:59, dayOfWeek: 0, openingTime: 09:00:00}], isOpenOutsideBusinessHours: true}) — shape: {carrierBusinessHours: list, isOpenOutsideBusinessHours: bool}
   --carrier-schedule: list # Schedule sent by the carrier, to configure Shipping policy — item shape: {dayOfWeek?: int, timeLimit?: string}
   cubic_weight_settings: record # Measure that accounts package's volume, and not only weight. (e.g. {minimunAcceptableVolumetricWeight: 5, volumetricFactor: 3}) — shape: {minimunAcceptableVolumetricWeight: float, volumetricFactor: float}
@@ -2235,9 +2340,12 @@ export def "post-api-logistics-pvt-shipping-policies" [
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base "/api/logistics/pvt/shipping-policies" $auth.query)
   let req_body = {"businessHourSettings": $business_hour_settings, "carrierSchedule": $carrier_schedule, "cubicWeightSettings": $cubic_weight_settings, "deliveryScheduleSettings": $delivery_schedule_settings, "id": $id, "isActive": $is_active, "maxDimension": $max_dimension, "maximumValueAceptable": $maximum_value_aceptable, "minimumValueAceptable": $minimum_value_aceptable, "modalSettings": $modal_settings, "name": $name, "numberOfItemsPerShipment": $number_of_items_per_shipment, "pickupPointsSettings": $pickup_points_settings, "shippingMethod": $shipping_method, "weekendAndHolidays": $weekend_and_holidays} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "isActive") == null) { error make --unspanned { msg: "required body field 'isActive' missing: pass --is-active or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
@@ -2272,12 +2380,14 @@ export def "delete-api-logistics-pvt-shipping-policies-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
-  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
+  --content-type: string # Type of the content being sent (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/logistics/pvt/shipping-policies/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2311,12 +2421,14 @@ export def "get-api-logistics-pvt-shipping-policies-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
-  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
+  --content-type: string # Type of the content being sent (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/logistics/pvt/shipping-policies/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2352,8 +2464,8 @@ export def "put-api-logistics-pvt-shipping-policies-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
-  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
+  --content-type: string # Type of the content being sent (required, default: application/json)
   --delivery-on-weekends: oneof<nothing, bool> # If the shipping policy (carrier) delivers on weekends (e.g. false)
   --delivery-schedule-settings: record # Settings for the Scheduled Delivery feature. — shape: {dayOfWeekForDelivery: list, maxRangeDelivery: float, useDeliverySchedule: bool}
   --is-active: oneof<nothing, bool> # If the shipping policy is active or not. (e.g. true)
@@ -2365,9 +2477,13 @@ export def "put-api-logistics-pvt-shipping-policies-id" [
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/json")
+  let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/logistics/pvt/shipping-policies/{id}") $auth.query)
   let req_body = {"deliveryOnWeekends": $delivery_on_weekends, "deliveryScheduleSettings": $delivery_schedule_settings, "isActive": $is_active, "maxDimension": $max_dimension, "name": $name, "shippingMethod": $shipping_method} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "deliveryOnWeekends") == null) { error make --unspanned { msg: "required body field 'deliveryOnWeekends' missing: pass --delivery-on-weekends or pipe a record" } }
+  if (($req_body | get -o "isActive") == null) { error make --unspanned { msg: "required body field 'isActive' missing: pass --is-active or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
@@ -2402,13 +2518,15 @@ export def "calculate-sla" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent.
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent. (required, default: application/json; charset=utf-8)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
   --body: list
 ]: any -> list<table<aditionalTimeBlockedDays: string, availabilityQuantity: int, carrierSchedule: list, coordinates: string, deliveryOnWeekends: bool, deliveryWindows: list, dockId: string, dockTime: string, freightTableId: string, freightTableName: string, itemId: string, listPrice: float, location: record, pickupStoreInfo: string, quantity: int, restrictedFreight: string, salesChannel: string, slaType: string, slaTypeName: string, timeToDockPlusDockTime: string, totalTime: string, transitTime: string, wareHouseId: string>> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LOGISTICS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LOGISTICS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let content_type = ($content_type | default "application/json; charset=utf-8")
+  let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/logistics/pvt/shipping/calculate" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -175,13 +175,14 @@ export def "application-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # The maximum number of items to return in the response. A maximum of 1000 applications can be returned. (format: int32, default: 1000)
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
 ]: nothing -> record<odata_nextLink: string, value: table<displayName: string, id: string, versions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/applications" $qp $auth.query)
   let accept_val = "application/json"
@@ -218,14 +219,15 @@ export def "application-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
 ]: nothing -> record<displayName: string, id: string, versions: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/applications/{application_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -264,13 +266,14 @@ export def "certificate-list" [
   --select: string # An OData $select clause.
   --maxresults: int # The maximum number of items to return in the response. A maximum of 1000 Certificates can be returned. (format: int32, default: 1000)
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
 ]: nothing -> record<odata_nextLink: string, value: table<deleteCertificateError: record, previousState: string, previousStateTransitionTime: string, publicData: string, state: string, stateTransitionTime: string, thumbprint: string, thumbprintAlgorithm: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/certificates" $qp $auth.query)
   let accept_val = "application/json"
@@ -306,19 +309,20 @@ export def "certificate-add" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --certificate-format: string@certificate-format-completer
   data: string
   --password: string # This is required if the Certificate format is pfx. It should be omitted if the Certificate format is cer.
   thumbprint: string
   thumbprint_algorithm: string
-]: any -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/certificates" $qp $auth.query)
   let req_body = {"certificateFormat": $certificate_format, "data": $data, "password": $password, "thumbprint": $thumbprint, "thumbprintAlgorithm": $thumbprint_algorithm} | compact
@@ -358,15 +362,16 @@ export def "certificate-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
-]: nothing -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($thumbprint_algorithm | is-empty) { error make --unspanned { msg: "path parameter 'thumbprintAlgorithm' must be non-empty" } }
   if ($thumbprint | is-empty) { error make --unspanned { msg: "path parameter 'thumbprint' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({thumbprint_algorithm: (encode-path-segment $thumbprint_algorithm), thumbprint: (encode-path-segment $thumbprint)} | format pattern "/certificates(thumbprintAlgorithm={thumbprint_algorithm},thumbprint={thumbprint})") $qp $auth.query)
   let accept_val = "application/json"
@@ -405,15 +410,16 @@ export def "certificate-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # An OData $select clause.
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
 ]: nothing -> record<deleteCertificateError: record<code: string, message: string, values: list<record>>, previousState: string, previousStateTransitionTime: string, publicData: string, state: string, stateTransitionTime: string, thumbprint: string, thumbprintAlgorithm: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($thumbprint_algorithm | is-empty) { error make --unspanned { msg: "path parameter 'thumbprintAlgorithm' must be non-empty" } }
   if ($thumbprint | is-empty) { error make --unspanned { msg: "path parameter 'thumbprint' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$select" $select "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({thumbprint_algorithm: (encode-path-segment $thumbprint_algorithm), thumbprint: (encode-path-segment $thumbprint)} | format pattern "/certificates(thumbprintAlgorithm={thumbprint_algorithm},thumbprint={thumbprint})") $qp $auth.query)
   let accept_val = "application/json"
@@ -451,15 +457,16 @@ export def "certificate-cancel-deletion" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
-]: nothing -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($thumbprint_algorithm | is-empty) { error make --unspanned { msg: "path parameter 'thumbprintAlgorithm' must be non-empty" } }
   if ($thumbprint | is-empty) { error make --unspanned { msg: "path parameter 'thumbprint' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({thumbprint_algorithm: (encode-path-segment $thumbprint_algorithm), thumbprint: (encode-path-segment $thumbprint)} | format pattern "/certificates(thumbprintAlgorithm={thumbprint_algorithm},thumbprint={thumbprint})/canceldelete") $qp $auth.query)
   let accept_val = "application/json"
@@ -499,13 +506,14 @@ export def "job-list" [
   --expand: string # An OData $expand clause.
   --maxresults: int # The maximum number of items to return in the response. A maximum of 1000 Jobs can be returned. (format: int32, default: 1000)
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
 ]: nothing -> record<odata_nextLink: string, value: table<commonEnvironmentSettings: list, constraints: record, creationTime: string, displayName: string, eTag: string, executionInfo: record, id: string, jobManagerTask: record, jobPreparationTask: record, jobReleaseTask: record, lastModified: string, metadata: list, networkConfiguration: record, onAllTasksComplete: string, onTaskFailure: string, poolInfo: record, previousState: string, previousStateTransitionTime: string, priority: int, state: string, stateTransitionTime: string, stats: record, url: string, usesTaskDependencies: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/jobs" $qp $auth.query)
   let accept_val = "application/json"
@@ -549,10 +557,10 @@ export def "job-add" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --common-environment-settings: list # Individual Tasks can override an environment setting specified here by specifying the same setting name with a different value. — item shape: {name: string, value?: string}
   --constraints: any # shape: {maxTaskRetryCount?: int, maxWallClockTime?: string}
   --display-name: string # The display name need not be unique and can contain any Unicode characters up to a maximum length of 1024.
@@ -567,10 +575,11 @@ export def "job-add" [
   pool_info: any # shape: {autoPoolSpecification?: any, poolId?: string}
   --priority: int # Priority values can range from -1000 to 1000, with -1000 being the lowest priority and 1000 being the highest priority. The default value is 0. (format: int32)
   --uses-task-dependencies: oneof<nothing, bool>
-]: any -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/jobs" $qp $auth.query)
   let req_body = {"commonEnvironmentSettings": $common_environment_settings, "constraints": $constraints, "displayName": $display_name, "id": $id, "jobManagerTask": $job_manager_task, "jobPreparationTask": $job_preparation_task, "jobReleaseTask": $job_release_task, "metadata": $metadata, "networkConfiguration": $network_configuration, "onAllTasksComplete": $on_all_tasks_complete, "onTaskFailure": $on_task_failure, "poolInfo": $pool_info, "priority": $priority, "usesTaskDependencies": $uses_task_dependencies} | compact
@@ -609,18 +618,19 @@ export def "job-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --if-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --if-none-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
-  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time.
-  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time.
-]: nothing -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
+  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -659,18 +669,19 @@ export def "job-get" [
   --select: string # An OData $select clause.
   --expand: string # An OData $expand clause.
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --if-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --if-none-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
-  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time.
-  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time.
+  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
+  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
 ]: nothing -> record<commonEnvironmentSettings: table<name: string, value: string>, constraints: record<maxTaskRetryCount: int, maxWallClockTime: string>, creationTime: string, displayName: string, eTag: string, executionInfo: record<endTime: string, poolId: string, schedulingError: record<category: string, code: string, details: list, message: string>, startTime: string, terminateReason: string>, id: string, jobManagerTask: record<allowLowPriorityNode: bool, applicationPackageReferences: list<record>, authenticationTokenSettings: record<access: list>, commandLine: string, constraints: record<maxTaskRetryCount: int, maxWallClockTime: string, retentionTime: string>, containerSettings: record<containerRunOptions: string, imageName: string, registry: record, workingDirectory: string>, displayName: string, environmentSettings: list<record>, id: string, killJobOnCompletion: bool, outputFiles: list<record>, resourceFiles: list<record>, runExclusive: bool, userIdentity: record<autoUser: record, username: string>>, jobPreparationTask: record<commandLine: string, constraints: record<maxTaskRetryCount: int, maxWallClockTime: string, retentionTime: string>, containerSettings: record<containerRunOptions: string, imageName: string, registry: record, workingDirectory: string>, environmentSettings: list<record>, id: string, rerunOnNodeRebootAfterSuccess: bool, resourceFiles: list<record>, userIdentity: record<autoUser: record, username: string>, waitForSuccess: bool>, jobReleaseTask: record<commandLine: string, containerSettings: record<containerRunOptions: string, imageName: string, registry: record, workingDirectory: string>, environmentSettings: list<record>, id: string, maxWallClockTime: string, resourceFiles: list<record>, retentionTime: string, userIdentity: record<autoUser: record, username: string>>, lastModified: string, metadata: table<name: string, value: string>, networkConfiguration: record<subnetId: string>, onAllTasksComplete: string, onTaskFailure: string, poolInfo: record<autoPoolSpecification: record<autoPoolIdPrefix: string, keepAlive: bool, pool: record, poolLifetimeOption: string>, poolId: string>, previousState: string, previousStateTransitionTime: string, priority: int, state: string, stateTransitionTime: string, stats: record<kernelCPUTime: string, lastUpdateTime: string, numFailedTasks: int, numSucceededTasks: int, numTaskRetries: int, readIOGiB: float, readIOps: int, startTime: string, url: string, userCPUTime: string, waitTime: string, wallClockTime: string, writeIOGiB: float, writeIOps: int>, url: string, usesTaskDependencies: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$select" $select "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -710,24 +721,25 @@ export def "job-patch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --if-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --if-none-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
-  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time.
-  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time.
+  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
+  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
   --constraints: any # shape: {maxTaskRetryCount?: int, maxWallClockTime?: string}
   --metadata: list # If omitted, the existing Job metadata is left unchanged. — item shape: {name: string, value: string}
   --on-all-tasks-complete: string@on-all-tasks-complete-completer
   --pool-info: any # shape: {autoPoolSpecification?: any, poolId?: string}
   --priority: int # Priority values can range from -1000 to 1000, with -1000 being the lowest priority and 1000 being the highest priority. If omitted, the priority of the Job is left unchanged. (format: int32)
-]: any -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}") $qp $auth.query)
   let req_body = {"constraints": $constraints, "metadata": $metadata, "onAllTasksComplete": $on_all_tasks_complete, "poolInfo": $pool_info, "priority": $priority} | compact
@@ -769,24 +781,25 @@ export def "job-update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --if-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --if-none-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
-  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time.
-  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time.
+  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
+  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
   --constraints: any # shape: {maxTaskRetryCount?: int, maxWallClockTime?: string}
   --metadata: list # If omitted, it takes the default value of an empty list; in effect, any existing metadata is deleted. — item shape: {name: string, value: string}
   --on-all-tasks-complete: string@on-all-tasks-complete-completer
   pool_info: any # shape: {autoPoolSpecification?: any, poolId?: string}
   --priority: int # Priority values can range from -1000 to 1000, with -1000 being the lowest priority and 1000 being the highest priority. If omitted, it is set to the default value 0. (format: int32)
-]: any -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}") $qp $auth.query)
   let req_body = {"constraints": $constraints, "metadata": $metadata, "onAllTasksComplete": $on_all_tasks_complete, "poolInfo": $pool_info, "priority": $priority} | compact
@@ -826,16 +839,17 @@ export def "task-add-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   value: list # The total serialized size of this collection must be less than 1MB. If it is greater than 1MB (for example if each Task has 100's of resource files or environment variables), the request will fail with code 'RequestBodyTooLarge' and should be retried again with fewer Tasks. — item shape: {affinityInfo?: any, applicationPackageReferences?: list, authenticationTokenSettings?: any, commandLine: string, constraints?: any, containerSettings?: any, dependsOn?: any, displayName?: string, environmentSettings?: list, exitConditions?: any, id: string, multiInstanceSettings?: any, outputFiles?: list, resourceFiles?: list, userIdentity?: any}
 ]: any -> record<value: table<eTag: string, error: record, lastModified: string, location: string, status: string, taskId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}/addtaskcollection") $qp $auth.query)
   let req_body = {"value": $value} | compact
@@ -874,20 +888,21 @@ export def "job-disable" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --if-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --if-none-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
-  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time.
-  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time.
+  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
+  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
   disable_tasks: string@disable-tasks-completer
-]: any -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}/disable") $qp $auth.query)
   let req_body = {"disableTasks": $disable_tasks} | compact
@@ -926,18 +941,19 @@ export def "job-enable" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --if-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --if-none-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
-  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time.
-  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time.
-]: nothing -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
+  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}/enable") $qp $auth.query)
   let accept_val = "application/json"
@@ -977,14 +993,15 @@ export def "job-list-preparation-and-release-task-status" [
   --select: string # An OData $select clause.
   --maxresults: int # The maximum number of items to return in the response. A maximum of 1000 Tasks can be returned. (format: int32, default: 1000)
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
 ]: nothing -> record<odata_nextLink: string, value: table<jobPreparationTaskExecutionInfo: record, jobReleaseTaskExecutionInfo: record, nodeId: string, nodeUrl: string, poolId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}/jobpreparationandreleasetaskstatus") $qp $auth.query)
   let accept_val = "application/json"
@@ -1021,14 +1038,15 @@ export def "job-get-task-counts" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
 ]: nothing -> record<active: int, completed: int, failed: int, running: int, succeeded: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}/taskcounts") $qp $auth.query)
   let accept_val = "application/json"
@@ -1069,14 +1087,15 @@ export def "task-list" [
   --expand: string # An OData $expand clause.
   --maxresults: int # The maximum number of items to return in the response. A maximum of 1000 Tasks can be returned. (format: int32, default: 1000)
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
 ]: nothing -> record<odata_nextLink: string, value: table<affinityInfo: record, applicationPackageReferences: list, authenticationTokenSettings: record, commandLine: string, constraints: record, containerSettings: record, creationTime: string, dependsOn: record, displayName: string, eTag: string, environmentSettings: list, executionInfo: record, exitConditions: record, id: string, lastModified: string, multiInstanceSettings: record, nodeInfo: record, outputFiles: list, previousState: string, previousStateTransitionTime: string, resourceFiles: list, state: string, stateTransitionTime: string, stats: record, url: string, userIdentity: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}/tasks") $qp $auth.query)
   let accept_val = "application/json"
@@ -1125,10 +1144,10 @@ export def "task-add" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --affinity-info: any # shape: {affinityId: string}
   --application-package-references: list # Application packages are downloaded and deployed to a shared directory, not the Task working directory. Therefore, if a referenced package is already on the Node, and is up to date, then it is not re-downloaded; the existing copy on the Compute Node is used. If a referenced Package cannot be installed, for example because the package has been deleted or because download failed, the Task fails. — item shape: {applicationId: string, version?: string}
   --authentication-token-settings: any # shape: {access?: list<string>}
@@ -1144,11 +1163,12 @@ export def "task-add" [
   --output-files: list # For multi-instance Tasks, the files will only be uploaded from the Compute Node on which the primary Task is executed. — item shape: {destination: any, filePattern: string, uploadOptions: any}
   --resource-files: list # For multi-instance Tasks, the resource files will only be downloaded to the Compute Node on which the primary Task is executed. There is a maximum size for the list of resource files. When the max size is exceeded, the request will fail and the response error code will be RequestEntityTooLarge. If this occurs, the collection of ResourceFiles must be reduced in size. This can be achieved using .zip files, Application Packages, or Docker Containers. — item shape: {autoStorageContainerName?: string, blobPrefix?: string, fileMode?: string, filePath?: string, httpUrl?: string, storageContainerUrl?: string}
   --user-identity: any # Specify either the userName or autoUser property, but not both. — shape: {autoUser?: any, username?: string}
-]: any -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}/tasks") $qp $auth.query)
   let req_body = {"affinityInfo": $affinity_info, "applicationPackageReferences": $application_package_references, "authenticationTokenSettings": $authentication_token_settings, "commandLine": $command_line, "constraints": $constraints, "containerSettings": $container_settings, "dependsOn": $depends_on, "displayName": $display_name, "environmentSettings": $environment_settings, "exitConditions": $exit_conditions, "id": $id, "multiInstanceSettings": $multi_instance_settings, "outputFiles": $output_files, "resourceFiles": $resource_files, "userIdentity": $user_identity} | compact
@@ -1188,19 +1208,20 @@ export def "task-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --if-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --if-none-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
-  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time.
-  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time.
-]: nothing -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
+  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id)} | format pattern "/jobs/{job_id}/tasks/{task_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1240,19 +1261,20 @@ export def "task-get" [
   --select: string # An OData $select clause.
   --expand: string # An OData $expand clause.
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --if-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --if-none-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
-  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time.
-  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time.
+  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
+  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
 ]: nothing -> record<affinityInfo: record<affinityId: string>, applicationPackageReferences: table<applicationId: string, version: string>, authenticationTokenSettings: record<access: list<string>>, commandLine: string, constraints: record<maxTaskRetryCount: int, maxWallClockTime: string, retentionTime: string>, containerSettings: record<containerRunOptions: string, imageName: string, registry: record<password: string, registryServer: string, username: string>, workingDirectory: string>, creationTime: string, dependsOn: record<taskIdRanges: list<record>, taskIds: list<string>>, displayName: string, eTag: string, environmentSettings: table<name: string, value: string>, executionInfo: record<containerInfo: record<containerId: string, error: string, state: string>, endTime: string, exitCode: int, failureInfo: record<category: string, code: string, details: list, message: string>, lastRequeueTime: string, lastRetryTime: string, requeueCount: int, result: string, retryCount: int, startTime: string>, exitConditions: record<default: record<dependencyAction: string, jobAction: string>, exitCodeRanges: list<record>, exitCodes: list<record>, fileUploadError: record<dependencyAction: string, jobAction: string>, preProcessingError: record<dependencyAction: string, jobAction: string>>, id: string, lastModified: string, multiInstanceSettings: record<commonResourceFiles: list<record>, coordinationCommandLine: string, numberOfInstances: int>, nodeInfo: record<affinityId: string, nodeId: string, nodeUrl: string, poolId: string, taskRootDirectory: string, taskRootDirectoryUrl: string>, outputFiles: table<destination: record, filePattern: string, uploadOptions: record>, previousState: string, previousStateTransitionTime: string, resourceFiles: table<autoStorageContainerName: string, blobPrefix: string, fileMode: string, filePath: string, httpUrl: string, storageContainerUrl: string>, state: string, stateTransitionTime: string, stats: record<kernelCPUTime: string, lastUpdateTime: string, readIOGiB: float, readIOps: int, startTime: string, url: string, userCPUTime: string, waitTime: string, wallClockTime: string, writeIOGiB: float, writeIOps: int>, url: string, userIdentity: record<autoUser: record<elevationLevel: string, scope: string>, username: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$select" $select "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id)} | format pattern "/jobs/{job_id}/tasks/{task_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1291,21 +1313,22 @@ export def "task-update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --if-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --if-none-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
-  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time.
-  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time.
+  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
+  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
   --constraints: any # shape: {maxTaskRetryCount?: int, maxWallClockTime?: string, retentionTime?: string}
-]: any -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id)} | format pattern "/jobs/{job_id}/tasks/{task_id}") $qp $auth.query)
   let req_body = {"constraints": $constraints} | compact
@@ -1348,15 +1371,16 @@ export def "file-list-from-task" [
   --recursive: oneof<nothing, bool> # Whether to list children of the Task directory. This parameter can be used in combination with the filter parameter to list specific type of files.
   --maxresults: int # The maximum number of items to return in the response. A maximum of 1000 files can be returned. (format: int32, default: 1000)
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
 ]: nothing -> record<odata_nextLink: string, value: table<isDirectory: bool, name: string, properties: record, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "recursive" $recursive "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id)} | format pattern "/jobs/{job_id}/tasks/{task_id}/files") $qp $auth.query)
   let accept_val = "application/json"
@@ -1396,16 +1420,17 @@ export def "file-delete-from-task" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --recursive: oneof<nothing, bool> # Whether to delete children of a directory. If the filePath parameter represents a directory instead of a file, you can set recursive to true to delete the directory and all of the files and subdirectories in it. If recursive is false then the directory must be empty or deletion will fail.
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
-]: nothing -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
   if ($file_path | is-empty) { error make --unspanned { msg: "path parameter 'filePath' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "recursive" $recursive "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id), file_path: (encode-path-segment $file_path)} | format pattern "/jobs/{job_id}/tasks/{task_id}/files/{file_path}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1445,19 +1470,20 @@ export def "file-get-from-task" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --ocp-range: string # The byte range to be retrieved. The default is to retrieve the entire file. The format is bytes=startRange-endRange.
-  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time.
-  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time.
+  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
+  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
   if ($file_path | is-empty) { error make --unspanned { msg: "path parameter 'filePath' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id), file_path: (encode-path-segment $file_path)} | format pattern "/jobs/{job_id}/tasks/{task_id}/files/{file_path}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1496,18 +1522,19 @@ export def "file-get-properties-from-task" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
-  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time.
-  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
+  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
+  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
   if ($file_path | is-empty) { error make --unspanned { msg: "path parameter 'filePath' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id), file_path: (encode-path-segment $file_path)} | format pattern "/jobs/{job_id}/tasks/{task_id}/files/{file_path}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1545,19 +1572,20 @@ export def "task-reactivate" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --if-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --if-none-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
-  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time.
-  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time.
-]: nothing -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
+  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id)} | format pattern "/jobs/{job_id}/tasks/{task_id}/reactivate") $qp $auth.query)
   let accept_val = "application/json"
@@ -1596,15 +1624,16 @@ export def "task-list-subtasks" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # An OData $select clause.
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
 ]: nothing -> record<value: table<containerInfo: record, endTime: string, exitCode: int, failureInfo: record, id: int, nodeInfo: record, previousState: string, previousStateTransitionTime: string, result: string, startTime: string, state: string, stateTransitionTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$select" $select "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id)} | format pattern "/jobs/{job_id}/tasks/{task_id}/subtasksinfo") $qp $auth.query)
   let accept_val = "application/json"
@@ -1642,19 +1671,20 @@ export def "task-terminate" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --if-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --if-none-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
-  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time.
-  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time.
-]: nothing -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
+  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), task_id: (encode-path-segment $task_id)} | format pattern "/jobs/{job_id}/tasks/{task_id}/terminate") $qp $auth.query)
   let accept_val = "application/json"
@@ -1691,20 +1721,21 @@ export def "job-terminate" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --if-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --if-none-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
-  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time.
-  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time.
+  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
+  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
   --terminate-reason: string
-]: any -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}/terminate") $qp $auth.query)
   let req_body = {"terminateReason": $terminate_reason} | compact
@@ -1746,13 +1777,14 @@ export def "job-schedule-list" [
   --expand: string # An OData $expand clause.
   --maxresults: int # The maximum number of items to return in the response. A maximum of 1000 Job Schedules can be returned. (format: int32, default: 1000)
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
 ]: nothing -> record<odata_nextLink: string, value: table<creationTime: string, displayName: string, eTag: string, executionInfo: record, id: string, jobSpecification: record, lastModified: string, metadata: list, previousState: string, previousStateTransitionTime: string, schedule: record, state: string, stateTransitionTime: string, stats: record, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/jobschedules" $qp $auth.query)
   let accept_val = "application/json"
@@ -1791,19 +1823,20 @@ export def "job-schedule-add" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --display-name: string # The display name need not be unique and can contain any Unicode characters up to a maximum length of 1024.
   id: string # The ID can contain any combination of alphanumeric characters including hyphens and underscores, and cannot contain more than 64 characters. The ID is case-preserving and case-insensitive (that is, you may not have two IDs within an Account that differ only by case).
   job_specification: any # shape: {commonEnvironmentSettings?: list, constraints?: any, displayName?: string, jobManagerTask?: any, jobPreparationTask?: any, jobReleaseTask?: any, metadata?: list, networkConfiguration?: any, onAllTasksComplete?: "noaction"|"terminatejob", onTaskFailure?: "noaction"|"performexitoptionsjobaction", poolInfo: any, priority?: int, usesTaskDependencies?: bool}
   --metadata: list # The Batch service does not assign any meaning to metadata; it is solely for the use of user code. — item shape: {name: string, value: string}
   schedule: any # shape: {doNotRunAfter?: string, doNotRunUntil?: string, recurrenceInterval?: string, startWindow?: string}
-]: any -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/jobschedules" $qp $auth.query)
   let req_body = {"displayName": $display_name, "id": $id, "jobSpecification": $job_specification, "metadata": $metadata, "schedule": $schedule} | compact
@@ -1842,18 +1875,19 @@ export def "job-schedule-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --if-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --if-none-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
-  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time.
-  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time.
-]: nothing -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
+  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'jobScheduleId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_schedule_id: (encode-path-segment $job_schedule_id)} | format pattern "/jobschedules/{job_schedule_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1892,18 +1926,19 @@ export def "job-schedule-get" [
   --select: string # An OData $select clause.
   --expand: string # An OData $expand clause.
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --if-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --if-none-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
-  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time.
-  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time.
+  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
+  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
 ]: nothing -> record<creationTime: string, displayName: string, eTag: string, executionInfo: record<endTime: string, nextRunTime: string, recentJob: record<id: string, url: string>>, id: string, jobSpecification: record<commonEnvironmentSettings: list<record>, constraints: record<maxTaskRetryCount: int, maxWallClockTime: string>, displayName: string, jobManagerTask: record<allowLowPriorityNode: bool, applicationPackageReferences: list, authenticationTokenSettings: record, commandLine: string, constraints: record, containerSettings: record, displayName: string, environmentSettings: list, id: string, killJobOnCompletion: bool, outputFiles: list, resourceFiles: list, runExclusive: bool, userIdentity: record>, jobPreparationTask: record<commandLine: string, constraints: record, containerSettings: record, environmentSettings: list, id: string, rerunOnNodeRebootAfterSuccess: bool, resourceFiles: list, userIdentity: record, waitForSuccess: bool>, jobReleaseTask: record<commandLine: string, containerSettings: record, environmentSettings: list, id: string, maxWallClockTime: string, resourceFiles: list, retentionTime: string, userIdentity: record>, metadata: list<record>, networkConfiguration: record<subnetId: string>, onAllTasksComplete: string, onTaskFailure: string, poolInfo: record<autoPoolSpecification: record, poolId: string>, priority: int, usesTaskDependencies: bool>, lastModified: string, metadata: table<name: string, value: string>, previousState: string, previousStateTransitionTime: string, schedule: record<doNotRunAfter: string, doNotRunUntil: string, recurrenceInterval: string, startWindow: string>, state: string, stateTransitionTime: string, stats: record<kernelCPUTime: string, lastUpdateTime: string, numFailedTasks: int, numSucceededTasks: int, numTaskRetries: int, readIOGiB: float, readIOps: int, startTime: string, url: string, userCPUTime: string, waitTime: string, wallClockTime: string, writeIOGiB: float, writeIOps: int>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'jobScheduleId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$select" $select "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_schedule_id: (encode-path-segment $job_schedule_id)} | format pattern "/jobschedules/{job_schedule_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1940,18 +1975,19 @@ export def "job-schedule-exists" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --if-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --if-none-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
-  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time.
-  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time.
+  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
+  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'jobScheduleId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_schedule_id: (encode-path-segment $job_schedule_id)} | format pattern "/jobschedules/{job_schedule_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1991,22 +2027,23 @@ export def "job-schedule-patch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --if-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --if-none-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
-  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time.
-  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time.
+  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
+  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
   --job-specification: any # shape: {commonEnvironmentSettings?: list, constraints?: any, displayName?: string, jobManagerTask?: any, jobPreparationTask?: any, jobReleaseTask?: any, metadata?: list, networkConfiguration?: any, onAllTasksComplete?: "noaction"|"terminatejob", onTaskFailure?: "noaction"|"performexitoptionsjobaction", poolInfo: any, priority?: int, usesTaskDependencies?: bool}
   --metadata: list # If you do not specify this element, existing metadata is left unchanged. — item shape: {name: string, value: string}
   --schedule: any # shape: {doNotRunAfter?: string, doNotRunUntil?: string, recurrenceInterval?: string, startWindow?: string}
-]: any -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'jobScheduleId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_schedule_id: (encode-path-segment $job_schedule_id)} | format pattern "/jobschedules/{job_schedule_id}") $qp $auth.query)
   let req_body = {"jobSpecification": $job_specification, "metadata": $metadata, "schedule": $schedule} | compact
@@ -2048,22 +2085,23 @@ export def "job-schedule-update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --if-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --if-none-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
-  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time.
-  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time.
+  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
+  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
   job_specification: any # shape: {commonEnvironmentSettings?: list, constraints?: any, displayName?: string, jobManagerTask?: any, jobPreparationTask?: any, jobReleaseTask?: any, metadata?: list, networkConfiguration?: any, onAllTasksComplete?: "noaction"|"terminatejob", onTaskFailure?: "noaction"|"performexitoptionsjobaction", poolInfo: any, priority?: int, usesTaskDependencies?: bool}
   --metadata: list # If you do not specify this element, it takes the default value of an empty list; in effect, any existing metadata is deleted. — item shape: {name: string, value: string}
   schedule: any # shape: {doNotRunAfter?: string, doNotRunUntil?: string, recurrenceInterval?: string, startWindow?: string}
-]: any -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'jobScheduleId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_schedule_id: (encode-path-segment $job_schedule_id)} | format pattern "/jobschedules/{job_schedule_id}") $qp $auth.query)
   let req_body = {"jobSpecification": $job_specification, "metadata": $metadata, "schedule": $schedule} | compact
@@ -2102,18 +2140,19 @@ export def "job-schedule-disable" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --if-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --if-none-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
-  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time.
-  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time.
-]: nothing -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
+  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'jobScheduleId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_schedule_id: (encode-path-segment $job_schedule_id)} | format pattern "/jobschedules/{job_schedule_id}/disable") $qp $auth.query)
   let accept_val = "application/json"
@@ -2150,18 +2189,19 @@ export def "job-schedule-enable" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --if-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --if-none-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
-  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time.
-  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time.
-]: nothing -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
+  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'jobScheduleId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_schedule_id: (encode-path-segment $job_schedule_id)} | format pattern "/jobschedules/{job_schedule_id}/enable") $qp $auth.query)
   let accept_val = "application/json"
@@ -2202,14 +2242,15 @@ export def "job-list-from-job-schedule" [
   --expand: string # An OData $expand clause.
   --maxresults: int # The maximum number of items to return in the response. A maximum of 1000 Jobs can be returned. (format: int32, default: 1000)
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
 ]: nothing -> record<odata_nextLink: string, value: table<commonEnvironmentSettings: list, constraints: record, creationTime: string, displayName: string, eTag: string, executionInfo: record, id: string, jobManagerTask: record, jobPreparationTask: record, jobReleaseTask: record, lastModified: string, metadata: list, networkConfiguration: record, onAllTasksComplete: string, onTaskFailure: string, poolInfo: record, previousState: string, previousStateTransitionTime: string, priority: int, state: string, stateTransitionTime: string, stats: record, url: string, usesTaskDependencies: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'jobScheduleId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_schedule_id: (encode-path-segment $job_schedule_id)} | format pattern "/jobschedules/{job_schedule_id}/jobs") $qp $auth.query)
   let accept_val = "application/json"
@@ -2246,18 +2287,19 @@ export def "job-schedule-terminate" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --if-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --if-none-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
-  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time.
-  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time.
-]: nothing -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
+  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'jobScheduleId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_schedule_id: (encode-path-segment $job_schedule_id)} | format pattern "/jobschedules/{job_schedule_id}/terminate") $qp $auth.query)
   let accept_val = "application/json"
@@ -2293,13 +2335,14 @@ export def "job-get-all-lifetime-statistics" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
 ]: nothing -> record<kernelCPUTime: string, lastUpdateTime: string, numFailedTasks: int, numSucceededTasks: int, numTaskRetries: int, readIOGiB: float, readIOps: int, startTime: string, url: string, userCPUTime: string, waitTime: string, wallClockTime: string, writeIOGiB: float, writeIOps: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/lifetimejobstats" $qp $auth.query)
   let accept_val = "application/json"
@@ -2335,13 +2378,14 @@ export def "pool-get-all-lifetime-statistics" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
 ]: nothing -> record<lastUpdateTime: string, resourceStats: record<avgCPUPercentage: float, avgDiskGiB: float, avgMemoryGiB: float, diskReadGiB: float, diskReadIOps: int, diskWriteGiB: float, diskWriteIOps: int, lastUpdateTime: string, networkReadGiB: float, networkWriteGiB: float, peakDiskGiB: float, peakMemoryGiB: float, startTime: string>, startTime: string, url: string, usageStats: record<dedicatedCoreTime: string, lastUpdateTime: string, startTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/lifetimepoolstats" $qp $auth.query)
   let accept_val = "application/json"
@@ -2379,13 +2423,14 @@ export def "account-list-pool-node-counts" [
   --filter: string # An OData $filter clause. For more information on constructing this filter, see https://docs.microsoft.com/en-us/rest/api/batchservice/odata-filters-in-batch.
   --maxresults: int # The maximum number of items to return in the response. (format: int32, default: 10)
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
 ]: nothing -> record<odata_nextLink: string, value: table<dedicated: record, lowPriority: record, poolId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nodecounts" $qp $auth.query)
   let accept_val = "application/json"
@@ -2425,13 +2470,14 @@ export def "pool-list" [
   --expand: string # An OData $expand clause.
   --maxresults: int # The maximum number of items to return in the response. A maximum of 1000 Pools can be returned. (format: int32, default: 1000)
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
 ]: nothing -> record<odata_nextLink: string, value: table<allocationState: string, allocationStateTransitionTime: string, applicationLicenses: list, applicationPackageReferences: list, autoScaleEvaluationInterval: string, autoScaleFormula: string, autoScaleRun: record, certificateReferences: list, cloudServiceConfiguration: record, creationTime: string, currentDedicatedNodes: int, currentLowPriorityNodes: int, displayName: string, eTag: string, enableAutoScale: bool, enableInterNodeCommunication: bool, id: string, lastModified: string, maxTasksPerNode: int, metadata: list, mountConfiguration: list, networkConfiguration: record, resizeErrors: list, resizeTimeout: string, startTask: record, state: string, stateTransitionTime: string, stats: record, targetDedicatedNodes: int, targetLowPriorityNodes: int, taskSchedulingPolicy: record, url: string, userAccounts: list, virtualMachineConfiguration: record, vmSize: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pools" $qp $auth.query)
   let accept_val = "application/json"
@@ -2477,10 +2523,10 @@ export def "pool-add" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --application-licenses: list<string> # The list of application licenses must be a subset of available Batch service application licenses. If a license is requested which is not supported, Pool creation will fail.
   --application-package-references: list # Changes to Package references affect all new Nodes joining the Pool, but do not affect Compute Nodes that are already in the Pool until they are rebooted or reimaged. There is a maximum of 10 Package references on any given Pool. — item shape: {applicationId: string, version?: string}
   --auto-scale-evaluation-interval: string # The default value is 15 minutes. The minimum and maximum value are 5 minutes and 168 hours respectively. If you specify a value less than 5 minutes or greater than 168 hours, the Batch service returns an error; if you are calling the REST API directly, the HTTP status code is 400 (Bad Request). (format: duration)
@@ -2503,10 +2549,11 @@ export def "pool-add" [
   --user-accounts: list # item shape: {elevationLevel?: "nonadmin"|"admin", linuxUserConfiguration?: any, name: string, password: string, windowsUserConfiguration?: any}
   --virtual-machine-configuration: any # shape: {containerConfiguration?: any, dataDisks?: list, imageReference: any, licenseType?: string, nodeAgentSKUId: string, windowsConfiguration?: any}
   vm_size: string # For information about available sizes of virtual machines for Cloud Services Pools (pools created with cloudServiceConfiguration), see Sizes for Cloud Services (https://azure.microsoft.com/documentation/articles/cloud-services-sizes-specs/). Batch supports all Cloud Services VM sizes except ExtraSmall, A1V2 and A2V2. For information about available VM sizes for Pools using Images from the Virtual Machines Marketplace (pools created with virtualMachineConfiguration) see Sizes for Virtual Machines (Linux) (https://azure.microsoft.com/documentation/articles/virtual-machines-linux-sizes/) or Sizes for Virtual Machines (Windows) (https://azure.microsoft.com/documentation/articles/virtual-machines-windows-sizes/). Batch supports all Azure VM sizes except STANDARD_A0 and those with premium storage (STANDARD_GS, STANDARD_DS, and STANDARD_DSV2 series).
-]: any -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pools" $qp $auth.query)
   let req_body = {"applicationLicenses": $application_licenses, "applicationPackageReferences": $application_package_references, "autoScaleEvaluationInterval": $auto_scale_evaluation_interval, "autoScaleFormula": $auto_scale_formula, "certificateReferences": $certificate_references, "cloudServiceConfiguration": $cloud_service_configuration, "displayName": $display_name, "enableAutoScale": $enable_auto_scale, "enableInterNodeCommunication": $enable_inter_node_communication, "id": $id, "maxTasksPerNode": $max_tasks_per_node, "metadata": $metadata, "mountConfiguration": $mount_configuration, "networkConfiguration": $network_configuration, "resizeTimeout": $resize_timeout, "startTask": $start_task, "targetDedicatedNodes": $target_dedicated_nodes, "targetLowPriorityNodes": $target_low_priority_nodes, "taskSchedulingPolicy": $task_scheduling_policy, "userAccounts": $user_accounts, "virtualMachineConfiguration": $virtual_machine_configuration, "vmSize": $vm_size} | compact
@@ -2545,18 +2592,19 @@ export def "pool-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --if-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --if-none-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
-  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time.
-  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time.
-]: nothing -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
+  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2595,18 +2643,19 @@ export def "pool-get" [
   --select: string # An OData $select clause.
   --expand: string # An OData $expand clause.
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --if-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --if-none-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
-  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time.
-  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time.
+  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
+  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
 ]: nothing -> record<allocationState: string, allocationStateTransitionTime: string, applicationLicenses: list<string>, applicationPackageReferences: table<applicationId: string, version: string>, autoScaleEvaluationInterval: string, autoScaleFormula: string, autoScaleRun: record<error: record<code: string, message: string, values: list>, results: string, timestamp: string>, certificateReferences: table<storeLocation: string, storeName: string, thumbprint: string, thumbprintAlgorithm: string, visibility: list>, cloudServiceConfiguration: record<osFamily: string, osVersion: string>, creationTime: string, currentDedicatedNodes: int, currentLowPriorityNodes: int, displayName: string, eTag: string, enableAutoScale: bool, enableInterNodeCommunication: bool, id: string, lastModified: string, maxTasksPerNode: int, metadata: table<name: string, value: string>, mountConfiguration: table<azureBlobFileSystemConfiguration: record, azureFileShareConfiguration: record, cifsMountConfiguration: record, nfsMountConfiguration: record>, networkConfiguration: record<dynamicVNetAssignmentScope: string, endpointConfiguration: record<inboundNATPools: list>, publicIPs: list<string>, subnetId: string>, resizeErrors: table<code: string, message: string, values: list>, resizeTimeout: string, startTask: record<commandLine: string, containerSettings: record<containerRunOptions: string, imageName: string, registry: record, workingDirectory: string>, environmentSettings: list<record>, maxTaskRetryCount: int, resourceFiles: list<record>, userIdentity: record<autoUser: record, username: string>, waitForSuccess: bool>, state: string, stateTransitionTime: string, stats: record<lastUpdateTime: string, resourceStats: record<avgCPUPercentage: float, avgDiskGiB: float, avgMemoryGiB: float, diskReadGiB: float, diskReadIOps: int, diskWriteGiB: float, diskWriteIOps: int, lastUpdateTime: string, networkReadGiB: float, networkWriteGiB: float, peakDiskGiB: float, peakMemoryGiB: float, startTime: string>, startTime: string, url: string, usageStats: record<dedicatedCoreTime: string, lastUpdateTime: string, startTime: string>>, targetDedicatedNodes: int, targetLowPriorityNodes: int, taskSchedulingPolicy: record<nodeFillType: string>, url: string, userAccounts: table<elevationLevel: string, linuxUserConfiguration: record, name: string, password: string, windowsUserConfiguration: record>, virtualMachineConfiguration: record<containerConfiguration: record<containerImageNames: list, containerRegistries: list, type: string>, dataDisks: list<record>, imageReference: record<offer: string, publisher: string, sku: string, version: string, virtualMachineImageId: string>, licenseType: string, nodeAgentSKUId: string, windowsConfiguration: record<enableAutomaticUpdates: bool>>, vmSize: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$select" $select "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2643,18 +2692,19 @@ export def "pool-exists" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --if-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --if-none-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
-  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time.
-  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time.
+  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
+  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2695,23 +2745,24 @@ export def "pool-patch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --if-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --if-none-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
-  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time.
-  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time.
+  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
+  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
   --application-package-references: list # Changes to Package references affect all new Nodes joining the Pool, but do not affect Compute Nodes that are already in the Pool until they are rebooted or reimaged. If this element is present, it replaces any existing Package references. If you specify an empty collection, then all Package references are removed from the Pool. If omitted, any existing Package references are left unchanged. — item shape: {applicationId: string, version?: string}
   --certificate-references: list # If this element is present, it replaces any existing Certificate references configured on the Pool. If omitted, any existing Certificate references are left unchanged. For Windows Nodes, the Batch service installs the Certificates to the specified Certificate store and location. For Linux Compute Nodes, the Certificates are stored in a directory inside the Task working directory and an environment variable AZ_BATCH_CERTIFICATES_DIR is supplied to the Task to query for this location. For Certificates with visibility of 'remoteUser', a 'certs' directory is created in the user's home directory (e.g., /home/{user-name}/certs) and Certificates are placed in that directory. — item shape: {storeLocation?: "currentuser"|"localmachine", storeName?: string, thumbprint: string, thumbprintAlgorithm: string, visibility?: list<string>}
   --metadata: list # If this element is present, it replaces any existing metadata configured on the Pool. If you specify an empty collection, any metadata is removed from the Pool. If omitted, any existing metadata is left unchanged. — item shape: {name: string, value: string}
   --start-task: any # Batch will retry Tasks when a recovery operation is triggered on a Node. Examples of recovery operations include (but are not limited to) when an unhealthy Node is rebooted or a Compute Node disappeared due to host failure. Retries due to recovery operations are independent of and are not counted against the maxTaskRetryCount. Even if the maxTaskRetryCount is 0, an internal retry due to a recovery operation may occur. Because of this, all Tasks should be idempotent. This means Tasks need to tolerate being interrupted and restarted without causing any corruption or duplicate data. The best practice for long running Tasks is to use some form of checkpointing. In some cases the StartTask may be re-run even though the Compute Node was not rebooted. Special care should be taken to avoid StartTasks which create breakaway process or install/launch services from the StartTask working directory, as this will block Batch from being able to re-run the StartTask. — shape: {commandLine: string, containerSettings?: any, environmentSettings?: list, maxTaskRetryCount?: int, resourceFiles?: list, userIdentity?: any, waitForSuccess?: bool}
-]: any -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}") $qp $auth.query)
   let req_body = {"applicationPackageReferences": $application_package_references, "certificateReferences": $certificate_references, "metadata": $metadata, "startTask": $start_task} | compact
@@ -2750,14 +2801,15 @@ export def "pool-disable-auto-scale" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
-]: nothing -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}/disableautoscale") $qp $auth.query)
   let accept_val = "application/json"
@@ -2794,21 +2846,22 @@ export def "pool-enable-auto-scale" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --if-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --if-none-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
-  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time.
-  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time.
+  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
+  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
   --auto-scale-evaluation-interval: string # The default value is 15 minutes. The minimum and maximum value are 5 minutes and 168 hours respectively. If you specify a value less than 5 minutes or greater than 168 hours, the Batch service rejects the request with an invalid property value error; if you are calling the REST API directly, the HTTP status code is 400 (Bad Request). If you specify a new interval, then the existing autoscale evaluation schedule will be stopped and a new autoscale evaluation schedule will be started, with its starting time being the time when this request was issued. (format: duration)
   --auto-scale-formula: string # The formula is checked for validity before it is applied to the Pool. If the formula is not valid, the Batch service rejects the request with detailed error information. For more information about specifying this formula, see Automatically scale Compute Nodes in an Azure Batch Pool (https://azure.microsoft.com/en-us/documentation/articles/batch-automatic-scaling).
-]: any -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}/enableautoscale") $qp $auth.query)
   let req_body = {"autoScaleEvaluationInterval": $auto_scale_evaluation_interval, "autoScaleFormula": $auto_scale_formula} | compact
@@ -2847,16 +2900,17 @@ export def "pool-evaluate-auto-scale" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   auto_scale_formula: string # The formula is validated and its results calculated, but it is not applied to the Pool. To apply the formula to the Pool, 'Enable automatic scaling on a Pool'. For more information about specifying this formula, see Automatically scale Compute Nodes in an Azure Batch Pool (https://azure.microsoft.com/en-us/documentation/articles/batch-automatic-scaling).
 ]: any -> record<error: record<code: string, message: string, values: list<record>>, results: string, timestamp: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}/evaluateautoscale") $qp $auth.query)
   let req_body = {"autoScaleFormula": $auto_scale_formula} | compact
@@ -2898,14 +2952,15 @@ export def "compute-node-list" [
   --select: string # An OData $select clause.
   --maxresults: int # The maximum number of items to return in the response. A maximum of 1000 Compute Nodes can be returned. (format: int32, default: 1000)
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
 ]: nothing -> record<odata_nextLink: string, value: table<affinityId: string, allocationTime: string, certificateReferences: list, endpointConfiguration: record, errors: list, id: string, ipAddress: string, isDedicated: bool, lastBootTime: string, nodeAgentInfo: record, recentTasks: list, runningTasksCount: int, schedulingState: string, startTask: record, startTaskInfo: record, state: string, stateTransitionTime: string, totalTasksRun: int, totalTasksSucceeded: int, url: string, vmSize: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}/nodes") $qp $auth.query)
   let accept_val = "application/json"
@@ -2944,15 +2999,16 @@ export def "compute-node-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # An OData $select clause.
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
 ]: nothing -> record<affinityId: string, allocationTime: string, certificateReferences: table<storeLocation: string, storeName: string, thumbprint: string, thumbprintAlgorithm: string, visibility: list>, endpointConfiguration: record<inboundEndpoints: list<record>>, errors: table<code: string, errorDetails: list, message: string>, id: string, ipAddress: string, isDedicated: bool, lastBootTime: string, nodeAgentInfo: record<lastUpdateTime: string, version: string>, recentTasks: table<executionInfo: record, jobId: string, subtaskId: int, taskId: string, taskState: string, taskUrl: string>, runningTasksCount: int, schedulingState: string, startTask: record<commandLine: string, containerSettings: record<containerRunOptions: string, imageName: string, registry: record, workingDirectory: string>, environmentSettings: list<record>, maxTaskRetryCount: int, resourceFiles: list<record>, userIdentity: record<autoUser: record, username: string>, waitForSuccess: bool>, startTaskInfo: record<containerInfo: record<containerId: string, error: string, state: string>, endTime: string, exitCode: int, failureInfo: record<category: string, code: string, details: list, message: string>, lastRetryTime: string, result: string, retryCount: int, startTime: string, state: string>, state: string, stateTransitionTime: string, totalTasksRun: int, totalTasksSucceeded: int, url: string, vmSize: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$select" $select "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2990,17 +3046,18 @@ export def "compute-node-disable-scheduling" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --node-disable-scheduling-option: string@node-disable-scheduling-option-completer # The default value is requeue.
-]: any -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}/disablescheduling") $qp $auth.query)
   let req_body = {"nodeDisableSchedulingOption": $node_disable_scheduling_option} | compact
@@ -3040,15 +3097,16 @@ export def "compute-node-enable-scheduling" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
-]: nothing -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}/enablescheduling") $qp $auth.query)
   let accept_val = "application/json"
@@ -3089,15 +3147,16 @@ export def "file-list-from-compute-node" [
   --recursive: oneof<nothing, bool> # Whether to list children of a directory.
   --maxresults: int # The maximum number of items to return in the response. A maximum of 1000 files can be returned. (format: int32, default: 1000)
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
 ]: nothing -> record<odata_nextLink: string, value: table<isDirectory: bool, name: string, properties: record, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "recursive" $recursive "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}/files") $qp $auth.query)
   let accept_val = "application/json"
@@ -3137,16 +3196,17 @@ export def "file-delete-from-compute-node" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --recursive: oneof<nothing, bool> # Whether to delete children of a directory. If the filePath parameter represents a directory instead of a file, you can set recursive to true to delete the directory and all of the files and subdirectories in it. If recursive is false then the directory must be empty or deletion will fail.
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
-]: nothing -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
   if ($file_path | is-empty) { error make --unspanned { msg: "path parameter 'filePath' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "recursive" $recursive "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id), file_path: (encode-path-segment $file_path)} | format pattern "/pools/{pool_id}/nodes/{node_id}/files/{file_path}") $qp $auth.query)
   let accept_val = "application/json"
@@ -3186,19 +3246,20 @@ export def "file-get-from-compute-node" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --ocp-range: string # The byte range to be retrieved. The default is to retrieve the entire file. The format is bytes=startRange-endRange.
-  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time.
-  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time.
+  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
+  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
   if ($file_path | is-empty) { error make --unspanned { msg: "path parameter 'filePath' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id), file_path: (encode-path-segment $file_path)} | format pattern "/pools/{pool_id}/nodes/{node_id}/files/{file_path}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3237,18 +3298,19 @@ export def "file-get-properties-from-compute-node" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
-  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time.
-  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
+  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
+  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
   if ($file_path | is-empty) { error make --unspanned { msg: "path parameter 'filePath' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id), file_path: (encode-path-segment $file_path)} | format pattern "/pools/{pool_id}/nodes/{node_id}/files/{file_path}") $qp $auth.query)
   let accept_val = "application/json"
@@ -3287,15 +3349,16 @@ export def "compute-node-get-remote-desktop" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}/rdp") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3333,17 +3396,18 @@ export def "compute-node-reboot" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --node-reboot-option: string@node-reboot-option-completer # The default value is requeue.
-]: any -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}/reboot") $qp $auth.query)
   let req_body = {"nodeRebootOption": $node_reboot_option} | compact
@@ -3383,17 +3447,18 @@ export def "compute-node-reimage" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --node-reimage-option: string@node-reimage-option-completer # The default value is requeue.
-]: any -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}/reimage") $qp $auth.query)
   let req_body = {"nodeReimageOption": $node_reimage_option} | compact
@@ -3433,15 +3498,16 @@ export def "compute-node-get-remote-login-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
 ]: nothing -> record<remoteLoginIPAddress: string, remoteLoginPort: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}/remoteloginsettings") $qp $auth.query)
   let accept_val = "application/json"
@@ -3479,10 +3545,10 @@ export def "compute-node-upload-batch-service-logs" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   container_url: string # The URL must include a Shared Access Signature (SAS) granting write permissions to the container. The SAS duration must allow enough time for the upload to finish. The start time for SAS is optional and recommended to not be specified.
   --end-time: string # Any log file containing a log message in the time range will be uploaded. This means that the operation might retrieve more logs than have been requested since the entire log file is always uploaded, but the operation should not retrieve fewer logs than have been requested. If omitted, the default is to upload all logs available after the startTime. (format: date-time)
   start_time: string # Any log file containing a log message in the time range will be uploaded. This means that the operation might retrieve more logs than have been requested since the entire log file is always uploaded, but the operation should not retrieve fewer logs than have been requested. (format: date-time)
@@ -3492,6 +3558,7 @@ export def "compute-node-upload-batch-service-logs" [
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}/uploadbatchservicelogs") $qp $auth.query)
   let req_body = {"containerUrl": $container_url, "endTime": $end_time, "startTime": $start_time} | compact
@@ -3531,21 +3598,22 @@ export def "compute-node-add-user" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --expiry-time: string # If omitted, the default is 1 day from the current time. For Linux Compute Nodes, the expiryTime has a precision up to a day. (format: date-time)
   --is-admin: oneof<nothing, bool> # The default value is false.
   name: string
   --password: string # The password is required for Windows Compute Nodes (those created with 'cloudServiceConfiguration', or created with 'virtualMachineConfiguration' using a Windows Image reference). For Linux Compute Nodes, the password can optionally be specified along with the sshPublicKey property.
   --ssh-public-key: string # The public key should be compatible with OpenSSH encoding and should be base 64 encoded. This property can be specified only for Linux Compute Nodes. If this is specified for a Windows Compute Node, then the Batch service rejects the request; if you are calling the REST API directly, the HTTP status code is 400 (Bad Request).
-]: any -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id)} | format pattern "/pools/{pool_id}/nodes/{node_id}/users") $qp $auth.query)
   let req_body = {"expiryTime": $expiry_time, "isAdmin": $is_admin, "name": $name, "password": $password, "sshPublicKey": $ssh_public_key} | compact
@@ -3586,16 +3654,17 @@ export def "compute-node-delete-user" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
-]: nothing -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id), user_name: (encode-path-segment $user_name)} | format pattern "/pools/{pool_id}/nodes/{node_id}/users/{user_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -3634,20 +3703,21 @@ export def "compute-node-update-user" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --expiry-time: string # If omitted, the default is 1 day from the current time. For Linux Compute Nodes, the expiryTime has a precision up to a day. (format: date-time)
   --password: string # The password is required for Windows Compute Nodes (those created with 'cloudServiceConfiguration', or created with 'virtualMachineConfiguration' using a Windows Image reference). For Linux Compute Nodes, the password can optionally be specified along with the sshPublicKey property. If omitted, any existing password is removed.
   --ssh-public-key: string # The public key should be compatible with OpenSSH encoding and should be base 64 encoded. This property can be specified only for Linux Compute Nodes. If this is specified for a Windows Compute Node, then the Batch service rejects the request; if you are calling the REST API directly, the HTTP status code is 400 (Bad Request). If omitted, any existing SSH public key is removed.
-]: any -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id), node_id: (encode-path-segment $node_id), user_name: (encode-path-segment $user_name)} | format pattern "/pools/{pool_id}/nodes/{node_id}/users/{user_name}") $qp $auth.query)
   let req_body = {"expiryTime": $expiry_time, "password": $password, "sshPublicKey": $ssh_public_key} | compact
@@ -3686,22 +3756,23 @@ export def "pool-remove-nodes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --if-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --if-none-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
-  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time.
-  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time.
+  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
+  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
   --node-deallocation-option: string@node-deallocation-option-completer # The default value is requeue.
   node_list: list<string>
   --resize-timeout: string # The default value is 15 minutes. The minimum value is 5 minutes. If you specify a value less than 5 minutes, the Batch service returns an error; if you are calling the REST API directly, the HTTP status code is 400 (Bad Request). (format: duration)
-]: any -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}/removenodes") $qp $auth.query)
   let req_body = {"nodeDeallocationOption": $node_deallocation_option, "nodeList": $node_list, "resizeTimeout": $resize_timeout} | compact
@@ -3740,23 +3811,24 @@ export def "pool-resize" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --if-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --if-none-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
-  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time.
-  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time.
+  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
+  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
   --node-deallocation-option: string@node-deallocation-option-completer # The default value is requeue.
   --resize-timeout: string # The default value is 15 minutes. The minimum value is 5 minutes. If you specify a value less than 5 minutes, the Batch service returns an error; if you are calling the REST API directly, the HTTP status code is 400 (Bad Request). (format: duration)
   --target-dedicated-nodes: int # format: int32
   --target-low-priority-nodes: int # format: int32
-]: any -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}/resize") $qp $auth.query)
   let req_body = {"nodeDeallocationOption": $node_deallocation_option, "resizeTimeout": $resize_timeout, "targetDedicatedNodes": $target_dedicated_nodes, "targetLowPriorityNodes": $target_low_priority_nodes} | compact
@@ -3795,18 +3867,19 @@ export def "pool-stop-resize" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   --if-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --if-none-match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
-  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time.
-  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time.
-]: nothing -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+  --if-modified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time. (format: date-time-rfc1123)
+  --if-unmodified-since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time. (format: date-time-rfc1123)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}/stopresize") $qp $auth.query)
   let accept_val = "application/json"
@@ -3847,19 +3920,20 @@ export def "pool-update-properties" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
   application_package_references: list # The list replaces any existing Application Package references on the Pool. Changes to Application Package references affect all new Compute Nodes joining the Pool, but do not affect Compute Nodes that are already in the Pool until they are rebooted or reimaged. There is a maximum of 10 Application Package references on any given Pool. If omitted, or if you specify an empty collection, any existing Application Packages references are removed from the Pool. A maximum of 10 references may be specified on a given Pool. — item shape: {applicationId: string, version?: string}
   certificate_references: list # This list replaces any existing Certificate references configured on the Pool. If you specify an empty collection, any existing Certificate references are removed from the Pool. For Windows Nodes, the Batch service installs the Certificates to the specified Certificate store and location. For Linux Compute Nodes, the Certificates are stored in a directory inside the Task working directory and an environment variable AZ_BATCH_CERTIFICATES_DIR is supplied to the Task to query for this location. For Certificates with visibility of 'remoteUser', a 'certs' directory is created in the user's home directory (e.g., /home/{user-name}/certs) and Certificates are placed in that directory. — item shape: {storeLocation?: "currentuser"|"localmachine", storeName?: string, thumbprint: string, thumbprintAlgorithm: string, visibility?: list<string>}
   metadata: list # This list replaces any existing metadata configured on the Pool. If omitted, or if you specify an empty collection, any existing metadata is removed from the Pool. — item shape: {name: string, value: string}
   --start-task: any # Batch will retry Tasks when a recovery operation is triggered on a Node. Examples of recovery operations include (but are not limited to) when an unhealthy Node is rebooted or a Compute Node disappeared due to host failure. Retries due to recovery operations are independent of and are not counted against the maxTaskRetryCount. Even if the maxTaskRetryCount is 0, an internal retry due to a recovery operation may occur. Because of this, all Tasks should be idempotent. This means Tasks need to tolerate being interrupted and restarted without causing any corruption or duplicate data. The best practice for long running Tasks is to use some form of checkpointing. In some cases the StartTask may be re-run even though the Compute Node was not rebooted. Special care should be taken to avoid StartTasks which create breakaway process or install/launch services from the StartTask working directory, as this will block Batch from being able to re-run the StartTask. — shape: {commandLine: string, containerSettings?: any, environmentSettings?: list, maxTaskRetryCount?: int, resourceFiles?: list, userIdentity?: any, waitForSuccess?: bool}
-]: any -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pool_id: (encode-path-segment $pool_id)} | format pattern "/pools/{pool_id}/updateproperties") $qp $auth.query)
   let req_body = {"applicationPackageReferences": $application_package_references, "certificateReferences": $certificate_references, "metadata": $metadata, "startTask": $start_task} | compact
@@ -3901,13 +3975,14 @@ export def "pool-list-usage-metrics" [
   --filter: string # An OData $filter clause. For more information on constructing this filter, see https://docs.microsoft.com/en-us/rest/api/batchservice/odata-filters-in-batch#list-account-usage-metrics.
   --maxresults: int # The maximum number of items to return in the response. A maximum of 1000 results will be returned. (format: int32, default: 1000)
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
 ]: nothing -> record<odata_nextLink: string, value: table<endTime: string, poolId: string, startTime: string, totalCoreHours: float, vmSize: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "starttime" $starttime "scalar") (serialize-qp "endtime" $endtime "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/poolusagemetrics" $qp $auth.query)
   let accept_val = "application/json"
@@ -3945,13 +4020,14 @@ export def "account-list-supported-images" [
   --filter: string # An OData $filter clause. For more information on constructing this filter, see https://docs.microsoft.com/en-us/rest/api/batchservice/odata-filters-in-batch#list-support-images.
   --maxresults: int # The maximum number of items to return in the response. A maximum of 1000 results will be returned. (format: int32, default: 1000)
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
-  --api-version: string # Client API Version.
-  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
-  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
+  --api-version: string # Client API Version. (required)
+  --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0. (format: uuid)
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response. (default: false)
+  --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly. (format: date-time-rfc1123)
 ]: nothing -> record<odata_nextLink: string, value: table<batchSupportEndOfLife: string, capabilities: list, imageReference: record, nodeAgentSKUId: string, osType: string, verificationType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/supportedimages" $qp $auth.query)
   let accept_val = "application/json"

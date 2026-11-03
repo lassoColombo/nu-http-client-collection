@@ -12,8 +12,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -125,7 +125,6 @@ def format-completer [] { ["html" "json" "jsonp" "msgpack"] }
 def by-completer [] { ["id" "value"] }
 def accept-completer [] { ["application/json" "application/x-msgpack" "text/html"] }
 def direction-completer [] { ["backwards" "forwards"] }
-def accept-completer-1 [] { ["application/json" "application/x-msgpack"] }
 def form-factor-completer [] { ["car" "desktop" "embedded" "phone" "tablet" "tv" "watch"] }
 def platform-completer [] { ["android" "ios"] }
 def unit-completer [] { ["day" "hour" "minute" "month"] }
@@ -211,17 +210,23 @@ export def "get-metadata-of-channel" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --format: string@format-completer # The response format you would like
+  --x-ably-version: string # The version of the API you wish to use.
 ]: nothing -> record<channelId: string, isGlobalMaster: bool, region: string, status: record<isActive: bool, occupancy: record<presenceConnections: int, presenceMembers: int, presenceSubscribers: int, publishers: int, subscribers: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
-  let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/channels/{channel_id}") $auth.query)
-  let accept_val = "application/json"
+  let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/channels/{channel_id}") $qp $auth.query)
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Ably-Version": $x_ably_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: {}
+    query: ({"format": $format} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -248,22 +253,26 @@ export def "get-messages-by-channel" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
+  --format: string@format-completer # The response format you would like
   --start: string
   --limit: int # default: 100
   --end: string # default: now
   --direction: string@direction-completer # default: backwards
+  --x-ably-version: string # The version of the API you wish to use.
 ]: nothing -> table<clientId: string, connectionId: string, data: string, encoding: string, extras: record<push: record>, id: string, name: string, timestamp: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "direction" $direction "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "direction" $direction "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/channels/{channel_id}/messages") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Ably-Version": $x_ably_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"start": $start, "limit": $limit, "end": $end, "direction": $direction} | compact)
+    query: ({"format": $format, "start": $start, "limit": $limit, "end": $end, "direction": $direction} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -291,6 +300,8 @@ export def "publish-messages-to-channel" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
+  --format: string@format-completer # The response format you would like
+  --x-ably-version: string # The version of the API you wish to use.
   --client-id: string # The [client ID](https://www.ably.io/documentation/core-features/authentication#identified-clients) of the publisher of this message.
   --connection-id: string # The connection ID of the publisher of this message.
   --data: string # The string encoded payload, with the encoding specified below.
@@ -302,15 +313,18 @@ export def "publish-messages-to-channel" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
-  let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/channels/{channel_id}/messages") $auth.query)
+  let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/channels/{channel_id}/messages") $qp $auth.query)
   let req_body = {"clientId": $client_id, "connectionId": $connection_id, "data": $data, "encoding": $encoding, "extras": $extras, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Ably-Version": $x_ably_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let req = {
     method: "post"
     url: $full_url
-    query: {}
+    query: ({"format": $format} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -337,21 +351,25 @@ export def "get-presence-of-channel" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
+  --format: string@format-completer # The response format you would like
   --client-id: string
   --connection-id: string
   --limit: int # default: 100
+  --x-ably-version: string # The version of the API you wish to use.
 ]: nothing -> table<action: string, clientId: string, connectionId: string, data: string, encoding: string, extras: record<push: record>, id: string, timestamp: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
-  let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "connectionId" $connection_id "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "clientId" $client_id "scalar") (serialize-qp "connectionId" $connection_id "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/channels/{channel_id}/presence") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Ably-Version": $x_ably_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"clientId": $client_id, "connectionId": $connection_id, "limit": $limit} | compact)
+    query: ({"format": $format, "clientId": $client_id, "connectionId": $connection_id, "limit": $limit} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -378,22 +396,26 @@ export def "get-presence-history-of-channel" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
+  --format: string@format-completer # The response format you would like
   --start: string
   --limit: int # default: 100
   --end: string # default: now
   --direction: string@direction-completer # default: backwards
+  --x-ably-version: string # The version of the API you wish to use.
 ]: nothing -> table<action: string, clientId: string, connectionId: string, data: string, encoding: string, extras: record<push: record>, id: string, timestamp: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "direction" $direction "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "direction" $direction "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/channels/{channel_id}/presence/history") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Ably-Version": $x_ably_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"start": $start, "limit": $limit, "end": $end, "direction": $direction} | compact)
+    query: ({"format": $format, "start": $start, "limit": $limit, "end": $end, "direction": $direction} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -419,7 +441,9 @@ export def "request-access-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept: string@accept-completer-1 # Response content type
+  --accept: string@accept-completer # Response content type
+  --format: string@format-completer # The response format you would like
+  --x-ably-version: string # The version of the API you wish to use.
   --capability: record # The [capabilities](https://www.ably.io/documentation/core-features/authentication#capabilities-explained) (i.e. a set of channel names/namespaces and, for each, a set of operations) which should be a subset of the set of capabilities associated with the key specified in keyName. (e.g. {channel1: [publish, subscribe]})
   --client-id: string # The [client ID](https://www.ably.io/documentation/core-features/authentication#identified-clients) to be assosciated with the token. Can be set to * to allow for any client ID to be used.
   --body-key-name: string # Name of the key used for the TokenRequest. The keyName comprises of the app ID and key ID on an API Key. (e.g. xVLyHw.LMJZxw)
@@ -430,15 +454,18 @@ export def "request-access-token" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($key_name | is-empty) { error make --unspanned { msg: "path parameter 'keyName' must be non-empty" } }
-  let full_url = (build-url $base ({key_name: (encode-path-segment $key_name)} | format pattern "/keys/{key_name}/requestToken") $auth.query)
+  let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({key_name: (encode-path-segment $key_name)} | format pattern "/keys/{key_name}/requestToken") $qp $auth.query)
   let req_body = {"capability": $capability, "clientId": $client_id, "keyName": $body_key_name, "nonce": $nonce, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Ably-Version": $x_ably_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let req = {
     method: "post"
     url: $full_url
-    query: {}
+    query: ({"format": $format} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -463,6 +490,7 @@ export def "delete-push-device-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --format: string@format-completer # The response format you would like
   --channel: string # Filter to restrict to subscriptions associated with that channel.
   --device-id: string # Must be set when clientId is empty, cannot be used with clientId.
@@ -473,7 +501,7 @@ export def "delete-push-device-details" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "deviceId" $device_id "scalar") (serialize-qp "clientId" $client_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/push/channelSubscriptions" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Ably-Version": $x_ably_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -505,6 +533,7 @@ export def "get-push-subscriptions-on-channels" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --format: string@format-completer # The response format you would like
   --channel: string # Filter to restrict to subscriptions associated with that channel.
   --device-id: string # Optional filter to restrict to devices associated with that deviceId. Cannot be used with clientId.
@@ -516,7 +545,7 @@ export def "get-push-subscriptions-on-channels" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "deviceId" $device_id "scalar") (serialize-qp "clientId" $client_id "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/push/channelSubscriptions" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Ably-Version": $x_ably_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -548,6 +577,7 @@ export def "subscribe-push-device-to-channel" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --format: string@format-completer # The response format you would like
   --x-ably-version: string # The version of the API you wish to use.
   --channel: string # Channel name.
@@ -561,7 +591,7 @@ export def "subscribe-push-device-to-channel" [
   let full_url = (build-url $base "/push/channelSubscriptions" $qp $auth.query)
   let req_body = {"channel": $channel, "deviceId": $device_id, "clientId": $client_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Ably-Version": $x_ably_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -633,6 +663,7 @@ export def "unregister-all-push-devices" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --format: string@format-completer # The response format you would like
   --device-id: string # Optional filter to restrict to devices associated with that deviceId. Cannot be used with clientId.
   --client-id: string # Optional filter to restrict to devices associated with that clientId. Cannot be used with deviceId.
@@ -642,7 +673,7 @@ export def "unregister-all-push-devices" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "deviceId" $device_id "scalar") (serialize-qp "clientId" $client_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/push/deviceRegistrations" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Ably-Version": $x_ably_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -769,17 +800,23 @@ export def "unregister-push-device" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --format: string@format-completer # The response format you would like
+  --x-ably-version: string # The version of the API you wish to use.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'device_id' must be non-empty" } }
-  let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/push/deviceRegistrations/{device_id}") $auth.query)
-  let accept_val = "application/json"
+  let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/push/deviceRegistrations/{device_id}") $qp $auth.query)
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Ably-Version": $x_ably_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
-    query: {}
+    query: ({"format": $format} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -806,17 +843,22 @@ export def "get-push-device-details" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
+  --format: string@format-completer # The response format you would like
+  --x-ably-version: string # The version of the API you wish to use.
 ]: nothing -> record<clientId: string, deviceSecret: string, formFactor: string, id: string, metadata: record, platform: string, push_recipient: record<clientId: string, deviceId: string, deviceToken: string, registrationToken: string, transportType: string>, push_state: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'device_id' must be non-empty" } }
-  let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/push/deviceRegistrations/{device_id}") $auth.query)
+  let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/push/deviceRegistrations/{device_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Ably-Version": $x_ably_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: {}
+    query: ({"format": $format} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -844,6 +886,8 @@ export def "patch-push-device-details" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
+  --format: string@format-completer # The response format you would like
+  --x-ably-version: string # The version of the API you wish to use.
   --client-id: string # Optional trusted client identifier for the device.
   --device-secret: string # Secret value for the device.
   --form-factor: string@form-factor-completer # Form factor of the push device.
@@ -856,15 +900,18 @@ export def "patch-push-device-details" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'device_id' must be non-empty" } }
-  let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/push/deviceRegistrations/{device_id}") $auth.query)
+  let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/push/deviceRegistrations/{device_id}") $qp $auth.query)
   let req_body = {"clientId": $client_id, "deviceSecret": $device_secret, "formFactor": $form_factor, "id": $id, "metadata": $metadata, "platform": $platform, "push.recipient": $push_recipient} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Ably-Version": $x_ably_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
-    query: {}
+    query: ({"format": $format} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -892,6 +939,8 @@ export def "put-push-device-details" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
+  --format: string@format-completer # The response format you would like
+  --x-ably-version: string # The version of the API you wish to use.
   --client-id: string # Optional trusted client identifier for the device.
   --device-secret: string # Secret value for the device.
   --form-factor: string@form-factor-completer # Form factor of the push device.
@@ -904,15 +953,18 @@ export def "put-push-device-details" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'device_id' must be non-empty" } }
-  let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/push/deviceRegistrations/{device_id}") $auth.query)
+  let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/push/deviceRegistrations/{device_id}") $qp $auth.query)
   let req_body = {"clientId": $client_id, "deviceSecret": $device_secret, "formFactor": $form_factor, "id": $id, "metadata": $metadata, "platform": $platform, "push.recipient": $push_recipient} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Ably-Version": $x_ably_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let req = {
     method: "put"
     url: $full_url
-    query: {}
+    query: ({"format": $format} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -939,17 +991,22 @@ export def "update-push-device-details" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
+  --format: string@format-completer # The response format you would like
+  --x-ably-version: string # The version of the API you wish to use.
 ]: nothing -> record<clientId: string, deviceSecret: string, formFactor: string, id: string, metadata: record, platform: string, push_recipient: record<clientId: string, deviceId: string, deviceToken: string, registrationToken: string, transportType: string>, push_state: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'device_id' must be non-empty" } }
-  let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/push/deviceRegistrations/{device_id}/resetUpdateToken") $auth.query)
+  let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/push/deviceRegistrations/{device_id}/resetUpdateToken") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Ably-Version": $x_ably_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: {}
+    query: ({"format": $format} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -976,6 +1033,7 @@ export def "publish-push-notification-to-devices" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   --format: string@format-completer # The response format you would like
   --x-ably-version: string # The version of the API you wish to use.
   --push: record # shape: {apns?: record, data?: string, fcm?: record, notification?: record, web?: record}
@@ -988,7 +1046,7 @@ export def "publish-push-notification-to-devices" [
   let full_url = (build-url $base "/push/publish" $qp $auth.query)
   let req_body = {"push": $push, "recipient": $recipient} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Ably-Version": $x_ably_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1020,22 +1078,27 @@ export def "get-stats" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --format: string@format-completer # The response format you would like
   --start: string
   --limit: int # default: 100
   --end: string # default: now
   --direction: string@direction-completer # default: backwards
   --unit: string@unit-completer # Specifies the unit of aggregation in the returned results. (default: minute)
+  --x-ably-version: string # The version of the API you wish to use.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "unit" $unit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "unit" $unit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/stats" $qp $auth.query)
-  let accept_val = "application/json"
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Ably-Version": $x_ably_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"start": $start, "limit": $limit, "end": $end, "direction": $direction, "unit": $unit} | compact)
+    query: ({"format": $format, "start": $start, "limit": $limit, "end": $end, "direction": $direction, "unit": $unit} | compact)
     headers: $auth.headers
     body: null
     content_type: null

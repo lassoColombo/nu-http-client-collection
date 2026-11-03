@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -140,11 +140,12 @@ export def "get-ads" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --force-result: oneof<nothing, bool> # Whether to force a synchronous call to our external sponsorship provider; the default behavior is asynchronous.
   --ad-count: int # How many sponsorship units to request in one call; if left unspecified, the default behavior is to return only 1. (format: int32)
-  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
+  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token. (required)
   --x-advertising-id: string # A device-specific advertising identifier, if possible. Apple's IDFA is an example.
 ]: nothing -> record<Ad: record<InLine: record<AdSystem: string, AdTitle: string, Category: string, Creatives: list, Description: string, Extensions: list, Impression: list>, id: string>, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let qp = [(serialize-qp "forceResult" $force_result "scalar") (serialize-qp "adCount" $ad_count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/ads" $qp $auth.query)
   let accept_val = "application/xml"
@@ -181,7 +182,7 @@ export def "receive-ad-tracking" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token.
+  --authorization: string # Your access token from the Authorization Service. Should start with `Bearer`, followed by a space, followed by the token. (required)
   --x-advertising-id: string # A device-specific advertising identifier, if possible. Apple's IDFA is an example.
   attributes: any # All information relevant to a user who has requested sponsorship or submitted tracking information — shape: {ipAddress?: string, userAgent?: string}
   errors: list # A list of encountered errors, ignored on POST, PUT
@@ -193,6 +194,7 @@ export def "receive-ad-tracking" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/v2/ads" $auth.query)
   let req_body = {"attributes": $attributes, "errors": $errors, "href": $href, "items": $items, "links": $links, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

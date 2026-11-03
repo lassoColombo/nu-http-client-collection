@@ -1,4 +1,4 @@
-# Auto-generated client for AdSense Host API vv4.1
+# Auto-generated client for AdSense Host API v4.1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/adsensehost/v4.1/openapi.json
 # Auth: --token flag or $env.ADSENSE_HOST_API_TOKEN
 
@@ -12,20 +12,10 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
-}
-
-# Merge multiple auth records (AND-form security: every scheme must be sent).
-def merge-auth [parts: list]: nothing -> record {
-  let active = ($parts | where {|p| $p.location != "none" })
-  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
-  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
-  let locs = ($active | each {|p| $p.location } | uniq)
-  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
-  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
 # Serialize a single query parameter based on collection style
@@ -160,8 +150,8 @@ export def commands []: nothing -> table {
 # operationId: adsensehost.accounts.list
 export def "adsensehost-accounts-list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -175,10 +165,11 @@ export def "adsensehost-accounts-list" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-  --filter-ad-client-id: list<string> # Ad clients to list accounts for.
+  --filter-ad-client-id: list<string> # Ad clients to list accounts for. (required)
 ]: nothing -> record<etag: string, items: table<id: string, kind: string, name: string, status: string>, kind: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ADSENSE_HOST_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ADSENSE_HOST_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($filter_ad_client_id == null) { error make --unspanned { msg: "required query parameter 'filterAdClientId' missing: pass --filter-ad-client-id" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "filterAdClientId" $filter_ad_client_id "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/accounts" $qp $auth.query)
   let accept_val = "application/json"
@@ -204,8 +195,8 @@ export def "adsensehost-accounts-list" [
 export def "adsensehost-accounts-get" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -220,7 +211,7 @@ export def "adsensehost-accounts-get" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<id: string, kind: string, name: string, status: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ADSENSE_HOST_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ADSENSE_HOST_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
@@ -248,8 +239,8 @@ export def "adsensehost-accounts-get" [
 export def "adsensehost-accounts-adclients-list" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -266,7 +257,7 @@ export def "adsensehost-accounts-adclients-list" [
   --max-results: int # The maximum number of ad clients to include in the response, used for paging.
   --page-token: string # A continuation token, used to page through ad clients. To retrieve the next page, set this parameter to the value of "nextPageToken" from the previous response.
 ]: nothing -> record<etag: string, items: table<arcOptIn: bool, id: string, kind: string, productCode: string, supportsReporting: bool>, kind: string, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ADSENSE_HOST_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ADSENSE_HOST_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -295,8 +286,8 @@ export def "adsensehost-accounts-adclients-get" [
   account_id: string
   ad_client_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -311,7 +302,7 @@ export def "adsensehost-accounts-adclients-get" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<arcOptIn: bool, id: string, kind: string, productCode: string, supportsReporting: bool> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ADSENSE_HOST_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ADSENSE_HOST_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($ad_client_id | is-empty) { error make --unspanned { msg: "path parameter 'adClientId' must be non-empty" } }
@@ -341,8 +332,8 @@ export def "adsensehost-accounts-adunits-list" [
   account_id: string
   ad_client_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -360,7 +351,7 @@ export def "adsensehost-accounts-adunits-list" [
   --max-results: int # The maximum number of ad units to include in the response, used for paging.
   --page-token: string # A continuation token, used to page through ad units. To retrieve the next page, set this parameter to the value of "nextPageToken" from the previous response.
 ]: nothing -> record<etag: string, items: table<code: string, contentAdsSettings: record, customStyle: record, id: string, kind: string, mobileContentAdsSettings: record, name: string, status: string>, kind: string, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ADSENSE_HOST_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ADSENSE_HOST_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($ad_client_id | is-empty) { error make --unspanned { msg: "path parameter 'adClientId' must be non-empty" } }
@@ -393,8 +384,8 @@ export def "adsensehost-accounts-adunits-patch" [
   account_id: string
   ad_client_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -408,7 +399,7 @@ export def "adsensehost-accounts-adunits-patch" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-  --ad-unit-id: string # Ad unit to get.
+  --ad-unit-id: string # Ad unit to get. (required)
   --code: string # Identity code of this ad unit, not necessarily unique across ad clients.
   --content-ads-settings: record # Settings specific to content ads (AFC) and highend mobile content ads (AFMC - deprecated). — shape: {backupOption?: record, size?: string, type?: string}
   --custom-style: record # shape: {colors?: record, corners?: string, font?: record, kind?: string}
@@ -419,10 +410,11 @@ export def "adsensehost-accounts-adunits-patch" [
   --status: string # Status of this ad unit. Possible values are: NEW: Indicates that the ad unit was created within the last seven days and does not yet have any activity associated with it. ACTIVE: Indicates that there has been activity on this ad unit in the last seven days. INACTIVE: Indicates that there has been no activity on this ad unit in the last seven days.
 ]: any -> record<code: string, contentAdsSettings: record<backupOption: record<color: string, type: string, url: string>, size: string, type: string>, customStyle: record<colors: record<background: string, border: string, text: string, title: string, url: string>, corners: string, font: record<family: string, size: string>, kind: string>, id: string, kind: string, mobileContentAdsSettings: record<markupLanguage: string, scriptingLanguage: string, size: string, type: string>, name: string, status: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ADSENSE_HOST_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ADSENSE_HOST_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($ad_client_id | is-empty) { error make --unspanned { msg: "path parameter 'adClientId' must be non-empty" } }
+  if ($ad_unit_id == null) { error make --unspanned { msg: "required query parameter 'adUnitId' missing: pass --ad-unit-id" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "adUnitId" $ad_unit_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), ad_client_id: (encode-path-segment $ad_client_id)} | format pattern "/accounts/{account_id}/adclients/{ad_client_id}/adunits") $qp $auth.query)
   let req_body = {"code": $code, "contentAdsSettings": $content_ads_settings, "customStyle": $custom_style, "id": $id, "kind": $kind, "mobileContentAdsSettings": $mobile_content_ads_settings, "name": $name, "status": $status} | compact
@@ -454,8 +446,8 @@ export def "adsensehost-accounts-adunits-insert" [
   account_id: string
   ad_client_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -479,7 +471,7 @@ export def "adsensehost-accounts-adunits-insert" [
   --status: string # Status of this ad unit. Possible values are: NEW: Indicates that the ad unit was created within the last seven days and does not yet have any activity associated with it. ACTIVE: Indicates that there has been activity on this ad unit in the last seven days. INACTIVE: Indicates that there has been no activity on this ad unit in the last seven days.
 ]: any -> record<code: string, contentAdsSettings: record<backupOption: record<color: string, type: string, url: string>, size: string, type: string>, customStyle: record<colors: record<background: string, border: string, text: string, title: string, url: string>, corners: string, font: record<family: string, size: string>, kind: string>, id: string, kind: string, mobileContentAdsSettings: record<markupLanguage: string, scriptingLanguage: string, size: string, type: string>, name: string, status: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ADSENSE_HOST_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ADSENSE_HOST_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($ad_client_id | is-empty) { error make --unspanned { msg: "path parameter 'adClientId' must be non-empty" } }
@@ -514,8 +506,8 @@ export def "adsensehost-accounts-adunits-update" [
   account_id: string
   ad_client_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -539,7 +531,7 @@ export def "adsensehost-accounts-adunits-update" [
   --status: string # Status of this ad unit. Possible values are: NEW: Indicates that the ad unit was created within the last seven days and does not yet have any activity associated with it. ACTIVE: Indicates that there has been activity on this ad unit in the last seven days. INACTIVE: Indicates that there has been no activity on this ad unit in the last seven days.
 ]: any -> record<code: string, contentAdsSettings: record<backupOption: record<color: string, type: string, url: string>, size: string, type: string>, customStyle: record<colors: record<background: string, border: string, text: string, title: string, url: string>, corners: string, font: record<family: string, size: string>, kind: string>, id: string, kind: string, mobileContentAdsSettings: record<markupLanguage: string, scriptingLanguage: string, size: string, type: string>, name: string, status: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ADSENSE_HOST_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ADSENSE_HOST_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($ad_client_id | is-empty) { error make --unspanned { msg: "path parameter 'adClientId' must be non-empty" } }
@@ -572,8 +564,8 @@ export def "adsensehost-accounts-adunits-delete" [
   ad_client_id: string
   ad_unit_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -588,7 +580,7 @@ export def "adsensehost-accounts-adunits-delete" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<code: string, contentAdsSettings: record<backupOption: record<color: string, type: string, url: string>, size: string, type: string>, customStyle: record<colors: record<background: string, border: string, text: string, title: string, url: string>, corners: string, font: record<family: string, size: string>, kind: string>, id: string, kind: string, mobileContentAdsSettings: record<markupLanguage: string, scriptingLanguage: string, size: string, type: string>, name: string, status: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ADSENSE_HOST_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ADSENSE_HOST_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($ad_client_id | is-empty) { error make --unspanned { msg: "path parameter 'adClientId' must be non-empty" } }
@@ -620,8 +612,8 @@ export def "adsensehost-accounts-adunits-get" [
   ad_client_id: string
   ad_unit_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -636,7 +628,7 @@ export def "adsensehost-accounts-adunits-get" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<code: string, contentAdsSettings: record<backupOption: record<color: string, type: string, url: string>, size: string, type: string>, customStyle: record<colors: record<background: string, border: string, text: string, title: string, url: string>, corners: string, font: record<family: string, size: string>, kind: string>, id: string, kind: string, mobileContentAdsSettings: record<markupLanguage: string, scriptingLanguage: string, size: string, type: string>, name: string, status: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ADSENSE_HOST_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ADSENSE_HOST_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($ad_client_id | is-empty) { error make --unspanned { msg: "path parameter 'adClientId' must be non-empty" } }
@@ -668,8 +660,8 @@ export def "adsensehost-accounts-adunits-get-ad-code" [
   ad_client_id: string
   ad_unit_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -685,7 +677,7 @@ export def "adsensehost-accounts-adunits-get-ad-code" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --host-custom-channel-id: list<string> # Host custom channel to attach to the ad code.
 ]: nothing -> record<adCode: string, kind: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ADSENSE_HOST_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ADSENSE_HOST_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($ad_client_id | is-empty) { error make --unspanned { msg: "path parameter 'adClientId' must be non-empty" } }
@@ -715,8 +707,8 @@ export def "adsensehost-accounts-adunits-get-ad-code" [
 export def "adsensehost-accounts-reports-generate" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -730,27 +722,29 @@ export def "adsensehost-accounts-reports-generate" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-  --start-date: string # Start of the date range to report on in "YYYY-MM-DD" format, inclusive.
-  --end-date: string # End of the date range to report on in "YYYY-MM-DD" format, inclusive.
+  --start-date: string # Start of the date range to report on in "YYYY-MM-DD" format, inclusive. (required)
+  --end-date: string # End of the date range to report on in "YYYY-MM-DD" format, inclusive. (required)
   --dimension: list<string> # Dimensions to base the report on.
   --filter: list<string> # Filters to be run on the report.
   --locale: string # Optional locale to use for translating report output to a local language. Defaults to "en_US" if not specified.
   --max-results: int # The maximum number of rows of report data to return.
   --metric: list<string> # Numeric columns to include in the report.
-  --qp-sort: list<string> # The name of a dimension or metric to sort the resulting report on, optionally prefixed with "+" to sort ascending or "-" to sort descending. If no prefix is specified, the column is sorted ascending.
+  --sort: list<string> # The name of a dimension or metric to sort the resulting report on, optionally prefixed with "+" to sort ascending or "-" to sort descending. If no prefix is specified, the column is sorted ascending.
   --start-index: int # Index of the first row of report data to return.
 ]: nothing -> record<averages: list<string>, headers: table<currency: string, name: string, type: string>, kind: string, rows: list<list<string>>, totalMatchedRows: string, totals: list<string>, warnings: list<string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ADSENSE_HOST_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ADSENSE_HOST_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "dimension" $dimension "multi") (serialize-qp "filter" $filter "multi") (serialize-qp "locale" $locale "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "metric" $metric "multi") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'startDate' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'endDate' missing: pass --end-date" } }
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "dimension" $dimension "multi") (serialize-qp "filter" $filter "multi") (serialize-qp "locale" $locale "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "metric" $metric "multi") (serialize-qp "sort" $sort "multi") (serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/reports") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "startDate": $start_date, "endDate": $end_date, "dimension": $dimension, "filter": $filter, "locale": $locale, "maxResults": $max_results, "metric": $metric, "sort": $qp_sort, "startIndex": $start_index} | compact)
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "startDate": $start_date, "endDate": $end_date, "dimension": $dimension, "filter": $filter, "locale": $locale, "maxResults": $max_results, "metric": $metric, "sort": $sort, "startIndex": $start_index} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -767,8 +761,8 @@ export def "adsensehost-accounts-reports-generate" [
 # operationId: adsensehost.adclients.list
 export def "adsensehost-adclients-list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -785,7 +779,7 @@ export def "adsensehost-adclients-list" [
   --max-results: int # The maximum number of ad clients to include in the response, used for paging.
   --page-token: string # A continuation token, used to page through ad clients. To retrieve the next page, set this parameter to the value of "nextPageToken" from the previous response.
 ]: nothing -> record<etag: string, items: table<arcOptIn: bool, id: string, kind: string, productCode: string, supportsReporting: bool>, kind: string, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ADSENSE_HOST_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ADSENSE_HOST_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/adclients" $qp $auth.query)
@@ -812,8 +806,8 @@ export def "adsensehost-adclients-list" [
 export def "adsensehost-adclients-get" [
   ad_client_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -828,7 +822,7 @@ export def "adsensehost-adclients-get" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<arcOptIn: bool, id: string, kind: string, productCode: string, supportsReporting: bool> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ADSENSE_HOST_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ADSENSE_HOST_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ad_client_id | is-empty) { error make --unspanned { msg: "path parameter 'adClientId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
@@ -856,8 +850,8 @@ export def "adsensehost-adclients-get" [
 export def "adsensehost-customchannels-list" [
   ad_client_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -874,7 +868,7 @@ export def "adsensehost-customchannels-list" [
   --max-results: int # The maximum number of custom channels to include in the response, used for paging.
   --page-token: string # A continuation token, used to page through custom channels. To retrieve the next page, set this parameter to the value of "nextPageToken" from the previous response.
 ]: nothing -> record<etag: string, items: table<code: string, id: string, kind: string, name: string>, kind: string, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ADSENSE_HOST_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ADSENSE_HOST_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ad_client_id | is-empty) { error make --unspanned { msg: "path parameter 'adClientId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -902,8 +896,8 @@ export def "adsensehost-customchannels-list" [
 export def "adsensehost-customchannels-patch" [
   ad_client_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -917,16 +911,17 @@ export def "adsensehost-customchannels-patch" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-  --custom-channel-id: string # Custom channel to get.
+  --custom-channel-id: string # Custom channel to get. (required)
   --code: string # Code of this custom channel, not necessarily unique across ad clients.
   --id: string # Unique identifier of this custom channel. This should be considered an opaque identifier; it is not safe to rely on it being in any particular format.
   --kind: string # Kind of resource this is, in this case adsensehost#customChannel. (default: adsensehost#customChannel)
   --name: string # Name of this custom channel.
 ]: any -> record<code: string, id: string, kind: string, name: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ADSENSE_HOST_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ADSENSE_HOST_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ad_client_id | is-empty) { error make --unspanned { msg: "path parameter 'adClientId' must be non-empty" } }
+  if ($custom_channel_id == null) { error make --unspanned { msg: "required query parameter 'customChannelId' missing: pass --custom-channel-id" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "customChannelId" $custom_channel_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ad_client_id: (encode-path-segment $ad_client_id)} | format pattern "/adclients/{ad_client_id}/customchannels") $qp $auth.query)
   let req_body = {"code": $code, "id": $id, "kind": $kind, "name": $name} | compact
@@ -954,8 +949,8 @@ export def "adsensehost-customchannels-patch" [
 export def "adsensehost-customchannels-insert" [
   ad_client_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -975,7 +970,7 @@ export def "adsensehost-customchannels-insert" [
   --name: string # Name of this custom channel.
 ]: any -> record<code: string, id: string, kind: string, name: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ADSENSE_HOST_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ADSENSE_HOST_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ad_client_id | is-empty) { error make --unspanned { msg: "path parameter 'adClientId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
@@ -1005,8 +1000,8 @@ export def "adsensehost-customchannels-insert" [
 export def "adsensehost-customchannels-update" [
   ad_client_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1026,7 +1021,7 @@ export def "adsensehost-customchannels-update" [
   --name: string # Name of this custom channel.
 ]: any -> record<code: string, id: string, kind: string, name: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ADSENSE_HOST_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ADSENSE_HOST_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ad_client_id | is-empty) { error make --unspanned { msg: "path parameter 'adClientId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
@@ -1057,8 +1052,8 @@ export def "adsensehost-customchannels-delete" [
   ad_client_id: string
   custom_channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1073,7 +1068,7 @@ export def "adsensehost-customchannels-delete" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<code: string, id: string, kind: string, name: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ADSENSE_HOST_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ADSENSE_HOST_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ad_client_id | is-empty) { error make --unspanned { msg: "path parameter 'adClientId' must be non-empty" } }
   if ($custom_channel_id | is-empty) { error make --unspanned { msg: "path parameter 'customChannelId' must be non-empty" } }
@@ -1103,8 +1098,8 @@ export def "adsensehost-customchannels-get" [
   ad_client_id: string
   custom_channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1119,7 +1114,7 @@ export def "adsensehost-customchannels-get" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<code: string, id: string, kind: string, name: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ADSENSE_HOST_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ADSENSE_HOST_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ad_client_id | is-empty) { error make --unspanned { msg: "path parameter 'adClientId' must be non-empty" } }
   if ($custom_channel_id | is-empty) { error make --unspanned { msg: "path parameter 'customChannelId' must be non-empty" } }
@@ -1148,8 +1143,8 @@ export def "adsensehost-customchannels-get" [
 export def "adsensehost-urlchannels-list" [
   ad_client_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1166,7 +1161,7 @@ export def "adsensehost-urlchannels-list" [
   --max-results: int # The maximum number of URL channels to include in the response, used for paging.
   --page-token: string # A continuation token, used to page through URL channels. To retrieve the next page, set this parameter to the value of "nextPageToken" from the previous response.
 ]: nothing -> record<etag: string, items: table<id: string, kind: string, urlPattern: string>, kind: string, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ADSENSE_HOST_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ADSENSE_HOST_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ad_client_id | is-empty) { error make --unspanned { msg: "path parameter 'adClientId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -1194,8 +1189,8 @@ export def "adsensehost-urlchannels-list" [
 export def "adsensehost-urlchannels-insert" [
   ad_client_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1214,7 +1209,7 @@ export def "adsensehost-urlchannels-insert" [
   --url-pattern: string # URL Pattern of this URL channel. Does not include "http://" or "https://". Example: www.example.com/home
 ]: any -> record<id: string, kind: string, urlPattern: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ADSENSE_HOST_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ADSENSE_HOST_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ad_client_id | is-empty) { error make --unspanned { msg: "path parameter 'adClientId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
@@ -1245,8 +1240,8 @@ export def "adsensehost-urlchannels-delete" [
   ad_client_id: string
   url_channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1261,7 +1256,7 @@ export def "adsensehost-urlchannels-delete" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<id: string, kind: string, urlPattern: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ADSENSE_HOST_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ADSENSE_HOST_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ad_client_id | is-empty) { error make --unspanned { msg: "path parameter 'adClientId' must be non-empty" } }
   if ($url_channel_id | is-empty) { error make --unspanned { msg: "path parameter 'urlChannelId' must be non-empty" } }
@@ -1289,8 +1284,8 @@ export def "adsensehost-urlchannels-delete" [
 # operationId: adsensehost.associationsessions.start
 export def "adsensehost-associationsessions-start" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1304,14 +1299,16 @@ export def "adsensehost-associationsessions-start" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-  --product-code: list<string> # Products to associate with the user.
-  --website-url: string # The URL of the user's hosted website.
+  --product-code: list<string> # Products to associate with the user. (required)
+  --website-url: string # The URL of the user's hosted website. (required)
   --callback-url: string # The URL to redirect the user to once association is completed. It receives a token parameter that can then be used to retrieve the associated account.
   --user-locale: string # The preferred locale of the user.
   --website-locale: string # The locale of the user's hosted website.
 ]: nothing -> record<accountId: string, id: string, kind: string, productCodes: list<string>, redirectUrl: string, status: string, userLocale: string, websiteLocale: string, websiteUrl: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ADSENSE_HOST_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ADSENSE_HOST_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($product_code == null) { error make --unspanned { msg: "required query parameter 'productCode' missing: pass --product-code" } }
+  if ($website_url == null) { error make --unspanned { msg: "required query parameter 'websiteUrl' missing: pass --website-url" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "productCode" $product_code "multi") (serialize-qp "websiteUrl" $website_url "scalar") (serialize-qp "callbackUrl" $callback_url "scalar") (serialize-qp "userLocale" $user_locale "scalar") (serialize-qp "websiteLocale" $website_locale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/associationsessions/start" $qp $auth.query)
   let accept_val = "application/json"
@@ -1336,8 +1333,8 @@ export def "adsensehost-associationsessions-start" [
 # operationId: adsensehost.associationsessions.verify
 export def "adsensehost-associationsessions-verify" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1351,10 +1348,11 @@ export def "adsensehost-associationsessions-verify" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-  --qp-token: string # The token returned to the association callback URL.
+  --qp-token: string # The token returned to the association callback URL. (required)
 ]: nothing -> record<accountId: string, id: string, kind: string, productCodes: list<string>, redirectUrl: string, status: string, userLocale: string, websiteLocale: string, websiteUrl: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ADSENSE_HOST_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ADSENSE_HOST_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/associationsessions/verify" $qp $auth.query)
   let accept_val = "application/json"
@@ -1379,8 +1377,8 @@ export def "adsensehost-associationsessions-verify" [
 # operationId: adsensehost.reports.generate
 export def "adsensehost-reports-generate" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1394,26 +1392,28 @@ export def "adsensehost-reports-generate" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-  --start-date: string # Start of the date range to report on in "YYYY-MM-DD" format, inclusive.
-  --end-date: string # End of the date range to report on in "YYYY-MM-DD" format, inclusive.
+  --start-date: string # Start of the date range to report on in "YYYY-MM-DD" format, inclusive. (required)
+  --end-date: string # End of the date range to report on in "YYYY-MM-DD" format, inclusive. (required)
   --dimension: list<string> # Dimensions to base the report on.
   --filter: list<string> # Filters to be run on the report.
   --locale: string # Optional locale to use for translating report output to a local language. Defaults to "en_US" if not specified.
   --max-results: int # The maximum number of rows of report data to return.
   --metric: list<string> # Numeric columns to include in the report.
-  --qp-sort: list<string> # The name of a dimension or metric to sort the resulting report on, optionally prefixed with "+" to sort ascending or "-" to sort descending. If no prefix is specified, the column is sorted ascending.
+  --sort: list<string> # The name of a dimension or metric to sort the resulting report on, optionally prefixed with "+" to sort ascending or "-" to sort descending. If no prefix is specified, the column is sorted ascending.
   --start-index: int # Index of the first row of report data to return.
 ]: nothing -> record<averages: list<string>, headers: table<currency: string, name: string, type: string>, kind: string, rows: list<list<string>>, totalMatchedRows: string, totals: list<string>, warnings: list<string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o ADSENSE_HOST_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o ADSENSE_HOST_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "dimension" $dimension "multi") (serialize-qp "filter" $filter "multi") (serialize-qp "locale" $locale "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "metric" $metric "multi") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'startDate' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'endDate' missing: pass --end-date" } }
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "dimension" $dimension "multi") (serialize-qp "filter" $filter "multi") (serialize-qp "locale" $locale "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "metric" $metric "multi") (serialize-qp "sort" $sort "multi") (serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reports" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "startDate": $start_date, "endDate": $end_date, "dimension": $dimension, "filter": $filter, "locale": $locale, "maxResults": $max_results, "metric": $metric, "sort": $qp_sort, "startIndex": $start_index} | compact)
+    query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "userIp": $user_ip, "startDate": $start_date, "endDate": $end_date, "dimension": $dimension, "filter": $filter, "locale": $locale, "maxResults": $max_results, "metric": $metric, "sort": $sort, "startIndex": $start_index} | compact)
     headers: $auth.headers
     body: null
     content_type: null

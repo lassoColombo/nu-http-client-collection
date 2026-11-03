@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -143,10 +143,11 @@ export def "get-asset-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
+  --xero-tenant-id: string # Xero identifier for Tenant (required, e.g. YOUR_XERO_TENANT_ID)
 ]: nothing -> table<accumulatedDepreciationAccountId: string, assetTypeId: string, assetTypeName: string, bookDepreciationSetting: record<averagingMethod: string, bookEffectiveDateOfChangeId: string, depreciableObjectId: string, depreciableObjectType: string, depreciationCalculationMethod: string, depreciationMethod: string, depreciationRate: float, effectiveLifeYears: int>, depreciationExpenseAccountId: string, fixedAssetAccountId: string, locks: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base "/AssetTypes" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -181,7 +182,7 @@ export def "create-asset-type" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
+  --xero-tenant-id: string # Xero identifier for Tenant (required, e.g. YOUR_XERO_TENANT_ID)
   --accumulated-depreciation-account-id: string # The account for accumulated depreciation of fixed assets of this type (format: uuid, e.g. ca4c6b39-4f4f-43e8-98da-5e1f350a6694)
   --asset-type-id: string # Xero generated unique identifier for asset types (format: uuid, e.g. 5da209c5-5e19-4a43-b925-71b776c49ced)
   asset_type_name: string # The name of the asset type (e.g. Computer Equipment)
@@ -193,6 +194,7 @@ export def "create-asset-type" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base "/AssetTypes" $auth.query)
   let req_body = {"accumulatedDepreciationAccountId": $accumulated_depreciation_account_id, "assetTypeId": $asset_type_id, "assetTypeName": $asset_type_name, "bookDepreciationSetting": $book_depreciation_setting, "depreciationExpenseAccountId": $depreciation_expense_account_id, "fixedAssetAccountId": $fixed_asset_account_id, "locks": $locks} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -228,16 +230,18 @@ export def "get-assets" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --status: string@status-completer # Required when retrieving a collection of assets. See Asset Status Codes (e.g. DRAFT)
+  --status: string@status-completer # Required when retrieving a collection of assets. See Asset Status Codes (required, e.g. DRAFT)
   --page: int # Results are paged. This specifies which page of the results to return. The default page is 1. (e.g. 1)
   --page-size: int # The number of records returned per page. By default the number of records returned is 10. (e.g. 5)
   --order-by: string@order-by-completer # Requests can be ordered by AssetType, AssetName, AssetNumber, PurchaseDate and PurchasePrice. If the asset status is DISPOSED it also allows DisposalDate and DisposalPrice. (e.g. AssetName)
   --sort-direction: string@sort-direction-completer # ASC or DESC (e.g. ASC)
   --filter-by: string # A string that can be used to filter the list to only return assets containing the text. Checks it against the AssetName, AssetNumber, Description and AssetTypeName fields. (e.g. Company Car)
-  --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
+  --xero-tenant-id: string # Xero identifier for Tenant (required, e.g. YOUR_XERO_TENANT_ID)
 ]: nothing -> record<items: table<accountingBookValue: float, assetId: string, assetName: string, assetNumber: string, assetStatus: string, assetTypeId: string, bookDepreciationDetail: record, bookDepreciationSetting: record, canRollback: bool, disposalDate: string, disposalPrice: float, isDeleteEnabledForDate: bool, purchaseDate: string, purchasePrice: float, serialNumber: string, warrantyExpiryDate: string>, pagination: record<itemCount: int, page: int, pageCount: int, pageSize: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($status == null) { error make --unspanned { msg: "required query parameter 'status' missing: pass --status" } }
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "sortDirection" $sort_direction "scalar") (serialize-qp "filterBy" $filter_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Assets" $qp $auth.query)
   let accept_val = "application/json"
@@ -274,7 +278,7 @@ export def "create-asset" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
+  --xero-tenant-id: string # Xero identifier for Tenant (required, e.g. YOUR_XERO_TENANT_ID)
   --accounting-book-value: float # The accounting value of the asset (format: double, e.g. 0)
   --asset-id: string # The Xero-generated Id for the asset (format: uuid, e.g. 3b5b3a38-5649-495f-87a1-14a4e5918634)
   asset_name: string # The name of the asset (e.g. Awesome Truck 3)
@@ -295,6 +299,7 @@ export def "create-asset" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base "/Assets" $auth.query)
   let req_body = {"accountingBookValue": $accounting_book_value, "assetId": $asset_id, "assetName": $asset_name, "assetNumber": $asset_number, "assetStatus": $asset_status, "assetTypeId": $asset_type_id, "bookDepreciationDetail": $book_depreciation_detail, "bookDepreciationSetting": $book_depreciation_setting, "canRollback": $can_rollback, "disposalDate": $disposal_date, "disposalPrice": $disposal_price, "isDeleteEnabledForDate": $is_delete_enabled_for_date, "purchaseDate": $purchase_date, "purchasePrice": $purchase_price, "serialNumber": $serial_number, "warrantyExpiryDate": $warranty_expiry_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -331,11 +336,12 @@ export def "get-asset-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
+  --xero-tenant-id: string # Xero identifier for Tenant (required, e.g. YOUR_XERO_TENANT_ID)
 ]: nothing -> record<accountingBookValue: float, assetId: string, assetName: string, assetNumber: string, assetStatus: string, assetTypeId: string, bookDepreciationDetail: record<costLimit: float, currentAccumDepreciationAmount: float, currentCapitalGain: float, currentGainLoss: float, depreciationStartDate: string, priorAccumDepreciationAmount: float, residualValue: float>, bookDepreciationSetting: record<averagingMethod: string, bookEffectiveDateOfChangeId: string, depreciableObjectId: string, depreciableObjectType: string, depreciationCalculationMethod: string, depreciationMethod: string, depreciationRate: float, effectiveLifeYears: int>, canRollback: bool, disposalDate: string, disposalPrice: float, isDeleteEnabledForDate: bool, purchaseDate: string, purchasePrice: float, serialNumber: string, warrantyExpiryDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/Assets/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -369,10 +375,11 @@ export def "get-asset-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
+  --xero-tenant-id: string # Xero identifier for Tenant (required, e.g. YOUR_XERO_TENANT_ID)
 ]: nothing -> record<assetNumberPrefix: string, assetNumberSequence: string, assetStartDate: string, defaultCapitalGainOnDisposalAccountId: string, defaultGainOnDisposalAccountId: string, defaultLossOnDisposalAccountId: string, lastDepreciationDate: string, optInForTax: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base "/Settings" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

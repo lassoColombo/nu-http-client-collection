@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -155,7 +155,7 @@ export def "delete-session" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<botId: record, botAliasId: record, localeId: record, sessionId: record> {
+]: nothing -> record<botId: string, botAliasId: string, localeId: string, sessionId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
@@ -206,7 +206,7 @@ export def "get-session" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<sessionId: record, messages: record, interpretations: record, sessionState: record<dialogAction: record<type: record, slotToElicit: record, slotElicitationStyle: record, subSlotToElicit: record>, intent: record<name: record, slots: record, state: record, confirmationState: record>, activeContexts: record, sessionAttributes: record, originatingRequestId: record, runtimeHints: record<slotHints: record>>> {
+]: nothing -> record<sessionId: string, messages: table<content: string, contentType: string, imageResponseCard: record>, interpretations: table<nluConfidence: record, sentimentResponse: record, intent: record>, sessionState: record<dialogAction: record<type: string, slotToElicit: string, slotElicitationStyle: string, subSlotToElicit: record>, intent: record<name: string, slots: record, state: string, confirmationState: string>, activeContexts: list<record>, sessionAttributes: record, originatingRequestId: string, runtimeHints: record<slotHints: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
@@ -236,8 +236,8 @@ export def "get-session" [
 #
 # POST /bots/{botId}/botAliases/{botAliasId}/botLocales/{localeId}/sessions/{sessionId}
 # operationId: PutSession
-# --messages item shape: {content?: any, contentType: any, imageResponseCard?: record}
-# --sessionState shape: {dialogAction?: any, intent?: any, activeContexts?: any, sessionAttributes?: any, originatingRequestId?: any, runtimeHints?: any}
+# --messages item shape: {content?: string, contentType: "CustomPayload"|"ImageResponseCard"|"PlainText"|"SSML", imageResponseCard?: record}
+# --sessionState shape: {dialogAction?: record, intent?: record, activeContexts?: list, sessionAttributes?: record, originatingRequestId?: string, runtimeHints?: record}
 export def "put-session" [
   bot_id: string
   bot_alias_id: string
@@ -260,10 +260,10 @@ export def "put-session" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --response-content-type: string # The message that Amazon Lex V2 returns in the response can be either text or speech depending on the value of this parameter. If the value is text/plain; charset=utf-8, Amazon Lex V2 returns text in the response.
-  --messages: list # A list of messages to send to the user. Messages are sent in the order that they are defined in the list. — item shape: {content?: any, contentType: any, imageResponseCard?: record}
-  session_state: record # The state of the user's session with Amazon Lex V2. — shape: {dialogAction?: any, intent?: any, activeContexts?: any, sessionAttributes?: any, originatingRequestId?: any, runtimeHints?: any}
+  --messages: list # A list of messages to send to the user. Messages are sent in the order that they are defined in the list. — item shape: {content?: string, contentType: "CustomPayload"|"ImageResponseCard"|"PlainText"|"SSML", imageResponseCard?: record}
+  session_state: record # The state of the user's session with Amazon Lex V2. — shape: {dialogAction?: record, intent?: record, activeContexts?: list, sessionAttributes?: record, originatingRequestId?: string, runtimeHints?: record}
   --request-attributes: record # Request-specific information passed between Amazon Lex V2 and the client application. The namespace x-amz-lex: is reserved for special attributes. Don't create any request attributes with the prefix x-amz-lex:.
-]: any -> record<audioStream: record> {
+]: any -> record<audioStream: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -296,7 +296,7 @@ export def "put-session" [
 #
 # POST /bots/{botId}/botAliases/{botAliasId}/botLocales/{localeId}/sessions/{sessionId}/text
 # operationId: RecognizeText
-# --sessionState shape: {dialogAction?: any, intent?: any, activeContexts?: any, sessionAttributes?: any, originatingRequestId?: any, runtimeHints?: any}
+# --sessionState shape: {dialogAction?: record, intent?: record, activeContexts?: list, sessionAttributes?: record, originatingRequestId?: string, runtimeHints?: record}
 export def "recognize-text" [
   bot_id: string
   bot_alias_id: string
@@ -319,9 +319,9 @@ export def "recognize-text" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   text: string # The text that the user entered. Amazon Lex V2 interprets this text. (format: password)
-  --session-state: record # The state of the user's session with Amazon Lex V2. — shape: {dialogAction?: any, intent?: any, activeContexts?: any, sessionAttributes?: any, originatingRequestId?: any, runtimeHints?: any}
+  --session-state: record # The state of the user's session with Amazon Lex V2. — shape: {dialogAction?: record, intent?: record, activeContexts?: list, sessionAttributes?: record, originatingRequestId?: string, runtimeHints?: record}
   --request-attributes: record # Request-specific information passed between the client application and Amazon Lex V2 The namespace x-amz-lex: is reserved for special attributes. Don't create any request attributes with the prefix x-amz-lex:.
-]: any -> record<messages: record, sessionState: record<dialogAction: record<type: record, slotToElicit: record, slotElicitationStyle: record, subSlotToElicit: record>, intent: record<name: record, slots: record, state: record, confirmationState: record>, activeContexts: record, sessionAttributes: record, originatingRequestId: record, runtimeHints: record<slotHints: record>>, interpretations: record, requestAttributes: record, sessionId: record, recognizedBotMember: record<botId: record, botName: record>> {
+]: any -> record<messages: table<content: string, contentType: string, imageResponseCard: record>, sessionState: record<dialogAction: record<type: string, slotToElicit: string, slotElicitationStyle: string, subSlotToElicit: record>, intent: record<name: string, slots: record, state: string, confirmationState: string>, activeContexts: list<record>, sessionAttributes: record, originatingRequestId: string, runtimeHints: record<slotHints: record>>, interpretations: table<nluConfidence: record, sentimentResponse: record, intent: record>, requestAttributes: record, sessionId: string, recognizedBotMember: record<botId: string, botName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -375,12 +375,12 @@ export def "recognize-utterance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-lex-session-state: string # Sets the state of the session with the user. You can use this to set the current intent, attributes, context, and dialog action. Use the dialog action to determine the next step that Amazon Lex V2 should use in the conversation with the user. The sessionState field must be compressed using gzip and then base64 encoded before sending to Amazon Lex V2.
-  --x-amz-lex-request-attributes: string # Request-specific information passed between the client application and Amazon Lex V2 The namespace x-amz-lex: is reserved for special attributes. Don't create any request attributes for prefix x-amz-lex:. The requestAttributes field must be compressed using gzip and then base64 encoded before sending to Amazon Lex V2.
-  --content-type: string # Indicates the format for audio input or that the content is text. The header must start with one of the following prefixes: PCM format, audio data must be in little-endian byte order. audio/l16; rate=16000; channels=1 audio/x-l16; sample-rate=16000; channel-count=1 audio/lpcm; sample-rate=8000; sample-size-bits=16; channel-count=1; is-big-endian=false Opus format audio/x-cbr-opus-with-preamble;preamble-size=0;bit-rate=256000;frame-size-milliseconds=4 Text format text/plain; charset=utf-8
+  --x-amz-lex-session-state: string # Sets the state of the session with the user. You can use this to set the current intent, attributes, context, and dialog action. Use the dialog action to determine the next step that Amazon Lex V2 should use in the conversation with the user. The sessionState field must be compressed using gzip and then base64 encoded before sending to Amazon Lex V2. (format: password)
+  --x-amz-lex-request-attributes: string # Request-specific information passed between the client application and Amazon Lex V2 The namespace x-amz-lex: is reserved for special attributes. Don't create any request attributes for prefix x-amz-lex:. The requestAttributes field must be compressed using gzip and then base64 encoded before sending to Amazon Lex V2. (format: password)
+  --content-type: string # Indicates the format for audio input or that the content is text. The header must start with one of the following prefixes: PCM format, audio data must be in little-endian byte order. audio/l16; rate=16000; channels=1 audio/x-l16; sample-rate=16000; channel-count=1 audio/lpcm; sample-rate=8000; sample-size-bits=16; channel-count=1; is-big-endian=false Opus format audio/x-cbr-opus-with-preamble;preamble-size=0;bit-rate=256000;frame-size-milliseconds=4 Text format text/plain; charset=utf-8 (required)
   --response-content-type: string # The message that Amazon Lex V2 returns in the response can be either text or speech based on the responseContentType value. If the value is text/plain;charset=utf-8, Amazon Lex V2 returns text in the response. If the value begins with audio/, Amazon Lex V2 returns speech in the response. Amazon Lex V2 uses Amazon Polly to generate the speech using the configuration that you specified in the responseContentType parameter. For example, if you specify audio/mpeg as the value, Amazon Lex V2 returns speech in the MPEG format. If the value is audio/pcm, the speech returned is audio/pcm at 16 KHz in 16-bit, little-endian format. The following are the accepted values: audio/mpeg audio/ogg audio/pcm (16 KHz) audio/* (defaults to mpeg) text/plain; charset=utf-8
   --input-stream: string # User input in PCM or Opus audio format or text format as described in the requestContentType parameter.
-]: any -> record<audioStream: record> {
+]: any -> record<audioStream: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

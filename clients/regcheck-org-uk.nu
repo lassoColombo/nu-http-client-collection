@@ -131,10 +131,11 @@ export def "check" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --search-string: string # A registration number
+  --search-string: string # A registration number (required)
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($search_string == null) { error make --unspanned { msg: "required query parameter 'searchString' missing: pass --search-string" } }
   let qp = [(serialize-qp "searchString" $search_string "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Check" $qp $auth.query)
   let accept_val = "application/json"

@@ -105,7 +105,7 @@ def tz-completer [] { ["local" "utc"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-alertslat-lat-lon-lon" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-alerts-lat-lat-lon-lon" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 # Returns severe weather alerts issued by meteorological agencies - Given a lat/lon.
 #
 # GET /alerts?lat={lat}&lon={lon}
-export def "get-alertslat-lat-lon-lon" [
+export def "get-alerts-lat-lat-lon-lon" [
   lat: float
   lon: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -141,14 +141,15 @@ export def "get-alertslat-lat-lon-lon" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --callback: string # Wraps return in jsonp callback - Example - callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<alerts: table<alerts: list, description: string, effective_local: string, effective_utc: string, expires_local: string, expires_utc: string, severity: string, title: string, uri: string>, lat: float, lon: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($lat | is-empty) { error make --unspanned { msg: "path parameter 'lat' must be non-empty" } }
   if ($lon | is-empty) { error make --unspanned { msg: "path parameter 'lon' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/alerts?lat={lat}&lon={lon}") $qp $auth.query)
+  let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/alerts") "lat={lat}&lon={lon}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -179,11 +180,12 @@ export def "get-bulk-files-file" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<code: int, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file | is-empty) { error make --unspanned { msg: "path parameter 'file' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({file: (encode-path-segment $file)} | format pattern "/bulk/files/{file}") $qp $auth.query)
   let accept_val = "application/json"
@@ -205,7 +207,7 @@ export def "get-bulk-files-file" [
 # Returns current air quality conditions - Given City and/or State, Country.
 #
 # GET /current/airquality?city={city}&country={country}
-export def "get-current-airqualitycity-city-country-country" [
+export def "get-current-airquality-city-city-country-country" [
   city: string
   country: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -219,14 +221,15 @@ export def "get-current-airqualitycity-city-country-country" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --state: string # Full name of state. (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<aqi: int, no2: float, o3: float, pm10: float, pm25: float, so2: float>, lat: string, lon: string, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($city | is-empty) { error make --unspanned { msg: "path parameter 'city' must be non-empty" } }
   if ($country | is-empty) { error make --unspanned { msg: "path parameter 'country' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city: (encode-path-segment $city), country: (encode-path-segment $country)} | format pattern "/current/airquality?city={city}&country={country}") $qp $auth.query)
+  let full_url = (build-url $base ({city: (encode-path-segment $city), country: (encode-path-segment $country)} | format pattern "/current/airquality") "city={city}&country={country}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -246,7 +249,7 @@ export def "get-current-airqualitycity-city-country-country" [
 # Returns current air quality conditions - Given a City ID.
 #
 # GET /current/airquality?city_id={city_id}
-export def "get-current-airqualitycity-id-city-id" [
+export def "get-current-airquality-city-id-city-id" [
   city_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -258,13 +261,14 @@ export def "get-current-airqualitycity-id-city-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --callback: string # Wraps return in jsonp callback. Example - callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<aqi: int, no2: float, o3: float, pm10: float, pm25: float, so2: float>, lat: string, lon: string, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($city_id | is-empty) { error make --unspanned { msg: "path parameter 'city_id' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/current/airquality?city_id={city_id}") $qp $auth.query)
+  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/current/airquality") "city_id={city_id}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -284,7 +288,7 @@ export def "get-current-airqualitycity-id-city-id" [
 # Returns current air quality conditions - Given a lat/lon.
 #
 # GET /current/airquality?lat={lat}&lon={lon}
-export def "get-current-airqualitylat-lat-lon-lon" [
+export def "get-current-airquality-lat-lat-lon-lon" [
   lat: float
   lon: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -297,14 +301,15 @@ export def "get-current-airqualitylat-lat-lon-lon" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --callback: string # Wraps return in jsonp callback. Example - callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<aqi: int, no2: float, o3: float, pm10: float, pm25: float, so2: float>, lat: string, lon: string, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($lat | is-empty) { error make --unspanned { msg: "path parameter 'lat' must be non-empty" } }
   if ($lon | is-empty) { error make --unspanned { msg: "path parameter 'lon' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/current/airquality?lat={lat}&lon={lon}") $qp $auth.query)
+  let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/current/airquality") "lat={lat}&lon={lon}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -324,7 +329,7 @@ export def "get-current-airqualitylat-lat-lon-lon" [
 # Returns current air quality conditions - Given a Postal Code.
 #
 # GET /current/airquality?postal_code={postal_code}
-export def "get-current-airqualitypostal-code-postal-code" [
+export def "get-current-airquality-postal-code-postal-code" [
   postal_code: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -337,13 +342,14 @@ export def "get-current-airqualitypostal-code-postal-code" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # Country Code (2 letter). (format: string)
   --callback: string # Wraps return in jsonp callback. Example - callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<aqi: int, no2: float, o3: float, pm10: float, pm25: float, so2: float>, lat: string, lon: string, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($postal_code | is-empty) { error make --unspanned { msg: "path parameter 'postal_code' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({postal_code: (encode-path-segment $postal_code)} | format pattern "/current/airquality?postal_code={postal_code}") $qp $auth.query)
+  let full_url = (build-url $base ({postal_code: (encode-path-segment $postal_code)} | format pattern "/current/airquality") "postal_code={postal_code}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -363,7 +369,7 @@ export def "get-current-airqualitypostal-code-postal-code" [
 # Returns a group of observations given a list of cities
 #
 # GET /current?cities={cities}
-export def "get-currentcities-cities" [
+export def "get-current-cities-cities" [
   cities: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -378,13 +384,14 @@ export def "get-currentcities-cities" [
   --marine: string@marine-completer # Marine stations only (buoys, oil platforms, etc) (format: string)
   --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback - Example - callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<count: int, data: table<app_temp: float, aqi: float, city_name: string, clouds: int, country_code: string, datetime: string, dewpt: float, dhi: float, dni: float, elev_angle: float, ghi: float, gust: float, hour_angle: float, lat: float, lon: float, ob_time: string, pod: string, precip: float, pres: float, rh: int, slp: float, snow: float, solar_rad: float, sources: list, state_code: string, station: string, sunrise: string, sunset: string, temp: float, timezone: string, ts: float, uv: float, vis: int, weather: record, wind_cdir: string, wind_cdir_full: string, wind_dir: int, wind_speed: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cities | is-empty) { error make --unspanned { msg: "path parameter 'cities' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "units" $units "scalar") (serialize-qp "marine" $marine "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({cities: (encode-path-segment $cities)} | format pattern "/current?cities={cities}") $qp $auth.query)
+  let full_url = (build-url $base ({cities: (encode-path-segment $cities)} | format pattern "/current") "cities={cities}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -404,7 +411,7 @@ export def "get-currentcities-cities" [
 # Returns a Current Observation - Given City and/or State, Country.
 #
 # GET /current?city={city}&country={country}
-export def "get-currentcity-city-country-country" [
+export def "get-current-city-city-country-country" [
   city: string
   country: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -422,14 +429,15 @@ export def "get-currentcity-city-country-country" [
   --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
   --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback - Example - callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<count: int, data: table<app_temp: float, aqi: float, city_name: string, clouds: int, country_code: string, datetime: string, dewpt: float, dhi: float, dni: float, elev_angle: float, ghi: float, gust: float, hour_angle: float, lat: float, lon: float, ob_time: string, pod: string, precip: float, pres: float, rh: int, slp: float, snow: float, solar_rad: float, sources: list, state_code: string, station: string, sunrise: string, sunset: string, temp: float, timezone: string, ts: float, uv: float, vis: int, weather: record, wind_cdir: string, wind_cdir_full: string, wind_dir: int, wind_speed: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($city | is-empty) { error make --unspanned { msg: "path parameter 'city' must be non-empty" } }
   if ($country | is-empty) { error make --unspanned { msg: "path parameter 'country' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "include" $include "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "marine" $marine "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city: (encode-path-segment $city), country: (encode-path-segment $country)} | format pattern "/current?city={city}&country={country}") $qp $auth.query)
+  let full_url = (build-url $base ({city: (encode-path-segment $city), country: (encode-path-segment $country)} | format pattern "/current") "city={city}&country={country}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -449,7 +457,7 @@ export def "get-currentcity-city-country-country" [
 # Returns a current observation by city id.
 #
 # GET /current?city_id={city_id}
-export def "get-currentcity-id-city-id" [
+export def "get-current-city-id-city-id" [
   city_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -465,13 +473,14 @@ export def "get-currentcity-id-city-id" [
   --marine: string@marine-completer # Marine stations only (buoys, oil platforms, etc) (format: string)
   --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback - Example - callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<count: int, data: table<app_temp: float, aqi: float, city_name: string, clouds: int, country_code: string, datetime: string, dewpt: float, dhi: float, dni: float, elev_angle: float, ghi: float, gust: float, hour_angle: float, lat: float, lon: float, ob_time: string, pod: string, precip: float, pres: float, rh: int, slp: float, snow: float, solar_rad: float, sources: list, state_code: string, station: string, sunrise: string, sunset: string, temp: float, timezone: string, ts: float, uv: float, vis: int, weather: record, wind_cdir: string, wind_cdir_full: string, wind_dir: int, wind_speed: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($city_id | is-empty) { error make --unspanned { msg: "path parameter 'city_id' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "units" $units "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "marine" $marine "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/current?city_id={city_id}") $qp $auth.query)
+  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/current") "city_id={city_id}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -491,7 +500,7 @@ export def "get-currentcity-id-city-id" [
 # Returns a Current Observation - Given a lat/lon.
 #
 # GET /current?lat={lat}&lon={lon}
-export def "get-currentlat-lat-lon-lon" [
+export def "get-current-lat-lat-lon-lon" [
   lat: float
   lon: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -508,14 +517,15 @@ export def "get-currentlat-lat-lon-lon" [
   --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
   --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback - Example - callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<count: int, data: table<app_temp: float, aqi: float, city_name: string, clouds: int, country_code: string, datetime: string, dewpt: float, dhi: float, dni: float, elev_angle: float, ghi: float, gust: float, hour_angle: float, lat: float, lon: float, ob_time: string, pod: string, precip: float, pres: float, rh: int, slp: float, snow: float, solar_rad: float, sources: list, state_code: string, station: string, sunrise: string, sunset: string, temp: float, timezone: string, ts: float, uv: float, vis: int, weather: record, wind_cdir: string, wind_cdir_full: string, wind_dir: int, wind_speed: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($lat | is-empty) { error make --unspanned { msg: "path parameter 'lat' must be non-empty" } }
   if ($lon | is-empty) { error make --unspanned { msg: "path parameter 'lon' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "include" $include "scalar") (serialize-qp "marine" $marine "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/current?lat={lat}&lon={lon}") $qp $auth.query)
+  let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/current") "lat={lat}&lon={lon}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -535,7 +545,7 @@ export def "get-currentlat-lat-lon-lon" [
 # Returns a group of observations given a list of points in the format (lat1, lon1), (lat2, lon2), (latN, lonN), ...
 #
 # GET /current?points={points}
-export def "get-currentpoints-points" [
+export def "get-current-points-points" [
   points: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -549,13 +559,14 @@ export def "get-currentpoints-points" [
   --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
   --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<count: int, data: table<app_temp: float, aqi: float, city_name: string, clouds: int, country_code: string, datetime: string, dewpt: float, dhi: float, dni: float, elev_angle: float, ghi: float, gust: float, hour_angle: float, lat: float, lon: float, ob_time: string, pod: string, precip: float, pres: float, rh: int, slp: float, snow: float, solar_rad: float, sources: list, state_code: string, station: string, sunrise: string, sunset: string, temp: float, timezone: string, ts: float, uv: float, vis: int, weather: record, wind_cdir: string, wind_cdir_full: string, wind_dir: int, wind_speed: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($points | is-empty) { error make --unspanned { msg: "path parameter 'points' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({points: (encode-path-segment $points)} | format pattern "/current?points={points}") $qp $auth.query)
+  let full_url = (build-url $base ({points: (encode-path-segment $points)} | format pattern "/current") "points={points}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -575,7 +586,7 @@ export def "get-currentpoints-points" [
 # Returns a current observation by postal code.
 #
 # GET /current?postal_code={postal_code}
-export def "get-currentpostal-code-postal-code" [
+export def "get-current-postal-code-postal-code" [
   postal_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -592,13 +603,14 @@ export def "get-currentpostal-code-postal-code" [
   --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
   --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback - Example - callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<count: int, data: table<app_temp: float, aqi: float, city_name: string, clouds: int, country_code: string, datetime: string, dewpt: float, dhi: float, dni: float, elev_angle: float, ghi: float, gust: float, hour_angle: float, lat: float, lon: float, ob_time: string, pod: string, precip: float, pres: float, rh: int, slp: float, snow: float, solar_rad: float, sources: list, state_code: string, station: string, sunrise: string, sunset: string, temp: float, timezone: string, ts: float, uv: float, vis: int, weather: record, wind_cdir: string, wind_cdir_full: string, wind_dir: int, wind_speed: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($postal_code | is-empty) { error make --unspanned { msg: "path parameter 'postal_code' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "marine" $marine "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({postal_code: (encode-path-segment $postal_code)} | format pattern "/current?postal_code={postal_code}") $qp $auth.query)
+  let full_url = (build-url $base ({postal_code: (encode-path-segment $postal_code)} | format pattern "/current") "postal_code={postal_code}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -618,7 +630,7 @@ export def "get-currentpostal-code-postal-code" [
 # Returns a Current Observation. - Given a station ID.
 #
 # GET /current?station={station}
-export def "get-currentstation-station" [
+export def "get-current-station-station" [
   station: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -633,13 +645,14 @@ export def "get-currentstation-station" [
   --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
   --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<count: int, data: table<app_temp: float, aqi: float, city_name: string, clouds: int, country_code: string, datetime: string, dewpt: float, dhi: float, dni: float, elev_angle: float, ghi: float, gust: float, hour_angle: float, lat: float, lon: float, ob_time: string, pod: string, precip: float, pres: float, rh: int, slp: float, snow: float, solar_rad: float, sources: list, state_code: string, station: string, sunrise: string, sunset: string, temp: float, timezone: string, ts: float, uv: float, vis: int, weather: record, wind_cdir: string, wind_cdir_full: string, wind_dir: int, wind_speed: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($station | is-empty) { error make --unspanned { msg: "path parameter 'station' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "include" $include "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({station: (encode-path-segment $station)} | format pattern "/current?station={station}") $qp $auth.query)
+  let full_url = (build-url $base ({station: (encode-path-segment $station)} | format pattern "/current") "station={station}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -659,7 +672,7 @@ export def "get-currentstation-station" [
 # Returns a group of observations given a list of stations
 #
 # GET /current?stations={stations}
-export def "get-currentstations-stations" [
+export def "get-current-stations-stations" [
   stations: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -673,13 +686,14 @@ export def "get-currentstations-stations" [
   --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
   --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<count: int, data: table<app_temp: float, aqi: float, city_name: string, clouds: int, country_code: string, datetime: string, dewpt: float, dhi: float, dni: float, elev_angle: float, ghi: float, gust: float, hour_angle: float, lat: float, lon: float, ob_time: string, pod: string, precip: float, pres: float, rh: int, slp: float, snow: float, solar_rad: float, sources: list, state_code: string, station: string, sunrise: string, sunset: string, temp: float, timezone: string, ts: float, uv: float, vis: int, weather: record, wind_cdir: string, wind_cdir_full: string, wind_dir: int, wind_speed: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($stations | is-empty) { error make --unspanned { msg: "path parameter 'stations' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({stations: (encode-path-segment $stations)} | format pattern "/current?stations={stations}") $qp $auth.query)
+  let full_url = (build-url $base ({stations: (encode-path-segment $stations)} | format pattern "/current") "stations={stations}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -699,7 +713,7 @@ export def "get-currentstations-stations" [
 # Returns 72 hour (hourly) Air Quality forecast - Given City and/or State, Country.
 #
 # GET /forecast/airquality?city={city}&country={country}
-export def "get-forecast-airqualitycity-city-country-country" [
+export def "get-forecast-airquality-city-city-country-country" [
   city: string
   country: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -714,14 +728,15 @@ export def "get-forecast-airqualitycity-city-country-country" [
   --state: string # Full name of state. (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
   --hours: int # Number of hours to return. (format: integer)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<aqi: int, no2: float, o3: float, pm10: float, pm25: float, so2: float, timestamp_local: string, timestamp_utc: string, ts: float>, lat: string, lon: string, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($city | is-empty) { error make --unspanned { msg: "path parameter 'city' must be non-empty" } }
   if ($country | is-empty) { error make --unspanned { msg: "path parameter 'country' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "hours" $hours "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city: (encode-path-segment $city), country: (encode-path-segment $country)} | format pattern "/forecast/airquality?city={city}&country={country}") $qp $auth.query)
+  let full_url = (build-url $base ({city: (encode-path-segment $city), country: (encode-path-segment $country)} | format pattern "/forecast/airquality") "city={city}&country={country}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -741,7 +756,7 @@ export def "get-forecast-airqualitycity-city-country-country" [
 # Returns 72 hour (hourly) Air Quality forecast - Given a City ID.
 #
 # GET /forecast/airquality?city_id={city_id}
-export def "get-forecast-airqualitycity-id-city-id" [
+export def "get-forecast-airquality-city-id-city-id" [
   city_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -754,13 +769,14 @@ export def "get-forecast-airqualitycity-id-city-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --callback: string # Wraps return in jsonp callback. Example - callback=func (format: string)
   --hours: int # Number of hours to return. (format: integer)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<aqi: int, no2: float, o3: float, pm10: float, pm25: float, so2: float, timestamp_local: string, timestamp_utc: string, ts: float>, lat: string, lon: string, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($city_id | is-empty) { error make --unspanned { msg: "path parameter 'city_id' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "callback" $callback "scalar") (serialize-qp "hours" $hours "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/forecast/airquality?city_id={city_id}") $qp $auth.query)
+  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/forecast/airquality") "city_id={city_id}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -780,7 +796,7 @@ export def "get-forecast-airqualitycity-id-city-id" [
 # Returns 72 hour (hourly) Air Quality forecast - Given a lat/lon.
 #
 # GET /forecast/airquality?lat={lat}&lon={lon}
-export def "get-forecast-airqualitylat-lat-lon-lon" [
+export def "get-forecast-airquality-lat-lat-lon-lon" [
   lat: float
   lon: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -793,15 +809,16 @@ export def "get-forecast-airqualitylat-lat-lon-lon" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --callback: string # Wraps return in jsonp callback. Example - callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
   --hours: int # Number of hours to return. (format: integer)
 ]: nothing -> record<city_name: string, country_code: string, data: table<aqi: int, no2: float, o3: float, pm10: float, pm25: float, so2: float, timestamp_local: string, timestamp_utc: string, ts: float>, lat: string, lon: string, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($lat | is-empty) { error make --unspanned { msg: "path parameter 'lat' must be non-empty" } }
   if ($lon | is-empty) { error make --unspanned { msg: "path parameter 'lon' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "hours" $hours "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/forecast/airquality?lat={lat}&lon={lon}") $qp $auth.query)
+  let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/forecast/airquality") "lat={lat}&lon={lon}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -821,7 +838,7 @@ export def "get-forecast-airqualitylat-lat-lon-lon" [
 # Returns 72 hour (hourly) Air Quality forecast - Given a Postal Code.
 #
 # GET /forecast/airquality?postal_code={postal_code}
-export def "get-forecast-airqualitypostal-code-postal-code" [
+export def "get-forecast-airquality-postal-code-postal-code" [
   postal_code: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -835,13 +852,14 @@ export def "get-forecast-airqualitypostal-code-postal-code" [
   --country: string # Country Code (2 letter). (format: string)
   --callback: string # Wraps return in jsonp callback. Example - callback=func (format: string)
   --hours: int # Number of hours to return. (format: integer)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<aqi: int, no2: float, o3: float, pm10: float, pm25: float, so2: float, timestamp_local: string, timestamp_utc: string, ts: float>, lat: string, lon: string, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($postal_code | is-empty) { error make --unspanned { msg: "path parameter 'postal_code' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "hours" $hours "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({postal_code: (encode-path-segment $postal_code)} | format pattern "/forecast/airquality?postal_code={postal_code}") $qp $auth.query)
+  let full_url = (build-url $base ({postal_code: (encode-path-segment $postal_code)} | format pattern "/forecast/airquality") "postal_code={postal_code}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -861,7 +879,7 @@ export def "get-forecast-airqualitypostal-code-postal-code" [
 # Returns a daily forecast - Given City and/or State, Country.
 #
 # GET /forecast/daily?city={city}&country={country}
-export def "get-forecast-dailycity-city-country-country" [
+export def "get-forecast-daily-city-city-country-country" [
   city: string
   country: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -878,14 +896,15 @@ export def "get-forecast-dailycity-city-country-country" [
   --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
   --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback. Example - callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<app_max_temp: float, app_min_temp: float, clouds: int, datetime: string, dewpt: float, max_dhi: float, max_temp: float, min_temp: float, moon_phase: float, moonrise_ts: int, moonset_ts: int, pod: string, pop: float, precip: float, pres: float, rh: int, slp: float, snow: float, snow_depth: float, sunrise_ts: int, sunset_ts: int, temp: float, timestamp_local: string, timestamp_utc: string, ts: float, uv: float, vis: float, weather: record, wind_cdir: string, wind_cdir_full: string, wind_dir: int, wind_spd: float>, lat: string, lon: string, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($city | is-empty) { error make --unspanned { msg: "path parameter 'city' must be non-empty" } }
   if ($country | is-empty) { error make --unspanned { msg: "path parameter 'country' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "days" $days "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city: (encode-path-segment $city), country: (encode-path-segment $country)} | format pattern "/forecast/daily?city={city}&country={country}") $qp $auth.query)
+  let full_url = (build-url $base ({city: (encode-path-segment $city), country: (encode-path-segment $country)} | format pattern "/forecast/daily") "city={city}&country={country}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -905,7 +924,7 @@ export def "get-forecast-dailycity-city-country-country" [
 # Returns a daily forecast - Given a City ID.
 #
 # GET /forecast/daily?city_id={city_id}
-export def "get-forecast-dailycity-id-city-id" [
+export def "get-forecast-daily-city-id-city-id" [
   city_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -920,13 +939,14 @@ export def "get-forecast-dailycity-id-city-id" [
   --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
   --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<app_max_temp: float, app_min_temp: float, clouds: int, datetime: string, dewpt: float, max_dhi: float, max_temp: float, min_temp: float, moon_phase: float, moonrise_ts: int, moonset_ts: int, pod: string, pop: float, precip: float, pres: float, rh: int, slp: float, snow: float, snow_depth: float, sunrise_ts: int, sunset_ts: int, temp: float, timestamp_local: string, timestamp_utc: string, ts: float, uv: float, vis: float, weather: record, wind_cdir: string, wind_cdir_full: string, wind_dir: int, wind_spd: float>, lat: string, lon: string, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($city_id | is-empty) { error make --unspanned { msg: "path parameter 'city_id' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "days" $days "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/forecast/daily?city_id={city_id}") $qp $auth.query)
+  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/forecast/daily") "city_id={city_id}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -946,7 +966,7 @@ export def "get-forecast-dailycity-id-city-id" [
 # Returns a daily forecast - Given Lat/Lon.
 #
 # GET /forecast/daily?lat={lat}&lon={lon}
-export def "get-forecast-dailylat-lat-lon-lon" [
+export def "get-forecast-daily-lat-lat-lon-lon" [
   lat: float
   lon: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -962,14 +982,15 @@ export def "get-forecast-dailylat-lat-lon-lon" [
   --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
   --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<app_max_temp: float, app_min_temp: float, clouds: int, datetime: string, dewpt: float, max_dhi: float, max_temp: float, min_temp: float, moon_phase: float, moonrise_ts: int, moonset_ts: int, pod: string, pop: float, precip: float, pres: float, rh: int, slp: float, snow: float, snow_depth: float, sunrise_ts: int, sunset_ts: int, temp: float, timestamp_local: string, timestamp_utc: string, ts: float, uv: float, vis: float, weather: record, wind_cdir: string, wind_cdir_full: string, wind_dir: int, wind_spd: float>, lat: string, lon: string, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($lat | is-empty) { error make --unspanned { msg: "path parameter 'lat' must be non-empty" } }
   if ($lon | is-empty) { error make --unspanned { msg: "path parameter 'lon' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "days" $days "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/forecast/daily?lat={lat}&lon={lon}") $qp $auth.query)
+  let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/forecast/daily") "lat={lat}&lon={lon}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -989,7 +1010,7 @@ export def "get-forecast-dailylat-lat-lon-lon" [
 # Returns a daily forecast - Given a Postal Code.
 #
 # GET /forecast/daily?postal_code={postal_code}
-export def "get-forecast-dailypostal-code-postal-code" [
+export def "get-forecast-daily-postal-code-postal-code" [
   postal_code: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1005,13 +1026,14 @@ export def "get-forecast-dailypostal-code-postal-code" [
   --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
   --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<app_max_temp: float, app_min_temp: float, clouds: int, datetime: string, dewpt: float, max_dhi: float, max_temp: float, min_temp: float, moon_phase: float, moonrise_ts: int, moonset_ts: int, pod: string, pop: float, precip: float, pres: float, rh: int, slp: float, snow: float, snow_depth: float, sunrise_ts: int, sunset_ts: int, temp: float, timestamp_local: string, timestamp_utc: string, ts: float, uv: float, vis: float, weather: record, wind_cdir: string, wind_cdir_full: string, wind_dir: int, wind_spd: float>, lat: string, lon: string, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($postal_code | is-empty) { error make --unspanned { msg: "path parameter 'postal_code' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "days" $days "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({postal_code: (encode-path-segment $postal_code)} | format pattern "/forecast/daily?postal_code={postal_code}") $qp $auth.query)
+  let full_url = (build-url $base ({postal_code: (encode-path-segment $postal_code)} | format pattern "/forecast/daily") "postal_code={postal_code}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1031,7 +1053,7 @@ export def "get-forecast-dailypostal-code-postal-code" [
 # Returns Energy Forecast API response - Given a single lat/lon.
 #
 # GET /forecast/energy?lat={lat}&lon={lon}
-export def "get-forecast-energylat-lat-lon-lon" [
+export def "get-forecast-energy-lat-lat-lon-lon" [
   lat: float
   lon: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1047,14 +1069,15 @@ export def "get-forecast-energylat-lat-lon-lon" [
   --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
   --tp: string@tp-completer # Time period (default: daily) (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<cdd: float, clouds: int, date: string, dewpt: float, hdd: float, precip: float, rh: int, snow: float, sun_hours: float, t_dhi: float, t_dni: float, t_ghi: float, temp: float, wind_dir: int, wind_spd: float>, lat: string, lon: string, state_code: string, threshold_units: string, threshold_value: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($lat | is-empty) { error make --unspanned { msg: "path parameter 'lat' must be non-empty" } }
   if ($lon | is-empty) { error make --unspanned { msg: "path parameter 'lon' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "threshold" $threshold "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "tp" $tp "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/forecast/energy?lat={lat}&lon={lon}") $qp $auth.query)
+  let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/forecast/energy") "lat={lat}&lon={lon}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1074,7 +1097,7 @@ export def "get-forecast-energylat-lat-lon-lon" [
 # Returns an hourly forecast - Given City and/or State, Country.
 #
 # GET /forecast/hourly?city={city}&country={country}
-export def "get-forecast-hourlycity-city-country-country" [
+export def "get-forecast-hourly-city-city-country-country" [
   city: string
   country: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1091,14 +1114,15 @@ export def "get-forecast-hourlycity-city-country-country" [
   --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
   --hours: int # Number of hours to return. (format: integer)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<app_temp: float, clouds: int, datetime: string, dewpt: float, dhi: float, dni: float, ghi: float, pod: string, pop: float, precip: float, pres: float, rh: int, slp: float, snow: float, snow_depth: float, solar_rad: float, temp: float, timestamp_local: string, timestamp_utc: string, ts: float, uv: float, vis: float, weather: record, wind_cdir: string, wind_cdir_full: string, wind_dir: int, wind_gust_spd: float, wind_spd: float>, lat: string, lon: string, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($city | is-empty) { error make --unspanned { msg: "path parameter 'city' must be non-empty" } }
   if ($country | is-empty) { error make --unspanned { msg: "path parameter 'country' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "hours" $hours "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city: (encode-path-segment $city), country: (encode-path-segment $country)} | format pattern "/forecast/hourly?city={city}&country={country}") $qp $auth.query)
+  let full_url = (build-url $base ({city: (encode-path-segment $city), country: (encode-path-segment $country)} | format pattern "/forecast/hourly") "city={city}&country={country}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1118,7 +1142,7 @@ export def "get-forecast-hourlycity-city-country-country" [
 # Returns an hourly forecast - Given a City ID.
 #
 # GET /forecast/hourly?city_id={city_id}
-export def "get-forecast-hourlycity-id-city-id" [
+export def "get-forecast-hourly-city-id-city-id" [
   city_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1133,13 +1157,14 @@ export def "get-forecast-hourlycity-id-city-id" [
   --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback. Example - callback=func (format: string)
   --hours: int # Number of hours to return. (format: integer)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<app_temp: float, clouds: int, datetime: string, dewpt: float, dhi: float, dni: float, ghi: float, pod: string, pop: float, precip: float, pres: float, rh: int, slp: float, snow: float, snow_depth: float, solar_rad: float, temp: float, timestamp_local: string, timestamp_utc: string, ts: float, uv: float, vis: float, weather: record, wind_cdir: string, wind_cdir_full: string, wind_dir: int, wind_gust_spd: float, wind_spd: float>, lat: string, lon: string, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($city_id | is-empty) { error make --unspanned { msg: "path parameter 'city_id' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "hours" $hours "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/forecast/hourly?city_id={city_id}") $qp $auth.query)
+  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/forecast/hourly") "city_id={city_id}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1159,7 +1184,7 @@ export def "get-forecast-hourlycity-id-city-id" [
 # Returns an hourly forecast - Given a lat/lon.
 #
 # GET /forecast/hourly?lat={lat}&lon={lon}
-export def "get-forecast-hourlylat-lat-lon-lon" [
+export def "get-forecast-hourly-lat-lat-lon-lon" [
   lat: float
   lon: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1174,15 +1199,16 @@ export def "get-forecast-hourlylat-lat-lon-lon" [
   --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
   --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback. Example - callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
   --hours: int # Number of hours to return. (format: integer)
 ]: nothing -> record<city_name: string, country_code: string, data: table<app_temp: float, clouds: int, datetime: string, dewpt: float, dhi: float, dni: float, ghi: float, pod: string, pop: float, precip: float, pres: float, rh: int, slp: float, snow: float, snow_depth: float, solar_rad: float, temp: float, timestamp_local: string, timestamp_utc: string, ts: float, uv: float, vis: float, weather: record, wind_cdir: string, wind_cdir_full: string, wind_dir: int, wind_gust_spd: float, wind_spd: float>, lat: string, lon: string, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($lat | is-empty) { error make --unspanned { msg: "path parameter 'lat' must be non-empty" } }
   if ($lon | is-empty) { error make --unspanned { msg: "path parameter 'lon' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "hours" $hours "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/forecast/hourly?lat={lat}&lon={lon}") $qp $auth.query)
+  let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/forecast/hourly") "lat={lat}&lon={lon}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1202,7 +1228,7 @@ export def "get-forecast-hourlylat-lat-lon-lon" [
 # Returns an hourly forecast - Given a Postal Code.
 #
 # GET /forecast/hourly?postal_code={postal_code}
-export def "get-forecast-hourlypostal-code-postal-code" [
+export def "get-forecast-hourly-postal-code-postal-code" [
   postal_code: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1218,13 +1244,14 @@ export def "get-forecast-hourlypostal-code-postal-code" [
   --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback. Example - callback=func (format: string)
   --hours: int # Number of hours to return. (format: integer)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<app_temp: float, clouds: int, datetime: string, dewpt: float, dhi: float, dni: float, ghi: float, pod: string, pop: float, precip: float, pres: float, rh: int, slp: float, snow: float, snow_depth: float, solar_rad: float, temp: float, timestamp_local: string, timestamp_utc: string, ts: float, uv: float, vis: float, weather: record, wind_cdir: string, wind_cdir_full: string, wind_dir: int, wind_gust_spd: float, wind_spd: float>, lat: string, lon: string, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($postal_code | is-empty) { error make --unspanned { msg: "path parameter 'postal_code' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "hours" $hours "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({postal_code: (encode-path-segment $postal_code)} | format pattern "/forecast/hourly?postal_code={postal_code}") $qp $auth.query)
+  let full_url = (build-url $base ({postal_code: (encode-path-segment $postal_code)} | format pattern "/forecast/hourly") "postal_code={postal_code}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1244,7 +1271,7 @@ export def "get-forecast-hourlypostal-code-postal-code" [
 # Returns 72 hours of historical quality conditions - Given City and/or State, Country.
 #
 # GET /history/airquality?city={city}&country={country}
-export def "get-history-airqualitycity-city-country-country" [
+export def "get-history-airquality-city-city-country-country" [
   city: string
   country: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1258,14 +1285,15 @@ export def "get-history-airqualitycity-city-country-country" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --state: string # Full name of state. (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<aqi: int, no2: float, o3: float, pm10: float, pm25: float, so2: float>, lat: string, lon: string, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($city | is-empty) { error make --unspanned { msg: "path parameter 'city' must be non-empty" } }
   if ($country | is-empty) { error make --unspanned { msg: "path parameter 'country' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city: (encode-path-segment $city), country: (encode-path-segment $country)} | format pattern "/history/airquality?city={city}&country={country}") $qp $auth.query)
+  let full_url = (build-url $base ({city: (encode-path-segment $city), country: (encode-path-segment $country)} | format pattern "/history/airquality") "city={city}&country={country}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1285,7 +1313,7 @@ export def "get-history-airqualitycity-city-country-country" [
 # Returns 72 hours of historical air quality conditions - Given a City ID.
 #
 # GET /history/airquality?city_id={city_id}
-export def "get-history-airqualitycity-id-city-id" [
+export def "get-history-airquality-city-id-city-id" [
   city_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1297,13 +1325,14 @@ export def "get-history-airqualitycity-id-city-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --callback: string # Wraps return in jsonp callback. Example - callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<aqi: int, no2: float, o3: float, pm10: float, pm25: float, so2: float>, lat: string, lon: string, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($city_id | is-empty) { error make --unspanned { msg: "path parameter 'city_id' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/history/airquality?city_id={city_id}") $qp $auth.query)
+  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/history/airquality") "city_id={city_id}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1323,7 +1352,7 @@ export def "get-history-airqualitycity-id-city-id" [
 # Returns 72 hours of historical air quality conditions - Given a lat/lon.
 #
 # GET /history/airquality?lat={lat}&lon={lon}
-export def "get-history-airqualitylat-lat-lon-lon" [
+export def "get-history-airquality-lat-lat-lon-lon" [
   lat: float
   lon: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1336,14 +1365,15 @@ export def "get-history-airqualitylat-lat-lon-lon" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --callback: string # Wraps return in jsonp callback. Example - callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<aqi: int, no2: float, o3: float, pm10: float, pm25: float, so2: float>, lat: string, lon: string, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($lat | is-empty) { error make --unspanned { msg: "path parameter 'lat' must be non-empty" } }
   if ($lon | is-empty) { error make --unspanned { msg: "path parameter 'lon' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/history/airquality?lat={lat}&lon={lon}") $qp $auth.query)
+  let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/history/airquality") "lat={lat}&lon={lon}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1363,7 +1393,7 @@ export def "get-history-airqualitylat-lat-lon-lon" [
 # Returns 72 hours of historical air quality conditions - Given a Postal Code.
 #
 # GET /history/airquality?postal_code={postal_code}
-export def "get-history-airqualitypostal-code-postal-code" [
+export def "get-history-airquality-postal-code-postal-code" [
   postal_code: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1376,13 +1406,14 @@ export def "get-history-airqualitypostal-code-postal-code" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # Country Code (2 letter). (format: string)
   --callback: string # Wraps return in jsonp callback. Example - callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<aqi: int, no2: float, o3: float, pm10: float, pm25: float, so2: float>, lat: string, lon: string, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($postal_code | is-empty) { error make --unspanned { msg: "path parameter 'postal_code' must be non-empty" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({postal_code: (encode-path-segment $postal_code)} | format pattern "/history/airquality?postal_code={postal_code}") $qp $auth.query)
+  let full_url = (build-url $base ({postal_code: (encode-path-segment $postal_code)} | format pattern "/history/airquality") "postal_code={postal_code}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1402,7 +1433,7 @@ export def "get-history-airqualitypostal-code-postal-code" [
 # Returns Historical Observations - Given City and/or State, Country.
 #
 # GET /history/daily?city={city}&country={country}
-export def "get-history-dailycity-city-country-country" [
+export def "get-history-daily-city-city-country-country" [
   city: string
   country: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1415,19 +1446,22 @@ export def "get-history-dailycity-city-country-country" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --state: string # Full name of state. (format: string)
-  --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
-  --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
+  --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (required, format: string)
+  --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (required, format: string)
   --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
   --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<datetime: string, dewpt: float, dhi: int, dni: int, ghi: int, max_temp: float, max_temp_ts: float, max_uv: float, max_wind_dir: int, max_wind_spd: float, max_wind_spd_ts: float, min_temp: float, min_temp_ts: float, precip: float, precip_gpm: float, pres: float, revision_status: string, rh: int, slp: float, snow: float, snow_depth: float, t_dhi: int, t_dni: int, t_ghi: int, temp: float, ts: int, wind_dir: int, wind_gust_spd: float, wind_spd: float>, lat: string, lon: string, sources: list<string>, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($city | is-empty) { error make --unspanned { msg: "path parameter 'city' must be non-empty" } }
   if ($country | is-empty) { error make --unspanned { msg: "path parameter 'country' must be non-empty" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'end_date' missing: pass --end-date" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city: (encode-path-segment $city), country: (encode-path-segment $country)} | format pattern "/history/daily?city={city}&country={country}") $qp $auth.query)
+  let full_url = (build-url $base ({city: (encode-path-segment $city), country: (encode-path-segment $country)} | format pattern "/history/daily") "city={city}&country={country}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1447,7 +1481,7 @@ export def "get-history-dailycity-city-country-country" [
 # Returns Historical Observations - Given a City ID
 #
 # GET /history/daily?city_id={city_id}
-export def "get-history-dailycity-id-city-id" [
+export def "get-history-daily-city-id-city-id" [
   city_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1458,18 +1492,21 @@ export def "get-history-dailycity-id-city-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH) (format: string)
-  --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH) (format: string)
+  --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH) (required, format: string)
+  --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH) (required, format: string)
   --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
   --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<datetime: string, dewpt: float, dhi: int, dni: int, ghi: int, max_temp: float, max_temp_ts: float, max_uv: float, max_wind_dir: int, max_wind_spd: float, max_wind_spd_ts: float, min_temp: float, min_temp_ts: float, precip: float, precip_gpm: float, pres: float, revision_status: string, rh: int, slp: float, snow: float, snow_depth: float, t_dhi: int, t_dni: int, t_ghi: int, temp: float, ts: int, wind_dir: int, wind_gust_spd: float, wind_spd: float>, lat: string, lon: string, sources: list<string>, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($city_id | is-empty) { error make --unspanned { msg: "path parameter 'city_id' must be non-empty" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'end_date' missing: pass --end-date" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/history/daily?city_id={city_id}") $qp $auth.query)
+  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/history/daily") "city_id={city_id}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1489,7 +1526,7 @@ export def "get-history-dailycity-id-city-id" [
 # Returns Historical Observations - Given a lat/lon.
 #
 # GET /history/daily?lat={lat}&lon={lon}
-export def "get-history-dailylat-lat-lon-lon" [
+export def "get-history-daily-lat-lat-lon-lon" [
   lat: float
   lon: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1501,19 +1538,22 @@ export def "get-history-dailylat-lat-lon-lon" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
-  --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
+  --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (required, format: string)
+  --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (required, format: string)
   --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
   --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<datetime: string, dewpt: float, dhi: int, dni: int, ghi: int, max_temp: float, max_temp_ts: float, max_uv: float, max_wind_dir: int, max_wind_spd: float, max_wind_spd_ts: float, min_temp: float, min_temp_ts: float, precip: float, precip_gpm: float, pres: float, revision_status: string, rh: int, slp: float, snow: float, snow_depth: float, t_dhi: int, t_dni: int, t_ghi: int, temp: float, ts: int, wind_dir: int, wind_gust_spd: float, wind_spd: float>, lat: string, lon: string, sources: list<string>, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($lat | is-empty) { error make --unspanned { msg: "path parameter 'lat' must be non-empty" } }
   if ($lon | is-empty) { error make --unspanned { msg: "path parameter 'lon' must be non-empty" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'end_date' missing: pass --end-date" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/history/daily?lat={lat}&lon={lon}") $qp $auth.query)
+  let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/history/daily") "lat={lat}&lon={lon}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1533,7 +1573,7 @@ export def "get-history-dailylat-lat-lon-lon" [
 # Returns Historical Observations - Given a Postal Code
 #
 # GET /history/daily?postal_code={postal_code}
-export def "get-history-dailypostal-code-postal-code" [
+export def "get-history-daily-postal-code-postal-code" [
   postal_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1545,18 +1585,21 @@ export def "get-history-dailypostal-code-postal-code" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # Country Code (2 letter). (format: string)
-  --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH) (format: string)
-  --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH) (format: string)
+  --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH) (required, format: string)
+  --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH) (required, format: string)
   --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
   --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<datetime: string, dewpt: float, dhi: int, dni: int, ghi: int, max_temp: float, max_temp_ts: float, max_uv: float, max_wind_dir: int, max_wind_spd: float, max_wind_spd_ts: float, min_temp: float, min_temp_ts: float, precip: float, precip_gpm: float, pres: float, revision_status: string, rh: int, slp: float, snow: float, snow_depth: float, t_dhi: int, t_dni: int, t_ghi: int, temp: float, ts: int, wind_dir: int, wind_gust_spd: float, wind_spd: float>, lat: string, lon: string, sources: list<string>, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($postal_code | is-empty) { error make --unspanned { msg: "path parameter 'postal_code' must be non-empty" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'end_date' missing: pass --end-date" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({postal_code: (encode-path-segment $postal_code)} | format pattern "/history/daily?postal_code={postal_code}") $qp $auth.query)
+  let full_url = (build-url $base ({postal_code: (encode-path-segment $postal_code)} | format pattern "/history/daily") "postal_code={postal_code}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1576,7 +1619,7 @@ export def "get-history-dailypostal-code-postal-code" [
 # Returns Historical Observations - Given a station ID.
 #
 # GET /history/daily?station={station}
-export def "get-history-dailystation-station" [
+export def "get-history-daily-station-station" [
   station: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1587,18 +1630,21 @@ export def "get-history-dailystation-station" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
-  --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
+  --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (required, format: string)
+  --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (required, format: string)
   --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
   --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<datetime: string, dewpt: float, dhi: int, dni: int, ghi: int, max_temp: float, max_temp_ts: float, max_uv: float, max_wind_dir: int, max_wind_spd: float, max_wind_spd_ts: float, min_temp: float, min_temp_ts: float, precip: float, precip_gpm: float, pres: float, revision_status: string, rh: int, slp: float, snow: float, snow_depth: float, t_dhi: int, t_dni: int, t_ghi: int, temp: float, ts: int, wind_dir: int, wind_gust_spd: float, wind_spd: float>, lat: string, lon: string, sources: list<string>, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($station | is-empty) { error make --unspanned { msg: "path parameter 'station' must be non-empty" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'end_date' missing: pass --end-date" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({station: (encode-path-segment $station)} | format pattern "/history/daily?station={station}") $qp $auth.query)
+  let full_url = (build-url $base ({station: (encode-path-segment $station)} | format pattern "/history/daily") "station={station}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1618,7 +1664,7 @@ export def "get-history-dailystation-station" [
 # Returns Energy API response - Given a single lat/lon.
 #
 # GET /history/energy?lat={lat}&lon={lon}
-export def "get-history-energylat-lat-lon-lon" [
+export def "get-history-energy-lat-lat-lon-lon" [
   lat: float
   lon: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1630,20 +1676,23 @@ export def "get-history-energylat-lat-lon-lon" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
-  --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
+  --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (required, format: string)
+  --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (required, format: string)
   --tp: string@tp-completer-1 # Time period to aggregate by (daily, monthly) (format: string)
   --threshold: float # Temperature threshold to use to calculate degree days (default 18 C) (format: double)
   --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<count: int, data: table<cdd: float, city_name: string, clouds: int, country_code: string, dewpt: float, hdd: float, lat: string, lon: string, precip: float, rh: int, snow: float, sources: list, state_code: string, station_id: string, sun_hours: float, t_dhi: float, t_dni: float, t_ghi: float, temp: float, timezone: string, wind_dir: int, wind_spd: float>, end_date: int, start_date: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($lat | is-empty) { error make --unspanned { msg: "path parameter 'lat' must be non-empty" } }
   if ($lon | is-empty) { error make --unspanned { msg: "path parameter 'lon' must be non-empty" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'end_date' missing: pass --end-date" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "tp" $tp "scalar") (serialize-qp "threshold" $threshold "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/history/energy?lat={lat}&lon={lon}") $qp $auth.query)
+  let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/history/energy") "lat={lat}&lon={lon}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1663,7 +1712,7 @@ export def "get-history-energylat-lat-lon-lon" [
 # Returns Historical Observations - Given City and/or State, Country.
 #
 # GET /history/hourly?city={city}&country={country}
-export def "get-history-hourlycity-city-country-country" [
+export def "get-history-hourly-city-city-country-country" [
   city: string
   country: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1676,20 +1725,23 @@ export def "get-history-hourlycity-city-country-country" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --state: string # Full name of state. (format: string)
-  --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
-  --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
+  --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (required, format: string)
+  --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (required, format: string)
   --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
   --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --tz: string@tz-completer # Assume utc (default) or local time for start_date, end_date (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<app_temp: float, azimuth: float, clouds: int, datetime: string, dewpt: int, dhi: float, dni: float, elev_angle: float, ghi: float, h_angle: float, pod: string, precip: float, pres: float, revision_status: string, rh: int, slp: float, snow: float, solar_rad: float, temp: float, timestamp_local: string, timestamp_utc: string, ts: float, uv: float, vis: float, weather: record, wind_dir: int, wind_gust_spd: float, wind_spd: float>, lat: string, lon: string, sources: list<string>, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($city | is-empty) { error make --unspanned { msg: "path parameter 'city' must be non-empty" } }
   if ($country | is-empty) { error make --unspanned { msg: "path parameter 'country' must be non-empty" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'end_date' missing: pass --end-date" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city: (encode-path-segment $city), country: (encode-path-segment $country)} | format pattern "/history/hourly?city={city}&country={country}") $qp $auth.query)
+  let full_url = (build-url $base ({city: (encode-path-segment $city), country: (encode-path-segment $country)} | format pattern "/history/hourly") "city={city}&country={country}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1709,7 +1761,7 @@ export def "get-history-hourlycity-city-country-country" [
 # Returns Historical Observations - Given a City ID
 #
 # GET /history/hourly?city_id={city_id}
-export def "get-history-hourlycity-id-city-id" [
+export def "get-history-hourly-city-id-city-id" [
   city_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1720,19 +1772,22 @@ export def "get-history-hourlycity-id-city-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH) (format: string)
-  --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH) (format: string)
+  --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH) (required, format: string)
+  --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH) (required, format: string)
   --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
   --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --tz: string@tz-completer # Assume utc (default) or local time for start_date, end_date (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<app_temp: float, azimuth: float, clouds: int, datetime: string, dewpt: int, dhi: float, dni: float, elev_angle: float, ghi: float, h_angle: float, pod: string, precip: float, pres: float, revision_status: string, rh: int, slp: float, snow: float, solar_rad: float, temp: float, timestamp_local: string, timestamp_utc: string, ts: float, uv: float, vis: float, weather: record, wind_dir: int, wind_gust_spd: float, wind_spd: float>, lat: string, lon: string, sources: list<string>, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($city_id | is-empty) { error make --unspanned { msg: "path parameter 'city_id' must be non-empty" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'end_date' missing: pass --end-date" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/history/hourly?city_id={city_id}") $qp $auth.query)
+  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/history/hourly") "city_id={city_id}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1752,7 +1807,7 @@ export def "get-history-hourlycity-id-city-id" [
 # Returns Historical Observations - Given a lat/lon.
 #
 # GET /history/hourly?lat={lat}&lon={lon}
-export def "get-history-hourlylat-lat-lon-lon" [
+export def "get-history-hourly-lat-lat-lon-lon" [
   lat: float
   lon: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1764,20 +1819,23 @@ export def "get-history-hourlylat-lat-lon-lon" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
-  --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
+  --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (required, format: string)
+  --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (required, format: string)
   --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
   --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --tz: string@tz-completer # Assume utc (default) or local time for start_date, end_date (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<app_temp: float, azimuth: float, clouds: int, datetime: string, dewpt: int, dhi: float, dni: float, elev_angle: float, ghi: float, h_angle: float, pod: string, precip: float, pres: float, revision_status: string, rh: int, slp: float, snow: float, solar_rad: float, temp: float, timestamp_local: string, timestamp_utc: string, ts: float, uv: float, vis: float, weather: record, wind_dir: int, wind_gust_spd: float, wind_spd: float>, lat: string, lon: string, sources: list<string>, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($lat | is-empty) { error make --unspanned { msg: "path parameter 'lat' must be non-empty" } }
   if ($lon | is-empty) { error make --unspanned { msg: "path parameter 'lon' must be non-empty" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'end_date' missing: pass --end-date" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/history/hourly?lat={lat}&lon={lon}") $qp $auth.query)
+  let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/history/hourly") "lat={lat}&lon={lon}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1797,7 +1855,7 @@ export def "get-history-hourlylat-lat-lon-lon" [
 # Returns Historical Observations - Given a Postal Code
 #
 # GET /history/hourly?postal_code={postal_code}
-export def "get-history-hourlypostal-code-postal-code" [
+export def "get-history-hourly-postal-code-postal-code" [
   postal_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1809,19 +1867,22 @@ export def "get-history-hourlypostal-code-postal-code" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # Country Code (2 letter). (format: string)
-  --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH) (format: string)
-  --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH) (format: string)
+  --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH) (required, format: string)
+  --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH) (required, format: string)
   --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
   --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --tz: string@tz-completer # Assume utc (default) or local time for start_date, end_date (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<app_temp: float, azimuth: float, clouds: int, datetime: string, dewpt: int, dhi: float, dni: float, elev_angle: float, ghi: float, h_angle: float, pod: string, precip: float, pres: float, revision_status: string, rh: int, slp: float, snow: float, solar_rad: float, temp: float, timestamp_local: string, timestamp_utc: string, ts: float, uv: float, vis: float, weather: record, wind_dir: int, wind_gust_spd: float, wind_spd: float>, lat: string, lon: string, sources: list<string>, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($postal_code | is-empty) { error make --unspanned { msg: "path parameter 'postal_code' must be non-empty" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'end_date' missing: pass --end-date" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({postal_code: (encode-path-segment $postal_code)} | format pattern "/history/hourly?postal_code={postal_code}") $qp $auth.query)
+  let full_url = (build-url $base ({postal_code: (encode-path-segment $postal_code)} | format pattern "/history/hourly") "postal_code={postal_code}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1841,7 +1902,7 @@ export def "get-history-hourlypostal-code-postal-code" [
 # Returns Historical Observations - Given a station ID.
 #
 # GET /history/hourly?station={station}
-export def "get-history-hourlystation-station" [
+export def "get-history-hourly-station-station" [
   station: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1852,19 +1913,22 @@ export def "get-history-hourlystation-station" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
-  --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
+  --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (required, format: string)
+  --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (required, format: string)
   --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
   --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --tz: string@tz-completer # Assume utc (default) or local time for start_date, end_date (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<app_temp: float, azimuth: float, clouds: int, datetime: string, dewpt: int, dhi: float, dni: float, elev_angle: float, ghi: float, h_angle: float, pod: string, precip: float, pres: float, revision_status: string, rh: int, slp: float, snow: float, solar_rad: float, temp: float, timestamp_local: string, timestamp_utc: string, ts: float, uv: float, vis: float, weather: record, wind_dir: int, wind_gust_spd: float, wind_spd: float>, lat: string, lon: string, sources: list<string>, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($station | is-empty) { error make --unspanned { msg: "path parameter 'station' must be non-empty" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'end_date' missing: pass --end-date" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({station: (encode-path-segment $station)} | format pattern "/history/hourly?station={station}") $qp $auth.query)
+  let full_url = (build-url $base ({station: (encode-path-segment $station)} | format pattern "/history/hourly") "station={station}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1884,7 +1948,7 @@ export def "get-history-hourlystation-station" [
 # Returns Historical Observations - Given City and/or State, Country.
 #
 # GET /history/subhourly?city={city}&country={country}
-export def "get-history-subhourlycity-city-country-country" [
+export def "get-history-subhourly-city-city-country-country" [
   city: string
   country: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1897,20 +1961,23 @@ export def "get-history-subhourlycity-city-country-country" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --state: string # Full name of state. (format: string)
-  --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
-  --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
+  --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (required, format: string)
+  --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (required, format: string)
   --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
   --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --tz: string@tz-completer # Assume utc (default) or local time for start_date, end_date (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<app_temp: float, azimuth: float, clouds: int, datetime: string, dewpt: int, dhi: float, dni: float, elev_angle: float, ghi: float, h_angle: float, pod: string, precip: float, pres: float, revision_status: string, rh: int, slp: float, snow: float, solar_rad: float, temp: float, timestamp_local: string, timestamp_utc: string, ts: float, uv: float, vis: float, weather: record, wind_dir: int, wind_gust_spd: float, wind_spd: float>, lat: string, lon: string, sources: list<string>, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($city | is-empty) { error make --unspanned { msg: "path parameter 'city' must be non-empty" } }
   if ($country | is-empty) { error make --unspanned { msg: "path parameter 'country' must be non-empty" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'end_date' missing: pass --end-date" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city: (encode-path-segment $city), country: (encode-path-segment $country)} | format pattern "/history/subhourly?city={city}&country={country}") $qp $auth.query)
+  let full_url = (build-url $base ({city: (encode-path-segment $city), country: (encode-path-segment $country)} | format pattern "/history/subhourly") "city={city}&country={country}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1930,7 +1997,7 @@ export def "get-history-subhourlycity-city-country-country" [
 # Returns Historical Observations - Given a City ID
 #
 # GET /history/subhourly?city_id={city_id}
-export def "get-history-subhourlycity-id-city-id" [
+export def "get-history-subhourly-city-id-city-id" [
   city_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1941,19 +2008,22 @@ export def "get-history-subhourlycity-id-city-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH) (format: string)
-  --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH) (format: string)
+  --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH) (required, format: string)
+  --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH) (required, format: string)
   --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
   --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --tz: string@tz-completer # Assume utc (default) or local time for start_date, end_date (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<app_temp: float, azimuth: float, clouds: int, datetime: string, dewpt: int, dhi: float, dni: float, elev_angle: float, ghi: float, h_angle: float, pod: string, precip: float, pres: float, revision_status: string, rh: int, slp: float, snow: float, solar_rad: float, temp: float, timestamp_local: string, timestamp_utc: string, ts: float, uv: float, vis: float, weather: record, wind_dir: int, wind_gust_spd: float, wind_spd: float>, lat: string, lon: string, sources: list<string>, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($city_id | is-empty) { error make --unspanned { msg: "path parameter 'city_id' must be non-empty" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'end_date' missing: pass --end-date" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/history/subhourly?city_id={city_id}") $qp $auth.query)
+  let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/history/subhourly") "city_id={city_id}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1973,7 +2043,7 @@ export def "get-history-subhourlycity-id-city-id" [
 # Returns Historical Observations - Given a lat/lon.
 #
 # GET /history/subhourly?lat={lat}&lon={lon}
-export def "get-history-subhourlylat-lat-lon-lon" [
+export def "get-history-subhourly-lat-lat-lon-lon" [
   lat: float
   lon: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1985,20 +2055,23 @@ export def "get-history-subhourlylat-lat-lon-lon" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
-  --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
+  --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (required, format: string)
+  --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (required, format: string)
   --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
   --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --tz: string@tz-completer # Assume utc (default) or local time for start_date, end_date (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<app_temp: float, azimuth: float, clouds: int, datetime: string, dewpt: int, dhi: float, dni: float, elev_angle: float, ghi: float, h_angle: float, pod: string, precip: float, pres: float, revision_status: string, rh: int, slp: float, snow: float, solar_rad: float, temp: float, timestamp_local: string, timestamp_utc: string, ts: float, uv: float, vis: float, weather: record, wind_dir: int, wind_gust_spd: float, wind_spd: float>, lat: string, lon: string, sources: list<string>, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($lat | is-empty) { error make --unspanned { msg: "path parameter 'lat' must be non-empty" } }
   if ($lon | is-empty) { error make --unspanned { msg: "path parameter 'lon' must be non-empty" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'end_date' missing: pass --end-date" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/history/subhourly?lat={lat}&lon={lon}") $qp $auth.query)
+  let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/history/subhourly") "lat={lat}&lon={lon}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2018,7 +2091,7 @@ export def "get-history-subhourlylat-lat-lon-lon" [
 # Returns Historical Observations - Given a Postal Code
 #
 # GET /history/subhourly?postal_code={postal_code}
-export def "get-history-subhourlypostal-code-postal-code" [
+export def "get-history-subhourly-postal-code-postal-code" [
   postal_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2030,19 +2103,22 @@ export def "get-history-subhourlypostal-code-postal-code" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # Country Code (2 letter). (format: string)
-  --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH) (format: string)
-  --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH) (format: string)
+  --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH) (required, format: string)
+  --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH) (required, format: string)
   --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
   --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --tz: string@tz-completer # Assume utc (default) or local time for start_date, end_date (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<app_temp: float, azimuth: float, clouds: int, datetime: string, dewpt: int, dhi: float, dni: float, elev_angle: float, ghi: float, h_angle: float, pod: string, precip: float, pres: float, revision_status: string, rh: int, slp: float, snow: float, solar_rad: float, temp: float, timestamp_local: string, timestamp_utc: string, ts: float, uv: float, vis: float, weather: record, wind_dir: int, wind_gust_spd: float, wind_spd: float>, lat: string, lon: string, sources: list<string>, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($postal_code | is-empty) { error make --unspanned { msg: "path parameter 'postal_code' must be non-empty" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'end_date' missing: pass --end-date" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({postal_code: (encode-path-segment $postal_code)} | format pattern "/history/subhourly?postal_code={postal_code}") $qp $auth.query)
+  let full_url = (build-url $base ({postal_code: (encode-path-segment $postal_code)} | format pattern "/history/subhourly") "postal_code={postal_code}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2062,7 +2138,7 @@ export def "get-history-subhourlypostal-code-postal-code" [
 # Returns Historical Observations - Given a station ID.
 #
 # GET /history/subhourly?station={station}
-export def "get-history-subhourlystation-station" [
+export def "get-history-subhourly-station-station" [
   station: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2073,19 +2149,22 @@ export def "get-history-subhourlystation-station" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
-  --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (format: string)
+  --start-date: string # Start Date (YYYY-MM-DD or YYYY-MM-DD:HH). (required, format: string)
+  --end-date: string # End Date (YYYY-MM-DD or YYYY-MM-DD:HH). (required, format: string)
   --units: string@units-completer # Convert to units. Default Metric See units field description (format: string)
   --lang: string@lang-completer # Language (Default: English) See language field description (format: string)
   --tz: string@tz-completer # Assume utc (default) or local time for start_date, end_date (format: string)
   --callback: string # Wraps return in jsonp callback. Example: callback=func (format: string)
-  --key: string # Your registered API key. (format: string)
+  --key: string # Your registered API key. (required, format: string)
 ]: nothing -> record<city_name: string, country_code: string, data: table<app_temp: float, azimuth: float, clouds: int, datetime: string, dewpt: int, dhi: float, dni: float, elev_angle: float, ghi: float, h_angle: float, pod: string, precip: float, pres: float, revision_status: string, rh: int, slp: float, snow: float, solar_rad: float, temp: float, timestamp_local: string, timestamp_utc: string, ts: float, uv: float, vis: float, weather: record, wind_dir: int, wind_gust_spd: float, wind_spd: float>, lat: string, lon: string, sources: list<string>, state_code: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($station | is-empty) { error make --unspanned { msg: "path parameter 'station' must be non-empty" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'end_date' missing: pass --end-date" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({station: (encode-path-segment $station)} | format pattern "/history/subhourly?station={station}") $qp $auth.query)
+  let full_url = (build-url $base ({station: (encode-path-segment $station)} | format pattern "/history/subhourly") "station={station}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {

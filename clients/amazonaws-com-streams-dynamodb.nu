@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -98,6 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # Completers for enum parameters
 def x-amz-target-completer [] { ["DynamoDBStreams_20120810.DescribeStream"] }
 def x-amz-target-completer-1 [] { ["DynamoDBStreams_20120810.GetRecords"] }
+def shard-iterator-type-completer [] { ["AFTER_SEQUENCE_NUMBER" "AT_SEQUENCE_NUMBER" "LATEST" "TRIM_HORIZON"] }
 def x-amz-target-completer-2 [] { ["DynamoDBStreams_20120810.GetShardIterator"] }
 def x-amz-target-completer-3 [] { ["DynamoDBStreams_20120810.ListStreams"] }
 
@@ -145,14 +146,15 @@ export def "describe-stream" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  stream_arn: any
-  --limit: any
-  --exclusive-start-shard-id: any
-]: any -> record<StreamDescription: record<StreamArn: record, StreamLabel: record, StreamStatus: record, StreamViewType: record, CreationRequestDateTime: record, TableName: record, KeySchema: record, Shards: record, LastEvaluatedShardId: record>> {
+  --x-amz-target: string@x-amz-target-completer # required
+  stream_arn: string # The Amazon Resource Name (ARN) for the stream.
+  --limit: int # The maximum number of shard objects to return. The upper limit is 100.
+  --exclusive-start-shard-id: string # The shard ID of the first item that this operation will evaluate. Use the value that was returned for LastEvaluatedShardId in the previous operation.
+]: any -> record<StreamDescription: record<StreamArn: string, StreamLabel: string, StreamStatus: string, StreamViewType: string, CreationRequestDateTime: string, TableName: string, KeySchema: list<record>, Shards: list<record>, LastEvaluatedShardId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDBStreams_20120810.DescribeStream")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StreamArn": $stream_arn, "Limit": $limit, "ExclusiveStartShardId": $exclusive_start_shard_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -195,13 +197,14 @@ export def "get-records" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  shard_iterator: any
-  --limit: any
-]: any -> record<Records: record, NextShardIterator: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  shard_iterator: string # A shard iterator that was retrieved from a previous GetShardIterator operation. This iterator can be used to access the stream records in this shard.
+  --limit: int # The maximum number of records to return from the shard. The upper limit is 1000.
+]: any -> record<Records: table<eventID: string, eventName: string, eventVersion: string, eventSource: string, awsRegion: string, dynamodb: record, userIdentity: record>, NextShardIterator: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDBStreams_20120810.GetRecords")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ShardIterator": $shard_iterator, "Limit": $limit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -244,15 +247,16 @@ export def "get-shard-iterator" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  stream_arn: any
-  shard_id: any
-  shard_iterator_type: any
-  --sequence-number: any
-]: any -> record<ShardIterator: record> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  stream_arn: string # The Amazon Resource Name (ARN) for the stream.
+  shard_id: string # The identifier of the shard. The iterator will be returned for this shard ID.
+  shard_iterator_type: string@shard-iterator-type-completer # Determines how the shard iterator is used to start reading stream records from the shard: AT_SEQUENCE_NUMBER - Start reading exactly from the position denoted by a specific sequence number. AFTER_SEQUENCE_NUMBER - Start reading right after the position denoted by a specific sequence number. TRIM_HORIZON - Start reading at the last (untrimmed) stream record, which is the oldest record in the shard. In DynamoDB Streams, there is a 24 hour limit on data retention. Stream records whose age exceeds this limit are subject to removal (trimming) from the stream. LATEST - Start reading just after the most recent stream record in the shard, so that you always read the most recent data in the shard.
+  --sequence-number: string # The sequence number of a stream record in the shard from which to start reading.
+]: any -> record<ShardIterator: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDBStreams_20120810.GetShardIterator")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StreamArn": $stream_arn, "ShardId": $shard_id, "ShardIteratorType": $shard_iterator_type, "SequenceNumber": $sequence_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -295,14 +299,15 @@ export def "list-streams" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  --table-name: any
-  --limit: any
-  --exclusive-start-stream-arn: any
-]: any -> record<Streams: record, LastEvaluatedStreamArn: record> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  --table-name: string # If this parameter is provided, then only the streams associated with this table name are returned.
+  --limit: int # The maximum number of streams to return. The upper limit is 100.
+  --exclusive-start-stream-arn: string # The ARN (Amazon Resource Name) of the first item that this operation will evaluate. Use the value that was returned for LastEvaluatedStreamArn in the previous operation.
+]: any -> record<Streams: table<StreamArn: string, TableName: string, StreamLabel: string>, LastEvaluatedStreamArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "DynamoDBStreams_20120810.ListStreams")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TableName": $table_name, "Limit": $limit, "ExclusiveStartStreamArn": $exclusive_start_stream_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

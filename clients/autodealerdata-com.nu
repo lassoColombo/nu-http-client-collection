@@ -143,12 +143,14 @@ export def "days-supply-days-supply-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --jwt: string
-  --brand-name: string
+  --jwt: string # required
+  --brand-name: string # required
   --region-name: string # default: REGION_STATE_CA
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: any, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($jwt == null) { error make --unspanned { msg: "required query parameter 'jwt' missing: pass --jwt" } }
+  if ($brand_name == null) { error make --unspanned { msg: "required query parameter 'brandName' missing: pass --brand-name" } }
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "regionName" $region_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/daysSupply" $qp $auth.query)
   let accept_val = "application/json"
@@ -181,12 +183,14 @@ export def "days-to-sell-days-to-sell-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --jwt: string
-  --brand-name: string
+  --jwt: string # required
+  --brand-name: string # required
   --region-name: string # default: REGION_STATE_CA
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: any, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($jwt == null) { error make --unspanned { msg: "required query parameter 'jwt' missing: pass --jwt" } }
+  if ($brand_name == null) { error make --unspanned { msg: "required query parameter 'brandName' missing: pass --brand-name" } }
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "regionName" $region_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/daysToSell" $qp $auth.query)
   let accept_val = "application/json"
@@ -219,10 +223,11 @@ export def "get-brand-names-get-brands-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --jwt: string
+  --jwt: string # required
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: list<string>, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($jwt == null) { error make --unspanned { msg: "required query parameter 'jwt' missing: pass --jwt" } }
   let qp = [(serialize-qp "jwt" $jwt "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getBrands" $qp $auth.query)
   let accept_val = "application/json"
@@ -255,11 +260,13 @@ export def "get-dealers-get-dealers-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --jwt: string
-  --zip-code: int
+  --jwt: string # required
+  --zip-code: int # required
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: table<address: string, dealerName: string, ids: list, state: string, zipCode: int>, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($jwt == null) { error make --unspanned { msg: "required query parameter 'jwt' missing: pass --jwt" } }
+  if ($zip_code == null) { error make --unspanned { msg: "required query parameter 'zipCode' missing: pass --zip-code" } }
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "zipCode" $zip_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getDealers" $qp $auth.query)
   let accept_val = "application/json"
@@ -292,11 +299,13 @@ export def "get-dealers-get-dealers-by-id-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --jwt: string
-  --dealer-id: int
+  --jwt: string # required
+  --dealer-id: int # required
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: table<address: string, dealerName: string, ids: list, state: string, zipCode: int>, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($jwt == null) { error make --unspanned { msg: "required query parameter 'jwt' missing: pass --jwt" } }
+  if ($dealer_id == null) { error make --unspanned { msg: "required query parameter 'dealerID' missing: pass --dealer-id" } }
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "dealerID" $dealer_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getDealersByID" $qp $auth.query)
   let accept_val = "application/json"
@@ -329,12 +338,13 @@ export def "get-dealers-get-dealers-by-region-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --jwt: string
+  --jwt: string # required
   --region-name: string # default: REGION_STATE_CA
   --page: int # default: 1
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: record<dealers: list<record>, maxPages: int, page: int>, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($jwt == null) { error make --unspanned { msg: "required query parameter 'jwt' missing: pass --jwt" } }
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "regionName" $region_name "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getDealersByRegion" $qp $auth.query)
   let accept_val = "application/json"
@@ -367,11 +377,13 @@ export def "get-model-names-all-get-inactive-models-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --jwt: string
-  --brand-name: string
+  --jwt: string # required
+  --brand-name: string # required
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: table<modelName: string>, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($jwt == null) { error make --unspanned { msg: "required query parameter 'jwt' missing: pass --jwt" } }
+  if ($brand_name == null) { error make --unspanned { msg: "required query parameter 'brandName' missing: pass --brand-name" } }
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brand_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getInactiveModels" $qp $auth.query)
   let accept_val = "application/json"
@@ -404,11 +416,13 @@ export def "get-model-names-get-models-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --jwt: string
-  --brand-name: string
+  --jwt: string # required
+  --brand-name: string # required
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: table<modelName: string>, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($jwt == null) { error make --unspanned { msg: "required query parameter 'jwt' missing: pass --jwt" } }
+  if ($brand_name == null) { error make --unspanned { msg: "required query parameter 'brandName' missing: pass --brand-name" } }
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brand_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getModels" $qp $auth.query)
   let accept_val = "application/json"
@@ -441,12 +455,14 @@ export def "get-region-brand-market-share-get-region-brand-market-share-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --jwt: string
-  --brand-name: string
+  --jwt: string # required
+  --brand-name: string # required
   --region-name: string # default: REGION_STATE_CA
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: any, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($jwt == null) { error make --unspanned { msg: "required query parameter 'jwt' missing: pass --jwt" } }
+  if ($brand_name == null) { error make --unspanned { msg: "required query parameter 'brandName' missing: pass --brand-name" } }
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "regionName" $region_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getRegionBrandMarketShare" $qp $auth.query)
   let accept_val = "application/json"
@@ -479,11 +495,12 @@ export def "get-region-market-share-get-region-market-share-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --jwt: string
+  --jwt: string # required
   --region-name: string # default: REGION_STATE_CA
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: any, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($jwt == null) { error make --unspanned { msg: "required query parameter 'jwt' missing: pass --jwt" } }
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "regionName" $region_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getRegionMarketShare" $qp $auth.query)
   let accept_val = "application/json"
@@ -516,10 +533,11 @@ export def "get-regions-get-regions-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --jwt: string
+  --jwt: string # required
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: list<string>, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($jwt == null) { error make --unspanned { msg: "required query parameter 'jwt' missing: pass --jwt" } }
   let qp = [(serialize-qp "jwt" $jwt "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getRegions" $qp $auth.query)
   let accept_val = "application/json"
@@ -552,11 +570,13 @@ export def "get-sub-user-keys-get-sub-user-keys-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-id: string
-  --api-key: string
+  --api-id: string # required
+  --api-key: string # required
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: any, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_id == null) { error make --unspanned { msg: "required query parameter 'apiID' missing: pass --api-id" } }
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'apiKey' missing: pass --api-key" } }
   let qp = [(serialize-qp "apiID" $api_id "scalar") (serialize-qp "apiKey" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getSubUserKeys" $qp $auth.query)
   let accept_val = "application/json"
@@ -589,11 +609,13 @@ export def "make-token-get-token-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-id: string
-  --api-key: string
+  --api-id: string # required
+  --api-key: string # required
 ]: nothing -> record<createdOn: int, expires: int, token: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_id == null) { error make --unspanned { msg: "required query parameter 'apiID' missing: pass --api-id" } }
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'apiKey' missing: pass --api-key" } }
   let qp = [(serialize-qp "apiID" $api_id "scalar") (serialize-qp "apiKey" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getToken" $qp $auth.query)
   let accept_val = "application/json"
@@ -626,11 +648,13 @@ export def "make-token-get-token-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-id: string
-  --api-key: string
+  --api-id: string # required
+  --api-key: string # required
 ]: nothing -> record<createdOn: int, expires: int, token: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_id == null) { error make --unspanned { msg: "required query parameter 'apiID' missing: pass --api-id" } }
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'apiKey' missing: pass --api-key" } }
   let qp = [(serialize-qp "apiID" $api_id "scalar") (serialize-qp "apiKey" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getToken" $qp $auth.query)
   let accept_val = "application/json"
@@ -663,12 +687,14 @@ export def "get-avg-list-price-list-price-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --jwt: string
-  --brand-name: string
+  --jwt: string # required
+  --brand-name: string # required
   --region-name: string # default: REGION_STATE_CA
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: table<average: float, median: float, name: string, pVariance: float, stdDev: float>, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($jwt == null) { error make --unspanned { msg: "required query parameter 'jwt' missing: pass --jwt" } }
+  if ($brand_name == null) { error make --unspanned { msg: "required query parameter 'brandName' missing: pass --brand-name" } }
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "regionName" $region_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listPrice" $qp $auth.query)
   let accept_val = "application/json"
@@ -701,13 +727,15 @@ export def "get-listings-by-dealer-listings-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --jwt: string
-  --dealer-id: int
+  --jwt: string # required
+  --dealer-id: int # required
   --page: int # default: 1
   --new-cars: oneof<nothing, bool> # default: true
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: record<listings: list<record>, maxPages: int, page: int>, endDate: string, modelName: string, msg: string, regionName: string, startDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($jwt == null) { error make --unspanned { msg: "required query parameter 'jwt' missing: pass --jwt" } }
+  if ($dealer_id == null) { error make --unspanned { msg: "required query parameter 'dealerID' missing: pass --dealer-id" } }
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "dealerID" $dealer_id "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "newCars" $new_cars "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listings" $qp $auth.query)
   let accept_val = "application/json"
@@ -740,7 +768,7 @@ export def "get-listings2-listings2-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --jwt: string
+  --jwt: string # required
   --dealer-id: int # default: 0
   --zip-code: int # default: 0
   --latitude: float # default: 0
@@ -761,6 +789,7 @@ export def "get-listings2-listings2-get" [
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: record<listings: list<record>, maxPages: int, page: int>, endDate: string, modelName: string, msg: string, regionName: string, startDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($jwt == null) { error make --unspanned { msg: "required query parameter 'jwt' missing: pass --jwt" } }
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "dealerID" $dealer_id "scalar") (serialize-qp "zipCode" $zip_code "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "regionName" $region_name "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "modelName" $model_name "scalar") (serialize-qp "modelYear" $model_year "scalar") (serialize-qp "mileageLow" $mileage_low "scalar") (serialize-qp "mileageHigh" $mileage_high "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "daysBack" $days_back "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "newCars" $new_cars "scalar") (serialize-qp "extendedSearch" $extended_search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listings2" $qp $auth.query)
   let accept_val = "application/json"
@@ -793,15 +822,19 @@ export def "get-listings-by-dealer-listings-by-date-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --jwt: string
-  --dealer-id: int
-  --start-date: string # format: date
-  --end-date: string # format: date
+  --jwt: string # required
+  --dealer-id: int # required
+  --start-date: string # required, format: date
+  --end-date: string # required, format: date
   --page: int # default: 1
   --new-cars: oneof<nothing, bool> # default: true
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: record<listings: list<record>, maxPages: int, page: int>, endDate: string, modelName: string, msg: string, regionName: string, startDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($jwt == null) { error make --unspanned { msg: "required query parameter 'jwt' missing: pass --jwt" } }
+  if ($dealer_id == null) { error make --unspanned { msg: "required query parameter 'dealerID' missing: pass --dealer-id" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'startDate' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'endDate' missing: pass --end-date" } }
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "dealerID" $dealer_id "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "newCars" $new_cars "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listingsByDate" $qp $auth.query)
   let accept_val = "application/json"
@@ -834,15 +867,18 @@ export def "get-listings-by-region-listings-by-region-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --jwt: string
-  --region-name: string
-  --model-name: string
+  --jwt: string # required
+  --region-name: string # required
+  --model-name: string # required
   --days-back: int # default: 10
   --page: int # default: 1
   --new-cars: oneof<nothing, bool> # default: true
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: record<listings: list<record>, maxPages: int, page: int>, endDate: string, modelName: string, msg: string, regionName: string, startDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($jwt == null) { error make --unspanned { msg: "required query parameter 'jwt' missing: pass --jwt" } }
+  if ($region_name == null) { error make --unspanned { msg: "required query parameter 'regionName' missing: pass --region-name" } }
+  if ($model_name == null) { error make --unspanned { msg: "required query parameter 'modelName' missing: pass --model-name" } }
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "regionName" $region_name "scalar") (serialize-qp "modelName" $model_name "scalar") (serialize-qp "daysBack" $days_back "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "newCars" $new_cars "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listingsByRegion" $qp $auth.query)
   let accept_val = "application/json"
@@ -875,16 +911,21 @@ export def "get-listings-by-region-and-date-listings-by-region-and-date-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --jwt: string
-  --region-name: string
-  --model-name: string
-  --start-date: string # format: date
-  --end-date: string # format: date
+  --jwt: string # required
+  --region-name: string # required
+  --model-name: string # required
+  --start-date: string # required, format: date
+  --end-date: string # required, format: date
   --page: int # default: 1
   --new-cars: oneof<nothing, bool> # default: true
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: record<listings: list<record>, maxPages: int, page: int>, endDate: string, modelName: string, msg: string, regionName: string, startDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($jwt == null) { error make --unspanned { msg: "required query parameter 'jwt' missing: pass --jwt" } }
+  if ($region_name == null) { error make --unspanned { msg: "required query parameter 'regionName' missing: pass --region-name" } }
+  if ($model_name == null) { error make --unspanned { msg: "required query parameter 'modelName' missing: pass --model-name" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'startDate' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'endDate' missing: pass --end-date" } }
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "regionName" $region_name "scalar") (serialize-qp "modelName" $model_name "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "newCars" $new_cars "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listingsByRegionAndDate" $qp $auth.query)
   let accept_val = "application/json"
@@ -917,14 +958,16 @@ export def "listings-by-zip-code-listings-by-zip-code-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --jwt: string
-  --zip-code: int
+  --jwt: string # required
+  --zip-code: int # required
   --page: int # default: 1
   --new-cars: oneof<nothing, bool> # default: true
   --model-name: string
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: record<listings: list<record>, maxPages: int, page: int>, endDate: string, modelName: string, msg: string, regionName: string, startDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($jwt == null) { error make --unspanned { msg: "required query parameter 'jwt' missing: pass --jwt" } }
+  if ($zip_code == null) { error make --unspanned { msg: "required query parameter 'zipCode' missing: pass --zip-code" } }
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "zipCode" $zip_code "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "newCars" $new_cars "scalar") (serialize-qp "modelName" $model_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listingsByZipCode" $qp $auth.query)
   let accept_val = "application/json"
@@ -957,16 +1000,20 @@ export def "listings-by-zip-code-and-date-listings-by-zip-code-and-date-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --jwt: string
-  --zip-code: int
-  --start-date: string # format: date
-  --end-date: string # format: date
+  --jwt: string # required
+  --zip-code: int # required
+  --start-date: string # required, format: date
+  --end-date: string # required, format: date
   --page: int # default: 1
   --new-cars: oneof<nothing, bool> # default: true
   --model-name: string
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: record<listings: list<record>, maxPages: int, page: int>, endDate: string, modelName: string, msg: string, regionName: string, startDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($jwt == null) { error make --unspanned { msg: "required query parameter 'jwt' missing: pass --jwt" } }
+  if ($zip_code == null) { error make --unspanned { msg: "required query parameter 'zipCode' missing: pass --zip-code" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'startDate' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'endDate' missing: pass --end-date" } }
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "zipCode" $zip_code "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "newCars" $new_cars "scalar") (serialize-qp "modelName" $model_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listingsByZipCodeAndDate" $qp $auth.query)
   let accept_val = "application/json"
@@ -999,14 +1046,16 @@ export def "make-sub-user-key-make-sub-user-key-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-id: string
-  --api-key: string
+  --api-id: string # required
+  --api-key: string # required
   --site-name: string # default: localhost
   --end-points: list<string> # default: [*]
 ]: any -> record<createdOn: int, domain: string, endPoints: list<string>, expires: int, token: string, uuid: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_id == null) { error make --unspanned { msg: "required query parameter 'apiID' missing: pass --api-id" } }
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'apiKey' missing: pass --api-key" } }
   let qp = [(serialize-qp "apiID" $api_id "scalar") (serialize-qp "apiKey" $api_key "scalar") (serialize-qp "siteName" $site_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/makeSubUserKey" $qp $auth.query)
   let req_body = {"endPoints": $end_points} | compact
@@ -1041,13 +1090,16 @@ export def "get-model-used-dist-model-year-dist-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --jwt: string
-  --model-name: string
-  --brand-name: string
+  --jwt: string # required
+  --model-name: string # required
+  --brand-name: string # required
   --region-name: string # default: REGION_STATE_CA
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: table<brandName: string, modelName: string, percentOfMarket: float, year: int>, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($jwt == null) { error make --unspanned { msg: "required query parameter 'jwt' missing: pass --jwt" } }
+  if ($model_name == null) { error make --unspanned { msg: "required query parameter 'modelName' missing: pass --model-name" } }
+  if ($brand_name == null) { error make --unspanned { msg: "required query parameter 'brandName' missing: pass --brand-name" } }
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "modelName" $model_name "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "regionName" $region_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/modelYearDist" $qp $auth.query)
   let accept_val = "application/json"
@@ -1080,13 +1132,17 @@ export def "get-dealer-sales-region-daily-sales-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --jwt: string
-  --brand-name: string
-  --region-name: string
-  --day: string # format: date
+  --jwt: string # required
+  --brand-name: string # required
+  --region-name: string # required
+  --day: string # required, format: date
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: any, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($jwt == null) { error make --unspanned { msg: "required query parameter 'jwt' missing: pass --jwt" } }
+  if ($brand_name == null) { error make --unspanned { msg: "required query parameter 'brandName' missing: pass --brand-name" } }
+  if ($region_name == null) { error make --unspanned { msg: "required query parameter 'regionName' missing: pass --region-name" } }
+  if ($day == null) { error make --unspanned { msg: "required query parameter 'day' missing: pass --day" } }
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "regionName" $region_name "scalar") (serialize-qp "day" $day "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/regionDailySales" $qp $auth.query)
   let accept_val = "application/json"
@@ -1119,13 +1175,17 @@ export def "get-dealer-sales-region-sales-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --jwt: string
-  --brand-name: string
-  --region-name: string
-  --month: string # format: date
+  --jwt: string # required
+  --brand-name: string # required
+  --region-name: string # required
+  --month: string # required, format: date
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: any, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($jwt == null) { error make --unspanned { msg: "required query parameter 'jwt' missing: pass --jwt" } }
+  if ($brand_name == null) { error make --unspanned { msg: "required query parameter 'brandName' missing: pass --brand-name" } }
+  if ($region_name == null) { error make --unspanned { msg: "required query parameter 'regionName' missing: pass --region-name" } }
+  if ($month == null) { error make --unspanned { msg: "required query parameter 'month' missing: pass --month" } }
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "regionName" $region_name "scalar") (serialize-qp "month" $month "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/regionSales" $qp $auth.query)
   let accept_val = "application/json"
@@ -1158,12 +1218,15 @@ export def "revoke-sub-user-key-revoke-sub-user-key-put" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-id: string
-  --api-key: string
-  --sub-user-key-uuid: string
+  --api-id: string # required
+  --api-key: string # required
+  --sub-user-key-uuid: string # required
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: any, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_id == null) { error make --unspanned { msg: "required query parameter 'apiID' missing: pass --api-id" } }
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'apiKey' missing: pass --api-key" } }
+  if ($sub_user_key_uuid == null) { error make --unspanned { msg: "required query parameter 'subUserKeyUUID' missing: pass --sub-user-key-uuid" } }
   let qp = [(serialize-qp "apiID" $api_id "scalar") (serialize-qp "apiKey" $api_key "scalar") (serialize-qp "subUserKeyUUID" $sub_user_key_uuid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/revokeSubUserKey" $qp $auth.query)
   let accept_val = "application/json"
@@ -1196,12 +1259,14 @@ export def "get-avg-sale-price-sale-price-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --jwt: string
-  --brand-name: string
+  --jwt: string # required
+  --brand-name: string # required
   --region-name: string # default: REGION_STATE_CA
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: table<average: float, median: float, name: string, pVariance: float, stdDev: float>, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($jwt == null) { error make --unspanned { msg: "required query parameter 'jwt' missing: pass --jwt" } }
+  if ($brand_name == null) { error make --unspanned { msg: "required query parameter 'brandName' missing: pass --brand-name" } }
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "regionName" $region_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/salePrice" $qp $auth.query)
   let accept_val = "application/json"
@@ -1234,13 +1299,16 @@ export def "get-model-sale-buckets-sale-price-histogram-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --jwt: string
-  --model-name: string
-  --brand-name: string
+  --jwt: string # required
+  --model-name: string # required
+  --brand-name: string # required
   --region-name: string # default: REGION_STATE_CA
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: table<bucket: float, modelName: string, percentOfMarket: float>, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($jwt == null) { error make --unspanned { msg: "required query parameter 'jwt' missing: pass --jwt" } }
+  if ($model_name == null) { error make --unspanned { msg: "required query parameter 'modelName' missing: pass --model-name" } }
+  if ($brand_name == null) { error make --unspanned { msg: "required query parameter 'brandName' missing: pass --brand-name" } }
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "modelName" $model_name "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "regionName" $region_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/salePriceHistogram" $qp $auth.query)
   let accept_val = "application/json"
@@ -1273,14 +1341,16 @@ export def "get-market3-similar-sale-price-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --jwt: string
-  --vin: string
+  --jwt: string # required
+  --vin: string # required
   --region-name: string # default: REGION_STATE_CA
   --days-back: int # default: 45
   --same-year: oneof<nothing, bool> # default: false
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: record<daysBack: int, mileCount: int, milesAvg: float, milesStdDev: float, newCount: int, newSaleAvg: float, newSaleStdDev: float, usedCount: int, usedSaleAvg: float, usedSaleStdDev: float>, endDate: string, modelName: string, msg: string, regionName: string, startDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($jwt == null) { error make --unspanned { msg: "required query parameter 'jwt' missing: pass --jwt" } }
+  if ($vin == null) { error make --unspanned { msg: "required query parameter 'vin' missing: pass --vin" } }
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "regionName" $region_name "scalar") (serialize-qp "daysBack" $days_back "scalar") (serialize-qp "sameYear" $same_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/similarSalePrice" $qp $auth.query)
   let accept_val = "application/json"
@@ -1313,11 +1383,12 @@ export def "get-top-models-top-models-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --jwt: string
+  --jwt: string # required
   --region-name: string # default: REGION_STATE_CA
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: table<brandMarketShare: float, brandName: string, modelName: string, percentOfBrandSales: float, percentOfTopSales: float>, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($jwt == null) { error make --unspanned { msg: "required query parameter 'jwt' missing: pass --jwt" } }
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "regionName" $region_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/topModels" $qp $auth.query)
   let accept_val = "application/json"
@@ -1350,8 +1421,8 @@ export def "get-market4-valuation-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --jwt: string
-  --vin: string
+  --jwt: string # required
+  --vin: string # required
   --dealer-id: int # default: 0
   --zip-code: int # default: 0
   --latitude: float # default: 0
@@ -1369,6 +1440,8 @@ export def "get-market4-valuation-get" [
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: record<daysBack: int, mileCount: int, milesAvg: float, milesStdDev: float, newCount: int, newSaleAvg: float, newSaleStdDev: float, usedCount: int, usedSaleAvg: float, usedSaleStdDev: float>, endDate: string, modelName: string, msg: string, regionName: string, startDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($jwt == null) { error make --unspanned { msg: "required query parameter 'jwt' missing: pass --jwt" } }
+  if ($vin == null) { error make --unspanned { msg: "required query parameter 'vin' missing: pass --vin" } }
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "dealerID" $dealer_id "scalar") (serialize-qp "zipCode" $zip_code "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "regionName" $region_name "scalar") (serialize-qp "mileageLow" $mileage_low "scalar") (serialize-qp "mileageHigh" $mileage_high "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "daysBack" $days_back "scalar") (serialize-qp "newCars" $new_cars "scalar") (serialize-qp "extendedSearch" $extended_search "scalar") (serialize-qp "sameYear" $same_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/valuation" $qp $auth.query)
   let accept_val = "application/json"
@@ -1401,11 +1474,13 @@ export def "get-history2-vehicle-history-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --jwt: string
-  --vin: string
+  --jwt: string # required
+  --vin: string # required
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: record<data: list<record>, vin: string>, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($jwt == null) { error make --unspanned { msg: "required query parameter 'jwt' missing: pass --jwt" } }
+  if ($vin == null) { error make --unspanned { msg: "required query parameter 'vin' missing: pass --vin" } }
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "vin" $vin "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/vehicleHistory" $qp $auth.query)
   let accept_val = "application/json"
@@ -1438,12 +1513,15 @@ export def "get-vehicle-seen-vehicle-seen-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --jwt: string
-  --vin: string
-  --after-date: string # format: date
+  --jwt: string # required
+  --vin: string # required
+  --after-date: string # required, format: date
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: bool, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($jwt == null) { error make --unspanned { msg: "required query parameter 'jwt' missing: pass --jwt" } }
+  if ($vin == null) { error make --unspanned { msg: "required query parameter 'vin' missing: pass --vin" } }
+  if ($after_date == null) { error make --unspanned { msg: "required query parameter 'afterDate' missing: pass --after-date" } }
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "afterDate" $after_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/vehicleSeen" $qp $auth.query)
   let accept_val = "application/json"
@@ -1476,13 +1554,15 @@ export def "vin-decode-vin-decode-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --jwt: string
-  --vin: string
+  --jwt: string # required
+  --vin: string # required
   --pass-empty: oneof<nothing, bool> # default: false
   --include-recall: oneof<nothing, bool> # default: true
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: any, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($jwt == null) { error make --unspanned { msg: "required query parameter 'jwt' missing: pass --jwt" } }
+  if ($vin == null) { error make --unspanned { msg: "required query parameter 'vin' missing: pass --vin" } }
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "passEmpty" $pass_empty "scalar") (serialize-qp "includeRecall" $include_recall "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/vinDecode" $qp $auth.query)
   let accept_val = "application/json"

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -112,6 +112,8 @@ def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors
 def base-url-completer [] { ["http://groundstation.us-east-1.amazonaws.com" "http://groundstation.us-east-2.amazonaws.com" "http://groundstation.us-west-1.amazonaws.com" "http://groundstation.us-west-2.amazonaws.com" "http://groundstation.us-gov-west-1.amazonaws.com" "http://groundstation.us-gov-east-1.amazonaws.com" "http://groundstation.ca-central-1.amazonaws.com" "http://groundstation.eu-north-1.amazonaws.com" "http://groundstation.eu-west-1.amazonaws.com" "http://groundstation.eu-west-2.amazonaws.com" "http://groundstation.eu-west-3.amazonaws.com" "http://groundstation.eu-central-1.amazonaws.com" "http://groundstation.eu-south-1.amazonaws.com" "http://groundstation.af-south-1.amazonaws.com" "http://groundstation.ap-northeast-1.amazonaws.com" "http://groundstation.ap-northeast-2.amazonaws.com" "http://groundstation.ap-northeast-3.amazonaws.com" "http://groundstation.ap-southeast-1.amazonaws.com" "http://groundstation.ap-southeast-2.amazonaws.com" "http://groundstation.ap-east-1.amazonaws.com" "http://groundstation.ap-south-1.amazonaws.com" "http://groundstation.sa-east-1.amazonaws.com" "http://groundstation.me-south-1.amazonaws.com" "https://groundstation.us-east-1.amazonaws.com" "https://groundstation.us-east-2.amazonaws.com" "https://groundstation.us-west-1.amazonaws.com" "https://groundstation.us-west-2.amazonaws.com" "https://groundstation.us-gov-west-1.amazonaws.com" "https://groundstation.us-gov-east-1.amazonaws.com" "https://groundstation.ca-central-1.amazonaws.com" "https://groundstation.eu-north-1.amazonaws.com" "https://groundstation.eu-west-1.amazonaws.com" "https://groundstation.eu-west-2.amazonaws.com" "https://groundstation.eu-west-3.amazonaws.com" "https://groundstation.eu-central-1.amazonaws.com" "https://groundstation.eu-south-1.amazonaws.com" "https://groundstation.af-south-1.amazonaws.com" "https://groundstation.ap-northeast-1.amazonaws.com" "https://groundstation.ap-northeast-2.amazonaws.com" "https://groundstation.ap-northeast-3.amazonaws.com" "https://groundstation.ap-southeast-1.amazonaws.com" "https://groundstation.ap-southeast-2.amazonaws.com" "https://groundstation.ap-east-1.amazonaws.com" "https://groundstation.ap-south-1.amazonaws.com" "https://groundstation.sa-east-1.amazonaws.com" "https://groundstation.me-south-1.amazonaws.com" "http://groundstation.cn-north-1.amazonaws.com.cn" "http://groundstation.cn-northwest-1.amazonaws.com.cn" "https://groundstation.cn-north-1.amazonaws.com.cn" "https://groundstation.cn-northwest-1.amazonaws.com.cn"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def config-type-completer [] { ["antenna-downlink" "antenna-downlink-demod-decode" "antenna-uplink" "dataflow-endpoint" "s3-recording" "tracking" "uplink-echo"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -158,7 +160,7 @@ export def "cancel-contact" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<contactId: record> {
+]: nothing -> record<contactId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
@@ -203,7 +205,7 @@ export def "describe-contact" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<contactId: record, contactStatus: record, dataflowList: record, endTime: record, errorMessage: record, groundStation: record, maximumElevation: record<unit: record, value: record>, missionProfileArn: record, postPassEndTime: record, prePassStartTime: record, region: record, satelliteArn: record, startTime: record, tags: record> {
+]: nothing -> record<contactId: string, contactStatus: string, dataflowList: table<destination: record, errorMessage: string, source: record>, endTime: string, errorMessage: string, groundStation: string, maximumElevation: record<unit: string, value: float>, missionProfileArn: string, postPassEndTime: string, prePassStartTime: string, region: string, satelliteArn: string, startTime: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
@@ -230,7 +232,7 @@ export def "describe-contact" [
 #
 # POST /config
 # operationId: CreateConfig
-# --configData shape: {antennaDownlinkConfig?: any, antennaDownlinkDemodDecodeConfig?: any, antennaUplinkConfig?: any, dataflowEndpointConfig?: any, s3RecordingConfig?: any, trackingConfig?: any, uplinkEchoConfig?: any}
+# --configData shape: {antennaDownlinkConfig?: record, antennaDownlinkDemodDecodeConfig?: record, antennaUplinkConfig?: record, dataflowEndpointConfig?: record, s3RecordingConfig?: record, trackingConfig?: record, uplinkEchoConfig?: record}
 export def "create-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -248,10 +250,10 @@ export def "create-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  config_data: record # Object containing the parameters of a Config. See the subtype definitions for what each type of Config contains. — shape: {antennaDownlinkConfig?: any, antennaDownlinkDemodDecodeConfig?: any, antennaUplinkConfig?: any, dataflowEndpointConfig?: any, s3RecordingConfig?: any, trackingConfig?: any, uplinkEchoConfig?: any}
+  config_data: record # Object containing the parameters of a Config. See the subtype definitions for what each type of Config contains. — shape: {antennaDownlinkConfig?: record, antennaDownlinkDemodDecodeConfig?: record, antennaUplinkConfig?: record, dataflowEndpointConfig?: record, s3RecordingConfig?: record, trackingConfig?: record, uplinkEchoConfig?: record}
   name: string # Name of a Config.
   --tags: record # Tags assigned to a Config.
-]: any -> record<configArn: record, configId: record, configType: record> {
+]: any -> record<configArn: string, configId: string, configType: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -299,7 +301,7 @@ export def "list-configs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<configList: record, nextToken: record> {
+]: nothing -> record<configList: table<configArn: string, configId: string, configType: string, name: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -326,7 +328,7 @@ export def "list-configs" [
 #
 # POST /dataflowEndpointGroup
 # operationId: CreateDataflowEndpointGroup
-# --endpointDetails item shape: {awsGroundStationAgentEndpoint?: any, endpoint?: any, healthReasons?: any, healthStatus?: any, securityDetails?: any}
+# --endpointDetails item shape: {awsGroundStationAgentEndpoint?: record, endpoint?: record, healthReasons?: list<string>, healthStatus?: "UNHEALTHY"|"HEALTHY", securityDetails?: record}
 export def "create-dataflow-endpoint-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -346,9 +348,9 @@ export def "create-dataflow-endpoint-group" [
   --x-amz-signed-headers: string
   --contact-post-pass-duration-seconds: int # Amount of time, in seconds, after a contact ends that the Ground Station Dataflow Endpoint Group will be in a POSTPASS state. A Ground Station Dataflow Endpoint Group State Change event will be emitted when the Dataflow Endpoint Group enters and exits the POSTPASS state.
   --contact-pre-pass-duration-seconds: int # Amount of time, in seconds, before a contact starts that the Ground Station Dataflow Endpoint Group will be in a PREPASS state. A Ground Station Dataflow Endpoint Group State Change event will be emitted when the Dataflow Endpoint Group enters and exits the PREPASS state.
-  endpoint_details: list # Endpoint details of each endpoint in the dataflow endpoint group. — item shape: {awsGroundStationAgentEndpoint?: any, endpoint?: any, healthReasons?: any, healthStatus?: any, securityDetails?: any}
+  endpoint_details: list # Endpoint details of each endpoint in the dataflow endpoint group. — item shape: {awsGroundStationAgentEndpoint?: record, endpoint?: record, healthReasons?: list<string>, healthStatus?: "UNHEALTHY"|"HEALTHY", securityDetails?: record}
   --tags: record # Tags of a dataflow endpoint group.
-]: any -> record<dataflowEndpointGroupId: record> {
+]: any -> record<dataflowEndpointGroupId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -396,7 +398,7 @@ export def "list-dataflow-endpoint-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<dataflowEndpointGroupList: record, nextToken: record> {
+]: nothing -> record<dataflowEndpointGroupList: table<dataflowEndpointGroupArn: string, dataflowEndpointGroupId: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -449,7 +451,7 @@ export def "create-ephemeris" [
   --priority: int # Customer-provided priority score to establish the order in which overlapping ephemerides should be used. The default for customer-provided ephemeris priority is 1, and higher numbers take precedence. Priority must be 1 or greater
   satellite_id: string # AWS Ground Station satellite ID for this ephemeris.
   --tags: record # Tags assigned to an ephemeris.
-]: any -> record<ephemerisId: record> {
+]: any -> record<ephemerisId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -478,7 +480,7 @@ export def "create-ephemeris" [
 #
 # POST /missionprofile
 # operationId: CreateMissionProfile
-# --streamsKmsKey shape: {kmsAliasArn?: any, kmsKeyArn?: any}
+# --streamsKmsKey shape: {kmsAliasArn?: string, kmsKeyArn?: string}
 export def "create-mission-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -501,11 +503,11 @@ export def "create-mission-profile" [
   dataflow_edges: list # A list of lists of ARNs. Each list of ARNs is an edge, with a from Config and a to Config.
   minimum_viable_contact_duration_seconds: int # Smallest amount of time in seconds that you’d like to see for an available contact. AWS Ground Station will not present you with contacts shorter than this duration.
   name: string # Name of a mission profile.
-  --streams-kms-key: record # AWS Key Management Service (KMS) Key. — shape: {kmsAliasArn?: any, kmsKeyArn?: any}
+  --streams-kms-key: record # AWS Key Management Service (KMS) Key. — shape: {kmsAliasArn?: string, kmsKeyArn?: string}
   --streams-kms-role: string # Role to use for encrypting streams with KMS key.
   --tags: record # Tags assigned to a mission profile.
   tracking_config_arn: string # ARN of a tracking Config.
-]: any -> record<missionProfileId: record> {
+]: any -> record<missionProfileId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -553,7 +555,7 @@ export def "list-mission-profiles" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<missionProfileList: record, nextToken: record> {
+]: nothing -> record<missionProfileList: table<missionProfileArn: string, missionProfileId: string, name: string, region: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -581,7 +583,7 @@ export def "list-mission-profiles" [
 # DELETE /config/{configType}/{configId}
 # operationId: DeleteConfig
 export def "delete-config" [
-  config_type: string
+  config_type: string@config-type-completer
   config_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -599,7 +601,7 @@ export def "delete-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<configArn: record, configId: record, configType: record> {
+]: nothing -> record<configArn: string, configId: string, configType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($config_type | is-empty) { error make --unspanned { msg: "path parameter 'configType' must be non-empty" } }
@@ -628,7 +630,7 @@ export def "delete-config" [
 # GET /config/{configType}/{configId}
 # operationId: GetConfig
 export def "get-config" [
-  config_type: string
+  config_type: string@config-type-completer
   config_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -646,7 +648,7 @@ export def "get-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<configArn: record, configData: record<antennaDownlinkConfig: record<spectrumConfig: record>, antennaDownlinkDemodDecodeConfig: record<decodeConfig: record, demodulationConfig: record, spectrumConfig: record>, antennaUplinkConfig: record<spectrumConfig: record, targetEirp: record, transmitDisabled: record>, dataflowEndpointConfig: record<dataflowEndpointName: record, dataflowEndpointRegion: record>, s3RecordingConfig: record<bucketArn: record, prefix: record, roleArn: record>, trackingConfig: record<autotrack: record>, uplinkEchoConfig: record<antennaUplinkConfigArn: record, enabled: record>>, configId: record, configType: record, name: record, tags: record> {
+]: nothing -> record<configArn: string, configData: record<antennaDownlinkConfig: record<spectrumConfig: record>, antennaDownlinkDemodDecodeConfig: record<decodeConfig: record, demodulationConfig: record, spectrumConfig: record>, antennaUplinkConfig: record<spectrumConfig: record, targetEirp: record, transmitDisabled: bool>, dataflowEndpointConfig: record<dataflowEndpointName: string, dataflowEndpointRegion: string>, s3RecordingConfig: record<bucketArn: string, prefix: string, roleArn: string>, trackingConfig: record<autotrack: string>, uplinkEchoConfig: record<antennaUplinkConfigArn: string, enabled: bool>>, configId: string, configType: string, name: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($config_type | is-empty) { error make --unspanned { msg: "path parameter 'configType' must be non-empty" } }
@@ -674,9 +676,9 @@ export def "get-config" [
 #
 # PUT /config/{configType}/{configId}
 # operationId: UpdateConfig
-# --configData shape: {antennaDownlinkConfig?: any, antennaDownlinkDemodDecodeConfig?: any, antennaUplinkConfig?: any, dataflowEndpointConfig?: any, s3RecordingConfig?: any, trackingConfig?: any, uplinkEchoConfig?: any}
+# --configData shape: {antennaDownlinkConfig?: record, antennaDownlinkDemodDecodeConfig?: record, antennaUplinkConfig?: record, dataflowEndpointConfig?: record, s3RecordingConfig?: record, trackingConfig?: record, uplinkEchoConfig?: record}
 export def "update-config" [
-  config_type: string
+  config_type: string@config-type-completer
   config_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -694,9 +696,9 @@ export def "update-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  config_data: record # Object containing the parameters of a Config. See the subtype definitions for what each type of Config contains. — shape: {antennaDownlinkConfig?: any, antennaDownlinkDemodDecodeConfig?: any, antennaUplinkConfig?: any, dataflowEndpointConfig?: any, s3RecordingConfig?: any, trackingConfig?: any, uplinkEchoConfig?: any}
+  config_data: record # Object containing the parameters of a Config. See the subtype definitions for what each type of Config contains. — shape: {antennaDownlinkConfig?: record, antennaDownlinkDemodDecodeConfig?: record, antennaUplinkConfig?: record, dataflowEndpointConfig?: record, s3RecordingConfig?: record, trackingConfig?: record, uplinkEchoConfig?: record}
   name: string # Name of a Config.
-]: any -> record<configArn: record, configId: record, configType: record> {
+]: any -> record<configArn: string, configId: string, configType: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -745,7 +747,7 @@ export def "delete-dataflow-endpoint-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<dataflowEndpointGroupId: record> {
+]: nothing -> record<dataflowEndpointGroupId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dataflow_endpoint_group_id | is-empty) { error make --unspanned { msg: "path parameter 'dataflowEndpointGroupId' must be non-empty" } }
@@ -790,7 +792,7 @@ export def "get-dataflow-endpoint-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<contactPostPassDurationSeconds: record, contactPrePassDurationSeconds: record, dataflowEndpointGroupArn: record, dataflowEndpointGroupId: record, endpointsDetails: record, tags: record> {
+]: nothing -> record<contactPostPassDurationSeconds: int, contactPrePassDurationSeconds: int, dataflowEndpointGroupArn: string, dataflowEndpointGroupId: string, endpointsDetails: table<awsGroundStationAgentEndpoint: record, endpoint: record, healthReasons: list, healthStatus: string, securityDetails: record>, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dataflow_endpoint_group_id | is-empty) { error make --unspanned { msg: "path parameter 'dataflowEndpointGroupId' must be non-empty" } }
@@ -835,7 +837,7 @@ export def "delete-ephemeris" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ephemerisId: record> {
+]: nothing -> record<ephemerisId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ephemeris_id | is-empty) { error make --unspanned { msg: "path parameter 'ephemerisId' must be non-empty" } }
@@ -880,7 +882,7 @@ export def "describe-ephemeris" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<creationTime: record, enabled: record, ephemerisId: record, invalidReason: record, name: record, priority: record, satelliteId: record, status: record, suppliedData: record<oem: record<ephemerisData: record, sourceS3Object: record>, tle: record<ephemerisData: record, sourceS3Object: record>>, tags: record> {
+]: nothing -> record<creationTime: string, enabled: bool, ephemerisId: string, invalidReason: string, name: string, priority: int, satelliteId: string, status: string, suppliedData: record<oem: record<ephemerisData: string, sourceS3Object: record>, tle: record<ephemerisData: string, sourceS3Object: record>>, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ephemeris_id | is-empty) { error make --unspanned { msg: "path parameter 'ephemerisId' must be non-empty" } }
@@ -928,7 +930,7 @@ export def "update-ephemeris" [
   --enabled: oneof<nothing, bool> # Whether the ephemeris is enabled or not. Changing this value will not require the ephemeris to be re-validated.
   --name: string # A name string associated with the ephemeris. Used as a human-readable identifier for the ephemeris.
   --priority: int # Customer-provided priority score to establish the order in which overlapping ephemerides should be used. The default for customer-provided ephemeris priority is 1, and higher numbers take precedence. Priority must be 1 or greater
-]: any -> record<ephemerisId: record> {
+]: any -> record<ephemerisId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -936,6 +938,7 @@ export def "update-ephemeris" [
   let full_url = (build-url $base ({ephemeris_id: (encode-path-segment $ephemeris_id)} | format pattern "/ephemeris/{ephemeris_id}") $auth.query)
   let req_body = {"enabled": $enabled, "name": $name, "priority": $priority} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "enabled") == null) { error make --unspanned { msg: "required body field 'enabled' missing: pass --enabled or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
@@ -976,7 +979,7 @@ export def "delete-mission-profile" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<missionProfileId: record> {
+]: nothing -> record<missionProfileId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($mission_profile_id | is-empty) { error make --unspanned { msg: "path parameter 'missionProfileId' must be non-empty" } }
@@ -1021,7 +1024,7 @@ export def "get-mission-profile" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<contactPostPassDurationSeconds: record, contactPrePassDurationSeconds: record, dataflowEdges: record, minimumViableContactDurationSeconds: record, missionProfileArn: record, missionProfileId: record, name: record, region: record, streamsKmsKey: record<kmsAliasArn: record, kmsKeyArn: record>, streamsKmsRole: record, tags: record, trackingConfigArn: record> {
+]: nothing -> record<contactPostPassDurationSeconds: int, contactPrePassDurationSeconds: int, dataflowEdges: list<list<string>>, minimumViableContactDurationSeconds: int, missionProfileArn: string, missionProfileId: string, name: string, region: string, streamsKmsKey: record<kmsAliasArn: string, kmsKeyArn: string>, streamsKmsRole: string, tags: record, trackingConfigArn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($mission_profile_id | is-empty) { error make --unspanned { msg: "path parameter 'missionProfileId' must be non-empty" } }
@@ -1048,7 +1051,7 @@ export def "get-mission-profile" [
 #
 # PUT /missionprofile/{missionProfileId}
 # operationId: UpdateMissionProfile
-# --streamsKmsKey shape: {kmsAliasArn?: any, kmsKeyArn?: any}
+# --streamsKmsKey shape: {kmsAliasArn?: string, kmsKeyArn?: string}
 export def "update-mission-profile" [
   mission_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1072,10 +1075,10 @@ export def "update-mission-profile" [
   --dataflow-edges: list # A list of lists of ARNs. Each list of ARNs is an edge, with a from Config and a to Config.
   --minimum-viable-contact-duration-seconds: int # Smallest amount of time in seconds that you’d like to see for an available contact. AWS Ground Station will not present you with contacts shorter than this duration.
   --name: string # Name of a mission profile.
-  --streams-kms-key: record # AWS Key Management Service (KMS) Key. — shape: {kmsAliasArn?: any, kmsKeyArn?: any}
+  --streams-kms-key: record # AWS Key Management Service (KMS) Key. — shape: {kmsAliasArn?: string, kmsKeyArn?: string}
   --streams-kms-role: string # Role to use for encrypting streams with KMS key.
   --tracking-config-arn: string # ARN of a tracking Config.
-]: any -> record<missionProfileId: record> {
+]: any -> record<missionProfileId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1123,7 +1126,7 @@ export def "get-agent-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<agentId: record, taskingDocument: record> {
+]: nothing -> record<agentId: string, taskingDocument: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_id | is-empty) { error make --unspanned { msg: "path parameter 'agentId' must be non-empty" } }
@@ -1169,7 +1172,7 @@ export def "get-minute-usage" [
   --x-amz-signed-headers: string
   month: int # The month being requested, with a value of 1-12.
   year: int # The year being requested, in the format of YYYY.
-]: any -> record<estimatedMinutesRemaining: record, isReservedMinutesCustomer: record, totalReservedMinuteAllocation: record, totalScheduledMinutes: record, upcomingMinutesScheduled: record> {
+]: any -> record<estimatedMinutesRemaining: int, isReservedMinutesCustomer: bool, totalReservedMinuteAllocation: int, totalScheduledMinutes: int, upcomingMinutesScheduled: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1216,7 +1219,7 @@ export def "get-satellite" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<currentEphemeris: record<ephemerisId: record, epoch: record, name: record, source: record>, groundStations: record, noradSatelliteID: record, satelliteArn: record, satelliteId: record> {
+]: nothing -> record<currentEphemeris: record<ephemerisId: string, epoch: string, name: string, source: string>, groundStations: list<string>, noradSatelliteID: int, satelliteArn: string, satelliteId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($satellite_id | is-empty) { error make --unspanned { msg: "path parameter 'satelliteId' must be non-empty" } }
@@ -1270,7 +1273,7 @@ export def "list-contacts" [
   --satellite-arn: string # ARN of a satellite.
   start_time: string # Start time of a contact in UTC. (format: date-time)
   status_list: list<string> # Status of a contact reservation.
-]: any -> record<contactList: record, nextToken: record> {
+]: any -> record<contactList: table<contactId: string, contactStatus: string, endTime: string, errorMessage: string, groundStation: string, maximumElevation: record, missionProfileArn: string, postPassEndTime: string, prePassStartTime: string, region: string, satelliteArn: string, startTime: string, tags: record>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1323,7 +1326,7 @@ export def "list-ephemerides" [
   satellite_id: string # The AWS Ground Station satellite ID to list ephemeris for.
   start_time: string # The start time to list in UTC. The operation will return an ephemeris if its expiration time is within the time range defined by the startTime and endTime. (format: date-time)
   --status-list: list<string> # The list of ephemeris status to return.
-]: any -> record<ephemerides: record, nextToken: record> {
+]: any -> record<ephemerides: table<creationTime: string, enabled: bool, ephemerisId: string, name: string, priority: int, sourceS3Object: record, status: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1373,7 +1376,7 @@ export def "list-ground-stations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<groundStationList: record, nextToken: record> {
+]: nothing -> record<groundStationList: table<groundStationId: string, groundStationName: string, region: string>, nextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "satelliteId" $satellite_id "scalar")] | flatten | str join "&"
@@ -1419,7 +1422,7 @@ export def "list-satellites" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<nextToken: record, satellites: record> {
+]: nothing -> record<nextToken: string, satellites: table<currentEphemeris: record, groundStations: list, noradSatelliteID: int, satelliteArn: string, satelliteId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -1540,8 +1543,8 @@ export def "tag-resource" [
 #
 # POST /agent
 # operationId: RegisterAgent
-# --agentDetails shape: {agentCpuCores?: any, agentVersion?: any, componentVersions?: any, instanceId?: any, instanceType?: any, reservedCpuCores?: any}
-# --discoveryData shape: {capabilityArns?: any, privateIpAddresses?: any, publicIpAddresses?: any}
+# --agentDetails shape: {agentCpuCores?: list<int>, agentVersion?: string, componentVersions?: list, instanceId?: string, instanceType?: string, reservedCpuCores?: list<int>}
+# --discoveryData shape: {capabilityArns?: list<string>, privateIpAddresses?: list<string>, publicIpAddresses?: list<string>}
 export def "register-agent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1559,9 +1562,9 @@ export def "register-agent" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  agent_details: record # Detailed information about the agent. — shape: {agentCpuCores?: any, agentVersion?: any, componentVersions?: any, instanceId?: any, instanceType?: any, reservedCpuCores?: any}
-  discovery_data: record # Data for agent discovery. — shape: {capabilityArns?: any, privateIpAddresses?: any, publicIpAddresses?: any}
-]: any -> record<agentId: record> {
+  agent_details: record # Detailed information about the agent. — shape: {agentCpuCores?: list<int>, agentVersion?: string, componentVersions?: list, instanceId?: string, instanceType?: string, reservedCpuCores?: list<int>}
+  discovery_data: record # Data for agent discovery. — shape: {capabilityArns?: list<string>, privateIpAddresses?: list<string>, publicIpAddresses?: list<string>}
+]: any -> record<agentId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1613,7 +1616,7 @@ export def "reserve-contact" [
   satellite_arn: string # ARN of a satellite
   start_time: string # Start time of a contact in UTC. (format: date-time)
   --tags: record # Tags assigned to a contact.
-]: any -> record<contactId: record> {
+]: any -> record<contactId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1653,7 +1656,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # Keys of a resource tag.
+  --tag-keys: list # Keys of a resource tag. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1665,6 +1668,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1689,8 +1693,8 @@ export def "untag-resource" [
 #
 # PUT /agent/{agentId}
 # operationId: UpdateAgentStatus
-# --aggregateStatus shape: {signatureMap?: any, status?: any}
-# --componentStatuses item shape: {bytesReceived?: any, bytesSent?: any, capabilityArn: any, componentType: any, dataflowId: any, packetsDropped?: any, status: any}
+# --aggregateStatus shape: {signatureMap?: record, status?: "SUCCESS"|"FAILED"|"ACTIVE"|"INACTIVE"}
+# --componentStatuses item shape: {bytesReceived?: int, bytesSent?: int, capabilityArn: string, componentType: string, dataflowId: string, packetsDropped?: int, status: "SUCCESS"|"FAILED"|"ACTIVE"|"INACTIVE"}
 export def "update-agent-status" [
   agent_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1709,10 +1713,10 @@ export def "update-agent-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  aggregate_status: record # Aggregate status of Agent components. — shape: {signatureMap?: any, status?: any}
-  component_statuses: list # List of component statuses for agent. — item shape: {bytesReceived?: any, bytesSent?: any, capabilityArn: any, componentType: any, dataflowId: any, packetsDropped?: any, status: any}
+  aggregate_status: record # Aggregate status of Agent components. — shape: {signatureMap?: record, status?: "SUCCESS"|"FAILED"|"ACTIVE"|"INACTIVE"}
+  component_statuses: list # List of component statuses for agent. — item shape: {bytesReceived?: int, bytesSent?: int, capabilityArn: string, componentType: string, dataflowId: string, packetsDropped?: int, status: "SUCCESS"|"FAILED"|"ACTIVE"|"INACTIVE"}
   task_id: string # GUID of agent task.
-]: any -> record<agentId: record> {
+]: any -> record<agentId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -1,4 +1,4 @@
-# Auto-generated client for My Business Business Information API vv1
+# Auto-generated client for My Business Business Information API v1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/mybusinessbusinessinformation/v1/openapi.json
 # Auth: --token flag or $env.MY_BUSINESS_BUSINESS_INFORMATION_API_TOKEN
 

@@ -203,25 +203,27 @@ export def "recognize-file" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --secret-key: string # The secret key used to authenticate your account. You can view your secret key by visiting https://cloud.openalpr.com/
+  --secret-key: string # The secret key used to authenticate your account. You can view your secret key by visiting https://cloud.openalpr.com/ (required)
   --recognize-vehicle: int@recognize-vehicle-completer # If set to 1, the vehicle will also be recognized in the image This requires an additional credit per request (default: 0)
-  --country: string # Defines the training data used by OpenALPR. "us" analyzes North-American style plates. "eu" analyzes European-style plates. This field is required if using the "plate" task
+  --country: string # Defines the training data used by OpenALPR. "us" analyzes North-American style plates. "eu" analyzes European-style plates. This field is required if using the "plate" task (required)
   --return-image: int@return-image-completer # If set to 1, the image you uploaded will be encoded in base64 and sent back along with the response (default: 0)
   --topn: int # The number of results you would like to be returned for plate candidates and vehicle classifications (default: 10)
   --is-cropped: int@is-cropped-completer # When providing a plate or vehicle that is already cropped, this performs a recognition against the full crop and does not attempt to localize the plate/vehicle (default: 0)
   image: path # The image file that you wish to analyze
-]: any -> any {
+]: any -> record<credit_cost: int, credits_monthly_total: int, credits_monthly_used: int, data_type: string, epoch_time: float, img_height: int, img_width: int, processing_time: record<plates: float, total: float, vehicles: float>, regions_of_interest: table<height: int, width: int, x: int, y: int>, results: table<candidates: list, confidence: float, coordinates: list, matches_template: int, plate: string, processing_time_ms: float, region: string, region_confidence: float, requested_topn: int, vehicle: record, vehicle_region: record>, vehicles: table<details: record, height: int, width: int, x: int, y: int>, version: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secret_key' missing: pass --secret-key" } }
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
   let qp = [(serialize-qp "secret_key" $secret_key "scalar") (serialize-qp "recognize_vehicle" $recognize_vehicle "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "return_image" $return_image "scalar") (serialize-qp "topn" $topn "scalar") (serialize-qp "is_cropped" $is_cropped "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recognize" $qp $auth.query)
   let req_body = {"image": $image} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["image"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["image"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -250,16 +252,18 @@ export def "recognize-bytes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --secret-key: string # The secret key used to authenticate your account. You can view your secret key by visiting https://cloud.openalpr.com/
+  --secret-key: string # The secret key used to authenticate your account. You can view your secret key by visiting https://cloud.openalpr.com/ (required)
   --recognize-vehicle: int@recognize-vehicle-completer # If set to 1, the vehicle will also be recognized in the image This requires an additional credit per request (default: 0)
-  --country: string # Defines the training data used by OpenALPR. "us" analyzes North-American style plates. "eu" analyzes European-style plates. This field is required if using the "plate" task
+  --country: string # Defines the training data used by OpenALPR. "us" analyzes North-American style plates. "eu" analyzes European-style plates. This field is required if using the "plate" task (required)
   --return-image: int@return-image-completer # If set to 1, the image you uploaded will be encoded in base64 and sent back along with the response (default: 0)
   --topn: int # The number of results you would like to be returned for plate candidates and vehicle classifications (default: 10)
   --body: string
-]: any -> any {
+]: any -> record<credit_cost: int, credits_monthly_total: int, credits_monthly_used: int, data_type: string, epoch_time: float, img_height: int, img_width: int, processing_time: record<plates: float, total: float, vehicles: float>, regions_of_interest: table<height: int, width: int, x: int, y: int>, results: table<candidates: list, confidence: float, coordinates: list, matches_template: int, plate: string, processing_time_ms: float, region: string, region_confidence: float, requested_topn: int, vehicle: record, vehicle_region: record>, vehicles: table<details: record, height: int, width: int, x: int, y: int>, version: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secret_key' missing: pass --secret-key" } }
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
   let qp = [(serialize-qp "secret_key" $secret_key "scalar") (serialize-qp "recognize_vehicle" $recognize_vehicle "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "return_image" $return_image "scalar") (serialize-qp "topn" $topn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recognize_bytes" $qp $auth.query)
   let req_body = $body
@@ -294,15 +298,18 @@ export def "recognize-url" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --image-url: string # A URL to an image that you wish to analyze
-  --secret-key: string # The secret key used to authenticate your account. You can view your secret key by visiting https://cloud.openalpr.com/
+  --image-url: string # A URL to an image that you wish to analyze (required)
+  --secret-key: string # The secret key used to authenticate your account. You can view your secret key by visiting https://cloud.openalpr.com/ (required)
   --recognize-vehicle: int@recognize-vehicle-completer # If set to 1, the vehicle will also be recognized in the image This requires an additional credit per request (default: 0)
-  --country: string # Defines the training data used by OpenALPR. "us" analyzes North-American style plates. "eu" analyzes European-style plates. This field is required if using the "plate" task
+  --country: string # Defines the training data used by OpenALPR. "us" analyzes North-American style plates. "eu" analyzes European-style plates. This field is required if using the "plate" task (required)
   --return-image: int@return-image-completer # If set to 1, the image you uploaded will be encoded in base64 and sent back along with the response (default: 0)
   --topn: int # The number of results you would like to be returned for plate candidates and vehicle classifications (default: 10)
-]: nothing -> any {
+]: nothing -> record<credit_cost: int, credits_monthly_total: int, credits_monthly_used: int, data_type: string, epoch_time: float, img_height: int, img_width: int, processing_time: record<plates: float, total: float, vehicles: float>, regions_of_interest: table<height: int, width: int, x: int, y: int>, results: table<candidates: list, confidence: float, coordinates: list, matches_template: int, plate: string, processing_time_ms: float, region: string, region_confidence: float, requested_topn: int, vehicle: record, vehicle_region: record>, vehicles: table<details: record, height: int, width: int, x: int, y: int>, version: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($image_url == null) { error make --unspanned { msg: "required query parameter 'image_url' missing: pass --image-url" } }
+  if ($secret_key == null) { error make --unspanned { msg: "required query parameter 'secret_key' missing: pass --secret-key" } }
+  if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
   let qp = [(serialize-qp "image_url" $image_url "scalar") (serialize-qp "secret_key" $secret_key "scalar") (serialize-qp "recognize_vehicle" $recognize_vehicle "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "return_image" $return_image "scalar") (serialize-qp "topn" $topn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recognize_url" $qp $auth.query)
   let accept_val = "application/json"

@@ -1,4 +1,4 @@
-# Auto-generated client for LetMC Api V2, Free (Tier 1) vv2-free-tier
+# Auto-generated client for LetMC Api V2, Free (Tier 1) v2-free-tier
 # Source: https://api.apis.guru/v2/specs/letmc.com/free-tier/v2-free-tier/swagger.json
 # Auth: --token flag or $env.LETMC_API_V2_FREE_TIER_1_TOKEN
 
@@ -12,8 +12,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "apikey" => { {scheme: $scheme, headers: {ApiKey: $token_val}, query: "", location: "header"} }
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "apikey" => { {scheme: $scheme, headers: {"ApiKey": $token_val}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -137,12 +137,14 @@ export def "get-v2-tier1-short-name-area-areas" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --offset: int # The index of the first item to return (format: int32)
-  --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
+  --offset: int # The index of the first item to return (required, format: int32)
+  --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
 ]: nothing -> record<Count: int, Data: table<Branch: string, ETag: string, Name: string, OID: string, ShowOnSites: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier1/{short_name}/area/areas") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -214,12 +216,14 @@ export def "get-v2-tier1-short-name-branch-branches" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --offset: int # The index of the first item to return (format: int32)
-  --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
+  --offset: int # The index of the first item to return (required, format: int32)
+  --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
 ]: nothing -> record<Count: int, Data: table<Address1: string, Address2: string, Address3: string, Address4: string, CompanyName: string, County: string, EMailAddress: string, ETag: string, FaxPhone: string, LandPhone: string, Name: string, OID: string, Postcode: string, WebAddress: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier1/{short_name}/branch/branches") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -328,12 +332,14 @@ export def "get-v2-tier1-short-name-county-counties" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --offset: int # The index of the first item to return (format: int32)
-  --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
+  --offset: int # The index of the first item to return (required, format: int32)
+  --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
 ]: nothing -> record<Count: int, Data: table<ETag: string, Name: string, OID: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier1/{short_name}/county/counties") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -407,13 +413,15 @@ export def "county-controller-get-counties-branches" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --offset: int # The index of the first item to return (format: int32)
-  --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
+  --offset: int # The index of the first item to return (required, format: int32)
+  --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
 ]: nothing -> record<Count: int, Data: table<Address1: string, Address2: string, Address3: string, Address4: string, CompanyName: string, County: string, EMailAddress: string, ETag: string, FaxPhone: string, LandPhone: string, Name: string, OID: string, Postcode: string, WebAddress: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
   if ($county_id | is-empty) { error make --unspanned { msg: "path parameter 'countyID' must be non-empty" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), county_id: (encode-path-segment $county_id)} | format pattern "/v2/tier1/{short_name}/county/counties/{county_id}/branches") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -447,12 +455,14 @@ export def "get-v2-tier1-short-name-diary-allocations" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --offset: int # The index of the first item to return (format: int32)
-  --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
+  --offset: int # The index of the first item to return (required, format: int32)
+  --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
 ]: nothing -> record<Count: int, Data: table<AppointmentType: string, ETag: string, End: string, OID: string, Staff: string, Start: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier1/{short_name}/diary/allocations") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -524,12 +534,14 @@ export def "get-v2-tier1-short-name-diary-appointments" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --offset: int # The index of the first item to return (format: int32)
-  --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
+  --offset: int # The index of the first item to return (required, format: int32)
+  --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
 ]: nothing -> record<Count: int, Data: table<AppointmentType: string, Cancelled: bool, Comment: string, CreatedAt: string, CreatedBy: string, ETag: string, End: string, OID: string, RemindAt: string, RemindBefore: string, Staff: string, Start: string, Subject: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier1/{short_name}/diary/appointments") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -601,12 +613,14 @@ export def "get-v2-tier1-short-name-diary-appointmenttypes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --offset: int # The index of the first item to return (format: int32)
-  --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
+  --offset: int # The index of the first item to return (required, format: int32)
+  --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
 ]: nothing -> record<Count: int, Data: table<ETag: string, Name: string, OID: string, SystemType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier1/{short_name}/diary/appointmenttypes") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -679,9 +693,9 @@ export def "lettings-controller-get-advertised" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --branch-id: string # The unique ID of the Branch
-  --offset: int # The index of the first item to return (format: int32)
-  --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
+  --branch-id: string # The unique ID of the Branch (required)
+  --offset: int # The index of the first item to return (required, format: int32)
+  --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
   --area-id: string # The unique ID of the Area
   --rent-minimum: float # The minimum advertised rent to search for (format: double)
   --rent-maximum: float # The maximum advertised rent to search for (format: double)
@@ -692,6 +706,9 @@ export def "lettings-controller-get-advertised" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($branch_id == null) { error make --unspanned { msg: "required query parameter 'branchID' missing: pass --branch-id" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
   let qp = [(serialize-qp "branchID" $branch_id "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "areaID" $area_id "scalar") (serialize-qp "rentMinimum" $rent_minimum "scalar") (serialize-qp "rentMaximum" $rent_maximum "scalar") (serialize-qp "maximumTenants" $maximum_tenants "scalar") (serialize-qp "wantSharedProperties" $want_shared_properties "scalar") (serialize-qp "wantStudentProperties" $want_student_properties "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier1/{short_name}/lettings/advertised") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -726,11 +743,11 @@ export def "lettings-controller-get-advertised-between-dates" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --branch-id: string # The unique ID of the Branch
-  --offset: int # The index of the first item to return (format: int32)
-  --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
-  --range-start-date: string # The date to search from (format: date-time)
-  --range-end-date: string # The date to search to (format: date-time)
+  --branch-id: string # The unique ID of the Branch (required)
+  --offset: int # The index of the first item to return (required, format: int32)
+  --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
+  --range-start-date: string # The date to search from (required, format: date-time)
+  --range-end-date: string # The date to search to (required, format: date-time)
   --area-id: string # The unique ID of the Area
   --rent-minimum: float # The minimum advertised rent to search for (format: double)
   --rent-maximum: float # The maximum advertised rent to search for (format: double)
@@ -741,6 +758,11 @@ export def "lettings-controller-get-advertised-between-dates" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($branch_id == null) { error make --unspanned { msg: "required query parameter 'branchID' missing: pass --branch-id" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
+  if ($range_start_date == null) { error make --unspanned { msg: "required query parameter 'rangeStartDate' missing: pass --range-start-date" } }
+  if ($range_end_date == null) { error make --unspanned { msg: "required query parameter 'rangeEndDate' missing: pass --range-end-date" } }
   let qp = [(serialize-qp "branchID" $branch_id "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "rangeStartDate" $range_start_date "scalar") (serialize-qp "rangeEndDate" $range_end_date "scalar") (serialize-qp "areaID" $area_id "scalar") (serialize-qp "rentMinimum" $rent_minimum "scalar") (serialize-qp "rentMaximum" $rent_maximum "scalar") (serialize-qp "maximumTenants" $maximum_tenants "scalar") (serialize-qp "wantSharedProperties" $want_shared_properties "scalar") (serialize-qp "wantStudentProperties" $want_student_properties "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier1/{short_name}/lettings/advertisedbetweendates") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -774,12 +796,14 @@ export def "get-v2-tier1-short-name-lettings-tenancies" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --offset: int # The index of the first item to return (format: int32)
-  --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
+  --offset: int # The index of the first item to return (required, format: int32)
+  --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
 ]: nothing -> record<Count: int, Data: table<AdvertiseFrom: string, Area: string, BondRequired: float, Branch: string, ETag: string, Furnished: string, GlobalReference: string, IsShareProperty: bool, IsStudentProperty: bool, IsTenancyAdvertised: bool, IsTenancyProposed: bool, MaximumTenants: int, MinimumTenants: int, OID: string, RentAdvertised: float, RentRecurrence: int, RentSchedule: string, TenancyProperty: string, TenantSystemTypes: list, TermMaximum: int, TermMinimum: int, TermStart: string, UtilityCouncilTax: string, UtilityElectricity: string, UtilityGas: string, UtilityTelephone: string, UtilityWater: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier1/{short_name}/lettings/tenancies") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -890,12 +914,14 @@ export def "get-v2-tier1-short-name-photo-photos" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --offset: int # The index of the first item to return (format: int32)
-  --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
+  --offset: int # The index of the first item to return (required, format: int32)
+  --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
 ]: nothing -> record<Count: int, Data: table<ETag: string, FileName: string, InspectionItem: string, InterimInspection: string, InventoryItem: string, Name: string, OID: string, PhotoNumber: int, PhotoType: string, Property: string, Room: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier1/{short_name}/photo/photos") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1009,12 +1035,14 @@ export def "get-v2-tier1-short-name-property-properties" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --offset: int # The index of the first item to return (format: int32)
-  --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
+  --offset: int # The index of the first item to return (required, format: int32)
+  --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
 ]: nothing -> record<Count: int, Data: table<Area: string, Branch: string, Description: string, ETag: string, FullAddress: string, GlobalReference: string, MainPhoto: string, ManagedByStaff: string, OID: string, PropertySource: string, PropertyType: string, RoomName: string, VideoURL: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier1/{short_name}/property/properties") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1088,13 +1116,15 @@ export def "property-controller-get-properties-facilities" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --offset: int # The index of the first item to return (format: int32)
-  --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
+  --offset: int # The index of the first item to return (required, format: int32)
+  --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
 ]: nothing -> record<Count: int, Data: table<ETag: string, Name: string, OID: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
   if ($property_id | is-empty) { error make --unspanned { msg: "path parameter 'propertyID' must be non-empty" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), property_id: (encode-path-segment $property_id)} | format pattern "/v2/tier1/{short_name}/property/properties/{property_id}/facilities") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1130,13 +1160,15 @@ export def "property-controller-get-properties-photos" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --offset: int # The index of the first item to return (format: int32)
-  --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
+  --offset: int # The index of the first item to return (required, format: int32)
+  --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
 ]: nothing -> record<Count: int, Data: table<ETag: string, FileName: string, InspectionItem: string, InterimInspection: string, InventoryItem: string, Name: string, OID: string, PhotoNumber: int, PhotoType: string, Property: string, Room: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
   if ($property_id | is-empty) { error make --unspanned { msg: "path parameter 'propertyID' must be non-empty" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), property_id: (encode-path-segment $property_id)} | format pattern "/v2/tier1/{short_name}/property/properties/{property_id}/photos") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1172,13 +1204,15 @@ export def "property-controller-get-properties-rooms" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --offset: int # The index of the first item to return (format: int32)
-  --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
+  --offset: int # The index of the first item to return (required, format: int32)
+  --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
 ]: nothing -> record<Count: int, Data: table<Area: string, Branch: string, Description: string, ETag: string, FullAddress: string, GlobalReference: string, HeightCentimeters: int, HeightMeters: int, LengthCentimeters: int, LengthMeters: int, MainPhoto: string, ManagedByStaff: string, OID: string, PropertySource: string, RoomFloor: string, RoomName: string, WidthCentiMeters: int, WidthMeters: int>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
   if ($property_id | is-empty) { error make --unspanned { msg: "path parameter 'propertyID' must be non-empty" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), property_id: (encode-path-segment $property_id)} | format pattern "/v2/tier1/{short_name}/property/properties/{property_id}/rooms") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1214,13 +1248,15 @@ export def "property-controller-get-properties-tenancies" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --offset: int # The index of the first item to return (format: int32)
-  --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
+  --offset: int # The index of the first item to return (required, format: int32)
+  --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
 ]: nothing -> record<Count: int, Data: table<AdvertiseFrom: string, Area: string, BondRequired: float, Branch: string, ETag: string, Furnished: string, GlobalReference: string, IsShareProperty: bool, IsStudentProperty: bool, IsTenancyAdvertised: bool, IsTenancyProposed: bool, MaximumTenants: int, MinimumTenants: int, OID: string, RentAdvertised: float, RentRecurrence: int, RentSchedule: string, TenancyProperty: string, TenantSystemTypes: list, TermMaximum: int, TermMinimum: int, TermStart: string, UtilityCouncilTax: string, UtilityElectricity: string, UtilityGas: string, UtilityTelephone: string, UtilityWater: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
   if ($property_id | is-empty) { error make --unspanned { msg: "path parameter 'propertyID' must be non-empty" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), property_id: (encode-path-segment $property_id)} | format pattern "/v2/tier1/{short_name}/property/properties/{property_id}/tenancies") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1333,11 +1369,11 @@ export def "sales-controller-get-advertised-sales" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --branch-id: string # The unique ID of the Branch
-  --offset: int # The index of the first item to return (format: int32)
-  --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
-  --only-developement: oneof<nothing, bool> # Show only development properties?
-  --only-investements: oneof<nothing, bool> # Show only investment properties?
+  --branch-id: string # The unique ID of the Branch (required)
+  --offset: int # The index of the first item to return (required, format: int32)
+  --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
+  --only-developement: oneof<nothing, bool> # Show only development properties? (required)
+  --only-investements: oneof<nothing, bool> # Show only investment properties? (required)
   --minimum-price: float # The minimum price to search for (format: double)
   --maximum-price: float # The maximum price to search for (format: double)
   --minimum-beds: int # The minimum beds to search for (format: int32)
@@ -1349,6 +1385,11 @@ export def "sales-controller-get-advertised-sales" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($branch_id == null) { error make --unspanned { msg: "required query parameter 'branchID' missing: pass --branch-id" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
+  if ($only_developement == null) { error make --unspanned { msg: "required query parameter 'onlyDevelopement' missing: pass --only-developement" } }
+  if ($only_investements == null) { error make --unspanned { msg: "required query parameter 'onlyInvestements' missing: pass --only-investements" } }
   let qp = [(serialize-qp "branchID" $branch_id "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "onlyDevelopement" $only_developement "scalar") (serialize-qp "onlyInvestements" $only_investements "scalar") (serialize-qp "minimumPrice" $minimum_price "scalar") (serialize-qp "maximumPrice" $maximum_price "scalar") (serialize-qp "minimumBeds" $minimum_beds "scalar") (serialize-qp "minimumBathrooms" $minimum_bathrooms "scalar") (serialize-qp "minimumEnsuites" $minimum_ensuites "scalar") (serialize-qp "minimumToilets" $minimum_toilets "scalar") (serialize-qp "minimumReception" $minimum_reception "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier1/{short_name}/sales/advertisedsales") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1460,12 +1501,14 @@ export def "get-v2-tier1-short-name-sales-salesfeaturetypes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --offset: int # The index of the first item to return (format: int32)
-  --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
+  --offset: int # The index of the first item to return (required, format: int32)
+  --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
 ]: nothing -> record<Count: int, Data: table<ETag: string, Name: string, OID: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier1/{short_name}/sales/salesfeaturetypes") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1537,12 +1580,14 @@ export def "get-v2-tier1-short-name-sales-salesinstructions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --offset: int # The index of the first item to return (format: int32)
-  --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
+  --offset: int # The index of the first item to return (required, format: int32)
+  --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
 ]: nothing -> record<Count: int, Data: table<Address1: string, Address2: string, Address3: string, Address4: string, AddressNumber: string, Area: string, Bathrooms: int, BathroomsEnsuite: int, Bedrooms: int, ContractType: string, Country: string, Description: string, DevelopmentOpp: bool, Directions: string, EPCCurrentEER: int, EPCCurrentEI: int, EPCPotentialEER: int, EPCPotentialEI: int, ETag: string, HasElectricitySupply: bool, HasGasSupply: bool, HasWaterMeter: bool, InvestmentOpp: bool, Kitchens: int, OID: string, OutsideSpaceBalcony: bool, OutsideSpaceCommunalGarden: bool, OutsideSpaceConservatory: bool, OutsideSpaceGarden: bool, OutsideSpaceLargeGarden: bool, OutsideSpacePatio: bool, OutsideSpaceRoofTerrace: bool, OutsideSpaceSouthFacingGarden: bool, ParkingAllocated: bool, ParkingCarport: bool, ParkingDoubleGarage: bool, ParkingGarage: bool, ParkingOffRoad: bool, ParkingOnRoad: bool, ParkingPermit: bool, ParkingSecureGated: bool, ParkingTripleGarage: bool, Postcode: string, Price: float, PropertyOwnableType: string, ReceptionRooms: int, State: string, Tenure: string, VideoURL: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier1/{short_name}/sales/salesinstructions") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1616,13 +1661,15 @@ export def "sales-controller-get-sales-instructions-features" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --offset: int # The index of the first item to return (format: int32)
-  --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
+  --offset: int # The index of the first item to return (required, format: int32)
+  --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
 ]: nothing -> record<Count: int, Data: table<Comment: string, ETag: string, OID: string, Type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
   if ($sales_instruction_id | is-empty) { error make --unspanned { msg: "path parameter 'salesInstructionID' must be non-empty" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), sales_instruction_id: (encode-path-segment $sales_instruction_id)} | format pattern "/v2/tier1/{short_name}/sales/salesinstructions/{sales_instruction_id}/features") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1658,13 +1705,15 @@ export def "sales-controller-get-sales-instructions-floor-plans" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --offset: int # The index of the first item to return (format: int32)
-  --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
+  --offset: int # The index of the first item to return (required, format: int32)
+  --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
 ]: nothing -> record<Count: int, Data: table<ETag: string, FileName: string, InspectionItem: string, InterimInspection: string, InventoryItem: string, Name: string, OID: string, PhotoNumber: int, PhotoType: string, Property: string, Room: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
   if ($sales_instruction_id | is-empty) { error make --unspanned { msg: "path parameter 'salesInstructionID' must be non-empty" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), sales_instruction_id: (encode-path-segment $sales_instruction_id)} | format pattern "/v2/tier1/{short_name}/sales/salesinstructions/{sales_instruction_id}/floorplans") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1700,13 +1749,15 @@ export def "sales-controller-get-sales-instructions-photos" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --offset: int # The index of the first item to return (format: int32)
-  --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
+  --offset: int # The index of the first item to return (required, format: int32)
+  --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
 ]: nothing -> record<Count: int, Data: table<ETag: string, FileName: string, InspectionItem: string, InterimInspection: string, InventoryItem: string, Name: string, OID: string, PhotoNumber: int, PhotoType: string, Property: string, Room: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
   if ($sales_instruction_id | is-empty) { error make --unspanned { msg: "path parameter 'salesInstructionID' must be non-empty" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), sales_instruction_id: (encode-path-segment $sales_instruction_id)} | format pattern "/v2/tier1/{short_name}/sales/salesinstructions/{sales_instruction_id}/photos") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1742,13 +1793,15 @@ export def "sales-controller-get-sales-instructions-rooms" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --offset: int # The index of the first item to return (format: int32)
-  --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
+  --offset: int # The index of the first item to return (required, format: int32)
+  --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
 ]: nothing -> record<Count: int, Data: table<Area: string, Branch: string, Description: string, ETag: string, FullAddress: string, GlobalReference: string, HeightCentimeters: int, HeightMeters: int, LengthCentimeters: int, LengthMeters: int, MainPhoto: string, ManagedByStaff: string, OID: string, PropertySource: string, RoomFloor: string, RoomName: string, WidthCentiMeters: int, WidthMeters: int>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
   if ($sales_instruction_id | is-empty) { error make --unspanned { msg: "path parameter 'salesInstructionID' must be non-empty" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), sales_instruction_id: (encode-path-segment $sales_instruction_id)} | format pattern "/v2/tier1/{short_name}/sales/salesinstructions/{sales_instruction_id}/rooms") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1782,12 +1835,14 @@ export def "get-v2-tier1-short-name-staff-staff" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --offset: int # The index of the first item to return (format: int32)
-  --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
+  --offset: int # The index of the first item to return (required, format: int32)
+  --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
 ]: nothing -> record<Count: int, Data: table<ETag: string, Forename: string, GlobalReference: string, IsEnabled: bool, ManagedBy: string, Middlename: string, OID: string, Surname: string, Title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($count == null) { error make --unspanned { msg: "required query parameter 'count' missing: pass --count" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier1/{short_name}/staff/staff") $qp $auth.query)
   let accept_val = ($accept | default "application/json")

@@ -1,4 +1,4 @@
-# Auto-generated client for Chrome UX Report API vv1
+# Auto-generated client for Chrome UX Report API v1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/chromeuxreport/v1/openapi.json
 # Auth: --token flag or $env.CHROME_UX_REPORT_API_TOKEN
 

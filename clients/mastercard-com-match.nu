@@ -213,12 +213,13 @@ export def "post-fraud-merchant-v3-retro-retro-inquiry-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --acquirer-id: string # The Member ICA number which is used to validate that the application has permission to hit the MATCH database. This number must be obtained from a participating MATCH acquiring bank or entity before a developer can access the MATCH resource.
+  --acquirer-id: string # The Member ICA number which is used to validate that the application has permission to hit the MATCH database. This number must be obtained from a participating MATCH acquiring bank or entity before a developer can access the MATCH resource. (required)
   --retro-inquiry-request: any # shape: {InquiryReferenceNumber?: string}
 ]: any -> record<RetroInquiryResponse: record<PossibleMerchantMatches: record<TerminatedMerchant: list, TotalLength: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($acquirer_id == null) { error make --unspanned { msg: "required query parameter 'AcquirerId' missing: pass --acquirer-id" } }
   let qp = [(serialize-qp "AcquirerId" $acquirer_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/fraud/merchant/v3/retro/retro-inquiry-details" $qp $auth.query)
   let req_body = {"RetroInquiryRequest": $retro_inquiry_request} | compact
@@ -291,13 +292,15 @@ export def "post-fraud-merchant-v3-termination-inquiry" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page-offset: float # The zero-based offset to start at. The actual start position is this value +1. An offset of 10 starts at item 11. Combined with the PageLength option this allows pagination to be supported through the service requests. (e.g. 0)
-  --page-length: float # The maximum number of items to retrieve within the current "page" of results. (e.g. 10)
+  --page-offset: float # The zero-based offset to start at. The actual start position is this value +1. An offset of 10 starts at item 11. Combined with the PageLength option this allows pagination to be supported through the service requests. (required, e.g. 0)
+  --page-length: float # The maximum number of items to retrieve within the current "page" of results. (required, e.g. 10)
   --termination-inquiry-request: any # shape: {AcquirerId: string, Merchant?: any, TransactionReferenceNumber?: string}
 ]: any -> record<TerminationInquiry: record<PageOffset: string, PossibleInquiryMatches: record<InquiredMerchant: list, TotalLength: string>, PossibleMerchantMatches: list<record>, TransactionReferenceNumber: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($page_offset == null) { error make --unspanned { msg: "required query parameter 'PageOffset' missing: pass --page-offset" } }
+  if ($page_length == null) { error make --unspanned { msg: "required query parameter 'PageLength' missing: pass --page-length" } }
   let qp = [(serialize-qp "PageOffset" $page_offset "scalar") (serialize-qp "PageLength" $page_length "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/fraud/merchant/v3/termination-inquiry" $qp $auth.query)
   let req_body = {"TerminationInquiryRequest": $termination_inquiry_request} | compact
@@ -332,13 +335,16 @@ export def "get-fraud-merchant-v3-termination-inquiry-irn" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page-offset: float # The zero-based offset to start at. The actual start position is this value +1. An offset of 10 starts at item 11. Combined with the PageLength option this allows pagination to be supported through the service requests. (e.g. 0)
-  --page-length: float # The maximum number of items to retrieve within the current "page" of results. (e.g. 10)
-  --acquirer-id: string # The Member ICA number which is used to validate that the application has permission to hit the MATCH database. This number must be obtained from a participating MATCH acquiring bank or entity before a developer can access the MATCH resource. (e.g. 1996)
+  --page-offset: float # The zero-based offset to start at. The actual start position is this value +1. An offset of 10 starts at item 11. Combined with the PageLength option this allows pagination to be supported through the service requests. (required, e.g. 0)
+  --page-length: float # The maximum number of items to retrieve within the current "page" of results. (required, e.g. 10)
+  --acquirer-id: string # The Member ICA number which is used to validate that the application has permission to hit the MATCH database. This number must be obtained from a participating MATCH acquiring bank or entity before a developer can access the MATCH resource. (required, e.g. 1996)
 ]: nothing -> record<TerminationInquiry: record<PageOffset: string, PossibleInquiryMatches: record<InquiredMerchant: list, TotalLength: string>, PossibleMerchantMatches: list<record>, TransactionReferenceNumber: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($irn | is-empty) { error make --unspanned { msg: "path parameter 'IRN' must be non-empty" } }
+  if ($page_offset == null) { error make --unspanned { msg: "required query parameter 'PageOffset' missing: pass --page-offset" } }
+  if ($page_length == null) { error make --unspanned { msg: "required query parameter 'PageLength' missing: pass --page-length" } }
+  if ($acquirer_id == null) { error make --unspanned { msg: "required query parameter 'AcquirerId' missing: pass --acquirer-id" } }
   let qp = [(serialize-qp "PageOffset" $page_offset "scalar") (serialize-qp "PageLength" $page_length "scalar") (serialize-qp "AcquirerId" $acquirer_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({irn: (encode-path-segment $irn)} | format pattern "/fraud/merchant/v3/termination-inquiry/{irn}") $qp $auth.query)
   let accept_val = "application/json"

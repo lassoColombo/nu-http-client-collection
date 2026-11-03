@@ -157,11 +157,12 @@ export def "data-sources-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # Selects which top-level properties of the data sources to retrieve. Specified as a comma-separated list of JSON property names, or '*' for all properties. The default is all properties.
-  --api-version: string # Client Api Version.
-  --client-request-id: string # The tracking ID sent with the request to help with debugging.
+  --api-version: string # Client Api Version. (required)
+  --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
 ]: nothing -> record<value: table<_odata_etag: string, container: record, credentials: record, dataChangeDetectionPolicy: record, dataDeletionDetectionPolicy: record, description: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$select" $select "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/datasources" $qp $auth.query)
   let accept_val = "application/json"
@@ -201,8 +202,8 @@ export def "data-sources-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-  --client-request-id: string # The tracking ID sent with the request to help with debugging.
+  --api-version: string # Client Api Version. (required)
+  --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
   --odata-etag: string # The ETag of the DataSource.
   container: any # Represents information about the entity (such as Azure SQL table or CosmosDB collection) that will be indexed. — shape: {name: string, query?: string}
   credentials: any # Represents credentials that can be used to connect to a datasource. — shape: {connectionString?: string}
@@ -215,6 +216,7 @@ export def "data-sources-create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/datasources" $qp $auth.query)
   let req_body = {"@odata.etag": $odata_etag, "container": $container, "credentials": $credentials, "dataChangeDetectionPolicy": $data_change_detection_policy, "dataDeletionDetectionPolicy": $data_deletion_detection_policy, "description": $description, "name": $name, "type": $type} | compact
@@ -253,14 +255,15 @@ export def "data-sources-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-  --client-request-id: string # The tracking ID sent with the request to help with debugging.
+  --api-version: string # Client Api Version. (required)
+  --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
   --if-match: string # Defines the If-Match condition. The operation will be performed only if the ETag on the server matches this value.
   --if-none-match: string # Defines the If-None-Match condition. The operation will be performed only if the ETag on the server does not match this value.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($data_source_name | is-empty) { error make --unspanned { msg: "path parameter 'dataSourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({data_source_name: (encode-path-segment $data_source_name)} | format pattern "/datasources('{data_source_name}')") $qp $auth.query)
   let accept_val = "application/json"
@@ -297,12 +300,13 @@ export def "data-sources-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-  --client-request-id: string # The tracking ID sent with the request to help with debugging.
+  --api-version: string # Client Api Version. (required)
+  --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
 ]: nothing -> record<_odata_etag: string, container: record<name: string, query: string>, credentials: record<connectionString: string>, dataChangeDetectionPolicy: record<_odata_type: string>, dataDeletionDetectionPolicy: record<_odata_type: string>, description: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($data_source_name | is-empty) { error make --unspanned { msg: "path parameter 'dataSourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({data_source_name: (encode-path-segment $data_source_name)} | format pattern "/datasources('{data_source_name}')") $qp $auth.query)
   let accept_val = "application/json"
@@ -343,11 +347,11 @@ export def "data-sources-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-  --client-request-id: string # The tracking ID sent with the request to help with debugging.
+  --api-version: string # Client Api Version. (required)
+  --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
   --if-match: string # Defines the If-Match condition. The operation will be performed only if the ETag on the server matches this value.
   --if-none-match: string # Defines the If-None-Match condition. The operation will be performed only if the ETag on the server does not match this value.
-  --prefer: string@prefer-completer # For HTTP PUT requests, instructs the service to return the created/updated resource on success.
+  --prefer: string@prefer-completer # For HTTP PUT requests, instructs the service to return the created/updated resource on success. (required)
   --odata-etag: string # The ETag of the DataSource.
   container: any # Represents information about the entity (such as Azure SQL table or CosmosDB collection) that will be indexed. — shape: {name: string, query?: string}
   credentials: any # Represents credentials that can be used to connect to a datasource. — shape: {connectionString?: string}
@@ -361,6 +365,8 @@ export def "data-sources-create-or-update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($data_source_name | is-empty) { error make --unspanned { msg: "path parameter 'dataSourceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  let prefer = ($prefer | default "return=representation")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({data_source_name: (encode-path-segment $data_source_name)} | format pattern "/datasources('{data_source_name}')") $qp $auth.query)
   let req_body = {"@odata.etag": $odata_etag, "container": $container, "credentials": $credentials, "dataChangeDetectionPolicy": $data_change_detection_policy, "dataDeletionDetectionPolicy": $data_deletion_detection_policy, "description": $description, "name": $name, "type": $type} | compact
@@ -399,11 +405,12 @@ export def "indexers-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # Selects which top-level properties of the indexers to retrieve. Specified as a comma-separated list of JSON property names, or '*' for all properties. The default is all properties.
-  --api-version: string # Client Api Version.
-  --client-request-id: string # The tracking ID sent with the request to help with debugging.
+  --api-version: string # Client Api Version. (required)
+  --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
 ]: nothing -> record<value: table<_odata_etag: string, dataSourceName: string, description: string, disabled: bool, fieldMappings: list, name: string, outputFieldMappings: list, parameters: record, schedule: record, skillsetName: string, targetIndexName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$select" $select "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/indexers" $qp $auth.query)
   let accept_val = "application/json"
@@ -443,8 +450,8 @@ export def "indexers-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-  --client-request-id: string # The tracking ID sent with the request to help with debugging.
+  --api-version: string # Client Api Version. (required)
+  --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
   --odata-etag: string # The ETag of the Indexer.
   data_source_name: string # The name of the datasource from which this indexer reads data.
   --description: string # The description of the indexer.
@@ -460,6 +467,7 @@ export def "indexers-create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/indexers" $qp $auth.query)
   let req_body = {"@odata.etag": $odata_etag, "dataSourceName": $data_source_name, "description": $description, "disabled": $disabled, "fieldMappings": $field_mappings, "name": $name, "outputFieldMappings": $output_field_mappings, "parameters": $parameters, "schedule": $schedule, "skillsetName": $skillset_name, "targetIndexName": $target_index_name} | compact
@@ -498,14 +506,15 @@ export def "indexers-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-  --client-request-id: string # The tracking ID sent with the request to help with debugging.
+  --api-version: string # Client Api Version. (required)
+  --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
   --if-match: string # Defines the If-Match condition. The operation will be performed only if the ETag on the server matches this value.
   --if-none-match: string # Defines the If-None-Match condition. The operation will be performed only if the ETag on the server does not match this value.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($indexer_name | is-empty) { error make --unspanned { msg: "path parameter 'indexerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({indexer_name: (encode-path-segment $indexer_name)} | format pattern "/indexers('{indexer_name}')") $qp $auth.query)
   let accept_val = "application/json"
@@ -542,12 +551,13 @@ export def "indexers-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-  --client-request-id: string # The tracking ID sent with the request to help with debugging.
+  --api-version: string # Client Api Version. (required)
+  --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
 ]: nothing -> record<_odata_etag: string, dataSourceName: string, description: string, disabled: bool, fieldMappings: table<mappingFunction: record, sourceFieldName: string, targetFieldName: string>, name: string, outputFieldMappings: table<mappingFunction: record, sourceFieldName: string, targetFieldName: string>, parameters: record<base64EncodeKeys: bool, batchSize: int, configuration: record, maxFailedItems: int, maxFailedItemsPerBatch: int>, schedule: record<interval: string, startTime: string>, skillsetName: string, targetIndexName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($indexer_name | is-empty) { error make --unspanned { msg: "path parameter 'indexerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({indexer_name: (encode-path-segment $indexer_name)} | format pattern "/indexers('{indexer_name}')") $qp $auth.query)
   let accept_val = "application/json"
@@ -588,11 +598,11 @@ export def "indexers-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-  --client-request-id: string # The tracking ID sent with the request to help with debugging.
+  --api-version: string # Client Api Version. (required)
+  --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
   --if-match: string # Defines the If-Match condition. The operation will be performed only if the ETag on the server matches this value.
   --if-none-match: string # Defines the If-None-Match condition. The operation will be performed only if the ETag on the server does not match this value.
-  --prefer: string@prefer-completer # For HTTP PUT requests, instructs the service to return the created/updated resource on success.
+  --prefer: string@prefer-completer # For HTTP PUT requests, instructs the service to return the created/updated resource on success. (required)
   --odata-etag: string # The ETag of the Indexer.
   data_source_name: string # The name of the datasource from which this indexer reads data.
   --description: string # The description of the indexer.
@@ -609,6 +619,8 @@ export def "indexers-create-or-update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($indexer_name | is-empty) { error make --unspanned { msg: "path parameter 'indexerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  let prefer = ($prefer | default "return=representation")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({indexer_name: (encode-path-segment $indexer_name)} | format pattern "/indexers('{indexer_name}')") $qp $auth.query)
   let req_body = {"@odata.etag": $odata_etag, "dataSourceName": $data_source_name, "description": $description, "disabled": $disabled, "fieldMappings": $field_mappings, "name": $name, "outputFieldMappings": $output_field_mappings, "parameters": $parameters, "schedule": $schedule, "skillsetName": $skillset_name, "targetIndexName": $target_index_name} | compact
@@ -647,12 +659,13 @@ export def "indexers-reset" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-  --client-request-id: string # The tracking ID sent with the request to help with debugging.
+  --api-version: string # Client Api Version. (required)
+  --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($indexer_name | is-empty) { error make --unspanned { msg: "path parameter 'indexerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({indexer_name: (encode-path-segment $indexer_name)} | format pattern "/indexers('{indexer_name}')/search.reset") $qp $auth.query)
   let accept_val = "application/json"
@@ -689,12 +702,13 @@ export def "indexers-run" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-  --client-request-id: string # The tracking ID sent with the request to help with debugging.
+  --api-version: string # Client Api Version. (required)
+  --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($indexer_name | is-empty) { error make --unspanned { msg: "path parameter 'indexerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({indexer_name: (encode-path-segment $indexer_name)} | format pattern "/indexers('{indexer_name}')/search.run") $qp $auth.query)
   let accept_val = "application/json"
@@ -731,12 +745,13 @@ export def "indexers-get-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-  --client-request-id: string # The tracking ID sent with the request to help with debugging.
+  --api-version: string # Client Api Version. (required)
+  --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
 ]: nothing -> record<executionHistory: table<endTime: string, errorMessage: string, errors: list, finalTrackingState: string, initialTrackingState: string, itemsFailed: int, itemsProcessed: int, startTime: string, status: string, warnings: list>, lastResult: record<endTime: string, errorMessage: string, errors: list<record>, finalTrackingState: string, initialTrackingState: string, itemsFailed: int, itemsProcessed: int, startTime: string, status: string, warnings: list<record>>, limits: record<maxDocumentContentCharactersToExtract: float, maxDocumentExtractionSize: float, maxRunTime: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($indexer_name | is-empty) { error make --unspanned { msg: "path parameter 'indexerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({indexer_name: (encode-path-segment $indexer_name)} | format pattern "/indexers('{indexer_name}')/search.status") $qp $auth.query)
   let accept_val = "application/json"
@@ -773,11 +788,12 @@ export def "indexes-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # Selects which top-level properties of the index definitions to retrieve. Specified as a comma-separated list of JSON property names, or '*' for all properties. The default is all properties.
-  --api-version: string # Client Api Version.
-  --client-request-id: string # The tracking ID sent with the request to help with debugging.
+  --api-version: string # Client Api Version. (required)
+  --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
 ]: nothing -> record<value: table<_odata_etag: string, analyzers: list, charFilters: list, corsOptions: record, defaultScoringProfile: string, encryptionKey: record, fields: list, name: string, scoringProfiles: list, suggesters: list, tokenFilters: list, tokenizers: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$select" $select "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/indexes" $qp $auth.query)
   let accept_val = "application/json"
@@ -822,8 +838,8 @@ export def "indexes-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-  --client-request-id: string # The tracking ID sent with the request to help with debugging.
+  --api-version: string # Client Api Version. (required)
+  --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
   --odata-etag: string # The ETag of the index.
   --analyzers: list # The analyzers for the index. — item shape: {@odata.type: string, name: string}
   --char-filters: list # The character filters for the index. — item shape: {@odata.type: string, name: string}
@@ -840,6 +856,7 @@ export def "indexes-create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/indexes" $qp $auth.query)
   let req_body = {"@odata.etag": $odata_etag, "analyzers": $analyzers, "charFilters": $char_filters, "corsOptions": $cors_options, "defaultScoringProfile": $default_scoring_profile, "encryptionKey": $encryption_key, "fields": $fields, "name": $name, "scoringProfiles": $scoring_profiles, "suggesters": $suggesters, "tokenFilters": $token_filters, "tokenizers": $tokenizers} | compact
@@ -878,14 +895,15 @@ export def "indexes-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-  --client-request-id: string # The tracking ID sent with the request to help with debugging.
+  --api-version: string # Client Api Version. (required)
+  --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
   --if-match: string # Defines the If-Match condition. The operation will be performed only if the ETag on the server matches this value.
   --if-none-match: string # Defines the If-None-Match condition. The operation will be performed only if the ETag on the server does not match this value.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index_name | is-empty) { error make --unspanned { msg: "path parameter 'indexName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({index_name: (encode-path-segment $index_name)} | format pattern "/indexes('{index_name}')") $qp $auth.query)
   let accept_val = "application/json"
@@ -922,12 +940,13 @@ export def "indexes-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-  --client-request-id: string # The tracking ID sent with the request to help with debugging.
+  --api-version: string # Client Api Version. (required)
+  --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
 ]: nothing -> record<_odata_etag: string, analyzers: table<_odata_type: string, name: string>, charFilters: table<_odata_type: string, name: string>, corsOptions: record<allowedOrigins: list<string>, maxAgeInSeconds: int>, defaultScoringProfile: string, encryptionKey: record<accessCredentials: record<applicationId: string, applicationSecret: string>, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string>, fields: table<analyzer: string, facetable: bool, fields: list, filterable: bool, indexAnalyzer: string, key: bool, name: string, retrievable: bool, searchAnalyzer: string, searchable: bool, sortable: bool, synonymMaps: list, type: string>, name: string, scoringProfiles: table<functionAggregation: string, functions: list, name: string, text: record>, suggesters: table<name: string, searchMode: string, sourceFields: list>, tokenFilters: table<_odata_type: string, name: string>, tokenizers: table<_odata_type: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index_name | is-empty) { error make --unspanned { msg: "path parameter 'indexName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({index_name: (encode-path-segment $index_name)} | format pattern "/indexes('{index_name}')") $qp $auth.query)
   let accept_val = "application/json"
@@ -974,11 +993,11 @@ export def "indexes-create-or-update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --allow-index-downtime: oneof<nothing, bool> # Allows new analyzers, tokenizers, token filters, or char filters to be added to an index by taking the index offline for at least a few seconds. This temporarily causes indexing and query requests to fail. Performance and write availability of the index can be impaired for several minutes after the index is updated, or longer for very large indexes.
-  --api-version: string # Client Api Version.
-  --client-request-id: string # The tracking ID sent with the request to help with debugging.
+  --api-version: string # Client Api Version. (required)
+  --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
   --if-match: string # Defines the If-Match condition. The operation will be performed only if the ETag on the server matches this value.
   --if-none-match: string # Defines the If-None-Match condition. The operation will be performed only if the ETag on the server does not match this value.
-  --prefer: string@prefer-completer # For HTTP PUT requests, instructs the service to return the created/updated resource on success.
+  --prefer: string@prefer-completer # For HTTP PUT requests, instructs the service to return the created/updated resource on success. (required)
   --odata-etag: string # The ETag of the index.
   --analyzers: list # The analyzers for the index. — item shape: {@odata.type: string, name: string}
   --char-filters: list # The character filters for the index. — item shape: {@odata.type: string, name: string}
@@ -996,6 +1015,8 @@ export def "indexes-create-or-update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index_name | is-empty) { error make --unspanned { msg: "path parameter 'indexName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  let prefer = ($prefer | default "return=representation")
   let qp = [(serialize-qp "allowIndexDowntime" $allow_index_downtime "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({index_name: (encode-path-segment $index_name)} | format pattern "/indexes('{index_name}')") $qp $auth.query)
   let req_body = {"@odata.etag": $odata_etag, "analyzers": $analyzers, "charFilters": $char_filters, "corsOptions": $cors_options, "defaultScoringProfile": $default_scoring_profile, "encryptionKey": $encryption_key, "fields": $fields, "name": $name, "scoringProfiles": $scoring_profiles, "suggesters": $suggesters, "tokenFilters": $token_filters, "tokenizers": $tokenizers} | compact
@@ -1034,8 +1055,8 @@ export def "indexes-analyze" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-  --client-request-id: string # The tracking ID sent with the request to help with debugging.
+  --api-version: string # Client Api Version. (required)
+  --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
   --analyzer: string@analyzer-completer # Defines the names of all text analyzers supported by Azure Cognitive Search.
   --char-filters: list<string> # An optional list of character filters to use when breaking the given text. This parameter can only be set when using the tokenizer parameter.
   text: string # The text to break into tokens.
@@ -1046,6 +1067,7 @@ export def "indexes-analyze" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index_name | is-empty) { error make --unspanned { msg: "path parameter 'indexName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({index_name: (encode-path-segment $index_name)} | format pattern "/indexes('{index_name}')/search.analyze") $qp $auth.query)
   let req_body = {"analyzer": $analyzer, "charFilters": $char_filters, "text": $text, "tokenFilters": $token_filters, "tokenizer": $tokenizer} | compact
@@ -1084,12 +1106,13 @@ export def "indexes-get-statistics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-  --client-request-id: string # The tracking ID sent with the request to help with debugging.
+  --api-version: string # Client Api Version. (required)
+  --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
 ]: nothing -> record<documentCount: int, storageSize: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index_name | is-empty) { error make --unspanned { msg: "path parameter 'indexName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({index_name: (encode-path-segment $index_name)} | format pattern "/indexes('{index_name}')/search.stats") $qp $auth.query)
   let accept_val = "application/json"
@@ -1124,11 +1147,12 @@ export def "get-service-statistics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-  --client-request-id: string # The tracking ID sent with the request to help with debugging.
+  --api-version: string # Client Api Version. (required)
+  --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
 ]: nothing -> record<counters: record<dataSourcesCount: record<quota: int, usage: int>, documentCount: record<quota: int, usage: int>, indexersCount: record<quota: int, usage: int>, indexesCount: record<quota: int, usage: int>, storageSize: record<quota: int, usage: int>, synonymMaps: record<quota: int, usage: int>>, limits: record<maxComplexCollectionFieldsPerIndex: int, maxComplexObjectsInCollectionsPerDocument: int, maxFieldNestingDepthPerIndex: int, maxFieldsPerIndex: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/servicestats" $qp $auth.query)
   let accept_val = "application/json"
@@ -1165,11 +1189,12 @@ export def "skillsets-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # Selects which top-level properties of the skillsets to retrieve. Specified as a comma-separated list of JSON property names, or '*' for all properties. The default is all properties.
-  --api-version: string # Client Api Version.
-  --client-request-id: string # The tracking ID sent with the request to help with debugging.
+  --api-version: string # Client Api Version. (required)
+  --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
 ]: nothing -> record<value: table<_odata_etag: string, cognitiveServices: record, description: string, name: string, skills: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$select" $select "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/skillsets" $qp $auth.query)
   let accept_val = "application/json"
@@ -1207,8 +1232,8 @@ export def "skillsets-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-  --client-request-id: string # The tracking ID sent with the request to help with debugging.
+  --api-version: string # Client Api Version. (required)
+  --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
   --odata-etag: string # The ETag of the skillset.
   --cognitive-services: any # Abstract base class for describing any cognitive service resource attached to the skillset. — shape: {@odata.type: string, description?: string}
   description: string # The description of the skillset.
@@ -1218,6 +1243,7 @@ export def "skillsets-create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/skillsets" $qp $auth.query)
   let req_body = {"@odata.etag": $odata_etag, "cognitiveServices": $cognitive_services, "description": $description, "name": $name, "skills": $skills} | compact
@@ -1256,14 +1282,15 @@ export def "skillsets-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-  --client-request-id: string # The tracking ID sent with the request to help with debugging.
+  --api-version: string # Client Api Version. (required)
+  --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
   --if-match: string # Defines the If-Match condition. The operation will be performed only if the ETag on the server matches this value.
   --if-none-match: string # Defines the If-None-Match condition. The operation will be performed only if the ETag on the server does not match this value.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($skillset_name | is-empty) { error make --unspanned { msg: "path parameter 'skillsetName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({skillset_name: (encode-path-segment $skillset_name)} | format pattern "/skillsets('{skillset_name}')") $qp $auth.query)
   let accept_val = "application/json"
@@ -1300,12 +1327,13 @@ export def "skillsets-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-  --client-request-id: string # The tracking ID sent with the request to help with debugging.
+  --api-version: string # Client Api Version. (required)
+  --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
 ]: nothing -> record<_odata_etag: string, cognitiveServices: record<_odata_type: string, description: string>, description: string, name: string, skills: table<_odata_type: string, context: string, description: string, inputs: list, name: string, outputs: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($skillset_name | is-empty) { error make --unspanned { msg: "path parameter 'skillsetName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({skillset_name: (encode-path-segment $skillset_name)} | format pattern "/skillsets('{skillset_name}')") $qp $auth.query)
   let accept_val = "application/json"
@@ -1344,11 +1372,11 @@ export def "skillsets-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-  --client-request-id: string # The tracking ID sent with the request to help with debugging.
+  --api-version: string # Client Api Version. (required)
+  --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
   --if-match: string # Defines the If-Match condition. The operation will be performed only if the ETag on the server matches this value.
   --if-none-match: string # Defines the If-None-Match condition. The operation will be performed only if the ETag on the server does not match this value.
-  --prefer: string@prefer-completer # For HTTP PUT requests, instructs the service to return the created/updated resource on success.
+  --prefer: string@prefer-completer # For HTTP PUT requests, instructs the service to return the created/updated resource on success. (required)
   --odata-etag: string # The ETag of the skillset.
   --cognitive-services: any # Abstract base class for describing any cognitive service resource attached to the skillset. — shape: {@odata.type: string, description?: string}
   description: string # The description of the skillset.
@@ -1359,6 +1387,8 @@ export def "skillsets-create-or-update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($skillset_name | is-empty) { error make --unspanned { msg: "path parameter 'skillsetName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  let prefer = ($prefer | default "return=representation")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({skillset_name: (encode-path-segment $skillset_name)} | format pattern "/skillsets('{skillset_name}')") $qp $auth.query)
   let req_body = {"@odata.etag": $odata_etag, "cognitiveServices": $cognitive_services, "description": $description, "name": $name, "skills": $skills} | compact
@@ -1397,11 +1427,12 @@ export def "synonym-maps-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --select: string # Selects which top-level properties of the synonym maps to retrieve. Specified as a comma-separated list of JSON property names, or '*' for all properties. The default is all properties.
-  --api-version: string # Client Api Version.
-  --client-request-id: string # The tracking ID sent with the request to help with debugging.
+  --api-version: string # Client Api Version. (required)
+  --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
 ]: nothing -> record<value: table<_odata_etag: string, encryptionKey: record, format: string, name: string, synonyms: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$select" $select "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/synonymmaps" $qp $auth.query)
   let accept_val = "application/json"
@@ -1438,8 +1469,8 @@ export def "synonym-maps-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-  --client-request-id: string # The tracking ID sent with the request to help with debugging.
+  --api-version: string # Client Api Version. (required)
+  --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
   --odata-etag: string # The ETag of the synonym map.
   --encryption-key: any # A customer-managed encryption key in Azure Key Vault. Keys that you create and manage can be used to encrypt or decrypt data-at-rest in Azure Cognitive Search, such as indexes and synonym maps. — shape: {accessCredentials?: any, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string}
   format: string@format-completer # The format of the synonym map. Only the 'solr' format is currently supported.
@@ -1449,6 +1480,7 @@ export def "synonym-maps-create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/synonymmaps" $qp $auth.query)
   let req_body = {"@odata.etag": $odata_etag, "encryptionKey": $encryption_key, "format": $format, "name": $name, "synonyms": $synonyms} | compact
@@ -1487,14 +1519,15 @@ export def "synonym-maps-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-  --client-request-id: string # The tracking ID sent with the request to help with debugging.
+  --api-version: string # Client Api Version. (required)
+  --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
   --if-match: string # Defines the If-Match condition. The operation will be performed only if the ETag on the server matches this value.
   --if-none-match: string # Defines the If-None-Match condition. The operation will be performed only if the ETag on the server does not match this value.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($synonym_map_name | is-empty) { error make --unspanned { msg: "path parameter 'synonymMapName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({synonym_map_name: (encode-path-segment $synonym_map_name)} | format pattern "/synonymmaps('{synonym_map_name}')") $qp $auth.query)
   let accept_val = "application/json"
@@ -1531,12 +1564,13 @@ export def "synonym-maps-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-  --client-request-id: string # The tracking ID sent with the request to help with debugging.
+  --api-version: string # Client Api Version. (required)
+  --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
 ]: nothing -> record<_odata_etag: string, encryptionKey: record<accessCredentials: record<applicationId: string, applicationSecret: string>, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string>, format: string, name: string, synonyms: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($synonym_map_name | is-empty) { error make --unspanned { msg: "path parameter 'synonymMapName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({synonym_map_name: (encode-path-segment $synonym_map_name)} | format pattern "/synonymmaps('{synonym_map_name}')") $qp $auth.query)
   let accept_val = "application/json"
@@ -1574,11 +1608,11 @@ export def "synonym-maps-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-  --client-request-id: string # The tracking ID sent with the request to help with debugging.
+  --api-version: string # Client Api Version. (required)
+  --client-request-id: string # The tracking ID sent with the request to help with debugging. (format: uuid)
   --if-match: string # Defines the If-Match condition. The operation will be performed only if the ETag on the server matches this value.
   --if-none-match: string # Defines the If-None-Match condition. The operation will be performed only if the ETag on the server does not match this value.
-  --prefer: string@prefer-completer # For HTTP PUT requests, instructs the service to return the created/updated resource on success.
+  --prefer: string@prefer-completer # For HTTP PUT requests, instructs the service to return the created/updated resource on success. (required)
   --odata-etag: string # The ETag of the synonym map.
   --encryption-key: any # A customer-managed encryption key in Azure Key Vault. Keys that you create and manage can be used to encrypt or decrypt data-at-rest in Azure Cognitive Search, such as indexes and synonym maps. — shape: {accessCredentials?: any, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string}
   format: string@format-completer # The format of the synonym map. Only the 'solr' format is currently supported.
@@ -1589,6 +1623,8 @@ export def "synonym-maps-create-or-update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($synonym_map_name | is-empty) { error make --unspanned { msg: "path parameter 'synonymMapName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
+  let prefer = ($prefer | default "return=representation")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({synonym_map_name: (encode-path-segment $synonym_map_name)} | format pattern "/synonymmaps('{synonym_map_name}')") $qp $auth.query)
   let req_body = {"@odata.etag": $odata_etag, "encryptionKey": $encryption_key, "format": $format, "name": $name, "synonyms": $synonyms} | compact

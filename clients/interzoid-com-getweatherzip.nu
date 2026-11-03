@@ -131,11 +131,13 @@ export def "getweatherzipcode" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --license: string # Your Interzoid license API key. Register at www.interzoid.com/register
-  --zip: string # Zip code for weather information
+  --license: string # Your Interzoid license API key. Register at www.interzoid.com/register (required)
+  --zip: string # Zip code for weather information (required)
 ]: nothing -> record<City: string, Code: string, Credits: string, RelativeHumidity: string, State: string, TempC: string, TempF: string, VisibilityMiles: string, Weather: string, WindDir: string, WindMPH: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($license == null) { error make --unspanned { msg: "required query parameter 'license' missing: pass --license" } }
+  if ($zip == null) { error make --unspanned { msg: "required query parameter 'zip' missing: pass --zip" } }
   let qp = [(serialize-qp "license" $license "scalar") (serialize-qp "zip" $zip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getweatherzipcode" $qp $auth.query)
   let accept_val = "application/json"

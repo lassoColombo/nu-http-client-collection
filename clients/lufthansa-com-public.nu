@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -94,6 +94,8 @@ def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: 
 def base-url-completer [] { ["https://api.lufthansa.com/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def product-code-completer [] { ["FAN" "FCO" "FCP" "FDG" "FTF" "FUN" "FWN" "YCO" "YCP" "YDG" "YNB" "YNZ" "YTF" "YUN" "ZXB" "ZXF" "ZXR"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -126,7 +128,7 @@ export def "cargo-get-route-from-date-product-code-by-origin-and-destination-get
   origin: string
   destination: string
   from_date: string
-  product_code: string
+  product_code: string@product-code-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -136,7 +138,7 @@ export def "cargo-get-route-from-date-product-code-by-origin-and-destination-get
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -179,7 +181,7 @@ export def "cargo-shipment-tracking-by-awb-prefix-and-awb-number-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -222,7 +224,7 @@ export def "offers-lounges-by-location-get" [
   --cabin-class: string # Cabin class: 'M', 'E', 'C', 'F' (Acceptable values are: "", "M", "E", "C", "F")
   --tier-code: string # Frequent flyer level ('FTL', 'SGC', 'SEN', 'HON') (Acceptable values are: "", "FTL", "SGC", "SEN", "HON")
   --lang: string # Language code.
-  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -266,7 +268,7 @@ export def "offers-seatmaps-destination-date-cabin-class-by-flight-number-and-or
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -312,7 +314,7 @@ export def "operations-flightstatus-arrivals-by-airport-code-and-from-date-time-
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: string # Number of records returned per request. Defaults to 20, maximum is 100 (if a value bigger than 100 is given, 100 will be taken)
   --offset: string # Number of records skipped. Defaults to 0
-  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -356,7 +358,7 @@ export def "operations-flightstatus-departures-by-airport-code-and-from-date-tim
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: string # Number of records returned per request. Defaults to 20, maximum is 100 (if a value bigger than 100 is given, 100 will be taken)
   --offset: string # Number of records skipped. Defaults to 0
-  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -401,7 +403,7 @@ export def "operations-flightstatus-route-date-by-origin-and-destination-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: string # Number of records returned per request. Defaults to 20, maximum is 100 (if a value bigger than 100 is given, 100 will be taken)
   --offset: string # Number of records skipped. Defaults to 0
-  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -446,7 +448,7 @@ export def "operations-flightstatus-by-flight-number-and-date-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: string # Number of records returned per request. Defaults to 20, maximum is 100 (if a value bigger than 100 is given, 100 will be taken)
   --offset: string # Number of records skipped. Defaults to 0
-  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -492,7 +494,7 @@ export def "operations-schedules-from-date-time-by-origin-and-destination-get" [
   --direct-flights: oneof<nothing, bool> # Show only direct flights (false=0, true=1). Default is false
   --limit: string # Number of records returned per request. Defaults to 20, maximum is 100 (if a value bigger than 100 is given, 100 will be taken)
   --offset: string # Number of records skipped. Defaults to 0
-  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -536,7 +538,7 @@ export def "references-aircraft-by-aircraft-code-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: string # Number of records returned per request. Defaults to 20, maximum is 100 (if a value bigger than 100 is given, 100 will be taken) (default: 20)
   --offset: string # Number of records skipped. Defaults to 0 (default: 0)
-  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -578,7 +580,7 @@ export def "references-airlines-by-airline-code-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: string # Number of records returned per request. Defaults to 20, maximum is 100 (if a value bigger than 100 is given, 100 will be taken) (default: 20)
   --offset: string # Number of records skipped. Defaults to 0 (default: 0)
-  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -620,7 +622,7 @@ export def "references-airports-nearest-by-latitude-and-longitude-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --lang: string # 2 letter ISO 3166-1 language code
-  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -665,7 +667,7 @@ export def "references-airports-by-airport-code-get" [
   --limit: string # Number of records returned per request. Defaults to 20, maximum is 100 (if a value bigger than 100 is given, 100 will be taken) (default: 20)
   --offset: string # Number of records skipped. Defaults to 0 (default: 0)
   --l-hoperated: oneof<nothing, bool> # Restrict the results to locations with flights operated by LH (false=0, true=1)
-  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required)
 ]: nothing -> record<AirportResource: record<Airports: record<Airport: record>, Meta: record<_Version: string, Link: list, TotalCount: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -708,7 +710,7 @@ export def "references-cities-by-city-code-get" [
   --lang: string # 2 letter ISO 3166-1 language code
   --limit: string # Number of records returned per request. Defaults to 20, maximum is 100 (if a value bigger than 100 is given, 100 will be taken) (default: 20)
   --offset: string # Number of records skipped. Defaults to 0 (default: 0)
-  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -751,7 +753,7 @@ export def "references-countries-by-country-code-get" [
   --lang: string # 2 letter ISO 3166-1 language code
   --limit: string # Number of records returned per request. Defaults to 20, maximum is 100 (if a value bigger than 100 is given, 100 will be taken) (default: 20)
   --offset: string # Number of records skipped. Defaults to 0 (default: 0)
-  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

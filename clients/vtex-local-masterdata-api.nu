@@ -1,6 +1,7 @@
 # Auto-generated client for MasterData API - v1 v1.0
 # Source: https://api.apis.guru/v2/specs/vtex.local/MasterData-API-/1.0/openapi.json
-# Auth: --token flag or $env.MASTERDATA_API_V1_TOKEN
+# Auth (appKey): --token-appkey flag or $env.MASTERDATA_API_V1_APPKEY_TOKEN
+# Auth (appToken): --token-apptoken flag or $env.MASTERDATA_API_V1_APPTOKEN_TOKEN
 
 const BASE_URL = "https://vtex.local"
 
@@ -12,8 +13,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-vtex-api-appkey" => { {scheme: $scheme, headers: {X-VTEX-API-AppKey: $token_val}, query: "", location: "header"} }
-    "x-vtex-api-apptoken" => { {scheme: $scheme, headers: {X-VTEX-API-AppToken: $token_val}, query: "", location: "header"} }
+    "x-vtex-api-appkey" => { {scheme: $scheme, headers: {"X-VTEX-API-AppKey": $token_val}, query: "", location: "header"} }
+    "x-vtex-api-apptoken" => { {scheme: $scheme, headers: {"X-VTEX-API-AppToken": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -160,7 +161,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-appkey" "token-apptoken"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "listdataentities" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -195,11 +196,13 @@ export def "listdataentities" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand (required, default: application/vnd.vtex.ds.v10+json)
 ]: nothing -> table<acronym: string, allowGetAll: bool, name: string, primaryKeyType: string> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MASTERDATA_API_V1_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MASTERDATA_API_V1_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/vnd.vtex.ds.v10+json")
   let full_url = (build-url $base "/api/dataentities" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -234,12 +237,14 @@ export def "getdataentitystructure" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand (required, default: application/vnd.vtex.ds.v10+json)
 ]: nothing -> record<acronym: string, allowGetAll: bool, fields: table<displayName: string, isFilter: bool, isInternal: bool, isNullable: bool, isSearchable: bool, name: string, type: string>, name: string, primaryKeyType: string> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MASTERDATA_API_V1_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MASTERDATA_API_V1_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($acronym | is-empty) { error make --unspanned { msg: "path parameter 'acronym' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/vnd.vtex.ds.v10+json")
   let full_url = (build-url $base ({acronym: (encode-path-segment $acronym)} | format pattern "/api/dataentities/{acronym}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -274,13 +279,14 @@ export def "createorupdatepartialdocument" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand (required, default: application/vnd.vtex.ds.v10+json)
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MASTERDATA_API_V1_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MASTERDATA_API_V1_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($acronym | is-empty) { error make --unspanned { msg: "path parameter 'acronym' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/vnd.vtex.ds.v10+json")
   let full_url = (build-url $base ({acronym: (encode-path-segment $acronym)} | format pattern "/api/dataentities/{acronym}/documents") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -317,13 +323,14 @@ export def "createnewdocument" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand (required, default: application/vnd.vtex.ds.v10+json)
   --body: record
 ]: any -> record<Href: string, Id: string> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MASTERDATA_API_V1_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MASTERDATA_API_V1_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($acronym | is-empty) { error make --unspanned { msg: "path parameter 'acronym' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/vnd.vtex.ds.v10+json")
   let full_url = (build-url $base ({acronym: (encode-path-segment $acronym)} | format pattern "/api/dataentities/{acronym}/documents") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -360,13 +367,14 @@ export def "createorupdateentiredocument" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand (required, default: application/vnd.vtex.ds.v10+json)
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MASTERDATA_API_V1_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MASTERDATA_API_V1_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($acronym | is-empty) { error make --unspanned { msg: "path parameter 'acronym' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/vnd.vtex.ds.v10+json")
   let full_url = (build-url $base ({acronym: (encode-path-segment $acronym)} | format pattern "/api/dataentities/{acronym}/documents") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -404,13 +412,15 @@ export def "deletedocument" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand (required, default: application/vnd.vtex.ds.v10+json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MASTERDATA_API_V1_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MASTERDATA_API_V1_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($acronym | is-empty) { error make --unspanned { msg: "path parameter 'acronym' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/vnd.vtex.ds.v10+json")
   let full_url = (build-url $base ({acronym: (encode-path-segment $acronym), id: (encode-path-segment $id)} | format pattern "/api/dataentities/{acronym}/documents/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -446,13 +456,15 @@ export def "getdocument" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand (required, default: application/vnd.vtex.ds.v10+json)
 ]: nothing -> record<campo1: string, campo2: string, campo3: int> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MASTERDATA_API_V1_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MASTERDATA_API_V1_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($acronym | is-empty) { error make --unspanned { msg: "path parameter 'acronym' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/vnd.vtex.ds.v10+json")
   let full_url = (build-url $base ({acronym: (encode-path-segment $acronym), id: (encode-path-segment $id)} | format pattern "/api/dataentities/{acronym}/documents/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -488,7 +500,7 @@ export def "updatepartialdocument" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand (required, default: application/vnd.vtex.ds.v10+json)
   --body: record
 ]: any -> any {
   let input = $in
@@ -496,6 +508,7 @@ export def "updatepartialdocument" [
   let base = ($base_url | default $BASE_URL)
   if ($acronym | is-empty) { error make --unspanned { msg: "path parameter 'acronym' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/vnd.vtex.ds.v10+json")
   let full_url = (build-url $base ({acronym: (encode-path-segment $acronym), id: (encode-path-segment $id)} | format pattern "/api/dataentities/{acronym}/documents/{id}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -533,7 +546,7 @@ export def "updateentiredocument" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand (required, default: application/vnd.vtex.ds.v10+json)
   --body: record
 ]: any -> any {
   let input = $in
@@ -541,6 +554,7 @@ export def "updateentiredocument" [
   let base = ($base_url | default $BASE_URL)
   if ($acronym | is-empty) { error make --unspanned { msg: "path parameter 'acronym' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/vnd.vtex.ds.v10+json")
   let full_url = (build-url $base ({acronym: (encode-path-segment $acronym), id: (encode-path-segment $id)} | format pattern "/api/dataentities/{acronym}/documents/{id}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -578,7 +592,7 @@ export def "validate-documentby-clusters" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand (required, default: application/vnd.vtex.ds.v10+json)
   --body: list
 ]: any -> any {
   let input = $in
@@ -586,6 +600,7 @@ export def "validate-documentby-clusters" [
   let base = ($base_url | default $BASE_URL)
   if ($acronym | is-empty) { error make --unspanned { msg: "path parameter 'acronym' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/vnd.vtex.ds.v10+json")
   let full_url = (build-url $base ({acronym: (encode-path-segment $acronym), id: (encode-path-segment $id)} | format pattern "/api/dataentities/{acronym}/documents/{id}/clusters") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -623,7 +638,7 @@ export def "putscores" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand (required, default: application/vnd.vtex.ds.v10+json)
   --body: list
 ]: any -> any {
   let input = $in
@@ -631,6 +646,7 @@ export def "putscores" [
   let base = ($base_url | default $BASE_URL)
   if ($acronym | is-empty) { error make --unspanned { msg: "path parameter 'acronym' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/vnd.vtex.ds.v10+json")
   let full_url = (build-url $base ({acronym: (encode-path-segment $acronym), id: (encode-path-segment $id)} | format pattern "/api/dataentities/{acronym}/documents/{id}/score") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -669,7 +685,7 @@ export def "deletescorebyfield" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand (required, default: application/vnd.vtex.ds.v10+json)
   key: string
 ]: any -> any {
   let input = $in
@@ -678,6 +694,7 @@ export def "deletescorebyfield" [
   if ($acronym | is-empty) { error make --unspanned { msg: "path parameter 'acronym' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($field_name | is-empty) { error make --unspanned { msg: "path parameter 'field-name' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/vnd.vtex.ds.v10+json")
   let full_url = (build-url $base ({acronym: (encode-path-segment $acronym), id: (encode-path-segment $id), field_name: (encode-path-segment $field_name)} | format pattern "/api/dataentities/{acronym}/documents/{id}/score/{field_name}") $auth.query)
   let req_body = {"key": $key} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -716,7 +733,7 @@ export def "putscorebyfield" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand (required, default: application/vnd.vtex.ds.v10+json)
   key: string
   point: int # format: int32
   until: string
@@ -727,6 +744,7 @@ export def "putscorebyfield" [
   if ($acronym | is-empty) { error make --unspanned { msg: "path parameter 'acronym' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($field_name | is-empty) { error make --unspanned { msg: "path parameter 'field-name' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "application/vnd.vtex.ds.v10+json")
   let full_url = (build-url $base ({acronym: (encode-path-segment $acronym), id: (encode-path-segment $id), field_name: (encode-path-segment $field_name)} | format pattern "/api/dataentities/{acronym}/documents/{id}/score/{field_name}") $auth.query)
   let req_body = {"key": $key, "point": $point, "until": $until} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -764,13 +782,15 @@ export def "listversions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand (required, default: application/vnd.vtex.ds.v10+json)
 ]: nothing -> table<date: string, id: string> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MASTERDATA_API_V1_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MASTERDATA_API_V1_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($acronym | is-empty) { error make --unspanned { msg: "path parameter 'acronym' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/vnd.vtex.ds.v10+json")
   let full_url = (build-url $base ({acronym: (encode-path-segment $acronym), id: (encode-path-segment $id)} | format pattern "/api/dataentities/{acronym}/documents/{id}/versions") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -807,14 +827,16 @@ export def "getversion" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand (required, default: application/vnd.vtex.ds.v10+json)
 ]: nothing -> record<author: string, document: record<accountId: string, accountName: string, carttag: string, checkouttag: string, dataEntityId: string, departmentVisitedTag: record<DisplayValue: string, Scores: record>, email: string, followers: list<string>, id: string, rclastsession: string, rclastsessiondate: string>, id: string> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MASTERDATA_API_V1_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MASTERDATA_API_V1_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($acronym | is-empty) { error make --unspanned { msg: "path parameter 'acronym' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/vnd.vtex.ds.v10+json")
   let full_url = (build-url $base ({acronym: (encode-path-segment $acronym), id: (encode-path-segment $id), version_id: (encode-path-segment $version_id)} | format pattern "/api/dataentities/{acronym}/documents/{id}/versions/{version_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -851,14 +873,16 @@ export def "putversion" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand (required, default: application/vnd.vtex.ds.v10+json)
 ]: nothing -> record<Href: string, Id: string> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MASTERDATA_API_V1_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MASTERDATA_API_V1_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($acronym | is-empty) { error make --unspanned { msg: "path parameter 'acronym' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/vnd.vtex.ds.v10+json")
   let full_url = (build-url $base ({acronym: (encode-path-segment $acronym), id: (encode-path-segment $id), version_id: (encode-path-segment $version_id)} | format pattern "/api/dataentities/{acronym}/documents/{id}/versions/{version_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -908,8 +932,8 @@ export def "saveattachment" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -981,12 +1005,14 @@ export def "scrolldocuments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand (required, default: application/vnd.vtex.ds.v10+json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MASTERDATA_API_V1_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MASTERDATA_API_V1_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($acronym | is-empty) { error make --unspanned { msg: "path parameter 'acronym' must be non-empty" } }
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/vnd.vtex.ds.v10+json")
   let full_url = (build-url $base ({acronym: (encode-path-segment $acronym)} | format pattern "/api/dataentities/{acronym}/scroll") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1022,18 +1048,21 @@ export def "searchdocuments" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # Fields that will be returned by document (default: email,firstName,document)
-  --qp-where: string # Specification of filters. As seen below (default: firstName is not null)
+  --where: string # Specification of filters. As seen below (default: firstName is not null)
   --schema: string # Enter with the name of the schema to filter documents by compatibility of the schema. (default: {{schema}})
   --keyword: string # String to search (default: String to search)
-  --qp-sort: string # Use ASC value to sort ascending or DESC value to sort descending. (default: firstName ASC)
-  --content-type: string # Type of the content being sent
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
-  --rest-range: string # Range of documents to show
+  --sort: string # Use ASC value to sort ascending or DESC value to sort descending. (default: firstName ASC)
+  --content-type: string # Type of the content being sent (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand (required, default: application/vnd.vtex.ds.v10+json)
+  --rest-range: string # Range of documents to show (required, default: resources=0-10)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o MASTERDATA_API_V1_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o MASTERDATA_API_V1_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($acronym | is-empty) { error make --unspanned { msg: "path parameter 'acronym' must be non-empty" } }
-  let qp = [(serialize-qp "_fields" $fields "scalar") (serialize-qp "_where" $qp_where "scalar") (serialize-qp "_schema" $schema "scalar") (serialize-qp "_keyword" $keyword "scalar") (serialize-qp "_sort" $qp_sort "scalar")] | flatten | str join "&"
+  let content_type = ($content_type | default "application/json")
+  let hdr_accept = ($hdr_accept | default "application/vnd.vtex.ds.v10+json")
+  let rest_range = ($rest_range | default "resources=0-10")
+  let qp = [(serialize-qp "_fields" $fields "scalar") (serialize-qp "_where" $where "scalar") (serialize-qp "_schema" $schema "scalar") (serialize-qp "_keyword" $keyword "scalar") (serialize-qp "_sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({acronym: (encode-path-segment $acronym)} | format pattern "/api/dataentities/{acronym}/search") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1042,7 +1071,7 @@ export def "searchdocuments" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"_fields": $fields, "_where": $qp_where, "_schema": $schema, "_keyword": $keyword, "_sort": $qp_sort} | compact)
+    query: ({"_fields": $fields, "_where": $where, "_schema": $schema, "_keyword": $keyword, "_sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null

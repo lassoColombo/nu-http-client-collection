@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -96,6 +96,7 @@ def base-url-completer [] { ["http://dax.us-east-1.amazonaws.com" "http://dax.us
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def cluster-endpoint-encryption-type-completer [] { ["NONE" "TLS"] }
 def x-amz-target-completer [] { ["AmazonDAXV3.CreateCluster"] }
 def x-amz-target-completer-1 [] { ["AmazonDAXV3.CreateParameterGroup"] }
 def x-amz-target-completer-2 [] { ["AmazonDAXV3.CreateSubnetGroup"] }
@@ -105,6 +106,7 @@ def x-amz-target-completer-5 [] { ["AmazonDAXV3.DeleteParameterGroup"] }
 def x-amz-target-completer-6 [] { ["AmazonDAXV3.DeleteSubnetGroup"] }
 def x-amz-target-completer-7 [] { ["AmazonDAXV3.DescribeClusters"] }
 def x-amz-target-completer-8 [] { ["AmazonDAXV3.DescribeDefaultParameters"] }
+def source-type-completer [] { ["CLUSTER" "PARAMETER_GROUP" "SUBNET_GROUP"] }
 def x-amz-target-completer-9 [] { ["AmazonDAXV3.DescribeEvents"] }
 def x-amz-target-completer-10 [] { ["AmazonDAXV3.DescribeParameterGroups"] }
 def x-amz-target-completer-11 [] { ["AmazonDAXV3.DescribeParameters"] }
@@ -145,6 +147,8 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateCluster
+# --Tags item shape: {Key?: string, Value?: string}
+# --SSESpecification shape: {Enabled: bool}
 export def "create-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -162,25 +166,26 @@ export def "create-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  cluster_name: any
-  node_type: any
-  --description: any
-  replication_factor: any
-  --availability-zones: any
-  --subnet-group-name: any
-  --security-group-ids: any
-  --preferred-maintenance-window: any
-  --notification-topic-arn: any
-  iam_role_arn: any
-  --parameter-group-name: any
-  --tags: any
-  --sse-specification: any
-  --cluster-endpoint-encryption-type: any
-]: any -> record<Cluster: record<ClusterName: record, Description: record, ClusterArn: record, TotalNodes: record, ActiveNodes: record, NodeType: record, Status: record, ClusterDiscoveryEndpoint: record<Address: record, Port: record, URL: record>, NodeIdsToRemove: record, Nodes: record, PreferredMaintenanceWindow: record, NotificationConfiguration: record<TopicArn: record, TopicStatus: record>, SubnetGroup: record, SecurityGroups: record, IamRoleArn: record, ParameterGroup: record<ParameterGroupName: record, ParameterApplyStatus: record, NodeIdsToReboot: record>, SSEDescription: record<Status: record>, ClusterEndpointEncryptionType: record>> {
+  --x-amz-target: string@x-amz-target-completer # required
+  cluster_name: string # The cluster identifier. This parameter is stored as a lowercase string. Constraints: A name must contain from 1 to 20 alphanumeric characters or hyphens. The first character must be a letter. A name cannot end with a hyphen or contain two consecutive hyphens.
+  node_type: string # The compute and memory capacity of the nodes in the cluster.
+  --description: string # A description of the cluster.
+  replication_factor: int # The number of nodes in the DAX cluster. A replication factor of 1 will create a single-node cluster, without any read replicas. For additional fault tolerance, you can create a multiple node cluster with one or more read replicas. To do this, set ReplicationFactor to a number between 3 (one primary and two read replicas) and 10 (one primary and nine read replicas). If the AvailabilityZones parameter is provided, its length must equal the ReplicationFactor. AWS recommends that you have at least two read replicas per cluster.
+  --availability-zones: list<string> # The Availability Zones (AZs) in which the cluster nodes will reside after the cluster has been created or updated. If provided, the length of this list must equal the ReplicationFactor parameter. If you omit this parameter, DAX will spread the nodes across Availability Zones for the highest availability.
+  --subnet-group-name: string # The name of the subnet group to be used for the replication group. DAX clusters can only run in an Amazon VPC environment. All of the subnets that you specify in a subnet group must exist in the same VPC.
+  --security-group-ids: list<string> # A list of security group IDs to be assigned to each node in the DAX cluster. (Each of the security group ID is system-generated.) If this parameter is not specified, DAX assigns the default VPC security group to each node.
+  --preferred-maintenance-window: string # Specifies the weekly time range during which maintenance on the DAX cluster is performed. It is specified as a range in the format ddd:hh24:mi-ddd:hh24:mi (24H Clock UTC). The minimum maintenance window is a 60 minute period. Valid values for ddd are: sun mon tue wed thu fri sat Example: sun:05:00-sun:09:00 If you don't specify a preferred maintenance window when you create or modify a cache cluster, DAX assigns a 60-minute maintenance window on a randomly selected day of the week.
+  --notification-topic-arn: string # The Amazon Resource Name (ARN) of the Amazon SNS topic to which notifications will be sent. The Amazon SNS topic owner must be same as the DAX cluster owner.
+  iam_role_arn: string # A valid Amazon Resource Name (ARN) that identifies an IAM role. At runtime, DAX will assume this role and use the role's permissions to access DynamoDB on your behalf.
+  --parameter-group-name: string # The parameter group to be associated with the DAX cluster.
+  --tags: list # A set of tags to associate with the DAX cluster. — item shape: {Key?: string, Value?: string}
+  --sse-specification: record # Represents the settings used to enable server-side encryption. — shape: {Enabled: bool}
+  --cluster-endpoint-encryption-type: string@cluster-endpoint-encryption-type-completer # The type of encryption the cluster's endpoint should support. Values are: NONE for no encryption TLS for Transport Layer Security
+]: any -> record<Cluster: record<ClusterName: string, Description: string, ClusterArn: string, TotalNodes: int, ActiveNodes: int, NodeType: string, Status: string, ClusterDiscoveryEndpoint: record<Address: string, Port: int, URL: string>, NodeIdsToRemove: list<string>, Nodes: list<record>, PreferredMaintenanceWindow: string, NotificationConfiguration: record<TopicArn: string, TopicStatus: string>, SubnetGroup: string, SecurityGroups: list<record>, IamRoleArn: string, ParameterGroup: record<ParameterGroupName: string, ParameterApplyStatus: string, NodeIdsToReboot: list>, SSEDescription: record<Status: string>, ClusterEndpointEncryptionType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonDAXV3.CreateCluster")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClusterName": $cluster_name, "NodeType": $node_type, "Description": $description, "ReplicationFactor": $replication_factor, "AvailabilityZones": $availability_zones, "SubnetGroupName": $subnet_group_name, "SecurityGroupIds": $security_group_ids, "PreferredMaintenanceWindow": $preferred_maintenance_window, "NotificationTopicArn": $notification_topic_arn, "IamRoleArn": $iam_role_arn, "ParameterGroupName": $parameter_group_name, "Tags": $tags, "SSESpecification": $sse_specification, "ClusterEndpointEncryptionType": $cluster_endpoint_encryption_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -223,13 +228,14 @@ export def "create-parameter-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  parameter_group_name: any
-  --description: any
-]: any -> record<ParameterGroup: record<ParameterGroupName: record, Description: record>> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  parameter_group_name: string # The name of the parameter group to apply to all of the clusters in this replication group.
+  --description: string # A description of the parameter group.
+]: any -> record<ParameterGroup: record<ParameterGroupName: string, Description: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonDAXV3.CreateParameterGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ParameterGroupName": $parameter_group_name, "Description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -272,14 +278,15 @@ export def "create-subnet-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  subnet_group_name: any
-  --description: any
-  subnet_ids: any
-]: any -> record<SubnetGroup: record<SubnetGroupName: record, Description: record, VpcId: record, Subnets: record>> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  subnet_group_name: string # A name for the subnet group. This value is stored as a lowercase string.
+  --description: string # A description for the subnet group
+  subnet_ids: list<string> # A list of VPC subnet IDs for the subnet group.
+]: any -> record<SubnetGroup: record<SubnetGroupName: string, Description: string, VpcId: string, Subnets: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonDAXV3.CreateSubnetGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SubnetGroupName": $subnet_group_name, "Description": $description, "SubnetIds": $subnet_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -322,15 +329,16 @@ export def "decrease-replication-factor" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  cluster_name: any
-  new_replication_factor: any
-  --availability-zones: any
-  --node-ids-to-remove: any
-]: any -> record<Cluster: record<ClusterName: record, Description: record, ClusterArn: record, TotalNodes: record, ActiveNodes: record, NodeType: record, Status: record, ClusterDiscoveryEndpoint: record<Address: record, Port: record, URL: record>, NodeIdsToRemove: record, Nodes: record, PreferredMaintenanceWindow: record, NotificationConfiguration: record<TopicArn: record, TopicStatus: record>, SubnetGroup: record, SecurityGroups: record, IamRoleArn: record, ParameterGroup: record<ParameterGroupName: record, ParameterApplyStatus: record, NodeIdsToReboot: record>, SSEDescription: record<Status: record>, ClusterEndpointEncryptionType: record>> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  cluster_name: string # The name of the DAX cluster from which you want to remove nodes.
+  new_replication_factor: int # The new number of nodes for the DAX cluster.
+  --availability-zones: list<string> # The Availability Zone(s) from which to remove nodes.
+  --node-ids-to-remove: list<string> # The unique identifiers of the nodes to be removed from the cluster.
+]: any -> record<Cluster: record<ClusterName: string, Description: string, ClusterArn: string, TotalNodes: int, ActiveNodes: int, NodeType: string, Status: string, ClusterDiscoveryEndpoint: record<Address: string, Port: int, URL: string>, NodeIdsToRemove: list<string>, Nodes: list<record>, PreferredMaintenanceWindow: string, NotificationConfiguration: record<TopicArn: string, TopicStatus: string>, SubnetGroup: string, SecurityGroups: list<record>, IamRoleArn: string, ParameterGroup: record<ParameterGroupName: string, ParameterApplyStatus: string, NodeIdsToReboot: list>, SSEDescription: record<Status: string>, ClusterEndpointEncryptionType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonDAXV3.DecreaseReplicationFactor")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClusterName": $cluster_name, "NewReplicationFactor": $new_replication_factor, "AvailabilityZones": $availability_zones, "NodeIdsToRemove": $node_ids_to_remove} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -373,12 +381,13 @@ export def "delete-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  cluster_name: any
-]: any -> record<Cluster: record<ClusterName: record, Description: record, ClusterArn: record, TotalNodes: record, ActiveNodes: record, NodeType: record, Status: record, ClusterDiscoveryEndpoint: record<Address: record, Port: record, URL: record>, NodeIdsToRemove: record, Nodes: record, PreferredMaintenanceWindow: record, NotificationConfiguration: record<TopicArn: record, TopicStatus: record>, SubnetGroup: record, SecurityGroups: record, IamRoleArn: record, ParameterGroup: record<ParameterGroupName: record, ParameterApplyStatus: record, NodeIdsToReboot: record>, SSEDescription: record<Status: record>, ClusterEndpointEncryptionType: record>> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  cluster_name: string # The name of the cluster to be deleted.
+]: any -> record<Cluster: record<ClusterName: string, Description: string, ClusterArn: string, TotalNodes: int, ActiveNodes: int, NodeType: string, Status: string, ClusterDiscoveryEndpoint: record<Address: string, Port: int, URL: string>, NodeIdsToRemove: list<string>, Nodes: list<record>, PreferredMaintenanceWindow: string, NotificationConfiguration: record<TopicArn: string, TopicStatus: string>, SubnetGroup: string, SecurityGroups: list<record>, IamRoleArn: string, ParameterGroup: record<ParameterGroupName: string, ParameterApplyStatus: string, NodeIdsToReboot: list>, SSEDescription: record<Status: string>, ClusterEndpointEncryptionType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonDAXV3.DeleteCluster")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClusterName": $cluster_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -421,12 +430,13 @@ export def "delete-parameter-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  parameter_group_name: any
-]: any -> record<DeletionMessage: record> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  parameter_group_name: string # The name of the parameter group to delete.
+]: any -> record<DeletionMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonDAXV3.DeleteParameterGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ParameterGroupName": $parameter_group_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -469,12 +479,13 @@ export def "delete-subnet-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  subnet_group_name: any
-]: any -> record<DeletionMessage: record> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  subnet_group_name: string # The name of the subnet group to delete.
+]: any -> record<DeletionMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonDAXV3.DeleteSubnetGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SubnetGroupName": $subnet_group_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -517,14 +528,15 @@ export def "describe-clusters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  --cluster-names: any
-  --max-results: any
-  --next-token: any
-]: any -> record<NextToken: record, Clusters: record> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  --cluster-names: list<string> # The names of the DAX clusters being described.
+  --max-results: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. The value for MaxResults must be between 20 and 100.
+  --next-token: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults.
+]: any -> record<NextToken: string, Clusters: table<ClusterName: string, Description: string, ClusterArn: string, TotalNodes: int, ActiveNodes: int, NodeType: string, Status: string, ClusterDiscoveryEndpoint: record, NodeIdsToRemove: list, Nodes: list, PreferredMaintenanceWindow: string, NotificationConfiguration: record, SubnetGroup: string, SecurityGroups: list, IamRoleArn: string, ParameterGroup: record, SSEDescription: record, ClusterEndpointEncryptionType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonDAXV3.DescribeClusters")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClusterNames": $cluster_names, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -567,13 +579,14 @@ export def "describe-default-parameters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  --max-results: any
-  --next-token: any
-]: any -> record<NextToken: record, Parameters: record> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  --max-results: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. The value for MaxResults must be between 20 and 100.
+  --next-token: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults.
+]: any -> record<NextToken: string, Parameters: table<ParameterName: string, ParameterType: string, ParameterValue: string, NodeTypeSpecificValues: list, Description: string, Source: string, DataType: string, AllowedValues: string, IsModifiable: string, ChangeType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonDAXV3.DescribeDefaultParameters")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"MaxResults": $max_results, "NextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -616,18 +629,19 @@ export def "describe-events" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  --source-name: any
-  --source-type: any
-  --start-time: any
-  --end-time: any
-  --duration: any
-  --max-results: any
-  --next-token: any
-]: any -> record<NextToken: record, Events: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  --source-name: string # The identifier of the event source for which events will be returned. If not specified, then all sources are included in the response.
+  --source-type: string@source-type-completer # The event source to retrieve events for. If no value is specified, all events are returned.
+  --start-time: string # The beginning of the time interval to retrieve events for, specified in ISO 8601 format. (format: date-time)
+  --end-time: string # The end of the time interval for which to retrieve events, specified in ISO 8601 format. (format: date-time)
+  --duration: int # The number of minutes' worth of events to retrieve.
+  --max-results: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. The value for MaxResults must be between 20 and 100.
+  --next-token: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults.
+]: any -> record<NextToken: string, Events: table<SourceName: string, SourceType: string, Message: string, Date: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonDAXV3.DescribeEvents")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SourceName": $source_name, "SourceType": $source_type, "StartTime": $start_time, "EndTime": $end_time, "Duration": $duration, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -670,14 +684,15 @@ export def "describe-parameter-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  --parameter-group-names: any
-  --max-results: any
-  --next-token: any
-]: any -> record<NextToken: record, ParameterGroups: record> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  --parameter-group-names: list<string> # The names of the parameter groups.
+  --max-results: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. The value for MaxResults must be between 20 and 100.
+  --next-token: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults.
+]: any -> record<NextToken: string, ParameterGroups: table<ParameterGroupName: string, Description: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonDAXV3.DescribeParameterGroups")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ParameterGroupNames": $parameter_group_names, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -720,17 +735,18 @@ export def "describe-parameters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  parameter_group_name: any
-  --body-source: any
-  --max-results: any
-  --next-token: any
-]: any -> record<NextToken: record, Parameters: record> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  parameter_group_name: string # The name of the parameter group.
+  --source: string # How the parameter is defined. For example, system denotes a system-defined parameter.
+  --max-results: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. The value for MaxResults must be between 20 and 100.
+  --next-token: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults.
+]: any -> record<NextToken: string, Parameters: table<ParameterName: string, ParameterType: string, ParameterValue: string, NodeTypeSpecificValues: list, Description: string, Source: string, DataType: string, AllowedValues: string, IsModifiable: string, ChangeType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonDAXV3.DescribeParameters")
   let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"ParameterGroupName": $parameter_group_name, "Source": $body_source, "MaxResults": $max_results, "NextToken": $next_token} | compact
+  let req_body = {"ParameterGroupName": $parameter_group_name, "Source": $source, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -771,14 +787,15 @@ export def "describe-subnet-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  --subnet-group-names: any
-  --max-results: any
-  --next-token: any
-]: any -> record<NextToken: record, SubnetGroups: record> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  --subnet-group-names: list<string> # The name of the subnet group.
+  --max-results: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. The value for MaxResults must be between 20 and 100.
+  --next-token: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults.
+]: any -> record<NextToken: string, SubnetGroups: table<SubnetGroupName: string, Description: string, VpcId: string, Subnets: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonDAXV3.DescribeSubnetGroups")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SubnetGroupNames": $subnet_group_names, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -821,14 +838,15 @@ export def "increase-replication-factor" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  cluster_name: any
-  new_replication_factor: any
-  --availability-zones: any
-]: any -> record<Cluster: record<ClusterName: record, Description: record, ClusterArn: record, TotalNodes: record, ActiveNodes: record, NodeType: record, Status: record, ClusterDiscoveryEndpoint: record<Address: record, Port: record, URL: record>, NodeIdsToRemove: record, Nodes: record, PreferredMaintenanceWindow: record, NotificationConfiguration: record<TopicArn: record, TopicStatus: record>, SubnetGroup: record, SecurityGroups: record, IamRoleArn: record, ParameterGroup: record<ParameterGroupName: record, ParameterApplyStatus: record, NodeIdsToReboot: record>, SSEDescription: record<Status: record>, ClusterEndpointEncryptionType: record>> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  cluster_name: string # The name of the DAX cluster that will receive additional nodes.
+  new_replication_factor: int # The new number of nodes for the DAX cluster.
+  --availability-zones: list<string> # The Availability Zones (AZs) in which the cluster nodes will be created. All nodes belonging to the cluster are placed in these Availability Zones. Use this parameter if you want to distribute the nodes across multiple AZs.
+]: any -> record<Cluster: record<ClusterName: string, Description: string, ClusterArn: string, TotalNodes: int, ActiveNodes: int, NodeType: string, Status: string, ClusterDiscoveryEndpoint: record<Address: string, Port: int, URL: string>, NodeIdsToRemove: list<string>, Nodes: list<record>, PreferredMaintenanceWindow: string, NotificationConfiguration: record<TopicArn: string, TopicStatus: string>, SubnetGroup: string, SecurityGroups: list<record>, IamRoleArn: string, ParameterGroup: record<ParameterGroupName: string, ParameterApplyStatus: string, NodeIdsToReboot: list>, SSEDescription: record<Status: string>, ClusterEndpointEncryptionType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonDAXV3.IncreaseReplicationFactor")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClusterName": $cluster_name, "NewReplicationFactor": $new_replication_factor, "AvailabilityZones": $availability_zones} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -871,13 +889,14 @@ export def "list-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  resource_name: any
-  --next-token: any
-]: any -> record<Tags: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  resource_name: string # The name of the DAX resource to which the tags belong.
+  --next-token: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token.
+]: any -> record<Tags: table<Key: string, Value: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonDAXV3.ListTags")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceName": $resource_name, "NextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -920,13 +939,14 @@ export def "reboot-node" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  cluster_name: any
-  node_id: any
-]: any -> record<Cluster: record<ClusterName: record, Description: record, ClusterArn: record, TotalNodes: record, ActiveNodes: record, NodeType: record, Status: record, ClusterDiscoveryEndpoint: record<Address: record, Port: record, URL: record>, NodeIdsToRemove: record, Nodes: record, PreferredMaintenanceWindow: record, NotificationConfiguration: record<TopicArn: record, TopicStatus: record>, SubnetGroup: record, SecurityGroups: record, IamRoleArn: record, ParameterGroup: record<ParameterGroupName: record, ParameterApplyStatus: record, NodeIdsToReboot: record>, SSEDescription: record<Status: record>, ClusterEndpointEncryptionType: record>> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  cluster_name: string # The name of the DAX cluster containing the node to be rebooted.
+  node_id: string # The system-assigned ID of the node to be rebooted.
+]: any -> record<Cluster: record<ClusterName: string, Description: string, ClusterArn: string, TotalNodes: int, ActiveNodes: int, NodeType: string, Status: string, ClusterDiscoveryEndpoint: record<Address: string, Port: int, URL: string>, NodeIdsToRemove: list<string>, Nodes: list<record>, PreferredMaintenanceWindow: string, NotificationConfiguration: record<TopicArn: string, TopicStatus: string>, SubnetGroup: string, SecurityGroups: list<record>, IamRoleArn: string, ParameterGroup: record<ParameterGroupName: string, ParameterApplyStatus: string, NodeIdsToReboot: list>, SSEDescription: record<Status: string>, ClusterEndpointEncryptionType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonDAXV3.RebootNode")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClusterName": $cluster_name, "NodeId": $node_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -952,6 +972,7 @@ export def "reboot-node" [
 #
 # POST /
 # operationId: TagResource
+# --Tags item shape: {Key?: string, Value?: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -969,13 +990,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  resource_name: any
-  tags: any
-]: any -> record<Tags: record> {
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  resource_name: string # The name of the DAX resource to which tags should be added.
+  tags: list # The tags to be assigned to the DAX resource. — item shape: {Key?: string, Value?: string}
+]: any -> record<Tags: table<Key: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonDAXV3.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceName": $resource_name, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1018,13 +1040,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  resource_name: any
-  tag_keys: any
-]: any -> record<Tags: record> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  resource_name: string # The name of the DAX resource from which the tags should be removed.
+  tag_keys: list<string> # A list of tag keys. If the DAX cluster has any tags with these keys, then the tags are removed from the cluster.
+]: any -> record<Tags: table<Key: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonDAXV3.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceName": $resource_name, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1067,18 +1090,19 @@ export def "update-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  cluster_name: any
-  --description: any
-  --preferred-maintenance-window: any
-  --notification-topic-arn: any
-  --notification-topic-status: any
-  --parameter-group-name: any
-  --security-group-ids: any
-]: any -> record<Cluster: record<ClusterName: record, Description: record, ClusterArn: record, TotalNodes: record, ActiveNodes: record, NodeType: record, Status: record, ClusterDiscoveryEndpoint: record<Address: record, Port: record, URL: record>, NodeIdsToRemove: record, Nodes: record, PreferredMaintenanceWindow: record, NotificationConfiguration: record<TopicArn: record, TopicStatus: record>, SubnetGroup: record, SecurityGroups: record, IamRoleArn: record, ParameterGroup: record<ParameterGroupName: record, ParameterApplyStatus: record, NodeIdsToReboot: record>, SSEDescription: record<Status: record>, ClusterEndpointEncryptionType: record>> {
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  cluster_name: string # The name of the DAX cluster to be modified.
+  --description: string # A description of the changes being made to the cluster.
+  --preferred-maintenance-window: string # A range of time when maintenance of DAX cluster software will be performed. For example: sun:01:00-sun:09:00. Cluster maintenance normally takes less than 30 minutes, and is performed automatically within the maintenance window.
+  --notification-topic-arn: string # The Amazon Resource Name (ARN) that identifies the topic.
+  --notification-topic-status: string # The current state of the topic. A value of “active” means that notifications will be sent to the topic. A value of “inactive” means that notifications will not be sent to the topic.
+  --parameter-group-name: string # The name of a parameter group for this cluster.
+  --security-group-ids: list<string> # A list of user-specified security group IDs to be assigned to each node in the DAX cluster. If this parameter is not specified, DAX assigns the default VPC security group to each node.
+]: any -> record<Cluster: record<ClusterName: string, Description: string, ClusterArn: string, TotalNodes: int, ActiveNodes: int, NodeType: string, Status: string, ClusterDiscoveryEndpoint: record<Address: string, Port: int, URL: string>, NodeIdsToRemove: list<string>, Nodes: list<record>, PreferredMaintenanceWindow: string, NotificationConfiguration: record<TopicArn: string, TopicStatus: string>, SubnetGroup: string, SecurityGroups: list<record>, IamRoleArn: string, ParameterGroup: record<ParameterGroupName: string, ParameterApplyStatus: string, NodeIdsToReboot: list>, SSEDescription: record<Status: string>, ClusterEndpointEncryptionType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonDAXV3.UpdateCluster")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClusterName": $cluster_name, "Description": $description, "PreferredMaintenanceWindow": $preferred_maintenance_window, "NotificationTopicArn": $notification_topic_arn, "NotificationTopicStatus": $notification_topic_status, "ParameterGroupName": $parameter_group_name, "SecurityGroupIds": $security_group_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1104,6 +1128,7 @@ export def "update-cluster" [
 #
 # POST /
 # operationId: UpdateParameterGroup
+# --ParameterNameValues item shape: {ParameterName?: string, ParameterValue?: string}
 export def "update-parameter-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1121,13 +1146,14 @@ export def "update-parameter-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  parameter_group_name: any
-  parameter_name_values: any
-]: any -> record<ParameterGroup: record<ParameterGroupName: record, Description: record>> {
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  parameter_group_name: string # The name of the parameter group.
+  parameter_name_values: list # An array of name-value pairs for the parameters in the group. Each element in the array represents a single parameter. record-ttl-millis and query-ttl-millis are the only supported parameter names. For more details, see Configuring TTL Settings (https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DAX.cluster-management.html#DAX.cluster-management.custom-settings.ttl). — item shape: {ParameterName?: string, ParameterValue?: string}
+]: any -> record<ParameterGroup: record<ParameterGroupName: string, Description: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonDAXV3.UpdateParameterGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ParameterGroupName": $parameter_group_name, "ParameterNameValues": $parameter_name_values} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1170,14 +1196,15 @@ export def "update-subnet-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  subnet_group_name: any
-  --description: any
-  --subnet-ids: any
-]: any -> record<SubnetGroup: record<SubnetGroupName: record, Description: record, VpcId: record, Subnets: record>> {
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  subnet_group_name: string # The name of the subnet group.
+  --description: string # A description of the subnet group.
+  --subnet-ids: list<string> # A list of subnet IDs in the subnet group.
+]: any -> record<SubnetGroup: record<SubnetGroupName: string, Description: string, VpcId: string, Subnets: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AmazonDAXV3.UpdateSubnetGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SubnetGroupName": $subnet_group_name, "Description": $description, "SubnetIds": $subnet_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

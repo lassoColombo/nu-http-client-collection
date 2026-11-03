@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -113,7 +113,9 @@ def base-url-completer [] { ["https://ob.nordigen.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def payment-product-completer [] { ["CBCT" "ISCT" "SCT" "T2P"] }
 def address-country-completer [] { ["AT" "BE" "BG" "CY" "CZ" "DE" "DK" "EE" "ES" "FI" "FR" "GB" "GR" "HR" "HU" "IE" "IS" "IT" "LI" "LT" "LU" "LV" "MT" "NL" "NO" "PL" "PT" "RO" "SE" "SI" "SK"] }
+def type-completer [] { ["IBAN" "SCAN"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -193,7 +195,7 @@ export def "retrieve-account-metadata" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created: string, iban: string, id: string, institution_id: string, last_accessed: string, owner_name: string, status: record> {
+]: nothing -> record<created: string, iban: string, id: string, institution_id: string, last_accessed: string, owner_name: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -605,7 +607,7 @@ export def "list-payments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page. (default: 100)
   --offset: int # The initial index from which to return the results. (default: 1)
-]: nothing -> record<count: int, next: string, previous: string, results: table<creditor_account: string, custom_payment_id: string, debtor_account: record, description: string, instructed_amount: record, payment_id: string, payment_product: record, payment_status: record, payment_type: record, redirect: string>> {
+]: nothing -> record<count: int, next: string, previous: string, results: table<creditor_account: string, custom_payment_id: string, debtor_account: record, description: string, instructed_amount: record, payment_id: string, payment_product: string, payment_status: string, payment_type: string, redirect: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -630,7 +632,9 @@ export def "list-payments" [
 #
 # POST /api/v2/payments/
 # operationId: create payment
-# --periodic_payment shape: {day_of_execution?: string, end_date?: string, execution_rule?: any, frequency?: any, start_date: string}
+# --debtor_account shape: {account?: string, address_country?: string, address_street?: string, currency?: string, name: string, post_code?: string, type?: "IBAN"|"SCAN", type_number?: string}
+# --instructed_amount shape: {amount: string, currency: string}
+# --periodic_payment shape: {day_of_execution?: string, end_date?: string, execution_rule?: "following"|"preceding", frequency?: "Daily"|"Weekly"|"EveryTwoWeeks"|"Monthly"|"EveryTwoMonths"|"Quarterly"|"SemiAnnual"|"Annual"|"MonthlyVariable", start_date: string}
 export def "create-payment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -643,15 +647,15 @@ export def "create-payment" [
   --dry-run(-n) # Return the request that would be sent without executing it
   creditor_account: string # Registered creditor account (format: uuid)
   --custom-payment-id: string # Payment Custom Payment ID
-  --debtor-account: any # Debtor account
+  --debtor-account: record # Debtor account — shape: {account?: string, address_country?: string, address_street?: string, currency?: string, name: string, post_code?: string, type?: "IBAN"|"SCAN", type_number?: string}
   --description: string # Payment description (default: GOCARDLESS)
   --institution-id: string # Institution ID for Payment (default: SWEDBANK_SANDBOX_SANDLV22)
-  instructed_amount: any # Instructed amount
-  --payment-product: any # Payment product (default: ISCT)
-  --periodic-payment: record # Periodic Payment Serializer. — shape: {day_of_execution?: string, end_date?: string, execution_rule?: any, frequency?: any, start_date: string}
+  instructed_amount: record # Instructed amount — shape: {amount: string, currency: string}
+  --payment-product: string@payment-product-completer # Payment product (default: ISCT)
+  --periodic-payment: record # Periodic Payment Serializer. — shape: {day_of_execution?: string, end_date?: string, execution_rule?: "following"|"preceding", frequency?: "Daily"|"Weekly"|"EveryTwoWeeks"|"Monthly"|"EveryTwoMonths"|"Quarterly"|"SemiAnnual"|"Annual"|"MonthlyVariable", start_date: string}
   --redirect: string # Redirect URL to your application after payment is done (nullable, format: uri)
   --requested-execution-date: string # Payment Execution date (for periodic payments) (format: date)
-]: any -> record<creditor_account: string, custom_payment_id: string, description: string, instructed_amount: record<amount: string, currency: string>, link: string, payment_id: string, payment_product: record, payment_status: record, payment_type: record, periodic_payment: record<day_of_execution: string, end_date: string, execution_rule: record, frequency: record, start_date: string>, redirect: string, requested_execution_date: string> {
+]: any -> record<creditor_account: string, custom_payment_id: string, description: string, instructed_amount: record<amount: string, currency: string>, link: string, payment_id: string, payment_product: string, payment_status: string, payment_type: string, periodic_payment: record<day_of_execution: string, end_date: string, execution_rule: string, frequency: string, start_date: string>, redirect: string, requested_execution_date: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -688,7 +692,7 @@ export def "retrieve-all-payment-creditor-accounts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<account: string, address_country: string, currency: string, id: string, name: string, type: record> {
+]: nothing -> table<account: string, address_country: string, currency: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/payments/account/" $auth.query)
@@ -730,7 +734,7 @@ export def "payments-creditors-list" [
   --name: string
   --offset: int # The initial index from which to return the results. (default: 1)
   --type: string
-]: nothing -> record<count: int, next: string, previous: string, results: table<account: string, address_country: string, currency: string, id: string, name: string, type: record>> {
+]: nothing -> record<count: int, next: string, previous: string, results: table<account: string, address_country: string, currency: string, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "account" $account "scalar") (serialize-qp "address_country" $address_country "scalar") (serialize-qp "agent" $agent "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
@@ -774,8 +778,8 @@ export def "payments-creditors-create" [
   --institution-id: string # an Institution ID for this CreditorAccount
   name: string # Creditor account name
   --post-code: string # Creditor account address post code
-  --type: any # Creditor account type (default: IBAN)
-]: any -> record<account: string, address_country: string, address_street: string, agent: string, agent_name: string, currency: string, id: string, institution_id: string, name: string, post_code: string, type: record> {
+  --type: string@type-completer # Creditor account type (default: IBAN)
+]: any -> record<account: string, address_country: string, address_street: string, agent: string, agent_name: string, currency: string, id: string, institution_id: string, name: string, post_code: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -849,7 +853,7 @@ export def "payments-creditors-retrieve" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account: string, address_country: string, currency: string, id: string, name: string, type: record> {
+]: nothing -> record<account: string, address_country: string, currency: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -957,7 +961,7 @@ export def "retrieve-payment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<creditor_account: string, custom_payment_id: string, debtor_account: record<account: string, address_country: string, address_street: string, currency: string, name: string, post_code: string, type: record, type_number: string>, description: string, instructed_amount: record<amount: string, currency: string>, payment_id: string, payment_product: record, payment_status: record, payment_type: record, redirect: string> {
+]: nothing -> record<creditor_account: string, custom_payment_id: string, debtor_account: record<account: string, address_country: string, address_street: string, currency: string, name: string, post_code: string, type: string, type_number: string>, description: string, instructed_amount: record<amount: string, currency: string>, payment_id: string, payment_product: string, payment_status: string, payment_type: string, redirect: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -994,7 +998,7 @@ export def "retrieve-all-requisitions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return per page. (default: 100)
   --offset: int # The initial index from which to return the results. (default: 1)
-]: nothing -> record<count: int, next: string, previous: string, results: table<account_selection: bool, accounts: list, agreement: string, created: string, id: string, institution_id: string, link: string, redirect: string, redirect_immediate: bool, reference: string, ssn: string, status: record, user_language: string>> {
+]: nothing -> record<count: int, next: string, previous: string, results: table<account_selection: bool, accounts: list, agreement: string, created: string, id: string, institution_id: string, link: string, redirect: string, redirect_immediate: bool, reference: string, ssn: string, status: string, user_language: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -1037,7 +1041,7 @@ export def "requisition-created" [
   --reference: string # additional ID to identify the end user
   --ssn: string # optional SSN field to verify ownership of the account
   --user-language: string # A two-letter country code (ISO 639-1)
-]: any -> record<account_selection: bool, accounts: list<any>, agreement: string, created: string, id: string, institution_id: string, link: string, redirect: string, redirect_immediate: bool, reference: string, ssn: string, status: record, user_language: string> {
+]: any -> record<account_selection: bool, accounts: list<any>, agreement: string, created: string, id: string, institution_id: string, link: string, redirect: string, redirect_immediate: bool, reference: string, ssn: string, status: string, user_language: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1111,7 +1115,7 @@ export def "requisition-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_selection: bool, accounts: list<string>, agreement: string, created: string, id: string, institution_id: string, link: string, redirect: string, redirect_immediate: bool, reference: string, ssn: string, status: record, user_language: string> {
+]: nothing -> record<account_selection: bool, accounts: list<string>, agreement: string, created: string, id: string, institution_id: string, link: string, redirect: string, redirect_immediate: bool, reference: string, ssn: string, status: string, user_language: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

@@ -170,7 +170,7 @@ export def "get-html" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --url: string # URL of the target page (e.g. https://example.com)
+  --url: string # URL of the target page (required, e.g. https://example.com)
   --headers: record # HTTP headers to pass to the target page. Can be specified either via a nested query parameter (...&headers[One]=value1&headers=[Another]=value2) or as a JSON encoded object (...&headers={"One": "value1", "Another": "value2"}) (e.g. {"Cookie":"session=some_id"})
   --timeout: int # Maximum processing time in ms. Increase it in case of timeout errors (10000 by default, maximum is 30000) (default: 10000, e.g. 10000)
   --js: oneof<nothing, bool> # Execute on-page JavaScript using a headless browser (true by default) (default: true, e.g. true)
@@ -183,6 +183,7 @@ export def "get-html" [
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
   let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "headers" $headers "multi") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "js" $js "scalar") (serialize-qp "js_timeout" $js_timeout "scalar") (serialize-qp "proxy" $proxy "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "error_on_404" $error_on_404 "scalar") (serialize-qp "error_on_redirect" $error_on_redirect "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/html" $qp $auth.query)
   let accept_val = "text/html"
@@ -216,7 +217,7 @@ export def "get-selected" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --selector: string # CSS selector (null by default, returns whole page HTML) (e.g. h1)
-  --url: string # URL of the target page (e.g. https://example.com)
+  --url: string # URL of the target page (required, e.g. https://example.com)
   --headers: record # HTTP headers to pass to the target page. Can be specified either via a nested query parameter (...&headers[One]=value1&headers=[Another]=value2) or as a JSON encoded object (...&headers={"One": "value1", "Another": "value2"}) (e.g. {"Cookie":"session=some_id"})
   --timeout: int # Maximum processing time in ms. Increase it in case of timeout errors (10000 by default, maximum is 30000) (default: 10000, e.g. 10000)
   --js: oneof<nothing, bool> # Execute on-page JavaScript using a headless browser (true by default) (default: true, e.g. true)
@@ -229,6 +230,7 @@ export def "get-selected" [
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
   let qp = [(serialize-qp "selector" $selector "scalar") (serialize-qp "url" $url "scalar") (serialize-qp "headers" $headers "multi") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "js" $js "scalar") (serialize-qp "js_timeout" $js_timeout "scalar") (serialize-qp "proxy" $proxy "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "error_on_404" $error_on_404 "scalar") (serialize-qp "error_on_redirect" $error_on_redirect "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/selected" $qp $auth.query)
   let accept_val = "text/html"
@@ -262,7 +264,7 @@ export def "get-selected-multiple" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --selectors: list<string> # Multiple CSS selectors (null by default, returns whole page HTML) (e.g. [h1])
-  --url: string # URL of the target page (e.g. https://example.com)
+  --url: string # URL of the target page (required, e.g. https://example.com)
   --headers: record # HTTP headers to pass to the target page. Can be specified either via a nested query parameter (...&headers[One]=value1&headers=[Another]=value2) or as a JSON encoded object (...&headers={"One": "value1", "Another": "value2"}) (e.g. {"Cookie":"session=some_id"})
   --timeout: int # Maximum processing time in ms. Increase it in case of timeout errors (10000 by default, maximum is 30000) (default: 10000, e.g. 10000)
   --js: oneof<nothing, bool> # Execute on-page JavaScript using a headless browser (true by default) (default: true, e.g. true)
@@ -275,6 +277,7 @@ export def "get-selected-multiple" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
   let qp = [(serialize-qp "selectors" $selectors "multi") (serialize-qp "url" $url "scalar") (serialize-qp "headers" $headers "multi") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "js" $js "scalar") (serialize-qp "js_timeout" $js_timeout "scalar") (serialize-qp "proxy" $proxy "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "error_on_404" $error_on_404 "scalar") (serialize-qp "error_on_redirect" $error_on_redirect "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/selected-multiple" $qp $auth.query)
   let accept_val = "application/json"

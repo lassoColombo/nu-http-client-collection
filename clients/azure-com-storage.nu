@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -128,6 +128,7 @@ def signed-resource-types-completer [] { ["c" "o" "s"] }
 def signed-services-completer [] { ["b" "f" "q" "t"] }
 def signed-resource-completer [] { ["b" "c" "f" "s"] }
 def expand-completer-1 [] { ["kerb"] }
+def management-policy-name-completer [] { ["default"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -166,10 +167,11 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
 ]: nothing -> record<value: table<display: record, name: string, origin: string, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Storage/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -203,7 +205,7 @@ export def "storage-accounts-check-name-availability" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   name: string # The storage account name.
   type: string@type-completer # The type of resource, Microsoft.Storage/storageAccounts
 ]: any -> record<message: string, nameAvailable: bool, reason: string> {
@@ -211,6 +213,7 @@ export def "storage-accounts-check-name-availability" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Storage/checkNameAvailability") $qp $auth.query)
   let req_body = {"name": $name, "type": $type} | compact
@@ -247,12 +250,13 @@ export def "usages-list-by-location" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
 ]: nothing -> record<value: table<currentValue: int, limit: int, name: record, unit: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Storage/locations/{location}/usages") $qp $auth.query)
   let accept_val = "application/json"
@@ -286,11 +290,12 @@ export def "skus-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
 ]: nothing -> record<value: table<capabilities: list, kind: string, locations: list, name: string, resourceType: string, restrictions: list, tier: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Storage/skus") $qp $auth.query)
   let accept_val = "application/json"
@@ -324,11 +329,12 @@ export def "storage-accounts-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<nextLink: string, value: table<identity: record, kind: string, properties: record, sku: record, location: string, tags: record>> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> record<nextLink: string, value: table<identity: record, kind: string, properties: record, sku: record, location: string, tags: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Storage/storageAccounts") $qp $auth.query)
   let accept_val = "application/json"
@@ -363,12 +369,13 @@ export def "storage-accounts-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
-]: nothing -> record<nextLink: string, value: table<identity: record, kind: string, properties: record, sku: record, location: string, tags: record>> {
+  --api-version: string # The API version to use for this operation. (required)
+]: nothing -> record<nextLink: string, value: table<identity: record, kind: string, properties: record, sku: record, location: string, tags: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts") $qp $auth.query)
   let accept_val = "application/json"
@@ -404,13 +411,14 @@ export def "storage-accounts-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -446,14 +454,15 @@ export def "storage-accounts-get-properties" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --expand: string@expand-completer # May be used to expand the properties within account's properties. By default, data is not included when fetching properties. Currently we only support geoReplicationStats.
-]: nothing -> record<identity: record<principalId: string, tenantId: string, type: string>, kind: string, properties: record<accessTier: string, azureFilesIdentityBasedAuthentication: record<activeDirectoryProperties: record, directoryServiceOptions: string>, creationTime: string, customDomain: record<name: string, useSubDomainName: bool>, encryption: record<keySource: string, keyvaultproperties: record, services: record>, failoverInProgress: bool, geoReplicationStats: record<canFailover: bool, lastSyncTime: string, status: string>, isHnsEnabled: bool, largeFileSharesState: string, lastGeoFailoverTime: string, networkAcls: record<bypass: string, defaultAction: string, ipRules: list, virtualNetworkRules: list>, primaryEndpoints: record<blob: string, dfs: string, file: string, queue: string, table: string, web: string>, primaryLocation: string, provisioningState: string, secondaryEndpoints: record<blob: string, dfs: string, file: string, queue: string, table: string, web: string>, secondaryLocation: string, statusOfPrimary: string, statusOfSecondary: string, supportsHttpsTrafficOnly: bool>, sku: record<capabilities: list<record>, kind: string, locations: list<string>, name: string, resourceType: string, restrictions: list<record>, tier: string>, location: string, tags: record> {
+]: nothing -> record<identity: record<principalId: string, tenantId: string, type: string>, kind: string, properties: record<accessTier: string, azureFilesIdentityBasedAuthentication: record<activeDirectoryProperties: record, directoryServiceOptions: string>, creationTime: string, customDomain: record<name: string, useSubDomainName: bool>, encryption: record<keySource: string, keyvaultproperties: record, services: record>, failoverInProgress: bool, geoReplicationStats: record<canFailover: bool, lastSyncTime: string, status: string>, isHnsEnabled: bool, largeFileSharesState: string, lastGeoFailoverTime: string, networkAcls: record<bypass: string, defaultAction: string, ipRules: list, virtualNetworkRules: list>, primaryEndpoints: record<blob: string, dfs: string, file: string, queue: string, table: string, web: string>, primaryLocation: string, provisioningState: string, secondaryEndpoints: record<blob: string, dfs: string, file: string, queue: string, table: string, web: string>, secondaryLocation: string, statusOfPrimary: string, statusOfSecondary: string, supportsHttpsTrafficOnly: bool>, sku: record<capabilities: list<record>, kind: string, locations: list<string>, name: string, resourceType: string, restrictions: list<record>, tier: string>, location: string, tags: record, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -492,19 +501,20 @@ export def "storage-accounts-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --identity: any # Identity for the resource. — shape: {type: "SystemAssigned"}
   --kind: string@kind-completer # Optional. Indicates the type of storage account. Currently only StorageV2 value supported by server.
   --properties: any # The parameters used when updating a storage account. — shape: {accessTier?: "Hot"|"Cool", azureFilesIdentityBasedAuthentication?: any, customDomain?: any, encryption?: any, largeFileSharesState?: "Disabled"|"Enabled", networkAcls?: any, supportsHttpsTrafficOnly?: bool}
   --sku: any # The SKU of the storage account. — shape: {name: "Standard_LRS"|"Standard_GRS"|"Standard_RAGRS"|"Standard_ZRS"|"Premium_LRS"|"Premium_ZRS"|"Standard_GZRS"|"Standard_RAGZRS", restrictions?: list}
   --tags: record # Gets or sets a list of key value pairs that describe the resource. These tags can be used in viewing and grouping this resource (across resource groups). A maximum of 15 tags can be provided for a resource. Each tag must have a key no greater in length than 128 characters and a value no greater in length than 256 characters.
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string>, kind: string, properties: record<accessTier: string, azureFilesIdentityBasedAuthentication: record<activeDirectoryProperties: record, directoryServiceOptions: string>, creationTime: string, customDomain: record<name: string, useSubDomainName: bool>, encryption: record<keySource: string, keyvaultproperties: record, services: record>, failoverInProgress: bool, geoReplicationStats: record<canFailover: bool, lastSyncTime: string, status: string>, isHnsEnabled: bool, largeFileSharesState: string, lastGeoFailoverTime: string, networkAcls: record<bypass: string, defaultAction: string, ipRules: list, virtualNetworkRules: list>, primaryEndpoints: record<blob: string, dfs: string, file: string, queue: string, table: string, web: string>, primaryLocation: string, provisioningState: string, secondaryEndpoints: record<blob: string, dfs: string, file: string, queue: string, table: string, web: string>, secondaryLocation: string, statusOfPrimary: string, statusOfSecondary: string, supportsHttpsTrafficOnly: bool>, sku: record<capabilities: list<record>, kind: string, locations: list<string>, name: string, resourceType: string, restrictions: list<record>, tier: string>, location: string, tags: record> {
+]: any -> record<identity: record<principalId: string, tenantId: string, type: string>, kind: string, properties: record<accessTier: string, azureFilesIdentityBasedAuthentication: record<activeDirectoryProperties: record, directoryServiceOptions: string>, creationTime: string, customDomain: record<name: string, useSubDomainName: bool>, encryption: record<keySource: string, keyvaultproperties: record, services: record>, failoverInProgress: bool, geoReplicationStats: record<canFailover: bool, lastSyncTime: string, status: string>, isHnsEnabled: bool, largeFileSharesState: string, lastGeoFailoverTime: string, networkAcls: record<bypass: string, defaultAction: string, ipRules: list, virtualNetworkRules: list>, primaryEndpoints: record<blob: string, dfs: string, file: string, queue: string, table: string, web: string>, primaryLocation: string, provisioningState: string, secondaryEndpoints: record<blob: string, dfs: string, file: string, queue: string, table: string, web: string>, secondaryLocation: string, statusOfPrimary: string, statusOfSecondary: string, supportsHttpsTrafficOnly: bool>, sku: record<capabilities: list<record>, kind: string, locations: list<string>, name: string, resourceType: string, restrictions: list<record>, tier: string>, location: string, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}") $qp $auth.query)
   let req_body = {"identity": $identity, "kind": $kind, "properties": $properties, "sku": $sku, "tags": $tags} | compact
@@ -545,20 +555,21 @@ export def "storage-accounts-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --identity: any # Identity for the resource. — shape: {type: "SystemAssigned"}
   kind: string@kind-completer # Required. Indicates the type of storage account.
   location: string # Required. Gets or sets the location of the resource. This will be one of the supported and registered Azure Geo Regions (e.g. West US, East US, Southeast Asia, etc.). The geo region of a resource cannot be changed once it is created, but if an identical geo region is specified on update, the request will succeed.
   --properties: any # The parameters used to create the storage account. — shape: {accessTier?: "Hot"|"Cool", azureFilesIdentityBasedAuthentication?: any, customDomain?: any, encryption?: any, isHnsEnabled?: bool, largeFileSharesState?: "Disabled"|"Enabled", networkAcls?: any, supportsHttpsTrafficOnly?: bool}
   sku: any # The SKU of the storage account. — shape: {name: "Standard_LRS"|"Standard_GRS"|"Standard_RAGRS"|"Standard_ZRS"|"Premium_LRS"|"Premium_ZRS"|"Standard_GZRS"|"Standard_RAGZRS", restrictions?: list}
   --tags: record # Gets or sets a list of key value pairs that describe the resource. These tags can be used for viewing and grouping this resource (across resource groups). A maximum of 15 tags can be provided for a resource. Each tag must have a key with a length no greater than 128 characters and a value with a length no greater than 256 characters.
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string>, kind: string, properties: record<accessTier: string, azureFilesIdentityBasedAuthentication: record<activeDirectoryProperties: record, directoryServiceOptions: string>, creationTime: string, customDomain: record<name: string, useSubDomainName: bool>, encryption: record<keySource: string, keyvaultproperties: record, services: record>, failoverInProgress: bool, geoReplicationStats: record<canFailover: bool, lastSyncTime: string, status: string>, isHnsEnabled: bool, largeFileSharesState: string, lastGeoFailoverTime: string, networkAcls: record<bypass: string, defaultAction: string, ipRules: list, virtualNetworkRules: list>, primaryEndpoints: record<blob: string, dfs: string, file: string, queue: string, table: string, web: string>, primaryLocation: string, provisioningState: string, secondaryEndpoints: record<blob: string, dfs: string, file: string, queue: string, table: string, web: string>, secondaryLocation: string, statusOfPrimary: string, statusOfSecondary: string, supportsHttpsTrafficOnly: bool>, sku: record<capabilities: list<record>, kind: string, locations: list<string>, name: string, resourceType: string, restrictions: list<record>, tier: string>, location: string, tags: record> {
+]: any -> record<identity: record<principalId: string, tenantId: string, type: string>, kind: string, properties: record<accessTier: string, azureFilesIdentityBasedAuthentication: record<activeDirectoryProperties: record, directoryServiceOptions: string>, creationTime: string, customDomain: record<name: string, useSubDomainName: bool>, encryption: record<keySource: string, keyvaultproperties: record, services: record>, failoverInProgress: bool, geoReplicationStats: record<canFailover: bool, lastSyncTime: string, status: string>, isHnsEnabled: bool, largeFileSharesState: string, lastGeoFailoverTime: string, networkAcls: record<bypass: string, defaultAction: string, ipRules: list, virtualNetworkRules: list>, primaryEndpoints: record<blob: string, dfs: string, file: string, queue: string, table: string, web: string>, primaryLocation: string, provisioningState: string, secondaryEndpoints: record<blob: string, dfs: string, file: string, queue: string, table: string, web: string>, secondaryLocation: string, statusOfPrimary: string, statusOfSecondary: string, supportsHttpsTrafficOnly: bool>, sku: record<capabilities: list<record>, kind: string, locations: list<string>, name: string, resourceType: string, restrictions: list<record>, tier: string>, location: string, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}") $qp $auth.query)
   let req_body = {"identity": $identity, "kind": $kind, "location": $location, "properties": $properties, "sku": $sku, "tags": $tags} | compact
@@ -596,7 +607,7 @@ export def "storage-accounts-list-account-sas" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --key-to-sign: string # The key to sign the account SAS token with.
   signed_expiry: string # The time at which the shared access signature becomes invalid. (format: date-time)
   --signed-ip: string # An IP address or a range of IP addresses from which to accept requests.
@@ -612,6 +623,7 @@ export def "storage-accounts-list-account-sas" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/ListAccountSas") $qp $auth.query)
   let req_body = {"keyToSign": $key_to_sign, "signedExpiry": $signed_expiry, "signedIp": $signed_ip, "signedPermission": $signed_permission, "signedProtocol": $signed_protocol, "signedResourceTypes": $signed_resource_types, "signedServices": $signed_services, "signedStart": $signed_start} | compact
@@ -649,7 +661,7 @@ export def "storage-accounts-list-service-sas" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   canonicalized_resource: string # The canonical path to the signed resource.
   --end-pk: string # The end of partition key.
   --end-rk: string # The end of row key.
@@ -675,6 +687,7 @@ export def "storage-accounts-list-service-sas" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/ListServiceSas") $qp $auth.query)
   let req_body = {"canonicalizedResource": $canonicalized_resource, "endPk": $end_pk, "endRk": $end_rk, "keyToSign": $key_to_sign, "rscc": $rscc, "rscd": $rscd, "rsce": $rsce, "rscl": $rscl, "rsct": $rsct, "signedExpiry": $signed_expiry, "signedIdentifier": $signed_identifier, "signedIp": $signed_ip, "signedPermission": $signed_permission, "signedProtocol": $signed_protocol, "signedResource": $signed_resource, "signedStart": $signed_start, "startPk": $start_pk, "startRk": $start_rk} | compact
@@ -712,13 +725,14 @@ export def "storage-accounts-failover" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/failover") $qp $auth.query)
   let accept_val = "application/json"
@@ -754,7 +768,7 @@ export def "storage-accounts-list-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --expand: string@expand-completer-1 # Specifies type of the key to be listed. Possible value is kerb.
 ]: nothing -> record<keys: table<keyName: string, permissions: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -762,6 +776,7 @@ export def "storage-accounts-list-keys" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/listKeys") $qp $auth.query)
   let accept_val = "application/json"
@@ -788,7 +803,7 @@ export def "management-policies-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
-  management_policy_name: string
+  management_policy_name: string@management-policy-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -798,7 +813,7 @@ export def "management-policies-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -806,6 +821,7 @@ export def "management-policies-delete" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($management_policy_name | is-empty) { error make --unspanned { msg: "path parameter 'managementPolicyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), management_policy_name: (encode-path-segment $management_policy_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/managementPolicies/{management_policy_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -832,7 +848,7 @@ export def "management-policies-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
-  management_policy_name: string
+  management_policy_name: string@management-policy-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -842,7 +858,7 @@ export def "management-policies-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
 ]: nothing -> record<properties: record<lastModifiedTime: string, policy: record<rules: list>>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -850,6 +866,7 @@ export def "management-policies-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($management_policy_name | is-empty) { error make --unspanned { msg: "path parameter 'managementPolicyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), management_policy_name: (encode-path-segment $management_policy_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/managementPolicies/{management_policy_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -877,7 +894,7 @@ export def "management-policies-create-or-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
-  management_policy_name: string
+  management_policy_name: string@management-policy-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -887,7 +904,7 @@ export def "management-policies-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   --properties: any # The Storage Account ManagementPolicy properties. — shape: {policy: any}
 ]: any -> record<properties: record<lastModifiedTime: string, policy: record<rules: list>>, id: string, name: string, type: string> {
   let input = $in
@@ -897,6 +914,7 @@ export def "management-policies-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($management_policy_name | is-empty) { error make --unspanned { msg: "path parameter 'managementPolicyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), management_policy_name: (encode-path-segment $management_policy_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/managementPolicies/{management_policy_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -934,7 +952,7 @@ export def "storage-accounts-regenerate-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
   key_name: string # The name of storage keys that want to be regenerated, possible values are key1, key2, kerb1, kerb2.
 ]: any -> record<keys: table<keyName: string, permissions: string, value: string>> {
   let input = $in
@@ -943,6 +961,7 @@ export def "storage-accounts-regenerate-key" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/regenerateKey") $qp $auth.query)
   let req_body = {"keyName": $key_name} | compact
@@ -980,13 +999,14 @@ export def "storage-accounts-revoke-user-delegation-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for this operation.
+  --api-version: string # The API version to use for this operation. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Storage/storageAccounts/{account_name}/revokeUserDelegationKeys") $qp $auth.query)
   let accept_val = "application/json"

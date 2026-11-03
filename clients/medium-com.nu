@@ -12,8 +12,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-rapidapi-host" => { {scheme: $scheme, headers: {x-rapidapi-host: $token_val}, query: "", location: "header"} }
-    "x-rapidapi-key" => { {scheme: $scheme, headers: {x-rapidapi-key: $token_val}, query: "", location: "header"} }
+    "x-rapidapi-host" => { {scheme: $scheme, headers: {"x-rapidapi-host": $token_val}, query: "", location: "header"} }
+    "x-rapidapi-key" => { {scheme: $scheme, headers: {"x-rapidapi-key": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -99,7 +99,7 @@ def auth-scheme-completer [] { ["x-rapidapi-host" "x-rapidapi-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-op" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 # Get Welcome
 #
 # GET /
-export def "get" [
+export def "get-op" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -586,19 +586,19 @@ export def "get-publication-publication-id-articles" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-from: string # To get the articles before specified date and time. (e.g. 2023-01-31T13:10:00)
+  --from: string # To get the articles before specified date and time. (e.g. 2023-01-31T13:10:00)
 ]: nothing -> record<publication_articles: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
   if ($publication_id | is-empty) { error make --unspanned { msg: "path parameter 'publication_id' must be non-empty" } }
-  let qp = [(serialize-qp "from" $qp_from "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "from" $from "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({publication_id: (encode-path-segment $publication_id)} | format pattern "/publication/{publication_id}/articles") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from} | compact)
+    query: ({"from": $from} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -682,8 +682,7 @@ export def "get-related-tags-tag" [
 # Search Articles
 #
 # GET /search/articles?query={query}
-export def "get-search-articlesquery-query" [
-  query: any
+export def "get-search-articles-query-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -693,19 +692,19 @@ export def "get-search-articlesquery-query" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Search query (e.g. startup)
+  --query: string # Search query (required, e.g. startup)
 ]: nothing -> record<articles: list<string>, search_query: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  if ($query | is-empty) { error make --unspanned { msg: "path parameter 'query' must be non-empty" } }
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({query: (encode-path-segment $query)} | format pattern "/search/articles?query={query}") $qp $auth.query)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/search/articles" "query={query}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"query": $qp_query} | compact)
+    query: ({"query": $query} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -719,8 +718,7 @@ export def "get-search-articlesquery-query" [
 # Search Lists
 #
 # GET /search/lists?query={query}
-export def "get-search-listsquery-query" [
-  query: any
+export def "get-search-lists-query-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -730,19 +728,19 @@ export def "get-search-listsquery-query" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Search query (e.g. artificial intelligence)
+  --query: string # Search query (required, e.g. artificial intelligence)
 ]: nothing -> record<lists: list<string>, search_query: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  if ($query | is-empty) { error make --unspanned { msg: "path parameter 'query' must be non-empty" } }
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({query: (encode-path-segment $query)} | format pattern "/search/lists?query={query}") $qp $auth.query)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/search/lists" "query={query}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"query": $qp_query} | compact)
+    query: ({"query": $query} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -756,8 +754,7 @@ export def "get-search-listsquery-query" [
 # Search Publications
 #
 # GET /search/publications?query={query}
-export def "get-search-publicationsquery-query" [
-  query: any
+export def "get-search-publications-query-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -767,19 +764,19 @@ export def "get-search-publicationsquery-query" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Search query (e.g. mental health)
+  --query: string # Search query (required, e.g. mental health)
 ]: nothing -> record<publications: list<string>, search_query: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  if ($query | is-empty) { error make --unspanned { msg: "path parameter 'query' must be non-empty" } }
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({query: (encode-path-segment $query)} | format pattern "/search/publications?query={query}") $qp $auth.query)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/search/publications" "query={query}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"query": $qp_query} | compact)
+    query: ({"query": $query} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -793,8 +790,7 @@ export def "get-search-publicationsquery-query" [
 # Search Tags
 #
 # GET /search/tags?query={query}
-export def "get-search-tagsquery-query" [
-  query: any
+export def "get-search-tags-query-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -804,19 +800,19 @@ export def "get-search-tagsquery-query" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Search query (e.g. blockchain)
+  --query: string # Search query (required, e.g. blockchain)
 ]: nothing -> record<search_query: string, tags: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  if ($query | is-empty) { error make --unspanned { msg: "path parameter 'query' must be non-empty" } }
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({query: (encode-path-segment $query)} | format pattern "/search/tags?query={query}") $qp $auth.query)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/search/tags" "query={query}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"query": $qp_query} | compact)
+    query: ({"query": $query} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -830,8 +826,7 @@ export def "get-search-tagsquery-query" [
 # Search Users
 #
 # GET /search/users?query={query}
-export def "get-search-usersquery-query" [
-  query: any
+export def "get-search-users-query-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -841,19 +836,19 @@ export def "get-search-usersquery-query" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-query: string # Search query (e.g. data engineer)
+  --query: string # Search query (required, e.g. data engineer)
 ]: nothing -> record<search_query: string, users: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-host"))
   let base = ($base_url | default $BASE_URL)
-  if ($query | is-empty) { error make --unspanned { msg: "path parameter 'query' must be non-empty" } }
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({query: (encode-path-segment $query)} | format pattern "/search/users?query={query}") $qp $auth.query)
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
+  let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/search/users" "query={query}" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"query": $qp_query} | compact)
+    query: ({"query": $query} | compact)
     headers: $auth.headers
     body: null
     content_type: null

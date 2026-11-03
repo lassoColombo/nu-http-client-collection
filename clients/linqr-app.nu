@@ -12,8 +12,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "byvalue-token" => { {scheme: $scheme, headers: {Byvalue-Token: $token_val}, query: "", location: "header"} }
-    "x-rapidapi-key" => { {scheme: $scheme, headers: {X-RapidAPI-Key: $token_val}, query: "", location: "header"} }
+    "byvalue-token" => { {scheme: $scheme, headers: {"Byvalue-Token": $token_val}, query: "", location: "header"} }
+    "x-rapidapi-key" => { {scheme: $scheme, headers: {"X-RapidAPI-Key": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -166,7 +166,8 @@ export def commands []: nothing -> table {
 #
 # POST /batch/qrcode
 # operationId: qrCodeBatch_batch_qrcode_post
-# --items item shape: {data: any, image?: any, output?: any, size?: any, style?: any}
+# --items item shape: {data: any, image?: record, output?: record, size?: record, style?: record}
+# --output shape: {filename?: string, format?: "zip"|"tgz"}
 export def "qr-code-batch-batch-qrcode-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -178,8 +179,8 @@ export def "qr-code-batch-batch-qrcode-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  items: list # `items` property allows you to specify an array of QR Codes to generate. The elements of the array must be valid objects analogous to those required for single code generation. — item shape: {data: any, image?: any, output?: any, size?: any, style?: any}
-  --output: any # `output` property allows you to specify the name and extension (type) of the file returned by the API (default: {filename: qrcodes, format: zip})
+  items: list # `items` property allows you to specify an array of QR Codes to generate. The elements of the array must be valid objects analogous to those required for single code generation. — item shape: {data: any, image?: record, output?: record, size?: record, style?: record}
+  --output: record # `output` property allows you to specify the name and extension (type) of the file returned by the API (default: {filename: qrcodes, format: zip}) — shape: {filename?: string, format?: "zip"|"tgz"}
 ]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "byvalue-token"))
@@ -261,8 +262,8 @@ export def "image-upload-images-post" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["image"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["image"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -353,6 +354,10 @@ export def "image-list-images-id-get" [
 #
 # POST /qrcode
 # operationId: dispatcher_qrcode_post
+# --image shape: {modules?: bool, uri: any}
+# --output shape: {filename?: string, format?: "svg"|"png"|"pdf"|"ps"|"jpeg"|"webp"}
+# --size shape: {error_correction?: "L"|"M"|"Q"|"H", quiet_zone?: int, width?: int}
+# --style shape: {background?: record, inner_eye?: record, module?: record, outer_eye?: record}
 export def "dispatcher-qrcode-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -365,10 +370,10 @@ export def "dispatcher-qrcode-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   data: any # `data` property allows you to specify the data stored in the QR Code.
-  --image: any # `image` property allows you to set parameters of a custom image (e.g. your company logo, icon etc.) placed in the center of the generated QR Code.
-  --output: any # `output` property allows you to specify the name and extension (type) of the file returned by the API (default: {filename: qrcode, format: svg})
-  --size: any # `size` property allows you to set the values that define the sizes of the generated QR Code. (default: {error_correction: M, quiet_zone: 4, width: 200})
-  --style: any # `style` property allows you to select the appearance parameters of the modules and eyes of the generated QR Code. All color specifications can be defined via: * CSS3 name: `Black`, `azure`, ... * hex value: `0x000`, `#FFFFFF`, `7fffd4`, ... * RGB/RGBA strings: `rgb(255, 255, 255)`, `rgba(255, 255, 255, 0.5)`, ... * HSL strings: `hsl(270, 60%, 70%)`, `hsl(270, 60%, 70%, .5)`, ... Color values can be obtained from any online color picker like developer.mozilla.org (https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Colors/Color_picker_tool). (default: {background: {}, inner_eye: {shape: default}, module: {color: black, shape: default}, outer_eye: {shape: default}})
+  --image: record # `image` property allows you to set parameters of a custom image (e.g. your company logo, icon etc.) placed in the center of the generated QR Code. — shape: {modules?: bool, uri: any}
+  --output: record # `output` property allows you to specify the name and extension (type) of the file returned by the API (default: {filename: qrcode, format: svg}) — shape: {filename?: string, format?: "svg"|"png"|"pdf"|"ps"|"jpeg"|"webp"}
+  --size: record # `size` property allows you to set the values that define the sizes of the generated QR Code. (default: {error_correction: M, quiet_zone: 4, width: 200}) — shape: {error_correction?: "L"|"M"|"Q"|"H", quiet_zone?: int, width?: int}
+  --style: record # `style` property allows you to select the appearance parameters of the modules and eyes of the generated QR Code. All color specifications can be defined via: * CSS3 name: `Black`, `azure`, ... * hex value: `0x000`, `#FFFFFF`, `7fffd4`, ... * RGB/RGBA strings: `rgb(255, 255, 255)`, `rgba(255, 255, 255, 0.5)`, ... * HSL strings: `hsl(270, 60%, 70%)`, `hsl(270, 60%, 70%, .5)`, ... Color values can be obtained from any online color picker like developer.mozilla.org (https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Colors/Color_picker_tool). (default: {background: {}, inner_eye: {shape: default}, module: {color: black, shape: default}, outer_eye: {shape: default}}) — shape: {background?: record, inner_eye?: record, module?: record, outer_eye?: record}
 ]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "byvalue-token"))
@@ -396,6 +401,10 @@ export def "dispatcher-qrcode-post" [
 #
 # POST /qrcode/contact
 # operationId: dispatcher_qrcode_contact_post
+# --image shape: {modules?: bool, uri: any}
+# --output shape: {filename?: string, format?: "svg"|"png"|"pdf"|"ps"|"jpeg"|"webp"}
+# --size shape: {error_correction?: "L"|"M"|"Q"|"H", quiet_zone?: int, width?: int}
+# --style shape: {background?: record, inner_eye?: record, module?: record, outer_eye?: record}
 export def "dispatcher-qrcode-contact-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -408,10 +417,10 @@ export def "dispatcher-qrcode-contact-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   data: any # `data` property allows you to specify personal information stored as electronic business card in the QR Code. The number and type of supported properties may depend on the QR Code reader software support.
-  --image: any # `image` property allows you to set parameters of a custom image (e.g. your company logo, icon etc.) placed in the center of the generated QR Code.
-  --output: any # `output` property allows you to specify the name and extension (type) of the file returned by the API (default: {filename: qrcode, format: svg})
-  --size: any # `size` property allows you to set the values that define the sizes of the generated QR Code. (default: {error_correction: M, quiet_zone: 4, width: 200})
-  --style: any # `style` property allows you to select the appearance parameters of the modules and eyes of the generated QR Code. All color specifications can be defined via: * CSS3 name: `Black`, `azure`, ... * hex value: `0x000`, `#FFFFFF`, `7fffd4`, ... * RGB/RGBA strings: `rgb(255, 255, 255)`, `rgba(255, 255, 255, 0.5)`, ... * HSL strings: `hsl(270, 60%, 70%)`, `hsl(270, 60%, 70%, .5)`, ... Color values can be obtained from any online color picker like developer.mozilla.org (https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Colors/Color_picker_tool). (default: {background: {}, inner_eye: {shape: default}, module: {color: black, shape: default}, outer_eye: {shape: default}})
+  --image: record # `image` property allows you to set parameters of a custom image (e.g. your company logo, icon etc.) placed in the center of the generated QR Code. — shape: {modules?: bool, uri: any}
+  --output: record # `output` property allows you to specify the name and extension (type) of the file returned by the API (default: {filename: qrcode, format: svg}) — shape: {filename?: string, format?: "svg"|"png"|"pdf"|"ps"|"jpeg"|"webp"}
+  --size: record # `size` property allows you to set the values that define the sizes of the generated QR Code. (default: {error_correction: M, quiet_zone: 4, width: 200}) — shape: {error_correction?: "L"|"M"|"Q"|"H", quiet_zone?: int, width?: int}
+  --style: record # `style` property allows you to select the appearance parameters of the modules and eyes of the generated QR Code. All color specifications can be defined via: * CSS3 name: `Black`, `azure`, ... * hex value: `0x000`, `#FFFFFF`, `7fffd4`, ... * RGB/RGBA strings: `rgb(255, 255, 255)`, `rgba(255, 255, 255, 0.5)`, ... * HSL strings: `hsl(270, 60%, 70%)`, `hsl(270, 60%, 70%, .5)`, ... Color values can be obtained from any online color picker like developer.mozilla.org (https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Colors/Color_picker_tool). (default: {background: {}, inner_eye: {shape: default}, module: {color: black, shape: default}, outer_eye: {shape: default}}) — shape: {background?: record, inner_eye?: record, module?: record, outer_eye?: record}
 ]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "byvalue-token"))
@@ -439,6 +448,11 @@ export def "dispatcher-qrcode-contact-post" [
 #
 # POST /qrcode/crypto
 # operationId: dispatcher_qrcode_crypto_post
+# --data shape: {address: string, amount?: float, currency: "bitcoin"|"bitcoincash"|"ethereum"|"litecoin"|"dash", label?: string, message?: string}
+# --image shape: {modules?: bool, uri: any}
+# --output shape: {filename?: string, format?: "svg"|"png"|"pdf"|"ps"|"jpeg"|"webp"}
+# --size shape: {error_correction?: "L"|"M"|"Q"|"H", quiet_zone?: int, width?: int}
+# --style shape: {background?: record, inner_eye?: record, module?: record, outer_eye?: record}
 export def "dispatcher-qrcode-crypto-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -450,11 +464,11 @@ export def "dispatcher-qrcode-crypto-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  data: any # `data` property allows you to specify cryptocurrency payment parameters.
-  --image: any # `image` property allows you to set parameters of a custom image (e.g. your company logo, icon etc.) placed in the center of the generated QR Code.
-  --output: any # `output` property allows you to specify the name and extension (type) of the file returned by the API (default: {filename: qrcode, format: svg})
-  --size: any # `size` property allows you to set the values that define the sizes of the generated QR Code. (default: {error_correction: M, quiet_zone: 4, width: 200})
-  --style: any # `style` property allows you to select the appearance parameters of the modules and eyes of the generated QR Code. All color specifications can be defined via: * CSS3 name: `Black`, `azure`, ... * hex value: `0x000`, `#FFFFFF`, `7fffd4`, ... * RGB/RGBA strings: `rgb(255, 255, 255)`, `rgba(255, 255, 255, 0.5)`, ... * HSL strings: `hsl(270, 60%, 70%)`, `hsl(270, 60%, 70%, .5)`, ... Color values can be obtained from any online color picker like developer.mozilla.org (https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Colors/Color_picker_tool). (default: {background: {}, inner_eye: {shape: default}, module: {color: black, shape: default}, outer_eye: {shape: default}})
+  data: record # `data` property allows you to specify cryptocurrency payment parameters. — shape: {address: string, amount?: float, currency: "bitcoin"|"bitcoincash"|"ethereum"|"litecoin"|"dash", label?: string, message?: string}
+  --image: record # `image` property allows you to set parameters of a custom image (e.g. your company logo, icon etc.) placed in the center of the generated QR Code. — shape: {modules?: bool, uri: any}
+  --output: record # `output` property allows you to specify the name and extension (type) of the file returned by the API (default: {filename: qrcode, format: svg}) — shape: {filename?: string, format?: "svg"|"png"|"pdf"|"ps"|"jpeg"|"webp"}
+  --size: record # `size` property allows you to set the values that define the sizes of the generated QR Code. (default: {error_correction: M, quiet_zone: 4, width: 200}) — shape: {error_correction?: "L"|"M"|"Q"|"H", quiet_zone?: int, width?: int}
+  --style: record # `style` property allows you to select the appearance parameters of the modules and eyes of the generated QR Code. All color specifications can be defined via: * CSS3 name: `Black`, `azure`, ... * hex value: `0x000`, `#FFFFFF`, `7fffd4`, ... * RGB/RGBA strings: `rgb(255, 255, 255)`, `rgba(255, 255, 255, 0.5)`, ... * HSL strings: `hsl(270, 60%, 70%)`, `hsl(270, 60%, 70%, .5)`, ... Color values can be obtained from any online color picker like developer.mozilla.org (https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Colors/Color_picker_tool). (default: {background: {}, inner_eye: {shape: default}, module: {color: black, shape: default}, outer_eye: {shape: default}}) — shape: {background?: record, inner_eye?: record, module?: record, outer_eye?: record}
 ]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "byvalue-token"))
@@ -482,6 +496,11 @@ export def "dispatcher-qrcode-crypto-post" [
 #
 # POST /qrcode/email
 # operationId: dispatcher_qrcode_email_post
+# --data shape: {bcc?: any, body?: string, cc?: any, subject?: string, to: any}
+# --image shape: {modules?: bool, uri: any}
+# --output shape: {filename?: string, format?: "svg"|"png"|"pdf"|"ps"|"jpeg"|"webp"}
+# --size shape: {error_correction?: "L"|"M"|"Q"|"H", quiet_zone?: int, width?: int}
+# --style shape: {background?: record, inner_eye?: record, module?: record, outer_eye?: record}
 export def "dispatcher-qrcode-email-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -493,11 +512,11 @@ export def "dispatcher-qrcode-email-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  data: any # `data` property allows you to specify the e-mail template stored in the QR Code.
-  --image: any # `image` property allows you to set parameters of a custom image (e.g. your company logo, icon etc.) placed in the center of the generated QR Code.
-  --output: any # `output` property allows you to specify the name and extension (type) of the file returned by the API (default: {filename: qrcode, format: svg})
-  --size: any # `size` property allows you to set the values that define the sizes of the generated QR Code. (default: {error_correction: M, quiet_zone: 4, width: 200})
-  --style: any # `style` property allows you to select the appearance parameters of the modules and eyes of the generated QR Code. All color specifications can be defined via: * CSS3 name: `Black`, `azure`, ... * hex value: `0x000`, `#FFFFFF`, `7fffd4`, ... * RGB/RGBA strings: `rgb(255, 255, 255)`, `rgba(255, 255, 255, 0.5)`, ... * HSL strings: `hsl(270, 60%, 70%)`, `hsl(270, 60%, 70%, .5)`, ... Color values can be obtained from any online color picker like developer.mozilla.org (https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Colors/Color_picker_tool). (default: {background: {}, inner_eye: {shape: default}, module: {color: black, shape: default}, outer_eye: {shape: default}})
+  data: record # `data` property allows you to specify the e-mail template stored in the QR Code. — shape: {bcc?: any, body?: string, cc?: any, subject?: string, to: any}
+  --image: record # `image` property allows you to set parameters of a custom image (e.g. your company logo, icon etc.) placed in the center of the generated QR Code. — shape: {modules?: bool, uri: any}
+  --output: record # `output` property allows you to specify the name and extension (type) of the file returned by the API (default: {filename: qrcode, format: svg}) — shape: {filename?: string, format?: "svg"|"png"|"pdf"|"ps"|"jpeg"|"webp"}
+  --size: record # `size` property allows you to set the values that define the sizes of the generated QR Code. (default: {error_correction: M, quiet_zone: 4, width: 200}) — shape: {error_correction?: "L"|"M"|"Q"|"H", quiet_zone?: int, width?: int}
+  --style: record # `style` property allows you to select the appearance parameters of the modules and eyes of the generated QR Code. All color specifications can be defined via: * CSS3 name: `Black`, `azure`, ... * hex value: `0x000`, `#FFFFFF`, `7fffd4`, ... * RGB/RGBA strings: `rgb(255, 255, 255)`, `rgba(255, 255, 255, 0.5)`, ... * HSL strings: `hsl(270, 60%, 70%)`, `hsl(270, 60%, 70%, .5)`, ... Color values can be obtained from any online color picker like developer.mozilla.org (https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Colors/Color_picker_tool). (default: {background: {}, inner_eye: {shape: default}, module: {color: black, shape: default}, outer_eye: {shape: default}}) — shape: {background?: record, inner_eye?: record, module?: record, outer_eye?: record}
 ]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "byvalue-token"))
@@ -525,6 +544,11 @@ export def "dispatcher-qrcode-email-post" [
 #
 # POST /qrcode/geo
 # operationId: dispatcher_qrcode_geo_post
+# --data shape: {format?: "google"|"rfc5870", latitude: float, longitude: float}
+# --image shape: {modules?: bool, uri: any}
+# --output shape: {filename?: string, format?: "svg"|"png"|"pdf"|"ps"|"jpeg"|"webp"}
+# --size shape: {error_correction?: "L"|"M"|"Q"|"H", quiet_zone?: int, width?: int}
+# --style shape: {background?: record, inner_eye?: record, module?: record, outer_eye?: record}
 export def "dispatcher-qrcode-geo-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -536,11 +560,11 @@ export def "dispatcher-qrcode-geo-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  data: any # `data` property allows you to specify geographic location (map pin).
-  --image: any # `image` property allows you to set parameters of a custom image (e.g. your company logo, icon etc.) placed in the center of the generated QR Code.
-  --output: any # `output` property allows you to specify the name and extension (type) of the file returned by the API (default: {filename: qrcode, format: svg})
-  --size: any # `size` property allows you to set the values that define the sizes of the generated QR Code. (default: {error_correction: M, quiet_zone: 4, width: 200})
-  --style: any # `style` property allows you to select the appearance parameters of the modules and eyes of the generated QR Code. All color specifications can be defined via: * CSS3 name: `Black`, `azure`, ... * hex value: `0x000`, `#FFFFFF`, `7fffd4`, ... * RGB/RGBA strings: `rgb(255, 255, 255)`, `rgba(255, 255, 255, 0.5)`, ... * HSL strings: `hsl(270, 60%, 70%)`, `hsl(270, 60%, 70%, .5)`, ... Color values can be obtained from any online color picker like developer.mozilla.org (https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Colors/Color_picker_tool). (default: {background: {}, inner_eye: {shape: default}, module: {color: black, shape: default}, outer_eye: {shape: default}})
+  data: record # `data` property allows you to specify geographic location (map pin). — shape: {format?: "google"|"rfc5870", latitude: float, longitude: float}
+  --image: record # `image` property allows you to set parameters of a custom image (e.g. your company logo, icon etc.) placed in the center of the generated QR Code. — shape: {modules?: bool, uri: any}
+  --output: record # `output` property allows you to specify the name and extension (type) of the file returned by the API (default: {filename: qrcode, format: svg}) — shape: {filename?: string, format?: "svg"|"png"|"pdf"|"ps"|"jpeg"|"webp"}
+  --size: record # `size` property allows you to set the values that define the sizes of the generated QR Code. (default: {error_correction: M, quiet_zone: 4, width: 200}) — shape: {error_correction?: "L"|"M"|"Q"|"H", quiet_zone?: int, width?: int}
+  --style: record # `style` property allows you to select the appearance parameters of the modules and eyes of the generated QR Code. All color specifications can be defined via: * CSS3 name: `Black`, `azure`, ... * hex value: `0x000`, `#FFFFFF`, `7fffd4`, ... * RGB/RGBA strings: `rgb(255, 255, 255)`, `rgba(255, 255, 255, 0.5)`, ... * HSL strings: `hsl(270, 60%, 70%)`, `hsl(270, 60%, 70%, .5)`, ... Color values can be obtained from any online color picker like developer.mozilla.org (https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Colors/Color_picker_tool). (default: {background: {}, inner_eye: {shape: default}, module: {color: black, shape: default}, outer_eye: {shape: default}}) — shape: {background?: record, inner_eye?: record, module?: record, outer_eye?: record}
 ]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "byvalue-token"))
@@ -568,6 +592,11 @@ export def "dispatcher-qrcode-geo-post" [
 #
 # POST /qrcode/phone
 # operationId: dispatcher_qrcode_phone_post
+# --data shape: {phone: string}
+# --image shape: {modules?: bool, uri: any}
+# --output shape: {filename?: string, format?: "svg"|"png"|"pdf"|"ps"|"jpeg"|"webp"}
+# --size shape: {error_correction?: "L"|"M"|"Q"|"H", quiet_zone?: int, width?: int}
+# --style shape: {background?: record, inner_eye?: record, module?: record, outer_eye?: record}
 export def "dispatcher-qrcode-phone-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -579,11 +608,11 @@ export def "dispatcher-qrcode-phone-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  data: any # `data` property allows you to specify telephone number called.
-  --image: any # `image` property allows you to set parameters of a custom image (e.g. your company logo, icon etc.) placed in the center of the generated QR Code.
-  --output: any # `output` property allows you to specify the name and extension (type) of the file returned by the API (default: {filename: qrcode, format: svg})
-  --size: any # `size` property allows you to set the values that define the sizes of the generated QR Code. (default: {error_correction: M, quiet_zone: 4, width: 200})
-  --style: any # `style` property allows you to select the appearance parameters of the modules and eyes of the generated QR Code. All color specifications can be defined via: * CSS3 name: `Black`, `azure`, ... * hex value: `0x000`, `#FFFFFF`, `7fffd4`, ... * RGB/RGBA strings: `rgb(255, 255, 255)`, `rgba(255, 255, 255, 0.5)`, ... * HSL strings: `hsl(270, 60%, 70%)`, `hsl(270, 60%, 70%, .5)`, ... Color values can be obtained from any online color picker like developer.mozilla.org (https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Colors/Color_picker_tool). (default: {background: {}, inner_eye: {shape: default}, module: {color: black, shape: default}, outer_eye: {shape: default}})
+  data: record # `data` property allows you to specify telephone number called. — shape: {phone: string}
+  --image: record # `image` property allows you to set parameters of a custom image (e.g. your company logo, icon etc.) placed in the center of the generated QR Code. — shape: {modules?: bool, uri: any}
+  --output: record # `output` property allows you to specify the name and extension (type) of the file returned by the API (default: {filename: qrcode, format: svg}) — shape: {filename?: string, format?: "svg"|"png"|"pdf"|"ps"|"jpeg"|"webp"}
+  --size: record # `size` property allows you to set the values that define the sizes of the generated QR Code. (default: {error_correction: M, quiet_zone: 4, width: 200}) — shape: {error_correction?: "L"|"M"|"Q"|"H", quiet_zone?: int, width?: int}
+  --style: record # `style` property allows you to select the appearance parameters of the modules and eyes of the generated QR Code. All color specifications can be defined via: * CSS3 name: `Black`, `azure`, ... * hex value: `0x000`, `#FFFFFF`, `7fffd4`, ... * RGB/RGBA strings: `rgb(255, 255, 255)`, `rgba(255, 255, 255, 0.5)`, ... * HSL strings: `hsl(270, 60%, 70%)`, `hsl(270, 60%, 70%, .5)`, ... Color values can be obtained from any online color picker like developer.mozilla.org (https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Colors/Color_picker_tool). (default: {background: {}, inner_eye: {shape: default}, module: {color: black, shape: default}, outer_eye: {shape: default}}) — shape: {background?: record, inner_eye?: record, module?: record, outer_eye?: record}
 ]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "byvalue-token"))
@@ -611,6 +640,11 @@ export def "dispatcher-qrcode-phone-post" [
 #
 # POST /qrcode/sms
 # operationId: dispatcher_qrcode_sms_post
+# --data shape: {message?: string, to: any}
+# --image shape: {modules?: bool, uri: any}
+# --output shape: {filename?: string, format?: "svg"|"png"|"pdf"|"ps"|"jpeg"|"webp"}
+# --size shape: {error_correction?: "L"|"M"|"Q"|"H", quiet_zone?: int, width?: int}
+# --style shape: {background?: record, inner_eye?: record, module?: record, outer_eye?: record}
 export def "dispatcher-qrcode-sms-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -622,11 +656,11 @@ export def "dispatcher-qrcode-sms-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  data: any # `data` property allows you to specify SMS template.
-  --image: any # `image` property allows you to set parameters of a custom image (e.g. your company logo, icon etc.) placed in the center of the generated QR Code.
-  --output: any # `output` property allows you to specify the name and extension (type) of the file returned by the API (default: {filename: qrcode, format: svg})
-  --size: any # `size` property allows you to set the values that define the sizes of the generated QR Code. (default: {error_correction: M, quiet_zone: 4, width: 200})
-  --style: any # `style` property allows you to select the appearance parameters of the modules and eyes of the generated QR Code. All color specifications can be defined via: * CSS3 name: `Black`, `azure`, ... * hex value: `0x000`, `#FFFFFF`, `7fffd4`, ... * RGB/RGBA strings: `rgb(255, 255, 255)`, `rgba(255, 255, 255, 0.5)`, ... * HSL strings: `hsl(270, 60%, 70%)`, `hsl(270, 60%, 70%, .5)`, ... Color values can be obtained from any online color picker like developer.mozilla.org (https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Colors/Color_picker_tool). (default: {background: {}, inner_eye: {shape: default}, module: {color: black, shape: default}, outer_eye: {shape: default}})
+  data: record # `data` property allows you to specify SMS template. — shape: {message?: string, to: any}
+  --image: record # `image` property allows you to set parameters of a custom image (e.g. your company logo, icon etc.) placed in the center of the generated QR Code. — shape: {modules?: bool, uri: any}
+  --output: record # `output` property allows you to specify the name and extension (type) of the file returned by the API (default: {filename: qrcode, format: svg}) — shape: {filename?: string, format?: "svg"|"png"|"pdf"|"ps"|"jpeg"|"webp"}
+  --size: record # `size` property allows you to set the values that define the sizes of the generated QR Code. (default: {error_correction: M, quiet_zone: 4, width: 200}) — shape: {error_correction?: "L"|"M"|"Q"|"H", quiet_zone?: int, width?: int}
+  --style: record # `style` property allows you to select the appearance parameters of the modules and eyes of the generated QR Code. All color specifications can be defined via: * CSS3 name: `Black`, `azure`, ... * hex value: `0x000`, `#FFFFFF`, `7fffd4`, ... * RGB/RGBA strings: `rgb(255, 255, 255)`, `rgba(255, 255, 255, 0.5)`, ... * HSL strings: `hsl(270, 60%, 70%)`, `hsl(270, 60%, 70%, .5)`, ... Color values can be obtained from any online color picker like developer.mozilla.org (https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Colors/Color_picker_tool). (default: {background: {}, inner_eye: {shape: default}, module: {color: black, shape: default}, outer_eye: {shape: default}}) — shape: {background?: record, inner_eye?: record, module?: record, outer_eye?: record}
 ]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "byvalue-token"))
@@ -654,6 +688,10 @@ export def "dispatcher-qrcode-sms-post" [
 #
 # POST /qrcode/text
 # operationId: dispatcher_qrcode_text_post
+# --image shape: {modules?: bool, uri: any}
+# --output shape: {filename?: string, format?: "svg"|"png"|"pdf"|"ps"|"jpeg"|"webp"}
+# --size shape: {error_correction?: "L"|"M"|"Q"|"H", quiet_zone?: int, width?: int}
+# --style shape: {background?: record, inner_eye?: record, module?: record, outer_eye?: record}
 export def "dispatcher-qrcode-text-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -665,11 +703,11 @@ export def "dispatcher-qrcode-text-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  data: any # `data` property allows you to specify the text stored in the QR Code.
-  --image: any # `image` property allows you to set parameters of a custom image (e.g. your company logo, icon etc.) placed in the center of the generated QR Code.
-  --output: any # `output` property allows you to specify the name and extension (type) of the file returned by the API (default: {filename: qrcode, format: svg})
-  --size: any # `size` property allows you to set the values that define the sizes of the generated QR Code. (default: {error_correction: M, quiet_zone: 4, width: 200})
-  --style: any # `style` property allows you to select the appearance parameters of the modules and eyes of the generated QR Code. All color specifications can be defined via: * CSS3 name: `Black`, `azure`, ... * hex value: `0x000`, `#FFFFFF`, `7fffd4`, ... * RGB/RGBA strings: `rgb(255, 255, 255)`, `rgba(255, 255, 255, 0.5)`, ... * HSL strings: `hsl(270, 60%, 70%)`, `hsl(270, 60%, 70%, .5)`, ... Color values can be obtained from any online color picker like developer.mozilla.org (https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Colors/Color_picker_tool). (default: {background: {}, inner_eye: {shape: default}, module: {color: black, shape: default}, outer_eye: {shape: default}})
+  data: string # `data` property allows you to specify the text stored in the QR Code.
+  --image: record # `image` property allows you to set parameters of a custom image (e.g. your company logo, icon etc.) placed in the center of the generated QR Code. — shape: {modules?: bool, uri: any}
+  --output: record # `output` property allows you to specify the name and extension (type) of the file returned by the API (default: {filename: qrcode, format: svg}) — shape: {filename?: string, format?: "svg"|"png"|"pdf"|"ps"|"jpeg"|"webp"}
+  --size: record # `size` property allows you to set the values that define the sizes of the generated QR Code. (default: {error_correction: M, quiet_zone: 4, width: 200}) — shape: {error_correction?: "L"|"M"|"Q"|"H", quiet_zone?: int, width?: int}
+  --style: record # `style` property allows you to select the appearance parameters of the modules and eyes of the generated QR Code. All color specifications can be defined via: * CSS3 name: `Black`, `azure`, ... * hex value: `0x000`, `#FFFFFF`, `7fffd4`, ... * RGB/RGBA strings: `rgb(255, 255, 255)`, `rgba(255, 255, 255, 0.5)`, ... * HSL strings: `hsl(270, 60%, 70%)`, `hsl(270, 60%, 70%, .5)`, ... Color values can be obtained from any online color picker like developer.mozilla.org (https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Colors/Color_picker_tool). (default: {background: {}, inner_eye: {shape: default}, module: {color: black, shape: default}, outer_eye: {shape: default}}) — shape: {background?: record, inner_eye?: record, module?: record, outer_eye?: record}
 ]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "byvalue-token"))
@@ -697,6 +735,11 @@ export def "dispatcher-qrcode-text-post" [
 #
 # POST /qrcode/wifi
 # operationId: dispatcher_qrcode_wifi_post
+# --data shape: {hidden?: bool, password?: string, security?: "WEP"|"WPA"|"nopass", ssid: string}
+# --image shape: {modules?: bool, uri: any}
+# --output shape: {filename?: string, format?: "svg"|"png"|"pdf"|"ps"|"jpeg"|"webp"}
+# --size shape: {error_correction?: "L"|"M"|"Q"|"H", quiet_zone?: int, width?: int}
+# --style shape: {background?: record, inner_eye?: record, module?: record, outer_eye?: record}
 export def "dispatcher-qrcode-wifi-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -708,11 +751,11 @@ export def "dispatcher-qrcode-wifi-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  data: any # `data` property allows you to specify specify the WiFi access point credentials stored in the QR Code.
-  --image: any # `image` property allows you to set parameters of a custom image (e.g. your company logo, icon etc.) placed in the center of the generated QR Code.
-  --output: any # `output` property allows you to specify the name and extension (type) of the file returned by the API (default: {filename: qrcode, format: svg})
-  --size: any # `size` property allows you to set the values that define the sizes of the generated QR Code. (default: {error_correction: M, quiet_zone: 4, width: 200})
-  --style: any # `style` property allows you to select the appearance parameters of the modules and eyes of the generated QR Code. All color specifications can be defined via: * CSS3 name: `Black`, `azure`, ... * hex value: `0x000`, `#FFFFFF`, `7fffd4`, ... * RGB/RGBA strings: `rgb(255, 255, 255)`, `rgba(255, 255, 255, 0.5)`, ... * HSL strings: `hsl(270, 60%, 70%)`, `hsl(270, 60%, 70%, .5)`, ... Color values can be obtained from any online color picker like developer.mozilla.org (https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Colors/Color_picker_tool). (default: {background: {}, inner_eye: {shape: default}, module: {color: black, shape: default}, outer_eye: {shape: default}})
+  data: record # `data` property allows you to specify specify the WiFi access point credentials stored in the QR Code. — shape: {hidden?: bool, password?: string, security?: "WEP"|"WPA"|"nopass", ssid: string}
+  --image: record # `image` property allows you to set parameters of a custom image (e.g. your company logo, icon etc.) placed in the center of the generated QR Code. — shape: {modules?: bool, uri: any}
+  --output: record # `output` property allows you to specify the name and extension (type) of the file returned by the API (default: {filename: qrcode, format: svg}) — shape: {filename?: string, format?: "svg"|"png"|"pdf"|"ps"|"jpeg"|"webp"}
+  --size: record # `size` property allows you to set the values that define the sizes of the generated QR Code. (default: {error_correction: M, quiet_zone: 4, width: 200}) — shape: {error_correction?: "L"|"M"|"Q"|"H", quiet_zone?: int, width?: int}
+  --style: record # `style` property allows you to select the appearance parameters of the modules and eyes of the generated QR Code. All color specifications can be defined via: * CSS3 name: `Black`, `azure`, ... * hex value: `0x000`, `#FFFFFF`, `7fffd4`, ... * RGB/RGBA strings: `rgb(255, 255, 255)`, `rgba(255, 255, 255, 0.5)`, ... * HSL strings: `hsl(270, 60%, 70%)`, `hsl(270, 60%, 70%, .5)`, ... Color values can be obtained from any online color picker like developer.mozilla.org (https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Colors/Color_picker_tool). (default: {background: {}, inner_eye: {shape: default}, module: {color: black, shape: default}, outer_eye: {shape: default}}) — shape: {background?: record, inner_eye?: record, module?: record, outer_eye?: record}
 ]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "byvalue-token"))

@@ -1,4 +1,4 @@
-# Auto-generated client for Google Sheets API vv4
+# Auto-generated client for Google Sheets API v4
 # Source: https://api.apis.guru/v2/specs/googleapis.com/sheets/v4/openapi.json
 # Auth: --token flag or $env.GOOGLE_SHEETS_API_TOKEN
 
@@ -12,20 +12,10 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
-}
-
-# Merge multiple auth records (AND-form security: every scheme must be sent).
-def merge-auth [parts: list]: nothing -> record {
-  let active = ($parts | where {|p| $p.location != "none" })
-  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
-  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
-  let locs = ($active | each {|p| $p.location } | uniq)
-  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
-  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
 # Serialize a single query parameter based on collection style
@@ -162,8 +152,8 @@ export def commands []: nothing -> table {
 # --sheets item shape: {bandedRanges?: list, basicFilter?: record, charts?: list, columnGroups?: list, conditionalFormats?: list, data?: list, developerMetadata?: list, filterViews?: list, merges?: list, properties?: record, protectedRanges?: list, rowGroups?: list, slicers?: list}
 export def "sheets-spreadsheets-create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -190,7 +180,7 @@ export def "sheets-spreadsheets-create" [
   --spreadsheet-url: string # The url of the spreadsheet. This field is read-only.
 ]: any -> record<dataSourceSchedules: table<dailySchedule: record, enabled: bool, monthlySchedule: record, nextRun: record, refreshScope: string, weeklySchedule: record>, dataSources: table<calculatedColumns: list, dataSourceId: string, sheetId: int, spec: record>, developerMetadata: table<location: record, metadataId: int, metadataKey: string, metadataValue: string, visibility: string>, namedRanges: table<name: string, namedRangeId: string, range: record>, properties: record<autoRecalc: string, defaultFormat: record<backgroundColor: record, backgroundColorStyle: record, borders: record, horizontalAlignment: string, hyperlinkDisplayType: string, numberFormat: record, padding: record, textDirection: string, textFormat: record, textRotation: record, verticalAlignment: string, wrapStrategy: string>, iterativeCalculationSettings: record<convergenceThreshold: float, maxIterations: int>, locale: string, spreadsheetTheme: record<primaryFontFamily: string, themeColors: list>, timeZone: string, title: string>, sheets: table<bandedRanges: list, basicFilter: record, charts: list, columnGroups: list, conditionalFormats: list, data: list, developerMetadata: list, filterViews: list, merges: list, properties: record, protectedRanges: list, rowGroups: list, slicers: list>, spreadsheetId: string, spreadsheetUrl: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_SHEETS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_SHEETS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/spreadsheets" $qp $auth.query)
@@ -219,8 +209,8 @@ export def "sheets-spreadsheets-create" [
 export def "sheets-spreadsheets-get" [
   spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -241,7 +231,7 @@ export def "sheets-spreadsheets-get" [
   --include-grid-data: oneof<nothing, bool> # True if grid data should be returned. This parameter is ignored if a field mask was set in the request.
   --ranges: list<string> # The ranges to retrieve from the spreadsheet.
 ]: nothing -> record<dataSourceSchedules: table<dailySchedule: record, enabled: bool, monthlySchedule: record, nextRun: record, refreshScope: string, weeklySchedule: record>, dataSources: table<calculatedColumns: list, dataSourceId: string, sheetId: int, spec: record>, developerMetadata: table<location: record, metadataId: int, metadataKey: string, metadataValue: string, visibility: string>, namedRanges: table<name: string, namedRangeId: string, range: record>, properties: record<autoRecalc: string, defaultFormat: record<backgroundColor: record, backgroundColorStyle: record, borders: record, horizontalAlignment: string, hyperlinkDisplayType: string, numberFormat: record, padding: record, textDirection: string, textFormat: record, textRotation: record, verticalAlignment: string, wrapStrategy: string>, iterativeCalculationSettings: record<convergenceThreshold: float, maxIterations: int>, locale: string, spreadsheetTheme: record<primaryFontFamily: string, themeColors: list>, timeZone: string, title: string>, sheets: table<bandedRanges: list, basicFilter: record, charts: list, columnGroups: list, conditionalFormats: list, data: list, developerMetadata: list, filterViews: list, merges: list, properties: record, protectedRanges: list, rowGroups: list, slicers: list>, spreadsheetId: string, spreadsheetUrl: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_SHEETS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_SHEETS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($spreadsheet_id | is-empty) { error make --unspanned { msg: "path parameter 'spreadsheetId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "includeGridData" $include_grid_data "scalar") (serialize-qp "ranges" $ranges "multi")] | flatten | str join "&"
@@ -270,8 +260,8 @@ export def "sheets-spreadsheets-developer-metadata-get" [
   spreadsheet_id: string
   metadata_id: int
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -290,7 +280,7 @@ export def "sheets-spreadsheets-developer-metadata-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<location: record<dimensionRange: record<dimension: string, endIndex: int, sheetId: int, startIndex: int>, locationType: string, sheetId: int, spreadsheet: bool>, metadataId: int, metadataKey: string, metadataValue: string, visibility: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_SHEETS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_SHEETS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($spreadsheet_id | is-empty) { error make --unspanned { msg: "path parameter 'spreadsheetId' must be non-empty" } }
   if ($metadata_id | is-empty) { error make --unspanned { msg: "path parameter 'metadataId' must be non-empty" } }
@@ -320,8 +310,8 @@ export def "sheets-spreadsheets-developer-metadata-get" [
 export def "sheets-spreadsheets-developer-metadata-search" [
   spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -342,7 +332,7 @@ export def "sheets-spreadsheets-developer-metadata-search" [
   --data-filters: list # The data filters describing the criteria used to determine which DeveloperMetadata entries to return. DeveloperMetadata matching any of the specified filters are included in the response. — item shape: {a1Range?: string, developerMetadataLookup?: record, gridRange?: record}
 ]: any -> record<matchedDeveloperMetadata: table<dataFilters: list, developerMetadata: record>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_SHEETS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_SHEETS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($spreadsheet_id | is-empty) { error make --unspanned { msg: "path parameter 'spreadsheetId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -373,8 +363,8 @@ export def "sheets-spreadsheets-sheets-copy-to" [
   spreadsheet_id: string
   sheet_id: int
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -395,7 +385,7 @@ export def "sheets-spreadsheets-sheets-copy-to" [
   --destination-spreadsheet-id: string # The ID of the spreadsheet to copy the sheet to.
 ]: any -> record<dataSourceSheetProperties: record<columns: list<record>, dataExecutionStatus: record<errorCode: string, errorMessage: string, lastRefreshTime: string, state: string>, dataSourceId: string>, gridProperties: record<columnCount: int, columnGroupControlAfter: bool, frozenColumnCount: int, frozenRowCount: int, hideGridlines: bool, rowCount: int, rowGroupControlAfter: bool>, hidden: bool, index: int, rightToLeft: bool, sheetId: int, sheetType: string, tabColor: record<alpha: float, blue: float, green: float, red: float>, tabColorStyle: record<rgbColor: record<alpha: float, blue: float, green: float, red: float>, themeColor: string>, title: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_SHEETS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_SHEETS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($spreadsheet_id | is-empty) { error make --unspanned { msg: "path parameter 'spreadsheetId' must be non-empty" } }
   if ($sheet_id | is-empty) { error make --unspanned { msg: "path parameter 'sheetId' must be non-empty" } }
@@ -427,8 +417,8 @@ export def "sheets-spreadsheets-values-get" [
   spreadsheet_id: string
   range: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -450,7 +440,7 @@ export def "sheets-spreadsheets-values-get" [
   --major-dimension: string@major-dimension-completer # The major dimension that results should use. For example, if the spreadsheet data in Sheet1 is: `A1=1,B1=2,A2=3,B2=4`, then requesting `range=Sheet1!A1:B2?majorDimension=ROWS` returns `[[1,2],[3,4]]`, whereas requesting `range=Sheet1!A1:B2?majorDimension=COLUMNS` returns `[[1,3],[2,4]]`.
   --value-render-option: string@value-render-option-completer # How values should be represented in the output. The default render option is FORMATTED_VALUE.
 ]: nothing -> record<majorDimension: string, range: string, values: list<list<any>>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_SHEETS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_SHEETS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($spreadsheet_id | is-empty) { error make --unspanned { msg: "path parameter 'spreadsheetId' must be non-empty" } }
   if ($range | is-empty) { error make --unspanned { msg: "path parameter 'range' must be non-empty" } }
@@ -480,8 +470,8 @@ export def "sheets-spreadsheets-values-update" [
   spreadsheet_id: string
   range: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -508,7 +498,7 @@ export def "sheets-spreadsheets-values-update" [
   --values: list # The data that was read or to be written. This is an array of arrays, the outer array representing all the data and each inner array representing a major dimension. Each item in the inner array corresponds with one cell. For output, empty trailing rows and columns will not be included. For input, supported value types are: bool, string, and double. Null values will be skipped. To set a cell to an empty value, set the string value to an empty string.
 ]: any -> record<spreadsheetId: string, updatedCells: int, updatedColumns: int, updatedData: record<majorDimension: string, range: string, values: list<list>>, updatedRange: string, updatedRows: int> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_SHEETS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_SHEETS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($spreadsheet_id | is-empty) { error make --unspanned { msg: "path parameter 'spreadsheetId' must be non-empty" } }
   if ($range | is-empty) { error make --unspanned { msg: "path parameter 'range' must be non-empty" } }
@@ -540,8 +530,8 @@ export def "sheets-spreadsheets-values-append" [
   spreadsheet_id: string
   range: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -569,7 +559,7 @@ export def "sheets-spreadsheets-values-append" [
   --values: list # The data that was read or to be written. This is an array of arrays, the outer array representing all the data and each inner array representing a major dimension. Each item in the inner array corresponds with one cell. For output, empty trailing rows and columns will not be included. For input, supported value types are: bool, string, and double. Null values will be skipped. To set a cell to an empty value, set the string value to an empty string.
 ]: any -> record<spreadsheetId: string, tableRange: string, updates: record<spreadsheetId: string, updatedCells: int, updatedColumns: int, updatedData: record<majorDimension: string, range: string, values: list>, updatedRange: string, updatedRows: int>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_SHEETS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_SHEETS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($spreadsheet_id | is-empty) { error make --unspanned { msg: "path parameter 'spreadsheetId' must be non-empty" } }
   if ($range | is-empty) { error make --unspanned { msg: "path parameter 'range' must be non-empty" } }
@@ -601,8 +591,8 @@ export def "sheets-spreadsheets-values-clear" [
   spreadsheet_id: string
   range: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -623,7 +613,7 @@ export def "sheets-spreadsheets-values-clear" [
   --body: record
 ]: any -> record<clearedRange: string, spreadsheetId: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_SHEETS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_SHEETS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($spreadsheet_id | is-empty) { error make --unspanned { msg: "path parameter 'spreadsheetId' must be non-empty" } }
   if ($range | is-empty) { error make --unspanned { msg: "path parameter 'range' must be non-empty" } }
@@ -654,8 +644,8 @@ export def "sheets-spreadsheets-values-clear" [
 export def "sheets-spreadsheets-values-batch-clear" [
   spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -676,7 +666,7 @@ export def "sheets-spreadsheets-values-batch-clear" [
   --ranges: list<string> # The ranges to clear, in [A1 notation or R1C1 notation](/sheets/api/guides/concepts#cell).
 ]: any -> record<clearedRanges: list<string>, spreadsheetId: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_SHEETS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_SHEETS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($spreadsheet_id | is-empty) { error make --unspanned { msg: "path parameter 'spreadsheetId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -707,8 +697,8 @@ export def "sheets-spreadsheets-values-batch-clear" [
 export def "sheets-spreadsheets-values-batch-clear-by-data-filter" [
   spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -729,7 +719,7 @@ export def "sheets-spreadsheets-values-batch-clear-by-data-filter" [
   --data-filters: list # The DataFilters used to determine which ranges to clear. — item shape: {a1Range?: string, developerMetadataLookup?: record, gridRange?: record}
 ]: any -> record<clearedRanges: list<string>, spreadsheetId: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_SHEETS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_SHEETS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($spreadsheet_id | is-empty) { error make --unspanned { msg: "path parameter 'spreadsheetId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -759,8 +749,8 @@ export def "sheets-spreadsheets-values-batch-clear-by-data-filter" [
 export def "sheets-spreadsheets-values-batch-get" [
   spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -783,7 +773,7 @@ export def "sheets-spreadsheets-values-batch-get" [
   --ranges: list<string> # The [A1 notation or R1C1 notation](/sheets/api/guides/concepts#cell) of the range to retrieve values from.
   --value-render-option: string@value-render-option-completer # How values should be represented in the output. The default render option is ValueRenderOption.FORMATTED_VALUE.
 ]: nothing -> record<spreadsheetId: string, valueRanges: table<majorDimension: string, range: string, values: list>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_SHEETS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_SHEETS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($spreadsheet_id | is-empty) { error make --unspanned { msg: "path parameter 'spreadsheetId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dateTimeRenderOption" $date_time_render_option "scalar") (serialize-qp "majorDimension" $major_dimension "scalar") (serialize-qp "ranges" $ranges "multi") (serialize-qp "valueRenderOption" $value_render_option "scalar")] | flatten | str join "&"
@@ -812,8 +802,8 @@ export def "sheets-spreadsheets-values-batch-get" [
 export def "sheets-spreadsheets-values-batch-get-by-data-filter" [
   spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -837,7 +827,7 @@ export def "sheets-spreadsheets-values-batch-get-by-data-filter" [
   --value-render-option: string@value-render-option-completer # How values should be represented in the output. The default render option is FORMATTED_VALUE.
 ]: any -> record<spreadsheetId: string, valueRanges: table<dataFilters: list, valueRange: record>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_SHEETS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_SHEETS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($spreadsheet_id | is-empty) { error make --unspanned { msg: "path parameter 'spreadsheetId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -868,8 +858,8 @@ export def "sheets-spreadsheets-values-batch-get-by-data-filter" [
 export def "sheets-spreadsheets-values-batch-update" [
   spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -894,7 +884,7 @@ export def "sheets-spreadsheets-values-batch-update" [
   --value-input-option: string@value-input-option-completer # How the input data should be interpreted.
 ]: any -> record<responses: table<spreadsheetId: string, updatedCells: int, updatedColumns: int, updatedData: record, updatedRange: string, updatedRows: int>, spreadsheetId: string, totalUpdatedCells: int, totalUpdatedColumns: int, totalUpdatedRows: int, totalUpdatedSheets: int> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_SHEETS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_SHEETS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($spreadsheet_id | is-empty) { error make --unspanned { msg: "path parameter 'spreadsheetId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -925,8 +915,8 @@ export def "sheets-spreadsheets-values-batch-update" [
 export def "sheets-spreadsheets-values-batch-update-by-data-filter" [
   spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -951,7 +941,7 @@ export def "sheets-spreadsheets-values-batch-update-by-data-filter" [
   --value-input-option: string@value-input-option-completer # How the input data should be interpreted.
 ]: any -> record<responses: table<dataFilter: record, updatedCells: int, updatedColumns: int, updatedData: record, updatedRange: string, updatedRows: int>, spreadsheetId: string, totalUpdatedCells: int, totalUpdatedColumns: int, totalUpdatedRows: int, totalUpdatedSheets: int> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_SHEETS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_SHEETS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($spreadsheet_id | is-empty) { error make --unspanned { msg: "path parameter 'spreadsheetId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -982,8 +972,8 @@ export def "sheets-spreadsheets-values-batch-update-by-data-filter" [
 export def "sheets-spreadsheets-batch-update" [
   spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1007,7 +997,7 @@ export def "sheets-spreadsheets-batch-update" [
   --response-ranges: list<string> # Limits the ranges included in the response spreadsheet. Meaningful only if include_spreadsheet_in_response is 'true'.
 ]: any -> record<replies: table<addBanding: record, addChart: record, addDataSource: record, addDimensionGroup: record, addFilterView: record, addNamedRange: record, addProtectedRange: record, addSheet: record, addSlicer: record, createDeveloperMetadata: record, deleteConditionalFormatRule: record, deleteDeveloperMetadata: record, deleteDimensionGroup: record, deleteDuplicates: record, duplicateFilterView: record, duplicateSheet: record, findReplace: record, refreshDataSource: record, trimWhitespace: record, updateConditionalFormatRule: record, updateDataSource: record, updateDeveloperMetadata: record, updateEmbeddedObjectPosition: record>, spreadsheetId: string, updatedSpreadsheet: record<dataSourceSchedules: list<record>, dataSources: list<record>, developerMetadata: list<record>, namedRanges: list<record>, properties: record<autoRecalc: string, defaultFormat: record, iterativeCalculationSettings: record, locale: string, spreadsheetTheme: record, timeZone: string, title: string>, sheets: list<record>, spreadsheetId: string, spreadsheetUrl: string>> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_SHEETS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_SHEETS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($spreadsheet_id | is-empty) { error make --unspanned { msg: "path parameter 'spreadsheetId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1038,8 +1028,8 @@ export def "sheets-spreadsheets-batch-update" [
 export def "sheets-spreadsheets-get-by-data-filter" [
   spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1061,7 +1051,7 @@ export def "sheets-spreadsheets-get-by-data-filter" [
   --include-grid-data: oneof<nothing, bool> # True if grid data should be returned. This parameter is ignored if a field mask was set in the request.
 ]: any -> record<dataSourceSchedules: table<dailySchedule: record, enabled: bool, monthlySchedule: record, nextRun: record, refreshScope: string, weeklySchedule: record>, dataSources: table<calculatedColumns: list, dataSourceId: string, sheetId: int, spec: record>, developerMetadata: table<location: record, metadataId: int, metadataKey: string, metadataValue: string, visibility: string>, namedRanges: table<name: string, namedRangeId: string, range: record>, properties: record<autoRecalc: string, defaultFormat: record<backgroundColor: record, backgroundColorStyle: record, borders: record, horizontalAlignment: string, hyperlinkDisplayType: string, numberFormat: record, padding: record, textDirection: string, textFormat: record, textRotation: record, verticalAlignment: string, wrapStrategy: string>, iterativeCalculationSettings: record<convergenceThreshold: float, maxIterations: int>, locale: string, spreadsheetTheme: record<primaryFontFamily: string, themeColors: list>, timeZone: string, title: string>, sheets: table<bandedRanges: list, basicFilter: record, charts: list, columnGroups: list, conditionalFormats: list, data: list, developerMetadata: list, filterViews: list, merges: list, properties: record, protectedRanges: list, rowGroups: list, slicers: list>, spreadsheetId: string, spreadsheetUrl: string> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_SHEETS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_SHEETS_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($spreadsheet_id | is-empty) { error make --unspanned { msg: "path parameter 'spreadsheetId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"

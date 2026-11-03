@@ -131,11 +131,13 @@ export def "getareacodefromnumber" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --license: string # Your Interzoid license API key. Register at www.interzoid.com/register
-  --number: string # Telephone number to retrieve area code information
+  --license: string # Your Interzoid license API key. Register at www.interzoid.com/register (required)
+  --number: string # Telephone number to retrieve area code information (required)
 ]: nothing -> record<Abbreviation: string, AreaCode: string, Code: string, Credits: string, Locale: string, PrimaryCity: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($license == null) { error make --unspanned { msg: "required query parameter 'license' missing: pass --license" } }
+  if ($number == null) { error make --unspanned { msg: "required query parameter 'number' missing: pass --number" } }
   let qp = [(serialize-qp "license" $license "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getareacodefromnumber" $qp $auth.query)
   let accept_val = "application/json"

@@ -141,10 +141,11 @@ export def "delete-listings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --domains: list<string> # A comma separated list of domain names
+  --domains: list<string> # A comma separated list of domain names (required)
 ]: nothing -> record<listingActionId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domains == null) { error make --unspanned { msg: "required query parameter 'domains' missing: pass --domains" } }
   let qp = [(serialize-qp "domains" $domains "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/aftermarket/listings" $qp $auth.query)
   let accept_val = ($accept | default "application/javascript")

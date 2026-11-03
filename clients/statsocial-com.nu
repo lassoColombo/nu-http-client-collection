@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "api_key" => { {scheme: $scheme, headers: {api_key: $token_val}, query: "", location: "header"} }
+    "api_key" => { {scheme: $scheme, headers: {"api_key": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -137,10 +137,11 @@ export def "get-applications-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --key: string # User application key
+  --key: string # User application key (required)
 ]: nothing -> record<data: record<remaining_count: int, reports: record<created: string, name: string, report_type: string, status: string>, total_reports_count: int, total_reports_done: int>, msg: string, success: string> {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/applications/status/" $qp $auth.query)
   let accept_val = "application/json"
@@ -172,13 +173,15 @@ export def "get-reports" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --report-hash: string # Unique report hash
+  --report-hash: string # Unique report hash (required)
   --baseline: int # Default value will be 'world'
   --report-date: int # report_date represents a Unix timestamp of when the report was generated. Default value will be the latest report generated. You can request the /report/dates/ endpoint in order to obtain available timestamps. Date must be in the future.
-  --sample: int # Sample report indicator (default: 1)
+  --sample: int # Sample report indicator (required, default: 1)
 ]: nothing -> record<data: record<Combined_Age: record<18___24: record, 25___34: record, 35___44: record>, Sex: record<Female: record, Male: record>>, msg: string, success: string> {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($report_hash == null) { error make --unspanned { msg: "required query parameter 'report_hash' missing: pass --report-hash" } }
+  let sample = ($sample | default 1)
   let qp = [(serialize-qp "report_hash" $report_hash "scalar") (serialize-qp "baseline" $baseline "scalar") (serialize-qp "report_date" $report_date "scalar") (serialize-qp "sample" $sample "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reports/" $qp $auth.query)
   let accept_val = "application/json"
@@ -210,13 +213,15 @@ export def "post-reports" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --report-hash: string # Unique report hash
+  --report-hash: string # Unique report hash (required)
   --baseline: int # Default value will be 'world'
   --report-date: int # report_date represents a Unix timestamp of when the report was generated. Default value will be the latest report generated. You can request the /report/dates/ endpoint in order to obtain available timestamps. Date must be in the future.
-  --sample: int # Sample report indicator (default: 1)
+  --sample: int # Sample report indicator (required, default: 1)
 ]: nothing -> record<data: record<Combined_Age: record<18___24: record, 25___34: record, 35___44: record>, Sex: record<Female: record, Male: record>>, msg: string, success: string> {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($report_hash == null) { error make --unspanned { msg: "required query parameter 'report_hash' missing: pass --report-hash" } }
+  let sample = ($sample | default 1)
   let qp = [(serialize-qp "report_hash" $report_hash "scalar") (serialize-qp "baseline" $baseline "scalar") (serialize-qp "report_date" $report_date "scalar") (serialize-qp "sample" $sample "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reports/" $qp $auth.query)
   let accept_val = "application/json"
@@ -248,11 +253,12 @@ export def "get-reports-custom-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --upload-hash: string # Upload hash to be used for inserting handles
+  --upload-hash: string # Upload hash to be used for inserting handles (required)
   --filter: string # Filtering options to be used when creating a filtered report. The options must be in JSON form, example: {'gender':['male'],'ages':['18-24'],'countries':['usa']}
 ]: nothing -> record<data: record<report_hash: string>, msg: string, success: string> {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($upload_hash == null) { error make --unspanned { msg: "required query parameter 'upload_hash' missing: pass --upload-hash" } }
   let qp = [(serialize-qp "upload_hash" $upload_hash "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reports/custom/create/" $qp $auth.query)
   let accept_val = "application/json"
@@ -284,11 +290,12 @@ export def "post-reports-custom-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --upload-hash: string # Upload hash to be used for inserting handles
+  --upload-hash: string # Upload hash to be used for inserting handles (required)
   --filter: string # Filtering options to be used when creating a filtered report. The options must be in JSON form, example: {'gender':['male'],'ages':['18-24'],'countries':['usa']}
 ]: nothing -> record<data: record<report_hash: string>, msg: string, success: string> {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($upload_hash == null) { error make --unspanned { msg: "required query parameter 'upload_hash' missing: pass --upload-hash" } }
   let qp = [(serialize-qp "upload_hash" $upload_hash "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reports/custom/create/" $qp $auth.query)
   let accept_val = "application/json"
@@ -320,10 +327,11 @@ export def "get-reports-custom-generate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --report-name: string # Name of the report
+  --report-name: string # Name of the report (required)
 ]: nothing -> record<data: record<upload_hash: string>, msg: string, success: string> {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($report_name == null) { error make --unspanned { msg: "required query parameter 'report_name' missing: pass --report-name" } }
   let qp = [(serialize-qp "report_name" $report_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reports/custom/generate/" $qp $auth.query)
   let accept_val = "application/json"
@@ -355,10 +363,11 @@ export def "post-reports-custom-generate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --report-name: string # Name of the report
+  --report-name: string # Name of the report (required)
 ]: nothing -> record<data: record<upload_hash: string>, msg: string, success: string> {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($report_name == null) { error make --unspanned { msg: "required query parameter 'report_name' missing: pass --report-name" } }
   let qp = [(serialize-qp "report_name" $report_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reports/custom/generate/" $qp $auth.query)
   let accept_val = "application/json"
@@ -390,11 +399,13 @@ export def "get-reports-custom-insert" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --upload-hash: string # Upload hash to be used for inserting handles
-  --ids: list # List of twitter ids, separated by commas, to be inserted into report. Ids must be enclosed with brackets ie. [177490485] or [177490485,23423434]
+  --upload-hash: string # Upload hash to be used for inserting handles (required)
+  --ids: list # List of twitter ids, separated by commas, to be inserted into report. Ids must be enclosed with brackets ie. [177490485] or [177490485,23423434] (required)
 ]: nothing -> record<data: record<distinct_relations: int, total_relations: int>, msg: string, success: string> {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($upload_hash == null) { error make --unspanned { msg: "required query parameter 'upload_hash' missing: pass --upload-hash" } }
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
   let qp = [(serialize-qp "upload_hash" $upload_hash "scalar") (serialize-qp "ids" $ids "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/reports/custom/insert/" $qp $auth.query)
   let accept_val = "application/json"
@@ -426,11 +437,13 @@ export def "post-reports-custom-insert" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --upload-hash: string # Upload hash to be used for inserting handles
-  --ids: list # List of twitter ids, separated by commas, to be inserted into report. Ids must be enclosed with brackets ie. [177490485] or [177490485,23423434]
+  --upload-hash: string # Upload hash to be used for inserting handles (required)
+  --ids: list # List of twitter ids, separated by commas, to be inserted into report. Ids must be enclosed with brackets ie. [177490485] or [177490485,23423434] (required)
 ]: nothing -> record<data: record<distinct_relations: int, total_relations: int>, msg: string, success: string> {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($upload_hash == null) { error make --unspanned { msg: "required query parameter 'upload_hash' missing: pass --upload-hash" } }
+  if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
   let qp = [(serialize-qp "upload_hash" $upload_hash "scalar") (serialize-qp "ids" $ids "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/reports/custom/insert/" $qp $auth.query)
   let accept_val = "application/json"
@@ -462,10 +475,11 @@ export def "get-reports-dates" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --report-hash: string # Unique report hash
+  --report-hash: string # Unique report hash (required)
 ]: nothing -> record<data: list<int>, msg: string, success: string> {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($report_hash == null) { error make --unspanned { msg: "required query parameter 'report_hash' missing: pass --report-hash" } }
   let qp = [(serialize-qp "report_hash" $report_hash "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reports/dates/" $qp $auth.query)
   let accept_val = "application/json"
@@ -497,10 +511,11 @@ export def "post-reports-dates" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --report-hash: string # Unique report hash
+  --report-hash: string # Unique report hash (required)
 ]: nothing -> record<data: list<int>, msg: string, success: string> {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($report_hash == null) { error make --unspanned { msg: "required query parameter 'report_hash' missing: pass --report-hash" } }
   let qp = [(serialize-qp "report_hash" $report_hash "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reports/dates/" $qp $auth.query)
   let accept_val = "application/json"
@@ -532,10 +547,11 @@ export def "get-reports-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --report-hash: string # Unique hash belonging to report
+  --report-hash: string # Unique hash belonging to report (required)
 ]: nothing -> record<msg: string, success: string> {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($report_hash == null) { error make --unspanned { msg: "required query parameter 'report_hash' missing: pass --report-hash" } }
   let qp = [(serialize-qp "report_hash" $report_hash "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reports/status/" $qp $auth.query)
   let accept_val = "application/json"
@@ -567,10 +583,11 @@ export def "post-reports-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --report-hash: string # Unique hash belonging to report
+  --report-hash: string # Unique hash belonging to report (required)
 ]: nothing -> record<msg: string, success: string> {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($report_hash == null) { error make --unspanned { msg: "required query parameter 'report_hash' missing: pass --report-hash" } }
   let qp = [(serialize-qp "report_hash" $report_hash "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reports/status/" $qp $auth.query)
   let accept_val = "application/json"
@@ -602,14 +619,18 @@ export def "get-reports-tweet-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --report-name: string # Name of report
-  --start-date: int # A unix timestamp. start_date will be set to the previous midnight.
-  --end-date: int # A unix timestamp. end_date will be set to the next midnight.
-  --terms: string # If you are tracking a single term, then the keyword itself is suffice otherwise, tracking multiple terms must be in JSON form, example '[{"operator":"","word":"http://google.com"},{"operator":"or","word":"#test"},{"operator":"and","word":"test2"}]' Which results in filtering tweets containing 'http://google.com' OR '#test' AND 'test2'. (NOTE) Make sure to URL encode the terms value for multiple terms.
+  --report-name: string # Name of report (required)
+  --start-date: int # A unix timestamp. start_date will be set to the previous midnight. (required)
+  --end-date: int # A unix timestamp. end_date will be set to the next midnight. (required)
+  --terms: string # If you are tracking a single term, then the keyword itself is suffice otherwise, tracking multiple terms must be in JSON form, example '[{"operator":"","word":"http://google.com"},{"operator":"or","word":"#test"},{"operator":"and","word":"test2"}]' Which results in filtering tweets containing 'http://google.com' OR '#test' AND 'test2'. (NOTE) Make sure to URL encode the terms value for multiple terms. (required)
   --filter: string # Filtering options to be used when creating a filtered report. The options must be in JSON form, example: {'gender':['male'],'ages':['18-24'],'countries':['usa']}
 ]: nothing -> record<data: record<aggregate_report_hash: string, daily_report_hash: string, monthly_report_hash: string, weekly_report_hash: string>, msg: string, success: string> {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($report_name == null) { error make --unspanned { msg: "required query parameter 'report_name' missing: pass --report-name" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'end_date' missing: pass --end-date" } }
+  if ($terms == null) { error make --unspanned { msg: "required query parameter 'terms' missing: pass --terms" } }
   let qp = [(serialize-qp "report_name" $report_name "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "terms" $terms "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reports/tweet/create/" $qp $auth.query)
   let accept_val = "application/json"
@@ -641,14 +662,18 @@ export def "post-reports-tweet-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --report-name: string # Name of report
-  --start-date: int # A unix timestamp. start_date will be set to the previous midnight.
-  --end-date: int # A unix timestamp. end_date will be set to the next midnight.
-  --terms: string # If you are tracking a single term, then the keyword itself is suffice otherwise, tracking multiple terms must be in JSON form, example '[{"operator":"","word":"http://google.com"},{"operator":"or","word":"#test"},{"operator":"and","word":"test2"}]' Which results in filtering tweets containing 'http://google.com' OR '#test' AND 'test2'. (NOTE) Make sure to URL encode the terms value for multiple terms.
+  --report-name: string # Name of report (required)
+  --start-date: int # A unix timestamp. start_date will be set to the previous midnight. (required)
+  --end-date: int # A unix timestamp. end_date will be set to the next midnight. (required)
+  --terms: string # If you are tracking a single term, then the keyword itself is suffice otherwise, tracking multiple terms must be in JSON form, example '[{"operator":"","word":"http://google.com"},{"operator":"or","word":"#test"},{"operator":"and","word":"test2"}]' Which results in filtering tweets containing 'http://google.com' OR '#test' AND 'test2'. (NOTE) Make sure to URL encode the terms value for multiple terms. (required)
   --filter: string # Filtering options to be used when creating a filtered report. The options must be in JSON form, example: {'gender':['male'],'ages':['18-24'],'countries':['usa']}
 ]: nothing -> record<data: record<aggregate_report_hash: string, daily_report_hash: string, monthly_report_hash: string, weekly_report_hash: string>, msg: string, success: string> {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($report_name == null) { error make --unspanned { msg: "required query parameter 'report_name' missing: pass --report-name" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'end_date' missing: pass --end-date" } }
+  if ($terms == null) { error make --unspanned { msg: "required query parameter 'terms' missing: pass --terms" } }
   let qp = [(serialize-qp "report_name" $report_name "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "terms" $terms "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reports/tweet/create/" $qp $auth.query)
   let accept_val = "application/json"

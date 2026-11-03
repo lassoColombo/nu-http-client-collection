@@ -211,7 +211,7 @@ export def "get-search-v1-scrape" [
   --accept: string@accept-completer # Response content type
   --q: string # Lucene-type search query
   --field: string # Metadata field (default: identifier)
-  --qp-sort: string # sort collations
+  --sort: string # sort collations
   --size: int # Number of query results to return (default: 1000)
   --cursor: string # Cursor for scrolling (used for subsequent calls)
   --total-only: oneof<nothing, bool> # Request total only; do not return hits (default: false)
@@ -219,14 +219,14 @@ export def "get-search-v1-scrape" [
 ]: nothing -> record<count: int, cursor: string, items: list<record>, previous: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "field" $field "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "total_only" $total_only "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "field" $field "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "total_only" $total_only "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search/v1/scrape" $qp $auth.query)
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"q": $q, "field": $field, "sort": $qp_sort, "size": $size, "cursor": $cursor, "total_only": $total_only, "callback": $callback} | compact)
+    query: ({"q": $q, "field": $field, "sort": $sort, "size": $size, "cursor": $cursor, "total_only": $total_only, "callback": $callback} | compact)
     headers: $auth.headers
     body: null
     content_type: null

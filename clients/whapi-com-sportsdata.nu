@@ -139,16 +139,17 @@ export def "get-competitions-for-class" [
   --displayed: string # Specify whether to return displayed entities or not (default: yes)
   --channel: string # Specify a channel filter and only results from that channel will be returned
   --status: string # Specify a status to filter results by. This is currently A (active) or S (suspended)
-  --qp-sort: string # The field to order the response by, followed by the order. For example: name,desc (default: id,asc)
+  --sort: string # The field to order the response by, followed by the order. For example: name,desc (default: id,asc)
   --offset: int # Skip over a number of elements by specifying a start value for the query (default: 0)
   --limit: int # Specify the number of results to return (default: 100)
   --culture: string # Code used to return responses in language other than English, acceptable values are en-GB|de-DE|es-ES|fr-FR|nn-NO|fi-FI|ru-RU|pt-PT|hu-HU|sl-SL|ga-IE|en-CA|sr-Latn|sv-SE|el=GR|zh-CHS|it-IT|zh-CHT|cs-CZ|de-AT|ja-JP|pl-PL|da-DK|ro-RO|nl-NL|tr-TR
-  --api-key: string # Your API Key available from your developer portal
+  --api-key: string # Your API Key available from your developer portal (required)
 ]: nothing -> record<competitions: table<betInRunningDelay: float, cashinAvailable: bool, channels: list, description: string, displayed: bool, flags: list, id: string, isPublished: bool, name: string, order: int, parentIds: list, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($class_id | is-empty) { error make --unspanned { msg: "path parameter 'classId' must be non-empty" } }
-  let qp = [(serialize-qp "isPublished" $is_published "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "displayed" $displayed "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "culture" $culture "scalar")] | flatten | str join "&"
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
+  let qp = [(serialize-qp "isPublished" $is_published "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "displayed" $displayed "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "culture" $culture "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({class_id: (encode-path-segment $class_id)} | format pattern "/classes/{class_id}/competitions/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -157,7 +158,7 @@ export def "get-competitions-for-class" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"isPublished": $is_published, "fields": $fields, "include": $include, "exclude": $exclude, "displayed": $displayed, "channel": $channel, "status": $status, "sort": $qp_sort, "offset": $offset, "limit": $limit, "culture": $culture} | compact)
+    query: ({"isPublished": $is_published, "fields": $fields, "include": $include, "exclude": $exclude, "displayed": $displayed, "channel": $channel, "status": $status, "sort": $sort, "offset": $offset, "limit": $limit, "culture": $culture} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -192,7 +193,7 @@ export def "get-events-for-class" [
   --settled: oneof<nothing, bool> # Specify wether only settled entities should be returned
   --include-empty: oneof<nothing, bool> # When declared as false it should exclude markets and events that have no selections / markets (default: true)
   --status: string # Specify a status to filter results by. This is currently A (active) or S (suspended)
-  --qp-sort: string # The field to order the response by, followed by the order. For example: name,desc (default: id,asc)
+  --sort: string # The field to order the response by, followed by the order. For example: name,desc (default: id,asc)
   --offset: int # Skip over a number of elements by specifying a start value for the query (default: 0)
   --limit: int # Specify the number of results to return (default: 100)
   --headline-summary: oneof<nothing, bool> # Return only headline markets (Markets with the lowest display order) Either 1 InPlay and 1 Pre-Match, or the amount specified in marketCount, if available. Markets and Outcomes will be returned. (default: false)
@@ -213,12 +214,13 @@ export def "get-events-for-class" [
   --selection-status: string # Specify a status to filter results by. This is currently A (active) or S (suspended)
   --selection-channel: string # Specify a channel filter and only results from that channel will be returned
   --selection-published: string # Specify whether only active entities should be returned, according to the William Hill definition of active (default: yes)
-  --api-key: string # Your API Key available from your developer portal
+  --api-key: string # Your API Key available from your developer portal (required)
 ]: nothing -> record<events: table<betInRunningDelay: float, bettingStatus: string, cashinAvailable: bool, channels: list, country: string, description: string, displayed: bool, eventSort: string, flags: list, hasInPlayMarkets: bool, hasLivePrices: bool, id: string, isInPlay: bool, isPublished: bool, marketCountActiveInPlay: float, marketCountActivePreMatch: float, marketCountActiveTotal: float, marketCountInPlay: float, marketCountPreMatch: float, markets: list, name: string, order: float, parentIds: list, raceNum: string, settled: bool, startDateTime: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($class_id | is-empty) { error make --unspanned { msg: "path parameter 'classId' must be non-empty" } }
-  let qp = [(serialize-qp "isPublished" $is_published "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "displayed" $displayed "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "settled" $settled "scalar") (serialize-qp "includeEmpty" $include_empty "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "headlineSummary" $headline_summary "scalar") (serialize-qp "includeAllDescendants" $include_all_descendants "scalar") (serialize-qp "isInPlay" $is_in_play "scalar") (serialize-qp "marketCount" $market_count "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "dateFrom" $date_from "scalar") (serialize-qp "dateTo" $date_to "scalar") (serialize-qp "eventSort" $event_sort "scalar") (serialize-qp "culture" $culture "scalar") (serialize-qp "marketPublished" $market_published "scalar") (serialize-qp "marketStatus" $market_status "scalar") (serialize-qp "marketDisplayed" $market_displayed "scalar") (serialize-qp "marketChannel" $market_channel "scalar") (serialize-qp "marketSort" $market_sort "scalar") (serialize-qp "marketEW" $market_ew "scalar") (serialize-qp "selectionStatus" $selection_status "scalar") (serialize-qp "selectionChannel" $selection_channel "scalar") (serialize-qp "selectionPublished" $selection_published "scalar")] | flatten | str join "&"
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
+  let qp = [(serialize-qp "isPublished" $is_published "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "displayed" $displayed "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "settled" $settled "scalar") (serialize-qp "includeEmpty" $include_empty "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "headlineSummary" $headline_summary "scalar") (serialize-qp "includeAllDescendants" $include_all_descendants "scalar") (serialize-qp "isInPlay" $is_in_play "scalar") (serialize-qp "marketCount" $market_count "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "dateFrom" $date_from "scalar") (serialize-qp "dateTo" $date_to "scalar") (serialize-qp "eventSort" $event_sort "scalar") (serialize-qp "culture" $culture "scalar") (serialize-qp "marketPublished" $market_published "scalar") (serialize-qp "marketStatus" $market_status "scalar") (serialize-qp "marketDisplayed" $market_displayed "scalar") (serialize-qp "marketChannel" $market_channel "scalar") (serialize-qp "marketSort" $market_sort "scalar") (serialize-qp "marketEW" $market_ew "scalar") (serialize-qp "selectionStatus" $selection_status "scalar") (serialize-qp "selectionChannel" $selection_channel "scalar") (serialize-qp "selectionPublished" $selection_published "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({class_id: (encode-path-segment $class_id)} | format pattern "/classes/{class_id}/events/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -227,7 +229,7 @@ export def "get-events-for-class" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"isPublished": $is_published, "fields": $fields, "include": $include, "exclude": $exclude, "displayed": $displayed, "channel": $channel, "settled": $settled, "includeEmpty": $include_empty, "status": $status, "sort": $qp_sort, "offset": $offset, "limit": $limit, "headlineSummary": $headline_summary, "includeAllDescendants": $include_all_descendants, "isInPlay": $is_in_play, "marketCount": $market_count, "date": $date, "dateFrom": $date_from, "dateTo": $date_to, "eventSort": $event_sort, "culture": $culture, "marketPublished": $market_published, "marketStatus": $market_status, "marketDisplayed": $market_displayed, "marketChannel": $market_channel, "marketSort": $market_sort, "marketEW": $market_ew, "selectionStatus": $selection_status, "selectionChannel": $selection_channel, "selectionPublished": $selection_published} | compact)
+    query: ({"isPublished": $is_published, "fields": $fields, "include": $include, "exclude": $exclude, "displayed": $displayed, "channel": $channel, "settled": $settled, "includeEmpty": $include_empty, "status": $status, "sort": $sort, "offset": $offset, "limit": $limit, "headlineSummary": $headline_summary, "includeAllDescendants": $include_all_descendants, "isInPlay": $is_in_play, "marketCount": $market_count, "date": $date, "dateFrom": $date_from, "dateTo": $date_to, "eventSort": $event_sort, "culture": $culture, "marketPublished": $market_published, "marketStatus": $market_status, "marketDisplayed": $market_displayed, "marketChannel": $market_channel, "marketSort": $market_sort, "marketEW": $market_ew, "selectionStatus": $selection_status, "selectionChannel": $selection_channel, "selectionPublished": $selection_published} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -257,11 +259,12 @@ export def "get-competition" [
   --include: list<string> # Specify fields in addition to the default to return (Comma-Separated List)
   --exclude: list<string> # Specify fields from the default to exclude (Comma-Separated List)
   --culture: string # Code used to return responses in language other than English, acceptable values are en-GB|de-DE|es-ES|fr-FR|nn-NO|fi-FI|ru-RU|pt-PT|hu-HU|sl-SL|ga-IE|en-CA|sr-Latn|sv-SE|el=GR|zh-CHS|it-IT|zh-CHT|cs-CZ|de-AT|ja-JP|pl-PL|da-DK|ro-RO|nl-NL|tr-TR
-  --api-key: string # Your API Key available from your developer portal
+  --api-key: string # Your API Key available from your developer portal (required)
 ]: nothing -> record<betInRunningDelay: float, cashinAvailable: bool, channels: list<string>, description: string, displayed: bool, flags: list<string>, id: string, isPublished: bool, name: string, order: int, parentIds: list<string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($competition_id | is-empty) { error make --unspanned { msg: "path parameter 'competitionId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "culture" $culture "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({competition_id: (encode-path-segment $competition_id)} | format pattern "/competitions/{competition_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -306,7 +309,7 @@ export def "get-events-for-competition" [
   --settled: oneof<nothing, bool> # Specify wether only settled entities should be returned
   --include-empty: oneof<nothing, bool> # When declared as false it should exclude markets and events that have no selections / markets (default: true)
   --status: string # Specify a status to filter results by. This is currently A (active) or S (suspended)
-  --qp-sort: string # The field to order the response by, followed by the order. For example: name,desc (default: id,asc)
+  --sort: string # The field to order the response by, followed by the order. For example: name,desc (default: id,asc)
   --offset: int # Skip over a number of elements by specifying a start value for the query (default: 0)
   --limit: int # Specify the number of results to return (default: 100)
   --headline-summary: oneof<nothing, bool> # Return only headline markets (Markets with the lowest display order) Either 1 InPlay and 1 Pre-Match, or the amount specified in marketCount, if available. Markets and Outcomes will be returned. (default: false)
@@ -328,12 +331,13 @@ export def "get-events-for-competition" [
   --selection-status: string # Specify a status to filter results by. This is currently A (active) or S (suspended)
   --selection-channel: string # Specify a channel filter and only results from that channel will be returned
   --selection-published: string # Specify whether only active entities should be returned, according to the William Hill definition of active (default: yes)
-  --api-key: string # Your API Key available from your developer portal
+  --api-key: string # Your API Key available from your developer portal (required)
 ]: nothing -> record<events: table<betInRunningDelay: float, bettingStatus: string, cashinAvailable: bool, channels: list, country: string, description: string, displayed: bool, eventSort: string, flags: list, hasInPlayMarkets: bool, hasLivePrices: bool, id: string, isInPlay: bool, isPublished: bool, marketCountActiveInPlay: float, marketCountActivePreMatch: float, marketCountActiveTotal: float, marketCountInPlay: float, marketCountPreMatch: float, markets: list, name: string, order: float, parentIds: list, raceNum: string, settled: bool, startDateTime: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($competition_id | is-empty) { error make --unspanned { msg: "path parameter 'competitionId' must be non-empty" } }
-  let qp = [(serialize-qp "isPublished" $is_published "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "displayed" $displayed "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "settled" $settled "scalar") (serialize-qp "includeEmpty" $include_empty "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "headlineSummary" $headline_summary "scalar") (serialize-qp "includeAllDescendants" $include_all_descendants "scalar") (serialize-qp "isInPlay" $is_in_play "scalar") (serialize-qp "marketCount" $market_count "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "dateFrom" $date_from "scalar") (serialize-qp "dateTo" $date_to "scalar") (serialize-qp "marketGroupId" $market_group_id "scalar") (serialize-qp "eventSort" $event_sort "scalar") (serialize-qp "culture" $culture "scalar") (serialize-qp "marketPublished" $market_published "scalar") (serialize-qp "marketStatus" $market_status "scalar") (serialize-qp "marketDisplayed" $market_displayed "scalar") (serialize-qp "marketChannel" $market_channel "scalar") (serialize-qp "marketSort" $market_sort "scalar") (serialize-qp "marketEW" $market_ew "scalar") (serialize-qp "selectionStatus" $selection_status "scalar") (serialize-qp "selectionChannel" $selection_channel "scalar") (serialize-qp "selectionPublished" $selection_published "scalar")] | flatten | str join "&"
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
+  let qp = [(serialize-qp "isPublished" $is_published "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "displayed" $displayed "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "settled" $settled "scalar") (serialize-qp "includeEmpty" $include_empty "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "headlineSummary" $headline_summary "scalar") (serialize-qp "includeAllDescendants" $include_all_descendants "scalar") (serialize-qp "isInPlay" $is_in_play "scalar") (serialize-qp "marketCount" $market_count "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "dateFrom" $date_from "scalar") (serialize-qp "dateTo" $date_to "scalar") (serialize-qp "marketGroupId" $market_group_id "scalar") (serialize-qp "eventSort" $event_sort "scalar") (serialize-qp "culture" $culture "scalar") (serialize-qp "marketPublished" $market_published "scalar") (serialize-qp "marketStatus" $market_status "scalar") (serialize-qp "marketDisplayed" $market_displayed "scalar") (serialize-qp "marketChannel" $market_channel "scalar") (serialize-qp "marketSort" $market_sort "scalar") (serialize-qp "marketEW" $market_ew "scalar") (serialize-qp "selectionStatus" $selection_status "scalar") (serialize-qp "selectionChannel" $selection_channel "scalar") (serialize-qp "selectionPublished" $selection_published "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({competition_id: (encode-path-segment $competition_id)} | format pattern "/competitions/{competition_id}/events/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -342,7 +346,7 @@ export def "get-events-for-competition" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"isPublished": $is_published, "fields": $fields, "include": $include, "exclude": $exclude, "displayed": $displayed, "channel": $channel, "settled": $settled, "includeEmpty": $include_empty, "status": $status, "sort": $qp_sort, "offset": $offset, "limit": $limit, "headlineSummary": $headline_summary, "includeAllDescendants": $include_all_descendants, "isInPlay": $is_in_play, "marketCount": $market_count, "date": $date, "dateFrom": $date_from, "dateTo": $date_to, "marketGroupId": $market_group_id, "eventSort": $event_sort, "culture": $culture, "marketPublished": $market_published, "marketStatus": $market_status, "marketDisplayed": $market_displayed, "marketChannel": $market_channel, "marketSort": $market_sort, "marketEW": $market_ew, "selectionStatus": $selection_status, "selectionChannel": $selection_channel, "selectionPublished": $selection_published} | compact)
+    query: ({"isPublished": $is_published, "fields": $fields, "include": $include, "exclude": $exclude, "displayed": $displayed, "channel": $channel, "settled": $settled, "includeEmpty": $include_empty, "status": $status, "sort": $sort, "offset": $offset, "limit": $limit, "headlineSummary": $headline_summary, "includeAllDescendants": $include_all_descendants, "isInPlay": $is_in_play, "marketCount": $market_count, "date": $date, "dateFrom": $date_from, "dateTo": $date_to, "marketGroupId": $market_group_id, "eventSort": $event_sort, "culture": $culture, "marketPublished": $market_published, "marketStatus": $market_status, "marketDisplayed": $market_displayed, "marketChannel": $market_channel, "marketSort": $market_sort, "marketEW": $market_ew, "selectionStatus": $selection_status, "selectionChannel": $selection_channel, "selectionPublished": $selection_published} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -371,17 +375,18 @@ export def "get-market-groups-for-competition" [
   --fields: list<string> # Specify an absolute field list to return (Comma-Separated List)
   --include: list<string> # Specify fields in addition to the default to return (Comma-Separated List)
   --exclude: list<string> # Specify fields from the default to exclude (Comma-Separated List)
-  --qp-sort: string # The field to order the response by, followed by the order. For example: name,desc (default: id,asc)
+  --sort: string # The field to order the response by, followed by the order. For example: name,desc (default: id,asc)
   --offset: int # Skip over a number of elements by specifying a start value for the query (default: 0)
   --limit: int # Specify the number of results to return (default: 100)
   --culture: string # Code used to return responses in language other than English, acceptable values are en-GB|de-DE|es-ES|fr-FR|nn-NO|fi-FI|ru-RU|pt-PT|hu-HU|sl-SL|ga-IE|en-CA|sr-Latn|sv-SE|el=GR|zh-CHS|it-IT|zh-CHT|cs-CZ|de-AT|ja-JP|pl-PL|da-DK|ro-RO|nl-NL|tr-TR
   --name: string # Filter by market group name
-  --api-key: string # Your API Key available from your developer portal
+  --api-key: string # Your API Key available from your developer portal (required)
 ]: nothing -> record<marketGroups: table<collectionId: string, competitionId: string, id: string, marketSort: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($competition_id | is-empty) { error make --unspanned { msg: "path parameter 'competitionId' must be non-empty" } }
-  let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "culture" $culture "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
+  let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "sort" $sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "culture" $culture "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({competition_id: (encode-path-segment $competition_id)} | format pattern "/competitions/{competition_id}/marketgroups/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -390,7 +395,7 @@ export def "get-market-groups-for-competition" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"fields": $fields, "include": $include, "exclude": $exclude, "sort": $qp_sort, "offset": $offset, "limit": $limit, "culture": $culture, "name": $name} | compact)
+    query: ({"fields": $fields, "include": $include, "exclude": $exclude, "sort": $sort, "offset": $offset, "limit": $limit, "culture": $culture, "name": $name} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -419,13 +424,16 @@ export def "get-markets-by-group-id" [
   --fields: list<string> # Specify an absolute field list to return (Comma-Separated List)
   --include: list<string> # Specify fields in addition to the default to return (Comma-Separated List)
   --exclude: list<string> # Specify fields from the default to exclude (Comma-Separated List)
-  --market-sort: string # Filter by market sort (e.g. MR (match result) -- (Outright)).
-  --market-group-id: string # Filter by marketGroupId (e.g. OB_MG1276585).
-  --api-key: string # Your API Key available from your developer portal
+  --market-sort: string # Filter by market sort (e.g. MR (match result) -- (Outright)). (required)
+  --market-group-id: string # Filter by marketGroupId (e.g. OB_MG1276585). (required)
+  --api-key: string # Your API Key available from your developer portal (required)
 ]: nothing -> record<marketGroups: table<collectionId: string, competitionId: string, id: string, marketSort: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($competition_id | is-empty) { error make --unspanned { msg: "path parameter 'competitionId' must be non-empty" } }
+  if ($market_sort == null) { error make --unspanned { msg: "required query parameter 'marketSort' missing: pass --market-sort" } }
+  if ($market_group_id == null) { error make --unspanned { msg: "required query parameter 'marketGroupId' missing: pass --market-group-id" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "marketSort" $market_sort "scalar") (serialize-qp "marketGroupId" $market_group_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({competition_id: (encode-path-segment $competition_id)} | format pattern "/competitions/{competition_id}/marketsByGroupid") $qp $auth.query)
   let accept_val = "application/json"
@@ -471,7 +479,7 @@ export def "get-events" [
   --include-empty: oneof<nothing, bool> # When declared as false it should exclude markets and events that have no selections / markets (default: true)
   --headline-summary: oneof<nothing, bool> # Return only headline markets (Markets with the lowest display order) Either 1 InPlay and 1 Pre-Match, or the amount specified in marketCount, if available. Markets and Outcomes will be returned. (default: false)
   --market-count: int # Specify the number of markets to return when requesting headlineSummary. This count of InPlay and Pre-Match markets will be returned.For example, when specifying 1, 1 In Play and 1 Pre Match market will be returned. (default: 1)
-  --qp-sort: string # The field to order the response by, followed by the order. For example: name,desc (default: id,asc)
+  --sort: string # The field to order the response by, followed by the order. For example: name,desc (default: id,asc)
   --offset: int # Skip over a number of elements by specifying a start value for the query (default: 0)
   --limit: int # Specify the number of results to return (default: 100)
   --market-ids: list<string> # Comma-seaerated list of market IDs to filter by
@@ -485,11 +493,12 @@ export def "get-events" [
   --selection-status: string # Specify a status to filter results by. This is currently A (active) or S (suspended)
   --selection-channel: string # Specify a channel filter and only results from that channel will be returned
   --selection-published: string # Specify whether only active entities should be returned, according to the William Hill definition of active (default: yes)
-  --api-key: string # Your API Key available from your developer portal
+  --api-key: string # Your API Key available from your developer portal (required)
 ]: nothing -> record<events: table<betInRunningDelay: float, bettingStatus: string, cashinAvailable: bool, channels: list, country: string, description: string, displayed: bool, eventSort: string, flags: list, hasInPlayMarkets: bool, hasLivePrices: bool, id: string, isInPlay: bool, isPublished: bool, marketCountActiveInPlay: float, marketCountActivePreMatch: float, marketCountActiveTotal: float, marketCountInPlay: float, marketCountPreMatch: float, markets: list, name: string, order: float, parentIds: list, raceNum: string, settled: bool, startDateTime: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "isPublished" $is_published "scalar") (serialize-qp "includeAllDescendants" $include_all_descendants "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "channel" $channel "scalar") (serialize-qp "settled" $settled "scalar") (serialize-qp "includeEmpty" $include_empty "scalar") (serialize-qp "headlineSummary" $headline_summary "scalar") (serialize-qp "marketCount" $market_count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "marketIds" $market_ids "csv") (serialize-qp "culture" $culture "scalar") (serialize-qp "marketPublished" $market_published "scalar") (serialize-qp "marketStatus" $market_status "scalar") (serialize-qp "marketDisplayed" $market_displayed "scalar") (serialize-qp "marketChannel" $market_channel "scalar") (serialize-qp "marketSort" $market_sort "scalar") (serialize-qp "marketEW" $market_ew "scalar") (serialize-qp "selectionStatus" $selection_status "scalar") (serialize-qp "selectionChannel" $selection_channel "scalar") (serialize-qp "selectionPublished" $selection_published "scalar")] | flatten | str join "&"
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
+  let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "isPublished" $is_published "scalar") (serialize-qp "includeAllDescendants" $include_all_descendants "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "channel" $channel "scalar") (serialize-qp "settled" $settled "scalar") (serialize-qp "includeEmpty" $include_empty "scalar") (serialize-qp "headlineSummary" $headline_summary "scalar") (serialize-qp "marketCount" $market_count "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "marketIds" $market_ids "csv") (serialize-qp "culture" $culture "scalar") (serialize-qp "marketPublished" $market_published "scalar") (serialize-qp "marketStatus" $market_status "scalar") (serialize-qp "marketDisplayed" $market_displayed "scalar") (serialize-qp "marketChannel" $market_channel "scalar") (serialize-qp "marketSort" $market_sort "scalar") (serialize-qp "marketEW" $market_ew "scalar") (serialize-qp "selectionStatus" $selection_status "scalar") (serialize-qp "selectionChannel" $selection_channel "scalar") (serialize-qp "selectionPublished" $selection_published "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/events/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -498,7 +507,7 @@ export def "get-events" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"ids": $ids, "isPublished": $is_published, "includeAllDescendants": $include_all_descendants, "fields": $fields, "include": $include, "exclude": $exclude, "channel": $channel, "settled": $settled, "includeEmpty": $include_empty, "headlineSummary": $headline_summary, "marketCount": $market_count, "sort": $qp_sort, "offset": $offset, "limit": $limit, "marketIds": $market_ids, "culture": $culture, "marketPublished": $market_published, "marketStatus": $market_status, "marketDisplayed": $market_displayed, "marketChannel": $market_channel, "marketSort": $market_sort, "marketEW": $market_ew, "selectionStatus": $selection_status, "selectionChannel": $selection_channel, "selectionPublished": $selection_published} | compact)
+    query: ({"ids": $ids, "isPublished": $is_published, "includeAllDescendants": $include_all_descendants, "fields": $fields, "include": $include, "exclude": $exclude, "channel": $channel, "settled": $settled, "includeEmpty": $include_empty, "headlineSummary": $headline_summary, "marketCount": $market_count, "sort": $sort, "offset": $offset, "limit": $limit, "marketIds": $market_ids, "culture": $culture, "marketPublished": $market_published, "marketStatus": $market_status, "marketDisplayed": $market_displayed, "marketChannel": $market_channel, "marketSort": $market_sort, "marketEW": $market_ew, "selectionStatus": $selection_status, "selectionChannel": $selection_channel, "selectionPublished": $selection_published} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -542,11 +551,12 @@ export def "get-event" [
   --selection-status: string # Specify a status to filter results by. This is currently A (active) or S (suspended)
   --selection-channel: string # Specify a channel filter and only results from that channel will be returned
   --selection-published: string # Specify whether only active entities should be returned, according to the William Hill definition of active (default: yes)
-  --api-key: string # Your API Key available from your developer portal
+  --api-key: string # Your API Key available from your developer portal (required)
 ]: nothing -> record<events: table<betInRunningDelay: float, bettingStatus: string, cashinAvailable: bool, channels: list, country: string, description: string, displayed: bool, eventSort: string, flags: list, hasInPlayMarkets: bool, hasLivePrices: bool, id: string, isInPlay: bool, isPublished: bool, marketCountActiveInPlay: float, marketCountActivePreMatch: float, marketCountActiveTotal: float, marketCountInPlay: float, marketCountPreMatch: float, markets: list, name: string, order: float, parentIds: list, raceNum: string, settled: bool, startDateTime: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'eventId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let qp = [(serialize-qp "includeAllDescendants" $include_all_descendants "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "headlineSummary" $headline_summary "scalar") (serialize-qp "marketCount" $market_count "scalar") (serialize-qp "marketIds" $market_ids "csv") (serialize-qp "includeEmpty" $include_empty "scalar") (serialize-qp "culture" $culture "scalar") (serialize-qp "marketPublished" $market_published "scalar") (serialize-qp "marketStatus" $market_status "scalar") (serialize-qp "marketDisplayed" $market_displayed "scalar") (serialize-qp "marketChannel" $market_channel "scalar") (serialize-qp "marketSort" $market_sort "scalar") (serialize-qp "marketEW" $market_ew "scalar") (serialize-qp "selectionStatus" $selection_status "scalar") (serialize-qp "selectionChannel" $selection_channel "scalar") (serialize-qp "selectionPublished" $selection_published "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/events/{event_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -585,11 +595,12 @@ export def "get-event-competitors" [
   --fields: list<string> # Specify an absolute field list to return (Comma-Separated List)
   --include: list<string> # Specify fields in addition to the default to return (Comma-Separated List)
   --exclude: list<string> # Specify fields from the default to exclude (Comma-Separated List)
-  --api-key: string # Your API Key available from your developer portal
+  --api-key: string # Your API Key available from your developer portal (required)
 ]: nothing -> record<competitors: table<age: float, colour: string, drawNumber: float, formGuide: string, id: float, jockeyName: string, name: string, overview: string, ownerName: string, rating: string, sex: string, silkImageUrl: string, trainerName: string, weightPounds: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'eventId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/events/{event_id}/competitors") $qp $auth.query)
   let accept_val = "application/json"
@@ -641,11 +652,12 @@ export def "get-markets" [
   --selection-status: string # Specify a status to filter results by. This is currently A (active) or S (suspended)
   --selection-channel: string # Specify a channel filter and only results from that channel will be returned
   --selection-published: string # Specify whether only active entities should be returned, according to the William Hill definition of active (default: yes)
-  --api-key: string # Your API Key available from your developer portal
+  --api-key: string # Your API Key available from your developer portal (required)
 ]: nothing -> record<markets: table<antepostMarket: bool, bestOddsGuaranteed: bool, betInRunningDelay: float, channels: string, description: string, displayed: bool, eachWay: bool, eachWayFactorDen: float, eachWayFactorNum: float, eachWayPlaces: float, earlyPriceAvailable: bool, fcAvailable: bool, firstFourAvailable: bool, firstPriceAvailable: bool, flags: string, hcapMakeup: float, hcapValue: float, id: string, isInPlayMarket: bool, isPublished: bool, livePriceAvailable: bool, marketGroupCollectionId: string, marketGroupId: string, marketGroupName: string, marketSort: string, name: string, order: float, parentIds: list, quinellaAvailable: bool, selections: list, settled: bool, startingPriceAvailable: bool, status: string, tcAvailable: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'eventId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "includeAllDescendants" $include_all_descendants "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "includeEmpty" $include_empty "scalar") (serialize-qp "culture" $culture "scalar") (serialize-qp "marketPublished" $market_published "scalar") (serialize-qp "marketStatus" $market_status "scalar") (serialize-qp "marketDisplayed" $market_displayed "scalar") (serialize-qp "marketChannel" $market_channel "scalar") (serialize-qp "marketSort" $market_sort "scalar") (serialize-qp "marketEW" $market_ew "scalar") (serialize-qp "selectionStatus" $selection_status "scalar") (serialize-qp "selectionChannel" $selection_channel "scalar") (serialize-qp "selectionPublished" $selection_published "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/events/{event_id}/markets/") $qp $auth.query)
   let accept_val = "application/json"
@@ -690,12 +702,13 @@ export def "get-selections" [
   --selection-status: string # Specify a status to filter results by. This is currently A (active) or S (suspended)
   --selection-channel: string # Specify a channel filter and only results from that channel will be returned
   --selection-published: string # Specify whether only active entities should be returned, according to the William Hill definition of active (default: yes)
-  --api-key: string # Your API Key available from your developer portal
+  --api-key: string # Your API Key available from your developer portal (required)
 ]: nothing -> record<selections: table<cashinPriceDen: float, cashinPriceNum: float, channels: list, csAway: float, csHome: float, currentPriceDen: float, currentPriceNum: float, description: string, displayed: bool, id: string, isPublished: bool, name: string, oddsDecimal: float, oddsFractional: float, order: float, parentIds: list, priceFormatted: record, result: string, resultType: string, runnerNum: float, settled: bool, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'eventId' must be non-empty" } }
   if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "culture" $culture "scalar") (serialize-qp "selectionStatus" $selection_status "scalar") (serialize-qp "selectionChannel" $selection_channel "scalar") (serialize-qp "selectionPublished" $selection_published "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({event_id: (encode-path-segment $event_id), market_id: (encode-path-segment $market_id)} | format pattern "/events/{event_id}/markets/{market_id}/selections/") $qp $auth.query)
   let accept_val = "application/json"
@@ -730,7 +743,7 @@ export def "get-sports" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-sort: string # The field to order the response by, followed by the order. For example: name,desc (default: id,asc)
+  --sort: string # The field to order the response by, followed by the order. For example: name,desc (default: id,asc)
   --offset: int # Skip over a number of elements by specifying a start value for the query (default: 0)
   --is-published: string # Specify whether only active entities should be returned, according to the William Hill definition of active (default: yes)
   --limit: int # Specify the number of results to return (default: 100)
@@ -738,11 +751,12 @@ export def "get-sports" [
   --include: list<string> # Specify fields in addition to the default to return (Comma-Separated List)
   --exclude: list<string> # Specify fields from the default to exclude (Comma-Separated List)
   --culture: string # Code used to return responses in language other than English, acceptable values are en-GB|de-DE|es-ES|fr-FR|nn-NO|fi-FI|ru-RU|pt-PT|hu-HU|sl-SL|ga-IE|en-CA|sr-Latn|sv-SE|el=GR|zh-CHS|it-IT|zh-CHT|cs-CZ|de-AT|ja-JP|pl-PL|da-DK|ro-RO|nl-NL|tr-TR
-  --api-key: string # Your API Key available from your developer portal
+  --api-key: string # Your API Key available from your developer portal (required)
 ]: nothing -> record<sports: table<id: string, isPublished: bool, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "isPublished" $is_published "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "culture" $culture "scalar")] | flatten | str join "&"
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
+  let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "isPublished" $is_published "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "culture" $culture "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sports/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -751,7 +765,7 @@ export def "get-sports" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sort": $qp_sort, "offset": $offset, "isPublished": $is_published, "limit": $limit, "fields": $fields, "include": $include, "exclude": $exclude, "culture": $culture} | compact)
+    query: ({"sort": $sort, "offset": $offset, "isPublished": $is_published, "limit": $limit, "fields": $fields, "include": $include, "exclude": $exclude, "culture": $culture} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -784,16 +798,17 @@ export def "get-classes-for-sport" [
   --displayed: string # Specify whether to return displayed entities or not (default: yes)
   --channel: string # Specify a channel filter and only results from that channel will be returned
   --status: string # Specify a status to filter results by. This is currently A (active) or S (suspended)
-  --qp-sort: string # The field to order the response by, followed by the order. For example: name,desc (default: id,asc)
+  --sort: string # The field to order the response by, followed by the order. For example: name,desc (default: id,asc)
   --offset: int # Skip over a number of elements by specifying a start value for the query (default: 0)
   --limit: int # Specify the number of results to return (default: 100)
   --culture: string # Code used to return responses in language other than English, acceptable values are en-GB|de-DE|es-ES|fr-FR|nn-NO|fi-FI|ru-RU|pt-PT|hu-HU|sl-SL|ga-IE|en-CA|sr-Latn|sv-SE|el=GR|zh-CHS|it-IT|zh-CHT|cs-CZ|de-AT|ja-JP|pl-PL|da-DK|ro-RO|nl-NL|tr-TR
-  --api-key: string # Your API Key available from your developer portal
+  --api-key: string # Your API Key available from your developer portal (required)
 ]: nothing -> record<classes: table<id: string, isPublished: bool, name: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sport_id | is-empty) { error make --unspanned { msg: "path parameter 'sportId' must be non-empty" } }
-  let qp = [(serialize-qp "isPublished" $is_published "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "displayed" $displayed "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "culture" $culture "scalar")] | flatten | str join "&"
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
+  let qp = [(serialize-qp "isPublished" $is_published "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "displayed" $displayed "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "culture" $culture "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({sport_id: (encode-path-segment $sport_id)} | format pattern "/sports/{sport_id}/classes/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -802,7 +817,7 @@ export def "get-classes-for-sport" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"isPublished": $is_published, "fields": $fields, "include": $include, "exclude": $exclude, "displayed": $displayed, "channel": $channel, "status": $status, "sort": $qp_sort, "offset": $offset, "limit": $limit, "culture": $culture} | compact)
+    query: ({"isPublished": $is_published, "fields": $fields, "include": $include, "exclude": $exclude, "displayed": $displayed, "channel": $channel, "status": $status, "sort": $sort, "offset": $offset, "limit": $limit, "culture": $culture} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -835,16 +850,17 @@ export def "get-competitions-for-sport" [
   --displayed: string # Specify whether to return displayed entities or not (default: yes)
   --channel: string # Specify a channel filter and only results from that channel will be returned
   --status: string # Specify a status to filter results by. This is currently A (active) or S (suspended)
-  --qp-sort: string # The field to order the response by, followed by the order. For example: name,desc (default: id,asc)
+  --sort: string # The field to order the response by, followed by the order. For example: name,desc (default: id,asc)
   --offset: int # Skip over a number of elements by specifying a start value for the query (default: 0)
   --limit: int # Specify the number of results to return (default: 100)
   --culture: string # Code used to return responses in language other than English, acceptable values are en-GB|de-DE|es-ES|fr-FR|nn-NO|fi-FI|ru-RU|pt-PT|hu-HU|sl-SL|ga-IE|en-CA|sr-Latn|sv-SE|el=GR|zh-CHS|it-IT|zh-CHT|cs-CZ|de-AT|ja-JP|pl-PL|da-DK|ro-RO|nl-NL|tr-TR
-  --api-key: string # Your API Key available from your developer portal
+  --api-key: string # Your API Key available from your developer portal (required)
 ]: nothing -> record<competitions: table<betInRunningDelay: float, cashinAvailable: bool, channels: list, description: string, displayed: bool, flags: list, id: string, isPublished: bool, name: string, order: int, parentIds: list, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sport_id | is-empty) { error make --unspanned { msg: "path parameter 'sportId' must be non-empty" } }
-  let qp = [(serialize-qp "isPublished" $is_published "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "displayed" $displayed "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "culture" $culture "scalar")] | flatten | str join "&"
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
+  let qp = [(serialize-qp "isPublished" $is_published "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "displayed" $displayed "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "culture" $culture "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({sport_id: (encode-path-segment $sport_id)} | format pattern "/sports/{sport_id}/competitions/") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -853,7 +869,7 @@ export def "get-competitions-for-sport" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"isPublished": $is_published, "fields": $fields, "include": $include, "exclude": $exclude, "displayed": $displayed, "channel": $channel, "status": $status, "sort": $qp_sort, "offset": $offset, "limit": $limit, "culture": $culture} | compact)
+    query: ({"isPublished": $is_published, "fields": $fields, "include": $include, "exclude": $exclude, "displayed": $displayed, "channel": $channel, "status": $status, "sort": $sort, "offset": $offset, "limit": $limit, "culture": $culture} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -888,10 +904,11 @@ export def "get-top-bets" [
   --sort-name: string # The market sort code used to further filter event results. Please note this can only be used with event id(s).
   --culture: string # Code used to return responses in language other than English, acceptable values are en-GB|de-DE|es-ES|fr-FR|nn-NO|fi-FI|ru-RU|pt-PT|hu-HU|sl-SL|ga-IE|en-CA|sr-Latn|sv-SE|el=GR|zh-CHS|it-IT|zh-CHT|cs-CZ|de-AT|ja-JP|pl-PL|da-DK|ro-RO|nl-NL|tr-TR
   --locale: string # Code used to select a set of top bets settings, default is "whapi" which allows events set in far future to be included, setting the value to "en-GB" will activate english sportsbook settings, mirroring top bets on the website, which restricts events returned to those taking place in next 36 hours. Acceptable values (not all heve their own settings - if none currently available for that locale - en-GB will be used) are de-DE|whapi|en-GB|es-ES|fr-FR|nn-NO|fi-FI|ru-RU|pt-PT|hu-HU|sl-SL|ga-IE|en-CA|sr-Latn|sv-SE|el=GR|zh-CHS|it-IT|zh-CHT|cs-CZ|de-AT|ja-JP|pl-PL|da-DK|ro-RO|nl-NL|tr-TR
-  --api-key: string # Your API Key available from your developer portal
+  --api-key: string # Your API Key available from your developer portal (required)
 ]: nothing -> record<bets: table<competition: record, event: record, market: record, selection: record, sport: record, weight: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let qp = [(serialize-qp "sportIds" $sport_ids "csv") (serialize-qp "competitionIds" $competition_ids "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "param_topBetEventId" $param_top_bet_event_id "scalar") (serialize-qp "sortName" $sort_name "scalar") (serialize-qp "culture" $culture "scalar") (serialize-qp "Locale" $locale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/topbets/" $qp $auth.query)
   let accept_val = "application/json"

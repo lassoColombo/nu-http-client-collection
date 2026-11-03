@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -159,13 +159,14 @@ export def "registries-get-build-source-upload-url" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
+  --api-version: string # The client API version. (required)
 ]: nothing -> record<relativePath: string, uploadUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($registry_name | is-empty) { error make --unspanned { msg: "path parameter 'registryName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), registry_name: (encode-path-segment $registry_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/listBuildSourceUploadUrl") $qp $auth.query)
   let accept_val = "application/json"
@@ -201,15 +202,16 @@ export def "runs-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
+  --api-version: string # The client API version. (required)
   --filter: string # The runs filter to apply on the operation. Arithmetic operators are not supported. The allowed string function is 'contains'. All logical operators except 'Not', 'Has', 'All' are allowed.
   --top: int # $top is supported for get list of runs, which limits the maximum number of runs to return. (format: int32)
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($registry_name | is-empty) { error make --unspanned { msg: "path parameter 'registryName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), registry_name: (encode-path-segment $registry_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/runs") $qp $auth.query)
   let accept_val = "application/json"
@@ -246,14 +248,15 @@ export def "runs-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
-]: nothing -> record<properties: record<agentConfiguration: record<cpu: int>, createTime: string, customRegistries: list<string>, finishTime: string, imageUpdateTrigger: record<id: string, images: list, timestamp: string>, isArchiveEnabled: bool, lastUpdatedTime: string, outputImages: list<record>, platform: record<architecture: string, os: string, variant: string>, provisioningState: string, runErrorMessage: string, runId: string, runType: string, sourceRegistryAuth: string, sourceTrigger: record<branchName: string, commitId: string, eventType: string, id: string, providerType: string, pullRequestId: string, repositoryUrl: string>, startTime: string, status: string, task: string, timerTrigger: record<scheduleOccurrence: string, timerTriggerName: string>, updateTriggerToken: string>> {
+  --api-version: string # The client API version. (required)
+]: nothing -> record<properties: record<agentConfiguration: record<cpu: int>, createTime: string, customRegistries: list<string>, finishTime: string, imageUpdateTrigger: record<id: string, images: list, timestamp: string>, isArchiveEnabled: bool, lastUpdatedTime: string, outputImages: list<record>, platform: record<architecture: string, os: string, variant: string>, provisioningState: string, runErrorMessage: string, runId: string, runType: string, sourceRegistryAuth: string, sourceTrigger: record<branchName: string, commitId: string, eventType: string, id: string, providerType: string, pullRequestId: string, repositoryUrl: string>, startTime: string, status: string, task: string, timerTrigger: record<scheduleOccurrence: string, timerTriggerName: string>, updateTriggerToken: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($registry_name | is-empty) { error make --unspanned { msg: "path parameter 'registryName' must be non-empty" } }
   if ($run_id | is-empty) { error make --unspanned { msg: "path parameter 'runId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), registry_name: (encode-path-segment $registry_name), run_id: (encode-path-segment $run_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/runs/{run_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -290,9 +293,9 @@ export def "runs-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
+  --api-version: string # The client API version. (required)
   --is-archive-enabled: oneof<nothing, bool> # The value that indicates whether archiving is enabled or not.
-]: any -> record<properties: record<agentConfiguration: record<cpu: int>, createTime: string, customRegistries: list<string>, finishTime: string, imageUpdateTrigger: record<id: string, images: list, timestamp: string>, isArchiveEnabled: bool, lastUpdatedTime: string, outputImages: list<record>, platform: record<architecture: string, os: string, variant: string>, provisioningState: string, runErrorMessage: string, runId: string, runType: string, sourceRegistryAuth: string, sourceTrigger: record<branchName: string, commitId: string, eventType: string, id: string, providerType: string, pullRequestId: string, repositoryUrl: string>, startTime: string, status: string, task: string, timerTrigger: record<scheduleOccurrence: string, timerTriggerName: string>, updateTriggerToken: string>> {
+]: any -> record<properties: record<agentConfiguration: record<cpu: int>, createTime: string, customRegistries: list<string>, finishTime: string, imageUpdateTrigger: record<id: string, images: list, timestamp: string>, isArchiveEnabled: bool, lastUpdatedTime: string, outputImages: list<record>, platform: record<architecture: string, os: string, variant: string>, provisioningState: string, runErrorMessage: string, runId: string, runType: string, sourceRegistryAuth: string, sourceTrigger: record<branchName: string, commitId: string, eventType: string, id: string, providerType: string, pullRequestId: string, repositoryUrl: string>, startTime: string, status: string, task: string, timerTrigger: record<scheduleOccurrence: string, timerTriggerName: string>, updateTriggerToken: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -300,6 +303,7 @@ export def "runs-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($registry_name | is-empty) { error make --unspanned { msg: "path parameter 'registryName' must be non-empty" } }
   if ($run_id | is-empty) { error make --unspanned { msg: "path parameter 'runId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), registry_name: (encode-path-segment $registry_name), run_id: (encode-path-segment $run_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/runs/{run_id}") $qp $auth.query)
   let req_body = {"isArchiveEnabled": $is_archive_enabled} | compact
@@ -338,14 +342,15 @@ export def "runs-cancel" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
-]: nothing -> record<error: record<code: string, message: string>> {
+  --api-version: string # The client API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($registry_name | is-empty) { error make --unspanned { msg: "path parameter 'registryName' must be non-empty" } }
   if ($run_id | is-empty) { error make --unspanned { msg: "path parameter 'runId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), registry_name: (encode-path-segment $registry_name), run_id: (encode-path-segment $run_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/runs/{run_id}/cancel") $qp $auth.query)
   let accept_val = "application/json"
@@ -382,7 +387,7 @@ export def "runs-get-log-sas-url" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
+  --api-version: string # The client API version. (required)
 ]: nothing -> record<logLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -390,6 +395,7 @@ export def "runs-get-log-sas-url" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($registry_name | is-empty) { error make --unspanned { msg: "path parameter 'registryName' must be non-empty" } }
   if ($run_id | is-empty) { error make --unspanned { msg: "path parameter 'runId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), registry_name: (encode-path-segment $registry_name), run_id: (encode-path-segment $run_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/runs/{run_id}/listLogSasUrl") $qp $auth.query)
   let accept_val = "application/json"
@@ -426,16 +432,17 @@ export def "registries-schedule-run" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
+  --api-version: string # The client API version. (required)
   --is-archive-enabled: oneof<nothing, bool> # The value that indicates whether archiving is enabled for the run or not. (default: false)
   type: string # The type of the run request.
-]: any -> record<properties: record<agentConfiguration: record<cpu: int>, createTime: string, customRegistries: list<string>, finishTime: string, imageUpdateTrigger: record<id: string, images: list, timestamp: string>, isArchiveEnabled: bool, lastUpdatedTime: string, outputImages: list<record>, platform: record<architecture: string, os: string, variant: string>, provisioningState: string, runErrorMessage: string, runId: string, runType: string, sourceRegistryAuth: string, sourceTrigger: record<branchName: string, commitId: string, eventType: string, id: string, providerType: string, pullRequestId: string, repositoryUrl: string>, startTime: string, status: string, task: string, timerTrigger: record<scheduleOccurrence: string, timerTriggerName: string>, updateTriggerToken: string>> {
+]: any -> record<properties: record<agentConfiguration: record<cpu: int>, createTime: string, customRegistries: list<string>, finishTime: string, imageUpdateTrigger: record<id: string, images: list, timestamp: string>, isArchiveEnabled: bool, lastUpdatedTime: string, outputImages: list<record>, platform: record<architecture: string, os: string, variant: string>, provisioningState: string, runErrorMessage: string, runId: string, runType: string, sourceRegistryAuth: string, sourceTrigger: record<branchName: string, commitId: string, eventType: string, id: string, providerType: string, pullRequestId: string, repositoryUrl: string>, startTime: string, status: string, task: string, timerTrigger: record<scheduleOccurrence: string, timerTriggerName: string>, updateTriggerToken: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($registry_name | is-empty) { error make --unspanned { msg: "path parameter 'registryName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), registry_name: (encode-path-segment $registry_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/scheduleRun") $qp $auth.query)
   let req_body = {"isArchiveEnabled": $is_archive_enabled, "type": $type} | compact
@@ -473,13 +480,14 @@ export def "task-runs-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
-]: nothing -> record<nextLink: string, value: table<identity: record, properties: record>> {
+  --api-version: string # The client API version. (required)
+]: nothing -> record<nextLink: string, value: table<identity: record, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($registry_name | is-empty) { error make --unspanned { msg: "path parameter 'registryName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), registry_name: (encode-path-segment $registry_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/taskRuns") $qp $auth.query)
   let accept_val = "application/json"
@@ -516,14 +524,15 @@ export def "task-runs-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
-]: nothing -> record<error: record<code: string, message: string>> {
+  --api-version: string # The client API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($registry_name | is-empty) { error make --unspanned { msg: "path parameter 'registryName' must be non-empty" } }
   if ($task_run_name | is-empty) { error make --unspanned { msg: "path parameter 'taskRunName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), registry_name: (encode-path-segment $registry_name), task_run_name: (encode-path-segment $task_run_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/taskRuns/{task_run_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -560,14 +569,15 @@ export def "task-runs-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
-]: nothing -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<forceUpdateTag: string, provisioningState: string, runRequest: record<isArchiveEnabled: bool, type: string>, runResult: record<properties: record>>> {
+  --api-version: string # The client API version. (required)
+]: nothing -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<forceUpdateTag: string, provisioningState: string, runRequest: record<isArchiveEnabled: bool, type: string>, runResult: record<properties: record, id: string, name: string, type: string>>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($registry_name | is-empty) { error make --unspanned { msg: "path parameter 'registryName' must be non-empty" } }
   if ($task_run_name | is-empty) { error make --unspanned { msg: "path parameter 'taskRunName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), registry_name: (encode-path-segment $registry_name), task_run_name: (encode-path-segment $task_run_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/taskRuns/{task_run_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -606,11 +616,11 @@ export def "task-runs-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
+  --api-version: string # The client API version. (required)
   --identity: record # Managed identity for the resource. — shape: {principalId?: string, tenantId?: string, type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
   --properties: record # The properties of a task run update parameters. — shape: {forceUpdateTag?: string, runRequest?: record}
   --tags: record # The ARM resource tags.
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<forceUpdateTag: string, provisioningState: string, runRequest: record<isArchiveEnabled: bool, type: string>, runResult: record<properties: record>>> {
+]: any -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<forceUpdateTag: string, provisioningState: string, runRequest: record<isArchiveEnabled: bool, type: string>, runResult: record<properties: record, id: string, name: string, type: string>>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -618,6 +628,7 @@ export def "task-runs-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($registry_name | is-empty) { error make --unspanned { msg: "path parameter 'registryName' must be non-empty" } }
   if ($task_run_name | is-empty) { error make --unspanned { msg: "path parameter 'taskRunName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), registry_name: (encode-path-segment $registry_name), task_run_name: (encode-path-segment $task_run_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/taskRuns/{task_run_name}") $qp $auth.query)
   let req_body = {"identity": $identity, "properties": $properties, "tags": $tags} | compact
@@ -658,12 +669,12 @@ export def "task-runs-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
+  --api-version: string # The client API version. (required)
   --identity: record # Managed identity for the resource. — shape: {principalId?: string, tenantId?: string, type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
   --properties: record # The properties of task run. — shape: {forceUpdateTag?: string, runRequest?: record, runResult?: record}
   location: string # The location of the resource. This cannot be changed after the resource is created.
   --tags: record # The tags of the resource.
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<forceUpdateTag: string, provisioningState: string, runRequest: record<isArchiveEnabled: bool, type: string>, runResult: record<properties: record>>> {
+]: any -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<forceUpdateTag: string, provisioningState: string, runRequest: record<isArchiveEnabled: bool, type: string>, runResult: record<properties: record, id: string, name: string, type: string>>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -671,6 +682,7 @@ export def "task-runs-create" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($registry_name | is-empty) { error make --unspanned { msg: "path parameter 'registryName' must be non-empty" } }
   if ($task_run_name | is-empty) { error make --unspanned { msg: "path parameter 'taskRunName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), registry_name: (encode-path-segment $registry_name), task_run_name: (encode-path-segment $task_run_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/taskRuns/{task_run_name}") $qp $auth.query)
   let req_body = {"identity": $identity, "properties": $properties, "location": $location, "tags": $tags} | compact
@@ -708,13 +720,14 @@ export def "tasks-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
-]: nothing -> record<nextLink: string, value: table<identity: record, properties: record>> {
+  --api-version: string # The client API version. (required)
+]: nothing -> record<nextLink: string, value: table<identity: record, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($registry_name | is-empty) { error make --unspanned { msg: "path parameter 'registryName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), registry_name: (encode-path-segment $registry_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/tasks") $qp $auth.query)
   let accept_val = "application/json"
@@ -751,14 +764,15 @@ export def "tasks-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
-]: nothing -> record<error: record<code: string, message: string>> {
+  --api-version: string # The client API version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($registry_name | is-empty) { error make --unspanned { msg: "path parameter 'registryName' must be non-empty" } }
   if ($task_name | is-empty) { error make --unspanned { msg: "path parameter 'taskName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), registry_name: (encode-path-segment $registry_name), task_name: (encode-path-segment $task_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/tasks/{task_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -795,14 +809,15 @@ export def "tasks-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
-]: nothing -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<agentConfiguration: record<cpu: int>, creationDate: string, credentials: record<customRegistries: record, sourceRegistry: record>, platform: record<architecture: string, os: string, variant: string>, provisioningState: string, status: string, step: record<baseImageDependencies: list, contextAccessToken: string, contextPath: string, type: string>, timeout: int, trigger: record<baseImageTrigger: record, sourceTriggers: list, timerTriggers: list>>> {
+  --api-version: string # The client API version. (required)
+]: nothing -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<agentConfiguration: record<cpu: int>, creationDate: string, credentials: record<customRegistries: record, sourceRegistry: record>, platform: record<architecture: string, os: string, variant: string>, provisioningState: string, status: string, step: record<baseImageDependencies: list, contextAccessToken: string, contextPath: string, type: string>, timeout: int, trigger: record<baseImageTrigger: record, sourceTriggers: list, timerTriggers: list>>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($registry_name | is-empty) { error make --unspanned { msg: "path parameter 'registryName' must be non-empty" } }
   if ($task_name | is-empty) { error make --unspanned { msg: "path parameter 'taskName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), registry_name: (encode-path-segment $registry_name), task_name: (encode-path-segment $task_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/tasks/{task_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -841,11 +856,11 @@ export def "tasks-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
+  --api-version: string # The client API version. (required)
   --identity: record # Managed identity for the resource. — shape: {principalId?: string, tenantId?: string, type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
   --properties: record # The properties for updating a task. — shape: {agentConfiguration?: record, credentials?: record, platform?: record, status?: "Disabled"|"Enabled", step?: record, timeout?: int, trigger?: record}
   --tags: record # The ARM resource tags.
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<agentConfiguration: record<cpu: int>, creationDate: string, credentials: record<customRegistries: record, sourceRegistry: record>, platform: record<architecture: string, os: string, variant: string>, provisioningState: string, status: string, step: record<baseImageDependencies: list, contextAccessToken: string, contextPath: string, type: string>, timeout: int, trigger: record<baseImageTrigger: record, sourceTriggers: list, timerTriggers: list>>> {
+]: any -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<agentConfiguration: record<cpu: int>, creationDate: string, credentials: record<customRegistries: record, sourceRegistry: record>, platform: record<architecture: string, os: string, variant: string>, provisioningState: string, status: string, step: record<baseImageDependencies: list, contextAccessToken: string, contextPath: string, type: string>, timeout: int, trigger: record<baseImageTrigger: record, sourceTriggers: list, timerTriggers: list>>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -853,6 +868,7 @@ export def "tasks-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($registry_name | is-empty) { error make --unspanned { msg: "path parameter 'registryName' must be non-empty" } }
   if ($task_name | is-empty) { error make --unspanned { msg: "path parameter 'taskName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), registry_name: (encode-path-segment $registry_name), task_name: (encode-path-segment $task_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/tasks/{task_name}") $qp $auth.query)
   let req_body = {"identity": $identity, "properties": $properties, "tags": $tags} | compact
@@ -893,12 +909,12 @@ export def "tasks-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
+  --api-version: string # The client API version. (required)
   --identity: record # Managed identity for the resource. — shape: {principalId?: string, tenantId?: string, type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
   --properties: record # The properties of a task. — shape: {agentConfiguration?: record, credentials?: record, platform: record, status?: "Disabled"|"Enabled", step: record, timeout?: int, trigger?: record}
   location: string # The location of the resource. This cannot be changed after the resource is created.
   --tags: record # The tags of the resource.
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<agentConfiguration: record<cpu: int>, creationDate: string, credentials: record<customRegistries: record, sourceRegistry: record>, platform: record<architecture: string, os: string, variant: string>, provisioningState: string, status: string, step: record<baseImageDependencies: list, contextAccessToken: string, contextPath: string, type: string>, timeout: int, trigger: record<baseImageTrigger: record, sourceTriggers: list, timerTriggers: list>>> {
+]: any -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<agentConfiguration: record<cpu: int>, creationDate: string, credentials: record<customRegistries: record, sourceRegistry: record>, platform: record<architecture: string, os: string, variant: string>, provisioningState: string, status: string, step: record<baseImageDependencies: list, contextAccessToken: string, contextPath: string, type: string>, timeout: int, trigger: record<baseImageTrigger: record, sourceTriggers: list, timerTriggers: list>>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -906,6 +922,7 @@ export def "tasks-create" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($registry_name | is-empty) { error make --unspanned { msg: "path parameter 'registryName' must be non-empty" } }
   if ($task_name | is-empty) { error make --unspanned { msg: "path parameter 'taskName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), registry_name: (encode-path-segment $registry_name), task_name: (encode-path-segment $task_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/tasks/{task_name}") $qp $auth.query)
   let req_body = {"identity": $identity, "properties": $properties, "location": $location, "tags": $tags} | compact
@@ -944,14 +961,15 @@ export def "tasks-get-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The client API version.
-]: nothing -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<agentConfiguration: record<cpu: int>, creationDate: string, credentials: record<customRegistries: record, sourceRegistry: record>, platform: record<architecture: string, os: string, variant: string>, provisioningState: string, status: string, step: record<baseImageDependencies: list, contextAccessToken: string, contextPath: string, type: string>, timeout: int, trigger: record<baseImageTrigger: record, sourceTriggers: list, timerTriggers: list>>> {
+  --api-version: string # The client API version. (required)
+]: nothing -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<agentConfiguration: record<cpu: int>, creationDate: string, credentials: record<customRegistries: record, sourceRegistry: record>, platform: record<architecture: string, os: string, variant: string>, provisioningState: string, status: string, step: record<baseImageDependencies: list, contextAccessToken: string, contextPath: string, type: string>, timeout: int, trigger: record<baseImageTrigger: record, sourceTriggers: list, timerTriggers: list>>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($registry_name | is-empty) { error make --unspanned { msg: "path parameter 'registryName' must be non-empty" } }
   if ($task_name | is-empty) { error make --unspanned { msg: "path parameter 'taskName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), registry_name: (encode-path-segment $registry_name), task_name: (encode-path-segment $task_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerRegistry/registries/{registry_name}/tasks/{task_name}/listDetails") $qp $auth.query)
   let accept_val = "application/json"

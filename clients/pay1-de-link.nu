@@ -1,4 +1,4 @@
-# Auto-generated client for PAYONE Link API vv1
+# Auto-generated client for PAYONE Link API v1
 # Source: https://api.apis.guru/v2/specs/pay1.de/link/v1/openapi.json
 # Auth: --token flag or $env.PAYONE_LINK_API_TOKEN
 
@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "payone-hmac-sha256" => { {scheme: $scheme, headers: {Authorization: $"Payone-hmac-sha256 ($token_val)"}, query: "", location: "header"} }
+    "payone-hmac-sha256" => { {scheme: $scheme, headers: {"Authorization": $"Payone-hmac-sha256 ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -151,13 +151,17 @@ export def "get-payment-links" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # format: int32, default: 0
   --limit: int # format: int32, default: 25
-  --merchant-id: string
-  --account-id: string
-  --portal-id: string
-  --mode: string
+  --merchant-id: string # required
+  --account-id: string # required
+  --portal-id: string # required
+  --mode: string # required
 ]: nothing -> record<content: table<accountId: string, active: bool, amount: int, backgroundImage: string, billing: record, created: int, currency: string, description: string, email: string, errorUrl: string, expiration: string, hash: string, id: string, intent: string, invoiceInformation: record, language: string, link: string, logo: string, merchantId: string, mode: string, modified: int, notifyUrl: string, paymentMethod: string, paymentMethods: list, paymentProcess: string, portalId: string, redirectUrl: string, reference: string, shipping: record, shoppingCart: list, status: string, successUrl: string, userId: string>, empty: bool, first: bool, last: bool, number: int, numberOfElements: int, pageable: record<offset: int, pageNumber: int, pageSize: int, paged: bool, sort: record<empty: bool, sorted: bool, unsorted: bool>, unpaged: bool>, size: int, sort: record<empty: bool, sorted: bool, unsorted: bool>, totalElements: int, totalPages: int> {
   let auth = (build-auth $token ($auth_scheme | default "payone-hmac-sha256"))
   let base = ($base_url | default $BASE_URL)
+  if ($merchant_id == null) { error make --unspanned { msg: "required query parameter 'merchantId' missing: pass --merchant-id" } }
+  if ($account_id == null) { error make --unspanned { msg: "required query parameter 'accountId' missing: pass --account-id" } }
+  if ($portal_id == null) { error make --unspanned { msg: "required query parameter 'portalId' missing: pass --portal-id" } }
+  if ($mode == null) { error make --unspanned { msg: "required query parameter 'mode' missing: pass --mode" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "merchantId" $merchant_id "scalar") (serialize-qp "accountId" $account_id "scalar") (serialize-qp "portalId" $portal_id "scalar") (serialize-qp "mode" $mode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/payment-links" $qp $auth.query)
   let accept_val = "application/json"

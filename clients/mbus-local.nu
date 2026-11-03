@@ -99,6 +99,8 @@ def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: 
 def base-url-completer [] { ["http://mbus.local" "http://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def baudrate-completer [] { ["1200" "2400" "300" "4800" "600" "9600"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -161,9 +163,9 @@ export def "mbus-api" [
 #
 # POST /mbus/get/{device}/{baudrate}/{address}
 # operationId: get
-export def "get" [
+export def "post-mbus-get-device-baudrate-address" [
   device: string
-  baudrate: int
+  baudrate: int@baudrate-completer
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -203,7 +205,7 @@ export def "get" [
 # operationId: getMulti
 export def "get-multi" [
   device: string
-  baudrate: int
+  baudrate: int@baudrate-completer
   address: string
   maxframes: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -347,7 +349,7 @@ export def "hat-on" [
 # operationId: scan
 export def "scan" [
   device: string
-  baudrate: int
+  baudrate: int@baudrate-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -155,7 +155,7 @@ export def "batch-delete-worlds" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   worlds: list<string> # A list of Amazon Resource Names (arns) that correspond to worlds to delete.
-]: any -> record<unprocessedWorlds: record> {
+]: any -> record<unprocessedWorlds: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -202,7 +202,7 @@ export def "batch-describe-simulation-job" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   jobs: list<string> # A list of Amazon Resource Names (ARNs) of simulation jobs to describe.
-]: any -> record<jobs: record, unprocessedJobs: record> {
+]: any -> record<jobs: table<arn: string, name: string, status: string, lastStartedAt: string, lastUpdatedAt: string, failureBehavior: string, failureCode: string, failureReason: string, clientRequestToken: string, outputLocation: record, loggingConfig: record, maxJobDurationInSeconds: int, simulationTimeMillis: int, iamRole: string, robotApplications: list, simulationApplications: list, dataSources: list, tags: record, vpcConfig: record, networkInterface: record, compute: record>, unprocessedJobs: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -469,8 +469,8 @@ export def "cancel-world-generation-job" [
 # POST /createDeploymentJob
 # DEPRECATED
 # operationId: CreateDeploymentJob
-# --deploymentConfig shape: {concurrentDeploymentPercentage?: any, failureThresholdPercentage?: any, robotDeploymentTimeoutInSeconds?: any, downloadConditionFile?: any}
-# --deploymentApplicationConfigs item shape: {application: any, applicationVersion: any, launchConfig: any}
+# --deploymentConfig shape: {concurrentDeploymentPercentage?: int, failureThresholdPercentage?: int, robotDeploymentTimeoutInSeconds?: int, downloadConditionFile?: record}
+# --deploymentApplicationConfigs item shape: {application: string, applicationVersion: string, launchConfig: record}
 @deprecated
 export def "create-deployment-job" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -489,12 +489,12 @@ export def "create-deployment-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --deployment-config: record # Information about a deployment configuration. — shape: {concurrentDeploymentPercentage?: any, failureThresholdPercentage?: any, robotDeploymentTimeoutInSeconds?: any, downloadConditionFile?: any}
+  --deployment-config: record # Information about a deployment configuration. — shape: {concurrentDeploymentPercentage?: int, failureThresholdPercentage?: int, robotDeploymentTimeoutInSeconds?: int, downloadConditionFile?: record}
   client_request_token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.
   fleet: string # The Amazon Resource Name (ARN) of the fleet to deploy.
-  deployment_application_configs: list # The deployment application configuration. — item shape: {application: any, applicationVersion: any, launchConfig: any}
+  deployment_application_configs: list # The deployment application configuration. — item shape: {application: string, applicationVersion: string, launchConfig: record}
   --tags: record # A map that contains tag keys and tag values that are attached to the deployment job.
-]: any -> record<arn: record, fleet: record, status: record, deploymentApplicationConfigs: record, failureReason: record, failureCode: record, createdAt: record, deploymentConfig: record<concurrentDeploymentPercentage: record, failureThresholdPercentage: record, robotDeploymentTimeoutInSeconds: record, downloadConditionFile: record<bucket: record, key: record, etag: record>>, tags: record> {
+]: any -> record<arn: string, fleet: string, status: string, deploymentApplicationConfigs: table<application: string, applicationVersion: string, launchConfig: record>, failureReason: string, failureCode: string, createdAt: string, deploymentConfig: record<concurrentDeploymentPercentage: int, failureThresholdPercentage: int, robotDeploymentTimeoutInSeconds: int, downloadConditionFile: record<bucket: string, key: string, etag: string>>, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -544,7 +544,7 @@ export def "create-fleet" [
   --x-amz-signed-headers: string
   name: string # The name of the fleet.
   --tags: record # A map that contains tag keys and tag values that are attached to the fleet.
-]: any -> record<arn: record, name: record, createdAt: record, tags: record> {
+]: any -> record<arn: string, name: string, createdAt: string, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -596,7 +596,7 @@ export def "create-robot" [
   architecture: string@architecture-completer # The target architecture of the robot.
   greengrass_group_id: string # The Greengrass group id.
   --tags: record # A map that contains tag keys and tag values that are attached to the robot.
-]: any -> record<arn: record, name: record, createdAt: record, greengrassGroupId: record, architecture: record, tags: record> {
+]: any -> record<arn: string, name: string, createdAt: string, greengrassGroupId: string, architecture: string, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -625,9 +625,9 @@ export def "create-robot" [
 #
 # POST /createRobotApplication
 # operationId: CreateRobotApplication
-# --sources item shape: {s3Bucket?: any, s3Key?: any, architecture?: any}
-# --robotSoftwareSuite shape: {name?: any, version?: any}
-# --environment shape: {uri?: any}
+# --sources item shape: {s3Bucket?: string, s3Key?: string, architecture?: "X86_64"|"ARM64"|"ARMHF"}
+# --robotSoftwareSuite shape: {name?: "ROS"|"ROS2"|"General", version?: "Kinetic"|"Melodic"|"Dashing"|"Foxy"}
+# --environment shape: {uri?: string}
 export def "create-robot-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -646,11 +646,11 @@ export def "create-robot-application" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   name: string # The name of the robot application.
-  --sources: list # The sources of the robot application. — item shape: {s3Bucket?: any, s3Key?: any, architecture?: any}
-  robot_software_suite: record # Information about a robot software suite (ROS distribution). — shape: {name?: any, version?: any}
+  --sources: list # The sources of the robot application. — item shape: {s3Bucket?: string, s3Key?: string, architecture?: "X86_64"|"ARM64"|"ARMHF"}
+  robot_software_suite: record # Information about a robot software suite (ROS distribution). — shape: {name?: "ROS"|"ROS2"|"General", version?: "Kinetic"|"Melodic"|"Dashing"|"Foxy"}
   --tags: record # A map that contains tag keys and tag values that are attached to the robot application.
-  --environment: record # The object that contains the Docker image URI for either your robot or simulation applications. — shape: {uri?: any}
-]: any -> record<arn: record, name: record, version: record, sources: record, robotSoftwareSuite: record<name: record, version: record>, lastUpdatedAt: record, revisionId: record, tags: record, environment: record<uri: record>> {
+  --environment: record # The object that contains the Docker image URI for either your robot or simulation applications. — shape: {uri?: string}
+]: any -> record<arn: string, name: string, version: string, sources: table<s3Bucket: string, s3Key: string, etag: string, architecture: string>, robotSoftwareSuite: record<name: string, version: string>, lastUpdatedAt: string, revisionId: string, tags: record, environment: record<uri: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -700,7 +700,7 @@ export def "create-robot-application-version" [
   --current-revision-id: string # The current revision id for the robot application. If you provide a value and it matches the latest revision ID, a new version will be created.
   --s3-etags: list<string> # The Amazon S3 identifier for the zip file bundle that you use for your robot application.
   --image-digest: string # A SHA256 identifier for the Docker image that you use for your robot application.
-]: any -> record<arn: record, name: record, version: record, sources: record, robotSoftwareSuite: record<name: record, version: record>, lastUpdatedAt: record, revisionId: record, environment: record<uri: record>> {
+]: any -> record<arn: string, name: string, version: string, sources: table<s3Bucket: string, s3Key: string, etag: string, architecture: string>, robotSoftwareSuite: record<name: string, version: string>, lastUpdatedAt: string, revisionId: string, environment: record<uri: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -729,11 +729,11 @@ export def "create-robot-application-version" [
 #
 # POST /createSimulationApplication
 # operationId: CreateSimulationApplication
-# --sources item shape: {s3Bucket?: any, s3Key?: any, architecture?: any}
-# --simulationSoftwareSuite shape: {name?: any, version?: any}
-# --robotSoftwareSuite shape: {name?: any, version?: any}
-# --renderingEngine shape: {name?: any, version?: any}
-# --environment shape: {uri?: any}
+# --sources item shape: {s3Bucket?: string, s3Key?: string, architecture?: "X86_64"|"ARM64"|"ARMHF"}
+# --simulationSoftwareSuite shape: {name?: "Gazebo"|"RosbagPlay"|"SimulationRuntime", version?: string}
+# --robotSoftwareSuite shape: {name?: "ROS"|"ROS2"|"General", version?: "Kinetic"|"Melodic"|"Dashing"|"Foxy"}
+# --renderingEngine shape: {name?: "OGRE", version?: string}
+# --environment shape: {uri?: string}
 export def "create-simulation-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -752,13 +752,13 @@ export def "create-simulation-application" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   name: string # The name of the simulation application.
-  --sources: list # The sources of the simulation application. — item shape: {s3Bucket?: any, s3Key?: any, architecture?: any}
-  simulation_software_suite: record # Information about a simulation software suite. — shape: {name?: any, version?: any}
-  robot_software_suite: record # Information about a robot software suite (ROS distribution). — shape: {name?: any, version?: any}
-  --rendering-engine: record # Information about a rendering engine. — shape: {name?: any, version?: any}
+  --sources: list # The sources of the simulation application. — item shape: {s3Bucket?: string, s3Key?: string, architecture?: "X86_64"|"ARM64"|"ARMHF"}
+  simulation_software_suite: record # Information about a simulation software suite. — shape: {name?: "Gazebo"|"RosbagPlay"|"SimulationRuntime", version?: string}
+  robot_software_suite: record # Information about a robot software suite (ROS distribution). — shape: {name?: "ROS"|"ROS2"|"General", version?: "Kinetic"|"Melodic"|"Dashing"|"Foxy"}
+  --rendering-engine: record # Information about a rendering engine. — shape: {name?: "OGRE", version?: string}
   --tags: record # A map that contains tag keys and tag values that are attached to the simulation application.
-  --environment: record # The object that contains the Docker image URI for either your robot or simulation applications. — shape: {uri?: any}
-]: any -> record<arn: record, name: record, version: record, sources: record, simulationSoftwareSuite: record<name: record, version: record>, robotSoftwareSuite: record<name: record, version: record>, renderingEngine: record<name: record, version: record>, lastUpdatedAt: record, revisionId: record, tags: record, environment: record<uri: record>> {
+  --environment: record # The object that contains the Docker image URI for either your robot or simulation applications. — shape: {uri?: string}
+]: any -> record<arn: string, name: string, version: string, sources: table<s3Bucket: string, s3Key: string, etag: string, architecture: string>, simulationSoftwareSuite: record<name: string, version: string>, robotSoftwareSuite: record<name: string, version: string>, renderingEngine: record<name: string, version: string>, lastUpdatedAt: string, revisionId: string, tags: record, environment: record<uri: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -808,7 +808,7 @@ export def "create-simulation-application-version" [
   --current-revision-id: string # The current revision id for the simulation application. If you provide a value and it matches the latest revision ID, a new version will be created.
   --s3-etags: list<string> # The Amazon S3 eTag identifier for the zip file bundle that you use to create the simulation application.
   --image-digest: string # The SHA256 digest used to identify the Docker image URI used to created the simulation application.
-]: any -> record<arn: record, name: record, version: record, sources: record, simulationSoftwareSuite: record<name: record, version: record>, robotSoftwareSuite: record<name: record, version: record>, renderingEngine: record<name: record, version: record>, lastUpdatedAt: record, revisionId: record, environment: record<uri: record>> {
+]: any -> record<arn: string, name: string, version: string, sources: table<s3Bucket: string, s3Key: string, etag: string, architecture: string>, simulationSoftwareSuite: record<name: string, version: string>, robotSoftwareSuite: record<name: string, version: string>, renderingEngine: record<name: string, version: string>, lastUpdatedAt: string, revisionId: string, environment: record<uri: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -837,13 +837,13 @@ export def "create-simulation-application-version" [
 #
 # POST /createSimulationJob
 # operationId: CreateSimulationJob
-# --outputLocation shape: {s3Bucket?: any, s3Prefix?: any}
-# --loggingConfig shape: {recordAllRosTopics?: any}
-# --robotApplications item shape: {application: any, applicationVersion?: any, launchConfig: any, uploadConfigurations?: any, useDefaultUploadConfigurations?: any, tools?: any, useDefaultTools?: any}
-# --simulationApplications item shape: {application: any, applicationVersion?: any, launchConfig: any, uploadConfigurations?: any, worldConfigs?: any, useDefaultUploadConfigurations?: any, tools?: any, useDefaultTools?: any}
-# --dataSources item shape: {name: any, s3Bucket: any, s3Keys: any, type?: any, destination?: any}
-# --vpcConfig shape: {subnets?: any, securityGroups?: any, assignPublicIp?: any}
-# --compute shape: {simulationUnitLimit?: any, computeType?: any, gpuUnitLimit?: any}
+# --outputLocation shape: {s3Bucket?: string, s3Prefix?: string}
+# --loggingConfig shape: {recordAllRosTopics?: bool}
+# --robotApplications item shape: {application: string, applicationVersion?: string, launchConfig: record, uploadConfigurations?: list, useDefaultUploadConfigurations?: bool, tools?: list, useDefaultTools?: bool}
+# --simulationApplications item shape: {application: string, applicationVersion?: string, launchConfig: record, uploadConfigurations?: list, worldConfigs?: list, useDefaultUploadConfigurations?: bool, tools?: list, useDefaultTools?: bool}
+# --dataSources item shape: {name: string, s3Bucket: string, s3Keys: list<string>, type?: "Prefix"|"Archive"|"File", destination?: string}
+# --vpcConfig shape: {subnets?: list<string>, securityGroups?: list<string>, assignPublicIp?: bool}
+# --compute shape: {simulationUnitLimit?: int, computeType?: "CPU"|"GPU_AND_CPU", gpuUnitLimit?: int}
 export def "create-simulation-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -862,18 +862,18 @@ export def "create-simulation-job" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --client-request-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.
-  --output-location: record # The output location. — shape: {s3Bucket?: any, s3Prefix?: any}
-  --logging-config: record # The logging configuration. — shape: {recordAllRosTopics?: any}
+  --output-location: record # The output location. — shape: {s3Bucket?: string, s3Prefix?: string}
+  --logging-config: record # The logging configuration. — shape: {recordAllRosTopics?: bool}
   max_job_duration_in_seconds: int # The maximum simulation job duration in seconds (up to 14 days or 1,209,600 seconds. When maxJobDurationInSeconds is reached, the simulation job will status will transition to Completed.
   iam_role: string # The IAM role name that allows the simulation instance to call the AWS APIs that are specified in its associated policies on your behalf. This is how credentials are passed in to your simulation job.
   --failure-behavior: string@failure-behavior-completer # The failure behavior the simulation job. Continue Leaves the instance running for its maximum timeout duration after a 4XX error code. Fail Stop the simulation job and terminate the instance.
-  --robot-applications: list # The robot application to use in the simulation job. — item shape: {application: any, applicationVersion?: any, launchConfig: any, uploadConfigurations?: any, useDefaultUploadConfigurations?: any, tools?: any, useDefaultTools?: any}
-  --simulation-applications: list # The simulation application to use in the simulation job. — item shape: {application: any, applicationVersion?: any, launchConfig: any, uploadConfigurations?: any, worldConfigs?: any, useDefaultUploadConfigurations?: any, tools?: any, useDefaultTools?: any}
-  --data-sources: list # Specify data sources to mount read-only files from S3 into your simulation. These files are available under /opt/robomaker/datasources/data_source_name. There is a limit of 100 files and a combined size of 25GB for all DataSourceConfig objects. — item shape: {name: any, s3Bucket: any, s3Keys: any, type?: any, destination?: any}
+  --robot-applications: list # The robot application to use in the simulation job. — item shape: {application: string, applicationVersion?: string, launchConfig: record, uploadConfigurations?: list, useDefaultUploadConfigurations?: bool, tools?: list, useDefaultTools?: bool}
+  --simulation-applications: list # The simulation application to use in the simulation job. — item shape: {application: string, applicationVersion?: string, launchConfig: record, uploadConfigurations?: list, worldConfigs?: list, useDefaultUploadConfigurations?: bool, tools?: list, useDefaultTools?: bool}
+  --data-sources: list # Specify data sources to mount read-only files from S3 into your simulation. These files are available under /opt/robomaker/datasources/data_source_name. There is a limit of 100 files and a combined size of 25GB for all DataSourceConfig objects. — item shape: {name: string, s3Bucket: string, s3Keys: list<string>, type?: "Prefix"|"Archive"|"File", destination?: string}
   --tags: record # A map that contains tag keys and tag values that are attached to the simulation job.
-  --vpc-config: record # If your simulation job accesses resources in a VPC, you provide this parameter identifying the list of security group IDs and subnet IDs. These must belong to the same VPC. You must provide at least one security group and two subnet IDs. — shape: {subnets?: any, securityGroups?: any, assignPublicIp?: any}
-  --compute: record # Compute information for the simulation job. — shape: {simulationUnitLimit?: any, computeType?: any, gpuUnitLimit?: any}
-]: any -> record<arn: record, status: record, lastStartedAt: record, lastUpdatedAt: record, failureBehavior: record, failureCode: record, clientRequestToken: record, outputLocation: record<s3Bucket: record, s3Prefix: record>, loggingConfig: record<recordAllRosTopics: record>, maxJobDurationInSeconds: record, simulationTimeMillis: record, iamRole: record, robotApplications: record, simulationApplications: record, dataSources: record, tags: record, vpcConfig: record<subnets: record, securityGroups: record, vpcId: record, assignPublicIp: record>, compute: record<simulationUnitLimit: record, computeType: record, gpuUnitLimit: record>> {
+  --vpc-config: record # If your simulation job accesses resources in a VPC, you provide this parameter identifying the list of security group IDs and subnet IDs. These must belong to the same VPC. You must provide at least one security group and two subnet IDs. — shape: {subnets?: list<string>, securityGroups?: list<string>, assignPublicIp?: bool}
+  --compute: record # Compute information for the simulation job. — shape: {simulationUnitLimit?: int, computeType?: "CPU"|"GPU_AND_CPU", gpuUnitLimit?: int}
+]: any -> record<arn: string, status: string, lastStartedAt: string, lastUpdatedAt: string, failureBehavior: string, failureCode: string, clientRequestToken: string, outputLocation: record<s3Bucket: string, s3Prefix: string>, loggingConfig: record<recordAllRosTopics: bool>, maxJobDurationInSeconds: int, simulationTimeMillis: int, iamRole: string, robotApplications: table<application: string, applicationVersion: string, launchConfig: record, uploadConfigurations: list, useDefaultUploadConfigurations: bool, tools: list, useDefaultTools: bool>, simulationApplications: table<application: string, applicationVersion: string, launchConfig: record, uploadConfigurations: list, worldConfigs: list, useDefaultUploadConfigurations: bool, tools: list, useDefaultTools: bool>, dataSources: table<name: string, s3Bucket: string, s3Keys: list, type: string, destination: string>, tags: record, vpcConfig: record<subnets: list<string>, securityGroups: list<string>, vpcId: string, assignPublicIp: bool>, compute: record<simulationUnitLimit: int, computeType: string, gpuUnitLimit: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -902,7 +902,7 @@ export def "create-simulation-job" [
 #
 # POST /createWorldExportJob
 # operationId: CreateWorldExportJob
-# --outputLocation shape: {s3Bucket?: any, s3Prefix?: any}
+# --outputLocation shape: {s3Bucket?: string, s3Prefix?: string}
 export def "create-world-export-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -922,10 +922,10 @@ export def "create-world-export-job" [
   --x-amz-signed-headers: string
   --client-request-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.
   worlds: list<string> # A list of Amazon Resource Names (arns) that correspond to worlds to export.
-  output_location: record # The output location. — shape: {s3Bucket?: any, s3Prefix?: any}
+  output_location: record # The output location. — shape: {s3Bucket?: string, s3Prefix?: string}
   iam_role: string # The IAM role that the world export process uses to access the Amazon S3 bucket and put the export.
   --tags: record # A map that contains tag keys and tag values that are attached to the world export job.
-]: any -> record<arn: record, status: record, createdAt: record, failureCode: record, clientRequestToken: record, outputLocation: record<s3Bucket: record, s3Prefix: record>, iamRole: record, tags: record> {
+]: any -> record<arn: string, status: string, createdAt: string, failureCode: string, clientRequestToken: string, outputLocation: record<s3Bucket: string, s3Prefix: string>, iamRole: string, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -954,7 +954,7 @@ export def "create-world-export-job" [
 #
 # POST /createWorldGenerationJob
 # operationId: CreateWorldGenerationJob
-# --worldCount shape: {floorplanCount?: any, interiorCountPerFloorplan?: any}
+# --worldCount shape: {floorplanCount?: int, interiorCountPerFloorplan?: int}
 export def "create-world-generation-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -974,10 +974,10 @@ export def "create-world-generation-job" [
   --x-amz-signed-headers: string
   --client-request-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.
   template: string # The Amazon Resource Name (arn) of the world template describing the worlds you want to create.
-  world_count: record # The number of worlds that will be created. You can configure the number of unique floorplans and the number of unique interiors for each floor plan. For example, if you want 1 world with 20 unique interiors, you set floorplanCount = 1 and interiorCountPerFloorplan = 20. This will result in 20 worlds (floorplanCount * interiorCountPerFloorplan). If you set floorplanCount = 4 and interiorCountPerFloorplan = 5, there will be 20 worlds with 5 unique floor plans. — shape: {floorplanCount?: any, interiorCountPerFloorplan?: any}
+  world_count: record # The number of worlds that will be created. You can configure the number of unique floorplans and the number of unique interiors for each floor plan. For example, if you want 1 world with 20 unique interiors, you set floorplanCount = 1 and interiorCountPerFloorplan = 20. This will result in 20 worlds (floorplanCount * interiorCountPerFloorplan). If you set floorplanCount = 4 and interiorCountPerFloorplan = 5, there will be 20 worlds with 5 unique floor plans. — shape: {floorplanCount?: int, interiorCountPerFloorplan?: int}
   --tags: record # A map that contains tag keys and tag values that are attached to the world generator job.
   --world-tags: record # A map that contains tag keys and tag values that are attached to the generated worlds.
-]: any -> record<arn: record, status: record, createdAt: record, failureCode: record, clientRequestToken: record, template: record, worldCount: record<floorplanCount: record, interiorCountPerFloorplan: record>, tags: record, worldTags: record> {
+]: any -> record<arn: string, status: string, createdAt: string, failureCode: string, clientRequestToken: string, template: string, worldCount: record<floorplanCount: int, interiorCountPerFloorplan: int>, tags: record, worldTags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1006,7 +1006,7 @@ export def "create-world-generation-job" [
 #
 # POST /createWorldTemplate
 # operationId: CreateWorldTemplate
-# --templateLocation shape: {s3Bucket?: any, s3Key?: any}
+# --templateLocation shape: {s3Bucket?: string, s3Key?: string}
 export def "create-world-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1027,9 +1027,9 @@ export def "create-world-template" [
   --client-request-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.
   --name: string # The name of the world template.
   --template-body: string # The world template body.
-  --template-location: record # Information about a template location. — shape: {s3Bucket?: any, s3Key?: any}
+  --template-location: record # Information about a template location. — shape: {s3Bucket?: string, s3Key?: string}
   --tags: record # A map that contains tag keys and tag values that are attached to the world template.
-]: any -> record<arn: record, clientRequestToken: record, createdAt: record, name: record, tags: record> {
+]: any -> record<arn: string, clientRequestToken: string, createdAt: string, name: string, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1320,7 +1320,7 @@ export def "deregister-robot" [
   --x-amz-signed-headers: string
   fleet: string # The Amazon Resource Name (ARN) of the fleet.
   robot: string # The Amazon Resource Name (ARN) of the robot.
-]: any -> record<fleet: record, robot: record> {
+]: any -> record<fleet: string, robot: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1369,7 +1369,7 @@ export def "describe-deployment-job" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   job: string # The Amazon Resource Name (ARN) of the deployment job.
-]: any -> record<arn: record, fleet: record, status: record, deploymentConfig: record<concurrentDeploymentPercentage: record, failureThresholdPercentage: record, robotDeploymentTimeoutInSeconds: record, downloadConditionFile: record<bucket: record, key: record, etag: record>>, deploymentApplicationConfigs: record, failureReason: record, failureCode: record, createdAt: record, robotDeploymentSummary: record, tags: record> {
+]: any -> record<arn: string, fleet: string, status: string, deploymentConfig: record<concurrentDeploymentPercentage: int, failureThresholdPercentage: int, robotDeploymentTimeoutInSeconds: int, downloadConditionFile: record<bucket: string, key: string, etag: string>>, deploymentApplicationConfigs: table<application: string, applicationVersion: string, launchConfig: record>, failureReason: string, failureCode: string, createdAt: string, robotDeploymentSummary: table<arn: string, deploymentStartTime: string, deploymentFinishTime: string, status: string, progressDetail: record, failureReason: string, failureCode: string>, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1418,7 +1418,7 @@ export def "describe-fleet" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   fleet: string # The Amazon Resource Name (ARN) of the fleet.
-]: any -> record<name: record, arn: record, robots: record, createdAt: record, lastDeploymentStatus: record, lastDeploymentJob: record, lastDeploymentTime: record, tags: record> {
+]: any -> record<name: string, arn: string, robots: table<arn: string, name: string, fleetArn: string, status: string, greenGrassGroupId: string, createdAt: string, architecture: string, lastDeploymentJob: string, lastDeploymentTime: string>, createdAt: string, lastDeploymentStatus: string, lastDeploymentJob: string, lastDeploymentTime: string, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1467,7 +1467,7 @@ export def "describe-robot" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   robot: string # The Amazon Resource Name (ARN) of the robot to be described.
-]: any -> record<arn: record, name: record, fleetArn: record, status: record, greengrassGroupId: record, createdAt: record, architecture: record, lastDeploymentJob: record, lastDeploymentTime: record, tags: record> {
+]: any -> record<arn: string, name: string, fleetArn: string, status: string, greengrassGroupId: string, createdAt: string, architecture: string, lastDeploymentJob: string, lastDeploymentTime: string, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1515,7 +1515,7 @@ export def "describe-robot-application" [
   --x-amz-signed-headers: string
   application: string # The Amazon Resource Name (ARN) of the robot application.
   --application-version: string # The version of the robot application to describe.
-]: any -> record<arn: record, name: record, version: record, sources: record, robotSoftwareSuite: record<name: record, version: record>, revisionId: record, lastUpdatedAt: record, tags: record, environment: record<uri: record>, imageDigest: record> {
+]: any -> record<arn: string, name: string, version: string, sources: table<s3Bucket: string, s3Key: string, etag: string, architecture: string>, robotSoftwareSuite: record<name: string, version: string>, revisionId: string, lastUpdatedAt: string, tags: record, environment: record<uri: string>, imageDigest: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1563,7 +1563,7 @@ export def "describe-simulation-application" [
   --x-amz-signed-headers: string
   application: string # The application information for the simulation application.
   --application-version: string # The version of the simulation application to describe.
-]: any -> record<arn: record, name: record, version: record, sources: record, simulationSoftwareSuite: record<name: record, version: record>, robotSoftwareSuite: record<name: record, version: record>, renderingEngine: record<name: record, version: record>, revisionId: record, lastUpdatedAt: record, tags: record, environment: record<uri: record>, imageDigest: record> {
+]: any -> record<arn: string, name: string, version: string, sources: table<s3Bucket: string, s3Key: string, etag: string, architecture: string>, simulationSoftwareSuite: record<name: string, version: string>, robotSoftwareSuite: record<name: string, version: string>, renderingEngine: record<name: string, version: string>, revisionId: string, lastUpdatedAt: string, tags: record, environment: record<uri: string>, imageDigest: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1610,7 +1610,7 @@ export def "describe-simulation-job" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   job: string # The Amazon Resource Name (ARN) of the simulation job to be described.
-]: any -> record<arn: record, name: record, status: record, lastStartedAt: record, lastUpdatedAt: record, failureBehavior: record, failureCode: record, failureReason: record, clientRequestToken: record, outputLocation: record<s3Bucket: record, s3Prefix: record>, loggingConfig: record<recordAllRosTopics: record>, maxJobDurationInSeconds: record, simulationTimeMillis: record, iamRole: record, robotApplications: record, simulationApplications: record, dataSources: record, tags: record, vpcConfig: record<subnets: record, securityGroups: record, vpcId: record, assignPublicIp: record>, networkInterface: record<networkInterfaceId: record, privateIpAddress: record, publicIpAddress: record>, compute: record<simulationUnitLimit: record, computeType: record, gpuUnitLimit: record>> {
+]: any -> record<arn: string, name: string, status: string, lastStartedAt: string, lastUpdatedAt: string, failureBehavior: string, failureCode: string, failureReason: string, clientRequestToken: string, outputLocation: record<s3Bucket: string, s3Prefix: string>, loggingConfig: record<recordAllRosTopics: bool>, maxJobDurationInSeconds: int, simulationTimeMillis: int, iamRole: string, robotApplications: table<application: string, applicationVersion: string, launchConfig: record, uploadConfigurations: list, useDefaultUploadConfigurations: bool, tools: list, useDefaultTools: bool>, simulationApplications: table<application: string, applicationVersion: string, launchConfig: record, uploadConfigurations: list, worldConfigs: list, useDefaultUploadConfigurations: bool, tools: list, useDefaultTools: bool>, dataSources: table<name: string, s3Bucket: string, s3Keys: list, type: string, destination: string>, tags: record, vpcConfig: record<subnets: list<string>, securityGroups: list<string>, vpcId: string, assignPublicIp: bool>, networkInterface: record<networkInterfaceId: string, privateIpAddress: string, publicIpAddress: string>, compute: record<simulationUnitLimit: int, computeType: string, gpuUnitLimit: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1657,7 +1657,7 @@ export def "describe-simulation-job-batch" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   batch: string # The id of the batch to describe.
-]: any -> record<arn: record, status: record, lastUpdatedAt: record, createdAt: record, clientRequestToken: record, batchPolicy: record<timeoutInSeconds: record, maxConcurrency: record>, failureCode: record, failureReason: record, failedRequests: record, pendingRequests: record, createdRequests: record, tags: record> {
+]: any -> record<arn: string, status: string, lastUpdatedAt: string, createdAt: string, clientRequestToken: string, batchPolicy: record<timeoutInSeconds: int, maxConcurrency: int>, failureCode: string, failureReason: string, failedRequests: table<request: record, failureReason: string, failureCode: string, failedAt: string>, pendingRequests: table<outputLocation: record, loggingConfig: record, maxJobDurationInSeconds: int, iamRole: string, failureBehavior: string, useDefaultApplications: bool, robotApplications: list, simulationApplications: list, dataSources: list, vpcConfig: record, compute: record, tags: record>, createdRequests: table<arn: string, lastUpdatedAt: string, name: string, status: string, simulationApplicationNames: list, robotApplicationNames: list, dataSourceNames: list, computeType: string>, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1704,7 +1704,7 @@ export def "describe-world" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   world: string # The Amazon Resource Name (arn) of the world you want to describe.
-]: any -> record<arn: record, generationJob: record, template: record, createdAt: record, tags: record, worldDescriptionBody: record> {
+]: any -> record<arn: string, generationJob: string, template: string, createdAt: string, tags: record, worldDescriptionBody: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1751,7 +1751,7 @@ export def "describe-world-export-job" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   job: string # The Amazon Resource Name (arn) of the world export job to describe.
-]: any -> record<arn: record, status: record, createdAt: record, failureCode: record, failureReason: record, clientRequestToken: record, worlds: record, outputLocation: record<s3Bucket: record, s3Prefix: record>, iamRole: record, tags: record> {
+]: any -> record<arn: string, status: string, createdAt: string, failureCode: string, failureReason: string, clientRequestToken: string, worlds: list<string>, outputLocation: record<s3Bucket: string, s3Prefix: string>, iamRole: string, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1798,7 +1798,7 @@ export def "describe-world-generation-job" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   job: string # The Amazon Resource Name (arn) of the world generation job to describe.
-]: any -> record<arn: record, status: record, createdAt: record, failureCode: record, failureReason: record, clientRequestToken: record, template: record, worldCount: record<floorplanCount: record, interiorCountPerFloorplan: record>, finishedWorldsSummary: record<finishedCount: record, succeededWorlds: record, failureSummary: record<totalFailureCount: record, failures: record>>, tags: record, worldTags: record> {
+]: any -> record<arn: string, status: string, createdAt: string, failureCode: string, failureReason: string, clientRequestToken: string, template: string, worldCount: record<floorplanCount: int, interiorCountPerFloorplan: int>, finishedWorldsSummary: record<finishedCount: int, succeededWorlds: list<string>, failureSummary: record<totalFailureCount: int, failures: list>>, tags: record, worldTags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1845,7 +1845,7 @@ export def "describe-world-template" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   template: string # The Amazon Resource Name (arn) of the world template you want to describe.
-]: any -> record<arn: record, clientRequestToken: record, name: record, createdAt: record, lastUpdatedAt: record, tags: record, version: record> {
+]: any -> record<arn: string, clientRequestToken: string, name: string, createdAt: string, lastUpdatedAt: string, tags: record, version: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1893,7 +1893,7 @@ export def "get-world-template-body" [
   --x-amz-signed-headers: string
   --template: string # The Amazon Resource Name (arn) of the world template.
   --generation-job: string # The Amazon Resource Name (arn) of the world generator job.
-]: any -> record<templateBody: record> {
+]: any -> record<templateBody: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1923,7 +1923,7 @@ export def "get-world-template-body" [
 # POST /listDeploymentJobs
 # DEPRECATED
 # operationId: ListDeploymentJobs
-# --filters item shape: {name?: any, values?: any}
+# --filters item shape: {name?: string, values?: list<string>}
 @deprecated
 export def "list-deployment-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -1944,10 +1944,10 @@ export def "list-deployment-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --filters: list # Optional filters to limit results. The filter names status and fleetName are supported. When filtering, you must use the complete value of the filtered item. You can use up to three filters, but they must be for the same named item. For example, if you are looking for items with the status InProgress or the status Pending. — item shape: {name?: any, values?: any}
+  --filters: list # Optional filters to limit results. The filter names status and fleetName are supported. When filtering, you must use the complete value of the filtered item. You can use up to three filters, but they must be for the same named item. For example, if you are looking for items with the status InProgress or the status Pending. — item shape: {name?: string, values?: list<string>}
   --next-token-body: string # If the previous paginated request did not return all of the remaining results, the response object's nextToken parameter value is set to a token. To retrieve the next set of results, call ListDeploymentJobs again and assign that token to the request object's nextToken parameter. If there are no remaining results, the previous response object's NextToken parameter is set to null. (body field)
   --max-results-body: int # When this parameter is used, ListDeploymentJobs only returns maxResults results in a single page along with a nextToken response element. The remaining results of the initial request can be seen by sending another ListDeploymentJobs request with the returned nextToken value. This value can be between 1 and 200. If this parameter is not used, then ListDeploymentJobs returns up to 200 results and a nextToken value if applicable. (body field)
-]: any -> record<deploymentJobs: record, nextToken: record> {
+]: any -> record<deploymentJobs: table<arn: string, fleet: string, status: string, deploymentApplicationConfigs: list, deploymentConfig: record, failureReason: string, failureCode: string, createdAt: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1978,7 +1978,7 @@ export def "list-deployment-jobs" [
 # POST /listFleets
 # DEPRECATED
 # operationId: ListFleets
-# --filters item shape: {name?: any, values?: any}
+# --filters item shape: {name?: string, values?: list<string>}
 @deprecated
 export def "list-fleets" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2001,8 +2001,8 @@ export def "list-fleets" [
   --x-amz-signed-headers: string
   --next-token-body: string # If the previous paginated request did not return all of the remaining results, the response object's nextToken parameter value is set to a token. To retrieve the next set of results, call ListFleets again and assign that token to the request object's nextToken parameter. If there are no remaining results, the previous response object's NextToken parameter is set to null. This token should be treated as an opaque identifier that is only used to retrieve the next items in a list and not for other programmatic purposes. (body field)
   --max-results-body: int # When this parameter is used, ListFleets only returns maxResults results in a single page along with a nextToken response element. The remaining results of the initial request can be seen by sending another ListFleets request with the returned nextToken value. This value can be between 1 and 200. If this parameter is not used, then ListFleets returns up to 200 results and a nextToken value if applicable. (body field)
-  --filters: list # Optional filters to limit results. The filter name name is supported. When filtering, you must use the complete value of the filtered item. You can use up to three filters. — item shape: {name?: any, values?: any}
-]: any -> record<fleetDetails: record, nextToken: record> {
+  --filters: list # Optional filters to limit results. The filter name name is supported. When filtering, you must use the complete value of the filtered item. You can use up to three filters. — item shape: {name?: string, values?: list<string>}
+]: any -> record<fleetDetails: table<name: string, arn: string, createdAt: string, lastDeploymentStatus: string, lastDeploymentJob: string, lastDeploymentTime: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2032,7 +2032,7 @@ export def "list-fleets" [
 #
 # POST /listRobotApplications
 # operationId: ListRobotApplications
-# --filters item shape: {name?: any, values?: any}
+# --filters item shape: {name?: string, values?: list<string>}
 export def "list-robot-applications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2055,8 +2055,8 @@ export def "list-robot-applications" [
   --version-qualifier: string # The version qualifier of the robot application.
   --next-token-body: string # If the previous paginated request did not return all of the remaining results, the response object's nextToken parameter value is set to a token. To retrieve the next set of results, call ListRobotApplications again and assign that token to the request object's nextToken parameter. If there are no remaining results, the previous response object's NextToken parameter is set to null. (body field)
   --max-results-body: int # When this parameter is used, ListRobotApplications only returns maxResults results in a single page along with a nextToken response element. The remaining results of the initial request can be seen by sending another ListRobotApplications request with the returned nextToken value. This value can be between 1 and 100. If this parameter is not used, then ListRobotApplications returns up to 100 results and a nextToken value if applicable. (body field)
-  --filters: list # Optional filters to limit results. The filter name name is supported. When filtering, you must use the complete value of the filtered item. You can use up to three filters. — item shape: {name?: any, values?: any}
-]: any -> record<robotApplicationSummaries: record, nextToken: record> {
+  --filters: list # Optional filters to limit results. The filter name name is supported. When filtering, you must use the complete value of the filtered item. You can use up to three filters. — item shape: {name?: string, values?: list<string>}
+]: any -> record<robotApplicationSummaries: table<name: string, arn: string, version: string, lastUpdatedAt: string, robotSoftwareSuite: record>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2087,7 +2087,7 @@ export def "list-robot-applications" [
 # POST /listRobots
 # DEPRECATED
 # operationId: ListRobots
-# --filters item shape: {name?: any, values?: any}
+# --filters item shape: {name?: string, values?: list<string>}
 @deprecated
 export def "list-robots" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2110,8 +2110,8 @@ export def "list-robots" [
   --x-amz-signed-headers: string
   --next-token-body: string # If the previous paginated request did not return all of the remaining results, the response object's nextToken parameter value is set to a token. To retrieve the next set of results, call ListRobots again and assign that token to the request object's nextToken parameter. If there are no remaining results, the previous response object's NextToken parameter is set to null. (body field)
   --max-results-body: int # When this parameter is used, ListRobots only returns maxResults results in a single page along with a nextToken response element. The remaining results of the initial request can be seen by sending another ListRobots request with the returned nextToken value. This value can be between 1 and 200. If this parameter is not used, then ListRobots returns up to 200 results and a nextToken value if applicable. (body field)
-  --filters: list # Optional filters to limit results. The filter names status and fleetName are supported. When filtering, you must use the complete value of the filtered item. You can use up to three filters, but they must be for the same named item. For example, if you are looking for items with the status Registered or the status Available. — item shape: {name?: any, values?: any}
-]: any -> record<robots: record, nextToken: record> {
+  --filters: list # Optional filters to limit results. The filter names status and fleetName are supported. When filtering, you must use the complete value of the filtered item. You can use up to three filters, but they must be for the same named item. For example, if you are looking for items with the status Registered or the status Available. — item shape: {name?: string, values?: list<string>}
+]: any -> record<robots: table<arn: string, name: string, fleetArn: string, status: string, greenGrassGroupId: string, createdAt: string, architecture: string, lastDeploymentJob: string, lastDeploymentTime: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2141,7 +2141,7 @@ export def "list-robots" [
 #
 # POST /listSimulationApplications
 # operationId: ListSimulationApplications
-# --filters item shape: {name?: any, values?: any}
+# --filters item shape: {name?: string, values?: list<string>}
 export def "list-simulation-applications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2164,8 +2164,8 @@ export def "list-simulation-applications" [
   --version-qualifier: string # The version qualifier of the simulation application.
   --next-token-body: string # If the previous paginated request did not return all of the remaining results, the response object's nextToken parameter value is set to a token. To retrieve the next set of results, call ListSimulationApplications again and assign that token to the request object's nextToken parameter. If there are no remaining results, the previous response object's NextToken parameter is set to null. (body field)
   --max-results-body: int # When this parameter is used, ListSimulationApplications only returns maxResults results in a single page along with a nextToken response element. The remaining results of the initial request can be seen by sending another ListSimulationApplications request with the returned nextToken value. This value can be between 1 and 100. If this parameter is not used, then ListSimulationApplications returns up to 100 results and a nextToken value if applicable. (body field)
-  --filters: list # Optional list of filters to limit results. The filter name name is supported. When filtering, you must use the complete value of the filtered item. You can use up to three filters. — item shape: {name?: any, values?: any}
-]: any -> record<simulationApplicationSummaries: record, nextToken: record> {
+  --filters: list # Optional list of filters to limit results. The filter name name is supported. When filtering, you must use the complete value of the filtered item. You can use up to three filters. — item shape: {name?: string, values?: list<string>}
+]: any -> record<simulationApplicationSummaries: table<name: string, arn: string, version: string, lastUpdatedAt: string, robotSoftwareSuite: record, simulationSoftwareSuite: record>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2195,7 +2195,7 @@ export def "list-simulation-applications" [
 #
 # POST /listSimulationJobBatches
 # operationId: ListSimulationJobBatches
-# --filters item shape: {name?: any, values?: any}
+# --filters item shape: {name?: string, values?: list<string>}
 export def "list-simulation-job-batches" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2217,8 +2217,8 @@ export def "list-simulation-job-batches" [
   --x-amz-signed-headers: string
   --next-token-body: string # If the previous paginated request did not return all of the remaining results, the response object's nextToken parameter value is set to a token. To retrieve the next set of results, call ListSimulationJobBatches again and assign that token to the request object's nextToken parameter. If there are no remaining results, the previous response object's NextToken parameter is set to null. (body field)
   --max-results-body: int # When this parameter is used, ListSimulationJobBatches only returns maxResults results in a single page along with a nextToken response element. The remaining results of the initial request can be seen by sending another ListSimulationJobBatches request with the returned nextToken value. (body field)
-  --filters: list # Optional filters to limit results. — item shape: {name?: any, values?: any}
-]: any -> record<simulationJobBatchSummaries: record, nextToken: record> {
+  --filters: list # Optional filters to limit results. — item shape: {name?: string, values?: list<string>}
+]: any -> record<simulationJobBatchSummaries: table<arn: string, lastUpdatedAt: string, createdAt: string, status: string, failedRequestCount: int, pendingRequestCount: int, createdRequestCount: int>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2248,7 +2248,7 @@ export def "list-simulation-job-batches" [
 #
 # POST /listSimulationJobs
 # operationId: ListSimulationJobs
-# --filters item shape: {name?: any, values?: any}
+# --filters item shape: {name?: string, values?: list<string>}
 export def "list-simulation-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2270,8 +2270,8 @@ export def "list-simulation-jobs" [
   --x-amz-signed-headers: string
   --next-token-body: string # If the previous paginated request did not return all of the remaining results, the response object's nextToken parameter value is set to a token. To retrieve the next set of results, call ListSimulationJobs again and assign that token to the request object's nextToken parameter. If there are no remaining results, the previous response object's NextToken parameter is set to null. (body field)
   --max-results-body: int # When this parameter is used, ListSimulationJobs only returns maxResults results in a single page along with a nextToken response element. The remaining results of the initial request can be seen by sending another ListSimulationJobs request with the returned nextToken value. This value can be between 1 and 1000. If this parameter is not used, then ListSimulationJobs returns up to 1000 results and a nextToken value if applicable. (body field)
-  --filters: list # Optional filters to limit results. The filter names status and simulationApplicationName and robotApplicationName are supported. When filtering, you must use the complete value of the filtered item. You can use up to three filters, but they must be for the same named item. For example, if you are looking for items with the status Preparing or the status Running. — item shape: {name?: any, values?: any}
-]: any -> record<simulationJobSummaries: record, nextToken: record> {
+  --filters: list # Optional filters to limit results. The filter names status and simulationApplicationName and robotApplicationName are supported. When filtering, you must use the complete value of the filtered item. You can use up to three filters, but they must be for the same named item. For example, if you are looking for items with the status Preparing or the status Running. — item shape: {name?: string, values?: list<string>}
+]: any -> record<simulationJobSummaries: table<arn: string, lastUpdatedAt: string, name: string, status: string, simulationApplicationNames: list, robotApplicationNames: list, dataSourceNames: list, computeType: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2395,7 +2395,7 @@ export def "tag-resource" [
 #
 # POST /listWorldExportJobs
 # operationId: ListWorldExportJobs
-# --filters item shape: {name?: any, values?: any}
+# --filters item shape: {name?: string, values?: list<string>}
 export def "list-world-export-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2417,8 +2417,8 @@ export def "list-world-export-jobs" [
   --x-amz-signed-headers: string
   --next-token-body: string # If the previous paginated request did not return all of the remaining results, the response object's nextToken parameter value is set to a token. To retrieve the next set of results, call ListWorldExportJobs again and assign that token to the request object's nextToken parameter. If there are no remaining results, the previous response object's NextToken parameter is set to null. (body field)
   --max-results-body: int # When this parameter is used, ListWorldExportJobs only returns maxResults results in a single page along with a nextToken response element. The remaining results of the initial request can be seen by sending another ListWorldExportJobs request with the returned nextToken value. This value can be between 1 and 100. If this parameter is not used, then ListWorldExportJobs returns up to 100 results and a nextToken value if applicable. (body field)
-  --filters: list # Optional filters to limit results. You can use generationJobId and templateId. — item shape: {name?: any, values?: any}
-]: any -> record<worldExportJobSummaries: record, nextToken: record> {
+  --filters: list # Optional filters to limit results. You can use generationJobId and templateId. — item shape: {name?: string, values?: list<string>}
+]: any -> record<worldExportJobSummaries: table<arn: string, status: string, createdAt: string, worlds: list, outputLocation: record>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2448,7 +2448,7 @@ export def "list-world-export-jobs" [
 #
 # POST /listWorldGenerationJobs
 # operationId: ListWorldGenerationJobs
-# --filters item shape: {name?: any, values?: any}
+# --filters item shape: {name?: string, values?: list<string>}
 export def "list-world-generation-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2470,8 +2470,8 @@ export def "list-world-generation-jobs" [
   --x-amz-signed-headers: string
   --next-token-body: string # If the previous paginated request did not return all of the remaining results, the response object's nextToken parameter value is set to a token. To retrieve the next set of results, call ListWorldGenerationJobsRequest again and assign that token to the request object's nextToken parameter. If there are no remaining results, the previous response object's NextToken parameter is set to null. (body field)
   --max-results-body: int # When this parameter is used, ListWorldGeneratorJobs only returns maxResults results in a single page along with a nextToken response element. The remaining results of the initial request can be seen by sending another ListWorldGeneratorJobs request with the returned nextToken value. This value can be between 1 and 100. If this parameter is not used, then ListWorldGeneratorJobs returns up to 100 results and a nextToken value if applicable. (body field)
-  --filters: list # Optional filters to limit results. You can use status and templateId. — item shape: {name?: any, values?: any}
-]: any -> record<worldGenerationJobSummaries: record, nextToken: record> {
+  --filters: list # Optional filters to limit results. You can use status and templateId. — item shape: {name?: string, values?: list<string>}
+]: any -> record<worldGenerationJobSummaries: table<arn: string, template: string, createdAt: string, status: string, worldCount: record, succeededWorldCount: int, failedWorldCount: int>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2522,7 +2522,7 @@ export def "list-world-templates" [
   --x-amz-signed-headers: string
   --next-token-body: string # If the previous paginated request did not return all of the remaining results, the response object's nextToken parameter value is set to a token. To retrieve the next set of results, call ListWorldTemplates again and assign that token to the request object's nextToken parameter. If there are no remaining results, the previous response object's NextToken parameter is set to null. (body field)
   --max-results-body: int # When this parameter is used, ListWorldTemplates only returns maxResults results in a single page along with a nextToken response element. The remaining results of the initial request can be seen by sending another ListWorldTemplates request with the returned nextToken value. This value can be between 1 and 100. If this parameter is not used, then ListWorldTemplates returns up to 100 results and a nextToken value if applicable. (body field)
-]: any -> record<templateSummaries: record, nextToken: record> {
+]: any -> record<templateSummaries: table<arn: string, createdAt: string, lastUpdatedAt: string, name: string, version: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2552,7 +2552,7 @@ export def "list-world-templates" [
 #
 # POST /listWorlds
 # operationId: ListWorlds
-# --filters item shape: {name?: any, values?: any}
+# --filters item shape: {name?: string, values?: list<string>}
 export def "list-worlds" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2574,8 +2574,8 @@ export def "list-worlds" [
   --x-amz-signed-headers: string
   --next-token-body: string # If the previous paginated request did not return all of the remaining results, the response object's nextToken parameter value is set to a token. To retrieve the next set of results, call ListWorlds again and assign that token to the request object's nextToken parameter. If there are no remaining results, the previous response object's NextToken parameter is set to null. (body field)
   --max-results-body: int # When this parameter is used, ListWorlds only returns maxResults results in a single page along with a nextToken response element. The remaining results of the initial request can be seen by sending another ListWorlds request with the returned nextToken value. This value can be between 1 and 100. If this parameter is not used, then ListWorlds returns up to 100 results and a nextToken value if applicable. (body field)
-  --filters: list # Optional filters to limit results. You can use status. — item shape: {name?: any, values?: any}
-]: any -> record<worldSummaries: record, nextToken: record> {
+  --filters: list # Optional filters to limit results. You can use status. — item shape: {name?: string, values?: list<string>}
+]: any -> record<worldSummaries: table<arn: string, createdAt: string, generationJob: string, template: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2626,7 +2626,7 @@ export def "register-robot" [
   --x-amz-signed-headers: string
   fleet: string # The Amazon Resource Name (ARN) of the fleet.
   robot: string # The Amazon Resource Name (ARN) of the robot.
-]: any -> record<fleet: record, robot: record> {
+]: any -> record<fleet: string, robot: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2702,8 +2702,8 @@ export def "restart-simulation-job" [
 #
 # POST /startSimulationJobBatch
 # operationId: StartSimulationJobBatch
-# --batchPolicy shape: {timeoutInSeconds?: any, maxConcurrency?: any}
-# --createSimulationJobRequests item shape: {outputLocation?: record, loggingConfig?: record, maxJobDurationInSeconds: any, iamRole?: any, failureBehavior?: any, useDefaultApplications?: any, robotApplications?: any, simulationApplications?: any, dataSources?: any, vpcConfig?: record, compute?: any, tags?: any}
+# --batchPolicy shape: {timeoutInSeconds?: int, maxConcurrency?: int}
+# --createSimulationJobRequests item shape: {outputLocation?: record, loggingConfig?: record, maxJobDurationInSeconds: int, iamRole?: string, failureBehavior?: "Fail"|"Continue", useDefaultApplications?: bool, robotApplications?: list, simulationApplications?: list, dataSources?: list, vpcConfig?: record, compute?: record, tags?: record}
 export def "start-simulation-job-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2722,10 +2722,10 @@ export def "start-simulation-job-batch" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --client-request-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.
-  --batch-policy: record # Information about the batch policy. — shape: {timeoutInSeconds?: any, maxConcurrency?: any}
-  create_simulation_job_requests: list # A list of simulation job requests to create in the batch. — item shape: {outputLocation?: record, loggingConfig?: record, maxJobDurationInSeconds: any, iamRole?: any, failureBehavior?: any, useDefaultApplications?: any, robotApplications?: any, simulationApplications?: any, dataSources?: any, vpcConfig?: record, compute?: any, tags?: any}
+  --batch-policy: record # Information about the batch policy. — shape: {timeoutInSeconds?: int, maxConcurrency?: int}
+  create_simulation_job_requests: list # A list of simulation job requests to create in the batch. — item shape: {outputLocation?: record, loggingConfig?: record, maxJobDurationInSeconds: int, iamRole?: string, failureBehavior?: "Fail"|"Continue", useDefaultApplications?: bool, robotApplications?: list, simulationApplications?: list, dataSources?: list, vpcConfig?: record, compute?: record, tags?: record}
   --tags: record # A map that contains tag keys and tag values that are attached to the deployment job batch.
-]: any -> record<arn: record, status: record, createdAt: record, clientRequestToken: record, batchPolicy: record<timeoutInSeconds: record, maxConcurrency: record>, failureCode: record, failureReason: record, failedRequests: record, pendingRequests: record, createdRequests: record, tags: record> {
+]: any -> record<arn: string, status: string, createdAt: string, clientRequestToken: string, batchPolicy: record<timeoutInSeconds: int, maxConcurrency: int>, failureCode: string, failureReason: string, failedRequests: table<request: record, failureReason: string, failureCode: string, failedAt: string>, pendingRequests: table<outputLocation: record, loggingConfig: record, maxJobDurationInSeconds: int, iamRole: string, failureBehavior: string, useDefaultApplications: bool, robotApplications: list, simulationApplications: list, dataSources: list, vpcConfig: record, compute: record, tags: record>, createdRequests: table<arn: string, lastUpdatedAt: string, name: string, status: string, simulationApplicationNames: list, robotApplicationNames: list, dataSourceNames: list, computeType: string>, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2775,7 +2775,7 @@ export def "sync-deployment-job" [
   --x-amz-signed-headers: string
   client_request_token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.
   fleet: string # The target fleet for the synchronization.
-]: any -> record<arn: record, fleet: record, status: record, deploymentConfig: record<concurrentDeploymentPercentage: record, failureThresholdPercentage: record, robotDeploymentTimeoutInSeconds: record, downloadConditionFile: record<bucket: record, key: record, etag: record>>, deploymentApplicationConfigs: record, failureReason: record, failureCode: record, createdAt: record> {
+]: any -> record<arn: string, fleet: string, status: string, deploymentConfig: record<concurrentDeploymentPercentage: int, failureThresholdPercentage: int, robotDeploymentTimeoutInSeconds: int, downloadConditionFile: record<bucket: string, key: string, etag: string>>, deploymentApplicationConfigs: table<application: string, applicationVersion: string, launchConfig: record>, failureReason: string, failureCode: string, createdAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2815,7 +2815,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # A map that contains tag keys and tag values that will be unattached from the resource.
+  --tag-keys: list # A map that contains tag keys and tag values that will be unattached from the resource. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2827,6 +2827,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2851,9 +2852,9 @@ export def "untag-resource" [
 #
 # POST /updateRobotApplication
 # operationId: UpdateRobotApplication
-# --sources item shape: {s3Bucket?: any, s3Key?: any, architecture?: any}
-# --robotSoftwareSuite shape: {name?: any, version?: any}
-# --environment shape: {uri?: any}
+# --sources item shape: {s3Bucket?: string, s3Key?: string, architecture?: "X86_64"|"ARM64"|"ARMHF"}
+# --robotSoftwareSuite shape: {name?: "ROS"|"ROS2"|"General", version?: "Kinetic"|"Melodic"|"Dashing"|"Foxy"}
+# --environment shape: {uri?: string}
 export def "update-robot-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2872,11 +2873,11 @@ export def "update-robot-application" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   application: string # The application information for the robot application.
-  --sources: list # The sources of the robot application. — item shape: {s3Bucket?: any, s3Key?: any, architecture?: any}
-  robot_software_suite: record # Information about a robot software suite (ROS distribution). — shape: {name?: any, version?: any}
+  --sources: list # The sources of the robot application. — item shape: {s3Bucket?: string, s3Key?: string, architecture?: "X86_64"|"ARM64"|"ARMHF"}
+  robot_software_suite: record # Information about a robot software suite (ROS distribution). — shape: {name?: "ROS"|"ROS2"|"General", version?: "Kinetic"|"Melodic"|"Dashing"|"Foxy"}
   --current-revision-id: string # The revision id for the robot application.
-  --environment: record # The object that contains the Docker image URI for either your robot or simulation applications. — shape: {uri?: any}
-]: any -> record<arn: record, name: record, version: record, sources: record, robotSoftwareSuite: record<name: record, version: record>, lastUpdatedAt: record, revisionId: record, environment: record<uri: record>> {
+  --environment: record # The object that contains the Docker image URI for either your robot or simulation applications. — shape: {uri?: string}
+]: any -> record<arn: string, name: string, version: string, sources: table<s3Bucket: string, s3Key: string, etag: string, architecture: string>, robotSoftwareSuite: record<name: string, version: string>, lastUpdatedAt: string, revisionId: string, environment: record<uri: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2905,11 +2906,11 @@ export def "update-robot-application" [
 #
 # POST /updateSimulationApplication
 # operationId: UpdateSimulationApplication
-# --sources item shape: {s3Bucket?: any, s3Key?: any, architecture?: any}
-# --simulationSoftwareSuite shape: {name?: any, version?: any}
-# --robotSoftwareSuite shape: {name?: any, version?: any}
-# --renderingEngine shape: {name?: any, version?: any}
-# --environment shape: {uri?: any}
+# --sources item shape: {s3Bucket?: string, s3Key?: string, architecture?: "X86_64"|"ARM64"|"ARMHF"}
+# --simulationSoftwareSuite shape: {name?: "Gazebo"|"RosbagPlay"|"SimulationRuntime", version?: string}
+# --robotSoftwareSuite shape: {name?: "ROS"|"ROS2"|"General", version?: "Kinetic"|"Melodic"|"Dashing"|"Foxy"}
+# --renderingEngine shape: {name?: "OGRE", version?: string}
+# --environment shape: {uri?: string}
 export def "update-simulation-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2928,13 +2929,13 @@ export def "update-simulation-application" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   application: string # The application information for the simulation application.
-  --sources: list # The sources of the simulation application. — item shape: {s3Bucket?: any, s3Key?: any, architecture?: any}
-  simulation_software_suite: record # Information about a simulation software suite. — shape: {name?: any, version?: any}
-  robot_software_suite: record # Information about a robot software suite (ROS distribution). — shape: {name?: any, version?: any}
-  --rendering-engine: record # Information about a rendering engine. — shape: {name?: any, version?: any}
+  --sources: list # The sources of the simulation application. — item shape: {s3Bucket?: string, s3Key?: string, architecture?: "X86_64"|"ARM64"|"ARMHF"}
+  simulation_software_suite: record # Information about a simulation software suite. — shape: {name?: "Gazebo"|"RosbagPlay"|"SimulationRuntime", version?: string}
+  robot_software_suite: record # Information about a robot software suite (ROS distribution). — shape: {name?: "ROS"|"ROS2"|"General", version?: "Kinetic"|"Melodic"|"Dashing"|"Foxy"}
+  --rendering-engine: record # Information about a rendering engine. — shape: {name?: "OGRE", version?: string}
   --current-revision-id: string # The revision id for the robot application.
-  --environment: record # The object that contains the Docker image URI for either your robot or simulation applications. — shape: {uri?: any}
-]: any -> record<arn: record, name: record, version: record, sources: record, simulationSoftwareSuite: record<name: record, version: record>, robotSoftwareSuite: record<name: record, version: record>, renderingEngine: record<name: record, version: record>, lastUpdatedAt: record, revisionId: record, environment: record<uri: record>> {
+  --environment: record # The object that contains the Docker image URI for either your robot or simulation applications. — shape: {uri?: string}
+]: any -> record<arn: string, name: string, version: string, sources: table<s3Bucket: string, s3Key: string, etag: string, architecture: string>, simulationSoftwareSuite: record<name: string, version: string>, robotSoftwareSuite: record<name: string, version: string>, renderingEngine: record<name: string, version: string>, lastUpdatedAt: string, revisionId: string, environment: record<uri: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2963,7 +2964,7 @@ export def "update-simulation-application" [
 #
 # POST /updateWorldTemplate
 # operationId: UpdateWorldTemplate
-# --templateLocation shape: {s3Bucket?: any, s3Key?: any}
+# --templateLocation shape: {s3Bucket?: string, s3Key?: string}
 export def "update-world-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2984,8 +2985,8 @@ export def "update-world-template" [
   template: string # The Amazon Resource Name (arn) of the world template to update.
   --name: string # The name of the template.
   --template-body: string # The world template body.
-  --template-location: record # Information about a template location. — shape: {s3Bucket?: any, s3Key?: any}
-]: any -> record<arn: record, name: record, createdAt: record, lastUpdatedAt: record> {
+  --template-location: record # Information about a template location. — shape: {s3Bucket?: string, s3Key?: string}
+]: any -> record<arn: string, name: string, createdAt: string, lastUpdatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

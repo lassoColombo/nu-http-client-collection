@@ -131,14 +131,18 @@ export def "get-trip-purpose-prediction" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --origin-location-code: string # city/airport [IATA code](http://www.iata.org/publications/Pages/code-search.aspx) from which the traveler will depart, e.g. BOS for Boston (e.g. NYC)
-  --destination-location-code: string # city/airport [IATA code](http://www.iata.org/publications/Pages/code-search.aspx) to which the traveler is going, e.g. PAR for Paris (e.g. MAD)
-  --departure-date: string # the date on which the traveler will depart from the origin to go to the destination. Dates are specified in the [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) YYYY-MM-DD format, e.g. 2017-12-25 (e.g. 2023-12-01)
-  --return-date: string # the date on which the traveler will depart from the destination to return to the origin. Dates are specified in the [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) YYYY-MM-DD format, e.g. 2018-02-28 (e.g. 2023-12-12)
+  --origin-location-code: string # city/airport [IATA code](http://www.iata.org/publications/Pages/code-search.aspx) from which the traveler will depart, e.g. BOS for Boston (required, e.g. NYC)
+  --destination-location-code: string # city/airport [IATA code](http://www.iata.org/publications/Pages/code-search.aspx) to which the traveler is going, e.g. PAR for Paris (required, e.g. MAD)
+  --departure-date: string # the date on which the traveler will depart from the origin to go to the destination. Dates are specified in the [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) YYYY-MM-DD format, e.g. 2017-12-25 (required, e.g. 2023-12-01)
+  --return-date: string # the date on which the traveler will depart from the destination to return to the origin. Dates are specified in the [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) YYYY-MM-DD format, e.g. 2018-02-28 (required, e.g. 2023-12-12)
   --search-date: string # the date on which the traveler is performing the search. If this parameter is not specified, current date will be used. Dates are specified in the [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) YYYY-MM-DD format, e.g. 2018-02-28
-]: nothing -> any {
+]: nothing -> record<data: record<id: string, probability: string, result: string, subType: string, type: string>, meta: record<defaults: record<searchDate: string>, links: record<related: string, self: string, type: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($origin_location_code == null) { error make --unspanned { msg: "required query parameter 'originLocationCode' missing: pass --origin-location-code" } }
+  if ($destination_location_code == null) { error make --unspanned { msg: "required query parameter 'destinationLocationCode' missing: pass --destination-location-code" } }
+  if ($departure_date == null) { error make --unspanned { msg: "required query parameter 'departureDate' missing: pass --departure-date" } }
+  if ($return_date == null) { error make --unspanned { msg: "required query parameter 'returnDate' missing: pass --return-date" } }
   let qp = [(serialize-qp "originLocationCode" $origin_location_code "scalar") (serialize-qp "destinationLocationCode" $destination_location_code "scalar") (serialize-qp "departureDate" $departure_date "scalar") (serialize-qp "returnDate" $return_date "scalar") (serialize-qp "searchDate" $search_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/travel/predictions/trip-purpose" $qp $auth.query)
   let accept_val = "application/vnd.amadeus+json"

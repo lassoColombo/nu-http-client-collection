@@ -1,4 +1,4 @@
-# Auto-generated client for GameSparks Game Details API vv2
+# Auto-generated client for GameSparks Game Details API v2
 # Source: https://api.apis.guru/v2/specs/gamesparks.net/game-details/v2/openapi.json
 # Auth: --token flag or $env.GAMESPARKS_GAME_DETAILS_API_TOKEN
 
@@ -12,9 +12,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "accesstoken" => { {scheme: $scheme, headers: {accessToken: $token_val}, query: "", location: "header"} }
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
-    "jwt" => { {scheme: $scheme, headers: {jwt: $token_val}, query: "", location: "header"} }
+    "accesstoken" => { {scheme: $scheme, headers: {"accessToken": $token_val}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
+    "jwt" => { {scheme: $scheme, headers: {"jwt": $token_val}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -148,6 +148,7 @@ def stage-completer [] { ["LIVE" "PREVIEW"] }
 def data-type-completer [] { ["activeDevices" "activeLocations" "activeUsers" "averageBandwidthPerUser" "averageDauOverMau" "averageJsExecutionTime" "averageRequestsPerUser" "averageResponseTime" "averageResponseTimePerType" "connectedUsers" "customAnalyticTotal" "customAnalyticUser" "scriptLogLevelsCount" "sessionAnalytic" "sessionAnalyticTotal" "storagePerUser" "timedAnalyticTotal"] }
 def precision-completer [] { ["DAILY" "HOURLY" "MONTHLY"] }
 def query-name-completer [] { ["activeUsersNow" "averageDailyActiveUsers" "averageSessionDuration" "dailyActiveUsers" "lastMonthlyActiveUsers" "monthlyActiveUsers"] }
+def action-completer [] { ["publish" "start" "stop" "unpublish"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -221,16 +222,21 @@ export def "get-analytics-data-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stage: string@stage-completer # stage
-  --data-type: string@data-type-completer # dataType
-  --precision: string@precision-completer # precision
-  --start-date: string # yyyy-MM-dd (format: date)
-  --end-date: string # yyyy-MM-dd (format: date)
+  --stage: string@stage-completer # stage (required)
+  --data-type: string@data-type-completer # dataType (required)
+  --precision: string@precision-completer # precision (required)
+  --start-date: string # yyyy-MM-dd (required, format: date)
+  --end-date: string # yyyy-MM-dd (required, format: date)
   --keys: string # the keys to select. For example "ReturningUsers", "NewUsers", etc
 ]: nothing -> table<_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
+  if ($stage == null) { error make --unspanned { msg: "required query parameter 'stage' missing: pass --stage" } }
+  if ($data_type == null) { error make --unspanned { msg: "required query parameter 'dataType' missing: pass --data-type" } }
+  if ($precision == null) { error make --unspanned { msg: "required query parameter 'precision' missing: pass --precision" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'startDate' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'endDate' missing: pass --end-date" } }
   let qp = [(serialize-qp "stage" $stage "scalar") (serialize-qp "dataType" $data_type "scalar") (serialize-qp "precision" $precision "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "keys" $keys "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/analytics") $qp $auth.query)
   let accept_val = "application/json;charset=UTF-8"
@@ -264,12 +270,14 @@ export def "get-data-count-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stage: string@stage-completer # stage
-  --query-name: string@query-name-completer # queryName
+  --stage: string@stage-completer # stage (required)
+  --query-name: string@query-name-completer # queryName (required)
 ]: nothing -> record<result: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
+  if ($stage == null) { error make --unspanned { msg: "required query parameter 'stage' missing: pass --stage" } }
+  if ($query_name == null) { error make --unspanned { msg: "required query parameter 'queryName' missing: pass --query-name" } }
   let qp = [(serialize-qp "stage" $stage "scalar") (serialize-qp "queryName" $query_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/analytics/count") $qp $auth.query)
   let accept_val = "application/json;charset=UTF-8"
@@ -303,11 +311,12 @@ export def "get-retention-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stage: string@stage-completer # stage
+  --stage: string@stage-completer # stage (required)
 ]: nothing -> record<result: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
+  if ($stage == null) { error make --unspanned { msg: "required query parameter 'stage' missing: pass --stage" } }
   let qp = [(serialize-qp "stage" $stage "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/analytics/rollingRetention") $qp $auth.query)
   let accept_val = "application/json;charset=UTF-8"
@@ -433,13 +442,16 @@ export def "get-game-summary-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stage: string@stage-completer # stage
-  --start-date: string # yyyy-MM-dd (format: date)
-  --end-date: string # yyyy-MM-dd (format: date)
+  --stage: string@stage-completer # stage (required)
+  --start-date: string # yyyy-MM-dd (required, format: date)
+  --end-date: string # yyyy-MM-dd (required, format: date)
 ]: nothing -> record<logLevelData: list<record>, logLevelSummary: table<count: int, level: string>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
+  if ($stage == null) { error make --unspanned { msg: "required query parameter 'stage' missing: pass --stage" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'startDate' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'endDate' missing: pass --end-date" } }
   let qp = [(serialize-qp "stage" $stage "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/notifications/summary") $qp $auth.query)
   let accept_val = "application/json;charset=UTF-8"
@@ -909,21 +921,22 @@ export def "import-accept-using-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: string # body
+  --body: string # body (required)
   file: string # file (format: binary)
 ]: any -> record<message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
+  if ($body == null) { error make --unspanned { msg: "required query parameter 'body' missing: pass --body" } }
   let qp = [(serialize-qp "body" $body "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/scripts/import/accept") $qp $auth.query)
   let req_body = {"file": $file} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -964,8 +977,8 @@ export def "import-zip-using-post" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -2135,7 +2148,7 @@ export def "update-experiment-using-put" [
 export def "do-action-experiment-using-post" [
   api_key: string
   id: int
-  action: string
+  action: string@action-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

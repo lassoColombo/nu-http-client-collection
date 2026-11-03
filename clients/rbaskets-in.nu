@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -114,6 +114,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def in-param-completer [] { ["any" "body" "headers" "query"] }
+def method-completer [] { ["CONNECT" "DELETE" "GET" "HEAD" "OPTIONS" "PATCH" "POST" "PUT" "TRACE"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -411,7 +412,7 @@ export def "get-api-baskets-name-requests" [
 # GET /api/baskets/{name}/responses/{method}
 export def "get-api-baskets-name-responses-method" [
   name: string
-  method: string
+  method: string@method-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -448,7 +449,7 @@ export def "get-api-baskets-name-responses-method" [
 # PUT /api/baskets/{name}/responses/{method}
 export def "put-api-baskets-name-responses-method" [
   name: string
-  method: string
+  method: string@method-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -844,7 +845,7 @@ export def "get-baskets-name-requests" [
 @deprecated
 export def "get-baskets-name-responses-method" [
   name: string
-  method: string
+  method: string@method-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -883,7 +884,7 @@ export def "get-baskets-name-responses-method" [
 @deprecated
 export def "put-baskets-name-responses-method" [
   name: string
-  method: string
+  method: string@method-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

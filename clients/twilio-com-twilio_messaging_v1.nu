@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -705,6 +705,8 @@ export def "create-us-app-to-person" [
   let full_url = (build-url $base ({messaging_service_sid: (encode-path-segment $messaging_service_sid)} | format pattern "/v1/Services/{messaging_service_sid}/Compliance/Usa2p") $auth.query)
   let req_body = {"BrandRegistrationSid": $brand_registration_sid, "Description": $description, "HasEmbeddedLinks": $has_embedded_links, "HasEmbeddedPhone": $has_embedded_phone, "HelpKeywords": $help_keywords, "HelpMessage": $help_message, "MessageFlow": $message_flow, "MessageSamples": $message_samples, "OptInKeywords": $opt_in_keywords, "OptInMessage": $opt_in_message, "OptOutKeywords": $opt_out_keywords, "OptOutMessage": $opt_out_message, "UsAppToPersonUsecase": $us_app_to_person_usecase} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "HasEmbeddedLinks") == null) { error make --unspanned { msg: "required body field 'HasEmbeddedLinks' missing: pass --has-embedded-links or pipe a record" } }
+  if (($req_body | get -o "HasEmbeddedPhone") == null) { error make --unspanned { msg: "required body field 'HasEmbeddedPhone' missing: pass --has-embedded-phone or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })

@@ -141,8 +141,8 @@ export def "get-json-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --text: list<string> # Word or phrase to find associations with. Tip. You can use multiple parameters 'text' in a request (from 1 to 10 inclusive). This way you can get associations for several input words or phrases in one response. Restriction: regardless of the size of the text association lookup is always performed by the first 10 words of the text.
-  --lang: string@lang-completer # Query language. Use language code for the language of the text: * de - German; * en - English; * es - Spanish; * fr - French; * it - Italian; * pt - Portuguese; * ru - Russian;
+  --text: list<string> # Word or phrase to find associations with. Tip. You can use multiple parameters 'text' in a request (from 1 to 10 inclusive). This way you can get associations for several input words or phrases in one response. Restriction: regardless of the size of the text association lookup is always performed by the first 10 words of the text. (required)
+  --lang: string@lang-completer # Query language. Use language code for the language of the text: * de - German; * en - English; * es - Spanish; * fr - French; * it - Italian; * pt - Portuguese; * ru - Russian; (required)
   --type: string@type-completer # Type of result. Possible values: * stimulus - an input data (the text parameter) is considered as a response word. The service returns a list of stimuli words, which evoke a given response word; * response - an input data (the text parameter) is considered as a stimulus word. The service returns a list of response words, which come to mind for a given stimulus word. (default: stimulus)
   --limit: int # Maximum number of results to return. Allows to limit the number of results (associations) in response. The value of this parameter is an integer number from 1 to 300 inclusive. (default: 50)
   --pos: list<string> # Parts of speech to return. Allows to limit results by specified parts of speech. The value of this parameter is a list of parts of speech separated by comma. The following parts of speech codes are supported: * noun * adjective * verb * adverb (default: [noun, adjective, verb, adverb])
@@ -150,6 +150,8 @@ export def "get-json-search" [
 ]: nothing -> record<code: int, request: record<indent: string, lang: string, limit: int, pos: string, text: list<string>, type: string>, response: table<items: list, text: string>, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($text == null) { error make --unspanned { msg: "required query parameter 'text' missing: pass --text" } }
+  if ($lang == null) { error make --unspanned { msg: "required query parameter 'lang' missing: pass --lang" } }
   let qp = [(serialize-qp "text" $text "multi") (serialize-qp "lang" $lang "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "pos" $pos "csv") (serialize-qp "indent" $indent "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/json/search" $qp $auth.query)
   let accept_val = "application/json"
@@ -181,18 +183,18 @@ export def "post-json-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  text: list # Word or phrase to find associations with. Tip. You can use multiple parameters 'text' in a request (from 1 to 10 inclusive). This way you can get associations for several input words or phrases in one response. Restriction: regardless of the size of the text association lookup is always performed by the first 10 words of the text.
+  text: list<string> # Word or phrase to find associations with. Tip. You can use multiple parameters 'text' in a request (from 1 to 10 inclusive). This way you can get associations for several input words or phrases in one response. Restriction: regardless of the size of the text association lookup is always performed by the first 10 words of the text.
   lang: string@lang-completer # Query language. Use language code for the language of the text: * de - German; * en - English; * es - Spanish; * fr - French; * it - Italian; * pt - Portuguese; * ru - Russian;
   --type: string@type-completer # Type of result. Possible values: * stimulus - an input data (the text parameter) is considered as a response word. The service returns a list of stimuli words, which evoke a given response word; * response - an input data (the text parameter) is considered as a stimulus word. The service returns a list of response words, which come to mind for a given stimulus word.
   --limit: int # Maximum number of results to return. Allows to limit the number of results (associations) in response. The value of this parameter is an integer number from 1 to 300 inclusive.
-  --pos: list # Parts of speech to return. Allows to limit results by specified parts of speech. The value of this parameter is a list of parts of speech separated by comma. The following parts of speech codes are supported: * noun * adjective * verb * adverb
+  --pos: list<string> # Parts of speech to return. Allows to limit results by specified parts of speech. The value of this parameter is a list of parts of speech separated by comma. The following parts of speech codes are supported: * noun * adjective * verb * adverb
   --indent: string@indent-completer # Indentation switch for pretty printing of JSON response. Allows to either turn on or off space indentation for a response. The following values are allowed: * yes - turns indentation with spaces on; * no - turn indentation with spaces off;
 ]: any -> record<code: int, request: record<indent: string, lang: string, limit: int, pos: string, text: list<string>, type: string>, response: table<items: list, text: string>, version: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/json/search" $auth.query)
-  let req_body = {"text": $text, "lang": $lang, "type": $type, "limit": $limit, "pos": $pos, "indent": $indent} | compact
+  let req_body = {"text": $text, "lang": $lang, "type": $type, "limit": $limit, "pos": (if ($pos | describe | str starts-with "list") { $pos | each { into string } | str join "," } else { $pos }), "indent": $indent} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

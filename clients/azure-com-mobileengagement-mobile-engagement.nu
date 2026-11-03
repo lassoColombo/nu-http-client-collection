@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -113,6 +113,7 @@ def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def kind-completer [] { ["announcements" "dataPushes" "nativePushes" "polls"] }
 def delivery-time-completer [] { ["any" "background" "session"] }
 def notification-type-completer [] { ["popup" "system"] }
 def push-mode-completer [] { ["manual" "one-shot" "real-time"] }
@@ -158,11 +159,12 @@ export def "app-collections-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MobileEngagement/appCollections") $qp $auth.query)
   let accept_val = "application/json"
@@ -196,7 +198,7 @@ export def "app-collections-check-name-availability" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --available: oneof<nothing, bool> # Available.
   --name: string # Name.
   --unavailability-reason: string # UnavailabilityReason.
@@ -205,6 +207,7 @@ export def "app-collections-check-name-availability" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MobileEngagement/checkAppCollectionNameAvailability") $qp $auth.query)
   let req_body = {"available": $available, "name": $name, "unavailabilityReason": $unavailability_reason} | compact
@@ -240,11 +243,12 @@ export def "supported-platforms-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<platforms: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MobileEngagement/supportedPlatforms") $qp $auth.query)
   let accept_val = "application/json"
@@ -280,13 +284,14 @@ export def "apps-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($app_collection | is-empty) { error make --unspanned { msg: "path parameter 'appCollection' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps") $qp $auth.query)
   let accept_val = "application/json"
@@ -314,7 +319,7 @@ export def "campaigns-list" [
   resource_group_name: string
   app_collection: string
   app_name: string
-  kind: string
+  kind: string@kind-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -324,13 +329,13 @@ export def "campaigns-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --skip: int # Control paging of campaigns, start results at the given offset, defaults to 0 (1st page of data).
   --top: int # Control paging of campaigns, number of campaigns to return with each call. It returns all campaigns by default. When specifying $top parameter, the response contains a `nextLink` property describing the path to get the next page if there are more results.
   --filter: string # Filter can be used to restrict the results to campaigns matching a specific state. The syntax is `$filter=state eq 'draft'`. Valid state values are: draft, scheduled, in-progress, and finished. Only the eq operator and the state property are supported.
   --orderby: string # Sort results by an expression which looks like `$orderby=id asc` (this example is actually the default behavior). The syntax is orderby={property} {direction} or just orderby={property}. The available sorting properties are id, name, state, activatedDate, and finishedDate. The available directions are asc (for ascending order) and desc (for descending order). When not specified the asc direction is used. Only one property at a time can be used for sorting.
   --search: string # Restrict results to campaigns matching the optional `search` expression. This currently performs the search based on the name on the campaign only, case insensitive. If the campaign contains the value of the `search` parameter anywhere in the name, it matches.
-]: nothing -> record<nextLink: string, value: table<activatedDate: string, endTime: string, finishedDate: string, name: string, startTime: string, timezone: string, id: int>> {
+]: nothing -> record<nextLink: string, value: table<activatedDate: string, endTime: string, finishedDate: string, name: string, startTime: string, timezone: string, id: int, state: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -338,6 +343,7 @@ export def "campaigns-list" [
   if ($app_collection | is-empty) { error make --unspanned { msg: "path parameter 'appCollection' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
   if ($kind | is-empty) { error make --unspanned { msg: "path parameter 'kind' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$search" $search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name), kind: (encode-path-segment $kind)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/campaigns/{kind}") $qp $auth.query)
   let accept_val = "application/json"
@@ -368,7 +374,7 @@ export def "campaigns-create" [
   resource_group_name: string
   app_collection: string
   app_name: string
-  kind: string
+  kind: string@kind-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -378,7 +384,7 @@ export def "campaigns-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --audience: record # Specify which users will be targeted by this campaign. By default, all users will be targeted. If you set `pushMode` property to `manual`, the only thing you can specify in the audience is the push quota filter. An audience is a boolean expression made of criteria (variables) operators (`not`, `and` or `or`) and parenthesis. Additionally, a set of filters can be added to an audience. 65535 bytes max as per JSON encoding. — shape: {criteria?: record, expression?: string, filters?: list}
   --category: string # Category of the campaign. Categories can be used on the application side to customize campaigns.
   --delivery-activities: list<string> # Announcements/polls only. Array containing the list of activities in which the campaign can be delivered. deliveryTime must be set to session. If the platform is iOS, this option can also be set if deliveryTime is set to any. In that case, if the campaign is received when the application is launched, it will be delivered only in the specified list of activities.
@@ -416,6 +422,7 @@ export def "campaigns-create" [
   if ($app_collection | is-empty) { error make --unspanned { msg: "path parameter 'appCollection' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
   if ($kind | is-empty) { error make --unspanned { msg: "path parameter 'kind' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name), kind: (encode-path-segment $kind)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/campaigns/{kind}") $qp $auth.query)
   let req_body = {"audience": $audience, "category": $category, "deliveryActivities": $delivery_activities, "deliveryTime": $delivery_time, "endTime": $end_time, "localization": $localization, "name": $name, "notificationBadge": $notification_badge, "notificationCloseable": $notification_closeable, "notificationIcon": $notification_icon, "notificationSound": $notification_sound, "notificationType": $notification_type, "notificationVibrate": $notification_vibrate, "pushMode": $push_mode, "questions": $questions, "startTime": $start_time, "timezone": $timezone, "type": $type, "actionButtonText": $action_button_text, "actionUrl": $action_url, "body": $body, "exitButtonText": $exit_button_text, "notificationImage": $notification_image, "notificationMessage": $notification_message, "notificationOptions": $notification_options, "notificationTitle": $notification_title, "payload": $payload, "title": $title} | compact
@@ -446,7 +453,7 @@ export def "campaigns-test-new" [
   resource_group_name: string
   app_collection: string
   app_name: string
-  kind: string
+  kind: string@kind-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -456,7 +463,7 @@ export def "campaigns-test-new" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   data: any # shape: {audience?: record, category?: string, deliveryActivities?: list<string>, deliveryTime?: "any"|"background"|"session", endTime?: string, localization?: record, name?: string, notificationBadge?: bool, notificationCloseable?: bool, notificationIcon?: bool, notificationSound?: bool, notificationType?: "system"|"popup", notificationVibrate?: bool, pushMode?: "real-time"|"one-shot"|"manual", questions?: list, startTime?: string, timezone?: string, ... (11 more fields)}
   device_id: string # Device identifier (as returned by the SDK).
   --lang: string # The language to test expressed using ISO 639-1 code. The default language of the campaign will be used if the parameter is not provided.
@@ -469,6 +476,7 @@ export def "campaigns-test-new" [
   if ($app_collection | is-empty) { error make --unspanned { msg: "path parameter 'appCollection' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
   if ($kind | is-empty) { error make --unspanned { msg: "path parameter 'kind' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name), kind: (encode-path-segment $kind)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/campaigns/{kind}/test") $qp $auth.query)
   let req_body = {"data": $data, "deviceId": $device_id, "lang": $lang} | compact
@@ -498,7 +506,7 @@ export def "campaigns-delete" [
   resource_group_name: string
   app_collection: string
   app_name: string
-  kind: string
+  kind: string@kind-completer
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -509,8 +517,8 @@ export def "campaigns-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<error: record<code: string, message: string>> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -519,6 +527,7 @@ export def "campaigns-delete" [
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
   if ($kind | is-empty) { error make --unspanned { msg: "path parameter 'kind' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name), kind: (encode-path-segment $kind), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/campaigns/{kind}/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -546,7 +555,7 @@ export def "campaigns-get" [
   resource_group_name: string
   app_collection: string
   app_name: string
-  kind: string
+  kind: string@kind-completer
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -557,8 +566,8 @@ export def "campaigns-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<activatedDate: string, finishedDate: string, id: int, state: string, audience: record<criteria: record, expression: string, filters: list<record>>, category: string, deliveryActivities: list<string>, deliveryTime: string, endTime: string, localization: record, name: string, notificationBadge: bool, notificationCloseable: bool, notificationIcon: bool, notificationSound: bool, notificationType: string, notificationVibrate: bool, pushMode: string, questions: table<choices: list, id: int, localization: record, title: string>, startTime: string, timezone: string, type: string> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<activatedDate: string, finishedDate: string, id: int, state: string, audience: record<criteria: record, expression: string, filters: list<record>>, category: string, deliveryActivities: list<string>, deliveryTime: string, endTime: string, localization: record, name: string, notificationBadge: bool, notificationCloseable: bool, notificationIcon: bool, notificationSound: bool, notificationType: string, notificationVibrate: bool, pushMode: string, questions: table<choices: list, id: int, localization: record, title: string>, startTime: string, timezone: string, type: string, actionButtonText: string, actionUrl: string, body: string, exitButtonText: string, notificationImage: string, notificationMessage: string, notificationOptions: record<actionText: string, bigPicture: string, bigText: string, sound: string>, notificationTitle: string, payload: record, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -567,6 +576,7 @@ export def "campaigns-get" [
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
   if ($kind | is-empty) { error make --unspanned { msg: "path parameter 'kind' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name), kind: (encode-path-segment $kind), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/campaigns/{kind}/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -597,7 +607,7 @@ export def "campaigns-update" [
   resource_group_name: string
   app_collection: string
   app_name: string
-  kind: string
+  kind: string@kind-completer
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -608,7 +618,7 @@ export def "campaigns-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --audience: record # Specify which users will be targeted by this campaign. By default, all users will be targeted. If you set `pushMode` property to `manual`, the only thing you can specify in the audience is the push quota filter. An audience is a boolean expression made of criteria (variables) operators (`not`, `and` or `or`) and parenthesis. Additionally, a set of filters can be added to an audience. 65535 bytes max as per JSON encoding. — shape: {criteria?: record, expression?: string, filters?: list}
   --category: string # Category of the campaign. Categories can be used on the application side to customize campaigns.
   --delivery-activities: list<string> # Announcements/polls only. Array containing the list of activities in which the campaign can be delivered. deliveryTime must be set to session. If the platform is iOS, this option can also be set if deliveryTime is set to any. In that case, if the campaign is received when the application is launched, it will be delivered only in the specified list of activities.
@@ -647,6 +657,7 @@ export def "campaigns-update" [
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
   if ($kind | is-empty) { error make --unspanned { msg: "path parameter 'kind' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name), kind: (encode-path-segment $kind), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/campaigns/{kind}/{id}") $qp $auth.query)
   let req_body = {"audience": $audience, "category": $category, "deliveryActivities": $delivery_activities, "deliveryTime": $delivery_time, "endTime": $end_time, "localization": $localization, "name": $name, "notificationBadge": $notification_badge, "notificationCloseable": $notification_closeable, "notificationIcon": $notification_icon, "notificationSound": $notification_sound, "notificationType": $notification_type, "notificationVibrate": $notification_vibrate, "pushMode": $push_mode, "questions": $questions, "startTime": $start_time, "timezone": $timezone, "type": $type, "actionButtonText": $action_button_text, "actionUrl": $action_url, "body": $body, "exitButtonText": $exit_button_text, "notificationImage": $notification_image, "notificationMessage": $notification_message, "notificationOptions": $notification_options, "notificationTitle": $notification_title, "payload": $payload, "title": $title} | compact
@@ -676,7 +687,7 @@ export def "campaigns-activate" [
   resource_group_name: string
   app_collection: string
   app_name: string
-  kind: string
+  kind: string@kind-completer
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -687,7 +698,7 @@ export def "campaigns-activate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<id: int, state: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -697,6 +708,7 @@ export def "campaigns-activate" [
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
   if ($kind | is-empty) { error make --unspanned { msg: "path parameter 'kind' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name), kind: (encode-path-segment $kind), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/campaigns/{kind}/{id}/activate") $qp $auth.query)
   let accept_val = "application/json"
@@ -724,7 +736,7 @@ export def "campaigns-finish" [
   resource_group_name: string
   app_collection: string
   app_name: string
-  kind: string
+  kind: string@kind-completer
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -735,7 +747,7 @@ export def "campaigns-finish" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<id: int, state: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -745,6 +757,7 @@ export def "campaigns-finish" [
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
   if ($kind | is-empty) { error make --unspanned { msg: "path parameter 'kind' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name), kind: (encode-path-segment $kind), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/campaigns/{kind}/{id}/finish") $qp $auth.query)
   let accept_val = "application/json"
@@ -773,7 +786,7 @@ export def "campaigns-push" [
   resource_group_name: string
   app_collection: string
   app_name: string
-  kind: string
+  kind: string@kind-completer
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -784,7 +797,7 @@ export def "campaigns-push" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --data: any # shape: {audience?: record, category?: string, deliveryActivities?: list<string>, deliveryTime?: "any"|"background"|"session", endTime?: string, localization?: record, name?: string, notificationBadge?: bool, notificationCloseable?: bool, notificationIcon?: bool, notificationSound?: bool, notificationType?: "system"|"popup", notificationVibrate?: bool, pushMode?: "real-time"|"one-shot"|"manual", questions?: list, startTime?: string, timezone?: string, ... (11 more fields)}
   device_ids: list<string> # Device identifiers to push as a JSON array of strings. Note that if you want to push the same campaign several times to the same device, you need to make several API calls.
 ]: any -> record<invalidDeviceIds: list<string>> {
@@ -797,6 +810,7 @@ export def "campaigns-push" [
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
   if ($kind | is-empty) { error make --unspanned { msg: "path parameter 'kind' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name), kind: (encode-path-segment $kind), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/campaigns/{kind}/{id}/push") $qp $auth.query)
   let req_body = {"data": $data, "deviceIds": $device_ids} | compact
@@ -826,7 +840,7 @@ export def "campaigns-get-statistics" [
   resource_group_name: string
   app_collection: string
   app_name: string
-  kind: string
+  kind: string@kind-completer
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -837,7 +851,7 @@ export def "campaigns-get-statistics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<answers: record, content_actioned: int, content_displayed: int, content_exited: int, delivered: int, dropped: int, in_app_notification_actioned: int, in_app_notification_displayed: int, in_app_notification_exited: int, pushed: int, pushed_native: int, pushed_native_adm: int, pushed_native_google: int, queued: int, system_notification_actioned: int, system_notification_displayed: int, system_notification_exited: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -847,6 +861,7 @@ export def "campaigns-get-statistics" [
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
   if ($kind | is-empty) { error make --unspanned { msg: "path parameter 'kind' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name), kind: (encode-path-segment $kind), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/campaigns/{kind}/{id}/statistics") $qp $auth.query)
   let accept_val = "application/json"
@@ -874,7 +889,7 @@ export def "campaigns-suspend" [
   resource_group_name: string
   app_collection: string
   app_name: string
-  kind: string
+  kind: string@kind-completer
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -885,7 +900,7 @@ export def "campaigns-suspend" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<id: int, state: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -895,6 +910,7 @@ export def "campaigns-suspend" [
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
   if ($kind | is-empty) { error make --unspanned { msg: "path parameter 'kind' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name), kind: (encode-path-segment $kind), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/campaigns/{kind}/{id}/suspend") $qp $auth.query)
   let accept_val = "application/json"
@@ -922,7 +938,7 @@ export def "campaigns-test-saved" [
   resource_group_name: string
   app_collection: string
   app_name: string
-  kind: string
+  kind: string@kind-completer
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -933,7 +949,7 @@ export def "campaigns-test-saved" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   device_id: string # Device identifier (as returned by the SDK).
   --lang: string # The language to test expressed using ISO 639-1 code. The default language of the campaign will be used if the parameter is not provided.
 ]: any -> record<id: int, state: string> {
@@ -946,6 +962,7 @@ export def "campaigns-test-saved" [
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
   if ($kind | is-empty) { error make --unspanned { msg: "path parameter 'kind' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name), kind: (encode-path-segment $kind), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/campaigns/{kind}/{id}/test") $qp $auth.query)
   let req_body = {"deviceId": $device_id, "lang": $lang} | compact
@@ -975,7 +992,7 @@ export def "campaigns-get-by-name" [
   resource_group_name: string
   app_collection: string
   app_name: string
-  kind: string
+  kind: string@kind-completer
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -986,8 +1003,8 @@ export def "campaigns-get-by-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
-]: nothing -> record<activatedDate: string, finishedDate: string, id: int, state: string, audience: record<criteria: record, expression: string, filters: list<record>>, category: string, deliveryActivities: list<string>, deliveryTime: string, endTime: string, localization: record, name: string, notificationBadge: bool, notificationCloseable: bool, notificationIcon: bool, notificationSound: bool, notificationType: string, notificationVibrate: bool, pushMode: string, questions: table<choices: list, id: int, localization: record, title: string>, startTime: string, timezone: string, type: string> {
+  --api-version: string # Client Api Version. (required)
+]: nothing -> record<activatedDate: string, finishedDate: string, id: int, state: string, audience: record<criteria: record, expression: string, filters: list<record>>, category: string, deliveryActivities: list<string>, deliveryTime: string, endTime: string, localization: record, name: string, notificationBadge: bool, notificationCloseable: bool, notificationIcon: bool, notificationSound: bool, notificationType: string, notificationVibrate: bool, pushMode: string, questions: table<choices: list, id: int, localization: record, title: string>, startTime: string, timezone: string, type: string, actionButtonText: string, actionUrl: string, body: string, exitButtonText: string, notificationImage: string, notificationMessage: string, notificationOptions: record<actionText: string, bigPicture: string, bigText: string, sound: string>, notificationTitle: string, payload: record, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -996,6 +1013,7 @@ export def "campaigns-get-by-name" [
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
   if ($kind | is-empty) { error make --unspanned { msg: "path parameter 'kind' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name), kind: (encode-path-segment $kind), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/campaignsByName/{kind}/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1032,7 +1050,7 @@ export def "devices-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --top: int # Number of devices to return with each call. Defaults to 100 and cannot return more. Passing a greater value is ignored. The response contains a `nextLink` property describing the URI path to get the next page of results if not all results could be returned at once.
   --select: string # By default all `meta` and `appInfo` properties are returned, this property is used to restrict the output to the desired properties. It also excludes all devices from the output that have none of the selected properties. In other terms, only devices having at least one of the selected property being set is part of the results. Examples: - `$select=appInfo` : select all devices having at least 1 appInfo, return them all and don’t return any meta property. - `$select=meta` : return only meta properties in the output. - `$select=appInfo,meta/firstSeen,meta/lastSeen` : return all `appInfo`, plus meta object containing only firstSeen and lastSeen properties. The format is thus a comma separated list of properties to select. Use `appInfo` to select all appInfo properties, `meta` to select all meta properties. Use `appInfo/{key}` and `meta/{key}` to select specific appInfo and meta properties.
   --filter: string # Filter can be used to reduce the number of results. Filter is a boolean expression that can look like the following examples: * `$filter=deviceId gt 'abcdef0123456789abcdef0123456789'` * `$filter=lastModified le 1447284263690L` * `$filter=(deviceId ge 'abcdef0123456789abcdef0123456789') and (deviceId lt 'bacdef0123456789abcdef0123456789') and (lastModified gt 1447284263690L)` The first example is used automatically for paging when returning the `nextLink` property. The filter expression is a combination of checks on some properties that can be compared to their value. The available operators are: * `gt` : greater than * `ge` : greater than or equals * `lt` : less than * `le` : less than or equals * `and` : to add multiple checks (all checks must pass), optional parentheses can be used. The properties that can be used in the expression are the following: * `deviceId {operator} '{deviceIdValue}'` : a lexicographical comparison is made on the deviceId value, use single quotes for the value. * `lastModified {operator} {number}L` : returns only meta properties or appInfo properties whose last value modification timestamp compared to the specified value is matching (value is milliseconds since January 1st, 1970 UTC). Please note the `L` character after the number of milliseconds, its required when the number of milliseconds exceeds `2^31 - 1` (which is always the case for recent timestamps). Using `lastModified` excludes all devices from the output that have no property matching the timestamp criteria, like `$select`. Please note that the internal value of `lastModified` timestamp for a given property is never part of the results.
@@ -1043,6 +1061,7 @@ export def "devices-list" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($app_collection | is-empty) { error make --unspanned { msg: "path parameter 'appCollection' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices") $qp $auth.query)
   let accept_val = "application/json"
@@ -1079,7 +1098,7 @@ export def "export-tasks-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --skip: int # Control paging of export tasks, start results at the given offset, defaults to 0 (1st page of data). (default: 0)
   --top: int # Control paging of export tasks, number of export tasks to return with each call. By default, it returns all export tasks with a default paging of 20. The response contains a `nextLink` property describing the path to get the next page if there are more results. The maximum paging limit for $top is 40. (default: 20)
   --orderby: string # Sort results by an expression which looks like `$orderby=taskId asc` (default when not specified). The syntax is orderby={property} {direction} or just orderby={property}. Properties that can be specified for sorting: taskId, errorDetails, dateCreated, taskStatus, and dateCreated. The available directions are asc (for ascending order) and desc (for descending order). When not specified the asc direction is used. Only one orderby property can be specified.
@@ -1090,6 +1109,7 @@ export def "export-tasks-list" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($app_collection | is-empty) { error make --unspanned { msg: "path parameter 'appCollection' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/exportTasks") $qp $auth.query)
   let accept_val = "application/json"
@@ -1126,7 +1146,7 @@ export def "export-tasks-create-activities-task" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   container_url: string # format: uri
   --description: string # A description of the export task.
   end_date: string # A date as defined by full-date in RFC3339. (format: date)
@@ -1140,6 +1160,7 @@ export def "export-tasks-create-activities-task" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($app_collection | is-empty) { error make --unspanned { msg: "path parameter 'appCollection' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/exportTasks/activities") $qp $auth.query)
   let req_body = {"containerUrl": $container_url, "description": $description, "endDate": $end_date, "exportFormat": $export_format, "startDate": $start_date} | compact
@@ -1178,7 +1199,7 @@ export def "export-tasks-create-crashes-task" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   container_url: string # format: uri
   --description: string # A description of the export task.
   end_date: string # A date as defined by full-date in RFC3339. (format: date)
@@ -1192,6 +1213,7 @@ export def "export-tasks-create-crashes-task" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($app_collection | is-empty) { error make --unspanned { msg: "path parameter 'appCollection' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/exportTasks/crashes") $qp $auth.query)
   let req_body = {"containerUrl": $container_url, "description": $description, "endDate": $end_date, "exportFormat": $export_format, "startDate": $start_date} | compact
@@ -1230,7 +1252,7 @@ export def "export-tasks-create-errors-task" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   container_url: string # format: uri
   --description: string # A description of the export task.
   end_date: string # A date as defined by full-date in RFC3339. (format: date)
@@ -1244,6 +1266,7 @@ export def "export-tasks-create-errors-task" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($app_collection | is-empty) { error make --unspanned { msg: "path parameter 'appCollection' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/exportTasks/errors") $qp $auth.query)
   let req_body = {"containerUrl": $container_url, "description": $description, "endDate": $end_date, "exportFormat": $export_format, "startDate": $start_date} | compact
@@ -1282,7 +1305,7 @@ export def "export-tasks-create-events-task" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   container_url: string # format: uri
   --description: string # A description of the export task.
   end_date: string # A date as defined by full-date in RFC3339. (format: date)
@@ -1296,6 +1319,7 @@ export def "export-tasks-create-events-task" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($app_collection | is-empty) { error make --unspanned { msg: "path parameter 'appCollection' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/exportTasks/events") $qp $auth.query)
   let req_body = {"containerUrl": $container_url, "description": $description, "endDate": $end_date, "exportFormat": $export_format, "startDate": $start_date} | compact
@@ -1334,7 +1358,7 @@ export def "export-tasks-create-feedback-task-by-campaign" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   campaign_ids: list<int> # A list of campaign identifiers.
   campaign_type: string@campaign-type-completer # Campaign type.
   container_url: string # format: uri
@@ -1348,6 +1372,7 @@ export def "export-tasks-create-feedback-task-by-campaign" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($app_collection | is-empty) { error make --unspanned { msg: "path parameter 'appCollection' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/exportTasks/feedbackByCampaign") $qp $auth.query)
   let req_body = {"campaignIds": $campaign_ids, "campaignType": $campaign_type, "containerUrl": $container_url, "description": $description, "exportFormat": $export_format} | compact
@@ -1386,7 +1411,7 @@ export def "export-tasks-create-feedback-task-by-date-range" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   campaign_type: string@campaign-type-completer # Campaign type.
   campaign_window_end: string # A date time as defined by date-time in RFC3339. (format: date-time)
   campaign_window_start: string # A date time as defined by date-time in RFC3339. (format: date-time)
@@ -1401,6 +1426,7 @@ export def "export-tasks-create-feedback-task-by-date-range" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($app_collection | is-empty) { error make --unspanned { msg: "path parameter 'appCollection' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/exportTasks/feedbackByDate") $qp $auth.query)
   let req_body = {"campaignType": $campaign_type, "campaignWindowEnd": $campaign_window_end, "campaignWindowStart": $campaign_window_start, "containerUrl": $container_url, "description": $description, "exportFormat": $export_format} | compact
@@ -1439,7 +1465,7 @@ export def "export-tasks-create-jobs-task" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   container_url: string # format: uri
   --description: string # A description of the export task.
   end_date: string # A date as defined by full-date in RFC3339. (format: date)
@@ -1453,6 +1479,7 @@ export def "export-tasks-create-jobs-task" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($app_collection | is-empty) { error make --unspanned { msg: "path parameter 'appCollection' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/exportTasks/jobs") $qp $auth.query)
   let req_body = {"containerUrl": $container_url, "description": $description, "endDate": $end_date, "exportFormat": $export_format, "startDate": $start_date} | compact
@@ -1491,7 +1518,7 @@ export def "export-tasks-create-sessions-task" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   container_url: string # format: uri
   --description: string # A description of the export task.
   end_date: string # A date as defined by full-date in RFC3339. (format: date)
@@ -1505,6 +1532,7 @@ export def "export-tasks-create-sessions-task" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($app_collection | is-empty) { error make --unspanned { msg: "path parameter 'appCollection' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/exportTasks/sessions") $qp $auth.query)
   let req_body = {"containerUrl": $container_url, "description": $description, "endDate": $end_date, "exportFormat": $export_format, "startDate": $start_date} | compact
@@ -1543,7 +1571,7 @@ export def "export-tasks-create-tags-task" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   container_url: string # format: uri
   --description: string # A description of the export task.
   export_format: string@export-format-completer # The format of exported data.
@@ -1555,6 +1583,7 @@ export def "export-tasks-create-tags-task" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($app_collection | is-empty) { error make --unspanned { msg: "path parameter 'appCollection' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/exportTasks/tags") $qp $auth.query)
   let req_body = {"containerUrl": $container_url, "description": $description, "exportFormat": $export_format} | compact
@@ -1593,7 +1622,7 @@ export def "export-tasks-create-tokens-task" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   container_url: string # format: uri
   --description: string # A description of the export task.
   export_format: string@export-format-completer # The format of exported data.
@@ -1605,6 +1634,7 @@ export def "export-tasks-create-tokens-task" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($app_collection | is-empty) { error make --unspanned { msg: "path parameter 'appCollection' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/exportTasks/tokens") $qp $auth.query)
   let req_body = {"containerUrl": $container_url, "description": $description, "exportFormat": $export_format} | compact
@@ -1644,7 +1674,7 @@ export def "export-tasks-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<dateCompleted: string, dateCreated: string, description: string, errorDetails: string, exportType: string, id: string, state: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1653,6 +1683,7 @@ export def "export-tasks-get" [
   if ($app_collection | is-empty) { error make --unspanned { msg: "path parameter 'appCollection' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/exportTasks/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1689,7 +1720,7 @@ export def "import-tasks-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --skip: int # Control paging of import jobs, start results at the given offset, defaults to 0 (1st page of data). (default: 0)
   --top: int # Control paging of import jobs, number of import jobs to return with each call. By default, it returns all import jobs with a default paging of 20. The response contains a `nextLink` property describing the path to get the next page if there are more results. The maximum paging limit for $top is 40. (default: 20)
   --orderby: string # Sort results by an expression which looks like `$orderby=jobId asc` (default when not specified). The syntax is orderby={property} {direction} or just orderby={property}. Properties that can be specified for sorting: jobId, errorDetails, dateCreated, jobStatus, and dateCreated. The available directions are asc (for ascending order) and desc (for descending order). When not specified the asc direction is used. Only one orderby property can be specified.
@@ -1700,6 +1731,7 @@ export def "import-tasks-list" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($app_collection | is-empty) { error make --unspanned { msg: "path parameter 'appCollection' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/importTasks") $qp $auth.query)
   let accept_val = "application/json"
@@ -1736,7 +1768,7 @@ export def "import-tasks-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --storage-url: string # A shared Access Signature (SAS) Storage URI where the job results will be retrieved from.
 ]: any -> record<dateCompleted: string, dateCreated: string, errorDetails: string, id: string, state: string, storageUrl: string> {
   let input = $in
@@ -1746,6 +1778,7 @@ export def "import-tasks-create" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($app_collection | is-empty) { error make --unspanned { msg: "path parameter 'appCollection' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/importTasks") $qp $auth.query)
   let req_body = {"storageUrl": $storage_url} | compact
@@ -1785,7 +1818,7 @@ export def "import-tasks-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<dateCompleted: string, dateCreated: string, errorDetails: string, id: string, state: string, storageUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1794,6 +1827,7 @@ export def "import-tasks-get" [
   if ($app_collection | is-empty) { error make --unspanned { msg: "path parameter 'appCollection' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/importTasks/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1830,7 +1864,7 @@ export def "devices-tag-by-device-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --delete-on-null: oneof<nothing, bool> # If this parameter is `true`, tags with a null value will be deleted. (default: false)
   tags: any # A JSON object describing the set of tags to record for a set of users. Each key is a device/user identifier, each value is itself a key/value set: the tags to set for the specified device/user identifier.
 ]: any -> record<invalidIds: list<string>> {
@@ -1841,6 +1875,7 @@ export def "devices-tag-by-device-id" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($app_collection | is-empty) { error make --unspanned { msg: "path parameter 'appCollection' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/tag") $qp $auth.query)
   let req_body = {"deleteOnNull": $delete_on_null, "tags": $tags} | compact
@@ -1880,7 +1915,7 @@ export def "devices-get-by-device-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<appInfo: record, deviceId: string, info: record<androidAPILevel: int, applicationVersionCode: int, applicationVersionName: string, carrierCountry: string, carrierName: string, firmwareName: string, firmwareVersion: string, locale: string, networkSubtype: string, networkType: string, phoneManufacturer: string, phoneModel: string, serviceVersion: string, timeZoneOffset: int>, location: record<countrycode: string, locality: string, region: string>, meta: record<firstSeen: int, lastInfo: int, lastLocation: int, lastSeen: int, nativePushEnabled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1889,6 +1924,7 @@ export def "devices-get-by-device-id" [
   if ($app_collection | is-empty) { error make --unspanned { msg: "path parameter 'appCollection' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name), device_id: (encode-path-segment $device_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/devices/{device_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1925,7 +1961,7 @@ export def "devices-tag-by-user-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
   --delete-on-null: oneof<nothing, bool> # If this parameter is `true`, tags with a null value will be deleted. (default: false)
   tags: any # A JSON object describing the set of tags to record for a set of users. Each key is a device/user identifier, each value is itself a key/value set: the tags to set for the specified device/user identifier.
 ]: any -> record<invalidIds: list<string>> {
@@ -1936,6 +1972,7 @@ export def "devices-tag-by-user-id" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($app_collection | is-empty) { error make --unspanned { msg: "path parameter 'appCollection' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/users/tag") $qp $auth.query)
   let req_body = {"deleteOnNull": $delete_on_null, "tags": $tags} | compact
@@ -1975,7 +2012,7 @@ export def "devices-get-by-user-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version.
+  --api-version: string # Client Api Version. (required)
 ]: nothing -> record<appInfo: record, deviceId: string, info: record<androidAPILevel: int, applicationVersionCode: int, applicationVersionName: string, carrierCountry: string, carrierName: string, firmwareName: string, firmwareVersion: string, locale: string, networkSubtype: string, networkType: string, phoneManufacturer: string, phoneModel: string, serviceVersion: string, timeZoneOffset: int>, location: record<countrycode: string, locality: string, region: string>, meta: record<firstSeen: int, lastInfo: int, lastLocation: int, lastSeen: int, nativePushEnabled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1984,6 +2021,7 @@ export def "devices-get-by-user-id" [
   if ($app_collection | is-empty) { error make --unspanned { msg: "path parameter 'appCollection' must be non-empty" } }
   if ($app_name | is-empty) { error make --unspanned { msg: "path parameter 'appName' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), app_collection: (encode-path-segment $app_collection), app_name: (encode-path-segment $app_name), user_id: (encode-path-segment $user_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MobileEngagement/appcollections/{app_collection}/apps/{app_name}/users/{user_id}") $qp $auth.query)
   let accept_val = "application/json"

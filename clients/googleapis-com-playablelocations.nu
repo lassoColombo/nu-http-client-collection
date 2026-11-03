@@ -1,4 +1,4 @@
-# Auto-generated client for Playable Locations API vv3
+# Auto-generated client for Playable Locations API v3
 # Source: https://api.apis.guru/v2/specs/googleapis.com/playablelocations/v3/openapi.json
 # Auth: --token flag or $env.PLAYABLE_LOCATIONS_API_TOKEN
 

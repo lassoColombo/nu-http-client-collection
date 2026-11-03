@@ -130,21 +130,23 @@ export def "get-convert" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-from: string # Currency you want to convert. For example, EUR
-  --qp-to: string # Comma separated list of currencies codes. For example, USD
+  --from: string # Currency you want to convert. For example, EUR (required)
+  --to: string # Comma separated list of currencies codes. For example, USD (required)
   --amount: string # This parameter can be used to specify the amount you want to convert. If an amount is not specified then 1 is assumed.
   --decimal-places: string # This parameter can be used to specify the number of decimal places included in the output. If an amount is not specified then 12 is assumed.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "decimal_places" $decimal_places "scalar")] | flatten | str join "&"
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "decimal_places" $decimal_places "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/convert" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to, "amount": $amount, "decimal_places": $decimal_places} | compact)
+    query: ({"from": $from, "to": $to, "amount": $amount, "decimal_places": $decimal_places} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -238,22 +240,25 @@ export def "get-history" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-from: string # Currency you want to convert. For example, EUR
-  --qp-to: string # Comma separated list of currencies codes. For example, USD
-  --date: string # UTC date should be in the form of YYYY-MM-DD, for example, 2018-06-20. Data available from 2018-06-19 only.
+  --from: string # Currency you want to convert. For example, EUR (required)
+  --to: string # Comma separated list of currencies codes. For example, USD (required)
+  --date: string # UTC date should be in the form of YYYY-MM-DD, for example, 2018-06-20. Data available from 2018-06-19 only. (required)
   --amount: string # This parameter can be used to specify the amount you want to convert. If an amount is not specified then 1 is assumed.
   --decimal-places: string # This parameter can be used to specify the number of decimal places included in the output. If an amount is not specified then 4 is assumed.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "decimal_places" $decimal_places "scalar")] | flatten | str join "&"
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  if ($date == null) { error make --unspanned { msg: "required query parameter 'date' missing: pass --date" } }
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "decimal_places" $decimal_places "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/history" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to, "date": $date, "amount": $amount, "decimal_places": $decimal_places} | compact)
+    query: ({"from": $from, "to": $to, "date": $date, "amount": $amount, "decimal_places": $decimal_places} | compact)
     headers: $auth.headers
     body: null
     content_type: null

@@ -1,4 +1,4 @@
-# Auto-generated client for BikeWise API v2 vv2
+# Auto-generated client for BikeWise API v2 v2
 # Source: https://api.apis.guru/v2/specs/bikewise.org/v2/openapi.json
 # Auth: --token flag or $env.BIKEWISE_API_V2_TOKEN
 

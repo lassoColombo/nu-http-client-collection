@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -99,8 +99,14 @@ def auth-scheme-completer [] { ["bearer"] }
 def x-amz-target-completer [] { ["AWSIESnowballJobManagementService.CancelCluster"] }
 def x-amz-target-completer-1 [] { ["AWSIESnowballJobManagementService.CancelJob"] }
 def x-amz-target-completer-2 [] { ["AWSIESnowballJobManagementService.CreateAddress"] }
+def job-type-completer [] { ["EXPORT" "IMPORT" "LOCAL_USE"] }
+def snowball-type-completer [] { ["EDGE" "EDGE_C" "EDGE_CG" "EDGE_S" "SNC1_HDD" "SNC1_SSD" "STANDARD" "V3_5C" "V3_5S"] }
+def shipping-option-completer [] { ["EXPRESS" "NEXT_DAY" "SECOND_DAY" "STANDARD"] }
+def remote-management-completer [] { ["INSTALLED_AUTOSTART" "INSTALLED_ONLY"] }
+def snowball-capacity-preference-completer [] { ["NoPreference" "T100" "T14" "T240" "T32" "T42" "T50" "T8" "T80" "T98"] }
 def x-amz-target-completer-3 [] { ["AWSIESnowballJobManagementService.CreateCluster"] }
 def x-amz-target-completer-4 [] { ["AWSIESnowballJobManagementService.CreateJob"] }
+def long-term-pricing-type-completer [] { ["OneMonth" "OneYear" "ThreeYear"] }
 def x-amz-target-completer-5 [] { ["AWSIESnowballJobManagementService.CreateLongTermPricing"] }
 def x-amz-target-completer-6 [] { ["AWSIESnowballJobManagementService.CreateReturnShippingLabel"] }
 def x-amz-target-completer-7 [] { ["AWSIESnowballJobManagementService.DescribeAddress"] }
@@ -117,9 +123,11 @@ def x-amz-target-completer-17 [] { ["AWSIESnowballJobManagementService.ListClust
 def x-amz-target-completer-18 [] { ["AWSIESnowballJobManagementService.ListCompatibleImages"] }
 def x-amz-target-completer-19 [] { ["AWSIESnowballJobManagementService.ListJobs"] }
 def x-amz-target-completer-20 [] { ["AWSIESnowballJobManagementService.ListLongTermPricing"] }
+def service-name-completer [] { ["EKS_ANYWHERE" "KUBERNETES"] }
 def x-amz-target-completer-21 [] { ["AWSIESnowballJobManagementService.ListServiceVersions"] }
 def x-amz-target-completer-22 [] { ["AWSIESnowballJobManagementService.UpdateCluster"] }
 def x-amz-target-completer-23 [] { ["AWSIESnowballJobManagementService.UpdateJob"] }
+def shipment-state-completer [] { ["RECEIVED" "RETURNED"] }
 def x-amz-target-completer-24 [] { ["AWSIESnowballJobManagementService.UpdateJobShipmentState"] }
 def x-amz-target-completer-25 [] { ["AWSIESnowballJobManagementService.UpdateLongTermPricing"] }
 
@@ -167,12 +175,13 @@ export def "cancel-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  cluster_id: any
+  --x-amz-target: string@x-amz-target-completer # required
+  cluster_id: string # The 39-character ID for the cluster that you want to cancel, for example CID123e4567-e89b-12d3-a456-426655440000.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIESnowballJobManagementService.CancelCluster")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClusterId": $cluster_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -215,12 +224,13 @@ export def "cancel-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  job_id: any
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  job_id: string # The 39-character job ID for the job that you want to cancel, for example JID123e4567-e89b-12d3-a456-426655440000.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIESnowballJobManagementService.CancelJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -246,6 +256,7 @@ export def "cancel-job" [
 #
 # POST /
 # operationId: CreateAddress
+# --Address shape: {AddressId?: string, Name?: string, Company?: string, Street1?: string, Street2?: string, Street3?: string, City?: string, StateOrProvince?: string, PrefectureOrDistrict?: string, Landmark?: string, Country?: string, PostalCode?: string, PhoneNumber?: string, IsRestricted?: bool}
 export def "create-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -263,12 +274,13 @@ export def "create-address" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  address: any
-]: any -> record<AddressId: record> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  address: record # The address that you want the Snow device(s) associated with a specific job to be shipped to. Addresses are validated at the time of creation. The address you provide must be located within the serviceable area of your region. Although no individual elements of the Address are required, if the address is invalid or unsupported, then an exception is thrown. — shape: {AddressId?: string, Name?: string, Company?: string, Street1?: string, Street2?: string, Street3?: string, City?: string, StateOrProvince?: string, PrefectureOrDistrict?: string, Landmark?: string, Country?: string, PostalCode?: string, PhoneNumber?: string, IsRestricted?: bool}
+]: any -> record<AddressId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIESnowballJobManagementService.CreateAddress")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Address": $address} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -294,6 +306,10 @@ export def "create-address" [
 #
 # POST /
 # operationId: CreateCluster
+# --Resources shape: {S3Resources?: list, LambdaResources?: list, Ec2AmiResources?: list}
+# --OnDeviceServiceConfiguration shape: {NFSOnDeviceService?: record, TGWOnDeviceService?: record, EKSOnDeviceService?: record, S3OnDeviceService?: record}
+# --Notification shape: {SnsTopicARN?: string, JobStatesToNotify?: list<string>, NotifyAll?: bool}
+# --TaxDocuments shape: {IND?: record}
 export def "create-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -311,28 +327,29 @@ export def "create-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  job_type: any
-  --resources: any
-  --on-device-service-configuration: any
-  --description: any
-  address_id: any
-  --kms-key-arn: any
-  --role-arn: any
-  snowball_type: any
-  shipping_option: any
-  --notification: any
-  --forwarding-address-id: any
-  --tax-documents: any
-  --remote-management: any
-  --initial-cluster-size: any
-  --force-create-jobs: any
-  --long-term-pricing-ids: any
-  --snowball-capacity-preference: any
-]: any -> record<ClusterId: record, JobListEntries: record> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  job_type: string@job-type-completer # The type of job for this cluster. Currently, the only job type supported for clusters is LOCAL_USE. For more information, see "https://docs.aws.amazon.com/snowball/latest/snowcone-guide/snow-device-types.html" (Snow Family Devices and Capacity) in the Snowcone User Guide or "https://docs.aws.amazon.com/snowball/latest/developer-guide/snow-device-types.html" (Snow Family Devices and Capacity) in the Snowcone User Guide.
+  --resources: record # Contains an array of Amazon Web Services resource objects. Each object represents an Amazon S3 bucket, an Lambda function, or an Amazon Machine Image (AMI) based on Amazon EC2 that is associated with a particular job. — shape: {S3Resources?: list, LambdaResources?: list, Ec2AmiResources?: list}
+  --on-device-service-configuration: record # An object that represents the metadata and configuration settings for services on an Amazon Web Services Snow Family device. — shape: {NFSOnDeviceService?: record, TGWOnDeviceService?: record, EKSOnDeviceService?: record, S3OnDeviceService?: record}
+  --description: string # An optional description of this specific cluster, for example Environmental Data Cluster-01.
+  address_id: string # The ID for the address that you want the cluster shipped to.
+  --kms-key-arn: string # The KmsKeyARN value that you want to associate with this cluster. KmsKeyARN values are created by using the CreateKey (https://docs.aws.amazon.com/kms/latest/APIReference/API_CreateKey.html) API action in Key Management Service (KMS).
+  --role-arn: string # The RoleARN that you want to associate with this cluster. RoleArn values are created by using the CreateRole (https://docs.aws.amazon.com/IAM/latest/APIReference/API_CreateRole.html) API action in Identity and Access Management (IAM).
+  snowball_type: string@snowball-type-completer # The type of Snow Family devices to use for this cluster. For cluster jobs, Amazon Web Services Snow Family currently supports only the EDGE device type. For more information, see "https://docs.aws.amazon.com/snowball/latest/snowcone-guide/snow-device-types.html" (Snow Family Devices and Capacity) in the Snowcone User Guide or "https://docs.aws.amazon.com/snowball/latest/developer-guide/snow-device-types.html" (Snow Family Devices and Capacity) in the Snowcone User Guide.
+  shipping_option: string@shipping-option-completer # The shipping speed for each node in this cluster. This speed doesn't dictate how soon you'll get each Snowball Edge device, rather it represents how quickly each device moves to its destination while in transit. Regional shipping speeds are as follows: In Australia, you have access to express shipping. Typically, Snow devices shipped express are delivered in about a day. In the European Union (EU), you have access to express shipping. Typically, Snow devices shipped express are delivered in about a day. In addition, most countries in the EU have access to standard shipping, which typically takes less than a week, one way. In India, Snow devices are delivered in one to seven days. In the United States of America (US), you have access to one-day shipping and two-day shipping. In Australia, you have access to express shipping. Typically, devices shipped express are delivered in about a day. In the European Union (EU), you have access to express shipping. Typically, Snow devices shipped express are delivered in about a day. In addition, most countries in the EU have access to standard shipping, which typically takes less than a week, one way. In India, Snow devices are delivered in one to seven days. In the US, you have access to one-day shipping and two-day shipping.
+  --notification: record # The Amazon Simple Notification Service (Amazon SNS) notification settings associated with a specific job. The Notification object is returned as a part of the response syntax of the DescribeJob action in the JobMetadata data type. When the notification settings are defined during job creation, you can choose to notify based on a specific set of job states using the JobStatesToNotify array of strings, or you can specify that you want to have Amazon SNS notifications sent out for all job states with NotifyAll set to true. — shape: {SnsTopicARN?: string, JobStatesToNotify?: list<string>, NotifyAll?: bool}
+  --forwarding-address-id: string # The forwarding address ID for a cluster. This field is not supported in most regions.
+  --tax-documents: record # The tax documents required in your Amazon Web Services Region. — shape: {IND?: record}
+  --remote-management: string@remote-management-completer # Allows you to securely operate and manage Snow devices in a cluster remotely from outside of your internal network. When set to INSTALLED_AUTOSTART, remote management will automatically be available when the device arrives at your location. Otherwise, you need to use the Snowball Client to manage the device.
+  --initial-cluster-size: int # If provided, each job will be automatically created and associated with the new cluster. If not provided, will be treated as 0.
+  --force-create-jobs: oneof<nothing, bool> # Force to create cluster when user attempts to overprovision or underprovision a cluster. A cluster is overprovisioned or underprovisioned if the initial size of the cluster is more (overprovisioned) or less (underprovisioned) than what needed to meet capacity requirement specified with OnDeviceServiceConfiguration.
+  --long-term-pricing-ids: list<string> # Lists long-term pricing id that will be used to associate with jobs automatically created for the new cluster.
+  --snowball-capacity-preference: string@snowball-capacity-preference-completer # If your job is being created in one of the US regions, you have the option of specifying what size Snow device you'd like for this job. In all other regions, Snowballs come with 80 TB in storage capacity. For more information, see "https://docs.aws.amazon.com/snowball/latest/snowcone-guide/snow-device-types.html" (Snow Family Devices and Capacity) in the Snowcone User Guide or "https://docs.aws.amazon.com/snowball/latest/developer-guide/snow-device-types.html" (Snow Family Devices and Capacity) in the Snowcone User Guide.
+]: any -> record<ClusterId: string, JobListEntries: table<JobId: string, JobState: string, IsMaster: bool, JobType: string, SnowballType: string, CreationDate: string, Description: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIESnowballJobManagementService.CreateCluster")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobType": $job_type, "Resources": $resources, "OnDeviceServiceConfiguration": $on_device_service_configuration, "Description": $description, "AddressId": $address_id, "KmsKeyARN": $kms_key_arn, "RoleARN": $role_arn, "SnowballType": $snowball_type, "ShippingOption": $shipping_option, "Notification": $notification, "ForwardingAddressId": $forwarding_address_id, "TaxDocuments": $tax_documents, "RemoteManagement": $remote_management, "InitialClusterSize": $initial_cluster_size, "ForceCreateJobs": $force_create_jobs, "LongTermPricingIds": $long_term_pricing_ids, "SnowballCapacityPreference": $snowball_capacity_preference} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -358,6 +375,11 @@ export def "create-cluster" [
 #
 # POST /
 # operationId: CreateJob
+# --Resources shape: {S3Resources?: list, LambdaResources?: list, Ec2AmiResources?: list}
+# --OnDeviceServiceConfiguration shape: {NFSOnDeviceService?: record, TGWOnDeviceService?: record, EKSOnDeviceService?: record, S3OnDeviceService?: record}
+# --Notification shape: {SnsTopicARN?: string, JobStatesToNotify?: list<string>, NotifyAll?: bool}
+# --TaxDocuments shape: {IND?: record}
+# --DeviceConfiguration shape: {SnowconeDeviceConfiguration?: record}
 export def "create-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -375,28 +397,29 @@ export def "create-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  --job-type: any
-  --resources: any
-  --on-device-service-configuration: any
-  --description: any
-  --address-id: any
-  --kms-key-arn: any
-  --role-arn: any
-  --snowball-capacity-preference: any
-  --shipping-option: any
-  --notification: any
-  --cluster-id: any
-  --snowball-type: any
-  --forwarding-address-id: any
-  --tax-documents: any
-  --device-configuration: any
-  --remote-management: any
-  --long-term-pricing-id: any
-]: any -> record<JobId: record> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  --job-type: string@job-type-completer # Defines the type of job that you're creating.
+  --resources: record # Contains an array of Amazon Web Services resource objects. Each object represents an Amazon S3 bucket, an Lambda function, or an Amazon Machine Image (AMI) based on Amazon EC2 that is associated with a particular job. — shape: {S3Resources?: list, LambdaResources?: list, Ec2AmiResources?: list}
+  --on-device-service-configuration: record # An object that represents the metadata and configuration settings for services on an Amazon Web Services Snow Family device. — shape: {NFSOnDeviceService?: record, TGWOnDeviceService?: record, EKSOnDeviceService?: record, S3OnDeviceService?: record}
+  --description: string # Defines an optional description of this specific job, for example Important Photos 2016-08-11.
+  --address-id: string # The ID for the address that you want the Snow device shipped to.
+  --kms-key-arn: string # The KmsKeyARN that you want to associate with this job. KmsKeyARNs are created using the CreateKey (https://docs.aws.amazon.com/kms/latest/APIReference/API_CreateKey.html) Key Management Service (KMS) API action.
+  --role-arn: string # The RoleARN that you want to associate with this job. RoleArns are created using the CreateRole (https://docs.aws.amazon.com/IAM/latest/APIReference/API_CreateRole.html) Identity and Access Management (IAM) API action.
+  --snowball-capacity-preference: string@snowball-capacity-preference-completer # If your job is being created in one of the US regions, you have the option of specifying what size Snow device you'd like for this job. In all other regions, Snowballs come with 80 TB in storage capacity. For more information, see "https://docs.aws.amazon.com/snowball/latest/snowcone-guide/snow-device-types.html" (Snow Family Devices and Capacity) in the Snowcone User Guide or "https://docs.aws.amazon.com/snowball/latest/developer-guide/snow-device-types.html" (Snow Family Devices and Capacity) in the Snowcone User Guide.
+  --shipping-option: string@shipping-option-completer # The shipping speed for this job. This speed doesn't dictate how soon you'll get the Snow device, rather it represents how quickly the Snow device moves to its destination while in transit. Regional shipping speeds are as follows: In Australia, you have access to express shipping. Typically, Snow devices shipped express are delivered in about a day. In the European Union (EU), you have access to express shipping. Typically, Snow devices shipped express are delivered in about a day. In addition, most countries in the EU have access to standard shipping, which typically takes less than a week, one way. In India, Snow devices are delivered in one to seven days. In the US, you have access to one-day shipping and two-day shipping.
+  --notification: record # The Amazon Simple Notification Service (Amazon SNS) notification settings associated with a specific job. The Notification object is returned as a part of the response syntax of the DescribeJob action in the JobMetadata data type. When the notification settings are defined during job creation, you can choose to notify based on a specific set of job states using the JobStatesToNotify array of strings, or you can specify that you want to have Amazon SNS notifications sent out for all job states with NotifyAll set to true. — shape: {SnsTopicARN?: string, JobStatesToNotify?: list<string>, NotifyAll?: bool}
+  --cluster-id: string # The ID of a cluster. If you're creating a job for a node in a cluster, you need to provide only this clusterId value. The other job attributes are inherited from the cluster.
+  --snowball-type: string@snowball-type-completer # The type of Snow Family devices to use for this job. For cluster jobs, Amazon Web Services Snow Family currently supports only the EDGE device type. The type of Amazon Web Services Snow device to use for this job. Currently, the only supported device type for cluster jobs is EDGE. For more information, see Snowball Edge Device Options (https://docs.aws.amazon.com/snowball/latest/developer-guide/device-differences.html) in the Snowball Edge Developer Guide. For more information, see "https://docs.aws.amazon.com/snowball/latest/snowcone-guide/snow-device-types.html" (Snow Family Devices and Capacity) in the Snowcone User Guide or "https://docs.aws.amazon.com/snowball/latest/developer-guide/snow-device-types.html" (Snow Family Devices and Capacity) in the Snowcone User Guide.
+  --forwarding-address-id: string # The forwarding address ID for a job. This field is not supported in most Regions.
+  --tax-documents: record # The tax documents required in your Amazon Web Services Region. — shape: {IND?: record}
+  --device-configuration: record # The container for SnowconeDeviceConfiguration. — shape: {SnowconeDeviceConfiguration?: record}
+  --remote-management: string@remote-management-completer # Allows you to securely operate and manage Snowcone devices remotely from outside of your internal network. When set to INSTALLED_AUTOSTART, remote management will automatically be available when the device arrives at your location. Otherwise, you need to use the Snowball Client to manage the device.
+  --long-term-pricing-id: string # The ID of the long-term pricing type for the device.
+]: any -> record<JobId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIESnowballJobManagementService.CreateJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobType": $job_type, "Resources": $resources, "OnDeviceServiceConfiguration": $on_device_service_configuration, "Description": $description, "AddressId": $address_id, "KmsKeyARN": $kms_key_arn, "RoleARN": $role_arn, "SnowballCapacityPreference": $snowball_capacity_preference, "ShippingOption": $shipping_option, "Notification": $notification, "ClusterId": $cluster_id, "SnowballType": $snowball_type, "ForwardingAddressId": $forwarding_address_id, "TaxDocuments": $tax_documents, "DeviceConfiguration": $device_configuration, "RemoteManagement": $remote_management, "LongTermPricingId": $long_term_pricing_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -439,14 +462,15 @@ export def "create-long-term-pricing" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  long_term_pricing_type: any
-  --is-long-term-pricing-auto-renew: any
-  --snowball-type: any
-]: any -> record<LongTermPricingId: record> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  long_term_pricing_type: string@long-term-pricing-type-completer # The type of long-term pricing option you want for the device, either 1-year or 3-year long-term pricing.
+  --is-long-term-pricing-auto-renew: oneof<nothing, bool> # Specifies whether the current long-term pricing type for the device should be renewed.
+  --snowball-type: string@snowball-type-completer # The type of Snow Family devices to use for the long-term pricing job.
+]: any -> record<LongTermPricingId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIESnowballJobManagementService.CreateLongTermPricing")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LongTermPricingType": $long_term_pricing_type, "IsLongTermPricingAutoRenew": $is_long_term_pricing_auto_renew, "SnowballType": $snowball_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -489,13 +513,14 @@ export def "create-return-shipping-label" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  job_id: any
-  --shipping-option: any
-]: any -> record<Status: record> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  job_id: string # The ID for a job that you want to create the return shipping label for; for example, JID123e4567-e89b-12d3-a456-426655440000.
+  --shipping-option: string@shipping-option-completer # The shipping speed for a particular job. This speed doesn't dictate how soon the device is returned to Amazon Web Services. This speed represents how quickly it moves to its destination while in transit. Regional shipping speeds are as follows:
+]: any -> record<Status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIESnowballJobManagementService.CreateReturnShippingLabel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id, "ShippingOption": $shipping_option} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -538,12 +563,13 @@ export def "describe-address" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  address_id: any
-]: any -> record<Address: record<AddressId: record, Name: record, Company: record, Street1: record, Street2: record, Street3: record, City: record, StateOrProvince: record, PrefectureOrDistrict: record, Landmark: record, Country: record, PostalCode: record, PhoneNumber: record, IsRestricted: record>> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  address_id: string # The automatically generated ID for a specific address.
+]: any -> record<Address: record<AddressId: string, Name: string, Company: string, Street1: string, Street2: string, Street3: string, City: string, StateOrProvince: string, PrefectureOrDistrict: string, Landmark: string, Country: string, PostalCode: string, PhoneNumber: string, IsRestricted: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIESnowballJobManagementService.DescribeAddress")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AddressId": $address_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -588,13 +614,14 @@ export def "describe-addresses" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<Addresses: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  --max-results-body: int # The number of ADDRESS objects to return. (body field)
+  --next-token-body: string # HTTP requests are stateless. To identify what object comes "next" in the list of ADDRESS objects, you have the option of specifying a value for NextToken as the starting point for your list of returned addresses. (body field)
+]: any -> record<Addresses: table<AddressId: string, Name: string, Company: string, Street1: string, Street2: string, Street3: string, City: string, StateOrProvince: string, PrefectureOrDistrict: string, Landmark: string, Country: string, PostalCode: string, PhoneNumber: string, IsRestricted: bool>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIESnowballJobManagementService.DescribeAddresses")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -638,12 +665,13 @@ export def "describe-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  cluster_id: any
-]: any -> record<ClusterMetadata: record<ClusterId: record, Description: record, KmsKeyARN: record, RoleARN: record, ClusterState: record, JobType: record, SnowballType: record, CreationDate: record, Resources: record<S3Resources: record, LambdaResources: record, Ec2AmiResources: record>, AddressId: record, ShippingOption: record, Notification: record<SnsTopicARN: record, JobStatesToNotify: record, NotifyAll: record>, ForwardingAddressId: record, TaxDocuments: record<IND: record>, OnDeviceServiceConfiguration: record<NFSOnDeviceService: record, TGWOnDeviceService: record, EKSOnDeviceService: record, S3OnDeviceService: record>>> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  cluster_id: string # The automatically generated ID for a cluster.
+]: any -> record<ClusterMetadata: record<ClusterId: string, Description: string, KmsKeyARN: string, RoleARN: string, ClusterState: string, JobType: string, SnowballType: string, CreationDate: string, Resources: record<S3Resources: list, LambdaResources: list, Ec2AmiResources: list>, AddressId: string, ShippingOption: string, Notification: record<SnsTopicARN: string, JobStatesToNotify: list, NotifyAll: bool>, ForwardingAddressId: string, TaxDocuments: record<IND: record>, OnDeviceServiceConfiguration: record<NFSOnDeviceService: record, TGWOnDeviceService: record, EKSOnDeviceService: record, S3OnDeviceService: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIESnowballJobManagementService.DescribeCluster")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClusterId": $cluster_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -686,12 +714,13 @@ export def "describe-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  job_id: any
-]: any -> record<JobMetadata: record<JobId: record, JobState: record, JobType: record, SnowballType: record, CreationDate: record, Resources: record<S3Resources: record, LambdaResources: record, Ec2AmiResources: record>, Description: record, KmsKeyARN: record, RoleARN: record, AddressId: record, ShippingDetails: record<ShippingOption: record, InboundShipment: record, OutboundShipment: record>, SnowballCapacityPreference: record, Notification: record<SnsTopicARN: record, JobStatesToNotify: record, NotifyAll: record>, DataTransferProgress: record<BytesTransferred: record, ObjectsTransferred: record, TotalBytes: record, TotalObjects: record>, JobLogInfo: record<JobCompletionReportURI: record, JobSuccessLogURI: record, JobFailureLogURI: record>, ClusterId: record, ForwardingAddressId: record, TaxDocuments: record<IND: record>, DeviceConfiguration: record<SnowconeDeviceConfiguration: record>, RemoteManagement: record, LongTermPricingId: record, OnDeviceServiceConfiguration: record<NFSOnDeviceService: record, TGWOnDeviceService: record, EKSOnDeviceService: record, S3OnDeviceService: record>>, SubJobMetadata: record> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  job_id: string # The automatically generated ID for a job, for example JID123e4567-e89b-12d3-a456-426655440000.
+]: any -> record<JobMetadata: record<JobId: string, JobState: string, JobType: string, SnowballType: string, CreationDate: string, Resources: record<S3Resources: list, LambdaResources: list, Ec2AmiResources: list>, Description: string, KmsKeyARN: string, RoleARN: string, AddressId: string, ShippingDetails: record<ShippingOption: string, InboundShipment: record, OutboundShipment: record>, SnowballCapacityPreference: string, Notification: record<SnsTopicARN: string, JobStatesToNotify: list, NotifyAll: bool>, DataTransferProgress: record<BytesTransferred: int, ObjectsTransferred: int, TotalBytes: int, TotalObjects: int>, JobLogInfo: record<JobCompletionReportURI: string, JobSuccessLogURI: string, JobFailureLogURI: string>, ClusterId: string, ForwardingAddressId: string, TaxDocuments: record<IND: record>, DeviceConfiguration: record<SnowconeDeviceConfiguration: record>, RemoteManagement: string, LongTermPricingId: string, OnDeviceServiceConfiguration: record<NFSOnDeviceService: record, TGWOnDeviceService: record, EKSOnDeviceService: record, S3OnDeviceService: record>>, SubJobMetadata: table<JobId: string, JobState: string, JobType: string, SnowballType: string, CreationDate: string, Resources: record, Description: string, KmsKeyARN: string, RoleARN: string, AddressId: string, ShippingDetails: record, SnowballCapacityPreference: string, Notification: record, DataTransferProgress: record, JobLogInfo: record, ClusterId: string, ForwardingAddressId: string, TaxDocuments: record, DeviceConfiguration: record, RemoteManagement: string, LongTermPricingId: string, OnDeviceServiceConfiguration: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIESnowballJobManagementService.DescribeJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -734,12 +763,13 @@ export def "describe-return-shipping-label" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  job_id: any
-]: any -> record<Status: record, ExpirationDate: record, ReturnShippingLabelURI: record> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  job_id: string # The automatically generated ID for a job, for example JID123e4567-e89b-12d3-a456-426655440000.
+]: any -> record<Status: string, ExpirationDate: string, ReturnShippingLabelURI: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIESnowballJobManagementService.DescribeReturnShippingLabel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -782,12 +812,13 @@ export def "get-job-manifest" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  job_id: any
-]: any -> record<ManifestURI: record> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  job_id: string # The ID for a job that you want to get the manifest file for, for example JID123e4567-e89b-12d3-a456-426655440000.
+]: any -> record<ManifestURI: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIESnowballJobManagementService.GetJobManifest")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -830,12 +861,13 @@ export def "get-job-unlock-code" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  job_id: any
-]: any -> record<UnlockCode: record> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  job_id: string # The ID for the job that you want to get the UnlockCode value for, for example JID123e4567-e89b-12d3-a456-426655440000.
+]: any -> record<UnlockCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIESnowballJobManagementService.GetJobUnlockCode")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -878,12 +910,13 @@ export def "get-snowball-usage" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
+  --x-amz-target: string@x-amz-target-completer-14 # required
   --body: record
-]: any -> record<SnowballLimit: record, SnowballsInUse: record> {
+]: any -> record<SnowballLimit: int, SnowballsInUse: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIESnowballJobManagementService.GetSnowballUsage")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -926,12 +959,13 @@ export def "get-software-updates" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  job_id: any
-]: any -> record<UpdatesURI: record> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  job_id: string # The ID for a job that you want to get the software update file for, for example JID123e4567-e89b-12d3-a456-426655440000.
+]: any -> record<UpdatesURI: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIESnowballJobManagementService.GetSoftwareUpdates")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -976,14 +1010,15 @@ export def "list-cluster-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  cluster_id: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<JobListEntries: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  cluster_id: string # The 39-character ID for the cluster that you want to list, for example CID123e4567-e89b-12d3-a456-426655440000.
+  --max-results-body: int # The number of JobListEntry objects to return. (body field)
+  --next-token-body: string # HTTP requests are stateless. To identify what object comes "next" in the list of JobListEntry objects, you have the option of specifying NextToken as the starting point for your returned list. (body field)
+]: any -> record<JobListEntries: table<JobId: string, JobState: string, IsMaster: bool, JobType: string, SnowballType: string, CreationDate: string, Description: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIESnowballJobManagementService.ListClusterJobs")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ClusterId": $cluster_id, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -1029,13 +1064,14 @@ export def "list-clusters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<ClusterListEntries: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  --max-results-body: int # The number of ClusterListEntry objects to return. (body field)
+  --next-token-body: string # HTTP requests are stateless. To identify what object comes "next" in the list of ClusterListEntry objects, you have the option of specifying NextToken as the starting point for your returned list. (body field)
+]: any -> record<ClusterListEntries: table<ClusterId: string, ClusterState: string, CreationDate: string, Description: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIESnowballJobManagementService.ListClusters")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -1081,13 +1117,14 @@ export def "list-compatible-images" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<CompatibleImages: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  --max-results-body: int # The maximum number of results for the list of compatible images. Currently, a Snowball Edge device can store 10 AMIs. (body field)
+  --next-token-body: string # HTTP requests are stateless. To identify what object comes "next" in the list of compatible images, you can specify a value for NextToken as the starting point for your list of returned images. (body field)
+]: any -> record<CompatibleImages: table<AmiId: string, Name: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIESnowballJobManagementService.ListCompatibleImages")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -1133,13 +1170,14 @@ export def "list-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<JobListEntries: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  --max-results-body: int # The number of JobListEntry objects to return. (body field)
+  --next-token-body: string # HTTP requests are stateless. To identify what object comes "next" in the list of JobListEntry objects, you have the option of specifying NextToken as the starting point for your returned list. (body field)
+]: any -> record<JobListEntries: table<JobId: string, JobState: string, IsMaster: bool, JobType: string, SnowballType: string, CreationDate: string, Description: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIESnowballJobManagementService.ListJobs")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -1185,13 +1223,14 @@ export def "list-long-term-pricing" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<LongTermPricingEntries: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  --max-results-body: int # The maximum number of ListLongTermPricing objects to return. (body field)
+  --next-token-body: string # Because HTTP requests are stateless, this is the starting point for your next list of ListLongTermPricing to return. (body field)
+]: any -> record<LongTermPricingEntries: table<LongTermPricingId: string, LongTermPricingEndDate: string, LongTermPricingStartDate: string, LongTermPricingType: string, CurrentActiveJob: string, ReplacementJob: string, IsLongTermPricingAutoRenew: bool, LongTermPricingStatus: string, SnowballType: string, JobIds: list>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIESnowballJobManagementService.ListLongTermPricing")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
@@ -1218,6 +1257,7 @@ export def "list-long-term-pricing" [
 #
 # POST /
 # operationId: ListServiceVersions
+# --DependentServices item shape: {ServiceName?: "KUBERNETES"|"EKS_ANYWHERE", ServiceVersion?: record}
 export def "list-service-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1235,15 +1275,16 @@ export def "list-service-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  service_name: any
-  --dependent-services: any
-  --max-results: any
-  --next-token: any
-]: any -> record<ServiceVersions: record, ServiceName: record, DependentServices: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  service_name: string@service-name-completer # The name of the service for which you're requesting supported versions.
+  --dependent-services: list # A list of names and versions of dependant services of the requested service. — item shape: {ServiceName?: "KUBERNETES"|"EKS_ANYWHERE", ServiceVersion?: record}
+  --max-results: int # The maximum number of ListServiceVersions objects to return.
+  --next-token: string # Because HTTP requests are stateless, this is the starting point for the next list of returned ListServiceVersionsRequest versions.
+]: any -> record<ServiceVersions: table<Version: string>, ServiceName: string, DependentServices: table<ServiceName: string, ServiceVersion: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIESnowballJobManagementService.ListServiceVersions")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServiceName": $service_name, "DependentServices": $dependent_services, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1269,6 +1310,9 @@ export def "list-service-versions" [
 #
 # POST /
 # operationId: UpdateCluster
+# --Resources shape: {S3Resources?: list, LambdaResources?: list, Ec2AmiResources?: list}
+# --OnDeviceServiceConfiguration shape: {NFSOnDeviceService?: record, TGWOnDeviceService?: record, EKSOnDeviceService?: record, S3OnDeviceService?: record}
+# --Notification shape: {SnsTopicARN?: string, JobStatesToNotify?: list<string>, NotifyAll?: bool}
 export def "update-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1286,20 +1330,21 @@ export def "update-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  cluster_id: any
-  --role-arn: any
-  --description: any
-  --resources: any
-  --on-device-service-configuration: any
-  --address-id: any
-  --shipping-option: any
-  --notification: any
-  --forwarding-address-id: any
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  cluster_id: string # The cluster ID of the cluster that you want to update, for example CID123e4567-e89b-12d3-a456-426655440000.
+  --role-arn: string # The new role Amazon Resource Name (ARN) that you want to associate with this cluster. To create a role ARN, use the CreateRole (https://docs.aws.amazon.com/IAM/latest/APIReference/API_CreateRole.html) API action in Identity and Access Management (IAM).
+  --description: string # The updated description of this cluster.
+  --resources: record # Contains an array of Amazon Web Services resource objects. Each object represents an Amazon S3 bucket, an Lambda function, or an Amazon Machine Image (AMI) based on Amazon EC2 that is associated with a particular job. — shape: {S3Resources?: list, LambdaResources?: list, Ec2AmiResources?: list}
+  --on-device-service-configuration: record # An object that represents the metadata and configuration settings for services on an Amazon Web Services Snow Family device. — shape: {NFSOnDeviceService?: record, TGWOnDeviceService?: record, EKSOnDeviceService?: record, S3OnDeviceService?: record}
+  --address-id: string # The ID of the updated Address object.
+  --shipping-option: string@shipping-option-completer # The updated shipping option value of this cluster's ShippingDetails object.
+  --notification: record # The Amazon Simple Notification Service (Amazon SNS) notification settings associated with a specific job. The Notification object is returned as a part of the response syntax of the DescribeJob action in the JobMetadata data type. When the notification settings are defined during job creation, you can choose to notify based on a specific set of job states using the JobStatesToNotify array of strings, or you can specify that you want to have Amazon SNS notifications sent out for all job states with NotifyAll set to true. — shape: {SnsTopicARN?: string, JobStatesToNotify?: list<string>, NotifyAll?: bool}
+  --forwarding-address-id: string # The updated ID for the forwarding address for a cluster. This field is not supported in most regions.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIESnowballJobManagementService.UpdateCluster")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClusterId": $cluster_id, "RoleARN": $role_arn, "Description": $description, "Resources": $resources, "OnDeviceServiceConfiguration": $on_device_service_configuration, "AddressId": $address_id, "ShippingOption": $shipping_option, "Notification": $notification, "ForwardingAddressId": $forwarding_address_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1325,6 +1370,9 @@ export def "update-cluster" [
 #
 # POST /
 # operationId: UpdateJob
+# --Notification shape: {SnsTopicARN?: string, JobStatesToNotify?: list<string>, NotifyAll?: bool}
+# --Resources shape: {S3Resources?: list, LambdaResources?: list, Ec2AmiResources?: list}
+# --OnDeviceServiceConfiguration shape: {NFSOnDeviceService?: record, TGWOnDeviceService?: record, EKSOnDeviceService?: record, S3OnDeviceService?: record}
 export def "update-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1342,21 +1390,22 @@ export def "update-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  job_id: any
-  --role-arn: any
-  --notification: any
-  --resources: any
-  --on-device-service-configuration: any
-  --address-id: any
-  --shipping-option: any
-  --description: any
-  --snowball-capacity-preference: any
-  --forwarding-address-id: any
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  job_id: string # The job ID of the job that you want to update, for example JID123e4567-e89b-12d3-a456-426655440000.
+  --role-arn: string # The new role Amazon Resource Name (ARN) that you want to associate with this job. To create a role ARN, use the CreateRole (https://docs.aws.amazon.com/IAM/latest/APIReference/API_CreateRole.html)Identity and Access Management (IAM) API action.
+  --notification: record # The Amazon Simple Notification Service (Amazon SNS) notification settings associated with a specific job. The Notification object is returned as a part of the response syntax of the DescribeJob action in the JobMetadata data type. When the notification settings are defined during job creation, you can choose to notify based on a specific set of job states using the JobStatesToNotify array of strings, or you can specify that you want to have Amazon SNS notifications sent out for all job states with NotifyAll set to true. — shape: {SnsTopicARN?: string, JobStatesToNotify?: list<string>, NotifyAll?: bool}
+  --resources: record # Contains an array of Amazon Web Services resource objects. Each object represents an Amazon S3 bucket, an Lambda function, or an Amazon Machine Image (AMI) based on Amazon EC2 that is associated with a particular job. — shape: {S3Resources?: list, LambdaResources?: list, Ec2AmiResources?: list}
+  --on-device-service-configuration: record # An object that represents the metadata and configuration settings for services on an Amazon Web Services Snow Family device. — shape: {NFSOnDeviceService?: record, TGWOnDeviceService?: record, EKSOnDeviceService?: record, S3OnDeviceService?: record}
+  --address-id: string # The ID of the updated Address object.
+  --shipping-option: string@shipping-option-completer # The updated shipping option value of this job's ShippingDetails object.
+  --description: string # The updated description of this job's JobMetadata object.
+  --snowball-capacity-preference: string@snowball-capacity-preference-completer # The updated SnowballCapacityPreference of this job's JobMetadata object. The 50 TB Snowballs are only available in the US regions. For more information, see "https://docs.aws.amazon.com/snowball/latest/snowcone-guide/snow-device-types.html" (Snow Family Devices and Capacity) in the Snowcone User Guide or "https://docs.aws.amazon.com/snowball/latest/developer-guide/snow-device-types.html" (Snow Family Devices and Capacity) in the Snowcone User Guide.
+  --forwarding-address-id: string # The updated ID for the forwarding address for a job. This field is not supported in most regions.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIESnowballJobManagementService.UpdateJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id, "RoleARN": $role_arn, "Notification": $notification, "Resources": $resources, "OnDeviceServiceConfiguration": $on_device_service_configuration, "AddressId": $address_id, "ShippingOption": $shipping_option, "Description": $description, "SnowballCapacityPreference": $snowball_capacity_preference, "ForwardingAddressId": $forwarding_address_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1399,13 +1448,14 @@ export def "update-job-shipment-state" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  job_id: any
-  shipment_state: any
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  job_id: string # The job ID of the job whose shipment date you want to update, for example JID123e4567-e89b-12d3-a456-426655440000.
+  shipment_state: string@shipment-state-completer # The state of a device when it is being shipped. Set to RECEIVED when the device arrives at your location. Set to RETURNED when you have returned the device to Amazon Web Services.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIESnowballJobManagementService.UpdateJobShipmentState")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id, "ShipmentState": $shipment_state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1448,14 +1498,15 @@ export def "update-long-term-pricing" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  long_term_pricing_id: any
-  --replacement-job: any
-  --is-long-term-pricing-auto-renew: any
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  long_term_pricing_id: string # The ID of the long-term pricing type for the device.
+  --replacement-job: string # Specifies that a device that is ordered with long-term pricing should be replaced with a new device.
+  --is-long-term-pricing-auto-renew: oneof<nothing, bool> # If set to true, specifies that the current long-term pricing type for the device should be automatically renewed before the long-term pricing contract expires.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSIESnowballJobManagementService.UpdateLongTermPricing")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LongTermPricingId": $long_term_pricing_id, "ReplacementJob": $replacement_job, "IsLongTermPricingAutoRenew": $is_long_term_pricing_auto_renew} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

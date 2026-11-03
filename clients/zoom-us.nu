@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -210,6 +210,7 @@ def status-completer-5 [] { ["Available" "Away" "Do_No_Disturb"] }
 def option-completer-3 [] { ["meeting_authentication" "meeting_secuirty" "recording_authentication"] }
 def action-completer-11 [] { ["activate" "deactivate"] }
 def type-completer-15 [] { ["token" "zak"] }
+def tsp-id-completer [] { ["1" "2"] }
 def type-completer-16 [] { ["5" "6" "9"] }
 def action-completer-12 [] { ["end"] }
 
@@ -254,7 +255,7 @@ export def "accounts" [
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --page-number: int # **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field. The page number of the current page in the returned records. (default: 1)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record {
+]: nothing -> record<next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int, accounts: table<account_name: string, account_number: string, account_type: string, created_at: string, id: string, owner_email: string, seats: int, subscription_end_time: string, subscription_start_time: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page_number" $page_number "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
@@ -495,20 +496,20 @@ export def "account-billing-invoices" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-from: string # Start date for the invoice query in `yyyy-mm-dd` format. The date range defined by the “from” and “to” parameters should not exceed one year. The range defined should fall within the past three years. (format: date)
-  --qp-to: string # End date for the invoice query in `yyyy-mm-dd` format (format: date)
+  --from: string # Start date for the invoice query in `yyyy-mm-dd` format. The date range defined by the “from” and “to” parameters should not exceed one year. The range defined should fall within the past three years. (format: date)
+  --to: string # End date for the invoice query in `yyyy-mm-dd` format (format: date)
 ]: nothing -> record<currency: string, invoices: table<balance: float, due_date: string, id: string, invoice_date: string, invoice_number: string, status: string, target_date: string, tax_amount: float, total_amount: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/billing/invoices") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to} | compact)
+    query: ({"from": $from, "to": $to} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -668,7 +669,7 @@ export def "account-managed-domain" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<domains: list<record>, total_records: int> {
+]: nothing -> record<domains: table<domain: string, status: string>, total_records: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -1306,20 +1307,20 @@ export def "get-account-cloud-recording" [
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-  --qp-from: string # The start date in UTC for the monthly range for which you would like to retrieve recordings. The maximum range can be a month. If no value is provided for this field, the default will be current date. For example, if you make the API request on June 30, 2020, without providing the “from” and “to” parameters, by default the value of 'from' field will be “2020-06-30” and the value of the 'to' field will be “2020-07-01”. (format: date-time)
-  --qp-to: string # The end date for the monthly range for which you would like to retrieve recordings. The maximum range can be a month. (format: date-time)
+  --from: string # The start date in UTC for the monthly range for which you would like to retrieve recordings. The maximum range can be a month. If no value is provided for this field, the default will be current date. For example, if you make the API request on June 30, 2020, without providing the “from” and “to” parameters, by default the value of 'from' field will be “2020-06-30” and the value of the 'to' field will be “2020-07-01”. (format: date-time)
+  --to: string # The end date for the monthly range for which you would like to retrieve recordings. The maximum range can be a month. (format: date-time)
 ]: nothing -> record<from: string, meetings: table<duration: int, host_id: string, id: string, recording_count: int, recording_files: list, start_time: string, topic: string, total_size: int, uuid: string>, next_page_token: string, page_size: int, to: string, total_records: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/recordings") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"page_size": $page_size, "next_page_token": $next_page_token, "from": $qp_from, "to": $qp_to} | compact)
+    query: ({"page_size": $page_size, "next_page_token": $next_page_token, "from": $from, "to": $to} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1500,8 +1501,8 @@ export def "upload-vb" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -2059,6 +2060,7 @@ export def "switch-user-account" [
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/accounts/{account_id}/users/{user_id}/account") $auth.query)
   let req_body = {"account_id": $body_account_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "account_id") == null) { error make --unspanned { msg: "required body field 'account_id' missing: pass --body-account-id or pipe a record" } }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2129,20 +2131,20 @@ export def "list-archived-files" [
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-  --qp-from: string # Start date for the query in "yyyy-MM-dd'T'HH:mm:ss'Z'" format. The duration for the query defined using the "from" and "to" parameters should not exceed 7 days as this API only provides a week's data at once.
-  --qp-to: string # End date for the query in "yyyy-MM-dd'T'HH:mm:ss'Z'" format.
+  --from: string # Start date for the query in "yyyy-MM-dd'T'HH:mm:ss'Z'" format. The duration for the query defined using the "from" and "to" parameters should not exceed 7 days as this API only provides a week's data at once.
+  --to: string # End date for the query in "yyyy-MM-dd'T'HH:mm:ss'Z'" format.
   --query-data-type: string@query-data-type-completer # Query data type for `from` and `to`. (default: meeting_start_time)
 ]: nothing -> record<from: string, meetings: table<archive_files: list, duration: int, host_id: string, id: int, recording_count: int, start_time: string, timezone: string, topic: string, total_size: int, type: int, uuid: string>, next_page_token: string, page_size: int, to: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "query_data_type" $query_data_type "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "query_data_type" $query_data_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/archive_files" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"page_size": $page_size, "next_page_token": $next_page_token, "from": $qp_from, "to": $qp_to, "query_data_type": $query_data_type} | compact)
+    query: ({"page_size": $page_size, "next_page_token": $next_page_token, "from": $from, "to": $to, "query_data_type": $query_data_type} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2980,13 +2982,14 @@ export def "search-company-contacts" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --search-key: string # Provide the keyword - either first name, last name or email of the contact whom you have to search for.
+  --search-key: string # Provide the keyword - either first name, last name or email of the contact whom you have to search for. (required)
   --query-presence-status: string # Set `query_presence_status` to `true` in order to include the presence status of a contact in the response.
   --page-size: int # The number of records to be returned with a single API call. (default: 1)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
 ]: nothing -> record<contacts: table<dept: string, direct_numbers: list, email: string, extension_number: string, first_name: string, id: string, im_group_id: string, im_group_name: string, job_title: string, last_name: string, location: string, phone_number: string, presence_status: string, sip_phone_number: string>, next_page_token: string, page_size: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($search_key == null) { error make --unspanned { msg: "required query parameter 'search_key' missing: pass --search-key" } }
   let qp = [(serialize-qp "search_key" $search_key "scalar") (serialize-qp "query_presence_status" $query_presence_status "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/contacts" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -3616,8 +3619,8 @@ export def "upload-group-vb" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -3650,7 +3653,7 @@ export def "device-list" [
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --page-number: int # **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field. The page number of the current page in the returned records. (default: 1)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record {
+]: nothing -> record<next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int, devices: table<id: string, encryption: string, ip: string, name: string, protocol: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page_number" $page_number "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
@@ -3941,21 +3944,23 @@ export def "im-chat-sessions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (format: date)
-  --qp-to: string # End date. (format: date)
+  --from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (required, format: date)
+  --to: string # End date. (required, format: date)
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
 ]: nothing -> record<from: string, to: string, next_page_token: string, page_size: int, sessions: table<last_message_sent_time: string, name: string, session_id: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/im/chat/sessions" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to, "page_size": $page_size, "next_page_token": $next_page_token} | compact)
+    query: ({"from": $from, "to": $to, "page_size": $page_size, "next_page_token": $next_page_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3984,22 +3989,24 @@ export def "im-chat-messages" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (format: date)
-  --qp-to: string # End date. (format: date)
+  --from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (required, format: date)
+  --to: string # End date. (required, format: date)
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
 ]: nothing -> record<from: string, session_id: string, to: string, next_page_token: string, page_size: int, messages: table<action: string, action_time: string, date_time: string, message: string, sender: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($session_id | is-empty) { error make --unspanned { msg: "path parameter 'sessionId' must be non-empty" } }
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({session_id: (encode-path-segment $session_id)} | format pattern "/im/chat/sessions/{session_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to, "page_size": $page_size, "next_page_token": $next_page_token} | compact)
+    query: ({"from": $from, "to": $to, "page_size": $page_size, "next_page_token": $next_page_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4025,7 +4032,7 @@ export def "im-groups" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> record<total_records: int, groups: table<id: string, name: string, total_members: int, search_by_account: bool, search_by_domain: bool, search_by_ma_account: bool, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/im/groups" $auth.query)
@@ -4140,7 +4147,7 @@ export def "im-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: string> {
+]: nothing -> record<id: string, name: string, total_members: int, search_by_account: bool, search_by_domain: bool, search_by_ma_account: bool, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -4224,7 +4231,7 @@ export def "im-group-members" [
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --page-number: int # **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field. The page number of the current page in the returned records. (default: 1)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record {
+]: nothing -> record<next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int, members: table<email: string, first_name: string, id: string, last_name: string, type: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -4794,7 +4801,7 @@ export def "meeting-polls" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> record<polls: table<id: string, status: string, questions: list, title: string>, total_records: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
@@ -5035,7 +5042,7 @@ export def "recording-get" [
   --accept: string@accept-completer # Response content type
   --include-fields: string # Get the `download_access_token` field for downloading meeting recordings.
   --ttl: int # Time to live (TTL) of the `download_access_token`. This is only valid if the `include_fields` query parameter contains `download_access_token`. The range is between 0-604800.
-]: nothing -> record<download_access_token: string> {
+]: nothing -> record<account_id: string, duration: int, host_id: string, id: string, recording_count: string, start_time: string, topic: string, total_size: string, type: string, uuid: string, recording_files: table<deleted_time: string, download_url: string, file_size: float, file_type: string, id: string, meeting_id: string, play_url: string, recording_end: string, recording_start: string, recording_type: string, status: string>, download_access_token: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
@@ -5077,7 +5084,7 @@ export def "meeting-recording-registrants" [
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --page-number: int # **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field. The page number of the current page in the returned records. (default: 1)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record {
+]: nothing -> record<next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int, registrants: table<id: string, address: string, city: string, comments: string, country: string, custom_questions: list, email: string, first_name: string, industry: string, job_title: string, last_name: string, no_of_employees: string, org: string, phone: string, purchasing_time_frame: string, role_in_purchase_process: string, state: string, zip: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
@@ -5509,7 +5516,7 @@ export def "meeting-registrants" [
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --page-number: int # **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field. The page number of the current page in the returned records. (default: 1)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record {
+]: nothing -> record<next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int, registrants: table<id: string, address: string, city: string, comments: string, country: string, custom_questions: list, email: string, first_name: string, industry: string, job_title: string, last_name: string, no_of_employees: string, org: string, phone: string, purchasing_time_frame: string, role_in_purchase_process: string, state: string, zip: string, create_time: string, join_url: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
@@ -5812,19 +5819,21 @@ export def "dashboard-client-feedback" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (format: date)
-  --qp-to: string # End date. (format: date)
+  --from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (required, format: date)
+  --to: string # End date. (required, format: date)
 ]: nothing -> record<client_feedbacks: table<feedback_id: string, feedback_name: string, participants_count: int>, from: string, to: string, total_records: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/metrics/client/feedback" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to} | compact)
+    query: ({"from": $from, "to": $to} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -5851,22 +5860,22 @@ export def "dashboard-client-feedback-detail" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-from: string # format: date
-  --qp-to: string # format: date
+  --from: string # format: date
+  --to: string # format: date
   --page-size: int # default: 30
   --next-page-token: string
 ]: nothing -> record<from: string, to: string, next_page_token: string, page_size: int, client_feedback_details: table<email: string, meeting_id: string, participant_name: string, time: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($feedback_id | is-empty) { error make --unspanned { msg: "path parameter 'feedbackId' must be non-empty" } }
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({feedback_id: (encode-path-segment $feedback_id)} | format pattern "/metrics/client/feedback/{feedback_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to, "page_size": $page_size, "next_page_token": $next_page_token} | compact)
+    query: ({"from": $from, "to": $to, "page_size": $page_size, "next_page_token": $next_page_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -5892,19 +5901,19 @@ export def "list-meeting-satisfaction" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-from: string # The start date for the query in “yyyy-mm-dd” format. (format: date)
-  --qp-to: string # The end date for the query in “yyyy-mm-dd” format. (format: date)
+  --from: string # The start date for the query in “yyyy-mm-dd” format. (format: date)
+  --to: string # The end date for the query in “yyyy-mm-dd” format. (format: date)
 ]: nothing -> record<client_satisfaction: table<date: string, good_count: int, none_count: int, not_good_count: int, satisfaction_percent: int>, from: string, to: string, total_records: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/metrics/client/satisfaction" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to} | compact)
+    query: ({"from": $from, "to": $to} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -5930,19 +5939,21 @@ export def "dashboard-crc" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (format: date)
-  --qp-to: string # End date. (format: date)
-]: nothing -> record {
+  --from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (required, format: date)
+  --to: string # End date. (required, format: date)
+]: nothing -> record<from: string, to: string, crc_ports_usage: table<crc_ports_hour_usage: list, date_time: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/metrics/crc" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to} | compact)
+    query: ({"from": $from, "to": $to} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -5968,21 +5979,23 @@ export def "dashboard-im" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (format: date)
-  --qp-to: string # End date. (format: date)
+  --from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (required, format: date)
+  --to: string # End date. (required, format: date)
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
 ]: nothing -> record<from: string, to: string, next_page_token: string, page_count: int, page_size: int, total_records: int, users: table<calls_receive: int, calls_send: int, email: string, emoji_receive: int, emoji_send: int, files_receive: int, files_send: int, group_receive: int, group_send: int, images_receive: int, images_send: int, total_receive: int, total_send: int, user_id: string, user_name: string, videos_receive: int, videos_send: int, voice_receive: int, voice_send: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/metrics/im" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to, "page_size": $page_size, "next_page_token": $next_page_token} | compact)
+    query: ({"from": $from, "to": $to, "page_size": $page_size, "next_page_token": $next_page_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -6008,19 +6021,21 @@ export def "dashboard-issue-zoom-room" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (format: date)
-  --qp-to: string # End date. (format: date)
+  --from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (required, format: date)
+  --to: string # End date. (required, format: date)
 ]: nothing -> record<from: string, to: string, total_records: int, zoom_rooms: table<id: string, issues_count: int, room_name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/metrics/issues/zoomrooms" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to} | compact)
+    query: ({"from": $from, "to": $to} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -6047,22 +6062,24 @@ export def "dashboard-issue-detail-zoom-room" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (format: date)
-  --qp-to: string # End date. (format: date)
+  --from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (required, format: date)
+  --to: string # End date. (required, format: date)
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
 ]: nothing -> record<from: string, to: string, next_page_token: string, page_count: int, page_size: int, total_records: int, issue_details: table<issue: string, time: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($zoomroom_id | is-empty) { error make --unspanned { msg: "path parameter 'zoomroomId' must be non-empty" } }
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({zoomroom_id: (encode-path-segment $zoomroom_id)} | format pattern "/metrics/issues/zoomrooms/{zoomroom_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to, "page_size": $page_size, "next_page_token": $next_page_token} | compact)
+    query: ({"from": $from, "to": $to, "page_size": $page_size, "next_page_token": $next_page_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -6089,22 +6106,24 @@ export def "dashboard-meetings" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --type: string@type-completer-2 # Specify a value to get the response for the corresponding meeting type. The value of this field can be one of the following: `past` - Meeting that already occurred in the specified date range.`pastOne` - Past meetings that were attended by only one user. `live` - Live meetings. If you do not provide this field, the default value will be `live` and thus, the API will only query responses for live meetings. (default: live)
-  --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (format: date)
-  --qp-to: string # End date. (format: date)
+  --from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (required, format: date)
+  --to: string # End date. (required, format: date)
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --include-fields: string@include-fields-completer # Set the value of this field to "tracking_fields" if you would like to include tracking fields of each meeting in the response.
 ]: nothing -> record<from: string, to: string, next_page_token: string, page_count: int, page_size: int, total_records: int, meetings: table<custom_keys: list, dept: string, duration: string, email: string, end_time: string, has_3rd_party_audio: bool, has_pstn: bool, has_recording: bool, has_screen_share: bool, has_sip: bool, has_video: bool, has_voip: bool, host: string, id: int, in_room_participants: int, participants: int, start_time: string, topic: string, tracking_fields: list, user_type: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "include_fields" $include_fields "scalar")] | flatten | str join "&"
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "include_fields" $include_fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/metrics/meetings" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"type": $type, "from": $qp_from, "to": $qp_to, "page_size": $page_size, "next_page_token": $next_page_token, "include_fields": $include_fields} | compact)
+    query: ({"type": $type, "from": $from, "to": $to, "page_size": $page_size, "next_page_token": $next_page_token, "include_fields": $include_fields} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -6215,7 +6234,7 @@ export def "dashboard-meeting-participants-qos" [
   --type: string@type-completer-2 # The meeting types: `past` - Past meetings.`live` - Live Meetings. (default: live)
   --page-size: int # The number of items returned per page. (default: 1)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record {
+]: nothing -> record<next_page_token: string, page_count: int, page_size: int, total_records: int, participants: table<device: string, domain: string, harddisk_id: string, ip_address: string, join_time: string, leave_time: string, location: string, mac_addr: string, pc_name: string, user_id: string, user_name: string, user_qos: list, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
@@ -6376,21 +6395,23 @@ export def "dashboard-webinars" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --type: string@type-completer-3 # The webinar type. (default: live)
-  --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (format: date)
-  --qp-to: string # End date. (format: date)
+  --from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (required, format: date)
+  --to: string # End date. (required, format: date)
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
 ]: nothing -> record<from: string, to: string, next_page_token: string, page_count: int, page_size: int, total_records: int, webinars: table<custom_keys: list, dept: string, duration: string, email: string, end_time: string, has_3rd_party_audio: bool, has_pstn: bool, has_recording: bool, has_screen_share: bool, has_sip: bool, has_video: bool, has_voip: bool, host: string, id: int, participants: int, start_time: string, topic: string, user_type: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/metrics/webinars" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"type": $type, "from": $qp_from, "to": $qp_to, "page_size": $page_size, "next_page_token": $next_page_token} | compact)
+    query: ({"type": $type, "from": $from, "to": $to, "page_size": $page_size, "next_page_token": $next_page_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -6501,7 +6522,7 @@ export def "dashboard-webinar-participants-qos" [
   --type: string@type-completer-3 # The webinar type. (default: live)
   --page-size: int # The number of items returned per page. (default: 1)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record {
+]: nothing -> record<next_page_token: string, page_count: int, page_size: int, total_records: int, participants: table<device: string, domain: string, harddisk_id: string, ip_address: string, join_time: string, leave_time: string, location: string, mac_addr: string, pc_name: string, user_id: string, user_name: string, user_qos: list, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webinar_id | is-empty) { error make --unspanned { msg: "path parameter 'webinarId' must be non-empty" } }
@@ -6664,7 +6685,7 @@ export def "dashboard-zoom-rooms" [
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --page-number: int # The page number of the current page in the returned records. (default: 1)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record {
+]: nothing -> record<next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int, zoom_rooms: table<account_type: string, calender_name: string, camera: string, device_ip: string, email: string, health: string, id: string, issues: list, last_start_time: string, location: string, microphone: string, room_name: string, speaker: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "page_number" $page_number "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
@@ -6700,19 +6721,21 @@ export def "dashboard-zoom-room-issue" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (format: date)
-  --qp-to: string # End date. (format: date)
-]: nothing -> record {
+  --from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (required, format: date)
+  --to: string # End date. (required, format: date)
+]: nothing -> record<from: string, to: string, total_records: int, issues: table<issue_name: string, zoom_rooms_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/metrics/zoomrooms/issues" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to} | compact)
+    query: ({"from": $from, "to": $to} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -6739,22 +6762,24 @@ export def "dashboard-zoom-room" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (format: date)
-  --qp-to: string # End date. (format: date)
+  --from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (required, format: date)
+  --to: string # End date. (required, format: date)
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record {
+]: nothing -> record<account_type: string, calender_name: string, camera: string, device_ip: string, email: string, health: string, id: string, issues: list<string>, last_start_time: string, location: string, microphone: string, room_name: string, speaker: string, status: string, live_meeting: record<custom_keys: list<record>, dept: string, duration: string, email: string, end_time: string, has_3rd_party_audio: bool, has_pstn: bool, has_recording: bool, has_screen_share: bool, has_sip: bool, has_video: bool, has_voip: bool, host: string, id: int, in_room_participants: int, participants: int, start_time: string, topic: string, user_type: string, uuid: string>, past_meetings: record<from: string, to: string, next_page_token: string, page_count: int, page_size: int, total_records: int, meetings: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($zoomroom_id | is-empty) { error make --unspanned { msg: "path parameter 'zoomroomId' must be non-empty" } }
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({zoomroom_id: (encode-path-segment $zoomroom_id)} | format pattern "/metrics/zoomrooms/{zoomroom_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to, "page_size": $page_size, "next_page_token": $next_page_token} | compact)
+    query: ({"from": $from, "to": $to, "page_size": $page_size, "next_page_token": $next_page_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -6818,7 +6843,7 @@ export def "past-meetings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> record<meetings: table<start_time: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
@@ -6972,7 +6997,7 @@ export def "webinar-absentees" [
   --occurrence-id: string # The meeting occurrence ID.
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record {
+]: nothing -> record<next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int, registrants: table<id: string, address: string, city: string, comments: string, country: string, custom_questions: list, email: string, first_name: string, industry: string, job_title: string, last_name: string, no_of_employees: string, org: string, phone: string, purchasing_time_frame: string, role_in_purchase_process: string, state: string, zip: string, create_time: string, join_url: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webinar_uuid | is-empty) { error make --unspanned { msg: "path parameter 'WebinarUUID' must be non-empty" } }
@@ -7047,7 +7072,7 @@ export def "past-webinars" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> record<webinars: table<start_time: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webinar_id | is-empty) { error make --unspanned { msg: "path parameter 'webinarId' must be non-empty" } }
@@ -7639,8 +7664,8 @@ export def "account-call-logs" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
-  --qp-from: string # Start date from which you would like to get the call logs. The start date should be within past six months. The API only returns data pertaining to a month. Thus, the date range(defined using "from" and "to" fields) for which the call logs are to be returned must not exceed a month.
-  --qp-to: string # The end date upto which you would like to get the call logs for. The end date should be within past six months.
+  --from: string # Start date from which you would like to get the call logs. The start date should be within past six months. The API only returns data pertaining to a month. Thus, the date range(defined using "from" and "to" fields) for which the call logs are to be returned must not exceed a month.
+  --to: string # The end date upto which you would like to get the call logs for. The end date should be within past six months.
   --type: string # The type of the call logs. The value can be either "all" or "missed".
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --path: string # Filter the API response by [path](https://support.zoom.us/hc/en-us/articles/360021114452-Viewing-and-identifying-logs#h_646b46c6-0623-4ab1-8b8b-ea5b8bcef679) of the call. The value of this field can be one of the following: `voiceMail`, `message`, `forward`, `extension`, `callQueue`, `ivrMenu`, `companyDirectory`, `autoReceptionist`, `contactCenter`, `disconnected`, `commonAreaPhone`, `pstn`, `transfer`, `sharedLines`, `sharedLineGroup`, `tollFreeBilling`, `meetingService`, `parkPickup`, `parkTimeout`, `monitor`, `takeover`, `sipGroup`
@@ -7649,14 +7674,14 @@ export def "account-call-logs" [
 ]: nothing -> record<call_logs: table<answer_start_time: string, call_id: string, call_type: string, callee_name: string, callee_number: string, callee_number_type: string, caller_name: string, caller_number: string, caller_number_type: string, charge: string, client_code: string, date_time: string, direction: string, duration: int, id: string, owner: record, path: string, rate: string, recording_id: string, recording_type: string, result: string, site: record, user_id: string, waiting_time: string>, from: string, next_page_token: string, page_count: int, page_size: int, to: string, total_records: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "time_type" $time_type "scalar") (serialize-qp "site_id" $site_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "time_type" $time_type "scalar") (serialize-qp "site_id" $site_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/phone/call_logs" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"page_size": $page_size, "from": $qp_from, "to": $qp_to, "type": $type, "next_page_token": $next_page_token, "path": $path, "time_type": $time_type, "site_id": $site_id} | compact)
+    query: ({"page_size": $page_size, "from": $from, "to": $to, "type": $type, "next_page_token": $next_page_token, "path": $path, "time_type": $time_type, "site_id": $site_id} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -8164,20 +8189,20 @@ export def "get-call-queue-recordings" [
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-  --qp-from: string # Start date (within a 6 month range). (format: date)
-  --qp-to: string # End date (within a 6 month range). (format: date)
+  --from: string # Start date (within a 6 month range). (format: date)
+  --to: string # End date (within a 6 month range). (format: date)
 ]: nothing -> record<from: string, next_page_token: string, page_size: int, recordings: table<callee_name: string, callee_number: string, callee_number_type: string, caller_name: string, caller_number: string, caller_number_type: string, date_time: string, direction: string, download_url: string, duration: int, id: string>, to: string, total_records: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($call_queue_id | is-empty) { error make --unspanned { msg: "path parameter 'callQueueId' must be non-empty" } }
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({call_queue_id: (encode-path-segment $call_queue_id)} | format pattern "/phone/call_queues/{call_queue_id}/recordings") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"page_size": $page_size, "next_page_token": $next_page_token, "from": $qp_from, "to": $qp_to} | compact)
+    query: ({"page_size": $page_size, "next_page_token": $next_page_token, "from": $from, "to": $to} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -8479,12 +8504,13 @@ export def "list-phone-devices" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --type: string@type-completer-4 # State of the device. The value should be either `assigned` to list devices that have been assigned to user(s) or `unassigned` to list devices that have not yet been assigned to any user in the Zoom account.
+  --type: string@type-completer-4 # State of the device. The value should be either `assigned` to list devices that have been assigned to user(s) or `unassigned` to list devices that have not yet been assigned to any user in the Zoom account. (required)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --page-size: int # The number of records returned within a single API call. (default: 30)
 ]: nothing -> record<devices: table<assignee: record, device_type: string, display_name: string, id: string, mac_address: string, site: record, status: string>, next_page_token: string, page_size: int, total_records: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($type == null) { error make --unspanned { msg: "required query parameter 'type' missing: pass --type" } }
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/phone/devices" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -8678,8 +8704,8 @@ export def "list-call-logs-metrics" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-from: string # Start date for the report in `yyyy-mm-dd` format. Specify a 30 day range using the `from` and `to` parameters as the response provides a maximum of a month worth of data per API request.
-  --qp-to: string # End date for the report in `yyyy-mm-dd` format.
+  --from: string # Start date for the report in `yyyy-mm-dd` format. Specify a 30 day range using the `from` and `to` parameters as the response provides a maximum of a month worth of data per API request.
+  --to: string # End date for the report in `yyyy-mm-dd` format.
   --site-id: string # Unique identifier of the [site](https://support.zoom.us/hc/en-us/articles/360020809672-Managing-multiple-sites). Use this query parameter if you have enabled multiple sites and would like to filter the response of this API call by call logs of a specific phone site.
   --quality-type: string # Filter call logs by voice quality. Zoom uses MOS of 3.5 as a general baseline to categorize calls by call quality. A MOS greater than or equal to 3.5 means good quality, while below 3.5 means poor quality. The value of this field can be one of the following: * `good`: Retrieve call logs of the call(s) with good quality of voice. * `bad`: Retrieve call logs of the call(s) with good quality of voice. * `all`: Retrieve all call logs without filtering by voice quality.
   --page-size: int # The number of records returned within a single call. (default: 30)
@@ -8687,14 +8713,14 @@ export def "list-call-logs-metrics" [
 ]: nothing -> record<call_logs: table<call_id: string, callee: record, caller: record, date_time: string, direction: string, duration: int, mos: string>, from: string, next_page_token: string, page_size: int, to: string, total_records: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "quality_type" $quality_type "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "quality_type" $quality_type "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/phone/metrics/call_logs" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to, "site_id": $site_id, "quality_type": $quality_type, "page_size": $page_size, "next_page_token": $next_page_token} | compact)
+    query: ({"from": $from, "to": $to, "site_id": $site_id, "quality_type": $quality_type, "page_size": $page_size, "next_page_token": $next_page_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -8918,22 +8944,22 @@ export def "get-phone-recordings" [
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. The default is **30**, and the maximum is **100**.
   --next-page-token: string # The current page number of returned records.
-  --qp-from: string # Start date and time in **yyyy-mm-dd** format or **yyyy-MM-dd’T’HH:mm:ss’Z’** format. The date range defined by the from and to parameters should only be one month as the report includes only one month worth of data at once.
-  --qp-to: string # End date and time in **yyyy-mm-dd** format or **yyyy-MM-dd’T’HH:mm:ss’Z’** format, the same formats supported by the `from` parameter.
+  --from: string # Start date and time in **yyyy-mm-dd** format or **yyyy-MM-dd’T’HH:mm:ss’Z’** format. The date range defined by the from and to parameters should only be one month as the report includes only one month worth of data at once.
+  --to: string # End date and time in **yyyy-mm-dd** format or **yyyy-MM-dd’T’HH:mm:ss’Z’** format, the same formats supported by the `from` parameter.
   --owner-type: string # The owner type. The allowed values are null, `user`, or `callQueue`. The default is null. If null, returns all owner types. (default: all)
   --recording-type: string # The recording type. The allowed values are null, `OnDemand`, or `Automatic`. The default is null. If null, returns all recording types.
   --site-id: string # The site ID. The default is `All sites`. (default: All sites)
 ]: nothing -> record<next_page_token: string, page_size: int, recordings: table<callee_name: string, callee_number: string, callee_number_type: string, caller_name: string, caller_number: string, caller_number_type: string, date_time: string, direction: string, download_url: string, duration: int, id: string, owner: record, recording_type: string, site: record>, total_records: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "owner_type" $owner_type "scalar") (serialize-qp "recording_type" $recording_type "scalar") (serialize-qp "site_id" $site_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "owner_type" $owner_type "scalar") (serialize-qp "recording_type" $recording_type "scalar") (serialize-qp "site_id" $site_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/phone/recordings" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"page_size": $page_size, "next_page_token": $next_page_token, "from": $qp_from, "to": $qp_to, "owner_type": $owner_type, "recording_type": $recording_type, "site_id": $site_id} | compact)
+    query: ({"page_size": $page_size, "next_page_token": $next_page_token, "from": $from, "to": $to, "owner_type": $owner_type, "recording_type": $recording_type, "site_id": $site_id} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -8959,22 +8985,22 @@ export def "get-ps-operation-logs" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report provides only one month worth of data per API request.
-  --qp-to: string # End date in 'yyyy-mm-dd' format.
+  --from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report provides only one month worth of data per API request.
+  --to: string # End date in 'yyyy-mm-dd' format.
   --category-type: string # Filter the response by the category of the action performed. By default, the value of this field is "all" and thus, the response will include log of all operations for the defined period.To only include response for a specific category type, provide a value for `category_type` from this [table](http://marketplace.zoom.us/docs/phone-operation-categories ). (default: all)
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
 ]: nothing -> record<next_page_token: string, page_size: int, operation_logs: table<action: string, category_type: string, operation_detail: string, operator: string, time: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "category_type" $category_type "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "category_type" $category_type "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/phone/reports/operationlogs" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to, "category_type": $category_type, "page_size": $page_size, "next_page_token": $next_page_token} | compact)
+    query: ({"from": $from, "to": $to, "category_type": $category_type, "page_size": $page_size, "next_page_token": $next_page_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -9686,11 +9712,12 @@ export def "delete-phone-site" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --transfer-site-id: string # The Site ID of another site where the assets of the current site (users, numbers and phones) can be transferred to.
+  --transfer-site-id: string # The Site ID of another site where the assets of the current site (users, numbers and phones) can be transferred to. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($site_id | is-empty) { error make --unspanned { msg: "path parameter 'siteId' must be non-empty" } }
+  if ($transfer_site_id == null) { error make --unspanned { msg: "required query parameter 'transfer_site_id' missing: pass --transfer-site-id" } }
   let qp = [(serialize-qp "transfer_site_id" $transfer_site_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({site_id: (encode-path-segment $site_id)} | format pattern "/phone/sites/{site_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -9923,8 +9950,8 @@ export def "phone-user-call-logs" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
-  --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (format: date)
-  --qp-to: string # End date. (format: date)
+  --from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (required, format: date)
+  --to: string # End date. (required, format: date)
   --type: string@type-completer-7
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --phone-number: string # Filter API responses to include call logs of only the phone number defined in this field.
@@ -9933,14 +9960,16 @@ export def "phone-user-call-logs" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "phone_number" $phone_number "scalar") (serialize-qp "time_type" $time_type "scalar")] | flatten | str join "&"
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "phone_number" $phone_number "scalar") (serialize-qp "time_type" $time_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/phone/users/{user_id}/call_logs") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"page_size": $page_size, "from": $qp_from, "to": $qp_to, "type": $type, "next_page_token": $next_page_token, "phone_number": $phone_number, "time_type": $time_type} | compact)
+    query: ({"page_size": $page_size, "from": $from, "to": $to, "type": $type, "next_page_token": $next_page_token, "phone_number": $phone_number, "time_type": $time_type} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -10170,20 +10199,21 @@ export def "phone-user-recordings" [
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-  --qp-from: string # Start date for the query in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the response includes only one month worth of recording data. The month defined should fall within the last six months. (format: date)
-  --qp-to: string # End date. (format: date)
+  --from: string # Start date for the query in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the response includes only one month worth of recording data. The month defined should fall within the last six months. (format: date)
+  --to: string # End date. (required, format: date)
 ]: nothing -> record<from: string, next_page_token: string, page_count: int, page_size: int, recordings: table<callee_name: string, callee_number: string, callee_number_type: string, caller_name: string, caller_number: string, caller_number_type: string, date_time: string, direction: string, download_url: string, duration: string, id: string>, to: string, total_records: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/phone/users/{user_id}/recordings") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"page_size": $page_size, "next_page_token": $next_page_token, "from": $qp_from, "to": $qp_to} | compact)
+    query: ({"page_size": $page_size, "next_page_token": $next_page_token, "from": $from, "to": $to} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -10248,12 +10278,13 @@ export def "delete-user-setting" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --shared-id: string # Required only for voicemail setting type.
+  --shared-id: string # Required only for voicemail setting type. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   if ($setting_type | is-empty) { error make --unspanned { msg: "path parameter 'settingType' must be non-empty" } }
+  if ($shared_id == null) { error make --unspanned { msg: "required query parameter 'shared_id' missing: pass --shared-id" } }
   let qp = [(serialize-qp "shared_id" $shared_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), setting_type: (encode-path-segment $setting_type)} | format pattern "/phone/users/{user_id}/settings/{setting_type}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -10379,20 +10410,21 @@ export def "phone-user-voice-mails" [
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --status: string@status-completer-2 # Status of the voice mail (default: all)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-  --qp-from: string # Start date for the query in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the response includes only one month worth of voicemail data. The month defined should fall within the last six months. (format: date)
-  --qp-to: string # End date. (format: date)
+  --from: string # Start date for the query in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the response includes only one month worth of voicemail data. The month defined should fall within the last six months. (format: date)
+  --to: string # End date. (required, format: date)
 ]: nothing -> record<from: string, next_page_token: string, page_count: int, page_size: int, to: string, total_records: int, voice_mails: table<callee_name: string, callee_number: string, callee_number_type: string, caller_name: string, caller_number: string, caller_number_type: string, date_time: string, download_url: string, duration: string, id: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/phone/users/{user_id}/voice_mails") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"page_size": $page_size, "status": $status, "next_page_token": $next_page_token, "from": $qp_from, "to": $qp_to} | compact)
+    query: ({"page_size": $page_size, "status": $status, "next_page_token": $next_page_token, "from": $from, "to": $to} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -10455,21 +10487,21 @@ export def "report-sign-in-sign-out-activities" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-from: string # Start date for which you would like to view the activity logs report. Using the `from` and `to` parameters, specify a monthly date range for the report as the API only provides one month worth of data in one request. The specified date range should fall within the last six months. (format: date)
-  --qp-to: string # End date up to which you would like to view the activity logs report. (format: date)
+  --from: string # Start date for which you would like to view the activity logs report. Using the `from` and `to` parameters, specify a monthly date range for the report as the API only provides one month worth of data in one request. The specified date range should fall within the last six months. (format: date)
+  --to: string # End date up to which you would like to view the activity logs report. (format: date)
   --page-size: int # The number of records to be returned within a single API call
   --next-page-token: string # Next page token is used to paginate through large result sets
 ]: nothing -> record<activity_logs: table<client_type: string, email: string, ip_address: string, time: string, type: string, version: string>, from: string, next_page_token: string, page_size: string, to: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/report/activities" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to, "page_size": $page_size, "next_page_token": $next_page_token} | compact)
+    query: ({"from": $from, "to": $to, "page_size": $page_size, "next_page_token": $next_page_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -10495,19 +10527,21 @@ export def "report-cloud-recording" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (format: date)
-  --qp-to: string # End date. (format: date)
+  --from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (required, format: date)
+  --to: string # End date. (required, format: date)
 ]: nothing -> record<from: string, to: string, cloud_recording_storage: table<date: string, free_usage: string, plan_usage: string, usage: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/report/cloud_recording" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to} | compact)
+    query: ({"from": $from, "to": $to} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -10686,22 +10720,24 @@ export def "report-operation-logs" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (format: date)
-  --qp-to: string # End date. (format: date)
+  --from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (required, format: date)
+  --to: string # End date. (required, format: date)
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --category-type: string@category-type-completer # **Optional** Filter your response by a category type to see reports for a specific category. The value for this field can be one of the following: `all``user``user_settings``account``billing``im``recording``phone_contacts``webinar``sub_account``role``zoom_rooms`
 ]: nothing -> record<next_page_token: string, page_size: int, operation_logs: table<action: string, category_type: string, operation_detail: string, operator: string, time: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "category_type" $category_type "scalar")] | flatten | str join "&"
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "category_type" $category_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/report/operationlogs" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to, "page_size": $page_size, "next_page_token": $next_page_token, "category_type": $category_type} | compact)
+    query: ({"from": $from, "to": $to, "page_size": $page_size, "next_page_token": $next_page_token, "category_type": $category_type} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -10728,22 +10764,24 @@ export def "report-telephone" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --type: string@type-completer-8 # Audio types:`1` - Toll-free Call-in & Call-out.`2` - Toll `3` - SIP Connected Audio (default: 1)
-  --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (format: date)
-  --qp-to: string # End date. (format: date)
+  --from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (required, format: date)
+  --to: string # End date. (required, format: date)
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --page-number: int # **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field. The page number of the current page in the returned records. (default: 1)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record {
+]: nothing -> record<from: string, next_page_token: int, page_count: int, page_size: int, to: string, total_records: int, telephony_usage: table<call_in_number: string, country_name: string, dept: string, duration: int, end_time: string, host_email: string, host_id: string, host_name: string, meeting_id: int, meeting_type: string, phone_number: string, rate: float, signaled_number: string, start_time: string, total: float, type: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "page_number" $page_number "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "page_number" $page_number "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/report/telephone" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"type": $type, "from": $qp_from, "to": $qp_to, "page_size": $page_size, "page_number": $page_number, "next_page_token": $next_page_token} | compact)
+    query: ({"type": $type, "from": $from, "to": $to, "page_size": $page_size, "page_number": $page_number, "next_page_token": $next_page_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -10770,22 +10808,24 @@ export def "report-users" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --type: string@type-completer-9 # Active or inactive hosts.`active` - Active hosts. `inactive` - Inactive hosts.
-  --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (format: date)
-  --qp-to: string # End date. (format: date)
+  --from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (required, format: date)
+  --to: string # End date. (required, format: date)
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --page-number: int # The page number of the current page in the returned records. (default: 1)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record {
+]: nothing -> record<from: string, next_page_token: string, page_count: int, page_number: int, page_size: int, to: string, total_records: int, total_meeting_minutes: int, total_meetings: int, total_participants: int, users: table<custom_attributes: record, dept: string, email: string, id: string, meeting_minutes: int, meetings: int, participants: int, type: int, user_name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "page_number" $page_number "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "page_number" $page_number "scalar") (serialize-qp "next_page_token" $next_page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/report/users" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"type": $type, "from": $qp_from, "to": $qp_to, "page_size": $page_size, "page_number": $page_number, "next_page_token": $next_page_token} | compact)
+    query: ({"type": $type, "from": $from, "to": $to, "page_size": $page_size, "page_number": $page_number, "next_page_token": $next_page_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -10812,8 +10852,8 @@ export def "report-meetings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (format: date)
-  --qp-to: string # End date. (format: date)
+  --from: string # Start date in 'yyyy-mm-dd' format. The date range defined by the "from" and "to" parameters should only be one month as the report includes only one month worth of data at once. (required, format: date)
+  --to: string # End date. (required, format: date)
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --type: string@type-completer-10 # The meeting types: `past` - Past meetings.`pastOne` - Past one user meetings. (default: past)
@@ -10821,14 +10861,16 @@ export def "report-meetings" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
+  if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
+  if ($to == null) { error make --unspanned { msg: "required query parameter 'to' missing: pass --to" } }
+  let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/report/users/{user_id}/meetings") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"from": $qp_from, "to": $qp_to, "page_size": $page_size, "next_page_token": $next_page_token, "type": $type} | compact)
+    query: ({"from": $from, "to": $to, "page_size": $page_size, "next_page_token": $next_page_token, "type": $type} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -11006,7 +11048,7 @@ export def "roles" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> record<roles: table<description: string, id: string, name: string, total_members: int>, total_records: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/roles" $auth.query)
@@ -11208,7 +11250,7 @@ export def "role-members" [
   --page-number: int # **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field. The page number of the current page in the returned records. (default: 1)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --page-size: int # The number of records returned within a single API call. (default: 30)
-]: nothing -> record<members: list<record>, next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int> {
+]: nothing -> record<members: table<department: string, email: string, first_name: string, id: string, last_name: string, type: int>, next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'roleId' must be non-empty" } }
@@ -11483,10 +11525,11 @@ export def "get-zr-account-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --setting-type: string@setting-type-completer # The type of setting that you would like to retrieve. `alert`: Alert Settings applied on the Zoom Rooms Account. `meeting`: Meeting settings of the Zoom Rooms Account. `signage`: View digital signage settings of the Zoom Rooms Account. (default: meeting)
+  --setting-type: string@setting-type-completer # The type of setting that you would like to retrieve. `alert`: Alert Settings applied on the Zoom Rooms Account. `meeting`: Meeting settings of the Zoom Rooms Account. `signage`: View digital signage settings of the Zoom Rooms Account. (required, default: meeting)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let setting_type = ($setting_type | default "meeting")
   let qp = [(serialize-qp "setting_type" $setting_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rooms/account_settings" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -11524,7 +11567,7 @@ export def "update-zoom-room-acc-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --setting-type: string # The type of setting that you would like to update. `alert`: Alert Settings applied on the Zoom Rooms Account. `meeting`: Meeting settings of the Zoom Rooms Account. `signage`: View digital signage settings of the Zoom Rooms Account. (default: meeting)
+  --setting-type: string # The type of setting that you would like to update. `alert`: Alert Settings applied on the Zoom Rooms Account. `meeting`: Meeting settings of the Zoom Rooms Account. `signage`: View digital signage settings of the Zoom Rooms Account. (required, default: meeting)
   --zoom-rooms: record # shape: {allow_multiple_content_sharing?: bool, audio_device_daily_auto_test?: bool, auto_direct_sharing?: bool, auto_start_scheduled_meeting?: bool, auto_stop_scheduled_meeting?: bool, count_attendees_number_in_room?: bool, display_feedback_survey?: bool, display_meeting_list?: bool, display_top_banner?: bool, email_address_prompt_before_recording?: bool, encrypt_shared_screen_content?: bool, hide_id_for_private_meeting?: bool, make_room_alternative_host?: bool, secure_connection_channel?: bool, ... (10 more fields)}
   --client-alert: record # The Client Alert Settings section includes alerts that display on the TV screen of the Zoom Room. Disable these settings if you have deliberately disconnected one or more peripheral devices or have never enabled them. — shape: {detect_bluetooth_microphone_error_alert?: bool, detect_bluetooth_speaker_error_alert?: bool, detect_camera_error_alert?: bool, detect_microphone_error_alert?: bool, detect_speaker_error_alert?: bool}
   --digital-signage: record # shape: {banner?: record, display_period?: record, enable_digital_signage?: bool, layout?: string, mute?: bool, play_list?: list}
@@ -11533,6 +11576,7 @@ export def "update-zoom-room-acc-settings" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let setting_type = ($setting_type | default "meeting")
   let qp = [(serialize-qp "setting_type" $setting_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rooms/account_settings" $qp $auth.query)
   let req_body = {"zoom_rooms": $zoom_rooms, "client_alert": $client_alert, "digital_signage": $digital_signage, "notification": $notification} | compact
@@ -11924,11 +11968,12 @@ export def "get-zr-location-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --setting-type: string # The type of setting that you would like to retrieve. `alert`: Alert Settings applied on the Zoom Rooms Account. `meeting`: Meeting settings of the Zoom Rooms Account. `signage`: Digital signage settings of the Zoom Rooms Account. (default: meeting)
+  --setting-type: string # The type of setting that you would like to retrieve. `alert`: Alert Settings applied on the Zoom Rooms Account. `meeting`: Meeting settings of the Zoom Rooms Account. `signage`: Digital signage settings of the Zoom Rooms Account. (required, default: meeting)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'locationId' must be non-empty" } }
+  let setting_type = ($setting_type | default "meeting")
   let qp = [(serialize-qp "setting_type" $setting_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({location_id: (encode-path-segment $location_id)} | format pattern "/rooms/locations/{location_id}/settings") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -11968,7 +12013,7 @@ export def "update-zr-location-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --setting-type: string # The type of setting that you would like to update. `alert`: Alert Settings applied on the Zoom Rooms Account. `meeting`: Meeting settings of the Zoom Rooms Account. `signage`: Digital signage settings. (default: meeting)
+  --setting-type: string # The type of setting that you would like to update. `alert`: Alert Settings applied on the Zoom Rooms Account. `meeting`: Meeting settings of the Zoom Rooms Account. `signage`: Digital signage settings. (required, default: meeting)
   --meeting-security: record # shape: {encryption_type?: "enhanced_encryption"|"e2ee", end_to_end_encrypted_meetings?: bool}
   --zoom-rooms: record # shape: {allow_multiple_content_sharing?: bool, audio_device_daily_auto_test?: bool, auto_accept_incoming_call_and_fecc?: bool, auto_direct_sharing?: bool, auto_start_scheduled_meeting?: bool, auto_stop_scheduled_meeting?: bool, count_attendees_number_in_room?: bool, display_feedback_survey?: bool, display_meeting_list?: bool, display_top_banner?: bool, encrypt_shared_screen_content?: bool, hide_id_for_private_meeting?: bool, hide_self_view?: bool, lock_speaker_volume_control?: bool, ... (13 more fields)}
   --client-alert: record # The Client Alert Settings section includes alerts that display on the TV screen of the Zoom Room. Disable these settings if you have deliberately disconnected one or more peripheral devices or have never enabled them. — shape: {detect_bluetooth_microphone_error_alert?: bool, detect_bluetooth_speaker_error_alert?: bool, detect_camera_error_alert?: bool, detect_microphone_error_alert?: bool, detect_speaker_error_alert?: bool}
@@ -11979,6 +12024,7 @@ export def "update-zr-location-settings" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'locationId' must be non-empty" } }
+  let setting_type = ($setting_type | default "meeting")
   let qp = [(serialize-qp "setting_type" $setting_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({location_id: (encode-path-segment $location_id)} | format pattern "/rooms/locations/{location_id}/settings") $qp $auth.query)
   let req_body = {"meeting_security": $meeting_security, "zoom_rooms": $zoom_rooms, "client_alert": $client_alert, "digital_signage": $digital_signage, "notification": $notification} | compact
@@ -12295,11 +12341,12 @@ export def "get-zr-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --setting-type: string # The type of setting that you would like to retrieve. `alert`: Alert Settings applied on the Zoom Rooms Account. `meeting`: Meeting settings of the Zoom Rooms Account. (default: meeting)
+  --setting-type: string # The type of setting that you would like to retrieve. `alert`: Alert Settings applied on the Zoom Rooms Account. `meeting`: Meeting settings of the Zoom Rooms Account. (required, default: meeting)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'roomId' must be non-empty" } }
+  let setting_type = ($setting_type | default "meeting")
   let qp = [(serialize-qp "setting_type" $setting_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/rooms/{room_id}/settings") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -12605,7 +12652,7 @@ export def "trackingfield-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> record<total_records: int, tracking_fields: table<id: string, field: string, recommended_values: list, required: bool, visible: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tracking_fields" $auth.query)
@@ -12960,10 +13007,11 @@ export def "user-email" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --email: string # The email address to be verified.
+  --email: string # The email address to be verified. (required)
 ]: nothing -> record<existed_email: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($email == null) { error make --unspanned { msg: "required query parameter 'email' missing: pass --email" } }
   let qp = [(serialize-qp "email" $email "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users/email" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -13032,10 +13080,11 @@ export def "user-vanity-name" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --vanity-name: string # Personal meeting room name.
+  --vanity-name: string # Personal meeting room name. (required)
 ]: nothing -> record<existed: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($vanity_name == null) { error make --unspanned { msg: "required query parameter 'vanity_name' missing: pass --vanity-name" } }
   let qp = [(serialize-qp "vanity_name" $vanity_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users/vanity_name" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -13448,7 +13497,7 @@ export def "meetings" [
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --page-number: string # The page number of the current page in the returned records.
-]: nothing -> record {
+]: nothing -> record<next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int, meetings: table<agenda: string, created_at: string, duration: int, host_id: string, id: int, join_url: string, pmi: string, start_time: string, timezone: string, topic: string, type: int, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -13665,8 +13714,8 @@ export def "user-picture" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["pic_file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["pic_file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -13743,21 +13792,21 @@ export def "recordings-list" [
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --mc: string # Query Metadata of Recording if an On-Premise Meeting Connector was used for the meeting. (default: false)
   --trash: oneof<nothing, bool> # Query trash. `true`: List recordings from trash. `false`: Do not list recordings from the trash. The default value is `false`. If you set it to `true`, you can use the `trash_type` property to indicate the type of Cloud recording that you need to retrieve. (default: false)
-  --qp-from: string # The start date in 'yyyy-mm-dd' UTC format for the date range for which you would like to retrieve recordings. The maximum range can be a month. If no value is provided for this field, the default will be current date. For example, if you make the API request on June 30, 2020, without providing the “from” and “to” parameters, by default the value of 'from' field will be “2020-06-30” and the value of the 'to' field will be “2020-07-01”. **Note**: The "trash" files cannot be filtered by date range and thus, the "from" and "to" fields should not be used for trash files. (format: date)
-  --qp-to: string # End date in 'yyyy-mm-dd' 'yyyy-mm-dd' UTC format. (format: date)
+  --from: string # The start date in 'yyyy-mm-dd' UTC format for the date range for which you would like to retrieve recordings. The maximum range can be a month. If no value is provided for this field, the default will be current date. For example, if you make the API request on June 30, 2020, without providing the “from” and “to” parameters, by default the value of 'from' field will be “2020-06-30” and the value of the 'to' field will be “2020-07-01”. **Note**: The "trash" files cannot be filtered by date range and thus, the "from" and "to" fields should not be used for trash files. (format: date)
+  --to: string # End date in 'yyyy-mm-dd' 'yyyy-mm-dd' UTC format. (format: date)
   --trash-type: string # The type of Cloud recording that you would like to retrieve from the trash. The value can be one of the following: `meeting_recordings`: List all meeting recordings from the trash. `recording_file`: List all individual recording files from the trash. (default: meeting_recordings)
-]: nothing -> record {
+]: nothing -> record<from: string, to: string, next_page_token: string, page_count: int, page_size: int, total_records: int, meetings: table<account_id: string, duration: int, host_id: string, id: string, recording_count: string, start_time: string, topic: string, total_size: string, type: string, uuid: string, recording_files: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
-  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "mc" $mc "scalar") (serialize-qp "trash" $trash "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "trash_type" $trash_type "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page_size" $page_size "scalar") (serialize-qp "next_page_token" $next_page_token "scalar") (serialize-qp "mc" $mc "scalar") (serialize-qp "trash" $trash "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "trash_type" $trash_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/recordings") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"page_size": $page_size, "next_page_token": $next_page_token, "mc": $mc, "trash": $trash, "from": $qp_from, "to": $qp_to, "trash_type": $trash_type} | compact)
+    query: ({"page_size": $page_size, "next_page_token": $next_page_token, "mc": $mc, "trash": $trash, "from": $from, "to": $to, "trash_type": $trash_type} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -14044,8 +14093,8 @@ export def "upload-v-buser" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -14304,7 +14353,7 @@ export def "tsp-url-update" [
 # operationId: userTSPDelete
 export def "user-tsp-delete" [
   user_id: string
-  tsp_id: string
+  tsp_id: string@tsp-id-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14342,7 +14391,7 @@ export def "user-tsp-delete" [
 # operationId: userTSP
 export def "user-tsp" [
   user_id: string
-  tsp_id: string
+  tsp_id: string@tsp-id-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14382,7 +14431,7 @@ export def "user-tsp" [
 # --dial_in_numbers item shape: {code?: string, country_label?: string, number?: string, type?: "toll"|"tollfree"|"media_link"}
 export def "user-tsp-update" [
   user_id: string
-  tsp_id: string
+  tsp_id: string@tsp-id-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14476,7 +14525,7 @@ export def "webinars" [
   --accept: string@accept-completer # Response content type
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --page-number: int # **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field. The page number of the current page in the returned records. (default: 1)
-]: nothing -> record {
+]: nothing -> record<next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int, webinars: table<agenda: string, created_at: string, duration: int, host_id: string, id: int, join_url: string, start_time: string, timezone: string, topic: string, type: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -14635,6 +14684,7 @@ export def "webinar" [
 # PATCH /webinars/{webinarId}
 # operationId: webinarUpdate
 # --recurrence shape: {end_date_time?: string, end_times?: int, monthly_day?: int, monthly_week?: "-1"|"1"|"2"|"3"|"4", monthly_week_day?: "1"|"2"|"3"|"4"|"5"|"6"|"7", repeat_interval?: int, type: "1"|"2"|"3", weekly_days?: "1"|"2"|"3"|"4"|"5"|"6"|"7"}
+# --settings shape: {allow_multiple_devices?: bool, alternative_hosts?: string, approval_type?: "0"|"1"|"2", attendees_and_panelists_reminder_email_notification?: record, audio?: "both"|"telephony"|"voip", authentication_domains?: string, authentication_name?: string, authentication_option?: string, auto_recording?: "local"|"cloud"|"none", close_registration?: bool, contact_email?: string, contact_name?: string, email_language?: string, enforce_login?: bool, enforce_login_domains?: string, ... (19 more fields)}
 # --tracking_fields item shape: {field?: string, value?: string}
 export def "webinar-update" [
   webinar_id: int
@@ -14652,7 +14702,7 @@ export def "webinar-update" [
   --duration: int # Webinar duration (minutes). Used for scheduled webinar only.
   --password: string # [Webinar passcode](https://support.zoom.us/hc/en-us/articles/360033559832-Meeting-and-webinar-passwords). By default, passcode may only contain the following characters: [a-z A-Z 0-9 @ - _ * !] and can have a maximum of 10 characters. **Note:** If the account owner or the admin has configured [minimum passcode requirement settings](https://support.zoom.us/hc/en-us/articles/360033559832-Meeting-and-webinar-passwords#h_a427384b-e383-4f80-864d-794bf0a37604), the passcode value provided here must meet those requirements. If the requirements are enabled, you can view those requirements by calling either the [Get User Settings API](https://marketplace.zoom.us/docs/api-reference/zoom-api/users/usersettings) or the [Get Account Settings](https://marketplace.zoom.us/docs/api-reference/zoom-api/accounts/accountsettings) API. If "**Require a passcode when scheduling new meetings**" setting has been **enabled** **and** [locked](https://support.zoom.us/hc/en-us/articles/115005269866-Using-Tiered-Settings#locked) for the user, the passcode field will be autogenerated for the Webinar in the response even if it is not provided in the API request.
   --recurrence: record # Recurrence object. Use this object only for a meeting with type `8` i.e., a recurring meeting with fixed time. — shape: {end_date_time?: string, end_times?: int, monthly_day?: int, monthly_week?: "-1"|"1"|"2"|"3"|"4", monthly_week_day?: "1"|"2"|"3"|"4"|"5"|"6"|"7", repeat_interval?: int, type: "1"|"2"|"3", weekly_days?: "1"|"2"|"3"|"4"|"5"|"6"|"7"}
-  --settings: any
+  --settings: record # Webinar settings. — shape: {allow_multiple_devices?: bool, alternative_hosts?: string, approval_type?: "0"|"1"|"2", attendees_and_panelists_reminder_email_notification?: record, audio?: "both"|"telephony"|"voip", authentication_domains?: string, authentication_name?: string, authentication_option?: string, auto_recording?: "local"|"cloud"|"none", close_registration?: bool, contact_email?: string, contact_name?: string, email_language?: string, enforce_login?: bool, enforce_login_domains?: string, ... (19 more fields)}
   --start-time: string # Webinar start time, in the format "yyyy-MM-dd'T'HH:mm:ss'Z'." Should be in GMT time. In the format "yyyy-MM-dd'T'HH:mm:ss." This should be in local time and the timezone should be specified. Only used for scheduled webinars and recurring webinars with a fixed time. (format: date-time)
   --timezone: string # Time zone to format start_time. For example, "America/Los_Angeles". For scheduled meetings only. Please reference our [time zone](#timezones) list for supported time zones and their formats.
   --topic: string # Webinar topic.
@@ -14778,7 +14828,7 @@ export def "webinar-panelists" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> record<panelists: table<id: string, email: string, name: string, join_url: string>, total_records: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webinar_id | is-empty) { error make --unspanned { msg: "path parameter 'webinarId' must be non-empty" } }
@@ -14895,7 +14945,7 @@ export def "webinar-polls" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> record<polls: table<id: string, status: string, questions: list, title: string>, total_records: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webinar_id | is-empty) { error make --unspanned { msg: "path parameter 'webinarId' must be non-empty" } }
@@ -15102,7 +15152,7 @@ export def "webinar-registrants" [
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --page-number: int # **Deprecated** - This field has been deprecated and we will stop supporting it completely in a future release. Please use "next_page_token" for pagination instead of this field. The page number of the current page in the returned records. (default: 1)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
-]: nothing -> record {
+]: nothing -> record<next_page_token: string, page_count: int, page_number: int, page_size: int, total_records: int, registrants: table<id: string, address: string, city: string, comments: string, country: string, custom_questions: list, email: string, first_name: string, industry: string, job_title: string, last_name: string, no_of_employees: string, org: string, phone: string, purchasing_time_frame: string, role_in_purchase_process: string, state: string, zip: string, create_time: string, join_url: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webinar_id | is-empty) { error make --unspanned { msg: "path parameter 'webinarId' must be non-empty" } }
@@ -15366,7 +15416,7 @@ export def "webinar-registrant-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --occurrence-id: string # The meeting occurrence ID.
-]: nothing -> record {
+]: nothing -> record<id: string, address: string, city: string, comments: string, country: string, custom_questions: table<title: string, value: string>, email: string, first_name: string, industry: string, job_title: string, last_name: string, no_of_employees: string, org: string, phone: string, purchasing_time_frame: string, role_in_purchase_process: string, state: string, zip: string, create_time: string, join_url: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webinar_id | is-empty) { error make --unspanned { msg: "path parameter 'webinarId' must be non-empty" } }

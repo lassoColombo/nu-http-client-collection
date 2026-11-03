@@ -12,8 +12,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-developer-key" => { {scheme: $scheme, headers: {X-Developer-Key: $token_val}, query: "", location: "header"} }
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "x-developer-key" => { {scheme: $scheme, headers: {"X-Developer-Key": $token_val}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -691,11 +691,12 @@ export def "delete-events-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --behaviour: string@behaviour-completer # Whether the delete applies only to this event, to all events within the series from this event or to all events within the series.
+  --behaviour: string@behaviour-completer # Whether the delete applies only to this event, to all events within the series from this event or to all events within the series. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($behaviour == null) { error make --unspanned { msg: "required query parameter 'behaviour' missing: pass --behaviour" } }
   let qp = [(serialize-qp "behaviour" $behaviour "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/events/{id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -986,12 +987,14 @@ export def "get-scenarios-id-events" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start-date: string # Return the events from and including this date. (e.g. 2020-10-01)
-  --end-date: string # Return the events until and including this date. (e.g. 2020-10-30)
+  --start-date: string # Return the events from and including this date. (required, e.g. 2020-10-01)
+  --end-date: string # Return the events until and including this date. (required, e.g. 2020-10-30)
 ]: nothing -> table<amount: float, amount_in_base_currency: float, category: record<children: list, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, colour: string, currency_code: string, date: string, id: string, infinite_series: bool, note: string, repeat_interval: int, repeat_type: string, scenario: record<achieve_date: string, closing_balance: float, closing_balance_date: string, created_at: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, description: string, id: int, interest_rate: float, interest_rate_repeat_id: int, maximum_value: float, minimum_value: float, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, title: string, type: string, updated_at: string>, series_id: int, series_start_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'end_date' missing: pass --end-date" } }
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/scenarios/{id}/events") $qp $auth.query)
   let accept_val = "application/json"
@@ -1810,14 +1813,18 @@ export def "get-users-id-budget-summary" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --period: string@period-completer # The period to analyse in, one of `weeks`, `months` or `years`. Also supported is `event`, although event period analysis is only possible when the budget events gathered align, so in this case where all categories are analysed together, it's highly unlikely that event period analysis will be possible. (e.g. weeks)
-  --interval: int # The period interval, e.g. if the interval is 2 and the period is weeks, the budget will be analysed fortnightly. (e.g. 2)
-  --start-date: string # The date to start analysing the budget from. This will be bumped out to make full periods as necessary. (e.g. 2016-11-01)
-  --end-date: string # The date to stop analysing the budget from. This will be bumped out to make full periods as necessary. (e.g. 2016-11-30)
+  --period: string@period-completer # The period to analyse in, one of `weeks`, `months` or `years`. Also supported is `event`, although event period analysis is only possible when the budget events gathered align, so in this case where all categories are analysed together, it's highly unlikely that event period analysis will be possible. (required, e.g. weeks)
+  --interval: int # The period interval, e.g. if the interval is 2 and the period is weeks, the budget will be analysed fortnightly. (required, e.g. 2)
+  --start-date: string # The date to start analysing the budget from. This will be bumped out to make full periods as necessary. (required, e.g. 2016-11-01)
+  --end-date: string # The date to stop analysing the budget from. This will be bumped out to make full periods as necessary. (required, e.g. 2016-11-30)
 ]: nothing -> table<category: record<children: list, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, expense: record<average_actual_amount: float, average_forecast_amount: float, currency_code: string, end_date: string, periods: list, start_date: string, total_actual_amount: float, total_forecast_amount: float, total_over_by: float, total_under_by: float>, income: record<average_actual_amount: float, average_forecast_amount: float, currency_code: string, end_date: string, periods: list, start_date: string, total_actual_amount: float, total_forecast_amount: float, total_over_by: float, total_under_by: float>, is_transfer: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'period' missing: pass --period" } }
+  if ($interval == null) { error make --unspanned { msg: "required query parameter 'interval' missing: pass --interval" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'end_date' missing: pass --end-date" } }
   let qp = [(serialize-qp "period" $period "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/budget_summary") $qp $auth.query)
   let accept_val = "application/json"
@@ -1965,12 +1972,14 @@ export def "get-users-id-events" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start-date: string # Return the events from and including this date. (e.g. 2020-10-01)
-  --end-date: string # Return the events until and including this date. (e.g. 2020-10-30)
+  --start-date: string # Return the events from and including this date. (required, e.g. 2020-10-01)
+  --end-date: string # Return the events until and including this date. (required, e.g. 2020-10-30)
 ]: nothing -> table<amount: float, amount_in_base_currency: float, category: record<children: list, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, colour: string, currency_code: string, date: string, id: string, infinite_series: bool, note: string, repeat_interval: int, repeat_type: string, scenario: record<achieve_date: string, closing_balance: float, closing_balance_date: string, created_at: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, description: string, id: int, interest_rate: float, interest_rate_repeat_id: int, maximum_value: float, minimum_value: float, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, title: string, type: string, updated_at: string>, series_id: int, series_start_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'end_date' missing: pass --end-date" } }
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/events") $qp $auth.query)
   let accept_val = "application/json"
@@ -2262,16 +2271,22 @@ export def "get-users-id-trend-analysis" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --period: string@period-completer # The period to analyse in, one of `weeks`, `months` or `years`. Also supported is `event`, although event period analysis is only possible when the budget events gathered align, so in this case where all categories are analysed together, it's highly unlikely that event period analysis will be possible. (e.g. weeks)
-  --interval: int # The period interval, e.g. if the interval is 2 and the period is weeks, the budget will be analysed fortnightly. (e.g. true)
-  --start-date: string # The date to start analysing the budget from. This will be bumped out to make full periods as necessary. (e.g. 2016-11-01)
-  --end-date: string # The date to stop analysing the budget from. This will be bumped out to make full periods as necessary. (e.g. 2016-11-30)
-  --categories: string # A comma-separated list of category IDs to analyse. (e.g. 42,49)
-  --scenarios: string # A comma-separated list of scenario IDs to analyse. You're likely going to want to include all a user's scenarios here, unless you have reason to only analyse for a subset of scenarios. Regardless of what scenarios are analysed, all actuals (transactions) across all accounts will be included. (e.g. 11,29)
+  --period: string@period-completer # The period to analyse in, one of `weeks`, `months` or `years`. Also supported is `event`, although event period analysis is only possible when the budget events gathered align, so in this case where all categories are analysed together, it's highly unlikely that event period analysis will be possible. (required, e.g. weeks)
+  --interval: int # The period interval, e.g. if the interval is 2 and the period is weeks, the budget will be analysed fortnightly. (required, e.g. true)
+  --start-date: string # The date to start analysing the budget from. This will be bumped out to make full periods as necessary. (required, e.g. 2016-11-01)
+  --end-date: string # The date to stop analysing the budget from. This will be bumped out to make full periods as necessary. (required, e.g. 2016-11-30)
+  --categories: string # A comma-separated list of category IDs to analyse. (required, e.g. 42,49)
+  --scenarios: string # A comma-separated list of scenario IDs to analyse. You're likely going to want to include all a user's scenarios here, unless you have reason to only analyse for a subset of scenarios. Regardless of what scenarios are analysed, all actuals (transactions) across all accounts will be included. (required, e.g. 11,29)
 ]: nothing -> table<category: record<children: list, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, expense: record<average_actual_amount: float, average_forecast_amount: float, currency_code: string, end_date: string, periods: list, start_date: string, total_actual_amount: float, total_forecast_amount: float, total_over_by: float, total_under_by: float>, income: record<average_actual_amount: float, average_forecast_amount: float, currency_code: string, end_date: string, periods: list, start_date: string, total_actual_amount: float, total_forecast_amount: float, total_over_by: float, total_under_by: float>, is_transfer: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'period' missing: pass --period" } }
+  if ($interval == null) { error make --unspanned { msg: "required query parameter 'interval' missing: pass --interval" } }
+  if ($start_date == null) { error make --unspanned { msg: "required query parameter 'start_date' missing: pass --start-date" } }
+  if ($end_date == null) { error make --unspanned { msg: "required query parameter 'end_date' missing: pass --end-date" } }
+  if ($categories == null) { error make --unspanned { msg: "required query parameter 'categories' missing: pass --categories" } }
+  if ($scenarios == null) { error make --unspanned { msg: "required query parameter 'scenarios' missing: pass --scenarios" } }
   let qp = [(serialize-qp "period" $period "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "categories" $categories "scalar") (serialize-qp "scenarios" $scenarios "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/trend_analysis") $qp $auth.query)
   let accept_val = "application/json"

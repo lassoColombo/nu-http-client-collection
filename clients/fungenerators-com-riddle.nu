@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-fungenerators-api-secret" => { {scheme: $scheme, headers: {X-Fungenerators-Api-Secret: $token_val}, query: "", location: "header"} }
+    "x-fungenerators-api-secret" => { {scheme: $scheme, headers: {"X-Fungenerators-Api-Secret": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -149,10 +149,11 @@ export def "delete-riddle" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Riddle ID (format: string)
+  --id: string # Riddle ID (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-fungenerators-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/riddle" $qp $auth.query)
   let accept_val = "application/json"
@@ -219,12 +220,15 @@ export def "post-riddle" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --question: string # Riddle Question (format: string)
-  --category: string # Category of the riddle (format: string)
-  --answer: string # Answer(s) to the riddle question (format: string)
+  --question: string # Riddle Question (required, format: string)
+  --category: string # Category of the riddle (required, format: string)
+  --answer: string # Answer(s) to the riddle question (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-fungenerators-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($question == null) { error make --unspanned { msg: "required query parameter 'question' missing: pass --question" } }
+  if ($category == null) { error make --unspanned { msg: "required query parameter 'category' missing: pass --category" } }
+  if ($answer == null) { error make --unspanned { msg: "required query parameter 'answer' missing: pass --answer" } }
   let qp = [(serialize-qp "question" $question "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "answer" $answer "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/riddle" $qp $auth.query)
   let accept_val = "application/json"
@@ -256,12 +260,15 @@ export def "put-riddle" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --question: string # Riddle Question (format: string)
-  --category: string # Category of the riddle (format: string)
-  --answer: string # Answer(s) to the riddle question (format: string)
+  --question: string # Riddle Question (required, format: string)
+  --category: string # Category of the riddle (required, format: string)
+  --answer: string # Answer(s) to the riddle question (required, format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-fungenerators-api-secret"))
   let base = ($base_url | default $BASE_URL)
+  if ($question == null) { error make --unspanned { msg: "required query parameter 'question' missing: pass --question" } }
+  if ($category == null) { error make --unspanned { msg: "required query parameter 'category' missing: pass --category" } }
+  if ($answer == null) { error make --unspanned { msg: "required query parameter 'answer' missing: pass --answer" } }
   let qp = [(serialize-qp "question" $question "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "answer" $answer "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/riddle" $qp $auth.query)
   let accept_val = "application/json"

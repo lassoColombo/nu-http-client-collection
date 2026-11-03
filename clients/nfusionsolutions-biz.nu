@@ -137,14 +137,16 @@ export def "currencies-history-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --pairs: string # comma separated list of currency pairs. For example: USD/CAD,USD/EUR,USD/AUD
-  --start: string # start date of time period. format is yyyy-mm-dd (format: date-time)
+  --pairs: string # comma separated list of currency pairs. For example: USD/CAD,USD/EUR,USD/AUD (required)
+  --start: string # start date of time period. format is yyyy-mm-dd (required, format: date-time)
   --end: string # end date of time period. format is yyyy-mm-dd. Default is current date. (format: date-time)
   --interval: string # aggregation interval. Composed of an optional integer value (which defaults to 1 when not specified), followed by a type string which must be one of the following values: y=year, m=month, w=week, d=day, h=hour, mi=minute For example, a yearly interval can be specified as "y" and 6 month interval as "6m". If not specified the interval parameter default is 1 Day.
   --format: string@format-completer # to override content negotiation specify a value of json or xml
 ]: nothing -> table<data: record<baseCurrency: string, intervals: list, name: string, symbol: string>, error: string, requestedCurrency: string, requestedSymbol: string, requestedUnitOfMeasure: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($pairs == null) { error make --unspanned { msg: "required query parameter 'pairs' missing: pass --pairs" } }
+  if ($start == null) { error make --unspanned { msg: "required query parameter 'start' missing: pass --start" } }
   let qp = [(serialize-qp "pairs" $pairs "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/Currencies/history" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -215,11 +217,12 @@ export def "currencies-rate-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --pairs: string # comma separated list of currency pairs. For example: USD/CAD,USD/EUR,USD/AUD
+  --pairs: string # comma separated list of currency pairs. For example: USD/CAD,USD/EUR,USD/AUD (required)
   --format: string@format-completer # to override content negotiation specify a value of json or xml
 ]: nothing -> table<data: record<symbol: string, timestamp: string, value: float>, error: string, requestedCurrency: string, requestedSymbol: string, requestedUnitOfMeasure: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($pairs == null) { error make --unspanned { msg: "required query parameter 'pairs' missing: pass --pairs" } }
   let qp = [(serialize-qp "pairs" $pairs "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/Currencies/rate" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -290,11 +293,12 @@ export def "currencies-summary-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --pairs: string # comma separated list of currency pairs. For example: USD/CAD,USD/EUR,USD/AUD
+  --pairs: string # comma separated list of currency pairs. For example: USD/CAD,USD/EUR,USD/AUD (required)
   --format: string@format-completer # to override content negotiation specify a value of json or xml
 ]: nothing -> table<data: record<ask: float, baseCurrency: string, bid: float, fiftyTwoWeekHigh: float, fiftyTwoWeekLow: float, fiftyTwoWeekPercentChange: float, fourWeekPercentChange: float, high: float, last: float, low: float, oneDayChange: float, oneDayPercentChange: float, oneDayValue: float, open: float, symbol: string, timeStamp: string, twelveWeekPercentChange: float, yearToDatePercentChange: float>, error: string, requestedCurrency: string, requestedSymbol: string, requestedUnitOfMeasure: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($pairs == null) { error make --unspanned { msg: "required query parameter 'pairs' missing: pass --pairs" } }
   let qp = [(serialize-qp "pairs" $pairs "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/Currencies/summary" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -365,8 +369,8 @@ export def "metals-benchmark-history-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --metals: string # comma separated list of metals
-  --start: string # start date of time period. format is yyyy-mm-dd (format: date-time)
+  --metals: string # comma separated list of metals (required)
+  --start: string # start date of time period. format is yyyy-mm-dd (required, format: date-time)
   --end: string # end date of time period. format is yyyy-mm-dd. Default is current date. (format: date-time)
   --interval: string # aggregation interval. Composed of an optional integer value (which defaults to 1 when not specified), followed by a type string which must be one of the following values: y=year, m=month, w=week, d=day, h=hour, mi=minute For example, a yearly interval can be specified as "y" and 6 month interval as "6m". If not specified the interval parameter default is 1 Day.
   --historicalfx: oneof<nothing, bool> # if true use historical currency rates otherwise current currency rates. Defaults to true.
@@ -376,6 +380,8 @@ export def "metals-benchmark-history-get" [
 ]: nothing -> table<data: record<baseCurrency: string, intervals: list, name: string, symbol: string>, error: string, requestedCurrency: string, requestedSymbol: string, requestedUnitOfMeasure: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($metals == null) { error make --unspanned { msg: "required query parameter 'metals' missing: pass --metals" } }
+  if ($start == null) { error make --unspanned { msg: "required query parameter 'start' missing: pass --start" } }
   let qp = [(serialize-qp "metals" $metals "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "historicalfx" $historicalfx "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "unitofmeasure" $unitofmeasure "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/Metals/benchmark/history" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -409,13 +415,14 @@ export def "metals-benchmark-summary-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --metals: string # comma separated list of metals
+  --metals: string # comma separated list of metals (required)
   --currency: string # comma separated list of conversion currencies, defaults to USD
   --unitofmeasure: string@unitofmeasure-completer # unit of meaure, defaults to troy ounces. allowed values are: mg=milligram g=gram kg=kilogram gr=grain oz=ounce toz=troy ounce ct=carat dwt=pennyweight
   --format: string@format-completer # to override content negotiation specify a value of json or xml
 ]: nothing -> table<data: record<ask: float, baseCurrency: string, bid: float, fiftyTwoWeekHigh: float, fiftyTwoWeekLow: float, fiftyTwoWeekPercentChange: float, fourWeekPercentChange: float, high: float, last: float, low: float, oneDayChange: float, oneDayPercentChange: float, oneDayValue: float, open: float, symbol: string, timeStamp: string, twelveWeekPercentChange: float, yearToDatePercentChange: float>, error: string, requestedCurrency: string, requestedSymbol: string, requestedUnitOfMeasure: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($metals == null) { error make --unspanned { msg: "required query parameter 'metals' missing: pass --metals" } }
   let qp = [(serialize-qp "metals" $metals "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "unitofmeasure" $unitofmeasure "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/Metals/benchmark/summary" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -486,8 +493,8 @@ export def "metals-spot-history-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --metals: string # comma separated list of metals
-  --start: string # start date of time period. format is yyyy-mm-dd (format: date-time)
+  --metals: string # comma separated list of metals (required)
+  --start: string # start date of time period. format is yyyy-mm-dd (required, format: date-time)
   --end: string # end date of time period. format is yyyy-mm-dd. Default is current date. (format: date-time)
   --interval: string # aggregation interval. Composed of an optional integer value (which defaults to 1 when not specified), followed by a type string which must be one of the following values: y=year, m=month, w=week, d=day, h=hour, mi=minute For example, a yearly interval can be specified as "y" and 6 month interval as "6m". If not specified the interval parameter default is 1 Day.
   --historicalfx: oneof<nothing, bool> # if true use historical currency rates otherwise current currency rates. Defaults to true.
@@ -497,6 +504,8 @@ export def "metals-spot-history-get" [
 ]: nothing -> table<data: record<baseCurrency: string, intervals: list, name: string, symbol: string>, error: string, requestedCurrency: string, requestedSymbol: string, requestedUnitOfMeasure: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($metals == null) { error make --unspanned { msg: "required query parameter 'metals' missing: pass --metals" } }
+  if ($start == null) { error make --unspanned { msg: "required query parameter 'start' missing: pass --start" } }
   let qp = [(serialize-qp "metals" $metals "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "historicalfx" $historicalfx "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "unitofmeasure" $unitofmeasure "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/Metals/spot/history" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -530,13 +539,14 @@ export def "metals-spot-historical-performance-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --metals: string # comma separated list of metals
+  --metals: string # comma separated list of metals (required)
   --currency: string # comma separated list of conversion currencies, defaults to USD
   --unitofmeasure: string@unitofmeasure-completer # unit of meaure, defaults to troy ounces. allowed values are: mg=milligram g=gram kg=kilogram gr=grain oz=ounce toz=troy ounce ct=carat dwt=pennyweight
   --format: string@format-completer # to override content negotiation specify a value of json or xml
 ]: nothing -> table<data: record<baseCurrency: string, intervals: list, name: string, symbol: string>, error: string, requestedCurrency: string, requestedSymbol: string, requestedUnitOfMeasure: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($metals == null) { error make --unspanned { msg: "required query parameter 'metals' missing: pass --metals" } }
   let qp = [(serialize-qp "metals" $metals "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "unitofmeasure" $unitofmeasure "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/Metals/spot/performance" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -570,7 +580,7 @@ export def "metals-spot-annual-historical-performance-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --metals: string # comma separated list of metals
+  --metals: string # comma separated list of metals (required)
   --currency: string # comma separated list of conversion currencies, defaults to USD
   --unitofmeasure: string@unitofmeasure-completer # unit of meaure, defaults to troy ounces. allowed values are: mg=milligram g=gram kg=kilogram gr=grain oz=ounce toz=troy ounce ct=carat dwt=pennyweight
   --format: string@format-completer # to override content negotiation specify a value of json or xml
@@ -578,6 +588,7 @@ export def "metals-spot-annual-historical-performance-get" [
 ]: nothing -> table<data: record<baseCurrency: string, intervals: list, name: string, symbol: string>, error: string, requestedCurrency: string, requestedSymbol: string, requestedUnitOfMeasure: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($metals == null) { error make --unspanned { msg: "required query parameter 'metals' missing: pass --metals" } }
   let qp = [(serialize-qp "metals" $metals "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "unitofmeasure" $unitofmeasure "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "years" $years "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/Metals/spot/performance/annual" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -611,14 +622,16 @@ export def "metals-spot-ratio-history-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --pairs: string # comma separated list of metals
-  --start: string # start date of time period. format is yyyy-mm-dd (format: date-time)
+  --pairs: string # comma separated list of metals (required)
+  --start: string # start date of time period. format is yyyy-mm-dd (required, format: date-time)
   --end: string # end date of time period. format is yyyy-mm-dd. Default is current date. (format: date-time)
   --interval: string # aggregation interval. Composed of an optional integer value (which defaults to 1 when not specified), followed by a type string which must be one of the following values: y=year, m=month, w=week, d=day, h=hour, mi=minute For example, a yearly interval can be specified as "y" and 6 month interval as "6m". If not specified the interval parameter default is 1 Day.
   --format: string@format-completer # to override content negotiation specify a value of json or xml
 ]: nothing -> table<data: record<baseCurrency: string, intervals: list, name: string, symbol: string>, error: string, requestedCurrency: string, requestedSymbol: string, requestedUnitOfMeasure: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($pairs == null) { error make --unspanned { msg: "required query parameter 'pairs' missing: pass --pairs" } }
+  if ($start == null) { error make --unspanned { msg: "required query parameter 'start' missing: pass --start" } }
   let qp = [(serialize-qp "pairs" $pairs "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/Metals/spot/ratio/history" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -652,11 +665,12 @@ export def "metals-spot-ratio-summary-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --pairs: string # comma separated list of metal pairs. For example: gold/silver,gold/platinum,silver/palladium
+  --pairs: string # comma separated list of metal pairs. For example: gold/silver,gold/platinum,silver/palladium (required)
   --format: string@format-completer # to override content negotiation specify a value of json or xml
 ]: nothing -> table<data: record<ask: float, baseCurrency: string, bid: float, fiftyTwoWeekHigh: float, fiftyTwoWeekLow: float, fiftyTwoWeekPercentChange: float, fourWeekPercentChange: float, high: float, last: float, low: float, oneDayChange: float, oneDayPercentChange: float, oneDayValue: float, open: float, symbol: string, timeStamp: string, twelveWeekPercentChange: float, yearToDatePercentChange: float>, error: string, requestedCurrency: string, requestedSymbol: string, requestedUnitOfMeasure: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($pairs == null) { error make --unspanned { msg: "required query parameter 'pairs' missing: pass --pairs" } }
   let qp = [(serialize-qp "pairs" $pairs "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/Metals/spot/ratio/summary" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -690,13 +704,14 @@ export def "metals-spot-summary-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --metals: string # comma separated list of metals
+  --metals: string # comma separated list of metals (required)
   --currency: string # comma separated list of conversion currencies, defaults to USD
   --unitofmeasure: string@unitofmeasure-completer # unit of meaure, defaults to troy ounces. allowed values are: mg=milligram g=gram kg=kilogram gr=grain oz=ounce toz=troy ounce ct=carat dwt=pennyweight
   --format: string@format-completer # to override content negotiation specify a value of json or xml
 ]: nothing -> table<data: record<ask: float, baseCurrency: string, bid: float, fiftyTwoWeekHigh: float, fiftyTwoWeekLow: float, fiftyTwoWeekPercentChange: float, fourWeekPercentChange: float, high: float, last: float, low: float, oneDayChange: float, oneDayPercentChange: float, oneDayValue: float, open: float, symbol: string, timeStamp: string, twelveWeekPercentChange: float, yearToDatePercentChange: float>, error: string, requestedCurrency: string, requestedSymbol: string, requestedUnitOfMeasure: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($metals == null) { error make --unspanned { msg: "required query parameter 'metals' missing: pass --metals" } }
   let qp = [(serialize-qp "metals" $metals "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "unitofmeasure" $unitofmeasure "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/Metals/spot/summary" $qp $auth.query)
   let accept_val = ($accept | default "application/json")

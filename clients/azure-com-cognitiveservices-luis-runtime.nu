@@ -1,4 +1,4 @@
-# Auto-generated client for Language Understanding Intelligent Service (LUIS) Endpoint API for running predictions and extracting user intentions and entities from utterances. vv2.0 preview
+# Auto-generated client for Language Understanding Intelligent Service (LUIS) Endpoint API for running predictions and extracting user intentions and entities from utterances. v2.0 preview
 # Source: https://api.apis.guru/v2/specs/azure.com/cognitiveservices-LUIS-Runtime/v2.0 preview/swagger.json
 # Auth: --token flag or $env.LANGUAGE_UNDERSTANDING_INTELLIGENT_SERVICE_LUIS_ENDPOINT_API_FOR_RUNNING_PREDICTIONS_AND_EXTRACTING_USER_INTENTIONS_AND_ENTITIES_FROM_UTTERANCES_TOKEN
 
@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {Ocp-Apim-Subscription-Key: $token_val}, query: "", location: "header"} }
+    "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {"Ocp-Apim-Subscription-Key": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -139,7 +139,7 @@ export def "prediction-resolve2" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The utterance to predict.
+  --q: string # The utterance to predict. (required)
   --timezone-offset: float # The timezone offset for the location of the request.
   --verbose: oneof<nothing, bool> # If true, return all intents instead of just the top scoring intent.
   --staging: oneof<nothing, bool> # Use the staging endpoint slot.
@@ -150,6 +150,7 @@ export def "prediction-resolve2" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "timezoneOffset" $timezone_offset "scalar") (serialize-qp "verbose" $verbose "scalar") (serialize-qp "staging" $staging "scalar") (serialize-qp "spellCheck" $spell_check "scalar") (serialize-qp "bing-spell-check-subscription-key" $bing_spell_check_subscription_key "scalar") (serialize-qp "log" $log "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/{app_id}") $qp $auth.query)
   let accept_val = "application/json"

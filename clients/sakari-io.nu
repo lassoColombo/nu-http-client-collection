@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -428,7 +428,7 @@ export def "contacts-fetch-all" [
   --mobile: string # Filter by mobile or part of
   --email: string # Filter by email or part of
   --tags: string # Filter by tag(s)
-]: nothing -> record<error: record<code: string, message: string>, pagination: record<limit: int, offset: int, totalCount: int>, success: bool, data: table<created: record, error: record, updated: record, valid: bool>> {
+]: nothing -> record<error: record<code: string, message: string>, pagination: record<limit: int, offset: int, totalCount: int>, success: bool, data: table<email: string, firstName: string, id: string, lastName: string, mobile: record, attributes: record, tags: list, created: record, error: record, updated: record, valid: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -554,7 +554,7 @@ export def "contacts-fetch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<created: record<at: string, by: record>, error: record<code: string, description: string>, updated: record<at: string, by: record>, valid: bool>, success: bool> {
+]: nothing -> record<data: record<email: string, firstName: string, id: string, lastName: string, mobile: record<country: string, number: string>, attributes: record, tags: list<record>, created: record<at: string, by: record>, error: record<code: string, description: string>, updated: record<at: string, by: record>, valid: bool>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -592,7 +592,7 @@ export def "contacts-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<created: record<at: string, by: record>, error: record<code: string, description: string>, updated: record<at: string, by: record>, valid: bool>, success: bool> {
+]: nothing -> record<data: record<email: string, firstName: string, id: string, lastName: string, mobile: record<country: string, number: string>, attributes: record, tags: list<record>, created: record<at: string, by: record>, error: record<code: string, description: string>, updated: record<at: string, by: record>, valid: bool>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -1184,18 +1184,18 @@ export def "tools-share-file" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --media: string # format: binary
+  --body: string
 ]: any -> record<data: record<expires: string, link: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/tools/sharefile" $auth.query)
-  let req_body = {"media": $media} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["media"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url

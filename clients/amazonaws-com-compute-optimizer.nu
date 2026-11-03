@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -96,8 +96,10 @@ def base-url-completer [] { ["http://compute-optimizer.us-east-1.amazonaws.com" 
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def resource-type-completer [] { ["AutoScalingGroup" "EbsVolume" "Ec2Instance" "EcsService" "LambdaFunction" "NotApplicable"] }
 def x-amz-target-completer [] { ["ComputeOptimizerService.DeleteRecommendationPreferences"] }
 def x-amz-target-completer-1 [] { ["ComputeOptimizerService.DescribeRecommendationExportJobs"] }
+def file-format-completer [] { ["Csv"] }
 def x-amz-target-completer-2 [] { ["ComputeOptimizerService.ExportAutoScalingGroupRecommendations"] }
 def x-amz-target-completer-3 [] { ["ComputeOptimizerService.ExportEBSVolumeRecommendations"] }
 def x-amz-target-completer-4 [] { ["ComputeOptimizerService.ExportEC2InstanceRecommendations"] }
@@ -106,6 +108,7 @@ def x-amz-target-completer-6 [] { ["ComputeOptimizerService.ExportLambdaFunction
 def x-amz-target-completer-7 [] { ["ComputeOptimizerService.GetAutoScalingGroupRecommendations"] }
 def x-amz-target-completer-8 [] { ["ComputeOptimizerService.GetEBSVolumeRecommendations"] }
 def x-amz-target-completer-9 [] { ["ComputeOptimizerService.GetEC2InstanceRecommendations"] }
+def stat-completer [] { ["Average" "Maximum"] }
 def x-amz-target-completer-10 [] { ["ComputeOptimizerService.GetEC2RecommendationProjectedMetrics"] }
 def x-amz-target-completer-11 [] { ["ComputeOptimizerService.GetECSServiceRecommendationProjectedMetrics"] }
 def x-amz-target-completer-12 [] { ["ComputeOptimizerService.GetECSServiceRecommendations"] }
@@ -115,7 +118,10 @@ def x-amz-target-completer-15 [] { ["ComputeOptimizerService.GetEnrollmentStatus
 def x-amz-target-completer-16 [] { ["ComputeOptimizerService.GetLambdaFunctionRecommendations"] }
 def x-amz-target-completer-17 [] { ["ComputeOptimizerService.GetRecommendationPreferences"] }
 def x-amz-target-completer-18 [] { ["ComputeOptimizerService.GetRecommendationSummaries"] }
+def enhanced-infrastructure-metrics-completer [] { ["Active" "Inactive"] }
+def inferred-workload-types-completer [] { ["Active" "Inactive"] }
 def x-amz-target-completer-19 [] { ["ComputeOptimizerService.PutRecommendationPreferences"] }
+def status-completer [] { ["Active" "Failed" "Inactive" "Pending"] }
 def x-amz-target-completer-20 [] { ["ComputeOptimizerService.UpdateEnrollmentStatus"] }
 
 # List all available API commands with their parameters
@@ -145,6 +151,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: DeleteRecommendationPreferences
+# --scope shape: {name?: "Organization"|"AccountId"|"ResourceArn", value?: string}
 export def "delete-recommendation-preferences" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -162,14 +169,15 @@ export def "delete-recommendation-preferences" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  resource_type: any
-  --scope: any
-  recommendation_preference_names: any
+  --x-amz-target: string@x-amz-target-completer # required
+  resource_type: string@resource-type-completer # The target resource type of the recommendation preference to delete. The Ec2Instance option encompasses standalone instances and instances that are part of Auto Scaling groups. The AutoScalingGroup option encompasses only instances that are part of an Auto Scaling group. The valid values for this parameter are Ec2Instance and AutoScalingGroup.
+  --scope: record # Describes the scope of a recommendation preference. Recommendation preferences can be created at the organization level (for management accounts of an organization only), account level, and resource level. For more information, see Activating enhanced infrastructure metrics (https://docs.aws.amazon.com/compute-optimizer/latest/ug/enhanced-infrastructure-metrics.html) in the Compute Optimizer User Guide. You cannot create recommendation preferences for Auto Scaling groups at the organization and account levels. You can create recommendation preferences for Auto Scaling groups only at the resource level by specifying a scope name of ResourceArn and a scope value of the Auto Scaling group Amazon Resource Name (ARN). This will configure the preference for all instances that are part of the specified Auto Scaling group. You also cannot create recommendation preferences at the resource level for instances that are part of an Auto Scaling group. You can create recommendation preferences at the resource level only for standalone instances. — shape: {name?: "Organization"|"AccountId"|"ResourceArn", value?: string}
+  recommendation_preference_names: list<string> # The name of the recommendation preference to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.DeleteRecommendationPreferences")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceType": $resource_type, "scope": $scope, "recommendationPreferenceNames": $recommendation_preference_names} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -195,6 +203,7 @@ export def "delete-recommendation-preferences" [
 #
 # POST /
 # operationId: DescribeRecommendationExportJobs
+# --filters item shape: {name?: "ResourceType"|"JobStatus", values?: list<string>}
 export def "describe-recommendation-export-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -214,15 +223,16 @@ export def "describe-recommendation-export-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  --job-ids: any
-  --filters: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<recommendationExportJobs: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  --job-ids: list<string> # The identification numbers of the export jobs to return. An export job ID is returned when you create an export using the ExportAutoScalingGroupRecommendations or ExportEC2InstanceRecommendations actions. All export jobs created in the last seven days are returned if this parameter is omitted.
+  --filters: list # An array of objects to specify a filter that returns a more specific list of export jobs. — item shape: {name?: "ResourceType"|"JobStatus", values?: list<string>}
+  --next-token-body: string # The token to advance to the next page of export jobs. (body field)
+  --max-results-body: int # The maximum number of export jobs to return with a single request. To retrieve the remaining results, make another request with the returned nextToken value. (body field)
+]: any -> record<recommendationExportJobs: table<jobId: string, destination: record, resourceType: string, status: string, creationTimestamp: string, lastUpdatedTimestamp: string, failureReason: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.DescribeRecommendationExportJobs")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"jobIds": $job_ids, "filters": $filters, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -249,6 +259,9 @@ export def "describe-recommendation-export-jobs" [
 #
 # POST /
 # operationId: ExportAutoScalingGroupRecommendations
+# --filters item shape: {name?: "Finding"|"FindingReasonCodes"|"RecommendationSourceType", values?: list<string>}
+# --s3DestinationConfig shape: {bucket?: string, keyPrefix?: string}
+# --recommendationPreferences shape: {cpuVendorArchitectures?: list<string>}
 export def "export-auto-scaling-group-recommendations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -266,18 +279,19 @@ export def "export-auto-scaling-group-recommendations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  --account-ids: any
-  --filters: any
-  --fields-to-export: any
-  s3_destination_config: any
-  --file-format: any
-  --include-member-accounts: any
-  --recommendation-preferences: any
-]: any -> record<jobId: record, s3Destination: record<bucket: record, key: record, metadataKey: record>> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  --account-ids: list<string> # The IDs of the Amazon Web Services accounts for which to export Auto Scaling group recommendations. If your account is the management account of an organization, use this parameter to specify the member account for which you want to export recommendations. This parameter cannot be specified together with the include member accounts parameter. The parameters are mutually exclusive. Recommendations for member accounts are not included in the export if this parameter, or the include member accounts parameter, is omitted. You can specify multiple account IDs per request.
+  --filters: list # An array of objects to specify a filter that exports a more specific set of Auto Scaling group recommendations. — item shape: {name?: "Finding"|"FindingReasonCodes"|"RecommendationSourceType", values?: list<string>}
+  --fields-to-export: list<string> # The recommendations data to include in the export file. For more information about the fields that can be exported, see Exported files (https://docs.aws.amazon.com/compute-optimizer/latest/ug/exporting-recommendations.html#exported-files) in the Compute Optimizer User Guide.
+  s3_destination_config: record # Describes the destination Amazon Simple Storage Service (Amazon S3) bucket name and key prefix for a recommendations export job. You must create the destination Amazon S3 bucket for your recommendations export before you create the export job. Compute Optimizer does not create the S3 bucket for you. After you create the S3 bucket, ensure that it has the required permission policy to allow Compute Optimizer to write the export file to it. If you plan to specify an object prefix when you create the export job, you must include the object prefix in the policy that you add to the S3 bucket. For more information, see Amazon S3 Bucket Policy for Compute Optimizer (https://docs.aws.amazon.com/compute-optimizer/latest/ug/create-s3-bucket-policy-for-compute-optimizer.html) in the Compute Optimizer User Guide. — shape: {bucket?: string, keyPrefix?: string}
+  --file-format: string@file-format-completer # The format of the export file. The only export file format currently supported is Csv.
+  --include-member-accounts: oneof<nothing, bool> # Indicates whether to include recommendations for resources in all member accounts of the organization if your account is the management account of an organization. The member accounts must also be opted in to Compute Optimizer, and trusted access for Compute Optimizer must be enabled in the organization account. For more information, see Compute Optimizer and Amazon Web Services Organizations trusted access (https://docs.aws.amazon.com/compute-optimizer/latest/ug/security-iam.html#trusted-service-access) in the Compute Optimizer User Guide. Recommendations for member accounts of the organization are not included in the export file if this parameter is omitted. This parameter cannot be specified together with the account IDs parameter. The parameters are mutually exclusive. Recommendations for member accounts are not included in the export if this parameter, or the account IDs parameter, is omitted.
+  --recommendation-preferences: record # Describes the recommendation preferences to return in the response of a GetAutoScalingGroupRecommendations, GetEC2InstanceRecommendations, and GetEC2RecommendationProjectedMetrics request. — shape: {cpuVendorArchitectures?: list<string>}
+]: any -> record<jobId: string, s3Destination: record<bucket: string, key: string, metadataKey: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.ExportAutoScalingGroupRecommendations")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"accountIds": $account_ids, "filters": $filters, "fieldsToExport": $fields_to_export, "s3DestinationConfig": $s3_destination_config, "fileFormat": $file_format, "includeMemberAccounts": $include_member_accounts, "recommendationPreferences": $recommendation_preferences} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -303,7 +317,8 @@ export def "export-auto-scaling-group-recommendations" [
 #
 # POST /
 # operationId: ExportEBSVolumeRecommendations
-# --s3DestinationConfig shape: {bucket?: any, keyPrefix?: any}
+# --filters item shape: {name?: "Finding", values?: list<string>}
+# --s3DestinationConfig shape: {bucket?: string, keyPrefix?: string}
 export def "export-ebs-volume-recommendations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -321,17 +336,18 @@ export def "export-ebs-volume-recommendations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  --account-ids: any
-  --filters: any
-  --fields-to-export: any
-  s3_destination_config: record # Describes the destination Amazon Simple Storage Service (Amazon S3) bucket name and key prefix for a recommendations export job. You must create the destination Amazon S3 bucket for your recommendations export before you create the export job. Compute Optimizer does not create the S3 bucket for you. After you create the S3 bucket, ensure that it has the required permission policy to allow Compute Optimizer to write the export file to it. If you plan to specify an object prefix when you create the export job, you must include the object prefix in the policy that you add to the S3 bucket. For more information, see Amazon S3 Bucket Policy for Compute Optimizer (https://docs.aws.amazon.com/compute-optimizer/latest/ug/create-s3-bucket-policy-for-compute-optimizer.html) in the Compute Optimizer User Guide. — shape: {bucket?: any, keyPrefix?: any}
-  --file-format: any
-  --include-member-accounts: any
-]: any -> record<jobId: record, s3Destination: record<bucket: record, key: record, metadataKey: record>> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  --account-ids: list<string> # The IDs of the Amazon Web Services accounts for which to export Amazon EBS volume recommendations. If your account is the management account of an organization, use this parameter to specify the member account for which you want to export recommendations. This parameter cannot be specified together with the include member accounts parameter. The parameters are mutually exclusive. Recommendations for member accounts are not included in the export if this parameter, or the include member accounts parameter, is omitted. You can specify multiple account IDs per request.
+  --filters: list # An array of objects to specify a filter that exports a more specific set of Amazon EBS volume recommendations. — item shape: {name?: "Finding", values?: list<string>}
+  --fields-to-export: list<string> # The recommendations data to include in the export file. For more information about the fields that can be exported, see Exported files (https://docs.aws.amazon.com/compute-optimizer/latest/ug/exporting-recommendations.html#exported-files) in the Compute Optimizer User Guide.
+  s3_destination_config: record # Describes the destination Amazon Simple Storage Service (Amazon S3) bucket name and key prefix for a recommendations export job. You must create the destination Amazon S3 bucket for your recommendations export before you create the export job. Compute Optimizer does not create the S3 bucket for you. After you create the S3 bucket, ensure that it has the required permission policy to allow Compute Optimizer to write the export file to it. If you plan to specify an object prefix when you create the export job, you must include the object prefix in the policy that you add to the S3 bucket. For more information, see Amazon S3 Bucket Policy for Compute Optimizer (https://docs.aws.amazon.com/compute-optimizer/latest/ug/create-s3-bucket-policy-for-compute-optimizer.html) in the Compute Optimizer User Guide. — shape: {bucket?: string, keyPrefix?: string}
+  --file-format: string@file-format-completer # The format of the export file. The only export file format currently supported is Csv.
+  --include-member-accounts: oneof<nothing, bool> # Indicates whether to include recommendations for resources in all member accounts of the organization if your account is the management account of an organization. The member accounts must also be opted in to Compute Optimizer, and trusted access for Compute Optimizer must be enabled in the organization account. For more information, see Compute Optimizer and Amazon Web Services Organizations trusted access (https://docs.aws.amazon.com/compute-optimizer/latest/ug/security-iam.html#trusted-service-access) in the Compute Optimizer User Guide. Recommendations for member accounts of the organization are not included in the export file if this parameter is omitted. This parameter cannot be specified together with the account IDs parameter. The parameters are mutually exclusive. Recommendations for member accounts are not included in the export if this parameter, or the account IDs parameter, is omitted.
+]: any -> record<jobId: string, s3Destination: record<bucket: string, key: string, metadataKey: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.ExportEBSVolumeRecommendations")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"accountIds": $account_ids, "filters": $filters, "fieldsToExport": $fields_to_export, "s3DestinationConfig": $s3_destination_config, "fileFormat": $file_format, "includeMemberAccounts": $include_member_accounts} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -357,6 +373,9 @@ export def "export-ebs-volume-recommendations" [
 #
 # POST /
 # operationId: ExportEC2InstanceRecommendations
+# --filters item shape: {name?: "Finding"|"FindingReasonCodes"|"RecommendationSourceType", values?: list<string>}
+# --s3DestinationConfig shape: {bucket?: string, keyPrefix?: string}
+# --recommendationPreferences shape: {cpuVendorArchitectures?: list<string>}
 export def "export-ec2-instance-recommendations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -374,18 +393,19 @@ export def "export-ec2-instance-recommendations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  --account-ids: any
-  --filters: any
-  --fields-to-export: any
-  s3_destination_config: any
-  --file-format: any
-  --include-member-accounts: any
-  --recommendation-preferences: any
-]: any -> record<jobId: record, s3Destination: record<bucket: record, key: record, metadataKey: record>> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  --account-ids: list<string> # The IDs of the Amazon Web Services accounts for which to export instance recommendations. If your account is the management account of an organization, use this parameter to specify the member account for which you want to export recommendations. This parameter cannot be specified together with the include member accounts parameter. The parameters are mutually exclusive. Recommendations for member accounts are not included in the export if this parameter, or the include member accounts parameter, is omitted. You can specify multiple account IDs per request.
+  --filters: list # An array of objects to specify a filter that exports a more specific set of instance recommendations. — item shape: {name?: "Finding"|"FindingReasonCodes"|"RecommendationSourceType", values?: list<string>}
+  --fields-to-export: list<string> # The recommendations data to include in the export file. For more information about the fields that can be exported, see Exported files (https://docs.aws.amazon.com/compute-optimizer/latest/ug/exporting-recommendations.html#exported-files) in the Compute Optimizer User Guide.
+  s3_destination_config: record # Describes the destination Amazon Simple Storage Service (Amazon S3) bucket name and key prefix for a recommendations export job. You must create the destination Amazon S3 bucket for your recommendations export before you create the export job. Compute Optimizer does not create the S3 bucket for you. After you create the S3 bucket, ensure that it has the required permission policy to allow Compute Optimizer to write the export file to it. If you plan to specify an object prefix when you create the export job, you must include the object prefix in the policy that you add to the S3 bucket. For more information, see Amazon S3 Bucket Policy for Compute Optimizer (https://docs.aws.amazon.com/compute-optimizer/latest/ug/create-s3-bucket-policy-for-compute-optimizer.html) in the Compute Optimizer User Guide. — shape: {bucket?: string, keyPrefix?: string}
+  --file-format: string@file-format-completer # The format of the export file. The only export file format currently supported is Csv.
+  --include-member-accounts: oneof<nothing, bool> # Indicates whether to include recommendations for resources in all member accounts of the organization if your account is the management account of an organization. The member accounts must also be opted in to Compute Optimizer, and trusted access for Compute Optimizer must be enabled in the organization account. For more information, see Compute Optimizer and Amazon Web Services Organizations trusted access (https://docs.aws.amazon.com/compute-optimizer/latest/ug/security-iam.html#trusted-service-access) in the Compute Optimizer User Guide. Recommendations for member accounts of the organization are not included in the export file if this parameter is omitted. Recommendations for member accounts are not included in the export if this parameter, or the account IDs parameter, is omitted.
+  --recommendation-preferences: record # Describes the recommendation preferences to return in the response of a GetAutoScalingGroupRecommendations, GetEC2InstanceRecommendations, and GetEC2RecommendationProjectedMetrics request. — shape: {cpuVendorArchitectures?: list<string>}
+]: any -> record<jobId: string, s3Destination: record<bucket: string, key: string, metadataKey: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.ExportEC2InstanceRecommendations")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"accountIds": $account_ids, "filters": $filters, "fieldsToExport": $fields_to_export, "s3DestinationConfig": $s3_destination_config, "fileFormat": $file_format, "includeMemberAccounts": $include_member_accounts, "recommendationPreferences": $recommendation_preferences} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -411,7 +431,8 @@ export def "export-ec2-instance-recommendations" [
 #
 # POST /
 # operationId: ExportECSServiceRecommendations
-# --s3DestinationConfig shape: {bucket?: any, keyPrefix?: any}
+# --filters item shape: {name?: "Finding"|"FindingReasonCode", values?: list<string>}
+# --s3DestinationConfig shape: {bucket?: string, keyPrefix?: string}
 export def "export-ecs-service-recommendations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -429,17 +450,18 @@ export def "export-ecs-service-recommendations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  --account-ids: any
-  --filters: any
-  --fields-to-export: any
-  s3_destination_config: record # Describes the destination Amazon Simple Storage Service (Amazon S3) bucket name and key prefix for a recommendations export job. You must create the destination Amazon S3 bucket for your recommendations export before you create the export job. Compute Optimizer does not create the S3 bucket for you. After you create the S3 bucket, ensure that it has the required permission policy to allow Compute Optimizer to write the export file to it. If you plan to specify an object prefix when you create the export job, you must include the object prefix in the policy that you add to the S3 bucket. For more information, see Amazon S3 Bucket Policy for Compute Optimizer (https://docs.aws.amazon.com/compute-optimizer/latest/ug/create-s3-bucket-policy-for-compute-optimizer.html) in the Compute Optimizer User Guide. — shape: {bucket?: any, keyPrefix?: any}
-  --file-format: any
-  --include-member-accounts: any
-]: any -> record<jobId: record, s3Destination: record<bucket: record, key: record, metadataKey: record>> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  --account-ids: list<string> # The Amazon Web Services account IDs for the export Amazon ECS service recommendations. If your account is the management account or the delegated administrator of an organization, use this parameter to specify the member account you want to export recommendations to. This parameter can't be specified together with the include member accounts parameter. The parameters are mutually exclusive. If this parameter or the include member accounts parameter is omitted, the recommendations for member accounts aren't included in the export. You can specify multiple account IDs per request.
+  --filters: list # An array of objects to specify a filter that exports a more specific set of Amazon ECS service recommendations. — item shape: {name?: "Finding"|"FindingReasonCode", values?: list<string>}
+  --fields-to-export: list<string> # The recommendations data to include in the export file. For more information about the fields that can be exported, see Exported files (https://docs.aws.amazon.com/compute-optimizer/latest/ug/exporting-recommendations.html#exported-files) in the Compute Optimizer User Guide.
+  s3_destination_config: record # Describes the destination Amazon Simple Storage Service (Amazon S3) bucket name and key prefix for a recommendations export job. You must create the destination Amazon S3 bucket for your recommendations export before you create the export job. Compute Optimizer does not create the S3 bucket for you. After you create the S3 bucket, ensure that it has the required permission policy to allow Compute Optimizer to write the export file to it. If you plan to specify an object prefix when you create the export job, you must include the object prefix in the policy that you add to the S3 bucket. For more information, see Amazon S3 Bucket Policy for Compute Optimizer (https://docs.aws.amazon.com/compute-optimizer/latest/ug/create-s3-bucket-policy-for-compute-optimizer.html) in the Compute Optimizer User Guide. — shape: {bucket?: string, keyPrefix?: string}
+  --file-format: string@file-format-completer # The format of the export file. The CSV file is the only export file format currently supported.
+  --include-member-accounts: oneof<nothing, bool> # If your account is the management account or the delegated administrator of an organization, this parameter indicates whether to include recommendations for resources in all member accounts of the organization. The member accounts must also be opted in to Compute Optimizer, and trusted access for Compute Optimizer must be enabled in the organization account. For more information, see Compute Optimizer and Amazon Web Services Organizations trusted access (https://docs.aws.amazon.com/compute-optimizer/latest/ug/security-iam.html#trusted-service-access) in the Compute Optimizer User Guide. If this parameter is omitted, recommendations for member accounts of the organization aren't included in the export file. If this parameter or the account ID parameter is omitted, recommendations for member accounts aren't included in the export.
+]: any -> record<jobId: string, s3Destination: record<bucket: string, key: string, metadataKey: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.ExportECSServiceRecommendations")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"accountIds": $account_ids, "filters": $filters, "fieldsToExport": $fields_to_export, "s3DestinationConfig": $s3_destination_config, "fileFormat": $file_format, "includeMemberAccounts": $include_member_accounts} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -465,7 +487,8 @@ export def "export-ecs-service-recommendations" [
 #
 # POST /
 # operationId: ExportLambdaFunctionRecommendations
-# --s3DestinationConfig shape: {bucket?: any, keyPrefix?: any}
+# --filters item shape: {name?: "Finding"|"FindingReasonCode", values?: list<string>}
+# --s3DestinationConfig shape: {bucket?: string, keyPrefix?: string}
 export def "export-lambda-function-recommendations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -483,17 +506,18 @@ export def "export-lambda-function-recommendations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  --account-ids: any
-  --filters: any
-  --fields-to-export: any
-  s3_destination_config: record # Describes the destination Amazon Simple Storage Service (Amazon S3) bucket name and key prefix for a recommendations export job. You must create the destination Amazon S3 bucket for your recommendations export before you create the export job. Compute Optimizer does not create the S3 bucket for you. After you create the S3 bucket, ensure that it has the required permission policy to allow Compute Optimizer to write the export file to it. If you plan to specify an object prefix when you create the export job, you must include the object prefix in the policy that you add to the S3 bucket. For more information, see Amazon S3 Bucket Policy for Compute Optimizer (https://docs.aws.amazon.com/compute-optimizer/latest/ug/create-s3-bucket-policy-for-compute-optimizer.html) in the Compute Optimizer User Guide. — shape: {bucket?: any, keyPrefix?: any}
-  --file-format: any
-  --include-member-accounts: any
-]: any -> record<jobId: record, s3Destination: record<bucket: record, key: record, metadataKey: record>> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  --account-ids: list<string> # The IDs of the Amazon Web Services accounts for which to export Lambda function recommendations. If your account is the management account of an organization, use this parameter to specify the member account for which you want to export recommendations. This parameter cannot be specified together with the include member accounts parameter. The parameters are mutually exclusive. Recommendations for member accounts are not included in the export if this parameter, or the include member accounts parameter, is omitted. You can specify multiple account IDs per request.
+  --filters: list # An array of objects to specify a filter that exports a more specific set of Lambda function recommendations. — item shape: {name?: "Finding"|"FindingReasonCode", values?: list<string>}
+  --fields-to-export: list<string> # The recommendations data to include in the export file. For more information about the fields that can be exported, see Exported files (https://docs.aws.amazon.com/compute-optimizer/latest/ug/exporting-recommendations.html#exported-files) in the Compute Optimizer User Guide.
+  s3_destination_config: record # Describes the destination Amazon Simple Storage Service (Amazon S3) bucket name and key prefix for a recommendations export job. You must create the destination Amazon S3 bucket for your recommendations export before you create the export job. Compute Optimizer does not create the S3 bucket for you. After you create the S3 bucket, ensure that it has the required permission policy to allow Compute Optimizer to write the export file to it. If you plan to specify an object prefix when you create the export job, you must include the object prefix in the policy that you add to the S3 bucket. For more information, see Amazon S3 Bucket Policy for Compute Optimizer (https://docs.aws.amazon.com/compute-optimizer/latest/ug/create-s3-bucket-policy-for-compute-optimizer.html) in the Compute Optimizer User Guide. — shape: {bucket?: string, keyPrefix?: string}
+  --file-format: string@file-format-completer # The format of the export file. The only export file format currently supported is Csv.
+  --include-member-accounts: oneof<nothing, bool> # Indicates whether to include recommendations for resources in all member accounts of the organization if your account is the management account of an organization. The member accounts must also be opted in to Compute Optimizer, and trusted access for Compute Optimizer must be enabled in the organization account. For more information, see Compute Optimizer and Amazon Web Services Organizations trusted access (https://docs.aws.amazon.com/compute-optimizer/latest/ug/security-iam.html#trusted-service-access) in the Compute Optimizer User Guide. Recommendations for member accounts of the organization are not included in the export file if this parameter is omitted. This parameter cannot be specified together with the account IDs parameter. The parameters are mutually exclusive. Recommendations for member accounts are not included in the export if this parameter, or the account IDs parameter, is omitted.
+]: any -> record<jobId: string, s3Destination: record<bucket: string, key: string, metadataKey: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.ExportLambdaFunctionRecommendations")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"accountIds": $account_ids, "filters": $filters, "fieldsToExport": $fields_to_export, "s3DestinationConfig": $s3_destination_config, "fileFormat": $file_format, "includeMemberAccounts": $include_member_accounts} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -519,6 +543,8 @@ export def "export-lambda-function-recommendations" [
 #
 # POST /
 # operationId: GetAutoScalingGroupRecommendations
+# --filters item shape: {name?: "Finding"|"FindingReasonCodes"|"RecommendationSourceType", values?: list<string>}
+# --recommendationPreferences shape: {cpuVendorArchitectures?: list<string>}
 export def "get-auto-scaling-group-recommendations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -536,17 +562,18 @@ export def "get-auto-scaling-group-recommendations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  --account-ids: any
-  --auto-scaling-group-arns: any
-  --next-token: any
-  --max-results: any
-  --filters: any
-  --recommendation-preferences: any
-]: any -> record<nextToken: record, autoScalingGroupRecommendations: record, errors: record> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  --account-ids: list<string> # The ID of the Amazon Web Services account for which to return Auto Scaling group recommendations. If your account is the management account of an organization, use this parameter to specify the member account for which you want to return Auto Scaling group recommendations. Only one account ID can be specified per request.
+  --auto-scaling-group-arns: list<string> # The Amazon Resource Name (ARN) of the Auto Scaling groups for which to return recommendations.
+  --next-token: string # The token to advance to the next page of Auto Scaling group recommendations.
+  --max-results: int # The maximum number of Auto Scaling group recommendations to return with a single request. To retrieve the remaining results, make another request with the returned nextToken value.
+  --filters: list # An array of objects to specify a filter that returns a more specific list of Auto Scaling group recommendations. — item shape: {name?: "Finding"|"FindingReasonCodes"|"RecommendationSourceType", values?: list<string>}
+  --recommendation-preferences: record # Describes the recommendation preferences to return in the response of a GetAutoScalingGroupRecommendations, GetEC2InstanceRecommendations, and GetEC2RecommendationProjectedMetrics request. — shape: {cpuVendorArchitectures?: list<string>}
+]: any -> record<nextToken: string, autoScalingGroupRecommendations: table<accountId: string, autoScalingGroupArn: string, autoScalingGroupName: string, finding: string, utilizationMetrics: list, lookBackPeriodInDays: float, currentConfiguration: record, recommendationOptions: list, lastRefreshTimestamp: string, currentPerformanceRisk: string, effectiveRecommendationPreferences: record, inferredWorkloadTypes: list>, errors: table<identifier: string, code: string, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.GetAutoScalingGroupRecommendations")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"accountIds": $account_ids, "autoScalingGroupArns": $auto_scaling_group_arns, "nextToken": $next_token, "maxResults": $max_results, "filters": $filters, "recommendationPreferences": $recommendation_preferences} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -572,6 +599,7 @@ export def "get-auto-scaling-group-recommendations" [
 #
 # POST /
 # operationId: GetEBSVolumeRecommendations
+# --filters item shape: {name?: "Finding", values?: list<string>}
 export def "get-ebs-volume-recommendations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -589,16 +617,17 @@ export def "get-ebs-volume-recommendations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  --volume-arns: any
-  --next-token: any
-  --max-results: any
-  --filters: any
-  --account-ids: any
-]: any -> record<nextToken: record, volumeRecommendations: record, errors: record> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  --volume-arns: list<string> # The Amazon Resource Name (ARN) of the volumes for which to return recommendations.
+  --next-token: string # The token to advance to the next page of volume recommendations.
+  --max-results: int # The maximum number of volume recommendations to return with a single request. To retrieve the remaining results, make another request with the returned nextToken value.
+  --filters: list # An array of objects to specify a filter that returns a more specific list of volume recommendations. — item shape: {name?: "Finding", values?: list<string>}
+  --account-ids: list<string> # The ID of the Amazon Web Services account for which to return volume recommendations. If your account is the management account of an organization, use this parameter to specify the member account for which you want to return volume recommendations. Only one account ID can be specified per request.
+]: any -> record<nextToken: string, volumeRecommendations: table<volumeArn: string, accountId: string, currentConfiguration: record, finding: string, utilizationMetrics: list, lookBackPeriodInDays: float, volumeRecommendationOptions: list, lastRefreshTimestamp: string, currentPerformanceRisk: string>, errors: table<identifier: string, code: string, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.GetEBSVolumeRecommendations")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"volumeArns": $volume_arns, "nextToken": $next_token, "maxResults": $max_results, "filters": $filters, "accountIds": $account_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -624,6 +653,8 @@ export def "get-ebs-volume-recommendations" [
 #
 # POST /
 # operationId: GetEC2InstanceRecommendations
+# --filters item shape: {name?: "Finding"|"FindingReasonCodes"|"RecommendationSourceType", values?: list<string>}
+# --recommendationPreferences shape: {cpuVendorArchitectures?: list<string>}
 export def "get-ec2-instance-recommendations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -641,17 +672,18 @@ export def "get-ec2-instance-recommendations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  --instance-arns: any
-  --next-token: any
-  --max-results: any
-  --filters: any
-  --account-ids: any
-  --recommendation-preferences: any
-]: any -> record<nextToken: record, instanceRecommendations: record, errors: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  --instance-arns: list<string> # The Amazon Resource Name (ARN) of the instances for which to return recommendations.
+  --next-token: string # The token to advance to the next page of instance recommendations.
+  --max-results: int # The maximum number of instance recommendations to return with a single request. To retrieve the remaining results, make another request with the returned nextToken value.
+  --filters: list # An array of objects to specify a filter that returns a more specific list of instance recommendations. — item shape: {name?: "Finding"|"FindingReasonCodes"|"RecommendationSourceType", values?: list<string>}
+  --account-ids: list<string> # The ID of the Amazon Web Services account for which to return instance recommendations. If your account is the management account of an organization, use this parameter to specify the member account for which you want to return instance recommendations. Only one account ID can be specified per request.
+  --recommendation-preferences: record # Describes the recommendation preferences to return in the response of a GetAutoScalingGroupRecommendations, GetEC2InstanceRecommendations, and GetEC2RecommendationProjectedMetrics request. — shape: {cpuVendorArchitectures?: list<string>}
+]: any -> record<nextToken: string, instanceRecommendations: table<instanceArn: string, accountId: string, instanceName: string, currentInstanceType: string, finding: string, findingReasonCodes: list, utilizationMetrics: list, lookBackPeriodInDays: float, recommendationOptions: list, recommendationSources: list, lastRefreshTimestamp: string, currentPerformanceRisk: string, effectiveRecommendationPreferences: record, inferredWorkloadTypes: list, instanceState: string>, errors: table<identifier: string, code: string, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.GetEC2InstanceRecommendations")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"instanceArns": $instance_arns, "nextToken": $next_token, "maxResults": $max_results, "filters": $filters, "accountIds": $account_ids, "recommendationPreferences": $recommendation_preferences} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -677,6 +709,7 @@ export def "get-ec2-instance-recommendations" [
 #
 # POST /
 # operationId: GetEC2RecommendationProjectedMetrics
+# --recommendationPreferences shape: {cpuVendorArchitectures?: list<string>}
 export def "get-ec2-recommendation-projected-metrics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -694,17 +727,18 @@ export def "get-ec2-recommendation-projected-metrics" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  instance_arn: any
-  stat: any
-  period: any
-  start_time: any
-  end_time: any
-  --recommendation-preferences: any
-]: any -> record<recommendedOptionProjectedMetrics: record> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  instance_arn: string # The Amazon Resource Name (ARN) of the instances for which to return recommendation projected metrics.
+  stat: string@stat-completer # The statistic of the projected metrics.
+  period: int # The granularity, in seconds, of the projected metrics data points.
+  start_time: string # The timestamp of the first projected metrics data point to return. (format: date-time)
+  end_time: string # The timestamp of the last projected metrics data point to return. (format: date-time)
+  --recommendation-preferences: record # Describes the recommendation preferences to return in the response of a GetAutoScalingGroupRecommendations, GetEC2InstanceRecommendations, and GetEC2RecommendationProjectedMetrics request. — shape: {cpuVendorArchitectures?: list<string>}
+]: any -> record<recommendedOptionProjectedMetrics: table<recommendedInstanceType: string, rank: int, projectedMetrics: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.GetEC2RecommendationProjectedMetrics")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"instanceArn": $instance_arn, "stat": $stat, "period": $period, "startTime": $start_time, "endTime": $end_time, "recommendationPreferences": $recommendation_preferences} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -747,16 +781,17 @@ export def "get-ecs-service-recommendation-projected-metrics" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  service_arn: any
-  stat: any
-  period: any
-  start_time: any
-  end_time: any
-]: any -> record<recommendedOptionProjectedMetrics: record> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  service_arn: string # The ARN that identifies the Amazon ECS service. The following is the format of the ARN: arn:aws:ecs:region:aws_account_id:service/cluster-name/service-name
+  stat: string@stat-completer # The statistic of the projected metrics.
+  period: int # The granularity, in seconds, of the projected metrics data points.
+  start_time: string # The timestamp of the first projected metrics data point to return. (format: date-time)
+  end_time: string # The timestamp of the last projected metrics data point to return. (format: date-time)
+]: any -> record<recommendedOptionProjectedMetrics: table<recommendedCpuUnits: int, recommendedMemorySize: int, projectedMetrics: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.GetECSServiceRecommendationProjectedMetrics")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"serviceArn": $service_arn, "stat": $stat, "period": $period, "startTime": $start_time, "endTime": $end_time} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -782,6 +817,7 @@ export def "get-ecs-service-recommendation-projected-metrics" [
 #
 # POST /
 # operationId: GetECSServiceRecommendations
+# --filters item shape: {name?: "Finding"|"FindingReasonCode", values?: list<string>}
 export def "get-ecs-service-recommendations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -799,16 +835,17 @@ export def "get-ecs-service-recommendations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  --service-arns: any
-  --next-token: any
-  --max-results: any
-  --filters: any
-  --account-ids: any
-]: any -> record<nextToken: record, ecsServiceRecommendations: record, errors: record> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  --service-arns: list<string> # The ARN that identifies the Amazon ECS service. The following is the format of the ARN: arn:aws:ecs:region:aws_account_id:service/cluster-name/service-name
+  --next-token: string # The token to advance to the next page of Amazon ECS service recommendations.
+  --max-results: int # The maximum number of Amazon ECS service recommendations to return with a single request. To retrieve the remaining results, make another request with the returned nextToken value.
+  --filters: list # An array of objects to specify a filter that returns a more specific list of Amazon ECS service recommendations. — item shape: {name?: "Finding"|"FindingReasonCode", values?: list<string>}
+  --account-ids: list<string> # Return the Amazon ECS service recommendations to the specified Amazon Web Services account IDs. If your account is the management account or the delegated administrator of an organization, use this parameter to return the Amazon ECS service recommendations to specific member accounts. You can only specify one account ID per request.
+]: any -> record<nextToken: string, ecsServiceRecommendations: table<serviceArn: string, accountId: string, currentServiceConfiguration: record, utilizationMetrics: list, lookbackPeriodInDays: float, launchType: string, lastRefreshTimestamp: string, finding: string, findingReasonCodes: list, serviceRecommendationOptions: list, currentPerformanceRisk: string>, errors: table<identifier: string, code: string, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.GetECSServiceRecommendations")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"serviceArns": $service_arns, "nextToken": $next_token, "maxResults": $max_results, "filters": $filters, "accountIds": $account_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -851,12 +888,13 @@ export def "get-effective-recommendation-preferences" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  resource_arn: any
-]: any -> record<enhancedInfrastructureMetrics: record, externalMetricsPreference: record<source: record>> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the resource for which to confirm effective recommendation preferences. Only EC2 instance and Auto Scaling group ARNs are currently supported.
+]: any -> record<enhancedInfrastructureMetrics: string, externalMetricsPreference: record<source: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.GetEffectiveRecommendationPreferences")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceArn": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -899,12 +937,13 @@ export def "get-enrollment-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
+  --x-amz-target: string@x-amz-target-completer-14 # required
   --body: record
-]: any -> record<status: record, statusReason: record, memberAccountsEnrolled: record, lastUpdatedTimestamp: record, numberOfMemberAccountsOptedIn: record> {
+]: any -> record<status: string, statusReason: string, memberAccountsEnrolled: bool, lastUpdatedTimestamp: string, numberOfMemberAccountsOptedIn: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.GetEnrollmentStatus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -930,6 +969,7 @@ export def "get-enrollment-status" [
 #
 # POST /
 # operationId: GetEnrollmentStatusesForOrganization
+# --filters item shape: {name?: "Status", values?: list<string>}
 export def "get-enrollment-statuses-for-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -949,14 +989,15 @@ export def "get-enrollment-statuses-for-organization" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  --filters: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<accountEnrollmentStatuses: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  --filters: list # An array of objects to specify a filter that returns a more specific list of account enrollment statuses. — item shape: {name?: "Status", values?: list<string>}
+  --next-token-body: string # The token to advance to the next page of account enrollment statuses. (body field)
+  --max-results-body: int # The maximum number of account enrollment statuses to return with a single request. You can specify up to 100 statuses to return with each request. To retrieve the remaining results, make another request with the returned nextToken value. (body field)
+]: any -> record<accountEnrollmentStatuses: table<accountId: string, status: string, statusReason: string, lastUpdatedTimestamp: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.GetEnrollmentStatusesForOrganization")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"filters": $filters, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -983,6 +1024,7 @@ export def "get-enrollment-statuses-for-organization" [
 #
 # POST /
 # operationId: GetLambdaFunctionRecommendations
+# --filters item shape: {name?: "Finding"|"FindingReasonCode", values?: list<string>}
 export def "get-lambda-function-recommendations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1002,16 +1044,17 @@ export def "get-lambda-function-recommendations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  --function-arns: any
-  --account-ids: any
-  --filters: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<nextToken: record, lambdaFunctionRecommendations: record> {
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  --function-arns: list<string> # The Amazon Resource Name (ARN) of the functions for which to return recommendations. You can specify a qualified or unqualified ARN. If you specify an unqualified ARN without a function version suffix, Compute Optimizer will return recommendations for the latest ($LATEST) version of the function. If you specify a qualified ARN with a version suffix, Compute Optimizer will return recommendations for the specified function version. For more information about using function versions, see Using versions (https://docs.aws.amazon.com/lambda/latest/dg/configuration-versions.html#versioning-versions-using) in the Lambda Developer Guide.
+  --account-ids: list<string> # The ID of the Amazon Web Services account for which to return function recommendations. If your account is the management account of an organization, use this parameter to specify the member account for which you want to return function recommendations. Only one account ID can be specified per request.
+  --filters: list # An array of objects to specify a filter that returns a more specific list of function recommendations. — item shape: {name?: "Finding"|"FindingReasonCode", values?: list<string>}
+  --next-token-body: string # The token to advance to the next page of function recommendations. (body field)
+  --max-results-body: int # The maximum number of function recommendations to return with a single request. To retrieve the remaining results, make another request with the returned nextToken value. (body field)
+]: any -> record<nextToken: string, lambdaFunctionRecommendations: table<functionArn: string, functionVersion: string, accountId: string, currentMemorySize: int, numberOfInvocations: int, utilizationMetrics: list, lookbackPeriodInDays: float, lastRefreshTimestamp: string, finding: string, findingReasonCodes: list, memorySizeRecommendationOptions: list, currentPerformanceRisk: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.GetLambdaFunctionRecommendations")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"functionArns": $function_arns, "accountIds": $account_ids, "filters": $filters, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -1038,6 +1081,7 @@ export def "get-lambda-function-recommendations" [
 #
 # POST /
 # operationId: GetRecommendationPreferences
+# --scope shape: {name?: "Organization"|"AccountId"|"ResourceArn", value?: string}
 export def "get-recommendation-preferences" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1057,15 +1101,16 @@ export def "get-recommendation-preferences" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  resource_type: any
-  --scope: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<nextToken: record, recommendationPreferencesDetails: record> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  resource_type: string@resource-type-completer # The target resource type of the recommendation preference for which to return preferences. The Ec2Instance option encompasses standalone instances and instances that are part of Auto Scaling groups. The AutoScalingGroup option encompasses only instances that are part of an Auto Scaling group. The valid values for this parameter are Ec2Instance and AutoScalingGroup.
+  --scope: record # Describes the scope of a recommendation preference. Recommendation preferences can be created at the organization level (for management accounts of an organization only), account level, and resource level. For more information, see Activating enhanced infrastructure metrics (https://docs.aws.amazon.com/compute-optimizer/latest/ug/enhanced-infrastructure-metrics.html) in the Compute Optimizer User Guide. You cannot create recommendation preferences for Auto Scaling groups at the organization and account levels. You can create recommendation preferences for Auto Scaling groups only at the resource level by specifying a scope name of ResourceArn and a scope value of the Auto Scaling group Amazon Resource Name (ARN). This will configure the preference for all instances that are part of the specified Auto Scaling group. You also cannot create recommendation preferences at the resource level for instances that are part of an Auto Scaling group. You can create recommendation preferences at the resource level only for standalone instances. — shape: {name?: "Organization"|"AccountId"|"ResourceArn", value?: string}
+  --next-token-body: string # The token to advance to the next page of recommendation preferences. (body field)
+  --max-results-body: int # The maximum number of recommendation preferences to return with a single request. To retrieve the remaining results, make another request with the returned nextToken value. (body field)
+]: any -> record<nextToken: string, recommendationPreferencesDetails: table<scope: record, resourceType: string, enhancedInfrastructureMetrics: string, inferredWorkloadTypes: string, externalMetricsPreference: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.GetRecommendationPreferences")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"resourceType": $resource_type, "scope": $scope, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -1111,14 +1156,15 @@ export def "get-recommendation-summaries" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  --account-ids: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<nextToken: record, recommendationSummaries: record> {
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  --account-ids: list<string> # The ID of the Amazon Web Services account for which to return recommendation summaries. If your account is the management account of an organization, use this parameter to specify the member account for which you want to return recommendation summaries. Only one account ID can be specified per request.
+  --next-token-body: string # The token to advance to the next page of recommendation summaries. (body field)
+  --max-results-body: int # The maximum number of recommendation summaries to return with a single request. To retrieve the remaining results, make another request with the returned nextToken value. (body field)
+]: any -> record<nextToken: string, recommendationSummaries: table<summaries: list, recommendationResourceType: string, accountId: string, savingsOpportunity: record, currentPerformanceRiskRatings: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.GetRecommendationSummaries")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"accountIds": $account_ids, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -1145,6 +1191,8 @@ export def "get-recommendation-summaries" [
 #
 # POST /
 # operationId: PutRecommendationPreferences
+# --scope shape: {name?: "Organization"|"AccountId"|"ResourceArn", value?: string}
+# --externalMetricsPreference shape: {source?: "Datadog"|"Dynatrace"|"NewRelic"|"Instana"}
 export def "put-recommendation-preferences" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1162,16 +1210,17 @@ export def "put-recommendation-preferences" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  resource_type: any
-  --scope: any
-  --enhanced-infrastructure-metrics: any
-  --inferred-workload-types: any
-  --external-metrics-preference: any
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  resource_type: string@resource-type-completer # The target resource type of the recommendation preference to create. The Ec2Instance option encompasses standalone instances and instances that are part of Auto Scaling groups. The AutoScalingGroup option encompasses only instances that are part of an Auto Scaling group. The valid values for this parameter are Ec2Instance and AutoScalingGroup.
+  --scope: record # Describes the scope of a recommendation preference. Recommendation preferences can be created at the organization level (for management accounts of an organization only), account level, and resource level. For more information, see Activating enhanced infrastructure metrics (https://docs.aws.amazon.com/compute-optimizer/latest/ug/enhanced-infrastructure-metrics.html) in the Compute Optimizer User Guide. You cannot create recommendation preferences for Auto Scaling groups at the organization and account levels. You can create recommendation preferences for Auto Scaling groups only at the resource level by specifying a scope name of ResourceArn and a scope value of the Auto Scaling group Amazon Resource Name (ARN). This will configure the preference for all instances that are part of the specified Auto Scaling group. You also cannot create recommendation preferences at the resource level for instances that are part of an Auto Scaling group. You can create recommendation preferences at the resource level only for standalone instances. — shape: {name?: "Organization"|"AccountId"|"ResourceArn", value?: string}
+  --enhanced-infrastructure-metrics: string@enhanced-infrastructure-metrics-completer # The status of the enhanced infrastructure metrics recommendation preference to create or update. Specify the Active status to activate the preference, or specify Inactive to deactivate the preference. For more information, see Enhanced infrastructure metrics (https://docs.aws.amazon.com/compute-optimizer/latest/ug/enhanced-infrastructure-metrics.html) in the Compute Optimizer User Guide.
+  --inferred-workload-types: string@inferred-workload-types-completer # The status of the inferred workload types recommendation preference to create or update. The inferred workload type feature is active by default. To deactivate it, create a recommendation preference. Specify the Inactive status to deactivate the feature, or specify Active to activate it. For more information, see Inferred workload types (https://docs.aws.amazon.com/compute-optimizer/latest/ug/inferred-workload-types.html) in the Compute Optimizer User Guide.
+  --external-metrics-preference: record # Describes the external metrics preferences for EC2 rightsizing recommendations. — shape: {source?: "Datadog"|"Dynatrace"|"NewRelic"|"Instana"}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.PutRecommendationPreferences")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceType": $resource_type, "scope": $scope, "enhancedInfrastructureMetrics": $enhanced_infrastructure_metrics, "inferredWorkloadTypes": $inferred_workload_types, "externalMetricsPreference": $external_metrics_preference} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1214,13 +1263,14 @@ export def "update-enrollment-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  status: any
-  --include-member-accounts: any
-]: any -> record<status: record, statusReason: record> {
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  status: string@status-completer # The new enrollment status of the account. The following status options are available: Active - Opts in your account to the Compute Optimizer service. Compute Optimizer begins analyzing the configuration and utilization metrics of your Amazon Web Services resources after you opt in. For more information, see Metrics analyzed by Compute Optimizer (https://docs.aws.amazon.com/compute-optimizer/latest/ug/metrics.html) in the Compute Optimizer User Guide. Inactive - Opts out your account from the Compute Optimizer service. Your account's recommendations and related metrics data will be deleted from Compute Optimizer after you opt out. The Pending and Failed options cannot be used to update the enrollment status of an account. They are returned in the response of a request to update the enrollment status of an account.
+  --include-member-accounts: oneof<nothing, bool> # Indicates whether to enroll member accounts of the organization if the account is the management account of an organization.
+]: any -> record<status: string, statusReason: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.UpdateEnrollmentStatus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"status": $status, "includeMemberAccounts": $include_member_accounts} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

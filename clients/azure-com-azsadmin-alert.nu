@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -147,14 +147,15 @@ export def "alerts-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2016-05-01)
+  --api-version: string # Client API Version. (required, default: 2016-05-01)
   --filter: string # OData filter parameter.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  let api_version = ($api_version | default "2016-05-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), location: (encode-path-segment $location)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.InfrastructureInsights.Admin/regionHealths/{location}/alerts") $qp $auth.query)
   let accept_val = "application/json"
@@ -191,14 +192,15 @@ export def "alerts-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2016-05-01)
-]: nothing -> record<properties: record<alertId: string, alertProperties: record, closedByUserAlias: string, closedTimestamp: string, createdTimestamp: string, description: list<record>, faultId: string, faultTypeId: string, hasValidRemediationAction: bool, impactedResourceDisplayName: string, impactedResourceId: string, lastUpdatedTimestamp: string, remediation: list<record>, resourceProviderRegistrationId: string, resourceRegistrationId: string, severity: string, state: string, title: string>> {
+  --api-version: string # Client API Version. (required, default: 2016-05-01)
+]: nothing -> record<properties: record<alertId: string, alertProperties: record, closedByUserAlias: string, closedTimestamp: string, createdTimestamp: string, description: list<record>, faultId: string, faultTypeId: string, hasValidRemediationAction: bool, impactedResourceDisplayName: string, impactedResourceId: string, lastUpdatedTimestamp: string, remediation: list<record>, resourceProviderRegistrationId: string, resourceRegistrationId: string, severity: string, state: string, title: string>, location: string, tags: record, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
   if ($alert_name | is-empty) { error make --unspanned { msg: "path parameter 'alertName' must be non-empty" } }
+  let api_version = ($api_version | default "2016-05-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), location: (encode-path-segment $location), alert_name: (encode-path-segment $alert_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.InfrastructureInsights.Admin/regionHealths/{location}/alerts/{alert_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -236,12 +238,12 @@ export def "alerts-close" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2016-05-01)
-  --user: string # The username used to perform the operation.
+  --api-version: string # Client API Version. (required, default: 2016-05-01)
+  --user: string # The username used to perform the operation. (required)
   --properties: any # Contains alert data. — shape: {alertId?: string, alertProperties?: record, closedByUserAlias?: string, closedTimestamp?: string, createdTimestamp?: string, description?: list, faultId?: string, faultTypeId?: string, hasValidRemediationAction?: bool, impactedResourceDisplayName?: string, impactedResourceId?: string, lastUpdatedTimestamp?: string, remediation?: list, resourceProviderRegistrationId?: string, resourceRegistrationId?: string, severity?: string, state?: string, title?: string}
   --body-location: string # The Azure Region where the resource lives
   --tags: record # Resource tags.
-]: any -> record<properties: record<alertId: string, alertProperties: record, closedByUserAlias: string, closedTimestamp: string, createdTimestamp: string, description: list<record>, faultId: string, faultTypeId: string, hasValidRemediationAction: bool, impactedResourceDisplayName: string, impactedResourceId: string, lastUpdatedTimestamp: string, remediation: list<record>, resourceProviderRegistrationId: string, resourceRegistrationId: string, severity: string, state: string, title: string>> {
+]: any -> record<properties: record<alertId: string, alertProperties: record, closedByUserAlias: string, closedTimestamp: string, createdTimestamp: string, description: list<record>, faultId: string, faultTypeId: string, hasValidRemediationAction: bool, impactedResourceDisplayName: string, impactedResourceId: string, lastUpdatedTimestamp: string, remediation: list<record>, resourceProviderRegistrationId: string, resourceRegistrationId: string, severity: string, state: string, title: string>, location: string, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -249,6 +251,8 @@ export def "alerts-close" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
   if ($alert_name | is-empty) { error make --unspanned { msg: "path parameter 'alertName' must be non-empty" } }
+  let api_version = ($api_version | default "2016-05-01")
+  if ($user == null) { error make --unspanned { msg: "required query parameter 'user' missing: pass --user" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "user" $user "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), location: (encode-path-segment $location), alert_name: (encode-path-segment $alert_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.InfrastructureInsights.Admin/regionHealths/{location}/alerts/{alert_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $body_location, "tags": $tags} | compact
@@ -287,7 +291,7 @@ export def "alerts-repair" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API Version. (default: 2016-05-01)
+  --api-version: string # Client API Version. (required, default: 2016-05-01)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -295,6 +299,7 @@ export def "alerts-repair" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
   if ($alert_name | is-empty) { error make --unspanned { msg: "path parameter 'alertName' must be non-empty" } }
+  let api_version = ($api_version | default "2016-05-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), location: (encode-path-segment $location), alert_name: (encode-path-segment $alert_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.InfrastructureInsights.Admin/regionHealths/{location}/alerts/{alert_name}/repair") $qp $auth.query)
   let accept_val = "application/json"

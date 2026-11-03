@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -157,11 +157,12 @@ export def "app-service-certificate-orders-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, kind: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.CertificateRegistration/certificateOrders") $qp $auth.query)
   let accept_val = "application/json"
@@ -196,7 +197,7 @@ export def "app-service-certificate-orders-validate-purchase-information" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # AppServiceCertificateOrder resource specific properties — shape: {autoRenew?: bool, certificates?: record, csr?: string, distinguishedName?: string, intermediate?: record, keySize?: int, productType: "StandardDomainValidatedSsl"|"StandardDomainValidatedWildCardSsl", root?: record, signedCertificate?: record, validityInYears?: int}
   --kind: string # Kind of resource.
   location: string # Resource Location.
@@ -206,6 +207,7 @@ export def "app-service-certificate-orders-validate-purchase-information" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.CertificateRegistration/validateCertificateRegistrationInformation") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind, "location": $location, "tags": $tags} | compact
@@ -242,12 +244,13 @@ export def "app-service-certificate-orders-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, kind: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CertificateRegistration/certificateOrders") $qp $auth.query)
   let accept_val = "application/json"
@@ -283,13 +286,14 @@ export def "app-service-certificate-orders-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($certificate_order_name | is-empty) { error make --unspanned { msg: "path parameter 'certificateOrderName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), certificate_order_name: (encode-path-segment $certificate_order_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificate_order_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -325,13 +329,14 @@ export def "app-service-certificate-orders-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<appServiceCertificateNotRenewableReasons: list<string>, autoRenew: bool, certificates: record, csr: string, distinguishedName: string, domainVerificationToken: string, expirationTime: string, intermediate: record<issuer: string, notAfter: string, notBefore: string, rawData: string, serialNumber: string, signatureAlgorithm: string, subject: string, thumbprint: string, version: int>, isPrivateKeyExternal: bool, keySize: int, lastCertificateIssuanceTime: string, nextAutoRenewalTimeStamp: string, productType: string, provisioningState: string, root: record<issuer: string, notAfter: string, notBefore: string, rawData: string, serialNumber: string, signatureAlgorithm: string, subject: string, thumbprint: string, version: int>, serialNumber: string, signedCertificate: record<issuer: string, notAfter: string, notBefore: string, rawData: string, serialNumber: string, signatureAlgorithm: string, subject: string, thumbprint: string, version: int>, status: string, validityInYears: int>> {
+  --api-version: string # API Version (required)
+]: nothing -> record<properties: record<appServiceCertificateNotRenewableReasons: list<string>, autoRenew: bool, certificates: record, csr: string, distinguishedName: string, domainVerificationToken: string, expirationTime: string, intermediate: record<issuer: string, notAfter: string, notBefore: string, rawData: string, serialNumber: string, signatureAlgorithm: string, subject: string, thumbprint: string, version: int>, isPrivateKeyExternal: bool, keySize: int, lastCertificateIssuanceTime: string, nextAutoRenewalTimeStamp: string, productType: string, provisioningState: string, root: record<issuer: string, notAfter: string, notBefore: string, rawData: string, serialNumber: string, signatureAlgorithm: string, subject: string, thumbprint: string, version: int>, serialNumber: string, signedCertificate: record<issuer: string, notAfter: string, notBefore: string, rawData: string, serialNumber: string, signatureAlgorithm: string, subject: string, thumbprint: string, version: int>, status: string, validityInYears: int>, id: string, kind: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($certificate_order_name | is-empty) { error make --unspanned { msg: "path parameter 'certificateOrderName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), certificate_order_name: (encode-path-segment $certificate_order_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificate_order_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -368,16 +373,17 @@ export def "app-service-certificate-orders-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # AppServiceCertificateOrderPatchResource resource specific properties — shape: {autoRenew?: bool, certificates?: record, csr?: string, distinguishedName?: string, intermediate?: record, keySize?: int, productType: "StandardDomainValidatedSsl"|"StandardDomainValidatedWildCardSsl", root?: record, signedCertificate?: record, validityInYears?: int}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<appServiceCertificateNotRenewableReasons: list<string>, autoRenew: bool, certificates: record, csr: string, distinguishedName: string, domainVerificationToken: string, expirationTime: string, intermediate: record<issuer: string, notAfter: string, notBefore: string, rawData: string, serialNumber: string, signatureAlgorithm: string, subject: string, thumbprint: string, version: int>, isPrivateKeyExternal: bool, keySize: int, lastCertificateIssuanceTime: string, nextAutoRenewalTimeStamp: string, productType: string, provisioningState: string, root: record<issuer: string, notAfter: string, notBefore: string, rawData: string, serialNumber: string, signatureAlgorithm: string, subject: string, thumbprint: string, version: int>, serialNumber: string, signedCertificate: record<issuer: string, notAfter: string, notBefore: string, rawData: string, serialNumber: string, signatureAlgorithm: string, subject: string, thumbprint: string, version: int>, status: string, validityInYears: int>> {
+]: any -> record<properties: record<appServiceCertificateNotRenewableReasons: list<string>, autoRenew: bool, certificates: record, csr: string, distinguishedName: string, domainVerificationToken: string, expirationTime: string, intermediate: record<issuer: string, notAfter: string, notBefore: string, rawData: string, serialNumber: string, signatureAlgorithm: string, subject: string, thumbprint: string, version: int>, isPrivateKeyExternal: bool, keySize: int, lastCertificateIssuanceTime: string, nextAutoRenewalTimeStamp: string, productType: string, provisioningState: string, root: record<issuer: string, notAfter: string, notBefore: string, rawData: string, serialNumber: string, signatureAlgorithm: string, subject: string, thumbprint: string, version: int>, serialNumber: string, signedCertificate: record<issuer: string, notAfter: string, notBefore: string, rawData: string, serialNumber: string, signatureAlgorithm: string, subject: string, thumbprint: string, version: int>, status: string, validityInYears: int>, id: string, kind: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($certificate_order_name | is-empty) { error make --unspanned { msg: "path parameter 'certificateOrderName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), certificate_order_name: (encode-path-segment $certificate_order_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificate_order_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
@@ -416,18 +422,19 @@ export def "app-service-certificate-orders-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # AppServiceCertificateOrder resource specific properties — shape: {autoRenew?: bool, certificates?: record, csr?: string, distinguishedName?: string, intermediate?: record, keySize?: int, productType: "StandardDomainValidatedSsl"|"StandardDomainValidatedWildCardSsl", root?: record, signedCertificate?: record, validityInYears?: int}
   --kind: string # Kind of resource.
   location: string # Resource Location.
   --tags: record # Resource tags.
-]: any -> record<properties: record<appServiceCertificateNotRenewableReasons: list<string>, autoRenew: bool, certificates: record, csr: string, distinguishedName: string, domainVerificationToken: string, expirationTime: string, intermediate: record<issuer: string, notAfter: string, notBefore: string, rawData: string, serialNumber: string, signatureAlgorithm: string, subject: string, thumbprint: string, version: int>, isPrivateKeyExternal: bool, keySize: int, lastCertificateIssuanceTime: string, nextAutoRenewalTimeStamp: string, productType: string, provisioningState: string, root: record<issuer: string, notAfter: string, notBefore: string, rawData: string, serialNumber: string, signatureAlgorithm: string, subject: string, thumbprint: string, version: int>, serialNumber: string, signedCertificate: record<issuer: string, notAfter: string, notBefore: string, rawData: string, serialNumber: string, signatureAlgorithm: string, subject: string, thumbprint: string, version: int>, status: string, validityInYears: int>> {
+]: any -> record<properties: record<appServiceCertificateNotRenewableReasons: list<string>, autoRenew: bool, certificates: record, csr: string, distinguishedName: string, domainVerificationToken: string, expirationTime: string, intermediate: record<issuer: string, notAfter: string, notBefore: string, rawData: string, serialNumber: string, signatureAlgorithm: string, subject: string, thumbprint: string, version: int>, isPrivateKeyExternal: bool, keySize: int, lastCertificateIssuanceTime: string, nextAutoRenewalTimeStamp: string, productType: string, provisioningState: string, root: record<issuer: string, notAfter: string, notBefore: string, rawData: string, serialNumber: string, signatureAlgorithm: string, subject: string, thumbprint: string, version: int>, serialNumber: string, signedCertificate: record<issuer: string, notAfter: string, notBefore: string, rawData: string, serialNumber: string, signatureAlgorithm: string, subject: string, thumbprint: string, version: int>, status: string, validityInYears: int>, id: string, kind: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($certificate_order_name | is-empty) { error make --unspanned { msg: "path parameter 'certificateOrderName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), certificate_order_name: (encode-path-segment $certificate_order_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificate_order_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind, "location": $location, "tags": $tags} | compact
@@ -465,13 +472,14 @@ export def "app-service-certificate-orders-list-certificates" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, kind: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($certificate_order_name | is-empty) { error make --unspanned { msg: "path parameter 'certificateOrderName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), certificate_order_name: (encode-path-segment $certificate_order_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificate_order_name}/certificates") $qp $auth.query)
   let accept_val = "application/json"
@@ -508,7 +516,7 @@ export def "app-service-certificate-orders-delete-certificate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -516,6 +524,7 @@ export def "app-service-certificate-orders-delete-certificate" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($certificate_order_name | is-empty) { error make --unspanned { msg: "path parameter 'certificateOrderName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), certificate_order_name: (encode-path-segment $certificate_order_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificate_order_name}/certificates/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -552,14 +561,15 @@ export def "app-service-certificate-orders-get-certificate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<keyVaultId: string, keyVaultSecretName: string, provisioningState: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> record<properties: record<keyVaultId: string, keyVaultSecretName: string, provisioningState: string>, id: string, kind: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($certificate_order_name | is-empty) { error make --unspanned { msg: "path parameter 'certificateOrderName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), certificate_order_name: (encode-path-segment $certificate_order_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificate_order_name}/certificates/{name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -597,10 +607,10 @@ export def "app-service-certificate-orders-update-certificate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: record # Key Vault container for a certificate that is purchased through Azure. — shape: {keyVaultId?: string, keyVaultSecretName?: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<keyVaultId: string, keyVaultSecretName: string, provisioningState: string>> {
+]: any -> record<properties: record<keyVaultId: string, keyVaultSecretName: string, provisioningState: string>, id: string, kind: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -608,6 +618,7 @@ export def "app-service-certificate-orders-update-certificate" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($certificate_order_name | is-empty) { error make --unspanned { msg: "path parameter 'certificateOrderName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), certificate_order_name: (encode-path-segment $certificate_order_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificate_order_name}/certificates/{name}") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
@@ -647,12 +658,12 @@ export def "app-service-certificate-orders-create-or-update-certificate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: record # Key Vault container for a certificate that is purchased through Azure. — shape: {keyVaultId?: string, keyVaultSecretName?: string}
   --kind: string # Kind of resource.
   location: string # Resource Location.
   --tags: record # Resource tags.
-]: any -> record<properties: record<keyVaultId: string, keyVaultSecretName: string, provisioningState: string>> {
+]: any -> record<properties: record<keyVaultId: string, keyVaultSecretName: string, provisioningState: string>, id: string, kind: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -660,6 +671,7 @@ export def "app-service-certificate-orders-create-or-update-certificate" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($certificate_order_name | is-empty) { error make --unspanned { msg: "path parameter 'certificateOrderName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), certificate_order_name: (encode-path-segment $certificate_order_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificate_order_name}/certificates/{name}") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind, "location": $location, "tags": $tags} | compact
@@ -698,7 +710,7 @@ export def "app-service-certificate-orders-reissue" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # ReissueCertificateOrderRequest resource specific properties — shape: {csr?: string, delayExistingRevokeInHours?: int, isPrivateKeyExternal?: bool, keySize?: int}
   --kind: string # Kind of resource.
 ]: any -> any {
@@ -708,6 +720,7 @@ export def "app-service-certificate-orders-reissue" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($certificate_order_name | is-empty) { error make --unspanned { msg: "path parameter 'certificateOrderName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), certificate_order_name: (encode-path-segment $certificate_order_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificate_order_name}/reissue") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
@@ -746,7 +759,7 @@ export def "app-service-certificate-orders-renew" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # RenewCertificateOrderRequest resource specific properties — shape: {csr?: string, isPrivateKeyExternal?: bool, keySize?: int}
   --kind: string # Kind of resource.
 ]: any -> any {
@@ -756,6 +769,7 @@ export def "app-service-certificate-orders-renew" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($certificate_order_name | is-empty) { error make --unspanned { msg: "path parameter 'certificateOrderName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), certificate_order_name: (encode-path-segment $certificate_order_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificate_order_name}/renew") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
@@ -793,13 +807,14 @@ export def "app-service-certificate-orders-resend-email" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($certificate_order_name | is-empty) { error make --unspanned { msg: "path parameter 'certificateOrderName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), certificate_order_name: (encode-path-segment $certificate_order_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificate_order_name}/resendEmail") $qp $auth.query)
   let accept_val = "application/json"
@@ -835,7 +850,7 @@ export def "app-service-certificate-orders-resend-request-emails" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --name: string # Name of the object.
 ]: any -> any {
   let input = $in
@@ -844,6 +859,7 @@ export def "app-service-certificate-orders-resend-request-emails" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($certificate_order_name | is-empty) { error make --unspanned { msg: "path parameter 'certificateOrderName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), certificate_order_name: (encode-path-segment $certificate_order_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificate_order_name}/resendRequestEmails") $qp $auth.query)
   let req_body = {"name": $name} | compact
@@ -881,7 +897,7 @@ export def "app-service-certificate-orders-retrieve-site-seal" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --light-theme: oneof<nothing, bool> # If true use the light color theme for site seal; otherwise, use the default color theme.
   --locale: string # Locale of site seal.
 ]: any -> record<html: string> {
@@ -891,6 +907,7 @@ export def "app-service-certificate-orders-retrieve-site-seal" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($certificate_order_name | is-empty) { error make --unspanned { msg: "path parameter 'certificateOrderName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), certificate_order_name: (encode-path-segment $certificate_order_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificate_order_name}/retrieveSiteSeal") $qp $auth.query)
   let req_body = {"lightTheme": $light_theme, "locale": $locale} | compact
@@ -928,13 +945,14 @@ export def "app-service-certificate-orders-verify-domain-ownership" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($certificate_order_name | is-empty) { error make --unspanned { msg: "path parameter 'certificateOrderName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), certificate_order_name: (encode-path-segment $certificate_order_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificate_order_name}/verifyDomainOwnership") $qp $auth.query)
   let accept_val = "application/json"
@@ -970,13 +988,14 @@ export def "app-service-certificate-orders-retrieve-certificate-actions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> table<properties: record<actionType: string, createdAt: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> table<properties: record<actionType: string, createdAt: string>, id: string, kind: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CertificateRegistration/certificateOrders/{name}/retrieveCertificateActions") $qp $auth.query)
   let accept_val = "application/json"
@@ -1012,13 +1031,14 @@ export def "app-service-certificate-orders-retrieve-certificate-email-history" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> table<properties: record<emailId: string, timeStamp: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> table<properties: record<emailId: string, timeStamp: string>, id: string, kind: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CertificateRegistration/certificateOrders/{name}/retrieveEmailHistory") $qp $auth.query)
   let accept_val = "application/json"

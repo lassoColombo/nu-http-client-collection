@@ -12,8 +12,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
-    "jwt" => { {scheme: $scheme, headers: {Authorization: $"JWT ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
+    "jwt" => { {scheme: $scheme, headers: {"Authorization": $"JWT ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -616,7 +616,7 @@ export def "get-belege" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --format: string@format-completer # Determines the format of the `Beleg` collection. (default: export)
+  --format: string@format-completer # Determines the format of the `Beleg` collection. (required, default: export)
   --order: string@order-completer # Determines the sorting order. (default: asc)
   --limit: int # Limits the number of returned results.
   --offset: int # Skips the specified number of results from the result set. (default: 0)
@@ -624,10 +624,11 @@ export def "get-belege" [
   --after: string # Only return results that where saved after the specified date-time string (i.e., anything that `Date.parse()` can parse).
   --gte: int # Only return results that have at least a particular `Belegnummer`.
   --lte: int # Only return results that have at most a particular `Belegnummer`.
-]: nothing -> record {
+]: nothing -> record<Belege: table<Beleg_Codes: list, Beleg_Typen: list, Belegdaten: record, JWS: string, QR: string, QR_Link: string, Registrierkasse_UUID: string, Signaturerstellungseinheit_UUID: string, _href: string, _uuid: string>, Belege_Gruppe: table<Belege_kompakt: list, Signaturzertifikat: string, Zertifizierungsstellen: list>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($registrierkasse_uuid | is-empty) { error make --unspanned { msg: "path parameter 'registrierkasseUuid' must be non-empty" } }
+  let format = ($format | default "export")
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "after" $after "scalar") (serialize-qp "gte" $gte "scalar") (serialize-qp "lte" $lte "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({registrierkasse_uuid: (encode-path-segment $registrierkasse_uuid)} | format pattern "/registrierkassen/{registrierkasse_uuid}/belege") $qp $auth.query)
   let accept_val = "application/json"

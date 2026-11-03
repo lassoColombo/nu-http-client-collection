@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -156,10 +156,11 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Specifies the version of API used for this request.
+  --api-version: string # Specifies the version of API used for this request. (required)
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string, origin: string, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.BatchAI/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -194,12 +195,13 @@ export def "usages-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Specifies the version of API used for this request.
+  --api-version: string # Specifies the version of API used for this request. (required)
 ]: nothing -> record<nextLink: string, value: table<currentValue: int, limit: int, name: record, unit: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.BatchAI/locations/{location}/usages") $qp $auth.query)
   let accept_val = "application/json"
@@ -234,11 +236,12 @@ export def "workspaces-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # The maximum number of items to return in the response. A maximum of 1000 files can be returned. (format: int32, default: 1000)
-  --api-version: string # Specifies the version of API used for this request.
+  --api-version: string # Specifies the version of API used for this request. (required)
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.BatchAI/workspaces") $qp $auth.query)
   let accept_val = "application/json"
@@ -274,12 +277,13 @@ export def "workspaces-list-by-resource-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # The maximum number of items to return in the response. A maximum of 1000 files can be returned. (format: int32, default: 1000)
-  --api-version: string # Specifies the version of API used for this request.
+  --api-version: string # Specifies the version of API used for this request. (required)
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces") $qp $auth.query)
   let accept_val = "application/json"
@@ -315,13 +319,14 @@ export def "workspaces-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Specifies the version of API used for this request.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Specifies the version of API used for this request. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -357,13 +362,14 @@ export def "workspaces-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Specifies the version of API used for this request.
+  --api-version: string # Specifies the version of API used for this request. (required)
 ]: nothing -> record<properties: record<creationTime: string, provisioningState: string, provisioningStateTransitionTime: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -399,7 +405,7 @@ export def "workspaces-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Specifies the version of API used for this request.
+  --api-version: string # Specifies the version of API used for this request. (required)
   --tags: record # The user specified tags associated with the Workspace.
 ]: any -> record<properties: record<creationTime: string, provisioningState: string, provisioningStateTransitionTime: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
@@ -408,6 +414,7 @@ export def "workspaces-update" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}") $qp $auth.query)
   let req_body = {"tags": $tags} | compact
@@ -445,7 +452,7 @@ export def "workspaces-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Specifies the version of API used for this request.
+  --api-version: string # Specifies the version of API used for this request. (required)
   location: string # The region in which to create the Workspace.
   --tags: record # The user specified tags associated with the Workspace.
 ]: any -> record<properties: record<creationTime: string, provisioningState: string, provisioningStateTransitionTime: string>, id: string, location: string, name: string, tags: record, type: string> {
@@ -455,6 +462,7 @@ export def "workspaces-create" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}") $qp $auth.query)
   let req_body = {"location": $location, "tags": $tags} | compact
@@ -493,13 +501,14 @@ export def "clusters-list-by-workspace" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # The maximum number of items to return in the response. A maximum of 1000 files can be returned. (format: int32, default: 1000)
-  --api-version: string # Specifies the version of API used for this request.
+  --api-version: string # Specifies the version of API used for this request. (required)
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/clusters") $qp $auth.query)
   let accept_val = "application/json"
@@ -536,14 +545,15 @@ export def "clusters-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Specifies the version of API used for this request.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Specifies the version of API used for this request. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($cluster_name | is-empty) { error make --unspanned { msg: "path parameter 'clusterName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), cluster_name: (encode-path-segment $cluster_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/clusters/{cluster_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -580,7 +590,7 @@ export def "clusters-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Specifies the version of API used for this request.
+  --api-version: string # Specifies the version of API used for this request. (required)
 ]: nothing -> record<properties: record<allocationState: string, allocationStateTransitionTime: string, creationTime: string, currentNodeCount: int, errors: list<record>, nodeSetup: record<mountVolumes: record, performanceCountersSettings: record, setupTask: record>, nodeStateCounts: record<idleNodeCount: int, leavingNodeCount: int, preparingNodeCount: int, runningNodeCount: int, unusableNodeCount: int>, provisioningState: string, provisioningStateTransitionTime: string, scaleSettings: record<autoScale: record, manual: record>, subnet: record<id: string>, userAccountSettings: record<adminUserName: string, adminUserPassword: string, adminUserSshPublicKey: string>, virtualMachineConfiguration: record<imageReference: record>, vmPriority: string, vmSize: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -588,6 +598,7 @@ export def "clusters-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($cluster_name | is-empty) { error make --unspanned { msg: "path parameter 'clusterName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), cluster_name: (encode-path-segment $cluster_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/clusters/{cluster_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -625,7 +636,7 @@ export def "clusters-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Specifies the version of API used for this request.
+  --api-version: string # Specifies the version of API used for this request. (required)
   --properties: any # The properties of a Cluster that need to be updated. — shape: {scaleSettings?: any}
 ]: any -> record<properties: record<allocationState: string, allocationStateTransitionTime: string, creationTime: string, currentNodeCount: int, errors: list<record>, nodeSetup: record<mountVolumes: record, performanceCountersSettings: record, setupTask: record>, nodeStateCounts: record<idleNodeCount: int, leavingNodeCount: int, preparingNodeCount: int, runningNodeCount: int, unusableNodeCount: int>, provisioningState: string, provisioningStateTransitionTime: string, scaleSettings: record<autoScale: record, manual: record>, subnet: record<id: string>, userAccountSettings: record<adminUserName: string, adminUserPassword: string, adminUserSshPublicKey: string>, virtualMachineConfiguration: record<imageReference: record>, vmPriority: string, vmSize: string>, id: string, name: string, type: string> {
   let input = $in
@@ -635,6 +646,7 @@ export def "clusters-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($cluster_name | is-empty) { error make --unspanned { msg: "path parameter 'clusterName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), cluster_name: (encode-path-segment $cluster_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/clusters/{cluster_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -674,7 +686,7 @@ export def "clusters-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Specifies the version of API used for this request.
+  --api-version: string # Specifies the version of API used for this request. (required)
   --properties: any # The properties of a Cluster. — shape: {nodeSetup?: any, scaleSettings?: any, subnet?: any, userAccountSettings: any, virtualMachineConfiguration?: any, vmPriority?: "dedicated"|"lowpriority", vmSize: string}
 ]: any -> record<properties: record<allocationState: string, allocationStateTransitionTime: string, creationTime: string, currentNodeCount: int, errors: list<record>, nodeSetup: record<mountVolumes: record, performanceCountersSettings: record, setupTask: record>, nodeStateCounts: record<idleNodeCount: int, leavingNodeCount: int, preparingNodeCount: int, runningNodeCount: int, unusableNodeCount: int>, provisioningState: string, provisioningStateTransitionTime: string, scaleSettings: record<autoScale: record, manual: record>, subnet: record<id: string>, userAccountSettings: record<adminUserName: string, adminUserPassword: string, adminUserSshPublicKey: string>, virtualMachineConfiguration: record<imageReference: record>, vmPriority: string, vmSize: string>, id: string, name: string, type: string> {
   let input = $in
@@ -684,6 +696,7 @@ export def "clusters-create" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($cluster_name | is-empty) { error make --unspanned { msg: "path parameter 'clusterName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), cluster_name: (encode-path-segment $cluster_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/clusters/{cluster_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -722,7 +735,7 @@ export def "clusters-list-remote-login-information" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Specifies the version of API used for this request.
+  --api-version: string # Specifies the version of API used for this request. (required)
 ]: nothing -> record<nextLink: string, value: table<ipAddress: string, nodeId: string, port: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -730,6 +743,7 @@ export def "clusters-list-remote-login-information" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($cluster_name | is-empty) { error make --unspanned { msg: "path parameter 'clusterName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), cluster_name: (encode-path-segment $cluster_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/clusters/{cluster_name}/listRemoteLoginInformation") $qp $auth.query)
   let accept_val = "application/json"
@@ -766,13 +780,14 @@ export def "experiments-list-by-workspace" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # The maximum number of items to return in the response. A maximum of 1000 files can be returned. (format: int32, default: 1000)
-  --api-version: string # Specifies the version of API used for this request.
+  --api-version: string # Specifies the version of API used for this request. (required)
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/experiments") $qp $auth.query)
   let accept_val = "application/json"
@@ -809,14 +824,15 @@ export def "experiments-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Specifies the version of API used for this request.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Specifies the version of API used for this request. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($experiment_name | is-empty) { error make --unspanned { msg: "path parameter 'experimentName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/experiments/{experiment_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -853,7 +869,7 @@ export def "experiments-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Specifies the version of API used for this request.
+  --api-version: string # Specifies the version of API used for this request. (required)
 ]: nothing -> record<properties: record<creationTime: string, provisioningState: string, provisioningStateTransitionTime: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -861,6 +877,7 @@ export def "experiments-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($experiment_name | is-empty) { error make --unspanned { msg: "path parameter 'experimentName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/experiments/{experiment_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -897,7 +914,7 @@ export def "experiments-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Specifies the version of API used for this request.
+  --api-version: string # Specifies the version of API used for this request. (required)
 ]: nothing -> record<properties: record<creationTime: string, provisioningState: string, provisioningStateTransitionTime: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -905,6 +922,7 @@ export def "experiments-create" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($experiment_name | is-empty) { error make --unspanned { msg: "path parameter 'experimentName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/experiments/{experiment_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -942,7 +960,7 @@ export def "jobs-list-by-experiment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # The maximum number of items to return in the response. A maximum of 1000 files can be returned. (format: int32, default: 1000)
-  --api-version: string # Specifies the version of API used for this request.
+  --api-version: string # Specifies the version of API used for this request. (required)
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -950,6 +968,7 @@ export def "jobs-list-by-experiment" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($experiment_name | is-empty) { error make --unspanned { msg: "path parameter 'experimentName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/experiments/{experiment_name}/jobs") $qp $auth.query)
   let accept_val = "application/json"
@@ -987,8 +1006,8 @@ export def "jobs-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Specifies the version of API used for this request.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Specifies the version of API used for this request. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -996,6 +1015,7 @@ export def "jobs-delete" [
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($experiment_name | is-empty) { error make --unspanned { msg: "path parameter 'experimentName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name), job_name: (encode-path-segment $job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/experiments/{experiment_name}/jobs/{job_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1033,7 +1053,7 @@ export def "jobs-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Specifies the version of API used for this request.
+  --api-version: string # Specifies the version of API used for this request. (required)
 ]: nothing -> record<properties: record<caffe2Settings: record<commandLineArgs: string, pythonInterpreterPath: string, pythonScriptFilePath: string>, caffeSettings: record<commandLineArgs: string, configFilePath: string, processCount: int, pythonInterpreterPath: string, pythonScriptFilePath: string>, chainerSettings: record<commandLineArgs: string, processCount: int, pythonInterpreterPath: string, pythonScriptFilePath: string>, cluster: record<id: string>, cntkSettings: record<commandLineArgs: string, configFilePath: string, languageType: string, processCount: int, pythonInterpreterPath: string, pythonScriptFilePath: string>, constraints: record<maxWallClockTime: string>, containerSettings: record<imageSourceRegistry: record, shmSize: string>, creationTime: string, customMpiSettings: record<commandLine: string, processCount: int>, customToolkitSettings: record<commandLine: string>, environmentVariables: list<record>, executionInfo: record<endTime: string, errors: list, exitCode: int, startTime: string>, executionState: string, executionStateTransitionTime: string, horovodSettings: record<commandLineArgs: string, processCount: int, pythonInterpreterPath: string, pythonScriptFilePath: string>, inputDirectories: list<record>, jobOutputDirectoryPathSegment: string, jobPreparation: record<commandLine: string>, mountVolumes: record<azureBlobFileSystems: list, azureFileShares: list, fileServers: list, unmanagedFileSystems: list>, nodeCount: int, outputDirectories: list<record>, provisioningState: string, provisioningStateTransitionTime: string, pyTorchSettings: record<commandLineArgs: string, communicationBackend: string, processCount: int, pythonInterpreterPath: string, pythonScriptFilePath: string>, schedulingPriority: string, secrets: list<record>, stdOutErrPathPrefix: string, tensorFlowSettings: record<masterCommandLineArgs: string, parameterServerCommandLineArgs: string, parameterServerCount: int, pythonInterpreterPath: string, pythonScriptFilePath: string, workerCommandLineArgs: string, workerCount: int>, toolType: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1042,6 +1062,7 @@ export def "jobs-get" [
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($experiment_name | is-empty) { error make --unspanned { msg: "path parameter 'experimentName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name), job_name: (encode-path-segment $job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/experiments/{experiment_name}/jobs/{job_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1080,7 +1101,7 @@ export def "jobs-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Specifies the version of API used for this request.
+  --api-version: string # Specifies the version of API used for this request. (required)
   --properties: any # The properties of a Batch AI Job. — shape: {caffe2Settings?: any, caffeSettings?: any, chainerSettings?: any, cluster: any, cntkSettings?: any, constraints?: any, containerSettings?: any, customMpiSettings?: any, customToolkitSettings?: any, environmentVariables?: list, horovodSettings?: any, inputDirectories?: list, jobPreparation?: any, mountVolumes?: any, nodeCount: int, outputDirectories?: list, pyTorchSettings?: any, schedulingPriority?: "low"|"normal"|"high", secrets?: list, stdOutErrPathPrefix: string, tensorFlowSettings?: any}
 ]: any -> record<properties: record<caffe2Settings: record<commandLineArgs: string, pythonInterpreterPath: string, pythonScriptFilePath: string>, caffeSettings: record<commandLineArgs: string, configFilePath: string, processCount: int, pythonInterpreterPath: string, pythonScriptFilePath: string>, chainerSettings: record<commandLineArgs: string, processCount: int, pythonInterpreterPath: string, pythonScriptFilePath: string>, cluster: record<id: string>, cntkSettings: record<commandLineArgs: string, configFilePath: string, languageType: string, processCount: int, pythonInterpreterPath: string, pythonScriptFilePath: string>, constraints: record<maxWallClockTime: string>, containerSettings: record<imageSourceRegistry: record, shmSize: string>, creationTime: string, customMpiSettings: record<commandLine: string, processCount: int>, customToolkitSettings: record<commandLine: string>, environmentVariables: list<record>, executionInfo: record<endTime: string, errors: list, exitCode: int, startTime: string>, executionState: string, executionStateTransitionTime: string, horovodSettings: record<commandLineArgs: string, processCount: int, pythonInterpreterPath: string, pythonScriptFilePath: string>, inputDirectories: list<record>, jobOutputDirectoryPathSegment: string, jobPreparation: record<commandLine: string>, mountVolumes: record<azureBlobFileSystems: list, azureFileShares: list, fileServers: list, unmanagedFileSystems: list>, nodeCount: int, outputDirectories: list<record>, provisioningState: string, provisioningStateTransitionTime: string, pyTorchSettings: record<commandLineArgs: string, communicationBackend: string, processCount: int, pythonInterpreterPath: string, pythonScriptFilePath: string>, schedulingPriority: string, secrets: list<record>, stdOutErrPathPrefix: string, tensorFlowSettings: record<masterCommandLineArgs: string, parameterServerCommandLineArgs: string, parameterServerCount: int, pythonInterpreterPath: string, pythonScriptFilePath: string, workerCommandLineArgs: string, workerCount: int>, toolType: string>, id: string, name: string, type: string> {
   let input = $in
@@ -1091,6 +1112,7 @@ export def "jobs-create" [
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($experiment_name | is-empty) { error make --unspanned { msg: "path parameter 'experimentName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name), job_name: (encode-path-segment $job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/experiments/{experiment_name}/jobs/{job_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -1130,11 +1152,11 @@ export def "jobs-list-output-files" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --outputdirectoryid: string # Id of the job output directory. This is the OutputDirectory-->id parameter that is given by the user during Create Job.
+  --outputdirectoryid: string # Id of the job output directory. This is the OutputDirectory-->id parameter that is given by the user during Create Job. (required)
   --directory: string # The path to the directory. (default: .)
   --linkexpiryinminutes: int # The number of minutes after which the download link will expire. (format: int32, default: 60)
   --maxresults: int # The maximum number of items to return in the response. A maximum of 1000 files can be returned. (format: int32, default: 1000)
-  --api-version: string # Specifies the version of API used for this request.
+  --api-version: string # Specifies the version of API used for this request. (required)
 ]: nothing -> record<nextLink: string, value: table<downloadUrl: string, fileType: string, name: string, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1143,6 +1165,8 @@ export def "jobs-list-output-files" [
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($experiment_name | is-empty) { error make --unspanned { msg: "path parameter 'experimentName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
+  if ($outputdirectoryid == null) { error make --unspanned { msg: "required query parameter 'outputdirectoryid' missing: pass --outputdirectoryid" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "outputdirectoryid" $outputdirectoryid "scalar") (serialize-qp "directory" $directory "scalar") (serialize-qp "linkexpiryinminutes" $linkexpiryinminutes "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name), job_name: (encode-path-segment $job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/experiments/{experiment_name}/jobs/{job_name}/listOutputFiles") $qp $auth.query)
   let accept_val = "application/json"
@@ -1180,7 +1204,7 @@ export def "jobs-list-remote-login-information" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Specifies the version of API used for this request.
+  --api-version: string # Specifies the version of API used for this request. (required)
 ]: nothing -> record<nextLink: string, value: table<ipAddress: string, nodeId: string, port: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1189,6 +1213,7 @@ export def "jobs-list-remote-login-information" [
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($experiment_name | is-empty) { error make --unspanned { msg: "path parameter 'experimentName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name), job_name: (encode-path-segment $job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/experiments/{experiment_name}/jobs/{job_name}/listRemoteLoginInformation") $qp $auth.query)
   let accept_val = "application/json"
@@ -1226,8 +1251,8 @@ export def "jobs-terminate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Specifies the version of API used for this request.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Specifies the version of API used for this request. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1235,6 +1260,7 @@ export def "jobs-terminate" [
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($experiment_name | is-empty) { error make --unspanned { msg: "path parameter 'experimentName' must be non-empty" } }
   if ($job_name | is-empty) { error make --unspanned { msg: "path parameter 'jobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name), job_name: (encode-path-segment $job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/experiments/{experiment_name}/jobs/{job_name}/terminate") $qp $auth.query)
   let accept_val = "application/json"
@@ -1271,13 +1297,14 @@ export def "file-servers-list-by-workspace" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # The maximum number of items to return in the response. A maximum of 1000 files can be returned. (format: int32, default: 1000)
-  --api-version: string # Specifies the version of API used for this request.
+  --api-version: string # Specifies the version of API used for this request. (required)
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/fileServers") $qp $auth.query)
   let accept_val = "application/json"
@@ -1314,14 +1341,15 @@ export def "file-servers-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Specifies the version of API used for this request.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # Specifies the version of API used for this request. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($file_server_name | is-empty) { error make --unspanned { msg: "path parameter 'fileServerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), file_server_name: (encode-path-segment $file_server_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/fileServers/{file_server_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1358,7 +1386,7 @@ export def "file-servers-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Specifies the version of API used for this request.
+  --api-version: string # Specifies the version of API used for this request. (required)
 ]: nothing -> record<properties: record<creationTime: string, dataDisks: record<cachingType: string, diskCount: int, diskSizeInGB: int, storageAccountType: string>, mountSettings: record<fileServerInternalIP: string, fileServerPublicIP: string, mountPoint: string>, provisioningState: string, provisioningStateTransitionTime: string, sshConfiguration: record<publicIPsToAllow: list, userAccountSettings: record>, subnet: record<id: string>, vmSize: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1366,6 +1394,7 @@ export def "file-servers-get" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($file_server_name | is-empty) { error make --unspanned { msg: "path parameter 'fileServerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), file_server_name: (encode-path-segment $file_server_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/fileServers/{file_server_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1403,7 +1432,7 @@ export def "file-servers-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Specifies the version of API used for this request.
+  --api-version: string # Specifies the version of API used for this request. (required)
   --properties: any # The properties of a file server. — shape: {dataDisks: any, sshConfiguration: any, subnet?: any, vmSize: string}
 ]: any -> record<properties: record<creationTime: string, dataDisks: record<cachingType: string, diskCount: int, diskSizeInGB: int, storageAccountType: string>, mountSettings: record<fileServerInternalIP: string, fileServerPublicIP: string, mountPoint: string>, provisioningState: string, provisioningStateTransitionTime: string, sshConfiguration: record<publicIPsToAllow: list, userAccountSettings: record>, subnet: record<id: string>, vmSize: string>, id: string, name: string, type: string> {
   let input = $in
@@ -1413,6 +1442,7 @@ export def "file-servers-create" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   if ($file_server_name | is-empty) { error make --unspanned { msg: "path parameter 'fileServerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), file_server_name: (encode-path-segment $file_server_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/fileServers/{file_server_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact

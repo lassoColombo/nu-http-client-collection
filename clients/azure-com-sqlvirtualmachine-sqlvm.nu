@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -150,10 +150,11 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version to use for the request.
+  --api-version: string # API version to use for the request. (required)
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string, origin: string, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.SqlVirtualMachine/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -187,11 +188,12 @@ export def "sql-virtual-machine-groups-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version to use for the request.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API version to use for the request. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups") $qp $auth.query)
   let accept_val = "application/json"
@@ -225,11 +227,12 @@ export def "sql-virtual-machines-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version to use for the request.
-]: nothing -> record<nextLink: string, value: table<identity: record, properties: record>> {
+  --api-version: string # API version to use for the request. (required)
+]: nothing -> record<nextLink: string, value: table<identity: record, properties: record, location: string, tags: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachines") $qp $auth.query)
   let accept_val = "application/json"
@@ -264,12 +267,13 @@ export def "sql-virtual-machine-groups-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version to use for the request.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API version to use for the request. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups") $qp $auth.query)
   let accept_val = "application/json"
@@ -305,13 +309,14 @@ export def "sql-virtual-machine-groups-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version to use for the request.
+  --api-version: string # API version to use for the request. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($sql_virtual_machine_group_name | is-empty) { error make --unspanned { msg: "path parameter 'sqlVirtualMachineGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), sql_virtual_machine_group_name: (encode-path-segment $sql_virtual_machine_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sql_virtual_machine_group_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -347,13 +352,14 @@ export def "sql-virtual-machine-groups-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version to use for the request.
-]: nothing -> record<properties: record<clusterConfiguration: string, clusterManagerType: string, provisioningState: string, scaleType: string, sqlImageOffer: string, sqlImageSku: string, wsfcDomainProfile: record<clusterBootstrapAccount: string, clusterOperatorAccount: string, domainFqdn: string, fileShareWitnessPath: string, ouPath: string, sqlServiceAccount: string, storageAccountPrimaryKey: string, storageAccountUrl: string>>> {
+  --api-version: string # API version to use for the request. (required)
+]: nothing -> record<properties: record<clusterConfiguration: string, clusterManagerType: string, provisioningState: string, scaleType: string, sqlImageOffer: string, sqlImageSku: string, wsfcDomainProfile: record<clusterBootstrapAccount: string, clusterOperatorAccount: string, domainFqdn: string, fileShareWitnessPath: string, ouPath: string, sqlServiceAccount: string, storageAccountPrimaryKey: string, storageAccountUrl: string>>, location: string, tags: record, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($sql_virtual_machine_group_name | is-empty) { error make --unspanned { msg: "path parameter 'sqlVirtualMachineGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), sql_virtual_machine_group_name: (encode-path-segment $sql_virtual_machine_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sql_virtual_machine_group_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -389,15 +395,16 @@ export def "sql-virtual-machine-groups-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version to use for the request.
+  --api-version: string # API version to use for the request. (required)
   --tags: record # Resource tags.
-]: any -> record<properties: record<clusterConfiguration: string, clusterManagerType: string, provisioningState: string, scaleType: string, sqlImageOffer: string, sqlImageSku: string, wsfcDomainProfile: record<clusterBootstrapAccount: string, clusterOperatorAccount: string, domainFqdn: string, fileShareWitnessPath: string, ouPath: string, sqlServiceAccount: string, storageAccountPrimaryKey: string, storageAccountUrl: string>>> {
+]: any -> record<properties: record<clusterConfiguration: string, clusterManagerType: string, provisioningState: string, scaleType: string, sqlImageOffer: string, sqlImageSku: string, wsfcDomainProfile: record<clusterBootstrapAccount: string, clusterOperatorAccount: string, domainFqdn: string, fileShareWitnessPath: string, ouPath: string, sqlServiceAccount: string, storageAccountPrimaryKey: string, storageAccountUrl: string>>, location: string, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($sql_virtual_machine_group_name | is-empty) { error make --unspanned { msg: "path parameter 'sqlVirtualMachineGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), sql_virtual_machine_group_name: (encode-path-segment $sql_virtual_machine_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sql_virtual_machine_group_name}") $qp $auth.query)
   let req_body = {"tags": $tags} | compact
@@ -436,17 +443,18 @@ export def "sql-virtual-machine-groups-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version to use for the request.
+  --api-version: string # API version to use for the request. (required)
   --properties: record # The properties of a SQL virtual machine group. — shape: {sqlImageOffer?: string, sqlImageSku?: "Developer"|"Enterprise", wsfcDomainProfile?: record}
   location: string # Resource location.
   --tags: record # Resource tags.
-]: any -> record<properties: record<clusterConfiguration: string, clusterManagerType: string, provisioningState: string, scaleType: string, sqlImageOffer: string, sqlImageSku: string, wsfcDomainProfile: record<clusterBootstrapAccount: string, clusterOperatorAccount: string, domainFqdn: string, fileShareWitnessPath: string, ouPath: string, sqlServiceAccount: string, storageAccountPrimaryKey: string, storageAccountUrl: string>>> {
+]: any -> record<properties: record<clusterConfiguration: string, clusterManagerType: string, provisioningState: string, scaleType: string, sqlImageOffer: string, sqlImageSku: string, wsfcDomainProfile: record<clusterBootstrapAccount: string, clusterOperatorAccount: string, domainFqdn: string, fileShareWitnessPath: string, ouPath: string, sqlServiceAccount: string, storageAccountPrimaryKey: string, storageAccountUrl: string>>, location: string, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($sql_virtual_machine_group_name | is-empty) { error make --unspanned { msg: "path parameter 'sqlVirtualMachineGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), sql_virtual_machine_group_name: (encode-path-segment $sql_virtual_machine_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sql_virtual_machine_group_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
@@ -484,13 +492,14 @@ export def "availability-group-listeners-list-by-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version to use for the request.
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API version to use for the request. (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($sql_virtual_machine_group_name | is-empty) { error make --unspanned { msg: "path parameter 'sqlVirtualMachineGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), sql_virtual_machine_group_name: (encode-path-segment $sql_virtual_machine_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sql_virtual_machine_group_name}/availabilityGroupListeners") $qp $auth.query)
   let accept_val = "application/json"
@@ -527,7 +536,7 @@ export def "availability-group-listeners-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version to use for the request.
+  --api-version: string # API version to use for the request. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -535,6 +544,7 @@ export def "availability-group-listeners-delete" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($sql_virtual_machine_group_name | is-empty) { error make --unspanned { msg: "path parameter 'sqlVirtualMachineGroupName' must be non-empty" } }
   if ($availability_group_listener_name | is-empty) { error make --unspanned { msg: "path parameter 'availabilityGroupListenerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), sql_virtual_machine_group_name: (encode-path-segment $sql_virtual_machine_group_name), availability_group_listener_name: (encode-path-segment $availability_group_listener_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sql_virtual_machine_group_name}/availabilityGroupListeners/{availability_group_listener_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -571,14 +581,15 @@ export def "availability-group-listeners-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version to use for the request.
-]: nothing -> record<properties: record<availabilityGroupName: string, createDefaultAvailabilityGroupIfNotExist: bool, loadBalancerConfigurations: list<record>, port: int, provisioningState: string>> {
+  --api-version: string # API version to use for the request. (required)
+]: nothing -> record<properties: record<availabilityGroupName: string, createDefaultAvailabilityGroupIfNotExist: bool, loadBalancerConfigurations: list<record>, port: int, provisioningState: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($sql_virtual_machine_group_name | is-empty) { error make --unspanned { msg: "path parameter 'sqlVirtualMachineGroupName' must be non-empty" } }
   if ($availability_group_listener_name | is-empty) { error make --unspanned { msg: "path parameter 'availabilityGroupListenerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), sql_virtual_machine_group_name: (encode-path-segment $sql_virtual_machine_group_name), availability_group_listener_name: (encode-path-segment $availability_group_listener_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sql_virtual_machine_group_name}/availabilityGroupListeners/{availability_group_listener_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -616,9 +627,9 @@ export def "availability-group-listeners-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version to use for the request.
+  --api-version: string # API version to use for the request. (required)
   --properties: record # The properties of an availability group listener. — shape: {availabilityGroupName?: string, createDefaultAvailabilityGroupIfNotExist?: bool, loadBalancerConfigurations?: list, port?: int}
-]: any -> record<properties: record<availabilityGroupName: string, createDefaultAvailabilityGroupIfNotExist: bool, loadBalancerConfigurations: list<record>, port: int, provisioningState: string>> {
+]: any -> record<properties: record<availabilityGroupName: string, createDefaultAvailabilityGroupIfNotExist: bool, loadBalancerConfigurations: list<record>, port: int, provisioningState: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -626,6 +637,7 @@ export def "availability-group-listeners-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($sql_virtual_machine_group_name | is-empty) { error make --unspanned { msg: "path parameter 'sqlVirtualMachineGroupName' must be non-empty" } }
   if ($availability_group_listener_name | is-empty) { error make --unspanned { msg: "path parameter 'availabilityGroupListenerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), sql_virtual_machine_group_name: (encode-path-segment $sql_virtual_machine_group_name), availability_group_listener_name: (encode-path-segment $availability_group_listener_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sql_virtual_machine_group_name}/availabilityGroupListeners/{availability_group_listener_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -663,13 +675,14 @@ export def "sql-virtual-machines-list-by-sql-vm-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version to use for the request.
-]: nothing -> record<nextLink: string, value: table<identity: record, properties: record>> {
+  --api-version: string # API version to use for the request. (required)
+]: nothing -> record<nextLink: string, value: table<identity: record, properties: record, location: string, tags: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($sql_virtual_machine_group_name | is-empty) { error make --unspanned { msg: "path parameter 'sqlVirtualMachineGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), sql_virtual_machine_group_name: (encode-path-segment $sql_virtual_machine_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sql_virtual_machine_group_name}/sqlVirtualMachines") $qp $auth.query)
   let accept_val = "application/json"
@@ -704,12 +717,13 @@ export def "sql-virtual-machines-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version to use for the request.
-]: nothing -> record<nextLink: string, value: table<identity: record, properties: record>> {
+  --api-version: string # API version to use for the request. (required)
+]: nothing -> record<nextLink: string, value: table<identity: record, properties: record, location: string, tags: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachines") $qp $auth.query)
   let accept_val = "application/json"
@@ -745,13 +759,14 @@ export def "sql-virtual-machines-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version to use for the request.
+  --api-version: string # API version to use for the request. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($sql_virtual_machine_name | is-empty) { error make --unspanned { msg: "path parameter 'sqlVirtualMachineName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), sql_virtual_machine_name: (encode-path-segment $sql_virtual_machine_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachines/{sql_virtual_machine_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -788,13 +803,14 @@ export def "sql-virtual-machines-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # The child resources to include in the response.
-  --api-version: string # API version to use for the request.
-]: nothing -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<autoBackupSettings: record<backupScheduleType: string, backupSystemDbs: bool, enable: bool, enableEncryption: bool, fullBackupFrequency: string, fullBackupStartTime: int, fullBackupWindowHours: int, logBackupFrequency: int, password: string, retentionPeriod: int, storageAccessKey: string, storageAccountUrl: string>, autoPatchingSettings: record<dayOfWeek: string, enable: bool, maintenanceWindowDuration: int, maintenanceWindowStartingHour: int>, keyVaultCredentialSettings: record<azureKeyVaultUrl: string, credentialName: string, enable: bool, servicePrincipalName: string, servicePrincipalSecret: string>, provisioningState: string, serverConfigurationsManagementSettings: record<additionalFeaturesServerConfigurations: record, sqlConnectivityUpdateSettings: record, sqlStorageUpdateSettings: record, sqlWorkloadTypeUpdateSettings: record>, sqlImageOffer: string, sqlImageSku: string, sqlManagement: string, sqlServerLicenseType: string, sqlVirtualMachineGroupResourceId: string, storageConfigurationSettings: record<diskConfigurationType: string, sqlDataSettings: record, sqlLogSettings: record, sqlTempDbSettings: record, storageWorkloadType: string>, virtualMachineResourceId: string, wsfcDomainCredentials: record<clusterBootstrapAccountPassword: string, clusterOperatorAccountPassword: string, sqlServiceAccountPassword: string>>> {
+  --api-version: string # API version to use for the request. (required)
+]: nothing -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<autoBackupSettings: record<backupScheduleType: string, backupSystemDbs: bool, enable: bool, enableEncryption: bool, fullBackupFrequency: string, fullBackupStartTime: int, fullBackupWindowHours: int, logBackupFrequency: int, password: string, retentionPeriod: int, storageAccessKey: string, storageAccountUrl: string>, autoPatchingSettings: record<dayOfWeek: string, enable: bool, maintenanceWindowDuration: int, maintenanceWindowStartingHour: int>, keyVaultCredentialSettings: record<azureKeyVaultUrl: string, credentialName: string, enable: bool, servicePrincipalName: string, servicePrincipalSecret: string>, provisioningState: string, serverConfigurationsManagementSettings: record<additionalFeaturesServerConfigurations: record, sqlConnectivityUpdateSettings: record, sqlStorageUpdateSettings: record, sqlWorkloadTypeUpdateSettings: record>, sqlImageOffer: string, sqlImageSku: string, sqlManagement: string, sqlServerLicenseType: string, sqlVirtualMachineGroupResourceId: string, storageConfigurationSettings: record<diskConfigurationType: string, sqlDataSettings: record, sqlLogSettings: record, sqlTempDbSettings: record, storageWorkloadType: string>, virtualMachineResourceId: string, wsfcDomainCredentials: record<clusterBootstrapAccountPassword: string, clusterOperatorAccountPassword: string, sqlServiceAccountPassword: string>>, location: string, tags: record, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($sql_virtual_machine_name | is-empty) { error make --unspanned { msg: "path parameter 'sqlVirtualMachineName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), sql_virtual_machine_name: (encode-path-segment $sql_virtual_machine_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachines/{sql_virtual_machine_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -830,15 +846,16 @@ export def "sql-virtual-machines-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version to use for the request.
+  --api-version: string # API version to use for the request. (required)
   --tags: record # Resource tags.
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<autoBackupSettings: record<backupScheduleType: string, backupSystemDbs: bool, enable: bool, enableEncryption: bool, fullBackupFrequency: string, fullBackupStartTime: int, fullBackupWindowHours: int, logBackupFrequency: int, password: string, retentionPeriod: int, storageAccessKey: string, storageAccountUrl: string>, autoPatchingSettings: record<dayOfWeek: string, enable: bool, maintenanceWindowDuration: int, maintenanceWindowStartingHour: int>, keyVaultCredentialSettings: record<azureKeyVaultUrl: string, credentialName: string, enable: bool, servicePrincipalName: string, servicePrincipalSecret: string>, provisioningState: string, serverConfigurationsManagementSettings: record<additionalFeaturesServerConfigurations: record, sqlConnectivityUpdateSettings: record, sqlStorageUpdateSettings: record, sqlWorkloadTypeUpdateSettings: record>, sqlImageOffer: string, sqlImageSku: string, sqlManagement: string, sqlServerLicenseType: string, sqlVirtualMachineGroupResourceId: string, storageConfigurationSettings: record<diskConfigurationType: string, sqlDataSettings: record, sqlLogSettings: record, sqlTempDbSettings: record, storageWorkloadType: string>, virtualMachineResourceId: string, wsfcDomainCredentials: record<clusterBootstrapAccountPassword: string, clusterOperatorAccountPassword: string, sqlServiceAccountPassword: string>>> {
+]: any -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<autoBackupSettings: record<backupScheduleType: string, backupSystemDbs: bool, enable: bool, enableEncryption: bool, fullBackupFrequency: string, fullBackupStartTime: int, fullBackupWindowHours: int, logBackupFrequency: int, password: string, retentionPeriod: int, storageAccessKey: string, storageAccountUrl: string>, autoPatchingSettings: record<dayOfWeek: string, enable: bool, maintenanceWindowDuration: int, maintenanceWindowStartingHour: int>, keyVaultCredentialSettings: record<azureKeyVaultUrl: string, credentialName: string, enable: bool, servicePrincipalName: string, servicePrincipalSecret: string>, provisioningState: string, serverConfigurationsManagementSettings: record<additionalFeaturesServerConfigurations: record, sqlConnectivityUpdateSettings: record, sqlStorageUpdateSettings: record, sqlWorkloadTypeUpdateSettings: record>, sqlImageOffer: string, sqlImageSku: string, sqlManagement: string, sqlServerLicenseType: string, sqlVirtualMachineGroupResourceId: string, storageConfigurationSettings: record<diskConfigurationType: string, sqlDataSettings: record, sqlLogSettings: record, sqlTempDbSettings: record, storageWorkloadType: string>, virtualMachineResourceId: string, wsfcDomainCredentials: record<clusterBootstrapAccountPassword: string, clusterOperatorAccountPassword: string, sqlServiceAccountPassword: string>>, location: string, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($sql_virtual_machine_name | is-empty) { error make --unspanned { msg: "path parameter 'sqlVirtualMachineName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), sql_virtual_machine_name: (encode-path-segment $sql_virtual_machine_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachines/{sql_virtual_machine_name}") $qp $auth.query)
   let req_body = {"tags": $tags} | compact
@@ -878,18 +895,19 @@ export def "sql-virtual-machines-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API version to use for the request.
+  --api-version: string # API version to use for the request. (required)
   --identity: record # Azure Active Directory identity configuration for a resource. — shape: {type?: "SystemAssigned"}
   --properties: record # The SQL virtual machine properties. — shape: {autoBackupSettings?: record, autoPatchingSettings?: record, keyVaultCredentialSettings?: record, serverConfigurationsManagementSettings?: record, sqlImageOffer?: string, sqlImageSku?: "Developer"|"Express"|"Standard"|"Enterprise"|"Web", sqlManagement?: "Full"|"LightWeight"|"NoAgent", sqlServerLicenseType?: "PAYG"|"AHUB"|"DR", sqlVirtualMachineGroupResourceId?: string, storageConfigurationSettings?: record, virtualMachineResourceId?: string, wsfcDomainCredentials?: record}
   location: string # Resource location.
   --tags: record # Resource tags.
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<autoBackupSettings: record<backupScheduleType: string, backupSystemDbs: bool, enable: bool, enableEncryption: bool, fullBackupFrequency: string, fullBackupStartTime: int, fullBackupWindowHours: int, logBackupFrequency: int, password: string, retentionPeriod: int, storageAccessKey: string, storageAccountUrl: string>, autoPatchingSettings: record<dayOfWeek: string, enable: bool, maintenanceWindowDuration: int, maintenanceWindowStartingHour: int>, keyVaultCredentialSettings: record<azureKeyVaultUrl: string, credentialName: string, enable: bool, servicePrincipalName: string, servicePrincipalSecret: string>, provisioningState: string, serverConfigurationsManagementSettings: record<additionalFeaturesServerConfigurations: record, sqlConnectivityUpdateSettings: record, sqlStorageUpdateSettings: record, sqlWorkloadTypeUpdateSettings: record>, sqlImageOffer: string, sqlImageSku: string, sqlManagement: string, sqlServerLicenseType: string, sqlVirtualMachineGroupResourceId: string, storageConfigurationSettings: record<diskConfigurationType: string, sqlDataSettings: record, sqlLogSettings: record, sqlTempDbSettings: record, storageWorkloadType: string>, virtualMachineResourceId: string, wsfcDomainCredentials: record<clusterBootstrapAccountPassword: string, clusterOperatorAccountPassword: string, sqlServiceAccountPassword: string>>> {
+]: any -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<autoBackupSettings: record<backupScheduleType: string, backupSystemDbs: bool, enable: bool, enableEncryption: bool, fullBackupFrequency: string, fullBackupStartTime: int, fullBackupWindowHours: int, logBackupFrequency: int, password: string, retentionPeriod: int, storageAccessKey: string, storageAccountUrl: string>, autoPatchingSettings: record<dayOfWeek: string, enable: bool, maintenanceWindowDuration: int, maintenanceWindowStartingHour: int>, keyVaultCredentialSettings: record<azureKeyVaultUrl: string, credentialName: string, enable: bool, servicePrincipalName: string, servicePrincipalSecret: string>, provisioningState: string, serverConfigurationsManagementSettings: record<additionalFeaturesServerConfigurations: record, sqlConnectivityUpdateSettings: record, sqlStorageUpdateSettings: record, sqlWorkloadTypeUpdateSettings: record>, sqlImageOffer: string, sqlImageSku: string, sqlManagement: string, sqlServerLicenseType: string, sqlVirtualMachineGroupResourceId: string, storageConfigurationSettings: record<diskConfigurationType: string, sqlDataSettings: record, sqlLogSettings: record, sqlTempDbSettings: record, storageWorkloadType: string>, virtualMachineResourceId: string, wsfcDomainCredentials: record<clusterBootstrapAccountPassword: string, clusterOperatorAccountPassword: string, sqlServiceAccountPassword: string>>, location: string, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($sql_virtual_machine_name | is-empty) { error make --unspanned { msg: "path parameter 'sqlVirtualMachineName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), sql_virtual_machine_name: (encode-path-segment $sql_virtual_machine_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachines/{sql_virtual_machine_name}") $qp $auth.query)
   let req_body = {"identity": $identity, "properties": $properties, "location": $location, "tags": $tags} | compact

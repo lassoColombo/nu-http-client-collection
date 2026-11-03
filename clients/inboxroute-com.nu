@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -152,18 +152,18 @@ export def "get-contacts" [
   --listid: string # Unique 16 characters ID of the contact list to get contacts of
   --offset: int # Skip that many records
   --limit: int # Maximum number of items in page
-  --qp-sort: string # Property to sort by. Append '-' for descending order.
+  --sort: string # Property to sort by. Append '-' for descending order.
 ]: nothing -> record<page: table<_id: string, clientid: string, confirmed: string, customfields: any, email: string, fullname: string, ip: string, lang: string, listid: string, status: int>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "listid" $listid "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "listid" $listid "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/contacts" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"listid": $listid, "offset": $offset, "limit": $limit, "sort": $qp_sort} | compact)
+    query: ({"listid": $listid, "offset": $offset, "limit": $limit, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -189,18 +189,18 @@ export def "get-contacts-lists" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Skip that many records
   --limit: int # Maximum number of items in page
-  --qp-sort: string # Property to sort by. Append '-' for descending order.
+  --sort: string # Property to sort by. Append '-' for descending order.
 ]: nothing -> record<page: table<_id: string, clientid: string, created: string, customfields: list, eventcustomizations: list, name: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/contacts/lists" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"offset": $offset, "limit": $limit, "sort": $qp_sort} | compact)
+    query: ({"offset": $offset, "limit": $limit, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null

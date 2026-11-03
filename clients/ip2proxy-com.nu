@@ -99,7 +99,7 @@ def format-completer [] { ["json" "xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-op" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 # Check if an IP address is proxy
 #
 # GET /
-export def "get" [
+export def "get-op" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -133,12 +133,14 @@ export def "get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --package: string # Package name from PX1 to PX11. If not present, the web service will assume the PX1 package query.
-  --ip: string # IP address (IPv4) for lookup purpose. If not present, the server IP address will be used for the lookup.
+  --ip: string # IP address (IPv4) for lookup purpose. If not present, the server IP address will be used for the lookup. (required)
   --format: string@format-completer # If not present, json format will be returned as the search result.
-  --key: string # API key. Please sign up free trial license key at ip2location.com
+  --key: string # API key. Please sign up free trial license key at ip2location.com (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ip == null) { error make --unspanned { msg: "required query parameter 'ip' missing: pass --ip" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "package" $package "scalar") (serialize-qp "ip" $ip "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/html; charset=UTF-8"

@@ -152,13 +152,13 @@ export def "list" [
   --includes: list<string>@includes-completer # Optional details to be included in the response
   --offset: int # Number of Subscriptions to skip before starting to return paged results (must be a multiple of the limit) (default: 0)
   --limit: int # Number of Subscriptions to retrieve in this page, starting after offset (default: 25)
-  --qp-sort: string@sort-completer # Property name that will be used to sort results. "-" indicates descending (default: -expiresAt)
+  --sort: string@sort-completer # Property name that will be used to sort results. "-" indicates descending (default: -expiresAt)
   --x-shopper-id: string # Shopper ID to return subscriptions for when not using JWT
-  --x-market-id: string # The market that the response should be formatted for
+  --x-market-id: string # The market that the response should be formatted for (default: en-US)
 ]: nothing -> record<pagination: record<first: string, last: string, next: string, previous: string, total: int>, subscriptions: table<addons: list, billing: record, cancelable: bool, createdAt: string, expiresAt: string, label: string, launchUrl: string, paymentProfileId: int, priceLocked: bool, product: record, relations: record, renewAuto: bool, renewable: bool, status: string, subscriptionId: string, upgradeable: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "productGroupKeys" $product_group_keys "csv") (serialize-qp "includes" $includes "csv") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "productGroupKeys" $product_group_keys "csv") (serialize-qp "includes" $includes "csv") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/subscriptions" $qp $auth.query)
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -167,7 +167,7 @@ export def "list" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"productGroupKeys": $product_group_keys, "includes": $includes, "offset": $offset, "limit": $limit, "sort": $qp_sort} | compact)
+    query: ({"productGroupKeys": $product_group_keys, "includes": $includes, "offset": $offset, "limit": $limit, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -194,7 +194,7 @@ export def "product-groups" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --x-shopper-id: string # Shopper ID to return data for when not using JWT
-  --x-market-id: string # The market that the response should be formatted for
+  --x-market-id: string # The market that the response should be formatted for (default: en-US)
 ]: nothing -> table<productGroupKey: string, subscriptionCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -260,7 +260,7 @@ export def "cancel" [
 #
 # GET /v1/subscriptions/{subscriptionId}
 # operationId: get
-export def "get" [
+export def "get-v1-subscriptions-subscription-id" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -273,7 +273,7 @@ export def "get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --x-shopper-id: string # Shopper ID to be operated on, if different from JWT
-  --x-market-id: string # Unique identifier of the Market in which the request is happening
+  --x-market-id: string # Unique identifier of the Market in which the request is happening (default: en-US)
 ]: nothing -> record<addons: table<commitment: string, pfid: int, quantity: int>, billing: record<commitment: string, pastDueTypes: list<string>, renewAt: string, status: string>, cancelable: bool, createdAt: string, expiresAt: string, label: string, launchUrl: string, paymentProfileId: int, priceLocked: bool, product: record<label: string, namespace: string, pfid: int, productGroupKey: string, renewalPeriod: int, renewalPeriodUnit: string, renewalPfid: int, supportBillOn: bool>, relations: record<children: list<string>, parent: string>, renewAuto: bool, renewable: bool, status: string, subscriptionId: string, upgradeable: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -301,7 +301,7 @@ export def "get" [
 #
 # PATCH /v1/subscriptions/{subscriptionId}
 # operationId: update
-export def "update" [
+export def "patch-v1-subscriptions-subscription-id" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

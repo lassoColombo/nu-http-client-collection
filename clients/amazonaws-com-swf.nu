@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -108,6 +108,7 @@ def x-amz-target-completer-8 [] { ["SimpleWorkflowService.DescribeDomain"] }
 def x-amz-target-completer-9 [] { ["SimpleWorkflowService.DescribeWorkflowExecution"] }
 def x-amz-target-completer-10 [] { ["SimpleWorkflowService.DescribeWorkflowType"] }
 def x-amz-target-completer-11 [] { ["SimpleWorkflowService.GetWorkflowExecutionHistory"] }
+def registration-status-completer [] { ["DEPRECATED" "REGISTERED"] }
 def x-amz-target-completer-12 [] { ["SimpleWorkflowService.ListActivityTypes"] }
 def x-amz-target-completer-13 [] { ["SimpleWorkflowService.ListClosedWorkflowExecutions"] }
 def x-amz-target-completer-14 [] { ["SimpleWorkflowService.ListDomains"] }
@@ -119,6 +120,7 @@ def x-amz-target-completer-19 [] { ["SimpleWorkflowService.PollForDecisionTask"]
 def x-amz-target-completer-20 [] { ["SimpleWorkflowService.RecordActivityTaskHeartbeat"] }
 def x-amz-target-completer-21 [] { ["SimpleWorkflowService.RegisterActivityType"] }
 def x-amz-target-completer-22 [] { ["SimpleWorkflowService.RegisterDomain"] }
+def default-child-policy-completer [] { ["ABANDON" "REQUEST_CANCEL" "TERMINATE"] }
 def x-amz-target-completer-23 [] { ["SimpleWorkflowService.RegisterWorkflowType"] }
 def x-amz-target-completer-24 [] { ["SimpleWorkflowService.RequestCancelWorkflowExecution"] }
 def x-amz-target-completer-25 [] { ["SimpleWorkflowService.RespondActivityTaskCanceled"] }
@@ -126,6 +128,7 @@ def x-amz-target-completer-26 [] { ["SimpleWorkflowService.RespondActivityTaskCo
 def x-amz-target-completer-27 [] { ["SimpleWorkflowService.RespondActivityTaskFailed"] }
 def x-amz-target-completer-28 [] { ["SimpleWorkflowService.RespondDecisionTaskCompleted"] }
 def x-amz-target-completer-29 [] { ["SimpleWorkflowService.SignalWorkflowExecution"] }
+def child-policy-completer [] { ["ABANDON" "REQUEST_CANCEL" "TERMINATE"] }
 def x-amz-target-completer-30 [] { ["SimpleWorkflowService.StartWorkflowExecution"] }
 def x-amz-target-completer-31 [] { ["SimpleWorkflowService.TagResource"] }
 def x-amz-target-completer-32 [] { ["SimpleWorkflowService.TerminateWorkflowExecution"] }
@@ -161,6 +164,12 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CountClosedWorkflowExecutions
+# --startTimeFilter shape: {oldestDate: string, latestDate?: string}
+# --closeTimeFilter shape: {oldestDate: string, latestDate?: string}
+# --executionFilter shape: {workflowId: string}
+# --typeFilter shape: {name: string, version?: string}
+# --tagFilter shape: {tag: string}
+# --closeStatusFilter shape: {status: "COMPLETED"|"FAILED"|"CANCELED"|"TERMINATED"|"CONTINUED_AS_NEW"|"TIMED_OUT"}
 export def "count-closed-workflow-executions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -178,18 +187,19 @@ export def "count-closed-workflow-executions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  domain: any
-  --start-time-filter: any
-  --close-time-filter: any
-  --execution-filter: any
-  --type-filter: any
-  --tag-filter: any
-  --close-status-filter: any
-]: any -> record<count: record, truncated: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  domain: string # The name of the domain containing the workflow executions to count.
+  --start-time-filter: record # Used to filter the workflow executions in visibility APIs by various time-based rules. Each parameter, if specified, defines a rule that must be satisfied by each returned query result. The parameter values are in the Unix Time format (https://en.wikipedia.org/wiki/Unix_time). For example: "oldestDate": 1325376070. — shape: {oldestDate: string, latestDate?: string}
+  --close-time-filter: record # Used to filter the workflow executions in visibility APIs by various time-based rules. Each parameter, if specified, defines a rule that must be satisfied by each returned query result. The parameter values are in the Unix Time format (https://en.wikipedia.org/wiki/Unix_time). For example: "oldestDate": 1325376070. — shape: {oldestDate: string, latestDate?: string}
+  --execution-filter: record # Used to filter the workflow executions in visibility APIs by their workflowId. — shape: {workflowId: string}
+  --type-filter: record # Used to filter workflow execution query results by type. Each parameter, if specified, defines a rule that must be satisfied by each returned result. — shape: {name: string, version?: string}
+  --tag-filter: record # Used to filter the workflow executions in visibility APIs based on a tag. — shape: {tag: string}
+  --close-status-filter: record # Used to filter the closed workflow executions in visibility APIs by their close status. — shape: {status: "COMPLETED"|"FAILED"|"CANCELED"|"TERMINATED"|"CONTINUED_AS_NEW"|"TIMED_OUT"}
+]: any -> record<count: int, truncated: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.CountClosedWorkflowExecutions")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"domain": $domain, "startTimeFilter": $start_time_filter, "closeTimeFilter": $close_time_filter, "executionFilter": $execution_filter, "typeFilter": $type_filter, "tagFilter": $tag_filter, "closeStatusFilter": $close_status_filter} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -215,6 +225,10 @@ export def "count-closed-workflow-executions" [
 #
 # POST /
 # operationId: CountOpenWorkflowExecutions
+# --startTimeFilter shape: {oldestDate: string, latestDate?: string}
+# --typeFilter shape: {name: string, version?: string}
+# --tagFilter shape: {tag: string}
+# --executionFilter shape: {workflowId: string}
 export def "count-open-workflow-executions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -232,16 +246,17 @@ export def "count-open-workflow-executions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  domain: any
-  start_time_filter: any
-  --type-filter: any
-  --tag-filter: any
-  --execution-filter: any
-]: any -> record<count: record, truncated: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  domain: string # The name of the domain containing the workflow executions to count.
+  start_time_filter: record # Used to filter the workflow executions in visibility APIs by various time-based rules. Each parameter, if specified, defines a rule that must be satisfied by each returned query result. The parameter values are in the Unix Time format (https://en.wikipedia.org/wiki/Unix_time). For example: "oldestDate": 1325376070. — shape: {oldestDate: string, latestDate?: string}
+  --type-filter: record # Used to filter workflow execution query results by type. Each parameter, if specified, defines a rule that must be satisfied by each returned result. — shape: {name: string, version?: string}
+  --tag-filter: record # Used to filter the workflow executions in visibility APIs based on a tag. — shape: {tag: string}
+  --execution-filter: record # Used to filter the workflow executions in visibility APIs by their workflowId. — shape: {workflowId: string}
+]: any -> record<count: int, truncated: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.CountOpenWorkflowExecutions")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"domain": $domain, "startTimeFilter": $start_time_filter, "typeFilter": $type_filter, "tagFilter": $tag_filter, "executionFilter": $execution_filter} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -267,6 +282,7 @@ export def "count-open-workflow-executions" [
 #
 # POST /
 # operationId: CountPendingActivityTasks
+# --taskList shape: {name: string}
 export def "count-pending-activity-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -284,13 +300,14 @@ export def "count-pending-activity-tasks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  domain: any
-  task_list: any
-]: any -> record<count: record, truncated: record> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  domain: string # The name of the domain that contains the task list.
+  task_list: record # Represents a task list. — shape: {name: string}
+]: any -> record<count: int, truncated: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.CountPendingActivityTasks")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"domain": $domain, "taskList": $task_list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -316,6 +333,7 @@ export def "count-pending-activity-tasks" [
 #
 # POST /
 # operationId: CountPendingDecisionTasks
+# --taskList shape: {name: string}
 export def "count-pending-decision-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -333,13 +351,14 @@ export def "count-pending-decision-tasks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  domain: any
-  task_list: any
-]: any -> record<count: record, truncated: record> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  domain: string # The name of the domain that contains the task list.
+  task_list: record # Represents a task list. — shape: {name: string}
+]: any -> record<count: int, truncated: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.CountPendingDecisionTasks")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"domain": $domain, "taskList": $task_list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -365,6 +384,7 @@ export def "count-pending-decision-tasks" [
 #
 # POST /
 # operationId: DeprecateActivityType
+# --activityType shape: {name: string, version: string}
 export def "deprecate-activity-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -382,13 +402,14 @@ export def "deprecate-activity-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  domain: any
-  activity_type: any
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  domain: string # The name of the domain in which the activity type is registered.
+  activity_type: record # Represents an activity type. — shape: {name: string, version: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.DeprecateActivityType")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"domain": $domain, "activityType": $activity_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -431,12 +452,13 @@ export def "deprecate-domain" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  name: any
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  name: string # The name of the domain to deprecate.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.DeprecateDomain")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -462,6 +484,7 @@ export def "deprecate-domain" [
 #
 # POST /
 # operationId: DeprecateWorkflowType
+# --workflowType shape: {name: string, version: string}
 export def "deprecate-workflow-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -479,13 +502,14 @@ export def "deprecate-workflow-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  domain: any
-  workflow_type: any
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  domain: string # The name of the domain in which the workflow type is registered.
+  workflow_type: record # Represents a workflow type. — shape: {name: string, version: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.DeprecateWorkflowType")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"domain": $domain, "workflowType": $workflow_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -511,6 +535,7 @@ export def "deprecate-workflow-type" [
 #
 # POST /
 # operationId: DescribeActivityType
+# --activityType shape: {name: string, version: string}
 export def "describe-activity-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -528,13 +553,14 @@ export def "describe-activity-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  domain: any
-  activity_type: any
-]: any -> record<typeInfo: record<activityType: record<name: record, version: record>, status: record, description: record, creationDate: record, deprecationDate: record>, configuration: record<defaultTaskStartToCloseTimeout: record, defaultTaskHeartbeatTimeout: record, defaultTaskList: record<name: record>, defaultTaskPriority: record, defaultTaskScheduleToStartTimeout: record, defaultTaskScheduleToCloseTimeout: record>> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  domain: string # The name of the domain in which the activity type is registered.
+  activity_type: record # Represents an activity type. — shape: {name: string, version: string}
+]: any -> record<typeInfo: record<activityType: record<name: string, version: string>, status: string, description: string, creationDate: string, deprecationDate: string>, configuration: record<defaultTaskStartToCloseTimeout: string, defaultTaskHeartbeatTimeout: string, defaultTaskList: record<name: string>, defaultTaskPriority: string, defaultTaskScheduleToStartTimeout: string, defaultTaskScheduleToCloseTimeout: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.DescribeActivityType")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"domain": $domain, "activityType": $activity_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -577,12 +603,13 @@ export def "describe-domain" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  name: any
-]: any -> record<domainInfo: record<name: record, status: record, description: record, arn: record>, configuration: record<workflowExecutionRetentionPeriodInDays: record>> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  name: string # The name of the domain to describe.
+]: any -> record<domainInfo: record<name: string, status: string, description: string, arn: string>, configuration: record<workflowExecutionRetentionPeriodInDays: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.DescribeDomain")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -608,6 +635,7 @@ export def "describe-domain" [
 #
 # POST /
 # operationId: DescribeWorkflowExecution
+# --execution shape: {workflowId: string, runId: string}
 export def "describe-workflow-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -625,13 +653,14 @@ export def "describe-workflow-execution" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  domain: any
-  execution: any
-]: any -> record<executionInfo: record<execution: record<workflowId: record, runId: record>, workflowType: record<name: record, version: record>, startTimestamp: record, closeTimestamp: record, executionStatus: record, closeStatus: record, parent: record<workflowId: record, runId: record>, tagList: record, cancelRequested: record>, executionConfiguration: record<taskStartToCloseTimeout: record, executionStartToCloseTimeout: record, taskList: record<name: record>, taskPriority: record, childPolicy: record, lambdaRole: record>, openCounts: record<openActivityTasks: record, openDecisionTasks: record, openTimers: record, openChildWorkflowExecutions: record, openLambdaFunctions: record>, latestActivityTaskTimestamp: record, latestExecutionContext: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  domain: string # The name of the domain containing the workflow execution.
+  execution: record # Represents a workflow execution. — shape: {workflowId: string, runId: string}
+]: any -> record<executionInfo: record<execution: record<workflowId: string, runId: string>, workflowType: record<name: string, version: string>, startTimestamp: string, closeTimestamp: string, executionStatus: string, closeStatus: string, parent: record<workflowId: string, runId: string>, tagList: list<string>, cancelRequested: bool>, executionConfiguration: record<taskStartToCloseTimeout: string, executionStartToCloseTimeout: string, taskList: record<name: string>, taskPriority: string, childPolicy: string, lambdaRole: string>, openCounts: record<openActivityTasks: int, openDecisionTasks: int, openTimers: int, openChildWorkflowExecutions: int, openLambdaFunctions: int>, latestActivityTaskTimestamp: string, latestExecutionContext: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.DescribeWorkflowExecution")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"domain": $domain, "execution": $execution} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -657,6 +686,7 @@ export def "describe-workflow-execution" [
 #
 # POST /
 # operationId: DescribeWorkflowType
+# --workflowType shape: {name: string, version: string}
 export def "describe-workflow-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -674,13 +704,14 @@ export def "describe-workflow-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  domain: any
-  workflow_type: any
-]: any -> record<typeInfo: record<workflowType: record<name: record, version: record>, status: record, description: record, creationDate: record, deprecationDate: record>, configuration: record<defaultTaskStartToCloseTimeout: record, defaultExecutionStartToCloseTimeout: record, defaultTaskList: record<name: record>, defaultTaskPriority: record, defaultChildPolicy: record, defaultLambdaRole: record>> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  domain: string # The name of the domain in which this workflow type is registered.
+  workflow_type: record # Represents a workflow type. — shape: {name: string, version: string}
+]: any -> record<typeInfo: record<workflowType: record<name: string, version: string>, status: string, description: string, creationDate: string, deprecationDate: string>, configuration: record<defaultTaskStartToCloseTimeout: string, defaultExecutionStartToCloseTimeout: string, defaultTaskList: record<name: string>, defaultTaskPriority: string, defaultChildPolicy: string, defaultLambdaRole: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.DescribeWorkflowType")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"domain": $domain, "workflowType": $workflow_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -706,6 +737,7 @@ export def "describe-workflow-type" [
 #
 # POST /
 # operationId: GetWorkflowExecutionHistory
+# --execution shape: {workflowId: string, runId: string}
 export def "get-workflow-execution-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -725,16 +757,17 @@ export def "get-workflow-execution-history" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  domain: any
-  execution: any
-  --next-page-token-body: any #  (body field)
-  --maximum-page-size-body: any #  (body field)
-  --reverse-order: any
-]: any -> record<events: record, nextPageToken: record> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  domain: string # The name of the domain containing the workflow execution.
+  execution: record # Represents a workflow execution. — shape: {workflowId: string, runId: string}
+  --next-page-token-body: string # If NextPageToken is returned there are more results available. The value of NextPageToken is a unique pagination token for each page. Make the call again using the returned token to retrieve the next page. Keep all other arguments unchanged. Each pagination token expires after 60 seconds. Using an expired pagination token will return a 400 error: "Specified token has exceeded its maximum lifetime". The configured maximumPageSize determines how many results can be returned in a single call. (body field)
+  --maximum-page-size-body: int # The maximum number of results that are returned per call. Use nextPageToken to obtain further pages of results. (body field)
+  --reverse-order: oneof<nothing, bool> # When set to true, returns the events in reverse order. By default the results are returned in ascending order of the eventTimeStamp of the events.
+]: any -> record<events: table<eventTimestamp: string, eventType: string, eventId: int, workflowExecutionStartedEventAttributes: record, workflowExecutionCompletedEventAttributes: record, completeWorkflowExecutionFailedEventAttributes: record, workflowExecutionFailedEventAttributes: record, failWorkflowExecutionFailedEventAttributes: record, workflowExecutionTimedOutEventAttributes: record, workflowExecutionCanceledEventAttributes: record, cancelWorkflowExecutionFailedEventAttributes: record, workflowExecutionContinuedAsNewEventAttributes: record, continueAsNewWorkflowExecutionFailedEventAttributes: record, workflowExecutionTerminatedEventAttributes: record, workflowExecutionCancelRequestedEventAttributes: record, decisionTaskScheduledEventAttributes: record, decisionTaskStartedEventAttributes: record, decisionTaskCompletedEventAttributes: record, decisionTaskTimedOutEventAttributes: record, activityTaskScheduledEventAttributes: record, activityTaskStartedEventAttributes: record, activityTaskCompletedEventAttributes: record, activityTaskFailedEventAttributes: record, activityTaskTimedOutEventAttributes: record, activityTaskCanceledEventAttributes: record, activityTaskCancelRequestedEventAttributes: record, workflowExecutionSignaledEventAttributes: record, markerRecordedEventAttributes: record, recordMarkerFailedEventAttributes: record, timerStartedEventAttributes: record, timerFiredEventAttributes: record, timerCanceledEventAttributes: record, startChildWorkflowExecutionInitiatedEventAttributes: record, childWorkflowExecutionStartedEventAttributes: record, childWorkflowExecutionCompletedEventAttributes: record, childWorkflowExecutionFailedEventAttributes: record, childWorkflowExecutionTimedOutEventAttributes: record, childWorkflowExecutionCanceledEventAttributes: record, childWorkflowExecutionTerminatedEventAttributes: record, signalExternalWorkflowExecutionInitiatedEventAttributes: record, externalWorkflowExecutionSignaledEventAttributes: record, signalExternalWorkflowExecutionFailedEventAttributes: record, externalWorkflowExecutionCancelRequestedEventAttributes: record, requestCancelExternalWorkflowExecutionInitiatedEventAttributes: record, requestCancelExternalWorkflowExecutionFailedEventAttributes: record, scheduleActivityTaskFailedEventAttributes: record, requestCancelActivityTaskFailedEventAttributes: record, startTimerFailedEventAttributes: record, cancelTimerFailedEventAttributes: record, startChildWorkflowExecutionFailedEventAttributes: record, lambdaFunctionScheduledEventAttributes: record, lambdaFunctionStartedEventAttributes: record, lambdaFunctionCompletedEventAttributes: record, lambdaFunctionFailedEventAttributes: record, lambdaFunctionTimedOutEventAttributes: record, scheduleLambdaFunctionFailedEventAttributes: record, startLambdaFunctionFailedEventAttributes: record>, nextPageToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.GetWorkflowExecutionHistory")
   let qp = [(serialize-qp "maximumPageSize" $maximum_page_size "scalar") (serialize-qp "nextPageToken" $next_page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"domain": $domain, "execution": $execution, "nextPageToken": $next_page_token_body, "maximumPageSize": $maximum_page_size_body, "reverseOrder": $reverse_order} | compact
@@ -780,17 +813,18 @@ export def "list-activity-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  domain: any
-  --name: any
-  registration_status: any
-  --next-page-token-body: any #  (body field)
-  --maximum-page-size-body: any #  (body field)
-  --reverse-order: any
-]: any -> record<typeInfos: record, nextPageToken: record> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  domain: string # The name of the domain in which the activity types have been registered.
+  --name: string # If specified, only lists the activity types that have this name.
+  registration_status: string@registration-status-completer # Specifies the registration status of the activity types to list.
+  --next-page-token-body: string # If NextPageToken is returned there are more results available. The value of NextPageToken is a unique pagination token for each page. Make the call again using the returned token to retrieve the next page. Keep all other arguments unchanged. Each pagination token expires after 60 seconds. Using an expired pagination token will return a 400 error: "Specified token has exceeded its maximum lifetime". The configured maximumPageSize determines how many results can be returned in a single call. (body field)
+  --maximum-page-size-body: int # The maximum number of results that are returned per call. Use nextPageToken to obtain further pages of results. (body field)
+  --reverse-order: oneof<nothing, bool> # When set to true, returns the results in reverse order. By default, the results are returned in ascending alphabetical order by name of the activity types.
+]: any -> record<typeInfos: table<activityType: record, status: string, description: string, creationDate: string, deprecationDate: string>, nextPageToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.ListActivityTypes")
   let qp = [(serialize-qp "maximumPageSize" $maximum_page_size "scalar") (serialize-qp "nextPageToken" $next_page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"domain": $domain, "name": $name, "registrationStatus": $registration_status, "nextPageToken": $next_page_token_body, "maximumPageSize": $maximum_page_size_body, "reverseOrder": $reverse_order} | compact
@@ -817,6 +851,12 @@ export def "list-activity-types" [
 #
 # POST /
 # operationId: ListClosedWorkflowExecutions
+# --startTimeFilter shape: {oldestDate: string, latestDate?: string}
+# --closeTimeFilter shape: {oldestDate: string, latestDate?: string}
+# --executionFilter shape: {workflowId: string}
+# --closeStatusFilter shape: {status: "COMPLETED"|"FAILED"|"CANCELED"|"TERMINATED"|"CONTINUED_AS_NEW"|"TIMED_OUT"}
+# --typeFilter shape: {name: string, version?: string}
+# --tagFilter shape: {tag: string}
 export def "list-closed-workflow-executions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -836,21 +876,22 @@ export def "list-closed-workflow-executions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  domain: any
-  --start-time-filter: any
-  --close-time-filter: any
-  --execution-filter: any
-  --close-status-filter: any
-  --type-filter: any
-  --tag-filter: any
-  --next-page-token-body: any #  (body field)
-  --maximum-page-size-body: any #  (body field)
-  --reverse-order: any
-]: any -> record<executionInfos: record, nextPageToken: record> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  domain: string # The name of the domain that contains the workflow executions to list.
+  --start-time-filter: record # Used to filter the workflow executions in visibility APIs by various time-based rules. Each parameter, if specified, defines a rule that must be satisfied by each returned query result. The parameter values are in the Unix Time format (https://en.wikipedia.org/wiki/Unix_time). For example: "oldestDate": 1325376070. — shape: {oldestDate: string, latestDate?: string}
+  --close-time-filter: record # Used to filter the workflow executions in visibility APIs by various time-based rules. Each parameter, if specified, defines a rule that must be satisfied by each returned query result. The parameter values are in the Unix Time format (https://en.wikipedia.org/wiki/Unix_time). For example: "oldestDate": 1325376070. — shape: {oldestDate: string, latestDate?: string}
+  --execution-filter: record # Used to filter the workflow executions in visibility APIs by their workflowId. — shape: {workflowId: string}
+  --close-status-filter: record # Used to filter the closed workflow executions in visibility APIs by their close status. — shape: {status: "COMPLETED"|"FAILED"|"CANCELED"|"TERMINATED"|"CONTINUED_AS_NEW"|"TIMED_OUT"}
+  --type-filter: record # Used to filter workflow execution query results by type. Each parameter, if specified, defines a rule that must be satisfied by each returned result. — shape: {name: string, version?: string}
+  --tag-filter: record # Used to filter the workflow executions in visibility APIs based on a tag. — shape: {tag: string}
+  --next-page-token-body: string # If NextPageToken is returned there are more results available. The value of NextPageToken is a unique pagination token for each page. Make the call again using the returned token to retrieve the next page. Keep all other arguments unchanged. Each pagination token expires after 60 seconds. Using an expired pagination token will return a 400 error: "Specified token has exceeded its maximum lifetime". The configured maximumPageSize determines how many results can be returned in a single call. (body field)
+  --maximum-page-size-body: int # The maximum number of results that are returned per call. Use nextPageToken to obtain further pages of results. (body field)
+  --reverse-order: oneof<nothing, bool> # When set to true, returns the results in reverse order. By default the results are returned in descending order of the start or the close time of the executions.
+]: any -> record<executionInfos: table<execution: record, workflowType: record, startTimestamp: string, closeTimestamp: string, executionStatus: string, closeStatus: string, parent: record, tagList: list, cancelRequested: bool>, nextPageToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.ListClosedWorkflowExecutions")
   let qp = [(serialize-qp "maximumPageSize" $maximum_page_size "scalar") (serialize-qp "nextPageToken" $next_page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"domain": $domain, "startTimeFilter": $start_time_filter, "closeTimeFilter": $close_time_filter, "executionFilter": $execution_filter, "closeStatusFilter": $close_status_filter, "typeFilter": $type_filter, "tagFilter": $tag_filter, "nextPageToken": $next_page_token_body, "maximumPageSize": $maximum_page_size_body, "reverseOrder": $reverse_order} | compact
@@ -896,15 +937,16 @@ export def "list-domains" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  --next-page-token-body: any #  (body field)
-  registration_status: any
-  --maximum-page-size-body: any #  (body field)
-  --reverse-order: any
-]: any -> record<domainInfos: record, nextPageToken: record> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  --next-page-token-body: string # If NextPageToken is returned there are more results available. The value of NextPageToken is a unique pagination token for each page. Make the call again using the returned token to retrieve the next page. Keep all other arguments unchanged. Each pagination token expires after 60 seconds. Using an expired pagination token will return a 400 error: "Specified token has exceeded its maximum lifetime". The configured maximumPageSize determines how many results can be returned in a single call. (body field)
+  registration_status: string@registration-status-completer # Specifies the registration status of the domains to list.
+  --maximum-page-size-body: int # The maximum number of results that are returned per call. Use nextPageToken to obtain further pages of results. (body field)
+  --reverse-order: oneof<nothing, bool> # When set to true, returns the results in reverse order. By default, the results are returned in ascending alphabetical order by name of the domains.
+]: any -> record<domainInfos: table<name: string, status: string, description: string, arn: string>, nextPageToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.ListDomains")
   let qp = [(serialize-qp "maximumPageSize" $maximum_page_size "scalar") (serialize-qp "nextPageToken" $next_page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"nextPageToken": $next_page_token_body, "registrationStatus": $registration_status, "maximumPageSize": $maximum_page_size_body, "reverseOrder": $reverse_order} | compact
@@ -931,6 +973,10 @@ export def "list-domains" [
 #
 # POST /
 # operationId: ListOpenWorkflowExecutions
+# --startTimeFilter shape: {oldestDate: string, latestDate?: string}
+# --typeFilter shape: {name: string, version?: string}
+# --tagFilter shape: {tag: string}
+# --executionFilter shape: {workflowId: string}
 export def "list-open-workflow-executions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -950,19 +996,20 @@ export def "list-open-workflow-executions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  domain: any
-  start_time_filter: any
-  --type-filter: any
-  --tag-filter: any
-  --next-page-token-body: any #  (body field)
-  --maximum-page-size-body: any #  (body field)
-  --reverse-order: any
-  --execution-filter: any
-]: any -> record<executionInfos: record, nextPageToken: record> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  domain: string # The name of the domain that contains the workflow executions to list.
+  start_time_filter: record # Used to filter the workflow executions in visibility APIs by various time-based rules. Each parameter, if specified, defines a rule that must be satisfied by each returned query result. The parameter values are in the Unix Time format (https://en.wikipedia.org/wiki/Unix_time). For example: "oldestDate": 1325376070. — shape: {oldestDate: string, latestDate?: string}
+  --type-filter: record # Used to filter workflow execution query results by type. Each parameter, if specified, defines a rule that must be satisfied by each returned result. — shape: {name: string, version?: string}
+  --tag-filter: record # Used to filter the workflow executions in visibility APIs based on a tag. — shape: {tag: string}
+  --next-page-token-body: string # If NextPageToken is returned there are more results available. The value of NextPageToken is a unique pagination token for each page. Make the call again using the returned token to retrieve the next page. Keep all other arguments unchanged. Each pagination token expires after 60 seconds. Using an expired pagination token will return a 400 error: "Specified token has exceeded its maximum lifetime". The configured maximumPageSize determines how many results can be returned in a single call. (body field)
+  --maximum-page-size-body: int # The maximum number of results that are returned per call. Use nextPageToken to obtain further pages of results. (body field)
+  --reverse-order: oneof<nothing, bool> # When set to true, returns the results in reverse order. By default the results are returned in descending order of the start time of the executions.
+  --execution-filter: record # Used to filter the workflow executions in visibility APIs by their workflowId. — shape: {workflowId: string}
+]: any -> record<executionInfos: table<execution: record, workflowType: record, startTimestamp: string, closeTimestamp: string, executionStatus: string, closeStatus: string, parent: record, tagList: list, cancelRequested: bool>, nextPageToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.ListOpenWorkflowExecutions")
   let qp = [(serialize-qp "maximumPageSize" $maximum_page_size "scalar") (serialize-qp "nextPageToken" $next_page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"domain": $domain, "startTimeFilter": $start_time_filter, "typeFilter": $type_filter, "tagFilter": $tag_filter, "nextPageToken": $next_page_token_body, "maximumPageSize": $maximum_page_size_body, "reverseOrder": $reverse_order, "executionFilter": $execution_filter} | compact
@@ -1006,12 +1053,13 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  resource_arn: any
-]: any -> record<tags: record> {
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  resource_arn: string # The Amazon Resource Name (ARN) for the Amazon SWF domain.
+]: any -> record<tags: table<key: string, value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.ListTagsForResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceArn": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1056,17 +1104,18 @@ export def "list-workflow-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  domain: any
-  --name: any
-  registration_status: any
-  --next-page-token-body: any #  (body field)
-  --maximum-page-size-body: any #  (body field)
-  --reverse-order: any
-]: any -> record<typeInfos: record, nextPageToken: record> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  domain: string # The name of the domain in which the workflow types have been registered.
+  --name: string # If specified, lists the workflow type with this name.
+  registration_status: string@registration-status-completer # Specifies the registration status of the workflow types to list.
+  --next-page-token-body: string # If NextPageToken is returned there are more results available. The value of NextPageToken is a unique pagination token for each page. Make the call again using the returned token to retrieve the next page. Keep all other arguments unchanged. Each pagination token expires after 60 seconds. Using an expired pagination token will return a 400 error: "Specified token has exceeded its maximum lifetime". The configured maximumPageSize determines how many results can be returned in a single call. (body field)
+  --maximum-page-size-body: int # The maximum number of results that are returned per call. Use nextPageToken to obtain further pages of results. (body field)
+  --reverse-order: oneof<nothing, bool> # When set to true, returns the results in reverse order. By default the results are returned in ascending alphabetical order of the name of the workflow types.
+]: any -> record<typeInfos: table<workflowType: record, status: string, description: string, creationDate: string, deprecationDate: string>, nextPageToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.ListWorkflowTypes")
   let qp = [(serialize-qp "maximumPageSize" $maximum_page_size "scalar") (serialize-qp "nextPageToken" $next_page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"domain": $domain, "name": $name, "registrationStatus": $registration_status, "nextPageToken": $next_page_token_body, "maximumPageSize": $maximum_page_size_body, "reverseOrder": $reverse_order} | compact
@@ -1093,6 +1142,7 @@ export def "list-workflow-types" [
 #
 # POST /
 # operationId: PollForActivityTask
+# --taskList shape: {name: string}
 export def "poll-for-activity-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1110,14 +1160,15 @@ export def "poll-for-activity-task" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  domain: any
-  task_list: any
-  --identity: any
-]: any -> record<taskToken: record, activityId: record, startedEventId: record, workflowExecution: record<workflowId: record, runId: record>, activityType: record<name: record, version: record>, input: record> {
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  domain: string # The name of the domain that contains the task lists being polled.
+  task_list: record # Represents a task list. — shape: {name: string}
+  --identity: string # Identity of the worker making the request, recorded in the ActivityTaskStarted event in the workflow history. This enables diagnostic tracing when problems arise. The form of this identity is user defined.
+]: any -> record<taskToken: string, activityId: string, startedEventId: int, workflowExecution: record<workflowId: string, runId: string>, activityType: record<name: string, version: string>, input: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.PollForActivityTask")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"domain": $domain, "taskList": $task_list, "identity": $identity} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1143,6 +1194,7 @@ export def "poll-for-activity-task" [
 #
 # POST /
 # operationId: PollForDecisionTask
+# --taskList shape: {name: string}
 export def "poll-for-decision-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1162,17 +1214,18 @@ export def "poll-for-decision-task" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  domain: any
-  task_list: any
-  --identity: any
-  --next-page-token-body: any #  (body field)
-  --maximum-page-size-body: any #  (body field)
-  --reverse-order: any
-]: any -> record<taskToken: record, startedEventId: record, workflowExecution: record<workflowId: record, runId: record>, workflowType: record<name: record, version: record>, events: record, nextPageToken: record, previousStartedEventId: record> {
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  domain: string # The name of the domain containing the task lists to poll.
+  task_list: record # Represents a task list. — shape: {name: string}
+  --identity: string # Identity of the decider making the request, which is recorded in the DecisionTaskStarted event in the workflow history. This enables diagnostic tracing when problems arise. The form of this identity is user defined.
+  --next-page-token-body: string # If NextPageToken is returned there are more results available. The value of NextPageToken is a unique pagination token for each page. Make the call again using the returned token to retrieve the next page. Keep all other arguments unchanged. Each pagination token expires after 60 seconds. Using an expired pagination token will return a 400 error: "Specified token has exceeded its maximum lifetime". The configured maximumPageSize determines how many results can be returned in a single call. The nextPageToken returned by this action cannot be used with GetWorkflowExecutionHistory to get the next page. You must call PollForDecisionTask again (with the nextPageToken) to retrieve the next page of history records. Calling PollForDecisionTask with a nextPageToken doesn't return a new decision task. (body field)
+  --maximum-page-size-body: int # The maximum number of results that are returned per call. Use nextPageToken to obtain further pages of results. This is an upper limit only; the actual number of results returned per call may be fewer than the specified maximum. (body field)
+  --reverse-order: oneof<nothing, bool> # When set to true, returns the events in reverse order. By default the results are returned in ascending order of the eventTimestamp of the events.
+]: any -> record<taskToken: string, startedEventId: int, workflowExecution: record<workflowId: string, runId: string>, workflowType: record<name: string, version: string>, events: table<eventTimestamp: string, eventType: string, eventId: int, workflowExecutionStartedEventAttributes: record, workflowExecutionCompletedEventAttributes: record, completeWorkflowExecutionFailedEventAttributes: record, workflowExecutionFailedEventAttributes: record, failWorkflowExecutionFailedEventAttributes: record, workflowExecutionTimedOutEventAttributes: record, workflowExecutionCanceledEventAttributes: record, cancelWorkflowExecutionFailedEventAttributes: record, workflowExecutionContinuedAsNewEventAttributes: record, continueAsNewWorkflowExecutionFailedEventAttributes: record, workflowExecutionTerminatedEventAttributes: record, workflowExecutionCancelRequestedEventAttributes: record, decisionTaskScheduledEventAttributes: record, decisionTaskStartedEventAttributes: record, decisionTaskCompletedEventAttributes: record, decisionTaskTimedOutEventAttributes: record, activityTaskScheduledEventAttributes: record, activityTaskStartedEventAttributes: record, activityTaskCompletedEventAttributes: record, activityTaskFailedEventAttributes: record, activityTaskTimedOutEventAttributes: record, activityTaskCanceledEventAttributes: record, activityTaskCancelRequestedEventAttributes: record, workflowExecutionSignaledEventAttributes: record, markerRecordedEventAttributes: record, recordMarkerFailedEventAttributes: record, timerStartedEventAttributes: record, timerFiredEventAttributes: record, timerCanceledEventAttributes: record, startChildWorkflowExecutionInitiatedEventAttributes: record, childWorkflowExecutionStartedEventAttributes: record, childWorkflowExecutionCompletedEventAttributes: record, childWorkflowExecutionFailedEventAttributes: record, childWorkflowExecutionTimedOutEventAttributes: record, childWorkflowExecutionCanceledEventAttributes: record, childWorkflowExecutionTerminatedEventAttributes: record, signalExternalWorkflowExecutionInitiatedEventAttributes: record, externalWorkflowExecutionSignaledEventAttributes: record, signalExternalWorkflowExecutionFailedEventAttributes: record, externalWorkflowExecutionCancelRequestedEventAttributes: record, requestCancelExternalWorkflowExecutionInitiatedEventAttributes: record, requestCancelExternalWorkflowExecutionFailedEventAttributes: record, scheduleActivityTaskFailedEventAttributes: record, requestCancelActivityTaskFailedEventAttributes: record, startTimerFailedEventAttributes: record, cancelTimerFailedEventAttributes: record, startChildWorkflowExecutionFailedEventAttributes: record, lambdaFunctionScheduledEventAttributes: record, lambdaFunctionStartedEventAttributes: record, lambdaFunctionCompletedEventAttributes: record, lambdaFunctionFailedEventAttributes: record, lambdaFunctionTimedOutEventAttributes: record, scheduleLambdaFunctionFailedEventAttributes: record, startLambdaFunctionFailedEventAttributes: record>, nextPageToken: string, previousStartedEventId: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.PollForDecisionTask")
   let qp = [(serialize-qp "maximumPageSize" $maximum_page_size "scalar") (serialize-qp "nextPageToken" $next_page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"domain": $domain, "taskList": $task_list, "identity": $identity, "nextPageToken": $next_page_token_body, "maximumPageSize": $maximum_page_size_body, "reverseOrder": $reverse_order} | compact
@@ -1216,13 +1269,14 @@ export def "record-activity-task-heartbeat" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  task_token: any
-  --details: any
-]: any -> record<cancelRequested: record> {
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  task_token: string # The taskToken of the ActivityTask. taskToken is generated by the service and should be treated as an opaque value. If the task is passed to another process, its taskToken must also be passed. This enables it to provide its progress and respond with results.
+  --details: string # If specified, contains details about the progress of the task.
+]: any -> record<cancelRequested: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.RecordActivityTaskHeartbeat")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"taskToken": $task_token, "details": $details} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1248,6 +1302,7 @@ export def "record-activity-task-heartbeat" [
 #
 # POST /
 # operationId: RegisterActivityType
+# --defaultTaskList shape: {name: string}
 export def "register-activity-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1265,21 +1320,22 @@ export def "register-activity-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  domain: any
-  name: any
-  version: any
-  --description: any
-  --default-task-start-to-close-timeout: any
-  --default-task-heartbeat-timeout: any
-  --default-task-list: any
-  --default-task-priority: any
-  --default-task-schedule-to-start-timeout: any
-  --default-task-schedule-to-close-timeout: any
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  domain: string # The name of the domain in which this activity is to be registered.
+  name: string # The name of the activity type within the domain. The specified string must not start or end with whitespace. It must not contain a : (colon), / (slash), | (vertical bar), or any control characters (\u0000-\u001f | \u007f-\u009f). Also, it must not be the literal string arn.
+  version: string # The version of the activity type. The activity type consists of the name and version, the combination of which must be unique within the domain. The specified string must not start or end with whitespace. It must not contain a : (colon), / (slash), | (vertical bar), or any control characters (\u0000-\u001f | \u007f-\u009f). Also, it must not be the literal string arn.
+  --description: string # A textual description of the activity type.
+  --default-task-start-to-close-timeout: string # If set, specifies the default maximum duration that a worker can take to process tasks of this activity type. This default can be overridden when scheduling an activity task using the ScheduleActivityTask Decision. The duration is specified in seconds, an integer greater than or equal to 0. You can use NONE to specify unlimited duration.
+  --default-task-heartbeat-timeout: string # If set, specifies the default maximum time before which a worker processing a task of this type must report progress by calling RecordActivityTaskHeartbeat. If the timeout is exceeded, the activity task is automatically timed out. This default can be overridden when scheduling an activity task using the ScheduleActivityTask Decision. If the activity worker subsequently attempts to record a heartbeat or returns a result, the activity worker receives an UnknownResource fault. In this case, Amazon SWF no longer considers the activity task to be valid; the activity worker should clean up the activity task. The duration is specified in seconds, an integer greater than or equal to 0. You can use NONE to specify unlimited duration.
+  --default-task-list: record # Represents a task list. — shape: {name: string}
+  --default-task-priority: string # The default task priority to assign to the activity type. If not assigned, then 0 is used. Valid values are integers that range from Java's Integer.MIN_VALUE (-2147483648) to Integer.MAX_VALUE (2147483647). Higher numbers indicate higher priority. For more information about setting task priority, see Setting Task Priority (https://docs.aws.amazon.com/amazonswf/latest/developerguide/programming-priority.html) in the in the Amazon SWF Developer Guide..
+  --default-task-schedule-to-start-timeout: string # If set, specifies the default maximum duration that a task of this activity type can wait before being assigned to a worker. This default can be overridden when scheduling an activity task using the ScheduleActivityTask Decision. The duration is specified in seconds, an integer greater than or equal to 0. You can use NONE to specify unlimited duration.
+  --default-task-schedule-to-close-timeout: string # If set, specifies the default maximum duration for a task of this activity type. This default can be overridden when scheduling an activity task using the ScheduleActivityTask Decision. The duration is specified in seconds, an integer greater than or equal to 0. You can use NONE to specify unlimited duration.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.RegisterActivityType")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"domain": $domain, "name": $name, "version": $version, "description": $description, "defaultTaskStartToCloseTimeout": $default_task_start_to_close_timeout, "defaultTaskHeartbeatTimeout": $default_task_heartbeat_timeout, "defaultTaskList": $default_task_list, "defaultTaskPriority": $default_task_priority, "defaultTaskScheduleToStartTimeout": $default_task_schedule_to_start_timeout, "defaultTaskScheduleToCloseTimeout": $default_task_schedule_to_close_timeout} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1305,6 +1361,7 @@ export def "register-activity-type" [
 #
 # POST /
 # operationId: RegisterDomain
+# --tags item shape: {key: string, value?: string}
 export def "register-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1322,15 +1379,16 @@ export def "register-domain" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  name: any
-  --description: any
-  workflow_execution_retention_period_in_days: any
-  --tags: any
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  name: string # Name of the domain to register. The name must be unique in the region that the domain is registered in. The specified string must not start or end with whitespace. It must not contain a : (colon), / (slash), | (vertical bar), or any control characters (\u0000-\u001f | \u007f-\u009f). Also, it must not be the literal string arn.
+  --description: string # A text description of the domain.
+  workflow_execution_retention_period_in_days: string # The duration (in days) that records and histories of workflow executions on the domain should be kept by the service. After the retention period, the workflow execution isn't available in the results of visibility calls. If you pass the value NONE or 0 (zero), then the workflow execution history isn't retained. As soon as the workflow execution completes, the execution record and its history are deleted. The maximum workflow execution retention period is 90 days. For more information about Amazon SWF service limits, see: Amazon SWF Service Limits (https://docs.aws.amazon.com/amazonswf/latest/developerguide/swf-dg-limits.html) in the Amazon SWF Developer Guide.
+  --tags: list # Tags to be added when registering a domain. Tags may only contain unicode letters, digits, whitespace, or these symbols: _ . : / = + - @. — item shape: {key: string, value?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.RegisterDomain")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name, "description": $description, "workflowExecutionRetentionPeriodInDays": $workflow_execution_retention_period_in_days, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1356,6 +1414,7 @@ export def "register-domain" [
 #
 # POST /
 # operationId: RegisterWorkflowType
+# --defaultTaskList shape: {name: string}
 export def "register-workflow-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1373,21 +1432,22 @@ export def "register-workflow-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  domain: any
-  name: any
-  version: any
-  --description: any
-  --default-task-start-to-close-timeout: any
-  --default-execution-start-to-close-timeout: any
-  --default-task-list: any
-  --default-task-priority: any
-  --default-child-policy: any
-  --default-lambda-role: any
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  domain: string # The name of the domain in which to register the workflow type.
+  name: string # The name of the workflow type. The specified string must not start or end with whitespace. It must not contain a : (colon), / (slash), | (vertical bar), or any control characters (\u0000-\u001f | \u007f-\u009f). Also, it must not be the literal string arn.
+  version: string # The version of the workflow type. The workflow type consists of the name and version, the combination of which must be unique within the domain. To get a list of all currently registered workflow types, use the ListWorkflowTypes action. The specified string must not start or end with whitespace. It must not contain a : (colon), / (slash), | (vertical bar), or any control characters (\u0000-\u001f | \u007f-\u009f). Also, it must not be the literal string arn.
+  --description: string # Textual description of the workflow type.
+  --default-task-start-to-close-timeout: string # If set, specifies the default maximum duration of decision tasks for this workflow type. This default can be overridden when starting a workflow execution using the StartWorkflowExecution action or the StartChildWorkflowExecution Decision. The duration is specified in seconds, an integer greater than or equal to 0. You can use NONE to specify unlimited duration.
+  --default-execution-start-to-close-timeout: string # If set, specifies the default maximum duration for executions of this workflow type. You can override this default when starting an execution through the StartWorkflowExecution Action or StartChildWorkflowExecution Decision. The duration is specified in seconds; an integer greater than or equal to 0. Unlike some of the other timeout parameters in Amazon SWF, you cannot specify a value of "NONE" for defaultExecutionStartToCloseTimeout; there is a one-year max limit on the time that a workflow execution can run. Exceeding this limit always causes the workflow execution to time out.
+  --default-task-list: record # Represents a task list. — shape: {name: string}
+  --default-task-priority: string # The default task priority to assign to the workflow type. If not assigned, then 0 is used. Valid values are integers that range from Java's Integer.MIN_VALUE (-2147483648) to Integer.MAX_VALUE (2147483647). Higher numbers indicate higher priority. For more information about setting task priority, see Setting Task Priority (https://docs.aws.amazon.com/amazonswf/latest/developerguide/programming-priority.html) in the Amazon SWF Developer Guide.
+  --default-child-policy: string@default-child-policy-completer # If set, specifies the default policy to use for the child workflow executions when a workflow execution of this type is terminated, by calling the TerminateWorkflowExecution action explicitly or due to an expired timeout. This default can be overridden when starting a workflow execution using the StartWorkflowExecution action or the StartChildWorkflowExecution Decision. The supported child policies are: TERMINATE – The child executions are terminated. REQUEST_CANCEL – A request to cancel is attempted for each child execution by recording a WorkflowExecutionCancelRequested event in its history. It is up to the decider to take appropriate actions when it receives an execution history with this event. ABANDON – No action is taken. The child executions continue to run.
+  --default-lambda-role: string # The default IAM role attached to this workflow type. Executions of this workflow type need IAM roles to invoke Lambda functions. If you don't specify an IAM role when you start this workflow type, the default Lambda role is attached to the execution. For more information, see https://docs.aws.amazon.com/amazonswf/latest/developerguide/lambda-task.html (https://docs.aws.amazon.com/amazonswf/latest/developerguide/lambda-task.html) in the Amazon SWF Developer Guide.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.RegisterWorkflowType")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"domain": $domain, "name": $name, "version": $version, "description": $description, "defaultTaskStartToCloseTimeout": $default_task_start_to_close_timeout, "defaultExecutionStartToCloseTimeout": $default_execution_start_to_close_timeout, "defaultTaskList": $default_task_list, "defaultTaskPriority": $default_task_priority, "defaultChildPolicy": $default_child_policy, "defaultLambdaRole": $default_lambda_role} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1430,14 +1490,15 @@ export def "request-cancel-workflow-execution" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  domain: any
-  workflow_id: any
-  --run-id: any
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  domain: string # The name of the domain containing the workflow execution to cancel.
+  workflow_id: string # The workflowId of the workflow execution to cancel.
+  --run-id: string # The runId of the workflow execution to cancel.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.RequestCancelWorkflowExecution")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"domain": $domain, "workflowId": $workflow_id, "runId": $run_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1480,13 +1541,14 @@ export def "respond-activity-task-canceled" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  task_token: any
-  --details: any
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  task_token: string # The taskToken of the ActivityTask. taskToken is generated by the service and should be treated as an opaque value. If the task is passed to another process, its taskToken must also be passed. This enables it to provide its progress and respond with results.
+  --details: string # Information about the cancellation.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.RespondActivityTaskCanceled")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"taskToken": $task_token, "details": $details} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1529,13 +1591,14 @@ export def "respond-activity-task-completed" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-26
-  task_token: any
-  --result: any
+  --x-amz-target: string@x-amz-target-completer-26 # required
+  task_token: string # The taskToken of the ActivityTask. taskToken is generated by the service and should be treated as an opaque value. If the task is passed to another process, its taskToken must also be passed. This enables it to provide its progress and respond with results.
+  --result: string # The result of the activity task. It is a free form string that is implementation specific.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.RespondActivityTaskCompleted")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"taskToken": $task_token, "result": $result} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1578,14 +1641,15 @@ export def "respond-activity-task-failed" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-27
-  task_token: any
-  --reason: any
-  --details: any
+  --x-amz-target: string@x-amz-target-completer-27 # required
+  task_token: string # The taskToken of the ActivityTask. taskToken is generated by the service and should be treated as an opaque value. If the task is passed to another process, its taskToken must also be passed. This enables it to provide its progress and respond with results.
+  --reason: string # Description of the error that may assist in diagnostics.
+  --details: string # Detailed information about the failure.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.RespondActivityTaskFailed")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"taskToken": $task_token, "reason": $reason, "details": $details} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1611,6 +1675,7 @@ export def "respond-activity-task-failed" [
 #
 # POST /
 # operationId: RespondDecisionTaskCompleted
+# --decisions item shape: {decisionType: "ScheduleActivityTask"|"RequestCancelActivityTask"|"CompleteWorkflowExecution"|"FailWorkflowExecution"|"CancelWorkflowExecution"|"ContinueAsNewWorkflowExecution"|"RecordMarker"|"StartTimer"|"CancelTimer"|"SignalExternalWorkflowExecution"|"RequestCancelExternalWorkflowExecution"|"StartChildWorkflowExecution"|"ScheduleLambdaFunction", scheduleActivityTaskDecisionAttributes?: record, requestCancelActivityTaskDecisionAttributes?: record, ... (11 more fields)}
 export def "respond-decision-task-completed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1628,14 +1693,15 @@ export def "respond-decision-task-completed" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-28
-  task_token: any
-  --decisions: any
-  --execution-context: any
+  --x-amz-target: string@x-amz-target-completer-28 # required
+  task_token: string # The taskToken from the DecisionTask. taskToken is generated by the service and should be treated as an opaque value. If the task is passed to another process, its taskToken must also be passed. This enables it to provide its progress and respond with results.
+  --decisions: list # The list of decisions (possibly empty) made by the decider while processing this decision task. See the docs for the Decision structure for details. — item shape: {decisionType: "ScheduleActivityTask"|"RequestCancelActivityTask"|"CompleteWorkflowExecution"|"FailWorkflowExecution"|"CancelWorkflowExecution"|"ContinueAsNewWorkflowExecution"|"RecordMarker"|"StartTimer"|"CancelTimer"|"SignalExternalWorkflowExecution"|"RequestCancelExternalWorkflowExecution"|"StartChildWorkflowExecution"|"ScheduleLambdaFunction", scheduleActivityTaskDecisionAttributes?: record, requestCancelActivityTaskDecisionAttributes?: record, ... (11 more fields)}
+  --execution-context: string # User defined context to add to workflow execution.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.RespondDecisionTaskCompleted")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"taskToken": $task_token, "decisions": $decisions, "executionContext": $execution_context} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1678,18 +1744,19 @@ export def "signal-workflow-execution" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-29
-  domain: any
-  workflow_id: any
-  --run-id: any
-  signal_name: any
-  --input: any
+  --x-amz-target: string@x-amz-target-completer-29 # required
+  domain: string # The name of the domain containing the workflow execution to signal.
+  workflow_id: string # The workflowId of the workflow execution to signal.
+  --run-id: string # The runId of the workflow execution to signal.
+  signal_name: string # The name of the signal. This name must be meaningful to the target workflow.
+  --body-input: string # Data to attach to the WorkflowExecutionSignaled event in the target workflow execution's history.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.SignalWorkflowExecution")
   let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"domain": $domain, "workflowId": $workflow_id, "runId": $run_id, "signalName": $signal_name, "input": $input} | compact
+  let req_body = {"domain": $domain, "workflowId": $workflow_id, "runId": $run_id, "signalName": $signal_name, "input": $body_input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1713,6 +1780,8 @@ export def "signal-workflow-execution" [
 #
 # POST /
 # operationId: StartWorkflowExecution
+# --workflowType shape: {name: string, version: string}
+# --taskList shape: {name: string}
 export def "start-workflow-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1730,24 +1799,25 @@ export def "start-workflow-execution" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-30
-  domain: any
-  workflow_id: any
-  workflow_type: any
-  --task-list: any
-  --task-priority: any
-  --input: any
-  --execution-start-to-close-timeout: any
-  --tag-list: any
-  --task-start-to-close-timeout: any
-  --child-policy: any
-  --lambda-role: any
-]: any -> record<runId: record> {
+  --x-amz-target: string@x-amz-target-completer-30 # required
+  domain: string # The name of the domain in which the workflow execution is created.
+  workflow_id: string # The user defined identifier associated with the workflow execution. You can use this to associate a custom identifier with the workflow execution. You may specify the same identifier if a workflow execution is logically a restart of a previous execution. You cannot have two open workflow executions with the same workflowId at the same time within the same domain. The specified string must not start or end with whitespace. It must not contain a : (colon), / (slash), | (vertical bar), or any control characters (\u0000-\u001f | \u007f-\u009f). Also, it must not be the literal string arn.
+  workflow_type: record # Represents a workflow type. — shape: {name: string, version: string}
+  --task-list: record # Represents a task list. — shape: {name: string}
+  --task-priority: string # The task priority to use for this workflow execution. This overrides any default priority that was assigned when the workflow type was registered. If not set, then the default task priority for the workflow type is used. Valid values are integers that range from Java's Integer.MIN_VALUE (-2147483648) to Integer.MAX_VALUE (2147483647). Higher numbers indicate higher priority. For more information about setting task priority, see Setting Task Priority (https://docs.aws.amazon.com/amazonswf/latest/developerguide/programming-priority.html) in the Amazon SWF Developer Guide.
+  --body-input: string # The input for the workflow execution. This is a free form string which should be meaningful to the workflow you are starting. This input is made available to the new workflow execution in the WorkflowExecutionStarted history event.
+  --execution-start-to-close-timeout: string # The total duration for this workflow execution. This overrides the defaultExecutionStartToCloseTimeout specified when registering the workflow type. The duration is specified in seconds; an integer greater than or equal to 0. Exceeding this limit causes the workflow execution to time out. Unlike some of the other timeout parameters in Amazon SWF, you cannot specify a value of "NONE" for this timeout; there is a one-year max limit on the time that a workflow execution can run. An execution start-to-close timeout must be specified either through this parameter or as a default when the workflow type is registered. If neither this parameter nor a default execution start-to-close timeout is specified, a fault is returned.
+  --tag-list: list<string> # The list of tags to associate with the workflow execution. You can specify a maximum of 5 tags. You can list workflow executions with a specific tag by calling ListOpenWorkflowExecutions or ListClosedWorkflowExecutions and specifying a TagFilter.
+  --task-start-to-close-timeout: string # Specifies the maximum duration of decision tasks for this workflow execution. This parameter overrides the defaultTaskStartToCloseTimout specified when registering the workflow type using RegisterWorkflowType. The duration is specified in seconds, an integer greater than or equal to 0. You can use NONE to specify unlimited duration. A task start-to-close timeout for this workflow execution must be specified either as a default for the workflow type or through this parameter. If neither this parameter is set nor a default task start-to-close timeout was specified at registration time then a fault is returned.
+  --child-policy: string@child-policy-completer # If set, specifies the policy to use for the child workflow executions of this workflow execution if it is terminated, by calling the TerminateWorkflowExecution action explicitly or due to an expired timeout. This policy overrides the default child policy specified when registering the workflow type using RegisterWorkflowType. The supported child policies are: TERMINATE – The child executions are terminated. REQUEST_CANCEL – A request to cancel is attempted for each child execution by recording a WorkflowExecutionCancelRequested event in its history. It is up to the decider to take appropriate actions when it receives an execution history with this event. ABANDON – No action is taken. The child executions continue to run. A child policy for this workflow execution must be specified either as a default for the workflow type or through this parameter. If neither this parameter is set nor a default child policy was specified at registration time then a fault is returned.
+  --lambda-role: string # The IAM role to attach to this workflow execution. Executions of this workflow type need IAM roles to invoke Lambda functions. If you don't attach an IAM role, any attempt to schedule a Lambda task fails. This results in a ScheduleLambdaFunctionFailed history event. For more information, see https://docs.aws.amazon.com/amazonswf/latest/developerguide/lambda-task.html (https://docs.aws.amazon.com/amazonswf/latest/developerguide/lambda-task.html) in the Amazon SWF Developer Guide.
+]: any -> record<runId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.StartWorkflowExecution")
   let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"domain": $domain, "workflowId": $workflow_id, "workflowType": $workflow_type, "taskList": $task_list, "taskPriority": $task_priority, "input": $input, "executionStartToCloseTimeout": $execution_start_to_close_timeout, "tagList": $tag_list, "taskStartToCloseTimeout": $task_start_to_close_timeout, "childPolicy": $child_policy, "lambdaRole": $lambda_role} | compact
+  let req_body = {"domain": $domain, "workflowId": $workflow_id, "workflowType": $workflow_type, "taskList": $task_list, "taskPriority": $task_priority, "input": $body_input, "executionStartToCloseTimeout": $execution_start_to_close_timeout, "tagList": $tag_list, "taskStartToCloseTimeout": $task_start_to_close_timeout, "childPolicy": $child_policy, "lambdaRole": $lambda_role} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1771,6 +1841,7 @@ export def "start-workflow-execution" [
 #
 # POST /
 # operationId: TagResource
+# --tags item shape: {key: string, value?: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1788,13 +1859,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-31
-  resource_arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-31 # required
+  resource_arn: string # The Amazon Resource Name (ARN) for the Amazon SWF domain.
+  tags: list # The list of tags to add to a domain. Tags may only contain unicode letters, digits, whitespace, or these symbols: _ . : / = + - @. — item shape: {key: string, value?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceArn": $resource_arn, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1837,17 +1909,18 @@ export def "terminate-workflow-execution" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-32
-  domain: any
-  workflow_id: any
-  --run-id: any
-  --reason: any
-  --details: any
-  --child-policy: any
+  --x-amz-target: string@x-amz-target-completer-32 # required
+  domain: string # The domain of the workflow execution to terminate.
+  workflow_id: string # The workflowId of the workflow execution to terminate.
+  --run-id: string # The runId of the workflow execution to terminate.
+  --reason: string # A descriptive reason for terminating the workflow execution.
+  --details: string # Details for terminating the workflow execution.
+  --child-policy: string@child-policy-completer # If set, specifies the policy to use for the child workflow executions of the workflow execution being terminated. This policy overrides the child policy specified for the workflow execution at registration time or when starting the execution. The supported child policies are: TERMINATE – The child executions are terminated. REQUEST_CANCEL – A request to cancel is attempted for each child execution by recording a WorkflowExecutionCancelRequested event in its history. It is up to the decider to take appropriate actions when it receives an execution history with this event. ABANDON – No action is taken. The child executions continue to run. A child policy for this workflow execution must be specified either as a default for the workflow type or through this parameter. If neither this parameter is set nor a default child policy was specified at registration time then a fault is returned.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.TerminateWorkflowExecution")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"domain": $domain, "workflowId": $workflow_id, "runId": $run_id, "reason": $reason, "details": $details, "childPolicy": $child_policy} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1873,6 +1946,7 @@ export def "terminate-workflow-execution" [
 #
 # POST /
 # operationId: UndeprecateActivityType
+# --activityType shape: {name: string, version: string}
 export def "undeprecate-activity-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1890,13 +1964,14 @@ export def "undeprecate-activity-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-33
-  domain: any
-  activity_type: any
+  --x-amz-target: string@x-amz-target-completer-33 # required
+  domain: string # The name of the domain of the deprecated activity type.
+  activity_type: record # Represents an activity type. — shape: {name: string, version: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.UndeprecateActivityType")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"domain": $domain, "activityType": $activity_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1939,12 +2014,13 @@ export def "undeprecate-domain" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-34
-  name: any
+  --x-amz-target: string@x-amz-target-completer-34 # required
+  name: string # The name of the domain of the deprecated workflow type.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.UndeprecateDomain")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1970,6 +2046,7 @@ export def "undeprecate-domain" [
 #
 # POST /
 # operationId: UndeprecateWorkflowType
+# --workflowType shape: {name: string, version: string}
 export def "undeprecate-workflow-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1987,13 +2064,14 @@ export def "undeprecate-workflow-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-35
-  domain: any
-  workflow_type: any
+  --x-amz-target: string@x-amz-target-completer-35 # required
+  domain: string # The name of the domain of the deprecated workflow type.
+  workflow_type: record # Represents a workflow type. — shape: {name: string, version: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.UndeprecateWorkflowType")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"domain": $domain, "workflowType": $workflow_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2036,13 +2114,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-36
-  resource_arn: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-36 # required
+  resource_arn: string # The Amazon Resource Name (ARN) for the Amazon SWF domain.
+  tag_keys: list<string> # The list of tags to remove from the Amazon SWF domain.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceArn": $resource_arn, "tagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

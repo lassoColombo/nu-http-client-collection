@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -151,11 +151,12 @@ export def "managed-rule-sets-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
 ]: nothing -> record<nextLink: string, value: table<properties: record, sku: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Cdn/CdnWebApplicationFirewallManagedRuleSets") $qp $auth.query)
   let accept_val = "application/json"
@@ -190,12 +191,13 @@ export def "policies-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, sku: record, location: string, tags: record>> {
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
+]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, sku: record, location: string, tags: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/CdnWebApplicationFirewallPolicies") $qp $auth.query)
   let accept_val = "application/json"
@@ -231,13 +233,14 @@ export def "policies-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($policy_name | is-empty) { error make --unspanned { msg: "path parameter 'policyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), policy_name: (encode-path-segment $policy_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/CdnWebApplicationFirewallPolicies/{policy_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -273,13 +276,14 @@ export def "policies-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
-]: nothing -> record<etag: string, properties: record<customRules: record<rules: list>, endpointLinks: list<record>, managedRules: record<managedRuleSets: list>, policySettings: record<defaultCustomBlockResponseBody: string, defaultCustomBlockResponseStatusCode: int, defaultRedirectUrl: string, enabledState: string, mode: string>, provisioningState: string, rateLimitRules: record<rules: list>, resourceState: string>, sku: record<name: string>, location: string, tags: record> {
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
+]: nothing -> record<etag: string, properties: record<customRules: record<rules: list>, endpointLinks: list<record>, managedRules: record<managedRuleSets: list>, policySettings: record<defaultCustomBlockResponseBody: string, defaultCustomBlockResponseStatusCode: int, defaultRedirectUrl: string, enabledState: string, mode: string>, provisioningState: string, rateLimitRules: record<rules: list>, resourceState: string>, sku: record<name: string>, location: string, tags: record, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($policy_name | is-empty) { error make --unspanned { msg: "path parameter 'policyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), policy_name: (encode-path-segment $policy_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/CdnWebApplicationFirewallPolicies/{policy_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -315,15 +319,16 @@ export def "policies-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
   --tags: record # CdnWebApplicationFirewallPolicy tags
-]: any -> record<etag: string, properties: record<customRules: record<rules: list>, endpointLinks: list<record>, managedRules: record<managedRuleSets: list>, policySettings: record<defaultCustomBlockResponseBody: string, defaultCustomBlockResponseStatusCode: int, defaultRedirectUrl: string, enabledState: string, mode: string>, provisioningState: string, rateLimitRules: record<rules: list>, resourceState: string>, sku: record<name: string>, location: string, tags: record> {
+]: any -> record<etag: string, properties: record<customRules: record<rules: list>, endpointLinks: list<record>, managedRules: record<managedRuleSets: list>, policySettings: record<defaultCustomBlockResponseBody: string, defaultCustomBlockResponseStatusCode: int, defaultRedirectUrl: string, enabledState: string, mode: string>, provisioningState: string, rateLimitRules: record<rules: list>, resourceState: string>, sku: record<name: string>, location: string, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($policy_name | is-empty) { error make --unspanned { msg: "path parameter 'policyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), policy_name: (encode-path-segment $policy_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/CdnWebApplicationFirewallPolicies/{policy_name}") $qp $auth.query)
   let req_body = {"tags": $tags} | compact
@@ -363,19 +368,20 @@ export def "policies-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
   --etag: string # Gets a unique read-only string that changes whenever the resource is updated.
   --properties: any # Defines CDN web application firewall policy properties. — shape: {customRules?: any, managedRules?: any, policySettings?: any, rateLimitRules?: any}
   sku: record # The pricing tier (defines a CDN provider, feature list and rate) of the CDN profile. — shape: {name?: "Standard_Verizon"|"Premium_Verizon"|"Custom_Verizon"|"Standard_Akamai"|"Standard_ChinaCdn"|"Standard_Microsoft"|"Premium_ChinaCdn"}
   location: string # Resource location.
   --tags: record # Resource tags.
-]: any -> record<etag: string, properties: record<customRules: record<rules: list>, endpointLinks: list<record>, managedRules: record<managedRuleSets: list>, policySettings: record<defaultCustomBlockResponseBody: string, defaultCustomBlockResponseStatusCode: int, defaultRedirectUrl: string, enabledState: string, mode: string>, provisioningState: string, rateLimitRules: record<rules: list>, resourceState: string>, sku: record<name: string>, location: string, tags: record> {
+]: any -> record<etag: string, properties: record<customRules: record<rules: list>, endpointLinks: list<record>, managedRules: record<managedRuleSets: list>, policySettings: record<defaultCustomBlockResponseBody: string, defaultCustomBlockResponseStatusCode: int, defaultRedirectUrl: string, enabledState: string, mode: string>, provisioningState: string, rateLimitRules: record<rules: list>, resourceState: string>, sku: record<name: string>, location: string, tags: record, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($policy_name | is-empty) { error make --unspanned { msg: "path parameter 'policyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), policy_name: (encode-path-segment $policy_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Cdn/CdnWebApplicationFirewallPolicies/{policy_name}") $qp $auth.query)
   let req_body = {"etag": $etag, "properties": $properties, "sku": $sku, "location": $location, "tags": $tags} | compact

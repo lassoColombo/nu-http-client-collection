@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -154,7 +154,7 @@ export def "bulk-publish" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<IdentityPoolId: record> {
+]: nothing -> record<IdentityPoolId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($identity_pool_id | is-empty) { error make --unspanned { msg: "path parameter 'IdentityPoolId' must be non-empty" } }
@@ -201,7 +201,7 @@ export def "delete-dataset" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Dataset: record<IdentityId: record, DatasetName: record, CreationDate: record, LastModifiedDate: record, LastModifiedBy: record, DataStorage: record, NumRecords: record>> {
+]: nothing -> record<Dataset: record<IdentityId: string, DatasetName: string, CreationDate: string, LastModifiedDate: string, LastModifiedBy: string, DataStorage: int, NumRecords: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($identity_pool_id | is-empty) { error make --unspanned { msg: "path parameter 'IdentityPoolId' must be non-empty" } }
@@ -250,7 +250,7 @@ export def "describe-dataset" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Dataset: record<IdentityId: record, DatasetName: record, CreationDate: record, LastModifiedDate: record, LastModifiedBy: record, DataStorage: record, NumRecords: record>> {
+]: nothing -> record<Dataset: record<IdentityId: string, DatasetName: string, CreationDate: string, LastModifiedDate: string, LastModifiedBy: string, DataStorage: int, NumRecords: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($identity_pool_id | is-empty) { error make --unspanned { msg: "path parameter 'IdentityPoolId' must be non-empty" } }
@@ -279,7 +279,7 @@ export def "describe-dataset" [
 #
 # POST /identitypools/{IdentityPoolId}/identities/{IdentityId}/datasets/{DatasetName}
 # operationId: UpdateRecords
-# --RecordPatches item shape: {Op: any, Key: any, Value?: any, SyncCount: any, DeviceLastModifiedDate?: any}
+# --RecordPatches item shape: {Op: "replace"|"remove", Key: string, Value?: string, SyncCount: int, DeviceLastModifiedDate?: string}
 export def "update-records" [
   identity_pool_id: string
   identity_id: string
@@ -302,9 +302,9 @@ export def "update-records" [
   --x-amz-signed-headers: string
   --x-amz-client-context: string # Intended to supply a device ID that will populate the lastModifiedBy field referenced in other methods. The ClientContext field is not yet implemented.
   --device-id: string # The unique ID generated for this device by Cognito.
-  --record-patches: list # A list of patch operations. — item shape: {Op: any, Key: any, Value?: any, SyncCount: any, DeviceLastModifiedDate?: any}
+  --record-patches: list # A list of patch operations. — item shape: {Op: "replace"|"remove", Key: string, Value?: string, SyncCount: int, DeviceLastModifiedDate?: string}
   sync_session_token: string # The SyncSessionToken returned by a previous call to ListRecords for this dataset and identity.
-]: any -> record<Records: record> {
+]: any -> record<Records: table<Key: string, Value: string, SyncCount: int, LastModifiedDate: string, LastModifiedBy: string, DeviceLastModifiedDate: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -354,7 +354,7 @@ export def "describe-identity-pool-usage" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<IdentityPoolUsage: record<IdentityPoolId: record, SyncSessionsCount: record, DataStorage: record, LastModifiedDate: record>> {
+]: nothing -> record<IdentityPoolUsage: record<IdentityPoolId: string, SyncSessionsCount: int, DataStorage: int, LastModifiedDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($identity_pool_id | is-empty) { error make --unspanned { msg: "path parameter 'IdentityPoolId' must be non-empty" } }
@@ -400,7 +400,7 @@ export def "describe-identity-usage" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<IdentityUsage: record<IdentityId: record, IdentityPoolId: record, LastModifiedDate: record, DatasetCount: record, DataStorage: record>> {
+]: nothing -> record<IdentityUsage: record<IdentityId: string, IdentityPoolId: string, LastModifiedDate: string, DatasetCount: int, DataStorage: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($identity_pool_id | is-empty) { error make --unspanned { msg: "path parameter 'IdentityPoolId' must be non-empty" } }
@@ -446,7 +446,7 @@ export def "get-bulk-publish-details" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<IdentityPoolId: record, BulkPublishStartTime: record, BulkPublishCompleteTime: record, BulkPublishStatus: record, FailureMessage: record> {
+]: nothing -> record<IdentityPoolId: string, BulkPublishStartTime: string, BulkPublishCompleteTime: string, BulkPublishStatus: string, FailureMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($identity_pool_id | is-empty) { error make --unspanned { msg: "path parameter 'IdentityPoolId' must be non-empty" } }
@@ -585,7 +585,7 @@ export def "get-identity-pool-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<IdentityPoolId: record, PushSync: record<ApplicationArns: record, RoleArn: record>, CognitoStreams: record<StreamName: record, RoleArn: record, StreamingStatus: record>> {
+]: nothing -> record<IdentityPoolId: string, PushSync: record<ApplicationArns: list<string>, RoleArn: string>, CognitoStreams: record<StreamName: string, RoleArn: string, StreamingStatus: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($identity_pool_id | is-empty) { error make --unspanned { msg: "path parameter 'IdentityPoolId' must be non-empty" } }
@@ -612,8 +612,8 @@ export def "get-identity-pool-configuration" [
 #
 # POST /identitypools/{IdentityPoolId}/configuration
 # operationId: SetIdentityPoolConfiguration
-# --PushSync shape: {ApplicationArns?: any, RoleArn?: any}
-# --CognitoStreams shape: {StreamName?: any, RoleArn?: any, StreamingStatus?: any}
+# --PushSync shape: {ApplicationArns?: list<string>, RoleArn?: string}
+# --CognitoStreams shape: {StreamName?: string, RoleArn?: string, StreamingStatus?: "ENABLED"|"DISABLED"}
 export def "set-identity-pool-configuration" [
   identity_pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -632,9 +632,9 @@ export def "set-identity-pool-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --push-sync: record # Configuration options to be applied to the identity pool. — shape: {ApplicationArns?: any, RoleArn?: any}
-  --cognito-streams: record # Configuration options for configure Cognito streams. — shape: {StreamName?: any, RoleArn?: any, StreamingStatus?: any}
-]: any -> record<IdentityPoolId: record, PushSync: record<ApplicationArns: record, RoleArn: record>, CognitoStreams: record<StreamName: record, RoleArn: record, StreamingStatus: record>> {
+  --push-sync: record # Configuration options to be applied to the identity pool. — shape: {ApplicationArns?: list<string>, RoleArn?: string}
+  --cognito-streams: record # Configuration options for configure Cognito streams. — shape: {StreamName?: string, RoleArn?: string, StreamingStatus?: "ENABLED"|"DISABLED"}
+]: any -> record<IdentityPoolId: string, PushSync: record<ApplicationArns: list<string>, RoleArn: string>, CognitoStreams: record<StreamName: string, RoleArn: string, StreamingStatus: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -685,7 +685,7 @@ export def "list-datasets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Datasets: record, Count: record, NextToken: record> {
+]: nothing -> record<Datasets: table<IdentityId: string, DatasetName: string, CreationDate: string, LastModifiedDate: string, LastModifiedBy: string, DataStorage: int, NumRecords: int>, Count: int, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($identity_pool_id | is-empty) { error make --unspanned { msg: "path parameter 'IdentityPoolId' must be non-empty" } }
@@ -733,7 +733,7 @@ export def "list-identity-pool-usage" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<IdentityPoolUsages: record, MaxResults: record, Count: record, NextToken: record> {
+]: nothing -> record<IdentityPoolUsages: table<IdentityPoolId: string, SyncSessionsCount: int, DataStorage: int, LastModifiedDate: string>, MaxResults: int, Count: int, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -784,7 +784,7 @@ export def "list-records" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Records: record, NextToken: record, Count: record, DatasetSyncCount: record, LastModifiedBy: record, MergedDatasetNames: record, DatasetExists: record, DatasetDeletedAfterRequestedSyncCount: record, SyncSessionToken: record> {
+]: nothing -> record<Records: table<Key: string, Value: string, SyncCount: int, LastModifiedDate: string, LastModifiedBy: string, DeviceLastModifiedDate: string>, NextToken: string, Count: int, DatasetSyncCount: int, LastModifiedBy: string, MergedDatasetNames: list<string>, DatasetExists: bool, DatasetDeletedAfterRequestedSyncCount: bool, SyncSessionToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($identity_pool_id | is-empty) { error make --unspanned { msg: "path parameter 'IdentityPoolId' must be non-empty" } }
@@ -835,7 +835,7 @@ export def "register-device" [
   --x-amz-signed-headers: string
   platform: string@platform-completer # The SNS platform type (e.g. GCM, SDM, APNS, APNS_SANDBOX).
   --body-token: string # The push token.
-]: any -> record<DeviceId: record> {
+]: any -> record<DeviceId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -844,6 +844,7 @@ export def "register-device" [
   let full_url = (build-url $base ({identity_pool_id: (encode-path-segment $identity_pool_id), identity_id: (encode-path-segment $identity_id)} | format pattern "/identitypools/{identity_pool_id}/identity/{identity_id}/device") $auth.query)
   let req_body = {"Platform": $platform, "Token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "Token") == null) { error make --unspanned { msg: "required body field 'Token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact

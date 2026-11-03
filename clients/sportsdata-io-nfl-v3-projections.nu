@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {Ocp-Apim-Subscription-Key: $token_val}, query: "", location: "header"} }
+    "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {"Ocp-Apim-Subscription-Key": $token_val}, query: "", location: "header"} }
     "query-key" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "key")=(encode-path-segment $token_val)", location: "query"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -95,6 +95,8 @@ def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: 
 def base-url-completer [] { ["http://azure-api.sportsdata.io/v3/nfl/projections" "https://azure-api.sportsdata.io/v3/nfl/projections"] }
 def auth-scheme-completer [] { ["ocp-apim-subscription-key" "query-key"] }
 
+# Completers for enum parameters
+def format-completer [] { ["JSON" "XML"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -124,7 +126,7 @@ export def commands []: nothing -> table {
 # GET /{format}/DfsSlateOwnershipProjectionsBySlateID/{slateId}
 # operationId: DfsSlateOwnershipProjectionsBySlateid
 export def "dfs-slate-ownership-projections-by-slateid" [
-  format: string
+  format: string@format-completer
   slate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -162,7 +164,7 @@ export def "dfs-slate-ownership-projections-by-slateid" [
 # GET /{format}/DfsSlatesByDate/{date}
 # operationId: DfsSlatesByDate
 export def "dfs-slates-by-date" [
-  format: string
+  format: string@format-completer
   date: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -200,7 +202,7 @@ export def "dfs-slates-by-date" [
 # GET /{format}/DfsSlatesByWeek/{season}/{week}
 # operationId: DfsSlatesByWeek
 export def "dfs-slates-by-week" [
-  format: string
+  format: string@format-completer
   season: string
   week: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -240,7 +242,7 @@ export def "dfs-slates-by-week" [
 # GET /{format}/FantasyDefenseProjectionsByGame/{season}/{week}
 # operationId: ProjectedFantasyDefenseGameStatsWDfsSalaries
 export def "projected-fantasy-defense-game-stats-w-dfs-salaries" [
-  format: string
+  format: string@format-completer
   season: string
   week: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -280,7 +282,7 @@ export def "projected-fantasy-defense-game-stats-w-dfs-salaries" [
 # GET /{format}/FantasyDefenseProjectionsBySeason/{season}
 # operationId: ProjectedFantasyDefenseSeasonStatsWAdp
 export def "projected-fantasy-defense-season-stats-w-adp" [
-  format: string
+  format: string@format-completer
   season: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -318,7 +320,7 @@ export def "projected-fantasy-defense-season-stats-w-adp" [
 # GET /{format}/IdpPlayerGameProjectionStatsByPlayerID/{season}/{week}/{playerid}
 # operationId: IdpProjectedPlayerGameStatsByPlayerWInjuriesLineupsDfsSalaries
 export def "idp-projected-player-game-stats-by-player-w-injuries-lineups-dfs-salaries" [
-  format: string
+  format: string@format-completer
   season: string
   week: string
   playerid: string
@@ -360,7 +362,7 @@ export def "idp-projected-player-game-stats-by-player-w-injuries-lineups-dfs-sal
 # GET /{format}/IdpPlayerGameProjectionStatsByTeam/{season}/{week}/{team}
 # operationId: IdpProjectedPlayerGameStatsByTeamWInjuriesLineupsDfsSalaries
 export def "idp-projected-player-game-stats-by-team-w-injuries-lineups-dfs-salaries" [
-  format: string
+  format: string@format-completer
   season: string
   week: string
   team: string
@@ -402,7 +404,7 @@ export def "idp-projected-player-game-stats-by-team-w-injuries-lineups-dfs-salar
 # GET /{format}/IdpPlayerGameProjectionStatsByWeek/{season}/{week}
 # operationId: IdpProjectedPlayerGameStatsByWeekWInjuriesLineupsDfsSalaries
 export def "idp-projected-player-game-stats-by-week-w-injuries-lineups-dfs-salaries" [
-  format: string
+  format: string@format-completer
   season: string
   week: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -442,7 +444,7 @@ export def "idp-projected-player-game-stats-by-week-w-injuries-lineups-dfs-salar
 # GET /{format}/InjuredPlayers
 # operationId: InjuredPlayers
 export def "injured-players" [
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -478,7 +480,7 @@ export def "injured-players" [
 # GET /{format}/PlayerGameProjectionStatsByPlayerID/{season}/{week}/{playerid}
 # operationId: ProjectedPlayerGameStatsByPlayerWInjuriesLineupsDfsSalaries
 export def "projected-player-game-stats-by-player-w-injuries-lineups-dfs-salaries" [
-  format: string
+  format: string@format-completer
   season: string
   week: string
   playerid: string
@@ -520,7 +522,7 @@ export def "projected-player-game-stats-by-player-w-injuries-lineups-dfs-salarie
 # GET /{format}/PlayerGameProjectionStatsByTeam/{season}/{week}/{team}
 # operationId: ProjectedPlayerGameStatsByTeamWInjuriesLineupsDfsSalaries
 export def "projected-player-game-stats-by-team-w-injuries-lineups-dfs-salaries" [
-  format: string
+  format: string@format-completer
   season: string
   week: string
   team: string
@@ -562,7 +564,7 @@ export def "projected-player-game-stats-by-team-w-injuries-lineups-dfs-salaries"
 # GET /{format}/PlayerGameProjectionStatsByWeek/{season}/{week}
 # operationId: ProjectedPlayerGameStatsByWeekWInjuriesLineupsDfsSalaries
 export def "projected-player-game-stats-by-week-w-injuries-lineups-dfs-salaries" [
-  format: string
+  format: string@format-completer
   season: string
   week: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -602,7 +604,7 @@ export def "projected-player-game-stats-by-week-w-injuries-lineups-dfs-salaries"
 # GET /{format}/PlayerSeasonProjectionStats/{season}
 # operationId: ProjectedPlayerSeasonStatsWAdp
 export def "projected-player-season-stats-w-adp" [
-  format: string
+  format: string@format-completer
   season: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -640,7 +642,7 @@ export def "projected-player-season-stats-w-adp" [
 # GET /{format}/PlayerSeasonProjectionStatsByPlayerID/{season}/{playerid}
 # operationId: ProjectedPlayerSeasonStatsByPlayerWAdp
 export def "projected-player-season-stats-by-player-w-adp" [
-  format: string
+  format: string@format-completer
   season: string
   playerid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -680,7 +682,7 @@ export def "projected-player-season-stats-by-player-w-adp" [
 # GET /{format}/PlayerSeasonProjectionStatsByTeam/{season}/{team}
 # operationId: ProjectedPlayerSeasonStatsByTeamWAdp
 export def "projected-player-season-stats-by-team-w-adp" [
-  format: string
+  format: string@format-completer
   season: string
   team: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -720,7 +722,7 @@ export def "projected-player-season-stats-by-team-w-adp" [
 # GET /{format}/UpcomingDfsSlateOwnershipProjections
 # operationId: UpcomingDfsSlateOwnershipProjections
 export def "upcoming-dfs-slate-ownership-projections" [
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

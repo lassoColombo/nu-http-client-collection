@@ -165,11 +165,12 @@ export def "get-sdw-rest-services-get-download" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string # Output Format Flag. Enter one of the following keywords: - CSV = Facility results formatted as comma delimited file download (default).
-  --qid: string # Query ID Selector. Enter the QueryID number from a previously run query.
+  --qid: string # Query ID Selector. Enter the QueryID number from a previously run query. (required)
   --qcolumns: string # Used to customize service output. A list of comma-separated column IDs of output objects that will be returned in the service query object or download. Use the metadata service endpoint for a complete list of Ids and definitions.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qid == null) { error make --unspanned { msg: "required query parameter 'qid' missing: pass --qid" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "qid" $qid "scalar") (serialize-qp "qcolumns" $qcolumns "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sdw_rest_services.get_download" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -244,7 +245,7 @@ export def "get-sdw-rest-services-get-qid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
-  --qid: string # Query ID Selector. Enter the QueryID number from a previously run query.
+  --qid: string # Query ID Selector. Enter the QueryID number from a previously run query. (required)
   --pageno: float # Indicates the number of the page to display. It is used only when the results are paginated. (default: 1)
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
   --newsort: float # Output Sort Column. Enter the number of the column on which the data will be sorted. If unpopulated results will sort on the first column.
@@ -253,6 +254,7 @@ export def "get-sdw-rest-services-get-qid" [
 ]: nothing -> record<Results: record<Message: string, PageNo: string, QueryID: string, QueryRows: string, WaterSystems: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qid == null) { error make --unspanned { msg: "required query parameter 'qid' missing: pass --qid" } }
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "qid" $qid "scalar") (serialize-qp "pageno" $pageno "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "newsort" $newsort "scalar") (serialize-qp "descending" $descending "scalar") (serialize-qp "qcolumns" $qcolumns "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sdw_rest_services.get_qid" $qp $auth.query)
   let accept_val = ($accept | default "application/json")

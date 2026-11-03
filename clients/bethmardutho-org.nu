@@ -131,7 +131,7 @@ export def "get-lexeme-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<categoryType: string, etymologies: any, glosses: any, kaylo: any, lexeme: any, root: any, syriac: string, words: list<any>> {
+]: nothing -> record<categoryType: string, etymologies: record, glosses: record, kaylo: string, lexeme: record<id: int, uri: string>, root: record<id: int, uri: string>, syriac: string, words: table<id: int, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -166,7 +166,7 @@ export def "get-word-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<eastern: string, gender: string, glosses: record, hasSeyame: bool, isEnclitic: bool, isLexicalForm: bool, isTheoretical: bool, kaylo: string, lexeme: any, number: string, person: string, state: string, suffixGender: any, suffixNumber: any, suffixPerson: any, suffixType: string, syriac: string, tense: string, western: string, word: record<id: int, uri: string>> {
+]: nothing -> table<eastern: string, gender: string, glosses: record, hasSeyame: bool, isEnclitic: bool, isLexicalForm: bool, isTheoretical: bool, kaylo: string, lexeme: record<id: int, uri: string>, number: string, person: string, state: string, suffixGender: string, suffixNumber: string, suffixPerson: string, suffixType: string, syriac: string, tense: string, western: string, word: record<id: int, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

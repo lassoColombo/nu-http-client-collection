@@ -206,15 +206,20 @@ export def "post-dns-domain-add" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name: string # Fully qualified DNS name
-  --type: string # Type of DNS record
-  --content: string # Content for DNS record
-  --ttl: string # Time To Live for DNS record
-  --prio: string # Priority of DNS record
+  --name: string # Fully qualified DNS name (required)
+  --type: string # Type of DNS record (required)
+  --content: string # Content for DNS record (required)
+  --ttl: string # Time To Live for DNS record (required)
+  --prio: string # Priority of DNS record (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
+  if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
+  if ($type == null) { error make --unspanned { msg: "required query parameter 'type' missing: pass --type" } }
+  if ($content == null) { error make --unspanned { msg: "required query parameter 'content' missing: pass --content" } }
+  if ($ttl == null) { error make --unspanned { msg: "required query parameter 'ttl' missing: pass --ttl" } }
+  if ($prio == null) { error make --unspanned { msg: "required query parameter 'prio' missing: pass --prio" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "content" $content "scalar") (serialize-qp "ttl" $ttl "scalar") (serialize-qp "prio" $prio "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/dns/{domain}/add") $qp $auth.query)
   let accept_val = "application/json"
@@ -247,11 +252,12 @@ export def "post-dns-domain-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Id of the DNS Record
+  --id: string # Id of the DNS Record (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/dns/{domain}/delete") $qp $auth.query)
   let accept_val = "application/json"
@@ -284,7 +290,7 @@ export def "post-dns-domain-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Id of DNS record
+  --id: string # Id of DNS record (required)
   --name: string # Fully qualified name for the DNS record
   --type: string # Type for DNS record
   --content: string # Content for the DNS Record
@@ -294,6 +300,7 @@ export def "post-dns-domain-update" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "content" $content "scalar") (serialize-qp "ttl" $ttl "scalar") (serialize-qp "prio" $prio "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain: (encode-path-segment $domain)} | format pattern "/dns/{domain}/update") $qp $auth.query)
   let accept_val = "application/json"
@@ -358,10 +365,11 @@ export def "post-domains-add" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain: string # Domain to add to SolarVPS Distributed DNS
+  --domain: string # Domain to add to SolarVPS Distributed DNS (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain == null) { error make --unspanned { msg: "required query parameter 'domain' missing: pass --domain" } }
   let qp = [(serialize-qp "domain" $domain "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/domains/add" $qp $auth.query)
   let accept_val = "application/json"
@@ -393,10 +401,11 @@ export def "post-domains-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain: string # Domain to delete from SolarVPS Distributed DNS
+  --domain: string # Domain to delete from SolarVPS Distributed DNS (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain == null) { error make --unspanned { msg: "required query parameter 'domain' missing: pass --domain" } }
   let qp = [(serialize-qp "domain" $domain "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/domains/delete" $qp $auth.query)
   let accept_val = "application/json"
@@ -428,11 +437,13 @@ export def "get-key-generate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --username: string # Email address used to login to SolarSystem
-  --password: string # Password used to login to SolarSystem
+  --username: string # Email address used to login to SolarSystem (required)
+  --password: string # Password used to login to SolarSystem (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($username == null) { error make --unspanned { msg: "required query parameter 'username' missing: pass --username" } }
+  if ($password == null) { error make --unspanned { msg: "required query parameter 'password' missing: pass --password" } }
   let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/key/generate" $qp $auth.query)
   let accept_val = "application/json"
@@ -464,11 +475,13 @@ export def "get-key-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --username: string # Email address used to login to SolarSystem
-  --password: string # Password used to login to SolarSystem
+  --username: string # Email address used to login to SolarSystem (required)
+  --password: string # Password used to login to SolarSystem (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($username == null) { error make --unspanned { msg: "required query parameter 'username' missing: pass --username" } }
+  if ($password == null) { error make --unspanned { msg: "required query parameter 'password' missing: pass --password" } }
   let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/key/get" $qp $auth.query)
   let accept_val = "application/json"
@@ -740,12 +753,14 @@ export def "post-tickets-department-add" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --subject: string # Subject of the ticket you are opening
-  --contents: string # Message reply being sent
+  --subject: string # Subject of the ticket you are opening (required)
+  --contents: string # Message reply being sent (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   if ($department | is-empty) { error make --unspanned { msg: "path parameter 'department' must be non-empty" } }
+  if ($subject == null) { error make --unspanned { msg: "required query parameter 'subject' missing: pass --subject" } }
+  if ($contents == null) { error make --unspanned { msg: "required query parameter 'contents' missing: pass --contents" } }
   let qp = [(serialize-qp "subject" $subject "scalar") (serialize-qp "contents" $contents "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({department: (encode-path-segment $department)} | format pattern "/tickets/{department}/add") $qp $auth.query)
   let accept_val = "application/json"
@@ -813,11 +828,12 @@ export def "post-tickets-ticketid-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --contents: string # Message reply being sent
+  --contents: string # Message reply being sent (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   if ($ticketid | is-empty) { error make --unspanned { msg: "path parameter 'ticketid' must be non-empty" } }
+  if ($contents == null) { error make --unspanned { msg: "required query parameter 'contents' missing: pass --contents" } }
   let qp = [(serialize-qp "contents" $contents "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ticketid: (encode-path-segment $ticketid)} | format pattern "/tickets/{ticketid}/update") $qp $auth.query)
   let accept_val = "application/json"

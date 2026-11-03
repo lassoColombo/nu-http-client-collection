@@ -292,10 +292,10 @@ export def "fetch" [
 #
 # POST /parse
 # operationId: parse
-# --fields item shape: {attrs: list<string>, details?: any, filters?: list, name: string, selector: string, type: "0"|"1"|"2"}
+# --fields item shape: {attrs: list<string>, details?: record, filters?: list, name: string, selector: string, type: "0"|"1"|"2"}
 # --paginator shape: {nextPageSelector?: string, pageNum?: int}
 # --request shape: {actions?: list, ignoreHTTPStatusErrCodes?: bool, initialCookies?: list, output?: "buffer"|"file", proxy?: string, type: "base"|"chrome", url: string, waitDelay?: float}
-export def "parse" [
+export def "post-parse" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -306,7 +306,7 @@ export def "parse" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --common-parent: string # Specifies common ancestor block for a set of fields used to extract data from a web page. _(CSS Selector)_ (e.g. .common-block)
-  fields: list # Define a set of fields used to extract data from a web page. A Field represents a given chunk of extracted data from every block on each page. — item shape: {attrs: list<string>, details?: any, filters?: list, name: string, selector: string, type: "0"|"1"|"2"}
+  fields: list # Define a set of fields used to extract data from a web page. A Field represents a given chunk of extracted data from every block on each page. — item shape: {attrs: list<string>, details?: record, filters?: list, name: string, selector: string, type: "0"|"1"|"2"}
   format: string@format-completer-1 # Extracted data is returned either in CSV, MS Excel, JSON, JSON(Lines) or XML format.
   name: string # Collection name.
   --paginator: record # Specify _Next link_ paginator on pages containing a link pointing to the next page. The next page link is extracted from a document by querying href attribute of a given element's CSS selector. — shape: {nextPageSelector?: string, pageNum?: int}
@@ -339,7 +339,7 @@ export def "parse" [
 #
 # POST /serp
 # operationId: serp
-# --fields item shape: {attrs: list<string>, details?: any, filters?: list, name: string, selector: string, type: "0"|"1"|"2"}
+# --fields item shape: {attrs: list<string>, details?: record, filters?: list, name: string, selector: string, type: "0"|"1"|"2"}
 export def "serp" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -351,7 +351,7 @@ export def "serp" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-3 # Response content type
-  --fields: list # Specify CSS selectors (patterns) used to gather data from Search Engine Result Pages. Ready-to-use payloads for collecting search results from the most popular Search Engines are available. These payloads are customizable, though. — item shape: {attrs: list<string>, details?: any, filters?: list, name: string, selector: string, type: "0"|"1"|"2"}
+  --fields: list # Specify CSS selectors (patterns) used to gather data from Search Engine Result Pages. Ready-to-use payloads for collecting search results from the most popular Search Engines are available. These payloads are customizable, though. — item shape: {attrs: list<string>, details?: record, filters?: list, name: string, selector: string, type: "0"|"1"|"2"}
   format: string@format-completer-1 # Extracted data is returned either in CSV, MS Excel, JSON, JSON(Lines) or XML format.
   name: string # Collection name.
   --page-num: int # Specify number of pages to crawl. (default: 1)

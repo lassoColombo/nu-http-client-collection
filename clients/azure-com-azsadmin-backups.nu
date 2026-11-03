@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -141,13 +141,14 @@ export def "backups-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-01)
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # Client API version. (required, default: 2018-09-01)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), location: (encode-path-segment $location)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Backup.Admin/backupLocations/{location}/backups") $qp $auth.query)
   let accept_val = "application/json"
@@ -184,14 +185,15 @@ export def "backups-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-01)
-]: nothing -> record<properties: record<backupInfo: record<backupDataVersion: string, createdDateTime: string, deploymentID: string, encryptionCertThumbprint: string, isCloudRecoveryReady: bool, oemVersion: string, roleStatus: list, stampVersion: string, status: string, timeTakenToCreate: string>>> {
+  --api-version: string # Client API version. (required, default: 2018-09-01)
+]: nothing -> record<properties: record<backupInfo: record<backupDataVersion: string, createdDateTime: string, deploymentID: string, encryptionCertThumbprint: string, isCloudRecoveryReady: bool, oemVersion: string, roleStatus: list, stampVersion: string, status: string, timeTakenToCreate: string>>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
   if ($backup | is-empty) { error make --unspanned { msg: "path parameter 'backup' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), location: (encode-path-segment $location), backup: (encode-path-segment $backup)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Backup.Admin/backupLocations/{location}/backups/{backup}") $qp $auth.query)
   let accept_val = "application/json"
@@ -228,7 +230,7 @@ export def "backups-restore" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client API version. (default: 2018-09-01)
+  --api-version: string # Client API version. (required, default: 2018-09-01)
   --decryption-cert-base64: string # The certificate file raw data in Base64 string. This should be the .pfx file with the private key.
   --decryption-cert-password: string # The password for the decryption certificate.
   --role-name: string # The Azure Stack role name for restore, set it to empty for all infrastructure role
@@ -240,6 +242,7 @@ export def "backups-restore" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
   if ($backup | is-empty) { error make --unspanned { msg: "path parameter 'backup' must be non-empty" } }
+  let api_version = ($api_version | default "2018-09-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), location: (encode-path-segment $location), backup: (encode-path-segment $backup)} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Backup.Admin/backupLocations/{location}/backups/{backup}/restore") $qp $auth.query)
   let req_body = {"decryptionCertBase64": $decryption_cert_base64, "decryptionCertPassword": $decryption_cert_password, "roleName": $role_name} | compact

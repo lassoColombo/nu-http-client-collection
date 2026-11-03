@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -104,10 +104,15 @@ def x-amz-target-completer-4 [] { ["AWSKendraFrontendService.BatchGetDocumentSta
 def x-amz-target-completer-5 [] { ["AWSKendraFrontendService.BatchPutDocument"] }
 def x-amz-target-completer-6 [] { ["AWSKendraFrontendService.ClearQuerySuggestions"] }
 def x-amz-target-completer-7 [] { ["AWSKendraFrontendService.CreateAccessControlConfiguration"] }
+def type-completer [] { ["ALFRESCO" "BOX" "CONFLUENCE" "CUSTOM" "DATABASE" "FSX" "GITHUB" "GOOGLEDRIVE" "JIRA" "ONEDRIVE" "QUIP" "S3" "SALESFORCE" "SERVICENOW" "SHAREPOINT" "SLACK" "TEMPLATE" "WEBCRAWLER" "WORKDOCS"] }
 def x-amz-target-completer-8 [] { ["AWSKendraFrontendService.CreateDataSource"] }
 def x-amz-target-completer-9 [] { ["AWSKendraFrontendService.CreateExperience"] }
+def file-format-completer [] { ["CSV" "CSV_WITH_HEADER" "JSON"] }
 def x-amz-target-completer-10 [] { ["AWSKendraFrontendService.CreateFaq"] }
+def status-completer [] { ["ACTIVE" "INACTIVE"] }
 def x-amz-target-completer-11 [] { ["AWSKendraFrontendService.CreateFeaturedResultsSet"] }
+def edition-completer [] { ["DEVELOPER_EDITION" "ENTERPRISE_EDITION"] }
+def user-context-policy-completer [] { ["ATTRIBUTE_FILTER" "USER_TOKEN"] }
 def x-amz-target-completer-12 [] { ["AWSKendraFrontendService.CreateIndex"] }
 def x-amz-target-completer-13 [] { ["AWSKendraFrontendService.CreateQuerySuggestionsBlockList"] }
 def x-amz-target-completer-14 [] { ["AWSKendraFrontendService.CreateThesaurus"] }
@@ -132,8 +137,11 @@ def x-amz-target-completer-32 [] { ["AWSKendraFrontendService.DescribeThesaurus"
 def x-amz-target-completer-33 [] { ["AWSKendraFrontendService.DisassociateEntitiesFromExperience"] }
 def x-amz-target-completer-34 [] { ["AWSKendraFrontendService.DisassociatePersonasFromEntities"] }
 def x-amz-target-completer-35 [] { ["AWSKendraFrontendService.GetQuerySuggestions"] }
+def interval-completer [] { ["ONE_MONTH_AGO" "ONE_WEEK_AGO" "THIS_MONTH" "THIS_WEEK" "TWO_MONTHS_AGO" "TWO_WEEKS_AGO"] }
+def metric-type-completer [] { ["AGG_QUERY_DOC_METRICS" "DOCS_BY_CLICK_COUNT" "QUERIES_BY_COUNT" "QUERIES_BY_ZERO_CLICK_RATE" "QUERIES_BY_ZERO_RESULT_RATE" "TREND_QUERY_DOC_METRICS"] }
 def x-amz-target-completer-36 [] { ["AWSKendraFrontendService.GetSnapshots"] }
 def x-amz-target-completer-37 [] { ["AWSKendraFrontendService.ListAccessControlConfigurations"] }
+def status-filter-completer [] { ["ABORTED" "FAILED" "INCOMPLETE" "STOPPING" "SUCCEEDED" "SYNCING" "SYNCING_INDEXING"] }
 def x-amz-target-completer-38 [] { ["AWSKendraFrontendService.ListDataSourceSyncJobs"] }
 def x-amz-target-completer-39 [] { ["AWSKendraFrontendService.ListDataSources"] }
 def x-amz-target-completer-40 [] { ["AWSKendraFrontendService.ListEntityPersonas"] }
@@ -147,6 +155,7 @@ def x-amz-target-completer-47 [] { ["AWSKendraFrontendService.ListQuerySuggestio
 def x-amz-target-completer-48 [] { ["AWSKendraFrontendService.ListTagsForResource"] }
 def x-amz-target-completer-49 [] { ["AWSKendraFrontendService.ListThesauri"] }
 def x-amz-target-completer-50 [] { ["AWSKendraFrontendService.PutPrincipalMapping"] }
+def query-result-type-filter-completer [] { ["ANSWER" "DOCUMENT" "QUESTION_ANSWER"] }
 def x-amz-target-completer-51 [] { ["AWSKendraFrontendService.Query"] }
 def x-amz-target-completer-52 [] { ["AWSKendraFrontendService.StartDataSourceSyncJob"] }
 def x-amz-target-completer-53 [] { ["AWSKendraFrontendService.StopDataSourceSyncJob"] }
@@ -159,6 +168,7 @@ def x-amz-target-completer-59 [] { ["AWSKendraFrontendService.UpdateExperience"]
 def x-amz-target-completer-60 [] { ["AWSKendraFrontendService.UpdateFeaturedResultsSet"] }
 def x-amz-target-completer-61 [] { ["AWSKendraFrontendService.UpdateIndex"] }
 def x-amz-target-completer-62 [] { ["AWSKendraFrontendService.UpdateQuerySuggestionsBlockList"] }
+def mode-completer [] { ["ENABLED" "LEARN_ONLY"] }
 def x-amz-target-completer-63 [] { ["AWSKendraFrontendService.UpdateQuerySuggestionsConfig"] }
 def x-amz-target-completer-64 [] { ["AWSKendraFrontendService.UpdateThesaurus"] }
 
@@ -189,6 +199,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AssociateEntitiesToExperience
+# --EntityList item shape: {EntityId: string, EntityType: "USER"|"GROUP"}
 export def "associate-entities-to-experience" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -206,14 +217,15 @@ export def "associate-entities-to-experience" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  id: any
-  index_id: any
-  entity_list: any
-]: any -> record<FailedEntityList: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  id: string # The identifier of your Amazon Kendra experience.
+  index_id: string # The identifier of the index for your Amazon Kendra experience.
+  entity_list: list # Lists users or groups in your IAM Identity Center identity source. — item shape: {EntityId: string, EntityType: "USER"|"GROUP"}
+]: any -> record<FailedEntityList: table<EntityId: string, ErrorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.AssociateEntitiesToExperience")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Id": $id, "IndexId": $index_id, "EntityList": $entity_list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -239,6 +251,7 @@ export def "associate-entities-to-experience" [
 #
 # POST /
 # operationId: AssociatePersonasToEntities
+# --Personas item shape: {EntityId: string, Persona: "OWNER"|"VIEWER"}
 export def "associate-personas-to-entities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -256,14 +269,15 @@ export def "associate-personas-to-entities" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  id: any
-  index_id: any
-  personas: any
-]: any -> record<FailedEntityList: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  id: string # The identifier of your Amazon Kendra experience.
+  index_id: string # The identifier of the index for your Amazon Kendra experience.
+  personas: list # The personas that define the specific permissions of users or groups in your IAM Identity Center identity source. The available personas or access roles are Owner and Viewer. For more information on these personas, see Providing access to your search page (https://docs.aws.amazon.com/kendra/latest/dg/deploying-search-experience-no-code.html#access-search-experience). — item shape: {EntityId: string, Persona: "OWNER"|"VIEWER"}
+]: any -> record<FailedEntityList: table<EntityId: string, ErrorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.AssociatePersonasToEntities")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Id": $id, "IndexId": $index_id, "Personas": $personas} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -289,7 +303,7 @@ export def "associate-personas-to-entities" [
 #
 # POST /
 # operationId: BatchDeleteDocument
-# --DataSourceSyncJobMetricTarget shape: {DataSourceId: any, DataSourceSyncJobId?: any}
+# --DataSourceSyncJobMetricTarget shape: {DataSourceId: string, DataSourceSyncJobId?: string}
 export def "batch-delete-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -307,14 +321,15 @@ export def "batch-delete-document" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  index_id: any
-  document_id_list: any
-  --data-source-sync-job-metric-target: record # Maps a particular data source sync job to a particular data source. — shape: {DataSourceId: any, DataSourceSyncJobId?: any}
-]: any -> record<FailedDocuments: record> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  index_id: string # The identifier of the index that contains the documents to delete.
+  document_id_list: list<string> # One or more identifiers for documents to delete from the index.
+  --data-source-sync-job-metric-target: record # Maps a particular data source sync job to a particular data source. — shape: {DataSourceId: string, DataSourceSyncJobId?: string}
+]: any -> record<FailedDocuments: table<Id: string, ErrorCode: string, ErrorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.BatchDeleteDocument")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IndexId": $index_id, "DocumentIdList": $document_id_list, "DataSourceSyncJobMetricTarget": $data_source_sync_job_metric_target} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -357,13 +372,14 @@ export def "batch-delete-featured-results-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  index_id: any
-  featured_results_set_ids: any
-]: any -> record<Errors: record> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  index_id: string # The identifier of the index used for featuring results.
+  featured_results_set_ids: list<string> # The identifiers of the featured results sets that you want to delete.
+]: any -> record<Errors: table<Id: string, ErrorCode: string, ErrorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.BatchDeleteFeaturedResultsSet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IndexId": $index_id, "FeaturedResultsSetIds": $featured_results_set_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -389,6 +405,7 @@ export def "batch-delete-featured-results-set" [
 #
 # POST /
 # operationId: BatchGetDocumentStatus
+# --DocumentInfoList item shape: {DocumentId: string, Attributes?: list}
 export def "batch-get-document-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -406,13 +423,14 @@ export def "batch-get-document-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  index_id: any
-  document_info_list: any
-]: any -> record<Errors: record, DocumentStatusList: record> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  index_id: string # The identifier of the index to add documents to. The index ID is returned by the CreateIndex (https://docs.aws.amazon.com/kendra/latest/dg/API_CreateIndex.html) API.
+  document_info_list: list # A list of DocumentInfo objects that identify the documents for which to get the status. You identify the documents by their document ID and optional attributes. — item shape: {DocumentId: string, Attributes?: list}
+]: any -> record<Errors: table<DocumentId: string, ErrorCode: string, ErrorMessage: string>, DocumentStatusList: table<DocumentId: string, DocumentStatus: string, FailureCode: string, FailureReason: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.BatchGetDocumentStatus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IndexId": $index_id, "DocumentInfoList": $document_info_list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -438,6 +456,8 @@ export def "batch-get-document-status" [
 #
 # POST /
 # operationId: BatchPutDocument
+# --Documents item shape: {Id: string, Title?: string, Blob?: string, S3Path?: record, Attributes?: list, AccessControlList?: list, HierarchicalAccessControlList?: list, ContentType?: "PDF"|"HTML"|"MS_WORD"|"PLAIN_TEXT"|"PPT"|"RTF"|"XML"|"XSLT"|"MS_EXCEL"|"CSV"|"JSON"|"MD", AccessControlConfigurationId?: string}
+# --CustomDocumentEnrichmentConfiguration shape: {InlineConfigurations?: list, PreExtractionHookConfiguration?: record, PostExtractionHookConfiguration?: record, RoleArn?: string}
 export def "batch-put-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -455,15 +475,16 @@ export def "batch-put-document" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  index_id: any
-  --role-arn: any
-  documents: any
-  --custom-document-enrichment-configuration: any
-]: any -> record<FailedDocuments: record> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  index_id: string # The identifier of the index to add the documents to. You need to create the index first using the CreateIndex API.
+  --role-arn: string # The Amazon Resource Name (ARN) of an IAM role with permission to access your S3 bucket. For more information, see IAM access roles for Amazon Kendra (https://docs.aws.amazon.com/kendra/latest/dg/iam-roles.html).
+  documents: list # One or more documents to add to the index. Documents have the following file size limits. 50 MB total size for any file 5 MB extracted text for any file For more information, see Quotas (https://docs.aws.amazon.com/kendra/latest/dg/quotas.html). — item shape: {Id: string, Title?: string, Blob?: string, S3Path?: record, Attributes?: list, AccessControlList?: list, HierarchicalAccessControlList?: list, ContentType?: "PDF"|"HTML"|"MS_WORD"|"PLAIN_TEXT"|"PPT"|"RTF"|"XML"|"XSLT"|"MS_EXCEL"|"CSV"|"JSON"|"MD", AccessControlConfigurationId?: string}
+  --custom-document-enrichment-configuration: record # Provides the configuration information for altering document metadata and content during the document ingestion process. For more information, see Customizing document metadata during the ingestion process (https://docs.aws.amazon.com/kendra/latest/dg/custom-document-enrichment.html). — shape: {InlineConfigurations?: list, PreExtractionHookConfiguration?: record, PostExtractionHookConfiguration?: record, RoleArn?: string}
+]: any -> record<FailedDocuments: table<Id: string, ErrorCode: string, ErrorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.BatchPutDocument")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IndexId": $index_id, "RoleArn": $role_arn, "Documents": $documents, "CustomDocumentEnrichmentConfiguration": $custom_document_enrichment_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -506,12 +527,13 @@ export def "clear-query-suggestions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  index_id: any
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  index_id: string # The identifier of the index you want to clear query suggestions from.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.ClearQuerySuggestions")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IndexId": $index_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -537,6 +559,8 @@ export def "clear-query-suggestions" [
 #
 # POST /
 # operationId: CreateAccessControlConfiguration
+# --AccessControlList item shape: {Name: string, Type: "USER"|"GROUP", Access: "ALLOW"|"DENY", DataSourceId?: string}
+# --HierarchicalAccessControlList item shape: {PrincipalList: list}
 export def "create-access-control-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -554,17 +578,18 @@ export def "create-access-control-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  index_id: any
-  name: any
-  --description: any
-  --access-control-list: any
-  --hierarchical-access-control-list: any
-  --client-token: any
-]: any -> record<Id: record> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  index_id: string # The identifier of the index to create an access control configuration for your documents.
+  name: string # A name for the access control configuration.
+  --description: string # A description for the access control configuration.
+  --access-control-list: list # Information on principals (users and/or groups) and which documents they should have access to. This is useful for user context filtering, where search results are filtered based on the user or their group access to documents. — item shape: {Name: string, Type: "USER"|"GROUP", Access: "ALLOW"|"DENY", DataSourceId?: string}
+  --hierarchical-access-control-list: list # A list of principal (https://docs.aws.amazon.com/kendra/latest/dg/API_Principal.html) lists that define the hierarchy for which documents users should have access to. Each hierarchical list specifies which user or group has allow or deny access for each document. — item shape: {PrincipalList: list}
+  --client-token: string # A token that you provide to identify the request to create an access control configuration. Multiple calls to the CreateAccessControlConfiguration API with the same client token will create only one access control configuration.
+]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.CreateAccessControlConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IndexId": $index_id, "Name": $name, "Description": $description, "AccessControlList": $access_control_list, "HierarchicalAccessControlList": $hierarchical_access_control_list, "ClientToken": $client_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -590,6 +615,10 @@ export def "create-access-control-configuration" [
 #
 # POST /
 # operationId: CreateDataSource
+# --Configuration shape: {S3Configuration?: record, SharePointConfiguration?: record, DatabaseConfiguration?: record, SalesforceConfiguration?: record, OneDriveConfiguration?: record, ServiceNowConfiguration?: record, ConfluenceConfiguration?: record, GoogleDriveConfiguration?: record, WebCrawlerConfiguration?: record, WorkDocsConfiguration?: record, FsxConfiguration?: record, SlackConfiguration?: record, BoxConfiguration?: record, QuipConfiguration?: record, JiraConfiguration?: record, GitHubConfiguration?: record, ... (2 more fields)}
+# --VpcConfiguration shape: {SubnetIds: list<string>, SecurityGroupIds: list<string>}
+# --Tags item shape: {Key: string, Value: string}
+# --CustomDocumentEnrichmentConfiguration shape: {InlineConfigurations?: list, PreExtractionHookConfiguration?: record, PostExtractionHookConfiguration?: record, RoleArn?: string}
 export def "create-data-source" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -607,23 +636,24 @@ export def "create-data-source" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  name: any
-  index_id: any
-  type: any
-  --configuration: any
-  --vpc-configuration: any
-  --description: any
-  --schedule: any
-  --role-arn: any
-  --tags: any
-  --client-token: any
-  --language-code: any
-  --custom-document-enrichment-configuration: any
-]: any -> record<Id: record> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  name: string # A name for the data source connector.
+  index_id: string # The identifier of the index you want to use with the data source connector.
+  type: string@type-completer # The type of data source repository. For example, SHAREPOINT.
+  --configuration: record # Provides the configuration information for an Amazon Kendra data source. — shape: {S3Configuration?: record, SharePointConfiguration?: record, DatabaseConfiguration?: record, SalesforceConfiguration?: record, OneDriveConfiguration?: record, ServiceNowConfiguration?: record, ConfluenceConfiguration?: record, GoogleDriveConfiguration?: record, WebCrawlerConfiguration?: record, WorkDocsConfiguration?: record, FsxConfiguration?: record, SlackConfiguration?: record, BoxConfiguration?: record, QuipConfiguration?: record, JiraConfiguration?: record, GitHubConfiguration?: record, ... (2 more fields)}
+  --vpc-configuration: record # Provides the configuration information to connect to an Amazon VPC. — shape: {SubnetIds: list<string>, SecurityGroupIds: list<string>}
+  --description: string # A description for the data source connector.
+  --schedule: string # Sets the frequency for Amazon Kendra to check the documents in your data source repository and update the index. If you don't set a schedule Amazon Kendra will not periodically update the index. You can call the StartDataSourceSyncJob API to update the index. Specify a cron- format schedule string or an empty string to indicate that the index is updated on demand. You can't specify the Schedule parameter when the Type parameter is set to CUSTOM. If you do, you receive a ValidationException exception.
+  --role-arn: string # The Amazon Resource Name (ARN) of an IAM role with permission to access the data source and required resources. For more information, see IAM access roles for Amazon Kendra. (https://docs.aws.amazon.com/kendra/latest/dg/iam-roles.html). You can't specify the RoleArn parameter when the Type parameter is set to CUSTOM. If you do, you receive a ValidationException exception. The RoleArn parameter is required for all other data sources.
+  --tags: list # A list of key-value pairs that identify or categorize the data source connector. You can also use tags to help control access to the data source connector. Tag keys and values can consist of Unicode letters, digits, white space, and any of the following symbols: _ . : / = + - @. — item shape: {Key: string, Value: string}
+  --client-token: string # A token that you provide to identify the request to create a data source connector. Multiple calls to the CreateDataSource API with the same client token will create only one data source connector.
+  --language-code: string # The code for a language. The default language is English. For more information on supported languages, including their codes, see Adding documents in languages other than English (https://docs.aws.amazon.com/kendra/latest/dg/in-adding-languages.html).
+  --custom-document-enrichment-configuration: record # Provides the configuration information for altering document metadata and content during the document ingestion process. For more information, see Customizing document metadata during the ingestion process (https://docs.aws.amazon.com/kendra/latest/dg/custom-document-enrichment.html). — shape: {InlineConfigurations?: list, PreExtractionHookConfiguration?: record, PostExtractionHookConfiguration?: record, RoleArn?: string}
+]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.CreateDataSource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "IndexId": $index_id, "Type": $type, "Configuration": $configuration, "VpcConfiguration": $vpc_configuration, "Description": $description, "Schedule": $schedule, "RoleArn": $role_arn, "Tags": $tags, "ClientToken": $client_token, "LanguageCode": $language_code, "CustomDocumentEnrichmentConfiguration": $custom_document_enrichment_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -649,6 +679,7 @@ export def "create-data-source" [
 #
 # POST /
 # operationId: CreateExperience
+# --Configuration shape: {ContentSourceConfiguration?: record, UserIdentityConfiguration?: record}
 export def "create-experience" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -666,17 +697,18 @@ export def "create-experience" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  name: any
-  index_id: any
-  --role-arn: any
-  --configuration: any
-  --description: any
-  --client-token: any
-]: any -> record<Id: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  name: string # A name for your Amazon Kendra experience.
+  index_id: string # The identifier of the index for your Amazon Kendra experience.
+  --role-arn: string # The Amazon Resource Name (ARN) of an IAM role with permission to access Query API, GetQuerySuggestions API, and other required APIs. The role also must include permission to access IAM Identity Center (successor to Single Sign-On) that stores your user and group information. For more information, see IAM access roles for Amazon Kendra (https://docs.aws.amazon.com/kendra/latest/dg/iam-roles.html).
+  --configuration: record # Provides the configuration information for your Amazon Kendra experience. This includes the data source IDs and/or FAQ IDs, and user or group information to grant access to your Amazon Kendra experience. — shape: {ContentSourceConfiguration?: record, UserIdentityConfiguration?: record}
+  --description: string # A description for your Amazon Kendra experience.
+  --client-token: string # A token that you provide to identify the request to create your Amazon Kendra experience. Multiple calls to the CreateExperience API with the same client token creates only one Amazon Kendra experience.
+]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.CreateExperience")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "IndexId": $index_id, "RoleArn": $role_arn, "Configuration": $configuration, "Description": $description, "ClientToken": $client_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -702,6 +734,8 @@ export def "create-experience" [
 #
 # POST /
 # operationId: CreateFaq
+# --S3Path shape: {Bucket: string, Key: string}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-faq" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -719,20 +753,21 @@ export def "create-faq" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  index_id: any
-  name: any
-  --description: any
-  s3_path: any
-  role_arn: any
-  --tags: any
-  --file-format: any
-  --client-token: any
-  --language-code: any
-]: any -> record<Id: record> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  index_id: string # The identifier of the index for the FAQ.
+  name: string # A name for the FAQ.
+  --description: string # A description for the FAQ.
+  s3_path: record # Information required to find a specific file in an Amazon S3 bucket. — shape: {Bucket: string, Key: string}
+  role_arn: string # The Amazon Resource Name (ARN) of an IAM role with permission to access the S3 bucket that contains the FAQs. For more information, see IAM access roles for Amazon Kendra (https://docs.aws.amazon.com/kendra/latest/dg/iam-roles.html).
+  --tags: list # A list of key-value pairs that identify the FAQ. You can use the tags to identify and organize your resources and to control access to resources. — item shape: {Key: string, Value: string}
+  --file-format: string@file-format-completer # The format of the FAQ input file. You can choose between a basic CSV format, a CSV format that includes customs attributes in a header, and a JSON format that includes custom attributes. The format must match the format of the file stored in the S3 bucket identified in the S3Path parameter. For more information, see Adding questions and answers (https://docs.aws.amazon.com/kendra/latest/dg/in-creating-faq.html).
+  --client-token: string # A token that you provide to identify the request to create a FAQ. Multiple calls to the CreateFaqRequest API with the same client token will create only one FAQ.
+  --language-code: string # The code for a language. The default language is English. For more information on supported languages, including their codes, see Adding documents in languages other than English (https://docs.aws.amazon.com/kendra/latest/dg/in-adding-languages.html).
+]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.CreateFaq")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IndexId": $index_id, "Name": $name, "Description": $description, "S3Path": $s3_path, "RoleArn": $role_arn, "Tags": $tags, "FileFormat": $file_format, "ClientToken": $client_token, "LanguageCode": $language_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -758,6 +793,8 @@ export def "create-faq" [
 #
 # POST /
 # operationId: CreateFeaturedResultsSet
+# --FeaturedDocuments item shape: {Id?: string}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-featured-results-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -775,19 +812,20 @@ export def "create-featured-results-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  index_id: any
-  featured_results_set_name: any
-  --description: any
-  --client-token: any
-  --status: any
-  --query-texts: any
-  --featured-documents: any
-  --tags: any
-]: any -> record<FeaturedResultsSet: record<FeaturedResultsSetId: record, FeaturedResultsSetName: record, Description: record, Status: record, QueryTexts: record, FeaturedDocuments: record, LastUpdatedTimestamp: record, CreationTimestamp: record>> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  index_id: string # The identifier of the index that you want to use for featuring results.
+  featured_results_set_name: string # A name for the set of featured results.
+  --description: string # A description for the set of featured results.
+  --client-token: string # A token that you provide to identify the request to create a set of featured results. Multiple calls to the CreateFeaturedResultsSet API with the same client token will create only one featured results set.
+  --status: string@status-completer # The current status of the set of featured results. When the value is ACTIVE, featured results are ready for use. You can still configure your settings before setting the status to ACTIVE. You can set the status to ACTIVE or INACTIVE using the UpdateFeaturedResultsSet (https://docs.aws.amazon.com/kendra/latest/dg/API_UpdateFeaturedResultsSet.html) API. The queries you specify for featured results must be unique per featured results set for each index, whether the status is ACTIVE or INACTIVE.
+  --query-texts: list<string> # A list of queries for featuring results. For more information on the list of queries, see FeaturedResultsSet (https://docs.aws.amazon.com/kendra/latest/dg/API_FeaturedResultsSet.html).
+  --featured-documents: list # A list of document IDs for the documents you want to feature at the top of the search results page. For more information on the list of documents, see FeaturedResultsSet (https://docs.aws.amazon.com/kendra/latest/dg/API_FeaturedResultsSet.html). — item shape: {Id?: string}
+  --tags: list # A list of key-value pairs that identify or categorize the featured results set. You can also use tags to help control access to the featured results set. Tag keys and values can consist of Unicode letters, digits, white space, and any of the following symbols:_ . : / = + - @. — item shape: {Key: string, Value: string}
+]: any -> record<FeaturedResultsSet: record<FeaturedResultsSetId: string, FeaturedResultsSetName: string, Description: string, Status: string, QueryTexts: list<string>, FeaturedDocuments: list<record>, LastUpdatedTimestamp: int, CreationTimestamp: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.CreateFeaturedResultsSet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IndexId": $index_id, "FeaturedResultsSetName": $featured_results_set_name, "Description": $description, "ClientToken": $client_token, "Status": $status, "QueryTexts": $query_texts, "FeaturedDocuments": $featured_documents, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -813,6 +851,10 @@ export def "create-featured-results-set" [
 #
 # POST /
 # operationId: CreateIndex
+# --ServerSideEncryptionConfiguration shape: {KmsKeyId?: string}
+# --Tags item shape: {Key: string, Value: string}
+# --UserTokenConfigurations item shape: {JwtTokenTypeConfiguration?: record, JsonTokenTypeConfiguration?: record}
+# --UserGroupResolutionConfiguration shape: {UserGroupResolutionMode: "AWS_SSO"|"NONE"}
 export def "create-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -830,21 +872,22 @@ export def "create-index" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  name: any
-  --edition: any
-  role_arn: any
-  --server-side-encryption-configuration: any
-  --description: any
-  --client-token: any
-  --tags: any
-  --user-token-configurations: any
-  --user-context-policy: any
-  --user-group-resolution-configuration: any
-]: any -> record<Id: record> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  name: string # A name for the index.
+  --edition: string@edition-completer # The Amazon Kendra edition to use for the index. Choose DEVELOPER_EDITION for indexes intended for development, testing, or proof of concept. Use ENTERPRISE_EDITION for production. Once you set the edition for an index, it can't be changed. The Edition parameter is optional. If you don't supply a value, the default is ENTERPRISE_EDITION. For more information on quota limits for Enterprise and Developer editions, see Quotas (https://docs.aws.amazon.com/kendra/latest/dg/quotas.html).
+  role_arn: string # The Amazon Resource Name (ARN) of an IAM role with permission to access your Amazon CloudWatch logs and metrics. For more information, see IAM access roles for Amazon Kendra (https://docs.aws.amazon.com/kendra/latest/dg/iam-roles.html).
+  --server-side-encryption-configuration: record # Provides the identifier of the KMS key used to encrypt data indexed by Amazon Kendra. Amazon Kendra doesn't support asymmetric keys. — shape: {KmsKeyId?: string}
+  --description: string # A description for the index.
+  --client-token: string # A token that you provide to identify the request to create an index. Multiple calls to the CreateIndex API with the same client token will create only one index.
+  --tags: list # A list of key-value pairs that identify or categorize the index. You can also use tags to help control access to the index. Tag keys and values can consist of Unicode letters, digits, white space, and any of the following symbols: _ . : / = + - @. — item shape: {Key: string, Value: string}
+  --user-token-configurations: list # The user token configuration. — item shape: {JwtTokenTypeConfiguration?: record, JsonTokenTypeConfiguration?: record}
+  --user-context-policy: string@user-context-policy-completer # The user context policy. ATTRIBUTE_FILTER All indexed content is searchable and displayable for all users. If you want to filter search results on user context, you can use the attribute filters of _user_id and _group_ids or you can provide user and group information in UserContext. USER_TOKEN Enables token-based user access control to filter search results on user context. All documents with no access control and all documents accessible to the user will be searchable and displayable.
+  --user-group-resolution-configuration: record # Provides the configuration information to get users and groups from an IAM Identity Center (successor to Single Sign-On) identity source. This is useful for user context filtering, where search results are filtered based on the user or their group access to documents. You can also use the PutPrincipalMapping (https://docs.aws.amazon.com/kendra/latest/dg/API_PutPrincipalMapping.html) API to map users to their groups so that you only need to provide the user ID when you issue the query. To set up an IAM Identity Center identity source in the console to use with Amazon Kendra, see Getting started with an IAM Identity Center identity source (https://docs.aws.amazon.com/kendra/latest/dg/getting-started-aws-sso.html). You must also grant the required permissions to use IAM Identity Center with Amazon Kendra. For more information, see IAM roles for IAM Identity Center (https://docs.aws.amazon.com/kendra/latest/dg/iam-roles.html#iam-roles-aws-sso). Amazon Kendra currently does not support using UserGroupResolutionConfiguration with an Amazon Web Services organization member account for your IAM Identity Center identify source. You must create your index in the management account for the organization in order to use UserGroupResolutionConfiguration. — shape: {UserGroupResolutionMode: "AWS_SSO"|"NONE"}
+]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.CreateIndex")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Edition": $edition, "RoleArn": $role_arn, "ServerSideEncryptionConfiguration": $server_side_encryption_configuration, "Description": $description, "ClientToken": $client_token, "Tags": $tags, "UserTokenConfigurations": $user_token_configurations, "UserContextPolicy": $user_context_policy, "UserGroupResolutionConfiguration": $user_group_resolution_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -870,6 +913,8 @@ export def "create-index" [
 #
 # POST /
 # operationId: CreateQuerySuggestionsBlockList
+# --SourceS3Path shape: {Bucket: string, Key: string}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-query-suggestions-block-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -887,18 +932,19 @@ export def "create-query-suggestions-block-list" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  index_id: any
-  name: any
-  --description: any
-  source_s3_path: any
-  --client-token: any
-  role_arn: any
-  --tags: any
-]: any -> record<Id: record> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  index_id: string # The identifier of the index you want to create a query suggestions block list for.
+  name: string # A name for the block list. For example, the name 'offensive-words', which includes all offensive words that could appear in user queries and need to be blocked from suggestions.
+  --description: string # A description for the block list. For example, the description "List of all offensive words that can appear in user queries and need to be blocked from suggestions."
+  source_s3_path: record # Information required to find a specific file in an Amazon S3 bucket. — shape: {Bucket: string, Key: string}
+  --client-token: string # A token that you provide to identify the request to create a query suggestions block list.
+  role_arn: string # The Amazon Resource Name (ARN) of an IAM role with permission to access your S3 bucket that contains the block list text file. For more information, see IAM access roles for Amazon Kendra (https://docs.aws.amazon.com/kendra/latest/dg/iam-roles.html).
+  --tags: list # A list of key-value pairs that identify or categorize the block list. Tag keys and values can consist of Unicode letters, digits, white space, and any of the following symbols: _ . : / = + - @. — item shape: {Key: string, Value: string}
+]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.CreateQuerySuggestionsBlockList")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IndexId": $index_id, "Name": $name, "Description": $description, "SourceS3Path": $source_s3_path, "ClientToken": $client_token, "RoleArn": $role_arn, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -924,6 +970,8 @@ export def "create-query-suggestions-block-list" [
 #
 # POST /
 # operationId: CreateThesaurus
+# --Tags item shape: {Key: string, Value: string}
+# --SourceS3Path shape: {Bucket: string, Key: string}
 export def "create-thesaurus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -941,18 +989,19 @@ export def "create-thesaurus" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  index_id: any
-  name: any
-  --description: any
-  role_arn: any
-  --tags: any
-  source_s3_path: any
-  --client-token: any
-]: any -> record<Id: record> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  index_id: string # The identifier of the index for the thesaurus.
+  name: string # A name for the thesaurus.
+  --description: string # A description for the thesaurus.
+  role_arn: string # The Amazon Resource Name (ARN) of an IAM role with permission to access your S3 bucket that contains the thesaurus file. For more information, see IAM access roles for Amazon Kendra (https://docs.aws.amazon.com/kendra/latest/dg/iam-roles.html).
+  --tags: list # A list of key-value pairs that identify or categorize the thesaurus. You can also use tags to help control access to the thesaurus. Tag keys and values can consist of Unicode letters, digits, white space, and any of the following symbols: _ . : / = + - @. — item shape: {Key: string, Value: string}
+  source_s3_path: record # Information required to find a specific file in an Amazon S3 bucket. — shape: {Bucket: string, Key: string}
+  --client-token: string # A token that you provide to identify the request to create a thesaurus. Multiple calls to the CreateThesaurus API with the same client token will create only one thesaurus.
+]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.CreateThesaurus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IndexId": $index_id, "Name": $name, "Description": $description, "RoleArn": $role_arn, "Tags": $tags, "SourceS3Path": $source_s3_path, "ClientToken": $client_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -995,13 +1044,14 @@ export def "delete-access-control-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  index_id: any
-  id: any
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  index_id: string # The identifier of the index for an access control configuration.
+  id: string # The identifier of the access control configuration you want to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.DeleteAccessControlConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IndexId": $index_id, "Id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1044,13 +1094,14 @@ export def "delete-data-source" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  id: any
-  index_id: any
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  id: string # The identifier of the data source connector you want to delete.
+  index_id: string # The identifier of the index used with the data source connector.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.DeleteDataSource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Id": $id, "IndexId": $index_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1093,13 +1144,14 @@ export def "delete-experience" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  id: any
-  index_id: any
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  id: string # The identifier of your Amazon Kendra experience you want to delete.
+  index_id: string # The identifier of the index for your Amazon Kendra experience.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.DeleteExperience")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Id": $id, "IndexId": $index_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1142,13 +1194,14 @@ export def "delete-faq" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  id: any
-  index_id: any
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  id: string # The identifier of the FAQ you want to remove.
+  index_id: string # The identifier of the index for the FAQ.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.DeleteFaq")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Id": $id, "IndexId": $index_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1191,12 +1244,13 @@ export def "delete-index" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  id: any
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  id: string # The identifier of the index you want to delete.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.DeleteIndex")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1239,15 +1293,16 @@ export def "delete-principal-mapping" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  index_id: any
-  --data-source-id: any
-  group_id: any
-  --ordering-id: any
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  index_id: string # The identifier of the index you want to delete a group from.
+  --data-source-id: string # The identifier of the data source you want to delete a group from. A group can be tied to multiple data sources. You can delete a group from accessing documents in a certain data source. For example, the groups "Research", "Engineering", and "Sales and Marketing" are all tied to the company's documents stored in the data sources Confluence and Salesforce. You want to delete "Research" and "Engineering" groups from Salesforce, so that these groups cannot access customer-related documents stored in Salesforce. Only "Sales and Marketing" should access documents in the Salesforce data source.
+  group_id: string # The identifier of the group you want to delete.
+  --ordering-id: int # The timestamp identifier you specify to ensure Amazon Kendra does not override the latest DELETE action with previous actions. The highest number ID, which is the ordering ID, is the latest action you want to process and apply on top of other actions with lower number IDs. This prevents previous actions with lower number IDs from possibly overriding the latest action. The ordering ID can be the Unix time of the last update you made to a group members list. You would then provide this list when calling PutPrincipalMapping. This ensures your DELETE action for that updated group with the latest members list doesn't get overwritten by earlier DELETE actions for the same group which are yet to be processed. The default ordering ID is the current Unix time in milliseconds that the action was received by Amazon Kendra.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.DeletePrincipalMapping")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IndexId": $index_id, "DataSourceId": $data_source_id, "GroupId": $group_id, "OrderingId": $ordering_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1290,13 +1345,14 @@ export def "delete-query-suggestions-block-list" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  index_id: any
-  id: any
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  index_id: string # The identifier of the index for the block list.
+  id: string # The identifier of the block list you want to delete.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.DeleteQuerySuggestionsBlockList")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IndexId": $index_id, "Id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1339,13 +1395,14 @@ export def "delete-thesaurus" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  id: any
-  index_id: any
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  id: string # The identifier of the thesaurus you want to delete.
+  index_id: string # The identifier of the index for the thesaurus.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.DeleteThesaurus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Id": $id, "IndexId": $index_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1388,13 +1445,14 @@ export def "describe-access-control-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  index_id: any
-  id: any
-]: any -> record<Name: record, Description: record, ErrorMessage: record, AccessControlList: record, HierarchicalAccessControlList: record> {
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  index_id: string # The identifier of the index for an access control configuration.
+  id: string # The identifier of the access control configuration you want to get information on.
+]: any -> record<Name: string, Description: string, ErrorMessage: string, AccessControlList: table<Name: string, Type: string, Access: string, DataSourceId: string>, HierarchicalAccessControlList: table<PrincipalList: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.DescribeAccessControlConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IndexId": $index_id, "Id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1437,13 +1495,14 @@ export def "describe-data-source" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  id: any
-  index_id: any
-]: any -> record<Id: record, IndexId: record, Name: record, Type: record, Configuration: record<S3Configuration: record<BucketName: record, InclusionPrefixes: record, InclusionPatterns: record, ExclusionPatterns: record, DocumentsMetadataConfiguration: record, AccessControlListConfiguration: record>, SharePointConfiguration: record<SharePointVersion: record, Urls: record, SecretArn: record, CrawlAttachments: record, UseChangeLog: record, InclusionPatterns: record, ExclusionPatterns: record, VpcConfiguration: record, FieldMappings: record, DocumentTitleFieldName: record, DisableLocalGroups: record, SslCertificateS3Path: record, AuthenticationType: record, ProxyConfiguration: record>, DatabaseConfiguration: record<DatabaseEngineType: record, ConnectionConfiguration: record, VpcConfiguration: record, ColumnConfiguration: record, AclConfiguration: record, SqlConfiguration: record>, SalesforceConfiguration: record<ServerUrl: record, SecretArn: record, StandardObjectConfigurations: record, KnowledgeArticleConfiguration: record, ChatterFeedConfiguration: record, CrawlAttachments: record, StandardObjectAttachmentConfiguration: record, IncludeAttachmentFilePatterns: record, ExcludeAttachmentFilePatterns: record>, OneDriveConfiguration: record<TenantDomain: record, SecretArn: record, OneDriveUsers: record, InclusionPatterns: record, ExclusionPatterns: record, FieldMappings: record, DisableLocalGroups: record>, ServiceNowConfiguration: record<HostUrl: record, SecretArn: record, ServiceNowBuildVersion: record, KnowledgeArticleConfiguration: record, ServiceCatalogConfiguration: record, AuthenticationType: record>, ConfluenceConfiguration: record<ServerUrl: record, SecretArn: record, Version: record, SpaceConfiguration: record, PageConfiguration: record, BlogConfiguration: record, AttachmentConfiguration: record, VpcConfiguration: record, InclusionPatterns: record, ExclusionPatterns: record, ProxyConfiguration: record, AuthenticationType: record>, GoogleDriveConfiguration: record<SecretArn: record, InclusionPatterns: record, ExclusionPatterns: record, FieldMappings: record, ExcludeMimeTypes: record, ExcludeUserAccounts: record, ExcludeSharedDrives: record>, WebCrawlerConfiguration: record<Urls: record, CrawlDepth: record, MaxLinksPerPage: record, MaxContentSizePerPageInMegaBytes: record, MaxUrlsPerMinuteCrawlRate: record, UrlInclusionPatterns: record, UrlExclusionPatterns: record, ProxyConfiguration: record, AuthenticationConfiguration: record>, WorkDocsConfiguration: record<OrganizationId: record, CrawlComments: record, UseChangeLog: record, InclusionPatterns: record, ExclusionPatterns: record, FieldMappings: record>, FsxConfiguration: record<FileSystemId: record, FileSystemType: record, VpcConfiguration: record, SecretArn: record, InclusionPatterns: record, ExclusionPatterns: record, FieldMappings: record>, SlackConfiguration: record<TeamId: record, SecretArn: record, VpcConfiguration: record, SlackEntityList: record, UseChangeLog: record, CrawlBotMessage: record, ExcludeArchived: record, SinceCrawlDate: record, LookBackPeriod: record, PrivateChannelFilter: record, PublicChannelFilter: record, InclusionPatterns: record, ExclusionPatterns: record, FieldMappings: record>, BoxConfiguration: record<EnterpriseId: record, SecretArn: record, UseChangeLog: record, CrawlComments: record, CrawlTasks: record, CrawlWebLinks: record, FileFieldMappings: record, TaskFieldMappings: record, CommentFieldMappings: record, WebLinkFieldMappings: record, InclusionPatterns: record, ExclusionPatterns: record, VpcConfiguration: record>, QuipConfiguration: record<Domain: record, SecretArn: record, CrawlFileComments: record, CrawlChatRooms: record, CrawlAttachments: record, FolderIds: record, ThreadFieldMappings: record, MessageFieldMappings: record, AttachmentFieldMappings: record, InclusionPatterns: record, ExclusionPatterns: record, VpcConfiguration: record>, JiraConfiguration: record<JiraAccountUrl: record, SecretArn: record, UseChangeLog: record, Project: record, IssueType: record, Status: record, IssueSubEntityFilter: record, AttachmentFieldMappings: record, CommentFieldMappings: record, IssueFieldMappings: record, ProjectFieldMappings: record, WorkLogFieldMappings: record, InclusionPatterns: record, ExclusionPatterns: record, VpcConfiguration: record>, GitHubConfiguration: record<SaaSConfiguration: record, OnPremiseConfiguration: record, Type: record, SecretArn: record, UseChangeLog: record, GitHubDocumentCrawlProperties: record, RepositoryFilter: record, InclusionFolderNamePatterns: record, InclusionFileTypePatterns: record, InclusionFileNamePatterns: record, ExclusionFolderNamePatterns: record, ExclusionFileTypePatterns: record, ExclusionFileNamePatterns: record, VpcConfiguration: record, GitHubRepositoryConfigurationFieldMappings: record, GitHubCommitConfigurationFieldMappings: record, GitHubIssueDocumentConfigurationFieldMappings: record, GitHubIssueCommentConfigurationFieldMappings: record, GitHubIssueAttachmentConfigurationFieldMappings: record, GitHubPullRequestCommentConfigurationFieldMappings: record, GitHubPullRequestDocumentConfigurationFieldMappings: record, GitHubPullRequestDocumentAttachmentConfigurationFieldMappings: record>, AlfrescoConfiguration: record<SiteUrl: record, SiteId: record, SecretArn: record, SslCertificateS3Path: record, CrawlSystemFolders: record, CrawlComments: record, EntityFilter: record, DocumentLibraryFieldMappings: record, BlogFieldMappings: record, WikiFieldMappings: record, InclusionPatterns: record, ExclusionPatterns: record, VpcConfiguration: record>, TemplateConfiguration: record<Template: record>>, VpcConfiguration: record<SubnetIds: record, SecurityGroupIds: record>, CreatedAt: record, UpdatedAt: record, Description: record, Status: record, Schedule: record, RoleArn: record, ErrorMessage: record, LanguageCode: record, CustomDocumentEnrichmentConfiguration: record<InlineConfigurations: record, PreExtractionHookConfiguration: record<InvocationCondition: record, LambdaArn: record, S3Bucket: record>, PostExtractionHookConfiguration: record<InvocationCondition: record, LambdaArn: record, S3Bucket: record>, RoleArn: record>> {
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  id: string # The identifier of the data source connector.
+  index_id: string # The identifier of the index used with the data source connector.
+]: any -> record<Id: string, IndexId: string, Name: string, Type: string, Configuration: record<S3Configuration: record<BucketName: string, InclusionPrefixes: list, InclusionPatterns: list, ExclusionPatterns: list, DocumentsMetadataConfiguration: record, AccessControlListConfiguration: record>, SharePointConfiguration: record<SharePointVersion: string, Urls: list, SecretArn: string, CrawlAttachments: bool, UseChangeLog: bool, InclusionPatterns: list, ExclusionPatterns: list, VpcConfiguration: record, FieldMappings: list, DocumentTitleFieldName: string, DisableLocalGroups: bool, SslCertificateS3Path: record, AuthenticationType: string, ProxyConfiguration: record>, DatabaseConfiguration: record<DatabaseEngineType: string, ConnectionConfiguration: record, VpcConfiguration: record, ColumnConfiguration: record, AclConfiguration: record, SqlConfiguration: record>, SalesforceConfiguration: record<ServerUrl: string, SecretArn: string, StandardObjectConfigurations: list, KnowledgeArticleConfiguration: record, ChatterFeedConfiguration: record, CrawlAttachments: bool, StandardObjectAttachmentConfiguration: record, IncludeAttachmentFilePatterns: list, ExcludeAttachmentFilePatterns: list>, OneDriveConfiguration: record<TenantDomain: string, SecretArn: string, OneDriveUsers: record, InclusionPatterns: list, ExclusionPatterns: list, FieldMappings: list, DisableLocalGroups: bool>, ServiceNowConfiguration: record<HostUrl: string, SecretArn: string, ServiceNowBuildVersion: string, KnowledgeArticleConfiguration: record, ServiceCatalogConfiguration: record, AuthenticationType: string>, ConfluenceConfiguration: record<ServerUrl: string, SecretArn: string, Version: string, SpaceConfiguration: record, PageConfiguration: record, BlogConfiguration: record, AttachmentConfiguration: record, VpcConfiguration: record, InclusionPatterns: list, ExclusionPatterns: list, ProxyConfiguration: record, AuthenticationType: string>, GoogleDriveConfiguration: record<SecretArn: string, InclusionPatterns: list, ExclusionPatterns: list, FieldMappings: list, ExcludeMimeTypes: list, ExcludeUserAccounts: list, ExcludeSharedDrives: list>, WebCrawlerConfiguration: record<Urls: record, CrawlDepth: int, MaxLinksPerPage: int, MaxContentSizePerPageInMegaBytes: float, MaxUrlsPerMinuteCrawlRate: int, UrlInclusionPatterns: list, UrlExclusionPatterns: list, ProxyConfiguration: record, AuthenticationConfiguration: record>, WorkDocsConfiguration: record<OrganizationId: string, CrawlComments: bool, UseChangeLog: bool, InclusionPatterns: list, ExclusionPatterns: list, FieldMappings: list>, FsxConfiguration: record<FileSystemId: string, FileSystemType: string, VpcConfiguration: record, SecretArn: string, InclusionPatterns: list, ExclusionPatterns: list, FieldMappings: list>, SlackConfiguration: record<TeamId: string, SecretArn: string, VpcConfiguration: record, SlackEntityList: list, UseChangeLog: bool, CrawlBotMessage: bool, ExcludeArchived: bool, SinceCrawlDate: string, LookBackPeriod: int, PrivateChannelFilter: list, PublicChannelFilter: list, InclusionPatterns: list, ExclusionPatterns: list, FieldMappings: list>, BoxConfiguration: record<EnterpriseId: string, SecretArn: string, UseChangeLog: bool, CrawlComments: bool, CrawlTasks: bool, CrawlWebLinks: bool, FileFieldMappings: list, TaskFieldMappings: list, CommentFieldMappings: list, WebLinkFieldMappings: list, InclusionPatterns: list, ExclusionPatterns: list, VpcConfiguration: record>, QuipConfiguration: record<Domain: string, SecretArn: string, CrawlFileComments: bool, CrawlChatRooms: bool, CrawlAttachments: bool, FolderIds: list, ThreadFieldMappings: list, MessageFieldMappings: list, AttachmentFieldMappings: list, InclusionPatterns: list, ExclusionPatterns: list, VpcConfiguration: record>, JiraConfiguration: record<JiraAccountUrl: string, SecretArn: string, UseChangeLog: bool, Project: list, IssueType: list, Status: list, IssueSubEntityFilter: list, AttachmentFieldMappings: list, CommentFieldMappings: list, IssueFieldMappings: list, ProjectFieldMappings: list, WorkLogFieldMappings: list, InclusionPatterns: list, ExclusionPatterns: list, VpcConfiguration: record>, GitHubConfiguration: record<SaaSConfiguration: record, OnPremiseConfiguration: record, Type: string, SecretArn: string, UseChangeLog: bool, GitHubDocumentCrawlProperties: record, RepositoryFilter: list, InclusionFolderNamePatterns: list, InclusionFileTypePatterns: list, InclusionFileNamePatterns: list, ExclusionFolderNamePatterns: list, ExclusionFileTypePatterns: list, ExclusionFileNamePatterns: list, VpcConfiguration: record, GitHubRepositoryConfigurationFieldMappings: list, GitHubCommitConfigurationFieldMappings: list, GitHubIssueDocumentConfigurationFieldMappings: list, GitHubIssueCommentConfigurationFieldMappings: list, GitHubIssueAttachmentConfigurationFieldMappings: list, GitHubPullRequestCommentConfigurationFieldMappings: list, GitHubPullRequestDocumentConfigurationFieldMappings: list, GitHubPullRequestDocumentAttachmentConfigurationFieldMappings: list>, AlfrescoConfiguration: record<SiteUrl: string, SiteId: string, SecretArn: string, SslCertificateS3Path: record, CrawlSystemFolders: bool, CrawlComments: bool, EntityFilter: list, DocumentLibraryFieldMappings: list, BlogFieldMappings: list, WikiFieldMappings: list, InclusionPatterns: list, ExclusionPatterns: list, VpcConfiguration: record>, TemplateConfiguration: record<Template: record>>, VpcConfiguration: record<SubnetIds: list<string>, SecurityGroupIds: list<string>>, CreatedAt: string, UpdatedAt: string, Description: string, Status: string, Schedule: string, RoleArn: string, ErrorMessage: string, LanguageCode: string, CustomDocumentEnrichmentConfiguration: record<InlineConfigurations: list<record>, PreExtractionHookConfiguration: record<InvocationCondition: record, LambdaArn: string, S3Bucket: string>, PostExtractionHookConfiguration: record<InvocationCondition: record, LambdaArn: string, S3Bucket: string>, RoleArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.DescribeDataSource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Id": $id, "IndexId": $index_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1486,13 +1545,14 @@ export def "describe-experience" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  id: any
-  index_id: any
-]: any -> record<Id: record, IndexId: record, Name: record, Endpoints: record, Configuration: record<ContentSourceConfiguration: record<DataSourceIds: record, FaqIds: record, DirectPutContent: record>, UserIdentityConfiguration: record<IdentityAttributeName: record>>, CreatedAt: record, UpdatedAt: record, Description: record, Status: record, RoleArn: record, ErrorMessage: record> {
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  id: string # The identifier of your Amazon Kendra experience you want to get information on.
+  index_id: string # The identifier of the index for your Amazon Kendra experience.
+]: any -> record<Id: string, IndexId: string, Name: string, Endpoints: table<EndpointType: string, Endpoint: string>, Configuration: record<ContentSourceConfiguration: record<DataSourceIds: list, FaqIds: list, DirectPutContent: bool>, UserIdentityConfiguration: record<IdentityAttributeName: string>>, CreatedAt: string, UpdatedAt: string, Description: string, Status: string, RoleArn: string, ErrorMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.DescribeExperience")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Id": $id, "IndexId": $index_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1535,13 +1595,14 @@ export def "describe-faq" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-26
-  id: any
-  index_id: any
-]: any -> record<Id: record, IndexId: record, Name: record, Description: record, CreatedAt: record, UpdatedAt: record, S3Path: record<Bucket: record, Key: record>, Status: record, RoleArn: record, ErrorMessage: record, FileFormat: record, LanguageCode: record> {
+  --x-amz-target: string@x-amz-target-completer-26 # required
+  id: string # The identifier of the FAQ you want to get information on.
+  index_id: string # The identifier of the index for the FAQ.
+]: any -> record<Id: string, IndexId: string, Name: string, Description: string, CreatedAt: string, UpdatedAt: string, S3Path: record<Bucket: string, Key: string>, Status: string, RoleArn: string, ErrorMessage: string, FileFormat: string, LanguageCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.DescribeFaq")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Id": $id, "IndexId": $index_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1584,13 +1645,14 @@ export def "describe-featured-results-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-27
-  index_id: any
-  featured_results_set_id: any
-]: any -> record<FeaturedResultsSetId: record, FeaturedResultsSetName: record, Description: record, Status: record, QueryTexts: record, FeaturedDocumentsWithMetadata: record, FeaturedDocumentsMissing: record, LastUpdatedTimestamp: record, CreationTimestamp: record> {
+  --x-amz-target: string@x-amz-target-completer-27 # required
+  index_id: string # The identifier of the index used for featuring results.
+  featured_results_set_id: string # The identifier of the set of featured results that you want to get information on.
+]: any -> record<FeaturedResultsSetId: string, FeaturedResultsSetName: string, Description: string, Status: string, QueryTexts: list<string>, FeaturedDocumentsWithMetadata: table<Id: string, Title: string, URI: string>, FeaturedDocumentsMissing: table<Id: string>, LastUpdatedTimestamp: int, CreationTimestamp: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.DescribeFeaturedResultsSet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IndexId": $index_id, "FeaturedResultsSetId": $featured_results_set_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1633,12 +1695,13 @@ export def "describe-index" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-28
-  id: any
-]: any -> record<Name: record, Id: record, Edition: record, RoleArn: record, ServerSideEncryptionConfiguration: record<KmsKeyId: record>, Status: record, Description: record, CreatedAt: record, UpdatedAt: record, DocumentMetadataConfigurations: record, IndexStatistics: record<FaqStatistics: record<IndexedQuestionAnswersCount: record>, TextDocumentStatistics: record<IndexedTextDocumentsCount: record, IndexedTextBytes: record>>, ErrorMessage: record, CapacityUnits: record<StorageCapacityUnits: record, QueryCapacityUnits: record>, UserTokenConfigurations: record, UserContextPolicy: record, UserGroupResolutionConfiguration: record<UserGroupResolutionMode: record>> {
+  --x-amz-target: string@x-amz-target-completer-28 # required
+  id: string # The identifier of the index you want to get information on.
+]: any -> record<Name: string, Id: string, Edition: string, RoleArn: string, ServerSideEncryptionConfiguration: record<KmsKeyId: string>, Status: string, Description: string, CreatedAt: string, UpdatedAt: string, DocumentMetadataConfigurations: table<Name: string, Type: string, Relevance: record, Search: record>, IndexStatistics: record<FaqStatistics: record<IndexedQuestionAnswersCount: int>, TextDocumentStatistics: record<IndexedTextDocumentsCount: int, IndexedTextBytes: int>>, ErrorMessage: string, CapacityUnits: record<StorageCapacityUnits: int, QueryCapacityUnits: int>, UserTokenConfigurations: table<JwtTokenTypeConfiguration: record, JsonTokenTypeConfiguration: record>, UserContextPolicy: string, UserGroupResolutionConfiguration: record<UserGroupResolutionMode: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.DescribeIndex")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1681,14 +1744,15 @@ export def "describe-principal-mapping" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-29
-  index_id: any
-  --data-source-id: any
-  group_id: any
-]: any -> record<IndexId: record, DataSourceId: record, GroupId: record, GroupOrderingIdSummaries: record> {
+  --x-amz-target: string@x-amz-target-completer-29 # required
+  index_id: string # The identifier of the index required to check the processing of PUT and DELETE actions for mapping users to their groups.
+  --data-source-id: string # The identifier of the data source to check the processing of PUT and DELETE actions for mapping users to their groups.
+  group_id: string # The identifier of the group required to check the processing of PUT and DELETE actions for mapping users to their groups.
+]: any -> record<IndexId: string, DataSourceId: string, GroupId: string, GroupOrderingIdSummaries: table<Status: string, LastUpdatedAt: string, ReceivedAt: string, OrderingId: int, FailureReason: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.DescribePrincipalMapping")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IndexId": $index_id, "DataSourceId": $data_source_id, "GroupId": $group_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1731,13 +1795,14 @@ export def "describe-query-suggestions-block-list" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-30
-  index_id: any
-  id: any
-]: any -> record<IndexId: record, Id: record, Name: record, Description: record, Status: record, ErrorMessage: record, CreatedAt: record, UpdatedAt: record, SourceS3Path: record<Bucket: record, Key: record>, ItemCount: record, FileSizeBytes: record, RoleArn: record> {
+  --x-amz-target: string@x-amz-target-completer-30 # required
+  index_id: string # The identifier of the index for the block list.
+  id: string # The identifier of the block list you want to get information on.
+]: any -> record<IndexId: string, Id: string, Name: string, Description: string, Status: string, ErrorMessage: string, CreatedAt: string, UpdatedAt: string, SourceS3Path: record<Bucket: string, Key: string>, ItemCount: int, FileSizeBytes: int, RoleArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.DescribeQuerySuggestionsBlockList")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IndexId": $index_id, "Id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1780,12 +1845,13 @@ export def "describe-query-suggestions-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-31
-  index_id: any
-]: any -> record<Mode: record, Status: record, QueryLogLookBackWindowInDays: record, IncludeQueriesWithoutUserInformation: record, MinimumNumberOfQueryingUsers: record, MinimumQueryCount: record, LastSuggestionsBuildTime: record, LastClearTime: record, TotalSuggestionsCount: record> {
+  --x-amz-target: string@x-amz-target-completer-31 # required
+  index_id: string # The identifier of the index with query suggestions that you want to get information on.
+]: any -> record<Mode: string, Status: string, QueryLogLookBackWindowInDays: int, IncludeQueriesWithoutUserInformation: bool, MinimumNumberOfQueryingUsers: int, MinimumQueryCount: int, LastSuggestionsBuildTime: string, LastClearTime: string, TotalSuggestionsCount: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.DescribeQuerySuggestionsConfig")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IndexId": $index_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1828,13 +1894,14 @@ export def "describe-thesaurus" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-32
-  id: any
-  index_id: any
-]: any -> record<Id: record, IndexId: record, Name: record, Description: record, Status: record, ErrorMessage: record, CreatedAt: record, UpdatedAt: record, RoleArn: record, SourceS3Path: record<Bucket: record, Key: record>, FileSizeBytes: record, TermCount: record, SynonymRuleCount: record> {
+  --x-amz-target: string@x-amz-target-completer-32 # required
+  id: string # The identifier of the thesaurus you want to get information on.
+  index_id: string # The identifier of the index for the thesaurus.
+]: any -> record<Id: string, IndexId: string, Name: string, Description: string, Status: string, ErrorMessage: string, CreatedAt: string, UpdatedAt: string, RoleArn: string, SourceS3Path: record<Bucket: string, Key: string>, FileSizeBytes: int, TermCount: int, SynonymRuleCount: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.DescribeThesaurus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Id": $id, "IndexId": $index_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1860,6 +1927,7 @@ export def "describe-thesaurus" [
 #
 # POST /
 # operationId: DisassociateEntitiesFromExperience
+# --EntityList item shape: {EntityId: string, EntityType: "USER"|"GROUP"}
 export def "disassociate-entities-from-experience" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1877,14 +1945,15 @@ export def "disassociate-entities-from-experience" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-33
-  id: any
-  index_id: any
-  entity_list: any
-]: any -> record<FailedEntityList: record> {
+  --x-amz-target: string@x-amz-target-completer-33 # required
+  id: string # The identifier of your Amazon Kendra experience.
+  index_id: string # The identifier of the index for your Amazon Kendra experience.
+  entity_list: list # Lists users or groups in your IAM Identity Center identity source. — item shape: {EntityId: string, EntityType: "USER"|"GROUP"}
+]: any -> record<FailedEntityList: table<EntityId: string, ErrorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.DisassociateEntitiesFromExperience")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Id": $id, "IndexId": $index_id, "EntityList": $entity_list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1927,14 +1996,15 @@ export def "disassociate-personas-from-entities" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-34
-  id: any
-  index_id: any
-  entity_ids: any
-]: any -> record<FailedEntityList: record> {
+  --x-amz-target: string@x-amz-target-completer-34 # required
+  id: string # The identifier of your Amazon Kendra experience.
+  index_id: string # The identifier of the index for your Amazon Kendra experience.
+  entity_ids: list<string> # The identifiers of users or groups in your IAM Identity Center identity source. For example, user IDs could be user emails.
+]: any -> record<FailedEntityList: table<EntityId: string, ErrorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.DisassociatePersonasFromEntities")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Id": $id, "IndexId": $index_id, "EntityIds": $entity_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1977,14 +2047,15 @@ export def "get-query-suggestions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-35
-  index_id: any
-  query_text: any
-  --max-suggestions-count: any
-]: any -> record<QuerySuggestionsId: record, Suggestions: record> {
+  --x-amz-target: string@x-amz-target-completer-35 # required
+  index_id: string # The identifier of the index you want to get query suggestions from.
+  query_text: string # The text of a user's query to generate query suggestions. A query is suggested if the query prefix matches what a user starts to type as their query. Amazon Kendra does not show any suggestions if a user types fewer than two characters or more than 60 characters. A query must also have at least one search result and contain at least one word of more than four characters.
+  --max-suggestions-count: int # The maximum number of query suggestions you want to show to your users.
+]: any -> record<QuerySuggestionsId: string, Suggestions: table<Id: string, Value: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.GetQuerySuggestions")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IndexId": $index_id, "QueryText": $query_text, "MaxSuggestionsCount": $max_suggestions_count} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2029,16 +2100,17 @@ export def "get-snapshots" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-36
-  index_id: any
-  interval: any
-  metric_type: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<SnapShotTimeFilter: record<StartTime: record, EndTime: record>, SnapshotsDataHeader: record, SnapshotsData: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-36 # required
+  index_id: string # The identifier of the index to get search metrics data.
+  interval: string@interval-completer # The time interval or time window to get search metrics data. The time interval uses the time zone of your index. You can view data in the following time windows: THIS_WEEK: The current week, starting on the Sunday and ending on the day before the current date. ONE_WEEK_AGO: The previous week, starting on the Sunday and ending on the following Saturday. TWO_WEEKS_AGO: The week before the previous week, starting on the Sunday and ending on the following Saturday. THIS_MONTH: The current month, starting on the first day of the month and ending on the day before the current date. ONE_MONTH_AGO: The previous month, starting on the first day of the month and ending on the last day of the month. TWO_MONTHS_AGO: The month before the previous month, starting on the first day of the month and ending on last day of the month.
+  metric_type: string@metric-type-completer # The metric you want to retrieve. You can specify only one metric per call. For more information about the metrics you can view, see Gaining insights with search analytics (https://docs.aws.amazon.com/kendra/latest/dg/search-analytics.html).
+  --next-token-body: string # If the previous response was incomplete (because there is more data to retrieve), Amazon Kendra returns a pagination token in the response. You can use this pagination token to retrieve the next set of search metrics data. (body field)
+  --max-results-body: int # The maximum number of returned data for the metric. (body field)
+]: any -> record<SnapShotTimeFilter: record<StartTime: string, EndTime: string>, SnapshotsDataHeader: list<string>, SnapshotsData: list<list<string>>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.GetSnapshots")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"IndexId": $index_id, "Interval": $interval, "MetricType": $metric_type, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -2084,14 +2156,15 @@ export def "list-access-control-configurations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-37
-  index_id: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<NextToken: record, AccessControlConfigurations: record> {
+  --x-amz-target: string@x-amz-target-completer-37 # required
+  index_id: string # The identifier of the index for the access control configuration.
+  --next-token-body: string # If the previous response was incomplete (because there's more data to retrieve), Amazon Kendra returns a pagination token in the response. You can use this pagination token to retrieve the next set of access control configurations. (body field)
+  --max-results-body: int # The maximum number of access control configurations to return. (body field)
+]: any -> record<NextToken: string, AccessControlConfigurations: table<Id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.ListAccessControlConfigurations")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"IndexId": $index_id, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -2118,6 +2191,7 @@ export def "list-access-control-configurations" [
 #
 # POST /
 # operationId: ListDataSourceSyncJobs
+# --StartTimeFilter shape: {StartTime?: string, EndTime?: string}
 export def "list-data-source-sync-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2137,17 +2211,18 @@ export def "list-data-source-sync-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-38
-  id: any
-  index_id: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --start-time-filter: any
-  --status-filter: any
-]: any -> record<History: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-38 # required
+  id: string # The identifier of the data source connector.
+  index_id: string # The identifier of the index used with the data source connector.
+  --next-token-body: string # If the previous response was incomplete (because there is more data to retrieve), Amazon Kendra returns a pagination token in the response. You can use this pagination token to retrieve the next set of jobs. (body field)
+  --max-results-body: int # The maximum number of synchronization jobs to return in the response. If there are fewer results in the list, this response contains only the actual results. (body field)
+  --start-time-filter: record # Provides a range of time. — shape: {StartTime?: string, EndTime?: string}
+  --status-filter: string@status-filter-completer # Only returns synchronization jobs with the Status field equal to the specified status.
+]: any -> record<History: table<ExecutionId: string, StartTime: string, EndTime: string, Status: string, ErrorMessage: string, ErrorCode: string, DataSourceErrorCode: string, Metrics: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.ListDataSourceSyncJobs")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"Id": $id, "IndexId": $index_id, "NextToken": $next_token_body, "MaxResults": $max_results_body, "StartTimeFilter": $start_time_filter, "StatusFilter": $status_filter} | compact
@@ -2193,14 +2268,15 @@ export def "list-data-sources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-39
-  index_id: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<SummaryItems: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-39 # required
+  index_id: string # The identifier of the index used with one or more data source connectors.
+  --next-token-body: string # If the previous response was incomplete (because there is more data to retrieve), Amazon Kendra returns a pagination token in the response. You can use this pagination token to retrieve the next set of data source connectors. (body field)
+  --max-results-body: int # The maximum number of data source connectors to return. (body field)
+]: any -> record<SummaryItems: table<Name: string, Id: string, Type: string, CreatedAt: string, UpdatedAt: string, Status: string, LanguageCode: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.ListDataSources")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"IndexId": $index_id, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -2246,15 +2322,16 @@ export def "list-entity-personas" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-40
-  id: any
-  index_id: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<SummaryItems: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-40 # required
+  id: string # The identifier of your Amazon Kendra experience.
+  index_id: string # The identifier of the index for your Amazon Kendra experience.
+  --next-token-body: string # If the previous response was incomplete (because there is more data to retrieve), Amazon Kendra returns a pagination token in the response. You can use this pagination token to retrieve the next set of users or groups. (body field)
+  --max-results-body: int # The maximum number of returned users or groups. (body field)
+]: any -> record<SummaryItems: table<EntityId: string, Persona: string, CreatedAt: string, UpdatedAt: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.ListEntityPersonas")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"Id": $id, "IndexId": $index_id, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -2299,14 +2376,15 @@ export def "list-experience-entities" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-41
-  id: any
-  index_id: any
-  --next-token-body: any #  (body field)
-]: any -> record<SummaryItems: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-41 # required
+  id: string # The identifier of your Amazon Kendra experience.
+  index_id: string # The identifier of the index for your Amazon Kendra experience.
+  --next-token-body: string # If the previous response was incomplete (because there is more data to retrieve), Amazon Kendra returns a pagination token in the response. You can use this pagination token to retrieve the next set of users or groups. (body field)
+]: any -> record<SummaryItems: table<EntityId: string, EntityType: string, DisplayData: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.ListExperienceEntities")
   let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"Id": $id, "IndexId": $index_id, "NextToken": $next_token_body} | compact
@@ -2352,14 +2430,15 @@ export def "list-experiences" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-42
-  index_id: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<SummaryItems: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-42 # required
+  index_id: string # The identifier of the index for your Amazon Kendra experience.
+  --next-token-body: string # If the previous response was incomplete (because there is more data to retrieve), Amazon Kendra returns a pagination token in the response. You can use this pagination token to retrieve the next set of Amazon Kendra experiences. (body field)
+  --max-results-body: int # The maximum number of returned Amazon Kendra experiences. (body field)
+]: any -> record<SummaryItems: table<Name: string, Id: string, CreatedAt: string, Status: string, Endpoints: list>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.ListExperiences")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"IndexId": $index_id, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -2405,14 +2484,15 @@ export def "list-faqs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-43
-  index_id: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<NextToken: record, FaqSummaryItems: record> {
+  --x-amz-target: string@x-amz-target-completer-43 # required
+  index_id: string # The index that contains the FAQ lists.
+  --next-token-body: string # If the previous response was incomplete (because there is more data to retrieve), Amazon Kendra returns a pagination token in the response. You can use this pagination token to retrieve the next set of FAQs. (body field)
+  --max-results-body: int # The maximum number of FAQs to return in the response. If there are fewer results in the list, this response contains only the actual results. (body field)
+]: any -> record<NextToken: string, FaqSummaryItems: table<Id: string, Name: string, Status: string, CreatedAt: string, UpdatedAt: string, FileFormat: string, LanguageCode: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.ListFaqs")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"IndexId": $index_id, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -2456,14 +2536,15 @@ export def "list-featured-results-sets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-44
-  index_id: any
-  --next-token: any
-  --max-results: any
-]: any -> record<FeaturedResultsSetSummaryItems: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-44 # required
+  index_id: string # The identifier of the index used for featuring results.
+  --next-token: string # If the response is truncated, Amazon Kendra returns a pagination token in the response. You can use this pagination token to retrieve the next set of featured results sets.
+  --max-results: int # The maximum number of featured results sets to return.
+]: any -> record<FeaturedResultsSetSummaryItems: table<FeaturedResultsSetId: string, FeaturedResultsSetName: string, Status: string, LastUpdatedTimestamp: int, CreationTimestamp: int>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.ListFeaturedResultsSets")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IndexId": $index_id, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2508,16 +2589,17 @@ export def "list-groups-older-than-ordering-id" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-45
-  index_id: any
-  --data-source-id: any
-  ordering_id: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<GroupsSummaries: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-45 # required
+  index_id: string # The identifier of the index for getting a list of groups mapped to users before a given ordering or timestamp identifier.
+  --data-source-id: string # The identifier of the data source for getting a list of groups mapped to users before a given ordering timestamp identifier.
+  ordering_id: int # The timestamp identifier used for the latest PUT or DELETE action for mapping users to their groups.
+  --next-token-body: string # If the previous response was incomplete (because there is more data to retrieve), Amazon Kendra returns a pagination token in the response. You can use this pagination token to retrieve the next set of groups that are mapped to users before a given ordering or timestamp identifier. (body field)
+  --max-results-body: int # The maximum number of returned groups that are mapped to users before a given ordering or timestamp identifier. (body field)
+]: any -> record<GroupsSummaries: table<GroupId: string, OrderingId: int>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.ListGroupsOlderThanOrderingId")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"IndexId": $index_id, "DataSourceId": $data_source_id, "OrderingId": $ordering_id, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -2563,13 +2645,14 @@ export def "list-indices" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-46
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<IndexConfigurationSummaryItems: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-46 # required
+  --next-token-body: string # If the previous response was incomplete (because there is more data to retrieve), Amazon Kendra returns a pagination token in the response. You can use this pagination token to retrieve the next set of indexes. (body field)
+  --max-results-body: int # The maximum number of indices to return. (body field)
+]: any -> record<IndexConfigurationSummaryItems: table<Name: string, Id: string, Edition: string, CreatedAt: string, UpdatedAt: string, Status: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.ListIndices")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -2615,14 +2698,15 @@ export def "list-query-suggestions-block-lists" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-47
-  index_id: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<BlockListSummaryItems: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-47 # required
+  index_id: string # The identifier of the index for a list of all block lists that exist for that index. For information on the current quota limits for block lists, see Quotas for Amazon Kendra (https://docs.aws.amazon.com/kendra/latest/dg/quotas.html).
+  --next-token-body: string # If the previous response was incomplete (because there is more data to retrieve), Amazon Kendra returns a pagination token in the response. You can use this pagination token to retrieve the next set of block lists (BlockListSummaryItems). (body field)
+  --max-results-body: int # The maximum number of block lists to return. (body field)
+]: any -> record<BlockListSummaryItems: table<Id: string, Name: string, Status: string, CreatedAt: string, UpdatedAt: string, ItemCount: int>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.ListQuerySuggestionsBlockLists")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"IndexId": $index_id, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -2666,12 +2750,13 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-48
-  resource_arn: any
-]: any -> record<Tags: record> {
+  --x-amz-target: string@x-amz-target-completer-48 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the index, FAQ, or data source to get a list of tags for.
+]: any -> record<Tags: table<Key: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.ListTagsForResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceARN": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2716,14 +2801,15 @@ export def "list-thesauri" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-49
-  index_id: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<NextToken: record, ThesaurusSummaryItems: record> {
+  --x-amz-target: string@x-amz-target-completer-49 # required
+  index_id: string # The identifier of the index with one or more thesauri.
+  --next-token-body: string # If the previous response was incomplete (because there is more data to retrieve), Amazon Kendra returns a pagination token in the response. You can use this pagination token to retrieve the next set of thesauri (ThesaurusSummaryItems). (body field)
+  --max-results-body: int # The maximum number of thesauri to return. (body field)
+]: any -> record<NextToken: string, ThesaurusSummaryItems: table<Id: string, Name: string, Status: string, CreatedAt: string, UpdatedAt: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.ListThesauri")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"IndexId": $index_id, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -2750,6 +2836,7 @@ export def "list-thesauri" [
 #
 # POST /
 # operationId: PutPrincipalMapping
+# --GroupMembers shape: {MemberGroups?: list, MemberUsers?: list, S3PathforGroupMembers?: record}
 export def "put-principal-mapping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2767,17 +2854,18 @@ export def "put-principal-mapping" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-50
-  index_id: any
-  --data-source-id: any
-  group_id: any
-  group_members: any
-  --ordering-id: any
-  --role-arn: any
+  --x-amz-target: string@x-amz-target-completer-50 # required
+  index_id: string # The identifier of the index you want to map users to their groups.
+  --data-source-id: string # The identifier of the data source you want to map users to their groups. This is useful if a group is tied to multiple data sources, but you only want the group to access documents of a certain data source. For example, the groups "Research", "Engineering", and "Sales and Marketing" are all tied to the company's documents stored in the data sources Confluence and Salesforce. However, "Sales and Marketing" team only needs access to customer-related documents stored in Salesforce.
+  group_id: string # The identifier of the group you want to map its users to.
+  group_members: record # A list of users or sub groups that belong to a group. This is useful for user context filtering, where search results are filtered based on the user or their group access to documents. — shape: {MemberGroups?: list, MemberUsers?: list, S3PathforGroupMembers?: record}
+  --ordering-id: int # The timestamp identifier you specify to ensure Amazon Kendra does not override the latest PUT action with previous actions. The highest number ID, which is the ordering ID, is the latest action you want to process and apply on top of other actions with lower number IDs. This prevents previous actions with lower number IDs from possibly overriding the latest action. The ordering ID can be the Unix time of the last update you made to a group members list. You would then provide this list when calling PutPrincipalMapping. This ensures your PUT action for that updated group with the latest members list doesn't get overwritten by earlier PUT actions for the same group which are yet to be processed. The default ordering ID is the current Unix time in milliseconds that the action was received by Amazon Kendra.
+  --role-arn: string # The Amazon Resource Name (ARN) of a role that has access to the S3 file that contains your list of users or sub groups that belong to a group. For more information, see IAM roles for Amazon Kendra (https://docs.aws.amazon.com/kendra/latest/dg/iam-roles.html#iam-roles-ds).
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.PutPrincipalMapping")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IndexId": $index_id, "DataSourceId": $data_source_id, "GroupId": $group_id, "GroupMembers": $group_members, "OrderingId": $ordering_id, "RoleArn": $role_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2803,6 +2891,12 @@ export def "put-principal-mapping" [
 #
 # POST /
 # operationId: Query
+# --AttributeFilter shape: {AndAllFilters?: list, OrAllFilters?: list, NotFilter?: record, EqualsTo?: record, ContainsAll?: record, ContainsAny?: record, GreaterThan?: record, GreaterThanOrEquals?: record, LessThan?: record, LessThanOrEquals?: record}
+# --Facets item shape: {DocumentAttributeKey?: string, Facets?: list, MaxResults?: int}
+# --DocumentRelevanceOverrideConfigurations item shape: {Name: string, Relevance: record}
+# --SortingConfiguration shape: {DocumentAttributeKey: string, SortOrder: "DESC"|"ASC"}
+# --UserContext shape: {Token?: string, UserId?: string, Groups?: list<string>, DataSourceGroups?: list}
+# --SpellCorrectionConfiguration shape: {IncludeQuerySpellCheckSuggestions: bool}
 export def "query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2820,24 +2914,25 @@ export def "query" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-51
-  index_id: any
-  --query-text: any
-  --attribute-filter: any
-  --facets: any
-  --requested-document-attributes: any
-  --query-result-type-filter: any
-  --document-relevance-override-configurations: any
-  --page-number: any
-  --page-size: any
-  --sorting-configuration: any
-  --user-context: any
-  --visitor-id: any
-  --spell-correction-configuration: any
-]: any -> record<QueryId: record, ResultItems: record, FacetResults: record, TotalNumberOfResults: record, Warnings: record, SpellCorrectedQueries: record, FeaturedResultsItems: record> {
+  --x-amz-target: string@x-amz-target-completer-51 # required
+  index_id: string # The identifier of the index to search. The identifier is returned in the response from the CreateIndex API.
+  --query-text: string # The input query text for the search. Amazon Kendra truncates queries at 30 token words, which excludes punctuation and stop words. Truncation still applies if you use Boolean or more advanced, complex queries.
+  --attribute-filter: record # Provides filtering the query results based on document attributes or metadata fields. When you use the AndAllFilters or OrAllFilters, filters you can use 2 layers under the first attribute filter. For example, you can use: <AndAllFilters> <OrAllFilters> <EqualsTo> If you use more than 2 layers, you receive a ValidationException exception with the message "AttributeFilter cannot have a depth of more than 2." If you use more than 10 attribute filters in a given list for AndAllFilters or OrAllFilters, you receive a ValidationException with the message "AttributeFilter cannot have a length of more than 10". — shape: {AndAllFilters?: list, OrAllFilters?: list, NotFilter?: record, EqualsTo?: record, ContainsAll?: record, ContainsAny?: record, GreaterThan?: record, GreaterThanOrEquals?: record, LessThan?: record, LessThanOrEquals?: record}
+  --facets: list # An array of documents attributes. Amazon Kendra returns a count for each attribute key specified. This helps your users narrow their search. — item shape: {DocumentAttributeKey?: string, Facets?: list, MaxResults?: int}
+  --requested-document-attributes: list<string> # An array of document attributes to include in the response. You can limit the response to include certain document attributes. By default all document attributes are included in the response.
+  --query-result-type-filter: string@query-result-type-filter-completer # Sets the type of query. Only results for the specified query type are returned.
+  --document-relevance-override-configurations: list # Overrides relevance tuning configurations of fields or attributes set at the index level. If you use this API to override the relevance tuning configured at the index level, but there is no relevance tuning configured at the index level, then Amazon Kendra does not apply any relevance tuning. If there is relevance tuning configured at the index level, but you do not use this API to override any relevance tuning in the index, then Amazon Kendra uses the relevance tuning that is configured at the index level. If there is relevance tuning configured for fields at the index level, but you use this API to override only some of these fields, then for the fields you did not override, the importance is set to 1. — item shape: {Name: string, Relevance: record}
+  --page-number: int # Query results are returned in pages the size of the PageSize parameter. By default, Amazon Kendra returns the first page of results. Use this parameter to get result pages after the first one.
+  --page-size: int # Sets the number of results that are returned in each page of results. The default page size is 10. The maximum number of results returned is 100. If you ask for more than 100 results, only 100 are returned.
+  --sorting-configuration: record # Specifies the document attribute to use to sort the response to a Amazon Kendra query. You can specify a single attribute for sorting. The attribute must have the Sortable flag set to true, otherwise Amazon Kendra returns an exception. You can sort attributes of the following types. Date value Long value String value You can't sort attributes of the following type. String list value — shape: {DocumentAttributeKey: string, SortOrder: "DESC"|"ASC"}
+  --user-context: record # Provides information about the user context for an Amazon Kendra index. User context filtering is a kind of personalized search with the benefit of controlling access to documents. For example, not all teams that search the company portal for information should access top-secret company documents, nor are these documents relevant to all users. Only specific users or groups of teams given access to top-secret documents should see these documents in their search results. You provide one of the following: User token User ID, the groups the user belongs to, and any data sources the groups can access. If you provide both, an exception is thrown. — shape: {Token?: string, UserId?: string, Groups?: list<string>, DataSourceGroups?: list}
+  --visitor-id: string # Provides an identifier for a specific user. The VisitorId should be a unique identifier, such as a GUID. Don't use personally identifiable information, such as the user's email address, as the VisitorId.
+  --spell-correction-configuration: record # Provides the configuration information for suggested query spell corrections. Suggested spell corrections are based on words that appear in your indexed documents and how closely a corrected word matches a misspelled word. This feature is designed with certain defaults or limits. For information on the current limits and how to request more support for some limits, see the Spell Checker documentation (https://docs.aws.amazon.com/kendra/latest/dg/query-spell-check.html). — shape: {IncludeQuerySpellCheckSuggestions: bool}
+]: any -> record<QueryId: string, ResultItems: table<Id: string, Type: string, Format: string, AdditionalAttributes: list, DocumentId: string, DocumentTitle: record, DocumentExcerpt: record, DocumentURI: string, DocumentAttributes: list, ScoreAttributes: record, FeedbackToken: string, TableExcerpt: record>, FacetResults: table<DocumentAttributeKey: string, DocumentAttributeValueType: string, DocumentAttributeValueCountPairs: list>, TotalNumberOfResults: int, Warnings: table<Message: string, Code: string>, SpellCorrectedQueries: table<SuggestedQueryText: string, Corrections: list>, FeaturedResultsItems: table<Id: string, Type: string, AdditionalAttributes: list, DocumentId: string, DocumentTitle: record, DocumentExcerpt: record, DocumentURI: string, DocumentAttributes: list, FeedbackToken: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.Query")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IndexId": $index_id, "QueryText": $query_text, "AttributeFilter": $attribute_filter, "Facets": $facets, "RequestedDocumentAttributes": $requested_document_attributes, "QueryResultTypeFilter": $query_result_type_filter, "DocumentRelevanceOverrideConfigurations": $document_relevance_override_configurations, "PageNumber": $page_number, "PageSize": $page_size, "SortingConfiguration": $sorting_configuration, "UserContext": $user_context, "VisitorId": $visitor_id, "SpellCorrectionConfiguration": $spell_correction_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2880,13 +2975,14 @@ export def "start-data-source-sync-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-52
-  id: any
-  index_id: any
-]: any -> record<ExecutionId: record> {
+  --x-amz-target: string@x-amz-target-completer-52 # required
+  id: string # The identifier of the data source connector to synchronize.
+  index_id: string # The identifier of the index used with the data source connector.
+]: any -> record<ExecutionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.StartDataSourceSyncJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Id": $id, "IndexId": $index_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2929,13 +3025,14 @@ export def "stop-data-source-sync-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-53
-  id: any
-  index_id: any
+  --x-amz-target: string@x-amz-target-completer-53 # required
+  id: string # The identifier of the data source connector for which to stop the synchronization jobs.
+  index_id: string # The identifier of the index used with the data source connector.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.StopDataSourceSyncJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Id": $id, "IndexId": $index_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2961,6 +3058,8 @@ export def "stop-data-source-sync-job" [
 #
 # POST /
 # operationId: SubmitFeedback
+# --ClickFeedbackItems item shape: {ResultId: string, ClickTime: string}
+# --RelevanceFeedbackItems item shape: {ResultId: string, RelevanceValue: "RELEVANT"|"NOT_RELEVANT"}
 export def "submit-feedback" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2978,15 +3077,16 @@ export def "submit-feedback" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-54
-  index_id: any
-  query_id: any
-  --click-feedback-items: any
-  --relevance-feedback-items: any
+  --x-amz-target: string@x-amz-target-completer-54 # required
+  index_id: string # The identifier of the index that was queried.
+  query_id: string # The identifier of the specific query for which you are submitting feedback. The query ID is returned in the response to the Query API.
+  --click-feedback-items: list # Tells Amazon Kendra that a particular search result link was chosen by the user. — item shape: {ResultId: string, ClickTime: string}
+  --relevance-feedback-items: list # Provides Amazon Kendra with relevant or not relevant feedback for whether a particular item was relevant to the search. — item shape: {ResultId: string, RelevanceValue: "RELEVANT"|"NOT_RELEVANT"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.SubmitFeedback")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IndexId": $index_id, "QueryId": $query_id, "ClickFeedbackItems": $click_feedback_items, "RelevanceFeedbackItems": $relevance_feedback_items} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3012,6 +3112,7 @@ export def "submit-feedback" [
 #
 # POST /
 # operationId: TagResource
+# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3029,13 +3130,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-55
-  resource_arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-55 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the index, FAQ, or data source to tag.
+  tags: list # A list of tag keys to add to the index, FAQ, or data source. If a tag already exists, the existing value is replaced with the new value. — item shape: {Key: string, Value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceARN": $resource_arn, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3078,13 +3180,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-56
-  resource_arn: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-56 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the index, FAQ, or data source to remove the tag from.
+  tag_keys: list<string> # A list of tag keys to remove from the index, FAQ, or data source. If a tag key does not exist on the resource, it is ignored.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceARN": $resource_arn, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3110,6 +3213,8 @@ export def "untag-resource" [
 #
 # POST /
 # operationId: UpdateAccessControlConfiguration
+# --AccessControlList item shape: {Name: string, Type: "USER"|"GROUP", Access: "ALLOW"|"DENY", DataSourceId?: string}
+# --HierarchicalAccessControlList item shape: {PrincipalList: list}
 export def "update-access-control-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3127,17 +3232,18 @@ export def "update-access-control-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-57
-  index_id: any
-  id: any
-  --name: any
-  --description: any
-  --access-control-list: any
-  --hierarchical-access-control-list: any
+  --x-amz-target: string@x-amz-target-completer-57 # required
+  index_id: string # The identifier of the index for an access control configuration.
+  id: string # The identifier of the access control configuration you want to update.
+  --name: string # A new name for the access control configuration.
+  --description: string # A new description for the access control configuration.
+  --access-control-list: list # Information you want to update on principals (users and/or groups) and which documents they should have access to. This is useful for user context filtering, where search results are filtered based on the user or their group access to documents. — item shape: {Name: string, Type: "USER"|"GROUP", Access: "ALLOW"|"DENY", DataSourceId?: string}
+  --hierarchical-access-control-list: list # A list of principal (https://docs.aws.amazon.com/kendra/latest/dg/API_Principal.html) lists that define the hierarchy for which documents users should have access to. Each hierarchical list specifies which user or group has allow or deny access for each document. — item shape: {PrincipalList: list}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.UpdateAccessControlConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IndexId": $index_id, "Id": $id, "Name": $name, "Description": $description, "AccessControlList": $access_control_list, "HierarchicalAccessControlList": $hierarchical_access_control_list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3163,6 +3269,9 @@ export def "update-access-control-configuration" [
 #
 # POST /
 # operationId: UpdateDataSource
+# --Configuration shape: {S3Configuration?: record, SharePointConfiguration?: record, DatabaseConfiguration?: record, SalesforceConfiguration?: record, OneDriveConfiguration?: record, ServiceNowConfiguration?: record, ConfluenceConfiguration?: record, GoogleDriveConfiguration?: record, WebCrawlerConfiguration?: record, WorkDocsConfiguration?: record, FsxConfiguration?: record, SlackConfiguration?: record, BoxConfiguration?: record, QuipConfiguration?: record, JiraConfiguration?: record, GitHubConfiguration?: record, ... (2 more fields)}
+# --VpcConfiguration shape: {SubnetIds: list<string>, SecurityGroupIds: list<string>}
+# --CustomDocumentEnrichmentConfiguration shape: {InlineConfigurations?: list, PreExtractionHookConfiguration?: record, PostExtractionHookConfiguration?: record, RoleArn?: string}
 export def "update-data-source" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3180,21 +3289,22 @@ export def "update-data-source" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-58
-  id: any
-  --name: any
-  index_id: any
-  --configuration: any
-  --vpc-configuration: any
-  --description: any
-  --schedule: any
-  --role-arn: any
-  --language-code: any
-  --custom-document-enrichment-configuration: any
+  --x-amz-target: string@x-amz-target-completer-58 # required
+  id: string # The identifier of the data source connector you want to update.
+  --name: string # A new name for the data source connector.
+  index_id: string # The identifier of the index used with the data source connector.
+  --configuration: record # Provides the configuration information for an Amazon Kendra data source. — shape: {S3Configuration?: record, SharePointConfiguration?: record, DatabaseConfiguration?: record, SalesforceConfiguration?: record, OneDriveConfiguration?: record, ServiceNowConfiguration?: record, ConfluenceConfiguration?: record, GoogleDriveConfiguration?: record, WebCrawlerConfiguration?: record, WorkDocsConfiguration?: record, FsxConfiguration?: record, SlackConfiguration?: record, BoxConfiguration?: record, QuipConfiguration?: record, JiraConfiguration?: record, GitHubConfiguration?: record, ... (2 more fields)}
+  --vpc-configuration: record # Provides the configuration information to connect to an Amazon VPC. — shape: {SubnetIds: list<string>, SecurityGroupIds: list<string>}
+  --description: string # A new description for the data source connector.
+  --schedule: string # The sync schedule you want to update for the data source connector.
+  --role-arn: string # The Amazon Resource Name (ARN) of a role with permission to access the data source and required resources. For more information, see IAM roles for Amazon Kendra (https://docs.aws.amazon.com/kendra/latest/dg/iam-roles.html).
+  --language-code: string # The code for a language. The default language is English. For more information on supported languages, including their codes, see Adding documents in languages other than English (https://docs.aws.amazon.com/kendra/latest/dg/in-adding-languages.html).
+  --custom-document-enrichment-configuration: record # Provides the configuration information for altering document metadata and content during the document ingestion process. For more information, see Customizing document metadata during the ingestion process (https://docs.aws.amazon.com/kendra/latest/dg/custom-document-enrichment.html). — shape: {InlineConfigurations?: list, PreExtractionHookConfiguration?: record, PostExtractionHookConfiguration?: record, RoleArn?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.UpdateDataSource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Id": $id, "Name": $name, "IndexId": $index_id, "Configuration": $configuration, "VpcConfiguration": $vpc_configuration, "Description": $description, "Schedule": $schedule, "RoleArn": $role_arn, "LanguageCode": $language_code, "CustomDocumentEnrichmentConfiguration": $custom_document_enrichment_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3220,6 +3330,7 @@ export def "update-data-source" [
 #
 # POST /
 # operationId: UpdateExperience
+# --Configuration shape: {ContentSourceConfiguration?: record, UserIdentityConfiguration?: record}
 export def "update-experience" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3237,17 +3348,18 @@ export def "update-experience" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-59
-  id: any
-  --name: any
-  index_id: any
-  --role-arn: any
-  --configuration: any
-  --description: any
+  --x-amz-target: string@x-amz-target-completer-59 # required
+  id: string # The identifier of your Amazon Kendra experience you want to update.
+  --name: string # A new name for your Amazon Kendra experience.
+  index_id: string # The identifier of the index for your Amazon Kendra experience.
+  --role-arn: string # The Amazon Resource Name (ARN) of a role with permission to access Query API, QuerySuggestions API, SubmitFeedback API, and IAM Identity Center that stores your user and group information. For more information, see IAM roles for Amazon Kendra (https://docs.aws.amazon.com/kendra/latest/dg/iam-roles.html).
+  --configuration: record # Provides the configuration information for your Amazon Kendra experience. This includes the data source IDs and/or FAQ IDs, and user or group information to grant access to your Amazon Kendra experience. — shape: {ContentSourceConfiguration?: record, UserIdentityConfiguration?: record}
+  --description: string # A new description for your Amazon Kendra experience.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.UpdateExperience")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Id": $id, "Name": $name, "IndexId": $index_id, "RoleArn": $role_arn, "Configuration": $configuration, "Description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3273,6 +3385,7 @@ export def "update-experience" [
 #
 # POST /
 # operationId: UpdateFeaturedResultsSet
+# --FeaturedDocuments item shape: {Id?: string}
 export def "update-featured-results-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3290,18 +3403,19 @@ export def "update-featured-results-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-60
-  index_id: any
-  featured_results_set_id: any
-  --featured-results-set-name: any
-  --description: any
-  --status: any
-  --query-texts: any
-  --featured-documents: any
-]: any -> record<FeaturedResultsSet: record<FeaturedResultsSetId: record, FeaturedResultsSetName: record, Description: record, Status: record, QueryTexts: record, FeaturedDocuments: record, LastUpdatedTimestamp: record, CreationTimestamp: record>> {
+  --x-amz-target: string@x-amz-target-completer-60 # required
+  index_id: string # The identifier of the index used for featuring results.
+  featured_results_set_id: string # The identifier of the index used for featuring results.
+  --featured-results-set-name: string # A new name for the set of featured results.
+  --description: string # A new description for the set of featured results.
+  --status: string@status-completer # You can set the status to ACTIVE or INACTIVE. When the value is ACTIVE, featured results are ready for use. You can still configure your settings before setting the status to ACTIVE. The queries you specify for featured results must be unique per featured results set for each index, whether the status is ACTIVE or INACTIVE.
+  --query-texts: list<string> # A list of queries for featuring results. For more information on the list of queries, see FeaturedResultsSet (https://docs.aws.amazon.com/kendra/latest/dg/API_FeaturedResultsSet.html).
+  --featured-documents: list # A list of document IDs for the documents you want to feature at the top of the search results page. For more information on the list of featured documents, see FeaturedResultsSet (https://docs.aws.amazon.com/kendra/latest/dg/API_FeaturedResultsSet.html). — item shape: {Id?: string}
+]: any -> record<FeaturedResultsSet: record<FeaturedResultsSetId: string, FeaturedResultsSetName: string, Description: string, Status: string, QueryTexts: list<string>, FeaturedDocuments: list<record>, LastUpdatedTimestamp: int, CreationTimestamp: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.UpdateFeaturedResultsSet")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IndexId": $index_id, "FeaturedResultsSetId": $featured_results_set_id, "FeaturedResultsSetName": $featured_results_set_name, "Description": $description, "Status": $status, "QueryTexts": $query_texts, "FeaturedDocuments": $featured_documents} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3327,6 +3441,10 @@ export def "update-featured-results-set" [
 #
 # POST /
 # operationId: UpdateIndex
+# --DocumentMetadataConfigurationUpdates item shape: {Name: string, Type: "STRING_VALUE"|"STRING_LIST_VALUE"|"LONG_VALUE"|"DATE_VALUE", Relevance?: record, Search?: record}
+# --CapacityUnits shape: {StorageCapacityUnits: int, QueryCapacityUnits: int}
+# --UserTokenConfigurations item shape: {JwtTokenTypeConfiguration?: record, JsonTokenTypeConfiguration?: record}
+# --UserGroupResolutionConfiguration shape: {UserGroupResolutionMode: "AWS_SSO"|"NONE"}
 export def "update-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3344,20 +3462,21 @@ export def "update-index" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-61
-  id: any
-  --name: any
-  --role-arn: any
-  --description: any
-  --document-metadata-configuration-updates: any
-  --capacity-units: any
-  --user-token-configurations: any
-  --user-context-policy: any
-  --user-group-resolution-configuration: any
+  --x-amz-target: string@x-amz-target-completer-61 # required
+  id: string # The identifier of the index you want to update.
+  --name: string # The name of the index you want to update.
+  --role-arn: string # An Identity and Access Management (IAM) role that gives Amazon Kendra permission to access Amazon CloudWatch logs and metrics.
+  --description: string # A new description for the index.
+  --document-metadata-configuration-updates: list # The document metadata configuration you want to update for the index. Document metadata are fields or attributes associated with your documents. For example, the company department name associated with each document. — item shape: {Name: string, Type: "STRING_VALUE"|"STRING_LIST_VALUE"|"LONG_VALUE"|"DATE_VALUE", Relevance?: record, Search?: record}
+  --capacity-units: record # Specifies additional capacity units configured for your Enterprise Edition index. You can add and remove capacity units to fit your usage requirements. — shape: {StorageCapacityUnits: int, QueryCapacityUnits: int}
+  --user-token-configurations: list # The user token configuration. — item shape: {JwtTokenTypeConfiguration?: record, JsonTokenTypeConfiguration?: record}
+  --user-context-policy: string@user-context-policy-completer # The user context policy.
+  --user-group-resolution-configuration: record # Provides the configuration information to get users and groups from an IAM Identity Center (successor to Single Sign-On) identity source. This is useful for user context filtering, where search results are filtered based on the user or their group access to documents. You can also use the PutPrincipalMapping (https://docs.aws.amazon.com/kendra/latest/dg/API_PutPrincipalMapping.html) API to map users to their groups so that you only need to provide the user ID when you issue the query. To set up an IAM Identity Center identity source in the console to use with Amazon Kendra, see Getting started with an IAM Identity Center identity source (https://docs.aws.amazon.com/kendra/latest/dg/getting-started-aws-sso.html). You must also grant the required permissions to use IAM Identity Center with Amazon Kendra. For more information, see IAM roles for IAM Identity Center (https://docs.aws.amazon.com/kendra/latest/dg/iam-roles.html#iam-roles-aws-sso). Amazon Kendra currently does not support using UserGroupResolutionConfiguration with an Amazon Web Services organization member account for your IAM Identity Center identify source. You must create your index in the management account for the organization in order to use UserGroupResolutionConfiguration. — shape: {UserGroupResolutionMode: "AWS_SSO"|"NONE"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.UpdateIndex")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Id": $id, "Name": $name, "RoleArn": $role_arn, "Description": $description, "DocumentMetadataConfigurationUpdates": $document_metadata_configuration_updates, "CapacityUnits": $capacity_units, "UserTokenConfigurations": $user_token_configurations, "UserContextPolicy": $user_context_policy, "UserGroupResolutionConfiguration": $user_group_resolution_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3383,6 +3502,7 @@ export def "update-index" [
 #
 # POST /
 # operationId: UpdateQuerySuggestionsBlockList
+# --SourceS3Path shape: {Bucket: string, Key: string}
 export def "update-query-suggestions-block-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3400,17 +3520,18 @@ export def "update-query-suggestions-block-list" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-62
-  index_id: any
-  id: any
-  --name: any
-  --description: any
-  --source-s3-path: any
-  --role-arn: any
+  --x-amz-target: string@x-amz-target-completer-62 # required
+  index_id: string # The identifier of the index for the block list.
+  id: string # The identifier of the block list you want to update.
+  --name: string # A new name for the block list.
+  --description: string # A new description for the block list.
+  --source-s3-path: record # Information required to find a specific file in an Amazon S3 bucket. — shape: {Bucket: string, Key: string}
+  --role-arn: string # The IAM (Identity and Access Management) role used to access the block list text file in S3.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.UpdateQuerySuggestionsBlockList")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IndexId": $index_id, "Id": $id, "Name": $name, "Description": $description, "SourceS3Path": $source_s3_path, "RoleArn": $role_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3453,17 +3574,18 @@ export def "update-query-suggestions-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-63
-  index_id: any
-  --mode: any
-  --query-log-look-back-window-in-days: any
-  --include-queries-without-user-information: any
-  --minimum-number-of-querying-users: any
-  --minimum-query-count: any
+  --x-amz-target: string@x-amz-target-completer-63 # required
+  index_id: string # The identifier of the index with query suggestions you want to update.
+  --mode: string@mode-completer # Set the mode to ENABLED or LEARN_ONLY. By default, Amazon Kendra enables query suggestions. LEARN_ONLY mode allows you to turn off query suggestions. You can to update this at any time. In LEARN_ONLY mode, Amazon Kendra continues to learn from new queries to keep suggestions up to date for when you are ready to switch to ENABLED mode again.
+  --query-log-look-back-window-in-days: int # How recent your queries are in your query log time window. The time window is the number of days from current day to past days. By default, Amazon Kendra sets this to 180.
+  --include-queries-without-user-information: oneof<nothing, bool> # TRUE to include queries without user information (i.e. all queries, irrespective of the user), otherwise FALSE to only include queries with user information. If you pass user information to Amazon Kendra along with the queries, you can set this flag to FALSE and instruct Amazon Kendra to only consider queries with user information. If you set to FALSE, Amazon Kendra only considers queries searched at least MinimumQueryCount times across MinimumNumberOfQueryingUsers unique users for suggestions. If you set to TRUE, Amazon Kendra ignores all user information and learns from all queries.
+  --minimum-number-of-querying-users: int # The minimum number of unique users who must search a query in order for the query to be eligible to suggest to your users. Increasing this number might decrease the number of suggestions. However, this ensures a query is searched by many users and is truly popular to suggest to users. How you tune this setting depends on your specific needs.
+  --minimum-query-count: int # The the minimum number of times a query must be searched in order to be eligible to suggest to your users. Decreasing this number increases the number of suggestions. However, this affects the quality of suggestions as it sets a low bar for a query to be considered popular to suggest to users. How you tune this setting depends on your specific needs.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.UpdateQuerySuggestionsConfig")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"IndexId": $index_id, "Mode": $mode, "QueryLogLookBackWindowInDays": $query_log_look_back_window_in_days, "IncludeQueriesWithoutUserInformation": $include_queries_without_user_information, "MinimumNumberOfQueryingUsers": $minimum_number_of_querying_users, "MinimumQueryCount": $minimum_query_count} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3489,7 +3611,7 @@ export def "update-query-suggestions-config" [
 #
 # POST /
 # operationId: UpdateThesaurus
-# --SourceS3Path shape: {Bucket: any, Key: any}
+# --SourceS3Path shape: {Bucket: string, Key: string}
 export def "update-thesaurus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3507,17 +3629,18 @@ export def "update-thesaurus" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-64
-  id: any
-  --name: any
-  index_id: any
-  --description: any
-  --role-arn: any
-  --source-s3-path: record # Information required to find a specific file in an Amazon S3 bucket. — shape: {Bucket: any, Key: any}
+  --x-amz-target: string@x-amz-target-completer-64 # required
+  id: string # The identifier of the thesaurus you want to update.
+  --name: string # A new name for the thesaurus.
+  index_id: string # The identifier of the index for the thesaurus.
+  --description: string # A new description for the thesaurus.
+  --role-arn: string # An IAM role that gives Amazon Kendra permissions to access thesaurus file specified in SourceS3Path.
+  --source-s3-path: record # Information required to find a specific file in an Amazon S3 bucket. — shape: {Bucket: string, Key: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSKendraFrontendService.UpdateThesaurus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Id": $id, "Name": $name, "IndexId": $index_id, "Description": $description, "RoleArn": $role_arn, "SourceS3Path": $source_s3_path} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

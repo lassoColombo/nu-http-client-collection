@@ -1,6 +1,7 @@
 # Auto-generated client for Legacy Search API v1.0
 # Source: https://api.apis.guru/v2/specs/vtex.local/Search-API/1.0/openapi.json
-# Auth: --token flag or $env.LEGACY_SEARCH_API_TOKEN
+# Auth (appKey): --token-appkey flag or $env.LEGACY_SEARCH_API_APPKEY_TOKEN
+# Auth (appToken): --token-apptoken flag or $env.LEGACY_SEARCH_API_APPTOKEN_TOKEN
 
 const BASE_URL = "https://vtex.local"
 
@@ -12,8 +13,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-vtex-api-appkey" => { {scheme: $scheme, headers: {X-VTEX-API-AppKey: $token_val}, query: "", location: "header"} }
-    "x-vtex-api-apptoken" => { {scheme: $scheme, headers: {X-VTEX-API-AppToken: $token_val}, query: "", location: "header"} }
+    "x-vtex-api-appkey" => { {scheme: $scheme, headers: {"X-VTEX-API-AppKey": $token_val}, query: "", location: "header"} }
+    "x-vtex-api-apptoken" => { {scheme: $scheme, headers: {"X-VTEX-API-AppToken": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -108,7 +109,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-appkey" "token-apptoken"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-api-catalog-system-pub-facets-category-category-id" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -143,15 +144,15 @@ export def "get-api-catalog-system-pub-facets-category-category-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-from: string # Starter page range. These parameters allow the API to be paginated. Take into account that the initial and final pages cannot have a separation superior to 50 pages. Thus, it will be displayed 50 items per page. (e.g. 1)
-  --qp-to: string # Finisher page range. These parameters allow the API to be paginated. Take into account that the initial and final pages cannot have a separation superior to 50 pages. Thus, it will be displayed 50 items per page. (e.g. 50)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (e.g. application/json)
-  --content-type: string # Describes the type of the content being sent. (e.g. application/json)
+  --from: string # Starter page range. These parameters allow the API to be paginated. Take into account that the initial and final pages cannot have a separation superior to 50 pages. Thus, it will be displayed 50 items per page. (e.g. 1)
+  --to: string # Finisher page range. These parameters allow the API to be paginated. Take into account that the initial and final pages cannot have a separation superior to 50 pages. Thus, it will be displayed 50 items per page. (e.g. 50)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
+  --content-type: string # Describes the type of the content being sent. (required, e.g. application/json)
 ]: nothing -> table<Id: int, Name: string> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LEGACY_SEARCH_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LEGACY_SEARCH_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($category_id | is-empty) { error make --unspanned { msg: "path parameter 'categoryId' must be non-empty" } }
-  let qp = [(serialize-qp "_from" $qp_from "scalar") (serialize-qp "_to" $qp_to "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "_from" $from "scalar") (serialize-qp "_to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category_id: (encode-path-segment $category_id)} | format pattern "/api/catalog_system/pub/facets/category/{category_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -160,7 +161,7 @@ export def "get-api-catalog-system-pub-facets-category-category-id" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"_from": $qp_from, "_to": $qp_to} | compact)
+    query: ({"_from": $from, "_to": $to} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -186,16 +187,17 @@ export def "facetscategory" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --map: string # Mapping of the term. It can be `c` for a category, `b` for a brand, or `specificationFilter_{specificationId}` for a specification. You need to include a map for each term you are searching for in the same term's order. (e.g. c)
-  --qp-from: string # Starter page range. These parameters allow the API to be paginated. Take into account that the initial and final pages cannot have a separation superior to 50 pages. Thus, it will be displayed 50 items per page. (e.g. 1)
-  --qp-to: string # Finisher page range. These parameters allow the API to be paginated. Take into account that the initial and final pages cannot have a separation superior to 50 pages. Thus, it will be displayed 50 items per page. (e.g. 50)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (e.g. application/json)
-  --content-type: string # Describes the type of the content being sent. (e.g. application/json)
+  --map: string # Mapping of the term. It can be `c` for a category, `b` for a brand, or `specificationFilter_{specificationId}` for a specification. You need to include a map for each term you are searching for in the same term's order. (required, e.g. c)
+  --from: string # Starter page range. These parameters allow the API to be paginated. Take into account that the initial and final pages cannot have a separation superior to 50 pages. Thus, it will be displayed 50 items per page. (e.g. 1)
+  --to: string # Finisher page range. These parameters allow the API to be paginated. Take into account that the initial and final pages cannot have a separation superior to 50 pages. Thus, it will be displayed 50 items per page. (e.g. 50)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
+  --content-type: string # Describes the type of the content being sent. (required, e.g. application/json)
 ]: nothing -> record<Brands: table<Link: string, LinkEncoded: string, Map: string, Name: string, Position: int, Quantity: int, Value: string>, CategoriesTrees: table<Children: list, Id: int, Link: string, LinkEncoded: string, Map: string, Name: string, Position: int, Quantity: int, Value: string>, Departments: table<Link: string, LinkEncoded: string, Map: string, Name: string, Position: int, Quantity: int, Value: string>, PriceRanges: list<any>, SpecificationFilters: record, Summary: record<Brands: record<DisplayedItems: int, TotalItems: int>, CategoriesTrees: record<DisplayedItems: int, TotalItems: int>, Departments: record<DisplayedItems: int, TotalItems: int>, PriceRanges: record<DisplayedItems: int, TotalItems: int>, SpecificationFilters: record>> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LEGACY_SEARCH_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LEGACY_SEARCH_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($term | is-empty) { error make --unspanned { msg: "path parameter 'term' must be non-empty" } }
-  let qp = [(serialize-qp "map" $map "scalar") (serialize-qp "_from" $qp_from "scalar") (serialize-qp "_to" $qp_to "scalar")] | flatten | str join "&"
+  if ($map == null) { error make --unspanned { msg: "required query parameter 'map' missing: pass --map" } }
+  let qp = [(serialize-qp "map" $map "scalar") (serialize-qp "_from" $from "scalar") (serialize-qp "_to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({term: (encode-path-segment $term)} | format pattern "/api/catalog_system/pub/facets/search/{term}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -204,7 +206,7 @@ export def "facetscategory" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"map": $map, "_from": $qp_from, "_to": $qp_to} | compact)
+    query: ({"map": $map, "_from": $from, "_to": $to} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -230,8 +232,8 @@ export def "product-search-accessories" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (e.g. application/json)
-  --content-type: string # Describes the type of the content being sent. (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
+  --content-type: string # Describes the type of the content being sent. (required, e.g. application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LEGACY_SEARCH_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LEGACY_SEARCH_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default "https://entelperu.DefaultParameterValue.com.br/api/catalog_system/pub/products/crossselling/accessories")
@@ -270,8 +272,8 @@ export def "product-search-show-together" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (e.g. application/json)
-  --content-type: string # Describes the type of the content being sent. (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
+  --content-type: string # Describes the type of the content being sent. (required, e.g. application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LEGACY_SEARCH_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LEGACY_SEARCH_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default "https://entelperu.DefaultParameterValue.com.br/api/catalog_system/pub/products/crossselling/accessories")
@@ -310,8 +312,8 @@ export def "product-search-similars" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (e.g. application/json)
-  --content-type: string # Describes the type of the content being sent. (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
+  --content-type: string # Describes the type of the content being sent. (required, e.g. application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LEGACY_SEARCH_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LEGACY_SEARCH_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default "http://example.com/.DefaultParameterValue.com.br")
@@ -350,8 +352,8 @@ export def "product-search-suggestions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (e.g. application/json)
-  --content-type: string # Describes the type of the content being sent. (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
+  --content-type: string # Describes the type of the content being sent. (required, e.g. application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LEGACY_SEARCH_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LEGACY_SEARCH_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default "http://example.com/.DefaultParameterValue.com.br")
@@ -390,8 +392,8 @@ export def "product-search-who-bought-also-bought" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (e.g. application/json)
-  --content-type: string # Describes the type of the content being sent. (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
+  --content-type: string # Describes the type of the content being sent. (required, e.g. application/json)
 ]: nothing -> table<allSpecifications: list<string>, allSpecificationsGroups: list<string>, brand: string, brandId: int, brandImageUrl: string, categories: list<any>, categoriesIds: list<any>, categoryId: string, clusterHighlights: record, description: string, items: list<record>, link: string, linkText: string, metaTagDescription: string, productClusters: record, productId: string, productName: string, productReference: string, productReferenceCode: int, productTitle: string, releaseDate: string, searchableClusters: record> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LEGACY_SEARCH_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LEGACY_SEARCH_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default "http://example.com/.DefaultParameterValue.com.br")
@@ -430,8 +432,8 @@ export def "product-search-who-saw-also-bought" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (e.g. application/json)
-  --content-type: string # Describes the type of the content being sent. (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
+  --content-type: string # Describes the type of the content being sent. (required, e.g. application/json)
 ]: nothing -> table<allSpecifications: list<string>, allSpecificationsGroups: list<string>, brand: string, brandId: int, brandImageUrl: string, categories: list<any>, categoriesIds: list<any>, categoryId: string, clusterHighlights: record, description: string, items: list<record>, link: string, linkText: string, metaTagDescription: string, productClusters: record, productId: string, productName: string, productReference: string, productReferenceCode: int, productTitle: string, releaseDate: string, searchableClusters: record> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LEGACY_SEARCH_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LEGACY_SEARCH_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default "http://example.com/.DefaultParameterValue.com.br")
@@ -470,8 +472,8 @@ export def "product-search-who-saw-also-saw" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (e.g. application/json)
-  --content-type: string # Describes the type of the content being sent. (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
+  --content-type: string # Describes the type of the content being sent. (required, e.g. application/json)
 ]: nothing -> table<allSpecifications: list<string>, allSpecificationsGroups: list<string>, brand: string, brandId: int, brandImageUrl: string, categories: list<any>, categoriesIds: list<any>, categoryId: string, clusterHighlights: record, description: string, items: list<record>, link: string, linkText: string, metaTagDescription: string, productClusters: record, productId: string, productName: string, productReference: string, productReferenceCode: int, productTitle: string, releaseDate: string, searchableClusters: record> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LEGACY_SEARCH_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LEGACY_SEARCH_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default "http://example.com/.DefaultParameterValue.com.br")
@@ -509,8 +511,8 @@ export def "get-api-catalog-system-pub-products-offers-product-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (e.g. application/json)
-  --content-type: string # Describes the type of the content being sent. (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
+  --content-type: string # Describes the type of the content being sent. (required, e.g. application/json)
 ]: nothing -> table<EanId: string, IsActive: bool, LastModified: string, MainImage: record<ImageId: string, ImageLabel: string, ImagePath: string, ImageTag: string, ImageText: string, IsMain: bool, IsZoomSize: bool, LastModified: string>, Name: string, NameComplete: string, Offers: list<record>, ProductId: string, RefId: string, SkuId: string> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LEGACY_SEARCH_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LEGACY_SEARCH_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -549,8 +551,8 @@ export def "get-api-catalog-system-pub-products-offers-product-id-sku-sku-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (e.g. application/json)
-  --content-type: string # Describes the type of the content being sent. (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
+  --content-type: string # Describes the type of the content being sent. (required, e.g. application/json)
 ]: nothing -> table<EanId: string, IsActive: bool, LastModified: string, MainImage: record<ImageId: string, ImageLabel: string, ImagePath: string, ImageTag: string, ImageText: string, IsMain: bool, IsZoomSize: bool, LastModified: string>, Name: string, NameComplete: string, Offers: list<record>, ProductId: string, RefId: string, SkuId: string> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LEGACY_SEARCH_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LEGACY_SEARCH_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -589,17 +591,17 @@ export def "product-search-filteredand-ordered" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-from: string # Starter page range. These parameters allow the API to be paginated. Take into account that the initial and final pages cannot have a separation superior to 50 pages. Thus, it will be displayed 50 items per page. (e.g. 1)
-  --qp-to: string # Finisher page range. These parameters allow the API to be paginated. Take into account that the initial and final pages cannot have a separation superior to 50 pages. Thus, it will be displayed 50 items per page. (e.g. 50)
+  --from: string # Starter page range. These parameters allow the API to be paginated. Take into account that the initial and final pages cannot have a separation superior to 50 pages. Thus, it will be displayed 50 items per page. (e.g. 1)
+  --to: string # Finisher page range. These parameters allow the API to be paginated. Take into account that the initial and final pages cannot have a separation superior to 50 pages. Thus, it will be displayed 50 items per page. (e.g. 50)
   --ft: string # Filter by full text. The form is`ft={searchWord}` (e.g. television)
   --fq: string # General filter. It can be by category (`fq=C:/{a}/{b}`), by specification (`fq=specificationFilter_{a}:{b}`), by price range (`fq=P:[{a} TO {b}]`), by collection (`fq=productClusterIds:{{productClusterId}}`), by product ID (`fq=productId:{{productId}}`), by SKU ID (`fq=skuId:{{skuId}}`), by Reference ID (`fq=alternateIds_RefId:{{referenceId}}`), by EAN13 (`fq=alternateIds_Ean:{{ean13}}`), by availability at a specific sales channel (`fq=isAvailablePerSalesChannel_{{sc}}:{{bool}}`), by available at a specific seller (`fq=sellerId:{{sellerId}}`) (e.g. C:/1000041/1000049/)
   --o: string # Sorting method. It can be by Price (`O=OrderByPriceDESC` or `O=OrderByPriceASC`), by Top Selling Products (`O=OrderByTopSaleDESC`), by Best Reviews (`O=OrderByReviewRateDESC`), by Name (`O=OrderByNameASC` or `O=OrderByNameDESC`), by Release Date (`O=OrderByReleaseDateDESC`), by Best Discounts (`O=OrderByBestDiscountDESC`), by Score (`O=OrderByScoreDESC`) (e.g. OrderByNameASC)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (e.g. application/json)
-  --content-type: string # Describes the type of the content being sent. (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
+  --content-type: string # Describes the type of the content being sent. (required, e.g. application/json)
 ]: nothing -> table<allSpecifications: list<string>, allSpecificationsGroups: list<string>, brand: string, brandId: int, brandImageUrl: string, categories: list<any>, categoriesIds: list<any>, categoryId: string, clusterHighlights: record, description: string, items: list<record>, link: string, linkText: string, metaTagDescription: string, productClusters: record, productId: string, productName: string, productReference: string, productReferenceCode: int, productTitle: string, releaseDate: string, searchableClusters: record> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LEGACY_SEARCH_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LEGACY_SEARCH_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default "http://example.com/.DefaultParameterValue.com.br")
-  let qp = [(serialize-qp "_from" $qp_from "scalar") (serialize-qp "_to" $qp_to "scalar") (serialize-qp "ft" $ft "scalar") (serialize-qp "fq" $fq "scalar") (serialize-qp "O" $o "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "_from" $from "scalar") (serialize-qp "_to" $to "scalar") (serialize-qp "ft" $ft "scalar") (serialize-qp "fq" $fq "scalar") (serialize-qp "O" $o "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/catalog_system/pub/products/search" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -608,7 +610,7 @@ export def "product-search-filteredand-ordered" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"_from": $qp_from, "_to": $qp_to, "ft": $ft, "fq": $fq, "O": $o} | compact)
+    query: ({"_from": $from, "_to": $to, "ft": $ft, "fq": $fq, "O": $o} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -634,8 +636,8 @@ export def "searchbyproducturl" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (e.g. application/json)
-  --content-type: string # Describes the type of the content being sent. (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
+  --content-type: string # Describes the type of the content being sent. (required, e.g. application/json)
 ]: nothing -> table<allSpecifications: list<string>, allSpecificationsGroups: list<string>, brand: string, brandId: int, brandImageUrl: string, categories: list<any>, categoriesIds: list<any>, categoryId: string, clusterHighlights: record, description: string, items: list<record>, link: string, linkText: string, metaTagDescription: string, productClusters: record, productId: string, productName: string, productReference: string, productReferenceCode: int, productTitle: string, releaseDate: string, searchableClusters: record> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LEGACY_SEARCH_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LEGACY_SEARCH_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default "http://example.com/.DefaultParameterValue.com.br")
@@ -674,8 +676,8 @@ export def "product-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (e.g. application/json)
-  --content-type: string # Describes the type of the content being sent. (e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, e.g. application/json)
+  --content-type: string # Describes the type of the content being sent. (required, e.g. application/json)
 ]: nothing -> table<allSpecifications: list<string>, allSpecificationsGroups: list<string>, brand: string, brandId: int, brandImageUrl: string, categories: list<any>, categoriesIds: list<any>, categoryId: string, clusterHighlights: record, description: string, items: list<record>, link: string, linkText: string, metaTagDescription: string, productClusters: record, productId: string, productName: string, productReference: string, productReferenceCode: int, productTitle: string, releaseDate: string, searchableClusters: record> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LEGACY_SEARCH_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LEGACY_SEARCH_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default "http://example.com/.DefaultParameterValue.com.br")
@@ -713,12 +715,13 @@ export def "auto-complete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --product-name-contains: string # Part of the string that will be searched. (e.g. jeans)
-  --content-type: string # Type of the content being sent (e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand (e.g. application/json)
+  --product-name-contains: string # Part of the string that will be searched. (required, e.g. jeans)
+  --content-type: string # Type of the content being sent (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand (required, e.g. application/json)
 ]: nothing -> record<itemsReturned: table<criteria: string, href: string, items: list, name: string, thumb: string, thumbUrl: string>> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LEGACY_SEARCH_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LEGACY_SEARCH_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default "http://example.com/.DefaultParameterValue.com.br")
+  if ($product_name_contains == null) { error make --unspanned { msg: "required query parameter 'productNameContains' missing: pass --product-name-contains" } }
   let qp = [(serialize-qp "productNameContains" $product_name_contains "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/buscaautocomplete" $qp $auth.query)
   let accept_val = "application/json"

@@ -96,6 +96,7 @@ def auth-scheme-completer [] { ["query-api-key"] }
 
 # Completers for enum parameters
 def critics-pick-completer [] { ["N" "Y"] }
+def resource-type-completer [] { ["all" "picks"] }
 def order-completer [] { ["by-opening-date" "by-publication-date" "by-title"] }
 
 # List all available API commands with their parameters
@@ -195,7 +196,7 @@ export def "get-reviews-search-json" [
 
 # GET /reviews/{resource-type}.json
 export def "get-reviews-resource-type-json" [
-  resource_type: string
+  resource_type: string@resource-type-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

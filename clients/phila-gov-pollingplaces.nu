@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-op" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -120,7 +120,7 @@ export def commands []: nothing -> table {
 # Get Polling Places Data
 #
 # GET /
-export def "get" [
+export def "get-op" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -130,12 +130,14 @@ export def "get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ward: int # Ward Number (format: int32)
-  --division: int # Division Number (format: int32)
+  --ward: int # Ward Number (required, format: int32)
+  --division: int # Division Number (required, format: int32)
   --callback: string # Optional parameter for jsonp support.
 ]: nothing -> record<building: string, display_address: string, division: string, lat: float, lng: float, location: string, parking: string, pin_address: string, ward: string, zip_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ward == null) { error make --unspanned { msg: "required query parameter 'ward' missing: pass --ward" } }
+  if ($division == null) { error make --unspanned { msg: "required query parameter 'division' missing: pass --division" } }
   let qp = [(serialize-qp "ward" $ward "scalar") (serialize-qp "division" $division "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"

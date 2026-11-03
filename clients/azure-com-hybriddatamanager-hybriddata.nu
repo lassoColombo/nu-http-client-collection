@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -158,10 +158,11 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
+  --api-version: string # The API Version (required)
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string, origin: string, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.HybridData/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -195,11 +196,12 @@ export def "data-managers-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
-]: nothing -> record<nextLink: string, value: table<etag: string>> {
+  --api-version: string # The API Version (required)
+]: nothing -> record<nextLink: string, value: table<etag: string, id: string, location: string, name: string, sku: record, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.HybridData/dataManagers") $qp $auth.query)
   let accept_val = "application/json"
@@ -234,12 +236,13 @@ export def "data-managers-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
-]: nothing -> record<nextLink: string, value: table<etag: string>> {
+  --api-version: string # The API Version (required)
+]: nothing -> record<nextLink: string, value: table<etag: string, id: string, location: string, name: string, sku: record, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers") $qp $auth.query)
   let accept_val = "application/json"
@@ -275,13 +278,14 @@ export def "data-managers-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
+  --api-version: string # The API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($data_manager_name | is-empty) { error make --unspanned { msg: "path parameter 'dataManagerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -317,13 +321,14 @@ export def "data-managers-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
-]: nothing -> record<etag: string> {
+  --api-version: string # The API Version (required)
+]: nothing -> record<etag: string, id: string, location: string, name: string, sku: record<name: string, tier: string>, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($data_manager_name | is-empty) { error make --unspanned { msg: "path parameter 'dataManagerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -360,17 +365,18 @@ export def "data-managers-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
+  --api-version: string # The API Version (required)
   --if-match: string # Defines the If-Match condition. The patch will be performed only if the ETag of the data manager resource on the server matches this value.
   --sku: record # The sku type. — shape: {name?: string, tier?: string}
   --tags: record # The list of key value pairs that describe the resource. These tags can be used in viewing and grouping this resource (across resource groups).
-]: any -> record<etag: string> {
+]: any -> record<etag: string, id: string, location: string, name: string, sku: record<name: string, tier: string>, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($data_manager_name | is-empty) { error make --unspanned { msg: "path parameter 'dataManagerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}") $qp $auth.query)
   let req_body = {"sku": $sku, "tags": $tags} | compact
@@ -411,18 +417,19 @@ export def "data-managers-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
+  --api-version: string # The API Version (required)
   --etag: string # Etag of the Resource.
   location: string # The location of the resource. This will be one of the supported and registered Azure Geo Regions (e.g. West US, East US, Southeast Asia, etc.). The geo region of a resource cannot be changed once it is created, but if an identical geo region is specified on update the request will succeed.
   --sku: record # The sku type. — shape: {name?: string, tier?: string}
   --tags: record # The list of key value pairs that describe the resource. These tags can be used in viewing and grouping this resource (across resource groups).
-]: any -> record<etag: string> {
+]: any -> record<etag: string, id: string, location: string, name: string, sku: record<name: string, tier: string>, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($data_manager_name | is-empty) { error make --unspanned { msg: "path parameter 'dataManagerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}") $qp $auth.query)
   let req_body = {"etag": $etag, "location": $location, "sku": $sku, "tags": $tags} | compact
@@ -460,13 +467,14 @@ export def "data-services-list-by-data-manager" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # The API Version (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($data_manager_name | is-empty) { error make --unspanned { msg: "path parameter 'dataManagerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataServices") $qp $auth.query)
   let accept_val = "application/json"
@@ -503,14 +511,15 @@ export def "data-services-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
-]: nothing -> record<properties: record<state: string, supportedDataSinkTypes: list<string>, supportedDataSourceTypes: list<string>>> {
+  --api-version: string # The API Version (required)
+]: nothing -> record<properties: record<state: string, supportedDataSinkTypes: list<string>, supportedDataSourceTypes: list<string>>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($data_manager_name | is-empty) { error make --unspanned { msg: "path parameter 'dataManagerName' must be non-empty" } }
   if ($data_service_name | is-empty) { error make --unspanned { msg: "path parameter 'dataServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name), data_service_name: (encode-path-segment $data_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataServices/{data_service_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -547,15 +556,16 @@ export def "job-definitions-list-by-data-service" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
+  --api-version: string # The API Version (required)
   --filter: string # OData Filter options
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($data_manager_name | is-empty) { error make --unspanned { msg: "path parameter 'dataManagerName' must be non-empty" } }
   if ($data_service_name | is-empty) { error make --unspanned { msg: "path parameter 'dataServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name), data_service_name: (encode-path-segment $data_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataServices/{data_service_name}/jobDefinitions") $qp $auth.query)
   let accept_val = "application/json"
@@ -593,7 +603,7 @@ export def "job-definitions-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
+  --api-version: string # The API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -602,6 +612,7 @@ export def "job-definitions-delete" [
   if ($data_manager_name | is-empty) { error make --unspanned { msg: "path parameter 'dataManagerName' must be non-empty" } }
   if ($data_service_name | is-empty) { error make --unspanned { msg: "path parameter 'dataServiceName' must be non-empty" } }
   if ($job_definition_name | is-empty) { error make --unspanned { msg: "path parameter 'jobDefinitionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name), data_service_name: (encode-path-segment $data_service_name), job_definition_name: (encode-path-segment $job_definition_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataServices/{data_service_name}/jobDefinitions/{job_definition_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -639,8 +650,8 @@ export def "job-definitions-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
-]: nothing -> record<properties: record<customerSecrets: list<record>, dataServiceInput: record, dataSinkId: string, dataSourceId: string, lastModifiedTime: string, runLocation: string, schedules: list<record>, state: string, userConfirmation: string>> {
+  --api-version: string # The API Version (required)
+]: nothing -> record<properties: record<customerSecrets: list<record>, dataServiceInput: record, dataSinkId: string, dataSourceId: string, lastModifiedTime: string, runLocation: string, schedules: list<record>, state: string, userConfirmation: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -648,6 +659,7 @@ export def "job-definitions-get" [
   if ($data_manager_name | is-empty) { error make --unspanned { msg: "path parameter 'dataManagerName' must be non-empty" } }
   if ($data_service_name | is-empty) { error make --unspanned { msg: "path parameter 'dataServiceName' must be non-empty" } }
   if ($job_definition_name | is-empty) { error make --unspanned { msg: "path parameter 'jobDefinitionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name), data_service_name: (encode-path-segment $data_service_name), job_definition_name: (encode-path-segment $job_definition_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataServices/{data_service_name}/jobDefinitions/{job_definition_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -686,9 +698,9 @@ export def "job-definitions-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
+  --api-version: string # The API Version (required)
   properties: record # Job Definition — shape: {customerSecrets?: list, dataServiceInput?: record, dataSinkId: string, dataSourceId: string, lastModifiedTime?: string, runLocation?: "none"|"australiaeast"|"australiasoutheast"|"brazilsouth"|"canadacentral"|"canadaeast"|"centralindia"|"centralus"|"eastasia"|"eastus"|"eastus2"|"japaneast"|"japanwest"|"koreacentral"|"koreasouth"|"southeastasia"|"southcentralus"|"southindia"|"northcentralus"|"northeurope"|"uksouth"|"ukwest"|"westcentralus"|"westeurope"|"westindia"|"westus"|"westus2", ... (3 more fields)}
-]: any -> record<properties: record<customerSecrets: list<record>, dataServiceInput: record, dataSinkId: string, dataSourceId: string, lastModifiedTime: string, runLocation: string, schedules: list<record>, state: string, userConfirmation: string>> {
+]: any -> record<properties: record<customerSecrets: list<record>, dataServiceInput: record, dataSinkId: string, dataSourceId: string, lastModifiedTime: string, runLocation: string, schedules: list<record>, state: string, userConfirmation: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -697,6 +709,7 @@ export def "job-definitions-create-or-update" [
   if ($data_manager_name | is-empty) { error make --unspanned { msg: "path parameter 'dataManagerName' must be non-empty" } }
   if ($data_service_name | is-empty) { error make --unspanned { msg: "path parameter 'dataServiceName' must be non-empty" } }
   if ($job_definition_name | is-empty) { error make --unspanned { msg: "path parameter 'jobDefinitionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name), data_service_name: (encode-path-segment $data_service_name), job_definition_name: (encode-path-segment $job_definition_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataServices/{data_service_name}/jobDefinitions/{job_definition_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -736,9 +749,9 @@ export def "jobs-list-by-job-definition" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
+  --api-version: string # The API Version (required)
   --filter: string # OData Filter options
-]: nothing -> record<nextLink: string, value: table<endTime: string, error: record, properties: record, startTime: string, status: string>> {
+]: nothing -> record<nextLink: string, value: table<endTime: string, error: record, properties: record, startTime: string, status: string, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -746,6 +759,7 @@ export def "jobs-list-by-job-definition" [
   if ($data_manager_name | is-empty) { error make --unspanned { msg: "path parameter 'dataManagerName' must be non-empty" } }
   if ($data_service_name | is-empty) { error make --unspanned { msg: "path parameter 'dataServiceName' must be non-empty" } }
   if ($job_definition_name | is-empty) { error make --unspanned { msg: "path parameter 'jobDefinitionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name), data_service_name: (encode-path-segment $data_service_name), job_definition_name: (encode-path-segment $job_definition_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataServices/{data_service_name}/jobDefinitions/{job_definition_name}/jobs") $qp $auth.query)
   let accept_val = "application/json"
@@ -784,9 +798,9 @@ export def "jobs-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
+  --api-version: string # The API Version (required)
   --expand: string # $expand is supported on details parameter for job, which provides details on the job stages.
-]: nothing -> record<endTime: string, error: record<code: string, message: string>, properties: record<bytesProcessed: int, dataSinkName: string, dataSourceName: string, details: record<errorDetails: list, itemDetailsLink: string, jobDefinition: record, jobStages: list>, isCancellable: string, itemsProcessed: int, totalBytesToProcess: int, totalItemsToProcess: int>, startTime: string, status: string> {
+]: nothing -> record<endTime: string, error: record<code: string, message: string>, properties: record<bytesProcessed: int, dataSinkName: string, dataSourceName: string, details: record<errorDetails: list, itemDetailsLink: string, jobDefinition: record, jobStages: list>, isCancellable: string, itemsProcessed: int, totalBytesToProcess: int, totalItemsToProcess: int>, startTime: string, status: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -795,6 +809,7 @@ export def "jobs-get" [
   if ($data_service_name | is-empty) { error make --unspanned { msg: "path parameter 'dataServiceName' must be non-empty" } }
   if ($job_definition_name | is-empty) { error make --unspanned { msg: "path parameter 'jobDefinitionName' must be non-empty" } }
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name), data_service_name: (encode-path-segment $data_service_name), job_definition_name: (encode-path-segment $job_definition_name), job_id: (encode-path-segment $job_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataServices/{data_service_name}/jobDefinitions/{job_definition_name}/jobs/{job_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -833,7 +848,7 @@ export def "jobs-cancel" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
+  --api-version: string # The API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -843,6 +858,7 @@ export def "jobs-cancel" [
   if ($data_service_name | is-empty) { error make --unspanned { msg: "path parameter 'dataServiceName' must be non-empty" } }
   if ($job_definition_name | is-empty) { error make --unspanned { msg: "path parameter 'jobDefinitionName' must be non-empty" } }
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name), data_service_name: (encode-path-segment $data_service_name), job_definition_name: (encode-path-segment $job_definition_name), job_id: (encode-path-segment $job_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataServices/{data_service_name}/jobDefinitions/{job_definition_name}/jobs/{job_id}/cancel") $qp $auth.query)
   let accept_val = "application/json"
@@ -881,7 +897,7 @@ export def "jobs-resume" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
+  --api-version: string # The API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -891,6 +907,7 @@ export def "jobs-resume" [
   if ($data_service_name | is-empty) { error make --unspanned { msg: "path parameter 'dataServiceName' must be non-empty" } }
   if ($job_definition_name | is-empty) { error make --unspanned { msg: "path parameter 'jobDefinitionName' must be non-empty" } }
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name), data_service_name: (encode-path-segment $data_service_name), job_definition_name: (encode-path-segment $job_definition_name), job_id: (encode-path-segment $job_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataServices/{data_service_name}/jobDefinitions/{job_definition_name}/jobs/{job_id}/resume") $qp $auth.query)
   let accept_val = "application/json"
@@ -929,7 +946,7 @@ export def "job-definitions-run" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
+  --api-version: string # The API Version (required)
   --customer-secrets: list # List of customer secrets containing a key identifier and key value. The key identifier is a way for the specific data source to understand the key. Value contains customer secret encrypted by the encryptionKeys. — item shape: {algorithm: "None"|"RSA1_5"|"RSA_OAEP"|"PlainText", keyIdentifier: string, keyValue: string}
   --data-service-input: record # A generic json used differently by each data service type.
   --user-confirmation: string@user-confirmation-completer # Enum to detect if user confirmation is required. If not passed will default to NotRequired. (default: NotRequired)
@@ -942,6 +959,7 @@ export def "job-definitions-run" [
   if ($data_manager_name | is-empty) { error make --unspanned { msg: "path parameter 'dataManagerName' must be non-empty" } }
   if ($data_service_name | is-empty) { error make --unspanned { msg: "path parameter 'dataServiceName' must be non-empty" } }
   if ($job_definition_name | is-empty) { error make --unspanned { msg: "path parameter 'jobDefinitionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name), data_service_name: (encode-path-segment $data_service_name), job_definition_name: (encode-path-segment $job_definition_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataServices/{data_service_name}/jobDefinitions/{job_definition_name}/run") $qp $auth.query)
   let req_body = {"customerSecrets": $customer_secrets, "dataServiceInput": $data_service_input, "userConfirmation": $user_confirmation} | compact
@@ -980,15 +998,16 @@ export def "jobs-list-by-data-service" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
+  --api-version: string # The API Version (required)
   --filter: string # OData Filter options
-]: nothing -> record<nextLink: string, value: table<endTime: string, error: record, properties: record, startTime: string, status: string>> {
+]: nothing -> record<nextLink: string, value: table<endTime: string, error: record, properties: record, startTime: string, status: string, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($data_manager_name | is-empty) { error make --unspanned { msg: "path parameter 'dataManagerName' must be non-empty" } }
   if ($data_service_name | is-empty) { error make --unspanned { msg: "path parameter 'dataServiceName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name), data_service_name: (encode-path-segment $data_service_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataServices/{data_service_name}/jobs") $qp $auth.query)
   let accept_val = "application/json"
@@ -1024,13 +1043,14 @@ export def "data-store-types-list-by-data-manager" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # The API Version (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($data_manager_name | is-empty) { error make --unspanned { msg: "path parameter 'dataManagerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataStoreTypes") $qp $auth.query)
   let accept_val = "application/json"
@@ -1067,14 +1087,15 @@ export def "data-store-types-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
-]: nothing -> record<properties: record<repositoryType: string, state: string, supportedDataServicesAsSink: list<string>, supportedDataServicesAsSource: list<string>>> {
+  --api-version: string # The API Version (required)
+]: nothing -> record<properties: record<repositoryType: string, state: string, supportedDataServicesAsSink: list<string>, supportedDataServicesAsSource: list<string>>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($data_manager_name | is-empty) { error make --unspanned { msg: "path parameter 'dataManagerName' must be non-empty" } }
   if ($data_store_type_name | is-empty) { error make --unspanned { msg: "path parameter 'dataStoreTypeName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name), data_store_type_name: (encode-path-segment $data_store_type_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataStoreTypes/{data_store_type_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1110,14 +1131,15 @@ export def "data-stores-list-by-data-manager" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
+  --api-version: string # The API Version (required)
   --filter: string # OData Filter options
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($data_manager_name | is-empty) { error make --unspanned { msg: "path parameter 'dataManagerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataStores") $qp $auth.query)
   let accept_val = "application/json"
@@ -1154,7 +1176,7 @@ export def "data-stores-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
+  --api-version: string # The API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1162,6 +1184,7 @@ export def "data-stores-delete" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($data_manager_name | is-empty) { error make --unspanned { msg: "path parameter 'dataManagerName' must be non-empty" } }
   if ($data_store_name | is-empty) { error make --unspanned { msg: "path parameter 'dataStoreName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name), data_store_name: (encode-path-segment $data_store_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataStores/{data_store_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1198,14 +1221,15 @@ export def "data-stores-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
-]: nothing -> record<properties: record<customerSecrets: list<record>, dataStoreTypeId: string, extendedProperties: record, repositoryId: string, state: string>> {
+  --api-version: string # The API Version (required)
+]: nothing -> record<properties: record<customerSecrets: list<record>, dataStoreTypeId: string, extendedProperties: record, repositoryId: string, state: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($data_manager_name | is-empty) { error make --unspanned { msg: "path parameter 'dataManagerName' must be non-empty" } }
   if ($data_store_name | is-empty) { error make --unspanned { msg: "path parameter 'dataStoreName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name), data_store_name: (encode-path-segment $data_store_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataStores/{data_store_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1243,9 +1267,9 @@ export def "data-stores-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
+  --api-version: string # The API Version (required)
   properties: record # Data Store for sources and sinks — shape: {customerSecrets?: list, dataStoreTypeId: string, extendedProperties?: record, repositoryId?: string, state: "Disabled"|"Enabled"|"Supported"}
-]: any -> record<properties: record<customerSecrets: list<record>, dataStoreTypeId: string, extendedProperties: record, repositoryId: string, state: string>> {
+]: any -> record<properties: record<customerSecrets: list<record>, dataStoreTypeId: string, extendedProperties: record, repositoryId: string, state: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1253,6 +1277,7 @@ export def "data-stores-create-or-update" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($data_manager_name | is-empty) { error make --unspanned { msg: "path parameter 'dataManagerName' must be non-empty" } }
   if ($data_store_name | is-empty) { error make --unspanned { msg: "path parameter 'dataStoreName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name), data_store_name: (encode-path-segment $data_store_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/dataStores/{data_store_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -1290,14 +1315,15 @@ export def "job-definitions-list-by-data-manager" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
+  --api-version: string # The API Version (required)
   --filter: string # OData Filter options
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($data_manager_name | is-empty) { error make --unspanned { msg: "path parameter 'dataManagerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/jobDefinitions") $qp $auth.query)
   let accept_val = "application/json"
@@ -1333,14 +1359,15 @@ export def "jobs-list-by-data-manager" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
+  --api-version: string # The API Version (required)
   --filter: string # OData Filter options
-]: nothing -> record<nextLink: string, value: table<endTime: string, error: record, properties: record, startTime: string, status: string>> {
+]: nothing -> record<nextLink: string, value: table<endTime: string, error: record, properties: record, startTime: string, status: string, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($data_manager_name | is-empty) { error make --unspanned { msg: "path parameter 'dataManagerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/jobs") $qp $auth.query)
   let accept_val = "application/json"
@@ -1376,13 +1403,14 @@ export def "public-keys-list-by-data-manager" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # The API Version (required)
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($data_manager_name | is-empty) { error make --unspanned { msg: "path parameter 'dataManagerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/publicKeys") $qp $auth.query)
   let accept_val = "application/json"
@@ -1419,14 +1447,15 @@ export def "public-keys-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API Version
-]: nothing -> record<properties: record<dataServiceLevel1Key: record<encryptionChunkSizeInBytes: int, keyExponent: string, keyModulus: string>, dataServiceLevel2Key: record<encryptionChunkSizeInBytes: int, keyExponent: string, keyModulus: string>>> {
+  --api-version: string # The API Version (required)
+]: nothing -> record<properties: record<dataServiceLevel1Key: record<encryptionChunkSizeInBytes: int, keyExponent: string, keyModulus: string>, dataServiceLevel2Key: record<encryptionChunkSizeInBytes: int, keyExponent: string, keyModulus: string>>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($data_manager_name | is-empty) { error make --unspanned { msg: "path parameter 'dataManagerName' must be non-empty" } }
   if ($public_key_name | is-empty) { error make --unspanned { msg: "path parameter 'publicKeyName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), data_manager_name: (encode-path-segment $data_manager_name), public_key_name: (encode-path-segment $public_key_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HybridData/dataManagers/{data_manager_name}/publicKeys/{public_key_name}") $qp $auth.query)
   let accept_val = "application/json"

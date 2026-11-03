@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -139,11 +139,12 @@ export def "locations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version. (default: 2015-11-01)
+  --api-version: string # Client Api Version. (required, default: 2015-11-01)
 ]: nothing -> record<nextLink: string, value: table<displayName: string, id: string, latitude: string, longitude: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  let api_version = ($api_version | default "2015-11-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Subscriptions.Admin/locations") $qp $auth.query)
   let accept_val = "application/json"
@@ -178,12 +179,13 @@ export def "locations-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version. (default: 2015-11-01)
+  --api-version: string # Client Api Version. (required, default: 2015-11-01)
 ]: nothing -> record<displayName: string, id: string, latitude: string, longitude: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  let api_version = ($api_version | default "2015-11-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Subscriptions.Admin/locations/{location}") $qp $auth.query)
   let accept_val = "application/json"
@@ -218,7 +220,7 @@ export def "locations-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version. (default: 2015-11-01)
+  --api-version: string # Client Api Version. (required, default: 2015-11-01)
   --display-name: string # Display name of the location.
   --id: string # Location identifier.
   --latitude: string # Latitude of the location.
@@ -230,6 +232,7 @@ export def "locations-create-or-update" [
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  let api_version = ($api_version | default "2015-11-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Subscriptions.Admin/locations/{location}") $qp $auth.query)
   let req_body = {"displayName": $display_name, "id": $id, "latitude": $latitude, "longitude": $longitude, "name": $name} | compact
@@ -267,13 +270,14 @@ export def "locations-get-operations-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version. (default: 2015-11-01)
+  --api-version: string # Client Api Version. (required, default: 2015-11-01)
 ]: nothing -> record<endTime: string, error: record<code: string, details: record<nextLink: string, value: list>, message: string>, id: record<location: string, name: string, subscriptionId: string>, percentComplete: float, properties: record, responseContent: record, retryAfter: string, startTime: string, status: string, terminalHttpStatusCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
   if ($operations_status_name | is-empty) { error make --unspanned { msg: "path parameter 'operationsStatusName' must be non-empty" } }
+  let api_version = ($api_version | default "2015-11-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location), operations_status_name: (encode-path-segment $operations_status_name)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Subscriptions.Admin/locations/{location}/operationsStatus/{operations_status_name}") $qp $auth.query)
   let accept_val = "application/json"

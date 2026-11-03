@@ -131,22 +131,23 @@ export def "list-contracts-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --duns: string # A 9-digit DUNS number that uniquely identifies a vendor (required).
+  --duns: string # A 9-digit DUNS number that uniquely identifies a vendor (required). (required)
   --naics: string # a six digit NAICS code used to filter by contracts with a certain NAICS
-  --qp-sort: string # a field to sort on. Choices are date, status, agency, and amount
+  --sort: string # a field to sort on. Choices are date, status, agency, and amount
   --direction: string # The sort direction of the results. Choices are asc or desc.
   --page: string # the page to start on. Results are paginated in increments of 100. Begins at page=1.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "duns" $duns "scalar") (serialize-qp "naics" $naics "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  if ($duns == null) { error make --unspanned { msg: "required query parameter 'duns' missing: pass --duns" } }
+  let qp = [(serialize-qp "duns" $duns "scalar") (serialize-qp "naics" $naics "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/contracts/" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"duns": $duns, "naics": $naics, "sort": $qp_sort, "direction": $direction, "page": $page} | compact)
+    query: ({"duns": $duns, "naics": $naics, "sort": $sort, "direction": $direction, "page": $page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -275,12 +276,13 @@ export def "list-vendors-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --naics: string # a six digit NAICS code (required)
+  --naics: string # a six digit NAICS code (required) (required)
   --setasides: list<string> # a comma delimited list of two character setaside codes to filter by. Ex. setasides=A6,A5 will filter by 8a and veteran owned business.
   --vehicle: string # Choices are either oasis or oasissb. Will filter vendors by their presence in either the OASIS unrestricted vehicle or the OASIS Small Business vehicle.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($naics == null) { error make --unspanned { msg: "required query parameter 'naics' missing: pass --naics" } }
   let qp = [(serialize-qp "naics" $naics "scalar") (serialize-qp "setasides" $setasides "csv") (serialize-qp "vehicle" $vehicle "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/vendors/" $qp $auth.query)
   let accept_val = "application/json"

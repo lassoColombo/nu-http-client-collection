@@ -1,4 +1,4 @@
-# Auto-generated client for Deal API vv1.3.0
+# Auto-generated client for Deal API v1.3.0
 # Source: https://api.apis.guru/v2/specs/ebay.com/buy-deal/v1.3.0/openapi.json
 # Auth: --token flag or $env.DEAL_API_TOKEN
 
@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -137,10 +137,11 @@ export def "get-deal-items" [
   --delivery-country: string # A filter for items that can be shipped to the specified country.
   --limit: string # The maximum number of items, from the current result set, returned on a single page.
   --offset: string # The number of items that will be skipped in the result set. This is used with the limit field to control the pagination of the output. For example, if the offset is set to 0 and the limit is set to 10, the method will retrieve items 1 through 10 from the list of items returned. If the offset is set to 10 and the limit is set to 10, the method will retrieve items 11 through 20 from the list of items returned. Default: 0
-  --x-ebay-c-marketplace-id: string # A header used to specify the eBay marketplace ID.
+  --x-ebay-c-marketplace-id: string # A header used to specify the eBay marketplace ID. (required)
 ]: nothing -> record<dealItems: table<additionalImages: list, categoryAncestorIds: list, categoryId: string, commissionable: bool, dealAffiliateWebUrl: string, dealEndDate: string, dealStartDate: string, dealWebUrl: string, energyEfficiencyClass: string, image: record, itemAffiliateWebUrl: string, itemGroupId: string, itemGroupType: string, itemId: string, itemWebUrl: string, legacyItemId: string, marketingPrice: record, price: record, qualifiedPrograms: list, shippingOptions: list, title: string, unitPrice: record, unitPricingMeasure: string>, href: string, limit: int, next: string, offset: int, prev: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_ebay_c_marketplace_id == null) { error make --unspanned { msg: "required header parameter 'X-EBAY-C-MARKETPLACE-ID' missing: pass --x-ebay-c-marketplace-id" } }
   let qp = [(serialize-qp "category_ids" $category_ids "scalar") (serialize-qp "commissionable" $commissionable "scalar") (serialize-qp "delivery_country" $delivery_country "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/deal_item" $qp $auth.query)
   let accept_val = "application/json"
@@ -177,10 +178,11 @@ export def "get-events" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: string # The maximum number of items, from the current result set, returned on a single page. Default: 20 Maximum Value: 100
   --offset: string # The number of items that will be skipped in the result set. This is used with the limit field to control the pagination of the output. For example, if the offset is set to 0 and the limit is set to 10, the method will retrieve items 1 through 10 from the list of items returned. If the offset is set to 10 and the limit is set to 10, the method will retrieve items 11 through 20 from the list of items returned. Default: 0
-  --x-ebay-c-marketplace-id: string # A header used to specify the eBay marketplace ID.
+  --x-ebay-c-marketplace-id: string # A header used to specify the eBay marketplace ID. (required)
 ]: nothing -> record<events: table<applicableCoupons: list, description: string, endDate: string, eventAffiliateWebUrl: string, eventId: string, eventWebUrl: string, images: list, startDate: string, terms: record, title: string>, href: string, limit: int, next: string, offset: int, prev: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_ebay_c_marketplace_id == null) { error make --unspanned { msg: "required header parameter 'X-EBAY-C-MARKETPLACE-ID' missing: pass --x-ebay-c-marketplace-id" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/event" $qp $auth.query)
   let accept_val = "application/json"
@@ -216,11 +218,12 @@ export def "get-event" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-ebay-c-marketplace-id: string # A header used to specify the eBay marketplace ID.
+  --x-ebay-c-marketplace-id: string # A header used to specify the eBay marketplace ID. (required)
 ]: nothing -> record<applicableCoupons: table<redemptionCode: string, terms: record>, description: string, endDate: string, eventAffiliateWebUrl: string, eventId: string, eventWebUrl: string, images: table<height: string, imageUrl: string, text: string, width: string>, startDate: string, terms: record<fullText: string, summary: string>, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'event_id' must be non-empty" } }
+  if ($x_ebay_c_marketplace_id == null) { error make --unspanned { msg: "required header parameter 'X-EBAY-C-MARKETPLACE-ID' missing: pass --x-ebay-c-marketplace-id" } }
   let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/event/{event_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -256,13 +259,15 @@ export def "get-event-items" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --category-ids: string # The unique identifier of the eBay category for the search. Maximum Value: 1
   --delivery-country: string # A filter for items that can be shipped to the specified country.
-  --event-ids: string # The unique identifiers for the eBay events. Maximum Value: 1
+  --event-ids: string # The unique identifiers for the eBay events. Maximum Value: 1 (required)
   --limit: string # The maximum number of items, from the current result set, returned on a single page. Default: 20
   --offset: string # The number of items that will be skipped in the result set. This is used with the limit field to control the pagination of the output. For example, if the offset is set to 0 and the limit is set to 10, the method will retrieve items 1 through 10 from the list of items returned. If the offset is set to 10 and the limit is set to 10, the method will retrieve items 11 through 20 from the list of items returned. Default: 0
-  --x-ebay-c-marketplace-id: string # A header used to specify the eBay marketplace ID.
+  --x-ebay-c-marketplace-id: string # A header used to specify the eBay marketplace ID. (required)
 ]: nothing -> record<eventItems: table<additionalImages: list, categoryAncestorIds: list, categoryId: string, energyEfficiencyClass: string, eventId: string, image: record, itemAffiliateWebUrl: string, itemGroupId: string, itemGroupType: string, itemId: string, itemWebUrl: string, legacyItemId: string, marketingPrice: record, price: record, qualifiedPrograms: list, shippingOptions: list, title: string, unitPrice: record, unitPricingMeasure: string>, href: string, limit: int, next: string, offset: int, prev: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($event_ids == null) { error make --unspanned { msg: "required query parameter 'event_ids' missing: pass --event-ids" } }
+  if ($x_ebay_c_marketplace_id == null) { error make --unspanned { msg: "required header parameter 'X-EBAY-C-MARKETPLACE-ID' missing: pass --x-ebay-c-marketplace-id" } }
   let qp = [(serialize-qp "category_ids" $category_ids "scalar") (serialize-qp "delivery_country" $delivery_country "scalar") (serialize-qp "event_ids" $event_ids "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/event_item" $qp $auth.query)
   let accept_val = "application/json"

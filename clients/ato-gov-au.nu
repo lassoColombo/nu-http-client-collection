@@ -157,10 +157,11 @@ export def "get-business-names" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
-]: nothing -> table<fromDate: string, id: record, lifecycleState: string, name: string, toDate: string> {
+  --api-key: string # The API key. (required)
+]: nothing -> table<fromDate: string, id: string, lifecycleState: string, name: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base "/business-names" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -193,10 +194,11 @@ export def "get-classifications-address-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
-]: nothing -> table<description: string, id: record, name: string> {
+  --api-key: string # The API key. (required)
+]: nothing -> table<description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base "/classifications/address-types" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -229,10 +231,11 @@ export def "get-classifications-business-name-lifecycle-states" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
-]: nothing -> table<description: string, id: record, name: string> {
+  --api-key: string # The API key. (required)
+]: nothing -> table<description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base "/classifications/business-name-lifecycle-states" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -265,10 +268,11 @@ export def "get-classifications-electronic-address-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
-]: nothing -> table<description: string, id: record, name: string> {
+  --api-key: string # The API key. (required)
+]: nothing -> table<description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base "/classifications/electronic-address-types" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -301,10 +305,11 @@ export def "get-classifications-genders" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
-]: nothing -> table<gender: string, id: record> {
+  --api-key: string # The API key. (required)
+]: nothing -> table<gender: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base "/classifications/genders" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -337,10 +342,11 @@ export def "get-classifications-legal-entity-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
-]: nothing -> table<description: string, id: record, name: string> {
+  --api-key: string # The API key. (required)
+]: nothing -> table<description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base "/classifications/legal-entity-types" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -373,10 +379,11 @@ export def "get-classifications-license-lifecycle-states" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
-]: nothing -> table<description: string, id: record, name: string> {
+  --api-key: string # The API key. (required)
+]: nothing -> table<description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base "/classifications/license-lifecycle-states" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -409,10 +416,11 @@ export def "get-classifications-license-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
-]: nothing -> table<description: string, id: record, name: string> {
+  --api-key: string # The API key. (required)
+]: nothing -> table<description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base "/classifications/license-types" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -445,10 +453,11 @@ export def "get-classifications-name-directions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
-]: nothing -> table<description: string, id: record, name: string> {
+  --api-key: string # The API key. (required)
+]: nothing -> table<description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base "/classifications/name-directions" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -481,10 +490,11 @@ export def "get-classifications-name-prefixes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
-]: nothing -> table<description: string, id: record, name: string> {
+  --api-key: string # The API key. (required)
+]: nothing -> table<description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base "/classifications/name-prefixes" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -517,10 +527,11 @@ export def "get-classifications-name-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
-]: nothing -> table<description: string, id: record, name: string> {
+  --api-key: string # The API key. (required)
+]: nothing -> table<description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base "/classifications/name-types" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -553,10 +564,11 @@ export def "get-classifications-registered-identifier-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
-]: nothing -> table<description: string, id: record, name: string> {
+  --api-key: string # The API key. (required)
+]: nothing -> table<description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base "/classifications/registered-identifier-types" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -589,10 +601,11 @@ export def "get-classifications-roles" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
-]: nothing -> table<id: record, reciprocalRole: string, reciprocalRoleDescription: string, relationship: string, role: string, roleDescription: string> {
+  --api-key: string # The API key. (required)
+]: nothing -> table<id: string, reciprocalRole: string, reciprocalRoleDescription: string, relationship: string, role: string, roleDescription: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base "/classifications/roles" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -627,10 +640,11 @@ export def "get-individuals" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --date-of-birth: string # The individual's date of birth, for example, `1979-01-13` (in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format).
   --place-of-birth: string # The individual's place of birth, for example, `Tamworth`.
-  --api-key: string # The API key.
-]: nothing -> table<addresses: list<record>, dateOfBirth: string, electronicAddresses: list<record>, fromDate: string, gender: string, id: record, names: list<record>, placeOfBirth: string, toDate: string> {
+  --api-key: string # The API key. (required)
+]: nothing -> table<addresses: list<record>, dateOfBirth: string, electronicAddresses: list<record>, fromDate: string, gender: string, id: string, names: list<record>, placeOfBirth: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let qp = [(serialize-qp "dateOfBirth" $date_of_birth "scalar") (serialize-qp "placeOfBirth" $place_of_birth "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/individuals" $qp $auth.query)
   let accept_val = "application/json"
@@ -667,17 +681,18 @@ export def "post-individuals" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
+  --api-key: string # The API key. (required)
   --addresses: list # item shape: {city?: string, country?: string, line1?: string, line2?: string, line3?: string, name?: string, postalCode?: string, suburb?: string, addressType?: "Mailing"|"Principal Place of Business"|"Principal Place of Residence"}
   date_of_birth: string # The individual's date of birth, for example, `1979-01-13` (in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format). (format: date, e.g. 1979-01-13)
   --electronic-addresses: list # item shape: {areaCode?: string, countryPrefix?: string, electronicAddressType?: "Email"|"Fax"|"Landline"|"Mobile"|"Website", email?: string, extension?: string, number?: string, url?: string}
   --gender: string@gender-completer # The individual's gender. (default: Male)
   --names: list # item shape: {direction?: "left-to-right"|"right-to-left", familyName?: string, formalSalutation?: string, givenName?: string, informalSalutation?: string, middleName?: string, namePrefix?: "Mr"|"Ms", nameSuffix?: string, nameType?: "Alias"|"Principal Name"}
   place_of_birth: string # The individual's place of birth, for example, `Tamworth`. (e.g. Tamworth)
-]: any -> record<addresses: table<city: string, country: string, fromDate: string, id: record, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string, addressType: string>, dateOfBirth: string, electronicAddresses: table<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: record, number: string, toDate: string, url: string>, fromDate: string, gender: string, id: record, names: table<direction: string, familyName: string, formalSalutation: string, fromDate: string, givenName: string, id: record, informalSalutation: string, middleName: string, namePrefix: string, nameSuffix: string, nameType: string, toDate: string>, placeOfBirth: string, toDate: string> {
+]: any -> record<addresses: table<city: string, country: string, fromDate: string, id: string, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string, addressType: string>, dateOfBirth: string, electronicAddresses: table<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: string, number: string, toDate: string, url: string>, fromDate: string, gender: string, id: string, names: table<direction: string, familyName: string, formalSalutation: string, fromDate: string, givenName: string, id: string, informalSalutation: string, middleName: string, namePrefix: string, nameSuffix: string, nameType: string, toDate: string>, placeOfBirth: string, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base "/individuals" $auth.query)
   let req_body = {"addresses": $addresses, "dateOfBirth": $date_of_birth, "electronicAddresses": $electronic_addresses, "gender": $gender, "names": $names, "placeOfBirth": $place_of_birth} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -713,11 +728,12 @@ export def "delete-individuals-party-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
+  --api-key: string # The API key. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/individuals/{party_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -751,11 +767,12 @@ export def "get-individuals-party-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
-]: nothing -> record<addresses: table<city: string, country: string, fromDate: string, id: record, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string, addressType: string>, dateOfBirth: string, electronicAddresses: table<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: record, number: string, toDate: string, url: string>, fromDate: string, gender: string, id: record, names: table<direction: string, familyName: string, formalSalutation: string, fromDate: string, givenName: string, id: record, informalSalutation: string, middleName: string, namePrefix: string, nameSuffix: string, nameType: string, toDate: string>, placeOfBirth: string, toDate: string> {
+  --api-key: string # The API key. (required)
+]: nothing -> record<addresses: table<city: string, country: string, fromDate: string, id: string, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string, addressType: string>, dateOfBirth: string, electronicAddresses: table<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: string, number: string, toDate: string, url: string>, fromDate: string, gender: string, id: string, names: table<direction: string, familyName: string, formalSalutation: string, fromDate: string, givenName: string, id: string, informalSalutation: string, middleName: string, namePrefix: string, nameSuffix: string, nameType: string, toDate: string>, placeOfBirth: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/individuals/{party_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -792,18 +809,19 @@ export def "put-individuals-party-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
+  --api-key: string # The API key. (required)
   --addresses: list # item shape: {city?: string, country?: string, line1?: string, line2?: string, line3?: string, name?: string, postalCode?: string, suburb?: string, addressType?: "Mailing"|"Principal Place of Business"|"Principal Place of Residence"}
   date_of_birth: string # The individual's date of birth, for example, `1979-01-13` (in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format). (format: date, e.g. 1979-01-13)
   --electronic-addresses: list # item shape: {areaCode?: string, countryPrefix?: string, electronicAddressType?: "Email"|"Fax"|"Landline"|"Mobile"|"Website", email?: string, extension?: string, number?: string, url?: string}
   --gender: string@gender-completer # The individual's gender. (default: Male)
   --names: list # item shape: {direction?: "left-to-right"|"right-to-left", familyName?: string, formalSalutation?: string, givenName?: string, informalSalutation?: string, middleName?: string, namePrefix?: "Mr"|"Ms", nameSuffix?: string, nameType?: "Alias"|"Principal Name"}
   place_of_birth: string # The individual's place of birth, for example, `Tamworth`. (e.g. Tamworth)
-]: any -> record<addresses: table<city: string, country: string, fromDate: string, id: record, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string, addressType: string>, dateOfBirth: string, electronicAddresses: table<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: record, number: string, toDate: string, url: string>, fromDate: string, gender: string, id: record, names: table<direction: string, familyName: string, formalSalutation: string, fromDate: string, givenName: string, id: record, informalSalutation: string, middleName: string, namePrefix: string, nameSuffix: string, nameType: string, toDate: string>, placeOfBirth: string, toDate: string> {
+]: any -> record<addresses: table<city: string, country: string, fromDate: string, id: string, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string, addressType: string>, dateOfBirth: string, electronicAddresses: table<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: string, number: string, toDate: string, url: string>, fromDate: string, gender: string, id: string, names: table<direction: string, familyName: string, formalSalutation: string, fromDate: string, givenName: string, id: string, informalSalutation: string, middleName: string, namePrefix: string, nameSuffix: string, nameType: string, toDate: string>, placeOfBirth: string, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/individuals/{party_id}") $auth.query)
   let req_body = {"addresses": $addresses, "dateOfBirth": $date_of_birth, "electronicAddresses": $electronic_addresses, "gender": $gender, "names": $names, "placeOfBirth": $place_of_birth} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -839,11 +857,12 @@ export def "get-individuals-party-id-addresses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
-]: nothing -> table<city: string, country: string, fromDate: string, id: record, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string> {
+  --api-key: string # The API key. (required)
+]: nothing -> table<city: string, country: string, fromDate: string, id: string, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/individuals/{party_id}/addresses") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -877,7 +896,7 @@ export def "post-individuals-party-id-addresses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
+  --api-key: string # The API key. (required)
   --city: string # The city. (e.g. Canberra)
   --country: string # The country. (e.g. Australia)
   --line1: string # The address line 1. (e.g. Level 7)
@@ -886,11 +905,12 @@ export def "post-individuals-party-id-addresses" [
   --name: string # The address name. (e.g. Kembery Building)
   --postal-code: string # The postal code. (e.g. 2601)
   --suburb: string # The suburb. (e.g. Civic)
-]: any -> record<city: string, country: string, fromDate: string, id: record, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string> {
+]: any -> record<city: string, country: string, fromDate: string, id: string, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/individuals/{party_id}/addresses") $auth.query)
   let req_body = {"city": $city, "country": $country, "line1": $line1, "line2": $line2, "line3": $line3, "name": $name, "postalCode": $postal_code, "suburb": $suburb} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -927,12 +947,13 @@ export def "delete-individuals-party-id-addresses-address-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
+  --api-key: string # The API key. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
   if ($address_id | is-empty) { error make --unspanned { msg: "path parameter 'addressId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), address_id: (encode-path-segment $address_id)} | format pattern "/individuals/{party_id}/addresses/{address_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -967,12 +988,13 @@ export def "get-individuals-party-id-addresses-address-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
-]: nothing -> record<city: string, country: string, fromDate: string, id: record, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string> {
+  --api-key: string # The API key. (required)
+]: nothing -> record<city: string, country: string, fromDate: string, id: string, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
   if ($address_id | is-empty) { error make --unspanned { msg: "path parameter 'addressId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), address_id: (encode-path-segment $address_id)} | format pattern "/individuals/{party_id}/addresses/{address_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1007,7 +1029,7 @@ export def "put-individuals-party-id-addresses-address-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
+  --api-key: string # The API key. (required)
   --city: string # The city. (e.g. Canberra)
   --country: string # The country. (e.g. Australia)
   --line1: string # The address line 1. (e.g. Level 7)
@@ -1016,12 +1038,13 @@ export def "put-individuals-party-id-addresses-address-id" [
   --name: string # The address name. (e.g. Kembery Building)
   --postal-code: string # The postal code. (e.g. 2601)
   --suburb: string # The suburb. (e.g. Civic)
-]: any -> record<city: string, country: string, fromDate: string, id: record, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string> {
+]: any -> record<city: string, country: string, fromDate: string, id: string, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
   if ($address_id | is-empty) { error make --unspanned { msg: "path parameter 'addressId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), address_id: (encode-path-segment $address_id)} | format pattern "/individuals/{party_id}/addresses/{address_id}") $auth.query)
   let req_body = {"city": $city, "country": $country, "line1": $line1, "line2": $line2, "line3": $line3, "name": $name, "postalCode": $postal_code, "suburb": $suburb} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1057,11 +1080,12 @@ export def "get-individuals-party-id-business-names" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
-]: nothing -> table<fromDate: string, id: record, lifecycleState: string, name: string, toDate: string> {
+  --api-key: string # The API key. (required)
+]: nothing -> table<fromDate: string, id: string, lifecycleState: string, name: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/individuals/{party_id}/business-names") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1095,14 +1119,15 @@ export def "post-individuals-party-id-business-names" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
+  --api-key: string # The API key. (required)
   --lifecycle-state: string@lifecycle-state-completer # The business name's lifecycle state. (default: Pending Approval)
   --name: string # The business name. (e.g. XYZ Technology Ventures)
-]: any -> record<fromDate: string, id: record, lifecycleState: string, name: string, toDate: string> {
+]: any -> record<fromDate: string, id: string, lifecycleState: string, name: string, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/individuals/{party_id}/business-names") $auth.query)
   let req_body = {"lifecycleState": $lifecycle_state, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1139,12 +1164,13 @@ export def "delete-individuals-party-id-business-names-product-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
+  --api-key: string # The API key. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), product_id: (encode-path-segment $product_id)} | format pattern "/individuals/{party_id}/business-names/{product_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1179,12 +1205,13 @@ export def "get-individuals-party-id-business-names-product-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
-]: nothing -> record<fromDate: string, id: record, lifecycleState: string, name: string, toDate: string> {
+  --api-key: string # The API key. (required)
+]: nothing -> record<fromDate: string, id: string, lifecycleState: string, name: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), product_id: (encode-path-segment $product_id)} | format pattern "/individuals/{party_id}/business-names/{product_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1219,15 +1246,16 @@ export def "put-individuals-party-id-business-names-product-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
+  --api-key: string # The API key. (required)
   --lifecycle-state: string@lifecycle-state-completer # The business name's lifecycle state. (default: Pending Approval)
   --name: string # The business name. (e.g. XYZ Technology Ventures)
-]: any -> record<fromDate: string, id: record, lifecycleState: string, name: string, toDate: string> {
+]: any -> record<fromDate: string, id: string, lifecycleState: string, name: string, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), product_id: (encode-path-segment $product_id)} | format pattern "/individuals/{party_id}/business-names/{product_id}") $auth.query)
   let req_body = {"lifecycleState": $lifecycle_state, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1263,11 +1291,12 @@ export def "get-individuals-party-id-electronic-addresses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
-]: nothing -> table<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: record, number: string, toDate: string, url: string> {
+  --api-key: string # The API key. (required)
+]: nothing -> table<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: string, number: string, toDate: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/individuals/{party_id}/electronic-addresses") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1301,7 +1330,7 @@ export def "post-individuals-party-id-electronic-addresses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
+  --api-key: string # The API key. (required)
   --area-code: string # The area code, for example, "02". (e.g. 02)
   --country-prefix: string # The country prefix, for example, "61". (e.g. 61)
   --electronic-address-type: string@electronic-address-type-completer # The electronic address type. (default: Landline)
@@ -1309,11 +1338,12 @@ export def "post-individuals-party-id-electronic-addresses" [
   --extension: string # The extension number, for example, "4453". (e.g. )
   --number: string # The number, for example, "62164453". (e.g. 62164453)
   --url: string # The website address, for example, "https://ato.gov.au". (e.g. )
-]: any -> record<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: record, number: string, toDate: string, url: string> {
+]: any -> record<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: string, number: string, toDate: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/individuals/{party_id}/electronic-addresses") $auth.query)
   let req_body = {"areaCode": $area_code, "countryPrefix": $country_prefix, "electronicAddressType": $electronic_address_type, "email": $email, "extension": $extension, "number": $number, "url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1350,12 +1380,13 @@ export def "delete-individuals-party-id-electronic-addresses-address-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
+  --api-key: string # The API key. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
   if ($address_id | is-empty) { error make --unspanned { msg: "path parameter 'addressId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), address_id: (encode-path-segment $address_id)} | format pattern "/individuals/{party_id}/electronic-addresses/{address_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1390,12 +1421,13 @@ export def "get-individuals-party-id-electronic-addresses-address-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
-]: nothing -> record<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: record, number: string, toDate: string, url: string> {
+  --api-key: string # The API key. (required)
+]: nothing -> record<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: string, number: string, toDate: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
   if ($address_id | is-empty) { error make --unspanned { msg: "path parameter 'addressId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), address_id: (encode-path-segment $address_id)} | format pattern "/individuals/{party_id}/electronic-addresses/{address_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1430,7 +1462,7 @@ export def "put-individuals-party-id-electronic-addresses-address-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
+  --api-key: string # The API key. (required)
   --area-code: string # The area code, for example, "02". (e.g. 02)
   --country-prefix: string # The country prefix, for example, "61". (e.g. 61)
   --electronic-address-type: string@electronic-address-type-completer # The electronic address type. (default: Landline)
@@ -1438,12 +1470,13 @@ export def "put-individuals-party-id-electronic-addresses-address-id" [
   --extension: string # The extension number, for example, "4453". (e.g. )
   --number: string # The number, for example, "62164453". (e.g. 62164453)
   --url: string # The website address, for example, "https://ato.gov.au". (e.g. )
-]: any -> record<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: record, number: string, toDate: string, url: string> {
+]: any -> record<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: string, number: string, toDate: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
   if ($address_id | is-empty) { error make --unspanned { msg: "path parameter 'addressId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), address_id: (encode-path-segment $address_id)} | format pattern "/individuals/{party_id}/electronic-addresses/{address_id}") $auth.query)
   let req_body = {"areaCode": $area_code, "countryPrefix": $country_prefix, "electronicAddressType": $electronic_address_type, "email": $email, "extension": $extension, "number": $number, "url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1479,11 +1512,12 @@ export def "get-individuals-party-id-licenses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
-]: nothing -> table<fromDate: string, id: record, licenseType: string, lifecycleState: string, toDate: string> {
+  --api-key: string # The API key. (required)
+]: nothing -> table<fromDate: string, id: string, licenseType: string, lifecycleState: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/individuals/{party_id}/licenses") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1517,14 +1551,15 @@ export def "post-individuals-party-id-licenses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
+  --api-key: string # The API key. (required)
   --license-type: string@license-type-completer # The license type. (default: Australian Financial Services License)
   --lifecycle-state: string@lifecycle-state-completer # The business name's lifecycle state. (default: Pending Approval)
-]: any -> record<fromDate: string, id: record, licenseType: string, lifecycleState: string, toDate: string> {
+]: any -> record<fromDate: string, id: string, licenseType: string, lifecycleState: string, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/individuals/{party_id}/licenses") $auth.query)
   let req_body = {"licenseType": $license_type, "lifecycleState": $lifecycle_state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1561,12 +1596,13 @@ export def "delete-individuals-party-id-licenses-product-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
+  --api-key: string # The API key. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), product_id: (encode-path-segment $product_id)} | format pattern "/individuals/{party_id}/licenses/{product_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1601,12 +1637,13 @@ export def "get-individuals-party-id-licenses-product-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
-]: nothing -> record<fromDate: string, id: record, licenseType: string, lifecycleState: string, toDate: string> {
+  --api-key: string # The API key. (required)
+]: nothing -> record<fromDate: string, id: string, licenseType: string, lifecycleState: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), product_id: (encode-path-segment $product_id)} | format pattern "/individuals/{party_id}/licenses/{product_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1641,15 +1678,16 @@ export def "put-individuals-party-id-licenses-product-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
+  --api-key: string # The API key. (required)
   --license-type: string@license-type-completer # The license type. (default: Australian Financial Services License)
   --lifecycle-state: string@lifecycle-state-completer # The business name's lifecycle state. (default: Pending Approval)
-]: any -> record<fromDate: string, id: record, licenseType: string, lifecycleState: string, toDate: string> {
+]: any -> record<fromDate: string, id: string, licenseType: string, lifecycleState: string, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), product_id: (encode-path-segment $product_id)} | format pattern "/individuals/{party_id}/licenses/{product_id}") $auth.query)
   let req_body = {"licenseType": $license_type, "lifecycleState": $lifecycle_state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1685,11 +1723,12 @@ export def "get-individuals-party-id-roles" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
-]: nothing -> table<fromDate: string, id: record, partyRoleType: string, relatedPartyId: record, relatedPartyRoleType: string, relationshipType: string, toDate: string> {
+  --api-key: string # The API key. (required)
+]: nothing -> table<fromDate: string, id: string, partyRoleType: string, relatedPartyId: string, relatedPartyRoleType: string, relationshipType: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/individuals/{party_id}/roles") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1723,16 +1762,17 @@ export def "post-individuals-party-id-roles" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
+  --api-key: string # The API key. (required)
   --party-role-type: string@party-role-type-completer # The party's role type. (default: Employee)
-  related_party_id: any # The related party's unique identifier.
+  related_party_id: string # The related party's unique identifier.
   --related-party-role-type: string@related-party-role-type-completer # The related party's role type. (default: Employer)
   relationship_type: string@relationship-type-completer # The relationship type. (default: Employment)
-]: any -> record<fromDate: string, id: record, partyRoleType: string, relatedPartyId: record, relatedPartyRoleType: string, relationshipType: string, toDate: string> {
+]: any -> record<fromDate: string, id: string, partyRoleType: string, relatedPartyId: string, relatedPartyRoleType: string, relationshipType: string, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/individuals/{party_id}/roles") $auth.query)
   let req_body = {"partyRoleType": $party_role_type, "relatedPartyId": $related_party_id, "relatedPartyRoleType": $related_party_role_type, "relationshipType": $relationship_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1769,12 +1809,13 @@ export def "delete-individuals-party-id-roles-role-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
+  --api-key: string # The API key. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'roleId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), role_id: (encode-path-segment $role_id)} | format pattern "/individuals/{party_id}/roles/{role_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1809,12 +1850,13 @@ export def "get-individuals-party-id-roles-role-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
-]: nothing -> record<fromDate: string, id: record, partyRoleType: string, relatedPartyId: record, relatedPartyRoleType: string, relationshipType: string, toDate: string> {
+  --api-key: string # The API key. (required)
+]: nothing -> record<fromDate: string, id: string, partyRoleType: string, relatedPartyId: string, relatedPartyRoleType: string, relationshipType: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'roleId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), role_id: (encode-path-segment $role_id)} | format pattern "/individuals/{party_id}/roles/{role_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1849,17 +1891,18 @@ export def "put-individuals-party-id-roles-role-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
+  --api-key: string # The API key. (required)
   --party-role-type: string@party-role-type-completer # The party's role type. (default: Employee)
-  related_party_id: any # The related party's unique identifier.
+  related_party_id: string # The related party's unique identifier.
   --related-party-role-type: string@related-party-role-type-completer # The related party's role type. (default: Employer)
   relationship_type: string@relationship-type-completer # The relationship type. (default: Employment)
-]: any -> record<fromDate: string, id: record, partyRoleType: string, relatedPartyId: record, relatedPartyRoleType: string, relationshipType: string, toDate: string> {
+]: any -> record<fromDate: string, id: string, partyRoleType: string, relatedPartyId: string, relatedPartyRoleType: string, relationshipType: string, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'roleId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), role_id: (encode-path-segment $role_id)} | format pattern "/individuals/{party_id}/roles/{role_id}") $auth.query)
   let req_body = {"partyRoleType": $party_role_type, "relatedPartyId": $related_party_id, "relatedPartyRoleType": $related_party_role_type, "relationshipType": $relationship_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1894,10 +1937,11 @@ export def "get-licenses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
-]: nothing -> table<fromDate: string, id: record, licenseType: string, lifecycleState: string, toDate: string> {
+  --api-key: string # The API key. (required)
+]: nothing -> table<fromDate: string, id: string, licenseType: string, lifecycleState: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base "/licenses" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1932,10 +1976,11 @@ export def "get-organisations" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --registered-identifier: string # The registered identifier, for example, `ACN` or `ABN`.
   --identifier: string # The identifier, for example, `123456789`.
-  --api-key: string # The API key.
-]: nothing -> table<addresses: list<record>, electronicAddresses: list<record>, establishmentDate: string, fromDate: string, id: record, legalEntityType: string, names: list<record>, registeredIdentifiers: list<record>, toDate: string> {
+  --api-key: string # The API key. (required)
+]: nothing -> table<addresses: list<record>, electronicAddresses: list<record>, establishmentDate: string, fromDate: string, id: string, legalEntityType: string, names: list<record>, registeredIdentifiers: list<record>, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let qp = [(serialize-qp "registeredIdentifier" $registered_identifier "scalar") (serialize-qp "identifier" $identifier "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/organisations" $qp $auth.query)
   let accept_val = "application/json"
@@ -1973,17 +2018,18 @@ export def "post-organisations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
+  --api-key: string # The API key. (required)
   --addresses: list # item shape: {city?: string, country?: string, line1?: string, line2?: string, line3?: string, name?: string, postalCode?: string, suburb?: string, addressType?: "Mailing"|"Principal Place of Business"}
   --electronic-addresses: list # item shape: {areaCode?: string, countryPrefix?: string, electronicAddressType?: "Email"|"Fax"|"Landline"|"Mobile"|"Website", email?: string, extension?: string, number?: string, url?: string}
   establishment_date: string # The organisation's establishment date, for example, `1928-03-03` (in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format). (format: date, e.g. 1928-03-03)
   legal_entity_type: string@legal-entity-type-completer # The organisation's legal entity type. (default: Company)
   --names: list # item shape: {name?: string}
   --registered-identifiers: list # item shape: {identifier?: string, identifierType?: "ACN"|"ABN"}
-]: any -> record<addresses: table<city: string, country: string, fromDate: string, id: record, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string, addressType: string>, electronicAddresses: table<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: record, number: string, toDate: string, url: string>, establishmentDate: string, fromDate: string, id: record, legalEntityType: string, names: table<fromDate: string, id: record, name: string, toDate: string>, registeredIdentifiers: table<fromDate: string, id: record, identifier: string, identifierType: string, toDate: string>, toDate: string> {
+]: any -> record<addresses: table<city: string, country: string, fromDate: string, id: string, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string, addressType: string>, electronicAddresses: table<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: string, number: string, toDate: string, url: string>, establishmentDate: string, fromDate: string, id: string, legalEntityType: string, names: table<fromDate: string, id: string, name: string, toDate: string>, registeredIdentifiers: table<fromDate: string, id: string, identifier: string, identifierType: string, toDate: string>, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base "/organisations" $auth.query)
   let req_body = {"addresses": $addresses, "electronicAddresses": $electronic_addresses, "establishmentDate": $establishment_date, "legalEntityType": $legal_entity_type, "names": $names, "registeredIdentifiers": $registered_identifiers} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2019,11 +2065,12 @@ export def "delete-organisations-party-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
+  --api-key: string # The API key. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/organisations/{party_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2057,11 +2104,12 @@ export def "get-organisations-party-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
-]: nothing -> record<addresses: table<city: string, country: string, fromDate: string, id: record, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string, addressType: string>, electronicAddresses: table<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: record, number: string, toDate: string, url: string>, establishmentDate: string, fromDate: string, id: record, legalEntityType: string, names: table<fromDate: string, id: record, name: string, toDate: string>, registeredIdentifiers: table<fromDate: string, id: record, identifier: string, identifierType: string, toDate: string>, toDate: string> {
+  --api-key: string # The API key. (required)
+]: nothing -> record<addresses: table<city: string, country: string, fromDate: string, id: string, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string, addressType: string>, electronicAddresses: table<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: string, number: string, toDate: string, url: string>, establishmentDate: string, fromDate: string, id: string, legalEntityType: string, names: table<fromDate: string, id: string, name: string, toDate: string>, registeredIdentifiers: table<fromDate: string, id: string, identifier: string, identifierType: string, toDate: string>, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/organisations/{party_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2099,18 +2147,19 @@ export def "put-organisations-party-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
+  --api-key: string # The API key. (required)
   --addresses: list # item shape: {city?: string, country?: string, line1?: string, line2?: string, line3?: string, name?: string, postalCode?: string, suburb?: string, addressType?: "Mailing"|"Principal Place of Business"}
   --electronic-addresses: list # item shape: {areaCode?: string, countryPrefix?: string, electronicAddressType?: "Email"|"Fax"|"Landline"|"Mobile"|"Website", email?: string, extension?: string, number?: string, url?: string}
   establishment_date: string # The organisation's establishment date, for example, `1928-03-03` (in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format). (format: date, e.g. 1928-03-03)
   legal_entity_type: string@legal-entity-type-completer # The organisation's legal entity type. (default: Company)
   --names: list # item shape: {name?: string}
   --registered-identifiers: list # item shape: {identifier?: string, identifierType?: "ACN"|"ABN"}
-]: any -> record<addresses: table<city: string, country: string, fromDate: string, id: record, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string, addressType: string>, electronicAddresses: table<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: record, number: string, toDate: string, url: string>, establishmentDate: string, fromDate: string, id: record, legalEntityType: string, names: table<fromDate: string, id: record, name: string, toDate: string>, registeredIdentifiers: table<fromDate: string, id: record, identifier: string, identifierType: string, toDate: string>, toDate: string> {
+]: any -> record<addresses: table<city: string, country: string, fromDate: string, id: string, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string, addressType: string>, electronicAddresses: table<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: string, number: string, toDate: string, url: string>, establishmentDate: string, fromDate: string, id: string, legalEntityType: string, names: table<fromDate: string, id: string, name: string, toDate: string>, registeredIdentifiers: table<fromDate: string, id: string, identifier: string, identifierType: string, toDate: string>, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/organisations/{party_id}") $auth.query)
   let req_body = {"addresses": $addresses, "electronicAddresses": $electronic_addresses, "establishmentDate": $establishment_date, "legalEntityType": $legal_entity_type, "names": $names, "registeredIdentifiers": $registered_identifiers} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2146,11 +2195,12 @@ export def "get-organisations-party-id-addresses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
-]: nothing -> table<city: string, country: string, fromDate: string, id: record, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string> {
+  --api-key: string # The API key. (required)
+]: nothing -> table<city: string, country: string, fromDate: string, id: string, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/organisations/{party_id}/addresses") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2184,7 +2234,7 @@ export def "post-organisations-party-id-addresses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
+  --api-key: string # The API key. (required)
   --city: string # The city. (e.g. Canberra)
   --country: string # The country. (e.g. Australia)
   --line1: string # The address line 1. (e.g. Level 7)
@@ -2193,11 +2243,12 @@ export def "post-organisations-party-id-addresses" [
   --name: string # The address name. (e.g. Kembery Building)
   --postal-code: string # The postal code. (e.g. 2601)
   --suburb: string # The suburb. (e.g. Civic)
-]: any -> record<city: string, country: string, fromDate: string, id: record, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string> {
+]: any -> record<city: string, country: string, fromDate: string, id: string, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/organisations/{party_id}/addresses") $auth.query)
   let req_body = {"city": $city, "country": $country, "line1": $line1, "line2": $line2, "line3": $line3, "name": $name, "postalCode": $postal_code, "suburb": $suburb} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2234,12 +2285,13 @@ export def "delete-organisations-party-id-addresses-address-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
+  --api-key: string # The API key. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
   if ($address_id | is-empty) { error make --unspanned { msg: "path parameter 'addressId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), address_id: (encode-path-segment $address_id)} | format pattern "/organisations/{party_id}/addresses/{address_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2274,12 +2326,13 @@ export def "get-organisations-party-id-addresses-address-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
-]: nothing -> record<city: string, country: string, fromDate: string, id: record, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string> {
+  --api-key: string # The API key. (required)
+]: nothing -> record<city: string, country: string, fromDate: string, id: string, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
   if ($address_id | is-empty) { error make --unspanned { msg: "path parameter 'addressId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), address_id: (encode-path-segment $address_id)} | format pattern "/organisations/{party_id}/addresses/{address_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2314,7 +2367,7 @@ export def "put-organisations-party-id-addresses-address-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
+  --api-key: string # The API key. (required)
   --city: string # The city. (e.g. Canberra)
   --country: string # The country. (e.g. Australia)
   --line1: string # The address line 1. (e.g. Level 7)
@@ -2323,12 +2376,13 @@ export def "put-organisations-party-id-addresses-address-id" [
   --name: string # The address name. (e.g. Kembery Building)
   --postal-code: string # The postal code. (e.g. 2601)
   --suburb: string # The suburb. (e.g. Civic)
-]: any -> record<city: string, country: string, fromDate: string, id: record, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string> {
+]: any -> record<city: string, country: string, fromDate: string, id: string, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
   if ($address_id | is-empty) { error make --unspanned { msg: "path parameter 'addressId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), address_id: (encode-path-segment $address_id)} | format pattern "/organisations/{party_id}/addresses/{address_id}") $auth.query)
   let req_body = {"city": $city, "country": $country, "line1": $line1, "line2": $line2, "line3": $line3, "name": $name, "postalCode": $postal_code, "suburb": $suburb} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2364,11 +2418,12 @@ export def "get-organisations-party-id-business-names" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
-]: nothing -> table<fromDate: string, id: record, lifecycleState: string, name: string, toDate: string> {
+  --api-key: string # The API key. (required)
+]: nothing -> table<fromDate: string, id: string, lifecycleState: string, name: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/organisations/{party_id}/business-names") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2402,14 +2457,15 @@ export def "post-organisations-party-id-business-names" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
+  --api-key: string # The API key. (required)
   --lifecycle-state: string@lifecycle-state-completer # The business name's lifecycle state. (default: Pending Approval)
   --name: string # The business name. (e.g. XYZ Technology Ventures)
-]: any -> record<fromDate: string, id: record, lifecycleState: string, name: string, toDate: string> {
+]: any -> record<fromDate: string, id: string, lifecycleState: string, name: string, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/organisations/{party_id}/business-names") $auth.query)
   let req_body = {"lifecycleState": $lifecycle_state, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2446,12 +2502,13 @@ export def "delete-organisations-party-id-business-names-product-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
+  --api-key: string # The API key. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), product_id: (encode-path-segment $product_id)} | format pattern "/organisations/{party_id}/business-names/{product_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2486,12 +2543,13 @@ export def "get-organisations-party-id-business-names-product-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
-]: nothing -> record<fromDate: string, id: record, lifecycleState: string, name: string, toDate: string> {
+  --api-key: string # The API key. (required)
+]: nothing -> record<fromDate: string, id: string, lifecycleState: string, name: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), product_id: (encode-path-segment $product_id)} | format pattern "/organisations/{party_id}/business-names/{product_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2526,15 +2584,16 @@ export def "put-organisations-party-id-business-names-product-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
+  --api-key: string # The API key. (required)
   --lifecycle-state: string@lifecycle-state-completer # The business name's lifecycle state. (default: Pending Approval)
   --name: string # The business name. (e.g. XYZ Technology Ventures)
-]: any -> record<fromDate: string, id: record, lifecycleState: string, name: string, toDate: string> {
+]: any -> record<fromDate: string, id: string, lifecycleState: string, name: string, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), product_id: (encode-path-segment $product_id)} | format pattern "/organisations/{party_id}/business-names/{product_id}") $auth.query)
   let req_body = {"lifecycleState": $lifecycle_state, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2570,11 +2629,12 @@ export def "get-organisations-party-id-electronic-addresses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
-]: nothing -> table<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: record, number: string, toDate: string, url: string> {
+  --api-key: string # The API key. (required)
+]: nothing -> table<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: string, number: string, toDate: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/organisations/{party_id}/electronic-addresses") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2608,7 +2668,7 @@ export def "post-organisations-party-id-electronic-addresses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
+  --api-key: string # The API key. (required)
   --area-code: string # The area code, for example, "02". (e.g. 02)
   --country-prefix: string # The country prefix, for example, "61". (e.g. 61)
   --electronic-address-type: string@electronic-address-type-completer # The electronic address type. (default: Landline)
@@ -2616,11 +2676,12 @@ export def "post-organisations-party-id-electronic-addresses" [
   --extension: string # The extension number, for example, "4453". (e.g. )
   --number: string # The number, for example, "62164453". (e.g. 62164453)
   --url: string # The website address, for example, "https://ato.gov.au". (e.g. )
-]: any -> record<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: record, number: string, toDate: string, url: string> {
+]: any -> record<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: string, number: string, toDate: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/organisations/{party_id}/electronic-addresses") $auth.query)
   let req_body = {"areaCode": $area_code, "countryPrefix": $country_prefix, "electronicAddressType": $electronic_address_type, "email": $email, "extension": $extension, "number": $number, "url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2657,12 +2718,13 @@ export def "delete-organisations-party-id-electronic-addresses-address-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
+  --api-key: string # The API key. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
   if ($address_id | is-empty) { error make --unspanned { msg: "path parameter 'addressId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), address_id: (encode-path-segment $address_id)} | format pattern "/organisations/{party_id}/electronic-addresses/{address_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2697,12 +2759,13 @@ export def "get-organisations-party-id-electronic-addresses-address-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
-]: nothing -> record<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: record, number: string, toDate: string, url: string> {
+  --api-key: string # The API key. (required)
+]: nothing -> record<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: string, number: string, toDate: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
   if ($address_id | is-empty) { error make --unspanned { msg: "path parameter 'addressId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), address_id: (encode-path-segment $address_id)} | format pattern "/organisations/{party_id}/electronic-addresses/{address_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2737,7 +2800,7 @@ export def "put-organisations-party-id-electronic-addresses-address-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
+  --api-key: string # The API key. (required)
   --area-code: string # The area code, for example, "02". (e.g. 02)
   --country-prefix: string # The country prefix, for example, "61". (e.g. 61)
   --electronic-address-type: string@electronic-address-type-completer # The electronic address type. (default: Landline)
@@ -2745,12 +2808,13 @@ export def "put-organisations-party-id-electronic-addresses-address-id" [
   --extension: string # The extension number, for example, "4453". (e.g. )
   --number: string # The number, for example, "62164453". (e.g. 62164453)
   --url: string # The website address, for example, "https://ato.gov.au". (e.g. )
-]: any -> record<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: record, number: string, toDate: string, url: string> {
+]: any -> record<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: string, number: string, toDate: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
   if ($address_id | is-empty) { error make --unspanned { msg: "path parameter 'addressId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), address_id: (encode-path-segment $address_id)} | format pattern "/organisations/{party_id}/electronic-addresses/{address_id}") $auth.query)
   let req_body = {"areaCode": $area_code, "countryPrefix": $country_prefix, "electronicAddressType": $electronic_address_type, "email": $email, "extension": $extension, "number": $number, "url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2786,11 +2850,12 @@ export def "get-organisations-party-id-licenses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
-]: nothing -> table<fromDate: string, id: record, licenseType: string, lifecycleState: string, toDate: string> {
+  --api-key: string # The API key. (required)
+]: nothing -> table<fromDate: string, id: string, licenseType: string, lifecycleState: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/organisations/{party_id}/licenses") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2824,14 +2889,15 @@ export def "post-organisations-party-id-licenses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
+  --api-key: string # The API key. (required)
   --license-type: string@license-type-completer # The license type. (default: Australian Financial Services License)
   --lifecycle-state: string@lifecycle-state-completer # The business name's lifecycle state. (default: Pending Approval)
-]: any -> record<fromDate: string, id: record, licenseType: string, lifecycleState: string, toDate: string> {
+]: any -> record<fromDate: string, id: string, licenseType: string, lifecycleState: string, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/organisations/{party_id}/licenses") $auth.query)
   let req_body = {"licenseType": $license_type, "lifecycleState": $lifecycle_state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2868,12 +2934,13 @@ export def "delete-organisations-party-id-licenses-product-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
+  --api-key: string # The API key. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), product_id: (encode-path-segment $product_id)} | format pattern "/organisations/{party_id}/licenses/{product_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2908,12 +2975,13 @@ export def "get-organisations-party-id-licenses-product-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
-]: nothing -> record<fromDate: string, id: record, licenseType: string, lifecycleState: string, toDate: string> {
+  --api-key: string # The API key. (required)
+]: nothing -> record<fromDate: string, id: string, licenseType: string, lifecycleState: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), product_id: (encode-path-segment $product_id)} | format pattern "/organisations/{party_id}/licenses/{product_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2948,15 +3016,16 @@ export def "put-organisations-party-id-licenses-product-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
+  --api-key: string # The API key. (required)
   --license-type: string@license-type-completer # The license type. (default: Australian Financial Services License)
   --lifecycle-state: string@lifecycle-state-completer # The business name's lifecycle state. (default: Pending Approval)
-]: any -> record<fromDate: string, id: record, licenseType: string, lifecycleState: string, toDate: string> {
+]: any -> record<fromDate: string, id: string, licenseType: string, lifecycleState: string, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), product_id: (encode-path-segment $product_id)} | format pattern "/organisations/{party_id}/licenses/{product_id}") $auth.query)
   let req_body = {"licenseType": $license_type, "lifecycleState": $lifecycle_state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2992,11 +3061,12 @@ export def "get-organisations-party-id-roles" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
-]: nothing -> table<fromDate: string, id: record, partyRoleType: string, relatedPartyId: record, relatedPartyRoleType: string, relationshipType: string, toDate: string> {
+  --api-key: string # The API key. (required)
+]: nothing -> table<fromDate: string, id: string, partyRoleType: string, relatedPartyId: string, relatedPartyRoleType: string, relationshipType: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/organisations/{party_id}/roles") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3030,16 +3100,17 @@ export def "post-organisations-party-id-roles" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
+  --api-key: string # The API key. (required)
   --party-role-type: string@party-role-type-completer # The party's role type. (default: Employee)
-  related_party_id: any # The related party's unique identifier.
+  related_party_id: string # The related party's unique identifier.
   --related-party-role-type: string@related-party-role-type-completer # The related party's role type. (default: Employer)
   relationship_type: string@relationship-type-completer # The relationship type. (default: Employment)
-]: any -> record<fromDate: string, id: record, partyRoleType: string, relatedPartyId: record, relatedPartyRoleType: string, relationshipType: string, toDate: string> {
+]: any -> record<fromDate: string, id: string, partyRoleType: string, relatedPartyId: string, relatedPartyRoleType: string, relationshipType: string, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/organisations/{party_id}/roles") $auth.query)
   let req_body = {"partyRoleType": $party_role_type, "relatedPartyId": $related_party_id, "relatedPartyRoleType": $related_party_role_type, "relationshipType": $relationship_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3076,12 +3147,13 @@ export def "delete-organisations-party-id-roles-role-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
+  --api-key: string # The API key. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'roleId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), role_id: (encode-path-segment $role_id)} | format pattern "/organisations/{party_id}/roles/{role_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3116,12 +3188,13 @@ export def "get-organisations-party-id-roles-role-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
-]: nothing -> record<fromDate: string, id: record, partyRoleType: string, relatedPartyId: record, relatedPartyRoleType: string, relationshipType: string, toDate: string> {
+  --api-key: string # The API key. (required)
+]: nothing -> record<fromDate: string, id: string, partyRoleType: string, relatedPartyId: string, relatedPartyRoleType: string, relationshipType: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'roleId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), role_id: (encode-path-segment $role_id)} | format pattern "/organisations/{party_id}/roles/{role_id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3156,17 +3229,18 @@ export def "put-organisations-party-id-roles-role-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # The API key.
+  --api-key: string # The API key. (required)
   --party-role-type: string@party-role-type-completer # The party's role type. (default: Employee)
-  related_party_id: any # The related party's unique identifier.
+  related_party_id: string # The related party's unique identifier.
   --related-party-role-type: string@related-party-role-type-completer # The related party's role type. (default: Employer)
   relationship_type: string@relationship-type-completer # The relationship type. (default: Employment)
-]: any -> record<fromDate: string, id: record, partyRoleType: string, relatedPartyId: record, relatedPartyRoleType: string, relationshipType: string, toDate: string> {
+]: any -> record<fromDate: string, id: string, partyRoleType: string, relatedPartyId: string, relatedPartyRoleType: string, relationshipType: string, toDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'roleId' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), role_id: (encode-path-segment $role_id)} | format pattern "/organisations/{party_id}/roles/{role_id}") $auth.query)
   let req_body = {"partyRoleType": $party_role_type, "relatedPartyId": $related_party_id, "relatedPartyRoleType": $related_party_role_type, "relationshipType": $relationship_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

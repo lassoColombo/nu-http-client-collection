@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -143,6 +143,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AssociateNode
+# --EngineAttributes item shape: {Name?: string, Value?: string}
 export def "associate-node" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -160,14 +161,15 @@ export def "associate-node" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  server_name: any
-  node_name: any
-  engine_attributes: any
-]: any -> record<NodeAssociationStatusToken: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  server_name: string # The name of the server with which to associate the node.
+  node_name: string # The node name that is used by chef-client or puppet-agentfor a new node. We recommend to use a unique FQDN as hostname. For more information, see the Chef (https://docs.aws.amazon.com/https:/docs.chef.io/nodes.html#about-node-names) or Puppet (https://docs.aws.amazon.com/https:/docs.puppet.com/puppet/4.10/man/agent.html) documentation.
+  engine_attributes: list # Engine attributes used for associating the node. Attributes accepted in a AssociateNode request for Chef CHEF_ORGANIZATION: The Chef organization with which the node is associated. By default only one organization named default can exist. CHEF_NODE_PUBLIC_KEY: A PEM-formatted public key. This key is required for the chef-client agent to access the Chef API. Attributes accepted in a AssociateNode request for Puppet PUPPET_NODE_CSR: A PEM-formatted certificate-signing request (CSR) that is created by the node. — item shape: {Name?: string, Value?: string}
+]: any -> record<NodeAssociationStatusToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "OpsWorksCM_V2016_11_01.AssociateNode")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServerName": $server_name, "NodeName": $node_name, "EngineAttributes": $engine_attributes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -193,6 +195,7 @@ export def "associate-node" [
 #
 # POST /
 # operationId: CreateBackup
+# --Tags item shape: {Key: string, Value: string}
 export def "create-backup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -210,14 +213,15 @@ export def "create-backup" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  server_name: any
-  --description: any
-  --tags: any
-]: any -> record<Backup: record<BackupArn: record, BackupId: record, BackupType: record, CreatedAt: record, Description: record, Engine: record, EngineModel: record, EngineVersion: record, InstanceProfileArn: record, InstanceType: record, KeyPair: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, S3DataSize: record, S3DataUrl: record, S3LogUrl: record, SecurityGroupIds: record, ServerName: record, ServiceRoleArn: record, Status: record, StatusDescription: record, SubnetIds: record, ToolsVersion: record, UserArn: record>> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  server_name: string # The name of the server that you want to back up.
+  --description: string # A user-defined description of the backup.
+  --tags: list # A map that contains tag keys and tag values to attach to an AWS OpsWorks-CM server backup. The key cannot be empty. The key can be a maximum of 127 characters, and can contain only Unicode letters, numbers, or separators, or the following special characters: + - = . _ : / The value can be a maximum 255 characters, and contain only Unicode letters, numbers, or separators, or the following special characters: + - = . _ : / Leading and trailing white spaces are trimmed from both the key and value. A maximum of 50 user-applied tags is allowed for tag-supported AWS OpsWorks-CM resources. — item shape: {Key: string, Value: string}
+]: any -> record<Backup: record<BackupArn: string, BackupId: string, BackupType: string, CreatedAt: string, Description: string, Engine: string, EngineModel: string, EngineVersion: string, InstanceProfileArn: string, InstanceType: string, KeyPair: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, S3DataSize: int, S3DataUrl: string, S3LogUrl: string, SecurityGroupIds: list<string>, ServerName: string, ServiceRoleArn: string, Status: string, StatusDescription: string, SubnetIds: list<string>, ToolsVersion: string, UserArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "OpsWorksCM_V2016_11_01.CreateBackup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServerName": $server_name, "Description": $description, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -243,6 +247,8 @@ export def "create-backup" [
 #
 # POST /
 # operationId: CreateServer
+# --EngineAttributes item shape: {Name?: string, Value?: string}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-server" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -260,32 +266,33 @@ export def "create-server" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  --associate-public-ip-address: any
-  --custom-domain: any
-  --custom-certificate: any
-  --custom-private-key: any
-  --disable-automated-backup: any
-  engine: any
-  --engine-model: any
-  --engine-version: any
-  --engine-attributes: any
-  --backup-retention-count: any
-  server_name: any
-  instance_profile_arn: any
-  instance_type: any
-  --key-pair: any
-  --preferred-maintenance-window: any
-  --preferred-backup-window: any
-  --security-group-ids: any
-  service_role_arn: any
-  --subnet-ids: any
-  --tags: any
-  --backup-id: any
-]: any -> record<Server: record<AssociatePublicIpAddress: record, BackupRetentionCount: record, ServerName: record, CreatedAt: record, CloudFormationStackArn: record, CustomDomain: record, DisableAutomatedBackup: record, Endpoint: record, Engine: record, EngineModel: record, EngineAttributes: record, EngineVersion: record, InstanceProfileArn: record, InstanceType: record, KeyPair: record, MaintenanceStatus: record, PreferredMaintenanceWindow: record, PreferredBackupWindow: record, SecurityGroupIds: record, ServiceRoleArn: record, Status: record, StatusReason: record, SubnetIds: record, ServerArn: record>> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  --associate-public-ip-address: oneof<nothing, bool> # Associate a public IP address with a server that you are launching. Valid values are true or false. The default value is true.
+  --custom-domain: string # An optional public endpoint of a server, such as https://aws.my-company.com. To access the server, create a CNAME DNS record in your preferred DNS service that points the custom domain to the endpoint that is generated when the server is created (the value of the CreateServer Endpoint attribute). You cannot access the server by using the generated Endpoint value if the server is using a custom domain. If you specify a custom domain, you must also specify values for CustomCertificate and CustomPrivateKey.
+  --custom-certificate: string # A PEM-formatted HTTPS certificate. The value can be be a single, self-signed certificate, or a certificate chain. If you specify a custom certificate, you must also specify values for CustomDomain and CustomPrivateKey. The following are requirements for the CustomCertificate value: You can provide either a self-signed, custom certificate, or the full certificate chain. The certificate must be a valid X509 certificate, or a certificate chain in PEM format. The certificate must be valid at the time of upload. A certificate can't be used before its validity period begins (the certificate's NotBefore date), or after it expires (the certificate's NotAfter date). The certificate’s common name or subject alternative names (SANs), if present, must match the value of CustomDomain. The certificate must match the value of CustomPrivateKey.
+  --custom-private-key: string # A private key in PEM format for connecting to the server by using HTTPS. The private key must not be encrypted; it cannot be protected by a password or passphrase. If you specify a custom private key, you must also specify values for CustomDomain and CustomCertificate. (format: password)
+  --disable-automated-backup: oneof<nothing, bool> # Enable or disable scheduled backups. Valid values are true or false. The default value is true.
+  engine: string # The configuration management engine to use. Valid values include ChefAutomate and Puppet.
+  --engine-model: string # The engine model of the server. Valid values in this release include Monolithic for Puppet and Single for Chef.
+  --engine-version: string # The major release version of the engine that you want to use. For a Chef server, the valid value for EngineVersion is currently 2. For a Puppet server, valid values are 2019 or 2017.
+  --engine-attributes: list # Optional engine attributes on a specified server. Attributes accepted in a Chef createServer request: CHEF_AUTOMATE_PIVOTAL_KEY: A base64-encoded RSA public key. The corresponding private key is required to access the Chef API. When no CHEF_AUTOMATE_PIVOTAL_KEY is set, a private key is generated and returned in the response. CHEF_AUTOMATE_ADMIN_PASSWORD: The password for the administrative user in the Chef Automate web-based dashboard. The password length is a minimum of eight characters, and a maximum of 32. The password can contain letters, numbers, and special characters (!/@#$%^&+=_). The password must contain at least one lower case letter, one upper case letter, one number, and one special character. When no CHEF_AUTOMATE_ADMIN_PASSWORD is set, one is generated and returned in the response. Attributes accepted in a Puppet createServer request: PUPPET_ADMIN_PASSWORD: To work with the Puppet Enterprise console, a password must use ASCII characters. PUPPET_R10K_REMOTE: The r10k remote is the URL of your control repository (for example, ssh://git@your.git-repo.com:user/control-repo.git). Specifying an r10k remote opens TCP port 8170. PUPPET_R10K_PRIVATE_KEY: If you are using a private Git repository, add PUPPET_R10K_PRIVATE_KEY to specify a PEM-encoded private SSH key. — item shape: {Name?: string, Value?: string}
+  --backup-retention-count: int # The number of automated backups that you want to keep. Whenever a new backup is created, AWS OpsWorks CM deletes the oldest backups if this number is exceeded. The default value is 1.
+  server_name: string # The name of the server. The server name must be unique within your AWS account, within each region. Server names must start with a letter; then letters, numbers, or hyphens (-) are allowed, up to a maximum of 40 characters.
+  instance_profile_arn: string # The ARN of the instance profile that your Amazon EC2 instances use. Although the AWS OpsWorks console typically creates the instance profile for you, if you are using API commands instead, run the service-role-creation.yaml AWS CloudFormation template, located at https://s3.amazonaws.com/opsworks-cm-us-east-1-prod-default-assets/misc/opsworks-cm-roles.yaml. This template creates a CloudFormation stack that includes the instance profile you need.
+  instance_type: string # The Amazon EC2 instance type to use. For example, m5.large.
+  --key-pair: string # The Amazon EC2 key pair to set for the instance. This parameter is optional; if desired, you may specify this parameter to connect to your instances by using SSH.
+  --preferred-maintenance-window: string # DDD:HH:MM (weekly start time) or HH:MM (daily start time). Time windows always use coordinated universal time (UTC). Valid strings for day of week (DDD) are: Mon, Tue, Wed, Thr, Fri, Sat, or Sun.
+  --preferred-backup-window: string # DDD:HH:MM (weekly start time) or HH:MM (daily start time). Time windows always use coordinated universal time (UTC). Valid strings for day of week (DDD) are: Mon, Tue, Wed, Thr, Fri, Sat, or Sun.
+  --security-group-ids: list<string> # A list of security group IDs to attach to the Amazon EC2 instance. If you add this parameter, the specified security groups must be within the VPC that is specified by SubnetIds. If you do not specify this parameter, AWS OpsWorks CM creates one new security group that uses TCP ports 22 and 443, open to 0.0.0.0/0 (everyone).
+  service_role_arn: string # The service role that the AWS OpsWorks CM service backend uses to work with your account. Although the AWS OpsWorks management console typically creates the service role for you, if you are using the AWS CLI or API commands, run the service-role-creation.yaml AWS CloudFormation template, located at https://s3.amazonaws.com/opsworks-cm-us-east-1-prod-default-assets/misc/opsworks-cm-roles.yaml. This template creates a CloudFormation stack that includes the service role and instance profile that you need.
+  --subnet-ids: list<string> # The IDs of subnets in which to launch the server EC2 instance. Amazon EC2-Classic customers: This field is required. All servers must run within a VPC. The VPC must have "Auto Assign Public IP" enabled. EC2-VPC customers: This field is optional. If you do not specify subnet IDs, your EC2 instances are created in a default subnet that is selected by Amazon EC2. If you specify subnet IDs, the VPC must have "Auto Assign Public IP" enabled. For more information about supported Amazon EC2 platforms, see Supported Platforms (https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-supported-platforms.html).
+  --tags: list # A map that contains tag keys and tag values to attach to an AWS OpsWorks for Chef Automate or AWS OpsWorks for Puppet Enterprise server. The key cannot be empty. The key can be a maximum of 127 characters, and can contain only Unicode letters, numbers, or separators, or the following special characters: + - = . _ : / @ The value can be a maximum 255 characters, and contain only Unicode letters, numbers, or separators, or the following special characters: + - = . _ : / @ Leading and trailing white spaces are trimmed from both the key and value. A maximum of 50 user-applied tags is allowed for any AWS OpsWorks-CM server. — item shape: {Key: string, Value: string}
+  --backup-id: string # If you specify this field, AWS OpsWorks CM creates the server by using the backup represented by BackupId.
+]: any -> record<Server: record<AssociatePublicIpAddress: bool, BackupRetentionCount: int, ServerName: string, CreatedAt: string, CloudFormationStackArn: string, CustomDomain: string, DisableAutomatedBackup: bool, Endpoint: string, Engine: string, EngineModel: string, EngineAttributes: list<record>, EngineVersion: string, InstanceProfileArn: string, InstanceType: string, KeyPair: string, MaintenanceStatus: string, PreferredMaintenanceWindow: string, PreferredBackupWindow: string, SecurityGroupIds: list<string>, ServiceRoleArn: string, Status: string, StatusReason: string, SubnetIds: list<string>, ServerArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "OpsWorksCM_V2016_11_01.CreateServer")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AssociatePublicIpAddress": $associate_public_ip_address, "CustomDomain": $custom_domain, "CustomCertificate": $custom_certificate, "CustomPrivateKey": $custom_private_key, "DisableAutomatedBackup": $disable_automated_backup, "Engine": $engine, "EngineModel": $engine_model, "EngineVersion": $engine_version, "EngineAttributes": $engine_attributes, "BackupRetentionCount": $backup_retention_count, "ServerName": $server_name, "InstanceProfileArn": $instance_profile_arn, "InstanceType": $instance_type, "KeyPair": $key_pair, "PreferredMaintenanceWindow": $preferred_maintenance_window, "PreferredBackupWindow": $preferred_backup_window, "SecurityGroupIds": $security_group_ids, "ServiceRoleArn": $service_role_arn, "SubnetIds": $subnet_ids, "Tags": $tags, "BackupId": $backup_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -328,12 +335,13 @@ export def "delete-backup" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  backup_id: any
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  backup_id: string # The ID of the backup to delete. Run the DescribeBackups command to get a list of backup IDs. Backup IDs are in the format ServerName-yyyyMMddHHmmssSSS.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "OpsWorksCM_V2016_11_01.DeleteBackup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"BackupId": $backup_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -376,12 +384,13 @@ export def "delete-server" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  server_name: any
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  server_name: string # The ID of the server to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "OpsWorksCM_V2016_11_01.DeleteServer")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServerName": $server_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -424,12 +433,13 @@ export def "describe-account-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
+  --x-amz-target: string@x-amz-target-completer-5 # required
   --body: record
-]: any -> record<Attributes: record> {
+]: any -> record<Attributes: table<Name: string, Maximum: int, Used: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "OpsWorksCM_V2016_11_01.DescribeAccountAttributes")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -474,15 +484,16 @@ export def "describe-backups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  --backup-id: any
-  --server-name: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<Backups: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  --backup-id: string # Describes a single backup.
+  --server-name: string # Returns backups for the server with the specified ServerName.
+  --next-token-body: string # This is not currently implemented for DescribeBackups requests. (body field)
+  --max-results-body: int # This is not currently implemented for DescribeBackups requests. (body field)
+]: any -> record<Backups: table<BackupArn: string, BackupId: string, BackupType: string, CreatedAt: string, Description: string, Engine: string, EngineModel: string, EngineVersion: string, InstanceProfileArn: string, InstanceType: string, KeyPair: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, S3DataSize: int, S3DataUrl: string, S3LogUrl: string, SecurityGroupIds: list, ServerName: string, ServiceRoleArn: string, Status: string, StatusDescription: string, SubnetIds: list, ToolsVersion: string, UserArn: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "OpsWorksCM_V2016_11_01.DescribeBackups")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"BackupId": $backup_id, "ServerName": $server_name, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -528,14 +539,15 @@ export def "describe-events" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  server_name: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<ServerEvents: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  server_name: string # The name of the server for which you want to view events.
+  --next-token-body: string # NextToken is a string that is returned in some command responses. It indicates that not all entries have been returned, and that you must run at least one more request to get remaining items. To get remaining results, call DescribeEvents again, and assign the token from the previous results as the value of the nextToken parameter. If there are no more results, the response object's nextToken parameter value is null. Setting a nextToken value that was not returned in your previous results causes an InvalidNextTokenException to occur. (body field)
+  --max-results-body: int # To receive a paginated response, use this parameter to specify the maximum number of results to be returned with a single call. If the number of available results exceeds this maximum, the response includes a NextToken value that you can assign to the NextToken request parameter to get the next set of results. (body field)
+]: any -> record<ServerEvents: table<CreatedAt: string, ServerName: string, Message: string, LogUrl: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "OpsWorksCM_V2016_11_01.DescribeEvents")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ServerName": $server_name, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -579,13 +591,14 @@ export def "describe-node-association-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  node_association_status_token: any
-  server_name: any
-]: any -> record<NodeAssociationStatus: record, EngineAttributes: record> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  node_association_status_token: string # The token returned in either the AssociateNodeResponse or the DisassociateNodeResponse.
+  server_name: string # The name of the server from which to disassociate the node.
+]: any -> record<NodeAssociationStatus: string, EngineAttributes: table<Name: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "OpsWorksCM_V2016_11_01.DescribeNodeAssociationStatus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"NodeAssociationStatusToken": $node_association_status_token, "ServerName": $server_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -630,14 +643,15 @@ export def "describe-servers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  --server-name: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<Servers: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  --server-name: string # Describes the server with the specified ServerName.
+  --next-token-body: string # This is not currently implemented for DescribeServers requests. (body field)
+  --max-results-body: int # This is not currently implemented for DescribeServers requests. (body field)
+]: any -> record<Servers: table<AssociatePublicIpAddress: bool, BackupRetentionCount: int, ServerName: string, CreatedAt: string, CloudFormationStackArn: string, CustomDomain: string, DisableAutomatedBackup: bool, Endpoint: string, Engine: string, EngineModel: string, EngineAttributes: list, EngineVersion: string, InstanceProfileArn: string, InstanceType: string, KeyPair: string, MaintenanceStatus: string, PreferredMaintenanceWindow: string, PreferredBackupWindow: string, SecurityGroupIds: list, ServiceRoleArn: string, Status: string, StatusReason: string, SubnetIds: list, ServerArn: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "OpsWorksCM_V2016_11_01.DescribeServers")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ServerName": $server_name, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -664,6 +678,7 @@ export def "describe-servers" [
 #
 # POST /
 # operationId: DisassociateNode
+# --EngineAttributes item shape: {Name?: string, Value?: string}
 export def "disassociate-node" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -681,14 +696,15 @@ export def "disassociate-node" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  server_name: any
-  node_name: any
-  --engine-attributes: any
-]: any -> record<NodeAssociationStatusToken: record> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  server_name: string # The name of the server from which to disassociate the node.
+  node_name: string # The node name that is used by chef-client or puppet-agentfor a new node. We recommend to use a unique FQDN as hostname. For more information, see the Chef (https://docs.aws.amazon.com/https:/docs.chef.io/nodes.html#about-node-names) or Puppet (https://docs.aws.amazon.com/https:/docs.puppet.com/puppet/4.10/man/agent.html) documentation.
+  --engine-attributes: list # Engine attributes that are used for disassociating the node. No attributes are required for Puppet. Attributes required in a DisassociateNode request for Chef CHEF_ORGANIZATION: The Chef organization with which the node was associated. By default only one organization named default can exist. — item shape: {Name?: string, Value?: string}
+]: any -> record<NodeAssociationStatusToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "OpsWorksCM_V2016_11_01.DisassociateNode")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServerName": $server_name, "NodeName": $node_name, "EngineAttributes": $engine_attributes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -714,6 +730,7 @@ export def "disassociate-node" [
 #
 # POST /
 # operationId: ExportServerEngineAttribute
+# --InputAttributes item shape: {Name?: string, Value?: string}
 export def "export-server-engine-attribute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -731,14 +748,15 @@ export def "export-server-engine-attribute" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  export_attribute_name: any
-  server_name: any
-  --input-attributes: any
-]: any -> record<EngineAttribute: record<Name: record, Value: record>, ServerName: record> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  export_attribute_name: string # The name of the export attribute. Currently, the supported export attribute is Userdata. This exports a user data script that includes parameters and values provided in the InputAttributes list.
+  server_name: string # The name of the server from which you are exporting the attribute.
+  --input-attributes: list # The list of engine attributes. The list type is EngineAttribute. An EngineAttribute list item is a pair that includes an attribute name and its value. For the Userdata ExportAttributeName, the following are supported engine attribute names. RunList In Chef, a list of roles or recipes that are run in the specified order. In Puppet, this parameter is ignored. OrganizationName In Chef, an organization name. AWS OpsWorks for Chef Automate always creates the organization default. In Puppet, this parameter is ignored. NodeEnvironment In Chef, a node environment (for example, development, staging, or one-box). In Puppet, this parameter is ignored. NodeClientVersion In Chef, the version of the Chef engine (three numbers separated by dots, such as 13.8.5). If this attribute is empty, OpsWorks for Chef Automate uses the most current version. In Puppet, this parameter is ignored. — item shape: {Name?: string, Value?: string}
+]: any -> record<EngineAttribute: record<Name: string, Value: string>, ServerName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "OpsWorksCM_V2016_11_01.ExportServerEngineAttribute")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ExportAttributeName": $export_attribute_name, "ServerName": $server_name, "InputAttributes": $input_attributes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -783,14 +801,15 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  resource_arn: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<Tags: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  resource_arn: string # The Amazon Resource Number (ARN) of an AWS OpsWorks for Chef Automate or AWS OpsWorks for Puppet Enterprise server for which you want to show applied tags. For example, arn:aws:opsworks-cm:us-west-2:123456789012:server/test-owcm-server/EXAMPLE-66b0-4196-8274-d1a2bEXAMPLE.
+  --next-token-body: string # NextToken is a string that is returned in some command responses. It indicates that not all entries have been returned, and that you must run at least one more request to get remaining items. To get remaining results, call ListTagsForResource again, and assign the token from the previous results as the value of the nextToken parameter. If there are no more results, the response object's nextToken parameter value is null. Setting a nextToken value that was not returned in your previous results causes an InvalidNextTokenException to occur. (body field)
+  --max-results-body: int # To receive a paginated response, use this parameter to specify the maximum number of results to be returned with a single call. If the number of available results exceeds this maximum, the response includes a NextToken value that you can assign to the NextToken request parameter to get the next set of results. (body field)
+]: any -> record<Tags: table<Key: string, Value: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "OpsWorksCM_V2016_11_01.ListTagsForResource")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -834,15 +853,16 @@ export def "restore-server" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  backup_id: any
-  server_name: any
-  --instance-type: any
-  --key-pair: any
-]: any -> record<Server: record<AssociatePublicIpAddress: record, BackupRetentionCount: record, ServerName: record, CreatedAt: record, CloudFormationStackArn: record, CustomDomain: record, DisableAutomatedBackup: record, Endpoint: record, Engine: record, EngineModel: record, EngineAttributes: record, EngineVersion: record, InstanceProfileArn: record, InstanceType: record, KeyPair: record, MaintenanceStatus: record, PreferredMaintenanceWindow: record, PreferredBackupWindow: record, SecurityGroupIds: record, ServiceRoleArn: record, Status: record, StatusReason: record, SubnetIds: record, ServerArn: record>> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  backup_id: string # The ID of the backup that you want to use to restore a server.
+  server_name: string # The name of the server that you want to restore.
+  --instance-type: string # The type of instance to restore. Valid values must be specified in the following format: ^([cm][34]|t2).* For example, m5.large. Valid values are m5.large, r5.xlarge, and r5.2xlarge. If you do not specify this parameter, RestoreServer uses the instance type from the specified backup.
+  --key-pair: string # The name of the key pair to set on the new EC2 instance. This can be helpful if the administrator no longer has the SSH key.
+]: any -> record<Server: record<AssociatePublicIpAddress: bool, BackupRetentionCount: int, ServerName: string, CreatedAt: string, CloudFormationStackArn: string, CustomDomain: string, DisableAutomatedBackup: bool, Endpoint: string, Engine: string, EngineModel: string, EngineAttributes: list<record>, EngineVersion: string, InstanceProfileArn: string, InstanceType: string, KeyPair: string, MaintenanceStatus: string, PreferredMaintenanceWindow: string, PreferredBackupWindow: string, SecurityGroupIds: list<string>, ServiceRoleArn: string, Status: string, StatusReason: string, SubnetIds: list<string>, ServerArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "OpsWorksCM_V2016_11_01.RestoreServer")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"BackupId": $backup_id, "ServerName": $server_name, "InstanceType": $instance_type, "KeyPair": $key_pair} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -868,6 +888,7 @@ export def "restore-server" [
 #
 # POST /
 # operationId: StartMaintenance
+# --EngineAttributes item shape: {Name?: string, Value?: string}
 export def "start-maintenance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -885,13 +906,14 @@ export def "start-maintenance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  server_name: any
-  --engine-attributes: any
-]: any -> record<Server: record<AssociatePublicIpAddress: record, BackupRetentionCount: record, ServerName: record, CreatedAt: record, CloudFormationStackArn: record, CustomDomain: record, DisableAutomatedBackup: record, Endpoint: record, Engine: record, EngineModel: record, EngineAttributes: record, EngineVersion: record, InstanceProfileArn: record, InstanceType: record, KeyPair: record, MaintenanceStatus: record, PreferredMaintenanceWindow: record, PreferredBackupWindow: record, SecurityGroupIds: record, ServiceRoleArn: record, Status: record, StatusReason: record, SubnetIds: record, ServerArn: record>> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  server_name: string # The name of the server on which to run maintenance.
+  --engine-attributes: list # Engine attributes that are specific to the server on which you want to run maintenance. Attributes accepted in a StartMaintenance request for Chef CHEF_MAJOR_UPGRADE: If a Chef Automate server is eligible for upgrade to Chef Automate 2, add this engine attribute to a StartMaintenance request and set the value to true to upgrade the server to Chef Automate 2. For more information, see Upgrade an AWS OpsWorks for Chef Automate Server to Chef Automate 2 (https://docs.aws.amazon.com/opsworks/latest/userguide/opscm-a2upgrade.html). — item shape: {Name?: string, Value?: string}
+]: any -> record<Server: record<AssociatePublicIpAddress: bool, BackupRetentionCount: int, ServerName: string, CreatedAt: string, CloudFormationStackArn: string, CustomDomain: string, DisableAutomatedBackup: bool, Endpoint: string, Engine: string, EngineModel: string, EngineAttributes: list<record>, EngineVersion: string, InstanceProfileArn: string, InstanceType: string, KeyPair: string, MaintenanceStatus: string, PreferredMaintenanceWindow: string, PreferredBackupWindow: string, SecurityGroupIds: list<string>, ServiceRoleArn: string, Status: string, StatusReason: string, SubnetIds: list<string>, ServerArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "OpsWorksCM_V2016_11_01.StartMaintenance")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServerName": $server_name, "EngineAttributes": $engine_attributes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -917,6 +939,7 @@ export def "start-maintenance" [
 #
 # POST /
 # operationId: TagResource
+# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -934,13 +957,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  resource_arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  resource_arn: string # The Amazon Resource Number (ARN) of a resource to which you want to apply tags. For example, arn:aws:opsworks-cm:us-west-2:123456789012:server/test-owcm-server/EXAMPLE-66b0-4196-8274-d1a2bEXAMPLE.
+  tags: list # A map that contains tag keys and tag values to attach to AWS OpsWorks-CM servers or backups. The key cannot be empty. The key can be a maximum of 127 characters, and can contain only Unicode letters, numbers, or separators, or the following special characters: + - = . _ : / The value can be a maximum 255 characters, and contain only Unicode letters, numbers, or separators, or the following special characters: + - = . _ : / Leading and trailing white spaces are trimmed from both the key and value. A maximum of 50 user-applied tags is allowed for any AWS OpsWorks-CM server or backup. — item shape: {Key: string, Value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "OpsWorksCM_V2016_11_01.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -983,13 +1007,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  resource_arn: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  resource_arn: string # The Amazon Resource Number (ARN) of a resource from which you want to remove tags. For example, arn:aws:opsworks-cm:us-west-2:123456789012:server/test-owcm-server/EXAMPLE-66b0-4196-8274-d1a2bEXAMPLE.
+  tag_keys: list<string> # The keys of tags that you want to remove.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "OpsWorksCM_V2016_11_01.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1032,16 +1057,17 @@ export def "update-server" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  --disable-automated-backup: any
-  --backup-retention-count: any
-  server_name: any
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  --disable-automated-backup: oneof<nothing, bool> # Setting DisableAutomatedBackup to true disables automated or scheduled backups. Automated backups are enabled by default.
+  --backup-retention-count: int # Sets the number of automated backups that you want to keep.
+  server_name: string # The name of the server to update.
   --preferred-maintenance-window: string # DDD:HH:MM (weekly start time) or HH:MM (daily start time). Time windows always use coordinated universal time (UTC). Valid strings for day of week (DDD) are: Mon, Tue, Wed, Thr, Fri, Sat, or Sun.
   --preferred-backup-window: string # DDD:HH:MM (weekly start time) or HH:MM (daily start time). Time windows always use coordinated universal time (UTC). Valid strings for day of week (DDD) are: Mon, Tue, Wed, Thr, Fri, Sat, or Sun.
-]: any -> record<Server: record<AssociatePublicIpAddress: record, BackupRetentionCount: record, ServerName: record, CreatedAt: record, CloudFormationStackArn: record, CustomDomain: record, DisableAutomatedBackup: record, Endpoint: record, Engine: record, EngineModel: record, EngineAttributes: record, EngineVersion: record, InstanceProfileArn: record, InstanceType: record, KeyPair: record, MaintenanceStatus: record, PreferredMaintenanceWindow: record, PreferredBackupWindow: record, SecurityGroupIds: record, ServiceRoleArn: record, Status: record, StatusReason: record, SubnetIds: record, ServerArn: record>> {
+]: any -> record<Server: record<AssociatePublicIpAddress: bool, BackupRetentionCount: int, ServerName: string, CreatedAt: string, CloudFormationStackArn: string, CustomDomain: string, DisableAutomatedBackup: bool, Endpoint: string, Engine: string, EngineModel: string, EngineAttributes: list<record>, EngineVersion: string, InstanceProfileArn: string, InstanceType: string, KeyPair: string, MaintenanceStatus: string, PreferredMaintenanceWindow: string, PreferredBackupWindow: string, SecurityGroupIds: list<string>, ServiceRoleArn: string, Status: string, StatusReason: string, SubnetIds: list<string>, ServerArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "OpsWorksCM_V2016_11_01.UpdateServer")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DisableAutomatedBackup": $disable_automated_backup, "BackupRetentionCount": $backup_retention_count, "ServerName": $server_name, "PreferredMaintenanceWindow": $preferred_maintenance_window, "PreferredBackupWindow": $preferred_backup_window} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1084,14 +1110,15 @@ export def "update-server-engine-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  server_name: any
-  attribute_name: any
-  --attribute-value: any
-]: any -> record<Server: record<AssociatePublicIpAddress: record, BackupRetentionCount: record, ServerName: record, CreatedAt: record, CloudFormationStackArn: record, CustomDomain: record, DisableAutomatedBackup: record, Endpoint: record, Engine: record, EngineModel: record, EngineAttributes: record, EngineVersion: record, InstanceProfileArn: record, InstanceType: record, KeyPair: record, MaintenanceStatus: record, PreferredMaintenanceWindow: record, PreferredBackupWindow: record, SecurityGroupIds: record, ServiceRoleArn: record, Status: record, StatusReason: record, SubnetIds: record, ServerArn: record>> {
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  server_name: string # The name of the server to update.
+  attribute_name: string # The name of the engine attribute to update.
+  --attribute-value: string # The value to set for the attribute.
+]: any -> record<Server: record<AssociatePublicIpAddress: bool, BackupRetentionCount: int, ServerName: string, CreatedAt: string, CloudFormationStackArn: string, CustomDomain: string, DisableAutomatedBackup: bool, Endpoint: string, Engine: string, EngineModel: string, EngineAttributes: list<record>, EngineVersion: string, InstanceProfileArn: string, InstanceType: string, KeyPair: string, MaintenanceStatus: string, PreferredMaintenanceWindow: string, PreferredBackupWindow: string, SecurityGroupIds: list<string>, ServiceRoleArn: string, Status: string, StatusReason: string, SubnetIds: list<string>, ServerArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "OpsWorksCM_V2016_11_01.UpdateServerEngineAttributes")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServerName": $server_name, "AttributeName": $attribute_name, "AttributeValue": $attribute_value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

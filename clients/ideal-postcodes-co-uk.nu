@@ -151,7 +151,7 @@ export def "addresses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # e.g. ak_test
+  --api-key: string # required, e.g. ak_test
   --query: string # Specifies the address you wish to query. Query can be shortened to `q=`
   --limit: int # format: int32, default: 10, e.g. 5
   --page: int # format: int32, default: 0, e.g. 0
@@ -179,6 +179,7 @@ export def "addresses" [
 ]: nothing -> record<code: int, message: string, result: record<hits: list<any>, limit: int, page: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "postcode_outward" $postcode_outward "scalar") (serialize-qp "postcode" $postcode "scalar") (serialize-qp "postcode_area" $postcode_area "scalar") (serialize-qp "postcode_sector" $postcode_sector "scalar") (serialize-qp "post_town" $post_town "scalar") (serialize-qp "uprn" $uprn "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "postcode_type" $postcode_type "scalar") (serialize-qp "su_organisation_indicator" $su_organisation_indicator "scalar") (serialize-qp "box" $box "scalar") (serialize-qp "bias_postcode_outward" $bias_postcode_outward "scalar") (serialize-qp "bias_postcode" $bias_postcode "scalar") (serialize-qp "bias_postcode_area" $bias_postcode_area "scalar") (serialize-qp "bias_postcode_sector" $bias_postcode_sector "scalar") (serialize-qp "bias_post_town" $bias_post_town "scalar") (serialize-qp "bias_thoroughfare" $bias_thoroughfare "scalar") (serialize-qp "bias_country" $bias_country "scalar") (serialize-qp "bias_lonlat" $bias_lonlat "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/addresses" $qp $auth.query)
   let accept_val = "application/json"
@@ -385,11 +386,13 @@ export def "email-validation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # e.g. ak_test
-  --query: string # Specifies the email address to validate
+  --api-key: string # required, e.g. ak_test
+  --query: string # Specifies the email address to validate (required)
 ]: nothing -> record<code: int, message: string, result: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/emails" $qp $auth.query)
   let accept_val = "application/json"
@@ -997,11 +1000,13 @@ export def "phone-number-validation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # e.g. ak_test
-  --query: string # Specifies the phone number to validate. Phone number must include a country code in acceptable format. For instance, UK phone numbers should be suffixed `+44`, `44` or `0044`.
+  --api-key: string # required, e.g. ak_test
+  --query: string # Specifies the phone number to validate. Phone number must include a country code in acceptable format. For instance, UK phone numbers should be suffixed `+44`, `44` or `0044`. (required)
 ]: nothing -> record<code: int, message: string, result: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
+  if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/phone_numbers" $qp $auth.query)
   let accept_val = "application/json"
@@ -1034,7 +1039,7 @@ export def "find-place" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string # e.g. ak_test
+  --api-key: string # required, e.g. ak_test
   --query: string # Specifies the place you wish to query. Query can be shortened to `q=`
   --country-iso: string # e.g. GBR
   --bias-country-iso: string # e.g. GBR
@@ -1043,6 +1048,7 @@ export def "find-place" [
 ]: nothing -> record<code: int, message: string, result: record<hits: list<any>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "country_iso" $country_iso "scalar") (serialize-qp "bias_country_iso" $bias_country_iso "scalar") (serialize-qp "bias_lonlat" $bias_lonlat "scalar") (serialize-qp "bias_ip" $bias_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/places" $qp $auth.query)
   let accept_val = "application/json"

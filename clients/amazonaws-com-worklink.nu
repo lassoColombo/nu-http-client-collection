@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -211,7 +211,7 @@ export def "associate-website-authorization-provider" [
   fleet_arn: string # The ARN of the fleet.
   authorization_provider_type: string@authorization-provider-type-completer # The authorization provider type.
   --domain-name: string # The domain name of the authorization provider. This applies only to SAML-based authorization providers.
-]: any -> record<AuthorizationProviderId: record> {
+]: any -> record<AuthorizationProviderId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -262,7 +262,7 @@ export def "associate-website-certificate-authority" [
   fleet_arn: string # The ARN of the fleet.
   certificate: string # The root certificate of the CA.
   --display-name: string # The certificate name to display.
-]: any -> record<WebsiteCaId: record> {
+]: any -> record<WebsiteCaId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -314,7 +314,7 @@ export def "create-fleet" [
   --display-name: string # The fleet name to display.
   --optimize-for-end-user-location: oneof<nothing, bool> # The option to optimize for better performance by routing traffic through the closest AWS Region to users, which may be outside of your home Region.
   --tags: record # The tags to add to the resource. A tag is a key-value pair.
-]: any -> record<FleetArn: record> {
+]: any -> record<FleetArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -412,7 +412,7 @@ export def "describe-audit-stream-configuration" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   fleet_arn: string # The ARN of the fleet.
-]: any -> record<AuditStreamArn: record> {
+]: any -> record<AuditStreamArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -461,7 +461,7 @@ export def "describe-company-network-configuration" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   fleet_arn: string # The ARN of the fleet.
-]: any -> record<VpcId: record, SubnetIds: record, SecurityGroupIds: record> {
+]: any -> record<VpcId: string, SubnetIds: list<string>, SecurityGroupIds: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -511,7 +511,7 @@ export def "describe-device" [
   --x-amz-signed-headers: string
   fleet_arn: string # The ARN of the fleet.
   device_id: string # A unique identifier for a registered user's device.
-]: any -> record<Status: record, Model: record, Manufacturer: record, OperatingSystem: record, OperatingSystemVersion: record, PatchLevel: record, FirstAccessedTime: record, LastAccessedTime: record, Username: record> {
+]: any -> record<Status: string, Model: string, Manufacturer: string, OperatingSystem: string, OperatingSystemVersion: string, PatchLevel: string, FirstAccessedTime: string, LastAccessedTime: string, Username: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -560,7 +560,7 @@ export def "describe-device-policy-configuration" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   fleet_arn: string # The ARN of the fleet.
-]: any -> record<DeviceCaCertificate: record> {
+]: any -> record<DeviceCaCertificate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -610,7 +610,7 @@ export def "describe-domain" [
   --x-amz-signed-headers: string
   fleet_arn: string # The ARN of the fleet.
   domain_name: string # The name of the domain.
-]: any -> record<DomainName: record, DisplayName: record, CreatedTime: record, DomainStatus: record, AcmCertificateArn: record> {
+]: any -> record<DomainName: string, DisplayName: string, CreatedTime: string, DomainStatus: string, AcmCertificateArn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -659,7 +659,7 @@ export def "describe-fleet-metadata" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   fleet_arn: string # The Amazon Resource Name (ARN) of the fleet.
-]: any -> record<CreatedTime: record, LastUpdatedTime: record, FleetName: record, DisplayName: record, OptimizeForEndUserLocation: record, CompanyCode: record, FleetStatus: record, Tags: record> {
+]: any -> record<CreatedTime: string, LastUpdatedTime: string, FleetName: string, DisplayName: string, OptimizeForEndUserLocation: bool, CompanyCode: string, FleetStatus: string, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -708,7 +708,7 @@ export def "describe-identity-provider-configuration" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   fleet_arn: string # The ARN of the fleet.
-]: any -> record<IdentityProviderType: record, ServiceProviderSamlMetadata: record, IdentityProviderSamlMetadata: record> {
+]: any -> record<IdentityProviderType: string, ServiceProviderSamlMetadata: string, IdentityProviderSamlMetadata: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -758,7 +758,7 @@ export def "describe-website-certificate-authority" [
   --x-amz-signed-headers: string
   fleet_arn: string # The ARN of the fleet.
   website_ca_id: string # A unique identifier for the certificate authority.
-]: any -> record<Certificate: record, CreatedTime: record, DisplayName: record> {
+]: any -> record<Certificate: string, CreatedTime: string, DisplayName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -961,7 +961,7 @@ export def "list-devices" [
   fleet_arn: string # The ARN of the fleet.
   --next-token-body: string # The pagination token used to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (body field)
   --max-results-body: int # The maximum number of results to be included in the next page. (body field)
-]: any -> record<Devices: record, NextToken: record> {
+]: any -> record<Devices: table<DeviceId: string, DeviceStatus: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1015,7 +1015,7 @@ export def "list-domains" [
   fleet_arn: string # The ARN of the fleet.
   --next-token-body: string # The pagination token used to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (body field)
   --max-results-body: int # The maximum number of results to be included in the next page. (body field)
-]: any -> record<Domains: record, NextToken: record> {
+]: any -> record<Domains: table<DomainName: string, DisplayName: string, CreatedTime: string, DomainStatus: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1068,7 +1068,7 @@ export def "list-fleets" [
   --x-amz-signed-headers: string
   --next-token-body: string # The pagination token used to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (body field)
   --max-results-body: int # The maximum number of results to be included in the next page. (body field)
-]: any -> record<FleetSummaryList: record, NextToken: record> {
+]: any -> record<FleetSummaryList: table<FleetArn: string, CreatedTime: string, LastUpdatedTime: string, FleetName: string, DisplayName: string, CompanyCode: string, FleetStatus: string, Tags: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1220,7 +1220,7 @@ export def "list-website-authorization-providers" [
   fleet_arn: string # The ARN of the fleet.
   --next-token-body: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (body field)
   --max-results-body: int # The maximum number of results to be included in the next page. (body field)
-]: any -> record<WebsiteAuthorizationProviders: record, NextToken: record> {
+]: any -> record<WebsiteAuthorizationProviders: table<AuthorizationProviderId: string, AuthorizationProviderType: string, DomainName: string, CreatedTime: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1274,7 +1274,7 @@ export def "list-website-certificate-authorities" [
   fleet_arn: string # The ARN of the fleet.
   --max-results-body: int # The maximum number of results to be included in the next page. (body field)
   --next-token-body: string # The pagination token used to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (body field)
-]: any -> record<WebsiteCertificateAuthorities: record, NextToken: record> {
+]: any -> record<WebsiteCertificateAuthorities: table<WebsiteCaId: string, CreatedTime: string, DisplayName: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1467,7 +1467,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # The list of tag keys to remove from the resource.
+  --tag-keys: list # The list of tag keys to remove from the resource. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1479,6 +1479,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'ResourceArn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"

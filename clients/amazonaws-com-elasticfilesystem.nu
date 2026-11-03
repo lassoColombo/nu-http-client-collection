@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -144,9 +144,9 @@ export def commands []: nothing -> table {
 #
 # POST /2015-02-01/access-points
 # operationId: CreateAccessPoint
-# --Tags item shape: {Key: any, Value: any}
-# --PosixUser shape: {Uid?: any, Gid?: any, SecondaryGids?: any}
-# --RootDirectory shape: {Path?: any, CreationInfo?: any}
+# --Tags item shape: {Key: string, Value: string}
+# --PosixUser shape: {Uid?: int, Gid?: int, SecondaryGids?: list<int>}
+# --RootDirectory shape: {Path?: string, CreationInfo?: record}
 export def "create-access-point" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -165,11 +165,11 @@ export def "create-access-point" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   client_token: string # A string of up to 64 ASCII characters that Amazon EFS uses to ensure idempotent creation.
-  --tags: list # Creates tags associated with the access point. Each tag is a key-value pair, each key must be unique. For more information, see Tagging Amazon Web Services resources (https://docs.aws.amazon.com/general/latest/gr/aws_tagging.html) in the Amazon Web Services General Reference Guide. — item shape: {Key: any, Value: any}
+  --tags: list # Creates tags associated with the access point. Each tag is a key-value pair, each key must be unique. For more information, see Tagging Amazon Web Services resources (https://docs.aws.amazon.com/general/latest/gr/aws_tagging.html) in the Amazon Web Services General Reference Guide. — item shape: {Key: string, Value: string}
   file_system_id: string # The ID of the EFS file system that the access point provides access to.
-  --posix-user: record # The full POSIX identity, including the user ID, group ID, and any secondary group IDs, on the access point that is used for all file system operations performed by NFS clients using the access point. — shape: {Uid?: any, Gid?: any, SecondaryGids?: any}
-  --root-directory: record # Specifies the directory on the Amazon EFS file system that the access point provides access to. The access point exposes the specified file system path as the root directory of your file system to applications using the access point. NFS clients using the access point can only access data in the access point's RootDirectory and it's subdirectories. — shape: {Path?: any, CreationInfo?: any}
-]: any -> record<ClientToken: record, Name: record, Tags: record, AccessPointId: record, AccessPointArn: record, FileSystemId: record, PosixUser: record<Uid: record, Gid: record, SecondaryGids: record>, RootDirectory: record<Path: record, CreationInfo: record<OwnerUid: record, OwnerGid: record, Permissions: record>>, OwnerId: record, LifeCycleState: record> {
+  --posix-user: record # The full POSIX identity, including the user ID, group ID, and any secondary group IDs, on the access point that is used for all file system operations performed by NFS clients using the access point. — shape: {Uid?: int, Gid?: int, SecondaryGids?: list<int>}
+  --root-directory: record # Specifies the directory on the Amazon EFS file system that the access point provides access to. The access point exposes the specified file system path as the root directory of your file system to applications using the access point. NFS clients using the access point can only access data in the access point's RootDirectory and it's subdirectories. — shape: {Path?: string, CreationInfo?: record}
+]: any -> record<ClientToken: string, Name: string, Tags: table<Key: string, Value: string>, AccessPointId: string, AccessPointArn: string, FileSystemId: string, PosixUser: record<Uid: int, Gid: int, SecondaryGids: list<int>>, RootDirectory: record<Path: string, CreationInfo: record<OwnerUid: int, OwnerGid: int, Permissions: string>>, OwnerId: string, LifeCycleState: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -219,7 +219,7 @@ export def "describe-access-points" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AccessPoints: record, NextToken: record> {
+]: nothing -> record<AccessPoints: table<ClientToken: string, Name: string, Tags: list, AccessPointId: string, AccessPointArn: string, FileSystemId: string, PosixUser: record, RootDirectory: record, OwnerId: string, LifeCycleState: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "AccessPointId" $access_point_id "scalar") (serialize-qp "FileSystemId" $file_system_id "scalar")] | flatten | str join "&"
@@ -246,7 +246,7 @@ export def "describe-access-points" [
 #
 # POST /2015-02-01/file-systems
 # operationId: CreateFileSystem
-# --Tags item shape: {Key: any, Value: any}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-file-system" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -272,8 +272,8 @@ export def "create-file-system" [
   --provisioned-throughput-in-mibps: float # The throughput, measured in MiB/s, that you want to provision for a file system that you're creating. Valid values are 1-1024. Required if ThroughputMode is set to provisioned. The upper limit for throughput is 1024 MiB/s. To increase this limit, contact Amazon Web Services Support. For more information, see Amazon EFS quotas that you can increase (https://docs.aws.amazon.com/efs/latest/ug/limits.html#soft-limits) in the Amazon EFS User Guide. (format: double)
   --availability-zone-name: string # Used to create a file system that uses One Zone storage classes. It specifies the Amazon Web Services Availability Zone in which to create the file system. Use the format us-east-1a to specify the Availability Zone. For more information about One Zone storage classes, see Using EFS storage classes (https://docs.aws.amazon.com/efs/latest/ug/storage-classes.html) in the Amazon EFS User Guide. One Zone storage classes are not available in all Availability Zones in Amazon Web Services Regions where Amazon EFS is available.
   --backup: oneof<nothing, bool> # Specifies whether automatic backups are enabled on the file system that you are creating. Set the value to true to enable automatic backups. If you are creating a file system that uses One Zone storage classes, automatic backups are enabled by default. For more information, see Automatic backups (https://docs.aws.amazon.com/efs/latest/ug/awsbackup.html#automatic-backups) in the Amazon EFS User Guide. Default is false. However, if you specify an AvailabilityZoneName, the default is true. Backup is not available in all Amazon Web Services Regions where Amazon EFS is available.
-  --tags: list # Use to create one or more tags associated with the file system. Each tag is a user-defined key-value pair. Name your file system on creation by including a "Key":"Name","Value":"{value}" key-value pair. Each key must be unique. For more information, see Tagging Amazon Web Services resources (https://docs.aws.amazon.com/general/latest/gr/aws_tagging.html) in the Amazon Web Services General Reference Guide. — item shape: {Key: any, Value: any}
-]: any -> record<OwnerId: record, CreationToken: record, FileSystemId: record, FileSystemArn: record, CreationTime: record, LifeCycleState: record, Name: record, NumberOfMountTargets: record, SizeInBytes: record<Value: record, Timestamp: record, ValueInIA: record, ValueInStandard: record>, PerformanceMode: record, Encrypted: record, KmsKeyId: record, ThroughputMode: record, ProvisionedThroughputInMibps: record, AvailabilityZoneName: record, AvailabilityZoneId: record, Tags: record> {
+  --tags: list # Use to create one or more tags associated with the file system. Each tag is a user-defined key-value pair. Name your file system on creation by including a "Key":"Name","Value":"{value}" key-value pair. Each key must be unique. For more information, see Tagging Amazon Web Services resources (https://docs.aws.amazon.com/general/latest/gr/aws_tagging.html) in the Amazon Web Services General Reference Guide. — item shape: {Key: string, Value: string}
+]: any -> record<OwnerId: string, CreationToken: string, FileSystemId: string, FileSystemArn: string, CreationTime: string, LifeCycleState: string, Name: string, NumberOfMountTargets: int, SizeInBytes: record<Value: int, Timestamp: string, ValueInIA: int, ValueInStandard: int>, PerformanceMode: string, Encrypted: bool, KmsKeyId: string, ThroughputMode: string, ProvisionedThroughputInMibps: float, AvailabilityZoneName: string, AvailabilityZoneId: string, Tags: table<Key: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -323,7 +323,7 @@ export def "describe-file-systems" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Marker: record, FileSystems: record, NextMarker: record> {
+]: nothing -> record<Marker: string, FileSystems: table<OwnerId: string, CreationToken: string, FileSystemId: string, FileSystemArn: string, CreationTime: string, LifeCycleState: string, Name: string, NumberOfMountTargets: int, SizeInBytes: record, PerformanceMode: string, Encrypted: bool, KmsKeyId: string, ThroughputMode: string, ProvisionedThroughputInMibps: float, AvailabilityZoneName: string, AvailabilityZoneId: string, Tags: list>, NextMarker: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxItems" $max_items "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "CreationToken" $creation_token "scalar") (serialize-qp "FileSystemId" $file_system_id "scalar")] | flatten | str join "&"
@@ -371,7 +371,7 @@ export def "create-mount-target" [
   subnet_id: string # The ID of the subnet to add the mount target in. For file systems that use One Zone storage classes, use the subnet that is associated with the file system's Availability Zone.
   --ip-address: string # Valid IPv4 address within the address range of the specified subnet.
   --security-groups: list<string> # Up to five VPC security group IDs, of the form sg-xxxxxxxx. These must be for the same VPC as subnet specified.
-]: any -> record<OwnerId: record, MountTargetId: record, FileSystemId: record, SubnetId: record, LifeCycleState: record, IpAddress: record, NetworkInterfaceId: record, AvailabilityZoneId: record, AvailabilityZoneName: record, VpcId: record> {
+]: any -> record<OwnerId: string, MountTargetId: string, FileSystemId: string, SubnetId: string, LifeCycleState: string, IpAddress: string, NetworkInterfaceId: string, AvailabilityZoneId: string, AvailabilityZoneName: string, VpcId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -422,7 +422,7 @@ export def "describe-mount-targets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Marker: record, MountTargets: record, NextMarker: record> {
+]: nothing -> record<Marker: string, MountTargets: table<OwnerId: string, MountTargetId: string, FileSystemId: string, SubnetId: string, LifeCycleState: string, IpAddress: string, NetworkInterfaceId: string, AvailabilityZoneId: string, AvailabilityZoneName: string, VpcId: string>, NextMarker: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxItems" $max_items "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "FileSystemId" $file_system_id "scalar") (serialize-qp "MountTargetId" $mount_target_id "scalar") (serialize-qp "AccessPointId" $access_point_id "scalar")] | flatten | str join "&"
@@ -449,7 +449,7 @@ export def "describe-mount-targets" [
 #
 # POST /2015-02-01/file-systems/{SourceFileSystemId}/replication-configuration
 # operationId: CreateReplicationConfiguration
-# --Destinations item shape: {Region?: any, AvailabilityZoneName?: any, KmsKeyId?: any}
+# --Destinations item shape: {Region?: string, AvailabilityZoneName?: string, KmsKeyId?: string}
 export def "create-replication-configuration" [
   source_file_system_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -468,8 +468,8 @@ export def "create-replication-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  destinations: list # An array of destination configuration objects. Only one destination configuration object is supported. — item shape: {Region?: any, AvailabilityZoneName?: any, KmsKeyId?: any}
-]: any -> record<SourceFileSystemId: record, SourceFileSystemRegion: record, SourceFileSystemArn: record, OriginalSourceFileSystemArn: record, CreationTime: record, Destinations: record> {
+  destinations: list # An array of destination configuration objects. Only one destination configuration object is supported. — item shape: {Region?: string, AvailabilityZoneName?: string, KmsKeyId?: string}
+]: any -> record<SourceFileSystemId: string, SourceFileSystemRegion: string, SourceFileSystemArn: string, OriginalSourceFileSystemArn: string, CreationTime: string, Destinations: table<Status: string, FileSystemId: string, Region: string, LastReplicatedTimestamp: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -545,7 +545,7 @@ export def "delete-replication-configuration" [
 # POST /2015-02-01/create-tags/{FileSystemId}
 # DEPRECATED
 # operationId: CreateTags
-# --Tags item shape: {Key: any, Value: any}
+# --Tags item shape: {Key: string, Value: string}
 @deprecated
 export def "create-tags" [
   file_system_id: string
@@ -565,7 +565,7 @@ export def "create-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  tags: list # An array of Tag objects to add. Each Tag object is a key-value pair. — item shape: {Key: any, Value: any}
+  tags: list # An array of Tag objects to add. Each Tag object is a key-value pair. — item shape: {Key: string, Value: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -706,7 +706,7 @@ export def "update-file-system" [
   --x-amz-signed-headers: string
   --throughput-mode: string@throughput-mode-completer # (Optional) Updates the file system's throughput mode. If you're not updating your throughput mode, you don't need to provide this value in your request. If you are changing the ThroughputMode to provisioned, you must also set a value for ProvisionedThroughputInMibps.
   --provisioned-throughput-in-mibps: float # (Optional) Sets the amount of provisioned throughput, in MiB/s, for the file system. Valid values are 1-1024. If you are changing the throughput mode to provisioned, you must also provide the amount of provisioned throughput. Required if ThroughputMode is changed to provisioned on update. (format: double)
-]: any -> record<OwnerId: record, CreationToken: record, FileSystemId: record, FileSystemArn: record, CreationTime: record, LifeCycleState: record, Name: record, NumberOfMountTargets: record, SizeInBytes: record<Value: record, Timestamp: record, ValueInIA: record, ValueInStandard: record>, PerformanceMode: record, Encrypted: record, KmsKeyId: record, ThroughputMode: record, ProvisionedThroughputInMibps: record, AvailabilityZoneName: record, AvailabilityZoneId: record, Tags: record> {
+]: any -> record<OwnerId: string, CreationToken: string, FileSystemId: string, FileSystemArn: string, CreationTime: string, LifeCycleState: string, Name: string, NumberOfMountTargets: int, SizeInBytes: record<Value: int, Timestamp: string, ValueInIA: int, ValueInStandard: int>, PerformanceMode: string, Encrypted: bool, KmsKeyId: string, ThroughputMode: string, ProvisionedThroughputInMibps: float, AvailabilityZoneName: string, AvailabilityZoneId: string, Tags: table<Key: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -799,7 +799,7 @@ export def "describe-file-system-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<FileSystemId: record, Policy: record> {
+]: nothing -> record<FileSystemId: string, Policy: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_system_id | is-empty) { error make --unspanned { msg: "path parameter 'FileSystemId' must be non-empty" } }
@@ -846,7 +846,7 @@ export def "put-file-system-policy" [
   --x-amz-signed-headers: string
   policy: string # The FileSystemPolicy that you're creating. Accepts a JSON formatted policy definition. EFS file system policies have a 20,000 character limit. To find out more about the elements that make up a file system policy, see EFS Resource-based Policies (https://docs.aws.amazon.com/efs/latest/ug/access-control-overview.html#access-control-manage-access-intro-resource-policies).
   --bypass-policy-lockout-safety-check: oneof<nothing, bool> # (Optional) A boolean that specifies whether or not to bypass the FileSystemPolicy lockout safety check. The lockout safety check determines whether the policy in the request will lock out, or prevent, the IAM principal that is making the request from making future PutFileSystemPolicy requests on this file system. Set BypassPolicyLockoutSafetyCheck to True only when you intend to prevent the IAM principal that is making the request from making subsequent PutFileSystemPolicy requests on this file system. The default value is False.
-]: any -> record<FileSystemId: record, Policy: record> {
+]: any -> record<FileSystemId: string, Policy: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -989,7 +989,7 @@ export def "describe-account-preferences" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ResourceIdPreference: record<ResourceIdType: record, Resources: record>, NextToken: record> {
+]: nothing -> record<ResourceIdPreference: record<ResourceIdType: string, Resources: list<string>>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2015-02-01/account-preferences" $auth.query)
@@ -1033,7 +1033,7 @@ export def "put-account-preferences" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   resource_id_type: string@resource-id-type-completer # A preference indicating a choice to use 63bit/32bit IDs for all applicable resources.
-]: any -> record<ResourceIdPreference: record<ResourceIdType: record, Resources: record>> {
+]: any -> record<ResourceIdPreference: record<ResourceIdType: string, Resources: list<string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1080,7 +1080,7 @@ export def "describe-backup-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<BackupPolicy: record<Status: record>> {
+]: nothing -> record<BackupPolicy: record<Status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_system_id | is-empty) { error make --unspanned { msg: "path parameter 'FileSystemId' must be non-empty" } }
@@ -1107,7 +1107,7 @@ export def "describe-backup-policy" [
 #
 # PUT /2015-02-01/file-systems/{FileSystemId}/backup-policy
 # operationId: PutBackupPolicy
-# --BackupPolicy shape: {Status?: any}
+# --BackupPolicy shape: {Status?: "ENABLED"|"ENABLING"|"DISABLED"|"DISABLING"}
 export def "put-backup-policy" [
   file_system_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1126,8 +1126,8 @@ export def "put-backup-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  backup_policy: record # The backup policy for the file system used to create automatic daily backups. If status has a value of ENABLED, the file system is being automatically backed up. For more information, see Automatic backups (https://docs.aws.amazon.com/efs/latest/ug/awsbackup.html#automatic-backups). — shape: {Status?: any}
-]: any -> record<BackupPolicy: record<Status: record>> {
+  backup_policy: record # The backup policy for the file system used to create automatic daily backups. If status has a value of ENABLED, the file system is being automatically backed up. For more information, see Automatic backups (https://docs.aws.amazon.com/efs/latest/ug/awsbackup.html#automatic-backups). — shape: {Status?: "ENABLED"|"ENABLING"|"DISABLED"|"DISABLING"}
+]: any -> record<BackupPolicy: record<Status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1175,7 +1175,7 @@ export def "describe-lifecycle-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<LifecyclePolicies: record> {
+]: nothing -> record<LifecyclePolicies: table<TransitionToIA: string, TransitionToPrimaryStorageClass: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_system_id | is-empty) { error make --unspanned { msg: "path parameter 'FileSystemId' must be non-empty" } }
@@ -1202,7 +1202,7 @@ export def "describe-lifecycle-configuration" [
 #
 # PUT /2015-02-01/file-systems/{FileSystemId}/lifecycle-configuration
 # operationId: PutLifecycleConfiguration
-# --LifecyclePolicies item shape: {TransitionToIA?: any, TransitionToPrimaryStorageClass?: any}
+# --LifecyclePolicies item shape: {TransitionToIA?: "AFTER_7_DAYS"|"AFTER_14_DAYS"|"AFTER_30_DAYS"|"AFTER_60_DAYS"|"AFTER_90_DAYS"|"AFTER_1_DAY", TransitionToPrimaryStorageClass?: "AFTER_1_ACCESS"}
 export def "put-lifecycle-configuration" [
   file_system_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1221,8 +1221,8 @@ export def "put-lifecycle-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  lifecycle_policies: list # An array of LifecyclePolicy objects that define the file system's LifecycleConfiguration object. A LifecycleConfiguration object informs EFS lifecycle management and EFS Intelligent-Tiering of the following: When to move files in the file system from primary storage to the IA storage class. When to move files that are in IA storage to primary storage. When using the put-lifecycle-configuration CLI command or the PutLifecycleConfiguration API action, Amazon EFS requires that each LifecyclePolicy object have only a single transition. This means that in a request body, LifecyclePolicies must be structured as an array of LifecyclePolicy objects, one object for each transition, TransitionToIA, TransitionToPrimaryStorageClass. See the example requests in the following section for more information. — item shape: {TransitionToIA?: any, TransitionToPrimaryStorageClass?: any}
-]: any -> record<LifecyclePolicies: record> {
+  lifecycle_policies: list # An array of LifecyclePolicy objects that define the file system's LifecycleConfiguration object. A LifecycleConfiguration object informs EFS lifecycle management and EFS Intelligent-Tiering of the following: When to move files in the file system from primary storage to the IA storage class. When to move files that are in IA storage to primary storage. When using the put-lifecycle-configuration CLI command or the PutLifecycleConfiguration API action, Amazon EFS requires that each LifecyclePolicy object have only a single transition. This means that in a request body, LifecyclePolicies must be structured as an array of LifecyclePolicy objects, one object for each transition, TransitionToIA, TransitionToPrimaryStorageClass. See the example requests in the following section for more information. — item shape: {TransitionToIA?: "AFTER_7_DAYS"|"AFTER_14_DAYS"|"AFTER_30_DAYS"|"AFTER_60_DAYS"|"AFTER_90_DAYS"|"AFTER_1_DAY", TransitionToPrimaryStorageClass?: "AFTER_1_ACCESS"}
+]: any -> record<LifecyclePolicies: table<TransitionToIA: string, TransitionToPrimaryStorageClass: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1270,7 +1270,7 @@ export def "describe-mount-target-security-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<SecurityGroups: record> {
+]: nothing -> record<SecurityGroups: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($mount_target_id | is-empty) { error make --unspanned { msg: "path parameter 'MountTargetId' must be non-empty" } }
@@ -1366,7 +1366,7 @@ export def "describe-replication-configurations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Replications: record, NextToken: record> {
+]: nothing -> record<Replications: table<SourceFileSystemId: string, SourceFileSystemRegion: string, SourceFileSystemArn: string, OriginalSourceFileSystemArn: string, CreationTime: string, Destinations: list>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "FileSystemId" $file_system_id "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar")] | flatten | str join "&"
@@ -1415,7 +1415,7 @@ export def "describe-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Marker: record, Tags: record, NextMarker: record> {
+]: nothing -> record<Marker: string, Tags: table<Key: string, Value: string>, NextMarker: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_system_id | is-empty) { error make --unspanned { msg: "path parameter 'FileSystemId' must be non-empty" } }
@@ -1463,7 +1463,7 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Tags: record, NextToken: record> {
+]: nothing -> record<Tags: table<Key: string, Value: string>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'ResourceId' must be non-empty" } }
@@ -1491,7 +1491,7 @@ export def "list-tags-for-resource" [
 #
 # POST /2015-02-01/resource-tags/{ResourceId}
 # operationId: TagResource
-# --Tags item shape: {Key: any, Value: any}
+# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1510,7 +1510,7 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  tags: list # An array of Tag objects to add. Each Tag object is a key-value pair. — item shape: {Key: any, Value: any}
+  tags: list # An array of Tag objects to add. Each Tag object is a key-value pair. — item shape: {Key: string, Value: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1552,7 +1552,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # The keys of the key-value tag pairs that you want to remove from the specified EFS resource.
+  --tag-keys: list # The keys of the key-value tag pairs that you want to remove from the specified EFS resource. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1564,6 +1564,7 @@ export def "untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'ResourceId' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/2015-02-01/resource-tags/{resource_id}") $qp $auth.query)
   let accept_val = "application/json"

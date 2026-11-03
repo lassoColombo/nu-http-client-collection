@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -100,6 +100,7 @@ def x-amz-target-completer [] { ["NetworkFirewall_20201112.AssociateFirewallPoli
 def x-amz-target-completer-1 [] { ["NetworkFirewall_20201112.AssociateSubnets"] }
 def x-amz-target-completer-2 [] { ["NetworkFirewall_20201112.CreateFirewall"] }
 def x-amz-target-completer-3 [] { ["NetworkFirewall_20201112.CreateFirewallPolicy"] }
+def type-completer [] { ["STATEFUL" "STATELESS"] }
 def x-amz-target-completer-4 [] { ["NetworkFirewall_20201112.CreateRuleGroup"] }
 def x-amz-target-completer-5 [] { ["NetworkFirewall_20201112.CreateTLSInspectionConfiguration"] }
 def x-amz-target-completer-6 [] { ["NetworkFirewall_20201112.DeleteFirewall"] }
@@ -117,6 +118,8 @@ def x-amz-target-completer-17 [] { ["NetworkFirewall_20201112.DescribeTLSInspect
 def x-amz-target-completer-18 [] { ["NetworkFirewall_20201112.DisassociateSubnets"] }
 def x-amz-target-completer-19 [] { ["NetworkFirewall_20201112.ListFirewallPolicies"] }
 def x-amz-target-completer-20 [] { ["NetworkFirewall_20201112.ListFirewalls"] }
+def scope-completer [] { ["ACCOUNT" "MANAGED"] }
+def managed-type-completer [] { ["AWS_MANAGED_DOMAIN_LISTS" "AWS_MANAGED_THREAT_SIGNATURES"] }
 def x-amz-target-completer-21 [] { ["NetworkFirewall_20201112.ListRuleGroups"] }
 def x-amz-target-completer-22 [] { ["NetworkFirewall_20201112.ListTLSInspectionConfigurations"] }
 def x-amz-target-completer-23 [] { ["NetworkFirewall_20201112.ListTagsForResource"] }
@@ -177,15 +180,16 @@ export def "associate-firewall-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  --update-token: any
-  --firewall-arn: any
-  --firewall-name: any
-  firewall_policy_arn: any
-]: any -> record<FirewallArn: record, FirewallName: record, FirewallPolicyArn: record, UpdateToken: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  --update-token: string # An optional token that you can use for optimistic locking. Network Firewall returns a token to your requests that access the firewall. The token marks the state of the firewall resource at the time of the request. To make an unconditional change to the firewall, omit the token in your update request. Without the token, Network Firewall performs your updates regardless of whether the firewall has changed since you last retrieved it. To make a conditional change to the firewall, provide the token in your update request. Network Firewall uses the token to ensure that the firewall hasn't changed since you last retrieved it. If it has changed, the operation fails with an InvalidTokenException. If this happens, retrieve the firewall again to get a current copy of it with a new token. Reapply your changes as needed, then try the operation again using the new token.
+  --firewall-arn: string # The Amazon Resource Name (ARN) of the firewall. You must specify the ARN or the name, and you can specify both.
+  --firewall-name: string # The descriptive name of the firewall. You can't change the name of a firewall after you create it. You must specify the ARN or the name, and you can specify both.
+  firewall_policy_arn: string # The Amazon Resource Name (ARN) of the firewall policy.
+]: any -> record<FirewallArn: string, FirewallName: string, FirewallPolicyArn: string, UpdateToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "NetworkFirewall_20201112.AssociateFirewallPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"UpdateToken": $update_token, "FirewallArn": $firewall_arn, "FirewallName": $firewall_name, "FirewallPolicyArn": $firewall_policy_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -211,6 +215,7 @@ export def "associate-firewall-policy" [
 #
 # POST /
 # operationId: AssociateSubnets
+# --SubnetMappings item shape: {SubnetId: string, IPAddressType?: "DUALSTACK"|"IPV4"|"IPV6"}
 export def "associate-subnets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -228,15 +233,16 @@ export def "associate-subnets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  --update-token: any
-  --firewall-arn: any
-  --firewall-name: any
-  subnet_mappings: any
-]: any -> record<FirewallArn: record, FirewallName: record, SubnetMappings: record, UpdateToken: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  --update-token: string # An optional token that you can use for optimistic locking. Network Firewall returns a token to your requests that access the firewall. The token marks the state of the firewall resource at the time of the request. To make an unconditional change to the firewall, omit the token in your update request. Without the token, Network Firewall performs your updates regardless of whether the firewall has changed since you last retrieved it. To make a conditional change to the firewall, provide the token in your update request. Network Firewall uses the token to ensure that the firewall hasn't changed since you last retrieved it. If it has changed, the operation fails with an InvalidTokenException. If this happens, retrieve the firewall again to get a current copy of it with a new token. Reapply your changes as needed, then try the operation again using the new token.
+  --firewall-arn: string # The Amazon Resource Name (ARN) of the firewall. You must specify the ARN or the name, and you can specify both.
+  --firewall-name: string # The descriptive name of the firewall. You can't change the name of a firewall after you create it. You must specify the ARN or the name, and you can specify both.
+  subnet_mappings: list # The IDs of the subnets that you want to associate with the firewall. — item shape: {SubnetId: string, IPAddressType?: "DUALSTACK"|"IPV4"|"IPV6"}
+]: any -> record<FirewallArn: string, FirewallName: string, SubnetMappings: table<SubnetId: string, IPAddressType: string>, UpdateToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "NetworkFirewall_20201112.AssociateSubnets")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"UpdateToken": $update_token, "FirewallArn": $firewall_arn, "FirewallName": $firewall_name, "SubnetMappings": $subnet_mappings} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -262,6 +268,9 @@ export def "associate-subnets" [
 #
 # POST /
 # operationId: CreateFirewall
+# --SubnetMappings item shape: {SubnetId: string, IPAddressType?: "DUALSTACK"|"IPV4"|"IPV6"}
+# --Tags item shape: {Key: string, Value: string}
+# --EncryptionConfiguration shape: {KeyId?: string, Type: "CUSTOMER_KMS"|"AWS_OWNED_KMS_KEY"}
 export def "create-firewall" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -279,21 +288,22 @@ export def "create-firewall" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  firewall_name: any
-  firewall_policy_arn: any
-  vpc_id: any
-  subnet_mappings: any
-  --delete-protection: any
-  --subnet-change-protection: any
-  --firewall-policy-change-protection: any
-  --description: any
-  --tags: any
-  --encryption-configuration: any
-]: any -> record<Firewall: record<FirewallName: record, FirewallArn: record, FirewallPolicyArn: record, VpcId: record, SubnetMappings: record, DeleteProtection: record, SubnetChangeProtection: record, FirewallPolicyChangeProtection: record, Description: record, FirewallId: record, Tags: record, EncryptionConfiguration: record<KeyId: record, Type: record>>, FirewallStatus: record<Status: record, ConfigurationSyncStateSummary: record, SyncStates: record, CapacityUsageSummary: record<CIDRs: record>>> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  firewall_name: string # The descriptive name of the firewall. You can't change the name of a firewall after you create it.
+  firewall_policy_arn: string # The Amazon Resource Name (ARN) of the FirewallPolicy that you want to use for the firewall.
+  vpc_id: string # The unique identifier of the VPC where Network Firewall should create the firewall. You can't change this setting after you create the firewall.
+  subnet_mappings: list # The public subnets to use for your Network Firewall firewalls. Each subnet must belong to a different Availability Zone in the VPC. Network Firewall creates a firewall endpoint in each subnet. — item shape: {SubnetId: string, IPAddressType?: "DUALSTACK"|"IPV4"|"IPV6"}
+  --delete-protection: oneof<nothing, bool> # A flag indicating whether it is possible to delete the firewall. A setting of TRUE indicates that the firewall is protected against deletion. Use this setting to protect against accidentally deleting a firewall that is in use. When you create a firewall, the operation initializes this flag to TRUE.
+  --subnet-change-protection: oneof<nothing, bool> # A setting indicating whether the firewall is protected against changes to the subnet associations. Use this setting to protect against accidentally modifying the subnet associations for a firewall that is in use. When you create a firewall, the operation initializes this setting to TRUE.
+  --firewall-policy-change-protection: oneof<nothing, bool> # A setting indicating whether the firewall is protected against a change to the firewall policy association. Use this setting to protect against accidentally modifying the firewall policy for a firewall that is in use. When you create a firewall, the operation initializes this setting to TRUE.
+  --description: string # A description of the firewall.
+  --tags: list # The key:value pairs to associate with the resource. — item shape: {Key: string, Value: string}
+  --encryption-configuration: record # A complex type that contains optional Amazon Web Services Key Management Service (KMS) encryption settings for your Network Firewall resources. Your data is encrypted by default with an Amazon Web Services owned key that Amazon Web Services owns and manages for you. You can use either the Amazon Web Services owned key, or provide your own customer managed key. To learn more about KMS encryption of your Network Firewall resources, see Encryption at rest with Amazon Web Services Key Managment Service (https://docs.aws.amazon.com/kms/latest/developerguide/kms-encryption-at-rest.html) in the Network Firewall Developer Guide. — shape: {KeyId?: string, Type: "CUSTOMER_KMS"|"AWS_OWNED_KMS_KEY"}
+]: any -> record<Firewall: record<FirewallName: string, FirewallArn: string, FirewallPolicyArn: string, VpcId: string, SubnetMappings: list<record>, DeleteProtection: bool, SubnetChangeProtection: bool, FirewallPolicyChangeProtection: bool, Description: string, FirewallId: string, Tags: list<record>, EncryptionConfiguration: record<KeyId: string, Type: string>>, FirewallStatus: record<Status: string, ConfigurationSyncStateSummary: string, SyncStates: record, CapacityUsageSummary: record<CIDRs: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "NetworkFirewall_20201112.CreateFirewall")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FirewallName": $firewall_name, "FirewallPolicyArn": $firewall_policy_arn, "VpcId": $vpc_id, "SubnetMappings": $subnet_mappings, "DeleteProtection": $delete_protection, "SubnetChangeProtection": $subnet_change_protection, "FirewallPolicyChangeProtection": $firewall_policy_change_protection, "Description": $description, "Tags": $tags, "EncryptionConfiguration": $encryption_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -319,6 +329,9 @@ export def "create-firewall" [
 #
 # POST /
 # operationId: CreateFirewallPolicy
+# --FirewallPolicy shape: {StatelessRuleGroupReferences?: list, StatelessDefaultActions: list<string>, StatelessFragmentDefaultActions: list<string>, StatelessCustomActions?: list, StatefulRuleGroupReferences?: list, StatefulDefaultActions?: list<string>, StatefulEngineOptions?: record, TLSInspectionConfigurationArn?: string}
+# --Tags item shape: {Key: string, Value: string}
+# --EncryptionConfiguration shape: {KeyId?: string, Type: "CUSTOMER_KMS"|"AWS_OWNED_KMS_KEY"}
 export def "create-firewall-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -336,17 +349,18 @@ export def "create-firewall-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  firewall_policy_name: any
-  firewall_policy: any
-  --description: any
-  --tags: any
-  --body-dry-run: any
-  --encryption-configuration: any
-]: any -> record<UpdateToken: record, FirewallPolicyResponse: record<FirewallPolicyName: record, FirewallPolicyArn: record, FirewallPolicyId: record, Description: record, FirewallPolicyStatus: record, Tags: record, ConsumedStatelessRuleCapacity: record, ConsumedStatefulRuleCapacity: record, NumberOfAssociations: record, EncryptionConfiguration: record<KeyId: record, Type: record>, LastModifiedTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  firewall_policy_name: string # The descriptive name of the firewall policy. You can't change the name of a firewall policy after you create it.
+  firewall_policy: record # The firewall policy defines the behavior of a firewall using a collection of stateless and stateful rule groups and other settings. You can use one firewall policy for multiple firewalls. This, along with FirewallPolicyResponse, define the policy. You can retrieve all objects for a firewall policy by calling DescribeFirewallPolicy. — shape: {StatelessRuleGroupReferences?: list, StatelessDefaultActions: list<string>, StatelessFragmentDefaultActions: list<string>, StatelessCustomActions?: list, StatefulRuleGroupReferences?: list, StatefulDefaultActions?: list<string>, StatefulEngineOptions?: record, TLSInspectionConfigurationArn?: string}
+  --description: string # A description of the firewall policy.
+  --tags: list # The key:value pairs to associate with the resource. — item shape: {Key: string, Value: string}
+  --body-dry-run: oneof<nothing, bool> # Indicates whether you want Network Firewall to just check the validity of the request, rather than run the request. If set to TRUE, Network Firewall checks whether the request can run successfully, but doesn't actually make the requested changes. The call returns the value that the request would return if you ran it with dry run set to FALSE, but doesn't make additions or changes to your resources. This option allows you to make sure that you have the required permissions to run the request and that your request parameters are valid. If set to FALSE, Network Firewall makes the requested changes to your resources.
+  --encryption-configuration: record # A complex type that contains optional Amazon Web Services Key Management Service (KMS) encryption settings for your Network Firewall resources. Your data is encrypted by default with an Amazon Web Services owned key that Amazon Web Services owns and manages for you. You can use either the Amazon Web Services owned key, or provide your own customer managed key. To learn more about KMS encryption of your Network Firewall resources, see Encryption at rest with Amazon Web Services Key Managment Service (https://docs.aws.amazon.com/kms/latest/developerguide/kms-encryption-at-rest.html) in the Network Firewall Developer Guide. — shape: {KeyId?: string, Type: "CUSTOMER_KMS"|"AWS_OWNED_KMS_KEY"}
+]: any -> record<UpdateToken: string, FirewallPolicyResponse: record<FirewallPolicyName: string, FirewallPolicyArn: string, FirewallPolicyId: string, Description: string, FirewallPolicyStatus: string, Tags: list<record>, ConsumedStatelessRuleCapacity: int, ConsumedStatefulRuleCapacity: int, NumberOfAssociations: int, EncryptionConfiguration: record<KeyId: string, Type: string>, LastModifiedTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "NetworkFirewall_20201112.CreateFirewallPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FirewallPolicyName": $firewall_policy_name, "FirewallPolicy": $firewall_policy, "Description": $description, "Tags": $tags, "DryRun": $body_dry_run, "EncryptionConfiguration": $encryption_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -372,6 +386,10 @@ export def "create-firewall-policy" [
 #
 # POST /
 # operationId: CreateRuleGroup
+# --RuleGroup shape: {RuleVariables?: record, ReferenceSets?: record, RulesSource: record, StatefulRuleOptions?: record}
+# --Tags item shape: {Key: string, Value: string}
+# --EncryptionConfiguration shape: {KeyId?: string, Type: "CUSTOMER_KMS"|"AWS_OWNED_KMS_KEY"}
+# --SourceMetadata shape: {SourceArn?: string, SourceUpdateToken?: string}
 export def "create-rule-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -389,21 +407,22 @@ export def "create-rule-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  rule_group_name: any
-  --rule-group: any
-  --rules: any
-  type: any
-  --description: any
-  capacity: any
-  --tags: any
-  --body-dry-run: any
-  --encryption-configuration: any
-  --source-metadata: any
-]: any -> record<UpdateToken: record, RuleGroupResponse: record<RuleGroupArn: record, RuleGroupName: record, RuleGroupId: record, Description: record, Type: record, Capacity: record, RuleGroupStatus: record, Tags: record, ConsumedCapacity: record, NumberOfAssociations: record, EncryptionConfiguration: record<KeyId: record, Type: record>, SourceMetadata: record<SourceArn: record, SourceUpdateToken: record>, SnsTopic: record, LastModifiedTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  rule_group_name: string # The descriptive name of the rule group. You can't change the name of a rule group after you create it.
+  --rule-group: record # The object that defines the rules in a rule group. This, along with RuleGroupResponse, define the rule group. You can retrieve all objects for a rule group by calling DescribeRuleGroup. Network Firewall uses a rule group to inspect and control network traffic. You define stateless rule groups to inspect individual packets and you define stateful rule groups to inspect packets in the context of their traffic flow. To use a rule group, you include it by reference in an Network Firewall firewall policy, then you use the policy in a firewall. You can reference a rule group from more than one firewall policy, and you can use a firewall policy in more than one firewall. — shape: {RuleVariables?: record, ReferenceSets?: record, RulesSource: record, StatefulRuleOptions?: record}
+  --rules: string # A string containing stateful rule group rules specifications in Suricata flat format, with one rule per line. Use this to import your existing Suricata compatible rule groups. You must provide either this rules setting or a populated RuleGroup setting, but not both. You can provide your rule group specification in Suricata flat format through this setting when you create or update your rule group. The call response returns a RuleGroup object that Network Firewall has populated from your string.
+  type: string@type-completer # Indicates whether the rule group is stateless or stateful. If the rule group is stateless, it contains stateless rules. If it is stateful, it contains stateful rules.
+  --description: string # A description of the rule group.
+  capacity: int # The maximum operating resources that this rule group can use. Rule group capacity is fixed at creation. When you update a rule group, you are limited to this capacity. When you reference a rule group from a firewall policy, Network Firewall reserves this capacity for the rule group. You can retrieve the capacity that would be required for a rule group before you create the rule group by calling CreateRuleGroup with DryRun set to TRUE. You can't change or exceed this capacity when you update the rule group, so leave room for your rule group to grow. Capacity for a stateless rule group For a stateless rule group, the capacity required is the sum of the capacity requirements of the individual rules that you expect to have in the rule group. To calculate the capacity requirement of a single rule, multiply the capacity requirement values of each of the rule's match settings: A match setting with no criteria specified has a value of 1. A match setting with Any specified has a value of 1. All other match settings have a value equal to the number of elements provided in the setting. For example, a protocol setting ["UDP"] and a source setting ["10.0.0.0/24"] each have a value of 1. A protocol setting ["UDP","TCP"] has a value of 2. A source setting ["10.0.0.0/24","10.0.0.1/24","10.0.0.2/24"] has a value of 3. A rule with no criteria specified in any of its match settings has a capacity requirement of 1. A rule with protocol setting ["UDP","TCP"], source setting ["10.0.0.0/24","10.0.0.1/24","10.0.0.2/24"], and a single specification or no specification for each of the other match settings has a capacity requirement of 6. Capacity for a stateful rule group For a stateful rule group, the minimum capacity required is the number of individual rules that you expect to have in the rule group.
+  --tags: list # The key:value pairs to associate with the resource. — item shape: {Key: string, Value: string}
+  --body-dry-run: oneof<nothing, bool> # Indicates whether you want Network Firewall to just check the validity of the request, rather than run the request. If set to TRUE, Network Firewall checks whether the request can run successfully, but doesn't actually make the requested changes. The call returns the value that the request would return if you ran it with dry run set to FALSE, but doesn't make additions or changes to your resources. This option allows you to make sure that you have the required permissions to run the request and that your request parameters are valid. If set to FALSE, Network Firewall makes the requested changes to your resources.
+  --encryption-configuration: record # A complex type that contains optional Amazon Web Services Key Management Service (KMS) encryption settings for your Network Firewall resources. Your data is encrypted by default with an Amazon Web Services owned key that Amazon Web Services owns and manages for you. You can use either the Amazon Web Services owned key, or provide your own customer managed key. To learn more about KMS encryption of your Network Firewall resources, see Encryption at rest with Amazon Web Services Key Managment Service (https://docs.aws.amazon.com/kms/latest/developerguide/kms-encryption-at-rest.html) in the Network Firewall Developer Guide. — shape: {KeyId?: string, Type: "CUSTOMER_KMS"|"AWS_OWNED_KMS_KEY"}
+  --source-metadata: record # High-level information about the managed rule group that your own rule group is copied from. You can use the the metadata to track version updates made to the originating rule group. You can retrieve all objects for a rule group by calling DescribeRuleGroup (https://docs.aws.amazon.com/network-firewall/latest/APIReference/API_DescribeRuleGroup.html). — shape: {SourceArn?: string, SourceUpdateToken?: string}
+]: any -> record<UpdateToken: string, RuleGroupResponse: record<RuleGroupArn: string, RuleGroupName: string, RuleGroupId: string, Description: string, Type: string, Capacity: int, RuleGroupStatus: string, Tags: list<record>, ConsumedCapacity: int, NumberOfAssociations: int, EncryptionConfiguration: record<KeyId: string, Type: string>, SourceMetadata: record<SourceArn: string, SourceUpdateToken: string>, SnsTopic: string, LastModifiedTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "NetworkFirewall_20201112.CreateRuleGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RuleGroupName": $rule_group_name, "RuleGroup": $rule_group, "Rules": $rules, "Type": $type, "Description": $description, "Capacity": $capacity, "Tags": $tags, "DryRun": $body_dry_run, "EncryptionConfiguration": $encryption_configuration, "SourceMetadata": $source_metadata} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -429,7 +448,9 @@ export def "create-rule-group" [
 #
 # POST /
 # operationId: CreateTLSInspectionConfiguration
-# --EncryptionConfiguration shape: {KeyId?: any, Type: any}
+# --TLSInspectionConfiguration shape: {ServerCertificateConfigurations?: list}
+# --Tags item shape: {Key: string, Value: string}
+# --EncryptionConfiguration shape: {KeyId?: string, Type: "CUSTOMER_KMS"|"AWS_OWNED_KMS_KEY"}
 export def "create-tls-inspection-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -447,16 +468,17 @@ export def "create-tls-inspection-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  tls_inspection_configuration_name: any
-  tls_inspection_configuration: any
-  --description: any
-  --tags: any
-  --encryption-configuration: record # A complex type that contains optional Amazon Web Services Key Management Service (KMS) encryption settings for your Network Firewall resources. Your data is encrypted by default with an Amazon Web Services owned key that Amazon Web Services owns and manages for you. You can use either the Amazon Web Services owned key, or provide your own customer managed key. To learn more about KMS encryption of your Network Firewall resources, see Encryption at rest with Amazon Web Services Key Managment Service (https://docs.aws.amazon.com/kms/latest/developerguide/kms-encryption-at-rest.html) in the Network Firewall Developer Guide. — shape: {KeyId?: any, Type: any}
-]: any -> record<UpdateToken: record, TLSInspectionConfigurationResponse: record<TLSInspectionConfigurationArn: record, TLSInspectionConfigurationName: record, TLSInspectionConfigurationId: record, TLSInspectionConfigurationStatus: record, Description: record, Tags: record, LastModifiedTime: record, NumberOfAssociations: record, EncryptionConfiguration: record<KeyId: record, Type: record>, Certificates: record>> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  tls_inspection_configuration_name: string # The descriptive name of the TLS inspection configuration. You can't change the name of a TLS inspection configuration after you create it.
+  tls_inspection_configuration: record # The object that defines a TLS inspection configuration. This, along with TLSInspectionConfigurationResponse, define the TLS inspection configuration. You can retrieve all objects for a TLS inspection configuration by calling DescribeTLSInspectionConfiguration. Network Firewall uses a TLS inspection configuration to decrypt traffic. Network Firewall re-encrypts the traffic before sending it to its destination. To use a TLS inspection configuration, you add it to a Network Firewall firewall policy, then you apply the firewall policy to a firewall. Network Firewall acts as a proxy service to decrypt and inspect inbound traffic. You can reference a TLS inspection configuration from more than one firewall policy, and you can use a firewall policy in more than one firewall. For more information about using TLS inspection configurations, see Decrypting SSL/TLS traffic with TLS inspection configurations (https://docs.aws.amazon.com/network-firewall/latest/developerguide/tls-inspection.html) in the Network Firewall Developer Guide. — shape: {ServerCertificateConfigurations?: list}
+  --description: string # A description of the TLS inspection configuration.
+  --tags: list # The key:value pairs to associate with the resource. — item shape: {Key: string, Value: string}
+  --encryption-configuration: record # A complex type that contains optional Amazon Web Services Key Management Service (KMS) encryption settings for your Network Firewall resources. Your data is encrypted by default with an Amazon Web Services owned key that Amazon Web Services owns and manages for you. You can use either the Amazon Web Services owned key, or provide your own customer managed key. To learn more about KMS encryption of your Network Firewall resources, see Encryption at rest with Amazon Web Services Key Managment Service (https://docs.aws.amazon.com/kms/latest/developerguide/kms-encryption-at-rest.html) in the Network Firewall Developer Guide. — shape: {KeyId?: string, Type: "CUSTOMER_KMS"|"AWS_OWNED_KMS_KEY"}
+]: any -> record<UpdateToken: string, TLSInspectionConfigurationResponse: record<TLSInspectionConfigurationArn: string, TLSInspectionConfigurationName: string, TLSInspectionConfigurationId: string, TLSInspectionConfigurationStatus: string, Description: string, Tags: list<record>, LastModifiedTime: string, NumberOfAssociations: int, EncryptionConfiguration: record<KeyId: string, Type: string>, Certificates: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "NetworkFirewall_20201112.CreateTLSInspectionConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TLSInspectionConfigurationName": $tls_inspection_configuration_name, "TLSInspectionConfiguration": $tls_inspection_configuration, "Description": $description, "Tags": $tags, "EncryptionConfiguration": $encryption_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -499,13 +521,14 @@ export def "delete-firewall" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  --firewall-name: any
-  --firewall-arn: any
-]: any -> record<Firewall: record<FirewallName: record, FirewallArn: record, FirewallPolicyArn: record, VpcId: record, SubnetMappings: record, DeleteProtection: record, SubnetChangeProtection: record, FirewallPolicyChangeProtection: record, Description: record, FirewallId: record, Tags: record, EncryptionConfiguration: record<KeyId: record, Type: record>>, FirewallStatus: record<Status: record, ConfigurationSyncStateSummary: record, SyncStates: record, CapacityUsageSummary: record<CIDRs: record>>> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  --firewall-name: string # The descriptive name of the firewall. You can't change the name of a firewall after you create it. You must specify the ARN or the name, and you can specify both.
+  --firewall-arn: string # The Amazon Resource Name (ARN) of the firewall. You must specify the ARN or the name, and you can specify both.
+]: any -> record<Firewall: record<FirewallName: string, FirewallArn: string, FirewallPolicyArn: string, VpcId: string, SubnetMappings: list<record>, DeleteProtection: bool, SubnetChangeProtection: bool, FirewallPolicyChangeProtection: bool, Description: string, FirewallId: string, Tags: list<record>, EncryptionConfiguration: record<KeyId: string, Type: string>>, FirewallStatus: record<Status: string, ConfigurationSyncStateSummary: string, SyncStates: record, CapacityUsageSummary: record<CIDRs: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "NetworkFirewall_20201112.DeleteFirewall")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FirewallName": $firewall_name, "FirewallArn": $firewall_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -548,13 +571,14 @@ export def "delete-firewall-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  --firewall-policy-name: any
-  --firewall-policy-arn: any
-]: any -> record<FirewallPolicyResponse: record<FirewallPolicyName: record, FirewallPolicyArn: record, FirewallPolicyId: record, Description: record, FirewallPolicyStatus: record, Tags: record, ConsumedStatelessRuleCapacity: record, ConsumedStatefulRuleCapacity: record, NumberOfAssociations: record, EncryptionConfiguration: record<KeyId: record, Type: record>, LastModifiedTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  --firewall-policy-name: string # The descriptive name of the firewall policy. You can't change the name of a firewall policy after you create it. You must specify the ARN or the name, and you can specify both.
+  --firewall-policy-arn: string # The Amazon Resource Name (ARN) of the firewall policy. You must specify the ARN or the name, and you can specify both.
+]: any -> record<FirewallPolicyResponse: record<FirewallPolicyName: string, FirewallPolicyArn: string, FirewallPolicyId: string, Description: string, FirewallPolicyStatus: string, Tags: list<record>, ConsumedStatelessRuleCapacity: int, ConsumedStatefulRuleCapacity: int, NumberOfAssociations: int, EncryptionConfiguration: record<KeyId: string, Type: string>, LastModifiedTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "NetworkFirewall_20201112.DeleteFirewallPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FirewallPolicyName": $firewall_policy_name, "FirewallPolicyArn": $firewall_policy_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -597,12 +621,13 @@ export def "delete-resource-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  resource_arn: any
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the rule group or firewall policy whose resource policy you want to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "NetworkFirewall_20201112.DeleteResourcePolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -645,14 +670,15 @@ export def "delete-rule-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  --rule-group-name: any
-  --rule-group-arn: any
-  --type: any
-]: any -> record<RuleGroupResponse: record<RuleGroupArn: record, RuleGroupName: record, RuleGroupId: record, Description: record, Type: record, Capacity: record, RuleGroupStatus: record, Tags: record, ConsumedCapacity: record, NumberOfAssociations: record, EncryptionConfiguration: record<KeyId: record, Type: record>, SourceMetadata: record<SourceArn: record, SourceUpdateToken: record>, SnsTopic: record, LastModifiedTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  --rule-group-name: string # The descriptive name of the rule group. You can't change the name of a rule group after you create it. You must specify the ARN or the name, and you can specify both.
+  --rule-group-arn: string # The Amazon Resource Name (ARN) of the rule group. You must specify the ARN or the name, and you can specify both.
+  --type: string@type-completer # Indicates whether the rule group is stateless or stateful. If the rule group is stateless, it contains stateless rules. If it is stateful, it contains stateful rules. This setting is required for requests that do not include the RuleGroupARN.
+]: any -> record<RuleGroupResponse: record<RuleGroupArn: string, RuleGroupName: string, RuleGroupId: string, Description: string, Type: string, Capacity: int, RuleGroupStatus: string, Tags: list<record>, ConsumedCapacity: int, NumberOfAssociations: int, EncryptionConfiguration: record<KeyId: string, Type: string>, SourceMetadata: record<SourceArn: string, SourceUpdateToken: string>, SnsTopic: string, LastModifiedTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "NetworkFirewall_20201112.DeleteRuleGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RuleGroupName": $rule_group_name, "RuleGroupArn": $rule_group_arn, "Type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -695,13 +721,14 @@ export def "delete-tls-inspection-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  --tls-inspection-configuration-arn: any
-  --tls-inspection-configuration-name: any
-]: any -> record<TLSInspectionConfigurationResponse: record<TLSInspectionConfigurationArn: record, TLSInspectionConfigurationName: record, TLSInspectionConfigurationId: record, TLSInspectionConfigurationStatus: record, Description: record, Tags: record, LastModifiedTime: record, NumberOfAssociations: record, EncryptionConfiguration: record<KeyId: record, Type: record>, Certificates: record>> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  --tls-inspection-configuration-arn: string # The Amazon Resource Name (ARN) of the TLS inspection configuration. You must specify the ARN or the name, and you can specify both.
+  --tls-inspection-configuration-name: string # The descriptive name of the TLS inspection configuration. You can't change the name of a TLS inspection configuration after you create it. You must specify the ARN or the name, and you can specify both.
+]: any -> record<TLSInspectionConfigurationResponse: record<TLSInspectionConfigurationArn: string, TLSInspectionConfigurationName: string, TLSInspectionConfigurationId: string, TLSInspectionConfigurationStatus: string, Description: string, Tags: list<record>, LastModifiedTime: string, NumberOfAssociations: int, EncryptionConfiguration: record<KeyId: string, Type: string>, Certificates: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "NetworkFirewall_20201112.DeleteTLSInspectionConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TLSInspectionConfigurationArn": $tls_inspection_configuration_arn, "TLSInspectionConfigurationName": $tls_inspection_configuration_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -744,13 +771,14 @@ export def "describe-firewall" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  --firewall-name: any
-  --firewall-arn: any
-]: any -> record<UpdateToken: record, Firewall: record<FirewallName: record, FirewallArn: record, FirewallPolicyArn: record, VpcId: record, SubnetMappings: record, DeleteProtection: record, SubnetChangeProtection: record, FirewallPolicyChangeProtection: record, Description: record, FirewallId: record, Tags: record, EncryptionConfiguration: record<KeyId: record, Type: record>>, FirewallStatus: record<Status: record, ConfigurationSyncStateSummary: record, SyncStates: record, CapacityUsageSummary: record<CIDRs: record>>> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  --firewall-name: string # The descriptive name of the firewall. You can't change the name of a firewall after you create it. You must specify the ARN or the name, and you can specify both.
+  --firewall-arn: string # The Amazon Resource Name (ARN) of the firewall. You must specify the ARN or the name, and you can specify both.
+]: any -> record<UpdateToken: string, Firewall: record<FirewallName: string, FirewallArn: string, FirewallPolicyArn: string, VpcId: string, SubnetMappings: list<record>, DeleteProtection: bool, SubnetChangeProtection: bool, FirewallPolicyChangeProtection: bool, Description: string, FirewallId: string, Tags: list<record>, EncryptionConfiguration: record<KeyId: string, Type: string>>, FirewallStatus: record<Status: string, ConfigurationSyncStateSummary: string, SyncStates: record, CapacityUsageSummary: record<CIDRs: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "NetworkFirewall_20201112.DescribeFirewall")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FirewallName": $firewall_name, "FirewallArn": $firewall_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -793,13 +821,14 @@ export def "describe-firewall-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  --firewall-policy-name: any
-  --firewall-policy-arn: any
-]: any -> record<UpdateToken: record, FirewallPolicyResponse: record<FirewallPolicyName: record, FirewallPolicyArn: record, FirewallPolicyId: record, Description: record, FirewallPolicyStatus: record, Tags: record, ConsumedStatelessRuleCapacity: record, ConsumedStatefulRuleCapacity: record, NumberOfAssociations: record, EncryptionConfiguration: record<KeyId: record, Type: record>, LastModifiedTime: record>, FirewallPolicy: record<StatelessRuleGroupReferences: record, StatelessDefaultActions: record, StatelessFragmentDefaultActions: record, StatelessCustomActions: record, StatefulRuleGroupReferences: record, StatefulDefaultActions: record, StatefulEngineOptions: record<RuleOrder: record, StreamExceptionPolicy: record>, TLSInspectionConfigurationArn: record>> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  --firewall-policy-name: string # The descriptive name of the firewall policy. You can't change the name of a firewall policy after you create it. You must specify the ARN or the name, and you can specify both.
+  --firewall-policy-arn: string # The Amazon Resource Name (ARN) of the firewall policy. You must specify the ARN or the name, and you can specify both.
+]: any -> record<UpdateToken: string, FirewallPolicyResponse: record<FirewallPolicyName: string, FirewallPolicyArn: string, FirewallPolicyId: string, Description: string, FirewallPolicyStatus: string, Tags: list<record>, ConsumedStatelessRuleCapacity: int, ConsumedStatefulRuleCapacity: int, NumberOfAssociations: int, EncryptionConfiguration: record<KeyId: string, Type: string>, LastModifiedTime: string>, FirewallPolicy: record<StatelessRuleGroupReferences: list<record>, StatelessDefaultActions: list<string>, StatelessFragmentDefaultActions: list<string>, StatelessCustomActions: list<record>, StatefulRuleGroupReferences: list<record>, StatefulDefaultActions: list<string>, StatefulEngineOptions: record<RuleOrder: string, StreamExceptionPolicy: string>, TLSInspectionConfigurationArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "NetworkFirewall_20201112.DescribeFirewallPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FirewallPolicyName": $firewall_policy_name, "FirewallPolicyArn": $firewall_policy_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -842,13 +871,14 @@ export def "describe-logging-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  --firewall-arn: any
-  --firewall-name: any
-]: any -> record<FirewallArn: record, LoggingConfiguration: record<LogDestinationConfigs: record>> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  --firewall-arn: string # The Amazon Resource Name (ARN) of the firewall. You must specify the ARN or the name, and you can specify both.
+  --firewall-name: string # The descriptive name of the firewall. You can't change the name of a firewall after you create it. You must specify the ARN or the name, and you can specify both.
+]: any -> record<FirewallArn: string, LoggingConfiguration: record<LogDestinationConfigs: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "NetworkFirewall_20201112.DescribeLoggingConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FirewallArn": $firewall_arn, "FirewallName": $firewall_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -891,12 +921,13 @@ export def "describe-resource-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  resource_arn: any
-]: any -> record<Policy: record> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the rule group or firewall policy whose resource policy you want to retrieve.
+]: any -> record<Policy: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "NetworkFirewall_20201112.DescribeResourcePolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -939,14 +970,15 @@ export def "describe-rule-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  --rule-group-name: any
-  --rule-group-arn: any
-  --type: any
-]: any -> record<UpdateToken: record, RuleGroup: record<RuleVariables: record<IPSets: record, PortSets: record>, ReferenceSets: record<IPSetReferences: record>, RulesSource: record<RulesString: record, RulesSourceList: record, StatefulRules: record, StatelessRulesAndCustomActions: record>, StatefulRuleOptions: record<RuleOrder: record>>, RuleGroupResponse: record<RuleGroupArn: record, RuleGroupName: record, RuleGroupId: record, Description: record, Type: record, Capacity: record, RuleGroupStatus: record, Tags: record, ConsumedCapacity: record, NumberOfAssociations: record, EncryptionConfiguration: record<KeyId: record, Type: record>, SourceMetadata: record<SourceArn: record, SourceUpdateToken: record>, SnsTopic: record, LastModifiedTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  --rule-group-name: string # The descriptive name of the rule group. You can't change the name of a rule group after you create it. You must specify the ARN or the name, and you can specify both.
+  --rule-group-arn: string # The Amazon Resource Name (ARN) of the rule group. You must specify the ARN or the name, and you can specify both.
+  --type: string@type-completer # Indicates whether the rule group is stateless or stateful. If the rule group is stateless, it contains stateless rules. If it is stateful, it contains stateful rules. This setting is required for requests that do not include the RuleGroupARN.
+]: any -> record<UpdateToken: string, RuleGroup: record<RuleVariables: record<IPSets: record, PortSets: record>, ReferenceSets: record<IPSetReferences: record>, RulesSource: record<RulesString: string, RulesSourceList: record, StatefulRules: list, StatelessRulesAndCustomActions: record>, StatefulRuleOptions: record<RuleOrder: string>>, RuleGroupResponse: record<RuleGroupArn: string, RuleGroupName: string, RuleGroupId: string, Description: string, Type: string, Capacity: int, RuleGroupStatus: string, Tags: list<record>, ConsumedCapacity: int, NumberOfAssociations: int, EncryptionConfiguration: record<KeyId: string, Type: string>, SourceMetadata: record<SourceArn: string, SourceUpdateToken: string>, SnsTopic: string, LastModifiedTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "NetworkFirewall_20201112.DescribeRuleGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RuleGroupName": $rule_group_name, "RuleGroupArn": $rule_group_arn, "Type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -989,14 +1021,15 @@ export def "describe-rule-group-metadata" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  --rule-group-name: any
-  --rule-group-arn: any
-  --type: any
-]: any -> record<RuleGroupArn: record, RuleGroupName: record, Description: record, Type: record, Capacity: record, StatefulRuleOptions: record<RuleOrder: record>, LastModifiedTime: record> {
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  --rule-group-name: string # The descriptive name of the rule group. You can't change the name of a rule group after you create it. You must specify the ARN or the name, and you can specify both.
+  --rule-group-arn: string # The descriptive name of the rule group. You can't change the name of a rule group after you create it. You must specify the ARN or the name, and you can specify both.
+  --type: string@type-completer # Indicates whether the rule group is stateless or stateful. If the rule group is stateless, it contains stateless rules. If it is stateful, it contains stateful rules. This setting is required for requests that do not include the RuleGroupARN.
+]: any -> record<RuleGroupArn: string, RuleGroupName: string, Description: string, Type: string, Capacity: int, StatefulRuleOptions: record<RuleOrder: string>, LastModifiedTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "NetworkFirewall_20201112.DescribeRuleGroupMetadata")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RuleGroupName": $rule_group_name, "RuleGroupArn": $rule_group_arn, "Type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1039,13 +1072,14 @@ export def "describe-tls-inspection-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  --tls-inspection-configuration-arn: any
-  --tls-inspection-configuration-name: any
-]: any -> record<UpdateToken: record, TLSInspectionConfiguration: record<ServerCertificateConfigurations: record>, TLSInspectionConfigurationResponse: record<TLSInspectionConfigurationArn: record, TLSInspectionConfigurationName: record, TLSInspectionConfigurationId: record, TLSInspectionConfigurationStatus: record, Description: record, Tags: record, LastModifiedTime: record, NumberOfAssociations: record, EncryptionConfiguration: record<KeyId: record, Type: record>, Certificates: record>> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  --tls-inspection-configuration-arn: string # The Amazon Resource Name (ARN) of the TLS inspection configuration. You must specify the ARN or the name, and you can specify both.
+  --tls-inspection-configuration-name: string # The descriptive name of the TLS inspection configuration. You can't change the name of a TLS inspection configuration after you create it. You must specify the ARN or the name, and you can specify both.
+]: any -> record<UpdateToken: string, TLSInspectionConfiguration: record<ServerCertificateConfigurations: list<record>>, TLSInspectionConfigurationResponse: record<TLSInspectionConfigurationArn: string, TLSInspectionConfigurationName: string, TLSInspectionConfigurationId: string, TLSInspectionConfigurationStatus: string, Description: string, Tags: list<record>, LastModifiedTime: string, NumberOfAssociations: int, EncryptionConfiguration: record<KeyId: string, Type: string>, Certificates: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "NetworkFirewall_20201112.DescribeTLSInspectionConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TLSInspectionConfigurationArn": $tls_inspection_configuration_arn, "TLSInspectionConfigurationName": $tls_inspection_configuration_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1088,15 +1122,16 @@ export def "disassociate-subnets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  --update-token: any
-  --firewall-arn: any
-  --firewall-name: any
-  subnet_ids: any
-]: any -> record<FirewallArn: record, FirewallName: record, SubnetMappings: record, UpdateToken: record> {
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  --update-token: string # An optional token that you can use for optimistic locking. Network Firewall returns a token to your requests that access the firewall. The token marks the state of the firewall resource at the time of the request. To make an unconditional change to the firewall, omit the token in your update request. Without the token, Network Firewall performs your updates regardless of whether the firewall has changed since you last retrieved it. To make a conditional change to the firewall, provide the token in your update request. Network Firewall uses the token to ensure that the firewall hasn't changed since you last retrieved it. If it has changed, the operation fails with an InvalidTokenException. If this happens, retrieve the firewall again to get a current copy of it with a new token. Reapply your changes as needed, then try the operation again using the new token.
+  --firewall-arn: string # The Amazon Resource Name (ARN) of the firewall. You must specify the ARN or the name, and you can specify both.
+  --firewall-name: string # The descriptive name of the firewall. You can't change the name of a firewall after you create it. You must specify the ARN or the name, and you can specify both.
+  subnet_ids: list<string> # The unique identifiers for the subnets that you want to disassociate.
+]: any -> record<FirewallArn: string, FirewallName: string, SubnetMappings: table<SubnetId: string, IPAddressType: string>, UpdateToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "NetworkFirewall_20201112.DisassociateSubnets")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"UpdateToken": $update_token, "FirewallArn": $firewall_arn, "FirewallName": $firewall_name, "SubnetIds": $subnet_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1141,13 +1176,14 @@ export def "list-firewall-policies" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<NextToken: record, FirewallPolicies: record> {
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  --next-token-body: string # When you request a list of objects with a MaxResults setting, if the number of objects that are still available for retrieval exceeds the maximum you requested, Network Firewall returns a NextToken value in the response. To retrieve the next batch of objects, use the token returned from the prior request in your next request. (body field)
+  --max-results-body: int # The maximum number of objects that you want Network Firewall to return for this request. If more objects are available, in the response, Network Firewall provides a NextToken value that you can use in a subsequent call to get the next batch of objects. (body field)
+]: any -> record<NextToken: string, FirewallPolicies: table<Name: string, Arn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "NetworkFirewall_20201112.ListFirewallPolicies")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -1193,14 +1229,15 @@ export def "list-firewalls" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  --next-token-body: any #  (body field)
-  --vpc-ids: any
-  --max-results-body: any #  (body field)
-]: any -> record<NextToken: record, Firewalls: record> {
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  --next-token-body: string # When you request a list of objects with a MaxResults setting, if the number of objects that are still available for retrieval exceeds the maximum you requested, Network Firewall returns a NextToken value in the response. To retrieve the next batch of objects, use the token returned from the prior request in your next request. (body field)
+  --vpc-ids: list<string> # The unique identifiers of the VPCs that you want Network Firewall to retrieve the firewalls for. Leave this blank to retrieve all firewalls that you have defined.
+  --max-results-body: int # The maximum number of objects that you want Network Firewall to return for this request. If more objects are available, in the response, Network Firewall provides a NextToken value that you can use in a subsequent call to get the next batch of objects. (body field)
+]: any -> record<NextToken: string, Firewalls: table<FirewallName: string, FirewallArn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "NetworkFirewall_20201112.ListFirewalls")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "VpcIds": $vpc_ids, "MaxResults": $max_results_body} | compact
@@ -1246,16 +1283,17 @@ export def "list-rule-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --scope: any
-  --managed-type: any
-  --type: any
-]: any -> record<NextToken: record, RuleGroups: record> {
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  --next-token-body: string # When you request a list of objects with a MaxResults setting, if the number of objects that are still available for retrieval exceeds the maximum you requested, Network Firewall returns a NextToken value in the response. To retrieve the next batch of objects, use the token returned from the prior request in your next request. (body field)
+  --max-results-body: int # The maximum number of objects that you want Network Firewall to return for this request. If more objects are available, in the response, Network Firewall provides a NextToken value that you can use in a subsequent call to get the next batch of objects. (body field)
+  --scope: string@scope-completer # The scope of the request. The default setting of ACCOUNT or a setting of NULL returns all of the rule groups in your account. A setting of MANAGED returns all available managed rule groups.
+  --managed-type: string@managed-type-completer # Indicates the general category of the Amazon Web Services managed rule group.
+  --type: string@type-completer # Indicates whether the rule group is stateless or stateful. If the rule group is stateless, it contains stateless rules. If it is stateful, it contains stateful rules.
+]: any -> record<NextToken: string, RuleGroups: table<Name: string, Arn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "NetworkFirewall_20201112.ListRuleGroups")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "Scope": $scope, "ManagedType": $managed_type, "Type": $type} | compact
@@ -1301,13 +1339,14 @@ export def "list-tls-inspection-configurations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<NextToken: record, TLSInspectionConfigurations: record> {
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  --next-token-body: string # When you request a list of objects with a MaxResults setting, if the number of objects that are still available for retrieval exceeds the maximum you requested, Network Firewall returns a NextToken value in the response. To retrieve the next batch of objects, use the token returned from the prior request in your next request. (body field)
+  --max-results-body: int # The maximum number of objects that you want Network Firewall to return for this request. If more objects are available, in the response, Network Firewall provides a NextToken value that you can use in a subsequent call to get the next batch of objects. (body field)
+]: any -> record<NextToken: string, TLSInspectionConfigurations: table<Name: string, Arn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "NetworkFirewall_20201112.ListTLSInspectionConfigurations")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -1353,14 +1392,15 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  resource_arn: any
-]: any -> record<NextToken: record, Tags: record> {
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  --next-token-body: string # When you request a list of objects with a MaxResults setting, if the number of objects that are still available for retrieval exceeds the maximum you requested, Network Firewall returns a NextToken value in the response. To retrieve the next batch of objects, use the token returned from the prior request in your next request. (body field)
+  --max-results-body: int # The maximum number of objects that you want Network Firewall to return for this request. If more objects are available, in the response, Network Firewall provides a NextToken value that you can use in a subsequent call to get the next batch of objects. (body field)
+  resource_arn: string # The Amazon Resource Name (ARN) of the resource.
+]: any -> record<NextToken: string, Tags: table<Key: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "NetworkFirewall_20201112.ListTagsForResource")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "ResourceArn": $resource_arn} | compact
@@ -1404,13 +1444,14 @@ export def "put-resource-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  resource_arn: any
-  policy: any
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the account that you want to share rule groups and firewall policies with.
+  policy: string # The IAM policy statement that lists the accounts that you want to share your rule group or firewall policy with and the operations that you want the accounts to be able to perform. For a rule group resource, you can specify the following operations in the Actions section of the statement: network-firewall:CreateFirewallPolicy network-firewall:UpdateFirewallPolicy network-firewall:ListRuleGroups For a firewall policy resource, you can specify the following operations in the Actions section of the statement: network-firewall:CreateFirewall network-firewall:UpdateFirewall network-firewall:AssociateFirewallPolicy network-firewall:ListFirewallPolicies In the Resource section of the statement, you specify the ARNs for the rule groups and firewall policies that you want to share with the account that you specified in Arn.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "NetworkFirewall_20201112.PutResourcePolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "Policy": $policy} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1436,6 +1477,7 @@ export def "put-resource-policy" [
 #
 # POST /
 # operationId: TagResource
+# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1453,13 +1495,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  resource_arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the resource.
+  tags: list # item shape: {Key: string, Value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "NetworkFirewall_20201112.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1502,13 +1545,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-26
-  resource_arn: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-26 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the resource.
+  tag_keys: list<string>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "NetworkFirewall_20201112.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1551,18 +1595,20 @@ export def "update-firewall-delete-protection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-27
-  --update-token: any
-  --firewall-arn: any
-  --firewall-name: any
-  delete_protection: any
-]: any -> record<FirewallArn: record, FirewallName: record, DeleteProtection: record, UpdateToken: record> {
+  --x-amz-target: string@x-amz-target-completer-27 # required
+  --update-token: string # An optional token that you can use for optimistic locking. Network Firewall returns a token to your requests that access the firewall. The token marks the state of the firewall resource at the time of the request. To make an unconditional change to the firewall, omit the token in your update request. Without the token, Network Firewall performs your updates regardless of whether the firewall has changed since you last retrieved it. To make a conditional change to the firewall, provide the token in your update request. Network Firewall uses the token to ensure that the firewall hasn't changed since you last retrieved it. If it has changed, the operation fails with an InvalidTokenException. If this happens, retrieve the firewall again to get a current copy of it with a new token. Reapply your changes as needed, then try the operation again using the new token.
+  --firewall-arn: string # The Amazon Resource Name (ARN) of the firewall. You must specify the ARN or the name, and you can specify both.
+  --firewall-name: string # The descriptive name of the firewall. You can't change the name of a firewall after you create it. You must specify the ARN or the name, and you can specify both.
+  --delete-protection: oneof<nothing, bool> # A flag indicating whether it is possible to delete the firewall. A setting of TRUE indicates that the firewall is protected against deletion. Use this setting to protect against accidentally deleting a firewall that is in use. When you create a firewall, the operation initializes this flag to TRUE.
+]: any -> record<FirewallArn: string, FirewallName: string, DeleteProtection: bool, UpdateToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "NetworkFirewall_20201112.UpdateFirewallDeleteProtection")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"UpdateToken": $update_token, "FirewallArn": $firewall_arn, "FirewallName": $firewall_name, "DeleteProtection": $delete_protection} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "DeleteProtection") == null) { error make --unspanned { msg: "required body field 'DeleteProtection' missing: pass --delete-protection or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
@@ -1602,15 +1648,16 @@ export def "update-firewall-description" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-28
-  --update-token: any
-  --firewall-arn: any
-  --firewall-name: any
-  --description: any
-]: any -> record<FirewallArn: record, FirewallName: record, Description: record, UpdateToken: record> {
+  --x-amz-target: string@x-amz-target-completer-28 # required
+  --update-token: string # An optional token that you can use for optimistic locking. Network Firewall returns a token to your requests that access the firewall. The token marks the state of the firewall resource at the time of the request. To make an unconditional change to the firewall, omit the token in your update request. Without the token, Network Firewall performs your updates regardless of whether the firewall has changed since you last retrieved it. To make a conditional change to the firewall, provide the token in your update request. Network Firewall uses the token to ensure that the firewall hasn't changed since you last retrieved it. If it has changed, the operation fails with an InvalidTokenException. If this happens, retrieve the firewall again to get a current copy of it with a new token. Reapply your changes as needed, then try the operation again using the new token.
+  --firewall-arn: string # The Amazon Resource Name (ARN) of the firewall. You must specify the ARN or the name, and you can specify both.
+  --firewall-name: string # The descriptive name of the firewall. You can't change the name of a firewall after you create it. You must specify the ARN or the name, and you can specify both.
+  --description: string # The new description for the firewall. If you omit this setting, Network Firewall removes the description for the firewall.
+]: any -> record<FirewallArn: string, FirewallName: string, Description: string, UpdateToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "NetworkFirewall_20201112.UpdateFirewallDescription")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"UpdateToken": $update_token, "FirewallArn": $firewall_arn, "FirewallName": $firewall_name, "Description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1636,7 +1683,7 @@ export def "update-firewall-description" [
 #
 # POST /
 # operationId: UpdateFirewallEncryptionConfiguration
-# --EncryptionConfiguration shape: {KeyId?: any, Type: any}
+# --EncryptionConfiguration shape: {KeyId?: string, Type: "CUSTOMER_KMS"|"AWS_OWNED_KMS_KEY"}
 export def "update-firewall-encryption-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1654,15 +1701,16 @@ export def "update-firewall-encryption-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-29
-  --update-token: any
-  --firewall-arn: any
-  --firewall-name: any
-  --encryption-configuration: record # A complex type that contains optional Amazon Web Services Key Management Service (KMS) encryption settings for your Network Firewall resources. Your data is encrypted by default with an Amazon Web Services owned key that Amazon Web Services owns and manages for you. You can use either the Amazon Web Services owned key, or provide your own customer managed key. To learn more about KMS encryption of your Network Firewall resources, see Encryption at rest with Amazon Web Services Key Managment Service (https://docs.aws.amazon.com/kms/latest/developerguide/kms-encryption-at-rest.html) in the Network Firewall Developer Guide. — shape: {KeyId?: any, Type: any}
-]: any -> record<FirewallArn: record, FirewallName: record, UpdateToken: record, EncryptionConfiguration: record<KeyId: record, Type: record>> {
+  --x-amz-target: string@x-amz-target-completer-29 # required
+  --update-token: string # An optional token that you can use for optimistic locking. Network Firewall returns a token to your requests that access the firewall. The token marks the state of the firewall resource at the time of the request. To make an unconditional change to the firewall, omit the token in your update request. Without the token, Network Firewall performs your updates regardless of whether the firewall has changed since you last retrieved it. To make a conditional change to the firewall, provide the token in your update request. Network Firewall uses the token to ensure that the firewall hasn't changed since you last retrieved it. If it has changed, the operation fails with an InvalidTokenException. If this happens, retrieve the firewall again to get a current copy of it with a new token. Reapply your changes as needed, then try the operation again using the new token.
+  --firewall-arn: string # The Amazon Resource Name (ARN) of the firewall.
+  --firewall-name: string # The descriptive name of the firewall. You can't change the name of a firewall after you create it.
+  --encryption-configuration: record # A complex type that contains optional Amazon Web Services Key Management Service (KMS) encryption settings for your Network Firewall resources. Your data is encrypted by default with an Amazon Web Services owned key that Amazon Web Services owns and manages for you. You can use either the Amazon Web Services owned key, or provide your own customer managed key. To learn more about KMS encryption of your Network Firewall resources, see Encryption at rest with Amazon Web Services Key Managment Service (https://docs.aws.amazon.com/kms/latest/developerguide/kms-encryption-at-rest.html) in the Network Firewall Developer Guide. — shape: {KeyId?: string, Type: "CUSTOMER_KMS"|"AWS_OWNED_KMS_KEY"}
+]: any -> record<FirewallArn: string, FirewallName: string, UpdateToken: string, EncryptionConfiguration: record<KeyId: string, Type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "NetworkFirewall_20201112.UpdateFirewallEncryptionConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"UpdateToken": $update_token, "FirewallArn": $firewall_arn, "FirewallName": $firewall_name, "EncryptionConfiguration": $encryption_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1688,6 +1736,8 @@ export def "update-firewall-encryption-configuration" [
 #
 # POST /
 # operationId: UpdateFirewallPolicy
+# --FirewallPolicy shape: {StatelessRuleGroupReferences?: list, StatelessDefaultActions: list<string>, StatelessFragmentDefaultActions: list<string>, StatelessCustomActions?: list, StatefulRuleGroupReferences?: list, StatefulDefaultActions?: list<string>, StatefulEngineOptions?: record, TLSInspectionConfigurationArn?: string}
+# --EncryptionConfiguration shape: {KeyId?: string, Type: "CUSTOMER_KMS"|"AWS_OWNED_KMS_KEY"}
 export def "update-firewall-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1705,18 +1755,19 @@ export def "update-firewall-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-30
-  update_token: any
-  --firewall-policy-arn: any
-  --firewall-policy-name: any
-  firewall_policy: any
-  --description: any
-  --body-dry-run: any
-  --encryption-configuration: any
-]: any -> record<UpdateToken: record, FirewallPolicyResponse: record<FirewallPolicyName: record, FirewallPolicyArn: record, FirewallPolicyId: record, Description: record, FirewallPolicyStatus: record, Tags: record, ConsumedStatelessRuleCapacity: record, ConsumedStatefulRuleCapacity: record, NumberOfAssociations: record, EncryptionConfiguration: record<KeyId: record, Type: record>, LastModifiedTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-30 # required
+  update_token: string # A token used for optimistic locking. Network Firewall returns a token to your requests that access the firewall policy. The token marks the state of the policy resource at the time of the request. To make changes to the policy, you provide the token in your request. Network Firewall uses the token to ensure that the policy hasn't changed since you last retrieved it. If it has changed, the operation fails with an InvalidTokenException. If this happens, retrieve the firewall policy again to get a current copy of it with current token. Reapply your changes as needed, then try the operation again using the new token.
+  --firewall-policy-arn: string # The Amazon Resource Name (ARN) of the firewall policy. You must specify the ARN or the name, and you can specify both.
+  --firewall-policy-name: string # The descriptive name of the firewall policy. You can't change the name of a firewall policy after you create it. You must specify the ARN or the name, and you can specify both.
+  firewall_policy: record # The firewall policy defines the behavior of a firewall using a collection of stateless and stateful rule groups and other settings. You can use one firewall policy for multiple firewalls. This, along with FirewallPolicyResponse, define the policy. You can retrieve all objects for a firewall policy by calling DescribeFirewallPolicy. — shape: {StatelessRuleGroupReferences?: list, StatelessDefaultActions: list<string>, StatelessFragmentDefaultActions: list<string>, StatelessCustomActions?: list, StatefulRuleGroupReferences?: list, StatefulDefaultActions?: list<string>, StatefulEngineOptions?: record, TLSInspectionConfigurationArn?: string}
+  --description: string # A description of the firewall policy.
+  --body-dry-run: oneof<nothing, bool> # Indicates whether you want Network Firewall to just check the validity of the request, rather than run the request. If set to TRUE, Network Firewall checks whether the request can run successfully, but doesn't actually make the requested changes. The call returns the value that the request would return if you ran it with dry run set to FALSE, but doesn't make additions or changes to your resources. This option allows you to make sure that you have the required permissions to run the request and that your request parameters are valid. If set to FALSE, Network Firewall makes the requested changes to your resources.
+  --encryption-configuration: record # A complex type that contains optional Amazon Web Services Key Management Service (KMS) encryption settings for your Network Firewall resources. Your data is encrypted by default with an Amazon Web Services owned key that Amazon Web Services owns and manages for you. You can use either the Amazon Web Services owned key, or provide your own customer managed key. To learn more about KMS encryption of your Network Firewall resources, see Encryption at rest with Amazon Web Services Key Managment Service (https://docs.aws.amazon.com/kms/latest/developerguide/kms-encryption-at-rest.html) in the Network Firewall Developer Guide. — shape: {KeyId?: string, Type: "CUSTOMER_KMS"|"AWS_OWNED_KMS_KEY"}
+]: any -> record<UpdateToken: string, FirewallPolicyResponse: record<FirewallPolicyName: string, FirewallPolicyArn: string, FirewallPolicyId: string, Description: string, FirewallPolicyStatus: string, Tags: list<record>, ConsumedStatelessRuleCapacity: int, ConsumedStatefulRuleCapacity: int, NumberOfAssociations: int, EncryptionConfiguration: record<KeyId: string, Type: string>, LastModifiedTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "NetworkFirewall_20201112.UpdateFirewallPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"UpdateToken": $update_token, "FirewallPolicyArn": $firewall_policy_arn, "FirewallPolicyName": $firewall_policy_name, "FirewallPolicy": $firewall_policy, "Description": $description, "DryRun": $body_dry_run, "EncryptionConfiguration": $encryption_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1759,18 +1810,20 @@ export def "update-firewall-policy-change-protection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-31
-  --update-token: any
-  --firewall-arn: any
-  --firewall-name: any
-  firewall_policy_change_protection: any
-]: any -> record<UpdateToken: record, FirewallArn: record, FirewallName: record, FirewallPolicyChangeProtection: record> {
+  --x-amz-target: string@x-amz-target-completer-31 # required
+  --update-token: string # An optional token that you can use for optimistic locking. Network Firewall returns a token to your requests that access the firewall. The token marks the state of the firewall resource at the time of the request. To make an unconditional change to the firewall, omit the token in your update request. Without the token, Network Firewall performs your updates regardless of whether the firewall has changed since you last retrieved it. To make a conditional change to the firewall, provide the token in your update request. Network Firewall uses the token to ensure that the firewall hasn't changed since you last retrieved it. If it has changed, the operation fails with an InvalidTokenException. If this happens, retrieve the firewall again to get a current copy of it with a new token. Reapply your changes as needed, then try the operation again using the new token.
+  --firewall-arn: string # The Amazon Resource Name (ARN) of the firewall. You must specify the ARN or the name, and you can specify both.
+  --firewall-name: string # The descriptive name of the firewall. You can't change the name of a firewall after you create it. You must specify the ARN or the name, and you can specify both.
+  --firewall-policy-change-protection: oneof<nothing, bool> # A setting indicating whether the firewall is protected against a change to the firewall policy association. Use this setting to protect against accidentally modifying the firewall policy for a firewall that is in use. When you create a firewall, the operation initializes this setting to TRUE.
+]: any -> record<UpdateToken: string, FirewallArn: string, FirewallName: string, FirewallPolicyChangeProtection: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "NetworkFirewall_20201112.UpdateFirewallPolicyChangeProtection")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"UpdateToken": $update_token, "FirewallArn": $firewall_arn, "FirewallName": $firewall_name, "FirewallPolicyChangeProtection": $firewall_policy_change_protection} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "FirewallPolicyChangeProtection") == null) { error make --unspanned { msg: "required body field 'FirewallPolicyChangeProtection' missing: pass --firewall-policy-change-protection or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
@@ -1793,6 +1846,7 @@ export def "update-firewall-policy-change-protection" [
 #
 # POST /
 # operationId: UpdateLoggingConfiguration
+# --LoggingConfiguration shape: {LogDestinationConfigs: list}
 export def "update-logging-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1810,14 +1864,15 @@ export def "update-logging-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-32
-  --firewall-arn: any
-  --firewall-name: any
-  --logging-configuration: any
-]: any -> record<FirewallArn: record, FirewallName: record, LoggingConfiguration: record<LogDestinationConfigs: record>> {
+  --x-amz-target: string@x-amz-target-completer-32 # required
+  --firewall-arn: string # The Amazon Resource Name (ARN) of the firewall. You must specify the ARN or the name, and you can specify both.
+  --firewall-name: string # The descriptive name of the firewall. You can't change the name of a firewall after you create it. You must specify the ARN or the name, and you can specify both.
+  --logging-configuration: record # Defines how Network Firewall performs logging for a Firewall. — shape: {LogDestinationConfigs: list}
+]: any -> record<FirewallArn: string, FirewallName: string, LoggingConfiguration: record<LogDestinationConfigs: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "NetworkFirewall_20201112.UpdateLoggingConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FirewallArn": $firewall_arn, "FirewallName": $firewall_name, "LoggingConfiguration": $logging_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1843,6 +1898,9 @@ export def "update-logging-configuration" [
 #
 # POST /
 # operationId: UpdateRuleGroup
+# --RuleGroup shape: {RuleVariables?: record, ReferenceSets?: record, RulesSource: record, StatefulRuleOptions?: record}
+# --EncryptionConfiguration shape: {KeyId?: string, Type: "CUSTOMER_KMS"|"AWS_OWNED_KMS_KEY"}
+# --SourceMetadata shape: {SourceArn?: string, SourceUpdateToken?: string}
 export def "update-rule-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1860,21 +1918,22 @@ export def "update-rule-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-33
-  update_token: any
-  --rule-group-arn: any
-  --rule-group-name: any
-  --rule-group: any
-  --rules: any
-  --type: any
-  --description: any
-  --body-dry-run: any
-  --encryption-configuration: any
-  --source-metadata: any
-]: any -> record<UpdateToken: record, RuleGroupResponse: record<RuleGroupArn: record, RuleGroupName: record, RuleGroupId: record, Description: record, Type: record, Capacity: record, RuleGroupStatus: record, Tags: record, ConsumedCapacity: record, NumberOfAssociations: record, EncryptionConfiguration: record<KeyId: record, Type: record>, SourceMetadata: record<SourceArn: record, SourceUpdateToken: record>, SnsTopic: record, LastModifiedTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-33 # required
+  update_token: string # A token used for optimistic locking. Network Firewall returns a token to your requests that access the rule group. The token marks the state of the rule group resource at the time of the request. To make changes to the rule group, you provide the token in your request. Network Firewall uses the token to ensure that the rule group hasn't changed since you last retrieved it. If it has changed, the operation fails with an InvalidTokenException. If this happens, retrieve the rule group again to get a current copy of it with a current token. Reapply your changes as needed, then try the operation again using the new token.
+  --rule-group-arn: string # The Amazon Resource Name (ARN) of the rule group. You must specify the ARN or the name, and you can specify both.
+  --rule-group-name: string # The descriptive name of the rule group. You can't change the name of a rule group after you create it. You must specify the ARN or the name, and you can specify both.
+  --rule-group: record # The object that defines the rules in a rule group. This, along with RuleGroupResponse, define the rule group. You can retrieve all objects for a rule group by calling DescribeRuleGroup. Network Firewall uses a rule group to inspect and control network traffic. You define stateless rule groups to inspect individual packets and you define stateful rule groups to inspect packets in the context of their traffic flow. To use a rule group, you include it by reference in an Network Firewall firewall policy, then you use the policy in a firewall. You can reference a rule group from more than one firewall policy, and you can use a firewall policy in more than one firewall. — shape: {RuleVariables?: record, ReferenceSets?: record, RulesSource: record, StatefulRuleOptions?: record}
+  --rules: string # A string containing stateful rule group rules specifications in Suricata flat format, with one rule per line. Use this to import your existing Suricata compatible rule groups. You must provide either this rules setting or a populated RuleGroup setting, but not both. You can provide your rule group specification in Suricata flat format through this setting when you create or update your rule group. The call response returns a RuleGroup object that Network Firewall has populated from your string.
+  --type: string@type-completer # Indicates whether the rule group is stateless or stateful. If the rule group is stateless, it contains stateless rules. If it is stateful, it contains stateful rules. This setting is required for requests that do not include the RuleGroupARN.
+  --description: string # A description of the rule group.
+  --body-dry-run: oneof<nothing, bool> # Indicates whether you want Network Firewall to just check the validity of the request, rather than run the request. If set to TRUE, Network Firewall checks whether the request can run successfully, but doesn't actually make the requested changes. The call returns the value that the request would return if you ran it with dry run set to FALSE, but doesn't make additions or changes to your resources. This option allows you to make sure that you have the required permissions to run the request and that your request parameters are valid. If set to FALSE, Network Firewall makes the requested changes to your resources.
+  --encryption-configuration: record # A complex type that contains optional Amazon Web Services Key Management Service (KMS) encryption settings for your Network Firewall resources. Your data is encrypted by default with an Amazon Web Services owned key that Amazon Web Services owns and manages for you. You can use either the Amazon Web Services owned key, or provide your own customer managed key. To learn more about KMS encryption of your Network Firewall resources, see Encryption at rest with Amazon Web Services Key Managment Service (https://docs.aws.amazon.com/kms/latest/developerguide/kms-encryption-at-rest.html) in the Network Firewall Developer Guide. — shape: {KeyId?: string, Type: "CUSTOMER_KMS"|"AWS_OWNED_KMS_KEY"}
+  --source-metadata: record # High-level information about the managed rule group that your own rule group is copied from. You can use the the metadata to track version updates made to the originating rule group. You can retrieve all objects for a rule group by calling DescribeRuleGroup (https://docs.aws.amazon.com/network-firewall/latest/APIReference/API_DescribeRuleGroup.html). — shape: {SourceArn?: string, SourceUpdateToken?: string}
+]: any -> record<UpdateToken: string, RuleGroupResponse: record<RuleGroupArn: string, RuleGroupName: string, RuleGroupId: string, Description: string, Type: string, Capacity: int, RuleGroupStatus: string, Tags: list<record>, ConsumedCapacity: int, NumberOfAssociations: int, EncryptionConfiguration: record<KeyId: string, Type: string>, SourceMetadata: record<SourceArn: string, SourceUpdateToken: string>, SnsTopic: string, LastModifiedTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "NetworkFirewall_20201112.UpdateRuleGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"UpdateToken": $update_token, "RuleGroupArn": $rule_group_arn, "RuleGroupName": $rule_group_name, "RuleGroup": $rule_group, "Rules": $rules, "Type": $type, "Description": $description, "DryRun": $body_dry_run, "EncryptionConfiguration": $encryption_configuration, "SourceMetadata": $source_metadata} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1916,18 +1975,20 @@ export def "update-subnet-change-protection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-34
-  --update-token: any
-  --firewall-arn: any
-  --firewall-name: any
-  subnet_change_protection: any
-]: any -> record<UpdateToken: record, FirewallArn: record, FirewallName: record, SubnetChangeProtection: record> {
+  --x-amz-target: string@x-amz-target-completer-34 # required
+  --update-token: string # An optional token that you can use for optimistic locking. Network Firewall returns a token to your requests that access the firewall. The token marks the state of the firewall resource at the time of the request. To make an unconditional change to the firewall, omit the token in your update request. Without the token, Network Firewall performs your updates regardless of whether the firewall has changed since you last retrieved it. To make a conditional change to the firewall, provide the token in your update request. Network Firewall uses the token to ensure that the firewall hasn't changed since you last retrieved it. If it has changed, the operation fails with an InvalidTokenException. If this happens, retrieve the firewall again to get a current copy of it with a new token. Reapply your changes as needed, then try the operation again using the new token.
+  --firewall-arn: string # The Amazon Resource Name (ARN) of the firewall. You must specify the ARN or the name, and you can specify both.
+  --firewall-name: string # The descriptive name of the firewall. You can't change the name of a firewall after you create it. You must specify the ARN or the name, and you can specify both.
+  --subnet-change-protection: oneof<nothing, bool> # A setting indicating whether the firewall is protected against changes to the subnet associations. Use this setting to protect against accidentally modifying the subnet associations for a firewall that is in use. When you create a firewall, the operation initializes this setting to TRUE.
+]: any -> record<UpdateToken: string, FirewallArn: string, FirewallName: string, SubnetChangeProtection: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "NetworkFirewall_20201112.UpdateSubnetChangeProtection")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"UpdateToken": $update_token, "FirewallArn": $firewall_arn, "FirewallName": $firewall_name, "SubnetChangeProtection": $subnet_change_protection} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "SubnetChangeProtection") == null) { error make --unspanned { msg: "required body field 'SubnetChangeProtection' missing: pass --subnet-change-protection or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
@@ -1950,6 +2011,8 @@ export def "update-subnet-change-protection" [
 #
 # POST /
 # operationId: UpdateTLSInspectionConfiguration
+# --TLSInspectionConfiguration shape: {ServerCertificateConfigurations?: list}
+# --EncryptionConfiguration shape: {KeyId?: string, Type: "CUSTOMER_KMS"|"AWS_OWNED_KMS_KEY"}
 export def "update-tls-inspection-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1967,17 +2030,18 @@ export def "update-tls-inspection-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-35
-  --tls-inspection-configuration-arn: any
-  --tls-inspection-configuration-name: any
-  tls_inspection_configuration: any
-  --description: any
-  --encryption-configuration: any
-  update_token: any
-]: any -> record<UpdateToken: record, TLSInspectionConfigurationResponse: record<TLSInspectionConfigurationArn: record, TLSInspectionConfigurationName: record, TLSInspectionConfigurationId: record, TLSInspectionConfigurationStatus: record, Description: record, Tags: record, LastModifiedTime: record, NumberOfAssociations: record, EncryptionConfiguration: record<KeyId: record, Type: record>, Certificates: record>> {
+  --x-amz-target: string@x-amz-target-completer-35 # required
+  --tls-inspection-configuration-arn: string # The Amazon Resource Name (ARN) of the TLS inspection configuration.
+  --tls-inspection-configuration-name: string # The descriptive name of the TLS inspection configuration. You can't change the name of a TLS inspection configuration after you create it.
+  tls_inspection_configuration: record # The object that defines a TLS inspection configuration. This, along with TLSInspectionConfigurationResponse, define the TLS inspection configuration. You can retrieve all objects for a TLS inspection configuration by calling DescribeTLSInspectionConfiguration. Network Firewall uses a TLS inspection configuration to decrypt traffic. Network Firewall re-encrypts the traffic before sending it to its destination. To use a TLS inspection configuration, you add it to a Network Firewall firewall policy, then you apply the firewall policy to a firewall. Network Firewall acts as a proxy service to decrypt and inspect inbound traffic. You can reference a TLS inspection configuration from more than one firewall policy, and you can use a firewall policy in more than one firewall. For more information about using TLS inspection configurations, see Decrypting SSL/TLS traffic with TLS inspection configurations (https://docs.aws.amazon.com/network-firewall/latest/developerguide/tls-inspection.html) in the Network Firewall Developer Guide. — shape: {ServerCertificateConfigurations?: list}
+  --description: string # A description of the TLS inspection configuration.
+  --encryption-configuration: record # A complex type that contains optional Amazon Web Services Key Management Service (KMS) encryption settings for your Network Firewall resources. Your data is encrypted by default with an Amazon Web Services owned key that Amazon Web Services owns and manages for you. You can use either the Amazon Web Services owned key, or provide your own customer managed key. To learn more about KMS encryption of your Network Firewall resources, see Encryption at rest with Amazon Web Services Key Managment Service (https://docs.aws.amazon.com/kms/latest/developerguide/kms-encryption-at-rest.html) in the Network Firewall Developer Guide. — shape: {KeyId?: string, Type: "CUSTOMER_KMS"|"AWS_OWNED_KMS_KEY"}
+  update_token: string # A token used for optimistic locking. Network Firewall returns a token to your requests that access the TLS inspection configuration. The token marks the state of the TLS inspection configuration resource at the time of the request. To make changes to the TLS inspection configuration, you provide the token in your request. Network Firewall uses the token to ensure that the TLS inspection configuration hasn't changed since you last retrieved it. If it has changed, the operation fails with an InvalidTokenException. If this happens, retrieve the TLS inspection configuration again to get a current copy of it with a current token. Reapply your changes as needed, then try the operation again using the new token.
+]: any -> record<UpdateToken: string, TLSInspectionConfigurationResponse: record<TLSInspectionConfigurationArn: string, TLSInspectionConfigurationName: string, TLSInspectionConfigurationId: string, TLSInspectionConfigurationStatus: string, Description: string, Tags: list<record>, LastModifiedTime: string, NumberOfAssociations: int, EncryptionConfiguration: record<KeyId: string, Type: string>, Certificates: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "NetworkFirewall_20201112.UpdateTLSInspectionConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TLSInspectionConfigurationArn": $tls_inspection_configuration_arn, "TLSInspectionConfigurationName": $tls_inspection_configuration_name, "TLSInspectionConfiguration": $tls_inspection_configuration, "Description": $description, "EncryptionConfiguration": $encryption_configuration, "UpdateToken": $update_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

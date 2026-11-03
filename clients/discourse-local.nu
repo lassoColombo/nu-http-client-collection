@@ -140,6 +140,7 @@ def base-url-completer [] { ["http://discourse.local" "https://discourse.example
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def flag-completer [] { ["active" "blocked" "new" "staff" "suspect" "suspended"] }
 def order-completer [] { ["created" "days_visited" "email" "last_emailed" "posts" "posts_read" "read_time" "seen" "topics_viewed" "trust_level" "username"] }
 def asc-completer [] { ["true"] }
 def include-subcategories-completer [] { ["true"] }
@@ -231,6 +232,7 @@ export def "create-backup" [
   let full_url = (build-url $base "/admin/backups.json" $auth.query)
   let req_body = {"with_uploads": $with_uploads} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "with_uploads") == null) { error make --unspanned { msg: "required body field 'with_uploads' missing: pass --with-uploads or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -262,11 +264,12 @@ export def "download-backup" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string
+  --qp-token: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($filename | is-empty) { error make --unspanned { msg: "path parameter 'filename' must be non-empty" } }
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({filename: (encode-path-segment $filename)} | format pattern "/admin/backups/{filename}") $qp $auth.query)
   let accept_val = "application/json"
@@ -551,7 +554,7 @@ export def "delete-group" [
 # GET /admin/users/list/{flag}.json
 # operationId: adminListUsers
 export def "admin-list-users" [
-  flag: string
+  flag: string@flag-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1046,13 +1049,15 @@ export def "list-users-public" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --period: string@period-completer
-  --order: string@order-completer-1
+  --period: string@period-completer # required
+  --order: string@order-completer-1 # required
   --asc: string@asc-completer
   --page: int
 ]: nothing -> record<directory_items: table<days_visited: int, id: int, likes_given: int, likes_received: int, post_count: int, posts_read: int, topic_count: int, topics_entered: int, user: record>, meta: record<last_updated_at: string, load_more_directory_items: string, total_rows_directory_items: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($period == null) { error make --unspanned { msg: "required query parameter 'period' missing: pass --period" } }
+  if ($order == null) { error make --unspanned { msg: "required query parameter 'order' missing: pass --order" } }
   let qp = [(serialize-qp "period" $period "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "asc" $asc "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/directory_items.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -1312,8 +1317,8 @@ export def "create-invite" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
-  --api-username: string
+  --api-key: string # required
+  --api-username: string # required
   --custom-message: string # optional, for email invites
   --email: string # required for email invites only
   --expires-at: string # optional, if not supplied, the invite_expiry_days site setting is used
@@ -1326,6 +1331,8 @@ export def "create-invite" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'Api-Key' missing: pass --api-key" } }
+  if ($api_username == null) { error make --unspanned { msg: "required header parameter 'Api-Username' missing: pass --api-username" } }
   let full_url = (build-url $base "/invites.json" $auth.query)
   let req_body = {"custom_message": $custom_message, "email": $email, "expires_at": $expires_at, "group_id": $group_id, "group_names": $group_names, "max_redemptions_allowed": $max_redemptions_allowed, "skip_email": $skip_email, "topic_id": $topic_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1363,11 +1370,13 @@ export def "list-latest-topics" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --order: string # Enum: `default`, `created`, `activity`, `views`, `posts`, `category`, `likes`, `op_likes`, `posters`
   --ascending: string # Defaults to `desc`, add `ascending=true` to sort asc
-  --api-key: string
-  --api-username: string
+  --api-key: string # required
+  --api-username: string # required
 ]: nothing -> record<primary_groups: list<any>, topic_list: record<can_create_topic: bool, draft: string, draft_key: string, draft_sequence: int, per_page: int, topics: list<record>>, users: table<avatar_template: string, id: int, name: string, username: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'Api-Key' missing: pass --api-key" } }
+  if ($api_username == null) { error make --unspanned { msg: "required header parameter 'Api-Username' missing: pass --api-username" } }
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "ascending" $ascending "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/latest.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -1474,8 +1483,8 @@ export def "perform-post-action" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
-  --api-username: string
+  --api-key: string # required
+  --api-username: string # required
   --flag-topic: oneof<nothing, bool>
   id: int
   post_action_type_id: int
@@ -1483,6 +1492,8 @@ export def "perform-post-action" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'Api-Key' missing: pass --api-key" } }
+  if ($api_username == null) { error make --unspanned { msg: "required header parameter 'Api-Username' missing: pass --api-username" } }
   let full_url = (build-url $base "/post_actions.json" $auth.query)
   let req_body = {"flag_topic": $flag_topic, "id": $id, "post_action_type_id": $post_action_type_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1519,11 +1530,13 @@ export def "list-posts" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --before: string # Load posts with an id lower than this value. Useful for pagination.
-  --api-key: string
-  --api-username: string
+  --api-key: string # required
+  --api-username: string # required
 ]: nothing -> record<latest_posts: table<actions_summary: list, admin: bool, avatar_template: string, can_delete: bool, can_edit: bool, can_recover: bool, can_view_edit_history: bool, can_wiki: bool, category_id: int, cooked: string, created_at: string, deleted_at: string, display_username: string, edit_reason: string, flair_bg_color: string, flair_color: string, flair_name: string, flair_url: string, hidden: bool, id: int, incoming_link_count: int, moderator: bool, name: string, post_number: int, post_type: int, primary_group_name: string, quote_count: int, raw: string, readers_count: int, reads: int, reply_count: int, reply_to_post_number: string, reviewable_id: string, reviewable_score_count: int, reviewable_score_pending_count: int, score: float, staff: bool, topic_html_title: string, topic_id: int, topic_slug: string, topic_title: string, trust_level: int, updated_at: string, user_deleted: bool, user_id: int, user_title: string, username: string, version: int, wiki: bool, yours: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'Api-Key' missing: pass --api-key" } }
+  if ($api_username == null) { error make --unspanned { msg: "required header parameter 'Api-Username' missing: pass --api-username" } }
   let qp = [(serialize-qp "before" $before "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/posts.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -1576,6 +1589,7 @@ export def "create-topic-post-pm" [
   let full_url = (build-url $base "/posts.json" $auth.query)
   let req_body = {"archetype": $archetype, "category": $category, "created_at": $created_at, "embed_url": $embed_url, "external_id": $external_id, "raw": $body_raw, "target_recipients": $target_recipients, "target_usernames": $target_usernames, "title": $title, "topic_id": $topic_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "raw") == null) { error make --unspanned { msg: "required body field 'raw' missing: pass --body-raw or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -1647,12 +1661,14 @@ export def "get-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
-  --api-username: string
+  --api-key: string # required
+  --api-username: string # required
 ]: nothing -> record<actions_summary: table<can_act: bool, id: int>, admin: bool, avatar_template: string, can_delete: bool, can_edit: bool, can_recover: bool, can_view_edit_history: bool, can_wiki: bool, cooked: string, created_at: string, deleted_at: string, display_username: string, edit_reason: string, flair_bg_color: string, flair_color: string, flair_name: string, flair_url: string, hidden: bool, id: int, incoming_link_count: int, moderator: bool, name: string, post_number: int, post_type: int, primary_group_name: string, quote_count: int, raw: string, readers_count: int, reads: int, reply_count: int, reply_to_post_number: string, reviewable_id: string, reviewable_score_count: int, reviewable_score_pending_count: int, score: int, staff: bool, topic_id: int, topic_slug: string, trust_level: int, updated_at: string, user_deleted: bool, user_id: int, user_title: string, username: string, version: int, wiki: bool, yours: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'Api-Key' missing: pass --api-key" } }
+  if ($api_username == null) { error make --unspanned { msg: "required header parameter 'Api-Username' missing: pass --api-username" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/posts/{id}.json") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1688,14 +1704,16 @@ export def "update-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
-  --api-username: string
+  --api-key: string # required
+  --api-username: string # required
   --post: record # shape: {edit_reason?: string, raw: string}
 ]: any -> record<post: record<actions_summary: list<record>, admin: bool, avatar_template: string, can_delete: bool, can_edit: bool, can_recover: bool, can_view_edit_history: bool, can_wiki: bool, cooked: string, created_at: string, deleted_at: string, display_username: string, draft_sequence: int, edit_reason: string, flair_bg_color: string, flair_color: string, flair_url: string, hidden: bool, id: int, incoming_link_count: int, moderator: bool, name: string, post_number: int, post_type: int, primary_group_name: string, quote_count: int, readers_count: int, reads: int, reply_count: int, reply_to_post_number: string, reviewable_id: string, reviewable_score_count: int, reviewable_score_pending_count: int, score: float, staff: bool, topic_id: int, topic_slug: string, trust_level: int, updated_at: string, user_deleted: bool, user_id: int, user_title: string, username: string, version: int, wiki: bool, yours: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'Api-Key' missing: pass --api-key" } }
+  if ($api_username == null) { error make --unspanned { msg: "required header parameter 'Api-Username' missing: pass --api-username" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/posts/{id}.json") $auth.query)
   let req_body = {"post": $post} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1732,14 +1750,16 @@ export def "lock-post" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
-  --api-username: string
+  --api-key: string # required
+  --api-username: string # required
   locked: string
 ]: any -> record<locked: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'Api-Key' missing: pass --api-key" } }
+  if ($api_username == null) { error make --unspanned { msg: "required header parameter 'Api-Username' missing: pass --api-username" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/posts/{id}/locked.json") $auth.query)
   let req_body = {"locked": $locked} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1922,14 +1942,16 @@ export def "update-topic" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
-  --api-username: string
+  --api-key: string # required
+  --api-username: string # required
   --topic: record # shape: {category_id?: int, title?: string}
 ]: any -> record<basic_topic: record<fancy_title: string, id: int, posts_count: int, slug: string, title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'Api-Key' missing: pass --api-key" } }
+  if ($api_username == null) { error make --unspanned { msg: "required header parameter 'Api-Username' missing: pass --api-username" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/t/-/{id}.json") $auth.query)
   let req_body = {"topic": $topic} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2002,12 +2024,14 @@ export def "remove-topic" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
-  --api-username: string
+  --api-key: string # required
+  --api-username: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'Api-Key' missing: pass --api-key" } }
+  if ($api_username == null) { error make --unspanned { msg: "required header parameter 'Api-Username' missing: pass --api-username" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/t/{id}.json") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2042,12 +2066,14 @@ export def "get-topic" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
-  --api-username: string
+  --api-key: string # required
+  --api-username: string # required
 ]: nothing -> record<actions_summary: table<can_act: bool, count: int, hidden: bool, id: int>, archetype: string, archived: bool, bookmarked: bool, bookmarks: list<any>, category_id: int, chunk_size: int, closed: bool, created_at: string, current_post_number: int, deleted_at: string, deleted_by: string, details: record<can_archive_topic: bool, can_close_topic: bool, can_convert_topic: bool, can_create_post: bool, can_delete: bool, can_edit: bool, can_edit_staff_notes: bool, can_flag_topic: bool, can_invite_to: bool, can_invite_via_email: bool, can_moderate_category: bool, can_move_posts: bool, can_pin_unpin_topic: bool, can_remove_allowed_users: bool, can_remove_self_id: int, can_reply_as_new_topic: bool, can_review_topic: bool, can_split_merge_topic: bool, can_toggle_topic_visibility: bool, created_by: record<avatar_template: string, id: int, name: string, username: string>, last_poster: record<avatar_template: string, id: int, name: string, username: string>, notification_level: int, participants: list<record>>, draft: string, draft_key: string, draft_sequence: int, fancy_title: string, featured_link: string, has_deleted: bool, has_summary: bool, highest_post_number: int, id: int, image_url: string, last_posted_at: string, like_count: int, message_bus_last_id: int, participant_count: int, pinned: bool, pinned_at: string, pinned_globally: bool, pinned_until: string, post_stream: record<posts: list<record>, stream: list<any>>, posts_count: int, reply_count: int, show_read_indicator: bool, slow_mode_enabled_until: string, slow_mode_seconds: int, slug: string, suggested_topics: table<archetype: string, archived: bool, bookmarked: string, bumped: bool, bumped_at: string, category_id: int, closed: bool, created_at: string, excerpt: string, fancy_title: string, featured_link: string, highest_post_number: int, id: int, image_url: string, last_posted_at: string, like_count: int, liked: string, pinned: bool, posters: list, posts_count: int, reply_count: int, slug: string, tags: list, tags_descriptions: record, title: string, unpinned: string, unseen: bool, views: int, visible: bool>, tags: list<any>, tags_descriptions: record, thumbnails: string, timeline_lookup: list<any>, title: string, topic_timer: string, unpinned: string, user_id: int, views: int, visible: bool, word_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'Api-Key' missing: pass --api-key" } }
+  if ($api_username == null) { error make --unspanned { msg: "required header parameter 'Api-Username' missing: pass --api-username" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/t/{id}.json") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2082,12 +2108,14 @@ export def "bookmark-topic" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
-  --api-username: string
+  --api-key: string # required
+  --api-username: string # required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'Api-Key' missing: pass --api-key" } }
+  if ($api_username == null) { error make --unspanned { msg: "required header parameter 'Api-Username' missing: pass --api-username" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/t/{id}/bookmark.json") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2122,14 +2150,16 @@ export def "update-topic-timestamp" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
-  --api-username: string
+  --api-key: string # required
+  --api-username: string # required
   timestamp: string
 ]: any -> record<success: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'Api-Key' missing: pass --api-key" } }
+  if ($api_username == null) { error make --unspanned { msg: "required header parameter 'Api-Username' missing: pass --api-username" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/t/{id}/change-timestamp.json") $auth.query)
   let req_body = {"timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2166,8 +2196,8 @@ export def "invite-to-topic" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
-  --api-username: string
+  --api-key: string # required
+  --api-username: string # required
   --email: string
   --user: string
 ]: any -> record<user: record<avatar_template: string, id: int, name: string, username: string>> {
@@ -2175,6 +2205,8 @@ export def "invite-to-topic" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'Api-Key' missing: pass --api-key" } }
+  if ($api_username == null) { error make --unspanned { msg: "required header parameter 'Api-Username' missing: pass --api-username" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/t/{id}/invite.json") $auth.query)
   let req_body = {"email": $email, "user": $user} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2211,14 +2243,16 @@ export def "set-notification-level" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
-  --api-username: string
+  --api-key: string # required
+  --api-username: string # required
   notification_level: string@notification-level-completer
 ]: any -> record<success: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'Api-Key' missing: pass --api-key" } }
+  if ($api_username == null) { error make --unspanned { msg: "required header parameter 'Api-Username' missing: pass --api-username" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/t/{id}/notifications.json") $auth.query)
   let req_body = {"notification_level": $notification_level} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2255,12 +2289,14 @@ export def "get-specific-posts-from-topic" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
-  --api-username: string
+  --api-key: string # required
+  --api-username: string # required
 ]: nothing -> record<id: int, post_stream: record<posts: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'Api-Key' missing: pass --api-key" } }
+  if ($api_username == null) { error make --unspanned { msg: "required header parameter 'Api-Username' missing: pass --api-username" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/t/{id}/posts.json") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2295,8 +2331,8 @@ export def "update-topic-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
-  --api-username: string
+  --api-key: string # required
+  --api-username: string # required
   enabled: string@enabled-completer
   status: string@status-completer
   --until: string # Only required for `pinned` and `pinned_globally`
@@ -2305,6 +2341,8 @@ export def "update-topic-status" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'Api-Key' missing: pass --api-key" } }
+  if ($api_username == null) { error make --unspanned { msg: "required header parameter 'Api-Username' missing: pass --api-username" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/t/{id}/status.json") $auth.query)
   let req_body = {"enabled": $enabled, "status": $status, "until": $until} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2341,8 +2379,8 @@ export def "create-topic-timer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
-  --api-username: string
+  --api-key: string # required
+  --api-username: string # required
   --based-on-last-post: oneof<nothing, bool>
   --category-id: int
   --status-type: string
@@ -2352,6 +2390,8 @@ export def "create-topic-timer" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'Api-Key' missing: pass --api-key" } }
+  if ($api_username == null) { error make --unspanned { msg: "required header parameter 'Api-Username' missing: pass --api-username" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/t/{id}/timer.json") $auth.query)
   let req_body = {"based_on_last_post": $based_on_last_post, "category_id": $category_id, "status_type": $status_type, "time": $time} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2606,11 +2646,13 @@ export def "list-top-topics" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --period: string # Enum: `all`, `yearly`, `quarterly`, `monthly`, `weekly`, `daily`
-  --api-key: string
-  --api-username: string
+  --api-key: string # required
+  --api-username: string # required
 ]: nothing -> record<primary_groups: list<any>, topic_list: record<can_create_topic: bool, draft: string, draft_key: string, draft_sequence: int, for_period: string, per_page: int, topics: list<record>>, users: table<avatar_template: string, id: int, name: string, username: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'Api-Key' missing: pass --api-key" } }
+  if ($api_username == null) { error make --unspanned { msg: "required header parameter 'Api-Username' missing: pass --api-username" } }
   let qp = [(serialize-qp "period" $period "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/top.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -2718,12 +2760,14 @@ export def "get-user-external-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
-  --api-username: string
+  --api-key: string # required
+  --api-username: string # required
 ]: nothing -> record<user: record<admin: bool, allowed_pm_usernames: list<any>, avatar_template: string, badge_count: int, can_be_deleted: bool, can_change_bio: bool, can_change_location: bool, can_change_tracking_preferences: bool, can_change_website: bool, can_delete_all_posts: bool, can_edit: bool, can_edit_email: bool, can_edit_name: bool, can_edit_username: bool, can_ignore_user: bool, can_mute_user: bool, can_send_private_message_to_user: bool, can_send_private_messages: bool, can_upload_profile_header: bool, can_upload_user_card_background: bool, created_at: string, custom_fields: record<first_name: string>, featured_topic: string, featured_user_badge_ids: list<any>, flair_bg_color: string, flair_color: string, flair_group_id: string, flair_name: string, flair_url: string, group_users: list<record>, groups: list<record>, has_title_badges: bool, id: int, ignored: bool, ignored_usernames: list<any>, invited_by: string, last_posted_at: string, last_seen_at: string, locale: string, mailing_list_posts_per_day: int, moderator: bool, muted: bool, muted_category_ids: list<any>, muted_tags: list<any>, muted_usernames: list<any>, name: string, pending_count: int, pending_posts_count: int, post_count: int, primary_group_id: string, primary_group_name: string, profile_view_count: int, recent_time_read: int, regular_category_ids: list<any>, second_factor_backup_enabled: bool, second_factor_enabled: bool, staged: bool, system_avatar_template: string, system_avatar_upload_id: string, time_read: int, title: string, tracked_category_ids: list<any>, tracked_tags: list<any>, trust_level: int, uploaded_avatar_id: string, use_logo_small_as_avatar: bool, user_api_keys: string, user_auth_tokens: list<record>, user_fields: record<1: string, 2: string>, user_notification_schedule: record<day_0_end_time: int, day_0_start_time: int, day_1_end_time: int, day_1_start_time: int, day_2_end_time: int, day_2_start_time: int, day_3_end_time: int, day_3_start_time: int, day_4_end_time: int, day_4_start_time: int, day_5_end_time: int, day_5_start_time: int, day_6_end_time: int, day_6_start_time: int, enabled: bool>, user_option: record<allow_private_messages: bool, auto_track_topics_after_msecs: int, automatically_unpin_topics: bool, bookmark_auto_delete_preference: int, color_scheme_id: string, dark_scheme_id: string, default_calendar: string, digest_after_minutes: int, dynamic_favicon: bool, email_digests: bool, email_in_reply_to: bool, email_level: int, email_messages_level: int, email_previous_replies: int, enable_allowed_pm_users: bool, enable_defer: bool, enable_quoting: bool, external_links_in_new_tab: bool, hide_profile_and_presence: bool, homepage_id: string, include_tl0_in_digests: bool, like_notification_frequency: int, mailing_list_mode: bool, mailing_list_mode_frequency: int, new_topic_duration_minutes: int, notification_level_when_replying: int, oldest_search_log_date: string, seen_popups: list, sidebar_list_destination: string, skip_new_user_tips: bool, text_size: string, text_size_seq: int, theme_ids: list, theme_key_seq: int, timezone: string, title_count_mode: string, user_id: int>, username: string, watched_category_ids: list<any>, watched_first_post_category_ids: list<any>, watched_tags: list<any>, watching_first_post_tags: list<any>>, user_badges: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($external_id | is-empty) { error make --unspanned { msg: "path parameter 'external_id' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'Api-Key' missing: pass --api-key" } }
+  if ($api_username == null) { error make --unspanned { msg: "required header parameter 'Api-Username' missing: pass --api-username" } }
   let full_url = (build-url $base ({external_id: (encode-path-segment $external_id)} | format pattern "/u/by-external/{external_id}.json") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2759,13 +2803,15 @@ export def "get-user-identiy-provider-external-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
-  --api-username: string
+  --api-key: string # required
+  --api-username: string # required
 ]: nothing -> record<user: record<admin: bool, allowed_pm_usernames: list<any>, avatar_template: string, badge_count: int, can_be_deleted: bool, can_change_bio: bool, can_change_location: bool, can_change_tracking_preferences: bool, can_change_website: bool, can_delete_all_posts: bool, can_edit: bool, can_edit_email: bool, can_edit_name: bool, can_edit_username: bool, can_ignore_user: bool, can_mute_user: bool, can_send_private_message_to_user: bool, can_send_private_messages: bool, can_upload_profile_header: bool, can_upload_user_card_background: bool, created_at: string, custom_fields: record<first_name: string>, featured_topic: string, featured_user_badge_ids: list<any>, flair_bg_color: string, flair_color: string, flair_group_id: string, flair_name: string, flair_url: string, group_users: list<record>, groups: list<record>, has_title_badges: bool, id: int, ignored: bool, ignored_usernames: list<any>, invited_by: string, last_posted_at: string, last_seen_at: string, locale: string, mailing_list_posts_per_day: int, moderator: bool, muted: bool, muted_category_ids: list<any>, muted_tags: list<any>, muted_usernames: list<any>, name: string, pending_count: int, pending_posts_count: int, post_count: int, primary_group_id: string, primary_group_name: string, profile_view_count: int, recent_time_read: int, regular_category_ids: list<any>, second_factor_backup_enabled: bool, second_factor_enabled: bool, staged: bool, system_avatar_template: string, system_avatar_upload_id: string, time_read: int, title: string, tracked_category_ids: list<any>, tracked_tags: list<any>, trust_level: int, uploaded_avatar_id: string, use_logo_small_as_avatar: bool, user_api_keys: string, user_auth_tokens: list<record>, user_fields: record<1: string, 2: string>, user_notification_schedule: record<day_0_end_time: int, day_0_start_time: int, day_1_end_time: int, day_1_start_time: int, day_2_end_time: int, day_2_start_time: int, day_3_end_time: int, day_3_start_time: int, day_4_end_time: int, day_4_start_time: int, day_5_end_time: int, day_5_start_time: int, day_6_end_time: int, day_6_start_time: int, enabled: bool>, user_option: record<allow_private_messages: bool, auto_track_topics_after_msecs: int, automatically_unpin_topics: bool, bookmark_auto_delete_preference: int, color_scheme_id: string, dark_scheme_id: string, default_calendar: string, digest_after_minutes: int, dynamic_favicon: bool, email_digests: bool, email_in_reply_to: bool, email_level: int, email_messages_level: int, email_previous_replies: int, enable_allowed_pm_users: bool, enable_defer: bool, enable_quoting: bool, external_links_in_new_tab: bool, hide_profile_and_presence: bool, homepage_id: string, include_tl0_in_digests: bool, like_notification_frequency: int, mailing_list_mode: bool, mailing_list_mode_frequency: int, new_topic_duration_minutes: int, notification_level_when_replying: int, oldest_search_log_date: string, seen_popups: list, sidebar_list_destination: string, skip_new_user_tips: bool, text_size: string, text_size_seq: int, theme_ids: list, theme_key_seq: int, timezone: string, title_count_mode: string, user_id: int>, username: string, watched_category_ids: list<any>, watched_first_post_category_ids: list<any>, watched_tags: list<any>, watching_first_post_tags: list<any>>, user_badges: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($provider | is-empty) { error make --unspanned { msg: "path parameter 'provider' must be non-empty" } }
   if ($external_id | is-empty) { error make --unspanned { msg: "path parameter 'external_id' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'Api-Key' missing: pass --api-key" } }
+  if ($api_username == null) { error make --unspanned { msg: "required header parameter 'Api-Username' missing: pass --api-username" } }
   let full_url = (build-url $base ({provider: (encode-path-segment $provider), external_id: (encode-path-segment $external_id)} | format pattern "/u/by-external/{provider}/{external_id}.json") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2800,12 +2846,14 @@ export def "get-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
-  --api-username: string
+  --api-key: string # required
+  --api-username: string # required
 ]: nothing -> record<user: record<admin: bool, allowed_pm_usernames: list<any>, avatar_template: string, badge_count: int, can_be_deleted: bool, can_change_bio: bool, can_change_location: bool, can_change_tracking_preferences: bool, can_change_website: bool, can_delete_all_posts: bool, can_edit: bool, can_edit_email: bool, can_edit_name: bool, can_edit_username: bool, can_ignore_user: bool, can_mute_user: bool, can_send_private_message_to_user: bool, can_send_private_messages: bool, can_upload_profile_header: bool, can_upload_user_card_background: bool, created_at: string, custom_fields: record<first_name: string>, featured_topic: string, featured_user_badge_ids: list<any>, flair_bg_color: string, flair_color: string, flair_group_id: string, flair_name: string, flair_url: string, group_users: list<record>, groups: list<record>, has_title_badges: bool, id: int, ignored: bool, ignored_usernames: list<any>, invited_by: string, last_posted_at: string, last_seen_at: string, locale: string, mailing_list_posts_per_day: int, moderator: bool, muted: bool, muted_category_ids: list<any>, muted_tags: list<any>, muted_usernames: list<any>, name: string, pending_count: int, pending_posts_count: int, post_count: int, primary_group_id: string, primary_group_name: string, profile_view_count: int, recent_time_read: int, regular_category_ids: list<any>, second_factor_backup_enabled: bool, second_factor_enabled: bool, staged: bool, system_avatar_template: string, system_avatar_upload_id: string, time_read: int, title: string, tracked_category_ids: list<any>, tracked_tags: list<any>, trust_level: int, uploaded_avatar_id: string, use_logo_small_as_avatar: bool, user_api_keys: string, user_auth_tokens: list<record>, user_fields: record<1: string, 2: string>, user_notification_schedule: record<day_0_end_time: int, day_0_start_time: int, day_1_end_time: int, day_1_start_time: int, day_2_end_time: int, day_2_start_time: int, day_3_end_time: int, day_3_start_time: int, day_4_end_time: int, day_4_start_time: int, day_5_end_time: int, day_5_start_time: int, day_6_end_time: int, day_6_start_time: int, enabled: bool>, user_option: record<allow_private_messages: bool, auto_track_topics_after_msecs: int, automatically_unpin_topics: bool, bookmark_auto_delete_preference: int, color_scheme_id: string, dark_scheme_id: string, default_calendar: string, digest_after_minutes: int, dynamic_favicon: bool, email_digests: bool, email_in_reply_to: bool, email_level: int, email_messages_level: int, email_previous_replies: int, enable_allowed_pm_users: bool, enable_defer: bool, enable_quoting: bool, external_links_in_new_tab: bool, hide_profile_and_presence: bool, homepage_id: string, include_tl0_in_digests: bool, like_notification_frequency: int, mailing_list_mode: bool, mailing_list_mode_frequency: int, new_topic_duration_minutes: int, notification_level_when_replying: int, oldest_search_log_date: string, seen_popups: list, sidebar_list_destination: string, skip_new_user_tips: bool, text_size: string, text_size_seq: int, theme_ids: list, theme_key_seq: int, timezone: string, title_count_mode: string, user_id: int>, username: string, watched_category_ids: list<any>, watched_first_post_category_ids: list<any>, watched_tags: list<any>, watching_first_post_tags: list<any>>, user_badges: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'Api-Key' missing: pass --api-key" } }
+  if ($api_username == null) { error make --unspanned { msg: "required header parameter 'Api-Username' missing: pass --api-username" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/u/{username}.json") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2840,8 +2888,8 @@ export def "update-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
-  --api-username: string
+  --api-key: string # required
+  --api-username: string # required
   --email: string
   --external-ids: record
   --name: string
@@ -2851,6 +2899,8 @@ export def "update-user" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'Api-Key' missing: pass --api-key" } }
+  if ($api_username == null) { error make --unspanned { msg: "required header parameter 'Api-Username' missing: pass --api-username" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/u/{username}.json") $auth.query)
   let req_body = {"email": $email, "external_ids": $external_ids, "name": $name, "password": $password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3056,8 +3106,8 @@ export def "create-upload" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -3363,12 +3413,15 @@ export def "list-user-actions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --offset: int
-  --username: string
-  --filter: string
+  --offset: int # required
+  --username: string # required
+  --filter: string # required
 ]: nothing -> record<user_actions: table<acting_avatar_template: string, acting_name: string, acting_user_id: int, acting_username: string, action_code: string, action_type: int, archived: bool, avatar_template: string, category_id: int, closed: bool, created_at: string, deleted: bool, excerpt: string, hidden: string, name: string, post_id: string, post_number: int, post_type: string, slug: string, target_name: string, target_user_id: int, target_username: string, title: string, topic_id: int, user_id: int, username: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
+  if ($username == null) { error make --unspanned { msg: "required query parameter 'username' missing: pass --username" } }
+  if ($filter == null) { error make --unspanned { msg: "required query parameter 'filter' missing: pass --filter" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user_actions.json" $qp $auth.query)
   let accept_val = "application/json"
@@ -3437,8 +3490,8 @@ export def "create-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-key: string
-  --api-username: string
+  --api-key: string # required
+  --api-username: string # required
   --active: oneof<nothing, bool> # This param requires an api key in the request header or it will be ignored
   --approved: oneof<nothing, bool>
   email: string
@@ -3451,6 +3504,8 @@ export def "create-user" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_key == null) { error make --unspanned { msg: "required header parameter 'Api-Key' missing: pass --api-key" } }
+  if ($api_username == null) { error make --unspanned { msg: "required header parameter 'Api-Username' missing: pass --api-username" } }
   let full_url = (build-url $base "/users.json" $auth.query)
   let req_body = {"active": $active, "approved": $approved, "email": $email, "external_ids": $external_ids, "name": $name, "password": $password, "user_fields[1]": $user_fields_1, "username": $username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

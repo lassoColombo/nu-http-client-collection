@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -106,6 +106,8 @@ def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: b
 def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def offer-type-completer [] { ["virtualmachine"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -144,10 +146,11 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.MarketplaceOrdering/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -181,11 +184,12 @@ export def "marketplace-agreements-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
 ]: nothing -> table<properties: record<accepted: bool, licenseTextLink: string, plan: string, privacyPolicyLink: string, product: string, publisher: string, retrieveDatetime: string, signature: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MarketplaceOrdering/agreements") $qp $auth.query)
   let accept_val = "application/json"
@@ -222,7 +226,7 @@ export def "marketplace-agreements-get-agreement" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
 ]: nothing -> record<properties: record<accepted: bool, licenseTextLink: string, plan: string, privacyPolicyLink: string, product: string, publisher: string, retrieveDatetime: string, signature: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -230,6 +234,7 @@ export def "marketplace-agreements-get-agreement" [
   if ($publisher_id | is-empty) { error make --unspanned { msg: "path parameter 'publisherId' must be non-empty" } }
   if ($offer_id | is-empty) { error make --unspanned { msg: "path parameter 'offerId' must be non-empty" } }
   if ($plan_id | is-empty) { error make --unspanned { msg: "path parameter 'planId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), publisher_id: (encode-path-segment $publisher_id), offer_id: (encode-path-segment $offer_id), plan_id: (encode-path-segment $plan_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MarketplaceOrdering/agreements/{publisher_id}/offers/{offer_id}/plans/{plan_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -266,7 +271,7 @@ export def "marketplace-agreements-cancel" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
 ]: nothing -> record<properties: record<accepted: bool, licenseTextLink: string, plan: string, privacyPolicyLink: string, product: string, publisher: string, retrieveDatetime: string, signature: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -274,6 +279,7 @@ export def "marketplace-agreements-cancel" [
   if ($publisher_id | is-empty) { error make --unspanned { msg: "path parameter 'publisherId' must be non-empty" } }
   if ($offer_id | is-empty) { error make --unspanned { msg: "path parameter 'offerId' must be non-empty" } }
   if ($plan_id | is-empty) { error make --unspanned { msg: "path parameter 'planId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), publisher_id: (encode-path-segment $publisher_id), offer_id: (encode-path-segment $offer_id), plan_id: (encode-path-segment $plan_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MarketplaceOrdering/agreements/{publisher_id}/offers/{offer_id}/plans/{plan_id}/cancel") $qp $auth.query)
   let accept_val = "application/json"
@@ -310,7 +316,7 @@ export def "marketplace-agreements-sign" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
 ]: nothing -> record<properties: record<accepted: bool, licenseTextLink: string, plan: string, privacyPolicyLink: string, product: string, publisher: string, retrieveDatetime: string, signature: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -318,6 +324,7 @@ export def "marketplace-agreements-sign" [
   if ($publisher_id | is-empty) { error make --unspanned { msg: "path parameter 'publisherId' must be non-empty" } }
   if ($offer_id | is-empty) { error make --unspanned { msg: "path parameter 'offerId' must be non-empty" } }
   if ($plan_id | is-empty) { error make --unspanned { msg: "path parameter 'planId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), publisher_id: (encode-path-segment $publisher_id), offer_id: (encode-path-segment $offer_id), plan_id: (encode-path-segment $plan_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MarketplaceOrdering/agreements/{publisher_id}/offers/{offer_id}/plans/{plan_id}/sign") $qp $auth.query)
   let accept_val = "application/json"
@@ -342,7 +349,7 @@ export def "marketplace-agreements-sign" [
 # operationId: MarketplaceAgreements_Get
 export def "marketplace-agreements-get" [
   subscription_id: string
-  offer_type: string
+  offer_type: string@offer-type-completer
   publisher_id: string
   offer_id: string
   plan_id: string
@@ -355,7 +362,7 @@ export def "marketplace-agreements-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
 ]: nothing -> record<properties: record<accepted: bool, licenseTextLink: string, plan: string, privacyPolicyLink: string, product: string, publisher: string, retrieveDatetime: string, signature: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -364,6 +371,7 @@ export def "marketplace-agreements-get" [
   if ($publisher_id | is-empty) { error make --unspanned { msg: "path parameter 'publisherId' must be non-empty" } }
   if ($offer_id | is-empty) { error make --unspanned { msg: "path parameter 'offerId' must be non-empty" } }
   if ($plan_id | is-empty) { error make --unspanned { msg: "path parameter 'planId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), offer_type: (encode-path-segment $offer_type), publisher_id: (encode-path-segment $publisher_id), offer_id: (encode-path-segment $offer_id), plan_id: (encode-path-segment $plan_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MarketplaceOrdering/offerTypes/{offer_type}/publishers/{publisher_id}/offers/{offer_id}/plans/{plan_id}/agreements/current") $qp $auth.query)
   let accept_val = "application/json"
@@ -389,7 +397,7 @@ export def "marketplace-agreements-get" [
 # --properties shape: {accepted?: bool, licenseTextLink?: string, plan?: string, privacyPolicyLink?: string, product?: string, publisher?: string, retrieveDatetime?: string, signature?: string}
 export def "marketplace-agreements-create" [
   subscription_id: string
-  offer_type: string
+  offer_type: string@offer-type-completer
   publisher_id: string
   offer_id: string
   plan_id: string
@@ -402,7 +410,7 @@ export def "marketplace-agreements-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The API version to use for the request.
+  --api-version: string # The API version to use for the request. (required)
   --properties: any # Agreement Terms definition — shape: {accepted?: bool, licenseTextLink?: string, plan?: string, privacyPolicyLink?: string, product?: string, publisher?: string, retrieveDatetime?: string, signature?: string}
 ]: any -> record<properties: record<accepted: bool, licenseTextLink: string, plan: string, privacyPolicyLink: string, product: string, publisher: string, retrieveDatetime: string, signature: string>, id: string, name: string, type: string> {
   let input = $in
@@ -413,6 +421,7 @@ export def "marketplace-agreements-create" [
   if ($publisher_id | is-empty) { error make --unspanned { msg: "path parameter 'publisherId' must be non-empty" } }
   if ($offer_id | is-empty) { error make --unspanned { msg: "path parameter 'offerId' must be non-empty" } }
   if ($plan_id | is-empty) { error make --unspanned { msg: "path parameter 'planId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), offer_type: (encode-path-segment $offer_type), publisher_id: (encode-path-segment $publisher_id), offer_id: (encode-path-segment $offer_id), plan_id: (encode-path-segment $plan_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MarketplaceOrdering/offerTypes/{offer_type}/publishers/{publisher_id}/offers/{offer_id}/plans/{plan_id}/agreements/current") $qp $auth.query)
   let req_body = {"properties": $properties} | compact

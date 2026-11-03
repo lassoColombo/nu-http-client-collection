@@ -1,6 +1,7 @@
 # Auto-generated client for Ministry of Road Transport and Highways v3.0.0
 # Source: https://api.apis.guru/v2/specs/apisetu.gov.in/transport/3.0.0/openapi.json
-# Auth: --token flag or $env.MINISTRY_OF_ROAD_TRANSPORT_AND_HIGHWAYS_TOKEN
+# Auth (apiKey): --token-apikey flag or $env.MINISTRY_OF_ROAD_TRANSPORT_AND_HIGHWAYS_APIKEY_TOKEN
+# Auth (clientId): --token-clientid flag or $env.MINISTRY_OF_ROAD_TRANSPORT_AND_HIGHWAYS_CLIENTID_TOKEN
 
 const BASE_URL = "https://apisetu.gov.in/transport/v3"
 
@@ -12,8 +13,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-apisetu-apikey" => { {scheme: $scheme, headers: {X-APISETU-APIKEY: $token_val}, query: "", location: "header"} }
-    "x-apisetu-clientid" => { {scheme: $scheme, headers: {X-APISETU-CLIENTID: $token_val}, query: "", location: "header"} }
+    "x-apisetu-apikey" => { {scheme: $scheme, headers: {"X-APISETU-APIKEY": $token_val}, query: "", location: "header"} }
+    "x-apisetu-clientid" => { {scheme: $scheme, headers: {"X-APISETU-CLIENTID": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -113,7 +114,7 @@ def format-completer-1 [] { ["pdf"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-apikey" "token-clientid"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "drvlc" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)

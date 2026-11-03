@@ -136,10 +136,11 @@ export def "aggregate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: record
+  --body: record # required
 ]: nothing -> record<binData: string, data: record<names: list<string>, ndarry: list<any>, tensor: record<shape: list, values: list>, tftensor: record<bool_val: list, dcomplex_val: list, double_val: list, dtype: string, float_val: list, half_val: list, int64_val: list, int_val: list, resource_handle_val: list, scomplex_val: list, string_val: list, tensor_content: string, tensor_shape: record, uint32_val: list, uint64_val: list, variant_val: list, version_number: int>>, meta: record<metrics: list<record>, puid: string, requestPath: record, routing: record, tags: record>, status: record<code: int, info: string, reason: string, status: string>, strData: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($body == null) { error make --unspanned { msg: "required query parameter 'body' missing: pass --body" } }
   let qp = [(serialize-qp "body" $body "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/aggregate" $qp $auth.query)
   let accept_val = "application/json"
@@ -210,10 +211,11 @@ export def "transform-input4" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --json: record # e.g. {json: {"data":{"names" : ["feature1"],"tensor" : {"shape": [1,1],"values": [1]}}}}
+  --json: record # required, e.g. {json: {"data":{"names" : ["feature1"],"tensor" : {"shape": [1,1],"values": [1]}}}}
 ]: nothing -> record<binData: string, data: record<names: list<string>, ndarry: list<any>, tensor: record<shape: list, values: list>, tftensor: record<bool_val: list, dcomplex_val: list, double_val: list, dtype: string, float_val: list, half_val: list, int64_val: list, int_val: list, resource_handle_val: list, scomplex_val: list, string_val: list, tensor_content: string, tensor_shape: record, uint32_val: list, uint64_val: list, variant_val: list, version_number: int>>, meta: record<metrics: list<record>, puid: string, requestPath: record, routing: record, tags: record>, status: record<code: int, info: string, reason: string, status: string>, strData: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($json == null) { error make --unspanned { msg: "required query parameter 'json' missing: pass --json" } }
   let qp = [(serialize-qp "json" $json "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/predict" $qp $auth.query)
   let accept_val = "application/json"
@@ -284,10 +286,11 @@ export def "route2" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --json: record
+  --json: record # required
 ]: nothing -> record<binData: string, data: record<names: list<string>, ndarry: list<any>, tensor: record<shape: list, values: list>, tftensor: record<bool_val: list, dcomplex_val: list, double_val: list, dtype: string, float_val: list, half_val: list, int64_val: list, int_val: list, resource_handle_val: list, scomplex_val: list, string_val: list, tensor_content: string, tensor_shape: record, uint32_val: list, uint64_val: list, variant_val: list, version_number: int>>, meta: record<metrics: list<record>, puid: string, requestPath: record, routing: record, tags: record>, status: record<code: int, info: string, reason: string, status: string>, strData: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($json == null) { error make --unspanned { msg: "required query parameter 'json' missing: pass --json" } }
   let qp = [(serialize-qp "json" $json "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/route" $qp $auth.query)
   let accept_val = "application/json"
@@ -358,10 +361,11 @@ export def "send-feedback2" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --json: record
+  --json: record # required
 ]: nothing -> record<binData: string, data: record<names: list<string>, ndarry: list<any>, tensor: record<shape: list, values: list>, tftensor: record<bool_val: list, dcomplex_val: list, double_val: list, dtype: string, float_val: list, half_val: list, int64_val: list, int_val: list, resource_handle_val: list, scomplex_val: list, string_val: list, tensor_content: string, tensor_shape: record, uint32_val: list, uint64_val: list, variant_val: list, version_number: int>>, meta: record<metrics: list<record>, puid: string, requestPath: record, routing: record, tags: record>, status: record<code: int, info: string, reason: string, status: string>, strData: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($json == null) { error make --unspanned { msg: "required query parameter 'json' missing: pass --json" } }
   let qp = [(serialize-qp "json" $json "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/send-feedback" $qp $auth.query)
   let accept_val = "application/json"
@@ -432,10 +436,11 @@ export def "transform-input2" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --json: record
+  --json: record # required
 ]: nothing -> record<binData: string, data: record<names: list<string>, ndarry: list<any>, tensor: record<shape: list, values: list>, tftensor: record<bool_val: list, dcomplex_val: list, double_val: list, dtype: string, float_val: list, half_val: list, int64_val: list, int_val: list, resource_handle_val: list, scomplex_val: list, string_val: list, tensor_content: string, tensor_shape: record, uint32_val: list, uint64_val: list, variant_val: list, version_number: int>>, meta: record<metrics: list<record>, puid: string, requestPath: record, routing: record, tags: record>, status: record<code: int, info: string, reason: string, status: string>, strData: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($json == null) { error make --unspanned { msg: "required query parameter 'json' missing: pass --json" } }
   let qp = [(serialize-qp "json" $json "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/transform-input" $qp $auth.query)
   let accept_val = "application/json"
@@ -506,10 +511,11 @@ export def "transform-output2" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --json: record
+  --json: record # required
 ]: nothing -> record<binData: string, data: record<names: list<string>, ndarry: list<any>, tensor: record<shape: list, values: list>, tftensor: record<bool_val: list, dcomplex_val: list, double_val: list, dtype: string, float_val: list, half_val: list, int64_val: list, int_val: list, resource_handle_val: list, scomplex_val: list, string_val: list, tensor_content: string, tensor_shape: record, uint32_val: list, uint64_val: list, variant_val: list, version_number: int>>, meta: record<metrics: list<record>, puid: string, requestPath: record, routing: record, tags: record>, status: record<code: int, info: string, reason: string, status: string>, strData: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($json == null) { error make --unspanned { msg: "required query parameter 'json' missing: pass --json" } }
   let qp = [(serialize-qp "json" $json "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/transform-output" $qp $auth.query)
   let accept_val = "application/json"

@@ -101,7 +101,7 @@ def lang-completer [] { ["ar" "cs" "da" "de" "en" "es" "et" "fi" "fr" "ga" "it" 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-op" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -124,7 +124,7 @@ export def commands []: nothing -> table {
 # Get geolocation information via IP address
 #
 # GET /
-export def "get" [
+export def "get-op" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -136,13 +136,15 @@ export def "get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --package: string@package-completer # Web service package of different granularity of return information.
   --addon: list<string> # Extra information in addition to the above selected package. (e.g. continent,country)
-  --ip: string # IP address (IPv4 or IPv6) for reverse IP location lookup purpose. If not present, the server IP address will be used for the location lookup. (e.g. 8.8.8.8)
+  --ip: string # IP address (IPv4 or IPv6) for reverse IP location lookup purpose. If not present, the server IP address will be used for the location lookup. (required, e.g. 8.8.8.8)
   --format: string@format-completer # Format of the response message.
   --lang: string@lang-completer # Translation information. The translation only applicable for continent, country, region and city name for the addon package.
-  --key: string # API Key. Please sign up free trial license key at ip2location.com
+  --key: string # API Key. Please sign up free trial license key at ip2location.com (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ip == null) { error make --unspanned { msg: "required query parameter 'ip' missing: pass --ip" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "package" $package "scalar") (serialize-qp "addon" $addon "csv") (serialize-qp "ip" $ip "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"

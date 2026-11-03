@@ -12,8 +12,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "x-apideck-app-id" => { {scheme: $scheme, headers: {x-apideck-app-id: $token_val}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "x-apideck-app-id" => { {scheme: $scheme, headers: {"x-apideck-app-id": $token_val}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -162,14 +162,18 @@ export def "delete-proxy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
-  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
-  --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API. (e.g. close)
-  --x-apideck-downstream-url: string # Downstream URL (e.g. https://api.close.com/api/v1/lead)
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
+  --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API. (required, e.g. close)
+  --x-apideck-downstream-url: string # Downstream URL (required, e.g. https://api.close.com/api/v1/lead)
   --x-apideck-downstream-authorization: string # Downstream authorization header. This will skip the Vault token injection. (e.g. Bearer XXXXXXXXXXXXXXXXX)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
+  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
+  if ($x_apideck_service_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-service-id' missing: pass --x-apideck-service-id" } }
+  if ($x_apideck_downstream_url == null) { error make --unspanned { msg: "required header parameter 'x-apideck-downstream-url' missing: pass --x-apideck-downstream-url" } }
   let full_url = (build-url $base "/proxy" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -203,14 +207,18 @@ export def "get-proxy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
-  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
-  --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API. (e.g. close)
-  --x-apideck-downstream-url: string # Downstream URL (e.g. https://api.close.com/api/v1/lead)
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
+  --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API. (required, e.g. close)
+  --x-apideck-downstream-url: string # Downstream URL (required, e.g. https://api.close.com/api/v1/lead)
   --x-apideck-downstream-authorization: string # Downstream authorization header. This will skip the Vault token injection. (e.g. Bearer XXXXXXXXXXXXXXXXX)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
+  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
+  if ($x_apideck_service_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-service-id' missing: pass --x-apideck-service-id" } }
+  if ($x_apideck_downstream_url == null) { error make --unspanned { msg: "required header parameter 'x-apideck-downstream-url' missing: pass --x-apideck-downstream-url" } }
   let full_url = (build-url $base "/proxy" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -244,14 +252,18 @@ export def "options-proxy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
-  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
-  --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API. (e.g. close)
-  --x-apideck-downstream-url: string # Downstream URL (e.g. https://api.close.com/api/v1/lead)
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
+  --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API. (required, e.g. close)
+  --x-apideck-downstream-url: string # Downstream URL (required, e.g. https://api.close.com/api/v1/lead)
   --x-apideck-downstream-authorization: string # Downstream authorization header. This will skip the Vault token injection. (e.g. Bearer XXXXXXXXXXXXXXXXX)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
+  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
+  if ($x_apideck_service_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-service-id' missing: pass --x-apideck-service-id" } }
+  if ($x_apideck_downstream_url == null) { error make --unspanned { msg: "required header parameter 'x-apideck-downstream-url' missing: pass --x-apideck-downstream-url" } }
   let full_url = (build-url $base "/proxy" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -285,19 +297,23 @@ export def "patch-proxy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
-  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
-  --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API. (e.g. close)
-  --x-apideck-downstream-url: string # Downstream URL (e.g. https://api.close.com/api/v1/lead)
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
+  --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API. (required, e.g. close)
+  --x-apideck-downstream-url: string # Downstream URL (required, e.g. https://api.close.com/api/v1/lead)
   --x-apideck-downstream-authorization: string # Downstream authorization header. This will skip the Vault token injection. (e.g. Bearer XXXXXXXXXXXXXXXXX)
-  --body: any
+  --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
+  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
+  if ($x_apideck_service_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-service-id' missing: pass --x-apideck-service-id" } }
+  if ($x_apideck_downstream_url == null) { error make --unspanned { msg: "required header parameter 'x-apideck-downstream-url' missing: pass --x-apideck-downstream-url" } }
   let full_url = (build-url $base "/proxy" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id, "x-apideck-downstream-url": $x_apideck_downstream_url, "x-apideck-downstream-authorization": $x_apideck_downstream_authorization} | compact
@@ -308,7 +324,7 @@ export def "patch-proxy" [
     query: {}
     headers: $auth.headers
     body: $req_body
-    content_type: "*/*"
+    content_type: "application/json"
     timeout: ($max_time | default 30min)
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
@@ -330,19 +346,23 @@ export def "post-proxy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
-  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
-  --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API. (e.g. close)
-  --x-apideck-downstream-url: string # Downstream URL (e.g. https://api.close.com/api/v1/lead)
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
+  --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API. (required, e.g. close)
+  --x-apideck-downstream-url: string # Downstream URL (required, e.g. https://api.close.com/api/v1/lead)
   --x-apideck-downstream-authorization: string # Downstream authorization header. This will skip the Vault token injection. (e.g. Bearer XXXXXXXXXXXXXXXXX)
-  --body: any
+  --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
+  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
+  if ($x_apideck_service_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-service-id' missing: pass --x-apideck-service-id" } }
+  if ($x_apideck_downstream_url == null) { error make --unspanned { msg: "required header parameter 'x-apideck-downstream-url' missing: pass --x-apideck-downstream-url" } }
   let full_url = (build-url $base "/proxy" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id, "x-apideck-downstream-url": $x_apideck_downstream_url, "x-apideck-downstream-authorization": $x_apideck_downstream_authorization} | compact
@@ -353,7 +373,7 @@ export def "post-proxy" [
     query: {}
     headers: $auth.headers
     body: $req_body
-    content_type: "*/*"
+    content_type: "application/json"
     timeout: ($max_time | default 30min)
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
@@ -375,19 +395,23 @@ export def "put-proxy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
-  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
-  --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API. (e.g. close)
-  --x-apideck-downstream-url: string # Downstream URL (e.g. https://api.close.com/api/v1/lead)
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
+  --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API. (required, e.g. close)
+  --x-apideck-downstream-url: string # Downstream URL (required, e.g. https://api.close.com/api/v1/lead)
   --x-apideck-downstream-authorization: string # Downstream authorization header. This will skip the Vault token injection. (e.g. Bearer XXXXXXXXXXXXXXXXX)
-  --body: any
+  --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
+  if ($x_apideck_app_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-app-id' missing: pass --x-apideck-app-id" } }
+  if ($x_apideck_service_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-service-id' missing: pass --x-apideck-service-id" } }
+  if ($x_apideck_downstream_url == null) { error make --unspanned { msg: "required header parameter 'x-apideck-downstream-url' missing: pass --x-apideck-downstream-url" } }
   let full_url = (build-url $base "/proxy" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id, "x-apideck-downstream-url": $x_apideck_downstream_url, "x-apideck-downstream-authorization": $x_apideck_downstream_authorization} | compact
@@ -398,7 +422,7 @@ export def "put-proxy" [
     query: {}
     headers: $auth.headers
     body: $req_body
-    content_type: "*/*"
+    content_type: "application/json"
     timeout: ($max_time | default 30min)
     auth: {scheme: $auth.scheme, location: $auth.location}
   }

@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -111,10 +111,13 @@ def x-amz-target-completer-11 [] { ["Logs_20140328.DeleteResourcePolicy"] }
 def x-amz-target-completer-12 [] { ["Logs_20140328.DeleteRetentionPolicy"] }
 def x-amz-target-completer-13 [] { ["Logs_20140328.DeleteSubscriptionFilter"] }
 def x-amz-target-completer-14 [] { ["Logs_20140328.DescribeDestinations"] }
+def status-code-completer [] { ["CANCELLED" "COMPLETED" "FAILED" "PENDING" "PENDING_CANCEL" "RUNNING"] }
 def x-amz-target-completer-15 [] { ["Logs_20140328.DescribeExportTasks"] }
 def x-amz-target-completer-16 [] { ["Logs_20140328.DescribeLogGroups"] }
+def order-by-completer [] { ["LastEventTime" "LogStreamName"] }
 def x-amz-target-completer-17 [] { ["Logs_20140328.DescribeLogStreams"] }
 def x-amz-target-completer-18 [] { ["Logs_20140328.DescribeMetricFilters"] }
+def status-completer [] { ["Cancelled" "Complete" "Failed" "Running" "Scheduled" "Timeout" "Unknown"] }
 def x-amz-target-completer-19 [] { ["Logs_20140328.DescribeQueries"] }
 def x-amz-target-completer-20 [] { ["Logs_20140328.DescribeQueryDefinitions"] }
 def x-amz-target-completer-21 [] { ["Logs_20140328.DescribeResourcePolicies"] }
@@ -136,6 +139,7 @@ def x-amz-target-completer-36 [] { ["Logs_20140328.PutMetricFilter"] }
 def x-amz-target-completer-37 [] { ["Logs_20140328.PutQueryDefinition"] }
 def x-amz-target-completer-38 [] { ["Logs_20140328.PutResourcePolicy"] }
 def x-amz-target-completer-39 [] { ["Logs_20140328.PutRetentionPolicy"] }
+def distribution-completer [] { ["ByLogStream" "Random"] }
 def x-amz-target-completer-40 [] { ["Logs_20140328.PutSubscriptionFilter"] }
 def x-amz-target-completer-41 [] { ["Logs_20140328.StartQuery"] }
 def x-amz-target-completer-42 [] { ["Logs_20140328.StopQuery"] }
@@ -189,13 +193,14 @@ export def "associate-kms-key" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  log_group_name: any
-  kms_key_id: any
+  --x-amz-target: string@x-amz-target-completer # required
+  log_group_name: string # The name of the log group.
+  kms_key_id: string # The Amazon Resource Name (ARN) of the KMS key to use when encrypting log data. This must be a symmetric KMS key. For more information, see Amazon Resource Names (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html#arn-syntax-kms) and Using Symmetric and Asymmetric Keys (https://docs.aws.amazon.com/kms/latest/developerguide/symmetric-asymmetric.html).
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.AssociateKmsKey")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"logGroupName": $log_group_name, "kmsKeyId": $kms_key_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -238,12 +243,13 @@ export def "cancel-export-task" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  task_id: any
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  task_id: string # The ID of the export task.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.CancelExportTask")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"taskId": $task_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -286,20 +292,21 @@ export def "create-export-task" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  --task-name: any
-  log_group_name: any
-  --log-stream-name-prefix: any
-  --body-from: any
-  --body-to: any
-  destination: any
-  --destination-prefix: any
-]: any -> record<taskId: record> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  --task-name: string # The name of the export task.
+  log_group_name: string # The name of the log group.
+  --log-stream-name-prefix: string # Export only log streams that match the provided prefix. If you don't specify a value, no prefix filter is applied.
+  from: int # The start time of the range for the request, expressed as the number of milliseconds after Jan 1, 1970 00:00:00 UTC. Events with a timestamp earlier than this time are not exported.
+  to: int # The end time of the range for the request, expressed as the number of milliseconds after Jan 1, 1970 00:00:00 UTC. Events with a timestamp later than this time are not exported. You must specify a time that is not earlier than when this log group was created.
+  destination: string # The name of S3 bucket for the exported log data. The bucket must be in the same Amazon Web Services Region.
+  --destination-prefix: string # The prefix used as the start of the key for every object exported. If you don't specify a value, the default is exportedlogs.
+]: any -> record<taskId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.CreateExportTask")
   let full_url = (build-url $base "/" $auth.query)
-  let req_body = {"taskName": $task_name, "logGroupName": $log_group_name, "logStreamNamePrefix": $log_stream_name_prefix, "from": $body_from, "to": $body_to, "destination": $destination, "destinationPrefix": $destination_prefix} | compact
+  let req_body = {"taskName": $task_name, "logGroupName": $log_group_name, "logStreamNamePrefix": $log_stream_name_prefix, "from": $from, "to": $to, "destination": $destination, "destinationPrefix": $destination_prefix} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -340,14 +347,15 @@ export def "create-log-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  log_group_name: any
-  --kms-key-id: any
-  --tags: any
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  log_group_name: string # The name of the log group.
+  --kms-key-id: string # The Amazon Resource Name (ARN) of the KMS key to use when encrypting log data. For more information, see Amazon Resource Names (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html#arn-syntax-kms).
+  --tags: record # The key-value pairs to use for the tags. You can grant users access to certain log groups while preventing them from accessing other log groups. To do so, tag your groups and use IAM policies that refer to those tags. To assign tags when you create a log group, you must have either the logs:TagResource or logs:TagLogGroup permission. For more information about tagging, see Tagging Amazon Web Services resources (https://docs.aws.amazon.com/general/latest/gr/aws_tagging.html). For more information about using tags to control access, see Controlling access to Amazon Web Services resources using tags (https://docs.aws.amazon.com/IAM/latest/UserGuide/access_tags.html).
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.CreateLogGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"logGroupName": $log_group_name, "kmsKeyId": $kms_key_id, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -390,13 +398,14 @@ export def "create-log-stream" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  log_group_name: any
-  log_stream_name: any
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  log_group_name: string # The name of the log group.
+  log_stream_name: string # The name of the log stream.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.CreateLogStream")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"logGroupName": $log_group_name, "logStreamName": $log_stream_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -439,12 +448,13 @@ export def "delete-data-protection-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  log_group_identifier: any
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  log_group_identifier: string # The name or ARN of the log group that you want to delete the data protection policy for.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.DeleteDataProtectionPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"logGroupIdentifier": $log_group_identifier} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -487,12 +497,13 @@ export def "delete-destination" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  destination_name: any
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  destination_name: string # The name of the destination.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.DeleteDestination")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"destinationName": $destination_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -535,12 +546,13 @@ export def "delete-log-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  log_group_name: any
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  log_group_name: string # The name of the log group.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.DeleteLogGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"logGroupName": $log_group_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -583,13 +595,14 @@ export def "delete-log-stream" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  log_group_name: any
-  log_stream_name: any
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  log_group_name: string # The name of the log group.
+  log_stream_name: string # The name of the log stream.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.DeleteLogStream")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"logGroupName": $log_group_name, "logStreamName": $log_stream_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -632,13 +645,14 @@ export def "delete-metric-filter" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  log_group_name: any
-  filter_name: any
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  log_group_name: string # The name of the log group.
+  filter_name: string # The name of the metric filter.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.DeleteMetricFilter")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"logGroupName": $log_group_name, "filterName": $filter_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -681,12 +695,13 @@ export def "delete-query-definition" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  query_definition_id: any
-]: any -> record<success: record> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  query_definition_id: string # The ID of the query definition that you want to delete. You can use DescribeQueryDefinitions (https://docs.aws.amazon.com/AmazonCloudWatchLogs/latest/APIReference/API_DescribeQueryDefinitions.html) to retrieve the IDs of your saved query definitions.
+]: any -> record<success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.DeleteQueryDefinition")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"queryDefinitionId": $query_definition_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -729,12 +744,13 @@ export def "delete-resource-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  --policy-name: any
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  --policy-name: string # The name of the policy to be revoked. This parameter is required.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.DeleteResourcePolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"policyName": $policy_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -777,12 +793,13 @@ export def "delete-retention-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  log_group_name: any
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  log_group_name: string # The name of the log group.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.DeleteRetentionPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"logGroupName": $log_group_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -825,13 +842,14 @@ export def "delete-subscription-filter" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  log_group_name: any
-  filter_name: any
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  log_group_name: string # The name of the log group.
+  filter_name: string # The name of the subscription filter.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.DeleteSubscriptionFilter")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"logGroupName": $log_group_name, "filterName": $filter_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -876,14 +894,15 @@ export def "describe-destinations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  --destination-name-prefix: any
-  --next-token-body: any #  (body field)
-  --limit-body: any #  (body field)
-]: any -> record<destinations: record, nextToken: string> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  --destination-name-prefix: string # The prefix to match. If you don't specify a value, no prefix filter is applied.
+  --next-token-body: string # The token for the next set of items to return. The token expires after 24 hours. (body field)
+  --limit-body: int # The maximum number of items returned. If you don't specify a value, the default maximum value of 50 items is used. (body field)
+]: any -> record<destinations: table<destinationName: string, targetArn: string, roleArn: string, accessPolicy: string, arn: string, creationTime: int>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.DescribeDestinations")
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"DestinationNamePrefix": $destination_name_prefix, "nextToken": $next_token_body, "limit": $limit_body} | compact
@@ -927,15 +946,16 @@ export def "describe-export-tasks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  --task-id: any
-  --status-code: any
-  --next-token: any
-  --limit: any
-]: any -> record<exportTasks: record, nextToken: string> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  --task-id: string # The ID of the export task. Specifying a task ID filters the results to one or zero export tasks.
+  --status-code: string@status-code-completer # The status code of the export task. Specifying a status code filters the results to zero or more export tasks.
+  --next-token: string # The token for the next set of items to return. The token expires after 24 hours.
+  --limit: int # The maximum number of items returned. If you don't specify a value, the default is up to 50 items.
+]: any -> record<exportTasks: table<taskId: string, taskName: string, logGroupName: string, from: int, to: int, destination: string, destinationPrefix: string, status: record, executionInfo: record>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.DescribeExportTasks")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"taskId": $task_id, "statusCode": $status_code, "nextToken": $next_token, "limit": $limit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -980,17 +1000,18 @@ export def "describe-log-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  --account-identifiers: any
-  --log-group-name-prefix: any
-  --log-group-name-pattern: any
-  --next-token-body: any #  (body field)
-  --limit-body: any #  (body field)
-  --include-linked-accounts: any
-]: any -> record<logGroups: record, nextToken: string> {
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  --account-identifiers: list<string> # When includeLinkedAccounts is set to True, use this parameter to specify the list of accounts to search. You can specify as many as 20 account IDs in the array.
+  --log-group-name-prefix: string # The prefix to match. logGroupNamePrefix and logGroupNamePattern are mutually exclusive. Only one of these parameters can be passed.
+  --log-group-name-pattern: string # If you specify a string for this parameter, the operation returns only log groups that have names that match the string based on a case-sensitive substring search. For example, if you specify Foo, log groups named FooBar, aws/Foo, and GroupFoo would match, but foo, F/o/o and Froo would not match. logGroupNamePattern and logGroupNamePrefix are mutually exclusive. Only one of these parameters can be passed.
+  --next-token-body: string # The token for the next set of items to return. The token expires after 24 hours. (body field)
+  --limit-body: int # The maximum number of items returned. If you don't specify a value, the default is up to 50 items. (body field)
+  --include-linked-accounts: oneof<nothing, bool> # If you are using a monitoring account, set this to True to have the operation return log groups in the accounts listed in accountIdentifiers. If this parameter is set to true and accountIdentifiers contains a null value, the operation returns all log groups in the monitoring account and all log groups in all source accounts that are linked to the monitoring account. If you specify includeLinkedAccounts in your request, then metricFilterCount, retentionInDays, and storedBytes are not included in the response.
+]: any -> record<logGroups: table<logGroupName: string, creationTime: int, retentionInDays: int, metricFilterCount: int, arn: string, storedBytes: int, kmsKeyId: string, dataProtectionStatus: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.DescribeLogGroups")
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"accountIdentifiers": $account_identifiers, "logGroupNamePrefix": $log_group_name_prefix, "logGroupNamePattern": $log_group_name_pattern, "nextToken": $next_token_body, "limit": $limit_body, "includeLinkedAccounts": $include_linked_accounts} | compact
@@ -1036,18 +1057,19 @@ export def "describe-log-streams" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  --log-group-name: any
-  --log-group-identifier: any
-  --log-stream-name-prefix: any
-  --order-by: any
-  --descending: any
-  --next-token-body: any #  (body field)
-  --limit-body: any #  (body field)
-]: any -> record<logStreams: record, nextToken: string> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  --log-group-name: string # The name of the log group. You must include either logGroupIdentifier or logGroupName, but not both.
+  --log-group-identifier: string # Specify either the name or ARN of the log group to view. If the log group is in a source account and you are using a monitoring account, you must use the log group ARN. You must include either logGroupIdentifier or logGroupName, but not both.
+  --log-stream-name-prefix: string # The prefix to match. If orderBy is LastEventTime, you cannot specify this parameter.
+  --order-by: string@order-by-completer # If the value is LogStreamName, the results are ordered by log stream name. If the value is LastEventTime, the results are ordered by the event time. The default value is LogStreamName. If you order the results by event time, you cannot specify the logStreamNamePrefix parameter. lastEventTimestamp represents the time of the most recent log event in the log stream in CloudWatch Logs. This number is expressed as the number of milliseconds after Jan 1, 1970 00:00:00 UTC. lastEventTimestamp updates on an eventual consistency basis. It typically updates in less than an hour from ingestion, but in rare situations might take longer.
+  --descending: oneof<nothing, bool> # If the value is true, results are returned in descending order. If the value is to false, results are returned in ascending order. The default value is false.
+  --next-token-body: string # The token for the next set of items to return. The token expires after 24 hours. (body field)
+  --limit-body: int # The maximum number of items returned. If you don't specify a value, the default is up to 50 items. (body field)
+]: any -> record<logStreams: table<logStreamName: string, creationTime: int, firstEventTimestamp: int, lastEventTimestamp: int, lastIngestionTime: int, uploadSequenceToken: string, arn: string, storedBytes: int>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.DescribeLogStreams")
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"logGroupName": $log_group_name, "logGroupIdentifier": $log_group_identifier, "logStreamNamePrefix": $log_stream_name_prefix, "orderBy": $order_by, "descending": $descending, "nextToken": $next_token_body, "limit": $limit_body} | compact
@@ -1093,17 +1115,18 @@ export def "describe-metric-filters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  --log-group-name: any
-  --filter-name-prefix: any
-  --next-token-body: any #  (body field)
-  --limit-body: any #  (body field)
-  --metric-name: any
-  --metric-namespace: any
-]: any -> record<metricFilters: record, nextToken: string> {
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  --log-group-name: string # The name of the log group.
+  --filter-name-prefix: string # The prefix to match. CloudWatch Logs uses the value that you set here only if you also include the logGroupName parameter in your request.
+  --next-token-body: string # The token for the next set of items to return. The token expires after 24 hours. (body field)
+  --limit-body: int # The maximum number of items returned. If you don't specify a value, the default is up to 50 items. (body field)
+  --metric-name: string # The name of the CloudWatch metric to which the monitored log information should be published. For example, you might publish to a metric named ErrorCount.
+  --metric-namespace: string # Filters results to include only those in the specified namespace. If you include this parameter in your request, you must also include the metricName parameter.
+]: any -> record<metricFilters: table<filterName: string, filterPattern: string, metricTransformations: list, creationTime: int, logGroupName: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.DescribeMetricFilters")
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"logGroupName": $log_group_name, "filterNamePrefix": $filter_name_prefix, "nextToken": $next_token_body, "limit": $limit_body, "metricName": $metric_name, "metricNamespace": $metric_namespace} | compact
@@ -1147,15 +1170,16 @@ export def "describe-queries" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  --log-group-name: any
-  --status: any
-  --max-results: any
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  --log-group-name: string # Limits the returned queries to only those for the specified log group.
+  --status: string@status-completer # Limits the returned queries to only those that have the specified status. Valid values are Cancelled, Complete, Failed, Running, and Scheduled.
+  --max-results: int # Limits the number of returned queries to the specified number.
   --next-token: string # The token for the next set of items to return. The token expires after 24 hours.
-]: any -> record<queries: record, nextToken: string> {
+]: any -> record<queries: table<queryId: string, queryString: string, status: string, createTime: int, logGroupName: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.DescribeQueries")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"logGroupName": $log_group_name, "status": $status, "maxResults": $max_results, "nextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1198,14 +1222,15 @@ export def "describe-query-definitions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  --query-definition-name-prefix: any
-  --max-results: any
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  --query-definition-name-prefix: string # Use this parameter to filter your results to only the query definitions that have names that start with the prefix you specify.
+  --max-results: int # Limits the number of returned query definitions to the specified number.
   --next-token: string # The token for the next set of items to return. The token expires after 24 hours.
-]: any -> record<queryDefinitions: record, nextToken: string> {
+]: any -> record<queryDefinitions: table<queryDefinitionId: string, name: string, queryString: string, lastModified: int, logGroupNames: list>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.DescribeQueryDefinitions")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"queryDefinitionNamePrefix": $query_definition_name_prefix, "maxResults": $max_results, "nextToken": $next_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1248,13 +1273,14 @@ export def "describe-resource-policies" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
+  --x-amz-target: string@x-amz-target-completer-21 # required
   --next-token: string # The token for the next set of items to return. The token expires after 24 hours.
-  --limit: any
-]: any -> record<resourcePolicies: record, nextToken: string> {
+  --limit: int # The maximum number of resource policies to be displayed with one call of this API.
+]: any -> record<resourcePolicies: table<policyName: string, policyDocument: string, lastUpdatedTime: int>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.DescribeResourcePolicies")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"nextToken": $next_token, "limit": $limit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1299,15 +1325,16 @@ export def "describe-subscription-filters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  log_group_name: any
-  --filter-name-prefix: any
-  --next-token-body: any #  (body field)
-  --limit-body: any #  (body field)
-]: any -> record<subscriptionFilters: record, nextToken: string> {
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  log_group_name: string # The name of the log group.
+  --filter-name-prefix: string # The prefix to match. If you don't specify a value, no prefix filter is applied.
+  --next-token-body: string # The token for the next set of items to return. The token expires after 24 hours. (body field)
+  --limit-body: int # The maximum number of items returned. If you don't specify a value, the default is up to 50 items. (body field)
+]: any -> record<subscriptionFilters: table<filterName: string, logGroupName: string, filterPattern: string, destinationArn: string, roleArn: string, distribution: string, creationTime: int>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.DescribeSubscriptionFilters")
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"logGroupName": $log_group_name, "filterNamePrefix": $filter_name_prefix, "nextToken": $next_token_body, "limit": $limit_body} | compact
@@ -1351,12 +1378,13 @@ export def "disassociate-kms-key" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  log_group_name: any
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  log_group_name: string # The name of the log group.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.DisassociateKmsKey")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"logGroupName": $log_group_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1401,22 +1429,23 @@ export def "filter-log-events" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  --log-group-name: any
-  --log-group-identifier: any
-  --log-stream-names: any
-  --log-stream-name-prefix: any
-  --start-time: any
-  --end-time: any
-  --filter-pattern: any
-  --next-token-body: any #  (body field)
-  --limit-body: any #  (body field)
-  --interleaved: any
-  --unmask: any
-]: any -> record<events: record, searchedLogStreams: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  --log-group-name: string # The name of the log group to search. You must include either logGroupIdentifier or logGroupName, but not both.
+  --log-group-identifier: string # Specify either the name or ARN of the log group to view log events from. If the log group is in a source account and you are using a monitoring account, you must use the log group ARN. You must include either logGroupIdentifier or logGroupName, but not both.
+  --log-stream-names: list<string> # Filters the results to only logs from the log streams in this list. If you specify a value for both logStreamNamePrefix and logStreamNames, the action returns an InvalidParameterException error.
+  --log-stream-name-prefix: string # Filters the results to include only events from log streams that have names starting with this prefix. If you specify a value for both logStreamNamePrefix and logStreamNames, but the value for logStreamNamePrefix does not match any log stream names specified in logStreamNames, the action returns an InvalidParameterException error.
+  --start-time: int # The start of the time range, expressed as the number of milliseconds after Jan 1, 1970 00:00:00 UTC. Events with a timestamp before this time are not returned.
+  --end-time: int # The end of the time range, expressed as the number of milliseconds after Jan 1, 1970 00:00:00 UTC. Events with a timestamp later than this time are not returned.
+  --filter-pattern: string # A symbolic description of how CloudWatch Logs should interpret the data in each log event. For example, a log event can contain timestamps, IP addresses, strings, and so on. You use the filter pattern to specify what to look for in the log event message.
+  --next-token-body: string # The token for the next set of items to return. The token expires after 24 hours. (body field)
+  --limit-body: int # The maximum number of events to return. The default is 10,000 events. (body field)
+  --interleaved: oneof<nothing, bool> # If the value is true, the operation attempts to provide responses that contain events from multiple log streams within the log group, interleaved in a single response. If the value is false, all the matched log events in the first log stream are searched first, then those in the next log stream, and so on. Important As of June 17, 2019, this parameter is ignored and the value is assumed to be true. The response from this operation always interleaves events from multiple log streams within a log group.Starting on June 17, 2019, this parameter will be ignored and the value will be assumed to be true. The response from this operation will always interleave events from multiple log streams within a log group.
+  --unmask: oneof<nothing, bool> # Specify true to display the log event fields with all sensitive data unmasked and visible. The default is false. To use this operation with this parameter, you must be signed into an account with the logs:Unmask permission.
+]: any -> record<events: table<logStreamName: string, timestamp: int, message: string, ingestionTime: int, eventId: string>, searchedLogStreams: table<logStreamName: string, searchedCompletely: bool>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.FilterLogEvents")
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"logGroupName": $log_group_name, "logGroupIdentifier": $log_group_identifier, "logStreamNames": $log_stream_names, "logStreamNamePrefix": $log_stream_name_prefix, "startTime": $start_time, "endTime": $end_time, "filterPattern": $filter_pattern, "nextToken": $next_token_body, "limit": $limit_body, "interleaved": $interleaved, "unmask": $unmask} | compact
@@ -1460,12 +1489,13 @@ export def "get-data-protection-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  log_group_identifier: any
-]: any -> record<logGroupIdentifier: record, policyDocument: record, lastUpdatedTime: record> {
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  log_group_identifier: string # The name or ARN of the log group that contains the data protection policy that you want to see.
+]: any -> record<logGroupIdentifier: string, policyDocument: string, lastUpdatedTime: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.GetDataProtectionPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"logGroupIdentifier": $log_group_identifier} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1510,20 +1540,21 @@ export def "get-log-events" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-26
-  --log-group-name: any
-  --log-group-identifier: any
-  log_stream_name: any
-  --start-time: any
-  --end-time: any
-  --next-token-body: any #  (body field)
-  --limit-body: any #  (body field)
-  --start-from-head: any
-  --unmask: any
-]: any -> record<events: record, nextForwardToken: record, nextBackwardToken: record> {
+  --x-amz-target: string@x-amz-target-completer-26 # required
+  --log-group-name: string # The name of the log group. You must include either logGroupIdentifier or logGroupName, but not both.
+  --log-group-identifier: string # Specify either the name or ARN of the log group to view events from. If the log group is in a source account and you are using a monitoring account, you must use the log group ARN. You must include either logGroupIdentifier or logGroupName, but not both.
+  log_stream_name: string # The name of the log stream.
+  --start-time: int # The start of the time range, expressed as the number of milliseconds after Jan 1, 1970 00:00:00 UTC. Events with a timestamp equal to this time or later than this time are included. Events with a timestamp earlier than this time are not included.
+  --end-time: int # The end of the time range, expressed as the number of milliseconds after Jan 1, 1970 00:00:00 UTC. Events with a timestamp equal to or later than this time are not included.
+  --next-token-body: string # The token for the next set of items to return. The token expires after 24 hours. (body field)
+  --limit-body: int # The maximum number of log events returned. If you don't specify a limit, the default is as many log events as can fit in a response size of 1 MB (up to 10,000 log events). (body field)
+  --start-from-head: oneof<nothing, bool> # If the value is true, the earliest log events are returned first. If the value is false, the latest log events are returned first. The default value is false. If you are using a previous nextForwardToken value as the nextToken in this operation, you must specify true for startFromHead.
+  --unmask: oneof<nothing, bool> # Specify true to display the log event fields with all sensitive data unmasked and visible. The default is false. To use this operation with this parameter, you must be signed into an account with the logs:Unmask permission.
+]: any -> record<events: table<timestamp: int, message: string, ingestionTime: int>, nextForwardToken: string, nextBackwardToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.GetLogEvents")
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"logGroupName": $log_group_name, "logGroupIdentifier": $log_group_identifier, "logStreamName": $log_stream_name, "startTime": $start_time, "endTime": $end_time, "nextToken": $next_token_body, "limit": $limit_body, "startFromHead": $start_from_head, "unmask": $unmask} | compact
@@ -1567,14 +1598,15 @@ export def "get-log-group-fields" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-27
-  --log-group-name: any
-  --time: any
-  --log-group-identifier: any
-]: any -> record<logGroupFields: record> {
+  --x-amz-target: string@x-amz-target-completer-27 # required
+  --log-group-name: string # The name of the log group to search. You must include either logGroupIdentifier or logGroupName, but not both.
+  --time: int # The time to set as the center of the query. If you specify time, the 15 minutes before this time are queries. If you omit time, the 8 minutes before and 8 minutes after this time are searched. The time value is specified as epoch time, which is the number of seconds since January 1, 1970, 00:00:00 UTC.
+  --log-group-identifier: string # Specify either the name or ARN of the log group to view. If the log group is in a source account and you are using a monitoring account, you must specify the ARN. You must include either logGroupIdentifier or logGroupName, but not both.
+]: any -> record<logGroupFields: table<name: string, percent: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.GetLogGroupFields")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"logGroupName": $log_group_name, "time": $time, "logGroupIdentifier": $log_group_identifier} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1617,13 +1649,14 @@ export def "get-log-record" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-28
-  log_record_pointer: any
-  --unmask: any
+  --x-amz-target: string@x-amz-target-completer-28 # required
+  log_record_pointer: string # The pointer corresponding to the log event record you want to retrieve. You get this from the response of a GetQueryResults operation. In that response, the value of the @ptr field for a log event is the value to use as logRecordPointer to retrieve that complete log event record.
+  --unmask: oneof<nothing, bool> # Specify true to display the log event fields with all sensitive data unmasked and visible. The default is false. To use this operation with this parameter, you must be signed into an account with the logs:Unmask permission.
 ]: any -> record<logRecord: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.GetLogRecord")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"logRecordPointer": $log_record_pointer, "unmask": $unmask} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1666,12 +1699,13 @@ export def "get-query-results" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-29
-  query_id: any
-]: any -> record<results: record, statistics: record<recordsMatched: record, recordsScanned: record, bytesScanned: record>, status: record> {
+  --x-amz-target: string@x-amz-target-completer-29 # required
+  query_id: string # The ID number of the query.
+]: any -> record<results: list<list<record>>, statistics: record<recordsMatched: float, recordsScanned: float, bytesScanned: float>, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.GetQueryResults")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"queryId": $query_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1714,12 +1748,13 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-30
-  resource_arn: any
+  --x-amz-target: string@x-amz-target-completer-30 # required
+  resource_arn: string # The ARN of the resource that you want to view tags for. The ARN format of a log group is arn:aws:logs:Region:account-id:log-group:log-group-name The ARN format of a destination is arn:aws:logs:Region:account-id:destination:destination-name For more information about ARN format, see CloudWatch Logs resources and operations (https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/iam-access-control-overview-cwl.html).
 ]: any -> record<tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.ListTagsForResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceArn": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1764,12 +1799,13 @@ export def "list-tags-log-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-31
-  log_group_name: any
+  --x-amz-target: string@x-amz-target-completer-31 # required
+  log_group_name: string # The name of the log group.
 ]: any -> record<tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.ListTagsLogGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"logGroupName": $log_group_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1812,13 +1848,14 @@ export def "put-data-protection-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-32
-  log_group_identifier: any
-  policy_document: any
-]: any -> record<logGroupIdentifier: record, policyDocument: record, lastUpdatedTime: record> {
+  --x-amz-target: string@x-amz-target-completer-32 # required
+  log_group_identifier: string # Specify either the log group name or log group ARN.
+  policy_document: string # Specify the data protection policy, in JSON. This policy must include two JSON blocks: The first block must include both a DataIdentifer array and an Operation property with an Audit action. The DataIdentifer array lists the types of sensitive data that you want to mask. For more information about the available options, see Types of data that you can mask (https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/mask-sensitive-log-data-types.html). The Operation property with an Audit action is required to find the sensitive data terms. This Audit action must contain a FindingsDestination object. You can optionally use that FindingsDestination object to list one or more destinations to send audit findings to. If you specify destinations such as log groups, Kinesis Data Firehose streams, and S3 buckets, they must already exist. The second block must include both a DataIdentifer array and an Operation property with an Deidentify action. The DataIdentifer array must exactly match the DataIdentifer array in the first block of the policy. The Operation property with the Deidentify action is what actually masks the data, and it must contain the "MaskConfig": {} object. The "MaskConfig": {} object must be empty. For an example data protection policy, see the Examples section on this page. The contents of two DataIdentifer arrays must match exactly.
+]: any -> record<logGroupIdentifier: string, policyDocument: string, lastUpdatedTime: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.PutDataProtectionPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"logGroupIdentifier": $log_group_identifier, "policyDocument": $policy_document} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1861,15 +1898,16 @@ export def "put-destination" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-33
-  destination_name: any
-  target_arn: any
-  role_arn: any
-  --tags: any
-]: any -> record<destination: record<destinationName: record, targetArn: record, roleArn: record, accessPolicy: record, arn: record, creationTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-33 # required
+  destination_name: string # A name for the destination.
+  target_arn: string # The ARN of an Amazon Kinesis stream to which to deliver matching log events.
+  role_arn: string # The ARN of an IAM role that grants CloudWatch Logs permissions to call the Amazon Kinesis PutRecord operation on the destination stream.
+  --tags: record # An optional list of key-value pairs to associate with the resource. For more information about tagging, see Tagging Amazon Web Services resources (https://docs.aws.amazon.com/general/latest/gr/aws_tagging.html)
+]: any -> record<destination: record<destinationName: string, targetArn: string, roleArn: string, accessPolicy: string, arn: string, creationTime: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.PutDestination")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"destinationName": $destination_name, "targetArn": $target_arn, "roleArn": $role_arn, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1912,14 +1950,15 @@ export def "put-destination-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-34
-  destination_name: any
-  access_policy: any
-  --force-update: any
+  --x-amz-target: string@x-amz-target-completer-34 # required
+  destination_name: string # A name for an existing destination.
+  access_policy: string # An IAM policy document that authorizes cross-account users to deliver their log events to the associated destination. This can be up to 5120 bytes.
+  --force-update: oneof<nothing, bool> # Specify true if you are updating an existing destination policy to grant permission to an organization ID instead of granting permission to individual AWS accounts. Before you update a destination policy this way, you must first update the subscription filters in the accounts that send logs to this destination. If you do not, the subscription filters might stop working. By specifying true for forceUpdate, you are affirming that you have already updated the subscription filters. For more information, see Updating an existing cross-account subscription (https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/Cross-Account-Log_Subscription-Update.html) If you omit this parameter, the default of false is used.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.PutDestinationPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"destinationName": $destination_name, "accessPolicy": $access_policy, "forceUpdate": $force_update} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1945,6 +1984,7 @@ export def "put-destination-policy" [
 #
 # POST /
 # operationId: PutLogEvents
+# --logEvents item shape: {timestamp: int, message: string}
 export def "put-log-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1962,15 +2002,16 @@ export def "put-log-events" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-35
-  log_group_name: any
-  log_stream_name: any
-  log_events: any
-  --sequence-token: any
-]: any -> record<nextSequenceToken: record, rejectedLogEventsInfo: record<tooNewLogEventStartIndex: record, tooOldLogEventEndIndex: record, expiredLogEventEndIndex: record>> {
+  --x-amz-target: string@x-amz-target-completer-35 # required
+  log_group_name: string # The name of the log group.
+  log_stream_name: string # The name of the log stream.
+  log_events: list # The log events. — item shape: {timestamp: int, message: string}
+  --sequence-token: string # The sequence token obtained from the response of the previous PutLogEvents call. The sequenceToken parameter is now ignored in PutLogEvents actions. PutLogEvents actions are now accepted and never return InvalidSequenceTokenException or DataAlreadyAcceptedException even if the sequence token is not valid.
+]: any -> record<nextSequenceToken: string, rejectedLogEventsInfo: record<tooNewLogEventStartIndex: int, tooOldLogEventEndIndex: int, expiredLogEventEndIndex: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.PutLogEvents")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"logGroupName": $log_group_name, "logStreamName": $log_stream_name, "logEvents": $log_events, "sequenceToken": $sequence_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1996,6 +2037,7 @@ export def "put-log-events" [
 #
 # POST /
 # operationId: PutMetricFilter
+# --metricTransformations item shape: {metricName: string, metricNamespace: string, metricValue: string, defaultValue?: float, dimensions?: record, unit?: "Seconds"|"Microseconds"|"Milliseconds"|"Bytes"|"Kilobytes"|"Megabytes"|"Gigabytes"|"Terabytes"|"Bits"|"Kilobits"|"Megabits"|"Gigabits"|"Terabits"|"Percent"|"Count"|"Bytes/Second"|"Kilobytes/Second"|"Megabytes/Second"|"Gigabytes/Second"|"Terabytes/Second"|"Bits/Second"|"Kilobits/Second"|"Megabits/Second"|"Gigabits/Second"|"Terabits/Second"|"Count/Second"|"None"}
 export def "put-metric-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2013,15 +2055,16 @@ export def "put-metric-filter" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-36
-  log_group_name: any
-  filter_name: any
-  filter_pattern: any
-  metric_transformations: any
+  --x-amz-target: string@x-amz-target-completer-36 # required
+  log_group_name: string # The name of the log group.
+  filter_name: string # A name for the metric filter.
+  filter_pattern: string # A symbolic description of how CloudWatch Logs should interpret the data in each log event. For example, a log event can contain timestamps, IP addresses, strings, and so on. You use the filter pattern to specify what to look for in the log event message.
+  metric_transformations: list # A collection of information that defines how metric data gets emitted. — item shape: {metricName: string, metricNamespace: string, metricValue: string, defaultValue?: float, dimensions?: record, unit?: "Seconds"|"Microseconds"|"Milliseconds"|"Bytes"|"Kilobytes"|"Megabytes"|"Gigabytes"|"Terabytes"|"Bits"|"Kilobits"|"Megabits"|"Gigabits"|"Terabits"|"Percent"|"Count"|"Bytes/Second"|"Kilobytes/Second"|"Megabytes/Second"|"Gigabytes/Second"|"Terabytes/Second"|"Bits/Second"|"Kilobits/Second"|"Megabits/Second"|"Gigabits/Second"|"Terabits/Second"|"Count/Second"|"None"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.PutMetricFilter")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"logGroupName": $log_group_name, "filterName": $filter_name, "filterPattern": $filter_pattern, "metricTransformations": $metric_transformations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2064,15 +2107,16 @@ export def "put-query-definition" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-37
-  name: any
-  --query-definition-id: any
-  --log-group-names: any
-  query_string: any
-]: any -> record<queryDefinitionId: record> {
+  --x-amz-target: string@x-amz-target-completer-37 # required
+  name: string # A name for the query definition. If you are saving numerous query definitions, we recommend that you name them. This way, you can find the ones you want by using the first part of the name as a filter in the queryDefinitionNamePrefix parameter of DescribeQueryDefinitions (https://docs.aws.amazon.com/AmazonCloudWatchLogs/latest/APIReference/API_DescribeQueryDefinitions.html).
+  --query-definition-id: string # If you are updating a query definition, use this parameter to specify the ID of the query definition that you want to update. You can use DescribeQueryDefinitions (https://docs.aws.amazon.com/AmazonCloudWatchLogs/latest/APIReference/API_DescribeQueryDefinitions.html) to retrieve the IDs of your saved query definitions. If you are creating a query definition, do not specify this parameter. CloudWatch generates a unique ID for the new query definition and include it in the response to this operation.
+  --log-group-names: list<string> # Use this parameter to include specific log groups as part of your query definition. If you are updating a query definition and you omit this parameter, then the updated definition will contain no log groups.
+  query_string: string # The query string to use for this definition. For more information, see CloudWatch Logs Insights Query Syntax (https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/CWL_QuerySyntax.html).
+]: any -> record<queryDefinitionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.PutQueryDefinition")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name, "queryDefinitionId": $query_definition_id, "logGroupNames": $log_group_names, "queryString": $query_string} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2115,13 +2159,14 @@ export def "put-resource-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-38
-  --policy-name: any
-  --policy-document: any
-]: any -> record<resourcePolicy: record<policyName: record, policyDocument: record, lastUpdatedTime: record>> {
+  --x-amz-target: string@x-amz-target-completer-38 # required
+  --policy-name: string # Name of the new policy. This parameter is required.
+  --policy-document: string # Details of the new policy, including the identity of the principal that is enabled to put logs to this account. This is formatted as a JSON string. This parameter is required. The following example creates a resource policy enabling the Route 53 service to put DNS query logs in to the specified log group. Replace "logArn" with the ARN of your CloudWatch Logs resource, such as a log group or log stream. CloudWatch Logs also supports aws:SourceArn (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_condition-keys.html#condition-keys-sourcearn) and aws:SourceAccount (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_condition-keys.html#condition-keys-sourceaccount) condition context keys. In the example resource policy, you would replace the value of SourceArn with the resource making the call from Route 53 to CloudWatch Logs. You would also replace the value of SourceAccount with the Amazon Web Services account ID making that call. { "Version": "2012-10-17", "Statement": [ { "Sid": "Route53LogsToCloudWatchLogs", "Effect": "Allow", "Principal": { "Service": [ "route53.amazonaws.com" ] }, "Action": "logs:PutLogEvents", "Resource": "logArn", "Condition": { "ArnLike": { "aws:SourceArn": "myRoute53ResourceArn" }, "StringEquals": { "aws:SourceAccount": "myAwsAccountId" } } } ] }
+]: any -> record<resourcePolicy: record<policyName: string, policyDocument: string, lastUpdatedTime: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.PutResourcePolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"policyName": $policy_name, "policyDocument": $policy_document} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2164,13 +2209,14 @@ export def "put-retention-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-39
-  log_group_name: any
+  --x-amz-target: string@x-amz-target-completer-39 # required
+  log_group_name: string # The name of the log group.
   retention_in_days: int # The number of days to retain the log events in the specified log group. Possible values are: 1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1827, 2192, 2557, 2922, 3288, and 3653. To set a log group so that its log events do not expire, use DeleteRetentionPolicy (https://docs.aws.amazon.com/AmazonCloudWatchLogs/latest/APIReference/API_DeleteRetentionPolicy.html).
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.PutRetentionPolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"logGroupName": $log_group_name, "retentionInDays": $retention_in_days} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2213,17 +2259,18 @@ export def "put-subscription-filter" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-40
-  log_group_name: any
-  filter_name: any
-  filter_pattern: any
-  destination_arn: any
-  --role-arn: any
-  --distribution: any
+  --x-amz-target: string@x-amz-target-completer-40 # required
+  log_group_name: string # The name of the log group.
+  filter_name: string # A name for the subscription filter. If you are updating an existing filter, you must specify the correct name in filterName. To find the name of the filter currently associated with a log group, use DescribeSubscriptionFilters (https://docs.aws.amazon.com/AmazonCloudWatchLogs/latest/APIReference/API_DescribeSubscriptionFilters.html).
+  filter_pattern: string # A symbolic description of how CloudWatch Logs should interpret the data in each log event. For example, a log event can contain timestamps, IP addresses, strings, and so on. You use the filter pattern to specify what to look for in the log event message.
+  destination_arn: string # The ARN of the destination to deliver matching log events to. Currently, the supported destinations are: An Amazon Kinesis stream belonging to the same account as the subscription filter, for same-account delivery. A logical destination (specified using an ARN) belonging to a different account, for cross-account delivery. If you're setting up a cross-account subscription, the destination must have an IAM policy associated with it. The IAM policy must allow the sender to send logs to the destination. For more information, see PutDestinationPolicy (https://docs.aws.amazon.com/AmazonCloudWatchLogs/latest/APIReference/API_PutDestinationPolicy.html). A Kinesis Data Firehose delivery stream belonging to the same account as the subscription filter, for same-account delivery. A Lambda function belonging to the same account as the subscription filter, for same-account delivery.
+  --role-arn: string # The ARN of an IAM role that grants CloudWatch Logs permissions to deliver ingested log events to the destination stream. You don't need to provide the ARN when you are working with a logical destination for cross-account delivery.
+  --distribution: string@distribution-completer # The method used to distribute log data to the destination, which can be either random or grouped by log stream.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.PutSubscriptionFilter")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"logGroupName": $log_group_name, "filterName": $filter_name, "filterPattern": $filter_pattern, "destinationArn": $destination_arn, "roleArn": $role_arn, "distribution": $distribution} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2266,18 +2313,19 @@ export def "start-query" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-41
-  --log-group-name: any
-  --log-group-names: any
-  --log-group-identifiers: any
-  start_time: any
-  end_time: any
-  query_string: any
-  --limit: any
-]: any -> record<queryId: record> {
+  --x-amz-target: string@x-amz-target-completer-41 # required
+  --log-group-name: string # The log group on which to perform the query. A StartQuery operation must include exactly one of the following parameters: logGroupName, logGroupNames or logGroupIdentifiers.
+  --log-group-names: list<string> # The list of log groups to be queried. You can include up to 50 log groups. A StartQuery operation must include exactly one of the following parameters: logGroupName, logGroupNames or logGroupIdentifiers.
+  --log-group-identifiers: list<string> # The list of log groups to query. You can include up to 50 log groups. You can specify them by the log group name or ARN. If a log group that you're querying is in a source account and you're using a monitoring account, you must specify the ARN of the log group here. The query definition must also be defined in the monitoring account. If you specify an ARN, the ARN can't end with an asterisk (*). A StartQuery operation must include exactly one of the following parameters: logGroupName, logGroupNames or logGroupIdentifiers.
+  start_time: int # The beginning of the time range to query. The range is inclusive, so the specified start time is included in the query. Specified as epoch time, the number of seconds since January 1, 1970, 00:00:00 UTC.
+  end_time: int # The end of the time range to query. The range is inclusive, so the specified end time is included in the query. Specified as epoch time, the number of seconds since January 1, 1970, 00:00:00 UTC.
+  query_string: string # The query string to use. For more information, see CloudWatch Logs Insights Query Syntax (https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/CWL_QuerySyntax.html).
+  --limit: int # The maximum number of log events to return in the query. If the query string uses the fields command, only the specified fields and their values are returned. The default is 1000.
+]: any -> record<queryId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.StartQuery")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"logGroupName": $log_group_name, "logGroupNames": $log_group_names, "logGroupIdentifiers": $log_group_identifiers, "startTime": $start_time, "endTime": $end_time, "queryString": $query_string, "limit": $limit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2320,12 +2368,13 @@ export def "stop-query" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-42
-  query_id: any
-]: any -> record<success: record> {
+  --x-amz-target: string@x-amz-target-completer-42 # required
+  query_id: string # The ID number of the query to stop. To find this ID number, use DescribeQueries.
+]: any -> record<success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.StopQuery")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"queryId": $query_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2370,13 +2419,14 @@ export def "tag-log-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-43
-  log_group_name: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-43 # required
+  log_group_name: string # The name of the log group.
+  tags: record # The key-value pairs to use for the tags.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.TagLogGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"logGroupName": $log_group_name, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2419,13 +2469,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-44
-  resource_arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-44 # required
+  resource_arn: string # The ARN of the resource that you're adding tags to. The ARN format of a log group is arn:aws:logs:Region:account-id:log-group:log-group-name The ARN format of a destination is arn:aws:logs:Region:account-id:destination:destination-name For more information about ARN format, see CloudWatch Logs resources and operations (https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/iam-access-control-overview-cwl.html).
+  tags: record # The list of key-value pairs to associate with the resource.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceArn": $resource_arn, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2468,13 +2519,14 @@ export def "test-metric-filter" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-45
+  --x-amz-target: string@x-amz-target-completer-45 # required
   filter_pattern: string # A symbolic description of how CloudWatch Logs should interpret the data in each log event. For example, a log event can contain timestamps, IP addresses, strings, and so on. You use the filter pattern to specify what to look for in the log event message.
-  log_event_messages: any
-]: any -> record<matches: record> {
+  log_event_messages: list<string> # The log event messages to test.
+]: any -> record<matches: table<eventNumber: int, eventMessage: string, extractedValues: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.TestMetricFilter")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"filterPattern": $filter_pattern, "logEventMessages": $log_event_messages} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2519,13 +2571,14 @@ export def "untag-log-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-46
-  log_group_name: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-46 # required
+  log_group_name: string # The name of the log group.
+  tags: list<string> # The tag keys. The corresponding tags are removed from the log group.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.UntagLogGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"logGroupName": $log_group_name, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2568,13 +2621,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-47
-  resource_arn: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-47 # required
+  resource_arn: string # The ARN of the CloudWatch Logs resource that you're removing tags from. The ARN format of a log group is arn:aws:logs:Region:account-id:log-group:log-group-name The ARN format of a destination is arn:aws:logs:Region:account-id:destination:destination-name For more information about ARN format, see CloudWatch Logs resources and operations (https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/iam-access-control-overview-cwl.html).
+  tag_keys: list<string> # The list of tag keys to remove from the resource.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Logs_20140328.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceArn": $resource_arn, "tagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

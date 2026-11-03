@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -146,7 +146,7 @@ export def "list-realtime-contact-analysis-segments" [
   contact_id: string # The identifier of the contact.
   --max-results-body: int # The maximimum number of results to return per page. (body field)
   --next-token-body: string # The token for the next set of results. Use the value returned in the previous response in the next request to retrieve the next set of results. (body field)
-]: any -> record<Segments: record, NextToken: record> {
+]: any -> record<Segments: table<Transcript: record, Categories: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

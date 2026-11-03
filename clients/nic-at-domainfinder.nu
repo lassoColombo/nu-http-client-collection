@@ -130,10 +130,11 @@ export def "get-api-v1-suggest" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --term: string # Domainname/term to obtain suggestions for (e.g. mydomain)
+  --term: string # Domainname/term to obtain suggestions for (required, e.g. mydomain)
 ]: nothing -> record<: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($term == null) { error make --unspanned { msg: "required query parameter 'term' missing: pass --term" } }
   let qp = [(serialize-qp "term" $term "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/suggest" $qp $auth.query)
   let accept_val = "application/json"

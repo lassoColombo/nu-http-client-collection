@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -101,8 +101,11 @@ def x-amz-target-completer-1 [] { ["AWSShineFrontendService_20170701.DeleteParal
 def x-amz-target-completer-2 [] { ["AWSShineFrontendService_20170701.DeleteTerminology"] }
 def x-amz-target-completer-3 [] { ["AWSShineFrontendService_20170701.DescribeTextTranslationJob"] }
 def x-amz-target-completer-4 [] { ["AWSShineFrontendService_20170701.GetParallelData"] }
+def terminology-data-format-completer [] { ["CSV" "TMX" "TSV"] }
 def x-amz-target-completer-5 [] { ["AWSShineFrontendService_20170701.GetTerminology"] }
+def merge-strategy-completer [] { ["OVERWRITE"] }
 def x-amz-target-completer-6 [] { ["AWSShineFrontendService_20170701.ImportTerminology"] }
+def display-language-code-completer [] { ["de" "en" "es" "fr" "it" "ja" "ko" "pt" "zh" "zh-TW"] }
 def x-amz-target-completer-7 [] { ["AWSShineFrontendService_20170701.ListLanguages"] }
 def x-amz-target-completer-8 [] { ["AWSShineFrontendService_20170701.ListParallelData"] }
 def x-amz-target-completer-9 [] { ["AWSShineFrontendService_20170701.ListTagsForResource"] }
@@ -142,7 +145,9 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateParallelData
-# --EncryptionKey shape: {Type: any, Id: any}
+# --ParallelDataConfig shape: {S3Uri: string, Format: "TSV"|"CSV"|"TMX"}
+# --EncryptionKey shape: {Type: "KMS", Id: string}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-parallel-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -160,17 +165,18 @@ export def "create-parallel-data" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  name: any
-  --description: any
-  parallel_data_config: any
-  --encryption-key: record # The encryption key used to encrypt this object. — shape: {Type: any, Id: any}
-  client_token: any
-  --tags: any
-]: any -> record<Name: record, Status: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  name: string # A custom name for the parallel data resource in Amazon Translate. You must assign a name that is unique in the account and region.
+  --description: string # A custom description for the parallel data resource in Amazon Translate.
+  parallel_data_config: record # Specifies the format and S3 location of the parallel data input file. — shape: {S3Uri: string, Format: "TSV"|"CSV"|"TMX"}
+  --encryption-key: record # The encryption key used to encrypt this object. — shape: {Type: "KMS", Id: string}
+  client_token: string # A unique identifier for the request. This token is automatically generated when you use Amazon Translate through an AWS SDK.
+  --tags: list # Tags to be associated with this resource. A tag is a key-value pair that adds metadata to a resource. Each tag key for the resource must be unique. For more information, see Tagging your resources (https://docs.aws.amazon.com/translate/latest/dg/tagging.html). — item shape: {Key: string, Value: string}
+]: any -> record<Name: string, Status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSShineFrontendService_20170701.CreateParallelData")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Description": $description, "ParallelDataConfig": $parallel_data_config, "EncryptionKey": $encryption_key, "ClientToken": $client_token, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -213,12 +219,13 @@ export def "delete-parallel-data" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  name: any
-]: any -> record<Name: record, Status: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  name: string # The name of the parallel data resource that is being deleted.
+]: any -> record<Name: string, Status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSShineFrontendService_20170701.DeleteParallelData")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -261,12 +268,13 @@ export def "delete-terminology" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  name: any
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  name: string # The name of the custom terminology being deleted.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSShineFrontendService_20170701.DeleteTerminology")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -309,12 +317,13 @@ export def "describe-text-translation-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  job_id: any
-]: any -> record<TextTranslationJobProperties: record<JobId: record, JobName: record, JobStatus: record, JobDetails: record<TranslatedDocumentsCount: record, DocumentsWithErrorsCount: record, InputDocumentsCount: record>, SourceLanguageCode: record, TargetLanguageCodes: record, TerminologyNames: record, ParallelDataNames: record, Message: record, SubmittedTime: record, EndTime: record, InputDataConfig: record<S3Uri: record, ContentType: record>, OutputDataConfig: record<S3Uri: record, EncryptionKey: record>, DataAccessRoleArn: record, Settings: record<Formality: record, Profanity: record>>> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  job_id: string # The identifier that Amazon Translate generated for the job. The StartTextTranslationJob operation returns this identifier in its response.
+]: any -> record<TextTranslationJobProperties: record<JobId: string, JobName: string, JobStatus: string, JobDetails: record<TranslatedDocumentsCount: int, DocumentsWithErrorsCount: int, InputDocumentsCount: int>, SourceLanguageCode: string, TargetLanguageCodes: list<string>, TerminologyNames: list<string>, ParallelDataNames: list<string>, Message: string, SubmittedTime: string, EndTime: string, InputDataConfig: record<S3Uri: string, ContentType: string>, OutputDataConfig: record<S3Uri: string, EncryptionKey: record>, DataAccessRoleArn: string, Settings: record<Formality: string, Profanity: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSShineFrontendService_20170701.DescribeTextTranslationJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -357,12 +366,13 @@ export def "get-parallel-data" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  name: any
-]: any -> record<ParallelDataProperties: record<Name: record, Arn: record, Description: record, Status: record, SourceLanguageCode: record, TargetLanguageCodes: record, ParallelDataConfig: record<S3Uri: record, Format: record>, Message: record, ImportedDataSize: record, ImportedRecordCount: record, FailedRecordCount: record, SkippedRecordCount: record, EncryptionKey: record<Type: record, Id: record>, CreatedAt: record, LastUpdatedAt: record, LatestUpdateAttemptStatus: record, LatestUpdateAttemptAt: record>, DataLocation: record<RepositoryType: record, Location: record>, AuxiliaryDataLocation: record<RepositoryType: record, Location: record>, LatestUpdateAttemptAuxiliaryDataLocation: record<RepositoryType: record, Location: record>> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  name: string # The name of the parallel data resource that is being retrieved.
+]: any -> record<ParallelDataProperties: record<Name: string, Arn: string, Description: string, Status: string, SourceLanguageCode: string, TargetLanguageCodes: list<string>, ParallelDataConfig: record<S3Uri: string, Format: string>, Message: string, ImportedDataSize: int, ImportedRecordCount: int, FailedRecordCount: int, SkippedRecordCount: int, EncryptionKey: record<Type: string, Id: string>, CreatedAt: string, LastUpdatedAt: string, LatestUpdateAttemptStatus: string, LatestUpdateAttemptAt: string>, DataLocation: record<RepositoryType: string, Location: string>, AuxiliaryDataLocation: record<RepositoryType: string, Location: string>, LatestUpdateAttemptAuxiliaryDataLocation: record<RepositoryType: string, Location: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSShineFrontendService_20170701.GetParallelData")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -405,13 +415,14 @@ export def "get-terminology" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  name: any
-  --terminology-data-format: any
-]: any -> record<TerminologyProperties: record<Name: record, Description: record, Arn: record, SourceLanguageCode: record, TargetLanguageCodes: record, EncryptionKey: record<Type: record, Id: record>, SizeBytes: record, TermCount: record, CreatedAt: record, LastUpdatedAt: record, Directionality: record, Message: record, SkippedTermCount: record, Format: record>, TerminologyDataLocation: record<RepositoryType: record, Location: record>, AuxiliaryDataLocation: record<RepositoryType: record, Location: record>> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  name: string # The name of the custom terminology being retrieved.
+  --terminology-data-format: string@terminology-data-format-completer # The data format of the custom terminology being retrieved. If you don't specify this parameter, Amazon Translate returns a file with the same format as the file that was imported to create the terminology. If you specify this parameter when you retrieve a multi-directional terminology resource, you must specify the same format as the input file that was imported to create it. Otherwise, Amazon Translate throws an error.
+]: any -> record<TerminologyProperties: record<Name: string, Description: string, Arn: string, SourceLanguageCode: string, TargetLanguageCodes: list<string>, EncryptionKey: record<Type: string, Id: string>, SizeBytes: int, TermCount: int, CreatedAt: string, LastUpdatedAt: string, Directionality: string, Message: string, SkippedTermCount: int, Format: string>, TerminologyDataLocation: record<RepositoryType: string, Location: string>, AuxiliaryDataLocation: record<RepositoryType: string, Location: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSShineFrontendService_20170701.GetTerminology")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "TerminologyDataFormat": $terminology_data_format} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -437,6 +448,9 @@ export def "get-terminology" [
 #
 # POST /
 # operationId: ImportTerminology
+# --TerminologyData shape: {File: string, Format: "CSV"|"TMX"|"TSV", Directionality?: "UNI"|"MULTI"}
+# --EncryptionKey shape: {Type: "KMS", Id: string}
+# --Tags item shape: {Key: string, Value: string}
 export def "import-terminology" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -454,17 +468,18 @@ export def "import-terminology" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  name: any
-  merge_strategy: any
-  --description: any
-  terminology_data: any
-  --encryption-key: any
-  --tags: any
-]: any -> record<TerminologyProperties: record<Name: record, Description: record, Arn: record, SourceLanguageCode: record, TargetLanguageCodes: record, EncryptionKey: record<Type: record, Id: record>, SizeBytes: record, TermCount: record, CreatedAt: record, LastUpdatedAt: record, Directionality: record, Message: record, SkippedTermCount: record, Format: record>, AuxiliaryDataLocation: record<RepositoryType: record, Location: record>> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  name: string # The name of the custom terminology being imported.
+  merge_strategy: string@merge-strategy-completer # The merge strategy of the custom terminology being imported. Currently, only the OVERWRITE merge strategy is supported. In this case, the imported terminology will overwrite an existing terminology of the same name.
+  --description: string # The description of the custom terminology being imported.
+  terminology_data: record # The data associated with the custom terminology. For information about the custom terminology file, see Creating a Custom Terminology (https://docs.aws.amazon.com/translate/latest/dg/creating-custom-terminology.html). — shape: {File: string, Format: "CSV"|"TMX"|"TSV", Directionality?: "UNI"|"MULTI"}
+  --encryption-key: record # The encryption key used to encrypt this object. — shape: {Type: "KMS", Id: string}
+  --tags: list # Tags to be associated with this resource. A tag is a key-value pair that adds metadata to a resource. Each tag key for the resource must be unique. For more information, see Tagging your resources (https://docs.aws.amazon.com/translate/latest/dg/tagging.html). — item shape: {Key: string, Value: string}
+]: any -> record<TerminologyProperties: record<Name: string, Description: string, Arn: string, SourceLanguageCode: string, TargetLanguageCodes: list<string>, EncryptionKey: record<Type: string, Id: string>, SizeBytes: int, TermCount: int, CreatedAt: string, LastUpdatedAt: string, Directionality: string, Message: string, SkippedTermCount: int, Format: string>, AuxiliaryDataLocation: record<RepositoryType: string, Location: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSShineFrontendService_20170701.ImportTerminology")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "MergeStrategy": $merge_strategy, "Description": $description, "TerminologyData": $terminology_data, "EncryptionKey": $encryption_key, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -509,14 +524,15 @@ export def "list-languages" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  --display-language-code: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<Languages: record, DisplayLanguageCode: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  --display-language-code: string@display-language-code-completer # The language code for the language to use to display the language names in the response. The language code is en by default.
+  --next-token-body: string # Include the NextToken value to fetch the next group of supported languages. (body field)
+  --max-results-body: int # The maximum number of results to return in each response. (body field)
+]: any -> record<Languages: table<LanguageName: string, LanguageCode: string>, DisplayLanguageCode: string, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSShineFrontendService_20170701.ListLanguages")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"DisplayLanguageCode": $display_language_code, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -562,13 +578,14 @@ export def "list-parallel-data" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<ParallelDataPropertiesList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  --next-token-body: string # A string that specifies the next page of results to return in a paginated response. (body field)
+  --max-results-body: int # The maximum number of parallel data resources returned for each request. (body field)
+]: any -> record<ParallelDataPropertiesList: table<Name: string, Arn: string, Description: string, Status: string, SourceLanguageCode: string, TargetLanguageCodes: list, ParallelDataConfig: record, Message: string, ImportedDataSize: int, ImportedRecordCount: int, FailedRecordCount: int, SkippedRecordCount: int, EncryptionKey: record, CreatedAt: string, LastUpdatedAt: string, LatestUpdateAttemptStatus: string, LatestUpdateAttemptAt: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSShineFrontendService_20170701.ListParallelData")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -612,12 +629,13 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  resource_arn: any
-]: any -> record<Tags: record> {
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the given Amazon Translate resource you are querying.
+]: any -> record<Tags: table<Key: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSShineFrontendService_20170701.ListTagsForResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -662,13 +680,14 @@ export def "list-terminologies" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<TerminologyPropertiesList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  --next-token-body: string # If the result of the request to ListTerminologies was truncated, include the NextToken to fetch the next group of custom terminologies. (body field)
+  --max-results-body: int # The maximum number of custom terminologies returned per list request. (body field)
+]: any -> record<TerminologyPropertiesList: table<Name: string, Description: string, Arn: string, SourceLanguageCode: string, TargetLanguageCodes: list, EncryptionKey: record, SizeBytes: int, TermCount: int, CreatedAt: string, LastUpdatedAt: string, Directionality: string, Message: string, SkippedTermCount: int, Format: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSShineFrontendService_20170701.ListTerminologies")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -695,6 +714,7 @@ export def "list-terminologies" [
 #
 # POST /
 # operationId: ListTextTranslationJobs
+# --Filter shape: {JobName?: string, JobStatus?: "SUBMITTED"|"IN_PROGRESS"|"COMPLETED"|"COMPLETED_WITH_ERROR"|"FAILED"|"STOP_REQUESTED"|"STOPPED", SubmittedBeforeTime?: string, SubmittedAfterTime?: string}
 export def "list-text-translation-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -714,14 +734,15 @@ export def "list-text-translation-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  --filter: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<TextTranslationJobPropertiesList: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  --filter: record # Provides information for filtering a list of translation jobs. For more information, see ListTextTranslationJobs. — shape: {JobName?: string, JobStatus?: "SUBMITTED"|"IN_PROGRESS"|"COMPLETED"|"COMPLETED_WITH_ERROR"|"FAILED"|"STOP_REQUESTED"|"STOPPED", SubmittedBeforeTime?: string, SubmittedAfterTime?: string}
+  --next-token-body: string # The token to request the next page of results. (body field)
+  --max-results-body: int # The maximum number of results to return in each page. The default value is 100. (body field)
+]: any -> record<TextTranslationJobPropertiesList: table<JobId: string, JobName: string, JobStatus: string, JobDetails: record, SourceLanguageCode: string, TargetLanguageCodes: list, TerminologyNames: list, ParallelDataNames: list, Message: string, SubmittedTime: string, EndTime: string, InputDataConfig: record, OutputDataConfig: record, DataAccessRoleArn: string, Settings: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSShineFrontendService_20170701.ListTextTranslationJobs")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"Filter": $filter, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -748,6 +769,9 @@ export def "list-text-translation-jobs" [
 #
 # POST /
 # operationId: StartTextTranslationJob
+# --InputDataConfig shape: {S3Uri: string, ContentType: string}
+# --OutputDataConfig shape: {S3Uri: string, EncryptionKey?: record}
+# --Settings shape: {Formality?: "FORMAL"|"INFORMAL", Profanity?: "MASK"}
 export def "start-text-translation-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -765,21 +789,22 @@ export def "start-text-translation-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  --job-name: any
-  input_data_config: any
-  output_data_config: any
-  data_access_role_arn: any
-  source_language_code: any
-  target_language_codes: any
-  --terminology-names: any
-  --parallel-data-names: any
-  client_token: any
-  --settings: any
-]: any -> record<JobId: record, JobStatus: record> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  --job-name: string # The name of the batch translation job to be performed.
+  input_data_config: record # The input configuration properties for requesting a batch translation job. — shape: {S3Uri: string, ContentType: string}
+  output_data_config: record # The output configuration properties for a batch translation job. — shape: {S3Uri: string, EncryptionKey?: record}
+  data_access_role_arn: string # The Amazon Resource Name (ARN) of an AWS Identity Access and Management (IAM) role that grants Amazon Translate read access to your input data. For more information, see Identity and access management (https://docs.aws.amazon.com/translate/latest/dg/identity-and-access-management.html).
+  source_language_code: string # The language code of the input language. Specify the language if all input documents share the same language. If you don't know the language of the source files, or your input documents contains different source languages, select auto. Amazon Translate auto detects the source language for each input document. For a list of supported language codes, see Supported languages (https://docs.aws.amazon.com/translate/latest/dg/what-is-languages.html).
+  target_language_codes: list<string> # The target languages of the translation job. Enter up to 10 language codes. Each input file is translated into each target language. Each language code is 2 or 5 characters long. For a list of language codes, see Supported languages (https://docs.aws.amazon.com/translate/latest/dg/what-is-languages.html).
+  --terminology-names: list<string> # The name of a custom terminology resource to add to the translation job. This resource lists examples source terms and the desired translation for each term. This parameter accepts only one custom terminology resource. If you specify multiple target languages for the job, translate uses the designated terminology for each requested target language that has an entry for the source term in the terminology file. For a list of available custom terminology resources, use the ListTerminologies operation. For more information, see Custom terminology (https://docs.aws.amazon.com/translate/latest/dg/how-custom-terminology.html).
+  --parallel-data-names: list<string> # The name of a parallel data resource to add to the translation job. This resource consists of examples that show how you want segments of text to be translated. If you specify multiple target languages for the job, the parallel data file must include translations for all the target languages. When you add parallel data to a translation job, you create an Active Custom Translation job. This parameter accepts only one parallel data resource. Active Custom Translation jobs are priced at a higher rate than other jobs that don't use parallel data. For more information, see Amazon Translate pricing (http://aws.amazon.com/translate/pricing/). For a list of available parallel data resources, use the ListParallelData operation. For more information, see Customizing your translations with parallel data (https://docs.aws.amazon.com/translate/latest/dg/customizing-translations-parallel-data.html).
+  client_token: string # A unique identifier for the request. This token is generated for you when using the Amazon Translate SDK.
+  --settings: record # Optional settings that configure the translation output. Use these settings for real time translations and asynchronous translation jobs. — shape: {Formality?: "FORMAL"|"INFORMAL", Profanity?: "MASK"}
+]: any -> record<JobId: string, JobStatus: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSShineFrontendService_20170701.StartTextTranslationJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobName": $job_name, "InputDataConfig": $input_data_config, "OutputDataConfig": $output_data_config, "DataAccessRoleArn": $data_access_role_arn, "SourceLanguageCode": $source_language_code, "TargetLanguageCodes": $target_language_codes, "TerminologyNames": $terminology_names, "ParallelDataNames": $parallel_data_names, "ClientToken": $client_token, "Settings": $settings} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -822,12 +847,13 @@ export def "stop-text-translation-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  job_id: any
-]: any -> record<JobId: record, JobStatus: record> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  job_id: string # The job ID of the job to be stopped.
+]: any -> record<JobId: string, JobStatus: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSShineFrontendService_20170701.StopTextTranslationJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -853,6 +879,7 @@ export def "stop-text-translation-job" [
 #
 # POST /
 # operationId: TagResource
+# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -870,13 +897,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  resource_arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the given Amazon Translate resource to which you want to associate the tags.
+  tags: list # Tags being associated with a specific Amazon Translate resource. There can be a maximum of 50 tags (both existing and pending) associated with a specific resource. — item shape: {Key: string, Value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSShineFrontendService_20170701.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -902,6 +930,7 @@ export def "tag-resource" [
 #
 # POST /
 # operationId: TranslateText
+# --Settings shape: {Formality?: "FORMAL"|"INFORMAL", Profanity?: "MASK"}
 export def "translate-text" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -919,16 +948,17 @@ export def "translate-text" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  text: any
-  --terminology-names: any
-  source_language_code: any
-  target_language_code: any
-  --settings: any
-]: any -> record<TranslatedText: record, SourceLanguageCode: record, TargetLanguageCode: record, AppliedTerminologies: record, AppliedSettings: record<Formality: record, Profanity: record>> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  text: string # The text to translate. The text string can be a maximum of 10,000 bytes long. Depending on your character set, this may be fewer than 10,000 characters.
+  --terminology-names: list<string> # The name of the terminology list file to be used in the TranslateText request. You can use 1 terminology list at most in a TranslateText request. Terminology lists can contain a maximum of 256 terms.
+  source_language_code: string # The language code for the language of the source text. The language must be a language supported by Amazon Translate. For a list of language codes, see Supported languages (https://docs.aws.amazon.com/translate/latest/dg/what-is-languages.html). To have Amazon Translate determine the source language of your text, you can specify auto in the SourceLanguageCode field. If you specify auto, Amazon Translate will call Amazon Comprehend (https://docs.aws.amazon.com/comprehend/latest/dg/comprehend-general.html) to determine the source language. If you specify auto, you must send the TranslateText request in a region that supports Amazon Comprehend. Otherwise, the request returns an error indicating that autodetect is not supported.
+  target_language_code: string # The language code requested for the language of the target text. The language must be a language supported by Amazon Translate.
+  --settings: record # Optional settings that configure the translation output. Use these settings for real time translations and asynchronous translation jobs. — shape: {Formality?: "FORMAL"|"INFORMAL", Profanity?: "MASK"}
+]: any -> record<TranslatedText: string, SourceLanguageCode: string, TargetLanguageCode: string, AppliedTerminologies: table<Name: string, Terms: list>, AppliedSettings: record<Formality: string, Profanity: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSShineFrontendService_20170701.TranslateText")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Text": $text, "TerminologyNames": $terminology_names, "SourceLanguageCode": $source_language_code, "TargetLanguageCode": $target_language_code, "Settings": $settings} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -971,13 +1001,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  resource_arn: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the given Amazon Translate resource from which you want to remove the tags.
+  tag_keys: list<string> # The initial part of a key-value pair that forms a tag being removed from a given resource. Keys must be unique and cannot be duplicated for a particular resource.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSShineFrontendService_20170701.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1003,6 +1034,7 @@ export def "untag-resource" [
 #
 # POST /
 # operationId: UpdateParallelData
+# --ParallelDataConfig shape: {S3Uri: string, Format: "TSV"|"CSV"|"TMX"}
 export def "update-parallel-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1020,15 +1052,16 @@ export def "update-parallel-data" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  name: any
-  --description: any
-  parallel_data_config: any
-  client_token: any
-]: any -> record<Name: record, Status: record, LatestUpdateAttemptStatus: record, LatestUpdateAttemptAt: record> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  name: string # The name of the parallel data resource being updated.
+  --description: string # A custom description for the parallel data resource in Amazon Translate.
+  parallel_data_config: record # Specifies the format and S3 location of the parallel data input file. — shape: {S3Uri: string, Format: "TSV"|"CSV"|"TMX"}
+  client_token: string # A unique identifier for the request. This token is automatically generated when you use Amazon Translate through an AWS SDK.
+]: any -> record<Name: string, Status: string, LatestUpdateAttemptStatus: string, LatestUpdateAttemptAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "AWSShineFrontendService_20170701.UpdateParallelData")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Description": $description, "ParallelDataConfig": $parallel_data_config, "ClientToken": $client_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

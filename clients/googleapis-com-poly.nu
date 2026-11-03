@@ -1,4 +1,4 @@
-# Auto-generated client for Poly API vv1
+# Auto-generated client for Poly API v1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/poly/v1/openapi.json
 # Auth: --token flag or $env.POLY_API_TOKEN
 

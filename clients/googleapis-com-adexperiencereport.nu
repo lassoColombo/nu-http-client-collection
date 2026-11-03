@@ -1,4 +1,4 @@
-# Auto-generated client for Ad Experience Report API vv1
+# Auto-generated client for Ad Experience Report API v1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/adexperiencereport/v1/openapi.json
 # Auth: --token flag or $env.AD_EXPERIENCE_REPORT_API_TOKEN
 

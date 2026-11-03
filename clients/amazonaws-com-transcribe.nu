@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -96,8 +96,12 @@ def base-url-completer [] { ["http://transcribe.us-east-1.amazonaws.com" "http:/
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def input-type-completer [] { ["POST_CALL" "REAL_TIME"] }
 def x-amz-target-completer [] { ["Transcribe.CreateCallAnalyticsCategory"] }
+def language-code-completer [] { ["de-DE" "en-AU" "en-GB" "en-US" "es-US" "hi-IN" "ja-JP"] }
+def base-model-name-completer [] { ["NarrowBand" "WideBand"] }
 def x-amz-target-completer-1 [] { ["Transcribe.CreateLanguageModel"] }
+def language-code-completer-1 [] { ["af-ZA" "ar-AE" "ar-SA" "da-DK" "de-CH" "de-DE" "en-AB" "en-AU" "en-GB" "en-IE" "en-IN" "en-NZ" "en-US" "en-WL" "en-ZA" "es-ES" "es-US" "fa-IR" "fr-CA" "fr-FR" "he-IL" "hi-IN" "id-ID" "it-IT" "ja-JP" "ko-KR" "ms-MY" "nl-NL" "pt-BR" "pt-PT" "ru-RU" "sv-SE" "ta-IN" "te-IN" "th-TH" "tr-TR" "vi-VN" "zh-CN" "zh-TW"] }
 def x-amz-target-completer-2 [] { ["Transcribe.CreateMedicalVocabulary"] }
 def x-amz-target-completer-3 [] { ["Transcribe.CreateVocabulary"] }
 def x-amz-target-completer-4 [] { ["Transcribe.CreateVocabularyFilter"] }
@@ -118,15 +122,22 @@ def x-amz-target-completer-18 [] { ["Transcribe.GetTranscriptionJob"] }
 def x-amz-target-completer-19 [] { ["Transcribe.GetVocabulary"] }
 def x-amz-target-completer-20 [] { ["Transcribe.GetVocabularyFilter"] }
 def x-amz-target-completer-21 [] { ["Transcribe.ListCallAnalyticsCategories"] }
+def status-completer [] { ["COMPLETED" "FAILED" "IN_PROGRESS" "QUEUED"] }
 def x-amz-target-completer-22 [] { ["Transcribe.ListCallAnalyticsJobs"] }
+def status-equals-completer [] { ["COMPLETED" "FAILED" "IN_PROGRESS"] }
 def x-amz-target-completer-23 [] { ["Transcribe.ListLanguageModels"] }
 def x-amz-target-completer-24 [] { ["Transcribe.ListMedicalTranscriptionJobs"] }
+def state-equals-completer [] { ["FAILED" "PENDING" "READY"] }
 def x-amz-target-completer-25 [] { ["Transcribe.ListMedicalVocabularies"] }
 def x-amz-target-completer-26 [] { ["Transcribe.ListTagsForResource"] }
 def x-amz-target-completer-27 [] { ["Transcribe.ListTranscriptionJobs"] }
 def x-amz-target-completer-28 [] { ["Transcribe.ListVocabularies"] }
 def x-amz-target-completer-29 [] { ["Transcribe.ListVocabularyFilters"] }
 def x-amz-target-completer-30 [] { ["Transcribe.StartCallAnalyticsJob"] }
+def media-format-completer [] { ["amr" "flac" "mp3" "mp4" "ogg" "wav" "webm"] }
+def content-identification-type-completer [] { ["PHI"] }
+def specialty-completer [] { ["PRIMARYCARE"] }
+def type-completer [] { ["CONVERSATION" "DICTATION"] }
 def x-amz-target-completer-31 [] { ["Transcribe.StartMedicalTranscriptionJob"] }
 def x-amz-target-completer-32 [] { ["Transcribe.StartTranscriptionJob"] }
 def x-amz-target-completer-33 [] { ["Transcribe.TagResource"] }
@@ -163,6 +174,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateCallAnalyticsCategory
+# --Rules item shape: {NonTalkTimeFilter?: record, InterruptionFilter?: record, TranscriptFilter?: record, SentimentFilter?: record}
 export def "create-call-analytics-category" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -180,14 +192,15 @@ export def "create-call-analytics-category" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  category_name: any
-  rules: any
-  --input-type: any
-]: any -> record<CategoryProperties: record<CategoryName: record, Rules: record, CreateTime: record, LastUpdateTime: record, InputType: record>> {
+  --x-amz-target: string@x-amz-target-completer # required
+  category_name: string # A unique name, chosen by you, for your Call Analytics category. It's helpful to use a detailed naming system that will make sense to you in the future. For example, it's better to use sentiment-positive-last30seconds for a category over a generic name like test-category. Category names are case sensitive.
+  rules: list # Rules define a Call Analytics category. When creating a new category, you must create between 1 and 20 rules for that category. For each rule, you specify a filter you want applied to the attributes of a call. For example, you can choose a sentiment filter that detects if a customer's sentiment was positive during the last 30 seconds of the call. — item shape: {NonTalkTimeFilter?: record, InterruptionFilter?: record, TranscriptFilter?: record, SentimentFilter?: record}
+  --input-type: string@input-type-completer # Choose whether you want to create a real-time or a post-call category for your Call Analytics transcription. Specifying POST_CALL assigns your category to post-call transcriptions; categories with this input type cannot be applied to streaming (real-time) transcriptions. Specifying REAL_TIME assigns your category to streaming transcriptions; categories with this input type cannot be applied to post-call transcriptions. If you do not include InputType, your category is created as a post-call category by default.
+]: any -> record<CategoryProperties: record<CategoryName: string, Rules: list<record>, CreateTime: string, LastUpdateTime: string, InputType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Transcribe.CreateCallAnalyticsCategory")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"CategoryName": $category_name, "Rules": $rules, "InputType": $input_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -213,6 +226,8 @@ export def "create-call-analytics-category" [
 #
 # POST /
 # operationId: CreateLanguageModel
+# --InputDataConfig shape: {S3Uri: string, TuningDataS3Uri?: string, DataAccessRoleArn: string}
+# --Tags item shape: {Key: string, Value: string}
 export def "create-language-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -230,16 +245,17 @@ export def "create-language-model" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  language_code: any
-  base_model_name: any
-  model_name: any
-  input_data_config: any
-  --tags: any
-]: any -> record<LanguageCode: record, BaseModelName: record, ModelName: record, InputDataConfig: record<S3Uri: record, TuningDataS3Uri: record, DataAccessRoleArn: record>, ModelStatus: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  language_code: string@language-code-completer # The language code that represents the language of your model. Each custom language model must contain terms in only one language, and the language you select for your custom language model must match the language of your training and tuning data. For a list of supported languages and their associated language codes, refer to the Supported languages (https://docs.aws.amazon.com/transcribe/latest/dg/supported-languages.html) table. Note that US English (en-US) is the only language supported with Amazon Transcribe Medical. A custom language model can only be used to transcribe files in the same language as the model. For example, if you create a custom language model using US English (en-US), you can only apply this model to files that contain English audio.
+  base_model_name: string@base-model-name-completer # The Amazon Transcribe standard language model, or base model, used to create your custom language model. Amazon Transcribe offers two options for base models: Wideband and Narrowband. If the audio you want to transcribe has a sample rate of 16,000 Hz or greater, choose WideBand. To transcribe audio with a sample rate less than 16,000 Hz, choose NarrowBand.
+  model_name: string # A unique name, chosen by you, for your custom language model. This name is case sensitive, cannot contain spaces, and must be unique within an Amazon Web Services account. If you try to create a new custom language model with the same name as an existing custom language model, you get a ConflictException error.
+  input_data_config: record # Contains the Amazon S3 location of the training data you want to use to create a new custom language model, and permissions to access this location. When using InputDataConfig, you must include these sub-parameters: S3Uri and DataAccessRoleArn. You can optionally include TuningDataS3Uri. — shape: {S3Uri: string, TuningDataS3Uri?: string, DataAccessRoleArn: string}
+  --tags: list # Adds one or more custom tags, each in the form of a key:value pair, to a new custom language model at the time you create this new model. To learn more about using tags with Amazon Transcribe, refer to Tagging resources (https://docs.aws.amazon.com/transcribe/latest/dg/tagging.html). — item shape: {Key: string, Value: string}
+]: any -> record<LanguageCode: string, BaseModelName: string, ModelName: string, InputDataConfig: record<S3Uri: string, TuningDataS3Uri: string, DataAccessRoleArn: string>, ModelStatus: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Transcribe.CreateLanguageModel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LanguageCode": $language_code, "BaseModelName": $base_model_name, "ModelName": $model_name, "InputDataConfig": $input_data_config, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -265,6 +281,7 @@ export def "create-language-model" [
 #
 # POST /
 # operationId: CreateMedicalVocabulary
+# --Tags item shape: {Key: string, Value: string}
 export def "create-medical-vocabulary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -282,15 +299,16 @@ export def "create-medical-vocabulary" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  vocabulary_name: any
-  language_code: any
-  vocabulary_file_uri: any
-  --tags: any
-]: any -> record<VocabularyName: record, LanguageCode: record, VocabularyState: record, LastModifiedTime: record, FailureReason: record> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  vocabulary_name: string # A unique name, chosen by you, for your new custom medical vocabulary. This name is case sensitive, cannot contain spaces, and must be unique within an Amazon Web Services account. If you try to create a new custom medical vocabulary with the same name as an existing custom medical vocabulary, you get a ConflictException error.
+  language_code: string@language-code-completer-1 # The language code that represents the language of the entries in your custom vocabulary. US English (en-US) is the only language supported with Amazon Transcribe Medical.
+  vocabulary_file_uri: string # The Amazon S3 location (URI) of the text file that contains your custom medical vocabulary. The URI must be in the same Amazon Web Services Region as the resource you're calling. Here's an example URI path: s3://DOC-EXAMPLE-BUCKET/my-vocab-file.txt
+  --tags: list # Adds one or more custom tags, each in the form of a key:value pair, to a new custom medical vocabulary at the time you create this new custom vocabulary. To learn more about using tags with Amazon Transcribe, refer to Tagging resources (https://docs.aws.amazon.com/transcribe/latest/dg/tagging.html). — item shape: {Key: string, Value: string}
+]: any -> record<VocabularyName: string, LanguageCode: string, VocabularyState: string, LastModifiedTime: string, FailureReason: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Transcribe.CreateMedicalVocabulary")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"VocabularyName": $vocabulary_name, "LanguageCode": $language_code, "VocabularyFileUri": $vocabulary_file_uri, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -316,6 +334,7 @@ export def "create-medical-vocabulary" [
 #
 # POST /
 # operationId: CreateVocabulary
+# --Tags item shape: {Key: string, Value: string}
 export def "create-vocabulary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -333,17 +352,18 @@ export def "create-vocabulary" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  vocabulary_name: any
-  language_code: any
-  --phrases: any
-  --vocabulary-file-uri: any
-  --tags: any
-  --data-access-role-arn: any
-]: any -> record<VocabularyName: record, LanguageCode: record, VocabularyState: record, LastModifiedTime: record, FailureReason: record> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  vocabulary_name: string # A unique name, chosen by you, for your new custom vocabulary. This name is case sensitive, cannot contain spaces, and must be unique within an Amazon Web Services account. If you try to create a new custom vocabulary with the same name as an existing custom vocabulary, you get a ConflictException error.
+  language_code: string@language-code-completer-1 # The language code that represents the language of the entries in your custom vocabulary. Each custom vocabulary must contain terms in only one language. A custom vocabulary can only be used to transcribe files in the same language as the custom vocabulary. For example, if you create a custom vocabulary using US English (en-US), you can only apply this custom vocabulary to files that contain English audio. For a list of supported languages and their associated language codes, refer to the Supported languages (https://docs.aws.amazon.com/transcribe/latest/dg/supported-languages.html) table.
+  --phrases: list<string> # Use this parameter if you want to create your custom vocabulary by including all desired terms, as comma-separated values, within your request. The other option for creating your custom vocabulary is to save your entries in a text file and upload them to an Amazon S3 bucket, then specify the location of your file using the VocabularyFileUri parameter. Note that if you include Phrases in your request, you cannot use VocabularyFileUri; you must choose one or the other. Each language has a character set that contains all allowed characters for that specific language. If you use unsupported characters, your custom vocabulary filter request fails. Refer to Character Sets for Custom Vocabularies (https://docs.aws.amazon.com/transcribe/latest/dg/charsets.html) to get the character set for your language.
+  --vocabulary-file-uri: string # The Amazon S3 location of the text file that contains your custom vocabulary. The URI must be located in the same Amazon Web Services Region as the resource you're calling. Here's an example URI path: s3://DOC-EXAMPLE-BUCKET/my-vocab-file.txt Note that if you include VocabularyFileUri in your request, you cannot use the Phrases flag; you must choose one or the other.
+  --tags: list # Adds one or more custom tags, each in the form of a key:value pair, to a new custom vocabulary at the time you create this new custom vocabulary. To learn more about using tags with Amazon Transcribe, refer to Tagging resources (https://docs.aws.amazon.com/transcribe/latest/dg/tagging.html). — item shape: {Key: string, Value: string}
+  --data-access-role-arn: string # The Amazon Resource Name (ARN) of an IAM role that has permissions to access the Amazon S3 bucket that contains your input files (in this case, your custom vocabulary). If the role that you specify doesn’t have the appropriate permissions to access the specified Amazon S3 location, your request fails. IAM role ARNs have the format arn:partition:iam::account:role/role-name-with-path. For example: arn:aws:iam::111122223333:role/Admin. For more information, see IAM ARNs (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_identifiers.html#identifiers-arns).
+]: any -> record<VocabularyName: string, LanguageCode: string, VocabularyState: string, LastModifiedTime: string, FailureReason: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Transcribe.CreateVocabulary")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"VocabularyName": $vocabulary_name, "LanguageCode": $language_code, "Phrases": $phrases, "VocabularyFileUri": $vocabulary_file_uri, "Tags": $tags, "DataAccessRoleArn": $data_access_role_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -369,6 +389,7 @@ export def "create-vocabulary" [
 #
 # POST /
 # operationId: CreateVocabularyFilter
+# --Tags item shape: {Key: string, Value: string}
 export def "create-vocabulary-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -386,17 +407,18 @@ export def "create-vocabulary-filter" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  vocabulary_filter_name: any
-  language_code: any
-  --words: any
-  --vocabulary-filter-file-uri: any
-  --tags: any
-  --data-access-role-arn: any
-]: any -> record<VocabularyFilterName: record, LanguageCode: record, LastModifiedTime: record> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  vocabulary_filter_name: string # A unique name, chosen by you, for your new custom vocabulary filter. This name is case sensitive, cannot contain spaces, and must be unique within an Amazon Web Services account. If you try to create a new custom vocabulary filter with the same name as an existing custom vocabulary filter, you get a ConflictException error.
+  language_code: string@language-code-completer-1 # The language code that represents the language of the entries in your vocabulary filter. Each custom vocabulary filter must contain terms in only one language. A custom vocabulary filter can only be used to transcribe files in the same language as the filter. For example, if you create a custom vocabulary filter using US English (en-US), you can only apply this filter to files that contain English audio. For a list of supported languages and their associated language codes, refer to the Supported languages (https://docs.aws.amazon.com/transcribe/latest/dg/supported-languages.html) table.
+  --words: list<string> # Use this parameter if you want to create your custom vocabulary filter by including all desired terms, as comma-separated values, within your request. The other option for creating your vocabulary filter is to save your entries in a text file and upload them to an Amazon S3 bucket, then specify the location of your file using the VocabularyFilterFileUri parameter. Note that if you include Words in your request, you cannot use VocabularyFilterFileUri; you must choose one or the other. Each language has a character set that contains all allowed characters for that specific language. If you use unsupported characters, your custom vocabulary filter request fails. Refer to Character Sets for Custom Vocabularies (https://docs.aws.amazon.com/transcribe/latest/dg/charsets.html) to get the character set for your language.
+  --vocabulary-filter-file-uri: string # The Amazon S3 location of the text file that contains your custom vocabulary filter terms. The URI must be located in the same Amazon Web Services Region as the resource you're calling. Here's an example URI path: s3://DOC-EXAMPLE-BUCKET/my-vocab-filter-file.txt Note that if you include VocabularyFilterFileUri in your request, you cannot use Words; you must choose one or the other.
+  --tags: list # Adds one or more custom tags, each in the form of a key:value pair, to a new custom vocabulary filter at the time you create this new vocabulary filter. To learn more about using tags with Amazon Transcribe, refer to Tagging resources (https://docs.aws.amazon.com/transcribe/latest/dg/tagging.html). — item shape: {Key: string, Value: string}
+  --data-access-role-arn: string # The Amazon Resource Name (ARN) of an IAM role that has permissions to access the Amazon S3 bucket that contains your input files (in this case, your custom vocabulary filter). If the role that you specify doesn’t have the appropriate permissions to access the specified Amazon S3 location, your request fails. IAM role ARNs have the format arn:partition:iam::account:role/role-name-with-path. For example: arn:aws:iam::111122223333:role/Admin. For more information, see IAM ARNs (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_identifiers.html#identifiers-arns).
+]: any -> record<VocabularyFilterName: string, LanguageCode: string, LastModifiedTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Transcribe.CreateVocabularyFilter")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"VocabularyFilterName": $vocabulary_filter_name, "LanguageCode": $language_code, "Words": $words, "VocabularyFilterFileUri": $vocabulary_filter_file_uri, "Tags": $tags, "DataAccessRoleArn": $data_access_role_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -439,12 +461,13 @@ export def "delete-call-analytics-category" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  category_name: any
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  category_name: string # The name of the Call Analytics category you want to delete. Category names are case sensitive.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Transcribe.DeleteCallAnalyticsCategory")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"CategoryName": $category_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -487,12 +510,13 @@ export def "delete-call-analytics-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  call_analytics_job_name: any
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  call_analytics_job_name: string # The name of the Call Analytics job you want to delete. Job names are case sensitive.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Transcribe.DeleteCallAnalyticsJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"CallAnalyticsJobName": $call_analytics_job_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -535,12 +559,13 @@ export def "delete-language-model" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  model_name: any
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  model_name: string # The name of the custom language model you want to delete. Model names are case sensitive.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Transcribe.DeleteLanguageModel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ModelName": $model_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -583,12 +608,13 @@ export def "delete-medical-transcription-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  medical_transcription_job_name: any
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  medical_transcription_job_name: string # The name of the medical transcription job you want to delete. Job names are case sensitive.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Transcribe.DeleteMedicalTranscriptionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"MedicalTranscriptionJobName": $medical_transcription_job_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -631,12 +657,13 @@ export def "delete-medical-vocabulary" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  vocabulary_name: any
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  vocabulary_name: string # The name of the custom medical vocabulary you want to delete. Custom medical vocabulary names are case sensitive.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Transcribe.DeleteMedicalVocabulary")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"VocabularyName": $vocabulary_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -679,12 +706,13 @@ export def "delete-transcription-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  transcription_job_name: any
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  transcription_job_name: string # The name of the transcription job you want to delete. Job names are case sensitive.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Transcribe.DeleteTranscriptionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TranscriptionJobName": $transcription_job_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -727,12 +755,13 @@ export def "delete-vocabulary" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  vocabulary_name: any
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  vocabulary_name: string # The name of the custom vocabulary you want to delete. Custom vocabulary names are case sensitive.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Transcribe.DeleteVocabulary")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"VocabularyName": $vocabulary_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -775,12 +804,13 @@ export def "delete-vocabulary-filter" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  vocabulary_filter_name: any
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  vocabulary_filter_name: string # The name of the custom vocabulary filter you want to delete. Custom vocabulary filter names are case sensitive.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Transcribe.DeleteVocabularyFilter")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"VocabularyFilterName": $vocabulary_filter_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -823,12 +853,13 @@ export def "describe-language-model" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  model_name: any
-]: any -> record<LanguageModel: record<ModelName: record, CreateTime: record, LastModifiedTime: record, LanguageCode: record, BaseModelName: record, ModelStatus: record, UpgradeAvailability: record, FailureReason: record, InputDataConfig: record<S3Uri: record, TuningDataS3Uri: record, DataAccessRoleArn: record>>> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  model_name: string # The name of the custom language model you want information about. Model names are case sensitive.
+]: any -> record<LanguageModel: record<ModelName: string, CreateTime: string, LastModifiedTime: string, LanguageCode: string, BaseModelName: string, ModelStatus: string, UpgradeAvailability: bool, FailureReason: string, InputDataConfig: record<S3Uri: string, TuningDataS3Uri: string, DataAccessRoleArn: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Transcribe.DescribeLanguageModel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ModelName": $model_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -871,12 +902,13 @@ export def "get-call-analytics-category" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  category_name: any
-]: any -> record<CategoryProperties: record<CategoryName: record, Rules: record, CreateTime: record, LastUpdateTime: record, InputType: record>> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  category_name: string # The name of the Call Analytics category you want information about. Category names are case sensitive.
+]: any -> record<CategoryProperties: record<CategoryName: string, Rules: list<record>, CreateTime: string, LastUpdateTime: string, InputType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Transcribe.GetCallAnalyticsCategory")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"CategoryName": $category_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -919,12 +951,13 @@ export def "get-call-analytics-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  call_analytics_job_name: any
-]: any -> record<CallAnalyticsJob: record<CallAnalyticsJobName: record, CallAnalyticsJobStatus: record, LanguageCode: record, MediaSampleRateHertz: record, MediaFormat: record, Media: record<MediaFileUri: record, RedactedMediaFileUri: record>, Transcript: record<TranscriptFileUri: record, RedactedTranscriptFileUri: record>, StartTime: record, CreationTime: record, CompletionTime: record, FailureReason: record, DataAccessRoleArn: record, IdentifiedLanguageScore: record, Settings: record<VocabularyName: record, VocabularyFilterName: record, VocabularyFilterMethod: record, LanguageModelName: record, ContentRedaction: record, LanguageOptions: record, LanguageIdSettings: record>, ChannelDefinitions: record>> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  call_analytics_job_name: string # The name of the Call Analytics job you want information about. Job names are case sensitive.
+]: any -> record<CallAnalyticsJob: record<CallAnalyticsJobName: string, CallAnalyticsJobStatus: string, LanguageCode: string, MediaSampleRateHertz: int, MediaFormat: string, Media: record<MediaFileUri: string, RedactedMediaFileUri: string>, Transcript: record<TranscriptFileUri: string, RedactedTranscriptFileUri: string>, StartTime: string, CreationTime: string, CompletionTime: string, FailureReason: string, DataAccessRoleArn: string, IdentifiedLanguageScore: float, Settings: record<VocabularyName: string, VocabularyFilterName: string, VocabularyFilterMethod: string, LanguageModelName: string, ContentRedaction: record, LanguageOptions: list, LanguageIdSettings: record>, ChannelDefinitions: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Transcribe.GetCallAnalyticsJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"CallAnalyticsJobName": $call_analytics_job_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -967,12 +1000,13 @@ export def "get-medical-transcription-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  medical_transcription_job_name: any
-]: any -> record<MedicalTranscriptionJob: record<MedicalTranscriptionJobName: record, TranscriptionJobStatus: record, LanguageCode: record, MediaSampleRateHertz: record, MediaFormat: record, Media: record<MediaFileUri: record, RedactedMediaFileUri: record>, Transcript: record<TranscriptFileUri: record>, StartTime: record, CreationTime: record, CompletionTime: record, FailureReason: record, Settings: record<ShowSpeakerLabels: record, MaxSpeakerLabels: record, ChannelIdentification: record, ShowAlternatives: record, MaxAlternatives: record, VocabularyName: record>, ContentIdentificationType: record, Specialty: record, Type: record, Tags: record>> {
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  medical_transcription_job_name: string # The name of the medical transcription job you want information about. Job names are case sensitive.
+]: any -> record<MedicalTranscriptionJob: record<MedicalTranscriptionJobName: string, TranscriptionJobStatus: string, LanguageCode: string, MediaSampleRateHertz: int, MediaFormat: string, Media: record<MediaFileUri: string, RedactedMediaFileUri: string>, Transcript: record<TranscriptFileUri: string>, StartTime: string, CreationTime: string, CompletionTime: string, FailureReason: string, Settings: record<ShowSpeakerLabels: bool, MaxSpeakerLabels: int, ChannelIdentification: bool, ShowAlternatives: bool, MaxAlternatives: int, VocabularyName: string>, ContentIdentificationType: string, Specialty: string, Type: string, Tags: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Transcribe.GetMedicalTranscriptionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"MedicalTranscriptionJobName": $medical_transcription_job_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1015,12 +1049,13 @@ export def "get-medical-vocabulary" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  vocabulary_name: any
-]: any -> record<VocabularyName: record, LanguageCode: record, VocabularyState: record, LastModifiedTime: record, FailureReason: record, DownloadUri: record> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  vocabulary_name: string # The name of the custom medical vocabulary you want information about. Custom medical vocabulary names are case sensitive.
+]: any -> record<VocabularyName: string, LanguageCode: string, VocabularyState: string, LastModifiedTime: string, FailureReason: string, DownloadUri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Transcribe.GetMedicalVocabulary")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"VocabularyName": $vocabulary_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1063,12 +1098,13 @@ export def "get-transcription-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  transcription_job_name: any
-]: any -> record<TranscriptionJob: record<TranscriptionJobName: record, TranscriptionJobStatus: record, LanguageCode: record, MediaSampleRateHertz: record, MediaFormat: record, Media: record<MediaFileUri: record, RedactedMediaFileUri: record>, Transcript: record<TranscriptFileUri: record, RedactedTranscriptFileUri: record>, StartTime: record, CreationTime: record, CompletionTime: record, FailureReason: record, Settings: record<VocabularyName: record, ShowSpeakerLabels: record, MaxSpeakerLabels: record, ChannelIdentification: record, ShowAlternatives: record, MaxAlternatives: record, VocabularyFilterName: record, VocabularyFilterMethod: record>, ModelSettings: record<LanguageModelName: record>, JobExecutionSettings: record<AllowDeferredExecution: record, DataAccessRoleArn: record>, ContentRedaction: record<RedactionType: record, RedactionOutput: record, PiiEntityTypes: record>, IdentifyLanguage: record, IdentifyMultipleLanguages: record, LanguageOptions: record, IdentifiedLanguageScore: record, LanguageCodes: record, Tags: record, Subtitles: record<Formats: record, SubtitleFileUris: record, OutputStartIndex: record>, LanguageIdSettings: record>> {
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  transcription_job_name: string # The name of the transcription job you want information about. Job names are case sensitive.
+]: any -> record<TranscriptionJob: record<TranscriptionJobName: string, TranscriptionJobStatus: string, LanguageCode: string, MediaSampleRateHertz: int, MediaFormat: string, Media: record<MediaFileUri: string, RedactedMediaFileUri: string>, Transcript: record<TranscriptFileUri: string, RedactedTranscriptFileUri: string>, StartTime: string, CreationTime: string, CompletionTime: string, FailureReason: string, Settings: record<VocabularyName: string, ShowSpeakerLabels: bool, MaxSpeakerLabels: int, ChannelIdentification: bool, ShowAlternatives: bool, MaxAlternatives: int, VocabularyFilterName: string, VocabularyFilterMethod: string>, ModelSettings: record<LanguageModelName: string>, JobExecutionSettings: record<AllowDeferredExecution: bool, DataAccessRoleArn: string>, ContentRedaction: record<RedactionType: string, RedactionOutput: string, PiiEntityTypes: list>, IdentifyLanguage: bool, IdentifyMultipleLanguages: bool, LanguageOptions: list<string>, IdentifiedLanguageScore: float, LanguageCodes: list<record>, Tags: list<record>, Subtitles: record<Formats: list, SubtitleFileUris: list, OutputStartIndex: int>, LanguageIdSettings: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Transcribe.GetTranscriptionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TranscriptionJobName": $transcription_job_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1111,12 +1147,13 @@ export def "get-vocabulary" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  vocabulary_name: any
-]: any -> record<VocabularyName: record, LanguageCode: record, VocabularyState: record, LastModifiedTime: record, FailureReason: record, DownloadUri: record> {
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  vocabulary_name: string # The name of the custom vocabulary you want information about. Custom vocabulary names are case sensitive.
+]: any -> record<VocabularyName: string, LanguageCode: string, VocabularyState: string, LastModifiedTime: string, FailureReason: string, DownloadUri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Transcribe.GetVocabulary")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"VocabularyName": $vocabulary_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1159,12 +1196,13 @@ export def "get-vocabulary-filter" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  vocabulary_filter_name: any
-]: any -> record<VocabularyFilterName: record, LanguageCode: record, LastModifiedTime: record, DownloadUri: record> {
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  vocabulary_filter_name: string # The name of the custom vocabulary filter you want information about. Custom vocabulary filter names are case sensitive.
+]: any -> record<VocabularyFilterName: string, LanguageCode: string, LastModifiedTime: string, DownloadUri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Transcribe.GetVocabularyFilter")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"VocabularyFilterName": $vocabulary_filter_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1209,13 +1247,14 @@ export def "list-call-analytics-categories" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<NextToken: record, Categories: record> {
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  --next-token-body: string # If your ListCallAnalyticsCategories request returns more results than can be displayed, NextToken is displayed in the response with an associated string. To get the next page of results, copy this string and repeat your request, including NextToken with the value of the copied string. Repeat as needed to view all your results. (body field)
+  --max-results-body: int # The maximum number of Call Analytics categories to return in each page of results. If there are fewer results than the value that you specify, only the actual results are returned. If you don't specify a value, a default of 5 is used. (body field)
+]: any -> record<NextToken: string, Categories: table<CategoryName: string, Rules: list, CreateTime: string, LastUpdateTime: string, InputType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Transcribe.ListCallAnalyticsCategories")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -1261,15 +1300,16 @@ export def "list-call-analytics-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  --status: any
-  --job-name-contains: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<Status: record, NextToken: record, CallAnalyticsJobSummaries: record> {
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  --status: string@status-completer # Returns only Call Analytics jobs with the specified status. Jobs are ordered by creation date, with the newest job first. If you don't include Status, all Call Analytics jobs are returned.
+  --job-name-contains: string # Returns only the Call Analytics jobs that contain the specified string. The search is not case sensitive.
+  --next-token-body: string # If your ListCallAnalyticsJobs request returns more results than can be displayed, NextToken is displayed in the response with an associated string. To get the next page of results, copy this string and repeat your request, including NextToken with the value of the copied string. Repeat as needed to view all your results. (body field)
+  --max-results-body: int # The maximum number of Call Analytics jobs to return in each page of results. If there are fewer results than the value that you specify, only the actual results are returned. If you don't specify a value, a default of 5 is used. (body field)
+]: any -> record<Status: string, NextToken: string, CallAnalyticsJobSummaries: table<CallAnalyticsJobName: string, CreationTime: string, StartTime: string, CompletionTime: string, LanguageCode: string, CallAnalyticsJobStatus: string, FailureReason: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Transcribe.ListCallAnalyticsJobs")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"Status": $status, "JobNameContains": $job_name_contains, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -1315,15 +1355,16 @@ export def "list-language-models" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  --status-equals: any
-  --name-contains: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<NextToken: record, Models: record> {
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  --status-equals: string@status-equals-completer # Returns only custom language models with the specified status. Language models are ordered by creation date, with the newest model first. If you don't include StatusEquals, all custom language models are returned.
+  --name-contains: string # Returns only the custom language models that contain the specified string. The search is not case sensitive.
+  --next-token-body: string # If your ListLanguageModels request returns more results than can be displayed, NextToken is displayed in the response with an associated string. To get the next page of results, copy this string and repeat your request, including NextToken with the value of the copied string. Repeat as needed to view all your results. (body field)
+  --max-results-body: int # The maximum number of custom language models to return in each page of results. If there are fewer results than the value that you specify, only the actual results are returned. If you don't specify a value, a default of 5 is used. (body field)
+]: any -> record<NextToken: string, Models: table<ModelName: string, CreateTime: string, LastModifiedTime: string, LanguageCode: string, BaseModelName: string, ModelStatus: string, UpgradeAvailability: bool, FailureReason: string, InputDataConfig: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Transcribe.ListLanguageModels")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"StatusEquals": $status_equals, "NameContains": $name_contains, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -1369,15 +1410,16 @@ export def "list-medical-transcription-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  --status: any
-  --job-name-contains: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<Status: record, NextToken: record, MedicalTranscriptionJobSummaries: record> {
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  --status: string@status-completer # Returns only medical transcription jobs with the specified status. Jobs are ordered by creation date, with the newest job first. If you don't include Status, all medical transcription jobs are returned.
+  --job-name-contains: string # Returns only the medical transcription jobs that contain the specified string. The search is not case sensitive.
+  --next-token-body: string # If your ListMedicalTranscriptionJobs request returns more results than can be displayed, NextToken is displayed in the response with an associated string. To get the next page of results, copy this string and repeat your request, including NextToken with the value of the copied string. Repeat as needed to view all your results. (body field)
+  --max-results-body: int # The maximum number of medical transcription jobs to return in each page of results. If there are fewer results than the value that you specify, only the actual results are returned. If you don't specify a value, a default of 5 is used. (body field)
+]: any -> record<Status: string, NextToken: string, MedicalTranscriptionJobSummaries: table<MedicalTranscriptionJobName: string, CreationTime: string, StartTime: string, CompletionTime: string, LanguageCode: string, TranscriptionJobStatus: string, FailureReason: string, OutputLocationType: string, Specialty: string, ContentIdentificationType: string, Type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Transcribe.ListMedicalTranscriptionJobs")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"Status": $status, "JobNameContains": $job_name_contains, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -1423,15 +1465,16 @@ export def "list-medical-vocabularies" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --state-equals: any
-  --name-contains: any
-]: any -> record<Status: record, NextToken: record, Vocabularies: record> {
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  --next-token-body: string # If your ListMedicalVocabularies request returns more results than can be displayed, NextToken is displayed in the response with an associated string. To get the next page of results, copy this string and repeat your request, including NextToken with the value of the copied string. Repeat as needed to view all your results. (body field)
+  --max-results-body: int # The maximum number of custom medical vocabularies to return in each page of results. If there are fewer results than the value that you specify, only the actual results are returned. If you don't specify a value, a default of 5 is used. (body field)
+  --state-equals: string@state-equals-completer # Returns only custom medical vocabularies with the specified state. Custom vocabularies are ordered by creation date, with the newest vocabulary first. If you don't include StateEquals, all custom medical vocabularies are returned.
+  --name-contains: string # Returns only the custom medical vocabularies that contain the specified string. The search is not case sensitive.
+]: any -> record<Status: string, NextToken: string, Vocabularies: table<VocabularyName: string, LanguageCode: string, LastModifiedTime: string, VocabularyState: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Transcribe.ListMedicalVocabularies")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "StateEquals": $state_equals, "NameContains": $name_contains} | compact
@@ -1475,12 +1518,13 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-26
-  resource_arn: any
-]: any -> record<ResourceArn: record, Tags: record> {
+  --x-amz-target: string@x-amz-target-completer-26 # required
+  resource_arn: string # Returns a list of all tags associated with the specified Amazon Resource Name (ARN). ARNs have the format arn:partition:service:region:account-id:resource-type/resource-id. For example, arn:aws:transcribe:us-west-2:111122223333:transcription-job/transcription-job-name. Valid values for resource-type are: transcription-job, medical-transcription-job, vocabulary, medical-vocabulary, vocabulary-filter, and language-model.
+]: any -> record<ResourceArn: string, Tags: table<Key: string, Value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Transcribe.ListTagsForResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1525,15 +1569,16 @@ export def "list-transcription-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-27
-  --status: any
-  --job-name-contains: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<Status: record, NextToken: record, TranscriptionJobSummaries: record> {
+  --x-amz-target: string@x-amz-target-completer-27 # required
+  --status: string@status-completer # Returns only transcription jobs with the specified status. Jobs are ordered by creation date, with the newest job first. If you don't include Status, all transcription jobs are returned.
+  --job-name-contains: string # Returns only the transcription jobs that contain the specified string. The search is not case sensitive.
+  --next-token-body: string # If your ListTranscriptionJobs request returns more results than can be displayed, NextToken is displayed in the response with an associated string. To get the next page of results, copy this string and repeat your request, including NextToken with the value of the copied string. Repeat as needed to view all your results. (body field)
+  --max-results-body: int # The maximum number of transcription jobs to return in each page of results. If there are fewer results than the value that you specify, only the actual results are returned. If you don't specify a value, a default of 5 is used. (body field)
+]: any -> record<Status: string, NextToken: string, TranscriptionJobSummaries: table<TranscriptionJobName: string, CreationTime: string, StartTime: string, CompletionTime: string, LanguageCode: string, TranscriptionJobStatus: string, FailureReason: string, OutputLocationType: string, ContentRedaction: record, ModelSettings: record, IdentifyLanguage: bool, IdentifyMultipleLanguages: bool, IdentifiedLanguageScore: float, LanguageCodes: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Transcribe.ListTranscriptionJobs")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"Status": $status, "JobNameContains": $job_name_contains, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -1579,15 +1624,16 @@ export def "list-vocabularies" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-28
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --state-equals: any
-  --name-contains: any
-]: any -> record<Status: record, NextToken: record, Vocabularies: record> {
+  --x-amz-target: string@x-amz-target-completer-28 # required
+  --next-token-body: string # If your ListVocabularies request returns more results than can be displayed, NextToken is displayed in the response with an associated string. To get the next page of results, copy this string and repeat your request, including NextToken with the value of the copied string. Repeat as needed to view all your results. (body field)
+  --max-results-body: int # The maximum number of custom vocabularies to return in each page of results. If there are fewer results than the value that you specify, only the actual results are returned. If you don't specify a value, a default of 5 is used. (body field)
+  --state-equals: string@state-equals-completer # Returns only custom vocabularies with the specified state. Vocabularies are ordered by creation date, with the newest vocabulary first. If you don't include StateEquals, all custom medical vocabularies are returned.
+  --name-contains: string # Returns only the custom vocabularies that contain the specified string. The search is not case sensitive.
+]: any -> record<Status: string, NextToken: string, Vocabularies: table<VocabularyName: string, LanguageCode: string, LastModifiedTime: string, VocabularyState: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Transcribe.ListVocabularies")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "StateEquals": $state_equals, "NameContains": $name_contains} | compact
@@ -1633,14 +1679,15 @@ export def "list-vocabulary-filters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-29
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-  --name-contains: any
-]: any -> record<NextToken: record, VocabularyFilters: record> {
+  --x-amz-target: string@x-amz-target-completer-29 # required
+  --next-token-body: string # If your ListVocabularyFilters request returns more results than can be displayed, NextToken is displayed in the response with an associated string. To get the next page of results, copy this string and repeat your request, including NextToken with the value of the copied string. Repeat as needed to view all your results. (body field)
+  --max-results-body: int # The maximum number of custom vocabulary filters to return in each page of results. If there are fewer results than the value that you specify, only the actual results are returned. If you don't specify a value, a default of 5 is used. (body field)
+  --name-contains: string # Returns only the custom vocabulary filters that contain the specified string. The search is not case sensitive.
+]: any -> record<NextToken: string, VocabularyFilters: table<VocabularyFilterName: string, LanguageCode: string, LastModifiedTime: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Transcribe.ListVocabularyFilters")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "NameContains": $name_contains} | compact
@@ -1667,6 +1714,9 @@ export def "list-vocabulary-filters" [
 #
 # POST /
 # operationId: StartCallAnalyticsJob
+# --Media shape: {MediaFileUri?: string, RedactedMediaFileUri?: string}
+# --Settings shape: {VocabularyName?: string, VocabularyFilterName?: string, VocabularyFilterMethod?: "remove"|"mask"|"tag", LanguageModelName?: string, ContentRedaction?: record, LanguageOptions?: list<string>, LanguageIdSettings?: record}
+# --ChannelDefinitions item shape: {ChannelId?: int, ParticipantRole?: "AGENT"|"CUSTOMER"}
 export def "start-call-analytics-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1684,18 +1734,19 @@ export def "start-call-analytics-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-30
-  call_analytics_job_name: any
-  media: any
-  --output-location: any
-  --output-encryption-kms-key-id: any
-  --data-access-role-arn: any
-  --settings: any
-  --channel-definitions: any
-]: any -> record<CallAnalyticsJob: record<CallAnalyticsJobName: record, CallAnalyticsJobStatus: record, LanguageCode: record, MediaSampleRateHertz: record, MediaFormat: record, Media: record<MediaFileUri: record, RedactedMediaFileUri: record>, Transcript: record<TranscriptFileUri: record, RedactedTranscriptFileUri: record>, StartTime: record, CreationTime: record, CompletionTime: record, FailureReason: record, DataAccessRoleArn: record, IdentifiedLanguageScore: record, Settings: record<VocabularyName: record, VocabularyFilterName: record, VocabularyFilterMethod: record, LanguageModelName: record, ContentRedaction: record, LanguageOptions: record, LanguageIdSettings: record>, ChannelDefinitions: record>> {
+  --x-amz-target: string@x-amz-target-completer-30 # required
+  call_analytics_job_name: string # A unique name, chosen by you, for your Call Analytics job. This name is case sensitive, cannot contain spaces, and must be unique within an Amazon Web Services account. If you try to create a new job with the same name as an existing job, you get a ConflictException error.
+  media: record # Describes the Amazon S3 location of the media file you want to use in your request. For information on supported media formats, refer to the MediaFormat (https://docs.aws.amazon.com/APIReference/API_StartTranscriptionJob.html#transcribe-StartTranscriptionJob-request-MediaFormat) parameter or the Media formats (https://docs.aws.amazon.com/transcribe/latest/dg/how-input.html#how-input-audio) section in the Amazon S3 Developer Guide. — shape: {MediaFileUri?: string, RedactedMediaFileUri?: string}
+  --output-location: string # The Amazon S3 location where you want your Call Analytics transcription output stored. You can use any of the following formats to specify the output location: s3://DOC-EXAMPLE-BUCKET s3://DOC-EXAMPLE-BUCKET/my-output-folder/ s3://DOC-EXAMPLE-BUCKET/my-output-folder/my-call-analytics-job.json Unless you specify a file name (option 3), the name of your output file has a default value that matches the name you specified for your transcription job using the CallAnalyticsJobName parameter. You can specify a KMS key to encrypt your output using the OutputEncryptionKMSKeyId parameter. If you don't specify a KMS key, Amazon Transcribe uses the default Amazon S3 key for server-side encryption. If you don't specify OutputLocation, your transcript is placed in a service-managed Amazon S3 bucket and you are provided with a URI to access your transcript.
+  --output-encryption-kms-key-id: string # The KMS key you want to use to encrypt your Call Analytics output. If using a key located in the current Amazon Web Services account, you can specify your KMS key in one of four ways: Use the KMS key ID itself. For example, 1234abcd-12ab-34cd-56ef-1234567890ab. Use an alias for the KMS key ID. For example, alias/ExampleAlias. Use the Amazon Resource Name (ARN) for the KMS key ID. For example, arn:aws:kms:region:account-ID:key/1234abcd-12ab-34cd-56ef-1234567890ab. Use the ARN for the KMS key alias. For example, arn:aws:kms:region:account-ID:alias/ExampleAlias. If using a key located in a different Amazon Web Services account than the current Amazon Web Services account, you can specify your KMS key in one of two ways: Use the ARN for the KMS key ID. For example, arn:aws:kms:region:account-ID:key/1234abcd-12ab-34cd-56ef-1234567890ab. Use the ARN for the KMS key alias. For example, arn:aws:kms:region:account-ID:alias/ExampleAlias. If you don't specify an encryption key, your output is encrypted with the default Amazon S3 key (SSE-S3). If you specify a KMS key to encrypt your output, you must also specify an output location using the OutputLocation parameter. Note that the role making the request must have permission to use the specified KMS key.
+  --data-access-role-arn: string # The Amazon Resource Name (ARN) of an IAM role that has permissions to access the Amazon S3 bucket that contains your input files. If the role that you specify doesn’t have the appropriate permissions to access the specified Amazon S3 location, your request fails. IAM role ARNs have the format arn:partition:iam::account:role/role-name-with-path. For example: arn:aws:iam::111122223333:role/Admin. For more information, see IAM ARNs (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_identifiers.html#identifiers-arns).
+  --settings: record # Provides additional optional settings for your request, including content redaction, automatic language identification; allows you to apply custom language models, custom vocabulary filters, and custom vocabularies. — shape: {VocabularyName?: string, VocabularyFilterName?: string, VocabularyFilterMethod?: "remove"|"mask"|"tag", LanguageModelName?: string, ContentRedaction?: record, LanguageOptions?: list<string>, LanguageIdSettings?: record}
+  --channel-definitions: list # Makes it possible to specify which speaker is on which channel. For example, if your agent is the first participant to speak, you would set ChannelId to 0 (to indicate the first channel) and ParticipantRole to AGENT (to indicate that it's the agent speaking). — item shape: {ChannelId?: int, ParticipantRole?: "AGENT"|"CUSTOMER"}
+]: any -> record<CallAnalyticsJob: record<CallAnalyticsJobName: string, CallAnalyticsJobStatus: string, LanguageCode: string, MediaSampleRateHertz: int, MediaFormat: string, Media: record<MediaFileUri: string, RedactedMediaFileUri: string>, Transcript: record<TranscriptFileUri: string, RedactedTranscriptFileUri: string>, StartTime: string, CreationTime: string, CompletionTime: string, FailureReason: string, DataAccessRoleArn: string, IdentifiedLanguageScore: float, Settings: record<VocabularyName: string, VocabularyFilterName: string, VocabularyFilterMethod: string, LanguageModelName: string, ContentRedaction: record, LanguageOptions: list, LanguageIdSettings: record>, ChannelDefinitions: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Transcribe.StartCallAnalyticsJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"CallAnalyticsJobName": $call_analytics_job_name, "Media": $media, "OutputLocation": $output_location, "OutputEncryptionKMSKeyId": $output_encryption_kms_key_id, "DataAccessRoleArn": $data_access_role_arn, "Settings": $settings, "ChannelDefinitions": $channel_definitions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1721,7 +1772,9 @@ export def "start-call-analytics-job" [
 #
 # POST /
 # operationId: StartMedicalTranscriptionJob
-# --Media shape: {MediaFileUri?: any, RedactedMediaFileUri?: any}
+# --Media shape: {MediaFileUri?: string, RedactedMediaFileUri?: string}
+# --Settings shape: {ShowSpeakerLabels?: bool, MaxSpeakerLabels?: int, ChannelIdentification?: bool, ShowAlternatives?: bool, MaxAlternatives?: int, VocabularyName?: string}
+# --Tags item shape: {Key: string, Value: string}
 export def "start-medical-transcription-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1739,25 +1792,26 @@ export def "start-medical-transcription-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-31
-  medical_transcription_job_name: any
-  language_code: any
-  --media-sample-rate-hertz: any
-  --media-format: any
-  media: record # Describes the Amazon S3 location of the media file you want to use in your request. For information on supported media formats, refer to the MediaFormat (https://docs.aws.amazon.com/APIReference/API_StartTranscriptionJob.html#transcribe-StartTranscriptionJob-request-MediaFormat) parameter or the Media formats (https://docs.aws.amazon.com/transcribe/latest/dg/how-input.html#how-input-audio) section in the Amazon S3 Developer Guide. — shape: {MediaFileUri?: any, RedactedMediaFileUri?: any}
-  output_bucket_name: any
-  --output-key: any
-  --output-encryption-kms-key-id: any
-  --kms-encryption-context: any
-  --settings: any
-  --content-identification-type: any
-  specialty: any
-  type: any
-  --tags: any
-]: any -> record<MedicalTranscriptionJob: record<MedicalTranscriptionJobName: record, TranscriptionJobStatus: record, LanguageCode: record, MediaSampleRateHertz: record, MediaFormat: record, Media: record<MediaFileUri: record, RedactedMediaFileUri: record>, Transcript: record<TranscriptFileUri: record>, StartTime: record, CreationTime: record, CompletionTime: record, FailureReason: record, Settings: record<ShowSpeakerLabels: record, MaxSpeakerLabels: record, ChannelIdentification: record, ShowAlternatives: record, MaxAlternatives: record, VocabularyName: record>, ContentIdentificationType: record, Specialty: record, Type: record, Tags: record>> {
+  --x-amz-target: string@x-amz-target-completer-31 # required
+  medical_transcription_job_name: string # A unique name, chosen by you, for your medical transcription job. The name that you specify is also used as the default name of your transcription output file. If you want to specify a different name for your transcription output, use the OutputKey parameter. This name is case sensitive, cannot contain spaces, and must be unique within an Amazon Web Services account. If you try to create a new job with the same name as an existing job, you get a ConflictException error.
+  language_code: string@language-code-completer-1 # The language code that represents the language spoken in the input media file. US English (en-US) is the only valid value for medical transcription jobs. Any other value you enter for language code results in a BadRequestException error.
+  --media-sample-rate-hertz: int # The sample rate, in hertz, of the audio track in your input media file. If you don't specify the media sample rate, Amazon Transcribe Medical determines it for you. If you specify the sample rate, it must match the rate detected by Amazon Transcribe Medical; if there's a mismatch between the value that you specify and the value detected, your job fails. Therefore, in most cases, it's advised to omit MediaSampleRateHertz and let Amazon Transcribe Medical determine the sample rate.
+  --media-format: string@media-format-completer # Specify the format of your input media file.
+  media: record # Describes the Amazon S3 location of the media file you want to use in your request. For information on supported media formats, refer to the MediaFormat (https://docs.aws.amazon.com/APIReference/API_StartTranscriptionJob.html#transcribe-StartTranscriptionJob-request-MediaFormat) parameter or the Media formats (https://docs.aws.amazon.com/transcribe/latest/dg/how-input.html#how-input-audio) section in the Amazon S3 Developer Guide. — shape: {MediaFileUri?: string, RedactedMediaFileUri?: string}
+  output_bucket_name: string # The name of the Amazon S3 bucket where you want your medical transcription output stored. Do not include the S3:// prefix of the specified bucket. If you want your output to go to a sub-folder of this bucket, specify it using the OutputKey parameter; OutputBucketName only accepts the name of a bucket. For example, if you want your output stored in S3://DOC-EXAMPLE-BUCKET, set OutputBucketName to DOC-EXAMPLE-BUCKET. However, if you want your output stored in S3://DOC-EXAMPLE-BUCKET/test-files/, set OutputBucketName to DOC-EXAMPLE-BUCKET and OutputKey to test-files/. Note that Amazon Transcribe must have permission to use the specified location. You can change Amazon S3 permissions using the Amazon Web Services Management Console (https://console.aws.amazon.com/s3). See also Permissions Required for IAM User Roles (https://docs.aws.amazon.com/transcribe/latest/dg/security_iam_id-based-policy-examples.html#auth-role-iam-user).
+  --output-key: string # Use in combination with OutputBucketName to specify the output location of your transcript and, optionally, a unique name for your output file. The default name for your transcription output is the same as the name you specified for your medical transcription job (MedicalTranscriptionJobName). Here are some examples of how you can use OutputKey: If you specify 'DOC-EXAMPLE-BUCKET' as the OutputBucketName and 'my-transcript.json' as the OutputKey, your transcription output path is s3://DOC-EXAMPLE-BUCKET/my-transcript.json. If you specify 'my-first-transcription' as the MedicalTranscriptionJobName, 'DOC-EXAMPLE-BUCKET' as the OutputBucketName, and 'my-transcript' as the OutputKey, your transcription output path is s3://DOC-EXAMPLE-BUCKET/my-transcript/my-first-transcription.json. If you specify 'DOC-EXAMPLE-BUCKET' as the OutputBucketName and 'test-files/my-transcript.json' as the OutputKey, your transcription output path is s3://DOC-EXAMPLE-BUCKET/test-files/my-transcript.json. If you specify 'my-first-transcription' as the MedicalTranscriptionJobName, 'DOC-EXAMPLE-BUCKET' as the OutputBucketName, and 'test-files/my-transcript' as the OutputKey, your transcription output path is s3://DOC-EXAMPLE-BUCKET/test-files/my-transcript/my-first-transcription.json. If you specify the name of an Amazon S3 bucket sub-folder that doesn't exist, one is created for you.
+  --output-encryption-kms-key-id: string # The KMS key you want to use to encrypt your medical transcription output. If using a key located in the current Amazon Web Services account, you can specify your KMS key in one of four ways: Use the KMS key ID itself. For example, 1234abcd-12ab-34cd-56ef-1234567890ab. Use an alias for the KMS key ID. For example, alias/ExampleAlias. Use the Amazon Resource Name (ARN) for the KMS key ID. For example, arn:aws:kms:region:account-ID:key/1234abcd-12ab-34cd-56ef-1234567890ab. Use the ARN for the KMS key alias. For example, arn:aws:kms:region:account-ID:alias/ExampleAlias. If using a key located in a different Amazon Web Services account than the current Amazon Web Services account, you can specify your KMS key in one of two ways: Use the ARN for the KMS key ID. For example, arn:aws:kms:region:account-ID:key/1234abcd-12ab-34cd-56ef-1234567890ab. Use the ARN for the KMS key alias. For example, arn:aws:kms:region:account-ID:alias/ExampleAlias. If you don't specify an encryption key, your output is encrypted with the default Amazon S3 key (SSE-S3). If you specify a KMS key to encrypt your output, you must also specify an output location using the OutputLocation parameter. Note that the role making the request must have permission to use the specified KMS key.
+  --kms-encryption-context: record # A map of plain text, non-secret key:value pairs, known as encryption context pairs, that provide an added layer of security for your data. For more information, see KMS encryption context (https://docs.aws.amazon.com/transcribe/latest/dg/key-management.html#kms-context) and Asymmetric keys in KMS (https://docs.aws.amazon.com/transcribe/latest/dg/symmetric-asymmetric.html).
+  --settings: record # Allows additional optional settings in your request, including channel identification, alternative transcriptions, and speaker partitioning. You can use that to apply custom vocabularies to your medical transcription job. — shape: {ShowSpeakerLabels?: bool, MaxSpeakerLabels?: int, ChannelIdentification?: bool, ShowAlternatives?: bool, MaxAlternatives?: int, VocabularyName?: string}
+  --content-identification-type: string@content-identification-type-completer # Labels all personal health information (PHI) identified in your transcript. For more information, see Identifying personal health information (PHI) in a transcription (https://docs.aws.amazon.com/transcribe/latest/dg/phi-id.html).
+  specialty: string@specialty-completer # Specify the predominant medical specialty represented in your media. For batch transcriptions, PRIMARYCARE is the only valid value. If you require additional specialties, refer to .
+  type: string@type-completer # Specify whether your input media contains only one person (DICTATION) or contains a conversation between two people (CONVERSATION). For example, DICTATION could be used for a medical professional wanting to transcribe voice memos; CONVERSATION could be used for transcribing the doctor-patient dialogue during the patient's office visit.
+  --tags: list # Adds one or more custom tags, each in the form of a key:value pair, to a new medical transcription job at the time you start this new job. To learn more about using tags with Amazon Transcribe, refer to Tagging resources (https://docs.aws.amazon.com/transcribe/latest/dg/tagging.html). — item shape: {Key: string, Value: string}
+]: any -> record<MedicalTranscriptionJob: record<MedicalTranscriptionJobName: string, TranscriptionJobStatus: string, LanguageCode: string, MediaSampleRateHertz: int, MediaFormat: string, Media: record<MediaFileUri: string, RedactedMediaFileUri: string>, Transcript: record<TranscriptFileUri: string>, StartTime: string, CreationTime: string, CompletionTime: string, FailureReason: string, Settings: record<ShowSpeakerLabels: bool, MaxSpeakerLabels: int, ChannelIdentification: bool, ShowAlternatives: bool, MaxAlternatives: int, VocabularyName: string>, ContentIdentificationType: string, Specialty: string, Type: string, Tags: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Transcribe.StartMedicalTranscriptionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"MedicalTranscriptionJobName": $medical_transcription_job_name, "LanguageCode": $language_code, "MediaSampleRateHertz": $media_sample_rate_hertz, "MediaFormat": $media_format, "Media": $media, "OutputBucketName": $output_bucket_name, "OutputKey": $output_key, "OutputEncryptionKMSKeyId": $output_encryption_kms_key_id, "KMSEncryptionContext": $kms_encryption_context, "Settings": $settings, "ContentIdentificationType": $content_identification_type, "Specialty": $specialty, "Type": $type, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1783,6 +1837,13 @@ export def "start-medical-transcription-job" [
 #
 # POST /
 # operationId: StartTranscriptionJob
+# --Media shape: {MediaFileUri?: string, RedactedMediaFileUri?: string}
+# --Settings shape: {VocabularyName?: string, ShowSpeakerLabels?: bool, MaxSpeakerLabels?: int, ChannelIdentification?: bool, ShowAlternatives?: bool, MaxAlternatives?: int, VocabularyFilterName?: string, VocabularyFilterMethod?: "remove"|"mask"|"tag"}
+# --ModelSettings shape: {LanguageModelName?: string}
+# --JobExecutionSettings shape: {AllowDeferredExecution?: bool, DataAccessRoleArn?: string}
+# --ContentRedaction shape: {RedactionType: "PII", RedactionOutput: "redacted"|"redacted_and_unredacted", PiiEntityTypes?: list<string>}
+# --Subtitles shape: {Formats?: list<string>, OutputStartIndex?: int}
+# --Tags item shape: {Key: string, Value: string}
 export def "start-transcription-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1800,30 +1861,31 @@ export def "start-transcription-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-32
-  transcription_job_name: any
-  --language-code: any
-  --media-sample-rate-hertz: any
-  --media-format: any
-  media: any
-  --output-bucket-name: any
-  --output-key: any
-  --output-encryption-kms-key-id: any
-  --kms-encryption-context: any
-  --settings: any
-  --model-settings: any
-  --job-execution-settings: any
-  --content-redaction: any
-  --identify-language: any
-  --identify-multiple-languages: any
-  --language-options: any
-  --subtitles: any
-  --tags: any
-  --language-id-settings: any
-]: any -> record<TranscriptionJob: record<TranscriptionJobName: record, TranscriptionJobStatus: record, LanguageCode: record, MediaSampleRateHertz: record, MediaFormat: record, Media: record<MediaFileUri: record, RedactedMediaFileUri: record>, Transcript: record<TranscriptFileUri: record, RedactedTranscriptFileUri: record>, StartTime: record, CreationTime: record, CompletionTime: record, FailureReason: record, Settings: record<VocabularyName: record, ShowSpeakerLabels: record, MaxSpeakerLabels: record, ChannelIdentification: record, ShowAlternatives: record, MaxAlternatives: record, VocabularyFilterName: record, VocabularyFilterMethod: record>, ModelSettings: record<LanguageModelName: record>, JobExecutionSettings: record<AllowDeferredExecution: record, DataAccessRoleArn: record>, ContentRedaction: record<RedactionType: record, RedactionOutput: record, PiiEntityTypes: record>, IdentifyLanguage: record, IdentifyMultipleLanguages: record, LanguageOptions: record, IdentifiedLanguageScore: record, LanguageCodes: record, Tags: record, Subtitles: record<Formats: record, SubtitleFileUris: record, OutputStartIndex: record>, LanguageIdSettings: record>> {
+  --x-amz-target: string@x-amz-target-completer-32 # required
+  transcription_job_name: string # A unique name, chosen by you, for your transcription job. The name that you specify is also used as the default name of your transcription output file. If you want to specify a different name for your transcription output, use the OutputKey parameter. This name is case sensitive, cannot contain spaces, and must be unique within an Amazon Web Services account. If you try to create a new job with the same name as an existing job, you get a ConflictException error.
+  --language-code: string@language-code-completer-1 # The language code that represents the language spoken in the input media file. If you're unsure of the language spoken in your media file, consider using IdentifyLanguage or IdentifyMultipleLanguages to enable automatic language identification. Note that you must include one of LanguageCode, IdentifyLanguage, or IdentifyMultipleLanguages in your request. If you include more than one of these parameters, your transcription job fails. For a list of supported languages and their associated language codes, refer to the Supported languages (https://docs.aws.amazon.com/transcribe/latest/dg/supported-languages.html) table. To transcribe speech in Modern Standard Arabic (ar-SA), your media file must be encoded at a sample rate of 16,000 Hz or higher.
+  --media-sample-rate-hertz: int # The sample rate, in hertz, of the audio track in your input media file. If you don't specify the media sample rate, Amazon Transcribe determines it for you. If you specify the sample rate, it must match the rate detected by Amazon Transcribe. If there's a mismatch between the value that you specify and the value detected, your job fails. In most cases, you can omit MediaSampleRateHertz and let Amazon Transcribe determine the sample rate.
+  --media-format: string@media-format-completer # Specify the format of your input media file.
+  media: record # Describes the Amazon S3 location of the media file you want to use in your request. For information on supported media formats, refer to the MediaFormat (https://docs.aws.amazon.com/APIReference/API_StartTranscriptionJob.html#transcribe-StartTranscriptionJob-request-MediaFormat) parameter or the Media formats (https://docs.aws.amazon.com/transcribe/latest/dg/how-input.html#how-input-audio) section in the Amazon S3 Developer Guide. — shape: {MediaFileUri?: string, RedactedMediaFileUri?: string}
+  --output-bucket-name: string # The name of the Amazon S3 bucket where you want your transcription output stored. Do not include the S3:// prefix of the specified bucket. If you want your output to go to a sub-folder of this bucket, specify it using the OutputKey parameter; OutputBucketName only accepts the name of a bucket. For example, if you want your output stored in S3://DOC-EXAMPLE-BUCKET, set OutputBucketName to DOC-EXAMPLE-BUCKET. However, if you want your output stored in S3://DOC-EXAMPLE-BUCKET/test-files/, set OutputBucketName to DOC-EXAMPLE-BUCKET and OutputKey to test-files/. Note that Amazon Transcribe must have permission to use the specified location. You can change Amazon S3 permissions using the Amazon Web Services Management Console (https://console.aws.amazon.com/s3). See also Permissions Required for IAM User Roles (https://docs.aws.amazon.com/transcribe/latest/dg/security_iam_id-based-policy-examples.html#auth-role-iam-user). If you don't specify OutputBucketName, your transcript is placed in a service-managed Amazon S3 bucket and you are provided with a URI to access your transcript.
+  --output-key: string # Use in combination with OutputBucketName to specify the output location of your transcript and, optionally, a unique name for your output file. The default name for your transcription output is the same as the name you specified for your transcription job (TranscriptionJobName). Here are some examples of how you can use OutputKey: If you specify 'DOC-EXAMPLE-BUCKET' as the OutputBucketName and 'my-transcript.json' as the OutputKey, your transcription output path is s3://DOC-EXAMPLE-BUCKET/my-transcript.json. If you specify 'my-first-transcription' as the TranscriptionJobName, 'DOC-EXAMPLE-BUCKET' as the OutputBucketName, and 'my-transcript' as the OutputKey, your transcription output path is s3://DOC-EXAMPLE-BUCKET/my-transcript/my-first-transcription.json. If you specify 'DOC-EXAMPLE-BUCKET' as the OutputBucketName and 'test-files/my-transcript.json' as the OutputKey, your transcription output path is s3://DOC-EXAMPLE-BUCKET/test-files/my-transcript.json. If you specify 'my-first-transcription' as the TranscriptionJobName, 'DOC-EXAMPLE-BUCKET' as the OutputBucketName, and 'test-files/my-transcript' as the OutputKey, your transcription output path is s3://DOC-EXAMPLE-BUCKET/test-files/my-transcript/my-first-transcription.json. If you specify the name of an Amazon S3 bucket sub-folder that doesn't exist, one is created for you.
+  --output-encryption-kms-key-id: string # The KMS key you want to use to encrypt your transcription output. If using a key located in the current Amazon Web Services account, you can specify your KMS key in one of four ways: Use the KMS key ID itself. For example, 1234abcd-12ab-34cd-56ef-1234567890ab. Use an alias for the KMS key ID. For example, alias/ExampleAlias. Use the Amazon Resource Name (ARN) for the KMS key ID. For example, arn:aws:kms:region:account-ID:key/1234abcd-12ab-34cd-56ef-1234567890ab. Use the ARN for the KMS key alias. For example, arn:aws:kms:region:account-ID:alias/ExampleAlias. If using a key located in a different Amazon Web Services account than the current Amazon Web Services account, you can specify your KMS key in one of two ways: Use the ARN for the KMS key ID. For example, arn:aws:kms:region:account-ID:key/1234abcd-12ab-34cd-56ef-1234567890ab. Use the ARN for the KMS key alias. For example, arn:aws:kms:region:account-ID:alias/ExampleAlias. If you don't specify an encryption key, your output is encrypted with the default Amazon S3 key (SSE-S3). If you specify a KMS key to encrypt your output, you must also specify an output location using the OutputLocation parameter. Note that the role making the request must have permission to use the specified KMS key.
+  --kms-encryption-context: record # A map of plain text, non-secret key:value pairs, known as encryption context pairs, that provide an added layer of security for your data. For more information, see KMS encryption context (https://docs.aws.amazon.com/transcribe/latest/dg/key-management.html#kms-context) and Asymmetric keys in KMS (https://docs.aws.amazon.com/transcribe/latest/dg/symmetric-asymmetric.html).
+  --settings: record # Allows additional optional settings in your request, including channel identification, alternative transcriptions, and speaker partitioning. You can use that to apply custom vocabularies to your transcription job. — shape: {VocabularyName?: string, ShowSpeakerLabels?: bool, MaxSpeakerLabels?: int, ChannelIdentification?: bool, ShowAlternatives?: bool, MaxAlternatives?: int, VocabularyFilterName?: string, VocabularyFilterMethod?: "remove"|"mask"|"tag"}
+  --model-settings: record # Provides the name of the custom language model that was included in the specified transcription job. Only use ModelSettings with the LanguageModelName sub-parameter if you're not using automatic language identification (). If using LanguageIdSettings in your request, this parameter contains a LanguageModelName sub-parameter. — shape: {LanguageModelName?: string}
+  --job-execution-settings: record # Makes it possible to control how your transcription job is processed. Currently, the only JobExecutionSettings modification you can choose is enabling job queueing using the AllowDeferredExecution sub-parameter. If you include JobExecutionSettings in your request, you must also include the sub-parameters: AllowDeferredExecution and DataAccessRoleArn. — shape: {AllowDeferredExecution?: bool, DataAccessRoleArn?: string}
+  --content-redaction: record # Makes it possible to redact or flag specified personally identifiable information (PII) in your transcript. If you use ContentRedaction, you must also include the sub-parameters: PiiEntityTypes, RedactionOutput, and RedactionType. — shape: {RedactionType: "PII", RedactionOutput: "redacted"|"redacted_and_unredacted", PiiEntityTypes?: list<string>}
+  --identify-language: oneof<nothing, bool> # Enables automatic language identification in your transcription job request. Use this parameter if your media file contains only one language. If your media contains multiple languages, use IdentifyMultipleLanguages instead. If you include IdentifyLanguage, you can optionally include a list of language codes, using LanguageOptions, that you think may be present in your media file. Including LanguageOptions restricts IdentifyLanguage to only the language options that you specify, which can improve transcription accuracy. If you want to apply a custom language model, a custom vocabulary, or a custom vocabulary filter to your automatic language identification request, include LanguageIdSettings with the relevant sub-parameters (VocabularyName, LanguageModelName, and VocabularyFilterName). If you include LanguageIdSettings, also include LanguageOptions. Note that you must include one of LanguageCode, IdentifyLanguage, or IdentifyMultipleLanguages in your request. If you include more than one of these parameters, your transcription job fails.
+  --identify-multiple-languages: oneof<nothing, bool> # Enables automatic multi-language identification in your transcription job request. Use this parameter if your media file contains more than one language. If your media contains only one language, use IdentifyLanguage instead. If you include IdentifyMultipleLanguages, you can optionally include a list of language codes, using LanguageOptions, that you think may be present in your media file. Including LanguageOptions restricts IdentifyLanguage to only the language options that you specify, which can improve transcription accuracy. If you want to apply a custom vocabulary or a custom vocabulary filter to your automatic language identification request, include LanguageIdSettings with the relevant sub-parameters (VocabularyName and VocabularyFilterName). If you include LanguageIdSettings, also include LanguageOptions. Note that you must include one of LanguageCode, IdentifyLanguage, or IdentifyMultipleLanguages in your request. If you include more than one of these parameters, your transcription job fails.
+  --language-options: list<string> # You can specify two or more language codes that represent the languages you think may be present in your media. Including more than five is not recommended. If you're unsure what languages are present, do not include this parameter. If you include LanguageOptions in your request, you must also include IdentifyLanguage. For more information, refer to Supported languages (https://docs.aws.amazon.com/transcribe/latest/dg/supported-languages.html). To transcribe speech in Modern Standard Arabic (ar-SA), your media file must be encoded at a sample rate of 16,000 Hz or higher.
+  --subtitles: record # Generate subtitles for your media file with your transcription request. You can choose a start index of 0 or 1, and you can specify either WebVTT or SubRip (or both) as your output format. Note that your subtitle files are placed in the same location as your transcription output. — shape: {Formats?: list<string>, OutputStartIndex?: int}
+  --tags: list # Adds one or more custom tags, each in the form of a key:value pair, to a new transcription job at the time you start this new job. To learn more about using tags with Amazon Transcribe, refer to Tagging resources (https://docs.aws.amazon.com/transcribe/latest/dg/tagging.html). — item shape: {Key: string, Value: string}
+  --language-id-settings: record # If using automatic language identification in your request and you want to apply a custom language model, a custom vocabulary, or a custom vocabulary filter, include LanguageIdSettings with the relevant sub-parameters (VocabularyName, LanguageModelName, and VocabularyFilterName). Note that multi-language identification (IdentifyMultipleLanguages) doesn't support custom language models. LanguageIdSettings supports two to five language codes. Each language code you include can have an associated custom language model, custom vocabulary, and custom vocabulary filter. The language codes that you specify must match the languages of the associated custom language models, custom vocabularies, and custom vocabulary filters. It's recommended that you include LanguageOptions when using LanguageIdSettings to ensure that the correct language dialect is identified. For example, if you specify a custom vocabulary that is in en-US but Amazon Transcribe determines that the language spoken in your media is en-AU, your custom vocabulary is not applied to your transcription. If you include LanguageOptions and include en-US as the only English language dialect, your custom vocabulary is applied to your transcription. If you want to include a custom language model with your request but do not want to use automatic language identification, use instead the parameter with the LanguageModelName sub-parameter. If you want to include a custom vocabulary or a custom vocabulary filter (or both) with your request but do not want to use automatic language identification, use instead the parameter with the VocabularyName or VocabularyFilterName (or both) sub-parameter.
+]: any -> record<TranscriptionJob: record<TranscriptionJobName: string, TranscriptionJobStatus: string, LanguageCode: string, MediaSampleRateHertz: int, MediaFormat: string, Media: record<MediaFileUri: string, RedactedMediaFileUri: string>, Transcript: record<TranscriptFileUri: string, RedactedTranscriptFileUri: string>, StartTime: string, CreationTime: string, CompletionTime: string, FailureReason: string, Settings: record<VocabularyName: string, ShowSpeakerLabels: bool, MaxSpeakerLabels: int, ChannelIdentification: bool, ShowAlternatives: bool, MaxAlternatives: int, VocabularyFilterName: string, VocabularyFilterMethod: string>, ModelSettings: record<LanguageModelName: string>, JobExecutionSettings: record<AllowDeferredExecution: bool, DataAccessRoleArn: string>, ContentRedaction: record<RedactionType: string, RedactionOutput: string, PiiEntityTypes: list>, IdentifyLanguage: bool, IdentifyMultipleLanguages: bool, LanguageOptions: list<string>, IdentifiedLanguageScore: float, LanguageCodes: list<record>, Tags: list<record>, Subtitles: record<Formats: list, SubtitleFileUris: list, OutputStartIndex: int>, LanguageIdSettings: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Transcribe.StartTranscriptionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TranscriptionJobName": $transcription_job_name, "LanguageCode": $language_code, "MediaSampleRateHertz": $media_sample_rate_hertz, "MediaFormat": $media_format, "Media": $media, "OutputBucketName": $output_bucket_name, "OutputKey": $output_key, "OutputEncryptionKMSKeyId": $output_encryption_kms_key_id, "KMSEncryptionContext": $kms_encryption_context, "Settings": $settings, "ModelSettings": $model_settings, "JobExecutionSettings": $job_execution_settings, "ContentRedaction": $content_redaction, "IdentifyLanguage": $identify_language, "IdentifyMultipleLanguages": $identify_multiple_languages, "LanguageOptions": $language_options, "Subtitles": $subtitles, "Tags": $tags, "LanguageIdSettings": $language_id_settings} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1849,6 +1911,7 @@ export def "start-transcription-job" [
 #
 # POST /
 # operationId: TagResource
+# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1866,13 +1929,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-33
-  resource_arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-33 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the resource you want to tag. ARNs have the format arn:partition:service:region:account-id:resource-type/resource-id. For example, arn:aws:transcribe:us-west-2:111122223333:transcription-job/transcription-job-name. Valid values for resource-type are: transcription-job, medical-transcription-job, vocabulary, medical-vocabulary, vocabulary-filter, and language-model.
+  tags: list # Adds one or more custom tags, each in the form of a key:value pair, to the specified resource. To learn more about using tags with Amazon Transcribe, refer to Tagging resources (https://docs.aws.amazon.com/transcribe/latest/dg/tagging.html). — item shape: {Key: string, Value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Transcribe.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1915,13 +1979,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-34
-  resource_arn: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-34 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the Amazon Transcribe resource you want to remove tags from. ARNs have the format arn:partition:service:region:account-id:resource-type/resource-id. For example, arn:aws:transcribe:us-west-2:111122223333:transcription-job/transcription-job-name. Valid values for resource-type are: transcription-job, medical-transcription-job, vocabulary, medical-vocabulary, vocabulary-filter, and language-model.
+  tag_keys: list<string> # Removes the specified tag keys from the specified Amazon Transcribe resource.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Transcribe.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1947,6 +2012,7 @@ export def "untag-resource" [
 #
 # POST /
 # operationId: UpdateCallAnalyticsCategory
+# --Rules item shape: {NonTalkTimeFilter?: record, InterruptionFilter?: record, TranscriptFilter?: record, SentimentFilter?: record}
 export def "update-call-analytics-category" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1964,14 +2030,15 @@ export def "update-call-analytics-category" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-35
-  category_name: any
-  rules: any
-  --input-type: any
-]: any -> record<CategoryProperties: record<CategoryName: record, Rules: record, CreateTime: record, LastUpdateTime: record, InputType: record>> {
+  --x-amz-target: string@x-amz-target-completer-35 # required
+  category_name: string # The name of the Call Analytics category you want to update. Category names are case sensitive.
+  rules: list # The rules used for the updated Call Analytics category. The rules you provide in this field replace the ones that are currently being used in the specified category. — item shape: {NonTalkTimeFilter?: record, InterruptionFilter?: record, TranscriptFilter?: record, SentimentFilter?: record}
+  --input-type: string@input-type-completer # Choose whether you want to update a real-time or a post-call category. The input type you specify must match the input type specified when the category was created. For example, if you created a category with the POST_CALL input type, you must use POST_CALL as the input type when updating this category.
+]: any -> record<CategoryProperties: record<CategoryName: string, Rules: list<record>, CreateTime: string, LastUpdateTime: string, InputType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Transcribe.UpdateCallAnalyticsCategory")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"CategoryName": $category_name, "Rules": $rules, "InputType": $input_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2014,14 +2081,15 @@ export def "update-medical-vocabulary" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-36
-  vocabulary_name: any
-  language_code: any
-  vocabulary_file_uri: any
-]: any -> record<VocabularyName: record, LanguageCode: record, LastModifiedTime: record, VocabularyState: record> {
+  --x-amz-target: string@x-amz-target-completer-36 # required
+  vocabulary_name: string # The name of the custom medical vocabulary you want to update. Custom medical vocabulary names are case sensitive.
+  language_code: string@language-code-completer-1 # The language code that represents the language of the entries in the custom vocabulary you want to update. US English (en-US) is the only language supported with Amazon Transcribe Medical.
+  vocabulary_file_uri: string # The Amazon S3 location of the text file that contains your custom medical vocabulary. The URI must be located in the same Amazon Web Services Region as the resource you're calling. Here's an example URI path: s3://DOC-EXAMPLE-BUCKET/my-vocab-file.txt
+]: any -> record<VocabularyName: string, LanguageCode: string, LastModifiedTime: string, VocabularyState: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Transcribe.UpdateMedicalVocabulary")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"VocabularyName": $vocabulary_name, "LanguageCode": $language_code, "VocabularyFileUri": $vocabulary_file_uri} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2064,16 +2132,17 @@ export def "update-vocabulary" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-37
-  vocabulary_name: any
-  language_code: any
-  --phrases: any
-  --vocabulary-file-uri: any
-  --data-access-role-arn: any
-]: any -> record<VocabularyName: record, LanguageCode: record, LastModifiedTime: record, VocabularyState: record> {
+  --x-amz-target: string@x-amz-target-completer-37 # required
+  vocabulary_name: string # The name of the custom vocabulary you want to update. Custom vocabulary names are case sensitive.
+  language_code: string@language-code-completer-1 # The language code that represents the language of the entries in the custom vocabulary you want to update. Each custom vocabulary must contain terms in only one language. A custom vocabulary can only be used to transcribe files in the same language as the custom vocabulary. For example, if you create a custom vocabulary using US English (en-US), you can only apply this custom vocabulary to files that contain English audio. For a list of supported languages and their associated language codes, refer to the Supported languages (https://docs.aws.amazon.com/transcribe/latest/dg/supported-languages.html) table.
+  --phrases: list<string> # Use this parameter if you want to update your custom vocabulary by including all desired terms, as comma-separated values, within your request. The other option for updating your custom vocabulary is to save your entries in a text file and upload them to an Amazon S3 bucket, then specify the location of your file using the VocabularyFileUri parameter. Note that if you include Phrases in your request, you cannot use VocabularyFileUri; you must choose one or the other. Each language has a character set that contains all allowed characters for that specific language. If you use unsupported characters, your custom vocabulary filter request fails. Refer to Character Sets for Custom Vocabularies (https://docs.aws.amazon.com/transcribe/latest/dg/charsets.html) to get the character set for your language.
+  --vocabulary-file-uri: string # The Amazon S3 location of the text file that contains your custom vocabulary. The URI must be located in the same Amazon Web Services Region as the resource you're calling. Here's an example URI path: s3://DOC-EXAMPLE-BUCKET/my-vocab-file.txt Note that if you include VocabularyFileUri in your request, you cannot use the Phrases flag; you must choose one or the other.
+  --data-access-role-arn: string # The Amazon Resource Name (ARN) of an IAM role that has permissions to access the Amazon S3 bucket that contains your input files (in this case, your custom vocabulary). If the role that you specify doesn’t have the appropriate permissions to access the specified Amazon S3 location, your request fails. IAM role ARNs have the format arn:partition:iam::account:role/role-name-with-path. For example: arn:aws:iam::111122223333:role/Admin. For more information, see IAM ARNs (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_identifiers.html#identifiers-arns).
+]: any -> record<VocabularyName: string, LanguageCode: string, LastModifiedTime: string, VocabularyState: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Transcribe.UpdateVocabulary")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"VocabularyName": $vocabulary_name, "LanguageCode": $language_code, "Phrases": $phrases, "VocabularyFileUri": $vocabulary_file_uri, "DataAccessRoleArn": $data_access_role_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2116,15 +2185,16 @@ export def "update-vocabulary-filter" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-38
-  vocabulary_filter_name: any
-  --words: any
-  --vocabulary-filter-file-uri: any
-  --data-access-role-arn: any
-]: any -> record<VocabularyFilterName: record, LanguageCode: record, LastModifiedTime: record> {
+  --x-amz-target: string@x-amz-target-completer-38 # required
+  vocabulary_filter_name: string # The name of the custom vocabulary filter you want to update. Custom vocabulary filter names are case sensitive.
+  --words: list<string> # Use this parameter if you want to update your custom vocabulary filter by including all desired terms, as comma-separated values, within your request. The other option for updating your vocabulary filter is to save your entries in a text file and upload them to an Amazon S3 bucket, then specify the location of your file using the VocabularyFilterFileUri parameter. Note that if you include Words in your request, you cannot use VocabularyFilterFileUri; you must choose one or the other. Each language has a character set that contains all allowed characters for that specific language. If you use unsupported characters, your custom vocabulary filter request fails. Refer to Character Sets for Custom Vocabularies (https://docs.aws.amazon.com/transcribe/latest/dg/charsets.html) to get the character set for your language.
+  --vocabulary-filter-file-uri: string # The Amazon S3 location of the text file that contains your custom vocabulary filter terms. The URI must be located in the same Amazon Web Services Region as the resource you're calling. Here's an example URI path: s3://DOC-EXAMPLE-BUCKET/my-vocab-filter-file.txt Note that if you include VocabularyFilterFileUri in your request, you cannot use Words; you must choose one or the other.
+  --data-access-role-arn: string # The Amazon Resource Name (ARN) of an IAM role that has permissions to access the Amazon S3 bucket that contains your input files (in this case, your custom vocabulary filter). If the role that you specify doesn’t have the appropriate permissions to access the specified Amazon S3 location, your request fails. IAM role ARNs have the format arn:partition:iam::account:role/role-name-with-path. For example: arn:aws:iam::111122223333:role/Admin. For more information, see IAM ARNs (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_identifiers.html#identifiers-arns).
+]: any -> record<VocabularyFilterName: string, LanguageCode: string, LastModifiedTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Transcribe.UpdateVocabularyFilter")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"VocabularyFilterName": $vocabulary_filter_name, "Words": $words, "VocabularyFilterFileUri": $vocabulary_filter_file_uri, "DataAccessRoleArn": $data_access_role_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

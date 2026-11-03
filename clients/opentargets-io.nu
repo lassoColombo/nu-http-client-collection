@@ -205,11 +205,12 @@ export def "get-autocomplete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # A full text query.
+  --q: string # A full text query. (required)
   --size: string # Maximum amount of results to return. Defaults to 5.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/platform/private/autocomplete" $qp $auth.query)
   let accept_val = "application/json"
@@ -355,11 +356,12 @@ export def "get-drug-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-drug-id: string # An ID in the drug index.
+  --qp-drug-id: string # An ID in the drug index. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($drug_id | is-empty) { error make --unspanned { msg: "path parameter 'DRUG_ID' must be non-empty" } }
+  if ($qp_drug_id == null) { error make --unspanned { msg: "required query parameter 'drug_id' missing: pass --qp-drug-id" } }
   let qp = [(serialize-qp "drug_id" $qp_drug_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({drug_id: (encode-path-segment $drug_id)} | format pattern "/platform/private/drug/{drug_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -466,11 +468,12 @@ export def "get-quick-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # A full text query.
+  --q: string # A full text query. (required)
   --size: string # Maximum amount of results to return. Defaults to 5.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/platform/private/quicksearch" $qp $auth.query)
   let accept_val = "application/json"
@@ -651,10 +654,11 @@ export def "get-target-expression-by-ensgid" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --gene: string # An Ensembl gene identifier.
+  --gene: string # An Ensembl gene identifier. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($gene == null) { error make --unspanned { msg: "required query parameter 'gene' missing: pass --gene" } }
   let qp = [(serialize-qp "gene" $gene "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/platform/private/target/expression" $qp $auth.query)
   let accept_val = "application/json"
@@ -761,10 +765,11 @@ export def "get-association-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # An association ID usually in the form of `TARGET_ID-DISEASE_ID`.
+  --id: string # An association ID usually in the form of `TARGET_ID-DISEASE_ID`. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/platform/public/association" $qp $auth.query)
   let accept_val = "application/json"
@@ -813,21 +818,21 @@ export def "get-association-filter" [
   --scorevalue-max: float # Filter by maximum score value. (format: float)
   --scorevalue-types: string # Score types to apply the score value min and max filters. The default is `overall`.
   --size: float # Maximum amount of results to return. Defaults to 10, max is 10000. (format: integer)
-  --qp-from: float # How many initial results should be skipped. Defaults to 0. (format: integer)
+  --from: float # How many initial results should be skipped. Defaults to 0. (format: integer)
   --format: string # Format to get the data back. Can be 'json', 'xml', 'tab' or 'csv'. **Note** that this option can only be used when calling the API directly and will not work in this page. The response here will always be JSON.
-  --qp-sort: string # Sort by the given score type. Defaults to 'overall' and descending order. Use '~' prefix to do ascending order e.g. '~overall'. You will call a data type score like: 'datatypes.literature', and a data source as 'datasources.gwas'. Supports multiple entries.
+  --sort: string # Sort by the given score type. Defaults to 'overall' and descending order. Use '~' prefix to do ascending order e.g. '~overall'. You will call a data type score like: 'datatypes.literature', and a data source as 'datasources.gwas'. Supports multiple entries.
   --search: string # Restrict the filtered results to those matching the passed string. The matching is done with a phrase match prefix.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "target" $target "scalar") (serialize-qp "disease" $disease "scalar") (serialize-qp "therapeutic_area" $therapeutic_area "scalar") (serialize-qp "datasource" $datasource "scalar") (serialize-qp "datatype" $datatype "scalar") (serialize-qp "pathway" $pathway "scalar") (serialize-qp "target_class" $target_class "scalar") (serialize-qp "uniprotkw" $uniprotkw "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "datastructure" $datastructure "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "scorevalue_min" $scorevalue_min "scalar") (serialize-qp "scorevalue_max" $scorevalue_max "scalar") (serialize-qp "scorevalue_types" $scorevalue_types "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "target" $target "scalar") (serialize-qp "disease" $disease "scalar") (serialize-qp "therapeutic_area" $therapeutic_area "scalar") (serialize-qp "datasource" $datasource "scalar") (serialize-qp "datatype" $datatype "scalar") (serialize-qp "pathway" $pathway "scalar") (serialize-qp "target_class" $target_class "scalar") (serialize-qp "uniprotkw" $uniprotkw "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "datastructure" $datastructure "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "scorevalue_min" $scorevalue_min "scalar") (serialize-qp "scorevalue_max" $scorevalue_max "scalar") (serialize-qp "scorevalue_types" $scorevalue_types "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/platform/public/association/filter" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"target": $target, "disease": $disease, "therapeutic_area": $therapeutic_area, "datasource": $datasource, "datatype": $datatype, "pathway": $pathway, "target_class": $target_class, "uniprotkw": $uniprotkw, "direct": $direct, "datastructure": $datastructure, "fields": $fields, "facets": $facets, "scorevalue_min": $scorevalue_min, "scorevalue_max": $scorevalue_max, "scorevalue_types": $scorevalue_types, "size": $size, "from": $qp_from, "format": $format, "sort": $qp_sort, "search": $search} | compact)
+    query: ({"target": $target, "disease": $disease, "therapeutic_area": $therapeutic_area, "datasource": $datasource, "datatype": $datatype, "pathway": $pathway, "target_class": $target_class, "uniprotkw": $uniprotkw, "direct": $direct, "datastructure": $datastructure, "fields": $fields, "facets": $facets, "scorevalue_min": $scorevalue_min, "scorevalue_max": $scorevalue_max, "scorevalue_types": $scorevalue_types, "size": $size, "from": $from, "format": $format, "sort": $sort, "search": $search} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -890,10 +895,11 @@ export def "get-evidence-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # Internal unique ID of the evidence string to retrieve.
+  --id: string # Internal unique ID of the evidence string to retrieve. (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/platform/public/evidence" $qp $auth.query)
   let accept_val = "application/json"
@@ -974,21 +980,21 @@ export def "get-evidence-filter" [
   --fields: string # The fields you want to retrieve. This will get priority over the data structure requested.
   --scorevalue-min: float # Filter by minimum score value. The default is 0, but using 0.2 is a good trade-off to filter lower quality data points. (format: float, default: 0)
   --scorevalue-max: float # Filter by maximum score value. (format: float)
-  --qp-sort: string # Sort by the given field. The default is 'scores.association_score' in descending order. Use '~' prefix to do ascending order e.g. '~scores.association_score'. It supports multiple entries.
+  --sort: string # Sort by the given field. The default is 'scores.association_score' in descending order. Use '~' prefix to do ascending order e.g. '~scores.association_score'. It supports multiple entries.
   --size: float # Maximum amount of results to return. Defaults to 10, max is 10000. (format: integer)
-  --qp-from: float # How many initial results should be skipped. Defaults to 0. (format: integer)
+  --from: float # How many initial results should be skipped. Defaults to 0. (format: integer)
   --format: string # Format to get the data back. Can be 'json', 'xml', 'tab' or 'csv'. **Note** that this option can only be used when calling the API directly and will not work in this page. The response here will always be JSON.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "target" $target "scalar") (serialize-qp "disease" $disease "scalar") (serialize-qp "data source" $data_source "scalar") (serialize-qp "datatype" $datatype "scalar") (serialize-qp "pathway" $pathway "scalar") (serialize-qp "uniprotkw" $uniprotkw "scalar") (serialize-qp "datastructure" $datastructure "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "scorevalue_min" $scorevalue_min "scalar") (serialize-qp "scorevalue_max" $scorevalue_max "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "target" $target "scalar") (serialize-qp "disease" $disease "scalar") (serialize-qp "data source" $data_source "scalar") (serialize-qp "datatype" $datatype "scalar") (serialize-qp "pathway" $pathway "scalar") (serialize-qp "uniprotkw" $uniprotkw "scalar") (serialize-qp "datastructure" $datastructure "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "scorevalue_min" $scorevalue_min "scalar") (serialize-qp "scorevalue_max" $scorevalue_max "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/platform/public/evidence/filter" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"target": $target, "disease": $disease, "data source": $data_source, "datatype": $datatype, "pathway": $pathway, "uniprotkw": $uniprotkw, "datastructure": $datastructure, "fields": $fields, "scorevalue_min": $scorevalue_min, "scorevalue_max": $scorevalue_max, "sort": $qp_sort, "size": $size, "from": $qp_from, "format": $format} | compact)
+    query: ({"target": $target, "disease": $disease, "data source": $data_source, "datatype": $datatype, "pathway": $pathway, "uniprotkw": $uniprotkw, "datastructure": $datastructure, "fields": $fields, "scorevalue_min": $scorevalue_min, "scorevalue_max": $scorevalue_max, "sort": $sort, "size": $size, "from": $from, "format": $format} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1051,21 +1057,22 @@ export def "get-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # A full text query.
+  --q: string # A full text query. (required)
   --size: string # Maximum amount of results to return. Defaults to 10, max is 10000.
-  --qp-from: string # How many initial results should be skipped. Defaults to 0.
+  --from: string # How many initial results should be skipped. Defaults to 0.
   --filter: string # Restrict the search to the type requested. Eg. `target` or `disease`.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/platform/public/search" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"q": $q, "size": $size, "from": $qp_from, "filter": $filter} | compact)
+    query: ({"q": $q, "size": $size, "from": $from, "filter": $filter} | compact)
     headers: $auth.headers
     body: null
     content_type: null

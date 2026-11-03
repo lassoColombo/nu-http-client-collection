@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -98,12 +98,14 @@ def auth-scheme-completer [] { ["bearer"] }
 # Completers for enum parameters
 def x-amz-target-completer [] { ["CodePipeline_20150709.AcknowledgeJob"] }
 def x-amz-target-completer-1 [] { ["CodePipeline_20150709.AcknowledgeThirdPartyJob"] }
+def category-completer [] { ["Approval" "Build" "Deploy" "Invoke" "Source" "Test"] }
 def x-amz-target-completer-2 [] { ["CodePipeline_20150709.CreateCustomActionType"] }
 def x-amz-target-completer-3 [] { ["CodePipeline_20150709.CreatePipeline"] }
 def x-amz-target-completer-4 [] { ["CodePipeline_20150709.DeleteCustomActionType"] }
 def x-amz-target-completer-5 [] { ["CodePipeline_20150709.DeletePipeline"] }
 def x-amz-target-completer-6 [] { ["CodePipeline_20150709.DeleteWebhook"] }
 def x-amz-target-completer-7 [] { ["CodePipeline_20150709.DeregisterWebhookWithThirdParty"] }
+def transition-type-completer [] { ["Inbound" "Outbound"] }
 def x-amz-target-completer-8 [] { ["CodePipeline_20150709.DisableStageTransition"] }
 def x-amz-target-completer-9 [] { ["CodePipeline_20150709.EnableStageTransition"] }
 def x-amz-target-completer-10 [] { ["CodePipeline_20150709.GetActionType"] }
@@ -113,6 +115,7 @@ def x-amz-target-completer-13 [] { ["CodePipeline_20150709.GetPipelineExecution"
 def x-amz-target-completer-14 [] { ["CodePipeline_20150709.GetPipelineState"] }
 def x-amz-target-completer-15 [] { ["CodePipeline_20150709.GetThirdPartyJobDetails"] }
 def x-amz-target-completer-16 [] { ["CodePipeline_20150709.ListActionExecutions"] }
+def action-owner-filter-completer [] { ["AWS" "Custom" "ThirdParty"] }
 def x-amz-target-completer-17 [] { ["CodePipeline_20150709.ListActionTypes"] }
 def x-amz-target-completer-18 [] { ["CodePipeline_20150709.ListPipelineExecutions"] }
 def x-amz-target-completer-19 [] { ["CodePipeline_20150709.ListPipelines"] }
@@ -128,6 +131,7 @@ def x-amz-target-completer-28 [] { ["CodePipeline_20150709.PutThirdPartyJobFailu
 def x-amz-target-completer-29 [] { ["CodePipeline_20150709.PutThirdPartyJobSuccessResult"] }
 def x-amz-target-completer-30 [] { ["CodePipeline_20150709.PutWebhook"] }
 def x-amz-target-completer-31 [] { ["CodePipeline_20150709.RegisterWebhookWithThirdParty"] }
+def retry-mode-completer [] { ["FAILED_ACTIONS"] }
 def x-amz-target-completer-32 [] { ["CodePipeline_20150709.RetryStageExecution"] }
 def x-amz-target-completer-33 [] { ["CodePipeline_20150709.StartPipelineExecution"] }
 def x-amz-target-completer-34 [] { ["CodePipeline_20150709.StopPipelineExecution"] }
@@ -180,13 +184,14 @@ export def "acknowledge-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  job_id: any
-  nonce: any
-]: any -> record<status: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  job_id: string # The unique system-generated ID of the job for which you want to confirm receipt.
+  nonce: string # A system-generated random number that AWS CodePipeline uses to ensure that the job is being worked on by only one job worker. Get this number from the response of the PollForJobs request that returned this job.
+]: any -> record<status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodePipeline_20150709.AcknowledgeJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"jobId": $job_id, "nonce": $nonce} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -229,14 +234,15 @@ export def "acknowledge-third-party-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  job_id: any
-  nonce: any
-  client_token: any
-]: any -> record<status: record> {
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  job_id: string # The unique system-generated ID of the job.
+  nonce: string # A system-generated random number that AWS CodePipeline uses to ensure that the job is being worked on by only one job worker. Get this number from the response to a GetThirdPartyJobDetails request.
+  client_token: string # The clientToken portion of the clientId and clientToken pair used to verify that the calling entity is allowed access to the job and its details.
+]: any -> record<status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodePipeline_20150709.AcknowledgeThirdPartyJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"jobId": $job_id, "nonce": $nonce, "clientToken": $client_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -262,6 +268,11 @@ export def "acknowledge-third-party-job" [
 #
 # POST /
 # operationId: CreateCustomActionType
+# --settings shape: {thirdPartyConfigurationUrl?: string, entityUrlTemplate?: string, executionUrlTemplate?: string, revisionUrlTemplate?: string}
+# --configurationProperties item shape: {name: string, required: bool, key: bool, secret: bool, queryable?: bool, description?: string, type?: "String"|"Number"|"Boolean"}
+# --inputArtifactDetails shape: {minimumCount: int, maximumCount: int}
+# --outputArtifactDetails shape: {minimumCount: int, maximumCount: int}
+# --tags item shape: {key: string, value: string}
 export def "create-custom-action-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -279,19 +290,20 @@ export def "create-custom-action-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  category: any
-  provider: any
-  version: any
-  --settings: any
-  --configuration-properties: any
-  input_artifact_details: any
-  output_artifact_details: any
-  --tags: any
-]: any -> record<actionType: record<id: record<category: record, owner: record, provider: record, version: record>, settings: record<thirdPartyConfigurationUrl: record, entityUrlTemplate: record, executionUrlTemplate: record, revisionUrlTemplate: record>, actionConfigurationProperties: record, inputArtifactDetails: record<minimumCount: record, maximumCount: record>, outputArtifactDetails: record<minimumCount: record, maximumCount: record>>, tags: record> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  category: string@category-completer # The category of the custom action, such as a build action or a test action.
+  provider: string # The provider of the service used in the custom action, such as AWS CodeDeploy.
+  version: string # The version identifier of the custom action.
+  --settings: record # Returns information about the settings for an action type. — shape: {thirdPartyConfigurationUrl?: string, entityUrlTemplate?: string, executionUrlTemplate?: string, revisionUrlTemplate?: string}
+  --configuration-properties: list # The configuration properties for the custom action. You can refer to a name in the configuration properties of the custom action within the URL templates by following the format of {Config:name}, as long as the configuration property is both required and not secret. For more information, see Create a Custom Action for a Pipeline (https://docs.aws.amazon.com/codepipeline/latest/userguide/how-to-create-custom-action.html). — item shape: {name: string, required: bool, key: bool, secret: bool, queryable?: bool, description?: string, type?: "String"|"Number"|"Boolean"}
+  input_artifact_details: record # Returns information about the details of an artifact. — shape: {minimumCount: int, maximumCount: int}
+  output_artifact_details: record # Returns information about the details of an artifact. — shape: {minimumCount: int, maximumCount: int}
+  --tags: list # The tags for the custom action. — item shape: {key: string, value: string}
+]: any -> record<actionType: record<id: record<category: string, owner: string, provider: string, version: string>, settings: record<thirdPartyConfigurationUrl: string, entityUrlTemplate: string, executionUrlTemplate: string, revisionUrlTemplate: string>, actionConfigurationProperties: list<record>, inputArtifactDetails: record<minimumCount: int, maximumCount: int>, outputArtifactDetails: record<minimumCount: int, maximumCount: int>>, tags: table<key: string, value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodePipeline_20150709.CreateCustomActionType")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"category": $category, "provider": $provider, "version": $version, "settings": $settings, "configurationProperties": $configuration_properties, "inputArtifactDetails": $input_artifact_details, "outputArtifactDetails": $output_artifact_details, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -317,6 +329,8 @@ export def "create-custom-action-type" [
 #
 # POST /
 # operationId: CreatePipeline
+# --pipeline shape: {name: string, roleArn: string, artifactStore?: record, artifactStores?: record, stages: list, version?: int}
+# --tags item shape: {key: string, value: string}
 export def "create-pipeline" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -334,13 +348,14 @@ export def "create-pipeline" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  pipeline: any
-  --tags: any
-]: any -> record<pipeline: record<name: record, roleArn: record, artifactStore: record<type: record, location: record, encryptionKey: record>, artifactStores: record, stages: record, version: record>, tags: record> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  pipeline: record # Represents the structure of actions and stages to be performed in the pipeline. — shape: {name: string, roleArn: string, artifactStore?: record, artifactStores?: record, stages: list, version?: int}
+  --tags: list # The tags for the pipeline. — item shape: {key: string, value: string}
+]: any -> record<pipeline: record<name: string, roleArn: string, artifactStore: record<type: string, location: string, encryptionKey: record>, artifactStores: record, stages: list<record>, version: int>, tags: table<key: string, value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodePipeline_20150709.CreatePipeline")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"pipeline": $pipeline, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -383,14 +398,15 @@ export def "delete-custom-action-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  category: any
-  provider: any
-  version: any
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  category: string@category-completer # The category of the custom action that you want to delete, such as source or deploy.
+  provider: string # The provider of the service used in the custom action, such as AWS CodeDeploy.
+  version: string # The version of the custom action to delete.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodePipeline_20150709.DeleteCustomActionType")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"category": $category, "provider": $provider, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -433,12 +449,13 @@ export def "delete-pipeline" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  name: any
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  name: string # The name of the pipeline to be deleted.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodePipeline_20150709.DeletePipeline")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -481,12 +498,13 @@ export def "delete-webhook" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  name: any
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  name: string # The name of the webhook you want to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodePipeline_20150709.DeleteWebhook")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -529,12 +547,13 @@ export def "deregister-webhook-with-third-party" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  --webhook-name: any
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  --webhook-name: string # The name of the webhook you want to deregister.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodePipeline_20150709.DeregisterWebhookWithThirdParty")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"webhookName": $webhook_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -577,15 +596,16 @@ export def "disable-stage-transition" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  pipeline_name: any
-  stage_name: any
-  transition_type: any
-  reason: any
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  pipeline_name: string # The name of the pipeline in which you want to disable the flow of artifacts from one stage to another.
+  stage_name: string # The name of the stage where you want to disable the inbound or outbound transition of artifacts.
+  transition_type: string@transition-type-completer # Specifies whether artifacts are prevented from transitioning into the stage and being processed by the actions in that stage (inbound), or prevented from transitioning from the stage after they have been processed by the actions in that stage (outbound).
+  reason: string # The reason given to the user that a stage is disabled, such as waiting for manual approval or manual tests. This message is displayed in the pipeline console UI.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodePipeline_20150709.DisableStageTransition")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"pipelineName": $pipeline_name, "stageName": $stage_name, "transitionType": $transition_type, "reason": $reason} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -628,14 +648,15 @@ export def "enable-stage-transition" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  pipeline_name: any
-  stage_name: any
-  transition_type: any
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  pipeline_name: string # The name of the pipeline in which you want to enable the flow of artifacts from one stage to another.
+  stage_name: string # The name of the stage where you want to enable the transition of artifacts, either into the stage (inbound) or from that stage to the next stage (outbound).
+  transition_type: string@transition-type-completer # Specifies whether artifacts are allowed to enter the stage and be processed by the actions in that stage (inbound) or whether already processed artifacts are allowed to transition to the next stage (outbound).
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodePipeline_20150709.EnableStageTransition")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"pipelineName": $pipeline_name, "stageName": $stage_name, "transitionType": $transition_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -678,15 +699,16 @@ export def "get-action-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  category: any
-  owner: any
-  provider: any
-  version: any
-]: any -> record<actionType: record<description: record, executor: record<configuration: record, type: record, policyStatementsTemplate: record, jobTimeout: record>, id: record<category: record, owner: record, provider: record, version: record>, inputArtifactDetails: record<minimumCount: record, maximumCount: record>, outputArtifactDetails: record<minimumCount: record, maximumCount: record>, permissions: record<allowedAccounts: record>, properties: any, urls: record<configurationUrl: record, entityUrlTemplate: record, executionUrlTemplate: record, revisionUrlTemplate: record>>> {
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  category: string@category-completer # Defines what kind of action can be taken in the stage. The following are the valid values: Source Build Test Deploy Approval Invoke
+  owner: string # The creator of an action type that was created with any supported integration model. There are two valid values: AWS and ThirdParty.
+  provider: string # The provider of the action type being called. The provider name is specified when the action type is created.
+  version: string # A string that describes the action type version.
+]: any -> record<actionType: record<description: string, executor: record<configuration: record, type: string, policyStatementsTemplate: string, jobTimeout: int>, id: record<category: string, owner: string, provider: string, version: string>, inputArtifactDetails: record<minimumCount: int, maximumCount: int>, outputArtifactDetails: record<minimumCount: int, maximumCount: int>, permissions: record<allowedAccounts: list>, properties: any, urls: record<configurationUrl: string, entityUrlTemplate: string, executionUrlTemplate: string, revisionUrlTemplate: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodePipeline_20150709.GetActionType")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"category": $category, "owner": $owner, "provider": $provider, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -729,12 +751,13 @@ export def "get-job-details" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  job_id: any
-]: any -> record<jobDetails: record<id: record, data: record<actionTypeId: record, actionConfiguration: record, pipelineContext: record, inputArtifacts: record, outputArtifacts: record, artifactCredentials: record, continuationToken: record, encryptionKey: record>, accountId: record>> {
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  job_id: string # The unique system-generated ID for the job.
+]: any -> record<jobDetails: record<id: string, data: record<actionTypeId: record, actionConfiguration: record, pipelineContext: record, inputArtifacts: list, outputArtifacts: list, artifactCredentials: record, continuationToken: string, encryptionKey: record>, accountId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodePipeline_20150709.GetJobDetails")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"jobId": $job_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -777,13 +800,14 @@ export def "get-pipeline" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-12
-  name: any
-  --version: any
-]: any -> record<pipeline: record<name: record, roleArn: record, artifactStore: record<type: record, location: record, encryptionKey: record>, artifactStores: record, stages: record, version: record>, metadata: record<pipelineArn: record, created: record, updated: record>> {
+  --x-amz-target: string@x-amz-target-completer-12 # required
+  name: string # The name of the pipeline for which you want to get information. Pipeline names must be unique under an AWS user account.
+  --version: int # The version number of the pipeline. If you do not specify a version, defaults to the current version.
+]: any -> record<pipeline: record<name: string, roleArn: string, artifactStore: record<type: string, location: string, encryptionKey: record>, artifactStores: record, stages: list<record>, version: int>, metadata: record<pipelineArn: string, created: string, updated: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodePipeline_20150709.GetPipeline")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -826,13 +850,14 @@ export def "get-pipeline-execution" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-13
-  pipeline_name: any
-  pipeline_execution_id: any
-]: any -> record<pipelineExecution: record<pipelineName: record, pipelineVersion: record, pipelineExecutionId: record, status: record, statusSummary: record, artifactRevisions: record>> {
+  --x-amz-target: string@x-amz-target-completer-13 # required
+  pipeline_name: string # The name of the pipeline about which you want to get execution details.
+  pipeline_execution_id: string # The ID of the pipeline execution about which you want to get execution details.
+]: any -> record<pipelineExecution: record<pipelineName: string, pipelineVersion: int, pipelineExecutionId: string, status: string, statusSummary: string, artifactRevisions: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodePipeline_20150709.GetPipelineExecution")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"pipelineName": $pipeline_name, "pipelineExecutionId": $pipeline_execution_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -875,12 +900,13 @@ export def "get-pipeline-state" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-14
-  name: any
-]: any -> record<pipelineName: record, pipelineVersion: record, stageStates: record, created: record, updated: record> {
+  --x-amz-target: string@x-amz-target-completer-14 # required
+  name: string # The name of the pipeline about which you want to get information.
+]: any -> record<pipelineName: string, pipelineVersion: int, stageStates: table<stageName: string, inboundExecution: record, inboundTransitionState: record, actionStates: list, latestExecution: record>, created: string, updated: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodePipeline_20150709.GetPipelineState")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -923,13 +949,14 @@ export def "get-third-party-job-details" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-15
-  job_id: any
-  client_token: any
-]: any -> record<jobDetails: record<id: record, data: record<actionTypeId: record, actionConfiguration: record, pipelineContext: record, inputArtifacts: record, outputArtifacts: record, artifactCredentials: record, continuationToken: record, encryptionKey: record>, nonce: record>> {
+  --x-amz-target: string@x-amz-target-completer-15 # required
+  job_id: string # The unique system-generated ID used for identifying the job.
+  client_token: string # The clientToken portion of the clientId and clientToken pair used to verify that the calling entity is allowed access to the job and its details.
+]: any -> record<jobDetails: record<id: string, data: record<actionTypeId: record, actionConfiguration: record, pipelineContext: record, inputArtifacts: list, outputArtifacts: list, artifactCredentials: record, continuationToken: string, encryptionKey: record>, nonce: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodePipeline_20150709.GetThirdPartyJobDetails")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"jobId": $job_id, "clientToken": $client_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -955,6 +982,7 @@ export def "get-third-party-job-details" [
 #
 # POST /
 # operationId: ListActionExecutions
+# --filter shape: {pipelineExecutionId?: string}
 export def "list-action-executions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -974,15 +1002,16 @@ export def "list-action-executions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-16
-  pipeline_name: any
-  --filter: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<actionExecutionDetails: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-16 # required
+  pipeline_name: string # The name of the pipeline for which you want to list action execution history.
+  --filter: record # Filter values for the action execution. — shape: {pipelineExecutionId?: string}
+  --max-results-body: int # The maximum number of results to return in a single call. To retrieve the remaining results, make another call with the returned nextToken value. Action execution history is retained for up to 12 months, based on action execution start times. Default value is 100. Detailed execution history is available for executions run on or after February 21, 2019. (body field)
+  --next-token-body: string # The token that was returned from the previous ListActionExecutions call, which can be used to return the next set of action executions in the list. (body field)
+]: any -> record<actionExecutionDetails: table<pipelineExecutionId: string, actionExecutionId: string, pipelineVersion: int, stageName: string, actionName: string, startTime: string, lastUpdateTime: string, status: string, input: record, output: record>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodePipeline_20150709.ListActionExecutions")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"pipelineName": $pipeline_name, "filter": $filter, "maxResults": $max_results_body, "nextToken": $next_token_body} | compact
@@ -1027,14 +1056,15 @@ export def "list-action-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-17
-  --action-owner-filter: any
-  --next-token-body: any #  (body field)
-  --region-filter: any
-]: any -> record<actionTypes: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-17 # required
+  --action-owner-filter: string@action-owner-filter-completer # Filters the list of action types to those created by a specified entity.
+  --next-token-body: string # An identifier that was returned from the previous list action types call, which can be used to return the next set of action types in the list. (body field)
+  --region-filter: string # The Region to filter on for the list of action types.
+]: any -> record<actionTypes: table<id: record, settings: record, actionConfigurationProperties: list, inputArtifactDetails: record, outputArtifactDetails: record>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodePipeline_20150709.ListActionTypes")
   let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"actionOwnerFilter": $action_owner_filter, "nextToken": $next_token_body, "regionFilter": $region_filter} | compact
@@ -1080,14 +1110,15 @@ export def "list-pipeline-executions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-18
-  pipeline_name: any
-  --max-results-body: any #  (body field)
-  --next-token-body: any #  (body field)
-]: any -> record<pipelineExecutionSummaries: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-18 # required
+  pipeline_name: string # The name of the pipeline for which you want to get execution summary information.
+  --max-results-body: int # The maximum number of results to return in a single call. To retrieve the remaining results, make another call with the returned nextToken value. Pipeline history is limited to the most recent 12 months, based on pipeline execution start times. Default value is 100. (body field)
+  --next-token-body: string # The token that was returned from the previous ListPipelineExecutions call, which can be used to return the next set of pipeline executions in the list. (body field)
+]: any -> record<pipelineExecutionSummaries: table<pipelineExecutionId: string, status: string, startTime: string, lastUpdateTime: string, sourceRevisions: list, trigger: record, stopTrigger: record>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodePipeline_20150709.ListPipelineExecutions")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"pipelineName": $pipeline_name, "maxResults": $max_results_body, "nextToken": $next_token_body} | compact
@@ -1133,13 +1164,14 @@ export def "list-pipelines" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-19
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<pipelines: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-19 # required
+  --next-token-body: string # An identifier that was returned from the previous list pipelines call. It can be used to return the next set of pipelines in the list. (body field)
+  --max-results-body: int # The maximum number of pipelines to return in a single call. To retrieve the remaining pipelines, make another call with the returned nextToken value. The minimum value you can specify is 1. The maximum accepted value is 1000. (body field)
+]: any -> record<pipelines: table<name: string, version: int, created: string, updated: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodePipeline_20150709.ListPipelines")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -1185,14 +1217,15 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-20
-  resource_arn: any
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<tags: record, nextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-20 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the resource to get tags for.
+  --next-token-body: string # The token that was returned from the previous API call, which would be used to return the next page of the list. The ListTagsforResource call lists all available tags in one call and does not use pagination. (body field)
+  --max-results-body: int # The maximum number of results to return in a single call. (body field)
+]: any -> record<tags: table<key: string, value: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodePipeline_20150709.ListTagsForResource")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"resourceArn": $resource_arn, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
@@ -1238,13 +1271,14 @@ export def "list-webhooks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-21
-  --next-token-body: any #  (body field)
-  --max-results-body: any #  (body field)
-]: any -> record<webhooks: record, NextToken: record> {
+  --x-amz-target: string@x-amz-target-completer-21 # required
+  --next-token-body: string # The token that was returned from the previous ListWebhooks call, which can be used to return the next set of webhooks in the list. (body field)
+  --max-results-body: int # The maximum number of results to return in a single call. To retrieve the remaining results, make another call with the returned nextToken value. (body field)
+]: any -> record<webhooks: table<definition: record, url: string, errorMessage: string, errorCode: string, lastTriggered: string, arn: string, tags: list>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodePipeline_20150709.ListWebhooks")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
@@ -1271,6 +1305,7 @@ export def "list-webhooks" [
 #
 # POST /
 # operationId: PollForJobs
+# --actionTypeId shape: {category: "Source"|"Build"|"Deploy"|"Test"|"Invoke"|"Approval", owner: "AWS"|"ThirdParty"|"Custom", provider: string, version: string}
 export def "poll-for-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1288,14 +1323,15 @@ export def "poll-for-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-22
-  action_type_id: any
-  --max-batch-size: any
-  --query-param: any
-]: any -> record<jobs: record> {
+  --x-amz-target: string@x-amz-target-completer-22 # required
+  action_type_id: record # Represents information about an action type. — shape: {category: "Source"|"Build"|"Deploy"|"Test"|"Invoke"|"Approval", owner: "AWS"|"ThirdParty"|"Custom", provider: string, version: string}
+  --max-batch-size: int # The maximum number of jobs to return in a poll for jobs call.
+  --query-param: record # A map of property names and values. For an action type with no queryable properties, this value must be null or an empty map. For an action type with a queryable property, you must supply that property as a key in the map. Only jobs whose action configuration matches the mapped value are returned.
+]: any -> record<jobs: table<id: string, data: record, nonce: string, accountId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodePipeline_20150709.PollForJobs")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"actionTypeId": $action_type_id, "maxBatchSize": $max_batch_size, "queryParam": $query_param} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1321,6 +1357,7 @@ export def "poll-for-jobs" [
 #
 # POST /
 # operationId: PollForThirdPartyJobs
+# --actionTypeId shape: {category: "Source"|"Build"|"Deploy"|"Test"|"Invoke"|"Approval", owner: "AWS"|"ThirdParty"|"Custom", provider: string, version: string}
 export def "poll-for-third-party-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1338,13 +1375,14 @@ export def "poll-for-third-party-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-23
-  action_type_id: any
-  --max-batch-size: any
-]: any -> record<jobs: record> {
+  --x-amz-target: string@x-amz-target-completer-23 # required
+  action_type_id: record # Represents information about an action type. — shape: {category: "Source"|"Build"|"Deploy"|"Test"|"Invoke"|"Approval", owner: "AWS"|"ThirdParty"|"Custom", provider: string, version: string}
+  --max-batch-size: int # The maximum number of jobs to return in a poll for jobs call.
+]: any -> record<jobs: table<clientId: string, jobId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodePipeline_20150709.PollForThirdPartyJobs")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"actionTypeId": $action_type_id, "maxBatchSize": $max_batch_size} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1370,6 +1408,7 @@ export def "poll-for-third-party-jobs" [
 #
 # POST /
 # operationId: PutActionRevision
+# --actionRevision shape: {revisionId: string, revisionChangeId: string, created: string}
 export def "put-action-revision" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1387,15 +1426,16 @@ export def "put-action-revision" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-24
-  pipeline_name: any
-  stage_name: any
-  action_name: any
-  action_revision: any
-]: any -> record<newRevision: record, pipelineExecutionId: record> {
+  --x-amz-target: string@x-amz-target-completer-24 # required
+  pipeline_name: string # The name of the pipeline that starts processing the revision to the source.
+  stage_name: string # The name of the stage that contains the action that acts on the revision.
+  action_name: string # The name of the action that processes the revision.
+  action_revision: record # Represents information about the version (or revision) of an action. — shape: {revisionId: string, revisionChangeId: string, created: string}
+]: any -> record<newRevision: bool, pipelineExecutionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodePipeline_20150709.PutActionRevision")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"pipelineName": $pipeline_name, "stageName": $stage_name, "actionName": $action_name, "actionRevision": $action_revision} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1421,6 +1461,7 @@ export def "put-action-revision" [
 #
 # POST /
 # operationId: PutApprovalResult
+# --result shape: {summary: string, status: "Approved"|"Rejected"}
 export def "put-approval-result" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1438,19 +1479,21 @@ export def "put-approval-result" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-25
-  pipeline_name: any
-  stage_name: any
-  action_name: any
-  result: any
-  --body-token: any
-]: any -> record<approvedAt: record> {
+  --x-amz-target: string@x-amz-target-completer-25 # required
+  pipeline_name: string # The name of the pipeline that contains the action.
+  stage_name: string # The name of the stage that contains the action.
+  action_name: string # The name of the action for which approval is requested.
+  result: record # Represents information about the result of an approval request. — shape: {summary: string, status: "Approved"|"Rejected"}
+  --body-token: string # The system-generated token used to identify a unique approval request. The token for each open approval request can be obtained using the GetPipelineState action. It is used to validate that the approval request corresponding to this token is still valid.
+]: any -> record<approvedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodePipeline_20150709.PutApprovalResult")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"pipelineName": $pipeline_name, "stageName": $stage_name, "actionName": $action_name, "result": $result, "token": $body_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
@@ -1473,6 +1516,7 @@ export def "put-approval-result" [
 #
 # POST /
 # operationId: PutJobFailureResult
+# --failureDetails shape: {type: "JobFailed"|"ConfigurationError"|"PermissionError"|"RevisionOutOfSync"|"RevisionUnavailable"|"SystemUnavailable", message: string, externalExecutionId?: string}
 export def "put-job-failure-result" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1490,13 +1534,14 @@ export def "put-job-failure-result" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-26
-  job_id: any
-  failure_details: any
+  --x-amz-target: string@x-amz-target-completer-26 # required
+  job_id: string # The unique system-generated ID of the job that failed. This is the same ID returned from PollForJobs.
+  failure_details: record # Represents information about failure details. — shape: {type: "JobFailed"|"ConfigurationError"|"PermissionError"|"RevisionOutOfSync"|"RevisionUnavailable"|"SystemUnavailable", message: string, externalExecutionId?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodePipeline_20150709.PutJobFailureResult")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"jobId": $job_id, "failureDetails": $failure_details} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1522,6 +1567,8 @@ export def "put-job-failure-result" [
 #
 # POST /
 # operationId: PutJobSuccessResult
+# --currentRevision shape: {revision: string, changeIdentifier: string, created?: string, revisionSummary?: string}
+# --executionDetails shape: {summary?: string, externalExecutionId?: string, percentComplete?: int}
 export def "put-job-success-result" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1539,16 +1586,17 @@ export def "put-job-success-result" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-27
-  job_id: any
-  --current-revision: any
-  --continuation-token: any
-  --execution-details: any
-  --output-variables: any
+  --x-amz-target: string@x-amz-target-completer-27 # required
+  job_id: string # The unique system-generated ID of the job that succeeded. This is the same ID returned from PollForJobs.
+  --current-revision: record # Represents information about a current revision. — shape: {revision: string, changeIdentifier: string, created?: string, revisionSummary?: string}
+  --continuation-token: string # A token generated by a job worker, such as an AWS CodeDeploy deployment ID, that a successful job provides to identify a custom action in progress. Future jobs use this token to identify the running instance of the action. It can be reused to return more information about the progress of the custom action. When the action is complete, no continuation token should be supplied.
+  --execution-details: record # The details of the actions taken and results produced on an artifact as it passes through stages in the pipeline. — shape: {summary?: string, externalExecutionId?: string, percentComplete?: int}
+  --output-variables: record # Key-value pairs produced as output by a job worker that can be made available to a downstream action configuration. outputVariables can be included only when there is no continuation token on the request.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodePipeline_20150709.PutJobSuccessResult")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"jobId": $job_id, "currentRevision": $current_revision, "continuationToken": $continuation_token, "executionDetails": $execution_details, "outputVariables": $output_variables} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1574,6 +1622,7 @@ export def "put-job-success-result" [
 #
 # POST /
 # operationId: PutThirdPartyJobFailureResult
+# --failureDetails shape: {type: "JobFailed"|"ConfigurationError"|"PermissionError"|"RevisionOutOfSync"|"RevisionUnavailable"|"SystemUnavailable", message: string, externalExecutionId?: string}
 export def "put-third-party-job-failure-result" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1591,14 +1640,15 @@ export def "put-third-party-job-failure-result" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-28
-  job_id: any
-  client_token: any
-  failure_details: any
+  --x-amz-target: string@x-amz-target-completer-28 # required
+  job_id: string # The ID of the job that failed. This is the same ID returned from PollForThirdPartyJobs.
+  client_token: string # The clientToken portion of the clientId and clientToken pair used to verify that the calling entity is allowed access to the job and its details.
+  failure_details: record # Represents information about failure details. — shape: {type: "JobFailed"|"ConfigurationError"|"PermissionError"|"RevisionOutOfSync"|"RevisionUnavailable"|"SystemUnavailable", message: string, externalExecutionId?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodePipeline_20150709.PutThirdPartyJobFailureResult")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"jobId": $job_id, "clientToken": $client_token, "failureDetails": $failure_details} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1624,6 +1674,8 @@ export def "put-third-party-job-failure-result" [
 #
 # POST /
 # operationId: PutThirdPartyJobSuccessResult
+# --currentRevision shape: {revision: string, changeIdentifier: string, created?: string, revisionSummary?: string}
+# --executionDetails shape: {summary?: string, externalExecutionId?: string, percentComplete?: int}
 export def "put-third-party-job-success-result" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1641,16 +1693,17 @@ export def "put-third-party-job-success-result" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-29
-  job_id: any
-  client_token: any
-  --current-revision: any
-  --continuation-token: any
-  --execution-details: any
+  --x-amz-target: string@x-amz-target-completer-29 # required
+  job_id: string # The ID of the job that successfully completed. This is the same ID returned from PollForThirdPartyJobs.
+  client_token: string # The clientToken portion of the clientId and clientToken pair used to verify that the calling entity is allowed access to the job and its details.
+  --current-revision: record # Represents information about a current revision. — shape: {revision: string, changeIdentifier: string, created?: string, revisionSummary?: string}
+  --continuation-token: string # A token generated by a job worker, such as an AWS CodeDeploy deployment ID, that a successful job provides to identify a partner action in progress. Future jobs use this token to identify the running instance of the action. It can be reused to return more information about the progress of the partner action. When the action is complete, no continuation token should be supplied.
+  --execution-details: record # The details of the actions taken and results produced on an artifact as it passes through stages in the pipeline. — shape: {summary?: string, externalExecutionId?: string, percentComplete?: int}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodePipeline_20150709.PutThirdPartyJobSuccessResult")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"jobId": $job_id, "clientToken": $client_token, "currentRevision": $current_revision, "continuationToken": $continuation_token, "executionDetails": $execution_details} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1676,6 +1729,8 @@ export def "put-third-party-job-success-result" [
 #
 # POST /
 # operationId: PutWebhook
+# --webhook shape: {name: string, targetPipeline: string, targetAction: string, filters: list, authentication: "GITHUB_HMAC"|"IP"|"UNAUTHENTICATED", authenticationConfiguration: record}
+# --tags item shape: {key: string, value: string}
 export def "put-webhook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1693,13 +1748,14 @@ export def "put-webhook" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-30
-  webhook: any
-  --tags: any
-]: any -> record<webhook: record<definition: record<name: record, targetPipeline: record, targetAction: record, filters: record, authentication: record, authenticationConfiguration: record>, url: record, errorMessage: record, errorCode: record, lastTriggered: record, arn: record, tags: record>> {
+  --x-amz-target: string@x-amz-target-completer-30 # required
+  webhook: record # Represents information about a webhook and its definition. — shape: {name: string, targetPipeline: string, targetAction: string, filters: list, authentication: "GITHUB_HMAC"|"IP"|"UNAUTHENTICATED", authenticationConfiguration: record}
+  --tags: list # The tags for the webhook. — item shape: {key: string, value: string}
+]: any -> record<webhook: record<definition: record<name: string, targetPipeline: string, targetAction: string, filters: list, authentication: string, authenticationConfiguration: record>, url: string, errorMessage: string, errorCode: string, lastTriggered: string, arn: string, tags: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodePipeline_20150709.PutWebhook")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"webhook": $webhook, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1742,12 +1798,13 @@ export def "register-webhook-with-third-party" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-31
-  --webhook-name: any
+  --x-amz-target: string@x-amz-target-completer-31 # required
+  --webhook-name: string # The name of an existing webhook created with PutWebhook to register with a supported third party.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodePipeline_20150709.RegisterWebhookWithThirdParty")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"webhookName": $webhook_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1790,15 +1847,16 @@ export def "retry-stage-execution" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-32
-  pipeline_name: any
-  stage_name: any
-  pipeline_execution_id: any
-  retry_mode: any
-]: any -> record<pipelineExecutionId: record> {
+  --x-amz-target: string@x-amz-target-completer-32 # required
+  pipeline_name: string # The name of the pipeline that contains the failed stage.
+  stage_name: string # The name of the failed stage to be retried.
+  pipeline_execution_id: string # The ID of the pipeline execution in the failed stage to be retried. Use the GetPipelineState action to retrieve the current pipelineExecutionId of the failed stage
+  retry_mode: string@retry-mode-completer # The scope of the retry attempt. Currently, the only supported value is FAILED_ACTIONS.
+]: any -> record<pipelineExecutionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodePipeline_20150709.RetryStageExecution")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"pipelineName": $pipeline_name, "stageName": $stage_name, "pipelineExecutionId": $pipeline_execution_id, "retryMode": $retry_mode} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1841,13 +1899,14 @@ export def "start-pipeline-execution" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-33
-  name: any
-  --client-request-token: any
-]: any -> record<pipelineExecutionId: record> {
+  --x-amz-target: string@x-amz-target-completer-33 # required
+  name: string # The name of the pipeline to start.
+  --client-request-token: string # The system-generated unique ID used to identify a unique execution request.
+]: any -> record<pipelineExecutionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodePipeline_20150709.StartPipelineExecution")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name, "clientRequestToken": $client_request_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1890,15 +1949,16 @@ export def "stop-pipeline-execution" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-34
-  pipeline_name: any
-  pipeline_execution_id: any
-  --abandon: any
-  --reason: any
-]: any -> record<pipelineExecutionId: record> {
+  --x-amz-target: string@x-amz-target-completer-34 # required
+  pipeline_name: string # The name of the pipeline to stop.
+  pipeline_execution_id: string # The ID of the pipeline execution to be stopped in the current stage. Use the GetPipelineState action to retrieve the current pipelineExecutionId.
+  --abandon: oneof<nothing, bool> # Use this option to stop the pipeline execution by abandoning, rather than finishing, in-progress actions. This option can lead to failed or out-of-sequence tasks.
+  --reason: string # Use this option to enter comments, such as the reason the pipeline was stopped.
+]: any -> record<pipelineExecutionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodePipeline_20150709.StopPipelineExecution")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"pipelineName": $pipeline_name, "pipelineExecutionId": $pipeline_execution_id, "abandon": $abandon, "reason": $reason} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1924,6 +1984,7 @@ export def "stop-pipeline-execution" [
 #
 # POST /
 # operationId: TagResource
+# --tags item shape: {key: string, value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1941,13 +2002,14 @@ export def "tag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-35
-  resource_arn: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-35 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the resource you want to add tags to.
+  tags: list # The tags you want to modify or add to the resource. — item shape: {key: string, value: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodePipeline_20150709.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceArn": $resource_arn, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1990,13 +2052,14 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-36
-  resource_arn: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-36 # required
+  resource_arn: string # The Amazon Resource Name (ARN) of the resource to remove tags from.
+  tag_keys: list<string> # The list of keys for the tags to be removed from the resource.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodePipeline_20150709.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceArn": $resource_arn, "tagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2022,6 +2085,7 @@ export def "untag-resource" [
 #
 # POST /
 # operationId: UpdateActionType
+# --actionType shape: {description?: string, executor: record, id: record, inputArtifactDetails: record, outputArtifactDetails: record, permissions?: record, properties?: any, urls?: record}
 export def "update-action-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2039,12 +2103,13 @@ export def "update-action-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-37
-  action_type: any
+  --x-amz-target: string@x-amz-target-completer-37 # required
+  action_type: record # The parameters for the action type definition that are provided when the action type is created or updated. — shape: {description?: string, executor: record, id: record, inputArtifactDetails: record, outputArtifactDetails: record, permissions?: record, properties?: any, urls?: record}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodePipeline_20150709.UpdateActionType")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"actionType": $action_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2070,6 +2135,7 @@ export def "update-action-type" [
 #
 # POST /
 # operationId: UpdatePipeline
+# --pipeline shape: {name: string, roleArn: string, artifactStore?: record, artifactStores?: record, stages: list, version?: int}
 export def "update-pipeline" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2087,12 +2153,13 @@ export def "update-pipeline" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-38
-  pipeline: any
-]: any -> record<pipeline: record<name: record, roleArn: record, artifactStore: record<type: record, location: record, encryptionKey: record>, artifactStores: record, stages: record, version: record>> {
+  --x-amz-target: string@x-amz-target-completer-38 # required
+  pipeline: record # Represents the structure of actions and stages to be performed in the pipeline. — shape: {name: string, roleArn: string, artifactStore?: record, artifactStores?: record, stages: list, version?: int}
+]: any -> record<pipeline: record<name: string, roleArn: string, artifactStore: record<type: string, location: string, encryptionKey: record>, artifactStores: record, stages: list<record>, version: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "CodePipeline_20150709.UpdatePipeline")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"pipeline": $pipeline} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

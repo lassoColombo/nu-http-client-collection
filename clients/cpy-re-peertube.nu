@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -153,11 +153,12 @@ def include-completer [] { ["0" "1" "2" "4" "8"] }
 def privacy-one-of-completer [] { ["1" "2" "3" "4"] }
 def skip-count-completer [] { ["false" "true"] }
 def sort-completer-2 [] { ["-best" "-createdAt" "-duration" "-hot" "-likes" "-publishedAt" "-trending" "-views" "name"] }
+def state-completer-1 [] { ["" "active" "completed" "delayed" "failed" "waiting"] }
 def job-type-completer [] { ["activitypub-follow" "activitypub-http-broadcast" "activitypub-http-fetcher" "activitypub-http-unicast" "activitypub-refresher" "email" "video-channel-import" "video-file-import" "video-import" "video-live-ending" "video-redundancy" "video-transcoding" "videos-views-stats"] }
 def player-mode-completer [] { ["p2p-media-loader" "webtorrent"] }
 def search-target-completer [] { ["local" "search-index"] }
 def sort-completer-3 [] { ["-createdAt" "-duration" "-likes" "-match" "-publishedAt" "-views" "name"] }
-def state-completer-1 [] { ["accepted" "pending"] }
+def state-completer-2 [] { ["accepted" "pending"] }
 def actor-type-completer [] { ["Application" "Group" "Organization" "Person" "Service"] }
 def level-completer [] { ["error" "warn"] }
 def target-completer [] { ["my-videos" "remote-videos"] }
@@ -173,8 +174,10 @@ def sort-completer-7 [] { ["-createdAt" "-dislikes" "-duration" "-id" "-likes" "
 def privacy-completer-1 [] { ["1" "2" "3" "4"] }
 def latency-mode-completer [] { ["1" "2" "3"] }
 def sort-completer-8 [] { ["-createdAt" "-totalReplies"] }
+def metric-completer [] { ["aggregateWatchTime" "viewers"] }
 def transcoding-type-completer [] { ["hls" "webtorrent"] }
 def view-event-completer [] { ["seek"] }
+def format-completer [] { ["atom" "atom1" "json" "json1" "rss" "rss2" "xml"] }
 def accept-completer [] { ["application/atom+xml" "application/json" "application/rss+xml" "application/xml" "text/xml"] }
 
 # List all available API commands with their parameters
@@ -226,18 +229,18 @@ export def "get-abuses" [
   --filter: string@filter-completer # only list account, comment or video reports
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
-  --qp-sort: string@sort-completer # Sort abuses by criteria
+  --sort: string@sort-completer # Sort abuses by criteria
 ]: nothing -> record<data: table<createdAt: string, id: int, moderationComment: string, predefinedReasons: list, reason: string, reporterAccount: record, state: record, video: record>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "predefinedReason" $predefined_reason "multi") (serialize-qp "search" $search "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "searchReporter" $search_reporter "scalar") (serialize-qp "searchReportee" $search_reportee "scalar") (serialize-qp "searchVideo" $search_video "scalar") (serialize-qp "searchVideoChannel" $search_video_channel "scalar") (serialize-qp "videoIs" $video_is "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "predefinedReason" $predefined_reason "multi") (serialize-qp "search" $search "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "searchReporter" $search_reporter "scalar") (serialize-qp "searchReportee" $search_reportee "scalar") (serialize-qp "searchVideo" $search_video "scalar") (serialize-qp "searchVideoChannel" $search_video_channel "scalar") (serialize-qp "videoIs" $video_is "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/abuses" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"id": $id, "predefinedReason": $predefined_reason, "search": $search, "state": $state, "searchReporter": $search_reporter, "searchReportee": $search_reportee, "searchVideo": $search_video, "searchVideoChannel": $search_video_channel, "videoIs": $video_is, "filter": $filter, "start": $start, "count": $count, "sort": $qp_sort} | compact)
+    query: ({"id": $id, "predefinedReason": $predefined_reason, "search": $search, "state": $state, "searchReporter": $search_reporter, "searchReportee": $search_reportee, "searchVideo": $search_video, "searchVideoChannel": $search_video_channel, "videoIs": $video_is, "filter": $filter, "start": $start, "count": $count, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -252,8 +255,8 @@ export def "get-abuses" [
 #
 # POST /api/v1/abuses
 # --account shape: {id?: int}
-# --comment shape: {id?: any}
-# --video shape: {endAt?: int, id?: any, startAt?: int}
+# --comment shape: {id?: int}
+# --video shape: {endAt?: int, id?: int, startAt?: int}
 export def "post-api-v1-abuses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -265,10 +268,10 @@ export def "post-api-v1-abuses" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --account: record # shape: {id?: int}
-  --comment: record # shape: {id?: any}
+  --comment: record # shape: {id?: int}
   --predefined-reasons: list<string> # Reason categories that help triage reports
   reason: string # Reason why the user reports this video
-  --video: record # shape: {endAt?: int, id?: any, startAt?: int}
+  --video: record # shape: {endAt?: int, id?: int, startAt?: int}
 ]: any -> record<abuse: record<id: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -494,18 +497,18 @@ export def "get-accounts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
-  --qp-sort: string # Sort column (e.g. -createdAt)
-]: nothing -> table<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: record, updatedAt: string, url: string, description: string, displayName: string, userId: record> {
+  --sort: string # Sort column (e.g. -createdAt)
+]: nothing -> table<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/accounts" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"start": $start, "count": $count, "sort": $qp_sort} | compact)
+    query: ({"start": $start, "count": $count, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -531,7 +534,7 @@ export def "get-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: record, updatedAt: string, url: string, description: string, displayName: string, userId: record> {
+]: nothing -> record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -569,20 +572,20 @@ export def "get-account-followers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
-  --qp-sort: string@sort-completer-1 # Sort followers by criteria
+  --sort: string@sort-completer-1 # Sort followers by criteria
   --search: string # Plain text search, applied to various parts of the model depending on endpoint
 ]: nothing -> record<data: table<createdAt: string, follower: record, following: record, id: int, score: float, state: string, updatedAt: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/accounts/{name}/followers") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"start": $start, "count": $count, "sort": $qp_sort, "search": $search} | compact)
+    query: ({"start": $start, "count": $count, "sort": $sort, "search": $search} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -609,20 +612,20 @@ export def "get-api-v1-accounts-name-ratings" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
-  --qp-sort: string # Sort column (e.g. -createdAt)
+  --sort: string # Sort column (e.g. -createdAt)
   --rating: string@rating-completer # Optionally filter which ratings to retrieve
-]: nothing -> table<rating: string, video: record<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: record, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: record, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: record, views: int, waitTranscoding: bool>> {
+]: nothing -> table<rating: string, video: record<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "rating" $rating "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "rating" $rating "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/accounts/{name}/ratings") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"start": $start, "count": $count, "sort": $qp_sort, "rating": $rating} | compact)
+    query: ({"start": $start, "count": $count, "sort": $sort, "rating": $rating} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -649,19 +652,19 @@ export def "get-api-v1-accounts-name-video-channel-syncs" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
-  --qp-sort: string # Sort column (e.g. -createdAt)
+  --sort: string # Sort column (e.g. -createdAt)
 ]: nothing -> record<data: table<channel: record, createdAt: string, externalChannelUrl: string, id: int, lastSyncAt: string, state: record>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/accounts/{name}/video-channel-syncs") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"start": $start, "count": $count, "sort": $qp_sort} | compact)
+    query: ({"start": $start, "count": $count, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -689,19 +692,19 @@ export def "get-api-v1-accounts-name-video-channels" [
   --with-stats: oneof<nothing, bool> # include daily view statistics for the last 30 days and total views (only if authentified as the account user)
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
-  --qp-sort: string # Sort column (e.g. -createdAt)
-]: nothing -> record<data: table<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: record, updatedAt: string, url: string>, total: int> {
+  --sort: string # Sort column (e.g. -createdAt)
+]: nothing -> record<data: table<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: list, description: string, displayName: string, isLocal: bool, ownerAccount: record, support: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let qp = [(serialize-qp "withStats" $with_stats "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "withStats" $with_stats "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/accounts/{name}/video-channels") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"withStats": $with_stats, "start": $start, "count": $count, "sort": $qp_sort} | compact)
+    query: ({"withStats": $with_stats, "start": $start, "count": $count, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -728,21 +731,21 @@ export def "get-api-v1-accounts-name-video-playlists" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
-  --qp-sort: string # Sort column (e.g. -createdAt)
+  --sort: string # Sort column (e.g. -createdAt)
   --search: string # Plain text search, applied to various parts of the model depending on endpoint
   --playlist-type: int@playlist-type-completer
-]: nothing -> record<data: table<createdAt: string, description: string, displayName: string, id: int, isLocal: bool, ownerAccount: record, privacy: record, shortUUID: record, thumbnailPath: string, type: record, updatedAt: string, uuid: string, videoChannel: record, videoLength: int>, total: int> {
+]: nothing -> record<data: table<createdAt: string, description: string, displayName: string, id: int, isLocal: bool, ownerAccount: record, privacy: record, shortUUID: string, thumbnailPath: string, type: record, updatedAt: string, uuid: string, videoChannel: record, videoLength: int>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "playlistType" $playlist_type "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "playlistType" $playlist_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/accounts/{name}/video-playlists") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"start": $start, "count": $count, "sort": $qp_sort, "search": $search, "playlistType": $playlist_type} | compact)
+    query: ({"start": $start, "count": $count, "sort": $sort, "search": $search, "playlistType": $playlist_type} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -783,19 +786,19 @@ export def "get-account-videos" [
   --skip-count: string@skip-count-completer # if you don't need the `total` in the response (default: false)
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
-  --qp-sort: string@sort-completer-2
-]: nothing -> record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: record, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: record, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: record, views: int, waitTranscoding: bool>, total: int> {
+  --sort: string@sort-completer-2
+]: nothing -> record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let qp = [(serialize-qp "categoryOneOf" $category_one_of "scalar") (serialize-qp "isLive" $is_live "scalar") (serialize-qp "tagsOneOf" $tags_one_of "scalar") (serialize-qp "tagsAllOf" $tags_all_of "scalar") (serialize-qp "licenceOneOf" $licence_one_of "scalar") (serialize-qp "languageOneOf" $language_one_of "scalar") (serialize-qp "nsfw" $nsfw "scalar") (serialize-qp "isLocal" $is_local "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "privacyOneOf" $privacy_one_of "scalar") (serialize-qp "hasHLSFiles" $has_hls_files "scalar") (serialize-qp "hasWebtorrentFiles" $has_webtorrent_files "scalar") (serialize-qp "skipCount" $skip_count "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "categoryOneOf" $category_one_of "scalar") (serialize-qp "isLive" $is_live "scalar") (serialize-qp "tagsOneOf" $tags_one_of "scalar") (serialize-qp "tagsAllOf" $tags_all_of "scalar") (serialize-qp "licenceOneOf" $licence_one_of "scalar") (serialize-qp "languageOneOf" $language_one_of "scalar") (serialize-qp "nsfw" $nsfw "scalar") (serialize-qp "isLocal" $is_local "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "privacyOneOf" $privacy_one_of "scalar") (serialize-qp "hasHLSFiles" $has_hls_files "scalar") (serialize-qp "hasWebtorrentFiles" $has_webtorrent_files "scalar") (serialize-qp "skipCount" $skip_count "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/accounts/{name}/videos") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"categoryOneOf": $category_one_of, "isLive": $is_live, "tagsOneOf": $tags_one_of, "tagsAllOf": $tags_all_of, "licenceOneOf": $licence_one_of, "languageOneOf": $language_one_of, "nsfw": $nsfw, "isLocal": $is_local, "include": $include, "privacyOneOf": $privacy_one_of, "hasHLSFiles": $has_hls_files, "hasWebtorrentFiles": $has_webtorrent_files, "skipCount": $skip_count, "start": $start, "count": $count, "sort": $qp_sort} | compact)
+    query: ({"categoryOneOf": $category_one_of, "isLive": $is_live, "tagsOneOf": $tags_one_of, "tagsAllOf": $tags_all_of, "licenceOneOf": $licence_one_of, "languageOneOf": $language_one_of, "nsfw": $nsfw, "isLocal": $is_local, "include": $include, "privacyOneOf": $privacy_one_of, "hasHLSFiles": $has_hls_files, "hasWebtorrentFiles": $has_webtorrent_files, "skipCount": $skip_count, "start": $start, "count": $count, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1153,7 +1156,7 @@ export def "post-api-v1-jobs-resume" [
 # GET /api/v1/jobs/{state}
 # operationId: getJobs
 export def "get-jobs" [
-  state: string
+  state: string@state-completer-1
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1166,19 +1169,19 @@ export def "get-jobs" [
   --job-type: string@job-type-completer # job type
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
-  --qp-sort: string # Sort column (e.g. -createdAt)
+  --sort: string # Sort column (e.g. -createdAt)
 ]: nothing -> record<data: table<createdAt: string, data: record, error: record, finishedOn: string, id: int, processedOn: string, state: string, type: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($state | is-empty) { error make --unspanned { msg: "path parameter 'state' must be non-empty" } }
-  let qp = [(serialize-qp "jobType" $job_type "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "jobType" $job_type "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({state: (encode-path-segment $state)} | format pattern "/api/v1/jobs/{state}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"jobType": $job_type, "start": $start, "count": $count, "sort": $qp_sort} | compact)
+    query: ({"jobType": $job_type, "start": $start, "count": $count, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1286,18 +1289,18 @@ export def "get-plugins" [
   --uninstalled: oneof<nothing, bool>
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
-  --qp-sort: string # Sort column (e.g. -createdAt)
+  --sort: string # Sort column (e.g. -createdAt)
 ]: nothing -> record<data: table<createdAt: string, description: string, enabled: bool, homepage: string, latestVersion: string, name: string, peertubeEngine: string, settings: record, type: int, uninstalled: bool, updatedAt: string, version: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pluginType" $plugin_type "scalar") (serialize-qp "uninstalled" $uninstalled "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "pluginType" $plugin_type "scalar") (serialize-qp "uninstalled" $uninstalled "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/plugins" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"pluginType": $plugin_type, "uninstalled": $uninstalled, "start": $start, "count": $count, "sort": $qp_sort} | compact)
+    query: ({"pluginType": $plugin_type, "uninstalled": $uninstalled, "start": $start, "count": $count, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1327,18 +1330,18 @@ export def "get-available-plugins" [
   --current-peer-tube-engine: string
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
-  --qp-sort: string # Sort column (e.g. -createdAt)
+  --sort: string # Sort column (e.g. -createdAt)
 ]: nothing -> record<data: table<createdAt: string, description: string, enabled: bool, homepage: string, latestVersion: string, name: string, peertubeEngine: string, settings: record, type: int, uninstalled: bool, updatedAt: string, version: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "pluginType" $plugin_type "scalar") (serialize-qp "currentPeerTubeEngine" $current_peer_tube_engine "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "pluginType" $plugin_type "scalar") (serialize-qp "currentPeerTubeEngine" $current_peer_tube_engine "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/plugins/available" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"search": $search, "pluginType": $plugin_type, "currentPeerTubeEngine": $current_peer_tube_engine, "start": $start, "count": $count, "sort": $qp_sort} | compact)
+    query: ({"search": $search, "pluginType": $plugin_type, "currentPeerTubeEngine": $current_peer_tube_engine, "start": $start, "count": $count, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1624,22 +1627,23 @@ export def "search-channels" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --search: string # String to search. If the user can make a remote URI search, and the string is an URI then the PeerTube instance will fetch the remote object and add it to its database. Then, you can use the REST API to fetch the complete channel information and interact with it.
+  --search: string # String to search. If the user can make a remote URI search, and the string is an URI then the PeerTube instance will fetch the remote object and add it to its database. Then, you can use the REST API to fetch the complete channel information and interact with it. (required)
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --search-target: string@search-target-completer # If the administrator enabled search index support, you can override the default search target. **Warning**: If you choose to make an index search, PeerTube will get results from a third party service. It means the instance may not yet know the objects you fetched. If you want to load video/channel information: * If the current user has the ability to make a remote URI search (this information is available in the config endpoint), then reuse the search API to make a search using the object URI so PeerTube instance fetches the remote object and fill its database. After that, you can use the classic REST API endpoints to fetch the complete object or interact with it * If the current user doesn't have the ability to make a remote URI search, then redirect the user on the origin instance or fetch the data from the origin instance API
-  --qp-sort: string # Sort column (e.g. -createdAt)
-]: nothing -> record<data: table<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: record, updatedAt: string, url: string>, total: int> {
+  --sort: string # Sort column (e.g. -createdAt)
+]: nothing -> record<data: table<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: list, description: string, displayName: string, isLocal: bool, ownerAccount: record, support: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "searchTarget" $search_target "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  if ($search == null) { error make --unspanned { msg: "required query parameter 'search' missing: pass --search" } }
+  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "searchTarget" $search_target "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/search/video-channels" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"search": $search, "start": $start, "count": $count, "searchTarget": $search_target, "sort": $qp_sort} | compact)
+    query: ({"search": $search, "start": $start, "count": $count, "searchTarget": $search_target, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1664,22 +1668,23 @@ export def "search-playlists" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --search: string # String to search. If the user can make a remote URI search, and the string is an URI then the PeerTube instance will fetch the remote object and add it to its database. Then, you can use the REST API to fetch the complete playlist information and interact with it.
+  --search: string # String to search. If the user can make a remote URI search, and the string is an URI then the PeerTube instance will fetch the remote object and add it to its database. Then, you can use the REST API to fetch the complete playlist information and interact with it. (required)
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --search-target: string@search-target-completer # If the administrator enabled search index support, you can override the default search target. **Warning**: If you choose to make an index search, PeerTube will get results from a third party service. It means the instance may not yet know the objects you fetched. If you want to load video/channel information: * If the current user has the ability to make a remote URI search (this information is available in the config endpoint), then reuse the search API to make a search using the object URI so PeerTube instance fetches the remote object and fill its database. After that, you can use the classic REST API endpoints to fetch the complete object or interact with it * If the current user doesn't have the ability to make a remote URI search, then redirect the user on the origin instance or fetch the data from the origin instance API
-  --qp-sort: string # Sort column (e.g. -createdAt)
-]: nothing -> record<data: table<createdAt: string, description: string, displayName: string, id: int, isLocal: bool, ownerAccount: record, privacy: record, shortUUID: record, thumbnailPath: string, type: record, updatedAt: string, uuid: string, videoChannel: record, videoLength: int>, total: int> {
+  --sort: string # Sort column (e.g. -createdAt)
+]: nothing -> record<data: table<createdAt: string, description: string, displayName: string, id: int, isLocal: bool, ownerAccount: record, privacy: record, shortUUID: string, thumbnailPath: string, type: record, updatedAt: string, uuid: string, videoChannel: record, videoLength: int>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "searchTarget" $search_target "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  if ($search == null) { error make --unspanned { msg: "required query parameter 'search' missing: pass --search" } }
+  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "searchTarget" $search_target "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/search/video-playlists" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"search": $search, "start": $start, "count": $count, "searchTarget": $search_target, "sort": $qp_sort} | compact)
+    query: ({"search": $search, "start": $start, "count": $count, "searchTarget": $search_target, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1704,7 +1709,7 @@ export def "search-videos" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --search: string # String to search. If the user can make a remote URI search, and the string is an URI then the PeerTube instance will fetch the remote object and add it to its database. Then, you can use the REST API to fetch the complete video information and interact with it.
+  --search: string # String to search. If the user can make a remote URI search, and the string is an URI then the PeerTube instance will fetch the remote object and add it to its database. Then, you can use the REST API to fetch the complete video information and interact with it. (required)
   --category-one-of: string # category id of the video (see [/videos/categories](#operation/getCategories))
   --is-live: oneof<nothing, bool> # whether or not the video is a live
   --tags-one-of: string # tag(s) of the video
@@ -1722,24 +1727,25 @@ export def "search-videos" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --search-target: string@search-target-completer # If the administrator enabled search index support, you can override the default search target. **Warning**: If you choose to make an index search, PeerTube will get results from a third party service. It means the instance may not yet know the objects you fetched. If you want to load video/channel information: * If the current user has the ability to make a remote URI search (this information is available in the config endpoint), then reuse the search API to make a search using the object URI so PeerTube instance fetches the remote object and fill its database. After that, you can use the classic REST API endpoints to fetch the complete object or interact with it * If the current user doesn't have the ability to make a remote URI search, then redirect the user on the origin instance or fetch the data from the origin instance API
-  --qp-sort: string@sort-completer-3 # Sort videos by criteria (prefixing with `-` means `DESC` order):
+  --sort: string@sort-completer-3 # Sort videos by criteria (prefixing with `-` means `DESC` order):
   --start-date: string # Get videos that are published after this date (format: date-time)
   --end-date: string # Get videos that are published before this date (format: date-time)
   --originally-published-start-date: string # Get videos that are originally published after this date (format: date-time)
   --originally-published-end-date: string # Get videos that are originally published before this date (format: date-time)
   --duration-min: int # Get videos that have this minimum duration
   --duration-max: int # Get videos that have this maximum duration
-]: nothing -> record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: record, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: record, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: record, views: int, waitTranscoding: bool>, total: int> {
+]: nothing -> record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "categoryOneOf" $category_one_of "scalar") (serialize-qp "isLive" $is_live "scalar") (serialize-qp "tagsOneOf" $tags_one_of "scalar") (serialize-qp "tagsAllOf" $tags_all_of "scalar") (serialize-qp "licenceOneOf" $licence_one_of "scalar") (serialize-qp "languageOneOf" $language_one_of "scalar") (serialize-qp "nsfw" $nsfw "scalar") (serialize-qp "isLocal" $is_local "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "privacyOneOf" $privacy_one_of "scalar") (serialize-qp "uuids" $uuids "scalar") (serialize-qp "hasHLSFiles" $has_hls_files "scalar") (serialize-qp "hasWebtorrentFiles" $has_webtorrent_files "scalar") (serialize-qp "skipCount" $skip_count "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "searchTarget" $search_target "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "originallyPublishedStartDate" $originally_published_start_date "scalar") (serialize-qp "originallyPublishedEndDate" $originally_published_end_date "scalar") (serialize-qp "durationMin" $duration_min "scalar") (serialize-qp "durationMax" $duration_max "scalar")] | flatten | str join "&"
+  if ($search == null) { error make --unspanned { msg: "required query parameter 'search' missing: pass --search" } }
+  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "categoryOneOf" $category_one_of "scalar") (serialize-qp "isLive" $is_live "scalar") (serialize-qp "tagsOneOf" $tags_one_of "scalar") (serialize-qp "tagsAllOf" $tags_all_of "scalar") (serialize-qp "licenceOneOf" $licence_one_of "scalar") (serialize-qp "languageOneOf" $language_one_of "scalar") (serialize-qp "nsfw" $nsfw "scalar") (serialize-qp "isLocal" $is_local "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "privacyOneOf" $privacy_one_of "scalar") (serialize-qp "uuids" $uuids "scalar") (serialize-qp "hasHLSFiles" $has_hls_files "scalar") (serialize-qp "hasWebtorrentFiles" $has_webtorrent_files "scalar") (serialize-qp "skipCount" $skip_count "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "searchTarget" $search_target "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "originallyPublishedStartDate" $originally_published_start_date "scalar") (serialize-qp "originallyPublishedEndDate" $originally_published_end_date "scalar") (serialize-qp "durationMin" $duration_min "scalar") (serialize-qp "durationMax" $duration_max "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/search/videos" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"search": $search, "categoryOneOf": $category_one_of, "isLive": $is_live, "tagsOneOf": $tags_one_of, "tagsAllOf": $tags_all_of, "licenceOneOf": $licence_one_of, "languageOneOf": $language_one_of, "nsfw": $nsfw, "isLocal": $is_local, "include": $include, "privacyOneOf": $privacy_one_of, "uuids": $uuids, "hasHLSFiles": $has_hls_files, "hasWebtorrentFiles": $has_webtorrent_files, "skipCount": $skip_count, "start": $start, "count": $count, "searchTarget": $search_target, "sort": $qp_sort, "startDate": $start_date, "endDate": $end_date, "originallyPublishedStartDate": $originally_published_start_date, "originallyPublishedEndDate": $originally_published_end_date, "durationMin": $duration_min, "durationMax": $duration_max} | compact)
+    query: ({"search": $search, "categoryOneOf": $category_one_of, "isLive": $is_live, "tagsOneOf": $tags_one_of, "tagsAllOf": $tags_all_of, "licenceOneOf": $licence_one_of, "languageOneOf": $language_one_of, "nsfw": $nsfw, "isLocal": $is_local, "include": $include, "privacyOneOf": $privacy_one_of, "uuids": $uuids, "hasHLSFiles": $has_hls_files, "hasWebtorrentFiles": $has_webtorrent_files, "skipCount": $skip_count, "start": $start, "count": $count, "searchTarget": $search_target, "sort": $sort, "startDate": $start_date, "endDate": $end_date, "originallyPublishedStartDate": $originally_published_start_date, "originallyPublishedEndDate": $originally_published_end_date, "durationMin": $duration_min, "durationMax": $duration_max} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1799,18 +1805,18 @@ export def "get-api-v1-server-blocklist-accounts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
-  --qp-sort: string # Sort column (e.g. -createdAt)
+  --sort: string # Sort column (e.g. -createdAt)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/server/blocklist/accounts" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"start": $start, "count": $count, "sort": $qp_sort} | compact)
+    query: ({"start": $start, "count": $count, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1908,18 +1914,18 @@ export def "get-api-v1-server-blocklist-servers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
-  --qp-sort: string # Sort column (e.g. -createdAt)
+  --sort: string # Sort column (e.g. -createdAt)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/server/blocklist/servers" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"start": $start, "count": $count, "sort": $qp_sort} | compact)
+    query: ({"start": $start, "count": $count, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2015,22 +2021,22 @@ export def "get-api-v1-server-followers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --state: string@state-completer-1
+  --state: string@state-completer-2
   --actor-type: string@actor-type-completer
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
-  --qp-sort: string # Sort column (e.g. -createdAt)
+  --sort: string # Sort column (e.g. -createdAt)
 ]: nothing -> record<data: table<createdAt: string, follower: record, following: record, id: int, score: float, state: string, updatedAt: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "actorType" $actor_type "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "actorType" $actor_type "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/server/followers" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"state": $state, "actorType": $actor_type, "start": $start, "count": $count, "sort": $qp_sort} | compact)
+    query: ({"state": $state, "actorType": $actor_type, "start": $start, "count": $count, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2159,22 +2165,22 @@ export def "get-api-v1-server-following" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --state: string@state-completer-1
+  --state: string@state-completer-2
   --actor-type: string@actor-type-completer
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
-  --qp-sort: string # Sort column (e.g. -createdAt)
+  --sort: string # Sort column (e.g. -createdAt)
 ]: nothing -> record<data: table<createdAt: string, follower: record, following: record, id: int, score: float, state: string, updatedAt: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "actorType" $actor_type "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "actorType" $actor_type "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/server/following" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"state": $state, "actorType": $actor_type, "start": $start, "count": $count, "sort": $qp_sort} | compact)
+    query: ({"state": $state, "actorType": $actor_type, "start": $start, "count": $count, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2349,21 +2355,22 @@ export def "get-mirrored-videos" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --target: string@target-completer # direction of the mirror
+  --target: string@target-completer # direction of the mirror (required)
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
-  --qp-sort: string@sort-completer-4 # Sort abuses by criteria
+  --sort: string@sort-completer-4 # Sort abuses by criteria
 ]: nothing -> table<id: int, name: string, redundancies: record<files: list, streamingPlaylists: list>, url: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "target" $target "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  if ($target == null) { error make --unspanned { msg: "required query parameter 'target' missing: pass --target" } }
+  let qp = [(serialize-qp "target" $target "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/server/redundancy/videos" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"target": $target, "start": $start, "count": $count, "sort": $qp_sort} | compact)
+    query: ({"target": $target, "start": $start, "count": $count, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2388,7 +2395,7 @@ export def "put-mirrored-video" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  video_id: int # e.g. 42
+  video_id: int # object id for the video
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2471,6 +2478,7 @@ export def "put-api-v1-server-redundancy-host" [
   let full_url = (build-url $base ({host: (encode-path-segment $host)} | format pattern "/api/v1/server/redundancy/{host}") $auth.query)
   let req_body = {"redundancyAllowed": $redundancy_allowed} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "redundancyAllowed") == null) { error make --unspanned { msg: "required body field 'redundancyAllowed' missing: pass --redundancy-allowed or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -2539,18 +2547,18 @@ export def "get-users" [
   --blocked: oneof<nothing, bool> # Filter results down to (un)banned users
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
-  --qp-sort: string@sort-completer-5 # Sort users by criteria
-]: nothing -> table<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: record, updatedAt: string, url: string, description: string, displayName: string, userId: record>, autoPlayNextVideo: bool, autoPlayNextVideoPlaylist: bool, autoPlayVideo: bool, blocked: bool, blockedReason: string, createdAt: string, email: string, emailVerified: bool, id: record, lastLoginDate: string, noAccountSetupWarningModal: bool, noInstanceConfigWarningModal: bool, noWelcomeModal: bool, nsfwPolicy: string, p2pEnabled: bool, pluginAuth: string, role: record<id: int, label: string>, theme: string, username: string, videoChannels: list<record>, videoQuota: int, videoQuotaDaily: int> {
+  --sort: string@sort-completer-5 # Sort users by criteria
+]: nothing -> table<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, autoPlayNextVideo: bool, autoPlayNextVideoPlaylist: bool, autoPlayVideo: bool, blocked: bool, blockedReason: string, createdAt: string, email: string, emailVerified: bool, id: int, lastLoginDate: string, noAccountSetupWarningModal: bool, noInstanceConfigWarningModal: bool, noWelcomeModal: bool, nsfwPolicy: string, p2pEnabled: bool, pluginAuth: string, role: record<id: int, label: string>, theme: string, username: string, videoChannels: list<record>, videoQuota: int, videoQuotaDaily: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "blocked" $blocked "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "blocked" $blocked "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/users" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"search": $search, "blocked": $blocked, "start": $start, "count": $count, "sort": $qp_sort} | compact)
+    query: ({"search": $search, "blocked": $blocked, "start": $start, "count": $count, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2658,7 +2666,7 @@ export def "get-user-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: record, updatedAt: string, url: string, description: string, displayName: string, userId: record>, autoPlayNextVideo: bool, autoPlayNextVideoPlaylist: bool, autoPlayVideo: bool, blocked: bool, blockedReason: string, createdAt: string, email: string, emailVerified: bool, id: record, lastLoginDate: string, noAccountSetupWarningModal: bool, noInstanceConfigWarningModal: bool, noWelcomeModal: bool, nsfwPolicy: string, p2pEnabled: bool, pluginAuth: string, role: record<id: int, label: string>, theme: string, username: string, videoChannels: list<record>, videoQuota: int, videoQuotaDaily: int> {
+]: nothing -> table<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, autoPlayNextVideo: bool, autoPlayNextVideoPlaylist: bool, autoPlayVideo: bool, blocked: bool, blockedReason: string, createdAt: string, email: string, emailVerified: bool, id: int, lastLoginDate: string, noAccountSetupWarningModal: bool, noInstanceConfigWarningModal: bool, noWelcomeModal: bool, nsfwPolicy: string, p2pEnabled: bool, pluginAuth: string, role: record<id: int, label: string>, theme: string, username: string, videoChannels: list<record>, videoQuota: int, videoQuotaDaily: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/users/me" $auth.query)
@@ -2698,7 +2706,7 @@ export def "put-user-info" [
   --current-password: string # format: password
   --display-nsfw: string@display-nsfw-completer # new NSFW display policy
   --display-name: string # new name of the user in its representations
-  --email: any # new email used for login and service communications
+  --email: string # new email used for login and service communications (format: email)
   --no-account-setup-warning-modal: oneof<nothing, bool>
   --no-instance-config-warning-modal: oneof<nothing, bool>
   --no-welcome-modal: oneof<nothing, bool>
@@ -2746,20 +2754,20 @@ export def "get-my-abuses" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: int # only list the report with this id
   --state: int@state-completer
-  --qp-sort: string@sort-completer # Sort abuses by criteria
+  --sort: string@sort-completer # Sort abuses by criteria
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
 ]: nothing -> record<data: table<createdAt: string, id: int, moderationComment: string, predefinedReasons: list, reason: string, reporterAccount: record, state: record, video: record>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/users/me/abuses" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"id": $id, "state": $state, "sort": $qp_sort, "start": $start, "count": $count} | compact)
+    query: ({"id": $id, "state": $state, "sort": $sort, "start": $start, "count": $count} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2826,8 +2834,8 @@ export def "post-api-v1-users-me-avatar-pick" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["avatarfile"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["avatarfile"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -2858,7 +2866,7 @@ export def "get-api-v1-users-me-history-videos" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --search: string # Plain text search, applied to various parts of the model depending on endpoint
-]: nothing -> record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: record, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: record, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: record, views: int, waitTranscoding: bool>, total: int> {
+]: nothing -> record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
@@ -2902,8 +2910,8 @@ export def "post-api-v1-users-me-history-videos-remove" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body [] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -2922,7 +2930,7 @@ export def "post-api-v1-users-me-history-videos-remove" [
 #
 # DELETE /api/v1/users/me/history/videos/{videoId}
 export def "delete-api-v1-users-me-history-videos-video-id" [
-  video_id: int
+  video_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3017,18 +3025,18 @@ export def "get-api-v1-users-me-notifications" [
   --unread: oneof<nothing, bool> # only list unread notifications
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
-  --qp-sort: string # Sort column (e.g. -createdAt)
+  --sort: string # Sort column (e.g. -createdAt)
 ]: nothing -> record<data: table<account: record, actorFollow: record, comment: record, createdAt: string, id: int, read: bool, type: int, updatedAt: string, video: record, videoAbuse: record, videoBlacklist: record, videoImport: record>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "unread" $unread "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "unread" $unread "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/users/me/notifications" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"unread": $unread, "start": $start, "count": $count, "sort": $qp_sort} | compact)
+    query: ({"unread": $unread, "start": $start, "count": $count, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3124,18 +3132,18 @@ export def "get-api-v1-users-me-subscriptions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
-  --qp-sort: string # Sort column (e.g. -createdAt)
-]: nothing -> record<data: table<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: record, updatedAt: string, url: string>, total: int> {
+  --sort: string # Sort column (e.g. -createdAt)
+]: nothing -> record<data: table<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: list, description: string, displayName: string, isLocal: bool, ownerAccount: record, support: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/users/me/subscriptions" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"start": $start, "count": $count, "sort": $qp_sort} | compact)
+    query: ({"start": $start, "count": $count, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3196,10 +3204,11 @@ export def "get-api-v1-users-me-subscriptions-exist" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --uris: list<string> # list of uris to check if each is part of the user subscriptions
+  --uris: list<string> # list of uris to check if each is part of the user subscriptions (required)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($uris == null) { error make --unspanned { msg: "required query parameter 'uris' missing: pass --uris" } }
   let qp = [(serialize-qp "uris" $uris "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/users/me/subscriptions/exist" $qp $auth.query)
   let accept_val = "application/json"
@@ -3246,18 +3255,18 @@ export def "get-api-v1-users-me-subscriptions-videos" [
   --skip-count: string@skip-count-completer # if you don't need the `total` in the response (default: false)
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
-  --qp-sort: string@sort-completer-2
-]: nothing -> record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: record, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: record, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: record, views: int, waitTranscoding: bool>, total: int> {
+  --sort: string@sort-completer-2
+]: nothing -> record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "categoryOneOf" $category_one_of "scalar") (serialize-qp "isLive" $is_live "scalar") (serialize-qp "tagsOneOf" $tags_one_of "scalar") (serialize-qp "tagsAllOf" $tags_all_of "scalar") (serialize-qp "licenceOneOf" $licence_one_of "scalar") (serialize-qp "languageOneOf" $language_one_of "scalar") (serialize-qp "nsfw" $nsfw "scalar") (serialize-qp "isLocal" $is_local "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "privacyOneOf" $privacy_one_of "scalar") (serialize-qp "hasHLSFiles" $has_hls_files "scalar") (serialize-qp "hasWebtorrentFiles" $has_webtorrent_files "scalar") (serialize-qp "skipCount" $skip_count "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "categoryOneOf" $category_one_of "scalar") (serialize-qp "isLive" $is_live "scalar") (serialize-qp "tagsOneOf" $tags_one_of "scalar") (serialize-qp "tagsAllOf" $tags_all_of "scalar") (serialize-qp "licenceOneOf" $licence_one_of "scalar") (serialize-qp "languageOneOf" $language_one_of "scalar") (serialize-qp "nsfw" $nsfw "scalar") (serialize-qp "isLocal" $is_local "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "privacyOneOf" $privacy_one_of "scalar") (serialize-qp "hasHLSFiles" $has_hls_files "scalar") (serialize-qp "hasWebtorrentFiles" $has_webtorrent_files "scalar") (serialize-qp "skipCount" $skip_count "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/users/me/subscriptions/videos" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"categoryOneOf": $category_one_of, "isLive": $is_live, "tagsOneOf": $tags_one_of, "tagsAllOf": $tags_all_of, "licenceOneOf": $licence_one_of, "languageOneOf": $language_one_of, "nsfw": $nsfw, "isLocal": $is_local, "include": $include, "privacyOneOf": $privacy_one_of, "hasHLSFiles": $has_hls_files, "hasWebtorrentFiles": $has_webtorrent_files, "skipCount": $skip_count, "start": $start, "count": $count, "sort": $qp_sort} | compact)
+    query: ({"categoryOneOf": $category_one_of, "isLive": $is_live, "tagsOneOf": $tags_one_of, "tagsAllOf": $tags_all_of, "licenceOneOf": $licence_one_of, "languageOneOf": $language_one_of, "nsfw": $nsfw, "isLocal": $is_local, "include": $include, "privacyOneOf": $privacy_one_of, "hasHLSFiles": $has_hls_files, "hasWebtorrentFiles": $has_webtorrent_files, "skipCount": $skip_count, "start": $start, "count": $count, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3317,7 +3326,7 @@ export def "get-api-v1-users-me-subscriptions-subscription-handle" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: record, updatedAt: string, url: string, banners: table<createdAt: string, path: string, updatedAt: string, width: int>, description: string, displayName: string, isLocal: bool, ownerAccount: record<id: int, uuid: string>, support: string> {
+]: nothing -> record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: table<createdAt: string, path: string, updatedAt: string, width: int>, description: string, displayName: string, isLocal: bool, ownerAccount: record<id: int, uuid: string>, support: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_handle | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionHandle' must be non-empty" } }
@@ -3351,10 +3360,11 @@ export def "get-api-v1-users-me-video-playlists-videos-exist" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --video-ids: list # The video ids to check
+  --video-ids: list # The video ids to check (required)
 ]: nothing -> record<videoId: table<playlistElementId: int, playlistId: int, startTimestamp: int, stopTimestamp: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_ids == null) { error make --unspanned { msg: "required query parameter 'videoIds' missing: pass --video-ids" } }
   let qp = [(serialize-qp "videoIds" $video_ids "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/users/me/video-playlists/videos-exist" $qp $auth.query)
   let accept_val = "application/json"
@@ -3421,18 +3431,18 @@ export def "get-api-v1-users-me-videos" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
-  --qp-sort: string # Sort column (e.g. -createdAt)
-]: nothing -> record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: record, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: record, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: record, views: int, waitTranscoding: bool>, total: int> {
+  --sort: string # Sort column (e.g. -createdAt)
+]: nothing -> record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/users/me/videos" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"start": $start, "count": $count, "sort": $qp_sort} | compact)
+    query: ({"start": $start, "count": $count, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3458,21 +3468,21 @@ export def "get-api-v1-users-me-videos-imports" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
-  --qp-sort: string # Sort column (e.g. -createdAt)
+  --sort: string # Sort column (e.g. -createdAt)
   --target-url: string # Filter on import target URL
   --video-channel-sync-id: float # Filter on imports created by a specific channel synchronization
   --search: string # Search in video names
-]: nothing -> record<data: table<createdAt: string, error: string, id: record, magnetUri: string, state: record, targetUrl: string, torrentName: string, torrentfile: string, updatedAt: string, video: record>, total: int> {
+]: nothing -> record<data: table<createdAt: string, error: string, id: int, magnetUri: string, state: record, targetUrl: string, torrentName: string, torrentfile: string, updatedAt: string, video: record>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "targetUrl" $target_url "scalar") (serialize-qp "videoChannelSyncId" $video_channel_sync_id "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "targetUrl" $target_url "scalar") (serialize-qp "videoChannelSyncId" $video_channel_sync_id "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/users/me/videos/imports" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"start": $start, "count": $count, "sort": $qp_sort, "targetUrl": $target_url, "videoChannelSyncId": $video_channel_sync_id, "search": $search} | compact)
+    query: ({"start": $start, "count": $count, "sort": $sort, "targetUrl": $target_url, "videoChannelSyncId": $video_channel_sync_id, "search": $search} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3487,7 +3497,7 @@ export def "get-api-v1-users-me-videos-imports" [
 #
 # GET /api/v1/users/me/videos/{videoId}/rating
 export def "get-api-v1-users-me-videos-video-id-rating" [
-  video_id: int
+  video_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3537,7 +3547,7 @@ export def "register-user" [
   --display-name: string # editable name of the user, displayed in its representations
   email: string # email of the user, used for login or service communications (format: email)
   password: string # format: password
-  username: any # immutable name of the user, used to find or mention its actor
+  username: string # immutable name of the user, used to find or mention its actor
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3578,18 +3588,18 @@ export def "list-registrations" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --search: string
-  --qp-sort: string@sort-completer-6
+  --sort: string@sort-completer-6
 ]: nothing -> record<data: table<accountDisplayName: string, channelDisplayName: string, channelHandle: string, createdAt: string, email: string, emailVerified: bool, id: int, moderationResponse: string, registrationReason: string, state: record, updatedAt: string, user: record, username: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/users/registrations" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"start": $start, "count": $count, "search": $search, "sort": $qp_sort} | compact)
+    query: ({"start": $start, "count": $count, "search": $search, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3657,7 +3667,7 @@ export def "request-registration" [
   --display-name: string # editable name of the user, displayed in its representations
   email: string # email of the user, used for login or service communications (format: email)
   password: string # format: password
-  username: any # immutable name of the user, used to find or mention its actor
+  username: string # immutable name of the user, used to find or mention its actor
   registration_reason: string # reason for the user to register on the instance
 ]: any -> record<accountDisplayName: string, channelDisplayName: string, channelHandle: string, createdAt: string, email: string, emailVerified: bool, id: int, moderationResponse: string, registrationReason: string, state: record<id: int, label: string>, updatedAt: string, user: record<id: int>, username: string> {
   let input = $in
@@ -4004,7 +4014,7 @@ export def "put-user" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --admin-flags: int@admin-flags-completer # Admin flags for the user (None = `0`, Bypass video blocklist = `1`) (e.g. 1)
-  --email: any # The updated email of the user
+  --email: string # The updated email of the user (format: email)
   --email-verified: oneof<nothing, bool> # Set the email as verified
   --password: string # format: password
   --plugin-auth: string # The auth plugin to use to authenticate the user (nullable, e.g. peertube-plugin-auth-saml2)
@@ -4213,7 +4223,7 @@ export def "add-video-channel-sync" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --external-channel-url: string # e.g. https://youtube.com/c/UC_myfancychannel
   --video-channel-id: int # e.g. 42
-]: any -> record<videoChannelSync: record<channel: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: record, updatedAt: string, url: string, banners: list, description: string, displayName: string, isLocal: bool, ownerAccount: record, support: string>, createdAt: string, externalChannelUrl: string, id: int, lastSyncAt: string, state: record<id: int, label: string>>> {
+]: any -> record<videoChannelSync: record<channel: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: list, description: string, displayName: string, isLocal: bool, ownerAccount: record, support: string>, createdAt: string, externalChannelUrl: string, id: int, lastSyncAt: string, state: record<id: int, label: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4324,18 +4334,18 @@ export def "get-video-channels" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
-  --qp-sort: string # Sort column (e.g. -createdAt)
-]: nothing -> record<data: table<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: record, updatedAt: string, url: string>, total: int> {
+  --sort: string # Sort column (e.g. -createdAt)
+]: nothing -> record<data: table<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: list, description: string, displayName: string, isLocal: bool, ownerAccount: record, support: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/video-channels" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"start": $start, "count": $count, "sort": $qp_sort} | compact)
+    query: ({"start": $start, "count": $count, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4363,7 +4373,7 @@ export def "add-video-channel" [
   --description: any # Channel description
   display_name: any # Channel display name
   --support: any # How to support/fund the channel
-  name: any # username of the channel to create
+  name: string # username of the channel to create
 ]: any -> record<videoChannel: record<id: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4438,7 +4448,7 @@ export def "get-video-channel" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: record, updatedAt: string, url: string, banners: table<createdAt: string, path: string, updatedAt: string, width: int>, description: string, displayName: string, isLocal: bool, ownerAccount: record<id: int, uuid: string>, support: string> {
+]: nothing -> record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: table<createdAt: string, path: string, updatedAt: string, width: int>, description: string, displayName: string, isLocal: bool, ownerAccount: record<id: int, uuid: string>, support: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_handle | is-empty) { error make --unspanned { msg: "path parameter 'channelHandle' must be non-empty" } }
@@ -4562,8 +4572,8 @@ export def "post-api-v1-video-channels-channel-handle-avatar-pick" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["avatarfile"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["avatarfile"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -4638,8 +4648,8 @@ export def "post-api-v1-video-channels-channel-handle-banner-pick" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["bannerfile"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["bannerfile"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -4671,20 +4681,20 @@ export def "get-video-channel-followers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
-  --qp-sort: string@sort-completer-1 # Sort followers by criteria
+  --sort: string@sort-completer-1 # Sort followers by criteria
   --search: string # Plain text search, applied to various parts of the model depending on endpoint
 ]: nothing -> record<data: table<createdAt: string, follower: record, following: record, id: int, score: float, state: string, updatedAt: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_handle | is-empty) { error make --unspanned { msg: "path parameter 'channelHandle' must be non-empty" } }
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({channel_handle: (encode-path-segment $channel_handle)} | format pattern "/api/v1/video-channels/{channel_handle}/followers") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"start": $start, "count": $count, "sort": $qp_sort, "search": $search} | compact)
+    query: ({"start": $start, "count": $count, "sort": $sort, "search": $search} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4751,20 +4761,20 @@ export def "get-api-v1-video-channels-channel-handle-video-playlists" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
-  --qp-sort: string # Sort column (e.g. -createdAt)
+  --sort: string # Sort column (e.g. -createdAt)
   --playlist-type: int@playlist-type-completer
-]: nothing -> record<data: table<createdAt: string, description: string, displayName: string, id: int, isLocal: bool, ownerAccount: record, privacy: record, shortUUID: record, thumbnailPath: string, type: record, updatedAt: string, uuid: string, videoChannel: record, videoLength: int>, total: int> {
+]: nothing -> record<data: table<createdAt: string, description: string, displayName: string, id: int, isLocal: bool, ownerAccount: record, privacy: record, shortUUID: string, thumbnailPath: string, type: record, updatedAt: string, uuid: string, videoChannel: record, videoLength: int>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_handle | is-empty) { error make --unspanned { msg: "path parameter 'channelHandle' must be non-empty" } }
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "playlistType" $playlist_type "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "playlistType" $playlist_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({channel_handle: (encode-path-segment $channel_handle)} | format pattern "/api/v1/video-channels/{channel_handle}/video-playlists") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"start": $start, "count": $count, "sort": $qp_sort, "playlistType": $playlist_type} | compact)
+    query: ({"start": $start, "count": $count, "sort": $sort, "playlistType": $playlist_type} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4805,19 +4815,19 @@ export def "get-video-channel-videos" [
   --skip-count: string@skip-count-completer # if you don't need the `total` in the response (default: false)
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
-  --qp-sort: string@sort-completer-2
-]: nothing -> record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: record, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: record, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: record, views: int, waitTranscoding: bool>, total: int> {
+  --sort: string@sort-completer-2
+]: nothing -> record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_handle | is-empty) { error make --unspanned { msg: "path parameter 'channelHandle' must be non-empty" } }
-  let qp = [(serialize-qp "categoryOneOf" $category_one_of "scalar") (serialize-qp "isLive" $is_live "scalar") (serialize-qp "tagsOneOf" $tags_one_of "scalar") (serialize-qp "tagsAllOf" $tags_all_of "scalar") (serialize-qp "licenceOneOf" $licence_one_of "scalar") (serialize-qp "languageOneOf" $language_one_of "scalar") (serialize-qp "nsfw" $nsfw "scalar") (serialize-qp "isLocal" $is_local "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "privacyOneOf" $privacy_one_of "scalar") (serialize-qp "hasHLSFiles" $has_hls_files "scalar") (serialize-qp "hasWebtorrentFiles" $has_webtorrent_files "scalar") (serialize-qp "skipCount" $skip_count "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "categoryOneOf" $category_one_of "scalar") (serialize-qp "isLive" $is_live "scalar") (serialize-qp "tagsOneOf" $tags_one_of "scalar") (serialize-qp "tagsAllOf" $tags_all_of "scalar") (serialize-qp "licenceOneOf" $licence_one_of "scalar") (serialize-qp "languageOneOf" $language_one_of "scalar") (serialize-qp "nsfw" $nsfw "scalar") (serialize-qp "isLocal" $is_local "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "privacyOneOf" $privacy_one_of "scalar") (serialize-qp "hasHLSFiles" $has_hls_files "scalar") (serialize-qp "hasWebtorrentFiles" $has_webtorrent_files "scalar") (serialize-qp "skipCount" $skip_count "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({channel_handle: (encode-path-segment $channel_handle)} | format pattern "/api/v1/video-channels/{channel_handle}/videos") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"categoryOneOf": $category_one_of, "isLive": $is_live, "tagsOneOf": $tags_one_of, "tagsAllOf": $tags_all_of, "licenceOneOf": $licence_one_of, "languageOneOf": $language_one_of, "nsfw": $nsfw, "isLocal": $is_local, "include": $include, "privacyOneOf": $privacy_one_of, "hasHLSFiles": $has_hls_files, "hasWebtorrentFiles": $has_webtorrent_files, "skipCount": $skip_count, "start": $start, "count": $count, "sort": $qp_sort} | compact)
+    query: ({"categoryOneOf": $category_one_of, "isLive": $is_live, "tagsOneOf": $tags_one_of, "tagsAllOf": $tags_all_of, "licenceOneOf": $licence_one_of, "languageOneOf": $language_one_of, "nsfw": $nsfw, "isLocal": $is_local, "include": $include, "privacyOneOf": $privacy_one_of, "hasHLSFiles": $has_hls_files, "hasWebtorrentFiles": $has_webtorrent_files, "skipCount": $skip_count, "start": $start, "count": $count, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4844,19 +4854,19 @@ export def "get-playlists" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
-  --qp-sort: string # Sort column (e.g. -createdAt)
+  --sort: string # Sort column (e.g. -createdAt)
   --playlist-type: int@playlist-type-completer
-]: nothing -> record<data: table<createdAt: string, description: string, displayName: string, id: int, isLocal: bool, ownerAccount: record, privacy: record, shortUUID: record, thumbnailPath: string, type: record, updatedAt: string, uuid: string, videoChannel: record, videoLength: int>, total: int> {
+]: nothing -> record<data: table<createdAt: string, description: string, displayName: string, id: int, isLocal: bool, ownerAccount: record, privacy: record, shortUUID: string, thumbnailPath: string, type: record, updatedAt: string, uuid: string, videoChannel: record, videoLength: int>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "playlistType" $playlist_type "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "playlistType" $playlist_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/video-playlists" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"start": $start, "count": $count, "sort": $qp_sort, "playlistType": $playlist_type} | compact)
+    query: ({"start": $start, "count": $count, "sort": $sort, "playlistType": $playlist_type} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4885,7 +4895,7 @@ export def "add-playlist" [
   display_name: string # Video playlist display name
   --privacy: int@privacy-completer # Video playlist privacy policy (see [/video-playlists/privacies])
   --thumbnailfile: string # Video playlist thumbnail file (format: binary)
-  --video-channel-id: any # Video channel in which the playlist will be published
+  --video-channel-id: int # Video channel in which the playlist will be published
 ]: any -> record<videoPlaylist: record<id: int, shortUUID: string, uuid: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4895,8 +4905,8 @@ export def "add-playlist" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["thumbnailfile"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["thumbnailfile"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -4994,7 +5004,7 @@ export def "get-api-v1-video-playlists-playlist-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdAt: string, description: string, displayName: string, id: int, isLocal: bool, ownerAccount: record<avatars: list<record>, displayName: string, host: string, id: int, name: string, url: string>, privacy: record<id: int, label: string>, shortUUID: record, thumbnailPath: string, type: record<id: int, label: string>, updatedAt: string, uuid: string, videoChannel: record<avatars: list<record>, displayName: string, host: string, id: int, name: string, url: string>, videoLength: int> {
+]: nothing -> record<createdAt: string, description: string, displayName: string, id: int, isLocal: bool, ownerAccount: record<avatars: list<record>, displayName: string, host: string, id: int, name: string, url: string>, privacy: record<id: int, label: string>, shortUUID: string, thumbnailPath: string, type: record<id: int, label: string>, updatedAt: string, uuid: string, videoChannel: record<avatars: list<record>, displayName: string, host: string, id: int, name: string, url: string>, videoLength: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlistId' must be non-empty" } }
@@ -5033,7 +5043,7 @@ export def "put-api-v1-video-playlists-playlist-id" [
   --display-name: string # Video playlist display name
   --privacy: int@privacy-completer # Video playlist privacy policy (see [/video-playlists/privacies])
   --thumbnailfile: string # Video playlist thumbnail file (format: binary)
-  --video-channel-id: any # Video channel in which the playlist will be published
+  --video-channel-id: int # Video channel in which the playlist will be published
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5044,8 +5054,8 @@ export def "put-api-v1-video-playlists-playlist-id" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["thumbnailfile"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["thumbnailfile"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "put"
     url: $full_url
@@ -5077,7 +5087,7 @@ export def "get-video-playlist-videos" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
-]: nothing -> record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: record, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: record, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: record, views: int, waitTranscoding: bool>, total: int> {
+]: nothing -> record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlistId' must be non-empty" } }
@@ -5293,18 +5303,18 @@ export def "get-videos" [
   --skip-count: string@skip-count-completer # if you don't need the `total` in the response (default: false)
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
-  --qp-sort: string@sort-completer-2
-]: nothing -> record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: record, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: record, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: record, views: int, waitTranscoding: bool>, total: int> {
+  --sort: string@sort-completer-2
+]: nothing -> record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "categoryOneOf" $category_one_of "scalar") (serialize-qp "isLive" $is_live "scalar") (serialize-qp "tagsOneOf" $tags_one_of "scalar") (serialize-qp "tagsAllOf" $tags_all_of "scalar") (serialize-qp "licenceOneOf" $licence_one_of "scalar") (serialize-qp "languageOneOf" $language_one_of "scalar") (serialize-qp "nsfw" $nsfw "scalar") (serialize-qp "isLocal" $is_local "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "privacyOneOf" $privacy_one_of "scalar") (serialize-qp "hasHLSFiles" $has_hls_files "scalar") (serialize-qp "hasWebtorrentFiles" $has_webtorrent_files "scalar") (serialize-qp "skipCount" $skip_count "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "categoryOneOf" $category_one_of "scalar") (serialize-qp "isLive" $is_live "scalar") (serialize-qp "tagsOneOf" $tags_one_of "scalar") (serialize-qp "tagsAllOf" $tags_all_of "scalar") (serialize-qp "licenceOneOf" $licence_one_of "scalar") (serialize-qp "languageOneOf" $language_one_of "scalar") (serialize-qp "nsfw" $nsfw "scalar") (serialize-qp "isLocal" $is_local "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "privacyOneOf" $privacy_one_of "scalar") (serialize-qp "hasHLSFiles" $has_hls_files "scalar") (serialize-qp "hasWebtorrentFiles" $has_webtorrent_files "scalar") (serialize-qp "skipCount" $skip_count "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/videos" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"categoryOneOf": $category_one_of, "isLive": $is_live, "tagsOneOf": $tags_one_of, "tagsAllOf": $tags_all_of, "licenceOneOf": $licence_one_of, "languageOneOf": $language_one_of, "nsfw": $nsfw, "isLocal": $is_local, "include": $include, "privacyOneOf": $privacy_one_of, "hasHLSFiles": $has_hls_files, "hasWebtorrentFiles": $has_webtorrent_files, "skipCount": $skip_count, "start": $start, "count": $count, "sort": $qp_sort} | compact)
+    query: ({"categoryOneOf": $category_one_of, "isLive": $is_live, "tagsOneOf": $tags_one_of, "tagsAllOf": $tags_all_of, "licenceOneOf": $licence_one_of, "languageOneOf": $language_one_of, "nsfw": $nsfw, "isLocal": $is_local, "include": $include, "privacyOneOf": $privacy_one_of, "hasHLSFiles": $has_hls_files, "hasWebtorrentFiles": $has_webtorrent_files, "skipCount": $skip_count, "start": $start, "count": $count, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -5333,18 +5343,18 @@ export def "get-video-blocks" [
   --search: string # plain search that will match with video titles, and more
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
-  --qp-sort: string@sort-completer-7 # Sort blocklists by criteria
+  --sort: string@sort-completer-7 # Sort blocklists by criteria
 ]: nothing -> record<data: table<createdAt: string, description: string, dislikes: int, duration: int, id: int, likes: int, name: string, nsfw: bool, updatedAt: string, uuid: string, videoId: int, views: int>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/videos/blacklist" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"type": $type, "search": $search, "start": $start, "count": $count, "sort": $qp_sort} | compact)
+    query: ({"type": $type, "search": $search, "start": $start, "count": $count, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -5421,7 +5431,7 @@ export def "import-video" [
   --tags: list<string> # Video tags (maximum 5 tags each between 2 and 30 characters) (e.g. [framasoft, peertube])
   --thumbnailfile: string # Video thumbnail file (format: binary)
   --wait-transcoding: oneof<nothing, bool> # Whether or not we wait transcoding before publish the video
-]: any -> record<video: record<id: int, shortUUID: string, uuid: record>> {
+]: any -> record<video: record<id: int, shortUUID: string, uuid: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5430,8 +5440,8 @@ export def "import-video" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["previewfile" "thumbnailfile"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["previewfile" "thumbnailfile"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -5615,7 +5625,7 @@ export def "add-live" [
   --support: string # A text tell the audience how to support the creator (e.g. Please support our work on https://soutenir.framasoft.org/en/ <3)
   --tags: list<string> # Live video/replay tags (maximum 5 tags each between 2 and 30 characters)
   --thumbnailfile: string # Live video/replay thumbnail file (format: binary)
-]: any -> record<video: record<id: int, shortUUID: string, uuid: record>> {
+]: any -> record<video: record<id: int, shortUUID: string, uuid: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5624,8 +5634,8 @@ export def "add-live" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["previewfile" "thumbnailfile"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["previewfile" "thumbnailfile"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -5923,7 +5933,7 @@ export def "upload-legacy" [
   --thumbnailfile: string # Video thumbnail file (format: binary)
   --wait-transcoding: oneof<nothing, bool> # Whether or not we wait transcoding before publish the video
   videofile: string # Video file (format: binary)
-]: any -> record<video: record<id: int, shortUUID: string, uuid: record>> {
+]: any -> record<video: record<id: int, shortUUID: string, uuid: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5932,8 +5942,8 @@ export def "upload-legacy" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["previewfile" "thumbnailfile" "videofile"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["previewfile" "thumbnailfile" "videofile"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -5962,11 +5972,13 @@ export def "upload-resumable-cancel" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --upload-id: string # Created session id to proceed with. If you didn't send chunks in the last 12 hours, it is not valid anymore and the upload session has already been deleted with its data ;-)
-  --content-length: float # e.g. 0
+  --upload-id: string # Created session id to proceed with. If you didn't send chunks in the last 12 hours, it is not valid anymore and the upload session has already been deleted with its data ;-) (required)
+  --content-length: float # required, e.g. 0
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($upload_id == null) { error make --unspanned { msg: "required query parameter 'upload_id' missing: pass --upload-id" } }
+  if ($content_length == null) { error make --unspanned { msg: "required header parameter 'Content-Length' missing: pass --content-length" } }
   let qp = [(serialize-qp "upload_id" $upload_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/videos/upload-resumable" $qp $auth.query)
   let accept_val = "application/json"
@@ -6002,8 +6014,8 @@ export def "upload-resumable-init" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-upload-content-length: float # Number of bytes that will be uploaded in subsequent requests. Set this value to the size of the file you are uploading. (e.g. 2469036)
-  --x-upload-content-type: string # MIME type of the file that you are uploading. Depending on your instance settings, acceptable values might vary. (e.g. video/mp4)
+  --x-upload-content-length: float # Number of bytes that will be uploaded in subsequent requests. Set this value to the size of the file you are uploading. (required, e.g. 2469036)
+  --x-upload-content-type: string # MIME type of the file that you are uploading. Depending on your instance settings, acceptable values might vary. (required, format: mimetype, e.g. video/mp4)
   --category: int # category id of the video (see [/videos/categories](#operation/getCategories)) (e.g. 15)
   channel_id: int # Channel id that will contain this video (e.g. 3)
   --comments-enabled: oneof<nothing, bool> # Enable or disable comments for this video
@@ -6026,6 +6038,8 @@ export def "upload-resumable-init" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_upload_content_length == null) { error make --unspanned { msg: "required header parameter 'X-Upload-Content-Length' missing: pass --x-upload-content-length" } }
+  if ($x_upload_content_type == null) { error make --unspanned { msg: "required header parameter 'X-Upload-Content-Type' missing: pass --x-upload-content-type" } }
   let full_url = (build-url $base "/api/v1/videos/upload-resumable" $auth.query)
   let req_body = {"category": $category, "channelId": $channel_id, "commentsEnabled": $comments_enabled, "description": $description, "downloadEnabled": $download_enabled, "language": $language, "licence": $licence, "name": $name, "nsfw": $nsfw, "originallyPublishedAt": $originally_published_at, "previewfile": $previewfile, "privacy": $privacy, "scheduleUpdate": $schedule_update, "support": $support, "tags": $tags, "thumbnailfile": $thumbnailfile, "waitTranscoding": $wait_transcoding, "filename": $filename} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -6061,14 +6075,17 @@ export def "upload-resumable" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --upload-id: string # Created session id to proceed with. If you didn't send chunks in the last hour, it is not valid anymore and you need to initialize a new upload.
-  --content-range: string # Specifies the bytes in the file that the request is uploading. For example, a value of `bytes 0-262143/1000000` shows that the request is sending the first 262144 bytes (256 x 1024) in a 2,469,036 byte file. (e.g. bytes 0-262143/2469036)
-  --content-length: float # Size of the chunk that the request is sending. Remember that larger chunks are more efficient. PeerTube's web client uses chunks varying from 1048576 bytes (~1MB) and increases or reduces size depending on connection health. (e.g. 262144)
+  --upload-id: string # Created session id to proceed with. If you didn't send chunks in the last hour, it is not valid anymore and you need to initialize a new upload. (required)
+  --content-range: string # Specifies the bytes in the file that the request is uploading. For example, a value of `bytes 0-262143/1000000` shows that the request is sending the first 262144 bytes (256 x 1024) in a 2,469,036 byte file. (required, e.g. bytes 0-262143/2469036)
+  --content-length: float # Size of the chunk that the request is sending. Remember that larger chunks are more efficient. PeerTube's web client uses chunks varying from 1048576 bytes (~1MB) and increases or reduces size depending on connection health. (required, e.g. 262144)
   --body: string
-]: any -> record<video: record<id: int, shortUUID: string, uuid: record>> {
+]: any -> record<video: record<id: int, shortUUID: string, uuid: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($upload_id == null) { error make --unspanned { msg: "required query parameter 'upload_id' missing: pass --upload-id" } }
+  if ($content_range == null) { error make --unspanned { msg: "required header parameter 'Content-Range' missing: pass --content-range" } }
+  if ($content_length == null) { error make --unspanned { msg: "required header parameter 'Content-Length' missing: pass --content-length" } }
   let qp = [(serialize-qp "upload_id" $upload_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/videos/upload-resumable" $qp $auth.query)
   let req_body = $body
@@ -6142,7 +6159,7 @@ export def "get-video" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: record, updatedAt: string, url: string, description: string, displayName: string, userId: record>, blacklisted: bool, blacklistedReason: string, category: record<id: int, label: string>, channel: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: record, updatedAt: string, url: string, banners: list<record>, description: string, displayName: string, isLocal: bool, ownerAccount: record<id: int, uuid: string>, support: string>, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: record, isLive: bool, isLocal: bool, language: record<id: string, label: string>, licence: record<id: int, label: string>, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record<id: int, label: string>, publishedAt: string, scheduledUpdate: record<privacy: int, updateAt: string>, shortUUID: record, state: record<id: int, label: string>, thumbnailPath: string, updatedAt: string, userHistory: record<currentTime: int>, uuid: record, views: int, waitTranscoding: bool, commentsEnabled: bool, descriptionPath: string, downloadEnabled: bool, files: table<fileDownloadUrl: string, fileUrl: string, fps: float, id: int, magnetUri: string, metadataUrl: string, resolution: record, size: int, torrentDownloadUrl: string, torrentUrl: string>, streamingPlaylists: table<id: int, type: int, files: list, playlistUrl: string, redundancies: list, segmentsSha256Url: string>, support: string, tags: list<string>, trackerUrls: list<string>, viewers: int> {
+]: nothing -> record<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, blacklisted: bool, blacklistedReason: string, category: record<id: int, label: string>, channel: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: list<record>, description: string, displayName: string, isLocal: bool, ownerAccount: record<id: int, uuid: string>, support: string>, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record<id: string, label: string>, licence: record<id: int, label: string>, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record<id: int, label: string>, publishedAt: string, scheduledUpdate: record<privacy: int, updateAt: string>, shortUUID: string, state: record<id: int, label: string>, thumbnailPath: string, updatedAt: string, userHistory: record<currentTime: int>, uuid: string, views: int, waitTranscoding: bool, commentsEnabled: bool, descriptionPath: string, downloadEnabled: bool, files: table<fileDownloadUrl: string, fileUrl: string, fps: float, id: int, magnetUri: string, metadataUrl: string, resolution: record, size: int, torrentDownloadUrl: string, torrentUrl: string>, streamingPlaylists: table<id: int, type: int, files: list, playlistUrl: string, redundancies: list, segmentsSha256Url: string>, support: string, tags: list<string>, trackerUrls: list<string>, viewers: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6205,8 +6222,8 @@ export def "put-video" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["previewfile" "thumbnailfile"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["previewfile" "thumbnailfile"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "put"
     url: $full_url
@@ -6395,8 +6412,8 @@ export def "add-video-caption" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["captionfile"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["captionfile"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "put"
     url: $full_url
@@ -6427,19 +6444,19 @@ export def "get-api-v1-videos-id-comment-threads" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
-  --qp-sort: string@sort-completer-8 # Sort comments by criteria
-]: nothing -> record<data: table<account: record, createdAt: string, deletedAt: string, id: int, inReplyToCommentId: record, isDeleted: bool, text: string, threadId: int, totalReplies: int, totalRepliesFromVideoAuthor: int, updatedAt: string, url: string, videoId: int>, total: int> {
+  --sort: string@sort-completer-8 # Sort comments by criteria
+]: nothing -> record<data: table<account: record, createdAt: string, deletedAt: string, id: int, inReplyToCommentId: int, isDeleted: bool, text: string, threadId: int, totalReplies: int, totalRepliesFromVideoAuthor: int, updatedAt: string, url: string, videoId: int>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/comment-threads") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"start": $start, "count": $count, "sort": $qp_sort} | compact)
+    query: ({"start": $start, "count": $count, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -6464,8 +6481,8 @@ export def "post-api-v1-videos-id-comment-threads" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  text: any # format: markdown
-]: any -> record<comment: record<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: record, updatedAt: string, url: string, description: string, displayName: string, userId: record>, createdAt: string, deletedAt: string, id: int, inReplyToCommentId: record, isDeleted: bool, text: string, threadId: int, totalReplies: int, totalRepliesFromVideoAuthor: int, updatedAt: string, url: string, videoId: int>> {
+  text: string # Text of the comment (format: markdown)
+]: any -> record<comment: record<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, createdAt: string, deletedAt: string, id: int, inReplyToCommentId: int, isDeleted: bool, text: string, threadId: int, totalReplies: int, totalRepliesFromVideoAuthor: int, updatedAt: string, url: string, videoId: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6504,7 +6521,7 @@ export def "get-api-v1-videos-id-comment-threads-thread-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<children: list<any>, comment: record<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: record, updatedAt: string, url: string, description: string, displayName: string, userId: record>, createdAt: string, deletedAt: string, id: int, inReplyToCommentId: record, isDeleted: bool, text: string, threadId: int, totalReplies: int, totalRepliesFromVideoAuthor: int, updatedAt: string, url: string, videoId: int>> {
+]: nothing -> record<children: list<any>, comment: record<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, createdAt: string, deletedAt: string, id: int, inReplyToCommentId: int, isDeleted: bool, text: string, threadId: int, totalReplies: int, totalRepliesFromVideoAuthor: int, updatedAt: string, url: string, videoId: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6578,8 +6595,8 @@ export def "post-api-v1-videos-id-comments-comment-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  text: any # format: markdown
-]: any -> record<comment: record<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: record, updatedAt: string, url: string, description: string, displayName: string, userId: record>, createdAt: string, deletedAt: string, id: int, inReplyToCommentId: record, isDeleted: bool, text: string, threadId: int, totalReplies: int, totalRepliesFromVideoAuthor: int, updatedAt: string, url: string, videoId: int>> {
+  text: string # Text of the comment (format: markdown)
+]: any -> record<comment: record<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, createdAt: string, deletedAt: string, id: int, inReplyToCommentId: int, isDeleted: bool, text: string, threadId: int, totalReplies: int, totalRepliesFromVideoAuthor: int, updatedAt: string, url: string, videoId: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6904,7 +6921,7 @@ export def "get-api-v1-videos-id-stats-retention" [
 # GET /api/v1/videos/{id}/stats/timeseries/{metric}
 export def "get-api-v1-videos-id-stats-timeseries-metric" [
   id: string
-  metric: string
+  metric: string@metric-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7179,7 +7196,7 @@ export def "del-video-web-torrent" [
 # GET /feeds/subscriptions.{format}
 # operationId: getSyndicatedSubscriptionVideos
 export def "get-syndicated-subscription-videos" [
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7190,9 +7207,9 @@ export def "get-syndicated-subscription-videos" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --account-id: string # limit listing to a specific account
-  --qp-token: string # private token allowing access
-  --qp-sort: string # Sort column (e.g. -createdAt)
+  --account-id: string # limit listing to a specific account (required)
+  --qp-token: string # private token allowing access (required)
+  --sort: string # Sort column (e.g. -createdAt)
   --nsfw: string@nsfw-completer # whether to include nsfw videos, if any
   --is-local: oneof<nothing, bool> # **PeerTube >= 4.0** Display only local or remote videos
   --include: int@include-completer # **PeerTube >= 4.0** Include additional videos in results (can be combined using bitwise or operator) - `0` NONE - `1` NOT_PUBLISHED_STATE - `2` BLACKLISTED - `4` BLOCKED_OWNER - `8` FILES
@@ -7203,14 +7220,16 @@ export def "get-syndicated-subscription-videos" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  let qp = [(serialize-qp "accountId" $account_id "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "nsfw" $nsfw "scalar") (serialize-qp "isLocal" $is_local "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "privacyOneOf" $privacy_one_of "scalar") (serialize-qp "hasHLSFiles" $has_hls_files "scalar") (serialize-qp "hasWebtorrentFiles" $has_webtorrent_files "scalar")] | flatten | str join "&"
+  if ($account_id == null) { error make --unspanned { msg: "required query parameter 'accountId' missing: pass --account-id" } }
+  if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
+  let qp = [(serialize-qp "accountId" $account_id "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "nsfw" $nsfw "scalar") (serialize-qp "isLocal" $is_local "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "privacyOneOf" $privacy_one_of "scalar") (serialize-qp "hasHLSFiles" $has_hls_files "scalar") (serialize-qp "hasWebtorrentFiles" $has_webtorrent_files "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/feeds/subscriptions.{format}") $qp $auth.query)
   let accept_val = ($accept | default "application/atom+xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"accountId": $account_id, "token": $qp_token, "sort": $qp_sort, "nsfw": $nsfw, "isLocal": $is_local, "include": $include, "privacyOneOf": $privacy_one_of, "hasHLSFiles": $has_hls_files, "hasWebtorrentFiles": $has_webtorrent_files} | compact)
+    query: ({"accountId": $account_id, "token": $qp_token, "sort": $sort, "nsfw": $nsfw, "isLocal": $is_local, "include": $include, "privacyOneOf": $privacy_one_of, "hasHLSFiles": $has_hls_files, "hasWebtorrentFiles": $has_webtorrent_files} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -7226,7 +7245,7 @@ export def "get-syndicated-subscription-videos" [
 # GET /feeds/video-comments.{format}
 # operationId: getSyndicatedComments
 export def "get-syndicated-comments" [
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7269,7 +7288,7 @@ export def "get-syndicated-comments" [
 # GET /feeds/videos.{format}
 # operationId: getSyndicatedVideos
 export def "get-syndicated-videos" [
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7284,7 +7303,7 @@ export def "get-syndicated-videos" [
   --account-name: string # limit listing to a specific account
   --video-channel-id: string # limit listing to a specific video channel
   --video-channel-name: string # limit listing to a specific video channel
-  --qp-sort: string # Sort column (e.g. -createdAt)
+  --sort: string # Sort column (e.g. -createdAt)
   --nsfw: string@nsfw-completer # whether to include nsfw videos, if any
   --is-local: oneof<nothing, bool> # **PeerTube >= 4.0** Display only local or remote videos
   --include: int@include-completer # **PeerTube >= 4.0** Include additional videos in results (can be combined using bitwise or operator) - `0` NONE - `1` NOT_PUBLISHED_STATE - `2` BLACKLISTED - `4` BLOCKED_OWNER - `8` FILES
@@ -7295,14 +7314,14 @@ export def "get-syndicated-videos" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
-  let qp = [(serialize-qp "accountId" $account_id "scalar") (serialize-qp "accountName" $account_name "scalar") (serialize-qp "videoChannelId" $video_channel_id "scalar") (serialize-qp "videoChannelName" $video_channel_name "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "nsfw" $nsfw "scalar") (serialize-qp "isLocal" $is_local "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "privacyOneOf" $privacy_one_of "scalar") (serialize-qp "hasHLSFiles" $has_hls_files "scalar") (serialize-qp "hasWebtorrentFiles" $has_webtorrent_files "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "accountId" $account_id "scalar") (serialize-qp "accountName" $account_name "scalar") (serialize-qp "videoChannelId" $video_channel_id "scalar") (serialize-qp "videoChannelName" $video_channel_name "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "nsfw" $nsfw "scalar") (serialize-qp "isLocal" $is_local "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "privacyOneOf" $privacy_one_of "scalar") (serialize-qp "hasHLSFiles" $has_hls_files "scalar") (serialize-qp "hasWebtorrentFiles" $has_webtorrent_files "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/feeds/videos.{format}") $qp $auth.query)
   let accept_val = ($accept | default "application/atom+xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"accountId": $account_id, "accountName": $account_name, "videoChannelId": $video_channel_id, "videoChannelName": $video_channel_name, "sort": $qp_sort, "nsfw": $nsfw, "isLocal": $is_local, "include": $include, "privacyOneOf": $privacy_one_of, "hasHLSFiles": $has_hls_files, "hasWebtorrentFiles": $has_webtorrent_files} | compact)
+    query: ({"accountId": $account_id, "accountName": $account_name, "videoChannelId": $video_channel_id, "videoChannelName": $video_channel_name, "sort": $sort, "nsfw": $nsfw, "isLocal": $is_local, "include": $include, "privacyOneOf": $privacy_one_of, "hasHLSFiles": $has_hls_files, "hasWebtorrentFiles": $has_webtorrent_files} | compact)
     headers: $auth.headers
     body: null
     content_type: null

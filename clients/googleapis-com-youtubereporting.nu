@@ -1,4 +1,4 @@
-# Auto-generated client for YouTube Reporting API vv1
+# Auto-generated client for YouTube Reporting API v1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/youtubereporting/v1/openapi.json
 # Auth: --token flag or $env.YOUTUBE_REPORTING_API_TOKEN
 
@@ -12,20 +12,10 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
-}
-
-# Merge multiple auth records (AND-form security: every scheme must be sent).
-def merge-auth [parts: list]: nothing -> record {
-  let active = ($parts | where {|p| $p.location != "none" })
-  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
-  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
-  let locs = ($active | each {|p| $p.location } | uniq)
-  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
-  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
 # Serialize a single query parameter based on collection style
@@ -149,8 +139,8 @@ export def commands []: nothing -> table {
 # operationId: youtubereporting.jobs.list
 export def "youtubereporting-jobs-list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -173,7 +163,7 @@ export def "youtubereporting-jobs-list" [
   --page-size: int # Requested page size. Server may return fewer jobs than requested. If unspecified, server will pick an appropriate default.
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of ListReportTypesResponse.next_page_token returned in response to the previous call to the `ListJobs` method.
 ]: nothing -> record<jobs: table<createTime: string, expireTime: string, id: string, name: string, reportTypeId: string, systemManaged: bool>, nextPageToken: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o YOUTUBE_REPORTING_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o YOUTUBE_REPORTING_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "includeSystemManaged" $include_system_managed "scalar") (serialize-qp "onBehalfOfContentOwner" $on_behalf_of_content_owner "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/jobs" $qp $auth.query)
@@ -199,8 +189,8 @@ export def "youtubereporting-jobs-list" [
 # operationId: youtubereporting.jobs.create
 export def "youtubereporting-jobs-create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -227,7 +217,7 @@ export def "youtubereporting-jobs-create" [
   --system-managed: oneof<nothing, bool> # True if this a system-managed job that cannot be modified by the user; otherwise false.
 ]: any -> record<createTime: string, expireTime: string, id: string, name: string, reportTypeId: string, systemManaged: bool> {
   let input = $in
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o YOUTUBE_REPORTING_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o YOUTUBE_REPORTING_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "onBehalfOfContentOwner" $on_behalf_of_content_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/jobs" $qp $auth.query)
@@ -256,8 +246,8 @@ export def "youtubereporting-jobs-create" [
 export def "youtubereporting-jobs-delete" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -277,7 +267,7 @@ export def "youtubereporting-jobs-delete" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --on-behalf-of-content-owner: string # The content owner's external ID on which behalf the user is acting on. If not set, the user is acting for himself (his own channel).
 ]: nothing -> record {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o YOUTUBE_REPORTING_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o YOUTUBE_REPORTING_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "onBehalfOfContentOwner" $on_behalf_of_content_owner "scalar")] | flatten | str join "&"
@@ -305,8 +295,8 @@ export def "youtubereporting-jobs-delete" [
 export def "youtubereporting-jobs-get" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -326,7 +316,7 @@ export def "youtubereporting-jobs-get" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --on-behalf-of-content-owner: string # The content owner's external ID on which behalf the user is acting on. If not set, the user is acting for himself (his own channel).
 ]: nothing -> record<createTime: string, expireTime: string, id: string, name: string, reportTypeId: string, systemManaged: bool> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o YOUTUBE_REPORTING_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o YOUTUBE_REPORTING_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "onBehalfOfContentOwner" $on_behalf_of_content_owner "scalar")] | flatten | str join "&"
@@ -354,8 +344,8 @@ export def "youtubereporting-jobs-get" [
 export def "youtubereporting-jobs-reports-list" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -380,7 +370,7 @@ export def "youtubereporting-jobs-reports-list" [
   --start-time-at-or-after: string # If set, only reports whose start time is greater than or equal the specified date/time are returned.
   --start-time-before: string # If set, only reports whose start time is smaller than the specified date/time are returned.
 ]: nothing -> record<nextPageToken: string, reports: table<createTime: string, downloadUrl: string, endTime: string, id: string, jobExpireTime: string, jobId: string, startTime: string>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o YOUTUBE_REPORTING_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o YOUTUBE_REPORTING_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "onBehalfOfContentOwner" $on_behalf_of_content_owner "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "startTimeAtOrAfter" $start_time_at_or_after "scalar") (serialize-qp "startTimeBefore" $start_time_before "scalar")] | flatten | str join "&"
@@ -409,8 +399,8 @@ export def "youtubereporting-jobs-reports-get" [
   job_id: string
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -430,7 +420,7 @@ export def "youtubereporting-jobs-reports-get" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --on-behalf-of-content-owner: string # The content owner's external ID on which behalf the user is acting on. If not set, the user is acting for himself (his own channel).
 ]: nothing -> record<createTime: string, downloadUrl: string, endTime: string, id: string, jobExpireTime: string, jobId: string, startTime: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o YOUTUBE_REPORTING_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o YOUTUBE_REPORTING_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'reportId' must be non-empty" } }
@@ -459,8 +449,8 @@ export def "youtubereporting-jobs-reports-get" [
 export def "youtubereporting-media-download" [
   resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -479,7 +469,7 @@ export def "youtubereporting-media-download" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<algorithm: string, bigstoreObjectRef: string, blobRef: string, blobstore2Info: record<blobGeneration: string, blobId: string, downloadReadHandle: string, readToken: string, uploadMetadataContainer: string>, compositeMedia: table<blobRef: string, blobstore2Info: record, cosmoBinaryReference: string, crc32cHash: int, inline: string, length: string, md5Hash: string, objectId: record, path: string, referenceType: string, sha1Hash: string>, contentType: string, contentTypeInfo: record<bestGuess: string, fromBytes: string, fromFileName: string, fromHeader: string, fromUrlPath: string>, cosmoBinaryReference: string, crc32cHash: int, diffChecksumsResponse: record<checksumsLocation: record<blobRef: string, blobstore2Info: record, cosmoBinaryReference: string, crc32cHash: int, inline: string, length: string, md5Hash: string, objectId: record, path: string, referenceType: string, sha1Hash: string>, chunkSizeBytes: string, objectLocation: record<blobRef: string, blobstore2Info: record, cosmoBinaryReference: string, crc32cHash: int, inline: string, length: string, md5Hash: string, objectId: record, path: string, referenceType: string, sha1Hash: string>, objectSizeBytes: string, objectVersion: string>, diffDownloadResponse: record<objectLocation: record<blobRef: string, blobstore2Info: record, cosmoBinaryReference: string, crc32cHash: int, inline: string, length: string, md5Hash: string, objectId: record, path: string, referenceType: string, sha1Hash: string>>, diffUploadRequest: record<checksumsInfo: record<blobRef: string, blobstore2Info: record, cosmoBinaryReference: string, crc32cHash: int, inline: string, length: string, md5Hash: string, objectId: record, path: string, referenceType: string, sha1Hash: string>, objectInfo: record<blobRef: string, blobstore2Info: record, cosmoBinaryReference: string, crc32cHash: int, inline: string, length: string, md5Hash: string, objectId: record, path: string, referenceType: string, sha1Hash: string>, objectVersion: string>, diffUploadResponse: record<objectVersion: string, originalObject: record<blobRef: string, blobstore2Info: record, cosmoBinaryReference: string, crc32cHash: int, inline: string, length: string, md5Hash: string, objectId: record, path: string, referenceType: string, sha1Hash: string>>, diffVersionResponse: record<objectSizeBytes: string, objectVersion: string>, downloadParameters: record<allowGzipCompression: bool, ignoreRange: bool>, filename: string, hash: string, hashVerified: bool, inline: string, isPotentialRetry: bool, length: string, md5Hash: string, mediaId: string, objectId: record<bucketName: string, generation: string, objectName: string>, path: string, referenceType: string, sha1Hash: string, sha256Hash: string, timestamp: string, token: string> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o YOUTUBE_REPORTING_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o YOUTUBE_REPORTING_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -506,8 +496,8 @@ export def "youtubereporting-media-download" [
 # operationId: youtubereporting.reportTypes.list
 export def "youtubereporting-report-types-list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token-oauth2: string # Auth token for Oauth2 (Authorization)
-  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -530,7 +520,7 @@ export def "youtubereporting-report-types-list" [
   --page-size: int # Requested page size. Server may return fewer report types than requested. If unspecified, server will pick an appropriate default.
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of ListReportTypesResponse.next_page_token returned in response to the previous call to the `ListReportTypes` method.
 ]: nothing -> record<nextPageToken: string, reportTypes: table<deprecateTime: string, id: string, name: string, systemManaged: bool>> {
-  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o YOUTUBE_REPORTING_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o YOUTUBE_REPORTING_API_OAUTH2C_TOKEN | default "")) "bearer")])
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "includeSystemManaged" $include_system_managed "scalar") (serialize-qp "onBehalfOfContentOwner" $on_behalf_of_content_owner "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/reportTypes" $qp $auth.query)

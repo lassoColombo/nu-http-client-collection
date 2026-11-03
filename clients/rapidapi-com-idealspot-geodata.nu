@@ -131,11 +131,13 @@ export def "fetch-available-insights" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-rapid-api-key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata
-  --x-rapid-api-host: string
+  --x-rapid-api-key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata (required)
+  --x-rapid-api-host: string # required
 ]: nothing -> record<data: table<description: string, id: string, name: string, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($x_rapid_api_key == null) { error make --unspanned { msg: "required header parameter 'X-RapidAPI-Key' missing: pass --x-rapid-api-key" } }
+  if ($x_rapid_api_host == null) { error make --unspanned { msg: "required header parameter 'X-RapidAPI-Host' missing: pass --x-rapid-api-host" } }
   let full_url = (build-url $base "/data/insights" $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -170,12 +172,14 @@ export def "fetch-insight-query-parameters" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-rapid-api-key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata
-  --x-rapid-api-host: string
+  --x-rapid-api-key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata (required)
+  --x-rapid-api-host: string # required
 ]: nothing -> record<data: record<description: string, groups: list<string>, id: string, name: string, parameters: record<category: list>, periods: list<string>, slug: string, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($insight_id | is-empty) { error make --unspanned { msg: "path parameter 'insight_id:' must be non-empty" } }
+  if ($x_rapid_api_key == null) { error make --unspanned { msg: "required header parameter 'X-RapidAPI-Key' missing: pass --x-rapid-api-key" } }
+  if ($x_rapid_api_host == null) { error make --unspanned { msg: "required header parameter 'X-RapidAPI-Host' missing: pass --x-rapid-api-host" } }
   let full_url = (build-url $base ({insight_id: (encode-path-segment $insight_id)} | format pattern "/data/insights/{insight_id}") $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -210,14 +214,18 @@ export def "query-insightat-location" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --version: string # (Required) Insight version. Insight versions are incremented when a response format changes in any way, including the addition of new groups. Old versions are retained, unmodified, for backwards compatibility.
-  --location: string # (Required) Represents a buffer, region, or custom polygon specification. Accepts the `Location` model (as a `Buffer`, `Region`, or `Custom Polygon`) formatted as a JSON string. Multiple `location` query parameters are allowed. NOTE: When requesting multiple locations, you must include brackets(i.e. `?location[]=...&location[]=...`). If not included, only the last location will be used. For more detail, see https://idealspot.gitlab.io/developer-docs/#location
-  --x-rapid-api-key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata
-  --x-rapid-api-host: string
+  --version: string # (Required) Insight version. Insight versions are incremented when a response format changes in any way, including the addition of new groups. Old versions are retained, unmodified, for backwards compatibility. (required)
+  --location: string # (Required) Represents a buffer, region, or custom polygon specification. Accepts the `Location` model (as a `Buffer`, `Region`, or `Custom Polygon`) formatted as a JSON string. Multiple `location` query parameters are allowed. NOTE: When requesting multiple locations, you must include brackets(i.e. `?location[]=...&location[]=...`). If not included, only the last location will be used. For more detail, see https://idealspot.gitlab.io/developer-docs/#location (required)
+  --x-rapid-api-key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata (required)
+  --x-rapid-api-host: string # required
 ]: nothing -> record<data: table<data: list, location: record, location_index: int, metadata: record>> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($insight_id | is-empty) { error make --unspanned { msg: "path parameter 'insight_id:' must be non-empty" } }
+  if ($version == null) { error make --unspanned { msg: "required query parameter 'version' missing: pass --version" } }
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'location[]' missing: pass --location" } }
+  if ($x_rapid_api_key == null) { error make --unspanned { msg: "required header parameter 'X-RapidAPI-Key' missing: pass --x-rapid-api-key" } }
+  if ($x_rapid_api_host == null) { error make --unspanned { msg: "required header parameter 'X-RapidAPI-Host' missing: pass --x-rapid-api-host" } }
   let qp = [(serialize-qp "version" $version "scalar") (serialize-qp "location[]" $location "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({insight_id: (encode-path-segment $insight_id)} | format pattern "/data/insights/{insight_id}/query") $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"
@@ -252,12 +260,15 @@ export def "fetch-geometries" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --location: string # (Required) Represents a buffer, region, or custom polygon specification. Accepts the `Location` model (as a `Buffer`, `Region`, or `Custom Polygon`) formatted as a JSON string. Multiple `location` query parameters are allowed. NOTE: When requesting multiple locations, you must include brackets(i.e. `?location[]=...&location[]=...`). If not included, only the last location will be used.
-  --x-rapid-api-key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata
-  --x-rapid-api-host: string
+  --location: string # (Required) Represents a buffer, region, or custom polygon specification. Accepts the `Location` model (as a `Buffer`, `Region`, or `Custom Polygon`) formatted as a JSON string. Multiple `location` query parameters are allowed. NOTE: When requesting multiple locations, you must include brackets(i.e. `?location[]=...&location[]=...`). If not included, only the last location will be used. (required)
+  --x-rapid-api-key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata (required)
+  --x-rapid-api-host: string # required
 ]: nothing -> record<data: record<features: list<record>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
+  if ($location == null) { error make --unspanned { msg: "required query parameter 'location[]' missing: pass --location" } }
+  if ($x_rapid_api_key == null) { error make --unspanned { msg: "required header parameter 'X-RapidAPI-Key' missing: pass --x-rapid-api-key" } }
+  if ($x_rapid_api_host == null) { error make --unspanned { msg: "required header parameter 'X-RapidAPI-Host' missing: pass --x-rapid-api-host" } }
   let qp = [(serialize-qp "location[]" $location "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/geometries/geometry" $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"
@@ -294,13 +305,15 @@ export def "fetch-administrative-regionsusing-lat-lng" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-rapid-api-key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata
-  --x-rapid-api-host: string
+  --x-rapid-api-key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata (required)
+  --x-rapid-api-host: string # required
 ]: nothing -> record<data: table<geometry: record, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($latitude | is-empty) { error make --unspanned { msg: "path parameter 'latitude' must be non-empty" } }
   if ($longitude | is-empty) { error make --unspanned { msg: "path parameter 'longitude' must be non-empty" } }
+  if ($x_rapid_api_key == null) { error make --unspanned { msg: "required header parameter 'X-RapidAPI-Key' missing: pass --x-rapid-api-key" } }
+  if ($x_rapid_api_host == null) { error make --unspanned { msg: "required header parameter 'X-RapidAPI-Host' missing: pass --x-rapid-api-host" } }
   let full_url = (build-url $base ({latitude: (encode-path-segment $latitude), longitude: (encode-path-segment $longitude)} | format pattern "/geometries/regions/intersecting/{latitude}/{longitude}") $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -335,12 +348,14 @@ export def "vehicle-traffic-countsfor-road-segment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-rapid-api-key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata
-  --x-rapid-api-host: string
+  --x-rapid-api-key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata (required)
+  --x-rapid-api-host: string # required
 ]: nothing -> record<data: table<data: list, metadata: record, roadsegment: record, stats: record>> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($segment_id | is-empty) { error make --unspanned { msg: "path parameter 'segment_id' must be non-empty" } }
+  if ($x_rapid_api_key == null) { error make --unspanned { msg: "required header parameter 'X-RapidAPI-Key' missing: pass --x-rapid-api-key" } }
+  if ($x_rapid_api_host == null) { error make --unspanned { msg: "required header parameter 'X-RapidAPI-Host' missing: pass --x-rapid-api-host" } }
   let full_url = (build-url $base ({segment_id: (encode-path-segment $segment_id)} | format pattern "/traffic/counts/{segment_id}") $auth.query)
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -376,14 +391,17 @@ export def "fetch-nearest-road-segments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --n: int # Number of road segments to return (between 1 and 20) (format: int32)
-  --x-rapid-api-key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata
-  --x-rapid-api-host: string
+  --n: int # Number of road segments to return (between 1 and 20) (required, format: int32)
+  --x-rapid-api-key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata (required)
+  --x-rapid-api-host: string # required
 ]: nothing -> record<data: record<crs: record<properties: record, type: string>, features: list<record>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($latitude | is-empty) { error make --unspanned { msg: "path parameter 'latitude' must be non-empty" } }
   if ($longitude | is-empty) { error make --unspanned { msg: "path parameter 'longitude' must be non-empty" } }
+  if ($n == null) { error make --unspanned { msg: "required query parameter 'n' missing: pass --n" } }
+  if ($x_rapid_api_key == null) { error make --unspanned { msg: "required header parameter 'X-RapidAPI-Key' missing: pass --x-rapid-api-key" } }
+  if ($x_rapid_api_host == null) { error make --unspanned { msg: "required header parameter 'X-RapidAPI-Host' missing: pass --x-rapid-api-host" } }
   let qp = [(serialize-qp "n" $n "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({latitude: (encode-path-segment $latitude), longitude: (encode-path-segment $longitude)} | format pattern "/traffic/roads/nearest/{latitude}/{longitude}") $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"

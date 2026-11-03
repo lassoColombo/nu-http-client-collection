@@ -1,4 +1,4 @@
-# Auto-generated client for Web Fonts Developer API vv1
+# Auto-generated client for Web Fonts Developer API v1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/webfonts/v1/openapi.json
 # Auth: --token flag or $env.WEB_FONTS_DEVELOPER_API_TOKEN
 
@@ -148,19 +148,19 @@ export def "webfonts-webfonts-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --capability: list<string> # Controls the font urls in `Webfont.files`, by default, static ttf fonts are sent.
   --family: list<string> # Filters by Webfont.family, using literal match. If not set, returns all families
-  --qp-sort: string@sort-completer # Enables sorting of the list.
+  --sort: string@sort-completer # Enables sorting of the list.
   --subset: string # Filters by Webfont.subset, if subset is found in Webfont.subsets. If not set, returns all families.
 ]: nothing -> record<items: table<axes: list, category: string, family: string, files: record, kind: string, lastModified: string, menu: string, subsets: list, variants: list, version: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "capability" $capability "multi") (serialize-qp "family" $family "multi") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "subset" $subset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "capability" $capability "multi") (serialize-qp "family" $family "multi") (serialize-qp "sort" $sort "scalar") (serialize-qp "subset" $subset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/webfonts" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "capability": $capability, "family": $family, "sort": $qp_sort, "subset": $subset} | compact)
+    query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "capability": $capability, "family": $family, "sort": $sort, "subset": $subset} | compact)
     headers: $auth.headers
     body: null
     content_type: null

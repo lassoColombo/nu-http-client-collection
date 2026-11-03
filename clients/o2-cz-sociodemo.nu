@@ -132,13 +132,16 @@ export def "age" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --age-group: string # age-group specification (1: 8-18, 2: 19-25, 3: 26-35, 4: 36-55, 5: 56+) (e.g. 2)
-  --occurence-type: string # occurence type in the basic residential unit (1 - transit, 2 - visit) (e.g. 1)
-  --hour: string # time interval for the count aggregation (from 0 to 23) (e.g. 10)
+  --age-group: string # age-group specification (1: 8-18, 2: 19-25, 3: 26-35, 4: 36-55, 5: 56+) (required, e.g. 2)
+  --occurence-type: string # occurence type in the basic residential unit (1 - transit, 2 - visit) (required, e.g. 1)
+  --hour: string # time interval for the count aggregation (from 0 to 23) (required, e.g. 10)
 ]: nothing -> record<count: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($age_group == null) { error make --unspanned { msg: "required query parameter 'ageGroup' missing: pass --age-group" } }
+  if ($occurence_type == null) { error make --unspanned { msg: "required query parameter 'occurenceType' missing: pass --occurence-type" } }
+  if ($hour == null) { error make --unspanned { msg: "required query parameter 'hour' missing: pass --hour" } }
   let qp = [(serialize-qp "ageGroup" $age_group "scalar") (serialize-qp "occurenceType" $occurence_type "scalar") (serialize-qp "hour" $hour "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({location: (encode-path-segment $location)} | format pattern "/age/{location}") $qp $auth.query)
   let accept_val = "application/json"
@@ -172,13 +175,16 @@ export def "gender" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --g: string # gender specification (1 - male, 2 - female) (e.g. 1)
-  --occurence-type: string # occurence type in the basic residential unit (1 - transit, 2 - visit) (e.g. 1)
-  --hour: string # time interval for the count aggregation (from 0 to 23) (e.g. 10)
+  --g: string # gender specification (1 - male, 2 - female) (required, e.g. 1)
+  --occurence-type: string # occurence type in the basic residential unit (1 - transit, 2 - visit) (required, e.g. 1)
+  --hour: string # time interval for the count aggregation (from 0 to 23) (required, e.g. 10)
 ]: nothing -> record<count: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($g == null) { error make --unspanned { msg: "required query parameter 'g' missing: pass --g" } }
+  if ($occurence_type == null) { error make --unspanned { msg: "required query parameter 'occurenceType' missing: pass --occurence-type" } }
+  if ($hour == null) { error make --unspanned { msg: "required query parameter 'hour' missing: pass --hour" } }
   let qp = [(serialize-qp "g" $g "scalar") (serialize-qp "occurenceType" $occurence_type "scalar") (serialize-qp "hour" $hour "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({location: (encode-path-segment $location)} | format pattern "/gender/{location}") $qp $auth.query)
   let accept_val = "application/json"

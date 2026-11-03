@@ -112,7 +112,7 @@ def sort-by-completer-10 [] { ["cohort" "mir" "sample_type" "tcga_participant_ba
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "all" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-analyses-copy-number-genes-all" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 #
 # GET /Analyses/CopyNumber/Genes/All
 # operationId: All
-export def "all" [
+export def "get-analyses-copy-number-genes-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -539,7 +539,7 @@ export def "m-rna-seq-quartiles" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --format: string@format-completer # Format of result. (default: json)
-  --gene: string # Enter a single gene name.
+  --gene: string # Enter a single gene name. (required)
   --cohort: list<string> # Narrow search to one or more TCGA disease cohorts from the scrollable list.
   --protocol: list<string> # Narrow search to one or more sample characterization protocols from the scrollable list.
   --sample-type: list<string> # For which type of sample(s) should quartiles be computed?
@@ -547,6 +547,7 @@ export def "m-rna-seq-quartiles" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($gene == null) { error make --unspanned { msg: "required query parameter 'gene' missing: pass --gene" } }
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "gene" $gene "scalar") (serialize-qp "cohort" $cohort "csv") (serialize-qp "protocol" $protocol "csv") (serialize-qp "sample_type" $sample_type "csv") (serialize-qp "Exclude" $exclude "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/Analyses/mRNASeq/Quartiles" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
@@ -1040,7 +1041,7 @@ export def "barcode" [
 # GET /Metadata/SampleType/Code/{code}
 # operationId: Code
 export def "code" [
-  code: list
+  code: list<string>
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1079,7 +1080,7 @@ export def "code" [
 # GET /Metadata/SampleType/ShortLetterCode/{short_letter_code}
 # operationId: ShortLetterCode
 export def "short-letter-code" [
-  short_letter_code: list
+  short_letter_code: list<string>
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

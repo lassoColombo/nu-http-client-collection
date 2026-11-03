@@ -12,8 +12,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-api-key" => { {scheme: $scheme, headers: {X-API-Key: $token_val}, query: "", location: "header"} }
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "x-api-key" => { {scheme: $scheme, headers: {"X-API-Key": $token_val}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -414,20 +414,20 @@ export def "content-search-content-with-text" [
   --currentpage: int # Page number for the search results, starting with page 1. (format: int32)
   --head: oneof<nothing, bool> # Not used.
   --searchtext: string # Word or phrase for the search.
-  --qp-source: string # For analytics, hint at the part of the app that triggered the search. Optional.
+  --source: string # For analytics, hint at the part of the app that triggered the search. Optional.
   --tag: string # Tag used on the content to be searched.
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<hasMore: bool, query: record<currentPage: int, itemsPerPage: int, requestContinuationToken: string>, replacementContinuationToken: string, results: list<record>, totalResults: int, useTotalResults: bool>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($locale | is-empty) { error make --unspanned { msg: "path parameter 'locale' must be non-empty" } }
-  let qp = [(serialize-qp "ctype" $ctype "scalar") (serialize-qp "currentpage" $currentpage "scalar") (serialize-qp "head" $head "scalar") (serialize-qp "searchtext" $searchtext "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "tag" $tag "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "ctype" $ctype "scalar") (serialize-qp "currentpage" $currentpage "scalar") (serialize-qp "head" $head "scalar") (serialize-qp "searchtext" $searchtext "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "tag" $tag "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({locale: (encode-path-segment $locale)} | format pattern "/Content/Search/{locale}/") $qp $auth.query)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"ctype": $ctype, "currentpage": $currentpage, "head": $head, "searchtext": $searchtext, "source": $qp_source, "tag": $tag} | compact)
+    query: ({"ctype": $ctype, "currentpage": $currentpage, "head": $head, "searchtext": $searchtext, "source": $source, "tag": $tag} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -945,7 +945,7 @@ export def "destiny2-search-destiny-entities" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number to return, starting with 0. (format: int32)
-]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<results: record, suggestedWords: list<string>>, ThrottleSeconds: int> {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<results: record<hasMore: bool, query: record, replacementContinuationToken: string, results: list, totalResults: int, useTotalResults: bool>, suggestedWords: list<string>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
@@ -1491,7 +1491,7 @@ export def "destiny2-get-post-game-carnage-report" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<activityDetails: record, activityWasStartedFromBeginning: bool, entries: list<record>, period: string, startingPhaseIndex: int, teams: list<record>>, ThrottleSeconds: int> {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<activityDetails: record<directorActivityHash: int, instanceId: int, isPrivate: bool, membershipType: int, mode: int, modes: list, referenceId: int>, activityWasStartedFromBeginning: bool, entries: list<record>, period: string, startingPhaseIndex: int, teams: list<record>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($activity_id | is-empty) { error make --unspanned { msg: "path parameter 'activityId' must be non-empty" } }
@@ -1563,7 +1563,7 @@ export def "destiny2-get-public-vendors" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --components: list<int> # A comma separated list of components to return (as strings or numeric values). See the DestinyComponentType enum for valid components to request. You must request at least one component to receive results.
-]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<categories: record, sales: record, stringVariables: record, vendorGroups: record, vendors: record>, ThrottleSeconds: int> {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<categories: record<data: record, disabled: bool, privacy: int>, sales: record<data: record, disabled: bool, privacy: int>, stringVariables: record<data: record, disabled: bool, privacy: int>, vendorGroups: record<data: record, disabled: bool, privacy: int>, vendors: record<data: record, disabled: bool, privacy: int>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "components" $components "csv")] | flatten | str join "&"
@@ -1853,7 +1853,7 @@ export def "destiny2-get-profile" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --components: list<int> # A comma separated list of components to return (as strings or numeric values). See the DestinyComponentType enum for valid components to request. You must request at least one component to receive results.
-]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<characterActivities: record, characterCollectibles: record, characterCraftables: record, characterCurrencyLookups: record, characterEquipment: record, characterInventories: record, characterKiosks: record, characterLoadouts: record, characterPlugSets: record, characterPresentationNodes: record, characterProgressions: record, characterRecords: record, characterRenderData: record, characterStringVariables: record, characterUninstancedItemComponents: record, characters: record, itemComponents: record, metrics: record, platformSilver: record, profile: record, profileCollectibles: record, profileCommendations: record, profileCurrencies: record, profileInventory: record, profileKiosks: record, profilePlugSets: record, profilePresentationNodes: record, profileProgression: record, profileRecords: record, profileStringVariables: record, profileTransitoryData: record, responseMintedTimestamp: string, secondaryComponentsMintedTimestamp: string, vendorReceipts: record>, ThrottleSeconds: int> {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<characterActivities: record<data: record, disabled: bool, privacy: int>, characterCollectibles: record<data: record, disabled: bool, privacy: int>, characterCraftables: record<data: record, disabled: bool, privacy: int>, characterCurrencyLookups: record<data: record, disabled: bool, privacy: int>, characterEquipment: record<data: record, disabled: bool, privacy: int>, characterInventories: record<data: record, disabled: bool, privacy: int>, characterKiosks: record<data: record, disabled: bool, privacy: int>, characterLoadouts: record<data: record, disabled: bool, privacy: int>, characterPlugSets: record<data: record, disabled: bool, privacy: int>, characterPresentationNodes: record<data: record, disabled: bool, privacy: int>, characterProgressions: record<data: record, disabled: bool, privacy: int>, characterRecords: record<data: record, disabled: bool, privacy: int>, characterRenderData: record<data: record, disabled: bool, privacy: int>, characterStringVariables: record<data: record, disabled: bool, privacy: int>, characterUninstancedItemComponents: record, characters: record<data: record, disabled: bool, privacy: int>, itemComponents: record<instances: record, objectives: record, perks: record, plugObjectives: record, plugStates: record, renderData: record, reusablePlugs: record, sockets: record, stats: record, talentGrids: record>, metrics: record<data: record, disabled: bool, privacy: int>, platformSilver: record<data: record, disabled: bool, privacy: int>, profile: record<data: record, disabled: bool, privacy: int>, profileCollectibles: record<data: record, disabled: bool, privacy: int>, profileCommendations: record<data: record, disabled: bool, privacy: int>, profileCurrencies: record<data: record, disabled: bool, privacy: int>, profileInventory: record<data: record, disabled: bool, privacy: int>, profileKiosks: record<data: record, disabled: bool, privacy: int>, profilePlugSets: record<data: record, disabled: bool, privacy: int>, profilePresentationNodes: record<data: record, disabled: bool, privacy: int>, profileProgression: record<data: record, disabled: bool, privacy: int>, profileRecords: record<data: record, disabled: bool, privacy: int>, profileStringVariables: record<data: record, disabled: bool, privacy: int>, profileTransitoryData: record<data: record, disabled: bool, privacy: int>, responseMintedTimestamp: string, secondaryComponentsMintedTimestamp: string, vendorReceipts: record<data: record, disabled: bool, privacy: int>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
@@ -1894,7 +1894,7 @@ export def "destiny2-get-character" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --components: list<int> # A comma separated list of components to return (as strings or numeric values). See the DestinyComponentType enum for valid components to request. You must request at least one component to receive results.
-]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<activities: record, character: record, collectibles: record, currencyLookups: record, equipment: record, inventory: record, itemComponents: record, kiosks: record, loadouts: record, plugSets: record, presentationNodes: record, progressions: record, records: record, renderData: record, uninstancedItemComponents: record>, ThrottleSeconds: int> {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<activities: record<data: record, disabled: bool, privacy: int>, character: record<data: record, disabled: bool, privacy: int>, collectibles: record<data: record, disabled: bool, privacy: int>, currencyLookups: record<data: record, disabled: bool, privacy: int>, equipment: record<data: record, disabled: bool, privacy: int>, inventory: record<data: record, disabled: bool, privacy: int>, itemComponents: record<instances: record, objectives: record, perks: record, plugObjectives: record, plugStates: record, renderData: record, reusablePlugs: record, sockets: record, stats: record, talentGrids: record>, kiosks: record<data: record, disabled: bool, privacy: int>, loadouts: record<data: record, disabled: bool, privacy: int>, plugSets: record<data: record, disabled: bool, privacy: int>, presentationNodes: record<data: record, disabled: bool, privacy: int>, progressions: record<data: record, disabled: bool, privacy: int>, records: record<data: record, disabled: bool, privacy: int>, renderData: record<data: record, disabled: bool, privacy: int>, uninstancedItemComponents: record<objectives: record, perks: record>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
@@ -1937,7 +1937,7 @@ export def "destiny2-get-collectible-node-details" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --components: list<int> # A comma separated list of components to return (as strings or numeric values). See the DestinyComponentType enum for valid components to request. You must request at least one component to receive results.
-]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<collectibleItemComponents: record, collectibles: record>, ThrottleSeconds: int> {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<collectibleItemComponents: record<instances: record, objectives: record, perks: record, plugObjectives: record, plugStates: record, renderData: record, reusablePlugs: record, sockets: record, stats: record, talentGrids: record>, collectibles: record<data: record, disabled: bool, privacy: int>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
@@ -1981,7 +1981,7 @@ export def "destiny2-get-vendors" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --components: list<int> # A comma separated list of components to return (as strings or numeric values). See the DestinyComponentType enum for valid components to request. You must request at least one component to receive results.
   --filter: int # The filter of what vendors and items to return, if any. (format: int32)
-]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<categories: record, currencyLookups: record, itemComponents: record, sales: record, stringVariables: record, vendorGroups: record, vendors: record>, ThrottleSeconds: int> {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<categories: record<data: record, disabled: bool, privacy: int>, currencyLookups: record<data: record, disabled: bool, privacy: int>, itemComponents: record, sales: record<data: record, disabled: bool, privacy: int>, stringVariables: record<data: record, disabled: bool, privacy: int>, vendorGroups: record<data: record, disabled: bool, privacy: int>, vendors: record<data: record, disabled: bool, privacy: int>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
@@ -2024,7 +2024,7 @@ export def "destiny2-get-vendor" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --components: list<int> # A comma separated list of components to return (as strings or numeric values). See the DestinyComponentType enum for valid components to request. You must request at least one component to receive results.
-]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<categories: record, currencyLookups: record, itemComponents: record, sales: record, stringVariables: record, vendor: record>, ThrottleSeconds: int> {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<categories: record<data: record, disabled: bool, privacy: int>, currencyLookups: record<data: record, disabled: bool, privacy: int>, itemComponents: record<instances: record, objectives: record, perks: record, plugObjectives: record, plugStates: record, renderData: record, reusablePlugs: record, sockets: record, stats: record, talentGrids: record>, sales: record<data: record, disabled: bool, privacy: int>, stringVariables: record<data: record, disabled: bool, privacy: int>, vendor: record<data: record, disabled: bool, privacy: int>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
@@ -2067,7 +2067,7 @@ export def "destiny2-get-item" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --components: list<int> # A comma separated list of components to return (as strings or numeric values). See the DestinyComponentType enum for valid components to request. You must request at least one component to receive results.
-]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<characterId: int, instance: record, item: record, objectives: record, perks: record, plugObjectives: record, renderData: record, reusablePlugs: record, sockets: record, stats: record, talentGrid: record>, ThrottleSeconds: int> {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<characterId: int, instance: record<data: record, disabled: bool, privacy: int>, item: record<data: record, disabled: bool, privacy: int>, objectives: record<data: record, disabled: bool, privacy: int>, perks: record<data: record, disabled: bool, privacy: int>, plugObjectives: record<data: record, disabled: bool, privacy: int>, renderData: record<data: record, disabled: bool, privacy: int>, reusablePlugs: record<data: record, disabled: bool, privacy: int>, sockets: record<data: record, disabled: bool, privacy: int>, stats: record<data: record, disabled: bool, privacy: int>, talentGrid: record<data: record, disabled: bool, privacy: int>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
@@ -2108,7 +2108,7 @@ export def "destiny2-get-linked-profiles" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --get-all-memberships: oneof<nothing, bool> # (optional) if set to 'true', all memberships regardless of whether they're obscured by overrides will be returned. Normal privacy restrictions on account linking will still apply no matter what.
-]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<bnetMembership: record, profiles: list<record>, profilesWithErrors: list<record>>, ThrottleSeconds: int> {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<bnetMembership: record<applicableMembershipTypes: list, bungieGlobalDisplayName: string, bungieGlobalDisplayNameCode: int, crossSaveOverride: int, displayName: string, iconPath: string, isPublic: bool, membershipId: int, membershipType: int, supplementalDisplayName: string>, profiles: list<record>, profilesWithErrors: list<record>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
@@ -3290,11 +3290,12 @@ export def "group-v2-get-admins-and-founder-of-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --currentpage: int # Page number (starting with 1). Each page has a fixed size of 50 items per page. (format: int32)
+  --currentpage: int # Page number (starting with 1). Each page has a fixed size of 50 items per page. (required, format: int32)
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<hasMore: bool, query: record<currentPage: int, itemsPerPage: int, requestContinuationToken: string>, replacementContinuationToken: string, results: list<record>, totalResults: int, useTotalResults: bool>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
+  if ($currentpage == null) { error make --unspanned { msg: "required query parameter 'currentpage' missing: pass --currentpage" } }
   let qp = [(serialize-qp "currentpage" $currentpage "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/AdminsAndFounder/") $qp $auth.query)
   let accept_val = "*/*"
@@ -3328,11 +3329,12 @@ export def "group-v2-get-banned-members-of-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --currentpage: int # Page number (starting with 1). Each page has a fixed size of 50 entries. (format: int32)
+  --currentpage: int # Page number (starting with 1). Each page has a fixed size of 50 entries. (required, format: int32)
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<hasMore: bool, query: record<currentPage: int, itemsPerPage: int, requestContinuationToken: string>, replacementContinuationToken: string, results: list<record>, totalResults: int, useTotalResults: bool>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
+  if ($currentpage == null) { error make --unspanned { msg: "required query parameter 'currentpage' missing: pass --currentpage" } }
   let qp = [(serialize-qp "currentpage" $currentpage "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/Banned/") $qp $auth.query)
   let accept_val = "*/*"
@@ -3474,13 +3476,14 @@ export def "group-v2-get-members-of-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --currentpage: int # Page number (starting with 1). Each page has a fixed size of 50 items per page. (format: int32)
+  --currentpage: int # Page number (starting with 1). Each page has a fixed size of 50 items per page. (required, format: int32)
   --member-type: int # Filter out other member types. Use None for all members. (format: int32)
   --name-search: string # The name fragment upon which a search should be executed for members with matching display or unique names.
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<hasMore: bool, query: record<currentPage: int, itemsPerPage: int, requestContinuationToken: string>, replacementContinuationToken: string, results: list<record>, totalResults: int, useTotalResults: bool>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
+  if ($currentpage == null) { error make --unspanned { msg: "required query parameter 'currentpage' missing: pass --currentpage" } }
   let qp = [(serialize-qp "currentpage" $currentpage "scalar") (serialize-qp "memberType" $member_type "scalar") (serialize-qp "nameSearch" $name_search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/Members/") $qp $auth.query)
   let accept_val = "*/*"
@@ -3778,11 +3781,12 @@ export def "group-v2-get-invited-individuals" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --currentpage: int # Page number (starting with 1). Each page has a fixed size of 50 items per page. (format: int32)
+  --currentpage: int # Page number (starting with 1). Each page has a fixed size of 50 items per page. (required, format: int32)
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<hasMore: bool, query: record<currentPage: int, itemsPerPage: int, requestContinuationToken: string>, replacementContinuationToken: string, results: list<record>, totalResults: int, useTotalResults: bool>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
+  if ($currentpage == null) { error make --unspanned { msg: "required query parameter 'currentpage' missing: pass --currentpage" } }
   let qp = [(serialize-qp "currentpage" $currentpage "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/Members/InvitedIndividuals/") $qp $auth.query)
   let accept_val = "*/*"
@@ -3816,11 +3820,12 @@ export def "group-v2-get-pending-memberships" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --currentpage: int # Page number (starting with 1). Each page has a fixed size of 50 items per page. (format: int32)
+  --currentpage: int # Page number (starting with 1). Each page has a fixed size of 50 items per page. (required, format: int32)
 ]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<hasMore: bool, query: record<currentPage: int, itemsPerPage: int, requestContinuationToken: string>, replacementContinuationToken: string, results: list<record>, totalResults: int, useTotalResults: bool>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
+  if ($currentpage == null) { error make --unspanned { msg: "required query parameter 'currentpage' missing: pass --currentpage" } }
   let qp = [(serialize-qp "currentpage" $currentpage "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/Members/Pending/") $qp $auth.query)
   let accept_val = "*/*"

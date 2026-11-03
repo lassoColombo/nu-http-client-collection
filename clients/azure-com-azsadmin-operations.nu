@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -136,7 +136,7 @@ export def "compute-fabric-operations-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version. (default: 2016-05-01)
+  --api-version: string # Client Api Version. (required, default: 2016-05-01)
 ]: nothing -> record<properties: record<provisioningState: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -144,6 +144,7 @@ export def "compute-fabric-operations-get" [
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
   if ($provider | is-empty) { error make --unspanned { msg: "path parameter 'provider' must be non-empty" } }
   if ($compute_operation_result | is-empty) { error make --unspanned { msg: "path parameter 'computeOperationResult' must be non-empty" } }
+  let api_version = ($api_version | default "2016-05-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location), provider: (encode-path-segment $provider), compute_operation_result: (encode-path-segment $compute_operation_result)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/System.{location}/providers/{provider}/fabricLocations/{location}/computeOperationResults/{compute_operation_result}") $qp $auth.query)
   let accept_val = "application/json"
@@ -180,7 +181,7 @@ export def "network-fabric-operations-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # Client Api Version. (default: 2016-05-01)
+  --api-version: string # Client Api Version. (required, default: 2016-05-01)
 ]: nothing -> record<properties: record<provisioningState: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -188,6 +189,7 @@ export def "network-fabric-operations-get" [
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
   if ($provider | is-empty) { error make --unspanned { msg: "path parameter 'provider' must be non-empty" } }
   if ($network_operation_result | is-empty) { error make --unspanned { msg: "path parameter 'networkOperationResult' must be non-empty" } }
+  let api_version = ($api_version | default "2016-05-01")
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location), provider: (encode-path-segment $provider), network_operation_result: (encode-path-segment $network_operation_result)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/System.{location}/providers/{provider}/fabricLocations/{location}/networkOperationResults/{network_operation_result}") $qp $auth.query)
   let accept_val = "application/json"

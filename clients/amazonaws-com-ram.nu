@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -157,7 +157,7 @@ export def "accept-resource-share-invitation" [
   --x-amz-signed-headers: string
   resource_share_invitation_arn: string # The Amazon Resource Name (ARN) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) of the invitation that you want to accept.
   --client-token: string # Specifies a unique, case-sensitive identifier that you provide to ensure the idempotency of the request. This lets you safely retry the request without accidentally performing the same operation a second time. Passing the same value to a later call to an operation requires that you also pass the same value for all other parameters. We recommend that you use a UUID type of value. (https://wikipedia.org/wiki/Universally_unique_identifier). If you don't provide this value, then Amazon Web Services generates a random one for you. If you retry the operation with the same ClientToken, but with different parameters, the retry fails with an IdempotentParameterMismatch error.
-]: any -> record<resourceShareInvitation: record<resourceShareInvitationArn: record, resourceShareName: record, resourceShareArn: record, senderAccountId: record, receiverAccountId: record, invitationTimestamp: record, status: record, resourceShareAssociations: record, receiverArn: record>, clientToken: record> {
+]: any -> record<resourceShareInvitation: record<resourceShareInvitationArn: string, resourceShareName: string, resourceShareArn: string, senderAccountId: string, receiverAccountId: string, invitationTimestamp: string, status: string, resourceShareAssociations: list<record>, receiverArn: string>, clientToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -207,7 +207,7 @@ export def "associate-resource-share" [
   --resource-arns: list<string> # Specifies a list of Amazon Resource Names (ARNs) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) of the resources that you want to share. This can be null if you want to add only principals.
   --principals: list<string> # Specifies a list of principals to whom you want to the resource share. This can be null if you want to add only resources. What the principals can do with the resources in the share is determined by the RAM permissions that you associate with the resource share. See AssociateResourceSharePermission. You can include the following values: An Amazon Web Services account ID, for example: 123456789012 An Amazon Resource Name (ARN) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) of an organization in Organizations, for example: organizations::123456789012:organization/o-exampleorgid An ARN of an organizational unit (OU) in Organizations, for example: organizations::123456789012:ou/o-exampleorgid/ou-examplerootid-exampleouid123 An ARN of an IAM role, for example: iam::123456789012:role/rolename An ARN of an IAM user, for example: iam::123456789012user/username Not all resource types can be shared with IAM roles and users. For more information, see Sharing with IAM roles and users (https://docs.aws.amazon.com/ram/latest/userguide/permissions.html#permissions-rbp-supported-resource-types) in the Resource Access Manager User Guide.
   --client-token: string # Specifies a unique, case-sensitive identifier that you provide to ensure the idempotency of the request. This lets you safely retry the request without accidentally performing the same operation a second time. Passing the same value to a later call to an operation requires that you also pass the same value for all other parameters. We recommend that you use a UUID type of value. (https://wikipedia.org/wiki/Universally_unique_identifier). If you don't provide this value, then Amazon Web Services generates a random one for you. If you retry the operation with the same ClientToken, but with different parameters, the retry fails with an IdempotentParameterMismatch error.
-]: any -> record<resourceShareAssociations: record, clientToken: record> {
+]: any -> record<resourceShareAssociations: table<resourceShareArn: string, resourceShareName: string, associatedEntity: string, associationType: string, status: string, statusMessage: string, creationTime: string, lastUpdatedTime: string, external: bool>, clientToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -258,7 +258,7 @@ export def "associate-resource-share-permission" [
   --replace: oneof<nothing, bool> # Specifies whether the specified permission should replace the existing permission associated with the resource share. Use true to replace the current permissions. Use false to add the permission to a resource share that currently doesn't have a permission. The default value is false. A resource share can have only one permission per resource type. If a resource share already has a permission for the specified resource type and you don't set replace to true then the operation returns an error. This helps prevent accidental overwriting of a permission.
   --client-token: string # Specifies a unique, case-sensitive identifier that you provide to ensure the idempotency of the request. This lets you safely retry the request without accidentally performing the same operation a second time. Passing the same value to a later call to an operation requires that you also pass the same value for all other parameters. We recommend that you use a UUID type of value. (https://wikipedia.org/wiki/Universally_unique_identifier). If you don't provide this value, then Amazon Web Services generates a random one for you. If you retry the operation with the same ClientToken, but with different parameters, the retry fails with an IdempotentParameterMismatch error.
   --permission-version: int # Specifies the version of the RAM permission to associate with the resource share. You can specify only the version that is currently set as the default version for the permission. If you also set the replace pararameter to true, then this operation updates an outdated version of the permission to the current default version. You don't need to specify this parameter because the default behavior is to use the version that is currently set as the default version for the permission. This parameter is supported for backwards compatibility.
-]: any -> record<returnValue: record, clientToken: record> {
+]: any -> record<returnValue: bool, clientToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -287,7 +287,7 @@ export def "associate-resource-share-permission" [
 #
 # POST /createpermission
 # operationId: CreatePermission
-# --tags item shape: {key?: any, value?: any}
+# --tags item shape: {key?: string, value?: string}
 export def "create-permission" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -309,8 +309,8 @@ export def "create-permission" [
   resource_type: string # Specifies the name of the resource type that this customer managed permission applies to. The format is <service-code>:<resource-type> and is not case sensitive. For example, to specify an Amazon EC2 Subnet, you can use the string ec2:subnet. To see the list of valid values for this parameter, query the ListResourceTypes operation.
   policy_template: string # A string in JSON format string that contains the following elements of a resource-based policy: Effect: must be set to ALLOW. Action: specifies the actions that are allowed by this customer managed permission. The list must contain only actions that are supported by the specified resource type. For a list of all actions supported by each resource type, see Actions, resources, and condition keys for Amazon Web Services services (https://docs.aws.amazon.com/service-authorization/latest/reference/reference_policies_actions-resources-contextkeys.html) in the Identity and Access Management User Guide. Condition: (optional) specifies conditional parameters that must evaluate to true when a user attempts an action for that action to be allowed. For more information about the Condition element, see IAM policies: Condition element (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_condition.html) in the Identity and Access Management User Guide. This template can't include either the Resource or Principal elements. Those are both filled in by RAM when it instantiates the resource-based policy on each resource shared using this managed permission. The Resource comes from the ARN of the specific resource that you are sharing. The Principal comes from the list of identities added to the resource share.
   --client-token: string # Specifies a unique, case-sensitive identifier that you provide to ensure the idempotency of the request. This lets you safely retry the request without accidentally performing the same operation a second time. Passing the same value to a later call to an operation requires that you also pass the same value for all other parameters. We recommend that you use a UUID type of value. (https://wikipedia.org/wiki/Universally_unique_identifier). If you don't provide this value, then Amazon Web Services generates a random one for you. If you retry the operation with the same ClientToken, but with different parameters, the retry fails with an IdempotentParameterMismatch error.
-  --tags: list # Specifies a list of one or more tag key and value pairs to attach to the permission. — item shape: {key?: any, value?: any}
-]: any -> record<permission: record<arn: record, version: record, defaultVersion: record, name: record, resourceType: record, status: record, creationTime: record, lastUpdatedTime: record, isResourceTypeDefault: record, permissionType: record, featureSet: record, tags: record>, clientToken: record> {
+  --tags: list # Specifies a list of one or more tag key and value pairs to attach to the permission. — item shape: {key?: string, value?: string}
+]: any -> record<permission: record<arn: string, version: string, defaultVersion: bool, name: string, resourceType: string, status: string, creationTime: string, lastUpdatedTime: string, isResourceTypeDefault: bool, permissionType: string, featureSet: string, tags: list<record>>, clientToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -359,7 +359,7 @@ export def "create-permission-version" [
   permission_arn: string # Specifies the Amazon Resource Name (ARN) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) of the customer managed permission you're creating a new version for.
   policy_template: string # A string in JSON format string that contains the following elements of a resource-based policy: Effect: must be set to ALLOW. Action: specifies the actions that are allowed by this customer managed permission. The list must contain only actions that are supported by the specified resource type. For a list of all actions supported by each resource type, see Actions, resources, and condition keys for Amazon Web Services services (https://docs.aws.amazon.com/service-authorization/latest/reference/reference_policies_actions-resources-contextkeys.html) in the Identity and Access Management User Guide. Condition: (optional) specifies conditional parameters that must evaluate to true when a user attempts an action for that action to be allowed. For more information about the Condition element, see IAM policies: Condition element (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_condition.html) in the Identity and Access Management User Guide. This template can't include either the Resource or Principal elements. Those are both filled in by RAM when it instantiates the resource-based policy on each resource shared using this managed permission. The Resource comes from the ARN of the specific resource that you are sharing. The Principal comes from the list of identities added to the resource share.
   --client-token: string # Specifies a unique, case-sensitive identifier that you provide to ensure the idempotency of the request. This lets you safely retry the request without accidentally performing the same operation a second time. Passing the same value to a later call to an operation requires that you also pass the same value for all other parameters. We recommend that you use a UUID type of value. (https://wikipedia.org/wiki/Universally_unique_identifier). If you don't provide this value, then Amazon Web Services generates a random one for you. If you retry the operation with the same ClientToken, but with different parameters, the retry fails with an IdempotentParameterMismatch error.
-]: any -> record<permission: record<arn: record, version: record, defaultVersion: record, name: record, resourceType: record, permission: record, creationTime: record, lastUpdatedTime: record, isResourceTypeDefault: record, permissionType: record, featureSet: record, status: record, tags: record>, clientToken: record> {
+]: any -> record<permission: record<arn: string, version: string, defaultVersion: bool, name: string, resourceType: string, permission: string, creationTime: string, lastUpdatedTime: string, isResourceTypeDefault: bool, permissionType: string, featureSet: string, status: string, tags: list<record>>, clientToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -388,7 +388,7 @@ export def "create-permission-version" [
 #
 # POST /createresourceshare
 # operationId: CreateResourceShare
-# --tags item shape: {key?: any, value?: any}
+# --tags item shape: {key?: string, value?: string}
 export def "create-resource-share" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -409,11 +409,11 @@ export def "create-resource-share" [
   name: string # Specifies the name of the resource share.
   --resource-arns: list<string> # Specifies a list of one or more ARNs of the resources to associate with the resource share.
   --principals: list<string> # Specifies a list of one or more principals to associate with the resource share. You can include the following values: An Amazon Web Services account ID, for example: 123456789012 An Amazon Resource Name (ARN) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) of an organization in Organizations, for example: organizations::123456789012:organization/o-exampleorgid An ARN of an organizational unit (OU) in Organizations, for example: organizations::123456789012:ou/o-exampleorgid/ou-examplerootid-exampleouid123 An ARN of an IAM role, for example: iam::123456789012:role/rolename An ARN of an IAM user, for example: iam::123456789012user/username Not all resource types can be shared with IAM roles and users. For more information, see Sharing with IAM roles and users (https://docs.aws.amazon.com/ram/latest/userguide/permissions.html#permissions-rbp-supported-resource-types) in the Resource Access Manager User Guide.
-  --tags: list # Specifies one or more tags to attach to the resource share itself. It doesn't attach the tags to the resources associated with the resource share. — item shape: {key?: any, value?: any}
+  --tags: list # Specifies one or more tags to attach to the resource share itself. It doesn't attach the tags to the resources associated with the resource share. — item shape: {key?: string, value?: string}
   --allow-external-principals: oneof<nothing, bool> # Specifies whether principals outside your organization in Organizations can be associated with a resource share. A value of true lets you share with individual Amazon Web Services accounts that are not in your organization. A value of false only has meaning if your account is a member of an Amazon Web Services Organization. The default value is true.
   --client-token: string # Specifies a unique, case-sensitive identifier that you provide to ensure the idempotency of the request. This lets you safely retry the request without accidentally performing the same operation a second time. Passing the same value to a later call to an operation requires that you also pass the same value for all other parameters. We recommend that you use a UUID type of value. (https://wikipedia.org/wiki/Universally_unique_identifier). If you don't provide this value, then Amazon Web Services generates a random one for you. If you retry the operation with the same ClientToken, but with different parameters, the retry fails with an IdempotentParameterMismatch error.
   --permission-arns: list<string> # Specifies the Amazon Resource Names (ARNs) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) of the RAM permission to associate with the resource share. If you do not specify an ARN for the permission, RAM automatically attaches the default version of the permission for each resource type. You can associate only one permission with each resource type included in the resource share.
-]: any -> record<resourceShare: record<resourceShareArn: record, name: record, owningAccountId: record, allowExternalPrincipals: record, status: record, statusMessage: record, tags: record, creationTime: record, lastUpdatedTime: record, featureSet: record>, clientToken: record> {
+]: any -> record<resourceShare: record<resourceShareArn: string, name: string, owningAccountId: string, allowExternalPrincipals: bool, status: string, statusMessage: string, tags: list<record>, creationTime: string, lastUpdatedTime: string, featureSet: string>, clientToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -452,7 +452,7 @@ export def "delete-permission" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --permission-arn: string # Specifies the Amazon Resource Name (ARN) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) of the customer managed permission that you want to delete.
+  --permission-arn: string # Specifies the Amazon Resource Name (ARN) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) of the customer managed permission that you want to delete. (required)
   --client-token: string # Specifies a unique, case-sensitive identifier that you provide to ensure the idempotency of the request. This lets you safely retry the request without accidentally performing the same operation a second time. Passing the same value to a later call to an operation requires that you also pass the same value for all other parameters. We recommend that you use a UUID type of value. (https://wikipedia.org/wiki/Universally_unique_identifier). If you don't provide this value, then Amazon Web Services generates a random one for you. If you retry the operation with the same ClientToken, but with different parameters, the retry fails with an IdempotentParameterMismatch error.
   --x-amz-content-sha256: string
   --x-amz-date: string
@@ -461,9 +461,10 @@ export def "delete-permission" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<returnValue: record, clientToken: record, permissionStatus: record> {
+]: nothing -> record<returnValue: bool, clientToken: string, permissionStatus: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($permission_arn == null) { error make --unspanned { msg: "required query parameter 'permissionArn' missing: pass --permission-arn" } }
   let qp = [(serialize-qp "permissionArn" $permission_arn "scalar") (serialize-qp "clientToken" $client_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/deletepermission" $qp $auth.query)
   let accept_val = "application/json"
@@ -498,8 +499,8 @@ export def "delete-permission-version" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --permission-arn: string # Specifies the Amazon Resource Name (ARN) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) of the permission with the version you want to delete.
-  --permission-version: int # Specifies the version number to delete. You can't delete the default version for a customer managed permission. You can't delete a version if it's the only version of the permission. You must either first create another version, or delete the permission completely. You can't delete a version if it is attached to any resource shares. If the version is the default, you must first use SetDefaultPermissionVersion to set a different version as the default for the customer managed permission, and then use AssociateResourceSharePermission to update your resource shares to use the new default version.
+  --permission-arn: string # Specifies the Amazon Resource Name (ARN) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) of the permission with the version you want to delete. (required)
+  --permission-version: int # Specifies the version number to delete. You can't delete the default version for a customer managed permission. You can't delete a version if it's the only version of the permission. You must either first create another version, or delete the permission completely. You can't delete a version if it is attached to any resource shares. If the version is the default, you must first use SetDefaultPermissionVersion to set a different version as the default for the customer managed permission, and then use AssociateResourceSharePermission to update your resource shares to use the new default version. (required)
   --client-token: string # Specifies a unique, case-sensitive identifier that you provide to ensure the idempotency of the request. This lets you safely retry the request without accidentally performing the same operation a second time. Passing the same value to a later call to an operation requires that you also pass the same value for all other parameters. We recommend that you use a UUID type of value. (https://wikipedia.org/wiki/Universally_unique_identifier). If you don't provide this value, then Amazon Web Services generates a random one for you. If you retry the operation with the same ClientToken, but with different parameters, the retry fails with an IdempotentParameterMismatch error.
   --x-amz-content-sha256: string
   --x-amz-date: string
@@ -508,9 +509,11 @@ export def "delete-permission-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<returnValue: record, clientToken: record, permissionStatus: record> {
+]: nothing -> record<returnValue: bool, clientToken: string, permissionStatus: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($permission_arn == null) { error make --unspanned { msg: "required query parameter 'permissionArn' missing: pass --permission-arn" } }
+  if ($permission_version == null) { error make --unspanned { msg: "required query parameter 'permissionVersion' missing: pass --permission-version" } }
   let qp = [(serialize-qp "permissionArn" $permission_arn "scalar") (serialize-qp "permissionVersion" $permission_version "scalar") (serialize-qp "clientToken" $client_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/deletepermissionversion" $qp $auth.query)
   let accept_val = "application/json"
@@ -545,7 +548,7 @@ export def "delete-resource-share" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-share-arn: string # Specifies the Amazon Resource Name (ARN) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) of the resource share to delete.
+  --resource-share-arn: string # Specifies the Amazon Resource Name (ARN) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) of the resource share to delete. (required)
   --client-token: string # Specifies a unique, case-sensitive identifier that you provide to ensure the idempotency of the request. This lets you safely retry the request without accidentally performing the same operation a second time. Passing the same value to a later call to an operation requires that you also pass the same value for all other parameters. We recommend that you use a UUID type of value. (https://wikipedia.org/wiki/Universally_unique_identifier). If you don't provide this value, then Amazon Web Services generates a random one for you. If you retry the operation with the same ClientToken, but with different parameters, the retry fails with an IdempotentParameterMismatch error.
   --x-amz-content-sha256: string
   --x-amz-date: string
@@ -554,9 +557,10 @@ export def "delete-resource-share" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<returnValue: record, clientToken: record> {
+]: nothing -> record<returnValue: bool, clientToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_share_arn == null) { error make --unspanned { msg: "required query parameter 'resourceShareArn' missing: pass --resource-share-arn" } }
   let qp = [(serialize-qp "resourceShareArn" $resource_share_arn "scalar") (serialize-qp "clientToken" $client_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/deleteresourceshare" $qp $auth.query)
   let accept_val = "application/json"
@@ -602,7 +606,7 @@ export def "disassociate-resource-share" [
   --resource-arns: list<string> # Specifies a list of Amazon Resource Names (ARNs) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) for one or more resources that you want to remove from the resource share. After the operation runs, these resources are no longer shared with principals associated with the resource share.
   --principals: list<string> # Specifies a list of one or more principals that no longer are to have access to the resources in this resource share. You can include the following values: An Amazon Web Services account ID, for example: 123456789012 An Amazon Resource Name (ARN) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) of an organization in Organizations, for example: organizations::123456789012:organization/o-exampleorgid An ARN of an organizational unit (OU) in Organizations, for example: organizations::123456789012:ou/o-exampleorgid/ou-examplerootid-exampleouid123 An ARN of an IAM role, for example: iam::123456789012:role/rolename An ARN of an IAM user, for example: iam::123456789012user/username Not all resource types can be shared with IAM roles and users. For more information, see Sharing with IAM roles and users (https://docs.aws.amazon.com/ram/latest/userguide/permissions.html#permissions-rbp-supported-resource-types) in the Resource Access Manager User Guide.
   --client-token: string # Specifies a unique, case-sensitive identifier that you provide to ensure the idempotency of the request. This lets you safely retry the request without accidentally performing the same operation a second time. Passing the same value to a later call to an operation requires that you also pass the same value for all other parameters. We recommend that you use a UUID type of value. (https://wikipedia.org/wiki/Universally_unique_identifier). If you don't provide this value, then Amazon Web Services generates a random one for you. If you retry the operation with the same ClientToken, but with different parameters, the retry fails with an IdempotentParameterMismatch error.
-]: any -> record<resourceShareAssociations: record, clientToken: record> {
+]: any -> record<resourceShareAssociations: table<resourceShareArn: string, resourceShareName: string, associatedEntity: string, associationType: string, status: string, statusMessage: string, creationTime: string, lastUpdatedTime: string, external: bool>, clientToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -651,7 +655,7 @@ export def "disassociate-resource-share-permission" [
   resource_share_arn: string # The Amazon Resource Name (ARN) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) of the resource share that you want to remove the managed permission from.
   permission_arn: string # The Amazon Resource Name (ARN) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) of the managed permission to disassociate from the resource share. Changes to permissions take effect immediately.
   --client-token: string # Specifies a unique, case-sensitive identifier that you provide to ensure the idempotency of the request. This lets you safely retry the request without accidentally performing the same operation a second time. Passing the same value to a later call to an operation requires that you also pass the same value for all other parameters. We recommend that you use a UUID type of value. (https://wikipedia.org/wiki/Universally_unique_identifier). If you don't provide this value, then Amazon Web Services generates a random one for you. If you retry the operation with the same ClientToken, but with different parameters, the retry fails with an IdempotentParameterMismatch error.
-]: any -> record<returnValue: record, clientToken: record> {
+]: any -> record<returnValue: bool, clientToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -697,7 +701,7 @@ export def "enable-sharing-with-aws-organization" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<returnValue: record> {
+]: nothing -> record<returnValue: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/enablesharingwithawsorganization" $auth.query)
@@ -742,7 +746,7 @@ export def "get-permission" [
   --x-amz-signed-headers: string
   permission_arn: string # Specifies the Amazon Resource Name (ARN) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) of the permission whose contents you want to retrieve. To find the ARN for a permission, use either the ListPermissions operation or go to the Permissions library (https://console.aws.amazon.com/ram/home#Permissions:) page in the RAM console and then choose the name of the permission. The ARN is displayed on the detail page.
   --permission-version: int # Specifies the version number of the RAM permission to retrieve. If you don't specify this parameter, the operation retrieves the default version. To see the list of available versions, use ListPermissionVersions.
-]: any -> record<permission: record<arn: record, version: record, defaultVersion: record, name: record, resourceType: record, permission: record, creationTime: record, lastUpdatedTime: record, isResourceTypeDefault: record, permissionType: record, featureSet: record, status: record, tags: record>> {
+]: any -> record<permission: record<arn: string, version: string, defaultVersion: bool, name: string, resourceType: string, permission: string, creationTime: string, lastUpdatedTime: string, isResourceTypeDefault: bool, permissionType: string, featureSet: string, status: string, tags: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -794,7 +798,7 @@ export def "get-resource-policies" [
   --principal: string # Specifies the principal.
   --next-token-body: string # Specifies that you want to receive the next page of results. Valid only if you received a NextToken response in the previous request. If you did, it indicates that more output is available. Set this parameter to the value provided by the previous call's NextToken response to request the next page of results. (body field)
   --max-results-body: int # Specifies the total number of results that you want included on each page of the response. If you do not include this parameter, it defaults to a value that is specific to the operation. If additional items exist beyond the number you specify, the NextToken response element is returned with a value (not null). Include the specified value as the NextToken request parameter in the next call to the operation to get the next part of the results. Note that the service might return fewer results than the maximum even when there are more results available. You should check NextToken after every operation to ensure that you receive all of the results. (body field)
-]: any -> record<policies: record, nextToken: record> {
+]: any -> record<policies: list<string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -850,7 +854,7 @@ export def "get-resource-share-associations" [
   --association-status: string@association-status-completer # Specifies that you want to retrieve only associations that have this status.
   --next-token-body: string # Specifies that you want to receive the next page of results. Valid only if you received a NextToken response in the previous request. If you did, it indicates that more output is available. Set this parameter to the value provided by the previous call's NextToken response to request the next page of results. (body field)
   --max-results-body: int # Specifies the total number of results that you want included on each page of the response. If you do not include this parameter, it defaults to a value that is specific to the operation. If additional items exist beyond the number you specify, the NextToken response element is returned with a value (not null). Include the specified value as the NextToken request parameter in the next call to the operation to get the next part of the results. Note that the service might return fewer results than the maximum even when there are more results available. You should check NextToken after every operation to ensure that you receive all of the results. (body field)
-]: any -> record<resourceShareAssociations: record, nextToken: record> {
+]: any -> record<resourceShareAssociations: table<resourceShareArn: string, resourceShareName: string, associatedEntity: string, associationType: string, status: string, statusMessage: string, creationTime: string, lastUpdatedTime: string, external: bool>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -903,7 +907,7 @@ export def "get-resource-share-invitations" [
   --resource-share-arns: list<string> # Specifies that you want details about invitations only for the resource shares described by this list of Amazon Resource Names (ARNs) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html)
   --next-token-body: string # Specifies that you want to receive the next page of results. Valid only if you received a NextToken response in the previous request. If you did, it indicates that more output is available. Set this parameter to the value provided by the previous call's NextToken response to request the next page of results. (body field)
   --max-results-body: int # Specifies the total number of results that you want included on each page of the response. If you do not include this parameter, it defaults to a value that is specific to the operation. If additional items exist beyond the number you specify, the NextToken response element is returned with a value (not null). Include the specified value as the NextToken request parameter in the next call to the operation to get the next part of the results. Note that the service might return fewer results than the maximum even when there are more results available. You should check NextToken after every operation to ensure that you receive all of the results. (body field)
-]: any -> record<resourceShareInvitations: record, nextToken: record> {
+]: any -> record<resourceShareInvitations: table<resourceShareInvitationArn: string, resourceShareName: string, resourceShareArn: string, senderAccountId: string, receiverAccountId: string, invitationTimestamp: string, status: string, resourceShareAssociations: list, receiverArn: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -933,7 +937,7 @@ export def "get-resource-share-invitations" [
 #
 # POST /getresourceshares
 # operationId: GetResourceShares
-# --tagFilters item shape: {tagKey?: any, tagValues?: any}
+# --tagFilters item shape: {tagKey?: string, tagValues?: list<string>}
 export def "get-resource-shares" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -957,12 +961,12 @@ export def "get-resource-shares" [
   --resource-share-status: string@resource-share-status-completer # Specifies that you want to retrieve details of only those resource shares that have this status.
   resource_owner: string@resource-owner-completer # Specifies that you want to retrieve details of only those resource shares that match the following: SELF – resource shares that your account shares with other accounts OTHER-ACCOUNTS – resource shares that other accounts share with your account
   --name: string # Specifies the name of an individual resource share that you want to retrieve details about.
-  --tag-filters: list # Specifies that you want to retrieve details of only those resource shares that match the specified tag keys and values. — item shape: {tagKey?: any, tagValues?: any}
+  --tag-filters: list # Specifies that you want to retrieve details of only those resource shares that match the specified tag keys and values. — item shape: {tagKey?: string, tagValues?: list<string>}
   --next-token-body: string # Specifies that you want to receive the next page of results. Valid only if you received a NextToken response in the previous request. If you did, it indicates that more output is available. Set this parameter to the value provided by the previous call's NextToken response to request the next page of results. (body field)
   --max-results-body: int # Specifies the total number of results that you want included on each page of the response. If you do not include this parameter, it defaults to a value that is specific to the operation. If additional items exist beyond the number you specify, the NextToken response element is returned with a value (not null). Include the specified value as the NextToken request parameter in the next call to the operation to get the next part of the results. Note that the service might return fewer results than the maximum even when there are more results available. You should check NextToken after every operation to ensure that you receive all of the results. (body field)
   --permission-arn: string # Specifies that you want to retrieve details of only those resource shares that use the managed permission with this Amazon Resource Name (ARN) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html).
   --permission-version: int # Specifies that you want to retrieve details for only those resource shares that use the specified version of the managed permission.
-]: any -> record<resourceShares: record, nextToken: record> {
+]: any -> record<resourceShares: table<resourceShareArn: string, name: string, owningAccountId: string, allowExternalPrincipals: bool, status: string, statusMessage: string, tags: list, creationTime: string, lastUpdatedTime: string, featureSet: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1015,7 +1019,7 @@ export def "list-pending-invitation-resources" [
   --next-token-body: string # Specifies that you want to receive the next page of results. Valid only if you received a NextToken response in the previous request. If you did, it indicates that more output is available. Set this parameter to the value provided by the previous call's NextToken response to request the next page of results. (body field)
   --max-results-body: int # Specifies the total number of results that you want included on each page of the response. If you do not include this parameter, it defaults to a value that is specific to the operation. If additional items exist beyond the number you specify, the NextToken response element is returned with a value (not null). Include the specified value as the NextToken request parameter in the next call to the operation to get the next part of the results. Note that the service might return fewer results than the maximum even when there are more results available. You should check NextToken after every operation to ensure that you receive all of the results. (body field)
   --resource-region-scope: string@resource-region-scope-completer # Specifies that you want the results to include only resources that have the specified scope. ALL – the results include both global and regional resources or resource types. GLOBAL – the results include only global resources or resource types. REGIONAL – the results include only regional resources or resource types. The default value is ALL.
-]: any -> record<resources: record, nextToken: record> {
+]: any -> record<resources: table<arn: string, type: string, resourceShareArn: string, resourceGroupArn: string, status: string, statusMessage: string, creationTime: string, lastUpdatedTime: string, resourceRegionScope: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1072,7 +1076,7 @@ export def "list-permission-associations" [
   --default-version: oneof<nothing, bool> # When true, specifies that you want to list only those associations with resource shares that use the default version of the specified managed permission. When false (the default value), lists associations with resource shares that use any version of the specified managed permission.
   --next-token-body: string # Specifies that you want to receive the next page of results. Valid only if you received a NextToken response in the previous request. If you did, it indicates that more output is available. Set this parameter to the value provided by the previous call's NextToken response to request the next page of results. (body field)
   --max-results-body: int # Specifies the total number of results that you want included on each page of the response. If you do not include this parameter, it defaults to a value that is specific to the operation. If additional items exist beyond the number you specify, the NextToken response element is returned with a value (not null). Include the specified value as the NextToken request parameter in the next call to the operation to get the next part of the results. Note that the service might return fewer results than the maximum even when there are more results available. You should check NextToken after every operation to ensure that you receive all of the results. (body field)
-]: any -> record<permissions: record, nextToken: record> {
+]: any -> record<permissions: table<arn: string, permissionVersion: string, defaultVersion: bool, resourceType: string, status: string, featureSet: string, lastUpdatedTime: string, resourceShareArn: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1124,7 +1128,7 @@ export def "list-permission-versions" [
   permission_arn: string # Specifies the Amazon Resource Name (ARN) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) of the RAM permission whose versions you want to list. You can use the permissionVersion parameter on the AssociateResourceSharePermission operation to specify a non-default version to attach.
   --next-token-body: string # Specifies that you want to receive the next page of results. Valid only if you received a NextToken response in the previous request. If you did, it indicates that more output is available. Set this parameter to the value provided by the previous call's NextToken response to request the next page of results. (body field)
   --max-results-body: int # Specifies the total number of results that you want included on each page of the response. If you do not include this parameter, it defaults to a value that is specific to the operation. If additional items exist beyond the number you specify, the NextToken response element is returned with a value (not null). Include the specified value as the NextToken request parameter in the next call to the operation to get the next part of the results. Note that the service might return fewer results than the maximum even when there are more results available. You should check NextToken after every operation to ensure that you receive all of the results. (body field)
-]: any -> record<permissions: record, nextToken: record> {
+]: any -> record<permissions: table<arn: string, version: string, defaultVersion: bool, name: string, resourceType: string, status: string, creationTime: string, lastUpdatedTime: string, isResourceTypeDefault: bool, permissionType: string, featureSet: string, tags: list>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1177,7 +1181,7 @@ export def "list-permissions" [
   --next-token-body: string # Specifies that you want to receive the next page of results. Valid only if you received a NextToken response in the previous request. If you did, it indicates that more output is available. Set this parameter to the value provided by the previous call's NextToken response to request the next page of results. (body field)
   --max-results-body: int # Specifies the total number of results that you want included on each page of the response. If you do not include this parameter, it defaults to a value that is specific to the operation. If additional items exist beyond the number you specify, the NextToken response element is returned with a value (not null). Include the specified value as the NextToken request parameter in the next call to the operation to get the next part of the results. Note that the service might return fewer results than the maximum even when there are more results available. You should check NextToken after every operation to ensure that you receive all of the results. (body field)
   --permission-type: string@permission-type-completer # Specifies that you want to list only permissions of this type: AWS – returns only Amazon Web Services managed permissions. LOCAL – returns only customer managed permissions ALL – returns both Amazon Web Services managed permissions and customer managed permissions. If you don't specify this parameter, the default is All.
-]: any -> record<permissions: record, nextToken: record> {
+]: any -> record<permissions: table<arn: string, version: string, defaultVersion: bool, name: string, resourceType: string, status: string, creationTime: string, lastUpdatedTime: string, isResourceTypeDefault: bool, permissionType: string, featureSet: string, tags: list>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1233,7 +1237,7 @@ export def "list-principals" [
   --resource-share-arns: list<string> # Specifies that you want to list information for only principals associated with the resource shares specified by a list the Amazon Resource Names (ARNs) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html).
   --next-token-body: string # Specifies that you want to receive the next page of results. Valid only if you received a NextToken response in the previous request. If you did, it indicates that more output is available. Set this parameter to the value provided by the previous call's NextToken response to request the next page of results. (body field)
   --max-results-body: int # Specifies the total number of results that you want included on each page of the response. If you do not include this parameter, it defaults to a value that is specific to the operation. If additional items exist beyond the number you specify, the NextToken response element is returned with a value (not null). Include the specified value as the NextToken request parameter in the next call to the operation to get the next part of the results. Note that the service might return fewer results than the maximum even when there are more results available. You should check NextToken after every operation to ensure that you receive all of the results. (body field)
-]: any -> record<principals: record, nextToken: record> {
+]: any -> record<principals: table<id: string, resourceShareArn: string, creationTime: string, lastUpdatedTime: string, external: bool>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1286,7 +1290,7 @@ export def "list-replace-permission-associations-work" [
   --status: string@status-completer # Specifies that you want to see only the details about requests with a status that matches this value.
   --next-token-body: string # Specifies that you want to receive the next page of results. Valid only if you received a NextToken response in the previous request. If you did, it indicates that more output is available. Set this parameter to the value provided by the previous call's NextToken response to request the next page of results. (body field)
   --max-results-body: int # Specifies the total number of results that you want included on each page of the response. If you do not include this parameter, it defaults to a value that is specific to the operation. If additional items exist beyond the number you specify, the NextToken response element is returned with a value (not null). Include the specified value as the NextToken request parameter in the next call to the operation to get the next part of the results. Note that the service might return fewer results than the maximum even when there are more results available. You should check NextToken after every operation to ensure that you receive all of the results. (body field)
-]: any -> record<replacePermissionAssociationsWorks: record, nextToken: record> {
+]: any -> record<replacePermissionAssociationsWorks: table<id: string, fromPermissionArn: string, fromPermissionVersion: string, toPermissionArn: string, toPermissionVersion: string, status: string, statusMessage: string, creationTime: string, lastUpdatedTime: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1338,7 +1342,7 @@ export def "list-resource-share-permissions" [
   resource_share_arn: string # Specifies the Amazon Resource Name (ARN) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) of the resource share for which you want to retrieve the associated permissions.
   --next-token-body: string # Specifies that you want to receive the next page of results. Valid only if you received a NextToken response in the previous request. If you did, it indicates that more output is available. Set this parameter to the value provided by the previous call's NextToken response to request the next page of results. (body field)
   --max-results-body: int # Specifies the total number of results that you want included on each page of the response. If you do not include this parameter, it defaults to a value that is specific to the operation. If additional items exist beyond the number you specify, the NextToken response element is returned with a value (not null). Include the specified value as the NextToken request parameter in the next call to the operation to get the next part of the results. Note that the service might return fewer results than the maximum even when there are more results available. You should check NextToken after every operation to ensure that you receive all of the results. (body field)
-]: any -> record<permissions: record, nextToken: record> {
+]: any -> record<permissions: table<arn: string, version: string, defaultVersion: bool, name: string, resourceType: string, status: string, creationTime: string, lastUpdatedTime: string, isResourceTypeDefault: bool, permissionType: string, featureSet: string, tags: list>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1390,7 +1394,7 @@ export def "list-resource-types" [
   --next-token-body: string # Specifies that you want to receive the next page of results. Valid only if you received a NextToken response in the previous request. If you did, it indicates that more output is available. Set this parameter to the value provided by the previous call's NextToken response to request the next page of results. (body field)
   --max-results-body: int # Specifies the total number of results that you want included on each page of the response. If you do not include this parameter, it defaults to a value that is specific to the operation. If additional items exist beyond the number you specify, the NextToken response element is returned with a value (not null). Include the specified value as the NextToken request parameter in the next call to the operation to get the next part of the results. Note that the service might return fewer results than the maximum even when there are more results available. You should check NextToken after every operation to ensure that you receive all of the results. (body field)
   --resource-region-scope: string@resource-region-scope-completer # Specifies that you want the results to include only resources that have the specified scope. ALL – the results include both global and regional resources or resource types. GLOBAL – the results include only global resources or resource types. REGIONAL – the results include only regional resources or resource types. The default value is ALL.
-]: any -> record<resourceTypes: record, nextToken: record> {
+]: any -> record<resourceTypes: table<resourceType: string, serviceName: string, resourceRegionScope: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1447,7 +1451,7 @@ export def "list-resources" [
   --next-token-body: string # Specifies that you want to receive the next page of results. Valid only if you received a NextToken response in the previous request. If you did, it indicates that more output is available. Set this parameter to the value provided by the previous call's NextToken response to request the next page of results. (body field)
   --max-results-body: int # Specifies the total number of results that you want included on each page of the response. If you do not include this parameter, it defaults to a value that is specific to the operation. If additional items exist beyond the number you specify, the NextToken response element is returned with a value (not null). Include the specified value as the NextToken request parameter in the next call to the operation to get the next part of the results. Note that the service might return fewer results than the maximum even when there are more results available. You should check NextToken after every operation to ensure that you receive all of the results. (body field)
   --resource-region-scope: string@resource-region-scope-completer # Specifies that you want the results to include only resources that have the specified scope. ALL – the results include both global and regional resources or resource types. GLOBAL – the results include only global resources or resource types. REGIONAL – the results include only regional resources or resource types. The default value is ALL.
-]: any -> record<resources: record, nextToken: record> {
+]: any -> record<resources: table<arn: string, type: string, resourceShareArn: string, resourceGroupArn: string, status: string, statusMessage: string, creationTime: string, lastUpdatedTime: string, resourceRegionScope: string>, nextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1497,7 +1501,7 @@ export def "promote-permission-created-from-policy" [
   permission_arn: string # Specifies the Amazon Resource Name (ARN) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) of the CREATED_FROM_POLICY permission that you want to promote. You can get this Amazon Resource Name (ARN) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) by calling the ListResourceSharePermissions operation.
   name: string # Specifies a name for the promoted customer managed permission.
   --client-token: string # Specifies a unique, case-sensitive identifier that you provide to ensure the idempotency of the request. This lets you safely retry the request without accidentally performing the same operation a second time. Passing the same value to a later call to an operation requires that you also pass the same value for all other parameters. We recommend that you use a UUID type of value. (https://wikipedia.org/wiki/Universally_unique_identifier). If you don't provide this value, then Amazon Web Services generates a random one for you. If you retry the operation with the same ClientToken, but with different parameters, the retry fails with an IdempotentParameterMismatch error.
-]: any -> record<permission: record<arn: record, version: record, defaultVersion: record, name: record, resourceType: record, status: record, creationTime: record, lastUpdatedTime: record, isResourceTypeDefault: record, permissionType: record, featureSet: record, tags: record>, clientToken: record> {
+]: any -> record<permission: record<arn: string, version: string, defaultVersion: bool, name: string, resourceType: string, status: string, creationTime: string, lastUpdatedTime: string, isResourceTypeDefault: bool, permissionType: string, featureSet: string, tags: list<record>>, clientToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1536,7 +1540,7 @@ export def "promote-resource-share-created-from-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-share-arn: string # Specifies the Amazon Resource Name (ARN) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) of the resource share to promote.
+  --resource-share-arn: string # Specifies the Amazon Resource Name (ARN) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) of the resource share to promote. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1544,9 +1548,10 @@ export def "promote-resource-share-created-from-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<returnValue: record> {
+]: nothing -> record<returnValue: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_share_arn == null) { error make --unspanned { msg: "required query parameter 'resourceShareArn' missing: pass --resource-share-arn" } }
   let qp = [(serialize-qp "resourceShareArn" $resource_share_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/promoteresourcesharecreatedfrompolicy" $qp $auth.query)
   let accept_val = "application/json"
@@ -1590,7 +1595,7 @@ export def "reject-resource-share-invitation" [
   --x-amz-signed-headers: string
   resource_share_invitation_arn: string # Specifies the Amazon Resource Name (ARN) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) of the invitation that you want to reject.
   --client-token: string # Specifies a unique, case-sensitive identifier that you provide to ensure the idempotency of the request. This lets you safely retry the request without accidentally performing the same operation a second time. Passing the same value to a later call to an operation requires that you also pass the same value for all other parameters. We recommend that you use a UUID type of value. (https://wikipedia.org/wiki/Universally_unique_identifier). If you don't provide this value, then Amazon Web Services generates a random one for you. If you retry the operation with the same ClientToken, but with different parameters, the retry fails with an IdempotentParameterMismatch error.
-]: any -> record<resourceShareInvitation: record<resourceShareInvitationArn: record, resourceShareName: record, resourceShareArn: record, senderAccountId: record, receiverAccountId: record, invitationTimestamp: record, status: record, resourceShareAssociations: record, receiverArn: record>, clientToken: record> {
+]: any -> record<resourceShareInvitation: record<resourceShareInvitationArn: string, resourceShareName: string, resourceShareArn: string, senderAccountId: string, receiverAccountId: string, invitationTimestamp: string, status: string, resourceShareAssociations: list<record>, receiverArn: string>, clientToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1640,7 +1645,7 @@ export def "replace-permission-associations" [
   --from-permission-version: int # Specifies that you want to updated the permissions for only those resource shares that use the specified version of the managed permission.
   to_permission_arn: string # Specifies the ARN of the managed permission that you want to associate with resource shares in place of the one specified by fromPerssionArn and fromPermissionVersion. The operation always associates the version that is currently the default for the specified managed permission.
   --client-token: string # Specifies a unique, case-sensitive identifier that you provide to ensure the idempotency of the request. This lets you safely retry the request without accidentally performing the same operation a second time. Passing the same value to a later call to an operation requires that you also pass the same value for all other parameters. We recommend that you use a UUID type of value. (https://wikipedia.org/wiki/Universally_unique_identifier). If you don't provide this value, then Amazon Web Services generates a random one for you. If you retry the operation with the same ClientToken, but with different parameters, the retry fails with an IdempotentParameterMismatch error.
-]: any -> record<replacePermissionAssociationsWork: record<id: record, fromPermissionArn: record, fromPermissionVersion: record, toPermissionArn: record, toPermissionVersion: record, status: record, statusMessage: record, creationTime: record, lastUpdatedTime: record>, clientToken: record> {
+]: any -> record<replacePermissionAssociationsWork: record<id: string, fromPermissionArn: string, fromPermissionVersion: string, toPermissionArn: string, toPermissionVersion: string, status: string, statusMessage: string, creationTime: string, lastUpdatedTime: string>, clientToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1689,7 +1694,7 @@ export def "set-default-permission-version" [
   permission_arn: string # Specifies the Amazon Resource Name (ARN) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) of the customer managed permission whose default version you want to change.
   permission_version: int # Specifies the version number that you want to designate as the default for customer managed permission. To see a list of all available version numbers, use ListPermissionVersions.
   --client-token: string # Specifies a unique, case-sensitive identifier that you provide to ensure the idempotency of the request. This lets you safely retry the request without accidentally performing the same operation a second time. Passing the same value to a later call to an operation requires that you also pass the same value for all other parameters. We recommend that you use a UUID type of value. (https://wikipedia.org/wiki/Universally_unique_identifier). If you don't provide this value, then Amazon Web Services generates a random one for you. If you retry the operation with the same ClientToken, but with different parameters, the retry fails with an IdempotentParameterMismatch error.
-]: any -> record<returnValue: record, clientToken: record> {
+]: any -> record<returnValue: bool, clientToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1718,7 +1723,7 @@ export def "set-default-permission-version" [
 #
 # POST /tagresource
 # operationId: TagResource
-# --tags item shape: {key?: any, value?: any}
+# --tags item shape: {key?: string, value?: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1737,7 +1742,7 @@ export def "tag-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --resource-share-arn: string # Specifies the Amazon Resource Name (ARN) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) of the resource share that you want to add tags to. You must specify either resourceShareArn, or resourceArn, but not both.
-  tags: list # A list of one or more tag key and value pairs. The tag key must be present and not be an empty string. The tag value must be present but can be an empty string. — item shape: {key?: any, value?: any}
+  tags: list # A list of one or more tag key and value pairs. The tag key must be present and not be an empty string. The tag value must be present but can be an empty string. — item shape: {key?: string, value?: string}
   --resource-arn: string # Specifies the Amazon Resource Name (ARN) (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) of the managed permission that you want to add tags to. You must specify either resourceArn, or resourceShareArn, but not both.
 ]: any -> record {
   let input = $in
@@ -1838,7 +1843,7 @@ export def "update-resource-share" [
   --name: string # If specified, the new name that you want to attach to the resource share.
   --allow-external-principals: oneof<nothing, bool> # Specifies whether principals outside your organization in Organizations can be associated with a resource share.
   --client-token: string # Specifies a unique, case-sensitive identifier that you provide to ensure the idempotency of the request. This lets you safely retry the request without accidentally performing the same operation a second time. Passing the same value to a later call to an operation requires that you also pass the same value for all other parameters. We recommend that you use a UUID type of value. (https://wikipedia.org/wiki/Universally_unique_identifier). If you don't provide this value, then Amazon Web Services generates a random one for you. If you retry the operation with the same ClientToken, but with different parameters, the retry fails with an IdempotentParameterMismatch error.
-]: any -> record<resourceShare: record<resourceShareArn: record, name: record, owningAccountId: record, allowExternalPrincipals: record, status: record, statusMessage: record, tags: record, creationTime: record, lastUpdatedTime: record, featureSet: record>, clientToken: record> {
+]: any -> record<resourceShare: record<resourceShareArn: string, name: string, owningAccountId: string, allowExternalPrincipals: bool, status: string, statusMessage: string, tags: list<record>, creationTime: string, lastUpdatedTime: string, featureSet: string>, clientToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

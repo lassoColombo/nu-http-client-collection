@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -161,11 +161,12 @@ export def "consumer-invitations-list-invitations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
+  --api-version: string # The api version to use. (required)
   --skip-token: string # The continuation token
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.DataShare/ListInvitations" $qp $auth.query)
   let accept_val = "application/json"
@@ -200,13 +201,14 @@ export def "consumer-invitations-reject-invitation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
+  --api-version: string # The api version to use. (required)
   properties: record # Properties of consumer invitation — shape: {invitationId: string}
-]: any -> record<properties: record<dataSetCount: int, description: string, invitationId: string, invitationStatus: string, location: string, providerEmail: string, providerName: string, providerTenantName: string, respondedAt: string, sentAt: string, shareName: string, termsOfUse: string, userEmail: string, userName: string>> {
+]: any -> record<properties: record<dataSetCount: int, description: string, invitationId: string, invitationStatus: string, location: string, providerEmail: string, providerName: string, providerTenantName: string, respondedAt: string, sentAt: string, shareName: string, termsOfUse: string, userEmail: string, userName: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({location: (encode-path-segment $location)} | format pattern "/providers/Microsoft.DataShare/locations/{location}/RejectInvitation") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -243,12 +245,13 @@ export def "consumer-invitations-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
-]: nothing -> record<properties: record<dataSetCount: int, description: string, invitationId: string, invitationStatus: string, location: string, providerEmail: string, providerName: string, providerTenantName: string, respondedAt: string, sentAt: string, shareName: string, termsOfUse: string, userEmail: string, userName: string>> {
+  --api-version: string # The api version to use. (required)
+]: nothing -> record<properties: record<dataSetCount: int, description: string, invitationId: string, invitationStatus: string, location: string, providerEmail: string, providerName: string, providerTenantName: string, respondedAt: string, sentAt: string, shareName: string, termsOfUse: string, userEmail: string, userName: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
   if ($invitation_id | is-empty) { error make --unspanned { msg: "path parameter 'invitationId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({location: (encode-path-segment $location), invitation_id: (encode-path-segment $invitation_id)} | format pattern "/providers/Microsoft.DataShare/locations/{location}/consumerInvitations/{invitation_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -281,10 +284,11 @@ export def "operations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
+  --api-version: string # The api version to use. (required)
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string, origin: string, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.DataShare/operations" $qp $auth.query)
   let accept_val = "application/json"
@@ -318,12 +322,13 @@ export def "accounts-list-by-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
+  --api-version: string # The api version to use. (required)
   --skip-token: string # Continuation token
-]: nothing -> record<nextLink: string, value: table<identity: record, properties: record>> {
+]: nothing -> record<nextLink: string, value: table<identity: record, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataShare/accounts") $qp $auth.query)
   let accept_val = "application/json"
@@ -358,13 +363,14 @@ export def "accounts-list-by-resource-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
+  --api-version: string # The api version to use. (required)
   --skip-token: string # Continuation token
-]: nothing -> record<nextLink: string, value: table<identity: record, properties: record>> {
+]: nothing -> record<nextLink: string, value: table<identity: record, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts") $qp $auth.query)
   let accept_val = "application/json"
@@ -400,13 +406,14 @@ export def "accounts-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
+  --api-version: string # The api version to use. (required)
 ]: nothing -> record<endTime: string, error: record<code: string, details: list<any>, message: string, target: string>, startTime: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -442,13 +449,14 @@ export def "accounts-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
-]: nothing -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<createdAt: string, provisioningState: string, userEmail: string, userName: string>> {
+  --api-version: string # The api version to use. (required)
+]: nothing -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<createdAt: string, provisioningState: string, userEmail: string, userName: string>, id: string, location: string, name: string, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -484,15 +492,16 @@ export def "accounts-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
+  --api-version: string # The api version to use. (required)
   --tags: record # Tags on the azure resource.
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<createdAt: string, provisioningState: string, userEmail: string, userName: string>> {
+]: any -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<createdAt: string, provisioningState: string, userEmail: string, userName: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}") $qp $auth.query)
   let req_body = {"tags": $tags} | compact
@@ -531,18 +540,19 @@ export def "accounts-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
+  --api-version: string # The api version to use. (required)
   identity: record # Identity of resource — shape: {type?: "SystemAssigned"}
   --properties: record # Account property bag.
   --location: string # Location of the azure resource.
   --tags: record # Tags on the azure resource.
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<createdAt: string, provisioningState: string, userEmail: string, userName: string>> {
+]: any -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<createdAt: string, provisioningState: string, userEmail: string, userName: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}") $qp $auth.query)
   let req_body = {"identity": $identity, "properties": $properties, "location": $location, "tags": $tags} | compact
@@ -580,14 +590,15 @@ export def "share-subscriptions-list-by-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
+  --api-version: string # The api version to use. (required)
   --skip-token: string # Continuation Token
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shareSubscriptions") $qp $auth.query)
   let accept_val = "application/json"
@@ -624,7 +635,7 @@ export def "share-subscriptions-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
+  --api-version: string # The api version to use. (required)
 ]: nothing -> record<endTime: string, error: record<code: string, details: list<any>, message: string, target: string>, startTime: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -632,6 +643,7 @@ export def "share-subscriptions-delete" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($share_subscription_name | is-empty) { error make --unspanned { msg: "path parameter 'shareSubscriptionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), share_subscription_name: (encode-path-segment $share_subscription_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shareSubscriptions/{share_subscription_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -668,14 +680,15 @@ export def "share-subscriptions-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
-]: nothing -> record<properties: record<createdAt: string, invitationId: string, providerEmail: string, providerName: string, providerTenantName: string, provisioningState: string, shareDescription: string, shareKind: string, shareName: string, shareSubscriptionStatus: string, shareTerms: string, sourceShareLocation: string, userEmail: string, userName: string>> {
+  --api-version: string # The api version to use. (required)
+]: nothing -> record<properties: record<createdAt: string, invitationId: string, providerEmail: string, providerName: string, providerTenantName: string, provisioningState: string, shareDescription: string, shareKind: string, shareName: string, shareSubscriptionStatus: string, shareTerms: string, sourceShareLocation: string, userEmail: string, userName: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($share_subscription_name | is-empty) { error make --unspanned { msg: "path parameter 'shareSubscriptionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), share_subscription_name: (encode-path-segment $share_subscription_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shareSubscriptions/{share_subscription_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -713,9 +726,9 @@ export def "share-subscriptions-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
+  --api-version: string # The api version to use. (required)
   properties: record # Share subscription property bag. — shape: {invitationId: string, sourceShareLocation: string}
-]: any -> record<properties: record<createdAt: string, invitationId: string, providerEmail: string, providerName: string, providerTenantName: string, provisioningState: string, shareDescription: string, shareKind: string, shareName: string, shareSubscriptionStatus: string, shareTerms: string, sourceShareLocation: string, userEmail: string, userName: string>> {
+]: any -> record<properties: record<createdAt: string, invitationId: string, providerEmail: string, providerName: string, providerTenantName: string, provisioningState: string, shareDescription: string, shareKind: string, shareName: string, shareSubscriptionStatus: string, shareTerms: string, sourceShareLocation: string, userEmail: string, userName: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -723,6 +736,7 @@ export def "share-subscriptions-create" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($share_subscription_name | is-empty) { error make --unspanned { msg: "path parameter 'shareSubscriptionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), share_subscription_name: (encode-path-segment $share_subscription_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shareSubscriptions/{share_subscription_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -761,15 +775,16 @@ export def "consumer-source-data-sets-list-by-share-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
+  --api-version: string # The api version to use. (required)
   --skip-token: string # Continuation token
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($share_subscription_name | is-empty) { error make --unspanned { msg: "path parameter 'shareSubscriptionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), share_subscription_name: (encode-path-segment $share_subscription_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shareSubscriptions/{share_subscription_name}/ConsumerSourceDataSets") $qp $auth.query)
   let accept_val = "application/json"
@@ -806,7 +821,7 @@ export def "share-subscriptions-synchronize" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
+  --api-version: string # The api version to use. (required)
   --synchronization-mode: string@synchronization-mode-completer # Mode of synchronization used in triggers and snapshot sync. Incremental by default
 ]: any -> record<durationMs: int, endTime: string, message: string, startTime: string, status: string, synchronizationId: string, synchronizationMode: string> {
   let input = $in
@@ -816,6 +831,7 @@ export def "share-subscriptions-synchronize" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($share_subscription_name | is-empty) { error make --unspanned { msg: "path parameter 'shareSubscriptionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), share_subscription_name: (encode-path-segment $share_subscription_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shareSubscriptions/{share_subscription_name}/Synchronize") $qp $auth.query)
   let req_body = {"synchronizationMode": $synchronization_mode} | compact
@@ -854,7 +870,7 @@ export def "share-subscriptions-cancel-synchronization" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
+  --api-version: string # The api version to use. (required)
   synchronization_id: string # Synchronization id
 ]: any -> record<durationMs: int, endTime: string, message: string, startTime: string, status: string, synchronizationId: string, synchronizationMode: string> {
   let input = $in
@@ -864,6 +880,7 @@ export def "share-subscriptions-cancel-synchronization" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($share_subscription_name | is-empty) { error make --unspanned { msg: "path parameter 'shareSubscriptionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), share_subscription_name: (encode-path-segment $share_subscription_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shareSubscriptions/{share_subscription_name}/cancelSynchronization") $qp $auth.query)
   let req_body = {"synchronizationId": $synchronization_id} | compact
@@ -902,15 +919,16 @@ export def "data-set-mappings-list-by-share-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
+  --api-version: string # The api version to use. (required)
   --skip-token: string # Continuation token
-]: nothing -> record<nextLink: string, value: table<kind: string>> {
+]: nothing -> record<nextLink: string, value: table<kind: string, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($share_subscription_name | is-empty) { error make --unspanned { msg: "path parameter 'shareSubscriptionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), share_subscription_name: (encode-path-segment $share_subscription_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shareSubscriptions/{share_subscription_name}/dataSetMappings") $qp $auth.query)
   let accept_val = "application/json"
@@ -948,8 +966,8 @@ export def "data-set-mappings-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # The api version to use. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -957,6 +975,7 @@ export def "data-set-mappings-delete" [
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($share_subscription_name | is-empty) { error make --unspanned { msg: "path parameter 'shareSubscriptionName' must be non-empty" } }
   if ($data_set_mapping_name | is-empty) { error make --unspanned { msg: "path parameter 'dataSetMappingName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), share_subscription_name: (encode-path-segment $share_subscription_name), data_set_mapping_name: (encode-path-segment $data_set_mapping_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shareSubscriptions/{share_subscription_name}/dataSetMappings/{data_set_mapping_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -994,8 +1013,8 @@ export def "data-set-mappings-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
-]: nothing -> record<kind: string> {
+  --api-version: string # The api version to use. (required)
+]: nothing -> record<kind: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1003,6 +1022,7 @@ export def "data-set-mappings-get" [
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($share_subscription_name | is-empty) { error make --unspanned { msg: "path parameter 'shareSubscriptionName' must be non-empty" } }
   if ($data_set_mapping_name | is-empty) { error make --unspanned { msg: "path parameter 'dataSetMappingName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), share_subscription_name: (encode-path-segment $share_subscription_name), data_set_mapping_name: (encode-path-segment $data_set_mapping_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shareSubscriptions/{share_subscription_name}/dataSetMappings/{data_set_mapping_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1041,9 +1061,9 @@ export def "data-set-mappings-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
+  --api-version: string # The api version to use. (required)
   kind: string@kind-completer # Kind of data set mapping.
-]: any -> record<kind: string> {
+]: any -> record<kind: string, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1052,6 +1072,7 @@ export def "data-set-mappings-create" [
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($share_subscription_name | is-empty) { error make --unspanned { msg: "path parameter 'shareSubscriptionName' must be non-empty" } }
   if ($data_set_mapping_name | is-empty) { error make --unspanned { msg: "path parameter 'dataSetMappingName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), share_subscription_name: (encode-path-segment $share_subscription_name), data_set_mapping_name: (encode-path-segment $data_set_mapping_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shareSubscriptions/{share_subscription_name}/dataSetMappings/{data_set_mapping_name}") $qp $auth.query)
   let req_body = {"kind": $kind} | compact
@@ -1090,7 +1111,7 @@ export def "share-subscriptions-list-source-share-synchronization-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
+  --api-version: string # The api version to use. (required)
   --skip-token: string # Continuation token
 ]: nothing -> record<nextLink: string, value: table<kind: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1099,6 +1120,7 @@ export def "share-subscriptions-list-source-share-synchronization-settings" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($share_subscription_name | is-empty) { error make --unspanned { msg: "path parameter 'shareSubscriptionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), share_subscription_name: (encode-path-segment $share_subscription_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shareSubscriptions/{share_subscription_name}/listSourceShareSynchronizationSettings") $qp $auth.query)
   let accept_val = "application/json"
@@ -1135,7 +1157,7 @@ export def "share-subscriptions-list-synchronization-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
+  --api-version: string # The api version to use. (required)
   --skip-token: string # Continuation token
   synchronization_id: string # Synchronization id
 ]: any -> record<nextLink: string, value: table<dataSetId: string, dataSetType: string, durationMs: int, endTime: string, filesRead: int, filesWritten: int, message: string, name: string, rowsCopied: int, rowsRead: int, sizeRead: int, sizeWritten: int, startTime: string, status: string, vCore: int>> {
@@ -1146,6 +1168,7 @@ export def "share-subscriptions-list-synchronization-details" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($share_subscription_name | is-empty) { error make --unspanned { msg: "path parameter 'shareSubscriptionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), share_subscription_name: (encode-path-segment $share_subscription_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shareSubscriptions/{share_subscription_name}/listSynchronizationDetails") $qp $auth.query)
   let req_body = {"synchronizationId": $synchronization_id} | compact
@@ -1184,7 +1207,7 @@ export def "share-subscriptions-list-synchronizations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
+  --api-version: string # The api version to use. (required)
   --skip-token: string # Continuation token
 ]: nothing -> record<nextLink: string, value: table<durationMs: int, endTime: string, message: string, startTime: string, status: string, synchronizationId: string, synchronizationMode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1193,6 +1216,7 @@ export def "share-subscriptions-list-synchronizations" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($share_subscription_name | is-empty) { error make --unspanned { msg: "path parameter 'shareSubscriptionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), share_subscription_name: (encode-path-segment $share_subscription_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shareSubscriptions/{share_subscription_name}/listSynchronizations") $qp $auth.query)
   let accept_val = "application/json"
@@ -1229,15 +1253,16 @@ export def "triggers-list-by-share-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
+  --api-version: string # The api version to use. (required)
   --skip-token: string # Continuation token
-]: nothing -> record<nextLink: string, value: table<kind: string>> {
+]: nothing -> record<nextLink: string, value: table<kind: string, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($share_subscription_name | is-empty) { error make --unspanned { msg: "path parameter 'shareSubscriptionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), share_subscription_name: (encode-path-segment $share_subscription_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shareSubscriptions/{share_subscription_name}/triggers") $qp $auth.query)
   let accept_val = "application/json"
@@ -1275,7 +1300,7 @@ export def "triggers-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
+  --api-version: string # The api version to use. (required)
 ]: nothing -> record<endTime: string, error: record<code: string, details: list<any>, message: string, target: string>, startTime: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1284,6 +1309,7 @@ export def "triggers-delete" [
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($share_subscription_name | is-empty) { error make --unspanned { msg: "path parameter 'shareSubscriptionName' must be non-empty" } }
   if ($trigger_name | is-empty) { error make --unspanned { msg: "path parameter 'triggerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), share_subscription_name: (encode-path-segment $share_subscription_name), trigger_name: (encode-path-segment $trigger_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shareSubscriptions/{share_subscription_name}/triggers/{trigger_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1321,8 +1347,8 @@ export def "triggers-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
-]: nothing -> record<kind: string> {
+  --api-version: string # The api version to use. (required)
+]: nothing -> record<kind: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1330,6 +1356,7 @@ export def "triggers-get" [
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($share_subscription_name | is-empty) { error make --unspanned { msg: "path parameter 'shareSubscriptionName' must be non-empty" } }
   if ($trigger_name | is-empty) { error make --unspanned { msg: "path parameter 'triggerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), share_subscription_name: (encode-path-segment $share_subscription_name), trigger_name: (encode-path-segment $trigger_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shareSubscriptions/{share_subscription_name}/triggers/{trigger_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1368,9 +1395,9 @@ export def "triggers-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
+  --api-version: string # The api version to use. (required)
   kind: string@kind-completer-1 # Kind of synchronization
-]: any -> record<kind: string> {
+]: any -> record<kind: string, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1379,6 +1406,7 @@ export def "triggers-create" [
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($share_subscription_name | is-empty) { error make --unspanned { msg: "path parameter 'shareSubscriptionName' must be non-empty" } }
   if ($trigger_name | is-empty) { error make --unspanned { msg: "path parameter 'triggerName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), share_subscription_name: (encode-path-segment $share_subscription_name), trigger_name: (encode-path-segment $trigger_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shareSubscriptions/{share_subscription_name}/triggers/{trigger_name}") $qp $auth.query)
   let req_body = {"kind": $kind} | compact
@@ -1416,14 +1444,15 @@ export def "shares-list-by-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
+  --api-version: string # The api version to use. (required)
   --skip-token: string # Continuation Token
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares") $qp $auth.query)
   let accept_val = "application/json"
@@ -1460,7 +1489,7 @@ export def "shares-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
+  --api-version: string # The api version to use. (required)
 ]: nothing -> record<endTime: string, error: record<code: string, details: list<any>, message: string, target: string>, startTime: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1468,6 +1497,7 @@ export def "shares-delete" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($share_name | is-empty) { error make --unspanned { msg: "path parameter 'shareName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), share_name: (encode-path-segment $share_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1504,14 +1534,15 @@ export def "shares-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
-]: nothing -> record<properties: record<createdAt: string, description: string, provisioningState: string, shareKind: string, terms: string, userEmail: string, userName: string>> {
+  --api-version: string # The api version to use. (required)
+]: nothing -> record<properties: record<createdAt: string, description: string, provisioningState: string, shareKind: string, terms: string, userEmail: string, userName: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($share_name | is-empty) { error make --unspanned { msg: "path parameter 'shareName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), share_name: (encode-path-segment $share_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1549,9 +1580,9 @@ export def "shares-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
+  --api-version: string # The api version to use. (required)
   --properties: record # Share property bag. — shape: {description?: string, shareKind?: "CopyBased"|"InPlace", terms?: string}
-]: any -> record<properties: record<createdAt: string, description: string, provisioningState: string, shareKind: string, terms: string, userEmail: string, userName: string>> {
+]: any -> record<properties: record<createdAt: string, description: string, provisioningState: string, shareKind: string, terms: string, userEmail: string, userName: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1559,6 +1590,7 @@ export def "shares-create" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($share_name | is-empty) { error make --unspanned { msg: "path parameter 'shareName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), share_name: (encode-path-segment $share_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -1597,15 +1629,16 @@ export def "data-sets-list-by-share" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
+  --api-version: string # The api version to use. (required)
   --skip-token: string # continuation token
-]: nothing -> record<nextLink: string, value: table<kind: string>> {
+]: nothing -> record<nextLink: string, value: table<kind: string, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($share_name | is-empty) { error make --unspanned { msg: "path parameter 'shareName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), share_name: (encode-path-segment $share_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}/dataSets") $qp $auth.query)
   let accept_val = "application/json"
@@ -1643,8 +1676,8 @@ export def "data-sets-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # The api version to use. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1652,6 +1685,7 @@ export def "data-sets-delete" [
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($share_name | is-empty) { error make --unspanned { msg: "path parameter 'shareName' must be non-empty" } }
   if ($data_set_name | is-empty) { error make --unspanned { msg: "path parameter 'dataSetName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), share_name: (encode-path-segment $share_name), data_set_name: (encode-path-segment $data_set_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}/dataSets/{data_set_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1689,8 +1723,8 @@ export def "data-sets-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
-]: nothing -> record<kind: string> {
+  --api-version: string # The api version to use. (required)
+]: nothing -> record<kind: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1698,6 +1732,7 @@ export def "data-sets-get" [
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($share_name | is-empty) { error make --unspanned { msg: "path parameter 'shareName' must be non-empty" } }
   if ($data_set_name | is-empty) { error make --unspanned { msg: "path parameter 'dataSetName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), share_name: (encode-path-segment $share_name), data_set_name: (encode-path-segment $data_set_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}/dataSets/{data_set_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1736,9 +1771,9 @@ export def "data-sets-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
+  --api-version: string # The api version to use. (required)
   kind: string@kind-completer-2 # Kind of data set.
-]: any -> record<kind: string> {
+]: any -> record<kind: string, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1747,6 +1782,7 @@ export def "data-sets-create" [
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($share_name | is-empty) { error make --unspanned { msg: "path parameter 'shareName' must be non-empty" } }
   if ($data_set_name | is-empty) { error make --unspanned { msg: "path parameter 'dataSetName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), share_name: (encode-path-segment $share_name), data_set_name: (encode-path-segment $data_set_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}/dataSets/{data_set_name}") $qp $auth.query)
   let req_body = {"kind": $kind} | compact
@@ -1785,15 +1821,16 @@ export def "invitations-list-by-share" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
+  --api-version: string # The api version to use. (required)
   --skip-token: string # The continuation token
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($share_name | is-empty) { error make --unspanned { msg: "path parameter 'shareName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), share_name: (encode-path-segment $share_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}/invitations") $qp $auth.query)
   let accept_val = "application/json"
@@ -1831,8 +1868,8 @@ export def "invitations-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
-]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
+  --api-version: string # The api version to use. (required)
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1840,6 +1877,7 @@ export def "invitations-delete" [
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($share_name | is-empty) { error make --unspanned { msg: "path parameter 'shareName' must be non-empty" } }
   if ($invitation_name | is-empty) { error make --unspanned { msg: "path parameter 'invitationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), share_name: (encode-path-segment $share_name), invitation_name: (encode-path-segment $invitation_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}/invitations/{invitation_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1877,8 +1915,8 @@ export def "invitations-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
-]: nothing -> record<properties: record<invitationId: string, invitationStatus: string, respondedAt: string, sentAt: string, targetActiveDirectoryId: string, targetEmail: string, targetObjectId: string, userEmail: string, userName: string>> {
+  --api-version: string # The api version to use. (required)
+]: nothing -> record<properties: record<invitationId: string, invitationStatus: string, respondedAt: string, sentAt: string, targetActiveDirectoryId: string, targetEmail: string, targetObjectId: string, userEmail: string, userName: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1886,6 +1924,7 @@ export def "invitations-get" [
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($share_name | is-empty) { error make --unspanned { msg: "path parameter 'shareName' must be non-empty" } }
   if ($invitation_name | is-empty) { error make --unspanned { msg: "path parameter 'invitationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), share_name: (encode-path-segment $share_name), invitation_name: (encode-path-segment $invitation_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}/invitations/{invitation_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1924,9 +1963,9 @@ export def "invitations-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
+  --api-version: string # The api version to use. (required)
   --properties: record # Invitation property bag. — shape: {targetActiveDirectoryId?: string, targetEmail?: string, targetObjectId?: string}
-]: any -> record<properties: record<invitationId: string, invitationStatus: string, respondedAt: string, sentAt: string, targetActiveDirectoryId: string, targetEmail: string, targetObjectId: string, userEmail: string, userName: string>> {
+]: any -> record<properties: record<invitationId: string, invitationStatus: string, respondedAt: string, sentAt: string, targetActiveDirectoryId: string, targetEmail: string, targetObjectId: string, userEmail: string, userName: string>, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1935,6 +1974,7 @@ export def "invitations-create" [
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($share_name | is-empty) { error make --unspanned { msg: "path parameter 'shareName' must be non-empty" } }
   if ($invitation_name | is-empty) { error make --unspanned { msg: "path parameter 'invitationName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), share_name: (encode-path-segment $share_name), invitation_name: (encode-path-segment $invitation_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}/invitations/{invitation_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
@@ -1973,7 +2013,7 @@ export def "shares-list-synchronization-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
+  --api-version: string # The api version to use. (required)
   --skip-token: string # Continuation token
   --consumer-email: string # Email of the user who created the synchronization
   --consumer-name: string # Name of the user who created the synchronization
@@ -1992,6 +2032,7 @@ export def "shares-list-synchronization-details" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($share_name | is-empty) { error make --unspanned { msg: "path parameter 'shareName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), share_name: (encode-path-segment $share_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}/listSynchronizationDetails") $qp $auth.query)
   let req_body = {"consumerEmail": $consumer_email, "consumerName": $consumer_name, "consumerTenantName": $consumer_tenant_name, "durationMs": $duration_ms, "endTime": $end_time, "message": $message, "startTime": $start_time, "status": $status, "synchronizationId": $synchronization_id} | compact
@@ -2030,7 +2071,7 @@ export def "shares-list-synchronizations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
+  --api-version: string # The api version to use. (required)
   --skip-token: string # Continuation token
 ]: nothing -> record<nextLink: string, value: table<consumerEmail: string, consumerName: string, consumerTenantName: string, durationMs: int, endTime: string, message: string, startTime: string, status: string, synchronizationId: string, synchronizationMode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2039,6 +2080,7 @@ export def "shares-list-synchronizations" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($share_name | is-empty) { error make --unspanned { msg: "path parameter 'shareName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), share_name: (encode-path-segment $share_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}/listSynchronizations") $qp $auth.query)
   let accept_val = "application/json"
@@ -2075,15 +2117,16 @@ export def "provider-share-subscriptions-list-by-share" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
+  --api-version: string # The api version to use. (required)
   --skip-token: string # Continuation Token
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($share_name | is-empty) { error make --unspanned { msg: "path parameter 'shareName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), share_name: (encode-path-segment $share_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}/providerShareSubscriptions") $qp $auth.query)
   let accept_val = "application/json"
@@ -2121,8 +2164,8 @@ export def "provider-share-subscriptions-get-by-share" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
-]: nothing -> record<properties: record<consumerEmail: string, consumerName: string, consumerTenantName: string, createdAt: string, providerEmail: string, providerName: string, shareSubscriptionObjectId: string, shareSubscriptionStatus: string, sharedAt: string>> {
+  --api-version: string # The api version to use. (required)
+]: nothing -> record<properties: record<consumerEmail: string, consumerName: string, consumerTenantName: string, createdAt: string, providerEmail: string, providerName: string, shareSubscriptionObjectId: string, shareSubscriptionStatus: string, sharedAt: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2130,6 +2173,7 @@ export def "provider-share-subscriptions-get-by-share" [
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($share_name | is-empty) { error make --unspanned { msg: "path parameter 'shareName' must be non-empty" } }
   if ($provider_share_subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'providerShareSubscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), share_name: (encode-path-segment $share_name), provider_share_subscription_id: (encode-path-segment $provider_share_subscription_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}/providerShareSubscriptions/{provider_share_subscription_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2167,8 +2211,8 @@ export def "provider-share-subscriptions-reinstate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
-]: nothing -> record<properties: record<consumerEmail: string, consumerName: string, consumerTenantName: string, createdAt: string, providerEmail: string, providerName: string, shareSubscriptionObjectId: string, shareSubscriptionStatus: string, sharedAt: string>> {
+  --api-version: string # The api version to use. (required)
+]: nothing -> record<properties: record<consumerEmail: string, consumerName: string, consumerTenantName: string, createdAt: string, providerEmail: string, providerName: string, shareSubscriptionObjectId: string, shareSubscriptionStatus: string, sharedAt: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2176,6 +2220,7 @@ export def "provider-share-subscriptions-reinstate" [
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($share_name | is-empty) { error make --unspanned { msg: "path parameter 'shareName' must be non-empty" } }
   if ($provider_share_subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'providerShareSubscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), share_name: (encode-path-segment $share_name), provider_share_subscription_id: (encode-path-segment $provider_share_subscription_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}/providerShareSubscriptions/{provider_share_subscription_id}/reinstate") $qp $auth.query)
   let accept_val = "application/json"
@@ -2213,8 +2258,8 @@ export def "provider-share-subscriptions-revoke" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
-]: nothing -> record<properties: record<consumerEmail: string, consumerName: string, consumerTenantName: string, createdAt: string, providerEmail: string, providerName: string, shareSubscriptionObjectId: string, shareSubscriptionStatus: string, sharedAt: string>> {
+  --api-version: string # The api version to use. (required)
+]: nothing -> record<properties: record<consumerEmail: string, consumerName: string, consumerTenantName: string, createdAt: string, providerEmail: string, providerName: string, shareSubscriptionObjectId: string, shareSubscriptionStatus: string, sharedAt: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2222,6 +2267,7 @@ export def "provider-share-subscriptions-revoke" [
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($share_name | is-empty) { error make --unspanned { msg: "path parameter 'shareName' must be non-empty" } }
   if ($provider_share_subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'providerShareSubscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), share_name: (encode-path-segment $share_name), provider_share_subscription_id: (encode-path-segment $provider_share_subscription_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}/providerShareSubscriptions/{provider_share_subscription_id}/revoke") $qp $auth.query)
   let accept_val = "application/json"
@@ -2258,15 +2304,16 @@ export def "synchronization-settings-list-by-share" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
+  --api-version: string # The api version to use. (required)
   --skip-token: string # continuation token
-]: nothing -> record<nextLink: string, value: table<kind: string>> {
+]: nothing -> record<nextLink: string, value: table<kind: string, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($share_name | is-empty) { error make --unspanned { msg: "path parameter 'shareName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), share_name: (encode-path-segment $share_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}/synchronizationSettings") $qp $auth.query)
   let accept_val = "application/json"
@@ -2304,7 +2351,7 @@ export def "synchronization-settings-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
+  --api-version: string # The api version to use. (required)
 ]: nothing -> record<endTime: string, error: record<code: string, details: list<any>, message: string, target: string>, startTime: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2313,6 +2360,7 @@ export def "synchronization-settings-delete" [
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($share_name | is-empty) { error make --unspanned { msg: "path parameter 'shareName' must be non-empty" } }
   if ($synchronization_setting_name | is-empty) { error make --unspanned { msg: "path parameter 'synchronizationSettingName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), share_name: (encode-path-segment $share_name), synchronization_setting_name: (encode-path-segment $synchronization_setting_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}/synchronizationSettings/{synchronization_setting_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2350,8 +2398,8 @@ export def "synchronization-settings-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
-]: nothing -> record<kind: string> {
+  --api-version: string # The api version to use. (required)
+]: nothing -> record<kind: string, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2359,6 +2407,7 @@ export def "synchronization-settings-get" [
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($share_name | is-empty) { error make --unspanned { msg: "path parameter 'shareName' must be non-empty" } }
   if ($synchronization_setting_name | is-empty) { error make --unspanned { msg: "path parameter 'synchronizationSettingName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), share_name: (encode-path-segment $share_name), synchronization_setting_name: (encode-path-segment $synchronization_setting_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}/synchronizationSettings/{synchronization_setting_name}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2397,9 +2446,9 @@ export def "synchronization-settings-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # The api version to use.
+  --api-version: string # The api version to use. (required)
   kind: string@kind-completer-1 # Kind of synchronization
-]: any -> record<kind: string> {
+]: any -> record<kind: string, id: string, name: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2408,6 +2457,7 @@ export def "synchronization-settings-create" [
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   if ($share_name | is-empty) { error make --unspanned { msg: "path parameter 'shareName' must be non-empty" } }
   if ($synchronization_setting_name | is-empty) { error make --unspanned { msg: "path parameter 'synchronizationSettingName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), share_name: (encode-path-segment $share_name), synchronization_setting_name: (encode-path-segment $synchronization_setting_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}/synchronizationSettings/{synchronization_setting_name}") $qp $auth.query)
   let req_body = {"kind": $kind} | compact

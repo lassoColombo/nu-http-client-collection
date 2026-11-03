@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
@@ -96,6 +96,7 @@ def base-url-completer [] { ["http://firehose.us-east-1.amazonaws.com" "http://f
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def delivery-stream-type-completer [] { ["DirectPut" "KinesisStreamAsSource"] }
 def x-amz-target-completer [] { ["Firehose_20150804.CreateDeliveryStream"] }
 def x-amz-target-completer-1 [] { ["Firehose_20150804.DeleteDeliveryStream"] }
 def x-amz-target-completer-2 [] { ["Firehose_20150804.DescribeDeliveryStream"] }
@@ -136,6 +137,17 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateDeliveryStream
+# --KinesisStreamSourceConfiguration shape: {KinesisStreamARN: string, RoleARN: string}
+# --DeliveryStreamEncryptionConfigurationInput shape: {KeyARN?: string, KeyType: "AWS_OWNED_CMK"|"CUSTOMER_MANAGED_CMK"}
+# --S3DestinationConfiguration shape: {RoleARN: string, BucketARN: string, Prefix?: string, ErrorOutputPrefix?: string, BufferingHints?: record, CompressionFormat?: "UNCOMPRESSED"|"GZIP"|"ZIP"|"Snappy"|"HADOOP_SNAPPY", EncryptionConfiguration?: record, CloudWatchLoggingOptions?: record}
+# --ExtendedS3DestinationConfiguration shape: {RoleARN: string, BucketARN: string, Prefix?: string, ErrorOutputPrefix?: string, BufferingHints?: record, CompressionFormat?: "UNCOMPRESSED"|"GZIP"|"ZIP"|"Snappy"|"HADOOP_SNAPPY", EncryptionConfiguration?: record, CloudWatchLoggingOptions?: record, ProcessingConfiguration?: record, S3BackupMode?: "Disabled"|"Enabled", S3BackupConfiguration?: record, DataFormatConversionConfiguration?: record, DynamicPartitioningConfiguration?: record}
+# --RedshiftDestinationConfiguration shape: {RoleARN: string, ClusterJDBCURL: string, CopyCommand: record, Username: string, Password: string, RetryOptions?: record, S3Configuration: record, ProcessingConfiguration?: record, S3BackupMode?: "Disabled"|"Enabled", S3BackupConfiguration?: record, CloudWatchLoggingOptions?: record}
+# --ElasticsearchDestinationConfiguration shape: {RoleARN: string, DomainARN?: string, ClusterEndpoint?: string, IndexName: string, TypeName?: string, IndexRotationPeriod?: "NoRotation"|"OneHour"|"OneDay"|"OneWeek"|"OneMonth", BufferingHints?: record, RetryOptions?: record, S3BackupMode?: "FailedDocumentsOnly"|"AllDocuments", S3Configuration: record, ProcessingConfiguration?: record, CloudWatchLoggingOptions?: record, VpcConfiguration?: record}
+# --AmazonopensearchserviceDestinationConfiguration shape: {RoleARN: string, DomainARN?: string, ClusterEndpoint?: string, IndexName: string, TypeName?: string, IndexRotationPeriod?: "NoRotation"|"OneHour"|"OneDay"|"OneWeek"|"OneMonth", BufferingHints?: record, RetryOptions?: record, S3BackupMode?: "FailedDocumentsOnly"|"AllDocuments", S3Configuration: record, ProcessingConfiguration?: record, CloudWatchLoggingOptions?: record, VpcConfiguration?: record}
+# --SplunkDestinationConfiguration shape: {HECEndpoint: string, HECEndpointType: "Raw"|"Event", HECToken: string, HECAcknowledgmentTimeoutInSeconds?: int, RetryOptions?: record, S3BackupMode?: "FailedEventsOnly"|"AllEvents", S3Configuration: record, ProcessingConfiguration?: record, CloudWatchLoggingOptions?: record}
+# --HttpEndpointDestinationConfiguration shape: {EndpointConfiguration: record, BufferingHints?: record, CloudWatchLoggingOptions?: record, RequestConfiguration?: record, ProcessingConfiguration?: record, RoleARN?: string, RetryOptions?: record, S3BackupMode?: "FailedDataOnly"|"AllData", S3Configuration: record}
+# --Tags item shape: {Key: string, Value?: string}
+# --AmazonOpenSearchServerlessDestinationConfiguration shape: {RoleARN: string, CollectionEndpoint?: string, IndexName: string, BufferingHints?: record, RetryOptions?: record, S3BackupMode?: "FailedDocumentsOnly"|"AllDocuments", S3Configuration: record, ProcessingConfiguration?: record, CloudWatchLoggingOptions?: record, VpcConfiguration?: record}
 export def "create-delivery-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -153,24 +165,25 @@ export def "create-delivery-stream" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer
-  delivery_stream_name: any
-  --delivery-stream-type: any
-  --kinesis-stream-source-configuration: any
-  --delivery-stream-encryption-configuration-input: any
-  --s3-destination-configuration: any
-  --extended-s3-destination-configuration: any
-  --redshift-destination-configuration: any
-  --elasticsearch-destination-configuration: any
-  --amazonopensearchservice-destination-configuration: any
-  --splunk-destination-configuration: any
-  --http-endpoint-destination-configuration: any
-  --tags: any
-  --amazon-open-search-serverless-destination-configuration: any
-]: any -> record<DeliveryStreamARN: record> {
+  --x-amz-target: string@x-amz-target-completer # required
+  delivery_stream_name: string # The name of the delivery stream. This name must be unique per Amazon Web Services account in the same Amazon Web Services Region. If the delivery streams are in different accounts or different Regions, you can have multiple delivery streams with the same name.
+  --delivery-stream-type: string@delivery-stream-type-completer # The delivery stream type. This parameter can be one of the following values: DirectPut: Provider applications access the delivery stream directly. KinesisStreamAsSource: The delivery stream uses a Kinesis data stream as a source.
+  --kinesis-stream-source-configuration: record # The stream and role Amazon Resource Names (ARNs) for a Kinesis data stream used as the source for a delivery stream. — shape: {KinesisStreamARN: string, RoleARN: string}
+  --delivery-stream-encryption-configuration-input: record # Specifies the type and Amazon Resource Name (ARN) of the CMK to use for Server-Side Encryption (SSE). — shape: {KeyARN?: string, KeyType: "AWS_OWNED_CMK"|"CUSTOMER_MANAGED_CMK"}
+  --s3-destination-configuration: record # Describes the configuration of a destination in Amazon S3. — shape: {RoleARN: string, BucketARN: string, Prefix?: string, ErrorOutputPrefix?: string, BufferingHints?: record, CompressionFormat?: "UNCOMPRESSED"|"GZIP"|"ZIP"|"Snappy"|"HADOOP_SNAPPY", EncryptionConfiguration?: record, CloudWatchLoggingOptions?: record}
+  --extended-s3-destination-configuration: record # Describes the configuration of a destination in Amazon S3. — shape: {RoleARN: string, BucketARN: string, Prefix?: string, ErrorOutputPrefix?: string, BufferingHints?: record, CompressionFormat?: "UNCOMPRESSED"|"GZIP"|"ZIP"|"Snappy"|"HADOOP_SNAPPY", EncryptionConfiguration?: record, CloudWatchLoggingOptions?: record, ProcessingConfiguration?: record, S3BackupMode?: "Disabled"|"Enabled", S3BackupConfiguration?: record, DataFormatConversionConfiguration?: record, DynamicPartitioningConfiguration?: record}
+  --redshift-destination-configuration: record # Describes the configuration of a destination in Amazon Redshift. — shape: {RoleARN: string, ClusterJDBCURL: string, CopyCommand: record, Username: string, Password: string, RetryOptions?: record, S3Configuration: record, ProcessingConfiguration?: record, S3BackupMode?: "Disabled"|"Enabled", S3BackupConfiguration?: record, CloudWatchLoggingOptions?: record}
+  --elasticsearch-destination-configuration: record # Describes the configuration of a destination in Amazon ES. — shape: {RoleARN: string, DomainARN?: string, ClusterEndpoint?: string, IndexName: string, TypeName?: string, IndexRotationPeriod?: "NoRotation"|"OneHour"|"OneDay"|"OneWeek"|"OneMonth", BufferingHints?: record, RetryOptions?: record, S3BackupMode?: "FailedDocumentsOnly"|"AllDocuments", S3Configuration: record, ProcessingConfiguration?: record, CloudWatchLoggingOptions?: record, VpcConfiguration?: record}
+  --amazonopensearchservice-destination-configuration: record # Describes the configuration of a destination in Amazon OpenSearch Service — shape: {RoleARN: string, DomainARN?: string, ClusterEndpoint?: string, IndexName: string, TypeName?: string, IndexRotationPeriod?: "NoRotation"|"OneHour"|"OneDay"|"OneWeek"|"OneMonth", BufferingHints?: record, RetryOptions?: record, S3BackupMode?: "FailedDocumentsOnly"|"AllDocuments", S3Configuration: record, ProcessingConfiguration?: record, CloudWatchLoggingOptions?: record, VpcConfiguration?: record}
+  --splunk-destination-configuration: record # Describes the configuration of a destination in Splunk. — shape: {HECEndpoint: string, HECEndpointType: "Raw"|"Event", HECToken: string, HECAcknowledgmentTimeoutInSeconds?: int, RetryOptions?: record, S3BackupMode?: "FailedEventsOnly"|"AllEvents", S3Configuration: record, ProcessingConfiguration?: record, CloudWatchLoggingOptions?: record}
+  --http-endpoint-destination-configuration: record # Describes the configuration of the HTTP endpoint destination. — shape: {EndpointConfiguration: record, BufferingHints?: record, CloudWatchLoggingOptions?: record, RequestConfiguration?: record, ProcessingConfiguration?: record, RoleARN?: string, RetryOptions?: record, S3BackupMode?: "FailedDataOnly"|"AllData", S3Configuration: record}
+  --tags: list # A set of tags to assign to the delivery stream. A tag is a key-value pair that you can define and assign to Amazon Web Services resources. Tags are metadata. For example, you can add friendly names and descriptions or other types of information that can help you distinguish the delivery stream. For more information about tags, see Using Cost Allocation Tags (https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/cost-alloc-tags.html) in the Amazon Web Services Billing and Cost Management User Guide. You can specify up to 50 tags when creating a delivery stream. — item shape: {Key: string, Value?: string}
+  --amazon-open-search-serverless-destination-configuration: record # Describes the configuration of a destination in the Serverless offering for Amazon OpenSearch Service. — shape: {RoleARN: string, CollectionEndpoint?: string, IndexName: string, BufferingHints?: record, RetryOptions?: record, S3BackupMode?: "FailedDocumentsOnly"|"AllDocuments", S3Configuration: record, ProcessingConfiguration?: record, CloudWatchLoggingOptions?: record, VpcConfiguration?: record}
+]: any -> record<DeliveryStreamARN: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Firehose_20150804.CreateDeliveryStream")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DeliveryStreamName": $delivery_stream_name, "DeliveryStreamType": $delivery_stream_type, "KinesisStreamSourceConfiguration": $kinesis_stream_source_configuration, "DeliveryStreamEncryptionConfigurationInput": $delivery_stream_encryption_configuration_input, "S3DestinationConfiguration": $s3_destination_configuration, "ExtendedS3DestinationConfiguration": $extended_s3_destination_configuration, "RedshiftDestinationConfiguration": $redshift_destination_configuration, "ElasticsearchDestinationConfiguration": $elasticsearch_destination_configuration, "AmazonopensearchserviceDestinationConfiguration": $amazonopensearchservice_destination_configuration, "SplunkDestinationConfiguration": $splunk_destination_configuration, "HttpEndpointDestinationConfiguration": $http_endpoint_destination_configuration, "Tags": $tags, "AmazonOpenSearchServerlessDestinationConfiguration": $amazon_open_search_serverless_destination_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -213,13 +226,14 @@ export def "delete-delivery-stream" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-1
-  delivery_stream_name: any
-  --allow-force-delete: any
+  --x-amz-target: string@x-amz-target-completer-1 # required
+  delivery_stream_name: string # The name of the delivery stream.
+  --allow-force-delete: oneof<nothing, bool> # Set this to true if you want to delete the delivery stream even if Kinesis Data Firehose is unable to retire the grant for the CMK. Kinesis Data Firehose might be unable to retire the grant due to a customer error, such as when the CMK or the grant are in an invalid state. If you force deletion, you can then use the RevokeGrant (https://docs.aws.amazon.com/kms/latest/APIReference/API_RevokeGrant.html) operation to revoke the grant you gave to Kinesis Data Firehose. If a failure to retire the grant happens due to an Amazon Web Services KMS issue, Kinesis Data Firehose keeps retrying the delete operation. The default value is false.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Firehose_20150804.DeleteDeliveryStream")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DeliveryStreamName": $delivery_stream_name, "AllowForceDelete": $allow_force_delete} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -262,14 +276,15 @@ export def "describe-delivery-stream" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-2
-  delivery_stream_name: any
-  --limit: any
-  --exclusive-start-destination-id: any
-]: any -> record<DeliveryStreamDescription: record<DeliveryStreamName: record, DeliveryStreamARN: record, DeliveryStreamStatus: record, FailureDescription: record<Type: record, Details: record>, DeliveryStreamEncryptionConfiguration: record<KeyARN: record, KeyType: record, Status: record, FailureDescription: record>, DeliveryStreamType: record, VersionId: record, CreateTimestamp: record, LastUpdateTimestamp: record, Source: record<KinesisStreamSourceDescription: record>, Destinations: record, HasMoreDestinations: record>> {
+  --x-amz-target: string@x-amz-target-completer-2 # required
+  delivery_stream_name: string # The name of the delivery stream.
+  --limit: int # The limit on the number of destinations to return. You can have one destination per delivery stream.
+  --exclusive-start-destination-id: string # The ID of the destination to start returning the destination information. Kinesis Data Firehose supports one destination per delivery stream.
+]: any -> record<DeliveryStreamDescription: record<DeliveryStreamName: string, DeliveryStreamARN: string, DeliveryStreamStatus: string, FailureDescription: record<Type: string, Details: string>, DeliveryStreamEncryptionConfiguration: record<KeyARN: string, KeyType: string, Status: string, FailureDescription: record>, DeliveryStreamType: string, VersionId: string, CreateTimestamp: string, LastUpdateTimestamp: string, Source: record<KinesisStreamSourceDescription: record>, Destinations: list<record>, HasMoreDestinations: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Firehose_20150804.DescribeDeliveryStream")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DeliveryStreamName": $delivery_stream_name, "Limit": $limit, "ExclusiveStartDestinationId": $exclusive_start_destination_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -312,14 +327,15 @@ export def "list-delivery-streams" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-3
-  --limit: any
-  --delivery-stream-type: any
-  --exclusive-start-delivery-stream-name: any
-]: any -> record<DeliveryStreamNames: record, HasMoreDeliveryStreams: record> {
+  --x-amz-target: string@x-amz-target-completer-3 # required
+  --limit: int # The maximum number of delivery streams to list. The default value is 10.
+  --delivery-stream-type: string@delivery-stream-type-completer # The delivery stream type. This can be one of the following values: DirectPut: Provider applications access the delivery stream directly. KinesisStreamAsSource: The delivery stream uses a Kinesis data stream as a source. This parameter is optional. If this parameter is omitted, delivery streams of all types are returned.
+  --exclusive-start-delivery-stream-name: string # The list of delivery streams returned by this call to ListDeliveryStreams will start with the delivery stream whose name comes alphabetically immediately after the name you specify in ExclusiveStartDeliveryStreamName.
+]: any -> record<DeliveryStreamNames: list<string>, HasMoreDeliveryStreams: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Firehose_20150804.ListDeliveryStreams")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Limit": $limit, "DeliveryStreamType": $delivery_stream_type, "ExclusiveStartDeliveryStreamName": $exclusive_start_delivery_stream_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -362,14 +378,15 @@ export def "list-tags-for-delivery-stream" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-4
-  delivery_stream_name: any
-  --exclusive-start-tag-key: any
-  --limit: any
-]: any -> record<Tags: record, HasMoreTags: record> {
+  --x-amz-target: string@x-amz-target-completer-4 # required
+  delivery_stream_name: string # The name of the delivery stream whose tags you want to list.
+  --exclusive-start-tag-key: string # The key to use as the starting point for the list of tags. If you set this parameter, ListTagsForDeliveryStream gets all tags that occur after ExclusiveStartTagKey.
+  --limit: int # The number of tags to return. If this number is less than the total number of tags associated with the delivery stream, HasMoreTags is set to true in the response. To list additional tags, set ExclusiveStartTagKey to the last key in the response.
+]: any -> record<Tags: table<Key: string, Value: string>, HasMoreTags: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Firehose_20150804.ListTagsForDeliveryStream")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DeliveryStreamName": $delivery_stream_name, "ExclusiveStartTagKey": $exclusive_start_tag_key, "Limit": $limit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -395,6 +412,7 @@ export def "list-tags-for-delivery-stream" [
 #
 # POST /
 # operationId: PutRecord
+# --Record shape: {Data: string}
 export def "put-record" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -412,13 +430,14 @@ export def "put-record" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-5
-  delivery_stream_name: any
-  record: any
-]: any -> record<RecordId: record, Encrypted: record> {
+  --x-amz-target: string@x-amz-target-completer-5 # required
+  delivery_stream_name: string # The name of the delivery stream.
+  record: record # The unit of data in a delivery stream. — shape: {Data: string}
+]: any -> record<RecordId: string, Encrypted: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Firehose_20150804.PutRecord")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DeliveryStreamName": $delivery_stream_name, "Record": $record} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -444,6 +463,7 @@ export def "put-record" [
 #
 # POST /
 # operationId: PutRecordBatch
+# --Records item shape: {Data: string}
 export def "put-record-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -461,13 +481,14 @@ export def "put-record-batch" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-6
-  delivery_stream_name: any
-  records: any
-]: any -> record<FailedPutCount: record, Encrypted: record, RequestResponses: record> {
+  --x-amz-target: string@x-amz-target-completer-6 # required
+  delivery_stream_name: string # The name of the delivery stream.
+  records: list # One or more records. — item shape: {Data: string}
+]: any -> record<FailedPutCount: int, Encrypted: bool, RequestResponses: table<RecordId: string, ErrorCode: string, ErrorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Firehose_20150804.PutRecordBatch")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DeliveryStreamName": $delivery_stream_name, "Records": $records} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -493,6 +514,7 @@ export def "put-record-batch" [
 #
 # POST /
 # operationId: StartDeliveryStreamEncryption
+# --DeliveryStreamEncryptionConfigurationInput shape: {KeyARN?: string, KeyType: "AWS_OWNED_CMK"|"CUSTOMER_MANAGED_CMK"}
 export def "start-delivery-stream-encryption" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -510,13 +532,14 @@ export def "start-delivery-stream-encryption" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-7
-  delivery_stream_name: any
-  --delivery-stream-encryption-configuration-input: any
+  --x-amz-target: string@x-amz-target-completer-7 # required
+  delivery_stream_name: string # The name of the delivery stream for which you want to enable server-side encryption (SSE).
+  --delivery-stream-encryption-configuration-input: record # Specifies the type and Amazon Resource Name (ARN) of the CMK to use for Server-Side Encryption (SSE). — shape: {KeyARN?: string, KeyType: "AWS_OWNED_CMK"|"CUSTOMER_MANAGED_CMK"}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Firehose_20150804.StartDeliveryStreamEncryption")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DeliveryStreamName": $delivery_stream_name, "DeliveryStreamEncryptionConfigurationInput": $delivery_stream_encryption_configuration_input} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -559,12 +582,13 @@ export def "stop-delivery-stream-encryption" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-8
-  delivery_stream_name: any
+  --x-amz-target: string@x-amz-target-completer-8 # required
+  delivery_stream_name: string # The name of the delivery stream for which you want to disable server-side encryption (SSE).
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Firehose_20150804.StopDeliveryStreamEncryption")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DeliveryStreamName": $delivery_stream_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -590,6 +614,7 @@ export def "stop-delivery-stream-encryption" [
 #
 # POST /
 # operationId: TagDeliveryStream
+# --Tags item shape: {Key: string, Value?: string}
 export def "tag-delivery-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -607,13 +632,14 @@ export def "tag-delivery-stream" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-9
-  delivery_stream_name: any
-  tags: any
+  --x-amz-target: string@x-amz-target-completer-9 # required
+  delivery_stream_name: string # The name of the delivery stream to which you want to add the tags.
+  tags: list # A set of key-value pairs to use to create the tags. — item shape: {Key: string, Value?: string}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Firehose_20150804.TagDeliveryStream")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DeliveryStreamName": $delivery_stream_name, "Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -656,13 +682,14 @@ export def "untag-delivery-stream" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-10
-  delivery_stream_name: any
-  tag_keys: any
+  --x-amz-target: string@x-amz-target-completer-10 # required
+  delivery_stream_name: string # The name of the delivery stream.
+  tag_keys: list<string> # A list of tag keys. Each corresponding tag is removed from the delivery stream.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Firehose_20150804.UntagDeliveryStream")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DeliveryStreamName": $delivery_stream_name, "TagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -688,6 +715,14 @@ export def "untag-delivery-stream" [
 #
 # POST /
 # operationId: UpdateDestination
+# --S3DestinationUpdate shape: {RoleARN?: string, BucketARN?: string, Prefix?: string, ErrorOutputPrefix?: string, BufferingHints?: record, CompressionFormat?: "UNCOMPRESSED"|"GZIP"|"ZIP"|"Snappy"|"HADOOP_SNAPPY", EncryptionConfiguration?: record, CloudWatchLoggingOptions?: record}
+# --ExtendedS3DestinationUpdate shape: {RoleARN?: string, BucketARN?: string, Prefix?: string, ErrorOutputPrefix?: string, BufferingHints?: record, CompressionFormat?: "UNCOMPRESSED"|"GZIP"|"ZIP"|"Snappy"|"HADOOP_SNAPPY", EncryptionConfiguration?: record, CloudWatchLoggingOptions?: record, ProcessingConfiguration?: record, S3BackupMode?: "Disabled"|"Enabled", S3BackupUpdate?: record, DataFormatConversionConfiguration?: record, DynamicPartitioningConfiguration?: record}
+# --RedshiftDestinationUpdate shape: {RoleARN?: string, ClusterJDBCURL?: string, CopyCommand?: record, Username?: string, Password?: string, RetryOptions?: record, S3Update?: record, ProcessingConfiguration?: record, S3BackupMode?: "Disabled"|"Enabled", S3BackupUpdate?: record, CloudWatchLoggingOptions?: record}
+# --ElasticsearchDestinationUpdate shape: {RoleARN?: string, DomainARN?: string, ClusterEndpoint?: string, IndexName?: string, TypeName?: string, IndexRotationPeriod?: "NoRotation"|"OneHour"|"OneDay"|"OneWeek"|"OneMonth", BufferingHints?: record, RetryOptions?: record, S3Update?: record, ProcessingConfiguration?: record, CloudWatchLoggingOptions?: record}
+# --AmazonopensearchserviceDestinationUpdate shape: {RoleARN?: string, DomainARN?: string, ClusterEndpoint?: string, IndexName?: string, TypeName?: string, IndexRotationPeriod?: "NoRotation"|"OneHour"|"OneDay"|"OneWeek"|"OneMonth", BufferingHints?: record, RetryOptions?: record, S3Update?: record, ProcessingConfiguration?: record, CloudWatchLoggingOptions?: record}
+# --SplunkDestinationUpdate shape: {HECEndpoint?: string, HECEndpointType?: "Raw"|"Event", HECToken?: string, HECAcknowledgmentTimeoutInSeconds?: int, RetryOptions?: record, S3BackupMode?: "FailedEventsOnly"|"AllEvents", S3Update?: record, ProcessingConfiguration?: record, CloudWatchLoggingOptions?: record}
+# --HttpEndpointDestinationUpdate shape: {EndpointConfiguration?: record, BufferingHints?: record, CloudWatchLoggingOptions?: record, RequestConfiguration?: record, ProcessingConfiguration?: record, RoleARN?: string, RetryOptions?: record, S3BackupMode?: "FailedDataOnly"|"AllData", S3Update?: record}
+# --AmazonOpenSearchServerlessDestinationUpdate shape: {RoleARN?: string, CollectionEndpoint?: string, IndexName?: string, BufferingHints?: record, RetryOptions?: record, S3Update?: record, ProcessingConfiguration?: record, CloudWatchLoggingOptions?: record}
 export def "update-destination" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -705,22 +740,23 @@ export def "update-destination" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-target: string@x-amz-target-completer-11
-  delivery_stream_name: any
-  current_delivery_stream_version_id: any
-  destination_id: any
-  --s3-destination-update: any
-  --extended-s3-destination-update: any
-  --redshift-destination-update: any
-  --elasticsearch-destination-update: any
-  --amazonopensearchservice-destination-update: any
-  --splunk-destination-update: any
-  --http-endpoint-destination-update: any
-  --amazon-open-search-serverless-destination-update: any
+  --x-amz-target: string@x-amz-target-completer-11 # required
+  delivery_stream_name: string # The name of the delivery stream.
+  current_delivery_stream_version_id: string # Obtain this value from the VersionId result of DeliveryStreamDescription. This value is required, and helps the service perform conditional operations. For example, if there is an interleaving update and this value is null, then the update destination fails. After the update is successful, the VersionId value is updated. The service then performs a merge of the old configuration with the new configuration.
+  destination_id: string # The ID of the destination.
+  --s3-destination-update: record # Describes an update for a destination in Amazon S3. — shape: {RoleARN?: string, BucketARN?: string, Prefix?: string, ErrorOutputPrefix?: string, BufferingHints?: record, CompressionFormat?: "UNCOMPRESSED"|"GZIP"|"ZIP"|"Snappy"|"HADOOP_SNAPPY", EncryptionConfiguration?: record, CloudWatchLoggingOptions?: record}
+  --extended-s3-destination-update: record # Describes an update for a destination in Amazon S3. — shape: {RoleARN?: string, BucketARN?: string, Prefix?: string, ErrorOutputPrefix?: string, BufferingHints?: record, CompressionFormat?: "UNCOMPRESSED"|"GZIP"|"ZIP"|"Snappy"|"HADOOP_SNAPPY", EncryptionConfiguration?: record, CloudWatchLoggingOptions?: record, ProcessingConfiguration?: record, S3BackupMode?: "Disabled"|"Enabled", S3BackupUpdate?: record, DataFormatConversionConfiguration?: record, DynamicPartitioningConfiguration?: record}
+  --redshift-destination-update: record # Describes an update for a destination in Amazon Redshift. — shape: {RoleARN?: string, ClusterJDBCURL?: string, CopyCommand?: record, Username?: string, Password?: string, RetryOptions?: record, S3Update?: record, ProcessingConfiguration?: record, S3BackupMode?: "Disabled"|"Enabled", S3BackupUpdate?: record, CloudWatchLoggingOptions?: record}
+  --elasticsearch-destination-update: record # Describes an update for a destination in Amazon ES. — shape: {RoleARN?: string, DomainARN?: string, ClusterEndpoint?: string, IndexName?: string, TypeName?: string, IndexRotationPeriod?: "NoRotation"|"OneHour"|"OneDay"|"OneWeek"|"OneMonth", BufferingHints?: record, RetryOptions?: record, S3Update?: record, ProcessingConfiguration?: record, CloudWatchLoggingOptions?: record}
+  --amazonopensearchservice-destination-update: record # Describes an update for a destination in Amazon OpenSearch Service. — shape: {RoleARN?: string, DomainARN?: string, ClusterEndpoint?: string, IndexName?: string, TypeName?: string, IndexRotationPeriod?: "NoRotation"|"OneHour"|"OneDay"|"OneWeek"|"OneMonth", BufferingHints?: record, RetryOptions?: record, S3Update?: record, ProcessingConfiguration?: record, CloudWatchLoggingOptions?: record}
+  --splunk-destination-update: record # Describes an update for a destination in Splunk. — shape: {HECEndpoint?: string, HECEndpointType?: "Raw"|"Event", HECToken?: string, HECAcknowledgmentTimeoutInSeconds?: int, RetryOptions?: record, S3BackupMode?: "FailedEventsOnly"|"AllEvents", S3Update?: record, ProcessingConfiguration?: record, CloudWatchLoggingOptions?: record}
+  --http-endpoint-destination-update: record # Updates the specified HTTP endpoint destination. — shape: {EndpointConfiguration?: record, BufferingHints?: record, CloudWatchLoggingOptions?: record, RequestConfiguration?: record, ProcessingConfiguration?: record, RoleARN?: string, RetryOptions?: record, S3BackupMode?: "FailedDataOnly"|"AllData", S3Update?: record}
+  --amazon-open-search-serverless-destination-update: record # Describes an update for a destination in the Serverless offering for Amazon OpenSearch Service. — shape: {RoleARN?: string, CollectionEndpoint?: string, IndexName?: string, BufferingHints?: record, RetryOptions?: record, S3Update?: record, ProcessingConfiguration?: record, CloudWatchLoggingOptions?: record}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let x_amz_target = ($x_amz_target | default "Firehose_20150804.UpdateDestination")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DeliveryStreamName": $delivery_stream_name, "CurrentDeliveryStreamVersionId": $current_delivery_stream_version_id, "DestinationId": $destination_id, "S3DestinationUpdate": $s3_destination_update, "ExtendedS3DestinationUpdate": $extended_s3_destination_update, "RedshiftDestinationUpdate": $redshift_destination_update, "ElasticsearchDestinationUpdate": $elasticsearch_destination_update, "AmazonopensearchserviceDestinationUpdate": $amazonopensearchservice_destination_update, "SplunkDestinationUpdate": $splunk_destination_update, "HttpEndpointDestinationUpdate": $http_endpoint_destination_update, "AmazonOpenSearchServerlessDestinationUpdate": $amazon_open_search_serverless_destination_update} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

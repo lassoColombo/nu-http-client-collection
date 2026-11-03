@@ -93,6 +93,8 @@ def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: 
 def base-url-completer [] { ["http://www.bclaws.ca/civix" "https://www.bclaws.ca/civix"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def aspect-id-completer [] { ["arch_oic" "bcgaz1" "bcgaz2" "complete" "corpreg" "ecb" "hscr" "oic" "psl"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -121,7 +123,7 @@ export def commands []: nothing -> table {
 #
 # GET /content/{aspectId}
 export def "get-content-aspect-id" [
-  aspect_id: string
+  aspect_id: string@aspect-id-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -156,7 +158,7 @@ export def "get-content-aspect-id" [
 #
 # GET /content/{aspectId}/{civixDocumentId}
 export def "get-content-aspect-id-civix-document-id" [
-  aspect_id: string
+  aspect_id: string@aspect-id-completer
   civix_document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -193,7 +195,7 @@ export def "get-content-aspect-id-civix-document-id" [
 #
 # GET /document/id/{aspectId}/{civixIndexId}/{civixDocumentId}
 export def "get-document-id-aspect-id-civix-index-id-civix-document-id" [
-  aspect_id: string
+  aspect_id: string@aspect-id-completer
   civix_index_id: string
   civix_document_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -232,7 +234,7 @@ export def "get-document-id-aspect-id-civix-index-id-civix-document-id" [
 #
 # GET /document/id/{aspectId}/{civixIndexId}/{civixDocumentId}/search/{searchString}
 export def "get-document-id-aspect-id-civix-index-id-civix-document-id-search-search-string" [
-  aspect_id: string
+  aspect_id: string@aspect-id-completer
   civix_index_id: string
   civix_document_id: string
   search_string: string
@@ -273,7 +275,7 @@ export def "get-document-id-aspect-id-civix-index-id-civix-document-id-search-se
 #
 # GET /document/id/{aspectId}/{civixIndexId}/{civixDocumentId}/xml
 export def "get-document-id-aspect-id-civix-index-id-civix-document-id-xml" [
-  aspect_id: string
+  aspect_id: string@aspect-id-completer
   civix_index_id: string
   civix_document_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -312,7 +314,7 @@ export def "get-document-id-aspect-id-civix-index-id-civix-document-id-xml" [
 #
 # GET /document/id/{aspectId}/{civixIndexId}/{civixDocumentId}/xml/search/{searchString}
 export def "get-document-id-aspect-id-civix-index-id-civix-document-id-xml-search-search-string" [
-  aspect_id: string
+  aspect_id: string@aspect-id-completer
   civix_index_id: string
   civix_document_id: string
   search_string: string
@@ -353,7 +355,7 @@ export def "get-document-id-aspect-id-civix-index-id-civix-document-id-xml-searc
 #
 # GET /search/{aspectId}/fullsearch
 export def "get-search-aspect-id-fullsearch" [
-  aspect_id: string
+  aspect_id: string@aspect-id-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -363,15 +365,20 @@ export def "get-search-aspect-id-fullsearch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # query term (default: water)
-  --s: string # first hit (start index) (default: 0)
-  --e: int # last hit (end index) (default: 20)
-  --n-frag: int # number of fragment snippets to return (< 10) (default: 5)
-  --l-frag: int # length of fragment snippets (< 200) (default: 100)
+  --q: string # query term (required, default: water)
+  --s: string # first hit (start index) (required, default: 0)
+  --e: int # last hit (end index) (required, default: 20)
+  --n-frag: int # number of fragment snippets to return (< 10) (required, default: 5)
+  --l-frag: int # length of fragment snippets (< 200) (required, default: 100)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($aspect_id | is-empty) { error make --unspanned { msg: "path parameter 'aspectId' must be non-empty" } }
+  let q = ($q | default "water")
+  let s = ($s | default "0")
+  let e = ($e | default 20)
+  let n_frag = ($n_frag | default 5)
+  let l_frag = ($l_frag | default 100)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "s" $s "scalar") (serialize-qp "e" $e "scalar") (serialize-qp "nFrag" $n_frag "scalar") (serialize-qp "lFrag" $l_frag "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({aspect_id: (encode-path-segment $aspect_id)} | format pattern "/search/{aspect_id}/fullsearch") $qp $auth.query)
   let accept_val = "application/json"

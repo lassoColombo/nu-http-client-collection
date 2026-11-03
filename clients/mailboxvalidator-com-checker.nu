@@ -133,11 +133,13 @@ export def "get-v1-email-free" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --format: string@format-completer # Return the result in json (default) or xml format.
-  --email: string # The email address to check if is from a free email provider.
-  --key: string # API key.
+  --email: string # The email address to check if is from a free email provider. (required)
+  --key: string # API key. (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($email == null) { error make --unspanned { msg: "required query parameter 'email' missing: pass --email" } }
+  if ($key == null) { error make --unspanned { msg: "required query parameter 'key' missing: pass --key" } }
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/email/free" $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"

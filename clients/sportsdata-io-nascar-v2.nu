@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {Ocp-Apim-Subscription-Key: $token_val}, query: "", location: "header"} }
+    "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {"Ocp-Apim-Subscription-Key": $token_val}, query: "", location: "header"} }
     "query-key" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "key")=(encode-path-segment $token_val)", location: "query"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
@@ -95,6 +95,8 @@ def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: 
 def base-url-completer [] { ["http://azure-api.sportsdata.io/nascar/v2" "https://azure-api.sportsdata.io/nascar/v2"] }
 def auth-scheme-completer [] { ["ocp-apim-subscription-key" "query-key"] }
 
+# Completers for enum parameters
+def format-completer [] { ["json" "xml"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -124,7 +126,7 @@ export def commands []: nothing -> table {
 # GET /{format}/DriverRaceProjections/{raceid}
 # operationId: DriverRaceProjectionsEntryList
 export def "driver-race-projections-entry-list" [
-  format: string
+  format: string@format-completer
   raceid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -162,7 +164,7 @@ export def "driver-race-projections-entry-list" [
 # GET /{format}/driver/{driverid}
 # operationId: DriverDetails
 export def "driver-details" [
-  format: string
+  format: string@format-completer
   driverid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -200,7 +202,7 @@ export def "driver-details" [
 # GET /{format}/drivers
 # operationId: Drivers
 export def "drivers" [
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -236,7 +238,7 @@ export def "drivers" [
 # GET /{format}/raceresult/{raceid}
 # operationId: RaceResults
 export def "race-results" [
-  format: string
+  format: string@format-completer
   raceid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -274,7 +276,7 @@ export def "race-results" [
 # GET /{format}/races/{season}
 # operationId: RacesSchedule
 export def "races-schedule" [
-  format: string
+  format: string@format-completer
   season: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -312,7 +314,7 @@ export def "races-schedule" [
 # GET /{format}/series
 # operationId: Series
 export def "series" [
-  format: string
+  format: string@format-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
